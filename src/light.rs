@@ -6,38 +6,48 @@ const TAG: [u8; 4] = *b"LITE";
 const FIXED_SIZE: usize = 44;
 const EXTENDED_SIZE: usize = 72;
 
-/// A light node with fixed lighting values and preserved animation bytes.
-#[derive(Clone, Debug, Eq, PartialEq)]
+/// A light node with decoded lighting values and animation tracks.
+#[derive(Clone, Debug, PartialEq)]
 pub struct Light {
-    bytes: Vec<u8>,
+    node: Node,
+    light_type: u32,
+    attenuation_start: f32,
+    attenuation_end: f32,
+    color: [f32; 3],
+    intensity: f32,
+    ambient_color: [f32; 3],
+    ambient_intensity: f32,
+    extended_words: Option<[u32; 7]>,
+    tracks: Vec<AnimationTrack>,
 }
 
 impl Light {
     /// Creates a light with zeroed lighting values.
     pub fn new(node: Node, light_type: u32) -> Self {
-        let mut bytes = vec![0; 4];
-        bytes.extend_from_slice(&node.to_bytes());
-        bytes.extend_from_slice(&light_type.to_le_bytes());
-        bytes.resize(bytes.len() + FIXED_SIZE - 4, 0);
-        let size = bytes.len() as u32;
-        bytes[..4].copy_from_slice(&size.to_le_bytes());
-        Self { bytes }
+        Self {
+            node,
+            light_type,
+            attenuation_start: 0.0,
+            attenuation_end: 0.0,
+            color: [0.0; 3],
+            intensity: 0.0,
+            ambient_color: [0.0; 3],
+            ambient_intensity: 0.0,
+            extended_words: None,
+            tracks: Vec::new(),
+        }
     }
 
     /// Creates a light with the additional fixed fields used by newer models.
     pub fn new_for_version(node: Node, light_type: u32, version: u32) -> Self {
         let mut light = Self::new(node, light_type);
         if version >= 1200 {
-            light
-                .bytes
-                .resize(light.bytes.len() + EXTENDED_SIZE - FIXED_SIZE, 0);
-            let size = light.bytes.len() as u32;
-            light.bytes[..4].copy_from_slice(&size.to_le_bytes());
+            light.extended_words = Some([0; 7]);
         }
         light
     }
 
-    /// Wraps one inclusive-size light record.
+    /// Parses one inclusive-size light record.
     pub fn from_bytes(bytes: &[u8]) -> Result<Self, Error> {
         let end = record_end(bytes, 0)?;
         if end != bytes.len() {
@@ -46,137 +56,66 @@ impl Light {
                 offset: end,
             });
         }
-        Ok(Self {
-            bytes: bytes.to_vec(),
-        })
-    }
-
-    /// Returns the complete light record.
-    pub fn as_bytes(&self) -> &[u8] {
-        &self.bytes
-    }
-
-    /// Returns the shared node.
-    pub fn node(&self) -> Node {
-        let start = 4;
-        let end = start + self.node_size();
-        Node::from_bytes(&self.bytes[start..end]).expect("validated node")
-    }
-
-    /// Returns raw light type ID.
-    pub fn light_type(&self) -> u32 {
-        self.u32_at(self.fixed_offset())
-    }
-
-    /// Sets raw light type ID.
-    pub fn set_light_type(&mut self, kind: u32) {
-        self.set_u32_at(self.fixed_offset(), kind);
-    }
-
-    /// Returns attenuation start distance.
-    pub fn attenuation_start(&self) -> f32 {
-        self.f32_at(self.fixed_offset() + 4)
-    }
-
-    /// Sets attenuation start distance.
-    pub fn set_attenuation_start(&mut self, value: f32) {
-        self.set_f32_at(self.fixed_offset() + 4, value);
-    }
-
-    /// Returns attenuation end distance.
-    pub fn attenuation_end(&self) -> f32 {
-        self.f32_at(self.fixed_offset() + 8)
-    }
-
-    /// Sets attenuation end distance.
-    pub fn set_attenuation_end(&mut self, value: f32) {
-        self.set_f32_at(self.fixed_offset() + 8, value);
-    }
-
-    /// Returns RGB light color.
-    pub fn color(&self) -> [f32; 3] {
-        self.vec3_at(self.fixed_offset() + 12)
-    }
-
-    /// Sets RGB light color.
-    pub fn set_color(&mut self, color: [f32; 3]) {
-        self.set_vec3_at(self.fixed_offset() + 12, color);
-    }
-
-    /// Returns light intensity.
-    pub fn intensity(&self) -> f32 {
-        self.f32_at(self.fixed_offset() + 24)
-    }
-
-    /// Sets light intensity.
-    pub fn set_intensity(&mut self, value: f32) {
-        self.set_f32_at(self.fixed_offset() + 24, value);
-    }
-
-    /// Returns ambient RGB color.
-    pub fn ambient_color(&self) -> [f32; 3] {
-        self.vec3_at(self.fixed_offset() + 28)
-    }
-
-    /// Sets ambient RGB color.
-    pub fn set_ambient_color(&mut self, color: [f32; 3]) {
-        self.set_vec3_at(self.fixed_offset() + 28, color);
-    }
-
-    /// Returns ambient intensity.
-    pub fn ambient_intensity(&self) -> f32 {
-        self.f32_at(self.fixed_offset() + 40)
-    }
-
-    /// Sets ambient intensity.
-    pub fn set_ambient_intensity(&mut self, value: f32) {
-        self.set_f32_at(self.fixed_offset() + 40, value);
-    }
-
-    /// Returns optional light track bytes without interpretation.
-    pub fn track_bytes(&self) -> &[u8] {
-        &self.bytes[self.track_start()..]
-    }
-
-    /// Returns the additional seven raw words in newer light records, when present.
-    pub fn extended_words(&self) -> Option<[u32; 7]> {
-        (self.track_start() == self.fixed_offset() + EXTENDED_SIZE)
-            .then(|| std::array::from_fn(|i| self.u32_at(self.fixed_offset() + FIXED_SIZE + i * 4)))
-    }
-
-    /// Sets the additional seven raw words in a newer light record.
-    pub fn set_extended_words(&mut self, words: [u32; 7]) -> Result<(), Error> {
-        if self.extended_words().is_none() {
-            return Err(Error::MalformedRecord {
-                tag: TAG,
-                offset: self.fixed_offset() + FIXED_SIZE,
+        let node_size = read_u32(bytes, 4) as usize;
+        let fixed = 4 + node_size;
+        let node = Node::from_bytes(&bytes[4..fixed])?;
+        let short = fixed + FIXED_SIZE;
+        let extended = fixed + EXTENDED_SIZE;
+        let has_extended = bytes.len() >= extended
+            && (bytes.len() == extended
+                || bytes
+                    .get(extended..extended + 4)
+                    .is_some_and(|tag| is_track(tag.try_into().expect("four-byte tag"))))
+            && bytes.get(short..short + 4).map_or(true, |tag| {
+                !is_track(tag.try_into().expect("four-byte tag"))
             });
-        }
-        for (i, word) in words.into_iter().enumerate() {
-            self.set_u32_at(self.fixed_offset() + FIXED_SIZE + i * 4, word);
-        }
-        Ok(())
-    }
-
-    /// Decodes optional visibility, color, intensity, and attenuation tracks.
-    pub fn tracks(&self) -> Result<Vec<AnimationTrack>, Error> {
-        let mut result = Vec::new();
-        let mut offset = self.track_start();
-        while offset < self.bytes.len() {
-            let (track, consumed) = AnimationTrack::parse(&self.bytes, offset)?;
+        let extended_words =
+            has_extended.then(|| std::array::from_fn(|i| read_u32(bytes, short + i * 4)));
+        let mut tracks = Vec::new();
+        let mut offset = if has_extended { extended } else { short };
+        while offset < bytes.len() {
+            let (track, consumed) = AnimationTrack::parse(bytes, offset)?;
             if !is_track(track.tag) {
                 return Err(Error::MalformedRecord { tag: TAG, offset });
             }
-            result.push(track);
+            tracks.push(track);
             offset += consumed;
         }
-        Ok(result)
+        Ok(Self {
+            node,
+            light_type: read_u32(bytes, fixed),
+            attenuation_start: read_f32(bytes, fixed + 4),
+            attenuation_end: read_f32(bytes, fixed + 8),
+            color: read_vec3(bytes, fixed + 12),
+            intensity: read_f32(bytes, fixed + 24),
+            ambient_color: read_vec3(bytes, fixed + 28),
+            ambient_intensity: read_f32(bytes, fixed + 40),
+            extended_words,
+            tracks,
+        })
     }
 
-    /// Replaces optional light animation tracks.
-    pub fn set_tracks(&mut self, tracks: &[AnimationTrack]) -> Result<(), Error> {
-        let mut bytes = self.bytes[..self.track_start()].to_vec();
-        for track in tracks {
+    /// Serializes the inclusive-size light record.
+    pub fn to_bytes(&self) -> Result<Vec<u8>, Error> {
+        let mut bytes = vec![0; 4];
+        bytes.extend_from_slice(&self.node.to_bytes());
+        bytes.extend_from_slice(&self.light_type.to_le_bytes());
+        bytes.extend_from_slice(&self.attenuation_start.to_le_bytes());
+        bytes.extend_from_slice(&self.attenuation_end.to_le_bytes());
+        for value in self.color {
+            bytes.extend_from_slice(&value.to_le_bytes());
+        }
+        bytes.extend_from_slice(&self.intensity.to_le_bytes());
+        for value in self.ambient_color {
+            bytes.extend_from_slice(&value.to_le_bytes());
+        }
+        bytes.extend_from_slice(&self.ambient_intensity.to_le_bytes());
+        if let Some(words) = self.extended_words {
+            for word in words {
+                bytes.extend_from_slice(&word.to_le_bytes());
+            }
+        }
+        for track in &self.tracks {
             if !is_track(track.tag) {
                 return Err(Error::MalformedRecord {
                     tag: TAG,
@@ -185,74 +124,127 @@ impl Light {
             }
             bytes.extend_from_slice(&track.to_bytes()?);
         }
-        if bytes.len() > u32::MAX as usize {
-            return Err(Error::ChunkTooLarge {
+        let size = u32::try_from(bytes.len()).map_err(|_| Error::ChunkTooLarge {
+            tag: TAG,
+            size: bytes.len(),
+        })?;
+        bytes[..4].copy_from_slice(&size.to_le_bytes());
+        Ok(bytes)
+    }
+
+    /// Borrows the shared node.
+    pub fn node(&self) -> &Node {
+        &self.node
+    }
+
+    /// Borrows the shared node for editing.
+    pub fn node_mut(&mut self) -> &mut Node {
+        &mut self.node
+    }
+
+    /// Returns raw light type ID.
+    pub fn light_type(&self) -> u32 {
+        self.light_type
+    }
+    /// Sets raw light type ID.
+    pub fn set_light_type(&mut self, kind: u32) {
+        self.light_type = kind;
+    }
+    /// Returns attenuation start distance.
+    pub fn attenuation_start(&self) -> f32 {
+        self.attenuation_start
+    }
+    /// Sets attenuation start distance.
+    pub fn set_attenuation_start(&mut self, value: f32) {
+        self.attenuation_start = value;
+    }
+    /// Returns attenuation end distance.
+    pub fn attenuation_end(&self) -> f32 {
+        self.attenuation_end
+    }
+    /// Sets attenuation end distance.
+    pub fn set_attenuation_end(&mut self, value: f32) {
+        self.attenuation_end = value;
+    }
+    /// Returns RGB light color.
+    pub fn color(&self) -> [f32; 3] {
+        self.color
+    }
+    /// Sets RGB light color.
+    pub fn set_color(&mut self, color: [f32; 3]) {
+        self.color = color;
+    }
+    /// Returns light intensity.
+    pub fn intensity(&self) -> f32 {
+        self.intensity
+    }
+    /// Sets light intensity.
+    pub fn set_intensity(&mut self, value: f32) {
+        self.intensity = value;
+    }
+    /// Returns ambient RGB color.
+    pub fn ambient_color(&self) -> [f32; 3] {
+        self.ambient_color
+    }
+    /// Sets ambient RGB color.
+    pub fn set_ambient_color(&mut self, color: [f32; 3]) {
+        self.ambient_color = color;
+    }
+    /// Returns ambient intensity.
+    pub fn ambient_intensity(&self) -> f32 {
+        self.ambient_intensity
+    }
+    /// Sets ambient intensity.
+    pub fn set_ambient_intensity(&mut self, value: f32) {
+        self.ambient_intensity = value;
+    }
+    /// Returns the additional seven raw words in newer light records, when present.
+    pub fn extended_words(&self) -> Option<[u32; 7]> {
+        self.extended_words
+    }
+    /// Sets the additional seven raw words in a newer light record.
+    pub fn set_extended_words(&mut self, words: [u32; 7]) -> Result<(), Error> {
+        if self.extended_words.is_none() {
+            return Err(Error::MalformedRecord {
                 tag: TAG,
-                size: bytes.len(),
+                offset: 4 + self.node.to_bytes().len() + FIXED_SIZE,
             });
         }
-        let size = bytes.len() as u32;
-        bytes[..4].copy_from_slice(&size.to_le_bytes());
-        self.bytes = bytes;
+        self.extended_words = Some(words);
         Ok(())
     }
-
-    fn node_size(&self) -> usize {
-        u32::from_le_bytes(self.bytes[4..8].try_into().expect("validated node size")) as usize
+    /// Borrows decoded light animation tracks.
+    pub fn tracks(&self) -> &[AnimationTrack] {
+        &self.tracks
     }
-
-    fn fixed_offset(&self) -> usize {
-        4 + self.node_size()
-    }
-
-    fn track_start(&self) -> usize {
-        let short = self.fixed_offset() + FIXED_SIZE;
-        let extended = self.fixed_offset() + EXTENDED_SIZE;
-        if self.bytes.len() >= extended
-            && (self.bytes.len() == extended
-                || self
-                    .bytes
-                    .get(extended..extended + 4)
-                    .is_some_and(|tag| is_track(tag.try_into().expect("four-byte tag"))))
-            && self.bytes.get(short..short + 4).map_or(true, |tag| {
-                !is_track(tag.try_into().expect("four-byte tag"))
-            })
-        {
-            extended
-        } else {
-            short
+    /// Replaces optional light animation tracks.
+    pub fn set_tracks(&mut self, tracks: &[AnimationTrack]) -> Result<(), Error> {
+        for track in tracks {
+            if !is_track(track.tag) {
+                return Err(Error::MalformedRecord {
+                    tag: TAG,
+                    offset: 0,
+                });
+            }
+            track.to_bytes()?;
         }
+        self.tracks = tracks.to_vec();
+        Ok(())
     }
+}
 
-    fn u32_at(&self, offset: usize) -> u32 {
-        u32::from_le_bytes(
-            self.bytes[offset..offset + 4]
-                .try_into()
-                .expect("four-byte field"),
-        )
-    }
-
-    fn set_u32_at(&mut self, offset: usize, value: u32) {
-        self.bytes[offset..offset + 4].copy_from_slice(&value.to_le_bytes());
-    }
-
-    fn f32_at(&self, offset: usize) -> f32 {
-        f32::from_bits(self.u32_at(offset))
-    }
-
-    fn set_f32_at(&mut self, offset: usize, value: f32) {
-        self.set_u32_at(offset, value.to_bits());
-    }
-
-    fn vec3_at(&self, offset: usize) -> [f32; 3] {
-        std::array::from_fn(|axis| self.f32_at(offset + axis * 4))
-    }
-
-    fn set_vec3_at(&mut self, offset: usize, color: [f32; 3]) {
-        for (axis, value) in color.into_iter().enumerate() {
-            self.set_f32_at(offset + axis * 4, value);
-        }
-    }
+fn read_u32(bytes: &[u8], offset: usize) -> u32 {
+    u32::from_le_bytes(
+        bytes[offset..offset + 4]
+            .try_into()
+            .expect("validated field"),
+    )
+}
+fn read_f32(bytes: &[u8], offset: usize) -> f32 {
+    f32::from_bits(read_u32(bytes, offset))
+}
+fn read_vec3(bytes: &[u8], offset: usize) -> [f32; 3] {
+    std::array::from_fn(|i| read_f32(bytes, offset + i * 4))
 }
 
 fn is_track(tag: [u8; 4]) -> bool {
@@ -318,7 +310,7 @@ impl Model {
     /// Replaces lights in the first `LITE` chunk.
     pub fn set_lights(&mut self, lights: &[Light]) -> Result<(), Error> {
         let size = lights.iter().try_fold(0usize, |sum, light| {
-            sum.checked_add(light.bytes.len())
+            sum.checked_add(light.to_bytes()?.len())
                 .filter(|&size| size <= u32::MAX as usize)
                 .ok_or(Error::ChunkTooLarge {
                     tag: TAG,
@@ -327,7 +319,7 @@ impl Model {
         })?;
         let mut data = Vec::with_capacity(size);
         for light in lights {
-            data.extend_from_slice(light.as_bytes());
+            data.extend_from_slice(&light.to_bytes()?);
         }
         self.replace_chunks(TAG, data);
         Ok(())

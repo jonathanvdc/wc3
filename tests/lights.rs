@@ -38,8 +38,8 @@ fn light_color_track_round_trip() {
         }],
     };
     light.set_tracks(std::slice::from_ref(&track)).unwrap();
-    let parsed = Light::from_bytes(light.as_bytes()).unwrap();
-    assert_eq!(parsed.tracks().unwrap(), vec![track]);
+    let parsed = Light::from_bytes(&light.to_bytes().unwrap()).unwrap();
+    assert_eq!(parsed.tracks(), &[track]);
 }
 
 #[test]
@@ -59,7 +59,7 @@ fn extended_light_fields_and_tracks_round_trip() {
         }],
     };
     light.set_tracks(std::slice::from_ref(&track)).unwrap();
-    let parsed = Light::from_bytes(light.as_bytes()).unwrap();
+    let parsed = Light::from_bytes(&light.to_bytes().unwrap()).unwrap();
     assert_eq!(parsed.extended_words(), Some(words));
-    assert_eq!(parsed.tracks().unwrap(), vec![track]);
+    assert_eq!(parsed.tracks(), &[track]);
 }

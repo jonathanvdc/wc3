@@ -58,10 +58,7 @@ impl Model {
             emitter.tracks()?;
         }
         self.cameras()?;
-        for light in self.lights()? {
-            light.node().tracks();
-            light.tracks()?;
-        }
+        self.lights()?;
         self.texture_animations()?;
         Ok(())
     }
