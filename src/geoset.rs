@@ -1,4 +1,4 @@
-//! Size-bounded geoset records and basic mesh accessors.
+//! Typed geoset sections and lossless MDX serialization.
 
 use std::borrow::Cow;
 
@@ -6,34 +6,57 @@ use crate::{Error, Model};
 
 const TAG: [u8; 4] = *b"GEOS";
 
-/// A geoset record, retaining all version-specific fields and unknown data.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct Geoset {
-    version: u32,
-    bytes: Vec<u8>,
-}
-
-#[derive(Clone, Debug)]
-struct Layout {
-    vertex_groups: (usize, usize),
-    matrix_group_sizes: (usize, usize),
-    matrix_indices: (usize, usize),
-    properties: usize,
-    extent: usize,
-    sequence_extents: (usize, usize),
-    uv_start: usize,
-    tangents: Option<(usize, usize)>,
-    skin_weights: Option<(usize, usize)>,
-    skin_bone_indices: Option<(usize, usize)>,
-    uv_sets: Vec<(usize, usize)>,
-}
-
-/// Bounding volume stored on a geoset or one of its sequence extents.
+/// A geoset's bounding volume, also used for each sequence extent.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct GeosetExtent {
     pub bounds_radius: f32,
     pub minimum: [f32; 3],
     pub maximum: [f32; 3],
+}
+
+impl Default for GeosetExtent {
+    fn default() -> Self {
+        Self {
+            bounds_radius: 0.0,
+            minimum: [0.0; 3],
+            maximum: [0.0; 3],
+        }
+    }
+}
+
+// The extension order is retained because both TANG/SKIN orderings occur in
+// valid files. Skin's second array has no tag or count of its own.
+#[derive(Clone, Debug, PartialEq)]
+enum Extension {
+    Tangents(Vec<[f32; 4]>),
+    Skin {
+        weights: Vec<u8>,
+        bone_indices: Option<Vec<u8>>,
+    },
+}
+
+/// A geoset as typed sections. Uninterpreted packed skin bytes and the exact
+/// fixed-width name field are retained for byte-for-byte serialization.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Geoset {
+    version: u32,
+    vertices: Vec<[f32; 3]>,
+    normals: Vec<[f32; 3]>,
+    primitive_types: Vec<u32>,
+    primitive_counts: Vec<u32>,
+    faces: Vec<u16>,
+    vertex_groups: Vec<u8>,
+    matrix_group_sizes: Vec<u32>,
+    matrix_indices: Vec<u32>,
+    material_id: u32,
+    selection_group: u32,
+    unselectable_raw: u32,
+    level_of_detail: Option<u32>,
+    name: Option<[u8; 80]>,
+    extent: GeosetExtent,
+    sequence_extents: Vec<GeosetExtent>,
+    extensions: Vec<Extension>,
+    uv_sets: Vec<Vec<[f32; 2]>>,
 }
 
 impl Geoset {
@@ -53,49 +76,202 @@ impl Geoset {
                 offset: 0,
             });
         }
-        let mut bytes = vec![0; 4];
-        {
-            let mut section = |tag: [u8; 4], count: usize, data: &[u8]| {
-                bytes.extend_from_slice(&tag);
-                bytes.extend_from_slice(&(count as u32).to_le_bytes());
-                bytes.extend_from_slice(data);
-            };
-            let mut coordinates = Vec::with_capacity(vertices.len() * 12);
-            for vertex in vertices {
-                for value in vertex {
-                    coordinates.extend_from_slice(&value.to_le_bytes());
-                }
-            }
-            section(*b"VRTX", vertices.len(), &coordinates);
-            coordinates.clear();
-            for normal in normals {
-                for value in normal {
-                    coordinates.extend_from_slice(&value.to_le_bytes());
-                }
-            }
-            section(*b"NRMS", normals.len(), &coordinates);
-            section(*b"PTYP", 1, &4u32.to_le_bytes());
-            section(*b"PCNT", 1, &(faces.len() as u32).to_le_bytes());
-            let mut indices = Vec::with_capacity(faces.len() * 2);
-            for index in faces {
-                indices.extend_from_slice(&index.to_le_bytes());
-            }
-            section(*b"PVTX", faces.len(), &indices);
-            section(*b"GNDX", vertices.len(), &vec![0; vertices.len()]);
-            section(*b"MTGC", 1, &1u32.to_le_bytes());
-            section(*b"MATS", 1, &0u32.to_le_bytes());
+        Ok(Self {
+            version,
+            vertices: vertices.to_vec(),
+            normals: normals.to_vec(),
+            primitive_types: vec![4],
+            primitive_counts: vec![faces.len() as u32],
+            faces: faces.to_vec(),
+            vertex_groups: vec![0; vertices.len()],
+            matrix_group_sizes: vec![1],
+            matrix_indices: vec![0],
+            material_id: 0,
+            selection_group: 0,
+            unselectable_raw: 0,
+            level_of_detail: (version >= 900).then_some(0),
+            name: (version >= 900).then_some([0; 80]),
+            extent: GeosetExtent::default(),
+            sequence_extents: Vec::new(),
+            extensions: Vec::new(),
+            uv_sets: vec![vec![[0.0; 2]; vertices.len()]],
+        })
+    }
+
+    /// Decodes one inclusive-size geoset record for a particular MDX version.
+    pub fn from_bytes(version: u32, bytes: &[u8]) -> Result<Self, Error> {
+        let mut cursor = Cursor::new(bytes);
+        let size = cursor.read_u32()? as usize;
+        if size != bytes.len() {
+            return Err(Error::MalformedRecord {
+                tag: TAG,
+                offset: 0,
+            });
         }
-        bytes.extend_from_slice(&[0; 12]);
+        let vertices = decode_vectors::<3>(cursor.section(*b"VRTX", 12)?);
+        let normals = decode_vectors::<3>(cursor.section(*b"NRMS", 12)?);
+        let primitive_types = decode_words(cursor.section(*b"PTYP", 4)?);
+        let primitive_counts = decode_words(cursor.section(*b"PCNT", 4)?);
+        let faces = cursor
+            .section(*b"PVTX", 2)?
+            .chunks_exact(2)
+            .map(|bytes| u16::from_le_bytes(bytes.try_into().expect("two-byte face index")))
+            .collect();
+        let vertex_groups = cursor.section(*b"GNDX", 1)?.to_vec();
+        let matrix_group_sizes = decode_words(cursor.section(*b"MTGC", 4)?);
+        let matrix_indices = decode_words(cursor.section(*b"MATS", 4)?);
+        let material_id = cursor.read_u32()?;
+        let selection_group = cursor.read_u32()?;
+        let unselectable_raw = cursor.read_u32()?;
+        let (level_of_detail, name) = if version >= 900 {
+            let lod = cursor.read_u32()?;
+            let name = cursor
+                .read_exact(80)?
+                .try_into()
+                .expect("fixed-width geoset name");
+            (Some(lod), Some(name))
+        } else {
+            (None, None)
+        };
+        let extent = cursor.read_extent()?;
+        let sequence_count = cursor.read_u32()? as usize;
+        let mut sequence_extents = Vec::new();
+        for _ in 0..sequence_count {
+            sequence_extents.push(cursor.read_extent()?);
+        }
+        let mut extensions = Vec::new();
         if version >= 900 {
-            bytes.extend_from_slice(&[0; 84]);
+            while cursor.peek_tag()? != *b"UVAS" {
+                let offset = cursor.offset;
+                let tag = cursor.peek_tag()?;
+                match &tag {
+                    b"TANG"
+                        if !extensions
+                            .iter()
+                            .any(|part| matches!(part, Extension::Tangents(_))) =>
+                    {
+                        extensions.push(Extension::Tangents(decode_vectors::<4>(
+                            cursor.section(*b"TANG", 16)?,
+                        )));
+                    }
+                    b"SKIN"
+                        if !extensions
+                            .iter()
+                            .any(|part| matches!(part, Extension::Skin { .. })) =>
+                    {
+                        let weights = cursor.section(*b"SKIN", 1)?.to_vec();
+                        let bone_indices = if version >= 1200
+                            && !matches!(&cursor.peek_tag()?, b"UVAS" | b"TANG")
+                        {
+                            Some(cursor.read_exact(weights.len())?.to_vec())
+                        } else {
+                            None
+                        };
+                        extensions.push(Extension::Skin {
+                            weights,
+                            bone_indices,
+                        });
+                    }
+                    _ => return Err(Error::MalformedRecord { tag: TAG, offset }),
+                }
+            }
         }
-        bytes.extend_from_slice(&[0; 28]);
-        bytes.extend_from_slice(&0u32.to_le_bytes());
+        if cursor.read_exact(4)? != b"UVAS" {
+            return Err(Error::MalformedRecord {
+                tag: TAG,
+                offset: cursor.offset - 4,
+            });
+        }
+        let uv_count = cursor.read_u32()? as usize;
+        let mut uv_sets = Vec::new();
+        for _ in 0..uv_count {
+            uv_sets.push(decode_vectors::<2>(cursor.section(*b"UVBS", 8)?));
+        }
+        if cursor.offset != bytes.len() {
+            return Err(Error::MalformedRecord {
+                tag: TAG,
+                offset: cursor.offset,
+            });
+        }
+        Ok(Self {
+            version,
+            vertices,
+            normals,
+            primitive_types,
+            primitive_counts,
+            faces,
+            vertex_groups,
+            matrix_group_sizes,
+            matrix_indices,
+            material_id,
+            selection_group,
+            unselectable_raw,
+            level_of_detail,
+            name,
+            extent,
+            sequence_extents,
+            extensions,
+            uv_sets,
+        })
+    }
+
+    /// Serializes this geoset, including all section headers and its size word.
+    pub fn to_bytes(&self) -> Result<Vec<u8>, Error> {
+        let mut bytes = vec![0; 4];
+        write_vectors(&mut bytes, *b"VRTX", &self.vertices)?;
+        write_vectors(&mut bytes, *b"NRMS", &self.normals)?;
+        write_words(&mut bytes, *b"PTYP", &self.primitive_types)?;
+        write_words(&mut bytes, *b"PCNT", &self.primitive_counts)?;
+        write_section_header(&mut bytes, *b"PVTX", self.faces.len())?;
+        for face in &self.faces {
+            bytes.extend_from_slice(&face.to_le_bytes());
+        }
+        write_section_header(&mut bytes, *b"GNDX", self.vertex_groups.len())?;
+        bytes.extend_from_slice(&self.vertex_groups);
+        write_words(&mut bytes, *b"MTGC", &self.matrix_group_sizes)?;
+        write_words(&mut bytes, *b"MATS", &self.matrix_indices)?;
+        for word in [
+            self.material_id,
+            self.selection_group,
+            self.unselectable_raw,
+        ] {
+            bytes.extend_from_slice(&word.to_le_bytes());
+        }
+        if self.version >= 900 {
+            bytes.extend_from_slice(&self.level_of_detail.unwrap_or_default().to_le_bytes());
+            bytes.extend_from_slice(self.name.as_ref().unwrap_or(&[0; 80]));
+        }
+        write_extent(&mut bytes, self.extent);
+        write_count(&mut bytes, self.sequence_extents.len())?;
+        for extent in &self.sequence_extents {
+            write_extent(&mut bytes, *extent);
+        }
+        for extension in &self.extensions {
+            match extension {
+                Extension::Tangents(tangents) => write_vectors(&mut bytes, *b"TANG", tangents)?,
+                Extension::Skin {
+                    weights,
+                    bone_indices,
+                } => {
+                    write_section_header(&mut bytes, *b"SKIN", weights.len())?;
+                    bytes.extend_from_slice(weights);
+                    if let Some(indices) = bone_indices {
+                        if self.version < 1200 || indices.len() != weights.len() {
+                            return Err(Error::MalformedRecord {
+                                tag: TAG,
+                                offset: bytes.len(),
+                            });
+                        }
+                        bytes.extend_from_slice(indices);
+                    }
+                }
+            }
+        }
         bytes.extend_from_slice(b"UVAS");
-        bytes.extend_from_slice(&1u32.to_le_bytes());
-        bytes.extend_from_slice(b"UVBS");
-        bytes.extend_from_slice(&(vertices.len() as u32).to_le_bytes());
-        bytes.resize(bytes.len() + vertices.len() * 8, 0);
+        write_count(&mut bytes, self.uv_sets.len())?;
+        for uv_set in &self.uv_sets {
+            write_vectors(&mut bytes, *b"UVBS", uv_set)?;
+        }
         if bytes.len() > u32::MAX as usize {
             return Err(Error::ChunkTooLarge {
                 tag: TAG,
@@ -104,280 +280,216 @@ impl Geoset {
         }
         let size = bytes.len() as u32;
         bytes[..4].copy_from_slice(&size.to_le_bytes());
-        Ok(Self { version, bytes })
+        Ok(bytes)
     }
 
-    /// Wraps one inclusive-size geoset record.
-    pub fn from_bytes(version: u32, bytes: &[u8]) -> Result<Self, Error> {
-        if bytes.len() < 4 {
-            return Err(Error::MalformedRecord {
-                tag: TAG,
-                offset: 0,
-            });
-        }
-        let size = u32::from_le_bytes(bytes[..4].try_into().expect("four-byte size"));
-        if size as usize != bytes.len() {
-            return Err(Error::MalformedRecord {
-                tag: TAG,
-                offset: 0,
-            });
-        }
-        let geoset = Self {
-            version,
-            bytes: bytes.to_vec(),
-        };
-        geoset.layout()?;
-        Ok(geoset)
-    }
-
-    /// Returns the MDX version used to interpret this geoset.
+    /// The MDX version used to interpret this record.
     pub fn version(&self) -> u32 {
         self.version
     }
 
-    /// Returns the complete record, including its inclusive size field.
-    pub fn as_bytes(&self) -> &[u8] {
-        &self.bytes
+    /// Borrows all vertex positions without decoding or allocating.
+    pub fn vertices(&self) -> &[[f32; 3]] {
+        &self.vertices
+    }
+    /// Mutably borrows vertex positions for bulk edits.
+    pub fn vertices_mut(&mut self) -> &mut [[f32; 3]] {
+        &mut self.vertices
+    }
+    /// Borrows all vertex normals.
+    pub fn normals(&self) -> &[[f32; 3]] {
+        &self.normals
+    }
+    /// Mutably borrows normals for bulk edits.
+    pub fn normals_mut(&mut self) -> &mut [[f32; 3]] {
+        &mut self.normals
+    }
+    /// Borrows primitive type identifiers from `PTYP`.
+    pub fn primitive_types(&self) -> &[u32] {
+        &self.primitive_types
+    }
+    /// Borrows primitive counts from `PCNT`.
+    pub fn primitive_counts(&self) -> &[u32] {
+        &self.primitive_counts
+    }
+    /// Borrows vertex indices from `PVTX`.
+    pub fn face_indices(&self) -> &[u16] {
+        &self.faces
+    }
+    /// Mutably borrows face indices for bulk edits.
+    pub fn face_indices_mut(&mut self) -> &mut [u16] {
+        &mut self.faces
+    }
+    /// Borrows the matrix group assigned to each vertex.
+    pub fn vertex_groups(&self) -> &[u8] {
+        &self.vertex_groups
+    }
+    /// Borrows matrix group sizes from `MTGC`.
+    pub fn matrix_group_sizes(&self) -> &[u32] {
+        &self.matrix_group_sizes
+    }
+    /// Borrows flattened matrix indices from `MATS`.
+    pub fn matrix_indices(&self) -> &[u32] {
+        &self.matrix_indices
+    }
+    /// Returns the referenced material index.
+    pub fn material_id(&self) -> u32 {
+        self.material_id
+    }
+    /// Returns the selection group index.
+    pub fn selection_group(&self) -> u32 {
+        self.selection_group
+    }
+    /// Returns the unselectable flag as a boolean.
+    pub fn unselectable(&self) -> bool {
+        self.unselectable_raw != 0
+    }
+    /// Returns the exact unselectable field, including nonstandard bits.
+    pub fn raw_unselectable(&self) -> u32 {
+        self.unselectable_raw
+    }
+    /// Returns the Reforged level of detail, if that field exists.
+    pub fn level_of_detail(&self) -> Option<u32> {
+        self.level_of_detail
+    }
+    /// Returns the overall geoset bounds.
+    pub fn extent(&self) -> GeosetExtent {
+        self.extent
+    }
+    /// Borrows per-sequence bounding volumes.
+    pub fn sequence_extents(&self) -> &[GeosetExtent] {
+        &self.sequence_extents
+    }
+    /// Borrows every UV coordinate set.
+    pub fn uv_sets(&self) -> &[Vec<[f32; 2]>] {
+        &self.uv_sets
+    }
+    /// Mutably borrows one UV set for bulk edits.
+    pub fn uv_set_mut(&mut self, index: usize) -> Option<&mut [[f32; 2]]> {
+        self.uv_sets.get_mut(index).map(Vec::as_mut_slice)
     }
 
-    /// Returns the XYZ vertices from the leading `VRTX` section.
-    pub fn vertices(&self) -> Result<Vec<[f32; 3]>, Error> {
-        let (data, _) = self.section(4, *b"VRTX", 12)?;
-        Ok(data
-            .chunks_exact(12)
-            .map(|vertex| {
-                std::array::from_fn(|index| {
-                    let start = index * 4;
-                    f32::from_le_bytes(
-                        vertex[start..start + 4]
-                            .try_into()
-                            .expect("four-byte field"),
-                    )
-                })
-            })
-            .collect())
+    /// Returns the fixed-width name without changing nonzero padding bytes.
+    pub fn name(&self) -> Option<Cow<'_, str>> {
+        self.name.as_ref().map(|name| {
+            let end = name
+                .iter()
+                .position(|&byte| byte == 0)
+                .unwrap_or(name.len());
+            String::from_utf8_lossy(&name[..end])
+        })
     }
 
-    /// Changes one XYZ vertex while leaving all other geoset bytes intact.
+    /// Borrows optional Reforged tangent vectors.
+    pub fn tangents(&self) -> Option<&[[f32; 4]]> {
+        self.extensions.iter().find_map(|part| match part {
+            Extension::Tangents(values) => Some(values.as_slice()),
+            _ => None,
+        })
+    }
+
+    /// Borrows opaque packed skin weights.
+    pub fn skin_weights(&self) -> Option<&[u8]> {
+        self.extensions.iter().find_map(|part| match part {
+            Extension::Skin { weights, .. } => Some(weights.as_slice()),
+            _ => None,
+        })
+    }
+
+    /// Borrows the extra untagged bone index array in newer files.
+    pub fn skin_bone_indices(&self) -> Option<&[u8]> {
+        self.extensions.iter().find_map(|part| match part {
+            Extension::Skin { bone_indices, .. } => bone_indices.as_deref(),
+            _ => None,
+        })
+    }
+
+    /// Changes one vertex position.
     pub fn set_vertex(&mut self, index: usize, vertex: [f32; 3]) -> Result<(), Error> {
-        let (_, end) = self.section(4, *b"VRTX", 12)?;
-        let start = 12usize
-            .checked_add(index.checked_mul(12).ok_or(Error::MalformedRecord {
-                tag: TAG,
-                offset: index,
-            })?)
-            .ok_or(Error::MalformedRecord {
-                tag: TAG,
-                offset: index,
-            })?;
-        if start.checked_add(12).map_or(true, |next| next > end) {
-            return Err(Error::MalformedRecord {
-                tag: TAG,
-                offset: index,
-            });
-        }
-        for (coordinate, value) in vertex.into_iter().enumerate() {
-            let offset = start + coordinate * 4;
-            self.bytes[offset..offset + 4].copy_from_slice(&value.to_le_bytes());
-        }
+        *self.vertices.get_mut(index).ok_or(Error::MalformedRecord {
+            tag: TAG,
+            offset: index,
+        })? = vertex;
         Ok(())
     }
 
-    /// Returns XYZ normals from the `NRMS` section.
-    pub fn normals(&self) -> Result<Vec<[f32; 3]>, Error> {
-        let (_, vertex_end) = self.section(4, *b"VRTX", 12)?;
-        let (data, _) = self.section(vertex_end, *b"NRMS", 12)?;
-        Ok(data
-            .chunks_exact(12)
-            .map(|normal| {
-                std::array::from_fn(|index| {
-                    let start = index * 4;
-                    f32::from_le_bytes(
-                        normal[start..start + 4]
-                            .try_into()
-                            .expect("four-byte field"),
-                    )
-                })
-            })
-            .collect())
-    }
-
-    /// Changes one normal without altering other sections.
+    /// Changes one vertex normal.
     pub fn set_normal(&mut self, index: usize, normal: [f32; 3]) -> Result<(), Error> {
-        let (_, vertex_end) = self.section(4, *b"VRTX", 12)?;
-        let (_, normal_end) = self.section(vertex_end, *b"NRMS", 12)?;
-        let start = vertex_end
-            .checked_add(8)
-            .and_then(|n| index.checked_mul(12).and_then(|m| n.checked_add(m)))
-            .filter(|&start| start.checked_add(12).is_some_and(|end| end <= normal_end))
-            .ok_or(Error::MalformedRecord {
-                tag: TAG,
-                offset: index,
-            })?;
-        for (i, value) in normal.into_iter().enumerate() {
-            self.bytes[start + i * 4..start + i * 4 + 4].copy_from_slice(&value.to_le_bytes());
-        }
+        *self.normals.get_mut(index).ok_or(Error::MalformedRecord {
+            tag: TAG,
+            offset: index,
+        })? = normal;
         Ok(())
     }
 
-    /// Returns face vertex indices from `PVTX`.
-    pub fn face_indices(&self) -> Result<Vec<u16>, Error> {
-        let (_, vertex_end) = self.section(4, *b"VRTX", 12)?;
-        let (_, normal_end) = self.section(vertex_end, *b"NRMS", 12)?;
-        let (_, primitive_end) = self.section(normal_end, *b"PTYP", 4)?;
-        let (_, counts_end) = self.section(primitive_end, *b"PCNT", 4)?;
-        let (data, _) = self.section(counts_end, *b"PVTX", 2)?;
-        Ok(data
-            .chunks_exact(2)
-            .map(|bytes| u16::from_le_bytes(bytes.try_into().expect("two-byte field")))
-            .collect())
-    }
-
-    /// Returns one matrix group index per vertex.
-    pub fn vertex_groups(&self) -> Result<&[u8], Error> {
-        let layout = self.layout()?;
-        Ok(&self.bytes[layout.vertex_groups.0..layout.vertex_groups.1])
-    }
-
-    /// Replaces the matrix group index assigned to each vertex.
+    /// Replaces the per-vertex matrix group indices.
     pub fn set_vertex_groups(&mut self, groups: &[u8]) -> Result<(), Error> {
-        if groups.len() != self.word(8) as usize {
+        if groups.len() != self.vertices.len() {
             return Err(Error::MalformedRecord {
                 tag: TAG,
                 offset: groups.len(),
             });
         }
-        let layout = self.layout()?;
-        let mut data = Vec::with_capacity(groups.len() + 8);
-        data.extend_from_slice(b"GNDX");
-        data.extend_from_slice(&(groups.len() as u32).to_le_bytes());
-        data.extend_from_slice(groups);
-        self.replace_range(layout.vertex_groups.0 - 8..layout.vertex_groups.1, &data)
+        self.vertex_groups = groups.to_vec();
+        Ok(())
     }
 
-    /// Returns the number of matrix entries in each geoset group.
-    pub fn matrix_group_sizes(&self) -> Result<Vec<u32>, Error> {
-        let layout = self.layout()?;
-        Ok(self.words(layout.matrix_group_sizes))
-    }
-
-    /// Returns flattened matrix indices for all geoset groups.
-    pub fn matrix_indices(&self) -> Result<Vec<u32>, Error> {
-        let layout = self.layout()?;
-        Ok(self.words(layout.matrix_indices))
-    }
-
-    /// Replaces matrix groups and their flattened matrix references.
+    /// Replaces matrix groups and their flattened indices.
     pub fn set_matrix_groups(&mut self, groups: &[Vec<u32>]) -> Result<(), Error> {
-        if groups.len() > u32::MAX as usize
-            || groups.iter().any(|group| group.len() > u32::MAX as usize)
-        {
-            return Err(Error::ChunkTooLarge {
-                tag: TAG,
-                size: usize::MAX,
-            });
-        }
-        let layout = self.layout()?;
-        let mut data = Vec::new();
-        data.extend_from_slice(b"MTGC");
-        data.extend_from_slice(&(groups.len() as u32).to_le_bytes());
-        for group in groups {
-            data.extend_from_slice(&(group.len() as u32).to_le_bytes());
-        }
-        data.extend_from_slice(b"MATS");
         let total = groups
             .iter()
             .try_fold(0usize, |sum, group| sum.checked_add(group.len()))
-            .filter(|&n| n <= u32::MAX as usize)
+            .filter(|&total| total <= u32::MAX as usize)
             .ok_or(Error::ChunkTooLarge {
                 tag: TAG,
                 size: usize::MAX,
             })?;
-        data.extend_from_slice(&(total as u32).to_le_bytes());
-        for group in groups {
-            for index in group {
-                data.extend_from_slice(&index.to_le_bytes());
-            }
+        if groups.len() > u32::MAX as usize {
+            return Err(Error::ChunkTooLarge {
+                tag: TAG,
+                size: groups.len(),
+            });
         }
-        self.replace_range(
-            layout.matrix_group_sizes.0 - 8..layout.matrix_indices.1,
-            &data,
-        )
-    }
-
-    /// Returns the material index used by this geoset.
-    pub fn material_id(&self) -> Result<u32, Error> {
-        Ok(self.word(self.layout()?.properties))
-    }
-
-    /// Changes the material index without altering the other mesh sections.
-    pub fn set_material_id(&mut self, id: u32) -> Result<(), Error> {
-        let offset = self.layout()?.properties;
-        self.bytes[offset..offset + 4].copy_from_slice(&id.to_le_bytes());
+        self.matrix_group_sizes = groups.iter().map(|group| group.len() as u32).collect();
+        self.matrix_indices = Vec::with_capacity(total);
+        for group in groups {
+            self.matrix_indices.extend_from_slice(group);
+        }
         Ok(())
     }
 
-    /// Returns the selection group index.
-    pub fn selection_group(&self) -> Result<u32, Error> {
-        Ok(self.word(self.layout()?.properties + 4))
+    /// Changes the material reference.
+    pub fn set_material_id(&mut self, id: u32) {
+        self.material_id = id;
+    }
+    /// Changes the selection group.
+    pub fn set_selection_group(&mut self, group: u32) {
+        self.selection_group = group;
+    }
+    /// Sets the unselectable field to zero or one.
+    pub fn set_unselectable(&mut self, value: bool) {
+        self.unselectable_raw = u32::from(value);
+    }
+    /// Sets the exact unselectable field.
+    pub fn set_raw_unselectable(&mut self, value: u32) {
+        self.unselectable_raw = value;
     }
 
-    /// Changes the selection group index.
-    pub fn set_selection_group(&mut self, group: u32) -> Result<(), Error> {
-        let offset = self.layout()?.properties + 4;
-        self.bytes[offset..offset + 4].copy_from_slice(&group.to_le_bytes());
-        Ok(())
-    }
-
-    /// Returns the raw unselectable flag word.
-    pub fn unselectable(&self) -> Result<bool, Error> {
-        Ok(self.word(self.layout()?.properties + 8) != 0)
-    }
-
-    /// Changes the unselectable flag while preserving other fields.
-    pub fn set_unselectable(&mut self, value: bool) -> Result<(), Error> {
-        let offset = self.layout()?.properties + 8;
-        self.bytes[offset..offset + 4].copy_from_slice(&u32::from(value).to_le_bytes());
-        Ok(())
-    }
-
-    /// Returns the level of detail present since version 900.
-    pub fn level_of_detail(&self) -> Result<Option<u32>, Error> {
-        let version = self.version;
-        let layout = self.layout()?;
-        Ok((version >= 900).then(|| self.word(layout.properties + 12)))
-    }
-
-    /// Changes the level of detail in a version 900 or later geoset.
+    /// Changes the Reforged level of detail.
     pub fn set_level_of_detail(&mut self, level: u32) -> Result<(), Error> {
-        let version = self.version;
-        if version < 900 {
+        if self.version < 900 {
             return Err(Error::MalformedRecord {
                 tag: TAG,
                 offset: 0,
             });
         }
-        let offset = self.layout()?.properties + 12;
-        self.bytes[offset..offset + 4].copy_from_slice(&level.to_le_bytes());
+        self.level_of_detail = Some(level);
         Ok(())
     }
 
-    /// Returns the version 900 or later geoset name, if present.
-    pub fn name(&self) -> Result<Option<Cow<'_, str>>, Error> {
-        let version = self.version;
-        if version < 900 {
-            return Ok(None);
-        }
-        let offset = self.layout()?.properties + 16;
-        let field = &self.bytes[offset..offset + 80];
-        let end = field.iter().position(|&byte| byte == 0).unwrap_or(80);
-        Ok(Some(String::from_utf8_lossy(&field[..end])))
-    }
-
-    /// Changes the version 900 or later geoset name.
+    /// Changes the Reforged name and clears unused name bytes.
     pub fn set_name(&mut self, name: &str) -> Result<(), Error> {
-        let version = self.version;
-        if version < 900 {
+        if self.version < 900 {
             return Err(Error::MalformedRecord {
                 tag: TAG,
                 offset: 0,
@@ -386,53 +498,30 @@ impl Geoset {
         if name.len() >= 80 || name.as_bytes().contains(&0) {
             return Err(Error::InvalidString { max_bytes: 79 });
         }
-        let offset = self.layout()?.properties + 16;
-        self.bytes[offset..offset + 80].fill(0);
-        self.bytes[offset..offset + name.len()].copy_from_slice(name.as_bytes());
+        let mut field = [0; 80];
+        field[..name.len()].copy_from_slice(name.as_bytes());
+        self.name = Some(field);
         Ok(())
     }
 
-    /// Returns the geoset's bounding volume.
-    pub fn extent(&self) -> Result<GeosetExtent, Error> {
-        Ok(self.extent_at(self.layout()?.extent))
+    /// Changes the overall geoset bounds.
+    pub fn set_extent(&mut self, extent: GeosetExtent) {
+        self.extent = extent;
     }
 
-    /// Changes the geoset's bounding volume.
-    pub fn set_extent(&mut self, extent: GeosetExtent) -> Result<(), Error> {
-        let offset = self.layout()?.extent;
-        self.set_extent_at(offset, extent);
-        Ok(())
-    }
-
-    /// Returns per-sequence bounding volumes.
-    pub fn sequence_extents(&self) -> Result<Vec<GeosetExtent>, Error> {
-        let layout = self.layout()?;
-        Ok((layout.sequence_extents.0..layout.sequence_extents.1)
-            .step_by(28)
-            .map(|offset| self.extent_at(offset))
-            .collect())
-    }
-
-    /// Changes one per-sequence bounding volume.
+    /// Changes one per-sequence bound.
     pub fn set_sequence_extent(&mut self, index: usize, extent: GeosetExtent) -> Result<(), Error> {
-        let layout = self.layout()?;
-        let offset = index
-            .checked_mul(28)
-            .and_then(|n| layout.sequence_extents.0.checked_add(n))
-            .filter(|&offset| {
-                offset
-                    .checked_add(28)
-                    .is_some_and(|end| end <= layout.sequence_extents.1)
-            })
+        *self
+            .sequence_extents
+            .get_mut(index)
             .ok_or(Error::MalformedRecord {
                 tag: TAG,
                 offset: index,
-            })?;
-        self.set_extent_at(offset, extent);
+            })? = extent;
         Ok(())
     }
 
-    /// Replaces all per-sequence bounding volumes.
+    /// Replaces all per-sequence bounds.
     pub fn set_sequence_extents(&mut self, extents: &[GeosetExtent]) -> Result<(), Error> {
         if extents.len() > u32::MAX as usize {
             return Err(Error::ChunkTooLarge {
@@ -440,120 +529,53 @@ impl Geoset {
                 size: extents.len(),
             });
         }
-        let layout = self.layout()?;
-        let mut data = Vec::new();
-        data.extend_from_slice(&(extents.len() as u32).to_le_bytes());
-        for extent in extents {
-            data.extend_from_slice(&extent.bounds_radius.to_le_bytes());
-            for value in extent.minimum.into_iter().chain(extent.maximum) {
-                data.extend_from_slice(&value.to_le_bytes());
-            }
-        }
-        self.replace_range(
-            layout.sequence_extents.0 - 4..layout.sequence_extents.1,
-            &data,
-        )
+        self.sequence_extents = extents.to_vec();
+        Ok(())
     }
 
-    /// Returns optional Reforged XYZW tangent vectors.
-    pub fn tangents(&self) -> Result<Option<Vec<[f32; 4]>>, Error> {
-        let layout = self.layout()?;
-        Ok(layout.tangents.map(|(start, end)| {
-            self.bytes[start..end]
-                .chunks_exact(16)
-                .map(|bytes| {
-                    std::array::from_fn(|i| {
-                        f32::from_le_bytes(bytes[i * 4..i * 4 + 4].try_into().expect("tangent"))
-                    })
-                })
-                .collect()
-        }))
-    }
-
-    /// Replaces or removes the optional Reforged tangent section.
+    /// Replaces or removes the Reforged tangent section, retaining its order.
     pub fn set_tangents(&mut self, tangents: Option<&[[f32; 4]]>) -> Result<(), Error> {
-        let version = self.version;
-        if version < 900 {
+        if self.version < 900 {
             return Err(Error::MalformedRecord {
                 tag: TAG,
                 offset: 0,
             });
         }
-        let layout = self.layout()?;
-        let range = if let Some((start, end)) = layout.tangents {
-            start - 8..end
-        } else {
-            let start = layout
-                .skin_weights
-                .map_or(layout.uv_start, |(start, _)| start - 8);
-            start..start
-        };
-        let mut data = Vec::new();
-        if let Some(tangents) = tangents {
-            if tangents.len() > u32::MAX as usize {
-                return Err(Error::ChunkTooLarge {
-                    tag: TAG,
-                    size: tangents.len(),
-                });
-            }
-            data.extend_from_slice(b"TANG");
-            data.extend_from_slice(&(tangents.len() as u32).to_le_bytes());
-            for tangent in tangents {
-                for value in tangent {
-                    data.extend_from_slice(&value.to_le_bytes());
-                }
-            }
+        if tangents.is_some_and(|values| values.len() > u32::MAX as usize) {
+            return Err(Error::ChunkTooLarge {
+                tag: TAG,
+                size: usize::MAX,
+            });
         }
-        self.replace_range(range, &data)
+        if let Some(index) = self
+            .extensions
+            .iter()
+            .position(|part| matches!(part, Extension::Tangents(_)))
+        {
+            if let Some(values) = tangents {
+                self.extensions[index] = Extension::Tangents(values.to_vec());
+            } else {
+                self.extensions.remove(index);
+            }
+        } else if let Some(values) = tangents {
+            self.extensions
+                .insert(0, Extension::Tangents(values.to_vec()));
+        }
+        Ok(())
     }
 
-    /// Returns optional Reforged skin weight and bone index bytes.
-    pub fn skin_weights(&self) -> Result<Option<&[u8]>, Error> {
-        let layout = self.layout()?;
-        Ok(layout
-            .skin_weights
-            .map(|(start, end)| &self.bytes[start..end]))
-    }
-
-    /// Returns the additional packed bone-index bytes found after skin weights in newer files.
-    pub fn skin_bone_indices(&self) -> Result<Option<&[u8]>, Error> {
-        let layout = self.layout()?;
-        Ok(layout
-            .skin_bone_indices
-            .map(|(start, end)| &self.bytes[start..end]))
-    }
-
-    /// Replaces or removes the optional skin data. Newer layouts may include a
-    /// second equally sized packed bone-index array after the weights.
+    /// Replaces or removes packed skin data, retaining its section order.
     pub fn set_skin_data(
         &mut self,
         weights: Option<&[u8]>,
         bone_indices: Option<&[u8]>,
     ) -> Result<(), Error> {
-        let version = self.version;
-        if version < 900 {
+        if self.version < 900 {
             return Err(Error::MalformedRecord {
                 tag: TAG,
                 offset: 0,
             });
         }
-        let layout = self.layout()?;
-        let range = if let Some((start, end)) = layout.skin_weights {
-            start - 8..layout.skin_bone_indices.map_or(end, |(_, end)| end)
-        } else {
-            layout.uv_start..layout.uv_start
-        };
-        if bone_indices.is_some()
-            && (version < 1200
-                || weights.is_none()
-                || weights.unwrap().len() != bone_indices.unwrap().len())
-        {
-            return Err(Error::MalformedRecord {
-                tag: TAG,
-                offset: range.start,
-            });
-        }
-        let mut data = Vec::new();
         if let Some(weights) = weights {
             if weights.len() > u32::MAX as usize {
                 return Err(Error::ChunkTooLarge {
@@ -561,57 +583,46 @@ impl Geoset {
                     size: weights.len(),
                 });
             }
-            data.extend_from_slice(b"SKIN");
-            data.extend_from_slice(&(weights.len() as u32).to_le_bytes());
-            data.extend_from_slice(weights);
-            if let Some(indices) = bone_indices {
-                data.extend_from_slice(indices);
+        }
+        if let Some(indices) = bone_indices {
+            if self.version < 1200 || weights.map_or(true, |weights| weights.len() != indices.len())
+            {
+                return Err(Error::MalformedRecord {
+                    tag: TAG,
+                    offset: 0,
+                });
             }
         }
-        self.replace_range(range, &data)
+        let new_part = weights.map(|weights| Extension::Skin {
+            weights: weights.to_vec(),
+            bone_indices: bone_indices.map(|indices| indices.to_vec()),
+        });
+        if let Some(index) = self
+            .extensions
+            .iter()
+            .position(|part| matches!(part, Extension::Skin { .. }))
+        {
+            if let Some(part) = new_part {
+                self.extensions[index] = part;
+            } else {
+                self.extensions.remove(index);
+            }
+        } else if let Some(part) = new_part {
+            self.extensions.push(part);
+        }
+        Ok(())
     }
 
-    /// Returns all UV coordinate sets.
-    pub fn uv_sets(&self) -> Result<Vec<Vec<[f32; 2]>>, Error> {
-        let layout = self.layout()?;
-        Ok(layout
-            .uv_sets
-            .into_iter()
-            .map(|(start, end)| {
-                self.bytes[start..end]
-                    .chunks_exact(8)
-                    .map(|bytes| {
-                        [
-                            f32::from_le_bytes(bytes[..4].try_into().expect("u coordinate")),
-                            f32::from_le_bytes(bytes[4..8].try_into().expect("v coordinate")),
-                        ]
-                    })
-                    .collect()
-            })
-            .collect())
-    }
-
-    /// Changes one UV coordinate in an existing set.
+    /// Changes one UV coordinate.
     pub fn set_uv(&mut self, set: usize, index: usize, uv: [f32; 2]) -> Result<(), Error> {
-        let layout = self.layout()?;
-        let (start, end) = *layout.uv_sets.get(set).ok_or(Error::MalformedRecord {
+        let coordinates = self.uv_sets.get_mut(set).ok_or(Error::MalformedRecord {
             tag: TAG,
             offset: set,
         })?;
-        let offset = index
-            .checked_mul(8)
-            .and_then(|n| start.checked_add(n))
-            .filter(|&offset| {
-                offset
-                    .checked_add(8)
-                    .is_some_and(|end_offset| end_offset <= end)
-            })
-            .ok_or(Error::MalformedRecord {
-                tag: TAG,
-                offset: index,
-            })?;
-        self.bytes[offset..offset + 4].copy_from_slice(&uv[0].to_le_bytes());
-        self.bytes[offset + 4..offset + 8].copy_from_slice(&uv[1].to_le_bytes());
+        *coordinates.get_mut(index).ok_or(Error::MalformedRecord {
+            tag: TAG,
+            offset: index,
+        })? = uv;
         Ok(())
     }
 
@@ -623,212 +634,144 @@ impl Geoset {
                 size: usize::MAX,
             });
         }
-        let layout = self.layout()?;
-        let mut data = Vec::new();
-        data.extend_from_slice(b"UVAS");
-        data.extend_from_slice(&(sets.len() as u32).to_le_bytes());
-        for set in sets {
-            data.extend_from_slice(b"UVBS");
-            data.extend_from_slice(&(set.len() as u32).to_le_bytes());
-            for uv in set {
-                for value in uv {
-                    data.extend_from_slice(&value.to_le_bytes());
-                }
-            }
-        }
-        self.replace_range(layout.uv_start..self.bytes.len(), &data)
-    }
-
-    fn layout(&self) -> Result<Layout, Error> {
-        let version = self.version;
-        let (_, end) = self.section(4, *b"VRTX", 12)?;
-        let (_, end) = self.section(end, *b"NRMS", 12)?;
-        let (_, end) = self.section(end, *b"PTYP", 4)?;
-        let (_, end) = self.section(end, *b"PCNT", 4)?;
-        let (_, end) = self.section(end, *b"PVTX", 2)?;
-        let (data, end) = self.section(end, *b"GNDX", 1)?;
-        let vertex_groups = (end - data.len(), end);
-        let (data, end) = self.section(end, *b"MTGC", 4)?;
-        let matrix_group_sizes = (end - data.len(), end);
-        let (data, end) = self.section(end, *b"MATS", 4)?;
-        let matrix_indices = (end - data.len(), end);
-        let properties = end;
-        let metadata_size = if version >= 900 { 96 } else { 12 };
-        let extent = end
-            .checked_add(metadata_size)
-            .filter(|&next| next <= self.bytes.len())
-            .ok_or(Error::MalformedRecord {
-                tag: TAG,
-                offset: end,
-            })?;
-        let sequence_count_offset = extent
-            .checked_add(28)
-            .filter(|&next| next + 4 <= self.bytes.len())
-            .ok_or(Error::MalformedRecord {
-                tag: TAG,
-                offset: extent,
-            })?;
-        let count = self.word(sequence_count_offset) as usize;
-        let sequence_start = sequence_count_offset + 4;
-        let mut offset = count
-            .checked_mul(28)
-            .and_then(|n| sequence_start.checked_add(n))
-            .filter(|&next| next <= self.bytes.len())
-            .ok_or(Error::MalformedRecord {
-                tag: TAG,
-                offset: sequence_start,
-            })?;
-        let sequence_extents = (sequence_start, offset);
-        let mut tangents = None;
-        let mut skin_weights = None;
-        let mut skin_bone_indices = None;
-        if version >= 900 {
-            loop {
-                let tag = self
-                    .bytes
-                    .get(offset..offset + 4)
-                    .ok_or(Error::MalformedRecord { tag: TAG, offset })?;
-                if tag == b"UVAS" {
-                    break;
-                }
-                let kind = if tag == b"TANG" {
-                    0
-                } else if tag == b"SKIN" {
-                    1
-                } else {
-                    return Err(Error::MalformedRecord { tag: TAG, offset });
-                };
-                let (_, next) = self.section(
-                    offset,
-                    if kind == 0 { *b"TANG" } else { *b"SKIN" },
-                    if kind == 0 { 16 } else { 1 },
-                )?;
-                let range = (offset + 8, next);
-                if kind == 0 {
-                    if tangents.replace(range).is_some() {
-                        return Err(Error::MalformedRecord { tag: TAG, offset });
-                    }
-                } else if skin_weights.replace(range).is_some() {
-                    return Err(Error::MalformedRecord { tag: TAG, offset });
-                }
-                offset = next;
-                if kind == 1
-                    && version >= 1200
-                    && self.bytes.get(offset..offset + 4) != Some(b"UVAS")
-                {
-                    let end = offset
-                        .checked_add(range.1 - range.0)
-                        .filter(|&end| end <= self.bytes.len())
-                        .ok_or(Error::MalformedRecord { tag: TAG, offset })?;
-                    skin_bone_indices = Some((offset, end));
-                    offset = end;
-                }
-            }
-        }
-        let uv_start = offset;
-        if self.bytes.get(offset..offset + 4) != Some(b"UVAS") {
-            return Err(Error::MalformedRecord { tag: TAG, offset });
-        }
-        if self.bytes.get(offset + 4..offset + 8).is_none() {
-            return Err(Error::MalformedRecord { tag: TAG, offset });
-        }
-        let uv_count = self.word(offset + 4) as usize;
-        offset += 8;
-        let mut uv_sets = Vec::new();
-        for _ in 0..uv_count {
-            let (data, end) = self.section(offset, *b"UVBS", 8)?;
-            uv_sets.push((end - data.len(), end));
-            offset = end;
-        }
-        if offset != self.bytes.len() {
-            return Err(Error::MalformedRecord { tag: TAG, offset });
-        }
-        Ok(Layout {
-            vertex_groups,
-            matrix_group_sizes,
-            matrix_indices,
-            properties,
-            extent,
-            sequence_extents,
-            uv_start,
-            tangents,
-            skin_weights,
-            skin_bone_indices,
-            uv_sets,
-        })
-    }
-
-    fn word(&self, offset: usize) -> u32 {
-        u32::from_le_bytes(
-            self.bytes[offset..offset + 4]
-                .try_into()
-                .expect("checked field"),
-        )
-    }
-
-    fn words(&self, (start, end): (usize, usize)) -> Vec<u32> {
-        self.bytes[start..end]
-            .chunks_exact(4)
-            .map(|bytes| u32::from_le_bytes(bytes.try_into().expect("matrix word")))
-            .collect()
-    }
-
-    fn extent_at(&self, offset: usize) -> GeosetExtent {
-        GeosetExtent {
-            bounds_radius: f32::from_bits(self.word(offset)),
-            minimum: std::array::from_fn(|i| f32::from_bits(self.word(offset + 4 + i * 4))),
-            maximum: std::array::from_fn(|i| f32::from_bits(self.word(offset + 16 + i * 4))),
-        }
-    }
-
-    fn set_extent_at(&mut self, offset: usize, extent: GeosetExtent) {
-        self.bytes[offset..offset + 4].copy_from_slice(&extent.bounds_radius.to_le_bytes());
-        for (i, value) in extent.minimum.into_iter().chain(extent.maximum).enumerate() {
-            self.bytes[offset + 4 + i * 4..offset + 8 + i * 4]
-                .copy_from_slice(&value.to_le_bytes());
-        }
-    }
-
-    fn replace_range(&mut self, range: std::ops::Range<usize>, data: &[u8]) -> Result<(), Error> {
-        let size = self
-            .bytes
-            .len()
-            .checked_sub(range.len())
-            .and_then(|n| n.checked_add(data.len()))
-            .filter(|&n| n <= u32::MAX as usize)
-            .ok_or(Error::ChunkTooLarge {
-                tag: TAG,
-                size: usize::MAX,
-            })?;
-        self.bytes.splice(range, data.iter().copied());
-        self.bytes[..4].copy_from_slice(&(size as u32).to_le_bytes());
+        self.uv_sets = sets.to_vec();
         Ok(())
     }
+}
 
-    fn section(&self, offset: usize, tag: [u8; 4], stride: usize) -> Result<(&[u8], usize), Error> {
-        let header = self
-            .bytes
-            .get(offset..offset.saturating_add(8))
-            .ok_or(Error::MalformedRecord { tag: TAG, offset })?;
-        if header[..4] != tag {
+struct Cursor<'a> {
+    bytes: &'a [u8],
+    offset: usize,
+}
+
+impl<'a> Cursor<'a> {
+    fn new(bytes: &'a [u8]) -> Self {
+        Self { bytes, offset: 0 }
+    }
+
+    fn read_exact(&mut self, size: usize) -> Result<&'a [u8], Error> {
+        let start = self.offset;
+        let end = start.checked_add(size).ok_or(Error::MalformedRecord {
+            tag: TAG,
+            offset: start,
+        })?;
+        let data = self.bytes.get(start..end).ok_or(Error::MalformedRecord {
+            tag: TAG,
+            offset: start,
+        })?;
+        self.offset = end;
+        Ok(data)
+    }
+
+    fn read_u32(&mut self) -> Result<u32, Error> {
+        Ok(u32::from_le_bytes(
+            self.read_exact(4)?.try_into().expect("four-byte word"),
+        ))
+    }
+
+    fn peek_tag(&self) -> Result<[u8; 4], Error> {
+        self.bytes
+            .get(self.offset..self.offset.saturating_add(4))
+            .ok_or(Error::MalformedRecord {
+                tag: TAG,
+                offset: self.offset,
+            })?
+            .try_into()
+            .map_err(|_| Error::MalformedRecord {
+                tag: TAG,
+                offset: self.offset,
+            })
+    }
+
+    fn section(&mut self, tag: [u8; 4], stride: usize) -> Result<&'a [u8], Error> {
+        let offset = self.offset;
+        if self.read_exact(4)? != tag {
             return Err(Error::MalformedRecord { tag: TAG, offset });
         }
-        let count = u32::from_le_bytes(header[4..8].try_into().expect("four-byte count"));
-        let start = offset + 8;
-        let end = (count as usize)
+        let count = self.read_u32()? as usize;
+        let size = count
             .checked_mul(stride)
-            .and_then(|size| start.checked_add(size))
             .ok_or(Error::MalformedRecord { tag: TAG, offset })?;
-        let data = self
-            .bytes
-            .get(start..end)
-            .ok_or(Error::MalformedRecord { tag: TAG, offset })?;
-        Ok((data, end))
+        self.read_exact(size)
+    }
+
+    fn read_extent(&mut self) -> Result<GeosetExtent, Error> {
+        let mut float = || self.read_u32().map(f32::from_bits);
+        Ok(GeosetExtent {
+            bounds_radius: float()?,
+            minimum: [float()?, float()?, float()?],
+            maximum: [float()?, float()?, float()?],
+        })
+    }
+}
+
+fn decode_words(bytes: &[u8]) -> Vec<u32> {
+    bytes
+        .chunks_exact(4)
+        .map(|bytes| u32::from_le_bytes(bytes.try_into().expect("four-byte word")))
+        .collect()
+}
+
+fn decode_vectors<const N: usize>(bytes: &[u8]) -> Vec<[f32; N]> {
+    bytes
+        .chunks_exact(N * 4)
+        .map(|vector| {
+            std::array::from_fn(|i| {
+                f32::from_le_bytes(
+                    vector[i * 4..i * 4 + 4]
+                        .try_into()
+                        .expect("four-byte float"),
+                )
+            })
+        })
+        .collect()
+}
+
+fn write_count(bytes: &mut Vec<u8>, count: usize) -> Result<(), Error> {
+    let count = u32::try_from(count).map_err(|_| Error::ChunkTooLarge {
+        tag: TAG,
+        size: count,
+    })?;
+    bytes.extend_from_slice(&count.to_le_bytes());
+    Ok(())
+}
+
+fn write_section_header(bytes: &mut Vec<u8>, tag: [u8; 4], count: usize) -> Result<(), Error> {
+    bytes.extend_from_slice(&tag);
+    write_count(bytes, count)
+}
+
+fn write_words(bytes: &mut Vec<u8>, tag: [u8; 4], words: &[u32]) -> Result<(), Error> {
+    write_section_header(bytes, tag, words.len())?;
+    for word in words {
+        bytes.extend_from_slice(&word.to_le_bytes());
+    }
+    Ok(())
+}
+
+fn write_vectors<const N: usize>(
+    bytes: &mut Vec<u8>,
+    tag: [u8; 4],
+    vectors: &[[f32; N]],
+) -> Result<(), Error> {
+    write_section_header(bytes, tag, vectors.len())?;
+    for vector in vectors {
+        for value in vector {
+            bytes.extend_from_slice(&value.to_le_bytes());
+        }
+    }
+    Ok(())
+}
+
+fn write_extent(bytes: &mut Vec<u8>, extent: GeosetExtent) {
+    bytes.extend_from_slice(&extent.bounds_radius.to_le_bytes());
+    for value in extent.minimum.into_iter().chain(extent.maximum) {
+        bytes.extend_from_slice(&value.to_le_bytes());
     }
 }
 
 impl Model {
-    /// Decodes size-bounded geoset records from all `GEOS` chunks.
+    /// Decodes geosets from every `GEOS` chunk in file order.
     pub fn geosets(&self) -> Result<Vec<Geoset>, Error> {
         let version = self.version().unwrap_or(800);
         let mut geosets = Vec::new();
@@ -855,26 +798,24 @@ impl Model {
         Ok(geosets)
     }
 
-    /// Replaces all geoset records in the first `GEOS` chunk.
+    /// Replaces geosets after checking their version and encoding their sections.
     pub fn set_geosets(&mut self, geosets: &[Geoset]) -> Result<(), Error> {
         let expected = self.version().unwrap_or(800);
-        if let Some(geoset) = geosets.iter().find(|geoset| geoset.version != expected) {
-            return Err(Error::VersionMismatch {
-                expected,
-                actual: geoset.version,
-            });
-        }
-        let size = geosets.iter().try_fold(0usize, |sum, geoset| {
-            sum.checked_add(geoset.bytes.len())
-                .filter(|&size| size <= u32::MAX as usize)
-                .ok_or(Error::ChunkTooLarge {
-                    tag: TAG,
-                    size: usize::MAX,
-                })
-        })?;
-        let mut data = Vec::with_capacity(size);
+        let mut data = Vec::new();
         for geoset in geosets {
-            data.extend_from_slice(geoset.as_bytes());
+            if geoset.version != expected {
+                return Err(Error::VersionMismatch {
+                    expected,
+                    actual: geoset.version,
+                });
+            }
+            data.extend_from_slice(&geoset.to_bytes()?);
+            if data.len() > u32::MAX as usize {
+                return Err(Error::ChunkTooLarge {
+                    tag: TAG,
+                    size: data.len(),
+                });
+            }
         }
         self.replace_chunks(TAG, data);
         Ok(())

@@ -28,25 +28,7 @@ impl Model {
                 layer.tracks()?;
             }
         }
-        for geoset in self.geosets()? {
-            geoset.vertices()?;
-            geoset.normals()?;
-            geoset.face_indices()?;
-            geoset.vertex_groups()?;
-            geoset.matrix_group_sizes()?;
-            geoset.matrix_indices()?;
-            geoset.material_id()?;
-            geoset.selection_group()?;
-            geoset.unselectable()?;
-            geoset.level_of_detail()?;
-            geoset.name()?;
-            geoset.extent()?;
-            geoset.sequence_extents()?;
-            geoset.tangents()?;
-            geoset.skin_weights()?;
-            geoset.skin_bone_indices()?;
-            geoset.uv_sets()?;
-        }
+        self.geosets()?;
         for animation in self.geoset_animations()? {
             animation.tracks()?;
         }

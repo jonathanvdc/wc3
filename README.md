@@ -41,3 +41,8 @@ are created or decoded. Their field accessors use that version automatically.
 For example, `model.materials()?` returns materials whose `layers()` and
 `shader()` methods need no version argument. Model setters reject records
 built for a different version.
+
+Geosets hold typed sections rather than a serialized record. Accessors such
+as `vertices()` borrow the decoded data, and `vertices_mut()` supports bulk
+edits. `Geoset::to_bytes()` reconstructs the record, preserving optional
+section order, exact fixed-width names, and packed skin data.
