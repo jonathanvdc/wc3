@@ -23,6 +23,8 @@ mod material;
 pub use material::{Layer, Material};
 mod model_info;
 pub use model_info::ModelInfo;
+mod node;
+pub use node::{Bone, Node};
 mod sequence;
 pub use sequence::Sequence;
 mod simple_chunks;
