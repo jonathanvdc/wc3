@@ -8,10 +8,10 @@ The target range is MDX versions 800 through 1800.
 
 Typed access is available for model information, animation sequences, texture
 references, global sequences, pivot points, basic geoset mesh data, material
-and layer headers, bones, helpers, and node transform tracks. Unknown fields
-and chunks remain available as bytes, so files can be preserved while typed
-coverage grows. Full semantic support across the target version range has not
-yet been verified.
+and layer headers, geoset animations, bones, helpers, node transform tracks,
+and bind-pose matrices. Unknown fields and chunks remain available as bytes,
+so files can be preserved while typed coverage grows. Full semantic support
+across the target version range has not yet been verified.
 
 ## Rust API
 
