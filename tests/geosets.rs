@@ -1,5 +1,5 @@
-use wc3_mdx::{Geoset, GeosetExtent, Model};
 use wc3_mdx::Record;
+use wc3_mdx::{Geoset, GeosetExtent, Model};
 
 fn sample_geoset() -> Geoset {
     let geoset = Geoset::new(1800, &[[1.0, 2.0, 3.0]], &[[0.0, 0.0, 1.0]], &[0, 0, 0]).unwrap();
@@ -16,14 +16,8 @@ fn geoset_mesh_edit_preserves_other_sections() {
     let mut model = Model::new(1800);
     model.set_geosets(&[geoset]).unwrap();
     let decoded = Model::decode(&model.encode().unwrap(), 800).unwrap();
-    assert_eq!(
-        decoded.geosets()[0].vertices(),
-        vec![[4.0, 5.0, 6.0]]
-    );
-    assert_eq!(
-        decoded.geosets()[0].normals(),
-        vec![[0.0, 0.0, 1.0]]
-    );
+    assert_eq!(decoded.geosets()[0].vertices(), vec![[4.0, 5.0, 6.0]]);
+    assert_eq!(decoded.geosets()[0].normals(), vec![[0.0, 0.0, 1.0]]);
 }
 
 #[test]

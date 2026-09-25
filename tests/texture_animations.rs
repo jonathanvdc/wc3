@@ -19,8 +19,5 @@ fn texture_animation_tracks_round_trip() {
     let mut model = Model::new(1100);
     model.set_texture_animations(&[animation]);
     let parsed = Model::decode(&model.encode().unwrap(), 800).unwrap();
-    assert_eq!(
-        parsed.texture_animations()[0].tracks(),
-        vec![track]
-    );
+    assert_eq!(parsed.texture_animations()[0].tracks(), vec![track]);
 }

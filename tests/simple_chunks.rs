@@ -13,4 +13,3 @@ fn global_sequences_and_pivots_round_trip() {
         vec![[1.0, 2.0, 3.0], [-4.0, 5.5, 0.0]]
     );
 }
-
