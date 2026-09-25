@@ -19,7 +19,7 @@ fn texture_animation_tracks_round_trip() {
     model.set_texture_animations(&[animation]).unwrap();
     let parsed = Model::from_bytes(&model.to_bytes().unwrap()).unwrap();
     assert_eq!(
-        parsed.texture_animations().unwrap()[0].tracks().unwrap(),
+        parsed.texture_animations().unwrap()[0].tracks(),
         vec![track]
     );
 }

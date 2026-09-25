@@ -1,21 +1,13 @@
-//! Texture animation records in `TXAN` chunks.
+//! Typed texture animation tracks in `TXAN` chunks.
 
 use crate::{AnimationTrack, Error, Model};
 
 const TAG: [u8; 4] = *b"TXAN";
 
 /// A texture animation containing translation, rotation, and scaling tracks.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct TextureAnimation {
-    bytes: Vec<u8>,
-}
-
-impl Default for TextureAnimation {
-    fn default() -> Self {
-        Self {
-            bytes: 4u32.to_le_bytes().to_vec(),
-        }
-    }
+    tracks: Vec<AnimationTrack>,
 }
 
 impl TextureAnimation {
@@ -24,50 +16,37 @@ impl TextureAnimation {
         Self::default()
     }
 
-    /// Wraps one inclusive-size record.
+    /// Parses one inclusive-size record and its tracks.
     pub fn from_bytes(bytes: &[u8]) -> Result<Self, Error> {
-        if bytes.len() < 4 {
+        let size_bytes = bytes.get(..4).ok_or(Error::MalformedRecord {
+            tag: TAG,
+            offset: 0,
+        })?;
+        if u32::from_le_bytes(size_bytes.try_into().expect("four-byte size")) as usize
+            != bytes.len()
+        {
             return Err(Error::MalformedRecord {
                 tag: TAG,
                 offset: 0,
             });
         }
-        let size = u32::from_le_bytes(bytes[..4].try_into().expect("four-byte size")) as usize;
-        if size != bytes.len() {
-            return Err(Error::MalformedRecord {
-                tag: TAG,
-                offset: 0,
-            });
-        }
-        Ok(Self {
-            bytes: bytes.to_vec(),
-        })
-    }
-
-    /// Returns the complete record.
-    pub fn as_bytes(&self) -> &[u8] {
-        &self.bytes
-    }
-
-    /// Decodes `KTAT`, `KTAR`, and `KTAS` tracks.
-    pub fn tracks(&self) -> Result<Vec<AnimationTrack>, Error> {
         let mut tracks = Vec::new();
         let mut offset = 4;
-        while offset < self.bytes.len() {
-            let (track, consumed) = AnimationTrack::parse(&self.bytes, offset)?;
+        while offset < bytes.len() {
+            let (track, consumed) = AnimationTrack::parse(bytes, offset)?;
             if !is_track_tag(track.tag) {
                 return Err(Error::MalformedRecord { tag: TAG, offset });
             }
             tracks.push(track);
             offset += consumed;
         }
-        Ok(tracks)
+        Ok(Self { tracks })
     }
 
-    /// Replaces tracks and updates the inclusive size.
-    pub fn set_tracks(&mut self, tracks: &[AnimationTrack]) -> Result<(), Error> {
+    /// Serializes the inclusive-size record.
+    pub fn to_bytes(&self) -> Result<Vec<u8>, Error> {
         let mut bytes = vec![0; 4];
-        for track in tracks {
+        for track in &self.tracks {
             if !is_track_tag(track.tag) {
                 return Err(Error::MalformedRecord {
                     tag: TAG,
@@ -76,15 +55,38 @@ impl TextureAnimation {
             }
             bytes.extend_from_slice(&track.to_bytes()?);
         }
-        if bytes.len() > u32::MAX as usize {
-            return Err(Error::ChunkTooLarge {
-                tag: TAG,
-                size: bytes.len(),
-            });
-        }
-        let size = bytes.len() as u32;
+        let size = u32::try_from(bytes.len()).map_err(|_| Error::ChunkTooLarge {
+            tag: TAG,
+            size: bytes.len(),
+        })?;
         bytes[..4].copy_from_slice(&size.to_le_bytes());
-        self.bytes = bytes;
+        Ok(bytes)
+    }
+
+    /// Borrows decoded tracks without reparsing.
+    pub fn tracks(&self) -> &[AnimationTrack] {
+        &self.tracks
+    }
+
+    /// Replaces texture animation tracks.
+    pub fn set_tracks(&mut self, tracks: &[AnimationTrack]) -> Result<(), Error> {
+        let mut size = 4usize;
+        for track in tracks {
+            if !is_track_tag(track.tag) {
+                return Err(Error::MalformedRecord {
+                    tag: TAG,
+                    offset: size,
+                });
+            }
+            size = size
+                .checked_add(track.to_bytes()?.len())
+                .filter(|&size| size <= u32::MAX as usize)
+                .ok_or(Error::ChunkTooLarge {
+                    tag: TAG,
+                    size: usize::MAX,
+                })?;
+        }
+        self.tracks = tracks.to_vec();
         Ok(())
     }
 }
@@ -122,17 +124,15 @@ impl Model {
 
     /// Replaces texture animations in the first `TXAN` chunk.
     pub fn set_texture_animations(&mut self, animations: &[TextureAnimation]) -> Result<(), Error> {
-        let size = animations.iter().try_fold(0usize, |sum, animation| {
-            sum.checked_add(animation.bytes.len())
-                .filter(|&size| size <= u32::MAX as usize)
-                .ok_or(Error::ChunkTooLarge {
-                    tag: TAG,
-                    size: usize::MAX,
-                })
-        })?;
-        let mut data = Vec::with_capacity(size);
+        let mut data = Vec::new();
         for animation in animations {
-            data.extend_from_slice(animation.as_bytes());
+            data.extend_from_slice(&animation.to_bytes()?);
+            if data.len() > u32::MAX as usize {
+                return Err(Error::ChunkTooLarge {
+                    tag: TAG,
+                    size: data.len(),
+                });
+            }
         }
         self.replace_chunks(TAG, data);
         Ok(())

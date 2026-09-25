@@ -57,6 +57,6 @@ fn geoset_animation_color_track_round_trip() {
         }],
     };
     animation.set_tracks(std::slice::from_ref(&track)).unwrap();
-    let parsed = GeosetAnimation::from_bytes(animation.as_bytes()).unwrap();
-    assert_eq!(parsed.tracks().unwrap(), vec![track]);
+    let parsed = GeosetAnimation::from_bytes(&animation.to_bytes().unwrap()).unwrap();
+    assert_eq!(parsed.tracks(), vec![track]);
 }

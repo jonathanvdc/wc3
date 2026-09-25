@@ -30,26 +30,29 @@ impl GeosetAnimationFlags {
     }
 }
 
-/// A geoset animation with optional track bytes retained.
-#[derive(Clone, Debug, Eq, PartialEq)]
+/// A geoset animation with decoded alpha and color tracks.
+#[derive(Clone, Debug, PartialEq)]
 pub struct GeosetAnimation {
-    bytes: Vec<u8>,
+    alpha: f32,
+    raw_flags: u32,
+    color: [f32; 3],
+    geoset_id: u32,
+    tracks: Vec<AnimationTrack>,
 }
 
 impl GeosetAnimation {
     /// Creates a geoset animation with opaque white color and full alpha.
     pub fn new(geoset_id: u32) -> Self {
-        let mut bytes = vec![0; HEADER_SIZE];
-        bytes[..4].copy_from_slice(&(HEADER_SIZE as u32).to_le_bytes());
-        bytes[4..8].copy_from_slice(&1.0f32.to_le_bytes());
-        for offset in [12, 16, 20] {
-            bytes[offset..offset + 4].copy_from_slice(&1.0f32.to_le_bytes());
+        Self {
+            alpha: 1.0,
+            raw_flags: 0,
+            color: [1.0; 3],
+            geoset_id,
+            tracks: Vec::new(),
         }
-        bytes[24..28].copy_from_slice(&geoset_id.to_le_bytes());
-        Self { bytes }
     }
 
-    /// Wraps one inclusive-size record.
+    /// Parses one inclusive-size geoset animation record.
     pub fn from_bytes(bytes: &[u8]) -> Result<Self, Error> {
         if bytes.len() < HEADER_SIZE {
             return Err(Error::MalformedRecord {
@@ -57,99 +60,48 @@ impl GeosetAnimation {
                 offset: 0,
             });
         }
-        let size = u32::from_le_bytes(bytes[..4].try_into().expect("four-byte size")) as usize;
-        if size != bytes.len() {
+        let word = |offset: usize| {
+            u32::from_le_bytes(bytes[offset..offset + 4].try_into().expect("header field"))
+        };
+        if word(0) as usize != bytes.len() {
             return Err(Error::MalformedRecord {
                 tag: TAG,
                 offset: 0,
             });
         }
-        Ok(Self {
-            bytes: bytes.to_vec(),
-        })
-    }
-
-    /// Returns the complete record, including any animation tracks.
-    pub fn as_bytes(&self) -> &[u8] {
-        &self.bytes
-    }
-
-    /// Returns base alpha.
-    pub fn alpha(&self) -> f32 {
-        f32::from_bits(self.u32_at(4))
-    }
-
-    /// Sets base alpha.
-    pub fn set_alpha(&mut self, alpha: f32) {
-        self.set_u32_at(4, alpha.to_bits());
-    }
-
-    /// Returns decoded animation flags.
-    pub fn flags(&self) -> GeosetAnimationFlags {
-        GeosetAnimationFlags::from_bits(self.raw_flags())
-    }
-
-    /// Returns exact raw animation flag bits.
-    pub fn raw_flags(&self) -> u32 {
-        self.u32_at(8)
-    }
-
-    /// Sets decoded animation flags.
-    pub fn set_flags(&mut self, flags: GeosetAnimationFlags) {
-        self.set_raw_flags(flags.bits());
-    }
-
-    /// Sets exact raw animation flag bits.
-    pub fn set_raw_flags(&mut self, flags: u32) {
-        self.set_u32_at(8, flags);
-    }
-
-    /// Returns the RGB base color.
-    pub fn color(&self) -> [f32; 3] {
-        std::array::from_fn(|index| f32::from_bits(self.u32_at(12 + index * 4)))
-    }
-
-    /// Sets the RGB base color.
-    pub fn set_color(&mut self, color: [f32; 3]) {
-        for (index, value) in color.into_iter().enumerate() {
-            self.set_u32_at(12 + index * 4, value.to_bits());
-        }
-    }
-
-    /// Returns the referenced geoset index.
-    pub fn geoset_id(&self) -> u32 {
-        self.u32_at(24)
-    }
-
-    /// Sets the referenced geoset index.
-    pub fn set_geoset_id(&mut self, id: u32) {
-        self.set_u32_at(24, id);
-    }
-
-    /// Returns optional `KGAO` and `KGAC` track data without interpretation.
-    pub fn track_bytes(&self) -> &[u8] {
-        &self.bytes[HEADER_SIZE..]
-    }
-
-    /// Decodes alpha and color animation tracks.
-    pub fn tracks(&self) -> Result<Vec<AnimationTrack>, Error> {
-        let mut result = Vec::new();
+        let mut tracks = Vec::new();
         let mut offset = HEADER_SIZE;
-        while offset < self.bytes.len() {
-            let (track, consumed) = AnimationTrack::parse(&self.bytes, offset)?;
+        while offset < bytes.len() {
+            let (track, consumed) = AnimationTrack::parse(bytes, offset)?;
             if !matches!(&track.tag, b"KGAO" | b"KGAC") {
                 return Err(Error::MalformedRecord { tag: TAG, offset });
             }
-            result.push(track);
+            tracks.push(track);
             offset += consumed;
         }
-        Ok(result)
+        Ok(Self {
+            alpha: f32::from_bits(word(4)),
+            raw_flags: word(8),
+            color: [
+                f32::from_bits(word(12)),
+                f32::from_bits(word(16)),
+                f32::from_bits(word(20)),
+            ],
+            geoset_id: word(24),
+            tracks,
+        })
     }
 
-    /// Replaces alpha and color animation tracks.
-    pub fn set_tracks(&mut self, tracks: &[AnimationTrack]) -> Result<(), Error> {
-        let mut bytes = self.bytes[..HEADER_SIZE].to_vec();
-        for track in tracks {
+    /// Serializes the record and its tracks.
+    pub fn to_bytes(&self) -> Result<Vec<u8>, Error> {
+        let mut bytes = vec![0; HEADER_SIZE];
+        bytes[4..8].copy_from_slice(&self.alpha.to_le_bytes());
+        bytes[8..12].copy_from_slice(&self.raw_flags.to_le_bytes());
+        for (index, value) in self.color.into_iter().enumerate() {
+            bytes[12 + index * 4..16 + index * 4].copy_from_slice(&value.to_le_bytes());
+        }
+        bytes[24..28].copy_from_slice(&self.geoset_id.to_le_bytes());
+        for track in &self.tracks {
             if !matches!(&track.tag, b"KGAO" | b"KGAC") {
                 return Err(Error::MalformedRecord {
                     tag: TAG,
@@ -158,28 +110,78 @@ impl GeosetAnimation {
             }
             bytes.extend_from_slice(&track.to_bytes()?);
         }
-        if bytes.len() > u32::MAX as usize {
-            return Err(Error::ChunkTooLarge {
-                tag: TAG,
-                size: bytes.len(),
-            });
-        }
-        let size = bytes.len() as u32;
+        let size = u32::try_from(bytes.len()).map_err(|_| Error::ChunkTooLarge {
+            tag: TAG,
+            size: bytes.len(),
+        })?;
         bytes[..4].copy_from_slice(&size.to_le_bytes());
-        self.bytes = bytes;
+        Ok(bytes)
+    }
+
+    /// Returns the base alpha.
+    pub fn alpha(&self) -> f32 {
+        self.alpha
+    }
+    /// Changes the base alpha.
+    pub fn set_alpha(&mut self, alpha: f32) {
+        self.alpha = alpha;
+    }
+    /// Returns decoded rendering flags.
+    pub fn flags(&self) -> GeosetAnimationFlags {
+        GeosetAnimationFlags::from_bits(self.raw_flags)
+    }
+    /// Returns exact rendering bits.
+    pub fn raw_flags(&self) -> u32 {
+        self.raw_flags
+    }
+    /// Changes decoded rendering bits.
+    pub fn set_flags(&mut self, flags: GeosetAnimationFlags) {
+        self.raw_flags = flags.bits();
+    }
+    /// Changes exact rendering bits.
+    pub fn set_raw_flags(&mut self, flags: u32) {
+        self.raw_flags = flags;
+    }
+    /// Returns base RGB color.
+    pub fn color(&self) -> [f32; 3] {
+        self.color
+    }
+    /// Changes base RGB color.
+    pub fn set_color(&mut self, color: [f32; 3]) {
+        self.color = color;
+    }
+    /// Returns the referenced geoset index.
+    pub fn geoset_id(&self) -> u32 {
+        self.geoset_id
+    }
+    /// Changes the referenced geoset index.
+    pub fn set_geoset_id(&mut self, id: u32) {
+        self.geoset_id = id;
+    }
+    /// Borrows alpha and color tracks without reparsing.
+    pub fn tracks(&self) -> &[AnimationTrack] {
+        &self.tracks
+    }
+    /// Replaces alpha and color tracks.
+    pub fn set_tracks(&mut self, tracks: &[AnimationTrack]) -> Result<(), Error> {
+        let mut size = HEADER_SIZE;
+        for track in tracks {
+            if !matches!(&track.tag, b"KGAO" | b"KGAC") {
+                return Err(Error::MalformedRecord {
+                    tag: TAG,
+                    offset: size,
+                });
+            }
+            size = size
+                .checked_add(track.to_bytes()?.len())
+                .filter(|&size| size <= u32::MAX as usize)
+                .ok_or(Error::ChunkTooLarge {
+                    tag: TAG,
+                    size: usize::MAX,
+                })?;
+        }
+        self.tracks = tracks.to_vec();
         Ok(())
-    }
-
-    fn u32_at(&self, offset: usize) -> u32 {
-        u32::from_le_bytes(
-            self.bytes[offset..offset + 4]
-                .try_into()
-                .expect("four-byte field"),
-        )
-    }
-
-    fn set_u32_at(&mut self, offset: usize, value: u32) {
-        self.bytes[offset..offset + 4].copy_from_slice(&value.to_le_bytes());
     }
 }
 
@@ -210,19 +212,17 @@ impl Model {
         Ok(animations)
     }
 
-    /// Replaces all geoset animations in the first `GEOA` chunk.
+    /// Replaces geoset animations in the first `GEOA` chunk.
     pub fn set_geoset_animations(&mut self, animations: &[GeosetAnimation]) -> Result<(), Error> {
-        let size = animations.iter().try_fold(0usize, |sum, animation| {
-            sum.checked_add(animation.bytes.len())
-                .filter(|&size| size <= u32::MAX as usize)
-                .ok_or(Error::ChunkTooLarge {
-                    tag: TAG,
-                    size: usize::MAX,
-                })
-        })?;
-        let mut data = Vec::with_capacity(size);
+        let mut data = Vec::new();
         for animation in animations {
-            data.extend_from_slice(animation.as_bytes());
+            data.extend_from_slice(&animation.to_bytes()?);
+            if data.len() > u32::MAX as usize {
+                return Err(Error::ChunkTooLarge {
+                    tag: TAG,
+                    size: data.len(),
+                });
+            }
         }
         self.replace_chunks(TAG, data);
         Ok(())

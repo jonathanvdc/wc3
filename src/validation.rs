@@ -24,9 +24,7 @@ impl Model {
         self.face_fx()?;
         self.materials()?;
         self.geosets()?;
-        for animation in self.geoset_animations()? {
-            animation.tracks()?;
-        }
+        self.geoset_animations()?;
         for bone in self.bones()? {
             bone.node().tracks();
         }
@@ -66,9 +64,7 @@ impl Model {
             light.node().tracks();
             light.tracks()?;
         }
-        for animation in self.texture_animations()? {
-            animation.tracks()?;
-        }
+        self.texture_animations()?;
         Ok(())
     }
 }
