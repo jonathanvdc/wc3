@@ -25,29 +25,6 @@ fn preserves_repeated_chunks_and_order() {
 }
 
 #[test]
-fn typed_setter_preserves_repeated_chunk_boundaries() {
-    let mut model = Model::new(800);
-    model.push(ModelChunk::from_raw(RawChunk::new(*b"GLBS", 100u32.to_le_bytes().to_vec()), 800));
-    model.push(ModelChunk::from_raw(RawChunk::new(*b"TEST", vec![9]), 800));
-    model.push(ModelChunk::from_raw(RawChunk::new(*b"GLBS", 200u32.to_le_bytes().to_vec()), 800));
-    let original = model.encode().unwrap();
-    let mut durations = model.global_sequences().unwrap();
-    model.set_global_sequences(&durations).unwrap();
-    assert_eq!(model.encode().unwrap(), original);
-    durations[1] = 300;
-    model.set_global_sequences(&durations).unwrap();
-    assert_eq!(
-        model.chunks()[1].to_raw().unwrap().data,
-        100u32.to_le_bytes()
-    );
-    assert_eq!(model.chunks()[2].tag(), *b"TEST");
-    assert_eq!(
-        model.chunks()[3].to_raw().unwrap().data,
-        300u32.to_le_bytes()
-    );
-}
-
-#[test]
 fn local_files_round_trip_when_available() {
     let Ok(directory) = std::env::var("WC3_MDX_FIXTURES") else {
         return;

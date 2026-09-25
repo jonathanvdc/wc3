@@ -90,18 +90,6 @@ impl Model {
         }
         if positions.is_empty() {
             self.push(ModelChunk::from_raw(RawChunk::new(tag, data), version));
-        } else if lengths
-            .iter()
-            .try_fold(0usize, |sum, length| sum.checked_add(*length))
-            == Some(data.len())
-        {
-            let mut offset = 0;
-            for (index, length) in positions.into_iter().zip(lengths) {
-                let end = offset + length;
-                self.chunks_mut()[index] =
-                    ModelChunk::from_raw(RawChunk::new(tag, data[offset..end].to_vec()), version);
-                offset = end;
-            }
         } else {
             self.chunks_mut()[positions[0]] =
                 ModelChunk::from_raw(RawChunk::new(tag, data), version);
