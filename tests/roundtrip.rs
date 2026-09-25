@@ -125,6 +125,56 @@ fn typed_accessors_preserve_local_files_when_available() {
                 let points = model.pivot_points().unwrap();
                 model.set_pivot_points(&points).unwrap();
             }
+            if model
+                .chunks()
+                .iter()
+                .filter(|chunk| chunk.tag == *b"EVTS")
+                .count()
+                == 1
+            {
+                let records = model.event_objects().unwrap();
+                model.set_event_objects(&records).unwrap();
+            }
+            if model
+                .chunks()
+                .iter()
+                .filter(|chunk| chunk.tag == *b"CLID")
+                .count()
+                == 1
+            {
+                let records = model.collision_shapes().unwrap();
+                model.set_collision_shapes(&records).unwrap();
+            }
+            if model
+                .chunks()
+                .iter()
+                .filter(|chunk| chunk.tag == *b"ATCH")
+                .count()
+                == 1
+            {
+                let records = model.attachments().unwrap();
+                model.set_attachments(&records).unwrap();
+            }
+            if model
+                .chunks()
+                .iter()
+                .filter(|chunk| chunk.tag == *b"FAFX")
+                .count()
+                == 1
+            {
+                let records = model.face_fx().unwrap();
+                model.set_face_fx(&records).unwrap();
+            }
+            if model
+                .chunks()
+                .iter()
+                .filter(|chunk| chunk.tag == *b"GEOA")
+                .count()
+                == 1
+            {
+                let records = model.geoset_animations().unwrap();
+                model.set_geoset_animations(&records).unwrap();
+            }
             assert_eq!(model.to_bytes().unwrap(), bytes, "{}", path.display());
         }
     }
