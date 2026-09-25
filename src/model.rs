@@ -105,7 +105,6 @@ impl Model {
                 ),
             );
         }
-        self.redecode_all();
     }
 
     /// Returns the ordered list of chunks.
@@ -132,32 +131,11 @@ impl Model {
     pub fn push(&mut self, chunk: RawChunk) {
         let version = self.version();
         self.chunks.push(ModelChunk::from_raw(chunk, version));
-        if self.version() != version {
-            self.redecode_all();
-        }
     }
 
     /// Appends an already decoded chunk.
     pub fn push_chunk(&mut self, chunk: ModelChunk) {
-        let version = self.version();
         self.chunks.push(chunk);
-        if self.version() != version {
-            self.redecode_all();
-        }
-    }
-
-    pub(crate) fn redecode_all(&mut self) {
-        let version = self.version();
-        self.chunks = self
-            .chunks
-            .drain(..)
-            .map(|chunk| {
-                let raw = chunk
-                    .to_raw()
-                    .expect("cannot refresh an unencodable typed chunk");
-                ModelChunk::from_raw(raw, version)
-            })
-            .collect();
     }
 }
 
