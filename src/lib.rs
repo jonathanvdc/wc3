@@ -59,6 +59,7 @@ mod texture;
 pub use texture::{Texture, TextureFlags};
 mod texture_animation;
 pub use texture_animation::TextureAnimation;
+mod validation;
 
 /// The four bytes at the start of an MDX file.
 pub const MAGIC: [u8; 4] = *b"MDLX";
