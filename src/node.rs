@@ -9,7 +9,6 @@ use std::borrow::Cow;
 use crate::utils::field;
 use crate::{AnimationTrack, Error, Model};
 
-pub(crate) const HEADER_SIZE: usize = 96;
 const NAME_SIZE: usize = 80;
 
 /// Node behavior and object-kind bits. Unrecognized bits survive conversion.
@@ -139,24 +138,15 @@ impl Node {
     pub fn tracks(&self) -> &[AnimationTrack] {
         &self.tracks
     }
-    /// Replaces transform tracks after validating their tags and size.
+    /// Replaces transform tracks after checking their tags.
     pub fn set_tracks(&mut self, tracks: &[AnimationTrack]) -> Result<(), Error> {
-        let mut size = HEADER_SIZE;
         for track in tracks {
             if !matches!(&track.tag, b"KGTR" | b"KGRT" | b"KGSC") {
                 return Err(Error::MalformedRecord {
                     tag: Node::TAG,
-                    offset: size,
+                    offset: 0,
                 });
             }
-            let bytes = track.encode()?;
-            size = size
-                .checked_add(bytes.len())
-                .filter(|&size| size <= u32::MAX as usize)
-                .ok_or(Error::ChunkTooLarge {
-                    tag: Node::TAG,
-                    size: usize::MAX,
-                })?;
         }
         self.tracks = tracks.to_vec();
         Ok(())
@@ -259,7 +249,7 @@ impl Record for Node {
         bytes.write(self.parent_id);
         bytes.write(self.raw_flags);
         for track in &self.tracks {
-            track.encode_to(bytes).expect("validated node track");
+            track.encode_to(bytes)?;
         }
         bytes.finish_sized(marker, Self::TAG)?;
         Ok(())

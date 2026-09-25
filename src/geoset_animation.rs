@@ -6,8 +6,6 @@ use crate::Record;
 use crate::{AnimationTrack, Error, Model};
 use crate::{Cursor, GeosetAnimationsChunk, ModelChunk};
 
-pub(crate) const HEADER_SIZE: usize = 28;
-
 /// Geoset animation rendering flags, retaining unknown bits.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct GeosetAnimationFlags(u32);
@@ -101,21 +99,13 @@ impl GeosetAnimation {
     }
     /// Replaces alpha and color tracks.
     pub fn set_tracks(&mut self, tracks: &[AnimationTrack]) -> Result<(), Error> {
-        let mut size = HEADER_SIZE;
         for track in tracks {
             if !matches!(&track.tag, b"KGAO" | b"KGAC") {
                 return Err(Error::MalformedRecord {
                     tag: GeosetAnimation::TAG,
-                    offset: size,
+                    offset: 0,
                 });
             }
-            size = size
-                .checked_add(track.encode()?.len())
-                .filter(|&size| size <= u32::MAX as usize)
-                .ok_or(Error::ChunkTooLarge {
-                    tag: GeosetAnimation::TAG,
-                    size: usize::MAX,
-                })?;
         }
         self.tracks = tracks.to_vec();
         Ok(())

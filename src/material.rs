@@ -439,7 +439,6 @@ impl Layer {
                         offset: 0,
                     });
                 }
-                track.encode()?;
             }
         }
         if let LayerExtensions::V1100 { texture_slots, .. } = &mut self.extensions {
@@ -460,7 +459,6 @@ impl Layer {
                     offset: 0,
                 });
             }
-            track.encode()?;
         }
         self.tracks = tracks.to_vec();
         Ok(())

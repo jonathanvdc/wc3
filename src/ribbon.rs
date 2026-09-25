@@ -34,14 +34,12 @@ pub struct RibbonEmitter {
 
 impl RibbonEmitter {
     /// Creates a ribbon emitter with zeroed fixed properties.
-    pub fn new(node: Node) -> Result<Self, Error> {
-        let emitter = Self {
+    pub fn new(node: Node) -> Self {
+        Self {
             node,
             fields: RibbonFields::default(),
             tracks: Vec::new(),
-        };
-        emitter.encode()?;
-        Ok(emitter)
+        }
     }
 
     /// Borrows the embedded node.
@@ -78,7 +76,6 @@ impl RibbonEmitter {
                     offset: 0,
                 });
             }
-            track.encode()?;
         }
         self.tracks = tracks.to_vec();
         Ok(())

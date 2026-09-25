@@ -18,14 +18,12 @@ pub struct EventObject {
 
 impl EventObject {
     /// Creates an event object from a node, global sequence ID, and frame times.
-    pub fn new(node: Node, global_sequence_id: u32, frames: &[u32]) -> Result<Self, Error> {
-        let event = Self {
+    pub fn new(node: Node, global_sequence_id: u32, frames: &[u32]) -> Self {
+        Self {
             node,
             global_sequence_id,
             frames: frames.to_vec(),
-        };
-        event.encode()?;
-        Ok(event)
+        }
     }
 
     /// Borrows its shared node.
@@ -54,12 +52,8 @@ impl EventObject {
     }
 
     /// Replaces event frame times.
-    pub fn set_frames(&mut self, frames: &[u32]) -> Result<(), Error> {
-        let mut replacement = self.clone();
-        replacement.frames = frames.to_vec();
-        replacement.encode()?;
-        self.frames = replacement.frames;
-        Ok(())
+    pub fn set_frames(&mut self, frames: &[u32]) {
+        self.frames = frames.to_vec();
     }
 }
 

@@ -94,14 +94,12 @@ pub struct ParticleEmitter2 {
 
 impl ParticleEmitter2 {
     /// Creates an emitter with zeroed fixed fields.
-    pub fn new(node: Node) -> Result<Self, Error> {
-        let emitter = Self {
+    pub fn new(node: Node) -> Self {
+        Self {
             node,
             fields: Particle2Fields::default(),
             tracks: Vec::new(),
-        };
-        emitter.encode()?;
-        Ok(emitter)
+        }
     }
 
     /// Borrows the embedded node.
@@ -143,7 +141,6 @@ impl ParticleEmitter2 {
                     offset: 0,
                 });
             }
-            track.encode()?;
         }
         self.tracks = tracks.to_vec();
         Ok(())

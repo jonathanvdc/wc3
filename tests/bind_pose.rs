@@ -6,7 +6,7 @@ fn bind_pose_matrices_round_trip() {
     let matrix = [
         1.0f32, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0,
     ];
-    let mut pose = BindPose::new(&[matrix]).unwrap();
+    let mut pose = BindPose::new(&[matrix]);
     assert_eq!(pose.matrix(0), Some(matrix));
     let changed = [2.0; 12];
     assert!(pose.set_matrix(0, changed));

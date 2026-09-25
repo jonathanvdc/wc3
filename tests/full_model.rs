@@ -45,9 +45,11 @@ fn full_model(version: u32) -> Model {
         .unwrap();
     model.set_pivot_points(&[[0.0, 0.0, 0.0]; 3]).unwrap();
     model
-        .set_event_objects(&[
-            EventObject::new(Node::new("Event", 3).unwrap(), u32::MAX, &[500]).unwrap(),
-        ])
+        .set_event_objects(&[EventObject::new(
+            Node::new("Event", 3).unwrap(),
+            u32::MAX,
+            &[500],
+        )])
         .unwrap();
     model
         .set_collision_shapes(&[CollisionShape::new_box(
@@ -63,12 +65,10 @@ fn full_model(version: u32) -> Model {
         .unwrap()])
         .unwrap();
     model
-        .set_particle_emitters2(
-            &[ParticleEmitter2::new(Node::new("Emitter2", 6).unwrap()).unwrap()],
-        )
+        .set_particle_emitters2(&[ParticleEmitter2::new(Node::new("Emitter2", 6).unwrap())])
         .unwrap();
     model
-        .set_ribbon_emitters(&[RibbonEmitter::new(Node::new("Ribbon", 7).unwrap()).unwrap()])
+        .set_ribbon_emitters(&[RibbonEmitter::new(Node::new("Ribbon", 7).unwrap())])
         .unwrap();
     model
         .set_cameras(&[Camera::new_for_version("Camera", version).unwrap()])
@@ -84,7 +84,7 @@ fn full_model(version: u32) -> Model {
         model
             .set_face_fx(&[FaceFx::new("Face", "Textures\\Face.blp").unwrap()])
             .unwrap();
-        model.set_bind_pose(&BindPose::new(&[[0.0; 12]]).unwrap());
+        model.set_bind_pose(&BindPose::new(&[[0.0; 12]]));
         model
             .set_popcorn_emitters(&[PopcornEmitter::new(
                 Node::new("Popcorn", 9).unwrap(),

@@ -133,7 +133,6 @@ impl ParticleEmitter {
                     offset: 0,
                 });
             }
-            track.encode()?;
         }
         self.tracks = tracks.to_vec();
         Ok(())

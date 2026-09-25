@@ -3,7 +3,7 @@ use wc3_mdx::{Model, Node, Particle2Frames, ParticleEmitter2};
 
 #[test]
 fn particle_emitter2_fields_round_trip() {
-    let mut emitter = ParticleEmitter2::new(Node::new("Flame", 1).unwrap()).unwrap();
+    let mut emitter = ParticleEmitter2::new(Node::new("Flame", 1).unwrap());
     let mut fields = emitter.fields();
     fields.speed = 5.0;
     fields.emission_rate = 20.0;

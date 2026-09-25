@@ -9,7 +9,6 @@ use std::borrow::Cow;
 use crate::utils::field;
 use crate::{AnimationTrack, Error, Model};
 
-pub(crate) const HEADER_SIZE: usize = 120;
 const NAME_SIZE: usize = 80;
 const MAX_RECORD_SIZE: usize = 0x00ff_ffff;
 
@@ -114,21 +113,13 @@ impl Camera {
     }
     /// Replaces camera tracks.
     pub fn set_tracks(&mut self, tracks: &[AnimationTrack]) -> Result<(), Error> {
-        let mut size = HEADER_SIZE;
         for track in tracks {
             if !is_track(track.tag) {
                 return Err(Error::MalformedRecord {
                     tag: Camera::TAG,
-                    offset: size,
+                    offset: 0,
                 });
             }
-            size = size
-                .checked_add(track.encode()?.len())
-                .filter(|&size| size <= MAX_RECORD_SIZE)
-                .ok_or(Error::ChunkTooLarge {
-                    tag: Camera::TAG,
-                    size: usize::MAX,
-                })?;
         }
         self.tracks = tracks.to_vec();
         Ok(())

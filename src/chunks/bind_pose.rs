@@ -16,12 +16,10 @@ pub struct BindPose {
 
 impl BindPose {
     /// Creates a bind pose from 12-float matrices.
-    pub fn new(matrices: &[[f32; 12]]) -> Result<Self, Error> {
-        let pose = Self {
+    pub fn new(matrices: &[[f32; 12]]) -> Self {
+        Self {
             matrices: matrices.to_vec(),
-        };
-        pose.encode()?;
-        Ok(pose)
+        }
     }
 
     /// Returns the number of matrices.
@@ -121,10 +119,6 @@ impl Record for BindPose {
     }
 
     fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), Error> {
-        let count = u32::try_from(self.matrices.len()).map_err(|_| Error::ChunkTooLarge {
-            tag: BindPose::TAG,
-            size: self.matrices.len(),
-        })?;
         self.matrices
             .len()
             .checked_mul(MATRIX_SIZE)
@@ -135,7 +129,7 @@ impl Record for BindPose {
                 size: usize::MAX,
             })?;
 
-        bytes.write(count);
+        bytes.write(self.matrices.len() as u32);
         for matrix in &self.matrices {
             for value in matrix {
                 bytes.write(value);

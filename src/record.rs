@@ -130,13 +130,10 @@ mod tests {
             ParticleEmitter::new(second.clone(), "second.mdx").unwrap(),
         );
         check(
-            ParticleEmitter2::new(first.clone()).unwrap(),
-            ParticleEmitter2::new(second.clone()).unwrap(),
+            ParticleEmitter2::new(first.clone()),
+            ParticleEmitter2::new(second.clone()),
         );
-        check(
-            RibbonEmitter::new(first).unwrap(),
-            RibbonEmitter::new(second).unwrap(),
-        );
+        check(RibbonEmitter::new(first), RibbonEmitter::new(second));
     }
 
     #[test]

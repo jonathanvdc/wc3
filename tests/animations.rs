@@ -64,3 +64,17 @@ fn standalone_integer_track_preserves_values() {
     assert_eq!(parsed.keyframes[0].integer_value(), Some(u32::MAX));
     assert!(AnimationTrack::decode(&[bytes, vec![0]].concat(), 800).is_err());
 }
+
+#[test]
+fn setter_does_not_serialize_tracks_to_validate_them() {
+    let mut node = Node::new("Animated", 4).unwrap();
+    let track = AnimationTrack {
+        tag: *b"KGTR",
+        interpolation: 4,
+        global_sequence_id: u32::MAX,
+        keyframes: Vec::new(),
+    };
+
+    node.set_tracks(&[track]).unwrap();
+    assert!(node.encode().is_err());
+}

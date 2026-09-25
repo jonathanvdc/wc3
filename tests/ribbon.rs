@@ -3,7 +3,7 @@ use wc3_mdx::{AnimationTrack, Keyframe, Model, Node, RibbonEmitter};
 
 #[test]
 fn ribbon_fields_and_integer_animation_round_trip() {
-    let mut emitter = RibbonEmitter::new(Node::new("Trail", 4).unwrap()).unwrap();
+    let mut emitter = RibbonEmitter::new(Node::new("Trail", 4).unwrap());
     let mut fields = emitter.fields();
     fields.height_above = 3.0;
     fields.color = [1.0, 0.5, 0.25];
@@ -36,7 +36,7 @@ fn ribbon_fields_and_integer_animation_round_trip() {
 
 #[test]
 fn ribbon_color_animation_round_trip() {
-    let mut emitter = RibbonEmitter::new(Node::new("ColorTrail", 5).unwrap()).unwrap();
+    let mut emitter = RibbonEmitter::new(Node::new("ColorTrail", 5).unwrap());
     let track = AnimationTrack {
         tag: *b"KRCO",
         interpolation: 1,

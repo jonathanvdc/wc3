@@ -10,7 +10,7 @@ fn validates_synthetic_known_chunks_and_preserves_unknown() {
         ])
         .unwrap();
     model
-        .set_ribbon_emitters(&[RibbonEmitter::new(Node::new("Trail", 1).unwrap()).unwrap()])
+        .set_ribbon_emitters(&[RibbonEmitter::new(Node::new("Trail", 1).unwrap())])
         .unwrap();
     model.push(ModelChunk::from_raw(
         RawChunk::new(*b"FUTR", vec![1, 2, 3]),
@@ -30,7 +30,6 @@ fn empty_mdlx_is_valid() {
 fn rejects_malformed_known_track() {
     let mut model = Model::new(800);
     let mut ribbon = RibbonEmitter::new(Node::new("Trail", 1).unwrap())
-        .unwrap()
         .encode()
         .unwrap()
         .to_vec();

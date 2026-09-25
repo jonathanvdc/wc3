@@ -25,21 +25,13 @@ impl TextureAnimation {
 
     /// Replaces texture animation tracks.
     pub fn set_tracks(&mut self, tracks: &[AnimationTrack]) -> Result<(), Error> {
-        let mut size = 4usize;
         for track in tracks {
             if !is_track_tag(track.tag) {
                 return Err(Error::MalformedRecord {
                     tag: TextureAnimation::TAG,
-                    offset: size,
+                    offset: 0,
                 });
             }
-            size = size
-                .checked_add(track.encode()?.len())
-                .filter(|&size| size <= u32::MAX as usize)
-                .ok_or(Error::ChunkTooLarge {
-                    tag: TextureAnimation::TAG,
-                    size: usize::MAX,
-                })?;
         }
         self.tracks = tracks.to_vec();
         Ok(())

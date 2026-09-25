@@ -125,7 +125,7 @@ impl Light {
         if self.extended_words.is_none() {
             return Err(Error::MalformedRecord {
                 tag: Light::TAG,
-                offset: 4 + self.node.encode()?.len() + FIXED_SIZE,
+                offset: 0,
             });
         }
         self.extended_words = Some(words);
@@ -144,7 +144,6 @@ impl Light {
                     offset: 0,
                 });
             }
-            track.encode()?;
         }
         self.tracks = tracks.to_vec();
         Ok(())

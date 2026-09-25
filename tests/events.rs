@@ -4,9 +4,9 @@ use wc3_mdx::{EventObject, Model, Node};
 #[test]
 fn event_object_round_trip() {
     let node = Node::new("Sound", 2).unwrap();
-    let mut event = EventObject::new(node, u32::MAX, &[100, 200]).unwrap();
+    let mut event = EventObject::new(node, u32::MAX, &[100, 200]);
     event.set_global_sequence_id(3);
-    event.set_frames(&[100, 200, 300]).unwrap();
+    event.set_frames(&[100, 200, 300]);
     let mut model = Model::new(800);
     model.set_event_objects(&[event]).unwrap();
     let parsed = Model::decode(&model.encode().unwrap(), 800).unwrap();
@@ -18,8 +18,8 @@ fn event_object_round_trip() {
 
 #[test]
 fn adjacent_events_decode_at_their_own_boundaries() {
-    let first = EventObject::new(Node::new("First", 1).unwrap(), 0, &[10, 20]).unwrap();
-    let second = EventObject::new(Node::new("Second", 2).unwrap(), 1, &[30]).unwrap();
+    let first = EventObject::new(Node::new("First", 1).unwrap(), 0, &[10, 20]);
+    let second = EventObject::new(Node::new("Second", 2).unwrap(), 1, &[30]);
     let mut bytes = first.encode().unwrap();
     let first_len = bytes.len();
     bytes.extend_from_slice(&second.encode().unwrap());

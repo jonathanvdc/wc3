@@ -32,7 +32,6 @@ impl Attachment {
             visibility_track: None,
         };
         attachment.set_path(path)?;
-        attachment.encode()?;
         Ok(attachment)
     }
 
@@ -80,7 +79,6 @@ impl Attachment {
                     offset: 0,
                 });
             }
-            track.encode()?;
         }
         self.visibility_track = track.cloned();
         Ok(())

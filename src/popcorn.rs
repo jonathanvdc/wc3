@@ -44,7 +44,6 @@ impl PopcornEmitter {
         };
         emitter.set_path(path)?;
         emitter.set_visibility_guide(visibility_guide)?;
-        emitter.encode()?;
         Ok(emitter)
     }
 
@@ -133,7 +132,6 @@ impl PopcornEmitter {
                     offset: 0,
                 });
             }
-            track.encode()?;
         }
         self.tracks = tracks.to_vec();
         Ok(())
