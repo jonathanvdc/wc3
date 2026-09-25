@@ -19,12 +19,16 @@ impl VersionChunk {
 }
 
 impl Record for VersionChunk {
-    fn decode(bytes: &[u8], _version: u32) -> Result<Self, Error> {
-        let number = bytes.get(..4).ok_or(Error::InvalidVersionChunk)?;
-        Ok(Self {
-            version: u32::from_le_bytes(number.try_into().expect("four-byte version")),
-            extension: bytes[4..].to_vec(),
-        })
+    fn decode_one(bytes: &[u8], _version: u32) -> Result<(Self, usize), Error> {
+        let length = bytes.len();
+        let value = {
+            let number = bytes.get(..4).ok_or(Error::InvalidVersionChunk)?;
+            Ok(Self {
+                version: u32::from_le_bytes(number.try_into().expect("four-byte version")),
+                extension: bytes[4..].to_vec(),
+            })
+        }?;
+        Ok((value, length))
     }
 
     fn encode(&self) -> Result<Vec<u8>, Error> {

@@ -40,26 +40,6 @@ pub(crate) fn layout(bytes: &[u8], tag: [u8; 4], fixed_size: usize) -> Result<La
     })
 }
 
-pub(crate) fn records(data: &[u8], tag: [u8; 4], fixed_size: usize) -> Result<Vec<&[u8]>, Error> {
-    let mut result = Vec::new();
-    let mut offset = 0;
-    while offset < data.len() {
-        let size_bytes = data
-            .get(offset..offset.saturating_add(4))
-            .ok_or(Error::MalformedRecord { tag, offset })?;
-        let size = u32::from_le_bytes(size_bytes.try_into().expect("four-byte size")) as usize;
-        let end = offset
-            .checked_add(size)
-            .filter(|&end| end <= data.len() && end > offset)
-            .ok_or(Error::MalformedRecord { tag, offset })?;
-        let record = &data[offset..end];
-        layout(record, tag, fixed_size)?;
-        result.push(record);
-        offset = end;
-    }
-    Ok(result)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

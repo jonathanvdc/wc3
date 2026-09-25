@@ -5,8 +5,20 @@ use crate::Error;
 
 /// A typed MDX record that can be converted to and from bytes.
 pub trait Record: Sized {
-    /// Parses a record.
-    fn decode(bytes: &[u8], version: u32) -> Result<Self, Error>;
+    /// Parses the first record in a byte stream and returns its length.
+    fn decode_one(bytes: &[u8], version: u32) -> Result<(Self, usize), Error>;
+
+    /// Parses exactly one record, rejecting any trailing bytes.
+    fn decode(bytes: &[u8], version: u32) -> Result<Self, Error> {
+        let (record, consumed) = Self::decode_one(bytes, version)?;
+        if consumed != bytes.len() {
+            return Err(Error::TrailingRecordBytes {
+                consumed,
+                total: bytes.len(),
+            });
+        }
+        Ok(record)
+    }
 
     /// Writes a record.
     fn encode(&self) -> Result<Vec<u8>, Error>;
@@ -16,6 +28,26 @@ pub trait Record: Sized {
     fn decode_latest(bytes: &[u8]) -> Result<Self, Error> {
         Self::decode(bytes, LATEST_VERSION)
     }
+}
+
+/// Reads a record's size word and checks that its complete payload is available.
+pub(crate) fn sized_record_len(
+    bytes: &[u8],
+    tag: [u8; 4],
+    minimum: usize,
+    mask: u32,
+    extra: usize,
+) -> Result<usize, Error> {
+    let size_bytes = bytes
+        .get(..4)
+        .ok_or(Error::MalformedRecord { tag, offset: 0 })?;
+    let size = (u32::from_le_bytes(size_bytes.try_into().expect("size word")) & mask) as usize;
+    if size < minimum {
+        return Err(Error::MalformedRecord { tag, offset: 0 });
+    }
+    size.checked_add(extra)
+        .filter(|&length| length <= bytes.len())
+        .ok_or(Error::MalformedRecord { tag, offset: 0 })
 }
 
 #[cfg(test)]
@@ -35,6 +67,37 @@ mod tests {
         round_trip(&Sequence::new("Stand", [0, 100]).unwrap(), 800);
         round_trip(&Geoset::new(1800, &[], &[], &[]).unwrap(), 1800);
         assert!(Sequence::decode(&[0; 131], 800).is_err());
+    }
+
+    #[test]
+    fn decode_one_advances_through_records_and_decode_rejects_trailing_bytes() {
+        let first = Sequence::new("Stand", [0, 100]).unwrap();
+        let second = Sequence::new("Walk", [101, 200]).unwrap();
+        let mut bytes = first.encode().unwrap();
+        bytes.extend_from_slice(&second.encode().unwrap());
+
+        let (decoded, consumed) = Sequence::decode_one(&bytes, 800).unwrap();
+        assert_eq!(decoded, first);
+        assert_eq!(consumed, first.encode().unwrap().len());
+        assert_eq!(
+            Sequence::decode(&bytes, 800),
+            Err(crate::Error::TrailingRecordBytes {
+                consumed,
+                total: bytes.len(),
+            })
+        );
+
+        let first = Geoset::new(800, &[], &[], &[]).unwrap();
+        let second = Geoset::new(800, &[], &[], &[]).unwrap();
+        let mut bytes = first.encode().unwrap();
+        bytes.extend_from_slice(&second.encode().unwrap());
+        let (decoded, consumed) = Geoset::decode_one(&bytes, 800).unwrap();
+        assert_eq!(decoded, first);
+        assert_eq!(consumed, first.encode().unwrap().len());
+        assert!(matches!(
+            Geoset::decode(&bytes, 800),
+            Err(crate::Error::TrailingRecordBytes { .. })
+        ));
     }
 
     #[test]

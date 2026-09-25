@@ -111,27 +111,6 @@ fn is_layer_track(tag: [u8; 4]) -> bool {
     )
 }
 
-fn sized_records(data: &[u8], tag: [u8; 4]) -> Result<Vec<&[u8]>, Error> {
-    let mut records = Vec::new();
-    let mut offset = 0;
-    while offset < data.len() {
-        let size_bytes = data
-            .get(offset..offset.saturating_add(4))
-            .ok_or(Error::MalformedRecord { tag, offset })?;
-        let size = u32::from_le_bytes(size_bytes.try_into().expect("four-byte size")) as usize;
-        if size < 4 {
-            return Err(Error::MalformedRecord { tag, offset });
-        }
-        let end = offset
-            .checked_add(size)
-            .filter(|&end| end <= data.len())
-            .ok_or(Error::MalformedRecord { tag, offset })?;
-        records.push(&data[offset..end]);
-        offset = end;
-    }
-    Ok(records)
-}
-
 struct Cursor<'a> {
     bytes: &'a [u8],
     offset: usize,
@@ -494,47 +473,47 @@ impl Model {
 }
 
 impl Record for Material {
-    fn decode(bytes: &[u8], version: u32) -> Result<Self, Error> {
-        if sized_records(bytes, Material::TAG)?.len() != 1 {
-            return Err(Error::MalformedRecord {
-                tag: Material::TAG,
-                offset: 0,
-            });
-        }
-        let mut cursor = Cursor::new(bytes, Material::TAG);
-        if cursor.word()? as usize != bytes.len() {
-            return Err(Error::MalformedRecord {
-                tag: Material::TAG,
-                offset: 0,
-            });
-        }
-        let priority_plane = cursor.word()?;
-        let render_mode = cursor.word()?;
-        let shader = if has_shader(version) {
-            Some(cursor.read(80)?.try_into().expect("shader field"))
-        } else {
-            None
-        };
-        cursor.expect_tag(LAYER_TAG)?;
-        let count = cursor.word()? as usize;
-        let records = sized_records(&bytes[cursor.offset..], LAYER_TAG)?;
-        if records.len() != count {
-            return Err(Error::MalformedRecord {
-                tag: Material::TAG,
-                offset: cursor.offset,
-            });
-        }
-        let layers = records
-            .into_iter()
-            .map(|bytes| Layer::decode(bytes, version))
-            .collect::<Result<_, _>>()?;
-        Ok(Self {
-            version,
-            priority_plane,
-            render_mode,
-            shader,
-            layers,
-        })
+    fn decode_one(bytes: &[u8], version: u32) -> Result<(Self, usize), Error> {
+        let length = crate::record::sized_record_len(bytes, Self::TAG, 4, u32::MAX, 0)?;
+        let bytes = &bytes[..length];
+        let value = {
+            let mut cursor = Cursor::new(bytes, Material::TAG);
+            if cursor.word()? as usize != bytes.len() {
+                return Err(Error::MalformedRecord {
+                    tag: Material::TAG,
+                    offset: 0,
+                });
+            }
+            let priority_plane = cursor.word()?;
+            let render_mode = cursor.word()?;
+            let shader = if has_shader(version) {
+                Some(cursor.read(80)?.try_into().expect("shader field"))
+            } else {
+                None
+            };
+            cursor.expect_tag(LAYER_TAG)?;
+            let count = cursor.word()? as usize;
+            let mut layers = Vec::new();
+            for _ in 0..count {
+                let (layer, consumed) = Layer::decode_one(&bytes[cursor.offset..], version)?;
+                cursor.offset += consumed;
+                layers.push(layer);
+            }
+            if cursor.offset != bytes.len() {
+                return Err(Error::MalformedRecord {
+                    tag: Material::TAG,
+                    offset: cursor.offset,
+                });
+            }
+            Ok(Self {
+                version,
+                priority_plane,
+                render_mode,
+                shader,
+                layers,
+            })
+        }?;
+        Ok((value, length))
     }
 
     fn encode(&self) -> Result<Vec<u8>, Error> {
@@ -561,95 +540,95 @@ impl Record for Material {
 }
 
 impl Record for Layer {
-    fn decode(bytes: &[u8], version: u32) -> Result<Self, Error> {
-        if sized_records(bytes, LAYER_TAG)?.len() != 1 {
-            return Err(Error::MalformedRecord {
-                tag: LAYER_TAG,
-                offset: 0,
-            });
-        }
-        let mut cursor = Cursor::new(bytes, LAYER_TAG);
-        if cursor.word()? as usize != bytes.len() {
-            return Err(Error::MalformedRecord {
-                tag: LAYER_TAG,
-                offset: 0,
-            });
-        }
-        let filter_mode = cursor.word()?;
-        let shading_flags = cursor.word()?;
-        let texture_id = cursor.word()?;
-        let texture_animation_id = cursor.word()?;
-        let coordinate_id = cursor.word()?;
-        let alpha = cursor.float()?;
-        let emissive_gain = if version >= 900 {
-            Some(cursor.float()?)
-        } else {
-            None
-        };
-        let (fresnel_color, fresnel_opacity, fresnel_team_color) = if version >= 1000 {
-            (
-                Some([cursor.float()?, cursor.float()?, cursor.float()?]),
-                Some(cursor.float()?),
-                Some(cursor.float()?),
-            )
-        } else {
-            (None, None, None)
-        };
-        let shader_type_id = if version >= 1100 {
-            Some(cursor.word()?)
-        } else {
-            None
-        };
-        let mut texture_slots = Vec::new();
-        if version >= 1100 {
-            let count = cursor.word()? as usize;
-            for _ in 0..count {
-                let texture_id = cursor.word()?;
-                let texture_type = cursor.word()?;
-                let track =
-                    if bytes.get(cursor.offset..cursor.offset.saturating_add(4)) == Some(b"KMTF") {
+    fn decode_one(bytes: &[u8], version: u32) -> Result<(Self, usize), Error> {
+        let length = crate::record::sized_record_len(bytes, LAYER_TAG, 4, u32::MAX, 0)?;
+        let bytes = &bytes[..length];
+        let value = {
+            let mut cursor = Cursor::new(bytes, LAYER_TAG);
+            if cursor.word()? as usize != bytes.len() {
+                return Err(Error::MalformedRecord {
+                    tag: LAYER_TAG,
+                    offset: 0,
+                });
+            }
+            let filter_mode = cursor.word()?;
+            let shading_flags = cursor.word()?;
+            let texture_id = cursor.word()?;
+            let texture_animation_id = cursor.word()?;
+            let coordinate_id = cursor.word()?;
+            let alpha = cursor.float()?;
+            let emissive_gain = if version >= 900 {
+                Some(cursor.float()?)
+            } else {
+                None
+            };
+            let (fresnel_color, fresnel_opacity, fresnel_team_color) = if version >= 1000 {
+                (
+                    Some([cursor.float()?, cursor.float()?, cursor.float()?]),
+                    Some(cursor.float()?),
+                    Some(cursor.float()?),
+                )
+            } else {
+                (None, None, None)
+            };
+            let shader_type_id = if version >= 1100 {
+                Some(cursor.word()?)
+            } else {
+                None
+            };
+            let mut texture_slots = Vec::new();
+            if version >= 1100 {
+                let count = cursor.word()? as usize;
+                for _ in 0..count {
+                    let texture_id = cursor.word()?;
+                    let texture_type = cursor.word()?;
+                    let track = if bytes.get(cursor.offset..cursor.offset.saturating_add(4))
+                        == Some(b"KMTF")
+                    {
                         let (track, size) = AnimationTrack::parse(bytes, cursor.offset)?;
                         cursor.offset += size;
                         Some(track)
                     } else {
                         None
                     };
-                texture_slots.push(LayerTextureSlot {
-                    texture_id,
-                    texture_type,
-                    track,
-                });
+                    texture_slots.push(LayerTextureSlot {
+                        texture_id,
+                        texture_type,
+                        track,
+                    });
+                }
             }
-        }
-        let mut tracks = Vec::new();
-        while cursor.offset < bytes.len() {
-            let offset = cursor.offset;
-            let (track, size) = AnimationTrack::parse(bytes, offset)?;
-            if !is_layer_track(track.tag) {
-                return Err(Error::MalformedRecord {
-                    tag: LAYER_TAG,
-                    offset,
-                });
+            let mut tracks = Vec::new();
+            while cursor.offset < bytes.len() {
+                let offset = cursor.offset;
+                let (track, size) = AnimationTrack::parse(bytes, offset)?;
+                if !is_layer_track(track.tag) {
+                    return Err(Error::MalformedRecord {
+                        tag: LAYER_TAG,
+                        offset,
+                    });
+                }
+                tracks.push(track);
+                cursor.offset += size;
             }
-            tracks.push(track);
-            cursor.offset += size;
-        }
-        Ok(Self {
-            version,
-            filter_mode,
-            shading_flags,
-            texture_id,
-            texture_animation_id,
-            coordinate_id,
-            alpha,
-            emissive_gain,
-            fresnel_color,
-            fresnel_opacity,
-            fresnel_team_color,
-            shader_type_id,
-            texture_slots,
-            tracks,
-        })
+            Ok(Self {
+                version,
+                filter_mode,
+                shading_flags,
+                texture_id,
+                texture_animation_id,
+                coordinate_id,
+                alpha,
+                emissive_gain,
+                fresnel_color,
+                fresnel_opacity,
+                fresnel_team_color,
+                shader_type_id,
+                texture_slots,
+                tracks,
+            })
+        }?;
+        Ok((value, length))
     }
 
     fn encode(&self) -> Result<Vec<u8>, Error> {

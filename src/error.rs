@@ -31,6 +31,8 @@ pub enum Error {
     InvalidString { max_bytes: usize },
     /// A size-bounded record or section is malformed at the given offset.
     MalformedRecord { tag: [u8; 4], offset: usize },
+    /// A decoder stopped before the end of an exact record input.
+    TrailingRecordBytes { consumed: usize, total: usize },
 }
 
 impl fmt::Display for Error {
@@ -72,6 +74,9 @@ impl fmt::Display for Error {
                 "malformed {:?} record at byte {offset}",
                 String::from_utf8_lossy(tag)
             ),
+            Self::TrailingRecordBytes { consumed, total } => {
+                write!(f, "record consumed {consumed} of {total} bytes")
+            }
         }
     }
 }

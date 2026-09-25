@@ -163,46 +163,52 @@ impl Model {
 }
 
 impl Record for Camera {
-    fn decode(bytes: &[u8], _version: u32) -> Result<Self, Error> {
-        if bytes.len() < HEADER_SIZE {
-            return Err(Error::MalformedRecord {
-                tag: Camera::TAG,
-                offset: 0,
-            });
-        }
-        let size_word = u32::from_le_bytes(bytes[..4].try_into().expect("four-byte size"));
-        if (size_word & 0x00ff_ffff) as usize != bytes.len() {
-            return Err(Error::MalformedRecord {
-                tag: Camera::TAG,
-                offset: 0,
-            });
-        }
-        let float = |offset: usize| {
-            f32::from_le_bytes(bytes[offset..offset + 4].try_into().expect("camera field"))
-        };
-        let mut tracks = Vec::new();
-        let mut offset = HEADER_SIZE;
-        while offset < bytes.len() {
-            let (track, size) = AnimationTrack::parse(bytes, offset)?;
-            if !is_track(track.tag) {
+    fn decode_one(bytes: &[u8], _version: u32) -> Result<(Self, usize), Error> {
+        let length =
+            crate::record::sized_record_len(bytes, Self::TAG, HEADER_SIZE, 0x00ff_ffff, 0)?;
+        let bytes = &bytes[..length];
+        let value = {
+            if bytes.len() < HEADER_SIZE {
                 return Err(Error::MalformedRecord {
                     tag: Camera::TAG,
-                    offset,
+                    offset: 0,
                 });
             }
-            tracks.push(track);
-            offset += size;
-        }
-        Ok(Self {
-            name: bytes[4..84].try_into().expect("fixed-width name"),
-            record_flags: (size_word >> 24) as u8,
-            position: [float(84), float(88), float(92)],
-            field_of_view: float(96),
-            far_clip: float(100),
-            near_clip: float(104),
-            target_position: [float(108), float(112), float(116)],
-            tracks,
-        })
+            let size_word = u32::from_le_bytes(bytes[..4].try_into().expect("four-byte size"));
+            if (size_word & 0x00ff_ffff) as usize != bytes.len() {
+                return Err(Error::MalformedRecord {
+                    tag: Camera::TAG,
+                    offset: 0,
+                });
+            }
+            let float = |offset: usize| {
+                f32::from_le_bytes(bytes[offset..offset + 4].try_into().expect("camera field"))
+            };
+            let mut tracks = Vec::new();
+            let mut offset = HEADER_SIZE;
+            while offset < bytes.len() {
+                let (track, size) = AnimationTrack::parse(bytes, offset)?;
+                if !is_track(track.tag) {
+                    return Err(Error::MalformedRecord {
+                        tag: Camera::TAG,
+                        offset,
+                    });
+                }
+                tracks.push(track);
+                offset += size;
+            }
+            Ok(Self {
+                name: bytes[4..84].try_into().expect("fixed-width name"),
+                record_flags: (size_word >> 24) as u8,
+                position: [float(84), float(88), float(92)],
+                field_of_view: float(96),
+                far_clip: float(100),
+                near_clip: float(104),
+                target_position: [float(108), float(112), float(116)],
+                tracks,
+            })
+        }?;
+        Ok((value, length))
     }
 
     fn encode(&self) -> Result<Vec<u8>, Error> {

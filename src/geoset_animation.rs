@@ -146,46 +146,51 @@ impl Model {
 }
 
 impl Record for GeosetAnimation {
-    fn decode(bytes: &[u8], _version: u32) -> Result<Self, Error> {
-        if bytes.len() < HEADER_SIZE {
-            return Err(Error::MalformedRecord {
-                tag: GeosetAnimation::TAG,
-                offset: 0,
-            });
-        }
-        let word = |offset: usize| {
-            u32::from_le_bytes(bytes[offset..offset + 4].try_into().expect("header field"))
-        };
-        if word(0) as usize != bytes.len() {
-            return Err(Error::MalformedRecord {
-                tag: GeosetAnimation::TAG,
-                offset: 0,
-            });
-        }
-        let mut tracks = Vec::new();
-        let mut offset = HEADER_SIZE;
-        while offset < bytes.len() {
-            let (track, consumed) = AnimationTrack::parse(bytes, offset)?;
-            if !matches!(&track.tag, b"KGAO" | b"KGAC") {
+    fn decode_one(bytes: &[u8], _version: u32) -> Result<(Self, usize), Error> {
+        let length = crate::record::sized_record_len(bytes, Self::TAG, HEADER_SIZE, u32::MAX, 0)?;
+        let bytes = &bytes[..length];
+        let value = {
+            if bytes.len() < HEADER_SIZE {
                 return Err(Error::MalformedRecord {
                     tag: GeosetAnimation::TAG,
-                    offset,
+                    offset: 0,
                 });
             }
-            tracks.push(track);
-            offset += consumed;
-        }
-        Ok(Self {
-            alpha: f32::from_bits(word(4)),
-            raw_flags: word(8),
-            color: [
-                f32::from_bits(word(12)),
-                f32::from_bits(word(16)),
-                f32::from_bits(word(20)),
-            ],
-            geoset_id: word(24),
-            tracks,
-        })
+            let word = |offset: usize| {
+                u32::from_le_bytes(bytes[offset..offset + 4].try_into().expect("header field"))
+            };
+            if word(0) as usize != bytes.len() {
+                return Err(Error::MalformedRecord {
+                    tag: GeosetAnimation::TAG,
+                    offset: 0,
+                });
+            }
+            let mut tracks = Vec::new();
+            let mut offset = HEADER_SIZE;
+            while offset < bytes.len() {
+                let (track, consumed) = AnimationTrack::parse(bytes, offset)?;
+                if !matches!(&track.tag, b"KGAO" | b"KGAC") {
+                    return Err(Error::MalformedRecord {
+                        tag: GeosetAnimation::TAG,
+                        offset,
+                    });
+                }
+                tracks.push(track);
+                offset += consumed;
+            }
+            Ok(Self {
+                alpha: f32::from_bits(word(4)),
+                raw_flags: word(8),
+                color: [
+                    f32::from_bits(word(12)),
+                    f32::from_bits(word(16)),
+                    f32::from_bits(word(20)),
+                ],
+                geoset_id: word(24),
+                tracks,
+            })
+        }?;
+        Ok((value, length))
     }
 
     fn encode(&self) -> Result<Vec<u8>, Error> {

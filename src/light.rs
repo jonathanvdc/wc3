@@ -242,54 +242,59 @@ impl Model {
 }
 
 impl Record for Light {
-    fn decode(bytes: &[u8], _version: u32) -> Result<Self, Error> {
-        let end = record_end(bytes, 0)?;
-        if end != bytes.len() {
-            return Err(Error::MalformedRecord {
-                tag: Light::TAG,
-                offset: end,
-            });
-        }
-        let node_size = read_u32(bytes, 4) as usize;
-        let fixed = 4 + node_size;
-        let node = Node::decode(&bytes[4..fixed], 0)?;
-        let short = fixed + FIXED_SIZE;
-        let extended = fixed + EXTENDED_SIZE;
-        let has_extended = bytes.len() >= extended
-            && (bytes.len() == extended
-                || bytes
-                    .get(extended..extended + 4)
-                    .is_some_and(|tag| is_track(tag.try_into().expect("four-byte tag"))))
-            && bytes.get(short..short + 4).map_or(true, |tag| {
-                !is_track(tag.try_into().expect("four-byte tag"))
-            });
-        let extended_words =
-            has_extended.then(|| std::array::from_fn(|i| read_u32(bytes, short + i * 4)));
-        let mut tracks = Vec::new();
-        let mut offset = if has_extended { extended } else { short };
-        while offset < bytes.len() {
-            let (track, consumed) = AnimationTrack::parse(bytes, offset)?;
-            if !is_track(track.tag) {
+    fn decode_one(bytes: &[u8], _version: u32) -> Result<(Self, usize), Error> {
+        let length = record_end(bytes, 0)?;
+        let bytes = &bytes[..length];
+        let value = {
+            let end = record_end(bytes, 0)?;
+            if end != bytes.len() {
                 return Err(Error::MalformedRecord {
                     tag: Light::TAG,
-                    offset,
+                    offset: end,
                 });
             }
-            tracks.push(track);
-            offset += consumed;
-        }
-        Ok(Self {
-            node,
-            light_type: read_u32(bytes, fixed),
-            attenuation_start: read_f32(bytes, fixed + 4),
-            attenuation_end: read_f32(bytes, fixed + 8),
-            color: read_vec3(bytes, fixed + 12),
-            intensity: read_f32(bytes, fixed + 24),
-            ambient_color: read_vec3(bytes, fixed + 28),
-            ambient_intensity: read_f32(bytes, fixed + 40),
-            extended_words,
-            tracks,
-        })
+            let node_size = read_u32(bytes, 4) as usize;
+            let fixed = 4 + node_size;
+            let node = Node::decode(&bytes[4..fixed], 0)?;
+            let short = fixed + FIXED_SIZE;
+            let extended = fixed + EXTENDED_SIZE;
+            let has_extended = bytes.len() >= extended
+                && (bytes.len() == extended
+                    || bytes
+                        .get(extended..extended + 4)
+                        .is_some_and(|tag| is_track(tag.try_into().expect("four-byte tag"))))
+                && bytes.get(short..short + 4).map_or(true, |tag| {
+                    !is_track(tag.try_into().expect("four-byte tag"))
+                });
+            let extended_words =
+                has_extended.then(|| std::array::from_fn(|i| read_u32(bytes, short + i * 4)));
+            let mut tracks = Vec::new();
+            let mut offset = if has_extended { extended } else { short };
+            while offset < bytes.len() {
+                let (track, consumed) = AnimationTrack::parse(bytes, offset)?;
+                if !is_track(track.tag) {
+                    return Err(Error::MalformedRecord {
+                        tag: Light::TAG,
+                        offset,
+                    });
+                }
+                tracks.push(track);
+                offset += consumed;
+            }
+            Ok(Self {
+                node,
+                light_type: read_u32(bytes, fixed),
+                attenuation_start: read_f32(bytes, fixed + 4),
+                attenuation_end: read_f32(bytes, fixed + 8),
+                color: read_vec3(bytes, fixed + 12),
+                intensity: read_f32(bytes, fixed + 24),
+                ambient_color: read_vec3(bytes, fixed + 28),
+                ambient_intensity: read_f32(bytes, fixed + 40),
+                extended_words,
+                tracks,
+            })
+        }?;
+        Ok((value, length))
     }
 
     fn encode(&self) -> Result<Vec<u8>, Error> {

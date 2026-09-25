@@ -16,10 +16,14 @@ impl ModelInfoChunk {
 }
 
 impl Record for ModelInfoChunk {
-    fn decode(bytes: &[u8], version: u32) -> Result<Self, Error> {
-        let info = crate::ModelInfo::parse(bytes)?;
-        let _ = version;
-        Ok(Self::new(info, bytes[372..].to_vec()))
+    fn decode_one(bytes: &[u8], version: u32) -> Result<(Self, usize), Error> {
+        let length = bytes.len();
+        let value = {
+            let info = crate::ModelInfo::parse(bytes)?;
+            let _ = version;
+            Ok(Self::new(info, bytes[372..].to_vec()))
+        }?;
+        Ok((value, length))
     }
 
     fn encode(&self) -> Result<Vec<u8>, Error> {

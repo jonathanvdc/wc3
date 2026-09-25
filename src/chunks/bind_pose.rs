@@ -84,41 +84,46 @@ impl Model {
 }
 
 impl Record for BindPose {
-    fn decode(bytes: &[u8], _version: u32) -> Result<Self, Error> {
-        let count_bytes = bytes.get(..4).ok_or(Error::MalformedChunk {
-            tag: BindPose::TAG,
-            size: bytes.len(),
-            expected: 4,
-        })?;
-        let count = u32::from_le_bytes(count_bytes.try_into().expect("four-byte count")) as usize;
-        let expected = count
-            .checked_mul(MATRIX_SIZE)
-            .and_then(|n| n.checked_add(4))
-            .ok_or(Error::MalformedRecord {
-                tag: BindPose::TAG,
-                offset: 0,
-            })?;
-        if bytes.len() != expected {
-            return Err(Error::MalformedChunk {
+    fn decode_one(bytes: &[u8], _version: u32) -> Result<(Self, usize), Error> {
+        let length = bytes.len();
+        let value = {
+            let count_bytes = bytes.get(..4).ok_or(Error::MalformedChunk {
                 tag: BindPose::TAG,
                 size: bytes.len(),
-                expected,
-            });
-        }
-        let matrices = bytes[4..]
-            .chunks_exact(MATRIX_SIZE)
-            .map(|matrix| {
-                std::array::from_fn(|coordinate| {
-                    let offset = coordinate * 4;
-                    f32::from_le_bytes(
-                        matrix[offset..offset + 4]
-                            .try_into()
-                            .expect("four-byte field"),
-                    )
+                expected: 4,
+            })?;
+            let count =
+                u32::from_le_bytes(count_bytes.try_into().expect("four-byte count")) as usize;
+            let expected = count
+                .checked_mul(MATRIX_SIZE)
+                .and_then(|n| n.checked_add(4))
+                .ok_or(Error::MalformedRecord {
+                    tag: BindPose::TAG,
+                    offset: 0,
+                })?;
+            if bytes.len() != expected {
+                return Err(Error::MalformedChunk {
+                    tag: BindPose::TAG,
+                    size: bytes.len(),
+                    expected,
+                });
+            }
+            let matrices = bytes[4..]
+                .chunks_exact(MATRIX_SIZE)
+                .map(|matrix| {
+                    std::array::from_fn(|coordinate| {
+                        let offset = coordinate * 4;
+                        f32::from_le_bytes(
+                            matrix[offset..offset + 4]
+                                .try_into()
+                                .expect("four-byte field"),
+                        )
+                    })
                 })
-            })
-            .collect();
-        Ok(Self { matrices })
+                .collect();
+            Ok(Self { matrices })
+        }?;
+        Ok((value, length))
     }
 
     fn encode(&self) -> Result<Vec<u8>, Error> {

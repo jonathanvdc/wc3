@@ -128,31 +128,36 @@ impl Model {
 }
 
 impl Record for EventObject {
-    fn decode(bytes: &[u8], _version: u32) -> Result<Self, Error> {
-        let end = record_end(bytes, 0)?;
-        if end != bytes.len() {
-            return Err(Error::MalformedRecord {
-                tag: EventObject::TAG,
-                offset: end,
-            });
-        }
-        let node_size =
-            u32::from_le_bytes(bytes[..4].try_into().expect("validated node size")) as usize;
-        let node = Node::decode(&bytes[..node_size], 0)?;
-        let global_sequence_id = u32::from_le_bytes(
-            bytes[node_size + 8..node_size + 12]
-                .try_into()
-                .expect("validated ID"),
-        );
-        let frames = bytes[node_size + 12..]
-            .chunks_exact(4)
-            .map(|bytes| u32::from_le_bytes(bytes.try_into().expect("four-byte frame")))
-            .collect();
-        Ok(Self {
-            node,
-            global_sequence_id,
-            frames,
-        })
+    fn decode_one(bytes: &[u8], _version: u32) -> Result<(Self, usize), Error> {
+        let length = record_end(bytes, 0)?;
+        let bytes = &bytes[..length];
+        let value = {
+            let end = record_end(bytes, 0)?;
+            if end != bytes.len() {
+                return Err(Error::MalformedRecord {
+                    tag: EventObject::TAG,
+                    offset: end,
+                });
+            }
+            let node_size =
+                u32::from_le_bytes(bytes[..4].try_into().expect("validated node size")) as usize;
+            let node = Node::decode(&bytes[..node_size], 0)?;
+            let global_sequence_id = u32::from_le_bytes(
+                bytes[node_size + 8..node_size + 12]
+                    .try_into()
+                    .expect("validated ID"),
+            );
+            let frames = bytes[node_size + 12..]
+                .chunks_exact(4)
+                .map(|bytes| u32::from_le_bytes(bytes.try_into().expect("four-byte frame")))
+                .collect();
+            Ok(Self {
+                node,
+                global_sequence_id,
+                frames,
+            })
+        }?;
+        Ok((value, length))
     }
 
     fn encode(&self) -> Result<Vec<u8>, Error> {

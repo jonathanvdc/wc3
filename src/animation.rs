@@ -158,15 +158,8 @@ fn components(tag: [u8; 4]) -> Option<usize> {
 }
 
 impl Record for AnimationTrack {
-    fn decode(bytes: &[u8], _version: u32) -> Result<Self, Error> {
-        let (track, consumed) = Self::parse(bytes, 0)?;
-        if consumed != bytes.len() {
-            return Err(Error::MalformedRecord {
-                tag: track.tag,
-                offset: consumed,
-            });
-        }
-        Ok(track)
+    fn decode_one(bytes: &[u8], _version: u32) -> Result<(Self, usize), Error> {
+        Self::parse(bytes, 0)
     }
 
     fn encode(&self) -> Result<Vec<u8>, Error> {

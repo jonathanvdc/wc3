@@ -202,13 +202,18 @@ impl Model {
 }
 
 impl Record for Sequence {
-    fn decode(bytes: &[u8], _version: u32) -> Result<Self, Error> {
-        let bytes: [u8; 132] = bytes.try_into().map_err(|_| Error::MalformedChunk {
-            tag: *b"SEQS",
-            size: bytes.len(),
-            expected: 132,
-        })?;
-        Ok(Self { bytes })
+    fn decode_one(bytes: &[u8], _version: u32) -> Result<(Self, usize), Error> {
+        let length = SIZE;
+        let bytes = bytes.get(..length).unwrap_or(bytes);
+        let value = {
+            let bytes: [u8; 132] = bytes.try_into().map_err(|_| Error::MalformedChunk {
+                tag: *b"SEQS",
+                size: bytes.len(),
+                expected: 132,
+            })?;
+            Ok(Self { bytes })
+        }?;
+        Ok((value, length))
     }
 
     fn encode(&self) -> Result<Vec<u8>, Error> {

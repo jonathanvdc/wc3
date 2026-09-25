@@ -158,50 +158,55 @@ impl Model {
 }
 
 impl Record for Attachment {
-    fn decode(bytes: &[u8], _version: u32) -> Result<Self, Error> {
-        if record_end(bytes, 0)? != bytes.len() {
-            return Err(Error::MalformedRecord {
-                tag: Attachment::TAG,
-                offset: 0,
-            });
-        }
-        let node_size =
-            u32::from_le_bytes(bytes[4..8].try_into().expect("validated node size")) as usize;
-        let fixed = 4 + node_size;
-        let node = Node::decode(&bytes[4..fixed], 0)?;
-        let path = bytes[fixed..fixed + PATH_SIZE]
-            .try_into()
-            .expect("validated path");
-        let reserved = u32::from_le_bytes(
-            bytes[fixed + PATH_SIZE..fixed + PATH_SIZE + 4]
-                .try_into()
-                .expect("validated reserved field"),
-        );
-        let id = u32::from_le_bytes(
-            bytes[fixed + PATH_SIZE + 4..fixed + FIXED_SIZE]
-                .try_into()
-                .expect("validated ID"),
-        );
-        let offset = fixed + FIXED_SIZE;
-        let visibility_track = if offset == bytes.len() {
-            None
-        } else {
-            let (track, consumed) = AnimationTrack::parse(bytes, offset)?;
-            if track.tag != *b"KATV" || offset + consumed != bytes.len() {
+    fn decode_one(bytes: &[u8], _version: u32) -> Result<(Self, usize), Error> {
+        let length = record_end(bytes, 0)?;
+        let bytes = &bytes[..length];
+        let value = {
+            if record_end(bytes, 0)? != bytes.len() {
                 return Err(Error::MalformedRecord {
                     tag: Attachment::TAG,
-                    offset,
+                    offset: 0,
                 });
             }
-            Some(track)
-        };
-        Ok(Self {
-            node,
-            path,
-            reserved,
-            id,
-            visibility_track,
-        })
+            let node_size =
+                u32::from_le_bytes(bytes[4..8].try_into().expect("validated node size")) as usize;
+            let fixed = 4 + node_size;
+            let node = Node::decode(&bytes[4..fixed], 0)?;
+            let path = bytes[fixed..fixed + PATH_SIZE]
+                .try_into()
+                .expect("validated path");
+            let reserved = u32::from_le_bytes(
+                bytes[fixed + PATH_SIZE..fixed + PATH_SIZE + 4]
+                    .try_into()
+                    .expect("validated reserved field"),
+            );
+            let id = u32::from_le_bytes(
+                bytes[fixed + PATH_SIZE + 4..fixed + FIXED_SIZE]
+                    .try_into()
+                    .expect("validated ID"),
+            );
+            let offset = fixed + FIXED_SIZE;
+            let visibility_track = if offset == bytes.len() {
+                None
+            } else {
+                let (track, consumed) = AnimationTrack::parse(bytes, offset)?;
+                if track.tag != *b"KATV" || offset + consumed != bytes.len() {
+                    return Err(Error::MalformedRecord {
+                        tag: Attachment::TAG,
+                        offset,
+                    });
+                }
+                Some(track)
+            };
+            Ok(Self {
+                node,
+                path,
+                reserved,
+                id,
+                visibility_track,
+            })
+        }?;
+        Ok((value, length))
     }
 
     fn encode(&self) -> Result<Vec<u8>, Error> {

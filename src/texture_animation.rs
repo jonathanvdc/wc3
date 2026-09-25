@@ -74,33 +74,38 @@ impl Model {
 }
 
 impl Record for TextureAnimation {
-    fn decode(bytes: &[u8], _version: u32) -> Result<Self, Error> {
-        let size_bytes = bytes.get(..4).ok_or(Error::MalformedRecord {
-            tag: TextureAnimation::TAG,
-            offset: 0,
-        })?;
-        if u32::from_le_bytes(size_bytes.try_into().expect("four-byte size")) as usize
-            != bytes.len()
-        {
-            return Err(Error::MalformedRecord {
+    fn decode_one(bytes: &[u8], _version: u32) -> Result<(Self, usize), Error> {
+        let length = crate::record::sized_record_len(bytes, Self::TAG, 4, u32::MAX, 0)?;
+        let bytes = &bytes[..length];
+        let value = {
+            let size_bytes = bytes.get(..4).ok_or(Error::MalformedRecord {
                 tag: TextureAnimation::TAG,
                 offset: 0,
-            });
-        }
-        let mut tracks = Vec::new();
-        let mut offset = 4;
-        while offset < bytes.len() {
-            let (track, consumed) = AnimationTrack::parse(bytes, offset)?;
-            if !is_track_tag(track.tag) {
+            })?;
+            if u32::from_le_bytes(size_bytes.try_into().expect("four-byte size")) as usize
+                != bytes.len()
+            {
                 return Err(Error::MalformedRecord {
                     tag: TextureAnimation::TAG,
-                    offset,
+                    offset: 0,
                 });
             }
-            tracks.push(track);
-            offset += consumed;
-        }
-        Ok(Self { tracks })
+            let mut tracks = Vec::new();
+            let mut offset = 4;
+            while offset < bytes.len() {
+                let (track, consumed) = AnimationTrack::parse(bytes, offset)?;
+                if !is_track_tag(track.tag) {
+                    return Err(Error::MalformedRecord {
+                        tag: TextureAnimation::TAG,
+                        offset,
+                    });
+                }
+                tracks.push(track);
+                offset += consumed;
+            }
+            Ok(Self { tracks })
+        }?;
+        Ok((value, length))
     }
 
     fn encode(&self) -> Result<Vec<u8>, Error> {

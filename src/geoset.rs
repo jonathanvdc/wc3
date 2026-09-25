@@ -614,125 +614,130 @@ impl Model {
 }
 
 impl Record for Geoset {
-    fn decode(bytes: &[u8], version: u32) -> Result<Self, Error> {
-        let mut cursor = Cursor::new(bytes);
-        let size = cursor.read_u32()? as usize;
-        if size != bytes.len() {
-            return Err(Error::MalformedRecord {
-                tag: Geoset::TAG,
-                offset: 0,
-            });
-        }
-        let vertices = decode_vectors::<3>(cursor.section(*b"VRTX", 12)?);
-        let normals = decode_vectors::<3>(cursor.section(*b"NRMS", 12)?);
-        let primitive_types = decode_words(cursor.section(*b"PTYP", 4)?);
-        let primitive_counts = decode_words(cursor.section(*b"PCNT", 4)?);
-        let faces = cursor
-            .section(*b"PVTX", 2)?
-            .chunks_exact(2)
-            .map(|bytes| u16::from_le_bytes(bytes.try_into().expect("two-byte face index")))
-            .collect();
-        let vertex_groups = cursor.section(*b"GNDX", 1)?.to_vec();
-        let matrix_group_sizes = decode_words(cursor.section(*b"MTGC", 4)?);
-        let matrix_indices = decode_words(cursor.section(*b"MATS", 4)?);
-        let material_id = cursor.read_u32()?;
-        let selection_group = cursor.read_u32()?;
-        let unselectable_raw = cursor.read_u32()?;
-        let (level_of_detail, name) = if version >= 900 {
-            let lod = cursor.read_u32()?;
-            let name = cursor
-                .read_exact(80)?
-                .try_into()
-                .expect("fixed-width geoset name");
-            (Some(lod), Some(name))
-        } else {
-            (None, None)
-        };
-        let extent = cursor.read_extent()?;
-        let sequence_count = cursor.read_u32()? as usize;
-        let mut sequence_extents = Vec::new();
-        for _ in 0..sequence_count {
-            sequence_extents.push(cursor.read_extent()?);
-        }
-        let mut extensions = Vec::new();
-        if version >= 900 {
-            while cursor.peek_tag()? != *b"UVAS" {
-                let offset = cursor.offset;
-                let tag = cursor.peek_tag()?;
-                match &tag {
-                    b"TANG"
-                        if !extensions
-                            .iter()
-                            .any(|part| matches!(part, Extension::Tangents(_))) =>
-                    {
-                        extensions.push(Extension::Tangents(decode_vectors::<4>(
-                            cursor.section(*b"TANG", 16)?,
-                        )));
-                    }
-                    b"SKIN"
-                        if !extensions
-                            .iter()
-                            .any(|part| matches!(part, Extension::Skin { .. })) =>
-                    {
-                        let weights = cursor.section(*b"SKIN", 1)?.to_vec();
-                        let bone_indices = if version >= 1200
-                            && !matches!(&cursor.peek_tag()?, b"UVAS" | b"TANG")
+    fn decode_one(bytes: &[u8], version: u32) -> Result<(Self, usize), Error> {
+        let length = crate::record::sized_record_len(bytes, Self::TAG, 4, u32::MAX, 0)?;
+        let bytes = &bytes[..length];
+        let value = {
+            let mut cursor = Cursor::new(bytes);
+            let size = cursor.read_u32()? as usize;
+            if size != bytes.len() {
+                return Err(Error::MalformedRecord {
+                    tag: Geoset::TAG,
+                    offset: 0,
+                });
+            }
+            let vertices = decode_vectors::<3>(cursor.section(*b"VRTX", 12)?);
+            let normals = decode_vectors::<3>(cursor.section(*b"NRMS", 12)?);
+            let primitive_types = decode_words(cursor.section(*b"PTYP", 4)?);
+            let primitive_counts = decode_words(cursor.section(*b"PCNT", 4)?);
+            let faces = cursor
+                .section(*b"PVTX", 2)?
+                .chunks_exact(2)
+                .map(|bytes| u16::from_le_bytes(bytes.try_into().expect("two-byte face index")))
+                .collect();
+            let vertex_groups = cursor.section(*b"GNDX", 1)?.to_vec();
+            let matrix_group_sizes = decode_words(cursor.section(*b"MTGC", 4)?);
+            let matrix_indices = decode_words(cursor.section(*b"MATS", 4)?);
+            let material_id = cursor.read_u32()?;
+            let selection_group = cursor.read_u32()?;
+            let unselectable_raw = cursor.read_u32()?;
+            let (level_of_detail, name) = if version >= 900 {
+                let lod = cursor.read_u32()?;
+                let name = cursor
+                    .read_exact(80)?
+                    .try_into()
+                    .expect("fixed-width geoset name");
+                (Some(lod), Some(name))
+            } else {
+                (None, None)
+            };
+            let extent = cursor.read_extent()?;
+            let sequence_count = cursor.read_u32()? as usize;
+            let mut sequence_extents = Vec::new();
+            for _ in 0..sequence_count {
+                sequence_extents.push(cursor.read_extent()?);
+            }
+            let mut extensions = Vec::new();
+            if version >= 900 {
+                while cursor.peek_tag()? != *b"UVAS" {
+                    let offset = cursor.offset;
+                    let tag = cursor.peek_tag()?;
+                    match &tag {
+                        b"TANG"
+                            if !extensions
+                                .iter()
+                                .any(|part| matches!(part, Extension::Tangents(_))) =>
                         {
-                            Some(cursor.read_exact(weights.len())?.to_vec())
-                        } else {
-                            None
-                        };
-                        extensions.push(Extension::Skin {
-                            weights,
-                            bone_indices,
-                        });
-                    }
-                    _ => {
-                        return Err(Error::MalformedRecord {
-                            tag: Geoset::TAG,
-                            offset,
-                        })
+                            extensions.push(Extension::Tangents(decode_vectors::<4>(
+                                cursor.section(*b"TANG", 16)?,
+                            )));
+                        }
+                        b"SKIN"
+                            if !extensions
+                                .iter()
+                                .any(|part| matches!(part, Extension::Skin { .. })) =>
+                        {
+                            let weights = cursor.section(*b"SKIN", 1)?.to_vec();
+                            let bone_indices = if version >= 1200
+                                && !matches!(&cursor.peek_tag()?, b"UVAS" | b"TANG")
+                            {
+                                Some(cursor.read_exact(weights.len())?.to_vec())
+                            } else {
+                                None
+                            };
+                            extensions.push(Extension::Skin {
+                                weights,
+                                bone_indices,
+                            });
+                        }
+                        _ => {
+                            return Err(Error::MalformedRecord {
+                                tag: Geoset::TAG,
+                                offset,
+                            })
+                        }
                     }
                 }
             }
-        }
-        if cursor.read_exact(4)? != b"UVAS" {
-            return Err(Error::MalformedRecord {
-                tag: Geoset::TAG,
-                offset: cursor.offset - 4,
-            });
-        }
-        let uv_count = cursor.read_u32()? as usize;
-        let mut uv_sets = Vec::new();
-        for _ in 0..uv_count {
-            uv_sets.push(decode_vectors::<2>(cursor.section(*b"UVBS", 8)?));
-        }
-        if cursor.offset != bytes.len() {
-            return Err(Error::MalformedRecord {
-                tag: Geoset::TAG,
-                offset: cursor.offset,
-            });
-        }
-        Ok(Self {
-            version,
-            vertices,
-            normals,
-            primitive_types,
-            primitive_counts,
-            faces,
-            vertex_groups,
-            matrix_group_sizes,
-            matrix_indices,
-            material_id,
-            selection_group,
-            unselectable_raw,
-            level_of_detail,
-            name,
-            extent,
-            sequence_extents,
-            extensions,
-            uv_sets,
-        })
+            if cursor.read_exact(4)? != b"UVAS" {
+                return Err(Error::MalformedRecord {
+                    tag: Geoset::TAG,
+                    offset: cursor.offset - 4,
+                });
+            }
+            let uv_count = cursor.read_u32()? as usize;
+            let mut uv_sets = Vec::new();
+            for _ in 0..uv_count {
+                uv_sets.push(decode_vectors::<2>(cursor.section(*b"UVBS", 8)?));
+            }
+            if cursor.offset != bytes.len() {
+                return Err(Error::MalformedRecord {
+                    tag: Geoset::TAG,
+                    offset: cursor.offset,
+                });
+            }
+            Ok(Self {
+                version,
+                vertices,
+                normals,
+                primitive_types,
+                primitive_counts,
+                faces,
+                vertex_groups,
+                matrix_group_sizes,
+                matrix_indices,
+                material_id,
+                selection_group,
+                unselectable_raw,
+                level_of_detail,
+                name,
+                extent,
+                sequence_extents,
+                extensions,
+                uv_sets,
+            })
+        }?;
+        Ok((value, length))
     }
 
     fn encode(&self) -> Result<Vec<u8>, Error> {

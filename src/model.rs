@@ -202,50 +202,56 @@ mod tests {
 }
 
 impl Record for Model {
-    fn decode(bytes: &[u8], default_version: u32) -> Result<Self, Error> {
-        if !bytes.starts_with(&MAGIC) {
-            return Err(Error::InvalidMagic);
-        }
-        let mut chunks = Vec::new();
-        let mut offset = MAGIC.len();
-        while offset < bytes.len() {
-            if bytes.len() - offset < 8 {
-                return Err(Error::TruncatedHeader { offset });
+    fn decode_one(bytes: &[u8], default_version: u32) -> Result<(Self, usize), Error> {
+        let length = bytes.len();
+        let value = {
+            if !bytes.starts_with(&MAGIC) {
+                return Err(Error::InvalidMagic);
             }
-            let tag = bytes[offset..offset + 4]
-                .try_into()
-                .expect("four-byte slice");
-            let size = u32::from_le_bytes(
-                bytes[offset + 4..offset + 8]
+            let mut chunks = Vec::new();
+            let mut offset = MAGIC.len();
+            while offset < bytes.len() {
+                if bytes.len() - offset < 8 {
+                    return Err(Error::TruncatedHeader { offset });
+                }
+                let tag = bytes[offset..offset + 4]
                     .try_into()
-                    .expect("four-byte slice"),
-            );
-            let start = offset + 8;
-            let end = start
-                .checked_add(size as usize)
-                .filter(|&end| end <= bytes.len())
-                .ok_or(Error::TruncatedChunk { tag, offset, size })?;
-            chunks.push(RawChunk::new(tag, bytes[start..end].to_vec()));
-            offset = end;
-        }
-        if chunks
-            .iter()
-            .any(|chunk| chunk.tag == *b"VERS" && chunk.data.len() < 4)
-        {
-            return Err(Error::InvalidVersionChunk);
-        }
-        let version = chunks
-            .iter()
-            .find(|chunk| chunk.tag == *b"VERS")
-            .map(|chunk| u32::from_le_bytes(chunk.data[..4].try_into().expect("four-byte version")))
-            .unwrap_or(default_version);
-        Ok(Self {
-            default_version,
-            chunks: chunks
-                .into_iter()
-                .map(|chunk| ModelChunk::from_raw(chunk, version))
-                .collect(),
-        })
+                    .expect("four-byte slice");
+                let size = u32::from_le_bytes(
+                    bytes[offset + 4..offset + 8]
+                        .try_into()
+                        .expect("four-byte slice"),
+                );
+                let start = offset + 8;
+                let end = start
+                    .checked_add(size as usize)
+                    .filter(|&end| end <= bytes.len())
+                    .ok_or(Error::TruncatedChunk { tag, offset, size })?;
+                chunks.push(RawChunk::new(tag, bytes[start..end].to_vec()));
+                offset = end;
+            }
+            if chunks
+                .iter()
+                .any(|chunk| chunk.tag == *b"VERS" && chunk.data.len() < 4)
+            {
+                return Err(Error::InvalidVersionChunk);
+            }
+            let version = chunks
+                .iter()
+                .find(|chunk| chunk.tag == *b"VERS")
+                .map(|chunk| {
+                    u32::from_le_bytes(chunk.data[..4].try_into().expect("four-byte version"))
+                })
+                .unwrap_or(default_version);
+            Ok(Self {
+                default_version,
+                chunks: chunks
+                    .into_iter()
+                    .map(|chunk| ModelChunk::from_raw(chunk, version))
+                    .collect(),
+            })
+        }?;
+        Ok((value, length))
     }
 
     fn encode(&self) -> Result<Vec<u8>, Error> {

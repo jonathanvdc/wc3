@@ -10,20 +10,24 @@ pub struct GlobalSequencesChunk {
 }
 
 impl Record for GlobalSequencesChunk {
-    fn decode(bytes: &[u8], _version: u32) -> Result<Self, Error> {
-        if bytes.len() % 4 != 0 {
-            return Err(Error::MalformedChunk {
-                tag: Self::TAG,
-                size: bytes.len(),
-                expected: 4,
-            });
-        }
-        Ok(Self {
-            durations: bytes
-                .chunks_exact(4)
-                .map(|word| u32::from_le_bytes(word.try_into().expect("four-byte field")))
-                .collect(),
-        })
+    fn decode_one(bytes: &[u8], _version: u32) -> Result<(Self, usize), Error> {
+        let length = bytes.len();
+        let value = {
+            if bytes.len() % 4 != 0 {
+                return Err(Error::MalformedChunk {
+                    tag: Self::TAG,
+                    size: bytes.len(),
+                    expected: 4,
+                });
+            }
+            Ok(Self {
+                durations: bytes
+                    .chunks_exact(4)
+                    .map(|word| u32::from_le_bytes(word.try_into().expect("four-byte field")))
+                    .collect(),
+            })
+        }?;
+        Ok((value, length))
     }
 
     fn encode(&self) -> Result<Vec<u8>, Error> {

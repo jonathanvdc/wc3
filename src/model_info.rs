@@ -154,13 +154,18 @@ impl Model {
 }
 
 impl Record for ModelInfo {
-    fn decode(bytes: &[u8], _version: u32) -> Result<Self, Error> {
-        let bytes: [u8; 372] = bytes.try_into().map_err(|_| Error::MalformedChunk {
-            tag: *b"MODL",
-            size: bytes.len(),
-            expected: 372,
-        })?;
-        Ok(Self { bytes })
+    fn decode_one(bytes: &[u8], _version: u32) -> Result<(Self, usize), Error> {
+        let length = 372;
+        let bytes = bytes.get(..length).unwrap_or(bytes);
+        let value = {
+            let bytes: [u8; 372] = bytes.try_into().map_err(|_| Error::MalformedChunk {
+                tag: *b"MODL",
+                size: bytes.len(),
+                expected: 372,
+            })?;
+            Ok(Self { bytes })
+        }?;
+        Ok((value, length))
     }
 
     fn encode(&self) -> Result<Vec<u8>, Error> {

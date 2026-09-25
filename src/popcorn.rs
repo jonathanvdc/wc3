@@ -217,56 +217,61 @@ impl Model {
 }
 
 impl Record for PopcornEmitter {
-    fn decode(bytes: &[u8], _version: u32) -> Result<Self, Error> {
-        if record_end(bytes, 0)? != bytes.len() {
-            return Err(Error::MalformedRecord {
-                tag: PopcornEmitter::TAG,
-                offset: 0,
-            });
-        }
-        let node_size =
-            u32::from_le_bytes(bytes[4..8].try_into().expect("validated node size")) as usize;
-        let fixed = 4 + node_size;
-        let node = Node::decode(&bytes[4..fixed], 0)?;
-        let word = |offset| {
-            u32::from_le_bytes(
-                bytes[fixed + offset..fixed + offset + 4]
-                    .try_into()
-                    .expect("validated field"),
-            )
-        };
-        let float = |offset| f32::from_bits(word(offset));
-        let path = bytes[fixed + 32..fixed + 32 + PATH_SIZE]
-            .try_into()
-            .expect("validated path");
-        let visibility_guide = bytes[fixed + 32 + PATH_SIZE..fixed + FIXED_SIZE]
-            .try_into()
-            .expect("validated guide");
-        let mut tracks = Vec::new();
-        let mut offset = fixed + FIXED_SIZE;
-        while offset < bytes.len() {
-            let (track, consumed) = AnimationTrack::parse(bytes, offset)?;
-            if !is_track_tag(track.tag) {
+    fn decode_one(bytes: &[u8], _version: u32) -> Result<(Self, usize), Error> {
+        let length = record_end(bytes, 0)?;
+        let bytes = &bytes[..length];
+        let value = {
+            if record_end(bytes, 0)? != bytes.len() {
                 return Err(Error::MalformedRecord {
                     tag: PopcornEmitter::TAG,
-                    offset,
+                    offset: 0,
                 });
             }
-            tracks.push(track);
-            offset += consumed;
-        }
-        Ok(Self {
-            node,
-            life_span: float(0),
-            emission_rate: float(4),
-            speed: float(8),
-            color: [float(12), float(16), float(20)],
-            alpha: float(24),
-            replaceable_id: word(28),
-            path,
-            visibility_guide,
-            tracks,
-        })
+            let node_size =
+                u32::from_le_bytes(bytes[4..8].try_into().expect("validated node size")) as usize;
+            let fixed = 4 + node_size;
+            let node = Node::decode(&bytes[4..fixed], 0)?;
+            let word = |offset| {
+                u32::from_le_bytes(
+                    bytes[fixed + offset..fixed + offset + 4]
+                        .try_into()
+                        .expect("validated field"),
+                )
+            };
+            let float = |offset| f32::from_bits(word(offset));
+            let path = bytes[fixed + 32..fixed + 32 + PATH_SIZE]
+                .try_into()
+                .expect("validated path");
+            let visibility_guide = bytes[fixed + 32 + PATH_SIZE..fixed + FIXED_SIZE]
+                .try_into()
+                .expect("validated guide");
+            let mut tracks = Vec::new();
+            let mut offset = fixed + FIXED_SIZE;
+            while offset < bytes.len() {
+                let (track, consumed) = AnimationTrack::parse(bytes, offset)?;
+                if !is_track_tag(track.tag) {
+                    return Err(Error::MalformedRecord {
+                        tag: PopcornEmitter::TAG,
+                        offset,
+                    });
+                }
+                tracks.push(track);
+                offset += consumed;
+            }
+            Ok(Self {
+                node,
+                life_span: float(0),
+                emission_rate: float(4),
+                speed: float(8),
+                color: [float(12), float(16), float(20)],
+                alpha: float(24),
+                replaceable_id: word(28),
+                path,
+                visibility_guide,
+                tracks,
+            })
+        }?;
+        Ok((value, length))
     }
 
     fn encode(&self) -> Result<Vec<u8>, Error> {

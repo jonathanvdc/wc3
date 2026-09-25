@@ -160,30 +160,35 @@ impl Model {
 }
 
 impl Record for ParticleEmitter {
-    fn decode(bytes: &[u8], _version: u32) -> Result<Self, Error> {
-        let layout = sized_node::layout(bytes, ParticleEmitter::TAG, FIXED_SIZE)?;
-        let node = Node::decode(&bytes[4..layout.fixed_start], 0)?;
-        let fixed = bytes[layout.fixed_start..layout.track_start]
-            .try_into()
-            .expect("validated fixed fields");
-        let mut tracks = Vec::new();
-        let mut offset = layout.track_start;
-        while offset < bytes.len() {
-            let (track, consumed) = AnimationTrack::parse(bytes, offset)?;
-            if !is_track(track.tag) {
-                return Err(Error::MalformedRecord {
-                    tag: ParticleEmitter::TAG,
-                    offset,
-                });
+    fn decode_one(bytes: &[u8], _version: u32) -> Result<(Self, usize), Error> {
+        let length = crate::record::sized_record_len(bytes, Self::TAG, FIXED_SIZE, u32::MAX, 0)?;
+        let bytes = &bytes[..length];
+        let value = {
+            let layout = sized_node::layout(bytes, ParticleEmitter::TAG, FIXED_SIZE)?;
+            let node = Node::decode(&bytes[4..layout.fixed_start], 0)?;
+            let fixed = bytes[layout.fixed_start..layout.track_start]
+                .try_into()
+                .expect("validated fixed fields");
+            let mut tracks = Vec::new();
+            let mut offset = layout.track_start;
+            while offset < bytes.len() {
+                let (track, consumed) = AnimationTrack::parse(bytes, offset)?;
+                if !is_track(track.tag) {
+                    return Err(Error::MalformedRecord {
+                        tag: ParticleEmitter::TAG,
+                        offset,
+                    });
+                }
+                tracks.push(track);
+                offset += consumed;
             }
-            tracks.push(track);
-            offset += consumed;
-        }
-        Ok(Self {
-            node,
-            fixed,
-            tracks,
-        })
+            Ok(Self {
+                node,
+                fixed,
+                tracks,
+            })
+        }?;
+        Ok((value, length))
     }
 
     fn encode(&self) -> Result<Vec<u8>, Error> {

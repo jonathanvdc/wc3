@@ -193,46 +193,53 @@ impl Model {
 }
 
 impl Record for CollisionShape {
-    fn decode(bytes: &[u8], _version: u32) -> Result<Self, Error> {
-        if record_end(bytes, 0)? != bytes.len() {
-            return Err(Error::MalformedRecord {
-                tag: CollisionShape::TAG,
-                offset: 0,
-            });
-        }
-        let node_size =
-            u32::from_le_bytes(bytes[..4].try_into().expect("validated node size")) as usize;
-        let node = Node::decode(&bytes[..node_size], 0)?;
-        let kind = u32::from_le_bytes(
-            bytes[node_size..node_size + 4]
-                .try_into()
-                .expect("validated kind"),
-        );
-        let start = node_size + 4;
-        let vec3 = |offset| {
-            std::array::from_fn(|axis| {
-                f32::from_le_bytes(
-                    bytes[offset + axis * 4..offset + axis * 4 + 4]
-                        .try_into()
-                        .expect("validated coordinate"),
-                )
-            })
-        };
-        let scalar = |offset| {
-            f32::from_le_bytes(
-                bytes[offset..offset + 4]
+    fn decode_one(bytes: &[u8], _version: u32) -> Result<(Self, usize), Error> {
+        let length = record_end(bytes, 0)?;
+        let bytes = &bytes[..length];
+        let value = {
+            if record_end(bytes, 0)? != bytes.len() {
+                return Err(Error::MalformedRecord {
+                    tag: CollisionShape::TAG,
+                    offset: 0,
+                });
+            }
+            let node_size =
+                u32::from_le_bytes(bytes[..4].try_into().expect("validated node size")) as usize;
+            let node = Node::decode(&bytes[..node_size], 0)?;
+            let kind = u32::from_le_bytes(
+                bytes[node_size..node_size + 4]
                     .try_into()
-                    .expect("validated radius"),
-            )
-        };
-        let geometry = match kind {
-            0 => CollisionGeometry::Box([vec3(start), vec3(start + 12)]),
-            1 => CollisionGeometry::Plane([vec3(start), vec3(start + 12)]),
-            2 => CollisionGeometry::Sphere(vec3(start), scalar(start + 12)),
-            3 => CollisionGeometry::Cylinder([vec3(start), vec3(start + 12)], scalar(start + 24)),
-            _ => unreachable!("validated kind"),
-        };
-        Ok(Self { node, geometry })
+                    .expect("validated kind"),
+            );
+            let start = node_size + 4;
+            let vec3 = |offset| {
+                std::array::from_fn(|axis| {
+                    f32::from_le_bytes(
+                        bytes[offset + axis * 4..offset + axis * 4 + 4]
+                            .try_into()
+                            .expect("validated coordinate"),
+                    )
+                })
+            };
+            let scalar = |offset| {
+                f32::from_le_bytes(
+                    bytes[offset..offset + 4]
+                        .try_into()
+                        .expect("validated radius"),
+                )
+            };
+            let geometry = match kind {
+                0 => CollisionGeometry::Box([vec3(start), vec3(start + 12)]),
+                1 => CollisionGeometry::Plane([vec3(start), vec3(start + 12)]),
+                2 => CollisionGeometry::Sphere(vec3(start), scalar(start + 12)),
+                3 => {
+                    CollisionGeometry::Cylinder([vec3(start), vec3(start + 12)], scalar(start + 24))
+                }
+                _ => unreachable!("validated kind"),
+            };
+            Ok(Self { node, geometry })
+        }?;
+        Ok((value, length))
     }
 
     fn encode(&self) -> Result<Vec<u8>, Error> {
