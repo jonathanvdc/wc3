@@ -1,6 +1,7 @@
 //! Fixed-width texture records in `TEXS` chunks.
 use crate::Encoder;
 use crate::Tag;
+use crate::ValueError;
 
 use crate::Record;
 use crate::{Cursor, ModelChunk, TexturesChunk};
@@ -47,7 +48,7 @@ pub struct Texture {
 
 impl Texture {
     /// Creates a texture with a path and no flags or replacement ID.
-    pub fn new(path: &str) -> Result<Self, Error> {
+    pub fn new(path: &str) -> Result<Self, ValueError> {
         let mut texture = Self {
             replaceable_id: 0,
             path: [0; PATH_SIZE],
@@ -82,7 +83,7 @@ impl Texture {
     }
 
     /// Sets the path, clearing the unused part of the fixed-width field.
-    pub fn set_path(&mut self, path: &str) -> Result<(), Error> {
+    pub fn set_path(&mut self, path: &str) -> Result<(), ValueError> {
         field::set_text(&mut self.path, path)
     }
 

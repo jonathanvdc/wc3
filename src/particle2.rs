@@ -1,5 +1,6 @@
 //! Particle emitter 2 records in `PRE2` chunks.
 use crate::Encoder;
+use crate::ValueError;
 use crate::{Color, Tag, Vec3};
 
 use crate::Record;
@@ -133,12 +134,12 @@ impl ParticleEmitter2 {
     }
 
     /// Replaces optional animation tracks.
-    pub fn set_tracks(&mut self, tracks: &[AnimationTrack]) -> Result<(), Error> {
+    pub fn set_tracks(&mut self, tracks: &[AnimationTrack]) -> Result<(), ValueError> {
         for track in tracks {
             if !is_track(track.tag) {
-                return Err(Error::MalformedRecord {
-                    tag: ParticleEmitter2::TAG,
-                    offset: 0,
+                return Err(ValueError::InvalidTrackTag {
+                    record: ParticleEmitter2::TAG,
+                    track: track.tag,
                 });
             }
         }

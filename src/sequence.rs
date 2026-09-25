@@ -1,5 +1,6 @@
 //! Animation sequence records in the `SEQS` chunk.
 use crate::Encoder;
+use crate::ValueError;
 use crate::{Tag, Vec3};
 
 use crate::Record;
@@ -50,7 +51,7 @@ pub struct Sequence {
 }
 
 impl Sequence {
-    pub fn new(name: &str, interval: [u32; 2]) -> Result<Self, Error> {
+    pub fn new(name: &str, interval: [u32; 2]) -> Result<Self, ValueError> {
         let mut sequence = Self {
             name: [0; NAME_SIZE],
             interval,
@@ -74,7 +75,7 @@ impl Sequence {
     pub fn name(&self) -> Cow<'_, str> {
         field::text(&self.name)
     }
-    pub fn set_name(&mut self, name: &str) -> Result<(), Error> {
+    pub fn set_name(&mut self, name: &str) -> Result<(), ValueError> {
         field::set_text(&mut self.name, name)
     }
     pub fn interval(&self) -> [u32; 2] {

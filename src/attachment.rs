@@ -1,6 +1,7 @@
 //! Attachment records in `ATCH` chunks.
 use crate::Encoder;
 use crate::Tag;
+use crate::ValueError;
 
 use crate::Record;
 use crate::{AttachmentsChunk, Cursor, ModelChunk};
@@ -23,7 +24,7 @@ pub struct Attachment {
 
 impl Attachment {
     /// Creates an attachment from a node, model path, and attachment ID.
-    pub fn new(node: Node, path: &str, id: u32) -> Result<Self, Error> {
+    pub fn new(node: Node, path: &str, id: u32) -> Result<Self, ValueError> {
         let mut attachment = Self {
             node,
             path: [0; PATH_SIZE],
@@ -51,7 +52,7 @@ impl Attachment {
     }
 
     /// Sets the model path and clears the old path field.
-    pub fn set_path(&mut self, path: &str) -> Result<(), Error> {
+    pub fn set_path(&mut self, path: &str) -> Result<(), ValueError> {
         field::set_text(&mut self.path, path)
     }
 
@@ -71,12 +72,15 @@ impl Attachment {
     }
 
     /// Replaces the optional visibility track.
-    pub fn set_visibility_track(&mut self, track: Option<&AnimationTrack>) -> Result<(), Error> {
+    pub fn set_visibility_track(
+        &mut self,
+        track: Option<&AnimationTrack>,
+    ) -> Result<(), ValueError> {
         if let Some(track) = track {
             if track.tag != *b"KATV" {
-                return Err(Error::MalformedRecord {
-                    tag: Attachment::TAG,
-                    offset: 0,
+                return Err(ValueError::InvalidTrackTag {
+                    record: Attachment::TAG,
+                    track: track.tag,
                 });
             }
         }

@@ -1,6 +1,7 @@
 //! Shared node headers used by bones and helpers.
 use crate::Encoder;
 use crate::Tag;
+use crate::ValueError;
 
 use crate::Record;
 use crate::{BonesChunk, Cursor, HelpersChunk, ModelChunk};
@@ -80,7 +81,7 @@ pub struct Bone {
 
 impl Node {
     /// Creates a node without animation tracks.
-    pub fn new(name: &str, object_id: u32) -> Result<Self, Error> {
+    pub fn new(name: &str, object_id: u32) -> Result<Self, ValueError> {
         let mut node = Self {
             name: [0; NAME_SIZE],
             object_id,
@@ -98,7 +99,7 @@ impl Node {
     }
 
     /// Sets the node name and clears unused bytes.
-    pub fn set_name(&mut self, name: &str) -> Result<(), Error> {
+    pub fn set_name(&mut self, name: &str) -> Result<(), ValueError> {
         field::set_text(&mut self.name, name)
     }
 
@@ -139,12 +140,12 @@ impl Node {
         &self.tracks
     }
     /// Replaces transform tracks after checking their tags.
-    pub fn set_tracks(&mut self, tracks: &[AnimationTrack]) -> Result<(), Error> {
+    pub fn set_tracks(&mut self, tracks: &[AnimationTrack]) -> Result<(), ValueError> {
         for track in tracks {
             if !matches!(&track.tag, b"KGTR" | b"KGRT" | b"KGSC") {
-                return Err(Error::MalformedRecord {
-                    tag: Node::TAG,
-                    offset: 0,
+                return Err(ValueError::InvalidTrackTag {
+                    record: Node::TAG,
+                    track: track.tag,
                 });
             }
         }

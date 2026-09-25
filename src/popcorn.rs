@@ -1,5 +1,6 @@
 //! Reforged popcorn particle emitters in `CORN` chunks.
 use crate::Encoder;
+use crate::ValueError;
 use crate::{Color, Tag};
 
 use crate::Record;
@@ -29,7 +30,7 @@ pub struct PopcornEmitter {
 
 impl PopcornEmitter {
     /// Creates an emitter with zeroed physical values.
-    pub fn new(node: Node, path: &str, visibility_guide: &str) -> Result<Self, Error> {
+    pub fn new(node: Node, path: &str, visibility_guide: &str) -> Result<Self, ValueError> {
         let mut emitter = Self {
             node,
             life_span: 0.0,
@@ -108,7 +109,7 @@ impl PopcornEmitter {
         field::text(&self.path)
     }
     /// Sets the model path.
-    pub fn set_path(&mut self, path: &str) -> Result<(), Error> {
+    pub fn set_path(&mut self, path: &str) -> Result<(), ValueError> {
         field::set_text(&mut self.path, path)
     }
     /// Returns the animation visibility guide path.
@@ -116,7 +117,7 @@ impl PopcornEmitter {
         field::text(&self.visibility_guide)
     }
     /// Sets the animation visibility guide path.
-    pub fn set_visibility_guide(&mut self, guide: &str) -> Result<(), Error> {
+    pub fn set_visibility_guide(&mut self, guide: &str) -> Result<(), ValueError> {
         field::set_text(&mut self.visibility_guide, guide)
     }
     /// Borrows decoded animation tracks.
@@ -124,12 +125,12 @@ impl PopcornEmitter {
         &self.tracks
     }
     /// Replaces optional animation tracks.
-    pub fn set_tracks(&mut self, tracks: &[AnimationTrack]) -> Result<(), Error> {
+    pub fn set_tracks(&mut self, tracks: &[AnimationTrack]) -> Result<(), ValueError> {
         for track in tracks {
             if !is_track_tag(track.tag) {
-                return Err(Error::MalformedRecord {
-                    tag: PopcornEmitter::TAG,
-                    offset: 0,
+                return Err(ValueError::InvalidTrackTag {
+                    record: PopcornEmitter::TAG,
+                    track: track.tag,
                 });
             }
         }

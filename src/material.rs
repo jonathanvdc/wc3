@@ -1,5 +1,6 @@
 //! Typed material layers and versioned texture slots.
 use crate::Encoder;
+use crate::ValueError;
 use crate::{Color, Tag, Version};
 
 use crate::Record;
@@ -224,10 +225,10 @@ impl Material {
         self.shader.as_ref().map(|field| field::text(field))
     }
     /// Changes the shader path and clears unused bytes.
-    pub fn set_shader(&mut self, shader: &str) -> Result<(), Error> {
-        let field = self.shader.as_mut().ok_or(Error::MalformedRecord {
+    pub fn set_shader(&mut self, shader: &str) -> Result<(), ValueError> {
+        let field = self.shader.as_mut().ok_or(ValueError::UnavailableField {
             tag: Material::TAG,
-            offset: 12,
+            field: "shader",
         })?;
         field::set_text(field, shader)
     }
@@ -240,9 +241,9 @@ impl Material {
         &mut self.layers
     }
     /// Replaces all layers, rejecting a different MDX version.
-    pub fn set_layers(&mut self, layers: &[Layer]) -> Result<(), Error> {
+    pub fn set_layers(&mut self, layers: &[Layer]) -> Result<(), ValueError> {
         if let Some(layer) = layers.iter().find(|layer| layer.version != self.version) {
-            return Err(Error::VersionMismatch {
+            return Err(ValueError::VersionMismatch {
                 expected: self.version,
                 actual: layer.version,
             });
@@ -338,8 +339,8 @@ impl Layer {
         }
     }
     /// Changes emissive gain in versions 900 and later.
-    pub fn set_emissive_gain(&mut self, value: f32) -> Result<(), Error> {
-        self.require_version(900, 28)?;
+    pub fn set_emissive_gain(&mut self, value: f32) -> Result<(), ValueError> {
+        self.require_version(900)?;
         match &mut self.extensions {
             LayerExtensions::Classic => unreachable!(),
             LayerExtensions::V900 { emissive_gain }
@@ -369,8 +370,8 @@ impl Layer {
         self.fresnel().map(|f| f.color)
     }
     /// Changes the Fresnel color in versions 1000 and later.
-    pub fn set_fresnel_color(&mut self, value: Color) -> Result<(), Error> {
-        self.require_version(1000, 32)?;
+    pub fn set_fresnel_color(&mut self, value: Color) -> Result<(), ValueError> {
+        self.require_version(1000)?;
         self.fresnel_mut().unwrap().color = value;
         Ok(())
     }
@@ -379,8 +380,8 @@ impl Layer {
         self.fresnel().map(|f| f.opacity)
     }
     /// Changes Fresnel opacity in versions 1000 and later.
-    pub fn set_fresnel_opacity(&mut self, value: f32) -> Result<(), Error> {
-        self.require_version(1000, 44)?;
+    pub fn set_fresnel_opacity(&mut self, value: f32) -> Result<(), ValueError> {
+        self.require_version(1000)?;
         self.fresnel_mut().unwrap().opacity = value;
         Ok(())
     }
@@ -389,8 +390,8 @@ impl Layer {
         self.fresnel().map(|f| f.team_color)
     }
     /// Changes Fresnel team-color strength in versions 1000 and later.
-    pub fn set_fresnel_team_color(&mut self, value: f32) -> Result<(), Error> {
-        self.require_version(1000, 48)?;
+    pub fn set_fresnel_team_color(&mut self, value: f32) -> Result<(), ValueError> {
+        self.require_version(1000)?;
         self.fresnel_mut().unwrap().team_color = value;
         Ok(())
     }
@@ -402,8 +403,8 @@ impl Layer {
         }
     }
     /// Changes shader type ID in versions 1100 and later.
-    pub fn set_shader_type_id(&mut self, value: u32) -> Result<(), Error> {
-        self.require_version(1100, 52)?;
+    pub fn set_shader_type_id(&mut self, value: u32) -> Result<(), ValueError> {
+        self.require_version(1100)?;
         if let LayerExtensions::V1100 { shader_type_id, .. } = &mut self.extensions {
             *shader_type_id = value;
         }
@@ -417,14 +418,14 @@ impl Layer {
         }
     }
     /// Replaces Reforged texture slots after validating their tracks.
-    pub fn set_texture_slots(&mut self, slots: &[LayerTextureSlot]) -> Result<(), Error> {
-        self.require_version(1100, 56)?;
+    pub fn set_texture_slots(&mut self, slots: &[LayerTextureSlot]) -> Result<(), ValueError> {
+        self.require_version(1100)?;
         for slot in slots {
             if let Some(track) = &slot.track {
                 if track.tag != *b"KMTF" {
-                    return Err(Error::MalformedRecord {
-                        tag: LAYER_TAG,
-                        offset: 0,
+                    return Err(ValueError::InvalidTrackTag {
+                        record: LAYER_TAG,
+                        track: track.tag,
                     });
                 }
             }
@@ -439,23 +440,24 @@ impl Layer {
         &self.tracks
     }
     /// Replaces layer animation tracks.
-    pub fn set_tracks(&mut self, tracks: &[AnimationTrack]) -> Result<(), Error> {
+    pub fn set_tracks(&mut self, tracks: &[AnimationTrack]) -> Result<(), ValueError> {
         for track in tracks {
             if !is_layer_track(track.tag) {
-                return Err(Error::MalformedRecord {
-                    tag: LAYER_TAG,
-                    offset: 0,
+                return Err(ValueError::InvalidTrackTag {
+                    record: LAYER_TAG,
+                    track: track.tag,
                 });
             }
         }
         self.tracks = tracks.to_vec();
         Ok(())
     }
-    fn require_version(&self, minimum: u32, offset: usize) -> Result<(), Error> {
+    fn require_version(&self, minimum: u32) -> Result<(), ValueError> {
         if self.version < minimum {
-            Err(Error::MalformedRecord {
+            Err(ValueError::UnsupportedVersion {
                 tag: LAYER_TAG,
-                offset,
+                minimum,
+                actual: self.version,
             })
         } else {
             Ok(())
@@ -473,11 +475,11 @@ impl Model {
     }
 
     /// Replaces all material records in the first `MTLS` chunk.
-    pub fn set_materials(&mut self, materials: &[Material]) -> Result<(), Error> {
+    pub fn set_materials(&mut self, materials: &[Material]) -> Result<(), ValueError> {
         let expected = self.version();
         for material in materials {
             if material.version != expected {
-                return Err(Error::VersionMismatch {
+                return Err(ValueError::VersionMismatch {
                     expected,
                     actual: material.version,
                 });

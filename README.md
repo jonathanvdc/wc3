@@ -21,15 +21,18 @@ coverage across the entire game collection has not yet been verified.
 use wc3_mdx::{Record, Model, ModelInfo};
 
 let mut model = Model::new(800);
-model.set_model_info(&ModelInfo::new("Example")?);\
+model.set_model_info(&ModelInfo::new("Example")?);
 let encoded = model.encode()?;
 let decoded = Model::decode_latest(&encoded)?;
 decoded.validate()?;
 assert_eq!(decoded.version(), 800);
 let info = decoded.model_info()?.unwrap();
 assert_eq!(info.name(), "Example");
-# Ok::<(), wc3_mdx::Error>(())
+# Ok::<(), Box<dyn std::error::Error>>(())
 ```
+
+Constructors and setters that can reject values return `ValueError`. Binary
+decoding, encoding, and model validation currently return `Error`.
 
 `Model::chunks()` exposes `ModelChunk` variants for known chunk types, plus
 `Unknown` and `Malformed` variants. A malformed chunk retains its original

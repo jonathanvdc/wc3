@@ -2,7 +2,7 @@
 
 use std::borrow::Cow;
 
-use crate::Error;
+use crate::ValueError;
 
 pub(crate) fn text(field: &[u8]) -> Cow<'_, str> {
     let end = field
@@ -12,9 +12,9 @@ pub(crate) fn text(field: &[u8]) -> Cow<'_, str> {
     String::from_utf8_lossy(&field[..end])
 }
 
-pub(crate) fn set_text(field: &mut [u8], value: &str) -> Result<(), Error> {
+pub(crate) fn set_text(field: &mut [u8], value: &str) -> Result<(), ValueError> {
     if value.len() >= field.len() || value.as_bytes().contains(&0) {
-        return Err(Error::InvalidString {
+        return Err(ValueError::InvalidString {
             max_bytes: field.len() - 1,
         });
     }

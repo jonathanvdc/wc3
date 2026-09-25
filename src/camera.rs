@@ -1,5 +1,6 @@
 //! Typed camera records in `CAMS` chunks.
 use crate::Encoder;
+use crate::ValueError;
 use crate::{Tag, Vec3, Version};
 
 use crate::Record;
@@ -27,7 +28,7 @@ pub struct Camera {
 
 impl Camera {
     /// Creates a camera with zeroed position and target fields.
-    pub fn new(name: &str) -> Result<Self, Error> {
+    pub fn new(name: &str) -> Result<Self, ValueError> {
         let mut camera = Self {
             name: [0; NAME_SIZE],
             record_flags: 0,
@@ -43,7 +44,7 @@ impl Camera {
     }
 
     /// Creates a camera with the record flags used by newer models.
-    pub fn new_for_version(name: &str, version: Version) -> Result<Self, Error> {
+    pub fn new_for_version(name: &str, version: Version) -> Result<Self, ValueError> {
         let mut camera = Self::new(name)?;
         if version >= 1200 {
             camera.record_flags = 3;
@@ -64,7 +65,7 @@ impl Camera {
         field::text(&self.name)
     }
     /// Changes the name and clears unused bytes.
-    pub fn set_name(&mut self, name: &str) -> Result<(), Error> {
+    pub fn set_name(&mut self, name: &str) -> Result<(), ValueError> {
         field::set_text(&mut self.name, name)
     }
     /// Returns camera XYZ position.
@@ -112,12 +113,12 @@ impl Camera {
         &self.tracks
     }
     /// Replaces camera tracks.
-    pub fn set_tracks(&mut self, tracks: &[AnimationTrack]) -> Result<(), Error> {
+    pub fn set_tracks(&mut self, tracks: &[AnimationTrack]) -> Result<(), ValueError> {
         for track in tracks {
             if !is_track(track.tag) {
-                return Err(Error::MalformedRecord {
-                    tag: Camera::TAG,
-                    offset: 0,
+                return Err(ValueError::InvalidTrackTag {
+                    record: Camera::TAG,
+                    track: track.tag,
                 });
             }
         }

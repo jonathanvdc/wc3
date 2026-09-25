@@ -1,5 +1,6 @@
 //! Light records in `LITE` chunks.
 use crate::Encoder;
+use crate::ValueError;
 use crate::{Color, Tag, Version};
 
 use crate::Record;
@@ -121,11 +122,11 @@ impl Light {
         self.extended_words
     }
     /// Sets the additional seven raw words in a newer light record.
-    pub fn set_extended_words(&mut self, words: [u32; 7]) -> Result<(), Error> {
+    pub fn set_extended_words(&mut self, words: [u32; 7]) -> Result<(), ValueError> {
         if self.extended_words.is_none() {
-            return Err(Error::MalformedRecord {
+            return Err(ValueError::UnavailableField {
                 tag: Light::TAG,
-                offset: 0,
+                field: "extended words",
             });
         }
         self.extended_words = Some(words);
@@ -136,12 +137,12 @@ impl Light {
         &self.tracks
     }
     /// Replaces optional light animation tracks.
-    pub fn set_tracks(&mut self, tracks: &[AnimationTrack]) -> Result<(), Error> {
+    pub fn set_tracks(&mut self, tracks: &[AnimationTrack]) -> Result<(), ValueError> {
         for track in tracks {
             if !is_track(track.tag) {
-                return Err(Error::MalformedRecord {
-                    tag: Light::TAG,
-                    offset: 0,
+                return Err(ValueError::InvalidTrackTag {
+                    record: Light::TAG,
+                    track: track.tag,
                 });
             }
         }

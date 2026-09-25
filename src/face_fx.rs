@@ -1,6 +1,7 @@
 //! Reforged face-animation references in `FAFX` chunks.
 use crate::Encoder;
 use crate::Tag;
+use crate::ValueError;
 
 use crate::Record;
 use crate::{Cursor, FaceFxChunk, ModelChunk};
@@ -22,7 +23,7 @@ pub struct FaceFx {
 
 impl FaceFx {
     /// Creates a face-animation reference.
-    pub fn new(name: &str, path: &str) -> Result<Self, Error> {
+    pub fn new(name: &str, path: &str) -> Result<Self, ValueError> {
         let mut entry = Self {
             name: [0; NAME_SIZE],
             path: [0; PATH_SIZE],
@@ -46,7 +47,7 @@ impl FaceFx {
     }
 
     /// Replaces the name.
-    pub fn set_name(&mut self, name: &str) -> Result<(), Error> {
+    pub fn set_name(&mut self, name: &str) -> Result<(), ValueError> {
         field::set_text(&mut self.name, name)
     }
 
@@ -56,7 +57,7 @@ impl FaceFx {
     }
 
     /// Replaces the animation resource path.
-    pub fn set_path(&mut self, path: &str) -> Result<(), Error> {
+    pub fn set_path(&mut self, path: &str) -> Result<(), ValueError> {
         field::set_text(&mut self.path, path)
     }
 }

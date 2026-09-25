@@ -1,5 +1,6 @@
 //! Typed geoset sections and lossless MDX serialization.
 use crate::Encoder;
+use crate::ValueError;
 use crate::{Tag, Vec3, Version};
 
 use crate::cursor::Cursor;
@@ -77,14 +78,18 @@ impl Geoset {
         vertices: &[Vec3],
         normals: &[Vec3],
         faces: &[u16],
-    ) -> Result<Self, Error> {
-        if vertices.len() != normals.len()
-            || vertices.len() > u32::MAX as usize
-            || faces.len() > u32::MAX as usize
-        {
-            return Err(Error::MalformedRecord {
+    ) -> Result<Self, ValueError> {
+        if vertices.len() != normals.len() {
+            return Err(ValueError::LengthMismatch {
                 tag: Geoset::TAG,
-                offset: 0,
+                expected: vertices.len(),
+                actual: normals.len(),
+            });
+        }
+        if faces.len() > u32::MAX as usize {
+            return Err(ValueError::CountTooLarge {
+                tag: Geoset::TAG,
+                count: faces.len(),
             });
         }
         Ok(Self {
@@ -231,29 +236,40 @@ impl Geoset {
     }
 
     /// Changes one vertex position.
-    pub fn set_vertex(&mut self, index: usize, vertex: Vec3) -> Result<(), Error> {
-        *self.vertices.get_mut(index).ok_or(Error::MalformedRecord {
-            tag: Geoset::TAG,
-            offset: index,
-        })? = vertex;
+    pub fn set_vertex(&mut self, index: usize, vertex: Vec3) -> Result<(), ValueError> {
+        let len = self.vertices.len();
+        *self
+            .vertices
+            .get_mut(index)
+            .ok_or(ValueError::IndexOutOfBounds {
+                tag: Geoset::TAG,
+                index,
+                len,
+            })? = vertex;
         Ok(())
     }
 
     /// Changes one vertex normal.
-    pub fn set_normal(&mut self, index: usize, normal: Vec3) -> Result<(), Error> {
-        *self.normals.get_mut(index).ok_or(Error::MalformedRecord {
-            tag: Geoset::TAG,
-            offset: index,
-        })? = normal;
+    pub fn set_normal(&mut self, index: usize, normal: Vec3) -> Result<(), ValueError> {
+        let len = self.normals.len();
+        *self
+            .normals
+            .get_mut(index)
+            .ok_or(ValueError::IndexOutOfBounds {
+                tag: Geoset::TAG,
+                index,
+                len,
+            })? = normal;
         Ok(())
     }
 
     /// Replaces the per-vertex matrix group indices.
-    pub fn set_vertex_groups(&mut self, groups: &[u8]) -> Result<(), Error> {
+    pub fn set_vertex_groups(&mut self, groups: &[u8]) -> Result<(), ValueError> {
         if groups.len() != self.vertices.len() {
-            return Err(Error::MalformedRecord {
+            return Err(ValueError::LengthMismatch {
                 tag: Geoset::TAG,
-                offset: groups.len(),
+                expected: self.vertices.len(),
+                actual: groups.len(),
             });
         }
         self.vertex_groups = groups.to_vec();
@@ -261,11 +277,11 @@ impl Geoset {
     }
 
     /// Replaces matrix groups and their flattened indices.
-    pub fn set_matrix_groups(&mut self, groups: &[Vec<u32>]) -> Result<(), Error> {
-        if groups.iter().any(|group| group.len() > u32::MAX as usize) {
-            return Err(Error::ChunkTooLarge {
+    pub fn set_matrix_groups(&mut self, groups: &[Vec<u32>]) -> Result<(), ValueError> {
+        if let Some(group) = groups.iter().find(|group| group.len() > u32::MAX as usize) {
+            return Err(ValueError::CountTooLarge {
                 tag: Geoset::TAG,
-                size: usize::MAX,
+                count: group.len(),
             });
         }
         self.matrix_group_sizes = groups.iter().map(|group| group.len() as u32).collect();
@@ -294,11 +310,11 @@ impl Geoset {
     }
 
     /// Changes the Reforged level of detail.
-    pub fn set_level_of_detail(&mut self, level: u32) -> Result<(), Error> {
+    pub fn set_level_of_detail(&mut self, level: u32) -> Result<(), ValueError> {
         if self.version < 900 {
-            return Err(Error::MalformedRecord {
+            return Err(ValueError::UnavailableField {
                 tag: Geoset::TAG,
-                offset: 0,
+                field: "level of detail",
             });
         }
         self.header_extension
@@ -309,11 +325,11 @@ impl Geoset {
     }
 
     /// Changes the Reforged name and clears unused name bytes.
-    pub fn set_name(&mut self, name: &str) -> Result<(), Error> {
+    pub fn set_name(&mut self, name: &str) -> Result<(), ValueError> {
         if self.version < 900 {
-            return Err(Error::MalformedRecord {
+            return Err(ValueError::UnavailableField {
                 tag: Geoset::TAG,
-                offset: 0,
+                field: "name",
             });
         }
         let mut field = [0; 80];
@@ -331,13 +347,19 @@ impl Geoset {
     }
 
     /// Changes one per-sequence bound.
-    pub fn set_sequence_extent(&mut self, index: usize, extent: GeosetExtent) -> Result<(), Error> {
+    pub fn set_sequence_extent(
+        &mut self,
+        index: usize,
+        extent: GeosetExtent,
+    ) -> Result<(), ValueError> {
+        let len = self.sequence_extents.len();
         *self
             .sequence_extents
             .get_mut(index)
-            .ok_or(Error::MalformedRecord {
+            .ok_or(ValueError::IndexOutOfBounds {
                 tag: Geoset::TAG,
-                offset: index,
+                index,
+                len,
             })? = extent;
         Ok(())
     }
@@ -348,11 +370,11 @@ impl Geoset {
     }
 
     /// Replaces or removes the Reforged tangent section, retaining its order.
-    pub fn set_tangents(&mut self, tangents: Option<&[[f32; 4]]>) -> Result<(), Error> {
+    pub fn set_tangents(&mut self, tangents: Option<&[[f32; 4]]>) -> Result<(), ValueError> {
         if self.version < 900 {
-            return Err(Error::MalformedRecord {
+            return Err(ValueError::UnavailableField {
                 tag: Geoset::TAG,
-                offset: 0,
+                field: "tangents",
             });
         }
         if let Some(index) = self
@@ -377,19 +399,29 @@ impl Geoset {
         &mut self,
         weights: Option<&[u8]>,
         bone_indices: Option<&[u8]>,
-    ) -> Result<(), Error> {
+    ) -> Result<(), ValueError> {
         if self.version < 900 {
-            return Err(Error::MalformedRecord {
+            return Err(ValueError::UnavailableField {
                 tag: Geoset::TAG,
-                offset: 0,
+                field: "skin data",
             });
         }
         if let Some(indices) = bone_indices {
-            if self.version < 1200 || weights.map_or(true, |weights| weights.len() != indices.len())
-            {
-                return Err(Error::MalformedRecord {
+            if self.version < 1200 {
+                return Err(ValueError::UnavailableField {
                     tag: Geoset::TAG,
-                    offset: 0,
+                    field: "skin bone indices",
+                });
+            }
+            let weights = weights.ok_or(ValueError::MissingField {
+                tag: Geoset::TAG,
+                field: "skin weights",
+            })?;
+            if weights.len() != indices.len() {
+                return Err(ValueError::LengthMismatch {
+                    tag: Geoset::TAG,
+                    expected: weights.len(),
+                    actual: indices.len(),
                 });
             }
         }
@@ -414,15 +446,24 @@ impl Geoset {
     }
 
     /// Changes one UV coordinate.
-    pub fn set_uv(&mut self, set: usize, index: usize, uv: [f32; 2]) -> Result<(), Error> {
-        let coordinates = self.uv_sets.get_mut(set).ok_or(Error::MalformedRecord {
-            tag: Geoset::TAG,
-            offset: set,
-        })?;
-        *coordinates.get_mut(index).ok_or(Error::MalformedRecord {
-            tag: Geoset::TAG,
-            offset: index,
-        })? = uv;
+    pub fn set_uv(&mut self, set: usize, index: usize, uv: [f32; 2]) -> Result<(), ValueError> {
+        let sets_len = self.uv_sets.len();
+        let coordinates = self
+            .uv_sets
+            .get_mut(set)
+            .ok_or(ValueError::IndexOutOfBounds {
+                tag: Geoset::TAG,
+                index: set,
+                len: sets_len,
+            })?;
+        let len = coordinates.len();
+        *coordinates
+            .get_mut(index)
+            .ok_or(ValueError::IndexOutOfBounds {
+                tag: Geoset::TAG,
+                index,
+                len,
+            })? = uv;
         Ok(())
     }
 
@@ -534,12 +575,12 @@ impl Model {
         })
     }
 
-    /// Replaces geosets after checking their version and encoding their sections.
-    pub fn set_geosets(&mut self, geosets: &[Geoset]) -> Result<(), Error> {
+    /// Replaces geosets after checking their version.
+    pub fn set_geosets(&mut self, geosets: &[Geoset]) -> Result<(), ValueError> {
         let expected = self.version();
         for geoset in geosets {
             if geoset.version != expected {
-                return Err(Error::VersionMismatch {
+                return Err(ValueError::VersionMismatch {
                     expected,
                     actual: geoset.version,
                 });

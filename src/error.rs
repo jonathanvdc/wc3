@@ -24,8 +24,6 @@ pub enum Error {
         size: usize,
         expected: usize,
     },
-    /// A fixed-width string is too long or contains a NUL.
-    InvalidString { max_bytes: usize },
     /// A size-bounded record or section is malformed at the given offset.
     MalformedRecord { tag: Tag, offset: usize },
     /// A decoder stopped before the end of an exact record input.
@@ -67,9 +65,6 @@ impl fmt::Display for Error {
                 "{:?} chunk has {size} bytes; expected at least {expected}",
                 String::from_utf8_lossy(tag)
             ),
-            Self::InvalidString { max_bytes } => {
-                write!(f, "string must fit in {max_bytes} bytes and contain no NUL")
-            }
             Self::MalformedRecord { tag, offset } => write!(
                 f,
                 "malformed {:?} record at byte {offset}",
@@ -89,3 +84,104 @@ impl fmt::Display for Error {
 }
 
 impl std::error::Error for Error {}
+
+/// Errors caused by a value supplied to a constructor or setter.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum ValueError {
+    InvalidString {
+        max_bytes: usize,
+    },
+    VersionMismatch {
+        expected: Version,
+        actual: Version,
+    },
+    UnsupportedVersion {
+        tag: Tag,
+        minimum: Version,
+        actual: Version,
+    },
+    UnavailableField {
+        tag: Tag,
+        field: &'static str,
+    },
+    InvalidTrackTag {
+        record: Tag,
+        track: Tag,
+    },
+    IndexOutOfBounds {
+        tag: Tag,
+        index: usize,
+        len: usize,
+    },
+    LengthMismatch {
+        tag: Tag,
+        expected: usize,
+        actual: usize,
+    },
+    MissingField {
+        tag: Tag,
+        field: &'static str,
+    },
+    CountTooLarge {
+        tag: Tag,
+        count: usize,
+    },
+}
+
+impl fmt::Display for ValueError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::InvalidString { max_bytes } => {
+                write!(f, "string must fit in {max_bytes} bytes and contain no NUL")
+            }
+            Self::VersionMismatch { expected, actual } => write!(
+                f,
+                "value version {actual} does not match destination version {expected}"
+            ),
+            Self::UnsupportedVersion {
+                tag,
+                minimum,
+                actual,
+            } => write!(
+                f,
+                "{:?} requires version {minimum}, got {actual}",
+                String::from_utf8_lossy(tag)
+            ),
+            Self::UnavailableField { tag, field } => write!(
+                f,
+                "{field} is unavailable in {:?}",
+                String::from_utf8_lossy(tag)
+            ),
+            Self::InvalidTrackTag { record, track } => write!(
+                f,
+                "track {:?} is not valid in {:?}",
+                String::from_utf8_lossy(track),
+                String::from_utf8_lossy(record)
+            ),
+            Self::IndexOutOfBounds { tag, index, len } => write!(
+                f,
+                "index {index} is outside {:?} length {len}",
+                String::from_utf8_lossy(tag)
+            ),
+            Self::LengthMismatch {
+                tag,
+                expected,
+                actual,
+            } => write!(
+                f,
+                "{:?} has {actual} values; expected {expected}",
+                String::from_utf8_lossy(tag)
+            ),
+            Self::MissingField { tag, field } => {
+                write!(f, "{:?} requires {field}", String::from_utf8_lossy(tag))
+            }
+            Self::CountTooLarge { tag, count } => write!(
+                f,
+                "{:?} count {count} exceeds u32",
+                String::from_utf8_lossy(tag)
+            ),
+        }
+    }
+}
+
+impl std::error::Error for ValueError {}

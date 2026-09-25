@@ -1,6 +1,7 @@
 //! Typed texture animation tracks in `TXAN` chunks.
 use crate::Encoder;
 use crate::Tag;
+use crate::ValueError;
 
 use crate::Record;
 use crate::{AnimationTrack, Error, Model};
@@ -24,12 +25,12 @@ impl TextureAnimation {
     }
 
     /// Replaces texture animation tracks.
-    pub fn set_tracks(&mut self, tracks: &[AnimationTrack]) -> Result<(), Error> {
+    pub fn set_tracks(&mut self, tracks: &[AnimationTrack]) -> Result<(), ValueError> {
         for track in tracks {
             if !is_track_tag(track.tag) {
-                return Err(Error::MalformedRecord {
-                    tag: TextureAnimation::TAG,
-                    offset: 0,
+                return Err(ValueError::InvalidTrackTag {
+                    record: TextureAnimation::TAG,
+                    track: track.tag,
                 });
             }
         }

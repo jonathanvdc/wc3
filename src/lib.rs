@@ -28,7 +28,7 @@ pub type Tag = [u8; 4];
 pub mod chunks;
 pub use chunks::*;
 mod error;
-pub use error::Error;
+pub use error::{Error, ValueError};
 mod encoder;
 pub use encoder::{Encoder, Scalar, SizeMarker};
 mod cursor;

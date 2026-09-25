@@ -1,5 +1,6 @@
 //! Ribbon emitter records in `RIBB` chunks.
 use crate::Encoder;
+use crate::ValueError;
 use crate::{Color, Tag};
 
 use crate::Record;
@@ -68,12 +69,12 @@ impl RibbonEmitter {
     }
 
     /// Replaces optional ribbon animation tracks.
-    pub fn set_tracks(&mut self, tracks: &[AnimationTrack]) -> Result<(), Error> {
+    pub fn set_tracks(&mut self, tracks: &[AnimationTrack]) -> Result<(), ValueError> {
         for track in tracks {
             if !is_track(track.tag) {
-                return Err(Error::MalformedRecord {
-                    tag: RibbonEmitter::TAG,
-                    offset: 0,
+                return Err(ValueError::InvalidTrackTag {
+                    record: RibbonEmitter::TAG,
+                    track: track.tag,
                 });
             }
         }

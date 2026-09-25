@@ -1,5 +1,6 @@
 //! Geoset animation records in `GEOA` chunks.
 use crate::Encoder;
+use crate::ValueError;
 use crate::{Color, Tag};
 
 use crate::Record;
@@ -98,12 +99,12 @@ impl GeosetAnimation {
         &self.tracks
     }
     /// Replaces alpha and color tracks.
-    pub fn set_tracks(&mut self, tracks: &[AnimationTrack]) -> Result<(), Error> {
+    pub fn set_tracks(&mut self, tracks: &[AnimationTrack]) -> Result<(), ValueError> {
         for track in tracks {
             if !matches!(&track.tag, b"KGAO" | b"KGAC") {
-                return Err(Error::MalformedRecord {
-                    tag: GeosetAnimation::TAG,
-                    offset: 0,
+                return Err(ValueError::InvalidTrackTag {
+                    record: GeosetAnimation::TAG,
+                    track: track.tag,
                 });
             }
         }

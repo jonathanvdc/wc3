@@ -1,5 +1,6 @@
 //! Fixed-size `MODL` model information.
 use crate::Encoder;
+use crate::ValueError;
 use crate::{Tag, Vec3};
 
 use crate::Record;
@@ -38,7 +39,7 @@ impl Default for ModelInfo {
 
 impl ModelInfo {
     /// Creates a zero-initialized model record with a name.
-    pub fn new(name: &str) -> Result<Self, Error> {
+    pub fn new(name: &str) -> Result<Self, ValueError> {
         let mut info = Self::default();
         info.set_name(name)?;
         Ok(info)
@@ -62,7 +63,7 @@ impl ModelInfo {
     }
 
     /// Sets the model name, clearing the rest of its fixed-width field.
-    pub fn set_name(&mut self, name: &str) -> Result<(), Error> {
+    pub fn set_name(&mut self, name: &str) -> Result<(), ValueError> {
         field::set_text(&mut self.name, name)
     }
 

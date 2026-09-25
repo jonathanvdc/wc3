@@ -1,6 +1,7 @@
 //! Classic particle emitters stored in `PREM` chunks.
 use crate::Encoder;
 use crate::Tag;
+use crate::ValueError;
 
 use crate::Record;
 use crate::{Cursor, ModelChunk, ParticleEmittersChunk};
@@ -28,7 +29,7 @@ pub struct ParticleEmitter {
 
 impl ParticleEmitter {
     /// Creates an emitter with zeroed physical values.
-    pub fn new(node: Node, path: &str) -> Result<Self, Error> {
+    pub fn new(node: Node, path: &str) -> Result<Self, ValueError> {
         let mut emitter = Self {
             node,
             emission_rate: 0.0,
@@ -110,7 +111,7 @@ impl ParticleEmitter {
     }
 
     /// Sets the emitter path while retaining all other fields.
-    pub fn set_path(&mut self, path: &str) -> Result<(), Error> {
+    pub fn set_path(&mut self, path: &str) -> Result<(), ValueError> {
         field::set_text(&mut self.path, path)
     }
 
@@ -125,12 +126,12 @@ impl ParticleEmitter {
     }
 
     /// Replaces optional animation tracks.
-    pub fn set_tracks(&mut self, tracks: &[AnimationTrack]) -> Result<(), Error> {
+    pub fn set_tracks(&mut self, tracks: &[AnimationTrack]) -> Result<(), ValueError> {
         for track in tracks {
             if !is_track(track.tag) {
-                return Err(Error::MalformedRecord {
-                    tag: ParticleEmitter::TAG,
-                    offset: 0,
+                return Err(ValueError::InvalidTrackTag {
+                    record: ParticleEmitter::TAG,
+                    track: track.tag,
                 });
             }
         }

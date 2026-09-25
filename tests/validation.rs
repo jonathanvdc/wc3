@@ -1,5 +1,7 @@
 use wc3_mdx::Record;
-use wc3_mdx::{Error, Geoset, Material, Model, ModelChunk, Node, RawChunk, RibbonEmitter};
+use wc3_mdx::{
+    Error, Geoset, Material, Model, ModelChunk, Node, RawChunk, RibbonEmitter, ValueError,
+};
 
 #[test]
 fn validates_synthetic_known_chunks_and_preserves_unknown() {
@@ -83,7 +85,7 @@ fn rejects_layer_shorter_than_its_versioned_header() {
     assert!(wc3_mdx::Layer::decode(&layer, 1800).is_err());
     assert_eq!(
         material.set_layers(&[wc3_mdx::Layer::new(800)]),
-        Err(Error::VersionMismatch {
+        Err(ValueError::VersionMismatch {
             expected: 1800,
             actual: 800
         })
@@ -95,14 +97,14 @@ fn rejects_records_from_another_model_version() {
     let mut model = Model::new(1800);
     assert_eq!(
         model.set_materials(&[Material::new(800)]),
-        Err(Error::VersionMismatch {
+        Err(ValueError::VersionMismatch {
             expected: 1800,
             actual: 800
         })
     );
     assert_eq!(
         model.set_geosets(&[Geoset::new(800, &[], &[], &[]).unwrap()]),
-        Err(Error::VersionMismatch {
+        Err(ValueError::VersionMismatch {
             expected: 1800,
             actual: 800
         })
