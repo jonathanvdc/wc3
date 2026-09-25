@@ -32,7 +32,7 @@ pub use event::EventObject;
 mod face_fx;
 pub use face_fx::FaceFx;
 mod geoset;
-pub use geoset::Geoset;
+pub use geoset::{Geoset, GeosetExtent};
 mod geoset_animation;
 pub use geoset_animation::{GeosetAnimation, GeosetAnimationFlags};
 mod light;

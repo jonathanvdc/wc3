@@ -63,6 +63,32 @@ fn rejects_invalid_geoset_sizes() {
 }
 
 #[test]
+fn builds_complete_synthetic_geosets() {
+    for version in [800, 900, 1100, 1200, 1800] {
+        let mut geoset = Geoset::new(
+            version,
+            &[[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]],
+            &[[0.0, 0.0, 1.0]; 2],
+            &[0, 1, 0],
+        )
+        .unwrap();
+        geoset.set_material_id(version, 7).unwrap();
+        assert_eq!(geoset.material_id(version).unwrap(), 7);
+        assert_eq!(geoset.vertex_groups(version).unwrap(), &[0, 0]);
+        assert_eq!(geoset.matrix_group_sizes(version).unwrap(), vec![1]);
+        assert_eq!(geoset.matrix_indices(version).unwrap(), vec![0]);
+        assert_eq!(geoset.uv_sets(version).unwrap(), vec![vec![[0.0, 0.0]; 2]]);
+        let mut model = Model::new(version);
+        model.set_geosets(&[geoset]).unwrap();
+        let parsed = Model::from_bytes(&model.to_bytes().unwrap()).unwrap();
+        assert_eq!(
+            parsed.geosets().unwrap()[0].material_id(version).unwrap(),
+            7
+        );
+    }
+}
+
+#[test]
 fn local_geosets_have_bounded_mesh_sections_when_available() {
     let Ok(directory) = std::env::var("WC3_MDX_FIXTURES") else {
         return;
@@ -80,6 +106,16 @@ fn local_geosets_have_bounded_mesh_sections_when_available() {
                     geoset.vertices().unwrap();
                     geoset.normals().unwrap();
                     geoset.face_indices().unwrap();
+                    let version = model.version().unwrap();
+                    geoset.vertex_groups(version).unwrap();
+                    geoset.matrix_group_sizes(version).unwrap();
+                    geoset.matrix_indices(version).unwrap();
+                    geoset.extent(version).unwrap();
+                    geoset.sequence_extents(version).unwrap();
+                    geoset.tangents(version).unwrap();
+                    geoset.skin_weights(version).unwrap();
+                    geoset.skin_bone_indices(version).unwrap();
+                    geoset.uv_sets(version).unwrap();
                 }
             }
         }
