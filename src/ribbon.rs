@@ -112,7 +112,7 @@ impl Model {
         for emitter in emitters {
             data.extend_from_slice(&emitter.encode()?);
         }
-        self.replace_chunks(RibbonEmitter::TAG, data)?;
+        self.replace_raw_chunk(RibbonEmitter::TAG, data)?;
         Ok(())
     }
 }

@@ -140,7 +140,7 @@ impl Model {
                 });
             }
         }
-        self.replace_chunks(GeosetAnimation::TAG, data)?;
+        self.replace_raw_chunk(GeosetAnimation::TAG, data)?;
         Ok(())
     }
 }

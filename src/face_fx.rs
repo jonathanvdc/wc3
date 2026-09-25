@@ -74,7 +74,7 @@ impl Model {
         for entry in entries {
             data.extend_from_slice(entry.as_bytes());
         }
-        self.replace_chunks(FaceFx::TAG, data)?;
+        self.replace_raw_chunk(FaceFx::TAG, data)?;
         Ok(())
     }
 }

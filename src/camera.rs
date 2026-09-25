@@ -157,7 +157,7 @@ impl Model {
                 });
             }
         }
-        self.replace_chunks(Camera::TAG, data)?;
+        self.replace_raw_chunk(Camera::TAG, data)?;
         Ok(())
     }
 }

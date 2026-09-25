@@ -196,7 +196,7 @@ impl Model {
         for sequence in sequences {
             data.extend_from_slice(sequence.as_bytes());
         }
-        self.replace_chunks(Sequence::TAG, data)?;
+        self.replace_raw_chunk(Sequence::TAG, data)?;
         Ok(())
     }
 }

@@ -68,7 +68,7 @@ impl Model {
                 });
             }
         }
-        self.replace_chunks(TextureAnimation::TAG, data)?;
+        self.replace_raw_chunk(TextureAnimation::TAG, data)?;
         Ok(())
     }
 }

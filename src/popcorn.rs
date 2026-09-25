@@ -167,7 +167,7 @@ impl Model {
         for emitter in emitters {
             data.extend_from_slice(&emitter.encode()?);
         }
-        self.replace_chunks(PopcornEmitter::TAG, data)?;
+        self.replace_raw_chunk(PopcornEmitter::TAG, data)?;
         Ok(())
     }
 }

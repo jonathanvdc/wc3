@@ -262,7 +262,7 @@ impl Model {
         for emitter in emitters {
             data.extend_from_slice(&emitter.encode()?);
         }
-        self.replace_chunks(ParticleEmitter2::TAG, data)?;
+        self.replace_raw_chunk(ParticleEmitter2::TAG, data)?;
         Ok(())
     }
 }

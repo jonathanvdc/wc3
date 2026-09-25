@@ -436,7 +436,7 @@ impl Model {
                 });
             }
         }
-        self.replace_chunks(Material::TAG, data)?;
+        self.replace_raw_chunk(Material::TAG, data)?;
         Ok(())
     }
 }

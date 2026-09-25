@@ -567,7 +567,7 @@ impl Model {
                 });
             }
         }
-        self.replace_chunks(Geoset::TAG, data)?;
+        self.replace_raw_chunk(Geoset::TAG, data)?;
         Ok(())
     }
 }

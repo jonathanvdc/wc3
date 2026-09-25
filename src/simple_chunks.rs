@@ -36,7 +36,7 @@ impl Model {
         for duration in durations {
             data.extend_from_slice(&duration.to_le_bytes());
         }
-        self.replace_chunks(*b"GLBS", data)?;
+        self.replace_raw_chunk(*b"GLBS", data)?;
         Ok(())
     }
 
@@ -74,26 +74,22 @@ impl Model {
                 data.extend_from_slice(&coordinate.to_le_bytes());
             }
         }
-        self.replace_chunks(*b"PIVT", data)?;
+        self.replace_raw_chunk(*b"PIVT", data)?;
         Ok(())
     }
 
-    pub(crate) fn replace_chunks(&mut self, tag: [u8; 4], data: Vec<u8>) -> Result<(), Error> {
+    pub(crate) fn replace_raw_chunk(&mut self, tag: [u8; 4], data: Vec<u8>) -> Result<(), Error> {
         let version = self.version();
-        let mut positions = Vec::new();
-        for (index, chunk) in self.chunks().iter().enumerate() {
-            if chunk.tag() == tag {
-                positions.push(index);
-            }
-        }
-        if positions.is_empty() {
-            self.push(ModelChunk::from_raw(RawChunk::new(tag, data), version));
-        } else {
-            self.chunks_mut()[positions[0]] =
-                ModelChunk::from_raw(RawChunk::new(tag, data), version);
+        self.replace_chunk(ModelChunk::from_raw(RawChunk::new(tag, data), version))
+    }
+
+    pub(crate) fn replace_chunk(&mut self, chunk: ModelChunk) -> Result<(), Error> {
+        let tag = chunk.tag();
+        if let Some(index) = self.chunks().iter().position(|existing| existing.tag() == tag) {
+            self.chunks_mut()[index] = chunk;
             let mut seen = false;
-            self.chunks_mut().retain(|chunk| {
-                if chunk.tag() != tag {
+            self.chunks_mut().retain(|existing| {
+                if existing.tag() != tag {
                     return true;
                 }
                 if seen {
@@ -103,6 +99,8 @@ impl Model {
                     true
                 }
             });
+        } else {
+            self.push(chunk);
         }
         Ok(())
     }

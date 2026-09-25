@@ -209,7 +209,7 @@ impl Model {
                 });
             }
         }
-        self.replace_chunks(Bone::TAG, data)?;
+        self.replace_raw_chunk(Bone::TAG, data)?;
         Ok(())
     }
 
@@ -233,7 +233,7 @@ impl Model {
                 });
             }
         }
-        self.replace_chunks(Node::TAG, data)?;
+        self.replace_raw_chunk(Node::TAG, data)?;
         Ok(())
     }
 }

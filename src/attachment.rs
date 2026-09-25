@@ -107,7 +107,7 @@ impl Model {
         for attachment in attachments {
             data.extend_from_slice(&attachment.encode()?);
         }
-        self.replace_chunks(Attachment::TAG, data)?;
+        self.replace_raw_chunk(Attachment::TAG, data)?;
         Ok(())
     }
 }

@@ -123,7 +123,7 @@ impl Model {
         for texture in textures {
             data.extend_from_slice(texture.as_bytes());
         }
-        self.replace_chunks(Texture::TAG, data)?;
+        self.replace_raw_chunk(Texture::TAG, data)?;
         Ok(())
     }
 }

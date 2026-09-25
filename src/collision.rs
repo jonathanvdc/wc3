@@ -145,7 +145,7 @@ impl Model {
         for shape in shapes {
             data.extend_from_slice(&shape.encode()?);
         }
-        self.replace_chunks(CollisionShape::TAG, data)?;
+        self.replace_raw_chunk(CollisionShape::TAG, data)?;
         Ok(())
     }
 }

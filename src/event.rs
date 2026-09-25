@@ -83,7 +83,7 @@ impl Model {
         for event in events {
             data.extend_from_slice(&event.encode()?);
         }
-        self.replace_chunks(EventObject::TAG, data)?;
+        self.replace_raw_chunk(EventObject::TAG, data)?;
         Ok(())
     }
 }

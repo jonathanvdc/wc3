@@ -178,7 +178,7 @@ impl Model {
         for light in lights {
             data.extend_from_slice(&light.encode()?);
         }
-        self.replace_chunks(Light::TAG, data)?;
+        self.replace_raw_chunk(Light::TAG, data)?;
         Ok(())
     }
 }
