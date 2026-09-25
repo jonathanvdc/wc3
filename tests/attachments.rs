@@ -27,5 +27,5 @@ fn attachment_fields_and_visibility_round_trip() {
     assert_eq!(attachment.node().name(), "Weapon");
     assert_eq!(attachment.path(), "Abilities\\Weapons\\Sword.mdx");
     assert_eq!(attachment.id(), 2);
-    assert_eq!(attachment.visibility_track().unwrap(), Some(track));
+    assert_eq!(attachment.visibility_track(), Some(&track));
 }

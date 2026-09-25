@@ -9,32 +9,31 @@ const PATH_SIZE: usize = 256;
 const FIXED_SIZE: usize = PATH_SIZE + 8;
 
 /// An attachment node with a model path and optional visibility track.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Attachment {
-    bytes: Vec<u8>,
+    node: Node,
+    path: [u8; PATH_SIZE],
+    reserved: u32,
+    id: u32,
+    visibility_track: Option<AnimationTrack>,
 }
 
 impl Attachment {
     /// Creates an attachment from a node, model path, and attachment ID.
     pub fn new(node: Node, path: &str, id: u32) -> Result<Self, Error> {
-        let mut bytes = vec![0; 4];
-        bytes.extend_from_slice(&node.to_bytes());
-        bytes.resize(bytes.len() + FIXED_SIZE, 0);
-        if bytes.len() > u32::MAX as usize {
-            return Err(Error::ChunkTooLarge {
-                tag: TAG,
-                size: bytes.len(),
-            });
-        }
-        let size = bytes.len() as u32;
-        bytes[..4].copy_from_slice(&size.to_le_bytes());
-        let mut attachment = Self { bytes };
+        let mut attachment = Self {
+            node,
+            path: [0; PATH_SIZE],
+            reserved: 0,
+            id,
+            visibility_track: None,
+        };
         attachment.set_path(path)?;
-        attachment.set_id(id);
+        attachment.to_bytes()?;
         Ok(attachment)
     }
 
-    /// Wraps one inclusive-size attachment record.
+    /// Parses one inclusive-size attachment record.
     pub fn from_bytes(bytes: &[u8]) -> Result<Self, Error> {
         if record_end(bytes, 0)? != bytes.len() {
             return Err(Error::MalformedRecord {
@@ -42,106 +41,126 @@ impl Attachment {
                 offset: 0,
             });
         }
+        let node_size =
+            u32::from_le_bytes(bytes[4..8].try_into().expect("validated node size")) as usize;
+        let fixed = 4 + node_size;
+        let node = Node::from_bytes(&bytes[4..fixed])?;
+        let path = bytes[fixed..fixed + PATH_SIZE]
+            .try_into()
+            .expect("validated path");
+        let reserved = u32::from_le_bytes(
+            bytes[fixed + PATH_SIZE..fixed + PATH_SIZE + 4]
+                .try_into()
+                .expect("validated reserved field"),
+        );
+        let id = u32::from_le_bytes(
+            bytes[fixed + PATH_SIZE + 4..fixed + FIXED_SIZE]
+                .try_into()
+                .expect("validated ID"),
+        );
+        let offset = fixed + FIXED_SIZE;
+        let visibility_track = if offset == bytes.len() {
+            None
+        } else {
+            let (track, consumed) = AnimationTrack::parse(bytes, offset)?;
+            if track.tag != *b"KATV" || offset + consumed != bytes.len() {
+                return Err(Error::MalformedRecord { tag: TAG, offset });
+            }
+            Some(track)
+        };
         Ok(Self {
-            bytes: bytes.to_vec(),
+            node,
+            path,
+            reserved,
+            id,
+            visibility_track,
         })
     }
 
-    /// Returns the complete record.
-    pub fn as_bytes(&self) -> &[u8] {
-        &self.bytes
+    /// Serializes the inclusive-size attachment record.
+    pub fn to_bytes(&self) -> Result<Vec<u8>, Error> {
+        let mut bytes = vec![0; 4];
+        bytes.extend_from_slice(&self.node.to_bytes());
+        bytes.extend_from_slice(&self.path);
+        bytes.extend_from_slice(&self.reserved.to_le_bytes());
+        bytes.extend_from_slice(&self.id.to_le_bytes());
+        if let Some(track) = &self.visibility_track {
+            if track.tag != *b"KATV" {
+                return Err(Error::MalformedRecord {
+                    tag: TAG,
+                    offset: bytes.len(),
+                });
+            }
+            bytes.extend_from_slice(&track.to_bytes()?);
+        }
+        let size = u32::try_from(bytes.len()).map_err(|_| Error::ChunkTooLarge {
+            tag: TAG,
+            size: bytes.len(),
+        })?;
+        bytes[..4].copy_from_slice(&size.to_le_bytes());
+        Ok(bytes)
     }
 
-    /// Returns the shared node.
-    pub fn node(&self) -> Node {
-        let size = self.node_size();
-        Node::from_bytes(&self.bytes[4..4 + size]).expect("validated node")
+    /// Borrows the shared node.
+    pub fn node(&self) -> &Node {
+        &self.node
+    }
+
+    /// Borrows the shared node for editing.
+    pub fn node_mut(&mut self) -> &mut Node {
+        &mut self.node
     }
 
     /// Returns the model path up to the first NUL.
     pub fn path(&self) -> Cow<'_, str> {
-        let start = self.fixed_offset();
-        let field = &self.bytes[start..start + PATH_SIZE];
-        let end = field
+        let end = self
+            .path
             .iter()
             .position(|&byte| byte == 0)
             .unwrap_or(PATH_SIZE);
-        String::from_utf8_lossy(&field[..end])
+        String::from_utf8_lossy(&self.path[..end])
     }
 
-    /// Sets the model path without changing reserved bytes.
+    /// Sets the model path and clears the old path field.
     pub fn set_path(&mut self, path: &str) -> Result<(), Error> {
         if path.len() >= PATH_SIZE || path.as_bytes().contains(&0) {
             return Err(Error::InvalidString {
                 max_bytes: PATH_SIZE - 1,
             });
         }
-        let start = self.fixed_offset();
-        self.bytes[start..start + PATH_SIZE].fill(0);
-        self.bytes[start..start + path.len()].copy_from_slice(path.as_bytes());
+        self.path.fill(0);
+        self.path[..path.len()].copy_from_slice(path.as_bytes());
         Ok(())
     }
 
     /// Returns the attachment ID.
     pub fn id(&self) -> u32 {
-        let offset = self.fixed_offset() + PATH_SIZE + 4;
-        u32::from_le_bytes(
-            self.bytes[offset..offset + 4]
-                .try_into()
-                .expect("four-byte ID"),
-        )
+        self.id
     }
 
     /// Sets the attachment ID.
     pub fn set_id(&mut self, id: u32) {
-        let offset = self.fixed_offset() + PATH_SIZE + 4;
-        self.bytes[offset..offset + 4].copy_from_slice(&id.to_le_bytes());
+        self.id = id;
     }
 
-    /// Returns the optional visibility track, if present.
-    pub fn visibility_track(&self) -> Result<Option<AnimationTrack>, Error> {
-        let offset = self.fixed_offset() + FIXED_SIZE;
-        if offset == self.bytes.len() {
-            return Ok(None);
-        }
-        let (track, consumed) = AnimationTrack::parse(&self.bytes, offset)?;
-        if track.tag != *b"KATV" || offset + consumed != self.bytes.len() {
-            return Err(Error::MalformedRecord { tag: TAG, offset });
-        }
-        Ok(Some(track))
+    /// Borrows the optional visibility track.
+    pub fn visibility_track(&self) -> Option<&AnimationTrack> {
+        self.visibility_track.as_ref()
     }
 
-    /// Replaces the optional visibility track and updates the record size.
+    /// Replaces the optional visibility track.
     pub fn set_visibility_track(&mut self, track: Option<&AnimationTrack>) -> Result<(), Error> {
-        let start = self.fixed_offset() + FIXED_SIZE;
-        let mut bytes = self.bytes[..start].to_vec();
         if let Some(track) = track {
             if track.tag != *b"KATV" {
                 return Err(Error::MalformedRecord {
                     tag: TAG,
-                    offset: start,
+                    offset: 0,
                 });
             }
-            bytes.extend_from_slice(&track.to_bytes()?);
+            track.to_bytes()?;
         }
-        if bytes.len() > u32::MAX as usize {
-            return Err(Error::ChunkTooLarge {
-                tag: TAG,
-                size: bytes.len(),
-            });
-        }
-        let size = bytes.len() as u32;
-        bytes[..4].copy_from_slice(&size.to_le_bytes());
-        self.bytes = bytes;
+        self.visibility_track = track.cloned();
         Ok(())
-    }
-
-    fn node_size(&self) -> usize {
-        u32::from_le_bytes(self.bytes[4..8].try_into().expect("validated node size")) as usize
-    }
-
-    fn fixed_offset(&self) -> usize {
-        4 + self.node_size()
     }
 }
 
@@ -201,7 +220,7 @@ impl Model {
     /// Replaces attachments in the first `ATCH` chunk.
     pub fn set_attachments(&mut self, attachments: &[Attachment]) -> Result<(), Error> {
         let size = attachments.iter().try_fold(0usize, |sum, attachment| {
-            sum.checked_add(attachment.bytes.len())
+            sum.checked_add(attachment.to_bytes()?.len())
                 .filter(|&size| size <= u32::MAX as usize)
                 .ok_or(Error::ChunkTooLarge {
                     tag: TAG,
@@ -210,7 +229,7 @@ impl Model {
         })?;
         let mut data = Vec::with_capacity(size);
         for attachment in attachments {
-            data.extend_from_slice(attachment.as_bytes());
+            data.extend_from_slice(&attachment.to_bytes()?);
         }
         self.replace_chunks(TAG, data);
         Ok(())

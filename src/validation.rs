@@ -31,10 +31,7 @@ impl Model {
         for helper in self.helpers()? {
             helper.tracks();
         }
-        for attachment in self.attachments()? {
-            attachment.node().tracks();
-            attachment.visibility_track()?;
-        }
+        self.attachments()?;
         for event in self.event_objects()? {
             event.node().tracks();
         }
