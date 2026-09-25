@@ -147,13 +147,12 @@ impl Record for Texture {
         })
     }
 
-    fn encode(&self) -> Result<Vec<u8>, Error> {
-        let mut bytes = Vec::with_capacity(SIZE);
+    fn encode_to(&self, bytes: &mut Vec<u8>) -> Result<(), Error> {
         bytes.extend_from_slice(&self.replaceable_id.to_le_bytes());
         bytes.extend_from_slice(&self.path);
         bytes.extend_from_slice(&self.reserved);
         bytes.extend_from_slice(&self.flags.to_le_bytes());
-        Ok(bytes)
+        Ok(())
     }
 }
 

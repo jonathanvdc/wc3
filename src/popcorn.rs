@@ -209,9 +209,10 @@ impl Record for PopcornEmitter {
         })
     }
 
-    fn encode(&self) -> Result<Vec<u8>, Error> {
-        let mut bytes = vec![0; 4];
-        bytes.extend_from_slice(&self.node.encode()?);
+    fn encode_to(&self, bytes: &mut Vec<u8>) -> Result<(), Error> {
+        let start = bytes.len();
+        bytes.resize(start + 4, 0);
+        self.node.encode_to(bytes)?;
         for value in [
             self.life_span,
             self.emission_rate,
@@ -230,17 +231,17 @@ impl Record for PopcornEmitter {
             if !is_track_tag(track.tag) {
                 return Err(Error::MalformedRecord {
                     tag: PopcornEmitter::TAG,
-                    offset: bytes.len(),
+                    offset: bytes.len() - start,
                 });
             }
-            bytes.extend_from_slice(&track.encode()?);
+            track.encode_to(bytes)?;
         }
-        let size = u32::try_from(bytes.len()).map_err(|_| Error::ChunkTooLarge {
+        let size = u32::try_from(bytes.len() - start).map_err(|_| Error::ChunkTooLarge {
             tag: PopcornEmitter::TAG,
-            size: bytes.len(),
+            size: bytes.len() - start,
         })?;
-        bytes[..4].copy_from_slice(&size.to_le_bytes());
-        Ok(bytes)
+        bytes[start..start + 4].copy_from_slice(&size.to_le_bytes());
+        Ok(())
     }
 }
 

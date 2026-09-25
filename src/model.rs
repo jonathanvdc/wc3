@@ -226,19 +226,11 @@ impl Record for Model {
         Ok(value)
     }
 
-    fn encode(&self) -> Result<Vec<u8>, Error> {
-        let chunks = self
-            .chunks
-            .iter()
-            .map(ModelChunk::to_raw)
-            .collect::<Result<Vec<_>, _>>()?;
-        let mut output = Vec::new();
+    fn encode_to(&self, output: &mut Vec<u8>) -> Result<(), Error> {
         output.extend_from_slice(&MAGIC);
-        for chunk in &chunks {
-            output.extend_from_slice(&chunk.tag);
-            output.extend_from_slice(&(chunk.data.len() as u32).to_le_bytes());
-            output.extend_from_slice(&chunk.data);
+        for chunk in &self.chunks {
+            chunk.encode_to(output)?;
         }
-        Ok(output)
+        Ok(())
     }
 }

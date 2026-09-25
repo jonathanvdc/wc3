@@ -190,8 +190,7 @@ impl Record for Sequence {
             maximum_extent,
         })
     }
-    fn encode(&self) -> Result<Vec<u8>, Error> {
-        let mut bytes = Vec::with_capacity(SIZE);
+    fn encode_to(&self, bytes: &mut Vec<u8>) -> Result<(), Error> {
         bytes.extend_from_slice(&self.name);
         for value in self
             .interval
@@ -208,7 +207,7 @@ impl Record for Sequence {
         {
             bytes.extend_from_slice(&value.to_le_bytes());
         }
-        Ok(bytes)
+        Ok(())
     }
 }
 

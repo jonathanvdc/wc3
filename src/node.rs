@@ -251,20 +251,19 @@ impl Record for Node {
         })
     }
 
-    fn encode(&self) -> Result<Vec<u8>, Error> {
-        Ok({
-            let mut bytes = vec![0; HEADER_SIZE];
-            bytes[4..84].copy_from_slice(&self.name);
-            bytes[84..88].copy_from_slice(&self.object_id.to_le_bytes());
-            bytes[88..92].copy_from_slice(&self.parent_id.to_le_bytes());
-            bytes[92..96].copy_from_slice(&self.raw_flags.to_le_bytes());
-            for track in &self.tracks {
-                bytes.extend_from_slice(&track.encode().expect("validated node track"));
-            }
-            let size = bytes.len() as u32;
-            bytes[..4].copy_from_slice(&size.to_le_bytes());
-            bytes
-        })
+    fn encode_to(&self, bytes: &mut Vec<u8>) -> Result<(), Error> {
+        let start = bytes.len();
+        bytes.resize(start + HEADER_SIZE, 0);
+        bytes[start + 4..start + 84].copy_from_slice(&self.name);
+        bytes[start + 84..start + 88].copy_from_slice(&self.object_id.to_le_bytes());
+        bytes[start + 88..start + 92].copy_from_slice(&self.parent_id.to_le_bytes());
+        bytes[start + 92..start + 96].copy_from_slice(&self.raw_flags.to_le_bytes());
+        for track in &self.tracks {
+            track.encode_to(bytes).expect("validated node track");
+        }
+        let size = (bytes.len() - start) as u32;
+        bytes[start..start + 4].copy_from_slice(&size.to_le_bytes());
+        Ok(())
     }
 }
 
@@ -280,13 +279,11 @@ impl Record for Bone {
         })
     }
 
-    fn encode(&self) -> Result<Vec<u8>, Error> {
-        Ok({
-            let mut bytes = self.node.encode()?;
-            bytes.extend_from_slice(&self.geoset_id.to_le_bytes());
-            bytes.extend_from_slice(&self.geoset_animation_id.to_le_bytes());
-            bytes
-        })
+    fn encode_to(&self, bytes: &mut Vec<u8>) -> Result<(), Error> {
+        self.node.encode_to(bytes)?;
+        bytes.extend_from_slice(&self.geoset_id.to_le_bytes());
+        bytes.extend_from_slice(&self.geoset_animation_id.to_le_bytes());
+        Ok(())
     }
 }
 

@@ -162,40 +162,38 @@ impl Record for CollisionShape {
         Ok(Self { node, geometry })
     }
 
-    fn encode(&self) -> Result<Vec<u8>, Error> {
-        Ok({
-            let mut bytes = self.node.encode()?;
-            let kind = match self.geometry {
-                CollisionGeometry::Box(_) => 0u32,
-                CollisionGeometry::Plane(_) => 1,
-                CollisionGeometry::Sphere(_, _) => 2,
-                CollisionGeometry::Cylinder(_, _) => 3,
-            };
-            bytes.extend_from_slice(&kind.to_le_bytes());
-            let mut push_vec3 = |values: Vec3| {
-                for value in values {
-                    bytes.extend_from_slice(&value.to_le_bytes());
-                }
-            };
-            match self.geometry {
-                CollisionGeometry::Box(points) | CollisionGeometry::Plane(points) => {
-                    for point in points {
-                        push_vec3(point);
-                    }
-                }
-                CollisionGeometry::Sphere(center, radius) => {
-                    push_vec3(center);
-                    bytes.extend_from_slice(&radius.to_le_bytes());
-                }
-                CollisionGeometry::Cylinder(points, radius) => {
-                    for point in points {
-                        push_vec3(point);
-                    }
-                    bytes.extend_from_slice(&radius.to_le_bytes());
+    fn encode_to(&self, bytes: &mut Vec<u8>) -> Result<(), Error> {
+        self.node.encode_to(bytes)?;
+        let kind = match self.geometry {
+            CollisionGeometry::Box(_) => 0u32,
+            CollisionGeometry::Plane(_) => 1,
+            CollisionGeometry::Sphere(_, _) => 2,
+            CollisionGeometry::Cylinder(_, _) => 3,
+        };
+        bytes.extend_from_slice(&kind.to_le_bytes());
+        let mut push_vec3 = |values: Vec3| {
+            for value in values {
+                bytes.extend_from_slice(&value.to_le_bytes());
+            }
+        };
+        match self.geometry {
+            CollisionGeometry::Box(points) | CollisionGeometry::Plane(points) => {
+                for point in points {
+                    push_vec3(point);
                 }
             }
-            bytes
-        })
+            CollisionGeometry::Sphere(center, radius) => {
+                push_vec3(center);
+                bytes.extend_from_slice(&radius.to_le_bytes());
+            }
+            CollisionGeometry::Cylinder(points, radius) => {
+                for point in points {
+                    push_vec3(point);
+                }
+                bytes.extend_from_slice(&radius.to_le_bytes());
+            }
+        }
+        Ok(())
     }
 }
 

@@ -166,7 +166,7 @@ impl Record for AnimationTrack {
         Ok(track)
     }
 
-    fn encode(&self) -> Result<Vec<u8>, Error> {
+    fn encode_to(&self, bytes: &mut Vec<u8>) -> Result<(), Error> {
         let components = components(self.tag).ok_or(Error::MalformedRecord {
             tag: self.tag,
             offset: 0,
@@ -178,7 +178,7 @@ impl Record for AnimationTrack {
             });
         }
         let tangents = self.interpolation >= 2;
-        let mut output = Vec::new();
+        let output = bytes;
         output.extend_from_slice(&self.tag);
         output.extend_from_slice(&(self.keyframes.len() as u32).to_le_bytes());
         output.extend_from_slice(&self.interpolation.to_le_bytes());
@@ -215,6 +215,6 @@ impl Record for AnimationTrack {
                 }
             }
         }
-        Ok(output)
+        Ok(())
     }
 }

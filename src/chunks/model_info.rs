@@ -27,7 +27,7 @@ impl Record for ModelInfoChunk {
         Ok(Self::new(info, extension))
     }
 
-    fn encode(&self) -> Result<Vec<u8>, Error> {
+    fn encode_to(&self, bytes: &mut Vec<u8>) -> Result<(), Error> {
         let size = 372usize
             .checked_add(self.extension.len())
             .ok_or(Error::ChunkTooLarge {
@@ -40,10 +40,10 @@ impl Record for ModelInfoChunk {
                 size,
             });
         }
-        let mut bytes = Vec::with_capacity(size);
-        bytes.extend_from_slice(&self.info.as_bytes());
+
+        self.info.encode_to(bytes)?;
         bytes.extend_from_slice(&self.extension);
-        Ok(bytes)
+        Ok(())
     }
 }
 

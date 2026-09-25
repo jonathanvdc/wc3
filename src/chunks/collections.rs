@@ -40,18 +40,18 @@ impl<C: CollectionChunk> Record for C {
         Ok(C::from_records(records))
     }
 
-    fn encode(&self) -> Result<Vec<u8>, Error> {
-        let mut bytes = Vec::new();
+    fn encode_to(&self, bytes: &mut Vec<u8>) -> Result<(), Error> {
+        let start = bytes.len();
         for record in self.records() {
-            bytes.extend_from_slice(&record.encode()?);
-            if bytes.len() > u32::MAX as usize {
+            record.encode_to(bytes)?;
+            if bytes.len() - start > u32::MAX as usize {
                 return Err(Error::ChunkTooLarge {
                     tag: C::tag(),
-                    size: bytes.len(),
+                    size: bytes.len() - start,
                 });
             }
         }
-        Ok(bytes)
+        Ok(())
     }
 }
 

@@ -96,11 +96,10 @@ impl Record for FaceFx {
         Ok(Self { name, path })
     }
 
-    fn encode(&self) -> Result<Vec<u8>, Error> {
-        let mut bytes = Vec::with_capacity(SIZE);
+    fn encode_to(&self, bytes: &mut Vec<u8>) -> Result<(), Error> {
         bytes.extend_from_slice(&self.name);
         bytes.extend_from_slice(&self.path);
-        Ok(bytes)
+        Ok(())
     }
 }
 

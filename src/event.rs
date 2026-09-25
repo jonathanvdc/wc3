@@ -104,8 +104,8 @@ impl Record for EventObject {
         })
     }
 
-    fn encode(&self) -> Result<Vec<u8>, Error> {
-        let mut bytes = self.node.encode()?;
+    fn encode_to(&self, bytes: &mut Vec<u8>) -> Result<(), Error> {
+        self.node.encode_to(bytes)?;
         bytes.extend_from_slice(&TRACK_TAG);
         let count = u32::try_from(self.frames.len()).map_err(|_| Error::ChunkTooLarge {
             tag: EventObject::TAG,
@@ -122,7 +122,7 @@ impl Record for EventObject {
                 size: bytes.len(),
             });
         }
-        Ok(bytes)
+        Ok(())
     }
 }
 

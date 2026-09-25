@@ -699,20 +699,21 @@ impl Record for Geoset {
         Ok(value)
     }
 
-    fn encode(&self) -> Result<Vec<u8>, Error> {
-        let mut bytes = vec![0; 4];
-        write_vectors(&mut bytes, *b"VRTX", &self.vertices)?;
-        write_vectors(&mut bytes, *b"NRMS", &self.normals)?;
-        write_words(&mut bytes, *b"PTYP", &self.primitive_types)?;
-        write_words(&mut bytes, *b"PCNT", &self.primitive_counts)?;
-        write_section_header(&mut bytes, *b"PVTX", self.faces.len())?;
+    fn encode_to(&self, bytes: &mut Vec<u8>) -> Result<(), Error> {
+        let start = bytes.len();
+        bytes.resize(start + 4, 0);
+        write_vectors(bytes, *b"VRTX", &self.vertices)?;
+        write_vectors(bytes, *b"NRMS", &self.normals)?;
+        write_words(bytes, *b"PTYP", &self.primitive_types)?;
+        write_words(bytes, *b"PCNT", &self.primitive_counts)?;
+        write_section_header(bytes, *b"PVTX", self.faces.len())?;
         for face in &self.faces {
             bytes.extend_from_slice(&face.to_le_bytes());
         }
-        write_section_header(&mut bytes, *b"GNDX", self.vertex_groups.len())?;
+        write_section_header(bytes, *b"GNDX", self.vertex_groups.len())?;
         bytes.extend_from_slice(&self.vertex_groups);
-        write_words(&mut bytes, *b"MTGC", &self.matrix_group_sizes)?;
-        write_words(&mut bytes, *b"MATS", &self.matrix_indices)?;
+        write_words(bytes, *b"MTGC", &self.matrix_group_sizes)?;
+        write_words(bytes, *b"MATS", &self.matrix_indices)?;
         for word in [
             self.material_id,
             self.selection_group,
@@ -725,27 +726,25 @@ impl Record for Geoset {
             bytes.extend_from_slice(&header.level_of_detail.to_le_bytes());
             bytes.extend_from_slice(&header.name);
         }
-        write_extent(&mut bytes, self.extent);
-        write_count(&mut bytes, self.sequence_extents.len())?;
+        write_extent(bytes, self.extent);
+        write_count(bytes, self.sequence_extents.len())?;
         for extent in &self.sequence_extents {
-            write_extent(&mut bytes, *extent);
+            write_extent(bytes, *extent);
         }
         for extension in &self.extensions {
             match extension {
-                GeosetExtraSection::Tangents(tangents) => {
-                    write_vectors(&mut bytes, *b"TANG", tangents)?
-                }
+                GeosetExtraSection::Tangents(tangents) => write_vectors(bytes, *b"TANG", tangents)?,
                 GeosetExtraSection::Skin {
                     weights,
                     bone_indices,
                 } => {
-                    write_section_header(&mut bytes, *b"SKIN", weights.len())?;
+                    write_section_header(bytes, *b"SKIN", weights.len())?;
                     bytes.extend_from_slice(weights);
                     if let Some(indices) = bone_indices {
                         if self.version < 1200 || indices.len() != weights.len() {
                             return Err(Error::MalformedRecord {
                                 tag: Geoset::TAG,
-                                offset: bytes.len(),
+                                offset: bytes.len() - start,
                             });
                         }
                         bytes.extend_from_slice(indices);
@@ -754,19 +753,19 @@ impl Record for Geoset {
             }
         }
         bytes.extend_from_slice(b"UVAS");
-        write_count(&mut bytes, self.uv_sets.len())?;
+        write_count(bytes, self.uv_sets.len())?;
         for uv_set in &self.uv_sets {
-            write_vectors(&mut bytes, *b"UVBS", uv_set)?;
+            write_vectors(bytes, *b"UVBS", uv_set)?;
         }
-        if bytes.len() > u32::MAX as usize {
+        if bytes.len() - start > u32::MAX as usize {
             return Err(Error::ChunkTooLarge {
                 tag: Geoset::TAG,
-                size: bytes.len(),
+                size: bytes.len() - start,
             });
         }
-        let size = bytes.len() as u32;
-        bytes[..4].copy_from_slice(&size.to_le_bytes());
-        Ok(bytes)
+        let size = (bytes.len() - start) as u32;
+        bytes[start..start + 4].copy_from_slice(&size.to_le_bytes());
+        Ok(())
     }
 }
 

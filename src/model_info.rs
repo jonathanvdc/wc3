@@ -177,8 +177,7 @@ impl Record for ModelInfo {
         })
     }
 
-    fn encode(&self) -> Result<Vec<u8>, Error> {
-        let mut bytes = Vec::with_capacity(SIZE);
+    fn encode_to(&self, bytes: &mut Vec<u8>) -> Result<(), Error> {
         bytes.extend_from_slice(&self.name);
         bytes.extend_from_slice(&self.reserved);
         bytes.extend_from_slice(&self.bounds_radius.to_le_bytes());
@@ -186,7 +185,7 @@ impl Record for ModelInfo {
             bytes.extend_from_slice(&value.to_le_bytes());
         }
         bytes.extend_from_slice(&self.blend_time.to_le_bytes());
-        Ok(bytes)
+        Ok(())
     }
 }
 

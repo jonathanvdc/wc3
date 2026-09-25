@@ -2,7 +2,7 @@
 use crate::{Tag, Version};
 
 use super::*;
-use crate::{Chunk, Error, KnownChunk, RawChunk};
+use crate::{Chunk, Error, KnownChunk, RawChunk, Record};
 
 /// A known chunk that could not be decoded. Its original bytes remain intact.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -67,6 +67,44 @@ impl Chunk for ModelChunk {
 }
 
 impl ModelChunk {
+    pub(crate) fn encode_to(&self, output: &mut Vec<u8>) -> Result<(), Error> {
+        let tag = self.tag();
+        output.extend_from_slice(&tag);
+        let size_offset = output.len();
+        output.extend_from_slice(&0u32.to_le_bytes());
+        match self {
+            Self::Version(value) => value.encode_to(output)?,
+            Self::ModelInfo(value) => value.encode_to(output)?,
+            Self::Sequences(value) => value.encode_to(output)?,
+            Self::GlobalSequences(value) => value.encode_to(output)?,
+            Self::Textures(value) => value.encode_to(output)?,
+            Self::Materials(value) => value.encode_to(output)?,
+            Self::Geosets(value) => value.encode_to(output)?,
+            Self::GeosetAnimations(value) => value.encode_to(output)?,
+            Self::Bones(value) => value.encode_to(output)?,
+            Self::Helpers(value) => value.encode_to(output)?,
+            Self::Attachments(value) => value.encode_to(output)?,
+            Self::EventObjects(value) => value.encode_to(output)?,
+            Self::CollisionShapes(value) => value.encode_to(output)?,
+            Self::ParticleEmitters(value) => value.encode_to(output)?,
+            Self::ParticleEmitters2(value) => value.encode_to(output)?,
+            Self::RibbonEmitters(value) => value.encode_to(output)?,
+            Self::PopcornEmitters(value) => value.encode_to(output)?,
+            Self::Cameras(value) => value.encode_to(output)?,
+            Self::Lights(value) => value.encode_to(output)?,
+            Self::TextureAnimations(value) => value.encode_to(output)?,
+            Self::FaceFx(value) => value.encode_to(output)?,
+            Self::PivotPoints(value) => value.encode_to(output)?,
+            Self::BindPose(value) => value.encode_to(output)?,
+            Self::Unknown(raw) => output.extend_from_slice(&raw.data),
+            Self::Malformed(malformed) => output.extend_from_slice(&malformed.raw.data),
+        }
+        let size = output.len() - size_offset - 4;
+        let size = u32::try_from(size).map_err(|_| Error::ChunkTooLarge { tag, size })?;
+        output[size_offset..size_offset + 4].copy_from_slice(&size.to_le_bytes());
+        Ok(())
+    }
+
     /// Decodes a known chunk, retaining its bytes and error if decoding fails.
     pub fn from_raw(raw: RawChunk, version: Version) -> Self {
         let decoded = match raw.tag {

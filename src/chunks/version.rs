@@ -28,7 +28,7 @@ impl Record for VersionChunk {
         Ok(Self { version, extension })
     }
 
-    fn encode(&self) -> Result<Vec<u8>, Error> {
+    fn encode_to(&self, bytes: &mut Vec<u8>) -> Result<(), Error> {
         let size = 4usize
             .checked_add(self.extension.len())
             .ok_or(Error::ChunkTooLarge {
@@ -41,10 +41,10 @@ impl Record for VersionChunk {
                 size,
             });
         }
-        let mut bytes = Vec::with_capacity(size);
+
         bytes.extend_from_slice(&self.version.to_le_bytes());
         bytes.extend_from_slice(&self.extension);
-        Ok(bytes)
+        Ok(())
     }
 }
 

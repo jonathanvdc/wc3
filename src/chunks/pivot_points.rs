@@ -28,15 +28,15 @@ impl Record for PivotPointsChunk {
         Ok(Self { points })
     }
 
-    fn encode(&self) -> Result<Vec<u8>, Error> {
-        let size = checked_chunk_size(self.points.len(), 12, Self::TAG)?;
-        let mut bytes = Vec::with_capacity(size);
+    fn encode_to(&self, bytes: &mut Vec<u8>) -> Result<(), Error> {
+        checked_chunk_size(self.points.len(), 12, Self::TAG)?;
+
         for point in &self.points {
             for coordinate in point {
                 bytes.extend_from_slice(&coordinate.to_le_bytes());
             }
         }
-        Ok(bytes)
+        Ok(())
     }
 }
 

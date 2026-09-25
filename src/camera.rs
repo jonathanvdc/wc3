@@ -195,36 +195,39 @@ impl Record for Camera {
         })
     }
 
-    fn encode(&self) -> Result<Vec<u8>, Error> {
-        let mut bytes = vec![0; HEADER_SIZE];
-        bytes[4..84].copy_from_slice(&self.name);
+    fn encode_to(&self, bytes: &mut Vec<u8>) -> Result<(), Error> {
+        let start = bytes.len();
+        bytes.resize(start + HEADER_SIZE, 0);
+        bytes[start + 4..start + 84].copy_from_slice(&self.name);
         for (index, value) in self.position.into_iter().enumerate() {
-            bytes[84 + index * 4..88 + index * 4].copy_from_slice(&value.to_le_bytes());
+            bytes[start + 84 + index * 4..start + 88 + index * 4]
+                .copy_from_slice(&value.to_le_bytes());
         }
-        bytes[96..100].copy_from_slice(&self.field_of_view.to_le_bytes());
-        bytes[100..104].copy_from_slice(&self.far_clip.to_le_bytes());
-        bytes[104..108].copy_from_slice(&self.near_clip.to_le_bytes());
+        bytes[start + 96..start + 100].copy_from_slice(&self.field_of_view.to_le_bytes());
+        bytes[start + 100..start + 104].copy_from_slice(&self.far_clip.to_le_bytes());
+        bytes[start + 104..start + 108].copy_from_slice(&self.near_clip.to_le_bytes());
         for (index, value) in self.target_position.into_iter().enumerate() {
-            bytes[108 + index * 4..112 + index * 4].copy_from_slice(&value.to_le_bytes());
+            bytes[start + 108 + index * 4..start + 112 + index * 4]
+                .copy_from_slice(&value.to_le_bytes());
         }
         for track in &self.tracks {
             if !is_track(track.tag) {
                 return Err(Error::MalformedRecord {
                     tag: Camera::TAG,
-                    offset: bytes.len(),
+                    offset: bytes.len() - start,
                 });
             }
-            bytes.extend_from_slice(&track.encode()?);
+            track.encode_to(bytes)?;
         }
-        if bytes.len() > MAX_RECORD_SIZE {
+        if bytes.len() - start > MAX_RECORD_SIZE {
             return Err(Error::ChunkTooLarge {
                 tag: Camera::TAG,
-                size: bytes.len(),
+                size: bytes.len() - start,
             });
         }
-        let size = bytes.len() as u32 | (u32::from(self.record_flags) << 24);
-        bytes[..4].copy_from_slice(&size.to_le_bytes());
-        Ok(bytes)
+        let size = (bytes.len() - start) as u32 | (u32::from(self.record_flags) << 24);
+        bytes[start..start + 4].copy_from_slice(&size.to_le_bytes());
+        Ok(())
     }
 }
 

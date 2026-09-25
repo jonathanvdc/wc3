@@ -17,8 +17,15 @@ pub trait Record: Sized {
         Ok(record)
     }
 
+    /// Appends a record to an existing byte buffer.
+    fn encode_to(&self, output: &mut Vec<u8>) -> Result<(), Error>;
+
     /// Writes a record.
-    fn encode(&self) -> Result<Vec<u8>, Error>;
+    fn encode(&self) -> Result<Vec<u8>, Error> {
+        let mut output = Vec::new();
+        self.encode_to(&mut output)?;
+        Ok(output)
+    }
 
     /// Parses a record, assuming the model has the latest version
     /// if it has no `VERS` chunk.
@@ -43,6 +50,10 @@ mod tests {
 
     fn round_trip<T: Record + PartialEq + std::fmt::Debug>(value: &T, version: u32) {
         let bytes = value.encode().unwrap();
+        let mut appended = vec![0xaa, 0xbb];
+        value.encode_to(&mut appended).unwrap();
+        assert_eq!(&appended[..2], &[0xaa, 0xbb]);
+        assert_eq!(&appended[2..], bytes);
         assert_eq!(T::decode(&bytes, version).unwrap(), *value);
     }
 

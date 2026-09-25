@@ -119,13 +119,12 @@ impl Record for BindPose {
         Ok(Self { matrices })
     }
 
-    fn encode(&self) -> Result<Vec<u8>, Error> {
+    fn encode_to(&self, bytes: &mut Vec<u8>) -> Result<(), Error> {
         let count = u32::try_from(self.matrices.len()).map_err(|_| Error::ChunkTooLarge {
             tag: BindPose::TAG,
             size: self.matrices.len(),
         })?;
-        let size = self
-            .matrices
+        self.matrices
             .len()
             .checked_mul(MATRIX_SIZE)
             .and_then(|n| n.checked_add(4))
@@ -134,14 +133,14 @@ impl Record for BindPose {
                 tag: BindPose::TAG,
                 size: usize::MAX,
             })?;
-        let mut bytes = Vec::with_capacity(size);
+
         bytes.extend_from_slice(&count.to_le_bytes());
         for matrix in &self.matrices {
             for value in matrix {
                 bytes.extend_from_slice(&value.to_le_bytes());
             }
         }
-        Ok(bytes)
+        Ok(())
     }
 }
 

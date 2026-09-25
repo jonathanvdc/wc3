@@ -28,13 +28,13 @@ impl Record for GlobalSequencesChunk {
         Ok(Self { durations })
     }
 
-    fn encode(&self) -> Result<Vec<u8>, Error> {
-        let size = checked_chunk_size(self.durations.len(), 4, Self::TAG)?;
-        let mut bytes = Vec::with_capacity(size);
+    fn encode_to(&self, bytes: &mut Vec<u8>) -> Result<(), Error> {
+        checked_chunk_size(self.durations.len(), 4, Self::TAG)?;
+
         for duration in &self.durations {
             bytes.extend_from_slice(&duration.to_le_bytes());
         }
-        Ok(bytes)
+        Ok(())
     }
 }
 

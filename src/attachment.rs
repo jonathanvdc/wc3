@@ -140,9 +140,10 @@ impl Record for Attachment {
         })
     }
 
-    fn encode(&self) -> Result<Vec<u8>, Error> {
-        let mut bytes = vec![0; 4];
-        bytes.extend_from_slice(&self.node.encode()?);
+    fn encode_to(&self, bytes: &mut Vec<u8>) -> Result<(), Error> {
+        let start = bytes.len();
+        bytes.resize(start + 4, 0);
+        self.node.encode_to(bytes)?;
         bytes.extend_from_slice(&self.path);
         bytes.extend_from_slice(&self.reserved.to_le_bytes());
         bytes.extend_from_slice(&self.id.to_le_bytes());
@@ -150,17 +151,17 @@ impl Record for Attachment {
             if track.tag != *b"KATV" {
                 return Err(Error::MalformedRecord {
                     tag: Attachment::TAG,
-                    offset: bytes.len(),
+                    offset: bytes.len() - start,
                 });
             }
-            bytes.extend_from_slice(&track.encode()?);
+            track.encode_to(bytes)?;
         }
-        let size = u32::try_from(bytes.len()).map_err(|_| Error::ChunkTooLarge {
+        let size = u32::try_from(bytes.len() - start).map_err(|_| Error::ChunkTooLarge {
             tag: Attachment::TAG,
-            size: bytes.len(),
+            size: bytes.len() - start,
         })?;
-        bytes[..4].copy_from_slice(&size.to_le_bytes());
-        Ok(bytes)
+        bytes[start..start + 4].copy_from_slice(&size.to_le_bytes());
+        Ok(())
     }
 }
 

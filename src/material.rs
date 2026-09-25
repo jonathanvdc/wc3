@@ -540,15 +540,16 @@ impl Record for Material {
         Ok(value)
     }
 
-    fn encode(&self) -> Result<Vec<u8>, Error> {
-        let mut bytes = vec![0; 4];
+    fn encode_to(&self, bytes: &mut Vec<u8>) -> Result<(), Error> {
+        let start = bytes.len();
+        bytes.resize(start + 4, 0);
         bytes.extend_from_slice(&self.priority_plane.to_le_bytes());
         bytes.extend_from_slice(&self.render_mode.to_le_bytes());
         if has_shader(self.version) {
             bytes.extend_from_slice(self.shader.as_ref().unwrap_or(&[0; 80]));
         }
         bytes.extend_from_slice(b"LAYS");
-        write_count(&mut bytes, self.layers.len(), Material::TAG)?;
+        write_count(bytes, self.layers.len(), Material::TAG)?;
         for layer in &self.layers {
             if layer.version != self.version {
                 return Err(Error::VersionMismatch {
@@ -556,10 +557,10 @@ impl Record for Material {
                     actual: layer.version,
                 });
             }
-            bytes.extend_from_slice(&layer.encode()?);
+            layer.encode_to(bytes)?;
         }
-        finish_record(&mut bytes, Material::TAG)?;
-        Ok(bytes)
+        finish_record(&mut bytes[start..], Material::TAG)?;
+        Ok(())
     }
 }
 
@@ -647,8 +648,9 @@ impl Record for Layer {
         Ok(value)
     }
 
-    fn encode(&self) -> Result<Vec<u8>, Error> {
-        let mut bytes = vec![0; 4];
+    fn encode_to(&self, bytes: &mut Vec<u8>) -> Result<(), Error> {
+        let start = bytes.len();
+        bytes.resize(start + 4, 0);
         for word in [
             self.filter_mode,
             self.shading_flags,
@@ -688,7 +690,7 @@ impl Record for Layer {
         } = &self.extensions
         {
             bytes.extend_from_slice(&shader_type_id.to_le_bytes());
-            write_count(&mut bytes, texture_slots.len(), LAYER_TAG)?;
+            write_count(bytes, texture_slots.len(), LAYER_TAG)?;
             for slot in texture_slots {
                 bytes.extend_from_slice(&slot.texture_id.to_le_bytes());
                 bytes.extend_from_slice(&slot.texture_type.to_le_bytes());
@@ -696,10 +698,10 @@ impl Record for Layer {
                     if track.tag != *b"KMTF" {
                         return Err(Error::MalformedRecord {
                             tag: LAYER_TAG,
-                            offset: bytes.len(),
+                            offset: bytes.len() - start,
                         });
                     }
-                    bytes.extend_from_slice(&track.encode()?);
+                    track.encode_to(bytes)?;
                 }
             }
         }
@@ -707,13 +709,13 @@ impl Record for Layer {
             if !is_layer_track(track.tag) {
                 return Err(Error::MalformedRecord {
                     tag: LAYER_TAG,
-                    offset: bytes.len(),
+                    offset: bytes.len() - start,
                 });
             }
-            bytes.extend_from_slice(&track.encode()?);
+            track.encode_to(bytes)?;
         }
-        finish_record(&mut bytes, LAYER_TAG)?;
-        Ok(bytes)
+        finish_record(&mut bytes[start..], LAYER_TAG)?;
+        Ok(())
     }
 }
 

@@ -184,8 +184,8 @@ fn decode_fields(bytes: &[u8]) -> Particle2Fields {
     }
 }
 
-fn encode_fields(fields: &Particle2Fields) -> Vec<u8> {
-    let mut bytes = Vec::with_capacity(FIXED_SIZE);
+fn encode_fields(fields: &Particle2Fields, bytes: &mut Vec<u8>) {
+    let start = bytes.len();
     for value in [
         fields.speed,
         fields.variation,
@@ -230,8 +230,7 @@ fn encode_fields(fields: &Particle2Fields) -> Vec<u8> {
     ] {
         bytes.extend_from_slice(&value.to_le_bytes());
     }
-    debug_assert_eq!(bytes.len(), FIXED_SIZE);
-    bytes
+    debug_assert_eq!(bytes.len() - start, FIXED_SIZE);
 }
 
 fn is_track(tag: Tag) -> bool {
@@ -284,25 +283,26 @@ impl Record for ParticleEmitter2 {
         })
     }
 
-    fn encode(&self) -> Result<Vec<u8>, Error> {
-        let mut bytes = vec![0; 4];
-        bytes.extend_from_slice(&self.node.encode()?);
-        bytes.extend_from_slice(&encode_fields(&self.fields));
+    fn encode_to(&self, bytes: &mut Vec<u8>) -> Result<(), Error> {
+        let start = bytes.len();
+        bytes.resize(start + 4, 0);
+        self.node.encode_to(bytes)?;
+        encode_fields(&self.fields, bytes);
         for track in &self.tracks {
             if !is_track(track.tag) {
                 return Err(Error::MalformedRecord {
                     tag: ParticleEmitter2::TAG,
-                    offset: bytes.len(),
+                    offset: bytes.len() - start,
                 });
             }
-            bytes.extend_from_slice(&track.encode()?);
+            track.encode_to(bytes)?;
         }
-        let size = u32::try_from(bytes.len()).map_err(|_| Error::ChunkTooLarge {
+        let size = u32::try_from(bytes.len() - start).map_err(|_| Error::ChunkTooLarge {
             tag: ParticleEmitter2::TAG,
-            size: bytes.len(),
+            size: bytes.len() - start,
         })?;
-        bytes[..4].copy_from_slice(&size.to_le_bytes());
-        Ok(bytes)
+        bytes[start..start + 4].copy_from_slice(&size.to_le_bytes());
+        Ok(())
     }
 }
 
