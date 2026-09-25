@@ -19,6 +19,8 @@ use std::fmt;
 
 mod animation;
 pub use animation::{AnimationTrack, Keyframe};
+mod bind_pose;
+pub use bind_pose::BindPose;
 mod geoset;
 pub use geoset::Geoset;
 mod geoset_animation;
