@@ -35,6 +35,8 @@ pub enum Error {
     TrailingRecordBytes { consumed: usize, total: usize },
     /// A bounded cursor could not read the requested number of bytes.
     UnexpectedEnd { offset: usize, needed: usize },
+    /// A size prefix is smaller than the size of the prefix itself.
+    InvalidRecordLength { offset: usize, length: usize },
 }
 
 impl fmt::Display for Error {
@@ -81,6 +83,9 @@ impl fmt::Display for Error {
             }
             Self::UnexpectedEnd { offset, needed } => {
                 write!(f, "cannot read {needed} bytes at offset {offset}")
+            }
+            Self::InvalidRecordLength { offset, length } => {
+                write!(f, "invalid record length {length} at offset {offset}")
             }
         }
     }

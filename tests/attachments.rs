@@ -30,3 +30,21 @@ fn attachment_fields_and_visibility_round_trip() {
     assert_eq!(attachment.id(), 2);
     assert_eq!(attachment.visibility_track(), Some(&track));
 }
+
+#[test]
+fn adjacent_attachments_decode_at_their_own_boundaries() {
+    let first = Attachment::new(Node::new("First", 1).unwrap(), "first.mdx", 1).unwrap();
+    let second = Attachment::new(Node::new("Second", 2).unwrap(), "second.mdx", 2).unwrap();
+    let mut bytes = first.encode().unwrap();
+    let first_len = bytes.len();
+    bytes.extend_from_slice(&second.encode().unwrap());
+    assert_eq!(
+        Attachment::decode_one(&bytes, 800).unwrap(),
+        (first.clone(), first_len)
+    );
+    assert_eq!(
+        Attachment::decode_one(&bytes[first_len..], 800).unwrap().0,
+        second
+    );
+    assert!(Attachment::decode(&bytes, 800).is_err());
+}

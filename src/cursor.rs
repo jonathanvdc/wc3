@@ -71,6 +71,21 @@ impl<'a> Cursor<'a> {
         })
     }
 
+    /// Reads a little-endian size that includes its own four bytes, then
+    /// returns a cursor bounded to the remaining record body.
+    pub(crate) fn slice_u32_sized(&mut self) -> Result<Self, Error> {
+        let mut next = *self;
+        let start = next.absolute_position();
+        let length = next.read_u32()? as usize;
+        let body_len = length.checked_sub(4).ok_or(Error::InvalidRecordLength {
+            offset: start,
+            length,
+        })?;
+        let body = next.slice(body_len)?;
+        *self = next;
+        Ok(body)
+    }
+
     pub(crate) fn finish(self) -> Result<(), Error> {
         if self.offset == self.bytes.len() {
             Ok(())
@@ -131,5 +146,36 @@ mod tests {
                 total: 2
             })
         );
+    }
+
+    #[test]
+    fn sized_slice_consumes_one_record_and_preserves_position_on_failure() {
+        let bytes = [6, 0, 0, 0, 42, 43, 9];
+        let mut cursor = Cursor::new(&bytes);
+        let mut body = cursor.slice_u32_sized().unwrap();
+        assert_eq!(cursor.position(), 6);
+        assert_eq!(body.read_exact(2).unwrap(), &[42, 43]);
+        body.finish().unwrap();
+        assert_eq!(cursor.read_exact(1).unwrap(), &[9]);
+
+        let mut short = Cursor::new(&[3, 0, 0, 0]);
+        assert_eq!(
+            short.slice_u32_sized().unwrap_err(),
+            Error::InvalidRecordLength {
+                offset: 0,
+                length: 3
+            }
+        );
+        assert_eq!(short.position(), 0);
+
+        let mut truncated = Cursor::new(&[8, 0, 0, 0, 1]);
+        assert_eq!(
+            truncated.slice_u32_sized().unwrap_err(),
+            Error::UnexpectedEnd {
+                offset: 4,
+                needed: 4
+            }
+        );
+        assert_eq!(truncated.position(), 0);
     }
 }

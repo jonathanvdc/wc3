@@ -32,9 +32,9 @@ fn rejects_invalid_geoset_sizes() {
     model.push(RawChunk::new(*b"GEOS", 100u32.to_le_bytes().to_vec()));
     assert_eq!(
         model.geosets(),
-        Err(Error::MalformedRecord {
-            tag: *b"GEOS",
-            offset: 0
+        Err(Error::UnexpectedEnd {
+            offset: 4,
+            needed: 96
         })
     );
 }

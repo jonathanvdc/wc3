@@ -1,5 +1,6 @@
 //! Event objects stored in `EVTS` chunks.
 
+use crate::cursor::Cursor;
 use crate::Record;
 use crate::{Error, Model, Node};
 
@@ -60,45 +61,6 @@ impl EventObject {
     }
 }
 
-pub(crate) fn record_end(data: &[u8], offset: usize) -> Result<usize, Error> {
-    let size_bytes = data
-        .get(offset..offset.saturating_add(4))
-        .ok_or(Error::MalformedRecord {
-            tag: EventObject::TAG,
-            offset,
-        })?;
-    let node_size = u32::from_le_bytes(size_bytes.try_into().expect("four-byte size")) as usize;
-    let node_end = offset
-        .checked_add(node_size)
-        .filter(|&end| end <= data.len())
-        .ok_or(Error::MalformedRecord {
-            tag: EventObject::TAG,
-            offset,
-        })?;
-    Node::decode(&data[offset..node_end], 0)?;
-    let header = data
-        .get(node_end..node_end.saturating_add(12))
-        .ok_or(Error::MalformedRecord {
-            tag: EventObject::TAG,
-            offset: node_end,
-        })?;
-    if header[..4] != TRACK_TAG {
-        return Err(Error::MalformedRecord {
-            tag: EventObject::TAG,
-            offset: node_end,
-        });
-    }
-    let count = u32::from_le_bytes(header[4..8].try_into().expect("four-byte count")) as usize;
-    node_end
-        .checked_add(12)
-        .and_then(|start| count.checked_mul(4).and_then(|n| start.checked_add(n)))
-        .filter(|&end| end <= data.len())
-        .ok_or(Error::MalformedRecord {
-            tag: EventObject::TAG,
-            offset: node_end,
-        })
-}
-
 impl Model {
     /// Decodes all event objects in `EVTS` chunks.
     pub fn event_objects(&self) -> Result<Vec<EventObject>, Error> {
@@ -129,35 +91,32 @@ impl Model {
 
 impl Record for EventObject {
     fn decode_one(bytes: &[u8], _version: u32) -> Result<(Self, usize), Error> {
-        let length = record_end(bytes, 0)?;
-        let bytes = &bytes[..length];
-        let value = {
-            let end = record_end(bytes, 0)?;
-            if end != bytes.len() {
-                return Err(Error::MalformedRecord {
-                    tag: EventObject::TAG,
-                    offset: end,
-                });
-            }
-            let node_size =
-                u32::from_le_bytes(bytes[..4].try_into().expect("validated node size")) as usize;
-            let node = Node::decode(&bytes[..node_size], 0)?;
-            let global_sequence_id = u32::from_le_bytes(
-                bytes[node_size + 8..node_size + 12]
-                    .try_into()
-                    .expect("validated ID"),
-            );
-            let frames = bytes[node_size + 12..]
-                .chunks_exact(4)
-                .map(|bytes| u32::from_le_bytes(bytes.try_into().expect("four-byte frame")))
-                .collect();
-            Ok(Self {
+        let mut cursor = Cursor::new(bytes);
+        let mut probe = cursor;
+        let node_size = probe.read_u32()? as usize;
+        let node = Node::decode(cursor.read_exact(node_size)?, 0)?;
+        let offset = cursor.position();
+        if cursor.read_exact(4)? != TRACK_TAG {
+            return Err(Error::MalformedRecord {
+                tag: Self::TAG,
+                offset,
+            });
+        }
+        let count = cursor.read_u32()? as usize;
+        let global_sequence_id = cursor.read_u32()?;
+        let mut frames = Vec::new();
+        for _ in 0..count {
+            frames.push(cursor.read_u32()?);
+        }
+        let consumed = cursor.position();
+        Ok((
+            Self {
                 node,
                 global_sequence_id,
                 frames,
-            })
-        }?;
-        Ok((value, length))
+            },
+            consumed,
+        ))
     }
 
     fn encode(&self) -> Result<Vec<u8>, Error> {

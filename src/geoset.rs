@@ -451,7 +451,7 @@ fn peek_tag(cursor: &Cursor<'_>) -> Result<[u8; 4], Error> {
 }
 
 fn section<'a>(cursor: &mut Cursor<'a>, tag: [u8; 4], stride: usize) -> Result<&'a [u8], Error> {
-    let offset = cursor.position();
+    let offset = cursor.absolute_position();
     if cursor.read_exact(4)? != tag {
         return Err(Error::MalformedRecord {
             tag: Geoset::TAG,
@@ -574,18 +574,10 @@ impl Model {
 
 impl Record for Geoset {
     fn decode_one(bytes: &[u8], version: u32) -> Result<(Self, usize), Error> {
-        let length = crate::record::sized_record_len(bytes, Self::TAG, 4, u32::MAX, 0)?;
         let mut source = Cursor::new(bytes);
-        let mut cursor = source.slice(length)?;
-        let bytes = cursor.remaining();
+        let mut cursor = source.slice_u32_sized()?;
+        let length = source.position();
         let value = {
-            let size = cursor.read_u32()? as usize;
-            if size != bytes.len() {
-                return Err(Error::MalformedRecord {
-                    tag: Geoset::TAG,
-                    offset: 0,
-                });
-            }
             let vertices = decode_vectors::<3>(section(&mut cursor, *b"VRTX", 12)?);
             let normals = decode_vectors::<3>(section(&mut cursor, *b"NRMS", 12)?);
             let primitive_types = decode_words(section(&mut cursor, *b"PTYP", 4)?);
@@ -619,7 +611,7 @@ impl Record for Geoset {
             let mut extensions = Vec::new();
             if version >= 900 {
                 while peek_tag(&cursor)? != *b"UVAS" {
-                    let offset = cursor.position();
+                    let offset = cursor.absolute_position();
                     let tag = peek_tag(&cursor)?;
                     match &tag {
                         b"TANG"
@@ -663,19 +655,13 @@ impl Record for Geoset {
             if cursor.read_exact(4)? != b"UVAS" {
                 return Err(Error::MalformedRecord {
                     tag: Geoset::TAG,
-                    offset: cursor.position() - 4,
+                    offset: cursor.absolute_position() - 4,
                 });
             }
             let uv_count = cursor.read_u32()? as usize;
             let mut uv_sets = Vec::new();
             for _ in 0..uv_count {
                 uv_sets.push(decode_vectors::<2>(section(&mut cursor, *b"UVBS", 8)?));
-            }
-            if cursor.position() != bytes.len() {
-                return Err(Error::MalformedRecord {
-                    tag: Geoset::TAG,
-                    offset: cursor.position(),
-                });
             }
             Ok(Self {
                 version,

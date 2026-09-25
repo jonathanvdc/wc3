@@ -1,5 +1,6 @@
 //! Attachment records in `ATCH` chunks.
 
+use crate::cursor::Cursor;
 use crate::Record;
 use std::borrow::Cow;
 
@@ -7,7 +8,6 @@ use crate::utils::field;
 use crate::{AnimationTrack, Error, Model, Node};
 
 const PATH_SIZE: usize = 256;
-const FIXED_SIZE: usize = PATH_SIZE + 8;
 
 /// An attachment node with a model path and optional visibility track.
 #[derive(Clone, Debug, PartialEq)]
@@ -85,50 +85,6 @@ impl Attachment {
     }
 }
 
-pub(crate) fn record_end(data: &[u8], offset: usize) -> Result<usize, Error> {
-    let size_bytes = data
-        .get(offset..offset.saturating_add(4))
-        .ok_or(Error::MalformedRecord {
-            tag: Attachment::TAG,
-            offset,
-        })?;
-    let size = u32::from_le_bytes(size_bytes.try_into().expect("four-byte size")) as usize;
-    let end = offset
-        .checked_add(size)
-        .filter(|&end| end <= data.len())
-        .ok_or(Error::MalformedRecord {
-            tag: Attachment::TAG,
-            offset,
-        })?;
-    let node_start = offset + 4;
-    let node_size_bytes =
-        data.get(node_start..node_start.saturating_add(4))
-            .ok_or(Error::MalformedRecord {
-                tag: Attachment::TAG,
-                offset: node_start,
-            })?;
-    let node_size =
-        u32::from_le_bytes(node_size_bytes.try_into().expect("four-byte size")) as usize;
-    let node_end = node_start
-        .checked_add(node_size)
-        .filter(|&node_end| node_end <= end)
-        .ok_or(Error::MalformedRecord {
-            tag: Attachment::TAG,
-            offset: node_start,
-        })?;
-    Node::decode(&data[node_start..node_end], 0)?;
-    if node_end
-        .checked_add(FIXED_SIZE)
-        .map_or(true, |required| required > end)
-    {
-        return Err(Error::MalformedRecord {
-            tag: Attachment::TAG,
-            offset: node_end,
-        });
-    }
-    Ok(end)
-}
-
 impl Model {
     /// Decodes all attachments in `ATCH` chunks.
     pub fn attachments(&self) -> Result<Vec<Attachment>, Error> {
@@ -159,54 +115,43 @@ impl Model {
 
 impl Record for Attachment {
     fn decode_one(bytes: &[u8], _version: u32) -> Result<(Self, usize), Error> {
-        let length = record_end(bytes, 0)?;
-        let bytes = &bytes[..length];
-        let value = {
-            if record_end(bytes, 0)? != bytes.len() {
+        let mut source = Cursor::new(bytes);
+        let mut cursor = source.slice_u32_sized()?;
+        let length = source.position();
+        let mut probe = cursor;
+        let node_size = probe.read_u32()? as usize;
+        let node = Node::decode(cursor.read_exact(node_size)?, 0)?;
+        let path = cursor
+            .read_exact(PATH_SIZE)?
+            .try_into()
+            .expect("fixed-width path");
+        let reserved = cursor.read_u32()?;
+        let id = cursor.read_u32()?;
+        let visibility_track = if cursor.remaining().is_empty() {
+            None
+        } else {
+            let offset = cursor.absolute_position();
+            let (track, consumed) = AnimationTrack::decode_one(cursor.remaining(), 0)?;
+            if track.tag != *b"KATV" {
                 return Err(Error::MalformedRecord {
-                    tag: Attachment::TAG,
-                    offset: 0,
+                    tag: Self::TAG,
+                    offset,
                 });
             }
-            let node_size =
-                u32::from_le_bytes(bytes[4..8].try_into().expect("validated node size")) as usize;
-            let fixed = 4 + node_size;
-            let node = Node::decode(&bytes[4..fixed], 0)?;
-            let path = bytes[fixed..fixed + PATH_SIZE]
-                .try_into()
-                .expect("validated path");
-            let reserved = u32::from_le_bytes(
-                bytes[fixed + PATH_SIZE..fixed + PATH_SIZE + 4]
-                    .try_into()
-                    .expect("validated reserved field"),
-            );
-            let id = u32::from_le_bytes(
-                bytes[fixed + PATH_SIZE + 4..fixed + FIXED_SIZE]
-                    .try_into()
-                    .expect("validated ID"),
-            );
-            let offset = fixed + FIXED_SIZE;
-            let visibility_track = if offset == bytes.len() {
-                None
-            } else {
-                let (track, consumed) = AnimationTrack::parse(bytes, offset)?;
-                if track.tag != *b"KATV" || offset + consumed != bytes.len() {
-                    return Err(Error::MalformedRecord {
-                        tag: Attachment::TAG,
-                        offset,
-                    });
-                }
-                Some(track)
-            };
-            Ok(Self {
+            cursor.read_exact(consumed)?;
+            Some(track)
+        };
+        cursor.finish()?;
+        Ok((
+            Self {
                 node,
                 path,
                 reserved,
                 id,
                 visibility_track,
-            })
-        }?;
-        Ok((value, length))
+            },
+            length,
+        ))
     }
 
     fn encode(&self) -> Result<Vec<u8>, Error> {

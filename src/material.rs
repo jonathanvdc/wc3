@@ -117,7 +117,7 @@ fn expect_tag(
     expected: [u8; 4],
     record_tag: [u8; 4],
 ) -> Result<(), Error> {
-    let offset = cursor.position();
+    let offset = cursor.absolute_position();
     if cursor.read_exact(4)? == expected {
         Ok(())
     } else {
@@ -444,17 +444,11 @@ impl Model {
 
 impl Record for Material {
     fn decode_one(bytes: &[u8], version: u32) -> Result<(Self, usize), Error> {
-        let length = crate::record::sized_record_len(bytes, Self::TAG, 4, u32::MAX, 0)?;
         let mut source = Cursor::new(bytes);
-        let mut cursor = source.slice(length)?;
-        let bytes = cursor.remaining();
+        let mut cursor = source.slice_u32_sized()?;
+        let length = source.position();
+        let bytes = &bytes[..length];
         let value = {
-            if cursor.read_u32()? as usize != bytes.len() {
-                return Err(Error::MalformedRecord {
-                    tag: Material::TAG,
-                    offset: 0,
-                });
-            }
             let priority_plane = cursor.read_u32()?;
             let render_mode = cursor.read_u32()?;
             let shader = if has_shader(version) {
@@ -466,15 +460,10 @@ impl Record for Material {
             let count = cursor.read_u32()? as usize;
             let mut layers = Vec::new();
             for _ in 0..count {
-                let (layer, consumed) = Layer::decode_one(&bytes[cursor.position()..], version)?;
+                let (layer, consumed) =
+                    Layer::decode_one(&bytes[cursor.absolute_position()..], version)?;
                 cursor.read_exact(consumed)?;
                 layers.push(layer);
-            }
-            if cursor.position() != bytes.len() {
-                return Err(Error::MalformedRecord {
-                    tag: Material::TAG,
-                    offset: cursor.position(),
-                });
             }
             Ok(Self {
                 version,
@@ -513,17 +502,11 @@ impl Record for Material {
 
 impl Record for Layer {
     fn decode_one(bytes: &[u8], version: u32) -> Result<(Self, usize), Error> {
-        let length = crate::record::sized_record_len(bytes, LAYER_TAG, 4, u32::MAX, 0)?;
         let mut source = Cursor::new(bytes);
-        let mut cursor = source.slice(length)?;
-        let bytes = cursor.remaining();
+        let mut cursor = source.slice_u32_sized()?;
+        let length = source.position();
+        let bytes = &bytes[..length];
         let value = {
-            if cursor.read_u32()? as usize != bytes.len() {
-                return Err(Error::MalformedRecord {
-                    tag: LAYER_TAG,
-                    offset: 0,
-                });
-            }
             let filter_mode = cursor.read_u32()?;
             let shading_flags = cursor.read_u32()?;
             let texture_id = cursor.read_u32()?;
@@ -555,10 +538,12 @@ impl Record for Layer {
                 for _ in 0..count {
                     let texture_id = cursor.read_u32()?;
                     let texture_type = cursor.read_u32()?;
-                    let track = if bytes.get(cursor.position()..cursor.position().saturating_add(4))
-                        == Some(b"KMTF")
+                    let track = if bytes.get(
+                        cursor.absolute_position()..cursor.absolute_position().saturating_add(4),
+                    ) == Some(b"KMTF")
                     {
-                        let (track, size) = AnimationTrack::parse(bytes, cursor.position())?;
+                        let (track, size) =
+                            AnimationTrack::parse(bytes, cursor.absolute_position())?;
                         cursor.read_exact(size)?;
                         Some(track)
                     } else {
@@ -572,8 +557,8 @@ impl Record for Layer {
                 }
             }
             let mut tracks = Vec::new();
-            while cursor.position() < bytes.len() {
-                let offset = cursor.position();
+            while cursor.absolute_position() < bytes.len() {
+                let offset = cursor.absolute_position();
                 let (track, size) = AnimationTrack::parse(bytes, offset)?;
                 if !is_layer_track(track.tag) {
                     return Err(Error::MalformedRecord {

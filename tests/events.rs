@@ -17,6 +17,24 @@ fn event_object_round_trip() {
 }
 
 #[test]
+fn adjacent_events_decode_at_their_own_boundaries() {
+    let first = EventObject::new(Node::new("First", 1).unwrap(), 0, &[10, 20]).unwrap();
+    let second = EventObject::new(Node::new("Second", 2).unwrap(), 1, &[30]).unwrap();
+    let mut bytes = first.encode().unwrap();
+    let first_len = bytes.len();
+    bytes.extend_from_slice(&second.encode().unwrap());
+    assert_eq!(
+        EventObject::decode_one(&bytes, 800).unwrap(),
+        (first.clone(), first_len)
+    );
+    assert_eq!(
+        EventObject::decode_one(&bytes[first_len..], 800).unwrap().0,
+        second
+    );
+    assert!(EventObject::decode(&bytes, 800).is_err());
+}
+
+#[test]
 fn local_event_objects_round_trip_when_available() {
     let Ok(directory) = std::env::var("WC3_MDX_FIXTURES") else {
         return;
