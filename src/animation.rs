@@ -161,7 +161,8 @@ fn components(tag: [u8; 4]) -> Option<usize> {
         b"KGTR" | b"KGSC" | b"KCTR" | b"KTTR" | b"KPPC" | b"KTAT" | b"KTAS" => Some(3),
         b"KGRT" | b"KTAR" => Some(4),
         b"KCRL" | b"KATV" | b"KPPA" | b"KPPE" | b"KPPL" | b"KPPS" | b"KPPV" | b"KPEV" | b"KPEE"
-        | b"KPEG" | b"KPLN" | b"KPLT" | b"KPEL" | b"KPES" => Some(1),
+        | b"KPEG" | b"KPLN" | b"KPLT" | b"KPEL" | b"KPES" | b"KP2V" | b"KP2E" | b"KP2W"
+        | b"KP2N" | b"KP2S" | b"KP2L" | b"KP2G" | b"KP2R" => Some(1),
         _ => None,
     }
 }

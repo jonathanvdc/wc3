@@ -47,6 +47,8 @@ mod popcorn;
 pub use popcorn::PopcornEmitter;
 mod particle;
 pub use particle::ParticleEmitter;
+mod particle2;
+pub use particle2::{Particle2Fields, ParticleEmitter2};
 mod sequence;
 pub use sequence::Sequence;
 mod simple_chunks;
