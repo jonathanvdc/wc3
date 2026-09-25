@@ -29,7 +29,10 @@ fn sequence_fields_round_trip() {
 #[test]
 fn malformed_sequence_chunk_is_reported() {
     let mut model = Model::new(1800);
-    model.push(ModelChunk::from_raw(RawChunk::new(*b"SEQS", vec![0; 131]), 1800));
+    model.push(ModelChunk::from_raw(
+        RawChunk::new(*b"SEQS", vec![0; 131]),
+        1800,
+    ));
     assert_eq!(
         model.sequences(),
         Err(Error::MalformedChunk {

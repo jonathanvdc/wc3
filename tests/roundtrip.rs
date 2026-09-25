@@ -5,8 +5,14 @@ use wc3_mdx::{Model, ModelChunk, RawChunk};
 fn synthetic_versions_and_unknown_chunks_round_trip() {
     for version in [800, 900, 1000, 1100, 1200, 1800] {
         let mut model = Model::new(version);
-        model.push(ModelChunk::from_raw(RawChunk::new(*b"MODL", vec![0; 372]), version));
-        model.push(ModelChunk::from_raw(RawChunk::new(*b"FUTR", vec![0, 1, 2, 255]), version));
+        model.push(ModelChunk::from_raw(
+            RawChunk::new(*b"MODL", vec![0; 372]),
+            version,
+        ));
+        model.push(ModelChunk::from_raw(
+            RawChunk::new(*b"FUTR", vec![0, 1, 2, 255]),
+            version,
+        ));
         let bytes = model.encode().unwrap();
         let parsed = Model::decode(&bytes, 800).unwrap();
         assert_eq!(parsed.version(), version);

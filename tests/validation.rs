@@ -12,7 +12,10 @@ fn validates_synthetic_known_chunks_and_preserves_unknown() {
     model
         .set_ribbon_emitters(&[RibbonEmitter::new(Node::new("Trail", 1).unwrap()).unwrap()])
         .unwrap();
-    model.push(ModelChunk::from_raw(RawChunk::new(*b"FUTR", vec![1, 2, 3]), 800));
+    model.push(ModelChunk::from_raw(
+        RawChunk::new(*b"FUTR", vec![1, 2, 3]),
+        800,
+    ));
     model.validate().unwrap();
     let bytes = model.encode().unwrap();
     assert_eq!(Model::decode(&bytes, 800).unwrap().encode().unwrap(), bytes);
@@ -51,7 +54,10 @@ fn rejects_short_repeated_version_chunks() {
     assert_eq!(model.stored_version(), None);
     assert_eq!(model.version(), 800);
     assert_eq!(model.validate(), Err(Error::InvalidVersionChunk));
-    assert_eq!(model.set_version(1800).unwrap_err(), Error::InvalidVersionChunk);
+    assert_eq!(
+        model.set_version(1800).unwrap_err(),
+        Error::InvalidVersionChunk
+    );
 }
 
 #[test]
@@ -91,7 +97,10 @@ fn rejects_records_from_another_model_version() {
 fn validates_every_repeated_model_info_chunk() {
     let mut model = Model::new(800);
     model.set_model_info(&wc3_mdx::ModelInfo::new("Good").unwrap());
-    model.push(ModelChunk::from_raw(RawChunk::new(*b"MODL", vec![0; 12]), 800));
+    model.push(ModelChunk::from_raw(
+        RawChunk::new(*b"MODL", vec![0; 12]),
+        800,
+    ));
     assert!(model.model_info().unwrap().is_some());
     assert!(model.validate().is_err());
 }

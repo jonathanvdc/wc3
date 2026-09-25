@@ -32,30 +32,4 @@ impl Model {
             points: points.to_vec(),
         }))
     }
-
-    pub(crate) fn replace_chunk(&mut self, chunk: ModelChunk) -> Result<(), Error> {
-        let tag = chunk.tag();
-        if let Some(index) = self
-            .chunks()
-            .iter()
-            .position(|existing| existing.tag() == tag)
-        {
-            self.chunks_mut()[index] = chunk;
-            let mut seen = false;
-            self.chunks_mut().retain(|existing| {
-                if existing.tag() != tag {
-                    return true;
-                }
-                if seen {
-                    false
-                } else {
-                    seen = true;
-                    true
-                }
-            });
-        } else {
-            self.push(chunk);
-        }
-        Ok(())
-    }
 }
