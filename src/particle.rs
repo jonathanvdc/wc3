@@ -1,10 +1,11 @@
 //! Classic particle emitters stored in `PREM` chunks.
 
+use crate::cursor::Cursor;
 use crate::Record;
 use std::borrow::Cow;
 
 use crate::utils::field;
-use crate::{sized_node, AnimationTrack, Error, Model, Node};
+use crate::{AnimationTrack, Error, Model, Node};
 
 pub(crate) const FIXED_SIZE: usize = 284;
 const PATH_SIZE: usize = 256;
@@ -161,34 +162,36 @@ impl Model {
 
 impl Record for ParticleEmitter {
     fn decode_one(bytes: &[u8], _version: u32) -> Result<(Self, usize), Error> {
-        let length = crate::record::sized_record_len(bytes, Self::TAG, FIXED_SIZE, u32::MAX, 0)?;
-        let bytes = &bytes[..length];
-        let value = {
-            let layout = sized_node::layout(bytes, ParticleEmitter::TAG, FIXED_SIZE)?;
-            let node = Node::decode(&bytes[4..layout.fixed_start], 0)?;
-            let fixed = bytes[layout.fixed_start..layout.track_start]
-                .try_into()
-                .expect("validated fixed fields");
-            let mut tracks = Vec::new();
-            let mut offset = layout.track_start;
-            while offset < bytes.len() {
-                let (track, consumed) = AnimationTrack::parse(bytes, offset)?;
-                if !is_track(track.tag) {
-                    return Err(Error::MalformedRecord {
-                        tag: ParticleEmitter::TAG,
-                        offset,
-                    });
-                }
-                tracks.push(track);
-                offset += consumed;
+        let mut source = Cursor::new(bytes);
+        let mut cursor = source.slice_u32_sized()?;
+        let (node, node_len) = Node::decode_one(cursor.remaining(), 0)?;
+        cursor.read_exact(node_len)?;
+        let fixed = cursor
+            .read_exact(FIXED_SIZE)?
+            .try_into()
+            .expect("fixed emitter fields");
+        let mut tracks = Vec::new();
+        while !cursor.remaining().is_empty() {
+            let offset = cursor.absolute_position();
+            let (track, consumed) = AnimationTrack::decode_one(cursor.remaining(), 0)?;
+            if !is_track(track.tag) {
+                return Err(Error::MalformedRecord {
+                    tag: Self::TAG,
+                    offset,
+                });
             }
-            Ok(Self {
+            cursor.read_exact(consumed)?;
+            tracks.push(track);
+        }
+        cursor.finish()?;
+        Ok((
+            Self {
                 node,
                 fixed,
                 tracks,
-            })
-        }?;
-        Ok((value, length))
+            },
+            source.position(),
+        ))
     }
 
     fn encode(&self) -> Result<Vec<u8>, Error> {

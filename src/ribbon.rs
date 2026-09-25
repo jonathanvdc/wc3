@@ -1,7 +1,8 @@
 //! Ribbon emitter records in `RIBB` chunks.
 
+use crate::cursor::Cursor;
 use crate::Record;
-use crate::{sized_node, AnimationTrack, Error, Model, Node};
+use crate::{AnimationTrack, Error, Model, Node};
 
 pub(crate) const FIXED_SIZE: usize = 52;
 
@@ -119,49 +120,50 @@ impl Model {
 
 impl Record for RibbonEmitter {
     fn decode_one(bytes: &[u8], _version: u32) -> Result<(Self, usize), Error> {
-        let length = crate::record::sized_record_len(bytes, Self::TAG, FIXED_SIZE, u32::MAX, 0)?;
-        let bytes = &bytes[..length];
-        let value = {
-            let layout = sized_node::layout(bytes, RibbonEmitter::TAG, FIXED_SIZE)?;
-            let node = Node::decode(&bytes[4..layout.fixed_start], 0)?;
-            let fixed = &bytes[layout.fixed_start..layout.track_start];
-            let word = |offset: usize| {
-                u32::from_le_bytes(fixed[offset..offset + 4].try_into().expect("fixed field"))
-            };
-            let float = |offset: usize| f32::from_bits(word(offset));
-            let fields = RibbonFields {
-                height_above: float(0),
-                height_below: float(4),
-                alpha: float(8),
-                color: [float(12), float(16), float(20)],
-                life_span: float(24),
-                texture_slot: word(28),
-                emission_rate: word(32),
-                rows: word(36),
-                columns: word(40),
-                material_id: word(44),
-                gravity: float(48),
-            };
-            let mut tracks = Vec::new();
-            let mut offset = layout.track_start;
-            while offset < bytes.len() {
-                let (track, consumed) = AnimationTrack::parse(bytes, offset)?;
-                if !is_track(track.tag) {
-                    return Err(Error::MalformedRecord {
-                        tag: RibbonEmitter::TAG,
-                        offset,
-                    });
-                }
-                tracks.push(track);
-                offset += consumed;
+        let mut source = Cursor::new(bytes);
+        let mut cursor = source.slice_u32_sized()?;
+        let (node, node_len) = Node::decode_one(cursor.remaining(), 0)?;
+        cursor.read_exact(node_len)?;
+        let fixed = cursor.read_exact(FIXED_SIZE)?;
+        let word = |offset: usize| {
+            u32::from_le_bytes(fixed[offset..offset + 4].try_into().expect("fixed field"))
+        };
+        let float = |offset: usize| f32::from_bits(word(offset));
+        let fields = RibbonFields {
+            height_above: float(0),
+            height_below: float(4),
+            alpha: float(8),
+            color: [float(12), float(16), float(20)],
+            life_span: float(24),
+            texture_slot: word(28),
+            emission_rate: word(32),
+            rows: word(36),
+            columns: word(40),
+            material_id: word(44),
+            gravity: float(48),
+        };
+        let mut tracks = Vec::new();
+        while !cursor.remaining().is_empty() {
+            let offset = cursor.absolute_position();
+            let (track, consumed) = AnimationTrack::decode_one(cursor.remaining(), 0)?;
+            if !is_track(track.tag) {
+                return Err(Error::MalformedRecord {
+                    tag: Self::TAG,
+                    offset,
+                });
             }
-            Ok(Self {
+            cursor.read_exact(consumed)?;
+            tracks.push(track);
+        }
+        cursor.finish()?;
+        Ok((
+            Self {
                 node,
                 fields,
                 tracks,
-            })
-        }?;
-        Ok((value, length))
+            },
+            source.position(),
+        ))
     }
 
     fn encode(&self) -> Result<Vec<u8>, Error> {

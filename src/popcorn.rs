@@ -1,5 +1,6 @@
 //! Reforged popcorn particle emitters in `CORN` chunks.
 
+use crate::cursor::Cursor;
 use crate::Record;
 use std::borrow::Cow;
 
@@ -144,50 +145,6 @@ fn is_track_tag(tag: [u8; 4]) -> bool {
     )
 }
 
-pub(crate) fn record_end(data: &[u8], offset: usize) -> Result<usize, Error> {
-    let size_bytes = data
-        .get(offset..offset.saturating_add(4))
-        .ok_or(Error::MalformedRecord {
-            tag: PopcornEmitter::TAG,
-            offset,
-        })?;
-    let size = u32::from_le_bytes(size_bytes.try_into().expect("four-byte size")) as usize;
-    let end = offset
-        .checked_add(size)
-        .filter(|&end| end <= data.len())
-        .ok_or(Error::MalformedRecord {
-            tag: PopcornEmitter::TAG,
-            offset,
-        })?;
-    let node_start = offset + 4;
-    let node_size_bytes =
-        data.get(node_start..node_start.saturating_add(4))
-            .ok_or(Error::MalformedRecord {
-                tag: PopcornEmitter::TAG,
-                offset: node_start,
-            })?;
-    let node_size =
-        u32::from_le_bytes(node_size_bytes.try_into().expect("four-byte size")) as usize;
-    let node_end = node_start
-        .checked_add(node_size)
-        .filter(|&node_end| node_end <= end)
-        .ok_or(Error::MalformedRecord {
-            tag: PopcornEmitter::TAG,
-            offset: node_start,
-        })?;
-    Node::decode(&data[node_start..node_end], 0)?;
-    if node_end
-        .checked_add(FIXED_SIZE)
-        .map_or(true, |required| required > end)
-    {
-        return Err(Error::MalformedRecord {
-            tag: PopcornEmitter::TAG,
-            offset: node_end,
-        });
-    }
-    Ok(end)
-}
-
 impl Model {
     /// Decodes all popcorn emitters in `CORN` chunks.
     pub fn popcorn_emitters(&self) -> Result<Vec<PopcornEmitter>, Error> {
@@ -218,60 +175,53 @@ impl Model {
 
 impl Record for PopcornEmitter {
     fn decode_one(bytes: &[u8], _version: u32) -> Result<(Self, usize), Error> {
-        let length = record_end(bytes, 0)?;
-        let bytes = &bytes[..length];
-        let value = {
-            if record_end(bytes, 0)? != bytes.len() {
+        let mut source = Cursor::new(bytes);
+        let mut cursor = source.slice_u32_sized()?;
+        let (node, node_len) = Node::decode_one(cursor.remaining(), 0)?;
+        cursor.read_exact(node_len)?;
+        let life_span = cursor.read_f32()?;
+        let emission_rate = cursor.read_f32()?;
+        let speed = cursor.read_f32()?;
+        let color = [cursor.read_f32()?, cursor.read_f32()?, cursor.read_f32()?];
+        let alpha = cursor.read_f32()?;
+        let replaceable_id = cursor.read_u32()?;
+        let path = cursor
+            .read_exact(PATH_SIZE)?
+            .try_into()
+            .expect("fixed-width path");
+        let visibility_guide = cursor
+            .read_exact(FIXED_SIZE - 32 - PATH_SIZE)?
+            .try_into()
+            .expect("fixed-width guide");
+        let mut tracks = Vec::new();
+        while !cursor.remaining().is_empty() {
+            let offset = cursor.absolute_position();
+            let (track, consumed) = AnimationTrack::decode_one(cursor.remaining(), 0)?;
+            if !is_track_tag(track.tag) {
                 return Err(Error::MalformedRecord {
-                    tag: PopcornEmitter::TAG,
-                    offset: 0,
+                    tag: Self::TAG,
+                    offset,
                 });
             }
-            let node_size =
-                u32::from_le_bytes(bytes[4..8].try_into().expect("validated node size")) as usize;
-            let fixed = 4 + node_size;
-            let node = Node::decode(&bytes[4..fixed], 0)?;
-            let word = |offset| {
-                u32::from_le_bytes(
-                    bytes[fixed + offset..fixed + offset + 4]
-                        .try_into()
-                        .expect("validated field"),
-                )
-            };
-            let float = |offset| f32::from_bits(word(offset));
-            let path = bytes[fixed + 32..fixed + 32 + PATH_SIZE]
-                .try_into()
-                .expect("validated path");
-            let visibility_guide = bytes[fixed + 32 + PATH_SIZE..fixed + FIXED_SIZE]
-                .try_into()
-                .expect("validated guide");
-            let mut tracks = Vec::new();
-            let mut offset = fixed + FIXED_SIZE;
-            while offset < bytes.len() {
-                let (track, consumed) = AnimationTrack::parse(bytes, offset)?;
-                if !is_track_tag(track.tag) {
-                    return Err(Error::MalformedRecord {
-                        tag: PopcornEmitter::TAG,
-                        offset,
-                    });
-                }
-                tracks.push(track);
-                offset += consumed;
-            }
-            Ok(Self {
+            cursor.read_exact(consumed)?;
+            tracks.push(track);
+        }
+        cursor.finish()?;
+        Ok((
+            Self {
                 node,
-                life_span: float(0),
-                emission_rate: float(4),
-                speed: float(8),
-                color: [float(12), float(16), float(20)],
-                alpha: float(24),
-                replaceable_id: word(28),
+                life_span,
+                emission_rate,
+                speed,
+                color,
+                alpha,
+                replaceable_id,
                 path,
                 visibility_guide,
                 tracks,
-            })
-        }?;
-        Ok((value, length))
+            },
+            source.position(),
+        ))
     }
 
     fn encode(&self) -> Result<Vec<u8>, Error> {

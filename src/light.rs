@@ -1,5 +1,6 @@
 //! Light records in `LITE` chunks.
 
+use crate::cursor::Cursor;
 use crate::Record;
 use crate::{AnimationTrack, Error, Model, Node};
 
@@ -148,69 +149,11 @@ impl Light {
     }
 }
 
-fn read_u32(bytes: &[u8], offset: usize) -> u32 {
-    u32::from_le_bytes(
-        bytes[offset..offset + 4]
-            .try_into()
-            .expect("validated field"),
-    )
-}
-fn read_f32(bytes: &[u8], offset: usize) -> f32 {
-    f32::from_bits(read_u32(bytes, offset))
-}
-fn read_vec3(bytes: &[u8], offset: usize) -> [f32; 3] {
-    std::array::from_fn(|i| read_f32(bytes, offset + i * 4))
-}
-
 fn is_track(tag: [u8; 4]) -> bool {
     matches!(
         &tag,
         b"KLAV" | b"KLAC" | b"KLAI" | b"KLBC" | b"KLBI" | b"KLAS" | b"KLAE"
     )
-}
-
-pub(crate) fn record_end(data: &[u8], offset: usize) -> Result<usize, Error> {
-    let size_bytes = data
-        .get(offset..offset.saturating_add(4))
-        .ok_or(Error::MalformedRecord {
-            tag: Light::TAG,
-            offset,
-        })?;
-    let size = u32::from_le_bytes(size_bytes.try_into().expect("four-byte size")) as usize;
-    let end = offset
-        .checked_add(size)
-        .filter(|&end| end <= data.len())
-        .ok_or(Error::MalformedRecord {
-            tag: Light::TAG,
-            offset,
-        })?;
-    let node_start = offset + 4;
-    let node_size_bytes =
-        data.get(node_start..node_start.saturating_add(4))
-            .ok_or(Error::MalformedRecord {
-                tag: Light::TAG,
-                offset: node_start,
-            })?;
-    let node_size =
-        u32::from_le_bytes(node_size_bytes.try_into().expect("four-byte size")) as usize;
-    let node_end = node_start
-        .checked_add(node_size)
-        .filter(|&node_end| node_end <= end)
-        .ok_or(Error::MalformedRecord {
-            tag: Light::TAG,
-            offset: node_start,
-        })?;
-    Node::decode(&data[node_start..node_end], 0)?;
-    if node_end
-        .checked_add(FIXED_SIZE)
-        .map_or(true, |required| required > end)
-    {
-        return Err(Error::MalformedRecord {
-            tag: Light::TAG,
-            offset: node_end,
-        });
-    }
-    Ok(end)
 }
 
 impl Model {
@@ -243,58 +186,65 @@ impl Model {
 
 impl Record for Light {
     fn decode_one(bytes: &[u8], _version: u32) -> Result<(Self, usize), Error> {
-        let length = record_end(bytes, 0)?;
-        let bytes = &bytes[..length];
-        let value = {
-            let end = record_end(bytes, 0)?;
-            if end != bytes.len() {
+        let mut source = Cursor::new(bytes);
+        let mut cursor = source.slice_u32_sized()?;
+        let (node, node_len) = Node::decode_one(cursor.remaining(), 0)?;
+        cursor.read_exact(node_len)?;
+        let light_type = cursor.read_u32()?;
+        let attenuation_start = cursor.read_f32()?;
+        let attenuation_end = cursor.read_f32()?;
+        let color = [cursor.read_f32()?, cursor.read_f32()?, cursor.read_f32()?];
+        let intensity = cursor.read_f32()?;
+        let ambient_color = [cursor.read_f32()?, cursor.read_f32()?, cursor.read_f32()?];
+        let ambient_intensity = cursor.read_f32()?;
+        let remaining = cursor.remaining();
+        let extension_size = EXTENDED_SIZE - FIXED_SIZE;
+        let has_extended = remaining.len() >= extension_size
+            && (remaining.len() == extension_size
+                || remaining
+                    .get(extension_size..extension_size + 4)
+                    .is_some_and(|tag| is_track(tag.try_into().expect("four-byte tag"))))
+            && remaining.get(..4).map_or(true, |tag| {
+                !is_track(tag.try_into().expect("four-byte tag"))
+            });
+        let extended_words = if has_extended {
+            let mut words = [0; 7];
+            for word in &mut words {
+                *word = cursor.read_u32()?;
+            }
+            Some(words)
+        } else {
+            None
+        };
+        let mut tracks = Vec::new();
+        while !cursor.remaining().is_empty() {
+            let offset = cursor.absolute_position();
+            let (track, consumed) = AnimationTrack::decode_one(cursor.remaining(), 0)?;
+            if !is_track(track.tag) {
                 return Err(Error::MalformedRecord {
-                    tag: Light::TAG,
-                    offset: end,
+                    tag: Self::TAG,
+                    offset,
                 });
             }
-            let node_size = read_u32(bytes, 4) as usize;
-            let fixed = 4 + node_size;
-            let node = Node::decode(&bytes[4..fixed], 0)?;
-            let short = fixed + FIXED_SIZE;
-            let extended = fixed + EXTENDED_SIZE;
-            let has_extended = bytes.len() >= extended
-                && (bytes.len() == extended
-                    || bytes
-                        .get(extended..extended + 4)
-                        .is_some_and(|tag| is_track(tag.try_into().expect("four-byte tag"))))
-                && bytes.get(short..short + 4).map_or(true, |tag| {
-                    !is_track(tag.try_into().expect("four-byte tag"))
-                });
-            let extended_words =
-                has_extended.then(|| std::array::from_fn(|i| read_u32(bytes, short + i * 4)));
-            let mut tracks = Vec::new();
-            let mut offset = if has_extended { extended } else { short };
-            while offset < bytes.len() {
-                let (track, consumed) = AnimationTrack::parse(bytes, offset)?;
-                if !is_track(track.tag) {
-                    return Err(Error::MalformedRecord {
-                        tag: Light::TAG,
-                        offset,
-                    });
-                }
-                tracks.push(track);
-                offset += consumed;
-            }
-            Ok(Self {
+            cursor.read_exact(consumed)?;
+            tracks.push(track);
+        }
+        cursor.finish()?;
+        Ok((
+            Self {
                 node,
-                light_type: read_u32(bytes, fixed),
-                attenuation_start: read_f32(bytes, fixed + 4),
-                attenuation_end: read_f32(bytes, fixed + 8),
-                color: read_vec3(bytes, fixed + 12),
-                intensity: read_f32(bytes, fixed + 24),
-                ambient_color: read_vec3(bytes, fixed + 28),
-                ambient_intensity: read_f32(bytes, fixed + 40),
+                light_type,
+                attenuation_start,
+                attenuation_end,
+                color,
+                intensity,
+                ambient_color,
+                ambient_intensity,
                 extended_words,
                 tracks,
-            })
-        }?;
-        Ok((value, length))
+            },
+            source.position(),
+        ))
     }
 
     fn encode(&self) -> Result<Vec<u8>, Error> {

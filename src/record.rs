@@ -30,26 +30,6 @@ pub trait Record: Sized {
     }
 }
 
-/// Reads a record's size word and checks that its complete payload is available.
-pub(crate) fn sized_record_len(
-    bytes: &[u8],
-    tag: [u8; 4],
-    minimum: usize,
-    mask: u32,
-    extra: usize,
-) -> Result<usize, Error> {
-    let size_bytes = bytes
-        .get(..4)
-        .ok_or(Error::MalformedRecord { tag, offset: 0 })?;
-    let size = (u32::from_le_bytes(size_bytes.try_into().expect("size word")) & mask) as usize;
-    if size < minimum {
-        return Err(Error::MalformedRecord { tag, offset: 0 });
-    }
-    size.checked_add(extra)
-        .filter(|&length| length <= bytes.len())
-        .ok_or(Error::MalformedRecord { tag, offset: 0 })
-}
-
 #[cfg(test)]
 mod tests {
     use super::Record;
@@ -98,6 +78,41 @@ mod tests {
             Geoset::decode(&bytes, 800),
             Err(crate::Error::TrailingRecordBytes { .. })
         ));
+    }
+
+    #[test]
+    fn cursor_decoders_stop_at_the_next_record() {
+        fn check<T: Record + PartialEq + std::fmt::Debug>(first: T, second: T) {
+            let mut bytes = first.encode().unwrap();
+            let first_len = bytes.len();
+            bytes.extend_from_slice(&second.encode().unwrap());
+            assert_eq!(T::decode_one(&bytes, 800).unwrap(), (first, first_len));
+            assert_eq!(T::decode_one(&bytes[first_len..], 800).unwrap().0, second);
+        }
+
+        let first = crate::Node::new("First", 1).unwrap();
+        let second = crate::Node::new("Second", 2).unwrap();
+        check(first.clone(), second.clone());
+        check(
+            crate::Bone::new(first.clone(), 1, 2),
+            crate::Bone::new(second.clone(), 3, 4),
+        );
+        check(
+            crate::Camera::new("First").unwrap(),
+            crate::Camera::new("Second").unwrap(),
+        );
+        check(
+            crate::ParticleEmitter::new(first.clone(), "first.mdx").unwrap(),
+            crate::ParticleEmitter::new(second.clone(), "second.mdx").unwrap(),
+        );
+        check(
+            crate::ParticleEmitter2::new(first.clone()).unwrap(),
+            crate::ParticleEmitter2::new(second.clone()).unwrap(),
+        );
+        check(
+            crate::RibbonEmitter::new(first).unwrap(),
+            crate::RibbonEmitter::new(second).unwrap(),
+        );
     }
 
     #[test]

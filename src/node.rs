@@ -1,5 +1,6 @@
 //! Shared node headers used by bones and helpers.
 
+use crate::cursor::Cursor;
 use crate::Record;
 use std::borrow::Cow;
 
@@ -74,21 +75,6 @@ pub struct Bone {
     node: Node,
     geoset_id: u32,
     geoset_animation_id: u32,
-}
-
-fn read_size(data: &[u8], offset: usize, tag: [u8; 4]) -> Result<usize, Error> {
-    let size_bytes = data
-        .get(offset..offset.saturating_add(4))
-        .ok_or(Error::MalformedRecord { tag, offset })?;
-    let size = u32::from_le_bytes(size_bytes.try_into().expect("four-byte size")) as usize;
-    if size < HEADER_SIZE
-        || offset
-            .checked_add(size)
-            .map_or(true, |end| end > data.len())
-    {
-        return Err(Error::MalformedRecord { tag, offset });
-    }
-    Ok(size)
 }
 
 impl Node {
@@ -255,41 +241,39 @@ impl Model {
 
 impl Record for Node {
     fn decode_one(bytes: &[u8], _version: u32) -> Result<(Self, usize), Error> {
-        let length = crate::record::sized_record_len(bytes, Self::TAG, HEADER_SIZE, u32::MAX, 0)?;
-        let bytes = &bytes[..length];
-        let value = {
-            if read_size(bytes, 0, Node::TAG)? != bytes.len() {
+        let mut source = Cursor::new(bytes);
+        let mut cursor = source.slice_u32_sized()?;
+        let name = cursor
+            .read_exact(NAME_SIZE)?
+            .try_into()
+            .expect("fixed-width node name");
+        let object_id = cursor.read_u32()?;
+        let parent_id = cursor.read_u32()?;
+        let raw_flags = cursor.read_u32()?;
+        let mut tracks = Vec::new();
+        while !cursor.remaining().is_empty() {
+            let offset = cursor.absolute_position();
+            let (track, consumed) = AnimationTrack::decode_one(cursor.remaining(), 0)?;
+            if !matches!(&track.tag, b"KGTR" | b"KGRT" | b"KGSC") {
                 return Err(Error::MalformedRecord {
-                    tag: Node::TAG,
-                    offset: 0,
+                    tag: Self::TAG,
+                    offset,
                 });
             }
-            let name = bytes[4..84].try_into().expect("fixed-width node name");
-            let word = |offset: usize| {
-                u32::from_le_bytes(bytes[offset..offset + 4].try_into().expect("node field"))
-            };
-            let mut tracks = Vec::new();
-            let mut offset = HEADER_SIZE;
-            while offset < bytes.len() {
-                let (track, size) = AnimationTrack::parse(bytes, offset)?;
-                if !matches!(&track.tag, b"KGTR" | b"KGRT" | b"KGSC") {
-                    return Err(Error::MalformedRecord {
-                        tag: Node::TAG,
-                        offset,
-                    });
-                }
-                tracks.push(track);
-                offset += size;
-            }
-            Ok(Self {
+            cursor.read_exact(consumed)?;
+            tracks.push(track);
+        }
+        cursor.finish()?;
+        Ok((
+            Self {
                 name,
-                object_id: word(84),
-                parent_id: word(88),
-                raw_flags: word(92),
+                object_id,
+                parent_id,
+                raw_flags,
                 tracks,
-            })
-        }?;
-        Ok((value, length))
+            },
+            source.position(),
+        ))
     }
 
     fn encode(&self) -> Result<Vec<u8>, Error> {
@@ -311,28 +295,19 @@ impl Record for Node {
 
 impl Record for Bone {
     fn decode_one(bytes: &[u8], _version: u32) -> Result<(Self, usize), Error> {
-        let length = crate::record::sized_record_len(bytes, Self::TAG, HEADER_SIZE, u32::MAX, 8)?;
-        let bytes = &bytes[..length];
-        let value = {
-            let node_size = read_size(bytes, 0, Bone::TAG)?;
-            if node_size.checked_add(8) != Some(bytes.len()) {
-                return Err(Error::MalformedRecord {
-                    tag: Bone::TAG,
-                    offset: 0,
-                });
-            }
-            let node = Node::decode(&bytes[..node_size], 0)?;
-            let geoset_id =
-                u32::from_le_bytes(bytes[node_size..node_size + 4].try_into().expect("bone ID"));
-            let geoset_animation_id =
-                u32::from_le_bytes(bytes[node_size + 4..].try_into().expect("animation ID"));
-            Ok(Self {
+        let mut cursor = Cursor::new(bytes);
+        let (node, node_len) = Node::decode_one(cursor.remaining(), 0)?;
+        cursor.read_exact(node_len)?;
+        let geoset_id = cursor.read_u32()?;
+        let geoset_animation_id = cursor.read_u32()?;
+        Ok((
+            Self {
                 node,
                 geoset_id,
                 geoset_animation_id,
-            })
-        }?;
-        Ok((value, length))
+            },
+            cursor.position(),
+        ))
     }
 
     fn encode(&self) -> Result<Vec<u8>, Error> {

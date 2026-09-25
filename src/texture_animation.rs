@@ -1,5 +1,6 @@
 //! Typed texture animation tracks in `TXAN` chunks.
 
+use crate::cursor::Cursor;
 use crate::Record;
 use crate::{AnimationTrack, Error, Model};
 
@@ -75,37 +76,23 @@ impl Model {
 
 impl Record for TextureAnimation {
     fn decode_one(bytes: &[u8], _version: u32) -> Result<(Self, usize), Error> {
-        let length = crate::record::sized_record_len(bytes, Self::TAG, 4, u32::MAX, 0)?;
-        let bytes = &bytes[..length];
-        let value = {
-            let size_bytes = bytes.get(..4).ok_or(Error::MalformedRecord {
-                tag: TextureAnimation::TAG,
-                offset: 0,
-            })?;
-            if u32::from_le_bytes(size_bytes.try_into().expect("four-byte size")) as usize
-                != bytes.len()
-            {
+        let mut source = Cursor::new(bytes);
+        let mut cursor = source.slice_u32_sized()?;
+        let mut tracks = Vec::new();
+        while !cursor.remaining().is_empty() {
+            let offset = cursor.absolute_position();
+            let (track, consumed) = AnimationTrack::decode_one(cursor.remaining(), 0)?;
+            if !is_track_tag(track.tag) {
                 return Err(Error::MalformedRecord {
-                    tag: TextureAnimation::TAG,
-                    offset: 0,
+                    tag: Self::TAG,
+                    offset,
                 });
             }
-            let mut tracks = Vec::new();
-            let mut offset = 4;
-            while offset < bytes.len() {
-                let (track, consumed) = AnimationTrack::parse(bytes, offset)?;
-                if !is_track_tag(track.tag) {
-                    return Err(Error::MalformedRecord {
-                        tag: TextureAnimation::TAG,
-                        offset,
-                    });
-                }
-                tracks.push(track);
-                offset += consumed;
-            }
-            Ok(Self { tracks })
-        }?;
-        Ok((value, length))
+            cursor.read_exact(consumed)?;
+            tracks.push(track);
+        }
+        cursor.finish()?;
+        Ok((Self { tracks }, source.position()))
     }
 
     fn encode(&self) -> Result<Vec<u8>, Error> {

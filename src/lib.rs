@@ -61,7 +61,6 @@ pub use ribbon::{RibbonEmitter, RibbonFields};
 mod sequence;
 pub use sequence::{Sequence, SequenceFlags};
 mod simple_chunks;
-mod sized_node;
 mod texture;
 pub use texture::{Texture, TextureFlags};
 mod texture_animation;
