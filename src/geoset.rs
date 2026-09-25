@@ -1,5 +1,6 @@
 //! Typed geoset sections and lossless MDX serialization.
 
+use crate::cursor::Cursor;
 use crate::Record;
 use std::borrow::Cow;
 
@@ -445,74 +446,32 @@ impl Geoset {
     }
 }
 
-struct Cursor<'a> {
-    bytes: &'a [u8],
-    offset: usize,
+fn peek_tag(cursor: &Cursor<'_>) -> Result<[u8; 4], Error> {
+    Ok(cursor.peek_exact(4)?.try_into().expect("four-byte tag"))
 }
 
-impl<'a> Cursor<'a> {
-    fn new(bytes: &'a [u8]) -> Self {
-        Self { bytes, offset: 0 }
-    }
-
-    fn read_exact(&mut self, size: usize) -> Result<&'a [u8], Error> {
-        let start = self.offset;
-        let end = start.checked_add(size).ok_or(Error::MalformedRecord {
-            tag: Geoset::TAG,
-            offset: start,
-        })?;
-        let data = self.bytes.get(start..end).ok_or(Error::MalformedRecord {
-            tag: Geoset::TAG,
-            offset: start,
-        })?;
-        self.offset = end;
-        Ok(data)
-    }
-
-    fn read_u32(&mut self) -> Result<u32, Error> {
-        Ok(u32::from_le_bytes(
-            self.read_exact(4)?.try_into().expect("four-byte word"),
-        ))
-    }
-
-    fn peek_tag(&self) -> Result<[u8; 4], Error> {
-        self.bytes
-            .get(self.offset..self.offset.saturating_add(4))
-            .ok_or(Error::MalformedRecord {
-                tag: Geoset::TAG,
-                offset: self.offset,
-            })?
-            .try_into()
-            .map_err(|_| Error::MalformedRecord {
-                tag: Geoset::TAG,
-                offset: self.offset,
-            })
-    }
-
-    fn section(&mut self, tag: [u8; 4], stride: usize) -> Result<&'a [u8], Error> {
-        let offset = self.offset;
-        if self.read_exact(4)? != tag {
-            return Err(Error::MalformedRecord {
-                tag: Geoset::TAG,
-                offset,
-            });
-        }
-        let count = self.read_u32()? as usize;
-        let size = count.checked_mul(stride).ok_or(Error::MalformedRecord {
+fn section<'a>(cursor: &mut Cursor<'a>, tag: [u8; 4], stride: usize) -> Result<&'a [u8], Error> {
+    let offset = cursor.position();
+    if cursor.read_exact(4)? != tag {
+        return Err(Error::MalformedRecord {
             tag: Geoset::TAG,
             offset,
-        })?;
-        self.read_exact(size)
+        });
     }
+    let count = cursor.read_u32()? as usize;
+    let size = count.checked_mul(stride).ok_or(Error::MalformedRecord {
+        tag: Geoset::TAG,
+        offset,
+    })?;
+    cursor.read_exact(size)
+}
 
-    fn read_extent(&mut self) -> Result<GeosetExtent, Error> {
-        let mut float = || self.read_u32().map(f32::from_bits);
-        Ok(GeosetExtent {
-            bounds_radius: float()?,
-            minimum: [float()?, float()?, float()?],
-            maximum: [float()?, float()?, float()?],
-        })
-    }
+fn read_extent(cursor: &mut Cursor<'_>) -> Result<GeosetExtent, Error> {
+    Ok(GeosetExtent {
+        bounds_radius: cursor.read_f32()?,
+        minimum: [cursor.read_f32()?, cursor.read_f32()?, cursor.read_f32()?],
+        maximum: [cursor.read_f32()?, cursor.read_f32()?, cursor.read_f32()?],
+    })
 }
 
 fn decode_words(bytes: &[u8]) -> Vec<u32> {
@@ -616,9 +575,10 @@ impl Model {
 impl Record for Geoset {
     fn decode_one(bytes: &[u8], version: u32) -> Result<(Self, usize), Error> {
         let length = crate::record::sized_record_len(bytes, Self::TAG, 4, u32::MAX, 0)?;
-        let bytes = &bytes[..length];
+        let mut source = Cursor::new(bytes);
+        let mut cursor = source.slice(length)?;
+        let bytes = cursor.remaining();
         let value = {
-            let mut cursor = Cursor::new(bytes);
             let size = cursor.read_u32()? as usize;
             if size != bytes.len() {
                 return Err(Error::MalformedRecord {
@@ -626,18 +586,17 @@ impl Record for Geoset {
                     offset: 0,
                 });
             }
-            let vertices = decode_vectors::<3>(cursor.section(*b"VRTX", 12)?);
-            let normals = decode_vectors::<3>(cursor.section(*b"NRMS", 12)?);
-            let primitive_types = decode_words(cursor.section(*b"PTYP", 4)?);
-            let primitive_counts = decode_words(cursor.section(*b"PCNT", 4)?);
-            let faces = cursor
-                .section(*b"PVTX", 2)?
+            let vertices = decode_vectors::<3>(section(&mut cursor, *b"VRTX", 12)?);
+            let normals = decode_vectors::<3>(section(&mut cursor, *b"NRMS", 12)?);
+            let primitive_types = decode_words(section(&mut cursor, *b"PTYP", 4)?);
+            let primitive_counts = decode_words(section(&mut cursor, *b"PCNT", 4)?);
+            let faces = section(&mut cursor, *b"PVTX", 2)?
                 .chunks_exact(2)
                 .map(|bytes| u16::from_le_bytes(bytes.try_into().expect("two-byte face index")))
                 .collect();
-            let vertex_groups = cursor.section(*b"GNDX", 1)?.to_vec();
-            let matrix_group_sizes = decode_words(cursor.section(*b"MTGC", 4)?);
-            let matrix_indices = decode_words(cursor.section(*b"MATS", 4)?);
+            let vertex_groups = section(&mut cursor, *b"GNDX", 1)?.to_vec();
+            let matrix_group_sizes = decode_words(section(&mut cursor, *b"MTGC", 4)?);
+            let matrix_indices = decode_words(section(&mut cursor, *b"MATS", 4)?);
             let material_id = cursor.read_u32()?;
             let selection_group = cursor.read_u32()?;
             let unselectable_raw = cursor.read_u32()?;
@@ -651,35 +610,37 @@ impl Record for Geoset {
             } else {
                 (None, None)
             };
-            let extent = cursor.read_extent()?;
+            let extent = read_extent(&mut cursor)?;
             let sequence_count = cursor.read_u32()? as usize;
             let mut sequence_extents = Vec::new();
             for _ in 0..sequence_count {
-                sequence_extents.push(cursor.read_extent()?);
+                sequence_extents.push(read_extent(&mut cursor)?);
             }
             let mut extensions = Vec::new();
             if version >= 900 {
-                while cursor.peek_tag()? != *b"UVAS" {
-                    let offset = cursor.offset;
-                    let tag = cursor.peek_tag()?;
+                while peek_tag(&cursor)? != *b"UVAS" {
+                    let offset = cursor.position();
+                    let tag = peek_tag(&cursor)?;
                     match &tag {
                         b"TANG"
                             if !extensions
                                 .iter()
                                 .any(|part| matches!(part, Extension::Tangents(_))) =>
                         {
-                            extensions.push(Extension::Tangents(decode_vectors::<4>(
-                                cursor.section(*b"TANG", 16)?,
-                            )));
+                            extensions.push(Extension::Tangents(decode_vectors::<4>(section(
+                                &mut cursor,
+                                *b"TANG",
+                                16,
+                            )?)));
                         }
                         b"SKIN"
                             if !extensions
                                 .iter()
                                 .any(|part| matches!(part, Extension::Skin { .. })) =>
                         {
-                            let weights = cursor.section(*b"SKIN", 1)?.to_vec();
+                            let weights = section(&mut cursor, *b"SKIN", 1)?.to_vec();
                             let bone_indices = if version >= 1200
-                                && !matches!(&cursor.peek_tag()?, b"UVAS" | b"TANG")
+                                && !matches!(&peek_tag(&cursor)?, b"UVAS" | b"TANG")
                             {
                                 Some(cursor.read_exact(weights.len())?.to_vec())
                             } else {
@@ -702,18 +663,18 @@ impl Record for Geoset {
             if cursor.read_exact(4)? != b"UVAS" {
                 return Err(Error::MalformedRecord {
                     tag: Geoset::TAG,
-                    offset: cursor.offset - 4,
+                    offset: cursor.position() - 4,
                 });
             }
             let uv_count = cursor.read_u32()? as usize;
             let mut uv_sets = Vec::new();
             for _ in 0..uv_count {
-                uv_sets.push(decode_vectors::<2>(cursor.section(*b"UVBS", 8)?));
+                uv_sets.push(decode_vectors::<2>(section(&mut cursor, *b"UVBS", 8)?));
             }
-            if cursor.offset != bytes.len() {
+            if cursor.position() != bytes.len() {
                 return Err(Error::MalformedRecord {
                     tag: Geoset::TAG,
-                    offset: cursor.offset,
+                    offset: cursor.position(),
                 });
             }
             Ok(Self {
@@ -737,6 +698,7 @@ impl Record for Geoset {
                 uv_sets,
             })
         }?;
+        cursor.finish()?;
         Ok((value, length))
     }
 

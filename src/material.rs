@@ -1,5 +1,6 @@
 //! Typed material layers and versioned texture slots.
 
+use crate::cursor::Cursor;
 use crate::Record;
 use std::borrow::Cow;
 
@@ -111,50 +112,19 @@ fn is_layer_track(tag: [u8; 4]) -> bool {
     )
 }
 
-struct Cursor<'a> {
-    bytes: &'a [u8],
-    offset: usize,
-    tag: [u8; 4],
-}
-impl<'a> Cursor<'a> {
-    fn new(bytes: &'a [u8], tag: [u8; 4]) -> Self {
-        Self {
-            bytes,
-            offset: 0,
-            tag,
-        }
-    }
-    fn read(&mut self, size: usize) -> Result<&'a [u8], Error> {
-        let start = self.offset;
-        let end = start.checked_add(size).ok_or(Error::MalformedRecord {
-            tag: self.tag,
-            offset: start,
-        })?;
-        let value = self.bytes.get(start..end).ok_or(Error::MalformedRecord {
-            tag: self.tag,
-            offset: start,
-        })?;
-        self.offset = end;
-        Ok(value)
-    }
-    fn word(&mut self) -> Result<u32, Error> {
-        Ok(u32::from_le_bytes(
-            self.read(4)?.try_into().expect("four-byte word"),
-        ))
-    }
-    fn float(&mut self) -> Result<f32, Error> {
-        self.word().map(f32::from_bits)
-    }
-    fn expect_tag(&mut self, expected: [u8; 4]) -> Result<(), Error> {
-        let offset = self.offset;
-        if self.read(4)? == expected {
-            Ok(())
-        } else {
-            Err(Error::MalformedRecord {
-                tag: self.tag,
-                offset,
-            })
-        }
+fn expect_tag(
+    cursor: &mut crate::cursor::Cursor<'_>,
+    expected: [u8; 4],
+    record_tag: [u8; 4],
+) -> Result<(), Error> {
+    let offset = cursor.position();
+    if cursor.read_exact(4)? == expected {
+        Ok(())
+    } else {
+        Err(Error::MalformedRecord {
+            tag: record_tag,
+            offset,
+        })
     }
 }
 
@@ -475,34 +445,35 @@ impl Model {
 impl Record for Material {
     fn decode_one(bytes: &[u8], version: u32) -> Result<(Self, usize), Error> {
         let length = crate::record::sized_record_len(bytes, Self::TAG, 4, u32::MAX, 0)?;
-        let bytes = &bytes[..length];
+        let mut source = Cursor::new(bytes);
+        let mut cursor = source.slice(length)?;
+        let bytes = cursor.remaining();
         let value = {
-            let mut cursor = Cursor::new(bytes, Material::TAG);
-            if cursor.word()? as usize != bytes.len() {
+            if cursor.read_u32()? as usize != bytes.len() {
                 return Err(Error::MalformedRecord {
                     tag: Material::TAG,
                     offset: 0,
                 });
             }
-            let priority_plane = cursor.word()?;
-            let render_mode = cursor.word()?;
+            let priority_plane = cursor.read_u32()?;
+            let render_mode = cursor.read_u32()?;
             let shader = if has_shader(version) {
-                Some(cursor.read(80)?.try_into().expect("shader field"))
+                Some(cursor.read_exact(80)?.try_into().expect("shader field"))
             } else {
                 None
             };
-            cursor.expect_tag(LAYER_TAG)?;
-            let count = cursor.word()? as usize;
+            expect_tag(&mut cursor, LAYER_TAG, Material::TAG)?;
+            let count = cursor.read_u32()? as usize;
             let mut layers = Vec::new();
             for _ in 0..count {
-                let (layer, consumed) = Layer::decode_one(&bytes[cursor.offset..], version)?;
-                cursor.offset += consumed;
+                let (layer, consumed) = Layer::decode_one(&bytes[cursor.position()..], version)?;
+                cursor.read_exact(consumed)?;
                 layers.push(layer);
             }
-            if cursor.offset != bytes.len() {
+            if cursor.position() != bytes.len() {
                 return Err(Error::MalformedRecord {
                     tag: Material::TAG,
-                    offset: cursor.offset,
+                    offset: cursor.position(),
                 });
             }
             Ok(Self {
@@ -513,6 +484,7 @@ impl Record for Material {
                 layers,
             })
         }?;
+        cursor.finish()?;
         Ok((value, length))
     }
 
@@ -542,51 +514,52 @@ impl Record for Material {
 impl Record for Layer {
     fn decode_one(bytes: &[u8], version: u32) -> Result<(Self, usize), Error> {
         let length = crate::record::sized_record_len(bytes, LAYER_TAG, 4, u32::MAX, 0)?;
-        let bytes = &bytes[..length];
+        let mut source = Cursor::new(bytes);
+        let mut cursor = source.slice(length)?;
+        let bytes = cursor.remaining();
         let value = {
-            let mut cursor = Cursor::new(bytes, LAYER_TAG);
-            if cursor.word()? as usize != bytes.len() {
+            if cursor.read_u32()? as usize != bytes.len() {
                 return Err(Error::MalformedRecord {
                     tag: LAYER_TAG,
                     offset: 0,
                 });
             }
-            let filter_mode = cursor.word()?;
-            let shading_flags = cursor.word()?;
-            let texture_id = cursor.word()?;
-            let texture_animation_id = cursor.word()?;
-            let coordinate_id = cursor.word()?;
-            let alpha = cursor.float()?;
+            let filter_mode = cursor.read_u32()?;
+            let shading_flags = cursor.read_u32()?;
+            let texture_id = cursor.read_u32()?;
+            let texture_animation_id = cursor.read_u32()?;
+            let coordinate_id = cursor.read_u32()?;
+            let alpha = cursor.read_f32()?;
             let emissive_gain = if version >= 900 {
-                Some(cursor.float()?)
+                Some(cursor.read_f32()?)
             } else {
                 None
             };
             let (fresnel_color, fresnel_opacity, fresnel_team_color) = if version >= 1000 {
                 (
-                    Some([cursor.float()?, cursor.float()?, cursor.float()?]),
-                    Some(cursor.float()?),
-                    Some(cursor.float()?),
+                    Some([cursor.read_f32()?, cursor.read_f32()?, cursor.read_f32()?]),
+                    Some(cursor.read_f32()?),
+                    Some(cursor.read_f32()?),
                 )
             } else {
                 (None, None, None)
             };
             let shader_type_id = if version >= 1100 {
-                Some(cursor.word()?)
+                Some(cursor.read_u32()?)
             } else {
                 None
             };
             let mut texture_slots = Vec::new();
             if version >= 1100 {
-                let count = cursor.word()? as usize;
+                let count = cursor.read_u32()? as usize;
                 for _ in 0..count {
-                    let texture_id = cursor.word()?;
-                    let texture_type = cursor.word()?;
-                    let track = if bytes.get(cursor.offset..cursor.offset.saturating_add(4))
+                    let texture_id = cursor.read_u32()?;
+                    let texture_type = cursor.read_u32()?;
+                    let track = if bytes.get(cursor.position()..cursor.position().saturating_add(4))
                         == Some(b"KMTF")
                     {
-                        let (track, size) = AnimationTrack::parse(bytes, cursor.offset)?;
-                        cursor.offset += size;
+                        let (track, size) = AnimationTrack::parse(bytes, cursor.position())?;
+                        cursor.read_exact(size)?;
                         Some(track)
                     } else {
                         None
@@ -599,8 +572,8 @@ impl Record for Layer {
                 }
             }
             let mut tracks = Vec::new();
-            while cursor.offset < bytes.len() {
-                let offset = cursor.offset;
+            while cursor.position() < bytes.len() {
+                let offset = cursor.position();
                 let (track, size) = AnimationTrack::parse(bytes, offset)?;
                 if !is_layer_track(track.tag) {
                     return Err(Error::MalformedRecord {
@@ -609,7 +582,7 @@ impl Record for Layer {
                     });
                 }
                 tracks.push(track);
-                cursor.offset += size;
+                cursor.read_exact(size)?;
             }
             Ok(Self {
                 version,
@@ -628,6 +601,7 @@ impl Record for Layer {
                 tracks,
             })
         }?;
+        cursor.finish()?;
         Ok((value, length))
     }
 

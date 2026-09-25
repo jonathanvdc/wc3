@@ -33,6 +33,8 @@ pub enum Error {
     MalformedRecord { tag: [u8; 4], offset: usize },
     /// A decoder stopped before the end of an exact record input.
     TrailingRecordBytes { consumed: usize, total: usize },
+    /// A bounded cursor could not read the requested number of bytes.
+    UnexpectedEnd { offset: usize, needed: usize },
 }
 
 impl fmt::Display for Error {
@@ -76,6 +78,9 @@ impl fmt::Display for Error {
             ),
             Self::TrailingRecordBytes { consumed, total } => {
                 write!(f, "record consumed {consumed} of {total} bytes")
+            }
+            Self::UnexpectedEnd { offset, needed } => {
+                write!(f, "cannot read {needed} bytes at offset {offset}")
             }
         }
     }
