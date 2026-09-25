@@ -39,7 +39,7 @@ fn rejects_malformed_known_track() {
 }
 
 #[test]
-fn rejects_short_repeated_version_chunks_and_repairs_mutated_first_version() {
+fn rejects_short_repeated_version_chunks() {
     let mut bytes = Model::new(800).encode().unwrap();
     bytes.extend_from_slice(b"VERS");
     bytes.extend_from_slice(&2u32.to_le_bytes());
@@ -51,9 +51,7 @@ fn rejects_short_repeated_version_chunks_and_repairs_mutated_first_version() {
     assert_eq!(model.stored_version(), None);
     assert_eq!(model.version(), 800);
     assert_eq!(model.validate(), Err(Error::InvalidVersionChunk));
-    model.set_version(1800);
-    assert_eq!(model.version(), 1800);
-    model.validate().unwrap();
+    assert_eq!(model.set_version(1800).unwrap_err(), Error::InvalidVersionChunk);
 }
 
 #[test]

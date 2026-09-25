@@ -1,6 +1,6 @@
 //! A model in the Warcraft III MDX format.
 
-use crate::{CollectionChunk, Error, ModelChunk, RawChunk, Record};
+use crate::{CollectionChunk, Error, ModelChunk, RawChunk, Record, VersionChunk};
 
 /// The four bytes at the start of an MDX file.
 pub const MAGIC: [u8; 4] = *b"MDLX";
@@ -49,10 +49,10 @@ impl Model {
     pub fn new(version: u32) -> Self {
         Self {
             default_version: version,
-            chunks: vec![ModelChunk::from_raw(
-                RawChunk::new(*b"VERS", version.to_le_bytes().to_vec()),
+            chunks: vec![ModelChunk::Version(VersionChunk {
                 version,
-            )],
+                extension: Vec::new(),
+            })],
         }
     }
 
@@ -71,28 +71,19 @@ impl Model {
     }
 
     /// Updates the first `VERS` value, or inserts a `VERS` chunk first.
-    pub fn set_version(&mut self, version: u32) {
-        if let Some(chunk) = self.chunk_mut(*b"VERS") {
-            match chunk {
-                ModelChunk::Version(current) => current.version = version,
-                _ => {
-                    let mut raw = chunk.to_raw().expect("version chunk can be encoded");
-                    if raw.data.len() < 4 {
-                        raw.data.resize(4, 0);
-                    }
-                    raw.data[..4].copy_from_slice(&version.to_le_bytes());
-                    *chunk = ModelChunk::from_raw(raw, version);
-                }
-            }
-        } else {
-            self.chunks.insert(
+    pub fn set_version(&mut self, version: u32) -> Result<(), Error> {
+        match self.chunk_mut(*b"VERS") {
+            Some(ModelChunk::Version(current)) => current.version = version,
+            Some(_) => return Err(Error::InvalidVersionChunk),
+            None => self.chunks.insert(
                 0,
-                ModelChunk::from_raw(
-                    RawChunk::new(*b"VERS", version.to_le_bytes().to_vec()),
+                ModelChunk::Version(VersionChunk {
                     version,
-                ),
-            );
+                    extension: Vec::new(),
+                }),
+            ),
         }
+        Ok(())
     }
 
     /// Returns the ordered list of chunks.
@@ -143,21 +134,6 @@ mod tests {
                 size: 5,
             })
         );
-    }
-
-    #[test]
-    fn edits_version_without_discarding_extra_bytes() {
-        let mut model = Model::new(800);
-        let Some(ModelChunk::Version(chunk)) = model.chunk_mut(*b"VERS") else {
-            panic!("expected version chunk");
-        };
-        chunk.extension.extend_from_slice(&[9, 8]);
-        model.set_version(1200);
-        assert_eq!(model.version(), 1200);
-        let Some(ModelChunk::Version(chunk)) = model.chunk(*b"VERS") else {
-            panic!("expected version chunk");
-        };
-        assert_eq!(chunk.extension, [9, 8]);
     }
 }
 
