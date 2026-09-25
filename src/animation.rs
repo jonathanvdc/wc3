@@ -2,6 +2,13 @@
 
 use crate::Error;
 
+/// Binary value type stored in a keyframe track.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum TrackValueKind {
+    Float,
+    Integer,
+}
+
 /// One decoded keyframe. Tangents are present for Hermite and Bezier tracks.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Keyframe {
@@ -46,6 +53,33 @@ pub struct AnimationTrack {
 }
 
 impl AnimationTrack {
+    /// Parses exactly one track from a byte slice.
+    pub fn from_bytes(data: &[u8]) -> Result<Self, Error> {
+        let (track, consumed) = Self::parse(data, 0)?;
+        if consumed != data.len() {
+            return Err(Error::MalformedRecord {
+                tag: track.tag,
+                offset: consumed,
+            });
+        }
+        Ok(track)
+    }
+
+    /// Returns the number of scalar components in each value, if the tag is known.
+    pub fn component_count(&self) -> Option<usize> {
+        components(self.tag)
+    }
+
+    /// Returns the binary value type, if the tag is known.
+    pub fn value_kind(&self) -> Option<TrackValueKind> {
+        components(self.tag)?;
+        Some(if matches!(&self.tag, b"KMTF" | b"KRTX") {
+            TrackValueKind::Integer
+        } else {
+            TrackValueKind::Float
+        })
+    }
+
     /// Parses one known track and returns the number of bytes consumed.
     pub(crate) fn parse(data: &[u8], offset: usize) -> Result<(Self, usize), Error> {
         let tag: [u8; 4] = data
