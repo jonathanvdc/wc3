@@ -21,6 +21,8 @@ mod model_info;
 pub use model_info::ModelInfo;
 mod sequence;
 pub use sequence::Sequence;
+mod texture;
+pub use texture::Texture;
 
 /// The four bytes at the start of an MDX file.
 pub const MAGIC: [u8; 4] = *b"MDLX";
