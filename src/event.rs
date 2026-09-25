@@ -72,6 +72,12 @@ impl EventObject {
         )
     }
 
+    /// Sets the global sequence reference without changing event frames.
+    pub fn set_global_sequence_id(&mut self, id: u32) {
+        let offset = self.node_size() + 8;
+        self.bytes[offset..offset + 4].copy_from_slice(&id.to_le_bytes());
+    }
+
     /// Returns event frame times in source order.
     pub fn frames(&self) -> Vec<u32> {
         let start = self.node().as_bytes().len() + 12;
@@ -79,6 +85,37 @@ impl EventObject {
             .chunks_exact(4)
             .map(|bytes| u32::from_le_bytes(bytes.try_into().expect("four-byte frame")))
             .collect()
+    }
+
+    /// Replaces event frame times and updates their count.
+    pub fn set_frames(&mut self, frames: &[u32]) -> Result<(), Error> {
+        if frames.len() > u32::MAX as usize {
+            return Err(Error::ChunkTooLarge {
+                tag: TAG,
+                size: frames.len(),
+            });
+        }
+        let start = self.node_size();
+        let size = start
+            .checked_add(12)
+            .and_then(|n| frames.len().checked_mul(4).and_then(|m| n.checked_add(m)))
+            .filter(|&size| size <= u32::MAX as usize)
+            .ok_or(Error::ChunkTooLarge {
+                tag: TAG,
+                size: usize::MAX,
+            })?;
+        let mut bytes = self.bytes[..start + 12].to_vec();
+        bytes[start + 4..start + 8].copy_from_slice(&(frames.len() as u32).to_le_bytes());
+        bytes.reserve(size - bytes.len());
+        for frame in frames {
+            bytes.extend_from_slice(&frame.to_le_bytes());
+        }
+        self.bytes = bytes;
+        Ok(())
+    }
+
+    fn node_size(&self) -> usize {
+        u32::from_le_bytes(self.bytes[..4].try_into().expect("validated node size")) as usize
     }
 }
 

@@ -3,14 +3,16 @@ use wc3_mdx::{EventObject, Model, Node};
 #[test]
 fn event_object_round_trip() {
     let node = Node::new("Sound", 2).unwrap();
-    let event = EventObject::new(node, u32::MAX, &[100, 200]).unwrap();
+    let mut event = EventObject::new(node, u32::MAX, &[100, 200]).unwrap();
+    event.set_global_sequence_id(3);
+    event.set_frames(&[100, 200, 300]).unwrap();
     let mut model = Model::new(800);
     model.set_event_objects(&[event]).unwrap();
     let parsed = Model::from_bytes(&model.to_bytes().unwrap()).unwrap();
     let event = &parsed.event_objects().unwrap()[0];
     assert_eq!(event.node().name(), "Sound");
-    assert_eq!(event.global_sequence_id(), u32::MAX);
-    assert_eq!(event.frames(), vec![100, 200]);
+    assert_eq!(event.global_sequence_id(), 3);
+    assert_eq!(event.frames(), vec![100, 200, 300]);
 }
 
 #[test]
