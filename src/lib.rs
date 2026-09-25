@@ -50,6 +50,8 @@ pub use sequence::Sequence;
 mod simple_chunks;
 mod texture;
 pub use texture::Texture;
+mod texture_animation;
+pub use texture_animation::TextureAnimation;
 
 /// The four bytes at the start of an MDX file.
 pub const MAGIC: [u8; 4] = *b"MDLX";

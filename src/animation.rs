@@ -158,8 +158,8 @@ impl AnimationTrack {
 
 fn components(tag: [u8; 4]) -> Option<usize> {
     match &tag {
-        b"KGTR" | b"KGSC" | b"KCTR" | b"KTTR" | b"KPPC" => Some(3),
-        b"KGRT" => Some(4),
+        b"KGTR" | b"KGSC" | b"KCTR" | b"KTTR" | b"KPPC" | b"KTAT" | b"KTAS" => Some(3),
+        b"KGRT" | b"KTAR" => Some(4),
         b"KCRL" | b"KATV" | b"KPPA" | b"KPPE" | b"KPPL" | b"KPPS" | b"KPPV" => Some(1),
         _ => None,
     }
