@@ -15,6 +15,23 @@ pub struct Keyframe {
     pub out_tangent: Option<Vec<f32>>,
 }
 
+impl Keyframe {
+    /// Interprets a scalar integer track value, such as a ribbon texture slot.
+    /// Integer tracks store their value in the same four bytes as a float track.
+    pub fn integer_value(&self) -> Option<u32> {
+        (self.value.len() == 1).then(|| self.value[0].to_bits())
+    }
+
+    /// Replaces the scalar value with an integer track value, preserving its bits.
+    pub fn set_integer_value(&mut self, value: u32) -> bool {
+        if self.value.len() != 1 {
+            return false;
+        }
+        self.value[0] = f32::from_bits(value);
+        true
+    }
+}
+
 /// A decoded animation track.
 #[derive(Clone, Debug, PartialEq)]
 pub struct AnimationTrack {
@@ -162,7 +179,8 @@ fn components(tag: [u8; 4]) -> Option<usize> {
         b"KGRT" | b"KTAR" => Some(4),
         b"KCRL" | b"KATV" | b"KPPA" | b"KPPE" | b"KPPL" | b"KPPS" | b"KPPV" | b"KPEV" | b"KPEE"
         | b"KPEG" | b"KPLN" | b"KPLT" | b"KPEL" | b"KPES" | b"KP2V" | b"KP2E" | b"KP2W"
-        | b"KP2N" | b"KP2S" | b"KP2L" | b"KP2G" | b"KP2R" => Some(1),
+        | b"KP2N" | b"KP2S" | b"KP2L" | b"KP2G" | b"KP2R" | b"KRVS" | b"KRHA" | b"KRHB"
+        | b"KRAL" | b"KRTX" => Some(1),
         _ => None,
     }
 }

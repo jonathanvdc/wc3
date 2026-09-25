@@ -49,6 +49,8 @@ mod particle;
 pub use particle::ParticleEmitter;
 mod particle2;
 pub use particle2::{Particle2Fields, ParticleEmitter2};
+mod ribbon;
+pub use ribbon::{RibbonEmitter, RibbonFields};
 mod sequence;
 pub use sequence::Sequence;
 mod simple_chunks;
