@@ -3,7 +3,7 @@ use crate::Encoder;
 use crate::{Tag, Version};
 
 use crate::Cursor;
-use crate::{CollectionChunk, Error, ModelChunk, RawChunk, Record, VersionChunk};
+use crate::{CollectionChunk, Error, ModelChunk, Record, VersionChunk};
 
 /// The four bytes at the start of an MDX file.
 pub const MAGIC: Tag = *b"MDLX";
@@ -148,6 +148,61 @@ impl Model {
     }
 }
 
+impl Record for Model {
+    fn decode_one(cursor: &mut Cursor<'_>, default_version: Version) -> Result<Self, Error> {
+        let version = scan_version(*cursor)?.unwrap_or(default_version);
+
+        let mut parse = *cursor;
+        parse.read_exact(4)?;
+        let mut chunks = Vec::new();
+        while !parse.remaining().is_empty() {
+            let (tag, _, mut payload) = read_chunk(&mut parse)?;
+            chunks.push(ModelChunk::decode_from(tag, &mut payload, version));
+        }
+        *cursor = parse;
+        Ok(Self {
+            default_version,
+            chunks,
+        })
+    }
+
+    fn encode_to(&self, output: &mut Encoder<'_>) -> Result<(), Error> {
+        output.write_bytes(&MAGIC);
+        for chunk in &self.chunks {
+            chunk.encode_to(output)?;
+        }
+        Ok(())
+    }
+}
+
+fn scan_version(mut cursor: Cursor<'_>) -> Result<Option<Version>, Error> {
+    if cursor.read_exact(4).ok() != Some(MAGIC.as_slice()) {
+        return Err(Error::InvalidMagic);
+    }
+    let mut version = None;
+    while !cursor.remaining().is_empty() {
+        let (tag, _, mut payload) = read_chunk(&mut cursor)?;
+        if tag == *b"VERS" {
+            let found = payload.read_u32().map_err(|_| Error::InvalidVersionChunk)?;
+            version.get_or_insert(found);
+        }
+    }
+    Ok(version)
+}
+
+fn read_chunk<'a>(cursor: &mut Cursor<'a>) -> Result<(Tag, u32, Cursor<'a>), Error> {
+    let offset = cursor.absolute_position();
+    if cursor.remaining().len() < 8 {
+        return Err(Error::TruncatedHeader { offset });
+    }
+    let tag = cursor.read_exact(4)?.try_into().expect("four-byte tag");
+    let size = cursor.read_u32()?;
+    let payload = cursor
+        .slice(size as usize)
+        .map_err(|_| Error::TruncatedChunk { tag, offset, size })?;
+    Ok((tag, size, payload))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -171,67 +226,33 @@ mod tests {
             })
         );
     }
-}
 
-impl Record for Model {
-    fn decode_one(cursor: &mut Cursor<'_>, default_version: Version) -> Result<Self, Error> {
-        let bytes = cursor.remaining();
-        let value = {
-            if !bytes.starts_with(&MAGIC) {
-                return Err(Error::InvalidMagic);
-            }
-            let mut chunks = Vec::new();
-            let mut offset = MAGIC.len();
-            while offset < bytes.len() {
-                if bytes.len() - offset < 8 {
-                    return Err(Error::TruncatedHeader { offset });
-                }
-                let tag = bytes[offset..offset + 4]
-                    .try_into()
-                    .expect("four-byte slice");
-                let size = u32::from_le_bytes(
-                    bytes[offset + 4..offset + 8]
-                        .try_into()
-                        .expect("four-byte slice"),
-                );
-                let start = offset + 8;
-                let end = start
-                    .checked_add(size as usize)
-                    .filter(|&end| end <= bytes.len())
-                    .ok_or(Error::TruncatedChunk { tag, offset, size })?;
-                chunks.push(RawChunk::new(tag, bytes[start..end].to_vec()));
-                offset = end;
-            }
-            if chunks
-                .iter()
-                .any(|chunk| chunk.tag == *b"VERS" && chunk.data.len() < 4)
-            {
-                return Err(Error::InvalidVersionChunk);
-            }
-            let version = chunks
-                .iter()
-                .find(|chunk| chunk.tag == *b"VERS")
-                .map(|chunk| {
-                    u32::from_le_bytes(chunk.data[..4].try_into().expect("four-byte version"))
-                })
-                .unwrap_or(default_version);
-            Ok(Self {
-                default_version,
-                chunks: chunks
-                    .into_iter()
-                    .map(|chunk| ModelChunk::from_raw(chunk, version))
-                    .collect(),
-            })
-        }?;
-        cursor.read_exact(bytes.len())?;
-        Ok(value)
+    #[test]
+    fn late_version_and_malformed_chunks_round_trip() {
+        let mut bytes = MAGIC.to_vec();
+        for (tag, payload) in [
+            (*b"FUTR", vec![1, 2]),
+            (*b"TEXS", vec![0; 267]),
+            (*b"VERS", 800u32.to_le_bytes().to_vec()),
+            (*b"VERS", 1800u32.to_le_bytes().to_vec()),
+        ] {
+            bytes.extend_from_slice(&tag);
+            bytes.extend_from_slice(&(payload.len() as u32).to_le_bytes());
+            bytes.extend_from_slice(&payload);
+        }
+        let model = Model::decode(&bytes, 1800).unwrap();
+        assert_eq!(model.version(), 800);
+        assert!(matches!(model.chunks()[0], ModelChunk::Unknown(_)));
+        assert!(matches!(model.chunks()[1], ModelChunk::Malformed(_)));
+        assert_eq!(model.encode().unwrap(), bytes);
     }
 
-    fn encode_to(&self, output: &mut Encoder<'_>) -> Result<(), Error> {
-        output.write_bytes(&MAGIC);
-        for chunk in &self.chunks {
-            chunk.encode_to(output)?;
-        }
-        Ok(())
+    #[test]
+    fn invalid_later_version_is_rejected() {
+        let mut bytes = Model::new(800).encode().unwrap();
+        bytes.extend_from_slice(b"VERS");
+        bytes.extend_from_slice(&3u32.to_le_bytes());
+        bytes.extend_from_slice(&[1, 2, 3]);
+        assert_eq!(Model::decode(&bytes, 1800), Err(Error::InvalidVersionChunk));
     }
 }
