@@ -1,4 +1,5 @@
 //! Ribbon emitter records in `RIBB` chunks.
+use crate::{Color, Tag};
 
 use crate::Record;
 use crate::{AnimationTrack, Error, Model, Node};
@@ -12,7 +13,7 @@ pub struct RibbonFields {
     pub height_above: f32,
     pub height_below: f32,
     pub alpha: f32,
-    pub color: [f32; 3],
+    pub color: Color,
     pub life_span: f32,
     pub texture_slot: u32,
     pub emission_rate: u32,
@@ -83,7 +84,7 @@ impl RibbonEmitter {
     }
 }
 
-fn is_track(tag: [u8; 4]) -> bool {
+fn is_track(tag: Tag) -> bool {
     matches!(
         &tag,
         b"KRVS" | b"KRHA" | b"KRHB" | b"KRAL" | b"KRCO" | b"KRTX"
@@ -195,5 +196,5 @@ impl Record for RibbonEmitter {
 
 impl RibbonEmitter {
     /// The tag of the chunk containing this record.
-    pub const TAG: [u8; 4] = *b"RIBB";
+    pub const TAG: Tag = *b"RIBB";
 }

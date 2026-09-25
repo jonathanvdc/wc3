@@ -1,4 +1,5 @@
 //! Shared node headers used by bones and helpers.
+use crate::Tag;
 
 use crate::Record;
 use crate::{BonesChunk, Cursor, HelpersChunk, ModelChunk};
@@ -291,10 +292,10 @@ impl Record for Bone {
 
 impl Node {
     /// The tag of the chunk containing this record.
-    pub const TAG: [u8; 4] = *b"HELP";
+    pub const TAG: Tag = *b"HELP";
 }
 
 impl Bone {
     /// The tag of the chunk containing this record.
-    pub const TAG: [u8; 4] = *b"BONE";
+    pub const TAG: Tag = *b"BONE";
 }

@@ -1,4 +1,5 @@
 //! Errors that can occur when reading or writing MDX files.
+use crate::{Tag, Version};
 
 use std::fmt;
 
@@ -10,27 +11,23 @@ pub enum Error {
     /// The chunk header is incomplete.
     TruncatedHeader { offset: usize },
     /// The declared chunk payload exceeds the input.
-    TruncatedChunk {
-        tag: [u8; 4],
-        offset: usize,
-        size: u32,
-    },
+    TruncatedChunk { tag: Tag, offset: usize, size: u32 },
     /// `VERS` has no four-byte version number.
     InvalidVersionChunk,
     /// A record belongs to a different MDX version than its destination.
-    VersionMismatch { expected: u32, actual: u32 },
+    VersionMismatch { expected: Version, actual: Version },
     /// The payload cannot be represented by a 32-bit MDX chunk size.
-    ChunkTooLarge { tag: [u8; 4], size: usize },
+    ChunkTooLarge { tag: Tag, size: usize },
     /// A known chunk is too short for its fixed layout.
     MalformedChunk {
-        tag: [u8; 4],
+        tag: Tag,
         size: usize,
         expected: usize,
     },
     /// A fixed-width string is too long or contains a NUL.
     InvalidString { max_bytes: usize },
     /// A size-bounded record or section is malformed at the given offset.
-    MalformedRecord { tag: [u8; 4], offset: usize },
+    MalformedRecord { tag: Tag, offset: usize },
     /// A decoder stopped before the end of an exact record input.
     TrailingRecordBytes { consumed: usize, total: usize },
     /// A bounded cursor could not read the requested number of bytes.

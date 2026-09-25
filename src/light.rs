@@ -1,4 +1,5 @@
 //! Light records in `LITE` chunks.
+use crate::{Color, Tag, Version};
 
 use crate::Record;
 use crate::{AnimationTrack, Error, Model, Node};
@@ -14,9 +15,9 @@ pub struct Light {
     light_type: u32,
     attenuation_start: f32,
     attenuation_end: f32,
-    color: [f32; 3],
+    color: Color,
     intensity: f32,
-    ambient_color: [f32; 3],
+    ambient_color: Color,
     ambient_intensity: f32,
     extended_words: Option<[u32; 7]>,
     tracks: Vec<AnimationTrack>,
@@ -40,7 +41,7 @@ impl Light {
     }
 
     /// Creates a light with the additional fixed fields used by newer models.
-    pub fn new_for_version(node: Node, light_type: u32, version: u32) -> Self {
+    pub fn new_for_version(node: Node, light_type: u32, version: Version) -> Self {
         let mut light = Self::new(node, light_type);
         if version >= 1200 {
             light.extended_words = Some([0; 7]);
@@ -83,11 +84,11 @@ impl Light {
         self.attenuation_end = value;
     }
     /// Returns RGB light color.
-    pub fn color(&self) -> [f32; 3] {
+    pub fn color(&self) -> Color {
         self.color
     }
     /// Sets RGB light color.
-    pub fn set_color(&mut self, color: [f32; 3]) {
+    pub fn set_color(&mut self, color: Color) {
         self.color = color;
     }
     /// Returns light intensity.
@@ -99,11 +100,11 @@ impl Light {
         self.intensity = value;
     }
     /// Returns ambient RGB color.
-    pub fn ambient_color(&self) -> [f32; 3] {
+    pub fn ambient_color(&self) -> Color {
         self.ambient_color
     }
     /// Sets ambient RGB color.
-    pub fn set_ambient_color(&mut self, color: [f32; 3]) {
+    pub fn set_ambient_color(&mut self, color: Color) {
         self.ambient_color = color;
     }
     /// Returns ambient intensity.
@@ -149,7 +150,7 @@ impl Light {
     }
 }
 
-fn is_track(tag: [u8; 4]) -> bool {
+fn is_track(tag: Tag) -> bool {
     matches!(
         &tag,
         b"KLAV" | b"KLAC" | b"KLAI" | b"KLBC" | b"KLBI" | b"KLAS" | b"KLAE"
@@ -268,5 +269,5 @@ impl Record for Light {
 
 impl Light {
     /// The tag of the chunk containing this record.
-    pub const TAG: [u8; 4] = *b"LITE";
+    pub const TAG: Tag = *b"LITE";
 }

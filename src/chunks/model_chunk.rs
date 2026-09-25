@@ -1,4 +1,5 @@
 //! Decoded, unknown, and malformed model chunks.
+use crate::{Tag, Version};
 
 use super::*;
 use crate::{Chunk, Error, KnownChunk, RawChunk};
@@ -57,7 +58,7 @@ impl PartialEq for ModelChunk {
 impl Eq for ModelChunk {}
 
 impl Chunk for ModelChunk {
-    fn tag(&self) -> [u8; 4] {
+    fn tag(&self) -> Tag {
         ModelChunk::tag(self)
     }
     fn encode_chunk(&self) -> Result<RawChunk, Error> {
@@ -67,7 +68,7 @@ impl Chunk for ModelChunk {
 
 impl ModelChunk {
     /// Decodes a known chunk, retaining its bytes and error if decoding fails.
-    pub fn from_raw(raw: RawChunk, version: u32) -> Self {
+    pub fn from_raw(raw: RawChunk, version: Version) -> Self {
         let decoded = match raw.tag {
             VersionChunk::TAG => VersionChunk::decode_chunk(&raw, version).map(Self::Version),
             ModelInfoChunk::TAG => ModelInfoChunk::decode_chunk(&raw, version).map(Self::ModelInfo),
@@ -120,7 +121,7 @@ impl ModelChunk {
     }
 
     /// Returns this chunk's tag.
-    pub fn tag(&self) -> [u8; 4] {
+    pub fn tag(&self) -> Tag {
         match self {
             Self::Version(_) => VersionChunk::TAG,
             Self::ModelInfo(_) => ModelInfoChunk::TAG,

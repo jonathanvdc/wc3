@@ -1,4 +1,5 @@
 //! The complete pivot-points chunk.
+use crate::{Tag, Vec3};
 
 use super::checked_chunk_size;
 use crate::Cursor;
@@ -7,7 +8,7 @@ use crate::{Error, KnownChunk, Record};
 /// The complete `PIVT` payload.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct PivotPointsChunk {
-    pub points: Vec<[f32; 3]>,
+    pub points: Vec<Vec3>,
 }
 
 impl Record for PivotPointsChunk {
@@ -40,7 +41,7 @@ impl Record for PivotPointsChunk {
 }
 
 impl KnownChunk for PivotPointsChunk {
-    const TAG: [u8; 4] = *b"PIVT";
+    const TAG: Tag = *b"PIVT";
 }
 
 #[cfg(test)]

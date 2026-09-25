@@ -1,4 +1,5 @@
 //! Classic particle emitters stored in `PREM` chunks.
+use crate::Tag;
 
 use crate::Record;
 use crate::{Cursor, ModelChunk, ParticleEmittersChunk};
@@ -138,7 +139,7 @@ impl ParticleEmitter {
     }
 }
 
-fn is_track(tag: [u8; 4]) -> bool {
+fn is_track(tag: Tag) -> bool {
     matches!(
         &tag,
         b"KPEV" | b"KPEE" | b"KPEG" | b"KPLN" | b"KPLT" | b"KPEL" | b"KPES"
@@ -240,5 +241,5 @@ impl Record for ParticleEmitter {
 
 impl ParticleEmitter {
     /// The tag of the chunk containing this record.
-    pub const TAG: [u8; 4] = *b"PREM";
+    pub const TAG: Tag = *b"PREM";
 }

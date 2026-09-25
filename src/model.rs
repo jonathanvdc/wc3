@@ -1,21 +1,22 @@
 //! A model in the Warcraft III MDX format.
+use crate::{Tag, Version};
 
 use crate::Cursor;
 use crate::{CollectionChunk, Error, ModelChunk, RawChunk, Record, VersionChunk};
 
 /// The four bytes at the start of an MDX file.
-pub const MAGIC: [u8; 4] = *b"MDLX";
+pub const MAGIC: Tag = *b"MDLX";
 
 /// The latest version number understood by this library.
 /// This is also the default version number used when creating a new model
 /// or when decoding a model that has no `VERS` chunk.
-pub const LATEST_VERSION: u32 = 1800;
+pub const LATEST_VERSION: Version = 1800;
 
 /// An ordered MDX model. Unknown chunks remain available and writable.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Model {
     /// The version number that is used if the model has no `VERS` chunk.
-    default_version: u32,
+    default_version: Version,
 
     /// The ordered list of chunks in the model.
     chunks: Vec<ModelChunk>,
@@ -36,7 +37,7 @@ impl Model {
 
     pub(crate) fn collect_chunk_items<T: Clone>(
         &self,
-        tag: [u8; 4],
+        tag: Tag,
         typed: impl Fn(&ModelChunk) -> Option<&[T]>,
     ) -> Result<Vec<T>, Error> {
         let mut result = Vec::new();
@@ -54,7 +55,7 @@ impl Model {
     }
 
     /// Creates a model with a `VERS` chunk for the given version.
-    pub fn new(version: u32) -> Self {
+    pub fn new(version: Version) -> Self {
         Self {
             default_version: version,
             chunks: vec![ModelChunk::Version(VersionChunk {
@@ -74,12 +75,12 @@ impl Model {
 
     /// Returns the model version, producing the value from the `VERS` chunk
     /// if there is such a chunk, or the default version otherwise.
-    pub fn version(&self) -> u32 {
+    pub fn version(&self) -> Version {
         self.stored_version().unwrap_or(self.default_version)
     }
 
     /// Updates the first `VERS` value, or inserts a `VERS` chunk first.
-    pub fn set_version(&mut self, version: u32) -> Result<(), Error> {
+    pub fn set_version(&mut self, version: Version) -> Result<(), Error> {
         match self.chunk_mut(*b"VERS") {
             Some(ModelChunk::Version(current)) => current.version = version,
             Some(_) => return Err(Error::InvalidVersionChunk),
@@ -105,12 +106,12 @@ impl Model {
     }
 
     /// Finds the first chunk with the given tag.
-    pub fn chunk(&self, tag: [u8; 4]) -> Option<&ModelChunk> {
+    pub fn chunk(&self, tag: Tag) -> Option<&ModelChunk> {
         self.chunks.iter().find(|chunk| chunk.tag() == tag)
     }
 
     /// Finds the first mutable chunk with the given tag.
-    pub fn chunk_mut(&mut self, tag: [u8; 4]) -> Option<&mut ModelChunk> {
+    pub fn chunk_mut(&mut self, tag: Tag) -> Option<&mut ModelChunk> {
         self.chunks.iter_mut().find(|chunk| chunk.tag() == tag)
     }
 
@@ -172,7 +173,7 @@ mod tests {
 }
 
 impl Record for Model {
-    fn decode_one(cursor: &mut Cursor<'_>, default_version: u32) -> Result<Self, Error> {
+    fn decode_one(cursor: &mut Cursor<'_>, default_version: Version) -> Result<Self, Error> {
         let bytes = cursor.remaining();
         let value = {
             if !bytes.starts_with(&MAGIC) {

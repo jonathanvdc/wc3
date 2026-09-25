@@ -1,4 +1,5 @@
 //! The complete version chunk payload.
+use crate::{Tag, Version};
 
 use crate::Cursor;
 use crate::{Error, KnownChunk, Record};
@@ -6,12 +7,12 @@ use crate::{Error, KnownChunk, Record};
 /// A complete `VERS` payload, including bytes after the version number.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct VersionChunk {
-    pub version: u32,
+    pub version: Version,
     pub extension: Vec<u8>,
 }
 
 impl VersionChunk {
-    pub fn new(version: u32) -> Self {
+    pub fn new(version: Version) -> Self {
         Self {
             version,
             extension: Vec::new(),
@@ -48,7 +49,7 @@ impl Record for VersionChunk {
 }
 
 impl KnownChunk for VersionChunk {
-    const TAG: [u8; 4] = *b"VERS";
+    const TAG: Tag = *b"VERS";
 }
 
 #[cfg(test)]

@@ -1,4 +1,5 @@
 //! Geoset animation records in `GEOA` chunks.
+use crate::{Color, Tag};
 
 use crate::Record;
 use crate::{AnimationTrack, Error, Model};
@@ -36,7 +37,7 @@ impl GeosetAnimationFlags {
 pub struct GeosetAnimation {
     alpha: f32,
     raw_flags: u32,
-    color: [f32; 3],
+    color: Color,
     geoset_id: u32,
     tracks: Vec<AnimationTrack>,
 }
@@ -78,11 +79,11 @@ impl GeosetAnimation {
         self.raw_flags = flags;
     }
     /// Returns base RGB color.
-    pub fn color(&self) -> [f32; 3] {
+    pub fn color(&self) -> Color {
         self.color
     }
     /// Changes base RGB color.
-    pub fn set_color(&mut self, color: [f32; 3]) {
+    pub fn set_color(&mut self, color: Color) {
         self.color = color;
     }
     /// Returns the referenced geoset index.
@@ -195,5 +196,5 @@ impl Record for GeosetAnimation {
 
 impl GeosetAnimation {
     /// The tag of the chunk containing this record.
-    pub const TAG: [u8; 4] = *b"GEOA";
+    pub const TAG: Tag = *b"GEOA";
 }

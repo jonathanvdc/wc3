@@ -1,4 +1,5 @@
 //! Typed camera records in `CAMS` chunks.
+use crate::{Tag, Vec3, Version};
 
 use crate::Record;
 use crate::{CamerasChunk, Cursor, ModelChunk};
@@ -16,11 +17,11 @@ const MAX_RECORD_SIZE: usize = 0x00ff_ffff;
 pub struct Camera {
     name: [u8; NAME_SIZE],
     record_flags: u8,
-    position: [f32; 3],
+    position: Vec3,
     field_of_view: f32,
     far_clip: f32,
     near_clip: f32,
-    target_position: [f32; 3],
+    target_position: Vec3,
     tracks: Vec<AnimationTrack>,
 }
 
@@ -42,7 +43,7 @@ impl Camera {
     }
 
     /// Creates a camera with the record flags used by newer models.
-    pub fn new_for_version(name: &str, version: u32) -> Result<Self, Error> {
+    pub fn new_for_version(name: &str, version: Version) -> Result<Self, Error> {
         let mut camera = Self::new(name)?;
         if version >= 1200 {
             camera.record_flags = 3;
@@ -67,11 +68,11 @@ impl Camera {
         field::set_text(&mut self.name, name)
     }
     /// Returns camera XYZ position.
-    pub fn position(&self) -> [f32; 3] {
+    pub fn position(&self) -> Vec3 {
         self.position
     }
     /// Changes camera XYZ position.
-    pub fn set_position(&mut self, position: [f32; 3]) {
+    pub fn set_position(&mut self, position: Vec3) {
         self.position = position;
     }
     /// Returns field of view.
@@ -99,11 +100,11 @@ impl Camera {
         self.near_clip = value;
     }
     /// Returns target XYZ position.
-    pub fn target_position(&self) -> [f32; 3] {
+    pub fn target_position(&self) -> Vec3 {
         self.target_position
     }
     /// Changes target XYZ position.
-    pub fn set_target_position(&mut self, target: [f32; 3]) {
+    pub fn set_target_position(&mut self, target: Vec3) {
         self.target_position = target;
     }
     /// Borrows decoded camera tracks without reparsing.
@@ -133,7 +134,7 @@ impl Camera {
     }
 }
 
-fn is_track(tag: [u8; 4]) -> bool {
+fn is_track(tag: Tag) -> bool {
     matches!(&tag, b"KCTR" | b"KTTR" | b"KCRL")
 }
 
@@ -229,5 +230,5 @@ impl Record for Camera {
 
 impl Camera {
     /// The tag of the chunk containing this record.
-    pub const TAG: [u8; 4] = *b"CAMS";
+    pub const TAG: Tag = *b"CAMS";
 }

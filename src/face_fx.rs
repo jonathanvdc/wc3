@@ -1,4 +1,5 @@
 //! Reforged face-animation references in `FAFX` chunks.
+use crate::Tag;
 
 use crate::Record;
 use crate::{Cursor, FaceFxChunk, ModelChunk};
@@ -105,5 +106,5 @@ impl Record for FaceFx {
 
 impl FaceFx {
     /// The tag of the chunk containing this record.
-    pub const TAG: [u8; 4] = *b"FAFX";
+    pub const TAG: Tag = *b"FAFX";
 }

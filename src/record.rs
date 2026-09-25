@@ -1,4 +1,5 @@
 //! Binary conversion for typed MDX records.
+use crate::Version;
 
 use crate::model::LATEST_VERSION;
 use crate::{Cursor, Error};
@@ -6,10 +7,10 @@ use crate::{Cursor, Error};
 /// A typed MDX record that can be converted to and from bytes.
 pub trait Record: Sized {
     /// Parses one record and advances the cursor past it.
-    fn decode_one(cursor: &mut Cursor<'_>, version: u32) -> Result<Self, Error>;
+    fn decode_one(cursor: &mut Cursor<'_>, version: Version) -> Result<Self, Error>;
 
     /// Parses exactly one record, rejecting any trailing bytes.
-    fn decode(bytes: &[u8], version: u32) -> Result<Self, Error> {
+    fn decode(bytes: &[u8], version: Version) -> Result<Self, Error> {
         let mut cursor = Cursor::new(bytes);
         let record = Self::decode_one(&mut cursor, version)?;
         cursor.finish()?;

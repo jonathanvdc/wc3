@@ -1,4 +1,5 @@
 //! Typed texture animation tracks in `TXAN` chunks.
+use crate::Tag;
 
 use crate::Record;
 use crate::{AnimationTrack, Error, Model};
@@ -44,7 +45,7 @@ impl TextureAnimation {
     }
 }
 
-fn is_track_tag(tag: [u8; 4]) -> bool {
+fn is_track_tag(tag: Tag) -> bool {
     matches!(&tag, b"KTAT" | b"KTAR" | b"KTAS")
 }
 
@@ -107,5 +108,5 @@ impl Record for TextureAnimation {
 
 impl TextureAnimation {
     /// The tag of the chunk containing this record.
-    pub const TAG: [u8; 4] = *b"TXAN";
+    pub const TAG: Tag = *b"TXAN";
 }

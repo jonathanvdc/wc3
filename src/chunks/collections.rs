@@ -1,4 +1,5 @@
 //! Complete payloads for chunks containing a sequence of records.
+use crate::{Tag, Version};
 
 use crate::{
     Attachment, Bone, Camera, CollisionShape, EventObject, FaceFx, Geoset, GeosetAnimation, Light,
@@ -13,7 +14,7 @@ pub trait CollectionChunk: Sized {
     type Item: Record;
 
     /// Returns this chunk type's tag.
-    fn tag() -> [u8; 4];
+    fn tag() -> Tag;
 
     /// Borrows the records in file order.
     fn records(&self) -> &[Self::Item];
@@ -23,7 +24,7 @@ pub trait CollectionChunk: Sized {
 }
 
 impl<C: CollectionChunk> Record for C {
-    fn decode_one(cursor: &mut Cursor<'_>, version: u32) -> Result<Self, Error> {
+    fn decode_one(cursor: &mut Cursor<'_>, version: Version) -> Result<Self, Error> {
         let mut records = Vec::new();
         while !cursor.remaining().is_empty() {
             let start = cursor.position();
@@ -72,7 +73,7 @@ macro_rules! record_collection {
 
         impl CollectionChunk for $name {
             type Item = $item;
-            fn tag() -> [u8; 4] {
+            fn tag() -> Tag {
                 <$item>::TAG
             }
             fn records(&self) -> &[Self::Item] {
@@ -84,7 +85,7 @@ macro_rules! record_collection {
         }
 
         impl KnownChunk for $name {
-            const TAG: [u8; 4] = <$item>::TAG;
+            const TAG: Tag = <$item>::TAG;
         }
     };
 }

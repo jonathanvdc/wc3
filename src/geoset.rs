@@ -1,4 +1,5 @@
 //! Typed geoset sections and lossless MDX serialization.
+use crate::{Tag, Vec3, Version};
 
 use crate::cursor::Cursor;
 use crate::Record;
@@ -12,8 +13,8 @@ use crate::{Error, Model};
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct GeosetExtent {
     pub bounds_radius: f32,
-    pub minimum: [f32; 3],
-    pub maximum: [f32; 3],
+    pub minimum: Vec3,
+    pub maximum: Vec3,
 }
 
 impl Default for GeosetExtent {
@@ -49,9 +50,9 @@ struct GeosetHeaderExtension {
 /// fixed-width name field are retained for byte-for-byte serialization.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Geoset {
-    version: u32,
-    vertices: Vec<[f32; 3]>,
-    normals: Vec<[f32; 3]>,
+    version: Version,
+    vertices: Vec<Vec3>,
+    normals: Vec<Vec3>,
     primitive_types: Vec<u32>,
     primitive_counts: Vec<u32>,
     faces: Vec<u16>,
@@ -71,9 +72,9 @@ pub struct Geoset {
 impl Geoset {
     /// Builds a basic geoset with one matrix group and one UV set.
     pub fn new(
-        version: u32,
-        vertices: &[[f32; 3]],
-        normals: &[[f32; 3]],
+        version: Version,
+        vertices: &[Vec3],
+        normals: &[Vec3],
         faces: &[u16],
     ) -> Result<Self, Error> {
         if vertices.len() != normals.len()
@@ -110,24 +111,24 @@ impl Geoset {
     }
 
     /// The MDX version used to interpret this record.
-    pub fn version(&self) -> u32 {
+    pub fn version(&self) -> Version {
         self.version
     }
 
     /// Borrows all vertex positions without decoding or allocating.
-    pub fn vertices(&self) -> &[[f32; 3]] {
+    pub fn vertices(&self) -> &[Vec3] {
         &self.vertices
     }
     /// Mutably borrows vertex positions for bulk edits.
-    pub fn vertices_mut(&mut self) -> &mut [[f32; 3]] {
+    pub fn vertices_mut(&mut self) -> &mut [Vec3] {
         &mut self.vertices
     }
     /// Borrows all vertex normals.
-    pub fn normals(&self) -> &[[f32; 3]] {
+    pub fn normals(&self) -> &[Vec3] {
         &self.normals
     }
     /// Mutably borrows normals for bulk edits.
-    pub fn normals_mut(&mut self) -> &mut [[f32; 3]] {
+    pub fn normals_mut(&mut self) -> &mut [Vec3] {
         &mut self.normals
     }
     /// Borrows primitive type identifiers from `PTYP`.
@@ -229,7 +230,7 @@ impl Geoset {
     }
 
     /// Changes one vertex position.
-    pub fn set_vertex(&mut self, index: usize, vertex: [f32; 3]) -> Result<(), Error> {
+    pub fn set_vertex(&mut self, index: usize, vertex: Vec3) -> Result<(), Error> {
         *self.vertices.get_mut(index).ok_or(Error::MalformedRecord {
             tag: Geoset::TAG,
             offset: index,
@@ -238,7 +239,7 @@ impl Geoset {
     }
 
     /// Changes one vertex normal.
-    pub fn set_normal(&mut self, index: usize, normal: [f32; 3]) -> Result<(), Error> {
+    pub fn set_normal(&mut self, index: usize, normal: Vec3) -> Result<(), Error> {
         *self.normals.get_mut(index).ok_or(Error::MalformedRecord {
             tag: Geoset::TAG,
             offset: index,
@@ -466,11 +467,11 @@ impl Geoset {
     }
 }
 
-fn peek_tag(cursor: &Cursor<'_>) -> Result<[u8; 4], Error> {
+fn peek_tag(cursor: &Cursor<'_>) -> Result<Tag, Error> {
     Ok(cursor.peek_exact(4)?.try_into().expect("four-byte tag"))
 }
 
-fn section<'a>(cursor: &mut Cursor<'a>, tag: [u8; 4], stride: usize) -> Result<&'a [u8], Error> {
+fn section<'a>(cursor: &mut Cursor<'a>, tag: Tag, stride: usize) -> Result<&'a [u8], Error> {
     let offset = cursor.absolute_position();
     if cursor.read_exact(4)? != tag {
         return Err(Error::MalformedRecord {
@@ -525,12 +526,12 @@ fn write_count(bytes: &mut Vec<u8>, count: usize) -> Result<(), Error> {
     Ok(())
 }
 
-fn write_section_header(bytes: &mut Vec<u8>, tag: [u8; 4], count: usize) -> Result<(), Error> {
+fn write_section_header(bytes: &mut Vec<u8>, tag: Tag, count: usize) -> Result<(), Error> {
     bytes.extend_from_slice(&tag);
     write_count(bytes, count)
 }
 
-fn write_words(bytes: &mut Vec<u8>, tag: [u8; 4], words: &[u32]) -> Result<(), Error> {
+fn write_words(bytes: &mut Vec<u8>, tag: Tag, words: &[u32]) -> Result<(), Error> {
     write_section_header(bytes, tag, words.len())?;
     for word in words {
         bytes.extend_from_slice(&word.to_le_bytes());
@@ -540,7 +541,7 @@ fn write_words(bytes: &mut Vec<u8>, tag: [u8; 4], words: &[u32]) -> Result<(), E
 
 fn write_vectors<const N: usize>(
     bytes: &mut Vec<u8>,
-    tag: [u8; 4],
+    tag: Tag,
     vectors: &[[f32; N]],
 ) -> Result<(), Error> {
     write_section_header(bytes, tag, vectors.len())?;
@@ -584,7 +585,7 @@ impl Model {
 }
 
 impl Record for Geoset {
-    fn decode_one(source: &mut Cursor<'_>, version: u32) -> Result<Self, Error> {
+    fn decode_one(source: &mut Cursor<'_>, version: Version) -> Result<Self, Error> {
         let mut cursor = source.slice_u32_sized()?;
 
         let value = {
@@ -771,5 +772,5 @@ impl Record for Geoset {
 
 impl Geoset {
     /// The tag of the chunk containing this record.
-    pub const TAG: [u8; 4] = *b"GEOS";
+    pub const TAG: Tag = *b"GEOS";
 }

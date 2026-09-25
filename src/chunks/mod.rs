@@ -1,4 +1,5 @@
 //! Raw and typed top-level MDX chunks.
+use crate::{Tag, Version};
 
 use crate::{Error, Record};
 
@@ -22,7 +23,7 @@ pub use version::VersionChunk;
 /// A value that represents a complete top-level chunk.
 pub trait Chunk {
     /// Returns this value's chunk tag.
-    fn tag(&self) -> [u8; 4];
+    fn tag(&self) -> Tag;
 
     /// Converts this value to a raw chunk.
     fn encode_chunk(&self) -> Result<RawChunk, Error>;
@@ -31,10 +32,10 @@ pub trait Chunk {
 /// A complete chunk whose tag is fixed by its type.
 pub trait KnownChunk: Chunk + Record {
     /// The four-byte chunk tag for this type.
-    const TAG: [u8; 4];
+    const TAG: Tag;
 
     /// Decodes the complete payload after checking its tag.
-    fn decode_chunk(chunk: &RawChunk, version: u32) -> Result<Self, Error> {
+    fn decode_chunk(chunk: &RawChunk, version: Version) -> Result<Self, Error> {
         if chunk.tag != Self::TAG {
             return Err(Error::MalformedRecord {
                 tag: chunk.tag,
@@ -46,7 +47,7 @@ pub trait KnownChunk: Chunk + Record {
 }
 
 impl<T: KnownChunk> Chunk for T {
-    fn tag(&self) -> [u8; 4] {
+    fn tag(&self) -> Tag {
         T::TAG
     }
 
@@ -55,7 +56,7 @@ impl<T: KnownChunk> Chunk for T {
     }
 }
 
-fn checked_chunk_size(count: usize, width: usize, tag: [u8; 4]) -> Result<usize, Error> {
+fn checked_chunk_size(count: usize, width: usize, tag: Tag) -> Result<usize, Error> {
     let size = count.checked_mul(width).ok_or(Error::ChunkTooLarge {
         tag,
         size: usize::MAX,

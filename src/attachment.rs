@@ -1,4 +1,5 @@
 //! Attachment records in `ATCH` chunks.
+use crate::Tag;
 
 use crate::Record;
 use crate::{AttachmentsChunk, Cursor, ModelChunk};
@@ -165,5 +166,5 @@ impl Record for Attachment {
 
 impl Attachment {
     /// The tag of the chunk containing this record.
-    pub const TAG: [u8; 4] = *b"ATCH";
+    pub const TAG: Tag = *b"ATCH";
 }

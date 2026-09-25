@@ -1,4 +1,5 @@
 //! Fixed-width texture records in `TEXS` chunks.
+use crate::Tag;
 
 use crate::Record;
 use crate::{Cursor, ModelChunk, TexturesChunk};
@@ -39,7 +40,7 @@ const PATH_SIZE: usize = 256;
 pub struct Texture {
     replaceable_id: u32,
     path: [u8; PATH_SIZE],
-    reserved: [u8; 4],
+    reserved: Tag,
     flags: u32,
 }
 
@@ -158,5 +159,5 @@ impl Record for Texture {
 
 impl Texture {
     /// The tag of the chunk containing this record.
-    pub const TAG: [u8; 4] = *b"TEXS";
+    pub const TAG: Tag = *b"TEXS";
 }

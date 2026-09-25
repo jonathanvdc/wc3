@@ -1,4 +1,5 @@
 //! Typed material layers and versioned texture slots.
+use crate::{Color, Tag, Version};
 
 use crate::Record;
 use crate::{Cursor, MaterialsChunk, ModelChunk};
@@ -7,7 +8,7 @@ use std::borrow::Cow;
 use crate::utils::field;
 use crate::{AnimationTrack, Error, Model};
 
-const LAYER_TAG: [u8; 4] = *b"LAYS";
+const LAYER_TAG: Tag = *b"LAYS";
 
 /// Material rendering bits, preserving unrecognized bits.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -76,7 +77,7 @@ pub struct LayerTextureSlot {
 /// A material with directly accessible layers and an exact shader field.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Material {
-    version: u32,
+    version: Version,
     priority_plane: u32,
     render_mode: u32,
     shader: Option<[u8; 80]>,
@@ -86,7 +87,7 @@ pub struct Material {
 /// A material layer with parsed texture slots and animation tracks.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Layer {
-    version: u32,
+    version: Version,
     filter_mode: u32,
     shading_flags: u32,
     texture_id: u32,
@@ -99,7 +100,7 @@ pub struct Layer {
 
 #[derive(Clone, Debug, PartialEq)]
 struct Fresnel {
-    color: [f32; 3],
+    color: Color,
     opacity: f32,
     team_color: f32,
 }
@@ -123,7 +124,7 @@ enum LayerExtensions {
 }
 
 impl LayerExtensions {
-    fn for_version(version: u32) -> Self {
+    fn for_version(version: Version) -> Self {
         let fresnel = Fresnel {
             color: [1.0; 3],
             opacity: 0.0,
@@ -149,21 +150,17 @@ impl LayerExtensions {
     }
 }
 
-fn has_shader(version: u32) -> bool {
+fn has_shader(version: Version) -> bool {
     (900..1100).contains(&version)
 }
-fn is_layer_track(tag: [u8; 4]) -> bool {
+fn is_layer_track(tag: Tag) -> bool {
     matches!(
         &tag,
         b"KMTA" | b"KMTF" | b"KMTE" | b"KFC3" | b"KFCA" | b"KFTC"
     )
 }
 
-fn expect_tag(
-    cursor: &mut Cursor<'_>,
-    expected: [u8; 4],
-    record_tag: [u8; 4],
-) -> Result<(), Error> {
+fn expect_tag(cursor: &mut Cursor<'_>, expected: Tag, record_tag: Tag) -> Result<(), Error> {
     let offset = cursor.absolute_position();
     if cursor.read_exact(4)? == expected {
         Ok(())
@@ -175,12 +172,12 @@ fn expect_tag(
     }
 }
 
-fn write_count(bytes: &mut Vec<u8>, count: usize, tag: [u8; 4]) -> Result<(), Error> {
+fn write_count(bytes: &mut Vec<u8>, count: usize, tag: Tag) -> Result<(), Error> {
     let value = u32::try_from(count).map_err(|_| Error::ChunkTooLarge { tag, size: count })?;
     bytes.extend_from_slice(&value.to_le_bytes());
     Ok(())
 }
-fn finish_record(bytes: &mut [u8], tag: [u8; 4]) -> Result<(), Error> {
+fn finish_record(bytes: &mut [u8], tag: Tag) -> Result<(), Error> {
     let size = u32::try_from(bytes.len()).map_err(|_| Error::ChunkTooLarge {
         tag,
         size: bytes.len(),
@@ -191,7 +188,7 @@ fn finish_record(bytes: &mut [u8], tag: [u8; 4]) -> Result<(), Error> {
 
 impl Material {
     /// Creates an empty material for the given MDX version.
-    pub fn new(version: u32) -> Self {
+    pub fn new(version: Version) -> Self {
         Self {
             version,
             priority_plane: 0,
@@ -202,7 +199,7 @@ impl Material {
     }
 
     /// Returns the MDX version used for this material.
-    pub fn version(&self) -> u32 {
+    pub fn version(&self) -> Version {
         self.version
     }
     /// Returns the material priority plane.
@@ -270,7 +267,7 @@ impl Material {
 
 impl Layer {
     /// Creates an empty layer with version-appropriate fields.
-    pub fn new(version: u32) -> Self {
+    pub fn new(version: Version) -> Self {
         Self {
             version,
             filter_mode: 0,
@@ -285,7 +282,7 @@ impl Layer {
     }
 
     /// Returns the MDX version used for this layer.
-    pub fn version(&self) -> u32 {
+    pub fn version(&self) -> Version {
         self.version
     }
     /// Returns the blend filter mode.
@@ -381,11 +378,11 @@ impl Layer {
         }
     }
     /// Returns the Fresnel color in versions 1000 and later.
-    pub fn fresnel_color(&self) -> Option<[f32; 3]> {
+    pub fn fresnel_color(&self) -> Option<Color> {
         self.fresnel().map(|f| f.color)
     }
     /// Changes the Fresnel color in versions 1000 and later.
-    pub fn set_fresnel_color(&mut self, value: [f32; 3]) -> Result<(), Error> {
+    pub fn set_fresnel_color(&mut self, value: Color) -> Result<(), Error> {
         self.require_version(1000, 32)?;
         self.fresnel_mut().unwrap().color = value;
         Ok(())
@@ -514,7 +511,7 @@ impl Model {
 }
 
 impl Record for Material {
-    fn decode_one(source: &mut Cursor<'_>, version: u32) -> Result<Self, Error> {
+    fn decode_one(source: &mut Cursor<'_>, version: Version) -> Result<Self, Error> {
         let mut cursor = source.slice_u32_sized()?;
         let value = {
             let priority_plane = cursor.read_u32()?;
@@ -567,7 +564,7 @@ impl Record for Material {
 }
 
 impl Record for Layer {
-    fn decode_one(source: &mut Cursor<'_>, version: u32) -> Result<Self, Error> {
+    fn decode_one(source: &mut Cursor<'_>, version: Version) -> Result<Self, Error> {
         let mut cursor = source.slice_u32_sized()?;
         let value = {
             let filter_mode = cursor.read_u32()?;
@@ -722,5 +719,5 @@ impl Record for Layer {
 
 impl Material {
     /// The tag of the chunk containing this record.
-    pub const TAG: [u8; 4] = *b"MTLS";
+    pub const TAG: Tag = *b"MTLS";
 }

@@ -1,4 +1,5 @@
 //! Fixed-size `MODL` model information.
+use crate::{Tag, Vec3};
 
 use crate::Record;
 use crate::{Cursor, ModelChunk, ModelInfoChunk};
@@ -14,7 +15,7 @@ const NAME_SIZE: usize = 336;
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ModelInfo {
     name: [u8; NAME_SIZE],
-    reserved: [u8; 4],
+    reserved: Tag,
     bounds_radius: u32,
     minimum_extent: [u32; 3],
     maximum_extent: [u32; 3],
@@ -75,22 +76,22 @@ impl ModelInfo {
     }
 
     /// Returns the minimum XYZ extent.
-    pub fn minimum_extent(&self) -> [f32; 3] {
+    pub fn minimum_extent(&self) -> Vec3 {
         self.minimum_extent.map(f32::from_bits)
     }
 
     /// Sets the minimum XYZ extent.
-    pub fn set_minimum_extent(&mut self, extent: [f32; 3]) {
+    pub fn set_minimum_extent(&mut self, extent: Vec3) {
         self.minimum_extent = extent.map(f32::to_bits);
     }
 
     /// Returns the maximum XYZ extent.
-    pub fn maximum_extent(&self) -> [f32; 3] {
+    pub fn maximum_extent(&self) -> Vec3 {
         self.maximum_extent.map(f32::from_bits)
     }
 
     /// Sets the maximum XYZ extent.
-    pub fn set_maximum_extent(&mut self, extent: [f32; 3]) {
+    pub fn set_maximum_extent(&mut self, extent: Vec3) {
         self.maximum_extent = extent.map(f32::to_bits);
     }
 
@@ -191,5 +192,5 @@ impl Record for ModelInfo {
 
 impl ModelInfo {
     /// The tag of the chunk containing this record.
-    pub const TAG: [u8; 4] = *b"MODL";
+    pub const TAG: Tag = *b"MODL";
 }

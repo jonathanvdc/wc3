@@ -1,4 +1,5 @@
 //! Particle emitter 2 records in `PRE2` chunks.
+use crate::{Color, Tag, Vec3};
 
 use crate::Record;
 use crate::{AnimationTrack, Error, Model, Node};
@@ -52,9 +53,9 @@ pub struct Particle2Fields {
     pub frame_flags: u32,
     pub tail_length: f32,
     pub time: f32,
-    pub segment_colors: [[f32; 3]; 3],
+    pub segment_colors: [Color; 3],
     pub alpha: [u8; 3],
-    pub particle_scaling: [f32; 3],
+    pub particle_scaling: Vec3,
     /// Life span, decay, tail, and tail decay UV intervals.
     pub uv_animations: [[u32; 3]; 4],
     pub texture_id: u32,
@@ -233,7 +234,7 @@ fn encode_fields(fields: &Particle2Fields) -> Vec<u8> {
     bytes
 }
 
-fn is_track(tag: [u8; 4]) -> bool {
+fn is_track(tag: Tag) -> bool {
     matches!(
         &tag,
         b"KP2V" | b"KP2E" | b"KP2W" | b"KP2N" | b"KP2S" | b"KP2L" | b"KP2G" | b"KP2R"
@@ -307,5 +308,5 @@ impl Record for ParticleEmitter2 {
 
 impl ParticleEmitter2 {
     /// The tag of the chunk containing this record.
-    pub const TAG: [u8; 4] = *b"PRE2";
+    pub const TAG: Tag = *b"PRE2";
 }

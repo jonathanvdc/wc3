@@ -1,4 +1,5 @@
 //! The complete model-information chunk.
+use crate::{Tag, Version};
 
 use crate::{Cursor, ModelInfo};
 use crate::{Error, KnownChunk, Record};
@@ -17,7 +18,7 @@ impl ModelInfoChunk {
 }
 
 impl Record for ModelInfoChunk {
-    fn decode_one(cursor: &mut Cursor<'_>, version: u32) -> Result<Self, Error> {
+    fn decode_one(cursor: &mut Cursor<'_>, version: Version) -> Result<Self, Error> {
         let _ = version;
         let info = ModelInfo::parse(cursor.remaining())?;
         cursor.read_exact(372)?;
@@ -47,7 +48,7 @@ impl Record for ModelInfoChunk {
 }
 
 impl KnownChunk for ModelInfoChunk {
-    const TAG: [u8; 4] = ModelInfo::TAG;
+    const TAG: Tag = ModelInfo::TAG;
 }
 
 #[cfg(test)]

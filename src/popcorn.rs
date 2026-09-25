@@ -1,4 +1,5 @@
 //! Reforged popcorn particle emitters in `CORN` chunks.
+use crate::{Color, Tag};
 
 use crate::Record;
 use crate::{Cursor, ModelChunk, PopcornEmittersChunk};
@@ -17,7 +18,7 @@ pub struct PopcornEmitter {
     life_span: f32,
     emission_rate: f32,
     speed: f32,
-    color: [f32; 3],
+    color: Color,
     alpha: f32,
     replaceable_id: u32,
     path: [u8; PATH_SIZE],
@@ -79,11 +80,11 @@ impl PopcornEmitter {
         self.speed = value;
     }
     /// Returns RGB particle color.
-    pub fn color(&self) -> [f32; 3] {
+    pub fn color(&self) -> Color {
         self.color
     }
     /// Sets RGB particle color.
-    pub fn set_color(&mut self, color: [f32; 3]) {
+    pub fn set_color(&mut self, color: Color) {
         self.color = color;
     }
     /// Returns base alpha.
@@ -138,7 +139,7 @@ impl PopcornEmitter {
     }
 }
 
-fn is_track_tag(tag: [u8; 4]) -> bool {
+fn is_track_tag(tag: Tag) -> bool {
     matches!(
         &tag,
         b"KPPA" | b"KPPC" | b"KPPE" | b"KPPL" | b"KPPS" | b"KPPV"
@@ -245,5 +246,5 @@ impl Record for PopcornEmitter {
 
 impl PopcornEmitter {
     /// The tag of the chunk containing this record.
-    pub const TAG: [u8; 4] = *b"CORN";
+    pub const TAG: Tag = *b"CORN";
 }

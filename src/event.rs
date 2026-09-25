@@ -1,10 +1,11 @@
 //! Event objects stored in `EVTS` chunks.
+use crate::Tag;
 
 use crate::Record;
 use crate::{Cursor, EventObjectsChunk, ModelChunk};
 use crate::{Error, Model, Node};
 
-const TRACK_TAG: [u8; 4] = *b"KEVT";
+const TRACK_TAG: Tag = *b"KEVT";
 
 /// A node followed by an event track.
 #[derive(Clone, Debug, PartialEq)]
@@ -127,5 +128,5 @@ impl Record for EventObject {
 
 impl EventObject {
     /// The tag of the chunk containing this record.
-    pub const TAG: [u8; 4] = *b"EVTS";
+    pub const TAG: Tag = *b"EVTS";
 }

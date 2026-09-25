@@ -1,4 +1,5 @@
 //! Box and sphere collision shapes in `CLID` chunks.
+use crate::{Tag, Vec3};
 
 use crate::cursor::Cursor;
 use crate::Record;
@@ -27,15 +28,15 @@ pub struct CollisionShape {
 
 #[derive(Clone, Debug, PartialEq)]
 enum CollisionGeometry {
-    Box([[f32; 3]; 2]),
-    Plane([[f32; 3]; 2]),
-    Sphere([f32; 3], f32),
-    Cylinder([[f32; 3]; 2], f32),
+    Box([Vec3; 2]),
+    Plane([Vec3; 2]),
+    Sphere(Vec3, f32),
+    Cylinder([Vec3; 2], f32),
 }
 
 impl CollisionShape {
     /// Creates a box collision shape from two XYZ corners.
-    pub fn new_box(node: Node, corners: [[f32; 3]; 2]) -> Self {
+    pub fn new_box(node: Node, corners: [Vec3; 2]) -> Self {
         Self {
             node,
             geometry: CollisionGeometry::Box(corners),
@@ -43,7 +44,7 @@ impl CollisionShape {
     }
 
     /// Creates a sphere collision shape from center and radius.
-    pub fn new_sphere(node: Node, center: [f32; 3], radius: f32) -> Self {
+    pub fn new_sphere(node: Node, center: Vec3, radius: f32) -> Self {
         Self {
             node,
             geometry: CollisionGeometry::Sphere(center, radius),
@@ -51,7 +52,7 @@ impl CollisionShape {
     }
 
     /// Creates a plane collision shape from two XYZ points.
-    pub fn new_plane(node: Node, points: [[f32; 3]; 2]) -> Self {
+    pub fn new_plane(node: Node, points: [Vec3; 2]) -> Self {
         Self {
             node,
             geometry: CollisionGeometry::Plane(points),
@@ -59,7 +60,7 @@ impl CollisionShape {
     }
 
     /// Creates a cylinder collision shape from endpoints and radius.
-    pub fn new_cylinder(node: Node, endpoints: [[f32; 3]; 2], radius: f32) -> Self {
+    pub fn new_cylinder(node: Node, endpoints: [Vec3; 2], radius: f32) -> Self {
         Self {
             node,
             geometry: CollisionGeometry::Cylinder(endpoints, radius),
@@ -87,7 +88,7 @@ impl CollisionShape {
     }
 
     /// Returns the two box corners, or `None` for other shapes.
-    pub fn box_corners(&self) -> Option<[[f32; 3]; 2]> {
+    pub fn box_corners(&self) -> Option<[Vec3; 2]> {
         match self.geometry {
             CollisionGeometry::Box(points) => Some(points),
             _ => None,
@@ -95,7 +96,7 @@ impl CollisionShape {
     }
 
     /// Returns the two points of a box, plane, or cylinder.
-    pub fn points(&self) -> Option<[[f32; 3]; 2]> {
+    pub fn points(&self) -> Option<[Vec3; 2]> {
         match self.geometry {
             CollisionGeometry::Box(points)
             | CollisionGeometry::Plane(points)
@@ -115,7 +116,7 @@ impl CollisionShape {
     }
 
     /// Returns sphere center and radius, or `None` for other shapes.
-    pub fn sphere(&self) -> Option<([f32; 3], f32)> {
+    pub fn sphere(&self) -> Option<(Vec3, f32)> {
         match self.geometry {
             CollisionGeometry::Sphere(center, radius) => Some((center, radius)),
             _ => None,
@@ -145,7 +146,7 @@ impl Record for CollisionShape {
         let node = Node::decode_one(cursor, 0)?;
         let kind_offset = cursor.absolute_position();
         let kind = cursor.read_u32()?;
-        let vec3 = |cursor: &mut Cursor<'_>| -> Result<[f32; 3], Error> { Ok(cursor.read_vec3()?) };
+        let vec3 = |cursor: &mut Cursor<'_>| -> Result<Vec3, Error> { Ok(cursor.read_vec3()?) };
         let geometry = match kind {
             0 => CollisionGeometry::Box([vec3(cursor)?, vec3(cursor)?]),
             1 => CollisionGeometry::Plane([vec3(cursor)?, vec3(cursor)?]),
@@ -171,7 +172,7 @@ impl Record for CollisionShape {
                 CollisionGeometry::Cylinder(_, _) => 3,
             };
             bytes.extend_from_slice(&kind.to_le_bytes());
-            let mut push_vec3 = |values: [f32; 3]| {
+            let mut push_vec3 = |values: Vec3| {
                 for value in values {
                     bytes.extend_from_slice(&value.to_le_bytes());
                 }
@@ -200,5 +201,5 @@ impl Record for CollisionShape {
 
 impl CollisionShape {
     /// The tag of the chunk containing this record.
-    pub const TAG: [u8; 4] = *b"CLID";
+    pub const TAG: Tag = *b"CLID";
 }

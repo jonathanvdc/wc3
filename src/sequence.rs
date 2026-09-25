@@ -1,4 +1,5 @@
 //! Animation sequence records in the `SEQS` chunk.
+use crate::{Tag, Vec3};
 
 use crate::Record;
 use crate::{Cursor, ModelChunk, SequencesChunk};
@@ -117,16 +118,16 @@ impl Sequence {
     pub fn set_bounds_radius(&mut self, radius: f32) {
         self.bounds_radius = radius.to_bits();
     }
-    pub fn minimum_extent(&self) -> [f32; 3] {
+    pub fn minimum_extent(&self) -> Vec3 {
         self.minimum_extent.map(f32::from_bits)
     }
-    pub fn set_minimum_extent(&mut self, extent: [f32; 3]) {
+    pub fn set_minimum_extent(&mut self, extent: Vec3) {
         self.minimum_extent = extent.map(f32::to_bits);
     }
-    pub fn maximum_extent(&self) -> [f32; 3] {
+    pub fn maximum_extent(&self) -> Vec3 {
         self.maximum_extent.map(f32::from_bits)
     }
-    pub fn set_maximum_extent(&mut self, extent: [f32; 3]) {
+    pub fn set_maximum_extent(&mut self, extent: Vec3) {
         self.maximum_extent = extent.map(f32::to_bits);
     }
 }
@@ -213,5 +214,5 @@ impl Record for Sequence {
 
 impl Sequence {
     /// The tag of the chunk containing this record.
-    pub const TAG: [u8; 4] = *b"SEQS";
+    pub const TAG: Tag = *b"SEQS";
 }

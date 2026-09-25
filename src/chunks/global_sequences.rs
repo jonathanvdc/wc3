@@ -1,4 +1,5 @@
 //! The complete global-sequences chunk.
+use crate::Tag;
 
 use super::checked_chunk_size;
 use crate::Cursor;
@@ -38,7 +39,7 @@ impl Record for GlobalSequencesChunk {
 }
 
 impl KnownChunk for GlobalSequencesChunk {
-    const TAG: [u8; 4] = *b"GLBS";
+    const TAG: Tag = *b"GLBS";
 }
 
 #[cfg(test)]

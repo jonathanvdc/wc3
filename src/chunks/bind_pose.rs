@@ -1,4 +1,5 @@
 //! Reforged bind-pose matrices in `BPOS` chunks.
+use crate::Tag;
 
 use crate::Record;
 use crate::{Cursor, ModelChunk};
@@ -145,5 +146,5 @@ impl Record for BindPose {
 }
 
 impl KnownChunk for BindPose {
-    const TAG: [u8; 4] = *b"BPOS";
+    const TAG: Tag = *b"BPOS";
 }

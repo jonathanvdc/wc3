@@ -16,6 +16,15 @@
 //! assert_eq!(Model::decode(&bytes, 800).unwrap(), model);
 //! ```
 
+/// A three-dimensional vector in MDX coordinates.
+pub type Vec3 = [f32; 3];
+/// An RGB color.
+pub type Color = [f32; 3];
+/// An MDX format version number.
+pub type Version = u32;
+/// A four-byte MDX chunk or track identifier.
+pub type Tag = [u8; 4];
+
 pub mod chunks;
 pub use chunks::*;
 mod error;

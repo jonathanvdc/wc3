@@ -1,4 +1,5 @@
 //! Keyframe tracks for node translation, rotation, and scaling.
+use crate::Tag;
 
 use crate::Cursor;
 use crate::Error;
@@ -45,7 +46,7 @@ impl Keyframe {
 #[derive(Clone, Debug, PartialEq)]
 pub struct AnimationTrack {
     /// Track identifier, such as `KGTR` for node translation or `KCTR` for a camera.
-    pub tag: [u8; 4],
+    pub tag: Tag,
     /// 0 = none, 1 = linear, 2 = Hermite, 3 = Bezier.
     pub interpolation: u32,
     /// Global sequence index, or `u32::MAX` when absent.
@@ -72,7 +73,7 @@ impl AnimationTrack {
 
     /// Parses one known track and returns the number of bytes consumed.
     pub(crate) fn parse(data: &[u8], offset: usize) -> Result<(Self, usize), Error> {
-        let tag: [u8; 4] = data
+        let tag: Tag = data
             .get(offset..offset.saturating_add(4))
             .ok_or(Error::MalformedRecord {
                 tag: *b"KGTR",
@@ -144,7 +145,7 @@ impl AnimationTrack {
     }
 }
 
-fn components(tag: [u8; 4]) -> Option<usize> {
+fn components(tag: Tag) -> Option<usize> {
     match &tag {
         b"KGTR" | b"KGSC" | b"KCTR" | b"KTTR" | b"KPPC" | b"KTAT" | b"KTAS" | b"KGAC" | b"KLAC"
         | b"KLBC" | b"KFC3" | b"KRCO" => Some(3),

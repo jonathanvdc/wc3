@@ -1,4 +1,5 @@
 //! Checked, bounded reads over immutable bytes.
+use crate::Vec3;
 
 use crate::Error;
 
@@ -69,7 +70,7 @@ impl<'a> Cursor<'a> {
     }
 
     /// Reads three IEEE 754 floats from twelve little-endian bytes.
-    pub fn read_vec3(&mut self) -> Result<[f32; 3], Error> {
+    pub fn read_vec3(&mut self) -> Result<Vec3, Error> {
         let x = self.read_f32()?;
         let y = self.read_f32()?;
         let z = self.read_f32()?;
