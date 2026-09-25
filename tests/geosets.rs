@@ -73,6 +73,22 @@ fn builds_complete_synthetic_geosets() {
         )
         .unwrap();
         geoset.set_material_id(version, 7).unwrap();
+        geoset
+            .set_matrix_groups(version, &[vec![1, 2], vec![3]])
+            .unwrap();
+        geoset
+            .set_sequence_extents(
+                version,
+                &[GeosetExtent {
+                    bounds_radius: 2.0,
+                    minimum: [-2.0; 3],
+                    maximum: [2.0; 3],
+                }],
+            )
+            .unwrap();
+        geoset
+            .set_uv_sets(version, &[vec![[0.0, 0.0]; 2], vec![[1.0, 1.0]; 2]])
+            .unwrap();
         geoset.set_normal(1, [0.0, 1.0, 0.0]).unwrap();
         geoset.set_selection_group(version, 3).unwrap();
         geoset.set_unselectable(version, true).unwrap();
@@ -94,11 +110,12 @@ fn builds_complete_synthetic_geosets() {
         assert!(geoset.unselectable(version).unwrap());
         assert_eq!(geoset.extent(version).unwrap(), extent);
         assert_eq!(geoset.vertex_groups(version).unwrap(), &[0, 0]);
-        assert_eq!(geoset.matrix_group_sizes(version).unwrap(), vec![1]);
-        assert_eq!(geoset.matrix_indices(version).unwrap(), vec![0]);
+        assert_eq!(geoset.matrix_group_sizes(version).unwrap(), vec![2, 1]);
+        assert_eq!(geoset.matrix_indices(version).unwrap(), vec![1, 2, 3]);
+        assert_eq!(geoset.sequence_extents(version).unwrap().len(), 1);
         assert_eq!(
             geoset.uv_sets(version).unwrap(),
-            vec![vec![[0.0, 0.0], [0.25, 0.75]]]
+            vec![vec![[0.0, 0.0], [0.25, 0.75]], vec![[1.0, 1.0]; 2]]
         );
         let mut model = Model::new(version);
         model.set_geosets(&[geoset]).unwrap();

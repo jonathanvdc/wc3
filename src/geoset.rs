@@ -20,6 +20,7 @@ struct Layout {
     properties: usize,
     extent: usize,
     sequence_extents: (usize, usize),
+    uv_start: usize,
     tangents: Option<(usize, usize)>,
     skin_weights: Option<(usize, usize)>,
     skin_bone_indices: Option<(usize, usize)>,
@@ -241,6 +242,44 @@ impl Geoset {
         Ok(self.words(layout.matrix_indices))
     }
 
+    /// Replaces matrix groups and their flattened matrix references.
+    pub fn set_matrix_groups(&mut self, version: u32, groups: &[Vec<u32>]) -> Result<(), Error> {
+        if groups.len() > u32::MAX as usize
+            || groups.iter().any(|group| group.len() > u32::MAX as usize)
+        {
+            return Err(Error::ChunkTooLarge {
+                tag: TAG,
+                size: usize::MAX,
+            });
+        }
+        let layout = self.layout(version)?;
+        let mut data = Vec::new();
+        data.extend_from_slice(b"MTGC");
+        data.extend_from_slice(&(groups.len() as u32).to_le_bytes());
+        for group in groups {
+            data.extend_from_slice(&(group.len() as u32).to_le_bytes());
+        }
+        data.extend_from_slice(b"MATS");
+        let total = groups
+            .iter()
+            .try_fold(0usize, |sum, group| sum.checked_add(group.len()))
+            .filter(|&n| n <= u32::MAX as usize)
+            .ok_or(Error::ChunkTooLarge {
+                tag: TAG,
+                size: usize::MAX,
+            })?;
+        data.extend_from_slice(&(total as u32).to_le_bytes());
+        for group in groups {
+            for index in group {
+                data.extend_from_slice(&index.to_le_bytes());
+            }
+        }
+        self.replace_range(
+            layout.matrix_group_sizes.0 - 8..layout.matrix_indices.1,
+            &data,
+        )
+    }
+
     /// Returns the material index used by this geoset.
     pub fn material_id(&self, version: u32) -> Result<u32, Error> {
         Ok(self.word(self.layout(version)?.properties))
@@ -369,6 +408,33 @@ impl Geoset {
         Ok(())
     }
 
+    /// Replaces all per-sequence bounding volumes.
+    pub fn set_sequence_extents(
+        &mut self,
+        version: u32,
+        extents: &[GeosetExtent],
+    ) -> Result<(), Error> {
+        if extents.len() > u32::MAX as usize {
+            return Err(Error::ChunkTooLarge {
+                tag: TAG,
+                size: extents.len(),
+            });
+        }
+        let layout = self.layout(version)?;
+        let mut data = Vec::new();
+        data.extend_from_slice(&(extents.len() as u32).to_le_bytes());
+        for extent in extents {
+            data.extend_from_slice(&extent.bounds_radius.to_le_bytes());
+            for value in extent.minimum.into_iter().chain(extent.maximum) {
+                data.extend_from_slice(&value.to_le_bytes());
+            }
+        }
+        self.replace_range(
+            layout.sequence_extents.0 - 4..layout.sequence_extents.1,
+            &data,
+        )
+    }
+
     /// Returns optional Reforged XYZW tangent vectors.
     pub fn tangents(&self, version: u32) -> Result<Option<Vec<[f32; 4]>>, Error> {
         let layout = self.layout(version)?;
@@ -448,6 +514,30 @@ impl Geoset {
         self.bytes[offset..offset + 4].copy_from_slice(&uv[0].to_le_bytes());
         self.bytes[offset + 4..offset + 8].copy_from_slice(&uv[1].to_le_bytes());
         Ok(())
+    }
+
+    /// Replaces every UV coordinate set.
+    pub fn set_uv_sets(&mut self, version: u32, sets: &[Vec<[f32; 2]>]) -> Result<(), Error> {
+        if sets.len() > u32::MAX as usize || sets.iter().any(|set| set.len() > u32::MAX as usize) {
+            return Err(Error::ChunkTooLarge {
+                tag: TAG,
+                size: usize::MAX,
+            });
+        }
+        let layout = self.layout(version)?;
+        let mut data = Vec::new();
+        data.extend_from_slice(b"UVAS");
+        data.extend_from_slice(&(sets.len() as u32).to_le_bytes());
+        for set in sets {
+            data.extend_from_slice(b"UVBS");
+            data.extend_from_slice(&(set.len() as u32).to_le_bytes());
+            for uv in set {
+                for value in uv {
+                    data.extend_from_slice(&value.to_le_bytes());
+                }
+            }
+        }
+        self.replace_range(layout.uv_start..self.bytes.len(), &data)
     }
 
     fn layout(&self, version: u32) -> Result<Layout, Error> {
@@ -535,6 +625,7 @@ impl Geoset {
                 }
             }
         }
+        let uv_start = offset;
         if self.bytes.get(offset..offset + 4) != Some(b"UVAS") {
             return Err(Error::MalformedRecord { tag: TAG, offset });
         }
@@ -559,6 +650,7 @@ impl Geoset {
             properties,
             extent,
             sequence_extents,
+            uv_start,
             tangents,
             skin_weights,
             skin_bone_indices,
@@ -595,6 +687,22 @@ impl Geoset {
             self.bytes[offset + 4 + i * 4..offset + 8 + i * 4]
                 .copy_from_slice(&value.to_le_bytes());
         }
+    }
+
+    fn replace_range(&mut self, range: std::ops::Range<usize>, data: &[u8]) -> Result<(), Error> {
+        let size = self
+            .bytes
+            .len()
+            .checked_sub(range.len())
+            .and_then(|n| n.checked_add(data.len()))
+            .filter(|&n| n <= u32::MAX as usize)
+            .ok_or(Error::ChunkTooLarge {
+                tag: TAG,
+                size: usize::MAX,
+            })?;
+        self.bytes.splice(range, data.iter().copied());
+        self.bytes[..4].copy_from_slice(&(size as u32).to_le_bytes());
+        Ok(())
     }
 
     fn section(&self, offset: usize, tag: [u8; 4], stride: usize) -> Result<(&[u8], usize), Error> {
