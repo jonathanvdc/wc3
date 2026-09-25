@@ -17,6 +17,8 @@
 
 use std::fmt;
 
+mod animation;
+pub use animation::{AnimationTrack, Keyframe};
 mod geoset;
 pub use geoset::Geoset;
 mod material;

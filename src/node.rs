@@ -2,7 +2,7 @@
 
 use std::borrow::Cow;
 
-use crate::{Error, Model};
+use crate::{AnimationTrack, Error, Model};
 
 const BONE_TAG: [u8; 4] = *b"BONE";
 const HELP_TAG: [u8; 4] = *b"HELP";
@@ -121,6 +121,36 @@ impl Node {
     /// Returns undecoded animation track bytes after the shared header.
     pub fn track_bytes(&self) -> &[u8] {
         &self.bytes[HEADER_SIZE..]
+    }
+
+    /// Decodes node translation, rotation, and scaling tracks.
+    pub fn tracks(&self) -> Result<Vec<AnimationTrack>, Error> {
+        let mut tracks = Vec::new();
+        let mut offset = HEADER_SIZE;
+        while offset < self.bytes.len() {
+            let (track, consumed) = AnimationTrack::parse(&self.bytes, offset)?;
+            tracks.push(track);
+            offset += consumed;
+        }
+        Ok(tracks)
+    }
+
+    /// Replaces the node's transform tracks and updates its inclusive size.
+    pub fn set_tracks(&mut self, tracks: &[AnimationTrack]) -> Result<(), Error> {
+        let mut bytes = self.bytes[..HEADER_SIZE].to_vec();
+        for track in tracks {
+            bytes.extend_from_slice(&track.to_bytes()?);
+        }
+        if bytes.len() > u32::MAX as usize {
+            return Err(Error::ChunkTooLarge {
+                tag: *b"HELP",
+                size: bytes.len(),
+            });
+        }
+        let size = bytes.len() as u32;
+        bytes[..4].copy_from_slice(&size.to_le_bytes());
+        self.bytes = bytes;
+        Ok(())
     }
 
     fn u32_at(&self, offset: usize) -> u32 {
