@@ -29,6 +29,8 @@ mod camera;
 pub use camera::Camera;
 mod event;
 pub use event::EventObject;
+mod face_fx;
+pub use face_fx::FaceFx;
 mod geoset;
 pub use geoset::Geoset;
 mod geoset_animation;
