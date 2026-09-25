@@ -19,6 +19,8 @@ use std::fmt;
 
 mod geoset;
 pub use geoset::Geoset;
+mod material;
+pub use material::{Layer, Material};
 mod model_info;
 pub use model_info::ModelInfo;
 mod sequence;
