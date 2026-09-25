@@ -58,22 +58,10 @@ impl Model {
 
     /// Returns the first `VERS` value, if present.
     pub fn stored_version(&self) -> Option<u32> {
-        self.chunks
-            .iter()
-            .find(|chunk| chunk.tag() == *b"VERS")
-            .and_then(|chunk| match chunk {
-                ModelChunk::Version(version) => Some(version.version),
-                ModelChunk::Unknown(raw) => raw
-                    .data
-                    .get(..4)
-                    .map(|bytes| u32::from_le_bytes(bytes.try_into().expect("four-byte version"))),
-                ModelChunk::Malformed(malformed) => {
-                    malformed.raw.data.get(..4).map(|bytes| {
-                        u32::from_le_bytes(bytes.try_into().expect("four-byte version"))
-                    })
-                }
-                _ => None,
-            })
+        self.chunks.iter().find_map(|chunk| match chunk {
+            ModelChunk::Version(version) => Some(version.version),
+            _ => None,
+        })
     }
 
     /// Returns the model version, producing the value from the `VERS` chunk
