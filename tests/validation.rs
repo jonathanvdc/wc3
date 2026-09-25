@@ -68,6 +68,15 @@ fn rejects_layer_shorter_than_its_versioned_header() {
 }
 
 #[test]
+fn validates_every_repeated_model_info_chunk() {
+    let mut model = Model::new(800);
+    model.set_model_info(&wc3_mdx::ModelInfo::new("Good").unwrap());
+    model.push(Chunk::new(*b"MODL", vec![0; 12]));
+    assert!(model.model_info().unwrap().is_some());
+    assert!(model.validate().is_err());
+}
+
+#[test]
 fn validates_local_models_when_available() {
     let Ok(directory) = std::env::var("WC3_MDX_FIXTURES") else {
         return;

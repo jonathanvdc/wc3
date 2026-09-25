@@ -1,6 +1,6 @@
 //! Semantic checks for all currently known MDX chunk layouts.
 
-use crate::{Error, Model};
+use crate::{Error, Model, ModelInfo};
 
 impl Model {
     /// Validates known chunks and animation records without changing their bytes.
@@ -18,7 +18,9 @@ impl Model {
             None if self.chunk(*b"VERS").is_some() => return Err(Error::InvalidVersionChunk),
             None => 800,
         };
-        self.model_info()?;
+        for chunk in self.chunks().iter().filter(|chunk| chunk.tag == *b"MODL") {
+            ModelInfo::parse(&chunk.data)?;
+        }
         self.sequences()?;
         self.global_sequences()?;
         self.textures()?;
