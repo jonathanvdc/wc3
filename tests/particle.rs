@@ -33,5 +33,5 @@ fn classic_particle_emitter_round_trip() {
     assert_eq!(emitter.latitude(), 0.4);
     assert_eq!(emitter.life_span(), 2.0);
     assert_eq!(emitter.initial_velocity(), 5.0);
-    assert_eq!(emitter.tracks().unwrap(), vec![track]);
+    assert_eq!(emitter.tracks(), &[track]);
 }

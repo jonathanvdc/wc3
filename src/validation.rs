@@ -38,10 +38,7 @@ impl Model {
         for shape in self.collision_shapes()? {
             shape.node().tracks();
         }
-        for emitter in self.particle_emitters()? {
-            emitter.node().tracks();
-            emitter.tracks()?;
-        }
+        self.particle_emitters()?;
         for emitter in self.particle_emitters2()? {
             emitter.node().tracks();
             emitter.tracks()?;

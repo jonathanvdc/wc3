@@ -9,38 +9,79 @@ const FIXED_SIZE: usize = 284;
 const PATH_SIZE: usize = 256;
 
 /// A Classic particle emitter with optional animated properties.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct ParticleEmitter {
-    bytes: Vec<u8>,
+    node: Node,
+    fixed: [u8; FIXED_SIZE],
+    tracks: Vec<AnimationTrack>,
 }
 
 impl ParticleEmitter {
     /// Creates an emitter with zeroed physical values.
     pub fn new(node: Node, path: &str) -> Result<Self, Error> {
-        let bytes = sized_node::new_record(&node, FIXED_SIZE, TAG)?;
-        let mut emitter = Self { bytes };
+        let mut emitter = Self {
+            node,
+            fixed: [0; FIXED_SIZE],
+            tracks: Vec::new(),
+        };
         emitter.set_path(path)?;
         Ok(emitter)
     }
 
     /// Wraps one inclusive-size emitter record.
     pub fn from_bytes(bytes: &[u8]) -> Result<Self, Error> {
-        sized_node::layout(bytes, TAG, FIXED_SIZE)?;
+        let layout = sized_node::layout(bytes, TAG, FIXED_SIZE)?;
+        let node = Node::from_bytes(&bytes[4..layout.fixed_start])?;
+        let fixed = bytes[layout.fixed_start..layout.track_start]
+            .try_into()
+            .expect("validated fixed fields");
+        let mut tracks = Vec::new();
+        let mut offset = layout.track_start;
+        while offset < bytes.len() {
+            let (track, consumed) = AnimationTrack::parse(bytes, offset)?;
+            if !is_track(track.tag) {
+                return Err(Error::MalformedRecord { tag: TAG, offset });
+            }
+            tracks.push(track);
+            offset += consumed;
+        }
         Ok(Self {
-            bytes: bytes.to_vec(),
+            node,
+            fixed,
+            tracks,
         })
     }
 
-    /// Returns the complete record.
-    pub fn as_bytes(&self) -> &[u8] {
-        &self.bytes
+    /// Serializes the complete record.
+    pub fn to_bytes(&self) -> Result<Vec<u8>, Error> {
+        let mut bytes = vec![0; 4];
+        bytes.extend_from_slice(&self.node.to_bytes());
+        bytes.extend_from_slice(&self.fixed);
+        for track in &self.tracks {
+            if !is_track(track.tag) {
+                return Err(Error::MalformedRecord {
+                    tag: TAG,
+                    offset: bytes.len(),
+                });
+            }
+            bytes.extend_from_slice(&track.to_bytes()?);
+        }
+        let size = u32::try_from(bytes.len()).map_err(|_| Error::ChunkTooLarge {
+            tag: TAG,
+            size: bytes.len(),
+        })?;
+        bytes[..4].copy_from_slice(&size.to_le_bytes());
+        Ok(bytes)
     }
 
-    /// Returns the shared node.
-    pub fn node(&self) -> Node {
-        let start = 4;
-        let end = self.fixed_start();
-        Node::from_bytes(&self.bytes[start..end]).expect("validated node")
+    /// Borrows the shared node.
+    pub fn node(&self) -> &Node {
+        &self.node
+    }
+
+    /// Borrows the shared node for editing.
+    pub fn node_mut(&mut self) -> &mut Node {
+        &mut self.node
     }
 
     /// Returns emission rate.
@@ -94,8 +135,7 @@ impl ParticleEmitter {
 
     /// Returns the emitter resource path up to the first NUL.
     pub fn path(&self) -> Cow<'_, str> {
-        let start = self.fixed_start() + 16;
-        let field = &self.bytes[start..start + PATH_SIZE];
+        let field = &self.fixed[16..16 + PATH_SIZE];
         let end = field
             .iter()
             .position(|&byte| byte == 0)
@@ -110,85 +150,46 @@ impl ParticleEmitter {
                 max_bytes: PATH_SIZE - 1,
             });
         }
-        let start = self.fixed_start() + 16;
-        self.bytes[start..start + PATH_SIZE].fill(0);
-        self.bytes[start..start + path.len()].copy_from_slice(path.as_bytes());
+        self.fixed[16..16 + PATH_SIZE].fill(0);
+        self.fixed[16..16 + path.len()].copy_from_slice(path.as_bytes());
         Ok(())
     }
 
     /// Returns the untyped reserved word following the path.
     pub fn reserved(&self) -> u32 {
-        let start = self.fixed_start() + 272;
-        u32::from_le_bytes(
-            self.bytes[start..start + 4]
-                .try_into()
-                .expect("four-byte field"),
-        )
+        u32::from_le_bytes(self.fixed[272..276].try_into().expect("four-byte field"))
     }
 
-    /// Decodes the optional animation tracks.
-    pub fn tracks(&self) -> Result<Vec<AnimationTrack>, Error> {
-        let mut result = Vec::new();
-        let mut offset = self.track_start();
-        while offset < self.bytes.len() {
-            let (track, consumed) = AnimationTrack::parse(&self.bytes, offset)?;
-            if !is_track(track.tag) {
-                return Err(Error::MalformedRecord { tag: TAG, offset });
-            }
-            result.push(track);
-            offset += consumed;
-        }
-        Ok(result)
+    /// Borrows decoded animation tracks.
+    pub fn tracks(&self) -> &[AnimationTrack] {
+        &self.tracks
     }
 
-    /// Replaces optional animation tracks and updates the record size.
+    /// Replaces optional animation tracks.
     pub fn set_tracks(&mut self, tracks: &[AnimationTrack]) -> Result<(), Error> {
-        let mut bytes = self.bytes[..self.track_start()].to_vec();
         for track in tracks {
             if !is_track(track.tag) {
                 return Err(Error::MalformedRecord {
                     tag: TAG,
-                    offset: bytes.len(),
+                    offset: 0,
                 });
             }
-            bytes.extend_from_slice(&track.to_bytes()?);
+            track.to_bytes()?;
         }
-        if bytes.len() > u32::MAX as usize {
-            return Err(Error::ChunkTooLarge {
-                tag: TAG,
-                size: bytes.len(),
-            });
-        }
-        let size = bytes.len() as u32;
-        bytes[..4].copy_from_slice(&size.to_le_bytes());
-        self.bytes = bytes;
+        self.tracks = tracks.to_vec();
         Ok(())
     }
 
-    fn fixed_start(&self) -> usize {
-        sized_node::layout(&self.bytes, TAG, FIXED_SIZE)
-            .expect("validated record")
-            .fixed_start
-    }
-
-    fn track_start(&self) -> usize {
-        sized_node::layout(&self.bytes, TAG, FIXED_SIZE)
-            .expect("validated record")
-            .track_start
-    }
-
     fn f32_at(&self, relative: usize) -> f32 {
-        let start = self.fixed_start() + relative;
         f32::from_le_bytes(
-            self.bytes[start..start + 4]
+            self.fixed[relative..relative + 4]
                 .try_into()
                 .expect("four-byte field"),
         )
     }
 
     fn set_f32_at(&mut self, relative: usize, value: f32) {
-        let start = self.fixed_start() + relative;
-        self.bytes[start..start + 4].copy_from_slice(&value.to_le_bytes());
+        self.fixed[relative..relative + 4].copy_from_slice(&value.to_le_bytes());
     }
 }
 
@@ -217,7 +218,7 @@ impl Model {
     /// Replaces particle emitters in the first `PREM` chunk.
     pub fn set_particle_emitters(&mut self, emitters: &[ParticleEmitter]) -> Result<(), Error> {
         let size = emitters.iter().try_fold(0usize, |sum, emitter| {
-            sum.checked_add(emitter.bytes.len())
+            sum.checked_add(emitter.to_bytes()?.len())
                 .filter(|&size| size <= u32::MAX as usize)
                 .ok_or(Error::ChunkTooLarge {
                     tag: TAG,
@@ -226,7 +227,7 @@ impl Model {
         })?;
         let mut data = Vec::with_capacity(size);
         for emitter in emitters {
-            data.extend_from_slice(emitter.as_bytes());
+            data.extend_from_slice(&emitter.to_bytes()?);
         }
         self.replace_chunks(TAG, data);
         Ok(())
