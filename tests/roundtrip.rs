@@ -192,6 +192,27 @@ fn typed_accessors_preserve_local_files_when_available() {
                 let records = model.geoset_animations().unwrap();
                 model.set_geoset_animations(&records).unwrap();
             }
+            macro_rules! round_trip_records {
+                ($tag:literal, $getter:ident, $setter:ident) => {
+                    if model
+                        .chunks()
+                        .iter()
+                        .filter(|chunk| chunk.tag == *$tag)
+                        .count()
+                        == 1
+                    {
+                        let records = model.$getter().unwrap();
+                        model.$setter(&records).unwrap();
+                    }
+                };
+            }
+            round_trip_records!(b"LITE", lights, set_lights);
+            round_trip_records!(b"TXAN", texture_animations, set_texture_animations);
+            round_trip_records!(b"CAMS", cameras, set_cameras);
+            round_trip_records!(b"PREM", particle_emitters, set_particle_emitters);
+            round_trip_records!(b"PRE2", particle_emitters2, set_particle_emitters2);
+            round_trip_records!(b"RIBB", ribbon_emitters, set_ribbon_emitters);
+            round_trip_records!(b"CORN", popcorn_emitters, set_popcorn_emitters);
             assert_eq!(model.to_bytes().unwrap(), bytes, "{}", path.display());
         }
     }

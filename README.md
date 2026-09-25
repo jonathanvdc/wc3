@@ -42,7 +42,8 @@ For example, `model.materials()?` returns materials whose `layers()` and
 `shader()` methods need no version argument. Model setters reject records
 built for a different version.
 
-Geosets hold typed sections rather than a serialized record. Accessors such
-as `vertices()` borrow the decoded data, and `vertices_mut()` supports bulk
-edits. `Geoset::to_bytes()` reconstructs the record, preserving optional
-section order, exact fixed-width names, and packed skin data.
+Geosets and variable-length records such as materials, nodes, lights,
+cameras, and emitters store decoded sections. Track accessors borrow parsed
+tracks, and `to_bytes()` reconstructs records while preserving field bits,
+fixed-width names, and optional section order. Geoset accessors such as
+`vertices()` borrow decoded data, and `vertices_mut()` supports bulk edits.
