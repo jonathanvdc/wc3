@@ -4,7 +4,7 @@ use crate::Record;
 use std::borrow::Cow;
 
 use crate::utils::field;
-use crate::{ChunkRecord, Error, Model};
+use crate::{Error, Model};
 
 const SIZE: usize = 340;
 const NAME_SIZE: usize = 80;
@@ -112,6 +112,7 @@ impl Record for FaceFx {
     }
 }
 
-impl ChunkRecord for FaceFx {
-    const TAG: [u8; 4] = *b"FAFX";
+impl FaceFx {
+    /// The tag of the chunk containing this record.
+    pub const TAG: [u8; 4] = *b"FAFX";
 }

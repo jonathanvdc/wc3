@@ -1,7 +1,7 @@
 //! Particle emitter 2 records in `PRE2` chunks.
 
 use crate::Record;
-use crate::{sized_node, AnimationTrack, ChunkRecord, Error, Model, Node};
+use crate::{sized_node, AnimationTrack, Error, Model, Node};
 
 const FIXED_SIZE: usize = 171;
 
@@ -324,6 +324,7 @@ impl Record for ParticleEmitter2 {
     }
 }
 
-impl ChunkRecord for ParticleEmitter2 {
-    const TAG: [u8; 4] = *b"PRE2";
+impl ParticleEmitter2 {
+    /// The tag of the chunk containing this record.
+    pub const TAG: [u8; 4] = *b"PRE2";
 }

@@ -4,7 +4,7 @@ use crate::Record;
 use std::borrow::Cow;
 
 use crate::utils::field;
-use crate::{AnimationTrack, ChunkRecord, Error, Model, Node};
+use crate::{AnimationTrack, Error, Model, Node};
 
 const PATH_SIZE: usize = 260;
 const FIXED_SIZE: usize = 32 + PATH_SIZE * 2;
@@ -314,6 +314,7 @@ impl Record for PopcornEmitter {
     }
 }
 
-impl ChunkRecord for PopcornEmitter {
-    const TAG: [u8; 4] = *b"CORN";
+impl PopcornEmitter {
+    /// The tag of the chunk containing this record.
+    pub const TAG: [u8; 4] = *b"CORN";
 }

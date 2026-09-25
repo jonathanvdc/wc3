@@ -19,8 +19,9 @@ pub trait Record: Sized {
     }
 }
 
-/// A typed MDX record that can be converted to and from bytes and is
-/// stored in a chunk with a known tag.
+/// A typed record that represents the complete payload of one MDX chunk.
+/// Types for individual entries in a multi-record chunk implement `Record`
+/// instead; their collection types implement `ChunkRecord`.
 pub trait ChunkRecord: Record {
     /// The four-byte chunk tag for this record type.
     const TAG: [u8; 4];

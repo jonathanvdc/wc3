@@ -4,7 +4,7 @@ use crate::Record;
 use std::borrow::Cow;
 
 use crate::utils::field;
-use crate::{ChunkRecord, Error, Model};
+use crate::{Error, Model};
 
 /// Sequence playback flags, with unrecognized bits retained.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -234,6 +234,7 @@ impl Record for Sequence {
     }
 }
 
-impl ChunkRecord for Sequence {
-    const TAG: [u8; 4] = *b"SEQS";
+impl Sequence {
+    /// The tag of the chunk containing this record.
+    pub const TAG: [u8; 4] = *b"SEQS";
 }

@@ -1,7 +1,7 @@
 //! Light records in `LITE` chunks.
 
 use crate::Record;
-use crate::{AnimationTrack, ChunkRecord, Error, Model, Node};
+use crate::{AnimationTrack, Error, Model, Node};
 
 const FIXED_SIZE: usize = 44;
 const EXTENDED_SIZE: usize = 72;
@@ -335,6 +335,7 @@ impl Record for Light {
     }
 }
 
-impl ChunkRecord for Light {
-    const TAG: [u8; 4] = *b"LITE";
+impl Light {
+    /// The tag of the chunk containing this record.
+    pub const TAG: [u8; 4] = *b"LITE";
 }

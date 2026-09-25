@@ -4,7 +4,7 @@ use crate::Record;
 use std::borrow::Cow;
 
 use crate::utils::field;
-use crate::{ChunkRecord, Error, Model};
+use crate::{Error, Model};
 
 /// A geoset's bounding volume, also used for each sequence extent.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -834,6 +834,7 @@ impl Record for Geoset {
     }
 }
 
-impl ChunkRecord for Geoset {
-    const TAG: [u8; 4] = *b"GEOS";
+impl Geoset {
+    /// The tag of the chunk containing this record.
+    pub const TAG: [u8; 4] = *b"GEOS";
 }

@@ -4,7 +4,7 @@ use crate::Record;
 use std::borrow::Cow;
 
 use crate::utils::field;
-use crate::{AnimationTrack, ChunkRecord, Error, Model};
+use crate::{AnimationTrack, Error, Model};
 
 const HEADER_SIZE: usize = 120;
 const NAME_SIZE: usize = 80;
@@ -268,6 +268,7 @@ impl Record for Camera {
     }
 }
 
-impl ChunkRecord for Camera {
-    const TAG: [u8; 4] = *b"CAMS";
+impl Camera {
+    /// The tag of the chunk containing this record.
+    pub const TAG: [u8; 4] = *b"CAMS";
 }

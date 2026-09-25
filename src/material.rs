@@ -4,7 +4,7 @@ use crate::Record;
 use std::borrow::Cow;
 
 use crate::utils::field;
-use crate::{AnimationTrack, ChunkRecord, Error, Model};
+use crate::{AnimationTrack, Error, Model};
 
 const LAYER_TAG: [u8; 4] = *b"LAYS";
 
@@ -713,6 +713,7 @@ impl Record for Layer {
     }
 }
 
-impl ChunkRecord for Material {
-    const TAG: [u8; 4] = *b"MTLS";
+impl Material {
+    /// The tag of the chunk containing this record.
+    pub const TAG: [u8; 4] = *b"MTLS";
 }

@@ -4,7 +4,7 @@ use crate::Record;
 use std::borrow::Cow;
 
 use crate::utils::field;
-use crate::{AnimationTrack, ChunkRecord, Error, Model};
+use crate::{AnimationTrack, Error, Model};
 
 const HEADER_SIZE: usize = 96;
 const NAME_SIZE: usize = 80;
@@ -356,10 +356,12 @@ impl Record for Bone {
     }
 }
 
-impl ChunkRecord for Node {
-    const TAG: [u8; 4] = *b"HELP";
+impl Node {
+    /// The tag of the chunk containing this record.
+    pub const TAG: [u8; 4] = *b"HELP";
 }
 
-impl ChunkRecord for Bone {
-    const TAG: [u8; 4] = *b"BONE";
+impl Bone {
+    /// The tag of the chunk containing this record.
+    pub const TAG: [u8; 4] = *b"BONE";
 }

@@ -1,7 +1,7 @@
 //! Box and sphere collision shapes in `CLID` chunks.
 
 use crate::Record;
-use crate::{ChunkRecord, Error, Model, Node};
+use crate::{Error, Model, Node};
 
 /// Warcraft III collision primitive type.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -282,6 +282,7 @@ impl Record for CollisionShape {
     }
 }
 
-impl ChunkRecord for CollisionShape {
-    const TAG: [u8; 4] = *b"CLID";
+impl CollisionShape {
+    /// The tag of the chunk containing this record.
+    pub const TAG: [u8; 4] = *b"CLID";
 }

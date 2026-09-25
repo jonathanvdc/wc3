@@ -1,7 +1,7 @@
 //! Geoset animation records in `GEOA` chunks.
 
 use crate::Record;
-use crate::{AnimationTrack, ChunkRecord, Error, Model};
+use crate::{AnimationTrack, Error, Model};
 
 const HEADER_SIZE: usize = 28;
 
@@ -244,6 +244,7 @@ impl Record for GeosetAnimation {
     }
 }
 
-impl ChunkRecord for GeosetAnimation {
-    const TAG: [u8; 4] = *b"GEOA";
+impl GeosetAnimation {
+    /// The tag of the chunk containing this record.
+    pub const TAG: [u8; 4] = *b"GEOA";
 }

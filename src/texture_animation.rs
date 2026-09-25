@@ -1,7 +1,7 @@
 //! Typed texture animation tracks in `TXAN` chunks.
 
 use crate::Record;
-use crate::{AnimationTrack, ChunkRecord, Error, Model};
+use crate::{AnimationTrack, Error, Model};
 
 /// A texture animation containing translation, rotation, and scaling tracks.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -153,6 +153,7 @@ impl Record for TextureAnimation {
     }
 }
 
-impl ChunkRecord for TextureAnimation {
-    const TAG: [u8; 4] = *b"TXAN";
+impl TextureAnimation {
+    /// The tag of the chunk containing this record.
+    pub const TAG: [u8; 4] = *b"TXAN";
 }

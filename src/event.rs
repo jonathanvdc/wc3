@@ -1,7 +1,7 @@
 //! Event objects stored in `EVTS` chunks.
 
 use crate::Record;
-use crate::{ChunkRecord, Error, Model, Node};
+use crate::{Error, Model, Node};
 
 const TRACK_TAG: [u8; 4] = *b"KEVT";
 
@@ -187,6 +187,7 @@ impl Record for EventObject {
     }
 }
 
-impl ChunkRecord for EventObject {
-    const TAG: [u8; 4] = *b"EVTS";
+impl EventObject {
+    /// The tag of the chunk containing this record.
+    pub const TAG: [u8; 4] = *b"EVTS";
 }

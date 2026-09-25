@@ -4,7 +4,7 @@ use crate::Record;
 use std::borrow::Cow;
 
 use crate::utils::field;
-use crate::{ChunkRecord, Error, Model};
+use crate::{Error, Model};
 
 /// Texture wrapping flags; unknown bits remain available through `bits`.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -161,6 +161,7 @@ impl Record for Texture {
     }
 }
 
-impl ChunkRecord for Texture {
-    const TAG: [u8; 4] = *b"TEXS";
+impl Texture {
+    /// The tag of the chunk containing this record.
+    pub const TAG: [u8; 4] = *b"TEXS";
 }

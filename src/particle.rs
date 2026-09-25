@@ -4,7 +4,7 @@ use crate::Record;
 use std::borrow::Cow;
 
 use crate::utils::field;
-use crate::{sized_node, AnimationTrack, ChunkRecord, Error, Model, Node};
+use crate::{sized_node, AnimationTrack, Error, Model, Node};
 
 const FIXED_SIZE: usize = 284;
 const PATH_SIZE: usize = 256;
@@ -218,6 +218,7 @@ impl Record for ParticleEmitter {
     }
 }
 
-impl ChunkRecord for ParticleEmitter {
-    const TAG: [u8; 4] = *b"PREM";
+impl ParticleEmitter {
+    /// The tag of the chunk containing this record.
+    pub const TAG: [u8; 4] = *b"PREM";
 }

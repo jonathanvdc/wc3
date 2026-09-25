@@ -1,7 +1,7 @@
 //! Ribbon emitter records in `RIBB` chunks.
 
 use crate::Record;
-use crate::{sized_node, AnimationTrack, ChunkRecord, Error, Model, Node};
+use crate::{sized_node, AnimationTrack, Error, Model, Node};
 
 const FIXED_SIZE: usize = 52;
 
@@ -212,6 +212,7 @@ impl Record for RibbonEmitter {
     }
 }
 
-impl ChunkRecord for RibbonEmitter {
-    const TAG: [u8; 4] = *b"RIBB";
+impl RibbonEmitter {
+    /// The tag of the chunk containing this record.
+    pub const TAG: [u8; 4] = *b"RIBB";
 }

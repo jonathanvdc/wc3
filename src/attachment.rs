@@ -4,7 +4,7 @@ use crate::Record;
 use std::borrow::Cow;
 
 use crate::utils::field;
-use crate::{AnimationTrack, ChunkRecord, Error, Model, Node};
+use crate::{AnimationTrack, Error, Model, Node};
 
 const PATH_SIZE: usize = 256;
 const FIXED_SIZE: usize = PATH_SIZE + 8;
@@ -238,6 +238,7 @@ impl Record for Attachment {
     }
 }
 
-impl ChunkRecord for Attachment {
-    const TAG: [u8; 4] = *b"ATCH";
+impl Attachment {
+    /// The tag of the chunk containing this record.
+    pub const TAG: [u8; 4] = *b"ATCH";
 }

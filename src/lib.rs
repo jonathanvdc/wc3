@@ -23,6 +23,8 @@ mod model;
 pub use model::Model;
 mod record;
 pub use record::{ChunkRecord, Record};
+mod record_collections;
+pub use record_collections::*;
 
 mod animation;
 pub use animation::{AnimationTrack, Keyframe, TrackValueKind};

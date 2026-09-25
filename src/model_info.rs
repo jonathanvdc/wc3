@@ -1,6 +1,5 @@
 //! Fixed-size `MODL` model information.
 
-use crate::record::ChunkRecord;
 use crate::Record;
 use std::borrow::Cow;
 
@@ -153,6 +152,7 @@ impl Record for ModelInfo {
     }
 }
 
-impl ChunkRecord for ModelInfo {
-    const TAG: [u8; 4] = *b"MODL";
+impl ModelInfo {
+    /// The tag of the chunk containing this record.
+    pub const TAG: [u8; 4] = *b"MODL";
 }
