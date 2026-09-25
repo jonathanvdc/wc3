@@ -158,8 +158,10 @@ fn components(tag: [u8; 4]) -> Option<usize> {
 }
 
 impl Record for AnimationTrack {
-    fn decode_one(bytes: &[u8], _version: u32) -> Result<(Self, usize), Error> {
-        Self::parse(bytes, 0)
+    fn decode_one(cursor: &mut crate::Cursor<'_>, _version: u32) -> Result<Self, Error> {
+        let (track, consumed) = Self::parse(cursor.remaining(), 0)?;
+        cursor.read_exact(consumed)?;
+        Ok(track)
     }
 
     fn encode(&self) -> Result<Vec<u8>, Error> {

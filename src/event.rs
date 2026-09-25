@@ -1,6 +1,5 @@
 //! Event objects stored in `EVTS` chunks.
 
-use crate::cursor::Cursor;
 use crate::Record;
 use crate::{Error, Model, Node};
 
@@ -90,12 +89,11 @@ impl Model {
 }
 
 impl Record for EventObject {
-    fn decode_one(bytes: &[u8], _version: u32) -> Result<(Self, usize), Error> {
-        let mut cursor = Cursor::new(bytes);
-        let mut probe = cursor;
+    fn decode_one(cursor: &mut crate::Cursor<'_>, _version: u32) -> Result<Self, Error> {
+        let mut probe = *cursor;
         let node_size = probe.read_u32()? as usize;
         let node = Node::decode(cursor.read_exact(node_size)?, 0)?;
-        let offset = cursor.position();
+        let offset = cursor.absolute_position();
         if cursor.read_exact(4)? != TRACK_TAG {
             return Err(Error::MalformedRecord {
                 tag: Self::TAG,
@@ -108,15 +106,11 @@ impl Record for EventObject {
         for _ in 0..count {
             frames.push(cursor.read_u32()?);
         }
-        let consumed = cursor.position();
-        Ok((
-            Self {
-                node,
-                global_sequence_id,
-                frames,
-            },
-            consumed,
-        ))
+        Ok(Self {
+            node,
+            global_sequence_id,
+            frames,
+        })
     }
 
     fn encode(&self) -> Result<Vec<u8>, Error> {

@@ -1,6 +1,5 @@
 //! Attachment records in `ATCH` chunks.
 
-use crate::cursor::Cursor;
 use crate::Record;
 use std::borrow::Cow;
 
@@ -114,10 +113,9 @@ impl Model {
 }
 
 impl Record for Attachment {
-    fn decode_one(bytes: &[u8], _version: u32) -> Result<(Self, usize), Error> {
-        let mut source = Cursor::new(bytes);
+    fn decode_one(source: &mut crate::Cursor<'_>, _version: u32) -> Result<Self, Error> {
         let mut cursor = source.slice_u32_sized()?;
-        let length = source.position();
+
         let mut probe = cursor;
         let node_size = probe.read_u32()? as usize;
         let node = Node::decode(cursor.read_exact(node_size)?, 0)?;
@@ -131,27 +129,24 @@ impl Record for Attachment {
             None
         } else {
             let offset = cursor.absolute_position();
-            let (track, consumed) = AnimationTrack::decode_one(cursor.remaining(), 0)?;
+            let track = AnimationTrack::decode_one(&mut cursor, 0)?;
             if track.tag != *b"KATV" {
                 return Err(Error::MalformedRecord {
                     tag: Self::TAG,
                     offset,
                 });
             }
-            cursor.read_exact(consumed)?;
+
             Some(track)
         };
         cursor.finish()?;
-        Ok((
-            Self {
-                node,
-                path,
-                reserved,
-                id,
-                visibility_track,
-            },
-            length,
-        ))
+        Ok(Self {
+            node,
+            path,
+            reserved,
+            id,
+            visibility_track,
+        })
     }
 
     fn encode(&self) -> Result<Vec<u8>, Error> {

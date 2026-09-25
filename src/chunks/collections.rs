@@ -1,6 +1,6 @@
 //! Complete payloads for chunks containing a sequence of records.
 
-use crate::{Error, KnownChunk, Record};
+use crate::{Cursor, Error, KnownChunk, Record};
 
 /// A complete chunk made of consecutive records of one type.
 pub trait CollectionChunk: Sized {
@@ -18,21 +18,20 @@ pub trait CollectionChunk: Sized {
 }
 
 impl<C: CollectionChunk> Record for C {
-    fn decode_one(bytes: &[u8], version: u32) -> Result<(Self, usize), Error> {
+    fn decode_one(cursor: &mut Cursor<'_>, version: u32) -> Result<Self, Error> {
         let mut records = Vec::new();
-        let mut remaining = bytes;
-        while !remaining.is_empty() {
-            let (record, consumed) = C::Item::decode_one(remaining, version)?;
-            if consumed == 0 || consumed > remaining.len() {
+        while !cursor.remaining().is_empty() {
+            let start = cursor.position();
+            let record = C::Item::decode_one(cursor, version)?;
+            if cursor.position() <= start {
                 return Err(Error::MalformedRecord {
                     tag: C::tag(),
-                    offset: bytes.len() - remaining.len(),
+                    offset: start,
                 });
             }
             records.push(record);
-            remaining = &remaining[consumed..];
         }
-        Ok((C::from_records(records), bytes.len()))
+        Ok(C::from_records(records))
     }
 
     fn encode(&self) -> Result<Vec<u8>, Error> {

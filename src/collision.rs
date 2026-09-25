@@ -151,23 +151,18 @@ impl Model {
 }
 
 impl Record for CollisionShape {
-    fn decode_one(bytes: &[u8], _version: u32) -> Result<(Self, usize), Error> {
-        let mut cursor = Cursor::new(bytes);
-        let (node, node_len) = Node::decode_one(cursor.remaining(), 0)?;
-        cursor.read_exact(node_len)?;
-        let kind_offset = cursor.position();
+    fn decode_one(cursor: &mut crate::Cursor<'_>, _version: u32) -> Result<Self, Error> {
+        let node = Node::decode_one(cursor, 0)?;
+        let kind_offset = cursor.absolute_position();
         let kind = cursor.read_u32()?;
         let vec3 = |cursor: &mut Cursor<'_>| -> Result<[f32; 3], Error> {
             Ok([cursor.read_f32()?, cursor.read_f32()?, cursor.read_f32()?])
         };
         let geometry = match kind {
-            0 => CollisionGeometry::Box([vec3(&mut cursor)?, vec3(&mut cursor)?]),
-            1 => CollisionGeometry::Plane([vec3(&mut cursor)?, vec3(&mut cursor)?]),
-            2 => CollisionGeometry::Sphere(vec3(&mut cursor)?, cursor.read_f32()?),
-            3 => CollisionGeometry::Cylinder(
-                [vec3(&mut cursor)?, vec3(&mut cursor)?],
-                cursor.read_f32()?,
-            ),
+            0 => CollisionGeometry::Box([vec3(cursor)?, vec3(cursor)?]),
+            1 => CollisionGeometry::Plane([vec3(cursor)?, vec3(cursor)?]),
+            2 => CollisionGeometry::Sphere(vec3(cursor)?, cursor.read_f32()?),
+            3 => CollisionGeometry::Cylinder([vec3(cursor)?, vec3(cursor)?], cursor.read_f32()?),
             _ => {
                 return Err(Error::MalformedRecord {
                     tag: Self::TAG,
@@ -175,7 +170,7 @@ impl Record for CollisionShape {
                 })
             }
         };
-        Ok((Self { node, geometry }, cursor.position()))
+        Ok(Self { node, geometry })
     }
 
     fn encode(&self) -> Result<Vec<u8>, Error> {

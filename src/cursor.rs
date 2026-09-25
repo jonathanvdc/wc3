@@ -2,16 +2,17 @@
 
 use crate::Error;
 
-/// A copyable position within a byte slice. Child cursors are bounded slices.
+/// A copyable position within immutable bytes. Child cursors are bounded slices.
 #[derive(Clone, Copy, Debug)]
-pub(crate) struct Cursor<'a> {
+pub struct Cursor<'a> {
     bytes: &'a [u8],
     offset: usize,
     base: usize,
 }
 
 impl<'a> Cursor<'a> {
-    pub(crate) fn new(bytes: &'a [u8]) -> Self {
+    /// Starts at the beginning of `bytes`.
+    pub fn new(bytes: &'a [u8]) -> Self {
         Self {
             bytes,
             offset: 0,
@@ -19,19 +20,23 @@ impl<'a> Cursor<'a> {
         }
     }
 
-    pub(crate) fn position(&self) -> usize {
+    /// Returns the position relative to this cursor's slice.
+    pub fn position(&self) -> usize {
         self.offset
     }
 
-    pub(crate) fn absolute_position(&self) -> usize {
+    /// Returns the position relative to the original cursor's bytes.
+    pub fn absolute_position(&self) -> usize {
         self.base + self.offset
     }
 
-    pub(crate) fn remaining(&self) -> &'a [u8] {
+    /// Borrows all bytes not yet consumed by this cursor.
+    pub fn remaining(&self) -> &'a [u8] {
         &self.bytes[self.offset..]
     }
 
-    pub(crate) fn read_exact(&mut self, len: usize) -> Result<&'a [u8], Error> {
+    /// Reads exactly `len` bytes and advances only on success.
+    pub fn read_exact(&mut self, len: usize) -> Result<&'a [u8], Error> {
         let start = self.offset;
         let end = start.checked_add(len).ok_or(Error::UnexpectedEnd {
             offset: self.absolute_position(),
@@ -45,23 +50,27 @@ impl<'a> Cursor<'a> {
         Ok(value)
     }
 
-    pub(crate) fn peek_exact(&self, len: usize) -> Result<&'a [u8], Error> {
+    /// Borrows the next `len` bytes without advancing.
+    pub fn peek_exact(&self, len: usize) -> Result<&'a [u8], Error> {
         let mut copy = *self;
         copy.read_exact(len)
     }
 
-    pub(crate) fn read_u32(&mut self) -> Result<u32, Error> {
+    /// Reads a little-endian `u32`.
+    pub fn read_u32(&mut self) -> Result<u32, Error> {
         Ok(u32::from_le_bytes(
             self.read_exact(4)?.try_into().expect("four-byte word"),
         ))
     }
 
-    pub(crate) fn read_f32(&mut self) -> Result<f32, Error> {
+    /// Reads an IEEE 754 float from four little-endian bytes.
+    pub fn read_f32(&mut self) -> Result<f32, Error> {
         Ok(f32::from_bits(self.read_u32()?))
     }
 
     /// Advances this cursor and returns a cursor confined to those bytes.
-    pub(crate) fn slice(&mut self, len: usize) -> Result<Self, Error> {
+    /// Copy the parent first if parsing the child may need to be rolled back.
+    pub fn slice(&mut self, len: usize) -> Result<Self, Error> {
         let base = self.absolute_position();
         let bytes = self.read_exact(len)?;
         Ok(Self {
@@ -73,7 +82,8 @@ impl<'a> Cursor<'a> {
 
     /// Reads a little-endian size that includes its own four bytes, then
     /// returns a cursor bounded to the remaining record body.
-    pub(crate) fn slice_u32_sized(&mut self) -> Result<Self, Error> {
+    /// Leaves the parent in place if the size or body is invalid.
+    pub fn slice_u32_sized(&mut self) -> Result<Self, Error> {
         let mut next = *self;
         let start = next.absolute_position();
         let length = next.read_u32()? as usize;
@@ -86,7 +96,8 @@ impl<'a> Cursor<'a> {
         Ok(body)
     }
 
-    pub(crate) fn finish(self) -> Result<(), Error> {
+    /// Requires that all bytes in this cursor's slice were consumed.
+    pub fn finish(self) -> Result<(), Error> {
         if self.offset == self.bytes.len() {
             Ok(())
         } else {

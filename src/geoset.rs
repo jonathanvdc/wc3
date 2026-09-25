@@ -573,10 +573,9 @@ impl Model {
 }
 
 impl Record for Geoset {
-    fn decode_one(bytes: &[u8], version: u32) -> Result<(Self, usize), Error> {
-        let mut source = Cursor::new(bytes);
+    fn decode_one(source: &mut crate::Cursor<'_>, version: u32) -> Result<Self, Error> {
         let mut cursor = source.slice_u32_sized()?;
-        let length = source.position();
+
         let value = {
             let vertices = decode_vectors::<3>(section(&mut cursor, *b"VRTX", 12)?);
             let normals = decode_vectors::<3>(section(&mut cursor, *b"NRMS", 12)?);
@@ -685,7 +684,7 @@ impl Record for Geoset {
             })
         }?;
         cursor.finish()?;
-        Ok((value, length))
+        Ok(value)
     }
 
     fn encode(&self) -> Result<Vec<u8>, Error> {

@@ -202,8 +202,8 @@ mod tests {
 }
 
 impl Record for Model {
-    fn decode_one(bytes: &[u8], default_version: u32) -> Result<(Self, usize), Error> {
-        let length = bytes.len();
+    fn decode_one(cursor: &mut crate::Cursor<'_>, default_version: u32) -> Result<Self, Error> {
+        let bytes = cursor.remaining();
         let value = {
             if !bytes.starts_with(&MAGIC) {
                 return Err(Error::InvalidMagic);
@@ -251,7 +251,8 @@ impl Record for Model {
                     .collect(),
             })
         }?;
-        Ok((value, length))
+        cursor.read_exact(bytes.len())?;
+        Ok(value)
     }
 
     fn encode(&self) -> Result<Vec<u8>, Error> {

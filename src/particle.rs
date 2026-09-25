@@ -1,6 +1,5 @@
 //! Classic particle emitters stored in `PREM` chunks.
 
-use crate::cursor::Cursor;
 use crate::Record;
 use std::borrow::Cow;
 
@@ -161,11 +160,9 @@ impl Model {
 }
 
 impl Record for ParticleEmitter {
-    fn decode_one(bytes: &[u8], _version: u32) -> Result<(Self, usize), Error> {
-        let mut source = Cursor::new(bytes);
+    fn decode_one(source: &mut crate::Cursor<'_>, _version: u32) -> Result<Self, Error> {
         let mut cursor = source.slice_u32_sized()?;
-        let (node, node_len) = Node::decode_one(cursor.remaining(), 0)?;
-        cursor.read_exact(node_len)?;
+        let node = Node::decode_one(&mut cursor, 0)?;
         let fixed = cursor
             .read_exact(FIXED_SIZE)?
             .try_into()
@@ -173,25 +170,22 @@ impl Record for ParticleEmitter {
         let mut tracks = Vec::new();
         while !cursor.remaining().is_empty() {
             let offset = cursor.absolute_position();
-            let (track, consumed) = AnimationTrack::decode_one(cursor.remaining(), 0)?;
+            let track = AnimationTrack::decode_one(&mut cursor, 0)?;
             if !is_track(track.tag) {
                 return Err(Error::MalformedRecord {
                     tag: Self::TAG,
                     offset,
                 });
             }
-            cursor.read_exact(consumed)?;
+
             tracks.push(track);
         }
         cursor.finish()?;
-        Ok((
-            Self {
-                node,
-                fixed,
-                tracks,
-            },
-            source.position(),
-        ))
+        Ok(Self {
+            node,
+            fixed,
+            tracks,
+        })
     }
 
     fn encode(&self) -> Result<Vec<u8>, Error> {

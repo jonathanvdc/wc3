@@ -1,6 +1,5 @@
 //! Typed camera records in `CAMS` chunks.
 
-use crate::cursor::Cursor;
 use crate::Record;
 use std::borrow::Cow;
 
@@ -164,13 +163,14 @@ impl Model {
 }
 
 impl Record for Camera {
-    fn decode_one(bytes: &[u8], _version: u32) -> Result<(Self, usize), Error> {
-        let mut source = Cursor::new(bytes);
+    fn decode_one(source: &mut crate::Cursor<'_>, _version: u32) -> Result<Self, Error> {
+        let start = source.absolute_position();
         let size_word = source.read_u32()?;
         let length = (size_word & 0x00ff_ffff) as usize;
-        let body_len = length
-            .checked_sub(4)
-            .ok_or(Error::InvalidRecordLength { offset: 0, length })?;
+        let body_len = length.checked_sub(4).ok_or(Error::InvalidRecordLength {
+            offset: start,
+            length,
+        })?;
         let mut cursor = source.slice(body_len)?;
         let name = cursor.read_exact(80)?.try_into().expect("fixed-width name");
         let position = [cursor.read_f32()?, cursor.read_f32()?, cursor.read_f32()?];
@@ -181,30 +181,27 @@ impl Record for Camera {
         let mut tracks = Vec::new();
         while !cursor.remaining().is_empty() {
             let offset = cursor.absolute_position();
-            let (track, consumed) = AnimationTrack::decode_one(cursor.remaining(), 0)?;
+            let track = AnimationTrack::decode_one(&mut cursor, 0)?;
             if !is_track(track.tag) {
                 return Err(Error::MalformedRecord {
                     tag: Self::TAG,
                     offset,
                 });
             }
-            cursor.read_exact(consumed)?;
+
             tracks.push(track);
         }
         cursor.finish()?;
-        Ok((
-            Self {
-                name,
-                record_flags: (size_word >> 24) as u8,
-                position,
-                field_of_view,
-                far_clip,
-                near_clip,
-                target_position,
-                tracks,
-            },
-            source.position(),
-        ))
+        Ok(Self {
+            name,
+            record_flags: (size_word >> 24) as u8,
+            position,
+            field_of_view,
+            far_clip,
+            near_clip,
+            target_position,
+            tracks,
+        })
     }
 
     fn encode(&self) -> Result<Vec<u8>, Error> {

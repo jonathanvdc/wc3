@@ -1,6 +1,5 @@
 //! Typed material layers and versioned texture slots.
 
-use crate::cursor::Cursor;
 use crate::Record;
 use std::borrow::Cow;
 
@@ -443,11 +442,8 @@ impl Model {
 }
 
 impl Record for Material {
-    fn decode_one(bytes: &[u8], version: u32) -> Result<(Self, usize), Error> {
-        let mut source = Cursor::new(bytes);
+    fn decode_one(source: &mut crate::Cursor<'_>, version: u32) -> Result<Self, Error> {
         let mut cursor = source.slice_u32_sized()?;
-        let length = source.position();
-        let bytes = &bytes[..length];
         let value = {
             let priority_plane = cursor.read_u32()?;
             let render_mode = cursor.read_u32()?;
@@ -460,9 +456,7 @@ impl Record for Material {
             let count = cursor.read_u32()? as usize;
             let mut layers = Vec::new();
             for _ in 0..count {
-                let (layer, consumed) =
-                    Layer::decode_one(&bytes[cursor.absolute_position()..], version)?;
-                cursor.read_exact(consumed)?;
+                let layer = Layer::decode_one(&mut cursor, version)?;
                 layers.push(layer);
             }
             Ok(Self {
@@ -474,7 +468,7 @@ impl Record for Material {
             })
         }?;
         cursor.finish()?;
-        Ok((value, length))
+        Ok(value)
     }
 
     fn encode(&self) -> Result<Vec<u8>, Error> {
@@ -501,11 +495,8 @@ impl Record for Material {
 }
 
 impl Record for Layer {
-    fn decode_one(bytes: &[u8], version: u32) -> Result<(Self, usize), Error> {
-        let mut source = Cursor::new(bytes);
+    fn decode_one(source: &mut crate::Cursor<'_>, version: u32) -> Result<Self, Error> {
         let mut cursor = source.slice_u32_sized()?;
-        let length = source.position();
-        let bytes = &bytes[..length];
         let value = {
             let filter_mode = cursor.read_u32()?;
             let shading_flags = cursor.read_u32()?;
@@ -538,14 +529,8 @@ impl Record for Layer {
                 for _ in 0..count {
                     let texture_id = cursor.read_u32()?;
                     let texture_type = cursor.read_u32()?;
-                    let track = if bytes.get(
-                        cursor.absolute_position()..cursor.absolute_position().saturating_add(4),
-                    ) == Some(b"KMTF")
-                    {
-                        let (track, size) =
-                            AnimationTrack::parse(bytes, cursor.absolute_position())?;
-                        cursor.read_exact(size)?;
-                        Some(track)
+                    let track = if cursor.remaining().get(..4) == Some(b"KMTF") {
+                        Some(AnimationTrack::decode_one(&mut cursor, version)?)
                     } else {
                         None
                     };
@@ -557,9 +542,9 @@ impl Record for Layer {
                 }
             }
             let mut tracks = Vec::new();
-            while cursor.absolute_position() < bytes.len() {
+            while !cursor.remaining().is_empty() {
                 let offset = cursor.absolute_position();
-                let (track, size) = AnimationTrack::parse(bytes, offset)?;
+                let track = AnimationTrack::decode_one(&mut cursor, version)?;
                 if !is_layer_track(track.tag) {
                     return Err(Error::MalformedRecord {
                         tag: LAYER_TAG,
@@ -567,7 +552,6 @@ impl Record for Layer {
                     });
                 }
                 tracks.push(track);
-                cursor.read_exact(size)?;
             }
             Ok(Self {
                 version,
@@ -587,7 +571,7 @@ impl Record for Layer {
             })
         }?;
         cursor.finish()?;
-        Ok((value, length))
+        Ok(value)
     }
 
     fn encode(&self) -> Result<Vec<u8>, Error> {

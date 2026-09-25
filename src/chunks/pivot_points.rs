@@ -10,33 +10,20 @@ pub struct PivotPointsChunk {
 }
 
 impl Record for PivotPointsChunk {
-    fn decode_one(bytes: &[u8], _version: u32) -> Result<(Self, usize), Error> {
-        let length = bytes.len();
-        let value = {
-            if bytes.len() % 12 != 0 {
-                return Err(Error::MalformedChunk {
-                    tag: Self::TAG,
-                    size: bytes.len(),
-                    expected: 12,
-                });
-            }
-            Ok(Self {
-                points: bytes
-                    .chunks_exact(12)
-                    .map(|point| {
-                        std::array::from_fn(|index| {
-                            let offset = index * 4;
-                            f32::from_le_bytes(
-                                point[offset..offset + 4]
-                                    .try_into()
-                                    .expect("four-byte field"),
-                            )
-                        })
-                    })
-                    .collect(),
-            })
-        }?;
-        Ok((value, length))
+    fn decode_one(cursor: &mut crate::Cursor<'_>, _version: u32) -> Result<Self, Error> {
+        let size = cursor.remaining().len();
+        if size % 12 != 0 {
+            return Err(Error::MalformedChunk {
+                tag: Self::TAG,
+                size,
+                expected: 12,
+            });
+        }
+        let mut points = Vec::new();
+        while !cursor.remaining().is_empty() {
+            points.push([cursor.read_f32()?, cursor.read_f32()?, cursor.read_f32()?]);
+        }
+        Ok(Self { points })
     }
 
     fn encode(&self) -> Result<Vec<u8>, Error> {

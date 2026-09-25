@@ -1,22 +1,18 @@
 //! Binary conversion for typed MDX records.
 
 use crate::model::LATEST_VERSION;
-use crate::Error;
+use crate::{Cursor, Error};
 
 /// A typed MDX record that can be converted to and from bytes.
 pub trait Record: Sized {
-    /// Parses the first record in a byte stream and returns its length.
-    fn decode_one(bytes: &[u8], version: u32) -> Result<(Self, usize), Error>;
+    /// Parses one record and advances the cursor past it.
+    fn decode_one(cursor: &mut Cursor<'_>, version: u32) -> Result<Self, Error>;
 
     /// Parses exactly one record, rejecting any trailing bytes.
     fn decode(bytes: &[u8], version: u32) -> Result<Self, Error> {
-        let (record, consumed) = Self::decode_one(bytes, version)?;
-        if consumed != bytes.len() {
-            return Err(Error::TrailingRecordBytes {
-                consumed,
-                total: bytes.len(),
-            });
-        }
+        let mut cursor = Cursor::new(bytes);
+        let record = Self::decode_one(&mut cursor, version)?;
+        cursor.finish()?;
         Ok(record)
     }
 
@@ -33,6 +29,7 @@ pub trait Record: Sized {
 #[cfg(test)]
 mod tests {
     use super::Record;
+    use crate::Cursor;
     use crate::KnownChunk;
     use crate::{Geoset, Model, Sequence};
 
@@ -56,8 +53,10 @@ mod tests {
         let mut bytes = first.encode().unwrap();
         bytes.extend_from_slice(&second.encode().unwrap());
 
-        let (decoded, consumed) = Sequence::decode_one(&bytes, 800).unwrap();
+        let mut cursor = Cursor::new(&bytes);
+        let decoded = Sequence::decode_one(&mut cursor, 800).unwrap();
         assert_eq!(decoded, first);
+        let consumed = cursor.position();
         assert_eq!(consumed, first.encode().unwrap().len());
         assert_eq!(
             Sequence::decode(&bytes, 800),
@@ -71,9 +70,10 @@ mod tests {
         let second = Geoset::new(800, &[], &[], &[]).unwrap();
         let mut bytes = first.encode().unwrap();
         bytes.extend_from_slice(&second.encode().unwrap());
-        let (decoded, consumed) = Geoset::decode_one(&bytes, 800).unwrap();
+        let mut cursor = Cursor::new(&bytes);
+        let decoded = Geoset::decode_one(&mut cursor, 800).unwrap();
         assert_eq!(decoded, first);
-        assert_eq!(consumed, first.encode().unwrap().len());
+        assert_eq!(cursor.position(), first.encode().unwrap().len());
         assert!(matches!(
             Geoset::decode(&bytes, 800),
             Err(crate::Error::TrailingRecordBytes { .. })
@@ -86,8 +86,11 @@ mod tests {
             let mut bytes = first.encode().unwrap();
             let first_len = bytes.len();
             bytes.extend_from_slice(&second.encode().unwrap());
-            assert_eq!(T::decode_one(&bytes, 800).unwrap(), (first, first_len));
-            assert_eq!(T::decode_one(&bytes[first_len..], 800).unwrap().0, second);
+            let mut cursor = Cursor::new(&bytes);
+            assert_eq!(T::decode_one(&mut cursor, 800).unwrap(), first);
+            assert_eq!(cursor.position(), first_len);
+            assert_eq!(T::decode_one(&mut cursor, 800).unwrap(), second);
+            cursor.finish().unwrap();
         }
 
         let first = crate::Node::new("First", 1).unwrap();

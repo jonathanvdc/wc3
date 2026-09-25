@@ -154,18 +154,18 @@ impl Model {
 }
 
 impl Record for ModelInfo {
-    fn decode_one(bytes: &[u8], _version: u32) -> Result<(Self, usize), Error> {
-        let length = 372;
-        let bytes = bytes.get(..length).unwrap_or(bytes);
-        let value = {
-            let bytes: [u8; 372] = bytes.try_into().map_err(|_| Error::MalformedChunk {
-                tag: *b"MODL",
-                size: bytes.len(),
+    fn decode_one(cursor: &mut crate::Cursor<'_>, _version: u32) -> Result<Self, Error> {
+        let size = cursor.remaining().len();
+        let bytes = cursor
+            .read_exact(372)
+            .map_err(|_| Error::MalformedChunk {
+                tag: Self::TAG,
+                size,
                 expected: 372,
-            })?;
-            Ok(Self { bytes })
-        }?;
-        Ok((value, length))
+            })?
+            .try_into()
+            .expect("fixed-width record");
+        Ok(Self { bytes })
     }
 
     fn encode(&self) -> Result<Vec<u8>, Error> {

@@ -84,46 +84,37 @@ impl Model {
 }
 
 impl Record for BindPose {
-    fn decode_one(bytes: &[u8], _version: u32) -> Result<(Self, usize), Error> {
-        let length = bytes.len();
-        let value = {
-            let count_bytes = bytes.get(..4).ok_or(Error::MalformedChunk {
-                tag: BindPose::TAG,
-                size: bytes.len(),
-                expected: 4,
+    fn decode_one(cursor: &mut crate::Cursor<'_>, _version: u32) -> Result<Self, Error> {
+        let size = cursor.remaining().len();
+        let count = cursor.read_u32().map_err(|_| Error::MalformedChunk {
+            tag: Self::TAG,
+            size,
+            expected: 4,
+        })? as usize;
+        let body_size = count
+            .checked_mul(MATRIX_SIZE)
+            .ok_or(Error::MalformedRecord {
+                tag: Self::TAG,
+                offset: 0,
             })?;
-            let count =
-                u32::from_le_bytes(count_bytes.try_into().expect("four-byte count")) as usize;
-            let expected = count
-                .checked_mul(MATRIX_SIZE)
-                .and_then(|n| n.checked_add(4))
-                .ok_or(Error::MalformedRecord {
-                    tag: BindPose::TAG,
-                    offset: 0,
-                })?;
-            if bytes.len() != expected {
-                return Err(Error::MalformedChunk {
-                    tag: BindPose::TAG,
-                    size: bytes.len(),
-                    expected,
-                });
-            }
-            let matrices = bytes[4..]
-                .chunks_exact(MATRIX_SIZE)
-                .map(|matrix| {
-                    std::array::from_fn(|coordinate| {
-                        let offset = coordinate * 4;
-                        f32::from_le_bytes(
-                            matrix[offset..offset + 4]
-                                .try_into()
-                                .expect("four-byte field"),
-                        )
-                    })
-                })
-                .collect();
-            Ok(Self { matrices })
-        }?;
-        Ok((value, length))
+        let expected = body_size.checked_add(4).ok_or(Error::MalformedRecord {
+            tag: Self::TAG,
+            offset: 0,
+        })?;
+        if size != expected {
+            return Err(Error::MalformedChunk {
+                tag: Self::TAG,
+                size,
+                expected,
+            });
+        }
+        let mut matrices = Vec::new();
+        for _ in 0..count {
+            matrices.push(std::array::from_fn(|_| {
+                cursor.read_f32().expect("validated matrix length")
+            }));
+        }
+        Ok(Self { matrices })
     }
 
     fn encode(&self) -> Result<Vec<u8>, Error> {

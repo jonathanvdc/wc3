@@ -1,4 +1,4 @@
-use wc3_mdx::Record;
+use wc3_mdx::{Cursor, Record};
 use wc3_mdx::{EventObject, Model, Node};
 
 #[test]
@@ -23,14 +23,11 @@ fn adjacent_events_decode_at_their_own_boundaries() {
     let mut bytes = first.encode().unwrap();
     let first_len = bytes.len();
     bytes.extend_from_slice(&second.encode().unwrap());
-    assert_eq!(
-        EventObject::decode_one(&bytes, 800).unwrap(),
-        (first.clone(), first_len)
-    );
-    assert_eq!(
-        EventObject::decode_one(&bytes[first_len..], 800).unwrap().0,
-        second
-    );
+    let mut cursor = Cursor::new(&bytes);
+    assert_eq!(EventObject::decode_one(&mut cursor, 800).unwrap(), first);
+    assert_eq!(cursor.position(), first_len);
+    assert_eq!(EventObject::decode_one(&mut cursor, 800).unwrap(), second);
+    cursor.finish().unwrap();
     assert!(EventObject::decode(&bytes, 800).is_err());
 }
 

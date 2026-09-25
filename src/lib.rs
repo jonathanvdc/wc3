@@ -21,6 +21,7 @@ pub use chunks::*;
 mod error;
 pub use error::Error;
 mod cursor;
+pub use cursor::Cursor;
 mod model;
 pub use model::Model;
 mod record;

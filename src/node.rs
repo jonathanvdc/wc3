@@ -1,6 +1,5 @@
 //! Shared node headers used by bones and helpers.
 
-use crate::cursor::Cursor;
 use crate::Record;
 use std::borrow::Cow;
 
@@ -240,8 +239,7 @@ impl Model {
 }
 
 impl Record for Node {
-    fn decode_one(bytes: &[u8], _version: u32) -> Result<(Self, usize), Error> {
-        let mut source = Cursor::new(bytes);
+    fn decode_one(source: &mut crate::Cursor<'_>, _version: u32) -> Result<Self, Error> {
         let mut cursor = source.slice_u32_sized()?;
         let name = cursor
             .read_exact(NAME_SIZE)?
@@ -253,27 +251,24 @@ impl Record for Node {
         let mut tracks = Vec::new();
         while !cursor.remaining().is_empty() {
             let offset = cursor.absolute_position();
-            let (track, consumed) = AnimationTrack::decode_one(cursor.remaining(), 0)?;
+            let track = AnimationTrack::decode_one(&mut cursor, 0)?;
             if !matches!(&track.tag, b"KGTR" | b"KGRT" | b"KGSC") {
                 return Err(Error::MalformedRecord {
                     tag: Self::TAG,
                     offset,
                 });
             }
-            cursor.read_exact(consumed)?;
+
             tracks.push(track);
         }
         cursor.finish()?;
-        Ok((
-            Self {
-                name,
-                object_id,
-                parent_id,
-                raw_flags,
-                tracks,
-            },
-            source.position(),
-        ))
+        Ok(Self {
+            name,
+            object_id,
+            parent_id,
+            raw_flags,
+            tracks,
+        })
     }
 
     fn encode(&self) -> Result<Vec<u8>, Error> {
@@ -294,20 +289,15 @@ impl Record for Node {
 }
 
 impl Record for Bone {
-    fn decode_one(bytes: &[u8], _version: u32) -> Result<(Self, usize), Error> {
-        let mut cursor = Cursor::new(bytes);
-        let (node, node_len) = Node::decode_one(cursor.remaining(), 0)?;
-        cursor.read_exact(node_len)?;
+    fn decode_one(cursor: &mut crate::Cursor<'_>, _version: u32) -> Result<Self, Error> {
+        let node = Node::decode_one(cursor, 0)?;
         let geoset_id = cursor.read_u32()?;
         let geoset_animation_id = cursor.read_u32()?;
-        Ok((
-            Self {
-                node,
-                geoset_id,
-                geoset_animation_id,
-            },
-            cursor.position(),
-        ))
+        Ok(Self {
+            node,
+            geoset_id,
+            geoset_animation_id,
+        })
     }
 
     fn encode(&self) -> Result<Vec<u8>, Error> {

@@ -1,6 +1,5 @@
 //! Reforged popcorn particle emitters in `CORN` chunks.
 
-use crate::cursor::Cursor;
 use crate::Record;
 use std::borrow::Cow;
 
@@ -174,11 +173,9 @@ impl Model {
 }
 
 impl Record for PopcornEmitter {
-    fn decode_one(bytes: &[u8], _version: u32) -> Result<(Self, usize), Error> {
-        let mut source = Cursor::new(bytes);
+    fn decode_one(source: &mut crate::Cursor<'_>, _version: u32) -> Result<Self, Error> {
         let mut cursor = source.slice_u32_sized()?;
-        let (node, node_len) = Node::decode_one(cursor.remaining(), 0)?;
-        cursor.read_exact(node_len)?;
+        let node = Node::decode_one(&mut cursor, 0)?;
         let life_span = cursor.read_f32()?;
         let emission_rate = cursor.read_f32()?;
         let speed = cursor.read_f32()?;
@@ -196,32 +193,29 @@ impl Record for PopcornEmitter {
         let mut tracks = Vec::new();
         while !cursor.remaining().is_empty() {
             let offset = cursor.absolute_position();
-            let (track, consumed) = AnimationTrack::decode_one(cursor.remaining(), 0)?;
+            let track = AnimationTrack::decode_one(&mut cursor, 0)?;
             if !is_track_tag(track.tag) {
                 return Err(Error::MalformedRecord {
                     tag: Self::TAG,
                     offset,
                 });
             }
-            cursor.read_exact(consumed)?;
+
             tracks.push(track);
         }
         cursor.finish()?;
-        Ok((
-            Self {
-                node,
-                life_span,
-                emission_rate,
-                speed,
-                color,
-                alpha,
-                replaceable_id,
-                path,
-                visibility_guide,
-                tracks,
-            },
-            source.position(),
-        ))
+        Ok(Self {
+            node,
+            life_span,
+            emission_rate,
+            speed,
+            color,
+            alpha,
+            replaceable_id,
+            path,
+            visibility_guide,
+            tracks,
+        })
     }
 
     fn encode(&self) -> Result<Vec<u8>, Error> {

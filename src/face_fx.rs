@@ -80,18 +80,18 @@ impl Model {
 }
 
 impl Record for FaceFx {
-    fn decode_one(bytes: &[u8], _version: u32) -> Result<(Self, usize), Error> {
-        let length = SIZE;
-        let bytes = bytes.get(..length).unwrap_or(bytes);
-        let value = {
-            let bytes: [u8; SIZE] = bytes.try_into().map_err(|_| Error::MalformedChunk {
-                tag: FaceFx::TAG,
-                size: bytes.len(),
+    fn decode_one(cursor: &mut crate::Cursor<'_>, _version: u32) -> Result<Self, Error> {
+        let size = cursor.remaining().len();
+        let bytes = cursor
+            .read_exact(SIZE)
+            .map_err(|_| Error::MalformedChunk {
+                tag: Self::TAG,
+                size,
                 expected: SIZE,
-            })?;
-            Ok(Self { bytes })
-        }?;
-        Ok((value, length))
+            })?
+            .try_into()
+            .expect("fixed-width record");
+        Ok(Self { bytes })
     }
 
     fn encode(&self) -> Result<Vec<u8>, Error> {
