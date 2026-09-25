@@ -35,135 +35,98 @@ const NAME_SIZE: usize = 80;
 /// A fixed-size animation sequence, including reserved fields and raw float bits.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Sequence {
-    bytes: [u8; SIZE],
+    name: [u8; NAME_SIZE],
+    interval: [u32; 2],
+    move_speed: u32,
+    flags: u32,
+    rarity: u32,
+    sync_point: u32,
+    bounds_radius: u32,
+    minimum_extent: [u32; 3],
+    maximum_extent: [u32; 3],
 }
 
 impl Sequence {
-    /// Creates a zero-initialized sequence with a name and frame interval.
     pub fn new(name: &str, interval: [u32; 2]) -> Result<Self, Error> {
-        let mut sequence = Self { bytes: [0; SIZE] };
+        let mut sequence = Self {
+            name: [0; NAME_SIZE],
+            interval,
+            move_speed: 0,
+            flags: 0,
+            rarity: 0,
+            sync_point: 0,
+            bounds_radius: 0,
+            minimum_extent: [0; 3],
+            maximum_extent: [0; 3],
+        };
         sequence.set_name(name)?;
-        sequence.set_interval(interval);
         Ok(sequence)
     }
-
-    /// Returns the original 132-byte record.
-    pub fn as_bytes(&self) -> &[u8; SIZE] {
-        &self.bytes
+    pub fn as_bytes(&self) -> [u8; SIZE] {
+        self.encode()
+            .expect("fixed-size record")
+            .try_into()
+            .expect("fixed-size record")
     }
-
-    /// Returns the name up to the first NUL, replacing invalid UTF-8.
     pub fn name(&self) -> Cow<'_, str> {
-        field::text(&self.bytes[..NAME_SIZE])
+        field::text(&self.name)
     }
-
-    /// Replaces the name without disturbing other sequence fields.
     pub fn set_name(&mut self, name: &str) -> Result<(), Error> {
-        field::set_text(&mut self.bytes[..NAME_SIZE], name)
+        field::set_text(&mut self.name, name)
     }
-
-    /// Returns the start and end frame times.
     pub fn interval(&self) -> [u32; 2] {
-        [
-            field::u32_at(&self.bytes, 80),
-            field::u32_at(&self.bytes, 84),
-        ]
+        self.interval
     }
-
-    /// Sets the start and end frame times.
     pub fn set_interval(&mut self, interval: [u32; 2]) {
-        field::set_u32_at(&mut self.bytes, 80, interval[0]);
-        field::set_u32_at(&mut self.bytes, 84, interval[1]);
+        self.interval = interval;
     }
-
-    /// Returns the ground movement speed.
     pub fn move_speed(&self) -> f32 {
-        f32::from_bits(field::u32_at(&self.bytes, 88))
+        f32::from_bits(self.move_speed)
     }
-
-    /// Sets the ground movement speed.
     pub fn set_move_speed(&mut self, speed: f32) {
-        field::set_u32_at(&mut self.bytes, 88, speed.to_bits());
+        self.move_speed = speed.to_bits();
     }
-
-    /// Returns decoded sequence playback flags.
     pub fn flags(&self) -> SequenceFlags {
-        SequenceFlags::from_bits(self.raw_flags())
+        SequenceFlags::from_bits(self.flags)
     }
-
-    /// Returns exact raw sequence flag bits.
     pub fn raw_flags(&self) -> u32 {
-        field::u32_at(&self.bytes, 92)
+        self.flags
     }
-
-    /// Sets decoded sequence playback flags.
     pub fn set_flags(&mut self, flags: SequenceFlags) {
-        self.set_raw_flags(flags.bits());
+        self.flags = flags.bits();
     }
-
-    /// Sets exact raw sequence flag bits.
     pub fn set_raw_flags(&mut self, flags: u32) {
-        field::set_u32_at(&mut self.bytes, 92, flags);
+        self.flags = flags;
     }
-
-    /// Returns the sequence rarity.
     pub fn rarity(&self) -> f32 {
-        f32::from_bits(field::u32_at(&self.bytes, 96))
+        f32::from_bits(self.rarity)
     }
-
-    /// Sets the sequence rarity.
     pub fn set_rarity(&mut self, rarity: f32) {
-        field::set_u32_at(&mut self.bytes, 96, rarity.to_bits());
+        self.rarity = rarity.to_bits();
     }
-
-    /// Returns the raw sync point field.
     pub fn sync_point(&self) -> u32 {
-        field::u32_at(&self.bytes, 100)
+        self.sync_point
     }
-
-    /// Sets the raw sync point field.
     pub fn set_sync_point(&mut self, point: u32) {
-        field::set_u32_at(&mut self.bytes, 100, point);
+        self.sync_point = point;
     }
-
-    /// Returns the bounding sphere radius.
     pub fn bounds_radius(&self) -> f32 {
-        f32::from_bits(field::u32_at(&self.bytes, 104))
+        f32::from_bits(self.bounds_radius)
     }
-
-    /// Sets the bounding sphere radius.
     pub fn set_bounds_radius(&mut self, radius: f32) {
-        field::set_u32_at(&mut self.bytes, 104, radius.to_bits());
+        self.bounds_radius = radius.to_bits();
     }
-
-    /// Returns the minimum XYZ extent.
     pub fn minimum_extent(&self) -> [f32; 3] {
-        self.extent_at(108)
+        self.minimum_extent.map(f32::from_bits)
     }
-
-    /// Sets the minimum XYZ extent.
     pub fn set_minimum_extent(&mut self, extent: [f32; 3]) {
-        self.set_extent_at(108, extent);
+        self.minimum_extent = extent.map(f32::to_bits);
     }
-
-    /// Returns the maximum XYZ extent.
     pub fn maximum_extent(&self) -> [f32; 3] {
-        self.extent_at(120)
+        self.maximum_extent.map(f32::from_bits)
     }
-
-    /// Sets the maximum XYZ extent.
     pub fn set_maximum_extent(&mut self, extent: [f32; 3]) {
-        self.set_extent_at(120, extent);
-    }
-
-    fn extent_at(&self, offset: usize) -> [f32; 3] {
-        std::array::from_fn(|index| f32::from_bits(field::u32_at(&self.bytes, offset + index * 4)))
-    }
-
-    fn set_extent_at(&mut self, offset: usize, extent: [f32; 3]) {
-        for (index, value) in extent.into_iter().enumerate() {
-            field::set_u32_at(&mut self.bytes, offset + index * 4, value.to_bits());
-        }
+        self.maximum_extent = extent.map(f32::to_bits);
     }
 }
 
@@ -188,20 +151,62 @@ impl Model {
 impl Record for Sequence {
     fn decode_one(cursor: &mut crate::Cursor<'_>, _version: u32) -> Result<Self, Error> {
         let size = cursor.remaining().len();
-        let bytes = cursor
-            .read_exact(SIZE)
-            .map_err(|_| Error::MalformedChunk {
+        if size < SIZE {
+            return Err(Error::MalformedChunk {
                 tag: Self::TAG,
                 size,
                 expected: SIZE,
-            })?
+            });
+        }
+        let name = cursor
+            .read_exact(NAME_SIZE)?
             .try_into()
-            .expect("fixed-width record");
-        Ok(Self { bytes })
+            .expect("fixed-width name");
+        let interval = [cursor.read_u32()?, cursor.read_u32()?];
+        let move_speed = cursor.read_u32()?;
+        let flags = cursor.read_u32()?;
+        let rarity = cursor.read_u32()?;
+        let sync_point = cursor.read_u32()?;
+        let bounds_radius = cursor.read_u32()?;
+        let mut minimum_extent = [0; 3];
+        let mut maximum_extent = [0; 3];
+        for value in &mut minimum_extent {
+            *value = cursor.read_u32()?;
+        }
+        for value in &mut maximum_extent {
+            *value = cursor.read_u32()?;
+        }
+        Ok(Self {
+            name,
+            interval,
+            move_speed,
+            flags,
+            rarity,
+            sync_point,
+            bounds_radius,
+            minimum_extent,
+            maximum_extent,
+        })
     }
-
     fn encode(&self) -> Result<Vec<u8>, Error> {
-        Ok(self.bytes.to_vec())
+        let mut bytes = Vec::with_capacity(SIZE);
+        bytes.extend_from_slice(&self.name);
+        for value in self
+            .interval
+            .into_iter()
+            .chain([
+                self.move_speed,
+                self.flags,
+                self.rarity,
+                self.sync_point,
+                self.bounds_radius,
+            ])
+            .chain(self.minimum_extent)
+            .chain(self.maximum_extent)
+        {
+            bytes.extend_from_slice(&value.to_le_bytes());
+        }
+        Ok(bytes)
     }
 }
 

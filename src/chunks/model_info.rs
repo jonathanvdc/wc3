@@ -39,7 +39,7 @@ impl Record for ModelInfoChunk {
             });
         }
         let mut bytes = Vec::with_capacity(size);
-        bytes.extend_from_slice(self.info.as_bytes());
+        bytes.extend_from_slice(&self.info.as_bytes());
         bytes.extend_from_slice(&self.extension);
         Ok(bytes)
     }

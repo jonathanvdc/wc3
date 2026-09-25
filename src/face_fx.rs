@@ -13,41 +13,48 @@ const PATH_SIZE: usize = 260;
 /// One fixed-size face-animation name and path pair.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct FaceFx {
-    bytes: [u8; SIZE],
+    name: [u8; NAME_SIZE],
+    path: [u8; PATH_SIZE],
 }
 
 impl FaceFx {
     /// Creates a face-animation reference.
     pub fn new(name: &str, path: &str) -> Result<Self, Error> {
-        let mut entry = Self { bytes: [0; SIZE] };
+        let mut entry = Self {
+            name: [0; NAME_SIZE],
+            path: [0; PATH_SIZE],
+        };
         entry.set_name(name)?;
         entry.set_path(path)?;
         Ok(entry)
     }
 
     /// Returns the original record bytes.
-    pub fn as_bytes(&self) -> &[u8; SIZE] {
-        &self.bytes
+    pub fn as_bytes(&self) -> [u8; SIZE] {
+        self.encode()
+            .expect("fixed-size record")
+            .try_into()
+            .expect("fixed-size record")
     }
 
     /// Returns the name up to the first NUL.
     pub fn name(&self) -> Cow<'_, str> {
-        field::text(&self.bytes[..NAME_SIZE])
+        field::text(&self.name)
     }
 
     /// Replaces the name.
     pub fn set_name(&mut self, name: &str) -> Result<(), Error> {
-        field::set_text(&mut self.bytes[..NAME_SIZE], name)
+        field::set_text(&mut self.name, name)
     }
 
     /// Returns the animation resource path up to the first NUL.
     pub fn path(&self) -> Cow<'_, str> {
-        field::text(&self.bytes[NAME_SIZE..])
+        field::text(&self.path)
     }
 
     /// Replaces the animation resource path.
     pub fn set_path(&mut self, path: &str) -> Result<(), Error> {
-        field::set_text(&mut self.bytes[NAME_SIZE..NAME_SIZE + PATH_SIZE], path)
+        field::set_text(&mut self.path, path)
     }
 }
 
@@ -71,20 +78,29 @@ impl Model {
 impl Record for FaceFx {
     fn decode_one(cursor: &mut crate::Cursor<'_>, _version: u32) -> Result<Self, Error> {
         let size = cursor.remaining().len();
-        let bytes = cursor
-            .read_exact(SIZE)
-            .map_err(|_| Error::MalformedChunk {
+        if size < SIZE {
+            return Err(Error::MalformedChunk {
                 tag: Self::TAG,
                 size,
                 expected: SIZE,
-            })?
+            });
+        }
+        let name = cursor
+            .read_exact(NAME_SIZE)?
             .try_into()
-            .expect("fixed-width record");
-        Ok(Self { bytes })
+            .expect("fixed-width name");
+        let path = cursor
+            .read_exact(PATH_SIZE)?
+            .try_into()
+            .expect("fixed-width path");
+        Ok(Self { name, path })
     }
 
     fn encode(&self) -> Result<Vec<u8>, Error> {
-        Ok(self.bytes.to_vec())
+        let mut bytes = Vec::with_capacity(SIZE);
+        bytes.extend_from_slice(&self.name);
+        bytes.extend_from_slice(&self.path);
+        Ok(bytes)
     }
 }
 

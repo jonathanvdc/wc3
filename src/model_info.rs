@@ -12,12 +12,24 @@ const NAME_SIZE: usize = 336;
 /// The 372-byte `MODL` record. Reserved bytes remain intact on edit.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ModelInfo {
-    bytes: [u8; SIZE],
+    name: [u8; NAME_SIZE],
+    reserved: [u8; 4],
+    bounds_radius: u32,
+    minimum_extent: [u32; 3],
+    maximum_extent: [u32; 3],
+    blend_time: u32,
 }
 
 impl Default for ModelInfo {
     fn default() -> Self {
-        Self { bytes: [0; SIZE] }
+        Self {
+            name: [0; NAME_SIZE],
+            reserved: [0; 4],
+            bounds_radius: 0,
+            minimum_extent: [0; 3],
+            maximum_extent: [0; 3],
+            blend_time: 0,
+        }
     }
 }
 
@@ -30,87 +42,65 @@ impl ModelInfo {
     }
 
     pub(crate) fn parse(data: &[u8]) -> Result<Self, Error> {
-        let bytes = data.get(..SIZE).ok_or(Error::MalformedChunk {
-            tag: ModelInfo::TAG,
-            size: data.len(),
-            expected: SIZE,
-        })?;
-        Ok(Self {
-            bytes: bytes.try_into().expect("fixed-size record"),
-        })
+        Self::decode_one(&mut crate::Cursor::new(data), 0)
     }
 
     /// Returns the raw fixed-width record.
-    pub fn as_bytes(&self) -> &[u8; SIZE] {
-        &self.bytes
+    pub fn as_bytes(&self) -> [u8; SIZE] {
+        self.encode()
+            .expect("fixed-size record")
+            .try_into()
+            .expect("fixed-size record")
     }
 
     /// Returns the model name up to the first NUL, replacing invalid UTF-8.
     pub fn name(&self) -> Cow<'_, str> {
-        field::text(&self.bytes[..NAME_SIZE])
+        field::text(&self.name)
     }
 
     /// Sets the model name, clearing the rest of its fixed-width field.
     pub fn set_name(&mut self, name: &str) -> Result<(), Error> {
-        field::set_text(&mut self.bytes[..NAME_SIZE], name)
+        field::set_text(&mut self.name, name)
     }
 
     /// Returns the model's bounding sphere radius.
     pub fn bounds_radius(&self) -> f32 {
-        f32::from_le_bytes(self.bytes[340..344].try_into().expect("fixed-size field"))
+        f32::from_bits(self.bounds_radius)
     }
 
     /// Sets the model's bounding sphere radius.
     pub fn set_bounds_radius(&mut self, radius: f32) {
-        self.bytes[340..344].copy_from_slice(&radius.to_le_bytes());
+        self.bounds_radius = radius.to_bits();
     }
 
     /// Returns the minimum XYZ extent.
     pub fn minimum_extent(&self) -> [f32; 3] {
-        self.extent_at(344)
+        self.minimum_extent.map(f32::from_bits)
     }
 
     /// Sets the minimum XYZ extent.
     pub fn set_minimum_extent(&mut self, extent: [f32; 3]) {
-        self.set_extent_at(344, extent);
+        self.minimum_extent = extent.map(f32::to_bits);
     }
 
     /// Returns the maximum XYZ extent.
     pub fn maximum_extent(&self) -> [f32; 3] {
-        self.extent_at(356)
+        self.maximum_extent.map(f32::from_bits)
     }
 
     /// Sets the maximum XYZ extent.
     pub fn set_maximum_extent(&mut self, extent: [f32; 3]) {
-        self.set_extent_at(356, extent);
+        self.maximum_extent = extent.map(f32::to_bits);
     }
 
     /// Returns the animation blend time in milliseconds.
     pub fn blend_time(&self) -> u32 {
-        u32::from_le_bytes(self.bytes[368..372].try_into().expect("fixed-size field"))
+        self.blend_time
     }
 
     /// Sets the animation blend time in milliseconds.
     pub fn set_blend_time(&mut self, time: u32) {
-        self.bytes[368..372].copy_from_slice(&time.to_le_bytes());
-    }
-
-    fn extent_at(&self, start: usize) -> [f32; 3] {
-        std::array::from_fn(|index| {
-            let offset = start + index * 4;
-            f32::from_le_bytes(
-                self.bytes[offset..offset + 4]
-                    .try_into()
-                    .expect("fixed-size field"),
-            )
-        })
-    }
-
-    fn set_extent_at(&mut self, start: usize, extent: [f32; 3]) {
-        for (index, value) in extent.into_iter().enumerate() {
-            let offset = start + index * 4;
-            self.bytes[offset..offset + 4].copy_from_slice(&value.to_le_bytes());
-        }
+        self.blend_time = time;
     }
 }
 
@@ -156,20 +146,48 @@ impl Model {
 impl Record for ModelInfo {
     fn decode_one(cursor: &mut crate::Cursor<'_>, _version: u32) -> Result<Self, Error> {
         let size = cursor.remaining().len();
-        let bytes = cursor
-            .read_exact(372)
-            .map_err(|_| Error::MalformedChunk {
+        if size < SIZE {
+            return Err(Error::MalformedChunk {
                 tag: Self::TAG,
                 size,
-                expected: 372,
-            })?
+                expected: SIZE,
+            });
+        }
+        let name = cursor
+            .read_exact(NAME_SIZE)?
             .try_into()
-            .expect("fixed-width record");
-        Ok(Self { bytes })
+            .expect("fixed-width name");
+        let reserved = cursor.read_exact(4)?.try_into().expect("fixed-width field");
+        let bounds_radius = cursor.read_u32()?;
+        let mut minimum_extent = [0; 3];
+        let mut maximum_extent = [0; 3];
+        for value in &mut minimum_extent {
+            *value = cursor.read_u32()?;
+        }
+        for value in &mut maximum_extent {
+            *value = cursor.read_u32()?;
+        }
+        let blend_time = cursor.read_u32()?;
+        Ok(Self {
+            name,
+            reserved,
+            bounds_radius,
+            minimum_extent,
+            maximum_extent,
+            blend_time,
+        })
     }
 
     fn encode(&self) -> Result<Vec<u8>, Error> {
-        Ok(self.bytes.to_vec())
+        let mut bytes = Vec::with_capacity(SIZE);
+        bytes.extend_from_slice(&self.name);
+        bytes.extend_from_slice(&self.reserved);
+        bytes.extend_from_slice(&self.bounds_radius.to_le_bytes());
+        for value in self.minimum_extent.into_iter().chain(self.maximum_extent) {
+            bytes.extend_from_slice(&value.to_le_bytes());
+        }
+        bytes.extend_from_slice(&self.blend_time.to_le_bytes());
+        Ok(bytes)
     }
 }
 

@@ -6,14 +6,20 @@ use std::borrow::Cow;
 use crate::utils::field;
 use crate::{AnimationTrack, Error, Model, Node};
 
-pub(crate) const FIXED_SIZE: usize = 284;
 const PATH_SIZE: usize = 256;
 
 /// A Classic particle emitter with optional animated properties.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ParticleEmitter {
     node: Node,
-    fixed: [u8; FIXED_SIZE],
+    emission_rate: f32,
+    gravity: f32,
+    longitude: f32,
+    latitude: f32,
+    path: [u8; PATH_SIZE],
+    reserved: u32,
+    life_span: f32,
+    initial_velocity: f32,
     tracks: Vec<AnimationTrack>,
 }
 
@@ -22,7 +28,14 @@ impl ParticleEmitter {
     pub fn new(node: Node, path: &str) -> Result<Self, Error> {
         let mut emitter = Self {
             node,
-            fixed: [0; FIXED_SIZE],
+            emission_rate: 0.0,
+            gravity: 0.0,
+            longitude: 0.0,
+            latitude: 0.0,
+            path: [0; PATH_SIZE],
+            reserved: 0,
+            life_span: 0.0,
+            initial_velocity: 0.0,
             tracks: Vec::new(),
         };
         emitter.set_path(path)?;
@@ -41,66 +54,66 @@ impl ParticleEmitter {
 
     /// Returns emission rate.
     pub fn emission_rate(&self) -> f32 {
-        field::f32_at(&self.fixed, 0)
+        self.emission_rate
     }
     /// Sets emission rate.
     pub fn set_emission_rate(&mut self, value: f32) {
-        field::set_f32_at(&mut self.fixed, 0, value);
+        self.emission_rate = value;
     }
     /// Returns gravity.
     pub fn gravity(&self) -> f32 {
-        field::f32_at(&self.fixed, 4)
+        self.gravity
     }
     /// Sets gravity.
     pub fn set_gravity(&mut self, value: f32) {
-        field::set_f32_at(&mut self.fixed, 4, value);
+        self.gravity = value;
     }
     /// Returns longitude.
     pub fn longitude(&self) -> f32 {
-        field::f32_at(&self.fixed, 8)
+        self.longitude
     }
     /// Sets longitude.
     pub fn set_longitude(&mut self, value: f32) {
-        field::set_f32_at(&mut self.fixed, 8, value);
+        self.longitude = value;
     }
     /// Returns latitude.
     pub fn latitude(&self) -> f32 {
-        field::f32_at(&self.fixed, 12)
+        self.latitude
     }
     /// Sets latitude.
     pub fn set_latitude(&mut self, value: f32) {
-        field::set_f32_at(&mut self.fixed, 12, value);
+        self.latitude = value;
     }
     /// Returns particle lifetime.
     pub fn life_span(&self) -> f32 {
-        field::f32_at(&self.fixed, 276)
+        self.life_span
     }
     /// Sets particle lifetime.
     pub fn set_life_span(&mut self, value: f32) {
-        field::set_f32_at(&mut self.fixed, 276, value);
+        self.life_span = value;
     }
     /// Returns initial velocity.
     pub fn initial_velocity(&self) -> f32 {
-        field::f32_at(&self.fixed, 280)
+        self.initial_velocity
     }
     /// Sets initial velocity.
     pub fn set_initial_velocity(&mut self, value: f32) {
-        field::set_f32_at(&mut self.fixed, 280, value);
+        self.initial_velocity = value;
     }
 
     /// Returns the emitter resource path up to the first NUL.
     pub fn path(&self) -> Cow<'_, str> {
-        field::text(&self.fixed[16..16 + PATH_SIZE])
+        field::text(&self.path)
     }
 
     /// Sets the emitter path while retaining all other fields.
     pub fn set_path(&mut self, path: &str) -> Result<(), Error> {
-        field::set_text(&mut self.fixed[16..16 + PATH_SIZE], path)
+        field::set_text(&mut self.path, path)
     }
 
     /// Returns the untyped reserved word following the path.
     pub fn reserved(&self) -> u32 {
-        u32::from_le_bytes(self.fixed[272..276].try_into().expect("four-byte field"))
+        self.reserved
     }
 
     /// Borrows decoded animation tracks.
@@ -152,10 +165,17 @@ impl Record for ParticleEmitter {
     fn decode_one(source: &mut crate::Cursor<'_>, _version: u32) -> Result<Self, Error> {
         let mut cursor = source.slice_u32_sized()?;
         let node = Node::decode_one(&mut cursor, 0)?;
-        let fixed = cursor
-            .read_exact(FIXED_SIZE)?
+        let emission_rate = cursor.read_f32()?;
+        let gravity = cursor.read_f32()?;
+        let longitude = cursor.read_f32()?;
+        let latitude = cursor.read_f32()?;
+        let path = cursor
+            .read_exact(PATH_SIZE)?
             .try_into()
-            .expect("fixed emitter fields");
+            .expect("fixed emitter path");
+        let reserved = cursor.read_u32()?;
+        let life_span = cursor.read_f32()?;
+        let initial_velocity = cursor.read_f32()?;
         let mut tracks = Vec::new();
         while !cursor.remaining().is_empty() {
             let offset = cursor.absolute_position();
@@ -172,7 +192,14 @@ impl Record for ParticleEmitter {
         cursor.finish()?;
         Ok(Self {
             node,
-            fixed,
+            emission_rate,
+            gravity,
+            longitude,
+            latitude,
+            path,
+            reserved,
+            life_span,
+            initial_velocity,
             tracks,
         })
     }
@@ -180,7 +207,18 @@ impl Record for ParticleEmitter {
     fn encode(&self) -> Result<Vec<u8>, Error> {
         let mut bytes = vec![0; 4];
         bytes.extend_from_slice(&self.node.encode()?);
-        bytes.extend_from_slice(&self.fixed);
+        for value in [
+            self.emission_rate,
+            self.gravity,
+            self.longitude,
+            self.latitude,
+        ] {
+            bytes.extend_from_slice(&value.to_le_bytes());
+        }
+        bytes.extend_from_slice(&self.path);
+        bytes.extend_from_slice(&self.reserved.to_le_bytes());
+        bytes.extend_from_slice(&self.life_span.to_le_bytes());
+        bytes.extend_from_slice(&self.initial_velocity.to_le_bytes());
         for track in &self.tracks {
             if !is_track(track.tag) {
                 return Err(Error::MalformedRecord {

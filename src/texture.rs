@@ -31,46 +31,56 @@ impl TextureFlags {
     }
 }
 pub(crate) const SIZE: usize = 268;
-const PATH_START: usize = 4;
 const PATH_SIZE: usize = 256;
 
 /// A texture reference with its original reserved bytes intact.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Texture {
-    bytes: [u8; SIZE],
+    replaceable_id: u32,
+    path: [u8; PATH_SIZE],
+    reserved: [u8; 4],
+    flags: u32,
 }
 
 impl Texture {
     /// Creates a texture with a path and no flags or replacement ID.
     pub fn new(path: &str) -> Result<Self, Error> {
-        let mut texture = Self { bytes: [0; SIZE] };
+        let mut texture = Self {
+            replaceable_id: 0,
+            path: [0; PATH_SIZE],
+            reserved: [0; 4],
+            flags: 0,
+        };
         texture.set_path(path)?;
         Ok(texture)
     }
 
     /// Returns the original 268-byte record.
-    pub fn as_bytes(&self) -> &[u8; SIZE] {
-        &self.bytes
+    pub fn as_bytes(&self) -> [u8; SIZE] {
+        self.encode()
+            .expect("fixed-size record")
+            .try_into()
+            .expect("fixed-size record")
     }
 
     /// Returns the replaceable texture ID.
     pub fn replaceable_id(&self) -> u32 {
-        u32::from_le_bytes(self.bytes[..4].try_into().expect("fixed-size field"))
+        self.replaceable_id
     }
 
     /// Sets the replaceable texture ID.
     pub fn set_replaceable_id(&mut self, id: u32) {
-        self.bytes[..4].copy_from_slice(&id.to_le_bytes());
+        self.replaceable_id = id;
     }
 
     /// Returns the path up to the first NUL, replacing invalid UTF-8.
     pub fn path(&self) -> Cow<'_, str> {
-        field::text(&self.bytes[PATH_START..PATH_START + PATH_SIZE])
+        field::text(&self.path)
     }
 
     /// Sets the path, clearing the unused part of the fixed-width field.
     pub fn set_path(&mut self, path: &str) -> Result<(), Error> {
-        field::set_text(&mut self.bytes[PATH_START..PATH_START + PATH_SIZE], path)
+        field::set_text(&mut self.path, path)
     }
 
     /// Returns decoded texture wrapping flags.
@@ -80,7 +90,7 @@ impl Texture {
 
     /// Returns exact raw texture flag bits.
     pub fn raw_flags(&self) -> u32 {
-        u32::from_le_bytes(self.bytes[264..268].try_into().expect("fixed-size field"))
+        self.flags
     }
 
     /// Sets decoded texture wrapping flags.
@@ -90,7 +100,7 @@ impl Texture {
 
     /// Sets exact raw texture flag bits.
     pub fn set_raw_flags(&mut self, flags: u32) {
-        self.bytes[264..268].copy_from_slice(&flags.to_le_bytes());
+        self.flags = flags;
     }
 }
 
@@ -115,20 +125,35 @@ impl Model {
 impl Record for Texture {
     fn decode_one(cursor: &mut crate::Cursor<'_>, _version: u32) -> Result<Self, Error> {
         let size = cursor.remaining().len();
-        let bytes = cursor
-            .read_exact(SIZE)
-            .map_err(|_| Error::MalformedChunk {
+        if size < SIZE {
+            return Err(Error::MalformedChunk {
                 tag: Self::TAG,
                 size,
                 expected: SIZE,
-            })?
+            });
+        }
+        let replaceable_id = cursor.read_u32()?;
+        let path = cursor
+            .read_exact(PATH_SIZE)?
             .try_into()
-            .expect("fixed-width record");
-        Ok(Self { bytes })
+            .expect("fixed-width path");
+        let reserved = cursor.read_exact(4)?.try_into().expect("fixed-width field");
+        let flags = cursor.read_u32()?;
+        Ok(Self {
+            replaceable_id,
+            path,
+            reserved,
+            flags,
+        })
     }
 
     fn encode(&self) -> Result<Vec<u8>, Error> {
-        Ok(self.bytes.to_vec())
+        let mut bytes = Vec::with_capacity(SIZE);
+        bytes.extend_from_slice(&self.replaceable_id.to_le_bytes());
+        bytes.extend_from_slice(&self.path);
+        bytes.extend_from_slice(&self.reserved);
+        bytes.extend_from_slice(&self.flags.to_le_bytes());
+        Ok(bytes)
     }
 }
 
