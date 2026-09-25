@@ -21,7 +21,7 @@ impl Record for PivotPointsChunk {
         }
         let mut points = Vec::new();
         while !cursor.remaining().is_empty() {
-            points.push([cursor.read_f32()?, cursor.read_f32()?, cursor.read_f32()?]);
+            points.push(cursor.read_vec3()?);
         }
         Ok(Self { points })
     }

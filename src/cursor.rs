@@ -68,6 +68,14 @@ impl<'a> Cursor<'a> {
         Ok(f32::from_bits(self.read_u32()?))
     }
 
+    /// Reads three IEEE 754 floats from twelve little-endian bytes.
+    pub fn read_vec3(&mut self) -> Result<[f32; 3], Error> {
+        let x = self.read_f32()?;
+        let y = self.read_f32()?;
+        let z = self.read_f32()?;
+        Ok([x, y, z])
+    }
+
     /// Advances this cursor and returns a cursor confined to those bytes.
     /// Copy the parent first if parsing the child may need to be rolled back.
     pub fn slice(&mut self, len: usize) -> Result<Self, Error> {

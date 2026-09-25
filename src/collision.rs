@@ -156,7 +156,7 @@ impl Record for CollisionShape {
         let kind_offset = cursor.absolute_position();
         let kind = cursor.read_u32()?;
         let vec3 = |cursor: &mut Cursor<'_>| -> Result<[f32; 3], Error> {
-            Ok([cursor.read_f32()?, cursor.read_f32()?, cursor.read_f32()?])
+            Ok(cursor.read_vec3()?)
         };
         let geometry = match kind {
             0 => CollisionGeometry::Box([vec3(cursor)?, vec3(cursor)?]),

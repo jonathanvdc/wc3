@@ -511,7 +511,7 @@ impl Record for Layer {
             };
             let (fresnel_color, fresnel_opacity, fresnel_team_color) = if version >= 1000 {
                 (
-                    Some([cursor.read_f32()?, cursor.read_f32()?, cursor.read_f32()?]),
+                    Some(cursor.read_vec3()?),
                     Some(cursor.read_f32()?),
                     Some(cursor.read_f32()?),
                 )

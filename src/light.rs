@@ -190,9 +190,9 @@ impl Record for Light {
         let light_type = cursor.read_u32()?;
         let attenuation_start = cursor.read_f32()?;
         let attenuation_end = cursor.read_f32()?;
-        let color = [cursor.read_f32()?, cursor.read_f32()?, cursor.read_f32()?];
+        let color = cursor.read_vec3()?;
         let intensity = cursor.read_f32()?;
-        let ambient_color = [cursor.read_f32()?, cursor.read_f32()?, cursor.read_f32()?];
+        let ambient_color = cursor.read_vec3()?;
         let ambient_intensity = cursor.read_f32()?;
         let remaining = cursor.remaining();
         let extension_size = EXTENDED_SIZE - FIXED_SIZE;

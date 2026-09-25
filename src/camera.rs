@@ -173,11 +173,11 @@ impl Record for Camera {
         })?;
         let mut cursor = source.slice(body_len)?;
         let name = cursor.read_exact(80)?.try_into().expect("fixed-width name");
-        let position = [cursor.read_f32()?, cursor.read_f32()?, cursor.read_f32()?];
+        let position = cursor.read_vec3()?;
         let field_of_view = cursor.read_f32()?;
         let far_clip = cursor.read_f32()?;
         let near_clip = cursor.read_f32()?;
-        let target_position = [cursor.read_f32()?, cursor.read_f32()?, cursor.read_f32()?];
+        let target_position = cursor.read_vec3()?;
         let mut tracks = Vec::new();
         while !cursor.remaining().is_empty() {
             let offset = cursor.absolute_position();

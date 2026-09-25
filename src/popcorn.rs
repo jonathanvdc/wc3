@@ -179,7 +179,7 @@ impl Record for PopcornEmitter {
         let life_span = cursor.read_f32()?;
         let emission_rate = cursor.read_f32()?;
         let speed = cursor.read_f32()?;
-        let color = [cursor.read_f32()?, cursor.read_f32()?, cursor.read_f32()?];
+        let color = cursor.read_vec3()?;
         let alpha = cursor.read_f32()?;
         let replaceable_id = cursor.read_u32()?;
         let path = cursor

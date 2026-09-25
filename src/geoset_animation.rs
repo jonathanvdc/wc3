@@ -150,7 +150,7 @@ impl Record for GeosetAnimation {
         let mut cursor = source.slice_u32_sized()?;
         let alpha = cursor.read_f32()?;
         let raw_flags = cursor.read_u32()?;
-        let color = [cursor.read_f32()?, cursor.read_f32()?, cursor.read_f32()?];
+        let color = cursor.read_vec3()?;
         let geoset_id = cursor.read_u32()?;
         let mut tracks = Vec::new();
         while !cursor.remaining().is_empty() {

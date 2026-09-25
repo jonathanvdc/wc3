@@ -469,8 +469,8 @@ fn section<'a>(cursor: &mut Cursor<'a>, tag: [u8; 4], stride: usize) -> Result<&
 fn read_extent(cursor: &mut Cursor<'_>) -> Result<GeosetExtent, Error> {
     Ok(GeosetExtent {
         bounds_radius: cursor.read_f32()?,
-        minimum: [cursor.read_f32()?, cursor.read_f32()?, cursor.read_f32()?],
-        maximum: [cursor.read_f32()?, cursor.read_f32()?, cursor.read_f32()?],
+        minimum: cursor.read_vec3()?,
+        maximum: cursor.read_vec3()?,
     })
 }
 
