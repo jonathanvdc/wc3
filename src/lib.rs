@@ -17,6 +17,9 @@
 
 use std::fmt;
 
+mod model_info;
+pub use model_info::ModelInfo;
+
 /// The four bytes at the start of an MDX file.
 pub const MAGIC: [u8; 4] = *b"MDLX";
 
@@ -59,6 +62,14 @@ pub enum Error {
     InvalidVersionChunk,
     /// The payload cannot be represented by a 32-bit MDX chunk size.
     ChunkTooLarge { tag: [u8; 4], size: usize },
+    /// A known chunk is too short for its fixed layout.
+    MalformedChunk {
+        tag: [u8; 4],
+        size: usize,
+        expected: usize,
+    },
+    /// A fixed-width string is too long or contains a NUL.
+    InvalidString { max_bytes: usize },
 }
 
 impl fmt::Display for Error {
@@ -79,6 +90,18 @@ impl fmt::Display for Error {
                 "{:?} chunk size {size} exceeds u32",
                 String::from_utf8_lossy(tag)
             ),
+            Self::MalformedChunk {
+                tag,
+                size,
+                expected,
+            } => write!(
+                f,
+                "{:?} chunk has {size} bytes; expected at least {expected}",
+                String::from_utf8_lossy(tag)
+            ),
+            Self::InvalidString { max_bytes } => {
+                write!(f, "string must fit in {max_bytes} bytes and contain no NUL")
+            }
         }
     }
 }
