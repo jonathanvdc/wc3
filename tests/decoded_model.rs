@@ -7,14 +7,9 @@ fn model_stores_known_unknown_and_malformed_chunks() {
         panic!("expected decoded version chunk");
     };
     assert_eq!(version.version, 800);
-    model.push(RawChunk::new(
-        *b"SEQS",
-        SequencesChunk::new(vec![Sequence::new("Stand", [0, 100]).unwrap()])
-            .encode()
-            .unwrap(),
-    ));
-    model.push(RawChunk::new(*b"FUTR", vec![1, 2, 3]));
-    model.push(RawChunk::new(*b"TEXS", vec![0; 267]));
+    model.push(ModelChunk::Sequences(SequencesChunk::new(vec![Sequence::new("Stand", [0, 100]).unwrap()])));
+    model.push(ModelChunk::from_raw(RawChunk::new(*b"FUTR", vec![1, 2, 3]), 800));
+    model.push(ModelChunk::from_raw(RawChunk::new(*b"TEXS", vec![0; 267]), 800));
 
     assert!(matches!(model.chunks()[1], ModelChunk::Sequences(_)));
     assert!(matches!(model.chunks()[2], ModelChunk::Unknown(_)));
@@ -37,7 +32,7 @@ fn model_stores_known_unknown_and_malformed_chunks() {
 #[test]
 fn edits_to_decoded_records_are_written() {
     let mut model = Model::new(800);
-    model.push(RawChunk::new(*b"SEQS", Vec::new()));
+    model.push(ModelChunk::from_raw(RawChunk::new(*b"SEQS", Vec::new()), 800));
     let ModelChunk::Sequences(decoded) = &mut model.chunks_mut()[1] else {
         panic!("expected typed sequence chunk");
     };
@@ -53,7 +48,7 @@ fn edits_to_decoded_records_are_written() {
 #[test]
 fn replacing_a_malformed_chunk_clears_its_error() {
     let mut model = Model::new(800);
-    model.push(RawChunk::new(*b"SEQS", vec![0; 131]));
+    model.push(ModelChunk::from_raw(RawChunk::new(*b"SEQS", vec![0; 131]), 800));
     assert!(matches!(model.chunks()[1], ModelChunk::Malformed(_)));
 
     *model.chunk_mut(*b"SEQS").unwrap() = ModelChunk::Sequences(SequencesChunk::new(vec![

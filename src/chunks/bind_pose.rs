@@ -78,7 +78,7 @@ impl Model {
         if let Some(chunk) = self.chunk_mut(BindPose::TAG) {
             *chunk = crate::ModelChunk::BindPose(pose.clone());
         } else {
-            self.push_chunk(crate::ModelChunk::BindPose(pose.clone()));
+            self.push(crate::ModelChunk::BindPose(pose.clone()));
         }
     }
 }

@@ -145,7 +145,7 @@ impl Model {
                 }
             }
         } else {
-            self.push_chunk(crate::ModelChunk::ModelInfo(crate::ModelInfoChunk::new(
+            self.push(crate::ModelChunk::ModelInfo(crate::ModelInfoChunk::new(
                 info.clone(),
                 Vec::new(),
             )));

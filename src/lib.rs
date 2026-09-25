@@ -9,9 +9,9 @@
 //! [`Model::chunk_mut`] for other chunks.
 //!
 //! ```
-//! use wc3_mdx::{RawChunk, Model, Record};
+//! use wc3_mdx::{Model, Record};
 //! let mut model = Model::new(800);
-//! model.push(RawChunk::new(*b"TEST", vec![1, 2, 3]));
+//! // Populate the model
 //! let bytes = model.encode().unwrap();
 //! assert_eq!(Model::decode(&bytes, 800).unwrap(), model);
 //! ```

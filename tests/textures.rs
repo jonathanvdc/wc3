@@ -1,4 +1,4 @@
-use wc3_mdx::Record;
+use wc3_mdx::{ModelChunk, Record};
 use wc3_mdx::{Error, Model, RawChunk, Texture, TextureFlags};
 
 #[test]
@@ -22,7 +22,7 @@ fn texture_reserved_bytes_are_preserved() {
     let mut model = Model::new(800);
     let mut data = Texture::new("a.blp").unwrap().encode().unwrap();
     data[260..264].copy_from_slice(&[9, 8, 7, 6]);
-    model.push(RawChunk::new(*b"TEXS", data));
+    model.push(ModelChunk::from_raw(RawChunk::new(*b"TEXS", data), 800));
     let mut textures = model.textures().unwrap();
     textures[0].set_path("b.blp").unwrap();
     model.set_textures(&textures).unwrap();
@@ -35,7 +35,7 @@ fn texture_reserved_bytes_are_preserved() {
 #[test]
 fn malformed_texture_chunk_is_reported() {
     let mut model = Model::new(800);
-    model.push(RawChunk::new(*b"TEXS", vec![0; 267]));
+    model.push(ModelChunk::from_raw(RawChunk::new(*b"TEXS", vec![0; 267]), 800));
     assert_eq!(
         model.textures(),
         Err(Error::MalformedChunk {

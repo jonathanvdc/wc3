@@ -1,4 +1,4 @@
-use wc3_mdx::Record;
+use wc3_mdx::{ModelChunk, Record};
 use wc3_mdx::{Error, Geoset, GeosetExtent, Model, RawChunk};
 
 fn sample_geoset() -> Geoset {
@@ -29,7 +29,7 @@ fn geoset_mesh_edit_preserves_other_sections() {
 #[test]
 fn rejects_invalid_geoset_sizes() {
     let mut model = Model::new(800);
-    model.push(RawChunk::new(*b"GEOS", 100u32.to_le_bytes().to_vec()));
+    model.push(ModelChunk::from_raw(RawChunk::new(*b"GEOS", 100u32.to_le_bytes().to_vec()), 800));
     assert_eq!(
         model.geosets(),
         Err(Error::UnexpectedEnd {

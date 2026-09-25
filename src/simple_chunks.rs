@@ -89,7 +89,7 @@ impl Model {
             }
         }
         if positions.is_empty() {
-            self.push(RawChunk::new(tag, data));
+            self.push(ModelChunk::from_raw(RawChunk::new(tag, data), version));
         } else if lengths
             .iter()
             .try_fold(0usize, |sum, length| sum.checked_add(*length))

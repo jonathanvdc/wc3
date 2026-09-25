@@ -1,5 +1,5 @@
 use wc3_mdx::Record;
-use wc3_mdx::{Error, Model, RawChunk, Sequence, SequenceFlags};
+use wc3_mdx::{Error, Model, ModelChunk, RawChunk, Sequence, SequenceFlags};
 
 #[test]
 fn sequence_fields_round_trip() {
@@ -29,7 +29,7 @@ fn sequence_fields_round_trip() {
 #[test]
 fn malformed_sequence_chunk_is_reported() {
     let mut model = Model::new(1800);
-    model.push(RawChunk::new(*b"SEQS", vec![0; 131]));
+    model.push(ModelChunk::from_raw(RawChunk::new(*b"SEQS", vec![0; 131]), 1800));
     assert_eq!(
         model.sequences(),
         Err(Error::MalformedChunk {

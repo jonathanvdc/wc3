@@ -1,4 +1,4 @@
-use wc3_mdx::Record;
+use wc3_mdx::{ModelChunk, Record};
 use wc3_mdx::{Model, ModelInfo, RawChunk};
 
 #[test]
@@ -26,7 +26,7 @@ fn preserves_reserved_and_extension_bytes() {
     let mut data = ModelInfo::new("Old").unwrap().encode().unwrap();
     data[336..340].copy_from_slice(&[1, 2, 3, 4]);
     data.extend_from_slice(&[5, 6]);
-    model.push(RawChunk::new(*b"MODL", data));
+    model.push(ModelChunk::from_raw(RawChunk::new(*b"MODL", data), 800));
     let mut info = model.model_info().unwrap().unwrap();
     info.set_name("New").unwrap();
     model.set_model_info(&info);

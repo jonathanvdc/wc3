@@ -1,12 +1,12 @@
 use wc3_mdx::Record;
-use wc3_mdx::{Model, RawChunk};
+use wc3_mdx::{Model, ModelChunk, RawChunk};
 
 #[test]
 fn synthetic_versions_and_unknown_chunks_round_trip() {
     for version in [800, 900, 1000, 1100, 1200, 1800] {
         let mut model = Model::new(version);
-        model.push(RawChunk::new(*b"MODL", vec![0; 372]));
-        model.push(RawChunk::new(*b"FUTR", vec![0, 1, 2, 255]));
+        model.push(ModelChunk::from_raw(RawChunk::new(*b"MODL", vec![0; 372]), version));
+        model.push(ModelChunk::from_raw(RawChunk::new(*b"FUTR", vec![0, 1, 2, 255]), version));
         let bytes = model.encode().unwrap();
         let parsed = Model::decode(&bytes, 800).unwrap();
         assert_eq!(parsed.version(), version);
@@ -17,8 +17,8 @@ fn synthetic_versions_and_unknown_chunks_round_trip() {
 #[test]
 fn preserves_repeated_chunks_and_order() {
     let mut model = Model::new(800);
-    model.push(RawChunk::new(*b"ABCD", vec![1]));
-    model.push(RawChunk::new(*b"ABCD", vec![2]));
+    model.push(ModelChunk::from_raw(RawChunk::new(*b"ABCD", vec![1]), 800));
+    model.push(ModelChunk::from_raw(RawChunk::new(*b"ABCD", vec![2]), 800));
     let parsed = Model::decode(&model.encode().unwrap(), 800).unwrap();
     assert_eq!(parsed.chunks()[1].to_raw().unwrap().data, vec![1]);
     assert_eq!(parsed.chunks()[2].to_raw().unwrap().data, vec![2]);
@@ -27,9 +27,9 @@ fn preserves_repeated_chunks_and_order() {
 #[test]
 fn typed_setter_preserves_repeated_chunk_boundaries() {
     let mut model = Model::new(800);
-    model.push(RawChunk::new(*b"GLBS", 100u32.to_le_bytes().to_vec()));
-    model.push(RawChunk::new(*b"TEST", vec![9]));
-    model.push(RawChunk::new(*b"GLBS", 200u32.to_le_bytes().to_vec()));
+    model.push(ModelChunk::from_raw(RawChunk::new(*b"GLBS", 100u32.to_le_bytes().to_vec()), 800));
+    model.push(ModelChunk::from_raw(RawChunk::new(*b"TEST", vec![9]), 800));
+    model.push(ModelChunk::from_raw(RawChunk::new(*b"GLBS", 200u32.to_le_bytes().to_vec()), 800));
     let original = model.encode().unwrap();
     let mut durations = model.global_sequences().unwrap();
     model.set_global_sequences(&durations).unwrap();

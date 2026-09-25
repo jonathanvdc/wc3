@@ -128,13 +128,7 @@ impl Model {
     }
 
     /// Appends a chunk.
-    pub fn push(&mut self, chunk: RawChunk) {
-        let version = self.version();
-        self.chunks.push(ModelChunk::from_raw(chunk, version));
-    }
-
-    /// Appends an already decoded chunk.
-    pub fn push_chunk(&mut self, chunk: ModelChunk) {
+    pub fn push(&mut self, chunk: ModelChunk) {
         self.chunks.push(chunk);
     }
 }
