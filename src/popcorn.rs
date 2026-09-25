@@ -1,6 +1,7 @@
 //! Reforged popcorn particle emitters in `CORN` chunks.
 
 use crate::Record;
+use crate::{Cursor, ModelChunk, PopcornEmittersChunk};
 use std::borrow::Cow;
 
 use crate::utils::field;
@@ -147,22 +148,22 @@ fn is_track_tag(tag: [u8; 4]) -> bool {
 impl Model {
     /// Decodes all popcorn emitters in `CORN` chunks.
     pub fn popcorn_emitters(&self) -> Result<Vec<PopcornEmitter>, Error> {
-        self.collect_chunk_records::<crate::PopcornEmittersChunk>(|chunk| match chunk {
-            crate::ModelChunk::PopcornEmitters(decoded) => Some(decoded),
+        self.collect_chunk_records::<PopcornEmittersChunk>(|chunk| match chunk {
+            ModelChunk::PopcornEmitters(decoded) => Some(decoded),
             _ => None,
         })
     }
 
     /// Replaces popcorn emitters in the first `CORN` chunk.
     pub fn set_popcorn_emitters(&mut self, emitters: &[PopcornEmitter]) -> Result<(), Error> {
-        self.replace_chunk(crate::ModelChunk::PopcornEmitters(
-            crate::PopcornEmittersChunk::new(emitters.to_vec()),
-        ))
+        self.replace_chunk(ModelChunk::PopcornEmitters(PopcornEmittersChunk::new(
+            emitters.to_vec(),
+        )))
     }
 }
 
 impl Record for PopcornEmitter {
-    fn decode_one(source: &mut crate::Cursor<'_>, _version: u32) -> Result<Self, Error> {
+    fn decode_one(source: &mut Cursor<'_>, _version: u32) -> Result<Self, Error> {
         let mut cursor = source.slice_u32_sized()?;
         let node = Node::decode_one(&mut cursor, 0)?;
         let life_span = cursor.read_f32()?;

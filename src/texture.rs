@@ -1,6 +1,7 @@
 //! Fixed-width texture records in `TEXS` chunks.
 
 use crate::Record;
+use crate::{Cursor, ModelChunk, TexturesChunk};
 use std::borrow::Cow;
 
 use crate::utils::field;
@@ -107,8 +108,8 @@ impl Texture {
 impl Model {
     /// Decodes all `TEXS` chunks in file order.
     pub fn textures(&self) -> Result<Vec<Texture>, Error> {
-        self.collect_chunk_records::<crate::TexturesChunk>(|chunk| match chunk {
-            crate::ModelChunk::Textures(decoded) => Some(decoded),
+        self.collect_chunk_records::<TexturesChunk>(|chunk| match chunk {
+            ModelChunk::Textures(decoded) => Some(decoded),
             _ => None,
         })
     }
@@ -116,14 +117,12 @@ impl Model {
     /// Writes the texture list to the first `TEXS` chunk. Additional `TEXS`
     /// chunks are removed after their records are replaced.
     pub fn set_textures(&mut self, textures: &[Texture]) -> Result<(), Error> {
-        self.replace_chunk(crate::ModelChunk::Textures(crate::TexturesChunk::new(
-            textures.to_vec(),
-        )))
+        self.replace_chunk(ModelChunk::Textures(TexturesChunk::new(textures.to_vec())))
     }
 }
 
 impl Record for Texture {
-    fn decode_one(cursor: &mut crate::Cursor<'_>, _version: u32) -> Result<Self, Error> {
+    fn decode_one(cursor: &mut Cursor<'_>, _version: u32) -> Result<Self, Error> {
         let size = cursor.remaining().len();
         if size < SIZE {
             return Err(Error::MalformedChunk {

@@ -31,7 +31,14 @@ mod tests {
     use super::Record;
     use crate::Cursor;
     use crate::KnownChunk;
-    use crate::{Geoset, Model, Sequence};
+    use crate::{
+        AttachmentsChunk, BindPose, Bone, BonesChunk, Camera, CamerasChunk, CollisionShapesChunk,
+        Error, EventObjectsChunk, FaceFxChunk, Geoset, GeosetAnimationsChunk, GeosetsChunk,
+        GlobalSequencesChunk, HelpersChunk, LightsChunk, MaterialsChunk, Model, ModelInfoChunk,
+        Node, ParticleEmitter, ParticleEmitter2, ParticleEmitters2Chunk, ParticleEmittersChunk,
+        PivotPointsChunk, PopcornEmittersChunk, RibbonEmitter, RibbonEmittersChunk, Sequence,
+        SequencesChunk, TextureAnimationsChunk, TexturesChunk, VersionChunk,
+    };
 
     fn round_trip<T: Record + PartialEq + std::fmt::Debug>(value: &T, version: u32) {
         let bytes = value.encode().unwrap();
@@ -60,7 +67,7 @@ mod tests {
         assert_eq!(consumed, first.encode().unwrap().len());
         assert_eq!(
             Sequence::decode(&bytes, 800),
-            Err(crate::Error::TrailingRecordBytes {
+            Err(Error::TrailingRecordBytes {
                 consumed,
                 total: bytes.len(),
             })
@@ -76,7 +83,7 @@ mod tests {
         assert_eq!(cursor.position(), first.encode().unwrap().len());
         assert!(matches!(
             Geoset::decode(&bytes, 800),
-            Err(crate::Error::TrailingRecordBytes { .. })
+            Err(Error::TrailingRecordBytes { .. })
         ));
     }
 
@@ -93,57 +100,57 @@ mod tests {
             cursor.finish().unwrap();
         }
 
-        let first = crate::Node::new("First", 1).unwrap();
-        let second = crate::Node::new("Second", 2).unwrap();
+        let first = Node::new("First", 1).unwrap();
+        let second = Node::new("Second", 2).unwrap();
         check(first.clone(), second.clone());
         check(
-            crate::Bone::new(first.clone(), 1, 2),
-            crate::Bone::new(second.clone(), 3, 4),
+            Bone::new(first.clone(), 1, 2),
+            Bone::new(second.clone(), 3, 4),
         );
         check(
-            crate::Camera::new("First").unwrap(),
-            crate::Camera::new("Second").unwrap(),
+            Camera::new("First").unwrap(),
+            Camera::new("Second").unwrap(),
         );
         check(
-            crate::ParticleEmitter::new(first.clone(), "first.mdx").unwrap(),
-            crate::ParticleEmitter::new(second.clone(), "second.mdx").unwrap(),
+            ParticleEmitter::new(first.clone(), "first.mdx").unwrap(),
+            ParticleEmitter::new(second.clone(), "second.mdx").unwrap(),
         );
         check(
-            crate::ParticleEmitter2::new(first.clone()).unwrap(),
-            crate::ParticleEmitter2::new(second.clone()).unwrap(),
+            ParticleEmitter2::new(first.clone()).unwrap(),
+            ParticleEmitter2::new(second.clone()).unwrap(),
         );
         check(
-            crate::RibbonEmitter::new(first).unwrap(),
-            crate::RibbonEmitter::new(second).unwrap(),
+            RibbonEmitter::new(first).unwrap(),
+            RibbonEmitter::new(second).unwrap(),
         );
     }
 
     #[test]
     fn known_top_level_chunks_have_distinct_chunk_records() {
         let tags = [
-            crate::VersionChunk::TAG,
-            crate::ModelInfoChunk::TAG,
-            crate::SequencesChunk::TAG,
-            crate::GlobalSequencesChunk::TAG,
-            crate::TexturesChunk::TAG,
-            crate::MaterialsChunk::TAG,
-            crate::GeosetsChunk::TAG,
-            crate::GeosetAnimationsChunk::TAG,
-            crate::BonesChunk::TAG,
-            crate::HelpersChunk::TAG,
-            crate::AttachmentsChunk::TAG,
-            crate::EventObjectsChunk::TAG,
-            crate::CollisionShapesChunk::TAG,
-            crate::ParticleEmittersChunk::TAG,
-            crate::ParticleEmitters2Chunk::TAG,
-            crate::RibbonEmittersChunk::TAG,
-            crate::PopcornEmittersChunk::TAG,
-            crate::CamerasChunk::TAG,
-            crate::LightsChunk::TAG,
-            crate::TextureAnimationsChunk::TAG,
-            crate::FaceFxChunk::TAG,
-            crate::PivotPointsChunk::TAG,
-            crate::BindPose::TAG,
+            VersionChunk::TAG,
+            ModelInfoChunk::TAG,
+            SequencesChunk::TAG,
+            GlobalSequencesChunk::TAG,
+            TexturesChunk::TAG,
+            MaterialsChunk::TAG,
+            GeosetsChunk::TAG,
+            GeosetAnimationsChunk::TAG,
+            BonesChunk::TAG,
+            HelpersChunk::TAG,
+            AttachmentsChunk::TAG,
+            EventObjectsChunk::TAG,
+            CollisionShapesChunk::TAG,
+            ParticleEmittersChunk::TAG,
+            ParticleEmitters2Chunk::TAG,
+            RibbonEmittersChunk::TAG,
+            PopcornEmittersChunk::TAG,
+            CamerasChunk::TAG,
+            LightsChunk::TAG,
+            TextureAnimationsChunk::TAG,
+            FaceFxChunk::TAG,
+            PivotPointsChunk::TAG,
+            BindPose::TAG,
         ];
         let mut unique = tags.to_vec();
         unique.sort_unstable();

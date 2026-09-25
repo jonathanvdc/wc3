@@ -1,24 +1,25 @@
 //! The complete model-information chunk.
 
+use crate::{Cursor, ModelInfo};
 use crate::{Error, KnownChunk, Record};
 
 /// A complete `MODL` chunk, including bytes after the standard record.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ModelInfoChunk {
-    pub info: crate::ModelInfo,
+    pub info: ModelInfo,
     pub extension: Vec<u8>,
 }
 
 impl ModelInfoChunk {
-    pub fn new(info: crate::ModelInfo, extension: Vec<u8>) -> Self {
+    pub fn new(info: ModelInfo, extension: Vec<u8>) -> Self {
         Self { info, extension }
     }
 }
 
 impl Record for ModelInfoChunk {
-    fn decode_one(cursor: &mut crate::Cursor<'_>, version: u32) -> Result<Self, Error> {
+    fn decode_one(cursor: &mut Cursor<'_>, version: u32) -> Result<Self, Error> {
         let _ = version;
-        let info = crate::ModelInfo::parse(cursor.remaining())?;
+        let info = ModelInfo::parse(cursor.remaining())?;
         cursor.read_exact(372)?;
         let extension = cursor.remaining().to_vec();
         cursor.read_exact(extension.len())?;
@@ -46,7 +47,7 @@ impl Record for ModelInfoChunk {
 }
 
 impl KnownChunk for ModelInfoChunk {
-    const TAG: [u8; 4] = crate::ModelInfo::TAG;
+    const TAG: [u8; 4] = ModelInfo::TAG;
 }
 
 #[cfg(test)]
@@ -56,7 +57,7 @@ mod tests {
 
     #[test]
     fn keeps_extension_bytes() {
-        let original = ModelInfoChunk::new(crate::ModelInfo::default(), vec![1, 2, 3]);
+        let original = ModelInfoChunk::new(ModelInfo::default(), vec![1, 2, 3]);
         let raw = original.encode_chunk().unwrap();
         assert_eq!(ModelInfoChunk::decode_chunk(&raw, 1800).unwrap(), original);
     }

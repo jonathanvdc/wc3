@@ -1,6 +1,7 @@
 //! Fixed-size `MODL` model information.
 
 use crate::Record;
+use crate::{Cursor, ModelChunk, ModelInfoChunk};
 use std::borrow::Cow;
 
 use crate::utils::field;
@@ -42,7 +43,7 @@ impl ModelInfo {
     }
 
     pub(crate) fn parse(data: &[u8]) -> Result<Self, Error> {
-        Self::decode_one(&mut crate::Cursor::new(data), 0)
+        Self::decode_one(&mut Cursor::new(data), 0)
     }
 
     /// Returns the raw fixed-width record.
@@ -111,9 +112,9 @@ impl Model {
             .iter()
             .find(|chunk| chunk.tag() == ModelInfo::TAG)
             .map(|chunk| match chunk {
-                crate::ModelChunk::ModelInfo(decoded) => Ok(decoded.info.clone()),
-                crate::ModelChunk::Malformed(malformed) => Err(malformed.error.clone()),
-                crate::ModelChunk::Unknown(raw) => ModelInfo::parse(&raw.data),
+                ModelChunk::ModelInfo(decoded) => Ok(decoded.info.clone()),
+                ModelChunk::Malformed(malformed) => Err(malformed.error.clone()),
+                ModelChunk::Unknown(raw) => ModelInfo::parse(&raw.data),
                 _ => unreachable!("MODL tag matched another typed chunk"),
             })
             .transpose()
@@ -124,18 +125,15 @@ impl Model {
     pub fn set_model_info(&mut self, info: &ModelInfo) {
         if let Some(chunk) = self.chunk_mut(ModelInfo::TAG) {
             match chunk {
-                crate::ModelChunk::ModelInfo(current) => current.info = info.clone(),
+                ModelChunk::ModelInfo(current) => current.info = info.clone(),
                 _ => {
                     let raw = chunk.to_raw().expect("model info chunk can be encoded");
                     let extension = raw.data.get(SIZE..).unwrap_or_default().to_vec();
-                    *chunk = crate::ModelChunk::ModelInfo(crate::ModelInfoChunk::new(
-                        info.clone(),
-                        extension,
-                    ));
+                    *chunk = ModelChunk::ModelInfo(ModelInfoChunk::new(info.clone(), extension));
                 }
             }
         } else {
-            self.push(crate::ModelChunk::ModelInfo(crate::ModelInfoChunk::new(
+            self.push(ModelChunk::ModelInfo(ModelInfoChunk::new(
                 info.clone(),
                 Vec::new(),
             )));
@@ -144,7 +142,7 @@ impl Model {
 }
 
 impl Record for ModelInfo {
-    fn decode_one(cursor: &mut crate::Cursor<'_>, _version: u32) -> Result<Self, Error> {
+    fn decode_one(cursor: &mut Cursor<'_>, _version: u32) -> Result<Self, Error> {
         let size = cursor.remaining().len();
         if size < SIZE {
             return Err(Error::MalformedChunk {

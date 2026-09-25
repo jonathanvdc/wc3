@@ -2,6 +2,7 @@
 
 use crate::Record;
 use crate::{AnimationTrack, Error, Model, Node};
+use crate::{Cursor, ModelChunk, RibbonEmittersChunk};
 
 pub(crate) const FIXED_SIZE: usize = 52;
 
@@ -92,22 +93,22 @@ fn is_track(tag: [u8; 4]) -> bool {
 impl Model {
     /// Decodes all ribbon emitter records in file order.
     pub fn ribbon_emitters(&self) -> Result<Vec<RibbonEmitter>, Error> {
-        self.collect_chunk_records::<crate::RibbonEmittersChunk>(|chunk| match chunk {
-            crate::ModelChunk::RibbonEmitters(decoded) => Some(decoded),
+        self.collect_chunk_records::<RibbonEmittersChunk>(|chunk| match chunk {
+            ModelChunk::RibbonEmitters(decoded) => Some(decoded),
             _ => None,
         })
     }
 
     /// Replaces ribbon emitters in the first `RIBB` chunk.
     pub fn set_ribbon_emitters(&mut self, emitters: &[RibbonEmitter]) -> Result<(), Error> {
-        self.replace_chunk(crate::ModelChunk::RibbonEmitters(
-            crate::RibbonEmittersChunk::new(emitters.to_vec()),
-        ))
+        self.replace_chunk(ModelChunk::RibbonEmitters(RibbonEmittersChunk::new(
+            emitters.to_vec(),
+        )))
     }
 }
 
 impl Record for RibbonEmitter {
-    fn decode_one(source: &mut crate::Cursor<'_>, _version: u32) -> Result<Self, Error> {
+    fn decode_one(source: &mut Cursor<'_>, _version: u32) -> Result<Self, Error> {
         let mut cursor = source.slice_u32_sized()?;
         let node = Node::decode_one(&mut cursor, 0)?;
         let fixed = cursor.read_exact(FIXED_SIZE)?;

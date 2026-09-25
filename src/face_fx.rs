@@ -1,6 +1,7 @@
 //! Reforged face-animation references in `FAFX` chunks.
 
 use crate::Record;
+use crate::{Cursor, FaceFxChunk, ModelChunk};
 use std::borrow::Cow;
 
 use crate::utils::field;
@@ -61,22 +62,20 @@ impl FaceFx {
 impl Model {
     /// Decodes every `FAFX` record in file order.
     pub fn face_fx(&self) -> Result<Vec<FaceFx>, Error> {
-        self.collect_chunk_records::<crate::FaceFxChunk>(|chunk| match chunk {
-            crate::ModelChunk::FaceFx(decoded) => Some(decoded),
+        self.collect_chunk_records::<FaceFxChunk>(|chunk| match chunk {
+            ModelChunk::FaceFx(decoded) => Some(decoded),
             _ => None,
         })
     }
 
     /// Replaces face-animation records in the first `FAFX` chunk.
     pub fn set_face_fx(&mut self, entries: &[FaceFx]) -> Result<(), Error> {
-        self.replace_chunk(crate::ModelChunk::FaceFx(crate::FaceFxChunk::new(
-            entries.to_vec(),
-        )))
+        self.replace_chunk(ModelChunk::FaceFx(FaceFxChunk::new(entries.to_vec())))
     }
 }
 
 impl Record for FaceFx {
-    fn decode_one(cursor: &mut crate::Cursor<'_>, _version: u32) -> Result<Self, Error> {
+    fn decode_one(cursor: &mut Cursor<'_>, _version: u32) -> Result<Self, Error> {
         let size = cursor.remaining().len();
         if size < SIZE {
             return Err(Error::MalformedChunk {

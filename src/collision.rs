@@ -2,6 +2,7 @@
 
 use crate::cursor::Cursor;
 use crate::Record;
+use crate::{CollisionShapesChunk, ModelChunk};
 use crate::{Error, Model, Node};
 
 /// Warcraft III collision primitive type.
@@ -125,22 +126,22 @@ impl CollisionShape {
 impl Model {
     /// Decodes all collision shapes in `CLID` chunks.
     pub fn collision_shapes(&self) -> Result<Vec<CollisionShape>, Error> {
-        self.collect_chunk_records::<crate::CollisionShapesChunk>(|chunk| match chunk {
-            crate::ModelChunk::CollisionShapes(decoded) => Some(decoded),
+        self.collect_chunk_records::<CollisionShapesChunk>(|chunk| match chunk {
+            ModelChunk::CollisionShapes(decoded) => Some(decoded),
             _ => None,
         })
     }
 
     /// Replaces collision shapes in the first `CLID` chunk.
     pub fn set_collision_shapes(&mut self, shapes: &[CollisionShape]) -> Result<(), Error> {
-        self.replace_chunk(crate::ModelChunk::CollisionShapes(
-            crate::CollisionShapesChunk::new(shapes.to_vec()),
-        ))
+        self.replace_chunk(ModelChunk::CollisionShapes(CollisionShapesChunk::new(
+            shapes.to_vec(),
+        )))
     }
 }
 
 impl Record for CollisionShape {
-    fn decode_one(cursor: &mut crate::Cursor<'_>, _version: u32) -> Result<Self, Error> {
+    fn decode_one(cursor: &mut Cursor<'_>, _version: u32) -> Result<Self, Error> {
         let node = Node::decode_one(cursor, 0)?;
         let kind_offset = cursor.absolute_position();
         let kind = cursor.read_u32()?;

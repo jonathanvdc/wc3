@@ -1,6 +1,7 @@
 //! Classic particle emitters stored in `PREM` chunks.
 
 use crate::Record;
+use crate::{Cursor, ModelChunk, ParticleEmittersChunk};
 use std::borrow::Cow;
 
 use crate::utils::field;
@@ -147,22 +148,22 @@ fn is_track(tag: [u8; 4]) -> bool {
 impl Model {
     /// Decodes all `PREM` records in file order.
     pub fn particle_emitters(&self) -> Result<Vec<ParticleEmitter>, Error> {
-        self.collect_chunk_records::<crate::ParticleEmittersChunk>(|chunk| match chunk {
-            crate::ModelChunk::ParticleEmitters(decoded) => Some(decoded),
+        self.collect_chunk_records::<ParticleEmittersChunk>(|chunk| match chunk {
+            ModelChunk::ParticleEmitters(decoded) => Some(decoded),
             _ => None,
         })
     }
 
     /// Replaces particle emitters in the first `PREM` chunk.
     pub fn set_particle_emitters(&mut self, emitters: &[ParticleEmitter]) -> Result<(), Error> {
-        self.replace_chunk(crate::ModelChunk::ParticleEmitters(
-            crate::ParticleEmittersChunk::new(emitters.to_vec()),
-        ))
+        self.replace_chunk(ModelChunk::ParticleEmitters(ParticleEmittersChunk::new(
+            emitters.to_vec(),
+        )))
     }
 }
 
 impl Record for ParticleEmitter {
-    fn decode_one(source: &mut crate::Cursor<'_>, _version: u32) -> Result<Self, Error> {
+    fn decode_one(source: &mut Cursor<'_>, _version: u32) -> Result<Self, Error> {
         let mut cursor = source.slice_u32_sized()?;
         let node = Node::decode_one(&mut cursor, 0)?;
         let emission_rate = cursor.read_f32()?;

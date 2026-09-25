@@ -2,6 +2,7 @@
 
 use crate::Record;
 use crate::{AnimationTrack, Error, Model, Node};
+use crate::{Cursor, LightsChunk, ModelChunk};
 
 const FIXED_SIZE: usize = 44;
 const EXTENDED_SIZE: usize = 72;
@@ -158,22 +159,20 @@ fn is_track(tag: [u8; 4]) -> bool {
 impl Model {
     /// Decodes all `LITE` records in file order.
     pub fn lights(&self) -> Result<Vec<Light>, Error> {
-        self.collect_chunk_records::<crate::LightsChunk>(|chunk| match chunk {
-            crate::ModelChunk::Lights(decoded) => Some(decoded),
+        self.collect_chunk_records::<LightsChunk>(|chunk| match chunk {
+            ModelChunk::Lights(decoded) => Some(decoded),
             _ => None,
         })
     }
 
     /// Replaces lights in the first `LITE` chunk.
     pub fn set_lights(&mut self, lights: &[Light]) -> Result<(), Error> {
-        self.replace_chunk(crate::ModelChunk::Lights(crate::LightsChunk::new(
-            lights.to_vec(),
-        )))
+        self.replace_chunk(ModelChunk::Lights(LightsChunk::new(lights.to_vec())))
     }
 }
 
 impl Record for Light {
-    fn decode_one(source: &mut crate::Cursor<'_>, _version: u32) -> Result<Self, Error> {
+    fn decode_one(source: &mut Cursor<'_>, _version: u32) -> Result<Self, Error> {
         let mut cursor = source.slice_u32_sized()?;
         let node = Node::decode_one(&mut cursor, 0)?;
         let light_type = cursor.read_u32()?;

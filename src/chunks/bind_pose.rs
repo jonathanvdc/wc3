@@ -1,6 +1,7 @@
 //! Reforged bind-pose matrices in `BPOS` chunks.
 
 use crate::Record;
+use crate::{Cursor, ModelChunk};
 use crate::{Error, KnownChunk, Model};
 
 const MATRIX_SIZE: usize = 48;
@@ -64,9 +65,9 @@ impl Model {
             .iter()
             .filter(|chunk| chunk.tag() == BindPose::TAG)
             .map(|chunk| match chunk {
-                crate::ModelChunk::BindPose(decoded) => Ok(decoded.clone()),
-                crate::ModelChunk::Malformed(malformed) => Err(malformed.error.clone()),
-                crate::ModelChunk::Unknown(raw) => BindPose::decode(&raw.data, self.version()),
+                ModelChunk::BindPose(decoded) => Ok(decoded.clone()),
+                ModelChunk::Malformed(malformed) => Err(malformed.error.clone()),
+                ModelChunk::Unknown(raw) => BindPose::decode(&raw.data, self.version()),
                 _ => unreachable!("BPOS tag matched another typed chunk"),
             })
             .collect()
@@ -76,15 +77,15 @@ impl Model {
     /// remain intact.
     pub fn set_bind_pose(&mut self, pose: &BindPose) {
         if let Some(chunk) = self.chunk_mut(BindPose::TAG) {
-            *chunk = crate::ModelChunk::BindPose(pose.clone());
+            *chunk = ModelChunk::BindPose(pose.clone());
         } else {
-            self.push(crate::ModelChunk::BindPose(pose.clone()));
+            self.push(ModelChunk::BindPose(pose.clone()));
         }
     }
 }
 
 impl Record for BindPose {
-    fn decode_one(cursor: &mut crate::Cursor<'_>, _version: u32) -> Result<Self, Error> {
+    fn decode_one(cursor: &mut Cursor<'_>, _version: u32) -> Result<Self, Error> {
         let size = cursor.remaining().len();
         let count = cursor.read_u32().map_err(|_| Error::MalformedChunk {
             tag: Self::TAG,

@@ -2,6 +2,7 @@
 
 use crate::Record;
 use crate::{AnimationTrack, Error, Model};
+use crate::{Cursor, GeosetAnimationsChunk, ModelChunk};
 
 pub(crate) const HEADER_SIZE: usize = 28;
 
@@ -122,22 +123,22 @@ impl GeosetAnimation {
 impl Model {
     /// Decodes all `GEOA` records in file order.
     pub fn geoset_animations(&self) -> Result<Vec<GeosetAnimation>, Error> {
-        self.collect_chunk_records::<crate::GeosetAnimationsChunk>(|chunk| match chunk {
-            crate::ModelChunk::GeosetAnimations(decoded) => Some(decoded),
+        self.collect_chunk_records::<GeosetAnimationsChunk>(|chunk| match chunk {
+            ModelChunk::GeosetAnimations(decoded) => Some(decoded),
             _ => None,
         })
     }
 
     /// Replaces geoset animations in the first `GEOA` chunk.
     pub fn set_geoset_animations(&mut self, animations: &[GeosetAnimation]) -> Result<(), Error> {
-        self.replace_chunk(crate::ModelChunk::GeosetAnimations(
-            crate::GeosetAnimationsChunk::new(animations.to_vec()),
-        ))
+        self.replace_chunk(ModelChunk::GeosetAnimations(GeosetAnimationsChunk::new(
+            animations.to_vec(),
+        )))
     }
 }
 
 impl Record for GeosetAnimation {
-    fn decode_one(source: &mut crate::Cursor<'_>, _version: u32) -> Result<Self, Error> {
+    fn decode_one(source: &mut Cursor<'_>, _version: u32) -> Result<Self, Error> {
         let mut cursor = source.slice_u32_sized()?;
         let alpha = cursor.read_f32()?;
         let raw_flags = cursor.read_u32()?;

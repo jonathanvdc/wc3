@@ -1,6 +1,7 @@
 //! Animation sequence records in the `SEQS` chunk.
 
 use crate::Record;
+use crate::{Cursor, ModelChunk, SequencesChunk};
 use std::borrow::Cow;
 
 use crate::utils::field;
@@ -133,8 +134,8 @@ impl Sequence {
 impl Model {
     /// Decodes every `SEQS` chunk in file order.
     pub fn sequences(&self) -> Result<Vec<Sequence>, Error> {
-        self.collect_chunk_records::<crate::SequencesChunk>(|chunk| match chunk {
-            crate::ModelChunk::Sequences(decoded) => Some(decoded),
+        self.collect_chunk_records::<SequencesChunk>(|chunk| match chunk {
+            ModelChunk::Sequences(decoded) => Some(decoded),
             _ => None,
         })
     }
@@ -142,14 +143,14 @@ impl Model {
     /// Writes all sequences to the first `SEQS` chunk, creating it if needed.
     /// Additional `SEQS` chunks are removed after their records are replaced.
     pub fn set_sequences(&mut self, sequences: &[Sequence]) -> Result<(), Error> {
-        self.replace_chunk(crate::ModelChunk::Sequences(crate::SequencesChunk::new(
+        self.replace_chunk(ModelChunk::Sequences(SequencesChunk::new(
             sequences.to_vec(),
         )))
     }
 }
 
 impl Record for Sequence {
-    fn decode_one(cursor: &mut crate::Cursor<'_>, _version: u32) -> Result<Self, Error> {
+    fn decode_one(cursor: &mut Cursor<'_>, _version: u32) -> Result<Self, Error> {
         let size = cursor.remaining().len();
         if size < SIZE {
             return Err(Error::MalformedChunk {

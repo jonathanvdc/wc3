@@ -1,6 +1,7 @@
 //! Attachment records in `ATCH` chunks.
 
 use crate::Record;
+use crate::{AttachmentsChunk, Cursor, ModelChunk};
 use std::borrow::Cow;
 
 use crate::utils::field;
@@ -87,22 +88,22 @@ impl Attachment {
 impl Model {
     /// Decodes all attachments in `ATCH` chunks.
     pub fn attachments(&self) -> Result<Vec<Attachment>, Error> {
-        self.collect_chunk_records::<crate::AttachmentsChunk>(|chunk| match chunk {
-            crate::ModelChunk::Attachments(decoded) => Some(decoded),
+        self.collect_chunk_records::<AttachmentsChunk>(|chunk| match chunk {
+            ModelChunk::Attachments(decoded) => Some(decoded),
             _ => None,
         })
     }
 
     /// Replaces attachments in the first `ATCH` chunk.
     pub fn set_attachments(&mut self, attachments: &[Attachment]) -> Result<(), Error> {
-        self.replace_chunk(crate::ModelChunk::Attachments(
-            crate::AttachmentsChunk::new(attachments.to_vec()),
-        ))
+        self.replace_chunk(ModelChunk::Attachments(AttachmentsChunk::new(
+            attachments.to_vec(),
+        )))
     }
 }
 
 impl Record for Attachment {
-    fn decode_one(source: &mut crate::Cursor<'_>, _version: u32) -> Result<Self, Error> {
+    fn decode_one(source: &mut Cursor<'_>, _version: u32) -> Result<Self, Error> {
         let mut cursor = source.slice_u32_sized()?;
 
         let mut probe = cursor;

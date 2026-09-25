@@ -1,6 +1,7 @@
 //! Typed camera records in `CAMS` chunks.
 
 use crate::Record;
+use crate::{CamerasChunk, Cursor, ModelChunk};
 use std::borrow::Cow;
 
 use crate::utils::field;
@@ -139,22 +140,20 @@ fn is_track(tag: [u8; 4]) -> bool {
 impl Model {
     /// Decodes all camera records in `CAMS` chunks.
     pub fn cameras(&self) -> Result<Vec<Camera>, Error> {
-        self.collect_chunk_records::<crate::CamerasChunk>(|chunk| match chunk {
-            crate::ModelChunk::Cameras(decoded) => Some(decoded),
+        self.collect_chunk_records::<CamerasChunk>(|chunk| match chunk {
+            ModelChunk::Cameras(decoded) => Some(decoded),
             _ => None,
         })
     }
 
     /// Replaces cameras in the first `CAMS` chunk.
     pub fn set_cameras(&mut self, cameras: &[Camera]) -> Result<(), Error> {
-        self.replace_chunk(crate::ModelChunk::Cameras(crate::CamerasChunk::new(
-            cameras.to_vec(),
-        )))
+        self.replace_chunk(ModelChunk::Cameras(CamerasChunk::new(cameras.to_vec())))
     }
 }
 
 impl Record for Camera {
-    fn decode_one(source: &mut crate::Cursor<'_>, _version: u32) -> Result<Self, Error> {
+    fn decode_one(source: &mut Cursor<'_>, _version: u32) -> Result<Self, Error> {
         let start = source.absolute_position();
         let size_word = source.read_u32()?;
         let length = (size_word & 0x00ff_ffff) as usize;

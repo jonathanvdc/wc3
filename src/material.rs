@@ -1,6 +1,7 @@
 //! Typed material layers and versioned texture slots.
 
 use crate::Record;
+use crate::{Cursor, MaterialsChunk, ModelChunk};
 use std::borrow::Cow;
 
 use crate::utils::field;
@@ -159,7 +160,7 @@ fn is_layer_track(tag: [u8; 4]) -> bool {
 }
 
 fn expect_tag(
-    cursor: &mut crate::cursor::Cursor<'_>,
+    cursor: &mut Cursor<'_>,
     expected: [u8; 4],
     record_tag: [u8; 4],
 ) -> Result<(), Error> {
@@ -489,8 +490,8 @@ impl Layer {
 impl Model {
     /// Decodes all `MTLS` records in file order.
     pub fn materials(&self) -> Result<Vec<Material>, Error> {
-        self.collect_chunk_records::<crate::MaterialsChunk>(|chunk| match chunk {
-            crate::ModelChunk::Materials(decoded) => Some(decoded),
+        self.collect_chunk_records::<MaterialsChunk>(|chunk| match chunk {
+            ModelChunk::Materials(decoded) => Some(decoded),
             _ => None,
         })
     }
@@ -506,14 +507,14 @@ impl Model {
                 });
             }
         }
-        self.replace_chunk(crate::ModelChunk::Materials(crate::MaterialsChunk::new(
+        self.replace_chunk(ModelChunk::Materials(MaterialsChunk::new(
             materials.to_vec(),
         )))
     }
 }
 
 impl Record for Material {
-    fn decode_one(source: &mut crate::Cursor<'_>, version: u32) -> Result<Self, Error> {
+    fn decode_one(source: &mut Cursor<'_>, version: u32) -> Result<Self, Error> {
         let mut cursor = source.slice_u32_sized()?;
         let value = {
             let priority_plane = cursor.read_u32()?;
@@ -566,7 +567,7 @@ impl Record for Material {
 }
 
 impl Record for Layer {
-    fn decode_one(source: &mut crate::Cursor<'_>, version: u32) -> Result<Self, Error> {
+    fn decode_one(source: &mut Cursor<'_>, version: u32) -> Result<Self, Error> {
         let mut cursor = source.slice_u32_sized()?;
         let value = {
             let filter_mode = cursor.read_u32()?;

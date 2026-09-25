@@ -1,5 +1,10 @@
 //! Complete payloads for chunks containing a sequence of records.
 
+use crate::{
+    Attachment, Bone, Camera, CollisionShape, EventObject, FaceFx, Geoset, GeosetAnimation, Light,
+    Material, Node, ParticleEmitter, ParticleEmitter2, PopcornEmitter, RibbonEmitter, Sequence,
+    Texture, TextureAnimation,
+};
 use crate::{Cursor, Error, KnownChunk, Record};
 
 /// A complete chunk made of consecutive records of one type.
@@ -84,24 +89,24 @@ macro_rules! record_collection {
     };
 }
 
-record_collection!(SequencesChunk, crate::Sequence);
-record_collection!(TexturesChunk, crate::Texture);
-record_collection!(GeosetsChunk, crate::Geoset);
-record_collection!(GeosetAnimationsChunk, crate::GeosetAnimation);
-record_collection!(MaterialsChunk, crate::Material);
-record_collection!(BonesChunk, crate::Bone);
-record_collection!(HelpersChunk, crate::Node);
-record_collection!(AttachmentsChunk, crate::Attachment);
-record_collection!(CamerasChunk, crate::Camera);
-record_collection!(CollisionShapesChunk, crate::CollisionShape);
-record_collection!(EventObjectsChunk, crate::EventObject);
-record_collection!(FaceFxChunk, crate::FaceFx);
-record_collection!(LightsChunk, crate::Light);
-record_collection!(ParticleEmittersChunk, crate::ParticleEmitter);
-record_collection!(ParticleEmitters2Chunk, crate::ParticleEmitter2);
-record_collection!(PopcornEmittersChunk, crate::PopcornEmitter);
-record_collection!(RibbonEmittersChunk, crate::RibbonEmitter);
-record_collection!(TextureAnimationsChunk, crate::TextureAnimation);
+record_collection!(SequencesChunk, Sequence);
+record_collection!(TexturesChunk, Texture);
+record_collection!(GeosetsChunk, Geoset);
+record_collection!(GeosetAnimationsChunk, GeosetAnimation);
+record_collection!(MaterialsChunk, Material);
+record_collection!(BonesChunk, Bone);
+record_collection!(HelpersChunk, Node);
+record_collection!(AttachmentsChunk, Attachment);
+record_collection!(CamerasChunk, Camera);
+record_collection!(CollisionShapesChunk, CollisionShape);
+record_collection!(EventObjectsChunk, EventObject);
+record_collection!(FaceFxChunk, FaceFx);
+record_collection!(LightsChunk, Light);
+record_collection!(ParticleEmittersChunk, ParticleEmitter);
+record_collection!(ParticleEmitters2Chunk, ParticleEmitter2);
+record_collection!(PopcornEmittersChunk, PopcornEmitter);
+record_collection!(RibbonEmittersChunk, RibbonEmitter);
+record_collection!(TextureAnimationsChunk, TextureAnimation);
 
 #[cfg(test)]
 mod tests {
@@ -111,8 +116,8 @@ mod tests {
     #[test]
     fn fixed_width_collection_uses_the_whole_chunk() {
         let records = vec![
-            crate::Sequence::new("Stand", [0, 100]).unwrap(),
-            crate::Sequence::new("Walk", [101, 200]).unwrap(),
+            Sequence::new("Stand", [0, 100]).unwrap(),
+            Sequence::new("Walk", [101, 200]).unwrap(),
         ];
         let original = SequencesChunk::new(records);
         let chunk = original.encode_chunk().unwrap();
@@ -120,14 +125,14 @@ mod tests {
             SequencesChunk::decode_chunk(&chunk, 1800).unwrap(),
             original
         );
-        assert!(crate::Sequence::decode(&chunk.data, 800).is_err());
+        assert!(Sequence::decode(&chunk.data, 800).is_err());
     }
 
     #[test]
     fn variable_width_collection_uses_the_whole_chunk() {
         let records = vec![
-            crate::Geoset::new(1800, &[], &[], &[]).unwrap(),
-            crate::Geoset::new(1800, &[], &[], &[]).unwrap(),
+            Geoset::new(1800, &[], &[], &[]).unwrap(),
+            Geoset::new(1800, &[], &[], &[]).unwrap(),
         ];
         let original = GeosetsChunk::new(records);
         let bytes = original.encode().unwrap();

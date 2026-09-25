@@ -1,5 +1,6 @@
 //! A model in the Warcraft III MDX format.
 
+use crate::Cursor;
 use crate::{CollectionChunk, Error, ModelChunk, RawChunk, Record, VersionChunk};
 
 /// The four bytes at the start of an MDX file.
@@ -171,7 +172,7 @@ mod tests {
 }
 
 impl Record for Model {
-    fn decode_one(cursor: &mut crate::Cursor<'_>, default_version: u32) -> Result<Self, Error> {
+    fn decode_one(cursor: &mut Cursor<'_>, default_version: u32) -> Result<Self, Error> {
         let bytes = cursor.remaining();
         let value = {
             if !bytes.starts_with(&MAGIC) {

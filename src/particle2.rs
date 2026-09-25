@@ -2,6 +2,7 @@
 
 use crate::Record;
 use crate::{AnimationTrack, Error, Model, Node};
+use crate::{Cursor, ModelChunk, ParticleEmitters2Chunk};
 
 pub(crate) const FIXED_SIZE: usize = 171;
 
@@ -242,22 +243,22 @@ fn is_track(tag: [u8; 4]) -> bool {
 impl Model {
     /// Decodes all `PRE2` records in file order.
     pub fn particle_emitters2(&self) -> Result<Vec<ParticleEmitter2>, Error> {
-        self.collect_chunk_records::<crate::ParticleEmitters2Chunk>(|chunk| match chunk {
-            crate::ModelChunk::ParticleEmitters2(decoded) => Some(decoded),
+        self.collect_chunk_records::<ParticleEmitters2Chunk>(|chunk| match chunk {
+            ModelChunk::ParticleEmitters2(decoded) => Some(decoded),
             _ => None,
         })
     }
 
     /// Replaces particle emitter 2 records in the first `PRE2` chunk.
     pub fn set_particle_emitters2(&mut self, emitters: &[ParticleEmitter2]) -> Result<(), Error> {
-        self.replace_chunk(crate::ModelChunk::ParticleEmitters2(
-            crate::ParticleEmitters2Chunk::new(emitters.to_vec()),
-        ))
+        self.replace_chunk(ModelChunk::ParticleEmitters2(ParticleEmitters2Chunk::new(
+            emitters.to_vec(),
+        )))
     }
 }
 
 impl Record for ParticleEmitter2 {
-    fn decode_one(source: &mut crate::Cursor<'_>, _version: u32) -> Result<Self, Error> {
+    fn decode_one(source: &mut Cursor<'_>, _version: u32) -> Result<Self, Error> {
         let mut cursor = source.slice_u32_sized()?;
         let node = Node::decode_one(&mut cursor, 0)?;
         let fields = decode_fields(cursor.read_exact(FIXED_SIZE)?);

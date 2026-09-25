@@ -1,6 +1,7 @@
 //! Event objects stored in `EVTS` chunks.
 
 use crate::Record;
+use crate::{Cursor, EventObjectsChunk, ModelChunk};
 use crate::{Error, Model, Node};
 
 const TRACK_TAG: [u8; 4] = *b"KEVT";
@@ -63,22 +64,22 @@ impl EventObject {
 impl Model {
     /// Decodes all event objects in `EVTS` chunks.
     pub fn event_objects(&self) -> Result<Vec<EventObject>, Error> {
-        self.collect_chunk_records::<crate::EventObjectsChunk>(|chunk| match chunk {
-            crate::ModelChunk::EventObjects(decoded) => Some(decoded),
+        self.collect_chunk_records::<EventObjectsChunk>(|chunk| match chunk {
+            ModelChunk::EventObjects(decoded) => Some(decoded),
             _ => None,
         })
     }
 
     /// Replaces event objects in the first `EVTS` chunk.
     pub fn set_event_objects(&mut self, events: &[EventObject]) -> Result<(), Error> {
-        self.replace_chunk(crate::ModelChunk::EventObjects(
-            crate::EventObjectsChunk::new(events.to_vec()),
-        ))
+        self.replace_chunk(ModelChunk::EventObjects(EventObjectsChunk::new(
+            events.to_vec(),
+        )))
     }
 }
 
 impl Record for EventObject {
-    fn decode_one(cursor: &mut crate::Cursor<'_>, _version: u32) -> Result<Self, Error> {
+    fn decode_one(cursor: &mut Cursor<'_>, _version: u32) -> Result<Self, Error> {
         let mut probe = *cursor;
         let node_size = probe.read_u32()? as usize;
         let node = Node::decode(cursor.read_exact(node_size)?, 0)?;

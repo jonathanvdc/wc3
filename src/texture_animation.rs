@@ -2,6 +2,7 @@
 
 use crate::Record;
 use crate::{AnimationTrack, Error, Model};
+use crate::{Cursor, ModelChunk, TextureAnimationsChunk};
 
 /// A texture animation containing translation, rotation, and scaling tracks.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -50,22 +51,22 @@ fn is_track_tag(tag: [u8; 4]) -> bool {
 impl Model {
     /// Decodes all texture animations in `TXAN` chunks.
     pub fn texture_animations(&self) -> Result<Vec<TextureAnimation>, Error> {
-        self.collect_chunk_records::<crate::TextureAnimationsChunk>(|chunk| match chunk {
-            crate::ModelChunk::TextureAnimations(decoded) => Some(decoded),
+        self.collect_chunk_records::<TextureAnimationsChunk>(|chunk| match chunk {
+            ModelChunk::TextureAnimations(decoded) => Some(decoded),
             _ => None,
         })
     }
 
     /// Replaces texture animations in the first `TXAN` chunk.
     pub fn set_texture_animations(&mut self, animations: &[TextureAnimation]) -> Result<(), Error> {
-        self.replace_chunk(crate::ModelChunk::TextureAnimations(
-            crate::TextureAnimationsChunk::new(animations.to_vec()),
-        ))
+        self.replace_chunk(ModelChunk::TextureAnimations(TextureAnimationsChunk::new(
+            animations.to_vec(),
+        )))
     }
 }
 
 impl Record for TextureAnimation {
-    fn decode_one(source: &mut crate::Cursor<'_>, _version: u32) -> Result<Self, Error> {
+    fn decode_one(source: &mut Cursor<'_>, _version: u32) -> Result<Self, Error> {
         let mut cursor = source.slice_u32_sized()?;
         let mut tracks = Vec::new();
         while !cursor.remaining().is_empty() {

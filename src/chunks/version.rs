@@ -1,5 +1,6 @@
 //! The complete version chunk payload.
 
+use crate::Cursor;
 use crate::{Error, KnownChunk, Record};
 
 /// A complete `VERS` payload, including bytes after the version number.
@@ -19,7 +20,7 @@ impl VersionChunk {
 }
 
 impl Record for VersionChunk {
-    fn decode_one(cursor: &mut crate::Cursor<'_>, _version: u32) -> Result<Self, Error> {
+    fn decode_one(cursor: &mut Cursor<'_>, _version: u32) -> Result<Self, Error> {
         let version = cursor.read_u32().map_err(|_| Error::InvalidVersionChunk)?;
         let extension = cursor.remaining().to_vec();
         cursor.read_exact(extension.len())?;

@@ -1,5 +1,6 @@
 //! Keyframe tracks for node translation, rotation, and scaling.
 
+use crate::Cursor;
 use crate::Error;
 use crate::Record;
 
@@ -158,7 +159,7 @@ fn components(tag: [u8; 4]) -> Option<usize> {
 }
 
 impl Record for AnimationTrack {
-    fn decode_one(cursor: &mut crate::Cursor<'_>, _version: u32) -> Result<Self, Error> {
+    fn decode_one(cursor: &mut Cursor<'_>, _version: u32) -> Result<Self, Error> {
         let (track, consumed) = Self::parse(cursor.remaining(), 0)?;
         cursor.read_exact(consumed)?;
         Ok(track)

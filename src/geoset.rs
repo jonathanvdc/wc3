@@ -2,6 +2,7 @@
 
 use crate::cursor::Cursor;
 use crate::Record;
+use crate::{GeosetsChunk, ModelChunk};
 use std::borrow::Cow;
 
 use crate::utils::field;
@@ -561,8 +562,8 @@ fn write_extent(bytes: &mut Vec<u8>, extent: GeosetExtent) {
 impl Model {
     /// Decodes geosets from every `GEOS` chunk in file order.
     pub fn geosets(&self) -> Result<Vec<Geoset>, Error> {
-        self.collect_chunk_records::<crate::GeosetsChunk>(|chunk| match chunk {
-            crate::ModelChunk::Geosets(decoded) => Some(decoded),
+        self.collect_chunk_records::<GeosetsChunk>(|chunk| match chunk {
+            ModelChunk::Geosets(decoded) => Some(decoded),
             _ => None,
         })
     }
@@ -578,14 +579,12 @@ impl Model {
                 });
             }
         }
-        self.replace_chunk(crate::ModelChunk::Geosets(crate::GeosetsChunk::new(
-            geosets.to_vec(),
-        )))
+        self.replace_chunk(ModelChunk::Geosets(GeosetsChunk::new(geosets.to_vec())))
     }
 }
 
 impl Record for Geoset {
-    fn decode_one(source: &mut crate::Cursor<'_>, version: u32) -> Result<Self, Error> {
+    fn decode_one(source: &mut Cursor<'_>, version: u32) -> Result<Self, Error> {
         let mut cursor = source.slice_u32_sized()?;
 
         let value = {

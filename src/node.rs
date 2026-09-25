@@ -1,6 +1,7 @@
 //! Shared node headers used by bones and helpers.
 
 use crate::Record;
+use crate::{BonesChunk, Cursor, HelpersChunk, ModelChunk};
 use std::borrow::Cow;
 
 use crate::utils::field;
@@ -191,37 +192,33 @@ impl Bone {
 impl Model {
     /// Decodes every bone in `BONE` chunks.
     pub fn bones(&self) -> Result<Vec<Bone>, Error> {
-        self.collect_chunk_records::<crate::BonesChunk>(|chunk| match chunk {
-            crate::ModelChunk::Bones(decoded) => Some(decoded),
+        self.collect_chunk_records::<BonesChunk>(|chunk| match chunk {
+            ModelChunk::Bones(decoded) => Some(decoded),
             _ => None,
         })
     }
 
     /// Replaces all bones in the first `BONE` chunk.
     pub fn set_bones(&mut self, bones: &[Bone]) -> Result<(), Error> {
-        self.replace_chunk(crate::ModelChunk::Bones(crate::BonesChunk::new(
-            bones.to_vec(),
-        )))
+        self.replace_chunk(ModelChunk::Bones(BonesChunk::new(bones.to_vec())))
     }
 
     /// Decodes every helper node in `HELP` chunks.
     pub fn helpers(&self) -> Result<Vec<Node>, Error> {
-        self.collect_chunk_records::<crate::HelpersChunk>(|chunk| match chunk {
-            crate::ModelChunk::Helpers(decoded) => Some(decoded),
+        self.collect_chunk_records::<HelpersChunk>(|chunk| match chunk {
+            ModelChunk::Helpers(decoded) => Some(decoded),
             _ => None,
         })
     }
 
     /// Replaces all helpers in the first `HELP` chunk.
     pub fn set_helpers(&mut self, helpers: &[Node]) -> Result<(), Error> {
-        self.replace_chunk(crate::ModelChunk::Helpers(crate::HelpersChunk::new(
-            helpers.to_vec(),
-        )))
+        self.replace_chunk(ModelChunk::Helpers(HelpersChunk::new(helpers.to_vec())))
     }
 }
 
 impl Record for Node {
-    fn decode_one(source: &mut crate::Cursor<'_>, _version: u32) -> Result<Self, Error> {
+    fn decode_one(source: &mut Cursor<'_>, _version: u32) -> Result<Self, Error> {
         let mut cursor = source.slice_u32_sized()?;
         let name = cursor
             .read_exact(NAME_SIZE)?
@@ -271,7 +268,7 @@ impl Record for Node {
 }
 
 impl Record for Bone {
-    fn decode_one(cursor: &mut crate::Cursor<'_>, _version: u32) -> Result<Self, Error> {
+    fn decode_one(cursor: &mut Cursor<'_>, _version: u32) -> Result<Self, Error> {
         let node = Node::decode_one(cursor, 0)?;
         let geoset_id = cursor.read_u32()?;
         let geoset_animation_id = cursor.read_u32()?;

@@ -1,6 +1,7 @@
 //! The complete global-sequences chunk.
 
 use super::checked_chunk_size;
+use crate::Cursor;
 use crate::{Error, KnownChunk, Record};
 
 /// The complete `GLBS` payload.
@@ -10,7 +11,7 @@ pub struct GlobalSequencesChunk {
 }
 
 impl Record for GlobalSequencesChunk {
-    fn decode_one(cursor: &mut crate::Cursor<'_>, _version: u32) -> Result<Self, Error> {
+    fn decode_one(cursor: &mut Cursor<'_>, _version: u32) -> Result<Self, Error> {
         let size = cursor.remaining().len();
         if size % 4 != 0 {
             return Err(Error::MalformedChunk {
