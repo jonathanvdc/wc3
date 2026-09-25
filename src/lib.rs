@@ -21,6 +21,8 @@ mod animation;
 pub use animation::{AnimationTrack, Keyframe};
 mod geoset;
 pub use geoset::Geoset;
+mod geoset_animation;
+pub use geoset_animation::GeosetAnimation;
 mod material;
 pub use material::{Layer, Material};
 mod model_info;
