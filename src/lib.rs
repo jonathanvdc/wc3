@@ -23,6 +23,8 @@ mod bind_pose;
 pub use bind_pose::BindPose;
 mod collision;
 pub use collision::{CollisionKind, CollisionShape};
+mod camera;
+pub use camera::Camera;
 mod event;
 pub use event::EventObject;
 mod geoset;

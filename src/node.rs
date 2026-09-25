@@ -129,6 +129,12 @@ impl Node {
         let mut offset = HEADER_SIZE;
         while offset < self.bytes.len() {
             let (track, consumed) = AnimationTrack::parse(&self.bytes, offset)?;
+            if !matches!(&track.tag, b"KGTR" | b"KGRT" | b"KGSC") {
+                return Err(Error::MalformedRecord {
+                    tag: *b"HELP",
+                    offset,
+                });
+            }
             tracks.push(track);
             offset += consumed;
         }
@@ -139,6 +145,12 @@ impl Node {
     pub fn set_tracks(&mut self, tracks: &[AnimationTrack]) -> Result<(), Error> {
         let mut bytes = self.bytes[..HEADER_SIZE].to_vec();
         for track in tracks {
+            if !matches!(&track.tag, b"KGTR" | b"KGRT" | b"KGSC") {
+                return Err(Error::MalformedRecord {
+                    tag: *b"HELP",
+                    offset: bytes.len(),
+                });
+            }
             bytes.extend_from_slice(&track.to_bytes()?);
         }
         if bytes.len() > u32::MAX as usize {

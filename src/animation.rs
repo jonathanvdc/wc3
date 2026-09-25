@@ -15,10 +15,10 @@ pub struct Keyframe {
     pub out_tangent: Option<Vec<f32>>,
 }
 
-/// A decoded node animation track.
+/// A decoded animation track.
 #[derive(Clone, Debug, PartialEq)]
 pub struct AnimationTrack {
-    /// `KGTR`, `KGRT`, or `KGSC` for a node transform.
+    /// Track identifier, such as `KGTR` for node translation or `KCTR` for a camera.
     pub tag: [u8; 4],
     /// 0 = none, 1 = linear, 2 = Hermite, 3 = Bezier.
     pub interpolation: u32,
@@ -158,8 +158,9 @@ impl AnimationTrack {
 
 fn components(tag: [u8; 4]) -> Option<usize> {
     match &tag {
-        b"KGTR" | b"KGSC" => Some(3),
+        b"KGTR" | b"KGSC" | b"KCTR" | b"KTTR" => Some(3),
         b"KGRT" => Some(4),
+        b"KCRL" => Some(1),
         _ => None,
     }
 }
