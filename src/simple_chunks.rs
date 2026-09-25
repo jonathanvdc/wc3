@@ -45,24 +45,9 @@ impl Model {
 
     /// Writes XYZ pivot points to a `PIVT` chunk.
     pub fn set_pivot_points(&mut self, points: &[[f32; 3]]) -> Result<(), Error> {
-        let size = points.len().checked_mul(12).ok_or(Error::ChunkTooLarge {
-            tag: *b"PIVT",
-            size: usize::MAX,
-        })?;
-        if size > u32::MAX as usize {
-            return Err(Error::ChunkTooLarge {
-                tag: *b"PIVT",
-                size,
-            });
-        }
-        let mut data = Vec::with_capacity(size);
-        for point in points {
-            for coordinate in point {
-                data.extend_from_slice(&coordinate.to_le_bytes());
-            }
-        }
-        self.replace_raw_chunk(*b"PIVT", data)?;
-        Ok(())
+        self.replace_chunk(ModelChunk::PivotPoints(PivotPointsChunk {
+            points: points.to_vec(),
+        }))
     }
 
     pub(crate) fn replace_raw_chunk(&mut self, tag: [u8; 4], data: Vec<u8>) -> Result<(), Error> {
