@@ -22,12 +22,7 @@ impl Model {
         self.pivot_points()?;
         self.bind_poses()?;
         self.face_fx()?;
-        for material in self.materials()? {
-            for layer in material.layers()? {
-                layer.texture_slots()?;
-                layer.tracks()?;
-            }
-        }
+        self.materials()?;
         self.geosets()?;
         for animation in self.geoset_animations()? {
             animation.tracks()?;

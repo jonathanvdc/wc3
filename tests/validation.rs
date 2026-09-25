@@ -59,7 +59,7 @@ fn rejects_short_repeated_version_chunks_and_repairs_mutated_first_version() {
 #[test]
 fn rejects_layer_shorter_than_its_versioned_header() {
     let mut material = Material::new(1800);
-    let layer = wc3_mdx::Layer::new(800).as_bytes().to_vec();
+    let layer = wc3_mdx::Layer::new(800).to_bytes().unwrap();
     assert!(wc3_mdx::Layer::from_bytes(1800, &layer).is_err());
     assert_eq!(
         material.set_layers(&[wc3_mdx::Layer::new(800)]),

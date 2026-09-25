@@ -1,10 +1,11 @@
-//! Size-bounded material and layer records.
+//! Typed material layers and versioned texture slots.
 
 use std::borrow::Cow;
 
 use crate::{AnimationTrack, Error, Model};
 
 const TAG: [u8; 4] = *b"MTLS";
+const LAYER_TAG: [u8; 4] = *b"LAYS";
 
 /// Material rendering bits, preserving unrecognized bits.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -62,43 +63,46 @@ impl LayerShadingFlags {
     }
 }
 
-/// A material record, including all version-specific bytes.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct Material {
-    version: u32,
-    bytes: Vec<u8>,
-}
-
-/// A material layer record, including animation tracks and extensions.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct Layer {
-    version: u32,
-    bytes: Vec<u8>,
-}
-
 /// A Reforged layer texture slot, optionally animated by `KMTF`.
 #[derive(Clone, Debug, PartialEq)]
 pub struct LayerTextureSlot {
-    /// Static texture index when no track is present.
     pub texture_id: u32,
-    /// Texture purpose identifier stored alongside the index.
     pub texture_type: u32,
-    /// Optional integer texture-index animation.
     pub track: Option<AnimationTrack>,
 }
 
-fn fixed_size(version: u32) -> usize {
-    if version >= 1100 {
-        60
-    } else if version >= 1000 {
-        52
-    } else if version >= 900 {
-        32
-    } else {
-        28
-    }
+/// A material with directly accessible layers and an exact shader field.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Material {
+    version: u32,
+    priority_plane: u32,
+    render_mode: u32,
+    shader: Option<[u8; 80]>,
+    layers: Vec<Layer>,
 }
 
+/// A material layer with parsed texture slots and animation tracks.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Layer {
+    version: u32,
+    filter_mode: u32,
+    shading_flags: u32,
+    texture_id: u32,
+    texture_animation_id: u32,
+    coordinate_id: u32,
+    alpha: f32,
+    emissive_gain: Option<f32>,
+    fresnel_color: Option<[f32; 3]>,
+    fresnel_opacity: Option<f32>,
+    fresnel_team_color: Option<f32>,
+    shader_type_id: Option<u32>,
+    texture_slots: Vec<LayerTextureSlot>,
+    tracks: Vec<AnimationTrack>,
+}
+
+fn has_shader(version: u32) -> bool {
+    (900..1100).contains(&version)
+}
 fn is_layer_track(tag: [u8; 4]) -> bool {
     matches!(
         &tag,
@@ -127,21 +131,80 @@ fn sized_records(data: &[u8], tag: [u8; 4]) -> Result<Vec<&[u8]>, Error> {
     Ok(records)
 }
 
-impl Material {
-    /// Creates an empty material for the selected format version.
-    pub fn new(version: u32) -> Self {
-        let header = if (900..1100).contains(&version) {
-            92
+struct Cursor<'a> {
+    bytes: &'a [u8],
+    offset: usize,
+    tag: [u8; 4],
+}
+impl<'a> Cursor<'a> {
+    fn new(bytes: &'a [u8], tag: [u8; 4]) -> Self {
+        Self {
+            bytes,
+            offset: 0,
+            tag,
+        }
+    }
+    fn read(&mut self, size: usize) -> Result<&'a [u8], Error> {
+        let start = self.offset;
+        let end = start.checked_add(size).ok_or(Error::MalformedRecord {
+            tag: self.tag,
+            offset: start,
+        })?;
+        let value = self.bytes.get(start..end).ok_or(Error::MalformedRecord {
+            tag: self.tag,
+            offset: start,
+        })?;
+        self.offset = end;
+        Ok(value)
+    }
+    fn word(&mut self) -> Result<u32, Error> {
+        Ok(u32::from_le_bytes(
+            self.read(4)?.try_into().expect("four-byte word"),
+        ))
+    }
+    fn float(&mut self) -> Result<f32, Error> {
+        self.word().map(f32::from_bits)
+    }
+    fn expect_tag(&mut self, expected: [u8; 4]) -> Result<(), Error> {
+        let offset = self.offset;
+        if self.read(4)? == expected {
+            Ok(())
         } else {
-            12
-        };
-        let mut bytes = vec![0; header + 8];
-        bytes[..4].copy_from_slice(&((header + 8) as u32).to_le_bytes());
-        bytes[header..header + 4].copy_from_slice(b"LAYS");
-        Self { version, bytes }
+            Err(Error::MalformedRecord {
+                tag: self.tag,
+                offset,
+            })
+        }
+    }
+}
+
+fn write_count(bytes: &mut Vec<u8>, count: usize, tag: [u8; 4]) -> Result<(), Error> {
+    let value = u32::try_from(count).map_err(|_| Error::ChunkTooLarge { tag, size: count })?;
+    bytes.extend_from_slice(&value.to_le_bytes());
+    Ok(())
+}
+fn finish_record(bytes: &mut [u8], tag: [u8; 4]) -> Result<(), Error> {
+    let size = u32::try_from(bytes.len()).map_err(|_| Error::ChunkTooLarge {
+        tag,
+        size: bytes.len(),
+    })?;
+    bytes[..4].copy_from_slice(&size.to_le_bytes());
+    Ok(())
+}
+
+impl Material {
+    /// Creates an empty material for the given MDX version.
+    pub fn new(version: u32) -> Self {
+        Self {
+            version,
+            priority_plane: 0,
+            render_mode: 0,
+            shader: has_shader(version).then_some([0; 80]),
+            layers: Vec::new(),
+        }
     }
 
-    /// Wraps one inclusive-size material record.
+    /// Parses exactly one material record and all its layers.
     pub fn from_bytes(version: u32, bytes: &[u8]) -> Result<Self, Error> {
         if sized_records(bytes, TAG)?.len() != 1 {
             return Err(Error::MalformedRecord {
@@ -149,133 +212,129 @@ impl Material {
                 offset: 0,
             });
         }
-        let material = Self {
-            version,
-            bytes: bytes.to_vec(),
-        };
-        for layer in material.layers()? {
-            layer.texture_slots()?;
-            layer.tracks()?;
+        let mut cursor = Cursor::new(bytes, TAG);
+        if cursor.word()? as usize != bytes.len() {
+            return Err(Error::MalformedRecord {
+                tag: TAG,
+                offset: 0,
+            });
         }
-        Ok(material)
+        let priority_plane = cursor.word()?;
+        let render_mode = cursor.word()?;
+        let shader = if has_shader(version) {
+            Some(cursor.read(80)?.try_into().expect("shader field"))
+        } else {
+            None
+        };
+        cursor.expect_tag(LAYER_TAG)?;
+        let count = cursor.word()? as usize;
+        let records = sized_records(&bytes[cursor.offset..], LAYER_TAG)?;
+        if records.len() != count {
+            return Err(Error::MalformedRecord {
+                tag: TAG,
+                offset: cursor.offset,
+            });
+        }
+        let layers = records
+            .into_iter()
+            .map(|bytes| Layer::from_bytes(version, bytes))
+            .collect::<Result<_, _>>()?;
+        Ok(Self {
+            version,
+            priority_plane,
+            render_mode,
+            shader,
+            layers,
+        })
     }
 
-    /// Returns the MDX version used to interpret this material.
+    /// Serializes the material and its layers.
+    pub fn to_bytes(&self) -> Result<Vec<u8>, Error> {
+        let mut bytes = vec![0; 4];
+        bytes.extend_from_slice(&self.priority_plane.to_le_bytes());
+        bytes.extend_from_slice(&self.render_mode.to_le_bytes());
+        if has_shader(self.version) {
+            bytes.extend_from_slice(self.shader.as_ref().unwrap_or(&[0; 80]));
+        }
+        bytes.extend_from_slice(b"LAYS");
+        write_count(&mut bytes, self.layers.len(), TAG)?;
+        for layer in &self.layers {
+            if layer.version != self.version {
+                return Err(Error::VersionMismatch {
+                    expected: self.version,
+                    actual: layer.version,
+                });
+            }
+            bytes.extend_from_slice(&layer.to_bytes()?);
+        }
+        finish_record(&mut bytes, TAG)?;
+        Ok(bytes)
+    }
+
+    /// Returns the MDX version used for this material.
     pub fn version(&self) -> u32 {
         self.version
     }
-
-    /// Returns the complete record, including its size field.
-    pub fn as_bytes(&self) -> &[u8] {
-        &self.bytes
-    }
-
     /// Returns the material priority plane.
-    pub fn priority_plane(&self) -> Result<u32, Error> {
-        self.u32_at(4)
+    pub fn priority_plane(&self) -> u32 {
+        self.priority_plane
     }
-
-    /// Sets the material priority plane.
-    pub fn set_priority_plane(&mut self, value: u32) -> Result<(), Error> {
-        self.set_u32_at(4, value)
+    /// Changes the material priority plane.
+    pub fn set_priority_plane(&mut self, value: u32) {
+        self.priority_plane = value;
     }
-
-    /// Returns decoded material render flags.
-    pub fn render_mode(&self) -> Result<MaterialRenderFlags, Error> {
-        self.raw_render_mode().map(MaterialRenderFlags::from_bits)
+    /// Returns decoded rendering flags.
+    pub fn render_mode(&self) -> MaterialRenderFlags {
+        MaterialRenderFlags::from_bits(self.render_mode)
     }
-
-    /// Returns exact raw render mode bits.
-    pub fn raw_render_mode(&self) -> Result<u32, Error> {
-        self.u32_at(8)
+    /// Returns exact rendering bits.
+    pub fn raw_render_mode(&self) -> u32 {
+        self.render_mode
     }
-
-    /// Sets decoded material render flags.
-    pub fn set_render_mode(&mut self, value: MaterialRenderFlags) -> Result<(), Error> {
-        self.set_raw_render_mode(value.bits())
+    /// Changes the rendering flags.
+    pub fn set_render_mode(&mut self, value: MaterialRenderFlags) {
+        self.render_mode = value.bits();
     }
-
-    /// Sets exact raw render mode bits.
-    pub fn set_raw_render_mode(&mut self, value: u32) -> Result<(), Error> {
-        self.set_u32_at(8, value)
+    /// Changes exact rendering bits.
+    pub fn set_raw_render_mode(&mut self, value: u32) {
+        self.render_mode = value;
     }
-
-    /// Returns the fixed-width shader path present in versions 900 through 1099.
-    pub fn shader(&self) -> Result<Option<Cow<'_, str>>, Error> {
-        let version = self.version;
-        if !(900..1100).contains(&version) {
-            return Ok(None);
-        }
-        let field = self.bytes.get(12..92).ok_or(Error::MalformedRecord {
+    /// Returns the shader path in versions 900 through 1099.
+    pub fn shader(&self) -> Option<Cow<'_, str>> {
+        self.shader.as_ref().map(|field| {
+            let end = field
+                .iter()
+                .position(|&byte| byte == 0)
+                .unwrap_or(field.len());
+            String::from_utf8_lossy(&field[..end])
+        })
+    }
+    /// Changes the shader path and clears unused bytes.
+    pub fn set_shader(&mut self, shader: &str) -> Result<(), Error> {
+        let field = self.shader.as_mut().ok_or(Error::MalformedRecord {
             tag: TAG,
             offset: 12,
         })?;
-        let end = field.iter().position(|&byte| byte == 0).unwrap_or(80);
-        Ok(Some(String::from_utf8_lossy(&field[..end])))
-    }
-
-    /// Sets the shader path in a version 900 through 1099 material.
-    pub fn set_shader(&mut self, shader: &str) -> Result<(), Error> {
-        let version = self.version;
-        if !(900..1100).contains(&version) {
-            return Err(Error::MalformedRecord {
-                tag: TAG,
-                offset: 12,
-            });
-        }
         if shader.len() >= 80 || shader.as_bytes().contains(&0) {
             return Err(Error::InvalidString { max_bytes: 79 });
         }
-        let field = self.bytes.get_mut(12..92).ok_or(Error::MalformedRecord {
-            tag: TAG,
-            offset: 12,
-        })?;
         field.fill(0);
         field[..shader.len()].copy_from_slice(shader.as_bytes());
         Ok(())
     }
-
-    /// Returns the bounded layer records. Versions 900 through 1099 have an
-    /// additional 80-byte shader field before `LAYS`.
-    pub fn layers(&self) -> Result<Vec<Layer>, Error> {
-        let version = self.version;
-        let offset = if (900..1100).contains(&version) {
-            92
-        } else {
-            12
-        };
-        let header = self
-            .bytes
-            .get(offset..offset + 8)
-            .ok_or(Error::MalformedRecord { tag: TAG, offset })?;
-        if &header[..4] != b"LAYS" {
-            return Err(Error::MalformedRecord { tag: TAG, offset });
-        }
-        let count = u32::from_le_bytes(header[4..8].try_into().expect("four-byte count")) as usize;
-        let records = sized_records(&self.bytes[offset + 8..], *b"LAYS")?;
-        if records.len() != count {
-            return Err(Error::MalformedRecord { tag: TAG, offset });
-        }
-        records
-            .into_iter()
-            .map(|bytes| Layer::from_bytes(version, bytes))
-            .collect()
+    /// Borrows layers without decoding or allocating.
+    pub fn layers(&self) -> &[Layer] {
+        &self.layers
     }
-
-    /// Replaces the material's layer list while retaining priority, flags, and shader bytes.
+    /// Mutably borrows layers for bulk edits.
+    pub fn layers_mut(&mut self) -> &mut [Layer] {
+        &mut self.layers
+    }
+    /// Replaces all layers, rejecting a different MDX version.
     pub fn set_layers(&mut self, layers: &[Layer]) -> Result<(), Error> {
-        let version = self.version;
-        let offset = if (900..1100).contains(&version) {
-            92
-        } else {
-            12
-        };
-        if self.bytes.get(offset..offset + 4) != Some(b"LAYS") {
-            return Err(Error::MalformedRecord { tag: TAG, offset });
-        }
-        if let Some(layer) = layers.iter().find(|layer| layer.version != version) {
+        if let Some(layer) = layers.iter().find(|layer| layer.version != self.version) {
             return Err(Error::VersionMismatch {
-                expected: version,
+                expected: self.version,
                 actual: layer.version,
             });
         }
@@ -285,392 +344,341 @@ impl Material {
                 size: layers.len(),
             });
         }
-        let mut bytes = self.bytes[..offset + 4].to_vec();
-        bytes.extend_from_slice(&(layers.len() as u32).to_le_bytes());
-        for layer in layers {
-            bytes.extend_from_slice(layer.as_bytes());
-        }
-        if bytes.len() > u32::MAX as usize {
-            return Err(Error::ChunkTooLarge {
-                tag: TAG,
-                size: bytes.len(),
-            });
-        }
-        let size = bytes.len() as u32;
-        bytes[..4].copy_from_slice(&size.to_le_bytes());
-        self.bytes = bytes;
-        Ok(())
-    }
-
-    fn u32_at(&self, offset: usize) -> Result<u32, Error> {
-        let bytes = self
-            .bytes
-            .get(offset..offset + 4)
-            .ok_or(Error::MalformedRecord { tag: TAG, offset })?;
-        Ok(u32::from_le_bytes(
-            bytes.try_into().expect("four-byte field"),
-        ))
-    }
-
-    fn set_u32_at(&mut self, offset: usize, value: u32) -> Result<(), Error> {
-        let bytes = self
-            .bytes
-            .get_mut(offset..offset + 4)
-            .ok_or(Error::MalformedRecord { tag: TAG, offset })?;
-        bytes.copy_from_slice(&value.to_le_bytes());
+        self.layers = layers.to_vec();
         Ok(())
     }
 }
 
 impl Layer {
-    /// Creates an empty layer with version-appropriate fixed fields.
+    /// Creates an empty layer with version-appropriate fields.
     pub fn new(version: u32) -> Self {
-        let size = fixed_size(version);
-        let mut bytes = vec![0; size];
-        bytes[..4].copy_from_slice(&(size as u32).to_le_bytes());
-        bytes[16..20].copy_from_slice(&u32::MAX.to_le_bytes());
-        bytes[24..28].copy_from_slice(&1.0f32.to_le_bytes());
-        if version >= 900 {
-            bytes[28..32].copy_from_slice(&1.0f32.to_le_bytes());
+        Self {
+            version,
+            filter_mode: 0,
+            shading_flags: 0,
+            texture_id: 0,
+            texture_animation_id: u32::MAX,
+            coordinate_id: 0,
+            alpha: 1.0,
+            emissive_gain: (version >= 900).then_some(1.0),
+            fresnel_color: (version >= 1000).then_some([1.0; 3]),
+            fresnel_opacity: (version >= 1000).then_some(0.0),
+            fresnel_team_color: (version >= 1000).then_some(0.0),
+            shader_type_id: (version >= 1100).then_some(0),
+            texture_slots: Vec::new(),
+            tracks: Vec::new(),
         }
-        if version >= 1000 {
-            for offset in [32, 36, 40] {
-                bytes[offset..offset + 4].copy_from_slice(&1.0f32.to_le_bytes());
-            }
-        }
-        Self { version, bytes }
     }
 
-    /// Wraps one inclusive-size layer record.
+    /// Parses exactly one layer, including texture slots and animation tracks.
     pub fn from_bytes(version: u32, bytes: &[u8]) -> Result<Self, Error> {
-        if sized_records(bytes, *b"LAYS")?.len() != 1 {
+        if sized_records(bytes, LAYER_TAG)?.len() != 1 {
             return Err(Error::MalformedRecord {
-                tag: *b"LAYS",
+                tag: LAYER_TAG,
                 offset: 0,
             });
         }
-        let layer = Self {
-            version,
-            bytes: bytes.to_vec(),
-        };
-        layer.tracks()?;
-        Ok(layer)
-    }
-
-    /// Returns the MDX version used to interpret this layer.
-    pub fn version(&self) -> u32 {
-        self.version
-    }
-
-    /// Returns the complete layer record.
-    pub fn as_bytes(&self) -> &[u8] {
-        &self.bytes
-    }
-
-    /// Returns the filter mode.
-    pub fn filter_mode(&self) -> Result<u32, Error> {
-        self.u32_at(4)
-    }
-
-    /// Sets the filter mode identifier.
-    pub fn set_filter_mode(&mut self, mode: u32) -> Result<(), Error> {
-        self.set_u32_at(4, mode)
-    }
-
-    /// Returns decoded layer shading flags.
-    pub fn shading_flags(&self) -> Result<LayerShadingFlags, Error> {
-        self.raw_shading_flags().map(LayerShadingFlags::from_bits)
-    }
-
-    /// Returns exact raw layer shading bits.
-    pub fn raw_shading_flags(&self) -> Result<u32, Error> {
-        self.u32_at(8)
-    }
-
-    /// Sets decoded layer shading flags.
-    pub fn set_shading_flags(&mut self, flags: LayerShadingFlags) -> Result<(), Error> {
-        self.set_raw_shading_flags(flags.bits())
-    }
-
-    /// Sets exact raw layer shading bits.
-    pub fn set_raw_shading_flags(&mut self, flags: u32) -> Result<(), Error> {
-        self.set_u32_at(8, flags)
-    }
-
-    /// Returns the texture index.
-    pub fn texture_id(&self) -> Result<u32, Error> {
-        self.u32_at(12)
-    }
-
-    /// Sets the texture index.
-    pub fn set_texture_id(&mut self, id: u32) -> Result<(), Error> {
-        self.set_u32_at(12, id)
-    }
-
-    /// Returns the base alpha value.
-    pub fn alpha(&self) -> Result<f32, Error> {
-        Ok(f32::from_bits(self.u32_at(24)?))
-    }
-
-    /// Returns the texture animation reference, or `u32::MAX` when absent.
-    pub fn texture_animation_id(&self) -> Result<u32, Error> {
-        self.u32_at(16)
-    }
-
-    /// Sets the texture animation reference.
-    pub fn set_texture_animation_id(&mut self, id: u32) -> Result<(), Error> {
-        self.set_u32_at(16, id)
-    }
-
-    /// Returns the texture coordinate set index.
-    pub fn coordinate_id(&self) -> Result<u32, Error> {
-        self.u32_at(20)
-    }
-
-    /// Sets the texture coordinate set index.
-    pub fn set_coordinate_id(&mut self, id: u32) -> Result<(), Error> {
-        self.set_u32_at(20, id)
-    }
-
-    /// Returns the emissive gain present since version 900.
-    pub fn emissive_gain(&self) -> Result<f32, Error> {
-        self.require_version(900, 28)?;
-        Ok(f32::from_bits(self.u32_at(28)?))
-    }
-
-    /// Sets emissive gain in a version 900 or later layer.
-    pub fn set_emissive_gain(&mut self, gain: f32) -> Result<(), Error> {
-        self.require_version(900, 28)?;
-        self.set_u32_at(28, gain.to_bits())
-    }
-
-    /// Returns the Fresnel color present since version 1000.
-    pub fn fresnel_color(&self) -> Result<[f32; 3], Error> {
-        self.require_version(1000, 32)?;
-        Ok([
-            f32::from_bits(self.u32_at(32)?),
-            f32::from_bits(self.u32_at(36)?),
-            f32::from_bits(self.u32_at(40)?),
-        ])
-    }
-
-    /// Sets the Fresnel color in a version 1000 or later layer.
-    pub fn set_fresnel_color(&mut self, color: [f32; 3]) -> Result<(), Error> {
-        self.require_version(1000, 32)?;
-        for (i, value) in color.into_iter().enumerate() {
-            self.set_u32_at(32 + i * 4, value.to_bits())?;
-        }
-        Ok(())
-    }
-
-    /// Returns Fresnel opacity present since version 1000.
-    pub fn fresnel_opacity(&self) -> Result<f32, Error> {
-        self.require_version(1000, 44)?;
-        Ok(f32::from_bits(self.u32_at(44)?))
-    }
-
-    /// Sets Fresnel opacity.
-    pub fn set_fresnel_opacity(&mut self, value: f32) -> Result<(), Error> {
-        self.require_version(1000, 44)?;
-        self.set_u32_at(44, value.to_bits())
-    }
-
-    /// Returns Fresnel team-color strength present since version 1000.
-    pub fn fresnel_team_color(&self) -> Result<f32, Error> {
-        self.require_version(1000, 48)?;
-        Ok(f32::from_bits(self.u32_at(48)?))
-    }
-
-    /// Sets Fresnel team-color strength.
-    pub fn set_fresnel_team_color(&mut self, value: f32) -> Result<(), Error> {
-        self.require_version(1000, 48)?;
-        self.set_u32_at(48, value.to_bits())
-    }
-
-    /// Returns shader type present since version 1100.
-    pub fn shader_type_id(&self) -> Result<u32, Error> {
-        self.require_version(1100, 52)?;
-        self.u32_at(52)
-    }
-
-    /// Sets shader type in a version 1100 or later layer.
-    pub fn set_shader_type_id(&mut self, id: u32) -> Result<(), Error> {
-        self.require_version(1100, 52)?;
-        self.set_u32_at(52, id)
-    }
-
-    /// Decodes version 1100 or later texture slots, including optional index tracks.
-    pub fn texture_slots(&self) -> Result<Vec<LayerTextureSlot>, Error> {
-        let version = self.version;
-        if version < 1100 {
-            return Ok(Vec::new());
-        }
-        let (slots, _) = self.scan_slots()?;
-        Ok(slots)
-    }
-
-    /// Replaces Reforged texture slots and keeps animation tracks that follow them.
-    pub fn set_texture_slots(&mut self, slots: &[LayerTextureSlot]) -> Result<(), Error> {
-        self.require_version(1100, 56)?;
-        let (_, tail_start) = self.scan_slots()?;
-        if slots.len() > u32::MAX as usize {
-            return Err(Error::ChunkTooLarge {
-                tag: *b"LAYS",
-                size: slots.len(),
+        let mut cursor = Cursor::new(bytes, LAYER_TAG);
+        if cursor.word()? as usize != bytes.len() {
+            return Err(Error::MalformedRecord {
+                tag: LAYER_TAG,
+                offset: 0,
             });
         }
-        let mut bytes = self.bytes[..60].to_vec();
-        bytes[56..60].copy_from_slice(&(slots.len() as u32).to_le_bytes());
-        for slot in slots {
-            bytes.extend_from_slice(&slot.texture_id.to_le_bytes());
-            bytes.extend_from_slice(&slot.texture_type.to_le_bytes());
-            if let Some(track) = &slot.track {
-                if track.tag != *b"KMTF" {
-                    return Err(Error::MalformedRecord {
-                        tag: *b"LAYS",
-                        offset: bytes.len(),
-                    });
-                }
-                bytes.extend_from_slice(&track.to_bytes()?);
+        let filter_mode = cursor.word()?;
+        let shading_flags = cursor.word()?;
+        let texture_id = cursor.word()?;
+        let texture_animation_id = cursor.word()?;
+        let coordinate_id = cursor.word()?;
+        let alpha = cursor.float()?;
+        let emissive_gain = if version >= 900 {
+            Some(cursor.float()?)
+        } else {
+            None
+        };
+        let (fresnel_color, fresnel_opacity, fresnel_team_color) = if version >= 1000 {
+            (
+                Some([cursor.float()?, cursor.float()?, cursor.float()?]),
+                Some(cursor.float()?),
+                Some(cursor.float()?),
+            )
+        } else {
+            (None, None, None)
+        };
+        let shader_type_id = if version >= 1100 {
+            Some(cursor.word()?)
+        } else {
+            None
+        };
+        let mut texture_slots = Vec::new();
+        if version >= 1100 {
+            let count = cursor.word()? as usize;
+            for _ in 0..count {
+                let texture_id = cursor.word()?;
+                let texture_type = cursor.word()?;
+                let track =
+                    if bytes.get(cursor.offset..cursor.offset.saturating_add(4)) == Some(b"KMTF") {
+                        let (track, size) = AnimationTrack::parse(bytes, cursor.offset)?;
+                        cursor.offset += size;
+                        Some(track)
+                    } else {
+                        None
+                    };
+                texture_slots.push(LayerTextureSlot {
+                    texture_id,
+                    texture_type,
+                    track,
+                });
             }
         }
-        bytes.extend_from_slice(&self.bytes[tail_start..]);
-        self.replace_bytes(bytes)
-    }
-
-    /// Returns animation tracks after the fixed header and texture slots.
-    pub fn tracks(&self) -> Result<Vec<AnimationTrack>, Error> {
-        let version = self.version;
-        if self.bytes.len() < fixed_size(version) {
-            return Err(Error::MalformedRecord {
-                tag: *b"LAYS",
-                offset: self.bytes.len(),
-            });
-        }
-        let mut offset = if version >= 1100 {
-            self.scan_slots()?.1
-        } else {
-            fixed_size(version)
-        };
         let mut tracks = Vec::new();
-        while offset < self.bytes.len() {
-            let (track, used) = AnimationTrack::parse(&self.bytes, offset)?;
+        while cursor.offset < bytes.len() {
+            let offset = cursor.offset;
+            let (track, size) = AnimationTrack::parse(bytes, offset)?;
             if !is_layer_track(track.tag) {
                 return Err(Error::MalformedRecord {
-                    tag: *b"LAYS",
+                    tag: LAYER_TAG,
                     offset,
                 });
             }
             tracks.push(track);
-            offset += used;
+            cursor.offset += size;
         }
-        Ok(tracks)
+        Ok(Self {
+            version,
+            filter_mode,
+            shading_flags,
+            texture_id,
+            texture_animation_id,
+            coordinate_id,
+            alpha,
+            emissive_gain,
+            fresnel_color,
+            fresnel_opacity,
+            fresnel_team_color,
+            shader_type_id,
+            texture_slots,
+            tracks,
+        })
     }
 
-    /// Replaces layer animation tracks after any Reforged texture slots.
-    pub fn set_tracks(&mut self, tracks: &[AnimationTrack]) -> Result<(), Error> {
-        let version = self.version;
-        let start = if version >= 1100 {
-            self.scan_slots()?.1
-        } else {
-            fixed_size(version)
-        };
-        let mut bytes = self
-            .bytes
-            .get(..start)
-            .ok_or(Error::MalformedRecord {
-                tag: *b"LAYS",
-                offset: start,
-            })?
-            .to_vec();
-        for track in tracks {
+    /// Serializes the layer and its animation tracks.
+    pub fn to_bytes(&self) -> Result<Vec<u8>, Error> {
+        let mut bytes = vec![0; 4];
+        for word in [
+            self.filter_mode,
+            self.shading_flags,
+            self.texture_id,
+            self.texture_animation_id,
+            self.coordinate_id,
+        ] {
+            bytes.extend_from_slice(&word.to_le_bytes());
+        }
+        bytes.extend_from_slice(&self.alpha.to_le_bytes());
+        if self.version >= 900 {
+            bytes.extend_from_slice(&self.emissive_gain.unwrap_or_default().to_le_bytes());
+        }
+        if self.version >= 1000 {
+            for value in self.fresnel_color.unwrap_or_default() {
+                bytes.extend_from_slice(&value.to_le_bytes());
+            }
+            bytes.extend_from_slice(&self.fresnel_opacity.unwrap_or_default().to_le_bytes());
+            bytes.extend_from_slice(&self.fresnel_team_color.unwrap_or_default().to_le_bytes());
+        }
+        if self.version >= 1100 {
+            bytes.extend_from_slice(&self.shader_type_id.unwrap_or_default().to_le_bytes());
+            write_count(&mut bytes, self.texture_slots.len(), LAYER_TAG)?;
+            for slot in &self.texture_slots {
+                bytes.extend_from_slice(&slot.texture_id.to_le_bytes());
+                bytes.extend_from_slice(&slot.texture_type.to_le_bytes());
+                if let Some(track) = &slot.track {
+                    if track.tag != *b"KMTF" {
+                        return Err(Error::MalformedRecord {
+                            tag: LAYER_TAG,
+                            offset: bytes.len(),
+                        });
+                    }
+                    bytes.extend_from_slice(&track.to_bytes()?);
+                }
+            }
+        }
+        for track in &self.tracks {
             if !is_layer_track(track.tag) {
                 return Err(Error::MalformedRecord {
-                    tag: *b"LAYS",
+                    tag: LAYER_TAG,
                     offset: bytes.len(),
                 });
             }
             bytes.extend_from_slice(&track.to_bytes()?);
         }
-        self.replace_bytes(bytes)
+        finish_record(&mut bytes, LAYER_TAG)?;
+        Ok(bytes)
     }
 
-    fn replace_bytes(&mut self, mut bytes: Vec<u8>) -> Result<(), Error> {
-        if bytes.len() > u32::MAX as usize {
-            return Err(Error::ChunkTooLarge {
-                tag: *b"LAYS",
-                size: bytes.len(),
-            });
-        }
-        let size = bytes.len() as u32;
-        bytes[..4].copy_from_slice(&size.to_le_bytes());
-        self.bytes = bytes;
+    /// Returns the MDX version used for this layer.
+    pub fn version(&self) -> u32 {
+        self.version
+    }
+    /// Returns the blend filter mode.
+    pub fn filter_mode(&self) -> u32 {
+        self.filter_mode
+    }
+    /// Changes the blend filter mode.
+    pub fn set_filter_mode(&mut self, mode: u32) {
+        self.filter_mode = mode;
+    }
+    /// Returns decoded layer shading bits.
+    pub fn shading_flags(&self) -> LayerShadingFlags {
+        LayerShadingFlags::from_bits(self.shading_flags)
+    }
+    /// Returns exact layer shading bits.
+    pub fn raw_shading_flags(&self) -> u32 {
+        self.shading_flags
+    }
+    /// Changes decoded layer shading bits.
+    pub fn set_shading_flags(&mut self, flags: LayerShadingFlags) {
+        self.shading_flags = flags.bits();
+    }
+    /// Changes exact layer shading bits.
+    pub fn set_raw_shading_flags(&mut self, flags: u32) {
+        self.shading_flags = flags;
+    }
+    /// Returns the base texture index.
+    pub fn texture_id(&self) -> u32 {
+        self.texture_id
+    }
+    /// Changes the base texture index.
+    pub fn set_texture_id(&mut self, id: u32) {
+        self.texture_id = id;
+    }
+    /// Returns the texture animation reference.
+    pub fn texture_animation_id(&self) -> u32 {
+        self.texture_animation_id
+    }
+    /// Changes the texture animation reference.
+    pub fn set_texture_animation_id(&mut self, id: u32) {
+        self.texture_animation_id = id;
+    }
+    /// Returns the texture coordinate set index.
+    pub fn coordinate_id(&self) -> u32 {
+        self.coordinate_id
+    }
+    /// Changes the texture coordinate set index.
+    pub fn set_coordinate_id(&mut self, id: u32) {
+        self.coordinate_id = id;
+    }
+    /// Returns the base alpha value.
+    pub fn alpha(&self) -> f32 {
+        self.alpha
+    }
+    /// Changes the base alpha value.
+    pub fn set_alpha(&mut self, value: f32) {
+        self.alpha = value;
+    }
+    /// Returns emissive gain in versions 900 and later.
+    pub fn emissive_gain(&self) -> Option<f32> {
+        self.emissive_gain
+    }
+    /// Changes emissive gain in versions 900 and later.
+    pub fn set_emissive_gain(&mut self, value: f32) -> Result<(), Error> {
+        self.require_version(900, 28)?;
+        self.emissive_gain = Some(value);
         Ok(())
     }
-
-    fn scan_slots(&self) -> Result<(Vec<LayerTextureSlot>, usize), Error> {
-        let count = self.u32_at(56)? as usize;
-        let mut offset = 60usize;
-        let mut slots = Vec::new();
-        for _ in 0..count {
-            let texture_id = self.u32_at(offset)?;
-            let texture_type = self.u32_at(offset + 4)?;
-            offset += 8;
-            let track = if self.bytes.get(offset..offset + 4) == Some(b"KMTF") {
-                let (track, used) = AnimationTrack::parse(&self.bytes, offset)?;
-                offset += used;
-                Some(track)
-            } else {
-                None
-            };
-            slots.push(LayerTextureSlot {
-                texture_id,
-                texture_type,
-                track,
+    /// Returns the Fresnel color in versions 1000 and later.
+    pub fn fresnel_color(&self) -> Option<[f32; 3]> {
+        self.fresnel_color
+    }
+    /// Changes the Fresnel color in versions 1000 and later.
+    pub fn set_fresnel_color(&mut self, value: [f32; 3]) -> Result<(), Error> {
+        self.require_version(1000, 32)?;
+        self.fresnel_color = Some(value);
+        Ok(())
+    }
+    /// Returns Fresnel opacity in versions 1000 and later.
+    pub fn fresnel_opacity(&self) -> Option<f32> {
+        self.fresnel_opacity
+    }
+    /// Changes Fresnel opacity in versions 1000 and later.
+    pub fn set_fresnel_opacity(&mut self, value: f32) -> Result<(), Error> {
+        self.require_version(1000, 44)?;
+        self.fresnel_opacity = Some(value);
+        Ok(())
+    }
+    /// Returns Fresnel team-color strength in versions 1000 and later.
+    pub fn fresnel_team_color(&self) -> Option<f32> {
+        self.fresnel_team_color
+    }
+    /// Changes Fresnel team-color strength in versions 1000 and later.
+    pub fn set_fresnel_team_color(&mut self, value: f32) -> Result<(), Error> {
+        self.require_version(1000, 48)?;
+        self.fresnel_team_color = Some(value);
+        Ok(())
+    }
+    /// Returns shader type ID in versions 1100 and later.
+    pub fn shader_type_id(&self) -> Option<u32> {
+        self.shader_type_id
+    }
+    /// Changes shader type ID in versions 1100 and later.
+    pub fn set_shader_type_id(&mut self, value: u32) -> Result<(), Error> {
+        self.require_version(1100, 52)?;
+        self.shader_type_id = Some(value);
+        Ok(())
+    }
+    /// Borrows Reforged texture slots and their optional tracks.
+    pub fn texture_slots(&self) -> &[LayerTextureSlot] {
+        &self.texture_slots
+    }
+    /// Replaces Reforged texture slots after validating their tracks.
+    pub fn set_texture_slots(&mut self, slots: &[LayerTextureSlot]) -> Result<(), Error> {
+        self.require_version(1100, 56)?;
+        if slots.len() > u32::MAX as usize {
+            return Err(Error::ChunkTooLarge {
+                tag: LAYER_TAG,
+                size: slots.len(),
             });
         }
-        Ok((slots, offset))
+        for slot in slots {
+            if let Some(track) = &slot.track {
+                if track.tag != *b"KMTF" {
+                    return Err(Error::MalformedRecord {
+                        tag: LAYER_TAG,
+                        offset: 0,
+                    });
+                }
+                track.to_bytes()?;
+            }
+        }
+        self.texture_slots = slots.to_vec();
+        Ok(())
     }
-
-    /// Sets the base alpha value.
-    pub fn set_alpha(&mut self, alpha: f32) -> Result<(), Error> {
-        self.set_u32_at(24, alpha.to_bits())
+    /// Borrows layer animation tracks after any texture slots.
+    pub fn tracks(&self) -> &[AnimationTrack] {
+        &self.tracks
     }
-
-    fn u32_at(&self, offset: usize) -> Result<u32, Error> {
-        let bytes = self
-            .bytes
-            .get(offset..offset + 4)
-            .ok_or(Error::MalformedRecord {
-                tag: *b"LAYS",
-                offset,
-            })?;
-        Ok(u32::from_le_bytes(
-            bytes.try_into().expect("four-byte field"),
-        ))
+    /// Replaces layer animation tracks.
+    pub fn set_tracks(&mut self, tracks: &[AnimationTrack]) -> Result<(), Error> {
+        for track in tracks {
+            if !is_layer_track(track.tag) {
+                return Err(Error::MalformedRecord {
+                    tag: LAYER_TAG,
+                    offset: 0,
+                });
+            }
+            track.to_bytes()?;
+        }
+        self.tracks = tracks.to_vec();
+        Ok(())
     }
-
     fn require_version(&self, minimum: u32, offset: usize) -> Result<(), Error> {
         if self.version < minimum {
             Err(Error::MalformedRecord {
-                tag: *b"LAYS",
+                tag: LAYER_TAG,
                 offset,
             })
         } else {
             Ok(())
         }
-    }
-
-    fn set_u32_at(&mut self, offset: usize, value: u32) -> Result<(), Error> {
-        let bytes = self
-            .bytes
-            .get_mut(offset..offset + 4)
-            .ok_or(Error::MalformedRecord {
-                tag: *b"LAYS",
-                offset,
-            })?;
-        bytes.copy_from_slice(&value.to_le_bytes());
-        Ok(())
     }
 }
 
@@ -690,26 +698,21 @@ impl Model {
     /// Replaces all material records in the first `MTLS` chunk.
     pub fn set_materials(&mut self, materials: &[Material]) -> Result<(), Error> {
         let expected = self.version().unwrap_or(800);
-        if let Some(material) = materials
-            .iter()
-            .find(|material| material.version != expected)
-        {
-            return Err(Error::VersionMismatch {
-                expected,
-                actual: material.version,
-            });
-        }
-        let size = materials.iter().try_fold(0usize, |sum, material| {
-            sum.checked_add(material.bytes.len())
-                .filter(|&size| size <= u32::MAX as usize)
-                .ok_or(Error::ChunkTooLarge {
-                    tag: TAG,
-                    size: usize::MAX,
-                })
-        })?;
-        let mut data = Vec::with_capacity(size);
+        let mut data = Vec::new();
         for material in materials {
-            data.extend_from_slice(material.as_bytes());
+            if material.version != expected {
+                return Err(Error::VersionMismatch {
+                    expected,
+                    actual: material.version,
+                });
+            }
+            data.extend_from_slice(&material.to_bytes()?);
+            if data.len() > u32::MAX as usize {
+                return Err(Error::ChunkTooLarge {
+                    tag: TAG,
+                    size: data.len(),
+                });
+            }
         }
         self.replace_chunks(TAG, data);
         Ok(())
