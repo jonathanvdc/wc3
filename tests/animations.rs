@@ -14,7 +14,7 @@ fn node_transform_tracks_round_trip() {
         }],
     };
     let mut node = Node::new("Animated", 4).unwrap();
-    node.set_tracks(&[track.clone()]).unwrap();
+    node.set_tracks(std::slice::from_ref(&track)).unwrap();
     let parsed = Node::from_bytes(node.as_bytes()).unwrap();
     assert_eq!(parsed.tracks().unwrap(), vec![track]);
 }

@@ -71,7 +71,7 @@ impl AnimationTrack {
                 u32::from_le_bytes(data[cursor..cursor + 4].try_into().expect("bounded frame"));
             cursor += 4;
             let mut read_vector = || {
-                let vector = (0..components)
+                (0..components)
                     .map(|_| {
                         let value = f32::from_le_bytes(
                             data[cursor..cursor + 4].try_into().expect("bounded value"),
@@ -79,8 +79,7 @@ impl AnimationTrack {
                         cursor += 4;
                         value
                     })
-                    .collect();
-                vector
+                    .collect()
             };
             let value = read_vector();
             let in_tangent = (interpolation >= 2).then(&mut read_vector);

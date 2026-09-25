@@ -16,7 +16,7 @@ pub struct Layer {
     bytes: Vec<u8>,
 }
 
-fn sized_records<'a>(data: &'a [u8], tag: [u8; 4]) -> Result<Vec<&'a [u8]>, Error> {
+fn sized_records(data: &[u8], tag: [u8; 4]) -> Result<Vec<&[u8]>, Error> {
     let mut records = Vec::new();
     let mut offset = 0;
     while offset < data.len() {
