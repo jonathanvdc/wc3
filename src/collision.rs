@@ -18,60 +18,54 @@ pub enum CollisionKind {
 }
 
 /// A collision primitive attached to a node.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct CollisionShape {
-    bytes: Vec<u8>,
+    node: Node,
+    geometry: CollisionGeometry,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+enum CollisionGeometry {
+    Box([[f32; 3]; 2]),
+    Plane([[f32; 3]; 2]),
+    Sphere([f32; 3], f32),
+    Cylinder([[f32; 3]; 2], f32),
 }
 
 impl CollisionShape {
     /// Creates a box collision shape from two XYZ corners.
     pub fn new_box(node: Node, corners: [[f32; 3]; 2]) -> Self {
-        let mut bytes = node.to_bytes();
-        bytes.extend_from_slice(&0u32.to_le_bytes());
-        for corner in corners {
-            for coordinate in corner {
-                bytes.extend_from_slice(&coordinate.to_le_bytes());
-            }
+        Self {
+            node,
+            geometry: CollisionGeometry::Box(corners),
         }
-        Self { bytes }
     }
 
     /// Creates a sphere collision shape from center and radius.
     pub fn new_sphere(node: Node, center: [f32; 3], radius: f32) -> Self {
-        let mut bytes = node.to_bytes();
-        bytes.extend_from_slice(&2u32.to_le_bytes());
-        for coordinate in center {
-            bytes.extend_from_slice(&coordinate.to_le_bytes());
+        Self {
+            node,
+            geometry: CollisionGeometry::Sphere(center, radius),
         }
-        bytes.extend_from_slice(&radius.to_le_bytes());
-        Self { bytes }
     }
 
     /// Creates a plane collision shape from two XYZ points.
     pub fn new_plane(node: Node, points: [[f32; 3]; 2]) -> Self {
-        Self::from_points(node, 1, points, None)
+        Self {
+            node,
+            geometry: CollisionGeometry::Plane(points),
+        }
     }
 
     /// Creates a cylinder collision shape from endpoints and radius.
     pub fn new_cylinder(node: Node, endpoints: [[f32; 3]; 2], radius: f32) -> Self {
-        Self::from_points(node, 3, endpoints, Some(radius))
+        Self {
+            node,
+            geometry: CollisionGeometry::Cylinder(endpoints, radius),
+        }
     }
 
-    fn from_points(node: Node, kind: u32, points: [[f32; 3]; 2], radius: Option<f32>) -> Self {
-        let mut bytes = node.to_bytes();
-        bytes.extend_from_slice(&kind.to_le_bytes());
-        for point in points {
-            for value in point {
-                bytes.extend_from_slice(&value.to_le_bytes());
-            }
-        }
-        if let Some(radius) = radius {
-            bytes.extend_from_slice(&radius.to_le_bytes());
-        }
-        Self { bytes }
-    }
-
-    /// Wraps one complete shape record.
+    /// Parses one complete shape record.
     pub fn from_bytes(bytes: &[u8]) -> Result<Self, Error> {
         if record_end(bytes, 0)? != bytes.len() {
             return Err(Error::MalformedRecord {
@@ -79,90 +73,130 @@ impl CollisionShape {
                 offset: 0,
             });
         }
-        Ok(Self {
-            bytes: bytes.to_vec(),
-        })
+        let node_size =
+            u32::from_le_bytes(bytes[..4].try_into().expect("validated node size")) as usize;
+        let node = Node::from_bytes(&bytes[..node_size])?;
+        let kind = u32::from_le_bytes(
+            bytes[node_size..node_size + 4]
+                .try_into()
+                .expect("validated kind"),
+        );
+        let start = node_size + 4;
+        let vec3 = |offset| {
+            std::array::from_fn(|axis| {
+                f32::from_le_bytes(
+                    bytes[offset + axis * 4..offset + axis * 4 + 4]
+                        .try_into()
+                        .expect("validated coordinate"),
+                )
+            })
+        };
+        let scalar = |offset| {
+            f32::from_le_bytes(
+                bytes[offset..offset + 4]
+                    .try_into()
+                    .expect("validated radius"),
+            )
+        };
+        let geometry = match kind {
+            0 => CollisionGeometry::Box([vec3(start), vec3(start + 12)]),
+            1 => CollisionGeometry::Plane([vec3(start), vec3(start + 12)]),
+            2 => CollisionGeometry::Sphere(vec3(start), scalar(start + 12)),
+            3 => CollisionGeometry::Cylinder([vec3(start), vec3(start + 12)], scalar(start + 24)),
+            _ => unreachable!("validated kind"),
+        };
+        Ok(Self { node, geometry })
     }
 
-    /// Returns the complete record.
-    pub fn as_bytes(&self) -> &[u8] {
-        &self.bytes
+    /// Serializes the complete shape record.
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let mut bytes = self.node.to_bytes();
+        let kind = match self.geometry {
+            CollisionGeometry::Box(_) => 0u32,
+            CollisionGeometry::Plane(_) => 1,
+            CollisionGeometry::Sphere(_, _) => 2,
+            CollisionGeometry::Cylinder(_, _) => 3,
+        };
+        bytes.extend_from_slice(&kind.to_le_bytes());
+        let mut push_vec3 = |values: [f32; 3]| {
+            for value in values {
+                bytes.extend_from_slice(&value.to_le_bytes());
+            }
+        };
+        match self.geometry {
+            CollisionGeometry::Box(points) | CollisionGeometry::Plane(points) => {
+                for point in points {
+                    push_vec3(point);
+                }
+            }
+            CollisionGeometry::Sphere(center, radius) => {
+                push_vec3(center);
+                bytes.extend_from_slice(&radius.to_le_bytes());
+            }
+            CollisionGeometry::Cylinder(points, radius) => {
+                for point in points {
+                    push_vec3(point);
+                }
+                bytes.extend_from_slice(&radius.to_le_bytes());
+            }
+        }
+        bytes
     }
 
-    /// Returns the attached node.
-    pub fn node(&self) -> Node {
-        let size =
-            u32::from_le_bytes(self.bytes[..4].try_into().expect("validated node size")) as usize;
-        Node::from_bytes(&self.bytes[..size]).expect("validated node")
+    /// Borrows the attached node.
+    pub fn node(&self) -> &Node {
+        &self.node
+    }
+
+    /// Borrows the attached node for editing.
+    pub fn node_mut(&mut self) -> &mut Node {
+        &mut self.node
     }
 
     /// Returns the collision primitive kind.
     pub fn kind(&self) -> CollisionKind {
-        let offset = self.node_size();
-        match u32::from_le_bytes(
-            self.bytes[offset..offset + 4]
-                .try_into()
-                .expect("validated kind"),
-        ) {
-            0 => CollisionKind::Box,
-            1 => CollisionKind::Plane,
-            2 => CollisionKind::Sphere,
-            3 => CollisionKind::Cylinder,
-            _ => unreachable!("validated kind"),
+        match self.geometry {
+            CollisionGeometry::Box(_) => CollisionKind::Box,
+            CollisionGeometry::Plane(_) => CollisionKind::Plane,
+            CollisionGeometry::Sphere(_, _) => CollisionKind::Sphere,
+            CollisionGeometry::Cylinder(_, _) => CollisionKind::Cylinder,
         }
     }
 
-    /// Returns the two box corners, or `None` for a sphere.
+    /// Returns the two box corners, or `None` for other shapes.
     pub fn box_corners(&self) -> Option<[[f32; 3]; 2]> {
-        if self.kind() != CollisionKind::Box {
-            return None;
-        }
-        let start = self.node_size() + 4;
-        Some(std::array::from_fn(|corner| {
-            std::array::from_fn(|axis| self.f32_at(start + (corner * 3 + axis) * 4))
-        }))
-    }
-
-    /// Returns the two points of a box, plane, or cylinder.
-    pub fn points(&self) -> Option<[[f32; 3]; 2]> {
-        if self.kind() == CollisionKind::Sphere {
-            return None;
-        }
-        let start = self.node_size() + 4;
-        Some(std::array::from_fn(|point| {
-            std::array::from_fn(|axis| self.f32_at(start + (point * 3 + axis) * 4))
-        }))
-    }
-
-    /// Returns the radius of a sphere or cylinder.
-    pub fn radius(&self) -> Option<f32> {
-        match self.kind() {
-            CollisionKind::Sphere => Some(self.f32_at(self.node_size() + 16)),
-            CollisionKind::Cylinder => Some(self.f32_at(self.node_size() + 28)),
+        match self.geometry {
+            CollisionGeometry::Box(points) => Some(points),
             _ => None,
         }
     }
 
-    /// Returns sphere center and radius, or `None` for a box.
-    pub fn sphere(&self) -> Option<([f32; 3], f32)> {
-        if self.kind() != CollisionKind::Sphere {
-            return None;
+    /// Returns the two points of a box, plane, or cylinder.
+    pub fn points(&self) -> Option<[[f32; 3]; 2]> {
+        match self.geometry {
+            CollisionGeometry::Box(points)
+            | CollisionGeometry::Plane(points)
+            | CollisionGeometry::Cylinder(points, _) => Some(points),
+            _ => None,
         }
-        let start = self.node_size() + 4;
-        let center = std::array::from_fn(|axis| self.f32_at(start + axis * 4));
-        Some((center, self.f32_at(start + 12)))
     }
 
-    fn node_size(&self) -> usize {
-        u32::from_le_bytes(self.bytes[..4].try_into().expect("validated node size")) as usize
+    /// Returns the radius of a sphere or cylinder.
+    pub fn radius(&self) -> Option<f32> {
+        match self.geometry {
+            CollisionGeometry::Sphere(_, radius) | CollisionGeometry::Cylinder(_, radius) => {
+                Some(radius)
+            }
+            _ => None,
+        }
     }
 
-    fn f32_at(&self, offset: usize) -> f32 {
-        f32::from_le_bytes(
-            self.bytes[offset..offset + 4]
-                .try_into()
-                .expect("validated coordinate"),
-        )
+    /// Returns sphere center and radius, or `None` for other shapes.
+    pub fn sphere(&self) -> Option<([f32; 3], f32)> {
+        match self.geometry {
+            CollisionGeometry::Sphere(center, radius) => Some((center, radius)),
+            _ => None,
+        }
     }
 }
 
@@ -221,7 +255,7 @@ impl Model {
     /// Replaces collision shapes in the first `CLID` chunk.
     pub fn set_collision_shapes(&mut self, shapes: &[CollisionShape]) -> Result<(), Error> {
         let size = shapes.iter().try_fold(0usize, |sum, shape| {
-            sum.checked_add(shape.bytes.len())
+            sum.checked_add(shape.to_bytes().len())
                 .filter(|&size| size <= u32::MAX as usize)
                 .ok_or(Error::ChunkTooLarge {
                     tag: TAG,
@@ -230,7 +264,7 @@ impl Model {
         })?;
         let mut data = Vec::with_capacity(size);
         for shape in shapes {
-            data.extend_from_slice(shape.as_bytes());
+            data.extend_from_slice(&shape.to_bytes());
         }
         self.replace_chunks(TAG, data);
         Ok(())
