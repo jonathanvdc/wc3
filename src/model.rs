@@ -232,22 +232,7 @@ impl Record for Model {
             .iter()
             .map(ModelChunk::to_raw)
             .collect::<Result<Vec<_>, _>>()?;
-        let capacity = chunks.iter().try_fold(4usize, |total, chunk| {
-            if chunk.data.len() > u32::MAX as usize {
-                return Err(Error::ChunkTooLarge {
-                    tag: chunk.tag,
-                    size: chunk.data.len(),
-                });
-            }
-            total
-                .checked_add(8)
-                .and_then(|n| n.checked_add(chunk.data.len()))
-                .ok_or(Error::ChunkTooLarge {
-                    tag: chunk.tag,
-                    size: chunk.data.len(),
-                })
-        })?;
-        let mut output = Vec::with_capacity(capacity);
+        let mut output = Vec::new();
         output.extend_from_slice(&MAGIC);
         for chunk in &chunks {
             output.extend_from_slice(&chunk.tag);
