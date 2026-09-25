@@ -583,41 +583,10 @@ fn write_extent(bytes: &mut Vec<u8>, extent: GeosetExtent) {
 impl Model {
     /// Decodes geosets from every `GEOS` chunk in file order.
     pub fn geosets(&self) -> Result<Vec<Geoset>, Error> {
-        let version = self.version();
-        let mut geosets = Vec::new();
-        for chunk in self
-            .chunks()
-            .iter()
-            .filter(|chunk| chunk.tag == Geoset::TAG)
-        {
-            let mut offset = 0;
-            while offset < chunk.data.len() {
-                let size_bytes = chunk.data.get(offset..offset.saturating_add(4)).ok_or(
-                    Error::MalformedRecord {
-                        tag: Geoset::TAG,
-                        offset,
-                    },
-                )?;
-                let size =
-                    u32::from_le_bytes(size_bytes.try_into().expect("four-byte size")) as usize;
-                if size < 4 {
-                    return Err(Error::MalformedRecord {
-                        tag: Geoset::TAG,
-                        offset,
-                    });
-                }
-                let end = offset
-                    .checked_add(size)
-                    .filter(|&end| end <= chunk.data.len())
-                    .ok_or(Error::MalformedRecord {
-                        tag: Geoset::TAG,
-                        offset,
-                    })?;
-                geosets.push(Geoset::decode(&chunk.data[offset..end], version)?);
-                offset = end;
-            }
-        }
-        Ok(geosets)
+        self.collect_chunk_records::<crate::GeosetsChunk>(|chunk| match chunk {
+            crate::ModelChunk::Geosets(decoded) => Some(decoded),
+            _ => None,
+        })
     }
 
     /// Replaces geosets after checking their version and encoding their sections.
@@ -639,7 +608,7 @@ impl Model {
                 });
             }
         }
-        self.replace_chunks(Geoset::TAG, data);
+        self.replace_chunks(Geoset::TAG, data)?;
         Ok(())
     }
 }

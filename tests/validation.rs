@@ -1,5 +1,5 @@
 use wc3_mdx::Record;
-use wc3_mdx::{Error, Geoset, Material, Model, Node, RawChunk, RibbonEmitter};
+use wc3_mdx::{Error, Geoset, Material, Model, ModelChunk, Node, RawChunk, RibbonEmitter};
 
 #[test]
 fn validates_synthetic_known_chunks_and_preserves_unknown() {
@@ -47,7 +47,7 @@ fn rejects_short_repeated_version_chunks_and_repairs_mutated_first_version() {
     assert_eq!(Model::decode(&bytes, 800), Err(Error::InvalidVersionChunk));
 
     let mut model = Model::new(800);
-    model.chunks_mut()[0].data.clear();
+    model.chunks_mut()[0] = ModelChunk::from_raw(RawChunk::new(*b"VERS", Vec::new()), 800);
     assert_eq!(model.stored_version(), None);
     assert_eq!(model.version(), 800);
     assert_eq!(model.validate(), Err(Error::InvalidVersionChunk));

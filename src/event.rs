@@ -60,7 +60,7 @@ impl EventObject {
     }
 }
 
-fn record_end(data: &[u8], offset: usize) -> Result<usize, Error> {
+pub(crate) fn record_end(data: &[u8], offset: usize) -> Result<usize, Error> {
     let size_bytes = data
         .get(offset..offset.saturating_add(4))
         .ok_or(Error::MalformedRecord {
@@ -102,20 +102,10 @@ fn record_end(data: &[u8], offset: usize) -> Result<usize, Error> {
 impl Model {
     /// Decodes all event objects in `EVTS` chunks.
     pub fn event_objects(&self) -> Result<Vec<EventObject>, Error> {
-        let mut events = Vec::new();
-        for chunk in self
-            .chunks()
-            .iter()
-            .filter(|chunk| chunk.tag == EventObject::TAG)
-        {
-            let mut offset = 0;
-            while offset < chunk.data.len() {
-                let end = record_end(&chunk.data, offset)?;
-                events.push(EventObject::decode(&chunk.data[offset..end], 0)?);
-                offset = end;
-            }
-        }
-        Ok(events)
+        self.collect_chunk_records::<crate::EventObjectsChunk>(|chunk| match chunk {
+            crate::ModelChunk::EventObjects(decoded) => Some(decoded),
+            _ => None,
+        })
     }
 
     /// Replaces event objects in the first `EVTS` chunk.
@@ -132,7 +122,7 @@ impl Model {
         for event in events {
             data.extend_from_slice(&event.encode()?);
         }
-        self.replace_chunks(EventObject::TAG, data);
+        self.replace_chunks(EventObject::TAG, data)?;
         Ok(())
     }
 }

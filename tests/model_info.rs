@@ -1,5 +1,5 @@
 use wc3_mdx::Record;
-use wc3_mdx::{Model, ModelInfo};
+use wc3_mdx::{Model, ModelInfo, RawChunk};
 
 #[test]
 fn model_info_edit_round_trip() {
@@ -23,19 +23,19 @@ fn model_info_edit_round_trip() {
 #[test]
 fn preserves_reserved_and_extension_bytes() {
     let mut model = Model::new(800);
-    model.set_model_info(&ModelInfo::new("Old").unwrap());
-    model.chunk_mut(*b"MODL").unwrap().data[336..340].copy_from_slice(&[1, 2, 3, 4]);
-    model
-        .chunk_mut(*b"MODL")
-        .unwrap()
-        .data
-        .extend_from_slice(&[5, 6]);
+    let mut data = ModelInfo::new("Old").unwrap().encode().unwrap();
+    data[336..340].copy_from_slice(&[1, 2, 3, 4]);
+    data.extend_from_slice(&[5, 6]);
+    model.push(RawChunk::new(*b"MODL", data));
     let mut info = model.model_info().unwrap().unwrap();
     info.set_name("New").unwrap();
     model.set_model_info(&info);
     assert_eq!(
-        &model.chunk(*b"MODL").unwrap().data[336..340],
+        &model.chunk(*b"MODL").unwrap().to_raw().unwrap().data[336..340],
         &[1, 2, 3, 4]
     );
-    assert_eq!(&model.chunk(*b"MODL").unwrap().data[372..], &[5, 6]);
+    assert_eq!(
+        &model.chunk(*b"MODL").unwrap().to_raw().unwrap().data[372..],
+        &[5, 6]
+    );
 }

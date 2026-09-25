@@ -12,6 +12,8 @@ mod global_sequences;
 pub use global_sequences::GlobalSequencesChunk;
 mod model_info;
 pub use model_info::ModelInfoChunk;
+mod model_chunk;
+pub use model_chunk::{MalformedChunk, ModelChunk};
 mod pivot_points;
 pub use pivot_points::PivotPointsChunk;
 mod version;

@@ -144,7 +144,7 @@ fn is_track_tag(tag: [u8; 4]) -> bool {
     )
 }
 
-fn record_end(data: &[u8], offset: usize) -> Result<usize, Error> {
+pub(crate) fn record_end(data: &[u8], offset: usize) -> Result<usize, Error> {
     let size_bytes = data
         .get(offset..offset.saturating_add(4))
         .ok_or(Error::MalformedRecord {
@@ -191,20 +191,10 @@ fn record_end(data: &[u8], offset: usize) -> Result<usize, Error> {
 impl Model {
     /// Decodes all popcorn emitters in `CORN` chunks.
     pub fn popcorn_emitters(&self) -> Result<Vec<PopcornEmitter>, Error> {
-        let mut emitters = Vec::new();
-        for chunk in self
-            .chunks()
-            .iter()
-            .filter(|chunk| chunk.tag == PopcornEmitter::TAG)
-        {
-            let mut offset = 0;
-            while offset < chunk.data.len() {
-                let end = record_end(&chunk.data, offset)?;
-                emitters.push(PopcornEmitter::decode(&chunk.data[offset..end], 0)?);
-                offset = end;
-            }
-        }
-        Ok(emitters)
+        self.collect_chunk_records::<crate::PopcornEmittersChunk>(|chunk| match chunk {
+            crate::ModelChunk::PopcornEmitters(decoded) => Some(decoded),
+            _ => None,
+        })
     }
 
     /// Replaces popcorn emitters in the first `CORN` chunk.
@@ -221,7 +211,7 @@ impl Model {
         for emitter in emitters {
             data.extend_from_slice(&emitter.encode()?);
         }
-        self.replace_chunks(PopcornEmitter::TAG, data);
+        self.replace_chunks(PopcornEmitter::TAG, data)?;
         Ok(())
     }
 }

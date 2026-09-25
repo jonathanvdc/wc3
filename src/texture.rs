@@ -30,7 +30,7 @@ impl TextureFlags {
         }
     }
 }
-const SIZE: usize = 268;
+pub(crate) const SIZE: usize = 268;
 const PATH_START: usize = 4;
 const PATH_SIZE: usize = 256;
 
@@ -46,12 +46,6 @@ impl Texture {
         let mut texture = Self { bytes: [0; SIZE] };
         texture.set_path(path)?;
         Ok(texture)
-    }
-
-    pub(crate) fn parse(bytes: &[u8]) -> Self {
-        Self {
-            bytes: bytes.try_into().expect("fixed-size record"),
-        }
     }
 
     /// Returns the original 268-byte record.
@@ -103,22 +97,10 @@ impl Texture {
 impl Model {
     /// Decodes all `TEXS` chunks in file order.
     pub fn textures(&self) -> Result<Vec<Texture>, Error> {
-        let mut textures = Vec::new();
-        for chunk in self
-            .chunks()
-            .iter()
-            .filter(|chunk| chunk.tag == Texture::TAG)
-        {
-            if chunk.data.len() % SIZE != 0 {
-                return Err(Error::MalformedChunk {
-                    tag: Texture::TAG,
-                    size: chunk.data.len(),
-                    expected: SIZE,
-                });
-            }
-            textures.extend(chunk.data.chunks_exact(SIZE).map(Texture::parse));
-        }
-        Ok(textures)
+        self.collect_chunk_records::<crate::TexturesChunk>(|chunk| match chunk {
+            crate::ModelChunk::Textures(decoded) => Some(decoded),
+            _ => None,
+        })
     }
 
     /// Writes the texture list to the first `TEXS` chunk. Additional `TEXS`
@@ -141,7 +123,7 @@ impl Model {
         for texture in textures {
             data.extend_from_slice(texture.as_bytes());
         }
-        self.replace_chunks(Texture::TAG, data);
+        self.replace_chunks(Texture::TAG, data)?;
         Ok(())
     }
 }

@@ -6,7 +6,7 @@ use std::borrow::Cow;
 use crate::utils::field;
 use crate::{AnimationTrack, Error, Model};
 
-const HEADER_SIZE: usize = 120;
+pub(crate) const HEADER_SIZE: usize = 120;
 const NAME_SIZE: usize = 80;
 const MAX_RECORD_SIZE: usize = 0x00ff_ffff;
 
@@ -139,40 +139,10 @@ fn is_track(tag: [u8; 4]) -> bool {
 impl Model {
     /// Decodes all camera records in `CAMS` chunks.
     pub fn cameras(&self) -> Result<Vec<Camera>, Error> {
-        let mut cameras = Vec::new();
-        for chunk in self
-            .chunks()
-            .iter()
-            .filter(|chunk| chunk.tag == Camera::TAG)
-        {
-            let mut offset = 0;
-            while offset < chunk.data.len() {
-                let size_bytes = chunk.data.get(offset..offset.saturating_add(4)).ok_or(
-                    Error::MalformedRecord {
-                        tag: Camera::TAG,
-                        offset,
-                    },
-                )?;
-                let size = (u32::from_le_bytes(size_bytes.try_into().expect("four-byte size"))
-                    & 0x00ff_ffff) as usize;
-                if size < HEADER_SIZE {
-                    return Err(Error::MalformedRecord {
-                        tag: Camera::TAG,
-                        offset,
-                    });
-                }
-                let end = offset
-                    .checked_add(size)
-                    .filter(|&end| end <= chunk.data.len())
-                    .ok_or(Error::MalformedRecord {
-                        tag: Camera::TAG,
-                        offset,
-                    })?;
-                cameras.push(Camera::decode(&chunk.data[offset..end], 0)?);
-                offset = end;
-            }
-        }
-        Ok(cameras)
+        self.collect_chunk_records::<crate::CamerasChunk>(|chunk| match chunk {
+            crate::ModelChunk::Cameras(decoded) => Some(decoded),
+            _ => None,
+        })
     }
 
     /// Replaces cameras in the first `CAMS` chunk.
@@ -187,7 +157,7 @@ impl Model {
                 });
             }
         }
-        self.replace_chunks(Camera::TAG, data);
+        self.replace_chunks(Camera::TAG, data)?;
         Ok(())
     }
 }

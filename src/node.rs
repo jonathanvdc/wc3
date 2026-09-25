@@ -6,7 +6,7 @@ use std::borrow::Cow;
 use crate::utils::field;
 use crate::{AnimationTrack, Error, Model};
 
-const HEADER_SIZE: usize = 96;
+pub(crate) const HEADER_SIZE: usize = 96;
 const NAME_SIZE: usize = 80;
 
 /// Node behavior and object-kind bits. Unrecognized bits survive conversion.
@@ -206,24 +206,10 @@ impl Bone {
 impl Model {
     /// Decodes every bone in `BONE` chunks.
     pub fn bones(&self) -> Result<Vec<Bone>, Error> {
-        let mut bones = Vec::new();
-        for chunk in self.chunks().iter().filter(|chunk| chunk.tag == Bone::TAG) {
-            let mut offset = 0;
-            while offset < chunk.data.len() {
-                let size = read_size(&chunk.data, offset, Bone::TAG)?;
-                let end = offset
-                    .checked_add(size)
-                    .and_then(|end| end.checked_add(8))
-                    .filter(|&end| end <= chunk.data.len())
-                    .ok_or(Error::MalformedRecord {
-                        tag: Bone::TAG,
-                        offset,
-                    })?;
-                bones.push(Bone::decode(&chunk.data[offset..end], 0)?);
-                offset = end;
-            }
-        }
-        Ok(bones)
+        self.collect_chunk_records::<crate::BonesChunk>(|chunk| match chunk {
+            crate::ModelChunk::Bones(decoded) => Some(decoded),
+            _ => None,
+        })
     }
 
     /// Replaces all bones in the first `BONE` chunk.
@@ -238,23 +224,16 @@ impl Model {
                 });
             }
         }
-        self.replace_chunks(Bone::TAG, data);
+        self.replace_chunks(Bone::TAG, data)?;
         Ok(())
     }
 
     /// Decodes every helper node in `HELP` chunks.
     pub fn helpers(&self) -> Result<Vec<Node>, Error> {
-        let mut helpers = Vec::new();
-        for chunk in self.chunks().iter().filter(|chunk| chunk.tag == Node::TAG) {
-            let mut offset = 0;
-            while offset < chunk.data.len() {
-                let size = read_size(&chunk.data, offset, Node::TAG)?;
-                let end = offset + size;
-                helpers.push(Node::decode(&chunk.data[offset..end], 0)?);
-                offset = end;
-            }
-        }
-        Ok(helpers)
+        self.collect_chunk_records::<crate::HelpersChunk>(|chunk| match chunk {
+            crate::ModelChunk::Helpers(decoded) => Some(decoded),
+            _ => None,
+        })
     }
 
     /// Replaces all helpers in the first `HELP` chunk.
@@ -269,7 +248,7 @@ impl Model {
                 });
             }
         }
-        self.replace_chunks(Node::TAG, data);
+        self.replace_chunks(Node::TAG, data)?;
         Ok(())
     }
 }

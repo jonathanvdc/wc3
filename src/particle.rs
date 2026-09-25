@@ -6,7 +6,7 @@ use std::borrow::Cow;
 use crate::utils::field;
 use crate::{sized_node, AnimationTrack, Error, Model, Node};
 
-const FIXED_SIZE: usize = 284;
+pub(crate) const FIXED_SIZE: usize = 284;
 const PATH_SIZE: usize = 256;
 
 /// A Classic particle emitter with optional animated properties.
@@ -134,20 +134,10 @@ fn is_track(tag: [u8; 4]) -> bool {
 impl Model {
     /// Decodes all `PREM` records in file order.
     pub fn particle_emitters(&self) -> Result<Vec<ParticleEmitter>, Error> {
-        let mut result = Vec::new();
-        for chunk in self
-            .chunks()
-            .iter()
-            .filter(|chunk| chunk.tag == ParticleEmitter::TAG)
-        {
-            result.extend(
-                sized_node::records(&chunk.data, ParticleEmitter::TAG, FIXED_SIZE)?
-                    .into_iter()
-                    .map(|bytes| ParticleEmitter::decode(bytes, 0))
-                    .collect::<Result<Vec<_>, _>>()?,
-            );
-        }
-        Ok(result)
+        self.collect_chunk_records::<crate::ParticleEmittersChunk>(|chunk| match chunk {
+            crate::ModelChunk::ParticleEmitters(decoded) => Some(decoded),
+            _ => None,
+        })
     }
 
     /// Replaces particle emitters in the first `PREM` chunk.
@@ -164,7 +154,7 @@ impl Model {
         for emitter in emitters {
             data.extend_from_slice(&emitter.encode()?);
         }
-        self.replace_chunks(ParticleEmitter::TAG, data);
+        self.replace_chunks(ParticleEmitter::TAG, data)?;
         Ok(())
     }
 }

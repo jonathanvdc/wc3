@@ -20,15 +20,14 @@ fn texture_fields_round_trip() {
 #[test]
 fn texture_reserved_bytes_are_preserved() {
     let mut model = Model::new(800);
-    model
-        .set_textures(&[Texture::new("a.blp").unwrap()])
-        .unwrap();
-    model.chunk_mut(*b"TEXS").unwrap().data[260..264].copy_from_slice(&[9, 8, 7, 6]);
+    let mut data = Texture::new("a.blp").unwrap().encode().unwrap();
+    data[260..264].copy_from_slice(&[9, 8, 7, 6]);
+    model.push(RawChunk::new(*b"TEXS", data));
     let mut textures = model.textures().unwrap();
     textures[0].set_path("b.blp").unwrap();
     model.set_textures(&textures).unwrap();
     assert_eq!(
-        &model.chunk(*b"TEXS").unwrap().data[260..264],
+        &model.chunk(*b"TEXS").unwrap().to_raw().unwrap().data[260..264],
         &[9, 8, 7, 6]
     );
 }

@@ -463,18 +463,10 @@ impl Layer {
 impl Model {
     /// Decodes all `MTLS` records in file order.
     pub fn materials(&self) -> Result<Vec<Material>, Error> {
-        let version = self.version();
-        let mut materials = Vec::new();
-        for chunk in self
-            .chunks()
-            .iter()
-            .filter(|chunk| chunk.tag == Material::TAG)
-        {
-            for bytes in sized_records(&chunk.data, Material::TAG)? {
-                materials.push(Material::decode(bytes, version)?);
-            }
-        }
-        Ok(materials)
+        self.collect_chunk_records::<crate::MaterialsChunk>(|chunk| match chunk {
+            crate::ModelChunk::Materials(decoded) => Some(decoded),
+            _ => None,
+        })
     }
 
     /// Replaces all material records in the first `MTLS` chunk.
@@ -496,7 +488,7 @@ impl Model {
                 });
             }
         }
-        self.replace_chunks(Material::TAG, data);
+        self.replace_chunks(Material::TAG, data)?;
         Ok(())
     }
 }

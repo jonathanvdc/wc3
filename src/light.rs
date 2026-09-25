@@ -169,7 +169,7 @@ fn is_track(tag: [u8; 4]) -> bool {
     )
 }
 
-fn record_end(data: &[u8], offset: usize) -> Result<usize, Error> {
+pub(crate) fn record_end(data: &[u8], offset: usize) -> Result<usize, Error> {
     let size_bytes = data
         .get(offset..offset.saturating_add(4))
         .ok_or(Error::MalformedRecord {
@@ -216,16 +216,10 @@ fn record_end(data: &[u8], offset: usize) -> Result<usize, Error> {
 impl Model {
     /// Decodes all `LITE` records in file order.
     pub fn lights(&self) -> Result<Vec<Light>, Error> {
-        let mut lights = Vec::new();
-        for chunk in self.chunks().iter().filter(|chunk| chunk.tag == Light::TAG) {
-            let mut offset = 0;
-            while offset < chunk.data.len() {
-                let end = record_end(&chunk.data, offset)?;
-                lights.push(Light::decode(&chunk.data[offset..end], 0)?);
-                offset = end;
-            }
-        }
-        Ok(lights)
+        self.collect_chunk_records::<crate::LightsChunk>(|chunk| match chunk {
+            crate::ModelChunk::Lights(decoded) => Some(decoded),
+            _ => None,
+        })
     }
 
     /// Replaces lights in the first `LITE` chunk.
@@ -242,7 +236,7 @@ impl Model {
         for light in lights {
             data.extend_from_slice(&light.encode()?);
         }
-        self.replace_chunks(Light::TAG, data);
+        self.replace_chunks(Light::TAG, data)?;
         Ok(())
     }
 }

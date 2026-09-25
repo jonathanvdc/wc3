@@ -29,7 +29,7 @@ impl SequenceFlags {
         }
     }
 }
-const SIZE: usize = 132;
+pub(crate) const SIZE: usize = 132;
 const NAME_SIZE: usize = 80;
 
 /// A fixed-size animation sequence, including reserved fields and raw float bits.
@@ -45,12 +45,6 @@ impl Sequence {
         sequence.set_name(name)?;
         sequence.set_interval(interval);
         Ok(sequence)
-    }
-
-    pub(crate) fn parse(bytes: &[u8]) -> Self {
-        Self {
-            bytes: bytes.try_into().expect("fixed-size record"),
-        }
     }
 
     /// Returns the original 132-byte record.
@@ -176,22 +170,10 @@ impl Sequence {
 impl Model {
     /// Decodes every `SEQS` chunk in file order.
     pub fn sequences(&self) -> Result<Vec<Sequence>, Error> {
-        let mut sequences = Vec::new();
-        for chunk in self
-            .chunks()
-            .iter()
-            .filter(|chunk| chunk.tag == Sequence::TAG)
-        {
-            if chunk.data.len() % SIZE != 0 {
-                return Err(Error::MalformedChunk {
-                    tag: Sequence::TAG,
-                    size: chunk.data.len(),
-                    expected: SIZE,
-                });
-            }
-            sequences.extend(chunk.data.chunks_exact(SIZE).map(Sequence::parse));
-        }
-        Ok(sequences)
+        self.collect_chunk_records::<crate::SequencesChunk>(|chunk| match chunk {
+            crate::ModelChunk::Sequences(decoded) => Some(decoded),
+            _ => None,
+        })
     }
 
     /// Writes all sequences to the first `SEQS` chunk, creating it if needed.
@@ -214,7 +196,7 @@ impl Model {
         for sequence in sequences {
             data.extend_from_slice(sequence.as_bytes());
         }
-        self.replace_chunks(Sequence::TAG, data);
+        self.replace_chunks(Sequence::TAG, data)?;
         Ok(())
     }
 }

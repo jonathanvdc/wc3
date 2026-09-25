@@ -1,7 +1,7 @@
 //! Reforged bind-pose matrices in `BPOS` chunks.
 
 use crate::Record;
-use crate::{Error, KnownChunk, Model, RawChunk};
+use crate::{Error, KnownChunk, Model};
 
 const MATRIX_SIZE: usize = 48;
 
@@ -62,8 +62,13 @@ impl Model {
     pub fn bind_poses(&self) -> Result<Vec<BindPose>, Error> {
         self.chunks()
             .iter()
-            .filter(|chunk| chunk.tag == BindPose::TAG)
-            .map(|chunk| BindPose::decode(&chunk.data, 0))
+            .filter(|chunk| chunk.tag() == BindPose::TAG)
+            .map(|chunk| match chunk {
+                crate::ModelChunk::BindPose(decoded) => Ok(decoded.clone()),
+                crate::ModelChunk::Malformed(malformed) => Err(malformed.error.clone()),
+                crate::ModelChunk::Unknown(raw) => BindPose::decode(&raw.data, self.version()),
+                _ => unreachable!("BPOS tag matched another typed chunk"),
+            })
             .collect()
     }
 
@@ -71,12 +76,9 @@ impl Model {
     /// remain intact.
     pub fn set_bind_pose(&mut self, pose: &BindPose) {
         if let Some(chunk) = self.chunk_mut(BindPose::TAG) {
-            chunk.data = pose.encode().expect("validated bind pose");
+            *chunk = crate::ModelChunk::BindPose(pose.clone());
         } else {
-            self.push(RawChunk::new(
-                BindPose::TAG,
-                pose.encode().expect("validated bind pose"),
-            ));
+            self.push_chunk(crate::ModelChunk::BindPose(pose.clone()));
         }
     }
 }

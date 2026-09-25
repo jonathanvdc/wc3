@@ -1,51 +1,23 @@
 //! Semantic checks for all currently known MDX chunk layouts.
 
-use crate::{Error, Model, ModelInfo};
+use crate::{Error, Model, ModelChunk};
 
 impl Model {
-    /// Validates known chunks and animation records without changing their bytes.
-    /// Unknown top-level chunks remain valid and round-trip unchanged.
+    /// Validates every known chunk against the model's current version.
+    /// Unknown chunks remain valid and round-trip unchanged.
     pub fn validate(&self) -> Result<(), Error> {
-        if self
-            .chunks()
-            .iter()
-            .any(|chunk| chunk.tag == *b"VERS" && chunk.data.len() < 4)
-        {
-            return Err(Error::InvalidVersionChunk);
+        for chunk in self.chunks() {
+            if let ModelChunk::Malformed(malformed) = chunk {
+                return Err(malformed.error().clone());
+            }
+            let raw = chunk.to_raw()?;
+            if raw.tag == *b"VERS" && raw.data.len() < 4 {
+                return Err(Error::InvalidVersionChunk);
+            }
+            if let ModelChunk::Malformed(malformed) = ModelChunk::from_raw(raw, self.version()) {
+                return Err(malformed.error);
+            }
         }
-        self.model_info()?;
-        for chunk in self.chunks().iter().filter(|chunk| chunk.tag == *b"MODL") {
-            ModelInfo::parse(&chunk.data)?;
-        }
-        self.sequences()?;
-        self.global_sequences()?;
-        self.textures()?;
-        self.pivot_points()?;
-        self.bind_poses()?;
-        self.face_fx()?;
-        self.materials()?;
-        self.geosets()?;
-        self.geoset_animations()?;
-        for bone in self.bones()? {
-            bone.node().tracks();
-        }
-        for helper in self.helpers()? {
-            helper.tracks();
-        }
-        self.attachments()?;
-        for event in self.event_objects()? {
-            event.node().tracks();
-        }
-        for shape in self.collision_shapes()? {
-            shape.node().tracks();
-        }
-        self.particle_emitters()?;
-        self.particle_emitters2()?;
-        self.ribbon_emitters()?;
-        self.popcorn_emitters()?;
-        self.cameras()?;
-        self.lights()?;
-        self.texture_animations()?;
         Ok(())
     }
 }

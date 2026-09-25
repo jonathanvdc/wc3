@@ -1,9 +1,10 @@
-//! Lossless Warcraft III MDX container parsing and writing.
+//! Warcraft III MDX container parsing and writing.
 //!
 //! MDX files start with `MDLX`, followed by tagged chunks. Each chunk has a
 //! four-byte identifier, a little-endian payload length, and its payload.
-//! Keeping payloads as bytes preserves chunks whose internal layout changes
-//! between Classic and Reforged versions. Use [`Model::version`] and
+//! Known chunks are decoded and encoded from their typed values. Unknown and
+//! malformed chunks retain their raw payloads.
+//! Use [`Model::version`] and
 //! [`Model::set_version`] for the `VERS` chunk, and [`Model::chunks`] or
 //! [`Model::chunk_mut`] for other chunks.
 //!

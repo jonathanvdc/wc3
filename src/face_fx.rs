@@ -6,7 +6,7 @@ use std::borrow::Cow;
 use crate::utils::field;
 use crate::{Error, Model};
 
-const SIZE: usize = 340;
+pub(crate) const SIZE: usize = 340;
 const NAME_SIZE: usize = 80;
 const PATH_SIZE: usize = 260;
 
@@ -54,28 +54,10 @@ impl FaceFx {
 impl Model {
     /// Decodes every `FAFX` record in file order.
     pub fn face_fx(&self) -> Result<Vec<FaceFx>, Error> {
-        let mut entries = Vec::new();
-        for chunk in self
-            .chunks()
-            .iter()
-            .filter(|chunk| chunk.tag == FaceFx::TAG)
-        {
-            if chunk.data.len() % SIZE != 0 {
-                return Err(Error::MalformedChunk {
-                    tag: FaceFx::TAG,
-                    size: chunk.data.len(),
-                    expected: SIZE,
-                });
-            }
-            entries.extend(
-                chunk
-                    .data
-                    .chunks_exact(SIZE)
-                    .map(|bytes| FaceFx::decode(bytes, 0))
-                    .collect::<Result<Vec<_>, _>>()?,
-            );
-        }
-        Ok(entries)
+        self.collect_chunk_records::<crate::FaceFxChunk>(|chunk| match chunk {
+            crate::ModelChunk::FaceFx(decoded) => Some(decoded),
+            _ => None,
+        })
     }
 
     /// Replaces face-animation records in the first `FAFX` chunk.
@@ -92,7 +74,7 @@ impl Model {
         for entry in entries {
             data.extend_from_slice(entry.as_bytes());
         }
-        self.replace_chunks(FaceFx::TAG, data);
+        self.replace_chunks(FaceFx::TAG, data)?;
         Ok(())
     }
 }

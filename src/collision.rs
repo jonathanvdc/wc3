@@ -121,7 +121,7 @@ impl CollisionShape {
     }
 }
 
-fn record_end(data: &[u8], offset: usize) -> Result<usize, Error> {
+pub(crate) fn record_end(data: &[u8], offset: usize) -> Result<usize, Error> {
     let size_bytes = data
         .get(offset..offset.saturating_add(4))
         .ok_or(Error::MalformedRecord {
@@ -167,20 +167,10 @@ fn record_end(data: &[u8], offset: usize) -> Result<usize, Error> {
 impl Model {
     /// Decodes all collision shapes in `CLID` chunks.
     pub fn collision_shapes(&self) -> Result<Vec<CollisionShape>, Error> {
-        let mut shapes = Vec::new();
-        for chunk in self
-            .chunks()
-            .iter()
-            .filter(|chunk| chunk.tag == CollisionShape::TAG)
-        {
-            let mut offset = 0;
-            while offset < chunk.data.len() {
-                let end = record_end(&chunk.data, offset)?;
-                shapes.push(CollisionShape::decode(&chunk.data[offset..end], 0)?);
-                offset = end;
-            }
-        }
-        Ok(shapes)
+        self.collect_chunk_records::<crate::CollisionShapesChunk>(|chunk| match chunk {
+            crate::ModelChunk::CollisionShapes(decoded) => Some(decoded),
+            _ => None,
+        })
     }
 
     /// Replaces collision shapes in the first `CLID` chunk.
@@ -197,7 +187,7 @@ impl Model {
         for shape in shapes {
             data.extend_from_slice(&shape.encode()?);
         }
-        self.replace_chunks(CollisionShape::TAG, data);
+        self.replace_chunks(CollisionShape::TAG, data)?;
         Ok(())
     }
 }

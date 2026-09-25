@@ -3,7 +3,7 @@
 use crate::Record;
 use crate::{sized_node, AnimationTrack, Error, Model, Node};
 
-const FIXED_SIZE: usize = 171;
+pub(crate) const FIXED_SIZE: usize = 171;
 
 /// Which particle parts are rendered for each emitted particle.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -242,20 +242,10 @@ fn is_track(tag: [u8; 4]) -> bool {
 impl Model {
     /// Decodes all `PRE2` records in file order.
     pub fn particle_emitters2(&self) -> Result<Vec<ParticleEmitter2>, Error> {
-        let mut result = Vec::new();
-        for chunk in self
-            .chunks()
-            .iter()
-            .filter(|chunk| chunk.tag == ParticleEmitter2::TAG)
-        {
-            result.extend(
-                sized_node::records(&chunk.data, ParticleEmitter2::TAG, FIXED_SIZE)?
-                    .into_iter()
-                    .map(|bytes| ParticleEmitter2::decode(bytes, 0))
-                    .collect::<Result<Vec<_>, _>>()?,
-            );
-        }
-        Ok(result)
+        self.collect_chunk_records::<crate::ParticleEmitters2Chunk>(|chunk| match chunk {
+            crate::ModelChunk::ParticleEmitters2(decoded) => Some(decoded),
+            _ => None,
+        })
     }
 
     /// Replaces particle emitter 2 records in the first `PRE2` chunk.
@@ -272,7 +262,7 @@ impl Model {
         for emitter in emitters {
             data.extend_from_slice(&emitter.encode()?);
         }
-        self.replace_chunks(ParticleEmitter2::TAG, data);
+        self.replace_chunks(ParticleEmitter2::TAG, data)?;
         Ok(())
     }
 }

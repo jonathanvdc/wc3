@@ -1,25 +1,21 @@
 //! Model accessors for scalar chunks.
 
-use crate::{Error, Model, RawChunk};
+use crate::{Error, GlobalSequencesChunk, Model, ModelChunk, PivotPointsChunk, RawChunk, Record};
 
 impl Model {
     /// Returns durations from every `GLBS` chunk in file order.
     pub fn global_sequences(&self) -> Result<Vec<u32>, Error> {
         let mut durations = Vec::new();
-        for chunk in self.chunks().iter().filter(|chunk| chunk.tag == *b"GLBS") {
-            if chunk.data.len() % 4 != 0 {
-                return Err(Error::MalformedChunk {
-                    tag: *b"GLBS",
-                    size: chunk.data.len(),
-                    expected: 4,
-                });
+        for chunk in self.chunks().iter().filter(|chunk| chunk.tag() == *b"GLBS") {
+            match chunk {
+                ModelChunk::GlobalSequences(decoded) => {
+                    durations.extend_from_slice(&decoded.durations)
+                }
+                ModelChunk::Malformed(malformed) => return Err(malformed.error().clone()),
+                ModelChunk::Unknown(raw) => durations
+                    .extend(GlobalSequencesChunk::decode(&raw.data, self.version())?.durations),
+                _ => unreachable!("GLBS tag matched another typed chunk"),
             }
-            durations.extend(
-                chunk
-                    .data
-                    .chunks_exact(4)
-                    .map(|bytes| u32::from_le_bytes(bytes.try_into().expect("four-byte field"))),
-            );
         }
         Ok(durations)
     }
@@ -40,31 +36,22 @@ impl Model {
         for duration in durations {
             data.extend_from_slice(&duration.to_le_bytes());
         }
-        self.replace_chunks(*b"GLBS", data);
+        self.replace_chunks(*b"GLBS", data)?;
         Ok(())
     }
 
     /// Returns XYZ pivot points from every `PIVT` chunk in file order.
     pub fn pivot_points(&self) -> Result<Vec<[f32; 3]>, Error> {
         let mut points = Vec::new();
-        for chunk in self.chunks().iter().filter(|chunk| chunk.tag == *b"PIVT") {
-            if chunk.data.len() % 12 != 0 {
-                return Err(Error::MalformedChunk {
-                    tag: *b"PIVT",
-                    size: chunk.data.len(),
-                    expected: 12,
-                });
+        for chunk in self.chunks().iter().filter(|chunk| chunk.tag() == *b"PIVT") {
+            match chunk {
+                ModelChunk::PivotPoints(decoded) => points.extend_from_slice(&decoded.points),
+                ModelChunk::Malformed(malformed) => return Err(malformed.error().clone()),
+                ModelChunk::Unknown(raw) => {
+                    points.extend(PivotPointsChunk::decode(&raw.data, self.version())?.points)
+                }
+                _ => unreachable!("PIVT tag matched another typed chunk"),
             }
-            points.extend(chunk.data.chunks_exact(12).map(|bytes| {
-                std::array::from_fn(|index| {
-                    let offset = index * 4;
-                    f32::from_le_bytes(
-                        bytes[offset..offset + 4]
-                            .try_into()
-                            .expect("four-byte field"),
-                    )
-                })
-            }));
         }
         Ok(points)
     }
@@ -87,39 +74,40 @@ impl Model {
                 data.extend_from_slice(&coordinate.to_le_bytes());
             }
         }
-        self.replace_chunks(*b"PIVT", data);
+        self.replace_chunks(*b"PIVT", data)?;
         Ok(())
     }
 
-    pub(crate) fn replace_chunks(&mut self, tag: [u8; 4], data: Vec<u8>) {
-        if let Some(first) = self.chunks_mut().iter().position(|chunk| chunk.tag == tag) {
-            let lengths: Vec<_> = self
-                .chunks_mut()
-                .iter()
-                .filter(|chunk| chunk.tag == tag)
-                .map(|chunk| chunk.data.len())
-                .collect();
-            if lengths
-                .iter()
-                .try_fold(0usize, |sum, length| sum.checked_add(*length))
-                == Some(data.len())
-            {
-                let mut offset = 0;
-                for chunk in self
-                    .chunks_mut()
-                    .iter_mut()
-                    .filter(|chunk| chunk.tag == tag)
-                {
-                    let end = offset + chunk.data.len();
-                    chunk.data = data[offset..end].to_vec();
-                    offset = end;
-                }
-                return;
+    pub(crate) fn replace_chunks(&mut self, tag: [u8; 4], data: Vec<u8>) -> Result<(), Error> {
+        let version = self.version();
+        let mut positions = Vec::new();
+        let mut lengths = Vec::new();
+        for (index, chunk) in self.chunks().iter().enumerate() {
+            if chunk.tag() == tag {
+                positions.push(index);
+                lengths.push(chunk.to_raw()?.data.len());
             }
-            self.chunks_mut()[first].data = data;
+        }
+        if positions.is_empty() {
+            self.push(RawChunk::new(tag, data));
+        } else if lengths
+            .iter()
+            .try_fold(0usize, |sum, length| sum.checked_add(*length))
+            == Some(data.len())
+        {
+            let mut offset = 0;
+            for (index, length) in positions.into_iter().zip(lengths) {
+                let end = offset + length;
+                self.chunks_mut()[index] =
+                    ModelChunk::from_raw(RawChunk::new(tag, data[offset..end].to_vec()), version);
+                offset = end;
+            }
+        } else {
+            self.chunks_mut()[positions[0]] =
+                ModelChunk::from_raw(RawChunk::new(tag, data), version);
             let mut seen = false;
             self.chunks_mut().retain(|chunk| {
-                if chunk.tag != tag {
+                if chunk.tag() != tag {
                     return true;
                 }
                 if seen {
@@ -129,8 +117,7 @@ impl Model {
                     true
                 }
             });
-        } else {
-            self.push(RawChunk::new(tag, data));
         }
+        Ok(())
     }
 }

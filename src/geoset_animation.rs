@@ -3,7 +3,7 @@
 use crate::Record;
 use crate::{AnimationTrack, Error, Model};
 
-const HEADER_SIZE: usize = 28;
+pub(crate) const HEADER_SIZE: usize = 28;
 
 /// Geoset animation rendering flags, retaining unknown bits.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -122,40 +122,10 @@ impl GeosetAnimation {
 impl Model {
     /// Decodes all `GEOA` records in file order.
     pub fn geoset_animations(&self) -> Result<Vec<GeosetAnimation>, Error> {
-        let mut animations = Vec::new();
-        for chunk in self
-            .chunks()
-            .iter()
-            .filter(|chunk| chunk.tag == GeosetAnimation::TAG)
-        {
-            let mut offset = 0;
-            while offset < chunk.data.len() {
-                let size_bytes = chunk.data.get(offset..offset.saturating_add(4)).ok_or(
-                    Error::MalformedRecord {
-                        tag: GeosetAnimation::TAG,
-                        offset,
-                    },
-                )?;
-                let size =
-                    u32::from_le_bytes(size_bytes.try_into().expect("four-byte size")) as usize;
-                if size < HEADER_SIZE {
-                    return Err(Error::MalformedRecord {
-                        tag: GeosetAnimation::TAG,
-                        offset,
-                    });
-                }
-                let end = offset
-                    .checked_add(size)
-                    .filter(|&end| end <= chunk.data.len())
-                    .ok_or(Error::MalformedRecord {
-                        tag: GeosetAnimation::TAG,
-                        offset,
-                    })?;
-                animations.push(GeosetAnimation::decode(&chunk.data[offset..end], 0)?);
-                offset = end;
-            }
-        }
-        Ok(animations)
+        self.collect_chunk_records::<crate::GeosetAnimationsChunk>(|chunk| match chunk {
+            crate::ModelChunk::GeosetAnimations(decoded) => Some(decoded),
+            _ => None,
+        })
     }
 
     /// Replaces geoset animations in the first `GEOA` chunk.
@@ -170,7 +140,7 @@ impl Model {
                 });
             }
         }
-        self.replace_chunks(GeosetAnimation::TAG, data);
+        self.replace_chunks(GeosetAnimation::TAG, data)?;
         Ok(())
     }
 }

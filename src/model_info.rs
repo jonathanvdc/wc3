@@ -117,8 +117,15 @@ impl ModelInfo {
 impl Model {
     /// Reads the first `MODL` record, if present.
     pub fn model_info(&self) -> Result<Option<ModelInfo>, Error> {
-        self.chunk(ModelInfo::TAG)
-            .map(|chunk| ModelInfo::parse(&chunk.data))
+        self.chunks()
+            .iter()
+            .find(|chunk| chunk.tag() == ModelInfo::TAG)
+            .map(|chunk| match chunk {
+                crate::ModelChunk::ModelInfo(decoded) => Ok(decoded.info.clone()),
+                crate::ModelChunk::Malformed(malformed) => Err(malformed.error.clone()),
+                crate::ModelChunk::Unknown(raw) => ModelInfo::parse(&raw.data),
+                _ => unreachable!("MODL tag matched another typed chunk"),
+            })
             .transpose()
     }
 
@@ -126,16 +133,22 @@ impl Model {
     /// after the standard record are retained.
     pub fn set_model_info(&mut self, info: &ModelInfo) {
         if let Some(chunk) = self.chunk_mut(ModelInfo::TAG) {
-            if chunk.data.len() >= SIZE {
-                chunk.data[..SIZE].copy_from_slice(info.as_bytes());
-            } else {
-                chunk.data = info.as_bytes().to_vec();
+            match chunk {
+                crate::ModelChunk::ModelInfo(current) => current.info = info.clone(),
+                _ => {
+                    let raw = chunk.to_raw().expect("model info chunk can be encoded");
+                    let extension = raw.data.get(SIZE..).unwrap_or_default().to_vec();
+                    *chunk = crate::ModelChunk::ModelInfo(crate::ModelInfoChunk::new(
+                        info.clone(),
+                        extension,
+                    ));
+                }
             }
         } else {
-            self.push(crate::RawChunk::new(
-                ModelInfo::TAG,
-                info.as_bytes().to_vec(),
-            ));
+            self.push_chunk(crate::ModelChunk::ModelInfo(crate::ModelInfoChunk::new(
+                info.clone(),
+                Vec::new(),
+            )));
         }
     }
 }

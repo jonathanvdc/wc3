@@ -20,8 +20,8 @@ fn preserves_repeated_chunks_and_order() {
     model.push(RawChunk::new(*b"ABCD", vec![1]));
     model.push(RawChunk::new(*b"ABCD", vec![2]));
     let parsed = Model::decode(&model.encode().unwrap(), 800).unwrap();
-    assert_eq!(parsed.chunks()[1].data, vec![1]);
-    assert_eq!(parsed.chunks()[2].data, vec![2]);
+    assert_eq!(parsed.chunks()[1].to_raw().unwrap().data, vec![1]);
+    assert_eq!(parsed.chunks()[2].to_raw().unwrap().data, vec![2]);
 }
 
 #[test]
@@ -36,9 +36,15 @@ fn typed_setter_preserves_repeated_chunk_boundaries() {
     assert_eq!(model.encode().unwrap(), original);
     durations[1] = 300;
     model.set_global_sequences(&durations).unwrap();
-    assert_eq!(model.chunks()[1].data, 100u32.to_le_bytes());
-    assert_eq!(model.chunks()[2].tag, *b"TEST");
-    assert_eq!(model.chunks()[3].data, 300u32.to_le_bytes());
+    assert_eq!(
+        model.chunks()[1].to_raw().unwrap().data,
+        100u32.to_le_bytes()
+    );
+    assert_eq!(model.chunks()[2].tag(), *b"TEST");
+    assert_eq!(
+        model.chunks()[3].to_raw().unwrap().data,
+        300u32.to_le_bytes()
+    );
 }
 
 #[test]
@@ -86,7 +92,7 @@ fn typed_accessors_preserve_local_files_when_available() {
             if model
                 .chunks()
                 .iter()
-                .filter(|chunk| chunk.tag == *b"SEQS")
+                .filter(|chunk| chunk.tag() == *b"SEQS")
                 .count()
                 == 1
             {
@@ -96,7 +102,7 @@ fn typed_accessors_preserve_local_files_when_available() {
             if model
                 .chunks()
                 .iter()
-                .filter(|chunk| chunk.tag == *b"TEXS")
+                .filter(|chunk| chunk.tag() == *b"TEXS")
                 .count()
                 == 1
             {
@@ -106,7 +112,7 @@ fn typed_accessors_preserve_local_files_when_available() {
             if model
                 .chunks()
                 .iter()
-                .filter(|chunk| chunk.tag == *b"MTLS")
+                .filter(|chunk| chunk.tag() == *b"MTLS")
                 .count()
                 == 1
             {
@@ -116,7 +122,7 @@ fn typed_accessors_preserve_local_files_when_available() {
             if model
                 .chunks()
                 .iter()
-                .filter(|chunk| chunk.tag == *b"GEOS")
+                .filter(|chunk| chunk.tag() == *b"GEOS")
                 .count()
                 == 1
             {
@@ -126,7 +132,7 @@ fn typed_accessors_preserve_local_files_when_available() {
             if model
                 .chunks()
                 .iter()
-                .filter(|chunk| chunk.tag == *b"BONE")
+                .filter(|chunk| chunk.tag() == *b"BONE")
                 .count()
                 == 1
             {
@@ -136,7 +142,7 @@ fn typed_accessors_preserve_local_files_when_available() {
             if model
                 .chunks()
                 .iter()
-                .filter(|chunk| chunk.tag == *b"PIVT")
+                .filter(|chunk| chunk.tag() == *b"PIVT")
                 .count()
                 == 1
             {
@@ -146,7 +152,7 @@ fn typed_accessors_preserve_local_files_when_available() {
             if model
                 .chunks()
                 .iter()
-                .filter(|chunk| chunk.tag == *b"EVTS")
+                .filter(|chunk| chunk.tag() == *b"EVTS")
                 .count()
                 == 1
             {
@@ -156,7 +162,7 @@ fn typed_accessors_preserve_local_files_when_available() {
             if model
                 .chunks()
                 .iter()
-                .filter(|chunk| chunk.tag == *b"CLID")
+                .filter(|chunk| chunk.tag() == *b"CLID")
                 .count()
                 == 1
             {
@@ -166,7 +172,7 @@ fn typed_accessors_preserve_local_files_when_available() {
             if model
                 .chunks()
                 .iter()
-                .filter(|chunk| chunk.tag == *b"ATCH")
+                .filter(|chunk| chunk.tag() == *b"ATCH")
                 .count()
                 == 1
             {
@@ -176,7 +182,7 @@ fn typed_accessors_preserve_local_files_when_available() {
             if model
                 .chunks()
                 .iter()
-                .filter(|chunk| chunk.tag == *b"FAFX")
+                .filter(|chunk| chunk.tag() == *b"FAFX")
                 .count()
                 == 1
             {
@@ -186,7 +192,7 @@ fn typed_accessors_preserve_local_files_when_available() {
             if model
                 .chunks()
                 .iter()
-                .filter(|chunk| chunk.tag == *b"GEOA")
+                .filter(|chunk| chunk.tag() == *b"GEOA")
                 .count()
                 == 1
             {
@@ -198,7 +204,7 @@ fn typed_accessors_preserve_local_files_when_available() {
                     if model
                         .chunks()
                         .iter()
-                        .filter(|chunk| chunk.tag == *$tag)
+                        .filter(|chunk| chunk.tag() == *$tag)
                         .count()
                         == 1
                     {
@@ -217,7 +223,7 @@ fn typed_accessors_preserve_local_files_when_available() {
             if model
                 .chunks()
                 .iter()
-                .filter(|chunk| chunk.tag == *b"BPOS")
+                .filter(|chunk| chunk.tag() == *b"BPOS")
                 .count()
                 == 1
             {

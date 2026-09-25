@@ -3,7 +3,7 @@
 use crate::Record;
 use crate::{sized_node, AnimationTrack, Error, Model, Node};
 
-const FIXED_SIZE: usize = 52;
+pub(crate) const FIXED_SIZE: usize = 52;
 
 /// Fixed properties of a ribbon emitter.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
@@ -92,20 +92,10 @@ fn is_track(tag: [u8; 4]) -> bool {
 impl Model {
     /// Decodes all ribbon emitter records in file order.
     pub fn ribbon_emitters(&self) -> Result<Vec<RibbonEmitter>, Error> {
-        let mut result = Vec::new();
-        for chunk in self
-            .chunks()
-            .iter()
-            .filter(|chunk| chunk.tag == RibbonEmitter::TAG)
-        {
-            result.extend(
-                sized_node::records(&chunk.data, RibbonEmitter::TAG, FIXED_SIZE)?
-                    .into_iter()
-                    .map(|bytes| RibbonEmitter::decode(bytes, 0))
-                    .collect::<Result<Vec<_>, _>>()?,
-            );
-        }
-        Ok(result)
+        self.collect_chunk_records::<crate::RibbonEmittersChunk>(|chunk| match chunk {
+            crate::ModelChunk::RibbonEmitters(decoded) => Some(decoded),
+            _ => None,
+        })
     }
 
     /// Replaces ribbon emitters in the first `RIBB` chunk.
@@ -122,7 +112,7 @@ impl Model {
         for emitter in emitters {
             data.extend_from_slice(&emitter.encode()?);
         }
-        self.replace_chunks(RibbonEmitter::TAG, data);
+        self.replace_chunks(RibbonEmitter::TAG, data)?;
         Ok(())
     }
 }

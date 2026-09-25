@@ -1,8 +1,8 @@
 # wc3-mdx
 
 Pure Rust Warcraft III MDX reader and writer for Classic and Reforged models.
-The crate keeps chunks in file order and preserves their exact payload bytes,
-including unknown fields and chunks. The target range is MDX versions 800
+The crate keeps decoded chunks in file order. Unknown and malformed chunks
+retain their exact payload bytes. The target range is MDX versions 800
 through 1800.
 
 Typed access covers the standard model, sequence, material, texture, geoset,
@@ -31,6 +31,11 @@ let info = decoded.model_info()?.unwrap();
 assert_eq!(info.name(), "Example");
 # Ok::<(), wc3_mdx::Error>(())
 ```
+
+`Model::chunks()` exposes `ModelChunk` variants for known chunk types, plus
+`Unknown` and `Malformed` variants. A malformed chunk retains its original
+bytes and decoding error; `validate()` reports that error. Editing a typed
+chunk variant writes its new payload when the model is encoded.
 
 Run unit and integration tests with `cargo test --all-targets`.
 Set `WC3_MDX_FIXTURES` to a directory of local `.mdx` files to include

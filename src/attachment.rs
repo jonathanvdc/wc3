@@ -85,7 +85,7 @@ impl Attachment {
     }
 }
 
-fn record_end(data: &[u8], offset: usize) -> Result<usize, Error> {
+pub(crate) fn record_end(data: &[u8], offset: usize) -> Result<usize, Error> {
     let size_bytes = data
         .get(offset..offset.saturating_add(4))
         .ok_or(Error::MalformedRecord {
@@ -132,20 +132,10 @@ fn record_end(data: &[u8], offset: usize) -> Result<usize, Error> {
 impl Model {
     /// Decodes all attachments in `ATCH` chunks.
     pub fn attachments(&self) -> Result<Vec<Attachment>, Error> {
-        let mut attachments = Vec::new();
-        for chunk in self
-            .chunks()
-            .iter()
-            .filter(|chunk| chunk.tag == Attachment::TAG)
-        {
-            let mut offset = 0;
-            while offset < chunk.data.len() {
-                let end = record_end(&chunk.data, offset)?;
-                attachments.push(Attachment::decode(&chunk.data[offset..end], 0)?);
-                offset = end;
-            }
-        }
-        Ok(attachments)
+        self.collect_chunk_records::<crate::AttachmentsChunk>(|chunk| match chunk {
+            crate::ModelChunk::Attachments(decoded) => Some(decoded),
+            _ => None,
+        })
     }
 
     /// Replaces attachments in the first `ATCH` chunk.
@@ -162,7 +152,7 @@ impl Model {
         for attachment in attachments {
             data.extend_from_slice(&attachment.encode()?);
         }
-        self.replace_chunks(Attachment::TAG, data);
+        self.replace_chunks(Attachment::TAG, data)?;
         Ok(())
     }
 }
