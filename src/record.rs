@@ -45,7 +45,7 @@ pub trait ChunkRecord: Record {
 
 #[cfg(test)]
 mod tests {
-    use super::Record;
+    use super::{ChunkRecord, Record};
     use crate::{Geoset, Model, Sequence};
 
     fn round_trip<T: Record + PartialEq + std::fmt::Debug>(value: &T, version: u32) {
@@ -59,5 +59,38 @@ mod tests {
         round_trip(&Sequence::new("Stand", [0, 100]).unwrap(), 800);
         round_trip(&Geoset::new(1800, &[], &[], &[]).unwrap(), 1800);
         assert!(Sequence::decode(&[0; 131], 800).is_err());
+    }
+
+    #[test]
+    fn known_top_level_chunks_have_distinct_chunk_records() {
+        let tags = [
+            crate::VersionChunk::TAG,
+            crate::ModelInfoChunk::TAG,
+            crate::SequencesChunk::TAG,
+            crate::GlobalSequencesChunk::TAG,
+            crate::TexturesChunk::TAG,
+            crate::MaterialsChunk::TAG,
+            crate::GeosetsChunk::TAG,
+            crate::GeosetAnimationsChunk::TAG,
+            crate::BonesChunk::TAG,
+            crate::HelpersChunk::TAG,
+            crate::AttachmentsChunk::TAG,
+            crate::EventObjectsChunk::TAG,
+            crate::CollisionShapesChunk::TAG,
+            crate::ParticleEmittersChunk::TAG,
+            crate::ParticleEmitters2Chunk::TAG,
+            crate::RibbonEmittersChunk::TAG,
+            crate::PopcornEmittersChunk::TAG,
+            crate::CamerasChunk::TAG,
+            crate::LightsChunk::TAG,
+            crate::TextureAnimationsChunk::TAG,
+            crate::FaceFxChunk::TAG,
+            crate::PivotPointsChunk::TAG,
+            crate::BindPose::TAG,
+        ];
+        let mut unique = tags.to_vec();
+        unique.sort_unstable();
+        unique.dedup();
+        assert_eq!(unique.len(), tags.len());
     }
 }

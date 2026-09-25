@@ -1,6 +1,128 @@
 //! Scalar global sequences and XYZ pivot points.
 
-use crate::{Chunk, Error, Model};
+use crate::{Chunk, ChunkRecord, Error, Model, Record};
+
+/// The complete `GLBS` payload.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct GlobalSequencesChunk {
+    pub durations: Vec<u32>,
+}
+
+impl Record for GlobalSequencesChunk {
+    fn decode(bytes: &[u8], _version: u32) -> Result<Self, Error> {
+        if bytes.len() % 4 != 0 {
+            return Err(Error::MalformedChunk {
+                tag: Self::TAG,
+                size: bytes.len(),
+                expected: 4,
+            });
+        }
+        Ok(Self {
+            durations: bytes
+                .chunks_exact(4)
+                .map(|word| u32::from_le_bytes(word.try_into().expect("four-byte field")))
+                .collect(),
+        })
+    }
+
+    fn encode(&self) -> Result<Vec<u8>, Error> {
+        let size = checked_chunk_size(self.durations.len(), 4, Self::TAG)?;
+        let mut bytes = Vec::with_capacity(size);
+        for duration in &self.durations {
+            bytes.extend_from_slice(&duration.to_le_bytes());
+        }
+        Ok(bytes)
+    }
+}
+
+impl ChunkRecord for GlobalSequencesChunk {
+    const TAG: [u8; 4] = *b"GLBS";
+}
+
+/// The complete `PIVT` payload.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct PivotPointsChunk {
+    pub points: Vec<[f32; 3]>,
+}
+
+impl Record for PivotPointsChunk {
+    fn decode(bytes: &[u8], _version: u32) -> Result<Self, Error> {
+        if bytes.len() % 12 != 0 {
+            return Err(Error::MalformedChunk {
+                tag: Self::TAG,
+                size: bytes.len(),
+                expected: 12,
+            });
+        }
+        Ok(Self {
+            points: bytes
+                .chunks_exact(12)
+                .map(|point| {
+                    std::array::from_fn(|index| {
+                        let offset = index * 4;
+                        f32::from_le_bytes(
+                            point[offset..offset + 4]
+                                .try_into()
+                                .expect("four-byte field"),
+                        )
+                    })
+                })
+                .collect(),
+        })
+    }
+
+    fn encode(&self) -> Result<Vec<u8>, Error> {
+        let size = checked_chunk_size(self.points.len(), 12, Self::TAG)?;
+        let mut bytes = Vec::with_capacity(size);
+        for point in &self.points {
+            for coordinate in point {
+                bytes.extend_from_slice(&coordinate.to_le_bytes());
+            }
+        }
+        Ok(bytes)
+    }
+}
+
+impl ChunkRecord for PivotPointsChunk {
+    const TAG: [u8; 4] = *b"PIVT";
+}
+
+fn checked_chunk_size(count: usize, width: usize, tag: [u8; 4]) -> Result<usize, Error> {
+    let size = count.checked_mul(width).ok_or(Error::ChunkTooLarge {
+        tag,
+        size: usize::MAX,
+    })?;
+    if size > u32::MAX as usize {
+        return Err(Error::ChunkTooLarge { tag, size });
+    }
+    Ok(size)
+}
+
+#[cfg(test)]
+mod chunk_record_tests {
+    use super::*;
+
+    #[test]
+    fn scalar_chunks_round_trip_complete_payloads() {
+        let globals = GlobalSequencesChunk {
+            durations: vec![100, 200, 300],
+        };
+        assert_eq!(
+            GlobalSequencesChunk::decode_chunk(&globals.encode_chunk().unwrap()).unwrap(),
+            globals
+        );
+
+        let pivots = PivotPointsChunk {
+            points: vec![[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]],
+        };
+        assert_eq!(
+            PivotPointsChunk::decode_chunk(&pivots.encode_chunk().unwrap()).unwrap(),
+            pivots
+        );
+        assert!(GlobalSequencesChunk::decode(&[1], 800).is_err());
+        assert!(PivotPointsChunk::decode(&[1], 800).is_err());
+    }
+}
 
 impl Model {
     /// Returns durations from every `GLBS` chunk in file order.
