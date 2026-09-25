@@ -24,6 +24,15 @@ impl Camera {
         Ok(camera)
     }
 
+    /// Creates a camera with the record flags used by newer models.
+    pub fn new_for_version(name: &str, version: u32) -> Result<Self, Error> {
+        let mut camera = Self::new(name)?;
+        if version >= 1200 {
+            camera.set_record_flags(3);
+        }
+        Ok(camera)
+    }
+
     /// Wraps one inclusive-size camera record.
     pub fn from_bytes(bytes: &[u8]) -> Result<Self, Error> {
         if bytes.len() < HEADER_SIZE {
@@ -32,7 +41,8 @@ impl Camera {
                 offset: 0,
             });
         }
-        let size = u32::from_le_bytes(bytes[..4].try_into().expect("four-byte size")) as usize;
+        let size = (u32::from_le_bytes(bytes[..4].try_into().expect("four-byte size"))
+            & 0x00ff_ffff) as usize;
         if size != bytes.len() {
             return Err(Error::MalformedRecord {
                 tag: TAG,
@@ -47,6 +57,16 @@ impl Camera {
     /// Returns the complete record.
     pub fn as_bytes(&self) -> &[u8] {
         &self.bytes
+    }
+
+    /// Returns the upper-byte record flags in the inclusive size word.
+    pub fn record_flags(&self) -> u8 {
+        self.bytes[3]
+    }
+
+    /// Sets the upper-byte record flags without changing the record length.
+    pub fn set_record_flags(&mut self, flags: u8) {
+        self.bytes[3] = flags;
     }
 
     /// Returns the camera name up to the first NUL.
@@ -153,13 +173,13 @@ impl Camera {
             }
             bytes.extend_from_slice(&track.to_bytes()?);
         }
-        if bytes.len() > u32::MAX as usize {
+        if bytes.len() > 0x00ff_ffff {
             return Err(Error::ChunkTooLarge {
                 tag: TAG,
                 size: bytes.len(),
             });
         }
-        let size = bytes.len() as u32;
+        let size = bytes.len() as u32 | (u32::from(self.record_flags()) << 24);
         bytes[..4].copy_from_slice(&size.to_le_bytes());
         self.bytes = bytes;
         Ok(())
@@ -199,8 +219,8 @@ impl Model {
                     .data
                     .get(offset..offset.saturating_add(4))
                     .ok_or(Error::MalformedRecord { tag: TAG, offset })?;
-                let size =
-                    u32::from_le_bytes(size_bytes.try_into().expect("four-byte size")) as usize;
+                let size = (u32::from_le_bytes(size_bytes.try_into().expect("four-byte size"))
+                    & 0x00ff_ffff) as usize;
                 if size < HEADER_SIZE {
                     return Err(Error::MalformedRecord { tag: TAG, offset });
                 }

@@ -32,3 +32,16 @@ fn camera_fields_and_tracks_round_trip() {
     assert_eq!(camera.near_clip(), 10.0);
     assert_eq!(camera.tracks().unwrap(), vec![track]);
 }
+
+#[test]
+fn newer_camera_size_flags_round_trip() {
+    let mut camera = Camera::new_for_version("Portrait", 1800).unwrap();
+    assert_eq!(camera.record_flags(), 3);
+    camera.set_field_of_view(0.8);
+    let mut model = Model::new(1800);
+    model.set_cameras(&[camera]).unwrap();
+    let bytes = model.to_bytes().unwrap();
+    let parsed = Model::from_bytes(&bytes).unwrap();
+    assert_eq!(parsed.cameras().unwrap()[0].record_flags(), 3);
+    assert_eq!(parsed.to_bytes().unwrap(), bytes);
+}
