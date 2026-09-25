@@ -151,7 +151,10 @@ impl RibbonEmitter {
 }
 
 fn is_track(tag: [u8; 4]) -> bool {
-    matches!(&tag, b"KRVS" | b"KRHA" | b"KRHB" | b"KRAL" | b"KRTX")
+    matches!(
+        &tag,
+        b"KRVS" | b"KRHA" | b"KRHB" | b"KRAL" | b"KRCO" | b"KRTX"
+    )
 }
 
 impl Model {

@@ -35,3 +35,27 @@ fn ribbon_fields_and_integer_animation_round_trip() {
     );
     assert_eq!(parsed.to_bytes().unwrap(), bytes);
 }
+
+#[test]
+fn ribbon_color_animation_round_trip() {
+    let mut emitter = RibbonEmitter::new(Node::new("ColorTrail", 5).unwrap()).unwrap();
+    let track = AnimationTrack {
+        tag: *b"KRCO",
+        interpolation: 1,
+        global_sequence_id: u32::MAX,
+        keyframes: vec![Keyframe {
+            frame: 42,
+            value: vec![1.0, 0.5, 0.25],
+            in_tangent: None,
+            out_tangent: None,
+        }],
+    };
+    emitter.set_tracks(std::slice::from_ref(&track)).unwrap();
+    assert_eq!(
+        RibbonEmitter::from_bytes(emitter.as_bytes())
+            .unwrap()
+            .tracks()
+            .unwrap(),
+        vec![track]
+    );
+}

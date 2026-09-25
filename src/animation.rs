@@ -176,7 +176,7 @@ impl AnimationTrack {
 fn components(tag: [u8; 4]) -> Option<usize> {
     match &tag {
         b"KGTR" | b"KGSC" | b"KCTR" | b"KTTR" | b"KPPC" | b"KTAT" | b"KTAS" | b"KGAC" | b"KLAC"
-        | b"KLBC" | b"KFC3" => Some(3),
+        | b"KLBC" | b"KFC3" | b"KRCO" => Some(3),
         b"KGRT" | b"KTAR" => Some(4),
         b"KCRL" | b"KATV" | b"KPPA" | b"KPPE" | b"KPPL" | b"KPPS" | b"KPPV" | b"KPEV" | b"KPEE"
         | b"KPEG" | b"KPLN" | b"KPLT" | b"KPEL" | b"KPES" | b"KP2V" | b"KP2E" | b"KP2W"
