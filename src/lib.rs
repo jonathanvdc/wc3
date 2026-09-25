@@ -17,6 +17,8 @@
 
 use std::fmt;
 
+mod geoset;
+pub use geoset::Geoset;
 mod model_info;
 pub use model_info::ModelInfo;
 mod sequence;
@@ -75,6 +77,8 @@ pub enum Error {
     },
     /// A fixed-width string is too long or contains a NUL.
     InvalidString { max_bytes: usize },
+    /// A size-bounded record or section is malformed at the given offset.
+    MalformedRecord { tag: [u8; 4], offset: usize },
 }
 
 impl fmt::Display for Error {
@@ -107,6 +111,11 @@ impl fmt::Display for Error {
             Self::InvalidString { max_bytes } => {
                 write!(f, "string must fit in {max_bytes} bytes and contain no NUL")
             }
+            Self::MalformedRecord { tag, offset } => write!(
+                f,
+                "malformed {:?} record at byte {offset}",
+                String::from_utf8_lossy(tag)
+            ),
         }
     }
 }
