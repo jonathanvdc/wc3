@@ -35,6 +35,19 @@ impl Model {
             geoset.vertices()?;
             geoset.normals()?;
             geoset.face_indices()?;
+            geoset.vertex_groups(version)?;
+            geoset.matrix_group_sizes(version)?;
+            geoset.matrix_indices(version)?;
+            geoset.material_id(version)?;
+            geoset.selection_group(version)?;
+            geoset.unselectable(version)?;
+            geoset.level_of_detail(version)?;
+            geoset.name(version)?;
+            geoset.extent(version)?;
+            geoset.sequence_extents(version)?;
+            geoset.tangents(version)?;
+            geoset.skin_weights(version)?;
+            geoset.skin_bone_indices(version)?;
             geoset.uv_sets(version)?;
         }
         for animation in self.geoset_animations()? {
