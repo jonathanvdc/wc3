@@ -14,7 +14,7 @@ pub struct EventObject {
 impl EventObject {
     /// Creates an event object from a node, global sequence ID, and frame times.
     pub fn new(node: Node, global_sequence_id: u32, frames: &[u32]) -> Result<Self, Error> {
-        let mut bytes = node.as_bytes().to_vec();
+        let mut bytes = node.to_bytes();
         bytes.extend_from_slice(&TRACK_TAG);
         if frames.len() > u32::MAX as usize {
             return Err(Error::ChunkTooLarge {
@@ -64,7 +64,7 @@ impl EventObject {
 
     /// Returns the global sequence ID, or `u32::MAX` when absent.
     pub fn global_sequence_id(&self) -> u32 {
-        let offset = self.node().as_bytes().len() + 8;
+        let offset = self.node_size() + 8;
         u32::from_le_bytes(
             self.bytes[offset..offset + 4]
                 .try_into()
@@ -80,7 +80,7 @@ impl EventObject {
 
     /// Returns event frame times in source order.
     pub fn frames(&self) -> Vec<u32> {
-        let start = self.node().as_bytes().len() + 12;
+        let start = self.node_size() + 12;
         self.bytes[start..]
             .chunks_exact(4)
             .map(|bytes| u32::from_le_bytes(bytes.try_into().expect("four-byte frame")))

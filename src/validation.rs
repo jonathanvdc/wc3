@@ -28,42 +28,42 @@ impl Model {
             animation.tracks()?;
         }
         for bone in self.bones()? {
-            bone.node().tracks()?;
+            bone.node().tracks();
         }
         for helper in self.helpers()? {
-            helper.tracks()?;
+            helper.tracks();
         }
         for attachment in self.attachments()? {
-            attachment.node().tracks()?;
+            attachment.node().tracks();
             attachment.visibility_track()?;
         }
         for event in self.event_objects()? {
-            event.node().tracks()?;
+            event.node().tracks();
         }
         for shape in self.collision_shapes()? {
-            shape.node().tracks()?;
+            shape.node().tracks();
         }
         for emitter in self.particle_emitters()? {
-            emitter.node().tracks()?;
+            emitter.node().tracks();
             emitter.tracks()?;
         }
         for emitter in self.particle_emitters2()? {
-            emitter.node().tracks()?;
+            emitter.node().tracks();
             emitter.tracks()?;
         }
         for emitter in self.ribbon_emitters()? {
-            emitter.node().tracks()?;
+            emitter.node().tracks();
             emitter.tracks()?;
         }
         for emitter in self.popcorn_emitters()? {
-            emitter.node().tracks()?;
+            emitter.node().tracks();
             emitter.tracks()?;
         }
         for camera in self.cameras()? {
             camera.tracks()?;
         }
         for light in self.lights()? {
-            light.node().tracks()?;
+            light.node().tracks();
             light.tracks()?;
         }
         for animation in self.texture_animations()? {

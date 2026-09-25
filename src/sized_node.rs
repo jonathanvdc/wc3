@@ -9,8 +9,9 @@ pub(crate) struct Layout {
 }
 
 pub(crate) fn new_record(node: &Node, fixed_size: usize, tag: [u8; 4]) -> Result<Vec<u8>, Error> {
+    let node_bytes = node.to_bytes();
     let size = 4usize
-        .checked_add(node.as_bytes().len())
+        .checked_add(node_bytes.len())
         .and_then(|n| n.checked_add(fixed_size))
         .filter(|&size| size <= u32::MAX as usize)
         .ok_or(Error::ChunkTooLarge {
@@ -19,7 +20,7 @@ pub(crate) fn new_record(node: &Node, fixed_size: usize, tag: [u8; 4]) -> Result
         })?;
     let mut bytes = vec![0; size];
     bytes[..4].copy_from_slice(&(size as u32).to_le_bytes());
-    bytes[4..4 + node.as_bytes().len()].copy_from_slice(node.as_bytes());
+    bytes[4..4 + node_bytes.len()].copy_from_slice(&node_bytes);
     Ok(bytes)
 }
 

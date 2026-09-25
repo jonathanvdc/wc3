@@ -15,8 +15,30 @@ fn node_transform_tracks_round_trip() {
     };
     let mut node = Node::new("Animated", 4).unwrap();
     node.set_tracks(std::slice::from_ref(&track)).unwrap();
-    let parsed = Node::from_bytes(node.as_bytes()).unwrap();
-    assert_eq!(parsed.tracks().unwrap(), vec![track]);
+    let parsed = Node::from_bytes(&node.to_bytes()).unwrap();
+    assert_eq!(parsed.tracks(), vec![track]);
+}
+
+#[test]
+fn node_keeps_name_padding_and_track_order() {
+    let mut node = Node::new("N", 2).unwrap();
+    let tracks = [*b"KGSC", *b"KGTR"].map(|tag| AnimationTrack {
+        tag,
+        interpolation: 1,
+        global_sequence_id: u32::MAX,
+        keyframes: vec![Keyframe {
+            frame: 7,
+            value: vec![1.0, 2.0, 3.0],
+            in_tangent: None,
+            out_tangent: None,
+        }],
+    });
+    node.set_tracks(&tracks).unwrap();
+    let mut bytes = node.to_bytes();
+    bytes[20] = 0xe1;
+    let parsed = Node::from_bytes(&bytes).unwrap();
+    assert_eq!(parsed.to_bytes(), bytes);
+    assert_eq!(parsed.tracks()[0].tag, *b"KGSC");
 }
 
 #[test]

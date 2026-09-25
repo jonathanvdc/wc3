@@ -18,7 +18,7 @@ impl Attachment {
     /// Creates an attachment from a node, model path, and attachment ID.
     pub fn new(node: Node, path: &str, id: u32) -> Result<Self, Error> {
         let mut bytes = vec![0; 4];
-        bytes.extend_from_slice(node.as_bytes());
+        bytes.extend_from_slice(&node.to_bytes());
         bytes.resize(bytes.len() + FIXED_SIZE, 0);
         if bytes.len() > u32::MAX as usize {
             return Err(Error::ChunkTooLarge {

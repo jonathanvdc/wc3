@@ -16,7 +16,7 @@ impl Light {
     /// Creates a light with zeroed lighting values.
     pub fn new(node: Node, light_type: u32) -> Self {
         let mut bytes = vec![0; 4];
-        bytes.extend_from_slice(node.as_bytes());
+        bytes.extend_from_slice(&node.to_bytes());
         bytes.extend_from_slice(&light_type.to_le_bytes());
         bytes.resize(bytes.len() + FIXED_SIZE - 4, 0);
         let size = bytes.len() as u32;

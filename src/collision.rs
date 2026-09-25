@@ -26,7 +26,7 @@ pub struct CollisionShape {
 impl CollisionShape {
     /// Creates a box collision shape from two XYZ corners.
     pub fn new_box(node: Node, corners: [[f32; 3]; 2]) -> Self {
-        let mut bytes = node.as_bytes().to_vec();
+        let mut bytes = node.to_bytes();
         bytes.extend_from_slice(&0u32.to_le_bytes());
         for corner in corners {
             for coordinate in corner {
@@ -38,7 +38,7 @@ impl CollisionShape {
 
     /// Creates a sphere collision shape from center and radius.
     pub fn new_sphere(node: Node, center: [f32; 3], radius: f32) -> Self {
-        let mut bytes = node.as_bytes().to_vec();
+        let mut bytes = node.to_bytes();
         bytes.extend_from_slice(&2u32.to_le_bytes());
         for coordinate in center {
             bytes.extend_from_slice(&coordinate.to_le_bytes());
@@ -58,7 +58,7 @@ impl CollisionShape {
     }
 
     fn from_points(node: Node, kind: u32, points: [[f32; 3]; 2], radius: Option<f32>) -> Self {
-        let mut bytes = node.as_bytes().to_vec();
+        let mut bytes = node.to_bytes();
         bytes.extend_from_slice(&kind.to_le_bytes());
         for point in points {
             for value in point {
