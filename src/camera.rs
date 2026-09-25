@@ -1,4 +1,5 @@
 //! Typed camera records in `CAMS` chunks.
+use crate::Encoder;
 use crate::{Tag, Vec3, Version};
 
 use crate::Record;
@@ -195,38 +196,35 @@ impl Record for Camera {
         })
     }
 
-    fn encode_to(&self, bytes: &mut Vec<u8>) -> Result<(), Error> {
-        let start = bytes.len();
-        bytes.resize(start + HEADER_SIZE, 0);
-        bytes[start + 4..start + 84].copy_from_slice(&self.name);
-        for (index, value) in self.position.into_iter().enumerate() {
-            bytes[start + 84 + index * 4..start + 88 + index * 4]
-                .copy_from_slice(&value.to_le_bytes());
+    fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), Error> {
+        let start = bytes.position();
+        let marker = bytes.begin_sized();
+        bytes.write_bytes(&self.name);
+        for value in self.position {
+            bytes.write(value);
         }
-        bytes[start + 96..start + 100].copy_from_slice(&self.field_of_view.to_le_bytes());
-        bytes[start + 100..start + 104].copy_from_slice(&self.far_clip.to_le_bytes());
-        bytes[start + 104..start + 108].copy_from_slice(&self.near_clip.to_le_bytes());
-        for (index, value) in self.target_position.into_iter().enumerate() {
-            bytes[start + 108 + index * 4..start + 112 + index * 4]
-                .copy_from_slice(&value.to_le_bytes());
+        bytes.write(self.field_of_view);
+        bytes.write(self.far_clip);
+        bytes.write(self.near_clip);
+        for value in self.target_position {
+            bytes.write(value);
         }
         for track in &self.tracks {
             if !is_track(track.tag) {
                 return Err(Error::MalformedRecord {
                     tag: Camera::TAG,
-                    offset: bytes.len() - start,
+                    offset: bytes.position() - start,
                 });
             }
             track.encode_to(bytes)?;
         }
-        if bytes.len() - start > MAX_RECORD_SIZE {
+        if bytes.position() - start > MAX_RECORD_SIZE {
             return Err(Error::ChunkTooLarge {
                 tag: Camera::TAG,
-                size: bytes.len() - start,
+                size: bytes.position() - start,
             });
         }
-        let size = (bytes.len() - start) as u32 | (u32::from(self.record_flags) << 24);
-        bytes[start..start + 4].copy_from_slice(&size.to_le_bytes());
+        bytes.finish_sized_with_flags(marker, Camera::TAG, u32::from(self.record_flags) << 24)?;
         Ok(())
     }
 }

@@ -1,4 +1,5 @@
 //! Ribbon emitter records in `RIBB` chunks.
+use crate::Encoder;
 use crate::{Color, Tag};
 
 use crate::Record;
@@ -151,9 +152,9 @@ impl Record for RibbonEmitter {
         })
     }
 
-    fn encode_to(&self, bytes: &mut Vec<u8>) -> Result<(), Error> {
-        let start = bytes.len();
-        bytes.resize(start + 4, 0);
+    fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), Error> {
+        let start = bytes.position();
+        let marker = bytes.begin_sized();
         self.node.encode_to(bytes)?;
         let fields = &self.fields;
         for value in [
@@ -165,7 +166,7 @@ impl Record for RibbonEmitter {
             fields.color[2],
             fields.life_span,
         ] {
-            bytes.extend_from_slice(&value.to_le_bytes());
+            bytes.write(value);
         }
         for value in [
             fields.texture_slot,
@@ -174,23 +175,19 @@ impl Record for RibbonEmitter {
             fields.columns,
             fields.material_id,
         ] {
-            bytes.extend_from_slice(&value.to_le_bytes());
+            bytes.write(value);
         }
-        bytes.extend_from_slice(&fields.gravity.to_le_bytes());
+        bytes.write(fields.gravity);
         for track in &self.tracks {
             if !is_track(track.tag) {
                 return Err(Error::MalformedRecord {
                     tag: RibbonEmitter::TAG,
-                    offset: bytes.len() - start,
+                    offset: bytes.position() - start,
                 });
             }
             track.encode_to(bytes)?;
         }
-        let size = u32::try_from(bytes.len() - start).map_err(|_| Error::ChunkTooLarge {
-            tag: RibbonEmitter::TAG,
-            size: bytes.len() - start,
-        })?;
-        bytes[start..start + 4].copy_from_slice(&size.to_le_bytes());
+        bytes.finish_sized(marker, RibbonEmitter::TAG)?;
         Ok(())
     }
 }

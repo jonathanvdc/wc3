@@ -1,4 +1,5 @@
 //! Typed texture animation tracks in `TXAN` chunks.
+use crate::Encoder;
 use crate::Tag;
 
 use crate::Record;
@@ -86,23 +87,19 @@ impl Record for TextureAnimation {
         Ok(Self { tracks })
     }
 
-    fn encode_to(&self, bytes: &mut Vec<u8>) -> Result<(), Error> {
-        let start = bytes.len();
-        bytes.resize(start + 4, 0);
+    fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), Error> {
+        let start = bytes.position();
+        let marker = bytes.begin_sized();
         for track in &self.tracks {
             if !is_track_tag(track.tag) {
                 return Err(Error::MalformedRecord {
                     tag: TextureAnimation::TAG,
-                    offset: bytes.len() - start,
+                    offset: bytes.position() - start,
                 });
             }
             track.encode_to(bytes)?;
         }
-        let size = u32::try_from(bytes.len() - start).map_err(|_| Error::ChunkTooLarge {
-            tag: TextureAnimation::TAG,
-            size: bytes.len() - start,
-        })?;
-        bytes[start..start + 4].copy_from_slice(&size.to_le_bytes());
+        bytes.finish_sized(marker, TextureAnimation::TAG)?;
         Ok(())
     }
 }

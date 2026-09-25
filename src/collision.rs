@@ -1,4 +1,5 @@
 //! Box and sphere collision shapes in `CLID` chunks.
+use crate::Encoder;
 use crate::{Tag, Vec3};
 
 use crate::cursor::Cursor;
@@ -162,7 +163,7 @@ impl Record for CollisionShape {
         Ok(Self { node, geometry })
     }
 
-    fn encode_to(&self, bytes: &mut Vec<u8>) -> Result<(), Error> {
+    fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), Error> {
         self.node.encode_to(bytes)?;
         let kind = match self.geometry {
             CollisionGeometry::Box(_) => 0u32,
@@ -170,10 +171,10 @@ impl Record for CollisionShape {
             CollisionGeometry::Sphere(_, _) => 2,
             CollisionGeometry::Cylinder(_, _) => 3,
         };
-        bytes.extend_from_slice(&kind.to_le_bytes());
+        bytes.write(kind);
         let mut push_vec3 = |values: Vec3| {
             for value in values {
-                bytes.extend_from_slice(&value.to_le_bytes());
+                bytes.write(value);
             }
         };
         match self.geometry {
@@ -184,13 +185,13 @@ impl Record for CollisionShape {
             }
             CollisionGeometry::Sphere(center, radius) => {
                 push_vec3(center);
-                bytes.extend_from_slice(&radius.to_le_bytes());
+                bytes.write(radius);
             }
             CollisionGeometry::Cylinder(points, radius) => {
                 for point in points {
                     push_vec3(point);
                 }
-                bytes.extend_from_slice(&radius.to_le_bytes());
+                bytes.write(radius);
             }
         }
         Ok(())

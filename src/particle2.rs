@@ -1,4 +1,5 @@
 //! Particle emitter 2 records in `PRE2` chunks.
+use crate::Encoder;
 use crate::{Color, Tag, Vec3};
 
 use crate::Record;
@@ -184,8 +185,8 @@ fn decode_fields(bytes: &[u8]) -> Particle2Fields {
     }
 }
 
-fn encode_fields(fields: &Particle2Fields, bytes: &mut Vec<u8>) {
-    let start = bytes.len();
+fn encode_fields(fields: &Particle2Fields, bytes: &mut Encoder<'_>) {
+    let start = bytes.position();
     for value in [
         fields.speed,
         fields.variation,
@@ -196,7 +197,7 @@ fn encode_fields(fields: &Particle2Fields, bytes: &mut Vec<u8>) {
         fields.width,
         fields.length,
     ] {
-        bytes.extend_from_slice(&value.to_le_bytes());
+        bytes.write(value);
     }
     for value in [
         fields.filter_mode,
@@ -204,22 +205,22 @@ fn encode_fields(fields: &Particle2Fields, bytes: &mut Vec<u8>) {
         fields.columns,
         fields.frame_flags,
     ] {
-        bytes.extend_from_slice(&value.to_le_bytes());
+        bytes.write(value);
     }
-    bytes.extend_from_slice(&fields.tail_length.to_le_bytes());
-    bytes.extend_from_slice(&fields.time.to_le_bytes());
+    bytes.write(fields.tail_length);
+    bytes.write(fields.time);
     for color in fields.segment_colors {
         for component in color {
-            bytes.extend_from_slice(&component.to_le_bytes());
+            bytes.write(component);
         }
     }
-    bytes.extend_from_slice(&fields.alpha);
+    bytes.write_bytes(&fields.alpha);
     for value in fields.particle_scaling {
-        bytes.extend_from_slice(&value.to_le_bytes());
+        bytes.write(value);
     }
     for group in fields.uv_animations {
         for value in group {
-            bytes.extend_from_slice(&value.to_le_bytes());
+            bytes.write(value);
         }
     }
     for value in [
@@ -228,9 +229,9 @@ fn encode_fields(fields: &Particle2Fields, bytes: &mut Vec<u8>) {
         fields.priority_plane,
         fields.replaceable_id,
     ] {
-        bytes.extend_from_slice(&value.to_le_bytes());
+        bytes.write(value);
     }
-    debug_assert_eq!(bytes.len() - start, FIXED_SIZE);
+    debug_assert_eq!(bytes.position() - start, FIXED_SIZE);
 }
 
 fn is_track(tag: Tag) -> bool {
@@ -283,25 +284,21 @@ impl Record for ParticleEmitter2 {
         })
     }
 
-    fn encode_to(&self, bytes: &mut Vec<u8>) -> Result<(), Error> {
-        let start = bytes.len();
-        bytes.resize(start + 4, 0);
+    fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), Error> {
+        let start = bytes.position();
+        let marker = bytes.begin_sized();
         self.node.encode_to(bytes)?;
         encode_fields(&self.fields, bytes);
         for track in &self.tracks {
             if !is_track(track.tag) {
                 return Err(Error::MalformedRecord {
                     tag: ParticleEmitter2::TAG,
-                    offset: bytes.len() - start,
+                    offset: bytes.position() - start,
                 });
             }
             track.encode_to(bytes)?;
         }
-        let size = u32::try_from(bytes.len() - start).map_err(|_| Error::ChunkTooLarge {
-            tag: ParticleEmitter2::TAG,
-            size: bytes.len() - start,
-        })?;
-        bytes[start..start + 4].copy_from_slice(&size.to_le_bytes());
+        bytes.finish_sized(marker, ParticleEmitter2::TAG)?;
         Ok(())
     }
 }

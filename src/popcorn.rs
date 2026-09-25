@@ -1,4 +1,5 @@
 //! Reforged popcorn particle emitters in `CORN` chunks.
+use crate::Encoder;
 use crate::{Color, Tag};
 
 use crate::Record;
@@ -209,9 +210,9 @@ impl Record for PopcornEmitter {
         })
     }
 
-    fn encode_to(&self, bytes: &mut Vec<u8>) -> Result<(), Error> {
-        let start = bytes.len();
-        bytes.resize(start + 4, 0);
+    fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), Error> {
+        let start = bytes.position();
+        let marker = bytes.begin_sized();
         self.node.encode_to(bytes)?;
         for value in [
             self.life_span,
@@ -222,25 +223,21 @@ impl Record for PopcornEmitter {
             self.color[2],
             self.alpha,
         ] {
-            bytes.extend_from_slice(&value.to_le_bytes());
+            bytes.write(value);
         }
-        bytes.extend_from_slice(&self.replaceable_id.to_le_bytes());
-        bytes.extend_from_slice(&self.path);
-        bytes.extend_from_slice(&self.visibility_guide);
+        bytes.write(self.replaceable_id);
+        bytes.write_bytes(&self.path);
+        bytes.write_bytes(&self.visibility_guide);
         for track in &self.tracks {
             if !is_track_tag(track.tag) {
                 return Err(Error::MalformedRecord {
                     tag: PopcornEmitter::TAG,
-                    offset: bytes.len() - start,
+                    offset: bytes.position() - start,
                 });
             }
             track.encode_to(bytes)?;
         }
-        let size = u32::try_from(bytes.len() - start).map_err(|_| Error::ChunkTooLarge {
-            tag: PopcornEmitter::TAG,
-            size: bytes.len() - start,
-        })?;
-        bytes[start..start + 4].copy_from_slice(&size.to_le_bytes());
+        bytes.finish_sized(marker, PopcornEmitter::TAG)?;
         Ok(())
     }
 }

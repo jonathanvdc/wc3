@@ -1,4 +1,5 @@
 //! Shared node headers used by bones and helpers.
+use crate::Encoder;
 use crate::Tag;
 
 use crate::Record;
@@ -251,18 +252,16 @@ impl Record for Node {
         })
     }
 
-    fn encode_to(&self, bytes: &mut Vec<u8>) -> Result<(), Error> {
-        let start = bytes.len();
-        bytes.resize(start + HEADER_SIZE, 0);
-        bytes[start + 4..start + 84].copy_from_slice(&self.name);
-        bytes[start + 84..start + 88].copy_from_slice(&self.object_id.to_le_bytes());
-        bytes[start + 88..start + 92].copy_from_slice(&self.parent_id.to_le_bytes());
-        bytes[start + 92..start + 96].copy_from_slice(&self.raw_flags.to_le_bytes());
+    fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), Error> {
+        let marker = bytes.begin_sized();
+        bytes.write_bytes(&self.name);
+        bytes.write(self.object_id);
+        bytes.write(self.parent_id);
+        bytes.write(self.raw_flags);
         for track in &self.tracks {
             track.encode_to(bytes).expect("validated node track");
         }
-        let size = (bytes.len() - start) as u32;
-        bytes[start..start + 4].copy_from_slice(&size.to_le_bytes());
+        bytes.finish_sized(marker, Self::TAG)?;
         Ok(())
     }
 }
@@ -279,10 +278,10 @@ impl Record for Bone {
         })
     }
 
-    fn encode_to(&self, bytes: &mut Vec<u8>) -> Result<(), Error> {
+    fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), Error> {
         self.node.encode_to(bytes)?;
-        bytes.extend_from_slice(&self.geoset_id.to_le_bytes());
-        bytes.extend_from_slice(&self.geoset_animation_id.to_le_bytes());
+        bytes.write(self.geoset_id);
+        bytes.write(self.geoset_animation_id);
         Ok(())
     }
 }

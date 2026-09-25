@@ -1,4 +1,5 @@
 //! Typed geoset sections and lossless MDX serialization.
+use crate::Encoder;
 use crate::{Tag, Vec3, Version};
 
 use crate::cursor::Cursor;
@@ -517,46 +518,46 @@ fn decode_vectors<const N: usize>(bytes: &[u8]) -> Vec<[f32; N]> {
         .collect()
 }
 
-fn write_count(bytes: &mut Vec<u8>, count: usize) -> Result<(), Error> {
+fn write_count(bytes: &mut Encoder<'_>, count: usize) -> Result<(), Error> {
     let count = u32::try_from(count).map_err(|_| Error::ChunkTooLarge {
         tag: Geoset::TAG,
         size: count,
     })?;
-    bytes.extend_from_slice(&count.to_le_bytes());
+    bytes.write(count);
     Ok(())
 }
 
-fn write_section_header(bytes: &mut Vec<u8>, tag: Tag, count: usize) -> Result<(), Error> {
-    bytes.extend_from_slice(&tag);
+fn write_section_header(bytes: &mut Encoder<'_>, tag: Tag, count: usize) -> Result<(), Error> {
+    bytes.write_bytes(&tag);
     write_count(bytes, count)
 }
 
-fn write_words(bytes: &mut Vec<u8>, tag: Tag, words: &[u32]) -> Result<(), Error> {
+fn write_words(bytes: &mut Encoder<'_>, tag: Tag, words: &[u32]) -> Result<(), Error> {
     write_section_header(bytes, tag, words.len())?;
     for word in words {
-        bytes.extend_from_slice(&word.to_le_bytes());
+        bytes.write(word);
     }
     Ok(())
 }
 
 fn write_vectors<const N: usize>(
-    bytes: &mut Vec<u8>,
+    bytes: &mut Encoder<'_>,
     tag: Tag,
     vectors: &[[f32; N]],
 ) -> Result<(), Error> {
     write_section_header(bytes, tag, vectors.len())?;
     for vector in vectors {
         for value in vector {
-            bytes.extend_from_slice(&value.to_le_bytes());
+            bytes.write(value);
         }
     }
     Ok(())
 }
 
-fn write_extent(bytes: &mut Vec<u8>, extent: GeosetExtent) {
-    bytes.extend_from_slice(&extent.bounds_radius.to_le_bytes());
+fn write_extent(bytes: &mut Encoder<'_>, extent: GeosetExtent) {
+    bytes.write(extent.bounds_radius);
     for value in extent.minimum.into_iter().chain(extent.maximum) {
-        bytes.extend_from_slice(&value.to_le_bytes());
+        bytes.write(value);
     }
 }
 
@@ -699,19 +700,19 @@ impl Record for Geoset {
         Ok(value)
     }
 
-    fn encode_to(&self, bytes: &mut Vec<u8>) -> Result<(), Error> {
-        let start = bytes.len();
-        bytes.resize(start + 4, 0);
+    fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), Error> {
+        let start = bytes.position();
+        let marker = bytes.begin_sized();
         write_vectors(bytes, *b"VRTX", &self.vertices)?;
         write_vectors(bytes, *b"NRMS", &self.normals)?;
         write_words(bytes, *b"PTYP", &self.primitive_types)?;
         write_words(bytes, *b"PCNT", &self.primitive_counts)?;
         write_section_header(bytes, *b"PVTX", self.faces.len())?;
         for face in &self.faces {
-            bytes.extend_from_slice(&face.to_le_bytes());
+            bytes.write(face);
         }
         write_section_header(bytes, *b"GNDX", self.vertex_groups.len())?;
-        bytes.extend_from_slice(&self.vertex_groups);
+        bytes.write_bytes(&self.vertex_groups);
         write_words(bytes, *b"MTGC", &self.matrix_group_sizes)?;
         write_words(bytes, *b"MATS", &self.matrix_indices)?;
         for word in [
@@ -719,12 +720,12 @@ impl Record for Geoset {
             self.selection_group,
             self.unselectable_raw,
         ] {
-            bytes.extend_from_slice(&word.to_le_bytes());
+            bytes.write(word);
         }
         if self.version >= 900 {
             let header = self.header_extension.as_ref().expect("versioned header");
-            bytes.extend_from_slice(&header.level_of_detail.to_le_bytes());
-            bytes.extend_from_slice(&header.name);
+            bytes.write(header.level_of_detail);
+            bytes.write_bytes(&header.name);
         }
         write_extent(bytes, self.extent);
         write_count(bytes, self.sequence_extents.len())?;
@@ -739,32 +740,31 @@ impl Record for Geoset {
                     bone_indices,
                 } => {
                     write_section_header(bytes, *b"SKIN", weights.len())?;
-                    bytes.extend_from_slice(weights);
+                    bytes.write_bytes(weights);
                     if let Some(indices) = bone_indices {
                         if self.version < 1200 || indices.len() != weights.len() {
                             return Err(Error::MalformedRecord {
                                 tag: Geoset::TAG,
-                                offset: bytes.len() - start,
+                                offset: bytes.position() - start,
                             });
                         }
-                        bytes.extend_from_slice(indices);
+                        bytes.write_bytes(indices);
                     }
                 }
             }
         }
-        bytes.extend_from_slice(b"UVAS");
+        bytes.write_bytes(b"UVAS");
         write_count(bytes, self.uv_sets.len())?;
         for uv_set in &self.uv_sets {
             write_vectors(bytes, *b"UVBS", uv_set)?;
         }
-        if bytes.len() - start > u32::MAX as usize {
+        if bytes.position() - start > u32::MAX as usize {
             return Err(Error::ChunkTooLarge {
                 tag: Geoset::TAG,
-                size: bytes.len() - start,
+                size: bytes.position() - start,
             });
         }
-        let size = (bytes.len() - start) as u32;
-        bytes[start..start + 4].copy_from_slice(&size.to_le_bytes());
+        bytes.finish_sized(marker, Self::TAG)?;
         Ok(())
     }
 }

@@ -1,4 +1,5 @@
 //! Geoset animation records in `GEOA` chunks.
+use crate::Encoder;
 use crate::{Color, Tag};
 
 use crate::Record;
@@ -168,30 +169,25 @@ impl Record for GeosetAnimation {
         })
     }
 
-    fn encode_to(&self, bytes: &mut Vec<u8>) -> Result<(), Error> {
-        let start = bytes.len();
-        bytes.resize(start + HEADER_SIZE, 0);
-        bytes[start + 4..start + 8].copy_from_slice(&self.alpha.to_le_bytes());
-        bytes[start + 8..start + 12].copy_from_slice(&self.raw_flags.to_le_bytes());
-        for (index, value) in self.color.into_iter().enumerate() {
-            bytes[start + 12 + index * 4..start + 16 + index * 4]
-                .copy_from_slice(&value.to_le_bytes());
+    fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), Error> {
+        let start = bytes.position();
+        let marker = bytes.begin_sized();
+        bytes.write(self.alpha);
+        bytes.write(self.raw_flags);
+        for value in self.color {
+            bytes.write(value);
         }
-        bytes[start + 24..start + 28].copy_from_slice(&self.geoset_id.to_le_bytes());
+        bytes.write(self.geoset_id);
         for track in &self.tracks {
             if !matches!(&track.tag, b"KGAO" | b"KGAC") {
                 return Err(Error::MalformedRecord {
                     tag: GeosetAnimation::TAG,
-                    offset: bytes.len() - start,
+                    offset: bytes.position() - start,
                 });
             }
             track.encode_to(bytes)?;
         }
-        let size = u32::try_from(bytes.len() - start).map_err(|_| Error::ChunkTooLarge {
-            tag: GeosetAnimation::TAG,
-            size: bytes.len() - start,
-        })?;
-        bytes[start..start + 4].copy_from_slice(&size.to_le_bytes());
+        bytes.finish_sized(marker, GeosetAnimation::TAG)?;
         Ok(())
     }
 }

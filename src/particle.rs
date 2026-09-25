@@ -1,4 +1,5 @@
 //! Classic particle emitters stored in `PREM` chunks.
+use crate::Encoder;
 use crate::Tag;
 
 use crate::Record;
@@ -206,9 +207,9 @@ impl Record for ParticleEmitter {
         })
     }
 
-    fn encode_to(&self, bytes: &mut Vec<u8>) -> Result<(), Error> {
-        let start = bytes.len();
-        bytes.resize(start + 4, 0);
+    fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), Error> {
+        let start = bytes.position();
+        let marker = bytes.begin_sized();
         self.node.encode_to(bytes)?;
         for value in [
             self.emission_rate,
@@ -216,26 +217,22 @@ impl Record for ParticleEmitter {
             self.longitude,
             self.latitude,
         ] {
-            bytes.extend_from_slice(&value.to_le_bytes());
+            bytes.write(value);
         }
-        bytes.extend_from_slice(&self.path);
-        bytes.extend_from_slice(&self.reserved.to_le_bytes());
-        bytes.extend_from_slice(&self.life_span.to_le_bytes());
-        bytes.extend_from_slice(&self.initial_velocity.to_le_bytes());
+        bytes.write_bytes(&self.path);
+        bytes.write(self.reserved);
+        bytes.write(self.life_span);
+        bytes.write(self.initial_velocity);
         for track in &self.tracks {
             if !is_track(track.tag) {
                 return Err(Error::MalformedRecord {
                     tag: ParticleEmitter::TAG,
-                    offset: bytes.len() - start,
+                    offset: bytes.position() - start,
                 });
             }
             track.encode_to(bytes)?;
         }
-        let size = u32::try_from(bytes.len() - start).map_err(|_| Error::ChunkTooLarge {
-            tag: ParticleEmitter::TAG,
-            size: bytes.len() - start,
-        })?;
-        bytes[start..start + 4].copy_from_slice(&size.to_le_bytes());
+        bytes.finish_sized(marker, ParticleEmitter::TAG)?;
         Ok(())
     }
 }

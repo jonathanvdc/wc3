@@ -1,4 +1,5 @@
 //! The complete version chunk payload.
+use crate::Encoder;
 use crate::{Tag, Version};
 
 use crate::Cursor;
@@ -28,7 +29,7 @@ impl Record for VersionChunk {
         Ok(Self { version, extension })
     }
 
-    fn encode_to(&self, bytes: &mut Vec<u8>) -> Result<(), Error> {
+    fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), Error> {
         let size = 4usize
             .checked_add(self.extension.len())
             .ok_or(Error::ChunkTooLarge {
@@ -42,8 +43,8 @@ impl Record for VersionChunk {
             });
         }
 
-        bytes.extend_from_slice(&self.version.to_le_bytes());
-        bytes.extend_from_slice(&self.extension);
+        bytes.write(self.version);
+        bytes.write_bytes(&self.extension);
         Ok(())
     }
 }

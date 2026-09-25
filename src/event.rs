@@ -1,4 +1,5 @@
 //! Event objects stored in `EVTS` chunks.
+use crate::Encoder;
 use crate::Tag;
 
 use crate::Record;
@@ -104,22 +105,23 @@ impl Record for EventObject {
         })
     }
 
-    fn encode_to(&self, bytes: &mut Vec<u8>) -> Result<(), Error> {
+    fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), Error> {
+        let start = bytes.position();
         self.node.encode_to(bytes)?;
-        bytes.extend_from_slice(&TRACK_TAG);
+        bytes.write_bytes(&TRACK_TAG);
         let count = u32::try_from(self.frames.len()).map_err(|_| Error::ChunkTooLarge {
             tag: EventObject::TAG,
             size: self.frames.len(),
         })?;
-        bytes.extend_from_slice(&count.to_le_bytes());
-        bytes.extend_from_slice(&self.global_sequence_id.to_le_bytes());
+        bytes.write(count);
+        bytes.write(self.global_sequence_id);
         for frame in &self.frames {
-            bytes.extend_from_slice(&frame.to_le_bytes());
+            bytes.write(frame);
         }
-        if bytes.len() > u32::MAX as usize {
+        if bytes.position() - start > u32::MAX as usize {
             return Err(Error::ChunkTooLarge {
                 tag: EventObject::TAG,
-                size: bytes.len(),
+                size: bytes.position() - start,
             });
         }
         Ok(())

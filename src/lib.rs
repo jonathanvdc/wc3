@@ -29,6 +29,8 @@ pub mod chunks;
 pub use chunks::*;
 mod error;
 pub use error::Error;
+mod encoder;
+pub use encoder::{Encoder, Scalar, SizeMarker};
 mod cursor;
 pub use cursor::Cursor;
 mod model;

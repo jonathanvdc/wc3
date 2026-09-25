@@ -1,4 +1,5 @@
 //! Animation sequence records in the `SEQS` chunk.
+use crate::Encoder;
 use crate::{Tag, Vec3};
 
 use crate::Record;
@@ -190,8 +191,8 @@ impl Record for Sequence {
             maximum_extent,
         })
     }
-    fn encode_to(&self, bytes: &mut Vec<u8>) -> Result<(), Error> {
-        bytes.extend_from_slice(&self.name);
+    fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), Error> {
+        bytes.write_bytes(&self.name);
         for value in self
             .interval
             .into_iter()
@@ -205,7 +206,7 @@ impl Record for Sequence {
             .chain(self.minimum_extent)
             .chain(self.maximum_extent)
         {
-            bytes.extend_from_slice(&value.to_le_bytes());
+            bytes.write(value);
         }
         Ok(())
     }

@@ -2,7 +2,7 @@
 use crate::Version;
 
 use crate::model::LATEST_VERSION;
-use crate::{Cursor, Error};
+use crate::{Cursor, Encoder, Error};
 
 /// A typed MDX record that can be converted to and from bytes.
 pub trait Record: Sized {
@@ -18,12 +18,12 @@ pub trait Record: Sized {
     }
 
     /// Appends a record to an existing byte buffer.
-    fn encode_to(&self, output: &mut Vec<u8>) -> Result<(), Error>;
+    fn encode_to(&self, output: &mut Encoder<'_>) -> Result<(), Error>;
 
     /// Writes a record.
     fn encode(&self) -> Result<Vec<u8>, Error> {
         let mut output = Vec::new();
-        self.encode_to(&mut output)?;
+        self.encode_to(&mut Encoder::new(&mut output))?;
         Ok(output)
     }
 
@@ -51,7 +51,9 @@ mod tests {
     fn round_trip<T: Record + PartialEq + std::fmt::Debug>(value: &T, version: u32) {
         let bytes = value.encode().unwrap();
         let mut appended = vec![0xaa, 0xbb];
-        value.encode_to(&mut appended).unwrap();
+        value
+            .encode_to(&mut crate::Encoder::new(&mut appended))
+            .unwrap();
         assert_eq!(&appended[..2], &[0xaa, 0xbb]);
         assert_eq!(&appended[2..], bytes);
         assert_eq!(T::decode(&bytes, version).unwrap(), *value);

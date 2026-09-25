@@ -1,4 +1,5 @@
 //! Fixed-size `MODL` model information.
+use crate::Encoder;
 use crate::{Tag, Vec3};
 
 use crate::Record;
@@ -177,14 +178,14 @@ impl Record for ModelInfo {
         })
     }
 
-    fn encode_to(&self, bytes: &mut Vec<u8>) -> Result<(), Error> {
-        bytes.extend_from_slice(&self.name);
-        bytes.extend_from_slice(&self.reserved);
-        bytes.extend_from_slice(&self.bounds_radius.to_le_bytes());
+    fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), Error> {
+        bytes.write_bytes(&self.name);
+        bytes.write_bytes(&self.reserved);
+        bytes.write(self.bounds_radius);
         for value in self.minimum_extent.into_iter().chain(self.maximum_extent) {
-            bytes.extend_from_slice(&value.to_le_bytes());
+            bytes.write(value);
         }
-        bytes.extend_from_slice(&self.blend_time.to_le_bytes());
+        bytes.write(self.blend_time);
         Ok(())
     }
 }

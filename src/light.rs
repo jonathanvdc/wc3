@@ -1,4 +1,5 @@
 //! Light records in `LITE` chunks.
+use crate::Encoder;
 use crate::{Color, Tag, Version};
 
 use crate::Record;
@@ -230,40 +231,36 @@ impl Record for Light {
         })
     }
 
-    fn encode_to(&self, bytes: &mut Vec<u8>) -> Result<(), Error> {
-        let start = bytes.len();
-        bytes.resize(start + 4, 0);
+    fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), Error> {
+        let start = bytes.position();
+        let marker = bytes.begin_sized();
         self.node.encode_to(bytes)?;
-        bytes.extend_from_slice(&self.light_type.to_le_bytes());
-        bytes.extend_from_slice(&self.attenuation_start.to_le_bytes());
-        bytes.extend_from_slice(&self.attenuation_end.to_le_bytes());
+        bytes.write(self.light_type);
+        bytes.write(self.attenuation_start);
+        bytes.write(self.attenuation_end);
         for value in self.color {
-            bytes.extend_from_slice(&value.to_le_bytes());
+            bytes.write(value);
         }
-        bytes.extend_from_slice(&self.intensity.to_le_bytes());
+        bytes.write(self.intensity);
         for value in self.ambient_color {
-            bytes.extend_from_slice(&value.to_le_bytes());
+            bytes.write(value);
         }
-        bytes.extend_from_slice(&self.ambient_intensity.to_le_bytes());
+        bytes.write(self.ambient_intensity);
         if let Some(words) = self.extended_words {
             for word in words {
-                bytes.extend_from_slice(&word.to_le_bytes());
+                bytes.write(word);
             }
         }
         for track in &self.tracks {
             if !is_track(track.tag) {
                 return Err(Error::MalformedRecord {
                     tag: Light::TAG,
-                    offset: bytes.len() - start,
+                    offset: bytes.position() - start,
                 });
             }
             track.encode_to(bytes)?;
         }
-        let size = u32::try_from(bytes.len() - start).map_err(|_| Error::ChunkTooLarge {
-            tag: Light::TAG,
-            size: bytes.len() - start,
-        })?;
-        bytes[start..start + 4].copy_from_slice(&size.to_le_bytes());
+        bytes.finish_sized(marker, Light::TAG)?;
         Ok(())
     }
 }

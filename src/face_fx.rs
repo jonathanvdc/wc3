@@ -1,4 +1,5 @@
 //! Reforged face-animation references in `FAFX` chunks.
+use crate::Encoder;
 use crate::Tag;
 
 use crate::Record;
@@ -96,9 +97,9 @@ impl Record for FaceFx {
         Ok(Self { name, path })
     }
 
-    fn encode_to(&self, bytes: &mut Vec<u8>) -> Result<(), Error> {
-        bytes.extend_from_slice(&self.name);
-        bytes.extend_from_slice(&self.path);
+    fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), Error> {
+        bytes.write_bytes(&self.name);
+        bytes.write_bytes(&self.path);
         Ok(())
     }
 }

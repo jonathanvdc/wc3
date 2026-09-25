@@ -1,4 +1,5 @@
 //! The complete pivot-points chunk.
+use crate::Encoder;
 use crate::{Tag, Vec3};
 
 use super::checked_chunk_size;
@@ -28,12 +29,12 @@ impl Record for PivotPointsChunk {
         Ok(Self { points })
     }
 
-    fn encode_to(&self, bytes: &mut Vec<u8>) -> Result<(), Error> {
+    fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), Error> {
         checked_chunk_size(self.points.len(), 12, Self::TAG)?;
 
         for point in &self.points {
             for coordinate in point {
-                bytes.extend_from_slice(&coordinate.to_le_bytes());
+                bytes.write(coordinate);
             }
         }
         Ok(())

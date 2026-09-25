@@ -1,4 +1,5 @@
 //! Attachment records in `ATCH` chunks.
+use crate::Encoder;
 use crate::Tag;
 
 use crate::Record;
@@ -140,27 +141,23 @@ impl Record for Attachment {
         })
     }
 
-    fn encode_to(&self, bytes: &mut Vec<u8>) -> Result<(), Error> {
-        let start = bytes.len();
-        bytes.resize(start + 4, 0);
+    fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), Error> {
+        let start = bytes.position();
+        let marker = bytes.begin_sized();
         self.node.encode_to(bytes)?;
-        bytes.extend_from_slice(&self.path);
-        bytes.extend_from_slice(&self.reserved.to_le_bytes());
-        bytes.extend_from_slice(&self.id.to_le_bytes());
+        bytes.write_bytes(&self.path);
+        bytes.write(self.reserved);
+        bytes.write(self.id);
         if let Some(track) = &self.visibility_track {
             if track.tag != *b"KATV" {
                 return Err(Error::MalformedRecord {
                     tag: Attachment::TAG,
-                    offset: bytes.len() - start,
+                    offset: bytes.position() - start,
                 });
             }
             track.encode_to(bytes)?;
         }
-        let size = u32::try_from(bytes.len() - start).map_err(|_| Error::ChunkTooLarge {
-            tag: Attachment::TAG,
-            size: bytes.len() - start,
-        })?;
-        bytes[start..start + 4].copy_from_slice(&size.to_le_bytes());
+        bytes.finish_sized(marker, Attachment::TAG)?;
         Ok(())
     }
 }

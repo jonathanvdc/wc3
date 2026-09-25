@@ -1,4 +1,5 @@
 //! Keyframe tracks for node translation, rotation, and scaling.
+use crate::Encoder;
 use crate::Tag;
 
 use crate::Cursor;
@@ -166,7 +167,7 @@ impl Record for AnimationTrack {
         Ok(track)
     }
 
-    fn encode_to(&self, bytes: &mut Vec<u8>) -> Result<(), Error> {
+    fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), Error> {
         let components = components(self.tag).ok_or(Error::MalformedRecord {
             tag: self.tag,
             offset: 0,
@@ -178,11 +179,10 @@ impl Record for AnimationTrack {
             });
         }
         let tangents = self.interpolation >= 2;
-        let output = bytes;
-        output.extend_from_slice(&self.tag);
-        output.extend_from_slice(&(self.keyframes.len() as u32).to_le_bytes());
-        output.extend_from_slice(&self.interpolation.to_le_bytes());
-        output.extend_from_slice(&self.global_sequence_id.to_le_bytes());
+        bytes.write_bytes(&self.tag);
+        bytes.write(self.keyframes.len() as u32);
+        bytes.write(self.interpolation);
+        bytes.write(self.global_sequence_id);
         for (index, key) in self.keyframes.iter().enumerate() {
             if key.value.len() != components
                 || key.in_tangent.is_some() != tangents
@@ -201,7 +201,7 @@ impl Record for AnimationTrack {
                     offset: index,
                 });
             }
-            output.extend_from_slice(&key.frame.to_le_bytes());
+            bytes.write(key.frame);
             for vector in [
                 Some(&key.value),
                 key.in_tangent.as_ref(),
@@ -211,7 +211,7 @@ impl Record for AnimationTrack {
             .flatten()
             {
                 for value in vector {
-                    output.extend_from_slice(&value.to_le_bytes());
+                    bytes.write(value);
                 }
             }
         }

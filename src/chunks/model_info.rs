@@ -1,4 +1,5 @@
 //! The complete model-information chunk.
+use crate::Encoder;
 use crate::{Tag, Version};
 
 use crate::{Cursor, ModelInfo};
@@ -27,7 +28,7 @@ impl Record for ModelInfoChunk {
         Ok(Self::new(info, extension))
     }
 
-    fn encode_to(&self, bytes: &mut Vec<u8>) -> Result<(), Error> {
+    fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), Error> {
         let size = 372usize
             .checked_add(self.extension.len())
             .ok_or(Error::ChunkTooLarge {
@@ -42,7 +43,7 @@ impl Record for ModelInfoChunk {
         }
 
         self.info.encode_to(bytes)?;
-        bytes.extend_from_slice(&self.extension);
+        bytes.write_bytes(&self.extension);
         Ok(())
     }
 }

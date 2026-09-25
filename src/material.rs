@@ -1,4 +1,5 @@
 //! Typed material layers and versioned texture slots.
+use crate::Encoder;
 use crate::{Color, Tag, Version};
 
 use crate::Record;
@@ -172,17 +173,9 @@ fn expect_tag(cursor: &mut Cursor<'_>, expected: Tag, record_tag: Tag) -> Result
     }
 }
 
-fn write_count(bytes: &mut Vec<u8>, count: usize, tag: Tag) -> Result<(), Error> {
+fn write_count(bytes: &mut Encoder<'_>, count: usize, tag: Tag) -> Result<(), Error> {
     let value = u32::try_from(count).map_err(|_| Error::ChunkTooLarge { tag, size: count })?;
-    bytes.extend_from_slice(&value.to_le_bytes());
-    Ok(())
-}
-fn finish_record(bytes: &mut [u8], tag: Tag) -> Result<(), Error> {
-    let size = u32::try_from(bytes.len()).map_err(|_| Error::ChunkTooLarge {
-        tag,
-        size: bytes.len(),
-    })?;
-    bytes[..4].copy_from_slice(&size.to_le_bytes());
+    bytes.write(value);
     Ok(())
 }
 
@@ -540,15 +533,14 @@ impl Record for Material {
         Ok(value)
     }
 
-    fn encode_to(&self, bytes: &mut Vec<u8>) -> Result<(), Error> {
-        let start = bytes.len();
-        bytes.resize(start + 4, 0);
-        bytes.extend_from_slice(&self.priority_plane.to_le_bytes());
-        bytes.extend_from_slice(&self.render_mode.to_le_bytes());
+    fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), Error> {
+        let marker = bytes.begin_sized();
+        bytes.write(self.priority_plane);
+        bytes.write(self.render_mode);
         if has_shader(self.version) {
-            bytes.extend_from_slice(self.shader.as_ref().unwrap_or(&[0; 80]));
+            bytes.write_bytes(self.shader.as_ref().unwrap_or(&[0; 80]));
         }
-        bytes.extend_from_slice(b"LAYS");
+        bytes.write_bytes(b"LAYS");
         write_count(bytes, self.layers.len(), Material::TAG)?;
         for layer in &self.layers {
             if layer.version != self.version {
@@ -559,7 +551,7 @@ impl Record for Material {
             }
             layer.encode_to(bytes)?;
         }
-        finish_record(&mut bytes[start..], Material::TAG)?;
+        bytes.finish_sized(marker, Material::TAG)?;
         Ok(())
     }
 }
@@ -648,9 +640,9 @@ impl Record for Layer {
         Ok(value)
     }
 
-    fn encode_to(&self, bytes: &mut Vec<u8>) -> Result<(), Error> {
-        let start = bytes.len();
-        bytes.resize(start + 4, 0);
+    fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), Error> {
+        let start = bytes.position();
+        let marker = bytes.begin_sized();
         for word in [
             self.filter_mode,
             self.shading_flags,
@@ -658,13 +650,13 @@ impl Record for Layer {
             self.texture_animation_id,
             self.coordinate_id,
         ] {
-            bytes.extend_from_slice(&word.to_le_bytes());
+            bytes.write(word);
         }
-        bytes.extend_from_slice(&self.alpha.to_le_bytes());
+        bytes.write(self.alpha);
         match &self.extensions {
             LayerExtensions::Classic => {}
             LayerExtensions::V900 { emissive_gain } => {
-                bytes.extend_from_slice(&emissive_gain.to_le_bytes());
+                bytes.write(emissive_gain);
             }
             LayerExtensions::V1000 {
                 emissive_gain,
@@ -675,12 +667,12 @@ impl Record for Layer {
                 fresnel,
                 ..
             } => {
-                bytes.extend_from_slice(&emissive_gain.to_le_bytes());
+                bytes.write(emissive_gain);
                 for value in fresnel.color {
-                    bytes.extend_from_slice(&value.to_le_bytes());
+                    bytes.write(value);
                 }
-                bytes.extend_from_slice(&fresnel.opacity.to_le_bytes());
-                bytes.extend_from_slice(&fresnel.team_color.to_le_bytes());
+                bytes.write(fresnel.opacity);
+                bytes.write(fresnel.team_color);
             }
         }
         if let LayerExtensions::V1100 {
@@ -689,16 +681,16 @@ impl Record for Layer {
             ..
         } = &self.extensions
         {
-            bytes.extend_from_slice(&shader_type_id.to_le_bytes());
+            bytes.write(shader_type_id);
             write_count(bytes, texture_slots.len(), LAYER_TAG)?;
             for slot in texture_slots {
-                bytes.extend_from_slice(&slot.texture_id.to_le_bytes());
-                bytes.extend_from_slice(&slot.texture_type.to_le_bytes());
+                bytes.write(slot.texture_id);
+                bytes.write(slot.texture_type);
                 if let Some(track) = &slot.track {
                     if track.tag != *b"KMTF" {
                         return Err(Error::MalformedRecord {
                             tag: LAYER_TAG,
-                            offset: bytes.len() - start,
+                            offset: bytes.position() - start,
                         });
                     }
                     track.encode_to(bytes)?;
@@ -709,12 +701,12 @@ impl Record for Layer {
             if !is_layer_track(track.tag) {
                 return Err(Error::MalformedRecord {
                     tag: LAYER_TAG,
-                    offset: bytes.len() - start,
+                    offset: bytes.position() - start,
                 });
             }
             track.encode_to(bytes)?;
         }
-        finish_record(&mut bytes[start..], LAYER_TAG)?;
+        bytes.finish_sized(marker, LAYER_TAG)?;
         Ok(())
     }
 }

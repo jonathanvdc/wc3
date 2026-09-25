@@ -1,4 +1,5 @@
 //! Fixed-width texture records in `TEXS` chunks.
+use crate::Encoder;
 use crate::Tag;
 
 use crate::Record;
@@ -147,11 +148,11 @@ impl Record for Texture {
         })
     }
 
-    fn encode_to(&self, bytes: &mut Vec<u8>) -> Result<(), Error> {
-        bytes.extend_from_slice(&self.replaceable_id.to_le_bytes());
-        bytes.extend_from_slice(&self.path);
-        bytes.extend_from_slice(&self.reserved);
-        bytes.extend_from_slice(&self.flags.to_le_bytes());
+    fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), Error> {
+        bytes.write(self.replaceable_id);
+        bytes.write_bytes(&self.path);
+        bytes.write_bytes(&self.reserved);
+        bytes.write(self.flags);
         Ok(())
     }
 }

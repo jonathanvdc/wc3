@@ -1,4 +1,5 @@
 //! A model in the Warcraft III MDX format.
+use crate::Encoder;
 use crate::{Tag, Version};
 
 use crate::Cursor;
@@ -226,8 +227,8 @@ impl Record for Model {
         Ok(value)
     }
 
-    fn encode_to(&self, output: &mut Vec<u8>) -> Result<(), Error> {
-        output.extend_from_slice(&MAGIC);
+    fn encode_to(&self, output: &mut Encoder<'_>) -> Result<(), Error> {
+        output.write_bytes(&MAGIC);
         for chunk in &self.chunks {
             chunk.encode_to(output)?;
         }

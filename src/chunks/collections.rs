@@ -1,4 +1,5 @@
 //! Complete payloads for chunks containing a sequence of records.
+use crate::Encoder;
 use crate::{Tag, Version};
 
 use crate::{
@@ -40,14 +41,14 @@ impl<C: CollectionChunk> Record for C {
         Ok(C::from_records(records))
     }
 
-    fn encode_to(&self, bytes: &mut Vec<u8>) -> Result<(), Error> {
-        let start = bytes.len();
+    fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), Error> {
+        let start = bytes.position();
         for record in self.records() {
             record.encode_to(bytes)?;
-            if bytes.len() - start > u32::MAX as usize {
+            if bytes.position() - start > u32::MAX as usize {
                 return Err(Error::ChunkTooLarge {
                     tag: C::tag(),
-                    size: bytes.len() - start,
+                    size: bytes.position() - start,
                 });
             }
         }

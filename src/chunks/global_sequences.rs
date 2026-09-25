@@ -1,4 +1,5 @@
 //! The complete global-sequences chunk.
+use crate::Encoder;
 use crate::Tag;
 
 use super::checked_chunk_size;
@@ -28,11 +29,11 @@ impl Record for GlobalSequencesChunk {
         Ok(Self { durations })
     }
 
-    fn encode_to(&self, bytes: &mut Vec<u8>) -> Result<(), Error> {
+    fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), Error> {
         checked_chunk_size(self.durations.len(), 4, Self::TAG)?;
 
         for duration in &self.durations {
-            bytes.extend_from_slice(&duration.to_le_bytes());
+            bytes.write(duration);
         }
         Ok(())
     }

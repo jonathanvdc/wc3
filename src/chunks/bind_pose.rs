@@ -1,4 +1,5 @@
 //! Reforged bind-pose matrices in `BPOS` chunks.
+use crate::Encoder;
 use crate::Tag;
 
 use crate::Record;
@@ -119,7 +120,7 @@ impl Record for BindPose {
         Ok(Self { matrices })
     }
 
-    fn encode_to(&self, bytes: &mut Vec<u8>) -> Result<(), Error> {
+    fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), Error> {
         let count = u32::try_from(self.matrices.len()).map_err(|_| Error::ChunkTooLarge {
             tag: BindPose::TAG,
             size: self.matrices.len(),
@@ -134,10 +135,10 @@ impl Record for BindPose {
                 size: usize::MAX,
             })?;
 
-        bytes.extend_from_slice(&count.to_le_bytes());
+        bytes.write(count);
         for matrix in &self.matrices {
             for value in matrix {
-                bytes.extend_from_slice(&value.to_le_bytes());
+                bytes.write(value);
             }
         }
         Ok(())

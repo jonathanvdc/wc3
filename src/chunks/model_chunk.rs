@@ -1,4 +1,5 @@
 //! Decoded, unknown, and malformed model chunks.
+use crate::Encoder;
 use crate::{Tag, Version};
 
 use super::*;
@@ -67,11 +68,10 @@ impl Chunk for ModelChunk {
 }
 
 impl ModelChunk {
-    pub(crate) fn encode_to(&self, output: &mut Vec<u8>) -> Result<(), Error> {
+    pub(crate) fn encode_to(&self, output: &mut Encoder<'_>) -> Result<(), Error> {
         let tag = self.tag();
-        output.extend_from_slice(&tag);
-        let size_offset = output.len();
-        output.extend_from_slice(&0u32.to_le_bytes());
+        output.write_bytes(&tag);
+        let marker = output.begin_sized();
         match self {
             Self::Version(value) => value.encode_to(output)?,
             Self::ModelInfo(value) => value.encode_to(output)?,
@@ -96,12 +96,10 @@ impl ModelChunk {
             Self::FaceFx(value) => value.encode_to(output)?,
             Self::PivotPoints(value) => value.encode_to(output)?,
             Self::BindPose(value) => value.encode_to(output)?,
-            Self::Unknown(raw) => output.extend_from_slice(&raw.data),
-            Self::Malformed(malformed) => output.extend_from_slice(&malformed.raw.data),
+            Self::Unknown(raw) => output.write_bytes(&raw.data),
+            Self::Malformed(malformed) => output.write_bytes(&malformed.raw.data),
         }
-        let size = output.len() - size_offset - 4;
-        let size = u32::try_from(size).map_err(|_| Error::ChunkTooLarge { tag, size })?;
-        output[size_offset..size_offset + 4].copy_from_slice(&size.to_le_bytes());
+        output.finish_payload(marker, tag)?;
         Ok(())
     }
 
