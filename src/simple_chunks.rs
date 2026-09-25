@@ -1,6 +1,6 @@
 //! Model accessors for scalar chunks.
 
-use crate::{Error, GlobalSequencesChunk, Model, ModelChunk, PivotPointsChunk, RawChunk, Record};
+use crate::{Error, GlobalSequencesChunk, Model, ModelChunk, PivotPointsChunk, RawChunk};
 
 impl Model {
     /// Returns durations from every `GLBS` chunk in file order.
@@ -12,8 +12,6 @@ impl Model {
                     durations.extend_from_slice(&decoded.durations)
                 }
                 ModelChunk::Malformed(malformed) => return Err(malformed.error().clone()),
-                ModelChunk::Unknown(raw) => durations
-                    .extend(GlobalSequencesChunk::decode(&raw.data, self.version())?.durations),
                 _ => unreachable!("GLBS tag matched another typed chunk"),
             }
         }
@@ -34,9 +32,6 @@ impl Model {
             match chunk {
                 ModelChunk::PivotPoints(decoded) => points.extend_from_slice(&decoded.points),
                 ModelChunk::Malformed(malformed) => return Err(malformed.error().clone()),
-                ModelChunk::Unknown(raw) => {
-                    points.extend(PivotPointsChunk::decode(&raw.data, self.version())?.points)
-                }
                 _ => unreachable!("PIVT tag matched another typed chunk"),
             }
         }
