@@ -42,7 +42,7 @@ pub use material::{Layer, Material};
 mod model_info;
 pub use model_info::ModelInfo;
 mod node;
-pub use node::{Bone, Node};
+pub use node::{Bone, Node, NodeFlags};
 mod popcorn;
 pub use popcorn::PopcornEmitter;
 mod particle;

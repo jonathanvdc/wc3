@@ -9,6 +9,55 @@ const HELP_TAG: [u8; 4] = *b"HELP";
 const HEADER_SIZE: usize = 96;
 const NAME_SIZE: usize = 80;
 
+/// Node behavior and object-kind bits. Unrecognized bits survive conversion.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct NodeFlags(u32);
+
+impl NodeFlags {
+    pub const DONT_INHERIT_TRANSLATION: Self = Self(0x1);
+    pub const DONT_INHERIT_ROTATION: Self = Self(0x2);
+    pub const DONT_INHERIT_SCALING: Self = Self(0x4);
+    pub const BILLBOARDED: Self = Self(0x8);
+    pub const BILLBOARD_LOCK_X: Self = Self(0x10);
+    pub const BILLBOARD_LOCK_Y: Self = Self(0x20);
+    pub const BILLBOARD_LOCK_Z: Self = Self(0x40);
+    pub const CAMERA_ANCHORED: Self = Self(0x80);
+    pub const BONE: Self = Self(0x100);
+    pub const LIGHT: Self = Self(0x200);
+    pub const EVENT_OBJECT: Self = Self(0x400);
+    pub const ATTACHMENT: Self = Self(0x800);
+    pub const PARTICLE_EMITTER: Self = Self(0x1000);
+    pub const COLLISION_SHAPE: Self = Self(0x2000);
+    pub const RIBBON_EMITTER: Self = Self(0x4000);
+    pub const EMITTER_USES_MDL_OR_UNSHADED: Self = Self(0x8000);
+    pub const EMITTER_USES_TGA_OR_SORT_FAR_Z: Self = Self(0x10000);
+    pub const LINE_EMITTER: Self = Self(0x20000);
+    pub const UNFOGGED: Self = Self(0x40000);
+    pub const MODEL_SPACE: Self = Self(0x80000);
+    pub const XY_QUAD: Self = Self(0x100000);
+
+    /// Wraps all bits, including values not yet assigned a name.
+    pub const fn from_bits(bits: u32) -> Self {
+        Self(bits)
+    }
+    /// Returns the exact stored bits.
+    pub const fn bits(self) -> u32 {
+        self.0
+    }
+    /// Reports whether every bit in `other` is set.
+    pub const fn contains(self, other: Self) -> bool {
+        self.0 & other.0 == other.0
+    }
+    /// Changes only the requested bits.
+    pub fn set(&mut self, other: Self, enabled: bool) {
+        if enabled {
+            self.0 |= other.0;
+        } else {
+            self.0 &= !other.0;
+        }
+    }
+}
+
 /// A generic node with its optional animation tracks retained as raw bytes.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Node {
@@ -108,13 +157,23 @@ impl Node {
         self.set_u32_at(88, id);
     }
 
-    /// Returns raw node flags.
-    pub fn flags(&self) -> u32 {
+    /// Returns the decoded node flag set.
+    pub fn flags(&self) -> NodeFlags {
+        NodeFlags::from_bits(self.raw_flags())
+    }
+
+    /// Returns the exact raw node flags.
+    pub fn raw_flags(&self) -> u32 {
         self.u32_at(92)
     }
 
-    /// Sets raw node flags.
-    pub fn set_flags(&mut self, flags: u32) {
+    /// Sets a decoded node flag set.
+    pub fn set_flags(&mut self, flags: NodeFlags) {
+        self.set_raw_flags(flags.bits());
+    }
+
+    /// Sets the exact raw node flags.
+    pub fn set_raw_flags(&mut self, flags: u32) {
         self.set_u32_at(92, flags);
     }
 
