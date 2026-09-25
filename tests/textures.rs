@@ -26,8 +26,6 @@ fn texture_reserved_bytes_are_preserved() {
     let mut textures = model.textures();
     textures[0].set_path("b.blp").unwrap();
     model.set_textures(&textures);
-    assert_eq!(
-        &model.chunk(*b"TEXS").unwrap().to_raw().unwrap().data[260..264],
-        &[9, 8, 7, 6]
-    );
+    let bytes = model.encode().unwrap();
+    assert_eq!(&bytes[24 + 260..24 + 264], &[9, 8, 7, 6]);
 }

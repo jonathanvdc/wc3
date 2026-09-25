@@ -1,6 +1,6 @@
 //! Semantic checks for all currently known MDX chunk layouts.
 
-use crate::{Error, Model, ModelChunk};
+use crate::{Encoder, Error, Model, ModelChunk};
 
 impl Model {
     /// Validates every known chunk against the model's current version.
@@ -10,11 +10,16 @@ impl Model {
             if let ModelChunk::Malformed(malformed) = chunk {
                 return Err(malformed.error().clone());
             }
-            let raw = chunk.to_raw()?;
-            if raw.tag == *b"VERS" && raw.data.len() < 4 {
+            let mut bytes = Vec::new();
+            chunk.encode_to(&mut Encoder::new(&mut bytes))?;
+            let tag = chunk.tag();
+            let data = bytes[8..].to_vec();
+            if tag == *b"VERS" && data.len() < 4 {
                 return Err(Error::InvalidVersionChunk);
             }
-            if let ModelChunk::Malformed(malformed) = ModelChunk::from_raw(raw, self.version()) {
+            if let ModelChunk::Malformed(malformed) =
+                ModelChunk::from_raw(crate::RawChunk::new(tag, data), self.version())
+            {
                 return Err(malformed.error);
             }
         }

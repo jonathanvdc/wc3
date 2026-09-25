@@ -26,8 +26,8 @@ fn preserves_repeated_chunks_and_order() {
     model.push(ModelChunk::from_raw(RawChunk::new(*b"ABCD", vec![1]), 800));
     model.push(ModelChunk::from_raw(RawChunk::new(*b"ABCD", vec![2]), 800));
     let parsed = Model::decode(&model.encode().unwrap(), 800).unwrap();
-    assert_eq!(parsed.chunks()[1].to_raw().unwrap().data, vec![1]);
-    assert_eq!(parsed.chunks()[2].to_raw().unwrap().data, vec![2]);
+    assert!(matches!(&parsed.chunks()[1], ModelChunk::Unknown(raw) if raw.data == [1]));
+    assert!(matches!(&parsed.chunks()[2], ModelChunk::Unknown(raw) if raw.data == [2]));
 }
 
 #[test]

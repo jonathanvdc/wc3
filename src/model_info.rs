@@ -130,8 +130,12 @@ impl Model {
             match chunk {
                 ModelChunk::ModelInfo(current) => current.info = info.clone(),
                 _ => {
-                    let raw = chunk.to_raw().expect("model info chunk can be encoded");
-                    let extension = raw.data.get(SIZE..).unwrap_or_default().to_vec();
+                    let data = match chunk {
+                        ModelChunk::Unknown(raw) => &raw.data,
+                        ModelChunk::Malformed(malformed) => &malformed.raw.data,
+                        _ => unreachable!("MODL tag matched another typed chunk"),
+                    };
+                    let extension = data.get(SIZE..).unwrap_or_default().to_vec();
                     *chunk = ModelChunk::ModelInfo(ModelInfoChunk::new(info.clone(), extension));
                 }
             }

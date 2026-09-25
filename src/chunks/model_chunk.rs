@@ -53,7 +53,11 @@ pub enum ModelChunk {
 
 impl PartialEq for ModelChunk {
     fn eq(&self, other: &Self) -> bool {
-        self.to_raw() == other.to_raw()
+        let mut left = Vec::new();
+        let mut right = Vec::new();
+        self.encode_to(&mut Encoder::new(&mut left))
+            == other.encode_to(&mut Encoder::new(&mut right))
+            && left == right
     }
 }
 impl Eq for ModelChunk {}
@@ -63,7 +67,9 @@ impl Chunk for ModelChunk {
         ModelChunk::tag(self)
     }
     fn encode_chunk(&self) -> Result<RawChunk, Error> {
-        self.to_raw()
+        let mut bytes = Vec::new();
+        self.encode_to(&mut Encoder::new(&mut bytes))?;
+        Ok(RawChunk::new(self.tag(), bytes[8..].to_vec()))
     }
 }
 
@@ -219,37 +225,6 @@ impl ModelChunk {
             Self::BindPose(_) => BindPose::TAG,
             Self::Unknown(raw) => raw.tag,
             Self::Malformed(malformed) => malformed.raw.tag,
-        }
-    }
-
-    /// Encodes a known chunk or returns the stored raw bytes.
-    pub fn to_raw(&self) -> Result<RawChunk, Error> {
-        match self {
-            Self::Version(value) => value.encode_chunk(),
-            Self::ModelInfo(value) => value.encode_chunk(),
-            Self::Sequences(value) => value.encode_chunk(),
-            Self::GlobalSequences(value) => value.encode_chunk(),
-            Self::Textures(value) => value.encode_chunk(),
-            Self::Materials(value) => value.encode_chunk(),
-            Self::Geosets(value) => value.encode_chunk(),
-            Self::GeosetAnimations(value) => value.encode_chunk(),
-            Self::Bones(value) => value.encode_chunk(),
-            Self::Helpers(value) => value.encode_chunk(),
-            Self::Attachments(value) => value.encode_chunk(),
-            Self::EventObjects(value) => value.encode_chunk(),
-            Self::CollisionShapes(value) => value.encode_chunk(),
-            Self::ParticleEmitters(value) => value.encode_chunk(),
-            Self::ParticleEmitters2(value) => value.encode_chunk(),
-            Self::RibbonEmitters(value) => value.encode_chunk(),
-            Self::PopcornEmitters(value) => value.encode_chunk(),
-            Self::Cameras(value) => value.encode_chunk(),
-            Self::Lights(value) => value.encode_chunk(),
-            Self::TextureAnimations(value) => value.encode_chunk(),
-            Self::FaceFx(value) => value.encode_chunk(),
-            Self::PivotPoints(value) => value.encode_chunk(),
-            Self::BindPose(value) => value.encode_chunk(),
-            Self::Unknown(raw) => Ok(raw.clone()),
-            Self::Malformed(malformed) => Ok(malformed.raw.clone()),
         }
     }
 }

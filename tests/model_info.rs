@@ -30,12 +30,8 @@ fn preserves_reserved_and_extension_bytes() {
     let mut info = model.model_info().unwrap().unwrap();
     info.set_name("New").unwrap();
     model.set_model_info(&info);
-    assert_eq!(
-        &model.chunk(*b"MODL").unwrap().to_raw().unwrap().data[336..340],
-        &[1, 2, 3, 4]
-    );
-    assert_eq!(
-        &model.chunk(*b"MODL").unwrap().to_raw().unwrap().data[372..],
-        &[5, 6]
-    );
+    let bytes = model.encode().unwrap();
+    let payload = &bytes[24..];
+    assert_eq!(&payload[336..340], &[1, 2, 3, 4]);
+    assert_eq!(&payload[372..], &[5, 6]);
 }
