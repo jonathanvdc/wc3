@@ -4,6 +4,61 @@ use crate::{Error, Model};
 
 const TAG: [u8; 4] = *b"MTLS";
 
+/// Material rendering bits, preserving unrecognized bits.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct MaterialRenderFlags(u32);
+
+impl MaterialRenderFlags {
+    pub const CONSTANT_COLOR: Self = Self(1);
+    pub const SORT_PRIMITIVES_FAR_Z: Self = Self(16);
+    pub const FULL_RESOLUTION: Self = Self(32);
+    pub const fn from_bits(bits: u32) -> Self {
+        Self(bits)
+    }
+    pub const fn bits(self) -> u32 {
+        self.0
+    }
+    pub const fn contains(self, other: Self) -> bool {
+        self.0 & other.0 == other.0
+    }
+    pub fn set(&mut self, other: Self, enabled: bool) {
+        if enabled {
+            self.0 |= other.0;
+        } else {
+            self.0 &= !other.0;
+        }
+    }
+}
+
+/// Material layer shading bits, preserving unrecognized bits.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct LayerShadingFlags(u32);
+
+impl LayerShadingFlags {
+    pub const UNSHADED: Self = Self(1);
+    pub const SPHERE_ENV_MAP: Self = Self(2);
+    pub const TWO_SIDED: Self = Self(16);
+    pub const UNFOGGED: Self = Self(32);
+    pub const NO_DEPTH_TEST: Self = Self(64);
+    pub const NO_DEPTH_SET: Self = Self(128);
+    pub const fn from_bits(bits: u32) -> Self {
+        Self(bits)
+    }
+    pub const fn bits(self) -> u32 {
+        self.0
+    }
+    pub const fn contains(self, other: Self) -> bool {
+        self.0 & other.0 == other.0
+    }
+    pub fn set(&mut self, other: Self, enabled: bool) {
+        if enabled {
+            self.0 |= other.0;
+        } else {
+            self.0 &= !other.0;
+        }
+    }
+}
+
 /// A material record, including all version-specific bytes.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Material {
@@ -66,13 +121,23 @@ impl Material {
         self.set_u32_at(4, value)
     }
 
-    /// Returns raw render mode flags.
-    pub fn render_mode(&self) -> Result<u32, Error> {
+    /// Returns decoded material render flags.
+    pub fn render_mode(&self) -> Result<MaterialRenderFlags, Error> {
+        self.raw_render_mode().map(MaterialRenderFlags::from_bits)
+    }
+
+    /// Returns exact raw render mode bits.
+    pub fn raw_render_mode(&self) -> Result<u32, Error> {
         self.u32_at(8)
     }
 
-    /// Sets raw render mode flags.
-    pub fn set_render_mode(&mut self, value: u32) -> Result<(), Error> {
+    /// Sets decoded material render flags.
+    pub fn set_render_mode(&mut self, value: MaterialRenderFlags) -> Result<(), Error> {
+        self.set_raw_render_mode(value.bits())
+    }
+
+    /// Sets exact raw render mode bits.
+    pub fn set_raw_render_mode(&mut self, value: u32) -> Result<(), Error> {
         self.set_u32_at(8, value)
     }
 
@@ -148,9 +213,24 @@ impl Layer {
         self.u32_at(4)
     }
 
-    /// Returns raw shading flags.
-    pub fn shading_flags(&self) -> Result<u32, Error> {
+    /// Returns decoded layer shading flags.
+    pub fn shading_flags(&self) -> Result<LayerShadingFlags, Error> {
+        self.raw_shading_flags().map(LayerShadingFlags::from_bits)
+    }
+
+    /// Returns exact raw layer shading bits.
+    pub fn raw_shading_flags(&self) -> Result<u32, Error> {
         self.u32_at(8)
+    }
+
+    /// Sets decoded layer shading flags.
+    pub fn set_shading_flags(&mut self, flags: LayerShadingFlags) -> Result<(), Error> {
+        self.set_raw_shading_flags(flags.bits())
+    }
+
+    /// Sets exact raw layer shading bits.
+    pub fn set_raw_shading_flags(&mut self, flags: u32) -> Result<(), Error> {
+        self.set_u32_at(8, flags)
     }
 
     /// Returns the texture index.

@@ -1,4 +1,4 @@
-use wc3_mdx::{Layer, Material, Model};
+use wc3_mdx::{Layer, LayerShadingFlags, Material, MaterialRenderFlags, Model};
 
 fn sample_material(version: u32) -> Material {
     let mut layer = vec![0; 28];
@@ -28,17 +28,25 @@ fn material_layers_round_trip_across_layouts() {
     for version in [800, 900, 1000, 1100, 1200, 1800] {
         let mut material = sample_material(version);
         material.set_priority_plane(3).unwrap();
-        material.set_render_mode(7).unwrap();
+        material.set_raw_render_mode(7).unwrap();
         let mut model = Model::new(version);
         model.set_materials(&[material]).unwrap();
         let decoded = Model::from_bytes(&model.to_bytes().unwrap()).unwrap();
         let materials = decoded.materials().unwrap();
         assert_eq!(materials[0].priority_plane().unwrap(), 3);
-        assert_eq!(materials[0].render_mode().unwrap(), 7);
+        assert_eq!(materials[0].raw_render_mode().unwrap(), 7);
+        assert!(materials[0]
+            .render_mode()
+            .unwrap()
+            .contains(MaterialRenderFlags::CONSTANT_COLOR));
         let layers = materials[0].layers(version).unwrap();
         assert_eq!(layers[0].filter_mode().unwrap(), 1);
         assert_eq!(layers[0].texture_id().unwrap(), 2);
         assert_eq!(layers[0].alpha().unwrap(), 0.5);
+        assert_eq!(
+            layers[0].shading_flags().unwrap(),
+            LayerShadingFlags::default()
+        );
         assert_eq!(Layer::from_bytes(layers[0].as_bytes()).unwrap(), layers[0]);
     }
 }
