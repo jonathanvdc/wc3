@@ -1,4 +1,4 @@
-use wc3_mdx::{Chunk, Error, Geoset, Model};
+use wc3_mdx::{Chunk, Error, Geoset, GeosetExtent, Model};
 
 fn sample_geoset() -> Geoset {
     let mut data = Vec::new();
@@ -73,11 +73,33 @@ fn builds_complete_synthetic_geosets() {
         )
         .unwrap();
         geoset.set_material_id(version, 7).unwrap();
+        geoset.set_normal(1, [0.0, 1.0, 0.0]).unwrap();
+        geoset.set_selection_group(version, 3).unwrap();
+        geoset.set_unselectable(version, true).unwrap();
+        geoset.set_uv(version, 0, 1, [0.25, 0.75]).unwrap();
+        let extent = GeosetExtent {
+            bounds_radius: 5.0,
+            minimum: [-1.0; 3],
+            maximum: [1.0; 3],
+        };
+        geoset.set_extent(version, extent).unwrap();
+        if version >= 900 {
+            geoset.set_level_of_detail(version, 2).unwrap();
+            geoset.set_name(version, "Body").unwrap();
+            assert_eq!(geoset.name(version).unwrap().as_deref(), Some("Body"));
+        }
         assert_eq!(geoset.material_id(version).unwrap(), 7);
+        assert_eq!(geoset.normals().unwrap()[1], [0.0, 1.0, 0.0]);
+        assert_eq!(geoset.selection_group(version).unwrap(), 3);
+        assert!(geoset.unselectable(version).unwrap());
+        assert_eq!(geoset.extent(version).unwrap(), extent);
         assert_eq!(geoset.vertex_groups(version).unwrap(), &[0, 0]);
         assert_eq!(geoset.matrix_group_sizes(version).unwrap(), vec![1]);
         assert_eq!(geoset.matrix_indices(version).unwrap(), vec![0]);
-        assert_eq!(geoset.uv_sets(version).unwrap(), vec![vec![[0.0, 0.0]; 2]]);
+        assert_eq!(
+            geoset.uv_sets(version).unwrap(),
+            vec![vec![[0.0, 0.0], [0.25, 0.75]]]
+        );
         let mut model = Model::new(version);
         model.set_geosets(&[geoset]).unwrap();
         let parsed = Model::from_bytes(&model.to_bytes().unwrap()).unwrap();
