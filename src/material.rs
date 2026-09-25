@@ -1,5 +1,7 @@
 //! Size-bounded material and layer records.
 
+use std::borrow::Cow;
+
 use crate::{AnimationTrack, Error, Model};
 
 const TAG: [u8; 4] = *b"MTLS";
@@ -185,6 +187,39 @@ impl Material {
         self.set_u32_at(8, value)
     }
 
+    /// Returns the fixed-width shader path present in versions 900 through 1099.
+    pub fn shader(&self, version: u32) -> Result<Option<Cow<'_, str>>, Error> {
+        if !(900..1100).contains(&version) {
+            return Ok(None);
+        }
+        let field = self.bytes.get(12..92).ok_or(Error::MalformedRecord {
+            tag: TAG,
+            offset: 12,
+        })?;
+        let end = field.iter().position(|&byte| byte == 0).unwrap_or(80);
+        Ok(Some(String::from_utf8_lossy(&field[..end])))
+    }
+
+    /// Sets the shader path in a version 900 through 1099 material.
+    pub fn set_shader(&mut self, version: u32, shader: &str) -> Result<(), Error> {
+        if !(900..1100).contains(&version) {
+            return Err(Error::MalformedRecord {
+                tag: TAG,
+                offset: 12,
+            });
+        }
+        if shader.len() >= 80 || shader.as_bytes().contains(&0) {
+            return Err(Error::InvalidString { max_bytes: 79 });
+        }
+        let field = self.bytes.get_mut(12..92).ok_or(Error::MalformedRecord {
+            tag: TAG,
+            offset: 12,
+        })?;
+        field.fill(0);
+        field[..shader.len()].copy_from_slice(shader.as_bytes());
+        Ok(())
+    }
+
     /// Returns the bounded layer records. Versions 900 through 1099 have an
     /// additional 80-byte shader field before `LAYS`.
     pub fn layers(&self, version: u32) -> Result<Vec<Layer>, Error> {
@@ -306,6 +341,11 @@ impl Layer {
     /// Returns the filter mode.
     pub fn filter_mode(&self) -> Result<u32, Error> {
         self.u32_at(4)
+    }
+
+    /// Sets the filter mode identifier.
+    pub fn set_filter_mode(&mut self, mode: u32) -> Result<(), Error> {
+        self.set_u32_at(4, mode)
     }
 
     /// Returns decoded layer shading flags.

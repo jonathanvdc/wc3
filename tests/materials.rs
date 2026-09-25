@@ -98,6 +98,21 @@ fn builds_material_with_reforged_layer() {
 }
 
 #[test]
+fn shader_path_round_trip_in_legacy_reforged_material() {
+    let mut material = Material::new(1000);
+    material.set_shader(1000, "Shaders\\Unit.shader").unwrap();
+    assert_eq!(
+        Material::from_bytes(material.as_bytes())
+            .unwrap()
+            .shader(1000)
+            .unwrap()
+            .as_deref(),
+        Some("Shaders\\Unit.shader")
+    );
+    assert!(material.set_shader(1800, "unused").is_err());
+}
+
+#[test]
 fn reforged_layer_texture_slot_and_tracks_round_trip() {
     let mut layer = Layer::new(1800);
     let mut texture_key = Keyframe {
