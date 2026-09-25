@@ -19,6 +19,8 @@ use std::fmt;
 
 mod animation;
 pub use animation::{AnimationTrack, Keyframe};
+mod attachment;
+pub use attachment::Attachment;
 mod bind_pose;
 pub use bind_pose::BindPose;
 mod collision;

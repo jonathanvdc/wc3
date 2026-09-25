@@ -160,7 +160,7 @@ fn components(tag: [u8; 4]) -> Option<usize> {
     match &tag {
         b"KGTR" | b"KGSC" | b"KCTR" | b"KTTR" => Some(3),
         b"KGRT" => Some(4),
-        b"KCRL" => Some(1),
+        b"KCRL" | b"KATV" => Some(1),
         _ => None,
     }
 }
