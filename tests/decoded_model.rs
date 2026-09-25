@@ -53,7 +53,7 @@ fn edits_to_decoded_records_are_written() {
 
     let bytes = model.encode().unwrap();
     let reopened = Model::decode(&bytes, 800).unwrap();
-    assert_eq!(reopened.sequences().unwrap()[0].name(), "Walk");
+    assert_eq!(reopened.sequences()[0].name(), "Walk");
 }
 
 #[test]
@@ -68,7 +68,7 @@ fn replacing_a_malformed_chunk_clears_its_error() {
     *model.chunk_mut(*b"SEQS").unwrap() = ModelChunk::Sequences(SequencesChunk::new(vec![
         Sequence::new("Stand", [0, 100]).unwrap(),
     ]));
-    assert_eq!(model.sequences().unwrap().len(), 1);
+    assert_eq!(model.sequences().len(), 1);
     assert!(model.validate().is_ok());
     assert!(matches!(model.chunks()[1], ModelChunk::Sequences(_)));
 }
@@ -84,7 +84,7 @@ fn collection_setter_keeps_records_decoded_and_collapses_repeated_chunks() {
     model.push(ModelChunk::Sequences(SequencesChunk::new(vec![
         second.clone()
     ])));
-    assert_eq!(model.sequences().unwrap(), vec![first, second.clone()]);
+    assert_eq!(model.sequences(), vec![first, second.clone()]);
 
     model.set_sequences(&[second.clone()]);
     assert!(matches!(
@@ -99,5 +99,5 @@ fn collection_setter_keeps_records_decoded_and_collapses_repeated_chunks() {
             .count(),
         1
     );
-    assert_eq!(model.sequences().unwrap(), vec![second]);
+    assert_eq!(model.sequences(), vec![second]);
 }

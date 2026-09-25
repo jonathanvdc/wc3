@@ -79,7 +79,7 @@ fn typed_accessors_preserve_local_files_when_available() {
                 .count()
                 == 1
             {
-                let records = model.sequences().unwrap();
+                let records = model.sequences();
                 model.set_sequences(&records);
             }
             if model
@@ -89,7 +89,7 @@ fn typed_accessors_preserve_local_files_when_available() {
                 .count()
                 == 1
             {
-                let records = model.textures().unwrap();
+                let records = model.textures();
                 model.set_textures(&records);
             }
             if model
@@ -99,7 +99,7 @@ fn typed_accessors_preserve_local_files_when_available() {
                 .count()
                 == 1
             {
-                let records = model.materials().unwrap();
+                let records = model.materials();
                 model.set_materials(&records).unwrap();
             }
             if model
@@ -109,7 +109,7 @@ fn typed_accessors_preserve_local_files_when_available() {
                 .count()
                 == 1
             {
-                let records = model.geosets().unwrap();
+                let records = model.geosets();
                 model.set_geosets(&records).unwrap();
             }
             if model
@@ -119,7 +119,7 @@ fn typed_accessors_preserve_local_files_when_available() {
                 .count()
                 == 1
             {
-                let records = model.bones().unwrap();
+                let records = model.bones();
                 model.set_bones(&records);
             }
             if model
@@ -129,7 +129,7 @@ fn typed_accessors_preserve_local_files_when_available() {
                 .count()
                 == 1
             {
-                let points = model.pivot_points().unwrap();
+                let points = model.pivot_points();
                 model.set_pivot_points(&points);
             }
             if model
@@ -139,7 +139,7 @@ fn typed_accessors_preserve_local_files_when_available() {
                 .count()
                 == 1
             {
-                let records = model.event_objects().unwrap();
+                let records = model.event_objects();
                 model.set_event_objects(&records);
             }
             if model
@@ -149,7 +149,7 @@ fn typed_accessors_preserve_local_files_when_available() {
                 .count()
                 == 1
             {
-                let records = model.collision_shapes().unwrap();
+                let records = model.collision_shapes();
                 model.set_collision_shapes(&records);
             }
             if model
@@ -159,7 +159,7 @@ fn typed_accessors_preserve_local_files_when_available() {
                 .count()
                 == 1
             {
-                let records = model.attachments().unwrap();
+                let records = model.attachments();
                 model.set_attachments(&records);
             }
             if model
@@ -169,7 +169,7 @@ fn typed_accessors_preserve_local_files_when_available() {
                 .count()
                 == 1
             {
-                let records = model.face_fx().unwrap();
+                let records = model.face_fx();
                 model.set_face_fx(&records);
             }
             if model
@@ -179,7 +179,7 @@ fn typed_accessors_preserve_local_files_when_available() {
                 .count()
                 == 1
             {
-                let records = model.geoset_animations().unwrap();
+                let records = model.geoset_animations();
                 model.set_geoset_animations(&records);
             }
             macro_rules! round_trip_records {
@@ -191,7 +191,7 @@ fn typed_accessors_preserve_local_files_when_available() {
                         .count()
                         == 1
                     {
-                        let records = model.$getter().unwrap();
+                        let records = model.$getter();
                         model.$setter(&records);
                     }
                 };

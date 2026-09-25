@@ -110,7 +110,7 @@ impl Texture {
 
 impl Model {
     /// Decodes all `TEXS` chunks in file order.
-    pub fn textures(&self) -> Result<Vec<Texture>, Error> {
+    pub fn textures(&self) -> Vec<Texture> {
         self.collect_chunk_records::<TexturesChunk>(|chunk| match chunk {
             ModelChunk::Textures(decoded) => Some(decoded),
             _ => None,

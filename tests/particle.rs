@@ -25,7 +25,7 @@ fn classic_particle_emitter_round_trip() {
     let mut model = Model::new(800);
     model.set_particle_emitters(&[emitter]);
     let parsed = Model::decode(&model.encode().unwrap(), 800).unwrap();
-    let emitter = &parsed.particle_emitters().unwrap()[0];
+    let emitter = &parsed.particle_emitters()[0];
     assert_eq!(emitter.node().name(), "Smoke");
     assert_eq!(emitter.path(), "smoke.mdl");
     assert_eq!(emitter.emission_rate(), 10.0);

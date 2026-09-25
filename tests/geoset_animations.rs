@@ -10,7 +10,7 @@ fn geoset_animation_fields_round_trip() {
     let mut model = Model::new(1800);
     model.set_geoset_animations(&[animation]);
     let parsed = Model::decode(&model.encode().unwrap(), 800).unwrap();
-    let actual = &parsed.geoset_animations().unwrap()[0];
+    let actual = &parsed.geoset_animations()[0];
     assert_eq!(actual.geoset_id(), 2);
     assert_eq!(actual.alpha(), 0.5);
     assert!(actual.flags().contains(GeosetAnimationFlags::DROP_SHADOW));
@@ -34,7 +34,7 @@ fn local_geoset_animations_round_trip_when_available() {
                 let bytes = std::fs::read(&path).unwrap();
                 let mut model = Model::decode(&bytes, 800).unwrap();
                 if model.chunk(*b"GEOA").is_some() {
-                    let records = model.geoset_animations().unwrap();
+                    let records = model.geoset_animations();
                     model.set_geoset_animations(&records);
                     assert_eq!(model.encode().unwrap(), bytes);
                 }

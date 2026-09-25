@@ -127,7 +127,7 @@ impl CollisionShape {
 
 impl Model {
     /// Decodes all collision shapes in `CLID` chunks.
-    pub fn collision_shapes(&self) -> Result<Vec<CollisionShape>, Error> {
+    pub fn collision_shapes(&self) -> Vec<CollisionShape> {
         self.collect_chunk_records::<CollisionShapesChunk>(|chunk| match chunk {
             ModelChunk::CollisionShapes(decoded) => Some(decoded),
             _ => None,

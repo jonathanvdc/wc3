@@ -10,7 +10,7 @@ fn event_object_round_trip() {
     let mut model = Model::new(800);
     model.set_event_objects(&[event]);
     let parsed = Model::decode(&model.encode().unwrap(), 800).unwrap();
-    let event = &parsed.event_objects().unwrap()[0];
+    let event = &parsed.event_objects()[0];
     assert_eq!(event.node().name(), "Sound");
     assert_eq!(event.global_sequence_id(), 3);
     assert_eq!(event.frames(), vec![100, 200, 300]);
@@ -46,7 +46,7 @@ fn local_event_objects_round_trip_when_available() {
                 let bytes = std::fs::read(&path).unwrap();
                 let mut model = Model::decode(&bytes, 800).unwrap();
                 if model.chunk(*b"EVTS").is_some() {
-                    let events = model.event_objects().unwrap();
+                    let events = model.event_objects();
                     model.set_event_objects(&events);
                     assert_eq!(model.encode().unwrap(), bytes);
                 }

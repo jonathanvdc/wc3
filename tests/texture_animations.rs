@@ -20,7 +20,7 @@ fn texture_animation_tracks_round_trip() {
     model.set_texture_animations(&[animation]);
     let parsed = Model::decode(&model.encode().unwrap(), 800).unwrap();
     assert_eq!(
-        parsed.texture_animations().unwrap()[0].tracks(),
+        parsed.texture_animations()[0].tracks(),
         vec![track]
     );
 }

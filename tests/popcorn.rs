@@ -14,7 +14,7 @@ fn popcorn_fixed_fields_round_trip() {
     let mut model = Model::new(1800);
     model.set_popcorn_emitters(&[emitter]);
     let parsed = Model::decode(&model.encode().unwrap(), 800).unwrap();
-    let emitter = &parsed.popcorn_emitters().unwrap()[0];
+    let emitter = &parsed.popcorn_emitters()[0];
     assert_eq!(emitter.node().name(), "Spark");
     assert_eq!(emitter.path(), "spark.mdx");
     assert_eq!(emitter.visibility_guide(), "Stand");
@@ -41,7 +41,7 @@ fn local_popcorn_emitters_round_trip_when_available() {
                 let bytes = std::fs::read(&path).unwrap();
                 let mut model = Model::decode(&bytes, 800).unwrap();
                 if model.chunk(*b"CORN").is_some() {
-                    let emitters = model.popcorn_emitters().unwrap();
+                    let emitters = model.popcorn_emitters();
                     for emitter in &emitters {
                         emitter.tracks();
                     }

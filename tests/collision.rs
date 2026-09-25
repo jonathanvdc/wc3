@@ -20,7 +20,7 @@ fn collision_primitives_round_trip() {
     let mut model = Model::new(800);
     model.set_collision_shapes(&[box_shape, sphere, plane, cylinder]);
     let decoded = Model::decode(&model.encode().unwrap(), 800).unwrap();
-    let shapes = decoded.collision_shapes().unwrap();
+    let shapes = decoded.collision_shapes();
     assert_eq!(shapes[0].node().name(), "Box");
     assert_eq!(shapes[0].kind(), CollisionKind::Box);
     assert_eq!(

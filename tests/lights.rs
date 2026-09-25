@@ -13,7 +13,7 @@ fn light_fields_round_trip() {
     let mut model = Model::new(1200);
     model.set_lights(&[light]);
     let parsed = Model::decode(&model.encode().unwrap(), 800).unwrap();
-    let light = &parsed.lights().unwrap()[0];
+    let light = &parsed.lights()[0];
     assert_eq!(light.node().name(), "Torch");
     assert_eq!(light.light_type(), 1);
     assert_eq!(light.attenuation_start(), 100.0);

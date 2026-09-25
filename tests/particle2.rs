@@ -20,7 +20,7 @@ fn particle_emitter2_fields_round_trip() {
     let mut model = Model::new(1800);
     model.set_particle_emitters2(&[emitter]);
     let parsed = Model::decode(&model.encode().unwrap(), 800).unwrap();
-    assert_eq!(parsed.particle_emitters2().unwrap()[0].fields(), fields);
+    assert_eq!(parsed.particle_emitters2()[0].fields(), fields);
 }
 
 #[test]
@@ -38,7 +38,7 @@ fn local_particle_emitter2_round_trip_when_available() {
                 let bytes = std::fs::read(&path).unwrap();
                 let mut model = Model::decode(&bytes, 800).unwrap();
                 if model.chunk(*b"PRE2").is_some() {
-                    let mut emitters = model.particle_emitters2().unwrap();
+                    let mut emitters = model.particle_emitters2();
                     for emitter in &mut emitters {
                         let fields = emitter.fields();
                         emitter.set_fields(&fields);

@@ -1,5 +1,5 @@
 use wc3_mdx::Record;
-use wc3_mdx::{Error, Model, ModelChunk, RawChunk, Sequence, SequenceFlags};
+use wc3_mdx::{Model, Sequence, SequenceFlags};
 
 #[test]
 fn sequence_fields_round_trip() {
@@ -14,7 +14,7 @@ fn sequence_fields_round_trip() {
     let mut model = Model::new(800);
     model.set_sequences(&[stand]);
     let decoded = Model::decode(&model.encode().unwrap(), 800).unwrap();
-    let sequence = &decoded.sequences().unwrap()[0];
+    let sequence = &decoded.sequences()[0];
     assert_eq!(sequence.name(), "Stand");
     assert_eq!(sequence.interval(), [0, 1000]);
     assert_eq!(sequence.move_speed(), 270.0);
@@ -24,21 +24,4 @@ fn sequence_fields_round_trip() {
     assert_eq!(sequence.bounds_radius(), 42.0);
     assert_eq!(sequence.minimum_extent(), [-2.0, -3.0, -4.0]);
     assert_eq!(sequence.maximum_extent(), [2.0, 3.0, 4.0]);
-}
-
-#[test]
-fn malformed_sequence_chunk_is_reported() {
-    let mut model = Model::new(1800);
-    model.push(ModelChunk::from_raw(
-        RawChunk::new(*b"SEQS", vec![0; 131]),
-        1800,
-    ));
-    assert_eq!(
-        model.sequences(),
-        Err(Error::MalformedChunk {
-            tag: *b"SEQS",
-            size: 131,
-            expected: 132,
-        })
-    );
 }

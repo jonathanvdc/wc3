@@ -59,7 +59,7 @@ impl EventObject {
 
 impl Model {
     /// Decodes all event objects in `EVTS` chunks.
-    pub fn event_objects(&self) -> Result<Vec<EventObject>, Error> {
+    pub fn event_objects(&self) -> Vec<EventObject> {
         self.collect_chunk_records::<EventObjectsChunk>(|chunk| match chunk {
             ModelChunk::EventObjects(decoded) => Some(decoded),
             _ => None,

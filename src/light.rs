@@ -160,7 +160,7 @@ fn is_track(tag: Tag) -> bool {
 
 impl Model {
     /// Decodes all `LITE` records in file order.
-    pub fn lights(&self) -> Result<Vec<Light>, Error> {
+    pub fn lights(&self) -> Vec<Light> {
         self.collect_chunk_records::<LightsChunk>(|chunk| match chunk {
             ModelChunk::Lights(decoded) => Some(decoded),
             _ => None,

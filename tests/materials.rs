@@ -23,7 +23,7 @@ fn material_layers_round_trip_across_layouts() {
         let mut model = Model::new(version);
         model.set_materials(&[material]).unwrap();
         let decoded = Model::decode(&model.encode().unwrap(), 800).unwrap();
-        let materials = decoded.materials().unwrap();
+        let materials = decoded.materials();
         assert_eq!(materials[0].version(), version);
         assert_eq!(materials[0].priority_plane(), 3);
         assert_eq!(materials[0].raw_render_mode(), 7);
@@ -57,7 +57,7 @@ fn local_material_layers_are_bounded_when_available() {
             } else if path.extension().is_some_and(|extension| extension == "mdx") {
                 let bytes = std::fs::read(&path).unwrap();
                 let model = Model::decode(&bytes, 800).unwrap();
-                for material in model.materials().unwrap() {
+                for material in model.materials() {
                     for layer in material.layers() {
                         layer.filter_mode();
                         layer.alpha();

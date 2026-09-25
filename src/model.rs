@@ -27,7 +27,7 @@ impl Model {
     pub(crate) fn collect_chunk_records<C: CollectionChunk + 'static>(
         &self,
         typed: for<'a> fn(&'a ModelChunk) -> Option<&'a C>,
-    ) -> Result<Vec<C::Item>, Error>
+    ) -> Vec<C::Item>
     where
         C::Item: Clone,
     {
@@ -40,19 +40,16 @@ impl Model {
         &self,
         tag: Tag,
         typed: impl Fn(&ModelChunk) -> Option<&[T]>,
-    ) -> Result<Vec<T>, Error> {
+    ) -> Vec<T> {
         let mut result = Vec::new();
         for chunk in self.chunks.iter().filter(|chunk| chunk.tag() == tag) {
-            if let ModelChunk::Malformed(malformed) = chunk {
-                return Err(malformed.error.clone());
-            }
             if let Some(items) = typed(chunk) {
                 result.extend_from_slice(items);
             } else {
                 unreachable!("tag matched a different decoded chunk type");
             }
         }
-        Ok(result)
+        result
     }
 
     /// Creates a model with a `VERS` chunk for the given version.

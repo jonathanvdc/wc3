@@ -1,5 +1,5 @@
-use wc3_mdx::{Error, Geoset, GeosetExtent, Model, RawChunk};
-use wc3_mdx::{ModelChunk, Record};
+use wc3_mdx::{Geoset, GeosetExtent, Model};
+use wc3_mdx::Record;
 
 fn sample_geoset() -> Geoset {
     let geoset = Geoset::new(1800, &[[1.0, 2.0, 3.0]], &[[0.0, 0.0, 1.0]], &[0, 0, 0]).unwrap();
@@ -17,28 +17,12 @@ fn geoset_mesh_edit_preserves_other_sections() {
     model.set_geosets(&[geoset]).unwrap();
     let decoded = Model::decode(&model.encode().unwrap(), 800).unwrap();
     assert_eq!(
-        decoded.geosets().unwrap()[0].vertices(),
+        decoded.geosets()[0].vertices(),
         vec![[4.0, 5.0, 6.0]]
     );
     assert_eq!(
-        decoded.geosets().unwrap()[0].normals(),
+        decoded.geosets()[0].normals(),
         vec![[0.0, 0.0, 1.0]]
-    );
-}
-
-#[test]
-fn rejects_invalid_geoset_sizes() {
-    let mut model = Model::new(800);
-    model.push(ModelChunk::from_raw(
-        RawChunk::new(*b"GEOS", 100u32.to_le_bytes().to_vec()),
-        800,
-    ));
-    assert_eq!(
-        model.geosets(),
-        Err(Error::UnexpectedEnd {
-            offset: 4,
-            needed: 96
-        })
     );
 }
 
@@ -116,8 +100,8 @@ fn builds_complete_synthetic_geosets() {
         let mut model = Model::new(version);
         model.set_geosets(&[geoset]).unwrap();
         let parsed = Model::decode(&model.encode().unwrap(), 800).unwrap();
-        assert_eq!(parsed.geosets().unwrap()[0].version(), version);
-        assert_eq!(parsed.geosets().unwrap()[0].material_id(), 7);
+        assert_eq!(parsed.geosets()[0].version(), version);
+        assert_eq!(parsed.geosets()[0].material_id(), 7);
     }
 }
 
@@ -161,7 +145,7 @@ fn local_geosets_have_bounded_mesh_sections_when_available() {
             } else if path.extension().is_some_and(|extension| extension == "mdx") {
                 let bytes = std::fs::read(&path).unwrap();
                 let model = Model::decode(&bytes, 800).unwrap();
-                for geoset in model.geosets().unwrap() {
+                for geoset in model.geosets() {
                     geoset.vertices();
                     geoset.normals();
                     geoset.face_indices();

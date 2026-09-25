@@ -11,14 +11,14 @@ fn bones_and_helpers_round_trip() {
     model.set_bones(&[bone]);
     model.set_helpers(&[node]);
     let parsed = Model::decode(&model.encode().unwrap(), 800).unwrap();
-    let bone = &parsed.bones().unwrap()[0];
+    let bone = &parsed.bones()[0];
     assert_eq!(bone.node().name(), "Root");
     assert_eq!(bone.node().object_id(), 7);
     assert_eq!(bone.node().parent_id(), 3);
     assert_eq!(bone.node().raw_flags(), 0x100);
     assert_eq!(bone.geoset_id(), 2);
     assert_eq!(bone.geoset_animation_id(), u32::MAX);
-    assert_eq!(parsed.helpers().unwrap()[0].name(), "Root");
+    assert_eq!(parsed.helpers()[0].name(), "Root");
 }
 
 #[test]
@@ -49,7 +49,7 @@ fn local_bones_are_bounded_when_available() {
             } else if path.extension().is_some_and(|extension| extension == "mdx") {
                 let bytes = std::fs::read(&path).unwrap();
                 let model = Model::decode_latest(&bytes).unwrap();
-                for bone in model.bones().unwrap() {
+                for bone in model.bones() {
                     assert!(!bone.node().name().is_empty());
                 }
             }

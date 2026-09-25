@@ -64,7 +64,7 @@ impl FaceFx {
 
 impl Model {
     /// Decodes every `FAFX` record in file order.
-    pub fn face_fx(&self) -> Result<Vec<FaceFx>, Error> {
+    pub fn face_fx(&self) -> Vec<FaceFx> {
         self.collect_chunk_records::<FaceFxChunk>(|chunk| match chunk {
             ModelChunk::FaceFx(decoded) => Some(decoded),
             _ => None,

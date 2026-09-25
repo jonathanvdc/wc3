@@ -75,6 +75,6 @@ fn all_chunk_families_validate_and_round_trip_across_versions() {
         parsed.validate().unwrap();
         assert_eq!(parsed.encode().unwrap(), bytes, "version {version}");
         assert_eq!(parsed.version(), version);
-        assert_eq!(parsed.materials().unwrap()[0].layers().len(), 1);
+        assert_eq!(parsed.materials()[0].layers().len(), 1);
     }
 }

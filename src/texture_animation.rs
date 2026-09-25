@@ -45,7 +45,7 @@ fn is_track_tag(tag: Tag) -> bool {
 
 impl Model {
     /// Decodes all texture animations in `TXAN` chunks.
-    pub fn texture_animations(&self) -> Result<Vec<TextureAnimation>, Error> {
+    pub fn texture_animations(&self) -> Vec<TextureAnimation> {
         self.collect_chunk_records::<TextureAnimationsChunk>(|chunk| match chunk {
             ModelChunk::TextureAnimations(decoded) => Some(decoded),
             _ => None,

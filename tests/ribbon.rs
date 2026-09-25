@@ -28,7 +28,7 @@ fn ribbon_fields_and_integer_animation_round_trip() {
     model.set_ribbon_emitters(&[emitter]);
     let bytes = model.encode().unwrap();
     let parsed = Model::decode(&bytes, 800).unwrap();
-    let ribbons = parsed.ribbon_emitters().unwrap();
+    let ribbons = parsed.ribbon_emitters();
     assert_eq!(ribbons[0].fields(), fields);
     assert_eq!(ribbons[0].tracks()[0].keyframes[0].integer_value(), Some(7));
     assert_eq!(parsed.encode().unwrap(), bytes);
