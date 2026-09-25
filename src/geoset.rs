@@ -25,15 +25,23 @@ impl Default for GeosetExtent {
     }
 }
 
-// The extension order is retained because both TANG/SKIN orderings occur in
-// valid files. Skin's second array has no tag or count of its own.
+/// An optional TANG or SKIN section. Their order is retained because both
+/// orderings occur in valid files. Skin's second array has no tag or count.
 #[derive(Clone, Debug, PartialEq)]
-enum Extension {
+enum GeosetExtraSection {
     Tangents(Vec<[f32; 4]>),
     Skin {
         weights: Vec<u8>,
         bone_indices: Option<Vec<u8>>,
     },
+}
+
+/// Fixed header fields added in version 900. Both fields are always present
+/// together, and the exact name bytes are retained for round-trip encoding.
+#[derive(Clone, Debug, PartialEq)]
+struct GeosetHeaderExtension {
+    level_of_detail: u32,
+    name: [u8; 80],
 }
 
 /// A geoset as typed sections. Uninterpreted packed skin bytes and the exact
@@ -52,11 +60,10 @@ pub struct Geoset {
     material_id: u32,
     selection_group: u32,
     unselectable_raw: u32,
-    level_of_detail: Option<u32>,
-    name: Option<[u8; 80]>,
+    header_extension: Option<GeosetHeaderExtension>,
     extent: GeosetExtent,
     sequence_extents: Vec<GeosetExtent>,
-    extensions: Vec<Extension>,
+    extensions: Vec<GeosetExtraSection>,
     uv_sets: Vec<Vec<[f32; 2]>>,
 }
 
@@ -90,8 +97,10 @@ impl Geoset {
             material_id: 0,
             selection_group: 0,
             unselectable_raw: 0,
-            level_of_detail: (version >= 900).then_some(0),
-            name: (version >= 900).then_some([0; 80]),
+            header_extension: (version >= 900).then_some(GeosetHeaderExtension {
+                level_of_detail: 0,
+                name: [0; 80],
+            }),
             extent: GeosetExtent::default(),
             sequence_extents: Vec::new(),
             extensions: Vec::new(),
@@ -166,7 +175,9 @@ impl Geoset {
     }
     /// Returns the Reforged level of detail, if that field exists.
     pub fn level_of_detail(&self) -> Option<u32> {
-        self.level_of_detail
+        self.header_extension
+            .as_ref()
+            .map(|header| header.level_of_detail)
     }
     /// Returns the overall geoset bounds.
     pub fn extent(&self) -> GeosetExtent {
@@ -187,13 +198,15 @@ impl Geoset {
 
     /// Returns the fixed-width name without changing nonzero padding bytes.
     pub fn name(&self) -> Option<Cow<'_, str>> {
-        self.name.as_ref().map(|name| field::text(name))
+        self.header_extension
+            .as_ref()
+            .map(|header| field::text(&header.name))
     }
 
     /// Borrows optional Reforged tangent vectors.
     pub fn tangents(&self) -> Option<&[[f32; 4]]> {
         self.extensions.iter().find_map(|part| match part {
-            Extension::Tangents(values) => Some(values.as_slice()),
+            GeosetExtraSection::Tangents(values) => Some(values.as_slice()),
             _ => None,
         })
     }
@@ -201,7 +214,7 @@ impl Geoset {
     /// Borrows opaque packed skin weights.
     pub fn skin_weights(&self) -> Option<&[u8]> {
         self.extensions.iter().find_map(|part| match part {
-            Extension::Skin { weights, .. } => Some(weights.as_slice()),
+            GeosetExtraSection::Skin { weights, .. } => Some(weights.as_slice()),
             _ => None,
         })
     }
@@ -209,7 +222,7 @@ impl Geoset {
     /// Borrows the extra untagged bone index array in newer files.
     pub fn skin_bone_indices(&self) -> Option<&[u8]> {
         self.extensions.iter().find_map(|part| match part {
-            Extension::Skin { bone_indices, .. } => bone_indices.as_deref(),
+            GeosetExtraSection::Skin { bone_indices, .. } => bone_indices.as_deref(),
             _ => None,
         })
     }
@@ -293,7 +306,10 @@ impl Geoset {
                 offset: 0,
             });
         }
-        self.level_of_detail = Some(level);
+        self.header_extension
+            .as_mut()
+            .expect("versioned header")
+            .level_of_detail = level;
         Ok(())
     }
 
@@ -307,7 +323,10 @@ impl Geoset {
         }
         let mut field = [0; 80];
         field::set_text(&mut field, name)?;
-        self.name = Some(field);
+        self.header_extension
+            .as_mut()
+            .expect("versioned header")
+            .name = field;
         Ok(())
     }
 
@@ -357,16 +376,16 @@ impl Geoset {
         if let Some(index) = self
             .extensions
             .iter()
-            .position(|part| matches!(part, Extension::Tangents(_)))
+            .position(|part| matches!(part, GeosetExtraSection::Tangents(_)))
         {
             if let Some(values) = tangents {
-                self.extensions[index] = Extension::Tangents(values.to_vec());
+                self.extensions[index] = GeosetExtraSection::Tangents(values.to_vec());
             } else {
                 self.extensions.remove(index);
             }
         } else if let Some(values) = tangents {
             self.extensions
-                .insert(0, Extension::Tangents(values.to_vec()));
+                .insert(0, GeosetExtraSection::Tangents(values.to_vec()));
         }
         Ok(())
     }
@@ -400,14 +419,14 @@ impl Geoset {
                 });
             }
         }
-        let new_part = weights.map(|weights| Extension::Skin {
+        let new_part = weights.map(|weights| GeosetExtraSection::Skin {
             weights: weights.to_vec(),
             bone_indices: bone_indices.map(|indices| indices.to_vec()),
         });
         if let Some(index) = self
             .extensions
             .iter()
-            .position(|part| matches!(part, Extension::Skin { .. }))
+            .position(|part| matches!(part, GeosetExtraSection::Skin { .. }))
         {
             if let Some(part) = new_part {
                 self.extensions[index] = part;
@@ -584,15 +603,18 @@ impl Record for Geoset {
             let material_id = cursor.read_u32()?;
             let selection_group = cursor.read_u32()?;
             let unselectable_raw = cursor.read_u32()?;
-            let (level_of_detail, name) = if version >= 900 {
+            let header_extension = if version >= 900 {
                 let lod = cursor.read_u32()?;
                 let name = cursor
                     .read_exact(80)?
                     .try_into()
                     .expect("fixed-width geoset name");
-                (Some(lod), Some(name))
+                Some(GeosetHeaderExtension {
+                    level_of_detail: lod,
+                    name,
+                })
             } else {
-                (None, None)
+                None
             };
             let extent = read_extent(&mut cursor)?;
             let sequence_count = cursor.read_u32()? as usize;
@@ -609,18 +631,16 @@ impl Record for Geoset {
                         b"TANG"
                             if !extensions
                                 .iter()
-                                .any(|part| matches!(part, Extension::Tangents(_))) =>
+                                .any(|part| matches!(part, GeosetExtraSection::Tangents(_))) =>
                         {
-                            extensions.push(Extension::Tangents(decode_vectors::<4>(section(
-                                &mut cursor,
-                                *b"TANG",
-                                16,
-                            )?)));
+                            extensions.push(GeosetExtraSection::Tangents(decode_vectors::<4>(
+                                section(&mut cursor, *b"TANG", 16)?,
+                            )));
                         }
                         b"SKIN"
                             if !extensions
                                 .iter()
-                                .any(|part| matches!(part, Extension::Skin { .. })) =>
+                                .any(|part| matches!(part, GeosetExtraSection::Skin { .. })) =>
                         {
                             let weights = section(&mut cursor, *b"SKIN", 1)?.to_vec();
                             let bone_indices = if version >= 1200
@@ -630,7 +650,7 @@ impl Record for Geoset {
                             } else {
                                 None
                             };
-                            extensions.push(Extension::Skin {
+                            extensions.push(GeosetExtraSection::Skin {
                                 weights,
                                 bone_indices,
                             });
@@ -668,8 +688,7 @@ impl Record for Geoset {
                 material_id,
                 selection_group,
                 unselectable_raw,
-                level_of_detail,
-                name,
+                header_extension,
                 extent,
                 sequence_extents,
                 extensions,
@@ -702,8 +721,9 @@ impl Record for Geoset {
             bytes.extend_from_slice(&word.to_le_bytes());
         }
         if self.version >= 900 {
-            bytes.extend_from_slice(&self.level_of_detail.unwrap_or_default().to_le_bytes());
-            bytes.extend_from_slice(self.name.as_ref().unwrap_or(&[0; 80]));
+            let header = self.header_extension.as_ref().expect("versioned header");
+            bytes.extend_from_slice(&header.level_of_detail.to_le_bytes());
+            bytes.extend_from_slice(&header.name);
         }
         write_extent(&mut bytes, self.extent);
         write_count(&mut bytes, self.sequence_extents.len())?;
@@ -712,8 +732,10 @@ impl Record for Geoset {
         }
         for extension in &self.extensions {
             match extension {
-                Extension::Tangents(tangents) => write_vectors(&mut bytes, *b"TANG", tangents)?,
-                Extension::Skin {
+                GeosetExtraSection::Tangents(tangents) => {
+                    write_vectors(&mut bytes, *b"TANG", tangents)?
+                }
+                GeosetExtraSection::Skin {
                     weights,
                     bone_indices,
                 } => {
