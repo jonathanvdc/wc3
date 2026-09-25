@@ -92,13 +92,60 @@ pub struct Layer {
     texture_animation_id: u32,
     coordinate_id: u32,
     alpha: f32,
-    emissive_gain: Option<f32>,
-    fresnel_color: Option<[f32; 3]>,
-    fresnel_opacity: Option<f32>,
-    fresnel_team_color: Option<f32>,
-    shader_type_id: Option<u32>,
-    texture_slots: Vec<LayerTextureSlot>,
+    extensions: LayerExtensions,
     tracks: Vec<AnimationTrack>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+struct Fresnel {
+    color: [f32; 3],
+    opacity: f32,
+    team_color: f32,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+enum LayerExtensions {
+    Classic,
+    V900 {
+        emissive_gain: f32,
+    },
+    V1000 {
+        emissive_gain: f32,
+        fresnel: Fresnel,
+    },
+    V1100 {
+        emissive_gain: f32,
+        fresnel: Fresnel,
+        shader_type_id: u32,
+        texture_slots: Vec<LayerTextureSlot>,
+    },
+}
+
+impl LayerExtensions {
+    fn for_version(version: u32) -> Self {
+        let fresnel = Fresnel {
+            color: [1.0; 3],
+            opacity: 0.0,
+            team_color: 0.0,
+        };
+        if version >= 1100 {
+            Self::V1100 {
+                emissive_gain: 1.0,
+                fresnel,
+                shader_type_id: 0,
+                texture_slots: Vec::new(),
+            }
+        } else if version >= 1000 {
+            Self::V1000 {
+                emissive_gain: 1.0,
+                fresnel,
+            }
+        } else if version >= 900 {
+            Self::V900 { emissive_gain: 1.0 }
+        } else {
+            Self::Classic
+        }
+    }
 }
 
 fn has_shader(version: u32) -> bool {
@@ -231,12 +278,7 @@ impl Layer {
             texture_animation_id: u32::MAX,
             coordinate_id: 0,
             alpha: 1.0,
-            emissive_gain: (version >= 900).then_some(1.0),
-            fresnel_color: (version >= 1000).then_some([1.0; 3]),
-            fresnel_opacity: (version >= 1000).then_some(0.0),
-            fresnel_team_color: (version >= 1000).then_some(0.0),
-            shader_type_id: (version >= 1100).then_some(0),
-            texture_slots: Vec::new(),
+            extensions: LayerExtensions::for_version(version),
             tracks: Vec::new(),
         }
     }
@@ -303,57 +345,91 @@ impl Layer {
     }
     /// Returns emissive gain in versions 900 and later.
     pub fn emissive_gain(&self) -> Option<f32> {
-        self.emissive_gain
+        match &self.extensions {
+            LayerExtensions::Classic => None,
+            LayerExtensions::V900 { emissive_gain }
+            | LayerExtensions::V1000 { emissive_gain, .. }
+            | LayerExtensions::V1100 { emissive_gain, .. } => Some(*emissive_gain),
+        }
     }
     /// Changes emissive gain in versions 900 and later.
     pub fn set_emissive_gain(&mut self, value: f32) -> Result<(), Error> {
         self.require_version(900, 28)?;
-        self.emissive_gain = Some(value);
+        match &mut self.extensions {
+            LayerExtensions::Classic => unreachable!(),
+            LayerExtensions::V900 { emissive_gain }
+            | LayerExtensions::V1000 { emissive_gain, .. }
+            | LayerExtensions::V1100 { emissive_gain, .. } => *emissive_gain = value,
+        }
         Ok(())
+    }
+    fn fresnel(&self) -> Option<&Fresnel> {
+        match &self.extensions {
+            LayerExtensions::V1000 { fresnel, .. } | LayerExtensions::V1100 { fresnel, .. } => {
+                Some(fresnel)
+            }
+            _ => None,
+        }
+    }
+    fn fresnel_mut(&mut self) -> Option<&mut Fresnel> {
+        match &mut self.extensions {
+            LayerExtensions::V1000 { fresnel, .. } | LayerExtensions::V1100 { fresnel, .. } => {
+                Some(fresnel)
+            }
+            _ => None,
+        }
     }
     /// Returns the Fresnel color in versions 1000 and later.
     pub fn fresnel_color(&self) -> Option<[f32; 3]> {
-        self.fresnel_color
+        self.fresnel().map(|f| f.color)
     }
     /// Changes the Fresnel color in versions 1000 and later.
     pub fn set_fresnel_color(&mut self, value: [f32; 3]) -> Result<(), Error> {
         self.require_version(1000, 32)?;
-        self.fresnel_color = Some(value);
+        self.fresnel_mut().unwrap().color = value;
         Ok(())
     }
     /// Returns Fresnel opacity in versions 1000 and later.
     pub fn fresnel_opacity(&self) -> Option<f32> {
-        self.fresnel_opacity
+        self.fresnel().map(|f| f.opacity)
     }
     /// Changes Fresnel opacity in versions 1000 and later.
     pub fn set_fresnel_opacity(&mut self, value: f32) -> Result<(), Error> {
         self.require_version(1000, 44)?;
-        self.fresnel_opacity = Some(value);
+        self.fresnel_mut().unwrap().opacity = value;
         Ok(())
     }
     /// Returns Fresnel team-color strength in versions 1000 and later.
     pub fn fresnel_team_color(&self) -> Option<f32> {
-        self.fresnel_team_color
+        self.fresnel().map(|f| f.team_color)
     }
     /// Changes Fresnel team-color strength in versions 1000 and later.
     pub fn set_fresnel_team_color(&mut self, value: f32) -> Result<(), Error> {
         self.require_version(1000, 48)?;
-        self.fresnel_team_color = Some(value);
+        self.fresnel_mut().unwrap().team_color = value;
         Ok(())
     }
     /// Returns shader type ID in versions 1100 and later.
     pub fn shader_type_id(&self) -> Option<u32> {
-        self.shader_type_id
+        match &self.extensions {
+            LayerExtensions::V1100 { shader_type_id, .. } => Some(*shader_type_id),
+            _ => None,
+        }
     }
     /// Changes shader type ID in versions 1100 and later.
     pub fn set_shader_type_id(&mut self, value: u32) -> Result<(), Error> {
         self.require_version(1100, 52)?;
-        self.shader_type_id = Some(value);
+        if let LayerExtensions::V1100 { shader_type_id, .. } = &mut self.extensions {
+            *shader_type_id = value;
+        }
         Ok(())
     }
     /// Borrows Reforged texture slots and their optional tracks.
     pub fn texture_slots(&self) -> &[LayerTextureSlot] {
-        &self.texture_slots
+        match &self.extensions {
+            LayerExtensions::V1100 { texture_slots, .. } => texture_slots,
+            _ => &[],
+        }
     }
     /// Replaces Reforged texture slots after validating their tracks.
     pub fn set_texture_slots(&mut self, slots: &[LayerTextureSlot]) -> Result<(), Error> {
@@ -375,7 +451,9 @@ impl Layer {
                 track.encode()?;
             }
         }
-        self.texture_slots = slots.to_vec();
+        if let LayerExtensions::V1100 { texture_slots, .. } = &mut self.extensions {
+            *texture_slots = slots.to_vec();
+        }
         Ok(())
     }
     /// Borrows layer animation tracks after any texture slots.
@@ -497,28 +575,16 @@ impl Record for Layer {
             let texture_animation_id = cursor.read_u32()?;
             let coordinate_id = cursor.read_u32()?;
             let alpha = cursor.read_f32()?;
-            let emissive_gain = if version >= 900 {
-                Some(cursor.read_f32()?)
-            } else {
-                None
-            };
-            let (fresnel_color, fresnel_opacity, fresnel_team_color) = if version >= 1000 {
-                (
-                    Some(cursor.read_vec3()?),
-                    Some(cursor.read_f32()?),
-                    Some(cursor.read_f32()?),
-                )
-            } else {
-                (None, None, None)
-            };
-            let shader_type_id = if version >= 1100 {
-                Some(cursor.read_u32()?)
-            } else {
-                None
-            };
-            let mut texture_slots = Vec::new();
-            if version >= 1100 {
+            let extensions = if version >= 1100 {
+                let emissive_gain = cursor.read_f32()?;
+                let fresnel = Fresnel {
+                    color: cursor.read_vec3()?,
+                    opacity: cursor.read_f32()?,
+                    team_color: cursor.read_f32()?,
+                };
+                let shader_type_id = cursor.read_u32()?;
                 let count = cursor.read_u32()? as usize;
+                let mut texture_slots = Vec::new();
                 for _ in 0..count {
                     let texture_id = cursor.read_u32()?;
                     let texture_type = cursor.read_u32()?;
@@ -533,7 +599,28 @@ impl Record for Layer {
                         track,
                     });
                 }
-            }
+                LayerExtensions::V1100 {
+                    emissive_gain,
+                    fresnel,
+                    shader_type_id,
+                    texture_slots,
+                }
+            } else if version >= 1000 {
+                LayerExtensions::V1000 {
+                    emissive_gain: cursor.read_f32()?,
+                    fresnel: Fresnel {
+                        color: cursor.read_vec3()?,
+                        opacity: cursor.read_f32()?,
+                        team_color: cursor.read_f32()?,
+                    },
+                }
+            } else if version >= 900 {
+                LayerExtensions::V900 {
+                    emissive_gain: cursor.read_f32()?,
+                }
+            } else {
+                LayerExtensions::Classic
+            };
             let mut tracks = Vec::new();
             while !cursor.remaining().is_empty() {
                 let offset = cursor.absolute_position();
@@ -554,12 +641,7 @@ impl Record for Layer {
                 texture_animation_id,
                 coordinate_id,
                 alpha,
-                emissive_gain,
-                fresnel_color,
-                fresnel_opacity,
-                fresnel_team_color,
-                shader_type_id,
-                texture_slots,
+                extensions,
                 tracks,
             })
         }?;
@@ -579,20 +661,37 @@ impl Record for Layer {
             bytes.extend_from_slice(&word.to_le_bytes());
         }
         bytes.extend_from_slice(&self.alpha.to_le_bytes());
-        if self.version >= 900 {
-            bytes.extend_from_slice(&self.emissive_gain.unwrap_or_default().to_le_bytes());
-        }
-        if self.version >= 1000 {
-            for value in self.fresnel_color.unwrap_or_default() {
-                bytes.extend_from_slice(&value.to_le_bytes());
+        match &self.extensions {
+            LayerExtensions::Classic => {}
+            LayerExtensions::V900 { emissive_gain } => {
+                bytes.extend_from_slice(&emissive_gain.to_le_bytes());
             }
-            bytes.extend_from_slice(&self.fresnel_opacity.unwrap_or_default().to_le_bytes());
-            bytes.extend_from_slice(&self.fresnel_team_color.unwrap_or_default().to_le_bytes());
+            LayerExtensions::V1000 {
+                emissive_gain,
+                fresnel,
+            }
+            | LayerExtensions::V1100 {
+                emissive_gain,
+                fresnel,
+                ..
+            } => {
+                bytes.extend_from_slice(&emissive_gain.to_le_bytes());
+                for value in fresnel.color {
+                    bytes.extend_from_slice(&value.to_le_bytes());
+                }
+                bytes.extend_from_slice(&fresnel.opacity.to_le_bytes());
+                bytes.extend_from_slice(&fresnel.team_color.to_le_bytes());
+            }
         }
-        if self.version >= 1100 {
-            bytes.extend_from_slice(&self.shader_type_id.unwrap_or_default().to_le_bytes());
-            write_count(&mut bytes, self.texture_slots.len(), LAYER_TAG)?;
-            for slot in &self.texture_slots {
+        if let LayerExtensions::V1100 {
+            shader_type_id,
+            texture_slots,
+            ..
+        } = &self.extensions
+        {
+            bytes.extend_from_slice(&shader_type_id.to_le_bytes());
+            write_count(&mut bytes, texture_slots.len(), LAYER_TAG)?;
+            for slot in texture_slots {
                 bytes.extend_from_slice(&slot.texture_id.to_le_bytes());
                 bytes.extend_from_slice(&slot.texture_type.to_le_bytes());
                 if let Some(track) = &slot.track {
