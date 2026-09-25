@@ -2,6 +2,7 @@
 
 use std::borrow::Cow;
 
+use crate::utils::field;
 use crate::{AnimationTrack, Error, Model, Node};
 
 const TAG: [u8; 4] = *b"ATCH";
@@ -113,24 +114,12 @@ impl Attachment {
 
     /// Returns the model path up to the first NUL.
     pub fn path(&self) -> Cow<'_, str> {
-        let end = self
-            .path
-            .iter()
-            .position(|&byte| byte == 0)
-            .unwrap_or(PATH_SIZE);
-        String::from_utf8_lossy(&self.path[..end])
+        field::text(&self.path)
     }
 
     /// Sets the model path and clears the old path field.
     pub fn set_path(&mut self, path: &str) -> Result<(), Error> {
-        if path.len() >= PATH_SIZE || path.as_bytes().contains(&0) {
-            return Err(Error::InvalidString {
-                max_bytes: PATH_SIZE - 1,
-            });
-        }
-        self.path.fill(0);
-        self.path[..path.len()].copy_from_slice(path.as_bytes());
-        Ok(())
+        field::set_text(&mut self.path, path)
     }
 
     /// Returns the attachment ID.

@@ -2,6 +2,7 @@
 
 use std::borrow::Cow;
 
+use crate::utils::field;
 use crate::{Error, Model};
 
 const TAG: [u8; 4] = *b"FAFX";
@@ -41,42 +42,23 @@ impl FaceFx {
 
     /// Returns the name up to the first NUL.
     pub fn name(&self) -> Cow<'_, str> {
-        text(&self.bytes[..NAME_SIZE])
+        field::text(&self.bytes[..NAME_SIZE])
     }
 
     /// Replaces the name.
     pub fn set_name(&mut self, name: &str) -> Result<(), Error> {
-        set_text(&mut self.bytes[..NAME_SIZE], name)
+        field::set_text(&mut self.bytes[..NAME_SIZE], name)
     }
 
     /// Returns the animation resource path up to the first NUL.
     pub fn path(&self) -> Cow<'_, str> {
-        text(&self.bytes[NAME_SIZE..])
+        field::text(&self.bytes[NAME_SIZE..])
     }
 
     /// Replaces the animation resource path.
     pub fn set_path(&mut self, path: &str) -> Result<(), Error> {
-        set_text(&mut self.bytes[NAME_SIZE..NAME_SIZE + PATH_SIZE], path)
+        field::set_text(&mut self.bytes[NAME_SIZE..NAME_SIZE + PATH_SIZE], path)
     }
-}
-
-fn text(bytes: &[u8]) -> Cow<'_, str> {
-    let end = bytes
-        .iter()
-        .position(|&byte| byte == 0)
-        .unwrap_or(bytes.len());
-    String::from_utf8_lossy(&bytes[..end])
-}
-
-fn set_text(field: &mut [u8], value: &str) -> Result<(), Error> {
-    if value.len() >= field.len() || value.as_bytes().contains(&0) {
-        return Err(Error::InvalidString {
-            max_bytes: field.len() - 1,
-        });
-    }
-    field.fill(0);
-    field[..value.len()].copy_from_slice(value.as_bytes());
-    Ok(())
 }
 
 impl Model {

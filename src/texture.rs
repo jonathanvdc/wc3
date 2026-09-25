@@ -2,6 +2,7 @@
 
 use std::borrow::Cow;
 
+use crate::utils::field;
 use crate::{Error, Model};
 
 const TAG: [u8; 4] = *b"TEXS";
@@ -71,24 +72,12 @@ impl Texture {
 
     /// Returns the path up to the first NUL, replacing invalid UTF-8.
     pub fn path(&self) -> Cow<'_, str> {
-        let field = &self.bytes[PATH_START..PATH_START + PATH_SIZE];
-        let end = field
-            .iter()
-            .position(|&byte| byte == 0)
-            .unwrap_or(PATH_SIZE);
-        String::from_utf8_lossy(&field[..end])
+        field::text(&self.bytes[PATH_START..PATH_START + PATH_SIZE])
     }
 
     /// Sets the path, clearing the unused part of the fixed-width field.
     pub fn set_path(&mut self, path: &str) -> Result<(), Error> {
-        if path.len() >= PATH_SIZE || path.as_bytes().contains(&0) {
-            return Err(Error::InvalidString {
-                max_bytes: PATH_SIZE - 1,
-            });
-        }
-        self.bytes[PATH_START..PATH_START + PATH_SIZE].fill(0);
-        self.bytes[PATH_START..PATH_START + path.len()].copy_from_slice(path.as_bytes());
-        Ok(())
+        field::set_text(&mut self.bytes[PATH_START..PATH_START + PATH_SIZE], path)
     }
 
     /// Returns decoded texture wrapping flags.

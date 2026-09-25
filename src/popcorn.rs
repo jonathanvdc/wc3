@@ -2,6 +2,7 @@
 
 use std::borrow::Cow;
 
+use crate::utils::field;
 use crate::{AnimationTrack, Error, Model, Node};
 
 const TAG: [u8; 4] = *b"CORN";
@@ -187,19 +188,19 @@ impl PopcornEmitter {
     }
     /// Returns the model path.
     pub fn path(&self) -> Cow<'_, str> {
-        text_field(&self.path)
+        field::text(&self.path)
     }
     /// Sets the model path.
     pub fn set_path(&mut self, path: &str) -> Result<(), Error> {
-        set_text_field(&mut self.path, path)
+        field::set_text(&mut self.path, path)
     }
     /// Returns the animation visibility guide path.
     pub fn visibility_guide(&self) -> Cow<'_, str> {
-        text_field(&self.visibility_guide)
+        field::text(&self.visibility_guide)
     }
     /// Sets the animation visibility guide path.
     pub fn set_visibility_guide(&mut self, guide: &str) -> Result<(), Error> {
-        set_text_field(&mut self.visibility_guide, guide)
+        field::set_text(&mut self.visibility_guide, guide)
     }
     /// Borrows decoded animation tracks.
     pub fn tracks(&self) -> &[AnimationTrack] {
@@ -219,25 +220,6 @@ impl PopcornEmitter {
         self.tracks = tracks.to_vec();
         Ok(())
     }
-}
-
-fn text_field(field: &[u8; PATH_SIZE]) -> Cow<'_, str> {
-    let end = field
-        .iter()
-        .position(|&byte| byte == 0)
-        .unwrap_or(PATH_SIZE);
-    String::from_utf8_lossy(&field[..end])
-}
-
-fn set_text_field(field: &mut [u8; PATH_SIZE], value: &str) -> Result<(), Error> {
-    if value.len() >= PATH_SIZE || value.as_bytes().contains(&0) {
-        return Err(Error::InvalidString {
-            max_bytes: PATH_SIZE - 1,
-        });
-    }
-    field.fill(0);
-    field[..value.len()].copy_from_slice(value.as_bytes());
-    Ok(())
 }
 
 fn is_track_tag(tag: [u8; 4]) -> bool {

@@ -2,6 +2,7 @@
 
 use std::borrow::Cow;
 
+use crate::utils::field;
 use crate::{Error, Model};
 
 const TAG: [u8; 4] = *b"GEOS";
@@ -371,13 +372,7 @@ impl Geoset {
 
     /// Returns the fixed-width name without changing nonzero padding bytes.
     pub fn name(&self) -> Option<Cow<'_, str>> {
-        self.name.as_ref().map(|name| {
-            let end = name
-                .iter()
-                .position(|&byte| byte == 0)
-                .unwrap_or(name.len());
-            String::from_utf8_lossy(&name[..end])
-        })
+        self.name.as_ref().map(|name| field::text(name))
     }
 
     /// Borrows optional Reforged tangent vectors.
@@ -495,11 +490,8 @@ impl Geoset {
                 offset: 0,
             });
         }
-        if name.len() >= 80 || name.as_bytes().contains(&0) {
-            return Err(Error::InvalidString { max_bytes: 79 });
-        }
         let mut field = [0; 80];
-        field[..name.len()].copy_from_slice(name.as_bytes());
+        field::set_text(&mut field, name)?;
         self.name = Some(field);
         Ok(())
     }

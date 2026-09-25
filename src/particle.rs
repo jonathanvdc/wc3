@@ -2,6 +2,7 @@
 
 use std::borrow::Cow;
 
+use crate::utils::field;
 use crate::{sized_node, AnimationTrack, Error, Model, Node};
 
 const TAG: [u8; 4] = *b"PREM";
@@ -86,73 +87,61 @@ impl ParticleEmitter {
 
     /// Returns emission rate.
     pub fn emission_rate(&self) -> f32 {
-        self.f32_at(0)
+        field::f32_at(&self.fixed, 0)
     }
     /// Sets emission rate.
     pub fn set_emission_rate(&mut self, value: f32) {
-        self.set_f32_at(0, value);
+        field::set_f32_at(&mut self.fixed, 0, value);
     }
     /// Returns gravity.
     pub fn gravity(&self) -> f32 {
-        self.f32_at(4)
+        field::f32_at(&self.fixed, 4)
     }
     /// Sets gravity.
     pub fn set_gravity(&mut self, value: f32) {
-        self.set_f32_at(4, value);
+        field::set_f32_at(&mut self.fixed, 4, value);
     }
     /// Returns longitude.
     pub fn longitude(&self) -> f32 {
-        self.f32_at(8)
+        field::f32_at(&self.fixed, 8)
     }
     /// Sets longitude.
     pub fn set_longitude(&mut self, value: f32) {
-        self.set_f32_at(8, value);
+        field::set_f32_at(&mut self.fixed, 8, value);
     }
     /// Returns latitude.
     pub fn latitude(&self) -> f32 {
-        self.f32_at(12)
+        field::f32_at(&self.fixed, 12)
     }
     /// Sets latitude.
     pub fn set_latitude(&mut self, value: f32) {
-        self.set_f32_at(12, value);
+        field::set_f32_at(&mut self.fixed, 12, value);
     }
     /// Returns particle lifetime.
     pub fn life_span(&self) -> f32 {
-        self.f32_at(276)
+        field::f32_at(&self.fixed, 276)
     }
     /// Sets particle lifetime.
     pub fn set_life_span(&mut self, value: f32) {
-        self.set_f32_at(276, value);
+        field::set_f32_at(&mut self.fixed, 276, value);
     }
     /// Returns initial velocity.
     pub fn initial_velocity(&self) -> f32 {
-        self.f32_at(280)
+        field::f32_at(&self.fixed, 280)
     }
     /// Sets initial velocity.
     pub fn set_initial_velocity(&mut self, value: f32) {
-        self.set_f32_at(280, value);
+        field::set_f32_at(&mut self.fixed, 280, value);
     }
 
     /// Returns the emitter resource path up to the first NUL.
     pub fn path(&self) -> Cow<'_, str> {
-        let field = &self.fixed[16..16 + PATH_SIZE];
-        let end = field
-            .iter()
-            .position(|&byte| byte == 0)
-            .unwrap_or(PATH_SIZE);
-        String::from_utf8_lossy(&field[..end])
+        field::text(&self.fixed[16..16 + PATH_SIZE])
     }
 
     /// Sets the emitter path while retaining all other fields.
     pub fn set_path(&mut self, path: &str) -> Result<(), Error> {
-        if path.len() >= PATH_SIZE || path.as_bytes().contains(&0) {
-            return Err(Error::InvalidString {
-                max_bytes: PATH_SIZE - 1,
-            });
-        }
-        self.fixed[16..16 + PATH_SIZE].fill(0);
-        self.fixed[16..16 + path.len()].copy_from_slice(path.as_bytes());
-        Ok(())
+        field::set_text(&mut self.fixed[16..16 + PATH_SIZE], path)
     }
 
     /// Returns the untyped reserved word following the path.
@@ -178,18 +167,6 @@ impl ParticleEmitter {
         }
         self.tracks = tracks.to_vec();
         Ok(())
-    }
-
-    fn f32_at(&self, relative: usize) -> f32 {
-        f32::from_le_bytes(
-            self.fixed[relative..relative + 4]
-                .try_into()
-                .expect("four-byte field"),
-        )
-    }
-
-    fn set_f32_at(&mut self, relative: usize, value: f32) {
-        self.fixed[relative..relative + 4].copy_from_slice(&value.to_le_bytes());
     }
 }
 

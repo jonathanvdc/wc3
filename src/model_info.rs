@@ -2,6 +2,7 @@
 
 use std::borrow::Cow;
 
+use crate::utils::field;
 use crate::{Error, Model};
 
 const TAG: [u8; 4] = *b"MODL";
@@ -46,24 +47,12 @@ impl ModelInfo {
 
     /// Returns the model name up to the first NUL, replacing invalid UTF-8.
     pub fn name(&self) -> Cow<'_, str> {
-        let bytes = &self.bytes[..NAME_SIZE];
-        let end = bytes
-            .iter()
-            .position(|&byte| byte == 0)
-            .unwrap_or(NAME_SIZE);
-        String::from_utf8_lossy(&bytes[..end])
+        field::text(&self.bytes[..NAME_SIZE])
     }
 
     /// Sets the model name, clearing the rest of its fixed-width field.
     pub fn set_name(&mut self, name: &str) -> Result<(), Error> {
-        if name.len() >= NAME_SIZE || name.as_bytes().contains(&0) {
-            return Err(Error::InvalidString {
-                max_bytes: NAME_SIZE - 1,
-            });
-        }
-        self.bytes[..NAME_SIZE].fill(0);
-        self.bytes[..name.len()].copy_from_slice(name.as_bytes());
-        Ok(())
+        field::set_text(&mut self.bytes[..NAME_SIZE], name)
     }
 
     /// Returns the model's bounding sphere radius.

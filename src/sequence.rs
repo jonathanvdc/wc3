@@ -2,6 +2,7 @@
 
 use std::borrow::Cow;
 
+use crate::utils::field;
 use crate::{Error, Model};
 
 const TAG: [u8; 4] = *b"SEQS";
@@ -60,44 +61,36 @@ impl Sequence {
 
     /// Returns the name up to the first NUL, replacing invalid UTF-8.
     pub fn name(&self) -> Cow<'_, str> {
-        let end = self.bytes[..NAME_SIZE]
-            .iter()
-            .position(|&byte| byte == 0)
-            .unwrap_or(NAME_SIZE);
-        String::from_utf8_lossy(&self.bytes[..end])
+        field::text(&self.bytes[..NAME_SIZE])
     }
 
     /// Replaces the name without disturbing other sequence fields.
     pub fn set_name(&mut self, name: &str) -> Result<(), Error> {
-        if name.len() >= NAME_SIZE || name.as_bytes().contains(&0) {
-            return Err(Error::InvalidString {
-                max_bytes: NAME_SIZE - 1,
-            });
-        }
-        self.bytes[..NAME_SIZE].fill(0);
-        self.bytes[..name.len()].copy_from_slice(name.as_bytes());
-        Ok(())
+        field::set_text(&mut self.bytes[..NAME_SIZE], name)
     }
 
     /// Returns the start and end frame times.
     pub fn interval(&self) -> [u32; 2] {
-        [self.u32_at(80), self.u32_at(84)]
+        [
+            field::u32_at(&self.bytes, 80),
+            field::u32_at(&self.bytes, 84),
+        ]
     }
 
     /// Sets the start and end frame times.
     pub fn set_interval(&mut self, interval: [u32; 2]) {
-        self.set_u32_at(80, interval[0]);
-        self.set_u32_at(84, interval[1]);
+        field::set_u32_at(&mut self.bytes, 80, interval[0]);
+        field::set_u32_at(&mut self.bytes, 84, interval[1]);
     }
 
     /// Returns the ground movement speed.
     pub fn move_speed(&self) -> f32 {
-        f32::from_bits(self.u32_at(88))
+        f32::from_bits(field::u32_at(&self.bytes, 88))
     }
 
     /// Sets the ground movement speed.
     pub fn set_move_speed(&mut self, speed: f32) {
-        self.set_u32_at(88, speed.to_bits());
+        field::set_u32_at(&mut self.bytes, 88, speed.to_bits());
     }
 
     /// Returns decoded sequence playback flags.
@@ -107,7 +100,7 @@ impl Sequence {
 
     /// Returns exact raw sequence flag bits.
     pub fn raw_flags(&self) -> u32 {
-        self.u32_at(92)
+        field::u32_at(&self.bytes, 92)
     }
 
     /// Sets decoded sequence playback flags.
@@ -117,37 +110,37 @@ impl Sequence {
 
     /// Sets exact raw sequence flag bits.
     pub fn set_raw_flags(&mut self, flags: u32) {
-        self.set_u32_at(92, flags);
+        field::set_u32_at(&mut self.bytes, 92, flags);
     }
 
     /// Returns the sequence rarity.
     pub fn rarity(&self) -> f32 {
-        f32::from_bits(self.u32_at(96))
+        f32::from_bits(field::u32_at(&self.bytes, 96))
     }
 
     /// Sets the sequence rarity.
     pub fn set_rarity(&mut self, rarity: f32) {
-        self.set_u32_at(96, rarity.to_bits());
+        field::set_u32_at(&mut self.bytes, 96, rarity.to_bits());
     }
 
     /// Returns the raw sync point field.
     pub fn sync_point(&self) -> u32 {
-        self.u32_at(100)
+        field::u32_at(&self.bytes, 100)
     }
 
     /// Sets the raw sync point field.
     pub fn set_sync_point(&mut self, point: u32) {
-        self.set_u32_at(100, point);
+        field::set_u32_at(&mut self.bytes, 100, point);
     }
 
     /// Returns the bounding sphere radius.
     pub fn bounds_radius(&self) -> f32 {
-        f32::from_bits(self.u32_at(104))
+        f32::from_bits(field::u32_at(&self.bytes, 104))
     }
 
     /// Sets the bounding sphere radius.
     pub fn set_bounds_radius(&mut self, radius: f32) {
-        self.set_u32_at(104, radius.to_bits());
+        field::set_u32_at(&mut self.bytes, 104, radius.to_bits());
     }
 
     /// Returns the minimum XYZ extent.
@@ -170,25 +163,13 @@ impl Sequence {
         self.set_extent_at(120, extent);
     }
 
-    fn u32_at(&self, offset: usize) -> u32 {
-        u32::from_le_bytes(
-            self.bytes[offset..offset + 4]
-                .try_into()
-                .expect("fixed-size field"),
-        )
-    }
-
-    fn set_u32_at(&mut self, offset: usize, value: u32) {
-        self.bytes[offset..offset + 4].copy_from_slice(&value.to_le_bytes());
-    }
-
     fn extent_at(&self, offset: usize) -> [f32; 3] {
-        std::array::from_fn(|index| f32::from_bits(self.u32_at(offset + index * 4)))
+        std::array::from_fn(|index| f32::from_bits(field::u32_at(&self.bytes, offset + index * 4)))
     }
 
     fn set_extent_at(&mut self, offset: usize, extent: [f32; 3]) {
         for (index, value) in extent.into_iter().enumerate() {
-            self.set_u32_at(offset + index * 4, value.to_bits());
+            field::set_u32_at(&mut self.bytes, offset + index * 4, value.to_bits());
         }
     }
 }

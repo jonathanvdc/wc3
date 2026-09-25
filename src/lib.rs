@@ -59,6 +59,7 @@ mod texture;
 pub use texture::{Texture, TextureFlags};
 mod texture_animation;
 pub use texture_animation::TextureAnimation;
+mod utils;
 mod validation;
 
 /// The four bytes at the start of an MDX file.

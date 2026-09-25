@@ -2,6 +2,7 @@
 
 use std::borrow::Cow;
 
+use crate::utils::field;
 use crate::{AnimationTrack, Error, Model};
 
 const TAG: [u8; 4] = *b"CAMS";
@@ -131,23 +132,11 @@ impl Camera {
     }
     /// Returns the name up to its first NUL.
     pub fn name(&self) -> Cow<'_, str> {
-        let end = self
-            .name
-            .iter()
-            .position(|&byte| byte == 0)
-            .unwrap_or(NAME_SIZE);
-        String::from_utf8_lossy(&self.name[..end])
+        field::text(&self.name)
     }
     /// Changes the name and clears unused bytes.
     pub fn set_name(&mut self, name: &str) -> Result<(), Error> {
-        if name.len() >= NAME_SIZE || name.as_bytes().contains(&0) {
-            return Err(Error::InvalidString {
-                max_bytes: NAME_SIZE - 1,
-            });
-        }
-        self.name.fill(0);
-        self.name[..name.len()].copy_from_slice(name.as_bytes());
-        Ok(())
+        field::set_text(&mut self.name, name)
     }
     /// Returns camera XYZ position.
     pub fn position(&self) -> [f32; 3] {

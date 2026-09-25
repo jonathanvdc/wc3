@@ -2,6 +2,7 @@
 
 use std::borrow::Cow;
 
+use crate::utils::field;
 use crate::{AnimationTrack, Error, Model};
 
 const TAG: [u8; 4] = *b"MTLS";
@@ -301,13 +302,7 @@ impl Material {
     }
     /// Returns the shader path in versions 900 through 1099.
     pub fn shader(&self) -> Option<Cow<'_, str>> {
-        self.shader.as_ref().map(|field| {
-            let end = field
-                .iter()
-                .position(|&byte| byte == 0)
-                .unwrap_or(field.len());
-            String::from_utf8_lossy(&field[..end])
-        })
+        self.shader.as_ref().map(|field| field::text(field))
     }
     /// Changes the shader path and clears unused bytes.
     pub fn set_shader(&mut self, shader: &str) -> Result<(), Error> {
@@ -315,12 +310,7 @@ impl Material {
             tag: TAG,
             offset: 12,
         })?;
-        if shader.len() >= 80 || shader.as_bytes().contains(&0) {
-            return Err(Error::InvalidString { max_bytes: 79 });
-        }
-        field.fill(0);
-        field[..shader.len()].copy_from_slice(shader.as_bytes());
-        Ok(())
+        field::set_text(field, shader)
     }
     /// Borrows layers without decoding or allocating.
     pub fn layers(&self) -> &[Layer] {
