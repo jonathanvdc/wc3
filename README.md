@@ -43,7 +43,7 @@ For example, `model.materials()?` returns materials whose `layers()` and
 built for a different version.
 
 Geosets and variable-length records such as materials, nodes, lights,
-cameras, and emitters store decoded sections. Track accessors borrow parsed
+cameras, emitters, and bind poses store decoded sections. Track accessors borrow parsed
 tracks, and `to_bytes()` reconstructs records while preserving field bits,
 fixed-width names, and optional section order. Geoset accessors such as
 `vertices()` borrow decoded data, and `vertices_mut()` supports bulk edits.

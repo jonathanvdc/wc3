@@ -213,6 +213,16 @@ fn typed_accessors_preserve_local_files_when_available() {
             round_trip_records!(b"PRE2", particle_emitters2, set_particle_emitters2);
             round_trip_records!(b"RIBB", ribbon_emitters, set_ribbon_emitters);
             round_trip_records!(b"CORN", popcorn_emitters, set_popcorn_emitters);
+            if model
+                .chunks()
+                .iter()
+                .filter(|chunk| chunk.tag == *b"BPOS")
+                .count()
+                == 1
+            {
+                let pose = model.bind_poses().unwrap().remove(0);
+                model.set_bind_pose(&pose);
+            }
             assert_eq!(model.to_bytes().unwrap(), bytes, "{}", path.display());
         }
     }
