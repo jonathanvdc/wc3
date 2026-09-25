@@ -146,3 +146,16 @@ fn reforged_layer_texture_slot_and_tracks_round_trip() {
     );
     assert_eq!(parsed.tracks(1800).unwrap(), vec![alpha_track]);
 }
+
+#[test]
+fn unlit_layer_flag_round_trip() {
+    let mut layer = Layer::new(1800);
+    let mut flags = layer.shading_flags().unwrap();
+    flags.set(LayerShadingFlags::UNLIT, true);
+    layer.set_shading_flags(flags).unwrap();
+    assert!(Layer::from_bytes(layer.as_bytes())
+        .unwrap()
+        .shading_flags()
+        .unwrap()
+        .contains(LayerShadingFlags::UNLIT));
+}

@@ -41,6 +41,7 @@ impl LayerShadingFlags {
     pub const UNFOGGED: Self = Self(32);
     pub const NO_DEPTH_TEST: Self = Self(64);
     pub const NO_DEPTH_SET: Self = Self(128);
+    pub const UNLIT: Self = Self(256);
     pub const fn from_bits(bits: u32) -> Self {
         Self(bits)
     }
