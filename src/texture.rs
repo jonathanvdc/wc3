@@ -118,8 +118,8 @@ impl Model {
 
     /// Writes the texture list to the first `TEXS` chunk. Additional `TEXS`
     /// chunks are removed after their records are replaced.
-    pub fn set_textures(&mut self, textures: &[Texture]) -> Result<(), Error> {
-        self.replace_chunk(ModelChunk::Textures(TexturesChunk::new(textures.to_vec())))
+    pub fn set_textures(&mut self, textures: &[Texture]) {
+        self.replace_chunk(ModelChunk::Textures(TexturesChunk::new(textures.to_vec())));
     }
 }
 

@@ -156,10 +156,10 @@ impl Model {
     }
 
     /// Replaces particle emitters in the first `PREM` chunk.
-    pub fn set_particle_emitters(&mut self, emitters: &[ParticleEmitter]) -> Result<(), Error> {
+    pub fn set_particle_emitters(&mut self, emitters: &[ParticleEmitter]) {
         self.replace_chunk(ModelChunk::ParticleEmitters(ParticleEmittersChunk::new(
             emitters.to_vec(),
-        )))
+        )));
     }
 }
 

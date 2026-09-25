@@ -121,7 +121,7 @@ impl Model {
         self.chunks.push(chunk);
     }
 
-    pub(crate) fn replace_chunk(&mut self, chunk: ModelChunk) -> Result<(), Error> {
+    pub(crate) fn replace_chunk(&mut self, chunk: ModelChunk) {
         let tag = chunk.tag();
         if let Some(index) = self
             .chunks()
@@ -144,7 +144,6 @@ impl Model {
         } else {
             self.push(chunk);
         }
-        Ok(())
     }
 }
 

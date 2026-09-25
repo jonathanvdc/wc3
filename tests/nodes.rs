@@ -8,8 +8,8 @@ fn bones_and_helpers_round_trip() {
     node.set_raw_flags(0x100);
     let bone = Bone::new(node.clone(), 2, u32::MAX);
     let mut model = Model::new(1800);
-    model.set_bones(&[bone]).unwrap();
-    model.set_helpers(&[node]).unwrap();
+    model.set_bones(&[bone]);
+    model.set_helpers(&[node]);
     let parsed = Model::decode(&model.encode().unwrap(), 800).unwrap();
     let bone = &parsed.bones().unwrap()[0];
     assert_eq!(bone.node().name(), "Root");

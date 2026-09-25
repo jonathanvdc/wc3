@@ -67,10 +67,10 @@ impl Model {
     }
 
     /// Replaces event objects in the first `EVTS` chunk.
-    pub fn set_event_objects(&mut self, events: &[EventObject]) -> Result<(), Error> {
+    pub fn set_event_objects(&mut self, events: &[EventObject]) {
         self.replace_chunk(ModelChunk::EventObjects(EventObjectsChunk::new(
             events.to_vec(),
-        )))
+        )));
     }
 }
 

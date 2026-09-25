@@ -23,7 +23,7 @@ fn classic_particle_emitter_round_trip() {
     };
     emitter.set_tracks(std::slice::from_ref(&track)).unwrap();
     let mut model = Model::new(800);
-    model.set_particle_emitters(&[emitter]).unwrap();
+    model.set_particle_emitters(&[emitter]);
     let parsed = Model::decode(&model.encode().unwrap(), 800).unwrap();
     let emitter = &parsed.particle_emitters().unwrap()[0];
     assert_eq!(emitter.node().name(), "Smoke");

@@ -18,7 +18,7 @@ fn particle_emitter2_fields_round_trip() {
     assert!(fields.squirt_enabled());
     emitter.set_fields(&fields);
     let mut model = Model::new(1800);
-    model.set_particle_emitters2(&[emitter]).unwrap();
+    model.set_particle_emitters2(&[emitter]);
     let parsed = Model::decode(&model.encode().unwrap(), 800).unwrap();
     assert_eq!(parsed.particle_emitters2().unwrap()[0].fields(), fields);
 }
@@ -44,7 +44,7 @@ fn local_particle_emitter2_round_trip_when_available() {
                         emitter.set_fields(&fields);
                         emitter.tracks();
                     }
-                    model.set_particle_emitters2(&emitters).unwrap();
+                    model.set_particle_emitters2(&emitters);
                     assert_eq!(model.encode().unwrap(), bytes, "{}", path.display());
                 }
             }

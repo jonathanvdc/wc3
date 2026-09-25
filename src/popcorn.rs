@@ -155,10 +155,10 @@ impl Model {
     }
 
     /// Replaces popcorn emitters in the first `CORN` chunk.
-    pub fn set_popcorn_emitters(&mut self, emitters: &[PopcornEmitter]) -> Result<(), Error> {
+    pub fn set_popcorn_emitters(&mut self, emitters: &[PopcornEmitter]) {
         self.replace_chunk(ModelChunk::PopcornEmitters(PopcornEmittersChunk::new(
             emitters.to_vec(),
-        )))
+        )));
     }
 }
 

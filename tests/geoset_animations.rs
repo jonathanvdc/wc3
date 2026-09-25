@@ -8,7 +8,7 @@ fn geoset_animation_fields_round_trip() {
     animation.set_raw_flags(7);
     animation.set_color([0.1, 0.2, 0.3]);
     let mut model = Model::new(1800);
-    model.set_geoset_animations(&[animation]).unwrap();
+    model.set_geoset_animations(&[animation]);
     let parsed = Model::decode(&model.encode().unwrap(), 800).unwrap();
     let actual = &parsed.geoset_animations().unwrap()[0];
     assert_eq!(actual.geoset_id(), 2);
@@ -35,7 +35,7 @@ fn local_geoset_animations_round_trip_when_available() {
                 let mut model = Model::decode(&bytes, 800).unwrap();
                 if model.chunk(*b"GEOA").is_some() {
                     let records = model.geoset_animations().unwrap();
-                    model.set_geoset_animations(&records).unwrap();
+                    model.set_geoset_animations(&records);
                     assert_eq!(model.encode().unwrap(), bytes);
                 }
             }

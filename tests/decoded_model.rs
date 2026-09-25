@@ -86,7 +86,7 @@ fn collection_setter_keeps_records_decoded_and_collapses_repeated_chunks() {
     ])));
     assert_eq!(model.sequences().unwrap(), vec![first, second.clone()]);
 
-    model.set_sequences(&[second.clone()]).unwrap();
+    model.set_sequences(&[second.clone()]);
     assert!(matches!(
         model.chunk(*b"SEQS"),
         Some(ModelChunk::Sequences(_))

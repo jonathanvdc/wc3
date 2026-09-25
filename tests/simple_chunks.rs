@@ -4,10 +4,8 @@ use wc3_mdx::{ModelChunk, Record};
 #[test]
 fn global_sequences_and_pivots_round_trip() {
     let mut model = Model::new(1100);
-    model.set_global_sequences(&[1000, 2500]).unwrap();
-    model
-        .set_pivot_points(&[[1.0, 2.0, 3.0], [-4.0, 5.5, 0.0]])
-        .unwrap();
+    model.set_global_sequences(&[1000, 2500]);
+    model.set_pivot_points(&[[1.0, 2.0, 3.0], [-4.0, 5.5, 0.0]]);
     let parsed = Model::decode(&model.encode().unwrap(), 800).unwrap();
     assert_eq!(parsed.global_sequences().unwrap(), vec![1000, 2500]);
     assert_eq!(

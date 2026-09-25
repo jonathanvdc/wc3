@@ -7,7 +7,7 @@ fn texture_fields_round_trip() {
     texture.set_replaceable_id(1);
     texture.set_flags(TextureFlags::from_bits(3));
     let mut model = Model::new(1800);
-    model.set_textures(&[texture]).unwrap();
+    model.set_textures(&[texture]);
 
     let decoded = Model::decode(&model.encode().unwrap(), 800).unwrap();
     let texture = &decoded.textures().unwrap()[0];
@@ -25,7 +25,7 @@ fn texture_reserved_bytes_are_preserved() {
     model.push(ModelChunk::from_raw(RawChunk::new(*b"TEXS", data), 800));
     let mut textures = model.textures().unwrap();
     textures[0].set_path("b.blp").unwrap();
-    model.set_textures(&textures).unwrap();
+    model.set_textures(&textures);
     assert_eq!(
         &model.chunk(*b"TEXS").unwrap().to_raw().unwrap().data[260..264],
         &[9, 8, 7, 6]

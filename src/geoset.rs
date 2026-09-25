@@ -262,25 +262,17 @@ impl Geoset {
 
     /// Replaces matrix groups and their flattened indices.
     pub fn set_matrix_groups(&mut self, groups: &[Vec<u32>]) -> Result<(), Error> {
-        let total = groups
-            .iter()
-            .try_fold(0usize, |sum, group| sum.checked_add(group.len()))
-            .filter(|&total| total <= u32::MAX as usize)
-            .ok_or(Error::ChunkTooLarge {
-                tag: Geoset::TAG,
-                size: usize::MAX,
-            })?;
-        if groups.len() > u32::MAX as usize {
+        if groups.iter().any(|group| group.len() > u32::MAX as usize) {
             return Err(Error::ChunkTooLarge {
                 tag: Geoset::TAG,
-                size: groups.len(),
+                size: usize::MAX,
             });
         }
         self.matrix_group_sizes = groups.iter().map(|group| group.len() as u32).collect();
-        self.matrix_indices = Vec::with_capacity(total);
-        for group in groups {
-            self.matrix_indices.extend_from_slice(group);
-        }
+        self.matrix_indices = groups
+            .iter()
+            .flat_map(|group| group.iter().copied())
+            .collect();
         Ok(())
     }
 
@@ -351,15 +343,8 @@ impl Geoset {
     }
 
     /// Replaces all per-sequence bounds.
-    pub fn set_sequence_extents(&mut self, extents: &[GeosetExtent]) -> Result<(), Error> {
-        if extents.len() > u32::MAX as usize {
-            return Err(Error::ChunkTooLarge {
-                tag: Geoset::TAG,
-                size: extents.len(),
-            });
-        }
+    pub fn set_sequence_extents(&mut self, extents: &[GeosetExtent]) {
         self.sequence_extents = extents.to_vec();
-        Ok(())
     }
 
     /// Replaces or removes the Reforged tangent section, retaining its order.
@@ -368,12 +353,6 @@ impl Geoset {
             return Err(Error::MalformedRecord {
                 tag: Geoset::TAG,
                 offset: 0,
-            });
-        }
-        if tangents.is_some_and(|values| values.len() > u32::MAX as usize) {
-            return Err(Error::ChunkTooLarge {
-                tag: Geoset::TAG,
-                size: usize::MAX,
             });
         }
         if let Some(index) = self
@@ -404,14 +383,6 @@ impl Geoset {
                 tag: Geoset::TAG,
                 offset: 0,
             });
-        }
-        if let Some(weights) = weights {
-            if weights.len() > u32::MAX as usize {
-                return Err(Error::ChunkTooLarge {
-                    tag: Geoset::TAG,
-                    size: weights.len(),
-                });
-            }
         }
         if let Some(indices) = bone_indices {
             if self.version < 1200 || weights.map_or(true, |weights| weights.len() != indices.len())
@@ -456,15 +427,8 @@ impl Geoset {
     }
 
     /// Replaces every UV coordinate set.
-    pub fn set_uv_sets(&mut self, sets: &[Vec<[f32; 2]>]) -> Result<(), Error> {
-        if sets.len() > u32::MAX as usize || sets.iter().any(|set| set.len() > u32::MAX as usize) {
-            return Err(Error::ChunkTooLarge {
-                tag: Geoset::TAG,
-                size: usize::MAX,
-            });
-        }
+    pub fn set_uv_sets(&mut self, sets: &[Vec<[f32; 2]>]) {
         self.uv_sets = sets.to_vec();
-        Ok(())
     }
 }
 
@@ -581,7 +545,8 @@ impl Model {
                 });
             }
         }
-        self.replace_chunk(ModelChunk::Geosets(GeosetsChunk::new(geosets.to_vec())))
+        self.replace_chunk(ModelChunk::Geosets(GeosetsChunk::new(geosets.to_vec())));
+        Ok(())
     }
 }
 

@@ -135,10 +135,10 @@ impl Model {
     }
 
     /// Replaces collision shapes in the first `CLID` chunk.
-    pub fn set_collision_shapes(&mut self, shapes: &[CollisionShape]) -> Result<(), Error> {
+    pub fn set_collision_shapes(&mut self, shapes: &[CollisionShape]) {
         self.replace_chunk(ModelChunk::CollisionShapes(CollisionShapesChunk::new(
             shapes.to_vec(),
-        )))
+        )));
     }
 }
 

@@ -17,7 +17,7 @@ fn texture_animation_tracks_round_trip() {
     let mut animation = TextureAnimation::new();
     animation.set_tracks(std::slice::from_ref(&track)).unwrap();
     let mut model = Model::new(1100);
-    model.set_texture_animations(&[animation]).unwrap();
+    model.set_texture_animations(&[animation]);
     let parsed = Model::decode(&model.encode().unwrap(), 800).unwrap();
     assert_eq!(
         parsed.texture_animations().unwrap()[0].tracks(),

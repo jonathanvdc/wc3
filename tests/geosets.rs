@@ -55,16 +55,12 @@ fn builds_complete_synthetic_geosets() {
         geoset.set_material_id(7);
         geoset.set_matrix_groups(&[vec![1, 2], vec![3]]).unwrap();
         geoset.set_vertex_groups(&[0, 1]).unwrap();
-        geoset
-            .set_sequence_extents(&[GeosetExtent {
-                bounds_radius: 2.0,
-                minimum: [-2.0; 3],
-                maximum: [2.0; 3],
-            }])
-            .unwrap();
-        geoset
-            .set_uv_sets(&[vec![[0.0, 0.0]; 2], vec![[1.0, 1.0]; 2]])
-            .unwrap();
+        geoset.set_sequence_extents(&[GeosetExtent {
+            bounds_radius: 2.0,
+            minimum: [-2.0; 3],
+            maximum: [2.0; 3],
+        }]);
+        geoset.set_uv_sets(&[vec![[0.0, 0.0]; 2], vec![[1.0, 1.0]; 2]]);
         geoset.set_normal(1, [0.0, 1.0, 0.0]).unwrap();
         geoset.set_selection_group(3);
         geoset.set_unselectable(true);

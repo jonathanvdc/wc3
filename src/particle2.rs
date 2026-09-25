@@ -248,10 +248,10 @@ impl Model {
     }
 
     /// Replaces particle emitter 2 records in the first `PRE2` chunk.
-    pub fn set_particle_emitters2(&mut self, emitters: &[ParticleEmitter2]) -> Result<(), Error> {
+    pub fn set_particle_emitters2(&mut self, emitters: &[ParticleEmitter2]) {
         self.replace_chunk(ModelChunk::ParticleEmitters2(ParticleEmitters2Chunk::new(
             emitters.to_vec(),
-        )))
+        )));
     }
 }
 

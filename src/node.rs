@@ -191,8 +191,8 @@ impl Model {
     }
 
     /// Replaces all bones in the first `BONE` chunk.
-    pub fn set_bones(&mut self, bones: &[Bone]) -> Result<(), Error> {
-        self.replace_chunk(ModelChunk::Bones(BonesChunk::new(bones.to_vec())))
+    pub fn set_bones(&mut self, bones: &[Bone]) {
+        self.replace_chunk(ModelChunk::Bones(BonesChunk::new(bones.to_vec())));
     }
 
     /// Decodes every helper node in `HELP` chunks.
@@ -204,8 +204,8 @@ impl Model {
     }
 
     /// Replaces all helpers in the first `HELP` chunk.
-    pub fn set_helpers(&mut self, helpers: &[Node]) -> Result<(), Error> {
-        self.replace_chunk(ModelChunk::Helpers(HelpersChunk::new(helpers.to_vec())))
+    pub fn set_helpers(&mut self, helpers: &[Node]) {
+        self.replace_chunk(ModelChunk::Helpers(HelpersChunk::new(helpers.to_vec())));
     }
 }
 

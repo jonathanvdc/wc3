@@ -52,10 +52,10 @@ impl Model {
     }
 
     /// Replaces texture animations in the first `TXAN` chunk.
-    pub fn set_texture_animations(&mut self, animations: &[TextureAnimation]) -> Result<(), Error> {
+    pub fn set_texture_animations(&mut self, animations: &[TextureAnimation]) {
         self.replace_chunk(ModelChunk::TextureAnimations(TextureAnimationsChunk::new(
             animations.to_vec(),
-        )))
+        )));
     }
 }
 

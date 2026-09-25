@@ -247,12 +247,6 @@ impl Material {
                 actual: layer.version,
             });
         }
-        if layers.len() > u32::MAX as usize {
-            return Err(Error::ChunkTooLarge {
-                tag: Material::TAG,
-                size: layers.len(),
-            });
-        }
         self.layers = layers.to_vec();
         Ok(())
     }
@@ -425,12 +419,6 @@ impl Layer {
     /// Replaces Reforged texture slots after validating their tracks.
     pub fn set_texture_slots(&mut self, slots: &[LayerTextureSlot]) -> Result<(), Error> {
         self.require_version(1100, 56)?;
-        if slots.len() > u32::MAX as usize {
-            return Err(Error::ChunkTooLarge {
-                tag: LAYER_TAG,
-                size: slots.len(),
-            });
-        }
         for slot in slots {
             if let Some(track) = &slot.track {
                 if track.tag != *b"KMTF" {
@@ -497,7 +485,8 @@ impl Model {
         }
         self.replace_chunk(ModelChunk::Materials(MaterialsChunk::new(
             materials.to_vec(),
-        )))
+        )));
+        Ok(())
     }
 }
 

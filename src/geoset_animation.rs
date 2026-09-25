@@ -122,10 +122,10 @@ impl Model {
     }
 
     /// Replaces geoset animations in the first `GEOA` chunk.
-    pub fn set_geoset_animations(&mut self, animations: &[GeosetAnimation]) -> Result<(), Error> {
+    pub fn set_geoset_animations(&mut self, animations: &[GeosetAnimation]) {
         self.replace_chunk(ModelChunk::GeosetAnimations(GeosetAnimationsChunk::new(
             animations.to_vec(),
-        )))
+        )));
     }
 }
 

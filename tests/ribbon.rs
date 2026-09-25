@@ -25,7 +25,7 @@ fn ribbon_fields_and_integer_animation_round_trip() {
         }])
         .unwrap();
     let mut model = Model::new(800);
-    model.set_ribbon_emitters(&[emitter]).unwrap();
+    model.set_ribbon_emitters(&[emitter]);
     let bytes = model.encode().unwrap();
     let parsed = Model::decode(&bytes, 800).unwrap();
     let ribbons = parsed.ribbon_emitters().unwrap();

@@ -167,8 +167,8 @@ impl Model {
     }
 
     /// Replaces lights in the first `LITE` chunk.
-    pub fn set_lights(&mut self, lights: &[Light]) -> Result<(), Error> {
-        self.replace_chunk(ModelChunk::Lights(LightsChunk::new(lights.to_vec())))
+    pub fn set_lights(&mut self, lights: &[Light]) {
+        self.replace_chunk(ModelChunk::Lights(LightsChunk::new(lights.to_vec())));
     }
 }
 

@@ -22,7 +22,7 @@ fn attachment_fields_and_visibility_round_trip() {
     };
     attachment.set_visibility_track(Some(&track)).unwrap();
     let mut model = Model::new(1800);
-    model.set_attachments(&[attachment]).unwrap();
+    model.set_attachments(&[attachment]);
     let parsed = Model::decode(&model.encode().unwrap(), 800).unwrap();
     let attachment = &parsed.attachments().unwrap()[0];
     assert_eq!(attachment.node().name(), "Weapon");

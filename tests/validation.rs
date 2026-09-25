@@ -9,9 +9,7 @@ fn validates_synthetic_known_chunks_and_preserves_unknown() {
             Geoset::new(800, &[[0.0, 0.0, 0.0]], &[[0.0, 0.0, 1.0]], &[0, 0, 0]).unwrap(),
         ])
         .unwrap();
-    model
-        .set_ribbon_emitters(&[RibbonEmitter::new(Node::new("Trail", 1).unwrap())])
-        .unwrap();
+    model.set_ribbon_emitters(&[RibbonEmitter::new(Node::new("Trail", 1).unwrap())]);
     model.push(ModelChunk::from_raw(
         RawChunk::new(*b"FUTR", vec![1, 2, 3]),
         800,

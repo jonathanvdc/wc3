@@ -99,10 +99,10 @@ impl Model {
     }
 
     /// Replaces ribbon emitters in the first `RIBB` chunk.
-    pub fn set_ribbon_emitters(&mut self, emitters: &[RibbonEmitter]) -> Result<(), Error> {
+    pub fn set_ribbon_emitters(&mut self, emitters: &[RibbonEmitter]) {
         self.replace_chunk(ModelChunk::RibbonEmitters(RibbonEmittersChunk::new(
             emitters.to_vec(),
-        )))
+        )));
     }
 }
 

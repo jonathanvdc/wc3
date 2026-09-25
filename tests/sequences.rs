@@ -12,7 +12,7 @@ fn sequence_fields_round_trip() {
     stand.set_minimum_extent([-2.0, -3.0, -4.0]);
     stand.set_maximum_extent([2.0, 3.0, 4.0]);
     let mut model = Model::new(800);
-    model.set_sequences(&[stand]).unwrap();
+    model.set_sequences(&[stand]);
     let decoded = Model::decode(&model.encode().unwrap(), 800).unwrap();
     let sequence = &decoded.sequences().unwrap()[0];
     assert_eq!(sequence.name(), "Stand");

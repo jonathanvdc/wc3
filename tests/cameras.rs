@@ -22,7 +22,7 @@ fn camera_fields_and_tracks_round_trip() {
     };
     camera.set_tracks(std::slice::from_ref(&track)).unwrap();
     let mut model = Model::new(1100);
-    model.set_cameras(&[camera]).unwrap();
+    model.set_cameras(&[camera]);
     let decoded = Model::decode(&model.encode().unwrap(), 800).unwrap();
     let camera = &decoded.cameras().unwrap()[0];
     assert_eq!(camera.name(), "Portrait");
@@ -40,7 +40,7 @@ fn newer_camera_size_flags_round_trip() {
     assert_eq!(camera.record_flags(), 3);
     camera.set_field_of_view(0.8);
     let mut model = Model::new(1800);
-    model.set_cameras(&[camera]).unwrap();
+    model.set_cameras(&[camera]);
     let bytes = model.encode().unwrap();
     let parsed = Model::decode(&bytes, 800).unwrap();
     assert_eq!(parsed.cameras().unwrap()[0].record_flags(), 3);

@@ -11,7 +11,7 @@ fn light_fields_round_trip() {
     light.set_ambient_color([0.1, 0.2, 0.3]);
     light.set_ambient_intensity(0.5);
     let mut model = Model::new(1200);
-    model.set_lights(&[light]).unwrap();
+    model.set_lights(&[light]);
     let parsed = Model::decode(&model.encode().unwrap(), 800).unwrap();
     let light = &parsed.lights().unwrap()[0];
     assert_eq!(light.node().name(), "Torch");

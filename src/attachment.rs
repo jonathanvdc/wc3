@@ -95,10 +95,10 @@ impl Model {
     }
 
     /// Replaces attachments in the first `ATCH` chunk.
-    pub fn set_attachments(&mut self, attachments: &[Attachment]) -> Result<(), Error> {
+    pub fn set_attachments(&mut self, attachments: &[Attachment]) {
         self.replace_chunk(ModelChunk::Attachments(AttachmentsChunk::new(
             attachments.to_vec(),
-        )))
+        )));
     }
 }
 

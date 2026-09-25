@@ -144,10 +144,10 @@ impl Model {
 
     /// Writes all sequences to the first `SEQS` chunk, creating it if needed.
     /// Additional `SEQS` chunks are removed after their records are replaced.
-    pub fn set_sequences(&mut self, sequences: &[Sequence]) -> Result<(), Error> {
+    pub fn set_sequences(&mut self, sequences: &[Sequence]) {
         self.replace_chunk(ModelChunk::Sequences(SequencesChunk::new(
             sequences.to_vec(),
-        )))
+        )));
     }
 }
 

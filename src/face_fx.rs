@@ -71,8 +71,8 @@ impl Model {
     }
 
     /// Replaces face-animation records in the first `FAFX` chunk.
-    pub fn set_face_fx(&mut self, entries: &[FaceFx]) -> Result<(), Error> {
-        self.replace_chunk(ModelChunk::FaceFx(FaceFxChunk::new(entries.to_vec())))
+    pub fn set_face_fx(&mut self, entries: &[FaceFx]) {
+        self.replace_chunk(ModelChunk::FaceFx(FaceFxChunk::new(entries.to_vec())));
     }
 }
 

@@ -140,8 +140,8 @@ impl Model {
     }
 
     /// Replaces cameras in the first `CAMS` chunk.
-    pub fn set_cameras(&mut self, cameras: &[Camera]) -> Result<(), Error> {
-        self.replace_chunk(ModelChunk::Cameras(CamerasChunk::new(cameras.to_vec())))
+    pub fn set_cameras(&mut self, cameras: &[Camera]) {
+        self.replace_chunk(ModelChunk::Cameras(CamerasChunk::new(cameras.to_vec())));
     }
 }
 

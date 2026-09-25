@@ -80,7 +80,7 @@ fn typed_accessors_preserve_local_files_when_available() {
                 == 1
             {
                 let records = model.sequences().unwrap();
-                model.set_sequences(&records).unwrap();
+                model.set_sequences(&records);
             }
             if model
                 .chunks()
@@ -90,7 +90,7 @@ fn typed_accessors_preserve_local_files_when_available() {
                 == 1
             {
                 let records = model.textures().unwrap();
-                model.set_textures(&records).unwrap();
+                model.set_textures(&records);
             }
             if model
                 .chunks()
@@ -120,7 +120,7 @@ fn typed_accessors_preserve_local_files_when_available() {
                 == 1
             {
                 let records = model.bones().unwrap();
-                model.set_bones(&records).unwrap();
+                model.set_bones(&records);
             }
             if model
                 .chunks()
@@ -130,7 +130,7 @@ fn typed_accessors_preserve_local_files_when_available() {
                 == 1
             {
                 let points = model.pivot_points().unwrap();
-                model.set_pivot_points(&points).unwrap();
+                model.set_pivot_points(&points);
             }
             if model
                 .chunks()
@@ -140,7 +140,7 @@ fn typed_accessors_preserve_local_files_when_available() {
                 == 1
             {
                 let records = model.event_objects().unwrap();
-                model.set_event_objects(&records).unwrap();
+                model.set_event_objects(&records);
             }
             if model
                 .chunks()
@@ -150,7 +150,7 @@ fn typed_accessors_preserve_local_files_when_available() {
                 == 1
             {
                 let records = model.collision_shapes().unwrap();
-                model.set_collision_shapes(&records).unwrap();
+                model.set_collision_shapes(&records);
             }
             if model
                 .chunks()
@@ -160,7 +160,7 @@ fn typed_accessors_preserve_local_files_when_available() {
                 == 1
             {
                 let records = model.attachments().unwrap();
-                model.set_attachments(&records).unwrap();
+                model.set_attachments(&records);
             }
             if model
                 .chunks()
@@ -170,7 +170,7 @@ fn typed_accessors_preserve_local_files_when_available() {
                 == 1
             {
                 let records = model.face_fx().unwrap();
-                model.set_face_fx(&records).unwrap();
+                model.set_face_fx(&records);
             }
             if model
                 .chunks()
@@ -180,7 +180,7 @@ fn typed_accessors_preserve_local_files_when_available() {
                 == 1
             {
                 let records = model.geoset_animations().unwrap();
-                model.set_geoset_animations(&records).unwrap();
+                model.set_geoset_animations(&records);
             }
             macro_rules! round_trip_records {
                 ($tag:literal, $getter:ident, $setter:ident) => {
@@ -192,7 +192,7 @@ fn typed_accessors_preserve_local_files_when_available() {
                         == 1
                     {
                         let records = model.$getter().unwrap();
-                        model.$setter(&records).unwrap();
+                        model.$setter(&records);
                     }
                 };
             }
