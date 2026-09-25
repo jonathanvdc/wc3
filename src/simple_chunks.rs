@@ -22,22 +22,9 @@ impl Model {
 
     /// Writes global sequence durations to a `GLBS` chunk.
     pub fn set_global_sequences(&mut self, durations: &[u32]) -> Result<(), Error> {
-        let size = durations.len().checked_mul(4).ok_or(Error::ChunkTooLarge {
-            tag: *b"GLBS",
-            size: usize::MAX,
-        })?;
-        if size > u32::MAX as usize {
-            return Err(Error::ChunkTooLarge {
-                tag: *b"GLBS",
-                size,
-            });
-        }
-        let mut data = Vec::with_capacity(size);
-        for duration in durations {
-            data.extend_from_slice(&duration.to_le_bytes());
-        }
-        self.replace_raw_chunk(*b"GLBS", data)?;
-        Ok(())
+        self.replace_chunk(ModelChunk::GlobalSequences(GlobalSequencesChunk {
+            durations: durations.to_vec(),
+        }))
     }
 
     /// Returns XYZ pivot points from every `PIVT` chunk in file order.
