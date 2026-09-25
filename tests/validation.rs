@@ -30,7 +30,8 @@ fn rejects_malformed_known_track() {
     let mut model = Model::new(800);
     let mut ribbon = RibbonEmitter::new(Node::new("Trail", 1).unwrap())
         .unwrap()
-        .as_bytes()
+        .to_bytes()
+        .unwrap()
         .to_vec();
     ribbon.extend_from_slice(b"KRVS");
     let len = ribbon.len() as u32;

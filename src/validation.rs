@@ -43,10 +43,7 @@ impl Model {
             emitter.node().tracks();
             emitter.tracks()?;
         }
-        for emitter in self.ribbon_emitters()? {
-            emitter.node().tracks();
-            emitter.tracks()?;
-        }
+        self.ribbon_emitters()?;
         for emitter in self.popcorn_emitters()? {
             emitter.node().tracks();
             emitter.tracks()?;

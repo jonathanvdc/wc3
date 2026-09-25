@@ -29,10 +29,7 @@ fn ribbon_fields_and_integer_animation_round_trip() {
     let parsed = Model::from_bytes(&bytes).unwrap();
     let ribbons = parsed.ribbon_emitters().unwrap();
     assert_eq!(ribbons[0].fields(), fields);
-    assert_eq!(
-        ribbons[0].tracks().unwrap()[0].keyframes[0].integer_value(),
-        Some(7)
-    );
+    assert_eq!(ribbons[0].tracks()[0].keyframes[0].integer_value(), Some(7));
     assert_eq!(parsed.to_bytes().unwrap(), bytes);
 }
 
@@ -52,10 +49,9 @@ fn ribbon_color_animation_round_trip() {
     };
     emitter.set_tracks(std::slice::from_ref(&track)).unwrap();
     assert_eq!(
-        RibbonEmitter::from_bytes(emitter.as_bytes())
+        RibbonEmitter::from_bytes(&emitter.to_bytes().unwrap())
             .unwrap()
-            .tracks()
-            .unwrap(),
+            .tracks(),
         vec![track]
     );
 }
