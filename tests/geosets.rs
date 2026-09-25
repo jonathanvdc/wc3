@@ -76,6 +76,7 @@ fn builds_complete_synthetic_geosets() {
         geoset
             .set_matrix_groups(version, &[vec![1, 2], vec![3]])
             .unwrap();
+        geoset.set_vertex_groups(version, &[0, 1]).unwrap();
         geoset
             .set_sequence_extents(
                 version,
@@ -102,6 +103,33 @@ fn builds_complete_synthetic_geosets() {
         if version >= 900 {
             geoset.set_level_of_detail(version, 2).unwrap();
             geoset.set_name(version, "Body").unwrap();
+            geoset
+                .set_tangents(version, Some(&[[1.0, 0.0, 0.0, 1.0]; 2]))
+                .unwrap();
+            let weights = [0u8; 16];
+            let indices = [1u8; 16];
+            geoset
+                .set_skin_data(
+                    version,
+                    Some(&weights),
+                    (version >= 1200).then_some(indices.as_slice()),
+                )
+                .unwrap();
+            assert_eq!(geoset.tangents(version).unwrap().unwrap().len(), 2);
+            assert_eq!(
+                geoset.skin_weights(version).unwrap(),
+                Some(weights.as_slice())
+            );
+            if version >= 1200 {
+                assert_eq!(
+                    geoset.skin_bone_indices(version).unwrap(),
+                    Some(indices.as_slice())
+                );
+            }
+            geoset.set_skin_data(version, None, None).unwrap();
+            geoset.set_tangents(version, None).unwrap();
+            assert!(geoset.skin_weights(version).unwrap().is_none());
+            assert!(geoset.tangents(version).unwrap().is_none());
             assert_eq!(geoset.name(version).unwrap().as_deref(), Some("Body"));
         }
         assert_eq!(geoset.material_id(version).unwrap(), 7);
@@ -109,7 +137,7 @@ fn builds_complete_synthetic_geosets() {
         assert_eq!(geoset.selection_group(version).unwrap(), 3);
         assert!(geoset.unselectable(version).unwrap());
         assert_eq!(geoset.extent(version).unwrap(), extent);
-        assert_eq!(geoset.vertex_groups(version).unwrap(), &[0, 0]);
+        assert_eq!(geoset.vertex_groups(version).unwrap(), &[0, 1]);
         assert_eq!(geoset.matrix_group_sizes(version).unwrap(), vec![2, 1]);
         assert_eq!(geoset.matrix_indices(version).unwrap(), vec![1, 2, 3]);
         assert_eq!(geoset.sequence_extents(version).unwrap().len(), 1);

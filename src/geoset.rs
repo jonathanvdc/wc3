@@ -230,6 +230,22 @@ impl Geoset {
         Ok(&self.bytes[layout.vertex_groups.0..layout.vertex_groups.1])
     }
 
+    /// Replaces the matrix group index assigned to each vertex.
+    pub fn set_vertex_groups(&mut self, version: u32, groups: &[u8]) -> Result<(), Error> {
+        if groups.len() != self.word(8) as usize {
+            return Err(Error::MalformedRecord {
+                tag: TAG,
+                offset: groups.len(),
+            });
+        }
+        let layout = self.layout(version)?;
+        let mut data = Vec::with_capacity(groups.len() + 8);
+        data.extend_from_slice(b"GNDX");
+        data.extend_from_slice(&(groups.len() as u32).to_le_bytes());
+        data.extend_from_slice(groups);
+        self.replace_range(layout.vertex_groups.0 - 8..layout.vertex_groups.1, &data)
+    }
+
     /// Returns the number of matrix entries in each geoset group.
     pub fn matrix_group_sizes(&self, version: u32) -> Result<Vec<u32>, Error> {
         let layout = self.layout(version)?;
@@ -450,6 +466,46 @@ impl Geoset {
         }))
     }
 
+    /// Replaces or removes the optional Reforged tangent section.
+    pub fn set_tangents(
+        &mut self,
+        version: u32,
+        tangents: Option<&[[f32; 4]]>,
+    ) -> Result<(), Error> {
+        if version < 900 {
+            return Err(Error::MalformedRecord {
+                tag: TAG,
+                offset: 0,
+            });
+        }
+        let layout = self.layout(version)?;
+        let range = if let Some((start, end)) = layout.tangents {
+            start - 8..end
+        } else {
+            let start = layout
+                .skin_weights
+                .map_or(layout.uv_start, |(start, _)| start - 8);
+            start..start
+        };
+        let mut data = Vec::new();
+        if let Some(tangents) = tangents {
+            if tangents.len() > u32::MAX as usize {
+                return Err(Error::ChunkTooLarge {
+                    tag: TAG,
+                    size: tangents.len(),
+                });
+            }
+            data.extend_from_slice(b"TANG");
+            data.extend_from_slice(&(tangents.len() as u32).to_le_bytes());
+            for tangent in tangents {
+                for value in tangent {
+                    data.extend_from_slice(&value.to_le_bytes());
+                }
+            }
+        }
+        self.replace_range(range, &data)
+    }
+
     /// Returns optional Reforged skin weight and bone index bytes.
     pub fn skin_weights(&self, version: u32) -> Result<Option<&[u8]>, Error> {
         let layout = self.layout(version)?;
@@ -464,6 +520,54 @@ impl Geoset {
         Ok(layout
             .skin_bone_indices
             .map(|(start, end)| &self.bytes[start..end]))
+    }
+
+    /// Replaces or removes the optional skin data. Newer layouts may include a
+    /// second equally sized packed bone-index array after the weights.
+    pub fn set_skin_data(
+        &mut self,
+        version: u32,
+        weights: Option<&[u8]>,
+        bone_indices: Option<&[u8]>,
+    ) -> Result<(), Error> {
+        if version < 900 {
+            return Err(Error::MalformedRecord {
+                tag: TAG,
+                offset: 0,
+            });
+        }
+        let layout = self.layout(version)?;
+        let range = if let Some((start, end)) = layout.skin_weights {
+            start - 8..layout.skin_bone_indices.map_or(end, |(_, end)| end)
+        } else {
+            layout.uv_start..layout.uv_start
+        };
+        if bone_indices.is_some()
+            && (version < 1200
+                || weights.is_none()
+                || weights.unwrap().len() != bone_indices.unwrap().len())
+        {
+            return Err(Error::MalformedRecord {
+                tag: TAG,
+                offset: range.start,
+            });
+        }
+        let mut data = Vec::new();
+        if let Some(weights) = weights {
+            if weights.len() > u32::MAX as usize {
+                return Err(Error::ChunkTooLarge {
+                    tag: TAG,
+                    size: weights.len(),
+                });
+            }
+            data.extend_from_slice(b"SKIN");
+            data.extend_from_slice(&(weights.len() as u32).to_le_bytes());
+            data.extend_from_slice(weights);
+            if let Some(indices) = bone_indices {
+                data.extend_from_slice(indices);
+            }
+        }
+        self.replace_range(range, &data)
     }
 
     /// Returns all UV coordinate sets.
