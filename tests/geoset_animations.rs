@@ -1,10 +1,10 @@
-use wc3_mdx::{AnimationTrack, GeosetAnimation, Keyframe, Model};
+use wc3_mdx::{AnimationTrack, GeosetAnimation, GeosetAnimationFlags, Keyframe, Model};
 
 #[test]
 fn geoset_animation_fields_round_trip() {
     let mut animation = GeosetAnimation::new(2);
     animation.set_alpha(0.5);
-    animation.set_flags(7);
+    animation.set_raw_flags(7);
     animation.set_color([0.1, 0.2, 0.3]);
     let mut model = Model::new(1800);
     model.set_geoset_animations(&[animation]).unwrap();
@@ -12,7 +12,9 @@ fn geoset_animation_fields_round_trip() {
     let actual = &parsed.geoset_animations().unwrap()[0];
     assert_eq!(actual.geoset_id(), 2);
     assert_eq!(actual.alpha(), 0.5);
-    assert_eq!(actual.flags(), 7);
+    assert!(actual.flags().contains(GeosetAnimationFlags::DROP_SHADOW));
+    assert!(actual.flags().contains(GeosetAnimationFlags::COLOR));
+    assert_eq!(actual.raw_flags(), 7);
     assert_eq!(actual.color(), [0.1, 0.2, 0.3]);
 }
 

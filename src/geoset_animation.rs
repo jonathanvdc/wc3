@@ -5,6 +5,31 @@ use crate::{AnimationTrack, Error, Model};
 const TAG: [u8; 4] = *b"GEOA";
 const HEADER_SIZE: usize = 28;
 
+/// Geoset animation rendering flags, retaining unknown bits.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct GeosetAnimationFlags(u32);
+
+impl GeosetAnimationFlags {
+    pub const DROP_SHADOW: Self = Self(1);
+    pub const COLOR: Self = Self(2);
+    pub const fn from_bits(bits: u32) -> Self {
+        Self(bits)
+    }
+    pub const fn bits(self) -> u32 {
+        self.0
+    }
+    pub const fn contains(self, other: Self) -> bool {
+        self.0 & other.0 == other.0
+    }
+    pub fn set(&mut self, other: Self, enabled: bool) {
+        if enabled {
+            self.0 |= other.0;
+        } else {
+            self.0 &= !other.0;
+        }
+    }
+}
+
 /// A geoset animation with optional track bytes retained.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct GeosetAnimation {
@@ -59,13 +84,23 @@ impl GeosetAnimation {
         self.set_u32_at(4, alpha.to_bits());
     }
 
-    /// Returns raw animation flags.
-    pub fn flags(&self) -> u32 {
+    /// Returns decoded animation flags.
+    pub fn flags(&self) -> GeosetAnimationFlags {
+        GeosetAnimationFlags::from_bits(self.raw_flags())
+    }
+
+    /// Returns exact raw animation flag bits.
+    pub fn raw_flags(&self) -> u32 {
         self.u32_at(8)
     }
 
-    /// Sets raw animation flags.
-    pub fn set_flags(&mut self, flags: u32) {
+    /// Sets decoded animation flags.
+    pub fn set_flags(&mut self, flags: GeosetAnimationFlags) {
+        self.set_raw_flags(flags.bits());
+    }
+
+    /// Sets exact raw animation flag bits.
+    pub fn set_raw_flags(&mut self, flags: u32) {
         self.set_u32_at(8, flags);
     }
 

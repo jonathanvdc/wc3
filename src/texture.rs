@@ -5,6 +5,31 @@ use std::borrow::Cow;
 use crate::{Error, Model};
 
 const TAG: [u8; 4] = *b"TEXS";
+
+/// Texture wrapping flags; unknown bits remain available through `bits`.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct TextureFlags(u32);
+
+impl TextureFlags {
+    pub const WRAP_WIDTH: Self = Self(1);
+    pub const WRAP_HEIGHT: Self = Self(2);
+    pub const fn from_bits(bits: u32) -> Self {
+        Self(bits)
+    }
+    pub const fn bits(self) -> u32 {
+        self.0
+    }
+    pub const fn contains(self, other: Self) -> bool {
+        self.0 & other.0 == other.0
+    }
+    pub fn set(&mut self, other: Self, enabled: bool) {
+        if enabled {
+            self.0 |= other.0;
+        } else {
+            self.0 &= !other.0;
+        }
+    }
+}
 const SIZE: usize = 268;
 const PATH_START: usize = 4;
 const PATH_SIZE: usize = 256;
@@ -66,13 +91,23 @@ impl Texture {
         Ok(())
     }
 
-    /// Returns raw texture flags.
-    pub fn flags(&self) -> u32 {
+    /// Returns decoded texture wrapping flags.
+    pub fn flags(&self) -> TextureFlags {
+        TextureFlags::from_bits(self.raw_flags())
+    }
+
+    /// Returns exact raw texture flag bits.
+    pub fn raw_flags(&self) -> u32 {
         u32::from_le_bytes(self.bytes[264..268].try_into().expect("fixed-size field"))
     }
 
-    /// Sets raw texture flags.
-    pub fn set_flags(&mut self, flags: u32) {
+    /// Sets decoded texture wrapping flags.
+    pub fn set_flags(&mut self, flags: TextureFlags) {
+        self.set_raw_flags(flags.bits());
+    }
+
+    /// Sets exact raw texture flag bits.
+    pub fn set_raw_flags(&mut self, flags: u32) {
         self.bytes[264..268].copy_from_slice(&flags.to_le_bytes());
     }
 }

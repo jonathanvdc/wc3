@@ -1,10 +1,10 @@
-use wc3_mdx::{Chunk, Error, Model, Texture};
+use wc3_mdx::{Chunk, Error, Model, Texture, TextureFlags};
 
 #[test]
 fn texture_fields_round_trip() {
     let mut texture = Texture::new("Textures\\Footman.blp").unwrap();
     texture.set_replaceable_id(1);
-    texture.set_flags(3);
+    texture.set_flags(TextureFlags::from_bits(3));
     let mut model = Model::new(1800);
     model.set_textures(&[texture]).unwrap();
 
@@ -12,7 +12,8 @@ fn texture_fields_round_trip() {
     let texture = &decoded.textures().unwrap()[0];
     assert_eq!(texture.path(), "Textures\\Footman.blp");
     assert_eq!(texture.replaceable_id(), 1);
-    assert_eq!(texture.flags(), 3);
+    assert!(texture.flags().contains(TextureFlags::WRAP_WIDTH));
+    assert!(texture.flags().contains(TextureFlags::WRAP_HEIGHT));
 }
 
 #[test]

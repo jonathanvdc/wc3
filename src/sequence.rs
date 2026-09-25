@@ -5,6 +5,30 @@ use std::borrow::Cow;
 use crate::{Error, Model};
 
 const TAG: [u8; 4] = *b"SEQS";
+
+/// Sequence playback flags, with unrecognized bits retained.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct SequenceFlags(u32);
+
+impl SequenceFlags {
+    pub const NON_LOOPING: Self = Self(1);
+    pub const fn from_bits(bits: u32) -> Self {
+        Self(bits)
+    }
+    pub const fn bits(self) -> u32 {
+        self.0
+    }
+    pub const fn contains(self, other: Self) -> bool {
+        self.0 & other.0 == other.0
+    }
+    pub fn set(&mut self, other: Self, enabled: bool) {
+        if enabled {
+            self.0 |= other.0;
+        } else {
+            self.0 &= !other.0;
+        }
+    }
+}
 const SIZE: usize = 132;
 const NAME_SIZE: usize = 80;
 
@@ -76,13 +100,23 @@ impl Sequence {
         self.set_u32_at(88, speed.to_bits());
     }
 
-    /// Returns the raw sequence flags. Bit 0 marks a non-looping sequence.
-    pub fn flags(&self) -> u32 {
+    /// Returns decoded sequence playback flags.
+    pub fn flags(&self) -> SequenceFlags {
+        SequenceFlags::from_bits(self.raw_flags())
+    }
+
+    /// Returns exact raw sequence flag bits.
+    pub fn raw_flags(&self) -> u32 {
         self.u32_at(92)
     }
 
-    /// Sets the raw sequence flags.
-    pub fn set_flags(&mut self, flags: u32) {
+    /// Sets decoded sequence playback flags.
+    pub fn set_flags(&mut self, flags: SequenceFlags) {
+        self.set_raw_flags(flags.bits());
+    }
+
+    /// Sets exact raw sequence flag bits.
+    pub fn set_raw_flags(&mut self, flags: u32) {
         self.set_u32_at(92, flags);
     }
 

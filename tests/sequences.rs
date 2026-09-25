@@ -1,10 +1,10 @@
-use wc3_mdx::{Chunk, Error, Model, Sequence};
+use wc3_mdx::{Chunk, Error, Model, Sequence, SequenceFlags};
 
 #[test]
 fn sequence_fields_round_trip() {
     let mut stand = Sequence::new("Stand", [0, 1000]).unwrap();
     stand.set_move_speed(270.0);
-    stand.set_flags(1);
+    stand.set_flags(SequenceFlags::NON_LOOPING);
     stand.set_rarity(0.5);
     stand.set_sync_point(500);
     stand.set_bounds_radius(42.0);
@@ -17,7 +17,7 @@ fn sequence_fields_round_trip() {
     assert_eq!(sequence.name(), "Stand");
     assert_eq!(sequence.interval(), [0, 1000]);
     assert_eq!(sequence.move_speed(), 270.0);
-    assert_eq!(sequence.flags(), 1);
+    assert!(sequence.flags().contains(SequenceFlags::NON_LOOPING));
     assert_eq!(sequence.rarity(), 0.5);
     assert_eq!(sequence.sync_point(), 500);
     assert_eq!(sequence.bounds_radius(), 42.0);
