@@ -13,11 +13,6 @@ impl Model {
         {
             return Err(Error::InvalidVersionChunk);
         }
-        let version = match self.version() {
-            Some(version) => version,
-            None if self.chunk(*b"VERS").is_some() => return Err(Error::InvalidVersionChunk),
-            None => 800,
-        };
         for chunk in self.chunks().iter().filter(|chunk| chunk.tag == *b"MODL") {
             ModelInfo::parse(&chunk.data)?;
         }
@@ -28,29 +23,29 @@ impl Model {
         self.bind_poses()?;
         self.face_fx()?;
         for material in self.materials()? {
-            for layer in material.layers(version)? {
-                layer.texture_slots(version)?;
-                layer.tracks(version)?;
+            for layer in material.layers()? {
+                layer.texture_slots()?;
+                layer.tracks()?;
             }
         }
         for geoset in self.geosets()? {
             geoset.vertices()?;
             geoset.normals()?;
             geoset.face_indices()?;
-            geoset.vertex_groups(version)?;
-            geoset.matrix_group_sizes(version)?;
-            geoset.matrix_indices(version)?;
-            geoset.material_id(version)?;
-            geoset.selection_group(version)?;
-            geoset.unselectable(version)?;
-            geoset.level_of_detail(version)?;
-            geoset.name(version)?;
-            geoset.extent(version)?;
-            geoset.sequence_extents(version)?;
-            geoset.tangents(version)?;
-            geoset.skin_weights(version)?;
-            geoset.skin_bone_indices(version)?;
-            geoset.uv_sets(version)?;
+            geoset.vertex_groups()?;
+            geoset.matrix_group_sizes()?;
+            geoset.matrix_indices()?;
+            geoset.material_id()?;
+            geoset.selection_group()?;
+            geoset.unselectable()?;
+            geoset.level_of_detail()?;
+            geoset.name()?;
+            geoset.extent()?;
+            geoset.sequence_extents()?;
+            geoset.tangents()?;
+            geoset.skin_weights()?;
+            geoset.skin_bone_indices()?;
+            geoset.uv_sets()?;
         }
         for animation in self.geoset_animations()? {
             animation.tracks()?;

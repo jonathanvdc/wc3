@@ -60,11 +60,33 @@ fn rejects_short_repeated_version_chunks_and_repairs_mutated_first_version() {
 fn rejects_layer_shorter_than_its_versioned_header() {
     let mut material = Material::new(1800);
     let layer = wc3_mdx::Layer::new(800).as_bytes().to_vec();
-    let layer = wc3_mdx::Layer::from_bytes(&layer).unwrap();
-    material.set_layers(1800, &[layer]).unwrap();
+    assert!(wc3_mdx::Layer::from_bytes(1800, &layer).is_err());
+    assert_eq!(
+        material.set_layers(&[wc3_mdx::Layer::new(800)]),
+        Err(Error::VersionMismatch {
+            expected: 1800,
+            actual: 800
+        })
+    );
+}
+
+#[test]
+fn rejects_records_from_another_model_version() {
     let mut model = Model::new(1800);
-    model.set_materials(&[material]).unwrap();
-    assert!(model.validate().is_err());
+    assert_eq!(
+        model.set_materials(&[Material::new(800)]),
+        Err(Error::VersionMismatch {
+            expected: 1800,
+            actual: 800
+        })
+    );
+    assert_eq!(
+        model.set_geosets(&[Geoset::new(800, &[], &[], &[]).unwrap()]),
+        Err(Error::VersionMismatch {
+            expected: 1800,
+            actual: 800
+        })
+    );
 }
 
 #[test]

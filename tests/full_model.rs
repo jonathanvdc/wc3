@@ -15,9 +15,7 @@ fn full_model(version: u32) -> Model {
         .set_textures(&[Texture::new("Textures\\Sample.blp").unwrap()])
         .unwrap();
     let mut material = Material::new(version);
-    material
-        .set_layers(version, &[Layer::new(version)])
-        .unwrap();
+    material.set_layers(&[Layer::new(version)]).unwrap();
     model.set_materials(&[material]).unwrap();
     model
         .set_texture_animations(&[TextureAnimation::new()])
@@ -108,12 +106,6 @@ fn all_chunk_families_validate_and_round_trip_across_versions() {
         parsed.validate().unwrap();
         assert_eq!(parsed.to_bytes().unwrap(), bytes, "version {version}");
         assert_eq!(parsed.version(), Some(version));
-        assert_eq!(
-            parsed.materials().unwrap()[0]
-                .layers(version)
-                .unwrap()
-                .len(),
-            1
-        );
+        assert_eq!(parsed.materials().unwrap()[0].layers().unwrap().len(), 1);
     }
 }

@@ -9,6 +9,7 @@ const TAG: [u8; 4] = *b"GEOS";
 /// A geoset record, retaining all version-specific fields and unknown data.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Geoset {
+    version: u32,
     bytes: Vec<u8>,
 }
 
@@ -103,11 +104,11 @@ impl Geoset {
         }
         let size = bytes.len() as u32;
         bytes[..4].copy_from_slice(&size.to_le_bytes());
-        Ok(Self { bytes })
+        Ok(Self { version, bytes })
     }
 
     /// Wraps one inclusive-size geoset record.
-    pub fn from_bytes(bytes: &[u8]) -> Result<Self, Error> {
+    pub fn from_bytes(version: u32, bytes: &[u8]) -> Result<Self, Error> {
         if bytes.len() < 4 {
             return Err(Error::MalformedRecord {
                 tag: TAG,
@@ -121,9 +122,17 @@ impl Geoset {
                 offset: 0,
             });
         }
-        Ok(Self {
+        let geoset = Self {
+            version,
             bytes: bytes.to_vec(),
-        })
+        };
+        geoset.layout()?;
+        Ok(geoset)
+    }
+
+    /// Returns the MDX version used to interpret this geoset.
+    pub fn version(&self) -> u32 {
+        self.version
     }
 
     /// Returns the complete record, including its inclusive size field.
@@ -225,20 +234,20 @@ impl Geoset {
     }
 
     /// Returns one matrix group index per vertex.
-    pub fn vertex_groups(&self, version: u32) -> Result<&[u8], Error> {
-        let layout = self.layout(version)?;
+    pub fn vertex_groups(&self) -> Result<&[u8], Error> {
+        let layout = self.layout()?;
         Ok(&self.bytes[layout.vertex_groups.0..layout.vertex_groups.1])
     }
 
     /// Replaces the matrix group index assigned to each vertex.
-    pub fn set_vertex_groups(&mut self, version: u32, groups: &[u8]) -> Result<(), Error> {
+    pub fn set_vertex_groups(&mut self, groups: &[u8]) -> Result<(), Error> {
         if groups.len() != self.word(8) as usize {
             return Err(Error::MalformedRecord {
                 tag: TAG,
                 offset: groups.len(),
             });
         }
-        let layout = self.layout(version)?;
+        let layout = self.layout()?;
         let mut data = Vec::with_capacity(groups.len() + 8);
         data.extend_from_slice(b"GNDX");
         data.extend_from_slice(&(groups.len() as u32).to_le_bytes());
@@ -247,19 +256,19 @@ impl Geoset {
     }
 
     /// Returns the number of matrix entries in each geoset group.
-    pub fn matrix_group_sizes(&self, version: u32) -> Result<Vec<u32>, Error> {
-        let layout = self.layout(version)?;
+    pub fn matrix_group_sizes(&self) -> Result<Vec<u32>, Error> {
+        let layout = self.layout()?;
         Ok(self.words(layout.matrix_group_sizes))
     }
 
     /// Returns flattened matrix indices for all geoset groups.
-    pub fn matrix_indices(&self, version: u32) -> Result<Vec<u32>, Error> {
-        let layout = self.layout(version)?;
+    pub fn matrix_indices(&self) -> Result<Vec<u32>, Error> {
+        let layout = self.layout()?;
         Ok(self.words(layout.matrix_indices))
     }
 
     /// Replaces matrix groups and their flattened matrix references.
-    pub fn set_matrix_groups(&mut self, version: u32, groups: &[Vec<u32>]) -> Result<(), Error> {
+    pub fn set_matrix_groups(&mut self, groups: &[Vec<u32>]) -> Result<(), Error> {
         if groups.len() > u32::MAX as usize
             || groups.iter().any(|group| group.len() > u32::MAX as usize)
         {
@@ -268,7 +277,7 @@ impl Geoset {
                 size: usize::MAX,
             });
         }
-        let layout = self.layout(version)?;
+        let layout = self.layout()?;
         let mut data = Vec::new();
         data.extend_from_slice(b"MTGC");
         data.extend_from_slice(&(groups.len() as u32).to_le_bytes());
@@ -297,73 +306,77 @@ impl Geoset {
     }
 
     /// Returns the material index used by this geoset.
-    pub fn material_id(&self, version: u32) -> Result<u32, Error> {
-        Ok(self.word(self.layout(version)?.properties))
+    pub fn material_id(&self) -> Result<u32, Error> {
+        Ok(self.word(self.layout()?.properties))
     }
 
     /// Changes the material index without altering the other mesh sections.
-    pub fn set_material_id(&mut self, version: u32, id: u32) -> Result<(), Error> {
-        let offset = self.layout(version)?.properties;
+    pub fn set_material_id(&mut self, id: u32) -> Result<(), Error> {
+        let offset = self.layout()?.properties;
         self.bytes[offset..offset + 4].copy_from_slice(&id.to_le_bytes());
         Ok(())
     }
 
     /// Returns the selection group index.
-    pub fn selection_group(&self, version: u32) -> Result<u32, Error> {
-        Ok(self.word(self.layout(version)?.properties + 4))
+    pub fn selection_group(&self) -> Result<u32, Error> {
+        Ok(self.word(self.layout()?.properties + 4))
     }
 
     /// Changes the selection group index.
-    pub fn set_selection_group(&mut self, version: u32, group: u32) -> Result<(), Error> {
-        let offset = self.layout(version)?.properties + 4;
+    pub fn set_selection_group(&mut self, group: u32) -> Result<(), Error> {
+        let offset = self.layout()?.properties + 4;
         self.bytes[offset..offset + 4].copy_from_slice(&group.to_le_bytes());
         Ok(())
     }
 
     /// Returns the raw unselectable flag word.
-    pub fn unselectable(&self, version: u32) -> Result<bool, Error> {
-        Ok(self.word(self.layout(version)?.properties + 8) != 0)
+    pub fn unselectable(&self) -> Result<bool, Error> {
+        Ok(self.word(self.layout()?.properties + 8) != 0)
     }
 
     /// Changes the unselectable flag while preserving other fields.
-    pub fn set_unselectable(&mut self, version: u32, value: bool) -> Result<(), Error> {
-        let offset = self.layout(version)?.properties + 8;
+    pub fn set_unselectable(&mut self, value: bool) -> Result<(), Error> {
+        let offset = self.layout()?.properties + 8;
         self.bytes[offset..offset + 4].copy_from_slice(&u32::from(value).to_le_bytes());
         Ok(())
     }
 
     /// Returns the level of detail present since version 900.
-    pub fn level_of_detail(&self, version: u32) -> Result<Option<u32>, Error> {
-        let layout = self.layout(version)?;
+    pub fn level_of_detail(&self) -> Result<Option<u32>, Error> {
+        let version = self.version;
+        let layout = self.layout()?;
         Ok((version >= 900).then(|| self.word(layout.properties + 12)))
     }
 
     /// Changes the level of detail in a version 900 or later geoset.
-    pub fn set_level_of_detail(&mut self, version: u32, level: u32) -> Result<(), Error> {
+    pub fn set_level_of_detail(&mut self, level: u32) -> Result<(), Error> {
+        let version = self.version;
         if version < 900 {
             return Err(Error::MalformedRecord {
                 tag: TAG,
                 offset: 0,
             });
         }
-        let offset = self.layout(version)?.properties + 12;
+        let offset = self.layout()?.properties + 12;
         self.bytes[offset..offset + 4].copy_from_slice(&level.to_le_bytes());
         Ok(())
     }
 
     /// Returns the version 900 or later geoset name, if present.
-    pub fn name(&self, version: u32) -> Result<Option<Cow<'_, str>>, Error> {
+    pub fn name(&self) -> Result<Option<Cow<'_, str>>, Error> {
+        let version = self.version;
         if version < 900 {
             return Ok(None);
         }
-        let offset = self.layout(version)?.properties + 16;
+        let offset = self.layout()?.properties + 16;
         let field = &self.bytes[offset..offset + 80];
         let end = field.iter().position(|&byte| byte == 0).unwrap_or(80);
         Ok(Some(String::from_utf8_lossy(&field[..end])))
     }
 
     /// Changes the version 900 or later geoset name.
-    pub fn set_name(&mut self, version: u32, name: &str) -> Result<(), Error> {
+    pub fn set_name(&mut self, name: &str) -> Result<(), Error> {
+        let version = self.version;
         if version < 900 {
             return Err(Error::MalformedRecord {
                 tag: TAG,
@@ -373,27 +386,27 @@ impl Geoset {
         if name.len() >= 80 || name.as_bytes().contains(&0) {
             return Err(Error::InvalidString { max_bytes: 79 });
         }
-        let offset = self.layout(version)?.properties + 16;
+        let offset = self.layout()?.properties + 16;
         self.bytes[offset..offset + 80].fill(0);
         self.bytes[offset..offset + name.len()].copy_from_slice(name.as_bytes());
         Ok(())
     }
 
     /// Returns the geoset's bounding volume.
-    pub fn extent(&self, version: u32) -> Result<GeosetExtent, Error> {
-        Ok(self.extent_at(self.layout(version)?.extent))
+    pub fn extent(&self) -> Result<GeosetExtent, Error> {
+        Ok(self.extent_at(self.layout()?.extent))
     }
 
     /// Changes the geoset's bounding volume.
-    pub fn set_extent(&mut self, version: u32, extent: GeosetExtent) -> Result<(), Error> {
-        let offset = self.layout(version)?.extent;
+    pub fn set_extent(&mut self, extent: GeosetExtent) -> Result<(), Error> {
+        let offset = self.layout()?.extent;
         self.set_extent_at(offset, extent);
         Ok(())
     }
 
     /// Returns per-sequence bounding volumes.
-    pub fn sequence_extents(&self, version: u32) -> Result<Vec<GeosetExtent>, Error> {
-        let layout = self.layout(version)?;
+    pub fn sequence_extents(&self) -> Result<Vec<GeosetExtent>, Error> {
+        let layout = self.layout()?;
         Ok((layout.sequence_extents.0..layout.sequence_extents.1)
             .step_by(28)
             .map(|offset| self.extent_at(offset))
@@ -401,13 +414,8 @@ impl Geoset {
     }
 
     /// Changes one per-sequence bounding volume.
-    pub fn set_sequence_extent(
-        &mut self,
-        version: u32,
-        index: usize,
-        extent: GeosetExtent,
-    ) -> Result<(), Error> {
-        let layout = self.layout(version)?;
+    pub fn set_sequence_extent(&mut self, index: usize, extent: GeosetExtent) -> Result<(), Error> {
+        let layout = self.layout()?;
         let offset = index
             .checked_mul(28)
             .and_then(|n| layout.sequence_extents.0.checked_add(n))
@@ -425,18 +433,14 @@ impl Geoset {
     }
 
     /// Replaces all per-sequence bounding volumes.
-    pub fn set_sequence_extents(
-        &mut self,
-        version: u32,
-        extents: &[GeosetExtent],
-    ) -> Result<(), Error> {
+    pub fn set_sequence_extents(&mut self, extents: &[GeosetExtent]) -> Result<(), Error> {
         if extents.len() > u32::MAX as usize {
             return Err(Error::ChunkTooLarge {
                 tag: TAG,
                 size: extents.len(),
             });
         }
-        let layout = self.layout(version)?;
+        let layout = self.layout()?;
         let mut data = Vec::new();
         data.extend_from_slice(&(extents.len() as u32).to_le_bytes());
         for extent in extents {
@@ -452,8 +456,8 @@ impl Geoset {
     }
 
     /// Returns optional Reforged XYZW tangent vectors.
-    pub fn tangents(&self, version: u32) -> Result<Option<Vec<[f32; 4]>>, Error> {
-        let layout = self.layout(version)?;
+    pub fn tangents(&self) -> Result<Option<Vec<[f32; 4]>>, Error> {
+        let layout = self.layout()?;
         Ok(layout.tangents.map(|(start, end)| {
             self.bytes[start..end]
                 .chunks_exact(16)
@@ -467,18 +471,15 @@ impl Geoset {
     }
 
     /// Replaces or removes the optional Reforged tangent section.
-    pub fn set_tangents(
-        &mut self,
-        version: u32,
-        tangents: Option<&[[f32; 4]]>,
-    ) -> Result<(), Error> {
+    pub fn set_tangents(&mut self, tangents: Option<&[[f32; 4]]>) -> Result<(), Error> {
+        let version = self.version;
         if version < 900 {
             return Err(Error::MalformedRecord {
                 tag: TAG,
                 offset: 0,
             });
         }
-        let layout = self.layout(version)?;
+        let layout = self.layout()?;
         let range = if let Some((start, end)) = layout.tangents {
             start - 8..end
         } else {
@@ -507,16 +508,16 @@ impl Geoset {
     }
 
     /// Returns optional Reforged skin weight and bone index bytes.
-    pub fn skin_weights(&self, version: u32) -> Result<Option<&[u8]>, Error> {
-        let layout = self.layout(version)?;
+    pub fn skin_weights(&self) -> Result<Option<&[u8]>, Error> {
+        let layout = self.layout()?;
         Ok(layout
             .skin_weights
             .map(|(start, end)| &self.bytes[start..end]))
     }
 
     /// Returns the additional packed bone-index bytes found after skin weights in newer files.
-    pub fn skin_bone_indices(&self, version: u32) -> Result<Option<&[u8]>, Error> {
-        let layout = self.layout(version)?;
+    pub fn skin_bone_indices(&self) -> Result<Option<&[u8]>, Error> {
+        let layout = self.layout()?;
         Ok(layout
             .skin_bone_indices
             .map(|(start, end)| &self.bytes[start..end]))
@@ -526,17 +527,17 @@ impl Geoset {
     /// second equally sized packed bone-index array after the weights.
     pub fn set_skin_data(
         &mut self,
-        version: u32,
         weights: Option<&[u8]>,
         bone_indices: Option<&[u8]>,
     ) -> Result<(), Error> {
+        let version = self.version;
         if version < 900 {
             return Err(Error::MalformedRecord {
                 tag: TAG,
                 offset: 0,
             });
         }
-        let layout = self.layout(version)?;
+        let layout = self.layout()?;
         let range = if let Some((start, end)) = layout.skin_weights {
             start - 8..layout.skin_bone_indices.map_or(end, |(_, end)| end)
         } else {
@@ -571,8 +572,8 @@ impl Geoset {
     }
 
     /// Returns all UV coordinate sets.
-    pub fn uv_sets(&self, version: u32) -> Result<Vec<Vec<[f32; 2]>>, Error> {
-        let layout = self.layout(version)?;
+    pub fn uv_sets(&self) -> Result<Vec<Vec<[f32; 2]>>, Error> {
+        let layout = self.layout()?;
         Ok(layout
             .uv_sets
             .into_iter()
@@ -591,14 +592,8 @@ impl Geoset {
     }
 
     /// Changes one UV coordinate in an existing set.
-    pub fn set_uv(
-        &mut self,
-        version: u32,
-        set: usize,
-        index: usize,
-        uv: [f32; 2],
-    ) -> Result<(), Error> {
-        let layout = self.layout(version)?;
+    pub fn set_uv(&mut self, set: usize, index: usize, uv: [f32; 2]) -> Result<(), Error> {
+        let layout = self.layout()?;
         let (start, end) = *layout.uv_sets.get(set).ok_or(Error::MalformedRecord {
             tag: TAG,
             offset: set,
@@ -621,14 +616,14 @@ impl Geoset {
     }
 
     /// Replaces every UV coordinate set.
-    pub fn set_uv_sets(&mut self, version: u32, sets: &[Vec<[f32; 2]>]) -> Result<(), Error> {
+    pub fn set_uv_sets(&mut self, sets: &[Vec<[f32; 2]>]) -> Result<(), Error> {
         if sets.len() > u32::MAX as usize || sets.iter().any(|set| set.len() > u32::MAX as usize) {
             return Err(Error::ChunkTooLarge {
                 tag: TAG,
                 size: usize::MAX,
             });
         }
-        let layout = self.layout(version)?;
+        let layout = self.layout()?;
         let mut data = Vec::new();
         data.extend_from_slice(b"UVAS");
         data.extend_from_slice(&(sets.len() as u32).to_le_bytes());
@@ -644,7 +639,8 @@ impl Geoset {
         self.replace_range(layout.uv_start..self.bytes.len(), &data)
     }
 
-    fn layout(&self, version: u32) -> Result<Layout, Error> {
+    fn layout(&self) -> Result<Layout, Error> {
+        let version = self.version;
         let (_, end) = self.section(4, *b"VRTX", 12)?;
         let (_, end) = self.section(end, *b"NRMS", 12)?;
         let (_, end) = self.section(end, *b"PTYP", 4)?;
@@ -834,6 +830,7 @@ impl Geoset {
 impl Model {
     /// Decodes size-bounded geoset records from all `GEOS` chunks.
     pub fn geosets(&self) -> Result<Vec<Geoset>, Error> {
+        let version = self.version().unwrap_or(800);
         let mut geosets = Vec::new();
         for chunk in self.chunks().iter().filter(|chunk| chunk.tag == TAG) {
             let mut offset = 0;
@@ -851,7 +848,7 @@ impl Model {
                     .checked_add(size)
                     .filter(|&end| end <= chunk.data.len())
                     .ok_or(Error::MalformedRecord { tag: TAG, offset })?;
-                geosets.push(Geoset::from_bytes(&chunk.data[offset..end])?);
+                geosets.push(Geoset::from_bytes(version, &chunk.data[offset..end])?);
                 offset = end;
             }
         }
@@ -860,6 +857,13 @@ impl Model {
 
     /// Replaces all geoset records in the first `GEOS` chunk.
     pub fn set_geosets(&mut self, geosets: &[Geoset]) -> Result<(), Error> {
+        let expected = self.version().unwrap_or(800);
+        if let Some(geoset) = geosets.iter().find(|geoset| geoset.version != expected) {
+            return Err(Error::VersionMismatch {
+                expected,
+                actual: geoset.version,
+            });
+        }
         let size = geosets.iter().try_fold(0usize, |sum, geoset| {
             sum.checked_add(geoset.bytes.len())
                 .filter(|&size| size <= u32::MAX as usize)

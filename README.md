@@ -35,3 +35,9 @@ assert_eq!(info.name(), "Example");
 Run unit and integration tests with `cargo test --all-targets`.
 Set `WC3_MDX_FIXTURES` to a directory of local `.mdx` files to include
 recursive byte-for-byte round-trip checks.
+
+`Geoset`, `Material`, and `Layer` retain the MDX version supplied when they
+are created or decoded. Their field accessors use that version automatically.
+For example, `model.materials()?` returns materials whose `layers()` and
+`shader()` methods need no version argument. Model setters reject records
+built for a different version.

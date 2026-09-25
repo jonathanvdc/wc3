@@ -101,6 +101,8 @@ pub enum Error {
     },
     /// `VERS` has no four-byte version number.
     InvalidVersionChunk,
+    /// A record belongs to a different MDX version than its destination.
+    VersionMismatch { expected: u32, actual: u32 },
     /// The payload cannot be represented by a 32-bit MDX chunk size.
     ChunkTooLarge { tag: [u8; 4], size: usize },
     /// A known chunk is too short for its fixed layout.
@@ -128,6 +130,10 @@ impl fmt::Display for Error {
                 String::from_utf8_lossy(tag)
             ),
             Self::InvalidVersionChunk => write!(f, "VERS chunk has fewer than four bytes"),
+            Self::VersionMismatch { expected, actual } => write!(
+                f,
+                "record version {actual} does not match model version {expected}"
+            ),
             Self::ChunkTooLarge { tag, size } => write!(
                 f,
                 "{:?} chunk size {size} exceeds u32",

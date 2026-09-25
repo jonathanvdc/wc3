@@ -4,26 +4,13 @@ use wc3_mdx::{
 };
 
 fn sample_material(version: u32) -> Material {
-    let mut layer = vec![0; 28];
-    layer[4..8].copy_from_slice(&1u32.to_le_bytes());
-    layer[12..16].copy_from_slice(&2u32.to_le_bytes());
-    layer[24..28].copy_from_slice(&0.5f32.to_le_bytes());
-    let layer_size = layer.len() as u32;
-    layer[..4].copy_from_slice(&layer_size.to_le_bytes());
-    let mut material = vec![
-        0;
-        if (900..1100).contains(&version) {
-            92
-        } else {
-            12
-        }
-    ];
-    material.extend_from_slice(b"LAYS");
-    material.extend_from_slice(&1u32.to_le_bytes());
-    material.extend_from_slice(&layer);
-    let size = material.len() as u32;
-    material[..4].copy_from_slice(&size.to_le_bytes());
-    Material::from_bytes(&material).unwrap()
+    let mut layer = Layer::new(version);
+    layer.set_filter_mode(1).unwrap();
+    layer.set_texture_id(2).unwrap();
+    layer.set_alpha(0.5).unwrap();
+    let mut material = Material::new(version);
+    material.set_layers(&[layer]).unwrap();
+    Material::from_bytes(version, material.as_bytes()).unwrap()
 }
 
 #[test]
@@ -36,13 +23,15 @@ fn material_layers_round_trip_across_layouts() {
         model.set_materials(&[material]).unwrap();
         let decoded = Model::from_bytes(&model.to_bytes().unwrap()).unwrap();
         let materials = decoded.materials().unwrap();
+        assert_eq!(materials[0].version(), version);
         assert_eq!(materials[0].priority_plane().unwrap(), 3);
         assert_eq!(materials[0].raw_render_mode().unwrap(), 7);
         assert!(materials[0]
             .render_mode()
             .unwrap()
             .contains(MaterialRenderFlags::CONSTANT_COLOR));
-        let layers = materials[0].layers(version).unwrap();
+        let layers = materials[0].layers().unwrap();
+        assert_eq!(layers[0].version(), version);
         assert_eq!(layers[0].filter_mode().unwrap(), 1);
         assert_eq!(layers[0].texture_id().unwrap(), 2);
         assert_eq!(layers[0].alpha().unwrap(), 0.5);
@@ -50,7 +39,10 @@ fn material_layers_round_trip_across_layouts() {
             layers[0].shading_flags().unwrap(),
             LayerShadingFlags::default()
         );
-        assert_eq!(Layer::from_bytes(layers[0].as_bytes()).unwrap(), layers[0]);
+        assert_eq!(
+            Layer::from_bytes(version, layers[0].as_bytes()).unwrap(),
+            layers[0]
+        );
     }
 }
 
@@ -69,11 +61,11 @@ fn local_material_layers_are_bounded_when_available() {
                 let bytes = std::fs::read(&path).unwrap();
                 let model = Model::from_bytes(&bytes).unwrap();
                 for material in model.materials().unwrap() {
-                    for layer in material.layers(model.version().unwrap()).unwrap() {
+                    for layer in material.layers().unwrap() {
                         layer.filter_mode().unwrap();
                         layer.alpha().unwrap();
-                        layer.texture_slots(model.version().unwrap()).unwrap();
-                        layer.tracks(model.version().unwrap()).unwrap();
+                        layer.texture_slots().unwrap();
+                        layer.tracks().unwrap();
                     }
                 }
             }
@@ -88,28 +80,28 @@ fn builds_material_with_reforged_layer() {
     layer.set_shader_type_id(2).unwrap();
     layer.set_fresnel_color([0.1, 0.2, 0.3]).unwrap();
     let mut material = Material::new(1100);
-    material.set_layers(1100, &[layer]).unwrap();
-    let parsed = Material::from_bytes(material.as_bytes()).unwrap();
-    let layers = parsed.layers(1100).unwrap();
+    material.set_layers(&[layer]).unwrap();
+    let parsed = Material::from_bytes(1100, material.as_bytes()).unwrap();
+    let layers = parsed.layers().unwrap();
     assert_eq!(layers[0].texture_id().unwrap(), 4);
     assert_eq!(layers[0].shader_type_id().unwrap(), 2);
     assert_eq!(layers[0].fresnel_color().unwrap(), [0.1, 0.2, 0.3]);
-    assert!(layers[0].texture_slots(1100).unwrap().is_empty());
+    assert!(layers[0].texture_slots().unwrap().is_empty());
 }
 
 #[test]
 fn shader_path_round_trip_in_legacy_reforged_material() {
     let mut material = Material::new(1000);
-    material.set_shader(1000, "Shaders\\Unit.shader").unwrap();
+    material.set_shader("Shaders\\Unit.shader").unwrap();
     assert_eq!(
-        Material::from_bytes(material.as_bytes())
+        Material::from_bytes(1000, material.as_bytes())
             .unwrap()
-            .shader(1000)
+            .shader()
             .unwrap()
             .as_deref(),
         Some("Shaders\\Unit.shader")
     );
-    assert!(material.set_shader(1800, "unused").is_err());
+    assert!(Material::new(1800).set_shader("unused").is_err());
 }
 
 #[test]
@@ -147,11 +139,11 @@ fn reforged_layer_texture_slot_and_tracks_round_trip() {
         }],
     };
     layer
-        .set_tracks(1800, std::slice::from_ref(&alpha_track))
+        .set_tracks(std::slice::from_ref(&alpha_track))
         .unwrap();
-    let parsed = Layer::from_bytes(layer.as_bytes()).unwrap();
+    let parsed = Layer::from_bytes(1800, layer.as_bytes()).unwrap();
     assert_eq!(
-        parsed.texture_slots(1800).unwrap()[0]
+        parsed.texture_slots().unwrap()[0]
             .track
             .as_ref()
             .unwrap()
@@ -159,7 +151,7 @@ fn reforged_layer_texture_slot_and_tracks_round_trip() {
             .integer_value(),
         Some(17)
     );
-    assert_eq!(parsed.tracks(1800).unwrap(), vec![alpha_track]);
+    assert_eq!(parsed.tracks().unwrap(), vec![alpha_track]);
 }
 
 #[test]
@@ -168,9 +160,19 @@ fn unlit_layer_flag_round_trip() {
     let mut flags = layer.shading_flags().unwrap();
     flags.set(LayerShadingFlags::UNLIT, true);
     layer.set_shading_flags(flags).unwrap();
-    assert!(Layer::from_bytes(layer.as_bytes())
+    assert!(Layer::from_bytes(1800, layer.as_bytes())
         .unwrap()
         .shading_flags()
         .unwrap()
         .contains(LayerShadingFlags::UNLIT));
+}
+
+#[test]
+fn version_specific_fields_do_not_write_into_legacy_tracks() {
+    let mut layer = Layer::new(800);
+    let before = layer.as_bytes().to_vec();
+    assert!(layer.set_emissive_gain(0.5).is_err());
+    assert!(layer.set_fresnel_opacity(0.5).is_err());
+    assert!(layer.set_shader_type_id(1).is_err());
+    assert_eq!(layer.as_bytes(), before);
 }

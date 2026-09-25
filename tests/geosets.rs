@@ -1,32 +1,8 @@
 use wc3_mdx::{Chunk, Error, Geoset, GeosetExtent, Model};
 
 fn sample_geoset() -> Geoset {
-    let mut data = Vec::new();
-    data.extend_from_slice(&0u32.to_le_bytes());
-    data.extend_from_slice(b"VRTX");
-    data.extend_from_slice(&1u32.to_le_bytes());
-    for value in [1.0f32, 2.0, 3.0] {
-        data.extend_from_slice(&value.to_le_bytes());
-    }
-    data.extend_from_slice(b"NRMS");
-    data.extend_from_slice(&1u32.to_le_bytes());
-    for value in [0.0f32, 0.0, 1.0] {
-        data.extend_from_slice(&value.to_le_bytes());
-    }
-    data.extend_from_slice(b"PTYP");
-    data.extend_from_slice(&1u32.to_le_bytes());
-    data.extend_from_slice(&4u32.to_le_bytes());
-    data.extend_from_slice(b"PCNT");
-    data.extend_from_slice(&1u32.to_le_bytes());
-    data.extend_from_slice(&3u32.to_le_bytes());
-    data.extend_from_slice(b"PVTX");
-    data.extend_from_slice(&3u32.to_le_bytes());
-    for index in [0u16, 0, 0] {
-        data.extend_from_slice(&index.to_le_bytes());
-    }
-    let size = data.len() as u32;
-    data[..4].copy_from_slice(&size.to_le_bytes());
-    Geoset::from_bytes(&data).unwrap()
+    let geoset = Geoset::new(1800, &[[1.0, 2.0, 3.0]], &[[0.0, 0.0, 1.0]], &[0, 0, 0]).unwrap();
+    Geoset::from_bytes(1800, geoset.as_bytes()).unwrap()
 }
 
 #[test]
@@ -72,86 +48,75 @@ fn builds_complete_synthetic_geosets() {
             &[0, 1, 0],
         )
         .unwrap();
-        geoset.set_material_id(version, 7).unwrap();
+        geoset.set_material_id(7).unwrap();
+        geoset.set_matrix_groups(&[vec![1, 2], vec![3]]).unwrap();
+        geoset.set_vertex_groups(&[0, 1]).unwrap();
         geoset
-            .set_matrix_groups(version, &[vec![1, 2], vec![3]])
-            .unwrap();
-        geoset.set_vertex_groups(version, &[0, 1]).unwrap();
-        geoset
-            .set_sequence_extents(
-                version,
-                &[GeosetExtent {
-                    bounds_radius: 2.0,
-                    minimum: [-2.0; 3],
-                    maximum: [2.0; 3],
-                }],
-            )
+            .set_sequence_extents(&[GeosetExtent {
+                bounds_radius: 2.0,
+                minimum: [-2.0; 3],
+                maximum: [2.0; 3],
+            }])
             .unwrap();
         geoset
-            .set_uv_sets(version, &[vec![[0.0, 0.0]; 2], vec![[1.0, 1.0]; 2]])
+            .set_uv_sets(&[vec![[0.0, 0.0]; 2], vec![[1.0, 1.0]; 2]])
             .unwrap();
         geoset.set_normal(1, [0.0, 1.0, 0.0]).unwrap();
-        geoset.set_selection_group(version, 3).unwrap();
-        geoset.set_unselectable(version, true).unwrap();
-        geoset.set_uv(version, 0, 1, [0.25, 0.75]).unwrap();
+        geoset.set_selection_group(3).unwrap();
+        geoset.set_unselectable(true).unwrap();
+        geoset.set_uv(0, 1, [0.25, 0.75]).unwrap();
         let extent = GeosetExtent {
             bounds_radius: 5.0,
             minimum: [-1.0; 3],
             maximum: [1.0; 3],
         };
-        geoset.set_extent(version, extent).unwrap();
+        geoset.set_extent(extent).unwrap();
         if version >= 900 {
-            geoset.set_level_of_detail(version, 2).unwrap();
-            geoset.set_name(version, "Body").unwrap();
+            geoset.set_level_of_detail(2).unwrap();
+            geoset.set_name("Body").unwrap();
             geoset
-                .set_tangents(version, Some(&[[1.0, 0.0, 0.0, 1.0]; 2]))
+                .set_tangents(Some(&[[1.0, 0.0, 0.0, 1.0]; 2]))
                 .unwrap();
             let weights = [0u8; 16];
             let indices = [1u8; 16];
             geoset
                 .set_skin_data(
-                    version,
                     Some(&weights),
                     (version >= 1200).then_some(indices.as_slice()),
                 )
                 .unwrap();
-            assert_eq!(geoset.tangents(version).unwrap().unwrap().len(), 2);
-            assert_eq!(
-                geoset.skin_weights(version).unwrap(),
-                Some(weights.as_slice())
-            );
+            assert_eq!(geoset.tangents().unwrap().unwrap().len(), 2);
+            assert_eq!(geoset.skin_weights().unwrap(), Some(weights.as_slice()));
             if version >= 1200 {
                 assert_eq!(
-                    geoset.skin_bone_indices(version).unwrap(),
+                    geoset.skin_bone_indices().unwrap(),
                     Some(indices.as_slice())
                 );
             }
-            geoset.set_skin_data(version, None, None).unwrap();
-            geoset.set_tangents(version, None).unwrap();
-            assert!(geoset.skin_weights(version).unwrap().is_none());
-            assert!(geoset.tangents(version).unwrap().is_none());
-            assert_eq!(geoset.name(version).unwrap().as_deref(), Some("Body"));
+            geoset.set_skin_data(None, None).unwrap();
+            geoset.set_tangents(None).unwrap();
+            assert!(geoset.skin_weights().unwrap().is_none());
+            assert!(geoset.tangents().unwrap().is_none());
+            assert_eq!(geoset.name().unwrap().as_deref(), Some("Body"));
         }
-        assert_eq!(geoset.material_id(version).unwrap(), 7);
+        assert_eq!(geoset.material_id().unwrap(), 7);
         assert_eq!(geoset.normals().unwrap()[1], [0.0, 1.0, 0.0]);
-        assert_eq!(geoset.selection_group(version).unwrap(), 3);
-        assert!(geoset.unselectable(version).unwrap());
-        assert_eq!(geoset.extent(version).unwrap(), extent);
-        assert_eq!(geoset.vertex_groups(version).unwrap(), &[0, 1]);
-        assert_eq!(geoset.matrix_group_sizes(version).unwrap(), vec![2, 1]);
-        assert_eq!(geoset.matrix_indices(version).unwrap(), vec![1, 2, 3]);
-        assert_eq!(geoset.sequence_extents(version).unwrap().len(), 1);
+        assert_eq!(geoset.selection_group().unwrap(), 3);
+        assert!(geoset.unselectable().unwrap());
+        assert_eq!(geoset.extent().unwrap(), extent);
+        assert_eq!(geoset.vertex_groups().unwrap(), &[0, 1]);
+        assert_eq!(geoset.matrix_group_sizes().unwrap(), vec![2, 1]);
+        assert_eq!(geoset.matrix_indices().unwrap(), vec![1, 2, 3]);
+        assert_eq!(geoset.sequence_extents().unwrap().len(), 1);
         assert_eq!(
-            geoset.uv_sets(version).unwrap(),
+            geoset.uv_sets().unwrap(),
             vec![vec![[0.0, 0.0], [0.25, 0.75]], vec![[1.0, 1.0]; 2]]
         );
         let mut model = Model::new(version);
         model.set_geosets(&[geoset]).unwrap();
         let parsed = Model::from_bytes(&model.to_bytes().unwrap()).unwrap();
-        assert_eq!(
-            parsed.geosets().unwrap()[0].material_id(version).unwrap(),
-            7
-        );
+        assert_eq!(parsed.geosets().unwrap()[0].version(), version);
+        assert_eq!(parsed.geosets().unwrap()[0].material_id().unwrap(), 7);
     }
 }
 
@@ -173,16 +138,15 @@ fn local_geosets_have_bounded_mesh_sections_when_available() {
                     geoset.vertices().unwrap();
                     geoset.normals().unwrap();
                     geoset.face_indices().unwrap();
-                    let version = model.version().unwrap();
-                    geoset.vertex_groups(version).unwrap();
-                    geoset.matrix_group_sizes(version).unwrap();
-                    geoset.matrix_indices(version).unwrap();
-                    geoset.extent(version).unwrap();
-                    geoset.sequence_extents(version).unwrap();
-                    geoset.tangents(version).unwrap();
-                    geoset.skin_weights(version).unwrap();
-                    geoset.skin_bone_indices(version).unwrap();
-                    geoset.uv_sets(version).unwrap();
+                    geoset.vertex_groups().unwrap();
+                    geoset.matrix_group_sizes().unwrap();
+                    geoset.matrix_indices().unwrap();
+                    geoset.extent().unwrap();
+                    geoset.sequence_extents().unwrap();
+                    geoset.tangents().unwrap();
+                    geoset.skin_weights().unwrap();
+                    geoset.skin_bone_indices().unwrap();
+                    geoset.uv_sets().unwrap();
                 }
             }
         }
