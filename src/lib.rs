@@ -21,6 +21,8 @@ mod animation;
 pub use animation::{AnimationTrack, Keyframe};
 mod bind_pose;
 pub use bind_pose::BindPose;
+mod event;
+pub use event::EventObject;
 mod geoset;
 pub use geoset::Geoset;
 mod geoset_animation;
