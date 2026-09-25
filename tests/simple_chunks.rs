@@ -1,5 +1,5 @@
 use wc3_mdx::Record;
-use wc3_mdx::{Chunk, Error, Model};
+use wc3_mdx::{Error, Model, RawChunk};
 
 #[test]
 fn global_sequences_and_pivots_round_trip() {
@@ -19,8 +19,8 @@ fn global_sequences_and_pivots_round_trip() {
 #[test]
 fn malformed_scalar_chunks_are_reported() {
     let mut model = Model::new(800);
-    model.push(Chunk::new(*b"GLBS", vec![1]));
-    model.push(Chunk::new(*b"PIVT", vec![0; 11]));
+    model.push(RawChunk::new(*b"GLBS", vec![1]));
+    model.push(RawChunk::new(*b"PIVT", vec![0; 11]));
     assert_eq!(
         model.global_sequences(),
         Err(Error::MalformedChunk {

@@ -8,30 +8,26 @@
 //! [`Model::chunk_mut`] for other chunks.
 //!
 //! ```
-//! use wc3_mdx::{Chunk, Model, Record};
+//! use wc3_mdx::{RawChunk, Model, Record};
 //! let mut model = Model::new(800);
-//! model.push(Chunk::new(*b"TEST", vec![1, 2, 3]));
+//! model.push(RawChunk::new(*b"TEST", vec![1, 2, 3]));
 //! let bytes = model.encode().unwrap();
 //! assert_eq!(Model::decode(&bytes, 800).unwrap(), model);
 //! ```
 
-mod chunk;
-pub use chunk::Chunk;
+pub mod chunks;
+pub use chunks::*;
 mod error;
 pub use error::Error;
 mod model;
-pub use model::{Model, VersionChunk};
+pub use model::Model;
 mod record;
-pub use record::{ChunkRecord, Record};
-mod record_collections;
-pub use record_collections::*;
+pub use record::Record;
 
 mod animation;
 pub use animation::{AnimationTrack, Keyframe, TrackValueKind};
 mod attachment;
 pub use attachment::Attachment;
-mod bind_pose;
-pub use bind_pose::BindPose;
 mod collision;
 pub use collision::{CollisionKind, CollisionShape};
 mod camera;
@@ -63,7 +59,6 @@ pub use ribbon::{RibbonEmitter, RibbonFields};
 mod sequence;
 pub use sequence::{Sequence, SequenceFlags};
 mod simple_chunks;
-pub use simple_chunks::{GlobalSequencesChunk, PivotPointsChunk};
 mod sized_node;
 mod texture;
 pub use texture::{Texture, TextureFlags};

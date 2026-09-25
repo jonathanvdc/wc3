@@ -1,6 +1,6 @@
 //! A model in the Warcraft III MDX format.
 
-use crate::{Chunk, ChunkRecord, Error, Record};
+use crate::{Error, RawChunk, Record};
 
 /// The four bytes at the start of an MDX file.
 pub const MAGIC: [u8; 4] = *b"MDLX";
@@ -10,74 +10,6 @@ pub const MAGIC: [u8; 4] = *b"MDLX";
 /// or when decoding a model that has no `VERS` chunk.
 pub const LATEST_VERSION: u32 = 1800;
 
-/// A complete `VERS` payload, including bytes after the version number.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct VersionChunk {
-    pub version: u32,
-    pub extension: Vec<u8>,
-}
-
-impl VersionChunk {
-    pub fn new(version: u32) -> Self {
-        Self {
-            version,
-            extension: Vec::new(),
-        }
-    }
-}
-
-impl Record for VersionChunk {
-    fn decode(bytes: &[u8], _version: u32) -> Result<Self, Error> {
-        let number = bytes.get(..4).ok_or(Error::InvalidVersionChunk)?;
-        Ok(Self {
-            version: u32::from_le_bytes(number.try_into().expect("four-byte version")),
-            extension: bytes[4..].to_vec(),
-        })
-    }
-
-    fn encode(&self) -> Result<Vec<u8>, Error> {
-        let size = 4usize
-            .checked_add(self.extension.len())
-            .ok_or(Error::ChunkTooLarge {
-                tag: Self::TAG,
-                size: usize::MAX,
-            })?;
-        if size > u32::MAX as usize {
-            return Err(Error::ChunkTooLarge {
-                tag: Self::TAG,
-                size,
-            });
-        }
-        let mut bytes = Vec::with_capacity(size);
-        bytes.extend_from_slice(&self.version.to_le_bytes());
-        bytes.extend_from_slice(&self.extension);
-        Ok(bytes)
-    }
-}
-
-impl ChunkRecord for VersionChunk {
-    const TAG: [u8; 4] = *b"VERS";
-}
-
-#[cfg(test)]
-mod version_chunk_tests {
-    use super::*;
-
-    #[test]
-    fn preserves_version_extension_bytes() {
-        let original = VersionChunk {
-            version: 1800,
-            extension: vec![9, 8, 7],
-        };
-        let chunk = original.encode_chunk().unwrap();
-        assert_eq!(VersionChunk::decode_chunk(&chunk).unwrap(), original);
-        assert_eq!(
-            VersionChunk::decode(&[1, 2, 3], 800),
-            Err(Error::InvalidVersionChunk)
-        );
-    }
-}
-
 /// An ordered MDX model. Unknown chunks remain available and writable.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Model {
@@ -85,7 +17,7 @@ pub struct Model {
     default_version: u32,
 
     /// The ordered list of chunks in the model.
-    chunks: Vec<Chunk>,
+    chunks: Vec<RawChunk>,
 }
 
 impl Model {
@@ -93,7 +25,7 @@ impl Model {
     pub fn new(version: u32) -> Self {
         Self {
             default_version: version,
-            chunks: vec![Chunk::new(*b"VERS", version.to_le_bytes().to_vec())],
+            chunks: vec![RawChunk::new(*b"VERS", version.to_le_bytes().to_vec())],
         }
     }
 
@@ -119,32 +51,32 @@ impl Model {
             chunk.data[..4].copy_from_slice(&version.to_le_bytes());
         } else {
             self.chunks
-                .insert(0, Chunk::new(*b"VERS", version.to_le_bytes().to_vec()));
+                .insert(0, RawChunk::new(*b"VERS", version.to_le_bytes().to_vec()));
         }
     }
 
     /// Returns the ordered list of chunks.
-    pub fn chunks(&self) -> &[Chunk] {
+    pub fn chunks(&self) -> &[RawChunk] {
         &self.chunks
     }
 
     /// Returns a mutable ordered list of chunks.
-    pub fn chunks_mut(&mut self) -> &mut Vec<Chunk> {
+    pub fn chunks_mut(&mut self) -> &mut Vec<RawChunk> {
         &mut self.chunks
     }
 
     /// Finds the first chunk with the given tag.
-    pub fn chunk(&self, tag: [u8; 4]) -> Option<&Chunk> {
+    pub fn chunk(&self, tag: [u8; 4]) -> Option<&RawChunk> {
         self.chunks.iter().find(|chunk| chunk.tag == tag)
     }
 
     /// Finds the first mutable chunk with the given tag.
-    pub fn chunk_mut(&mut self, tag: [u8; 4]) -> Option<&mut Chunk> {
+    pub fn chunk_mut(&mut self, tag: [u8; 4]) -> Option<&mut RawChunk> {
         self.chunks.iter_mut().find(|chunk| chunk.tag == tag)
     }
 
     /// Appends a chunk.
-    pub fn push(&mut self, chunk: Chunk) {
+    pub fn push(&mut self, chunk: RawChunk) {
         self.chunks.push(chunk);
     }
 }
@@ -211,7 +143,7 @@ impl Record for Model {
                 .checked_add(size as usize)
                 .filter(|&end| end <= bytes.len())
                 .ok_or(Error::TruncatedChunk { tag, offset, size })?;
-            chunks.push(Chunk::new(tag, bytes[start..end].to_vec()));
+            chunks.push(RawChunk::new(tag, bytes[start..end].to_vec()));
             offset = end;
         }
         let model = Self {

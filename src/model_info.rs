@@ -132,7 +132,10 @@ impl Model {
                 chunk.data = info.as_bytes().to_vec();
             }
         } else {
-            self.push(crate::Chunk::new(ModelInfo::TAG, info.as_bytes().to_vec()));
+            self.push(crate::RawChunk::new(
+                ModelInfo::TAG,
+                info.as_bytes().to_vec(),
+            ));
         }
     }
 }

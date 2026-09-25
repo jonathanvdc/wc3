@@ -1,7 +1,6 @@
 //! Binary conversion for typed MDX records.
 
 use crate::model::LATEST_VERSION;
-use crate::Chunk;
 use crate::Error;
 
 /// A typed MDX record that can be converted to and from bytes.
@@ -19,33 +18,10 @@ pub trait Record: Sized {
     }
 }
 
-/// A typed record that represents the complete payload of one MDX chunk.
-/// Types for individual entries in a multi-record chunk implement `Record`
-/// instead; their collection types implement `ChunkRecord`.
-pub trait ChunkRecord: Record {
-    /// The four-byte chunk tag for this record type.
-    const TAG: [u8; 4];
-
-    /// Encodes the record into a chunk with the appropriate tag.
-    fn encode_chunk(&self) -> Result<Chunk, Error> {
-        Ok(Chunk::new(Self::TAG, self.encode()?))
-    }
-
-    /// Decodes a record of this type from a chunk.
-    fn decode_chunk(chunk: &Chunk) -> Result<Self, Error> {
-        if chunk.tag != Self::TAG {
-            return Err(Error::MalformedRecord {
-                tag: chunk.tag,
-                offset: 0,
-            });
-        }
-        Self::decode(&chunk.data, LATEST_VERSION)
-    }
-}
-
 #[cfg(test)]
 mod tests {
-    use super::{ChunkRecord, Record};
+    use super::Record;
+    use crate::KnownChunk;
     use crate::{Geoset, Model, Sequence};
 
     fn round_trip<T: Record + PartialEq + std::fmt::Debug>(value: &T, version: u32) {

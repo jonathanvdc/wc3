@@ -1,6 +1,6 @@
 //! Complete payloads for chunks containing a sequence of records.
 
-use crate::{Chunk, ChunkRecord, Error, Model, Record};
+use crate::{Error, KnownChunk, Model, RawChunk, Record};
 
 macro_rules! record_collection {
     ($name:ident, $item:ty, $accessor:ident) => {
@@ -21,7 +21,7 @@ macro_rules! record_collection {
         impl Record for $name {
             fn decode(bytes: &[u8], version: u32) -> Result<Self, Error> {
                 let mut model = Model::new(version);
-                model.push(Chunk::new(Self::TAG, bytes.to_vec()));
+                model.push(RawChunk::new(Self::TAG, bytes.to_vec()));
                 Ok(Self::new(model.$accessor()?))
             }
 
@@ -40,7 +40,7 @@ macro_rules! record_collection {
             }
         }
 
-        impl ChunkRecord for $name {
+        impl KnownChunk for $name {
             const TAG: [u8; 4] = <$item>::TAG;
         }
     };
@@ -89,53 +89,10 @@ record_collection!(
     texture_animations
 );
 
-/// A complete `MODL` chunk, including bytes after the standard record.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct ModelInfoChunk {
-    pub info: crate::ModelInfo,
-    pub extension: Vec<u8>,
-}
-
-impl ModelInfoChunk {
-    pub fn new(info: crate::ModelInfo, extension: Vec<u8>) -> Self {
-        Self { info, extension }
-    }
-}
-
-impl Record for ModelInfoChunk {
-    fn decode(bytes: &[u8], version: u32) -> Result<Self, Error> {
-        let info = crate::ModelInfo::parse(bytes)?;
-        let _ = version;
-        Ok(Self::new(info, bytes[372..].to_vec()))
-    }
-
-    fn encode(&self) -> Result<Vec<u8>, Error> {
-        let size = 372usize
-            .checked_add(self.extension.len())
-            .ok_or(Error::ChunkTooLarge {
-                tag: Self::TAG,
-                size: usize::MAX,
-            })?;
-        if size > u32::MAX as usize {
-            return Err(Error::ChunkTooLarge {
-                tag: Self::TAG,
-                size,
-            });
-        }
-        let mut bytes = Vec::with_capacity(size);
-        bytes.extend_from_slice(self.info.as_bytes());
-        bytes.extend_from_slice(&self.extension);
-        Ok(bytes)
-    }
-}
-
-impl ChunkRecord for ModelInfoChunk {
-    const TAG: [u8; 4] = crate::ModelInfo::TAG;
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::Chunk;
 
     #[test]
     fn fixed_width_collection_uses_the_whole_chunk() {
@@ -145,7 +102,10 @@ mod tests {
         ];
         let original = SequencesChunk::new(records);
         let chunk = original.encode_chunk().unwrap();
-        assert_eq!(SequencesChunk::decode_chunk(&chunk).unwrap(), original);
+        assert_eq!(
+            SequencesChunk::decode_chunk(&chunk, 1800).unwrap(),
+            original
+        );
         assert!(crate::Sequence::decode(&chunk.data, 800).is_err());
     }
 
@@ -158,12 +118,5 @@ mod tests {
         let original = GeosetsChunk::new(records);
         let bytes = original.encode().unwrap();
         assert_eq!(GeosetsChunk::decode(&bytes, 1800).unwrap(), original);
-    }
-
-    #[test]
-    fn model_info_chunk_keeps_extension_bytes() {
-        let original = ModelInfoChunk::new(crate::ModelInfo::default(), vec![1, 2, 3]);
-        let chunk = original.encode_chunk().unwrap();
-        assert_eq!(ModelInfoChunk::decode_chunk(&chunk).unwrap(), original);
     }
 }

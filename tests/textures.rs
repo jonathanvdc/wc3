@@ -1,5 +1,5 @@
 use wc3_mdx::Record;
-use wc3_mdx::{Chunk, Error, Model, Texture, TextureFlags};
+use wc3_mdx::{Error, Model, RawChunk, Texture, TextureFlags};
 
 #[test]
 fn texture_fields_round_trip() {
@@ -36,7 +36,7 @@ fn texture_reserved_bytes_are_preserved() {
 #[test]
 fn malformed_texture_chunk_is_reported() {
     let mut model = Model::new(800);
-    model.push(Chunk::new(*b"TEXS", vec![0; 267]));
+    model.push(RawChunk::new(*b"TEXS", vec![0; 267]));
     assert_eq!(
         model.textures(),
         Err(Error::MalformedChunk {

@@ -18,11 +18,11 @@ coverage across the entire game collection has not yet been verified.
 ## Rust API
 
 ```rust
-use wc3_mdx::{Record, Chunk, Model, ModelInfo};
+use wc3_mdx::{Record, RawChunk, Model, ModelInfo};
 
 let mut model = Model::new(800);
 model.set_model_info(&ModelInfo::new("Example")?);
-model.push(Chunk::new(*b"TEST", vec![1, 2, 3]));
+model.push(RawChunk::new(*b"TEST", vec![1, 2, 3]));
 let encoded = model.encode()?;
 let decoded = Model::decode_latest(&encoded)?;
 decoded.validate()?;

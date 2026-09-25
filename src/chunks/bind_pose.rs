@@ -1,7 +1,7 @@
 //! Reforged bind-pose matrices in `BPOS` chunks.
 
 use crate::Record;
-use crate::{Chunk, ChunkRecord, Error, Model};
+use crate::{Error, KnownChunk, Model, RawChunk};
 
 const MATRIX_SIZE: usize = 48;
 
@@ -73,7 +73,7 @@ impl Model {
         if let Some(chunk) = self.chunk_mut(BindPose::TAG) {
             chunk.data = pose.encode().expect("validated bind pose");
         } else {
-            self.push(Chunk::new(
+            self.push(RawChunk::new(
                 BindPose::TAG,
                 pose.encode().expect("validated bind pose"),
             ));
@@ -145,6 +145,6 @@ impl Record for BindPose {
     }
 }
 
-impl ChunkRecord for BindPose {
+impl KnownChunk for BindPose {
     const TAG: [u8; 4] = *b"BPOS";
 }

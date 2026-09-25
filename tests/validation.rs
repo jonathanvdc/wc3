@@ -1,5 +1,5 @@
 use wc3_mdx::Record;
-use wc3_mdx::{Chunk, Error, Geoset, Material, Model, Node, RibbonEmitter};
+use wc3_mdx::{Error, Geoset, Material, Model, Node, RawChunk, RibbonEmitter};
 
 #[test]
 fn validates_synthetic_known_chunks_and_preserves_unknown() {
@@ -12,7 +12,7 @@ fn validates_synthetic_known_chunks_and_preserves_unknown() {
     model
         .set_ribbon_emitters(&[RibbonEmitter::new(Node::new("Trail", 1).unwrap()).unwrap()])
         .unwrap();
-    model.push(Chunk::new(*b"FUTR", vec![1, 2, 3]));
+    model.push(RawChunk::new(*b"FUTR", vec![1, 2, 3]));
     model.validate().unwrap();
     let bytes = model.encode().unwrap();
     assert_eq!(Model::decode(&bytes, 800).unwrap().encode().unwrap(), bytes);
@@ -34,7 +34,7 @@ fn rejects_malformed_known_track() {
     ribbon.extend_from_slice(b"KRVS");
     let len = ribbon.len() as u32;
     ribbon[..4].copy_from_slice(&len.to_le_bytes());
-    model.push(Chunk::new(*b"RIBB", ribbon));
+    model.push(RawChunk::new(*b"RIBB", ribbon));
     assert!(model.validate().is_err());
 }
 
@@ -93,7 +93,7 @@ fn rejects_records_from_another_model_version() {
 fn validates_every_repeated_model_info_chunk() {
     let mut model = Model::new(800);
     model.set_model_info(&wc3_mdx::ModelInfo::new("Good").unwrap());
-    model.push(Chunk::new(*b"MODL", vec![0; 12]));
+    model.push(RawChunk::new(*b"MODL", vec![0; 12]));
     assert!(model.model_info().unwrap().is_some());
     assert!(model.validate().is_err());
 }
