@@ -30,7 +30,7 @@ fn camera_fields_and_tracks_round_trip() {
     assert_eq!(camera.field_of_view(), 0.7);
     assert_eq!(camera.far_clip(), 1000.0);
     assert_eq!(camera.near_clip(), 10.0);
-    assert_eq!(camera.tracks().unwrap(), vec![track]);
+    assert_eq!(camera.tracks(), vec![track]);
 }
 
 #[test]

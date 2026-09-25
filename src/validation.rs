@@ -57,9 +57,7 @@ impl Model {
             emitter.node().tracks();
             emitter.tracks()?;
         }
-        for camera in self.cameras()? {
-            camera.tracks()?;
-        }
+        self.cameras()?;
         for light in self.lights()? {
             light.node().tracks();
             light.tracks()?;

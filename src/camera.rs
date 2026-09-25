@@ -1,4 +1,4 @@
-//! Camera records in `CAMS` chunks.
+//! Typed camera records in `CAMS` chunks.
 
 use std::borrow::Cow;
 
@@ -7,19 +7,34 @@ use crate::{AnimationTrack, Error, Model};
 const TAG: [u8; 4] = *b"CAMS";
 const HEADER_SIZE: usize = 120;
 const NAME_SIZE: usize = 80;
+const MAX_RECORD_SIZE: usize = 0x00ff_ffff;
 
-/// A camera record with its optional animation tracks retained.
-#[derive(Clone, Debug, Eq, PartialEq)]
+/// A camera with decoded fixed fields and animation tracks.
+#[derive(Clone, Debug, PartialEq)]
 pub struct Camera {
-    bytes: Vec<u8>,
+    name: [u8; NAME_SIZE],
+    record_flags: u8,
+    position: [f32; 3],
+    field_of_view: f32,
+    far_clip: f32,
+    near_clip: f32,
+    target_position: [f32; 3],
+    tracks: Vec<AnimationTrack>,
 }
 
 impl Camera {
     /// Creates a camera with zeroed position and target fields.
     pub fn new(name: &str) -> Result<Self, Error> {
-        let mut bytes = vec![0; HEADER_SIZE];
-        bytes[..4].copy_from_slice(&(HEADER_SIZE as u32).to_le_bytes());
-        let mut camera = Self { bytes };
+        let mut camera = Self {
+            name: [0; NAME_SIZE],
+            record_flags: 0,
+            position: [0.0; 3],
+            field_of_view: 0.0,
+            far_clip: 0.0,
+            near_clip: 0.0,
+            target_position: [0.0; 3],
+            tracks: Vec::new(),
+        };
         camera.set_name(name)?;
         Ok(camera)
     }
@@ -28,12 +43,12 @@ impl Camera {
     pub fn new_for_version(name: &str, version: u32) -> Result<Self, Error> {
         let mut camera = Self::new(name)?;
         if version >= 1200 {
-            camera.set_record_flags(3);
+            camera.record_flags = 3;
         }
         Ok(camera)
     }
 
-    /// Wraps one inclusive-size camera record.
+    /// Parses one camera record, preserving its upper-byte size flags.
     pub fn from_bytes(bytes: &[u8]) -> Result<Self, Error> {
         if bytes.len() < HEADER_SIZE {
             return Err(Error::MalformedRecord {
@@ -41,131 +56,53 @@ impl Camera {
                 offset: 0,
             });
         }
-        let size = (u32::from_le_bytes(bytes[..4].try_into().expect("four-byte size"))
-            & 0x00ff_ffff) as usize;
-        if size != bytes.len() {
+        let size_word = u32::from_le_bytes(bytes[..4].try_into().expect("four-byte size"));
+        if (size_word & 0x00ff_ffff) as usize != bytes.len() {
             return Err(Error::MalformedRecord {
                 tag: TAG,
                 offset: 0,
             });
         }
-        Ok(Self {
-            bytes: bytes.to_vec(),
-        })
-    }
-
-    /// Returns the complete record.
-    pub fn as_bytes(&self) -> &[u8] {
-        &self.bytes
-    }
-
-    /// Returns the upper-byte record flags in the inclusive size word.
-    pub fn record_flags(&self) -> u8 {
-        self.bytes[3]
-    }
-
-    /// Sets the upper-byte record flags without changing the record length.
-    pub fn set_record_flags(&mut self, flags: u8) {
-        self.bytes[3] = flags;
-    }
-
-    /// Returns the camera name up to the first NUL.
-    pub fn name(&self) -> Cow<'_, str> {
-        let field = &self.bytes[4..84];
-        let end = field
-            .iter()
-            .position(|&byte| byte == 0)
-            .unwrap_or(NAME_SIZE);
-        String::from_utf8_lossy(&field[..end])
-    }
-
-    /// Sets the camera name.
-    pub fn set_name(&mut self, name: &str) -> Result<(), Error> {
-        if name.len() >= NAME_SIZE || name.as_bytes().contains(&0) {
-            return Err(Error::InvalidString {
-                max_bytes: NAME_SIZE - 1,
-            });
-        }
-        self.bytes[4..84].fill(0);
-        self.bytes[4..4 + name.len()].copy_from_slice(name.as_bytes());
-        Ok(())
-    }
-
-    /// Returns the camera XYZ position.
-    pub fn position(&self) -> [f32; 3] {
-        self.vec3_at(84)
-    }
-
-    /// Sets the camera XYZ position.
-    pub fn set_position(&mut self, position: [f32; 3]) {
-        self.set_vec3_at(84, position);
-    }
-
-    /// Returns the field of view.
-    pub fn field_of_view(&self) -> f32 {
-        self.f32_at(96)
-    }
-
-    /// Sets the field of view.
-    pub fn set_field_of_view(&mut self, value: f32) {
-        self.set_f32_at(96, value);
-    }
-
-    /// Returns the far clipping distance.
-    pub fn far_clip(&self) -> f32 {
-        self.f32_at(100)
-    }
-
-    /// Sets the far clipping distance.
-    pub fn set_far_clip(&mut self, value: f32) {
-        self.set_f32_at(100, value);
-    }
-
-    /// Returns the near clipping distance.
-    pub fn near_clip(&self) -> f32 {
-        self.f32_at(104)
-    }
-
-    /// Sets the near clipping distance.
-    pub fn set_near_clip(&mut self, value: f32) {
-        self.set_f32_at(104, value);
-    }
-
-    /// Returns the camera target XYZ position.
-    pub fn target_position(&self) -> [f32; 3] {
-        self.vec3_at(108)
-    }
-
-    /// Sets the camera target XYZ position.
-    pub fn set_target_position(&mut self, target: [f32; 3]) {
-        self.set_vec3_at(108, target);
-    }
-
-    /// Returns undecoded track bytes.
-    pub fn track_bytes(&self) -> &[u8] {
-        &self.bytes[HEADER_SIZE..]
-    }
-
-    /// Decodes camera translation, target translation, and rotation tracks.
-    pub fn tracks(&self) -> Result<Vec<AnimationTrack>, Error> {
+        let float = |offset: usize| {
+            f32::from_le_bytes(bytes[offset..offset + 4].try_into().expect("camera field"))
+        };
         let mut tracks = Vec::new();
         let mut offset = HEADER_SIZE;
-        while offset < self.bytes.len() {
-            let (track, consumed) = AnimationTrack::parse(&self.bytes, offset)?;
-            if !matches!(&track.tag, b"KCTR" | b"KTTR" | b"KCRL") {
+        while offset < bytes.len() {
+            let (track, size) = AnimationTrack::parse(bytes, offset)?;
+            if !is_track(track.tag) {
                 return Err(Error::MalformedRecord { tag: TAG, offset });
             }
             tracks.push(track);
-            offset += consumed;
+            offset += size;
         }
-        Ok(tracks)
+        Ok(Self {
+            name: bytes[4..84].try_into().expect("fixed-width name"),
+            record_flags: (size_word >> 24) as u8,
+            position: [float(84), float(88), float(92)],
+            field_of_view: float(96),
+            far_clip: float(100),
+            near_clip: float(104),
+            target_position: [float(108), float(112), float(116)],
+            tracks,
+        })
     }
 
-    /// Replaces camera tracks and updates the inclusive record size.
-    pub fn set_tracks(&mut self, tracks: &[AnimationTrack]) -> Result<(), Error> {
-        let mut bytes = self.bytes[..HEADER_SIZE].to_vec();
-        for track in tracks {
-            if !matches!(&track.tag, b"KCTR" | b"KTTR" | b"KCRL") {
+    /// Serializes the camera and its tracks.
+    pub fn to_bytes(&self) -> Result<Vec<u8>, Error> {
+        let mut bytes = vec![0; HEADER_SIZE];
+        bytes[4..84].copy_from_slice(&self.name);
+        for (index, value) in self.position.into_iter().enumerate() {
+            bytes[84 + index * 4..88 + index * 4].copy_from_slice(&value.to_le_bytes());
+        }
+        bytes[96..100].copy_from_slice(&self.field_of_view.to_le_bytes());
+        bytes[100..104].copy_from_slice(&self.far_clip.to_le_bytes());
+        bytes[104..108].copy_from_slice(&self.near_clip.to_le_bytes());
+        for (index, value) in self.target_position.into_iter().enumerate() {
+            bytes[108 + index * 4..112 + index * 4].copy_from_slice(&value.to_le_bytes());
+        }
+        for track in &self.tracks {
+            if !is_track(track.tag) {
                 return Err(Error::MalformedRecord {
                     tag: TAG,
                     offset: bytes.len(),
@@ -173,39 +110,114 @@ impl Camera {
             }
             bytes.extend_from_slice(&track.to_bytes()?);
         }
-        if bytes.len() > 0x00ff_ffff {
+        if bytes.len() > MAX_RECORD_SIZE {
             return Err(Error::ChunkTooLarge {
                 tag: TAG,
                 size: bytes.len(),
             });
         }
-        let size = bytes.len() as u32 | (u32::from(self.record_flags()) << 24);
+        let size = bytes.len() as u32 | (u32::from(self.record_flags) << 24);
         bytes[..4].copy_from_slice(&size.to_le_bytes());
-        self.bytes = bytes;
+        Ok(bytes)
+    }
+
+    /// Returns the upper-byte record flags.
+    pub fn record_flags(&self) -> u8 {
+        self.record_flags
+    }
+    /// Changes the upper-byte record flags.
+    pub fn set_record_flags(&mut self, flags: u8) {
+        self.record_flags = flags;
+    }
+    /// Returns the name up to its first NUL.
+    pub fn name(&self) -> Cow<'_, str> {
+        let end = self
+            .name
+            .iter()
+            .position(|&byte| byte == 0)
+            .unwrap_or(NAME_SIZE);
+        String::from_utf8_lossy(&self.name[..end])
+    }
+    /// Changes the name and clears unused bytes.
+    pub fn set_name(&mut self, name: &str) -> Result<(), Error> {
+        if name.len() >= NAME_SIZE || name.as_bytes().contains(&0) {
+            return Err(Error::InvalidString {
+                max_bytes: NAME_SIZE - 1,
+            });
+        }
+        self.name.fill(0);
+        self.name[..name.len()].copy_from_slice(name.as_bytes());
         Ok(())
     }
-
-    fn f32_at(&self, offset: usize) -> f32 {
-        f32::from_le_bytes(
-            self.bytes[offset..offset + 4]
-                .try_into()
-                .expect("four-byte field"),
-        )
+    /// Returns camera XYZ position.
+    pub fn position(&self) -> [f32; 3] {
+        self.position
     }
-
-    fn set_f32_at(&mut self, offset: usize, value: f32) {
-        self.bytes[offset..offset + 4].copy_from_slice(&value.to_le_bytes());
+    /// Changes camera XYZ position.
+    pub fn set_position(&mut self, position: [f32; 3]) {
+        self.position = position;
     }
-
-    fn vec3_at(&self, offset: usize) -> [f32; 3] {
-        std::array::from_fn(|axis| self.f32_at(offset + axis * 4))
+    /// Returns field of view.
+    pub fn field_of_view(&self) -> f32 {
+        self.field_of_view
     }
-
-    fn set_vec3_at(&mut self, offset: usize, vector: [f32; 3]) {
-        for (axis, value) in vector.into_iter().enumerate() {
-            self.set_f32_at(offset + axis * 4, value);
+    /// Changes field of view.
+    pub fn set_field_of_view(&mut self, value: f32) {
+        self.field_of_view = value;
+    }
+    /// Returns far clipping distance.
+    pub fn far_clip(&self) -> f32 {
+        self.far_clip
+    }
+    /// Changes far clipping distance.
+    pub fn set_far_clip(&mut self, value: f32) {
+        self.far_clip = value;
+    }
+    /// Returns near clipping distance.
+    pub fn near_clip(&self) -> f32 {
+        self.near_clip
+    }
+    /// Changes near clipping distance.
+    pub fn set_near_clip(&mut self, value: f32) {
+        self.near_clip = value;
+    }
+    /// Returns target XYZ position.
+    pub fn target_position(&self) -> [f32; 3] {
+        self.target_position
+    }
+    /// Changes target XYZ position.
+    pub fn set_target_position(&mut self, target: [f32; 3]) {
+        self.target_position = target;
+    }
+    /// Borrows decoded camera tracks without reparsing.
+    pub fn tracks(&self) -> &[AnimationTrack] {
+        &self.tracks
+    }
+    /// Replaces camera tracks.
+    pub fn set_tracks(&mut self, tracks: &[AnimationTrack]) -> Result<(), Error> {
+        let mut size = HEADER_SIZE;
+        for track in tracks {
+            if !is_track(track.tag) {
+                return Err(Error::MalformedRecord {
+                    tag: TAG,
+                    offset: size,
+                });
+            }
+            size = size
+                .checked_add(track.to_bytes()?.len())
+                .filter(|&size| size <= MAX_RECORD_SIZE)
+                .ok_or(Error::ChunkTooLarge {
+                    tag: TAG,
+                    size: usize::MAX,
+                })?;
         }
+        self.tracks = tracks.to_vec();
+        Ok(())
     }
+}
+
+fn is_track(tag: [u8; 4]) -> bool {
+    matches!(&tag, b"KCTR" | b"KTTR" | b"KCRL")
 }
 
 impl Model {
@@ -237,17 +249,15 @@ impl Model {
 
     /// Replaces cameras in the first `CAMS` chunk.
     pub fn set_cameras(&mut self, cameras: &[Camera]) -> Result<(), Error> {
-        let size = cameras.iter().try_fold(0usize, |sum, camera| {
-            sum.checked_add(camera.bytes.len())
-                .filter(|&size| size <= u32::MAX as usize)
-                .ok_or(Error::ChunkTooLarge {
-                    tag: TAG,
-                    size: usize::MAX,
-                })
-        })?;
-        let mut data = Vec::with_capacity(size);
+        let mut data = Vec::new();
         for camera in cameras {
-            data.extend_from_slice(camera.as_bytes());
+            data.extend_from_slice(&camera.to_bytes()?);
+            if data.len() > u32::MAX as usize {
+                return Err(Error::ChunkTooLarge {
+                    tag: TAG,
+                    size: data.len(),
+                });
+            }
         }
         self.replace_chunks(TAG, data);
         Ok(())
