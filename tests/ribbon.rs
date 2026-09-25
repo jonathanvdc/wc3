@@ -1,3 +1,4 @@
+use wc3_mdx::Record;
 use wc3_mdx::{AnimationTrack, Keyframe, Model, Node, RibbonEmitter};
 
 #[test]
@@ -25,12 +26,12 @@ fn ribbon_fields_and_integer_animation_round_trip() {
         .unwrap();
     let mut model = Model::new(800);
     model.set_ribbon_emitters(&[emitter]).unwrap();
-    let bytes = model.to_bytes().unwrap();
-    let parsed = Model::from_bytes(&bytes).unwrap();
+    let bytes = model.encode().unwrap();
+    let parsed = Model::decode(&bytes, 800).unwrap();
     let ribbons = parsed.ribbon_emitters().unwrap();
     assert_eq!(ribbons[0].fields(), fields);
     assert_eq!(ribbons[0].tracks()[0].keyframes[0].integer_value(), Some(7));
-    assert_eq!(parsed.to_bytes().unwrap(), bytes);
+    assert_eq!(parsed.encode().unwrap(), bytes);
 }
 
 #[test]
@@ -49,7 +50,7 @@ fn ribbon_color_animation_round_trip() {
     };
     emitter.set_tracks(std::slice::from_ref(&track)).unwrap();
     assert_eq!(
-        RibbonEmitter::from_bytes(&emitter.to_bytes().unwrap())
+        RibbonEmitter::decode(&emitter.encode().unwrap(), 800)
             .unwrap()
             .tracks(),
         vec![track]

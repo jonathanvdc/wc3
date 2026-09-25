@@ -1,3 +1,4 @@
+use wc3_mdx::Record;
 use wc3_mdx::{Model, ModelInfo};
 
 #[test]
@@ -10,7 +11,7 @@ fn model_info_edit_round_trip() {
     info.set_blend_time(150);
     model.set_model_info(&info);
 
-    let parsed = Model::from_bytes(&model.to_bytes().unwrap()).unwrap();
+    let parsed = Model::decode(&model.encode().unwrap(), 800).unwrap();
     let actual = parsed.model_info().unwrap().unwrap();
     assert_eq!(actual.name(), "Footman");
     assert_eq!(actual.bounds_radius(), 42.5);

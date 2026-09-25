@@ -1,12 +1,11 @@
 //! Shared node headers used by bones and helpers.
 
+use crate::Record;
 use std::borrow::Cow;
 
 use crate::utils::field;
-use crate::{AnimationTrack, Error, Model};
+use crate::{AnimationTrack, ChunkRecord, Error, Model};
 
-const BONE_TAG: [u8; 4] = *b"BONE";
-const HELP_TAG: [u8; 4] = *b"HELP";
 const HEADER_SIZE: usize = 96;
 const NAME_SIZE: usize = 80;
 
@@ -106,55 +105,6 @@ impl Node {
         Ok(node)
     }
 
-    /// Parses one inclusive-size node record.
-    pub fn from_bytes(bytes: &[u8]) -> Result<Self, Error> {
-        if read_size(bytes, 0, HELP_TAG)? != bytes.len() {
-            return Err(Error::MalformedRecord {
-                tag: HELP_TAG,
-                offset: 0,
-            });
-        }
-        let name = bytes[4..84].try_into().expect("fixed-width node name");
-        let word = |offset: usize| {
-            u32::from_le_bytes(bytes[offset..offset + 4].try_into().expect("node field"))
-        };
-        let mut tracks = Vec::new();
-        let mut offset = HEADER_SIZE;
-        while offset < bytes.len() {
-            let (track, size) = AnimationTrack::parse(bytes, offset)?;
-            if !matches!(&track.tag, b"KGTR" | b"KGRT" | b"KGSC") {
-                return Err(Error::MalformedRecord {
-                    tag: HELP_TAG,
-                    offset,
-                });
-            }
-            tracks.push(track);
-            offset += size;
-        }
-        Ok(Self {
-            name,
-            object_id: word(84),
-            parent_id: word(88),
-            raw_flags: word(92),
-            tracks,
-        })
-    }
-
-    /// Serializes the node and its validated transform tracks.
-    pub fn to_bytes(&self) -> Vec<u8> {
-        let mut bytes = vec![0; HEADER_SIZE];
-        bytes[4..84].copy_from_slice(&self.name);
-        bytes[84..88].copy_from_slice(&self.object_id.to_le_bytes());
-        bytes[88..92].copy_from_slice(&self.parent_id.to_le_bytes());
-        bytes[92..96].copy_from_slice(&self.raw_flags.to_le_bytes());
-        for track in &self.tracks {
-            bytes.extend_from_slice(&track.to_bytes().expect("validated node track"));
-        }
-        let size = bytes.len() as u32;
-        bytes[..4].copy_from_slice(&size.to_le_bytes());
-        bytes
-    }
-
     /// Returns the name up to the first NUL, replacing invalid UTF-8.
     pub fn name(&self) -> Cow<'_, str> {
         field::text(&self.name)
@@ -207,16 +157,16 @@ impl Node {
         for track in tracks {
             if !matches!(&track.tag, b"KGTR" | b"KGRT" | b"KGSC") {
                 return Err(Error::MalformedRecord {
-                    tag: HELP_TAG,
+                    tag: Node::TAG,
                     offset: size,
                 });
             }
-            let bytes = track.to_bytes()?;
+            let bytes = track.encode()?;
             size = size
                 .checked_add(bytes.len())
                 .filter(|&size| size <= u32::MAX as usize)
                 .ok_or(Error::ChunkTooLarge {
-                    tag: HELP_TAG,
+                    tag: Node::TAG,
                     size: usize::MAX,
                 })?;
         }
@@ -235,34 +185,6 @@ impl Bone {
         }
     }
 
-    /// Parses one node followed by its bone references.
-    pub fn from_bytes(bytes: &[u8]) -> Result<Self, Error> {
-        let node_size = read_size(bytes, 0, BONE_TAG)?;
-        if node_size.checked_add(8) != Some(bytes.len()) {
-            return Err(Error::MalformedRecord {
-                tag: BONE_TAG,
-                offset: 0,
-            });
-        }
-        let node = Node::from_bytes(&bytes[..node_size])?;
-        let geoset_id =
-            u32::from_le_bytes(bytes[node_size..node_size + 4].try_into().expect("bone ID"));
-        let geoset_animation_id =
-            u32::from_le_bytes(bytes[node_size + 4..].try_into().expect("animation ID"));
-        Ok(Self {
-            node,
-            geoset_id,
-            geoset_animation_id,
-        })
-    }
-
-    /// Serializes the node and its bone references.
-    pub fn to_bytes(&self) -> Vec<u8> {
-        let mut bytes = self.node.to_bytes();
-        bytes.extend_from_slice(&self.geoset_id.to_le_bytes());
-        bytes.extend_from_slice(&self.geoset_animation_id.to_le_bytes());
-        bytes
-    }
     /// Borrows the shared node.
     pub fn node(&self) -> &Node {
         &self.node
@@ -285,19 +207,19 @@ impl Model {
     /// Decodes every bone in `BONE` chunks.
     pub fn bones(&self) -> Result<Vec<Bone>, Error> {
         let mut bones = Vec::new();
-        for chunk in self.chunks().iter().filter(|chunk| chunk.tag == BONE_TAG) {
+        for chunk in self.chunks().iter().filter(|chunk| chunk.tag == Bone::TAG) {
             let mut offset = 0;
             while offset < chunk.data.len() {
-                let size = read_size(&chunk.data, offset, BONE_TAG)?;
+                let size = read_size(&chunk.data, offset, Bone::TAG)?;
                 let end = offset
                     .checked_add(size)
                     .and_then(|end| end.checked_add(8))
                     .filter(|&end| end <= chunk.data.len())
                     .ok_or(Error::MalformedRecord {
-                        tag: BONE_TAG,
+                        tag: Bone::TAG,
                         offset,
                     })?;
-                bones.push(Bone::from_bytes(&chunk.data[offset..end])?);
+                bones.push(Bone::decode(&chunk.data[offset..end], 0)?);
                 offset = end;
             }
         }
@@ -308,27 +230,27 @@ impl Model {
     pub fn set_bones(&mut self, bones: &[Bone]) -> Result<(), Error> {
         let mut data = Vec::new();
         for bone in bones {
-            data.extend_from_slice(&bone.to_bytes());
+            data.extend_from_slice(&bone.encode()?);
             if data.len() > u32::MAX as usize {
                 return Err(Error::ChunkTooLarge {
-                    tag: BONE_TAG,
+                    tag: Bone::TAG,
                     size: data.len(),
                 });
             }
         }
-        self.replace_chunks(BONE_TAG, data);
+        self.replace_chunks(Bone::TAG, data);
         Ok(())
     }
 
     /// Decodes every helper node in `HELP` chunks.
     pub fn helpers(&self) -> Result<Vec<Node>, Error> {
         let mut helpers = Vec::new();
-        for chunk in self.chunks().iter().filter(|chunk| chunk.tag == HELP_TAG) {
+        for chunk in self.chunks().iter().filter(|chunk| chunk.tag == Node::TAG) {
             let mut offset = 0;
             while offset < chunk.data.len() {
-                let size = read_size(&chunk.data, offset, HELP_TAG)?;
+                let size = read_size(&chunk.data, offset, Node::TAG)?;
                 let end = offset + size;
-                helpers.push(Node::from_bytes(&chunk.data[offset..end])?);
+                helpers.push(Node::decode(&chunk.data[offset..end], 0)?);
                 offset = end;
             }
         }
@@ -339,15 +261,105 @@ impl Model {
     pub fn set_helpers(&mut self, helpers: &[Node]) -> Result<(), Error> {
         let mut data = Vec::new();
         for helper in helpers {
-            data.extend_from_slice(&helper.to_bytes());
+            data.extend_from_slice(&helper.encode()?);
             if data.len() > u32::MAX as usize {
                 return Err(Error::ChunkTooLarge {
-                    tag: HELP_TAG,
+                    tag: Node::TAG,
                     size: data.len(),
                 });
             }
         }
-        self.replace_chunks(HELP_TAG, data);
+        self.replace_chunks(Node::TAG, data);
         Ok(())
     }
+}
+
+impl Record for Node {
+    fn decode(bytes: &[u8], _version: u32) -> Result<Self, Error> {
+        if read_size(bytes, 0, Node::TAG)? != bytes.len() {
+            return Err(Error::MalformedRecord {
+                tag: Node::TAG,
+                offset: 0,
+            });
+        }
+        let name = bytes[4..84].try_into().expect("fixed-width node name");
+        let word = |offset: usize| {
+            u32::from_le_bytes(bytes[offset..offset + 4].try_into().expect("node field"))
+        };
+        let mut tracks = Vec::new();
+        let mut offset = HEADER_SIZE;
+        while offset < bytes.len() {
+            let (track, size) = AnimationTrack::parse(bytes, offset)?;
+            if !matches!(&track.tag, b"KGTR" | b"KGRT" | b"KGSC") {
+                return Err(Error::MalformedRecord {
+                    tag: Node::TAG,
+                    offset,
+                });
+            }
+            tracks.push(track);
+            offset += size;
+        }
+        Ok(Self {
+            name,
+            object_id: word(84),
+            parent_id: word(88),
+            raw_flags: word(92),
+            tracks,
+        })
+    }
+
+    fn encode(&self) -> Result<Vec<u8>, Error> {
+        Ok({
+            let mut bytes = vec![0; HEADER_SIZE];
+            bytes[4..84].copy_from_slice(&self.name);
+            bytes[84..88].copy_from_slice(&self.object_id.to_le_bytes());
+            bytes[88..92].copy_from_slice(&self.parent_id.to_le_bytes());
+            bytes[92..96].copy_from_slice(&self.raw_flags.to_le_bytes());
+            for track in &self.tracks {
+                bytes.extend_from_slice(&track.encode().expect("validated node track"));
+            }
+            let size = bytes.len() as u32;
+            bytes[..4].copy_from_slice(&size.to_le_bytes());
+            bytes
+        })
+    }
+}
+
+impl Record for Bone {
+    fn decode(bytes: &[u8], _version: u32) -> Result<Self, Error> {
+        let node_size = read_size(bytes, 0, Bone::TAG)?;
+        if node_size.checked_add(8) != Some(bytes.len()) {
+            return Err(Error::MalformedRecord {
+                tag: Bone::TAG,
+                offset: 0,
+            });
+        }
+        let node = Node::decode(&bytes[..node_size], 0)?;
+        let geoset_id =
+            u32::from_le_bytes(bytes[node_size..node_size + 4].try_into().expect("bone ID"));
+        let geoset_animation_id =
+            u32::from_le_bytes(bytes[node_size + 4..].try_into().expect("animation ID"));
+        Ok(Self {
+            node,
+            geoset_id,
+            geoset_animation_id,
+        })
+    }
+
+    fn encode(&self) -> Result<Vec<u8>, Error> {
+        Ok({
+            let mut bytes = self.node.encode()?;
+            bytes.extend_from_slice(&self.geoset_id.to_le_bytes());
+            bytes.extend_from_slice(&self.geoset_animation_id.to_le_bytes());
+            bytes
+        })
+    }
+}
+
+impl ChunkRecord for Node {
+    const TAG: [u8; 4] = *b"HELP";
+}
+
+impl ChunkRecord for Bone {
+    const TAG: [u8; 4] = *b"BONE";
 }

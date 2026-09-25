@@ -1,11 +1,10 @@
 //! Animation sequence records in the `SEQS` chunk.
 
+use crate::Record;
 use std::borrow::Cow;
 
 use crate::utils::field;
-use crate::{Error, Model};
-
-const TAG: [u8; 4] = *b"SEQS";
+use crate::{ChunkRecord, Error, Model};
 
 /// Sequence playback flags, with unrecognized bits retained.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -48,7 +47,7 @@ impl Sequence {
         Ok(sequence)
     }
 
-    fn parse(bytes: &[u8]) -> Self {
+    pub(crate) fn parse(bytes: &[u8]) -> Self {
         Self {
             bytes: bytes.try_into().expect("fixed-size record"),
         }
@@ -178,10 +177,14 @@ impl Model {
     /// Decodes every `SEQS` chunk in file order.
     pub fn sequences(&self) -> Result<Vec<Sequence>, Error> {
         let mut sequences = Vec::new();
-        for chunk in self.chunks().iter().filter(|chunk| chunk.tag == TAG) {
+        for chunk in self
+            .chunks()
+            .iter()
+            .filter(|chunk| chunk.tag == Sequence::TAG)
+        {
             if chunk.data.len() % SIZE != 0 {
                 return Err(Error::MalformedChunk {
-                    tag: TAG,
+                    tag: Sequence::TAG,
                     size: chunk.data.len(),
                     expected: SIZE,
                 });
@@ -198,17 +201,39 @@ impl Model {
             .len()
             .checked_mul(SIZE)
             .ok_or(Error::ChunkTooLarge {
-                tag: TAG,
+                tag: Sequence::TAG,
                 size: usize::MAX,
             })?;
         if size > u32::MAX as usize {
-            return Err(Error::ChunkTooLarge { tag: TAG, size });
+            return Err(Error::ChunkTooLarge {
+                tag: Sequence::TAG,
+                size,
+            });
         }
         let mut data = Vec::with_capacity(size);
         for sequence in sequences {
             data.extend_from_slice(sequence.as_bytes());
         }
-        self.replace_chunks(TAG, data);
+        self.replace_chunks(Sequence::TAG, data);
         Ok(())
     }
+}
+
+impl Record for Sequence {
+    fn decode(bytes: &[u8], _version: u32) -> Result<Self, Error> {
+        let bytes: [u8; 132] = bytes.try_into().map_err(|_| Error::MalformedChunk {
+            tag: *b"SEQS",
+            size: bytes.len(),
+            expected: 132,
+        })?;
+        Ok(Self { bytes })
+    }
+
+    fn encode(&self) -> Result<Vec<u8>, Error> {
+        Ok(self.bytes.to_vec())
+    }
+}
+
+impl ChunkRecord for Sequence {
+    const TAG: [u8; 4] = *b"SEQS";
 }

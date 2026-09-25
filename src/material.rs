@@ -1,11 +1,11 @@
 //! Typed material layers and versioned texture slots.
 
+use crate::Record;
 use std::borrow::Cow;
 
 use crate::utils::field;
-use crate::{AnimationTrack, Error, Model};
+use crate::{AnimationTrack, ChunkRecord, Error, Model};
 
-const TAG: [u8; 4] = *b"MTLS";
 const LAYER_TAG: [u8; 4] = *b"LAYS";
 
 /// Material rendering bits, preserving unrecognized bits.
@@ -205,73 +205,6 @@ impl Material {
         }
     }
 
-    /// Parses exactly one material record and all its layers.
-    pub fn from_bytes(version: u32, bytes: &[u8]) -> Result<Self, Error> {
-        if sized_records(bytes, TAG)?.len() != 1 {
-            return Err(Error::MalformedRecord {
-                tag: TAG,
-                offset: 0,
-            });
-        }
-        let mut cursor = Cursor::new(bytes, TAG);
-        if cursor.word()? as usize != bytes.len() {
-            return Err(Error::MalformedRecord {
-                tag: TAG,
-                offset: 0,
-            });
-        }
-        let priority_plane = cursor.word()?;
-        let render_mode = cursor.word()?;
-        let shader = if has_shader(version) {
-            Some(cursor.read(80)?.try_into().expect("shader field"))
-        } else {
-            None
-        };
-        cursor.expect_tag(LAYER_TAG)?;
-        let count = cursor.word()? as usize;
-        let records = sized_records(&bytes[cursor.offset..], LAYER_TAG)?;
-        if records.len() != count {
-            return Err(Error::MalformedRecord {
-                tag: TAG,
-                offset: cursor.offset,
-            });
-        }
-        let layers = records
-            .into_iter()
-            .map(|bytes| Layer::from_bytes(version, bytes))
-            .collect::<Result<_, _>>()?;
-        Ok(Self {
-            version,
-            priority_plane,
-            render_mode,
-            shader,
-            layers,
-        })
-    }
-
-    /// Serializes the material and its layers.
-    pub fn to_bytes(&self) -> Result<Vec<u8>, Error> {
-        let mut bytes = vec![0; 4];
-        bytes.extend_from_slice(&self.priority_plane.to_le_bytes());
-        bytes.extend_from_slice(&self.render_mode.to_le_bytes());
-        if has_shader(self.version) {
-            bytes.extend_from_slice(self.shader.as_ref().unwrap_or(&[0; 80]));
-        }
-        bytes.extend_from_slice(b"LAYS");
-        write_count(&mut bytes, self.layers.len(), TAG)?;
-        for layer in &self.layers {
-            if layer.version != self.version {
-                return Err(Error::VersionMismatch {
-                    expected: self.version,
-                    actual: layer.version,
-                });
-            }
-            bytes.extend_from_slice(&layer.to_bytes()?);
-        }
-        finish_record(&mut bytes, TAG)?;
-        Ok(bytes)
-    }
-
     /// Returns the MDX version used for this material.
     pub fn version(&self) -> u32 {
         self.version
@@ -307,7 +240,7 @@ impl Material {
     /// Changes the shader path and clears unused bytes.
     pub fn set_shader(&mut self, shader: &str) -> Result<(), Error> {
         let field = self.shader.as_mut().ok_or(Error::MalformedRecord {
-            tag: TAG,
+            tag: Material::TAG,
             offset: 12,
         })?;
         field::set_text(field, shader)
@@ -330,7 +263,7 @@ impl Material {
         }
         if layers.len() > u32::MAX as usize {
             return Err(Error::ChunkTooLarge {
-                tag: TAG,
+                tag: Material::TAG,
                 size: layers.len(),
             });
         }
@@ -358,151 +291,6 @@ impl Layer {
             texture_slots: Vec::new(),
             tracks: Vec::new(),
         }
-    }
-
-    /// Parses exactly one layer, including texture slots and animation tracks.
-    pub fn from_bytes(version: u32, bytes: &[u8]) -> Result<Self, Error> {
-        if sized_records(bytes, LAYER_TAG)?.len() != 1 {
-            return Err(Error::MalformedRecord {
-                tag: LAYER_TAG,
-                offset: 0,
-            });
-        }
-        let mut cursor = Cursor::new(bytes, LAYER_TAG);
-        if cursor.word()? as usize != bytes.len() {
-            return Err(Error::MalformedRecord {
-                tag: LAYER_TAG,
-                offset: 0,
-            });
-        }
-        let filter_mode = cursor.word()?;
-        let shading_flags = cursor.word()?;
-        let texture_id = cursor.word()?;
-        let texture_animation_id = cursor.word()?;
-        let coordinate_id = cursor.word()?;
-        let alpha = cursor.float()?;
-        let emissive_gain = if version >= 900 {
-            Some(cursor.float()?)
-        } else {
-            None
-        };
-        let (fresnel_color, fresnel_opacity, fresnel_team_color) = if version >= 1000 {
-            (
-                Some([cursor.float()?, cursor.float()?, cursor.float()?]),
-                Some(cursor.float()?),
-                Some(cursor.float()?),
-            )
-        } else {
-            (None, None, None)
-        };
-        let shader_type_id = if version >= 1100 {
-            Some(cursor.word()?)
-        } else {
-            None
-        };
-        let mut texture_slots = Vec::new();
-        if version >= 1100 {
-            let count = cursor.word()? as usize;
-            for _ in 0..count {
-                let texture_id = cursor.word()?;
-                let texture_type = cursor.word()?;
-                let track =
-                    if bytes.get(cursor.offset..cursor.offset.saturating_add(4)) == Some(b"KMTF") {
-                        let (track, size) = AnimationTrack::parse(bytes, cursor.offset)?;
-                        cursor.offset += size;
-                        Some(track)
-                    } else {
-                        None
-                    };
-                texture_slots.push(LayerTextureSlot {
-                    texture_id,
-                    texture_type,
-                    track,
-                });
-            }
-        }
-        let mut tracks = Vec::new();
-        while cursor.offset < bytes.len() {
-            let offset = cursor.offset;
-            let (track, size) = AnimationTrack::parse(bytes, offset)?;
-            if !is_layer_track(track.tag) {
-                return Err(Error::MalformedRecord {
-                    tag: LAYER_TAG,
-                    offset,
-                });
-            }
-            tracks.push(track);
-            cursor.offset += size;
-        }
-        Ok(Self {
-            version,
-            filter_mode,
-            shading_flags,
-            texture_id,
-            texture_animation_id,
-            coordinate_id,
-            alpha,
-            emissive_gain,
-            fresnel_color,
-            fresnel_opacity,
-            fresnel_team_color,
-            shader_type_id,
-            texture_slots,
-            tracks,
-        })
-    }
-
-    /// Serializes the layer and its animation tracks.
-    pub fn to_bytes(&self) -> Result<Vec<u8>, Error> {
-        let mut bytes = vec![0; 4];
-        for word in [
-            self.filter_mode,
-            self.shading_flags,
-            self.texture_id,
-            self.texture_animation_id,
-            self.coordinate_id,
-        ] {
-            bytes.extend_from_slice(&word.to_le_bytes());
-        }
-        bytes.extend_from_slice(&self.alpha.to_le_bytes());
-        if self.version >= 900 {
-            bytes.extend_from_slice(&self.emissive_gain.unwrap_or_default().to_le_bytes());
-        }
-        if self.version >= 1000 {
-            for value in self.fresnel_color.unwrap_or_default() {
-                bytes.extend_from_slice(&value.to_le_bytes());
-            }
-            bytes.extend_from_slice(&self.fresnel_opacity.unwrap_or_default().to_le_bytes());
-            bytes.extend_from_slice(&self.fresnel_team_color.unwrap_or_default().to_le_bytes());
-        }
-        if self.version >= 1100 {
-            bytes.extend_from_slice(&self.shader_type_id.unwrap_or_default().to_le_bytes());
-            write_count(&mut bytes, self.texture_slots.len(), LAYER_TAG)?;
-            for slot in &self.texture_slots {
-                bytes.extend_from_slice(&slot.texture_id.to_le_bytes());
-                bytes.extend_from_slice(&slot.texture_type.to_le_bytes());
-                if let Some(track) = &slot.track {
-                    if track.tag != *b"KMTF" {
-                        return Err(Error::MalformedRecord {
-                            tag: LAYER_TAG,
-                            offset: bytes.len(),
-                        });
-                    }
-                    bytes.extend_from_slice(&track.to_bytes()?);
-                }
-            }
-        }
-        for track in &self.tracks {
-            if !is_layer_track(track.tag) {
-                return Err(Error::MalformedRecord {
-                    tag: LAYER_TAG,
-                    offset: bytes.len(),
-                });
-            }
-            bytes.extend_from_slice(&track.to_bytes()?);
-        }
-        finish_record(&mut bytes, LAYER_TAG)?;
-        Ok(bytes)
     }
 
     /// Returns the MDX version used for this layer.
@@ -636,7 +424,7 @@ impl Layer {
                         offset: 0,
                     });
                 }
-                track.to_bytes()?;
+                track.encode()?;
             }
         }
         self.texture_slots = slots.to_vec();
@@ -655,7 +443,7 @@ impl Layer {
                     offset: 0,
                 });
             }
-            track.to_bytes()?;
+            track.encode()?;
         }
         self.tracks = tracks.to_vec();
         Ok(())
@@ -675,11 +463,15 @@ impl Layer {
 impl Model {
     /// Decodes all `MTLS` records in file order.
     pub fn materials(&self) -> Result<Vec<Material>, Error> {
-        let version = self.version().unwrap_or(800);
+        let version = self.version();
         let mut materials = Vec::new();
-        for chunk in self.chunks().iter().filter(|chunk| chunk.tag == TAG) {
-            for bytes in sized_records(&chunk.data, TAG)? {
-                materials.push(Material::from_bytes(version, bytes)?);
+        for chunk in self
+            .chunks()
+            .iter()
+            .filter(|chunk| chunk.tag == Material::TAG)
+        {
+            for bytes in sized_records(&chunk.data, Material::TAG)? {
+                materials.push(Material::decode(bytes, version)?);
             }
         }
         Ok(materials)
@@ -687,7 +479,7 @@ impl Model {
 
     /// Replaces all material records in the first `MTLS` chunk.
     pub fn set_materials(&mut self, materials: &[Material]) -> Result<(), Error> {
-        let expected = self.version().unwrap_or(800);
+        let expected = self.version();
         let mut data = Vec::new();
         for material in materials {
             if material.version != expected {
@@ -696,15 +488,231 @@ impl Model {
                     actual: material.version,
                 });
             }
-            data.extend_from_slice(&material.to_bytes()?);
+            data.extend_from_slice(&material.encode()?);
             if data.len() > u32::MAX as usize {
                 return Err(Error::ChunkTooLarge {
-                    tag: TAG,
+                    tag: Material::TAG,
                     size: data.len(),
                 });
             }
         }
-        self.replace_chunks(TAG, data);
+        self.replace_chunks(Material::TAG, data);
         Ok(())
     }
+}
+
+impl Record for Material {
+    fn decode(bytes: &[u8], version: u32) -> Result<Self, Error> {
+        if sized_records(bytes, Material::TAG)?.len() != 1 {
+            return Err(Error::MalformedRecord {
+                tag: Material::TAG,
+                offset: 0,
+            });
+        }
+        let mut cursor = Cursor::new(bytes, Material::TAG);
+        if cursor.word()? as usize != bytes.len() {
+            return Err(Error::MalformedRecord {
+                tag: Material::TAG,
+                offset: 0,
+            });
+        }
+        let priority_plane = cursor.word()?;
+        let render_mode = cursor.word()?;
+        let shader = if has_shader(version) {
+            Some(cursor.read(80)?.try_into().expect("shader field"))
+        } else {
+            None
+        };
+        cursor.expect_tag(LAYER_TAG)?;
+        let count = cursor.word()? as usize;
+        let records = sized_records(&bytes[cursor.offset..], LAYER_TAG)?;
+        if records.len() != count {
+            return Err(Error::MalformedRecord {
+                tag: Material::TAG,
+                offset: cursor.offset,
+            });
+        }
+        let layers = records
+            .into_iter()
+            .map(|bytes| Layer::decode(bytes, version))
+            .collect::<Result<_, _>>()?;
+        Ok(Self {
+            version,
+            priority_plane,
+            render_mode,
+            shader,
+            layers,
+        })
+    }
+
+    fn encode(&self) -> Result<Vec<u8>, Error> {
+        let mut bytes = vec![0; 4];
+        bytes.extend_from_slice(&self.priority_plane.to_le_bytes());
+        bytes.extend_from_slice(&self.render_mode.to_le_bytes());
+        if has_shader(self.version) {
+            bytes.extend_from_slice(self.shader.as_ref().unwrap_or(&[0; 80]));
+        }
+        bytes.extend_from_slice(b"LAYS");
+        write_count(&mut bytes, self.layers.len(), Material::TAG)?;
+        for layer in &self.layers {
+            if layer.version != self.version {
+                return Err(Error::VersionMismatch {
+                    expected: self.version,
+                    actual: layer.version,
+                });
+            }
+            bytes.extend_from_slice(&layer.encode()?);
+        }
+        finish_record(&mut bytes, Material::TAG)?;
+        Ok(bytes)
+    }
+}
+
+impl Record for Layer {
+    fn decode(bytes: &[u8], version: u32) -> Result<Self, Error> {
+        if sized_records(bytes, LAYER_TAG)?.len() != 1 {
+            return Err(Error::MalformedRecord {
+                tag: LAYER_TAG,
+                offset: 0,
+            });
+        }
+        let mut cursor = Cursor::new(bytes, LAYER_TAG);
+        if cursor.word()? as usize != bytes.len() {
+            return Err(Error::MalformedRecord {
+                tag: LAYER_TAG,
+                offset: 0,
+            });
+        }
+        let filter_mode = cursor.word()?;
+        let shading_flags = cursor.word()?;
+        let texture_id = cursor.word()?;
+        let texture_animation_id = cursor.word()?;
+        let coordinate_id = cursor.word()?;
+        let alpha = cursor.float()?;
+        let emissive_gain = if version >= 900 {
+            Some(cursor.float()?)
+        } else {
+            None
+        };
+        let (fresnel_color, fresnel_opacity, fresnel_team_color) = if version >= 1000 {
+            (
+                Some([cursor.float()?, cursor.float()?, cursor.float()?]),
+                Some(cursor.float()?),
+                Some(cursor.float()?),
+            )
+        } else {
+            (None, None, None)
+        };
+        let shader_type_id = if version >= 1100 {
+            Some(cursor.word()?)
+        } else {
+            None
+        };
+        let mut texture_slots = Vec::new();
+        if version >= 1100 {
+            let count = cursor.word()? as usize;
+            for _ in 0..count {
+                let texture_id = cursor.word()?;
+                let texture_type = cursor.word()?;
+                let track =
+                    if bytes.get(cursor.offset..cursor.offset.saturating_add(4)) == Some(b"KMTF") {
+                        let (track, size) = AnimationTrack::parse(bytes, cursor.offset)?;
+                        cursor.offset += size;
+                        Some(track)
+                    } else {
+                        None
+                    };
+                texture_slots.push(LayerTextureSlot {
+                    texture_id,
+                    texture_type,
+                    track,
+                });
+            }
+        }
+        let mut tracks = Vec::new();
+        while cursor.offset < bytes.len() {
+            let offset = cursor.offset;
+            let (track, size) = AnimationTrack::parse(bytes, offset)?;
+            if !is_layer_track(track.tag) {
+                return Err(Error::MalformedRecord {
+                    tag: LAYER_TAG,
+                    offset,
+                });
+            }
+            tracks.push(track);
+            cursor.offset += size;
+        }
+        Ok(Self {
+            version,
+            filter_mode,
+            shading_flags,
+            texture_id,
+            texture_animation_id,
+            coordinate_id,
+            alpha,
+            emissive_gain,
+            fresnel_color,
+            fresnel_opacity,
+            fresnel_team_color,
+            shader_type_id,
+            texture_slots,
+            tracks,
+        })
+    }
+
+    fn encode(&self) -> Result<Vec<u8>, Error> {
+        let mut bytes = vec![0; 4];
+        for word in [
+            self.filter_mode,
+            self.shading_flags,
+            self.texture_id,
+            self.texture_animation_id,
+            self.coordinate_id,
+        ] {
+            bytes.extend_from_slice(&word.to_le_bytes());
+        }
+        bytes.extend_from_slice(&self.alpha.to_le_bytes());
+        if self.version >= 900 {
+            bytes.extend_from_slice(&self.emissive_gain.unwrap_or_default().to_le_bytes());
+        }
+        if self.version >= 1000 {
+            for value in self.fresnel_color.unwrap_or_default() {
+                bytes.extend_from_slice(&value.to_le_bytes());
+            }
+            bytes.extend_from_slice(&self.fresnel_opacity.unwrap_or_default().to_le_bytes());
+            bytes.extend_from_slice(&self.fresnel_team_color.unwrap_or_default().to_le_bytes());
+        }
+        if self.version >= 1100 {
+            bytes.extend_from_slice(&self.shader_type_id.unwrap_or_default().to_le_bytes());
+            write_count(&mut bytes, self.texture_slots.len(), LAYER_TAG)?;
+            for slot in &self.texture_slots {
+                bytes.extend_from_slice(&slot.texture_id.to_le_bytes());
+                bytes.extend_from_slice(&slot.texture_type.to_le_bytes());
+                if let Some(track) = &slot.track {
+                    if track.tag != *b"KMTF" {
+                        return Err(Error::MalformedRecord {
+                            tag: LAYER_TAG,
+                            offset: bytes.len(),
+                        });
+                    }
+                    bytes.extend_from_slice(&track.encode()?);
+                }
+            }
+        }
+        for track in &self.tracks {
+            if !is_layer_track(track.tag) {
+                return Err(Error::MalformedRecord {
+                    tag: LAYER_TAG,
+                    offset: bytes.len(),
+                });
+            }
+            bytes.extend_from_slice(&track.encode()?);
+        }
+        finish_record(&mut bytes, LAYER_TAG)?;
+        Ok(bytes)
+    }
+}
+
+impl ChunkRecord for Material {
+    const TAG: [u8; 4] = *b"MTLS";
 }

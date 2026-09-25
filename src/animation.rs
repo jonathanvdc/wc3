@@ -1,6 +1,7 @@
 //! Keyframe tracks for node translation, rotation, and scaling.
 
 use crate::Error;
+use crate::Record;
 
 /// Binary value type stored in a keyframe track.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -53,18 +54,6 @@ pub struct AnimationTrack {
 }
 
 impl AnimationTrack {
-    /// Parses exactly one track from a byte slice.
-    pub fn from_bytes(data: &[u8]) -> Result<Self, Error> {
-        let (track, consumed) = Self::parse(data, 0)?;
-        if consumed != data.len() {
-            return Err(Error::MalformedRecord {
-                tag: track.tag,
-                offset: consumed,
-            });
-        }
-        Ok(track)
-    }
-
     /// Returns the number of scalar components in each value, if the tag is known.
     pub fn component_count(&self) -> Option<usize> {
         components(self.tag)
@@ -152,9 +141,35 @@ impl AnimationTrack {
             end - offset,
         ))
     }
+}
 
-    /// Encodes a track after checking its tag, interpolation, and key widths.
-    pub fn to_bytes(&self) -> Result<Vec<u8>, Error> {
+fn components(tag: [u8; 4]) -> Option<usize> {
+    match &tag {
+        b"KGTR" | b"KGSC" | b"KCTR" | b"KTTR" | b"KPPC" | b"KTAT" | b"KTAS" | b"KGAC" | b"KLAC"
+        | b"KLBC" | b"KFC3" | b"KRCO" => Some(3),
+        b"KGRT" | b"KTAR" => Some(4),
+        b"KCRL" | b"KATV" | b"KPPA" | b"KPPE" | b"KPPL" | b"KPPS" | b"KPPV" | b"KPEV" | b"KPEE"
+        | b"KPEG" | b"KPLN" | b"KPLT" | b"KPEL" | b"KPES" | b"KP2V" | b"KP2E" | b"KP2W"
+        | b"KP2N" | b"KP2S" | b"KP2L" | b"KP2G" | b"KP2R" | b"KRVS" | b"KRHA" | b"KRHB"
+        | b"KRAL" | b"KRTX" | b"KGAO" | b"KLAV" | b"KLAI" | b"KLBI" | b"KLAS" | b"KLAE"
+        | b"KMTA" | b"KMTF" | b"KMTE" | b"KFCA" | b"KFTC" => Some(1),
+        _ => None,
+    }
+}
+
+impl Record for AnimationTrack {
+    fn decode(bytes: &[u8], _version: u32) -> Result<Self, Error> {
+        let (track, consumed) = Self::parse(bytes, 0)?;
+        if consumed != bytes.len() {
+            return Err(Error::MalformedRecord {
+                tag: track.tag,
+                offset: consumed,
+            });
+        }
+        Ok(track)
+    }
+
+    fn encode(&self) -> Result<Vec<u8>, Error> {
         let components = components(self.tag).ok_or(Error::MalformedRecord {
             tag: self.tag,
             offset: 0,
@@ -204,19 +219,5 @@ impl AnimationTrack {
             }
         }
         Ok(output)
-    }
-}
-
-fn components(tag: [u8; 4]) -> Option<usize> {
-    match &tag {
-        b"KGTR" | b"KGSC" | b"KCTR" | b"KTTR" | b"KPPC" | b"KTAT" | b"KTAS" | b"KGAC" | b"KLAC"
-        | b"KLBC" | b"KFC3" | b"KRCO" => Some(3),
-        b"KGRT" | b"KTAR" => Some(4),
-        b"KCRL" | b"KATV" | b"KPPA" | b"KPPE" | b"KPPL" | b"KPPS" | b"KPPV" | b"KPEV" | b"KPEE"
-        | b"KPEG" | b"KPLN" | b"KPLT" | b"KPEL" | b"KPES" | b"KP2V" | b"KP2E" | b"KP2W"
-        | b"KP2N" | b"KP2S" | b"KP2L" | b"KP2G" | b"KP2R" | b"KRVS" | b"KRHA" | b"KRHB"
-        | b"KRAL" | b"KRTX" | b"KGAO" | b"KLAV" | b"KLAI" | b"KLBI" | b"KLAS" | b"KLAE"
-        | b"KMTA" | b"KMTF" | b"KMTE" | b"KFCA" | b"KFTC" => Some(1),
-        _ => None,
     }
 }

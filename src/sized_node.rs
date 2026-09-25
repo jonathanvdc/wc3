@@ -63,12 +63,13 @@ pub(crate) fn records(data: &[u8], tag: [u8; 4], fixed_size: usize) -> Result<Ve
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::Record;
 
     #[test]
     fn checks_outer_and_embedded_node_sizes() {
         let node = crate::Node::new("Emitter", 0).unwrap();
         let mut record = vec![0; 4];
-        record.extend_from_slice(&node.to_bytes());
+        record.extend_from_slice(&node.encode().unwrap());
         record.extend_from_slice(&[0; 8]);
         let size = record.len() as u32;
         record[..4].copy_from_slice(&size.to_le_bytes());

@@ -1,3 +1,4 @@
+use wc3_mdx::Record;
 use wc3_mdx::{Chunk, Model};
 
 #[test]
@@ -6,10 +7,10 @@ fn synthetic_versions_and_unknown_chunks_round_trip() {
         let mut model = Model::new(version);
         model.push(Chunk::new(*b"MODL", vec![0; 372]));
         model.push(Chunk::new(*b"FUTR", vec![0, 1, 2, 255]));
-        let bytes = model.to_bytes().unwrap();
-        let parsed = Model::from_bytes(&bytes).unwrap();
-        assert_eq!(parsed.version(), Some(version));
-        assert_eq!(parsed.to_bytes().unwrap(), bytes);
+        let bytes = model.encode().unwrap();
+        let parsed = Model::decode(&bytes, 800).unwrap();
+        assert_eq!(parsed.version(), version);
+        assert_eq!(parsed.encode().unwrap(), bytes);
     }
 }
 
@@ -18,7 +19,7 @@ fn preserves_repeated_chunks_and_order() {
     let mut model = Model::new(800);
     model.push(Chunk::new(*b"ABCD", vec![1]));
     model.push(Chunk::new(*b"ABCD", vec![2]));
-    let parsed = Model::from_bytes(&model.to_bytes().unwrap()).unwrap();
+    let parsed = Model::decode(&model.encode().unwrap(), 800).unwrap();
     assert_eq!(parsed.chunks()[1].data, vec![1]);
     assert_eq!(parsed.chunks()[2].data, vec![2]);
 }
@@ -29,10 +30,10 @@ fn typed_setter_preserves_repeated_chunk_boundaries() {
     model.push(Chunk::new(*b"GLBS", 100u32.to_le_bytes().to_vec()));
     model.push(Chunk::new(*b"TEST", vec![9]));
     model.push(Chunk::new(*b"GLBS", 200u32.to_le_bytes().to_vec()));
-    let original = model.to_bytes().unwrap();
+    let original = model.encode().unwrap();
     let mut durations = model.global_sequences().unwrap();
     model.set_global_sequences(&durations).unwrap();
-    assert_eq!(model.to_bytes().unwrap(), original);
+    assert_eq!(model.encode().unwrap(), original);
     durations[1] = 300;
     model.set_global_sequences(&durations).unwrap();
     assert_eq!(model.chunks()[1].data, 100u32.to_le_bytes());
@@ -53,9 +54,9 @@ fn local_files_round_trip_when_available() {
                 pending.push(path);
             } else if path.extension().is_some_and(|extension| extension == "mdx") {
                 let bytes = std::fs::read(&path).unwrap();
-                let model = Model::from_bytes(&bytes)
+                let model = Model::decode(&bytes, 800)
                     .unwrap_or_else(|error| panic!("{}: {error}", path.display()));
-                assert_eq!(model.to_bytes().unwrap(), bytes, "{}", path.display());
+                assert_eq!(model.encode().unwrap(), bytes, "{}", path.display());
             }
         }
     }
@@ -78,7 +79,7 @@ fn typed_accessors_preserve_local_files_when_available() {
                 continue;
             }
             let bytes = std::fs::read(&path).unwrap();
-            let mut model = Model::from_bytes(&bytes).unwrap();
+            let mut model = Model::decode(&bytes, 800).unwrap();
             if let Some(info) = model.model_info().unwrap() {
                 model.set_model_info(&info);
             }
@@ -223,7 +224,7 @@ fn typed_accessors_preserve_local_files_when_available() {
                 let pose = model.bind_poses().unwrap().remove(0);
                 model.set_bind_pose(&pose);
             }
-            assert_eq!(model.to_bytes().unwrap(), bytes, "{}", path.display());
+            assert_eq!(model.encode().unwrap(), bytes, "{}", path.display());
         }
     }
 }

@@ -18,15 +18,15 @@ coverage across the entire game collection has not yet been verified.
 ## Rust API
 
 ```rust
-use wc3_mdx::{Chunk, Model, ModelInfo};
+use wc3_mdx::{Record, Chunk, Model, ModelInfo};
 
 let mut model = Model::new(800);
 model.set_model_info(&ModelInfo::new("Example")?);
 model.push(Chunk::new(*b"TEST", vec![1, 2, 3]));
-let encoded = model.to_bytes()?;
-let decoded = Model::from_bytes(&encoded)?;
+let encoded = model.encode()?;
+let decoded = Model::decode_latest(&encoded)?;
 decoded.validate()?;
-assert_eq!(decoded.version(), Some(800));
+assert_eq!(decoded.version(), 800);
 let info = decoded.model_info()?.unwrap();
 assert_eq!(info.name(), "Example");
 # Ok::<(), wc3_mdx::Error>(())
@@ -44,6 +44,6 @@ built for a different version.
 
 Geosets and variable-length records such as materials, nodes, lights,
 cameras, emitters, and bind poses store decoded sections. Track accessors borrow parsed
-tracks, and `to_bytes()` reconstructs records while preserving field bits,
+tracks, and `encode()` reconstructs records while preserving field bits,
 fixed-width names, and optional section order. Geoset accessors such as
 `vertices()` borrow decoded data, and `vertices_mut()` supports bulk edits.

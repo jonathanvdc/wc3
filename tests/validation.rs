@@ -1,3 +1,4 @@
+use wc3_mdx::Record;
 use wc3_mdx::{Chunk, Error, Geoset, Material, Model, Node, RibbonEmitter};
 
 #[test]
@@ -13,16 +14,13 @@ fn validates_synthetic_known_chunks_and_preserves_unknown() {
         .unwrap();
     model.push(Chunk::new(*b"FUTR", vec![1, 2, 3]));
     model.validate().unwrap();
-    let bytes = model.to_bytes().unwrap();
-    assert_eq!(
-        Model::from_bytes(&bytes).unwrap().to_bytes().unwrap(),
-        bytes
-    );
+    let bytes = model.encode().unwrap();
+    assert_eq!(Model::decode(&bytes, 800).unwrap().encode().unwrap(), bytes);
 }
 
 #[test]
 fn empty_mdlx_is_valid() {
-    Model::from_bytes(b"MDLX").unwrap().validate().unwrap();
+    Model::decode(b"MDLX", 800).unwrap().validate().unwrap();
 }
 
 #[test]
@@ -30,7 +28,7 @@ fn rejects_malformed_known_track() {
     let mut model = Model::new(800);
     let mut ribbon = RibbonEmitter::new(Node::new("Trail", 1).unwrap())
         .unwrap()
-        .to_bytes()
+        .encode()
         .unwrap()
         .to_vec();
     ribbon.extend_from_slice(b"KRVS");
@@ -42,26 +40,27 @@ fn rejects_malformed_known_track() {
 
 #[test]
 fn rejects_short_repeated_version_chunks_and_repairs_mutated_first_version() {
-    let mut bytes = Model::new(800).to_bytes().unwrap();
+    let mut bytes = Model::new(800).encode().unwrap();
     bytes.extend_from_slice(b"VERS");
     bytes.extend_from_slice(&2u32.to_le_bytes());
     bytes.extend_from_slice(&[1, 2]);
-    assert_eq!(Model::from_bytes(&bytes), Err(Error::InvalidVersionChunk));
+    assert_eq!(Model::decode(&bytes, 800), Err(Error::InvalidVersionChunk));
 
     let mut model = Model::new(800);
     model.chunks_mut()[0].data.clear();
-    assert_eq!(model.version(), None);
+    assert_eq!(model.stored_version(), None);
+    assert_eq!(model.version(), 800);
     assert_eq!(model.validate(), Err(Error::InvalidVersionChunk));
     model.set_version(1800);
-    assert_eq!(model.version(), Some(1800));
+    assert_eq!(model.version(), 1800);
     model.validate().unwrap();
 }
 
 #[test]
 fn rejects_layer_shorter_than_its_versioned_header() {
     let mut material = Material::new(1800);
-    let layer = wc3_mdx::Layer::new(800).to_bytes().unwrap();
-    assert!(wc3_mdx::Layer::from_bytes(1800, &layer).is_err());
+    let layer = wc3_mdx::Layer::new(800).encode().unwrap();
+    assert!(wc3_mdx::Layer::decode(&layer, 1800).is_err());
     assert_eq!(
         material.set_layers(&[wc3_mdx::Layer::new(800)]),
         Err(Error::VersionMismatch {
@@ -112,7 +111,7 @@ fn validates_local_models_when_available() {
                 pending.push(path);
             } else if path.extension().is_some_and(|extension| extension == "mdx") {
                 let bytes = std::fs::read(&path).unwrap();
-                let model = Model::from_bytes(&bytes).unwrap();
+                let model = Model::decode(&bytes, 800).unwrap();
                 model
                     .validate()
                     .unwrap_or_else(|error| panic!("{}: {error}", path.display()));

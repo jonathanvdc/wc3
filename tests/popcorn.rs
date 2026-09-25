@@ -1,3 +1,4 @@
+use wc3_mdx::Record;
 use wc3_mdx::{Model, Node, PopcornEmitter};
 
 #[test]
@@ -12,7 +13,7 @@ fn popcorn_fixed_fields_round_trip() {
     emitter.set_replaceable_id(1);
     let mut model = Model::new(1800);
     model.set_popcorn_emitters(&[emitter]).unwrap();
-    let parsed = Model::from_bytes(&model.to_bytes().unwrap()).unwrap();
+    let parsed = Model::decode(&model.encode().unwrap(), 800).unwrap();
     let emitter = &parsed.popcorn_emitters().unwrap()[0];
     assert_eq!(emitter.node().name(), "Spark");
     assert_eq!(emitter.path(), "spark.mdx");
@@ -38,14 +39,14 @@ fn local_popcorn_emitters_round_trip_when_available() {
                 pending.push(path);
             } else if path.extension().is_some_and(|extension| extension == "mdx") {
                 let bytes = std::fs::read(&path).unwrap();
-                let mut model = Model::from_bytes(&bytes).unwrap();
+                let mut model = Model::decode(&bytes, 800).unwrap();
                 if model.chunk(*b"CORN").is_some() {
                     let emitters = model.popcorn_emitters().unwrap();
                     for emitter in &emitters {
                         emitter.tracks();
                     }
                     model.set_popcorn_emitters(&emitters).unwrap();
-                    assert_eq!(model.to_bytes().unwrap(), bytes);
+                    assert_eq!(model.encode().unwrap(), bytes);
                 }
             }
         }

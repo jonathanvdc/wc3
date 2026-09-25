@@ -13,6 +13,7 @@ impl Model {
         {
             return Err(Error::InvalidVersionChunk);
         }
+        self.model_info()?;
         for chunk in self.chunks().iter().filter(|chunk| chunk.tag == *b"MODL") {
             ModelInfo::parse(&chunk.data)?;
         }

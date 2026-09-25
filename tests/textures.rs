@@ -1,3 +1,4 @@
+use wc3_mdx::Record;
 use wc3_mdx::{Chunk, Error, Model, Texture, TextureFlags};
 
 #[test]
@@ -8,7 +9,7 @@ fn texture_fields_round_trip() {
     let mut model = Model::new(1800);
     model.set_textures(&[texture]).unwrap();
 
-    let decoded = Model::from_bytes(&model.to_bytes().unwrap()).unwrap();
+    let decoded = Model::decode(&model.encode().unwrap(), 800).unwrap();
     let texture = &decoded.textures().unwrap()[0];
     assert_eq!(texture.path(), "Textures\\Footman.blp");
     assert_eq!(texture.replaceable_id(), 1);

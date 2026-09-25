@@ -1,3 +1,4 @@
+use wc3_mdx::Record;
 use wc3_mdx::{AnimationTrack, Keyframe, Model, Node, ParticleEmitter};
 
 #[test]
@@ -23,7 +24,7 @@ fn classic_particle_emitter_round_trip() {
     emitter.set_tracks(std::slice::from_ref(&track)).unwrap();
     let mut model = Model::new(800);
     model.set_particle_emitters(&[emitter]).unwrap();
-    let parsed = Model::from_bytes(&model.to_bytes().unwrap()).unwrap();
+    let parsed = Model::decode(&model.encode().unwrap(), 800).unwrap();
     let emitter = &parsed.particle_emitters().unwrap()[0];
     assert_eq!(emitter.node().name(), "Smoke");
     assert_eq!(emitter.path(), "smoke.mdl");

@@ -1,3 +1,4 @@
+use wc3_mdx::Record;
 use wc3_mdx::{Chunk, Error, Model, Sequence, SequenceFlags};
 
 #[test]
@@ -12,7 +13,7 @@ fn sequence_fields_round_trip() {
     stand.set_maximum_extent([2.0, 3.0, 4.0]);
     let mut model = Model::new(800);
     model.set_sequences(&[stand]).unwrap();
-    let decoded = Model::from_bytes(&model.to_bytes().unwrap()).unwrap();
+    let decoded = Model::decode(&model.encode().unwrap(), 800).unwrap();
     let sequence = &decoded.sequences().unwrap()[0];
     assert_eq!(sequence.name(), "Stand");
     assert_eq!(sequence.interval(), [0, 1000]);

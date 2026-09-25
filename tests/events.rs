@@ -1,3 +1,4 @@
+use wc3_mdx::Record;
 use wc3_mdx::{EventObject, Model, Node};
 
 #[test]
@@ -8,7 +9,7 @@ fn event_object_round_trip() {
     event.set_frames(&[100, 200, 300]).unwrap();
     let mut model = Model::new(800);
     model.set_event_objects(&[event]).unwrap();
-    let parsed = Model::from_bytes(&model.to_bytes().unwrap()).unwrap();
+    let parsed = Model::decode(&model.encode().unwrap(), 800).unwrap();
     let event = &parsed.event_objects().unwrap()[0];
     assert_eq!(event.node().name(), "Sound");
     assert_eq!(event.global_sequence_id(), 3);
@@ -28,11 +29,11 @@ fn local_event_objects_round_trip_when_available() {
                 pending.push(path);
             } else if path.extension().is_some_and(|extension| extension == "mdx") {
                 let bytes = std::fs::read(&path).unwrap();
-                let mut model = Model::from_bytes(&bytes).unwrap();
+                let mut model = Model::decode(&bytes, 800).unwrap();
                 if model.chunk(*b"EVTS").is_some() {
                     let events = model.event_objects().unwrap();
                     model.set_event_objects(&events).unwrap();
-                    assert_eq!(model.to_bytes().unwrap(), bytes);
+                    assert_eq!(model.encode().unwrap(), bytes);
                 }
             }
         }

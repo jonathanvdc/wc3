@@ -1,11 +1,11 @@
 //! Classic particle emitters stored in `PREM` chunks.
 
+use crate::Record;
 use std::borrow::Cow;
 
 use crate::utils::field;
-use crate::{sized_node, AnimationTrack, Error, Model, Node};
+use crate::{sized_node, AnimationTrack, ChunkRecord, Error, Model, Node};
 
-const TAG: [u8; 4] = *b"PREM";
 const FIXED_SIZE: usize = 284;
 const PATH_SIZE: usize = 256;
 
@@ -27,52 +27,6 @@ impl ParticleEmitter {
         };
         emitter.set_path(path)?;
         Ok(emitter)
-    }
-
-    /// Wraps one inclusive-size emitter record.
-    pub fn from_bytes(bytes: &[u8]) -> Result<Self, Error> {
-        let layout = sized_node::layout(bytes, TAG, FIXED_SIZE)?;
-        let node = Node::from_bytes(&bytes[4..layout.fixed_start])?;
-        let fixed = bytes[layout.fixed_start..layout.track_start]
-            .try_into()
-            .expect("validated fixed fields");
-        let mut tracks = Vec::new();
-        let mut offset = layout.track_start;
-        while offset < bytes.len() {
-            let (track, consumed) = AnimationTrack::parse(bytes, offset)?;
-            if !is_track(track.tag) {
-                return Err(Error::MalformedRecord { tag: TAG, offset });
-            }
-            tracks.push(track);
-            offset += consumed;
-        }
-        Ok(Self {
-            node,
-            fixed,
-            tracks,
-        })
-    }
-
-    /// Serializes the complete record.
-    pub fn to_bytes(&self) -> Result<Vec<u8>, Error> {
-        let mut bytes = vec![0; 4];
-        bytes.extend_from_slice(&self.node.to_bytes());
-        bytes.extend_from_slice(&self.fixed);
-        for track in &self.tracks {
-            if !is_track(track.tag) {
-                return Err(Error::MalformedRecord {
-                    tag: TAG,
-                    offset: bytes.len(),
-                });
-            }
-            bytes.extend_from_slice(&track.to_bytes()?);
-        }
-        let size = u32::try_from(bytes.len()).map_err(|_| Error::ChunkTooLarge {
-            tag: TAG,
-            size: bytes.len(),
-        })?;
-        bytes[..4].copy_from_slice(&size.to_le_bytes());
-        Ok(bytes)
     }
 
     /// Borrows the shared node.
@@ -159,11 +113,11 @@ impl ParticleEmitter {
         for track in tracks {
             if !is_track(track.tag) {
                 return Err(Error::MalformedRecord {
-                    tag: TAG,
+                    tag: ParticleEmitter::TAG,
                     offset: 0,
                 });
             }
-            track.to_bytes()?;
+            track.encode()?;
         }
         self.tracks = tracks.to_vec();
         Ok(())
@@ -181,11 +135,15 @@ impl Model {
     /// Decodes all `PREM` records in file order.
     pub fn particle_emitters(&self) -> Result<Vec<ParticleEmitter>, Error> {
         let mut result = Vec::new();
-        for chunk in self.chunks().iter().filter(|chunk| chunk.tag == TAG) {
+        for chunk in self
+            .chunks()
+            .iter()
+            .filter(|chunk| chunk.tag == ParticleEmitter::TAG)
+        {
             result.extend(
-                sized_node::records(&chunk.data, TAG, FIXED_SIZE)?
+                sized_node::records(&chunk.data, ParticleEmitter::TAG, FIXED_SIZE)?
                     .into_iter()
-                    .map(ParticleEmitter::from_bytes)
+                    .map(|bytes| ParticleEmitter::decode(bytes, 0))
                     .collect::<Result<Vec<_>, _>>()?,
             );
         }
@@ -195,18 +153,71 @@ impl Model {
     /// Replaces particle emitters in the first `PREM` chunk.
     pub fn set_particle_emitters(&mut self, emitters: &[ParticleEmitter]) -> Result<(), Error> {
         let size = emitters.iter().try_fold(0usize, |sum, emitter| {
-            sum.checked_add(emitter.to_bytes()?.len())
+            sum.checked_add(emitter.encode()?.len())
                 .filter(|&size| size <= u32::MAX as usize)
                 .ok_or(Error::ChunkTooLarge {
-                    tag: TAG,
+                    tag: ParticleEmitter::TAG,
                     size: usize::MAX,
                 })
         })?;
         let mut data = Vec::with_capacity(size);
         for emitter in emitters {
-            data.extend_from_slice(&emitter.to_bytes()?);
+            data.extend_from_slice(&emitter.encode()?);
         }
-        self.replace_chunks(TAG, data);
+        self.replace_chunks(ParticleEmitter::TAG, data);
         Ok(())
     }
+}
+
+impl Record for ParticleEmitter {
+    fn decode(bytes: &[u8], _version: u32) -> Result<Self, Error> {
+        let layout = sized_node::layout(bytes, ParticleEmitter::TAG, FIXED_SIZE)?;
+        let node = Node::decode(&bytes[4..layout.fixed_start], 0)?;
+        let fixed = bytes[layout.fixed_start..layout.track_start]
+            .try_into()
+            .expect("validated fixed fields");
+        let mut tracks = Vec::new();
+        let mut offset = layout.track_start;
+        while offset < bytes.len() {
+            let (track, consumed) = AnimationTrack::parse(bytes, offset)?;
+            if !is_track(track.tag) {
+                return Err(Error::MalformedRecord {
+                    tag: ParticleEmitter::TAG,
+                    offset,
+                });
+            }
+            tracks.push(track);
+            offset += consumed;
+        }
+        Ok(Self {
+            node,
+            fixed,
+            tracks,
+        })
+    }
+
+    fn encode(&self) -> Result<Vec<u8>, Error> {
+        let mut bytes = vec![0; 4];
+        bytes.extend_from_slice(&self.node.encode()?);
+        bytes.extend_from_slice(&self.fixed);
+        for track in &self.tracks {
+            if !is_track(track.tag) {
+                return Err(Error::MalformedRecord {
+                    tag: ParticleEmitter::TAG,
+                    offset: bytes.len(),
+                });
+            }
+            bytes.extend_from_slice(&track.encode()?);
+        }
+        let size = u32::try_from(bytes.len()).map_err(|_| Error::ChunkTooLarge {
+            tag: ParticleEmitter::TAG,
+            size: bytes.len(),
+        })?;
+        bytes[..4].copy_from_slice(&size.to_le_bytes());
+        Ok(bytes)
+    }
+}
+
+impl ChunkRecord for ParticleEmitter {
+    const TAG: [u8; 4] = *b"PREM";
 }

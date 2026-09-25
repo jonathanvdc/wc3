@@ -1,11 +1,11 @@
 //! Reforged face-animation references in `FAFX` chunks.
 
+use crate::Record;
 use std::borrow::Cow;
 
 use crate::utils::field;
-use crate::{Error, Model};
+use crate::{ChunkRecord, Error, Model};
 
-const TAG: [u8; 4] = *b"FAFX";
 const SIZE: usize = 340;
 const NAME_SIZE: usize = 80;
 const PATH_SIZE: usize = 260;
@@ -23,16 +23,6 @@ impl FaceFx {
         entry.set_name(name)?;
         entry.set_path(path)?;
         Ok(entry)
-    }
-
-    /// Wraps one fixed-size record.
-    pub fn from_bytes(bytes: &[u8]) -> Result<Self, Error> {
-        let bytes: [u8; SIZE] = bytes.try_into().map_err(|_| Error::MalformedChunk {
-            tag: TAG,
-            size: bytes.len(),
-            expected: SIZE,
-        })?;
-        Ok(Self { bytes })
     }
 
     /// Returns the original record bytes.
@@ -65,10 +55,14 @@ impl Model {
     /// Decodes every `FAFX` record in file order.
     pub fn face_fx(&self) -> Result<Vec<FaceFx>, Error> {
         let mut entries = Vec::new();
-        for chunk in self.chunks().iter().filter(|chunk| chunk.tag == TAG) {
+        for chunk in self
+            .chunks()
+            .iter()
+            .filter(|chunk| chunk.tag == FaceFx::TAG)
+        {
             if chunk.data.len() % SIZE != 0 {
                 return Err(Error::MalformedChunk {
-                    tag: TAG,
+                    tag: FaceFx::TAG,
                     size: chunk.data.len(),
                     expected: SIZE,
                 });
@@ -77,7 +71,7 @@ impl Model {
                 chunk
                     .data
                     .chunks_exact(SIZE)
-                    .map(FaceFx::from_bytes)
+                    .map(|bytes| FaceFx::decode(bytes, 0))
                     .collect::<Result<Vec<_>, _>>()?,
             );
         }
@@ -91,14 +85,33 @@ impl Model {
             .checked_mul(SIZE)
             .filter(|&size| size <= u32::MAX as usize)
             .ok_or(Error::ChunkTooLarge {
-                tag: TAG,
+                tag: FaceFx::TAG,
                 size: usize::MAX,
             })?;
         let mut data = Vec::with_capacity(size);
         for entry in entries {
             data.extend_from_slice(entry.as_bytes());
         }
-        self.replace_chunks(TAG, data);
+        self.replace_chunks(FaceFx::TAG, data);
         Ok(())
     }
+}
+
+impl Record for FaceFx {
+    fn decode(bytes: &[u8], _version: u32) -> Result<Self, Error> {
+        let bytes: [u8; SIZE] = bytes.try_into().map_err(|_| Error::MalformedChunk {
+            tag: FaceFx::TAG,
+            size: bytes.len(),
+            expected: SIZE,
+        })?;
+        Ok(Self { bytes })
+    }
+
+    fn encode(&self) -> Result<Vec<u8>, Error> {
+        Ok(self.bytes.to_vec())
+    }
+}
+
+impl ChunkRecord for FaceFx {
+    const TAG: [u8; 4] = *b"FAFX";
 }

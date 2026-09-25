@@ -92,9 +92,9 @@ impl Model {
     }
 
     pub(crate) fn replace_chunks(&mut self, tag: [u8; 4], data: Vec<u8>) {
-        if let Some(first) = self.chunks.iter().position(|chunk| chunk.tag == tag) {
+        if let Some(first) = self.chunks_mut().iter().position(|chunk| chunk.tag == tag) {
             let lengths: Vec<_> = self
-                .chunks
+                .chunks_mut()
                 .iter()
                 .filter(|chunk| chunk.tag == tag)
                 .map(|chunk| chunk.data.len())
@@ -105,16 +105,20 @@ impl Model {
                 == Some(data.len())
             {
                 let mut offset = 0;
-                for chunk in self.chunks.iter_mut().filter(|chunk| chunk.tag == tag) {
+                for chunk in self
+                    .chunks_mut()
+                    .iter_mut()
+                    .filter(|chunk| chunk.tag == tag)
+                {
                     let end = offset + chunk.data.len();
                     chunk.data = data[offset..end].to_vec();
                     offset = end;
                 }
                 return;
             }
-            self.chunks[first].data = data;
+            self.chunks_mut()[first].data = data;
             let mut seen = false;
-            self.chunks.retain(|chunk| {
+            self.chunks_mut().retain(|chunk| {
                 if chunk.tag != tag {
                     return true;
                 }

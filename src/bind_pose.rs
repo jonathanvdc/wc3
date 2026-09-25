@@ -1,8 +1,8 @@
 //! Reforged bind-pose matrices in `BPOS` chunks.
 
-use crate::{Chunk, Error, Model};
+use crate::Record;
+use crate::{Chunk, ChunkRecord, Error, Model};
 
-const TAG: [u8; 4] = *b"BPOS";
 const MATRIX_SIZE: usize = 48;
 
 /// A `BPOS` payload containing decoded 3-by-4 floating-point matrices.
@@ -17,72 +17,8 @@ impl BindPose {
         let pose = Self {
             matrices: matrices.to_vec(),
         };
-        pose.to_bytes()?;
+        pose.encode()?;
         Ok(pose)
-    }
-
-    /// Parses one `BPOS` payload after checking its matrix count.
-    pub fn from_bytes(bytes: &[u8]) -> Result<Self, Error> {
-        let count_bytes = bytes.get(..4).ok_or(Error::MalformedChunk {
-            tag: TAG,
-            size: bytes.len(),
-            expected: 4,
-        })?;
-        let count = u32::from_le_bytes(count_bytes.try_into().expect("four-byte count")) as usize;
-        let expected = count
-            .checked_mul(MATRIX_SIZE)
-            .and_then(|n| n.checked_add(4))
-            .ok_or(Error::MalformedRecord {
-                tag: TAG,
-                offset: 0,
-            })?;
-        if bytes.len() != expected {
-            return Err(Error::MalformedChunk {
-                tag: TAG,
-                size: bytes.len(),
-                expected,
-            });
-        }
-        let matrices = bytes[4..]
-            .chunks_exact(MATRIX_SIZE)
-            .map(|matrix| {
-                std::array::from_fn(|coordinate| {
-                    let offset = coordinate * 4;
-                    f32::from_le_bytes(
-                        matrix[offset..offset + 4]
-                            .try_into()
-                            .expect("four-byte field"),
-                    )
-                })
-            })
-            .collect();
-        Ok(Self { matrices })
-    }
-
-    /// Serializes the `BPOS` payload.
-    pub fn to_bytes(&self) -> Result<Vec<u8>, Error> {
-        let count = u32::try_from(self.matrices.len()).map_err(|_| Error::ChunkTooLarge {
-            tag: TAG,
-            size: self.matrices.len(),
-        })?;
-        let size = self
-            .matrices
-            .len()
-            .checked_mul(MATRIX_SIZE)
-            .and_then(|n| n.checked_add(4))
-            .filter(|&size| size <= u32::MAX as usize)
-            .ok_or(Error::ChunkTooLarge {
-                tag: TAG,
-                size: usize::MAX,
-            })?;
-        let mut bytes = Vec::with_capacity(size);
-        bytes.extend_from_slice(&count.to_le_bytes());
-        for matrix in &self.matrices {
-            for value in matrix {
-                bytes.extend_from_slice(&value.to_le_bytes());
-            }
-        }
-        Ok(bytes)
     }
 
     /// Returns the number of matrices.
@@ -126,21 +62,89 @@ impl Model {
     pub fn bind_poses(&self) -> Result<Vec<BindPose>, Error> {
         self.chunks()
             .iter()
-            .filter(|chunk| chunk.tag == TAG)
-            .map(|chunk| BindPose::from_bytes(&chunk.data))
+            .filter(|chunk| chunk.tag == BindPose::TAG)
+            .map(|chunk| BindPose::decode(&chunk.data, 0))
             .collect()
     }
 
     /// Replaces the first `BPOS` chunk or appends one. Other `BPOS` chunks
     /// remain intact.
     pub fn set_bind_pose(&mut self, pose: &BindPose) {
-        if let Some(chunk) = self.chunk_mut(TAG) {
-            chunk.data = pose.to_bytes().expect("validated bind pose");
+        if let Some(chunk) = self.chunk_mut(BindPose::TAG) {
+            chunk.data = pose.encode().expect("validated bind pose");
         } else {
             self.push(Chunk::new(
-                TAG,
-                pose.to_bytes().expect("validated bind pose"),
+                BindPose::TAG,
+                pose.encode().expect("validated bind pose"),
             ));
         }
     }
+}
+
+impl Record for BindPose {
+    fn decode(bytes: &[u8], _version: u32) -> Result<Self, Error> {
+        let count_bytes = bytes.get(..4).ok_or(Error::MalformedChunk {
+            tag: BindPose::TAG,
+            size: bytes.len(),
+            expected: 4,
+        })?;
+        let count = u32::from_le_bytes(count_bytes.try_into().expect("four-byte count")) as usize;
+        let expected = count
+            .checked_mul(MATRIX_SIZE)
+            .and_then(|n| n.checked_add(4))
+            .ok_or(Error::MalformedRecord {
+                tag: BindPose::TAG,
+                offset: 0,
+            })?;
+        if bytes.len() != expected {
+            return Err(Error::MalformedChunk {
+                tag: BindPose::TAG,
+                size: bytes.len(),
+                expected,
+            });
+        }
+        let matrices = bytes[4..]
+            .chunks_exact(MATRIX_SIZE)
+            .map(|matrix| {
+                std::array::from_fn(|coordinate| {
+                    let offset = coordinate * 4;
+                    f32::from_le_bytes(
+                        matrix[offset..offset + 4]
+                            .try_into()
+                            .expect("four-byte field"),
+                    )
+                })
+            })
+            .collect();
+        Ok(Self { matrices })
+    }
+
+    fn encode(&self) -> Result<Vec<u8>, Error> {
+        let count = u32::try_from(self.matrices.len()).map_err(|_| Error::ChunkTooLarge {
+            tag: BindPose::TAG,
+            size: self.matrices.len(),
+        })?;
+        let size = self
+            .matrices
+            .len()
+            .checked_mul(MATRIX_SIZE)
+            .and_then(|n| n.checked_add(4))
+            .filter(|&size| size <= u32::MAX as usize)
+            .ok_or(Error::ChunkTooLarge {
+                tag: BindPose::TAG,
+                size: usize::MAX,
+            })?;
+        let mut bytes = Vec::with_capacity(size);
+        bytes.extend_from_slice(&count.to_le_bytes());
+        for matrix in &self.matrices {
+            for value in matrix {
+                bytes.extend_from_slice(&value.to_le_bytes());
+            }
+        }
+        Ok(bytes)
+    }
+}
+
+impl ChunkRecord for BindPose {
+    const TAG: [u8; 4] = *b"BPOS";
 }

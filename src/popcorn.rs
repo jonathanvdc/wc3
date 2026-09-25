@@ -1,11 +1,11 @@
 //! Reforged popcorn particle emitters in `CORN` chunks.
 
+use crate::Record;
 use std::borrow::Cow;
 
 use crate::utils::field;
-use crate::{AnimationTrack, Error, Model, Node};
+use crate::{AnimationTrack, ChunkRecord, Error, Model, Node};
 
-const TAG: [u8; 4] = *b"CORN";
 const PATH_SIZE: usize = 260;
 const FIXED_SIZE: usize = 32 + PATH_SIZE * 2;
 
@@ -41,93 +41,8 @@ impl PopcornEmitter {
         };
         emitter.set_path(path)?;
         emitter.set_visibility_guide(visibility_guide)?;
-        emitter.to_bytes()?;
+        emitter.encode()?;
         Ok(emitter)
-    }
-
-    /// Parses one inclusive-size emitter record.
-    pub fn from_bytes(bytes: &[u8]) -> Result<Self, Error> {
-        if record_end(bytes, 0)? != bytes.len() {
-            return Err(Error::MalformedRecord {
-                tag: TAG,
-                offset: 0,
-            });
-        }
-        let node_size =
-            u32::from_le_bytes(bytes[4..8].try_into().expect("validated node size")) as usize;
-        let fixed = 4 + node_size;
-        let node = Node::from_bytes(&bytes[4..fixed])?;
-        let word = |offset| {
-            u32::from_le_bytes(
-                bytes[fixed + offset..fixed + offset + 4]
-                    .try_into()
-                    .expect("validated field"),
-            )
-        };
-        let float = |offset| f32::from_bits(word(offset));
-        let path = bytes[fixed + 32..fixed + 32 + PATH_SIZE]
-            .try_into()
-            .expect("validated path");
-        let visibility_guide = bytes[fixed + 32 + PATH_SIZE..fixed + FIXED_SIZE]
-            .try_into()
-            .expect("validated guide");
-        let mut tracks = Vec::new();
-        let mut offset = fixed + FIXED_SIZE;
-        while offset < bytes.len() {
-            let (track, consumed) = AnimationTrack::parse(bytes, offset)?;
-            if !is_track_tag(track.tag) {
-                return Err(Error::MalformedRecord { tag: TAG, offset });
-            }
-            tracks.push(track);
-            offset += consumed;
-        }
-        Ok(Self {
-            node,
-            life_span: float(0),
-            emission_rate: float(4),
-            speed: float(8),
-            color: [float(12), float(16), float(20)],
-            alpha: float(24),
-            replaceable_id: word(28),
-            path,
-            visibility_guide,
-            tracks,
-        })
-    }
-
-    /// Serializes the inclusive-size emitter record.
-    pub fn to_bytes(&self) -> Result<Vec<u8>, Error> {
-        let mut bytes = vec![0; 4];
-        bytes.extend_from_slice(&self.node.to_bytes());
-        for value in [
-            self.life_span,
-            self.emission_rate,
-            self.speed,
-            self.color[0],
-            self.color[1],
-            self.color[2],
-            self.alpha,
-        ] {
-            bytes.extend_from_slice(&value.to_le_bytes());
-        }
-        bytes.extend_from_slice(&self.replaceable_id.to_le_bytes());
-        bytes.extend_from_slice(&self.path);
-        bytes.extend_from_slice(&self.visibility_guide);
-        for track in &self.tracks {
-            if !is_track_tag(track.tag) {
-                return Err(Error::MalformedRecord {
-                    tag: TAG,
-                    offset: bytes.len(),
-                });
-            }
-            bytes.extend_from_slice(&track.to_bytes()?);
-        }
-        let size = u32::try_from(bytes.len()).map_err(|_| Error::ChunkTooLarge {
-            tag: TAG,
-            size: bytes.len(),
-        })?;
-        bytes[..4].copy_from_slice(&size.to_le_bytes());
-        Ok(bytes)
     }
 
     /// Borrows the shared node.
@@ -211,11 +126,11 @@ impl PopcornEmitter {
         for track in tracks {
             if !is_track_tag(track.tag) {
                 return Err(Error::MalformedRecord {
-                    tag: TAG,
+                    tag: PopcornEmitter::TAG,
                     offset: 0,
                 });
             }
-            track.to_bytes()?;
+            track.encode()?;
         }
         self.tracks = tracks.to_vec();
         Ok(())
@@ -232,17 +147,23 @@ fn is_track_tag(tag: [u8; 4]) -> bool {
 fn record_end(data: &[u8], offset: usize) -> Result<usize, Error> {
     let size_bytes = data
         .get(offset..offset.saturating_add(4))
-        .ok_or(Error::MalformedRecord { tag: TAG, offset })?;
+        .ok_or(Error::MalformedRecord {
+            tag: PopcornEmitter::TAG,
+            offset,
+        })?;
     let size = u32::from_le_bytes(size_bytes.try_into().expect("four-byte size")) as usize;
     let end = offset
         .checked_add(size)
         .filter(|&end| end <= data.len())
-        .ok_or(Error::MalformedRecord { tag: TAG, offset })?;
+        .ok_or(Error::MalformedRecord {
+            tag: PopcornEmitter::TAG,
+            offset,
+        })?;
     let node_start = offset + 4;
     let node_size_bytes =
         data.get(node_start..node_start.saturating_add(4))
             .ok_or(Error::MalformedRecord {
-                tag: TAG,
+                tag: PopcornEmitter::TAG,
                 offset: node_start,
             })?;
     let node_size =
@@ -251,16 +172,16 @@ fn record_end(data: &[u8], offset: usize) -> Result<usize, Error> {
         .checked_add(node_size)
         .filter(|&node_end| node_end <= end)
         .ok_or(Error::MalformedRecord {
-            tag: TAG,
+            tag: PopcornEmitter::TAG,
             offset: node_start,
         })?;
-    Node::from_bytes(&data[node_start..node_end])?;
+    Node::decode(&data[node_start..node_end], 0)?;
     if node_end
         .checked_add(FIXED_SIZE)
         .map_or(true, |required| required > end)
     {
         return Err(Error::MalformedRecord {
-            tag: TAG,
+            tag: PopcornEmitter::TAG,
             offset: node_end,
         });
     }
@@ -271,11 +192,15 @@ impl Model {
     /// Decodes all popcorn emitters in `CORN` chunks.
     pub fn popcorn_emitters(&self) -> Result<Vec<PopcornEmitter>, Error> {
         let mut emitters = Vec::new();
-        for chunk in self.chunks().iter().filter(|chunk| chunk.tag == TAG) {
+        for chunk in self
+            .chunks()
+            .iter()
+            .filter(|chunk| chunk.tag == PopcornEmitter::TAG)
+        {
             let mut offset = 0;
             while offset < chunk.data.len() {
                 let end = record_end(&chunk.data, offset)?;
-                emitters.push(PopcornEmitter::from_bytes(&chunk.data[offset..end])?);
+                emitters.push(PopcornEmitter::decode(&chunk.data[offset..end], 0)?);
                 offset = end;
             }
         }
@@ -285,18 +210,110 @@ impl Model {
     /// Replaces popcorn emitters in the first `CORN` chunk.
     pub fn set_popcorn_emitters(&mut self, emitters: &[PopcornEmitter]) -> Result<(), Error> {
         let size = emitters.iter().try_fold(0usize, |sum, emitter| {
-            sum.checked_add(emitter.to_bytes()?.len())
+            sum.checked_add(emitter.encode()?.len())
                 .filter(|&size| size <= u32::MAX as usize)
                 .ok_or(Error::ChunkTooLarge {
-                    tag: TAG,
+                    tag: PopcornEmitter::TAG,
                     size: usize::MAX,
                 })
         })?;
         let mut data = Vec::with_capacity(size);
         for emitter in emitters {
-            data.extend_from_slice(&emitter.to_bytes()?);
+            data.extend_from_slice(&emitter.encode()?);
         }
-        self.replace_chunks(TAG, data);
+        self.replace_chunks(PopcornEmitter::TAG, data);
         Ok(())
     }
+}
+
+impl Record for PopcornEmitter {
+    fn decode(bytes: &[u8], _version: u32) -> Result<Self, Error> {
+        if record_end(bytes, 0)? != bytes.len() {
+            return Err(Error::MalformedRecord {
+                tag: PopcornEmitter::TAG,
+                offset: 0,
+            });
+        }
+        let node_size =
+            u32::from_le_bytes(bytes[4..8].try_into().expect("validated node size")) as usize;
+        let fixed = 4 + node_size;
+        let node = Node::decode(&bytes[4..fixed], 0)?;
+        let word = |offset| {
+            u32::from_le_bytes(
+                bytes[fixed + offset..fixed + offset + 4]
+                    .try_into()
+                    .expect("validated field"),
+            )
+        };
+        let float = |offset| f32::from_bits(word(offset));
+        let path = bytes[fixed + 32..fixed + 32 + PATH_SIZE]
+            .try_into()
+            .expect("validated path");
+        let visibility_guide = bytes[fixed + 32 + PATH_SIZE..fixed + FIXED_SIZE]
+            .try_into()
+            .expect("validated guide");
+        let mut tracks = Vec::new();
+        let mut offset = fixed + FIXED_SIZE;
+        while offset < bytes.len() {
+            let (track, consumed) = AnimationTrack::parse(bytes, offset)?;
+            if !is_track_tag(track.tag) {
+                return Err(Error::MalformedRecord {
+                    tag: PopcornEmitter::TAG,
+                    offset,
+                });
+            }
+            tracks.push(track);
+            offset += consumed;
+        }
+        Ok(Self {
+            node,
+            life_span: float(0),
+            emission_rate: float(4),
+            speed: float(8),
+            color: [float(12), float(16), float(20)],
+            alpha: float(24),
+            replaceable_id: word(28),
+            path,
+            visibility_guide,
+            tracks,
+        })
+    }
+
+    fn encode(&self) -> Result<Vec<u8>, Error> {
+        let mut bytes = vec![0; 4];
+        bytes.extend_from_slice(&self.node.encode()?);
+        for value in [
+            self.life_span,
+            self.emission_rate,
+            self.speed,
+            self.color[0],
+            self.color[1],
+            self.color[2],
+            self.alpha,
+        ] {
+            bytes.extend_from_slice(&value.to_le_bytes());
+        }
+        bytes.extend_from_slice(&self.replaceable_id.to_le_bytes());
+        bytes.extend_from_slice(&self.path);
+        bytes.extend_from_slice(&self.visibility_guide);
+        for track in &self.tracks {
+            if !is_track_tag(track.tag) {
+                return Err(Error::MalformedRecord {
+                    tag: PopcornEmitter::TAG,
+                    offset: bytes.len(),
+                });
+            }
+            bytes.extend_from_slice(&track.encode()?);
+        }
+        let size = u32::try_from(bytes.len()).map_err(|_| Error::ChunkTooLarge {
+            tag: PopcornEmitter::TAG,
+            size: bytes.len(),
+        })?;
+        bytes[..4].copy_from_slice(&size.to_le_bytes());
+        Ok(bytes)
+    }
+}
+
+impl ChunkRecord for PopcornEmitter {
+    const TAG: [u8; 4] = *b"CORN";
 }

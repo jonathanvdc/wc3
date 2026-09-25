@@ -1,3 +1,4 @@
+use wc3_mdx::Record;
 use wc3_mdx::{CollisionKind, CollisionShape, Model, Node};
 
 #[test]
@@ -20,7 +21,7 @@ fn collision_primitives_round_trip() {
     model
         .set_collision_shapes(&[box_shape, sphere, plane, cylinder])
         .unwrap();
-    let decoded = Model::from_bytes(&model.to_bytes().unwrap()).unwrap();
+    let decoded = Model::decode(&model.encode().unwrap(), 800).unwrap();
     let shapes = decoded.collision_shapes().unwrap();
     assert_eq!(shapes[0].node().name(), "Box");
     assert_eq!(shapes[0].kind(), CollisionKind::Box);

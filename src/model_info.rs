@@ -1,11 +1,12 @@
 //! Fixed-size `MODL` model information.
 
+use crate::record::ChunkRecord;
+use crate::Record;
 use std::borrow::Cow;
 
 use crate::utils::field;
 use crate::{Error, Model};
 
-const TAG: [u8; 4] = *b"MODL";
 const SIZE: usize = 372;
 const NAME_SIZE: usize = 336;
 
@@ -31,7 +32,7 @@ impl ModelInfo {
 
     pub(crate) fn parse(data: &[u8]) -> Result<Self, Error> {
         let bytes = data.get(..SIZE).ok_or(Error::MalformedChunk {
-            tag: TAG,
+            tag: ModelInfo::TAG,
             size: data.len(),
             expected: SIZE,
         })?;
@@ -117,7 +118,7 @@ impl ModelInfo {
 impl Model {
     /// Reads the first `MODL` record, if present.
     pub fn model_info(&self) -> Result<Option<ModelInfo>, Error> {
-        self.chunk(TAG)
+        self.chunk(ModelInfo::TAG)
             .map(|chunk| ModelInfo::parse(&chunk.data))
             .transpose()
     }
@@ -125,14 +126,33 @@ impl Model {
     /// Replaces the first `MODL` record or appends one. Any extension bytes
     /// after the standard record are retained.
     pub fn set_model_info(&mut self, info: &ModelInfo) {
-        if let Some(chunk) = self.chunk_mut(TAG) {
+        if let Some(chunk) = self.chunk_mut(ModelInfo::TAG) {
             if chunk.data.len() >= SIZE {
                 chunk.data[..SIZE].copy_from_slice(info.as_bytes());
             } else {
                 chunk.data = info.as_bytes().to_vec();
             }
         } else {
-            self.push(crate::Chunk::new(TAG, info.as_bytes().to_vec()));
+            self.push(crate::Chunk::new(ModelInfo::TAG, info.as_bytes().to_vec()));
         }
     }
+}
+
+impl Record for ModelInfo {
+    fn decode(bytes: &[u8], _version: u32) -> Result<Self, Error> {
+        let bytes: [u8; 372] = bytes.try_into().map_err(|_| Error::MalformedChunk {
+            tag: *b"MODL",
+            size: bytes.len(),
+            expected: 372,
+        })?;
+        Ok(Self { bytes })
+    }
+
+    fn encode(&self) -> Result<Vec<u8>, Error> {
+        Ok(self.bytes.to_vec())
+    }
+}
+
+impl ChunkRecord for ModelInfo {
+    const TAG: [u8; 4] = *b"MODL";
 }

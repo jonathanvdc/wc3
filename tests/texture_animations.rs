@@ -1,3 +1,4 @@
+use wc3_mdx::Record;
 use wc3_mdx::{AnimationTrack, Keyframe, Model, TextureAnimation};
 
 #[test]
@@ -17,7 +18,7 @@ fn texture_animation_tracks_round_trip() {
     animation.set_tracks(std::slice::from_ref(&track)).unwrap();
     let mut model = Model::new(1100);
     model.set_texture_animations(&[animation]).unwrap();
-    let parsed = Model::from_bytes(&model.to_bytes().unwrap()).unwrap();
+    let parsed = Model::decode(&model.encode().unwrap(), 800).unwrap();
     assert_eq!(
         parsed.texture_animations().unwrap()[0].tracks(),
         vec![track]

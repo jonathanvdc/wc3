@@ -1,8 +1,9 @@
+use wc3_mdx::Record;
 use wc3_mdx::{Chunk, Error, Geoset, GeosetExtent, Model};
 
 fn sample_geoset() -> Geoset {
     let geoset = Geoset::new(1800, &[[1.0, 2.0, 3.0]], &[[0.0, 0.0, 1.0]], &[0, 0, 0]).unwrap();
-    Geoset::from_bytes(1800, &geoset.to_bytes().unwrap()).unwrap()
+    Geoset::decode(&geoset.encode().unwrap(), 1800).unwrap()
 }
 
 #[test]
@@ -14,7 +15,7 @@ fn geoset_mesh_edit_preserves_other_sections() {
     geoset.set_vertex(0, [4.0, 5.0, 6.0]).unwrap();
     let mut model = Model::new(1800);
     model.set_geosets(&[geoset]).unwrap();
-    let decoded = Model::from_bytes(&model.to_bytes().unwrap()).unwrap();
+    let decoded = Model::decode(&model.encode().unwrap(), 800).unwrap();
     assert_eq!(
         decoded.geosets().unwrap()[0].vertices(),
         vec![[4.0, 5.0, 6.0]]
@@ -110,12 +111,12 @@ fn builds_complete_synthetic_geosets() {
             vec![vec![[0.0, 0.0], [0.25, 0.75]], vec![[1.0, 1.0]; 2]]
         );
         assert_eq!(
-            Geoset::from_bytes(version, &geoset.to_bytes().unwrap()).unwrap(),
+            Geoset::decode(&geoset.encode().unwrap(), version).unwrap(),
             geoset
         );
         let mut model = Model::new(version);
         model.set_geosets(&[geoset]).unwrap();
-        let parsed = Model::from_bytes(&model.to_bytes().unwrap()).unwrap();
+        let parsed = Model::decode(&model.encode().unwrap(), 800).unwrap();
         assert_eq!(parsed.geosets().unwrap()[0].version(), version);
         assert_eq!(parsed.geosets().unwrap()[0].material_id(), 7);
     }
@@ -128,7 +129,7 @@ fn preserves_float_bits_name_padding_and_extension_order() {
     geoset
         .set_skin_data(Some(&[1, 2, 3, 4]), Some(&[5, 6, 7, 8]))
         .unwrap();
-    let mut bytes = geoset.to_bytes().unwrap();
+    let mut bytes = geoset.encode().unwrap();
     bytes[12..16].copy_from_slice(&0x7fa1_2345u32.to_le_bytes());
     let mats = bytes.windows(4).position(|part| part == b"MATS").unwrap();
     let count = u32::from_le_bytes(bytes[mats + 4..mats + 8].try_into().unwrap()) as usize;
@@ -142,8 +143,8 @@ fn preserves_float_bits_name_padding_and_extension_order() {
     reordered.extend_from_slice(&bytes[skin..uv]);
     reordered.extend_from_slice(&bytes[tang..skin]);
     reordered.extend_from_slice(&bytes[uv..]);
-    let decoded = Geoset::from_bytes(1800, &reordered).unwrap();
-    assert_eq!(decoded.to_bytes().unwrap(), reordered);
+    let decoded = Geoset::decode(&reordered, 1800).unwrap();
+    assert_eq!(decoded.encode().unwrap(), reordered);
     assert_eq!(decoded.vertices()[0][0].to_bits(), 0x7fa1_2345);
 }
 
@@ -160,7 +161,7 @@ fn local_geosets_have_bounded_mesh_sections_when_available() {
                 pending.push(path);
             } else if path.extension().is_some_and(|extension| extension == "mdx") {
                 let bytes = std::fs::read(&path).unwrap();
-                let model = Model::from_bytes(&bytes).unwrap();
+                let model = Model::decode(&bytes, 800).unwrap();
                 for geoset in model.geosets().unwrap() {
                     geoset.vertices();
                     geoset.normals();

@@ -1,8 +1,8 @@
 //! Light records in `LITE` chunks.
 
-use crate::{AnimationTrack, Error, Model, Node};
+use crate::Record;
+use crate::{AnimationTrack, ChunkRecord, Error, Model, Node};
 
-const TAG: [u8; 4] = *b"LITE";
 const FIXED_SIZE: usize = 44;
 const EXTENDED_SIZE: usize = 72;
 
@@ -45,91 +45,6 @@ impl Light {
             light.extended_words = Some([0; 7]);
         }
         light
-    }
-
-    /// Parses one inclusive-size light record.
-    pub fn from_bytes(bytes: &[u8]) -> Result<Self, Error> {
-        let end = record_end(bytes, 0)?;
-        if end != bytes.len() {
-            return Err(Error::MalformedRecord {
-                tag: TAG,
-                offset: end,
-            });
-        }
-        let node_size = read_u32(bytes, 4) as usize;
-        let fixed = 4 + node_size;
-        let node = Node::from_bytes(&bytes[4..fixed])?;
-        let short = fixed + FIXED_SIZE;
-        let extended = fixed + EXTENDED_SIZE;
-        let has_extended = bytes.len() >= extended
-            && (bytes.len() == extended
-                || bytes
-                    .get(extended..extended + 4)
-                    .is_some_and(|tag| is_track(tag.try_into().expect("four-byte tag"))))
-            && bytes.get(short..short + 4).map_or(true, |tag| {
-                !is_track(tag.try_into().expect("four-byte tag"))
-            });
-        let extended_words =
-            has_extended.then(|| std::array::from_fn(|i| read_u32(bytes, short + i * 4)));
-        let mut tracks = Vec::new();
-        let mut offset = if has_extended { extended } else { short };
-        while offset < bytes.len() {
-            let (track, consumed) = AnimationTrack::parse(bytes, offset)?;
-            if !is_track(track.tag) {
-                return Err(Error::MalformedRecord { tag: TAG, offset });
-            }
-            tracks.push(track);
-            offset += consumed;
-        }
-        Ok(Self {
-            node,
-            light_type: read_u32(bytes, fixed),
-            attenuation_start: read_f32(bytes, fixed + 4),
-            attenuation_end: read_f32(bytes, fixed + 8),
-            color: read_vec3(bytes, fixed + 12),
-            intensity: read_f32(bytes, fixed + 24),
-            ambient_color: read_vec3(bytes, fixed + 28),
-            ambient_intensity: read_f32(bytes, fixed + 40),
-            extended_words,
-            tracks,
-        })
-    }
-
-    /// Serializes the inclusive-size light record.
-    pub fn to_bytes(&self) -> Result<Vec<u8>, Error> {
-        let mut bytes = vec![0; 4];
-        bytes.extend_from_slice(&self.node.to_bytes());
-        bytes.extend_from_slice(&self.light_type.to_le_bytes());
-        bytes.extend_from_slice(&self.attenuation_start.to_le_bytes());
-        bytes.extend_from_slice(&self.attenuation_end.to_le_bytes());
-        for value in self.color {
-            bytes.extend_from_slice(&value.to_le_bytes());
-        }
-        bytes.extend_from_slice(&self.intensity.to_le_bytes());
-        for value in self.ambient_color {
-            bytes.extend_from_slice(&value.to_le_bytes());
-        }
-        bytes.extend_from_slice(&self.ambient_intensity.to_le_bytes());
-        if let Some(words) = self.extended_words {
-            for word in words {
-                bytes.extend_from_slice(&word.to_le_bytes());
-            }
-        }
-        for track in &self.tracks {
-            if !is_track(track.tag) {
-                return Err(Error::MalformedRecord {
-                    tag: TAG,
-                    offset: bytes.len(),
-                });
-            }
-            bytes.extend_from_slice(&track.to_bytes()?);
-        }
-        let size = u32::try_from(bytes.len()).map_err(|_| Error::ChunkTooLarge {
-            tag: TAG,
-            size: bytes.len(),
-        })?;
-        bytes[..4].copy_from_slice(&size.to_le_bytes());
-        Ok(bytes)
     }
 
     /// Borrows the shared node.
@@ -206,8 +121,8 @@ impl Light {
     pub fn set_extended_words(&mut self, words: [u32; 7]) -> Result<(), Error> {
         if self.extended_words.is_none() {
             return Err(Error::MalformedRecord {
-                tag: TAG,
-                offset: 4 + self.node.to_bytes().len() + FIXED_SIZE,
+                tag: Light::TAG,
+                offset: 4 + self.node.encode()?.len() + FIXED_SIZE,
             });
         }
         self.extended_words = Some(words);
@@ -222,11 +137,11 @@ impl Light {
         for track in tracks {
             if !is_track(track.tag) {
                 return Err(Error::MalformedRecord {
-                    tag: TAG,
+                    tag: Light::TAG,
                     offset: 0,
                 });
             }
-            track.to_bytes()?;
+            track.encode()?;
         }
         self.tracks = tracks.to_vec();
         Ok(())
@@ -257,17 +172,23 @@ fn is_track(tag: [u8; 4]) -> bool {
 fn record_end(data: &[u8], offset: usize) -> Result<usize, Error> {
     let size_bytes = data
         .get(offset..offset.saturating_add(4))
-        .ok_or(Error::MalformedRecord { tag: TAG, offset })?;
+        .ok_or(Error::MalformedRecord {
+            tag: Light::TAG,
+            offset,
+        })?;
     let size = u32::from_le_bytes(size_bytes.try_into().expect("four-byte size")) as usize;
     let end = offset
         .checked_add(size)
         .filter(|&end| end <= data.len())
-        .ok_or(Error::MalformedRecord { tag: TAG, offset })?;
+        .ok_or(Error::MalformedRecord {
+            tag: Light::TAG,
+            offset,
+        })?;
     let node_start = offset + 4;
     let node_size_bytes =
         data.get(node_start..node_start.saturating_add(4))
             .ok_or(Error::MalformedRecord {
-                tag: TAG,
+                tag: Light::TAG,
                 offset: node_start,
             })?;
     let node_size =
@@ -276,16 +197,16 @@ fn record_end(data: &[u8], offset: usize) -> Result<usize, Error> {
         .checked_add(node_size)
         .filter(|&node_end| node_end <= end)
         .ok_or(Error::MalformedRecord {
-            tag: TAG,
+            tag: Light::TAG,
             offset: node_start,
         })?;
-    Node::from_bytes(&data[node_start..node_end])?;
+    Node::decode(&data[node_start..node_end], 0)?;
     if node_end
         .checked_add(FIXED_SIZE)
         .map_or(true, |required| required > end)
     {
         return Err(Error::MalformedRecord {
-            tag: TAG,
+            tag: Light::TAG,
             offset: node_end,
         });
     }
@@ -296,11 +217,11 @@ impl Model {
     /// Decodes all `LITE` records in file order.
     pub fn lights(&self) -> Result<Vec<Light>, Error> {
         let mut lights = Vec::new();
-        for chunk in self.chunks().iter().filter(|chunk| chunk.tag == TAG) {
+        for chunk in self.chunks().iter().filter(|chunk| chunk.tag == Light::TAG) {
             let mut offset = 0;
             while offset < chunk.data.len() {
                 let end = record_end(&chunk.data, offset)?;
-                lights.push(Light::from_bytes(&chunk.data[offset..end])?);
+                lights.push(Light::decode(&chunk.data[offset..end], 0)?);
                 offset = end;
             }
         }
@@ -310,18 +231,110 @@ impl Model {
     /// Replaces lights in the first `LITE` chunk.
     pub fn set_lights(&mut self, lights: &[Light]) -> Result<(), Error> {
         let size = lights.iter().try_fold(0usize, |sum, light| {
-            sum.checked_add(light.to_bytes()?.len())
+            sum.checked_add(light.encode()?.len())
                 .filter(|&size| size <= u32::MAX as usize)
                 .ok_or(Error::ChunkTooLarge {
-                    tag: TAG,
+                    tag: Light::TAG,
                     size: usize::MAX,
                 })
         })?;
         let mut data = Vec::with_capacity(size);
         for light in lights {
-            data.extend_from_slice(&light.to_bytes()?);
+            data.extend_from_slice(&light.encode()?);
         }
-        self.replace_chunks(TAG, data);
+        self.replace_chunks(Light::TAG, data);
         Ok(())
     }
+}
+
+impl Record for Light {
+    fn decode(bytes: &[u8], _version: u32) -> Result<Self, Error> {
+        let end = record_end(bytes, 0)?;
+        if end != bytes.len() {
+            return Err(Error::MalformedRecord {
+                tag: Light::TAG,
+                offset: end,
+            });
+        }
+        let node_size = read_u32(bytes, 4) as usize;
+        let fixed = 4 + node_size;
+        let node = Node::decode(&bytes[4..fixed], 0)?;
+        let short = fixed + FIXED_SIZE;
+        let extended = fixed + EXTENDED_SIZE;
+        let has_extended = bytes.len() >= extended
+            && (bytes.len() == extended
+                || bytes
+                    .get(extended..extended + 4)
+                    .is_some_and(|tag| is_track(tag.try_into().expect("four-byte tag"))))
+            && bytes.get(short..short + 4).map_or(true, |tag| {
+                !is_track(tag.try_into().expect("four-byte tag"))
+            });
+        let extended_words =
+            has_extended.then(|| std::array::from_fn(|i| read_u32(bytes, short + i * 4)));
+        let mut tracks = Vec::new();
+        let mut offset = if has_extended { extended } else { short };
+        while offset < bytes.len() {
+            let (track, consumed) = AnimationTrack::parse(bytes, offset)?;
+            if !is_track(track.tag) {
+                return Err(Error::MalformedRecord {
+                    tag: Light::TAG,
+                    offset,
+                });
+            }
+            tracks.push(track);
+            offset += consumed;
+        }
+        Ok(Self {
+            node,
+            light_type: read_u32(bytes, fixed),
+            attenuation_start: read_f32(bytes, fixed + 4),
+            attenuation_end: read_f32(bytes, fixed + 8),
+            color: read_vec3(bytes, fixed + 12),
+            intensity: read_f32(bytes, fixed + 24),
+            ambient_color: read_vec3(bytes, fixed + 28),
+            ambient_intensity: read_f32(bytes, fixed + 40),
+            extended_words,
+            tracks,
+        })
+    }
+
+    fn encode(&self) -> Result<Vec<u8>, Error> {
+        let mut bytes = vec![0; 4];
+        bytes.extend_from_slice(&self.node.encode()?);
+        bytes.extend_from_slice(&self.light_type.to_le_bytes());
+        bytes.extend_from_slice(&self.attenuation_start.to_le_bytes());
+        bytes.extend_from_slice(&self.attenuation_end.to_le_bytes());
+        for value in self.color {
+            bytes.extend_from_slice(&value.to_le_bytes());
+        }
+        bytes.extend_from_slice(&self.intensity.to_le_bytes());
+        for value in self.ambient_color {
+            bytes.extend_from_slice(&value.to_le_bytes());
+        }
+        bytes.extend_from_slice(&self.ambient_intensity.to_le_bytes());
+        if let Some(words) = self.extended_words {
+            for word in words {
+                bytes.extend_from_slice(&word.to_le_bytes());
+            }
+        }
+        for track in &self.tracks {
+            if !is_track(track.tag) {
+                return Err(Error::MalformedRecord {
+                    tag: Light::TAG,
+                    offset: bytes.len(),
+                });
+            }
+            bytes.extend_from_slice(&track.encode()?);
+        }
+        let size = u32::try_from(bytes.len()).map_err(|_| Error::ChunkTooLarge {
+            tag: Light::TAG,
+            size: bytes.len(),
+        })?;
+        bytes[..4].copy_from_slice(&size.to_le_bytes());
+        Ok(bytes)
+    }
+}
+
+impl ChunkRecord for Light {
+    const TAG: [u8; 4] = *b"LITE";
 }

@@ -1,8 +1,7 @@
 //! Box and sphere collision shapes in `CLID` chunks.
 
-use crate::{Error, Model, Node};
-
-const TAG: [u8; 4] = *b"CLID";
+use crate::Record;
+use crate::{ChunkRecord, Error, Model, Node};
 
 /// Warcraft III collision primitive type.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -65,84 +64,6 @@ impl CollisionShape {
         }
     }
 
-    /// Parses one complete shape record.
-    pub fn from_bytes(bytes: &[u8]) -> Result<Self, Error> {
-        if record_end(bytes, 0)? != bytes.len() {
-            return Err(Error::MalformedRecord {
-                tag: TAG,
-                offset: 0,
-            });
-        }
-        let node_size =
-            u32::from_le_bytes(bytes[..4].try_into().expect("validated node size")) as usize;
-        let node = Node::from_bytes(&bytes[..node_size])?;
-        let kind = u32::from_le_bytes(
-            bytes[node_size..node_size + 4]
-                .try_into()
-                .expect("validated kind"),
-        );
-        let start = node_size + 4;
-        let vec3 = |offset| {
-            std::array::from_fn(|axis| {
-                f32::from_le_bytes(
-                    bytes[offset + axis * 4..offset + axis * 4 + 4]
-                        .try_into()
-                        .expect("validated coordinate"),
-                )
-            })
-        };
-        let scalar = |offset| {
-            f32::from_le_bytes(
-                bytes[offset..offset + 4]
-                    .try_into()
-                    .expect("validated radius"),
-            )
-        };
-        let geometry = match kind {
-            0 => CollisionGeometry::Box([vec3(start), vec3(start + 12)]),
-            1 => CollisionGeometry::Plane([vec3(start), vec3(start + 12)]),
-            2 => CollisionGeometry::Sphere(vec3(start), scalar(start + 12)),
-            3 => CollisionGeometry::Cylinder([vec3(start), vec3(start + 12)], scalar(start + 24)),
-            _ => unreachable!("validated kind"),
-        };
-        Ok(Self { node, geometry })
-    }
-
-    /// Serializes the complete shape record.
-    pub fn to_bytes(&self) -> Vec<u8> {
-        let mut bytes = self.node.to_bytes();
-        let kind = match self.geometry {
-            CollisionGeometry::Box(_) => 0u32,
-            CollisionGeometry::Plane(_) => 1,
-            CollisionGeometry::Sphere(_, _) => 2,
-            CollisionGeometry::Cylinder(_, _) => 3,
-        };
-        bytes.extend_from_slice(&kind.to_le_bytes());
-        let mut push_vec3 = |values: [f32; 3]| {
-            for value in values {
-                bytes.extend_from_slice(&value.to_le_bytes());
-            }
-        };
-        match self.geometry {
-            CollisionGeometry::Box(points) | CollisionGeometry::Plane(points) => {
-                for point in points {
-                    push_vec3(point);
-                }
-            }
-            CollisionGeometry::Sphere(center, radius) => {
-                push_vec3(center);
-                bytes.extend_from_slice(&radius.to_le_bytes());
-            }
-            CollisionGeometry::Cylinder(points, radius) => {
-                for point in points {
-                    push_vec3(point);
-                }
-                bytes.extend_from_slice(&radius.to_le_bytes());
-            }
-        }
-        bytes
-    }
-
     /// Borrows the attached node.
     pub fn node(&self) -> &Node {
         &self.node
@@ -203,17 +124,23 @@ impl CollisionShape {
 fn record_end(data: &[u8], offset: usize) -> Result<usize, Error> {
     let size_bytes = data
         .get(offset..offset.saturating_add(4))
-        .ok_or(Error::MalformedRecord { tag: TAG, offset })?;
+        .ok_or(Error::MalformedRecord {
+            tag: CollisionShape::TAG,
+            offset,
+        })?;
     let node_size = u32::from_le_bytes(size_bytes.try_into().expect("four-byte size")) as usize;
     let node_end = offset
         .checked_add(node_size)
         .filter(|&end| end <= data.len())
-        .ok_or(Error::MalformedRecord { tag: TAG, offset })?;
-    Node::from_bytes(&data[offset..node_end])?;
+        .ok_or(Error::MalformedRecord {
+            tag: CollisionShape::TAG,
+            offset,
+        })?;
+    Node::decode(&data[offset..node_end], 0)?;
     let kind_bytes =
         data.get(node_end..node_end.saturating_add(4))
             .ok_or(Error::MalformedRecord {
-                tag: TAG,
+                tag: CollisionShape::TAG,
                 offset: node_end,
             })?;
     let kind = u32::from_le_bytes(kind_bytes.try_into().expect("four-byte kind"));
@@ -223,7 +150,7 @@ fn record_end(data: &[u8], offset: usize) -> Result<usize, Error> {
         3 => 28,
         _ => {
             return Err(Error::MalformedRecord {
-                tag: TAG,
+                tag: CollisionShape::TAG,
                 offset: node_end,
             })
         }
@@ -232,7 +159,7 @@ fn record_end(data: &[u8], offset: usize) -> Result<usize, Error> {
         .checked_add(4 + data_size)
         .filter(|&end| end <= data.len())
         .ok_or(Error::MalformedRecord {
-            tag: TAG,
+            tag: CollisionShape::TAG,
             offset: node_end,
         })
 }
@@ -241,11 +168,15 @@ impl Model {
     /// Decodes all collision shapes in `CLID` chunks.
     pub fn collision_shapes(&self) -> Result<Vec<CollisionShape>, Error> {
         let mut shapes = Vec::new();
-        for chunk in self.chunks().iter().filter(|chunk| chunk.tag == TAG) {
+        for chunk in self
+            .chunks()
+            .iter()
+            .filter(|chunk| chunk.tag == CollisionShape::TAG)
+        {
             let mut offset = 0;
             while offset < chunk.data.len() {
                 let end = record_end(&chunk.data, offset)?;
-                shapes.push(CollisionShape::from_bytes(&chunk.data[offset..end])?);
+                shapes.push(CollisionShape::decode(&chunk.data[offset..end], 0)?);
                 offset = end;
             }
         }
@@ -255,18 +186,102 @@ impl Model {
     /// Replaces collision shapes in the first `CLID` chunk.
     pub fn set_collision_shapes(&mut self, shapes: &[CollisionShape]) -> Result<(), Error> {
         let size = shapes.iter().try_fold(0usize, |sum, shape| {
-            sum.checked_add(shape.to_bytes().len())
+            sum.checked_add(shape.encode()?.len())
                 .filter(|&size| size <= u32::MAX as usize)
                 .ok_or(Error::ChunkTooLarge {
-                    tag: TAG,
+                    tag: CollisionShape::TAG,
                     size: usize::MAX,
                 })
         })?;
         let mut data = Vec::with_capacity(size);
         for shape in shapes {
-            data.extend_from_slice(&shape.to_bytes());
+            data.extend_from_slice(&shape.encode()?);
         }
-        self.replace_chunks(TAG, data);
+        self.replace_chunks(CollisionShape::TAG, data);
         Ok(())
     }
+}
+
+impl Record for CollisionShape {
+    fn decode(bytes: &[u8], _version: u32) -> Result<Self, Error> {
+        if record_end(bytes, 0)? != bytes.len() {
+            return Err(Error::MalformedRecord {
+                tag: CollisionShape::TAG,
+                offset: 0,
+            });
+        }
+        let node_size =
+            u32::from_le_bytes(bytes[..4].try_into().expect("validated node size")) as usize;
+        let node = Node::decode(&bytes[..node_size], 0)?;
+        let kind = u32::from_le_bytes(
+            bytes[node_size..node_size + 4]
+                .try_into()
+                .expect("validated kind"),
+        );
+        let start = node_size + 4;
+        let vec3 = |offset| {
+            std::array::from_fn(|axis| {
+                f32::from_le_bytes(
+                    bytes[offset + axis * 4..offset + axis * 4 + 4]
+                        .try_into()
+                        .expect("validated coordinate"),
+                )
+            })
+        };
+        let scalar = |offset| {
+            f32::from_le_bytes(
+                bytes[offset..offset + 4]
+                    .try_into()
+                    .expect("validated radius"),
+            )
+        };
+        let geometry = match kind {
+            0 => CollisionGeometry::Box([vec3(start), vec3(start + 12)]),
+            1 => CollisionGeometry::Plane([vec3(start), vec3(start + 12)]),
+            2 => CollisionGeometry::Sphere(vec3(start), scalar(start + 12)),
+            3 => CollisionGeometry::Cylinder([vec3(start), vec3(start + 12)], scalar(start + 24)),
+            _ => unreachable!("validated kind"),
+        };
+        Ok(Self { node, geometry })
+    }
+
+    fn encode(&self) -> Result<Vec<u8>, Error> {
+        Ok({
+            let mut bytes = self.node.encode()?;
+            let kind = match self.geometry {
+                CollisionGeometry::Box(_) => 0u32,
+                CollisionGeometry::Plane(_) => 1,
+                CollisionGeometry::Sphere(_, _) => 2,
+                CollisionGeometry::Cylinder(_, _) => 3,
+            };
+            bytes.extend_from_slice(&kind.to_le_bytes());
+            let mut push_vec3 = |values: [f32; 3]| {
+                for value in values {
+                    bytes.extend_from_slice(&value.to_le_bytes());
+                }
+            };
+            match self.geometry {
+                CollisionGeometry::Box(points) | CollisionGeometry::Plane(points) => {
+                    for point in points {
+                        push_vec3(point);
+                    }
+                }
+                CollisionGeometry::Sphere(center, radius) => {
+                    push_vec3(center);
+                    bytes.extend_from_slice(&radius.to_le_bytes());
+                }
+                CollisionGeometry::Cylinder(points, radius) => {
+                    for point in points {
+                        push_vec3(point);
+                    }
+                    bytes.extend_from_slice(&radius.to_le_bytes());
+                }
+            }
+            bytes
+        })
+    }
+}
+
+impl ChunkRecord for CollisionShape {
+    const TAG: [u8; 4] = *b"CLID";
 }

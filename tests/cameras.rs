@@ -1,3 +1,4 @@
+use wc3_mdx::Record;
 use wc3_mdx::{AnimationTrack, Camera, Keyframe, Model};
 
 #[test]
@@ -22,7 +23,7 @@ fn camera_fields_and_tracks_round_trip() {
     camera.set_tracks(std::slice::from_ref(&track)).unwrap();
     let mut model = Model::new(1100);
     model.set_cameras(&[camera]).unwrap();
-    let decoded = Model::from_bytes(&model.to_bytes().unwrap()).unwrap();
+    let decoded = Model::decode(&model.encode().unwrap(), 800).unwrap();
     let camera = &decoded.cameras().unwrap()[0];
     assert_eq!(camera.name(), "Portrait");
     assert_eq!(camera.position(), [1.0, 2.0, 3.0]);
@@ -40,8 +41,8 @@ fn newer_camera_size_flags_round_trip() {
     camera.set_field_of_view(0.8);
     let mut model = Model::new(1800);
     model.set_cameras(&[camera]).unwrap();
-    let bytes = model.to_bytes().unwrap();
-    let parsed = Model::from_bytes(&bytes).unwrap();
+    let bytes = model.encode().unwrap();
+    let parsed = Model::decode(&bytes, 800).unwrap();
     assert_eq!(parsed.cameras().unwrap()[0].record_flags(), 3);
-    assert_eq!(parsed.to_bytes().unwrap(), bytes);
+    assert_eq!(parsed.encode().unwrap(), bytes);
 }

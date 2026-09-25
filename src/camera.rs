@@ -1,11 +1,11 @@
 //! Typed camera records in `CAMS` chunks.
 
+use crate::Record;
 use std::borrow::Cow;
 
 use crate::utils::field;
-use crate::{AnimationTrack, Error, Model};
+use crate::{AnimationTrack, ChunkRecord, Error, Model};
 
-const TAG: [u8; 4] = *b"CAMS";
 const HEADER_SIZE: usize = 120;
 const NAME_SIZE: usize = 80;
 const MAX_RECORD_SIZE: usize = 0x00ff_ffff;
@@ -47,79 +47,6 @@ impl Camera {
             camera.record_flags = 3;
         }
         Ok(camera)
-    }
-
-    /// Parses one camera record, preserving its upper-byte size flags.
-    pub fn from_bytes(bytes: &[u8]) -> Result<Self, Error> {
-        if bytes.len() < HEADER_SIZE {
-            return Err(Error::MalformedRecord {
-                tag: TAG,
-                offset: 0,
-            });
-        }
-        let size_word = u32::from_le_bytes(bytes[..4].try_into().expect("four-byte size"));
-        if (size_word & 0x00ff_ffff) as usize != bytes.len() {
-            return Err(Error::MalformedRecord {
-                tag: TAG,
-                offset: 0,
-            });
-        }
-        let float = |offset: usize| {
-            f32::from_le_bytes(bytes[offset..offset + 4].try_into().expect("camera field"))
-        };
-        let mut tracks = Vec::new();
-        let mut offset = HEADER_SIZE;
-        while offset < bytes.len() {
-            let (track, size) = AnimationTrack::parse(bytes, offset)?;
-            if !is_track(track.tag) {
-                return Err(Error::MalformedRecord { tag: TAG, offset });
-            }
-            tracks.push(track);
-            offset += size;
-        }
-        Ok(Self {
-            name: bytes[4..84].try_into().expect("fixed-width name"),
-            record_flags: (size_word >> 24) as u8,
-            position: [float(84), float(88), float(92)],
-            field_of_view: float(96),
-            far_clip: float(100),
-            near_clip: float(104),
-            target_position: [float(108), float(112), float(116)],
-            tracks,
-        })
-    }
-
-    /// Serializes the camera and its tracks.
-    pub fn to_bytes(&self) -> Result<Vec<u8>, Error> {
-        let mut bytes = vec![0; HEADER_SIZE];
-        bytes[4..84].copy_from_slice(&self.name);
-        for (index, value) in self.position.into_iter().enumerate() {
-            bytes[84 + index * 4..88 + index * 4].copy_from_slice(&value.to_le_bytes());
-        }
-        bytes[96..100].copy_from_slice(&self.field_of_view.to_le_bytes());
-        bytes[100..104].copy_from_slice(&self.far_clip.to_le_bytes());
-        bytes[104..108].copy_from_slice(&self.near_clip.to_le_bytes());
-        for (index, value) in self.target_position.into_iter().enumerate() {
-            bytes[108 + index * 4..112 + index * 4].copy_from_slice(&value.to_le_bytes());
-        }
-        for track in &self.tracks {
-            if !is_track(track.tag) {
-                return Err(Error::MalformedRecord {
-                    tag: TAG,
-                    offset: bytes.len(),
-                });
-            }
-            bytes.extend_from_slice(&track.to_bytes()?);
-        }
-        if bytes.len() > MAX_RECORD_SIZE {
-            return Err(Error::ChunkTooLarge {
-                tag: TAG,
-                size: bytes.len(),
-            });
-        }
-        let size = bytes.len() as u32 | (u32::from(self.record_flags) << 24);
-        bytes[..4].copy_from_slice(&size.to_le_bytes());
-        Ok(bytes)
     }
 
     /// Returns the upper-byte record flags.
@@ -188,15 +115,15 @@ impl Camera {
         for track in tracks {
             if !is_track(track.tag) {
                 return Err(Error::MalformedRecord {
-                    tag: TAG,
+                    tag: Camera::TAG,
                     offset: size,
                 });
             }
             size = size
-                .checked_add(track.to_bytes()?.len())
+                .checked_add(track.encode()?.len())
                 .filter(|&size| size <= MAX_RECORD_SIZE)
                 .ok_or(Error::ChunkTooLarge {
-                    tag: TAG,
+                    tag: Camera::TAG,
                     size: usize::MAX,
                 })?;
         }
@@ -213,23 +140,35 @@ impl Model {
     /// Decodes all camera records in `CAMS` chunks.
     pub fn cameras(&self) -> Result<Vec<Camera>, Error> {
         let mut cameras = Vec::new();
-        for chunk in self.chunks().iter().filter(|chunk| chunk.tag == TAG) {
+        for chunk in self
+            .chunks()
+            .iter()
+            .filter(|chunk| chunk.tag == Camera::TAG)
+        {
             let mut offset = 0;
             while offset < chunk.data.len() {
-                let size_bytes = chunk
-                    .data
-                    .get(offset..offset.saturating_add(4))
-                    .ok_or(Error::MalformedRecord { tag: TAG, offset })?;
+                let size_bytes = chunk.data.get(offset..offset.saturating_add(4)).ok_or(
+                    Error::MalformedRecord {
+                        tag: Camera::TAG,
+                        offset,
+                    },
+                )?;
                 let size = (u32::from_le_bytes(size_bytes.try_into().expect("four-byte size"))
                     & 0x00ff_ffff) as usize;
                 if size < HEADER_SIZE {
-                    return Err(Error::MalformedRecord { tag: TAG, offset });
+                    return Err(Error::MalformedRecord {
+                        tag: Camera::TAG,
+                        offset,
+                    });
                 }
                 let end = offset
                     .checked_add(size)
                     .filter(|&end| end <= chunk.data.len())
-                    .ok_or(Error::MalformedRecord { tag: TAG, offset })?;
-                cameras.push(Camera::from_bytes(&chunk.data[offset..end])?);
+                    .ok_or(Error::MalformedRecord {
+                        tag: Camera::TAG,
+                        offset,
+                    })?;
+                cameras.push(Camera::decode(&chunk.data[offset..end], 0)?);
                 offset = end;
             }
         }
@@ -240,15 +179,95 @@ impl Model {
     pub fn set_cameras(&mut self, cameras: &[Camera]) -> Result<(), Error> {
         let mut data = Vec::new();
         for camera in cameras {
-            data.extend_from_slice(&camera.to_bytes()?);
+            data.extend_from_slice(&camera.encode()?);
             if data.len() > u32::MAX as usize {
                 return Err(Error::ChunkTooLarge {
-                    tag: TAG,
+                    tag: Camera::TAG,
                     size: data.len(),
                 });
             }
         }
-        self.replace_chunks(TAG, data);
+        self.replace_chunks(Camera::TAG, data);
         Ok(())
     }
+}
+
+impl Record for Camera {
+    fn decode(bytes: &[u8], _version: u32) -> Result<Self, Error> {
+        if bytes.len() < HEADER_SIZE {
+            return Err(Error::MalformedRecord {
+                tag: Camera::TAG,
+                offset: 0,
+            });
+        }
+        let size_word = u32::from_le_bytes(bytes[..4].try_into().expect("four-byte size"));
+        if (size_word & 0x00ff_ffff) as usize != bytes.len() {
+            return Err(Error::MalformedRecord {
+                tag: Camera::TAG,
+                offset: 0,
+            });
+        }
+        let float = |offset: usize| {
+            f32::from_le_bytes(bytes[offset..offset + 4].try_into().expect("camera field"))
+        };
+        let mut tracks = Vec::new();
+        let mut offset = HEADER_SIZE;
+        while offset < bytes.len() {
+            let (track, size) = AnimationTrack::parse(bytes, offset)?;
+            if !is_track(track.tag) {
+                return Err(Error::MalformedRecord {
+                    tag: Camera::TAG,
+                    offset,
+                });
+            }
+            tracks.push(track);
+            offset += size;
+        }
+        Ok(Self {
+            name: bytes[4..84].try_into().expect("fixed-width name"),
+            record_flags: (size_word >> 24) as u8,
+            position: [float(84), float(88), float(92)],
+            field_of_view: float(96),
+            far_clip: float(100),
+            near_clip: float(104),
+            target_position: [float(108), float(112), float(116)],
+            tracks,
+        })
+    }
+
+    fn encode(&self) -> Result<Vec<u8>, Error> {
+        let mut bytes = vec![0; HEADER_SIZE];
+        bytes[4..84].copy_from_slice(&self.name);
+        for (index, value) in self.position.into_iter().enumerate() {
+            bytes[84 + index * 4..88 + index * 4].copy_from_slice(&value.to_le_bytes());
+        }
+        bytes[96..100].copy_from_slice(&self.field_of_view.to_le_bytes());
+        bytes[100..104].copy_from_slice(&self.far_clip.to_le_bytes());
+        bytes[104..108].copy_from_slice(&self.near_clip.to_le_bytes());
+        for (index, value) in self.target_position.into_iter().enumerate() {
+            bytes[108 + index * 4..112 + index * 4].copy_from_slice(&value.to_le_bytes());
+        }
+        for track in &self.tracks {
+            if !is_track(track.tag) {
+                return Err(Error::MalformedRecord {
+                    tag: Camera::TAG,
+                    offset: bytes.len(),
+                });
+            }
+            bytes.extend_from_slice(&track.encode()?);
+        }
+        if bytes.len() > MAX_RECORD_SIZE {
+            return Err(Error::ChunkTooLarge {
+                tag: Camera::TAG,
+                size: bytes.len(),
+            });
+        }
+        let size = bytes.len() as u32 | (u32::from(self.record_flags) << 24);
+        bytes[..4].copy_from_slice(&size.to_le_bytes());
+        Ok(bytes)
+    }
+}
+
+impl ChunkRecord for Camera {
+    const TAG: [u8; 4] = *b"CAMS";
 }

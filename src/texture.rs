@@ -1,11 +1,10 @@
 //! Fixed-width texture records in `TEXS` chunks.
 
+use crate::Record;
 use std::borrow::Cow;
 
 use crate::utils::field;
-use crate::{Error, Model};
-
-const TAG: [u8; 4] = *b"TEXS";
+use crate::{ChunkRecord, Error, Model};
 
 /// Texture wrapping flags; unknown bits remain available through `bits`.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -49,7 +48,7 @@ impl Texture {
         Ok(texture)
     }
 
-    fn parse(bytes: &[u8]) -> Self {
+    pub(crate) fn parse(bytes: &[u8]) -> Self {
         Self {
             bytes: bytes.try_into().expect("fixed-size record"),
         }
@@ -105,10 +104,14 @@ impl Model {
     /// Decodes all `TEXS` chunks in file order.
     pub fn textures(&self) -> Result<Vec<Texture>, Error> {
         let mut textures = Vec::new();
-        for chunk in self.chunks().iter().filter(|chunk| chunk.tag == TAG) {
+        for chunk in self
+            .chunks()
+            .iter()
+            .filter(|chunk| chunk.tag == Texture::TAG)
+        {
             if chunk.data.len() % SIZE != 0 {
                 return Err(Error::MalformedChunk {
-                    tag: TAG,
+                    tag: Texture::TAG,
                     size: chunk.data.len(),
                     expected: SIZE,
                 });
@@ -125,17 +128,39 @@ impl Model {
             .len()
             .checked_mul(SIZE)
             .ok_or(Error::ChunkTooLarge {
-                tag: TAG,
+                tag: Texture::TAG,
                 size: usize::MAX,
             })?;
         if size > u32::MAX as usize {
-            return Err(Error::ChunkTooLarge { tag: TAG, size });
+            return Err(Error::ChunkTooLarge {
+                tag: Texture::TAG,
+                size,
+            });
         }
         let mut data = Vec::with_capacity(size);
         for texture in textures {
             data.extend_from_slice(texture.as_bytes());
         }
-        self.replace_chunks(TAG, data);
+        self.replace_chunks(Texture::TAG, data);
         Ok(())
     }
+}
+
+impl Record for Texture {
+    fn decode(bytes: &[u8], _version: u32) -> Result<Self, Error> {
+        let bytes: [u8; 268] = bytes.try_into().map_err(|_| Error::MalformedChunk {
+            tag: *b"TEXS",
+            size: bytes.len(),
+            expected: 268,
+        })?;
+        Ok(Self { bytes })
+    }
+
+    fn encode(&self) -> Result<Vec<u8>, Error> {
+        Ok(self.bytes.to_vec())
+    }
+}
+
+impl ChunkRecord for Texture {
+    const TAG: [u8; 4] = *b"TEXS";
 }

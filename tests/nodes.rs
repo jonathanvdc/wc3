@@ -1,3 +1,4 @@
+use wc3_mdx::Record;
 use wc3_mdx::{Bone, Model, Node, NodeFlags};
 
 #[test]
@@ -9,7 +10,7 @@ fn bones_and_helpers_round_trip() {
     let mut model = Model::new(1800);
     model.set_bones(&[bone]).unwrap();
     model.set_helpers(&[node]).unwrap();
-    let parsed = Model::from_bytes(&model.to_bytes().unwrap()).unwrap();
+    let parsed = Model::decode(&model.encode().unwrap(), 800).unwrap();
     let bone = &parsed.bones().unwrap()[0];
     assert_eq!(bone.node().name(), "Root");
     assert_eq!(bone.node().object_id(), 7);
@@ -47,7 +48,7 @@ fn local_bones_are_bounded_when_available() {
                 pending.push(path);
             } else if path.extension().is_some_and(|extension| extension == "mdx") {
                 let bytes = std::fs::read(&path).unwrap();
-                let model = Model::from_bytes(&bytes).unwrap();
+                let model = Model::decode_latest(&bytes).unwrap();
                 for bone in model.bones().unwrap() {
                     assert!(!bone.node().name().is_empty());
                 }

@@ -1,3 +1,4 @@
+use wc3_mdx::Record;
 use wc3_mdx::{
     AnimationTrack, Keyframe, Layer, LayerShadingFlags, LayerTextureSlot, Material,
     MaterialRenderFlags, Model,
@@ -10,7 +11,7 @@ fn sample_material(version: u32) -> Material {
     layer.set_alpha(0.5);
     let mut material = Material::new(version);
     material.set_layers(&[layer]).unwrap();
-    Material::from_bytes(version, &material.to_bytes().unwrap()).unwrap()
+    Material::decode(&material.encode().unwrap(), version).unwrap()
 }
 
 #[test]
@@ -21,7 +22,7 @@ fn material_layers_round_trip_across_layouts() {
         material.set_raw_render_mode(7);
         let mut model = Model::new(version);
         model.set_materials(&[material]).unwrap();
-        let decoded = Model::from_bytes(&model.to_bytes().unwrap()).unwrap();
+        let decoded = Model::decode(&model.encode().unwrap(), 800).unwrap();
         let materials = decoded.materials().unwrap();
         assert_eq!(materials[0].version(), version);
         assert_eq!(materials[0].priority_plane(), 3);
@@ -36,7 +37,7 @@ fn material_layers_round_trip_across_layouts() {
         assert_eq!(layers[0].alpha(), 0.5);
         assert_eq!(layers[0].shading_flags(), LayerShadingFlags::default());
         assert_eq!(
-            Layer::from_bytes(version, &layers[0].to_bytes().unwrap()).unwrap(),
+            Layer::decode(&layers[0].encode().unwrap(), version).unwrap(),
             layers[0]
         );
     }
@@ -55,7 +56,7 @@ fn local_material_layers_are_bounded_when_available() {
                 pending.push(path);
             } else if path.extension().is_some_and(|extension| extension == "mdx") {
                 let bytes = std::fs::read(&path).unwrap();
-                let model = Model::from_bytes(&bytes).unwrap();
+                let model = Model::decode(&bytes, 800).unwrap();
                 for material in model.materials().unwrap() {
                     for layer in material.layers() {
                         layer.filter_mode();
@@ -77,7 +78,7 @@ fn builds_material_with_reforged_layer() {
     layer.set_fresnel_color([0.1, 0.2, 0.3]).unwrap();
     let mut material = Material::new(1100);
     material.set_layers(&[layer]).unwrap();
-    let parsed = Material::from_bytes(1100, &material.to_bytes().unwrap()).unwrap();
+    let parsed = Material::decode(&material.encode().unwrap(), 1100).unwrap();
     let layers = parsed.layers();
     assert_eq!(layers[0].texture_id(), 4);
     assert_eq!(layers[0].shader_type_id(), Some(2));
@@ -90,7 +91,7 @@ fn shader_path_round_trip_in_legacy_reforged_material() {
     let mut material = Material::new(1000);
     material.set_shader("Shaders\\Unit.shader").unwrap();
     assert_eq!(
-        Material::from_bytes(1000, &material.to_bytes().unwrap())
+        Material::decode(&material.encode().unwrap(), 1000)
             .unwrap()
             .shader()
             .as_deref(),
@@ -136,7 +137,7 @@ fn reforged_layer_texture_slot_and_tracks_round_trip() {
     layer
         .set_tracks(std::slice::from_ref(&alpha_track))
         .unwrap();
-    let parsed = Layer::from_bytes(1800, &layer.to_bytes().unwrap()).unwrap();
+    let parsed = Layer::decode(&layer.encode().unwrap(), 1800).unwrap();
     assert_eq!(
         parsed.texture_slots()[0].track.as_ref().unwrap().keyframes[0].integer_value(),
         Some(17)
@@ -150,7 +151,7 @@ fn unlit_layer_flag_round_trip() {
     let mut flags = layer.shading_flags();
     flags.set(LayerShadingFlags::UNLIT, true);
     layer.set_shading_flags(flags);
-    assert!(Layer::from_bytes(1800, &layer.to_bytes().unwrap())
+    assert!(Layer::decode(&layer.encode().unwrap(), 1800)
         .unwrap()
         .shading_flags()
         .contains(LayerShadingFlags::UNLIT));
@@ -159,22 +160,22 @@ fn unlit_layer_flag_round_trip() {
 #[test]
 fn version_specific_fields_do_not_write_into_legacy_tracks() {
     let mut layer = Layer::new(800);
-    let before = layer.to_bytes().unwrap();
+    let before = layer.encode().unwrap();
     assert!(layer.set_emissive_gain(0.5).is_err());
     assert!(layer.set_fresnel_opacity(0.5).is_err());
     assert!(layer.set_shader_type_id(1).is_err());
-    assert_eq!(layer.to_bytes().unwrap(), before);
+    assert_eq!(layer.encode().unwrap(), before);
 }
 
 #[test]
 fn preserves_shader_padding_and_float_bits() {
     let mut material = Material::new(1000);
     material.set_layers(&[Layer::new(1000)]).unwrap();
-    let mut bytes = material.to_bytes().unwrap();
+    let mut bytes = material.encode().unwrap();
     bytes[20] = 0xaf;
     let layer_start = 100;
     bytes[layer_start + 24..layer_start + 28].copy_from_slice(&0x7fa1_2345u32.to_le_bytes());
-    let parsed = Material::from_bytes(1000, &bytes).unwrap();
-    assert_eq!(parsed.to_bytes().unwrap(), bytes);
+    let parsed = Material::decode(&bytes, 1000).unwrap();
+    assert_eq!(parsed.encode().unwrap(), bytes);
     assert_eq!(parsed.layers()[0].alpha().to_bits(), 0x7fa1_2345);
 }
