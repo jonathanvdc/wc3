@@ -2,16 +2,16 @@
 
 Work in progress: a pure Rust Warcraft III MDX reader and writer. The current
 crate parses the MDX container into ordered raw chunks and writes it back
-without changing chunk data. Semantic decoding of model objects, geometry,
-animations, and Reforged extensions is still to be implemented.
+without changing chunk data. Typed coverage is growing one chunk at a time.
 The target range is MDX versions 800 through 1800.
 
 Typed access is available for model information, animation sequences, texture
 references, global sequences, pivot points, basic geoset mesh data, material
 and layer headers, geoset animations, bones, helpers, node transform tracks,
-and bind-pose matrices. Unknown fields and chunks remain available as bytes,
-so files can be preserved while typed coverage grows. Full semantic support
-across the target version range has not yet been verified.
+bind-pose matrices, event objects, collision shapes, cameras, lights,
+attachments, face animation references, popcorn emitters, and texture
+animations. Unknown fields and chunks remain available as bytes. Full semantic
+support across the target version range has not yet been verified.
 
 ## Rust API
 
