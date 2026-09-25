@@ -41,7 +41,7 @@ fn local_particle_emitter2_round_trip_when_available() {
                     for emitter in &mut emitters {
                         let fields = emitter.fields();
                         emitter.set_fields(&fields);
-                        emitter.tracks().unwrap();
+                        emitter.tracks();
                     }
                     model.set_particle_emitters2(&emitters).unwrap();
                     assert_eq!(model.to_bytes().unwrap(), bytes, "{}", path.display());

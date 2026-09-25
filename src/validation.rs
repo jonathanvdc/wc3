@@ -39,10 +39,7 @@ impl Model {
             shape.node().tracks();
         }
         self.particle_emitters()?;
-        for emitter in self.particle_emitters2()? {
-            emitter.node().tracks();
-            emitter.tracks()?;
-        }
+        self.particle_emitters2()?;
         self.ribbon_emitters()?;
         for emitter in self.popcorn_emitters()? {
             emitter.node().tracks();

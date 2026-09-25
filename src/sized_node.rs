@@ -1,27 +1,11 @@
 //! Shared bounds checks for records with an outer size and embedded node.
 
-use crate::{Error, Node};
+use crate::Error;
 
 /// Offsets within one validated record.
 pub(crate) struct Layout {
     pub(crate) fixed_start: usize,
     pub(crate) track_start: usize,
-}
-
-pub(crate) fn new_record(node: &Node, fixed_size: usize, tag: [u8; 4]) -> Result<Vec<u8>, Error> {
-    let node_bytes = node.to_bytes();
-    let size = 4usize
-        .checked_add(node_bytes.len())
-        .and_then(|n| n.checked_add(fixed_size))
-        .filter(|&size| size <= u32::MAX as usize)
-        .ok_or(Error::ChunkTooLarge {
-            tag,
-            size: usize::MAX,
-        })?;
-    let mut bytes = vec![0; size];
-    bytes[..4].copy_from_slice(&(size as u32).to_le_bytes());
-    bytes[4..4 + node_bytes.len()].copy_from_slice(&node_bytes);
-    Ok(bytes)
 }
 
 pub(crate) fn layout(bytes: &[u8], tag: [u8; 4], fixed_size: usize) -> Result<Layout, Error> {
@@ -82,8 +66,12 @@ mod tests {
 
     #[test]
     fn checks_outer_and_embedded_node_sizes() {
-        let node = Node::new("Emitter", 0).unwrap();
-        let mut record = new_record(&node, 8, *b"TEST").unwrap();
+        let node = crate::Node::new("Emitter", 0).unwrap();
+        let mut record = vec![0; 4];
+        record.extend_from_slice(&node.to_bytes());
+        record.extend_from_slice(&[0; 8]);
+        let size = record.len() as u32;
+        record[..4].copy_from_slice(&size.to_le_bytes());
         assert_eq!(layout(&record, *b"TEST", 8).unwrap().fixed_start, 100);
         record[4..8].copy_from_slice(&1000u32.to_le_bytes());
         assert!(layout(&record, *b"TEST", 8).is_err());
