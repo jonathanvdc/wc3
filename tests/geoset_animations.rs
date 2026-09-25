@@ -1,4 +1,4 @@
-use wc3_mdx::{GeosetAnimation, Model};
+use wc3_mdx::{AnimationTrack, GeosetAnimation, Keyframe, Model};
 
 #[test]
 fn geoset_animation_fields_round_trip() {
@@ -38,4 +38,23 @@ fn local_geoset_animations_round_trip_when_available() {
             }
         }
     }
+}
+
+#[test]
+fn geoset_animation_color_track_round_trip() {
+    let mut animation = GeosetAnimation::new(1);
+    let track = AnimationTrack {
+        tag: *b"KGAC",
+        interpolation: 1,
+        global_sequence_id: u32::MAX,
+        keyframes: vec![Keyframe {
+            frame: 25,
+            value: vec![0.2, 0.4, 0.8],
+            in_tangent: None,
+            out_tangent: None,
+        }],
+    };
+    animation.set_tracks(std::slice::from_ref(&track)).unwrap();
+    let parsed = GeosetAnimation::from_bytes(animation.as_bytes()).unwrap();
+    assert_eq!(parsed.tracks().unwrap(), vec![track]);
 }

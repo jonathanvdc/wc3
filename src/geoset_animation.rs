@@ -1,6 +1,6 @@
 //! Geoset animation records in `GEOA` chunks.
 
-use crate::{Error, Model};
+use crate::{AnimationTrack, Error, Model};
 
 const TAG: [u8; 4] = *b"GEOA";
 const HEADER_SIZE: usize = 28;
@@ -94,6 +94,45 @@ impl GeosetAnimation {
     /// Returns optional `KGAO` and `KGAC` track data without interpretation.
     pub fn track_bytes(&self) -> &[u8] {
         &self.bytes[HEADER_SIZE..]
+    }
+
+    /// Decodes alpha and color animation tracks.
+    pub fn tracks(&self) -> Result<Vec<AnimationTrack>, Error> {
+        let mut result = Vec::new();
+        let mut offset = HEADER_SIZE;
+        while offset < self.bytes.len() {
+            let (track, consumed) = AnimationTrack::parse(&self.bytes, offset)?;
+            if !matches!(&track.tag, b"KGAO" | b"KGAC") {
+                return Err(Error::MalformedRecord { tag: TAG, offset });
+            }
+            result.push(track);
+            offset += consumed;
+        }
+        Ok(result)
+    }
+
+    /// Replaces alpha and color animation tracks.
+    pub fn set_tracks(&mut self, tracks: &[AnimationTrack]) -> Result<(), Error> {
+        let mut bytes = self.bytes[..HEADER_SIZE].to_vec();
+        for track in tracks {
+            if !matches!(&track.tag, b"KGAO" | b"KGAC") {
+                return Err(Error::MalformedRecord {
+                    tag: TAG,
+                    offset: bytes.len(),
+                });
+            }
+            bytes.extend_from_slice(&track.to_bytes()?);
+        }
+        if bytes.len() > u32::MAX as usize {
+            return Err(Error::ChunkTooLarge {
+                tag: TAG,
+                size: bytes.len(),
+            });
+        }
+        let size = bytes.len() as u32;
+        bytes[..4].copy_from_slice(&size.to_le_bytes());
+        self.bytes = bytes;
+        Ok(())
     }
 
     fn u32_at(&self, offset: usize) -> u32 {

@@ -1,4 +1,4 @@
-use wc3_mdx::{Light, Model, Node};
+use wc3_mdx::{AnimationTrack, Keyframe, Light, Model, Node};
 
 #[test]
 fn light_fields_round_trip() {
@@ -21,4 +21,23 @@ fn light_fields_round_trip() {
     assert_eq!(light.intensity(), 2.0);
     assert_eq!(light.ambient_color(), [0.1, 0.2, 0.3]);
     assert_eq!(light.ambient_intensity(), 0.5);
+}
+
+#[test]
+fn light_color_track_round_trip() {
+    let mut light = Light::new(Node::new("Lamp", 3).unwrap(), 0);
+    let track = AnimationTrack {
+        tag: *b"KLAC",
+        interpolation: 1,
+        global_sequence_id: u32::MAX,
+        keyframes: vec![Keyframe {
+            frame: 250,
+            value: vec![1.0, 0.5, 0.25],
+            in_tangent: None,
+            out_tangent: None,
+        }],
+    };
+    light.set_tracks(std::slice::from_ref(&track)).unwrap();
+    let parsed = Light::from_bytes(light.as_bytes()).unwrap();
+    assert_eq!(parsed.tracks().unwrap(), vec![track]);
 }

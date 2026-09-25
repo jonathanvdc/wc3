@@ -1,6 +1,6 @@
 //! Light records in `LITE` chunks.
 
-use crate::{Error, Model, Node};
+use crate::{AnimationTrack, Error, Model, Node};
 
 const TAG: [u8; 4] = *b"LITE";
 const FIXED_SIZE: usize = 44;
@@ -124,6 +124,45 @@ impl Light {
         &self.bytes[self.fixed_offset() + FIXED_SIZE..]
     }
 
+    /// Decodes optional visibility, color, intensity, and attenuation tracks.
+    pub fn tracks(&self) -> Result<Vec<AnimationTrack>, Error> {
+        let mut result = Vec::new();
+        let mut offset = self.fixed_offset() + FIXED_SIZE;
+        while offset < self.bytes.len() {
+            let (track, consumed) = AnimationTrack::parse(&self.bytes, offset)?;
+            if !is_track(track.tag) {
+                return Err(Error::MalformedRecord { tag: TAG, offset });
+            }
+            result.push(track);
+            offset += consumed;
+        }
+        Ok(result)
+    }
+
+    /// Replaces optional light animation tracks.
+    pub fn set_tracks(&mut self, tracks: &[AnimationTrack]) -> Result<(), Error> {
+        let mut bytes = self.bytes[..self.fixed_offset() + FIXED_SIZE].to_vec();
+        for track in tracks {
+            if !is_track(track.tag) {
+                return Err(Error::MalformedRecord {
+                    tag: TAG,
+                    offset: bytes.len(),
+                });
+            }
+            bytes.extend_from_slice(&track.to_bytes()?);
+        }
+        if bytes.len() > u32::MAX as usize {
+            return Err(Error::ChunkTooLarge {
+                tag: TAG,
+                size: bytes.len(),
+            });
+        }
+        let size = bytes.len() as u32;
+        bytes[..4].copy_from_slice(&size.to_le_bytes());
+        self.bytes = bytes;
+        Ok(())
+    }
+
     fn node_size(&self) -> usize {
         u32::from_le_bytes(self.bytes[4..8].try_into().expect("validated node size")) as usize
     }
@@ -161,6 +200,13 @@ impl Light {
             self.set_f32_at(offset + axis * 4, value);
         }
     }
+}
+
+fn is_track(tag: [u8; 4]) -> bool {
+    matches!(
+        &tag,
+        b"KLAV" | b"KLAC" | b"KLAI" | b"KLBC" | b"KLBI" | b"KLAS" | b"KLAE"
+    )
 }
 
 fn record_end(data: &[u8], offset: usize) -> Result<usize, Error> {
