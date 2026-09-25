@@ -31,6 +31,8 @@ mod geoset;
 pub use geoset::Geoset;
 mod geoset_animation;
 pub use geoset_animation::GeosetAnimation;
+mod light;
+pub use light::Light;
 mod material;
 pub use material::{Layer, Material};
 mod model_info;
