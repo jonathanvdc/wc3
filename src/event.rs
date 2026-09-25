@@ -71,20 +71,9 @@ impl Model {
 
     /// Replaces event objects in the first `EVTS` chunk.
     pub fn set_event_objects(&mut self, events: &[EventObject]) -> Result<(), Error> {
-        let size = events.iter().try_fold(0usize, |sum, event| {
-            sum.checked_add(event.encode()?.len())
-                .filter(|&size| size <= u32::MAX as usize)
-                .ok_or(Error::ChunkTooLarge {
-                    tag: EventObject::TAG,
-                    size: usize::MAX,
-                })
-        })?;
-        let mut data = Vec::with_capacity(size);
-        for event in events {
-            data.extend_from_slice(&event.encode()?);
-        }
-        self.replace_raw_chunk(EventObject::TAG, data)?;
-        Ok(())
+        self.replace_chunk(crate::ModelChunk::EventObjects(
+            crate::EventObjectsChunk::new(events.to_vec()),
+        ))
     }
 }
 

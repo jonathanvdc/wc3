@@ -21,23 +21,30 @@ pub struct Model {
 }
 
 impl Model {
-    pub(crate) fn collect_chunk_records<C: CollectionChunk>(
+    pub(crate) fn collect_chunk_records<C: CollectionChunk + 'static>(
         &self,
         typed: for<'a> fn(&'a ModelChunk) -> Option<&'a C>,
     ) -> Result<Vec<C::Item>, Error>
     where
         C::Item: Clone,
     {
+        self.collect_chunk_items(C::tag(), |chunk| {
+            typed(chunk).map(|collection| collection.records())
+        })
+    }
+
+    pub(crate) fn collect_chunk_items<T: Clone>(
+        &self,
+        tag: [u8; 4],
+        typed: impl Fn(&ModelChunk) -> Option<&[T]>,
+    ) -> Result<Vec<T>, Error> {
         let mut result = Vec::new();
-        for chunk in self.chunks.iter().filter(|chunk| chunk.tag() == C::tag()) {
+        for chunk in self.chunks.iter().filter(|chunk| chunk.tag() == tag) {
             if let ModelChunk::Malformed(malformed) = chunk {
                 return Err(malformed.error.clone());
             }
-            if let Some(collection) = typed(chunk) {
-                result.extend_from_slice(collection.records());
-            } else if let ModelChunk::Unknown(raw) = chunk {
-                let collection = C::decode(&raw.data, self.version())?;
-                result.extend_from_slice(collection.records());
+            if let Some(items) = typed(chunk) {
+                result.extend_from_slice(items);
             } else {
                 unreachable!("tag matched a different decoded chunk type");
             }

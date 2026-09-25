@@ -147,18 +147,9 @@ impl Model {
 
     /// Replaces cameras in the first `CAMS` chunk.
     pub fn set_cameras(&mut self, cameras: &[Camera]) -> Result<(), Error> {
-        let mut data = Vec::new();
-        for camera in cameras {
-            data.extend_from_slice(&camera.encode()?);
-            if data.len() > u32::MAX as usize {
-                return Err(Error::ChunkTooLarge {
-                    tag: Camera::TAG,
-                    size: data.len(),
-                });
-            }
-        }
-        self.replace_raw_chunk(Camera::TAG, data)?;
-        Ok(())
+        self.replace_chunk(crate::ModelChunk::Cameras(crate::CamerasChunk::new(
+            cameras.to_vec(),
+        )))
     }
 }
 

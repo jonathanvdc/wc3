@@ -95,20 +95,9 @@ impl Model {
 
     /// Replaces attachments in the first `ATCH` chunk.
     pub fn set_attachments(&mut self, attachments: &[Attachment]) -> Result<(), Error> {
-        let size = attachments.iter().try_fold(0usize, |sum, attachment| {
-            sum.checked_add(attachment.encode()?.len())
-                .filter(|&size| size <= u32::MAX as usize)
-                .ok_or(Error::ChunkTooLarge {
-                    tag: Attachment::TAG,
-                    size: usize::MAX,
-                })
-        })?;
-        let mut data = Vec::with_capacity(size);
-        for attachment in attachments {
-            data.extend_from_slice(&attachment.encode()?);
-        }
-        self.replace_raw_chunk(Attachment::TAG, data)?;
-        Ok(())
+        self.replace_chunk(crate::ModelChunk::Attachments(
+            crate::AttachmentsChunk::new(attachments.to_vec()),
+        ))
     }
 }
 

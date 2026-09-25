@@ -130,18 +130,9 @@ impl Model {
 
     /// Replaces geoset animations in the first `GEOA` chunk.
     pub fn set_geoset_animations(&mut self, animations: &[GeosetAnimation]) -> Result<(), Error> {
-        let mut data = Vec::new();
-        for animation in animations {
-            data.extend_from_slice(&animation.encode()?);
-            if data.len() > u32::MAX as usize {
-                return Err(Error::ChunkTooLarge {
-                    tag: GeosetAnimation::TAG,
-                    size: data.len(),
-                });
-            }
-        }
-        self.replace_raw_chunk(GeosetAnimation::TAG, data)?;
-        Ok(())
+        self.replace_chunk(crate::ModelChunk::GeosetAnimations(
+            crate::GeosetAnimationsChunk::new(animations.to_vec()),
+        ))
     }
 }
 

@@ -58,18 +58,9 @@ impl Model {
 
     /// Replaces texture animations in the first `TXAN` chunk.
     pub fn set_texture_animations(&mut self, animations: &[TextureAnimation]) -> Result<(), Error> {
-        let mut data = Vec::new();
-        for animation in animations {
-            data.extend_from_slice(&animation.encode()?);
-            if data.len() > u32::MAX as usize {
-                return Err(Error::ChunkTooLarge {
-                    tag: TextureAnimation::TAG,
-                    size: data.len(),
-                });
-            }
-        }
-        self.replace_raw_chunk(TextureAnimation::TAG, data)?;
-        Ok(())
+        self.replace_chunk(crate::ModelChunk::TextureAnimations(
+            crate::TextureAnimationsChunk::new(animations.to_vec()),
+        ))
     }
 }
 

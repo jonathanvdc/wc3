@@ -199,18 +199,9 @@ impl Model {
 
     /// Replaces all bones in the first `BONE` chunk.
     pub fn set_bones(&mut self, bones: &[Bone]) -> Result<(), Error> {
-        let mut data = Vec::new();
-        for bone in bones {
-            data.extend_from_slice(&bone.encode()?);
-            if data.len() > u32::MAX as usize {
-                return Err(Error::ChunkTooLarge {
-                    tag: Bone::TAG,
-                    size: data.len(),
-                });
-            }
-        }
-        self.replace_raw_chunk(Bone::TAG, data)?;
-        Ok(())
+        self.replace_chunk(crate::ModelChunk::Bones(crate::BonesChunk::new(
+            bones.to_vec(),
+        )))
     }
 
     /// Decodes every helper node in `HELP` chunks.
@@ -223,18 +214,9 @@ impl Model {
 
     /// Replaces all helpers in the first `HELP` chunk.
     pub fn set_helpers(&mut self, helpers: &[Node]) -> Result<(), Error> {
-        let mut data = Vec::new();
-        for helper in helpers {
-            data.extend_from_slice(&helper.encode()?);
-            if data.len() > u32::MAX as usize {
-                return Err(Error::ChunkTooLarge {
-                    tag: Node::TAG,
-                    size: data.len(),
-                });
-            }
-        }
-        self.replace_raw_chunk(Node::TAG, data)?;
-        Ok(())
+        self.replace_chunk(crate::ModelChunk::Helpers(crate::HelpersChunk::new(
+            helpers.to_vec(),
+        )))
     }
 }
 

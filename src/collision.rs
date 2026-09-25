@@ -133,20 +133,9 @@ impl Model {
 
     /// Replaces collision shapes in the first `CLID` chunk.
     pub fn set_collision_shapes(&mut self, shapes: &[CollisionShape]) -> Result<(), Error> {
-        let size = shapes.iter().try_fold(0usize, |sum, shape| {
-            sum.checked_add(shape.encode()?.len())
-                .filter(|&size| size <= u32::MAX as usize)
-                .ok_or(Error::ChunkTooLarge {
-                    tag: CollisionShape::TAG,
-                    size: usize::MAX,
-                })
-        })?;
-        let mut data = Vec::with_capacity(size);
-        for shape in shapes {
-            data.extend_from_slice(&shape.encode()?);
-        }
-        self.replace_raw_chunk(CollisionShape::TAG, data)?;
-        Ok(())
+        self.replace_chunk(crate::ModelChunk::CollisionShapes(
+            crate::CollisionShapesChunk::new(shapes.to_vec()),
+        ))
     }
 }
 
@@ -155,9 +144,7 @@ impl Record for CollisionShape {
         let node = Node::decode_one(cursor, 0)?;
         let kind_offset = cursor.absolute_position();
         let kind = cursor.read_u32()?;
-        let vec3 = |cursor: &mut Cursor<'_>| -> Result<[f32; 3], Error> {
-            Ok(cursor.read_vec3()?)
-        };
+        let vec3 = |cursor: &mut Cursor<'_>| -> Result<[f32; 3], Error> { Ok(cursor.read_vec3()?) };
         let geometry = match kind {
             0 => CollisionGeometry::Box([vec3(cursor)?, vec3(cursor)?]),
             1 => CollisionGeometry::Plane([vec3(cursor)?, vec3(cursor)?]),

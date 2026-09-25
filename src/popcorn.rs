@@ -155,20 +155,9 @@ impl Model {
 
     /// Replaces popcorn emitters in the first `CORN` chunk.
     pub fn set_popcorn_emitters(&mut self, emitters: &[PopcornEmitter]) -> Result<(), Error> {
-        let size = emitters.iter().try_fold(0usize, |sum, emitter| {
-            sum.checked_add(emitter.encode()?.len())
-                .filter(|&size| size <= u32::MAX as usize)
-                .ok_or(Error::ChunkTooLarge {
-                    tag: PopcornEmitter::TAG,
-                    size: usize::MAX,
-                })
-        })?;
-        let mut data = Vec::with_capacity(size);
-        for emitter in emitters {
-            data.extend_from_slice(&emitter.encode()?);
-        }
-        self.replace_raw_chunk(PopcornEmitter::TAG, data)?;
-        Ok(())
+        self.replace_chunk(crate::ModelChunk::PopcornEmitters(
+            crate::PopcornEmittersChunk::new(emitters.to_vec()),
+        ))
     }
 }
 

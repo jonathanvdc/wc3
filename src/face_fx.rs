@@ -62,20 +62,9 @@ impl Model {
 
     /// Replaces face-animation records in the first `FAFX` chunk.
     pub fn set_face_fx(&mut self, entries: &[FaceFx]) -> Result<(), Error> {
-        let size = entries
-            .len()
-            .checked_mul(SIZE)
-            .filter(|&size| size <= u32::MAX as usize)
-            .ok_or(Error::ChunkTooLarge {
-                tag: FaceFx::TAG,
-                size: usize::MAX,
-            })?;
-        let mut data = Vec::with_capacity(size);
-        for entry in entries {
-            data.extend_from_slice(entry.as_bytes());
-        }
-        self.replace_raw_chunk(FaceFx::TAG, data)?;
-        Ok(())
+        self.replace_chunk(crate::ModelChunk::FaceFx(crate::FaceFxChunk::new(
+            entries.to_vec(),
+        )))
     }
 }
 

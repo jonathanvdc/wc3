@@ -551,7 +551,6 @@ impl Model {
     /// Replaces geosets after checking their version and encoding their sections.
     pub fn set_geosets(&mut self, geosets: &[Geoset]) -> Result<(), Error> {
         let expected = self.version();
-        let mut data = Vec::new();
         for geoset in geosets {
             if geoset.version != expected {
                 return Err(Error::VersionMismatch {
@@ -559,16 +558,10 @@ impl Model {
                     actual: geoset.version,
                 });
             }
-            data.extend_from_slice(&geoset.encode()?);
-            if data.len() > u32::MAX as usize {
-                return Err(Error::ChunkTooLarge {
-                    tag: Geoset::TAG,
-                    size: data.len(),
-                });
-            }
         }
-        self.replace_raw_chunk(Geoset::TAG, data)?;
-        Ok(())
+        self.replace_chunk(crate::ModelChunk::Geosets(crate::GeosetsChunk::new(
+            geosets.to_vec(),
+        )))
     }
 }
 

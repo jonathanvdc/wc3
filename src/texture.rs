@@ -106,25 +106,9 @@ impl Model {
     /// Writes the texture list to the first `TEXS` chunk. Additional `TEXS`
     /// chunks are removed after their records are replaced.
     pub fn set_textures(&mut self, textures: &[Texture]) -> Result<(), Error> {
-        let size = textures
-            .len()
-            .checked_mul(SIZE)
-            .ok_or(Error::ChunkTooLarge {
-                tag: Texture::TAG,
-                size: usize::MAX,
-            })?;
-        if size > u32::MAX as usize {
-            return Err(Error::ChunkTooLarge {
-                tag: Texture::TAG,
-                size,
-            });
-        }
-        let mut data = Vec::with_capacity(size);
-        for texture in textures {
-            data.extend_from_slice(texture.as_bytes());
-        }
-        self.replace_raw_chunk(Texture::TAG, data)?;
-        Ok(())
+        self.replace_chunk(crate::ModelChunk::Textures(crate::TexturesChunk::new(
+            textures.to_vec(),
+        )))
     }
 }
 

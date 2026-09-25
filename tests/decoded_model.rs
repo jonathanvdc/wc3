@@ -58,3 +58,18 @@ fn replacing_a_malformed_chunk_clears_its_error() {
     assert!(model.validate().is_ok());
     assert!(matches!(model.chunks()[1], ModelChunk::Sequences(_)));
 }
+
+#[test]
+fn collection_setter_keeps_records_decoded_and_collapses_repeated_chunks() {
+    let mut model = Model::new(800);
+    let first = Sequence::new("Stand", [0, 100]).unwrap();
+    let second = Sequence::new("Walk", [101, 200]).unwrap();
+    model.push(ModelChunk::Sequences(SequencesChunk::new(vec![first.clone()])));
+    model.push(ModelChunk::Sequences(SequencesChunk::new(vec![second.clone()])));
+    assert_eq!(model.sequences().unwrap(), vec![first, second.clone()]);
+
+    model.set_sequences(&[second.clone()]).unwrap();
+    assert!(matches!(model.chunk(*b"SEQS"), Some(ModelChunk::Sequences(_))));
+    assert_eq!(model.chunks().iter().filter(|chunk| chunk.tag() == *b"SEQS").count(), 1);
+    assert_eq!(model.sequences().unwrap(), vec![second]);
+}

@@ -1,21 +1,14 @@
 //! Model accessors for scalar chunks.
 
-use crate::{Error, GlobalSequencesChunk, Model, ModelChunk, PivotPointsChunk, RawChunk};
+use crate::{Error, GlobalSequencesChunk, Model, ModelChunk, PivotPointsChunk};
 
 impl Model {
     /// Returns durations from every `GLBS` chunk in file order.
     pub fn global_sequences(&self) -> Result<Vec<u32>, Error> {
-        let mut durations = Vec::new();
-        for chunk in self.chunks().iter().filter(|chunk| chunk.tag() == *b"GLBS") {
-            match chunk {
-                ModelChunk::GlobalSequences(decoded) => {
-                    durations.extend_from_slice(&decoded.durations)
-                }
-                ModelChunk::Malformed(malformed) => return Err(malformed.error().clone()),
-                _ => unreachable!("GLBS tag matched another typed chunk"),
-            }
-        }
-        Ok(durations)
+        self.collect_chunk_items(*b"GLBS", |chunk| match chunk {
+            ModelChunk::GlobalSequences(decoded) => Some(&decoded.durations),
+            _ => None,
+        })
     }
 
     /// Writes global sequence durations to a `GLBS` chunk.
@@ -27,15 +20,10 @@ impl Model {
 
     /// Returns XYZ pivot points from every `PIVT` chunk in file order.
     pub fn pivot_points(&self) -> Result<Vec<[f32; 3]>, Error> {
-        let mut points = Vec::new();
-        for chunk in self.chunks().iter().filter(|chunk| chunk.tag() == *b"PIVT") {
-            match chunk {
-                ModelChunk::PivotPoints(decoded) => points.extend_from_slice(&decoded.points),
-                ModelChunk::Malformed(malformed) => return Err(malformed.error().clone()),
-                _ => unreachable!("PIVT tag matched another typed chunk"),
-            }
-        }
-        Ok(points)
+        self.collect_chunk_items(*b"PIVT", |chunk| match chunk {
+            ModelChunk::PivotPoints(decoded) => Some(&decoded.points),
+            _ => None,
+        })
     }
 
     /// Writes XYZ pivot points to a `PIVT` chunk.
@@ -45,14 +33,13 @@ impl Model {
         }))
     }
 
-    pub(crate) fn replace_raw_chunk(&mut self, tag: [u8; 4], data: Vec<u8>) -> Result<(), Error> {
-        let version = self.version();
-        self.replace_chunk(ModelChunk::from_raw(RawChunk::new(tag, data), version))
-    }
-
     pub(crate) fn replace_chunk(&mut self, chunk: ModelChunk) -> Result<(), Error> {
         let tag = chunk.tag();
-        if let Some(index) = self.chunks().iter().position(|existing| existing.tag() == tag) {
+        if let Some(index) = self
+            .chunks()
+            .iter()
+            .position(|existing| existing.tag() == tag)
+        {
             self.chunks_mut()[index] = chunk;
             let mut seen = false;
             self.chunks_mut().retain(|existing| {

@@ -100,20 +100,9 @@ impl Model {
 
     /// Replaces ribbon emitters in the first `RIBB` chunk.
     pub fn set_ribbon_emitters(&mut self, emitters: &[RibbonEmitter]) -> Result<(), Error> {
-        let size = emitters.iter().try_fold(0usize, |sum, emitter| {
-            sum.checked_add(emitter.encode()?.len())
-                .filter(|&size| size <= u32::MAX as usize)
-                .ok_or(Error::ChunkTooLarge {
-                    tag: RibbonEmitter::TAG,
-                    size: usize::MAX,
-                })
-        })?;
-        let mut data = Vec::with_capacity(size);
-        for emitter in emitters {
-            data.extend_from_slice(&emitter.encode()?);
-        }
-        self.replace_raw_chunk(RibbonEmitter::TAG, data)?;
-        Ok(())
+        self.replace_chunk(crate::ModelChunk::RibbonEmitters(
+            crate::RibbonEmittersChunk::new(emitters.to_vec()),
+        ))
     }
 }
 

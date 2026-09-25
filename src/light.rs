@@ -166,20 +166,9 @@ impl Model {
 
     /// Replaces lights in the first `LITE` chunk.
     pub fn set_lights(&mut self, lights: &[Light]) -> Result<(), Error> {
-        let size = lights.iter().try_fold(0usize, |sum, light| {
-            sum.checked_add(light.encode()?.len())
-                .filter(|&size| size <= u32::MAX as usize)
-                .ok_or(Error::ChunkTooLarge {
-                    tag: Light::TAG,
-                    size: usize::MAX,
-                })
-        })?;
-        let mut data = Vec::with_capacity(size);
-        for light in lights {
-            data.extend_from_slice(&light.encode()?);
-        }
-        self.replace_raw_chunk(Light::TAG, data)?;
-        Ok(())
+        self.replace_chunk(crate::ModelChunk::Lights(crate::LightsChunk::new(
+            lights.to_vec(),
+        )))
     }
 }
 

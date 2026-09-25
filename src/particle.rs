@@ -142,20 +142,9 @@ impl Model {
 
     /// Replaces particle emitters in the first `PREM` chunk.
     pub fn set_particle_emitters(&mut self, emitters: &[ParticleEmitter]) -> Result<(), Error> {
-        let size = emitters.iter().try_fold(0usize, |sum, emitter| {
-            sum.checked_add(emitter.encode()?.len())
-                .filter(|&size| size <= u32::MAX as usize)
-                .ok_or(Error::ChunkTooLarge {
-                    tag: ParticleEmitter::TAG,
-                    size: usize::MAX,
-                })
-        })?;
-        let mut data = Vec::with_capacity(size);
-        for emitter in emitters {
-            data.extend_from_slice(&emitter.encode()?);
-        }
-        self.replace_raw_chunk(ParticleEmitter::TAG, data)?;
-        Ok(())
+        self.replace_chunk(crate::ModelChunk::ParticleEmitters(
+            crate::ParticleEmittersChunk::new(emitters.to_vec()),
+        ))
     }
 }
 

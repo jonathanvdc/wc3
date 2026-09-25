@@ -179,25 +179,9 @@ impl Model {
     /// Writes all sequences to the first `SEQS` chunk, creating it if needed.
     /// Additional `SEQS` chunks are removed after their records are replaced.
     pub fn set_sequences(&mut self, sequences: &[Sequence]) -> Result<(), Error> {
-        let size = sequences
-            .len()
-            .checked_mul(SIZE)
-            .ok_or(Error::ChunkTooLarge {
-                tag: Sequence::TAG,
-                size: usize::MAX,
-            })?;
-        if size > u32::MAX as usize {
-            return Err(Error::ChunkTooLarge {
-                tag: Sequence::TAG,
-                size,
-            });
-        }
-        let mut data = Vec::with_capacity(size);
-        for sequence in sequences {
-            data.extend_from_slice(sequence.as_bytes());
-        }
-        self.replace_raw_chunk(Sequence::TAG, data)?;
-        Ok(())
+        self.replace_chunk(crate::ModelChunk::Sequences(crate::SequencesChunk::new(
+            sequences.to_vec(),
+        )))
     }
 }
 

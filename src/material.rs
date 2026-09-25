@@ -420,7 +420,6 @@ impl Model {
     /// Replaces all material records in the first `MTLS` chunk.
     pub fn set_materials(&mut self, materials: &[Material]) -> Result<(), Error> {
         let expected = self.version();
-        let mut data = Vec::new();
         for material in materials {
             if material.version != expected {
                 return Err(Error::VersionMismatch {
@@ -428,16 +427,10 @@ impl Model {
                     actual: material.version,
                 });
             }
-            data.extend_from_slice(&material.encode()?);
-            if data.len() > u32::MAX as usize {
-                return Err(Error::ChunkTooLarge {
-                    tag: Material::TAG,
-                    size: data.len(),
-                });
-            }
         }
-        self.replace_raw_chunk(Material::TAG, data)?;
-        Ok(())
+        self.replace_chunk(crate::ModelChunk::Materials(crate::MaterialsChunk::new(
+            materials.to_vec(),
+        )))
     }
 }
 
