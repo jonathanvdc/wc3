@@ -42,7 +42,7 @@ fn local_popcorn_emitters_round_trip_when_available() {
                 if model.chunk(*b"CORN").is_some() {
                     let emitters = model.popcorn_emitters().unwrap();
                     for emitter in &emitters {
-                        emitter.tracks().unwrap();
+                        emitter.tracks();
                     }
                     model.set_popcorn_emitters(&emitters).unwrap();
                     assert_eq!(model.to_bytes().unwrap(), bytes);
