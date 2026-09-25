@@ -38,7 +38,7 @@ pub use geoset_animation::{GeosetAnimation, GeosetAnimationFlags};
 mod light;
 pub use light::Light;
 mod material;
-pub use material::{Layer, LayerShadingFlags, Material, MaterialRenderFlags};
+pub use material::{Layer, LayerShadingFlags, LayerTextureSlot, Material, MaterialRenderFlags};
 mod model_info;
 pub use model_info::ModelInfo;
 mod node;
