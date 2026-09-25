@@ -1,4 +1,4 @@
-use wc3_mdx::{Model, Node, ParticleEmitter2};
+use wc3_mdx::{Model, Node, Particle2Frames, ParticleEmitter2};
 
 #[test]
 fn particle_emitter2_fields_round_trip() {
@@ -11,6 +11,10 @@ fn particle_emitter2_fields_round_trip() {
     fields.particle_scaling = [1.0, 2.0, 3.0];
     fields.uv_animations[0] = [0, 4, 2];
     fields.texture_id = 7;
+    fields.set_frames(Particle2Frames::Both);
+    fields.set_squirt_enabled(true);
+    assert_eq!(fields.frames(), Particle2Frames::Both);
+    assert!(fields.squirt_enabled());
     emitter.set_fields(&fields);
     let mut model = Model::new(1800);
     model.set_particle_emitters2(&[emitter]).unwrap();

@@ -48,7 +48,7 @@ pub use popcorn::PopcornEmitter;
 mod particle;
 pub use particle::ParticleEmitter;
 mod particle2;
-pub use particle2::{Particle2Fields, ParticleEmitter2};
+pub use particle2::{Particle2Fields, Particle2Frames, ParticleEmitter2};
 mod ribbon;
 pub use ribbon::{RibbonEmitter, RibbonFields};
 mod sequence;

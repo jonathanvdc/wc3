@@ -5,6 +5,34 @@ use crate::{sized_node, AnimationTrack, Error, Model, Node};
 const TAG: [u8; 4] = *b"PRE2";
 const FIXED_SIZE: usize = 171;
 
+/// Which particle parts are rendered for each emitted particle.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Particle2Frames {
+    Head,
+    Tail,
+    Both,
+    Unknown(u32),
+}
+
+impl Particle2Frames {
+    pub const fn from_raw(value: u32) -> Self {
+        match value {
+            0 => Self::Head,
+            1 => Self::Tail,
+            2 => Self::Both,
+            other => Self::Unknown(other),
+        }
+    }
+    pub const fn raw(self) -> u32 {
+        match self {
+            Self::Head => 0,
+            Self::Tail => 1,
+            Self::Both => 2,
+            Self::Unknown(value) => value,
+        }
+    }
+}
+
 /// Fixed physical, texture, and color fields of a particle emitter 2.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Particle2Fields {
@@ -32,6 +60,25 @@ pub struct Particle2Fields {
     pub squirt: u32,
     pub priority_plane: u32,
     pub replaceable_id: u32,
+}
+
+impl Particle2Fields {
+    /// Decodes the frame mode while retaining unrecognized values.
+    pub fn frames(&self) -> Particle2Frames {
+        Particle2Frames::from_raw(self.frame_flags)
+    }
+    /// Sets the frame mode.
+    pub fn set_frames(&mut self, frames: Particle2Frames) {
+        self.frame_flags = frames.raw();
+    }
+    /// Reports whether newly emitted particles are animated in one burst.
+    pub fn squirt_enabled(&self) -> bool {
+        self.squirt != 0
+    }
+    /// Changes the squirt flag.
+    pub fn set_squirt_enabled(&mut self, enabled: bool) {
+        self.squirt = u32::from(enabled);
+    }
 }
 
 /// A particle emitter 2 with an embedded node and optional animation tracks.
