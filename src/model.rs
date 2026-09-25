@@ -80,20 +80,17 @@ impl Model {
         self.stored_version().unwrap_or(self.default_version)
     }
 
-    /// Updates the first `VERS` value, or inserts a `VERS` chunk first.
-    pub fn set_version(&mut self, version: Version) -> Result<(), Error> {
-        match self.chunk_mut(*b"VERS") {
-            Some(ModelChunk::Version(current)) => current.version = version,
-            Some(_) => return Err(Error::InvalidVersionChunk),
-            None => self.chunks.insert(
-                0,
-                ModelChunk::Version(VersionChunk {
-                    version,
-                    extension: Vec::new(),
-                }),
-            ),
-        }
-        Ok(())
+    /// Replaces `VERS` chunks with one version chunk, preserving the first
+    /// decoded chunk's extension bytes.
+    pub fn set_version(&mut self, version: Version) {
+        let extension = self.chunks.iter().find_map(|chunk| match chunk {
+            ModelChunk::Version(current) => Some(current.extension.clone()),
+            _ => None,
+        });
+        self.replace_chunk(ModelChunk::Version(VersionChunk {
+            version,
+            extension: extension.unwrap_or_default(),
+        }));
     }
 
     /// Returns the ordered list of chunks.

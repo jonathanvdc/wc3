@@ -51,10 +51,29 @@ fn rejects_short_repeated_version_chunks() {
     assert_eq!(model.stored_version(), None);
     assert_eq!(model.version(), 800);
     assert_eq!(model.validate(), Err(Error::InvalidVersionChunk));
-    assert_eq!(
-        model.set_version(1800).unwrap_err(),
-        Error::InvalidVersionChunk
-    );
+    model.set_version(1800);
+    assert_eq!(model.version(), 1800);
+    assert_eq!(model.chunks().len(), 1);
+    model.validate().unwrap();
+}
+
+#[test]
+fn set_version_replaces_repeated_chunks_and_preserves_extension() {
+    let mut model = Model::new(800);
+    let ModelChunk::Version(first) = &mut model.chunks_mut()[0] else {
+        unreachable!()
+    };
+    first.extension = vec![7, 8];
+    model.push(ModelChunk::Version(wc3_mdx::VersionChunk::new(900)));
+
+    model.set_version(1800);
+
+    assert_eq!(model.chunks().len(), 1);
+    let ModelChunk::Version(current) = &model.chunks()[0] else {
+        unreachable!()
+    };
+    assert_eq!(current.version, 1800);
+    assert_eq!(current.extension, [7, 8]);
 }
 
 #[test]
