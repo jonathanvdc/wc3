@@ -81,11 +81,9 @@ impl Model {
     pub(crate) fn replace_chunks(&mut self, tag: [u8; 4], data: Vec<u8>) -> Result<(), Error> {
         let version = self.version();
         let mut positions = Vec::new();
-        let mut lengths = Vec::new();
         for (index, chunk) in self.chunks().iter().enumerate() {
             if chunk.tag() == tag {
                 positions.push(index);
-                lengths.push(chunk.to_raw()?.data.len());
             }
         }
         if positions.is_empty() {
