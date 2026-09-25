@@ -41,3 +41,25 @@ fn light_color_track_round_trip() {
     let parsed = Light::from_bytes(light.as_bytes()).unwrap();
     assert_eq!(parsed.tracks().unwrap(), vec![track]);
 }
+
+#[test]
+fn extended_light_fields_and_tracks_round_trip() {
+    let mut light = Light::new_for_version(Node::new("Glow", 4).unwrap(), 0, 1800);
+    let words = [1, 2, 3, 4, 5, 6, 7];
+    light.set_extended_words(words).unwrap();
+    let track = AnimationTrack {
+        tag: *b"KLAV",
+        interpolation: 1,
+        global_sequence_id: u32::MAX,
+        keyframes: vec![Keyframe {
+            frame: 10,
+            value: vec![1.0],
+            in_tangent: None,
+            out_tangent: None,
+        }],
+    };
+    light.set_tracks(std::slice::from_ref(&track)).unwrap();
+    let parsed = Light::from_bytes(light.as_bytes()).unwrap();
+    assert_eq!(parsed.extended_words(), Some(words));
+    assert_eq!(parsed.tracks().unwrap(), vec![track]);
+}

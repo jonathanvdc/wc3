@@ -4,6 +4,7 @@ use crate::{AnimationTrack, Error, Model, Node};
 
 const TAG: [u8; 4] = *b"LITE";
 const FIXED_SIZE: usize = 44;
+const EXTENDED_SIZE: usize = 72;
 
 /// A light node with fixed lighting values and preserved animation bytes.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -21,6 +22,19 @@ impl Light {
         let size = bytes.len() as u32;
         bytes[..4].copy_from_slice(&size.to_le_bytes());
         Self { bytes }
+    }
+
+    /// Creates a light with the additional fixed fields used by newer models.
+    pub fn new_for_version(node: Node, light_type: u32, version: u32) -> Self {
+        let mut light = Self::new(node, light_type);
+        if version >= 1200 {
+            light
+                .bytes
+                .resize(light.bytes.len() + EXTENDED_SIZE - FIXED_SIZE, 0);
+            let size = light.bytes.len() as u32;
+            light.bytes[..4].copy_from_slice(&size.to_le_bytes());
+        }
+        light
     }
 
     /// Wraps one inclusive-size light record.
@@ -121,13 +135,33 @@ impl Light {
 
     /// Returns optional light track bytes without interpretation.
     pub fn track_bytes(&self) -> &[u8] {
-        &self.bytes[self.fixed_offset() + FIXED_SIZE..]
+        &self.bytes[self.track_start()..]
+    }
+
+    /// Returns the additional seven raw words in newer light records, when present.
+    pub fn extended_words(&self) -> Option<[u32; 7]> {
+        (self.track_start() == self.fixed_offset() + EXTENDED_SIZE)
+            .then(|| std::array::from_fn(|i| self.u32_at(self.fixed_offset() + FIXED_SIZE + i * 4)))
+    }
+
+    /// Sets the additional seven raw words in a newer light record.
+    pub fn set_extended_words(&mut self, words: [u32; 7]) -> Result<(), Error> {
+        if self.extended_words().is_none() {
+            return Err(Error::MalformedRecord {
+                tag: TAG,
+                offset: self.fixed_offset() + FIXED_SIZE,
+            });
+        }
+        for (i, word) in words.into_iter().enumerate() {
+            self.set_u32_at(self.fixed_offset() + FIXED_SIZE + i * 4, word);
+        }
+        Ok(())
     }
 
     /// Decodes optional visibility, color, intensity, and attenuation tracks.
     pub fn tracks(&self) -> Result<Vec<AnimationTrack>, Error> {
         let mut result = Vec::new();
-        let mut offset = self.fixed_offset() + FIXED_SIZE;
+        let mut offset = self.track_start();
         while offset < self.bytes.len() {
             let (track, consumed) = AnimationTrack::parse(&self.bytes, offset)?;
             if !is_track(track.tag) {
@@ -141,7 +175,7 @@ impl Light {
 
     /// Replaces optional light animation tracks.
     pub fn set_tracks(&mut self, tracks: &[AnimationTrack]) -> Result<(), Error> {
-        let mut bytes = self.bytes[..self.fixed_offset() + FIXED_SIZE].to_vec();
+        let mut bytes = self.bytes[..self.track_start()].to_vec();
         for track in tracks {
             if !is_track(track.tag) {
                 return Err(Error::MalformedRecord {
@@ -169,6 +203,25 @@ impl Light {
 
     fn fixed_offset(&self) -> usize {
         4 + self.node_size()
+    }
+
+    fn track_start(&self) -> usize {
+        let short = self.fixed_offset() + FIXED_SIZE;
+        let extended = self.fixed_offset() + EXTENDED_SIZE;
+        if self.bytes.len() >= extended
+            && (self.bytes.len() == extended
+                || self
+                    .bytes
+                    .get(extended..extended + 4)
+                    .is_some_and(|tag| is_track(tag.try_into().expect("four-byte tag"))))
+            && self.bytes.get(short..short + 4).map_or(true, |tag| {
+                !is_track(tag.try_into().expect("four-byte tag"))
+            })
+        {
+            extended
+        } else {
+            short
+        }
     }
 
     fn u32_at(&self, offset: usize) -> u32 {
