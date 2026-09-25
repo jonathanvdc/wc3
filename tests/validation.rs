@@ -1,4 +1,4 @@
-use wc3_mdx::{Chunk, Geoset, Model, Node, RibbonEmitter};
+use wc3_mdx::{Chunk, Error, Geoset, Material, Model, Node, RibbonEmitter};
 
 #[test]
 fn validates_synthetic_known_chunks_and_preserves_unknown() {
@@ -36,6 +36,34 @@ fn rejects_malformed_known_track() {
     let len = ribbon.len() as u32;
     ribbon[..4].copy_from_slice(&len.to_le_bytes());
     model.push(Chunk::new(*b"RIBB", ribbon));
+    assert!(model.validate().is_err());
+}
+
+#[test]
+fn rejects_short_repeated_version_chunks_and_repairs_mutated_first_version() {
+    let mut bytes = Model::new(800).to_bytes().unwrap();
+    bytes.extend_from_slice(b"VERS");
+    bytes.extend_from_slice(&2u32.to_le_bytes());
+    bytes.extend_from_slice(&[1, 2]);
+    assert_eq!(Model::from_bytes(&bytes), Err(Error::InvalidVersionChunk));
+
+    let mut model = Model::new(800);
+    model.chunks_mut()[0].data.clear();
+    assert_eq!(model.version(), None);
+    assert_eq!(model.validate(), Err(Error::InvalidVersionChunk));
+    model.set_version(1800);
+    assert_eq!(model.version(), Some(1800));
+    model.validate().unwrap();
+}
+
+#[test]
+fn rejects_layer_shorter_than_its_versioned_header() {
+    let mut material = Material::new(1800);
+    let layer = wc3_mdx::Layer::new(800).as_bytes().to_vec();
+    let layer = wc3_mdx::Layer::from_bytes(&layer).unwrap();
+    material.set_layers(1800, &[layer]).unwrap();
+    let mut model = Model::new(1800);
+    model.set_materials(&[material]).unwrap();
     assert!(model.validate().is_err());
 }
 

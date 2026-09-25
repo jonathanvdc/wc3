@@ -193,8 +193,9 @@ impl Model {
         }
         let model = Self { chunks };
         if model
-            .chunk(*b"VERS")
-            .is_some_and(|chunk| chunk.data.len() < 4)
+            .chunks
+            .iter()
+            .any(|chunk| chunk.tag == *b"VERS" && chunk.data.len() < 4)
         {
             return Err(Error::InvalidVersionChunk);
         }
@@ -230,14 +231,17 @@ impl Model {
 
     /// Returns the first `VERS` value, if present.
     pub fn version(&self) -> Option<u32> {
-        self.chunk(*b"VERS").map(|chunk| {
-            u32::from_le_bytes(chunk.data[..4].try_into().expect("validated VERS chunk"))
-        })
+        self.chunk(*b"VERS")
+            .and_then(|chunk| chunk.data.get(..4))
+            .map(|bytes| u32::from_le_bytes(bytes.try_into().expect("four-byte version")))
     }
 
     /// Updates the first `VERS` value, or inserts a `VERS` chunk first.
     pub fn set_version(&mut self, version: u32) {
         if let Some(chunk) = self.chunk_mut(*b"VERS") {
+            if chunk.data.len() < 4 {
+                chunk.data.resize(4, 0);
+            }
             chunk.data[..4].copy_from_slice(&version.to_le_bytes());
         } else {
             self.chunks

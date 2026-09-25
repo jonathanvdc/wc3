@@ -6,6 +6,13 @@ impl Model {
     /// Validates known chunks and animation records without changing their bytes.
     /// Unknown top-level chunks remain valid and round-trip unchanged.
     pub fn validate(&self) -> Result<(), Error> {
+        if self
+            .chunks()
+            .iter()
+            .any(|chunk| chunk.tag == *b"VERS" && chunk.data.len() < 4)
+        {
+            return Err(Error::InvalidVersionChunk);
+        }
         let version = match self.version() {
             Some(version) => version,
             None if self.chunk(*b"VERS").is_some() => return Err(Error::InvalidVersionChunk),

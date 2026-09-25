@@ -499,6 +499,12 @@ impl Layer {
 
     /// Returns animation tracks after the fixed header and texture slots.
     pub fn tracks(&self, version: u32) -> Result<Vec<AnimationTrack>, Error> {
+        if self.bytes.len() < fixed_size(version) {
+            return Err(Error::MalformedRecord {
+                tag: *b"LAYS",
+                offset: self.bytes.len(),
+            });
+        }
         let mut offset = if version >= 1100 {
             self.scan_slots()?.1
         } else {
