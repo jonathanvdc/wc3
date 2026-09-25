@@ -21,6 +21,7 @@ mod model_info;
 pub use model_info::ModelInfo;
 mod sequence;
 pub use sequence::Sequence;
+mod simple_chunks;
 mod texture;
 pub use texture::Texture;
 

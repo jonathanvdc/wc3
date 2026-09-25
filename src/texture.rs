@@ -2,7 +2,7 @@
 
 use std::borrow::Cow;
 
-use crate::{Chunk, Error, Model};
+use crate::{Error, Model};
 
 const TAG: [u8; 4] = *b"TEXS";
 const SIZE: usize = 268;
@@ -111,23 +111,7 @@ impl Model {
         for texture in textures {
             data.extend_from_slice(texture.as_bytes());
         }
-        if let Some(first) = self.chunks().iter().position(|chunk| chunk.tag == TAG) {
-            self.chunks_mut()[first].data = data;
-            let mut seen = false;
-            self.chunks_mut().retain(|chunk| {
-                if chunk.tag != TAG {
-                    return true;
-                }
-                if seen {
-                    false
-                } else {
-                    seen = true;
-                    true
-                }
-            });
-        } else {
-            self.push(Chunk::new(TAG, data));
-        }
+        self.replace_chunks(TAG, data);
         Ok(())
     }
 }
