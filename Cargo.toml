@@ -1,0 +1,13 @@
+[package]
+name = "wc3-mdx"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.75"
+description = "Lossless Warcraft III MDX binary model reader and writer"
+license = "MIT OR Apache-2.0"
+readme = "README.md"
+exclude = ["/data/**"]
+keywords = ["warcraft", "mdx", "model", "binary"]
+categories = ["parser-implementations", "game-development"]
+
+[dependencies]
