@@ -9,8 +9,12 @@ const TAG: [u8; 4] = *b"CLID";
 pub enum CollisionKind {
     /// Two XYZ corners.
     Box,
+    /// Two XYZ points describing a plane.
+    Plane,
     /// Center XYZ and radius.
     Sphere,
+    /// Two XYZ endpoints and a radius.
+    Cylinder,
 }
 
 /// A collision primitive attached to a node.
@@ -40,6 +44,30 @@ impl CollisionShape {
             bytes.extend_from_slice(&coordinate.to_le_bytes());
         }
         bytes.extend_from_slice(&radius.to_le_bytes());
+        Self { bytes }
+    }
+
+    /// Creates a plane collision shape from two XYZ points.
+    pub fn new_plane(node: Node, points: [[f32; 3]; 2]) -> Self {
+        Self::from_points(node, 1, points, None)
+    }
+
+    /// Creates a cylinder collision shape from endpoints and radius.
+    pub fn new_cylinder(node: Node, endpoints: [[f32; 3]; 2], radius: f32) -> Self {
+        Self::from_points(node, 3, endpoints, Some(radius))
+    }
+
+    fn from_points(node: Node, kind: u32, points: [[f32; 3]; 2], radius: Option<f32>) -> Self {
+        let mut bytes = node.as_bytes().to_vec();
+        bytes.extend_from_slice(&kind.to_le_bytes());
+        for point in points {
+            for value in point {
+                bytes.extend_from_slice(&value.to_le_bytes());
+            }
+        }
+        if let Some(radius) = radius {
+            bytes.extend_from_slice(&radius.to_le_bytes());
+        }
         Self { bytes }
     }
 
@@ -77,7 +105,9 @@ impl CollisionShape {
                 .expect("validated kind"),
         ) {
             0 => CollisionKind::Box,
+            1 => CollisionKind::Plane,
             2 => CollisionKind::Sphere,
+            3 => CollisionKind::Cylinder,
             _ => unreachable!("validated kind"),
         }
     }
@@ -91,6 +121,26 @@ impl CollisionShape {
         Some(std::array::from_fn(|corner| {
             std::array::from_fn(|axis| self.f32_at(start + (corner * 3 + axis) * 4))
         }))
+    }
+
+    /// Returns the two points of a box, plane, or cylinder.
+    pub fn points(&self) -> Option<[[f32; 3]; 2]> {
+        if self.kind() == CollisionKind::Sphere {
+            return None;
+        }
+        let start = self.node_size() + 4;
+        Some(std::array::from_fn(|point| {
+            std::array::from_fn(|axis| self.f32_at(start + (point * 3 + axis) * 4))
+        }))
+    }
+
+    /// Returns the radius of a sphere or cylinder.
+    pub fn radius(&self) -> Option<f32> {
+        match self.kind() {
+            CollisionKind::Sphere => Some(self.f32_at(self.node_size() + 16)),
+            CollisionKind::Cylinder => Some(self.f32_at(self.node_size() + 28)),
+            _ => None,
+        }
     }
 
     /// Returns sphere center and radius, or `None` for a box.
@@ -134,8 +184,9 @@ fn record_end(data: &[u8], offset: usize) -> Result<usize, Error> {
             })?;
     let kind = u32::from_le_bytes(kind_bytes.try_into().expect("four-byte kind"));
     let data_size = match kind {
-        0 => 24,
+        0 | 1 => 24,
         2 => 16,
+        3 => 28,
         _ => {
             return Err(Error::MalformedRecord {
                 tag: TAG,
