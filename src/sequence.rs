@@ -137,10 +137,7 @@ impl Sequence {
 impl Model {
     /// Decodes every `SEQS` chunk in file order.
     pub fn sequences(&self) -> Vec<Sequence> {
-        self.collect_chunk_records::<SequencesChunk>(|chunk| match chunk {
-            ModelChunk::Sequences(decoded) => Some(decoded),
-            _ => None,
-        })
+        self.collect_chunk_records::<SequencesChunk>()
     }
 
     /// Writes all sequences to the first `SEQS` chunk, creating it if needed.

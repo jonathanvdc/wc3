@@ -111,10 +111,7 @@ impl Texture {
 impl Model {
     /// Decodes all `TEXS` chunks in file order.
     pub fn textures(&self) -> Vec<Texture> {
-        self.collect_chunk_records::<TexturesChunk>(|chunk| match chunk {
-            ModelChunk::Textures(decoded) => Some(decoded),
-            _ => None,
-        })
+        self.collect_chunk_records::<TexturesChunk>()
     }
 
     /// Writes the texture list to the first `TEXS` chunk. Additional `TEXS`

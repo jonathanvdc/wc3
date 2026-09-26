@@ -92,10 +92,7 @@ impl Attachment {
 impl Model {
     /// Decodes all attachments in `ATCH` chunks.
     pub fn attachments(&self) -> Vec<Attachment> {
-        self.collect_chunk_records::<AttachmentsChunk>(|chunk| match chunk {
-            ModelChunk::Attachments(decoded) => Some(decoded),
-            _ => None,
-        })
+        self.collect_chunk_records::<AttachmentsChunk>()
     }
 
     /// Replaces attachments in the first `ATCH` chunk.

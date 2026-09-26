@@ -93,10 +93,7 @@ fn is_track(tag: Tag) -> bool {
 impl Model {
     /// Decodes all ribbon emitter records in file order.
     pub fn ribbon_emitters(&self) -> Vec<RibbonEmitter> {
-        self.collect_chunk_records::<RibbonEmittersChunk>(|chunk| match chunk {
-            ModelChunk::RibbonEmitters(decoded) => Some(decoded),
-            _ => None,
-        })
+        self.collect_chunk_records::<RibbonEmittersChunk>()
     }
 
     /// Replaces ribbon emitters in the first `RIBB` chunk.

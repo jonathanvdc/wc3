@@ -116,10 +116,7 @@ impl GeosetAnimation {
 impl Model {
     /// Decodes all `GEOA` records in file order.
     pub fn geoset_animations(&self) -> Vec<GeosetAnimation> {
-        self.collect_chunk_records::<GeosetAnimationsChunk>(|chunk| match chunk {
-            ModelChunk::GeosetAnimations(decoded) => Some(decoded),
-            _ => None,
-        })
+        self.collect_chunk_records::<GeosetAnimationsChunk>()
     }
 
     /// Replaces geoset animations in the first `GEOA` chunk.

@@ -60,10 +60,7 @@ impl EventObject {
 impl Model {
     /// Decodes all event objects in `EVTS` chunks.
     pub fn event_objects(&self) -> Vec<EventObject> {
-        self.collect_chunk_records::<EventObjectsChunk>(|chunk| match chunk {
-            ModelChunk::EventObjects(decoded) => Some(decoded),
-            _ => None,
-        })
+        self.collect_chunk_records::<EventObjectsChunk>()
     }
 
     /// Replaces event objects in the first `EVTS` chunk.

@@ -61,12 +61,7 @@ impl BindPose {
 impl Model {
     /// Returns decoded `BPOS` chunks separately, preserving chunk boundaries.
     pub fn bind_poses(&self) -> Vec<BindPose> {
-        self.decoded_chunks(|chunk| match chunk {
-            ModelChunk::BindPose(decoded) => Some(decoded),
-            _ => None,
-        })
-        .cloned()
-        .collect()
+        self.decoded_chunks::<BindPose>().cloned().collect()
     }
 
     /// Replaces all `BPOS` chunks with one decoded chunk at the first one's

@@ -242,10 +242,7 @@ fn is_track(tag: Tag) -> bool {
 impl Model {
     /// Decodes all `PRE2` records in file order.
     pub fn particle_emitters2(&self) -> Vec<ParticleEmitter2> {
-        self.collect_chunk_records::<ParticleEmitters2Chunk>(|chunk| match chunk {
-            ModelChunk::ParticleEmitters2(decoded) => Some(decoded),
-            _ => None,
-        })
+        self.collect_chunk_records::<ParticleEmitters2Chunk>()
     }
 
     /// Replaces particle emitter 2 records in the first `PRE2` chunk.

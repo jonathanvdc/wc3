@@ -6,10 +6,7 @@ use crate::{GlobalSequencesChunk, Model, ModelChunk, PivotPointsChunk};
 impl Model {
     /// Returns durations from every `GLBS` chunk in file order.
     pub fn global_sequences(&self) -> Vec<u32> {
-        self.collect_chunk_items(|chunk| match chunk {
-            ModelChunk::GlobalSequences(decoded) => Some(&decoded.durations),
-            _ => None,
-        })
+        self.collect_chunk_items::<GlobalSequencesChunk, _>(|chunk| &chunk.durations)
     }
 
     /// Writes global sequence durations to a `GLBS` chunk.
@@ -21,10 +18,7 @@ impl Model {
 
     /// Returns XYZ pivot points from every `PIVT` chunk in file order.
     pub fn pivot_points(&self) -> Vec<Vec3> {
-        self.collect_chunk_items(|chunk| match chunk {
-            ModelChunk::PivotPoints(decoded) => Some(&decoded.points),
-            _ => None,
-        })
+        self.collect_chunk_items::<PivotPointsChunk, _>(|chunk| &chunk.points)
     }
 
     /// Writes XYZ pivot points to a `PIVT` chunk.

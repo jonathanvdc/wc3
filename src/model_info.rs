@@ -107,12 +107,9 @@ impl ModelInfo {
 impl Model {
     /// Returns the first decoded `MODL` record, if present.
     pub fn model_info(&self) -> Option<ModelInfo> {
-        self.decoded_chunks(|chunk| match chunk {
-            ModelChunk::ModelInfo(decoded) => Some(decoded),
-            _ => None,
-        })
-        .next()
-        .map(|decoded| decoded.info.clone())
+        self.decoded_chunks::<ModelInfoChunk>()
+            .next()
+            .map(|decoded| decoded.info.clone())
     }
 
     /// Replaces all `MODL` chunks with one decoded chunk at the first one's

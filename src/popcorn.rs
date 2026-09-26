@@ -149,10 +149,7 @@ fn is_track_tag(tag: Tag) -> bool {
 impl Model {
     /// Decodes all popcorn emitters in `CORN` chunks.
     pub fn popcorn_emitters(&self) -> Vec<PopcornEmitter> {
-        self.collect_chunk_records::<PopcornEmittersChunk>(|chunk| match chunk {
-            ModelChunk::PopcornEmitters(decoded) => Some(decoded),
-            _ => None,
-        })
+        self.collect_chunk_records::<PopcornEmittersChunk>()
     }
 
     /// Replaces popcorn emitters in the first `CORN` chunk.

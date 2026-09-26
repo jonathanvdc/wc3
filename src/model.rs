@@ -24,30 +24,30 @@ pub struct Model {
 }
 
 impl Model {
-    pub(crate) fn decoded_chunks<'a, C: ?Sized + 'a>(
-        &'a self,
-        typed: impl Fn(&ModelChunk) -> Option<&C> + 'a,
-    ) -> impl Iterator<Item = &'a C> + 'a {
-        self.chunks.iter().filter_map(typed)
+    pub(crate) fn decoded_chunks<'a, C: 'a>(&'a self) -> impl Iterator<Item = &'a C>
+    where
+        for<'b> &'b C: TryFrom<&'b ModelChunk>,
+    {
+        self.chunks
+            .iter()
+            .filter_map(|chunk| <&C>::try_from(chunk).ok())
     }
 
-    pub(crate) fn collect_chunk_records<C: CollectionChunk + 'static>(
-        &self,
-        typed: for<'a> fn(&'a ModelChunk) -> Option<&'a C>,
-    ) -> Vec<C::Item>
+    pub(crate) fn collect_chunk_records<C: CollectionChunk>(&self) -> Vec<C::Item>
     where
         C::Item: Clone,
+        for<'a> &'a C: TryFrom<&'a ModelChunk>,
     {
-        self.collect_chunk_items(|chunk| typed(chunk).map(|collection| collection.records()))
+        self.collect_chunk_items::<C, _>(|collection| collection.records())
     }
 
-    pub(crate) fn collect_chunk_items<T: Clone>(
-        &self,
-        typed: impl Fn(&ModelChunk) -> Option<&[T]>,
-    ) -> Vec<T> {
+    pub(crate) fn collect_chunk_items<C, T: Clone>(&self, items: impl Fn(&C) -> &[T]) -> Vec<T>
+    where
+        for<'a> &'a C: TryFrom<&'a ModelChunk>,
+    {
         let mut result = Vec::new();
-        for items in self.decoded_chunks(typed) {
-            result.extend_from_slice(items);
+        for chunk in self.decoded_chunks::<C>() {
+            result.extend_from_slice(items(chunk));
         }
         result
     }

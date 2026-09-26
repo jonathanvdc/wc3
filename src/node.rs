@@ -185,10 +185,7 @@ impl Bone {
 impl Model {
     /// Decodes every bone in `BONE` chunks.
     pub fn bones(&self) -> Vec<Bone> {
-        self.collect_chunk_records::<BonesChunk>(|chunk| match chunk {
-            ModelChunk::Bones(decoded) => Some(decoded),
-            _ => None,
-        })
+        self.collect_chunk_records::<BonesChunk>()
     }
 
     /// Replaces all bones in the first `BONE` chunk.
@@ -198,10 +195,7 @@ impl Model {
 
     /// Decodes every helper node in `HELP` chunks.
     pub fn helpers(&self) -> Vec<Node> {
-        self.collect_chunk_records::<HelpersChunk>(|chunk| match chunk {
-            ModelChunk::Helpers(decoded) => Some(decoded),
-            _ => None,
-        })
+        self.collect_chunk_records::<HelpersChunk>()
     }
 
     /// Replaces all helpers in the first `HELP` chunk.

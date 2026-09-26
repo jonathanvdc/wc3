@@ -569,10 +569,7 @@ fn write_extent(bytes: &mut Encoder<'_>, extent: GeosetExtent) {
 impl Model {
     /// Decodes geosets from every `GEOS` chunk in file order.
     pub fn geosets(&self) -> Vec<Geoset> {
-        self.collect_chunk_records::<GeosetsChunk>(|chunk| match chunk {
-            ModelChunk::Geosets(decoded) => Some(decoded),
-            _ => None,
-        })
+        self.collect_chunk_records::<GeosetsChunk>()
     }
 
     /// Replaces geosets after checking their version.

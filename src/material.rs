@@ -468,10 +468,7 @@ impl Layer {
 impl Model {
     /// Decodes all `MTLS` records in file order.
     pub fn materials(&self) -> Vec<Material> {
-        self.collect_chunk_records::<MaterialsChunk>(|chunk| match chunk {
-            ModelChunk::Materials(decoded) => Some(decoded),
-            _ => None,
-        })
+        self.collect_chunk_records::<MaterialsChunk>()
     }
 
     /// Replaces all material records in the first `MTLS` chunk.

@@ -150,10 +150,7 @@ fn is_track(tag: Tag) -> bool {
 impl Model {
     /// Decodes all `PREM` records in file order.
     pub fn particle_emitters(&self) -> Vec<ParticleEmitter> {
-        self.collect_chunk_records::<ParticleEmittersChunk>(|chunk| match chunk {
-            ModelChunk::ParticleEmitters(decoded) => Some(decoded),
-            _ => None,
-        })
+        self.collect_chunk_records::<ParticleEmittersChunk>()
     }
 
     /// Replaces particle emitters in the first `PREM` chunk.

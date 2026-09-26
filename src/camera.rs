@@ -134,10 +134,7 @@ fn is_track(tag: Tag) -> bool {
 impl Model {
     /// Decodes all camera records in `CAMS` chunks.
     pub fn cameras(&self) -> Vec<Camera> {
-        self.collect_chunk_records::<CamerasChunk>(|chunk| match chunk {
-            ModelChunk::Cameras(decoded) => Some(decoded),
-            _ => None,
-        })
+        self.collect_chunk_records::<CamerasChunk>()
     }
 
     /// Replaces cameras in the first `CAMS` chunk.

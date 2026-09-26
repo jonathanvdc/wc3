@@ -61,6 +61,17 @@ macro_rules! model_chunks {
                     }
                 }
             }
+
+            impl<'a> TryFrom<&'a ModelChunk> for &'a $chunk {
+                type Error = ();
+
+                fn try_from(chunk: &'a ModelChunk) -> Result<Self, Self::Error> {
+                    match chunk {
+                        ModelChunk::$variant(value) => Ok(value),
+                        _ => Err(()),
+                    }
+                }
+            }
         )*
 
         impl Encodable for ModelChunk {
@@ -172,12 +183,14 @@ mod tests {
         let version = VersionChunk::new(800);
         let chunk: ModelChunk = version.clone().into();
         assert!(matches!(chunk, ModelChunk::Version(_)));
+        assert_eq!(<&VersionChunk>::try_from(&chunk), Ok(&version));
         assert_eq!(VersionChunk::try_from(chunk).unwrap(), version);
     }
 
     #[test]
     fn failed_extraction_preserves_the_chunk() {
         let chunk = ModelChunk::Unknown(RawChunk::new(*b"FUTR", vec![1, 2, 3]));
+        assert!(<&VersionChunk>::try_from(&chunk).is_err());
         let original = VersionChunk::try_from(chunk).unwrap_err();
         assert!(matches!(original, ModelChunk::Unknown(raw) if raw.data == [1, 2, 3]));
     }
