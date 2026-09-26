@@ -1,5 +1,5 @@
-use wc3_mdx::{Decodable, Encodable};
 use wc3_mdx::{AnimationTrack, Keyframe, Model, Node, RibbonEmitter};
+use wc3_mdx::{Decodable, Encodable};
 
 #[test]
 fn ribbon_fields_and_integer_animation_round_trip() {

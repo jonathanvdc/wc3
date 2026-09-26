@@ -1,5 +1,5 @@
-use wc3_mdx::{Decodable, Encodable};
 use wc3_mdx::{BindPose, Model, ModelChunk, RawChunk};
+use wc3_mdx::{Decodable, Encodable};
 
 #[test]
 fn bind_pose_matrices_round_trip() {

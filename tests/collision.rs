@@ -1,5 +1,5 @@
-use wc3_mdx::{Decodable, Encodable};
 use wc3_mdx::{CollisionKind, CollisionShape, Model, Node};
+use wc3_mdx::{Decodable, Encodable};
 
 #[test]
 fn collision_primitives_round_trip() {

@@ -1,4 +1,4 @@
-use wc3_mdx::{AnimationTrack, Error, Geoset, Node, Encodable, ValueError};
+use wc3_mdx::{AnimationTrack, Encodable, Error, Geoset, Node, ValueError};
 
 #[test]
 fn construction_and_mutation_report_value_errors() {

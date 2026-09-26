@@ -1,5 +1,5 @@
-use wc3_mdx::{Decodable, Encodable};
 use wc3_mdx::{AnimationTrack, Camera, Keyframe, Model};
+use wc3_mdx::{Decodable, Encodable};
 
 #[test]
 fn camera_fields_and_tracks_round_trip() {

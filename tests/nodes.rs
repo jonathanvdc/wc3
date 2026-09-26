@@ -1,5 +1,5 @@
-use wc3_mdx::{Decodable, Encodable};
 use wc3_mdx::{Bone, Model, Node, NodeFlags};
+use wc3_mdx::{Decodable, Encodable};
 
 #[test]
 fn bones_and_helpers_round_trip() {

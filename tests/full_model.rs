@@ -1,9 +1,9 @@
-use wc3_mdx::{Decodable, Encodable};
 use wc3_mdx::{
     Attachment, BindPose, Bone, Camera, CollisionShape, EventObject, FaceFx, Geoset,
     GeosetAnimation, Layer, Light, Material, Model, ModelInfo, Node, ParticleEmitter,
     ParticleEmitter2, PopcornEmitter, RibbonEmitter, Sequence, Texture, TextureAnimation,
 };
+use wc3_mdx::{Decodable, Encodable};
 
 fn full_model(version: u32) -> Model {
     let mut model = Model::new(version);

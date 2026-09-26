@@ -1,8 +1,8 @@
-use wc3_mdx::{Decodable, Encodable};
 use wc3_mdx::{
     AnimationTrack, Keyframe, Layer, LayerShadingFlags, LayerTextureSlot, Material,
     MaterialRenderFlags, Model,
 };
+use wc3_mdx::{Decodable, Encodable};
 
 fn sample_material(version: u32) -> Material {
     let mut layer = Layer::new(version);
