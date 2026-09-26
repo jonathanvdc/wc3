@@ -22,7 +22,10 @@ fn model_stores_known_unknown_and_malformed_chunks() {
     assert!(matches!(model.chunks()[1], ModelChunk::Sequences(_)));
     assert!(matches!(model.chunks()[2], ModelChunk::Unknown(_)));
     assert!(matches!(model.chunks()[3], ModelChunk::Malformed(_)));
-    model.validate().unwrap();
+    let ModelChunk::Malformed(malformed) = &model.chunks()[3] else {
+        unreachable!()
+    };
+    assert_eq!(model.validate(), Err(malformed.error().clone()));
 
     let bytes = model.encode().unwrap();
     let decoded = Model::decode(&bytes, 800).unwrap();

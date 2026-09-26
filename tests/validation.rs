@@ -27,7 +27,7 @@ fn empty_mdlx_is_valid() {
 }
 
 #[test]
-fn ignores_malformed_known_track() {
+fn rejects_malformed_known_track() {
     let mut model = Model::new(800);
     let mut ribbon = RibbonEmitter::new(Node::new("Trail", 1).unwrap())
         .encode()
@@ -37,7 +37,10 @@ fn ignores_malformed_known_track() {
     let len = ribbon.len() as u32;
     ribbon[..4].copy_from_slice(&len.to_le_bytes());
     model.push(ModelChunk::from_raw(RawChunk::new(*b"RIBB", ribbon), 800));
-    model.validate().unwrap();
+    let ModelChunk::Malformed(malformed) = model.chunks().last().unwrap() else {
+        panic!("expected malformed ribbon chunk");
+    };
+    assert_eq!(model.validate(), Err(malformed.error().clone()));
 }
 
 #[test]
@@ -52,7 +55,7 @@ fn rejects_short_repeated_version_chunks() {
     model.chunks_mut()[0] = ModelChunk::from_raw(RawChunk::new(*b"VERS", Vec::new()), 800);
     assert_eq!(model.stored_version(), None);
     assert_eq!(model.version(), 800);
-    model.validate().unwrap();
+    assert_eq!(model.validate(), Err(Error::InvalidVersionChunk));
     model.set_version(1800);
     assert_eq!(model.version(), 1800);
     assert_eq!(model.chunks().len(), 1);
@@ -112,7 +115,7 @@ fn rejects_records_from_another_model_version() {
 }
 
 #[test]
-fn ignores_malformed_repeated_model_info_chunk() {
+fn rejects_malformed_repeated_model_info_chunk() {
     let mut model = Model::new(800);
     model.set_model_info(&wc3_mdx::ModelInfo::new("Good").unwrap());
     model.push(ModelChunk::from_raw(
@@ -120,7 +123,10 @@ fn ignores_malformed_repeated_model_info_chunk() {
         800,
     ));
     assert!(model.model_info().is_some());
-    model.validate().unwrap();
+    let ModelChunk::Malformed(malformed) = model.chunks().last().unwrap() else {
+        panic!("expected malformed model info chunk");
+    };
+    assert_eq!(model.validate(), Err(malformed.error().clone()));
 }
 
 #[test]
