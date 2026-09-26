@@ -15,13 +15,13 @@ const SIZE: usize = 372;
 const NAME_SIZE: usize = 336;
 
 /// The 372-byte `MODL` record. Reserved bytes remain intact on edit.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct ModelInfo {
     name: [u8; NAME_SIZE],
     reserved: Tag,
-    bounds_radius: u32,
-    minimum_extent: [u32; 3],
-    maximum_extent: [u32; 3],
+    bounds_radius: f32,
+    minimum_extent: Vec3,
+    maximum_extent: Vec3,
     blend_time: u32,
 }
 
@@ -30,9 +30,9 @@ impl Default for ModelInfo {
         Self {
             name: [0; NAME_SIZE],
             reserved: [0; 4],
-            bounds_radius: 0,
-            minimum_extent: [0; 3],
-            maximum_extent: [0; 3],
+            bounds_radius: 0.0,
+            minimum_extent: [0.0; 3],
+            maximum_extent: [0.0; 3],
             blend_time: 0,
         }
     }
@@ -66,32 +66,32 @@ impl ModelInfo {
 
     /// Returns the model's bounding sphere radius.
     pub fn bounds_radius(&self) -> f32 {
-        f32::from_bits(self.bounds_radius)
+        self.bounds_radius
     }
 
     /// Sets the model's bounding sphere radius.
     pub fn set_bounds_radius(&mut self, radius: f32) {
-        self.bounds_radius = radius.to_bits();
+        self.bounds_radius = radius;
     }
 
     /// Returns the minimum XYZ extent.
     pub fn minimum_extent(&self) -> Vec3 {
-        self.minimum_extent.map(f32::from_bits)
+        self.minimum_extent
     }
 
     /// Sets the minimum XYZ extent.
     pub fn set_minimum_extent(&mut self, extent: Vec3) {
-        self.minimum_extent = extent.map(f32::to_bits);
+        self.minimum_extent = extent;
     }
 
     /// Returns the maximum XYZ extent.
     pub fn maximum_extent(&self) -> Vec3 {
-        self.maximum_extent.map(f32::from_bits)
+        self.maximum_extent
     }
 
     /// Sets the maximum XYZ extent.
     pub fn set_maximum_extent(&mut self, extent: Vec3) {
-        self.maximum_extent = extent.map(f32::to_bits);
+        self.maximum_extent = extent;
     }
 
     /// Returns the animation blend time in milliseconds.

@@ -7,7 +7,7 @@ use crate::{Chunk, Decodable, DecodeError, Encodable, KnownChunk};
 use crate::{Cursor, ModelInfo};
 
 /// A complete `MODL` chunk, including bytes after the standard record.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct ModelInfoChunk {
     pub info: ModelInfo,
     pub extension: Vec<u8>,
