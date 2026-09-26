@@ -44,6 +44,25 @@ macro_rules! model_chunks {
             Malformed(MalformedChunk),
         }
 
+        $(
+            impl From<$chunk> for ModelChunk {
+                fn from(chunk: $chunk) -> Self {
+                    Self::$variant(chunk)
+                }
+            }
+
+            impl TryFrom<ModelChunk> for $chunk {
+                type Error = ModelChunk;
+
+                fn try_from(chunk: ModelChunk) -> Result<Self, Self::Error> {
+                    match chunk {
+                        ModelChunk::$variant(value) => Ok(value),
+                        other => Err(other),
+                    }
+                }
+            }
+        )*
+
         impl Encodable for ModelChunk {
             fn encode_to(&self, output: &mut Encoder<'_>) -> Result<(), Error> {
                 let tag = self.tag();
@@ -141,5 +160,25 @@ impl ModelChunk {
                 error,
             }),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn typed_chunks_convert_in_both_directions() {
+        let version = VersionChunk::new(800);
+        let chunk: ModelChunk = version.clone().into();
+        assert!(matches!(chunk, ModelChunk::Version(_)));
+        assert_eq!(VersionChunk::try_from(chunk).unwrap(), version);
+    }
+
+    #[test]
+    fn failed_extraction_preserves_the_chunk() {
+        let chunk = ModelChunk::Unknown(RawChunk::new(*b"FUTR", vec![1, 2, 3]));
+        let original = VersionChunk::try_from(chunk).unwrap_err();
+        assert!(matches!(original, ModelChunk::Unknown(raw) if raw.data == [1, 2, 3]));
     }
 }
