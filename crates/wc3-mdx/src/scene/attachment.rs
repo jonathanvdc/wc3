@@ -4,7 +4,7 @@ use crate::Encoder;
 use crate::KnownChunk;
 use crate::ValueError;
 
-use crate::{AttachmentsChunk, Cursor, TrackTag};
+use crate::{AttachmentVisibility, AttachmentsChunk, Cursor};
 use crate::{Decodable, Encodable};
 use std::borrow::Cow;
 
@@ -20,7 +20,7 @@ pub struct Attachment {
     path: FixedText<PATH_SIZE>,
     reserved: u32,
     id: u32,
-    visibility_track: Option<AnimationTrack>,
+    visibility_track: Option<AnimationTrack<AttachmentVisibility>>,
 }
 
 impl Attachment {
@@ -68,25 +68,13 @@ impl Attachment {
     }
 
     /// Borrows the optional visibility track.
-    pub fn visibility_track(&self) -> Option<&AnimationTrack> {
+    pub fn visibility_track(&self) -> Option<&AnimationTrack<AttachmentVisibility>> {
         self.visibility_track.as_ref()
     }
 
     /// Replaces the optional visibility track.
-    pub fn set_visibility_track(
-        &mut self,
-        track: Option<&AnimationTrack>,
-    ) -> Result<(), ValueError> {
-        if let Some(track) = track {
-            if track.tag != TrackTag::AttachmentVisibility {
-                return Err(ValueError::InvalidTrackTag {
-                    record: AttachmentsChunk::TAG,
-                    track: track.tag.bytes(),
-                });
-            }
-        }
+    pub fn set_visibility_track(&mut self, track: Option<&AnimationTrack<AttachmentVisibility>>) {
         self.visibility_track = track.cloned();
-        Ok(())
     }
 }
 
@@ -115,14 +103,7 @@ impl Decodable for Attachment {
         let visibility_track = if cursor.remaining().is_empty() {
             None
         } else {
-            let offset = cursor.absolute_position();
-            let track = AnimationTrack::decode_one(&mut cursor, 0)?;
-            if track.tag != TrackTag::AttachmentVisibility {
-                return Err(DecodeError::MalformedRecord {
-                    tag: AttachmentsChunk::TAG,
-                    offset,
-                });
-            }
+            let track = cursor.read::<AnimationTrack<AttachmentVisibility>>()?;
 
             Some(track)
         };
@@ -139,20 +120,13 @@ impl Decodable for Attachment {
 
 impl Encodable for Attachment {
     fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), EncodeError> {
-        let start = bytes.position();
         let marker = bytes.begin_sized();
         self.node.encode_to(bytes)?;
         bytes.write(&self.path);
         bytes.write(self.reserved);
         bytes.write(self.id);
         if let Some(track) = &self.visibility_track {
-            if track.tag != TrackTag::AttachmentVisibility {
-                return Err(EncodeError::MalformedRecord {
-                    tag: AttachmentsChunk::TAG,
-                    offset: bytes.position() - start,
-                });
-            }
-            track.encode_to(bytes)?;
+            bytes.write(track);
         }
         bytes.finish_sized(marker, AttachmentsChunk::TAG)?;
         Ok(())

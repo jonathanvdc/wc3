@@ -1,4 +1,5 @@
-use wc3_mdx::animation::{AnimationTrack, Keyframe, TrackTag};
+use wc3_mdx::animation::{AnimationTrack, ValueKeyframe};
+use wc3_mdx::animation::{LightColor, LightVisibility};
 use wc3_mdx::io::{Decodable, Encodable};
 use wc3_mdx::scene::{Light, Node};
 use wc3_mdx::Model;
@@ -29,18 +30,16 @@ fn light_fields_round_trip() {
 #[test]
 fn light_color_track_round_trip() {
     let mut light = Light::new(Node::new("Lamp", 3).unwrap(), 0);
-    let track = AnimationTrack {
-        tag: TrackTag::LightColor,
-        interpolation: 1,
-        global_sequence_id: u32::MAX,
-        keyframes: vec![Keyframe {
+    let track = AnimationTrack::<LightColor>::linear(
+        vec![ValueKeyframe {
             frame: 250,
-            value: vec![1.0, 0.5, 0.25],
-            in_tangent: None,
-            out_tangent: None,
+            value: [1.0, 0.5, 0.25],
         }],
-    };
-    light.set_tracks(std::slice::from_ref(&track)).unwrap();
+        None,
+    )
+    .unwrap()
+    .into();
+    light.set_tracks(std::slice::from_ref(&track));
     let parsed = Light::decode(&light.encode().unwrap(), 800).unwrap();
     assert_eq!(parsed.tracks(), &[track]);
 }
@@ -50,18 +49,16 @@ fn extended_light_fields_and_tracks_round_trip() {
     let mut light = Light::new_for_version(Node::new("Glow", 4).unwrap(), 0, 1800);
     let words = [1, 2, 3, 4, 5, 6, 7];
     light.set_extended_words(words).unwrap();
-    let track = AnimationTrack {
-        tag: TrackTag::LightVisibility,
-        interpolation: 1,
-        global_sequence_id: u32::MAX,
-        keyframes: vec![Keyframe {
+    let track = AnimationTrack::<LightVisibility>::linear(
+        vec![ValueKeyframe {
             frame: 10,
-            value: vec![1.0],
-            in_tangent: None,
-            out_tangent: None,
+            value: 1.0,
         }],
-    };
-    light.set_tracks(std::slice::from_ref(&track)).unwrap();
+        None,
+    )
+    .unwrap()
+    .into();
+    light.set_tracks(std::slice::from_ref(&track));
     let parsed = Light::decode(&light.encode().unwrap(), 800).unwrap();
     assert_eq!(parsed.extended_words(), Some(words));
     assert_eq!(parsed.tracks(), &[track]);

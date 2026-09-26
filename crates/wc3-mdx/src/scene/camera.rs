@@ -1,16 +1,24 @@
 //! Typed camera records in `CAMS` chunks.
+crate::animation::track_group! {
+    pub enum CameraTrack {
+        Translation: CameraTranslation,
+        TargetTranslation: CameraTargetTranslation,
+        Rotation: CameraRotation,
+    }
+}
+
 use crate::EncodeError;
 use crate::Encoder;
 use crate::KnownChunk;
 use crate::ValueError;
-use crate::{TrackTag, Vec3, Version};
+use crate::{Vec3, Version};
 
 use crate::{CamerasChunk, Cursor};
 use crate::{Decodable, Encodable};
 use std::borrow::Cow;
 
 use crate::FixedText;
-use crate::{AnimationTrack, DecodeError, Model};
+use crate::{DecodeError, Model};
 
 const NAME_SIZE: usize = 80;
 const MAX_RECORD_SIZE: usize = 0x00ff_ffff;
@@ -25,7 +33,7 @@ pub struct Camera {
     far_clip: f32,
     near_clip: f32,
     target_position: Vec3,
-    tracks: Vec<AnimationTrack>,
+    tracks: Vec<CameraTrack>,
 }
 
 impl Camera {
@@ -111,29 +119,13 @@ impl Camera {
         self.target_position = target;
     }
     /// Borrows decoded camera tracks without reparsing.
-    pub fn tracks(&self) -> &[AnimationTrack] {
+    pub fn tracks(&self) -> &[CameraTrack] {
         &self.tracks
     }
     /// Replaces camera tracks.
-    pub fn set_tracks(&mut self, tracks: &[AnimationTrack]) -> Result<(), ValueError> {
-        for track in tracks {
-            if !is_track(track.tag) {
-                return Err(ValueError::InvalidTrackTag {
-                    record: CamerasChunk::TAG,
-                    track: track.tag.bytes(),
-                });
-            }
-        }
+    pub fn set_tracks(&mut self, tracks: &[CameraTrack]) {
         self.tracks = tracks.to_vec();
-        Ok(())
     }
-}
-
-fn is_track(tag: TrackTag) -> bool {
-    matches!(
-        tag,
-        TrackTag::CameraTranslation | TrackTag::CameraTargetTranslation | TrackTag::CameraRoll
-    )
 }
 
 impl Model {
@@ -168,16 +160,7 @@ impl Decodable for Camera {
         let target_position = cursor.read()?;
         let mut tracks = Vec::new();
         while !cursor.remaining().is_empty() {
-            let offset = cursor.absolute_position();
-            let track = AnimationTrack::decode_one(&mut cursor, 0)?;
-            if !is_track(track.tag) {
-                return Err(DecodeError::MalformedRecord {
-                    tag: CamerasChunk::TAG,
-                    offset,
-                });
-            }
-
-            tracks.push(track);
+            tracks.push(cursor.read::<CameraTrack>()?);
         }
         cursor.finish()?;
         Ok(Self {
@@ -204,13 +187,7 @@ impl Encodable for Camera {
         bytes.write(self.near_clip);
         bytes.write(self.target_position);
         for track in &self.tracks {
-            if !is_track(track.tag) {
-                return Err(EncodeError::MalformedRecord {
-                    tag: CamerasChunk::TAG,
-                    offset: bytes.position() - start,
-                });
-            }
-            track.encode_to(bytes)?;
+            bytes.write(track);
         }
         if bytes.position() - start > MAX_RECORD_SIZE {
             return Err(EncodeError::ChunkTooLarge {

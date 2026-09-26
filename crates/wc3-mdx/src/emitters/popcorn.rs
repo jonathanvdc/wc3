@@ -1,16 +1,27 @@
 //! Reforged popcorn particle emitters in `CORN` chunks.
+crate::animation::track_group! {
+    pub enum PopcornTrack {
+        Alpha: PopcornAlpha,
+        Color: PopcornColor,
+        EmissionRate: PopcornEmissionRate,
+        Lifespan: PopcornLifespan,
+        Speed: PopcornSpeed,
+        Visibility: PopcornVisibility,
+    }
+}
+
+use crate::Color;
 use crate::EncodeError;
 use crate::Encoder;
 use crate::KnownChunk;
 use crate::ValueError;
-use crate::{Color, TrackTag};
 
 use crate::{Cursor, PopcornEmittersChunk};
 use crate::{Decodable, Encodable};
 use std::borrow::Cow;
 
 use crate::FixedText;
-use crate::{AnimationTrack, DecodeError, Model, Node};
+use crate::{DecodeError, Model, Node};
 
 const PATH_SIZE: usize = 260;
 
@@ -26,7 +37,7 @@ pub struct PopcornEmitter {
     replaceable_id: u32,
     path: FixedText<PATH_SIZE>,
     visibility_guide: FixedText<PATH_SIZE>,
-    tracks: Vec<AnimationTrack>,
+    tracks: Vec<PopcornTrack>,
 }
 
 impl PopcornEmitter {
@@ -122,34 +133,13 @@ impl PopcornEmitter {
         self.visibility_guide.set_text(guide)
     }
     /// Borrows decoded animation tracks.
-    pub fn tracks(&self) -> &[AnimationTrack] {
+    pub fn tracks(&self) -> &[PopcornTrack] {
         &self.tracks
     }
     /// Replaces optional animation tracks.
-    pub fn set_tracks(&mut self, tracks: &[AnimationTrack]) -> Result<(), ValueError> {
-        for track in tracks {
-            if !is_track_tag(track.tag) {
-                return Err(ValueError::InvalidTrackTag {
-                    record: PopcornEmittersChunk::TAG,
-                    track: track.tag.bytes(),
-                });
-            }
-        }
+    pub fn set_tracks(&mut self, tracks: &[PopcornTrack]) {
         self.tracks = tracks.to_vec();
-        Ok(())
     }
-}
-
-fn is_track_tag(tag: TrackTag) -> bool {
-    matches!(
-        tag,
-        TrackTag::PopcornAlpha
-            | TrackTag::PopcornColor
-            | TrackTag::PopcornEmissionRate
-            | TrackTag::PopcornLifespan
-            | TrackTag::PopcornSpeed
-            | TrackTag::PopcornVisibility
-    )
 }
 
 impl Model {
@@ -178,16 +168,7 @@ impl Decodable for PopcornEmitter {
         let visibility_guide = cursor.read()?;
         let mut tracks = Vec::new();
         while !cursor.remaining().is_empty() {
-            let offset = cursor.absolute_position();
-            let track = AnimationTrack::decode_one(&mut cursor, 0)?;
-            if !is_track_tag(track.tag) {
-                return Err(DecodeError::MalformedRecord {
-                    tag: PopcornEmittersChunk::TAG,
-                    offset,
-                });
-            }
-
-            tracks.push(track);
+            tracks.push(cursor.read::<PopcornTrack>()?);
         }
         cursor.finish()?;
         Ok(Self {
@@ -207,7 +188,6 @@ impl Decodable for PopcornEmitter {
 
 impl Encodable for PopcornEmitter {
     fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), EncodeError> {
-        let start = bytes.position();
         let marker = bytes.begin_sized();
         self.node.encode_to(bytes)?;
         for value in [
@@ -225,13 +205,7 @@ impl Encodable for PopcornEmitter {
         bytes.write(&self.path);
         bytes.write(&self.visibility_guide);
         for track in &self.tracks {
-            if !is_track_tag(track.tag) {
-                return Err(EncodeError::MalformedRecord {
-                    tag: PopcornEmittersChunk::TAG,
-                    offset: bytes.position() - start,
-                });
-            }
-            track.encode_to(bytes)?;
+            bytes.write(track);
         }
         bytes.finish_sized(marker, PopcornEmittersChunk::TAG)?;
         Ok(())

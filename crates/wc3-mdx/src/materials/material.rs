@@ -1,9 +1,20 @@
 //! Typed material layers and versioned texture slots.
+crate::animation::track_group! {
+    pub enum LayerTrack {
+        Alpha: LayerAlpha,
+        TextureId: LayerTextureId,
+        EmissiveGain: LayerEmissiveGain,
+        FresnelColor: LayerFresnelColor,
+        FresnelOpacity: LayerFresnelOpacity,
+        FresnelTeamColor: LayerFresnelTeamColor,
+    }
+}
+
 use crate::EncodeError;
 use crate::Encoder;
 use crate::KnownChunk;
 use crate::ValueError;
-use crate::{Color, Tag, TrackTag, Version};
+use crate::{Color, LayerTextureId, Tag, TrackTag, Version};
 
 use crate::{Cursor, MaterialsChunk};
 use crate::{Decodable, Encodable};
@@ -75,7 +86,7 @@ impl LayerShadingFlags {
 pub struct LayerTextureSlot {
     pub texture_id: u32,
     pub texture_type: u32,
-    pub track: Option<AnimationTrack>,
+    pub track: Option<AnimationTrack<LayerTextureId>>,
 }
 
 /// A material with directly accessible layers and an exact shader field.
@@ -99,7 +110,7 @@ pub struct Layer {
     coordinate_id: u32,
     alpha: f32,
     extensions: LayerExtensions,
-    tracks: Vec<AnimationTrack>,
+    tracks: Vec<LayerTrack>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -156,17 +167,6 @@ impl LayerExtensions {
 
 fn has_shader(version: Version) -> bool {
     (900..1100).contains(&version)
-}
-fn is_layer_track(tag: TrackTag) -> bool {
-    matches!(
-        tag,
-        TrackTag::LayerAlpha
-            | TrackTag::LayerTextureId
-            | TrackTag::LayerEmissiveGain
-            | TrackTag::LayerFresnelColor
-            | TrackTag::LayerFresnelOpacity
-            | TrackTag::LayerFresnelTeamColor
-    )
 }
 
 fn expect_tag(cursor: &mut Cursor<'_>, expected: Tag, record_tag: Tag) -> Result<(), DecodeError> {
@@ -425,40 +425,21 @@ impl Layer {
             _ => &[],
         }
     }
-    /// Replaces Reforged texture slots after validating their tracks.
+    /// Replaces Reforged texture slots.
     pub fn set_texture_slots(&mut self, slots: &[LayerTextureSlot]) -> Result<(), ValueError> {
         self.require_version(1100)?;
-        for slot in slots {
-            if let Some(track) = &slot.track {
-                if track.tag != TrackTag::LayerTextureId {
-                    return Err(ValueError::InvalidTrackTag {
-                        record: LAYER_TAG,
-                        track: track.tag.bytes(),
-                    });
-                }
-            }
-        }
         if let LayerExtensions::V1100 { texture_slots, .. } = &mut self.extensions {
             *texture_slots = slots.to_vec();
         }
         Ok(())
     }
     /// Borrows layer animation tracks after any texture slots.
-    pub fn tracks(&self) -> &[AnimationTrack] {
+    pub fn tracks(&self) -> &[LayerTrack] {
         &self.tracks
     }
     /// Replaces layer animation tracks.
-    pub fn set_tracks(&mut self, tracks: &[AnimationTrack]) -> Result<(), ValueError> {
-        for track in tracks {
-            if !is_layer_track(track.tag) {
-                return Err(ValueError::InvalidTrackTag {
-                    record: LAYER_TAG,
-                    track: track.tag.bytes(),
-                });
-            }
-        }
+    pub fn set_tracks(&mut self, tracks: &[LayerTrack]) {
         self.tracks = tracks.to_vec();
-        Ok(())
     }
     fn require_version(&self, minimum: u32) -> Result<(), ValueError> {
         if self.version < minimum {
@@ -573,8 +554,11 @@ impl Decodable for Layer {
                 for _ in 0..count {
                     let texture_id = cursor.read()?;
                     let texture_type = cursor.read()?;
-                    let track = if cursor.remaining().get(..4) == Some(b"KMTF") {
-                        Some(AnimationTrack::decode_one(&mut cursor, version)?)
+                    let track = if cursor
+                        .remaining()
+                        .starts_with(&TrackTag::LayerTextureId.bytes())
+                    {
+                        Some(cursor.read::<AnimationTrack<LayerTextureId>>()?)
                     } else {
                         None
                     };
@@ -608,15 +592,7 @@ impl Decodable for Layer {
             };
             let mut tracks = Vec::new();
             while !cursor.remaining().is_empty() {
-                let offset = cursor.absolute_position();
-                let track = AnimationTrack::decode_one(&mut cursor, version)?;
-                if !is_layer_track(track.tag) {
-                    return Err(DecodeError::MalformedRecord {
-                        tag: LAYER_TAG,
-                        offset,
-                    });
-                }
-                tracks.push(track);
+                tracks.push(cursor.read::<LayerTrack>()?);
             }
             Ok(Self {
                 version,
@@ -637,7 +613,6 @@ impl Decodable for Layer {
 
 impl Encodable for Layer {
     fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), EncodeError> {
-        let start = bytes.position();
         let marker = bytes.begin_sized();
         for word in [
             self.filter_mode,
@@ -683,24 +658,12 @@ impl Encodable for Layer {
                 bytes.write(slot.texture_id);
                 bytes.write(slot.texture_type);
                 if let Some(track) = &slot.track {
-                    if track.tag != TrackTag::LayerTextureId {
-                        return Err(EncodeError::MalformedRecord {
-                            tag: LAYER_TAG,
-                            offset: bytes.position() - start,
-                        });
-                    }
-                    track.encode_to(bytes)?;
+                    bytes.write(track);
                 }
             }
         }
         for track in &self.tracks {
-            if !is_layer_track(track.tag) {
-                return Err(EncodeError::MalformedRecord {
-                    tag: LAYER_TAG,
-                    offset: bytes.position() - start,
-                });
-            }
-            track.encode_to(bytes)?;
+            bytes.write(track);
         }
         bytes.finish_sized(marker, LAYER_TAG)?;
         Ok(())

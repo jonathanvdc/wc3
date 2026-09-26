@@ -1,13 +1,23 @@
 //! Ribbon emitter records in `RIBB` chunks.
+crate::animation::track_group! {
+    pub enum RibbonTrack {
+        Visibility: RibbonVisibility,
+        HeightAbove: RibbonHeightAbove,
+        HeightBelow: RibbonHeightBelow,
+        Alpha: RibbonAlpha,
+        Color: RibbonColor,
+        TextureSlot: RibbonTextureSlot,
+    }
+}
+
+use crate::Color;
 use crate::EncodeError;
 use crate::Encoder;
 use crate::KnownChunk;
-use crate::ValueError;
-use crate::{Color, TrackTag};
 
-use crate::{AnimationTrack, DecodeError, Model, Node};
 use crate::{Cursor, RibbonEmittersChunk};
 use crate::{Decodable, Encodable, Readable, Writable};
+use crate::{DecodeError, Model, Node};
 
 pub(crate) const FIXED_SIZE: usize = 52;
 
@@ -32,7 +42,7 @@ pub struct RibbonFields {
 pub struct RibbonEmitter {
     node: Node,
     fields: RibbonFields,
-    tracks: Vec<AnimationTrack>,
+    tracks: Vec<RibbonTrack>,
 }
 
 impl RibbonEmitter {
@@ -66,35 +76,14 @@ impl RibbonEmitter {
     }
 
     /// Borrows decoded ribbon animation tracks.
-    pub fn tracks(&self) -> &[AnimationTrack] {
+    pub fn tracks(&self) -> &[RibbonTrack] {
         &self.tracks
     }
 
     /// Replaces optional ribbon animation tracks.
-    pub fn set_tracks(&mut self, tracks: &[AnimationTrack]) -> Result<(), ValueError> {
-        for track in tracks {
-            if !is_track(track.tag) {
-                return Err(ValueError::InvalidTrackTag {
-                    record: RibbonEmittersChunk::TAG,
-                    track: track.tag.bytes(),
-                });
-            }
-        }
+    pub fn set_tracks(&mut self, tracks: &[RibbonTrack]) {
         self.tracks = tracks.to_vec();
-        Ok(())
     }
-}
-
-fn is_track(tag: TrackTag) -> bool {
-    matches!(
-        tag,
-        TrackTag::RibbonVisibility
-            | TrackTag::RibbonHeightAbove
-            | TrackTag::RibbonHeightBelow
-            | TrackTag::RibbonAlpha
-            | TrackTag::RibbonColor
-            | TrackTag::RibbonTextureSlot
-    )
 }
 
 impl Model {
@@ -118,16 +107,7 @@ impl Decodable for RibbonEmitter {
         fixed.finish()?;
         let mut tracks = Vec::new();
         while !cursor.remaining().is_empty() {
-            let offset = cursor.absolute_position();
-            let track = AnimationTrack::decode_one(&mut cursor, 0)?;
-            if !is_track(track.tag) {
-                return Err(DecodeError::MalformedRecord {
-                    tag: RibbonEmittersChunk::TAG,
-                    offset,
-                });
-            }
-
-            tracks.push(track);
+            tracks.push(cursor.read::<RibbonTrack>()?);
         }
         cursor.finish()?;
         Ok(Self {
@@ -140,18 +120,11 @@ impl Decodable for RibbonEmitter {
 
 impl Encodable for RibbonEmitter {
     fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), EncodeError> {
-        let start = bytes.position();
         let marker = bytes.begin_sized();
         self.node.encode_to(bytes)?;
         bytes.write(&self.fields);
         for track in &self.tracks {
-            if !is_track(track.tag) {
-                return Err(EncodeError::MalformedRecord {
-                    tag: RibbonEmittersChunk::TAG,
-                    offset: bytes.position() - start,
-                });
-            }
-            track.encode_to(bytes)?;
+            bytes.write(track);
         }
         bytes.finish_sized(marker, RibbonEmittersChunk::TAG)?;
         Ok(())

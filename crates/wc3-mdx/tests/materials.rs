@@ -1,4 +1,5 @@
-use wc3_mdx::animation::{AnimationTrack, Keyframe, TrackTag};
+use wc3_mdx::animation::{AnimationTrack, ValueKeyframe};
+use wc3_mdx::animation::{LayerAlpha, LayerTextureId};
 use wc3_mdx::io::{Decodable, Encodable};
 use wc3_mdx::materials::{
     Layer, LayerShadingFlags, LayerTextureSlot, Material, MaterialRenderFlags,
@@ -104,19 +105,11 @@ fn shader_path_round_trip_in_legacy_reforged_material() {
 #[test]
 fn reforged_layer_texture_slot_and_tracks_round_trip() {
     let mut layer = Layer::new(1800);
-    let mut texture_key = Keyframe {
+    let texture_key = ValueKeyframe {
         frame: 100,
-        value: vec![0.0],
-        in_tangent: None,
-        out_tangent: None,
+        value: 17u32,
     };
-    texture_key.set_integer_value(17);
-    let texture_track = AnimationTrack {
-        tag: TrackTag::LayerTextureId,
-        interpolation: 1,
-        global_sequence_id: u32::MAX,
-        keyframes: vec![texture_key],
-    };
+    let texture_track = AnimationTrack::<LayerTextureId>::linear(vec![texture_key], None).unwrap();
     layer
         .set_texture_slots(&[LayerTextureSlot {
             texture_id: 3,
@@ -124,24 +117,26 @@ fn reforged_layer_texture_slot_and_tracks_round_trip() {
             track: Some(texture_track.clone()),
         }])
         .unwrap();
-    let alpha_track = AnimationTrack {
-        tag: TrackTag::LayerAlpha,
-        interpolation: 1,
-        global_sequence_id: u32::MAX,
-        keyframes: vec![Keyframe {
+    let alpha_track = AnimationTrack::<LayerAlpha>::linear(
+        vec![ValueKeyframe {
             frame: 100,
-            value: vec![0.5],
-            in_tangent: None,
-            out_tangent: None,
+            value: 0.5,
         }],
-    };
-    layer
-        .set_tracks(std::slice::from_ref(&alpha_track))
-        .unwrap();
+        None,
+    )
+    .unwrap()
+    .into();
+    layer.set_tracks(std::slice::from_ref(&alpha_track));
     let parsed = Layer::decode(&layer.encode().unwrap(), 1800).unwrap();
     assert_eq!(
-        parsed.texture_slots()[0].track.as_ref().unwrap().keyframes[0].integer_value(),
-        Some(17)
+        parsed.texture_slots()[0]
+            .track
+            .as_ref()
+            .unwrap()
+            .linear_keys()
+            .unwrap()[0]
+            .value,
+        17
     );
     assert_eq!(parsed.tracks(), vec![alpha_track]);
 }

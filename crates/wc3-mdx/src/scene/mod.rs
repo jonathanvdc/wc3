@@ -12,3 +12,7 @@ mod face_fx;
 pub use face_fx::FaceFx;
 mod model_info;
 pub use model_info::ModelInfo;
+
+pub use camera::CameraTrack;
+pub use light::LightTrack;
+pub use node::NodeTrack;

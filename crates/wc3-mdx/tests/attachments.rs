@@ -1,4 +1,5 @@
-use wc3_mdx::animation::{AnimationTrack, Keyframe, TrackTag};
+use wc3_mdx::animation::AttachmentVisibility;
+use wc3_mdx::animation::{AnimationTrack, ValueKeyframe};
 use wc3_mdx::io::{Cursor, Decodable, Encodable};
 use wc3_mdx::scene::{Attachment, Node};
 use wc3_mdx::Model;
@@ -11,18 +12,15 @@ fn attachment_fields_and_visibility_round_trip() {
         2,
     )
     .unwrap();
-    let track = AnimationTrack {
-        tag: TrackTag::AttachmentVisibility,
-        interpolation: 1,
-        global_sequence_id: u32::MAX,
-        keyframes: vec![Keyframe {
+    let track = AnimationTrack::<AttachmentVisibility>::linear(
+        vec![ValueKeyframe {
             frame: 50,
-            value: vec![1.0],
-            in_tangent: None,
-            out_tangent: None,
+            value: 1.0,
         }],
-    };
-    attachment.set_visibility_track(Some(&track)).unwrap();
+        None,
+    )
+    .unwrap();
+    attachment.set_visibility_track(Some(&track));
     let mut model = Model::new(1800);
     model.set_attachments(&[attachment]);
     let parsed = Model::decode(&model.encode().unwrap(), 800).unwrap();

@@ -1,15 +1,23 @@
 //! Shared node headers used by bones and helpers.
+crate::animation::track_group! {
+    pub enum NodeTrack {
+        Translation: NodeTranslation,
+        Rotation: NodeRotation,
+        Scaling: NodeScaling,
+    }
+}
+
 use crate::EncodeError;
 use crate::Encoder;
 use crate::KnownChunk;
 use crate::ValueError;
 
-use crate::{BonesChunk, Cursor, HelpersChunk, TrackTag};
+use crate::{BonesChunk, Cursor, HelpersChunk};
 use crate::{Decodable, Encodable};
 use std::borrow::Cow;
 
 use crate::FixedText;
-use crate::{AnimationTrack, DecodeError, Model};
+use crate::{DecodeError, Model};
 
 const NAME_SIZE: usize = 80;
 
@@ -69,7 +77,7 @@ pub struct Node {
     object_id: u32,
     parent_id: u32,
     raw_flags: u32,
-    tracks: Vec<AnimationTrack>,
+    tracks: Vec<NodeTrack>,
 }
 
 /// A bone with a decoded node and two geoset references.
@@ -137,24 +145,12 @@ impl Node {
         self.raw_flags = flags;
     }
     /// Borrows decoded transform tracks without reparsing.
-    pub fn tracks(&self) -> &[AnimationTrack] {
+    pub fn tracks(&self) -> &[NodeTrack] {
         &self.tracks
     }
-    /// Replaces transform tracks after checking their tags.
-    pub fn set_tracks(&mut self, tracks: &[AnimationTrack]) -> Result<(), ValueError> {
-        for track in tracks {
-            if !matches!(
-                track.tag,
-                TrackTag::NodeTranslation | TrackTag::NodeRotation | TrackTag::NodeScaling
-            ) {
-                return Err(ValueError::InvalidTrackTag {
-                    record: HelpersChunk::TAG,
-                    track: track.tag.bytes(),
-                });
-            }
-        }
+    /// Replaces transform tracks.
+    pub fn set_tracks(&mut self, tracks: &[NodeTrack]) {
         self.tracks = tracks.to_vec();
-        Ok(())
     }
 }
 
@@ -217,19 +213,7 @@ impl Decodable for Node {
         let raw_flags = cursor.read()?;
         let mut tracks = Vec::new();
         while !cursor.remaining().is_empty() {
-            let offset = cursor.absolute_position();
-            let track = AnimationTrack::decode_one(&mut cursor, 0)?;
-            if !matches!(
-                track.tag,
-                TrackTag::NodeTranslation | TrackTag::NodeRotation | TrackTag::NodeScaling
-            ) {
-                return Err(DecodeError::MalformedRecord {
-                    tag: HelpersChunk::TAG,
-                    offset,
-                });
-            }
-
-            tracks.push(track);
+            tracks.push(cursor.read::<NodeTrack>()?);
         }
         cursor.finish()?;
         Ok(Self {
@@ -250,7 +234,7 @@ impl Encodable for Node {
         bytes.write(self.parent_id);
         bytes.write(self.raw_flags);
         for track in &self.tracks {
-            track.encode_to(bytes)?;
+            bytes.write(track);
         }
         bytes.finish_sized(marker, HelpersChunk::TAG)?;
         Ok(())

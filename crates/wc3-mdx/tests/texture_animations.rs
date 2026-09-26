@@ -1,22 +1,21 @@
-use wc3_mdx::animation::{AnimationTrack, Keyframe, TextureAnimation, TrackTag};
+use wc3_mdx::animation::TextureTranslation;
+use wc3_mdx::animation::{AnimationTrack, TextureAnimation, ValueKeyframe};
 use wc3_mdx::io::{Decodable, Encodable};
 use wc3_mdx::Model;
 
 #[test]
 fn texture_animation_tracks_round_trip() {
-    let track = AnimationTrack {
-        tag: TrackTag::TextureTranslation,
-        interpolation: 1,
-        global_sequence_id: u32::MAX,
-        keyframes: vec![Keyframe {
+    let track = AnimationTrack::<TextureTranslation>::linear(
+        vec![ValueKeyframe {
             frame: 100,
-            value: vec![1.0, 2.0, 3.0],
-            in_tangent: None,
-            out_tangent: None,
+            value: [1.0, 2.0, 3.0],
         }],
-    };
+        None,
+    )
+    .unwrap()
+    .into();
     let mut animation = TextureAnimation::new();
-    animation.set_tracks(std::slice::from_ref(&track)).unwrap();
+    animation.set_tracks(std::slice::from_ref(&track));
     let mut model = Model::new(1100);
     model.set_texture_animations(&[animation]);
     let parsed = Model::decode(&model.encode().unwrap(), 800).unwrap();

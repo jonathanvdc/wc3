@@ -1,10 +1,10 @@
 mod animation;
-pub use animation::{AnimationTrack, Keyframe, TrackTag, TrackValueKind};
+pub use animation::*;
 mod sequence;
 pub use sequence::{Sequence, SequenceFlags};
 mod texture_animation;
-pub use texture_animation::TextureAnimation;
+pub use texture_animation::{TextureAnimation, TextureAnimationTrack};
 mod geoset_animation;
-pub use geoset_animation::{GeosetAnimation, GeosetAnimationFlags};
+pub use geoset_animation::{GeosetAnimation, GeosetAnimationFlags, GeosetTrack};
 mod global_sequence;
 pub use global_sequence::GlobalSequence;

@@ -1,15 +1,27 @@
 //! Classic particle emitters stored in `PREM` chunks.
+crate::animation::track_group! {
+    pub enum ParticleTrack {
+        Visibility: ParticleVisibility,
+        EmissionRate: ParticleEmissionRate,
+        Gravity: ParticleGravity,
+        Longitude: ParticleLongitude,
+        Latitude: ParticleLatitude,
+        Lifespan: ParticleLifespan,
+        Speed: ParticleSpeed,
+    }
+}
+
 use crate::EncodeError;
 use crate::Encoder;
 use crate::KnownChunk;
 use crate::ValueError;
 
-use crate::{Cursor, ParticleEmittersChunk, TrackTag};
+use crate::{Cursor, ParticleEmittersChunk};
 use crate::{Decodable, Encodable};
 use std::borrow::Cow;
 
 use crate::FixedText;
-use crate::{AnimationTrack, DecodeError, Model, Node};
+use crate::{DecodeError, Model, Node};
 
 const PATH_SIZE: usize = 256;
 
@@ -25,7 +37,7 @@ pub struct ParticleEmitter {
     reserved: u32,
     life_span: f32,
     initial_velocity: f32,
-    tracks: Vec<AnimationTrack>,
+    tracks: Vec<ParticleTrack>,
 }
 
 impl ParticleEmitter {
@@ -122,36 +134,14 @@ impl ParticleEmitter {
     }
 
     /// Borrows decoded animation tracks.
-    pub fn tracks(&self) -> &[AnimationTrack] {
+    pub fn tracks(&self) -> &[ParticleTrack] {
         &self.tracks
     }
 
     /// Replaces optional animation tracks.
-    pub fn set_tracks(&mut self, tracks: &[AnimationTrack]) -> Result<(), ValueError> {
-        for track in tracks {
-            if !is_track(track.tag) {
-                return Err(ValueError::InvalidTrackTag {
-                    record: ParticleEmittersChunk::TAG,
-                    track: track.tag.bytes(),
-                });
-            }
-        }
+    pub fn set_tracks(&mut self, tracks: &[ParticleTrack]) {
         self.tracks = tracks.to_vec();
-        Ok(())
     }
-}
-
-fn is_track(tag: TrackTag) -> bool {
-    matches!(
-        tag,
-        TrackTag::ParticleVisibility
-            | TrackTag::ParticleEmissionRate
-            | TrackTag::ParticleGravity
-            | TrackTag::ParticleLongitude
-            | TrackTag::ParticleLatitude
-            | TrackTag::ParticleLifespan
-            | TrackTag::ParticleSpeed
-    )
 }
 
 impl Model {
@@ -180,16 +170,7 @@ impl Decodable for ParticleEmitter {
         let initial_velocity = cursor.read()?;
         let mut tracks = Vec::new();
         while !cursor.remaining().is_empty() {
-            let offset = cursor.absolute_position();
-            let track = AnimationTrack::decode_one(&mut cursor, 0)?;
-            if !is_track(track.tag) {
-                return Err(DecodeError::MalformedRecord {
-                    tag: ParticleEmittersChunk::TAG,
-                    offset,
-                });
-            }
-
-            tracks.push(track);
+            tracks.push(cursor.read::<ParticleTrack>()?);
         }
         cursor.finish()?;
         Ok(Self {
@@ -209,7 +190,6 @@ impl Decodable for ParticleEmitter {
 
 impl Encodable for ParticleEmitter {
     fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), EncodeError> {
-        let start = bytes.position();
         let marker = bytes.begin_sized();
         self.node.encode_to(bytes)?;
         for value in [
@@ -225,13 +205,7 @@ impl Encodable for ParticleEmitter {
         bytes.write(self.life_span);
         bytes.write(self.initial_velocity);
         for track in &self.tracks {
-            if !is_track(track.tag) {
-                return Err(EncodeError::MalformedRecord {
-                    tag: ParticleEmittersChunk::TAG,
-                    offset: bytes.position() - start,
-                });
-            }
-            track.encode_to(bytes)?;
+            bytes.write(track);
         }
         bytes.finish_sized(marker, ParticleEmittersChunk::TAG)?;
         Ok(())

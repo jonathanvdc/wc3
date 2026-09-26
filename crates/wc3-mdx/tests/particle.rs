@@ -1,4 +1,5 @@
-use wc3_mdx::animation::{AnimationTrack, Keyframe, TrackTag};
+use wc3_mdx::animation::ParticleVisibility;
+use wc3_mdx::animation::{AnimationTrack, ValueKeyframe};
 use wc3_mdx::emitters::ParticleEmitter;
 use wc3_mdx::io::{Decodable, Encodable};
 use wc3_mdx::scene::Node;
@@ -13,18 +14,16 @@ fn classic_particle_emitter_round_trip() {
     emitter.set_latitude(0.4);
     emitter.set_life_span(2.0);
     emitter.set_initial_velocity(5.0);
-    let track = AnimationTrack {
-        tag: TrackTag::ParticleVisibility,
-        interpolation: 1,
-        global_sequence_id: u32::MAX,
-        keyframes: vec![Keyframe {
+    let track = AnimationTrack::<ParticleVisibility>::linear(
+        vec![ValueKeyframe {
             frame: 100,
-            value: vec![1.0],
-            in_tangent: None,
-            out_tangent: None,
+            value: 1.0,
         }],
-    };
-    emitter.set_tracks(std::slice::from_ref(&track)).unwrap();
+        None,
+    )
+    .unwrap()
+    .into();
+    emitter.set_tracks(std::slice::from_ref(&track));
     let mut model = Model::new(800);
     model.set_particle_emitters(&[emitter]);
     let parsed = Model::decode(&model.encode().unwrap(), 800).unwrap();

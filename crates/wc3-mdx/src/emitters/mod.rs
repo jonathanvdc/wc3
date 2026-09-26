@@ -6,3 +6,8 @@ mod popcorn;
 pub use popcorn::PopcornEmitter;
 mod ribbon;
 pub use ribbon::{RibbonEmitter, RibbonFields};
+
+pub use particle::ParticleTrack;
+pub use particle2::Particle2Track;
+pub use popcorn::PopcornTrack;
+pub use ribbon::RibbonTrack;

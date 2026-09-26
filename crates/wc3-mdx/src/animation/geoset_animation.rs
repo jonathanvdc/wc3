@@ -1,13 +1,19 @@
 //! Geoset animation records in `GEOA` chunks.
+crate::animation::track_group! {
+    pub enum GeosetTrack {
+        Alpha: GeosetAlpha,
+        Color: GeosetColor,
+    }
+}
+
 use crate::Color;
 use crate::EncodeError;
 use crate::Encoder;
 use crate::KnownChunk;
-use crate::ValueError;
 
-use crate::{AnimationTrack, DecodeError, Model, TrackTag};
 use crate::{Cursor, GeosetAnimationsChunk};
 use crate::{Decodable, Encodable};
+use crate::{DecodeError, Model};
 
 /// Geoset animation rendering flags, retaining unknown bits.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -41,7 +47,7 @@ pub struct GeosetAnimation {
     raw_flags: u32,
     color: Color,
     geoset_id: u32,
-    tracks: Vec<AnimationTrack>,
+    tracks: Vec<GeosetTrack>,
 }
 
 impl GeosetAnimation {
@@ -97,21 +103,12 @@ impl GeosetAnimation {
         self.geoset_id = id;
     }
     /// Borrows alpha and color tracks without reparsing.
-    pub fn tracks(&self) -> &[AnimationTrack] {
+    pub fn tracks(&self) -> &[GeosetTrack] {
         &self.tracks
     }
     /// Replaces alpha and color tracks.
-    pub fn set_tracks(&mut self, tracks: &[AnimationTrack]) -> Result<(), ValueError> {
-        for track in tracks {
-            if !matches!(track.tag, TrackTag::GeosetAlpha | TrackTag::GeosetColor) {
-                return Err(ValueError::InvalidTrackTag {
-                    record: GeosetAnimationsChunk::TAG,
-                    track: track.tag.bytes(),
-                });
-            }
-        }
+    pub fn set_tracks(&mut self, tracks: &[GeosetTrack]) {
         self.tracks = tracks.to_vec();
-        Ok(())
     }
 }
 
@@ -136,16 +133,7 @@ impl Decodable for GeosetAnimation {
         let geoset_id = cursor.read()?;
         let mut tracks = Vec::new();
         while !cursor.remaining().is_empty() {
-            let offset = cursor.absolute_position();
-            let track = AnimationTrack::decode_one(&mut cursor, 0)?;
-            if !matches!(track.tag, TrackTag::GeosetAlpha | TrackTag::GeosetColor) {
-                return Err(DecodeError::MalformedRecord {
-                    tag: GeosetAnimationsChunk::TAG,
-                    offset,
-                });
-            }
-
-            tracks.push(track);
+            tracks.push(cursor.read::<GeosetTrack>()?);
         }
         cursor.finish()?;
         Ok(Self {
@@ -160,7 +148,6 @@ impl Decodable for GeosetAnimation {
 
 impl Encodable for GeosetAnimation {
     fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), EncodeError> {
-        let start = bytes.position();
         let marker = bytes.begin_sized();
         bytes.write(self.alpha);
         bytes.write(self.raw_flags);
@@ -169,13 +156,7 @@ impl Encodable for GeosetAnimation {
         }
         bytes.write(self.geoset_id);
         for track in &self.tracks {
-            if !matches!(track.tag, TrackTag::GeosetAlpha | TrackTag::GeosetColor) {
-                return Err(EncodeError::MalformedRecord {
-                    tag: GeosetAnimationsChunk::TAG,
-                    offset: bytes.position() - start,
-                });
-            }
-            track.encode_to(bytes)?;
+            bytes.write(track);
         }
         bytes.finish_sized(marker, GeosetAnimationsChunk::TAG)?;
         Ok(())

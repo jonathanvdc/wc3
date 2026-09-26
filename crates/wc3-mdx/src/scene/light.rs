@@ -1,13 +1,25 @@
 //! Light records in `LITE` chunks.
+crate::animation::track_group! {
+    pub enum LightTrack {
+        AttenuationStart: LightAttenuationStart,
+        AttenuationEnd: LightAttenuationEnd,
+        Color: LightColor,
+        Intensity: LightIntensity,
+        AmbientColor: LightAmbientColor,
+        AmbientIntensity: LightAmbientIntensity,
+        Visibility: LightVisibility,
+    }
+}
+
 use crate::EncodeError;
 use crate::Encoder;
 use crate::KnownChunk;
 use crate::ValueError;
-use crate::{Color, TrackTag, Version};
+use crate::{Color, Version};
 
-use crate::{AnimationTrack, DecodeError, Model, Node};
 use crate::{Cursor, LightsChunk};
 use crate::{Decodable, Encodable};
+use crate::{DecodeError, Model, Node};
 
 const FIXED_SIZE: usize = 44;
 const EXTENDED_SIZE: usize = 72;
@@ -24,7 +36,7 @@ pub struct Light {
     ambient_color: Color,
     ambient_intensity: f32,
     extended_words: Option<[u32; 7]>,
-    tracks: Vec<AnimationTrack>,
+    tracks: Vec<LightTrack>,
 }
 
 impl Light {
@@ -135,35 +147,13 @@ impl Light {
         Ok(())
     }
     /// Borrows decoded light animation tracks.
-    pub fn tracks(&self) -> &[AnimationTrack] {
+    pub fn tracks(&self) -> &[LightTrack] {
         &self.tracks
     }
     /// Replaces optional light animation tracks.
-    pub fn set_tracks(&mut self, tracks: &[AnimationTrack]) -> Result<(), ValueError> {
-        for track in tracks {
-            if !is_track(track.tag) {
-                return Err(ValueError::InvalidTrackTag {
-                    record: LightsChunk::TAG,
-                    track: track.tag.bytes(),
-                });
-            }
-        }
+    pub fn set_tracks(&mut self, tracks: &[LightTrack]) {
         self.tracks = tracks.to_vec();
-        Ok(())
     }
-}
-
-fn is_track(tag: TrackTag) -> bool {
-    matches!(
-        tag,
-        TrackTag::LightVisibility
-            | TrackTag::LightColor
-            | TrackTag::LightIntensity
-            | TrackTag::LightAmbientColor
-            | TrackTag::LightAmbientIntensity
-            | TrackTag::LightAttenuationStart
-            | TrackTag::LightAttenuationEnd
-    )
 }
 
 impl Model {
@@ -196,11 +186,10 @@ impl Decodable for Light {
                 || remaining
                     .get(extension_size..extension_size + 4)
                     .is_some_and(|tag| {
-                        TrackTag::from_bytes(tag.try_into().expect("four-byte tag"))
-                            .is_some_and(is_track)
+                        LightTrack::accepts_bytes(tag.try_into().expect("four-byte tag"))
                     }))
             && remaining.get(..4).map_or(true, |tag| {
-                !TrackTag::from_bytes(tag.try_into().expect("four-byte tag")).is_some_and(is_track)
+                !LightTrack::accepts_bytes(tag.try_into().expect("four-byte tag"))
             });
         let extended_words = if has_extended {
             let mut words = [0; 7];
@@ -213,16 +202,7 @@ impl Decodable for Light {
         };
         let mut tracks = Vec::new();
         while !cursor.remaining().is_empty() {
-            let offset = cursor.absolute_position();
-            let track = AnimationTrack::decode_one(&mut cursor, 0)?;
-            if !is_track(track.tag) {
-                return Err(DecodeError::MalformedRecord {
-                    tag: LightsChunk::TAG,
-                    offset,
-                });
-            }
-
-            tracks.push(track);
+            tracks.push(cursor.read::<LightTrack>()?);
         }
         cursor.finish()?;
         Ok(Self {
@@ -242,7 +222,6 @@ impl Decodable for Light {
 
 impl Encodable for Light {
     fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), EncodeError> {
-        let start = bytes.position();
         let marker = bytes.begin_sized();
         self.node.encode_to(bytes)?;
         bytes.write(self.light_type);
@@ -262,13 +241,7 @@ impl Encodable for Light {
             }
         }
         for track in &self.tracks {
-            if !is_track(track.tag) {
-                return Err(EncodeError::MalformedRecord {
-                    tag: LightsChunk::TAG,
-                    offset: bytes.position() - start,
-                });
-            }
-            track.encode_to(bytes)?;
+            bytes.write(track);
         }
         bytes.finish_sized(marker, LightsChunk::TAG)?;
         Ok(())

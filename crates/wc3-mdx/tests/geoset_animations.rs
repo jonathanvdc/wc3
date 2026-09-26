@@ -1,6 +1,5 @@
-use wc3_mdx::animation::{
-    AnimationTrack, GeosetAnimation, GeosetAnimationFlags, Keyframe, TrackTag,
-};
+use wc3_mdx::animation::GeosetColor;
+use wc3_mdx::animation::{AnimationTrack, GeosetAnimation, GeosetAnimationFlags, ValueKeyframe};
 use wc3_mdx::io::{Decodable, Encodable};
 use wc3_mdx::Model;
 
@@ -49,18 +48,16 @@ fn local_geoset_animations_round_trip_when_available() {
 #[test]
 fn geoset_animation_color_track_round_trip() {
     let mut animation = GeosetAnimation::new(1);
-    let track = AnimationTrack {
-        tag: TrackTag::GeosetColor,
-        interpolation: 1,
-        global_sequence_id: u32::MAX,
-        keyframes: vec![Keyframe {
+    let track = AnimationTrack::<GeosetColor>::linear(
+        vec![ValueKeyframe {
             frame: 25,
-            value: vec![0.2, 0.4, 0.8],
-            in_tangent: None,
-            out_tangent: None,
+            value: [0.2, 0.4, 0.8],
         }],
-    };
-    animation.set_tracks(std::slice::from_ref(&track)).unwrap();
+        None,
+    )
+    .unwrap()
+    .into();
+    animation.set_tracks(std::slice::from_ref(&track));
     let parsed = GeosetAnimation::decode(&animation.encode().unwrap(), 800).unwrap();
     assert_eq!(parsed.tracks(), vec![track]);
 }

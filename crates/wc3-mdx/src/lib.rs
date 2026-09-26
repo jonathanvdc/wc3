@@ -20,6 +20,8 @@ extern crate self as wc3_mdx;
 
 /// A three-dimensional vector in MDX coordinates.
 pub type Vec3 = [f32; 3];
+/// A four-component vector, used for rotation tracks.
+pub type Vec4 = [f32; 4];
 /// An RGB color.
 pub type Color = [f32; 3];
 /// An MDX format version number.

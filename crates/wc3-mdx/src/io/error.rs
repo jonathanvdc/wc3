@@ -130,10 +130,6 @@ pub enum ValueError {
         tag: Tag,
         field: &'static str,
     },
-    InvalidTrackTag {
-        record: Tag,
-        track: Tag,
-    },
     IndexOutOfBounds {
         tag: Tag,
         index: usize,
@@ -151,6 +147,9 @@ pub enum ValueError {
     CountTooLarge {
         tag: Tag,
         count: usize,
+    },
+    InvalidGlobalSequenceId {
+        id: u32,
     },
 }
 
@@ -178,12 +177,6 @@ impl fmt::Display for ValueError {
                 "{field} is unavailable in {:?}",
                 String::from_utf8_lossy(tag)
             ),
-            Self::InvalidTrackTag { record, track } => write!(
-                f,
-                "track {:?} is not valid in {:?}",
-                String::from_utf8_lossy(track),
-                String::from_utf8_lossy(record)
-            ),
             Self::IndexOutOfBounds { tag, index, len } => write!(
                 f,
                 "index {index} is outside {:?} length {len}",
@@ -206,6 +199,9 @@ impl fmt::Display for ValueError {
                 "{:?} count {count} exceeds u32",
                 String::from_utf8_lossy(tag)
             ),
+            Self::InvalidGlobalSequenceId { id } => {
+                write!(f, "global sequence ID {id} is reserved for no sequence")
+            }
         }
     }
 }

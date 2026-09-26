@@ -1,4 +1,5 @@
-use wc3_mdx::animation::{AnimationTrack, Keyframe, TrackTag};
+use wc3_mdx::animation::CameraRotation;
+use wc3_mdx::animation::{AnimationTrack, ValueKeyframe};
 use wc3_mdx::io::{Decodable, Encodable};
 use wc3_mdx::scene::Camera;
 use wc3_mdx::Model;
@@ -11,18 +12,16 @@ fn camera_fields_and_tracks_round_trip() {
     camera.set_field_of_view(0.7);
     camera.set_far_clip(1000.0);
     camera.set_near_clip(10.0);
-    let track = AnimationTrack {
-        tag: TrackTag::CameraRoll,
-        interpolation: 1,
-        global_sequence_id: u32::MAX,
-        keyframes: vec![Keyframe {
+    let track = AnimationTrack::<CameraRotation>::linear(
+        vec![ValueKeyframe {
             frame: 100,
-            value: vec![0.5],
-            in_tangent: None,
-            out_tangent: None,
+            value: 0.5,
         }],
-    };
-    camera.set_tracks(std::slice::from_ref(&track)).unwrap();
+        None,
+    )
+    .unwrap()
+    .into();
+    camera.set_tracks(std::slice::from_ref(&track));
     let mut model = Model::new(1100);
     model.set_cameras(&[camera]);
     let decoded = Model::decode(&model.encode().unwrap(), 800).unwrap();
