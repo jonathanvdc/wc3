@@ -557,8 +557,8 @@ fn write_vectors<const N: usize>(
 
 fn write_extent(bytes: &mut Encoder<'_>, extent: GeosetExtent) {
     bytes.write(extent.bounds_radius);
-    bytes.write(&extent.minimum);
-    bytes.write(&extent.maximum);
+    bytes.write(extent.minimum);
+    bytes.write(extent.maximum);
 }
 
 impl Model {

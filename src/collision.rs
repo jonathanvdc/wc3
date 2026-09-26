@@ -171,14 +171,14 @@ impl Encodable for CollisionShape {
 
         match self.geometry {
             CollisionGeometry::Box(points) | CollisionGeometry::Plane(points) => {
-                bytes.write(&points);
+                bytes.write(points);
             }
             CollisionGeometry::Sphere(center, radius) => {
-                bytes.write(&center);
+                bytes.write(center);
                 bytes.write(radius);
             }
             CollisionGeometry::Cylinder(points, radius) => {
-                bytes.write(&points);
+                bytes.write(points);
                 bytes.write(radius);
             }
         }

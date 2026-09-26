@@ -113,7 +113,7 @@ mod tests {
         let mut bytes = Vec::new();
         let mut encoder = Encoder::new(&mut bytes);
         encoder.write([1u32, 2]);
-        encoder.write(&[[1.5f32, -2.5]]);
+        encoder.write([[1.5f32, -2.5]]);
         encoder.write(&[3u16, 4][..]);
         assert_eq!(
             bytes,
