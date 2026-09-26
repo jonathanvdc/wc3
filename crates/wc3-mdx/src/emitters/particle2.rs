@@ -3,7 +3,7 @@ use crate::EncodeError;
 use crate::Encoder;
 use crate::KnownChunk;
 use crate::ValueError;
-use crate::{Color, Tag, Vec3};
+use crate::{Color, TrackTag, Vec3};
 
 use crate::{AnimationTrack, DecodeError, Model, Node};
 use crate::{Cursor, ParticleEmitters2Chunk};
@@ -141,7 +141,7 @@ impl ParticleEmitter2 {
             if !is_track(track.tag) {
                 return Err(ValueError::InvalidTrackTag {
                     record: ParticleEmitters2Chunk::TAG,
-                    track: track.tag,
+                    track: track.tag.bytes(),
                 });
             }
         }
@@ -150,10 +150,17 @@ impl ParticleEmitter2 {
     }
 }
 
-fn is_track(tag: Tag) -> bool {
+fn is_track(tag: TrackTag) -> bool {
     matches!(
-        &tag,
-        b"KP2V" | b"KP2E" | b"KP2W" | b"KP2N" | b"KP2S" | b"KP2L" | b"KP2G" | b"KP2R"
+        tag,
+        TrackTag::Particle2Visibility
+            | TrackTag::Particle2EmissionRate
+            | TrackTag::Particle2Width
+            | TrackTag::Particle2Length
+            | TrackTag::Particle2Speed
+            | TrackTag::Particle2Latitude
+            | TrackTag::Particle2Gravity
+            | TrackTag::Particle2Variation
     )
 }
 

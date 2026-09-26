@@ -3,7 +3,7 @@ use crate::EncodeError;
 use crate::Encoder;
 use crate::KnownChunk;
 use crate::ValueError;
-use crate::{Color, Tag};
+use crate::{Color, TrackTag};
 
 use crate::{Cursor, PopcornEmittersChunk};
 use crate::{Decodable, Encodable};
@@ -131,7 +131,7 @@ impl PopcornEmitter {
             if !is_track_tag(track.tag) {
                 return Err(ValueError::InvalidTrackTag {
                     record: PopcornEmittersChunk::TAG,
-                    track: track.tag,
+                    track: track.tag.bytes(),
                 });
             }
         }
@@ -140,10 +140,15 @@ impl PopcornEmitter {
     }
 }
 
-fn is_track_tag(tag: Tag) -> bool {
+fn is_track_tag(tag: TrackTag) -> bool {
     matches!(
-        &tag,
-        b"KPPA" | b"KPPC" | b"KPPE" | b"KPPL" | b"KPPS" | b"KPPV"
+        tag,
+        TrackTag::PopcornAlpha
+            | TrackTag::PopcornColor
+            | TrackTag::PopcornEmissionRate
+            | TrackTag::PopcornLifespan
+            | TrackTag::PopcornSpeed
+            | TrackTag::PopcornVisibility
     )
 }
 

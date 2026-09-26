@@ -1,11 +1,11 @@
-use wc3_mdx::animation::{AnimationTrack, Keyframe, TrackValueKind};
+use wc3_mdx::animation::{AnimationTrack, Keyframe, TrackTag, TrackValueKind};
 use wc3_mdx::io::{Decodable, Encodable};
 use wc3_mdx::scene::Node;
 
 #[test]
 fn node_transform_tracks_round_trip() {
     let track = AnimationTrack {
-        tag: *b"KGTR",
+        tag: TrackTag::NodeTranslation,
         interpolation: 2,
         global_sequence_id: u32::MAX,
         keyframes: vec![Keyframe {
@@ -24,7 +24,7 @@ fn node_transform_tracks_round_trip() {
 #[test]
 fn node_keeps_name_padding_and_track_order() {
     let mut node = Node::new("N", 2).unwrap();
-    let tracks = [*b"KGSC", *b"KGTR"].map(|tag| AnimationTrack {
+    let tracks = [TrackTag::NodeScaling, TrackTag::NodeTranslation].map(|tag| AnimationTrack {
         tag,
         interpolation: 1,
         global_sequence_id: u32::MAX,
@@ -40,7 +40,7 @@ fn node_keeps_name_padding_and_track_order() {
     bytes[20] = 0xe1;
     let parsed = Node::decode(&bytes, 800).unwrap();
     assert_eq!(parsed.encode().unwrap(), bytes);
-    assert_eq!(parsed.tracks()[0].tag, *b"KGSC");
+    assert_eq!(parsed.tracks()[0].tag, TrackTag::NodeScaling);
 }
 
 #[test]
@@ -53,7 +53,7 @@ fn standalone_integer_track_preserves_values() {
     };
     key.set_integer_value(u32::MAX);
     let track = AnimationTrack {
-        tag: *b"KMTF",
+        tag: TrackTag::LayerTextureId,
         interpolation: 1,
         global_sequence_id: u32::MAX,
         keyframes: vec![key],
@@ -70,7 +70,7 @@ fn standalone_integer_track_preserves_values() {
 fn setter_does_not_serialize_tracks_to_validate_them() {
     let mut node = Node::new("Animated", 4).unwrap();
     let track = AnimationTrack {
-        tag: *b"KGTR",
+        tag: TrackTag::NodeTranslation,
         interpolation: 4,
         global_sequence_id: u32::MAX,
         keyframes: Vec::new(),

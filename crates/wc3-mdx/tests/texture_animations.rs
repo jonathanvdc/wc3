@@ -1,11 +1,11 @@
-use wc3_mdx::animation::{AnimationTrack, Keyframe, TextureAnimation};
+use wc3_mdx::animation::{AnimationTrack, Keyframe, TextureAnimation, TrackTag};
 use wc3_mdx::io::{Decodable, Encodable};
 use wc3_mdx::Model;
 
 #[test]
 fn texture_animation_tracks_round_trip() {
     let track = AnimationTrack {
-        tag: *b"KTAT",
+        tag: TrackTag::TextureTranslation,
         interpolation: 1,
         global_sequence_id: u32::MAX,
         keyframes: vec![Keyframe {

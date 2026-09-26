@@ -2,10 +2,9 @@
 use crate::EncodeError;
 use crate::Encoder;
 use crate::KnownChunk;
-use crate::Tag;
 use crate::ValueError;
 
-use crate::{AnimationTrack, DecodeError, Model};
+use crate::{AnimationTrack, DecodeError, Model, TrackTag};
 use crate::{Cursor, TextureAnimationsChunk};
 use crate::{Decodable, Encodable};
 
@@ -32,7 +31,7 @@ impl TextureAnimation {
             if !is_track_tag(track.tag) {
                 return Err(ValueError::InvalidTrackTag {
                     record: TextureAnimationsChunk::TAG,
-                    track: track.tag,
+                    track: track.tag.bytes(),
                 });
             }
         }
@@ -41,8 +40,11 @@ impl TextureAnimation {
     }
 }
 
-fn is_track_tag(tag: Tag) -> bool {
-    matches!(&tag, b"KTAT" | b"KTAR" | b"KTAS")
+fn is_track_tag(tag: TrackTag) -> bool {
+    matches!(
+        tag,
+        TrackTag::TextureTranslation | TrackTag::TextureRotation | TrackTag::TextureScaling
+    )
 }
 
 impl Model {

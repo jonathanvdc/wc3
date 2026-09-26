@@ -14,6 +14,86 @@ pub enum TrackValueKind {
     Integer,
 }
 
+macro_rules! track_tags {
+    ($($name:ident => ($tag:literal, $components:literal)),+ $(,)?) => {
+        /// Known animation track identifiers.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
+        pub enum TrackTag { $($name),+ }
+
+        impl TrackTag {
+            /// Returns the four bytes stored in an MDX track header.
+            pub const fn bytes(self) -> Tag {
+                match self { $(Self::$name => *$tag),+ }
+            }
+
+            /// Parses a known track identifier.
+            pub const fn from_bytes(tag: Tag) -> Option<Self> {
+                match &tag { $($tag => Some(Self::$name),)+ _ => None }
+            }
+
+            /// Number of scalar components in each keyframe value.
+            pub const fn component_count(self) -> usize {
+                match self { $(Self::$name => $components),+ }
+            }
+        }
+    };
+}
+
+track_tags! {
+    NodeTranslation => (b"KGTR", 3),
+    NodeScaling => (b"KGSC", 3),
+    CameraTranslation => (b"KCTR", 3),
+    CameraTargetTranslation => (b"KTTR", 3),
+    PopcornColor => (b"KPPC", 3),
+    TextureTranslation => (b"KTAT", 3),
+    TextureScaling => (b"KTAS", 3),
+    GeosetColor => (b"KGAC", 3),
+    LightColor => (b"KLAC", 3),
+    LightAmbientColor => (b"KLBC", 3),
+    LayerFresnelColor => (b"KFC3", 3),
+    RibbonColor => (b"KRCO", 3),
+    NodeRotation => (b"KGRT", 4),
+    TextureRotation => (b"KTAR", 4),
+    CameraRoll => (b"KCRL", 1),
+    AttachmentVisibility => (b"KATV", 1),
+    PopcornAlpha => (b"KPPA", 1),
+    PopcornEmissionRate => (b"KPPE", 1),
+    PopcornLifespan => (b"KPPL", 1),
+    PopcornSpeed => (b"KPPS", 1),
+    PopcornVisibility => (b"KPPV", 1),
+    ParticleVisibility => (b"KPEV", 1),
+    ParticleEmissionRate => (b"KPEE", 1),
+    ParticleGravity => (b"KPEG", 1),
+    ParticleLongitude => (b"KPLN", 1),
+    ParticleLatitude => (b"KPLT", 1),
+    ParticleLifespan => (b"KPEL", 1),
+    ParticleSpeed => (b"KPES", 1),
+    Particle2Visibility => (b"KP2V", 1),
+    Particle2EmissionRate => (b"KP2E", 1),
+    Particle2Width => (b"KP2W", 1),
+    Particle2Length => (b"KP2N", 1),
+    Particle2Speed => (b"KP2S", 1),
+    Particle2Latitude => (b"KP2L", 1),
+    Particle2Gravity => (b"KP2G", 1),
+    Particle2Variation => (b"KP2R", 1),
+    RibbonVisibility => (b"KRVS", 1),
+    RibbonHeightAbove => (b"KRHA", 1),
+    RibbonHeightBelow => (b"KRHB", 1),
+    RibbonAlpha => (b"KRAL", 1),
+    RibbonTextureSlot => (b"KRTX", 1),
+    GeosetAlpha => (b"KGAO", 1),
+    LightVisibility => (b"KLAV", 1),
+    LightIntensity => (b"KLAI", 1),
+    LightAmbientIntensity => (b"KLBI", 1),
+    LightAttenuationStart => (b"KLAS", 1),
+    LightAttenuationEnd => (b"KLAE", 1),
+    LayerAlpha => (b"KMTA", 1),
+    LayerTextureId => (b"KMTF", 1),
+    LayerEmissiveGain => (b"KMTE", 1),
+    LayerFresnelOpacity => (b"KFCA", 1),
+    LayerFresnelTeamColor => (b"KFTC", 1),
+}
+
 /// One decoded keyframe. Tangents are present for Hermite and Bezier tracks.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Keyframe {
@@ -48,7 +128,7 @@ impl Keyframe {
 #[derive(Clone, Debug, PartialEq)]
 pub struct AnimationTrack {
     /// Track identifier, such as `KGTR` for node translation or `KCTR` for a camera.
-    pub tag: Tag,
+    pub tag: TrackTag,
     /// 0 = none, 1 = linear, 2 = Hermite, 3 = Bezier.
     pub interpolation: u32,
     /// Global sequence index, or `u32::MAX` when absent.
@@ -58,33 +138,23 @@ pub struct AnimationTrack {
 }
 
 impl AnimationTrack {
-    /// Returns the number of scalar components in each value, if the tag is known.
+    /// Returns the number of scalar components in each value.
     pub fn component_count(&self) -> Option<usize> {
-        components(self.tag)
+        Some(self.tag.component_count())
     }
 
-    /// Returns the binary value type, if the tag is known.
+    /// Returns the binary value type.
     pub fn value_kind(&self) -> Option<TrackValueKind> {
-        components(self.tag)?;
-        Some(if matches!(&self.tag, b"KMTF" | b"KRTX") {
-            TrackValueKind::Integer
-        } else {
-            TrackValueKind::Float
-        })
-    }
-}
-
-fn components(tag: Tag) -> Option<usize> {
-    match &tag {
-        b"KGTR" | b"KGSC" | b"KCTR" | b"KTTR" | b"KPPC" | b"KTAT" | b"KTAS" | b"KGAC" | b"KLAC"
-        | b"KLBC" | b"KFC3" | b"KRCO" => Some(3),
-        b"KGRT" | b"KTAR" => Some(4),
-        b"KCRL" | b"KATV" | b"KPPA" | b"KPPE" | b"KPPL" | b"KPPS" | b"KPPV" | b"KPEV" | b"KPEE"
-        | b"KPEG" | b"KPLN" | b"KPLT" | b"KPEL" | b"KPES" | b"KP2V" | b"KP2E" | b"KP2W"
-        | b"KP2N" | b"KP2S" | b"KP2L" | b"KP2G" | b"KP2R" | b"KRVS" | b"KRHA" | b"KRHB"
-        | b"KRAL" | b"KRTX" | b"KGAO" | b"KLAV" | b"KLAI" | b"KLBI" | b"KLAS" | b"KLAE"
-        | b"KMTA" | b"KMTF" | b"KMTE" | b"KFCA" | b"KFTC" => Some(1),
-        _ => None,
+        Some(
+            if matches!(
+                self.tag,
+                TrackTag::LayerTextureId | TrackTag::RibbonTextureSlot
+            ) {
+                TrackValueKind::Integer
+            } else {
+                TrackValueKind::Float
+            },
+        )
     }
 }
 
@@ -100,7 +170,9 @@ impl Decodable for AnimationTrack {
             })?
             .try_into()
             .expect("four-byte tag");
-        let components = components(tag).ok_or(DecodeError::MalformedRecord { tag, offset })?;
+        let track_tag =
+            TrackTag::from_bytes(tag).ok_or(DecodeError::MalformedRecord { tag, offset })?;
+        let components = track_tag.component_count();
         let malformed = || DecodeError::MalformedRecord { tag, offset };
         let count = next.read::<u32>().map_err(|_| malformed())? as usize;
         let interpolation = next.read::<u32>().map_err(|_| malformed())?;
@@ -144,7 +216,7 @@ impl Decodable for AnimationTrack {
         }
         *cursor = next;
         Ok(Self {
-            tag,
+            tag: track_tag,
             interpolation,
             global_sequence_id,
             keyframes,
@@ -154,18 +226,15 @@ impl Decodable for AnimationTrack {
 
 impl Encodable for AnimationTrack {
     fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), EncodeError> {
-        let components = components(self.tag).ok_or(EncodeError::MalformedRecord {
-            tag: self.tag,
-            offset: 0,
-        })?;
+        let components = self.tag.component_count();
         if self.interpolation > 3 || self.keyframes.len() > u32::MAX as usize {
             return Err(EncodeError::MalformedRecord {
-                tag: self.tag,
+                tag: self.tag.bytes(),
                 offset: 0,
             });
         }
         let tangents = self.interpolation >= 2;
-        bytes.write_bytes(&self.tag);
+        bytes.write_bytes(&self.tag.bytes());
         bytes.write(self.keyframes.len() as u32);
         bytes.write(self.interpolation);
         bytes.write(self.global_sequence_id);
@@ -183,7 +252,7 @@ impl Encodable for AnimationTrack {
                     .is_some_and(|v| v.len() != components)
             {
                 return Err(EncodeError::MalformedRecord {
-                    tag: self.tag,
+                    tag: self.tag.bytes(),
                     offset: index,
                 });
             }

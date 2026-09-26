@@ -4,7 +4,7 @@ use crate::Encoder;
 use crate::KnownChunk;
 use crate::ValueError;
 
-use crate::{BonesChunk, Cursor, HelpersChunk};
+use crate::{BonesChunk, Cursor, HelpersChunk, TrackTag};
 use crate::{Decodable, Encodable};
 use std::borrow::Cow;
 
@@ -143,10 +143,13 @@ impl Node {
     /// Replaces transform tracks after checking their tags.
     pub fn set_tracks(&mut self, tracks: &[AnimationTrack]) -> Result<(), ValueError> {
         for track in tracks {
-            if !matches!(&track.tag, b"KGTR" | b"KGRT" | b"KGSC") {
+            if !matches!(
+                track.tag,
+                TrackTag::NodeTranslation | TrackTag::NodeRotation | TrackTag::NodeScaling
+            ) {
                 return Err(ValueError::InvalidTrackTag {
                     record: HelpersChunk::TAG,
-                    track: track.tag,
+                    track: track.tag.bytes(),
                 });
             }
         }
@@ -216,7 +219,10 @@ impl Decodable for Node {
         while !cursor.remaining().is_empty() {
             let offset = cursor.absolute_position();
             let track = AnimationTrack::decode_one(&mut cursor, 0)?;
-            if !matches!(&track.tag, b"KGTR" | b"KGRT" | b"KGSC") {
+            if !matches!(
+                track.tag,
+                TrackTag::NodeTranslation | TrackTag::NodeRotation | TrackTag::NodeScaling
+            ) {
                 return Err(DecodeError::MalformedRecord {
                     tag: HelpersChunk::TAG,
                     offset,

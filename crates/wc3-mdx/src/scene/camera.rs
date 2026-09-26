@@ -3,7 +3,7 @@ use crate::EncodeError;
 use crate::Encoder;
 use crate::KnownChunk;
 use crate::ValueError;
-use crate::{Tag, Vec3, Version};
+use crate::{TrackTag, Vec3, Version};
 
 use crate::{CamerasChunk, Cursor};
 use crate::{Decodable, Encodable};
@@ -120,7 +120,7 @@ impl Camera {
             if !is_track(track.tag) {
                 return Err(ValueError::InvalidTrackTag {
                     record: CamerasChunk::TAG,
-                    track: track.tag,
+                    track: track.tag.bytes(),
                 });
             }
         }
@@ -129,8 +129,11 @@ impl Camera {
     }
 }
 
-fn is_track(tag: Tag) -> bool {
-    matches!(&tag, b"KCTR" | b"KTTR" | b"KCRL")
+fn is_track(tag: TrackTag) -> bool {
+    matches!(
+        tag,
+        TrackTag::CameraTranslation | TrackTag::CameraTargetTranslation | TrackTag::CameraRoll
+    )
 }
 
 impl Model {

@@ -3,7 +3,7 @@ use crate::EncodeError;
 use crate::Encoder;
 use crate::KnownChunk;
 use crate::ValueError;
-use crate::{Color, Tag, Version};
+use crate::{Color, TrackTag, Version};
 
 use crate::{AnimationTrack, DecodeError, Model, Node};
 use crate::{Cursor, LightsChunk};
@@ -144,7 +144,7 @@ impl Light {
             if !is_track(track.tag) {
                 return Err(ValueError::InvalidTrackTag {
                     record: LightsChunk::TAG,
-                    track: track.tag,
+                    track: track.tag.bytes(),
                 });
             }
         }
@@ -153,10 +153,16 @@ impl Light {
     }
 }
 
-fn is_track(tag: Tag) -> bool {
+fn is_track(tag: TrackTag) -> bool {
     matches!(
-        &tag,
-        b"KLAV" | b"KLAC" | b"KLAI" | b"KLBC" | b"KLBI" | b"KLAS" | b"KLAE"
+        tag,
+        TrackTag::LightVisibility
+            | TrackTag::LightColor
+            | TrackTag::LightIntensity
+            | TrackTag::LightAmbientColor
+            | TrackTag::LightAmbientIntensity
+            | TrackTag::LightAttenuationStart
+            | TrackTag::LightAttenuationEnd
     )
 }
 
@@ -189,9 +195,12 @@ impl Decodable for Light {
             && (remaining.len() == extension_size
                 || remaining
                     .get(extension_size..extension_size + 4)
-                    .is_some_and(|tag| is_track(tag.try_into().expect("four-byte tag"))))
+                    .is_some_and(|tag| {
+                        TrackTag::from_bytes(tag.try_into().expect("four-byte tag"))
+                            .is_some_and(is_track)
+                    }))
             && remaining.get(..4).map_or(true, |tag| {
-                !is_track(tag.try_into().expect("four-byte tag"))
+                !TrackTag::from_bytes(tag.try_into().expect("four-byte tag")).is_some_and(is_track)
             });
         let extended_words = if has_extended {
             let mut words = [0; 7];

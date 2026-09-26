@@ -1,4 +1,4 @@
-use wc3_mdx::animation::{AnimationTrack, Keyframe};
+use wc3_mdx::animation::{AnimationTrack, Keyframe, TrackTag};
 use wc3_mdx::emitters::ParticleEmitter;
 use wc3_mdx::io::{Decodable, Encodable};
 use wc3_mdx::scene::Node;
@@ -14,7 +14,7 @@ fn classic_particle_emitter_round_trip() {
     emitter.set_life_span(2.0);
     emitter.set_initial_velocity(5.0);
     let track = AnimationTrack {
-        tag: *b"KPEV",
+        tag: TrackTag::ParticleVisibility,
         interpolation: 1,
         global_sequence_id: u32::MAX,
         keyframes: vec![Keyframe {

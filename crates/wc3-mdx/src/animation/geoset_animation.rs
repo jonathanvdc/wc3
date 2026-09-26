@@ -5,7 +5,7 @@ use crate::Encoder;
 use crate::KnownChunk;
 use crate::ValueError;
 
-use crate::{AnimationTrack, DecodeError, Model};
+use crate::{AnimationTrack, DecodeError, Model, TrackTag};
 use crate::{Cursor, GeosetAnimationsChunk};
 use crate::{Decodable, Encodable};
 
@@ -103,10 +103,10 @@ impl GeosetAnimation {
     /// Replaces alpha and color tracks.
     pub fn set_tracks(&mut self, tracks: &[AnimationTrack]) -> Result<(), ValueError> {
         for track in tracks {
-            if !matches!(&track.tag, b"KGAO" | b"KGAC") {
+            if !matches!(track.tag, TrackTag::GeosetAlpha | TrackTag::GeosetColor) {
                 return Err(ValueError::InvalidTrackTag {
                     record: GeosetAnimationsChunk::TAG,
-                    track: track.tag,
+                    track: track.tag.bytes(),
                 });
             }
         }
@@ -138,7 +138,7 @@ impl Decodable for GeosetAnimation {
         while !cursor.remaining().is_empty() {
             let offset = cursor.absolute_position();
             let track = AnimationTrack::decode_one(&mut cursor, 0)?;
-            if !matches!(&track.tag, b"KGAO" | b"KGAC") {
+            if !matches!(track.tag, TrackTag::GeosetAlpha | TrackTag::GeosetColor) {
                 return Err(DecodeError::MalformedRecord {
                     tag: GeosetAnimationsChunk::TAG,
                     offset,
@@ -169,7 +169,7 @@ impl Encodable for GeosetAnimation {
         }
         bytes.write(self.geoset_id);
         for track in &self.tracks {
-            if !matches!(&track.tag, b"KGAO" | b"KGAC") {
+            if !matches!(track.tag, TrackTag::GeosetAlpha | TrackTag::GeosetColor) {
                 return Err(EncodeError::MalformedRecord {
                     tag: GeosetAnimationsChunk::TAG,
                     offset: bytes.position() - start,

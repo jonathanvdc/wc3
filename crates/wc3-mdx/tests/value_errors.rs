@@ -1,4 +1,4 @@
-use wc3_mdx::animation::AnimationTrack;
+use wc3_mdx::animation::{AnimationTrack, TrackTag};
 use wc3_mdx::chunks::HelpersChunk;
 use wc3_mdx::chunks::KnownChunk;
 use wc3_mdx::geometry::Geoset;
@@ -15,7 +15,7 @@ fn construction_and_mutation_report_value_errors() {
 
     let mut node = Node::new("Valid", 1).unwrap();
     let invalid_track = AnimationTrack {
-        tag: *b"KATV",
+        tag: TrackTag::AttachmentVisibility,
         interpolation: 0,
         global_sequence_id: u32::MAX,
         keyframes: Vec::new(),

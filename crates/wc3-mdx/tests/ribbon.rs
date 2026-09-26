@@ -1,4 +1,4 @@
-use wc3_mdx::animation::{AnimationTrack, Keyframe};
+use wc3_mdx::animation::{AnimationTrack, Keyframe, TrackTag};
 use wc3_mdx::emitters::RibbonEmitter;
 use wc3_mdx::io::{Decodable, Encodable};
 use wc3_mdx::scene::Node;
@@ -21,7 +21,7 @@ fn ribbon_fields_and_integer_animation_round_trip() {
     assert!(key.set_integer_value(7));
     emitter
         .set_tracks(&[AnimationTrack {
-            tag: *b"KRTX",
+            tag: TrackTag::RibbonTextureSlot,
             interpolation: 1,
             global_sequence_id: u32::MAX,
             keyframes: vec![key],
@@ -41,7 +41,7 @@ fn ribbon_fields_and_integer_animation_round_trip() {
 fn ribbon_color_animation_round_trip() {
     let mut emitter = RibbonEmitter::new(Node::new("ColorTrail", 5).unwrap());
     let track = AnimationTrack {
-        tag: *b"KRCO",
+        tag: TrackTag::RibbonColor,
         interpolation: 1,
         global_sequence_id: u32::MAX,
         keyframes: vec![Keyframe {

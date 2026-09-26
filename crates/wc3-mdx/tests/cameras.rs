@@ -1,4 +1,4 @@
-use wc3_mdx::animation::{AnimationTrack, Keyframe};
+use wc3_mdx::animation::{AnimationTrack, Keyframe, TrackTag};
 use wc3_mdx::io::{Decodable, Encodable};
 use wc3_mdx::scene::Camera;
 use wc3_mdx::Model;
@@ -12,7 +12,7 @@ fn camera_fields_and_tracks_round_trip() {
     camera.set_far_clip(1000.0);
     camera.set_near_clip(10.0);
     let track = AnimationTrack {
-        tag: *b"KCRL",
+        tag: TrackTag::CameraRoll,
         interpolation: 1,
         global_sequence_id: u32::MAX,
         keyframes: vec![Keyframe {

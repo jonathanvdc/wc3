@@ -3,7 +3,7 @@ use crate::EncodeError;
 use crate::Encoder;
 use crate::KnownChunk;
 use crate::ValueError;
-use crate::{Color, Tag};
+use crate::{Color, TrackTag};
 
 use crate::{AnimationTrack, DecodeError, Model, Node};
 use crate::{Cursor, RibbonEmittersChunk};
@@ -76,7 +76,7 @@ impl RibbonEmitter {
             if !is_track(track.tag) {
                 return Err(ValueError::InvalidTrackTag {
                     record: RibbonEmittersChunk::TAG,
-                    track: track.tag,
+                    track: track.tag.bytes(),
                 });
             }
         }
@@ -85,10 +85,15 @@ impl RibbonEmitter {
     }
 }
 
-fn is_track(tag: Tag) -> bool {
+fn is_track(tag: TrackTag) -> bool {
     matches!(
-        &tag,
-        b"KRVS" | b"KRHA" | b"KRHB" | b"KRAL" | b"KRCO" | b"KRTX"
+        tag,
+        TrackTag::RibbonVisibility
+            | TrackTag::RibbonHeightAbove
+            | TrackTag::RibbonHeightBelow
+            | TrackTag::RibbonAlpha
+            | TrackTag::RibbonColor
+            | TrackTag::RibbonTextureSlot
     )
 }
 

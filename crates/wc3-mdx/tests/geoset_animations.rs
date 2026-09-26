@@ -1,4 +1,6 @@
-use wc3_mdx::animation::{AnimationTrack, GeosetAnimation, GeosetAnimationFlags, Keyframe};
+use wc3_mdx::animation::{
+    AnimationTrack, GeosetAnimation, GeosetAnimationFlags, Keyframe, TrackTag,
+};
 use wc3_mdx::io::{Decodable, Encodable};
 use wc3_mdx::Model;
 
@@ -48,7 +50,7 @@ fn local_geoset_animations_round_trip_when_available() {
 fn geoset_animation_color_track_round_trip() {
     let mut animation = GeosetAnimation::new(1);
     let track = AnimationTrack {
-        tag: *b"KGAC",
+        tag: TrackTag::GeosetColor,
         interpolation: 1,
         global_sequence_id: u32::MAX,
         keyframes: vec![Keyframe {

@@ -4,7 +4,7 @@ use crate::Encoder;
 use crate::KnownChunk;
 use crate::ValueError;
 
-use crate::{AttachmentsChunk, Cursor};
+use crate::{AttachmentsChunk, Cursor, TrackTag};
 use crate::{Decodable, Encodable};
 use std::borrow::Cow;
 
@@ -78,10 +78,10 @@ impl Attachment {
         track: Option<&AnimationTrack>,
     ) -> Result<(), ValueError> {
         if let Some(track) = track {
-            if track.tag != *b"KATV" {
+            if track.tag != TrackTag::AttachmentVisibility {
                 return Err(ValueError::InvalidTrackTag {
                     record: AttachmentsChunk::TAG,
-                    track: track.tag,
+                    track: track.tag.bytes(),
                 });
             }
         }
@@ -117,7 +117,7 @@ impl Decodable for Attachment {
         } else {
             let offset = cursor.absolute_position();
             let track = AnimationTrack::decode_one(&mut cursor, 0)?;
-            if track.tag != *b"KATV" {
+            if track.tag != TrackTag::AttachmentVisibility {
                 return Err(DecodeError::MalformedRecord {
                     tag: AttachmentsChunk::TAG,
                     offset,
@@ -146,7 +146,7 @@ impl Encodable for Attachment {
         bytes.write(self.reserved);
         bytes.write(self.id);
         if let Some(track) = &self.visibility_track {
-            if track.tag != *b"KATV" {
+            if track.tag != TrackTag::AttachmentVisibility {
                 return Err(EncodeError::MalformedRecord {
                     tag: AttachmentsChunk::TAG,
                     offset: bytes.position() - start,

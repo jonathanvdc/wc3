@@ -2,10 +2,9 @@
 use crate::EncodeError;
 use crate::Encoder;
 use crate::KnownChunk;
-use crate::Tag;
 use crate::ValueError;
 
-use crate::{Cursor, ParticleEmittersChunk};
+use crate::{Cursor, ParticleEmittersChunk, TrackTag};
 use crate::{Decodable, Encodable};
 use std::borrow::Cow;
 
@@ -133,7 +132,7 @@ impl ParticleEmitter {
             if !is_track(track.tag) {
                 return Err(ValueError::InvalidTrackTag {
                     record: ParticleEmittersChunk::TAG,
-                    track: track.tag,
+                    track: track.tag.bytes(),
                 });
             }
         }
@@ -142,10 +141,16 @@ impl ParticleEmitter {
     }
 }
 
-fn is_track(tag: Tag) -> bool {
+fn is_track(tag: TrackTag) -> bool {
     matches!(
-        &tag,
-        b"KPEV" | b"KPEE" | b"KPEG" | b"KPLN" | b"KPLT" | b"KPEL" | b"KPES"
+        tag,
+        TrackTag::ParticleVisibility
+            | TrackTag::ParticleEmissionRate
+            | TrackTag::ParticleGravity
+            | TrackTag::ParticleLongitude
+            | TrackTag::ParticleLatitude
+            | TrackTag::ParticleLifespan
+            | TrackTag::ParticleSpeed
     )
 }
 

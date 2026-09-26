@@ -1,5 +1,5 @@
 mod animation;
-pub use animation::{AnimationTrack, Keyframe, TrackValueKind};
+pub use animation::{AnimationTrack, Keyframe, TrackTag, TrackValueKind};
 mod sequence;
 pub use sequence::{Sequence, SequenceFlags};
 mod texture_animation;

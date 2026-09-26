@@ -1,4 +1,4 @@
-use wc3_mdx::animation::{AnimationTrack, Keyframe};
+use wc3_mdx::animation::{AnimationTrack, Keyframe, TrackTag};
 use wc3_mdx::io::{Cursor, Decodable, Encodable};
 use wc3_mdx::scene::{Attachment, Node};
 use wc3_mdx::Model;
@@ -12,7 +12,7 @@ fn attachment_fields_and_visibility_round_trip() {
     )
     .unwrap();
     let track = AnimationTrack {
-        tag: *b"KATV",
+        tag: TrackTag::AttachmentVisibility,
         interpolation: 1,
         global_sequence_id: u32::MAX,
         keyframes: vec![Keyframe {

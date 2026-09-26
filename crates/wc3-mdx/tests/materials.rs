@@ -1,4 +1,4 @@
-use wc3_mdx::animation::{AnimationTrack, Keyframe};
+use wc3_mdx::animation::{AnimationTrack, Keyframe, TrackTag};
 use wc3_mdx::io::{Decodable, Encodable};
 use wc3_mdx::materials::{
     Layer, LayerShadingFlags, LayerTextureSlot, Material, MaterialRenderFlags,
@@ -112,7 +112,7 @@ fn reforged_layer_texture_slot_and_tracks_round_trip() {
     };
     texture_key.set_integer_value(17);
     let texture_track = AnimationTrack {
-        tag: *b"KMTF",
+        tag: TrackTag::LayerTextureId,
         interpolation: 1,
         global_sequence_id: u32::MAX,
         keyframes: vec![texture_key],
@@ -125,7 +125,7 @@ fn reforged_layer_texture_slot_and_tracks_round_trip() {
         }])
         .unwrap();
     let alpha_track = AnimationTrack {
-        tag: *b"KMTA",
+        tag: TrackTag::LayerAlpha,
         interpolation: 1,
         global_sequence_id: u32::MAX,
         keyframes: vec![Keyframe {

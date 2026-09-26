@@ -1,4 +1,4 @@
-use wc3_mdx::animation::{AnimationTrack, Keyframe};
+use wc3_mdx::animation::{AnimationTrack, Keyframe, TrackTag};
 use wc3_mdx::io::{Decodable, Encodable};
 use wc3_mdx::scene::{Light, Node};
 use wc3_mdx::Model;
@@ -30,7 +30,7 @@ fn light_fields_round_trip() {
 fn light_color_track_round_trip() {
     let mut light = Light::new(Node::new("Lamp", 3).unwrap(), 0);
     let track = AnimationTrack {
-        tag: *b"KLAC",
+        tag: TrackTag::LightColor,
         interpolation: 1,
         global_sequence_id: u32::MAX,
         keyframes: vec![Keyframe {
@@ -51,7 +51,7 @@ fn extended_light_fields_and_tracks_round_trip() {
     let words = [1, 2, 3, 4, 5, 6, 7];
     light.set_extended_words(words).unwrap();
     let track = AnimationTrack {
-        tag: *b"KLAV",
+        tag: TrackTag::LightVisibility,
         interpolation: 1,
         global_sequence_id: u32::MAX,
         keyframes: vec![Keyframe {

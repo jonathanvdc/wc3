@@ -3,7 +3,7 @@ use crate::EncodeError;
 use crate::Encoder;
 use crate::KnownChunk;
 use crate::ValueError;
-use crate::{Color, Tag, Version};
+use crate::{Color, Tag, TrackTag, Version};
 
 use crate::{Cursor, MaterialsChunk};
 use crate::{Decodable, Encodable};
@@ -157,10 +157,15 @@ impl LayerExtensions {
 fn has_shader(version: Version) -> bool {
     (900..1100).contains(&version)
 }
-fn is_layer_track(tag: Tag) -> bool {
+fn is_layer_track(tag: TrackTag) -> bool {
     matches!(
-        &tag,
-        b"KMTA" | b"KMTF" | b"KMTE" | b"KFC3" | b"KFCA" | b"KFTC"
+        tag,
+        TrackTag::LayerAlpha
+            | TrackTag::LayerTextureId
+            | TrackTag::LayerEmissiveGain
+            | TrackTag::LayerFresnelColor
+            | TrackTag::LayerFresnelOpacity
+            | TrackTag::LayerFresnelTeamColor
     )
 }
 
@@ -425,10 +430,10 @@ impl Layer {
         self.require_version(1100)?;
         for slot in slots {
             if let Some(track) = &slot.track {
-                if track.tag != *b"KMTF" {
+                if track.tag != TrackTag::LayerTextureId {
                     return Err(ValueError::InvalidTrackTag {
                         record: LAYER_TAG,
-                        track: track.tag,
+                        track: track.tag.bytes(),
                     });
                 }
             }
@@ -448,7 +453,7 @@ impl Layer {
             if !is_layer_track(track.tag) {
                 return Err(ValueError::InvalidTrackTag {
                     record: LAYER_TAG,
-                    track: track.tag,
+                    track: track.tag.bytes(),
                 });
             }
         }
@@ -678,7 +683,7 @@ impl Encodable for Layer {
                 bytes.write(slot.texture_id);
                 bytes.write(slot.texture_type);
                 if let Some(track) = &slot.track {
-                    if track.tag != *b"KMTF" {
+                    if track.tag != TrackTag::LayerTextureId {
                         return Err(EncodeError::MalformedRecord {
                             tag: LAYER_TAG,
                             offset: bytes.position() - start,
