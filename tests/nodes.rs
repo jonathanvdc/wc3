@@ -1,4 +1,4 @@
-use wc3_mdx::Record;
+use wc3_mdx::{Decodable, Encodable};
 use wc3_mdx::{Bone, Model, Node, NodeFlags};
 
 #[test]

@@ -3,8 +3,8 @@ use crate::Encoder;
 use crate::ValueError;
 use crate::{Color, Tag, Version};
 
-use crate::Record;
 use crate::{Cursor, MaterialsChunk, ModelChunk};
+use crate::{Decodable, Encodable};
 use std::borrow::Cow;
 
 use crate::utils::field;
@@ -492,7 +492,7 @@ impl Model {
     }
 }
 
-impl Record for Material {
+impl Decodable for Material {
     fn decode_one(source: &mut Cursor<'_>, version: Version) -> Result<Self, Error> {
         let mut cursor = source.slice_u32_sized()?;
         let value = {
@@ -521,7 +521,9 @@ impl Record for Material {
         cursor.finish()?;
         Ok(value)
     }
+}
 
+impl Encodable for Material {
     fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), Error> {
         let marker = bytes.begin_sized();
         bytes.write(self.priority_plane);
@@ -545,7 +547,7 @@ impl Record for Material {
     }
 }
 
-impl Record for Layer {
+impl Decodable for Layer {
     fn decode_one(source: &mut Cursor<'_>, version: Version) -> Result<Self, Error> {
         let mut cursor = source.slice_u32_sized()?;
         let value = {
@@ -628,7 +630,9 @@ impl Record for Layer {
         cursor.finish()?;
         Ok(value)
     }
+}
 
+impl Encodable for Layer {
     fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), Error> {
         let start = bytes.position();
         let marker = bytes.begin_sized();

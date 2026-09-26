@@ -3,8 +3,8 @@ use crate::Encoder;
 use crate::ValueError;
 use crate::{Tag, Vec3};
 
-use crate::Record;
 use crate::{Cursor, ModelChunk, ModelInfoChunk};
+use crate::{Decodable, Encodable};
 use std::borrow::Cow;
 
 use crate::utils::field;
@@ -125,7 +125,7 @@ impl Model {
     }
 }
 
-impl Record for ModelInfo {
+impl Decodable for ModelInfo {
     fn decode_one(cursor: &mut Cursor<'_>, _version: u32) -> Result<Self, Error> {
         let size = cursor.remaining().len();
         if size < SIZE {
@@ -159,7 +159,9 @@ impl Record for ModelInfo {
             blend_time,
         })
     }
+}
 
+impl Encodable for ModelInfo {
     fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), Error> {
         bytes.write_bytes(&self.name);
         bytes.write_bytes(&self.reserved);

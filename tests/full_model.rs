@@ -1,4 +1,4 @@
-use wc3_mdx::Record;
+use wc3_mdx::{Decodable, Encodable};
 use wc3_mdx::{
     Attachment, BindPose, Bone, Camera, CollisionShape, EventObject, FaceFx, Geoset,
     GeosetAnimation, Layer, Light, Material, Model, ModelInfo, Node, ParticleEmitter,

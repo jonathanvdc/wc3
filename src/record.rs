@@ -1,15 +1,28 @@
 //! Binary conversion for typed MDX records.
+use crate::model::LATEST_VERSION;
 use crate::Version;
 
-use crate::model::LATEST_VERSION;
 use crate::{Cursor, Encoder, Error};
 
-/// A typed MDX record that can be converted to and from bytes.
-pub trait Record: Sized {
-    /// Parses one record and advances the cursor past it.
+/// A typed MDX record that can be encoded as bytes.
+pub trait Encodable {
+    /// Encodes the record to the given output.
+    fn encode_to(&self, output: &mut Encoder<'_>) -> Result<(), Error>;
+
+    /// Encodes the record to a new byte vector.
+    fn encode(&self) -> Result<Vec<u8>, Error> {
+        let mut output = Vec::new();
+        self.encode_to(&mut Encoder::new(&mut output))?;
+        Ok(output)
+    }
+}
+
+/// A typed MDX record that can be decoded from bytes.
+pub trait Decodable: Sized {
+    /// Decodes the record from the given input.
     fn decode_one(cursor: &mut Cursor<'_>, version: Version) -> Result<Self, Error>;
 
-    /// Parses exactly one record, rejecting any trailing bytes.
+    /// Decodes the record from the given input, rejecting any trailing bytes.
     fn decode(bytes: &[u8], version: Version) -> Result<Self, Error> {
         let mut cursor = Cursor::new(bytes);
         let record = Self::decode_one(&mut cursor, version)?;
@@ -17,26 +30,17 @@ pub trait Record: Sized {
         Ok(record)
     }
 
-    /// Appends a record to an existing byte buffer.
-    fn encode_to(&self, output: &mut Encoder<'_>) -> Result<(), Error>;
-
-    /// Writes a record.
-    fn encode(&self) -> Result<Vec<u8>, Error> {
-        let mut output = Vec::new();
-        self.encode_to(&mut Encoder::new(&mut output))?;
-        Ok(output)
-    }
-
-    /// Parses a record, assuming the model has the latest version
-    /// if it has no `VERS` chunk.
     fn decode_latest(bytes: &[u8]) -> Result<Self, Error> {
         Self::decode(bytes, LATEST_VERSION)
     }
 }
 
+pub trait Record: Encodable + Decodable {}
+impl<T: Encodable + Decodable> Record for T {}
+
 #[cfg(test)]
 mod tests {
-    use super::Record;
+    use super::{Decodable, Encodable, Record};
     use crate::Cursor;
     use crate::KnownChunk;
     use crate::{

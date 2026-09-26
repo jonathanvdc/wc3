@@ -1,5 +1,5 @@
 use wc3_mdx::{AnimationTrack, Attachment, Keyframe, Model, Node};
-use wc3_mdx::{Cursor, Record};
+use wc3_mdx::{Cursor, Decodable, Encodable};
 
 #[test]
 fn attachment_fields_and_visibility_round_trip() {

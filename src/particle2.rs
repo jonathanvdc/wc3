@@ -3,9 +3,9 @@ use crate::Encoder;
 use crate::ValueError;
 use crate::{Color, Tag, Vec3};
 
-use crate::Record;
 use crate::{AnimationTrack, Error, Model, Node};
 use crate::{Cursor, ModelChunk, ParticleEmitters2Chunk};
+use crate::{Decodable, Encodable};
 
 pub(crate) const FIXED_SIZE: usize = 171;
 
@@ -256,7 +256,7 @@ impl Model {
     }
 }
 
-impl Record for ParticleEmitter2 {
+impl Decodable for ParticleEmitter2 {
     fn decode_one(source: &mut Cursor<'_>, _version: u32) -> Result<Self, Error> {
         let mut cursor = source.slice_u32_sized()?;
         let node = Node::decode_one(&mut cursor, 0)?;
@@ -281,7 +281,9 @@ impl Record for ParticleEmitter2 {
             tracks,
         })
     }
+}
 
+impl Encodable for ParticleEmitter2 {
     fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), Error> {
         let start = bytes.position();
         let marker = bytes.begin_sized();

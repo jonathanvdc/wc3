@@ -3,7 +3,7 @@ use crate::Encoder;
 use crate::{Tag, Version};
 
 use super::*;
-use crate::{Chunk, Cursor, Error, KnownChunk, RawChunk, Record};
+use crate::{Chunk, Cursor, Decodable, Encodable, Error, KnownChunk, RawChunk};
 
 /// A known chunk that could not be decoded. Its original bytes remain intact.
 #[derive(Clone, Debug, Eq, PartialEq)]

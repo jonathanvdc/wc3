@@ -1,4 +1,4 @@
-use wc3_mdx::Record;
+use wc3_mdx::{Decodable, Encodable};
 use wc3_mdx::{
     Error, Geoset, Material, Model, ModelChunk, Node, RawChunk, RibbonEmitter, ValueError,
 };

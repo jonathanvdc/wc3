@@ -3,8 +3,8 @@ use crate::Encoder;
 use crate::Tag;
 use crate::ValueError;
 
-use crate::Record;
 use crate::{BonesChunk, Cursor, HelpersChunk, ModelChunk};
+use crate::{Decodable, Encodable};
 use std::borrow::Cow;
 
 use crate::utils::field;
@@ -210,7 +210,7 @@ impl Model {
     }
 }
 
-impl Record for Node {
+impl Decodable for Node {
     fn decode_one(source: &mut Cursor<'_>, _version: u32) -> Result<Self, Error> {
         let mut cursor = source.slice_u32_sized()?;
         let name = cursor
@@ -242,7 +242,9 @@ impl Record for Node {
             tracks,
         })
     }
+}
 
+impl Encodable for Node {
     fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), Error> {
         let marker = bytes.begin_sized();
         bytes.write_bytes(&self.name);
@@ -257,7 +259,7 @@ impl Record for Node {
     }
 }
 
-impl Record for Bone {
+impl Decodable for Bone {
     fn decode_one(cursor: &mut Cursor<'_>, _version: u32) -> Result<Self, Error> {
         let node = Node::decode_one(cursor, 0)?;
         let geoset_id = cursor.read_u32()?;
@@ -268,7 +270,9 @@ impl Record for Bone {
             geoset_animation_id,
         })
     }
+}
 
+impl Encodable for Bone {
     fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), Error> {
         self.node.encode_to(bytes)?;
         bytes.write(self.geoset_id);

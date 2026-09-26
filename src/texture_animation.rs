@@ -3,9 +3,9 @@ use crate::Encoder;
 use crate::Tag;
 use crate::ValueError;
 
-use crate::Record;
 use crate::{AnimationTrack, Error, Model};
 use crate::{Cursor, ModelChunk, TextureAnimationsChunk};
+use crate::{Decodable, Encodable};
 
 /// A texture animation containing translation, rotation, and scaling tracks.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -60,7 +60,7 @@ impl Model {
     }
 }
 
-impl Record for TextureAnimation {
+impl Decodable for TextureAnimation {
     fn decode_one(source: &mut Cursor<'_>, _version: u32) -> Result<Self, Error> {
         let mut cursor = source.slice_u32_sized()?;
         let mut tracks = Vec::new();
@@ -79,7 +79,9 @@ impl Record for TextureAnimation {
         cursor.finish()?;
         Ok(Self { tracks })
     }
+}
 
+impl Encodable for TextureAnimation {
     fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), Error> {
         let start = bytes.position();
         let marker = bytes.begin_sized();

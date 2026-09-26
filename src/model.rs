@@ -3,7 +3,7 @@ use crate::Encoder;
 use crate::{Tag, Version};
 
 use crate::Cursor;
-use crate::{CollectionChunk, Error, ModelChunk, Record, VersionChunk};
+use crate::{CollectionChunk, Decodable, Encodable, Error, ModelChunk, VersionChunk};
 
 /// The four bytes at the start of an MDX file.
 pub const MAGIC: Tag = *b"MDLX";
@@ -141,7 +141,7 @@ impl Model {
     }
 }
 
-impl Record for Model {
+impl Decodable for Model {
     fn decode_one(cursor: &mut Cursor<'_>, default_version: Version) -> Result<Self, Error> {
         let version = scan_version(*cursor)?.unwrap_or(default_version);
 
@@ -158,7 +158,9 @@ impl Record for Model {
             chunks,
         })
     }
+}
 
+impl Encodable for Model {
     fn encode_to(&self, output: &mut Encoder<'_>) -> Result<(), Error> {
         output.write_bytes(&MAGIC);
         for chunk in &self.chunks {

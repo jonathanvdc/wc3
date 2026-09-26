@@ -52,6 +52,7 @@ fn checked_chunk_size(count: usize, width: usize, tag: Tag) -> Result<usize, Err
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{Decodable, Encodable};
 
     #[test]
     fn raw_and_known_chunks_expose_their_tags() {

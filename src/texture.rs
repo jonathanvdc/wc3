@@ -3,8 +3,8 @@ use crate::Encoder;
 use crate::Tag;
 use crate::ValueError;
 
-use crate::Record;
 use crate::{Cursor, ModelChunk, TexturesChunk};
+use crate::{Decodable, Encodable};
 use std::borrow::Cow;
 
 use crate::utils::field;
@@ -124,7 +124,7 @@ impl Model {
     }
 }
 
-impl Record for Texture {
+impl Decodable for Texture {
     fn decode_one(cursor: &mut Cursor<'_>, _version: u32) -> Result<Self, Error> {
         let size = cursor.remaining().len();
         if size < SIZE {
@@ -148,7 +148,9 @@ impl Record for Texture {
             flags,
         })
     }
+}
 
+impl Encodable for Texture {
     fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), Error> {
         bytes.write(self.replaceable_id);
         bytes.write_bytes(&self.path);

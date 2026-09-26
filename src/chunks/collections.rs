@@ -7,7 +7,7 @@ use crate::{
     Material, Node, ParticleEmitter, ParticleEmitter2, PopcornEmitter, RibbonEmitter, Sequence,
     Texture, TextureAnimation,
 };
-use crate::{Cursor, Error, KnownChunk, Record};
+use crate::{Cursor, Decodable, Encodable, Error, KnownChunk, Record};
 
 /// A complete chunk made of consecutive records of one type.
 pub trait CollectionChunk: Sized {
@@ -24,7 +24,7 @@ pub trait CollectionChunk: Sized {
     fn from_records(records: Vec<Self::Item>) -> Self;
 }
 
-impl<C: CollectionChunk> Record for C {
+impl<C: CollectionChunk> Decodable for C {
     fn decode_one(cursor: &mut Cursor<'_>, version: Version) -> Result<Self, Error> {
         let mut records = Vec::new();
         while !cursor.remaining().is_empty() {
@@ -40,7 +40,9 @@ impl<C: CollectionChunk> Record for C {
         }
         Ok(C::from_records(records))
     }
+}
 
+impl<C: CollectionChunk> Encodable for C {
     fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), Error> {
         let start = bytes.position();
         for record in self.records() {

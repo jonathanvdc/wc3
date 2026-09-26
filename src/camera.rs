@@ -3,8 +3,8 @@ use crate::Encoder;
 use crate::ValueError;
 use crate::{Tag, Vec3, Version};
 
-use crate::Record;
 use crate::{CamerasChunk, Cursor, ModelChunk};
+use crate::{Decodable, Encodable};
 use std::borrow::Cow;
 
 use crate::utils::field;
@@ -146,7 +146,7 @@ impl Model {
     }
 }
 
-impl Record for Camera {
+impl Decodable for Camera {
     fn decode_one(source: &mut Cursor<'_>, _version: u32) -> Result<Self, Error> {
         let start = source.absolute_position();
         let size_word = source.read_u32()?;
@@ -187,7 +187,9 @@ impl Record for Camera {
             tracks,
         })
     }
+}
 
+impl Encodable for Camera {
     fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), Error> {
         let start = bytes.position();
         let marker = bytes.begin_sized();

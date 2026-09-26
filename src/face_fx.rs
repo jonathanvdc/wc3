@@ -3,8 +3,8 @@ use crate::Encoder;
 use crate::Tag;
 use crate::ValueError;
 
-use crate::Record;
 use crate::{Cursor, FaceFxChunk, ModelChunk};
+use crate::{Decodable, Encodable};
 use std::borrow::Cow;
 
 use crate::utils::field;
@@ -77,7 +77,7 @@ impl Model {
     }
 }
 
-impl Record for FaceFx {
+impl Decodable for FaceFx {
     fn decode_one(cursor: &mut Cursor<'_>, _version: u32) -> Result<Self, Error> {
         let size = cursor.remaining().len();
         if size < SIZE {
@@ -97,7 +97,9 @@ impl Record for FaceFx {
             .expect("fixed-width path");
         Ok(Self { name, path })
     }
+}
 
+impl Encodable for FaceFx {
     fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), Error> {
         bytes.write_bytes(&self.name);
         bytes.write_bytes(&self.path);

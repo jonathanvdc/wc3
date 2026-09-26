@@ -3,8 +3,8 @@ use crate::Encoder;
 use crate::ValueError;
 use crate::{Color, Tag};
 
-use crate::Record;
 use crate::{Cursor, ModelChunk, PopcornEmittersChunk};
+use crate::{Decodable, Encodable};
 use std::borrow::Cow;
 
 use crate::utils::field;
@@ -163,7 +163,7 @@ impl Model {
     }
 }
 
-impl Record for PopcornEmitter {
+impl Decodable for PopcornEmitter {
     fn decode_one(source: &mut Cursor<'_>, _version: u32) -> Result<Self, Error> {
         let mut cursor = source.slice_u32_sized()?;
         let node = Node::decode_one(&mut cursor, 0)?;
@@ -208,7 +208,9 @@ impl Record for PopcornEmitter {
             tracks,
         })
     }
+}
 
+impl Encodable for PopcornEmitter {
     fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), Error> {
         let start = bytes.position();
         let marker = bytes.begin_sized();

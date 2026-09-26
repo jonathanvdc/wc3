@@ -4,7 +4,7 @@ use crate::{Tag, Vec3};
 
 use super::checked_chunk_size;
 use crate::Cursor;
-use crate::{Error, KnownChunk, Record};
+use crate::{Decodable, Encodable, Error, KnownChunk};
 
 /// The complete `PIVT` payload.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -12,7 +12,7 @@ pub struct PivotPointsChunk {
     pub points: Vec<Vec3>,
 }
 
-impl Record for PivotPointsChunk {
+impl Decodable for PivotPointsChunk {
     fn decode_one(cursor: &mut Cursor<'_>, _version: u32) -> Result<Self, Error> {
         let size = cursor.remaining().len();
         if size % 12 != 0 {
@@ -28,7 +28,9 @@ impl Record for PivotPointsChunk {
         }
         Ok(Self { points })
     }
+}
 
+impl Encodable for PivotPointsChunk {
     fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), Error> {
         checked_chunk_size(self.points.len(), 12, Self::TAG)?;
 

@@ -1,5 +1,5 @@
 use wc3_mdx::{Model, ModelInfo, RawChunk};
-use wc3_mdx::{ModelChunk, Record};
+use wc3_mdx::{ModelChunk, Decodable, Encodable};
 
 #[test]
 fn model_info_edit_round_trip() {

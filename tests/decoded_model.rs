@@ -1,4 +1,4 @@
-use wc3_mdx::{Model, ModelChunk, RawChunk, Record, Sequence, SequencesChunk};
+use wc3_mdx::{Model, ModelChunk, RawChunk, Decodable, Encodable, Sequence, SequencesChunk};
 
 #[test]
 fn model_stores_known_unknown_and_malformed_chunks() {

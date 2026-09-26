@@ -3,8 +3,8 @@ use crate::Encoder;
 use crate::Tag;
 use crate::ValueError;
 
-use crate::Record;
 use crate::{AttachmentsChunk, Cursor, ModelChunk};
+use crate::{Decodable, Encodable};
 use std::borrow::Cow;
 
 use crate::utils::field;
@@ -106,7 +106,7 @@ impl Model {
     }
 }
 
-impl Record for Attachment {
+impl Decodable for Attachment {
     fn decode_one(source: &mut Cursor<'_>, _version: u32) -> Result<Self, Error> {
         let mut cursor = source.slice_u32_sized()?;
 
@@ -142,7 +142,9 @@ impl Record for Attachment {
             visibility_track,
         })
     }
+}
 
+impl Encodable for Attachment {
     fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), Error> {
         let start = bytes.position();
         let marker = bytes.begin_sized();

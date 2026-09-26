@@ -4,7 +4,7 @@ use crate::Tag;
 
 use crate::Cursor;
 use crate::Error;
-use crate::Record;
+use crate::{Decodable, Encodable};
 
 /// Binary value type stored in a keyframe track.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -160,13 +160,15 @@ fn components(tag: Tag) -> Option<usize> {
     }
 }
 
-impl Record for AnimationTrack {
+impl Decodable for AnimationTrack {
     fn decode_one(cursor: &mut Cursor<'_>, _version: u32) -> Result<Self, Error> {
         let (track, consumed) = Self::parse(cursor.remaining(), 0)?;
         cursor.read_exact(consumed)?;
         Ok(track)
     }
+}
 
+impl Encodable for AnimationTrack {
     fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), Error> {
         let components = components(self.tag).ok_or(Error::MalformedRecord {
             tag: self.tag,

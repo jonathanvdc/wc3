@@ -4,7 +4,7 @@ use crate::Tag;
 
 use super::checked_chunk_size;
 use crate::Cursor;
-use crate::{Error, KnownChunk, Record};
+use crate::{Decodable, Encodable, Error, KnownChunk};
 
 /// The complete `GLBS` payload.
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
@@ -12,7 +12,7 @@ pub struct GlobalSequencesChunk {
     pub durations: Vec<u32>,
 }
 
-impl Record for GlobalSequencesChunk {
+impl Decodable for GlobalSequencesChunk {
     fn decode_one(cursor: &mut Cursor<'_>, _version: u32) -> Result<Self, Error> {
         let size = cursor.remaining().len();
         if size % 4 != 0 {
@@ -28,7 +28,9 @@ impl Record for GlobalSequencesChunk {
         }
         Ok(Self { durations })
     }
+}
 
+impl Encodable for GlobalSequencesChunk {
     fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), Error> {
         checked_chunk_size(self.durations.len(), 4, Self::TAG)?;
 

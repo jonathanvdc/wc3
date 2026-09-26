@@ -2,8 +2,8 @@
 use crate::Encoder;
 use crate::Tag;
 
-use crate::Record;
 use crate::{Cursor, EventObjectsChunk, ModelChunk};
+use crate::{Decodable, Encodable};
 use crate::{Error, Model, Node};
 
 const TRACK_TAG: Tag = *b"KEVT";
@@ -74,7 +74,7 @@ impl Model {
     }
 }
 
-impl Record for EventObject {
+impl Decodable for EventObject {
     fn decode_one(cursor: &mut Cursor<'_>, _version: u32) -> Result<Self, Error> {
         let mut probe = *cursor;
         let node_size = probe.read_u32()? as usize;
@@ -98,7 +98,9 @@ impl Record for EventObject {
             frames,
         })
     }
+}
 
+impl Encodable for EventObject {
     fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), Error> {
         let start = bytes.position();
         self.node.encode_to(bytes)?;

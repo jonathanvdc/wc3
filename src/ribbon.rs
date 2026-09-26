@@ -3,9 +3,9 @@ use crate::Encoder;
 use crate::ValueError;
 use crate::{Color, Tag};
 
-use crate::Record;
 use crate::{AnimationTrack, Error, Model, Node};
 use crate::{Cursor, ModelChunk, RibbonEmittersChunk};
+use crate::{Decodable, Encodable};
 
 pub(crate) const FIXED_SIZE: usize = 52;
 
@@ -107,7 +107,7 @@ impl Model {
     }
 }
 
-impl Record for RibbonEmitter {
+impl Decodable for RibbonEmitter {
     fn decode_one(source: &mut Cursor<'_>, _version: u32) -> Result<Self, Error> {
         let mut cursor = source.slice_u32_sized()?;
         let node = Node::decode_one(&mut cursor, 0)?;
@@ -149,7 +149,9 @@ impl Record for RibbonEmitter {
             tracks,
         })
     }
+}
 
+impl Encodable for RibbonEmitter {
     fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), Error> {
         let start = bytes.position();
         let marker = bytes.begin_sized();

@@ -3,9 +3,9 @@ use crate::Encoder;
 use crate::ValueError;
 use crate::{Color, Tag, Version};
 
-use crate::Record;
 use crate::{AnimationTrack, Error, Model, Node};
 use crate::{Cursor, LightsChunk, ModelChunk};
+use crate::{Decodable, Encodable};
 
 const FIXED_SIZE: usize = 44;
 const EXTENDED_SIZE: usize = 72;
@@ -173,7 +173,7 @@ impl Model {
     }
 }
 
-impl Record for Light {
+impl Decodable for Light {
     fn decode_one(source: &mut Cursor<'_>, _version: u32) -> Result<Self, Error> {
         let mut cursor = source.slice_u32_sized()?;
         let node = Node::decode_one(&mut cursor, 0)?;
@@ -230,7 +230,9 @@ impl Record for Light {
             tracks,
         })
     }
+}
 
+impl Encodable for Light {
     fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), Error> {
         let start = bytes.position();
         let marker = bytes.begin_sized();

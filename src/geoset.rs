@@ -4,7 +4,7 @@ use crate::ValueError;
 use crate::{Tag, Vec3, Version};
 
 use crate::cursor::Cursor;
-use crate::Record;
+use crate::{Decodable, Encodable};
 use crate::{GeosetsChunk, ModelChunk};
 use std::borrow::Cow;
 
@@ -591,7 +591,7 @@ impl Model {
     }
 }
 
-impl Record for Geoset {
+impl Decodable for Geoset {
     fn decode_one(source: &mut Cursor<'_>, version: Version) -> Result<Self, Error> {
         let mut cursor = source.slice_u32_sized()?;
 
@@ -705,7 +705,9 @@ impl Record for Geoset {
         cursor.finish()?;
         Ok(value)
     }
+}
 
+impl Encodable for Geoset {
     fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), Error> {
         let start = bytes.position();
         let marker = bytes.begin_sized();

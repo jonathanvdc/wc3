@@ -2,8 +2,8 @@
 use crate::Encoder;
 use crate::Tag;
 
-use crate::Record;
 use crate::{Cursor, ModelChunk};
+use crate::{Decodable, Encodable};
 use crate::{Error, KnownChunk, Model};
 
 const MATRIX_SIZE: usize = 48;
@@ -76,7 +76,7 @@ impl Model {
     }
 }
 
-impl Record for BindPose {
+impl Decodable for BindPose {
     fn decode_one(cursor: &mut Cursor<'_>, _version: u32) -> Result<Self, Error> {
         let size = cursor.remaining().len();
         let count = cursor.read_u32().map_err(|_| Error::MalformedChunk {
@@ -109,7 +109,9 @@ impl Record for BindPose {
         }
         Ok(Self { matrices })
     }
+}
 
+impl Encodable for BindPose {
     fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), Error> {
         self.matrices
             .len()

@@ -3,8 +3,8 @@ use crate::Encoder;
 use crate::{Tag, Vec3};
 
 use crate::cursor::Cursor;
-use crate::Record;
 use crate::{CollisionShapesChunk, ModelChunk};
+use crate::{Decodable, Encodable};
 use crate::{Error, Model, Node};
 
 /// Warcraft III collision primitive type.
@@ -142,7 +142,7 @@ impl Model {
     }
 }
 
-impl Record for CollisionShape {
+impl Decodable for CollisionShape {
     fn decode_one(cursor: &mut Cursor<'_>, _version: u32) -> Result<Self, Error> {
         let node = Node::decode_one(cursor, 0)?;
         let kind_offset = cursor.absolute_position();
@@ -162,7 +162,9 @@ impl Record for CollisionShape {
         };
         Ok(Self { node, geometry })
     }
+}
 
+impl Encodable for CollisionShape {
     fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), Error> {
         self.node.encode_to(bytes)?;
         let kind = match self.geometry {

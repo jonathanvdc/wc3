@@ -3,8 +3,8 @@ use crate::Encoder;
 use crate::Tag;
 use crate::ValueError;
 
-use crate::Record;
 use crate::{Cursor, ModelChunk, ParticleEmittersChunk};
+use crate::{Decodable, Encodable};
 use std::borrow::Cow;
 
 use crate::utils::field;
@@ -164,7 +164,7 @@ impl Model {
     }
 }
 
-impl Record for ParticleEmitter {
+impl Decodable for ParticleEmitter {
     fn decode_one(source: &mut Cursor<'_>, _version: u32) -> Result<Self, Error> {
         let mut cursor = source.slice_u32_sized()?;
         let node = Node::decode_one(&mut cursor, 0)?;
@@ -206,7 +206,9 @@ impl Record for ParticleEmitter {
             tracks,
         })
     }
+}
 
+impl Encodable for ParticleEmitter {
     fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), Error> {
         let start = bytes.position();
         let marker = bytes.begin_sized();

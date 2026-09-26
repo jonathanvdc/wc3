@@ -1,4 +1,4 @@
-use wc3_mdx::{Cursor, Record};
+use wc3_mdx::{Cursor, Decodable, Encodable};
 use wc3_mdx::{EventObject, Model, Node};
 
 #[test]

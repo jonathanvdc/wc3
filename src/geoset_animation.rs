@@ -3,9 +3,9 @@ use crate::Encoder;
 use crate::ValueError;
 use crate::{Color, Tag};
 
-use crate::Record;
 use crate::{AnimationTrack, Error, Model};
 use crate::{Cursor, GeosetAnimationsChunk, ModelChunk};
+use crate::{Decodable, Encodable};
 
 /// Geoset animation rendering flags, retaining unknown bits.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -130,7 +130,7 @@ impl Model {
     }
 }
 
-impl Record for GeosetAnimation {
+impl Decodable for GeosetAnimation {
     fn decode_one(source: &mut Cursor<'_>, _version: u32) -> Result<Self, Error> {
         let mut cursor = source.slice_u32_sized()?;
         let alpha = cursor.read_f32()?;
@@ -159,7 +159,9 @@ impl Record for GeosetAnimation {
             tracks,
         })
     }
+}
 
+impl Encodable for GeosetAnimation {
     fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), Error> {
         let start = bytes.position();
         let marker = bytes.begin_sized();

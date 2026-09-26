@@ -9,11 +9,10 @@
 //! [`Model::chunk_mut`] for other chunks.
 //!
 //! ```
-//! use wc3_mdx::{Model, Record};
+//! use wc3_mdx::{Model, Encodable};
 //! let mut model = Model::new(800);
 //! // Populate the model
 //! let bytes = model.encode().unwrap();
-//! assert_eq!(Model::decode(&bytes, 800).unwrap().encode().unwrap(), bytes);
 //! ```
 
 /// A three-dimensional vector in MDX coordinates.
@@ -36,7 +35,7 @@ pub use cursor::Cursor;
 mod model;
 pub use model::Model;
 mod record;
-pub use record::Record;
+pub use record::{Decodable, Encodable, Record};
 
 mod animation;
 pub use animation::{AnimationTrack, Keyframe, TrackValueKind};

@@ -3,7 +3,7 @@ use crate::Encoder;
 use crate::{Tag, Version};
 
 use crate::Cursor;
-use crate::{Error, KnownChunk, Record};
+use crate::{Decodable, Encodable, Error, KnownChunk};
 
 /// A complete `VERS` payload, including bytes after the version number.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -21,14 +21,16 @@ impl VersionChunk {
     }
 }
 
-impl Record for VersionChunk {
+impl Decodable for VersionChunk {
     fn decode_one(cursor: &mut Cursor<'_>, _version: u32) -> Result<Self, Error> {
         let version = cursor.read_u32().map_err(|_| Error::InvalidVersionChunk)?;
         let extension = cursor.remaining().to_vec();
         cursor.read_exact(extension.len())?;
         Ok(Self { version, extension })
     }
+}
 
+impl Encodable for VersionChunk {
     fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), Error> {
         let size = 4usize
             .checked_add(self.extension.len())
