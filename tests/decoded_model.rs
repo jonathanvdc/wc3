@@ -1,3 +1,5 @@
+use std::slice::from_ref;
+
 use wc3_mdx::{Decodable, Encodable, Model, ModelChunk, RawChunk, Sequence, SequencesChunk};
 
 #[test]
@@ -100,7 +102,7 @@ fn collection_setter_keeps_records_decoded_and_collapses_repeated_chunks() {
     model.push(ModelChunk::from(SequencesChunk::new(vec![second.clone()])));
     assert_eq!(model.sequences(), vec![first, second.clone()]);
 
-    model.set_sequences(&[second.clone()]);
+    model.set_sequences(from_ref(&second));
     assert!(matches!(
         model.chunk(*b"SEQS"),
         Some(ModelChunk::Sequences(_))
