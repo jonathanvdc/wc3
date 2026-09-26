@@ -1,102 +1,80 @@
 //! Reforged bind-pose matrices in `BPOS` chunks.
-use crate::EncodeError;
-use crate::Encoder;
-use crate::Tag;
-use std::array;
-
-use crate::Chunk;
-use crate::Cursor;
-use crate::{DecodeError, KnownChunk, Model};
+use crate::{
+    BindPoseMatrix, Chunk, CollectionChunk, Cursor, Decodable, DecodeError, Encodable, EncodeError,
+    Encoder, KnownChunk, Tag, Version,
+};
 
 const MATRIX_SIZE: usize = 48;
 
-/// A `BPOS` chunk containing decoded 3-by-4 floating-point matrices.
+/// A `BPOS` chunk containing a counted collection of matrices.
 #[derive(Clone, Debug, PartialEq)]
-pub struct BindPose {
-    matrices: Vec<[f32; 12]>,
+pub struct BindPoseChunk {
+    pub records: Vec<BindPoseMatrix>,
 }
 
-impl BindPose {
-    /// Creates a bind pose from 12-float matrices.
-    pub fn new(matrices: &[[f32; 12]]) -> Self {
-        Self {
-            matrices: matrices.to_vec(),
-        }
+impl BindPoseChunk {
+    pub fn new(records: Vec<BindPoseMatrix>) -> Self {
+        Self { records }
     }
 
-    /// Returns the number of matrices.
     pub fn len(&self) -> usize {
-        self.matrices.len()
+        self.records.len()
     }
 
-    /// Returns whether this bind pose contains no matrices.
     pub fn is_empty(&self) -> bool {
-        self.matrices.is_empty()
-    }
-
-    /// Borrows all decoded matrices.
-    pub fn matrices(&self) -> &[[f32; 12]] {
-        &self.matrices
-    }
-
-    /// Borrows decoded matrices for bulk editing.
-    pub fn matrices_mut(&mut self) -> &mut [[f32; 12]] {
-        &mut self.matrices
-    }
-
-    /// Returns one 3-by-4 matrix by index.
-    pub fn matrix(&self, index: usize) -> Option<[f32; 12]> {
-        self.matrices.get(index).copied()
-    }
-
-    /// Replaces one matrix, returning false for an out-of-range index.
-    pub fn set_matrix(&mut self, index: usize, matrix: [f32; 12]) -> bool {
-        if let Some(slot) = self.matrices.get_mut(index) {
-            *slot = matrix;
-            true
-        } else {
-            false
-        }
+        self.records.is_empty()
     }
 }
 
-impl Model {
-    /// Returns decoded `BPOS` chunks separately, preserving chunk boundaries.
-    pub fn bind_poses(&self) -> Vec<BindPose> {
-        self.decoded_chunks::<BindPose>().cloned().collect()
+impl CollectionChunk for BindPoseChunk {
+    type Item = BindPoseMatrix;
+
+    fn tag() -> Tag {
+        Self::TAG
     }
 
-    /// Replaces all `BPOS` chunks with one decoded chunk at the first one's
-    /// position, or appends one if none exists.
-    pub fn set_bind_pose(&mut self, pose: &BindPose) {
-        self.replace_chunk(pose.clone());
+    fn records(&self) -> &[Self::Item] {
+        &self.records
+    }
+
+    fn from_records(records: Vec<Self::Item>) -> Self {
+        Self { records }
     }
 }
 
-impl Chunk for BindPose {
+impl Chunk for BindPoseChunk {
     fn tag(&self) -> Tag {
         Self::TAG
     }
 
     fn encode_payload_to(&self, bytes: &mut Encoder<'_>) -> Result<(), EncodeError> {
-        self.matrices
+        let size = self
+            .records
             .len()
             .checked_mul(MATRIX_SIZE)
             .and_then(|n| n.checked_add(4))
-            .filter(|&size| size <= u32::MAX as usize)
             .ok_or(EncodeError::ChunkTooLarge {
-                tag: BindPose::TAG,
+                tag: Self::TAG,
                 size: usize::MAX,
             })?;
-
-        bytes.write(self.matrices.len() as u32);
-        bytes.write(self.matrices.as_slice());
+        if size > u32::MAX as usize {
+            return Err(EncodeError::ChunkTooLarge {
+                tag: Self::TAG,
+                size,
+            });
+        }
+        bytes.write(self.records.len() as u32);
+        for record in &self.records {
+            record.encode_to(bytes)?;
+        }
         Ok(())
     }
 }
 
-impl KnownChunk for BindPose {
-    fn decode_payload(cursor: &mut Cursor<'_>, _version: u32) -> Result<Self, DecodeError> {
+impl KnownChunk for BindPoseChunk {
+    const TAG: Tag = *b"BPOS";
+
+    fn decode_payload(cursor: &mut Cursor<'_>, version: Version) -> Result<Self, DecodeError> {
         let size = cursor.remaining().len();
         let count = cursor
             .read::<u32>()
@@ -105,14 +83,9 @@ impl KnownChunk for BindPose {
                 size,
                 expected: 4,
             })? as usize;
-        let body_size = count
+        let expected = count
             .checked_mul(MATRIX_SIZE)
-            .ok_or(DecodeError::MalformedRecord {
-                tag: Self::TAG,
-                offset: 0,
-            })?;
-        let expected = body_size
-            .checked_add(4)
+            .and_then(|n| n.checked_add(4))
             .ok_or(DecodeError::MalformedRecord {
                 tag: Self::TAG,
                 offset: 0,
@@ -124,14 +97,10 @@ impl KnownChunk for BindPose {
                 expected,
             });
         }
-        let mut matrices = Vec::new();
+        let mut records = Vec::with_capacity(count);
         for _ in 0..count {
-            matrices.push(array::from_fn(|_| {
-                cursor.read().expect("validated matrix length")
-            }));
+            records.push(BindPoseMatrix::decode_one(cursor, version)?);
         }
-        Ok(Self { matrices })
+        Ok(Self { records })
     }
-
-    const TAG: Tag = *b"BPOS";
 }

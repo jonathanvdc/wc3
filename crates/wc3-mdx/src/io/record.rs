@@ -45,12 +45,13 @@ mod tests {
     use crate::Cursor;
     use crate::KnownChunk;
     use crate::{
-        AttachmentsChunk, BindPose, Bone, BonesChunk, Camera, CamerasChunk, CollisionShapesChunk,
-        DecodeError, EventObjectsChunk, FaceFxChunk, Geoset, GeosetAnimationsChunk, GeosetsChunk,
-        GlobalSequencesChunk, HelpersChunk, LightsChunk, MaterialsChunk, Model, ModelInfoChunk,
-        Node, ParticleEmitter, ParticleEmitter2, ParticleEmitters2Chunk, ParticleEmittersChunk,
-        PivotPointsChunk, PopcornEmittersChunk, RibbonEmitter, RibbonEmittersChunk, Sequence,
-        SequencesChunk, TextureAnimationsChunk, TexturesChunk, VersionChunk,
+        AttachmentsChunk, BindPoseChunk, Bone, BonesChunk, Camera, CamerasChunk,
+        CollisionShapesChunk, DecodeError, EventObjectsChunk, FaceFxChunk, Geoset,
+        GeosetAnimationsChunk, GeosetsChunk, GlobalSequencesChunk, HelpersChunk, LightsChunk,
+        MaterialsChunk, Model, ModelInfoChunk, Node, ParticleEmitter, ParticleEmitter2,
+        ParticleEmitters2Chunk, ParticleEmittersChunk, PivotPointsChunk, PopcornEmittersChunk,
+        RibbonEmitter, RibbonEmittersChunk, Sequence, SequencesChunk, TextureAnimationsChunk,
+        TexturesChunk, VersionChunk,
     };
 
     fn round_trip<T: Record + PartialEq + std::fmt::Debug>(value: &T, version: u32) {
@@ -168,7 +169,7 @@ mod tests {
             TextureAnimationsChunk::TAG,
             FaceFxChunk::TAG,
             PivotPointsChunk::TAG,
-            BindPose::TAG,
+            BindPoseChunk::TAG,
         ];
         let mut unique = tags.to_vec();
         unique.sort_unstable();

@@ -135,7 +135,7 @@ model_chunks! {
     TextureAnimations(TextureAnimationsChunk),
     FaceFx(FaceFxChunk),
     PivotPoints(PivotPointsChunk),
-    BindPose(BindPose),
+    BindPose(BindPoseChunk),
 }
 
 impl ModelChunk {

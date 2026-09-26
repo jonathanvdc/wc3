@@ -7,7 +7,7 @@ use crate::DecodeError;
 mod raw;
 pub use raw::RawChunk;
 mod bind_pose;
-pub use bind_pose::BindPose;
+pub use bind_pose::BindPoseChunk;
 mod collections;
 pub use collections::*;
 mod model_info;

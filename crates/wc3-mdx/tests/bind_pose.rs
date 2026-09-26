@@ -1,4 +1,5 @@
-use wc3_mdx::chunks::{BindPose, ModelChunk, RawChunk};
+use wc3_mdx::chunks::{BindPoseChunk, ModelChunk, RawChunk};
+use wc3_mdx::geometry::BindPoseMatrix;
 use wc3_mdx::io::{Decodable, Encodable};
 use wc3_mdx::Model;
 
@@ -7,14 +8,14 @@ fn bind_pose_matrices_round_trip() {
     let matrix = [
         1.0f32, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0,
     ];
-    let mut pose = BindPose::new(&[matrix]);
-    assert_eq!(pose.matrix(0), Some(matrix));
+    let mut pose = BindPoseChunk::new(vec![BindPoseMatrix(matrix)]);
+    assert_eq!(pose.records.first().map(|record| record.0), Some(matrix));
     let changed = [2.0; 12];
-    assert!(pose.set_matrix(0, changed));
+    pose.records[0] = BindPoseMatrix(changed);
     let mut model = Model::new(1800);
     model.set_bind_pose(&pose);
     let parsed = Model::decode(&model.encode().unwrap(), 800).unwrap();
-    assert_eq!(parsed.bind_poses()[0].matrix(0), Some(changed));
+    assert_eq!(parsed.bind_poses()[0].records[0].0, changed);
 }
 
 #[test]
@@ -23,7 +24,7 @@ fn bind_poses_skip_malformed_chunks_and_setter_replaces_them() {
     model.push(ModelChunk::from_raw(RawChunk::new(*b"BPOS", vec![0]), 1800));
     assert!(model.bind_poses().is_empty());
 
-    let pose = BindPose::new(&[[0.0; 12]]);
+    let pose = BindPoseChunk::new(vec![BindPoseMatrix([0.0; 12])]);
     model.set_bind_pose(&pose);
     assert_eq!(model.bind_poses(), vec![pose]);
     assert_eq!(model.chunks().len(), 2);
