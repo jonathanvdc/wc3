@@ -1,6 +1,7 @@
 //! Typed texture animation tracks in `TXAN` chunks.
 use crate::EncodeError;
 use crate::Encoder;
+use crate::KnownChunk;
 use crate::Tag;
 use crate::ValueError;
 
@@ -30,7 +31,7 @@ impl TextureAnimation {
         for track in tracks {
             if !is_track_tag(track.tag) {
                 return Err(ValueError::InvalidTrackTag {
-                    record: TextureAnimation::TAG,
+                    record: TextureAnimationsChunk::TAG,
                     track: track.tag,
                 });
             }
@@ -65,7 +66,7 @@ impl Decodable for TextureAnimation {
             let track = AnimationTrack::decode_one(&mut cursor, 0)?;
             if !is_track_tag(track.tag) {
                 return Err(DecodeError::MalformedRecord {
-                    tag: Self::TAG,
+                    tag: TextureAnimationsChunk::TAG,
                     offset,
                 });
             }
@@ -84,18 +85,13 @@ impl Encodable for TextureAnimation {
         for track in &self.tracks {
             if !is_track_tag(track.tag) {
                 return Err(EncodeError::MalformedRecord {
-                    tag: TextureAnimation::TAG,
+                    tag: TextureAnimationsChunk::TAG,
                     offset: bytes.position() - start,
                 });
             }
             track.encode_to(bytes)?;
         }
-        bytes.finish_sized(marker, TextureAnimation::TAG)?;
+        bytes.finish_sized(marker, TextureAnimationsChunk::TAG)?;
         Ok(())
     }
-}
-
-impl TextureAnimation {
-    /// The tag of the chunk containing this record.
-    pub const TAG: Tag = *b"TXAN";
 }

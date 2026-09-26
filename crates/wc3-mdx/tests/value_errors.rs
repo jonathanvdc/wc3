@@ -1,4 +1,6 @@
-use wc3_mdx::{AnimationTrack, Encodable, EncodeError, Geoset, Node, ValueError};
+use wc3_mdx::{
+    AnimationTrack, Encodable, EncodeError, Geoset, HelpersChunk, KnownChunk, Node, ValueError,
+};
 
 #[test]
 fn construction_and_mutation_report_value_errors() {
@@ -18,7 +20,7 @@ fn construction_and_mutation_report_value_errors() {
     assert_eq!(
         node.set_tracks(&[invalid_track]),
         Err(ValueError::InvalidTrackTag {
-            record: Node::TAG,
+            record: HelpersChunk::TAG,
             track: *b"KATV",
         })
     );

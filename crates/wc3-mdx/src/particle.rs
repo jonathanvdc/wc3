@@ -1,6 +1,7 @@
 //! Classic particle emitters stored in `PREM` chunks.
 use crate::EncodeError;
 use crate::Encoder;
+use crate::KnownChunk;
 use crate::Tag;
 use crate::ValueError;
 
@@ -131,7 +132,7 @@ impl ParticleEmitter {
         for track in tracks {
             if !is_track(track.tag) {
                 return Err(ValueError::InvalidTrackTag {
-                    record: ParticleEmitter::TAG,
+                    record: ParticleEmittersChunk::TAG,
                     track: track.tag,
                 });
             }
@@ -178,7 +179,7 @@ impl Decodable for ParticleEmitter {
             let track = AnimationTrack::decode_one(&mut cursor, 0)?;
             if !is_track(track.tag) {
                 return Err(DecodeError::MalformedRecord {
-                    tag: Self::TAG,
+                    tag: ParticleEmittersChunk::TAG,
                     offset,
                 });
             }
@@ -221,18 +222,13 @@ impl Encodable for ParticleEmitter {
         for track in &self.tracks {
             if !is_track(track.tag) {
                 return Err(EncodeError::MalformedRecord {
-                    tag: ParticleEmitter::TAG,
+                    tag: ParticleEmittersChunk::TAG,
                     offset: bytes.position() - start,
                 });
             }
             track.encode_to(bytes)?;
         }
-        bytes.finish_sized(marker, ParticleEmitter::TAG)?;
+        bytes.finish_sized(marker, ParticleEmittersChunk::TAG)?;
         Ok(())
     }
-}
-
-impl ParticleEmitter {
-    /// The tag of the chunk containing this record.
-    pub const TAG: Tag = *b"PREM";
 }

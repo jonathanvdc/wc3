@@ -1,7 +1,8 @@
 //! Box and sphere collision shapes in `CLID` chunks.
 use crate::EncodeError;
 use crate::Encoder;
-use crate::{Tag, Vec3};
+use crate::KnownChunk;
+use crate::Vec3;
 
 use crate::cursor::Cursor;
 use crate::CollisionShapesChunk;
@@ -150,7 +151,7 @@ impl Decodable for CollisionShape {
             3 => CollisionGeometry::Cylinder([cursor.read()?, cursor.read()?], cursor.read()?),
             _ => {
                 return Err(DecodeError::MalformedRecord {
-                    tag: Self::TAG,
+                    tag: CollisionShapesChunk::TAG,
                     offset: kind_offset,
                 })
             }
@@ -185,9 +186,4 @@ impl Encodable for CollisionShape {
         }
         Ok(())
     }
-}
-
-impl CollisionShape {
-    /// The tag of the chunk containing this record.
-    pub const TAG: Tag = *b"CLID";
 }

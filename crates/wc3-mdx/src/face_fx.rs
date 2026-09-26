@@ -1,22 +1,20 @@
 //! Reforged face-animation references in `FAFX` chunks.
 use crate::EncodeError;
 use crate::Encoder;
-use crate::Tag;
 use crate::ValueError;
 
 use crate::{Cursor, FaceFxChunk};
-use crate::{Decodable, Encodable};
+use crate::{Decodable, Encodable, Readable, Writable};
 use std::borrow::Cow;
 
 use crate::FixedText;
 use crate::{DecodeError, Model};
 
-pub(crate) const SIZE: usize = 340;
 const NAME_SIZE: usize = 80;
 const PATH_SIZE: usize = 260;
 
 /// One fixed-size face-animation name and path pair.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Readable, Writable)]
 pub struct FaceFx {
     name: FixedText<NAME_SIZE>,
     path: FixedText<PATH_SIZE>,
@@ -69,29 +67,13 @@ impl Model {
 
 impl Decodable for FaceFx {
     fn decode_one(cursor: &mut Cursor<'_>, _version: u32) -> Result<Self, DecodeError> {
-        let size = cursor.remaining().len();
-        if size < SIZE {
-            return Err(DecodeError::MalformedChunk {
-                tag: Self::TAG,
-                size,
-                expected: SIZE,
-            });
-        }
-        let name = cursor.read()?;
-        let path = cursor.read()?;
-        Ok(Self { name, path })
+        cursor.read()
     }
 }
 
 impl Encodable for FaceFx {
     fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), EncodeError> {
-        bytes.write(&self.name);
-        bytes.write(&self.path);
+        bytes.write(self);
         Ok(())
     }
-}
-
-impl FaceFx {
-    /// The tag of the chunk containing this record.
-    pub const TAG: Tag = *b"FAFX";
 }

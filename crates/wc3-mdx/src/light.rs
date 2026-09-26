@@ -1,6 +1,7 @@
 //! Light records in `LITE` chunks.
 use crate::EncodeError;
 use crate::Encoder;
+use crate::KnownChunk;
 use crate::ValueError;
 use crate::{Color, Tag, Version};
 
@@ -126,7 +127,7 @@ impl Light {
     pub fn set_extended_words(&mut self, words: [u32; 7]) -> Result<(), ValueError> {
         if self.extended_words.is_none() {
             return Err(ValueError::UnavailableField {
-                tag: Light::TAG,
+                tag: LightsChunk::TAG,
                 field: "extended words",
             });
         }
@@ -142,7 +143,7 @@ impl Light {
         for track in tracks {
             if !is_track(track.tag) {
                 return Err(ValueError::InvalidTrackTag {
-                    record: Light::TAG,
+                    record: LightsChunk::TAG,
                     track: track.tag,
                 });
             }
@@ -207,7 +208,7 @@ impl Decodable for Light {
             let track = AnimationTrack::decode_one(&mut cursor, 0)?;
             if !is_track(track.tag) {
                 return Err(DecodeError::MalformedRecord {
-                    tag: Self::TAG,
+                    tag: LightsChunk::TAG,
                     offset,
                 });
             }
@@ -254,18 +255,13 @@ impl Encodable for Light {
         for track in &self.tracks {
             if !is_track(track.tag) {
                 return Err(EncodeError::MalformedRecord {
-                    tag: Light::TAG,
+                    tag: LightsChunk::TAG,
                     offset: bytes.position() - start,
                 });
             }
             track.encode_to(bytes)?;
         }
-        bytes.finish_sized(marker, Light::TAG)?;
+        bytes.finish_sized(marker, LightsChunk::TAG)?;
         Ok(())
     }
-}
-
-impl Light {
-    /// The tag of the chunk containing this record.
-    pub const TAG: Tag = *b"LITE";
 }

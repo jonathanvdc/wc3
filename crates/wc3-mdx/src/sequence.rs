@@ -2,10 +2,10 @@
 use crate::EncodeError;
 use crate::Encoder;
 use crate::ValueError;
-use crate::{Tag, Vec3};
+use crate::Vec3;
 
 use crate::{Cursor, SequencesChunk};
-use crate::{Decodable, Encodable};
+use crate::{Decodable, Encodable, Readable, Writable};
 use std::borrow::Cow;
 
 use crate::FixedText;
@@ -34,11 +34,10 @@ impl SequenceFlags {
         }
     }
 }
-pub(crate) const SIZE: usize = 132;
 const NAME_SIZE: usize = 80;
 
 /// A fixed-size animation sequence, including reserved fields.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Readable, Writable)]
 pub struct Sequence {
     name: FixedText<NAME_SIZE>,
     interval: [u32; 2],
@@ -145,53 +144,13 @@ impl Model {
 
 impl Decodable for Sequence {
     fn decode_one(cursor: &mut Cursor<'_>, _version: u32) -> Result<Self, DecodeError> {
-        let size = cursor.remaining().len();
-        if size < SIZE {
-            return Err(DecodeError::MalformedChunk {
-                tag: Self::TAG,
-                size,
-                expected: SIZE,
-            });
-        }
-        let name = cursor.read()?;
-        let interval = cursor.read()?;
-        let move_speed = cursor.read()?;
-        let flags = cursor.read()?;
-        let rarity = cursor.read()?;
-        let sync_point = cursor.read()?;
-        let bounds_radius = cursor.read()?;
-        let minimum_extent = cursor.read()?;
-        let maximum_extent = cursor.read()?;
-        Ok(Self {
-            name,
-            interval,
-            move_speed,
-            flags,
-            rarity,
-            sync_point,
-            bounds_radius,
-            minimum_extent,
-            maximum_extent,
-        })
+        cursor.read()
     }
 }
 
 impl Encodable for Sequence {
     fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), EncodeError> {
-        bytes.write(&self.name);
-        bytes.write(self.interval);
-        bytes.write(self.move_speed);
-        bytes.write(self.flags);
-        bytes.write(self.rarity);
-        bytes.write(self.sync_point);
-        bytes.write(self.bounds_radius);
-        bytes.write(self.minimum_extent);
-        bytes.write(self.maximum_extent);
+        bytes.write(self);
         Ok(())
     }
-}
-
-impl Sequence {
-    /// The tag of the chunk containing this record.
-    pub const TAG: Tag = *b"SEQS";
 }

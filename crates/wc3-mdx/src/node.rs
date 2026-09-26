@@ -1,7 +1,7 @@
 //! Shared node headers used by bones and helpers.
 use crate::EncodeError;
 use crate::Encoder;
-use crate::Tag;
+use crate::KnownChunk;
 use crate::ValueError;
 
 use crate::{BonesChunk, Cursor, HelpersChunk};
@@ -145,7 +145,7 @@ impl Node {
         for track in tracks {
             if !matches!(&track.tag, b"KGTR" | b"KGRT" | b"KGSC") {
                 return Err(ValueError::InvalidTrackTag {
-                    record: Node::TAG,
+                    record: HelpersChunk::TAG,
                     track: track.tag,
                 });
             }
@@ -218,7 +218,7 @@ impl Decodable for Node {
             let track = AnimationTrack::decode_one(&mut cursor, 0)?;
             if !matches!(&track.tag, b"KGTR" | b"KGRT" | b"KGSC") {
                 return Err(DecodeError::MalformedRecord {
-                    tag: Self::TAG,
+                    tag: HelpersChunk::TAG,
                     offset,
                 });
             }
@@ -246,7 +246,7 @@ impl Encodable for Node {
         for track in &self.tracks {
             track.encode_to(bytes)?;
         }
-        bytes.finish_sized(marker, Self::TAG)?;
+        bytes.finish_sized(marker, HelpersChunk::TAG)?;
         Ok(())
     }
 }
@@ -271,14 +271,4 @@ impl Encodable for Bone {
         bytes.write(self.geoset_animation_id);
         Ok(())
     }
-}
-
-impl Node {
-    /// The tag of the chunk containing this record.
-    pub const TAG: Tag = *b"HELP";
-}
-
-impl Bone {
-    /// The tag of the chunk containing this record.
-    pub const TAG: Tag = *b"BONE";
 }

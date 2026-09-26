@@ -5,7 +5,7 @@ use crate::Tag;
 use crate::ValueError;
 
 use crate::{Cursor, TexturesChunk};
-use crate::{Decodable, Encodable};
+use crate::{Decodable, Encodable, Readable, Writable};
 use std::borrow::Cow;
 
 use crate::FixedText;
@@ -35,11 +35,10 @@ impl TextureFlags {
         }
     }
 }
-pub(crate) const SIZE: usize = 268;
 const PATH_SIZE: usize = 256;
 
 /// A texture reference with its original reserved bytes intact.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Readable, Writable)]
 pub struct Texture {
     replaceable_id: u32,
     path: FixedText<PATH_SIZE>,
@@ -116,38 +115,13 @@ impl Model {
 
 impl Decodable for Texture {
     fn decode_one(cursor: &mut Cursor<'_>, _version: u32) -> Result<Self, DecodeError> {
-        let size = cursor.remaining().len();
-        if size < SIZE {
-            return Err(DecodeError::MalformedChunk {
-                tag: Self::TAG,
-                size,
-                expected: SIZE,
-            });
-        }
-        let replaceable_id = cursor.read()?;
-        let path = cursor.read()?;
-        let reserved = cursor.read_exact(4)?.try_into().expect("fixed-width field");
-        let flags = cursor.read()?;
-        Ok(Self {
-            replaceable_id,
-            path,
-            reserved,
-            flags,
-        })
+        cursor.read()
     }
 }
 
 impl Encodable for Texture {
     fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), EncodeError> {
-        bytes.write(self.replaceable_id);
-        bytes.write(&self.path);
-        bytes.write_bytes(&self.reserved);
-        bytes.write(self.flags);
+        bytes.write(self);
         Ok(())
     }
-}
-
-impl Texture {
-    /// The tag of the chunk containing this record.
-    pub const TAG: Tag = *b"TEXS";
 }

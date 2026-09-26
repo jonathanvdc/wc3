@@ -1,6 +1,7 @@
 //! Event objects stored in `EVTS` chunks.
 use crate::EncodeError;
 use crate::Encoder;
+use crate::KnownChunk;
 use crate::Tag;
 
 use crate::{Cursor, EventObjectsChunk};
@@ -78,7 +79,7 @@ impl Decodable for EventObject {
         let offset = cursor.absolute_position();
         if cursor.read_exact(4)? != TRACK_TAG {
             return Err(DecodeError::MalformedRecord {
-                tag: Self::TAG,
+                tag: EventObjectsChunk::TAG,
                 offset,
             });
         }
@@ -102,7 +103,7 @@ impl Encodable for EventObject {
         self.node.encode_to(bytes)?;
         bytes.write_bytes(&TRACK_TAG);
         let count = u32::try_from(self.frames.len()).map_err(|_| EncodeError::ChunkTooLarge {
-            tag: EventObject::TAG,
+            tag: EventObjectsChunk::TAG,
             size: self.frames.len(),
         })?;
         bytes.write(count);
@@ -112,15 +113,10 @@ impl Encodable for EventObject {
         }
         if bytes.position() - start > u32::MAX as usize {
             return Err(EncodeError::ChunkTooLarge {
-                tag: EventObject::TAG,
+                tag: EventObjectsChunk::TAG,
                 size: bytes.position() - start,
             });
         }
         Ok(())
     }
-}
-
-impl EventObject {
-    /// The tag of the chunk containing this record.
-    pub const TAG: Tag = *b"EVTS";
 }

@@ -1,7 +1,7 @@
 //! Attachment records in `ATCH` chunks.
 use crate::EncodeError;
 use crate::Encoder;
-use crate::Tag;
+use crate::KnownChunk;
 use crate::ValueError;
 
 use crate::{AttachmentsChunk, Cursor};
@@ -80,7 +80,7 @@ impl Attachment {
         if let Some(track) = track {
             if track.tag != *b"KATV" {
                 return Err(ValueError::InvalidTrackTag {
-                    record: Attachment::TAG,
+                    record: AttachmentsChunk::TAG,
                     track: track.tag,
                 });
             }
@@ -119,7 +119,7 @@ impl Decodable for Attachment {
             let track = AnimationTrack::decode_one(&mut cursor, 0)?;
             if track.tag != *b"KATV" {
                 return Err(DecodeError::MalformedRecord {
-                    tag: Self::TAG,
+                    tag: AttachmentsChunk::TAG,
                     offset,
                 });
             }
@@ -148,18 +148,13 @@ impl Encodable for Attachment {
         if let Some(track) = &self.visibility_track {
             if track.tag != *b"KATV" {
                 return Err(EncodeError::MalformedRecord {
-                    tag: Attachment::TAG,
+                    tag: AttachmentsChunk::TAG,
                     offset: bytes.position() - start,
                 });
             }
             track.encode_to(bytes)?;
         }
-        bytes.finish_sized(marker, Attachment::TAG)?;
+        bytes.finish_sized(marker, AttachmentsChunk::TAG)?;
         Ok(())
     }
-}
-
-impl Attachment {
-    /// The tag of the chunk containing this record.
-    pub const TAG: Tag = *b"ATCH";
 }

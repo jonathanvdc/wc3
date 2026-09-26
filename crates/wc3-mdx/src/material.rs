@@ -1,6 +1,7 @@
 //! Typed material layers and versioned texture slots.
 use crate::EncodeError;
 use crate::Encoder;
+use crate::KnownChunk;
 use crate::ValueError;
 use crate::{Color, Tag, Version};
 
@@ -229,7 +230,7 @@ impl Material {
     /// Changes the shader path and clears unused bytes.
     pub fn set_shader(&mut self, shader: &str) -> Result<(), ValueError> {
         let field = self.shader.as_mut().ok_or(ValueError::UnavailableField {
-            tag: Material::TAG,
+            tag: MaterialsChunk::TAG,
             field: "shader",
         })?;
         field.set_text(shader)
@@ -500,7 +501,7 @@ impl Decodable for Material {
             } else {
                 None
             };
-            expect_tag(&mut cursor, LAYER_TAG, Material::TAG)?;
+            expect_tag(&mut cursor, LAYER_TAG, MaterialsChunk::TAG)?;
             let count = cursor.read::<u32>()? as usize;
             let mut layers = Vec::new();
             for _ in 0..count {
@@ -529,7 +530,7 @@ impl Encodable for Material {
             bytes.write(self.shader.as_ref().expect("versioned shader"));
         }
         bytes.write_bytes(b"LAYS");
-        write_count(bytes, self.layers.len(), Material::TAG)?;
+        write_count(bytes, self.layers.len(), MaterialsChunk::TAG)?;
         for layer in &self.layers {
             if layer.version != self.version {
                 return Err(EncodeError::VersionMismatch {
@@ -539,7 +540,7 @@ impl Encodable for Material {
             }
             layer.encode_to(bytes)?;
         }
-        bytes.finish_sized(marker, Material::TAG)?;
+        bytes.finish_sized(marker, MaterialsChunk::TAG)?;
         Ok(())
     }
 }
@@ -699,9 +700,4 @@ impl Encodable for Layer {
         bytes.finish_sized(marker, LAYER_TAG)?;
         Ok(())
     }
-}
-
-impl Material {
-    /// The tag of the chunk containing this record.
-    pub const TAG: Tag = *b"MTLS";
 }

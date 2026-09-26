@@ -62,7 +62,7 @@ fn encode_records<C: CollectionChunk>(
 }
 
 macro_rules! record_collection {
-    ($name:ident, $item:ty) => {
+    ($name:ident, $item:ty, $tag:expr) => {
         #[doc = concat!("The complete `", stringify!($name), "` chunk.")]
         #[derive(Clone, Debug, PartialEq)]
         pub struct $name {
@@ -80,7 +80,7 @@ macro_rules! record_collection {
         impl CollectionChunk for $name {
             type Item = $item;
             fn tag() -> Tag {
-                <$item>::TAG
+                $tag
             }
             fn records(&self) -> &[Self::Item] {
                 &self.records
@@ -101,7 +101,7 @@ macro_rules! record_collection {
         }
 
         impl KnownChunk for $name {
-            const TAG: Tag = <$item>::TAG;
+            const TAG: Tag = $tag;
 
             fn decode_payload(
                 cursor: &mut Cursor<'_>,
@@ -113,24 +113,24 @@ macro_rules! record_collection {
     };
 }
 
-record_collection!(SequencesChunk, Sequence);
-record_collection!(TexturesChunk, Texture);
-record_collection!(GeosetsChunk, Geoset);
-record_collection!(GeosetAnimationsChunk, GeosetAnimation);
-record_collection!(MaterialsChunk, Material);
-record_collection!(BonesChunk, Bone);
-record_collection!(HelpersChunk, Node);
-record_collection!(AttachmentsChunk, Attachment);
-record_collection!(CamerasChunk, Camera);
-record_collection!(CollisionShapesChunk, CollisionShape);
-record_collection!(EventObjectsChunk, EventObject);
-record_collection!(FaceFxChunk, FaceFx);
-record_collection!(LightsChunk, Light);
-record_collection!(ParticleEmittersChunk, ParticleEmitter);
-record_collection!(ParticleEmitters2Chunk, ParticleEmitter2);
-record_collection!(PopcornEmittersChunk, PopcornEmitter);
-record_collection!(RibbonEmittersChunk, RibbonEmitter);
-record_collection!(TextureAnimationsChunk, TextureAnimation);
+record_collection!(SequencesChunk, Sequence, *b"SEQS");
+record_collection!(TexturesChunk, Texture, *b"TEXS");
+record_collection!(GeosetsChunk, Geoset, *b"GEOS");
+record_collection!(GeosetAnimationsChunk, GeosetAnimation, *b"GEOA");
+record_collection!(MaterialsChunk, Material, *b"MTLS");
+record_collection!(BonesChunk, Bone, *b"BONE");
+record_collection!(HelpersChunk, Node, *b"HELP");
+record_collection!(AttachmentsChunk, Attachment, *b"ATCH");
+record_collection!(CamerasChunk, Camera, *b"CAMS");
+record_collection!(CollisionShapesChunk, CollisionShape, *b"CLID");
+record_collection!(EventObjectsChunk, EventObject, *b"EVTS");
+record_collection!(FaceFxChunk, FaceFx, *b"FAFX");
+record_collection!(LightsChunk, Light, *b"LITE");
+record_collection!(ParticleEmittersChunk, ParticleEmitter, *b"PREM");
+record_collection!(ParticleEmitters2Chunk, ParticleEmitter2, *b"PRE2");
+record_collection!(PopcornEmittersChunk, PopcornEmitter, *b"CORN");
+record_collection!(RibbonEmittersChunk, RibbonEmitter, *b"RIBB");
+record_collection!(TextureAnimationsChunk, TextureAnimation, *b"TXAN");
 
 #[cfg(test)]
 mod tests {

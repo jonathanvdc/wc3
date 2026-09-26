@@ -1,6 +1,7 @@
 //! Typed camera records in `CAMS` chunks.
 use crate::EncodeError;
 use crate::Encoder;
+use crate::KnownChunk;
 use crate::ValueError;
 use crate::{Tag, Vec3, Version};
 
@@ -118,7 +119,7 @@ impl Camera {
         for track in tracks {
             if !is_track(track.tag) {
                 return Err(ValueError::InvalidTrackTag {
-                    record: Camera::TAG,
+                    record: CamerasChunk::TAG,
                     track: track.tag,
                 });
             }
@@ -168,7 +169,7 @@ impl Decodable for Camera {
             let track = AnimationTrack::decode_one(&mut cursor, 0)?;
             if !is_track(track.tag) {
                 return Err(DecodeError::MalformedRecord {
-                    tag: Self::TAG,
+                    tag: CamerasChunk::TAG,
                     offset,
                 });
             }
@@ -202,7 +203,7 @@ impl Encodable for Camera {
         for track in &self.tracks {
             if !is_track(track.tag) {
                 return Err(EncodeError::MalformedRecord {
-                    tag: Camera::TAG,
+                    tag: CamerasChunk::TAG,
                     offset: bytes.position() - start,
                 });
             }
@@ -210,16 +211,15 @@ impl Encodable for Camera {
         }
         if bytes.position() - start > MAX_RECORD_SIZE {
             return Err(EncodeError::ChunkTooLarge {
-                tag: Camera::TAG,
+                tag: CamerasChunk::TAG,
                 size: bytes.position() - start,
             });
         }
-        bytes.finish_sized_with_flags(marker, Camera::TAG, u32::from(self.record_flags) << 24)?;
+        bytes.finish_sized_with_flags(
+            marker,
+            CamerasChunk::TAG,
+            u32::from(self.record_flags) << 24,
+        )?;
         Ok(())
     }
-}
-
-impl Camera {
-    /// The tag of the chunk containing this record.
-    pub const TAG: Tag = *b"CAMS";
 }

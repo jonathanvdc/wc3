@@ -1,6 +1,7 @@
 //! Ribbon emitter records in `RIBB` chunks.
 use crate::EncodeError;
 use crate::Encoder;
+use crate::KnownChunk;
 use crate::ValueError;
 use crate::{Color, Tag};
 
@@ -74,7 +75,7 @@ impl RibbonEmitter {
         for track in tracks {
             if !is_track(track.tag) {
                 return Err(ValueError::InvalidTrackTag {
-                    record: RibbonEmitter::TAG,
+                    record: RibbonEmittersChunk::TAG,
                     track: track.tag,
                 });
             }
@@ -116,7 +117,7 @@ impl Decodable for RibbonEmitter {
             let track = AnimationTrack::decode_one(&mut cursor, 0)?;
             if !is_track(track.tag) {
                 return Err(DecodeError::MalformedRecord {
-                    tag: Self::TAG,
+                    tag: RibbonEmittersChunk::TAG,
                     offset,
                 });
             }
@@ -141,18 +142,13 @@ impl Encodable for RibbonEmitter {
         for track in &self.tracks {
             if !is_track(track.tag) {
                 return Err(EncodeError::MalformedRecord {
-                    tag: RibbonEmitter::TAG,
+                    tag: RibbonEmittersChunk::TAG,
                     offset: bytes.position() - start,
                 });
             }
             track.encode_to(bytes)?;
         }
-        bytes.finish_sized(marker, RibbonEmitter::TAG)?;
+        bytes.finish_sized(marker, RibbonEmittersChunk::TAG)?;
         Ok(())
     }
-}
-
-impl RibbonEmitter {
-    /// The tag of the chunk containing this record.
-    pub const TAG: Tag = *b"RIBB";
 }

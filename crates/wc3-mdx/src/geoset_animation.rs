@@ -1,8 +1,9 @@
 //! Geoset animation records in `GEOA` chunks.
+use crate::Color;
 use crate::EncodeError;
 use crate::Encoder;
+use crate::KnownChunk;
 use crate::ValueError;
-use crate::{Color, Tag};
 
 use crate::{AnimationTrack, DecodeError, Model};
 use crate::{Cursor, GeosetAnimationsChunk};
@@ -104,7 +105,7 @@ impl GeosetAnimation {
         for track in tracks {
             if !matches!(&track.tag, b"KGAO" | b"KGAC") {
                 return Err(ValueError::InvalidTrackTag {
-                    record: GeosetAnimation::TAG,
+                    record: GeosetAnimationsChunk::TAG,
                     track: track.tag,
                 });
             }
@@ -139,7 +140,7 @@ impl Decodable for GeosetAnimation {
             let track = AnimationTrack::decode_one(&mut cursor, 0)?;
             if !matches!(&track.tag, b"KGAO" | b"KGAC") {
                 return Err(DecodeError::MalformedRecord {
-                    tag: Self::TAG,
+                    tag: GeosetAnimationsChunk::TAG,
                     offset,
                 });
             }
@@ -170,18 +171,13 @@ impl Encodable for GeosetAnimation {
         for track in &self.tracks {
             if !matches!(&track.tag, b"KGAO" | b"KGAC") {
                 return Err(EncodeError::MalformedRecord {
-                    tag: GeosetAnimation::TAG,
+                    tag: GeosetAnimationsChunk::TAG,
                     offset: bytes.position() - start,
                 });
             }
             track.encode_to(bytes)?;
         }
-        bytes.finish_sized(marker, GeosetAnimation::TAG)?;
+        bytes.finish_sized(marker, GeosetAnimationsChunk::TAG)?;
         Ok(())
     }
-}
-
-impl GeosetAnimation {
-    /// The tag of the chunk containing this record.
-    pub const TAG: Tag = *b"GEOA";
 }

@@ -1,6 +1,7 @@
 //! Particle emitter 2 records in `PRE2` chunks.
 use crate::EncodeError;
 use crate::Encoder;
+use crate::KnownChunk;
 use crate::ValueError;
 use crate::{Color, Tag, Vec3};
 
@@ -139,7 +140,7 @@ impl ParticleEmitter2 {
         for track in tracks {
             if !is_track(track.tag) {
                 return Err(ValueError::InvalidTrackTag {
-                    record: ParticleEmitter2::TAG,
+                    record: ParticleEmitters2Chunk::TAG,
                     track: track.tag,
                 });
             }
@@ -181,7 +182,7 @@ impl Decodable for ParticleEmitter2 {
             let track = AnimationTrack::decode_one(&mut cursor, 0)?;
             if !is_track(track.tag) {
                 return Err(DecodeError::MalformedRecord {
-                    tag: Self::TAG,
+                    tag: ParticleEmitters2Chunk::TAG,
                     offset,
                 });
             }
@@ -206,18 +207,13 @@ impl Encodable for ParticleEmitter2 {
         for track in &self.tracks {
             if !is_track(track.tag) {
                 return Err(EncodeError::MalformedRecord {
-                    tag: ParticleEmitter2::TAG,
+                    tag: ParticleEmitters2Chunk::TAG,
                     offset: bytes.position() - start,
                 });
             }
             track.encode_to(bytes)?;
         }
-        bytes.finish_sized(marker, ParticleEmitter2::TAG)?;
+        bytes.finish_sized(marker, ParticleEmitters2Chunk::TAG)?;
         Ok(())
     }
-}
-
-impl ParticleEmitter2 {
-    /// The tag of the chunk containing this record.
-    pub const TAG: Tag = *b"PRE2";
 }

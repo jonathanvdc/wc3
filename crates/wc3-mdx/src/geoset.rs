@@ -1,6 +1,7 @@
 //! Typed geoset sections and lossless MDX serialization.
 use crate::EncodeError;
 use crate::Encoder;
+use crate::KnownChunk;
 use crate::ValueError;
 use crate::{Readable, Writable};
 use crate::{Tag, Vec3, Version};
@@ -83,14 +84,14 @@ impl Geoset {
     ) -> Result<Self, ValueError> {
         if vertices.len() != normals.len() {
             return Err(ValueError::LengthMismatch {
-                tag: Geoset::TAG,
+                tag: GeosetsChunk::TAG,
                 expected: vertices.len(),
                 actual: normals.len(),
             });
         }
         if faces.len() > u32::MAX as usize {
             return Err(ValueError::CountTooLarge {
-                tag: Geoset::TAG,
+                tag: GeosetsChunk::TAG,
                 count: faces.len(),
             });
         }
@@ -244,7 +245,7 @@ impl Geoset {
             .vertices
             .get_mut(index)
             .ok_or(ValueError::IndexOutOfBounds {
-                tag: Geoset::TAG,
+                tag: GeosetsChunk::TAG,
                 index,
                 len,
             })? = vertex;
@@ -258,7 +259,7 @@ impl Geoset {
             .normals
             .get_mut(index)
             .ok_or(ValueError::IndexOutOfBounds {
-                tag: Geoset::TAG,
+                tag: GeosetsChunk::TAG,
                 index,
                 len,
             })? = normal;
@@ -269,7 +270,7 @@ impl Geoset {
     pub fn set_vertex_groups(&mut self, groups: &[u8]) -> Result<(), ValueError> {
         if groups.len() != self.vertices.len() {
             return Err(ValueError::LengthMismatch {
-                tag: Geoset::TAG,
+                tag: GeosetsChunk::TAG,
                 expected: self.vertices.len(),
                 actual: groups.len(),
             });
@@ -282,7 +283,7 @@ impl Geoset {
     pub fn set_matrix_groups(&mut self, groups: &[Vec<u32>]) -> Result<(), ValueError> {
         if let Some(group) = groups.iter().find(|group| group.len() > u32::MAX as usize) {
             return Err(ValueError::CountTooLarge {
-                tag: Geoset::TAG,
+                tag: GeosetsChunk::TAG,
                 count: group.len(),
             });
         }
@@ -315,7 +316,7 @@ impl Geoset {
     pub fn set_level_of_detail(&mut self, level: u32) -> Result<(), ValueError> {
         if self.version < 900 {
             return Err(ValueError::UnavailableField {
-                tag: Geoset::TAG,
+                tag: GeosetsChunk::TAG,
                 field: "level of detail",
             });
         }
@@ -330,7 +331,7 @@ impl Geoset {
     pub fn set_name(&mut self, name: &str) -> Result<(), ValueError> {
         if self.version < 900 {
             return Err(ValueError::UnavailableField {
-                tag: Geoset::TAG,
+                tag: GeosetsChunk::TAG,
                 field: "name",
             });
         }
@@ -359,7 +360,7 @@ impl Geoset {
             .sequence_extents
             .get_mut(index)
             .ok_or(ValueError::IndexOutOfBounds {
-                tag: Geoset::TAG,
+                tag: GeosetsChunk::TAG,
                 index,
                 len,
             })? = extent;
@@ -375,7 +376,7 @@ impl Geoset {
     pub fn set_tangents(&mut self, tangents: Option<&[[f32; 4]]>) -> Result<(), ValueError> {
         if self.version < 900 {
             return Err(ValueError::UnavailableField {
-                tag: Geoset::TAG,
+                tag: GeosetsChunk::TAG,
                 field: "tangents",
             });
         }
@@ -404,24 +405,24 @@ impl Geoset {
     ) -> Result<(), ValueError> {
         if self.version < 900 {
             return Err(ValueError::UnavailableField {
-                tag: Geoset::TAG,
+                tag: GeosetsChunk::TAG,
                 field: "skin data",
             });
         }
         if let Some(indices) = bone_indices {
             if self.version < 1200 {
                 return Err(ValueError::UnavailableField {
-                    tag: Geoset::TAG,
+                    tag: GeosetsChunk::TAG,
                     field: "skin bone indices",
                 });
             }
             let weights = weights.ok_or(ValueError::MissingField {
-                tag: Geoset::TAG,
+                tag: GeosetsChunk::TAG,
                 field: "skin weights",
             })?;
             if weights.len() != indices.len() {
                 return Err(ValueError::LengthMismatch {
-                    tag: Geoset::TAG,
+                    tag: GeosetsChunk::TAG,
                     expected: weights.len(),
                     actual: indices.len(),
                 });
@@ -454,7 +455,7 @@ impl Geoset {
             .uv_sets
             .get_mut(set)
             .ok_or(ValueError::IndexOutOfBounds {
-                tag: Geoset::TAG,
+                tag: GeosetsChunk::TAG,
                 index: set,
                 len: sets_len,
             })?;
@@ -462,7 +463,7 @@ impl Geoset {
         *coordinates
             .get_mut(index)
             .ok_or(ValueError::IndexOutOfBounds {
-                tag: Geoset::TAG,
+                tag: GeosetsChunk::TAG,
                 index,
                 len,
             })? = uv;
@@ -483,7 +484,7 @@ fn section<'a>(cursor: &mut Cursor<'a>, tag: Tag, stride: usize) -> Result<&'a [
     let offset = cursor.absolute_position();
     if cursor.read_exact(4)? != tag {
         return Err(DecodeError::MalformedRecord {
-            tag: Geoset::TAG,
+            tag: GeosetsChunk::TAG,
             offset,
         });
     }
@@ -491,7 +492,7 @@ fn section<'a>(cursor: &mut Cursor<'a>, tag: Tag, stride: usize) -> Result<&'a [
     let size = count
         .checked_mul(stride)
         .ok_or(DecodeError::MalformedRecord {
-            tag: Geoset::TAG,
+            tag: GeosetsChunk::TAG,
             offset,
         })?;
     cursor.read_exact(size)
@@ -508,7 +509,7 @@ fn decode_values<T: Readable>(bytes: &[u8], width: usize) -> Result<Vec<T>, Deco
 
 fn write_count(bytes: &mut Encoder<'_>, count: usize) -> Result<(), EncodeError> {
     let count = u32::try_from(count).map_err(|_| EncodeError::ChunkTooLarge {
-        tag: Geoset::TAG,
+        tag: GeosetsChunk::TAG,
         size: count,
     })?;
     bytes.write(count);
@@ -626,7 +627,7 @@ impl Decodable for Geoset {
                         }
                         _ => {
                             return Err(DecodeError::MalformedRecord {
-                                tag: Geoset::TAG,
+                                tag: GeosetsChunk::TAG,
                                 offset,
                             })
                         }
@@ -635,7 +636,7 @@ impl Decodable for Geoset {
             }
             if cursor.read_exact(4)? != b"UVAS" {
                 return Err(DecodeError::MalformedRecord {
-                    tag: Geoset::TAG,
+                    tag: GeosetsChunk::TAG,
                     offset: cursor.absolute_position() - 4,
                 });
             }
@@ -716,7 +717,7 @@ impl Encodable for Geoset {
                     if let Some(indices) = bone_indices {
                         if self.version < 1200 || indices.len() != weights.len() {
                             return Err(EncodeError::MalformedRecord {
-                                tag: Geoset::TAG,
+                                tag: GeosetsChunk::TAG,
                                 offset: bytes.position() - start,
                             });
                         }
@@ -732,16 +733,11 @@ impl Encodable for Geoset {
         }
         if bytes.position() - start > u32::MAX as usize {
             return Err(EncodeError::ChunkTooLarge {
-                tag: Geoset::TAG,
+                tag: GeosetsChunk::TAG,
                 size: bytes.position() - start,
             });
         }
-        bytes.finish_sized(marker, Self::TAG)?;
+        bytes.finish_sized(marker, GeosetsChunk::TAG)?;
         Ok(())
     }
-}
-
-impl Geoset {
-    /// The tag of the chunk containing this record.
-    pub const TAG: Tag = *b"GEOS";
 }

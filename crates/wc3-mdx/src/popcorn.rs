@@ -1,6 +1,7 @@
 //! Reforged popcorn particle emitters in `CORN` chunks.
 use crate::EncodeError;
 use crate::Encoder;
+use crate::KnownChunk;
 use crate::ValueError;
 use crate::{Color, Tag};
 
@@ -129,7 +130,7 @@ impl PopcornEmitter {
         for track in tracks {
             if !is_track_tag(track.tag) {
                 return Err(ValueError::InvalidTrackTag {
-                    record: PopcornEmitter::TAG,
+                    record: PopcornEmittersChunk::TAG,
                     track: track.tag,
                 });
             }
@@ -176,7 +177,7 @@ impl Decodable for PopcornEmitter {
             let track = AnimationTrack::decode_one(&mut cursor, 0)?;
             if !is_track_tag(track.tag) {
                 return Err(DecodeError::MalformedRecord {
-                    tag: Self::TAG,
+                    tag: PopcornEmittersChunk::TAG,
                     offset,
                 });
             }
@@ -221,18 +222,13 @@ impl Encodable for PopcornEmitter {
         for track in &self.tracks {
             if !is_track_tag(track.tag) {
                 return Err(EncodeError::MalformedRecord {
-                    tag: PopcornEmitter::TAG,
+                    tag: PopcornEmittersChunk::TAG,
                     offset: bytes.position() - start,
                 });
             }
             track.encode_to(bytes)?;
         }
-        bytes.finish_sized(marker, PopcornEmitter::TAG)?;
+        bytes.finish_sized(marker, PopcornEmittersChunk::TAG)?;
         Ok(())
     }
-}
-
-impl PopcornEmitter {
-    /// The tag of the chunk containing this record.
-    pub const TAG: Tag = *b"CORN";
 }
