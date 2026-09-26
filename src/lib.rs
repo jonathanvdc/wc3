@@ -13,7 +13,7 @@
 //! let mut model = Model::new(800);
 //! // Populate the model
 //! let bytes = model.encode().unwrap();
-//! assert_eq!(Model::decode(&bytes, 800).unwrap(), model);
+//! assert_eq!(Model::decode(&bytes, 800).unwrap().encode().unwrap(), bytes);
 //! ```
 
 /// A three-dimensional vector in MDX coordinates.

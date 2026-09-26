@@ -51,17 +51,6 @@ pub enum ModelChunk {
     Malformed(MalformedChunk),
 }
 
-impl PartialEq for ModelChunk {
-    fn eq(&self, other: &Self) -> bool {
-        let mut left = Vec::new();
-        let mut right = Vec::new();
-        self.encode_to(&mut Encoder::new(&mut left))
-            == other.encode_to(&mut Encoder::new(&mut right))
-            && left == right
-    }
-}
-impl Eq for ModelChunk {}
-
 impl Chunk for ModelChunk {
     fn tag(&self) -> Tag {
         ModelChunk::tag(self)

@@ -61,7 +61,9 @@ mod tests {
 
     #[test]
     fn one_api_handles_model_fixed_and_versioned_records() {
-        round_trip(&Model::new(800), 800);
+        let model = Model::new(800);
+        let bytes = model.encode().unwrap();
+        assert_eq!(Model::decode(&bytes, 800).unwrap().encode().unwrap(), bytes);
         round_trip(&Sequence::new("Stand", [0, 100]).unwrap(), 800);
         round_trip(&Geoset::new(1800, &[], &[], &[]).unwrap(), 1800);
         assert!(Sequence::decode(&[0; 131], 800).is_err());

@@ -49,7 +49,10 @@ fn rejects_short_repeated_version_chunks() {
     bytes.extend_from_slice(b"VERS");
     bytes.extend_from_slice(&2u32.to_le_bytes());
     bytes.extend_from_slice(&[1, 2]);
-    assert_eq!(Model::decode(&bytes, 800), Err(Error::InvalidVersionChunk));
+    assert!(matches!(
+        Model::decode(&bytes, 800),
+        Err(Error::InvalidVersionChunk)
+    ));
 
     let mut model = Model::new(800);
     model.chunks_mut()[0] = ModelChunk::from_raw(RawChunk::new(*b"VERS", Vec::new()), 800);

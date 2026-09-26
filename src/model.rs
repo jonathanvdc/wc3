@@ -14,7 +14,7 @@ pub const MAGIC: Tag = *b"MDLX";
 pub const LATEST_VERSION: Version = 1800;
 
 /// An ordered MDX model. Unknown chunks remain available and writable.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug)]
 pub struct Model {
     /// The version number that is used if the model has no `VERS` chunk.
     default_version: Version,
@@ -202,22 +202,25 @@ mod tests {
 
     #[test]
     fn rejects_bad_magic_and_lengths() {
-        assert_eq!(Model::decode(b"wrong", 0), Err(Error::InvalidMagic));
-        assert_eq!(
+        assert!(matches!(
+            Model::decode(b"wrong", 0),
+            Err(Error::InvalidMagic)
+        ));
+        assert!(matches!(
             Model::decode(b"MDLXVE", 0),
             Err(Error::TruncatedHeader { offset: 4 })
-        );
+        ));
         let mut bytes = b"MDLXTEST".to_vec();
         bytes.extend_from_slice(&5u32.to_le_bytes());
         bytes.push(1);
-        assert_eq!(
+        assert!(matches!(
             Model::decode(&bytes, 0),
             Err(Error::TruncatedChunk {
-                tag: *b"TEST",
+                tag,
                 offset: 4,
                 size: 5,
-            })
-        );
+            }) if tag == *b"TEST"
+        ));
     }
 
     #[test]
@@ -246,6 +249,9 @@ mod tests {
         bytes.extend_from_slice(b"VERS");
         bytes.extend_from_slice(&3u32.to_le_bytes());
         bytes.extend_from_slice(&[1, 2, 3]);
-        assert_eq!(Model::decode(&bytes, 1800), Err(Error::InvalidVersionChunk));
+        assert!(matches!(
+            Model::decode(&bytes, 1800),
+            Err(Error::InvalidVersionChunk)
+        ));
     }
 }
