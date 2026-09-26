@@ -12,6 +12,18 @@ pub struct MalformedChunk {
     pub(crate) error: Error,
 }
 
+impl Encodable for MalformedChunk {
+    fn encode_to(&self, output: &mut Encoder<'_>) -> Result<(), Error> {
+        self.raw.encode_to(output)
+    }
+}
+
+impl Chunk for MalformedChunk {
+    fn tag(&self) -> Tag {
+        self.raw.tag
+    }
+}
+
 impl MalformedChunk {
     pub fn raw(&self) -> &RawChunk {
         &self.raw
@@ -51,14 +63,8 @@ pub enum ModelChunk {
     Malformed(MalformedChunk),
 }
 
-impl Chunk for ModelChunk {
-    fn tag(&self) -> Tag {
-        ModelChunk::tag(self)
-    }
-}
-
-impl ModelChunk {
-    pub(crate) fn encode_to(&self, output: &mut Encoder<'_>) -> Result<(), Error> {
+impl Encodable for ModelChunk {
+    fn encode_to(&self, output: &mut Encoder<'_>) -> Result<(), Error> {
         let tag = self.tag();
         output.write_bytes(&tag);
         let marker = output.begin_sized();
@@ -86,13 +92,21 @@ impl ModelChunk {
             Self::FaceFx(value) => value.encode_to(output)?,
             Self::PivotPoints(value) => value.encode_to(output)?,
             Self::BindPose(value) => value.encode_to(output)?,
-            Self::Unknown(raw) => output.write_bytes(&raw.data),
-            Self::Malformed(malformed) => output.write_bytes(&malformed.raw.data),
+            Self::Unknown(raw) => raw.encode_to(output)?,
+            Self::Malformed(malformed) => malformed.encode_to(output)?,
         }
         output.finish_payload(marker, tag)?;
         Ok(())
     }
+}
 
+impl Chunk for ModelChunk {
+    fn tag(&self) -> Tag {
+        ModelChunk::tag(self)
+    }
+}
+
+impl ModelChunk {
     /// Decodes a known chunk, retaining its bytes and error if decoding fails.
     pub fn from_raw(raw: RawChunk, version: Version) -> Self {
         let decoded = Self::decode_payload(raw.tag, &mut Cursor::new(&raw.data), version);

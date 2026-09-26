@@ -1,5 +1,5 @@
 //! Raw and typed top-level MDX chunks.
-use crate::Tag;
+use crate::{Encodable, Tag};
 
 use crate::{Error, Record};
 
@@ -21,7 +21,7 @@ mod version;
 pub use version::VersionChunk;
 
 /// A value that represents a complete top-level chunk.
-pub trait Chunk {
+pub trait Chunk: Encodable {
     /// Returns this value's chunk tag.
     fn tag(&self) -> Tag;
 }
