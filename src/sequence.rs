@@ -67,12 +67,7 @@ impl Sequence {
         sequence.set_name(name)?;
         Ok(sequence)
     }
-    pub fn as_bytes(&self) -> [u8; SIZE] {
-        self.encode()
-            .expect("fixed-size record")
-            .try_into()
-            .expect("fixed-size record")
-    }
+
     pub fn name(&self) -> Cow<'_, str> {
         field::text(&self.name)
     }

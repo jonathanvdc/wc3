@@ -35,12 +35,6 @@ impl FaceFx {
     }
 
     /// Returns the original record bytes.
-    pub fn as_bytes(&self) -> [u8; SIZE] {
-        self.encode()
-            .expect("fixed-size record")
-            .try_into()
-            .expect("fixed-size record")
-    }
 
     /// Returns the name up to the first NUL.
     pub fn name(&self) -> Cow<'_, str> {

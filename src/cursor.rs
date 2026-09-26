@@ -6,6 +6,14 @@ pub trait Readable: Sized {
     fn read_from(cursor: &mut Cursor<'_>) -> Result<Self, DecodeError>;
 }
 
+impl Readable for u16 {
+    fn read_from(cursor: &mut Cursor<'_>) -> Result<Self, DecodeError> {
+        Ok(u16::from_le_bytes(
+            cursor.read_exact(2)?.try_into().expect("two-byte word"),
+        ))
+    }
+}
+
 impl Readable for u32 {
     fn read_from(cursor: &mut Cursor<'_>) -> Result<Self, DecodeError> {
         Ok(u32::from_le_bytes(

@@ -47,12 +47,6 @@ impl ModelInfo {
     }
 
     /// Returns the raw fixed-width record.
-    pub fn as_bytes(&self) -> [u8; SIZE] {
-        self.encode()
-            .expect("fixed-size record")
-            .try_into()
-            .expect("fixed-size record")
-    }
 
     /// Returns the model name up to the first NUL, replacing invalid UTF-8.
     pub fn name(&self) -> Cow<'_, str> {

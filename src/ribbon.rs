@@ -107,24 +107,21 @@ impl Decodable for RibbonEmitter {
     fn decode_one(source: &mut Cursor<'_>, _version: u32) -> Result<Self, DecodeError> {
         let mut cursor = source.slice_u32_sized()?;
         let node = Node::decode_one(&mut cursor, 0)?;
-        let fixed = cursor.read_exact(FIXED_SIZE)?;
-        let word = |offset: usize| {
-            u32::from_le_bytes(fixed[offset..offset + 4].try_into().expect("fixed field"))
-        };
-        let float = |offset: usize| f32::from_bits(word(offset));
+        let mut fixed = cursor.slice(FIXED_SIZE)?;
         let fields = RibbonFields {
-            height_above: float(0),
-            height_below: float(4),
-            alpha: float(8),
-            color: [float(12), float(16), float(20)],
-            life_span: float(24),
-            texture_slot: word(28),
-            emission_rate: word(32),
-            rows: word(36),
-            columns: word(40),
-            material_id: word(44),
-            gravity: float(48),
+            height_above: fixed.read()?,
+            height_below: fixed.read()?,
+            alpha: fixed.read()?,
+            color: fixed.read()?,
+            life_span: fixed.read()?,
+            texture_slot: fixed.read()?,
+            emission_rate: fixed.read()?,
+            rows: fixed.read()?,
+            columns: fixed.read()?,
+            material_id: fixed.read()?,
+            gravity: fixed.read()?,
         };
+        fixed.finish()?;
         let mut tracks = Vec::new();
         while !cursor.remaining().is_empty() {
             let offset = cursor.absolute_position();

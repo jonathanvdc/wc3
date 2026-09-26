@@ -142,7 +142,7 @@ impl Decodable for CollisionShape {
     fn decode_one(cursor: &mut Cursor<'_>, _version: u32) -> Result<Self, DecodeError> {
         let node = Node::decode_one(cursor, 0)?;
         let kind_offset = cursor.absolute_position();
-        let kind = cursor.read()?;
+        let kind = cursor.read::<u32>()?;
         let geometry = match kind {
             0 => CollisionGeometry::Box([cursor.read()?, cursor.read()?]),
             1 => CollisionGeometry::Plane([cursor.read()?, cursor.read()?]),

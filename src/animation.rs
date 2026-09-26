@@ -72,79 +72,6 @@ impl AnimationTrack {
             TrackValueKind::Float
         })
     }
-
-    /// Parses one known track and returns the number of bytes consumed.
-    pub(crate) fn parse(data: &[u8], offset: usize) -> Result<(Self, usize), DecodeError> {
-        let tag: Tag = data
-            .get(offset..offset.saturating_add(4))
-            .ok_or(DecodeError::MalformedRecord {
-                tag: *b"KGTR",
-                offset,
-            })?
-            .try_into()
-            .expect("four-byte tag");
-        let components = components(tag).ok_or(DecodeError::MalformedRecord { tag, offset })?;
-        let header = data
-            .get(offset + 4..offset.saturating_add(16))
-            .ok_or(DecodeError::MalformedRecord { tag, offset })?;
-        let count = u32::from_le_bytes(header[..4].try_into().expect("four-byte count")) as usize;
-        let interpolation = u32::from_le_bytes(header[4..8].try_into().expect("four-byte field"));
-        if interpolation > 3 {
-            return Err(DecodeError::MalformedRecord { tag, offset });
-        }
-        let global_sequence_id =
-            u32::from_le_bytes(header[8..12].try_into().expect("four-byte field"));
-        let vector_count = if interpolation >= 2 { 3 } else { 1 };
-        let key_size = components
-            .checked_mul(vector_count)
-            .and_then(|n| n.checked_mul(4))
-            .and_then(|n| n.checked_add(4))
-            .ok_or(DecodeError::MalformedRecord { tag, offset })?;
-        let body_size = count
-            .checked_mul(key_size)
-            .ok_or(DecodeError::MalformedRecord { tag, offset })?;
-        let end = offset
-            .checked_add(16)
-            .and_then(|n| n.checked_add(body_size))
-            .filter(|&end| end <= data.len())
-            .ok_or(DecodeError::MalformedRecord { tag, offset })?;
-        let mut cursor = offset + 16;
-        let mut keyframes = Vec::with_capacity(count);
-        while cursor < end {
-            let frame =
-                u32::from_le_bytes(data[cursor..cursor + 4].try_into().expect("bounded frame"));
-            cursor += 4;
-            let mut read_vector = || {
-                (0..components)
-                    .map(|_| {
-                        let value = f32::from_le_bytes(
-                            data[cursor..cursor + 4].try_into().expect("bounded value"),
-                        );
-                        cursor += 4;
-                        value
-                    })
-                    .collect()
-            };
-            let value = read_vector();
-            let in_tangent = (interpolation >= 2).then(&mut read_vector);
-            let out_tangent = (interpolation >= 2).then(&mut read_vector);
-            keyframes.push(Keyframe {
-                frame,
-                value,
-                in_tangent,
-                out_tangent,
-            });
-        }
-        Ok((
-            Self {
-                tag,
-                interpolation,
-                global_sequence_id,
-                keyframes,
-            },
-            end - offset,
-        ))
-    }
 }
 
 fn components(tag: Tag) -> Option<usize> {
@@ -163,9 +90,65 @@ fn components(tag: Tag) -> Option<usize> {
 
 impl Decodable for AnimationTrack {
     fn decode_one(cursor: &mut Cursor<'_>, _version: u32) -> Result<Self, DecodeError> {
-        let (track, consumed) = Self::parse(cursor.remaining(), 0)?;
-        cursor.read_exact(consumed)?;
-        Ok(track)
+        let mut next = *cursor;
+        let offset = next.absolute_position();
+        let tag: Tag = next
+            .read_exact(4)
+            .map_err(|_| DecodeError::MalformedRecord {
+                tag: *b"KGTR",
+                offset,
+            })?
+            .try_into()
+            .expect("four-byte tag");
+        let components = components(tag).ok_or(DecodeError::MalformedRecord { tag, offset })?;
+        let malformed = || DecodeError::MalformedRecord { tag, offset };
+        let count = next.read::<u32>().map_err(|_| malformed())? as usize;
+        let interpolation = next.read::<u32>().map_err(|_| malformed())?;
+        if interpolation > 3 {
+            return Err(malformed());
+        }
+        let global_sequence_id = next.read::<u32>().map_err(|_| malformed())?;
+        let vector_count = if interpolation >= 2 { 3 } else { 1 };
+        let key_size = components
+            .checked_mul(vector_count)
+            .and_then(|n| n.checked_mul(4))
+            .and_then(|n| n.checked_add(4))
+            .ok_or_else(malformed)?;
+        let body_size = count.checked_mul(key_size).ok_or_else(malformed)?;
+        let mut body = next.slice(body_size).map_err(|_| malformed())?;
+        let mut keyframes = Vec::with_capacity(count);
+        for _ in 0..count {
+            let frame = body.read::<u32>().map_err(|_| malformed())?;
+            let read_vector = |body: &mut Cursor<'_>| -> Result<Vec<f32>, DecodeError> {
+                (0..components)
+                    .map(|_| body.read::<f32>().map_err(|_| malformed()))
+                    .collect()
+            };
+            let value = read_vector(&mut body)?;
+            let in_tangent = if interpolation >= 2 {
+                Some(read_vector(&mut body)?)
+            } else {
+                None
+            };
+            let out_tangent = if interpolation >= 2 {
+                Some(read_vector(&mut body)?)
+            } else {
+                None
+            };
+            keyframes.push(Keyframe {
+                frame,
+                value,
+                in_tangent,
+                out_tangent,
+            });
+        }
+        *cursor = next;
+        Ok(Self {
+            tag,
+            interpolation,
+            global_sequence_id,
+            keyframes,
+        })
     }
 }
 

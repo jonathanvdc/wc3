@@ -61,12 +61,6 @@ impl Texture {
     }
 
     /// Returns the original 268-byte record.
-    pub fn as_bytes(&self) -> [u8; SIZE] {
-        self.encode()
-            .expect("fixed-size record")
-            .try_into()
-            .expect("fixed-size record")
-    }
 
     /// Returns the replaceable texture ID.
     pub fn replaceable_id(&self) -> u32 {

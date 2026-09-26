@@ -149,39 +149,31 @@ impl ParticleEmitter2 {
     }
 }
 
-fn decode_fields(bytes: &[u8]) -> Particle2Fields {
-    let word = |offset: usize| {
-        u32::from_le_bytes(bytes[offset..offset + 4].try_into().expect("fixed field"))
-    };
-    let float = |offset: usize| f32::from_bits(word(offset));
-    Particle2Fields {
-        speed: float(0),
-        variation: float(4),
-        latitude: float(8),
-        gravity: float(12),
-        life_span: float(16),
-        emission_rate: float(20),
-        width: float(24),
-        length: float(28),
-        filter_mode: word(32),
-        rows: word(36),
-        columns: word(40),
-        frame_flags: word(44),
-        tail_length: float(48),
-        time: float(52),
-        segment_colors: std::array::from_fn(|segment| {
-            std::array::from_fn(|axis| float(56 + (segment * 3 + axis) * 4))
-        }),
-        alpha: bytes[92..95].try_into().expect("three alpha bytes"),
-        particle_scaling: std::array::from_fn(|axis| float(95 + axis * 4)),
-        uv_animations: std::array::from_fn(|group| {
-            std::array::from_fn(|index| word(107 + (group * 3 + index) * 4))
-        }),
-        texture_id: word(155),
-        squirt: word(159),
-        priority_plane: word(163),
-        replaceable_id: word(167),
-    }
+fn decode_fields(cursor: &mut Cursor<'_>) -> Result<Particle2Fields, DecodeError> {
+    Ok(Particle2Fields {
+        speed: cursor.read()?,
+        variation: cursor.read()?,
+        latitude: cursor.read()?,
+        gravity: cursor.read()?,
+        life_span: cursor.read()?,
+        emission_rate: cursor.read()?,
+        width: cursor.read()?,
+        length: cursor.read()?,
+        filter_mode: cursor.read()?,
+        rows: cursor.read()?,
+        columns: cursor.read()?,
+        frame_flags: cursor.read()?,
+        tail_length: cursor.read()?,
+        time: cursor.read()?,
+        segment_colors: cursor.read()?,
+        alpha: cursor.read_exact(3)?.try_into().expect("three alpha bytes"),
+        particle_scaling: cursor.read()?,
+        uv_animations: cursor.read()?,
+        texture_id: cursor.read()?,
+        squirt: cursor.read()?,
+        priority_plane: cursor.read()?,
+        replaceable_id: cursor.read()?,
+    })
 }
 
 fn encode_fields(fields: &Particle2Fields, bytes: &mut Encoder<'_>) {
@@ -246,7 +238,9 @@ impl Decodable for ParticleEmitter2 {
     fn decode_one(source: &mut Cursor<'_>, _version: u32) -> Result<Self, DecodeError> {
         let mut cursor = source.slice_u32_sized()?;
         let node = Node::decode_one(&mut cursor, 0)?;
-        let fields = decode_fields(cursor.read_exact(FIXED_SIZE)?);
+        let mut fixed = cursor.slice(FIXED_SIZE)?;
+        let fields = decode_fields(&mut fixed)?;
+        fixed.finish()?;
         let mut tracks = Vec::new();
         while !cursor.remaining().is_empty() {
             let offset = cursor.absolute_position();

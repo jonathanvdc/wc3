@@ -1,6 +1,7 @@
 //! Typed geoset sections and lossless MDX serialization.
 use crate::EncodeError;
 use crate::Encoder;
+use crate::Readable;
 use crate::ValueError;
 use crate::{Tag, Vec3, Version};
 
@@ -504,26 +505,13 @@ fn read_extent(cursor: &mut Cursor<'_>) -> Result<GeosetExtent, DecodeError> {
     })
 }
 
-fn decode_words(bytes: &[u8]) -> Vec<u32> {
-    bytes
-        .chunks_exact(4)
-        .map(|bytes| u32::from_le_bytes(bytes.try_into().expect("four-byte word")))
-        .collect()
-}
-
-fn decode_vectors<const N: usize>(bytes: &[u8]) -> Vec<[f32; N]> {
-    bytes
-        .chunks_exact(N * 4)
-        .map(|vector| {
-            std::array::from_fn(|i| {
-                f32::from_le_bytes(
-                    vector[i * 4..i * 4 + 4]
-                        .try_into()
-                        .expect("four-byte float"),
-                )
-            })
-        })
-        .collect()
+fn decode_values<T: Readable>(bytes: &[u8], width: usize) -> Result<Vec<T>, DecodeError> {
+    let mut cursor = Cursor::new(bytes);
+    let values = (0..bytes.len() / width)
+        .map(|_| cursor.read())
+        .collect::<Result<Vec<_>, _>>()?;
+    cursor.finish()?;
+    Ok(values)
 }
 
 fn write_count(bytes: &mut Encoder<'_>, count: usize) -> Result<(), EncodeError> {
@@ -595,17 +583,14 @@ impl Decodable for Geoset {
         let mut cursor = source.slice_u32_sized()?;
 
         let value = {
-            let vertices = decode_vectors::<3>(section(&mut cursor, *b"VRTX", 12)?);
-            let normals = decode_vectors::<3>(section(&mut cursor, *b"NRMS", 12)?);
-            let primitive_types = decode_words(section(&mut cursor, *b"PTYP", 4)?);
-            let primitive_counts = decode_words(section(&mut cursor, *b"PCNT", 4)?);
-            let faces = section(&mut cursor, *b"PVTX", 2)?
-                .chunks_exact(2)
-                .map(|bytes| u16::from_le_bytes(bytes.try_into().expect("two-byte face index")))
-                .collect();
+            let vertices = decode_values::<[f32; 3]>(section(&mut cursor, *b"VRTX", 12)?, 12)?;
+            let normals = decode_values::<[f32; 3]>(section(&mut cursor, *b"NRMS", 12)?, 12)?;
+            let primitive_types = decode_values::<u32>(section(&mut cursor, *b"PTYP", 4)?, 4)?;
+            let primitive_counts = decode_values::<u32>(section(&mut cursor, *b"PCNT", 4)?, 4)?;
+            let faces = decode_values::<u16>(section(&mut cursor, *b"PVTX", 2)?, 2)?;
             let vertex_groups = section(&mut cursor, *b"GNDX", 1)?.to_vec();
-            let matrix_group_sizes = decode_words(section(&mut cursor, *b"MTGC", 4)?);
-            let matrix_indices = decode_words(section(&mut cursor, *b"MATS", 4)?);
+            let matrix_group_sizes = decode_values::<u32>(section(&mut cursor, *b"MTGC", 4)?, 4)?;
+            let matrix_indices = decode_values::<u32>(section(&mut cursor, *b"MATS", 4)?, 4)?;
             let material_id = cursor.read()?;
             let selection_group = cursor.read()?;
             let unselectable_raw = cursor.read()?;
@@ -639,9 +624,9 @@ impl Decodable for Geoset {
                                 .iter()
                                 .any(|part| matches!(part, GeosetExtraSection::Tangents(_))) =>
                         {
-                            extensions.push(GeosetExtraSection::Tangents(decode_vectors::<4>(
-                                section(&mut cursor, *b"TANG", 16)?,
-                            )));
+                            extensions.push(GeosetExtraSection::Tangents(
+                                decode_values::<[f32; 4]>(section(&mut cursor, *b"TANG", 16)?, 16)?,
+                            ));
                         }
                         b"SKIN"
                             if !extensions
@@ -679,7 +664,10 @@ impl Decodable for Geoset {
             let uv_count = cursor.read::<u32>()? as usize;
             let mut uv_sets = Vec::new();
             for _ in 0..uv_count {
-                uv_sets.push(decode_vectors::<2>(section(&mut cursor, *b"UVBS", 8)?));
+                uv_sets.push(decode_values::<[f32; 2]>(
+                    section(&mut cursor, *b"UVBS", 8)?,
+                    8,
+                )?);
             }
             Ok(Self {
                 version,
