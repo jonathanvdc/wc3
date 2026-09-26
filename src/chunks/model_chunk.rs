@@ -1,15 +1,16 @@
 //! Decoded, unknown, and malformed model chunks.
+use crate::EncodeError;
 use crate::Encoder;
 use crate::{Tag, Version};
 
 use super::*;
-use crate::{Chunk, Cursor, Error, KnownChunk, RawChunk};
+use crate::{Chunk, Cursor, DecodeError, KnownChunk, RawChunk};
 
 /// A known chunk that could not be decoded. Its original bytes remain intact.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MalformedChunk {
     pub(crate) raw: RawChunk,
-    pub(crate) error: Error,
+    pub(crate) error: DecodeError,
 }
 
 impl Chunk for MalformedChunk {
@@ -17,7 +18,7 @@ impl Chunk for MalformedChunk {
         self.raw.tag
     }
 
-    fn encode_payload_to(&self, output: &mut Encoder<'_>) -> Result<(), Error> {
+    fn encode_payload_to(&self, output: &mut Encoder<'_>) -> Result<(), EncodeError> {
         self.raw.encode_payload_to(output)
     }
 }
@@ -26,7 +27,7 @@ impl MalformedChunk {
     pub fn raw(&self) -> &RawChunk {
         &self.raw
     }
-    pub fn error(&self) -> &Error {
+    pub fn error(&self) -> &DecodeError {
         &self.error
     }
 }
@@ -74,7 +75,7 @@ macro_rules! model_chunks {
 
         impl Chunk for ModelChunk {
             fn tag(&self) -> Tag { ModelChunk::tag(self) }
-            fn encode_payload_to(&self, output: &mut Encoder<'_>) -> Result<(), Error> {
+            fn encode_payload_to(&self, output: &mut Encoder<'_>) -> Result<(), EncodeError> {
                 match self {
                     $( Self::$variant(value) => value.encode_payload_to(output), )*
                     Self::Unknown(raw) => raw.encode_payload_to(output),
@@ -88,7 +89,7 @@ macro_rules! model_chunks {
                 tag: Tag,
                 payload: &mut Cursor<'_>,
                 version: Version,
-            ) -> Result<Option<Self>, Error> {
+            ) -> Result<Option<Self>, DecodeError> {
                 let mut cursor = *payload;
                 let decoded = match tag {
                     $( <$chunk>::TAG => <$chunk>::decode_payload(&mut cursor, version).map(Self::from), )*

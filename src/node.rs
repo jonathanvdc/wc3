@@ -1,4 +1,5 @@
 //! Shared node headers used by bones and helpers.
+use crate::EncodeError;
 use crate::Encoder;
 use crate::Tag;
 use crate::ValueError;
@@ -8,7 +9,7 @@ use crate::{Decodable, Encodable};
 use std::borrow::Cow;
 
 use crate::utils::field;
-use crate::{AnimationTrack, Error, Model};
+use crate::{AnimationTrack, DecodeError, Model};
 
 const NAME_SIZE: usize = 80;
 
@@ -205,7 +206,7 @@ impl Model {
 }
 
 impl Decodable for Node {
-    fn decode_one(source: &mut Cursor<'_>, _version: u32) -> Result<Self, Error> {
+    fn decode_one(source: &mut Cursor<'_>, _version: u32) -> Result<Self, DecodeError> {
         let mut cursor = source.slice_u32_sized()?;
         let name = cursor
             .read_exact(NAME_SIZE)?
@@ -219,7 +220,7 @@ impl Decodable for Node {
             let offset = cursor.absolute_position();
             let track = AnimationTrack::decode_one(&mut cursor, 0)?;
             if !matches!(&track.tag, b"KGTR" | b"KGRT" | b"KGSC") {
-                return Err(Error::MalformedRecord {
+                return Err(DecodeError::MalformedRecord {
                     tag: Self::TAG,
                     offset,
                 });
@@ -239,7 +240,7 @@ impl Decodable for Node {
 }
 
 impl Encodable for Node {
-    fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), Error> {
+    fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), EncodeError> {
         let marker = bytes.begin_sized();
         bytes.write_bytes(&self.name);
         bytes.write(self.object_id);
@@ -254,7 +255,7 @@ impl Encodable for Node {
 }
 
 impl Decodable for Bone {
-    fn decode_one(cursor: &mut Cursor<'_>, _version: u32) -> Result<Self, Error> {
+    fn decode_one(cursor: &mut Cursor<'_>, _version: u32) -> Result<Self, DecodeError> {
         let node = Node::decode_one(cursor, 0)?;
         let geoset_id = cursor.read()?;
         let geoset_animation_id = cursor.read()?;
@@ -267,7 +268,7 @@ impl Decodable for Bone {
 }
 
 impl Encodable for Bone {
-    fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), Error> {
+    fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), EncodeError> {
         self.node.encode_to(bytes)?;
         bytes.write(self.geoset_id);
         bytes.write(self.geoset_animation_id);

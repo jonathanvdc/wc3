@@ -1,10 +1,11 @@
 //! The complete pivot-points chunk.
+use crate::EncodeError;
 use crate::Encoder;
 use crate::{Tag, Vec3};
 
 use super::checked_chunk_size;
 use crate::Cursor;
-use crate::{Chunk, Error, KnownChunk};
+use crate::{Chunk, DecodeError, KnownChunk};
 
 /// The complete `PIVT` chunk.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -17,7 +18,7 @@ impl Chunk for PivotPointsChunk {
         Self::TAG
     }
 
-    fn encode_payload_to(&self, bytes: &mut Encoder<'_>) -> Result<(), Error> {
+    fn encode_payload_to(&self, bytes: &mut Encoder<'_>) -> Result<(), EncodeError> {
         checked_chunk_size(self.points.len(), 12, Self::TAG)?;
 
         bytes.write(self.points.as_slice());
@@ -26,10 +27,10 @@ impl Chunk for PivotPointsChunk {
 }
 
 impl KnownChunk for PivotPointsChunk {
-    fn decode_payload(cursor: &mut Cursor<'_>, _version: u32) -> Result<Self, Error> {
+    fn decode_payload(cursor: &mut Cursor<'_>, _version: u32) -> Result<Self, DecodeError> {
         let size = cursor.remaining().len();
         if size % 12 != 0 {
-            return Err(Error::MalformedChunk {
+            return Err(DecodeError::MalformedChunk {
                 tag: Self::TAG,
                 size,
                 expected: 12,

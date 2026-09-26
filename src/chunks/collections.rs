@@ -1,4 +1,5 @@
 //! Complete chunks containing a sequence of records.
+use crate::EncodeError;
 use crate::Encoder;
 use crate::{Tag, Version};
 
@@ -7,7 +8,7 @@ use crate::{
     Material, Node, ParticleEmitter, ParticleEmitter2, PopcornEmitter, RibbonEmitter, Sequence,
     Texture, TextureAnimation,
 };
-use crate::{Chunk, Cursor, Decodable, Encodable, Error, KnownChunk, Record};
+use crate::{Chunk, Cursor, Decodable, DecodeError, Encodable, KnownChunk, Record};
 
 /// A complete chunk made of consecutive records of one type.
 pub trait CollectionChunk: Sized {
@@ -27,13 +28,13 @@ pub trait CollectionChunk: Sized {
 fn decode_records<C: CollectionChunk>(
     cursor: &mut Cursor<'_>,
     version: Version,
-) -> Result<C, Error> {
+) -> Result<C, DecodeError> {
     let mut records = Vec::new();
     while !cursor.remaining().is_empty() {
         let start = cursor.position();
         let record = C::Item::decode_one(cursor, version)?;
         if cursor.position() <= start {
-            return Err(Error::MalformedRecord {
+            return Err(DecodeError::MalformedRecord {
                 tag: C::tag(),
                 offset: start,
             });
@@ -43,12 +44,15 @@ fn decode_records<C: CollectionChunk>(
     Ok(C::from_records(records))
 }
 
-fn encode_records<C: CollectionChunk>(chunk: &C, bytes: &mut Encoder<'_>) -> Result<(), Error> {
+fn encode_records<C: CollectionChunk>(
+    chunk: &C,
+    bytes: &mut Encoder<'_>,
+) -> Result<(), EncodeError> {
     let start = bytes.position();
     for record in chunk.records() {
         record.encode_to(bytes)?;
         if bytes.position() - start > u32::MAX as usize {
-            return Err(Error::ChunkTooLarge {
+            return Err(EncodeError::ChunkTooLarge {
                 tag: C::tag(),
                 size: bytes.position() - start,
             });
@@ -91,7 +95,7 @@ macro_rules! record_collection {
                 Self::TAG
             }
 
-            fn encode_payload_to(&self, bytes: &mut Encoder<'_>) -> Result<(), Error> {
+            fn encode_payload_to(&self, bytes: &mut Encoder<'_>) -> Result<(), EncodeError> {
                 encode_records(self, bytes)
             }
         }
@@ -99,7 +103,10 @@ macro_rules! record_collection {
         impl KnownChunk for $name {
             const TAG: Tag = <$item>::TAG;
 
-            fn decode_payload(cursor: &mut Cursor<'_>, version: Version) -> Result<Self, Error> {
+            fn decode_payload(
+                cursor: &mut Cursor<'_>,
+                version: Version,
+            ) -> Result<Self, DecodeError> {
                 decode_records(cursor, version)
             }
         }

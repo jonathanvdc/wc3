@@ -1,11 +1,12 @@
 //! Box and sphere collision shapes in `CLID` chunks.
+use crate::EncodeError;
 use crate::Encoder;
 use crate::{Tag, Vec3};
 
 use crate::cursor::Cursor;
 use crate::CollisionShapesChunk;
 use crate::{Decodable, Encodable};
-use crate::{Error, Model, Node};
+use crate::{DecodeError, Model, Node};
 
 /// Warcraft III collision primitive type.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -138,7 +139,7 @@ impl Model {
 }
 
 impl Decodable for CollisionShape {
-    fn decode_one(cursor: &mut Cursor<'_>, _version: u32) -> Result<Self, Error> {
+    fn decode_one(cursor: &mut Cursor<'_>, _version: u32) -> Result<Self, DecodeError> {
         let node = Node::decode_one(cursor, 0)?;
         let kind_offset = cursor.absolute_position();
         let kind = cursor.read()?;
@@ -148,7 +149,7 @@ impl Decodable for CollisionShape {
             2 => CollisionGeometry::Sphere(cursor.read()?, cursor.read()?),
             3 => CollisionGeometry::Cylinder([cursor.read()?, cursor.read()?], cursor.read()?),
             _ => {
-                return Err(Error::MalformedRecord {
+                return Err(DecodeError::MalformedRecord {
                     tag: Self::TAG,
                     offset: kind_offset,
                 })
@@ -159,7 +160,7 @@ impl Decodable for CollisionShape {
 }
 
 impl Encodable for CollisionShape {
-    fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), Error> {
+    fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), EncodeError> {
         self.node.encode_to(bytes)?;
         let kind = match self.geometry {
             CollisionGeometry::Box(_) => 0u32,

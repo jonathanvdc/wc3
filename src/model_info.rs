@@ -1,4 +1,5 @@
 //! Fixed-size `MODL` model information.
+use crate::EncodeError;
 use crate::Encoder;
 use crate::ValueError;
 use crate::{Tag, Vec3};
@@ -8,7 +9,7 @@ use crate::{Decodable, Encodable};
 use std::borrow::Cow;
 
 use crate::utils::field;
-use crate::{Error, Model};
+use crate::{DecodeError, Model};
 
 const SIZE: usize = 372;
 const NAME_SIZE: usize = 336;
@@ -120,10 +121,10 @@ impl Model {
 }
 
 impl Decodable for ModelInfo {
-    fn decode_one(cursor: &mut Cursor<'_>, _version: u32) -> Result<Self, Error> {
+    fn decode_one(cursor: &mut Cursor<'_>, _version: u32) -> Result<Self, DecodeError> {
         let size = cursor.remaining().len();
         if size < SIZE {
-            return Err(Error::MalformedChunk {
+            return Err(DecodeError::MalformedChunk {
                 tag: Self::TAG,
                 size,
                 expected: SIZE,
@@ -150,7 +151,7 @@ impl Decodable for ModelInfo {
 }
 
 impl Encodable for ModelInfo {
-    fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), Error> {
+    fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), EncodeError> {
         bytes.write_bytes(&self.name);
         bytes.write_bytes(&self.reserved);
         bytes.write(self.bounds_radius);

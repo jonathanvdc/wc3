@@ -1,9 +1,10 @@
 //! Keyframe tracks for node translation, rotation, and scaling.
+use crate::EncodeError;
 use crate::Encoder;
 use crate::Tag;
 
 use crate::Cursor;
-use crate::Error;
+use crate::DecodeError;
 use crate::{Decodable, Encodable};
 
 /// Binary value type stored in a keyframe track.
@@ -73,23 +74,23 @@ impl AnimationTrack {
     }
 
     /// Parses one known track and returns the number of bytes consumed.
-    pub(crate) fn parse(data: &[u8], offset: usize) -> Result<(Self, usize), Error> {
+    pub(crate) fn parse(data: &[u8], offset: usize) -> Result<(Self, usize), DecodeError> {
         let tag: Tag = data
             .get(offset..offset.saturating_add(4))
-            .ok_or(Error::MalformedRecord {
+            .ok_or(DecodeError::MalformedRecord {
                 tag: *b"KGTR",
                 offset,
             })?
             .try_into()
             .expect("four-byte tag");
-        let components = components(tag).ok_or(Error::MalformedRecord { tag, offset })?;
+        let components = components(tag).ok_or(DecodeError::MalformedRecord { tag, offset })?;
         let header = data
             .get(offset + 4..offset.saturating_add(16))
-            .ok_or(Error::MalformedRecord { tag, offset })?;
+            .ok_or(DecodeError::MalformedRecord { tag, offset })?;
         let count = u32::from_le_bytes(header[..4].try_into().expect("four-byte count")) as usize;
         let interpolation = u32::from_le_bytes(header[4..8].try_into().expect("four-byte field"));
         if interpolation > 3 {
-            return Err(Error::MalformedRecord { tag, offset });
+            return Err(DecodeError::MalformedRecord { tag, offset });
         }
         let global_sequence_id =
             u32::from_le_bytes(header[8..12].try_into().expect("four-byte field"));
@@ -98,15 +99,15 @@ impl AnimationTrack {
             .checked_mul(vector_count)
             .and_then(|n| n.checked_mul(4))
             .and_then(|n| n.checked_add(4))
-            .ok_or(Error::MalformedRecord { tag, offset })?;
+            .ok_or(DecodeError::MalformedRecord { tag, offset })?;
         let body_size = count
             .checked_mul(key_size)
-            .ok_or(Error::MalformedRecord { tag, offset })?;
+            .ok_or(DecodeError::MalformedRecord { tag, offset })?;
         let end = offset
             .checked_add(16)
             .and_then(|n| n.checked_add(body_size))
             .filter(|&end| end <= data.len())
-            .ok_or(Error::MalformedRecord { tag, offset })?;
+            .ok_or(DecodeError::MalformedRecord { tag, offset })?;
         let mut cursor = offset + 16;
         let mut keyframes = Vec::with_capacity(count);
         while cursor < end {
@@ -161,7 +162,7 @@ fn components(tag: Tag) -> Option<usize> {
 }
 
 impl Decodable for AnimationTrack {
-    fn decode_one(cursor: &mut Cursor<'_>, _version: u32) -> Result<Self, Error> {
+    fn decode_one(cursor: &mut Cursor<'_>, _version: u32) -> Result<Self, DecodeError> {
         let (track, consumed) = Self::parse(cursor.remaining(), 0)?;
         cursor.read_exact(consumed)?;
         Ok(track)
@@ -169,13 +170,13 @@ impl Decodable for AnimationTrack {
 }
 
 impl Encodable for AnimationTrack {
-    fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), Error> {
-        let components = components(self.tag).ok_or(Error::MalformedRecord {
+    fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), EncodeError> {
+        let components = components(self.tag).ok_or(EncodeError::MalformedRecord {
             tag: self.tag,
             offset: 0,
         })?;
         if self.interpolation > 3 || self.keyframes.len() > u32::MAX as usize {
-            return Err(Error::MalformedRecord {
+            return Err(EncodeError::MalformedRecord {
                 tag: self.tag,
                 offset: 0,
             });
@@ -198,7 +199,7 @@ impl Encodable for AnimationTrack {
                     .as_ref()
                     .is_some_and(|v| v.len() != components)
             {
-                return Err(Error::MalformedRecord {
+                return Err(EncodeError::MalformedRecord {
                     tag: self.tag,
                     offset: index,
                 });

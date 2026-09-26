@@ -1,9 +1,10 @@
 //! The complete version chunk.
+use crate::EncodeError;
 use crate::Encoder;
 use crate::{Tag, Version};
 
 use crate::Cursor;
-use crate::{Chunk, Error, KnownChunk};
+use crate::{Chunk, DecodeError, KnownChunk};
 
 /// A complete `VERS` chunk, including bytes after the version number.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -26,15 +27,15 @@ impl Chunk for VersionChunk {
         Self::TAG
     }
 
-    fn encode_payload_to(&self, bytes: &mut Encoder<'_>) -> Result<(), Error> {
+    fn encode_payload_to(&self, bytes: &mut Encoder<'_>) -> Result<(), EncodeError> {
         let size = 4usize
             .checked_add(self.extension.len())
-            .ok_or(Error::ChunkTooLarge {
+            .ok_or(EncodeError::ChunkTooLarge {
                 tag: Self::TAG,
                 size: usize::MAX,
             })?;
         if size > u32::MAX as usize {
-            return Err(Error::ChunkTooLarge {
+            return Err(EncodeError::ChunkTooLarge {
                 tag: Self::TAG,
                 size,
             });
@@ -47,8 +48,10 @@ impl Chunk for VersionChunk {
 }
 
 impl KnownChunk for VersionChunk {
-    fn decode_payload(cursor: &mut Cursor<'_>, _version: u32) -> Result<Self, Error> {
-        let version = cursor.read().map_err(|_| Error::InvalidVersionChunk)?;
+    fn decode_payload(cursor: &mut Cursor<'_>, _version: u32) -> Result<Self, DecodeError> {
+        let version = cursor
+            .read()
+            .map_err(|_| DecodeError::InvalidVersionChunk)?;
         let extension = cursor.remaining().to_vec();
         cursor.read_exact(extension.len())?;
         Ok(Self { version, extension })
@@ -75,7 +78,7 @@ mod version_chunk_tests {
                 &[b"VERS".as_slice(), &3u32.to_le_bytes(), &[1, 2, 3]].concat(),
                 800
             ),
-            Err(Error::InvalidVersionChunk)
+            Err(DecodeError::InvalidVersionChunk)
         );
     }
 }

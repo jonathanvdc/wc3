@@ -1,4 +1,5 @@
 //! Fixed-width texture records in `TEXS` chunks.
+use crate::EncodeError;
 use crate::Encoder;
 use crate::Tag;
 use crate::ValueError;
@@ -8,7 +9,7 @@ use crate::{Decodable, Encodable};
 use std::borrow::Cow;
 
 use crate::utils::field;
-use crate::{Error, Model};
+use crate::{DecodeError, Model};
 
 /// Texture wrapping flags; unknown bits remain available through `bits`.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -122,10 +123,10 @@ impl Model {
 }
 
 impl Decodable for Texture {
-    fn decode_one(cursor: &mut Cursor<'_>, _version: u32) -> Result<Self, Error> {
+    fn decode_one(cursor: &mut Cursor<'_>, _version: u32) -> Result<Self, DecodeError> {
         let size = cursor.remaining().len();
         if size < SIZE {
-            return Err(Error::MalformedChunk {
+            return Err(DecodeError::MalformedChunk {
                 tag: Self::TAG,
                 size,
                 expected: SIZE,
@@ -148,7 +149,7 @@ impl Decodable for Texture {
 }
 
 impl Encodable for Texture {
-    fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), Error> {
+    fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), EncodeError> {
         bytes.write(self.replaceable_id);
         bytes.write_bytes(&self.path);
         bytes.write_bytes(&self.reserved);

@@ -1,6 +1,6 @@
 use wc3_mdx::{Decodable, Encodable};
 use wc3_mdx::{
-    Error, Geoset, Material, Model, ModelChunk, Node, RawChunk, RibbonEmitter, ValueError,
+    DecodeError, Geoset, Material, Model, ModelChunk, Node, RawChunk, RibbonEmitter, ValueError,
 };
 
 #[test]
@@ -51,14 +51,14 @@ fn rejects_short_repeated_version_chunks() {
     bytes.extend_from_slice(&[1, 2]);
     assert!(matches!(
         Model::decode(&bytes, 800),
-        Err(Error::InvalidVersionChunk)
+        Err(DecodeError::InvalidVersionChunk)
     ));
 
     let mut model = Model::new(800);
     model.chunks_mut()[0] = ModelChunk::from_raw(RawChunk::new(*b"VERS", Vec::new()), 800);
     assert_eq!(model.stored_version(), None);
     assert_eq!(model.version(), 800);
-    assert_eq!(model.validate(), Err(Error::InvalidVersionChunk));
+    assert_eq!(model.validate(), Err(DecodeError::InvalidVersionChunk));
     model.set_version(1800);
     assert_eq!(model.version(), 1800);
     assert_eq!(model.chunks().len(), 1);

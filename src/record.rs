@@ -1,16 +1,17 @@
 //! Binary conversion for typed MDX records.
 use crate::model::LATEST_VERSION;
+use crate::EncodeError;
 use crate::Version;
 
-use crate::{Cursor, Encoder, Error};
+use crate::{Cursor, DecodeError, Encoder};
 
 /// A typed MDX record that can be encoded as bytes.
 pub trait Encodable {
     /// Encodes the record to the given output.
-    fn encode_to(&self, output: &mut Encoder<'_>) -> Result<(), Error>;
+    fn encode_to(&self, output: &mut Encoder<'_>) -> Result<(), EncodeError>;
 
     /// Encodes the record to a new byte vector.
-    fn encode(&self) -> Result<Vec<u8>, Error> {
+    fn encode(&self) -> Result<Vec<u8>, EncodeError> {
         let mut output = Vec::new();
         self.encode_to(&mut Encoder::new(&mut output))?;
         Ok(output)
@@ -20,17 +21,17 @@ pub trait Encodable {
 /// A typed MDX record that can be decoded from bytes.
 pub trait Decodable: Sized {
     /// Decodes the record from the given input.
-    fn decode_one(cursor: &mut Cursor<'_>, version: Version) -> Result<Self, Error>;
+    fn decode_one(cursor: &mut Cursor<'_>, version: Version) -> Result<Self, DecodeError>;
 
     /// Decodes the record from the given input, rejecting any trailing bytes.
-    fn decode(bytes: &[u8], version: Version) -> Result<Self, Error> {
+    fn decode(bytes: &[u8], version: Version) -> Result<Self, DecodeError> {
         let mut cursor = Cursor::new(bytes);
         let record = Self::decode_one(&mut cursor, version)?;
         cursor.finish()?;
         Ok(record)
     }
 
-    fn decode_latest(bytes: &[u8]) -> Result<Self, Error> {
+    fn decode_latest(bytes: &[u8]) -> Result<Self, DecodeError> {
         Self::decode(bytes, LATEST_VERSION)
     }
 }
@@ -45,7 +46,7 @@ mod tests {
     use crate::KnownChunk;
     use crate::{
         AttachmentsChunk, BindPose, Bone, BonesChunk, Camera, CamerasChunk, CollisionShapesChunk,
-        Error, EventObjectsChunk, FaceFxChunk, Geoset, GeosetAnimationsChunk, GeosetsChunk,
+        DecodeError, EventObjectsChunk, FaceFxChunk, Geoset, GeosetAnimationsChunk, GeosetsChunk,
         GlobalSequencesChunk, HelpersChunk, LightsChunk, MaterialsChunk, Model, ModelInfoChunk,
         Node, ParticleEmitter, ParticleEmitter2, ParticleEmitters2Chunk, ParticleEmittersChunk,
         PivotPointsChunk, PopcornEmittersChunk, RibbonEmitter, RibbonEmittersChunk, Sequence,
@@ -87,7 +88,7 @@ mod tests {
         assert_eq!(consumed, first.encode().unwrap().len());
         assert_eq!(
             Sequence::decode(&bytes, 800),
-            Err(Error::TrailingRecordBytes {
+            Err(DecodeError::TrailingRecordBytes {
                 consumed,
                 total: bytes.len(),
             })
@@ -103,7 +104,7 @@ mod tests {
         assert_eq!(cursor.position(), first.encode().unwrap().len());
         assert!(matches!(
             Geoset::decode(&bytes, 800),
-            Err(Error::TrailingRecordBytes { .. })
+            Err(DecodeError::TrailingRecordBytes { .. })
         ));
     }
 

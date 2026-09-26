@@ -1,10 +1,11 @@
 //! Event objects stored in `EVTS` chunks.
+use crate::EncodeError;
 use crate::Encoder;
 use crate::Tag;
 
 use crate::{Cursor, EventObjectsChunk};
 use crate::{Decodable, Encodable};
-use crate::{Error, Model, Node};
+use crate::{DecodeError, Model, Node};
 
 const TRACK_TAG: Tag = *b"KEVT";
 
@@ -70,13 +71,13 @@ impl Model {
 }
 
 impl Decodable for EventObject {
-    fn decode_one(cursor: &mut Cursor<'_>, _version: u32) -> Result<Self, Error> {
+    fn decode_one(cursor: &mut Cursor<'_>, _version: u32) -> Result<Self, DecodeError> {
         let mut probe = *cursor;
         let node_size = probe.read::<u32>()? as usize;
         let node = Node::decode(cursor.read_exact(node_size)?, 0)?;
         let offset = cursor.absolute_position();
         if cursor.read_exact(4)? != TRACK_TAG {
-            return Err(Error::MalformedRecord {
+            return Err(DecodeError::MalformedRecord {
                 tag: Self::TAG,
                 offset,
             });
@@ -96,11 +97,11 @@ impl Decodable for EventObject {
 }
 
 impl Encodable for EventObject {
-    fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), Error> {
+    fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), EncodeError> {
         let start = bytes.position();
         self.node.encode_to(bytes)?;
         bytes.write_bytes(&TRACK_TAG);
-        let count = u32::try_from(self.frames.len()).map_err(|_| Error::ChunkTooLarge {
+        let count = u32::try_from(self.frames.len()).map_err(|_| EncodeError::ChunkTooLarge {
             tag: EventObject::TAG,
             size: self.frames.len(),
         })?;
@@ -110,7 +111,7 @@ impl Encodable for EventObject {
             bytes.write(frame);
         }
         if bytes.position() - start > u32::MAX as usize {
-            return Err(Error::ChunkTooLarge {
+            return Err(EncodeError::ChunkTooLarge {
                 tag: EventObject::TAG,
                 size: bytes.position() - start,
             });

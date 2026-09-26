@@ -1,13 +1,13 @@
 //! Checked, bounded reads over immutable bytes.
-use crate::Error;
+use crate::DecodeError;
 
 /// A value that can be read from an MDX byte stream.
 pub trait Readable: Sized {
-    fn read_from(cursor: &mut Cursor<'_>) -> Result<Self, Error>;
+    fn read_from(cursor: &mut Cursor<'_>) -> Result<Self, DecodeError>;
 }
 
 impl Readable for u32 {
-    fn read_from(cursor: &mut Cursor<'_>) -> Result<Self, Error> {
+    fn read_from(cursor: &mut Cursor<'_>) -> Result<Self, DecodeError> {
         Ok(u32::from_le_bytes(
             cursor.read_exact(4)?.try_into().expect("four-byte word"),
         ))
@@ -15,13 +15,13 @@ impl Readable for u32 {
 }
 
 impl Readable for f32 {
-    fn read_from(cursor: &mut Cursor<'_>) -> Result<Self, Error> {
+    fn read_from(cursor: &mut Cursor<'_>) -> Result<Self, DecodeError> {
         Ok(f32::from_bits(cursor.read::<u32>()?))
     }
 }
 
 impl<T: Readable + Copy + Default, const N: usize> Readable for [T; N] {
-    fn read_from(cursor: &mut Cursor<'_>) -> Result<Self, Error> {
+    fn read_from(cursor: &mut Cursor<'_>) -> Result<Self, DecodeError> {
         let mut values = [T::default(); N];
         for value in &mut values {
             *value = cursor.read()?;
@@ -64,34 +64,37 @@ impl<'a> Cursor<'a> {
     }
 
     /// Reads exactly `len` bytes and advances only on success.
-    pub fn read_exact(&mut self, len: usize) -> Result<&'a [u8], Error> {
+    pub fn read_exact(&mut self, len: usize) -> Result<&'a [u8], DecodeError> {
         let start = self.offset;
-        let end = start.checked_add(len).ok_or(Error::UnexpectedEnd {
+        let end = start.checked_add(len).ok_or(DecodeError::UnexpectedEnd {
             offset: self.absolute_position(),
             needed: len,
         })?;
-        let value = self.bytes.get(start..end).ok_or(Error::UnexpectedEnd {
-            offset: self.absolute_position(),
-            needed: len,
-        })?;
+        let value = self
+            .bytes
+            .get(start..end)
+            .ok_or(DecodeError::UnexpectedEnd {
+                offset: self.absolute_position(),
+                needed: len,
+            })?;
         self.offset = end;
         Ok(value)
     }
 
     /// Borrows the next `len` bytes without advancing.
-    pub fn peek_exact(&self, len: usize) -> Result<&'a [u8], Error> {
+    pub fn peek_exact(&self, len: usize) -> Result<&'a [u8], DecodeError> {
         let mut copy = *self;
         copy.read_exact(len)
     }
 
     /// Reads a value from the byte stream.
-    pub fn read<T: Readable>(&mut self) -> Result<T, Error> {
+    pub fn read<T: Readable>(&mut self) -> Result<T, DecodeError> {
         T::read_from(self)
     }
 
     /// Advances this cursor and returns a cursor confined to those bytes.
     /// Copy the parent first if parsing the child may need to be rolled back.
-    pub fn slice(&mut self, len: usize) -> Result<Self, Error> {
+    pub fn slice(&mut self, len: usize) -> Result<Self, DecodeError> {
         let base = self.absolute_position();
         let bytes = self.read_exact(len)?;
         Ok(Self {
@@ -104,25 +107,27 @@ impl<'a> Cursor<'a> {
     /// Reads a little-endian size that includes its own four bytes, then
     /// returns a cursor bounded to the remaining record body.
     /// Leaves the parent in place if the size or body is invalid.
-    pub fn slice_u32_sized(&mut self) -> Result<Self, Error> {
+    pub fn slice_u32_sized(&mut self) -> Result<Self, DecodeError> {
         let mut next = *self;
         let start = next.absolute_position();
         let length = next.read::<u32>()? as usize;
-        let body_len = length.checked_sub(4).ok_or(Error::InvalidRecordLength {
-            offset: start,
-            length,
-        })?;
+        let body_len = length
+            .checked_sub(4)
+            .ok_or(DecodeError::InvalidRecordLength {
+                offset: start,
+                length,
+            })?;
         let body = next.slice(body_len)?;
         *self = next;
         Ok(body)
     }
 
     /// Requires that all bytes in this cursor's slice were consumed.
-    pub fn finish(self) -> Result<(), Error> {
+    pub fn finish(self) -> Result<(), DecodeError> {
         if self.offset == self.bytes.len() {
             Ok(())
         } else {
-            Err(Error::TrailingRecordBytes {
+            Err(DecodeError::TrailingRecordBytes {
                 consumed: self.offset,
                 total: self.bytes.len(),
             })
@@ -158,7 +163,7 @@ mod tests {
         assert_eq!(child.read_exact(2).unwrap(), &[10, 11]);
         assert_eq!(
             child.read_exact(1),
-            Err(Error::UnexpectedEnd {
+            Err(DecodeError::UnexpectedEnd {
                 offset: 2,
                 needed: 1
             })
@@ -173,7 +178,7 @@ mod tests {
         assert_eq!(inner.absolute_position(), 1);
         assert_eq!(
             inner.read_exact(2),
-            Err(Error::UnexpectedEnd {
+            Err(DecodeError::UnexpectedEnd {
                 offset: 1,
                 needed: 2
             })
@@ -181,7 +186,7 @@ mod tests {
         assert_eq!(inner.position(), 0);
         assert_eq!(
             middle.finish(),
-            Err(Error::TrailingRecordBytes {
+            Err(DecodeError::TrailingRecordBytes {
                 consumed: 1,
                 total: 2
             })
@@ -201,7 +206,7 @@ mod tests {
         let mut short = Cursor::new(&[3, 0, 0, 0]);
         assert_eq!(
             short.slice_u32_sized().unwrap_err(),
-            Error::InvalidRecordLength {
+            DecodeError::InvalidRecordLength {
                 offset: 0,
                 length: 3
             }
@@ -211,7 +216,7 @@ mod tests {
         let mut truncated = Cursor::new(&[8, 0, 0, 0, 1]);
         assert_eq!(
             truncated.slice_u32_sized().unwrap_err(),
-            Error::UnexpectedEnd {
+            DecodeError::UnexpectedEnd {
                 offset: 4,
                 needed: 4
             }

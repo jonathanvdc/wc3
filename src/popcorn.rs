@@ -1,4 +1,5 @@
 //! Reforged popcorn particle emitters in `CORN` chunks.
+use crate::EncodeError;
 use crate::Encoder;
 use crate::ValueError;
 use crate::{Color, Tag};
@@ -8,7 +9,7 @@ use crate::{Decodable, Encodable};
 use std::borrow::Cow;
 
 use crate::utils::field;
-use crate::{AnimationTrack, Error, Model, Node};
+use crate::{AnimationTrack, DecodeError, Model, Node};
 
 const PATH_SIZE: usize = 260;
 const FIXED_SIZE: usize = 32 + PATH_SIZE * 2;
@@ -159,7 +160,7 @@ impl Model {
 }
 
 impl Decodable for PopcornEmitter {
-    fn decode_one(source: &mut Cursor<'_>, _version: u32) -> Result<Self, Error> {
+    fn decode_one(source: &mut Cursor<'_>, _version: u32) -> Result<Self, DecodeError> {
         let mut cursor = source.slice_u32_sized()?;
         let node = Node::decode_one(&mut cursor, 0)?;
         let life_span = cursor.read()?;
@@ -181,7 +182,7 @@ impl Decodable for PopcornEmitter {
             let offset = cursor.absolute_position();
             let track = AnimationTrack::decode_one(&mut cursor, 0)?;
             if !is_track_tag(track.tag) {
-                return Err(Error::MalformedRecord {
+                return Err(DecodeError::MalformedRecord {
                     tag: Self::TAG,
                     offset,
                 });
@@ -206,7 +207,7 @@ impl Decodable for PopcornEmitter {
 }
 
 impl Encodable for PopcornEmitter {
-    fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), Error> {
+    fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), EncodeError> {
         let start = bytes.position();
         let marker = bytes.begin_sized();
         self.node.encode_to(bytes)?;
@@ -226,7 +227,7 @@ impl Encodable for PopcornEmitter {
         bytes.write_bytes(&self.visibility_guide);
         for track in &self.tracks {
             if !is_track_tag(track.tag) {
-                return Err(Error::MalformedRecord {
+                return Err(EncodeError::MalformedRecord {
                     tag: PopcornEmitter::TAG,
                     offset: bytes.position() - start,
                 });

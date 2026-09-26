@@ -32,7 +32,7 @@ assert_eq!(info.name(), "Example");
 ```
 
 Constructors and setters that can reject values return `ValueError`. Binary
-decoding, encoding, and model validation currently return `Error`.
+decoding and model validation return `DecodeError`; encoding returns `EncodeError`.
 
 `Model::chunks()` exposes `ModelChunk` variants for known chunk types, plus
 `Unknown` and `Malformed` variants. A malformed chunk retains its original

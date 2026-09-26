@@ -1,4 +1,4 @@
-use wc3_mdx::{AnimationTrack, Encodable, Error, Geoset, Node, ValueError};
+use wc3_mdx::{AnimationTrack, Encodable, EncodeError, Geoset, Node, ValueError};
 
 #[test]
 fn construction_and_mutation_report_value_errors() {
@@ -33,6 +33,6 @@ fn construction_and_mutation_report_value_errors() {
         })
     );
 
-    let encoded: Result<Vec<u8>, Error> = node.encode();
+    let encoded: Result<Vec<u8>, EncodeError> = node.encode();
     assert!(encoded.is_ok());
 }

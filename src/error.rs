@@ -3,9 +3,9 @@ use crate::{Tag, Version};
 
 use std::{error::Error as StdError, fmt};
 
-/// Errors caused by malformed input or a payload too large for the MDX format.
+/// Errors caused by malformed MDX input.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub enum Error {
+pub enum DecodeError {
     /// The input does not begin with `MDLX`.
     InvalidMagic,
     /// A typed chunk decoder encountered another chunk tag.
@@ -16,10 +16,6 @@ pub enum Error {
     TruncatedChunk { tag: Tag, offset: usize, size: u32 },
     /// `VERS` has no four-byte version number.
     InvalidVersionChunk,
-    /// A record belongs to a different MDX version than its destination.
-    VersionMismatch { expected: Version, actual: Version },
-    /// The payload cannot be represented by a 32-bit MDX chunk size.
-    ChunkTooLarge { tag: Tag, size: usize },
     /// A known chunk is too short for its fixed layout.
     MalformedChunk {
         tag: Tag,
@@ -36,7 +32,7 @@ pub enum Error {
     InvalidRecordLength { offset: usize, length: usize },
 }
 
-impl fmt::Display for Error {
+impl fmt::Display for DecodeError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::InvalidMagic => write!(f, "expected MDLX magic"),
@@ -55,15 +51,6 @@ impl fmt::Display for Error {
                 String::from_utf8_lossy(tag)
             ),
             Self::InvalidVersionChunk => write!(f, "VERS chunk has fewer than four bytes"),
-            Self::VersionMismatch { expected, actual } => write!(
-                f,
-                "record version {actual} does not match model version {expected}"
-            ),
-            Self::ChunkTooLarge { tag, size } => write!(
-                f,
-                "{:?} chunk size {size} exceeds u32",
-                String::from_utf8_lossy(tag)
-            ),
             Self::MalformedChunk {
                 tag,
                 size,
@@ -91,7 +78,38 @@ impl fmt::Display for Error {
     }
 }
 
-impl StdError for Error {}
+impl StdError for DecodeError {}
+
+/// Errors caused by values that cannot be written as MDX.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum EncodeError {
+    VersionMismatch { expected: Version, actual: Version },
+    ChunkTooLarge { tag: Tag, size: usize },
+    MalformedRecord { tag: Tag, offset: usize },
+}
+
+impl fmt::Display for EncodeError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::VersionMismatch { expected, actual } => write!(
+                f,
+                "record version {actual} does not match model version {expected}"
+            ),
+            Self::ChunkTooLarge { tag, size } => write!(
+                f,
+                "{:?} chunk size {size} exceeds u32",
+                String::from_utf8_lossy(tag)
+            ),
+            Self::MalformedRecord { tag, offset } => write!(
+                f,
+                "cannot encode {:?} record at byte {offset}",
+                String::from_utf8_lossy(tag)
+            ),
+        }
+    }
+}
+
+impl StdError for EncodeError {}
 
 /// Errors caused by a value supplied to a constructor or setter.
 #[derive(Clone, Debug, Eq, PartialEq)]

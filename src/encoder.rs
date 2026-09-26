@@ -1,5 +1,5 @@
 //! Sequential MDX writing into a caller-owned byte buffer.
-use crate::{Error, Tag};
+use crate::{EncodeError, Tag};
 
 /// Writes little-endian MDX fields into one growing buffer.
 pub struct Encoder<'a> {
@@ -78,14 +78,14 @@ impl<'a> Encoder<'a> {
     }
 
     /// Fills a record size word after its contents have been written.
-    pub fn finish_sized(&mut self, marker: SizeMarker, tag: Tag) -> Result<(), Error> {
+    pub fn finish_sized(&mut self, marker: SizeMarker, tag: Tag) -> Result<(), EncodeError> {
         self.finish_sized_with_flags(marker, tag, 0)
     }
 
     /// Fills a chunk size word with the payload length, excluding the word itself.
-    pub fn finish_payload(&mut self, marker: SizeMarker, tag: Tag) -> Result<(), Error> {
+    pub fn finish_payload(&mut self, marker: SizeMarker, tag: Tag) -> Result<(), EncodeError> {
         let size = self.position() - marker.0 - 4;
-        let size = u32::try_from(size).map_err(|_| Error::ChunkTooLarge { tag, size })?;
+        let size = u32::try_from(size).map_err(|_| EncodeError::ChunkTooLarge { tag, size })?;
         self.bytes[marker.0..marker.0 + 4].copy_from_slice(&size.to_le_bytes());
         Ok(())
     }
@@ -96,9 +96,9 @@ impl<'a> Encoder<'a> {
         marker: SizeMarker,
         tag: Tag,
         flags: u32,
-    ) -> Result<(), Error> {
+    ) -> Result<(), EncodeError> {
         let size = self.position() - marker.0;
-        let size = u32::try_from(size).map_err(|_| Error::ChunkTooLarge { tag, size })?;
+        let size = u32::try_from(size).map_err(|_| EncodeError::ChunkTooLarge { tag, size })?;
         self.bytes[marker.0..marker.0 + 4].copy_from_slice(&(size | flags).to_le_bytes());
         Ok(())
     }

@@ -1,4 +1,5 @@
 //! Typed geoset sections and lossless MDX serialization.
+use crate::EncodeError;
 use crate::Encoder;
 use crate::ValueError;
 use crate::{Tag, Vec3, Version};
@@ -9,7 +10,7 @@ use crate::{Decodable, Encodable};
 use std::borrow::Cow;
 
 use crate::utils::field;
-use crate::{Error, Model};
+use crate::{DecodeError, Model};
 
 /// A geoset's bounding volume, also used for each sequence extent.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -473,27 +474,29 @@ impl Geoset {
     }
 }
 
-fn peek_tag(cursor: &Cursor<'_>) -> Result<Tag, Error> {
+fn peek_tag(cursor: &Cursor<'_>) -> Result<Tag, DecodeError> {
     Ok(cursor.peek_exact(4)?.try_into().expect("four-byte tag"))
 }
 
-fn section<'a>(cursor: &mut Cursor<'a>, tag: Tag, stride: usize) -> Result<&'a [u8], Error> {
+fn section<'a>(cursor: &mut Cursor<'a>, tag: Tag, stride: usize) -> Result<&'a [u8], DecodeError> {
     let offset = cursor.absolute_position();
     if cursor.read_exact(4)? != tag {
-        return Err(Error::MalformedRecord {
+        return Err(DecodeError::MalformedRecord {
             tag: Geoset::TAG,
             offset,
         });
     }
     let count = cursor.read::<u32>()? as usize;
-    let size = count.checked_mul(stride).ok_or(Error::MalformedRecord {
-        tag: Geoset::TAG,
-        offset,
-    })?;
+    let size = count
+        .checked_mul(stride)
+        .ok_or(DecodeError::MalformedRecord {
+            tag: Geoset::TAG,
+            offset,
+        })?;
     cursor.read_exact(size)
 }
 
-fn read_extent(cursor: &mut Cursor<'_>) -> Result<GeosetExtent, Error> {
+fn read_extent(cursor: &mut Cursor<'_>) -> Result<GeosetExtent, DecodeError> {
     Ok(GeosetExtent {
         bounds_radius: cursor.read()?,
         minimum: cursor.read()?,
@@ -523,8 +526,8 @@ fn decode_vectors<const N: usize>(bytes: &[u8]) -> Vec<[f32; N]> {
         .collect()
 }
 
-fn write_count(bytes: &mut Encoder<'_>, count: usize) -> Result<(), Error> {
-    let count = u32::try_from(count).map_err(|_| Error::ChunkTooLarge {
+fn write_count(bytes: &mut Encoder<'_>, count: usize) -> Result<(), EncodeError> {
+    let count = u32::try_from(count).map_err(|_| EncodeError::ChunkTooLarge {
         tag: Geoset::TAG,
         size: count,
     })?;
@@ -532,12 +535,16 @@ fn write_count(bytes: &mut Encoder<'_>, count: usize) -> Result<(), Error> {
     Ok(())
 }
 
-fn write_section_header(bytes: &mut Encoder<'_>, tag: Tag, count: usize) -> Result<(), Error> {
+fn write_section_header(
+    bytes: &mut Encoder<'_>,
+    tag: Tag,
+    count: usize,
+) -> Result<(), EncodeError> {
     bytes.write_bytes(&tag);
     write_count(bytes, count)
 }
 
-fn write_words(bytes: &mut Encoder<'_>, tag: Tag, words: &[u32]) -> Result<(), Error> {
+fn write_words(bytes: &mut Encoder<'_>, tag: Tag, words: &[u32]) -> Result<(), EncodeError> {
     write_section_header(bytes, tag, words.len())?;
     for word in words {
         bytes.write(word);
@@ -549,7 +556,7 @@ fn write_vectors<const N: usize>(
     bytes: &mut Encoder<'_>,
     tag: Tag,
     vectors: &[[f32; N]],
-) -> Result<(), Error> {
+) -> Result<(), EncodeError> {
     write_section_header(bytes, tag, vectors.len())?;
     bytes.write(vectors);
     Ok(())
@@ -584,7 +591,7 @@ impl Model {
 }
 
 impl Decodable for Geoset {
-    fn decode_one(source: &mut Cursor<'_>, version: Version) -> Result<Self, Error> {
+    fn decode_one(source: &mut Cursor<'_>, version: Version) -> Result<Self, DecodeError> {
         let mut cursor = source.slice_u32_sized()?;
 
         let value = {
@@ -655,7 +662,7 @@ impl Decodable for Geoset {
                             });
                         }
                         _ => {
-                            return Err(Error::MalformedRecord {
+                            return Err(DecodeError::MalformedRecord {
                                 tag: Geoset::TAG,
                                 offset,
                             })
@@ -664,7 +671,7 @@ impl Decodable for Geoset {
                 }
             }
             if cursor.read_exact(4)? != b"UVAS" {
-                return Err(Error::MalformedRecord {
+                return Err(DecodeError::MalformedRecord {
                     tag: Geoset::TAG,
                     offset: cursor.absolute_position() - 4,
                 });
@@ -700,7 +707,7 @@ impl Decodable for Geoset {
 }
 
 impl Encodable for Geoset {
-    fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), Error> {
+    fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), EncodeError> {
         let start = bytes.position();
         let marker = bytes.begin_sized();
         write_vectors(bytes, *b"VRTX", &self.vertices)?;
@@ -743,7 +750,7 @@ impl Encodable for Geoset {
                     bytes.write_bytes(weights);
                     if let Some(indices) = bone_indices {
                         if self.version < 1200 || indices.len() != weights.len() {
-                            return Err(Error::MalformedRecord {
+                            return Err(EncodeError::MalformedRecord {
                                 tag: Geoset::TAG,
                                 offset: bytes.position() - start,
                             });
@@ -759,7 +766,7 @@ impl Encodable for Geoset {
             write_vectors(bytes, *b"UVBS", uv_set)?;
         }
         if bytes.position() - start > u32::MAX as usize {
-            return Err(Error::ChunkTooLarge {
+            return Err(EncodeError::ChunkTooLarge {
                 tag: Geoset::TAG,
                 size: bytes.position() - start,
             });

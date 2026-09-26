@@ -1,4 +1,5 @@
 //! Typed camera records in `CAMS` chunks.
+use crate::EncodeError;
 use crate::Encoder;
 use crate::ValueError;
 use crate::{Tag, Vec3, Version};
@@ -8,7 +9,7 @@ use crate::{Decodable, Encodable};
 use std::borrow::Cow;
 
 use crate::utils::field;
-use crate::{AnimationTrack, Error, Model};
+use crate::{AnimationTrack, DecodeError, Model};
 
 const NAME_SIZE: usize = 80;
 const MAX_RECORD_SIZE: usize = 0x00ff_ffff;
@@ -144,14 +145,16 @@ impl Model {
 }
 
 impl Decodable for Camera {
-    fn decode_one(source: &mut Cursor<'_>, _version: u32) -> Result<Self, Error> {
+    fn decode_one(source: &mut Cursor<'_>, _version: u32) -> Result<Self, DecodeError> {
         let start = source.absolute_position();
         let size_word: u32 = source.read()?;
         let length = (size_word & 0x00ff_ffff) as usize;
-        let body_len = length.checked_sub(4).ok_or(Error::InvalidRecordLength {
-            offset: start,
-            length,
-        })?;
+        let body_len = length
+            .checked_sub(4)
+            .ok_or(DecodeError::InvalidRecordLength {
+                offset: start,
+                length,
+            })?;
         let mut cursor = source.slice(body_len)?;
         let name = cursor.read_exact(80)?.try_into().expect("fixed-width name");
         let position = cursor.read()?;
@@ -164,7 +167,7 @@ impl Decodable for Camera {
             let offset = cursor.absolute_position();
             let track = AnimationTrack::decode_one(&mut cursor, 0)?;
             if !is_track(track.tag) {
-                return Err(Error::MalformedRecord {
+                return Err(DecodeError::MalformedRecord {
                     tag: Self::TAG,
                     offset,
                 });
@@ -187,7 +190,7 @@ impl Decodable for Camera {
 }
 
 impl Encodable for Camera {
-    fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), Error> {
+    fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), EncodeError> {
         let start = bytes.position();
         let marker = bytes.begin_sized();
         bytes.write_bytes(&self.name);
@@ -198,7 +201,7 @@ impl Encodable for Camera {
         bytes.write(self.target_position);
         for track in &self.tracks {
             if !is_track(track.tag) {
-                return Err(Error::MalformedRecord {
+                return Err(EncodeError::MalformedRecord {
                     tag: Camera::TAG,
                     offset: bytes.position() - start,
                 });
@@ -206,7 +209,7 @@ impl Encodable for Camera {
             track.encode_to(bytes)?;
         }
         if bytes.position() - start > MAX_RECORD_SIZE {
-            return Err(Error::ChunkTooLarge {
+            return Err(EncodeError::ChunkTooLarge {
                 tag: Camera::TAG,
                 size: bytes.position() - start,
             });

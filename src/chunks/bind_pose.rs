@@ -1,11 +1,12 @@
 //! Reforged bind-pose matrices in `BPOS` chunks.
+use crate::EncodeError;
 use crate::Encoder;
 use crate::Tag;
 use std::array;
 
 use crate::Chunk;
 use crate::Cursor;
-use crate::{Error, KnownChunk, Model};
+use crate::{DecodeError, KnownChunk, Model};
 
 const MATRIX_SIZE: usize = 48;
 
@@ -77,13 +78,13 @@ impl Chunk for BindPose {
         Self::TAG
     }
 
-    fn encode_payload_to(&self, bytes: &mut Encoder<'_>) -> Result<(), Error> {
+    fn encode_payload_to(&self, bytes: &mut Encoder<'_>) -> Result<(), EncodeError> {
         self.matrices
             .len()
             .checked_mul(MATRIX_SIZE)
             .and_then(|n| n.checked_add(4))
             .filter(|&size| size <= u32::MAX as usize)
-            .ok_or(Error::ChunkTooLarge {
+            .ok_or(EncodeError::ChunkTooLarge {
                 tag: BindPose::TAG,
                 size: usize::MAX,
             })?;
@@ -95,25 +96,29 @@ impl Chunk for BindPose {
 }
 
 impl KnownChunk for BindPose {
-    fn decode_payload(cursor: &mut Cursor<'_>, _version: u32) -> Result<Self, Error> {
+    fn decode_payload(cursor: &mut Cursor<'_>, _version: u32) -> Result<Self, DecodeError> {
         let size = cursor.remaining().len();
-        let count = cursor.read::<u32>().map_err(|_| Error::MalformedChunk {
-            tag: Self::TAG,
-            size,
-            expected: 4,
-        })? as usize;
+        let count = cursor
+            .read::<u32>()
+            .map_err(|_| DecodeError::MalformedChunk {
+                tag: Self::TAG,
+                size,
+                expected: 4,
+            })? as usize;
         let body_size = count
             .checked_mul(MATRIX_SIZE)
-            .ok_or(Error::MalformedRecord {
+            .ok_or(DecodeError::MalformedRecord {
                 tag: Self::TAG,
                 offset: 0,
             })?;
-        let expected = body_size.checked_add(4).ok_or(Error::MalformedRecord {
-            tag: Self::TAG,
-            offset: 0,
-        })?;
+        let expected = body_size
+            .checked_add(4)
+            .ok_or(DecodeError::MalformedRecord {
+                tag: Self::TAG,
+                offset: 0,
+            })?;
         if size != expected {
-            return Err(Error::MalformedChunk {
+            return Err(DecodeError::MalformedChunk {
                 tag: Self::TAG,
                 size,
                 expected,

@@ -1,7 +1,8 @@
 //! Raw and typed top-level MDX chunks.
+use crate::EncodeError;
 use crate::{Cursor, Decodable, Encodable, Encoder, Tag, Version};
 
-use crate::Error;
+use crate::DecodeError;
 
 mod raw;
 pub use raw::RawChunk;
@@ -26,11 +27,11 @@ pub trait Chunk {
     fn tag(&self) -> Tag;
 
     /// Writes only the contents of the chunk, without its tag or size.
-    fn encode_payload_to(&self, output: &mut Encoder<'_>) -> Result<(), Error>;
+    fn encode_payload_to(&self, output: &mut Encoder<'_>) -> Result<(), EncodeError>;
 }
 
 impl<T: Chunk + ?Sized> Encodable for T {
-    fn encode_to(&self, output: &mut Encoder<'_>) -> Result<(), Error> {
+    fn encode_to(&self, output: &mut Encoder<'_>) -> Result<(), EncodeError> {
         let tag = self.tag();
         output.write_bytes(&tag);
         let marker = output.begin_sized();
@@ -45,19 +46,19 @@ pub trait KnownChunk: Chunk + Sized {
     const TAG: Tag;
 
     /// Decodes a bounded chunk payload, without the tag or size.
-    fn decode_payload(cursor: &mut Cursor<'_>, version: Version) -> Result<Self, Error>;
+    fn decode_payload(cursor: &mut Cursor<'_>, version: Version) -> Result<Self, DecodeError>;
 }
 
 impl<T: KnownChunk> Decodable for T {
-    fn decode_one(cursor: &mut Cursor<'_>, version: Version) -> Result<Self, Error> {
+    fn decode_one(cursor: &mut Cursor<'_>, version: Version) -> Result<Self, DecodeError> {
         let mut next = *cursor;
         let offset = next.absolute_position();
         if next.remaining().len() < 8 {
-            return Err(Error::TruncatedHeader { offset });
+            return Err(DecodeError::TruncatedHeader { offset });
         }
         let tag: Tag = next.read_exact(4)?.try_into().expect("four-byte tag");
         if tag != T::TAG {
-            return Err(Error::UnexpectedChunkTag {
+            return Err(DecodeError::UnexpectedChunkTag {
                 expected: T::TAG,
                 actual: tag,
             });
@@ -65,7 +66,7 @@ impl<T: KnownChunk> Decodable for T {
         let size = next.read()?;
         let mut payload = next
             .slice(size as usize)
-            .map_err(|_| Error::TruncatedChunk { tag, offset, size })?;
+            .map_err(|_| DecodeError::TruncatedChunk { tag, offset, size })?;
         let decoded = T::decode_payload(&mut payload, version)?;
         payload.finish()?;
         *cursor = next;
@@ -73,13 +74,13 @@ impl<T: KnownChunk> Decodable for T {
     }
 }
 
-fn checked_chunk_size(count: usize, width: usize, tag: Tag) -> Result<usize, Error> {
-    let size = count.checked_mul(width).ok_or(Error::ChunkTooLarge {
+fn checked_chunk_size(count: usize, width: usize, tag: Tag) -> Result<usize, EncodeError> {
+    let size = count.checked_mul(width).ok_or(EncodeError::ChunkTooLarge {
         tag,
         size: usize::MAX,
     })?;
     if size > u32::MAX as usize {
-        return Err(Error::ChunkTooLarge { tag, size });
+        return Err(EncodeError::ChunkTooLarge { tag, size });
     }
     Ok(size)
 }
@@ -115,7 +116,7 @@ mod tests {
         wrong[..4].copy_from_slice(b"MODL");
         assert_eq!(
             VersionChunk::decode(&wrong, 800),
-            Err(Error::UnexpectedChunkTag {
+            Err(DecodeError::UnexpectedChunkTag {
                 expected: *b"VERS",
                 actual: *b"MODL",
             })
@@ -124,13 +125,13 @@ mod tests {
         short[4..8].copy_from_slice(&5u32.to_le_bytes());
         assert!(matches!(
             VersionChunk::decode(&short, 800),
-            Err(Error::TruncatedChunk { .. })
+            Err(DecodeError::TruncatedChunk { .. })
         ));
         let mut trailing = bytes.clone();
         trailing.push(0);
         assert!(matches!(
             VersionChunk::decode(&trailing, 800),
-            Err(Error::TrailingRecordBytes { .. })
+            Err(DecodeError::TrailingRecordBytes { .. })
         ));
         let joined = [bytes.clone(), bytes].concat();
         let mut cursor = Cursor::new(&joined);

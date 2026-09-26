@@ -1,4 +1,5 @@
 //! Animation sequence records in the `SEQS` chunk.
+use crate::EncodeError;
 use crate::Encoder;
 use crate::ValueError;
 use crate::{Tag, Vec3};
@@ -8,7 +9,7 @@ use crate::{Decodable, Encodable};
 use std::borrow::Cow;
 
 use crate::utils::field;
-use crate::{Error, Model};
+use crate::{DecodeError, Model};
 
 /// Sequence playback flags, with unrecognized bits retained.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -148,10 +149,10 @@ impl Model {
 }
 
 impl Decodable for Sequence {
-    fn decode_one(cursor: &mut Cursor<'_>, _version: u32) -> Result<Self, Error> {
+    fn decode_one(cursor: &mut Cursor<'_>, _version: u32) -> Result<Self, DecodeError> {
         let size = cursor.remaining().len();
         if size < SIZE {
-            return Err(Error::MalformedChunk {
+            return Err(DecodeError::MalformedChunk {
                 tag: Self::TAG,
                 size,
                 expected: SIZE,
@@ -184,7 +185,7 @@ impl Decodable for Sequence {
 }
 
 impl Encodable for Sequence {
-    fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), Error> {
+    fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), EncodeError> {
         bytes.write_bytes(&self.name);
         bytes.write(self.interval);
         bytes.write(self.move_speed);

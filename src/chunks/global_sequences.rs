@@ -1,10 +1,11 @@
 //! The complete global-sequences chunk.
+use crate::EncodeError;
 use crate::Encoder;
 use crate::Tag;
 
 use super::checked_chunk_size;
 use crate::Cursor;
-use crate::{Chunk, Error, KnownChunk};
+use crate::{Chunk, DecodeError, KnownChunk};
 
 /// The complete `GLBS` chunk.
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
@@ -17,7 +18,7 @@ impl Chunk for GlobalSequencesChunk {
         Self::TAG
     }
 
-    fn encode_payload_to(&self, bytes: &mut Encoder<'_>) -> Result<(), Error> {
+    fn encode_payload_to(&self, bytes: &mut Encoder<'_>) -> Result<(), EncodeError> {
         checked_chunk_size(self.durations.len(), 4, Self::TAG)?;
 
         for duration in &self.durations {
@@ -28,10 +29,10 @@ impl Chunk for GlobalSequencesChunk {
 }
 
 impl KnownChunk for GlobalSequencesChunk {
-    fn decode_payload(cursor: &mut Cursor<'_>, _version: u32) -> Result<Self, Error> {
+    fn decode_payload(cursor: &mut Cursor<'_>, _version: u32) -> Result<Self, DecodeError> {
         let size = cursor.remaining().len();
         if size % 4 != 0 {
-            return Err(Error::MalformedChunk {
+            return Err(DecodeError::MalformedChunk {
                 tag: Self::TAG,
                 size,
                 expected: 4,

@@ -1,9 +1,10 @@
 //! A model in the Warcraft III MDX format.
+use crate::EncodeError;
 use crate::Encoder;
 use crate::{Tag, Version};
 
 use crate::Cursor;
-use crate::{CollectionChunk, Decodable, Encodable, Error, ModelChunk, VersionChunk};
+use crate::{CollectionChunk, Decodable, DecodeError, Encodable, ModelChunk, VersionChunk};
 
 /// The four bytes at the start of an MDX file.
 pub const MAGIC: Tag = *b"MDLX";
@@ -143,7 +144,7 @@ impl Model {
 }
 
 impl Decodable for Model {
-    fn decode_one(cursor: &mut Cursor<'_>, default_version: Version) -> Result<Self, Error> {
+    fn decode_one(cursor: &mut Cursor<'_>, default_version: Version) -> Result<Self, DecodeError> {
         let version = scan_version(*cursor)?.unwrap_or(default_version);
 
         let mut parse = *cursor;
@@ -162,7 +163,7 @@ impl Decodable for Model {
 }
 
 impl Encodable for Model {
-    fn encode_to(&self, output: &mut Encoder<'_>) -> Result<(), Error> {
+    fn encode_to(&self, output: &mut Encoder<'_>) -> Result<(), EncodeError> {
         output.write_bytes(&MAGIC);
         for chunk in &self.chunks {
             chunk.encode_to(output)?;
@@ -171,31 +172,33 @@ impl Encodable for Model {
     }
 }
 
-fn scan_version(mut cursor: Cursor<'_>) -> Result<Option<Version>, Error> {
+fn scan_version(mut cursor: Cursor<'_>) -> Result<Option<Version>, DecodeError> {
     if cursor.read_exact(4).ok() != Some(MAGIC.as_slice()) {
-        return Err(Error::InvalidMagic);
+        return Err(DecodeError::InvalidMagic);
     }
     let mut version = None;
     while !cursor.remaining().is_empty() {
         let (tag, _, mut payload) = read_chunk(&mut cursor)?;
         if tag == *b"VERS" {
-            let found = payload.read().map_err(|_| Error::InvalidVersionChunk)?;
+            let found = payload
+                .read()
+                .map_err(|_| DecodeError::InvalidVersionChunk)?;
             version.get_or_insert(found);
         }
     }
     Ok(version)
 }
 
-fn read_chunk<'a>(cursor: &mut Cursor<'a>) -> Result<(Tag, u32, Cursor<'a>), Error> {
+fn read_chunk<'a>(cursor: &mut Cursor<'a>) -> Result<(Tag, u32, Cursor<'a>), DecodeError> {
     let offset = cursor.absolute_position();
     if cursor.remaining().len() < 8 {
-        return Err(Error::TruncatedHeader { offset });
+        return Err(DecodeError::TruncatedHeader { offset });
     }
     let tag = cursor.read_exact(4)?.try_into().expect("four-byte tag");
     let size = cursor.read()?;
     let payload = cursor
         .slice(size as usize)
-        .map_err(|_| Error::TruncatedChunk { tag, offset, size })?;
+        .map_err(|_| DecodeError::TruncatedChunk { tag, offset, size })?;
     Ok((tag, size, payload))
 }
 
@@ -207,18 +210,18 @@ mod tests {
     fn rejects_bad_magic_and_lengths() {
         assert!(matches!(
             Model::decode(b"wrong", 0),
-            Err(Error::InvalidMagic)
+            Err(DecodeError::InvalidMagic)
         ));
         assert!(matches!(
             Model::decode(b"MDLXVE", 0),
-            Err(Error::TruncatedHeader { offset: 4 })
+            Err(DecodeError::TruncatedHeader { offset: 4 })
         ));
         let mut bytes = b"MDLXTEST".to_vec();
         bytes.extend_from_slice(&5u32.to_le_bytes());
         bytes.push(1);
         assert!(matches!(
             Model::decode(&bytes, 0),
-            Err(Error::TruncatedChunk {
+            Err(DecodeError::TruncatedChunk {
                 tag,
                 offset: 4,
                 size: 5,
@@ -254,7 +257,7 @@ mod tests {
         bytes.extend_from_slice(&[1, 2, 3]);
         assert!(matches!(
             Model::decode(&bytes, 1800),
-            Err(Error::InvalidVersionChunk)
+            Err(DecodeError::InvalidVersionChunk)
         ));
     }
 }

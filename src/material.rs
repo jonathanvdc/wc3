@@ -1,4 +1,5 @@
 //! Typed material layers and versioned texture slots.
+use crate::EncodeError;
 use crate::Encoder;
 use crate::ValueError;
 use crate::{Color, Tag, Version};
@@ -8,7 +9,7 @@ use crate::{Decodable, Encodable};
 use std::borrow::Cow;
 
 use crate::utils::field;
-use crate::{AnimationTrack, Error, Model};
+use crate::{AnimationTrack, DecodeError, Model};
 
 const LAYER_TAG: Tag = *b"LAYS";
 
@@ -162,20 +163,21 @@ fn is_layer_track(tag: Tag) -> bool {
     )
 }
 
-fn expect_tag(cursor: &mut Cursor<'_>, expected: Tag, record_tag: Tag) -> Result<(), Error> {
+fn expect_tag(cursor: &mut Cursor<'_>, expected: Tag, record_tag: Tag) -> Result<(), DecodeError> {
     let offset = cursor.absolute_position();
     if cursor.read_exact(4)? == expected {
         Ok(())
     } else {
-        Err(Error::MalformedRecord {
+        Err(DecodeError::MalformedRecord {
             tag: record_tag,
             offset,
         })
     }
 }
 
-fn write_count(bytes: &mut Encoder<'_>, count: usize, tag: Tag) -> Result<(), Error> {
-    let value = u32::try_from(count).map_err(|_| Error::ChunkTooLarge { tag, size: count })?;
+fn write_count(bytes: &mut Encoder<'_>, count: usize, tag: Tag) -> Result<(), EncodeError> {
+    let value =
+        u32::try_from(count).map_err(|_| EncodeError::ChunkTooLarge { tag, size: count })?;
     bytes.write(value);
     Ok(())
 }
@@ -488,7 +490,7 @@ impl Model {
 }
 
 impl Decodable for Material {
-    fn decode_one(source: &mut Cursor<'_>, version: Version) -> Result<Self, Error> {
+    fn decode_one(source: &mut Cursor<'_>, version: Version) -> Result<Self, DecodeError> {
         let mut cursor = source.slice_u32_sized()?;
         let value = {
             let priority_plane = cursor.read()?;
@@ -519,7 +521,7 @@ impl Decodable for Material {
 }
 
 impl Encodable for Material {
-    fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), Error> {
+    fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), EncodeError> {
         let marker = bytes.begin_sized();
         bytes.write(self.priority_plane);
         bytes.write(self.render_mode);
@@ -530,7 +532,7 @@ impl Encodable for Material {
         write_count(bytes, self.layers.len(), Material::TAG)?;
         for layer in &self.layers {
             if layer.version != self.version {
-                return Err(Error::VersionMismatch {
+                return Err(EncodeError::VersionMismatch {
                     expected: self.version,
                     actual: layer.version,
                 });
@@ -543,7 +545,7 @@ impl Encodable for Material {
 }
 
 impl Decodable for Layer {
-    fn decode_one(source: &mut Cursor<'_>, version: Version) -> Result<Self, Error> {
+    fn decode_one(source: &mut Cursor<'_>, version: Version) -> Result<Self, DecodeError> {
         let mut cursor = source.slice_u32_sized()?;
         let value = {
             let filter_mode = cursor.read()?;
@@ -603,7 +605,7 @@ impl Decodable for Layer {
                 let offset = cursor.absolute_position();
                 let track = AnimationTrack::decode_one(&mut cursor, version)?;
                 if !is_layer_track(track.tag) {
-                    return Err(Error::MalformedRecord {
+                    return Err(DecodeError::MalformedRecord {
                         tag: LAYER_TAG,
                         offset,
                     });
@@ -628,7 +630,7 @@ impl Decodable for Layer {
 }
 
 impl Encodable for Layer {
-    fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), Error> {
+    fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), EncodeError> {
         let start = bytes.position();
         let marker = bytes.begin_sized();
         for word in [
@@ -676,7 +678,7 @@ impl Encodable for Layer {
                 bytes.write(slot.texture_type);
                 if let Some(track) = &slot.track {
                     if track.tag != *b"KMTF" {
-                        return Err(Error::MalformedRecord {
+                        return Err(EncodeError::MalformedRecord {
                             tag: LAYER_TAG,
                             offset: bytes.position() - start,
                         });
@@ -687,7 +689,7 @@ impl Encodable for Layer {
         }
         for track in &self.tracks {
             if !is_layer_track(track.tag) {
-                return Err(Error::MalformedRecord {
+                return Err(EncodeError::MalformedRecord {
                     tag: LAYER_TAG,
                     offset: bytes.position() - start,
                 });

@@ -1,9 +1,10 @@
 //! Typed texture animation tracks in `TXAN` chunks.
+use crate::EncodeError;
 use crate::Encoder;
 use crate::Tag;
 use crate::ValueError;
 
-use crate::{AnimationTrack, Error, Model};
+use crate::{AnimationTrack, DecodeError, Model};
 use crate::{Cursor, TextureAnimationsChunk};
 use crate::{Decodable, Encodable};
 
@@ -56,14 +57,14 @@ impl Model {
 }
 
 impl Decodable for TextureAnimation {
-    fn decode_one(source: &mut Cursor<'_>, _version: u32) -> Result<Self, Error> {
+    fn decode_one(source: &mut Cursor<'_>, _version: u32) -> Result<Self, DecodeError> {
         let mut cursor = source.slice_u32_sized()?;
         let mut tracks = Vec::new();
         while !cursor.remaining().is_empty() {
             let offset = cursor.absolute_position();
             let track = AnimationTrack::decode_one(&mut cursor, 0)?;
             if !is_track_tag(track.tag) {
-                return Err(Error::MalformedRecord {
+                return Err(DecodeError::MalformedRecord {
                     tag: Self::TAG,
                     offset,
                 });
@@ -77,12 +78,12 @@ impl Decodable for TextureAnimation {
 }
 
 impl Encodable for TextureAnimation {
-    fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), Error> {
+    fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), EncodeError> {
         let start = bytes.position();
         let marker = bytes.begin_sized();
         for track in &self.tracks {
             if !is_track_tag(track.tag) {
-                return Err(Error::MalformedRecord {
+                return Err(EncodeError::MalformedRecord {
                     tag: TextureAnimation::TAG,
                     offset: bytes.position() - start,
                 });
