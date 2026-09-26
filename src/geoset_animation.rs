@@ -130,7 +130,7 @@ impl Decodable for GeosetAnimation {
         let mut cursor = source.slice_u32_sized()?;
         let alpha = cursor.read()?;
         let raw_flags = cursor.read()?;
-        let color = cursor.read_vector()?;
+        let color = cursor.read()?;
         let geoset_id = cursor.read()?;
         let mut tracks = Vec::new();
         while !cursor.remaining().is_empty() {

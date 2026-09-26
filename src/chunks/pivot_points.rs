@@ -37,7 +37,7 @@ impl KnownChunk for PivotPointsChunk {
         }
         let mut points = Vec::new();
         while !cursor.remaining().is_empty() {
-            points.push(cursor.read_vector()?);
+            points.push(cursor.read()?);
         }
         Ok(Self { points })
     }

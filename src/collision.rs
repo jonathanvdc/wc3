@@ -143,13 +143,10 @@ impl Decodable for CollisionShape {
         let kind_offset = cursor.absolute_position();
         let kind = cursor.read()?;
         let geometry = match kind {
-            0 => CollisionGeometry::Box([cursor.read_vector()?, cursor.read_vector()?]),
-            1 => CollisionGeometry::Plane([cursor.read_vector()?, cursor.read_vector()?]),
-            2 => CollisionGeometry::Sphere(cursor.read_vector()?, cursor.read()?),
-            3 => CollisionGeometry::Cylinder(
-                [cursor.read_vector()?, cursor.read_vector()?],
-                cursor.read()?,
-            ),
+            0 => CollisionGeometry::Box([cursor.read()?, cursor.read()?]),
+            1 => CollisionGeometry::Plane([cursor.read()?, cursor.read()?]),
+            2 => CollisionGeometry::Sphere(cursor.read()?, cursor.read()?),
+            3 => CollisionGeometry::Cylinder([cursor.read()?, cursor.read()?], cursor.read()?),
             _ => {
                 return Err(Error::MalformedRecord {
                     tag: Self::TAG,

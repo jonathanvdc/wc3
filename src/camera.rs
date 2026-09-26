@@ -154,11 +154,11 @@ impl Decodable for Camera {
         })?;
         let mut cursor = source.slice(body_len)?;
         let name = cursor.read_exact(80)?.try_into().expect("fixed-width name");
-        let position = cursor.read_vector()?;
+        let position = cursor.read()?;
         let field_of_view = cursor.read()?;
         let far_clip = cursor.read()?;
         let near_clip = cursor.read()?;
-        let target_position = cursor.read_vector()?;
+        let target_position = cursor.read()?;
         let mut tracks = Vec::new();
         while !cursor.remaining().is_empty() {
             let offset = cursor.absolute_position();

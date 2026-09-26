@@ -496,8 +496,8 @@ fn section<'a>(cursor: &mut Cursor<'a>, tag: Tag, stride: usize) -> Result<&'a [
 fn read_extent(cursor: &mut Cursor<'_>) -> Result<GeosetExtent, Error> {
     Ok(GeosetExtent {
         bounds_radius: cursor.read()?,
-        minimum: cursor.read_vector()?,
-        maximum: cursor.read_vector()?,
+        minimum: cursor.read()?,
+        maximum: cursor.read()?,
     })
 }
 

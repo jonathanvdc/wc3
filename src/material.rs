@@ -555,7 +555,7 @@ impl Decodable for Layer {
             let extensions = if version >= 1100 {
                 let emissive_gain = cursor.read()?;
                 let fresnel = Fresnel {
-                    color: cursor.read_vector()?,
+                    color: cursor.read()?,
                     opacity: cursor.read()?,
                     team_color: cursor.read()?,
                 };
@@ -586,7 +586,7 @@ impl Decodable for Layer {
                 LayerExtensions::V1000 {
                     emissive_gain: cursor.read()?,
                     fresnel: Fresnel {
-                        color: cursor.read_vector()?,
+                        color: cursor.read()?,
                         opacity: cursor.read()?,
                         team_color: cursor.read()?,
                     },

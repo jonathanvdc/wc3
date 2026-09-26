@@ -161,14 +161,14 @@ impl Decodable for Sequence {
             .read_exact(NAME_SIZE)?
             .try_into()
             .expect("fixed-width name");
-        let interval = cursor.read_vector()?;
+        let interval = cursor.read()?;
         let move_speed = cursor.read()?;
         let flags = cursor.read()?;
         let rarity = cursor.read()?;
         let sync_point = cursor.read()?;
         let bounds_radius = cursor.read()?;
-        let minimum_extent = cursor.read_vector()?;
-        let maximum_extent = cursor.read_vector()?;
+        let minimum_extent = cursor.read()?;
+        let maximum_extent = cursor.read()?;
         Ok(Self {
             name,
             interval,

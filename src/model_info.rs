@@ -135,8 +135,8 @@ impl Decodable for ModelInfo {
             .expect("fixed-width name");
         let reserved = cursor.read_exact(4)?.try_into().expect("fixed-width field");
         let bounds_radius = cursor.read()?;
-        let minimum_extent = cursor.read_vector()?;
-        let maximum_extent = cursor.read_vector()?;
+        let minimum_extent = cursor.read()?;
+        let maximum_extent = cursor.read()?;
         let blend_time = cursor.read()?;
         Ok(Self {
             name,

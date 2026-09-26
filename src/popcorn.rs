@@ -165,7 +165,7 @@ impl Decodable for PopcornEmitter {
         let life_span = cursor.read()?;
         let emission_rate = cursor.read()?;
         let speed = cursor.read()?;
-        let color = cursor.read_vector()?;
+        let color = cursor.read()?;
         let alpha = cursor.read()?;
         let replaceable_id = cursor.read()?;
         let path = cursor

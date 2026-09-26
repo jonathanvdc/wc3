@@ -177,9 +177,9 @@ impl Decodable for Light {
         let light_type = cursor.read()?;
         let attenuation_start = cursor.read()?;
         let attenuation_end = cursor.read()?;
-        let color = cursor.read_vector()?;
+        let color = cursor.read()?;
         let intensity = cursor.read()?;
-        let ambient_color = cursor.read_vector()?;
+        let ambient_color = cursor.read()?;
         let ambient_intensity = cursor.read()?;
         let remaining = cursor.remaining();
         let extension_size = EXTENDED_SIZE - FIXED_SIZE;

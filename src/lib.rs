@@ -31,7 +31,7 @@ pub use error::{Error, ValueError};
 mod encoder;
 pub use encoder::{Encoder, Scalar, SizeMarker};
 mod cursor;
-pub use cursor::{Cursor, ReadScalar};
+pub use cursor::{Cursor, Readable};
 mod model;
 pub use model::Model;
 mod record;
