@@ -8,7 +8,7 @@ use crate::{AttachmentsChunk, Cursor};
 use crate::{Decodable, Encodable};
 use std::borrow::Cow;
 
-use crate::utils::field;
+use crate::FixedText;
 use crate::{AnimationTrack, DecodeError, Model, Node};
 
 const PATH_SIZE: usize = 256;
@@ -17,7 +17,7 @@ const PATH_SIZE: usize = 256;
 #[derive(Clone, Debug, PartialEq)]
 pub struct Attachment {
     node: Node,
-    path: [u8; PATH_SIZE],
+    path: FixedText<PATH_SIZE>,
     reserved: u32,
     id: u32,
     visibility_track: Option<AnimationTrack>,
@@ -28,7 +28,7 @@ impl Attachment {
     pub fn new(node: Node, path: &str, id: u32) -> Result<Self, ValueError> {
         let mut attachment = Self {
             node,
-            path: [0; PATH_SIZE],
+            path: FixedText::default(),
             reserved: 0,
             id,
             visibility_track: None,
@@ -49,12 +49,12 @@ impl Attachment {
 
     /// Returns the model path up to the first NUL.
     pub fn path(&self) -> Cow<'_, str> {
-        field::text(&self.path)
+        self.path.text()
     }
 
     /// Sets the model path and clears the old path field.
     pub fn set_path(&mut self, path: &str) -> Result<(), ValueError> {
-        field::set_text(&mut self.path, path)
+        self.path.set_text(path)
     }
 
     /// Returns the attachment ID.
@@ -109,10 +109,7 @@ impl Decodable for Attachment {
         let mut probe = cursor;
         let node_size = probe.read::<u32>()? as usize;
         let node = Node::decode(cursor.read_exact(node_size)?, 0)?;
-        let path = cursor
-            .read_exact(PATH_SIZE)?
-            .try_into()
-            .expect("fixed-width path");
+        let path = cursor.read()?;
         let reserved = cursor.read()?;
         let id = cursor.read()?;
         let visibility_track = if cursor.remaining().is_empty() {
@@ -145,7 +142,7 @@ impl Encodable for Attachment {
         let start = bytes.position();
         let marker = bytes.begin_sized();
         self.node.encode_to(bytes)?;
-        bytes.write_bytes(&self.path);
+        bytes.write(&self.path);
         bytes.write(self.reserved);
         bytes.write(self.id);
         if let Some(track) = &self.visibility_track {

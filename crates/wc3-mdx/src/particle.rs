@@ -8,7 +8,7 @@ use crate::{Cursor, ParticleEmittersChunk};
 use crate::{Decodable, Encodable};
 use std::borrow::Cow;
 
-use crate::utils::field;
+use crate::FixedText;
 use crate::{AnimationTrack, DecodeError, Model, Node};
 
 const PATH_SIZE: usize = 256;
@@ -21,7 +21,7 @@ pub struct ParticleEmitter {
     gravity: f32,
     longitude: f32,
     latitude: f32,
-    path: [u8; PATH_SIZE],
+    path: FixedText<PATH_SIZE>,
     reserved: u32,
     life_span: f32,
     initial_velocity: f32,
@@ -37,7 +37,7 @@ impl ParticleEmitter {
             gravity: 0.0,
             longitude: 0.0,
             latitude: 0.0,
-            path: [0; PATH_SIZE],
+            path: FixedText::default(),
             reserved: 0,
             life_span: 0.0,
             initial_velocity: 0.0,
@@ -108,12 +108,12 @@ impl ParticleEmitter {
 
     /// Returns the emitter resource path up to the first NUL.
     pub fn path(&self) -> Cow<'_, str> {
-        field::text(&self.path)
+        self.path.text()
     }
 
     /// Sets the emitter path while retaining all other fields.
     pub fn set_path(&mut self, path: &str) -> Result<(), ValueError> {
-        field::set_text(&mut self.path, path)
+        self.path.set_text(path)
     }
 
     /// Returns the untyped reserved word following the path.
@@ -168,10 +168,7 @@ impl Decodable for ParticleEmitter {
         let gravity = cursor.read()?;
         let longitude = cursor.read()?;
         let latitude = cursor.read()?;
-        let path = cursor
-            .read_exact(PATH_SIZE)?
-            .try_into()
-            .expect("fixed emitter path");
+        let path = cursor.read()?;
         let reserved = cursor.read()?;
         let life_span = cursor.read()?;
         let initial_velocity = cursor.read()?;
@@ -217,7 +214,7 @@ impl Encodable for ParticleEmitter {
         ] {
             bytes.write(value);
         }
-        bytes.write_bytes(&self.path);
+        bytes.write(&self.path);
         bytes.write(self.reserved);
         bytes.write(self.life_span);
         bytes.write(self.initial_velocity);

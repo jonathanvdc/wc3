@@ -8,7 +8,7 @@ use crate::{Cursor, SequencesChunk};
 use crate::{Decodable, Encodable};
 use std::borrow::Cow;
 
-use crate::utils::field;
+use crate::FixedText;
 use crate::{DecodeError, Model};
 
 /// Sequence playback flags, with unrecognized bits retained.
@@ -40,7 +40,7 @@ const NAME_SIZE: usize = 80;
 /// A fixed-size animation sequence, including reserved fields.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Sequence {
-    name: [u8; NAME_SIZE],
+    name: FixedText<NAME_SIZE>,
     interval: [u32; 2],
     move_speed: f32,
     flags: u32,
@@ -54,7 +54,7 @@ pub struct Sequence {
 impl Sequence {
     pub fn new(name: &str, interval: [u32; 2]) -> Result<Self, ValueError> {
         let mut sequence = Self {
-            name: [0; NAME_SIZE],
+            name: FixedText::default(),
             interval,
             move_speed: 0.0,
             flags: 0,
@@ -69,10 +69,10 @@ impl Sequence {
     }
 
     pub fn name(&self) -> Cow<'_, str> {
-        field::text(&self.name)
+        self.name.text()
     }
     pub fn set_name(&mut self, name: &str) -> Result<(), ValueError> {
-        field::set_text(&mut self.name, name)
+        self.name.set_text(name)
     }
     pub fn interval(&self) -> [u32; 2] {
         self.interval
@@ -153,10 +153,7 @@ impl Decodable for Sequence {
                 expected: SIZE,
             });
         }
-        let name = cursor
-            .read_exact(NAME_SIZE)?
-            .try_into()
-            .expect("fixed-width name");
+        let name = cursor.read()?;
         let interval = cursor.read()?;
         let move_speed = cursor.read()?;
         let flags = cursor.read()?;
@@ -181,7 +178,7 @@ impl Decodable for Sequence {
 
 impl Encodable for Sequence {
     fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), EncodeError> {
-        bytes.write_bytes(&self.name);
+        bytes.write(&self.name);
         bytes.write(self.interval);
         bytes.write(self.move_speed);
         bytes.write(self.flags);

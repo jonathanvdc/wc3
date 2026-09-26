@@ -8,7 +8,7 @@ use crate::{Cursor, MaterialsChunk};
 use crate::{Decodable, Encodable};
 use std::borrow::Cow;
 
-use crate::utils::field;
+use crate::FixedText;
 use crate::{AnimationTrack, DecodeError, Model};
 
 const LAYER_TAG: Tag = *b"LAYS";
@@ -83,7 +83,7 @@ pub struct Material {
     version: Version,
     priority_plane: u32,
     render_mode: u32,
-    shader: Option<[u8; 80]>,
+    shader: Option<FixedText<80>>,
     layers: Vec<Layer>,
 }
 
@@ -189,7 +189,7 @@ impl Material {
             version,
             priority_plane: 0,
             render_mode: 0,
-            shader: has_shader(version).then_some([0; 80]),
+            shader: has_shader(version).then_some(FixedText::default()),
             layers: Vec::new(),
         }
     }
@@ -224,7 +224,7 @@ impl Material {
     }
     /// Returns the shader path in versions 900 through 1099.
     pub fn shader(&self) -> Option<Cow<'_, str>> {
-        self.shader.as_ref().map(|field| field::text(field))
+        self.shader.as_ref().map(FixedText::text)
     }
     /// Changes the shader path and clears unused bytes.
     pub fn set_shader(&mut self, shader: &str) -> Result<(), ValueError> {
@@ -232,7 +232,7 @@ impl Material {
             tag: Material::TAG,
             field: "shader",
         })?;
-        field::set_text(field, shader)
+        field.set_text(shader)
     }
     /// Borrows layers without decoding or allocating.
     pub fn layers(&self) -> &[Layer] {
@@ -496,7 +496,7 @@ impl Decodable for Material {
             let priority_plane = cursor.read()?;
             let render_mode = cursor.read()?;
             let shader = if has_shader(version) {
-                Some(cursor.read_exact(80)?.try_into().expect("shader field"))
+                Some(cursor.read()?)
             } else {
                 None
             };
@@ -526,7 +526,7 @@ impl Encodable for Material {
         bytes.write(self.priority_plane);
         bytes.write(self.render_mode);
         if has_shader(self.version) {
-            bytes.write_bytes(self.shader.as_ref().unwrap_or(&[0; 80]));
+            bytes.write(self.shader.as_ref().expect("versioned shader"));
         }
         bytes.write_bytes(b"LAYS");
         write_count(bytes, self.layers.len(), Material::TAG)?;

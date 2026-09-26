@@ -8,7 +8,7 @@ use crate::{Cursor, ModelInfoChunk};
 use crate::{Decodable, Encodable};
 use std::borrow::Cow;
 
-use crate::utils::field;
+use crate::FixedText;
 use crate::{DecodeError, Model};
 
 const SIZE: usize = 372;
@@ -17,7 +17,7 @@ const NAME_SIZE: usize = 336;
 /// The 372-byte `MODL` record. Reserved bytes remain intact on edit.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ModelInfo {
-    name: [u8; NAME_SIZE],
+    name: FixedText<NAME_SIZE>,
     reserved: Tag,
     bounds_radius: f32,
     minimum_extent: Vec3,
@@ -28,7 +28,7 @@ pub struct ModelInfo {
 impl Default for ModelInfo {
     fn default() -> Self {
         Self {
-            name: [0; NAME_SIZE],
+            name: FixedText::default(),
             reserved: [0; 4],
             bounds_radius: 0.0,
             minimum_extent: [0.0; 3],
@@ -48,12 +48,12 @@ impl ModelInfo {
 
     /// Returns the model name up to the first NUL, replacing invalid UTF-8.
     pub fn name(&self) -> Cow<'_, str> {
-        field::text(&self.name)
+        self.name.text()
     }
 
     /// Sets the model name, clearing the rest of its fixed-width field.
     pub fn set_name(&mut self, name: &str) -> Result<(), ValueError> {
-        field::set_text(&mut self.name, name)
+        self.name.set_text(name)
     }
 
     /// Returns the model's bounding sphere radius.
@@ -122,10 +122,7 @@ impl Decodable for ModelInfo {
                 expected: SIZE,
             });
         }
-        let name = cursor
-            .read_exact(NAME_SIZE)?
-            .try_into()
-            .expect("fixed-width name");
+        let name = cursor.read()?;
         let reserved = cursor.read_exact(4)?.try_into().expect("fixed-width field");
         let bounds_radius = cursor.read()?;
         let minimum_extent = cursor.read()?;
@@ -144,7 +141,7 @@ impl Decodable for ModelInfo {
 
 impl Encodable for ModelInfo {
     fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), EncodeError> {
-        bytes.write_bytes(&self.name);
+        bytes.write(&self.name);
         bytes.write_bytes(&self.reserved);
         bytes.write(self.bounds_radius);
         bytes.write(self.minimum_extent);

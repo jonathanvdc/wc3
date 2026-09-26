@@ -8,7 +8,7 @@ use crate::{Cursor, FaceFxChunk};
 use crate::{Decodable, Encodable};
 use std::borrow::Cow;
 
-use crate::utils::field;
+use crate::FixedText;
 use crate::{DecodeError, Model};
 
 pub(crate) const SIZE: usize = 340;
@@ -18,16 +18,16 @@ const PATH_SIZE: usize = 260;
 /// One fixed-size face-animation name and path pair.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct FaceFx {
-    name: [u8; NAME_SIZE],
-    path: [u8; PATH_SIZE],
+    name: FixedText<NAME_SIZE>,
+    path: FixedText<PATH_SIZE>,
 }
 
 impl FaceFx {
     /// Creates a face-animation reference.
     pub fn new(name: &str, path: &str) -> Result<Self, ValueError> {
         let mut entry = Self {
-            name: [0; NAME_SIZE],
-            path: [0; PATH_SIZE],
+            name: FixedText::default(),
+            path: FixedText::default(),
         };
         entry.set_name(name)?;
         entry.set_path(path)?;
@@ -36,22 +36,22 @@ impl FaceFx {
 
     /// Returns the name up to the first NUL.
     pub fn name(&self) -> Cow<'_, str> {
-        field::text(&self.name)
+        self.name.text()
     }
 
     /// Replaces the name.
     pub fn set_name(&mut self, name: &str) -> Result<(), ValueError> {
-        field::set_text(&mut self.name, name)
+        self.name.set_text(name)
     }
 
     /// Returns the animation resource path up to the first NUL.
     pub fn path(&self) -> Cow<'_, str> {
-        field::text(&self.path)
+        self.path.text()
     }
 
     /// Replaces the animation resource path.
     pub fn set_path(&mut self, path: &str) -> Result<(), ValueError> {
-        field::set_text(&mut self.path, path)
+        self.path.set_text(path)
     }
 }
 
@@ -77,22 +77,16 @@ impl Decodable for FaceFx {
                 expected: SIZE,
             });
         }
-        let name = cursor
-            .read_exact(NAME_SIZE)?
-            .try_into()
-            .expect("fixed-width name");
-        let path = cursor
-            .read_exact(PATH_SIZE)?
-            .try_into()
-            .expect("fixed-width path");
+        let name = cursor.read()?;
+        let path = cursor.read()?;
         Ok(Self { name, path })
     }
 }
 
 impl Encodable for FaceFx {
     fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), EncodeError> {
-        bytes.write_bytes(&self.name);
-        bytes.write_bytes(&self.path);
+        bytes.write(&self.name);
+        bytes.write(&self.path);
         Ok(())
     }
 }

@@ -8,7 +8,7 @@ use crate::{CamerasChunk, Cursor};
 use crate::{Decodable, Encodable};
 use std::borrow::Cow;
 
-use crate::utils::field;
+use crate::FixedText;
 use crate::{AnimationTrack, DecodeError, Model};
 
 const NAME_SIZE: usize = 80;
@@ -17,7 +17,7 @@ const MAX_RECORD_SIZE: usize = 0x00ff_ffff;
 /// A camera with decoded fixed fields and animation tracks.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Camera {
-    name: [u8; NAME_SIZE],
+    name: FixedText<NAME_SIZE>,
     record_flags: u8,
     position: Vec3,
     field_of_view: f32,
@@ -31,7 +31,7 @@ impl Camera {
     /// Creates a camera with zeroed position and target fields.
     pub fn new(name: &str) -> Result<Self, ValueError> {
         let mut camera = Self {
-            name: [0; NAME_SIZE],
+            name: FixedText::default(),
             record_flags: 0,
             position: [0.0; 3],
             field_of_view: 0.0,
@@ -63,11 +63,11 @@ impl Camera {
     }
     /// Returns the name up to its first NUL.
     pub fn name(&self) -> Cow<'_, str> {
-        field::text(&self.name)
+        self.name.text()
     }
     /// Changes the name and clears unused bytes.
     pub fn set_name(&mut self, name: &str) -> Result<(), ValueError> {
-        field::set_text(&mut self.name, name)
+        self.name.set_text(name)
     }
     /// Returns camera XYZ position.
     pub fn position(&self) -> Vec3 {
@@ -156,7 +156,7 @@ impl Decodable for Camera {
                 length,
             })?;
         let mut cursor = source.slice(body_len)?;
-        let name = cursor.read_exact(80)?.try_into().expect("fixed-width name");
+        let name = cursor.read()?;
         let position = cursor.read()?;
         let field_of_view = cursor.read()?;
         let far_clip = cursor.read()?;
@@ -193,7 +193,7 @@ impl Encodable for Camera {
     fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), EncodeError> {
         let start = bytes.position();
         let marker = bytes.begin_sized();
-        bytes.write_bytes(&self.name);
+        bytes.write(&self.name);
         bytes.write(self.position);
         bytes.write(self.field_of_view);
         bytes.write(self.far_clip);

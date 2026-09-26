@@ -8,7 +8,7 @@ use crate::{Cursor, TexturesChunk};
 use crate::{Decodable, Encodable};
 use std::borrow::Cow;
 
-use crate::utils::field;
+use crate::FixedText;
 use crate::{DecodeError, Model};
 
 /// Texture wrapping flags; unknown bits remain available through `bits`.
@@ -42,7 +42,7 @@ const PATH_SIZE: usize = 256;
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Texture {
     replaceable_id: u32,
-    path: [u8; PATH_SIZE],
+    path: FixedText<PATH_SIZE>,
     reserved: Tag,
     flags: u32,
 }
@@ -52,7 +52,7 @@ impl Texture {
     pub fn new(path: &str) -> Result<Self, ValueError> {
         let mut texture = Self {
             replaceable_id: 0,
-            path: [0; PATH_SIZE],
+            path: FixedText::default(),
             reserved: [0; 4],
             flags: 0,
         };
@@ -72,12 +72,12 @@ impl Texture {
 
     /// Returns the path up to the first NUL, replacing invalid UTF-8.
     pub fn path(&self) -> Cow<'_, str> {
-        field::text(&self.path)
+        self.path.text()
     }
 
     /// Sets the path, clearing the unused part of the fixed-width field.
     pub fn set_path(&mut self, path: &str) -> Result<(), ValueError> {
-        field::set_text(&mut self.path, path)
+        self.path.set_text(path)
     }
 
     /// Returns decoded texture wrapping flags.
@@ -125,10 +125,7 @@ impl Decodable for Texture {
             });
         }
         let replaceable_id = cursor.read()?;
-        let path = cursor
-            .read_exact(PATH_SIZE)?
-            .try_into()
-            .expect("fixed-width path");
+        let path = cursor.read()?;
         let reserved = cursor.read_exact(4)?.try_into().expect("fixed-width field");
         let flags = cursor.read()?;
         Ok(Self {
@@ -143,7 +140,7 @@ impl Decodable for Texture {
 impl Encodable for Texture {
     fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), EncodeError> {
         bytes.write(self.replaceable_id);
-        bytes.write_bytes(&self.path);
+        bytes.write(&self.path);
         bytes.write_bytes(&self.reserved);
         bytes.write(self.flags);
         Ok(())

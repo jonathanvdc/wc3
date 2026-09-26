@@ -8,7 +8,7 @@ use crate::{BonesChunk, Cursor, HelpersChunk};
 use crate::{Decodable, Encodable};
 use std::borrow::Cow;
 
-use crate::utils::field;
+use crate::FixedText;
 use crate::{AnimationTrack, DecodeError, Model};
 
 const NAME_SIZE: usize = 80;
@@ -65,7 +65,7 @@ impl NodeFlags {
 /// A shared node header with decoded transform tracks.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Node {
-    name: [u8; NAME_SIZE],
+    name: FixedText<NAME_SIZE>,
     object_id: u32,
     parent_id: u32,
     raw_flags: u32,
@@ -84,7 +84,7 @@ impl Node {
     /// Creates a node without animation tracks.
     pub fn new(name: &str, object_id: u32) -> Result<Self, ValueError> {
         let mut node = Self {
-            name: [0; NAME_SIZE],
+            name: FixedText::default(),
             object_id,
             parent_id: u32::MAX,
             raw_flags: 0,
@@ -96,12 +96,12 @@ impl Node {
 
     /// Returns the name up to the first NUL, replacing invalid UTF-8.
     pub fn name(&self) -> Cow<'_, str> {
-        field::text(&self.name)
+        self.name.text()
     }
 
     /// Sets the node name and clears unused bytes.
     pub fn set_name(&mut self, name: &str) -> Result<(), ValueError> {
-        field::set_text(&mut self.name, name)
+        self.name.set_text(name)
     }
 
     /// Returns the object ID.
@@ -208,10 +208,7 @@ impl Model {
 impl Decodable for Node {
     fn decode_one(source: &mut Cursor<'_>, _version: u32) -> Result<Self, DecodeError> {
         let mut cursor = source.slice_u32_sized()?;
-        let name = cursor
-            .read_exact(NAME_SIZE)?
-            .try_into()
-            .expect("fixed-width node name");
+        let name = cursor.read()?;
         let object_id = cursor.read()?;
         let parent_id = cursor.read()?;
         let raw_flags = cursor.read()?;
@@ -242,7 +239,7 @@ impl Decodable for Node {
 impl Encodable for Node {
     fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), EncodeError> {
         let marker = bytes.begin_sized();
-        bytes.write_bytes(&self.name);
+        bytes.write(&self.name);
         bytes.write(self.object_id);
         bytes.write(self.parent_id);
         bytes.write(self.raw_flags);

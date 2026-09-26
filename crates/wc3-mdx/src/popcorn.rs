@@ -8,11 +8,10 @@ use crate::{Cursor, PopcornEmittersChunk};
 use crate::{Decodable, Encodable};
 use std::borrow::Cow;
 
-use crate::utils::field;
+use crate::FixedText;
 use crate::{AnimationTrack, DecodeError, Model, Node};
 
 const PATH_SIZE: usize = 260;
-const FIXED_SIZE: usize = 32 + PATH_SIZE * 2;
 
 /// A popcorn particle emitter with decoded fields and animation tracks.
 #[derive(Clone, Debug, PartialEq)]
@@ -24,8 +23,8 @@ pub struct PopcornEmitter {
     color: Color,
     alpha: f32,
     replaceable_id: u32,
-    path: [u8; PATH_SIZE],
-    visibility_guide: [u8; PATH_SIZE],
+    path: FixedText<PATH_SIZE>,
+    visibility_guide: FixedText<PATH_SIZE>,
     tracks: Vec<AnimationTrack>,
 }
 
@@ -40,8 +39,8 @@ impl PopcornEmitter {
             color: [0.0; 3],
             alpha: 0.0,
             replaceable_id: 0,
-            path: [0; PATH_SIZE],
-            visibility_guide: [0; PATH_SIZE],
+            path: FixedText::default(),
+            visibility_guide: FixedText::default(),
             tracks: Vec::new(),
         };
         emitter.set_path(path)?;
@@ -107,19 +106,19 @@ impl PopcornEmitter {
     }
     /// Returns the model path.
     pub fn path(&self) -> Cow<'_, str> {
-        field::text(&self.path)
+        self.path.text()
     }
     /// Sets the model path.
     pub fn set_path(&mut self, path: &str) -> Result<(), ValueError> {
-        field::set_text(&mut self.path, path)
+        self.path.set_text(path)
     }
     /// Returns the animation visibility guide path.
     pub fn visibility_guide(&self) -> Cow<'_, str> {
-        field::text(&self.visibility_guide)
+        self.visibility_guide.text()
     }
     /// Sets the animation visibility guide path.
     pub fn set_visibility_guide(&mut self, guide: &str) -> Result<(), ValueError> {
-        field::set_text(&mut self.visibility_guide, guide)
+        self.visibility_guide.set_text(guide)
     }
     /// Borrows decoded animation tracks.
     pub fn tracks(&self) -> &[AnimationTrack] {
@@ -169,14 +168,8 @@ impl Decodable for PopcornEmitter {
         let color = cursor.read()?;
         let alpha = cursor.read()?;
         let replaceable_id = cursor.read()?;
-        let path = cursor
-            .read_exact(PATH_SIZE)?
-            .try_into()
-            .expect("fixed-width path");
-        let visibility_guide = cursor
-            .read_exact(FIXED_SIZE - 32 - PATH_SIZE)?
-            .try_into()
-            .expect("fixed-width guide");
+        let path = cursor.read()?;
+        let visibility_guide = cursor.read()?;
         let mut tracks = Vec::new();
         while !cursor.remaining().is_empty() {
             let offset = cursor.absolute_position();
@@ -223,8 +216,8 @@ impl Encodable for PopcornEmitter {
             bytes.write(value);
         }
         bytes.write(self.replaceable_id);
-        bytes.write_bytes(&self.path);
-        bytes.write_bytes(&self.visibility_guide);
+        bytes.write(&self.path);
+        bytes.write(&self.visibility_guide);
         for track in &self.tracks {
             if !is_track_tag(track.tag) {
                 return Err(EncodeError::MalformedRecord {

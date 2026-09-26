@@ -10,7 +10,7 @@ use crate::GeosetsChunk;
 use crate::{Decodable, Encodable};
 use std::borrow::Cow;
 
-use crate::utils::field;
+use crate::FixedText;
 use crate::{DecodeError, Model};
 
 /// A geoset's bounding volume, also used for each sequence extent.
@@ -47,7 +47,7 @@ enum GeosetExtraSection {
 #[derive(Clone, Debug, PartialEq, Readable, Writable)]
 struct GeosetHeaderExtension {
     level_of_detail: u32,
-    name: [u8; 80],
+    name: FixedText<80>,
 }
 
 /// A geoset as typed sections. Uninterpreted packed skin bytes and the exact
@@ -109,7 +109,7 @@ impl Geoset {
             unselectable_raw: 0,
             header_extension: (version >= 900).then_some(GeosetHeaderExtension {
                 level_of_detail: 0,
-                name: [0; 80],
+                name: FixedText::default(),
             }),
             extent: GeosetExtent::default(),
             sequence_extents: Vec::new(),
@@ -210,7 +210,7 @@ impl Geoset {
     pub fn name(&self) -> Option<Cow<'_, str>> {
         self.header_extension
             .as_ref()
-            .map(|header| field::text(&header.name))
+            .map(|header| header.name.text())
     }
 
     /// Borrows optional Reforged tangent vectors.
@@ -334,8 +334,8 @@ impl Geoset {
                 field: "name",
             });
         }
-        let mut field = [0; 80];
-        field::set_text(&mut field, name)?;
+        let mut field = FixedText::default();
+        field.set_text(name)?;
         self.header_extension
             .as_mut()
             .expect("versioned header")
