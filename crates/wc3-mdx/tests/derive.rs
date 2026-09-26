@@ -1,4 +1,5 @@
-use wc3_mdx::{Cursor, Encoder, Readable, Writable};
+use wc3_mdx::io::{Cursor, Encoder};
+use wc3_mdx::{Readable, Writable};
 
 #[derive(Debug, PartialEq, Readable, Writable)]
 struct Header {

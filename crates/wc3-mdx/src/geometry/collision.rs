@@ -4,8 +4,8 @@ use crate::Encoder;
 use crate::KnownChunk;
 use crate::Vec3;
 
-use crate::cursor::Cursor;
 use crate::CollisionShapesChunk;
+use crate::Cursor;
 use crate::{Decodable, Encodable};
 use crate::{DecodeError, Model, Node};
 

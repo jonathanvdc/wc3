@@ -1,5 +1,8 @@
-use wc3_mdx::{Decodable, Encodable, ModelChunk};
-use wc3_mdx::{Model, RawChunk, Texture, TextureFlags};
+use wc3_mdx::chunks::ModelChunk;
+use wc3_mdx::chunks::RawChunk;
+use wc3_mdx::io::{Decodable, Encodable};
+use wc3_mdx::materials::{Texture, TextureFlags};
+use wc3_mdx::Model;
 
 #[test]
 fn texture_fields_round_trip() {

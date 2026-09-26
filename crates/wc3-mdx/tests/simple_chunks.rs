@@ -1,5 +1,5 @@
+use wc3_mdx::io::{Decodable, Encodable};
 use wc3_mdx::Model;
-use wc3_mdx::{Decodable, Encodable};
 
 #[test]
 fn global_sequences_and_pivots_round_trip() {

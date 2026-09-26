@@ -1,6 +1,9 @@
-use wc3_mdx::{
-    AnimationTrack, Encodable, EncodeError, Geoset, HelpersChunk, KnownChunk, Node, ValueError,
-};
+use wc3_mdx::animation::AnimationTrack;
+use wc3_mdx::chunks::HelpersChunk;
+use wc3_mdx::chunks::KnownChunk;
+use wc3_mdx::geometry::Geoset;
+use wc3_mdx::io::{Encodable, EncodeError, ValueError};
+use wc3_mdx::scene::Node;
 
 #[test]
 fn construction_and_mutation_report_value_errors() {

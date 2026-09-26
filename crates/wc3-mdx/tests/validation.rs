@@ -1,7 +1,11 @@
-use wc3_mdx::{Decodable, Encodable};
-use wc3_mdx::{
-    DecodeError, Geoset, Material, Model, ModelChunk, Node, RawChunk, RibbonEmitter, ValueError,
-};
+use wc3_mdx::chunks::{ModelChunk, RawChunk};
+use wc3_mdx::emitters::RibbonEmitter;
+use wc3_mdx::geometry::Geoset;
+use wc3_mdx::io::{Decodable, Encodable};
+use wc3_mdx::io::{DecodeError, ValueError};
+use wc3_mdx::materials::Material;
+use wc3_mdx::scene::Node;
+use wc3_mdx::Model;
 
 #[test]
 fn validates_synthetic_known_chunks_and_preserves_unknown() {
@@ -72,7 +76,7 @@ fn set_version_replaces_repeated_chunks_and_preserves_extension() {
         unreachable!()
     };
     first.extension = vec![7, 8];
-    model.push(ModelChunk::from(wc3_mdx::VersionChunk::new(900)));
+    model.push(ModelChunk::from(wc3_mdx::chunks::VersionChunk::new(900)));
 
     model.set_version(1800);
 
@@ -87,10 +91,10 @@ fn set_version_replaces_repeated_chunks_and_preserves_extension() {
 #[test]
 fn rejects_layer_shorter_than_its_versioned_header() {
     let mut material = Material::new(1800);
-    let layer = wc3_mdx::Layer::new(800).encode().unwrap();
-    assert!(wc3_mdx::Layer::decode(&layer, 1800).is_err());
+    let layer = wc3_mdx::materials::Layer::new(800).encode().unwrap();
+    assert!(wc3_mdx::materials::Layer::decode(&layer, 1800).is_err());
     assert_eq!(
-        material.set_layers(&[wc3_mdx::Layer::new(800)]),
+        material.set_layers(&[wc3_mdx::materials::Layer::new(800)]),
         Err(ValueError::VersionMismatch {
             expected: 1800,
             actual: 800
@@ -120,7 +124,7 @@ fn rejects_records_from_another_model_version() {
 #[test]
 fn rejects_malformed_repeated_model_info_chunk() {
     let mut model = Model::new(800);
-    model.set_model_info(&wc3_mdx::ModelInfo::new("Good").unwrap());
+    model.set_model_info(&wc3_mdx::scene::ModelInfo::new("Good").unwrap());
     model.push(ModelChunk::from_raw(
         RawChunk::new(*b"MODL", vec![0; 12]),
         800,

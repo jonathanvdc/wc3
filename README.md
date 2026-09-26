@@ -18,7 +18,9 @@ coverage across the entire game collection has not yet been verified.
 ## Rust API
 
 ```rust
-use wc3_mdx::{Record, Model, ModelInfo};
+use wc3_mdx::Model;
+use wc3_mdx::io::Record;
+use wc3_mdx::scene::ModelInfo;
 
 let mut model = Model::new(800);
 model.set_model_info(&ModelInfo::new("Example")?);
@@ -34,7 +36,7 @@ assert_eq!(info.name(), "Example");
 Constructors and setters that can reject values return `ValueError`. Binary
 decoding and model validation return `DecodeError`; encoding returns `EncodeError`.
 
-`Model::chunks()` exposes `ModelChunk` variants for known chunk types, plus
+`Model::chunks()` exposes `chunks::ModelChunk` variants for known chunk types, plus
 `Unknown` and `Malformed` variants. A malformed chunk retains its original
 bytes and decoding error; typed accessors and `validate()` skip it. Editing a
 typed chunk variant writes its new payload when the model is encoded.

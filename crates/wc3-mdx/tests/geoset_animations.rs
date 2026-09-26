@@ -1,5 +1,6 @@
-use wc3_mdx::{AnimationTrack, GeosetAnimation, GeosetAnimationFlags, Keyframe, Model};
-use wc3_mdx::{Decodable, Encodable};
+use wc3_mdx::animation::{AnimationTrack, GeosetAnimation, GeosetAnimationFlags, Keyframe};
+use wc3_mdx::io::{Decodable, Encodable};
+use wc3_mdx::Model;
 
 #[test]
 fn geoset_animation_fields_round_trip() {

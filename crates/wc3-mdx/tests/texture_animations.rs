@@ -1,5 +1,6 @@
-use wc3_mdx::{AnimationTrack, Keyframe, Model, TextureAnimation};
-use wc3_mdx::{Decodable, Encodable};
+use wc3_mdx::animation::{AnimationTrack, Keyframe, TextureAnimation};
+use wc3_mdx::io::{Decodable, Encodable};
+use wc3_mdx::Model;
 
 #[test]
 fn texture_animation_tracks_round_trip() {

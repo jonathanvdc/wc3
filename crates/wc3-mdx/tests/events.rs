@@ -1,5 +1,6 @@
-use wc3_mdx::{Cursor, Decodable, Encodable};
-use wc3_mdx::{EventObject, Model, Node};
+use wc3_mdx::io::{Cursor, Decodable, Encodable};
+use wc3_mdx::scene::{EventObject, Node};
+use wc3_mdx::Model;
 
 #[test]
 fn event_object_round_trip() {

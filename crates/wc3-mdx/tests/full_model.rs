@@ -1,9 +1,11 @@
-use wc3_mdx::{
-    Attachment, BindPose, Bone, Camera, CollisionShape, EventObject, FaceFx, Geoset,
-    GeosetAnimation, Layer, Light, Material, Model, ModelInfo, Node, ParticleEmitter,
-    ParticleEmitter2, PopcornEmitter, RibbonEmitter, Sequence, Texture, TextureAnimation,
-};
-use wc3_mdx::{Decodable, Encodable};
+use wc3_mdx::animation::{GeosetAnimation, Sequence, TextureAnimation};
+use wc3_mdx::chunks::BindPose;
+use wc3_mdx::emitters::{ParticleEmitter, ParticleEmitter2, PopcornEmitter, RibbonEmitter};
+use wc3_mdx::geometry::{CollisionShape, Geoset};
+use wc3_mdx::io::{Decodable, Encodable};
+use wc3_mdx::materials::{Layer, Material, Texture};
+use wc3_mdx::scene::{Attachment, Bone, Camera, EventObject, FaceFx, Light, ModelInfo, Node};
+use wc3_mdx::Model;
 
 fn full_model(version: u32) -> Model {
     let mut model = Model::new(version);

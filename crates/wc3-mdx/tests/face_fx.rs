@@ -1,5 +1,6 @@
-use wc3_mdx::{Decodable, Encodable};
-use wc3_mdx::{FaceFx, Model};
+use wc3_mdx::io::{Decodable, Encodable};
+use wc3_mdx::scene::FaceFx;
+use wc3_mdx::Model;
 
 #[test]
 fn face_animation_references_round_trip() {

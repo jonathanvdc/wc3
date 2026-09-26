@@ -1,5 +1,7 @@
-use wc3_mdx::{AnimationTrack, Keyframe, Light, Model, Node};
-use wc3_mdx::{Decodable, Encodable};
+use wc3_mdx::animation::{AnimationTrack, Keyframe};
+use wc3_mdx::io::{Decodable, Encodable};
+use wc3_mdx::scene::{Light, Node};
+use wc3_mdx::Model;
 
 #[test]
 fn light_fields_round_trip() {

@@ -6,7 +6,7 @@ use crate::ValueError;
 use crate::{Readable, Writable};
 use crate::{Tag, Vec3, Version};
 
-use crate::cursor::Cursor;
+use crate::Cursor;
 use crate::GeosetsChunk;
 use crate::{Decodable, Encodable};
 use std::borrow::Cow;

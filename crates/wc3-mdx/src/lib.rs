@@ -9,7 +9,8 @@
 //! [`Model::chunk_mut`] for other chunks.
 //!
 //! ```
-//! use wc3_mdx::{Model, Encodable};
+//! use wc3_mdx::Model;
+//! use wc3_mdx::io::Encodable;
 //! let mut model = Model::new(800);
 //! // Populate the model
 //! let bytes = model.encode().unwrap();
@@ -27,58 +28,22 @@ pub type Version = u32;
 pub type Tag = [u8; 4];
 
 pub mod chunks;
-pub use chunks::*;
-mod error;
-pub use error::{DecodeError, EncodeError, ValueError};
-mod encoder;
-pub use encoder::{Encoder, SizeMarker, Writable};
-mod cursor;
-pub use cursor::{Cursor, Readable};
+pub(crate) use chunks::*;
+
+pub mod io;
+pub use io::*;
+pub mod animation;
+pub(crate) use animation::*;
+pub mod geometry;
+pub(crate) use geometry::*;
+pub mod materials;
+pub(crate) use materials::*;
+pub mod scene;
+pub(crate) use scene::*;
+pub mod emitters;
+pub(crate) use emitters::*;
+
 pub use wc3_mdx_derive::{Readable, Writable};
-mod fixed_text;
-pub use fixed_text::FixedText;
 mod model;
 pub use model::Model;
-mod record;
-pub use record::{Decodable, Encodable, Record};
-
-mod animation;
-pub use animation::{AnimationTrack, Keyframe, TrackValueKind};
-mod attachment;
-pub use attachment::Attachment;
-mod collision;
-pub use collision::{CollisionKind, CollisionShape};
-mod camera;
-pub use camera::Camera;
-mod event;
-pub use event::EventObject;
-mod face_fx;
-pub use face_fx::FaceFx;
-mod geoset;
-pub use geoset::{Geoset, GeosetExtent};
-mod geoset_animation;
-pub use geoset_animation::{GeosetAnimation, GeosetAnimationFlags};
-mod light;
-pub use light::Light;
-mod material;
-pub use material::{Layer, LayerShadingFlags, LayerTextureSlot, Material, MaterialRenderFlags};
-mod model_info;
-pub use model_info::ModelInfo;
-mod node;
-pub use node::{Bone, Node, NodeFlags};
-mod popcorn;
-pub use popcorn::PopcornEmitter;
-mod particle;
-pub use particle::ParticleEmitter;
-mod particle2;
-pub use particle2::{Particle2Fields, Particle2Frames, ParticleEmitter2};
-mod ribbon;
-pub use ribbon::{RibbonEmitter, RibbonFields};
-mod sequence;
-pub use sequence::{Sequence, SequenceFlags};
-mod simple_chunks;
-mod texture;
-pub use texture::{Texture, TextureFlags};
-mod texture_animation;
-pub use texture_animation::TextureAnimation;
 mod validation;

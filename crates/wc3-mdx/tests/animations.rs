@@ -1,5 +1,6 @@
-use wc3_mdx::{AnimationTrack, Keyframe, Node, TrackValueKind};
-use wc3_mdx::{Decodable, Encodable};
+use wc3_mdx::animation::{AnimationTrack, Keyframe, TrackValueKind};
+use wc3_mdx::io::{Decodable, Encodable};
+use wc3_mdx::scene::Node;
 
 #[test]
 fn node_transform_tracks_round_trip() {

@@ -1,5 +1,7 @@
-use wc3_mdx::{CollisionKind, CollisionShape, Model, Node};
-use wc3_mdx::{Decodable, Encodable};
+use wc3_mdx::geometry::{CollisionKind, CollisionShape};
+use wc3_mdx::io::{Decodable, Encodable};
+use wc3_mdx::scene::Node;
+use wc3_mdx::Model;
 
 #[test]
 fn collision_primitives_round_trip() {

@@ -1,5 +1,7 @@
-use wc3_mdx::{Decodable, Encodable};
-use wc3_mdx::{Model, Node, PopcornEmitter};
+use wc3_mdx::emitters::PopcornEmitter;
+use wc3_mdx::io::{Decodable, Encodable};
+use wc3_mdx::scene::Node;
+use wc3_mdx::Model;
 
 #[test]
 fn popcorn_fixed_fields_round_trip() {

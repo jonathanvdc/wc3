@@ -1,6 +1,7 @@
 //! The complete global-sequences chunk.
 use crate::EncodeError;
 use crate::Encoder;
+use crate::Model;
 use crate::Tag;
 
 use super::checked_chunk_size;
@@ -64,5 +65,19 @@ mod tests {
             original
         );
         assert!(GlobalSequencesChunk::decode(&[1], 800).is_err());
+    }
+}
+
+impl Model {
+    /// Returns durations from every `GLBS` chunk in file order.
+    pub fn global_sequences(&self) -> Vec<u32> {
+        self.collect_chunk_items::<GlobalSequencesChunk, _>(|chunk| &chunk.durations)
+    }
+
+    /// Writes global sequence durations to a `GLBS` chunk.
+    pub fn set_global_sequences(&mut self, durations: &[u32]) {
+        self.replace_chunk(GlobalSequencesChunk {
+            durations: durations.to_vec(),
+        });
     }
 }

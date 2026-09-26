@@ -1,5 +1,8 @@
-use wc3_mdx::{Decodable, Encodable, ModelChunk};
-use wc3_mdx::{Model, ModelInfo, RawChunk};
+use wc3_mdx::chunks::ModelChunk;
+use wc3_mdx::chunks::RawChunk;
+use wc3_mdx::io::{Decodable, Encodable};
+use wc3_mdx::scene::ModelInfo;
+use wc3_mdx::Model;
 
 #[test]
 fn model_info_edit_round_trip() {
@@ -43,7 +46,7 @@ fn model_info_skips_malformed_chunks() {
     assert!(model.model_info().is_none());
 
     let expected = ModelInfo::new("Decoded").unwrap();
-    model.push(ModelChunk::from(wc3_mdx::ModelInfoChunk::new(
+    model.push(ModelChunk::from(wc3_mdx::chunks::ModelInfoChunk::new(
         ModelInfo::new("Duplicate").unwrap(),
         Vec::new(),
     )));

@@ -1,6 +1,7 @@
 //! The complete pivot-points chunk.
 use crate::EncodeError;
 use crate::Encoder;
+use crate::Model;
 use crate::{Tag, Vec3};
 
 use super::checked_chunk_size;
@@ -59,5 +60,19 @@ mod tests {
         let payload = original.encode().unwrap();
         assert_eq!(PivotPointsChunk::decode(&payload, 800).unwrap(), original);
         assert!(PivotPointsChunk::decode(&[1], 800).is_err());
+    }
+}
+
+impl Model {
+    /// Returns XYZ pivot points from every `PIVT` chunk in file order.
+    pub fn pivot_points(&self) -> Vec<Vec3> {
+        self.collect_chunk_items::<PivotPointsChunk, _>(|chunk| &chunk.points)
+    }
+
+    /// Writes XYZ pivot points to a `PIVT` chunk.
+    pub fn set_pivot_points(&mut self, points: &[Vec3]) {
+        self.replace_chunk(PivotPointsChunk {
+            points: points.to_vec(),
+        });
     }
 }

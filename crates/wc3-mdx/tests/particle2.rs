@@ -1,5 +1,7 @@
-use wc3_mdx::{Decodable, Encodable};
-use wc3_mdx::{Model, Node, Particle2Frames, ParticleEmitter2};
+use wc3_mdx::emitters::{Particle2Frames, ParticleEmitter2};
+use wc3_mdx::io::{Decodable, Encodable};
+use wc3_mdx::scene::Node;
+use wc3_mdx::Model;
 
 #[test]
 fn particle_emitter2_fields_round_trip() {

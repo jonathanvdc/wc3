@@ -1,5 +1,7 @@
-use wc3_mdx::{AnimationTrack, Attachment, Keyframe, Model, Node};
-use wc3_mdx::{Cursor, Decodable, Encodable};
+use wc3_mdx::animation::{AnimationTrack, Keyframe};
+use wc3_mdx::io::{Cursor, Decodable, Encodable};
+use wc3_mdx::scene::{Attachment, Node};
+use wc3_mdx::Model;
 
 #[test]
 fn attachment_fields_and_visibility_round_trip() {

@@ -1,6 +1,10 @@
 use std::slice::from_ref;
 
-use wc3_mdx::{Decodable, Encodable, Model, ModelChunk, RawChunk, Sequence, SequencesChunk};
+use wc3_mdx::animation::Sequence;
+use wc3_mdx::chunks::SequencesChunk;
+use wc3_mdx::chunks::{ModelChunk, RawChunk};
+use wc3_mdx::io::{Decodable, Encodable};
+use wc3_mdx::Model;
 
 #[test]
 fn model_stores_known_unknown_and_malformed_chunks() {

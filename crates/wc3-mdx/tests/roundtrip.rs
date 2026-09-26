@@ -1,5 +1,6 @@
-use wc3_mdx::{Decodable, Encodable};
-use wc3_mdx::{Model, ModelChunk, RawChunk};
+use wc3_mdx::chunks::{ModelChunk, RawChunk};
+use wc3_mdx::io::{Decodable, Encodable};
+use wc3_mdx::Model;
 
 #[test]
 fn synthetic_versions_and_unknown_chunks_round_trip() {

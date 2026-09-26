@@ -1,5 +1,6 @@
-use wc3_mdx::{Decodable, Encodable};
-use wc3_mdx::{Geoset, GeosetExtent, Model};
+use wc3_mdx::geometry::{Geoset, GeosetExtent};
+use wc3_mdx::io::{Decodable, Encodable};
+use wc3_mdx::Model;
 
 fn sample_geoset() -> Geoset {
     let geoset = Geoset::new(1800, &[[1.0, 2.0, 3.0]], &[[0.0, 0.0, 1.0]], &[0, 0, 0]).unwrap();

@@ -1,5 +1,8 @@
-use wc3_mdx::{AnimationTrack, Keyframe, Model, Node, ParticleEmitter};
-use wc3_mdx::{Decodable, Encodable};
+use wc3_mdx::animation::{AnimationTrack, Keyframe};
+use wc3_mdx::emitters::ParticleEmitter;
+use wc3_mdx::io::{Decodable, Encodable};
+use wc3_mdx::scene::Node;
+use wc3_mdx::Model;
 
 #[test]
 fn classic_particle_emitter_round_trip() {

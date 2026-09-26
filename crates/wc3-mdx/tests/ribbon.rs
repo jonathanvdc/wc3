@@ -1,5 +1,8 @@
-use wc3_mdx::{AnimationTrack, Keyframe, Model, Node, RibbonEmitter};
-use wc3_mdx::{Decodable, Encodable};
+use wc3_mdx::animation::{AnimationTrack, Keyframe};
+use wc3_mdx::emitters::RibbonEmitter;
+use wc3_mdx::io::{Decodable, Encodable};
+use wc3_mdx::scene::Node;
+use wc3_mdx::Model;
 
 #[test]
 fn ribbon_fields_and_integer_animation_round_trip() {

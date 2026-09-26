@@ -1,5 +1,6 @@
-use wc3_mdx::{Decodable, Encodable};
-use wc3_mdx::{Model, Sequence, SequenceFlags};
+use wc3_mdx::animation::{Sequence, SequenceFlags};
+use wc3_mdx::io::{Decodable, Encodable};
+use wc3_mdx::Model;
 
 #[test]
 fn sequence_fields_round_trip() {
