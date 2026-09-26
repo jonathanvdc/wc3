@@ -106,14 +106,14 @@ impl Decodable for Attachment {
         let mut cursor = source.slice_u32_sized()?;
 
         let mut probe = cursor;
-        let node_size = probe.read_u32()? as usize;
+        let node_size = probe.read::<u32>()? as usize;
         let node = Node::decode(cursor.read_exact(node_size)?, 0)?;
         let path = cursor
             .read_exact(PATH_SIZE)?
             .try_into()
             .expect("fixed-width path");
-        let reserved = cursor.read_u32()?;
-        let id = cursor.read_u32()?;
+        let reserved = cursor.read()?;
+        let id = cursor.read()?;
         let visibility_track = if cursor.remaining().is_empty() {
             None
         } else {

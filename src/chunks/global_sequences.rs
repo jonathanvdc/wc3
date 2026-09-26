@@ -39,7 +39,7 @@ impl KnownChunk for GlobalSequencesChunk {
         }
         let mut durations = Vec::new();
         while !cursor.remaining().is_empty() {
-            durations.push(cursor.read_u32()?);
+            durations.push(cursor.read()?);
         }
         Ok(Self { durations })
     }

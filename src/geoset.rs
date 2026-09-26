@@ -485,7 +485,7 @@ fn section<'a>(cursor: &mut Cursor<'a>, tag: Tag, stride: usize) -> Result<&'a [
             offset,
         });
     }
-    let count = cursor.read_u32()? as usize;
+    let count = cursor.read::<u32>()? as usize;
     let size = count.checked_mul(stride).ok_or(Error::MalformedRecord {
         tag: Geoset::TAG,
         offset,
@@ -495,9 +495,9 @@ fn section<'a>(cursor: &mut Cursor<'a>, tag: Tag, stride: usize) -> Result<&'a [
 
 fn read_extent(cursor: &mut Cursor<'_>) -> Result<GeosetExtent, Error> {
     Ok(GeosetExtent {
-        bounds_radius: cursor.read_f32()?,
-        minimum: cursor.read_vec3()?,
-        maximum: cursor.read_vec3()?,
+        bounds_radius: cursor.read()?,
+        minimum: cursor.read_vector()?,
+        maximum: cursor.read_vector()?,
     })
 }
 
@@ -599,11 +599,11 @@ impl Decodable for Geoset {
             let vertex_groups = section(&mut cursor, *b"GNDX", 1)?.to_vec();
             let matrix_group_sizes = decode_words(section(&mut cursor, *b"MTGC", 4)?);
             let matrix_indices = decode_words(section(&mut cursor, *b"MATS", 4)?);
-            let material_id = cursor.read_u32()?;
-            let selection_group = cursor.read_u32()?;
-            let unselectable_raw = cursor.read_u32()?;
+            let material_id = cursor.read()?;
+            let selection_group = cursor.read()?;
+            let unselectable_raw = cursor.read()?;
             let header_extension = if version >= 900 {
-                let lod = cursor.read_u32()?;
+                let lod = cursor.read()?;
                 let name = cursor
                     .read_exact(80)?
                     .try_into()
@@ -616,7 +616,7 @@ impl Decodable for Geoset {
                 None
             };
             let extent = read_extent(&mut cursor)?;
-            let sequence_count = cursor.read_u32()? as usize;
+            let sequence_count = cursor.read::<u32>()? as usize;
             let mut sequence_extents = Vec::new();
             for _ in 0..sequence_count {
                 sequence_extents.push(read_extent(&mut cursor)?);
@@ -669,7 +669,7 @@ impl Decodable for Geoset {
                     offset: cursor.absolute_position() - 4,
                 });
             }
-            let uv_count = cursor.read_u32()? as usize;
+            let uv_count = cursor.read::<u32>()? as usize;
             let mut uv_sets = Vec::new();
             for _ in 0..uv_count {
                 uv_sets.push(decode_vectors::<2>(section(&mut cursor, *b"UVBS", 8)?));

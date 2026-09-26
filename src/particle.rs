@@ -163,17 +163,17 @@ impl Decodable for ParticleEmitter {
     fn decode_one(source: &mut Cursor<'_>, _version: u32) -> Result<Self, Error> {
         let mut cursor = source.slice_u32_sized()?;
         let node = Node::decode_one(&mut cursor, 0)?;
-        let emission_rate = cursor.read_f32()?;
-        let gravity = cursor.read_f32()?;
-        let longitude = cursor.read_f32()?;
-        let latitude = cursor.read_f32()?;
+        let emission_rate = cursor.read()?;
+        let gravity = cursor.read()?;
+        let longitude = cursor.read()?;
+        let latitude = cursor.read()?;
         let path = cursor
             .read_exact(PATH_SIZE)?
             .try_into()
             .expect("fixed emitter path");
-        let reserved = cursor.read_u32()?;
-        let life_span = cursor.read_f32()?;
-        let initial_velocity = cursor.read_f32()?;
+        let reserved = cursor.read()?;
+        let life_span = cursor.read()?;
+        let initial_velocity = cursor.read()?;
         let mut tracks = Vec::new();
         while !cursor.remaining().is_empty() {
             let offset = cursor.absolute_position();

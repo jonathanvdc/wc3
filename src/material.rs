@@ -491,15 +491,15 @@ impl Decodable for Material {
     fn decode_one(source: &mut Cursor<'_>, version: Version) -> Result<Self, Error> {
         let mut cursor = source.slice_u32_sized()?;
         let value = {
-            let priority_plane = cursor.read_u32()?;
-            let render_mode = cursor.read_u32()?;
+            let priority_plane = cursor.read()?;
+            let render_mode = cursor.read()?;
             let shader = if has_shader(version) {
                 Some(cursor.read_exact(80)?.try_into().expect("shader field"))
             } else {
                 None
             };
             expect_tag(&mut cursor, LAYER_TAG, Material::TAG)?;
-            let count = cursor.read_u32()? as usize;
+            let count = cursor.read::<u32>()? as usize;
             let mut layers = Vec::new();
             for _ in 0..count {
                 let layer = Layer::decode_one(&mut cursor, version)?;
@@ -546,25 +546,25 @@ impl Decodable for Layer {
     fn decode_one(source: &mut Cursor<'_>, version: Version) -> Result<Self, Error> {
         let mut cursor = source.slice_u32_sized()?;
         let value = {
-            let filter_mode = cursor.read_u32()?;
-            let shading_flags = cursor.read_u32()?;
-            let texture_id = cursor.read_u32()?;
-            let texture_animation_id = cursor.read_u32()?;
-            let coordinate_id = cursor.read_u32()?;
-            let alpha = cursor.read_f32()?;
+            let filter_mode = cursor.read()?;
+            let shading_flags = cursor.read()?;
+            let texture_id = cursor.read()?;
+            let texture_animation_id = cursor.read()?;
+            let coordinate_id = cursor.read()?;
+            let alpha = cursor.read()?;
             let extensions = if version >= 1100 {
-                let emissive_gain = cursor.read_f32()?;
+                let emissive_gain = cursor.read()?;
                 let fresnel = Fresnel {
-                    color: cursor.read_vec3()?,
-                    opacity: cursor.read_f32()?,
-                    team_color: cursor.read_f32()?,
+                    color: cursor.read_vector()?,
+                    opacity: cursor.read()?,
+                    team_color: cursor.read()?,
                 };
-                let shader_type_id = cursor.read_u32()?;
-                let count = cursor.read_u32()? as usize;
+                let shader_type_id = cursor.read()?;
+                let count = cursor.read::<u32>()? as usize;
                 let mut texture_slots = Vec::new();
                 for _ in 0..count {
-                    let texture_id = cursor.read_u32()?;
-                    let texture_type = cursor.read_u32()?;
+                    let texture_id = cursor.read()?;
+                    let texture_type = cursor.read()?;
                     let track = if cursor.remaining().get(..4) == Some(b"KMTF") {
                         Some(AnimationTrack::decode_one(&mut cursor, version)?)
                     } else {
@@ -584,16 +584,16 @@ impl Decodable for Layer {
                 }
             } else if version >= 1000 {
                 LayerExtensions::V1000 {
-                    emissive_gain: cursor.read_f32()?,
+                    emissive_gain: cursor.read()?,
                     fresnel: Fresnel {
-                        color: cursor.read_vec3()?,
-                        opacity: cursor.read_f32()?,
-                        team_color: cursor.read_f32()?,
+                        color: cursor.read_vector()?,
+                        opacity: cursor.read()?,
+                        team_color: cursor.read()?,
                     },
                 }
             } else if version >= 900 {
                 LayerExtensions::V900 {
-                    emissive_gain: cursor.read_f32()?,
+                    emissive_gain: cursor.read()?,
                 }
             } else {
                 LayerExtensions::Classic

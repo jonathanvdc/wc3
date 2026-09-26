@@ -174,13 +174,13 @@ impl Decodable for Light {
     fn decode_one(source: &mut Cursor<'_>, _version: u32) -> Result<Self, Error> {
         let mut cursor = source.slice_u32_sized()?;
         let node = Node::decode_one(&mut cursor, 0)?;
-        let light_type = cursor.read_u32()?;
-        let attenuation_start = cursor.read_f32()?;
-        let attenuation_end = cursor.read_f32()?;
-        let color = cursor.read_vec3()?;
-        let intensity = cursor.read_f32()?;
-        let ambient_color = cursor.read_vec3()?;
-        let ambient_intensity = cursor.read_f32()?;
+        let light_type = cursor.read()?;
+        let attenuation_start = cursor.read()?;
+        let attenuation_end = cursor.read()?;
+        let color = cursor.read_vector()?;
+        let intensity = cursor.read()?;
+        let ambient_color = cursor.read_vector()?;
+        let ambient_intensity = cursor.read()?;
         let remaining = cursor.remaining();
         let extension_size = EXTENDED_SIZE - FIXED_SIZE;
         let has_extended = remaining.len() >= extension_size
@@ -194,7 +194,7 @@ impl Decodable for Light {
         let extended_words = if has_extended {
             let mut words = [0; 7];
             for word in &mut words {
-                *word = cursor.read_u32()?;
+                *word = cursor.read()?;
             }
             Some(words)
         } else {

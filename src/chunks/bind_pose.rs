@@ -97,7 +97,7 @@ impl Chunk for BindPose {
 impl KnownChunk for BindPose {
     fn decode_payload(cursor: &mut Cursor<'_>, _version: u32) -> Result<Self, Error> {
         let size = cursor.remaining().len();
-        let count = cursor.read_u32().map_err(|_| Error::MalformedChunk {
+        let count = cursor.read::<u32>().map_err(|_| Error::MalformedChunk {
             tag: Self::TAG,
             size,
             expected: 4,
@@ -122,7 +122,7 @@ impl KnownChunk for BindPose {
         let mut matrices = Vec::new();
         for _ in 0..count {
             matrices.push(array::from_fn(|_| {
-                cursor.read_f32().expect("validated matrix length")
+                cursor.read().expect("validated matrix length")
             }));
         }
         Ok(Self { matrices })

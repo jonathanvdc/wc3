@@ -128,10 +128,10 @@ impl Model {
 impl Decodable for GeosetAnimation {
     fn decode_one(source: &mut Cursor<'_>, _version: u32) -> Result<Self, Error> {
         let mut cursor = source.slice_u32_sized()?;
-        let alpha = cursor.read_f32()?;
-        let raw_flags = cursor.read_u32()?;
-        let color = cursor.read_vec3()?;
-        let geoset_id = cursor.read_u32()?;
+        let alpha = cursor.read()?;
+        let raw_flags = cursor.read()?;
+        let color = cursor.read_vector()?;
+        let geoset_id = cursor.read()?;
         let mut tracks = Vec::new();
         while !cursor.remaining().is_empty() {
             let offset = cursor.absolute_position();

@@ -72,7 +72,7 @@ impl Model {
 impl Decodable for EventObject {
     fn decode_one(cursor: &mut Cursor<'_>, _version: u32) -> Result<Self, Error> {
         let mut probe = *cursor;
-        let node_size = probe.read_u32()? as usize;
+        let node_size = probe.read::<u32>()? as usize;
         let node = Node::decode(cursor.read_exact(node_size)?, 0)?;
         let offset = cursor.absolute_position();
         if cursor.read_exact(4)? != TRACK_TAG {
@@ -81,11 +81,11 @@ impl Decodable for EventObject {
                 offset,
             });
         }
-        let count = cursor.read_u32()? as usize;
-        let global_sequence_id = cursor.read_u32()?;
+        let count = cursor.read::<u32>()? as usize;
+        let global_sequence_id = cursor.read()?;
         let mut frames = Vec::new();
         for _ in 0..count {
-            frames.push(cursor.read_u32()?);
+            frames.push(cursor.read()?);
         }
         Ok(Self {
             node,

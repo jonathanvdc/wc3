@@ -62,7 +62,7 @@ impl<T: KnownChunk> Decodable for T {
                 actual: tag,
             });
         }
-        let size = next.read_u32()?;
+        let size = next.read()?;
         let mut payload = next
             .slice(size as usize)
             .map_err(|_| Error::TruncatedChunk { tag, offset, size })?;

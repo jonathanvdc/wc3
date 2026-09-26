@@ -131,13 +131,13 @@ impl Decodable for Texture {
                 expected: SIZE,
             });
         }
-        let replaceable_id = cursor.read_u32()?;
+        let replaceable_id = cursor.read()?;
         let path = cursor
             .read_exact(PATH_SIZE)?
             .try_into()
             .expect("fixed-width path");
         let reserved = cursor.read_exact(4)?.try_into().expect("fixed-width field");
-        let flags = cursor.read_u32()?;
+        let flags = cursor.read()?;
         Ok(Self {
             replaceable_id,
             path,

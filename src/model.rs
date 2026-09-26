@@ -179,7 +179,7 @@ fn scan_version(mut cursor: Cursor<'_>) -> Result<Option<Version>, Error> {
     while !cursor.remaining().is_empty() {
         let (tag, _, mut payload) = read_chunk(&mut cursor)?;
         if tag == *b"VERS" {
-            let found = payload.read_u32().map_err(|_| Error::InvalidVersionChunk)?;
+            let found = payload.read().map_err(|_| Error::InvalidVersionChunk)?;
             version.get_or_insert(found);
         }
     }
@@ -192,7 +192,7 @@ fn read_chunk<'a>(cursor: &mut Cursor<'a>) -> Result<(Tag, u32, Cursor<'a>), Err
         return Err(Error::TruncatedHeader { offset });
     }
     let tag = cursor.read_exact(4)?.try_into().expect("four-byte tag");
-    let size = cursor.read_u32()?;
+    let size = cursor.read()?;
     let payload = cursor
         .slice(size as usize)
         .map_err(|_| Error::TruncatedChunk { tag, offset, size })?;

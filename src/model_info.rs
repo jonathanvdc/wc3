@@ -134,16 +134,10 @@ impl Decodable for ModelInfo {
             .try_into()
             .expect("fixed-width name");
         let reserved = cursor.read_exact(4)?.try_into().expect("fixed-width field");
-        let bounds_radius = cursor.read_u32()?;
-        let mut minimum_extent = [0; 3];
-        let mut maximum_extent = [0; 3];
-        for value in &mut minimum_extent {
-            *value = cursor.read_u32()?;
-        }
-        for value in &mut maximum_extent {
-            *value = cursor.read_u32()?;
-        }
-        let blend_time = cursor.read_u32()?;
+        let bounds_radius = cursor.read()?;
+        let minimum_extent = cursor.read_vector()?;
+        let maximum_extent = cursor.read_vector()?;
+        let blend_time = cursor.read()?;
         Ok(Self {
             name,
             reserved,

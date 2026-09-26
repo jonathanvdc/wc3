@@ -146,7 +146,7 @@ impl Model {
 impl Decodable for Camera {
     fn decode_one(source: &mut Cursor<'_>, _version: u32) -> Result<Self, Error> {
         let start = source.absolute_position();
-        let size_word = source.read_u32()?;
+        let size_word: u32 = source.read()?;
         let length = (size_word & 0x00ff_ffff) as usize;
         let body_len = length.checked_sub(4).ok_or(Error::InvalidRecordLength {
             offset: start,
@@ -154,11 +154,11 @@ impl Decodable for Camera {
         })?;
         let mut cursor = source.slice(body_len)?;
         let name = cursor.read_exact(80)?.try_into().expect("fixed-width name");
-        let position = cursor.read_vec3()?;
-        let field_of_view = cursor.read_f32()?;
-        let far_clip = cursor.read_f32()?;
-        let near_clip = cursor.read_f32()?;
-        let target_position = cursor.read_vec3()?;
+        let position = cursor.read_vector()?;
+        let field_of_view = cursor.read()?;
+        let far_clip = cursor.read()?;
+        let near_clip = cursor.read()?;
+        let target_position = cursor.read_vector()?;
         let mut tracks = Vec::new();
         while !cursor.remaining().is_empty() {
             let offset = cursor.absolute_position();

@@ -211,9 +211,9 @@ impl Decodable for Node {
             .read_exact(NAME_SIZE)?
             .try_into()
             .expect("fixed-width node name");
-        let object_id = cursor.read_u32()?;
-        let parent_id = cursor.read_u32()?;
-        let raw_flags = cursor.read_u32()?;
+        let object_id = cursor.read()?;
+        let parent_id = cursor.read()?;
+        let raw_flags = cursor.read()?;
         let mut tracks = Vec::new();
         while !cursor.remaining().is_empty() {
             let offset = cursor.absolute_position();
@@ -256,8 +256,8 @@ impl Encodable for Node {
 impl Decodable for Bone {
     fn decode_one(cursor: &mut Cursor<'_>, _version: u32) -> Result<Self, Error> {
         let node = Node::decode_one(cursor, 0)?;
-        let geoset_id = cursor.read_u32()?;
-        let geoset_animation_id = cursor.read_u32()?;
+        let geoset_id = cursor.read()?;
+        let geoset_animation_id = cursor.read()?;
         Ok(Self {
             node,
             geoset_id,

@@ -162,12 +162,12 @@ impl Decodable for PopcornEmitter {
     fn decode_one(source: &mut Cursor<'_>, _version: u32) -> Result<Self, Error> {
         let mut cursor = source.slice_u32_sized()?;
         let node = Node::decode_one(&mut cursor, 0)?;
-        let life_span = cursor.read_f32()?;
-        let emission_rate = cursor.read_f32()?;
-        let speed = cursor.read_f32()?;
-        let color = cursor.read_vec3()?;
-        let alpha = cursor.read_f32()?;
-        let replaceable_id = cursor.read_u32()?;
+        let life_span = cursor.read()?;
+        let emission_rate = cursor.read()?;
+        let speed = cursor.read()?;
+        let color = cursor.read_vector()?;
+        let alpha = cursor.read()?;
+        let replaceable_id = cursor.read()?;
         let path = cursor
             .read_exact(PATH_SIZE)?
             .try_into()

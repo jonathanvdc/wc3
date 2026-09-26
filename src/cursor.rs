@@ -1,7 +1,24 @@
 //! Checked, bounded reads over immutable bytes.
-use crate::Vec3;
-
 use crate::Error;
+
+/// A scalar that can be read from an MDX byte stream.
+pub trait ReadScalar: Copy + Default {
+    fn read_from(cursor: &mut Cursor<'_>) -> Result<Self, Error>;
+}
+
+impl ReadScalar for u32 {
+    fn read_from(cursor: &mut Cursor<'_>) -> Result<Self, Error> {
+        Ok(u32::from_le_bytes(
+            cursor.read_exact(4)?.try_into().expect("four-byte word"),
+        ))
+    }
+}
+
+impl ReadScalar for f32 {
+    fn read_from(cursor: &mut Cursor<'_>) -> Result<Self, Error> {
+        Ok(f32::from_bits(cursor.read::<u32>()?))
+    }
+}
 
 /// A copyable position within immutable bytes. Child cursors are bounded slices.
 #[derive(Clone, Copy, Debug)]
@@ -57,24 +74,18 @@ impl<'a> Cursor<'a> {
         copy.read_exact(len)
     }
 
-    /// Reads a little-endian `u32`.
-    pub fn read_u32(&mut self) -> Result<u32, Error> {
-        Ok(u32::from_le_bytes(
-            self.read_exact(4)?.try_into().expect("four-byte word"),
-        ))
+    /// Reads a little-endian scalar.
+    pub fn read<T: ReadScalar>(&mut self) -> Result<T, Error> {
+        T::read_from(self)
     }
 
-    /// Reads an IEEE 754 float from four little-endian bytes.
-    pub fn read_f32(&mut self) -> Result<f32, Error> {
-        Ok(f32::from_bits(self.read_u32()?))
-    }
-
-    /// Reads three IEEE 754 floats from twelve little-endian bytes.
-    pub fn read_vec3(&mut self) -> Result<Vec3, Error> {
-        let x = self.read_f32()?;
-        let y = self.read_f32()?;
-        let z = self.read_f32()?;
-        Ok([x, y, z])
+    /// Reads a fixed-size vector of little-endian scalars.
+    pub fn read_vector<T: ReadScalar, const N: usize>(&mut self) -> Result<[T; N], Error> {
+        let mut vector = [T::default(); N];
+        for value in &mut vector {
+            *value = self.read()?;
+        }
+        Ok(vector)
     }
 
     /// Advances this cursor and returns a cursor confined to those bytes.
@@ -95,7 +106,7 @@ impl<'a> Cursor<'a> {
     pub fn slice_u32_sized(&mut self) -> Result<Self, Error> {
         let mut next = *self;
         let start = next.absolute_position();
-        let length = next.read_u32()? as usize;
+        let length = next.read::<u32>()? as usize;
         let body_len = length.checked_sub(4).ok_or(Error::InvalidRecordLength {
             offset: start,
             length,
@@ -123,9 +134,17 @@ mod tests {
     use super::*;
 
     #[test]
+    fn reads_integer_and_float_vectors() {
+        let mut cursor = Cursor::new(&[1, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0xc0, 0x3f, 0, 0, 0x20, 0xc0]);
+        assert_eq!(cursor.read_vector::<u32, 2>().unwrap(), [1, 2]);
+        assert_eq!(cursor.read_vector::<f32, 2>().unwrap(), [1.5, -2.5]);
+        cursor.finish().unwrap();
+    }
+
+    #[test]
     fn slices_are_bounded_and_cursors_are_copyable_checkpoints() {
         let mut cursor = Cursor::new(&[1, 2, 3, 4, 5]);
-        assert_eq!(cursor.read_u32().unwrap(), 0x0403_0201);
+        assert_eq!(cursor.read::<u32>().unwrap(), 0x0403_0201);
         let checkpoint = cursor;
         assert_eq!(cursor.read_exact(1).unwrap(), &[5]);
         cursor = checkpoint;

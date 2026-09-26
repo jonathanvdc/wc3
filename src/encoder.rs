@@ -56,7 +56,12 @@ impl<'a> Encoder<'a> {
 
     /// Appends the components of a fixed-size vector in order.
     pub fn write_vector<T: Scalar + Copy, const N: usize>(&mut self, vector: &[T; N]) {
-        for &value in vector {
+        self.write_slice(vector);
+    }
+
+    /// Appends a slice of little-endian scalars in order.
+    pub fn write_slice<T: Scalar + Copy>(&mut self, values: &[T]) {
+        for &value in values {
             self.write(value);
         }
     }

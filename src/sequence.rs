@@ -161,20 +161,14 @@ impl Decodable for Sequence {
             .read_exact(NAME_SIZE)?
             .try_into()
             .expect("fixed-width name");
-        let interval = [cursor.read_u32()?, cursor.read_u32()?];
-        let move_speed = cursor.read_u32()?;
-        let flags = cursor.read_u32()?;
-        let rarity = cursor.read_u32()?;
-        let sync_point = cursor.read_u32()?;
-        let bounds_radius = cursor.read_u32()?;
-        let mut minimum_extent = [0; 3];
-        let mut maximum_extent = [0; 3];
-        for value in &mut minimum_extent {
-            *value = cursor.read_u32()?;
-        }
-        for value in &mut maximum_extent {
-            *value = cursor.read_u32()?;
-        }
+        let interval = cursor.read_vector()?;
+        let move_speed = cursor.read()?;
+        let flags = cursor.read()?;
+        let rarity = cursor.read()?;
+        let sync_point = cursor.read()?;
+        let bounds_radius = cursor.read()?;
+        let minimum_extent = cursor.read_vector()?;
+        let maximum_extent = cursor.read_vector()?;
         Ok(Self {
             name,
             interval,
@@ -192,21 +186,14 @@ impl Decodable for Sequence {
 impl Encodable for Sequence {
     fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), Error> {
         bytes.write_bytes(&self.name);
-        for value in self
-            .interval
-            .into_iter()
-            .chain([
-                self.move_speed,
-                self.flags,
-                self.rarity,
-                self.sync_point,
-                self.bounds_radius,
-            ])
-            .chain(self.minimum_extent)
-            .chain(self.maximum_extent)
-        {
-            bytes.write(value);
-        }
+        bytes.write_vector(&self.interval);
+        bytes.write(self.move_speed);
+        bytes.write(self.flags);
+        bytes.write(self.rarity);
+        bytes.write(self.sync_point);
+        bytes.write(self.bounds_radius);
+        bytes.write_vector(&self.minimum_extent);
+        bytes.write_vector(&self.maximum_extent);
         Ok(())
     }
 }

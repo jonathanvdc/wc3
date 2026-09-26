@@ -48,7 +48,7 @@ impl Chunk for VersionChunk {
 
 impl KnownChunk for VersionChunk {
     fn decode_payload(cursor: &mut Cursor<'_>, _version: u32) -> Result<Self, Error> {
-        let version = cursor.read_u32().map_err(|_| Error::InvalidVersionChunk)?;
+        let version = cursor.read().map_err(|_| Error::InvalidVersionChunk)?;
         let extension = cursor.remaining().to_vec();
         cursor.read_exact(extension.len())?;
         Ok(Self { version, extension })
