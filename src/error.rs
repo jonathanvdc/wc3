@@ -1,13 +1,15 @@
 //! Errors that can occur when reading or writing MDX files.
 use crate::{Tag, Version};
 
-use std::fmt;
+use std::{error::Error as StdError, fmt};
 
 /// Errors caused by malformed input or a payload too large for the MDX format.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Error {
     /// The input does not begin with `MDLX`.
     InvalidMagic,
+    /// A typed chunk decoder encountered another chunk tag.
+    UnexpectedChunkTag { expected: Tag, actual: Tag },
     /// The chunk header is incomplete.
     TruncatedHeader { offset: usize },
     /// The declared chunk payload exceeds the input.
@@ -38,6 +40,12 @@ impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::InvalidMagic => write!(f, "expected MDLX magic"),
+            Self::UnexpectedChunkTag { expected, actual } => write!(
+                f,
+                "expected {:?} chunk, found {:?}",
+                String::from_utf8_lossy(expected),
+                String::from_utf8_lossy(actual)
+            ),
             Self::TruncatedHeader { offset } => {
                 write!(f, "truncated chunk header at byte {offset}")
             }
@@ -83,7 +91,7 @@ impl fmt::Display for Error {
     }
 }
 
-impl std::error::Error for Error {}
+impl StdError for Error {}
 
 /// Errors caused by a value supplied to a constructor or setter.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -184,4 +192,4 @@ impl fmt::Display for ValueError {
     }
 }
 
-impl std::error::Error for ValueError {}
+impl StdError for ValueError {}

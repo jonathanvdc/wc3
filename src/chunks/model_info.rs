@@ -2,8 +2,8 @@
 use crate::Encoder;
 use crate::{Tag, Version};
 
+use crate::{Chunk, Decodable, Encodable, Error, KnownChunk};
 use crate::{Cursor, ModelInfo};
-use crate::{Decodable, Encodable, Error, KnownChunk};
 
 /// A complete `MODL` chunk, including bytes after the standard record.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -18,18 +18,12 @@ impl ModelInfoChunk {
     }
 }
 
-impl Decodable for ModelInfoChunk {
-    fn decode_one(cursor: &mut Cursor<'_>, version: Version) -> Result<Self, Error> {
-        let _ = version;
-        let info = ModelInfo::decode_one(cursor, version)?;
-        let extension = cursor.remaining().to_vec();
-        cursor.read_exact(extension.len())?;
-        Ok(Self::new(info, extension))
+impl Chunk for ModelInfoChunk {
+    fn tag(&self) -> Tag {
+        Self::TAG
     }
-}
 
-impl Encodable for ModelInfoChunk {
-    fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), Error> {
+    fn encode_payload_to(&self, bytes: &mut Encoder<'_>) -> Result<(), Error> {
         let size = 372usize
             .checked_add(self.extension.len())
             .ok_or(Error::ChunkTooLarge {
@@ -50,6 +44,14 @@ impl Encodable for ModelInfoChunk {
 }
 
 impl KnownChunk for ModelInfoChunk {
+    fn decode_payload(cursor: &mut Cursor<'_>, version: Version) -> Result<Self, Error> {
+        let _ = version;
+        let info = ModelInfo::decode_one(cursor, version)?;
+        let extension = cursor.remaining().to_vec();
+        cursor.read_exact(extension.len())?;
+        Ok(Self::new(info, extension))
+    }
+
     const TAG: Tag = ModelInfo::TAG;
 }
 

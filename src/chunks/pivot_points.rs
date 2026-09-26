@@ -4,16 +4,33 @@ use crate::{Tag, Vec3};
 
 use super::checked_chunk_size;
 use crate::Cursor;
-use crate::{Decodable, Encodable, Error, KnownChunk};
+use crate::{Chunk, Error, KnownChunk};
 
-/// The complete `PIVT` payload.
+/// The complete `PIVT` chunk.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct PivotPointsChunk {
     pub points: Vec<Vec3>,
 }
 
-impl Decodable for PivotPointsChunk {
-    fn decode_one(cursor: &mut Cursor<'_>, _version: u32) -> Result<Self, Error> {
+impl Chunk for PivotPointsChunk {
+    fn tag(&self) -> Tag {
+        Self::TAG
+    }
+
+    fn encode_payload_to(&self, bytes: &mut Encoder<'_>) -> Result<(), Error> {
+        checked_chunk_size(self.points.len(), 12, Self::TAG)?;
+
+        for point in &self.points {
+            for coordinate in point {
+                bytes.write(coordinate);
+            }
+        }
+        Ok(())
+    }
+}
+
+impl KnownChunk for PivotPointsChunk {
+    fn decode_payload(cursor: &mut Cursor<'_>, _version: u32) -> Result<Self, Error> {
         let size = cursor.remaining().len();
         if size % 12 != 0 {
             return Err(Error::MalformedChunk {
@@ -28,28 +45,14 @@ impl Decodable for PivotPointsChunk {
         }
         Ok(Self { points })
     }
-}
 
-impl Encodable for PivotPointsChunk {
-    fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), Error> {
-        checked_chunk_size(self.points.len(), 12, Self::TAG)?;
-
-        for point in &self.points {
-            for coordinate in point {
-                bytes.write(coordinate);
-            }
-        }
-        Ok(())
-    }
-}
-
-impl KnownChunk for PivotPointsChunk {
     const TAG: Tag = *b"PIVT";
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{Decodable, Encodable};
 
     #[test]
     fn round_trips_entire_payload() {

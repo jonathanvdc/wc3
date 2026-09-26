@@ -1,5 +1,5 @@
 use super::Chunk;
-use crate::{Encodable, Tag};
+use crate::{Encoder, Error, Tag};
 
 /// A tagged top-level MDX chunk. The payload is stored without interpretation.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -17,15 +17,13 @@ impl RawChunk {
     }
 }
 
-impl Encodable for RawChunk {
-    fn encode_to(&self, output: &mut crate::Encoder<'_>) -> Result<(), crate::Error> {
-        output.write_bytes(&self.data);
-        Ok(())
-    }
-}
-
 impl Chunk for RawChunk {
     fn tag(&self) -> Tag {
         self.tag
+    }
+
+    fn encode_payload_to(&self, output: &mut Encoder<'_>) -> Result<(), Error> {
+        output.write_bytes(&self.data);
+        Ok(())
     }
 }

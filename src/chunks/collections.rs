@@ -1,4 +1,4 @@
-//! Complete payloads for chunks containing a sequence of records.
+//! Complete chunks containing a sequence of records.
 use crate::Encoder;
 use crate::{Tag, Version};
 
@@ -7,7 +7,7 @@ use crate::{
     Material, Node, ParticleEmitter, ParticleEmitter2, PopcornEmitter, RibbonEmitter, Sequence,
     Texture, TextureAnimation,
 };
-use crate::{Cursor, Decodable, Encodable, Error, KnownChunk, Record};
+use crate::{Chunk, Cursor, Decodable, Encodable, Error, KnownChunk, Record};
 
 /// A complete chunk made of consecutive records of one type.
 pub trait CollectionChunk: Sized {
@@ -20,47 +20,46 @@ pub trait CollectionChunk: Sized {
     /// Borrows the records in file order.
     fn records(&self) -> &[Self::Item];
 
-    /// Builds a chunk payload from decoded records.
+    /// Builds a chunk from decoded records.
     fn from_records(records: Vec<Self::Item>) -> Self;
 }
 
-impl<C: CollectionChunk> Decodable for C {
-    fn decode_one(cursor: &mut Cursor<'_>, version: Version) -> Result<Self, Error> {
-        let mut records = Vec::new();
-        while !cursor.remaining().is_empty() {
-            let start = cursor.position();
-            let record = C::Item::decode_one(cursor, version)?;
-            if cursor.position() <= start {
-                return Err(Error::MalformedRecord {
-                    tag: C::tag(),
-                    offset: start,
-                });
-            }
-            records.push(record);
+fn decode_records<C: CollectionChunk>(
+    cursor: &mut Cursor<'_>,
+    version: Version,
+) -> Result<C, Error> {
+    let mut records = Vec::new();
+    while !cursor.remaining().is_empty() {
+        let start = cursor.position();
+        let record = C::Item::decode_one(cursor, version)?;
+        if cursor.position() <= start {
+            return Err(Error::MalformedRecord {
+                tag: C::tag(),
+                offset: start,
+            });
         }
-        Ok(C::from_records(records))
+        records.push(record);
     }
+    Ok(C::from_records(records))
 }
 
-impl<C: CollectionChunk> Encodable for C {
-    fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), Error> {
-        let start = bytes.position();
-        for record in self.records() {
-            record.encode_to(bytes)?;
-            if bytes.position() - start > u32::MAX as usize {
-                return Err(Error::ChunkTooLarge {
-                    tag: C::tag(),
-                    size: bytes.position() - start,
-                });
-            }
+fn encode_records<C: CollectionChunk>(chunk: &C, bytes: &mut Encoder<'_>) -> Result<(), Error> {
+    let start = bytes.position();
+    for record in chunk.records() {
+        record.encode_to(bytes)?;
+        if bytes.position() - start > u32::MAX as usize {
+            return Err(Error::ChunkTooLarge {
+                tag: C::tag(),
+                size: bytes.position() - start,
+            });
         }
-        Ok(())
     }
+    Ok(())
 }
 
 macro_rules! record_collection {
     ($name:ident, $item:ty) => {
-        #[doc = concat!("The complete `", stringify!($name), "` chunk payload.")]
+        #[doc = concat!("The complete `", stringify!($name), "` chunk.")]
         #[derive(Clone, Debug, PartialEq)]
         pub struct $name {
             /// Records in their original order.
@@ -87,8 +86,22 @@ macro_rules! record_collection {
             }
         }
 
+        impl Chunk for $name {
+            fn tag(&self) -> Tag {
+                Self::TAG
+            }
+
+            fn encode_payload_to(&self, bytes: &mut Encoder<'_>) -> Result<(), Error> {
+                encode_records(self, bytes)
+            }
+        }
+
         impl KnownChunk for $name {
             const TAG: Tag = <$item>::TAG;
+
+            fn decode_payload(cursor: &mut Cursor<'_>, version: Version) -> Result<Self, Error> {
+                decode_records(cursor, version)
+            }
         }
     };
 }

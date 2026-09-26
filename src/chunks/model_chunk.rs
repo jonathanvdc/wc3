@@ -3,7 +3,7 @@ use crate::Encoder;
 use crate::{Tag, Version};
 
 use super::*;
-use crate::{Chunk, Cursor, Decodable, Encodable, Error, KnownChunk, RawChunk};
+use crate::{Chunk, Cursor, Error, KnownChunk, RawChunk};
 
 /// A known chunk that could not be decoded. Its original bytes remain intact.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -12,15 +12,13 @@ pub struct MalformedChunk {
     pub(crate) error: Error,
 }
 
-impl Encodable for MalformedChunk {
-    fn encode_to(&self, output: &mut Encoder<'_>) -> Result<(), Error> {
-        self.raw.encode_to(output)
-    }
-}
-
 impl Chunk for MalformedChunk {
     fn tag(&self) -> Tag {
         self.raw.tag
+    }
+
+    fn encode_payload_to(&self, output: &mut Encoder<'_>) -> Result<(), Error> {
+        self.raw.encode_payload_to(output)
     }
 }
 
@@ -74,18 +72,14 @@ macro_rules! model_chunks {
             }
         )*
 
-        impl Encodable for ModelChunk {
-            fn encode_to(&self, output: &mut Encoder<'_>) -> Result<(), Error> {
-                let tag = self.tag();
-                output.write_bytes(&tag);
-                let marker = output.begin_sized();
+        impl Chunk for ModelChunk {
+            fn tag(&self) -> Tag { ModelChunk::tag(self) }
+            fn encode_payload_to(&self, output: &mut Encoder<'_>) -> Result<(), Error> {
                 match self {
-                    $( Self::$variant(value) => value.encode_to(output)?, )*
-                    Self::Unknown(raw) => raw.encode_to(output)?,
-                    Self::Malformed(malformed) => malformed.encode_to(output)?,
+                    $( Self::$variant(value) => value.encode_payload_to(output), )*
+                    Self::Unknown(raw) => raw.encode_payload_to(output),
+                    Self::Malformed(malformed) => malformed.encode_payload_to(output),
                 }
-                output.finish_payload(marker, tag)?;
-                Ok(())
             }
         }
 
@@ -97,7 +91,7 @@ macro_rules! model_chunks {
             ) -> Result<Option<Self>, Error> {
                 let mut cursor = *payload;
                 let decoded = match tag {
-                    $( <$chunk>::TAG => <$chunk>::decode_one(&mut cursor, version).map(Self::from), )*
+                    $( <$chunk>::TAG => <$chunk>::decode_payload(&mut cursor, version).map(Self::from), )*
                     _ => return Ok(None),
                 };
                 let chunk = decoded?;
@@ -141,12 +135,6 @@ model_chunks! {
     FaceFx(FaceFxChunk),
     PivotPoints(PivotPointsChunk),
     BindPose(BindPose),
-}
-
-impl Chunk for ModelChunk {
-    fn tag(&self) -> Tag {
-        ModelChunk::tag(self)
-    }
 }
 
 impl ModelChunk {

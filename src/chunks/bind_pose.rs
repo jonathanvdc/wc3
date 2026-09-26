@@ -1,14 +1,15 @@
 //! Reforged bind-pose matrices in `BPOS` chunks.
 use crate::Encoder;
 use crate::Tag;
+use std::array;
 
+use crate::Chunk;
 use crate::Cursor;
-use crate::{Decodable, Encodable};
 use crate::{Error, KnownChunk, Model};
 
 const MATRIX_SIZE: usize = 48;
 
-/// A `BPOS` payload containing decoded 3-by-4 floating-point matrices.
+/// A `BPOS` chunk containing decoded 3-by-4 floating-point matrices.
 #[derive(Clone, Debug, PartialEq)]
 pub struct BindPose {
     matrices: Vec<[f32; 12]>,
@@ -71,8 +72,34 @@ impl Model {
     }
 }
 
-impl Decodable for BindPose {
-    fn decode_one(cursor: &mut Cursor<'_>, _version: u32) -> Result<Self, Error> {
+impl Chunk for BindPose {
+    fn tag(&self) -> Tag {
+        Self::TAG
+    }
+
+    fn encode_payload_to(&self, bytes: &mut Encoder<'_>) -> Result<(), Error> {
+        self.matrices
+            .len()
+            .checked_mul(MATRIX_SIZE)
+            .and_then(|n| n.checked_add(4))
+            .filter(|&size| size <= u32::MAX as usize)
+            .ok_or(Error::ChunkTooLarge {
+                tag: BindPose::TAG,
+                size: usize::MAX,
+            })?;
+
+        bytes.write(self.matrices.len() as u32);
+        for matrix in &self.matrices {
+            for value in matrix {
+                bytes.write(value);
+            }
+        }
+        Ok(())
+    }
+}
+
+impl KnownChunk for BindPose {
+    fn decode_payload(cursor: &mut Cursor<'_>, _version: u32) -> Result<Self, Error> {
         let size = cursor.remaining().len();
         let count = cursor.read_u32().map_err(|_| Error::MalformedChunk {
             tag: Self::TAG,
@@ -98,36 +125,12 @@ impl Decodable for BindPose {
         }
         let mut matrices = Vec::new();
         for _ in 0..count {
-            matrices.push(std::array::from_fn(|_| {
+            matrices.push(array::from_fn(|_| {
                 cursor.read_f32().expect("validated matrix length")
             }));
         }
         Ok(Self { matrices })
     }
-}
 
-impl Encodable for BindPose {
-    fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), Error> {
-        self.matrices
-            .len()
-            .checked_mul(MATRIX_SIZE)
-            .and_then(|n| n.checked_add(4))
-            .filter(|&size| size <= u32::MAX as usize)
-            .ok_or(Error::ChunkTooLarge {
-                tag: BindPose::TAG,
-                size: usize::MAX,
-            })?;
-
-        bytes.write(self.matrices.len() as u32);
-        for matrix in &self.matrices {
-            for value in matrix {
-                bytes.write(value);
-            }
-        }
-        Ok(())
-    }
-}
-
-impl KnownChunk for BindPose {
     const TAG: Tag = *b"BPOS";
 }

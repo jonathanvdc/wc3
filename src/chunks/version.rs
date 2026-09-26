@@ -1,11 +1,11 @@
-//! The complete version chunk payload.
+//! The complete version chunk.
 use crate::Encoder;
 use crate::{Tag, Version};
 
 use crate::Cursor;
-use crate::{Decodable, Encodable, Error, KnownChunk};
+use crate::{Chunk, Error, KnownChunk};
 
-/// A complete `VERS` payload, including bytes after the version number.
+/// A complete `VERS` chunk, including bytes after the version number.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct VersionChunk {
     pub version: Version,
@@ -21,17 +21,12 @@ impl VersionChunk {
     }
 }
 
-impl Decodable for VersionChunk {
-    fn decode_one(cursor: &mut Cursor<'_>, _version: u32) -> Result<Self, Error> {
-        let version = cursor.read_u32().map_err(|_| Error::InvalidVersionChunk)?;
-        let extension = cursor.remaining().to_vec();
-        cursor.read_exact(extension.len())?;
-        Ok(Self { version, extension })
+impl Chunk for VersionChunk {
+    fn tag(&self) -> Tag {
+        Self::TAG
     }
-}
 
-impl Encodable for VersionChunk {
-    fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), Error> {
+    fn encode_payload_to(&self, bytes: &mut Encoder<'_>) -> Result<(), Error> {
         let size = 4usize
             .checked_add(self.extension.len())
             .ok_or(Error::ChunkTooLarge {
@@ -52,12 +47,20 @@ impl Encodable for VersionChunk {
 }
 
 impl KnownChunk for VersionChunk {
+    fn decode_payload(cursor: &mut Cursor<'_>, _version: u32) -> Result<Self, Error> {
+        let version = cursor.read_u32().map_err(|_| Error::InvalidVersionChunk)?;
+        let extension = cursor.remaining().to_vec();
+        cursor.read_exact(extension.len())?;
+        Ok(Self { version, extension })
+    }
+
     const TAG: Tag = *b"VERS";
 }
 
 #[cfg(test)]
 mod version_chunk_tests {
     use super::*;
+    use crate::{Decodable, Encodable};
 
     #[test]
     fn preserves_version_extension_bytes() {
@@ -68,7 +71,10 @@ mod version_chunk_tests {
         let payload = original.encode().unwrap();
         assert_eq!(VersionChunk::decode(&payload, 1800).unwrap(), original);
         assert_eq!(
-            VersionChunk::decode(&[1, 2, 3], 800),
+            VersionChunk::decode(
+                &[b"VERS".as_slice(), &3u32.to_le_bytes(), &[1, 2, 3]].concat(),
+                800
+            ),
             Err(Error::InvalidVersionChunk)
         );
     }
