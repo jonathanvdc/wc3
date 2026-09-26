@@ -551,14 +551,14 @@ fn write_vectors<const N: usize>(
     vectors: &[[f32; N]],
 ) -> Result<(), Error> {
     write_section_header(bytes, tag, vectors.len())?;
-    bytes.write_vectors(vectors);
+    bytes.write(vectors);
     Ok(())
 }
 
 fn write_extent(bytes: &mut Encoder<'_>, extent: GeosetExtent) {
     bytes.write(extent.bounds_radius);
-    bytes.write_vector(&extent.minimum);
-    bytes.write_vector(&extent.maximum);
+    bytes.write(&extent.minimum);
+    bytes.write(&extent.maximum);
 }
 
 impl Model {

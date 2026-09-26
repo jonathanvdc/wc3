@@ -9,15 +9,15 @@ pub struct Encoder<'a> {
 /// Position of a size word that will be filled after its record is written.
 pub struct SizeMarker(usize);
 
-/// A scalar with a little-endian MDX representation.
-pub trait Scalar {
+/// A value with a little-endian MDX representation.
+pub trait Writable {
     fn write_to(self, encoder: &mut Encoder<'_>);
 }
 
-macro_rules! scalar {
+macro_rules! writable_scalars {
     ($($ty:ty),* $(,)?) => {
         $(
-            impl Scalar for $ty {
+            impl Writable for $ty {
                 fn write_to(self, encoder: &mut Encoder<'_>) {
                     encoder.write_bytes(&self.to_le_bytes());
                 }
@@ -25,11 +25,27 @@ macro_rules! scalar {
         )*
     };
 }
-scalar!(u16, u32, i32, f32);
+writable_scalars!(u16, u32, i32, f32);
 
-impl<T: Scalar + Copy> Scalar for &T {
+impl<T: Writable + Copy> Writable for &T {
     fn write_to(self, encoder: &mut Encoder<'_>) {
         (*self).write_to(encoder);
+    }
+}
+
+impl<T: Writable + Copy, const N: usize> Writable for [T; N] {
+    fn write_to(self, encoder: &mut Encoder<'_>) {
+        for value in self {
+            encoder.write(value);
+        }
+    }
+}
+
+impl<T: Writable + Copy> Writable for &[T] {
+    fn write_to(self, encoder: &mut Encoder<'_>) {
+        for &value in self {
+            encoder.write(value);
+        }
     }
 }
 
@@ -49,28 +65,9 @@ impl<'a> Encoder<'a> {
         self.bytes.extend_from_slice(bytes);
     }
 
-    /// Appends a little-endian scalar.
-    pub fn write<T: Scalar>(&mut self, value: T) {
+    /// Appends a value in its little-endian MDX representation.
+    pub fn write<T: Writable>(&mut self, value: T) {
         value.write_to(self);
-    }
-
-    /// Appends the components of a fixed-size vector in order.
-    pub fn write_vector<T: Scalar + Copy, const N: usize>(&mut self, vector: &[T; N]) {
-        self.write_slice(vector);
-    }
-
-    /// Appends a slice of little-endian scalars in order.
-    pub fn write_slice<T: Scalar + Copy>(&mut self, values: &[T]) {
-        for &value in values {
-            self.write(value);
-        }
-    }
-
-    /// Appends a sequence of fixed-size vectors in order.
-    pub fn write_vectors<T: Scalar + Copy, const N: usize>(&mut self, vectors: &[[T; N]]) {
-        for vector in vectors {
-            self.write_vector(vector);
-        }
     }
 
     /// Writes a placeholder for a size that includes its own four bytes.
@@ -110,6 +107,19 @@ impl<'a> Encoder<'a> {
 #[cfg(test)]
 mod tests {
     use super::Encoder;
+
+    #[test]
+    fn writes_arrays_and_slices_in_element_order() {
+        let mut bytes = Vec::new();
+        let mut encoder = Encoder::new(&mut bytes);
+        encoder.write([1u32, 2]);
+        encoder.write(&[[1.5f32, -2.5]]);
+        encoder.write(&[3u16, 4][..]);
+        assert_eq!(
+            bytes,
+            [1, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0xc0, 0x3f, 0, 0, 0x20, 0xc0, 3, 0, 4, 0,]
+        );
+    }
 
     #[test]
     fn sized_fields_append_to_existing_bytes() {

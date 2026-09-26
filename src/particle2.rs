@@ -207,10 +207,10 @@ fn encode_fields(fields: &Particle2Fields, bytes: &mut Encoder<'_>) {
     }
     bytes.write(fields.tail_length);
     bytes.write(fields.time);
-    bytes.write_vectors(&fields.segment_colors);
+    bytes.write(&fields.segment_colors);
     bytes.write_bytes(&fields.alpha);
-    bytes.write_vector(&fields.particle_scaling);
-    bytes.write_vectors(&fields.uv_animations);
+    bytes.write(&fields.particle_scaling);
+    bytes.write(&fields.uv_animations);
     for value in [
         fields.texture_id,
         fields.squirt,

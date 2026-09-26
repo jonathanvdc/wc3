@@ -29,7 +29,7 @@ pub use chunks::*;
 mod error;
 pub use error::{Error, ValueError};
 mod encoder;
-pub use encoder::{Encoder, Scalar, SizeMarker};
+pub use encoder::{Encoder, SizeMarker, Writable};
 mod cursor;
 pub use cursor::{Cursor, Readable};
 mod model;

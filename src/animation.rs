@@ -212,7 +212,7 @@ impl Encodable for AnimationTrack {
             .into_iter()
             .flatten()
             {
-                bytes.write_slice(vector);
+                bytes.write(vector.as_slice());
             }
         }
         Ok(())

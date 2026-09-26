@@ -186,14 +186,14 @@ impl Decodable for Sequence {
 impl Encodable for Sequence {
     fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), Error> {
         bytes.write_bytes(&self.name);
-        bytes.write_vector(&self.interval);
+        bytes.write(&self.interval);
         bytes.write(self.move_speed);
         bytes.write(self.flags);
         bytes.write(self.rarity);
         bytes.write(self.sync_point);
         bytes.write(self.bounds_radius);
-        bytes.write_vector(&self.minimum_extent);
-        bytes.write_vector(&self.maximum_extent);
+        bytes.write(&self.minimum_extent);
+        bytes.write(&self.maximum_extent);
         Ok(())
     }
 }

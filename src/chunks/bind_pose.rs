@@ -89,7 +89,7 @@ impl Chunk for BindPose {
             })?;
 
         bytes.write(self.matrices.len() as u32);
-        bytes.write_vectors(&self.matrices);
+        bytes.write(self.matrices.as_slice());
         Ok(())
     }
 }
