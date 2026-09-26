@@ -37,18 +37,18 @@ impl SequenceFlags {
 pub(crate) const SIZE: usize = 132;
 const NAME_SIZE: usize = 80;
 
-/// A fixed-size animation sequence, including reserved fields and raw float bits.
-#[derive(Clone, Debug, Eq, PartialEq)]
+/// A fixed-size animation sequence, including reserved fields.
+#[derive(Clone, Debug, PartialEq)]
 pub struct Sequence {
     name: [u8; NAME_SIZE],
     interval: [u32; 2],
-    move_speed: u32,
+    move_speed: f32,
     flags: u32,
-    rarity: u32,
+    rarity: f32,
     sync_point: u32,
-    bounds_radius: u32,
-    minimum_extent: [u32; 3],
-    maximum_extent: [u32; 3],
+    bounds_radius: f32,
+    minimum_extent: Vec3,
+    maximum_extent: Vec3,
 }
 
 impl Sequence {
@@ -56,13 +56,13 @@ impl Sequence {
         let mut sequence = Self {
             name: [0; NAME_SIZE],
             interval,
-            move_speed: 0,
+            move_speed: 0.0,
             flags: 0,
-            rarity: 0,
+            rarity: 0.0,
             sync_point: 0,
-            bounds_radius: 0,
-            minimum_extent: [0; 3],
-            maximum_extent: [0; 3],
+            bounds_radius: 0.0,
+            minimum_extent: [0.0; 3],
+            maximum_extent: [0.0; 3],
         };
         sequence.set_name(name)?;
         Ok(sequence)
@@ -86,10 +86,10 @@ impl Sequence {
         self.interval = interval;
     }
     pub fn move_speed(&self) -> f32 {
-        f32::from_bits(self.move_speed)
+        self.move_speed
     }
     pub fn set_move_speed(&mut self, speed: f32) {
-        self.move_speed = speed.to_bits();
+        self.move_speed = speed;
     }
     pub fn flags(&self) -> SequenceFlags {
         SequenceFlags::from_bits(self.flags)
@@ -104,10 +104,10 @@ impl Sequence {
         self.flags = flags;
     }
     pub fn rarity(&self) -> f32 {
-        f32::from_bits(self.rarity)
+        self.rarity
     }
     pub fn set_rarity(&mut self, rarity: f32) {
-        self.rarity = rarity.to_bits();
+        self.rarity = rarity;
     }
     pub fn sync_point(&self) -> u32 {
         self.sync_point
@@ -116,22 +116,22 @@ impl Sequence {
         self.sync_point = point;
     }
     pub fn bounds_radius(&self) -> f32 {
-        f32::from_bits(self.bounds_radius)
+        self.bounds_radius
     }
     pub fn set_bounds_radius(&mut self, radius: f32) {
-        self.bounds_radius = radius.to_bits();
+        self.bounds_radius = radius;
     }
     pub fn minimum_extent(&self) -> Vec3 {
-        self.minimum_extent.map(f32::from_bits)
+        self.minimum_extent
     }
     pub fn set_minimum_extent(&mut self, extent: Vec3) {
-        self.minimum_extent = extent.map(f32::to_bits);
+        self.minimum_extent = extent;
     }
     pub fn maximum_extent(&self) -> Vec3 {
-        self.maximum_extent.map(f32::from_bits)
+        self.maximum_extent
     }
     pub fn set_maximum_extent(&mut self, extent: Vec3) {
-        self.maximum_extent = extent.map(f32::to_bits);
+        self.maximum_extent = extent;
     }
 }
 
