@@ -39,15 +39,15 @@ macro_rules! model_chunks {
         /// One ordered chunk in a model. Known variants contain complete decoded payloads.
         #[derive(Clone, Debug)]
         pub enum ModelChunk {
-            $( $variant($chunk), )*
+            $( $variant(Box<$chunk>), )*
             Unknown(RawChunk),
-            Malformed(MalformedChunk),
+            Malformed(Box<MalformedChunk>),
         }
 
         $(
             impl From<$chunk> for ModelChunk {
                 fn from(chunk: $chunk) -> Self {
-                    Self::$variant(chunk)
+                    Self::$variant(Box::new(chunk))
                 }
             }
 
@@ -56,7 +56,7 @@ macro_rules! model_chunks {
 
                 fn try_from(chunk: ModelChunk) -> Result<Self, Self::Error> {
                     match chunk {
-                        ModelChunk::$variant(value) => Ok(value),
+                        ModelChunk::$variant(value) => Ok(*value),
                         other => Err(other),
                     }
                 }
@@ -67,7 +67,7 @@ macro_rules! model_chunks {
 
                 fn try_from(chunk: &'a ModelChunk) -> Result<Self, Self::Error> {
                     match chunk {
-                        ModelChunk::$variant(value) => Ok(value),
+                        ModelChunk::$variant(value) => Ok(value.as_ref()),
                         _ => Err(()),
                     }
                 }
@@ -97,7 +97,7 @@ macro_rules! model_chunks {
             ) -> Result<Option<Self>, Error> {
                 let mut cursor = *payload;
                 let decoded = match tag {
-                    $( <$chunk>::TAG => <$chunk>::decode_one(&mut cursor, version).map(Self::$variant), )*
+                    $( <$chunk>::TAG => <$chunk>::decode_one(&mut cursor, version).map(Self::from), )*
                     _ => return Ok(None),
                 };
                 let chunk = decoded?;
@@ -156,7 +156,7 @@ impl ModelChunk {
         match decoded {
             Ok(Some(chunk)) => chunk,
             Ok(None) => Self::Unknown(raw),
-            Err(error) => Self::Malformed(MalformedChunk { raw, error }),
+            Err(error) => Self::Malformed(Box::new(MalformedChunk { raw, error })),
         }
     }
 
@@ -166,10 +166,10 @@ impl ModelChunk {
         match Self::decode_payload(tag, payload, version) {
             Ok(Some(chunk)) => chunk,
             Ok(None) => Self::Unknown(RawChunk::new(tag, payload.remaining().to_vec())),
-            Err(error) => Self::Malformed(MalformedChunk {
+            Err(error) => Self::Malformed(Box::new(MalformedChunk {
                 raw: RawChunk::new(tag, payload.remaining().to_vec()),
                 error,
-            }),
+            })),
         }
     }
 }

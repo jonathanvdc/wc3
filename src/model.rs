@@ -56,7 +56,7 @@ impl Model {
     pub fn new(version: Version) -> Self {
         Self {
             default_version: version,
-            chunks: vec![ModelChunk::Version(VersionChunk {
+            chunks: vec![ModelChunk::from(VersionChunk {
                 version,
                 extension: Vec::new(),
             })],

@@ -72,7 +72,7 @@ fn set_version_replaces_repeated_chunks_and_preserves_extension() {
         unreachable!()
     };
     first.extension = vec![7, 8];
-    model.push(ModelChunk::Version(wc3_mdx::VersionChunk::new(900)));
+    model.push(ModelChunk::from(wc3_mdx::VersionChunk::new(900)));
 
     model.set_version(1800);
 

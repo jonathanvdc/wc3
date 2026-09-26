@@ -1,4 +1,4 @@
-use wc3_mdx::{Model, ModelChunk, RawChunk, Decodable, Encodable, Sequence, SequencesChunk};
+use wc3_mdx::{Decodable, Encodable, Model, ModelChunk, RawChunk, Sequence, SequencesChunk};
 
 #[test]
 fn model_stores_known_unknown_and_malformed_chunks() {
@@ -7,9 +7,11 @@ fn model_stores_known_unknown_and_malformed_chunks() {
         panic!("expected decoded version chunk");
     };
     assert_eq!(version.version, 800);
-    model.push(ModelChunk::Sequences(SequencesChunk::new(vec![
-        Sequence::new("Stand", [0, 100]).unwrap(),
-    ])));
+    model.push(ModelChunk::from(SequencesChunk::new(vec![Sequence::new(
+        "Stand",
+        [0, 100],
+    )
+    .unwrap()])));
     model.push(ModelChunk::from_raw(
         RawChunk::new(*b"FUTR", vec![1, 2, 3]),
         800,
@@ -61,7 +63,7 @@ fn replacing_a_malformed_chunk_clears_its_error() {
     ));
     assert!(matches!(model.chunks()[1], ModelChunk::Malformed(_)));
 
-    *model.chunk_mut(*b"SEQS").unwrap() = ModelChunk::Sequences(SequencesChunk::new(vec![
+    *model.chunk_mut(*b"SEQS").unwrap() = ModelChunk::from(SequencesChunk::new(vec![
         Sequence::new("Stand", [0, 100]).unwrap(),
     ]));
     assert_eq!(model.sequences().len(), 1);
@@ -83,9 +85,9 @@ fn collection_accessors_skip_malformed_chunks() {
             .encode()
             .unwrap(),
     )));
-    model.push(ModelChunk::Sequences(SequencesChunk::new(vec![
-        sequence.clone()
-    ])));
+    model.push(ModelChunk::from(SequencesChunk::new(
+        vec![sequence.clone()],
+    )));
     assert_eq!(model.sequences(), vec![sequence]);
 }
 
@@ -94,12 +96,8 @@ fn collection_setter_keeps_records_decoded_and_collapses_repeated_chunks() {
     let mut model = Model::new(800);
     let first = Sequence::new("Stand", [0, 100]).unwrap();
     let second = Sequence::new("Walk", [101, 200]).unwrap();
-    model.push(ModelChunk::Sequences(SequencesChunk::new(vec![
-        first.clone()
-    ])));
-    model.push(ModelChunk::Sequences(SequencesChunk::new(vec![
-        second.clone()
-    ])));
+    model.push(ModelChunk::from(SequencesChunk::new(vec![first.clone()])));
+    model.push(ModelChunk::from(SequencesChunk::new(vec![second.clone()])));
     assert_eq!(model.sequences(), vec![first, second.clone()]);
 
     model.set_sequences(&[second.clone()]);
