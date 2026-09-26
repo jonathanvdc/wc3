@@ -46,8 +46,6 @@ impl ModelInfo {
         Ok(info)
     }
 
-    /// Returns the raw fixed-width record.
-
     /// Returns the model name up to the first NUL, replacing invalid UTF-8.
     pub fn name(&self) -> Cow<'_, str> {
         field::text(&self.name)

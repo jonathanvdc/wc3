@@ -702,7 +702,7 @@ impl Encodable for Geoset {
         bytes.write(&self.extent);
         write_count(bytes, self.sequence_extents.len())?;
         for extent in &self.sequence_extents {
-            bytes.write(&*extent);
+            bytes.write(extent);
         }
         for extension in &self.extensions {
             match extension {

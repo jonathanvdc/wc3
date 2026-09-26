@@ -34,8 +34,6 @@ impl FaceFx {
         Ok(entry)
     }
 
-    /// Returns the original record bytes.
-
     /// Returns the name up to the first NUL.
     pub fn name(&self) -> Cow<'_, str> {
         field::text(&self.name)

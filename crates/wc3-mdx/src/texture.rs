@@ -60,8 +60,6 @@ impl Texture {
         Ok(texture)
     }
 
-    /// Returns the original 268-byte record.
-
     /// Returns the replaceable texture ID.
     pub fn replaceable_id(&self) -> u32 {
         self.replaceable_id
