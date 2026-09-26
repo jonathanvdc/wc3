@@ -169,25 +169,17 @@ impl Encodable for CollisionShape {
             CollisionGeometry::Cylinder(_, _) => 3,
         };
         bytes.write(kind);
-        let mut push_vec3 = |values: Vec3| {
-            for value in values {
-                bytes.write(value);
-            }
-        };
+
         match self.geometry {
             CollisionGeometry::Box(points) | CollisionGeometry::Plane(points) => {
-                for point in points {
-                    push_vec3(point);
-                }
+                bytes.write_vectors(&points);
             }
             CollisionGeometry::Sphere(center, radius) => {
-                push_vec3(center);
+                bytes.write_vector(&center);
                 bytes.write(radius);
             }
             CollisionGeometry::Cylinder(points, radius) => {
-                for point in points {
-                    push_vec3(point);
-                }
+                bytes.write_vectors(&points);
                 bytes.write(radius);
             }
         }

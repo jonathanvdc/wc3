@@ -207,20 +207,10 @@ fn encode_fields(fields: &Particle2Fields, bytes: &mut Encoder<'_>) {
     }
     bytes.write(fields.tail_length);
     bytes.write(fields.time);
-    for color in fields.segment_colors {
-        for component in color {
-            bytes.write(component);
-        }
-    }
+    bytes.write_vectors(&fields.segment_colors);
     bytes.write_bytes(&fields.alpha);
-    for value in fields.particle_scaling {
-        bytes.write(value);
-    }
-    for group in fields.uv_animations {
-        for value in group {
-            bytes.write(value);
-        }
-    }
+    bytes.write_vector(&fields.particle_scaling);
+    bytes.write_vectors(&fields.uv_animations);
     for value in [
         fields.texture_id,
         fields.squirt,

@@ -160,9 +160,8 @@ impl Encodable for ModelInfo {
         bytes.write_bytes(&self.name);
         bytes.write_bytes(&self.reserved);
         bytes.write(self.bounds_radius);
-        for value in self.minimum_extent.into_iter().chain(self.maximum_extent) {
-            bytes.write(value);
-        }
+        bytes.write_vector(&self.minimum_extent);
+        bytes.write_vector(&self.maximum_extent);
         bytes.write(self.blend_time);
         Ok(())
     }

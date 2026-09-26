@@ -191,15 +191,11 @@ impl Encodable for Camera {
         let start = bytes.position();
         let marker = bytes.begin_sized();
         bytes.write_bytes(&self.name);
-        for value in self.position {
-            bytes.write(value);
-        }
+        bytes.write_vector(&self.position);
         bytes.write(self.field_of_view);
         bytes.write(self.far_clip);
         bytes.write(self.near_clip);
-        for value in self.target_position {
-            bytes.write(value);
-        }
+        bytes.write_vector(&self.target_position);
         for track in &self.tracks {
             if !is_track(track.tag) {
                 return Err(Error::MalformedRecord {

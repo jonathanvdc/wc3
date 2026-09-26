@@ -54,6 +54,20 @@ impl<'a> Encoder<'a> {
         value.write_to(self);
     }
 
+    /// Appends the components of a fixed-size vector in order.
+    pub fn write_vector<T: Scalar + Copy, const N: usize>(&mut self, vector: &[T; N]) {
+        for &value in vector {
+            self.write(value);
+        }
+    }
+
+    /// Appends a sequence of fixed-size vectors in order.
+    pub fn write_vectors<T: Scalar + Copy, const N: usize>(&mut self, vectors: &[[T; N]]) {
+        for vector in vectors {
+            self.write_vector(vector);
+        }
+    }
+
     /// Writes a placeholder for a size that includes its own four bytes.
     pub fn begin_sized(&mut self) -> SizeMarker {
         let marker = SizeMarker(self.position());

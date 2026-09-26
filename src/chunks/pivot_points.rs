@@ -20,11 +20,7 @@ impl Chunk for PivotPointsChunk {
     fn encode_payload_to(&self, bytes: &mut Encoder<'_>) -> Result<(), Error> {
         checked_chunk_size(self.points.len(), 12, Self::TAG)?;
 
-        for point in &self.points {
-            for coordinate in point {
-                bytes.write(coordinate);
-            }
-        }
+        bytes.write_vectors(&self.points);
         Ok(())
     }
 }
