@@ -9,6 +9,7 @@ use crate::{
     Texture, TextureAnimation,
 };
 use crate::{Chunk, Cursor, Decodable, DecodeError, Encodable, KnownChunk, Record};
+use crate::{GlobalSequence, PivotPoint};
 
 /// A complete chunk made of consecutive records of one type.
 pub trait CollectionChunk: Sized {
@@ -131,6 +132,8 @@ record_collection!(ParticleEmitters2Chunk, ParticleEmitter2, *b"PRE2");
 record_collection!(PopcornEmittersChunk, PopcornEmitter, *b"CORN");
 record_collection!(RibbonEmittersChunk, RibbonEmitter, *b"RIBB");
 record_collection!(TextureAnimationsChunk, TextureAnimation, *b"TXAN");
+record_collection!(GlobalSequencesChunk, GlobalSequence, *b"GLBS");
+record_collection!(PivotPointsChunk, PivotPoint, *b"PIVT");
 
 #[cfg(test)]
 mod tests {
@@ -157,5 +160,36 @@ mod tests {
         let original = GeosetsChunk::new(records);
         let bytes = original.encode().unwrap();
         assert_eq!(GeosetsChunk::decode(&bytes, 1800).unwrap(), original);
+    }
+
+    #[test]
+    fn fixed_width_values_use_collection_codec() {
+        let durations = GlobalSequencesChunk::new(vec![
+            GlobalSequence(100),
+            GlobalSequence(200),
+            GlobalSequence(300),
+        ]);
+        let points = PivotPointsChunk::new(vec![
+            PivotPoint([1.0, 2.0, 3.0]),
+            PivotPoint([4.0, 5.0, 6.0]),
+        ]);
+        assert_eq!(
+            GlobalSequencesChunk::decode(&durations.encode().unwrap(), 800).unwrap(),
+            durations
+        );
+        assert_eq!(
+            PivotPointsChunk::decode(&points.encode().unwrap(), 800).unwrap(),
+            points
+        );
+        assert!(GlobalSequencesChunk::decode(
+            &[b"GLBS".as_slice(), &1u32.to_le_bytes(), &[1]].concat(),
+            800
+        )
+        .is_err());
+        assert!(PivotPointsChunk::decode(
+            &[b"PIVT".as_slice(), &1u32.to_le_bytes(), &[1]].concat(),
+            800
+        )
+        .is_err());
     }
 }

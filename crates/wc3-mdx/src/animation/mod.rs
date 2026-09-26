@@ -6,3 +6,5 @@ mod texture_animation;
 pub use texture_animation::TextureAnimation;
 mod geoset_animation;
 pub use geoset_animation::{GeosetAnimation, GeosetAnimationFlags};
+mod global_sequence;
+pub use global_sequence::GlobalSequence;

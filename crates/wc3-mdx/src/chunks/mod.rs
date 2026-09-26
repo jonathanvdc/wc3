@@ -10,14 +10,10 @@ mod bind_pose;
 pub use bind_pose::BindPose;
 mod collections;
 pub use collections::*;
-mod global_sequences;
-pub use global_sequences::GlobalSequencesChunk;
 mod model_info;
 pub use model_info::ModelInfoChunk;
 mod model_chunk;
 pub use model_chunk::{MalformedChunk, ModelChunk};
-mod pivot_points;
-pub use pivot_points::PivotPointsChunk;
 mod version;
 pub use version::VersionChunk;
 
@@ -72,17 +68,6 @@ impl<T: KnownChunk> Decodable for T {
         *cursor = next;
         Ok(decoded)
     }
-}
-
-fn checked_chunk_size(count: usize, width: usize, tag: Tag) -> Result<usize, EncodeError> {
-    let size = count.checked_mul(width).ok_or(EncodeError::ChunkTooLarge {
-        tag,
-        size: usize::MAX,
-    })?;
-    if size > u32::MAX as usize {
-        return Err(EncodeError::ChunkTooLarge { tag, size });
-    }
-    Ok(size)
 }
 
 #[cfg(test)]
