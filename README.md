@@ -26,7 +26,7 @@ let encoded = model.encode()?;
 let decoded = Model::decode_latest(&encoded)?;
 decoded.validate()?;
 assert_eq!(decoded.version(), 800);
-let info = decoded.model_info()?.unwrap();
+let info = decoded.model_info().unwrap();
 assert_eq!(info.name(), "Example");
 # Ok::<(), Box<dyn std::error::Error>>(())
 ```

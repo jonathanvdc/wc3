@@ -69,7 +69,7 @@ fn typed_accessors_preserve_local_files_when_available() {
             }
             let bytes = std::fs::read(&path).unwrap();
             let mut model = Model::decode(&bytes, 800).unwrap();
-            if let Some(info) = model.model_info().unwrap() {
+            if let Some(info) = model.model_info() {
                 model.set_model_info(&info);
             }
             if model

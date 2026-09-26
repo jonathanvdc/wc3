@@ -45,10 +45,6 @@ impl ModelInfo {
         Ok(info)
     }
 
-    pub(crate) fn parse(data: &[u8]) -> Result<Self, Error> {
-        Self::decode_one(&mut Cursor::new(data), 0)
-    }
-
     /// Returns the raw fixed-width record.
     pub fn as_bytes(&self) -> [u8; SIZE] {
         self.encode()
@@ -109,42 +105,21 @@ impl ModelInfo {
 }
 
 impl Model {
-    /// Reads the first `MODL` record, if present.
-    pub fn model_info(&self) -> Result<Option<ModelInfo>, Error> {
-        self.chunks()
-            .iter()
-            .find(|chunk| chunk.tag() == ModelInfo::TAG)
-            .map(|chunk| match chunk {
-                ModelChunk::ModelInfo(decoded) => Ok(decoded.info.clone()),
-                ModelChunk::Malformed(malformed) => Err(malformed.error.clone()),
-                ModelChunk::Unknown(raw) => ModelInfo::parse(&raw.data),
-                _ => unreachable!("MODL tag matched another typed chunk"),
-            })
-            .transpose()
+    /// Returns the first decoded `MODL` record, if present.
+    pub fn model_info(&self) -> Option<ModelInfo> {
+        self.chunks().iter().find_map(|chunk| match chunk {
+            ModelChunk::ModelInfo(decoded) => Some(decoded.info.clone()),
+            _ => None,
+        })
     }
 
-    /// Replaces the first `MODL` record or appends one. Any extension bytes
-    /// after the standard record are retained.
+    /// Replaces all `MODL` chunks with one decoded chunk at the first one's
+    /// position, or appends one if none exists.
     pub fn set_model_info(&mut self, info: &ModelInfo) {
-        if let Some(chunk) = self.chunk_mut(ModelInfo::TAG) {
-            match chunk {
-                ModelChunk::ModelInfo(current) => current.info = info.clone(),
-                _ => {
-                    let data = match chunk {
-                        ModelChunk::Unknown(raw) => &raw.data,
-                        ModelChunk::Malformed(malformed) => &malformed.raw.data,
-                        _ => unreachable!("MODL tag matched another typed chunk"),
-                    };
-                    let extension = data.get(SIZE..).unwrap_or_default().to_vec();
-                    *chunk = ModelChunk::ModelInfo(ModelInfoChunk::new(info.clone(), extension));
-                }
-            }
-        } else {
-            self.push(ModelChunk::ModelInfo(ModelInfoChunk::new(
-                info.clone(),
-                Vec::new(),
-            )));
-        }
+        self.replace_chunk(ModelChunk::ModelInfo(ModelInfoChunk::new(
+            info.clone(),
+            Vec::new(),
+        )));
     }
 }
 

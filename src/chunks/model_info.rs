@@ -21,8 +21,7 @@ impl ModelInfoChunk {
 impl Record for ModelInfoChunk {
     fn decode_one(cursor: &mut Cursor<'_>, version: Version) -> Result<Self, Error> {
         let _ = version;
-        let info = ModelInfo::parse(cursor.remaining())?;
-        cursor.read_exact(372)?;
+        let info = ModelInfo::decode_one(cursor, version)?;
         let extension = cursor.remaining().to_vec();
         cursor.read_exact(extension.len())?;
         Ok(Self::new(info, extension))

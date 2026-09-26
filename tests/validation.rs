@@ -119,7 +119,7 @@ fn validates_every_repeated_model_info_chunk() {
         RawChunk::new(*b"MODL", vec![0; 12]),
         800,
     ));
-    assert!(model.model_info().unwrap().is_some());
+    assert!(model.model_info().is_some());
     assert!(model.validate().is_err());
 }
 
