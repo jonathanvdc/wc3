@@ -56,7 +56,6 @@ impl KnownChunk for VersionChunk {
 #[cfg(test)]
 mod version_chunk_tests {
     use super::*;
-    use crate::Chunk;
 
     #[test]
     fn preserves_version_extension_bytes() {
@@ -64,8 +63,8 @@ mod version_chunk_tests {
             version: 1800,
             extension: vec![9, 8, 7],
         };
-        let chunk = original.encode_chunk().unwrap();
-        assert_eq!(VersionChunk::decode_chunk(&chunk, 1800).unwrap(), original);
+        let payload = original.encode().unwrap();
+        assert_eq!(VersionChunk::decode(&payload, 1800).unwrap(), original);
         assert_eq!(
             VersionChunk::decode(&[1, 2, 3], 800),
             Err(Error::InvalidVersionChunk)

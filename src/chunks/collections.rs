@@ -113,7 +113,6 @@ record_collection!(TextureAnimationsChunk, TextureAnimation);
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::Chunk;
 
     #[test]
     fn fixed_width_collection_uses_the_whole_chunk() {
@@ -122,12 +121,9 @@ mod tests {
             Sequence::new("Walk", [101, 200]).unwrap(),
         ];
         let original = SequencesChunk::new(records);
-        let chunk = original.encode_chunk().unwrap();
-        assert_eq!(
-            SequencesChunk::decode_chunk(&chunk, 1800).unwrap(),
-            original
-        );
-        assert!(Sequence::decode(&chunk.data, 800).is_err());
+        let payload = original.encode().unwrap();
+        assert_eq!(SequencesChunk::decode(&payload, 1800).unwrap(), original);
+        assert!(Sequence::decode(&payload, 800).is_err());
     }
 
     #[test]

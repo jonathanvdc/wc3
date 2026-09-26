@@ -46,16 +46,15 @@ impl KnownChunk for GlobalSequencesChunk {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::Chunk;
 
     #[test]
     fn round_trips_entire_payload() {
         let original = GlobalSequencesChunk {
             durations: vec![100, 200, 300],
         };
-        let raw = original.encode_chunk().unwrap();
+        let payload = original.encode().unwrap();
         assert_eq!(
-            GlobalSequencesChunk::decode_chunk(&raw, 800).unwrap(),
+            GlobalSequencesChunk::decode(&payload, 800).unwrap(),
             original
         );
         assert!(GlobalSequencesChunk::decode(&[1], 800).is_err());

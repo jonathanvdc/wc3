@@ -1,5 +1,5 @@
 //! Raw and typed top-level MDX chunks.
-use crate::{Tag, Version};
+use crate::Tag;
 
 use crate::{Error, Record};
 
@@ -24,35 +24,17 @@ pub use version::VersionChunk;
 pub trait Chunk {
     /// Returns this value's chunk tag.
     fn tag(&self) -> Tag;
-
-    /// Converts this value to a raw chunk.
-    fn encode_chunk(&self) -> Result<RawChunk, Error>;
 }
 
 /// A complete chunk whose tag is fixed by its type.
 pub trait KnownChunk: Chunk + Record {
     /// The four-byte chunk tag for this type.
     const TAG: Tag;
-
-    /// Decodes the complete payload after checking its tag.
-    fn decode_chunk(chunk: &RawChunk, version: Version) -> Result<Self, Error> {
-        if chunk.tag != Self::TAG {
-            return Err(Error::MalformedRecord {
-                tag: chunk.tag,
-                offset: 0,
-            });
-        }
-        Self::decode(&chunk.data, version)
-    }
 }
 
 impl<T: KnownChunk> Chunk for T {
     fn tag(&self) -> Tag {
         T::TAG
-    }
-
-    fn encode_chunk(&self) -> Result<RawChunk, Error> {
-        Ok(RawChunk::new(T::TAG, self.encode()?))
     }
 }
 
@@ -71,20 +53,16 @@ fn checked_chunk_size(count: usize, width: usize, tag: Tag) -> Result<usize, Err
 mod tests {
     use super::*;
 
-    fn round_trip<C: Chunk>(chunk: &C) -> RawChunk {
-        let raw = chunk.encode_chunk().unwrap();
-        assert_eq!(chunk.tag(), raw.tag);
-        raw
-    }
-
     #[test]
-    fn raw_and_known_chunks_share_the_chunk_interface() {
+    fn raw_and_known_chunks_expose_their_tags() {
         let raw = RawChunk::new(*b"FUTR", vec![1, 2, 3]);
-        assert_eq!(round_trip(&raw), raw);
+        assert_eq!(raw.tag(), *b"FUTR");
 
         let known = VersionChunk::new(800);
-        let encoded = round_trip(&known);
-        assert_eq!(VersionChunk::decode_chunk(&encoded, 800).unwrap(), known);
-        assert!(VersionChunk::decode_chunk(&raw, 800).is_err());
+        assert_eq!(known.tag(), *b"VERS");
+        assert_eq!(
+            VersionChunk::decode(&known.encode().unwrap(), 800).unwrap(),
+            known
+        );
     }
 }

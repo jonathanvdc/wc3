@@ -66,11 +66,6 @@ impl Chunk for ModelChunk {
     fn tag(&self) -> Tag {
         ModelChunk::tag(self)
     }
-    fn encode_chunk(&self) -> Result<RawChunk, Error> {
-        let mut bytes = Vec::new();
-        self.encode_to(&mut Encoder::new(&mut bytes))?;
-        Ok(RawChunk::new(self.tag(), bytes[8..].to_vec()))
-    }
 }
 
 impl ModelChunk {

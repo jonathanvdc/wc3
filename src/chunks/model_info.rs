@@ -54,12 +54,11 @@ impl KnownChunk for ModelInfoChunk {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::Chunk;
 
     #[test]
     fn keeps_extension_bytes() {
         let original = ModelInfoChunk::new(ModelInfo::default(), vec![1, 2, 3]);
-        let raw = original.encode_chunk().unwrap();
-        assert_eq!(ModelInfoChunk::decode_chunk(&raw, 1800).unwrap(), original);
+        let payload = original.encode().unwrap();
+        assert_eq!(ModelInfoChunk::decode(&payload, 1800).unwrap(), original);
     }
 }

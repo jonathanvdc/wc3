@@ -1,5 +1,4 @@
 use super::Chunk;
-use crate::Error;
 use crate::Tag;
 
 /// A tagged top-level MDX chunk. The payload is stored without interpretation.
@@ -21,9 +20,5 @@ impl RawChunk {
 impl Chunk for RawChunk {
     fn tag(&self) -> Tag {
         self.tag
-    }
-
-    fn encode_chunk(&self) -> Result<RawChunk, Error> {
-        Ok(self.clone())
     }
 }

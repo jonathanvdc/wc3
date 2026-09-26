@@ -48,15 +48,14 @@ impl KnownChunk for PivotPointsChunk {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::Chunk;
 
     #[test]
     fn round_trips_entire_payload() {
         let original = PivotPointsChunk {
             points: vec![[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]],
         };
-        let raw = original.encode_chunk().unwrap();
-        assert_eq!(PivotPointsChunk::decode_chunk(&raw, 800).unwrap(), original);
+        let payload = original.encode().unwrap();
+        assert_eq!(PivotPointsChunk::decode(&payload, 800).unwrap(), original);
         assert!(PivotPointsChunk::decode(&[1], 800).is_err());
     }
 }
