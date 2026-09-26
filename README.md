@@ -36,8 +36,8 @@ decoding, encoding, and model validation currently return `Error`.
 
 `Model::chunks()` exposes `ModelChunk` variants for known chunk types, plus
 `Unknown` and `Malformed` variants. A malformed chunk retains its original
-bytes and decoding error; `validate()` reports that error. Editing a typed
-chunk variant writes its new payload when the model is encoded.
+bytes and decoding error; typed accessors and `validate()` skip it. Editing a
+typed chunk variant writes its new payload when the model is encoded.
 
 Run unit and integration tests with `cargo test --all-targets`.
 Set `WC3_MDX_FIXTURES` to a directory of local `.mdx` files to include

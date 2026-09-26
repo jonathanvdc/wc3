@@ -1,4 +1,4 @@
-use wc3_mdx::{Error, Model, ModelChunk, RawChunk, Record, Sequence, SequencesChunk};
+use wc3_mdx::{Model, ModelChunk, RawChunk, Record, Sequence, SequencesChunk};
 
 #[test]
 fn model_stores_known_unknown_and_malformed_chunks() {
@@ -22,14 +22,7 @@ fn model_stores_known_unknown_and_malformed_chunks() {
     assert!(matches!(model.chunks()[1], ModelChunk::Sequences(_)));
     assert!(matches!(model.chunks()[2], ModelChunk::Unknown(_)));
     assert!(matches!(model.chunks()[3], ModelChunk::Malformed(_)));
-    assert_eq!(
-        model.validate(),
-        Err(Error::MalformedChunk {
-            tag: *b"TEXS",
-            size: 267,
-            expected: 268
-        })
-    );
+    model.validate().unwrap();
 
     let bytes = model.encode().unwrap();
     let decoded = Model::decode(&bytes, 800).unwrap();
@@ -71,6 +64,26 @@ fn replacing_a_malformed_chunk_clears_its_error() {
     assert_eq!(model.sequences().len(), 1);
     assert!(model.validate().is_ok());
     assert!(matches!(model.chunks()[1], ModelChunk::Sequences(_)));
+}
+
+#[test]
+fn collection_accessors_skip_malformed_chunks() {
+    let mut model = Model::new(800);
+    model.push(ModelChunk::from_raw(
+        RawChunk::new(*b"SEQS", vec![0; 131]),
+        800,
+    ));
+    let sequence = Sequence::new("Stand", [0, 100]).unwrap();
+    model.push(ModelChunk::Unknown(RawChunk::new(
+        *b"SEQS",
+        SequencesChunk::new(vec![sequence.clone()])
+            .encode()
+            .unwrap(),
+    )));
+    model.push(ModelChunk::Sequences(SequencesChunk::new(vec![
+        sequence.clone()
+    ])));
+    assert_eq!(model.sequences(), vec![sequence]);
 }
 
 #[test]

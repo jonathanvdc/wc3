@@ -59,28 +59,20 @@ impl BindPose {
 }
 
 impl Model {
-    /// Decodes every `BPOS` chunk separately, preserving chunk boundaries.
-    pub fn bind_poses(&self) -> Result<Vec<BindPose>, Error> {
-        self.chunks()
-            .iter()
-            .filter(|chunk| chunk.tag() == BindPose::TAG)
-            .map(|chunk| match chunk {
-                ModelChunk::BindPose(decoded) => Ok(decoded.clone()),
-                ModelChunk::Malformed(malformed) => Err(malformed.error.clone()),
-                ModelChunk::Unknown(raw) => BindPose::decode(&raw.data, self.version()),
-                _ => unreachable!("BPOS tag matched another typed chunk"),
-            })
-            .collect()
+    /// Returns decoded `BPOS` chunks separately, preserving chunk boundaries.
+    pub fn bind_poses(&self) -> Vec<BindPose> {
+        self.decoded_chunks(|chunk| match chunk {
+            ModelChunk::BindPose(decoded) => Some(decoded),
+            _ => None,
+        })
+        .cloned()
+        .collect()
     }
 
-    /// Replaces the first `BPOS` chunk or appends one. Other `BPOS` chunks
-    /// remain intact.
+    /// Replaces all `BPOS` chunks with one decoded chunk at the first one's
+    /// position, or appends one if none exists.
     pub fn set_bind_pose(&mut self, pose: &BindPose) {
-        if let Some(chunk) = self.chunk_mut(BindPose::TAG) {
-            *chunk = ModelChunk::BindPose(pose.clone());
-        } else {
-            self.push(ModelChunk::BindPose(pose.clone()));
-        }
+        self.replace_chunk(ModelChunk::BindPose(pose.clone()));
     }
 }
 

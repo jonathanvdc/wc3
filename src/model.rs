@@ -24,6 +24,13 @@ pub struct Model {
 }
 
 impl Model {
+    pub(crate) fn decoded_chunks<'a, C: ?Sized + 'a>(
+        &'a self,
+        typed: impl Fn(&ModelChunk) -> Option<&C> + 'a,
+    ) -> impl Iterator<Item = &'a C> + 'a {
+        self.chunks.iter().filter_map(typed)
+    }
+
     pub(crate) fn collect_chunk_records<C: CollectionChunk + 'static>(
         &self,
         typed: for<'a> fn(&'a ModelChunk) -> Option<&'a C>,
@@ -31,23 +38,16 @@ impl Model {
     where
         C::Item: Clone,
     {
-        self.collect_chunk_items(C::tag(), |chunk| {
-            typed(chunk).map(|collection| collection.records())
-        })
+        self.collect_chunk_items(|chunk| typed(chunk).map(|collection| collection.records()))
     }
 
     pub(crate) fn collect_chunk_items<T: Clone>(
         &self,
-        tag: Tag,
         typed: impl Fn(&ModelChunk) -> Option<&[T]>,
     ) -> Vec<T> {
         let mut result = Vec::new();
-        for chunk in self.chunks.iter().filter(|chunk| chunk.tag() == tag) {
-            if let Some(items) = typed(chunk) {
-                result.extend_from_slice(items);
-            } else {
-                unreachable!("tag matched a different decoded chunk type");
-            }
+        for items in self.decoded_chunks(typed) {
+            result.extend_from_slice(items);
         }
         result
     }

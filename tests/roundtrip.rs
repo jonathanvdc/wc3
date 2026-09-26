@@ -210,7 +210,7 @@ fn typed_accessors_preserve_local_files_when_available() {
                 .count()
                 == 1
             {
-                let pose = model.bind_poses().unwrap().remove(0);
+                let pose = model.bind_poses().remove(0);
                 model.set_bind_pose(&pose);
             }
             assert_eq!(model.encode().unwrap(), bytes, "{}", path.display());
