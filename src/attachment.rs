@@ -3,7 +3,7 @@ use crate::Encoder;
 use crate::Tag;
 use crate::ValueError;
 
-use crate::{AttachmentsChunk, Cursor, ModelChunk};
+use crate::{AttachmentsChunk, Cursor};
 use crate::{Decodable, Encodable};
 use std::borrow::Cow;
 
@@ -97,9 +97,7 @@ impl Model {
 
     /// Replaces attachments in the first `ATCH` chunk.
     pub fn set_attachments(&mut self, attachments: &[Attachment]) {
-        self.replace_chunk(ModelChunk::Attachments(AttachmentsChunk::new(
-            attachments.to_vec(),
-        )));
+        self.replace_chunk(AttachmentsChunk::new(attachments.to_vec()));
     }
 }
 

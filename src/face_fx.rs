@@ -3,7 +3,7 @@ use crate::Encoder;
 use crate::Tag;
 use crate::ValueError;
 
-use crate::{Cursor, FaceFxChunk, ModelChunk};
+use crate::{Cursor, FaceFxChunk};
 use crate::{Decodable, Encodable};
 use std::borrow::Cow;
 
@@ -70,7 +70,7 @@ impl Model {
 
     /// Replaces face-animation records in the first `FAFX` chunk.
     pub fn set_face_fx(&mut self, entries: &[FaceFx]) {
-        self.replace_chunk(ModelChunk::FaceFx(FaceFxChunk::new(entries.to_vec())));
+        self.replace_chunk(FaceFxChunk::new(entries.to_vec()));
     }
 }
 

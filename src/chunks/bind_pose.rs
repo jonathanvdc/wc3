@@ -2,7 +2,7 @@
 use crate::Encoder;
 use crate::Tag;
 
-use crate::{Cursor, ModelChunk};
+use crate::Cursor;
 use crate::{Decodable, Encodable};
 use crate::{Error, KnownChunk, Model};
 
@@ -67,7 +67,7 @@ impl Model {
     /// Replaces all `BPOS` chunks with one decoded chunk at the first one's
     /// position, or appends one if none exists.
     pub fn set_bind_pose(&mut self, pose: &BindPose) {
-        self.replace_chunk(ModelChunk::BindPose(pose.clone()));
+        self.replace_chunk(pose.clone());
     }
 }
 

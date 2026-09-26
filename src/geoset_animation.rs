@@ -4,7 +4,7 @@ use crate::ValueError;
 use crate::{Color, Tag};
 
 use crate::{AnimationTrack, Error, Model};
-use crate::{Cursor, GeosetAnimationsChunk, ModelChunk};
+use crate::{Cursor, GeosetAnimationsChunk};
 use crate::{Decodable, Encodable};
 
 /// Geoset animation rendering flags, retaining unknown bits.
@@ -121,9 +121,7 @@ impl Model {
 
     /// Replaces geoset animations in the first `GEOA` chunk.
     pub fn set_geoset_animations(&mut self, animations: &[GeosetAnimation]) {
-        self.replace_chunk(ModelChunk::GeosetAnimations(GeosetAnimationsChunk::new(
-            animations.to_vec(),
-        )));
+        self.replace_chunk(GeosetAnimationsChunk::new(animations.to_vec()));
     }
 }
 

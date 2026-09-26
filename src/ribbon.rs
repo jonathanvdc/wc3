@@ -4,7 +4,7 @@ use crate::ValueError;
 use crate::{Color, Tag};
 
 use crate::{AnimationTrack, Error, Model, Node};
-use crate::{Cursor, ModelChunk, RibbonEmittersChunk};
+use crate::{Cursor, RibbonEmittersChunk};
 use crate::{Decodable, Encodable};
 
 pub(crate) const FIXED_SIZE: usize = 52;
@@ -98,9 +98,7 @@ impl Model {
 
     /// Replaces ribbon emitters in the first `RIBB` chunk.
     pub fn set_ribbon_emitters(&mut self, emitters: &[RibbonEmitter]) {
-        self.replace_chunk(ModelChunk::RibbonEmitters(RibbonEmittersChunk::new(
-            emitters.to_vec(),
-        )));
+        self.replace_chunk(RibbonEmittersChunk::new(emitters.to_vec()));
     }
 }
 

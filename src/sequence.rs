@@ -3,7 +3,7 @@ use crate::Encoder;
 use crate::ValueError;
 use crate::{Tag, Vec3};
 
-use crate::{Cursor, ModelChunk, SequencesChunk};
+use crate::{Cursor, SequencesChunk};
 use crate::{Decodable, Encodable};
 use std::borrow::Cow;
 
@@ -143,9 +143,7 @@ impl Model {
     /// Writes all sequences to the first `SEQS` chunk, creating it if needed.
     /// Additional `SEQS` chunks are removed after their records are replaced.
     pub fn set_sequences(&mut self, sequences: &[Sequence]) {
-        self.replace_chunk(ModelChunk::Sequences(SequencesChunk::new(
-            sequences.to_vec(),
-        )));
+        self.replace_chunk(SequencesChunk::new(sequences.to_vec()));
     }
 }
 

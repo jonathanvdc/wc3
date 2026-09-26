@@ -3,7 +3,7 @@ use crate::Encoder;
 use crate::ValueError;
 use crate::{Tag, Vec3, Version};
 
-use crate::{CamerasChunk, Cursor, ModelChunk};
+use crate::{CamerasChunk, Cursor};
 use crate::{Decodable, Encodable};
 use std::borrow::Cow;
 
@@ -139,7 +139,7 @@ impl Model {
 
     /// Replaces cameras in the first `CAMS` chunk.
     pub fn set_cameras(&mut self, cameras: &[Camera]) {
-        self.replace_chunk(ModelChunk::Cameras(CamerasChunk::new(cameras.to_vec())));
+        self.replace_chunk(CamerasChunk::new(cameras.to_vec()));
     }
 }
 

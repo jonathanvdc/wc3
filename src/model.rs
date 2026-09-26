@@ -84,10 +84,10 @@ impl Model {
             ModelChunk::Version(current) => Some(current.extension.clone()),
             _ => None,
         });
-        self.replace_chunk(ModelChunk::Version(VersionChunk {
+        self.replace_chunk(VersionChunk {
             version,
             extension: extension.unwrap_or_default(),
-        }));
+        });
     }
 
     /// Returns the ordered list of chunks.
@@ -115,7 +115,8 @@ impl Model {
         self.chunks.push(chunk);
     }
 
-    pub(crate) fn replace_chunk(&mut self, chunk: ModelChunk) {
+    pub(crate) fn replace_chunk(&mut self, chunk: impl Into<ModelChunk>) {
+        let chunk = chunk.into();
         let tag = chunk.tag();
         if let Some(index) = self
             .chunks()

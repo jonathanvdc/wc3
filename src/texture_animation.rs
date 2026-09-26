@@ -4,7 +4,7 @@ use crate::Tag;
 use crate::ValueError;
 
 use crate::{AnimationTrack, Error, Model};
-use crate::{Cursor, ModelChunk, TextureAnimationsChunk};
+use crate::{Cursor, TextureAnimationsChunk};
 use crate::{Decodable, Encodable};
 
 /// A texture animation containing translation, rotation, and scaling tracks.
@@ -51,9 +51,7 @@ impl Model {
 
     /// Replaces texture animations in the first `TXAN` chunk.
     pub fn set_texture_animations(&mut self, animations: &[TextureAnimation]) {
-        self.replace_chunk(ModelChunk::TextureAnimations(TextureAnimationsChunk::new(
-            animations.to_vec(),
-        )));
+        self.replace_chunk(TextureAnimationsChunk::new(animations.to_vec()));
     }
 }
 

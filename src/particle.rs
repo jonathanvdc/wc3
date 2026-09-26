@@ -3,7 +3,7 @@ use crate::Encoder;
 use crate::Tag;
 use crate::ValueError;
 
-use crate::{Cursor, ModelChunk, ParticleEmittersChunk};
+use crate::{Cursor, ParticleEmittersChunk};
 use crate::{Decodable, Encodable};
 use std::borrow::Cow;
 
@@ -155,9 +155,7 @@ impl Model {
 
     /// Replaces particle emitters in the first `PREM` chunk.
     pub fn set_particle_emitters(&mut self, emitters: &[ParticleEmitter]) {
-        self.replace_chunk(ModelChunk::ParticleEmitters(ParticleEmittersChunk::new(
-            emitters.to_vec(),
-        )));
+        self.replace_chunk(ParticleEmittersChunk::new(emitters.to_vec()));
     }
 }
 

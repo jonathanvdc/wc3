@@ -3,7 +3,7 @@ use crate::Encoder;
 use crate::ValueError;
 use crate::{Color, Tag};
 
-use crate::{Cursor, ModelChunk, PopcornEmittersChunk};
+use crate::{Cursor, PopcornEmittersChunk};
 use crate::{Decodable, Encodable};
 use std::borrow::Cow;
 
@@ -154,9 +154,7 @@ impl Model {
 
     /// Replaces popcorn emitters in the first `CORN` chunk.
     pub fn set_popcorn_emitters(&mut self, emitters: &[PopcornEmitter]) {
-        self.replace_chunk(ModelChunk::PopcornEmitters(PopcornEmittersChunk::new(
-            emitters.to_vec(),
-        )));
+        self.replace_chunk(PopcornEmittersChunk::new(emitters.to_vec()));
     }
 }
 

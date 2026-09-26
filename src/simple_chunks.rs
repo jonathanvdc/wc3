@@ -1,7 +1,7 @@
 //! Model accessors for scalar chunks.
 use crate::Vec3;
 
-use crate::{GlobalSequencesChunk, Model, ModelChunk, PivotPointsChunk};
+use crate::{GlobalSequencesChunk, Model, PivotPointsChunk};
 
 impl Model {
     /// Returns durations from every `GLBS` chunk in file order.
@@ -11,9 +11,9 @@ impl Model {
 
     /// Writes global sequence durations to a `GLBS` chunk.
     pub fn set_global_sequences(&mut self, durations: &[u32]) {
-        self.replace_chunk(ModelChunk::GlobalSequences(GlobalSequencesChunk {
+        self.replace_chunk(GlobalSequencesChunk {
             durations: durations.to_vec(),
-        }));
+        });
     }
 
     /// Returns XYZ pivot points from every `PIVT` chunk in file order.
@@ -23,8 +23,8 @@ impl Model {
 
     /// Writes XYZ pivot points to a `PIVT` chunk.
     pub fn set_pivot_points(&mut self, points: &[Vec3]) {
-        self.replace_chunk(ModelChunk::PivotPoints(PivotPointsChunk {
+        self.replace_chunk(PivotPointsChunk {
             points: points.to_vec(),
-        }));
+        });
     }
 }

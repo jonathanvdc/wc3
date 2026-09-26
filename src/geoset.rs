@@ -4,8 +4,8 @@ use crate::ValueError;
 use crate::{Tag, Vec3, Version};
 
 use crate::cursor::Cursor;
+use crate::GeosetsChunk;
 use crate::{Decodable, Encodable};
-use crate::{GeosetsChunk, ModelChunk};
 use std::borrow::Cow;
 
 use crate::utils::field;
@@ -583,7 +583,7 @@ impl Model {
                 });
             }
         }
-        self.replace_chunk(ModelChunk::Geosets(GeosetsChunk::new(geosets.to_vec())));
+        self.replace_chunk(GeosetsChunk::new(geosets.to_vec()));
         Ok(())
     }
 }

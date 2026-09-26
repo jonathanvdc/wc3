@@ -2,7 +2,7 @@
 use crate::Encoder;
 use crate::Tag;
 
-use crate::{Cursor, EventObjectsChunk, ModelChunk};
+use crate::{Cursor, EventObjectsChunk};
 use crate::{Decodable, Encodable};
 use crate::{Error, Model, Node};
 
@@ -65,9 +65,7 @@ impl Model {
 
     /// Replaces event objects in the first `EVTS` chunk.
     pub fn set_event_objects(&mut self, events: &[EventObject]) {
-        self.replace_chunk(ModelChunk::EventObjects(EventObjectsChunk::new(
-            events.to_vec(),
-        )));
+        self.replace_chunk(EventObjectsChunk::new(events.to_vec()));
     }
 }
 

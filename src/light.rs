@@ -4,7 +4,7 @@ use crate::ValueError;
 use crate::{Color, Tag, Version};
 
 use crate::{AnimationTrack, Error, Model, Node};
-use crate::{Cursor, LightsChunk, ModelChunk};
+use crate::{Cursor, LightsChunk};
 use crate::{Decodable, Encodable};
 
 const FIXED_SIZE: usize = 44;
@@ -166,7 +166,7 @@ impl Model {
 
     /// Replaces lights in the first `LITE` chunk.
     pub fn set_lights(&mut self, lights: &[Light]) {
-        self.replace_chunk(ModelChunk::Lights(LightsChunk::new(lights.to_vec())));
+        self.replace_chunk(LightsChunk::new(lights.to_vec()));
     }
 }
 

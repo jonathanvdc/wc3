@@ -3,7 +3,7 @@ use crate::Encoder;
 use crate::Tag;
 use crate::ValueError;
 
-use crate::{BonesChunk, Cursor, HelpersChunk, ModelChunk};
+use crate::{BonesChunk, Cursor, HelpersChunk};
 use crate::{Decodable, Encodable};
 use std::borrow::Cow;
 
@@ -190,7 +190,7 @@ impl Model {
 
     /// Replaces all bones in the first `BONE` chunk.
     pub fn set_bones(&mut self, bones: &[Bone]) {
-        self.replace_chunk(ModelChunk::Bones(BonesChunk::new(bones.to_vec())));
+        self.replace_chunk(BonesChunk::new(bones.to_vec()));
     }
 
     /// Decodes every helper node in `HELP` chunks.
@@ -200,7 +200,7 @@ impl Model {
 
     /// Replaces all helpers in the first `HELP` chunk.
     pub fn set_helpers(&mut self, helpers: &[Node]) {
-        self.replace_chunk(ModelChunk::Helpers(HelpersChunk::new(helpers.to_vec())));
+        self.replace_chunk(HelpersChunk::new(helpers.to_vec()));
     }
 }
 

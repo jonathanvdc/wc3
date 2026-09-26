@@ -3,7 +3,7 @@ use crate::Encoder;
 use crate::ValueError;
 use crate::{Color, Tag, Version};
 
-use crate::{Cursor, MaterialsChunk, ModelChunk};
+use crate::{Cursor, MaterialsChunk};
 use crate::{Decodable, Encodable};
 use std::borrow::Cow;
 
@@ -482,9 +482,7 @@ impl Model {
                 });
             }
         }
-        self.replace_chunk(ModelChunk::Materials(MaterialsChunk::new(
-            materials.to_vec(),
-        )));
+        self.replace_chunk(MaterialsChunk::new(materials.to_vec()));
         Ok(())
     }
 }

@@ -3,7 +3,7 @@ use crate::Encoder;
 use crate::{Tag, Vec3};
 
 use crate::cursor::Cursor;
-use crate::{CollisionShapesChunk, ModelChunk};
+use crate::CollisionShapesChunk;
 use crate::{Decodable, Encodable};
 use crate::{Error, Model, Node};
 
@@ -133,9 +133,7 @@ impl Model {
 
     /// Replaces collision shapes in the first `CLID` chunk.
     pub fn set_collision_shapes(&mut self, shapes: &[CollisionShape]) {
-        self.replace_chunk(ModelChunk::CollisionShapes(CollisionShapesChunk::new(
-            shapes.to_vec(),
-        )));
+        self.replace_chunk(CollisionShapesChunk::new(shapes.to_vec()));
     }
 }
 

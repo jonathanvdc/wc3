@@ -3,7 +3,7 @@ use crate::Encoder;
 use crate::Tag;
 use crate::ValueError;
 
-use crate::{Cursor, ModelChunk, TexturesChunk};
+use crate::{Cursor, TexturesChunk};
 use crate::{Decodable, Encodable};
 use std::borrow::Cow;
 
@@ -117,7 +117,7 @@ impl Model {
     /// Writes the texture list to the first `TEXS` chunk. Additional `TEXS`
     /// chunks are removed after their records are replaced.
     pub fn set_textures(&mut self, textures: &[Texture]) {
-        self.replace_chunk(ModelChunk::Textures(TexturesChunk::new(textures.to_vec())));
+        self.replace_chunk(TexturesChunk::new(textures.to_vec()));
     }
 }
 

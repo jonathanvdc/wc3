@@ -3,7 +3,7 @@ use crate::Encoder;
 use crate::ValueError;
 use crate::{Tag, Vec3};
 
-use crate::{Cursor, ModelChunk, ModelInfoChunk};
+use crate::{Cursor, ModelInfoChunk};
 use crate::{Decodable, Encodable};
 use std::borrow::Cow;
 
@@ -115,10 +115,7 @@ impl Model {
     /// Replaces all `MODL` chunks with one decoded chunk at the first one's
     /// position, or appends one if none exists.
     pub fn set_model_info(&mut self, info: &ModelInfo) {
-        self.replace_chunk(ModelChunk::ModelInfo(ModelInfoChunk::new(
-            info.clone(),
-            Vec::new(),
-        )));
+        self.replace_chunk(ModelInfoChunk::new(info.clone(), Vec::new()));
     }
 }
 
