@@ -1,8 +1,8 @@
 //! Typed geoset sections and lossless MDX serialization.
 use crate::EncodeError;
 use crate::Encoder;
-use crate::Readable;
 use crate::ValueError;
+use crate::{Readable, Writable};
 use crate::{Tag, Vec3, Version};
 
 use crate::cursor::Cursor;
@@ -14,7 +14,7 @@ use crate::utils::field;
 use crate::{DecodeError, Model};
 
 /// A geoset's bounding volume, also used for each sequence extent.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Readable, Writable)]
 pub struct GeosetExtent {
     pub bounds_radius: f32,
     pub minimum: Vec3,
@@ -44,7 +44,7 @@ enum GeosetExtraSection {
 
 /// Fixed header fields added in version 900. Both fields are always present
 /// together, and the exact name bytes are retained for round-trip encoding.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Readable, Writable)]
 struct GeosetHeaderExtension {
     level_of_detail: u32,
     name: [u8; 80],
@@ -497,14 +497,6 @@ fn section<'a>(cursor: &mut Cursor<'a>, tag: Tag, stride: usize) -> Result<&'a [
     cursor.read_exact(size)
 }
 
-fn read_extent(cursor: &mut Cursor<'_>) -> Result<GeosetExtent, DecodeError> {
-    Ok(GeosetExtent {
-        bounds_radius: cursor.read()?,
-        minimum: cursor.read()?,
-        maximum: cursor.read()?,
-    })
-}
-
 fn decode_values<T: Readable>(bytes: &[u8], width: usize) -> Result<Vec<T>, DecodeError> {
     let mut cursor = Cursor::new(bytes);
     let values = (0..bytes.len() / width)
@@ -550,12 +542,6 @@ fn write_vectors<const N: usize>(
     Ok(())
 }
 
-fn write_extent(bytes: &mut Encoder<'_>, extent: GeosetExtent) {
-    bytes.write(extent.bounds_radius);
-    bytes.write(extent.minimum);
-    bytes.write(extent.maximum);
-}
-
 impl Model {
     /// Decodes geosets from every `GEOS` chunk in file order.
     pub fn geosets(&self) -> Vec<Geoset> {
@@ -595,23 +581,15 @@ impl Decodable for Geoset {
             let selection_group = cursor.read()?;
             let unselectable_raw = cursor.read()?;
             let header_extension = if version >= 900 {
-                let lod = cursor.read()?;
-                let name = cursor
-                    .read_exact(80)?
-                    .try_into()
-                    .expect("fixed-width geoset name");
-                Some(GeosetHeaderExtension {
-                    level_of_detail: lod,
-                    name,
-                })
+                Some(cursor.read()?)
             } else {
                 None
             };
-            let extent = read_extent(&mut cursor)?;
+            let extent = cursor.read()?;
             let sequence_count = cursor.read::<u32>()? as usize;
             let mut sequence_extents = Vec::new();
             for _ in 0..sequence_count {
-                sequence_extents.push(read_extent(&mut cursor)?);
+                sequence_extents.push(cursor.read()?);
             }
             let mut extensions = Vec::new();
             if version >= 900 {
@@ -719,13 +697,12 @@ impl Encodable for Geoset {
         }
         if self.version >= 900 {
             let header = self.header_extension.as_ref().expect("versioned header");
-            bytes.write(header.level_of_detail);
-            bytes.write_bytes(&header.name);
+            bytes.write(header);
         }
-        write_extent(bytes, self.extent);
+        bytes.write(&self.extent);
         write_count(bytes, self.sequence_extents.len())?;
         for extent in &self.sequence_extents {
-            write_extent(bytes, *extent);
+            bytes.write(&*extent);
         }
         for extension in &self.extensions {
             match extension {

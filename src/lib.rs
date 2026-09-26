@@ -15,6 +15,8 @@
 //! let bytes = model.encode().unwrap();
 //! ```
 
+extern crate self as wc3_mdx;
+
 /// A three-dimensional vector in MDX coordinates.
 pub type Vec3 = [f32; 3];
 /// An RGB color.
@@ -32,6 +34,7 @@ mod encoder;
 pub use encoder::{Encoder, SizeMarker, Writable};
 mod cursor;
 pub use cursor::{Cursor, Readable};
+pub use wc3_mdx_derive::{Readable, Writable};
 mod model;
 pub use model::Model;
 mod record;

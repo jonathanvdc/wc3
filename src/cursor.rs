@@ -6,6 +6,12 @@ pub trait Readable: Sized {
     fn read_from(cursor: &mut Cursor<'_>) -> Result<Self, DecodeError>;
 }
 
+impl Readable for u8 {
+    fn read_from(cursor: &mut Cursor<'_>) -> Result<Self, DecodeError> {
+        Ok(cursor.read_exact(1)?[0])
+    }
+}
+
 impl Readable for u16 {
     fn read_from(cursor: &mut Cursor<'_>) -> Result<Self, DecodeError> {
         Ok(u16::from_le_bytes(

@@ -25,11 +25,24 @@ macro_rules! writable_scalars {
         )*
     };
 }
-writable_scalars!(u16, u32, i32, f32);
+writable_scalars!(u8, u16, u32, i32, f32);
 
-impl<T: Writable + Copy> Writable for &T {
+macro_rules! writable_scalar_refs {
+    ($($ty:ty),* $(,)?) => {
+        $(
+            impl Writable for &$ty {
+                fn write_to(self, encoder: &mut Encoder<'_>) {
+                    encoder.write(*self);
+                }
+            }
+        )*
+    };
+}
+writable_scalar_refs!(u8, u16, u32, i32, f32);
+
+impl<T: Writable + Copy, const N: usize> Writable for &[T; N] {
     fn write_to(self, encoder: &mut Encoder<'_>) {
-        (*self).write_to(encoder);
+        encoder.write(self.as_slice());
     }
 }
 

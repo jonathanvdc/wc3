@@ -6,7 +6,7 @@ use crate::{Color, Tag, Vec3};
 
 use crate::{AnimationTrack, DecodeError, Model, Node};
 use crate::{Cursor, ParticleEmitters2Chunk};
-use crate::{Decodable, Encodable};
+use crate::{Decodable, Encodable, Readable, Writable};
 
 pub(crate) const FIXED_SIZE: usize = 171;
 
@@ -39,7 +39,7 @@ impl Particle2Frames {
 }
 
 /// Fixed physical, texture, and color fields of a particle emitter 2.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, Readable, Writable)]
 pub struct Particle2Fields {
     pub speed: f32,
     pub variation: f32,
@@ -149,72 +149,6 @@ impl ParticleEmitter2 {
     }
 }
 
-fn decode_fields(cursor: &mut Cursor<'_>) -> Result<Particle2Fields, DecodeError> {
-    Ok(Particle2Fields {
-        speed: cursor.read()?,
-        variation: cursor.read()?,
-        latitude: cursor.read()?,
-        gravity: cursor.read()?,
-        life_span: cursor.read()?,
-        emission_rate: cursor.read()?,
-        width: cursor.read()?,
-        length: cursor.read()?,
-        filter_mode: cursor.read()?,
-        rows: cursor.read()?,
-        columns: cursor.read()?,
-        frame_flags: cursor.read()?,
-        tail_length: cursor.read()?,
-        time: cursor.read()?,
-        segment_colors: cursor.read()?,
-        alpha: cursor.read_exact(3)?.try_into().expect("three alpha bytes"),
-        particle_scaling: cursor.read()?,
-        uv_animations: cursor.read()?,
-        texture_id: cursor.read()?,
-        squirt: cursor.read()?,
-        priority_plane: cursor.read()?,
-        replaceable_id: cursor.read()?,
-    })
-}
-
-fn encode_fields(fields: &Particle2Fields, bytes: &mut Encoder<'_>) {
-    let start = bytes.position();
-    for value in [
-        fields.speed,
-        fields.variation,
-        fields.latitude,
-        fields.gravity,
-        fields.life_span,
-        fields.emission_rate,
-        fields.width,
-        fields.length,
-    ] {
-        bytes.write(value);
-    }
-    for value in [
-        fields.filter_mode,
-        fields.rows,
-        fields.columns,
-        fields.frame_flags,
-    ] {
-        bytes.write(value);
-    }
-    bytes.write(fields.tail_length);
-    bytes.write(fields.time);
-    bytes.write(fields.segment_colors);
-    bytes.write_bytes(&fields.alpha);
-    bytes.write(fields.particle_scaling);
-    bytes.write(fields.uv_animations);
-    for value in [
-        fields.texture_id,
-        fields.squirt,
-        fields.priority_plane,
-        fields.replaceable_id,
-    ] {
-        bytes.write(value);
-    }
-    debug_assert_eq!(bytes.position() - start, FIXED_SIZE);
-}
-
 fn is_track(tag: Tag) -> bool {
     matches!(
         &tag,
@@ -239,7 +173,7 @@ impl Decodable for ParticleEmitter2 {
         let mut cursor = source.slice_u32_sized()?;
         let node = Node::decode_one(&mut cursor, 0)?;
         let mut fixed = cursor.slice(FIXED_SIZE)?;
-        let fields = decode_fields(&mut fixed)?;
+        let fields = fixed.read()?;
         fixed.finish()?;
         let mut tracks = Vec::new();
         while !cursor.remaining().is_empty() {
@@ -268,7 +202,7 @@ impl Encodable for ParticleEmitter2 {
         let start = bytes.position();
         let marker = bytes.begin_sized();
         self.node.encode_to(bytes)?;
-        encode_fields(&self.fields, bytes);
+        bytes.write(&self.fields);
         for track in &self.tracks {
             if !is_track(track.tag) {
                 return Err(EncodeError::MalformedRecord {

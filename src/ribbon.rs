@@ -6,12 +6,12 @@ use crate::{Color, Tag};
 
 use crate::{AnimationTrack, DecodeError, Model, Node};
 use crate::{Cursor, RibbonEmittersChunk};
-use crate::{Decodable, Encodable};
+use crate::{Decodable, Encodable, Readable, Writable};
 
 pub(crate) const FIXED_SIZE: usize = 52;
 
 /// Fixed properties of a ribbon emitter.
-#[derive(Clone, Copy, Debug, Default, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Readable, Writable)]
 pub struct RibbonFields {
     pub height_above: f32,
     pub height_below: f32,
@@ -108,19 +108,7 @@ impl Decodable for RibbonEmitter {
         let mut cursor = source.slice_u32_sized()?;
         let node = Node::decode_one(&mut cursor, 0)?;
         let mut fixed = cursor.slice(FIXED_SIZE)?;
-        let fields = RibbonFields {
-            height_above: fixed.read()?,
-            height_below: fixed.read()?,
-            alpha: fixed.read()?,
-            color: fixed.read()?,
-            life_span: fixed.read()?,
-            texture_slot: fixed.read()?,
-            emission_rate: fixed.read()?,
-            rows: fixed.read()?,
-            columns: fixed.read()?,
-            material_id: fixed.read()?,
-            gravity: fixed.read()?,
-        };
+        let fields = fixed.read()?;
         fixed.finish()?;
         let mut tracks = Vec::new();
         while !cursor.remaining().is_empty() {
@@ -149,28 +137,7 @@ impl Encodable for RibbonEmitter {
         let start = bytes.position();
         let marker = bytes.begin_sized();
         self.node.encode_to(bytes)?;
-        let fields = &self.fields;
-        for value in [
-            fields.height_above,
-            fields.height_below,
-            fields.alpha,
-            fields.color[0],
-            fields.color[1],
-            fields.color[2],
-            fields.life_span,
-        ] {
-            bytes.write(value);
-        }
-        for value in [
-            fields.texture_slot,
-            fields.emission_rate,
-            fields.rows,
-            fields.columns,
-            fields.material_id,
-        ] {
-            bytes.write(value);
-        }
-        bytes.write(fields.gravity);
+        bytes.write(&self.fields);
         for track in &self.tracks {
             if !is_track(track.tag) {
                 return Err(EncodeError::MalformedRecord {

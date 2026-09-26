@@ -12,3 +12,4 @@ keywords = ["warcraft", "mdx", "model", "binary"]
 categories = ["parser-implementations", "game-development"]
 
 [dependencies]
+wc3-mdx-derive = { path = "wc3-mdx-derive", version = "0.1.0" }
