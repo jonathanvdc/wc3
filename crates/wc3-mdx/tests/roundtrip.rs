@@ -1,6 +1,6 @@
 use wc3_mdx::chunks::{ModelChunk, RawChunk, UnknownChunk};
 use wc3_mdx::io::{Readable, Writable};
-use wc3_mdx::{AnyVersionModel, Model, ModelVersion, V1000, V1100, V1200, V1800, V800, V900};
+use wc3_mdx::{DynamicModel, Model, ModelVersion, V1000, V1100, V1200, V1800, V800, V900};
 
 fn check_version<V: ModelVersion>() {
     let mut model = Model::<V>::new();
@@ -50,7 +50,7 @@ fn local_files_round_trip_when_available() {
                 pending.push(path);
             } else if path.extension().is_some_and(|extension| extension == "mdx") {
                 let bytes = std::fs::read(&path).unwrap();
-                let model = AnyVersionModel::decode(&bytes, 800)
+                let model = DynamicModel::decode(&bytes, 800)
                     .unwrap_or_else(|error| panic!("{}: {error}", path.display()));
                 assert_eq!(model.encode().unwrap(), bytes, "{}", path.display());
             }
@@ -129,13 +129,13 @@ fn typed_accessors_preserve_local_files_when_available() {
                 continue;
             }
             let bytes = std::fs::read(&path).unwrap();
-            match AnyVersionModel::decode(&bytes, 800).unwrap() {
-                AnyVersionModel::V800(model) => check_accessors(model, &bytes, &path),
-                AnyVersionModel::V900(model) => check_accessors(model, &bytes, &path),
-                AnyVersionModel::V1000(model) => check_accessors(model, &bytes, &path),
-                AnyVersionModel::V1100(model) => check_accessors(model, &bytes, &path),
-                AnyVersionModel::V1200(model) => check_accessors(model, &bytes, &path),
-                AnyVersionModel::V1800(model) => check_accessors(model, &bytes, &path),
+            match DynamicModel::decode(&bytes, 800).unwrap() {
+                DynamicModel::V800(model) => check_accessors(model, &bytes, &path),
+                DynamicModel::V900(model) => check_accessors(model, &bytes, &path),
+                DynamicModel::V1000(model) => check_accessors(model, &bytes, &path),
+                DynamicModel::V1100(model) => check_accessors(model, &bytes, &path),
+                DynamicModel::V1200(model) => check_accessors(model, &bytes, &path),
+                DynamicModel::V1800(model) => check_accessors(model, &bytes, &path),
             }
         }
     }

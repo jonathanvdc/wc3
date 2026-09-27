@@ -1,6 +1,6 @@
 use wc3_mdx::geometry::{Geoset, GeosetExtent};
 use wc3_mdx::io::{Readable, Writable};
-use wc3_mdx::{AnyVersionModel, Model, ModelVersion, V1100, V1200, V1800, V800, V900};
+use wc3_mdx::{DynamicModel, Model, ModelVersion, V1100, V1200, V1800, V800, V900};
 
 fn sample_geoset() -> Geoset<V1800> {
     let geoset = Geoset::<V1800>::new(&[[1.0, 2.0, 3.0]], &[[0.0, 0.0, 1.0]], &[0, 0, 0]).unwrap();
@@ -150,7 +150,7 @@ fn local_geosets_have_bounded_mesh_sections_when_available() {
                 pending.push(path);
             } else if path.extension().is_some_and(|extension| extension == "mdx") {
                 let bytes = std::fs::read(&path).unwrap();
-                let model = AnyVersionModel::decode(&bytes, 800).unwrap();
+                let model = DynamicModel::decode(&bytes, 800).unwrap();
                 fn check<V: ModelVersion>(model: Model<V>) {
                     for geoset in model.geosets() {
                         geoset.vertices();
@@ -168,12 +168,12 @@ fn local_geosets_have_bounded_mesh_sections_when_available() {
                     }
                 }
                 match model {
-                    AnyVersionModel::V800(model) => check(model),
-                    AnyVersionModel::V900(model) => check(model),
-                    AnyVersionModel::V1000(model) => check(model),
-                    AnyVersionModel::V1100(model) => check(model),
-                    AnyVersionModel::V1200(model) => check(model),
-                    AnyVersionModel::V1800(model) => check(model),
+                    DynamicModel::V800(model) => check(model),
+                    DynamicModel::V900(model) => check(model),
+                    DynamicModel::V1000(model) => check(model),
+                    DynamicModel::V1100(model) => check(model),
+                    DynamicModel::V1200(model) => check(model),
+                    DynamicModel::V1800(model) => check(model),
                 }
             }
         }

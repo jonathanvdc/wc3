@@ -3,7 +3,7 @@
 //! MDX files start with `MDLX`, followed by tagged chunks. Each chunk has a
 //! four-byte identifier, a little-endian payload length, and its payload.
 //! [`Model<V>`] ties a model's version to its chunks and records.
-//! [`AnyVersionModel`] dispatches a file's runtime version to a typed model.
+//! [`DynamicModel`] dispatches a file's runtime version to a typed model.
 //! Unknown chunks retain their raw payloads; malformed known chunks fail decoding.
 //!
 //! ```
@@ -45,9 +45,9 @@ pub(crate) use emitters::*;
 
 pub use wc3_mdx_derive::{Readable, Writable};
 mod model;
-pub use model::{AnyVersionModel, Model};
+pub use model::{DynamicModel, Model};
 mod model_access;
-pub use model_access::{ModelAccess, TryModelAccess};
+pub use model_access::{CommonModelAccess, TryModelAccess};
 mod versions;
 pub use versions::{
     ModelVersion, SupportsEmissiveGain, SupportsFresnel, SupportsLayerShaderTypeId,

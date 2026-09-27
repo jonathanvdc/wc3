@@ -17,7 +17,7 @@ coverage across the entire game collection has not yet been verified.
 ## Rust API
 
 ```rust
-use wc3_mdx::{AnyVersionModel, Model, V800};
+use wc3_mdx::{DynamicModel, Model, V800};
 use wc3_mdx::io::{Readable, Writable};
 use wc3_mdx::scene::ModelInfo;
 
@@ -28,7 +28,7 @@ let decoded = Model::<V800>::decode(&encoded)?;
 assert_eq!(decoded.version(), 800);
 let info = decoded.model_info().unwrap();
 assert_eq!(info.name(), "Example");
-assert!(matches!(AnyVersionModel::decode(&encoded, 800)?, AnyVersionModel::V800(_)));
+assert!(matches!(DynamicModel::decode(&encoded, 800)?, DynamicModel::V800(_)));
 # Ok::<(), Box<dyn std::error::Error>>(())
 ```
 

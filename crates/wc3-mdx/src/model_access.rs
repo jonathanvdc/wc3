@@ -4,10 +4,10 @@ use crate::geometry::{BindPoseMatrix, CollisionShape};
 use crate::materials::Texture;
 use crate::scene::{Attachment, Bone, EventObject, FaceFx, ModelInfo, Node};
 use crate::visit_model;
-use crate::{AnyVersionModel, Model, ModelVersion, ValueError, Vec3};
+use crate::{DynamicModel, Model, ModelVersion, ValueError, Vec3};
 
 /// Accessors whose record types do not depend on the model version.
-pub trait ModelAccess {
+pub trait CommonModelAccess {
     fn sequences(&self) -> Vec<Sequence>;
     fn set_sequences(&mut self, sequences: &[Sequence]);
     fn global_sequences(&self) -> Vec<u32>;
@@ -40,7 +40,7 @@ pub trait ModelAccess {
     fn set_model_info(&mut self, info: &ModelInfo);
 }
 
-impl<V: ModelVersion> ModelAccess for Model<V> {
+impl<V: ModelVersion> CommonModelAccess for Model<V> {
     fn sequences(&self) -> Vec<Sequence> {
         Model::sequences(self)
     }
@@ -133,7 +133,7 @@ impl<V: ModelVersion> ModelAccess for Model<V> {
     }
 }
 
-impl ModelAccess for AnyVersionModel {
+impl CommonModelAccess for DynamicModel {
     fn sequences(&self) -> Vec<Sequence> {
         visit_model!(self, |model| model.sequences())
     }
@@ -257,7 +257,7 @@ impl<V: ModelVersion> TryModelAccess for Model<V> {
     }
 }
 
-impl TryModelAccess for AnyVersionModel {
+impl TryModelAccess for DynamicModel {
     fn try_bind_poses(&self) -> Result<Vec<BindPoseMatrix>, ValueError> {
         visit_model!(self, |model| model.try_bind_poses())
     }

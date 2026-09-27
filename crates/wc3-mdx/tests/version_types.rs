@@ -3,7 +3,7 @@ use wc3_mdx::geometry::Geoset;
 use wc3_mdx::io::{DecodeError, Readable, ValueError, Writable};
 use wc3_mdx::materials::{Layer, Material};
 use wc3_mdx::scene::{Camera, CameraVariant, Light, Node};
-use wc3_mdx::{AnyVersionModel, Model, V1000, V1800, V800, V900};
+use wc3_mdx::{DynamicModel, Model, V1000, V1800, V800, V900};
 
 #[test]
 fn version_is_shared_by_model_and_nested_records() {
@@ -23,8 +23,8 @@ fn version_is_shared_by_model_and_nested_records() {
     assert_eq!(parsed.lights().len(), 1);
     assert_eq!(parsed.cameras()[0].variant(), CameraVariant::Variant3);
     assert!(matches!(
-        AnyVersionModel::decode(&bytes, 800),
-        Ok(AnyVersionModel::V1800(_))
+        DynamicModel::decode(&bytes, 800),
+        Ok(DynamicModel::V1800(_))
     ));
 }
 
@@ -81,7 +81,7 @@ fn runtime_dispatch_rejects_versions_without_a_layout() {
     let mut bytes = Model::<V800>::new().encode().unwrap();
     bytes[12..16].copy_from_slice(&777u32.to_le_bytes());
     assert!(matches!(
-        AnyVersionModel::decode(&bytes, 800),
+        DynamicModel::decode(&bytes, 800),
         Err(DecodeError::UnsupportedVersion { version: 777 })
     ));
 }

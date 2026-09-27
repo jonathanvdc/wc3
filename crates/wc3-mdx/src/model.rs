@@ -176,7 +176,7 @@ impl<V: ModelVersion> Writable for Model<V> {
 
 /// A decoded model whose version is determined by its `VERS` chunk.
 #[derive(Clone, Debug)]
-pub enum AnyVersionModel {
+pub enum DynamicModel {
     V800(Model<V800>),
     V900(Model<V900>),
     V1000(Model<V1000>),
@@ -185,15 +185,15 @@ pub enum AnyVersionModel {
     V1800(Model<V1800>),
 }
 
-/// Runs an expression against the typed model inside an [`AnyVersionModel`].
+/// Runs an expression against the typed model inside an [`DynamicModel`].
 ///
 /// The expression is compiled for each supported version and must return the
 /// same type for every version. Matching a reference allows read-only access;
 /// matching a mutable reference allows edits.
 ///
 /// ```
-/// use wc3_mdx::{visit_model, AnyVersionModel, Model, V800};
-/// let model = AnyVersionModel::V800(Model::<V800>::new());
+/// use wc3_mdx::{visit_model, DynamicModel, Model, V800};
+/// let model = DynamicModel::V800(Model::<V800>::new());
 /// let count = visit_model!(&model, |typed| typed.geosets().len());
 /// assert_eq!(count, 0);
 /// ```
@@ -201,17 +201,17 @@ pub enum AnyVersionModel {
 macro_rules! visit_model {
     ($value:expr, |$model:ident| $body:expr) => {
         match $value {
-            $crate::AnyVersionModel::V800($model) => $body,
-            $crate::AnyVersionModel::V900($model) => $body,
-            $crate::AnyVersionModel::V1000($model) => $body,
-            $crate::AnyVersionModel::V1100($model) => $body,
-            $crate::AnyVersionModel::V1200($model) => $body,
-            $crate::AnyVersionModel::V1800($model) => $body,
+            $crate::DynamicModel::V800($model) => $body,
+            $crate::DynamicModel::V900($model) => $body,
+            $crate::DynamicModel::V1000($model) => $body,
+            $crate::DynamicModel::V1100($model) => $body,
+            $crate::DynamicModel::V1200($model) => $body,
+            $crate::DynamicModel::V1800($model) => $body,
         }
     };
 }
 
-impl AnyVersionModel {
+impl DynamicModel {
     /// Decodes a model, using `default_version` when no `VERS` chunk is present.
     pub fn decode(bytes: &[u8], default_version: Version) -> Result<Self, DecodeError> {
         let version = scan_version(Cursor::new(bytes))?.unwrap_or(default_version);
@@ -310,8 +310,8 @@ mod tests {
     fn runtime_dispatch_preserves_the_typed_version() {
         let bytes = Model::<V1100>::new().encode().unwrap();
         assert!(matches!(
-            AnyVersionModel::decode(&bytes, 800),
-            Ok(AnyVersionModel::V1100(_))
+            DynamicModel::decode(&bytes, 800),
+            Ok(DynamicModel::V1100(_))
         ));
         assert!(matches!(
             Model::<V800>::decode(&bytes),

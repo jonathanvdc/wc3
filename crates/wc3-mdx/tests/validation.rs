@@ -4,7 +4,7 @@ use wc3_mdx::geometry::Geoset;
 use wc3_mdx::io::{DecodeError, Readable, Writable};
 use wc3_mdx::materials::Layer;
 use wc3_mdx::scene::Node;
-use wc3_mdx::{AnyVersionModel, Model, V1800, V800};
+use wc3_mdx::{DynamicModel, Model, V1800, V800};
 
 #[test]
 fn typed_known_chunks_and_unknown_chunks_round_trip() {
@@ -101,7 +101,7 @@ fn local_models_decode_when_available() {
                 pending.push(path);
             } else if path.extension().is_some_and(|extension| extension == "mdx") {
                 let bytes = std::fs::read(&path).unwrap();
-                AnyVersionModel::decode(&bytes, 800)
+                DynamicModel::decode(&bytes, 800)
                     .unwrap_or_else(|error| panic!("{}: {error}", path.display()));
             }
         }

@@ -4,7 +4,7 @@ use wc3_mdx::io::{Readable, Writable};
 use wc3_mdx::materials::{
     Layer, LayerShadingFlags, LayerTextureSlot, Material, MaterialRenderFlags,
 };
-use wc3_mdx::{AnyVersionModel, Model, ModelVersion, V1000, V1100, V1200, V1800, V800, V900};
+use wc3_mdx::{DynamicModel, Model, ModelVersion, V1000, V1100, V1200, V1800, V800, V900};
 
 fn sample_material<V: ModelVersion>() -> Material<V> {
     let mut layer = Layer::<V>::new();
@@ -66,7 +66,7 @@ fn local_material_layers_are_bounded_when_available() {
                 pending.push(path);
             } else if path.extension().is_some_and(|extension| extension == "mdx") {
                 let bytes = std::fs::read(&path).unwrap();
-                let model = AnyVersionModel::decode(&bytes, 800).unwrap();
+                let model = DynamicModel::decode(&bytes, 800).unwrap();
                 fn check<V: ModelVersion>(model: Model<V>) {
                     for material in model.materials() {
                         for layer in material.layers() {
@@ -78,12 +78,12 @@ fn local_material_layers_are_bounded_when_available() {
                     }
                 }
                 match model {
-                    AnyVersionModel::V800(model) => check(model),
-                    AnyVersionModel::V900(model) => check(model),
-                    AnyVersionModel::V1000(model) => check(model),
-                    AnyVersionModel::V1100(model) => check(model),
-                    AnyVersionModel::V1200(model) => check(model),
-                    AnyVersionModel::V1800(model) => check(model),
+                    DynamicModel::V800(model) => check(model),
+                    DynamicModel::V900(model) => check(model),
+                    DynamicModel::V1000(model) => check(model),
+                    DynamicModel::V1100(model) => check(model),
+                    DynamicModel::V1200(model) => check(model),
+                    DynamicModel::V1800(model) => check(model),
                 }
             }
         }
