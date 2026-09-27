@@ -1,5 +1,11 @@
-mod animation;
-pub use animation::*;
+mod track_kind;
+pub use track_kind::*;
+mod keyframe;
+pub use keyframe::{Interpolation, TangentKeyframe, ValueKeyframe};
+mod track;
+pub use track::AnimationTrack;
+mod track_group;
+pub(crate) use track_group::track_group;
 mod sequence;
 pub use sequence::{Sequence, SequenceFlags};
 mod texture_animation;
