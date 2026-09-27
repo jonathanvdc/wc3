@@ -101,6 +101,4 @@ version_capabilities! {
     /// ```
     pub trait SupportsLightFalloff for V1600, V1800;
 
-    /// Versions with geoset skin bone indices.
-    pub trait SupportsSkinBoneIndices for V1200, V1800;
 }

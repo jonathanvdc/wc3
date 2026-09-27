@@ -1,4 +1,4 @@
-use wc3_mdx::geometry::{Geoset, GeosetExtent};
+use wc3_mdx::geometry::{Geoset, GeosetExtent, SkinWeights};
 use wc3_mdx::io::{Readable, Writable};
 use wc3_mdx::{
     DynamicModel, Model, ModelVersion, V1100, V1200, V1300, V1400, V1600, V1800, V800, V900,
@@ -68,23 +68,18 @@ fn check_version<V: ModelVersion>() {
         geoset
             .try_set_tangents(Some(&[[1.0, 0.0, 0.0, 1.0]; 2]))
             .unwrap();
-        let weights = [0u8; 16];
-        let indices = [1u8; 16];
-        geoset
-            .try_set_skin_data(
-                Some(&weights),
-                matches!(version, 1200 | 1800).then_some(indices.as_slice()),
-            )
-            .unwrap();
+        let weights = [SkinWeights {
+            bone_indices: [1, 2, 3, 4],
+            weights: [255, 0, 0, 0],
+        }; 2];
+        geoset.try_set_skin_weights(Some(&weights)).unwrap();
         assert_eq!(geoset.try_tangents().unwrap().unwrap().len(), 2);
         assert_eq!(geoset.try_skin_weights().unwrap(), Some(weights.as_slice()));
-        if matches!(version, 1200 | 1800) {
-            assert_eq!(
-                geoset.try_skin_bone_indices().unwrap(),
-                Some(indices.as_slice())
-            );
-        }
-        geoset.try_set_skin_data(None, None).unwrap();
+        assert_eq!(
+            Geoset::<V>::decode(&geoset.encode().unwrap()).unwrap(),
+            geoset
+        );
+        geoset.try_set_skin_weights(None).unwrap();
         geoset.try_set_tangents(None).unwrap();
         assert!(geoset.try_skin_weights().unwrap().is_none());
         assert!(geoset.try_tangents().unwrap().is_none());
@@ -121,7 +116,10 @@ fn preserves_float_bits_name_padding_and_extension_order() {
         .try_set_tangents(Some(&[[1.0, 0.0, 0.0, 1.0]]))
         .unwrap();
     geoset
-        .try_set_skin_data(Some(&[1, 2, 3, 4]), Some(&[5, 6, 7, 8]))
+        .try_set_skin_weights(Some(&[SkinWeights {
+            bone_indices: [5, 6, 7, 8],
+            weights: [1, 2, 3, 249],
+        }]))
         .unwrap();
     let mut bytes = geoset.encode().unwrap();
     bytes[12..16].copy_from_slice(&0x7fa1_2345u32.to_le_bytes());
@@ -168,7 +166,6 @@ fn local_geosets_have_bounded_mesh_sections_when_available() {
                         geoset.sequence_extents();
                         let _ = geoset.try_tangents();
                         let _ = geoset.try_skin_weights();
-                        let _ = geoset.try_skin_bone_indices();
                         geoset.uv_sets();
                     }
                 }
@@ -190,31 +187,70 @@ fn local_geosets_have_bounded_mesh_sections_when_available() {
 
 #[test]
 fn skin_elements_widen_at_v1400() {
-    use wc3_mdx::{V1300, V1400};
-
-    let mut narrow = Geoset::<V1300>::new(&[], &[], &[]).unwrap();
-    narrow.try_set_skin_weights(Some(&[1, 2, 3, 4])).unwrap();
-    let mut wide = Geoset::<V1400>::new(&[], &[], &[]).unwrap();
-    wide.try_set_skin_weights(Some(&[1, 0, 2, 0, 3, 0, 4, 0]))
-        .unwrap();
+    let weights = [SkinWeights {
+        bone_indices: [1, 2, 3, 255],
+        weights: [128, 64, 32, 31],
+    }];
+    let mut narrow = Geoset::<V1300>::new(&[[0.0; 3]], &[[0.0; 3]], &[]).unwrap();
+    narrow.set_skin_weights(Some(&weights)).unwrap();
+    let mut wide = Geoset::<V1400>::new(&[[0.0; 3]], &[[0.0; 3]], &[]).unwrap();
+    wide.set_skin_weights(Some(&weights)).unwrap();
     let narrow_bytes = narrow.encode().unwrap();
     let wide_bytes = wide.encode().unwrap();
-    let narrow_skin = narrow_bytes
-        .windows(4)
-        .position(|bytes| bytes == b"SKIN")
-        .unwrap();
-    let wide_skin = wide_bytes
-        .windows(4)
-        .position(|bytes| bytes == b"SKIN")
-        .unwrap();
-    assert_eq!(
-        &narrow_bytes[narrow_skin + 4..narrow_skin + 8],
-        &4u32.to_le_bytes()
-    );
-    assert_eq!(
-        &wide_bytes[wide_skin + 4..wide_skin + 8],
-        &4u32.to_le_bytes()
-    );
+    for (bytes, payload) in [
+        (&narrow_bytes, vec![1, 2, 3, 255, 128, 64, 32, 31]),
+        (
+            &wide_bytes,
+            vec![1, 0, 2, 0, 3, 0, 255, 0, 128, 0, 64, 0, 32, 0, 31, 0],
+        ),
+    ] {
+        let skin = bytes.windows(4).position(|part| part == b"SKIN").unwrap();
+        assert_eq!(&bytes[skin + 4..skin + 8], &8u32.to_le_bytes());
+        assert_eq!(&bytes[skin + 8..skin + 8 + payload.len()], payload);
+        assert_eq!(
+            &bytes[skin + 8 + payload.len()..skin + 12 + payload.len()],
+            b"UVAS"
+        );
+    }
     assert_eq!(Geoset::<V1300>::decode(&narrow_bytes).unwrap(), narrow);
     assert_eq!(Geoset::<V1400>::decode(&wide_bytes).unwrap(), wide);
+}
+
+#[test]
+fn skin_version_gates_and_wide_indices() {
+    let weights = [SkinWeights {
+        bone_indices: [256, 1000, 65535, 0],
+        weights: [255, 0, 0, 0],
+    }];
+    let mut classic = Geoset::<V800>::new(&[], &[], &[]).unwrap();
+    assert!(classic.try_set_skin_weights(Some(&weights)).is_err());
+    assert!(classic.try_skin_weights().is_err());
+    let mut narrow = Geoset::<V1300>::new(&[], &[], &[]).unwrap();
+    assert!(narrow.set_skin_weights(Some(&weights)).is_err());
+    assert!(narrow.skin_weights().is_none());
+    let mut wide = Geoset::<V1400>::new(&[], &[], &[]).unwrap();
+    wide.set_skin_weights(Some(&weights)).unwrap();
+    assert_eq!(
+        Geoset::<V1400>::decode(&wide.encode().unwrap()).unwrap(),
+        wide
+    );
+}
+
+#[test]
+fn rejects_incomplete_skin_vertices_and_out_of_range_wide_weights() {
+    let mut geoset = sample_geoset();
+    geoset
+        .set_skin_weights(Some(&[SkinWeights {
+            bone_indices: [1; 4],
+            weights: [255, 0, 0, 0],
+        }]))
+        .unwrap();
+    let bytes = geoset.encode().unwrap();
+    let skin = bytes.windows(4).position(|part| part == b"SKIN").unwrap();
+    let mut invalid_weight = bytes.clone();
+    invalid_weight[skin + 16..skin + 18].copy_from_slice(&256u16.to_le_bytes());
+    assert!(Geoset::<V1800>::decode(&invalid_weight).is_err());
+    let mut invalid_count = bytes;
+    invalid_count[skin + 4..skin + 8].copy_from_slice(&7u32.to_le_bytes());
+    assert!(Geoset::<V1800>::decode(&invalid_count).is_err());
 }

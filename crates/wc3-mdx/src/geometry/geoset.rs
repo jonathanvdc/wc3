@@ -3,7 +3,7 @@ use crate::EncodeError;
 use crate::Encoder;
 use crate::KnownChunk;
 use crate::ValueError;
-use crate::{ModelVersion, SupportsReforgedChunks, SupportsSkinBoneIndices, Tag, Vec3, Version};
+use crate::{ModelVersion, SupportsReforgedChunks, Tag, Vec3, Version};
 use crate::{Readable, Writable};
 use std::fmt::Debug;
 use std::marker::PhantomData;
@@ -33,15 +33,19 @@ impl Default for GeosetExtent {
     }
 }
 
-/// An optional TANG or SKIN section. Their order is retained because both
-/// orderings occur in valid files. Skin's second array has no tag or count.
+/// Four bone influences for one vertex. Weights use the range 0..=255
+/// and are normalized by dividing by 255, even in the wide wire format.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct SkinWeights {
+    pub bone_indices: [u16; 4],
+    pub weights: [u8; 4],
+}
+
+/// Optional sections retain their original order for serialization.
 #[derive(Clone, Debug, PartialEq)]
-enum GeosetExtraSection<V: ModelVersion> {
+enum GeosetExtraSection {
     Tangents(Vec<[f32; 4]>),
-    Skin {
-        weights: Vec<u8>,
-        bone_indices: V::SkinBones,
-    },
+    Skin { weights: Vec<SkinWeights> },
 }
 
 /// Fixed header fields added in version 900. Both fields are always present
@@ -91,98 +95,39 @@ impl GeosetHeader for GeosetHeaderExtension {
 /// Chooses geoset fields for a model version.
 pub trait GeosetLayout {
     type Header: GeosetHeader;
-    type SkinBones: SkinBoneField;
-}
-
-/// Bone indices following the SKIN weights in layouts that support them.
-pub trait SkinBoneField: Clone + Debug + PartialEq {
-    fn from_indices(indices: Option<&[u8]>) -> Result<Self, ValueError>;
-    fn decode(cursor: &mut Cursor<'_>, weight_count: usize) -> Result<Self, DecodeError>;
-    fn indices(&self) -> Option<&[u8]>;
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct NoSkinBones;
-
-impl SkinBoneField for NoSkinBones {
-    fn from_indices(indices: Option<&[u8]>) -> Result<Self, ValueError> {
-        if indices.is_some() {
-            Err(ValueError::UnavailableField {
-                tag: *b"GEOS",
-                field: "skin bone indices",
-            })
-        } else {
-            Ok(Self)
-        }
-    }
-    fn decode(_: &mut Cursor<'_>, _: usize) -> Result<Self, DecodeError> {
-        Ok(Self)
-    }
-    fn indices(&self) -> Option<&[u8]> {
-        None
-    }
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct OptionalSkinBones(Option<Vec<u8>>);
-
-impl SkinBoneField for OptionalSkinBones {
-    fn from_indices(indices: Option<&[u8]>) -> Result<Self, ValueError> {
-        Ok(Self(indices.map(ToOwned::to_owned)))
-    }
-    fn decode(cursor: &mut Cursor<'_>, weight_count: usize) -> Result<Self, DecodeError> {
-        let present = !matches!(&peek_tag(cursor)?, b"UVAS" | b"TANG");
-        Ok(Self(if present {
-            Some(cursor.read_exact(weight_count)?.to_vec())
-        } else {
-            None
-        }))
-    }
-    fn indices(&self) -> Option<&[u8]> {
-        self.0.as_deref()
-    }
 }
 
 use crate::{V1000, V1100, V1200, V1300, V1400, V1600, V1800, V800, V900};
 impl GeosetLayout for V800 {
     type Header = ClassicGeosetHeader;
-    type SkinBones = NoSkinBones;
 }
 impl GeosetLayout for V900 {
     type Header = GeosetHeaderExtension;
-    type SkinBones = NoSkinBones;
 }
 impl GeosetLayout for V1000 {
     type Header = GeosetHeaderExtension;
-    type SkinBones = NoSkinBones;
 }
 impl GeosetLayout for V1100 {
     type Header = GeosetHeaderExtension;
-    type SkinBones = NoSkinBones;
 }
 impl GeosetLayout for V1200 {
     type Header = GeosetHeaderExtension;
-    type SkinBones = OptionalSkinBones;
 }
 impl GeosetLayout for V1300 {
     type Header = GeosetHeaderExtension;
-    type SkinBones = NoSkinBones;
 }
 impl GeosetLayout for V1400 {
     type Header = GeosetHeaderExtension;
-    type SkinBones = NoSkinBones;
 }
 impl GeosetLayout for V1600 {
     type Header = GeosetHeaderExtension;
-    type SkinBones = NoSkinBones;
 }
 impl GeosetLayout for V1800 {
     type Header = GeosetHeaderExtension;
-    type SkinBones = OptionalSkinBones;
 }
 
-/// A geoset as typed sections. Uninterpreted packed skin bytes and the exact
-/// fixed-width name field are retained for byte-for-byte serialization.
+/// A geoset as typed sections. The exact fixed-width name field is retained
+/// for byte-for-byte serialization.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Geoset<V: ModelVersion> {
     version: PhantomData<V>,
@@ -200,15 +145,11 @@ pub struct Geoset<V: ModelVersion> {
     header_extension: V::Header,
     extent: GeosetExtent,
     sequence_extents: Vec<GeosetExtent>,
-    extensions: Vec<GeosetExtraSection<V>>,
+    extensions: Vec<GeosetExtraSection>,
     uv_sets: Vec<Vec<[f32; 2]>>,
 }
 
 impl<V: ModelVersion> Geoset<V> {
-    /// Replaces packed skin weights without supplying version-specific bone indices.
-    pub fn try_set_skin_weights(&mut self, weights: Option<&[u8]>) -> Result<(), ValueError> {
-        self.try_set_skin_data(weights, None)
-    }
     /// Builds a basic geoset with one matrix group and one UV set.
     pub fn new(vertices: &[Vec3], normals: &[Vec3], faces: &[u16]) -> Result<Self, ValueError> {
         if vertices.len() != normals.len() {
@@ -368,8 +309,8 @@ impl<V: ModelVersion> Geoset<V> {
         }))
     }
 
-    /// Borrows opaque packed skin weights.
-    pub fn try_skin_weights(&self) -> Result<Option<&[u8]>, ValueError> {
+    /// Borrows the four bone influences for each skinned vertex.
+    pub fn try_skin_weights(&self) -> Result<Option<&[SkinWeights]>, ValueError> {
         if V::NUMBER < 900 {
             return Err(ValueError::UnsupportedVersion {
                 tag: *b"GEOS",
@@ -379,21 +320,6 @@ impl<V: ModelVersion> Geoset<V> {
         }
         Ok(self.extensions.iter().find_map(|part| match part {
             GeosetExtraSection::Skin { weights, .. } => Some(weights.as_slice()),
-            _ => None,
-        }))
-    }
-
-    /// Borrows the extra untagged bone index array in newer files.
-    pub fn try_skin_bone_indices(&self) -> Result<Option<&[u8]>, ValueError> {
-        if V::NUMBER < 1200 {
-            return Err(ValueError::UnsupportedVersion {
-                tag: *b"GEOS",
-                minimum: 1200,
-                actual: V::NUMBER,
-            });
-        }
-        Ok(self.extensions.iter().find_map(|part| match part {
-            GeosetExtraSection::Skin { bone_indices, .. } => bone_indices.indices(),
             _ => None,
         }))
     }
@@ -552,52 +478,42 @@ impl<V: ModelVersion> Geoset<V> {
         Ok(())
     }
 
-    /// Replaces or removes packed skin data, retaining its section order.
-    pub fn try_set_skin_data(
+    /// Replaces or removes per-vertex skin influences, retaining section order.
+    pub fn try_set_skin_weights(
         &mut self,
-        weights: Option<&[u8]>,
-        bone_indices: Option<&[u8]>,
+        weights: Option<&[SkinWeights]>,
     ) -> Result<(), ValueError> {
         if V::NUMBER < 900 {
             return Err(ValueError::UnsupportedVersion {
-                tag: GeosetsChunk::<V>::TAG,
+                tag: *b"GEOS",
                 minimum: 900,
                 actual: V::NUMBER,
             });
         }
-        if let Some(indices) = bone_indices {
-            if V::NUMBER < 1200 || matches!(V::NUMBER, 1300 | 1400 | 1600) {
+        if let Some(weights) = weights {
+            if weights.len() > u32::MAX as usize / 8 {
+                return Err(ValueError::CountTooLarge {
+                    tag: *b"SKIN",
+                    count: weights.len().saturating_mul(8),
+                });
+            }
+            if V::NUMBER < 1400
+                && weights.iter().any(|vertex| {
+                    vertex
+                        .bone_indices
+                        .iter()
+                        .any(|&index| index > u8::MAX as u16)
+                })
+            {
                 return Err(ValueError::UnsupportedVersion {
-                    tag: GeosetsChunk::<V>::TAG,
-                    minimum: 1200,
+                    tag: *b"SKIN",
+                    minimum: 1400,
                     actual: V::NUMBER,
                 });
             }
-            let weights = weights.ok_or(ValueError::MissingField {
-                tag: GeosetsChunk::<V>::TAG,
-                field: "skin weights",
-            })?;
-            if weights.len() != indices.len() {
-                return Err(ValueError::LengthMismatch {
-                    tag: GeosetsChunk::<V>::TAG,
-                    expected: weights.len(),
-                    actual: indices.len(),
-                });
-            }
         }
-        if let Some(weights) = weights {
-            if V::NUMBER >= 1400 && weights.len() % 2 != 0 {
-                return Err(ValueError::LengthMismatch {
-                    tag: *b"GEOS",
-                    expected: weights.len() + 1,
-                    actual: weights.len(),
-                });
-            }
-        }
-        let skin_bones = V::SkinBones::from_indices(bone_indices)?;
         let new_part = weights.map(|weights| GeosetExtraSection::Skin {
             weights: weights.to_vec(),
-            bone_indices: skin_bones,
         });
         if let Some(index) = self
             .extensions
@@ -674,6 +590,84 @@ fn decode_values<T: Readable>(bytes: &[u8], width: usize) -> Result<Vec<T>, Deco
     Ok(values)
 }
 
+fn read_skin_weights<V: ModelVersion>(
+    cursor: &mut Cursor<'_>,
+) -> Result<Vec<SkinWeights>, DecodeError> {
+    let offset = cursor.absolute_position();
+    let wide = V::NUMBER >= 1400;
+    let data = section(cursor, *b"SKIN", if wide { 2 } else { 1 })?;
+    let stride = if wide { 16 } else { 8 };
+    let malformed = || DecodeError::MalformedRecord {
+        tag: *b"SKIN",
+        offset,
+    };
+    if data.len() % stride != 0 {
+        return Err(malformed());
+    }
+    let mut cursor = Cursor::new(data);
+    (0..data.len() / stride)
+        .map(|_| {
+            let bone_indices = if wide {
+                cursor.read::<[u16; 4]>()?
+            } else {
+                cursor.read::<[u8; 4]>()?.map(u16::from)
+            };
+            let weights = if wide {
+                let values = cursor.read::<[u16; 4]>()?;
+                if values.iter().any(|&weight| weight > u8::MAX as u16) {
+                    return Err(malformed());
+                }
+                values.map(|weight| weight as u8)
+            } else {
+                cursor.read::<[u8; 4]>()?
+            };
+            Ok(SkinWeights {
+                bone_indices,
+                weights,
+            })
+        })
+        .collect()
+}
+
+fn read_extensions<V: ModelVersion>(
+    cursor: &mut Cursor<'_>,
+) -> Result<Vec<GeosetExtraSection>, DecodeError> {
+    let mut extensions = Vec::new();
+    if V::NUMBER >= 900 {
+        while peek_tag(cursor)? != *b"UVAS" {
+            let offset = cursor.absolute_position();
+            let tag = peek_tag(cursor)?;
+            match &tag {
+                b"TANG"
+                    if !extensions
+                        .iter()
+                        .any(|part| matches!(part, GeosetExtraSection::Tangents(_))) =>
+                {
+                    extensions.push(GeosetExtraSection::Tangents(decode_values::<[f32; 4]>(
+                        section(cursor, *b"TANG", 16)?,
+                        16,
+                    )?));
+                }
+                b"SKIN"
+                    if !extensions
+                        .iter()
+                        .any(|part| matches!(part, GeosetExtraSection::Skin { .. })) =>
+                {
+                    let weights = read_skin_weights::<V>(cursor)?;
+                    extensions.push(GeosetExtraSection::Skin { weights });
+                }
+                _ => {
+                    return Err(DecodeError::MalformedRecord {
+                        tag: GeosetsChunk::<V>::TAG,
+                        offset,
+                    })
+                }
+            }
+        }
+    }
+    Ok(extensions)
+}
+
 fn write_count(bytes: &mut Encoder<'_>, count: usize) -> Result<(), EncodeError> {
     let count = u32::try_from(count).map_err(|_| EncodeError::ChunkTooLarge {
         tag: *b"GEOS",
@@ -745,47 +739,7 @@ impl<V: ModelVersion> Readable for Geoset<V> {
             for _ in 0..sequence_count {
                 sequence_extents.push(cursor.read()?);
             }
-            let mut extensions = Vec::new();
-            if V::NUMBER >= 900 {
-                while peek_tag(&cursor)? != *b"UVAS" {
-                    let offset = cursor.absolute_position();
-                    let tag = peek_tag(&cursor)?;
-                    match &tag {
-                        b"TANG"
-                            if !extensions
-                                .iter()
-                                .any(|part| matches!(part, GeosetExtraSection::Tangents(_))) =>
-                        {
-                            extensions.push(GeosetExtraSection::Tangents(
-                                decode_values::<[f32; 4]>(section(&mut cursor, *b"TANG", 16)?, 16)?,
-                            ));
-                        }
-                        b"SKIN"
-                            if !extensions
-                                .iter()
-                                .any(|part| matches!(part, GeosetExtraSection::Skin { .. })) =>
-                        {
-                            let weights = section(
-                                &mut cursor,
-                                *b"SKIN",
-                                if V::NUMBER >= 1400 { 2 } else { 1 },
-                            )?
-                            .to_vec();
-                            let bone_indices = V::SkinBones::decode(&mut cursor, weights.len())?;
-                            extensions.push(GeosetExtraSection::Skin {
-                                weights,
-                                bone_indices,
-                            });
-                        }
-                        _ => {
-                            return Err(DecodeError::MalformedRecord {
-                                tag: GeosetsChunk::<V>::TAG,
-                                offset,
-                            })
-                        }
-                    }
-                }
-            }
+            let extensions = read_extensions::<V>(&mut cursor)?;
             if cursor.read_exact(4)? != b"UVAS" {
                 return Err(DecodeError::MalformedRecord {
                     tag: GeosetsChunk::<V>::TAG,
@@ -857,24 +811,29 @@ impl<V: ModelVersion> Writable for Geoset<V> {
         for extension in &self.extensions {
             match extension {
                 GeosetExtraSection::Tangents(tangents) => write_vectors(bytes, *b"TANG", tangents)?,
-                GeosetExtraSection::Skin {
-                    weights,
-                    bone_indices,
-                } => {
-                    write_section_header(
-                        bytes,
-                        *b"SKIN",
-                        weights.len() / if V::NUMBER >= 1400 { 2 } else { 1 },
-                    )?;
-                    bytes.write_bytes(weights);
-                    if let Some(indices) = bone_indices.indices() {
-                        if V::NUMBER < 1200 || indices.len() != weights.len() {
-                            return Err(EncodeError::MalformedRecord {
-                                tag: GeosetsChunk::<V>::TAG,
-                                offset: bytes.position() - start,
-                            });
+                GeosetExtraSection::Skin { weights } => {
+                    write_section_header(bytes, *b"SKIN", weights.len() * 8)?;
+                    for vertex in weights {
+                        for &index in &vertex.bone_indices {
+                            if V::NUMBER >= 1400 {
+                                bytes.write(&index)?;
+                            } else {
+                                let index = u8::try_from(index).map_err(|_| {
+                                    EncodeError::MalformedRecord {
+                                        tag: *b"SKIN",
+                                        offset: bytes.position() - start,
+                                    }
+                                })?;
+                                bytes.write(&index)?;
+                            }
                         }
-                        bytes.write_bytes(indices);
+                        for &weight in &vertex.weights {
+                            if V::NUMBER >= 1400 {
+                                bytes.write(&u16::from(weight))?;
+                            } else {
+                                bytes.write(&weight)?;
+                            }
+                        }
                     }
                 }
             }
@@ -910,7 +869,7 @@ impl<V: SupportsReforgedChunks> Geoset<V> {
             _ => None,
         })
     }
-    pub fn skin_weights(&self) -> Option<&[u8]> {
+    pub fn skin_weights(&self) -> Option<&[SkinWeights]> {
         self.extensions.iter().find_map(|part| match part {
             GeosetExtraSection::Skin { weights, .. } => Some(weights.as_slice()),
             _ => None,
@@ -926,17 +885,7 @@ impl<V: SupportsReforgedChunks> Geoset<V> {
     pub fn set_tangents(&mut self, tangents: Option<&[[f32; 4]]>) {
         self.try_set_tangents(tangents).expect("supported version")
     }
-    pub fn set_skin_weights(&mut self, weights: Option<&[u8]>) {
+    pub fn set_skin_weights(&mut self, weights: Option<&[SkinWeights]>) -> Result<(), ValueError> {
         self.try_set_skin_weights(weights)
-            .expect("supported version")
-    }
-}
-
-impl<V: SupportsSkinBoneIndices> Geoset<V> {
-    pub fn skin_bone_indices(&self) -> Option<&[u8]> {
-        self.extensions.iter().find_map(|part| match part {
-            GeosetExtraSection::Skin { bone_indices, .. } => bone_indices.indices(),
-            _ => None,
-        })
     }
 }

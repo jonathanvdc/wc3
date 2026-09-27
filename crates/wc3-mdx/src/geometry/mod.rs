@@ -1,5 +1,5 @@
 mod geoset;
-pub use geoset::{Geoset, GeosetExtent, GeosetLayout};
+pub use geoset::{Geoset, GeosetExtent, GeosetLayout, SkinWeights};
 mod collision;
 pub use collision::CollisionShape;
 mod pivot_point;

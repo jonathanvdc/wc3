@@ -52,6 +52,6 @@ mod versions;
 pub use versions::{
     ModelVersion, SupportsEmissiveGain, SupportsFresnel, SupportsLayerShaderTypeId,
     SupportsLayerTextureSlots, SupportsLightFalloff, SupportsLightShadowCasting,
-    SupportsLightShadowIntensity, SupportsMaterialShaderPath, SupportsReforgedChunks,
-    SupportsSkinBoneIndices, V1000, V1100, V1200, V1300, V1400, V1600, V1800, V800, V900,
+    SupportsLightShadowIntensity, SupportsMaterialShaderPath, SupportsReforgedChunks, V1000, V1100,
+    V1200, V1300, V1400, V1600, V1800, V800, V900,
 };

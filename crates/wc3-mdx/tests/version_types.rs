@@ -73,8 +73,8 @@ fn version_markers_select_record_fields() {
     let mut modern_geoset = Geoset::<V1800>::new(&[], &[], &[]).unwrap();
     assert!(classic_geoset.try_tangents().is_err());
     assert_eq!(modern_geoset.try_tangents().unwrap(), None);
-    assert_eq!(modern_geoset.try_skin_bone_indices().unwrap(), None);
-    modern_geoset.set_skin_weights(Some(&[]));
+    assert_eq!(modern_geoset.try_skin_weights().unwrap(), None);
+    modern_geoset.set_skin_weights(Some(&[])).unwrap();
     assert_eq!(modern_geoset.skin_weights(), Some([].as_slice()));
 }
 
