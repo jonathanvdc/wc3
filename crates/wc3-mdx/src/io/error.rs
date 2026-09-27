@@ -139,6 +139,11 @@ pub enum ValueError {
         minimum: Version,
         actual: Version,
     },
+    UnsupportedField {
+        tag: Tag,
+        field: &'static str,
+        actual: Version,
+    },
     UnavailableField {
         tag: Tag,
         field: &'static str,
@@ -183,6 +188,11 @@ impl fmt::Display for ValueError {
             } => write!(
                 f,
                 "{:?} requires version {minimum}, got {actual}",
+                String::from_utf8_lossy(tag)
+            ),
+            Self::UnsupportedField { tag, field, actual } => write!(
+                f,
+                "{field} is unsupported in {:?} version {actual}",
                 String::from_utf8_lossy(tag)
             ),
             Self::UnavailableField { tag, field } => write!(

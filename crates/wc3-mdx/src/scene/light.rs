@@ -1,5 +1,5 @@
 //! Light records in `LITE` chunks.
-use crate::ModelVersion;
+use crate::{ModelVersion, SupportsLightExtendedWords};
 use std::fmt::Debug;
 crate::animation::track_group! {
     pub enum LightTrack {
@@ -207,17 +207,24 @@ impl<V: ModelVersion> Light<V> {
         self.ambient_intensity = value;
     }
     /// Returns the additional seven raw words in newer light records, when present.
-    pub fn extended_words(&self) -> Option<[u32; 7]> {
-        self.extended_words.words()
+    pub fn try_extended_words(&self) -> Result<[u32; 7], ValueError> {
+        self.extended_words
+            .words()
+            .ok_or(ValueError::UnsupportedVersion {
+                tag: LightsChunk::<V>::TAG,
+                minimum: 1200,
+                actual: V::NUMBER,
+            })
     }
     /// Sets the additional seven raw words in a newer light record.
-    pub fn set_extended_words(&mut self, words: [u32; 7]) -> Result<(), ValueError> {
+    pub fn try_set_extended_words(&mut self, words: [u32; 7]) -> Result<(), ValueError> {
         *self
             .extended_words
             .words_mut()
-            .ok_or(ValueError::UnavailableField {
+            .ok_or(ValueError::UnsupportedVersion {
                 tag: LightsChunk::<V>::TAG,
-                field: "extended words",
+                minimum: 1200,
+                actual: V::NUMBER,
             })? = words;
         Ok(())
     }
@@ -240,5 +247,14 @@ impl<V: ModelVersion> Model<V> {
     /// Replaces lights in the first `LITE` chunk.
     pub fn set_lights(&mut self, lights: &[Light<V>]) {
         self.replace_chunk(LightsChunk::new(lights.to_vec()));
+    }
+}
+
+impl<V: SupportsLightExtendedWords> Light<V> {
+    pub fn extended_words(&self) -> [u32; 7] {
+        self.extended_words.words().expect("supported version")
+    }
+    pub fn set_extended_words(&mut self, words: [u32; 7]) {
+        *self.extended_words.words_mut().expect("supported version") = words;
     }
 }

@@ -15,7 +15,11 @@ use crate::EncodeError;
 use crate::Encoder;
 use crate::KnownChunk;
 use crate::ValueError;
-use crate::{Color, LayerTextureId, ModelVersion, Tag, TrackTag, Version};
+use crate::{
+    Color, LayerTextureId, ModelVersion, SupportsEmissiveGain, SupportsFresnel,
+    SupportsLayerShaderTypeId, SupportsLayerTextureSlots, SupportsMaterialShaderPath, Tag,
+    TrackTag, Version,
+};
 use std::marker::PhantomData;
 
 use crate::{Cursor, MaterialsChunk};
@@ -400,11 +404,25 @@ impl<V: ModelVersion> Material<V> {
         self.render_mode = value;
     }
     /// Returns the shader path in versions 900 through 1099.
-    pub fn shader(&self) -> Option<Cow<'_, str>> {
-        self.shader.text()
+    pub fn try_shader(&self) -> Result<Cow<'_, str>, ValueError> {
+        if !(matches!(V::NUMBER, 900 | 1000)) {
+            return Err(ValueError::UnsupportedField {
+                tag: *b"MTLS",
+                field: "shader",
+                actual: V::NUMBER,
+            });
+        }
+        Ok(self.shader.text().expect("supported version"))
     }
     /// Changes the shader path and clears unused bytes.
-    pub fn set_shader(&mut self, shader: &str) -> Result<(), ValueError> {
+    pub fn try_set_shader(&mut self, shader: &str) -> Result<(), ValueError> {
+        if !matches!(V::NUMBER, 900 | 1000) {
+            return Err(ValueError::UnsupportedField {
+                tag: *b"MTLS",
+                field: "shader",
+                actual: V::NUMBER,
+            });
+        }
         self.shader.set(shader)
     }
     /// Borrows layers without decoding or allocating.
@@ -510,10 +528,17 @@ impl<V: ModelVersion> Layer<V> {
         self.alpha = value;
     }
     /// Returns emissive gain when this layout includes it.
-    pub fn emissive_gain(&self) -> Option<f32> {
-        self.extensions.emissive_gain()
+    pub fn try_emissive_gain(&self) -> Result<f32, ValueError> {
+        if !(V::NUMBER >= 900) {
+            return Err(ValueError::UnsupportedVersion {
+                tag: *b"LAYS",
+                minimum: 900,
+                actual: V::NUMBER,
+            });
+        }
+        Ok(self.extensions.emissive_gain().expect("supported version"))
     }
-    pub fn set_emissive_gain(&mut self, value: f32) -> Result<(), ValueError> {
+    pub fn try_set_emissive_gain(&mut self, value: f32) -> Result<(), ValueError> {
         *self
             .extensions
             .emissive_gain_mut()
@@ -524,10 +549,21 @@ impl<V: ModelVersion> Layer<V> {
             })? = value;
         Ok(())
     }
-    pub fn fresnel_color(&self) -> Option<Color> {
-        self.extensions.fresnel().map(|f| f.color)
+    pub fn try_fresnel_color(&self) -> Result<Color, ValueError> {
+        if !(V::NUMBER >= 1000) {
+            return Err(ValueError::UnsupportedVersion {
+                tag: *b"LAYS",
+                minimum: 1000,
+                actual: V::NUMBER,
+            });
+        }
+        Ok(self
+            .extensions
+            .fresnel()
+            .map(|f| f.color)
+            .expect("supported version"))
     }
-    pub fn set_fresnel_color(&mut self, value: Color) -> Result<(), ValueError> {
+    pub fn try_set_fresnel_color(&mut self, value: Color) -> Result<(), ValueError> {
         self.extensions
             .fresnel_mut()
             .ok_or(ValueError::UnsupportedVersion {
@@ -538,10 +574,21 @@ impl<V: ModelVersion> Layer<V> {
             .color = value;
         Ok(())
     }
-    pub fn fresnel_opacity(&self) -> Option<f32> {
-        self.extensions.fresnel().map(|f| f.opacity)
+    pub fn try_fresnel_opacity(&self) -> Result<f32, ValueError> {
+        if !(V::NUMBER >= 1000) {
+            return Err(ValueError::UnsupportedVersion {
+                tag: *b"LAYS",
+                minimum: 1000,
+                actual: V::NUMBER,
+            });
+        }
+        Ok(self
+            .extensions
+            .fresnel()
+            .map(|f| f.opacity)
+            .expect("supported version"))
     }
-    pub fn set_fresnel_opacity(&mut self, value: f32) -> Result<(), ValueError> {
+    pub fn try_set_fresnel_opacity(&mut self, value: f32) -> Result<(), ValueError> {
         self.extensions
             .fresnel_mut()
             .ok_or(ValueError::UnsupportedVersion {
@@ -552,10 +599,21 @@ impl<V: ModelVersion> Layer<V> {
             .opacity = value;
         Ok(())
     }
-    pub fn fresnel_team_color(&self) -> Option<f32> {
-        self.extensions.fresnel().map(|f| f.team_color)
+    pub fn try_fresnel_team_color(&self) -> Result<f32, ValueError> {
+        if !(V::NUMBER >= 1000) {
+            return Err(ValueError::UnsupportedVersion {
+                tag: *b"LAYS",
+                minimum: 1000,
+                actual: V::NUMBER,
+            });
+        }
+        Ok(self
+            .extensions
+            .fresnel()
+            .map(|f| f.team_color)
+            .expect("supported version"))
     }
-    pub fn set_fresnel_team_color(&mut self, value: f32) -> Result<(), ValueError> {
+    pub fn try_set_fresnel_team_color(&mut self, value: f32) -> Result<(), ValueError> {
         self.extensions
             .fresnel_mut()
             .ok_or(ValueError::UnsupportedVersion {
@@ -566,10 +624,17 @@ impl<V: ModelVersion> Layer<V> {
             .team_color = value;
         Ok(())
     }
-    pub fn shader_type_id(&self) -> Option<u32> {
-        self.extensions.shader_type_id()
+    pub fn try_shader_type_id(&self) -> Result<u32, ValueError> {
+        if !(V::NUMBER >= 1100) {
+            return Err(ValueError::UnsupportedVersion {
+                tag: *b"LAYS",
+                minimum: 1100,
+                actual: V::NUMBER,
+            });
+        }
+        Ok(self.extensions.shader_type_id().expect("supported version"))
     }
-    pub fn set_shader_type_id(&mut self, value: u32) -> Result<(), ValueError> {
+    pub fn try_set_shader_type_id(&mut self, value: u32) -> Result<(), ValueError> {
         *self
             .extensions
             .shader_type_id_mut()
@@ -580,10 +645,17 @@ impl<V: ModelVersion> Layer<V> {
             })? = value;
         Ok(())
     }
-    pub fn texture_slots(&self) -> &[LayerTextureSlot] {
-        self.extensions.texture_slots()
+    pub fn try_texture_slots(&self) -> Result<&[LayerTextureSlot], ValueError> {
+        if !(V::NUMBER >= 1100) {
+            return Err(ValueError::UnsupportedVersion {
+                tag: *b"LAYS",
+                minimum: 1100,
+                actual: V::NUMBER,
+            });
+        }
+        Ok(self.extensions.texture_slots())
     }
-    pub fn set_texture_slots(&mut self, slots: &[LayerTextureSlot]) -> Result<(), ValueError> {
+    pub fn try_set_texture_slots(&mut self, slots: &[LayerTextureSlot]) -> Result<(), ValueError> {
         *self
             .extensions
             .texture_slots_mut()
@@ -656,5 +728,83 @@ impl<V: ModelVersion> Writable for Material<V> {
         }
         bytes.finish_sized(marker, MaterialsChunk::<V>::TAG)?;
         Ok(())
+    }
+}
+
+impl<V: SupportsMaterialShaderPath> Material<V> {
+    pub fn shader(&self) -> Cow<'_, str> {
+        self.shader.text().expect("supported version")
+    }
+    pub fn set_shader(&mut self, shader: &str) -> Result<(), ValueError> {
+        self.try_set_shader(shader)
+    }
+}
+
+impl<V: SupportsEmissiveGain> Layer<V> {
+    pub fn emissive_gain(&self) -> f32 {
+        self.extensions.emissive_gain().expect("supported version")
+    }
+    pub fn set_emissive_gain(&mut self, value: f32) {
+        self.try_set_emissive_gain(value)
+            .expect("supported version")
+    }
+}
+
+impl<V: SupportsFresnel> Layer<V> {
+    pub fn fresnel_color(&self) -> Color {
+        self.extensions
+            .fresnel()
+            .map(|f| f.color)
+            .expect("supported version")
+    }
+    pub fn set_fresnel_color(&mut self, value: Color) {
+        self.try_set_fresnel_color(value)
+            .expect("supported version")
+    }
+}
+
+impl<V: SupportsFresnel> Layer<V> {
+    pub fn fresnel_opacity(&self) -> f32 {
+        self.extensions
+            .fresnel()
+            .map(|f| f.opacity)
+            .expect("supported version")
+    }
+    pub fn set_fresnel_opacity(&mut self, value: f32) {
+        self.try_set_fresnel_opacity(value)
+            .expect("supported version")
+    }
+}
+
+impl<V: SupportsFresnel> Layer<V> {
+    pub fn fresnel_team_color(&self) -> f32 {
+        self.extensions
+            .fresnel()
+            .map(|f| f.team_color)
+            .expect("supported version")
+    }
+    pub fn set_fresnel_team_color(&mut self, value: f32) {
+        self.try_set_fresnel_team_color(value)
+            .expect("supported version")
+    }
+}
+
+impl<V: SupportsLayerShaderTypeId> Layer<V> {
+    pub fn shader_type_id(&self) -> u32 {
+        self.extensions.shader_type_id().expect("supported version")
+    }
+    pub fn set_shader_type_id(&mut self, value: u32) {
+        self.try_set_shader_type_id(value)
+            .expect("supported version")
+    }
+}
+
+impl<V: SupportsLayerTextureSlots> Layer<V> {
+    pub fn texture_slots(&self) -> &[LayerTextureSlot] {
+        self.extensions.texture_slots()
+    }
+    pub fn set_texture_slots(&mut self, slots: &[LayerTextureSlot]) {
+        self.try_set_texture_slots(slots)
+            .expect("supported version")
     }
 }

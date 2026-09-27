@@ -72,7 +72,7 @@ fn local_material_layers_are_bounded_when_available() {
                         for layer in material.layers() {
                             layer.filter_mode();
                             layer.alpha();
-                            layer.texture_slots();
+                            let _ = layer.try_texture_slots();
                             layer.tracks();
                         }
                     }
@@ -94,15 +94,15 @@ fn local_material_layers_are_bounded_when_available() {
 fn builds_material_with_reforged_layer() {
     let mut layer = Layer::<V1100>::new();
     layer.set_texture_id(4);
-    layer.set_shader_type_id(2).unwrap();
-    layer.set_fresnel_color([0.1, 0.2, 0.3]).unwrap();
+    layer.set_shader_type_id(2);
+    layer.set_fresnel_color([0.1, 0.2, 0.3]);
     let mut material = Material::<V1100>::new();
     material.set_layers(&[layer]);
     let parsed = Material::<V1100>::decode(&material.encode().unwrap()).unwrap();
     let layers = parsed.layers();
     assert_eq!(layers[0].texture_id(), 4);
-    assert_eq!(layers[0].shader_type_id(), Some(2));
-    assert_eq!(layers[0].fresnel_color(), Some([0.1, 0.2, 0.3]));
+    assert_eq!(layers[0].shader_type_id(), 2);
+    assert_eq!(layers[0].fresnel_color(), [0.1, 0.2, 0.3]);
     assert!(layers[0].texture_slots().is_empty());
 }
 
@@ -114,10 +114,10 @@ fn shader_path_round_trip_in_legacy_reforged_material() {
         Material::<V1000>::decode(&material.encode().unwrap())
             .unwrap()
             .shader()
-            .as_deref(),
-        Some("Shaders\\Unit.shader")
+            .as_ref(),
+        "Shaders\\Unit.shader"
     );
-    assert!(Material::<V1800>::new().set_shader("unused").is_err());
+    assert!(Material::<V1800>::new().try_set_shader("unused").is_err());
 }
 
 #[test]
@@ -128,13 +128,11 @@ fn reforged_layer_texture_slot_and_tracks_round_trip() {
         value: 17u32,
     };
     let texture_track = AnimationTrack::<LayerTextureId>::linear(vec![texture_key], None).unwrap();
-    layer
-        .set_texture_slots(&[LayerTextureSlot {
-            texture_id: 3,
-            texture_type: 2,
-            track: Some(texture_track.clone()),
-        }])
-        .unwrap();
+    layer.set_texture_slots(&[LayerTextureSlot {
+        texture_id: 3,
+        texture_type: 2,
+        track: Some(texture_track.clone()),
+    }]);
     let alpha_track = AnimationTrack::<LayerAlpha>::linear(
         vec![ValueKeyframe {
             frame: 100,
@@ -175,9 +173,9 @@ fn unlit_layer_flag_round_trip() {
 fn version_specific_fields_do_not_write_into_legacy_tracks() {
     let mut layer = Layer::<V800>::new();
     let before = layer.encode().unwrap();
-    assert!(layer.set_emissive_gain(0.5).is_err());
-    assert!(layer.set_fresnel_opacity(0.5).is_err());
-    assert!(layer.set_shader_type_id(1).is_err());
+    assert!(layer.try_set_emissive_gain(0.5).is_err());
+    assert!(layer.try_set_fresnel_opacity(0.5).is_err());
+    assert!(layer.try_set_shader_type_id(1).is_err());
     assert_eq!(layer.encode().unwrap(), before);
 }
 

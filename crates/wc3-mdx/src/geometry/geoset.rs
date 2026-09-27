@@ -3,7 +3,7 @@ use crate::EncodeError;
 use crate::Encoder;
 use crate::KnownChunk;
 use crate::ValueError;
-use crate::{ModelVersion, Tag, Vec3, Version};
+use crate::{ModelVersion, SupportsReforgedChunks, SupportsSkinBoneIndices, Tag, Vec3, Version};
 use crate::{Readable, Writable};
 use std::fmt::Debug;
 use std::marker::PhantomData;
@@ -193,6 +193,10 @@ pub struct Geoset<V: ModelVersion> {
 }
 
 impl<V: ModelVersion> Geoset<V> {
+    /// Replaces packed skin weights without supplying version-specific bone indices.
+    pub fn try_set_skin_weights(&mut self, weights: Option<&[u8]>) -> Result<(), ValueError> {
+        self.try_set_skin_data(weights, None)
+    }
     /// Builds a basic geoset with one matrix group and one UV set.
     pub fn new(vertices: &[Vec3], normals: &[Vec3], faces: &[u16]) -> Result<Self, ValueError> {
         if vertices.len() != normals.len() {
@@ -295,8 +299,18 @@ impl<V: ModelVersion> Geoset<V> {
         self.unselectable_raw
     }
     /// Returns the Reforged level of detail, if that field exists.
-    pub fn level_of_detail(&self) -> Option<u32> {
-        self.header_extension.level_of_detail()
+    pub fn try_level_of_detail(&self) -> Result<u32, ValueError> {
+        if V::NUMBER < 900 {
+            return Err(ValueError::UnsupportedVersion {
+                tag: *b"GEOS",
+                minimum: 900,
+                actual: V::NUMBER,
+            });
+        }
+        Ok(self
+            .header_extension
+            .level_of_detail()
+            .expect("supported version"))
     }
     /// Returns the overall geoset bounds.
     pub fn extent(&self) -> GeosetExtent {
@@ -316,32 +330,60 @@ impl<V: ModelVersion> Geoset<V> {
     }
 
     /// Returns the fixed-width name without changing nonzero padding bytes.
-    pub fn name(&self) -> Option<Cow<'_, str>> {
-        self.header_extension.name()
+    pub fn try_name(&self) -> Result<Cow<'_, str>, ValueError> {
+        if V::NUMBER < 900 {
+            return Err(ValueError::UnsupportedVersion {
+                tag: *b"GEOS",
+                minimum: 900,
+                actual: V::NUMBER,
+            });
+        }
+        Ok(self.header_extension.name().expect("supported version"))
     }
 
     /// Borrows optional Reforged tangent vectors.
-    pub fn tangents(&self) -> Option<&[[f32; 4]]> {
-        self.extensions.iter().find_map(|part| match part {
+    pub fn try_tangents(&self) -> Result<Option<&[[f32; 4]]>, ValueError> {
+        if V::NUMBER < 900 {
+            return Err(ValueError::UnsupportedVersion {
+                tag: *b"GEOS",
+                minimum: 900,
+                actual: V::NUMBER,
+            });
+        }
+        Ok(self.extensions.iter().find_map(|part| match part {
             GeosetExtraSection::Tangents(values) => Some(values.as_slice()),
             _ => None,
-        })
+        }))
     }
 
     /// Borrows opaque packed skin weights.
-    pub fn skin_weights(&self) -> Option<&[u8]> {
-        self.extensions.iter().find_map(|part| match part {
+    pub fn try_skin_weights(&self) -> Result<Option<&[u8]>, ValueError> {
+        if V::NUMBER < 900 {
+            return Err(ValueError::UnsupportedVersion {
+                tag: *b"GEOS",
+                minimum: 900,
+                actual: V::NUMBER,
+            });
+        }
+        Ok(self.extensions.iter().find_map(|part| match part {
             GeosetExtraSection::Skin { weights, .. } => Some(weights.as_slice()),
             _ => None,
-        })
+        }))
     }
 
     /// Borrows the extra untagged bone index array in newer files.
-    pub fn skin_bone_indices(&self) -> Option<&[u8]> {
-        self.extensions.iter().find_map(|part| match part {
+    pub fn try_skin_bone_indices(&self) -> Result<Option<&[u8]>, ValueError> {
+        if V::NUMBER < 1200 {
+            return Err(ValueError::UnsupportedVersion {
+                tag: *b"GEOS",
+                minimum: 1200,
+                actual: V::NUMBER,
+            });
+        }
+        Ok(self.extensions.iter().find_map(|part| match part {
             GeosetExtraSection::Skin { bone_indices, .. } => bone_indices.indices(),
             _ => None,
-        })
+        }))
     }
 
     /// Changes one vertex position.
@@ -419,24 +461,26 @@ impl<V: ModelVersion> Geoset<V> {
     }
 
     /// Changes the Reforged level of detail.
-    pub fn set_level_of_detail(&mut self, level: u32) -> Result<(), ValueError> {
+    pub fn try_set_level_of_detail(&mut self, level: u32) -> Result<(), ValueError> {
         *self
             .header_extension
             .level_of_detail_mut()
-            .ok_or(ValueError::UnavailableField {
+            .ok_or(ValueError::UnsupportedVersion {
                 tag: GeosetsChunk::<V>::TAG,
-                field: "level of detail",
+                minimum: 900,
+                actual: V::NUMBER,
             })? = level;
         Ok(())
     }
 
     /// Changes the Reforged name and clears unused name bytes.
-    pub fn set_name(&mut self, name: &str) -> Result<(), ValueError> {
+    pub fn try_set_name(&mut self, name: &str) -> Result<(), ValueError> {
         self.header_extension
             .name_mut()
-            .ok_or(ValueError::UnavailableField {
+            .ok_or(ValueError::UnsupportedVersion {
                 tag: GeosetsChunk::<V>::TAG,
-                field: "name",
+                minimum: 900,
+                actual: V::NUMBER,
             })?
             .set_text(name)?;
         Ok(())
@@ -471,11 +515,12 @@ impl<V: ModelVersion> Geoset<V> {
     }
 
     /// Replaces or removes the Reforged tangent section, retaining its order.
-    pub fn set_tangents(&mut self, tangents: Option<&[[f32; 4]]>) -> Result<(), ValueError> {
+    pub fn try_set_tangents(&mut self, tangents: Option<&[[f32; 4]]>) -> Result<(), ValueError> {
         if V::NUMBER < 900 {
-            return Err(ValueError::UnavailableField {
+            return Err(ValueError::UnsupportedVersion {
                 tag: GeosetsChunk::<V>::TAG,
-                field: "tangents",
+                minimum: 900,
+                actual: V::NUMBER,
             });
         }
         if let Some(index) = self
@@ -496,22 +541,24 @@ impl<V: ModelVersion> Geoset<V> {
     }
 
     /// Replaces or removes packed skin data, retaining its section order.
-    pub fn set_skin_data(
+    pub fn try_set_skin_data(
         &mut self,
         weights: Option<&[u8]>,
         bone_indices: Option<&[u8]>,
     ) -> Result<(), ValueError> {
         if V::NUMBER < 900 {
-            return Err(ValueError::UnavailableField {
+            return Err(ValueError::UnsupportedVersion {
                 tag: GeosetsChunk::<V>::TAG,
-                field: "skin data",
+                minimum: 900,
+                actual: V::NUMBER,
             });
         }
         if let Some(indices) = bone_indices {
             if V::NUMBER < 1200 {
-                return Err(ValueError::UnavailableField {
+                return Err(ValueError::UnsupportedVersion {
                     tag: GeosetsChunk::<V>::TAG,
-                    field: "skin bone indices",
+                    minimum: 1200,
+                    actual: V::NUMBER,
                 });
             }
             let weights = weights.ok_or(ValueError::MissingField {
@@ -815,5 +862,51 @@ impl<V: ModelVersion> Writable for Geoset<V> {
         }
         bytes.finish_sized(marker, GeosetsChunk::<V>::TAG)?;
         Ok(())
+    }
+}
+
+impl<V: SupportsReforgedChunks> Geoset<V> {
+    pub fn level_of_detail(&self) -> u32 {
+        self.header_extension
+            .level_of_detail()
+            .expect("supported version")
+    }
+    pub fn name(&self) -> Cow<'_, str> {
+        self.header_extension.name().expect("supported version")
+    }
+    pub fn tangents(&self) -> Option<&[[f32; 4]]> {
+        self.extensions.iter().find_map(|part| match part {
+            GeosetExtraSection::Tangents(values) => Some(values.as_slice()),
+            _ => None,
+        })
+    }
+    pub fn skin_weights(&self) -> Option<&[u8]> {
+        self.extensions.iter().find_map(|part| match part {
+            GeosetExtraSection::Skin { weights, .. } => Some(weights.as_slice()),
+            _ => None,
+        })
+    }
+    pub fn set_level_of_detail(&mut self, level: u32) {
+        self.try_set_level_of_detail(level)
+            .expect("supported version")
+    }
+    pub fn set_name(&mut self, name: &str) -> Result<(), ValueError> {
+        self.try_set_name(name)
+    }
+    pub fn set_tangents(&mut self, tangents: Option<&[[f32; 4]]>) {
+        self.try_set_tangents(tangents).expect("supported version")
+    }
+    pub fn set_skin_weights(&mut self, weights: Option<&[u8]>) {
+        self.try_set_skin_weights(weights)
+            .expect("supported version")
+    }
+}
+
+impl<V: SupportsSkinBoneIndices> Geoset<V> {
+    pub fn skin_bone_indices(&self) -> Option<&[u8]> {
+        self.extensions.iter().find_map(|part| match part {
+            GeosetExtraSection::Skin { bone_indices, .. } => bone_indices.indices(),
+            _ => None,
+        })
     }
 }

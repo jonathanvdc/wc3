@@ -58,29 +58,32 @@ fn check_version<V: ModelVersion>() {
     };
     geoset.set_extent(extent);
     if version >= 900 {
-        geoset.set_level_of_detail(2).unwrap();
-        geoset.set_name("Body").unwrap();
+        geoset.try_set_level_of_detail(2).unwrap();
+        geoset.try_set_name("Body").unwrap();
         geoset
-            .set_tangents(Some(&[[1.0, 0.0, 0.0, 1.0]; 2]))
+            .try_set_tangents(Some(&[[1.0, 0.0, 0.0, 1.0]; 2]))
             .unwrap();
         let weights = [0u8; 16];
         let indices = [1u8; 16];
         geoset
-            .set_skin_data(
+            .try_set_skin_data(
                 Some(&weights),
                 (version >= 1200).then_some(indices.as_slice()),
             )
             .unwrap();
-        assert_eq!(geoset.tangents().unwrap().len(), 2);
-        assert_eq!(geoset.skin_weights(), Some(weights.as_slice()));
+        assert_eq!(geoset.try_tangents().unwrap().unwrap().len(), 2);
+        assert_eq!(geoset.try_skin_weights().unwrap(), Some(weights.as_slice()));
         if version >= 1200 {
-            assert_eq!(geoset.skin_bone_indices(), Some(indices.as_slice()));
+            assert_eq!(
+                geoset.try_skin_bone_indices().unwrap(),
+                Some(indices.as_slice())
+            );
         }
-        geoset.set_skin_data(None, None).unwrap();
-        geoset.set_tangents(None).unwrap();
-        assert!(geoset.skin_weights().is_none());
-        assert!(geoset.tangents().is_none());
-        assert_eq!(geoset.name().as_deref(), Some("Body"));
+        geoset.try_set_skin_data(None, None).unwrap();
+        geoset.try_set_tangents(None).unwrap();
+        assert!(geoset.try_skin_weights().unwrap().is_none());
+        assert!(geoset.try_tangents().unwrap().is_none());
+        assert_eq!(geoset.try_name().unwrap().as_ref(), "Body");
     }
     assert_eq!(geoset.material_id(), 7);
     assert_eq!(geoset.normals()[1], [0.0, 1.0, 0.0]);
@@ -109,9 +112,11 @@ fn check_version<V: ModelVersion>() {
 #[test]
 fn preserves_float_bits_name_padding_and_extension_order() {
     let mut geoset = sample_geoset();
-    geoset.set_tangents(Some(&[[1.0, 0.0, 0.0, 1.0]])).unwrap();
     geoset
-        .set_skin_data(Some(&[1, 2, 3, 4]), Some(&[5, 6, 7, 8]))
+        .try_set_tangents(Some(&[[1.0, 0.0, 0.0, 1.0]]))
+        .unwrap();
+    geoset
+        .try_set_skin_data(Some(&[1, 2, 3, 4]), Some(&[5, 6, 7, 8]))
         .unwrap();
     let mut bytes = geoset.encode().unwrap();
     bytes[12..16].copy_from_slice(&0x7fa1_2345u32.to_le_bytes());
@@ -156,9 +161,9 @@ fn local_geosets_have_bounded_mesh_sections_when_available() {
                         geoset.matrix_indices();
                         geoset.extent();
                         geoset.sequence_extents();
-                        geoset.tangents();
-                        geoset.skin_weights();
-                        geoset.skin_bone_indices();
+                        let _ = geoset.try_tangents();
+                        let _ = geoset.try_skin_weights();
+                        let _ = geoset.try_skin_bone_indices();
                         geoset.uv_sets();
                     }
                 }

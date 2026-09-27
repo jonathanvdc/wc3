@@ -49,4 +49,8 @@ pub use model::{AnyVersionModel, Model};
 mod model_access;
 pub use model_access::{ModelAccess, TryModelAccess};
 mod versions;
-pub use versions::{ModelVersion, SupportsReforgedChunks, V1000, V1100, V1200, V1800, V800, V900};
+pub use versions::{
+    ModelVersion, SupportsEmissiveGain, SupportsFresnel, SupportsLayerShaderTypeId,
+    SupportsLayerTextureSlots, SupportsLightExtendedWords, SupportsMaterialShaderPath,
+    SupportsReforgedChunks, SupportsSkinBoneIndices, V1000, V1100, V1200, V1800, V800, V900,
+};

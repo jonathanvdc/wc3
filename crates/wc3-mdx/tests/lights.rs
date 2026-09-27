@@ -48,7 +48,7 @@ fn light_color_track_round_trip() {
 fn extended_light_fields_and_tracks_round_trip() {
     let mut light = Light::<wc3_mdx::V1800>::new(Node::new("Glow", 4).unwrap(), 0);
     let words = [1, 2, 3, 4, 5, 6, 7];
-    light.set_extended_words(words).unwrap();
+    light.set_extended_words(words);
     let track = AnimationTrack::<LightVisibility>::linear(
         vec![ValueKeyframe {
             frame: 10,
@@ -60,6 +60,6 @@ fn extended_light_fields_and_tracks_round_trip() {
     .into();
     light.set_tracks(std::slice::from_ref(&track));
     let parsed = Light::<wc3_mdx::V1800>::decode(&light.encode().unwrap()).unwrap();
-    assert_eq!(parsed.extended_words(), Some(words));
+    assert_eq!(parsed.extended_words(), words);
     assert_eq!(parsed.tracks(), &[track]);
 }
