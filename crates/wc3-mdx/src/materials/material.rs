@@ -116,7 +116,6 @@ pub struct Layer<V: ModelVersion> {
     tracks: Vec<LayerTrack>,
 }
 
-
 #[derive(Clone, Debug, PartialEq, Readable, Writable)]
 pub struct Fresnel {
     color: Color,
@@ -195,26 +194,8 @@ pub trait LayerExtra: Default + Readable + Writable + Clone + Debug + PartialEq 
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Default, Readable, Writable)]
 pub struct ClassicLayerExtra;
-
-impl Default for ClassicLayerExtra {
-    fn default() -> Self {
-        Self
-    }
-}
-
-impl Readable for ClassicLayerExtra {
-    fn read_from(_: &mut Cursor<'_>) -> Result<Self, DecodeError> {
-        Ok(Self)
-    }
-}
-
-impl Writable for ClassicLayerExtra {
-    fn write_to(&self, _: &mut Encoder<'_>) -> Result<(), EncodeError> {
-        Ok(())
-    }
-}
 
 impl LayerExtra for ClassicLayerExtra {}
 
