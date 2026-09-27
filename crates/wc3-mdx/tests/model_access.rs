@@ -1,5 +1,7 @@
 use wc3_mdx::geometry::BindPoseMatrix;
-use wc3_mdx::{AnyVersionModel, Model, ModelAccess, TryModelAccess, ValueError, V1800, V800, V900};
+use wc3_mdx::{
+    visit_model, AnyVersionModel, Model, ModelAccess, TryModelAccess, ValueError, V1800, V800, V900,
+};
 
 fn replace_durations(model: &mut impl ModelAccess) {
     model.set_global_sequences(&[100, 250]);
@@ -59,4 +61,14 @@ fn checked_accessors_distinguish_unsupported_and_empty() {
     assert!(runtime.try_popcorn_emitters().unwrap().is_empty());
     runtime.try_set_face_fx(&[]).unwrap();
     runtime.try_set_popcorn_emitters(&[]).unwrap();
+}
+
+#[test]
+fn public_visit_macro_supports_versioned_records_and_edits() {
+    let mut model = AnyVersionModel::V900(Model::<V900>::new());
+    let geoset_count = visit_model!(&model, |typed| typed.geosets().len());
+    assert_eq!(geoset_count, 0);
+
+    visit_model!(&mut model, |typed| typed.set_global_sequences(&[42]));
+    assert_eq!(model.global_sequences(), [42]);
 }

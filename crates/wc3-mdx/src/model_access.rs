@@ -2,8 +2,8 @@ use crate::animation::{GeosetAnimation, Sequence, TextureAnimation};
 use crate::emitters::{ParticleEmitter, ParticleEmitter2, PopcornEmitter, RibbonEmitter};
 use crate::geometry::{BindPoseMatrix, CollisionShape};
 use crate::materials::Texture;
-use crate::model::dispatch_model;
 use crate::scene::{Attachment, Bone, EventObject, FaceFx, ModelInfo, Node};
+use crate::visit_model;
 use crate::{AnyVersionModel, Model, ModelVersion, ValueError, Vec3};
 
 /// Accessors whose record types do not depend on the model version.
@@ -135,94 +135,94 @@ impl<V: ModelVersion> ModelAccess for Model<V> {
 
 impl ModelAccess for AnyVersionModel {
     fn sequences(&self) -> Vec<Sequence> {
-        dispatch_model!(self, model => model.sequences())
+        visit_model!(self, |model| model.sequences())
     }
     fn set_sequences(&mut self, sequences: &[Sequence]) {
-        dispatch_model!(self, model => model.set_sequences(sequences))
+        visit_model!(self, |model| model.set_sequences(sequences))
     }
     fn global_sequences(&self) -> Vec<u32> {
-        dispatch_model!(self, model => model.global_sequences())
+        visit_model!(self, |model| model.global_sequences())
     }
     fn set_global_sequences(&mut self, durations: &[u32]) {
-        dispatch_model!(self, model => model.set_global_sequences(durations))
+        visit_model!(self, |model| model.set_global_sequences(durations))
     }
     fn texture_animations(&self) -> Vec<TextureAnimation> {
-        dispatch_model!(self, model => model.texture_animations())
+        visit_model!(self, |model| model.texture_animations())
     }
     fn set_texture_animations(&mut self, animations: &[TextureAnimation]) {
-        dispatch_model!(self, model => model.set_texture_animations(animations))
+        visit_model!(self, |model| model.set_texture_animations(animations))
     }
     fn geoset_animations(&self) -> Vec<GeosetAnimation> {
-        dispatch_model!(self, model => model.geoset_animations())
+        visit_model!(self, |model| model.geoset_animations())
     }
     fn set_geoset_animations(&mut self, animations: &[GeosetAnimation]) {
-        dispatch_model!(self, model => model.set_geoset_animations(animations))
+        visit_model!(self, |model| model.set_geoset_animations(animations))
     }
     fn textures(&self) -> Vec<Texture> {
-        dispatch_model!(self, model => model.textures())
+        visit_model!(self, |model| model.textures())
     }
     fn set_textures(&mut self, textures: &[Texture]) {
-        dispatch_model!(self, model => model.set_textures(textures))
+        visit_model!(self, |model| model.set_textures(textures))
     }
     fn bones(&self) -> Vec<Bone> {
-        dispatch_model!(self, model => model.bones())
+        visit_model!(self, |model| model.bones())
     }
     fn set_bones(&mut self, bones: &[Bone]) {
-        dispatch_model!(self, model => model.set_bones(bones))
+        visit_model!(self, |model| model.set_bones(bones))
     }
     fn helpers(&self) -> Vec<Node> {
-        dispatch_model!(self, model => model.helpers())
+        visit_model!(self, |model| model.helpers())
     }
     fn set_helpers(&mut self, helpers: &[Node]) {
-        dispatch_model!(self, model => model.set_helpers(helpers))
+        visit_model!(self, |model| model.set_helpers(helpers))
     }
     fn attachments(&self) -> Vec<Attachment> {
-        dispatch_model!(self, model => model.attachments())
+        visit_model!(self, |model| model.attachments())
     }
     fn set_attachments(&mut self, attachments: &[Attachment]) {
-        dispatch_model!(self, model => model.set_attachments(attachments))
+        visit_model!(self, |model| model.set_attachments(attachments))
     }
     fn event_objects(&self) -> Vec<EventObject> {
-        dispatch_model!(self, model => model.event_objects())
+        visit_model!(self, |model| model.event_objects())
     }
     fn set_event_objects(&mut self, events: &[EventObject]) {
-        dispatch_model!(self, model => model.set_event_objects(events))
+        visit_model!(self, |model| model.set_event_objects(events))
     }
     fn collision_shapes(&self) -> Vec<CollisionShape> {
-        dispatch_model!(self, model => model.collision_shapes())
+        visit_model!(self, |model| model.collision_shapes())
     }
     fn set_collision_shapes(&mut self, shapes: &[CollisionShape]) {
-        dispatch_model!(self, model => model.set_collision_shapes(shapes))
+        visit_model!(self, |model| model.set_collision_shapes(shapes))
     }
     fn pivot_points(&self) -> Vec<Vec3> {
-        dispatch_model!(self, model => model.pivot_points())
+        visit_model!(self, |model| model.pivot_points())
     }
     fn set_pivot_points(&mut self, points: &[Vec3]) {
-        dispatch_model!(self, model => model.set_pivot_points(points))
+        visit_model!(self, |model| model.set_pivot_points(points))
     }
     fn particle_emitters(&self) -> Vec<ParticleEmitter> {
-        dispatch_model!(self, model => model.particle_emitters())
+        visit_model!(self, |model| model.particle_emitters())
     }
     fn set_particle_emitters(&mut self, emitters: &[ParticleEmitter]) {
-        dispatch_model!(self, model => model.set_particle_emitters(emitters))
+        visit_model!(self, |model| model.set_particle_emitters(emitters))
     }
     fn particle_emitters2(&self) -> Vec<ParticleEmitter2> {
-        dispatch_model!(self, model => model.particle_emitters2())
+        visit_model!(self, |model| model.particle_emitters2())
     }
     fn set_particle_emitters2(&mut self, emitters: &[ParticleEmitter2]) {
-        dispatch_model!(self, model => model.set_particle_emitters2(emitters))
+        visit_model!(self, |model| model.set_particle_emitters2(emitters))
     }
     fn ribbon_emitters(&self) -> Vec<RibbonEmitter> {
-        dispatch_model!(self, model => model.ribbon_emitters())
+        visit_model!(self, |model| model.ribbon_emitters())
     }
     fn set_ribbon_emitters(&mut self, emitters: &[RibbonEmitter]) {
-        dispatch_model!(self, model => model.set_ribbon_emitters(emitters))
+        visit_model!(self, |model| model.set_ribbon_emitters(emitters))
     }
     fn model_info(&self) -> Option<ModelInfo> {
-        dispatch_model!(self, model => model.model_info())
+        visit_model!(self, |model| model.model_info())
     }
     fn set_model_info(&mut self, info: &ModelInfo) {
-        dispatch_model!(self, model => model.set_model_info(info))
+        visit_model!(self, |model| model.set_model_info(info))
     }
 }
 
@@ -412,22 +412,22 @@ impl<V: ModelVersion> TryModelAccess for Model<V> {
 
 impl TryModelAccess for AnyVersionModel {
     fn try_bind_poses(&self) -> Result<Vec<BindPoseMatrix>, ValueError> {
-        dispatch_model!(self, model => model.try_bind_poses())
+        visit_model!(self, |model| model.try_bind_poses())
     }
     fn try_set_bind_poses(&mut self, poses: &[BindPoseMatrix]) -> Result<(), ValueError> {
-        dispatch_model!(self, model => model.try_set_bind_poses(poses))
+        visit_model!(self, |model| model.try_set_bind_poses(poses))
     }
     fn try_face_fx(&self) -> Result<Vec<FaceFx>, ValueError> {
-        dispatch_model!(self, model => model.try_face_fx())
+        visit_model!(self, |model| model.try_face_fx())
     }
     fn try_set_face_fx(&mut self, entries: &[FaceFx]) -> Result<(), ValueError> {
-        dispatch_model!(self, model => model.try_set_face_fx(entries))
+        visit_model!(self, |model| model.try_set_face_fx(entries))
     }
     fn try_popcorn_emitters(&self) -> Result<Vec<PopcornEmitter>, ValueError> {
-        dispatch_model!(self, model => model.try_popcorn_emitters())
+        visit_model!(self, |model| model.try_popcorn_emitters())
     }
     fn try_set_popcorn_emitters(&mut self, emitters: &[PopcornEmitter]) -> Result<(), ValueError> {
-        dispatch_model!(self, model => model.try_set_popcorn_emitters(emitters))
+        visit_model!(self, |model| model.try_set_popcorn_emitters(emitters))
     }
 }
 

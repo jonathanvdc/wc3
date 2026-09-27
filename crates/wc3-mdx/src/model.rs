@@ -185,19 +185,31 @@ pub enum AnyVersionModel {
     V1800(Model<V1800>),
 }
 
-macro_rules! dispatch_model {
-    ($value:expr, $model:ident => $body:expr) => {
+/// Runs an expression against the typed model inside an [`AnyVersionModel`].
+///
+/// The expression is compiled for each supported version and must return the
+/// same type for every version. Matching a reference allows read-only access;
+/// matching a mutable reference allows edits.
+///
+/// ```
+/// use wc3_mdx::{visit_model, AnyVersionModel, Model, V800};
+/// let model = AnyVersionModel::V800(Model::<V800>::new());
+/// let count = visit_model!(&model, |typed| typed.geosets().len());
+/// assert_eq!(count, 0);
+/// ```
+#[macro_export]
+macro_rules! visit_model {
+    ($value:expr, |$model:ident| $body:expr) => {
         match $value {
-            AnyVersionModel::V800($model) => $body,
-            AnyVersionModel::V900($model) => $body,
-            AnyVersionModel::V1000($model) => $body,
-            AnyVersionModel::V1100($model) => $body,
-            AnyVersionModel::V1200($model) => $body,
-            AnyVersionModel::V1800($model) => $body,
+            $crate::AnyVersionModel::V800($model) => $body,
+            $crate::AnyVersionModel::V900($model) => $body,
+            $crate::AnyVersionModel::V1000($model) => $body,
+            $crate::AnyVersionModel::V1100($model) => $body,
+            $crate::AnyVersionModel::V1200($model) => $body,
+            $crate::AnyVersionModel::V1800($model) => $body,
         }
     };
 }
-pub(crate) use dispatch_model;
 
 impl AnyVersionModel {
     /// Decodes a model, using `default_version` when no `VERS` chunk is present.
@@ -215,11 +227,11 @@ impl AnyVersionModel {
     }
 
     pub fn version(&self) -> Version {
-        dispatch_model!(self, model => model.version())
+        visit_model!(self, |model| model.version())
     }
 
     pub fn encode(&self) -> Result<Vec<u8>, EncodeError> {
-        dispatch_model!(self, model => model.encode())
+        visit_model!(self, |model| model.encode())
     }
 }
 
