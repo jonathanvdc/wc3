@@ -679,7 +679,7 @@ impl<V: ModelVersion> Model<V> {
 }
 
 impl<V: ModelVersion> Decodable for Geoset<V> {
-    fn decode_one(source: &mut Cursor<'_>, _version: Version) -> Result<Self, DecodeError> {
+    fn decode_one(source: &mut Cursor<'_>) -> Result<Self, DecodeError> {
         let mut cursor = source.slice_u32_sized()?;
 
         let value = {

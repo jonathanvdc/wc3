@@ -23,7 +23,7 @@ fn attachment_fields_and_visibility_round_trip() {
     attachment.set_visibility_track(Some(&track));
     let mut model = Model::<wc3_mdx::V1800>::new();
     model.set_attachments(&[attachment]);
-    let parsed = Model::<wc3_mdx::V1800>::decode(&model.encode().unwrap(), 800).unwrap();
+    let parsed = Model::<wc3_mdx::V1800>::decode(&model.encode().unwrap()).unwrap();
     let attachment = &parsed.attachments()[0];
     assert_eq!(attachment.node().name(), "Weapon");
     assert_eq!(attachment.path(), "Abilities\\Weapons\\Sword.mdx");
@@ -39,9 +39,9 @@ fn adjacent_attachments_decode_at_their_own_boundaries() {
     let first_len = bytes.len();
     bytes.extend_from_slice(&second.encode().unwrap());
     let mut cursor = Cursor::new(&bytes);
-    assert_eq!(Attachment::decode_one(&mut cursor, 800).unwrap(), first);
+    assert_eq!(Attachment::decode_one(&mut cursor).unwrap(), first);
     assert_eq!(cursor.position(), first_len);
-    assert_eq!(Attachment::decode_one(&mut cursor, 800).unwrap(), second);
+    assert_eq!(Attachment::decode_one(&mut cursor).unwrap(), second);
     cursor.finish().unwrap();
-    assert!(Attachment::decode(&bytes, 800).is_err());
+    assert!(Attachment::decode(&bytes).is_err());
 }

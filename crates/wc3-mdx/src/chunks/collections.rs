@@ -1,7 +1,7 @@
 //! Complete chunks containing a sequence of records.
 use crate::EncodeError;
 use crate::Encoder;
-use crate::{ModelVersion, Tag, Version};
+use crate::{ModelVersion, Tag};
 use std::marker::PhantomData;
 
 use crate::{
@@ -27,14 +27,11 @@ pub trait CollectionChunk: Sized {
     fn from_records(records: Vec<Self::Item>) -> Self;
 }
 
-fn decode_records<C: CollectionChunk>(
-    cursor: &mut Cursor<'_>,
-    version: Version,
-) -> Result<C, DecodeError> {
+fn decode_records<C: CollectionChunk>(cursor: &mut Cursor<'_>) -> Result<C, DecodeError> {
     let mut records = Vec::new();
     while !cursor.remaining().is_empty() {
         let start = cursor.position();
-        let record = C::Item::decode_one(cursor, version)?;
+        let record = C::Item::decode_one(cursor)?;
         if cursor.position() <= start {
             return Err(DecodeError::MalformedRecord {
                 tag: C::tag(),
@@ -105,11 +102,8 @@ macro_rules! record_collection {
         impl KnownChunk for $name {
             const TAG: Tag = $tag;
 
-            fn decode_payload(
-                cursor: &mut Cursor<'_>,
-                version: Version,
-            ) -> Result<Self, DecodeError> {
-                decode_records(cursor, version)
+            fn decode_payload(cursor: &mut Cursor<'_>) -> Result<Self, DecodeError> {
+                decode_records(cursor)
             }
         }
     };
@@ -156,11 +150,8 @@ macro_rules! versioned_record_collection {
 
         impl<V: ModelVersion> KnownChunk for $name<V> {
             const TAG: Tag = $tag;
-            fn decode_payload(
-                cursor: &mut Cursor<'_>,
-                _version: Version,
-            ) -> Result<Self, DecodeError> {
-                decode_records(cursor, V::NUMBER)
+            fn decode_payload(cursor: &mut Cursor<'_>) -> Result<Self, DecodeError> {
+                decode_records(cursor)
             }
         }
     };
@@ -199,8 +190,8 @@ mod tests {
         ];
         let original = SequencesChunk::new(records);
         let payload = original.encode().unwrap();
-        assert_eq!(SequencesChunk::decode(&payload, 1800).unwrap(), original);
-        assert!(Sequence::decode(&payload, 800).is_err());
+        assert_eq!(SequencesChunk::decode(&payload).unwrap(), original);
+        assert!(Sequence::decode(&payload).is_err());
     }
 
     #[test]
@@ -212,7 +203,7 @@ mod tests {
         let original = GeosetsChunk::new(records);
         let bytes = original.encode().unwrap();
         assert_eq!(
-            GeosetsChunk::<crate::V1800>::decode(&bytes, 1800).unwrap(),
+            GeosetsChunk::<crate::V1800>::decode(&bytes).unwrap(),
             original
         );
     }
@@ -229,21 +220,19 @@ mod tests {
             PivotPoint([4.0, 5.0, 6.0]),
         ]);
         assert_eq!(
-            GlobalSequencesChunk::decode(&durations.encode().unwrap(), 800).unwrap(),
+            GlobalSequencesChunk::decode(&durations.encode().unwrap()).unwrap(),
             durations
         );
         assert_eq!(
-            PivotPointsChunk::decode(&points.encode().unwrap(), 800).unwrap(),
+            PivotPointsChunk::decode(&points.encode().unwrap()).unwrap(),
             points
         );
         assert!(GlobalSequencesChunk::decode(
-            &[b"GLBS".as_slice(), &1u32.to_le_bytes(), &[1]].concat(),
-            800
+            &[b"GLBS".as_slice(), &1u32.to_le_bytes(), &[1]].concat()
         )
         .is_err());
         assert!(PivotPointsChunk::decode(
-            &[b"PIVT".as_slice(), &1u32.to_le_bytes(), &[1]].concat(),
-            800
+            &[b"PIVT".as_slice(), &1u32.to_le_bytes(), &[1]].concat()
         )
         .is_err());
     }

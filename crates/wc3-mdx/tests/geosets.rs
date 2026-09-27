@@ -4,7 +4,7 @@ use wc3_mdx::{AnyVersionModel, Model, ModelVersion, V1100, V1200, V1800, V800, V
 
 fn sample_geoset() -> Geoset<V1800> {
     let geoset = Geoset::<V1800>::new(&[[1.0, 2.0, 3.0]], &[[0.0, 0.0, 1.0]], &[0, 0, 0]).unwrap();
-    Geoset::<V1800>::decode(&geoset.encode().unwrap(), 1800).unwrap()
+    Geoset::<V1800>::decode(&geoset.encode().unwrap()).unwrap()
 }
 
 #[test]
@@ -16,7 +16,7 @@ fn geoset_mesh_edit_preserves_other_sections() {
     geoset.set_vertex(0, [4.0, 5.0, 6.0]).unwrap();
     let mut model = Model::<V1800>::new();
     model.set_geosets(&[geoset]);
-    let decoded = Model::<V1800>::decode(&model.encode().unwrap(), 800).unwrap();
+    let decoded = Model::<V1800>::decode(&model.encode().unwrap()).unwrap();
     assert_eq!(decoded.geosets()[0].vertices(), vec![[4.0, 5.0, 6.0]]);
     assert_eq!(decoded.geosets()[0].normals(), vec![[0.0, 0.0, 1.0]]);
 }
@@ -96,12 +96,12 @@ fn check_version<V: ModelVersion>() {
         vec![vec![[0.0, 0.0], [0.25, 0.75]], vec![[1.0, 1.0]; 2]]
     );
     assert_eq!(
-        Geoset::<V>::decode(&geoset.encode().unwrap(), version).unwrap(),
+        Geoset::<V>::decode(&geoset.encode().unwrap()).unwrap(),
         geoset
     );
     let mut model = Model::<V>::new();
     model.set_geosets(&[geoset]);
-    let parsed = Model::<V>::decode(&model.encode().unwrap(), 800).unwrap();
+    let parsed = Model::<V>::decode(&model.encode().unwrap()).unwrap();
     assert_eq!(parsed.geosets()[0].version(), version);
     assert_eq!(parsed.geosets()[0].material_id(), 7);
 }
@@ -127,7 +127,7 @@ fn preserves_float_bits_name_padding_and_extension_order() {
     reordered.extend_from_slice(&bytes[skin..uv]);
     reordered.extend_from_slice(&bytes[tang..skin]);
     reordered.extend_from_slice(&bytes[uv..]);
-    let decoded = Geoset::<V1800>::decode(&reordered, 1800).unwrap();
+    let decoded = Geoset::<V1800>::decode(&reordered).unwrap();
     assert_eq!(decoded.encode().unwrap(), reordered);
     assert_eq!(decoded.vertices()[0][0].to_bits(), 0x7fa1_2345);
 }

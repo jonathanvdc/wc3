@@ -15,7 +15,7 @@ fn light_fields_round_trip() {
     light.set_ambient_intensity(0.5);
     let mut model = Model::<wc3_mdx::V1200>::new();
     model.set_lights(&[light]);
-    let parsed = Model::<wc3_mdx::V1200>::decode(&model.encode().unwrap(), 800).unwrap();
+    let parsed = Model::<wc3_mdx::V1200>::decode(&model.encode().unwrap()).unwrap();
     let light = &parsed.lights()[0];
     assert_eq!(light.node().name(), "Torch");
     assert_eq!(light.light_type(), 1);
@@ -40,7 +40,7 @@ fn light_color_track_round_trip() {
     .unwrap()
     .into();
     light.set_tracks(std::slice::from_ref(&track));
-    let parsed = Light::<wc3_mdx::V800>::decode(&light.encode().unwrap(), 800).unwrap();
+    let parsed = Light::<wc3_mdx::V800>::decode(&light.encode().unwrap()).unwrap();
     assert_eq!(parsed.tracks(), &[track]);
 }
 
@@ -59,7 +59,7 @@ fn extended_light_fields_and_tracks_round_trip() {
     .unwrap()
     .into();
     light.set_tracks(std::slice::from_ref(&track));
-    let parsed = Light::<wc3_mdx::V1800>::decode(&light.encode().unwrap(), 800).unwrap();
+    let parsed = Light::<wc3_mdx::V1800>::decode(&light.encode().unwrap()).unwrap();
     assert_eq!(parsed.extended_words(), Some(words));
     assert_eq!(parsed.tracks(), &[track]);
 }

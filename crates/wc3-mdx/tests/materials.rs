@@ -7,14 +7,13 @@ use wc3_mdx::materials::{
 use wc3_mdx::{AnyVersionModel, Model, ModelVersion, V1000, V1100, V1200, V1800, V800, V900};
 
 fn sample_material<V: ModelVersion>() -> Material<V> {
-    let version = V::NUMBER;
     let mut layer = Layer::<V>::new();
     layer.set_filter_mode(1);
     layer.set_texture_id(2);
     layer.set_alpha(0.5);
     let mut material = Material::<V>::new();
     material.set_layers(&[layer]);
-    Material::<V>::decode(&material.encode().unwrap(), version).unwrap()
+    Material::<V>::decode(&material.encode().unwrap()).unwrap()
 }
 
 #[test]
@@ -34,7 +33,7 @@ fn check_version<V: ModelVersion>() {
     material.set_raw_render_mode(7);
     let mut model = Model::<V>::new();
     model.set_materials(&[material]);
-    let decoded = Model::<V>::decode(&model.encode().unwrap(), 800).unwrap();
+    let decoded = Model::<V>::decode(&model.encode().unwrap()).unwrap();
     let materials = decoded.materials();
     assert_eq!(materials[0].version(), version);
     assert_eq!(materials[0].priority_plane(), 3);
@@ -49,7 +48,7 @@ fn check_version<V: ModelVersion>() {
     assert_eq!(layers[0].alpha(), 0.5);
     assert_eq!(layers[0].shading_flags(), LayerShadingFlags::default());
     assert_eq!(
-        Layer::<V>::decode(&layers[0].encode().unwrap(), version).unwrap(),
+        Layer::<V>::decode(&layers[0].encode().unwrap()).unwrap(),
         layers[0]
     );
 }
@@ -99,7 +98,7 @@ fn builds_material_with_reforged_layer() {
     layer.set_fresnel_color([0.1, 0.2, 0.3]).unwrap();
     let mut material = Material::<V1100>::new();
     material.set_layers(&[layer]);
-    let parsed = Material::<V1100>::decode(&material.encode().unwrap(), 1100).unwrap();
+    let parsed = Material::<V1100>::decode(&material.encode().unwrap()).unwrap();
     let layers = parsed.layers();
     assert_eq!(layers[0].texture_id(), 4);
     assert_eq!(layers[0].shader_type_id(), Some(2));
@@ -112,7 +111,7 @@ fn shader_path_round_trip_in_legacy_reforged_material() {
     let mut material = Material::<V1000>::new();
     material.set_shader("Shaders\\Unit.shader").unwrap();
     assert_eq!(
-        Material::<V1000>::decode(&material.encode().unwrap(), 1000)
+        Material::<V1000>::decode(&material.encode().unwrap())
             .unwrap()
             .shader()
             .as_deref(),
@@ -146,7 +145,7 @@ fn reforged_layer_texture_slot_and_tracks_round_trip() {
     .unwrap()
     .into();
     layer.set_tracks(std::slice::from_ref(&alpha_track));
-    let parsed = Layer::<V1800>::decode(&layer.encode().unwrap(), 1800).unwrap();
+    let parsed = Layer::<V1800>::decode(&layer.encode().unwrap()).unwrap();
     assert_eq!(
         parsed.texture_slots()[0]
             .track
@@ -166,7 +165,7 @@ fn unlit_layer_flag_round_trip() {
     let mut flags = layer.shading_flags();
     flags.set(LayerShadingFlags::UNLIT, true);
     layer.set_shading_flags(flags);
-    assert!(Layer::<V1800>::decode(&layer.encode().unwrap(), 1800)
+    assert!(Layer::<V1800>::decode(&layer.encode().unwrap())
         .unwrap()
         .shading_flags()
         .contains(LayerShadingFlags::UNLIT));
@@ -190,7 +189,7 @@ fn preserves_shader_padding_and_float_bits() {
     bytes[20] = 0xaf;
     let layer_start = 100;
     bytes[layer_start + 24..layer_start + 28].copy_from_slice(&0x7fa1_2345u32.to_le_bytes());
-    let parsed = Material::<V1000>::decode(&bytes, 1000).unwrap();
+    let parsed = Material::<V1000>::decode(&bytes).unwrap();
     assert_eq!(parsed.encode().unwrap(), bytes);
     assert_eq!(parsed.layers()[0].alpha().to_bits(), 0x7fa1_2345);
 }

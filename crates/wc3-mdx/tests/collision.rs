@@ -21,7 +21,7 @@ fn collision_primitives_round_trip() {
     );
     let mut model = Model::<wc3_mdx::V800>::new();
     model.set_collision_shapes(&[box_shape, sphere, plane, cylinder]);
-    let decoded = Model::<wc3_mdx::V800>::decode(&model.encode().unwrap(), 800).unwrap();
+    let decoded = Model::<wc3_mdx::V800>::decode(&model.encode().unwrap()).unwrap();
     let shapes = decoded.collision_shapes();
     assert_eq!(shapes[0].node().name(), "Box");
     assert_eq!(shapes[0].kind(), CollisionKind::Box);

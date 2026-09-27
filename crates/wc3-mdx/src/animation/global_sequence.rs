@@ -2,7 +2,6 @@
 use crate::ModelVersion;
 use crate::{
     Cursor, Decodable, DecodeError, Encodable, EncodeError, Encoder, GlobalSequencesChunk, Model,
-    Version,
 };
 
 /// One global sequence duration in milliseconds.
@@ -17,7 +16,7 @@ impl Encodable for GlobalSequence {
 }
 
 impl Decodable for GlobalSequence {
-    fn decode_one(cursor: &mut Cursor<'_>, _version: Version) -> Result<Self, DecodeError> {
+    fn decode_one(cursor: &mut Cursor<'_>) -> Result<Self, DecodeError> {
         Ok(Self(cursor.read()?))
     }
 }

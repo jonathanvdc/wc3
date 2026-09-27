@@ -1,7 +1,7 @@
 //! One matrix in a Reforged bind pose.
 use crate::ModelVersion;
 use crate::{
-    BindPoseChunk, Cursor, Decodable, DecodeError, Encodable, EncodeError, Encoder, Model, Version,
+    BindPoseChunk, Cursor, Decodable, DecodeError, Encodable, EncodeError, Encoder, Model,
 };
 
 /// A 3-by-4 floating-point bind-pose matrix.
@@ -16,7 +16,7 @@ impl Encodable for BindPoseMatrix {
 }
 
 impl Decodable for BindPoseMatrix {
-    fn decode_one(cursor: &mut Cursor<'_>, _version: Version) -> Result<Self, DecodeError> {
+    fn decode_one(cursor: &mut Cursor<'_>) -> Result<Self, DecodeError> {
         Ok(Self(cursor.read()?))
     }
 }

@@ -206,7 +206,7 @@ impl<V: ModelVersion> Model<V> {
 }
 
 impl Decodable for Node {
-    fn decode_one(source: &mut Cursor<'_>, _version: u32) -> Result<Self, DecodeError> {
+    fn decode_one(source: &mut Cursor<'_>) -> Result<Self, DecodeError> {
         let mut cursor = source.slice_u32_sized()?;
         let name = cursor.read()?;
         let object_id = cursor.read()?;
@@ -243,8 +243,8 @@ impl Encodable for Node {
 }
 
 impl Decodable for Bone {
-    fn decode_one(cursor: &mut Cursor<'_>, _version: u32) -> Result<Self, DecodeError> {
-        let node = Node::decode_one(cursor, 0)?;
+    fn decode_one(cursor: &mut Cursor<'_>) -> Result<Self, DecodeError> {
+        let node = Node::decode_one(cursor)?;
         let geoset_id = cursor.read()?;
         let geoset_animation_id = cursor.read()?;
         Ok(Self {

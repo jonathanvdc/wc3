@@ -52,7 +52,7 @@ impl<V: ModelVersion> Model<V> {
 }
 
 impl Decodable for TextureAnimation {
-    fn decode_one(source: &mut Cursor<'_>, _version: u32) -> Result<Self, DecodeError> {
+    fn decode_one(source: &mut Cursor<'_>) -> Result<Self, DecodeError> {
         let mut cursor = source.slice_u32_sized()?;
         let mut tracks = Vec::new();
         while !cursor.remaining().is_empty() {

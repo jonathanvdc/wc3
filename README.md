@@ -24,7 +24,7 @@ use wc3_mdx::scene::ModelInfo;
 let mut model = Model::<V800>::new();
 model.set_model_info(&ModelInfo::new("Example")?);
 let encoded = model.encode()?;
-let decoded = Model::<V800>::decode(&encoded, 800)?;
+let decoded = Model::<V800>::decode(&encoded)?;
 assert_eq!(decoded.version(), 800);
 let info = decoded.model_info().unwrap();
 assert_eq!(info.name(), "Example");

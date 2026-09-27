@@ -1,6 +1,6 @@
 //! Raw and typed top-level MDX chunks.
 use crate::EncodeError;
-use crate::{Cursor, Decodable, Encodable, Encoder, Tag, Version};
+use crate::{Cursor, Decodable, Encodable, Encoder, Tag};
 
 use crate::DecodeError;
 
@@ -42,11 +42,11 @@ pub trait KnownChunk: Chunk + Sized {
     const TAG: Tag;
 
     /// Decodes a bounded chunk payload, without the tag or size.
-    fn decode_payload(cursor: &mut Cursor<'_>, version: Version) -> Result<Self, DecodeError>;
+    fn decode_payload(cursor: &mut Cursor<'_>) -> Result<Self, DecodeError>;
 }
 
 impl<T: KnownChunk> Decodable for T {
-    fn decode_one(cursor: &mut Cursor<'_>, version: Version) -> Result<Self, DecodeError> {
+    fn decode_one(cursor: &mut Cursor<'_>) -> Result<Self, DecodeError> {
         let mut next = *cursor;
         let offset = next.absolute_position();
         if next.remaining().len() < 8 {
@@ -63,7 +63,7 @@ impl<T: KnownChunk> Decodable for T {
         let mut payload = next
             .slice(size as usize)
             .map_err(|_| DecodeError::TruncatedChunk { tag, offset, size })?;
-        let decoded = T::decode_payload(&mut payload, version)?;
+        let decoded = T::decode_payload(&mut payload)?;
         payload.finish()?;
         *cursor = next;
         Ok(decoded)
@@ -87,7 +87,7 @@ mod tests {
         assert_eq!(known.encode().unwrap(), expected);
         assert_eq!(ModelChunk::from(known.clone()).encode().unwrap(), expected);
         assert_eq!(
-            VersionChunk::<crate::V800>::decode(&expected, 800).unwrap(),
+            VersionChunk::<crate::V800>::decode(&expected).unwrap(),
             known
         );
 
@@ -108,7 +108,7 @@ mod tests {
         let mut wrong = bytes.clone();
         wrong[..4].copy_from_slice(b"MODL");
         assert_eq!(
-            VersionChunk::<crate::V800>::decode(&wrong, 800),
+            VersionChunk::<crate::V800>::decode(&wrong),
             Err(DecodeError::UnexpectedChunkTag {
                 expected: *b"VERS",
                 actual: *b"MODL",
@@ -117,19 +117,19 @@ mod tests {
         let mut short = bytes.clone();
         short[4..8].copy_from_slice(&5u32.to_le_bytes());
         assert!(matches!(
-            VersionChunk::<crate::V800>::decode(&short, 800),
+            VersionChunk::<crate::V800>::decode(&short),
             Err(DecodeError::TruncatedChunk { .. })
         ));
         let mut trailing = bytes.clone();
         trailing.push(0);
         assert!(matches!(
-            VersionChunk::<crate::V800>::decode(&trailing, 800),
+            VersionChunk::<crate::V800>::decode(&trailing),
             Err(DecodeError::TrailingRecordBytes { .. })
         ));
         let joined = [bytes.clone(), bytes].concat();
         let mut cursor = Cursor::new(&joined);
-        VersionChunk::<crate::V800>::decode_one(&mut cursor, 800).unwrap();
-        VersionChunk::<crate::V800>::decode_one(&mut cursor, 800).unwrap();
+        VersionChunk::<crate::V800>::decode_one(&mut cursor).unwrap();
+        VersionChunk::<crate::V800>::decode_one(&mut cursor).unwrap();
         cursor.finish().unwrap();
     }
 
@@ -141,7 +141,7 @@ mod tests {
         let known = VersionChunk::<crate::V800>::new();
         assert_eq!(known.tag(), *b"VERS");
         assert_eq!(
-            VersionChunk::<crate::V800>::decode(&known.encode().unwrap(), 800).unwrap(),
+            VersionChunk::<crate::V800>::decode(&known.encode().unwrap()).unwrap(),
             known
         );
     }

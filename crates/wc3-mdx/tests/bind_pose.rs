@@ -14,7 +14,7 @@ fn bind_pose_matrices_round_trip() {
     pose.records[0] = BindPoseMatrix(changed);
     let mut model = Model::<wc3_mdx::V1800>::new();
     model.set_bind_pose(&pose);
-    let parsed = Model::<wc3_mdx::V1800>::decode(&model.encode().unwrap(), 800).unwrap();
+    let parsed = Model::<wc3_mdx::V1800>::decode(&model.encode().unwrap()).unwrap();
     assert_eq!(parsed.bind_poses()[0].records[0].0, changed);
 }
 
@@ -43,7 +43,7 @@ fn local_bind_poses_round_trip_when_available() {
                 pending.push(path);
             } else if path.extension().is_some_and(|extension| extension == "mdx") {
                 let bytes = std::fs::read(&path).unwrap();
-                let mut model = Model::<wc3_mdx::V1800>::decode(&bytes, 800).unwrap();
+                let mut model = Model::<wc3_mdx::V1800>::decode(&bytes).unwrap();
                 if let Some(pose) = model.bind_poses().first() {
                     model.set_bind_pose(pose);
                     assert_eq!(model.encode().unwrap(), bytes);

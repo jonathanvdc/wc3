@@ -202,7 +202,7 @@ impl<V: ModelVersion> Model<V> {
 }
 
 impl<V: ModelVersion> Decodable for Camera<V> {
-    fn decode_one(source: &mut Cursor<'_>, _version: u32) -> Result<Self, DecodeError> {
+    fn decode_one(source: &mut Cursor<'_>) -> Result<Self, DecodeError> {
         let start = source.absolute_position();
         let size_word: u32 = source.read()?;
         let length = (size_word & 0x00ff_ffff) as usize;

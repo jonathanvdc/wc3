@@ -25,7 +25,7 @@ fn ribbon_fields_and_integer_animation_round_trip() {
     let mut model = Model::<wc3_mdx::V800>::new();
     model.set_ribbon_emitters(&[emitter]);
     let bytes = model.encode().unwrap();
-    let parsed = Model::<wc3_mdx::V800>::decode(&bytes, 800).unwrap();
+    let parsed = Model::<wc3_mdx::V800>::decode(&bytes).unwrap();
     let ribbons = parsed.ribbon_emitters();
     assert_eq!(ribbons[0].fields(), fields);
     assert_eq!(
@@ -58,7 +58,7 @@ fn ribbon_color_animation_round_trip() {
     .into();
     emitter.set_tracks(std::slice::from_ref(&track));
     assert_eq!(
-        RibbonEmitter::decode(&emitter.encode().unwrap(), 800)
+        RibbonEmitter::decode(&emitter.encode().unwrap())
             .unwrap()
             .tracks(),
         vec![track]

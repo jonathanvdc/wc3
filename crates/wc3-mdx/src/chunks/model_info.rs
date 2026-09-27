@@ -1,7 +1,7 @@
 //! The complete model-information chunk.
 use crate::EncodeError;
 use crate::Encoder;
-use crate::{Tag, Version};
+use crate::Tag;
 
 use crate::{Chunk, Decodable, DecodeError, Encodable, KnownChunk};
 use crate::{Cursor, ModelInfo};
@@ -46,9 +46,8 @@ impl Chunk for ModelInfoChunk {
 }
 
 impl KnownChunk for ModelInfoChunk {
-    fn decode_payload(cursor: &mut Cursor<'_>, version: Version) -> Result<Self, DecodeError> {
-        let _ = version;
-        let info = ModelInfo::decode_one(cursor, version)?;
+    fn decode_payload(cursor: &mut Cursor<'_>) -> Result<Self, DecodeError> {
+        let info = ModelInfo::decode_one(cursor)?;
         let extension = cursor.remaining().to_vec();
         cursor.read_exact(extension.len())?;
         Ok(Self::new(info, extension))
@@ -65,6 +64,6 @@ mod tests {
     fn keeps_extension_bytes() {
         let original = ModelInfoChunk::new(ModelInfo::default(), vec![1, 2, 3]);
         let payload = original.encode().unwrap();
-        assert_eq!(ModelInfoChunk::decode(&payload, 1800).unwrap(), original);
+        assert_eq!(ModelInfoChunk::decode(&payload).unwrap(), original);
     }
 }

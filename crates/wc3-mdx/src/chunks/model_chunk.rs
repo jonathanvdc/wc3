@@ -94,7 +94,7 @@ macro_rules! model_chunks {
             ) -> Result<Option<Self>, DecodeError> {
                 let mut cursor = *payload;
                 let decoded = match tag {
-                    $( <$chunk>::TAG => <$chunk>::decode_payload(&mut cursor, V::NUMBER).map(Self::from), )*
+                    $( <$chunk>::TAG => <$chunk>::decode_payload(&mut cursor).map(Self::from), )*
                     _ => return Ok(None),
                 };
                 let chunk = decoded?;

@@ -49,7 +49,7 @@ impl<V: ModelVersion> Chunk for VersionChunk<V> {
 }
 
 impl<V: ModelVersion> KnownChunk for VersionChunk<V> {
-    fn decode_payload(cursor: &mut Cursor<'_>, _version: u32) -> Result<Self, DecodeError> {
+    fn decode_payload(cursor: &mut Cursor<'_>) -> Result<Self, DecodeError> {
         let version = cursor
             .read()
             .map_err(|_| DecodeError::InvalidVersionChunk)?;
@@ -81,13 +81,12 @@ mod version_chunk_tests {
         original.extension = vec![9, 8, 7];
         let payload = original.encode().unwrap();
         assert_eq!(
-            VersionChunk::<crate::V1800>::decode(&payload, 1800).unwrap(),
+            VersionChunk::<crate::V1800>::decode(&payload).unwrap(),
             original
         );
         assert_eq!(
             VersionChunk::<crate::V800>::decode(
-                &[b"VERS".as_slice(), &3u32.to_le_bytes(), &[1, 2, 3]].concat(),
-                800
+                &[b"VERS".as_slice(), &3u32.to_le_bytes(), &[1, 2, 3]].concat()
             ),
             Err(DecodeError::InvalidVersionChunk)
         );

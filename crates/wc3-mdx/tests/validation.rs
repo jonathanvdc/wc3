@@ -18,17 +18,14 @@ fn typed_known_chunks_and_unknown_chunks_round_trip() {
     ));
     let bytes = model.encode().unwrap();
     assert_eq!(
-        Model::<V800>::decode(&bytes, 800)
-            .unwrap()
-            .encode()
-            .unwrap(),
+        Model::<V800>::decode(&bytes).unwrap().encode().unwrap(),
         bytes
     );
 }
 
 #[test]
 fn empty_mdlx_uses_the_requested_type() {
-    assert_eq!(Model::<V800>::decode(b"MDLX", 800).unwrap().version(), 800);
+    assert_eq!(Model::<V800>::decode(b"MDLX").unwrap().version(), 800);
 }
 
 #[test]
@@ -49,7 +46,7 @@ fn repeated_versions_must_match_the_type() {
     bytes.extend_from_slice(&2u32.to_le_bytes());
     bytes.extend_from_slice(&[1, 2]);
     assert!(matches!(
-        Model::<V800>::decode(&bytes, 800),
+        Model::<V800>::decode(&bytes),
         Err(DecodeError::InvalidVersionChunk)
     ));
 
@@ -72,7 +69,7 @@ fn version_extension_is_preserved_without_mutable_version_number() {
     first.extension = vec![7, 8];
     model.push(ModelChunk::from(VersionChunk::<V800>::new()));
     let bytes = model.encode().unwrap();
-    let parsed = Model::<V800>::decode(&bytes, 800).unwrap();
+    let parsed = Model::<V800>::decode(&bytes).unwrap();
     let ModelChunk::Version(first) = &parsed.chunks()[0] else {
         unreachable!()
     };
@@ -83,7 +80,7 @@ fn version_extension_is_preserved_without_mutable_version_number() {
 #[test]
 fn layer_layout_is_selected_by_its_type() {
     let classic = Layer::<V800>::new().encode().unwrap();
-    assert!(Layer::<V1800>::decode(&classic, 1800).is_err());
+    assert!(Layer::<V1800>::decode(&classic).is_err());
 }
 
 #[test]

@@ -2,7 +2,6 @@
 use crate::ModelVersion;
 use crate::{
     Cursor, Decodable, DecodeError, Encodable, EncodeError, Encoder, Model, PivotPointsChunk, Vec3,
-    Version,
 };
 
 /// One model pivot point.
@@ -17,7 +16,7 @@ impl Encodable for PivotPoint {
 }
 
 impl Decodable for PivotPoint {
-    fn decode_one(cursor: &mut Cursor<'_>, _version: Version) -> Result<Self, DecodeError> {
+    fn decode_one(cursor: &mut Cursor<'_>) -> Result<Self, DecodeError> {
         Ok(Self(cursor.read()?))
     }
 }

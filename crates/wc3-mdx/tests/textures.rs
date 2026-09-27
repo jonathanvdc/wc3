@@ -12,7 +12,7 @@ fn texture_fields_round_trip() {
     let mut model = Model::<wc3_mdx::V1800>::new();
     model.set_textures(&[texture]);
 
-    let decoded = Model::<wc3_mdx::V1800>::decode(&model.encode().unwrap(), 800).unwrap();
+    let decoded = Model::<wc3_mdx::V1800>::decode(&model.encode().unwrap()).unwrap();
     let texture = &decoded.textures()[0];
     assert_eq!(texture.path(), "Textures\\Footman.blp");
     assert_eq!(texture.replaceable_id(), 1);

@@ -114,7 +114,7 @@ impl<V: ModelVersion> Model<V> {
 }
 
 impl Decodable for ModelInfo {
-    fn decode_one(cursor: &mut Cursor<'_>, _version: u32) -> Result<Self, DecodeError> {
+    fn decode_one(cursor: &mut Cursor<'_>) -> Result<Self, DecodeError> {
         let size = cursor.remaining().len();
         if size < SIZE {
             return Err(DecodeError::MalformedChunk {

@@ -9,10 +9,6 @@ use crate::{CollectionChunk, Decodable, DecodeError, Encodable, ModelChunk, Vers
 /// The four bytes at the start of an MDX file.
 pub const MAGIC: Tag = *b"MDLX";
 
-/// The latest version number understood by this library.
-/// Used by [`Decodable::decode_latest`] for records without a version type.
-pub const LATEST_VERSION: Version = 1800;
-
 /// An ordered MDX model whose known chunks and versioned records use layout `V`.
 ///
 /// ```compile_fail
@@ -130,7 +126,7 @@ impl<V: ModelVersion> Model<V> {
 }
 
 impl<V: ModelVersion> Decodable for Model<V> {
-    fn decode_one(cursor: &mut Cursor<'_>, _default_version: Version) -> Result<Self, DecodeError> {
+    fn decode_one(cursor: &mut Cursor<'_>) -> Result<Self, DecodeError> {
         if let Some(actual) = scan_version(*cursor)? {
             if actual != V::NUMBER {
                 return Err(DecodeError::VersionMismatch {
@@ -178,12 +174,12 @@ impl AnyVersionModel {
     pub fn decode(bytes: &[u8], default_version: Version) -> Result<Self, DecodeError> {
         let version = scan_version(Cursor::new(bytes))?.unwrap_or(default_version);
         match version {
-            800 => Model::<V800>::decode(bytes, version).map(Self::V800),
-            900 => Model::<V900>::decode(bytes, version).map(Self::V900),
-            1000 => Model::<V1000>::decode(bytes, version).map(Self::V1000),
-            1100 => Model::<V1100>::decode(bytes, version).map(Self::V1100),
-            1200 => Model::<V1200>::decode(bytes, version).map(Self::V1200),
-            1800 => Model::<V1800>::decode(bytes, version).map(Self::V1800),
+            800 => Model::<V800>::decode(bytes).map(Self::V800),
+            900 => Model::<V900>::decode(bytes).map(Self::V900),
+            1000 => Model::<V1000>::decode(bytes).map(Self::V1000),
+            1100 => Model::<V1100>::decode(bytes).map(Self::V1100),
+            1200 => Model::<V1200>::decode(bytes).map(Self::V1200),
+            1800 => Model::<V1800>::decode(bytes).map(Self::V1800),
             _ => Err(DecodeError::UnsupportedVersion { version }),
         }
     }
@@ -249,18 +245,18 @@ mod tests {
     #[test]
     fn rejects_bad_magic_and_lengths() {
         assert!(matches!(
-            Model::<V800>::decode(b"wrong", 800),
+            Model::<V800>::decode(b"wrong"),
             Err(DecodeError::InvalidMagic)
         ));
         assert!(matches!(
-            Model::<V800>::decode(b"MDLXVE", 800),
+            Model::<V800>::decode(b"MDLXVE"),
             Err(DecodeError::TruncatedHeader { offset: 4 })
         ));
         let mut bytes = b"MDLXTEST".to_vec();
         bytes.extend_from_slice(&5u32.to_le_bytes());
         bytes.push(1);
         assert!(matches!(
-            Model::<V800>::decode(&bytes, 800),
+            Model::<V800>::decode(&bytes),
             Err(DecodeError::TruncatedChunk { tag, offset: 4, size: 5 }) if tag == *b"TEST"
         ));
     }
@@ -272,14 +268,14 @@ mod tests {
             UnknownChunk::new(RawChunk::new(*b"FUTR", vec![1, 2])).unwrap(),
         ));
         let bytes = model.encode().unwrap();
-        let decoded = Model::<V800>::decode(&bytes, 800).unwrap();
+        let decoded = Model::<V800>::decode(&bytes).unwrap();
         assert_eq!(decoded.encode().unwrap(), bytes);
 
         let mut malformed = Model::<V800>::new().encode().unwrap();
         malformed.extend_from_slice(b"TEXS");
         malformed.extend_from_slice(&267u32.to_le_bytes());
         malformed.extend_from_slice(&[0; 267]);
-        assert!(Model::<V800>::decode(&malformed, 800).is_err());
+        assert!(Model::<V800>::decode(&malformed).is_err());
     }
 
     #[test]
@@ -290,7 +286,7 @@ mod tests {
             Ok(AnyVersionModel::V1100(_))
         ));
         assert!(matches!(
-            Model::<V800>::decode(&bytes, 800),
+            Model::<V800>::decode(&bytes),
             Err(DecodeError::VersionMismatch { .. })
         ));
     }

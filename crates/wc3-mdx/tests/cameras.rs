@@ -24,7 +24,7 @@ fn camera_fields_and_tracks_round_trip() {
     camera.set_tracks(std::slice::from_ref(&track));
     let mut model = Model::<wc3_mdx::V1100>::new();
     model.set_cameras(&[camera]);
-    let decoded = Model::<wc3_mdx::V1100>::decode(&model.encode().unwrap(), 800).unwrap();
+    let decoded = Model::<wc3_mdx::V1100>::decode(&model.encode().unwrap()).unwrap();
     let camera = &decoded.cameras()[0];
     assert_eq!(camera.name(), "Portrait");
     assert_eq!(camera.position(), [1.0, 2.0, 3.0]);
@@ -43,7 +43,7 @@ fn newer_camera_size_flags_round_trip() {
     let mut model = Model::<wc3_mdx::V1800>::new();
     model.set_cameras(&[camera]);
     let bytes = model.encode().unwrap();
-    let parsed = Model::<wc3_mdx::V1800>::decode(&bytes, 800).unwrap();
+    let parsed = Model::<wc3_mdx::V1800>::decode(&bytes).unwrap();
     assert_eq!(parsed.cameras()[0].record_flags(), 3);
     assert_eq!(parsed.encode().unwrap(), bytes);
 }

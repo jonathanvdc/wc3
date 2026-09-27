@@ -17,7 +17,7 @@ fn version_is_shared_by_model_and_nested_records() {
     model.set_cameras(&[Camera::<V1800>::new("View").unwrap()]);
 
     let bytes = model.encode().unwrap();
-    let parsed = Model::<V1800>::decode(&bytes, 800).unwrap();
+    let parsed = Model::<V1800>::decode(&bytes).unwrap();
     assert_eq!(parsed.materials().len(), 1);
     assert_eq!(parsed.geosets().len(), 1);
     assert_eq!(parsed.lights().len(), 1);
@@ -36,10 +36,7 @@ fn unknown_tags_are_explicit_and_known_tags_cannot_be_disguised() {
     model.push(ModelChunk::Unknown(unknown));
     let bytes = model.encode().unwrap();
     assert_eq!(
-        Model::<V800>::decode(&bytes, 800)
-            .unwrap()
-            .encode()
-            .unwrap(),
+        Model::<V800>::decode(&bytes).unwrap().encode().unwrap(),
         bytes
     );
 }

@@ -141,8 +141,8 @@ impl<V: ModelVersion> Model<V> {
 }
 
 impl Decodable for CollisionShape {
-    fn decode_one(cursor: &mut Cursor<'_>, _version: u32) -> Result<Self, DecodeError> {
-        let node = Node::decode_one(cursor, 0)?;
+    fn decode_one(cursor: &mut Cursor<'_>) -> Result<Self, DecodeError> {
+        let node = Node::decode_one(cursor)?;
         let kind_offset = cursor.absolute_position();
         let kind = cursor.read::<u32>()?;
         let geometry = match kind {

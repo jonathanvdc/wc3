@@ -10,7 +10,7 @@ fn event_object_round_trip() {
     event.set_frames(&[100, 200, 300]);
     let mut model = Model::<wc3_mdx::V800>::new();
     model.set_event_objects(&[event]);
-    let parsed = Model::<wc3_mdx::V800>::decode(&model.encode().unwrap(), 800).unwrap();
+    let parsed = Model::<wc3_mdx::V800>::decode(&model.encode().unwrap()).unwrap();
     let event = &parsed.event_objects()[0];
     assert_eq!(event.node().name(), "Sound");
     assert_eq!(event.global_sequence_id(), 3);
@@ -25,11 +25,11 @@ fn adjacent_events_decode_at_their_own_boundaries() {
     let first_len = bytes.len();
     bytes.extend_from_slice(&second.encode().unwrap());
     let mut cursor = Cursor::new(&bytes);
-    assert_eq!(EventObject::decode_one(&mut cursor, 800).unwrap(), first);
+    assert_eq!(EventObject::decode_one(&mut cursor).unwrap(), first);
     assert_eq!(cursor.position(), first_len);
-    assert_eq!(EventObject::decode_one(&mut cursor, 800).unwrap(), second);
+    assert_eq!(EventObject::decode_one(&mut cursor).unwrap(), second);
     cursor.finish().unwrap();
-    assert!(EventObject::decode(&bytes, 800).is_err());
+    assert!(EventObject::decode(&bytes).is_err());
 }
 
 #[test]
@@ -45,7 +45,7 @@ fn local_event_objects_round_trip_when_available() {
                 pending.push(path);
             } else if path.extension().is_some_and(|extension| extension == "mdx") {
                 let bytes = std::fs::read(&path).unwrap();
-                let mut model = Model::<wc3_mdx::V800>::decode(&bytes, 800).unwrap();
+                let mut model = Model::<wc3_mdx::V800>::decode(&bytes).unwrap();
                 if model.chunk(*b"EVTS").is_some() {
                     let events = model.event_objects();
                     model.set_event_objects(&events);

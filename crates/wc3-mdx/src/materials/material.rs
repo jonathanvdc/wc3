@@ -680,7 +680,7 @@ impl<V: ModelVersion> Model<V> {
 }
 
 impl<V: ModelVersion> Decodable for Material<V> {
-    fn decode_one(source: &mut Cursor<'_>, _version: Version) -> Result<Self, DecodeError> {
+    fn decode_one(source: &mut Cursor<'_>) -> Result<Self, DecodeError> {
         let mut cursor = source.slice_u32_sized()?;
         let value = {
             let priority_plane = cursor.read()?;
@@ -690,7 +690,7 @@ impl<V: ModelVersion> Decodable for Material<V> {
             let count = cursor.read::<u32>()? as usize;
             let mut layers = Vec::new();
             for _ in 0..count {
-                let layer = Layer::<V>::decode_one(&mut cursor, V::NUMBER)?;
+                let layer = Layer::<V>::decode_one(&mut cursor)?;
                 layers.push(layer);
             }
             Ok(Self {
@@ -723,7 +723,7 @@ impl<V: ModelVersion> Encodable for Material<V> {
 }
 
 impl<V: ModelVersion> Decodable for Layer<V> {
-    fn decode_one(source: &mut Cursor<'_>, _version: Version) -> Result<Self, DecodeError> {
+    fn decode_one(source: &mut Cursor<'_>) -> Result<Self, DecodeError> {
         let mut cursor = source.slice_u32_sized()?;
         let value = {
             let filter_mode = cursor.read()?;

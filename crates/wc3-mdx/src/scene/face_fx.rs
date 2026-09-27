@@ -67,7 +67,7 @@ impl<V: ModelVersion> Model<V> {
 }
 
 impl Decodable for FaceFx {
-    fn decode_one(cursor: &mut Cursor<'_>, _version: u32) -> Result<Self, DecodeError> {
+    fn decode_one(cursor: &mut Cursor<'_>) -> Result<Self, DecodeError> {
         cursor.read()
     }
 }

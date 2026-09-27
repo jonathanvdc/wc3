@@ -92,12 +92,12 @@ impl<V: ModelVersion> Model<V> {
 }
 
 impl Decodable for Attachment {
-    fn decode_one(source: &mut Cursor<'_>, _version: u32) -> Result<Self, DecodeError> {
+    fn decode_one(source: &mut Cursor<'_>) -> Result<Self, DecodeError> {
         let mut cursor = source.slice_u32_sized()?;
 
         let mut probe = cursor;
         let node_size = probe.read::<u32>()? as usize;
-        let node = Node::decode(cursor.read_exact(node_size)?, 0)?;
+        let node = Node::decode(cursor.read_exact(node_size)?)?;
         let path = cursor.read()?;
         let reserved = cursor.read()?;
         let id = cursor.read()?;

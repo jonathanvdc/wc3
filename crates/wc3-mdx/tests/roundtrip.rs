@@ -9,7 +9,7 @@ fn check_version<V: ModelVersion>() {
         UnknownChunk::<V>::new(RawChunk::new(*b"FUTR", vec![0, 1, 2, 255])).unwrap(),
     ));
     let bytes = model.encode().unwrap();
-    let parsed = Model::<V>::decode(&bytes, 800).unwrap();
+    let parsed = Model::<V>::decode(&bytes).unwrap();
     assert_eq!(parsed.version(), V::NUMBER);
     assert_eq!(parsed.encode().unwrap(), bytes);
 }
@@ -32,7 +32,7 @@ fn preserves_repeated_chunks_and_order() {
             UnknownChunk::<V800>::new(RawChunk::new(*b"ABCD", data)).unwrap(),
         ));
     }
-    let parsed = Model::<V800>::decode(&model.encode().unwrap(), 800).unwrap();
+    let parsed = Model::<V800>::decode(&model.encode().unwrap()).unwrap();
     assert!(matches!(&parsed.chunks()[1], ModelChunk::Unknown(raw) if raw.raw().data == [1]));
     assert!(matches!(&parsed.chunks()[2], ModelChunk::Unknown(raw) if raw.raw().data == [2]));
 }

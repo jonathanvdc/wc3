@@ -77,7 +77,7 @@ fn check_version<V: ModelVersion>() {
     let version = V::NUMBER;
     let model = full_model::<V>();
     let bytes = model.encode().unwrap();
-    let parsed = Model::<V>::decode(&bytes, 800).unwrap();
+    let parsed = Model::<V>::decode(&bytes).unwrap();
     assert_eq!(parsed.encode().unwrap(), bytes, "version {version}");
     assert_eq!(parsed.version(), version);
     assert_eq!(parsed.materials()[0].layers().len(), 1);

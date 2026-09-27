@@ -1,7 +1,5 @@
 //! Binary conversion for typed MDX records.
-use crate::model::LATEST_VERSION;
 use crate::EncodeError;
-use crate::Version;
 
 use crate::{Cursor, DecodeError, Encoder};
 
@@ -21,18 +19,14 @@ pub trait Encodable {
 /// A typed MDX record that can be decoded from bytes.
 pub trait Decodable: Sized {
     /// Decodes the record from the given input.
-    fn decode_one(cursor: &mut Cursor<'_>, version: Version) -> Result<Self, DecodeError>;
+    fn decode_one(cursor: &mut Cursor<'_>) -> Result<Self, DecodeError>;
 
     /// Decodes the record from the given input, rejecting any trailing bytes.
-    fn decode(bytes: &[u8], version: Version) -> Result<Self, DecodeError> {
+    fn decode(bytes: &[u8]) -> Result<Self, DecodeError> {
         let mut cursor = Cursor::new(bytes);
-        let record = Self::decode_one(&mut cursor, version)?;
+        let record = Self::decode_one(&mut cursor)?;
         cursor.finish()?;
         Ok(record)
-    }
-
-    fn decode_latest(bytes: &[u8]) -> Result<Self, DecodeError> {
-        Self::decode(bytes, LATEST_VERSION)
     }
 }
 
@@ -54,7 +48,7 @@ mod tests {
         TexturesChunk, VersionChunk,
     };
 
-    fn round_trip<T: Record + PartialEq + std::fmt::Debug>(value: &T, version: u32) {
+    fn round_trip<T: Record + PartialEq + std::fmt::Debug>(value: &T) {
         let bytes = value.encode().unwrap();
         let mut appended = vec![0xaa, 0xbb];
         value
@@ -62,7 +56,7 @@ mod tests {
             .unwrap();
         assert_eq!(&appended[..2], &[0xaa, 0xbb]);
         assert_eq!(&appended[2..], bytes);
-        assert_eq!(T::decode(&bytes, version).unwrap(), *value);
+        assert_eq!(T::decode(&bytes).unwrap(), *value);
     }
 
     #[test]
@@ -70,15 +64,15 @@ mod tests {
         let model = Model::<crate::V800>::new();
         let bytes = model.encode().unwrap();
         assert_eq!(
-            Model::<crate::V800>::decode(&bytes, 800)
+            Model::<crate::V800>::decode(&bytes)
                 .unwrap()
                 .encode()
                 .unwrap(),
             bytes
         );
-        round_trip(&Sequence::new("Stand", [0, 100]).unwrap(), 800);
-        round_trip(&Geoset::<crate::V1800>::new(&[], &[], &[]).unwrap(), 1800);
-        assert!(Sequence::decode(&[0; 131], 800).is_err());
+        round_trip(&Sequence::new("Stand", [0, 100]).unwrap());
+        round_trip(&Geoset::<crate::V1800>::new(&[], &[], &[]).unwrap());
+        assert!(Sequence::decode(&[0; 131]).is_err());
     }
 
     #[test]
@@ -89,12 +83,12 @@ mod tests {
         bytes.extend_from_slice(&second.encode().unwrap());
 
         let mut cursor = Cursor::new(&bytes);
-        let decoded = Sequence::decode_one(&mut cursor, 800).unwrap();
+        let decoded = Sequence::decode_one(&mut cursor).unwrap();
         assert_eq!(decoded, first);
         let consumed = cursor.position();
         assert_eq!(consumed, first.encode().unwrap().len());
         assert_eq!(
-            Sequence::decode(&bytes, 800),
+            Sequence::decode(&bytes),
             Err(DecodeError::TrailingRecordBytes {
                 consumed,
                 total: bytes.len(),
@@ -106,11 +100,11 @@ mod tests {
         let mut bytes = first.encode().unwrap();
         bytes.extend_from_slice(&second.encode().unwrap());
         let mut cursor = Cursor::new(&bytes);
-        let decoded = Geoset::<crate::V800>::decode_one(&mut cursor, 800).unwrap();
+        let decoded = Geoset::<crate::V800>::decode_one(&mut cursor).unwrap();
         assert_eq!(decoded, first);
         assert_eq!(cursor.position(), first.encode().unwrap().len());
         assert!(matches!(
-            Geoset::<crate::V800>::decode(&bytes, 800),
+            Geoset::<crate::V800>::decode(&bytes),
             Err(DecodeError::TrailingRecordBytes { .. })
         ));
     }
@@ -122,9 +116,9 @@ mod tests {
             let first_len = bytes.len();
             bytes.extend_from_slice(&second.encode().unwrap());
             let mut cursor = Cursor::new(&bytes);
-            assert_eq!(T::decode_one(&mut cursor, 800).unwrap(), first);
+            assert_eq!(T::decode_one(&mut cursor).unwrap(), first);
             assert_eq!(cursor.position(), first_len);
-            assert_eq!(T::decode_one(&mut cursor, 800).unwrap(), second);
+            assert_eq!(T::decode_one(&mut cursor).unwrap(), second);
             cursor.finish().unwrap();
         }
 

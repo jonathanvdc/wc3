@@ -100,9 +100,9 @@ impl<V: ModelVersion> Model<V> {
 }
 
 impl Decodable for RibbonEmitter {
-    fn decode_one(source: &mut Cursor<'_>, _version: u32) -> Result<Self, DecodeError> {
+    fn decode_one(source: &mut Cursor<'_>) -> Result<Self, DecodeError> {
         let mut cursor = source.slice_u32_sized()?;
-        let node = Node::decode_one(&mut cursor, 0)?;
+        let node = Node::decode_one(&mut cursor)?;
         let mut fixed = cursor.slice(FIXED_SIZE)?;
         let fields = fixed.read()?;
         fixed.finish()?;
