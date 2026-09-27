@@ -42,7 +42,7 @@ impl<V: ModelVersion> Chunk for VersionChunk<V> {
             });
         }
 
-        bytes.write(&(V::NUMBER))?;
+        bytes.write(&V::NUMBER)?;
         bytes.write_bytes(&self.extension);
         Ok(())
     }
@@ -73,19 +73,19 @@ impl<V: ModelVersion> KnownChunk for VersionChunk<V> {
 #[cfg(test)]
 mod version_chunk_tests {
     use super::*;
-    use crate::{Readable, Writable};
+    use crate::{Readable, V800, V1800, Writable};
 
     #[test]
     fn preserves_version_extension_bytes() {
-        let mut original = VersionChunk::<crate::V1800>::new();
+        let mut original = VersionChunk::<V1800>::new();
         original.extension = vec![9, 8, 7];
         let payload = original.encode().unwrap();
         assert_eq!(
-            VersionChunk::<crate::V1800>::decode(&payload).unwrap(),
+            VersionChunk::<V1800>::decode(&payload).unwrap(),
             original
         );
         assert_eq!(
-            VersionChunk::<crate::V800>::decode(
+            VersionChunk::<V800>::decode(
                 &[b"VERS".as_slice(), &3u32.to_le_bytes(), &[1, 2, 3]].concat()
             ),
             Err(DecodeError::InvalidVersionChunk)
