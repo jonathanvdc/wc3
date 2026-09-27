@@ -10,19 +10,6 @@ use crate::Cursor;
 use crate::{DecodeError, Model, Node};
 use crate::{Readable, Writable};
 
-/// Warcraft III collision primitive type.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum CollisionKind {
-    /// Two XYZ corners.
-    Box,
-    /// Two XYZ points describing a plane.
-    Plane,
-    /// Center XYZ and radius.
-    Sphere,
-    /// Two XYZ endpoints and a radius.
-    Cylinder,
-}
-
 /// A collision primitive attached to a node.
 #[derive(Clone, Debug, PartialEq, Readable, Writable)]
 pub struct CollisionShape {
@@ -121,16 +108,6 @@ impl CollisionShape {
     /// Borrows the attached node for editing.
     pub fn node_mut(&mut self) -> &mut Node {
         &mut self.node
-    }
-
-    /// Returns the collision primitive kind.
-    pub fn kind(&self) -> CollisionKind {
-        match self.geometry {
-            CollisionGeometry::Box(_) => CollisionKind::Box,
-            CollisionGeometry::Plane(_) => CollisionKind::Plane,
-            CollisionGeometry::Sphere(_, _) => CollisionKind::Sphere,
-            CollisionGeometry::Cylinder(_, _) => CollisionKind::Cylinder,
-        }
     }
 
     /// Returns the two box corners, or `None` for other shapes.
