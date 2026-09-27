@@ -1,6 +1,4 @@
 //! Fixed-size `MODL` model information.
-use crate::EncodeError;
-use crate::Encoder;
 use crate::ModelVersion;
 use crate::ValueError;
 use crate::{Tag, Vec3};
@@ -16,7 +14,7 @@ const SIZE: usize = 372;
 const NAME_SIZE: usize = 336;
 
 /// The 372-byte `MODL` record. Reserved bytes remain intact on edit.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Writable)]
 pub struct ModelInfo {
     name: FixedText<NAME_SIZE>,
     reserved: Tag,
@@ -137,18 +135,6 @@ impl Readable for ModelInfo {
             maximum_extent,
             blend_time,
         })
-    }
-}
-
-impl Writable for &ModelInfo {
-    fn write_to(self, bytes: &mut Encoder<'_>) -> Result<(), EncodeError> {
-        bytes.write(&self.name)?;
-        bytes.write_bytes(&self.reserved);
-        bytes.write(self.bounds_radius)?;
-        bytes.write(self.minimum_extent)?;
-        bytes.write(self.maximum_extent)?;
-        bytes.write(self.blend_time)?;
-        Ok(())
     }
 }
 

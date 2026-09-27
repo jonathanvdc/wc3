@@ -1,6 +1,6 @@
 //! Keyframe values and their binary representations.
 use super::TrackValue;
-use crate::{Cursor, DecodeError, EncodeError, Encoder, Readable, Writable};
+use crate::{EncodeError, Encoder, Readable, Writable};
 
 /// An interpolation mode shared by all keys in a track.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -12,7 +12,7 @@ pub enum Interpolation {
 }
 
 /// A keyframe without interpolation tangents.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Readable)]
 pub struct ValueKeyframe<T> {
     /// Frame time in milliseconds.
     pub frame: u32,
@@ -21,7 +21,7 @@ pub struct ValueKeyframe<T> {
 }
 
 /// A keyframe with both interpolation tangents.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Readable)]
 pub struct TangentKeyframe<T> {
     /// Frame time in milliseconds.
     pub frame: u32,
@@ -33,28 +33,10 @@ pub struct TangentKeyframe<T> {
     pub out_tangent: T,
 }
 
-impl<T: TrackValue> Readable for ValueKeyframe<T> {
-    fn read_from(cursor: &mut Cursor<'_>) -> Result<Self, DecodeError> {
-        Ok(Self {
-            frame: cursor.read()?,
-            value: cursor.read()?,
-        })
-    }
-}
 impl<T: TrackValue> Writable for ValueKeyframe<T> {
     fn write_to(self, encoder: &mut Encoder<'_>) -> Result<(), EncodeError> {
         encoder.write(&self)?;
         Ok(())
-    }
-}
-impl<T: TrackValue> Readable for TangentKeyframe<T> {
-    fn read_from(cursor: &mut Cursor<'_>) -> Result<Self, DecodeError> {
-        Ok(Self {
-            frame: cursor.read()?,
-            value: cursor.read()?,
-            in_tangent: cursor.read()?,
-            out_tangent: cursor.read()?,
-        })
     }
 }
 impl<T: TrackValue> Writable for TangentKeyframe<T> {

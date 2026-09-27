@@ -60,6 +60,7 @@ impl KnownChunk for ModelInfoChunk {
 mod tests {
     use super::*;
     use crate::Readable;
+    use crate::Writable;
 
     #[test]
     fn keeps_extension_bytes() {

@@ -1,25 +1,10 @@
 //! Model accessors for global sequences.
 use crate::ModelVersion;
-use crate::{
-    Cursor, DecodeError, EncodeError, Encoder, GlobalSequencesChunk, Model, Readable, Writable,
-};
+use crate::{GlobalSequencesChunk, Model, Readable, Writable};
 
 /// One global sequence duration in milliseconds.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Readable, Writable)]
 pub struct GlobalSequence(pub u32);
-
-impl Writable for &GlobalSequence {
-    fn write_to(self, output: &mut Encoder<'_>) -> Result<(), EncodeError> {
-        output.write(self.0)?;
-        Ok(())
-    }
-}
-
-impl Readable for GlobalSequence {
-    fn read_from(cursor: &mut Cursor<'_>) -> Result<Self, DecodeError> {
-        Ok(Self(cursor.read()?))
-    }
-}
 
 impl<V: ModelVersion> Model<V> {
     /// Returns durations from every `GLBS` chunk in file order.

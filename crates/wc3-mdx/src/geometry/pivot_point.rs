@@ -1,25 +1,10 @@
 //! Model accessors for pivot points.
 use crate::ModelVersion;
-use crate::{
-    Cursor, DecodeError, EncodeError, Encoder, Model, PivotPointsChunk, Readable, Vec3, Writable,
-};
+use crate::{Model, PivotPointsChunk, Readable, Vec3, Writable};
 
 /// One model pivot point.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Readable, Writable)]
 pub struct PivotPoint(pub Vec3);
-
-impl Writable for &PivotPoint {
-    fn write_to(self, output: &mut Encoder<'_>) -> Result<(), EncodeError> {
-        output.write(self.0)?;
-        Ok(())
-    }
-}
-
-impl Readable for PivotPoint {
-    fn read_from(cursor: &mut Cursor<'_>) -> Result<Self, DecodeError> {
-        Ok(Self(cursor.read()?))
-    }
-}
 
 impl<V: ModelVersion> Model<V> {
     /// Returns XYZ pivot points from every `PIVT` chunk in file order.
