@@ -23,6 +23,12 @@ impl<V: ModelVersion> VersionChunk<V> {
     }
 }
 
+impl<V: ModelVersion> Default for VersionChunk<V> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<V: ModelVersion> Chunk for VersionChunk<V> {
     fn tag(&self) -> Tag {
         Self::TAG

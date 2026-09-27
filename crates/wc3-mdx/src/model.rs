@@ -23,6 +23,12 @@ pub struct Model<V: ModelVersion> {
     chunks: Vec<ModelChunk<V>>,
 }
 
+impl<V: ModelVersion> Default for Model<V> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<V: ModelVersion> Model<V> {
     pub(crate) fn decoded_chunks<'a, C: 'a>(&'a self) -> impl Iterator<Item = &'a C>
     where

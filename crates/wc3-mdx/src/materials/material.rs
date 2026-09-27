@@ -116,7 +116,8 @@ pub struct Layer<V: ModelVersion> {
     tracks: Vec<LayerTrack>,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+
+#[derive(Clone, Debug, PartialEq, Readable, Writable)]
 pub struct Fresnel {
     color: Color,
     opacity: f32,
@@ -139,26 +140,8 @@ pub trait ShaderField: Default + Readable + Writable + Clone + Debug + PartialEq
     fn set(&mut self, text: &str) -> Result<(), ValueError>;
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, Readable, Writable)]
 pub struct NoShader;
-
-impl Default for NoShader {
-    fn default() -> Self {
-        Self
-    }
-}
-
-impl Readable for NoShader {
-    fn read_from(_: &mut Cursor<'_>) -> Result<Self, DecodeError> {
-        Ok(Self)
-    }
-}
-
-impl Writable for NoShader {
-    fn write_to(&self, _: &mut Encoder<'_>) -> Result<(), EncodeError> {
-        Ok(())
-    }
-}
 
 impl ShaderField for NoShader {
     fn text(&self) -> Option<Cow<'_, str>> {
@@ -172,26 +155,8 @@ impl ShaderField for NoShader {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, Readable, Writable)]
 pub struct ShaderText(FixedText<80>);
-
-impl Default for ShaderText {
-    fn default() -> Self {
-        Self(FixedText::default())
-    }
-}
-
-impl Readable for ShaderText {
-    fn read_from(cursor: &mut Cursor<'_>) -> Result<Self, DecodeError> {
-        Ok(Self(cursor.read()?))
-    }
-}
-
-impl Writable for ShaderText {
-    fn write_to(&self, output: &mut Encoder<'_>) -> Result<(), EncodeError> {
-        output.write(&self.0)
-    }
-}
 
 impl ShaderField for ShaderText {
     fn text(&self) -> Option<Cow<'_, str>> {
@@ -253,30 +218,9 @@ impl Writable for ClassicLayerExtra {
 
 impl LayerExtra for ClassicLayerExtra {}
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Default, Readable, Writable)]
 pub struct Layer900Extra {
     emissive_gain: f32,
-}
-
-impl Default for Layer900Extra {
-    fn default() -> Self {
-        Self { emissive_gain: 1.0 }
-    }
-}
-
-impl Readable for Layer900Extra {
-    fn read_from(cursor: &mut Cursor<'_>) -> Result<Self, DecodeError> {
-        Ok(Self {
-            emissive_gain: cursor.read()?,
-        })
-    }
-}
-
-impl Writable for Layer900Extra {
-    fn write_to(&self, output: &mut Encoder<'_>) -> Result<(), EncodeError> {
-        output.write(&(self.emissive_gain))?;
-        Ok(())
-    }
 }
 
 impl LayerExtra for Layer900Extra {
@@ -288,42 +232,10 @@ impl LayerExtra for Layer900Extra {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, Readable, Writable)]
 pub struct Layer1000Extra {
     base: Layer900Extra,
     fresnel: Fresnel,
-}
-
-impl Default for Layer1000Extra {
-    fn default() -> Self {
-        Self {
-            base: Layer900Extra::default(),
-            fresnel: Fresnel::default(),
-        }
-    }
-}
-
-impl Readable for Layer1000Extra {
-    fn read_from(cursor: &mut Cursor<'_>) -> Result<Self, DecodeError> {
-        Ok(Self {
-            base: cursor.read::<Layer900Extra>()?,
-            fresnel: Fresnel {
-                color: cursor.read()?,
-                opacity: cursor.read()?,
-                team_color: cursor.read()?,
-            },
-        })
-    }
-}
-
-impl Writable for Layer1000Extra {
-    fn write_to(&self, output: &mut Encoder<'_>) -> Result<(), EncodeError> {
-        output.write(&self.base)?;
-        output.write(&(self.fresnel.color))?;
-        output.write(&(self.fresnel.opacity))?;
-        output.write(&(self.fresnel.team_color))?;
-        Ok(())
-    }
 }
 
 impl LayerExtra for Layer1000Extra {
@@ -341,21 +253,11 @@ impl LayerExtra for Layer1000Extra {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct Layer1100Extra {
     base: Layer1000Extra,
     shader_type_id: u32,
     texture_slots: Vec<LayerTextureSlot>,
-}
-
-impl Default for Layer1100Extra {
-    fn default() -> Self {
-        Self {
-            base: Layer1000Extra::default(),
-            shader_type_id: 0,
-            texture_slots: Vec::new(),
-        }
-    }
 }
 
 impl Readable for Layer1100Extra {
@@ -543,6 +445,18 @@ impl<V: ModelVersion> Material<V> {
     /// Replaces all layers.
     pub fn set_layers(&mut self, layers: &[Layer<V>]) {
         self.layers = layers.to_vec();
+    }
+}
+
+impl<V: ModelVersion> Default for Material<V> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl<V: ModelVersion> Default for Layer<V> {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

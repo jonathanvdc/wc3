@@ -32,14 +32,8 @@ pub trait CameraFlags: Default + Clone + Debug + PartialEq {
     fn set_bits(&mut self, bits: u8);
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct ClassicCameraFlags(u8);
-
-impl Default for ClassicCameraFlags {
-    fn default() -> Self {
-        Self(0)
-    }
-}
 
 impl CameraFlags for ClassicCameraFlags {
     fn from_bits(bits: u8) -> Self {

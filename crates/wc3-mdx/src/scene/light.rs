@@ -57,14 +57,8 @@ impl Writable for ClassicLightExtension {
 
 impl LightExtension for ClassicLightExtension {}
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct ModernLightExtension([u32; 7]);
-
-impl Default for ModernLightExtension {
-    fn default() -> Self {
-        Self([0; 7])
-    }
-}
 
 impl Readable for ModernLightExtension {
     fn read_from(cursor: &mut Cursor<'_>) -> Result<Self, DecodeError> {
