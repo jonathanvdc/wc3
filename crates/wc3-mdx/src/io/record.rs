@@ -62,14 +62,14 @@ mod tests {
     }
 
     #[test]
-    fn decode_one_advances_through_records_and_decode_rejects_trailing_bytes() {
+    fn cursor_read_advances_through_records_and_decode_rejects_trailing_bytes() {
         let first = Sequence::new("Stand", [0, 100]).unwrap();
         let second = Sequence::new("Walk", [101, 200]).unwrap();
         let mut bytes = first.encode().unwrap();
         bytes.extend_from_slice(&second.encode().unwrap());
 
         let mut cursor = Cursor::new(&bytes);
-        let decoded = Sequence::decode_one(&mut cursor).unwrap();
+        let decoded: Sequence = cursor.read().unwrap();
         assert_eq!(decoded, first);
         let consumed = cursor.position();
         assert_eq!(consumed, first.encode().unwrap().len());
@@ -86,7 +86,7 @@ mod tests {
         let mut bytes = first.encode().unwrap();
         bytes.extend_from_slice(&second.encode().unwrap());
         let mut cursor = Cursor::new(&bytes);
-        let decoded = Geoset::<crate::V800>::decode_one(&mut cursor).unwrap();
+        let decoded: Geoset<crate::V800> = cursor.read().unwrap();
         assert_eq!(decoded, first);
         assert_eq!(cursor.position(), first.encode().unwrap().len());
         assert!(matches!(
@@ -102,9 +102,9 @@ mod tests {
             let first_len = bytes.len();
             bytes.extend_from_slice(&second.encode().unwrap());
             let mut cursor = Cursor::new(&bytes);
-            assert_eq!(T::decode_one(&mut cursor).unwrap(), first);
+            assert_eq!(cursor.read::<T>().unwrap(), first);
             assert_eq!(cursor.position(), first_len);
-            assert_eq!(T::decode_one(&mut cursor).unwrap(), second);
+            assert_eq!(cursor.read::<T>().unwrap(), second);
             cursor.finish().unwrap();
         }
 

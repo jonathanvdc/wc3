@@ -3,7 +3,7 @@ use crate::EncodeError;
 use crate::Encoder;
 use crate::Tag;
 
-use crate::{Chunk, DecodeError, Encodable, KnownChunk, Readable};
+use crate::{Chunk, DecodeError, Encodable, KnownChunk};
 use crate::{Cursor, ModelInfo};
 
 /// A complete `MODL` chunk, including bytes after the standard record.
@@ -47,7 +47,7 @@ impl Chunk for ModelInfoChunk {
 
 impl KnownChunk for ModelInfoChunk {
     fn decode_payload(cursor: &mut Cursor<'_>) -> Result<Self, DecodeError> {
-        let info = ModelInfo::decode_one(cursor)?;
+        let info = cursor.read()?;
         let extension = cursor.remaining().to_vec();
         cursor.read_exact(extension.len())?;
         Ok(Self::new(info, extension))
@@ -59,6 +59,7 @@ impl KnownChunk for ModelInfoChunk {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::Readable;
 
     #[test]
     fn keeps_extension_bytes() {

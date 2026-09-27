@@ -102,7 +102,7 @@ impl<V: ModelVersion> Model<V> {
 impl Readable for RibbonEmitter {
     fn read_from(source: &mut Cursor<'_>) -> Result<Self, DecodeError> {
         let mut cursor = source.slice_u32_sized()?;
-        let node = Node::decode_one(&mut cursor)?;
+        let node = cursor.read()?;
         let mut fixed = cursor.slice(FIXED_SIZE)?;
         let fields = fixed.read()?;
         fixed.finish()?;

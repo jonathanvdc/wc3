@@ -25,9 +25,9 @@ fn adjacent_events_decode_at_their_own_boundaries() {
     let first_len = bytes.len();
     bytes.extend_from_slice(&second.encode().unwrap());
     let mut cursor = Cursor::new(&bytes);
-    assert_eq!(EventObject::decode_one(&mut cursor).unwrap(), first);
+    assert_eq!(cursor.read::<EventObject>().unwrap(), first);
     assert_eq!(cursor.position(), first_len);
-    assert_eq!(EventObject::decode_one(&mut cursor).unwrap(), second);
+    assert_eq!(cursor.read::<EventObject>().unwrap(), second);
     cursor.finish().unwrap();
     assert!(EventObject::decode(&bytes).is_err());
 }

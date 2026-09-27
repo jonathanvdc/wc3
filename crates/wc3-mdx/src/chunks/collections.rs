@@ -9,7 +9,7 @@ use crate::{
     Material, Node, ParticleEmitter, ParticleEmitter2, PopcornEmitter, RibbonEmitter, Sequence,
     Texture, TextureAnimation,
 };
-use crate::{Chunk, Cursor, DecodeError, Encodable, KnownChunk, Readable, Record};
+use crate::{Chunk, Cursor, DecodeError, Encodable, KnownChunk, Record};
 use crate::{GlobalSequence, PivotPoint};
 
 /// A complete chunk made of consecutive records of one type.
@@ -31,7 +31,7 @@ fn decode_records<C: CollectionChunk>(cursor: &mut Cursor<'_>) -> Result<C, Deco
     let mut records = Vec::new();
     while !cursor.remaining().is_empty() {
         let start = cursor.position();
-        let record = C::Item::decode_one(cursor)?;
+        let record = cursor.read()?;
         if cursor.position() <= start {
             return Err(DecodeError::MalformedRecord {
                 tag: C::tag(),
@@ -181,6 +181,7 @@ record_collection!(PivotPointsChunk, PivotPoint, *b"PIVT");
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::Readable;
 
     #[test]
     fn fixed_width_collection_uses_the_whole_chunk() {

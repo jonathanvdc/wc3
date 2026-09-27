@@ -160,7 +160,7 @@ impl<V: ModelVersion> Model<V> {
 impl Readable for ParticleEmitter {
     fn read_from(source: &mut Cursor<'_>) -> Result<Self, DecodeError> {
         let mut cursor = source.slice_u32_sized()?;
-        let node = Node::decode_one(&mut cursor)?;
+        let node = cursor.read()?;
         let emission_rate = cursor.read()?;
         let gravity = cursor.read()?;
         let longitude = cursor.read()?;

@@ -142,7 +142,7 @@ impl<V: ModelVersion> Model<V> {
 
 impl Readable for CollisionShape {
     fn read_from(cursor: &mut Cursor<'_>) -> Result<Self, DecodeError> {
-        let node = Node::decode_one(cursor)?;
+        let node = cursor.read()?;
         let kind_offset = cursor.absolute_position();
         let kind = cursor.read::<u32>()?;
         let geometry = match kind {

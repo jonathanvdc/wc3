@@ -244,7 +244,7 @@ impl Encodable for Node {
 
 impl Readable for Bone {
     fn read_from(cursor: &mut Cursor<'_>) -> Result<Self, DecodeError> {
-        let node = Node::decode_one(cursor)?;
+        let node = cursor.read()?;
         let geoset_id = cursor.read()?;
         let geoset_animation_id = cursor.read()?;
         Ok(Self {

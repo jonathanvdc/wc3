@@ -1,7 +1,7 @@
 //! Reforged bind-pose matrices in `BPOS` chunks.
 use crate::{
     BindPoseMatrix, Chunk, CollectionChunk, Cursor, DecodeError, Encodable, EncodeError, Encoder,
-    KnownChunk, Readable, Tag,
+    KnownChunk, Tag,
 };
 
 const MATRIX_SIZE: usize = 48;

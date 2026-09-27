@@ -5,11 +5,6 @@ use crate::DecodeError;
 pub trait Readable: Sized {
     fn read_from(cursor: &mut Cursor<'_>) -> Result<Self, DecodeError>;
 
-    /// Reads one value from a cursor.
-    fn decode_one(cursor: &mut Cursor<'_>) -> Result<Self, DecodeError> {
-        Self::read_from(cursor)
-    }
-
     /// Reads a value and rejects trailing bytes.
     fn decode(bytes: &[u8]) -> Result<Self, DecodeError> {
         let mut cursor = Cursor::new(bytes);

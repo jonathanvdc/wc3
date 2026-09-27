@@ -690,7 +690,7 @@ impl<V: ModelVersion> Readable for Material<V> {
             let count = cursor.read::<u32>()? as usize;
             let mut layers = Vec::new();
             for _ in 0..count {
-                let layer = Layer::<V>::decode_one(&mut cursor)?;
+                let layer = cursor.read()?;
                 layers.push(layer);
             }
             Ok(Self {

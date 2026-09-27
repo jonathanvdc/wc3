@@ -128,8 +128,8 @@ mod tests {
         ));
         let joined = [bytes.clone(), bytes].concat();
         let mut cursor = Cursor::new(&joined);
-        VersionChunk::<crate::V800>::decode_one(&mut cursor).unwrap();
-        VersionChunk::<crate::V800>::decode_one(&mut cursor).unwrap();
+        cursor.read::<VersionChunk<crate::V800>>().unwrap();
+        cursor.read::<VersionChunk<crate::V800>>().unwrap();
         cursor.finish().unwrap();
     }
 
