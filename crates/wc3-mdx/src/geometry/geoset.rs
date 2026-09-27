@@ -48,42 +48,42 @@ enum GeosetExtraSection {
     Skin { weights: Vec<SkinWeights> },
 }
 
-/// Storage and serialization of the optional geoset sections for a version.
-pub trait GeosetExtensions: Default + Clone + Debug + PartialEq {
+/// Storage and serialization of the optional TANG and SKIN sections for a version.
+pub trait GeosetExtraSections: Default + Clone + Debug + PartialEq {
     fn read<V: ModelVersion>(_: &mut Cursor<'_>) -> Result<Self, DecodeError> {
         Ok(Self::default())
     }
     fn write<V: ModelVersion>(&self, _: &mut Encoder<'_>) -> Result<(), EncodeError> {
         Ok(())
     }
-    fn reforged(&self) -> Option<&ReforgedGeosetExtensions> {
+    fn reforged(&self) -> Option<&ReforgedGeosetExtraSections> {
         None
     }
-    fn reforged_mut(&mut self) -> Option<&mut ReforgedGeosetExtensions> {
+    fn reforged_mut(&mut self) -> Option<&mut ReforgedGeosetExtraSections> {
         None
     }
 }
 
-/// Classic geosets have no optional extension sections or extension storage.
+/// Classic geosets have no optional TANG or SKIN sections.
 #[derive(Clone, Debug, PartialEq, Default)]
-pub struct NoGeosetExtensions;
+pub struct NoGeosetExtraSections;
 
-impl GeosetExtensions for NoGeosetExtensions {}
+impl GeosetExtraSections for NoGeosetExtraSections {}
 
 /// Optional TANG and SKIN sections, retained in file order.
 #[derive(Clone, Debug, PartialEq, Default)]
-pub struct ReforgedGeosetExtensions {
+pub struct ReforgedGeosetExtraSections {
     sections: Vec<GeosetExtraSection>,
 }
 
-impl GeosetExtensions for ReforgedGeosetExtensions {
+impl GeosetExtraSections for ReforgedGeosetExtraSections {
     fn read<V: ModelVersion>(cursor: &mut Cursor<'_>) -> Result<Self, DecodeError> {
         Ok(Self {
-            sections: read_extensions::<V>(cursor)?,
+            sections: read_extra_sections::<V>(cursor)?,
         })
     }
     fn write<V: ModelVersion>(&self, bytes: &mut Encoder<'_>) -> Result<(), EncodeError> {
-        write_extensions::<V>(bytes, &self.sections)
+        write_extra_sections::<V>(bytes, &self.sections)
     }
     fn reforged(&self) -> Option<&Self> {
         Some(self)
@@ -93,16 +93,16 @@ impl GeosetExtensions for ReforgedGeosetExtensions {
     }
 }
 
-/// Fixed header fields added in version 900. Both fields are always present
+/// Level-of-detail index and name added in version 900. Both fields are present
 /// together, and the exact name bytes are retained for round-trip encoding.
 #[derive(Clone, Debug, PartialEq, Default, Readable, Writable)]
-pub struct GeosetHeaderExtension {
+pub struct GeosetLevelOfDetailFields {
     level_of_detail: u32,
     name: FixedText<80>,
 }
 
-/// The fixed geoset header selected by a model version.
-pub trait GeosetHeader: Default + Readable + Writable + Clone + Debug + PartialEq {
+/// The level-of-detail fields selected by a model version.
+pub trait GeosetLevelOfDetail: Default + Readable + Writable + Clone + Debug + PartialEq {
     fn level_of_detail(&self) -> Option<u32> {
         None
     }
@@ -118,11 +118,11 @@ pub trait GeosetHeader: Default + Readable + Writable + Clone + Debug + PartialE
 }
 
 #[derive(Clone, Debug, PartialEq, Default, Readable, Writable)]
-pub struct ClassicGeosetHeader;
+pub struct NoGeosetLevelOfDetail;
 
-impl GeosetHeader for ClassicGeosetHeader {}
+impl GeosetLevelOfDetail for NoGeosetLevelOfDetail {}
 
-impl GeosetHeader for GeosetHeaderExtension {
+impl GeosetLevelOfDetail for GeosetLevelOfDetailFields {
     fn level_of_detail(&self) -> Option<u32> {
         Some(self.level_of_detail)
     }
@@ -139,46 +139,46 @@ impl GeosetHeader for GeosetHeaderExtension {
 
 /// Chooses geoset fields for a model version.
 pub trait GeosetLayout {
-    type Header: GeosetHeader;
-    type Extensions: GeosetExtensions;
+    type LevelOfDetail: GeosetLevelOfDetail;
+    type ExtraSections: GeosetExtraSections;
 }
 
 use crate::{V1000, V1100, V1200, V1300, V1400, V1600, V1800, V800, V900};
 impl GeosetLayout for V800 {
-    type Header = ClassicGeosetHeader;
-    type Extensions = NoGeosetExtensions;
+    type LevelOfDetail = NoGeosetLevelOfDetail;
+    type ExtraSections = NoGeosetExtraSections;
 }
 impl GeosetLayout for V900 {
-    type Header = GeosetHeaderExtension;
-    type Extensions = ReforgedGeosetExtensions;
+    type LevelOfDetail = GeosetLevelOfDetailFields;
+    type ExtraSections = ReforgedGeosetExtraSections;
 }
 impl GeosetLayout for V1000 {
-    type Header = GeosetHeaderExtension;
-    type Extensions = ReforgedGeosetExtensions;
+    type LevelOfDetail = GeosetLevelOfDetailFields;
+    type ExtraSections = ReforgedGeosetExtraSections;
 }
 impl GeosetLayout for V1100 {
-    type Header = GeosetHeaderExtension;
-    type Extensions = ReforgedGeosetExtensions;
+    type LevelOfDetail = GeosetLevelOfDetailFields;
+    type ExtraSections = ReforgedGeosetExtraSections;
 }
 impl GeosetLayout for V1200 {
-    type Header = GeosetHeaderExtension;
-    type Extensions = ReforgedGeosetExtensions;
+    type LevelOfDetail = GeosetLevelOfDetailFields;
+    type ExtraSections = ReforgedGeosetExtraSections;
 }
 impl GeosetLayout for V1300 {
-    type Header = GeosetHeaderExtension;
-    type Extensions = ReforgedGeosetExtensions;
+    type LevelOfDetail = GeosetLevelOfDetailFields;
+    type ExtraSections = ReforgedGeosetExtraSections;
 }
 impl GeosetLayout for V1400 {
-    type Header = GeosetHeaderExtension;
-    type Extensions = ReforgedGeosetExtensions;
+    type LevelOfDetail = GeosetLevelOfDetailFields;
+    type ExtraSections = ReforgedGeosetExtraSections;
 }
 impl GeosetLayout for V1600 {
-    type Header = GeosetHeaderExtension;
-    type Extensions = ReforgedGeosetExtensions;
+    type LevelOfDetail = GeosetLevelOfDetailFields;
+    type ExtraSections = ReforgedGeosetExtraSections;
 }
 impl GeosetLayout for V1800 {
-    type Header = GeosetHeaderExtension;
-    type Extensions = ReforgedGeosetExtensions;
+    type LevelOfDetail = GeosetLevelOfDetailFields;
+    type ExtraSections = ReforgedGeosetExtraSections;
 }
 
 /// A geoset as typed sections. The exact fixed-width name field is retained
@@ -197,10 +197,10 @@ pub struct Geoset<V: ModelVersion> {
     material_id: u32,
     selection_group: u32,
     unselectable_raw: u32,
-    header_extension: V::Header,
+    level_of_detail: V::LevelOfDetail,
     extent: GeosetExtent,
     sequence_extents: Vec<GeosetExtent>,
-    extensions: V::Extensions,
+    extra_sections: V::ExtraSections,
     uv_sets: Vec<Vec<[f32; 2]>>,
 }
 
@@ -233,10 +233,10 @@ impl<V: ModelVersion> Geoset<V> {
             material_id: 0,
             selection_group: 0,
             unselectable_raw: 0,
-            header_extension: V::Header::default(),
+            level_of_detail: V::LevelOfDetail::default(),
             extent: GeosetExtent::default(),
             sequence_extents: Vec::new(),
-            extensions: V::Extensions::default(),
+            extra_sections: V::ExtraSections::default(),
             uv_sets: vec![vec![[0.0; 2]; vertices.len()]],
         })
     }
@@ -316,7 +316,7 @@ impl<V: ModelVersion> Geoset<V> {
             });
         }
         Ok(self
-            .header_extension
+            .level_of_detail
             .level_of_detail()
             .expect("supported version"))
     }
@@ -346,7 +346,7 @@ impl<V: ModelVersion> Geoset<V> {
                 actual: V::NUMBER,
             });
         }
-        Ok(self.header_extension.name().expect("supported version"))
+        Ok(self.level_of_detail.name().expect("supported version"))
     }
 
     /// Borrows optional Reforged tangent vectors.
@@ -359,7 +359,7 @@ impl<V: ModelVersion> Geoset<V> {
             });
         }
         Ok(self
-            .extensions
+            .extra_sections
             .reforged()
             .expect("supported version")
             .sections
@@ -380,7 +380,7 @@ impl<V: ModelVersion> Geoset<V> {
             });
         }
         Ok(self
-            .extensions
+            .extra_sections
             .reforged()
             .expect("supported version")
             .sections
@@ -468,7 +468,7 @@ impl<V: ModelVersion> Geoset<V> {
     /// Changes the Reforged level of detail.
     pub fn try_set_level_of_detail(&mut self, level: u32) -> Result<(), ValueError> {
         *self
-            .header_extension
+            .level_of_detail
             .level_of_detail_mut()
             .ok_or(ValueError::UnsupportedVersion {
                 tag: GeosetsChunk::<V>::TAG,
@@ -480,7 +480,7 @@ impl<V: ModelVersion> Geoset<V> {
 
     /// Changes the Reforged name and clears unused name bytes.
     pub fn try_set_name(&mut self, name: &str) -> Result<(), ValueError> {
-        self.header_extension
+        self.level_of_detail
             .name_mut()
             .ok_or(ValueError::UnsupportedVersion {
                 tag: GeosetsChunk::<V>::TAG,
@@ -529,7 +529,7 @@ impl<V: ModelVersion> Geoset<V> {
             });
         }
         let sections = &mut self
-            .extensions
+            .extra_sections
             .reforged_mut()
             .expect("supported version")
             .sections;
@@ -583,7 +583,7 @@ impl<V: ModelVersion> Geoset<V> {
             }
         }
         let sections = &mut self
-            .extensions
+            .extra_sections
             .reforged_mut()
             .expect("supported version")
             .sections;
@@ -703,31 +703,31 @@ fn read_skin_weights<V: ModelVersion>(
         .collect()
 }
 
-fn read_extensions<V: ModelVersion>(
+fn read_extra_sections<V: ModelVersion>(
     cursor: &mut Cursor<'_>,
 ) -> Result<Vec<GeosetExtraSection>, DecodeError> {
-    let mut extensions = Vec::new();
+    let mut extra_sections = Vec::new();
     while peek_tag(cursor)? != *b"UVAS" {
         let offset = cursor.absolute_position();
         let tag = peek_tag(cursor)?;
         match &tag {
             b"TANG"
-                if !extensions
+                if !extra_sections
                     .iter()
                     .any(|part| matches!(part, GeosetExtraSection::Tangents(_))) =>
             {
-                extensions.push(GeosetExtraSection::Tangents(decode_values::<[f32; 4]>(
+                extra_sections.push(GeosetExtraSection::Tangents(decode_values::<[f32; 4]>(
                     section(cursor, *b"TANG", 16)?,
                     16,
                 )?));
             }
             b"SKIN"
-                if !extensions
+                if !extra_sections
                     .iter()
                     .any(|part| matches!(part, GeosetExtraSection::Skin { .. })) =>
             {
                 let weights = read_skin_weights::<V>(cursor)?;
-                extensions.push(GeosetExtraSection::Skin { weights });
+                extra_sections.push(GeosetExtraSection::Skin { weights });
             }
             _ => {
                 return Err(DecodeError::MalformedRecord {
@@ -737,10 +737,10 @@ fn read_extensions<V: ModelVersion>(
             }
         }
     }
-    Ok(extensions)
+    Ok(extra_sections)
 }
 
-fn write_extensions<V: ModelVersion>(
+fn write_extra_sections<V: ModelVersion>(
     bytes: &mut Encoder<'_>,
     sections: &[GeosetExtraSection],
 ) -> Result<(), EncodeError> {
@@ -840,14 +840,14 @@ impl<V: ModelVersion> Readable for Geoset<V> {
             let material_id = cursor.read()?;
             let selection_group = cursor.read()?;
             let unselectable_raw = cursor.read()?;
-            let header_extension = cursor.read::<V::Header>()?;
+            let level_of_detail = cursor.read::<V::LevelOfDetail>()?;
             let extent = cursor.read()?;
             let sequence_count = cursor.read::<u32>()? as usize;
             let mut sequence_extents = Vec::new();
             for _ in 0..sequence_count {
                 sequence_extents.push(cursor.read()?);
             }
-            let extensions = V::Extensions::read::<V>(&mut cursor)?;
+            let extra_sections = V::ExtraSections::read::<V>(&mut cursor)?;
             if cursor.read_exact(4)? != b"UVAS" {
                 return Err(DecodeError::MalformedRecord {
                     tag: GeosetsChunk::<V>::TAG,
@@ -875,10 +875,10 @@ impl<V: ModelVersion> Readable for Geoset<V> {
                 material_id,
                 selection_group,
                 unselectable_raw,
-                header_extension,
+                level_of_detail,
                 extent,
                 sequence_extents,
-                extensions,
+                extra_sections,
                 uv_sets,
             })
         }?;
@@ -910,13 +910,13 @@ impl<V: ModelVersion> Writable for Geoset<V> {
         ] {
             bytes.write(&(word))?;
         }
-        bytes.write(&self.header_extension)?;
+        bytes.write(&self.level_of_detail)?;
         bytes.write(&self.extent)?;
         write_count(bytes, self.sequence_extents.len())?;
         for extent in &self.sequence_extents {
             bytes.write(extent)?;
         }
-        self.extensions.write::<V>(bytes)?;
+        self.extra_sections.write::<V>(bytes)?;
         bytes.write_bytes(b"UVAS");
         write_count(bytes, self.uv_sets.len())?;
         for uv_set in &self.uv_sets {
@@ -935,15 +935,15 @@ impl<V: ModelVersion> Writable for Geoset<V> {
 
 impl<V: SupportsReforgedChunks> Geoset<V> {
     pub fn level_of_detail(&self) -> u32 {
-        self.header_extension
+        self.level_of_detail
             .level_of_detail()
             .expect("supported version")
     }
     pub fn name(&self) -> Cow<'_, str> {
-        self.header_extension.name().expect("supported version")
+        self.level_of_detail.name().expect("supported version")
     }
     pub fn tangents(&self) -> Option<&[[f32; 4]]> {
-        self.extensions
+        self.extra_sections
             .reforged()
             .expect("supported version")
             .sections
@@ -954,7 +954,7 @@ impl<V: SupportsReforgedChunks> Geoset<V> {
             })
     }
     pub fn skin_weights(&self) -> Option<&[SkinWeights]> {
-        self.extensions
+        self.extra_sections
             .reforged()
             .expect("supported version")
             .sections
