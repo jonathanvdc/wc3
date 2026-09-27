@@ -30,14 +30,14 @@ fn check_version<V: ModelVersion>() {
     let version = V::NUMBER;
     let mut material = sample_material::<V>();
     material.set_priority_plane(3);
-    material.set_raw_render_mode(7);
+    material.set_render_mode(MaterialRenderFlags::from_bits(7));
     let mut model = Model::<V>::new();
     model.set_materials(&[material]);
     let decoded = Model::<V>::decode(&model.encode().unwrap()).unwrap();
     let materials = decoded.materials();
     assert_eq!(materials[0].version(), version);
     assert_eq!(materials[0].priority_plane(), 3);
-    assert_eq!(materials[0].raw_render_mode(), 7);
+    assert_eq!(materials[0].render_mode().bits(), 7);
     assert!(materials[0]
         .render_mode()
         .contains(MaterialRenderFlags::CONSTANT_COLOR));

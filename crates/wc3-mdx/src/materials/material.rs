@@ -28,7 +28,7 @@ use crate::{AnimationTrack, DecodeError, Model};
 const LAYER_TAG: Tag = *b"LAYS";
 
 /// Material rendering bits, preserving unrecognized bits.
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Readable, Writable)]
 pub struct MaterialRenderFlags(u32);
 
 impl MaterialRenderFlags {
@@ -96,7 +96,7 @@ pub struct LayerTextureSlot {
 pub struct Material<V: ModelVersion> {
     version: PhantomData<V>,
     priority_plane: u32,
-    render_mode: u32,
+    render_mode: MaterialRenderFlags,
     shader: V::Shader,
     layers: Vec<Layer<V>>,
 }
@@ -373,7 +373,7 @@ impl<V: ModelVersion> Material<V> {
         Self {
             version: PhantomData,
             priority_plane: 0,
-            render_mode: 0,
+            render_mode: MaterialRenderFlags::default(),
             shader: V::Shader::default(),
             layers: Vec::new(),
         }
@@ -393,18 +393,10 @@ impl<V: ModelVersion> Material<V> {
     }
     /// Returns decoded rendering flags.
     pub fn render_mode(&self) -> MaterialRenderFlags {
-        MaterialRenderFlags::from_bits(self.render_mode)
-    }
-    /// Returns exact rendering bits.
-    pub fn raw_render_mode(&self) -> u32 {
         self.render_mode
     }
     /// Changes the rendering flags.
     pub fn set_render_mode(&mut self, value: MaterialRenderFlags) {
-        self.render_mode = value.bits();
-    }
-    /// Changes exact rendering bits.
-    pub fn set_raw_render_mode(&mut self, value: u32) {
         self.render_mode = value;
     }
     /// Returns the shader path in versions 900 through 1099.
