@@ -24,7 +24,7 @@ pub enum CollisionKind {
 }
 
 /// A collision primitive attached to a node.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Readable, Writable)]
 pub struct CollisionShape {
     node: Node,
     geometry: CollisionGeometry,
@@ -36,6 +36,48 @@ enum CollisionGeometry {
     Plane([Vec3; 2]),
     Sphere(Vec3, f32),
     Cylinder([Vec3; 2], f32),
+}
+
+impl Readable for CollisionGeometry {
+    fn read_from(cursor: &mut Cursor<'_>) -> Result<Self, DecodeError> {
+        let kind_offset = cursor.absolute_position();
+        let kind = cursor.read::<u32>()?;
+        match kind {
+            0 => Ok(Self::Box([cursor.read()?, cursor.read()?])),
+            1 => Ok(Self::Plane([cursor.read()?, cursor.read()?])),
+            2 => Ok(Self::Sphere(cursor.read()?, cursor.read()?)),
+            3 => Ok(Self::Cylinder([cursor.read()?, cursor.read()?], cursor.read()?)),
+            _ => Err(DecodeError::MalformedRecord {
+                tag: CollisionShapesChunk::TAG,
+                offset: kind_offset,
+            }),
+        }
+    }
+}
+
+impl Writable for CollisionGeometry {
+    fn write_to(&self, bytes: &mut Encoder<'_>) -> Result<(), EncodeError> {
+        let kind = match self {
+            Self::Box(_) => 0u32,
+            Self::Plane(_) => 1,
+            Self::Sphere(_, _) => 2,
+            Self::Cylinder(_, _) => 3,
+        };
+        bytes.write(&kind)?;
+
+        match self {
+            Self::Box(points) | Self::Plane(points) => bytes.write(points)?,
+            Self::Sphere(center, radius) => {
+                bytes.write(center)?;
+                bytes.write(radius)?;
+            }
+            Self::Cylinder(points, radius) => {
+                bytes.write(points)?;
+                bytes.write(radius)?;
+            }
+        }
+        Ok(())
+    }
 }
 
 impl CollisionShape {
@@ -137,54 +179,5 @@ impl<V: ModelVersion> Model<V> {
     /// Replaces collision shapes in the first `CLID` chunk.
     pub fn set_collision_shapes(&mut self, shapes: &[CollisionShape]) {
         self.replace_chunk(CollisionShapesChunk::new(shapes.to_vec()));
-    }
-}
-
-impl Readable for CollisionShape {
-    fn read_from(cursor: &mut Cursor<'_>) -> Result<Self, DecodeError> {
-        let node = cursor.read()?;
-        let kind_offset = cursor.absolute_position();
-        let kind = cursor.read::<u32>()?;
-        let geometry = match kind {
-            0 => CollisionGeometry::Box([cursor.read()?, cursor.read()?]),
-            1 => CollisionGeometry::Plane([cursor.read()?, cursor.read()?]),
-            2 => CollisionGeometry::Sphere(cursor.read()?, cursor.read()?),
-            3 => CollisionGeometry::Cylinder([cursor.read()?, cursor.read()?], cursor.read()?),
-            _ => {
-                return Err(DecodeError::MalformedRecord {
-                    tag: CollisionShapesChunk::TAG,
-                    offset: kind_offset,
-                })
-            }
-        };
-        Ok(Self { node, geometry })
-    }
-}
-
-impl Writable for CollisionShape {
-    fn write_to(&self, bytes: &mut Encoder<'_>) -> Result<(), EncodeError> {
-        bytes.write(&self.node)?;
-        let kind = match self.geometry {
-            CollisionGeometry::Box(_) => 0u32,
-            CollisionGeometry::Plane(_) => 1,
-            CollisionGeometry::Sphere(_, _) => 2,
-            CollisionGeometry::Cylinder(_, _) => 3,
-        };
-        bytes.write(&kind)?;
-
-        match self.geometry {
-            CollisionGeometry::Box(points) | CollisionGeometry::Plane(points) => {
-                bytes.write(&points)?;
-            }
-            CollisionGeometry::Sphere(center, radius) => {
-                bytes.write(&center)?;
-                bytes.write(&radius)?;
-            }
-            CollisionGeometry::Cylinder(points, radius) => {
-                bytes.write(&points)?;
-                bytes.write(&radius)?;
-            }
-        }
-        Ok(())
     }
 }
