@@ -175,6 +175,20 @@ pub enum AnyVersionModel {
     V1800(Model<V1800>),
 }
 
+macro_rules! dispatch_model {
+    ($value:expr, $model:ident => $body:expr) => {
+        match $value {
+            AnyVersionModel::V800($model) => $body,
+            AnyVersionModel::V900($model) => $body,
+            AnyVersionModel::V1000($model) => $body,
+            AnyVersionModel::V1100($model) => $body,
+            AnyVersionModel::V1200($model) => $body,
+            AnyVersionModel::V1800($model) => $body,
+        }
+    };
+}
+pub(crate) use dispatch_model;
+
 impl AnyVersionModel {
     /// Decodes a model, using `default_version` when no `VERS` chunk is present.
     pub fn decode(bytes: &[u8], default_version: Version) -> Result<Self, DecodeError> {
@@ -191,25 +205,11 @@ impl AnyVersionModel {
     }
 
     pub fn version(&self) -> Version {
-        match self {
-            Self::V800(_) => 800,
-            Self::V900(_) => 900,
-            Self::V1000(_) => 1000,
-            Self::V1100(_) => 1100,
-            Self::V1200(_) => 1200,
-            Self::V1800(_) => 1800,
-        }
+        dispatch_model!(self, model => model.version())
     }
 
     pub fn encode(&self) -> Result<Vec<u8>, EncodeError> {
-        match self {
-            Self::V800(model) => model.encode(),
-            Self::V900(model) => model.encode(),
-            Self::V1000(model) => model.encode(),
-            Self::V1100(model) => model.encode(),
-            Self::V1200(model) => model.encode(),
-            Self::V1800(model) => model.encode(),
-        }
+        dispatch_model!(self, model => model.encode())
     }
 }
 
