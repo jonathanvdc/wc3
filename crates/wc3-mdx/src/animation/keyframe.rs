@@ -1,6 +1,5 @@
 //! Keyframe values and their binary representations.
-use super::TrackValue;
-use crate::{EncodeError, Encoder, Readable, Writable};
+use crate::{Readable, Writable};
 
 /// An interpolation mode shared by all keys in a track.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
