@@ -275,11 +275,11 @@ impl Readable for Layer1100Extra {
 impl Writable for Layer1100Extra {
     fn write_to(&self, output: &mut Encoder<'_>) -> Result<(), EncodeError> {
         output.write(&self.base)?;
-        output.write(&(self.shader_type_id))?;
+        output.write(&self.shader_type_id)?;
         write_count(output, self.texture_slots.len(), LAYER_TAG)?;
         for slot in &self.texture_slots {
-            output.write(&(slot.texture_id))?;
-            output.write(&(slot.texture_type))?;
+            output.write(&slot.texture_id)?;
+            output.write(&slot.texture_type)?;
             if let Some(track) = &slot.track {
                 output.write(track)?;
             }
