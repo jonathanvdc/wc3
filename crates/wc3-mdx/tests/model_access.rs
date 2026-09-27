@@ -1,6 +1,7 @@
 use wc3_mdx::geometry::BindPoseMatrix;
 use wc3_mdx::{
-    visit_model, DynamicModel, Model, CommonModelAccess, TryModelAccess, ValueError, V1800, V800, V900,
+    visit_model, CommonModelAccess, DynamicModel, Model, TryModelAccess, ValueError, V1800, V800,
+    V900,
 };
 
 fn replace_durations(model: &mut impl CommonModelAccess) {
