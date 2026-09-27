@@ -72,7 +72,8 @@ impl NodeFlags {
 }
 
 /// A shared node header with decoded transform tracks.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Readable, Writable)]
+#[mdx(sized(tag = HelpersChunk::TAG))]
 pub struct Node {
     name: FixedText<NAME_SIZE>,
     object_id: u32,
@@ -202,43 +203,6 @@ impl<V: ModelVersion> Model<V> {
     /// Replaces all helpers in the first `HELP` chunk.
     pub fn set_helpers(&mut self, helpers: &[Node]) {
         self.replace_chunk(HelpersChunk::new(helpers.to_vec()));
-    }
-}
-
-impl Readable for Node {
-    fn read_from(source: &mut Cursor<'_>) -> Result<Self, DecodeError> {
-        let mut cursor = source.slice_u32_sized()?;
-        let name = cursor.read()?;
-        let object_id = cursor.read()?;
-        let parent_id = cursor.read()?;
-        let raw_flags = cursor.read()?;
-        let mut tracks = Vec::new();
-        while !cursor.remaining().is_empty() {
-            tracks.push(cursor.read::<NodeTrack>()?);
-        }
-        cursor.finish()?;
-        Ok(Self {
-            name,
-            object_id,
-            parent_id,
-            raw_flags,
-            tracks,
-        })
-    }
-}
-
-impl Writable for Node {
-    fn write_to(&self, bytes: &mut Encoder<'_>) -> Result<(), EncodeError> {
-        let marker = bytes.begin_sized();
-        bytes.write(&self.name)?;
-        bytes.write(&self.object_id)?;
-        bytes.write(&self.parent_id)?;
-        bytes.write(&self.raw_flags)?;
-        for track in &self.tracks {
-            bytes.write(track)?;
-        }
-        bytes.finish_sized(marker, HelpersChunk::TAG)?;
-        Ok(())
     }
 }
 

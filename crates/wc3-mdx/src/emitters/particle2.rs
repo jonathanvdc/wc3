@@ -13,16 +13,12 @@ crate::animation::track_group! {
     }
 }
 
-use crate::EncodeError;
-use crate::Encoder;
 use crate::KnownChunk;
 use crate::{Color, Vec3};
 
-use crate::{Cursor, ParticleEmitters2Chunk};
-use crate::{DecodeError, Model, Node};
+use crate::ParticleEmitters2Chunk;
+use crate::{Model, Node};
 use crate::{Readable, Writable};
-
-pub(crate) const FIXED_SIZE: usize = 171;
 
 /// Which particle parts are rendered for each emitted particle.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -101,7 +97,8 @@ impl Particle2Fields {
 }
 
 /// A particle emitter 2 with decoded fields and animation tracks.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Readable, Writable)]
+#[mdx(sized(tag = ParticleEmitters2Chunk::TAG))]
 pub struct ParticleEmitter2 {
     node: Node,
     fields: Particle2Fields,
@@ -163,38 +160,5 @@ impl<V: ModelVersion> Model<V> {
     /// Replaces particle emitter 2 records in the first `PRE2` chunk.
     pub fn set_particle_emitters2(&mut self, emitters: &[ParticleEmitter2]) {
         self.replace_chunk(ParticleEmitters2Chunk::new(emitters.to_vec()));
-    }
-}
-
-impl Readable for ParticleEmitter2 {
-    fn read_from(source: &mut Cursor<'_>) -> Result<Self, DecodeError> {
-        let mut cursor = source.slice_u32_sized()?;
-        let node = cursor.read()?;
-        let mut fixed = cursor.slice(FIXED_SIZE)?;
-        let fields = fixed.read()?;
-        fixed.finish()?;
-        let mut tracks = Vec::new();
-        while !cursor.remaining().is_empty() {
-            tracks.push(cursor.read::<Particle2Track>()?);
-        }
-        cursor.finish()?;
-        Ok(Self {
-            node,
-            fields,
-            tracks,
-        })
-    }
-}
-
-impl Writable for ParticleEmitter2 {
-    fn write_to(&self, bytes: &mut Encoder<'_>) -> Result<(), EncodeError> {
-        let marker = bytes.begin_sized();
-        bytes.write(&self.node)?;
-        bytes.write(&self.fields)?;
-        for track in &self.tracks {
-            bytes.write(track)?;
-        }
-        bytes.finish_sized(marker, ParticleEmitters2Chunk::TAG)?;
-        Ok(())
     }
 }

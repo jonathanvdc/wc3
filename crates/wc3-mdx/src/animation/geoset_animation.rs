@@ -8,12 +8,10 @@ crate::animation::track_group! {
 }
 
 use crate::Color;
-use crate::EncodeError;
-use crate::Encoder;
 use crate::KnownChunk;
 
-use crate::{Cursor, GeosetAnimationsChunk};
-use crate::{DecodeError, Model};
+use crate::GeosetAnimationsChunk;
+use crate::Model;
 use crate::{Readable, Writable};
 
 /// Geoset animation rendering flags, retaining unknown bits.
@@ -42,7 +40,8 @@ impl GeosetAnimationFlags {
 }
 
 /// A geoset animation with decoded alpha and color tracks.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Readable, Writable)]
+#[mdx(sized(tag = GeosetAnimationsChunk::TAG))]
 pub struct GeosetAnimation {
     alpha: f32,
     raw_flags: u32,
@@ -122,42 +121,5 @@ impl<V: ModelVersion> Model<V> {
     /// Replaces geoset animations in the first `GEOA` chunk.
     pub fn set_geoset_animations(&mut self, animations: &[GeosetAnimation]) {
         self.replace_chunk(GeosetAnimationsChunk::new(animations.to_vec()));
-    }
-}
-
-impl Readable for GeosetAnimation {
-    fn read_from(source: &mut Cursor<'_>) -> Result<Self, DecodeError> {
-        let mut cursor = source.slice_u32_sized()?;
-        let alpha = cursor.read()?;
-        let raw_flags = cursor.read()?;
-        let color = cursor.read()?;
-        let geoset_id = cursor.read()?;
-        let mut tracks = Vec::new();
-        while !cursor.remaining().is_empty() {
-            tracks.push(cursor.read::<GeosetTrack>()?);
-        }
-        cursor.finish()?;
-        Ok(Self {
-            alpha,
-            raw_flags,
-            color,
-            geoset_id,
-            tracks,
-        })
-    }
-}
-
-impl Writable for GeosetAnimation {
-    fn write_to(&self, bytes: &mut Encoder<'_>) -> Result<(), EncodeError> {
-        let marker = bytes.begin_sized();
-        bytes.write(&self.alpha)?;
-        bytes.write(&self.raw_flags)?;
-        bytes.write(&self.color)?;
-        bytes.write(&self.geoset_id)?;
-        for track in &self.tracks {
-            bytes.write(track)?;
-        }
-        bytes.finish_sized(marker, GeosetAnimationsChunk::TAG)?;
-        Ok(())
     }
 }

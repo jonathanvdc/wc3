@@ -8,16 +8,15 @@ crate::animation::track_group! {
     }
 }
 
-use crate::EncodeError;
-use crate::Encoder;
 use crate::KnownChunk;
 
-use crate::{Cursor, TextureAnimationsChunk};
-use crate::{DecodeError, Model};
+use crate::Model;
+use crate::TextureAnimationsChunk;
 use crate::{Readable, Writable};
 
 /// A texture animation containing translation, rotation, and scaling tracks.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, Readable, Writable)]
+#[mdx(sized(tag = TextureAnimationsChunk::TAG))]
 pub struct TextureAnimation {
     tracks: Vec<TextureAnimationTrack>,
 }
@@ -48,28 +47,5 @@ impl<V: ModelVersion> Model<V> {
     /// Replaces texture animations in the first `TXAN` chunk.
     pub fn set_texture_animations(&mut self, animations: &[TextureAnimation]) {
         self.replace_chunk(TextureAnimationsChunk::new(animations.to_vec()));
-    }
-}
-
-impl Readable for TextureAnimation {
-    fn read_from(source: &mut Cursor<'_>) -> Result<Self, DecodeError> {
-        let mut cursor = source.slice_u32_sized()?;
-        let mut tracks = Vec::new();
-        while !cursor.remaining().is_empty() {
-            tracks.push(cursor.read::<TextureAnimationTrack>()?);
-        }
-        cursor.finish()?;
-        Ok(Self { tracks })
-    }
-}
-
-impl Writable for TextureAnimation {
-    fn write_to(&self, bytes: &mut Encoder<'_>) -> Result<(), EncodeError> {
-        let marker = bytes.begin_sized();
-        for track in &self.tracks {
-            bytes.write(track)?;
-        }
-        bytes.finish_sized(marker, TextureAnimationsChunk::TAG)?;
-        Ok(())
     }
 }

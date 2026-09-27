@@ -12,22 +12,21 @@ crate::animation::track_group! {
     }
 }
 
-use crate::EncodeError;
-use crate::Encoder;
 use crate::KnownChunk;
 use crate::ValueError;
 
-use crate::{Cursor, ParticleEmittersChunk};
+use crate::ParticleEmittersChunk;
 use crate::{Readable, Writable};
 use std::borrow::Cow;
 
 use crate::FixedText;
-use crate::{DecodeError, Model, Node};
+use crate::{Model, Node};
 
 const PATH_SIZE: usize = 256;
 
 /// A Classic particle emitter with optional animated properties.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Readable, Writable)]
+#[mdx(sized(tag = ParticleEmittersChunk::TAG))]
 pub struct ParticleEmitter {
     node: Node,
     emission_rate: f32,
@@ -154,57 +153,5 @@ impl<V: ModelVersion> Model<V> {
     /// Replaces particle emitters in the first `PREM` chunk.
     pub fn set_particle_emitters(&mut self, emitters: &[ParticleEmitter]) {
         self.replace_chunk(ParticleEmittersChunk::new(emitters.to_vec()));
-    }
-}
-
-impl Readable for ParticleEmitter {
-    fn read_from(source: &mut Cursor<'_>) -> Result<Self, DecodeError> {
-        let mut cursor = source.slice_u32_sized()?;
-        let node = cursor.read()?;
-        let emission_rate = cursor.read()?;
-        let gravity = cursor.read()?;
-        let longitude = cursor.read()?;
-        let latitude = cursor.read()?;
-        let path = cursor.read()?;
-        let reserved = cursor.read()?;
-        let life_span = cursor.read()?;
-        let initial_velocity = cursor.read()?;
-        let mut tracks = Vec::new();
-        while !cursor.remaining().is_empty() {
-            tracks.push(cursor.read::<ParticleTrack>()?);
-        }
-        cursor.finish()?;
-        Ok(Self {
-            node,
-            emission_rate,
-            gravity,
-            longitude,
-            latitude,
-            path,
-            reserved,
-            life_span,
-            initial_velocity,
-            tracks,
-        })
-    }
-}
-
-impl Writable for ParticleEmitter {
-    fn write_to(&self, bytes: &mut Encoder<'_>) -> Result<(), EncodeError> {
-        let marker = bytes.begin_sized();
-        bytes.write(&self.node)?;
-        bytes.write(&self.emission_rate)?;
-        bytes.write(&self.gravity)?;
-        bytes.write(&self.longitude)?;
-        bytes.write(&self.latitude)?;
-        bytes.write(&self.path)?;
-        bytes.write(&self.reserved)?;
-        bytes.write(&self.life_span)?;
-        bytes.write(&self.initial_velocity)?;
-        for track in &self.tracks {
-            bytes.write(track)?;
-        }
-        bytes.finish_sized(marker, ParticleEmittersChunk::TAG)?;
-        Ok(())
     }
 }

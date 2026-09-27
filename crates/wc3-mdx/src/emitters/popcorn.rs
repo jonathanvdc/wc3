@@ -12,22 +12,21 @@ crate::animation::track_group! {
 }
 
 use crate::Color;
-use crate::EncodeError;
-use crate::Encoder;
 use crate::KnownChunk;
 use crate::ValueError;
 
-use crate::{Cursor, PopcornEmittersChunk};
+use crate::PopcornEmittersChunk;
 use crate::{Readable, Writable};
 use std::borrow::Cow;
 
 use crate::FixedText;
-use crate::{DecodeError, Model, Node};
+use crate::{Model, Node};
 
 const PATH_SIZE: usize = 260;
 
 /// A popcorn particle emitter with decoded fields and animation tracks.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Readable, Writable)]
+#[mdx(sized(tag = PopcornEmittersChunk::TAG))]
 pub struct PopcornEmitter {
     node: Node,
     life_span: f32,
@@ -152,57 +151,5 @@ impl<V: ModelVersion> Model<V> {
     /// Replaces popcorn emitters in the first `CORN` chunk.
     pub fn set_popcorn_emitters(&mut self, emitters: &[PopcornEmitter]) {
         self.replace_chunk(PopcornEmittersChunk::new(emitters.to_vec()));
-    }
-}
-
-impl Readable for PopcornEmitter {
-    fn read_from(source: &mut Cursor<'_>) -> Result<Self, DecodeError> {
-        let mut cursor = source.slice_u32_sized()?;
-        let node = cursor.read()?;
-        let life_span = cursor.read()?;
-        let emission_rate = cursor.read()?;
-        let speed = cursor.read()?;
-        let color = cursor.read()?;
-        let alpha = cursor.read()?;
-        let replaceable_id = cursor.read()?;
-        let path = cursor.read()?;
-        let visibility_guide = cursor.read()?;
-        let mut tracks = Vec::new();
-        while !cursor.remaining().is_empty() {
-            tracks.push(cursor.read::<PopcornTrack>()?);
-        }
-        cursor.finish()?;
-        Ok(Self {
-            node,
-            life_span,
-            emission_rate,
-            speed,
-            color,
-            alpha,
-            replaceable_id,
-            path,
-            visibility_guide,
-            tracks,
-        })
-    }
-}
-
-impl Writable for PopcornEmitter {
-    fn write_to(&self, bytes: &mut Encoder<'_>) -> Result<(), EncodeError> {
-        let marker = bytes.begin_sized();
-        bytes.write(&self.node)?;
-        bytes.write(&self.life_span)?;
-        bytes.write(&self.emission_rate)?;
-        bytes.write(&self.speed)?;
-        bytes.write(&self.color)?;
-        bytes.write(&self.alpha)?;
-        bytes.write(&self.replaceable_id)?;
-        bytes.write(&self.path)?;
-        bytes.write(&self.visibility_guide)?;
-        for track in &self.tracks {
-            bytes.write(track)?;
-        }
-        bytes.finish_sized(marker, PopcornEmittersChunk::TAG)?;
-        Ok(())
     }
 }

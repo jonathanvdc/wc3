@@ -112,7 +112,8 @@ impl LightLayout for V1800 {
 }
 
 /// A light node with decoded lighting values and animation tracks.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Readable, Writable)]
+#[mdx(sized(tag = LightsChunk::<V>::TAG))]
 pub struct Light<V: ModelVersion> {
     node: Node,
     light_type: u32,
@@ -123,8 +124,8 @@ pub struct Light<V: ModelVersion> {
     ambient_color: Color,
     ambient_intensity: f32,
     extended_words: V::Extension,
-    tracks: Vec<LightTrack>,
     version: PhantomData<V>,
+    tracks: Vec<LightTrack>,
 }
 
 impl<V: ModelVersion> Light<V> {
@@ -245,58 +246,5 @@ impl<V: ModelVersion> Model<V> {
     /// Replaces lights in the first `LITE` chunk.
     pub fn set_lights(&mut self, lights: &[Light<V>]) {
         self.replace_chunk(LightsChunk::new(lights.to_vec()));
-    }
-}
-
-impl<V: ModelVersion> Readable for Light<V> {
-    fn read_from(source: &mut Cursor<'_>) -> Result<Self, DecodeError> {
-        let mut cursor = source.slice_u32_sized()?;
-        let node = cursor.read()?;
-        let light_type = cursor.read()?;
-        let attenuation_start = cursor.read()?;
-        let attenuation_end = cursor.read()?;
-        let color = cursor.read()?;
-        let intensity = cursor.read()?;
-        let ambient_color = cursor.read()?;
-        let ambient_intensity = cursor.read()?;
-        let extended_words = cursor.read::<V::Extension>()?;
-        let mut tracks = Vec::new();
-        while !cursor.remaining().is_empty() {
-            tracks.push(cursor.read::<LightTrack>()?);
-        }
-        cursor.finish()?;
-        Ok(Self {
-            node,
-            light_type,
-            attenuation_start,
-            attenuation_end,
-            color,
-            intensity,
-            ambient_color,
-            ambient_intensity,
-            extended_words,
-            tracks,
-            version: PhantomData,
-        })
-    }
-}
-
-impl<V: ModelVersion> Writable for Light<V> {
-    fn write_to(&self, bytes: &mut Encoder<'_>) -> Result<(), EncodeError> {
-        let marker = bytes.begin_sized();
-        bytes.write(&self.node)?;
-        bytes.write(&self.light_type)?;
-        bytes.write(&self.attenuation_start)?;
-        bytes.write(&self.attenuation_end)?;
-        bytes.write(&self.color)?;
-        bytes.write(&self.intensity)?;
-        bytes.write(&self.ambient_color)?;
-        bytes.write(&self.ambient_intensity)?;
-        bytes.write(&self.extended_words)?;
-        for track in &self.tracks {
-            bytes.write(track)?;
-        }
-        bytes.finish_sized(marker, LightsChunk::<V>::TAG)?;
-        Ok(())
     }
 }

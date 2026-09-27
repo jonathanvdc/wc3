@@ -102,7 +102,8 @@ pub struct Material<V: ModelVersion> {
 }
 
 /// A material layer with parsed texture slots and animation tracks.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Readable, Writable)]
+#[mdx(sized(tag = LAYER_TAG))]
 pub struct Layer<V: ModelVersion> {
     version: PhantomData<V>,
     filter_mode: u32,
@@ -767,56 +768,6 @@ impl<V: ModelVersion> Writable for Material<V> {
             bytes.write(layer)?;
         }
         bytes.finish_sized(marker, MaterialsChunk::<V>::TAG)?;
-        Ok(())
-    }
-}
-
-impl<V: ModelVersion> Readable for Layer<V> {
-    fn read_from(source: &mut Cursor<'_>) -> Result<Self, DecodeError> {
-        let mut cursor = source.slice_u32_sized()?;
-        let value = {
-            let filter_mode = cursor.read()?;
-            let shading_flags = cursor.read()?;
-            let texture_id = cursor.read()?;
-            let texture_animation_id = cursor.read()?;
-            let coordinate_id = cursor.read()?;
-            let alpha = cursor.read()?;
-            let extensions = cursor.read::<V::LayerExtra>()?;
-            let mut tracks = Vec::new();
-            while !cursor.remaining().is_empty() {
-                tracks.push(cursor.read::<LayerTrack>()?);
-            }
-            Ok(Self {
-                version: PhantomData,
-                filter_mode,
-                shading_flags,
-                texture_id,
-                texture_animation_id,
-                coordinate_id,
-                alpha,
-                extensions,
-                tracks,
-            })
-        }?;
-        cursor.finish()?;
-        Ok(value)
-    }
-}
-
-impl<V: ModelVersion> Writable for Layer<V> {
-    fn write_to(&self, bytes: &mut Encoder<'_>) -> Result<(), EncodeError> {
-        let marker = bytes.begin_sized();
-        bytes.write(&self.filter_mode)?;
-        bytes.write(&self.shading_flags)?;
-        bytes.write(&self.texture_id)?;
-        bytes.write(&self.texture_animation_id)?;
-        bytes.write(&self.coordinate_id)?;
-        bytes.write(&self.alpha)?;
-        bytes.write(&self.extensions)?;
-        for track in &self.tracks {
-            bytes.write(track)?;
-        }
-        bytes.finish_sized(marker, LAYER_TAG)?;
         Ok(())
     }
 }

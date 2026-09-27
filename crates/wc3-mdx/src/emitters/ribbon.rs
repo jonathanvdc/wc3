@@ -12,15 +12,11 @@ crate::animation::track_group! {
 }
 
 use crate::Color;
-use crate::EncodeError;
-use crate::Encoder;
 use crate::KnownChunk;
 
-use crate::{Cursor, RibbonEmittersChunk};
-use crate::{DecodeError, Model, Node};
+use crate::RibbonEmittersChunk;
+use crate::{Model, Node};
 use crate::{Readable, Writable};
-
-pub(crate) const FIXED_SIZE: usize = 52;
 
 /// Fixed properties of a ribbon emitter.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Readable, Writable)]
@@ -39,7 +35,8 @@ pub struct RibbonFields {
 }
 
 /// One ribbon emitter with decoded fixed properties and animation tracks.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Readable, Writable)]
+#[mdx(sized(tag = RibbonEmittersChunk::TAG))]
 pub struct RibbonEmitter {
     node: Node,
     fields: RibbonFields,
@@ -96,38 +93,5 @@ impl<V: ModelVersion> Model<V> {
     /// Replaces ribbon emitters in the first `RIBB` chunk.
     pub fn set_ribbon_emitters(&mut self, emitters: &[RibbonEmitter]) {
         self.replace_chunk(RibbonEmittersChunk::new(emitters.to_vec()));
-    }
-}
-
-impl Readable for RibbonEmitter {
-    fn read_from(source: &mut Cursor<'_>) -> Result<Self, DecodeError> {
-        let mut cursor = source.slice_u32_sized()?;
-        let node = cursor.read()?;
-        let mut fixed = cursor.slice(FIXED_SIZE)?;
-        let fields = fixed.read()?;
-        fixed.finish()?;
-        let mut tracks = Vec::new();
-        while !cursor.remaining().is_empty() {
-            tracks.push(cursor.read::<RibbonTrack>()?);
-        }
-        cursor.finish()?;
-        Ok(Self {
-            node,
-            fields,
-            tracks,
-        })
-    }
-}
-
-impl Writable for RibbonEmitter {
-    fn write_to(&self, bytes: &mut Encoder<'_>) -> Result<(), EncodeError> {
-        let marker = bytes.begin_sized();
-        bytes.write(&self.node)?;
-        bytes.write(&self.fields)?;
-        for track in &self.tracks {
-            bytes.write(track)?;
-        }
-        bytes.finish_sized(marker, RibbonEmittersChunk::TAG)?;
-        Ok(())
     }
 }
