@@ -1,6 +1,6 @@
 use wc3_mdx::animation::{AnimationTrack, ValueKeyframe};
 use wc3_mdx::animation::{LightColor, LightVisibility};
-use wc3_mdx::io::{Decodable, Encodable};
+use wc3_mdx::io::{Encodable, Readable};
 use wc3_mdx::scene::{Light, Node};
 use wc3_mdx::Model;
 

@@ -4,7 +4,7 @@ use crate::Encoder;
 use crate::{ModelVersion, Tag, Version, V1000, V1100, V1200, V1800, V800, V900};
 
 use crate::Cursor;
-use crate::{CollectionChunk, Decodable, DecodeError, Encodable, ModelChunk, VersionChunk};
+use crate::{CollectionChunk, DecodeError, Encodable, ModelChunk, Readable, VersionChunk};
 
 /// The four bytes at the start of an MDX file.
 pub const MAGIC: Tag = *b"MDLX";
@@ -125,8 +125,8 @@ impl<V: ModelVersion> Model<V> {
     }
 }
 
-impl<V: ModelVersion> Decodable for Model<V> {
-    fn decode_one(cursor: &mut Cursor<'_>) -> Result<Self, DecodeError> {
+impl<V: ModelVersion> Readable for Model<V> {
+    fn read_from(cursor: &mut Cursor<'_>) -> Result<Self, DecodeError> {
         if let Some(actual) = scan_version(*cursor)? {
             if actual != V::NUMBER {
                 return Err(DecodeError::VersionMismatch {

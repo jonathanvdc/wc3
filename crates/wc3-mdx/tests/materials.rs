@@ -1,6 +1,6 @@
 use wc3_mdx::animation::{AnimationTrack, ValueKeyframe};
 use wc3_mdx::animation::{LayerAlpha, LayerTextureId};
-use wc3_mdx::io::{Decodable, Encodable};
+use wc3_mdx::io::{Encodable, Readable};
 use wc3_mdx::materials::{
     Layer, LayerShadingFlags, LayerTextureSlot, Material, MaterialRenderFlags,
 };

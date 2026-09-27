@@ -21,8 +21,8 @@ use crate::ValueError;
 use std::marker::PhantomData;
 
 use crate::{Cursor, LightsChunk};
-use crate::{Decodable, Encodable};
 use crate::{DecodeError, Model, Node};
+use crate::{Encodable, Readable};
 
 /// Extra fixed words selected by the light record's version.
 pub trait LightExtension: Clone + Debug + PartialEq {
@@ -232,8 +232,8 @@ impl<V: ModelVersion> Model<V> {
     }
 }
 
-impl<V: ModelVersion> Decodable for Light<V> {
-    fn decode_one(source: &mut Cursor<'_>) -> Result<Self, DecodeError> {
+impl<V: ModelVersion> Readable for Light<V> {
+    fn read_from(source: &mut Cursor<'_>) -> Result<Self, DecodeError> {
         let mut cursor = source.slice_u32_sized()?;
         let node = Node::decode_one(&mut cursor)?;
         let light_type = cursor.read()?;

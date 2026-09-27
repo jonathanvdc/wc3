@@ -2,7 +2,7 @@ use wc3_mdx::animation::{
     AnimationTrack, LayerTextureId, NodeScaling, NodeTranslation, TangentKeyframe, TrackKind,
     TrackTag, TrackValueKind, ValueKeyframe,
 };
-use wc3_mdx::io::{Cursor, Decodable, DecodeError, Encodable, Encoder};
+use wc3_mdx::io::{Cursor, DecodeError, Encodable, Encoder, Readable};
 use wc3_mdx::scene::{Node, NodeTrack};
 
 fn write_track<T: wc3_mdx::io::Writable>(value: T) -> Vec<u8> {

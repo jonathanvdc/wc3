@@ -1,7 +1,7 @@
 use wc3_mdx::animation::{AnimationTrack, ValueKeyframe};
 use wc3_mdx::animation::{RibbonColor, RibbonTextureSlot};
 use wc3_mdx::emitters::{RibbonEmitter, RibbonTrack};
-use wc3_mdx::io::{Decodable, Encodable};
+use wc3_mdx::io::{Encodable, Readable};
 use wc3_mdx::scene::Node;
 use wc3_mdx::Model;
 

@@ -1,7 +1,7 @@
 //! Binary conversion for typed MDX records.
 use crate::EncodeError;
 
-use crate::{Cursor, DecodeError, Encoder};
+use crate::{Encoder, Readable};
 
 /// A typed MDX record that can be encoded as bytes.
 pub trait Encodable {
@@ -16,26 +16,12 @@ pub trait Encodable {
     }
 }
 
-/// A typed MDX record that can be decoded from bytes.
-pub trait Decodable: Sized {
-    /// Decodes the record from the given input.
-    fn decode_one(cursor: &mut Cursor<'_>) -> Result<Self, DecodeError>;
-
-    /// Decodes the record from the given input, rejecting any trailing bytes.
-    fn decode(bytes: &[u8]) -> Result<Self, DecodeError> {
-        let mut cursor = Cursor::new(bytes);
-        let record = Self::decode_one(&mut cursor)?;
-        cursor.finish()?;
-        Ok(record)
-    }
-}
-
-pub trait Record: Encodable + Decodable {}
-impl<T: Encodable + Decodable> Record for T {}
+pub trait Record: Encodable + Readable {}
+impl<T: Encodable + Readable> Record for T {}
 
 #[cfg(test)]
 mod tests {
-    use super::{Decodable, Encodable, Record};
+    use super::{Encodable, Readable, Record};
     use crate::Cursor;
     use crate::KnownChunk;
     use crate::{

@@ -5,12 +5,12 @@ use crate::ModelVersion;
 use crate::Tag;
 use crate::ValueError;
 
-use crate::{Cursor, TexturesChunk};
-use crate::{Decodable, Encodable, Readable, Writable};
+use crate::TexturesChunk;
+use crate::{Encodable, Readable, Writable};
 use std::borrow::Cow;
 
 use crate::FixedText;
-use crate::{DecodeError, Model};
+use crate::Model;
 
 /// Texture wrapping flags; unknown bits remain available through `bits`.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -111,12 +111,6 @@ impl<V: ModelVersion> Model<V> {
     /// chunks are removed after their records are replaced.
     pub fn set_textures(&mut self, textures: &[Texture]) {
         self.replace_chunk(TexturesChunk::new(textures.to_vec()));
-    }
-}
-
-impl Decodable for Texture {
-    fn decode_one(cursor: &mut Cursor<'_>) -> Result<Self, DecodeError> {
-        cursor.read()
     }
 }
 

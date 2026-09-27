@@ -9,8 +9,8 @@ use std::fmt::Debug;
 use std::marker::PhantomData;
 
 use crate::Cursor;
+use crate::Encodable;
 use crate::GeosetsChunk;
-use crate::{Decodable, Encodable};
 use std::borrow::Cow;
 
 use crate::FixedText;
@@ -678,8 +678,8 @@ impl<V: ModelVersion> Model<V> {
     }
 }
 
-impl<V: ModelVersion> Decodable for Geoset<V> {
-    fn decode_one(source: &mut Cursor<'_>) -> Result<Self, DecodeError> {
+impl<V: ModelVersion> Readable for Geoset<V> {
+    fn read_from(source: &mut Cursor<'_>) -> Result<Self, DecodeError> {
         let mut cursor = source.slice_u32_sized()?;
 
         let value = {

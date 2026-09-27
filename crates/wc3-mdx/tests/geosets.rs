@@ -1,5 +1,5 @@
 use wc3_mdx::geometry::{Geoset, GeosetExtent};
-use wc3_mdx::io::{Decodable, Encodable};
+use wc3_mdx::io::{Encodable, Readable};
 use wc3_mdx::{AnyVersionModel, Model, ModelVersion, V1100, V1200, V1800, V800, V900};
 
 fn sample_geoset() -> Geoset<V1800> {

@@ -18,7 +18,7 @@ use crate::KnownChunk;
 use crate::ValueError;
 
 use crate::{Cursor, PopcornEmittersChunk};
-use crate::{Decodable, Encodable};
+use crate::{Encodable, Readable};
 use std::borrow::Cow;
 
 use crate::FixedText;
@@ -155,8 +155,8 @@ impl<V: ModelVersion> Model<V> {
     }
 }
 
-impl Decodable for PopcornEmitter {
-    fn decode_one(source: &mut Cursor<'_>) -> Result<Self, DecodeError> {
+impl Readable for PopcornEmitter {
+    fn read_from(source: &mut Cursor<'_>) -> Result<Self, DecodeError> {
         let mut cursor = source.slice_u32_sized()?;
         let node = Node::decode_one(&mut cursor)?;
         let life_span = cursor.read()?;

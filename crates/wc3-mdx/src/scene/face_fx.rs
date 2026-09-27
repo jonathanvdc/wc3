@@ -4,12 +4,12 @@ use crate::Encoder;
 use crate::ModelVersion;
 use crate::ValueError;
 
-use crate::{Cursor, FaceFxChunk};
-use crate::{Decodable, Encodable, Readable, Writable};
+use crate::FaceFxChunk;
+use crate::{Encodable, Readable, Writable};
 use std::borrow::Cow;
 
 use crate::FixedText;
-use crate::{DecodeError, Model};
+use crate::Model;
 
 const NAME_SIZE: usize = 80;
 const PATH_SIZE: usize = 260;
@@ -63,12 +63,6 @@ impl<V: ModelVersion> Model<V> {
     /// Replaces face-animation records in the first `FAFX` chunk.
     pub fn set_face_fx(&mut self, entries: &[FaceFx]) {
         self.replace_chunk(FaceFxChunk::new(entries.to_vec()));
-    }
-}
-
-impl Decodable for FaceFx {
-    fn decode_one(cursor: &mut Cursor<'_>) -> Result<Self, DecodeError> {
-        cursor.read()
     }
 }
 

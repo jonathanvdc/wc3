@@ -6,7 +6,7 @@ use crate::ModelVersion;
 use crate::ValueError;
 
 use crate::{AttachmentVisibility, AttachmentsChunk, Cursor};
-use crate::{Decodable, Encodable};
+use crate::{Encodable, Readable};
 use std::borrow::Cow;
 
 use crate::FixedText;
@@ -91,8 +91,8 @@ impl<V: ModelVersion> Model<V> {
     }
 }
 
-impl Decodable for Attachment {
-    fn decode_one(source: &mut Cursor<'_>) -> Result<Self, DecodeError> {
+impl Readable for Attachment {
+    fn read_from(source: &mut Cursor<'_>) -> Result<Self, DecodeError> {
         let mut cursor = source.slice_u32_sized()?;
 
         let mut probe = cursor;

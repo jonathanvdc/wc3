@@ -19,7 +19,7 @@ use crate::{Color, LayerTextureId, ModelVersion, Tag, TrackTag, Version};
 use std::marker::PhantomData;
 
 use crate::{Cursor, MaterialsChunk};
-use crate::{Decodable, Encodable};
+use crate::{Encodable, Readable};
 use std::borrow::Cow;
 
 use crate::FixedText;
@@ -679,8 +679,8 @@ impl<V: ModelVersion> Model<V> {
     }
 }
 
-impl<V: ModelVersion> Decodable for Material<V> {
-    fn decode_one(source: &mut Cursor<'_>) -> Result<Self, DecodeError> {
+impl<V: ModelVersion> Readable for Material<V> {
+    fn read_from(source: &mut Cursor<'_>) -> Result<Self, DecodeError> {
         let mut cursor = source.slice_u32_sized()?;
         let value = {
             let priority_plane = cursor.read()?;
@@ -722,8 +722,8 @@ impl<V: ModelVersion> Encodable for Material<V> {
     }
 }
 
-impl<V: ModelVersion> Decodable for Layer<V> {
-    fn decode_one(source: &mut Cursor<'_>) -> Result<Self, DecodeError> {
+impl<V: ModelVersion> Readable for Layer<V> {
+    fn read_from(source: &mut Cursor<'_>) -> Result<Self, DecodeError> {
         let mut cursor = source.slice_u32_sized()?;
         let value = {
             let filter_mode = cursor.read()?;

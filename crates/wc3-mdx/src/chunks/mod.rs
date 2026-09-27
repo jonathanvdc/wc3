@@ -1,6 +1,6 @@
 //! Raw and typed top-level MDX chunks.
 use crate::EncodeError;
-use crate::{Cursor, Decodable, Encodable, Encoder, Tag};
+use crate::{Cursor, Encodable, Encoder, Readable, Tag};
 
 use crate::DecodeError;
 
@@ -45,8 +45,8 @@ pub trait KnownChunk: Chunk + Sized {
     fn decode_payload(cursor: &mut Cursor<'_>) -> Result<Self, DecodeError>;
 }
 
-impl<T: KnownChunk> Decodable for T {
-    fn decode_one(cursor: &mut Cursor<'_>) -> Result<Self, DecodeError> {
+impl<T: KnownChunk> Readable for T {
+    fn read_from(cursor: &mut Cursor<'_>) -> Result<Self, DecodeError> {
         let mut next = *cursor;
         let offset = next.absolute_position();
         if next.remaining().len() < 8 {
@@ -73,7 +73,7 @@ impl<T: KnownChunk> Decodable for T {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Decodable, Encodable};
+    use crate::{Encodable, Readable};
 
     #[test]
     fn chunks_encode_complete_headers_without_nesting() {

@@ -1,7 +1,7 @@
 //! Model accessors for pivot points.
 use crate::ModelVersion;
 use crate::{
-    Cursor, Decodable, DecodeError, Encodable, EncodeError, Encoder, Model, PivotPointsChunk, Vec3,
+    Cursor, DecodeError, Encodable, EncodeError, Encoder, Model, PivotPointsChunk, Readable, Vec3,
 };
 
 /// One model pivot point.
@@ -15,8 +15,8 @@ impl Encodable for PivotPoint {
     }
 }
 
-impl Decodable for PivotPoint {
-    fn decode_one(cursor: &mut Cursor<'_>) -> Result<Self, DecodeError> {
+impl Readable for PivotPoint {
+    fn read_from(cursor: &mut Cursor<'_>) -> Result<Self, DecodeError> {
         Ok(Self(cursor.read()?))
     }
 }

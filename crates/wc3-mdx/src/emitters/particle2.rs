@@ -19,8 +19,8 @@ use crate::KnownChunk;
 use crate::{Color, Vec3};
 
 use crate::{Cursor, ParticleEmitters2Chunk};
-use crate::{Decodable, Encodable, Readable, Writable};
 use crate::{DecodeError, Model, Node};
+use crate::{Encodable, Readable, Writable};
 
 pub(crate) const FIXED_SIZE: usize = 171;
 
@@ -166,8 +166,8 @@ impl<V: ModelVersion> Model<V> {
     }
 }
 
-impl Decodable for ParticleEmitter2 {
-    fn decode_one(source: &mut Cursor<'_>) -> Result<Self, DecodeError> {
+impl Readable for ParticleEmitter2 {
+    fn read_from(source: &mut Cursor<'_>) -> Result<Self, DecodeError> {
         let mut cursor = source.slice_u32_sized()?;
         let node = Node::decode_one(&mut cursor)?;
         let mut fixed = cursor.slice(FIXED_SIZE)?;

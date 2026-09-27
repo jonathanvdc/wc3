@@ -1,6 +1,6 @@
 use wc3_mdx::chunks::{BindPoseChunk, ModelChunk, RawChunk};
 use wc3_mdx::geometry::BindPoseMatrix;
-use wc3_mdx::io::{Decodable, Encodable};
+use wc3_mdx::io::{Encodable, Readable};
 use wc3_mdx::Model;
 
 #[test]

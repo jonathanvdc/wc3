@@ -5,12 +5,12 @@ use crate::ModelVersion;
 use crate::ValueError;
 use crate::Vec3;
 
-use crate::{Cursor, SequencesChunk};
-use crate::{Decodable, Encodable, Readable, Writable};
+use crate::SequencesChunk;
+use crate::{Encodable, Readable, Writable};
 use std::borrow::Cow;
 
 use crate::FixedText;
-use crate::{DecodeError, Model};
+use crate::Model;
 
 /// Sequence playback flags, with unrecognized bits retained.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -140,12 +140,6 @@ impl<V: ModelVersion> Model<V> {
     /// Additional `SEQS` chunks are removed after their records are replaced.
     pub fn set_sequences(&mut self, sequences: &[Sequence]) {
         self.replace_chunk(SequencesChunk::new(sequences.to_vec()));
-    }
-}
-
-impl Decodable for Sequence {
-    fn decode_one(cursor: &mut Cursor<'_>) -> Result<Self, DecodeError> {
-        cursor.read()
     }
 }
 

@@ -14,7 +14,7 @@ use crate::KnownChunk;
 use crate::ValueError;
 
 use crate::{BonesChunk, Cursor, HelpersChunk};
-use crate::{Decodable, Encodable};
+use crate::{Encodable, Readable};
 use std::borrow::Cow;
 
 use crate::FixedText;
@@ -205,8 +205,8 @@ impl<V: ModelVersion> Model<V> {
     }
 }
 
-impl Decodable for Node {
-    fn decode_one(source: &mut Cursor<'_>) -> Result<Self, DecodeError> {
+impl Readable for Node {
+    fn read_from(source: &mut Cursor<'_>) -> Result<Self, DecodeError> {
         let mut cursor = source.slice_u32_sized()?;
         let name = cursor.read()?;
         let object_id = cursor.read()?;
@@ -242,8 +242,8 @@ impl Encodable for Node {
     }
 }
 
-impl Decodable for Bone {
-    fn decode_one(cursor: &mut Cursor<'_>) -> Result<Self, DecodeError> {
+impl Readable for Bone {
+    fn read_from(cursor: &mut Cursor<'_>) -> Result<Self, DecodeError> {
         let node = Node::decode_one(cursor)?;
         let geoset_id = cursor.read()?;
         let geoset_animation_id = cursor.read()?;

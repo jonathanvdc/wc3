@@ -13,8 +13,8 @@ use crate::Encoder;
 use crate::KnownChunk;
 
 use crate::{Cursor, TextureAnimationsChunk};
-use crate::{Decodable, Encodable};
 use crate::{DecodeError, Model};
+use crate::{Encodable, Readable};
 
 /// A texture animation containing translation, rotation, and scaling tracks.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -51,8 +51,8 @@ impl<V: ModelVersion> Model<V> {
     }
 }
 
-impl Decodable for TextureAnimation {
-    fn decode_one(source: &mut Cursor<'_>) -> Result<Self, DecodeError> {
+impl Readable for TextureAnimation {
+    fn read_from(source: &mut Cursor<'_>) -> Result<Self, DecodeError> {
         let mut cursor = source.slice_u32_sized()?;
         let mut tracks = Vec::new();
         while !cursor.remaining().is_empty() {

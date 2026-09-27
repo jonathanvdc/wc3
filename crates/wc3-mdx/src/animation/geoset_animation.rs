@@ -13,8 +13,8 @@ use crate::Encoder;
 use crate::KnownChunk;
 
 use crate::{Cursor, GeosetAnimationsChunk};
-use crate::{Decodable, Encodable};
 use crate::{DecodeError, Model};
+use crate::{Encodable, Readable};
 
 /// Geoset animation rendering flags, retaining unknown bits.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -125,8 +125,8 @@ impl<V: ModelVersion> Model<V> {
     }
 }
 
-impl Decodable for GeosetAnimation {
-    fn decode_one(source: &mut Cursor<'_>) -> Result<Self, DecodeError> {
+impl Readable for GeosetAnimation {
+    fn read_from(source: &mut Cursor<'_>) -> Result<Self, DecodeError> {
         let mut cursor = source.slice_u32_sized()?;
         let alpha = cursor.read()?;
         let raw_flags = cursor.read()?;

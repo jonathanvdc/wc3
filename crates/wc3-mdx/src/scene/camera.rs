@@ -16,7 +16,7 @@ use crate::ValueError;
 use crate::Vec3;
 
 use crate::{CamerasChunk, Cursor};
-use crate::{Decodable, Encodable};
+use crate::{Encodable, Readable};
 use std::borrow::Cow;
 
 use crate::FixedText;
@@ -201,8 +201,8 @@ impl<V: ModelVersion> Model<V> {
     }
 }
 
-impl<V: ModelVersion> Decodable for Camera<V> {
-    fn decode_one(source: &mut Cursor<'_>) -> Result<Self, DecodeError> {
+impl<V: ModelVersion> Readable for Camera<V> {
+    fn read_from(source: &mut Cursor<'_>) -> Result<Self, DecodeError> {
         let start = source.absolute_position();
         let size_word: u32 = source.read()?;
         let length = (size_word & 0x00ff_ffff) as usize;

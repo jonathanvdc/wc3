@@ -3,7 +3,7 @@ use crate::EncodeError;
 use crate::Encoder;
 use crate::Tag;
 
-use crate::{Chunk, Decodable, DecodeError, Encodable, KnownChunk};
+use crate::{Chunk, DecodeError, Encodable, KnownChunk, Readable};
 use crate::{Cursor, ModelInfo};
 
 /// A complete `MODL` chunk, including bytes after the standard record.

@@ -1,6 +1,6 @@
 use wc3_mdx::chunks::{ModelChunk, RawChunk, UnknownChunk};
 use wc3_mdx::geometry::Geoset;
-use wc3_mdx::io::{Decodable, DecodeError, Encodable};
+use wc3_mdx::io::{DecodeError, Encodable, Readable};
 use wc3_mdx::materials::{Layer, Material};
 use wc3_mdx::scene::{Camera, Light, Node};
 use wc3_mdx::{AnyVersionModel, Model, V1000, V1800, V800, V900};

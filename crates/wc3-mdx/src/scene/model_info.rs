@@ -6,7 +6,7 @@ use crate::ValueError;
 use crate::{Tag, Vec3};
 
 use crate::{Cursor, ModelInfoChunk};
-use crate::{Decodable, Encodable};
+use crate::{Encodable, Readable};
 use std::borrow::Cow;
 
 use crate::FixedText;
@@ -113,8 +113,8 @@ impl<V: ModelVersion> Model<V> {
     }
 }
 
-impl Decodable for ModelInfo {
-    fn decode_one(cursor: &mut Cursor<'_>) -> Result<Self, DecodeError> {
+impl Readable for ModelInfo {
+    fn read_from(cursor: &mut Cursor<'_>) -> Result<Self, DecodeError> {
         let size = cursor.remaining().len();
         if size < SIZE {
             return Err(DecodeError::MalformedChunk {

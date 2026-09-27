@@ -1,7 +1,7 @@
 //! Reforged bind-pose matrices in `BPOS` chunks.
 use crate::{
-    BindPoseMatrix, Chunk, CollectionChunk, Cursor, Decodable, DecodeError, Encodable, EncodeError,
-    Encoder, KnownChunk, Tag,
+    BindPoseMatrix, Chunk, CollectionChunk, Cursor, DecodeError, Encodable, EncodeError, Encoder,
+    KnownChunk, Readable, Tag,
 };
 
 const MATRIX_SIZE: usize = 48;
@@ -99,7 +99,7 @@ impl KnownChunk for BindPoseChunk {
         }
         let mut records = Vec::with_capacity(count);
         for _ in 0..count {
-            records.push(BindPoseMatrix::decode_one(cursor)?);
+            records.push(cursor.read()?);
         }
         Ok(Self { records })
     }

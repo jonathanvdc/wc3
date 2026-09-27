@@ -73,7 +73,7 @@ impl<V: ModelVersion> KnownChunk for VersionChunk<V> {
 #[cfg(test)]
 mod version_chunk_tests {
     use super::*;
-    use crate::{Decodable, Encodable};
+    use crate::{Encodable, Readable};
 
     #[test]
     fn preserves_version_extension_bytes() {

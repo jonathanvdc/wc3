@@ -6,8 +6,8 @@ use crate::ModelVersion;
 use crate::Tag;
 
 use crate::{Cursor, EventObjectsChunk};
-use crate::{Decodable, Encodable};
 use crate::{DecodeError, Model, Node};
+use crate::{Encodable, Readable};
 
 const TRACK_TAG: Tag = *b"KEVT";
 
@@ -72,8 +72,8 @@ impl<V: ModelVersion> Model<V> {
     }
 }
 
-impl Decodable for EventObject {
-    fn decode_one(cursor: &mut Cursor<'_>) -> Result<Self, DecodeError> {
+impl Readable for EventObject {
+    fn read_from(cursor: &mut Cursor<'_>) -> Result<Self, DecodeError> {
         let mut probe = *cursor;
         let node_size = probe.read::<u32>()? as usize;
         let node = Node::decode(cursor.read_exact(node_size)?)?;

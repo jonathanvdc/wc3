@@ -17,8 +17,8 @@ use crate::Encoder;
 use crate::KnownChunk;
 
 use crate::{Cursor, RibbonEmittersChunk};
-use crate::{Decodable, Encodable, Readable, Writable};
 use crate::{DecodeError, Model, Node};
+use crate::{Encodable, Readable, Writable};
 
 pub(crate) const FIXED_SIZE: usize = 52;
 
@@ -99,8 +99,8 @@ impl<V: ModelVersion> Model<V> {
     }
 }
 
-impl Decodable for RibbonEmitter {
-    fn decode_one(source: &mut Cursor<'_>) -> Result<Self, DecodeError> {
+impl Readable for RibbonEmitter {
+    fn read_from(source: &mut Cursor<'_>) -> Result<Self, DecodeError> {
         let mut cursor = source.slice_u32_sized()?;
         let node = Node::decode_one(&mut cursor)?;
         let mut fixed = cursor.slice(FIXED_SIZE)?;

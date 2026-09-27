@@ -7,8 +7,8 @@ use crate::Vec3;
 
 use crate::CollisionShapesChunk;
 use crate::Cursor;
-use crate::{Decodable, Encodable};
 use crate::{DecodeError, Model, Node};
+use crate::{Encodable, Readable};
 
 /// Warcraft III collision primitive type.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -140,8 +140,8 @@ impl<V: ModelVersion> Model<V> {
     }
 }
 
-impl Decodable for CollisionShape {
-    fn decode_one(cursor: &mut Cursor<'_>) -> Result<Self, DecodeError> {
+impl Readable for CollisionShape {
+    fn read_from(cursor: &mut Cursor<'_>) -> Result<Self, DecodeError> {
         let node = Node::decode_one(cursor)?;
         let kind_offset = cursor.absolute_position();
         let kind = cursor.read::<u32>()?;

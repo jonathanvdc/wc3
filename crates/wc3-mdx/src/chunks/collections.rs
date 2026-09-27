@@ -9,7 +9,7 @@ use crate::{
     Material, Node, ParticleEmitter, ParticleEmitter2, PopcornEmitter, RibbonEmitter, Sequence,
     Texture, TextureAnimation,
 };
-use crate::{Chunk, Cursor, Decodable, DecodeError, Encodable, KnownChunk, Record};
+use crate::{Chunk, Cursor, DecodeError, Encodable, KnownChunk, Readable, Record};
 use crate::{GlobalSequence, PivotPoint};
 
 /// A complete chunk made of consecutive records of one type.

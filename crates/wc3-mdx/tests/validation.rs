@@ -1,7 +1,7 @@
 use wc3_mdx::chunks::{ModelChunk, RawChunk, UnknownChunk, VersionChunk};
 use wc3_mdx::emitters::RibbonEmitter;
 use wc3_mdx::geometry::Geoset;
-use wc3_mdx::io::{Decodable, DecodeError, Encodable};
+use wc3_mdx::io::{DecodeError, Encodable, Readable};
 use wc3_mdx::materials::Layer;
 use wc3_mdx::scene::Node;
 use wc3_mdx::{AnyVersionModel, Model, V1800, V800};

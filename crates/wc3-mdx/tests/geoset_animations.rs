@@ -1,6 +1,6 @@
 use wc3_mdx::animation::GeosetColor;
 use wc3_mdx::animation::{AnimationTrack, GeosetAnimation, GeosetAnimationFlags, ValueKeyframe};
-use wc3_mdx::io::{Decodable, Encodable};
+use wc3_mdx::io::{Encodable, Readable};
 use wc3_mdx::Model;
 
 #[test]
