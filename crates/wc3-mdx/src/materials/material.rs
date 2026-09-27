@@ -759,16 +759,12 @@ impl<V: ModelVersion> Readable for Layer<V> {
 impl<V: ModelVersion> Writable for Layer<V> {
     fn write_to(&self, bytes: &mut Encoder<'_>) -> Result<(), EncodeError> {
         let marker = bytes.begin_sized();
-        for word in [
-            self.filter_mode,
-            self.shading_flags,
-            self.texture_id,
-            self.texture_animation_id,
-            self.coordinate_id,
-        ] {
-            bytes.write(&(word))?;
-        }
-        bytes.write(&(self.alpha))?;
+        bytes.write(&self.filter_mode)?;
+        bytes.write(&self.shading_flags)?;
+        bytes.write(&self.texture_id)?;
+        bytes.write(&self.texture_animation_id)?;
+        bytes.write(&self.coordinate_id)?;
+        bytes.write(&self.alpha)?;
         self.extensions.encode(bytes)?;
         for track in &self.tracks {
             bytes.write(track)?;
