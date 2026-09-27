@@ -1,7 +1,7 @@
 mod node;
 pub use node::{Bone, Node, NodeFlags};
 mod camera;
-pub use camera::{Camera, CameraLayout};
+pub use camera::{Camera, CameraLayout, CameraVariant};
 mod light;
 pub use light::{Light, LightLayout};
 mod attachment;

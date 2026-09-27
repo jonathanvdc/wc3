@@ -1,6 +1,5 @@
 //! Typed camera records in `CAMS` chunks.
 use crate::ModelVersion;
-use std::fmt::Debug;
 crate::animation::track_group! {
     pub enum CameraTrack {
         Translation: CameraTranslation,
@@ -18,6 +17,7 @@ use crate::Vec3;
 use crate::{CamerasChunk, Cursor};
 use crate::{Readable, Writable};
 use std::borrow::Cow;
+use std::marker::PhantomData;
 
 use crate::FixedText;
 use crate::{DecodeError, Model};
@@ -25,84 +25,66 @@ use crate::{DecodeError, Model};
 const NAME_SIZE: usize = 80;
 const MAX_RECORD_SIZE: usize = 0x00ff_ffff;
 
-/// The high-byte record flags used by a camera layout.
-pub trait CameraFlags: Default + Clone + Debug + PartialEq {
-    fn from_bits(bits: u8) -> Self;
-    fn bits(&self) -> u8;
-    fn set_bits(&mut self, bits: u8);
+/// Camera record layout selected by the high byte of its size word.
+/// Variants 1 and 2 contain twelve otherwise uninterpreted bytes.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum CameraVariant {
+    Variant0,
+    Variant1([u8; 12]),
+    Variant2([u8; 12]),
+    Variant3,
+    Unknown(u8),
 }
 
-#[derive(Clone, Debug, Default, PartialEq)]
-pub struct ClassicCameraFlags(u8);
-
-impl CameraFlags for ClassicCameraFlags {
-    fn from_bits(bits: u8) -> Self {
-        Self(bits)
-    }
-    fn bits(&self) -> u8 {
-        self.0
-    }
-    fn set_bits(&mut self, bits: u8) {
-        self.0 = bits;
-    }
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct ModernCameraFlags(u8);
-
-impl Default for ModernCameraFlags {
-    fn default() -> Self {
-        Self(3)
-    }
-}
-
-impl CameraFlags for ModernCameraFlags {
-    fn from_bits(bits: u8) -> Self {
-        Self(bits)
-    }
-    fn bits(&self) -> u8 {
-        self.0
-    }
-    fn set_bits(&mut self, bits: u8) {
-        self.0 = bits;
+impl CameraVariant {
+    /// Returns the exact high-byte value stored in the record.
+    pub const fn value(self) -> u8 {
+        match self {
+            Self::Variant0 => 0,
+            Self::Variant1(_) => 1,
+            Self::Variant2(_) => 2,
+            Self::Variant3 => 3,
+            Self::Unknown(value) => value,
+        }
     }
 }
 
 pub trait CameraLayout {
-    type Flags: CameraFlags;
+    const DEFAULT_VARIANT: CameraVariant;
 }
 
 use crate::{V1000, V1100, V1200, V1800, V800, V900};
 impl CameraLayout for V800 {
-    type Flags = ClassicCameraFlags;
+    const DEFAULT_VARIANT: CameraVariant = CameraVariant::Variant0;
 }
 impl CameraLayout for V900 {
-    type Flags = ClassicCameraFlags;
+    const DEFAULT_VARIANT: CameraVariant = CameraVariant::Variant0;
 }
 impl CameraLayout for V1000 {
-    type Flags = ClassicCameraFlags;
+    const DEFAULT_VARIANT: CameraVariant = CameraVariant::Variant0;
 }
 impl CameraLayout for V1100 {
-    type Flags = ClassicCameraFlags;
+    const DEFAULT_VARIANT: CameraVariant = CameraVariant::Variant0;
 }
 impl CameraLayout for V1200 {
-    type Flags = ModernCameraFlags;
+    const DEFAULT_VARIANT: CameraVariant = CameraVariant::Variant3;
 }
 impl CameraLayout for V1800 {
-    type Flags = ModernCameraFlags;
+    const DEFAULT_VARIANT: CameraVariant = CameraVariant::Variant3;
 }
 
 /// A camera with decoded fixed fields and animation tracks.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Camera<V: ModelVersion> {
     name: FixedText<NAME_SIZE>,
-    record_flags: V::Flags,
+    variant: CameraVariant,
     position: Vec3,
     field_of_view: f32,
     far_clip: f32,
     near_clip: f32,
     target_position: Vec3,
     tracks: Vec<CameraTrack>,
+    version: PhantomData<V>,
 }
 
 impl<V: ModelVersion> Camera<V> {
@@ -110,25 +92,26 @@ impl<V: ModelVersion> Camera<V> {
     pub fn new(name: &str) -> Result<Self, ValueError> {
         let mut camera = Self {
             name: FixedText::default(),
-            record_flags: V::Flags::default(),
+            variant: V::DEFAULT_VARIANT,
             position: [0.0; 3],
             field_of_view: 0.0,
             far_clip: 0.0,
             near_clip: 0.0,
             target_position: [0.0; 3],
             tracks: Vec::new(),
+            version: PhantomData,
         };
         camera.set_name(name)?;
         Ok(camera)
     }
 
-    /// Returns the upper-byte record flags.
-    pub fn record_flags(&self) -> u8 {
-        self.record_flags.bits()
+    /// Returns the record layout variant and any associated bytes.
+    pub fn variant(&self) -> CameraVariant {
+        self.variant
     }
-    /// Changes the upper-byte record flags.
-    pub fn set_record_flags(&mut self, flags: u8) {
-        self.record_flags.set_bits(flags);
+    /// Changes the record layout variant.
+    pub fn set_variant(&mut self, variant: CameraVariant) {
+        self.variant = variant;
     }
     /// Returns the name up to its first NUL.
     pub fn name(&self) -> Cow<'_, str> {
@@ -217,6 +200,13 @@ impl<V: ModelVersion> Readable for Camera<V> {
         let field_of_view = cursor.read()?;
         let far_clip = cursor.read()?;
         let near_clip = cursor.read()?;
+        let variant = match (size_word >> 24) as u8 {
+            0 => CameraVariant::Variant0,
+            1 => CameraVariant::Variant1(cursor.read()?),
+            2 => CameraVariant::Variant2(cursor.read()?),
+            3 => CameraVariant::Variant3,
+            value => CameraVariant::Unknown(value),
+        };
         let target_position = cursor.read()?;
         let mut tracks = Vec::new();
         while !cursor.remaining().is_empty() {
@@ -225,13 +215,14 @@ impl<V: ModelVersion> Readable for Camera<V> {
         cursor.finish()?;
         Ok(Self {
             name,
-            record_flags: V::Flags::from_bits((size_word >> 24) as u8),
+            variant,
             position,
             field_of_view,
             far_clip,
             near_clip,
             target_position,
             tracks,
+            version: PhantomData,
         })
     }
 }
@@ -245,6 +236,12 @@ impl<V: ModelVersion> Writable for Camera<V> {
         bytes.write(&self.field_of_view)?;
         bytes.write(&self.far_clip)?;
         bytes.write(&self.near_clip)?;
+        match self.variant {
+            CameraVariant::Variant1(extra) | CameraVariant::Variant2(extra) => {
+                bytes.write(&extra)?;
+            }
+            _ => {}
+        }
         bytes.write(&self.target_position)?;
         for track in &self.tracks {
             bytes.write(track)?;
@@ -258,7 +255,7 @@ impl<V: ModelVersion> Writable for Camera<V> {
         bytes.finish_sized_with_flags(
             marker,
             CamerasChunk::<V>::TAG,
-            u32::from(self.record_flags.bits()) << 24,
+            u32::from(self.variant.value()) << 24,
         )?;
         Ok(())
     }

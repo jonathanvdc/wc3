@@ -2,7 +2,7 @@ use wc3_mdx::chunks::{ModelChunk, RawChunk, UnknownChunk};
 use wc3_mdx::geometry::Geoset;
 use wc3_mdx::io::{DecodeError, Readable, Writable};
 use wc3_mdx::materials::{Layer, Material};
-use wc3_mdx::scene::{Camera, Light, Node};
+use wc3_mdx::scene::{Camera, CameraVariant, Light, Node};
 use wc3_mdx::{AnyVersionModel, Model, V1000, V1800, V800, V900};
 
 #[test]
@@ -21,7 +21,7 @@ fn version_is_shared_by_model_and_nested_records() {
     assert_eq!(parsed.materials().len(), 1);
     assert_eq!(parsed.geosets().len(), 1);
     assert_eq!(parsed.lights().len(), 1);
-    assert_eq!(parsed.cameras()[0].record_flags(), 3);
+    assert_eq!(parsed.cameras()[0].variant(), CameraVariant::Variant3);
     assert!(matches!(
         AnyVersionModel::decode(&bytes, 800),
         Ok(AnyVersionModel::V1800(_))

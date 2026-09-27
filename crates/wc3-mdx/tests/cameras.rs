@@ -1,7 +1,7 @@
 use wc3_mdx::animation::CameraRotation;
 use wc3_mdx::animation::{AnimationTrack, ValueKeyframe};
 use wc3_mdx::io::{Readable, Writable};
-use wc3_mdx::scene::Camera;
+use wc3_mdx::scene::{Camera, CameraVariant};
 use wc3_mdx::Model;
 
 #[test]
@@ -36,14 +36,37 @@ fn camera_fields_and_tracks_round_trip() {
 }
 
 #[test]
-fn newer_camera_size_flags_round_trip() {
+fn newer_camera_variant_round_trip() {
     let mut camera = Camera::<wc3_mdx::V1800>::new("Portrait").unwrap();
-    assert_eq!(camera.record_flags(), 3);
+    assert_eq!(camera.variant(), CameraVariant::Variant3);
     camera.set_field_of_view(0.8);
     let mut model = Model::<wc3_mdx::V1800>::new();
     model.set_cameras(&[camera]);
     let bytes = model.encode().unwrap();
     let parsed = Model::<wc3_mdx::V1800>::decode(&bytes).unwrap();
-    assert_eq!(parsed.cameras()[0].record_flags(), 3);
+    assert_eq!(parsed.cameras()[0].variant(), CameraVariant::Variant3);
     assert_eq!(parsed.encode().unwrap(), bytes);
+}
+
+#[test]
+fn camera_variants_round_trip() {
+    let variants = [
+        CameraVariant::Variant0,
+        CameraVariant::Variant1([1; 12]),
+        CameraVariant::Variant2([2; 12]),
+        CameraVariant::Variant3,
+        CameraVariant::Unknown(0x80),
+    ];
+    for variant in variants {
+        let mut camera = Camera::<wc3_mdx::V1200>::new("Portrait").unwrap();
+        camera.set_variant(variant);
+        camera.set_target_position([4.0, 5.0, 6.0]);
+        let mut model = Model::<wc3_mdx::V1200>::new();
+        model.set_cameras(&[camera]);
+        let bytes = model.encode().unwrap();
+        let parsed = Model::<wc3_mdx::V1200>::decode(&bytes).unwrap();
+        assert_eq!(parsed.cameras()[0].variant(), variant);
+        assert_eq!(parsed.cameras()[0].target_position(), [4.0, 5.0, 6.0]);
+        assert_eq!(parsed.encode().unwrap(), bytes);
+    }
 }
