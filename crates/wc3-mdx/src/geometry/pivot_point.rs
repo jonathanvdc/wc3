@@ -1,4 +1,5 @@
 //! Model accessors for pivot points.
+use crate::ModelVersion;
 use crate::{
     Cursor, Decodable, DecodeError, Encodable, EncodeError, Encoder, Model, PivotPointsChunk, Vec3,
     Version,
@@ -21,7 +22,7 @@ impl Decodable for PivotPoint {
     }
 }
 
-impl Model {
+impl<V: ModelVersion> Model<V> {
     /// Returns XYZ pivot points from every `PIVT` chunk in file order.
     pub fn pivot_points(&self) -> Vec<Vec3> {
         self.collect_chunk_records::<PivotPointsChunk>()

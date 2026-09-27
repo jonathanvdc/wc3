@@ -1,4 +1,6 @@
 //! Typed camera records in `CAMS` chunks.
+use crate::ModelVersion;
+use std::fmt::Debug;
 crate::animation::track_group! {
     pub enum CameraTrack {
         Translation: CameraTranslation,
@@ -11,7 +13,7 @@ use crate::EncodeError;
 use crate::Encoder;
 use crate::KnownChunk;
 use crate::ValueError;
-use crate::{Vec3, Version};
+use crate::Vec3;
 
 use crate::{CamerasChunk, Cursor};
 use crate::{Decodable, Encodable};
@@ -23,11 +25,79 @@ use crate::{DecodeError, Model};
 const NAME_SIZE: usize = 80;
 const MAX_RECORD_SIZE: usize = 0x00ff_ffff;
 
+/// The high-byte record flags used by a camera layout.
+pub trait CameraFlags: Clone + Debug + PartialEq {
+    fn empty() -> Self;
+    fn from_bits(bits: u8) -> Self;
+    fn bits(&self) -> u8;
+    fn set_bits(&mut self, bits: u8);
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct ClassicCameraFlags(u8);
+
+impl CameraFlags for ClassicCameraFlags {
+    fn empty() -> Self {
+        Self(0)
+    }
+    fn from_bits(bits: u8) -> Self {
+        Self(bits)
+    }
+    fn bits(&self) -> u8 {
+        self.0
+    }
+    fn set_bits(&mut self, bits: u8) {
+        self.0 = bits;
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct ModernCameraFlags(u8);
+
+impl CameraFlags for ModernCameraFlags {
+    fn empty() -> Self {
+        Self(3)
+    }
+    fn from_bits(bits: u8) -> Self {
+        Self(bits)
+    }
+    fn bits(&self) -> u8 {
+        self.0
+    }
+    fn set_bits(&mut self, bits: u8) {
+        self.0 = bits;
+    }
+}
+
+pub trait CameraLayout {
+    type Flags: CameraFlags;
+}
+
+use crate::{V1000, V1100, V1200, V1800, V800, V900};
+impl CameraLayout for V800 {
+    type Flags = ClassicCameraFlags;
+}
+impl CameraLayout for V900 {
+    type Flags = ClassicCameraFlags;
+}
+impl CameraLayout for V1000 {
+    type Flags = ClassicCameraFlags;
+}
+impl CameraLayout for V1100 {
+    type Flags = ClassicCameraFlags;
+}
+impl CameraLayout for V1200 {
+    type Flags = ModernCameraFlags;
+}
+impl CameraLayout for V1800 {
+    type Flags = ModernCameraFlags;
+}
+
 /// A camera with decoded fixed fields and animation tracks.
 #[derive(Clone, Debug, PartialEq)]
-pub struct Camera {
+pub struct Camera<V: ModelVersion> {
     name: FixedText<NAME_SIZE>,
-    record_flags: u8,
+    record_flags: V::Flags,
     position: Vec3,
     field_of_view: f32,
     far_clip: f32,
@@ -36,12 +106,12 @@ pub struct Camera {
     tracks: Vec<CameraTrack>,
 }
 
-impl Camera {
+impl<V: ModelVersion> Camera<V> {
     /// Creates a camera with zeroed position and target fields.
     pub fn new(name: &str) -> Result<Self, ValueError> {
         let mut camera = Self {
             name: FixedText::default(),
-            record_flags: 0,
+            record_flags: V::Flags::empty(),
             position: [0.0; 3],
             field_of_view: 0.0,
             far_clip: 0.0,
@@ -53,22 +123,13 @@ impl Camera {
         Ok(camera)
     }
 
-    /// Creates a camera with the record flags used by newer models.
-    pub fn new_for_version(name: &str, version: Version) -> Result<Self, ValueError> {
-        let mut camera = Self::new(name)?;
-        if version >= 1200 {
-            camera.record_flags = 3;
-        }
-        Ok(camera)
-    }
-
     /// Returns the upper-byte record flags.
     pub fn record_flags(&self) -> u8 {
-        self.record_flags
+        self.record_flags.bits()
     }
     /// Changes the upper-byte record flags.
     pub fn set_record_flags(&mut self, flags: u8) {
-        self.record_flags = flags;
+        self.record_flags.set_bits(flags);
     }
     /// Returns the name up to its first NUL.
     pub fn name(&self) -> Cow<'_, str> {
@@ -128,19 +189,19 @@ impl Camera {
     }
 }
 
-impl Model {
+impl<V: ModelVersion> Model<V> {
     /// Decodes all camera records in `CAMS` chunks.
-    pub fn cameras(&self) -> Vec<Camera> {
-        self.collect_chunk_records::<CamerasChunk>()
+    pub fn cameras(&self) -> Vec<Camera<V>> {
+        self.collect_chunk_records::<CamerasChunk<V>>()
     }
 
     /// Replaces cameras in the first `CAMS` chunk.
-    pub fn set_cameras(&mut self, cameras: &[Camera]) {
+    pub fn set_cameras(&mut self, cameras: &[Camera<V>]) {
         self.replace_chunk(CamerasChunk::new(cameras.to_vec()));
     }
 }
 
-impl Decodable for Camera {
+impl<V: ModelVersion> Decodable for Camera<V> {
     fn decode_one(source: &mut Cursor<'_>, _version: u32) -> Result<Self, DecodeError> {
         let start = source.absolute_position();
         let size_word: u32 = source.read()?;
@@ -165,7 +226,7 @@ impl Decodable for Camera {
         cursor.finish()?;
         Ok(Self {
             name,
-            record_flags: (size_word >> 24) as u8,
+            record_flags: V::Flags::from_bits((size_word >> 24) as u8),
             position,
             field_of_view,
             far_clip,
@@ -176,7 +237,7 @@ impl Decodable for Camera {
     }
 }
 
-impl Encodable for Camera {
+impl<V: ModelVersion> Encodable for Camera<V> {
     fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), EncodeError> {
         let start = bytes.position();
         let marker = bytes.begin_sized();
@@ -191,14 +252,14 @@ impl Encodable for Camera {
         }
         if bytes.position() - start > MAX_RECORD_SIZE {
             return Err(EncodeError::ChunkTooLarge {
-                tag: CamerasChunk::TAG,
+                tag: CamerasChunk::<V>::TAG,
                 size: bytes.position() - start,
             });
         }
         bytes.finish_sized_with_flags(
             marker,
-            CamerasChunk::TAG,
-            u32::from(self.record_flags) << 24,
+            CamerasChunk::<V>::TAG,
+            u32::from(self.record_flags.bits()) << 24,
         )?;
         Ok(())
     }

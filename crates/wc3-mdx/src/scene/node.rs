@@ -1,4 +1,5 @@
 //! Shared node headers used by bones and helpers.
+use crate::ModelVersion;
 crate::animation::track_group! {
     pub enum NodeTrack {
         Translation: NodeTranslation,
@@ -182,7 +183,7 @@ impl Bone {
     }
 }
 
-impl Model {
+impl<V: ModelVersion> Model<V> {
     /// Decodes every bone in `BONE` chunks.
     pub fn bones(&self) -> Vec<Bone> {
         self.collect_chunk_records::<BonesChunk>()

@@ -24,9 +24,9 @@ fn classic_particle_emitter_round_trip() {
     .unwrap()
     .into();
     emitter.set_tracks(std::slice::from_ref(&track));
-    let mut model = Model::new(800);
+    let mut model = Model::<wc3_mdx::V800>::new();
     model.set_particle_emitters(&[emitter]);
-    let parsed = Model::decode(&model.encode().unwrap(), 800).unwrap();
+    let parsed = Model::<wc3_mdx::V800>::decode(&model.encode().unwrap(), 800).unwrap();
     let emitter = &parsed.particle_emitters()[0];
     assert_eq!(emitter.node().name(), "Smoke");
     assert_eq!(emitter.path(), "smoke.mdl");

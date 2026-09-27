@@ -1,4 +1,6 @@
 //! Light records in `LITE` chunks.
+use crate::ModelVersion;
+use std::fmt::Debug;
 crate::animation::track_group! {
     pub enum LightTrack {
         AttenuationStart: LightAttenuationStart,
@@ -11,22 +13,91 @@ crate::animation::track_group! {
     }
 }
 
+use crate::Color;
 use crate::EncodeError;
 use crate::Encoder;
 use crate::KnownChunk;
 use crate::ValueError;
-use crate::{Color, Version};
+use std::marker::PhantomData;
 
 use crate::{Cursor, LightsChunk};
 use crate::{Decodable, Encodable};
 use crate::{DecodeError, Model, Node};
 
-const FIXED_SIZE: usize = 44;
-const EXTENDED_SIZE: usize = 72;
+/// Extra fixed words selected by the light record's version.
+pub trait LightExtension: Clone + Debug + PartialEq {
+    fn empty() -> Self;
+    fn decode(cursor: &mut Cursor<'_>) -> Result<Self, DecodeError>;
+    fn encode(&self, output: &mut Encoder<'_>);
+    fn words(&self) -> Option<[u32; 7]> {
+        None
+    }
+    fn words_mut(&mut self) -> Option<&mut [u32; 7]> {
+        None
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct ClassicLightExtension;
+
+impl LightExtension for ClassicLightExtension {
+    fn empty() -> Self {
+        Self
+    }
+    fn decode(_: &mut Cursor<'_>) -> Result<Self, DecodeError> {
+        Ok(Self)
+    }
+    fn encode(&self, _: &mut Encoder<'_>) {}
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct ModernLightExtension([u32; 7]);
+
+impl LightExtension for ModernLightExtension {
+    fn empty() -> Self {
+        Self([0; 7])
+    }
+    fn decode(cursor: &mut Cursor<'_>) -> Result<Self, DecodeError> {
+        Ok(Self(cursor.read()?))
+    }
+    fn encode(&self, output: &mut Encoder<'_>) {
+        output.write(self.0);
+    }
+    fn words(&self) -> Option<[u32; 7]> {
+        Some(self.0)
+    }
+    fn words_mut(&mut self) -> Option<&mut [u32; 7]> {
+        Some(&mut self.0)
+    }
+}
+
+pub trait LightLayout {
+    type Extension: LightExtension;
+}
+
+use crate::{V1000, V1100, V1200, V1800, V800, V900};
+impl LightLayout for V800 {
+    type Extension = ClassicLightExtension;
+}
+impl LightLayout for V900 {
+    type Extension = ClassicLightExtension;
+}
+impl LightLayout for V1000 {
+    type Extension = ClassicLightExtension;
+}
+impl LightLayout for V1100 {
+    type Extension = ClassicLightExtension;
+}
+impl LightLayout for V1200 {
+    type Extension = ModernLightExtension;
+}
+impl LightLayout for V1800 {
+    type Extension = ModernLightExtension;
+}
 
 /// A light node with decoded lighting values and animation tracks.
 #[derive(Clone, Debug, PartialEq)]
-pub struct Light {
+pub struct Light<V: ModelVersion> {
     node: Node,
     light_type: u32,
     attenuation_start: f32,
@@ -35,11 +106,12 @@ pub struct Light {
     intensity: f32,
     ambient_color: Color,
     ambient_intensity: f32,
-    extended_words: Option<[u32; 7]>,
+    extended_words: V::Extension,
     tracks: Vec<LightTrack>,
+    version: PhantomData<V>,
 }
 
-impl Light {
+impl<V: ModelVersion> Light<V> {
     /// Creates a light with zeroed lighting values.
     pub fn new(node: Node, light_type: u32) -> Self {
         Self {
@@ -51,18 +123,10 @@ impl Light {
             intensity: 0.0,
             ambient_color: [0.0; 3],
             ambient_intensity: 0.0,
-            extended_words: None,
+            extended_words: V::Extension::empty(),
             tracks: Vec::new(),
+            version: PhantomData,
         }
-    }
-
-    /// Creates a light with the additional fixed fields used by newer models.
-    pub fn new_for_version(node: Node, light_type: u32, version: Version) -> Self {
-        let mut light = Self::new(node, light_type);
-        if version >= 1200 {
-            light.extended_words = Some([0; 7]);
-        }
-        light
     }
 
     /// Borrows the shared node.
@@ -133,17 +197,17 @@ impl Light {
     }
     /// Returns the additional seven raw words in newer light records, when present.
     pub fn extended_words(&self) -> Option<[u32; 7]> {
-        self.extended_words
+        self.extended_words.words()
     }
     /// Sets the additional seven raw words in a newer light record.
     pub fn set_extended_words(&mut self, words: [u32; 7]) -> Result<(), ValueError> {
-        if self.extended_words.is_none() {
-            return Err(ValueError::UnavailableField {
-                tag: LightsChunk::TAG,
+        *self
+            .extended_words
+            .words_mut()
+            .ok_or(ValueError::UnavailableField {
+                tag: LightsChunk::<V>::TAG,
                 field: "extended words",
-            });
-        }
-        self.extended_words = Some(words);
+            })? = words;
         Ok(())
     }
     /// Borrows decoded light animation tracks.
@@ -156,19 +220,19 @@ impl Light {
     }
 }
 
-impl Model {
+impl<V: ModelVersion> Model<V> {
     /// Decodes all `LITE` records in file order.
-    pub fn lights(&self) -> Vec<Light> {
-        self.collect_chunk_records::<LightsChunk>()
+    pub fn lights(&self) -> Vec<Light<V>> {
+        self.collect_chunk_records::<LightsChunk<V>>()
     }
 
     /// Replaces lights in the first `LITE` chunk.
-    pub fn set_lights(&mut self, lights: &[Light]) {
+    pub fn set_lights(&mut self, lights: &[Light<V>]) {
         self.replace_chunk(LightsChunk::new(lights.to_vec()));
     }
 }
 
-impl Decodable for Light {
+impl<V: ModelVersion> Decodable for Light<V> {
     fn decode_one(source: &mut Cursor<'_>, _version: u32) -> Result<Self, DecodeError> {
         let mut cursor = source.slice_u32_sized()?;
         let node = Node::decode_one(&mut cursor, 0)?;
@@ -179,27 +243,7 @@ impl Decodable for Light {
         let intensity = cursor.read()?;
         let ambient_color = cursor.read()?;
         let ambient_intensity = cursor.read()?;
-        let remaining = cursor.remaining();
-        let extension_size = EXTENDED_SIZE - FIXED_SIZE;
-        let has_extended = remaining.len() >= extension_size
-            && (remaining.len() == extension_size
-                || remaining
-                    .get(extension_size..extension_size + 4)
-                    .is_some_and(|tag| {
-                        LightTrack::accepts_bytes(tag.try_into().expect("four-byte tag"))
-                    }))
-            && remaining.get(..4).map_or(true, |tag| {
-                !LightTrack::accepts_bytes(tag.try_into().expect("four-byte tag"))
-            });
-        let extended_words = if has_extended {
-            let mut words = [0; 7];
-            for word in &mut words {
-                *word = cursor.read()?;
-            }
-            Some(words)
-        } else {
-            None
-        };
+        let extended_words = V::Extension::decode(&mut cursor)?;
         let mut tracks = Vec::new();
         while !cursor.remaining().is_empty() {
             tracks.push(cursor.read::<LightTrack>()?);
@@ -216,11 +260,12 @@ impl Decodable for Light {
             ambient_intensity,
             extended_words,
             tracks,
+            version: PhantomData,
         })
     }
 }
 
-impl Encodable for Light {
+impl<V: ModelVersion> Encodable for Light<V> {
     fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), EncodeError> {
         let marker = bytes.begin_sized();
         self.node.encode_to(bytes)?;
@@ -235,15 +280,11 @@ impl Encodable for Light {
             bytes.write(value);
         }
         bytes.write(self.ambient_intensity);
-        if let Some(words) = self.extended_words {
-            for word in words {
-                bytes.write(word);
-            }
-        }
+        self.extended_words.encode(bytes);
         for track in &self.tracks {
             bytes.write(track);
         }
-        bytes.finish_sized(marker, LightsChunk::TAG)?;
+        bytes.finish_sized(marker, LightsChunk::<V>::TAG)?;
         Ok(())
     }
 }

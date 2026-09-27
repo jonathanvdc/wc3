@@ -1,6 +1,7 @@
 //! Fixed-width texture records in `TEXS` chunks.
 use crate::EncodeError;
 use crate::Encoder;
+use crate::ModelVersion;
 use crate::Tag;
 use crate::ValueError;
 
@@ -100,7 +101,7 @@ impl Texture {
     }
 }
 
-impl Model {
+impl<V: ModelVersion> Model<V> {
     /// Decodes all `TEXS` chunks in file order.
     pub fn textures(&self) -> Vec<Texture> {
         self.collect_chunk_records::<TexturesChunk>()

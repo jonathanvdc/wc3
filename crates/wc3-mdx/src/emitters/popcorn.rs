@@ -1,4 +1,5 @@
 //! Reforged popcorn particle emitters in `CORN` chunks.
+use crate::ModelVersion;
 crate::animation::track_group! {
     pub enum PopcornTrack {
         Alpha: PopcornAlpha,
@@ -142,7 +143,7 @@ impl PopcornEmitter {
     }
 }
 
-impl Model {
+impl<V: ModelVersion> Model<V> {
     /// Decodes all popcorn emitters in `CORN` chunks.
     pub fn popcorn_emitters(&self) -> Vec<PopcornEmitter> {
         self.collect_chunk_records::<PopcornEmittersChunk>()

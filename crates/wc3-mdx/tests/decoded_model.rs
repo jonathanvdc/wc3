@@ -1,53 +1,32 @@
 use std::slice::from_ref;
 
 use wc3_mdx::animation::Sequence;
-use wc3_mdx::chunks::SequencesChunk;
-use wc3_mdx::chunks::{ModelChunk, RawChunk};
+use wc3_mdx::chunks::{ModelChunk, RawChunk, SequencesChunk, UnknownChunk};
 use wc3_mdx::io::{Decodable, Encodable};
-use wc3_mdx::Model;
+use wc3_mdx::{Model, V800};
 
 #[test]
-fn model_stores_known_unknown_and_malformed_chunks() {
-    let mut model = Model::new(800);
-    let ModelChunk::Version(version) = &model.chunks()[0] else {
-        panic!("expected decoded version chunk");
-    };
-    assert_eq!(version.version, 800);
+fn model_stores_known_and_unknown_chunks() {
+    let mut model = Model::<V800>::new();
     model.push(ModelChunk::from(SequencesChunk::new(vec![Sequence::new(
         "Stand",
         [0, 100],
     )
     .unwrap()])));
-    model.push(ModelChunk::from_raw(
-        RawChunk::new(*b"FUTR", vec![1, 2, 3]),
-        800,
-    ));
-    model.push(ModelChunk::from_raw(
-        RawChunk::new(*b"TEXS", vec![0; 267]),
-        800,
-    ));
+    let unknown = UnknownChunk::<V800>::new(RawChunk::new(*b"FUTR", vec![1, 2, 3])).unwrap();
+    model.push(ModelChunk::Unknown(unknown));
 
     assert!(matches!(model.chunks()[1], ModelChunk::Sequences(_)));
     assert!(matches!(model.chunks()[2], ModelChunk::Unknown(_)));
-    assert!(matches!(model.chunks()[3], ModelChunk::Malformed(_)));
-    let ModelChunk::Malformed(malformed) = &model.chunks()[3] else {
-        unreachable!()
-    };
-    assert_eq!(model.validate(), Err(malformed.error().clone()));
-
     let bytes = model.encode().unwrap();
-    let decoded = Model::decode(&bytes, 800).unwrap();
+    let decoded = Model::<V800>::decode(&bytes, 800).unwrap();
     assert_eq!(decoded.encode().unwrap(), bytes);
-    assert!(matches!(decoded.chunks()[3], ModelChunk::Malformed(_)));
 }
 
 #[test]
 fn edits_to_decoded_records_are_written() {
-    let mut model = Model::new(800);
-    model.push(ModelChunk::from_raw(
-        RawChunk::new(*b"SEQS", Vec::new()),
-        800,
-    ));
+    let mut model = Model::<V800>::new();
+    model.push(ModelChunk::from(SequencesChunk::new(Vec::new())));
     let ModelChunk::Sequences(decoded) = &mut model.chunks_mut()[1] else {
         panic!("expected typed sequence chunk");
     };
@@ -56,50 +35,19 @@ fn edits_to_decoded_records_are_written() {
         .push(Sequence::new("Walk", [0, 100]).unwrap());
 
     let bytes = model.encode().unwrap();
-    let reopened = Model::decode(&bytes, 800).unwrap();
+    let reopened = Model::<V800>::decode(&bytes, 800).unwrap();
     assert_eq!(reopened.sequences()[0].name(), "Walk");
 }
 
 #[test]
-fn replacing_a_malformed_chunk_clears_its_error() {
-    let mut model = Model::new(800);
-    model.push(ModelChunk::from_raw(
-        RawChunk::new(*b"SEQS", vec![0; 131]),
-        800,
-    ));
-    assert!(matches!(model.chunks()[1], ModelChunk::Malformed(_)));
-
-    *model.chunk_mut(*b"SEQS").unwrap() = ModelChunk::from(SequencesChunk::new(vec![
-        Sequence::new("Stand", [0, 100]).unwrap(),
-    ]));
-    assert_eq!(model.sequences().len(), 1);
-    assert!(model.validate().is_ok());
-    assert!(matches!(model.chunks()[1], ModelChunk::Sequences(_)));
+fn malformed_known_chunk_cannot_enter_typed_model() {
+    assert!(ModelChunk::<V800>::from_raw(RawChunk::new(*b"SEQS", vec![0; 131])).is_err());
+    assert!(UnknownChunk::<V800>::new(RawChunk::new(*b"SEQS", Vec::new())).is_none());
 }
 
 #[test]
-fn collection_accessors_skip_malformed_chunks() {
-    let mut model = Model::new(800);
-    model.push(ModelChunk::from_raw(
-        RawChunk::new(*b"SEQS", vec![0; 131]),
-        800,
-    ));
-    let sequence = Sequence::new("Stand", [0, 100]).unwrap();
-    model.push(ModelChunk::Unknown(RawChunk::new(
-        *b"SEQS",
-        SequencesChunk::new(vec![sequence.clone()])
-            .encode()
-            .unwrap(),
-    )));
-    model.push(ModelChunk::from(SequencesChunk::new(
-        vec![sequence.clone()],
-    )));
-    assert_eq!(model.sequences(), vec![sequence]);
-}
-
-#[test]
-fn collection_setter_keeps_records_decoded_and_collapses_repeated_chunks() {
-    let mut model = Model::new(800);
+fn collection_setter_collapses_repeated_chunks() {
+    let mut model = Model::<V800>::new();
     let first = Sequence::new("Stand", [0, 100]).unwrap();
     let second = Sequence::new("Walk", [101, 200]).unwrap();
     model.push(ModelChunk::from(SequencesChunk::new(vec![first.clone()])));

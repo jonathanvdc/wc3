@@ -1,7 +1,8 @@
 //! Complete chunks containing a sequence of records.
 use crate::EncodeError;
 use crate::Encoder;
-use crate::{Tag, Version};
+use crate::{ModelVersion, Tag, Version};
+use std::marker::PhantomData;
 
 use crate::{
     Attachment, Bone, Camera, CollisionShape, EventObject, FaceFx, Geoset, GeosetAnimation, Light,
@@ -114,19 +115,70 @@ macro_rules! record_collection {
     };
 }
 
+macro_rules! versioned_record_collection {
+    ($name:ident, $item:ident, $tag:expr) => {
+        #[derive(Clone, Debug, PartialEq)]
+        pub struct $name<V: ModelVersion> {
+            pub records: Vec<$item<V>>,
+            version: PhantomData<V>,
+        }
+
+        impl<V: ModelVersion> $name<V> {
+            pub fn new(records: Vec<$item<V>>) -> Self {
+                Self {
+                    records,
+                    version: PhantomData,
+                }
+            }
+        }
+
+        impl<V: ModelVersion> CollectionChunk for $name<V> {
+            type Item = $item<V>;
+            fn tag() -> Tag {
+                $tag
+            }
+            fn records(&self) -> &[Self::Item] {
+                &self.records
+            }
+            fn from_records(records: Vec<Self::Item>) -> Self {
+                Self::new(records)
+            }
+        }
+
+        impl<V: ModelVersion> Chunk for $name<V> {
+            fn tag(&self) -> Tag {
+                Self::TAG
+            }
+            fn encode_payload_to(&self, bytes: &mut Encoder<'_>) -> Result<(), EncodeError> {
+                encode_records(self, bytes)
+            }
+        }
+
+        impl<V: ModelVersion> KnownChunk for $name<V> {
+            const TAG: Tag = $tag;
+            fn decode_payload(
+                cursor: &mut Cursor<'_>,
+                _version: Version,
+            ) -> Result<Self, DecodeError> {
+                decode_records(cursor, V::NUMBER)
+            }
+        }
+    };
+}
+
 record_collection!(SequencesChunk, Sequence, *b"SEQS");
 record_collection!(TexturesChunk, Texture, *b"TEXS");
-record_collection!(GeosetsChunk, Geoset, *b"GEOS");
+versioned_record_collection!(GeosetsChunk, Geoset, *b"GEOS");
 record_collection!(GeosetAnimationsChunk, GeosetAnimation, *b"GEOA");
-record_collection!(MaterialsChunk, Material, *b"MTLS");
+versioned_record_collection!(MaterialsChunk, Material, *b"MTLS");
 record_collection!(BonesChunk, Bone, *b"BONE");
 record_collection!(HelpersChunk, Node, *b"HELP");
 record_collection!(AttachmentsChunk, Attachment, *b"ATCH");
-record_collection!(CamerasChunk, Camera, *b"CAMS");
+versioned_record_collection!(CamerasChunk, Camera, *b"CAMS");
 record_collection!(CollisionShapesChunk, CollisionShape, *b"CLID");
 record_collection!(EventObjectsChunk, EventObject, *b"EVTS");
 record_collection!(FaceFxChunk, FaceFx, *b"FAFX");
-record_collection!(LightsChunk, Light, *b"LITE");
+versioned_record_collection!(LightsChunk, Light, *b"LITE");
 record_collection!(ParticleEmittersChunk, ParticleEmitter, *b"PREM");
 record_collection!(ParticleEmitters2Chunk, ParticleEmitter2, *b"PRE2");
 record_collection!(PopcornEmittersChunk, PopcornEmitter, *b"CORN");
@@ -154,12 +206,15 @@ mod tests {
     #[test]
     fn variable_width_collection_uses_the_whole_chunk() {
         let records = vec![
-            Geoset::new(1800, &[], &[], &[]).unwrap(),
-            Geoset::new(1800, &[], &[], &[]).unwrap(),
+            Geoset::<crate::V1800>::new(&[], &[], &[]).unwrap(),
+            Geoset::<crate::V1800>::new(&[], &[], &[]).unwrap(),
         ];
         let original = GeosetsChunk::new(records);
         let bytes = original.encode().unwrap();
-        assert_eq!(GeosetsChunk::decode(&bytes, 1800).unwrap(), original);
+        assert_eq!(
+            GeosetsChunk::<crate::V1800>::decode(&bytes, 1800).unwrap(),
+            original
+        );
     }
 
     #[test]

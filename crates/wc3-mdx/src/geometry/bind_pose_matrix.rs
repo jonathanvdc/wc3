@@ -1,4 +1,5 @@
 //! One matrix in a Reforged bind pose.
+use crate::ModelVersion;
 use crate::{
     BindPoseChunk, Cursor, Decodable, DecodeError, Encodable, EncodeError, Encoder, Model, Version,
 };
@@ -20,7 +21,7 @@ impl Decodable for BindPoseMatrix {
     }
 }
 
-impl Model {
+impl<V: ModelVersion> Model<V> {
     /// Returns decoded `BPOS` chunks separately, preserving chunk boundaries.
     pub fn bind_poses(&self) -> Vec<BindPoseChunk> {
         self.decoded_chunks::<BindPoseChunk>().cloned().collect()

@@ -22,10 +22,10 @@ fn ribbon_fields_and_integer_animation_round_trip() {
             .unwrap()
             .into()],
     );
-    let mut model = Model::new(800);
+    let mut model = Model::<wc3_mdx::V800>::new();
     model.set_ribbon_emitters(&[emitter]);
     let bytes = model.encode().unwrap();
-    let parsed = Model::decode(&bytes, 800).unwrap();
+    let parsed = Model::<wc3_mdx::V800>::decode(&bytes, 800).unwrap();
     let ribbons = parsed.ribbon_emitters();
     assert_eq!(ribbons[0].fields(), fields);
     assert_eq!(

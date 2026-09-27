@@ -1,4 +1,5 @@
 //! Model accessors for global sequences.
+use crate::ModelVersion;
 use crate::{
     Cursor, Decodable, DecodeError, Encodable, EncodeError, Encoder, GlobalSequencesChunk, Model,
     Version,
@@ -21,7 +22,7 @@ impl Decodable for GlobalSequence {
     }
 }
 
-impl Model {
+impl<V: ModelVersion> Model<V> {
     /// Returns durations from every `GLBS` chunk in file order.
     pub fn global_sequences(&self) -> Vec<u32> {
         self.collect_chunk_records::<GlobalSequencesChunk>()

@@ -13,7 +13,7 @@ pub use collections::*;
 mod model_info;
 pub use model_info::ModelInfoChunk;
 mod model_chunk;
-pub use model_chunk::{MalformedChunk, ModelChunk};
+pub use model_chunk::{ModelChunk, UnknownChunk};
 mod version;
 pub use version::VersionChunk;
 
@@ -77,7 +77,7 @@ mod tests {
 
     #[test]
     fn chunks_encode_complete_headers_without_nesting() {
-        let known = VersionChunk::new(800);
+        let known = VersionChunk::<crate::V800>::new();
         let expected = [
             b"VERS".as_slice(),
             &4u32.to_le_bytes(),
@@ -86,21 +86,29 @@ mod tests {
         .concat();
         assert_eq!(known.encode().unwrap(), expected);
         assert_eq!(ModelChunk::from(known.clone()).encode().unwrap(), expected);
-        assert_eq!(VersionChunk::decode(&expected, 800).unwrap(), known);
+        assert_eq!(
+            VersionChunk::<crate::V800>::decode(&expected, 800).unwrap(),
+            known
+        );
 
         let raw = RawChunk::new(*b"FUTR", vec![1, 2, 3]);
         let raw_bytes = [b"FUTR".as_slice(), &3u32.to_le_bytes(), &[1, 2, 3]].concat();
         assert_eq!(raw.encode().unwrap(), raw_bytes);
-        assert_eq!(ModelChunk::Unknown(raw).encode().unwrap(), raw_bytes);
+        assert_eq!(
+            ModelChunk::Unknown(UnknownChunk::<crate::V800>::new(raw).unwrap())
+                .encode()
+                .unwrap(),
+            raw_bytes
+        );
     }
 
     #[test]
     fn known_chunk_decoder_checks_header_and_boundaries() {
-        let bytes = VersionChunk::new(800).encode().unwrap();
+        let bytes = VersionChunk::<crate::V800>::new().encode().unwrap();
         let mut wrong = bytes.clone();
         wrong[..4].copy_from_slice(b"MODL");
         assert_eq!(
-            VersionChunk::decode(&wrong, 800),
+            VersionChunk::<crate::V800>::decode(&wrong, 800),
             Err(DecodeError::UnexpectedChunkTag {
                 expected: *b"VERS",
                 actual: *b"MODL",
@@ -109,19 +117,19 @@ mod tests {
         let mut short = bytes.clone();
         short[4..8].copy_from_slice(&5u32.to_le_bytes());
         assert!(matches!(
-            VersionChunk::decode(&short, 800),
+            VersionChunk::<crate::V800>::decode(&short, 800),
             Err(DecodeError::TruncatedChunk { .. })
         ));
         let mut trailing = bytes.clone();
         trailing.push(0);
         assert!(matches!(
-            VersionChunk::decode(&trailing, 800),
+            VersionChunk::<crate::V800>::decode(&trailing, 800),
             Err(DecodeError::TrailingRecordBytes { .. })
         ));
         let joined = [bytes.clone(), bytes].concat();
         let mut cursor = Cursor::new(&joined);
-        VersionChunk::decode_one(&mut cursor, 800).unwrap();
-        VersionChunk::decode_one(&mut cursor, 800).unwrap();
+        VersionChunk::<crate::V800>::decode_one(&mut cursor, 800).unwrap();
+        VersionChunk::<crate::V800>::decode_one(&mut cursor, 800).unwrap();
         cursor.finish().unwrap();
     }
 
@@ -130,10 +138,10 @@ mod tests {
         let raw = RawChunk::new(*b"FUTR", vec![1, 2, 3]);
         assert_eq!(raw.tag(), *b"FUTR");
 
-        let known = VersionChunk::new(800);
+        let known = VersionChunk::<crate::V800>::new();
         assert_eq!(known.tag(), *b"VERS");
         assert_eq!(
-            VersionChunk::decode(&known.encode().unwrap(), 800).unwrap(),
+            VersionChunk::<crate::V800>::decode(&known.encode().unwrap(), 800).unwrap(),
             known
         );
     }

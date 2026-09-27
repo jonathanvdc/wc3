@@ -6,23 +6,22 @@ use wc3_mdx::geometry::{CollisionShape, Geoset};
 use wc3_mdx::io::{Decodable, Encodable};
 use wc3_mdx::materials::{Layer, Material, Texture};
 use wc3_mdx::scene::{Attachment, Bone, Camera, EventObject, FaceFx, Light, ModelInfo, Node};
-use wc3_mdx::Model;
+use wc3_mdx::{Model, ModelVersion, V1000, V1100, V1200, V1800, V800, V900};
 
-fn full_model(version: u32) -> Model {
-    let mut model = Model::new(version);
+fn full_model<V: ModelVersion>() -> Model<V> {
+    let version = V::NUMBER;
+    let mut model = Model::<V>::new();
     model.set_model_info(&ModelInfo::new("Complete Synthetic Model").unwrap());
     model.set_sequences(&[Sequence::new("Stand", [0, 1000]).unwrap()]);
     model.set_global_sequences(&[1000]);
     model.set_textures(&[Texture::new("Textures\\Sample.blp").unwrap()]);
-    let mut material = Material::new(version);
-    material.set_layers(&[Layer::new(version)]).unwrap();
-    model.set_materials(&[material]).unwrap();
+    let mut material = Material::<V>::new();
+    material.set_layers(&[Layer::<V>::new()]);
+    model.set_materials(&[material]);
     model.set_texture_animations(&[TextureAnimation::new()]);
-    model
-        .set_geosets(&[
-            Geoset::new(version, &[[0.0, 0.0, 0.0]], &[[0.0, 0.0, 1.0]], &[0, 0, 0]).unwrap(),
-        ])
-        .unwrap();
+    model.set_geosets(&[
+        Geoset::<V>::new(&[[0.0, 0.0, 0.0]], &[[0.0, 0.0, 1.0]], &[0, 0, 0]).unwrap(),
+    ]);
     model.set_geoset_animations(&[GeosetAnimation::new(0)]);
     model.set_bones(&[Bone::new(Node::new("Root", 0).unwrap(), 0, 0)]);
     model.set_helpers(&[Node::new("Helper", 1).unwrap()]);
@@ -49,12 +48,8 @@ fn full_model(version: u32) -> Model {
     .unwrap()]);
     model.set_particle_emitters2(&[ParticleEmitter2::new(Node::new("Emitter2", 6).unwrap())]);
     model.set_ribbon_emitters(&[RibbonEmitter::new(Node::new("Ribbon", 7).unwrap())]);
-    model.set_cameras(&[Camera::new_for_version("Camera", version).unwrap()]);
-    model.set_lights(&[Light::new_for_version(
-        Node::new("Light", 8).unwrap(),
-        0,
-        version,
-    )]);
+    model.set_cameras(&[Camera::<V>::new("Camera").unwrap()]);
+    model.set_lights(&[Light::<V>::new(Node::new("Light", 8).unwrap(), 0)]);
     if version >= 900 {
         model.set_face_fx(&[FaceFx::new("Face", "Textures\\Face.blp").unwrap()]);
         model.set_bind_pose(&BindPoseChunk::new(vec![BindPoseMatrix([0.0; 12])]));
@@ -70,14 +65,20 @@ fn full_model(version: u32) -> Model {
 
 #[test]
 fn all_chunk_families_validate_and_round_trip_across_versions() {
-    for version in [800, 900, 1000, 1100, 1200, 1800] {
-        let model = full_model(version);
-        model.validate().unwrap();
-        let bytes = model.encode().unwrap();
-        let parsed = Model::decode(&bytes, 800).unwrap();
-        parsed.validate().unwrap();
-        assert_eq!(parsed.encode().unwrap(), bytes, "version {version}");
-        assert_eq!(parsed.version(), version);
-        assert_eq!(parsed.materials()[0].layers().len(), 1);
-    }
+    check_version::<V800>();
+    check_version::<V900>();
+    check_version::<V1000>();
+    check_version::<V1100>();
+    check_version::<V1200>();
+    check_version::<V1800>();
+}
+
+fn check_version<V: ModelVersion>() {
+    let version = V::NUMBER;
+    let model = full_model::<V>();
+    let bytes = model.encode().unwrap();
+    let parsed = Model::<V>::decode(&bytes, 800).unwrap();
+    assert_eq!(parsed.encode().unwrap(), bytes, "version {version}");
+    assert_eq!(parsed.version(), version);
+    assert_eq!(parsed.materials()[0].layers().len(), 1);
 }

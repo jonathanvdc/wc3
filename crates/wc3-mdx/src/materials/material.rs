@@ -1,4 +1,5 @@
 //! Typed material layers and versioned texture slots.
+use std::fmt::Debug;
 crate::animation::track_group! {
     pub enum LayerTrack {
         Alpha: LayerAlpha,
@@ -14,7 +15,8 @@ use crate::EncodeError;
 use crate::Encoder;
 use crate::KnownChunk;
 use crate::ValueError;
-use crate::{Color, LayerTextureId, Tag, TrackTag, Version};
+use crate::{Color, LayerTextureId, ModelVersion, Tag, TrackTag, Version};
+use std::marker::PhantomData;
 
 use crate::{Cursor, MaterialsChunk};
 use crate::{Decodable, Encodable};
@@ -91,82 +93,326 @@ pub struct LayerTextureSlot {
 
 /// A material with directly accessible layers and an exact shader field.
 #[derive(Clone, Debug, PartialEq)]
-pub struct Material {
-    version: Version,
+pub struct Material<V: ModelVersion> {
+    version: PhantomData<V>,
     priority_plane: u32,
     render_mode: u32,
-    shader: Option<FixedText<80>>,
-    layers: Vec<Layer>,
+    shader: V::Shader,
+    layers: Vec<Layer<V>>,
 }
 
 /// A material layer with parsed texture slots and animation tracks.
 #[derive(Clone, Debug, PartialEq)]
-pub struct Layer {
-    version: Version,
+pub struct Layer<V: ModelVersion> {
+    version: PhantomData<V>,
     filter_mode: u32,
     shading_flags: u32,
     texture_id: u32,
     texture_animation_id: u32,
     coordinate_id: u32,
     alpha: f32,
-    extensions: LayerExtensions,
+    extensions: V::LayerExtra,
     tracks: Vec<LayerTrack>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
-struct Fresnel {
+pub struct Fresnel {
     color: Color,
     opacity: f32,
     team_color: f32,
 }
 
-#[derive(Clone, Debug, PartialEq)]
-enum LayerExtensions {
-    Classic,
-    V900 {
-        emissive_gain: f32,
-    },
-    V1000 {
-        emissive_gain: f32,
-        fresnel: Fresnel,
-    },
-    V1100 {
-        emissive_gain: f32,
-        fresnel: Fresnel,
-        shader_type_id: u32,
-        texture_slots: Vec<LayerTextureSlot>,
-    },
-}
-
-impl LayerExtensions {
-    fn for_version(version: Version) -> Self {
-        let fresnel = Fresnel {
+impl Default for Fresnel {
+    fn default() -> Self {
+        Self {
             color: [1.0; 3],
             opacity: 0.0,
             team_color: 0.0,
-        };
-        if version >= 1100 {
-            Self::V1100 {
-                emissive_gain: 1.0,
-                fresnel,
-                shader_type_id: 0,
-                texture_slots: Vec::new(),
-            }
-        } else if version >= 1000 {
-            Self::V1000 {
-                emissive_gain: 1.0,
-                fresnel,
-            }
-        } else if version >= 900 {
-            Self::V900 { emissive_gain: 1.0 }
-        } else {
-            Self::Classic
         }
     }
 }
 
-fn has_shader(version: Version) -> bool {
-    (900..1100).contains(&version)
+/// The fixed shader field selected by a model version.
+pub trait ShaderField: Clone + Debug + PartialEq {
+    fn empty() -> Self;
+    fn decode(cursor: &mut Cursor<'_>) -> Result<Self, DecodeError>;
+    fn encode(&self, output: &mut Encoder<'_>);
+    fn text(&self) -> Option<Cow<'_, str>>;
+    fn set(&mut self, text: &str) -> Result<(), ValueError>;
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct NoShader;
+
+impl ShaderField for NoShader {
+    fn empty() -> Self {
+        Self
+    }
+    fn decode(_: &mut Cursor<'_>) -> Result<Self, DecodeError> {
+        Ok(Self)
+    }
+    fn encode(&self, _: &mut Encoder<'_>) {}
+    fn text(&self) -> Option<Cow<'_, str>> {
+        None
+    }
+    fn set(&mut self, _: &str) -> Result<(), ValueError> {
+        Err(ValueError::UnavailableField {
+            tag: *b"MTLS",
+            field: "shader",
+        })
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct ShaderText(FixedText<80>);
+
+impl ShaderField for ShaderText {
+    fn empty() -> Self {
+        Self(FixedText::default())
+    }
+    fn decode(cursor: &mut Cursor<'_>) -> Result<Self, DecodeError> {
+        Ok(Self(cursor.read()?))
+    }
+    fn encode(&self, output: &mut Encoder<'_>) {
+        output.write(&self.0);
+    }
+    fn text(&self) -> Option<Cow<'_, str>> {
+        Some(self.0.text())
+    }
+    fn set(&mut self, text: &str) -> Result<(), ValueError> {
+        self.0.set_text(text)
+    }
+}
+
+/// The fields following a layer's shared header.
+pub trait LayerExtra: Clone + Debug + PartialEq {
+    fn empty() -> Self;
+    fn decode(cursor: &mut Cursor<'_>) -> Result<Self, DecodeError>;
+    fn encode(&self, output: &mut Encoder<'_>) -> Result<(), EncodeError>;
+    fn emissive_gain(&self) -> Option<f32> {
+        None
+    }
+    fn emissive_gain_mut(&mut self) -> Option<&mut f32> {
+        None
+    }
+    fn fresnel(&self) -> Option<&Fresnel> {
+        None
+    }
+    fn fresnel_mut(&mut self) -> Option<&mut Fresnel> {
+        None
+    }
+    fn shader_type_id(&self) -> Option<u32> {
+        None
+    }
+    fn shader_type_id_mut(&mut self) -> Option<&mut u32> {
+        None
+    }
+    fn texture_slots(&self) -> &[LayerTextureSlot] {
+        &[]
+    }
+    fn texture_slots_mut(&mut self) -> Option<&mut Vec<LayerTextureSlot>> {
+        None
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct ClassicLayerExtra;
+
+impl LayerExtra for ClassicLayerExtra {
+    fn empty() -> Self {
+        Self
+    }
+    fn decode(_: &mut Cursor<'_>) -> Result<Self, DecodeError> {
+        Ok(Self)
+    }
+    fn encode(&self, _: &mut Encoder<'_>) -> Result<(), EncodeError> {
+        Ok(())
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct Layer900Extra {
+    emissive_gain: f32,
+}
+
+impl LayerExtra for Layer900Extra {
+    fn empty() -> Self {
+        Self { emissive_gain: 1.0 }
+    }
+    fn decode(cursor: &mut Cursor<'_>) -> Result<Self, DecodeError> {
+        Ok(Self {
+            emissive_gain: cursor.read()?,
+        })
+    }
+    fn encode(&self, output: &mut Encoder<'_>) -> Result<(), EncodeError> {
+        output.write(self.emissive_gain);
+        Ok(())
+    }
+    fn emissive_gain(&self) -> Option<f32> {
+        Some(self.emissive_gain)
+    }
+    fn emissive_gain_mut(&mut self) -> Option<&mut f32> {
+        Some(&mut self.emissive_gain)
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct Layer1000Extra {
+    base: Layer900Extra,
+    fresnel: Fresnel,
+}
+
+impl LayerExtra for Layer1000Extra {
+    fn empty() -> Self {
+        Self {
+            base: Layer900Extra::empty(),
+            fresnel: Fresnel::default(),
+        }
+    }
+    fn decode(cursor: &mut Cursor<'_>) -> Result<Self, DecodeError> {
+        Ok(Self {
+            base: Layer900Extra::decode(cursor)?,
+            fresnel: Fresnel {
+                color: cursor.read()?,
+                opacity: cursor.read()?,
+                team_color: cursor.read()?,
+            },
+        })
+    }
+    fn encode(&self, output: &mut Encoder<'_>) -> Result<(), EncodeError> {
+        self.base.encode(output)?;
+        output.write(self.fresnel.color);
+        output.write(self.fresnel.opacity);
+        output.write(self.fresnel.team_color);
+        Ok(())
+    }
+    fn emissive_gain(&self) -> Option<f32> {
+        self.base.emissive_gain()
+    }
+    fn emissive_gain_mut(&mut self) -> Option<&mut f32> {
+        self.base.emissive_gain_mut()
+    }
+    fn fresnel(&self) -> Option<&Fresnel> {
+        Some(&self.fresnel)
+    }
+    fn fresnel_mut(&mut self) -> Option<&mut Fresnel> {
+        Some(&mut self.fresnel)
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct Layer1100Extra {
+    base: Layer1000Extra,
+    shader_type_id: u32,
+    texture_slots: Vec<LayerTextureSlot>,
+}
+
+impl LayerExtra for Layer1100Extra {
+    fn empty() -> Self {
+        Self {
+            base: Layer1000Extra::empty(),
+            shader_type_id: 0,
+            texture_slots: Vec::new(),
+        }
+    }
+    fn decode(cursor: &mut Cursor<'_>) -> Result<Self, DecodeError> {
+        let base = Layer1000Extra::decode(cursor)?;
+        let shader_type_id = cursor.read()?;
+        let count = cursor.read::<u32>()? as usize;
+        let mut texture_slots = Vec::new();
+        for _ in 0..count {
+            let texture_id = cursor.read()?;
+            let texture_type = cursor.read()?;
+            let track = if cursor
+                .remaining()
+                .starts_with(&TrackTag::LayerTextureId.bytes())
+            {
+                Some(cursor.read::<AnimationTrack<LayerTextureId>>()?)
+            } else {
+                None
+            };
+            texture_slots.push(LayerTextureSlot {
+                texture_id,
+                texture_type,
+                track,
+            });
+        }
+        Ok(Self {
+            base,
+            shader_type_id,
+            texture_slots,
+        })
+    }
+    fn encode(&self, output: &mut Encoder<'_>) -> Result<(), EncodeError> {
+        self.base.encode(output)?;
+        output.write(self.shader_type_id);
+        write_count(output, self.texture_slots.len(), LAYER_TAG)?;
+        for slot in &self.texture_slots {
+            output.write(slot.texture_id);
+            output.write(slot.texture_type);
+            if let Some(track) = &slot.track {
+                output.write(track);
+            }
+        }
+        Ok(())
+    }
+    fn emissive_gain(&self) -> Option<f32> {
+        self.base.emissive_gain()
+    }
+    fn emissive_gain_mut(&mut self) -> Option<&mut f32> {
+        self.base.emissive_gain_mut()
+    }
+    fn fresnel(&self) -> Option<&Fresnel> {
+        self.base.fresnel()
+    }
+    fn fresnel_mut(&mut self) -> Option<&mut Fresnel> {
+        self.base.fresnel_mut()
+    }
+    fn shader_type_id(&self) -> Option<u32> {
+        Some(self.shader_type_id)
+    }
+    fn shader_type_id_mut(&mut self) -> Option<&mut u32> {
+        Some(&mut self.shader_type_id)
+    }
+    fn texture_slots(&self) -> &[LayerTextureSlot] {
+        &self.texture_slots
+    }
+    fn texture_slots_mut(&mut self) -> Option<&mut Vec<LayerTextureSlot>> {
+        Some(&mut self.texture_slots)
+    }
+}
+
+/// Chooses the material and layer fields for a version.
+pub trait MaterialLayout {
+    type Shader: ShaderField;
+    type LayerExtra: LayerExtra;
+}
+
+use crate::{V1000, V1100, V1200, V1800, V800, V900};
+
+impl MaterialLayout for V800 {
+    type Shader = NoShader;
+    type LayerExtra = ClassicLayerExtra;
+}
+impl MaterialLayout for V900 {
+    type Shader = ShaderText;
+    type LayerExtra = Layer900Extra;
+}
+impl MaterialLayout for V1000 {
+    type Shader = ShaderText;
+    type LayerExtra = Layer1000Extra;
+}
+impl MaterialLayout for V1100 {
+    type Shader = NoShader;
+    type LayerExtra = Layer1100Extra;
+}
+impl MaterialLayout for V1200 {
+    type Shader = NoShader;
+    type LayerExtra = Layer1100Extra;
+}
+impl MaterialLayout for V1800 {
+    type Shader = NoShader;
+    type LayerExtra = Layer1100Extra;
 }
 
 fn expect_tag(cursor: &mut Cursor<'_>, expected: Tag, record_tag: Tag) -> Result<(), DecodeError> {
@@ -188,21 +434,21 @@ fn write_count(bytes: &mut Encoder<'_>, count: usize, tag: Tag) -> Result<(), En
     Ok(())
 }
 
-impl Material {
-    /// Creates an empty material for the given MDX version.
-    pub fn new(version: Version) -> Self {
+impl<V: ModelVersion> Material<V> {
+    /// Creates an empty material using `V`'s fields.
+    pub fn new() -> Self {
         Self {
-            version,
+            version: PhantomData,
             priority_plane: 0,
             render_mode: 0,
-            shader: has_shader(version).then_some(FixedText::default()),
+            shader: V::Shader::empty(),
             layers: Vec::new(),
         }
     }
 
     /// Returns the MDX version used for this material.
     pub fn version(&self) -> Version {
-        self.version
+        V::NUMBER
     }
     /// Returns the material priority plane.
     pub fn priority_plane(&self) -> u32 {
@@ -230,56 +476,45 @@ impl Material {
     }
     /// Returns the shader path in versions 900 through 1099.
     pub fn shader(&self) -> Option<Cow<'_, str>> {
-        self.shader.as_ref().map(FixedText::text)
+        self.shader.text()
     }
     /// Changes the shader path and clears unused bytes.
     pub fn set_shader(&mut self, shader: &str) -> Result<(), ValueError> {
-        let field = self.shader.as_mut().ok_or(ValueError::UnavailableField {
-            tag: MaterialsChunk::TAG,
-            field: "shader",
-        })?;
-        field.set_text(shader)
+        self.shader.set(shader)
     }
     /// Borrows layers without decoding or allocating.
-    pub fn layers(&self) -> &[Layer] {
+    pub fn layers(&self) -> &[Layer<V>] {
         &self.layers
     }
     /// Mutably borrows layers for bulk edits.
-    pub fn layers_mut(&mut self) -> &mut [Layer] {
+    pub fn layers_mut(&mut self) -> &mut [Layer<V>] {
         &mut self.layers
     }
-    /// Replaces all layers, rejecting a different MDX version.
-    pub fn set_layers(&mut self, layers: &[Layer]) -> Result<(), ValueError> {
-        if let Some(layer) = layers.iter().find(|layer| layer.version != self.version) {
-            return Err(ValueError::VersionMismatch {
-                expected: self.version,
-                actual: layer.version,
-            });
-        }
+    /// Replaces all layers.
+    pub fn set_layers(&mut self, layers: &[Layer<V>]) {
         self.layers = layers.to_vec();
-        Ok(())
     }
 }
 
-impl Layer {
+impl<V: ModelVersion> Layer<V> {
     /// Creates an empty layer with version-appropriate fields.
-    pub fn new(version: Version) -> Self {
+    pub fn new() -> Self {
         Self {
-            version,
+            version: PhantomData,
             filter_mode: 0,
             shading_flags: 0,
             texture_id: 0,
             texture_animation_id: u32::MAX,
             coordinate_id: 0,
             alpha: 1.0,
-            extensions: LayerExtensions::for_version(version),
+            extensions: V::LayerExtra::empty(),
             tracks: Vec::new(),
         }
     }
 
     /// Returns the MDX version used for this layer.
     pub fn version(&self) -> Version {
-        self.version
+        V::NUMBER
     }
     /// Returns the blend filter mode.
     pub fn filter_mode(&self) -> u32 {
@@ -337,100 +572,89 @@ impl Layer {
     pub fn set_alpha(&mut self, value: f32) {
         self.alpha = value;
     }
-    /// Returns emissive gain in versions 900 and later.
+    /// Returns emissive gain when this layout includes it.
     pub fn emissive_gain(&self) -> Option<f32> {
-        match &self.extensions {
-            LayerExtensions::Classic => None,
-            LayerExtensions::V900 { emissive_gain }
-            | LayerExtensions::V1000 { emissive_gain, .. }
-            | LayerExtensions::V1100 { emissive_gain, .. } => Some(*emissive_gain),
-        }
+        self.extensions.emissive_gain()
     }
-    /// Changes emissive gain in versions 900 and later.
     pub fn set_emissive_gain(&mut self, value: f32) -> Result<(), ValueError> {
-        self.require_version(900)?;
-        match &mut self.extensions {
-            LayerExtensions::Classic => unreachable!(),
-            LayerExtensions::V900 { emissive_gain }
-            | LayerExtensions::V1000 { emissive_gain, .. }
-            | LayerExtensions::V1100 { emissive_gain, .. } => *emissive_gain = value,
-        }
+        *self
+            .extensions
+            .emissive_gain_mut()
+            .ok_or(ValueError::UnsupportedVersion {
+                tag: LAYER_TAG,
+                minimum: 900,
+                actual: V::NUMBER,
+            })? = value;
         Ok(())
     }
-    fn fresnel(&self) -> Option<&Fresnel> {
-        match &self.extensions {
-            LayerExtensions::V1000 { fresnel, .. } | LayerExtensions::V1100 { fresnel, .. } => {
-                Some(fresnel)
-            }
-            _ => None,
-        }
-    }
-    fn fresnel_mut(&mut self) -> Option<&mut Fresnel> {
-        match &mut self.extensions {
-            LayerExtensions::V1000 { fresnel, .. } | LayerExtensions::V1100 { fresnel, .. } => {
-                Some(fresnel)
-            }
-            _ => None,
-        }
-    }
-    /// Returns the Fresnel color in versions 1000 and later.
     pub fn fresnel_color(&self) -> Option<Color> {
-        self.fresnel().map(|f| f.color)
+        self.extensions.fresnel().map(|f| f.color)
     }
-    /// Changes the Fresnel color in versions 1000 and later.
     pub fn set_fresnel_color(&mut self, value: Color) -> Result<(), ValueError> {
-        self.require_version(1000)?;
-        self.fresnel_mut().unwrap().color = value;
+        self.extensions
+            .fresnel_mut()
+            .ok_or(ValueError::UnsupportedVersion {
+                tag: LAYER_TAG,
+                minimum: 1000,
+                actual: V::NUMBER,
+            })?
+            .color = value;
         Ok(())
     }
-    /// Returns Fresnel opacity in versions 1000 and later.
     pub fn fresnel_opacity(&self) -> Option<f32> {
-        self.fresnel().map(|f| f.opacity)
+        self.extensions.fresnel().map(|f| f.opacity)
     }
-    /// Changes Fresnel opacity in versions 1000 and later.
     pub fn set_fresnel_opacity(&mut self, value: f32) -> Result<(), ValueError> {
-        self.require_version(1000)?;
-        self.fresnel_mut().unwrap().opacity = value;
+        self.extensions
+            .fresnel_mut()
+            .ok_or(ValueError::UnsupportedVersion {
+                tag: LAYER_TAG,
+                minimum: 1000,
+                actual: V::NUMBER,
+            })?
+            .opacity = value;
         Ok(())
     }
-    /// Returns Fresnel team-color strength in versions 1000 and later.
     pub fn fresnel_team_color(&self) -> Option<f32> {
-        self.fresnel().map(|f| f.team_color)
+        self.extensions.fresnel().map(|f| f.team_color)
     }
-    /// Changes Fresnel team-color strength in versions 1000 and later.
     pub fn set_fresnel_team_color(&mut self, value: f32) -> Result<(), ValueError> {
-        self.require_version(1000)?;
-        self.fresnel_mut().unwrap().team_color = value;
+        self.extensions
+            .fresnel_mut()
+            .ok_or(ValueError::UnsupportedVersion {
+                tag: LAYER_TAG,
+                minimum: 1000,
+                actual: V::NUMBER,
+            })?
+            .team_color = value;
         Ok(())
     }
-    /// Returns shader type ID in versions 1100 and later.
     pub fn shader_type_id(&self) -> Option<u32> {
-        match &self.extensions {
-            LayerExtensions::V1100 { shader_type_id, .. } => Some(*shader_type_id),
-            _ => None,
-        }
+        self.extensions.shader_type_id()
     }
-    /// Changes shader type ID in versions 1100 and later.
     pub fn set_shader_type_id(&mut self, value: u32) -> Result<(), ValueError> {
-        self.require_version(1100)?;
-        if let LayerExtensions::V1100 { shader_type_id, .. } = &mut self.extensions {
-            *shader_type_id = value;
-        }
+        *self
+            .extensions
+            .shader_type_id_mut()
+            .ok_or(ValueError::UnsupportedVersion {
+                tag: LAYER_TAG,
+                minimum: 1100,
+                actual: V::NUMBER,
+            })? = value;
         Ok(())
     }
-    /// Borrows Reforged texture slots and their optional tracks.
     pub fn texture_slots(&self) -> &[LayerTextureSlot] {
-        match &self.extensions {
-            LayerExtensions::V1100 { texture_slots, .. } => texture_slots,
-            _ => &[],
-        }
+        self.extensions.texture_slots()
     }
-    /// Replaces Reforged texture slots.
     pub fn set_texture_slots(&mut self, slots: &[LayerTextureSlot]) -> Result<(), ValueError> {
-        self.require_version(1100)?;
-        if let LayerExtensions::V1100 { texture_slots, .. } = &mut self.extensions {
-            *texture_slots = slots.to_vec();
-        }
+        *self
+            .extensions
+            .texture_slots_mut()
+            .ok_or(ValueError::UnsupportedVersion {
+                tag: LAYER_TAG,
+                minimum: 1100,
+                actual: V::NUMBER,
+            })? = slots.to_vec();
         Ok(())
     }
     /// Borrows layer animation tracks after any texture slots.
@@ -441,61 +665,36 @@ impl Layer {
     pub fn set_tracks(&mut self, tracks: &[LayerTrack]) {
         self.tracks = tracks.to_vec();
     }
-    fn require_version(&self, minimum: u32) -> Result<(), ValueError> {
-        if self.version < minimum {
-            Err(ValueError::UnsupportedVersion {
-                tag: LAYER_TAG,
-                minimum,
-                actual: self.version,
-            })
-        } else {
-            Ok(())
-        }
-    }
 }
 
-impl Model {
+impl<V: ModelVersion> Model<V> {
     /// Decodes all `MTLS` records in file order.
-    pub fn materials(&self) -> Vec<Material> {
-        self.collect_chunk_records::<MaterialsChunk>()
+    pub fn materials(&self) -> Vec<Material<V>> {
+        self.collect_chunk_records::<MaterialsChunk<V>>()
     }
 
     /// Replaces all material records in the first `MTLS` chunk.
-    pub fn set_materials(&mut self, materials: &[Material]) -> Result<(), ValueError> {
-        let expected = self.version();
-        for material in materials {
-            if material.version != expected {
-                return Err(ValueError::VersionMismatch {
-                    expected,
-                    actual: material.version,
-                });
-            }
-        }
+    pub fn set_materials(&mut self, materials: &[Material<V>]) {
         self.replace_chunk(MaterialsChunk::new(materials.to_vec()));
-        Ok(())
     }
 }
 
-impl Decodable for Material {
-    fn decode_one(source: &mut Cursor<'_>, version: Version) -> Result<Self, DecodeError> {
+impl<V: ModelVersion> Decodable for Material<V> {
+    fn decode_one(source: &mut Cursor<'_>, _version: Version) -> Result<Self, DecodeError> {
         let mut cursor = source.slice_u32_sized()?;
         let value = {
             let priority_plane = cursor.read()?;
             let render_mode = cursor.read()?;
-            let shader = if has_shader(version) {
-                Some(cursor.read()?)
-            } else {
-                None
-            };
-            expect_tag(&mut cursor, LAYER_TAG, MaterialsChunk::TAG)?;
+            let shader = V::Shader::decode(&mut cursor)?;
+            expect_tag(&mut cursor, LAYER_TAG, MaterialsChunk::<V>::TAG)?;
             let count = cursor.read::<u32>()? as usize;
             let mut layers = Vec::new();
             for _ in 0..count {
-                let layer = Layer::decode_one(&mut cursor, version)?;
+                let layer = Layer::<V>::decode_one(&mut cursor, V::NUMBER)?;
                 layers.push(layer);
             }
             Ok(Self {
-                version,
+                version: PhantomData,
                 priority_plane,
                 render_mode,
                 shader,
@@ -507,32 +706,24 @@ impl Decodable for Material {
     }
 }
 
-impl Encodable for Material {
+impl<V: ModelVersion> Encodable for Material<V> {
     fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), EncodeError> {
         let marker = bytes.begin_sized();
         bytes.write(self.priority_plane);
         bytes.write(self.render_mode);
-        if has_shader(self.version) {
-            bytes.write(self.shader.as_ref().expect("versioned shader"));
-        }
+        self.shader.encode(bytes);
         bytes.write_bytes(b"LAYS");
-        write_count(bytes, self.layers.len(), MaterialsChunk::TAG)?;
+        write_count(bytes, self.layers.len(), MaterialsChunk::<V>::TAG)?;
         for layer in &self.layers {
-            if layer.version != self.version {
-                return Err(EncodeError::VersionMismatch {
-                    expected: self.version,
-                    actual: layer.version,
-                });
-            }
             layer.encode_to(bytes)?;
         }
-        bytes.finish_sized(marker, MaterialsChunk::TAG)?;
+        bytes.finish_sized(marker, MaterialsChunk::<V>::TAG)?;
         Ok(())
     }
 }
 
-impl Decodable for Layer {
-    fn decode_one(source: &mut Cursor<'_>, version: Version) -> Result<Self, DecodeError> {
+impl<V: ModelVersion> Decodable for Layer<V> {
+    fn decode_one(source: &mut Cursor<'_>, _version: Version) -> Result<Self, DecodeError> {
         let mut cursor = source.slice_u32_sized()?;
         let value = {
             let filter_mode = cursor.read()?;
@@ -541,61 +732,13 @@ impl Decodable for Layer {
             let texture_animation_id = cursor.read()?;
             let coordinate_id = cursor.read()?;
             let alpha = cursor.read()?;
-            let extensions = if version >= 1100 {
-                let emissive_gain = cursor.read()?;
-                let fresnel = Fresnel {
-                    color: cursor.read()?,
-                    opacity: cursor.read()?,
-                    team_color: cursor.read()?,
-                };
-                let shader_type_id = cursor.read()?;
-                let count = cursor.read::<u32>()? as usize;
-                let mut texture_slots = Vec::new();
-                for _ in 0..count {
-                    let texture_id = cursor.read()?;
-                    let texture_type = cursor.read()?;
-                    let track = if cursor
-                        .remaining()
-                        .starts_with(&TrackTag::LayerTextureId.bytes())
-                    {
-                        Some(cursor.read::<AnimationTrack<LayerTextureId>>()?)
-                    } else {
-                        None
-                    };
-                    texture_slots.push(LayerTextureSlot {
-                        texture_id,
-                        texture_type,
-                        track,
-                    });
-                }
-                LayerExtensions::V1100 {
-                    emissive_gain,
-                    fresnel,
-                    shader_type_id,
-                    texture_slots,
-                }
-            } else if version >= 1000 {
-                LayerExtensions::V1000 {
-                    emissive_gain: cursor.read()?,
-                    fresnel: Fresnel {
-                        color: cursor.read()?,
-                        opacity: cursor.read()?,
-                        team_color: cursor.read()?,
-                    },
-                }
-            } else if version >= 900 {
-                LayerExtensions::V900 {
-                    emissive_gain: cursor.read()?,
-                }
-            } else {
-                LayerExtensions::Classic
-            };
+            let extensions = V::LayerExtra::decode(&mut cursor)?;
             let mut tracks = Vec::new();
             while !cursor.remaining().is_empty() {
                 tracks.push(cursor.read::<LayerTrack>()?);
             }
             Ok(Self {
-                version,
+                version: PhantomData,
                 filter_mode,
                 shading_flags,
                 texture_id,
@@ -611,7 +754,7 @@ impl Decodable for Layer {
     }
 }
 
-impl Encodable for Layer {
+impl<V: ModelVersion> Encodable for Layer<V> {
     fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), EncodeError> {
         let marker = bytes.begin_sized();
         for word in [
@@ -624,44 +767,7 @@ impl Encodable for Layer {
             bytes.write(word);
         }
         bytes.write(self.alpha);
-        match &self.extensions {
-            LayerExtensions::Classic => {}
-            LayerExtensions::V900 { emissive_gain } => {
-                bytes.write(emissive_gain);
-            }
-            LayerExtensions::V1000 {
-                emissive_gain,
-                fresnel,
-            }
-            | LayerExtensions::V1100 {
-                emissive_gain,
-                fresnel,
-                ..
-            } => {
-                bytes.write(emissive_gain);
-                for value in fresnel.color {
-                    bytes.write(value);
-                }
-                bytes.write(fresnel.opacity);
-                bytes.write(fresnel.team_color);
-            }
-        }
-        if let LayerExtensions::V1100 {
-            shader_type_id,
-            texture_slots,
-            ..
-        } = &self.extensions
-        {
-            bytes.write(shader_type_id);
-            write_count(bytes, texture_slots.len(), LAYER_TAG)?;
-            for slot in texture_slots {
-                bytes.write(slot.texture_id);
-                bytes.write(slot.texture_type);
-                if let Some(track) = &slot.track {
-                    bytes.write(track);
-                }
-            }
-        }
+        self.extensions.encode(bytes)?;
         for track in &self.tracks {
             bytes.write(track);
         }

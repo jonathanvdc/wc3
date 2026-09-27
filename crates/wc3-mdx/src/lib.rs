@@ -2,16 +2,14 @@
 //!
 //! MDX files start with `MDLX`, followed by tagged chunks. Each chunk has a
 //! four-byte identifier, a little-endian payload length, and its payload.
-//! Known chunks are decoded and encoded from their typed values. Unknown and
-//! malformed chunks retain their raw payloads.
-//! Use [`Model::version`] and
-//! [`Model::set_version`] for the `VERS` chunk, and [`Model::chunks`] or
-//! [`Model::chunk_mut`] for other chunks.
+//! [`Model<V>`] ties a model's version to its chunks and records.
+//! [`AnyVersionModel`] dispatches a file's runtime version to a typed model.
+//! Unknown chunks retain their raw payloads; malformed known chunks fail decoding.
 //!
 //! ```
-//! use wc3_mdx::Model;
+//! use wc3_mdx::{Model, V800};
 //! use wc3_mdx::io::Encodable;
-//! let mut model = Model::new(800);
+//! let model = Model::<V800>::new();
 //! // Populate the model
 //! let bytes = model.encode().unwrap();
 //! ```
@@ -47,5 +45,6 @@ pub(crate) use emitters::*;
 
 pub use wc3_mdx_derive::{Readable, Writable};
 mod model;
-pub use model::Model;
-mod validation;
+pub use model::{AnyVersionModel, Model};
+mod versions;
+pub use versions::{ModelVersion, V1000, V1100, V1200, V1800, V800, V900};

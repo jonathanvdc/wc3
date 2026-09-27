@@ -12,9 +12,9 @@ fn sequence_fields_round_trip() {
     stand.set_bounds_radius(42.0);
     stand.set_minimum_extent([-2.0, -3.0, -4.0]);
     stand.set_maximum_extent([2.0, 3.0, 4.0]);
-    let mut model = Model::new(800);
+    let mut model = Model::<wc3_mdx::V800>::new();
     model.set_sequences(&[stand]);
-    let decoded = Model::decode(&model.encode().unwrap(), 800).unwrap();
+    let decoded = Model::<wc3_mdx::V800>::decode(&model.encode().unwrap(), 800).unwrap();
     let sequence = &decoded.sequences()[0];
     assert_eq!(sequence.name(), "Stand");
     assert_eq!(sequence.interval(), [0, 1000]);

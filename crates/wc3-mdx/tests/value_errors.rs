@@ -10,7 +10,7 @@ fn construction_and_mutation_report_value_errors() {
         ValueError::InvalidString { max_bytes: 79 }
     );
 
-    let mut geoset = Geoset::new(800, &[], &[], &[]).unwrap();
+    let mut geoset = Geoset::<wc3_mdx::V800>::new(&[], &[], &[]).unwrap();
     assert_eq!(
         geoset.set_vertex(0, [0.0; 3]),
         Err(ValueError::IndexOutOfBounds {

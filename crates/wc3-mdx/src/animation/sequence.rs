@@ -1,6 +1,7 @@
 //! Animation sequence records in the `SEQS` chunk.
 use crate::EncodeError;
 use crate::Encoder;
+use crate::ModelVersion;
 use crate::ValueError;
 use crate::Vec3;
 
@@ -129,7 +130,7 @@ impl Sequence {
     }
 }
 
-impl Model {
+impl<V: ModelVersion> Model<V> {
     /// Decodes every `SEQS` chunk in file order.
     pub fn sequences(&self) -> Vec<Sequence> {
         self.collect_chunk_records::<SequencesChunk>()

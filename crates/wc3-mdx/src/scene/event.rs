@@ -2,6 +2,7 @@
 use crate::EncodeError;
 use crate::Encoder;
 use crate::KnownChunk;
+use crate::ModelVersion;
 use crate::Tag;
 
 use crate::{Cursor, EventObjectsChunk};
@@ -59,7 +60,7 @@ impl EventObject {
     }
 }
 
-impl Model {
+impl<V: ModelVersion> Model<V> {
     /// Decodes all event objects in `EVTS` chunks.
     pub fn event_objects(&self) -> Vec<EventObject> {
         self.collect_chunk_records::<EventObjectsChunk>()

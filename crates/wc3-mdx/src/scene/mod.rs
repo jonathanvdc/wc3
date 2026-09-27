@@ -1,9 +1,9 @@
 mod node;
 pub use node::{Bone, Node, NodeFlags};
 mod camera;
-pub use camera::Camera;
+pub use camera::{Camera, CameraLayout};
 mod light;
-pub use light::Light;
+pub use light::{Light, LightLayout};
 mod attachment;
 pub use attachment::Attachment;
 mod event;

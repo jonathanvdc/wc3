@@ -3,8 +3,10 @@ use crate::EncodeError;
 use crate::Encoder;
 use crate::KnownChunk;
 use crate::ValueError;
+use crate::{ModelVersion, Tag, Vec3, Version};
 use crate::{Readable, Writable};
-use crate::{Tag, Vec3, Version};
+use std::fmt::Debug;
+use std::marker::PhantomData;
 
 use crate::Cursor;
 use crate::GeosetsChunk;
@@ -35,27 +37,167 @@ impl Default for GeosetExtent {
 /// An optional TANG or SKIN section. Their order is retained because both
 /// orderings occur in valid files. Skin's second array has no tag or count.
 #[derive(Clone, Debug, PartialEq)]
-enum GeosetExtraSection {
+enum GeosetExtraSection<V: ModelVersion> {
     Tangents(Vec<[f32; 4]>),
     Skin {
         weights: Vec<u8>,
-        bone_indices: Option<Vec<u8>>,
+        bone_indices: V::SkinBones,
     },
 }
 
 /// Fixed header fields added in version 900. Both fields are always present
 /// together, and the exact name bytes are retained for round-trip encoding.
 #[derive(Clone, Debug, PartialEq, Readable, Writable)]
-struct GeosetHeaderExtension {
+pub struct GeosetHeaderExtension {
     level_of_detail: u32,
     name: FixedText<80>,
+}
+
+/// The fixed geoset header selected by a model version.
+pub trait GeosetHeader: Clone + Debug + PartialEq {
+    fn empty() -> Self;
+    fn decode(cursor: &mut Cursor<'_>) -> Result<Self, DecodeError>;
+    fn encode(&self, output: &mut Encoder<'_>);
+    fn level_of_detail(&self) -> Option<u32> {
+        None
+    }
+    fn name(&self) -> Option<Cow<'_, str>> {
+        None
+    }
+    fn level_of_detail_mut(&mut self) -> Option<&mut u32> {
+        None
+    }
+    fn name_mut(&mut self) -> Option<&mut FixedText<80>> {
+        None
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct ClassicGeosetHeader;
+
+impl GeosetHeader for ClassicGeosetHeader {
+    fn empty() -> Self {
+        Self
+    }
+    fn decode(_: &mut Cursor<'_>) -> Result<Self, DecodeError> {
+        Ok(Self)
+    }
+    fn encode(&self, _: &mut Encoder<'_>) {}
+}
+
+impl GeosetHeader for GeosetHeaderExtension {
+    fn empty() -> Self {
+        Self {
+            level_of_detail: 0,
+            name: FixedText::default(),
+        }
+    }
+    fn decode(cursor: &mut Cursor<'_>) -> Result<Self, DecodeError> {
+        cursor.read()
+    }
+    fn encode(&self, output: &mut Encoder<'_>) {
+        output.write(self);
+    }
+    fn level_of_detail(&self) -> Option<u32> {
+        Some(self.level_of_detail)
+    }
+    fn name(&self) -> Option<Cow<'_, str>> {
+        Some(self.name.text())
+    }
+    fn level_of_detail_mut(&mut self) -> Option<&mut u32> {
+        Some(&mut self.level_of_detail)
+    }
+    fn name_mut(&mut self) -> Option<&mut FixedText<80>> {
+        Some(&mut self.name)
+    }
+}
+
+/// Chooses geoset fields for a model version.
+pub trait GeosetLayout {
+    type Header: GeosetHeader;
+    type SkinBones: SkinBoneField;
+}
+
+/// Bone indices following the SKIN weights in layouts that support them.
+pub trait SkinBoneField: Clone + Debug + PartialEq {
+    fn from_indices(indices: Option<&[u8]>) -> Result<Self, ValueError>;
+    fn decode(cursor: &mut Cursor<'_>, weight_count: usize) -> Result<Self, DecodeError>;
+    fn indices(&self) -> Option<&[u8]>;
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct NoSkinBones;
+
+impl SkinBoneField for NoSkinBones {
+    fn from_indices(indices: Option<&[u8]>) -> Result<Self, ValueError> {
+        if indices.is_some() {
+            Err(ValueError::UnavailableField {
+                tag: *b"GEOS",
+                field: "skin bone indices",
+            })
+        } else {
+            Ok(Self)
+        }
+    }
+    fn decode(_: &mut Cursor<'_>, _: usize) -> Result<Self, DecodeError> {
+        Ok(Self)
+    }
+    fn indices(&self) -> Option<&[u8]> {
+        None
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct OptionalSkinBones(Option<Vec<u8>>);
+
+impl SkinBoneField for OptionalSkinBones {
+    fn from_indices(indices: Option<&[u8]>) -> Result<Self, ValueError> {
+        Ok(Self(indices.map(ToOwned::to_owned)))
+    }
+    fn decode(cursor: &mut Cursor<'_>, weight_count: usize) -> Result<Self, DecodeError> {
+        let present = !matches!(&peek_tag(cursor)?, b"UVAS" | b"TANG");
+        Ok(Self(if present {
+            Some(cursor.read_exact(weight_count)?.to_vec())
+        } else {
+            None
+        }))
+    }
+    fn indices(&self) -> Option<&[u8]> {
+        self.0.as_deref()
+    }
+}
+
+use crate::{V1000, V1100, V1200, V1800, V800, V900};
+impl GeosetLayout for V800 {
+    type Header = ClassicGeosetHeader;
+    type SkinBones = NoSkinBones;
+}
+impl GeosetLayout for V900 {
+    type Header = GeosetHeaderExtension;
+    type SkinBones = NoSkinBones;
+}
+impl GeosetLayout for V1000 {
+    type Header = GeosetHeaderExtension;
+    type SkinBones = NoSkinBones;
+}
+impl GeosetLayout for V1100 {
+    type Header = GeosetHeaderExtension;
+    type SkinBones = NoSkinBones;
+}
+impl GeosetLayout for V1200 {
+    type Header = GeosetHeaderExtension;
+    type SkinBones = OptionalSkinBones;
+}
+impl GeosetLayout for V1800 {
+    type Header = GeosetHeaderExtension;
+    type SkinBones = OptionalSkinBones;
 }
 
 /// A geoset as typed sections. Uninterpreted packed skin bytes and the exact
 /// fixed-width name field are retained for byte-for-byte serialization.
 #[derive(Clone, Debug, PartialEq)]
-pub struct Geoset {
-    version: Version,
+pub struct Geoset<V: ModelVersion> {
+    version: PhantomData<V>,
     vertices: Vec<Vec3>,
     normals: Vec<Vec3>,
     primitive_types: Vec<u32>,
@@ -67,36 +209,31 @@ pub struct Geoset {
     material_id: u32,
     selection_group: u32,
     unselectable_raw: u32,
-    header_extension: Option<GeosetHeaderExtension>,
+    header_extension: V::Header,
     extent: GeosetExtent,
     sequence_extents: Vec<GeosetExtent>,
-    extensions: Vec<GeosetExtraSection>,
+    extensions: Vec<GeosetExtraSection<V>>,
     uv_sets: Vec<Vec<[f32; 2]>>,
 }
 
-impl Geoset {
+impl<V: ModelVersion> Geoset<V> {
     /// Builds a basic geoset with one matrix group and one UV set.
-    pub fn new(
-        version: Version,
-        vertices: &[Vec3],
-        normals: &[Vec3],
-        faces: &[u16],
-    ) -> Result<Self, ValueError> {
+    pub fn new(vertices: &[Vec3], normals: &[Vec3], faces: &[u16]) -> Result<Self, ValueError> {
         if vertices.len() != normals.len() {
             return Err(ValueError::LengthMismatch {
-                tag: GeosetsChunk::TAG,
+                tag: GeosetsChunk::<V>::TAG,
                 expected: vertices.len(),
                 actual: normals.len(),
             });
         }
         if faces.len() > u32::MAX as usize {
             return Err(ValueError::CountTooLarge {
-                tag: GeosetsChunk::TAG,
+                tag: GeosetsChunk::<V>::TAG,
                 count: faces.len(),
             });
         }
         Ok(Self {
-            version,
+            version: PhantomData,
             vertices: vertices.to_vec(),
             normals: normals.to_vec(),
             primitive_types: vec![4],
@@ -108,10 +245,7 @@ impl Geoset {
             material_id: 0,
             selection_group: 0,
             unselectable_raw: 0,
-            header_extension: (version >= 900).then_some(GeosetHeaderExtension {
-                level_of_detail: 0,
-                name: FixedText::default(),
-            }),
+            header_extension: V::Header::empty(),
             extent: GeosetExtent::default(),
             sequence_extents: Vec::new(),
             extensions: Vec::new(),
@@ -121,7 +255,7 @@ impl Geoset {
 
     /// The MDX version used to interpret this record.
     pub fn version(&self) -> Version {
-        self.version
+        V::NUMBER
     }
 
     /// Borrows all vertex positions without decoding or allocating.
@@ -186,9 +320,7 @@ impl Geoset {
     }
     /// Returns the Reforged level of detail, if that field exists.
     pub fn level_of_detail(&self) -> Option<u32> {
-        self.header_extension
-            .as_ref()
-            .map(|header| header.level_of_detail)
+        self.header_extension.level_of_detail()
     }
     /// Returns the overall geoset bounds.
     pub fn extent(&self) -> GeosetExtent {
@@ -209,9 +341,7 @@ impl Geoset {
 
     /// Returns the fixed-width name without changing nonzero padding bytes.
     pub fn name(&self) -> Option<Cow<'_, str>> {
-        self.header_extension
-            .as_ref()
-            .map(|header| header.name.text())
+        self.header_extension.name()
     }
 
     /// Borrows optional Reforged tangent vectors.
@@ -233,7 +363,7 @@ impl Geoset {
     /// Borrows the extra untagged bone index array in newer files.
     pub fn skin_bone_indices(&self) -> Option<&[u8]> {
         self.extensions.iter().find_map(|part| match part {
-            GeosetExtraSection::Skin { bone_indices, .. } => bone_indices.as_deref(),
+            GeosetExtraSection::Skin { bone_indices, .. } => bone_indices.indices(),
             _ => None,
         })
     }
@@ -245,7 +375,7 @@ impl Geoset {
             .vertices
             .get_mut(index)
             .ok_or(ValueError::IndexOutOfBounds {
-                tag: GeosetsChunk::TAG,
+                tag: GeosetsChunk::<V>::TAG,
                 index,
                 len,
             })? = vertex;
@@ -259,7 +389,7 @@ impl Geoset {
             .normals
             .get_mut(index)
             .ok_or(ValueError::IndexOutOfBounds {
-                tag: GeosetsChunk::TAG,
+                tag: GeosetsChunk::<V>::TAG,
                 index,
                 len,
             })? = normal;
@@ -270,7 +400,7 @@ impl Geoset {
     pub fn set_vertex_groups(&mut self, groups: &[u8]) -> Result<(), ValueError> {
         if groups.len() != self.vertices.len() {
             return Err(ValueError::LengthMismatch {
-                tag: GeosetsChunk::TAG,
+                tag: GeosetsChunk::<V>::TAG,
                 expected: self.vertices.len(),
                 actual: groups.len(),
             });
@@ -283,7 +413,7 @@ impl Geoset {
     pub fn set_matrix_groups(&mut self, groups: &[Vec<u32>]) -> Result<(), ValueError> {
         if let Some(group) = groups.iter().find(|group| group.len() > u32::MAX as usize) {
             return Err(ValueError::CountTooLarge {
-                tag: GeosetsChunk::TAG,
+                tag: GeosetsChunk::<V>::TAG,
                 count: group.len(),
             });
         }
@@ -314,33 +444,25 @@ impl Geoset {
 
     /// Changes the Reforged level of detail.
     pub fn set_level_of_detail(&mut self, level: u32) -> Result<(), ValueError> {
-        if self.version < 900 {
-            return Err(ValueError::UnavailableField {
-                tag: GeosetsChunk::TAG,
+        *self
+            .header_extension
+            .level_of_detail_mut()
+            .ok_or(ValueError::UnavailableField {
+                tag: GeosetsChunk::<V>::TAG,
                 field: "level of detail",
-            });
-        }
-        self.header_extension
-            .as_mut()
-            .expect("versioned header")
-            .level_of_detail = level;
+            })? = level;
         Ok(())
     }
 
     /// Changes the Reforged name and clears unused name bytes.
     pub fn set_name(&mut self, name: &str) -> Result<(), ValueError> {
-        if self.version < 900 {
-            return Err(ValueError::UnavailableField {
-                tag: GeosetsChunk::TAG,
-                field: "name",
-            });
-        }
-        let mut field = FixedText::default();
-        field.set_text(name)?;
         self.header_extension
-            .as_mut()
-            .expect("versioned header")
-            .name = field;
+            .name_mut()
+            .ok_or(ValueError::UnavailableField {
+                tag: GeosetsChunk::<V>::TAG,
+                field: "name",
+            })?
+            .set_text(name)?;
         Ok(())
     }
 
@@ -360,7 +482,7 @@ impl Geoset {
             .sequence_extents
             .get_mut(index)
             .ok_or(ValueError::IndexOutOfBounds {
-                tag: GeosetsChunk::TAG,
+                tag: GeosetsChunk::<V>::TAG,
                 index,
                 len,
             })? = extent;
@@ -374,9 +496,9 @@ impl Geoset {
 
     /// Replaces or removes the Reforged tangent section, retaining its order.
     pub fn set_tangents(&mut self, tangents: Option<&[[f32; 4]]>) -> Result<(), ValueError> {
-        if self.version < 900 {
+        if V::NUMBER < 900 {
             return Err(ValueError::UnavailableField {
-                tag: GeosetsChunk::TAG,
+                tag: GeosetsChunk::<V>::TAG,
                 field: "tangents",
             });
         }
@@ -403,34 +525,35 @@ impl Geoset {
         weights: Option<&[u8]>,
         bone_indices: Option<&[u8]>,
     ) -> Result<(), ValueError> {
-        if self.version < 900 {
+        if V::NUMBER < 900 {
             return Err(ValueError::UnavailableField {
-                tag: GeosetsChunk::TAG,
+                tag: GeosetsChunk::<V>::TAG,
                 field: "skin data",
             });
         }
         if let Some(indices) = bone_indices {
-            if self.version < 1200 {
+            if V::NUMBER < 1200 {
                 return Err(ValueError::UnavailableField {
-                    tag: GeosetsChunk::TAG,
+                    tag: GeosetsChunk::<V>::TAG,
                     field: "skin bone indices",
                 });
             }
             let weights = weights.ok_or(ValueError::MissingField {
-                tag: GeosetsChunk::TAG,
+                tag: GeosetsChunk::<V>::TAG,
                 field: "skin weights",
             })?;
             if weights.len() != indices.len() {
                 return Err(ValueError::LengthMismatch {
-                    tag: GeosetsChunk::TAG,
+                    tag: GeosetsChunk::<V>::TAG,
                     expected: weights.len(),
                     actual: indices.len(),
                 });
             }
         }
+        let skin_bones = V::SkinBones::from_indices(bone_indices)?;
         let new_part = weights.map(|weights| GeosetExtraSection::Skin {
             weights: weights.to_vec(),
-            bone_indices: bone_indices.map(|indices| indices.to_vec()),
+            bone_indices: skin_bones,
         });
         if let Some(index) = self
             .extensions
@@ -455,7 +578,7 @@ impl Geoset {
             .uv_sets
             .get_mut(set)
             .ok_or(ValueError::IndexOutOfBounds {
-                tag: GeosetsChunk::TAG,
+                tag: GeosetsChunk::<V>::TAG,
                 index: set,
                 len: sets_len,
             })?;
@@ -463,7 +586,7 @@ impl Geoset {
         *coordinates
             .get_mut(index)
             .ok_or(ValueError::IndexOutOfBounds {
-                tag: GeosetsChunk::TAG,
+                tag: GeosetsChunk::<V>::TAG,
                 index,
                 len,
             })? = uv;
@@ -484,7 +607,7 @@ fn section<'a>(cursor: &mut Cursor<'a>, tag: Tag, stride: usize) -> Result<&'a [
     let offset = cursor.absolute_position();
     if cursor.read_exact(4)? != tag {
         return Err(DecodeError::MalformedRecord {
-            tag: GeosetsChunk::TAG,
+            tag: *b"GEOS",
             offset,
         });
     }
@@ -492,7 +615,7 @@ fn section<'a>(cursor: &mut Cursor<'a>, tag: Tag, stride: usize) -> Result<&'a [
     let size = count
         .checked_mul(stride)
         .ok_or(DecodeError::MalformedRecord {
-            tag: GeosetsChunk::TAG,
+            tag: *b"GEOS",
             offset,
         })?;
     cursor.read_exact(size)
@@ -509,7 +632,7 @@ fn decode_values<T: Readable>(bytes: &[u8], width: usize) -> Result<Vec<T>, Deco
 
 fn write_count(bytes: &mut Encoder<'_>, count: usize) -> Result<(), EncodeError> {
     let count = u32::try_from(count).map_err(|_| EncodeError::ChunkTooLarge {
-        tag: GeosetsChunk::TAG,
+        tag: *b"GEOS",
         size: count,
     })?;
     bytes.write(count);
@@ -543,30 +666,20 @@ fn write_vectors<const N: usize>(
     Ok(())
 }
 
-impl Model {
+impl<V: ModelVersion> Model<V> {
     /// Decodes geosets from every `GEOS` chunk in file order.
-    pub fn geosets(&self) -> Vec<Geoset> {
-        self.collect_chunk_records::<GeosetsChunk>()
+    pub fn geosets(&self) -> Vec<Geoset<V>> {
+        self.collect_chunk_records::<GeosetsChunk<V>>()
     }
 
-    /// Replaces geosets after checking their version.
-    pub fn set_geosets(&mut self, geosets: &[Geoset]) -> Result<(), ValueError> {
-        let expected = self.version();
-        for geoset in geosets {
-            if geoset.version != expected {
-                return Err(ValueError::VersionMismatch {
-                    expected,
-                    actual: geoset.version,
-                });
-            }
-        }
+    /// Replaces geosets.
+    pub fn set_geosets(&mut self, geosets: &[Geoset<V>]) {
         self.replace_chunk(GeosetsChunk::new(geosets.to_vec()));
-        Ok(())
     }
 }
 
-impl Decodable for Geoset {
-    fn decode_one(source: &mut Cursor<'_>, version: Version) -> Result<Self, DecodeError> {
+impl<V: ModelVersion> Decodable for Geoset<V> {
+    fn decode_one(source: &mut Cursor<'_>, _version: Version) -> Result<Self, DecodeError> {
         let mut cursor = source.slice_u32_sized()?;
 
         let value = {
@@ -581,11 +694,7 @@ impl Decodable for Geoset {
             let material_id = cursor.read()?;
             let selection_group = cursor.read()?;
             let unselectable_raw = cursor.read()?;
-            let header_extension = if version >= 900 {
-                Some(cursor.read()?)
-            } else {
-                None
-            };
+            let header_extension = V::Header::decode(&mut cursor)?;
             let extent = cursor.read()?;
             let sequence_count = cursor.read::<u32>()? as usize;
             let mut sequence_extents = Vec::new();
@@ -593,7 +702,7 @@ impl Decodable for Geoset {
                 sequence_extents.push(cursor.read()?);
             }
             let mut extensions = Vec::new();
-            if version >= 900 {
+            if V::NUMBER >= 900 {
                 while peek_tag(&cursor)? != *b"UVAS" {
                     let offset = cursor.absolute_position();
                     let tag = peek_tag(&cursor)?;
@@ -613,13 +722,7 @@ impl Decodable for Geoset {
                                 .any(|part| matches!(part, GeosetExtraSection::Skin { .. })) =>
                         {
                             let weights = section(&mut cursor, *b"SKIN", 1)?.to_vec();
-                            let bone_indices = if version >= 1200
-                                && !matches!(&peek_tag(&cursor)?, b"UVAS" | b"TANG")
-                            {
-                                Some(cursor.read_exact(weights.len())?.to_vec())
-                            } else {
-                                None
-                            };
+                            let bone_indices = V::SkinBones::decode(&mut cursor, weights.len())?;
                             extensions.push(GeosetExtraSection::Skin {
                                 weights,
                                 bone_indices,
@@ -627,7 +730,7 @@ impl Decodable for Geoset {
                         }
                         _ => {
                             return Err(DecodeError::MalformedRecord {
-                                tag: GeosetsChunk::TAG,
+                                tag: GeosetsChunk::<V>::TAG,
                                 offset,
                             })
                         }
@@ -636,7 +739,7 @@ impl Decodable for Geoset {
             }
             if cursor.read_exact(4)? != b"UVAS" {
                 return Err(DecodeError::MalformedRecord {
-                    tag: GeosetsChunk::TAG,
+                    tag: GeosetsChunk::<V>::TAG,
                     offset: cursor.absolute_position() - 4,
                 });
             }
@@ -649,7 +752,7 @@ impl Decodable for Geoset {
                 )?);
             }
             Ok(Self {
-                version,
+                version: PhantomData,
                 vertices,
                 normals,
                 primitive_types,
@@ -673,7 +776,7 @@ impl Decodable for Geoset {
     }
 }
 
-impl Encodable for Geoset {
+impl<V: ModelVersion> Encodable for Geoset<V> {
     fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), EncodeError> {
         let start = bytes.position();
         let marker = bytes.begin_sized();
@@ -696,10 +799,7 @@ impl Encodable for Geoset {
         ] {
             bytes.write(word);
         }
-        if self.version >= 900 {
-            let header = self.header_extension.as_ref().expect("versioned header");
-            bytes.write(header);
-        }
+        self.header_extension.encode(bytes);
         bytes.write(&self.extent);
         write_count(bytes, self.sequence_extents.len())?;
         for extent in &self.sequence_extents {
@@ -714,10 +814,10 @@ impl Encodable for Geoset {
                 } => {
                     write_section_header(bytes, *b"SKIN", weights.len())?;
                     bytes.write_bytes(weights);
-                    if let Some(indices) = bone_indices {
-                        if self.version < 1200 || indices.len() != weights.len() {
+                    if let Some(indices) = bone_indices.indices() {
+                        if V::NUMBER < 1200 || indices.len() != weights.len() {
                             return Err(EncodeError::MalformedRecord {
-                                tag: GeosetsChunk::TAG,
+                                tag: GeosetsChunk::<V>::TAG,
                                 offset: bytes.position() - start,
                             });
                         }
@@ -733,11 +833,11 @@ impl Encodable for Geoset {
         }
         if bytes.position() - start > u32::MAX as usize {
             return Err(EncodeError::ChunkTooLarge {
-                tag: GeosetsChunk::TAG,
+                tag: GeosetsChunk::<V>::TAG,
                 size: bytes.position() - start,
             });
         }
-        bytes.finish_sized(marker, GeosetsChunk::TAG)?;
+        bytes.finish_sized(marker, GeosetsChunk::<V>::TAG)?;
         Ok(())
     }
 }

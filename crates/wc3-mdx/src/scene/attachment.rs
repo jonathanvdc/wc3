@@ -2,6 +2,7 @@
 use crate::EncodeError;
 use crate::Encoder;
 use crate::KnownChunk;
+use crate::ModelVersion;
 use crate::ValueError;
 
 use crate::{AttachmentVisibility, AttachmentsChunk, Cursor};
@@ -78,7 +79,7 @@ impl Attachment {
     }
 }
 
-impl Model {
+impl<V: ModelVersion> Model<V> {
     /// Decodes all attachments in `ATCH` chunks.
     pub fn attachments(&self) -> Vec<Attachment> {
         self.collect_chunk_records::<AttachmentsChunk>()

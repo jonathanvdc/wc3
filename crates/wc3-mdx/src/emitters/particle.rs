@@ -1,4 +1,5 @@
 //! Classic particle emitters stored in `PREM` chunks.
+use crate::ModelVersion;
 crate::animation::track_group! {
     pub enum ParticleTrack {
         Visibility: ParticleVisibility,
@@ -144,7 +145,7 @@ impl ParticleEmitter {
     }
 }
 
-impl Model {
+impl<V: ModelVersion> Model<V> {
     /// Decodes all `PREM` records in file order.
     pub fn particle_emitters(&self) -> Vec<ParticleEmitter> {
         self.collect_chunk_records::<ParticleEmittersChunk>()

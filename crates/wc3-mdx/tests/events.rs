@@ -8,9 +8,9 @@ fn event_object_round_trip() {
     let mut event = EventObject::new(node, u32::MAX, &[100, 200]);
     event.set_global_sequence_id(3);
     event.set_frames(&[100, 200, 300]);
-    let mut model = Model::new(800);
+    let mut model = Model::<wc3_mdx::V800>::new();
     model.set_event_objects(&[event]);
-    let parsed = Model::decode(&model.encode().unwrap(), 800).unwrap();
+    let parsed = Model::<wc3_mdx::V800>::decode(&model.encode().unwrap(), 800).unwrap();
     let event = &parsed.event_objects()[0];
     assert_eq!(event.node().name(), "Sound");
     assert_eq!(event.global_sequence_id(), 3);
@@ -45,7 +45,7 @@ fn local_event_objects_round_trip_when_available() {
                 pending.push(path);
             } else if path.extension().is_some_and(|extension| extension == "mdx") {
                 let bytes = std::fs::read(&path).unwrap();
-                let mut model = Model::decode(&bytes, 800).unwrap();
+                let mut model = Model::<wc3_mdx::V800>::decode(&bytes, 800).unwrap();
                 if model.chunk(*b"EVTS").is_some() {
                     let events = model.event_objects();
                     model.set_event_objects(&events);

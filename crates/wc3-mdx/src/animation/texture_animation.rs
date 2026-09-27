@@ -1,4 +1,5 @@
 //! Typed texture animation tracks in `TXAN` chunks.
+use crate::ModelVersion;
 crate::animation::track_group! {
     pub enum TextureAnimationTrack {
         Translation: TextureTranslation,
@@ -38,7 +39,7 @@ impl TextureAnimation {
     }
 }
 
-impl Model {
+impl<V: ModelVersion> Model<V> {
     /// Decodes all texture animations in `TXAN` chunks.
     pub fn texture_animations(&self) -> Vec<TextureAnimation> {
         self.collect_chunk_records::<TextureAnimationsChunk>()

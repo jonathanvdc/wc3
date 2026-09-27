@@ -21,9 +21,9 @@ fn attachment_fields_and_visibility_round_trip() {
     )
     .unwrap();
     attachment.set_visibility_track(Some(&track));
-    let mut model = Model::new(1800);
+    let mut model = Model::<wc3_mdx::V1800>::new();
     model.set_attachments(&[attachment]);
-    let parsed = Model::decode(&model.encode().unwrap(), 800).unwrap();
+    let parsed = Model::<wc3_mdx::V1800>::decode(&model.encode().unwrap(), 800).unwrap();
     let attachment = &parsed.attachments()[0];
     assert_eq!(attachment.node().name(), "Weapon");
     assert_eq!(attachment.path(), "Abilities\\Weapons\\Sword.mdx");

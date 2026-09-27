@@ -1,4 +1,5 @@
 //! Geoset animation records in `GEOA` chunks.
+use crate::ModelVersion;
 crate::animation::track_group! {
     pub enum GeosetTrack {
         Alpha: GeosetAlpha,
@@ -112,7 +113,7 @@ impl GeosetAnimation {
     }
 }
 
-impl Model {
+impl<V: ModelVersion> Model<V> {
     /// Decodes all `GEOA` records in file order.
     pub fn geoset_animations(&self) -> Vec<GeosetAnimation> {
         self.collect_chunk_records::<GeosetAnimationsChunk>()

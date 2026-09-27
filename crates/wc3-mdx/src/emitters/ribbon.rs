@@ -1,4 +1,5 @@
 //! Ribbon emitter records in `RIBB` chunks.
+use crate::ModelVersion;
 crate::animation::track_group! {
     pub enum RibbonTrack {
         Visibility: RibbonVisibility,
@@ -86,7 +87,7 @@ impl RibbonEmitter {
     }
 }
 
-impl Model {
+impl<V: ModelVersion> Model<V> {
     /// Decodes all ribbon emitter records in file order.
     pub fn ribbon_emitters(&self) -> Vec<RibbonEmitter> {
         self.collect_chunk_records::<RibbonEmittersChunk>()

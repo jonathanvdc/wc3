@@ -1,6 +1,7 @@
 //! Fixed-size `MODL` model information.
 use crate::EncodeError;
 use crate::Encoder;
+use crate::ModelVersion;
 use crate::ValueError;
 use crate::{Tag, Vec3};
 
@@ -97,7 +98,7 @@ impl ModelInfo {
     }
 }
 
-impl Model {
+impl<V: ModelVersion> Model<V> {
     /// Returns the first decoded `MODL` record, if present.
     pub fn model_info(&self) -> Option<ModelInfo> {
         self.decoded_chunks::<ModelInfoChunk>()

@@ -67,11 +67,17 @@ mod tests {
 
     #[test]
     fn one_api_handles_model_fixed_and_versioned_records() {
-        let model = Model::new(800);
+        let model = Model::<crate::V800>::new();
         let bytes = model.encode().unwrap();
-        assert_eq!(Model::decode(&bytes, 800).unwrap().encode().unwrap(), bytes);
+        assert_eq!(
+            Model::<crate::V800>::decode(&bytes, 800)
+                .unwrap()
+                .encode()
+                .unwrap(),
+            bytes
+        );
         round_trip(&Sequence::new("Stand", [0, 100]).unwrap(), 800);
-        round_trip(&Geoset::new(1800, &[], &[], &[]).unwrap(), 1800);
+        round_trip(&Geoset::<crate::V1800>::new(&[], &[], &[]).unwrap(), 1800);
         assert!(Sequence::decode(&[0; 131], 800).is_err());
     }
 
@@ -95,16 +101,16 @@ mod tests {
             })
         );
 
-        let first = Geoset::new(800, &[], &[], &[]).unwrap();
-        let second = Geoset::new(800, &[], &[], &[]).unwrap();
+        let first = Geoset::<crate::V800>::new(&[], &[], &[]).unwrap();
+        let second = Geoset::<crate::V800>::new(&[], &[], &[]).unwrap();
         let mut bytes = first.encode().unwrap();
         bytes.extend_from_slice(&second.encode().unwrap());
         let mut cursor = Cursor::new(&bytes);
-        let decoded = Geoset::decode_one(&mut cursor, 800).unwrap();
+        let decoded = Geoset::<crate::V800>::decode_one(&mut cursor, 800).unwrap();
         assert_eq!(decoded, first);
         assert_eq!(cursor.position(), first.encode().unwrap().len());
         assert!(matches!(
-            Geoset::decode(&bytes, 800),
+            Geoset::<crate::V800>::decode(&bytes, 800),
             Err(DecodeError::TrailingRecordBytes { .. })
         ));
     }
@@ -130,8 +136,8 @@ mod tests {
             Bone::new(second.clone(), 3, 4),
         );
         check(
-            Camera::new("First").unwrap(),
-            Camera::new("Second").unwrap(),
+            Camera::<crate::V800>::new("First").unwrap(),
+            Camera::<crate::V800>::new("Second").unwrap(),
         );
         check(
             ParticleEmitter::new(first.clone(), "first.mdx").unwrap(),
@@ -147,13 +153,13 @@ mod tests {
     #[test]
     fn known_top_level_chunks_have_distinct_chunk_records() {
         let tags = [
-            VersionChunk::TAG,
+            VersionChunk::<crate::V800>::TAG,
             ModelInfoChunk::TAG,
             SequencesChunk::TAG,
             GlobalSequencesChunk::TAG,
             TexturesChunk::TAG,
-            MaterialsChunk::TAG,
-            GeosetsChunk::TAG,
+            MaterialsChunk::<crate::V800>::TAG,
+            GeosetsChunk::<crate::V800>::TAG,
             GeosetAnimationsChunk::TAG,
             BonesChunk::TAG,
             HelpersChunk::TAG,
@@ -164,8 +170,8 @@ mod tests {
             ParticleEmitters2Chunk::TAG,
             RibbonEmittersChunk::TAG,
             PopcornEmittersChunk::TAG,
-            CamerasChunk::TAG,
-            LightsChunk::TAG,
+            CamerasChunk::<crate::V800>::TAG,
+            LightsChunk::<crate::V800>::TAG,
             TextureAnimationsChunk::TAG,
             FaceFxChunk::TAG,
             PivotPointsChunk::TAG,

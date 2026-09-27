@@ -1,28 +1,29 @@
 //! The complete version chunk.
 use crate::EncodeError;
 use crate::Encoder;
-use crate::{Tag, Version};
+use crate::{ModelVersion, Tag};
+use std::marker::PhantomData;
 
 use crate::Cursor;
 use crate::{Chunk, DecodeError, KnownChunk};
 
 /// A complete `VERS` chunk, including bytes after the version number.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct VersionChunk {
-    pub version: Version,
+pub struct VersionChunk<V: ModelVersion> {
     pub extension: Vec<u8>,
+    version: PhantomData<V>,
 }
 
-impl VersionChunk {
-    pub fn new(version: Version) -> Self {
+impl<V: ModelVersion> VersionChunk<V> {
+    pub fn new() -> Self {
         Self {
-            version,
             extension: Vec::new(),
+            version: PhantomData,
         }
     }
 }
 
-impl Chunk for VersionChunk {
+impl<V: ModelVersion> Chunk for VersionChunk<V> {
     fn tag(&self) -> Tag {
         Self::TAG
     }
@@ -41,20 +42,29 @@ impl Chunk for VersionChunk {
             });
         }
 
-        bytes.write(self.version);
+        bytes.write(V::NUMBER);
         bytes.write_bytes(&self.extension);
         Ok(())
     }
 }
 
-impl KnownChunk for VersionChunk {
+impl<V: ModelVersion> KnownChunk for VersionChunk<V> {
     fn decode_payload(cursor: &mut Cursor<'_>, _version: u32) -> Result<Self, DecodeError> {
         let version = cursor
             .read()
             .map_err(|_| DecodeError::InvalidVersionChunk)?;
         let extension = cursor.remaining().to_vec();
         cursor.read_exact(extension.len())?;
-        Ok(Self { version, extension })
+        if version != V::NUMBER {
+            return Err(DecodeError::VersionMismatch {
+                expected: V::NUMBER,
+                actual: version,
+            });
+        }
+        Ok(Self {
+            extension,
+            version: PhantomData,
+        })
     }
 
     const TAG: Tag = *b"VERS";
@@ -67,14 +77,15 @@ mod version_chunk_tests {
 
     #[test]
     fn preserves_version_extension_bytes() {
-        let original = VersionChunk {
-            version: 1800,
-            extension: vec![9, 8, 7],
-        };
+        let mut original = VersionChunk::<crate::V1800>::new();
+        original.extension = vec![9, 8, 7];
         let payload = original.encode().unwrap();
-        assert_eq!(VersionChunk::decode(&payload, 1800).unwrap(), original);
         assert_eq!(
-            VersionChunk::decode(
+            VersionChunk::<crate::V1800>::decode(&payload, 1800).unwrap(),
+            original
+        );
+        assert_eq!(
+            VersionChunk::<crate::V800>::decode(
                 &[b"VERS".as_slice(), &3u32.to_le_bytes(), &[1, 2, 3]].concat(),
                 800
             ),

@@ -1,143 +1,98 @@
-use wc3_mdx::chunks::{ModelChunk, RawChunk};
+use wc3_mdx::chunks::{ModelChunk, RawChunk, UnknownChunk, VersionChunk};
 use wc3_mdx::emitters::RibbonEmitter;
 use wc3_mdx::geometry::Geoset;
-use wc3_mdx::io::{Decodable, Encodable};
-use wc3_mdx::io::{DecodeError, ValueError};
-use wc3_mdx::materials::Material;
+use wc3_mdx::io::{Decodable, DecodeError, Encodable};
+use wc3_mdx::materials::Layer;
 use wc3_mdx::scene::Node;
-use wc3_mdx::Model;
+use wc3_mdx::{AnyVersionModel, Model, V1800, V800};
 
 #[test]
-fn validates_synthetic_known_chunks_and_preserves_unknown() {
-    let mut model = Model::new(800);
-    model
-        .set_geosets(&[
-            Geoset::new(800, &[[0.0, 0.0, 0.0]], &[[0.0, 0.0, 1.0]], &[0, 0, 0]).unwrap(),
-        ])
-        .unwrap();
+fn typed_known_chunks_and_unknown_chunks_round_trip() {
+    let mut model = Model::<V800>::new();
+    model.set_geosets(&[
+        Geoset::<V800>::new(&[[0.0, 0.0, 0.0]], &[[0.0, 0.0, 1.0]], &[0, 0, 0]).unwrap(),
+    ]);
     model.set_ribbon_emitters(&[RibbonEmitter::new(Node::new("Trail", 1).unwrap())]);
-    model.push(ModelChunk::from_raw(
-        RawChunk::new(*b"FUTR", vec![1, 2, 3]),
-        800,
+    model.push(ModelChunk::Unknown(
+        UnknownChunk::<V800>::new(RawChunk::new(*b"FUTR", vec![1, 2, 3])).unwrap(),
     ));
-    model.validate().unwrap();
     let bytes = model.encode().unwrap();
-    assert_eq!(Model::decode(&bytes, 800).unwrap().encode().unwrap(), bytes);
+    assert_eq!(
+        Model::<V800>::decode(&bytes, 800)
+            .unwrap()
+            .encode()
+            .unwrap(),
+        bytes
+    );
 }
 
 #[test]
-fn empty_mdlx_is_valid() {
-    Model::decode(b"MDLX", 800).unwrap().validate().unwrap();
+fn empty_mdlx_uses_the_requested_type() {
+    assert_eq!(Model::<V800>::decode(b"MDLX", 800).unwrap().version(), 800);
 }
 
 #[test]
-fn rejects_malformed_known_track() {
-    let mut model = Model::new(800);
+fn malformed_known_track_cannot_enter_typed_model() {
     let mut ribbon = RibbonEmitter::new(Node::new("Trail", 1).unwrap())
         .encode()
-        .unwrap()
-        .to_vec();
+        .unwrap();
     ribbon.extend_from_slice(b"KRVS");
     let len = ribbon.len() as u32;
     ribbon[..4].copy_from_slice(&len.to_le_bytes());
-    model.push(ModelChunk::from_raw(RawChunk::new(*b"RIBB", ribbon), 800));
-    let ModelChunk::Malformed(malformed) = model.chunks().last().unwrap() else {
-        panic!("expected malformed ribbon chunk");
-    };
-    assert_eq!(model.validate(), Err(malformed.error().clone()));
+    assert!(ModelChunk::<V800>::from_raw(RawChunk::new(*b"RIBB", ribbon)).is_err());
 }
 
 #[test]
-fn rejects_short_repeated_version_chunks() {
-    let mut bytes = Model::new(800).encode().unwrap();
+fn repeated_versions_must_match_the_type() {
+    let mut bytes = Model::<V800>::new().encode().unwrap();
     bytes.extend_from_slice(b"VERS");
     bytes.extend_from_slice(&2u32.to_le_bytes());
     bytes.extend_from_slice(&[1, 2]);
     assert!(matches!(
-        Model::decode(&bytes, 800),
+        Model::<V800>::decode(&bytes, 800),
         Err(DecodeError::InvalidVersionChunk)
     ));
 
-    let mut model = Model::new(800);
-    model.chunks_mut()[0] = ModelChunk::from_raw(RawChunk::new(*b"VERS", Vec::new()), 800);
-    assert_eq!(model.stored_version(), None);
-    assert_eq!(model.version(), 800);
-    assert_eq!(model.validate(), Err(DecodeError::InvalidVersionChunk));
-    model.set_version(1800);
-    assert_eq!(model.version(), 1800);
-    assert_eq!(model.chunks().len(), 1);
-    model.validate().unwrap();
+    let wrong = RawChunk::new(*b"VERS", 1800u32.to_le_bytes().to_vec());
+    assert!(matches!(
+        ModelChunk::<V800>::from_raw(wrong),
+        Err(DecodeError::VersionMismatch {
+            expected: 800,
+            actual: 1800
+        })
+    ));
 }
 
 #[test]
-fn set_version_replaces_repeated_chunks_and_preserves_extension() {
-    let mut model = Model::new(800);
+fn version_extension_is_preserved_without_mutable_version_number() {
+    let mut model = Model::<V800>::new();
     let ModelChunk::Version(first) = &mut model.chunks_mut()[0] else {
         unreachable!()
     };
     first.extension = vec![7, 8];
-    model.push(ModelChunk::from(wc3_mdx::chunks::VersionChunk::new(900)));
-
-    model.set_version(1800);
-
-    assert_eq!(model.chunks().len(), 1);
-    let ModelChunk::Version(current) = &model.chunks()[0] else {
+    model.push(ModelChunk::from(VersionChunk::<V800>::new()));
+    let bytes = model.encode().unwrap();
+    let parsed = Model::<V800>::decode(&bytes, 800).unwrap();
+    let ModelChunk::Version(first) = &parsed.chunks()[0] else {
         unreachable!()
     };
-    assert_eq!(current.version, 1800);
-    assert_eq!(current.extension, [7, 8]);
+    assert_eq!(first.extension, [7, 8]);
+    assert_eq!(parsed.version(), 800);
 }
 
 #[test]
-fn rejects_layer_shorter_than_its_versioned_header() {
-    let mut material = Material::new(1800);
-    let layer = wc3_mdx::materials::Layer::new(800).encode().unwrap();
-    assert!(wc3_mdx::materials::Layer::decode(&layer, 1800).is_err());
-    assert_eq!(
-        material.set_layers(&[wc3_mdx::materials::Layer::new(800)]),
-        Err(ValueError::VersionMismatch {
-            expected: 1800,
-            actual: 800
-        })
-    );
+fn layer_layout_is_selected_by_its_type() {
+    let classic = Layer::<V800>::new().encode().unwrap();
+    assert!(Layer::<V1800>::decode(&classic, 1800).is_err());
 }
 
 #[test]
-fn rejects_records_from_another_model_version() {
-    let mut model = Model::new(1800);
-    assert_eq!(
-        model.set_materials(&[Material::new(800)]),
-        Err(ValueError::VersionMismatch {
-            expected: 1800,
-            actual: 800
-        })
-    );
-    assert_eq!(
-        model.set_geosets(&[Geoset::new(800, &[], &[], &[]).unwrap()]),
-        Err(ValueError::VersionMismatch {
-            expected: 1800,
-            actual: 800
-        })
-    );
+fn malformed_model_info_chunk_is_rejected() {
+    assert!(ModelChunk::<V800>::from_raw(RawChunk::new(*b"MODL", vec![0; 12])).is_err());
 }
 
 #[test]
-fn rejects_malformed_repeated_model_info_chunk() {
-    let mut model = Model::new(800);
-    model.set_model_info(&wc3_mdx::scene::ModelInfo::new("Good").unwrap());
-    model.push(ModelChunk::from_raw(
-        RawChunk::new(*b"MODL", vec![0; 12]),
-        800,
-    ));
-    assert!(model.model_info().is_some());
-    let ModelChunk::Malformed(malformed) = model.chunks().last().unwrap() else {
-        panic!("expected malformed model info chunk");
-    };
-    assert_eq!(model.validate(), Err(malformed.error().clone()));
-}
-
-#[test]
-fn validates_local_models_when_available() {
+fn local_models_decode_when_available() {
     let Ok(directory) = std::env::var("WC3_MDX_FIXTURES") else {
         return;
     };
@@ -149,9 +104,7 @@ fn validates_local_models_when_available() {
                 pending.push(path);
             } else if path.extension().is_some_and(|extension| extension == "mdx") {
                 let bytes = std::fs::read(&path).unwrap();
-                let model = Model::decode(&bytes, 800).unwrap();
-                model
-                    .validate()
+                AnyVersionModel::decode(&bytes, 800)
                     .unwrap_or_else(|error| panic!("{}: {error}", path.display()));
             }
         }

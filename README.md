@@ -1,55 +1,50 @@
 # wc3-mdx
 
 Pure Rust Warcraft III MDX reader and writer for Classic and Reforged models.
-The crate keeps decoded chunks in file order. Unknown and malformed chunks
-retain their exact payload bytes. The target range is MDX versions 800
-through 1800.
+The crate keeps decoded chunks in file order. Unknown chunks retain their
+exact payload bytes. Known chunks that cannot be decoded return an error.
+Typed models are available for MDX versions 800, 900, 1000, 1100, 1200, and 1800.
 
 Typed access covers the standard model, sequence, material, texture, geoset,
 node, animation, emitter, light, camera, attachment, collision, face effect,
 and bind pose chunks. Flag fields expose named bits while retaining unknown
-bits. `Model::validate()` checks known record layouts and tracks. The package
-has no runtime dependencies.
+bits. The package has no runtime dependencies.
 
-Byte-for-byte round-trip has been tested on a small local set of version 1800
-models and on synthetic models spanning 800 through 1800. Full semantic
+The tests cover synthetic models across the supported versions. Optional
+fixture tests check byte-for-byte round trips on local models. Full semantic
 coverage across the entire game collection has not yet been verified.
 
 ## Rust API
 
 ```rust
-use wc3_mdx::Model;
-use wc3_mdx::io::Record;
+use wc3_mdx::{AnyVersionModel, Model, V800};
+use wc3_mdx::io::{Decodable, Encodable};
 use wc3_mdx::scene::ModelInfo;
 
-let mut model = Model::new(800);
+let mut model = Model::<V800>::new();
 model.set_model_info(&ModelInfo::new("Example")?);
 let encoded = model.encode()?;
-let decoded = Model::decode_latest(&encoded)?;
-decoded.validate()?;
+let decoded = Model::<V800>::decode(&encoded, 800)?;
 assert_eq!(decoded.version(), 800);
 let info = decoded.model_info().unwrap();
 assert_eq!(info.name(), "Example");
+assert!(matches!(AnyVersionModel::decode(&encoded, 800)?, AnyVersionModel::V800(_)));
 # Ok::<(), Box<dyn std::error::Error>>(())
 ```
 
 Constructors and setters that can reject values return `ValueError`. Binary
-decoding and model validation return `DecodeError`; encoding returns `EncodeError`.
+decoding returns `DecodeError`; encoding returns `EncodeError`.
 
-`Model::chunks()` exposes `chunks::ModelChunk` variants for known chunk types, plus
-`Unknown` and `Malformed` variants. A malformed chunk retains its original
-bytes and decoding error; typed accessors and `validate()` skip it. Editing a
-typed chunk variant writes its new payload when the model is encoded.
+`Model<V>::chunks()` exposes `chunks::ModelChunk<V>` variants. Versioned records
+in those chunks also carry `V`. An `Unknown` chunk can only use a tag that the
+library does not recognize. Editing a typed chunk writes its new payload.
 
-Run unit and integration tests with `cargo test --all-targets`.
-Set `WC3_MDX_FIXTURES` to a directory of local `.mdx` files to include
-recursive byte-for-byte round-trip checks.
+Run the full test suite with `cargo test --workspace`. Set `WC3_MDX_FIXTURES`
+to a directory of local `.mdx` files for additional round-trip checks.
 
-`Geoset`, `Material`, and `Layer` retain the MDX version supplied when they
-are created or decoded. Their field accessors use that version automatically.
-For example, `model.materials()?` returns materials whose `layers()` and
-`shader()` methods need no version argument. Model setters reject records
-built for a different version.
+`Geoset<V>`, `Material<V>`, `Layer<V>`, `Camera<V>`, and `Light<V>` select their
+version-specific fields through traits implemented beside those records.
+Setters on `Model<V>` accept records with the same `V`.
 
 Geosets and variable-length records such as materials, nodes, lights,
 cameras, emitters, and bind poses store decoded sections. Track accessors borrow parsed

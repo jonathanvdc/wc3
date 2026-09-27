@@ -12,16 +12,16 @@ fn bind_pose_matrices_round_trip() {
     assert_eq!(pose.records.first().map(|record| record.0), Some(matrix));
     let changed = [2.0; 12];
     pose.records[0] = BindPoseMatrix(changed);
-    let mut model = Model::new(1800);
+    let mut model = Model::<wc3_mdx::V1800>::new();
     model.set_bind_pose(&pose);
-    let parsed = Model::decode(&model.encode().unwrap(), 800).unwrap();
+    let parsed = Model::<wc3_mdx::V1800>::decode(&model.encode().unwrap(), 800).unwrap();
     assert_eq!(parsed.bind_poses()[0].records[0].0, changed);
 }
 
 #[test]
-fn bind_poses_skip_malformed_chunks_and_setter_replaces_them() {
-    let mut model = Model::new(1800);
-    model.push(ModelChunk::from_raw(RawChunk::new(*b"BPOS", vec![0]), 1800));
+fn malformed_bind_pose_chunk_is_rejected() {
+    let mut model = Model::<wc3_mdx::V1800>::new();
+    assert!(ModelChunk::<wc3_mdx::V1800>::from_raw(RawChunk::new(*b"BPOS", vec![0])).is_err());
     assert!(model.bind_poses().is_empty());
 
     let pose = BindPoseChunk::new(vec![BindPoseMatrix([0.0; 12])]);
@@ -43,7 +43,7 @@ fn local_bind_poses_round_trip_when_available() {
                 pending.push(path);
             } else if path.extension().is_some_and(|extension| extension == "mdx") {
                 let bytes = std::fs::read(&path).unwrap();
-                let mut model = Model::decode(&bytes, 800).unwrap();
+                let mut model = Model::<wc3_mdx::V1800>::decode(&bytes, 800).unwrap();
                 if let Some(pose) = model.bind_poses().first() {
                     model.set_bind_pose(pose);
                     assert_eq!(model.encode().unwrap(), bytes);

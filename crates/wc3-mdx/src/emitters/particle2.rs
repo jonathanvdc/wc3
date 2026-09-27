@@ -1,4 +1,5 @@
 //! Particle emitter 2 records in `PRE2` chunks.
+use crate::ModelVersion;
 crate::animation::track_group! {
     pub enum Particle2Track {
         Visibility: Particle2Visibility,
@@ -153,7 +154,7 @@ impl ParticleEmitter2 {
     }
 }
 
-impl Model {
+impl<V: ModelVersion> Model<V> {
     /// Decodes all `PRE2` records in file order.
     pub fn particle_emitters2(&self) -> Vec<ParticleEmitter2> {
         self.collect_chunk_records::<ParticleEmitters2Chunk>()

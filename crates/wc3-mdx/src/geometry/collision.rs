@@ -2,6 +2,7 @@
 use crate::EncodeError;
 use crate::Encoder;
 use crate::KnownChunk;
+use crate::ModelVersion;
 use crate::Vec3;
 
 use crate::CollisionShapesChunk;
@@ -127,7 +128,7 @@ impl CollisionShape {
     }
 }
 
-impl Model {
+impl<V: ModelVersion> Model<V> {
     /// Decodes all collision shapes in `CLID` chunks.
     pub fn collision_shapes(&self) -> Vec<CollisionShape> {
         self.collect_chunk_records::<CollisionShapesChunk>()

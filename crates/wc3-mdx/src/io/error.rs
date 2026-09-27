@@ -16,6 +16,10 @@ pub enum DecodeError {
     TruncatedChunk { tag: Tag, offset: usize, size: u32 },
     /// `VERS` has no four-byte version number.
     InvalidVersionChunk,
+    /// A typed model was decoded from a file with a different version.
+    VersionMismatch { expected: Version, actual: Version },
+    /// No typed model implementation exists for this version.
+    UnsupportedVersion { version: Version },
     /// A known chunk is too short for its fixed layout.
     MalformedChunk {
         tag: Tag,
@@ -51,6 +55,15 @@ impl fmt::Display for DecodeError {
                 String::from_utf8_lossy(tag)
             ),
             Self::InvalidVersionChunk => write!(f, "VERS chunk has fewer than four bytes"),
+            Self::UnsupportedVersion { version } => {
+                write!(f, "unsupported model version {version}")
+            }
+            Self::VersionMismatch { expected, actual } => {
+                write!(
+                    f,
+                    "model version {actual} does not match expected version {expected}"
+                )
+            }
             Self::MalformedChunk {
                 tag,
                 size,

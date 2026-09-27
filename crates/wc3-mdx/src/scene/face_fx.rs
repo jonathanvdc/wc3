@@ -1,6 +1,7 @@
 //! Reforged face-animation references in `FAFX` chunks.
 use crate::EncodeError;
 use crate::Encoder;
+use crate::ModelVersion;
 use crate::ValueError;
 
 use crate::{Cursor, FaceFxChunk};
@@ -53,7 +54,7 @@ impl FaceFx {
     }
 }
 
-impl Model {
+impl<V: ModelVersion> Model<V> {
     /// Decodes every `FAFX` record in file order.
     pub fn face_fx(&self) -> Vec<FaceFx> {
         self.collect_chunk_records::<FaceFxChunk>()
