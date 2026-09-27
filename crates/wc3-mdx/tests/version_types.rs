@@ -1,5 +1,7 @@
+use std::mem::size_of;
 use wc3_mdx::chunks::{ModelChunk, RawChunk, UnknownChunk};
-use wc3_mdx::geometry::Geoset;
+
+use wc3_mdx::geometry::{Geoset, GeosetLayout, NoGeosetExtensions, ReforgedGeosetExtensions};
 use wc3_mdx::io::{DecodeError, Readable, ValueError, Writable};
 use wc3_mdx::materials::{Layer, Material};
 use wc3_mdx::scene::{Camera, CameraVariant, Light, Node};
@@ -86,4 +88,13 @@ fn runtime_dispatch_rejects_versions_without_a_layout() {
         DynamicModel::decode(&bytes, 800),
         Err(DecodeError::UnsupportedVersion { version: 777 })
     ));
+}
+
+#[test]
+fn geoset_extension_storage_is_selected_by_version() {
+    let classic: <V800 as GeosetLayout>::Extensions = NoGeosetExtensions;
+    let modern: <V900 as GeosetLayout>::Extensions = ReforgedGeosetExtensions::default();
+    assert_eq!(size_of::<NoGeosetExtensions>(), 0);
+    assert_eq!(classic, NoGeosetExtensions);
+    assert_eq!(modern, ReforgedGeosetExtensions::default());
 }

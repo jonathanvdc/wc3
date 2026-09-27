@@ -48,6 +48,51 @@ enum GeosetExtraSection {
     Skin { weights: Vec<SkinWeights> },
 }
 
+/// Storage and serialization of the optional geoset sections for a version.
+pub trait GeosetExtensions: Default + Clone + Debug + PartialEq {
+    fn read<V: ModelVersion>(_: &mut Cursor<'_>) -> Result<Self, DecodeError> {
+        Ok(Self::default())
+    }
+    fn write<V: ModelVersion>(&self, _: &mut Encoder<'_>) -> Result<(), EncodeError> {
+        Ok(())
+    }
+    fn reforged(&self) -> Option<&ReforgedGeosetExtensions> {
+        None
+    }
+    fn reforged_mut(&mut self) -> Option<&mut ReforgedGeosetExtensions> {
+        None
+    }
+}
+
+/// Classic geosets have no optional extension sections or extension storage.
+#[derive(Clone, Debug, PartialEq, Default)]
+pub struct NoGeosetExtensions;
+
+impl GeosetExtensions for NoGeosetExtensions {}
+
+/// Optional TANG and SKIN sections, retained in file order.
+#[derive(Clone, Debug, PartialEq, Default)]
+pub struct ReforgedGeosetExtensions {
+    sections: Vec<GeosetExtraSection>,
+}
+
+impl GeosetExtensions for ReforgedGeosetExtensions {
+    fn read<V: ModelVersion>(cursor: &mut Cursor<'_>) -> Result<Self, DecodeError> {
+        Ok(Self {
+            sections: read_extensions::<V>(cursor)?,
+        })
+    }
+    fn write<V: ModelVersion>(&self, bytes: &mut Encoder<'_>) -> Result<(), EncodeError> {
+        write_extensions::<V>(bytes, &self.sections)
+    }
+    fn reforged(&self) -> Option<&Self> {
+        Some(self)
+    }
+    fn reforged_mut(&mut self) -> Option<&mut Self> {
+        Some(self)
+    }
+}
+
 /// Fixed header fields added in version 900. Both fields are always present
 /// together, and the exact name bytes are retained for round-trip encoding.
 #[derive(Clone, Debug, PartialEq, Default, Readable, Writable)]
@@ -95,35 +140,45 @@ impl GeosetHeader for GeosetHeaderExtension {
 /// Chooses geoset fields for a model version.
 pub trait GeosetLayout {
     type Header: GeosetHeader;
+    type Extensions: GeosetExtensions;
 }
 
 use crate::{V1000, V1100, V1200, V1300, V1400, V1600, V1800, V800, V900};
 impl GeosetLayout for V800 {
     type Header = ClassicGeosetHeader;
+    type Extensions = NoGeosetExtensions;
 }
 impl GeosetLayout for V900 {
     type Header = GeosetHeaderExtension;
+    type Extensions = ReforgedGeosetExtensions;
 }
 impl GeosetLayout for V1000 {
     type Header = GeosetHeaderExtension;
+    type Extensions = ReforgedGeosetExtensions;
 }
 impl GeosetLayout for V1100 {
     type Header = GeosetHeaderExtension;
+    type Extensions = ReforgedGeosetExtensions;
 }
 impl GeosetLayout for V1200 {
     type Header = GeosetHeaderExtension;
+    type Extensions = ReforgedGeosetExtensions;
 }
 impl GeosetLayout for V1300 {
     type Header = GeosetHeaderExtension;
+    type Extensions = ReforgedGeosetExtensions;
 }
 impl GeosetLayout for V1400 {
     type Header = GeosetHeaderExtension;
+    type Extensions = ReforgedGeosetExtensions;
 }
 impl GeosetLayout for V1600 {
     type Header = GeosetHeaderExtension;
+    type Extensions = ReforgedGeosetExtensions;
 }
 impl GeosetLayout for V1800 {
     type Header = GeosetHeaderExtension;
+    type Extensions = ReforgedGeosetExtensions;
 }
 
 /// A geoset as typed sections. The exact fixed-width name field is retained
@@ -145,7 +200,7 @@ pub struct Geoset<V: ModelVersion> {
     header_extension: V::Header,
     extent: GeosetExtent,
     sequence_extents: Vec<GeosetExtent>,
-    extensions: Vec<GeosetExtraSection>,
+    extensions: V::Extensions,
     uv_sets: Vec<Vec<[f32; 2]>>,
 }
 
@@ -181,7 +236,7 @@ impl<V: ModelVersion> Geoset<V> {
             header_extension: V::Header::default(),
             extent: GeosetExtent::default(),
             sequence_extents: Vec::new(),
-            extensions: Vec::new(),
+            extensions: V::Extensions::default(),
             uv_sets: vec![vec![[0.0; 2]; vertices.len()]],
         })
     }
@@ -303,10 +358,16 @@ impl<V: ModelVersion> Geoset<V> {
                 actual: V::NUMBER,
             });
         }
-        Ok(self.extensions.iter().find_map(|part| match part {
-            GeosetExtraSection::Tangents(values) => Some(values.as_slice()),
-            _ => None,
-        }))
+        Ok(self
+            .extensions
+            .reforged()
+            .expect("supported version")
+            .sections
+            .iter()
+            .find_map(|part| match part {
+                GeosetExtraSection::Tangents(values) => Some(values.as_slice()),
+                _ => None,
+            }))
     }
 
     /// Borrows the four bone influences for each skinned vertex.
@@ -318,10 +379,16 @@ impl<V: ModelVersion> Geoset<V> {
                 actual: V::NUMBER,
             });
         }
-        Ok(self.extensions.iter().find_map(|part| match part {
-            GeosetExtraSection::Skin { weights, .. } => Some(weights.as_slice()),
-            _ => None,
-        }))
+        Ok(self
+            .extensions
+            .reforged()
+            .expect("supported version")
+            .sections
+            .iter()
+            .find_map(|part| match part {
+                GeosetExtraSection::Skin { weights, .. } => Some(weights.as_slice()),
+                _ => None,
+            }))
     }
 
     /// Changes one vertex position.
@@ -461,19 +528,22 @@ impl<V: ModelVersion> Geoset<V> {
                 actual: V::NUMBER,
             });
         }
-        if let Some(index) = self
+        let sections = &mut self
             .extensions
+            .reforged_mut()
+            .expect("supported version")
+            .sections;
+        if let Some(index) = sections
             .iter()
             .position(|part| matches!(part, GeosetExtraSection::Tangents(_)))
         {
             if let Some(values) = tangents {
-                self.extensions[index] = GeosetExtraSection::Tangents(values.to_vec());
+                sections[index] = GeosetExtraSection::Tangents(values.to_vec());
             } else {
-                self.extensions.remove(index);
+                sections.remove(index);
             }
         } else if let Some(values) = tangents {
-            self.extensions
-                .insert(0, GeosetExtraSection::Tangents(values.to_vec()));
+            sections.insert(0, GeosetExtraSection::Tangents(values.to_vec()));
         }
         Ok(())
     }
@@ -512,21 +582,25 @@ impl<V: ModelVersion> Geoset<V> {
                 });
             }
         }
+        let sections = &mut self
+            .extensions
+            .reforged_mut()
+            .expect("supported version")
+            .sections;
         let new_part = weights.map(|weights| GeosetExtraSection::Skin {
             weights: weights.to_vec(),
         });
-        if let Some(index) = self
-            .extensions
+        if let Some(index) = sections
             .iter()
             .position(|part| matches!(part, GeosetExtraSection::Skin { .. }))
         {
             if let Some(part) = new_part {
-                self.extensions[index] = part;
+                sections[index] = part;
             } else {
-                self.extensions.remove(index);
+                sections.remove(index);
             }
         } else if let Some(part) = new_part {
-            self.extensions.push(part);
+            sections.push(part);
         }
         Ok(())
     }
@@ -633,39 +707,73 @@ fn read_extensions<V: ModelVersion>(
     cursor: &mut Cursor<'_>,
 ) -> Result<Vec<GeosetExtraSection>, DecodeError> {
     let mut extensions = Vec::new();
-    if V::NUMBER >= 900 {
-        while peek_tag(cursor)? != *b"UVAS" {
-            let offset = cursor.absolute_position();
-            let tag = peek_tag(cursor)?;
-            match &tag {
-                b"TANG"
-                    if !extensions
-                        .iter()
-                        .any(|part| matches!(part, GeosetExtraSection::Tangents(_))) =>
-                {
-                    extensions.push(GeosetExtraSection::Tangents(decode_values::<[f32; 4]>(
-                        section(cursor, *b"TANG", 16)?,
-                        16,
-                    )?));
-                }
-                b"SKIN"
-                    if !extensions
-                        .iter()
-                        .any(|part| matches!(part, GeosetExtraSection::Skin { .. })) =>
-                {
-                    let weights = read_skin_weights::<V>(cursor)?;
-                    extensions.push(GeosetExtraSection::Skin { weights });
-                }
-                _ => {
-                    return Err(DecodeError::MalformedRecord {
-                        tag: GeosetsChunk::<V>::TAG,
-                        offset,
-                    })
-                }
+    while peek_tag(cursor)? != *b"UVAS" {
+        let offset = cursor.absolute_position();
+        let tag = peek_tag(cursor)?;
+        match &tag {
+            b"TANG"
+                if !extensions
+                    .iter()
+                    .any(|part| matches!(part, GeosetExtraSection::Tangents(_))) =>
+            {
+                extensions.push(GeosetExtraSection::Tangents(decode_values::<[f32; 4]>(
+                    section(cursor, *b"TANG", 16)?,
+                    16,
+                )?));
+            }
+            b"SKIN"
+                if !extensions
+                    .iter()
+                    .any(|part| matches!(part, GeosetExtraSection::Skin { .. })) =>
+            {
+                let weights = read_skin_weights::<V>(cursor)?;
+                extensions.push(GeosetExtraSection::Skin { weights });
+            }
+            _ => {
+                return Err(DecodeError::MalformedRecord {
+                    tag: GeosetsChunk::<V>::TAG,
+                    offset,
+                })
             }
         }
     }
     Ok(extensions)
+}
+
+fn write_extensions<V: ModelVersion>(
+    bytes: &mut Encoder<'_>,
+    sections: &[GeosetExtraSection],
+) -> Result<(), EncodeError> {
+    for extension in sections {
+        match extension {
+            GeosetExtraSection::Tangents(tangents) => write_vectors(bytes, *b"TANG", tangents)?,
+            GeosetExtraSection::Skin { weights } => {
+                write_section_header(bytes, *b"SKIN", weights.len() * 8)?;
+                for vertex in weights {
+                    for &index in &vertex.bone_indices {
+                        if V::NUMBER >= 1400 {
+                            bytes.write(&index)?;
+                        } else {
+                            let index =
+                                u8::try_from(index).map_err(|_| EncodeError::MalformedRecord {
+                                    tag: *b"SKIN",
+                                    offset: bytes.position(),
+                                })?;
+                            bytes.write(&index)?;
+                        }
+                    }
+                    for &weight in &vertex.weights {
+                        if V::NUMBER >= 1400 {
+                            bytes.write(&u16::from(weight))?;
+                        } else {
+                            bytes.write(&weight)?;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    Ok(())
 }
 
 fn write_count(bytes: &mut Encoder<'_>, count: usize) -> Result<(), EncodeError> {
@@ -739,7 +847,7 @@ impl<V: ModelVersion> Readable for Geoset<V> {
             for _ in 0..sequence_count {
                 sequence_extents.push(cursor.read()?);
             }
-            let extensions = read_extensions::<V>(&mut cursor)?;
+            let extensions = V::Extensions::read::<V>(&mut cursor)?;
             if cursor.read_exact(4)? != b"UVAS" {
                 return Err(DecodeError::MalformedRecord {
                     tag: GeosetsChunk::<V>::TAG,
@@ -808,36 +916,7 @@ impl<V: ModelVersion> Writable for Geoset<V> {
         for extent in &self.sequence_extents {
             bytes.write(extent)?;
         }
-        for extension in &self.extensions {
-            match extension {
-                GeosetExtraSection::Tangents(tangents) => write_vectors(bytes, *b"TANG", tangents)?,
-                GeosetExtraSection::Skin { weights } => {
-                    write_section_header(bytes, *b"SKIN", weights.len() * 8)?;
-                    for vertex in weights {
-                        for &index in &vertex.bone_indices {
-                            if V::NUMBER >= 1400 {
-                                bytes.write(&index)?;
-                            } else {
-                                let index = u8::try_from(index).map_err(|_| {
-                                    EncodeError::MalformedRecord {
-                                        tag: *b"SKIN",
-                                        offset: bytes.position() - start,
-                                    }
-                                })?;
-                                bytes.write(&index)?;
-                            }
-                        }
-                        for &weight in &vertex.weights {
-                            if V::NUMBER >= 1400 {
-                                bytes.write(&u16::from(weight))?;
-                            } else {
-                                bytes.write(&weight)?;
-                            }
-                        }
-                    }
-                }
-            }
-        }
+        self.extensions.write::<V>(bytes)?;
         bytes.write_bytes(b"UVAS");
         write_count(bytes, self.uv_sets.len())?;
         for uv_set in &self.uv_sets {
@@ -864,16 +943,26 @@ impl<V: SupportsReforgedChunks> Geoset<V> {
         self.header_extension.name().expect("supported version")
     }
     pub fn tangents(&self) -> Option<&[[f32; 4]]> {
-        self.extensions.iter().find_map(|part| match part {
-            GeosetExtraSection::Tangents(values) => Some(values.as_slice()),
-            _ => None,
-        })
+        self.extensions
+            .reforged()
+            .expect("supported version")
+            .sections
+            .iter()
+            .find_map(|part| match part {
+                GeosetExtraSection::Tangents(values) => Some(values.as_slice()),
+                _ => None,
+            })
     }
     pub fn skin_weights(&self) -> Option<&[SkinWeights]> {
-        self.extensions.iter().find_map(|part| match part {
-            GeosetExtraSection::Skin { weights, .. } => Some(weights.as_slice()),
-            _ => None,
-        })
+        self.extensions
+            .reforged()
+            .expect("supported version")
+            .sections
+            .iter()
+            .find_map(|part| match part {
+                GeosetExtraSection::Skin { weights, .. } => Some(weights.as_slice()),
+                _ => None,
+            })
     }
     pub fn set_level_of_detail(&mut self, level: u32) {
         self.try_set_level_of_detail(level)
