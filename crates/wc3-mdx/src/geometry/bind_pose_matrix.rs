@@ -1,14 +1,14 @@
 //! One matrix in a Reforged bind pose.
 use crate::ModelVersion;
-use crate::{BindPoseChunk, Cursor, DecodeError, Encodable, EncodeError, Encoder, Model, Readable};
+use crate::{BindPoseChunk, Cursor, DecodeError, EncodeError, Encoder, Model, Readable, Writable};
 
 /// A 3-by-4 floating-point bind-pose matrix.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct BindPoseMatrix(pub [f32; 12]);
 
-impl Encodable for BindPoseMatrix {
-    fn encode_to(&self, output: &mut Encoder<'_>) -> Result<(), EncodeError> {
-        output.write(self.0);
+impl Writable for &BindPoseMatrix {
+    fn write_to(self, output: &mut Encoder<'_>) -> Result<(), EncodeError> {
+        output.write(self.0)?;
         Ok(())
     }
 }

@@ -9,7 +9,6 @@ use std::fmt::Debug;
 use std::marker::PhantomData;
 
 use crate::Cursor;
-use crate::Encodable;
 use crate::GeosetsChunk;
 use std::borrow::Cow;
 
@@ -57,7 +56,7 @@ pub struct GeosetHeaderExtension {
 pub trait GeosetHeader: Clone + Debug + PartialEq {
     fn empty() -> Self;
     fn decode(cursor: &mut Cursor<'_>) -> Result<Self, DecodeError>;
-    fn encode(&self, output: &mut Encoder<'_>);
+    fn encode(&self, output: &mut Encoder<'_>) -> Result<(), EncodeError>;
     fn level_of_detail(&self) -> Option<u32> {
         None
     }
@@ -82,7 +81,9 @@ impl GeosetHeader for ClassicGeosetHeader {
     fn decode(_: &mut Cursor<'_>) -> Result<Self, DecodeError> {
         Ok(Self)
     }
-    fn encode(&self, _: &mut Encoder<'_>) {}
+    fn encode(&self, _: &mut Encoder<'_>) -> Result<(), EncodeError> {
+        Ok(())
+    }
 }
 
 impl GeosetHeader for GeosetHeaderExtension {
@@ -95,8 +96,8 @@ impl GeosetHeader for GeosetHeaderExtension {
     fn decode(cursor: &mut Cursor<'_>) -> Result<Self, DecodeError> {
         cursor.read()
     }
-    fn encode(&self, output: &mut Encoder<'_>) {
-        output.write(self);
+    fn encode(&self, output: &mut Encoder<'_>) -> Result<(), EncodeError> {
+        output.write(self)
     }
     fn level_of_detail(&self) -> Option<u32> {
         Some(self.level_of_detail)
@@ -635,7 +636,7 @@ fn write_count(bytes: &mut Encoder<'_>, count: usize) -> Result<(), EncodeError>
         tag: *b"GEOS",
         size: count,
     })?;
-    bytes.write(count);
+    bytes.write(count)?;
     Ok(())
 }
 
@@ -651,7 +652,7 @@ fn write_section_header(
 fn write_words(bytes: &mut Encoder<'_>, tag: Tag, words: &[u32]) -> Result<(), EncodeError> {
     write_section_header(bytes, tag, words.len())?;
     for word in words {
-        bytes.write(word);
+        bytes.write(word)?;
     }
     Ok(())
 }
@@ -662,7 +663,7 @@ fn write_vectors<const N: usize>(
     vectors: &[[f32; N]],
 ) -> Result<(), EncodeError> {
     write_section_header(bytes, tag, vectors.len())?;
-    bytes.write(vectors);
+    bytes.write(vectors)?;
     Ok(())
 }
 
@@ -776,8 +777,8 @@ impl<V: ModelVersion> Readable for Geoset<V> {
     }
 }
 
-impl<V: ModelVersion> Encodable for Geoset<V> {
-    fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), EncodeError> {
+impl<V: ModelVersion> Writable for &Geoset<V> {
+    fn write_to(self, bytes: &mut Encoder<'_>) -> Result<(), EncodeError> {
         let start = bytes.position();
         let marker = bytes.begin_sized();
         write_vectors(bytes, *b"VRTX", &self.vertices)?;
@@ -786,7 +787,7 @@ impl<V: ModelVersion> Encodable for Geoset<V> {
         write_words(bytes, *b"PCNT", &self.primitive_counts)?;
         write_section_header(bytes, *b"PVTX", self.faces.len())?;
         for face in &self.faces {
-            bytes.write(face);
+            bytes.write(face)?;
         }
         write_section_header(bytes, *b"GNDX", self.vertex_groups.len())?;
         bytes.write_bytes(&self.vertex_groups);
@@ -797,13 +798,13 @@ impl<V: ModelVersion> Encodable for Geoset<V> {
             self.selection_group,
             self.unselectable_raw,
         ] {
-            bytes.write(word);
+            bytes.write(word)?;
         }
-        self.header_extension.encode(bytes);
-        bytes.write(&self.extent);
+        self.header_extension.encode(bytes)?;
+        bytes.write(&self.extent)?;
         write_count(bytes, self.sequence_extents.len())?;
         for extent in &self.sequence_extents {
-            bytes.write(extent);
+            bytes.write(extent)?;
         }
         for extension in &self.extensions {
             match extension {

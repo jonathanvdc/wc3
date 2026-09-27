@@ -8,7 +8,7 @@ use crate::Vec3;
 use crate::CollisionShapesChunk;
 use crate::Cursor;
 use crate::{DecodeError, Model, Node};
-use crate::{Encodable, Readable};
+use crate::{Readable, Writable};
 
 /// Warcraft III collision primitive type.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -161,28 +161,28 @@ impl Readable for CollisionShape {
     }
 }
 
-impl Encodable for CollisionShape {
-    fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), EncodeError> {
-        self.node.encode_to(bytes)?;
+impl Writable for &CollisionShape {
+    fn write_to(self, bytes: &mut Encoder<'_>) -> Result<(), EncodeError> {
+        self.node.write_to(bytes)?;
         let kind = match self.geometry {
             CollisionGeometry::Box(_) => 0u32,
             CollisionGeometry::Plane(_) => 1,
             CollisionGeometry::Sphere(_, _) => 2,
             CollisionGeometry::Cylinder(_, _) => 3,
         };
-        bytes.write(kind);
+        bytes.write(kind)?;
 
         match self.geometry {
             CollisionGeometry::Box(points) | CollisionGeometry::Plane(points) => {
-                bytes.write(points);
+                bytes.write(points)?;
             }
             CollisionGeometry::Sphere(center, radius) => {
-                bytes.write(center);
-                bytes.write(radius);
+                bytes.write(center)?;
+                bytes.write(radius)?;
             }
             CollisionGeometry::Cylinder(points, radius) => {
-                bytes.write(points);
-                bytes.write(radius);
+                bytes.write(points)?;
+                bytes.write(radius)?;
             }
         }
         Ok(())

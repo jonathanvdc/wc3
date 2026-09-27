@@ -10,7 +10,7 @@ fn fixed_text_preserves_raw_bytes_until_edited() {
     assert_eq!(field.as_bytes(), &bytes);
 
     let mut encoded = Vec::new();
-    Encoder::new(&mut encoded).write(&field);
+    Encoder::new(&mut encoded).write(&field).unwrap();
     assert_eq!(encoded, bytes);
 
     field.set_text("Hi").unwrap();

@@ -1,5 +1,5 @@
 use wc3_mdx::emitters::{Particle2Frames, ParticleEmitter2};
-use wc3_mdx::io::{Encodable, Readable};
+use wc3_mdx::io::{Readable, Writable};
 use wc3_mdx::scene::Node;
 use wc3_mdx::Model;
 

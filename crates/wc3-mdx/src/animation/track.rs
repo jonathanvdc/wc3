@@ -1,6 +1,6 @@
 //! Typed keyframe tracks.
 use super::{Interpolation, TangentKeyframe, TrackKind, TrackTag, TrackValue, ValueKeyframe};
-use crate::{Cursor, DecodeError, Encoder, Readable, Tag, ValueError, Writable};
+use crate::{Cursor, DecodeError, EncodeError, Encoder, Readable, Tag, ValueError, Writable};
 use std::marker::PhantomData;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -189,22 +189,23 @@ impl<K: TrackKind> Readable for AnimationTrack<K> {
     }
 }
 impl<K: TrackKind> Writable for &AnimationTrack<K> {
-    fn write_to(self, encoder: &mut Encoder<'_>) {
+    fn write_to(self, encoder: &mut Encoder<'_>) -> Result<(), EncodeError> {
         encoder.write_bytes(&K::TAG);
-        encoder.write(self.keyframes.len() as u32);
-        encoder.write(self.keyframes.interpolation());
-        encoder.write(self.global_sequence_id.unwrap_or(u32::MAX));
+        encoder.write(self.keyframes.len() as u32)?;
+        encoder.write(self.keyframes.interpolation())?;
+        encoder.write(self.global_sequence_id.unwrap_or(u32::MAX))?;
         match &self.keyframes {
             Keyframes::Step(keys) | Keyframes::Linear(keys) => {
                 for key in keys {
-                    encoder.write(key);
+                    encoder.write(key)?;
                 }
             }
             Keyframes::Hermite(keys) | Keyframes::Bezier(keys) => {
                 for key in keys {
-                    encoder.write(key);
+                    encoder.write(key)?;
                 }
             }
         }
+        Ok(())
     }
 }

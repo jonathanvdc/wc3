@@ -18,7 +18,7 @@ use crate::KnownChunk;
 use crate::ValueError;
 
 use crate::{Cursor, PopcornEmittersChunk};
-use crate::{Encodable, Readable};
+use crate::{Readable, Writable};
 use std::borrow::Cow;
 
 use crate::FixedText;
@@ -187,10 +187,10 @@ impl Readable for PopcornEmitter {
     }
 }
 
-impl Encodable for PopcornEmitter {
-    fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), EncodeError> {
+impl Writable for &PopcornEmitter {
+    fn write_to(self, bytes: &mut Encoder<'_>) -> Result<(), EncodeError> {
         let marker = bytes.begin_sized();
-        self.node.encode_to(bytes)?;
+        self.node.write_to(bytes)?;
         for value in [
             self.life_span,
             self.emission_rate,
@@ -200,13 +200,13 @@ impl Encodable for PopcornEmitter {
             self.color[2],
             self.alpha,
         ] {
-            bytes.write(value);
+            bytes.write(value)?;
         }
-        bytes.write(self.replaceable_id);
-        bytes.write(&self.path);
-        bytes.write(&self.visibility_guide);
+        bytes.write(self.replaceable_id)?;
+        bytes.write(&self.path)?;
+        bytes.write(&self.visibility_guide)?;
         for track in &self.tracks {
-            bytes.write(track);
+            bytes.write(track)?;
         }
         bytes.finish_sized(marker, PopcornEmittersChunk::TAG)?;
         Ok(())

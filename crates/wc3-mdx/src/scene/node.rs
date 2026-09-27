@@ -14,7 +14,7 @@ use crate::KnownChunk;
 use crate::ValueError;
 
 use crate::{BonesChunk, Cursor, HelpersChunk};
-use crate::{Encodable, Readable};
+use crate::{Readable, Writable};
 use std::borrow::Cow;
 
 use crate::FixedText;
@@ -227,15 +227,15 @@ impl Readable for Node {
     }
 }
 
-impl Encodable for Node {
-    fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), EncodeError> {
+impl Writable for &Node {
+    fn write_to(self, bytes: &mut Encoder<'_>) -> Result<(), EncodeError> {
         let marker = bytes.begin_sized();
-        bytes.write(&self.name);
-        bytes.write(self.object_id);
-        bytes.write(self.parent_id);
-        bytes.write(self.raw_flags);
+        bytes.write(&self.name)?;
+        bytes.write(self.object_id)?;
+        bytes.write(self.parent_id)?;
+        bytes.write(self.raw_flags)?;
         for track in &self.tracks {
-            bytes.write(track);
+            bytes.write(track)?;
         }
         bytes.finish_sized(marker, HelpersChunk::TAG)?;
         Ok(())
@@ -255,11 +255,11 @@ impl Readable for Bone {
     }
 }
 
-impl Encodable for Bone {
-    fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), EncodeError> {
-        self.node.encode_to(bytes)?;
-        bytes.write(self.geoset_id);
-        bytes.write(self.geoset_animation_id);
+impl Writable for &Bone {
+    fn write_to(self, bytes: &mut Encoder<'_>) -> Result<(), EncodeError> {
+        self.node.write_to(bytes)?;
+        bytes.write(self.geoset_id)?;
+        bytes.write(self.geoset_animation_id)?;
         Ok(())
     }
 }

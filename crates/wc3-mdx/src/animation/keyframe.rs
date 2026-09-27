@@ -1,6 +1,6 @@
 //! Keyframe values and their binary representations.
 use super::TrackValue;
-use crate::{Cursor, DecodeError, Encoder, Readable, Writable};
+use crate::{Cursor, DecodeError, EncodeError, Encoder, Readable, Writable};
 
 /// An interpolation mode shared by all keys in a track.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -42,8 +42,9 @@ impl<T: TrackValue> Readable for ValueKeyframe<T> {
     }
 }
 impl<T: TrackValue> Writable for ValueKeyframe<T> {
-    fn write_to(self, encoder: &mut Encoder<'_>) {
-        encoder.write(&self);
+    fn write_to(self, encoder: &mut Encoder<'_>) -> Result<(), EncodeError> {
+        encoder.write(&self)?;
+        Ok(())
     }
 }
 impl<T: TrackValue> Readable for TangentKeyframe<T> {
@@ -57,22 +58,25 @@ impl<T: TrackValue> Readable for TangentKeyframe<T> {
     }
 }
 impl<T: TrackValue> Writable for TangentKeyframe<T> {
-    fn write_to(self, encoder: &mut Encoder<'_>) {
-        encoder.write(&self);
+    fn write_to(self, encoder: &mut Encoder<'_>) -> Result<(), EncodeError> {
+        encoder.write(&self)?;
+        Ok(())
     }
 }
 
 impl<T: TrackValue> Writable for &ValueKeyframe<T> {
-    fn write_to(self, encoder: &mut Encoder<'_>) {
-        encoder.write(self.frame);
-        encoder.write(self.value);
+    fn write_to(self, encoder: &mut Encoder<'_>) -> Result<(), EncodeError> {
+        encoder.write(self.frame)?;
+        encoder.write(self.value)?;
+        Ok(())
     }
 }
 impl<T: TrackValue> Writable for &TangentKeyframe<T> {
-    fn write_to(self, encoder: &mut Encoder<'_>) {
-        encoder.write(self.frame);
-        encoder.write(self.value);
-        encoder.write(self.in_tangent);
-        encoder.write(self.out_tangent);
+    fn write_to(self, encoder: &mut Encoder<'_>) -> Result<(), EncodeError> {
+        encoder.write(self.frame)?;
+        encoder.write(self.value)?;
+        encoder.write(self.in_tangent)?;
+        encoder.write(self.out_tangent)?;
+        Ok(())
     }
 }

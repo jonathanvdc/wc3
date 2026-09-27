@@ -1,6 +1,6 @@
 use wc3_mdx::chunks::ModelChunk;
 use wc3_mdx::chunks::RawChunk;
-use wc3_mdx::io::{Encodable, Readable};
+use wc3_mdx::io::{Readable, Writable};
 use wc3_mdx::materials::{Texture, TextureFlags};
 use wc3_mdx::Model;
 

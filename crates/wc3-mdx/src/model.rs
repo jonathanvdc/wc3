@@ -4,7 +4,7 @@ use crate::Encoder;
 use crate::{ModelVersion, Tag, Version, V1000, V1100, V1200, V1800, V800, V900};
 
 use crate::Cursor;
-use crate::{CollectionChunk, DecodeError, Encodable, ModelChunk, Readable, VersionChunk};
+use crate::{CollectionChunk, DecodeError, ModelChunk, Readable, VersionChunk, Writable};
 
 /// The four bytes at the start of an MDX file.
 pub const MAGIC: Tag = *b"MDLX";
@@ -148,11 +148,11 @@ impl<V: ModelVersion> Readable for Model<V> {
     }
 }
 
-impl<V: ModelVersion> Encodable for Model<V> {
-    fn encode_to(&self, output: &mut Encoder<'_>) -> Result<(), EncodeError> {
+impl<V: ModelVersion> Writable for &Model<V> {
+    fn write_to(self, output: &mut Encoder<'_>) -> Result<(), EncodeError> {
         output.write_bytes(&MAGIC);
         for chunk in &self.chunks {
-            chunk.encode_to(output)?;
+            chunk.write_to(output)?;
         }
         Ok(())
     }

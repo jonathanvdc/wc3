@@ -42,7 +42,7 @@ impl<V: ModelVersion> Chunk for VersionChunk<V> {
             });
         }
 
-        bytes.write(V::NUMBER);
+        bytes.write(V::NUMBER)?;
         bytes.write_bytes(&self.extension);
         Ok(())
     }
@@ -73,7 +73,7 @@ impl<V: ModelVersion> KnownChunk for VersionChunk<V> {
 #[cfg(test)]
 mod version_chunk_tests {
     use super::*;
-    use crate::{Encodable, Readable};
+    use crate::{Readable, Writable};
 
     #[test]
     fn preserves_version_extension_bytes() {

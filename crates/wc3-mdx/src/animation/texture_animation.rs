@@ -14,7 +14,7 @@ use crate::KnownChunk;
 
 use crate::{Cursor, TextureAnimationsChunk};
 use crate::{DecodeError, Model};
-use crate::{Encodable, Readable};
+use crate::{Readable, Writable};
 
 /// A texture animation containing translation, rotation, and scaling tracks.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -63,11 +63,11 @@ impl Readable for TextureAnimation {
     }
 }
 
-impl Encodable for TextureAnimation {
-    fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), EncodeError> {
+impl Writable for &TextureAnimation {
+    fn write_to(self, bytes: &mut Encoder<'_>) -> Result<(), EncodeError> {
         let marker = bytes.begin_sized();
         for track in &self.tracks {
-            bytes.write(track);
+            bytes.write(track)?;
         }
         bytes.finish_sized(marker, TextureAnimationsChunk::TAG)?;
         Ok(())

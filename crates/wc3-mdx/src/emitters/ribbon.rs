@@ -18,7 +18,7 @@ use crate::KnownChunk;
 
 use crate::{Cursor, RibbonEmittersChunk};
 use crate::{DecodeError, Model, Node};
-use crate::{Encodable, Readable, Writable};
+use crate::{Readable, Writable};
 
 pub(crate) const FIXED_SIZE: usize = 52;
 
@@ -119,13 +119,13 @@ impl Readable for RibbonEmitter {
     }
 }
 
-impl Encodable for RibbonEmitter {
-    fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), EncodeError> {
+impl Writable for &RibbonEmitter {
+    fn write_to(self, bytes: &mut Encoder<'_>) -> Result<(), EncodeError> {
         let marker = bytes.begin_sized();
-        self.node.encode_to(bytes)?;
-        bytes.write(&self.fields);
+        self.node.write_to(bytes)?;
+        bytes.write(&self.fields)?;
         for track in &self.tracks {
-            bytes.write(track);
+            bytes.write(track)?;
         }
         bytes.finish_sized(marker, RibbonEmittersChunk::TAG)?;
         Ok(())

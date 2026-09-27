@@ -1,12 +1,10 @@
 //! Animation sequence records in the `SEQS` chunk.
-use crate::EncodeError;
-use crate::Encoder;
 use crate::ModelVersion;
 use crate::ValueError;
 use crate::Vec3;
 
 use crate::SequencesChunk;
-use crate::{Encodable, Readable, Writable};
+use crate::{Readable, Writable};
 use std::borrow::Cow;
 
 use crate::FixedText;
@@ -140,12 +138,5 @@ impl<V: ModelVersion> Model<V> {
     /// Additional `SEQS` chunks are removed after their records are replaced.
     pub fn set_sequences(&mut self, sequences: &[Sequence]) {
         self.replace_chunk(SequencesChunk::new(sequences.to_vec()));
-    }
-}
-
-impl Encodable for Sequence {
-    fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), EncodeError> {
-        bytes.write(self);
-        Ok(())
     }
 }

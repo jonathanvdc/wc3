@@ -1,11 +1,9 @@
 //! Reforged face-animation references in `FAFX` chunks.
-use crate::EncodeError;
-use crate::Encoder;
 use crate::ModelVersion;
 use crate::ValueError;
 
 use crate::FaceFxChunk;
-use crate::{Encodable, Readable, Writable};
+use crate::{Readable, Writable};
 use std::borrow::Cow;
 
 use crate::FixedText;
@@ -63,12 +61,5 @@ impl<V: ModelVersion> Model<V> {
     /// Replaces face-animation records in the first `FAFX` chunk.
     pub fn set_face_fx(&mut self, entries: &[FaceFx]) {
         self.replace_chunk(FaceFxChunk::new(entries.to_vec()));
-    }
-}
-
-impl Encodable for FaceFx {
-    fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), EncodeError> {
-        bytes.write(self);
-        Ok(())
     }
 }

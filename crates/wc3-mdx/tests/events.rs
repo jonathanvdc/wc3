@@ -1,4 +1,4 @@
-use wc3_mdx::io::{Cursor, Encodable, Readable};
+use wc3_mdx::io::{Cursor, Readable, Writable};
 use wc3_mdx::scene::{EventObject, Node};
 use wc3_mdx::Model;
 

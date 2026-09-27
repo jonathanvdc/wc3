@@ -2,12 +2,12 @@ use wc3_mdx::animation::{
     AnimationTrack, LayerTextureId, NodeScaling, NodeTranslation, TangentKeyframe, TrackKind,
     TrackTag, TrackValueKind, ValueKeyframe,
 };
-use wc3_mdx::io::{Cursor, DecodeError, Encodable, Encoder, Readable};
+use wc3_mdx::io::{Cursor, DecodeError, Encoder, Readable, Writable};
 use wc3_mdx::scene::{Node, NodeTrack};
 
 fn write_track<T: wc3_mdx::io::Writable>(value: T) -> Vec<u8> {
     let mut bytes = Vec::new();
-    Encoder::new(&mut bytes).write(value);
+    Encoder::new(&mut bytes).write(value).unwrap();
     bytes
 }
 
@@ -130,7 +130,7 @@ fn tracks_use_readable_and_writable_io() {
     )
     .unwrap();
     let mut bytes = Vec::new();
-    Encoder::new(&mut bytes).write(&track);
+    Encoder::new(&mut bytes).write(&track).unwrap();
     assert_eq!(&bytes[..4], b"KGTR");
     let mut cursor = Cursor::new(&bytes);
     let parsed: AnimationTrack<NodeTranslation> = cursor.read().unwrap();

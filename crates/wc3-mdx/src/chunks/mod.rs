@@ -1,6 +1,6 @@
 //! Raw and typed top-level MDX chunks.
 use crate::EncodeError;
-use crate::{Cursor, Encodable, Encoder, Readable, Tag};
+use crate::{Cursor, Encoder, Readable, Tag, Writable};
 
 use crate::DecodeError;
 
@@ -26,8 +26,8 @@ pub trait Chunk {
     fn encode_payload_to(&self, output: &mut Encoder<'_>) -> Result<(), EncodeError>;
 }
 
-impl<T: Chunk + ?Sized> Encodable for T {
-    fn encode_to(&self, output: &mut Encoder<'_>) -> Result<(), EncodeError> {
+impl<T: Chunk + ?Sized> Writable for &T {
+    fn write_to(self, output: &mut Encoder<'_>) -> Result<(), EncodeError> {
         let tag = self.tag();
         output.write_bytes(&tag);
         let marker = output.begin_sized();
@@ -73,7 +73,7 @@ impl<T: KnownChunk> Readable for T {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Encodable, Readable};
+    use crate::{Readable, Writable};
 
     #[test]
     fn chunks_encode_complete_headers_without_nesting() {

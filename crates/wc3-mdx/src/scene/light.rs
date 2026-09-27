@@ -22,13 +22,13 @@ use std::marker::PhantomData;
 
 use crate::{Cursor, LightsChunk};
 use crate::{DecodeError, Model, Node};
-use crate::{Encodable, Readable};
+use crate::{Readable, Writable};
 
 /// Extra fixed words selected by the light record's version.
 pub trait LightExtension: Clone + Debug + PartialEq {
     fn empty() -> Self;
     fn decode(cursor: &mut Cursor<'_>) -> Result<Self, DecodeError>;
-    fn encode(&self, output: &mut Encoder<'_>);
+    fn encode(&self, output: &mut Encoder<'_>) -> Result<(), EncodeError>;
     fn words(&self) -> Option<[u32; 7]> {
         None
     }
@@ -47,7 +47,9 @@ impl LightExtension for ClassicLightExtension {
     fn decode(_: &mut Cursor<'_>) -> Result<Self, DecodeError> {
         Ok(Self)
     }
-    fn encode(&self, _: &mut Encoder<'_>) {}
+    fn encode(&self, _: &mut Encoder<'_>) -> Result<(), EncodeError> {
+        Ok(())
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -60,8 +62,8 @@ impl LightExtension for ModernLightExtension {
     fn decode(cursor: &mut Cursor<'_>) -> Result<Self, DecodeError> {
         Ok(Self(cursor.read()?))
     }
-    fn encode(&self, output: &mut Encoder<'_>) {
-        output.write(self.0);
+    fn encode(&self, output: &mut Encoder<'_>) -> Result<(), EncodeError> {
+        output.write(self.0)
     }
     fn words(&self) -> Option<[u32; 7]> {
         Some(self.0)
@@ -265,24 +267,24 @@ impl<V: ModelVersion> Readable for Light<V> {
     }
 }
 
-impl<V: ModelVersion> Encodable for Light<V> {
-    fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), EncodeError> {
+impl<V: ModelVersion> Writable for &Light<V> {
+    fn write_to(self, bytes: &mut Encoder<'_>) -> Result<(), EncodeError> {
         let marker = bytes.begin_sized();
-        self.node.encode_to(bytes)?;
-        bytes.write(self.light_type);
-        bytes.write(self.attenuation_start);
-        bytes.write(self.attenuation_end);
+        self.node.write_to(bytes)?;
+        bytes.write(self.light_type)?;
+        bytes.write(self.attenuation_start)?;
+        bytes.write(self.attenuation_end)?;
         for value in self.color {
-            bytes.write(value);
+            bytes.write(value)?;
         }
-        bytes.write(self.intensity);
+        bytes.write(self.intensity)?;
         for value in self.ambient_color {
-            bytes.write(value);
+            bytes.write(value)?;
         }
-        bytes.write(self.ambient_intensity);
-        self.extended_words.encode(bytes);
+        bytes.write(self.ambient_intensity)?;
+        self.extended_words.encode(bytes)?;
         for track in &self.tracks {
-            bytes.write(track);
+            bytes.write(track)?;
         }
         bytes.finish_sized(marker, LightsChunk::<V>::TAG)?;
         Ok(())

@@ -1,5 +1,5 @@
 use wc3_mdx::geometry::Geoset;
-use wc3_mdx::io::{Encodable, EncodeError, ValueError};
+use wc3_mdx::io::{EncodeError, ValueError, Writable};
 use wc3_mdx::scene::Node;
 
 #[test]

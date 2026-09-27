@@ -1,16 +1,16 @@
 //! Model accessors for pivot points.
 use crate::ModelVersion;
 use crate::{
-    Cursor, DecodeError, Encodable, EncodeError, Encoder, Model, PivotPointsChunk, Readable, Vec3,
+    Cursor, DecodeError, EncodeError, Encoder, Model, PivotPointsChunk, Readable, Vec3, Writable,
 };
 
 /// One model pivot point.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct PivotPoint(pub Vec3);
 
-impl Encodable for PivotPoint {
-    fn encode_to(&self, output: &mut Encoder<'_>) -> Result<(), EncodeError> {
-        output.write(self.0);
+impl Writable for &PivotPoint {
+    fn write_to(self, output: &mut Encoder<'_>) -> Result<(), EncodeError> {
+        output.write(self.0)?;
         Ok(())
     }
 }

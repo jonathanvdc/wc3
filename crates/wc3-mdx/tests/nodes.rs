@@ -1,4 +1,4 @@
-use wc3_mdx::io::{Encodable, Readable};
+use wc3_mdx::io::{Readable, Writable};
 use wc3_mdx::scene::{Bone, Node, NodeFlags};
 use wc3_mdx::Model;
 

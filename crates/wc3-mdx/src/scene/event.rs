@@ -7,7 +7,7 @@ use crate::Tag;
 
 use crate::{Cursor, EventObjectsChunk};
 use crate::{DecodeError, Model, Node};
-use crate::{Encodable, Readable};
+use crate::{Readable, Writable};
 
 const TRACK_TAG: Tag = *b"KEVT";
 
@@ -98,19 +98,19 @@ impl Readable for EventObject {
     }
 }
 
-impl Encodable for EventObject {
-    fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), EncodeError> {
+impl Writable for &EventObject {
+    fn write_to(self, bytes: &mut Encoder<'_>) -> Result<(), EncodeError> {
         let start = bytes.position();
-        self.node.encode_to(bytes)?;
+        self.node.write_to(bytes)?;
         bytes.write_bytes(&TRACK_TAG);
         let count = u32::try_from(self.frames.len()).map_err(|_| EncodeError::ChunkTooLarge {
             tag: EventObjectsChunk::TAG,
             size: self.frames.len(),
         })?;
-        bytes.write(count);
-        bytes.write(self.global_sequence_id);
+        bytes.write(count)?;
+        bytes.write(self.global_sequence_id)?;
         for frame in &self.frames {
-            bytes.write(frame);
+            bytes.write(frame)?;
         }
         if bytes.position() - start > u32::MAX as usize {
             return Err(EncodeError::ChunkTooLarge {

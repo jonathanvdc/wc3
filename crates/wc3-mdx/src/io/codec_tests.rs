@@ -1,27 +1,5 @@
-//! Binary conversion for typed MDX records.
-use crate::EncodeError;
-
-use crate::{Encoder, Readable};
-
-/// A typed MDX record that can be encoded as bytes.
-pub trait Encodable {
-    /// Encodes the record to the given output.
-    fn encode_to(&self, output: &mut Encoder<'_>) -> Result<(), EncodeError>;
-
-    /// Encodes the record to a new byte vector.
-    fn encode(&self) -> Result<Vec<u8>, EncodeError> {
-        let mut output = Vec::new();
-        self.encode_to(&mut Encoder::new(&mut output))?;
-        Ok(output)
-    }
-}
-
-pub trait Record: Encodable + Readable {}
-impl<T: Encodable + Readable> Record for T {}
-
 #[cfg(test)]
 mod tests {
-    use super::{Encodable, Readable, Record};
     use crate::Cursor;
     use crate::KnownChunk;
     use crate::{
@@ -33,12 +11,16 @@ mod tests {
         RibbonEmitter, RibbonEmittersChunk, Sequence, SequencesChunk, TextureAnimationsChunk,
         TexturesChunk, VersionChunk,
     };
+    use crate::{Readable, Writable};
 
-    fn round_trip<T: Record + PartialEq + std::fmt::Debug>(value: &T) {
+    fn round_trip<T: Readable + PartialEq + std::fmt::Debug>(value: &T)
+    where
+        for<'a> &'a T: Writable,
+    {
         let bytes = value.encode().unwrap();
         let mut appended = vec![0xaa, 0xbb];
         value
-            .encode_to(&mut crate::Encoder::new(&mut appended))
+            .write_to(&mut crate::Encoder::new(&mut appended))
             .unwrap();
         assert_eq!(&appended[..2], &[0xaa, 0xbb]);
         assert_eq!(&appended[2..], bytes);
@@ -97,7 +79,10 @@ mod tests {
 
     #[test]
     fn cursor_decoders_stop_at_the_next_record() {
-        fn check<T: Record + PartialEq + std::fmt::Debug>(first: T, second: T) {
+        fn check<T: Readable + PartialEq + std::fmt::Debug>(first: T, second: T)
+        where
+            for<'a> &'a T: Writable,
+        {
             let mut bytes = first.encode().unwrap();
             let first_len = bytes.len();
             bytes.extend_from_slice(&second.encode().unwrap());

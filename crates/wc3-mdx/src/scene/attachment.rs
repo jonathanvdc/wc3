@@ -6,7 +6,7 @@ use crate::ModelVersion;
 use crate::ValueError;
 
 use crate::{AttachmentVisibility, AttachmentsChunk, Cursor};
-use crate::{Encodable, Readable};
+use crate::{Readable, Writable};
 use std::borrow::Cow;
 
 use crate::FixedText;
@@ -119,15 +119,15 @@ impl Readable for Attachment {
     }
 }
 
-impl Encodable for Attachment {
-    fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), EncodeError> {
+impl Writable for &Attachment {
+    fn write_to(self, bytes: &mut Encoder<'_>) -> Result<(), EncodeError> {
         let marker = bytes.begin_sized();
-        self.node.encode_to(bytes)?;
-        bytes.write(&self.path);
-        bytes.write(self.reserved);
-        bytes.write(self.id);
+        self.node.write_to(bytes)?;
+        bytes.write(&self.path)?;
+        bytes.write(self.reserved)?;
+        bytes.write(self.id)?;
         if let Some(track) = &self.visibility_track {
-            bytes.write(track);
+            bytes.write(track)?;
         }
         bytes.finish_sized(marker, AttachmentsChunk::TAG)?;
         Ok(())

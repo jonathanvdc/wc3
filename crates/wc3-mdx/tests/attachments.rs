@@ -1,6 +1,6 @@
 use wc3_mdx::animation::AttachmentVisibility;
 use wc3_mdx::animation::{AnimationTrack, ValueKeyframe};
-use wc3_mdx::io::{Cursor, Encodable, Readable};
+use wc3_mdx::io::{Cursor, Readable, Writable};
 use wc3_mdx::scene::{Attachment, Node};
 use wc3_mdx::Model;
 

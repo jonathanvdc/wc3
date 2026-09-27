@@ -3,7 +3,7 @@ use crate::EncodeError;
 use crate::Encoder;
 use crate::Tag;
 
-use crate::{Chunk, DecodeError, Encodable, KnownChunk};
+use crate::{Chunk, DecodeError, KnownChunk, Writable};
 use crate::{Cursor, ModelInfo};
 
 /// A complete `MODL` chunk, including bytes after the standard record.
@@ -39,7 +39,7 @@ impl Chunk for ModelInfoChunk {
             });
         }
 
-        self.info.encode_to(bytes)?;
+        self.info.write_to(bytes)?;
         bytes.write_bytes(&self.extension);
         Ok(())
     }

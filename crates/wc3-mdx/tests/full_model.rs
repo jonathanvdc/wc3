@@ -3,7 +3,7 @@ use wc3_mdx::chunks::BindPoseChunk;
 use wc3_mdx::emitters::{ParticleEmitter, ParticleEmitter2, PopcornEmitter, RibbonEmitter};
 use wc3_mdx::geometry::BindPoseMatrix;
 use wc3_mdx::geometry::{CollisionShape, Geoset};
-use wc3_mdx::io::{Encodable, Readable};
+use wc3_mdx::io::{Readable, Writable};
 use wc3_mdx::materials::{Layer, Material, Texture};
 use wc3_mdx::scene::{Attachment, Bone, Camera, EventObject, FaceFx, Light, ModelInfo, Node};
 use wc3_mdx::{Model, ModelVersion, V1000, V1100, V1200, V1800, V800, V900};

@@ -24,7 +24,7 @@ macro_rules! track_group {
             }
         }
         impl $crate::Writable for &$group {
-            fn write_to(self, encoder: &mut $crate::Encoder<'_>) {
+            fn write_to(self, encoder: &mut $crate::Encoder<'_>) -> Result<(), $crate::EncodeError> {
                 match self { $( $group::$variant(track) => encoder.write(track), )+ }
             }
         }

@@ -2,7 +2,7 @@ use std::slice::from_ref;
 
 use wc3_mdx::animation::Sequence;
 use wc3_mdx::chunks::{ModelChunk, RawChunk, SequencesChunk, UnknownChunk};
-use wc3_mdx::io::{Encodable, Readable};
+use wc3_mdx::io::{Readable, Writable};
 use wc3_mdx::{Model, V800};
 
 #[test]

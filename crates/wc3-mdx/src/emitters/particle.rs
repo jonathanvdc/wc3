@@ -18,7 +18,7 @@ use crate::KnownChunk;
 use crate::ValueError;
 
 use crate::{Cursor, ParticleEmittersChunk};
-use crate::{Encodable, Readable};
+use crate::{Readable, Writable};
 use std::borrow::Cow;
 
 use crate::FixedText;
@@ -189,24 +189,24 @@ impl Readable for ParticleEmitter {
     }
 }
 
-impl Encodable for ParticleEmitter {
-    fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), EncodeError> {
+impl Writable for &ParticleEmitter {
+    fn write_to(self, bytes: &mut Encoder<'_>) -> Result<(), EncodeError> {
         let marker = bytes.begin_sized();
-        self.node.encode_to(bytes)?;
+        self.node.write_to(bytes)?;
         for value in [
             self.emission_rate,
             self.gravity,
             self.longitude,
             self.latitude,
         ] {
-            bytes.write(value);
+            bytes.write(value)?;
         }
-        bytes.write(&self.path);
-        bytes.write(self.reserved);
-        bytes.write(self.life_span);
-        bytes.write(self.initial_velocity);
+        bytes.write(&self.path)?;
+        bytes.write(self.reserved)?;
+        bytes.write(self.life_span)?;
+        bytes.write(self.initial_velocity)?;
         for track in &self.tracks {
-            bytes.write(track);
+            bytes.write(track)?;
         }
         bytes.finish_sized(marker, ParticleEmittersChunk::TAG)?;
         Ok(())

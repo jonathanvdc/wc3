@@ -46,7 +46,7 @@ fn expand(input: DeriveInput, reading: bool) -> proc_macro2::TokenStream {
                 .collect();
             (
                 quote!(Self { #(#names: cursor.read()?,)* }),
-                quote!(#(encoder.write(&self.#names);)*),
+                quote!(#(encoder.write(&self.#names)?;)*),
             )
         }
         Fields::Unnamed(fields) => {
@@ -54,7 +54,7 @@ fn expand(input: DeriveInput, reading: bool) -> proc_macro2::TokenStream {
             let reads: Vec<_> = indices.iter().map(|_| quote!(cursor.read()?)).collect();
             (
                 quote!(Self( #(#reads,)* )),
-                quote!(#(encoder.write(&self.#indices);)*),
+                quote!(#(encoder.write(&self.#indices)?;)*),
             )
         }
         Fields::Unit => (quote!(Self), quote!()),
@@ -70,8 +70,9 @@ fn expand(input: DeriveInput, reading: bool) -> proc_macro2::TokenStream {
     } else {
         quote! {
             impl #impl_generics ::wc3_mdx::Writable for &#name #ty_generics #where_clause {
-                fn write_to(self, encoder: &mut ::wc3_mdx::Encoder<'_>) {
+                fn write_to(self, encoder: &mut ::wc3_mdx::Encoder<'_>) -> Result<(), ::wc3_mdx::EncodeError> {
                     #writes
+                    Ok(())
                 }
             }
         }

@@ -1,6 +1,6 @@
 use wc3_mdx::animation::CameraRotation;
 use wc3_mdx::animation::{AnimationTrack, ValueKeyframe};
-use wc3_mdx::io::{Encodable, Readable};
+use wc3_mdx::io::{Readable, Writable};
 use wc3_mdx::scene::Camera;
 use wc3_mdx::Model;
 

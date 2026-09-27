@@ -1,5 +1,5 @@
 use wc3_mdx::animation::{Sequence, SequenceFlags};
-use wc3_mdx::io::{Encodable, Readable};
+use wc3_mdx::io::{Readable, Writable};
 use wc3_mdx::Model;
 
 #[test]

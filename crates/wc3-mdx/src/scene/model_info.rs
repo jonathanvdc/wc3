@@ -6,7 +6,7 @@ use crate::ValueError;
 use crate::{Tag, Vec3};
 
 use crate::{Cursor, ModelInfoChunk};
-use crate::{Encodable, Readable};
+use crate::{Readable, Writable};
 use std::borrow::Cow;
 
 use crate::FixedText;
@@ -140,14 +140,14 @@ impl Readable for ModelInfo {
     }
 }
 
-impl Encodable for ModelInfo {
-    fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), EncodeError> {
-        bytes.write(&self.name);
+impl Writable for &ModelInfo {
+    fn write_to(self, bytes: &mut Encoder<'_>) -> Result<(), EncodeError> {
+        bytes.write(&self.name)?;
         bytes.write_bytes(&self.reserved);
-        bytes.write(self.bounds_radius);
-        bytes.write(self.minimum_extent);
-        bytes.write(self.maximum_extent);
-        bytes.write(self.blend_time);
+        bytes.write(self.bounds_radius)?;
+        bytes.write(self.minimum_extent)?;
+        bytes.write(self.maximum_extent)?;
+        bytes.write(self.blend_time)?;
         Ok(())
     }
 }

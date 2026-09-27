@@ -8,7 +8,7 @@
 //!
 //! ```
 //! use wc3_mdx::{Model, V800};
-//! use wc3_mdx::io::Encodable;
+//! use wc3_mdx::io::Writable;
 //! let model = Model::<V800>::new();
 //! // Populate the model
 //! let bytes = model.encode().unwrap();

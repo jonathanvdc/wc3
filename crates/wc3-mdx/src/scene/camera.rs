@@ -16,7 +16,7 @@ use crate::ValueError;
 use crate::Vec3;
 
 use crate::{CamerasChunk, Cursor};
-use crate::{Encodable, Readable};
+use crate::{Readable, Writable};
 use std::borrow::Cow;
 
 use crate::FixedText;
@@ -237,18 +237,18 @@ impl<V: ModelVersion> Readable for Camera<V> {
     }
 }
 
-impl<V: ModelVersion> Encodable for Camera<V> {
-    fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), EncodeError> {
+impl<V: ModelVersion> Writable for &Camera<V> {
+    fn write_to(self, bytes: &mut Encoder<'_>) -> Result<(), EncodeError> {
         let start = bytes.position();
         let marker = bytes.begin_sized();
-        bytes.write(&self.name);
-        bytes.write(self.position);
-        bytes.write(self.field_of_view);
-        bytes.write(self.far_clip);
-        bytes.write(self.near_clip);
-        bytes.write(self.target_position);
+        bytes.write(&self.name)?;
+        bytes.write(self.position)?;
+        bytes.write(self.field_of_view)?;
+        bytes.write(self.far_clip)?;
+        bytes.write(self.near_clip)?;
+        bytes.write(self.target_position)?;
         for track in &self.tracks {
-            bytes.write(track);
+            bytes.write(track)?;
         }
         if bytes.position() - start > MAX_RECORD_SIZE {
             return Err(EncodeError::ChunkTooLarge {

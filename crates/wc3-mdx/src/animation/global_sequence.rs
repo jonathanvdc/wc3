@@ -1,16 +1,16 @@
 //! Model accessors for global sequences.
 use crate::ModelVersion;
 use crate::{
-    Cursor, DecodeError, Encodable, EncodeError, Encoder, GlobalSequencesChunk, Model, Readable,
+    Cursor, DecodeError, EncodeError, Encoder, GlobalSequencesChunk, Model, Readable, Writable,
 };
 
 /// One global sequence duration in milliseconds.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct GlobalSequence(pub u32);
 
-impl Encodable for GlobalSequence {
-    fn encode_to(&self, output: &mut Encoder<'_>) -> Result<(), EncodeError> {
-        output.write(self.0);
+impl Writable for &GlobalSequence {
+    fn write_to(self, output: &mut Encoder<'_>) -> Result<(), EncodeError> {
+        output.write(self.0)?;
         Ok(())
     }
 }

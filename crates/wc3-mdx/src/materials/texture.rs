@@ -1,12 +1,10 @@
 //! Fixed-width texture records in `TEXS` chunks.
-use crate::EncodeError;
-use crate::Encoder;
 use crate::ModelVersion;
 use crate::Tag;
 use crate::ValueError;
 
 use crate::TexturesChunk;
-use crate::{Encodable, Readable, Writable};
+use crate::{Readable, Writable};
 use std::borrow::Cow;
 
 use crate::FixedText;
@@ -111,12 +109,5 @@ impl<V: ModelVersion> Model<V> {
     /// chunks are removed after their records are replaced.
     pub fn set_textures(&mut self, textures: &[Texture]) {
         self.replace_chunk(TexturesChunk::new(textures.to_vec()));
-    }
-}
-
-impl Encodable for Texture {
-    fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), EncodeError> {
-        bytes.write(self);
-        Ok(())
     }
 }

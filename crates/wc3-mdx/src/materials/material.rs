@@ -19,7 +19,7 @@ use crate::{Color, LayerTextureId, ModelVersion, Tag, TrackTag, Version};
 use std::marker::PhantomData;
 
 use crate::{Cursor, MaterialsChunk};
-use crate::{Encodable, Readable};
+use crate::{Readable, Writable};
 use std::borrow::Cow;
 
 use crate::FixedText;
@@ -136,7 +136,7 @@ impl Default for Fresnel {
 pub trait ShaderField: Clone + Debug + PartialEq {
     fn empty() -> Self;
     fn decode(cursor: &mut Cursor<'_>) -> Result<Self, DecodeError>;
-    fn encode(&self, output: &mut Encoder<'_>);
+    fn encode(&self, output: &mut Encoder<'_>) -> Result<(), EncodeError>;
     fn text(&self) -> Option<Cow<'_, str>>;
     fn set(&mut self, text: &str) -> Result<(), ValueError>;
 }
@@ -151,7 +151,9 @@ impl ShaderField for NoShader {
     fn decode(_: &mut Cursor<'_>) -> Result<Self, DecodeError> {
         Ok(Self)
     }
-    fn encode(&self, _: &mut Encoder<'_>) {}
+    fn encode(&self, _: &mut Encoder<'_>) -> Result<(), EncodeError> {
+        Ok(())
+    }
     fn text(&self) -> Option<Cow<'_, str>> {
         None
     }
@@ -173,8 +175,8 @@ impl ShaderField for ShaderText {
     fn decode(cursor: &mut Cursor<'_>) -> Result<Self, DecodeError> {
         Ok(Self(cursor.read()?))
     }
-    fn encode(&self, output: &mut Encoder<'_>) {
-        output.write(&self.0);
+    fn encode(&self, output: &mut Encoder<'_>) -> Result<(), EncodeError> {
+        output.write(&self.0)
     }
     fn text(&self) -> Option<Cow<'_, str>> {
         Some(self.0.text())
@@ -245,7 +247,7 @@ impl LayerExtra for Layer900Extra {
         })
     }
     fn encode(&self, output: &mut Encoder<'_>) -> Result<(), EncodeError> {
-        output.write(self.emissive_gain);
+        output.write(self.emissive_gain)?;
         Ok(())
     }
     fn emissive_gain(&self) -> Option<f32> {
@@ -281,9 +283,9 @@ impl LayerExtra for Layer1000Extra {
     }
     fn encode(&self, output: &mut Encoder<'_>) -> Result<(), EncodeError> {
         self.base.encode(output)?;
-        output.write(self.fresnel.color);
-        output.write(self.fresnel.opacity);
-        output.write(self.fresnel.team_color);
+        output.write(self.fresnel.color)?;
+        output.write(self.fresnel.opacity)?;
+        output.write(self.fresnel.team_color)?;
         Ok(())
     }
     fn emissive_gain(&self) -> Option<f32> {
@@ -345,13 +347,13 @@ impl LayerExtra for Layer1100Extra {
     }
     fn encode(&self, output: &mut Encoder<'_>) -> Result<(), EncodeError> {
         self.base.encode(output)?;
-        output.write(self.shader_type_id);
+        output.write(self.shader_type_id)?;
         write_count(output, self.texture_slots.len(), LAYER_TAG)?;
         for slot in &self.texture_slots {
-            output.write(slot.texture_id);
-            output.write(slot.texture_type);
+            output.write(slot.texture_id)?;
+            output.write(slot.texture_type)?;
             if let Some(track) = &slot.track {
-                output.write(track);
+                output.write(track)?;
             }
         }
         Ok(())
@@ -430,7 +432,7 @@ fn expect_tag(cursor: &mut Cursor<'_>, expected: Tag, record_tag: Tag) -> Result
 fn write_count(bytes: &mut Encoder<'_>, count: usize, tag: Tag) -> Result<(), EncodeError> {
     let value =
         u32::try_from(count).map_err(|_| EncodeError::ChunkTooLarge { tag, size: count })?;
-    bytes.write(value);
+    bytes.write(value)?;
     Ok(())
 }
 
@@ -706,16 +708,16 @@ impl<V: ModelVersion> Readable for Material<V> {
     }
 }
 
-impl<V: ModelVersion> Encodable for Material<V> {
-    fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), EncodeError> {
+impl<V: ModelVersion> Writable for &Material<V> {
+    fn write_to(self, bytes: &mut Encoder<'_>) -> Result<(), EncodeError> {
         let marker = bytes.begin_sized();
-        bytes.write(self.priority_plane);
-        bytes.write(self.render_mode);
-        self.shader.encode(bytes);
+        bytes.write(self.priority_plane)?;
+        bytes.write(self.render_mode)?;
+        self.shader.encode(bytes)?;
         bytes.write_bytes(b"LAYS");
         write_count(bytes, self.layers.len(), MaterialsChunk::<V>::TAG)?;
         for layer in &self.layers {
-            layer.encode_to(bytes)?;
+            layer.write_to(bytes)?;
         }
         bytes.finish_sized(marker, MaterialsChunk::<V>::TAG)?;
         Ok(())
@@ -754,8 +756,8 @@ impl<V: ModelVersion> Readable for Layer<V> {
     }
 }
 
-impl<V: ModelVersion> Encodable for Layer<V> {
-    fn encode_to(&self, bytes: &mut Encoder<'_>) -> Result<(), EncodeError> {
+impl<V: ModelVersion> Writable for &Layer<V> {
+    fn write_to(self, bytes: &mut Encoder<'_>) -> Result<(), EncodeError> {
         let marker = bytes.begin_sized();
         for word in [
             self.filter_mode,
@@ -764,12 +766,12 @@ impl<V: ModelVersion> Encodable for Layer<V> {
             self.texture_animation_id,
             self.coordinate_id,
         ] {
-            bytes.write(word);
+            bytes.write(word)?;
         }
-        bytes.write(self.alpha);
+        bytes.write(self.alpha)?;
         self.extensions.encode(bytes)?;
         for track in &self.tracks {
-            bytes.write(track);
+            bytes.write(track)?;
         }
         bytes.finish_sized(marker, LAYER_TAG)?;
         Ok(())

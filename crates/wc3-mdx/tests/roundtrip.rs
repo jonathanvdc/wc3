@@ -1,5 +1,5 @@
 use wc3_mdx::chunks::{ModelChunk, RawChunk, UnknownChunk};
-use wc3_mdx::io::{Encodable, Readable};
+use wc3_mdx::io::{Readable, Writable};
 use wc3_mdx::{AnyVersionModel, Model, ModelVersion, V1000, V1100, V1200, V1800, V800, V900};
 
 fn check_version<V: ModelVersion>() {

@@ -18,7 +18,7 @@ coverage across the entire game collection has not yet been verified.
 
 ```rust
 use wc3_mdx::{AnyVersionModel, Model, V800};
-use wc3_mdx::io::{Readable, Encodable};
+use wc3_mdx::io::{Readable, Writable};
 use wc3_mdx::scene::ModelInfo;
 
 let mut model = Model::<V800>::new();

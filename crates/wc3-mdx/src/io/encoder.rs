@@ -11,15 +11,25 @@ pub struct SizeMarker(usize);
 
 /// A value with a little-endian MDX representation.
 pub trait Writable {
-    fn write_to(self, encoder: &mut Encoder<'_>);
+    fn write_to(self, encoder: &mut Encoder<'_>) -> Result<(), EncodeError>;
+
+    fn encode(self) -> Result<Vec<u8>, EncodeError>
+    where
+        Self: Sized,
+    {
+        let mut bytes = Vec::new();
+        self.write_to(&mut Encoder::new(&mut bytes))?;
+        Ok(bytes)
+    }
 }
 
 macro_rules! writable_scalars {
     ($($ty:ty),* $(,)?) => {
         $(
             impl Writable for $ty {
-                fn write_to(self, encoder: &mut Encoder<'_>) {
+                fn write_to(self, encoder: &mut Encoder<'_>) -> Result<(), EncodeError> {
                     encoder.write_bytes(&self.to_le_bytes());
+                    Ok(())
                 }
             }
         )*
@@ -31,8 +41,8 @@ macro_rules! writable_scalar_refs {
     ($($ty:ty),* $(,)?) => {
         $(
             impl Writable for &$ty {
-                fn write_to(self, encoder: &mut Encoder<'_>) {
-                    encoder.write(*self);
+                fn write_to(self, encoder: &mut Encoder<'_>) -> Result<(), EncodeError> {
+                    encoder.write(*self)
                 }
             }
         )*
@@ -41,24 +51,26 @@ macro_rules! writable_scalar_refs {
 writable_scalar_refs!(u8, u16, u32, i32, f32);
 
 impl<T: Writable + Copy, const N: usize> Writable for &[T; N] {
-    fn write_to(self, encoder: &mut Encoder<'_>) {
-        encoder.write(self.as_slice());
+    fn write_to(self, encoder: &mut Encoder<'_>) -> Result<(), EncodeError> {
+        encoder.write(self.as_slice())
     }
 }
 
 impl<T: Writable + Copy, const N: usize> Writable for [T; N] {
-    fn write_to(self, encoder: &mut Encoder<'_>) {
+    fn write_to(self, encoder: &mut Encoder<'_>) -> Result<(), EncodeError> {
         for value in self {
-            encoder.write(value);
+            encoder.write(value)?;
         }
+        Ok(())
     }
 }
 
 impl<T: Writable + Copy> Writable for &[T] {
-    fn write_to(self, encoder: &mut Encoder<'_>) {
+    fn write_to(self, encoder: &mut Encoder<'_>) -> Result<(), EncodeError> {
         for &value in self {
-            encoder.write(value);
+            encoder.write(value)?;
         }
+        Ok(())
     }
 }
 
@@ -79,14 +91,14 @@ impl<'a> Encoder<'a> {
     }
 
     /// Appends a value in its little-endian MDX representation.
-    pub fn write<T: Writable>(&mut self, value: T) {
-        value.write_to(self);
+    pub fn write<T: Writable>(&mut self, value: T) -> Result<(), EncodeError> {
+        value.write_to(self)
     }
 
     /// Writes a placeholder for a size that includes its own four bytes.
     pub fn begin_sized(&mut self) -> SizeMarker {
         let marker = SizeMarker(self.position());
-        self.write(0u32);
+        self.write(0u32).expect("writing a scalar cannot fail");
         marker
     }
 
@@ -125,9 +137,9 @@ mod tests {
     fn writes_arrays_and_slices_in_element_order() {
         let mut bytes = Vec::new();
         let mut encoder = Encoder::new(&mut bytes);
-        encoder.write([1u32, 2]);
-        encoder.write([[1.5f32, -2.5]]);
-        encoder.write(&[3u16, 4][..]);
+        encoder.write([1u32, 2]).unwrap();
+        encoder.write([[1.5f32, -2.5]]).unwrap();
+        encoder.write(&[3u16, 4][..]).unwrap();
         assert_eq!(
             bytes,
             [1, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0xc0, 0x3f, 0, 0, 0x20, 0xc0, 3, 0, 4, 0,]
@@ -140,10 +152,10 @@ mod tests {
         let mut encoder = Encoder::new(&mut bytes);
         encoder.write_bytes(b"TEST");
         let chunk = encoder.begin_sized();
-        encoder.write(0x1234u16);
+        encoder.write(0x1234u16).unwrap();
         encoder.finish_payload(chunk, *b"TEST").unwrap();
         let record = encoder.begin_sized();
-        encoder.write(1.5f32);
+        encoder.write(1.5f32).unwrap();
         encoder.finish_sized(record, *b"TEST").unwrap();
         assert_eq!(
             bytes,

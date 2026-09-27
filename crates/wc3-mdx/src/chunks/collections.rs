@@ -9,13 +9,13 @@ use crate::{
     Material, Node, ParticleEmitter, ParticleEmitter2, PopcornEmitter, RibbonEmitter, Sequence,
     Texture, TextureAnimation,
 };
-use crate::{Chunk, Cursor, DecodeError, Encodable, KnownChunk, Record};
+use crate::{Chunk, Cursor, DecodeError, KnownChunk, Readable, Writable};
 use crate::{GlobalSequence, PivotPoint};
 
 /// A complete chunk made of consecutive records of one type.
 pub trait CollectionChunk: Sized {
     /// The record type stored in this chunk.
-    type Item: Record;
+    type Item;
 
     /// Returns this chunk type's tag.
     fn tag() -> Tag;
@@ -27,7 +27,10 @@ pub trait CollectionChunk: Sized {
     fn from_records(records: Vec<Self::Item>) -> Self;
 }
 
-fn decode_records<C: CollectionChunk>(cursor: &mut Cursor<'_>) -> Result<C, DecodeError> {
+fn decode_records<C: CollectionChunk>(cursor: &mut Cursor<'_>) -> Result<C, DecodeError>
+where
+    C::Item: Readable,
+{
     let mut records = Vec::new();
     while !cursor.remaining().is_empty() {
         let start = cursor.position();
@@ -43,13 +46,13 @@ fn decode_records<C: CollectionChunk>(cursor: &mut Cursor<'_>) -> Result<C, Deco
     Ok(C::from_records(records))
 }
 
-fn encode_records<C: CollectionChunk>(
-    chunk: &C,
-    bytes: &mut Encoder<'_>,
-) -> Result<(), EncodeError> {
+fn encode_records<C: CollectionChunk>(chunk: &C, bytes: &mut Encoder<'_>) -> Result<(), EncodeError>
+where
+    for<'a> &'a C::Item: Writable,
+{
     let start = bytes.position();
     for record in chunk.records() {
-        record.encode_to(bytes)?;
+        bytes.write(record)?;
         if bytes.position() - start > u32::MAX as usize {
             return Err(EncodeError::ChunkTooLarge {
                 tag: C::tag(),
@@ -181,7 +184,7 @@ record_collection!(PivotPointsChunk, PivotPoint, *b"PIVT");
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::Readable;
+    use crate::{Readable, Writable};
 
     #[test]
     fn fixed_width_collection_uses_the_whole_chunk() {

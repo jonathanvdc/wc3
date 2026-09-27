@@ -1,6 +1,6 @@
 use wc3_mdx::animation::TextureTranslation;
 use wc3_mdx::animation::{AnimationTrack, TextureAnimation, ValueKeyframe};
-use wc3_mdx::io::{Encodable, Readable};
+use wc3_mdx::io::{Readable, Writable};
 use wc3_mdx::Model;
 
 #[test]
