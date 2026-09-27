@@ -101,7 +101,7 @@ impl Readable for EventObject {
 impl Writable for &EventObject {
     fn write_to(self, bytes: &mut Encoder<'_>) -> Result<(), EncodeError> {
         let start = bytes.position();
-        self.node.write_to(bytes)?;
+        bytes.write(&self.node)?;
         bytes.write_bytes(&TRACK_TAG);
         let count = u32::try_from(self.frames.len()).map_err(|_| EncodeError::ChunkTooLarge {
             tag: EventObjectsChunk::TAG,

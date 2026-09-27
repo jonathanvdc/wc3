@@ -189,7 +189,7 @@ impl Readable for ParticleEmitter2 {
 impl Writable for &ParticleEmitter2 {
     fn write_to(self, bytes: &mut Encoder<'_>) -> Result<(), EncodeError> {
         let marker = bytes.begin_sized();
-        self.node.write_to(bytes)?;
+        bytes.write(&self.node)?;
         bytes.write(&self.fields)?;
         for track in &self.tracks {
             bytes.write(track)?;

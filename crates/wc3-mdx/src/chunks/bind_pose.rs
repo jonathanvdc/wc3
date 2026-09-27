@@ -1,7 +1,7 @@
 //! Reforged bind-pose matrices in `BPOS` chunks.
 use crate::{
     BindPoseMatrix, Chunk, CollectionChunk, Cursor, DecodeError, EncodeError, Encoder, KnownChunk,
-    Tag, Writable,
+    Tag,
 };
 
 const MATRIX_SIZE: usize = 48;
@@ -65,7 +65,7 @@ impl Chunk for BindPoseChunk {
         }
         bytes.write(self.records.len() as u32)?;
         for record in &self.records {
-            record.write_to(bytes)?;
+            bytes.write(record)?;
         }
         Ok(())
     }

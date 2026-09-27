@@ -717,7 +717,7 @@ impl<V: ModelVersion> Writable for &Material<V> {
         bytes.write_bytes(b"LAYS");
         write_count(bytes, self.layers.len(), MaterialsChunk::<V>::TAG)?;
         for layer in &self.layers {
-            layer.write_to(bytes)?;
+            bytes.write(layer)?;
         }
         bytes.finish_sized(marker, MaterialsChunk::<V>::TAG)?;
         Ok(())

@@ -163,7 +163,7 @@ impl Readable for CollisionShape {
 
 impl Writable for &CollisionShape {
     fn write_to(self, bytes: &mut Encoder<'_>) -> Result<(), EncodeError> {
-        self.node.write_to(bytes)?;
+        bytes.write(&self.node)?;
         let kind = match self.geometry {
             CollisionGeometry::Box(_) => 0u32,
             CollisionGeometry::Plane(_) => 1,

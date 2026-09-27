@@ -122,7 +122,7 @@ impl Readable for RibbonEmitter {
 impl Writable for &RibbonEmitter {
     fn write_to(self, bytes: &mut Encoder<'_>) -> Result<(), EncodeError> {
         let marker = bytes.begin_sized();
-        self.node.write_to(bytes)?;
+        bytes.write(&self.node)?;
         bytes.write(&self.fields)?;
         for track in &self.tracks {
             bytes.write(track)?;

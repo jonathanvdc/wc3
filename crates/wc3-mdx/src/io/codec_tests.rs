@@ -19,9 +19,7 @@ mod tests {
     {
         let bytes = value.encode().unwrap();
         let mut appended = vec![0xaa, 0xbb];
-        value
-            .write_to(&mut crate::Encoder::new(&mut appended))
-            .unwrap();
+        crate::Encoder::new(&mut appended).write(value).unwrap();
         assert_eq!(&appended[..2], &[0xaa, 0xbb]);
         assert_eq!(&appended[2..], bytes);
         assert_eq!(T::decode(&bytes).unwrap(), *value);

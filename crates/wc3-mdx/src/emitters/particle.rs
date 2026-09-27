@@ -192,7 +192,7 @@ impl Readable for ParticleEmitter {
 impl Writable for &ParticleEmitter {
     fn write_to(self, bytes: &mut Encoder<'_>) -> Result<(), EncodeError> {
         let marker = bytes.begin_sized();
-        self.node.write_to(bytes)?;
+        bytes.write(&self.node)?;
         for value in [
             self.emission_rate,
             self.gravity,

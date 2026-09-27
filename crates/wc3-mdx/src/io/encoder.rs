@@ -18,7 +18,7 @@ pub trait Writable {
         Self: Sized,
     {
         let mut bytes = Vec::new();
-        self.write_to(&mut Encoder::new(&mut bytes))?;
+        Encoder::new(&mut bytes).write(self)?;
         Ok(bytes)
     }
 }

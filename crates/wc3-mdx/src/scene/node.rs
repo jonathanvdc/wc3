@@ -257,7 +257,7 @@ impl Readable for Bone {
 
 impl Writable for &Bone {
     fn write_to(self, bytes: &mut Encoder<'_>) -> Result<(), EncodeError> {
-        self.node.write_to(bytes)?;
+        bytes.write(&self.node)?;
         bytes.write(self.geoset_id)?;
         bytes.write(self.geoset_animation_id)?;
         Ok(())

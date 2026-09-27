@@ -190,7 +190,7 @@ impl Readable for PopcornEmitter {
 impl Writable for &PopcornEmitter {
     fn write_to(self, bytes: &mut Encoder<'_>) -> Result<(), EncodeError> {
         let marker = bytes.begin_sized();
-        self.node.write_to(bytes)?;
+        bytes.write(&self.node)?;
         for value in [
             self.life_span,
             self.emission_rate,

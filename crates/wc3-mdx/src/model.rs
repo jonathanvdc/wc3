@@ -152,7 +152,7 @@ impl<V: ModelVersion> Writable for &Model<V> {
     fn write_to(self, output: &mut Encoder<'_>) -> Result<(), EncodeError> {
         output.write_bytes(&MAGIC);
         for chunk in &self.chunks {
-            chunk.write_to(output)?;
+            output.write(chunk)?;
         }
         Ok(())
     }

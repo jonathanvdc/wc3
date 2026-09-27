@@ -270,7 +270,7 @@ impl<V: ModelVersion> Readable for Light<V> {
 impl<V: ModelVersion> Writable for &Light<V> {
     fn write_to(self, bytes: &mut Encoder<'_>) -> Result<(), EncodeError> {
         let marker = bytes.begin_sized();
-        self.node.write_to(bytes)?;
+        bytes.write(&self.node)?;
         bytes.write(self.light_type)?;
         bytes.write(self.attenuation_start)?;
         bytes.write(self.attenuation_end)?;
