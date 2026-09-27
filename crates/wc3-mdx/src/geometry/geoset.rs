@@ -636,7 +636,7 @@ fn write_count(bytes: &mut Encoder<'_>, count: usize) -> Result<(), EncodeError>
         tag: *b"GEOS",
         size: count,
     })?;
-    bytes.write(count)?;
+    bytes.write(&(count))?;
     Ok(())
 }
 
@@ -777,8 +777,8 @@ impl<V: ModelVersion> Readable for Geoset<V> {
     }
 }
 
-impl<V: ModelVersion> Writable for &Geoset<V> {
-    fn write_to(self, bytes: &mut Encoder<'_>) -> Result<(), EncodeError> {
+impl<V: ModelVersion> Writable for Geoset<V> {
+    fn write_to(&self, bytes: &mut Encoder<'_>) -> Result<(), EncodeError> {
         let start = bytes.position();
         let marker = bytes.begin_sized();
         write_vectors(bytes, *b"VRTX", &self.vertices)?;
@@ -798,7 +798,7 @@ impl<V: ModelVersion> Writable for &Geoset<V> {
             self.selection_group,
             self.unselectable_raw,
         ] {
-            bytes.write(word)?;
+            bytes.write(&(word))?;
         }
         self.header_extension.encode(bytes)?;
         bytes.write(&self.extent)?;

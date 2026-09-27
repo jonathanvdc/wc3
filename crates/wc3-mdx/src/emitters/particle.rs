@@ -189,22 +189,18 @@ impl Readable for ParticleEmitter {
     }
 }
 
-impl Writable for &ParticleEmitter {
-    fn write_to(self, bytes: &mut Encoder<'_>) -> Result<(), EncodeError> {
+impl Writable for ParticleEmitter {
+    fn write_to(&self, bytes: &mut Encoder<'_>) -> Result<(), EncodeError> {
         let marker = bytes.begin_sized();
         bytes.write(&self.node)?;
-        for value in [
-            self.emission_rate,
-            self.gravity,
-            self.longitude,
-            self.latitude,
-        ] {
-            bytes.write(value)?;
-        }
+        bytes.write(&self.emission_rate)?;
+        bytes.write(&self.gravity)?;
+        bytes.write(&self.longitude)?;
+        bytes.write(&self.latitude)?;
         bytes.write(&self.path)?;
-        bytes.write(self.reserved)?;
-        bytes.write(self.life_span)?;
-        bytes.write(self.initial_velocity)?;
+        bytes.write(&self.reserved)?;
+        bytes.write(&self.life_span)?;
+        bytes.write(&self.initial_velocity)?;
         for track in &self.tracks {
             bytes.write(track)?;
         }

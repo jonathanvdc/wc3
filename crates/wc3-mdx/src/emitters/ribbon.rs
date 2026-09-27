@@ -119,8 +119,8 @@ impl Readable for RibbonEmitter {
     }
 }
 
-impl Writable for &RibbonEmitter {
-    fn write_to(self, bytes: &mut Encoder<'_>) -> Result<(), EncodeError> {
+impl Writable for RibbonEmitter {
+    fn write_to(&self, bytes: &mut Encoder<'_>) -> Result<(), EncodeError> {
         let marker = bytes.begin_sized();
         bytes.write(&self.node)?;
         bytes.write(&self.fields)?;

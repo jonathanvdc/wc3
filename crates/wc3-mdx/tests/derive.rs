@@ -19,8 +19,8 @@ struct Pair(u16, u32);
 
 struct FailingField;
 
-impl Writable for &FailingField {
-    fn write_to(self, _: &mut Encoder<'_>) -> Result<(), EncodeError> {
+impl Writable for FailingField {
+    fn write_to(&self, _: &mut Encoder<'_>) -> Result<(), EncodeError> {
         Err(EncodeError::ChunkTooLarge {
             tag: *b"TEST",
             size: usize::MAX,

@@ -5,7 +5,7 @@ use wc3_mdx::animation::{
 use wc3_mdx::io::{Cursor, DecodeError, Encoder, Readable, Writable};
 use wc3_mdx::scene::{Node, NodeTrack};
 
-fn write_track<T: wc3_mdx::io::Writable>(value: T) -> Vec<u8> {
+fn write_track<T: wc3_mdx::io::Writable>(value: &T) -> Vec<u8> {
     let mut bytes = Vec::new();
     Encoder::new(&mut bytes).write(value).unwrap();
     bytes

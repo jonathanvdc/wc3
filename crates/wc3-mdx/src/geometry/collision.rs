@@ -161,8 +161,8 @@ impl Readable for CollisionShape {
     }
 }
 
-impl Writable for &CollisionShape {
-    fn write_to(self, bytes: &mut Encoder<'_>) -> Result<(), EncodeError> {
+impl Writable for CollisionShape {
+    fn write_to(&self, bytes: &mut Encoder<'_>) -> Result<(), EncodeError> {
         bytes.write(&self.node)?;
         let kind = match self.geometry {
             CollisionGeometry::Box(_) => 0u32,
@@ -170,19 +170,19 @@ impl Writable for &CollisionShape {
             CollisionGeometry::Sphere(_, _) => 2,
             CollisionGeometry::Cylinder(_, _) => 3,
         };
-        bytes.write(kind)?;
+        bytes.write(&kind)?;
 
         match self.geometry {
             CollisionGeometry::Box(points) | CollisionGeometry::Plane(points) => {
-                bytes.write(points)?;
+                bytes.write(&points)?;
             }
             CollisionGeometry::Sphere(center, radius) => {
-                bytes.write(center)?;
-                bytes.write(radius)?;
+                bytes.write(&center)?;
+                bytes.write(&radius)?;
             }
             CollisionGeometry::Cylinder(points, radius) => {
-                bytes.write(points)?;
-                bytes.write(radius)?;
+                bytes.write(&points)?;
+                bytes.write(&radius)?;
             }
         }
         Ok(())

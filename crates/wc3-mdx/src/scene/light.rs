@@ -63,7 +63,7 @@ impl LightExtension for ModernLightExtension {
         Ok(Self(cursor.read()?))
     }
     fn encode(&self, output: &mut Encoder<'_>) -> Result<(), EncodeError> {
-        output.write(self.0)
+        output.write(&self.0)
     }
     fn words(&self) -> Option<[u32; 7]> {
         Some(self.0)
@@ -267,21 +267,17 @@ impl<V: ModelVersion> Readable for Light<V> {
     }
 }
 
-impl<V: ModelVersion> Writable for &Light<V> {
-    fn write_to(self, bytes: &mut Encoder<'_>) -> Result<(), EncodeError> {
+impl<V: ModelVersion> Writable for Light<V> {
+    fn write_to(&self, bytes: &mut Encoder<'_>) -> Result<(), EncodeError> {
         let marker = bytes.begin_sized();
         bytes.write(&self.node)?;
-        bytes.write(self.light_type)?;
-        bytes.write(self.attenuation_start)?;
-        bytes.write(self.attenuation_end)?;
-        for value in self.color {
-            bytes.write(value)?;
-        }
-        bytes.write(self.intensity)?;
-        for value in self.ambient_color {
-            bytes.write(value)?;
-        }
-        bytes.write(self.ambient_intensity)?;
+        bytes.write(&self.light_type)?;
+        bytes.write(&self.attenuation_start)?;
+        bytes.write(&self.attenuation_end)?;
+        bytes.write(&self.color)?;
+        bytes.write(&self.intensity)?;
+        bytes.write(&self.ambient_color)?;
+        bytes.write(&self.ambient_intensity)?;
         self.extended_words.encode(bytes)?;
         for track in &self.tracks {
             bytes.write(track)?;

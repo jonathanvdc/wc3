@@ -12,7 +12,7 @@ pub enum Interpolation {
 }
 
 /// A keyframe without interpolation tangents.
-#[derive(Clone, Debug, PartialEq, Readable)]
+#[derive(Clone, Debug, PartialEq, Readable, Writable)]
 pub struct ValueKeyframe<T> {
     /// Frame time in milliseconds.
     pub frame: u32,
@@ -21,7 +21,7 @@ pub struct ValueKeyframe<T> {
 }
 
 /// A keyframe with both interpolation tangents.
-#[derive(Clone, Debug, PartialEq, Readable)]
+#[derive(Clone, Debug, PartialEq, Readable, Writable)]
 pub struct TangentKeyframe<T> {
     /// Frame time in milliseconds.
     pub frame: u32,
@@ -31,34 +31,4 @@ pub struct TangentKeyframe<T> {
     pub in_tangent: T,
     /// Outgoing tangent.
     pub out_tangent: T,
-}
-
-impl<T: TrackValue> Writable for ValueKeyframe<T> {
-    fn write_to(self, encoder: &mut Encoder<'_>) -> Result<(), EncodeError> {
-        encoder.write(&self)?;
-        Ok(())
-    }
-}
-impl<T: TrackValue> Writable for TangentKeyframe<T> {
-    fn write_to(self, encoder: &mut Encoder<'_>) -> Result<(), EncodeError> {
-        encoder.write(&self)?;
-        Ok(())
-    }
-}
-
-impl<T: TrackValue> Writable for &ValueKeyframe<T> {
-    fn write_to(self, encoder: &mut Encoder<'_>) -> Result<(), EncodeError> {
-        encoder.write(self.frame)?;
-        encoder.write(self.value)?;
-        Ok(())
-    }
-}
-impl<T: TrackValue> Writable for &TangentKeyframe<T> {
-    fn write_to(self, encoder: &mut Encoder<'_>) -> Result<(), EncodeError> {
-        encoder.write(self.frame)?;
-        encoder.write(self.value)?;
-        encoder.write(self.in_tangent)?;
-        encoder.write(self.out_tangent)?;
-        Ok(())
-    }
 }

@@ -63,8 +63,8 @@ impl Readable for TextureAnimation {
     }
 }
 
-impl Writable for &TextureAnimation {
-    fn write_to(self, bytes: &mut Encoder<'_>) -> Result<(), EncodeError> {
+impl Writable for TextureAnimation {
+    fn write_to(&self, bytes: &mut Encoder<'_>) -> Result<(), EncodeError> {
         let marker = bytes.begin_sized();
         for track in &self.tracks {
             bytes.write(track)?;

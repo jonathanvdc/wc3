@@ -15,7 +15,7 @@ mod tests {
 
     fn round_trip<T: Readable + PartialEq + std::fmt::Debug>(value: &T)
     where
-        for<'a> &'a T: Writable,
+        T: Writable,
     {
         let bytes = value.encode().unwrap();
         let mut appended = vec![0xaa, 0xbb];
@@ -79,7 +79,7 @@ mod tests {
     fn cursor_decoders_stop_at_the_next_record() {
         fn check<T: Readable + PartialEq + std::fmt::Debug>(first: T, second: T)
         where
-            for<'a> &'a T: Writable,
+            T: Writable,
         {
             let mut bytes = first.encode().unwrap();
             let first_len = bytes.len();

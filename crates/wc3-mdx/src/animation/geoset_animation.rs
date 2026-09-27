@@ -147,15 +147,15 @@ impl Readable for GeosetAnimation {
     }
 }
 
-impl Writable for &GeosetAnimation {
-    fn write_to(self, bytes: &mut Encoder<'_>) -> Result<(), EncodeError> {
+impl Writable for GeosetAnimation {
+    fn write_to(&self, bytes: &mut Encoder<'_>) -> Result<(), EncodeError> {
         let marker = bytes.begin_sized();
-        bytes.write(self.alpha)?;
-        bytes.write(self.raw_flags)?;
+        bytes.write(&(self.alpha))?;
+        bytes.write(&(self.raw_flags))?;
         for value in self.color {
-            bytes.write(value)?;
+            bytes.write(&(value))?;
         }
-        bytes.write(self.geoset_id)?;
+        bytes.write(&(self.geoset_id))?;
         for track in &self.tracks {
             bytes.write(track)?;
         }

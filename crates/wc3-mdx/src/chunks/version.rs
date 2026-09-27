@@ -42,7 +42,7 @@ impl<V: ModelVersion> Chunk for VersionChunk<V> {
             });
         }
 
-        bytes.write(V::NUMBER)?;
+        bytes.write(&(V::NUMBER))?;
         bytes.write_bytes(&self.extension);
         Ok(())
     }

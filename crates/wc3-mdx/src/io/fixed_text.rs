@@ -51,8 +51,8 @@ impl<const N: usize> Readable for FixedText<N> {
     }
 }
 
-impl<const N: usize> Writable for &FixedText<N> {
-    fn write_to(self, encoder: &mut Encoder<'_>) -> Result<(), EncodeError> {
+impl<const N: usize> Writable for FixedText<N> {
+    fn write_to(&self, encoder: &mut Encoder<'_>) -> Result<(), EncodeError> {
         encoder.write(self.0.as_slice())?;
         Ok(())
     }

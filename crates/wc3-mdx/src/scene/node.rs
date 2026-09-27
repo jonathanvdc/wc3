@@ -227,13 +227,13 @@ impl Readable for Node {
     }
 }
 
-impl Writable for &Node {
-    fn write_to(self, bytes: &mut Encoder<'_>) -> Result<(), EncodeError> {
+impl Writable for Node {
+    fn write_to(&self, bytes: &mut Encoder<'_>) -> Result<(), EncodeError> {
         let marker = bytes.begin_sized();
         bytes.write(&self.name)?;
-        bytes.write(self.object_id)?;
-        bytes.write(self.parent_id)?;
-        bytes.write(self.raw_flags)?;
+        bytes.write(&self.object_id)?;
+        bytes.write(&self.parent_id)?;
+        bytes.write(&self.raw_flags)?;
         for track in &self.tracks {
             bytes.write(track)?;
         }
@@ -255,11 +255,11 @@ impl Readable for Bone {
     }
 }
 
-impl Writable for &Bone {
-    fn write_to(self, bytes: &mut Encoder<'_>) -> Result<(), EncodeError> {
+impl Writable for Bone {
+    fn write_to(&self, bytes: &mut Encoder<'_>) -> Result<(), EncodeError> {
         bytes.write(&self.node)?;
-        bytes.write(self.geoset_id)?;
-        bytes.write(self.geoset_animation_id)?;
+        bytes.write(&self.geoset_id)?;
+        bytes.write(&self.geoset_animation_id)?;
         Ok(())
     }
 }

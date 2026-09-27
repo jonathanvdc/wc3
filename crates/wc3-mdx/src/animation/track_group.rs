@@ -23,8 +23,8 @@ macro_rules! track_group {
                 Err($crate::DecodeError::MalformedRecord { tag, offset })
             }
         }
-        impl $crate::Writable for &$group {
-            fn write_to(self, encoder: &mut $crate::Encoder<'_>) -> Result<(), $crate::EncodeError> {
+        impl $crate::Writable for $group {
+            fn write_to(&self, encoder: &mut $crate::Encoder<'_>) -> Result<(), $crate::EncodeError> {
                 match self { $( $group::$variant(track) => encoder.write(track), )+ }
             }
         }

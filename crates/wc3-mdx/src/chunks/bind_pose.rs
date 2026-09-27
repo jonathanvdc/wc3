@@ -63,7 +63,7 @@ impl Chunk for BindPoseChunk {
                 size,
             });
         }
-        bytes.write(self.records.len() as u32)?;
+        bytes.write(&(self.records.len() as u32))?;
         for record in &self.records {
             bytes.write(record)?;
         }

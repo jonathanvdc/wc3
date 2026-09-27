@@ -11,7 +11,7 @@ pub fn derive_readable(input: TokenStream) -> TokenStream {
 }
 
 /// Writes each struct field in declaration order from a shared reference.
-/// Every field must support `wc3_mdx::Writable` through a reference.
+/// Every field must implement `wc3_mdx::Writable`.
 #[proc_macro_derive(Writable)]
 pub fn derive_writable(input: TokenStream) -> TokenStream {
     expand(parse_macro_input!(input as DeriveInput), false).into()
@@ -32,7 +32,7 @@ fn expand(input: DeriveInput, reading: bool) -> proc_macro2::TokenStream {
         let predicate = if reading {
             parse_quote!(#ty: ::wc3_mdx::Readable)
         } else {
-            parse_quote!(for<'a> &'a #ty: ::wc3_mdx::Writable)
+            parse_quote!(#ty: ::wc3_mdx::Writable)
         };
         generics.make_where_clause().predicates.push(predicate);
     }
@@ -69,8 +69,8 @@ fn expand(input: DeriveInput, reading: bool) -> proc_macro2::TokenStream {
         }
     } else {
         quote! {
-            impl #impl_generics ::wc3_mdx::Writable for &#name #ty_generics #where_clause {
-                fn write_to(self, encoder: &mut ::wc3_mdx::Encoder<'_>) -> Result<(), ::wc3_mdx::EncodeError> {
+            impl #impl_generics ::wc3_mdx::Writable for #name #ty_generics #where_clause {
+                fn write_to(&self, encoder: &mut ::wc3_mdx::Encoder<'_>) -> Result<(), ::wc3_mdx::EncodeError> {
                     #writes
                     Ok(())
                 }

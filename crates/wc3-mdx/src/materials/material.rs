@@ -247,7 +247,7 @@ impl LayerExtra for Layer900Extra {
         })
     }
     fn encode(&self, output: &mut Encoder<'_>) -> Result<(), EncodeError> {
-        output.write(self.emissive_gain)?;
+        output.write(&(self.emissive_gain))?;
         Ok(())
     }
     fn emissive_gain(&self) -> Option<f32> {
@@ -283,9 +283,9 @@ impl LayerExtra for Layer1000Extra {
     }
     fn encode(&self, output: &mut Encoder<'_>) -> Result<(), EncodeError> {
         self.base.encode(output)?;
-        output.write(self.fresnel.color)?;
-        output.write(self.fresnel.opacity)?;
-        output.write(self.fresnel.team_color)?;
+        output.write(&(self.fresnel.color))?;
+        output.write(&(self.fresnel.opacity))?;
+        output.write(&(self.fresnel.team_color))?;
         Ok(())
     }
     fn emissive_gain(&self) -> Option<f32> {
@@ -347,11 +347,11 @@ impl LayerExtra for Layer1100Extra {
     }
     fn encode(&self, output: &mut Encoder<'_>) -> Result<(), EncodeError> {
         self.base.encode(output)?;
-        output.write(self.shader_type_id)?;
+        output.write(&(self.shader_type_id))?;
         write_count(output, self.texture_slots.len(), LAYER_TAG)?;
         for slot in &self.texture_slots {
-            output.write(slot.texture_id)?;
-            output.write(slot.texture_type)?;
+            output.write(&(slot.texture_id))?;
+            output.write(&(slot.texture_type))?;
             if let Some(track) = &slot.track {
                 output.write(track)?;
             }
@@ -432,7 +432,7 @@ fn expect_tag(cursor: &mut Cursor<'_>, expected: Tag, record_tag: Tag) -> Result
 fn write_count(bytes: &mut Encoder<'_>, count: usize, tag: Tag) -> Result<(), EncodeError> {
     let value =
         u32::try_from(count).map_err(|_| EncodeError::ChunkTooLarge { tag, size: count })?;
-    bytes.write(value)?;
+    bytes.write(&(value))?;
     Ok(())
 }
 
@@ -708,11 +708,11 @@ impl<V: ModelVersion> Readable for Material<V> {
     }
 }
 
-impl<V: ModelVersion> Writable for &Material<V> {
-    fn write_to(self, bytes: &mut Encoder<'_>) -> Result<(), EncodeError> {
+impl<V: ModelVersion> Writable for Material<V> {
+    fn write_to(&self, bytes: &mut Encoder<'_>) -> Result<(), EncodeError> {
         let marker = bytes.begin_sized();
-        bytes.write(self.priority_plane)?;
-        bytes.write(self.render_mode)?;
+        bytes.write(&(self.priority_plane))?;
+        bytes.write(&(self.render_mode))?;
         self.shader.encode(bytes)?;
         bytes.write_bytes(b"LAYS");
         write_count(bytes, self.layers.len(), MaterialsChunk::<V>::TAG)?;
@@ -756,8 +756,8 @@ impl<V: ModelVersion> Readable for Layer<V> {
     }
 }
 
-impl<V: ModelVersion> Writable for &Layer<V> {
-    fn write_to(self, bytes: &mut Encoder<'_>) -> Result<(), EncodeError> {
+impl<V: ModelVersion> Writable for Layer<V> {
+    fn write_to(&self, bytes: &mut Encoder<'_>) -> Result<(), EncodeError> {
         let marker = bytes.begin_sized();
         for word in [
             self.filter_mode,
@@ -766,9 +766,9 @@ impl<V: ModelVersion> Writable for &Layer<V> {
             self.texture_animation_id,
             self.coordinate_id,
         ] {
-            bytes.write(word)?;
+            bytes.write(&(word))?;
         }
-        bytes.write(self.alpha)?;
+        bytes.write(&(self.alpha))?;
         self.extensions.encode(bytes)?;
         for track in &self.tracks {
             bytes.write(track)?;

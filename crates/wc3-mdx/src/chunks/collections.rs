@@ -48,7 +48,7 @@ where
 
 fn encode_records<C: CollectionChunk>(chunk: &C, bytes: &mut Encoder<'_>) -> Result<(), EncodeError>
 where
-    for<'a> &'a C::Item: Writable,
+    C::Item: Writable,
 {
     let start = bytes.position();
     for record in chunk.records() {

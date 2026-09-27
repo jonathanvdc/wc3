@@ -26,8 +26,8 @@ pub trait Chunk {
     fn encode_payload_to(&self, output: &mut Encoder<'_>) -> Result<(), EncodeError>;
 }
 
-impl<T: Chunk + ?Sized> Writable for &T {
-    fn write_to(self, output: &mut Encoder<'_>) -> Result<(), EncodeError> {
+impl<T: Chunk + ?Sized> Writable for T {
+    fn write_to(&self, output: &mut Encoder<'_>) -> Result<(), EncodeError> {
         let tag = self.tag();
         output.write_bytes(&tag);
         let marker = output.begin_sized();

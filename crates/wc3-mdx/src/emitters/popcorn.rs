@@ -187,22 +187,16 @@ impl Readable for PopcornEmitter {
     }
 }
 
-impl Writable for &PopcornEmitter {
-    fn write_to(self, bytes: &mut Encoder<'_>) -> Result<(), EncodeError> {
+impl Writable for PopcornEmitter {
+    fn write_to(&self, bytes: &mut Encoder<'_>) -> Result<(), EncodeError> {
         let marker = bytes.begin_sized();
         bytes.write(&self.node)?;
-        for value in [
-            self.life_span,
-            self.emission_rate,
-            self.speed,
-            self.color[0],
-            self.color[1],
-            self.color[2],
-            self.alpha,
-        ] {
-            bytes.write(value)?;
-        }
-        bytes.write(self.replaceable_id)?;
+        bytes.write(&self.life_span)?;
+        bytes.write(&self.emission_rate)?;
+        bytes.write(&self.speed)?;
+        bytes.write(&self.color)?;
+        bytes.write(&self.alpha)?;
+        bytes.write(&self.replaceable_id)?;
         bytes.write(&self.path)?;
         bytes.write(&self.visibility_guide)?;
         for track in &self.tracks {

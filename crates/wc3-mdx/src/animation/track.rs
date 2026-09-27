@@ -188,12 +188,12 @@ impl<K: TrackKind> Readable for AnimationTrack<K> {
         })
     }
 }
-impl<K: TrackKind> Writable for &AnimationTrack<K> {
-    fn write_to(self, encoder: &mut Encoder<'_>) -> Result<(), EncodeError> {
+impl<K: TrackKind> Writable for AnimationTrack<K> {
+    fn write_to(&self, encoder: &mut Encoder<'_>) -> Result<(), EncodeError> {
         encoder.write_bytes(&K::TAG);
-        encoder.write(self.keyframes.len() as u32)?;
-        encoder.write(self.keyframes.interpolation())?;
-        encoder.write(self.global_sequence_id.unwrap_or(u32::MAX))?;
+        encoder.write(&(self.keyframes.len() as u32))?;
+        encoder.write(&(self.keyframes.interpolation()))?;
+        encoder.write(&(self.global_sequence_id.unwrap_or(u32::MAX)))?;
         match &self.keyframes {
             Keyframes::Step(keys) | Keyframes::Linear(keys) => {
                 for key in keys {

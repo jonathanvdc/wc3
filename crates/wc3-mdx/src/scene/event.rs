@@ -98,8 +98,8 @@ impl Readable for EventObject {
     }
 }
 
-impl Writable for &EventObject {
-    fn write_to(self, bytes: &mut Encoder<'_>) -> Result<(), EncodeError> {
+impl Writable for EventObject {
+    fn write_to(&self, bytes: &mut Encoder<'_>) -> Result<(), EncodeError> {
         let start = bytes.position();
         bytes.write(&self.node)?;
         bytes.write_bytes(&TRACK_TAG);
@@ -107,8 +107,8 @@ impl Writable for &EventObject {
             tag: EventObjectsChunk::TAG,
             size: self.frames.len(),
         })?;
-        bytes.write(count)?;
-        bytes.write(self.global_sequence_id)?;
+        bytes.write(&(count))?;
+        bytes.write(&(self.global_sequence_id))?;
         for frame in &self.frames {
             bytes.write(frame)?;
         }
