@@ -2,6 +2,7 @@
 use crate::ModelVersion;
 use crate::Tag;
 use crate::ValueError;
+use bitfield::bitfield;
 
 use crate::TexturesChunk;
 use crate::{Readable, Writable};
@@ -10,30 +11,18 @@ use std::borrow::Cow;
 use crate::FixedText;
 use crate::Model;
 
-/// Texture wrapping flags; unknown bits remain available through `bits`.
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub struct TextureFlags(u32);
-
-impl TextureFlags {
-    pub const WRAP_WIDTH: Self = Self(1);
-    pub const WRAP_HEIGHT: Self = Self(2);
-    pub const fn from_bits(bits: u32) -> Self {
-        Self(bits)
-    }
-    pub const fn bits(self) -> u32 {
-        self.0
-    }
-    pub const fn contains(self, other: Self) -> bool {
-        self.0 & other.0 == other.0
-    }
-    pub fn set(&mut self, other: Self, enabled: bool) {
-        if enabled {
-            self.0 |= other.0;
-        } else {
-            self.0 &= !other.0;
-        }
-    }
+bitfield! {
+    /// Texture wrapping flags; unknown bits remain available through `bits`.
+    #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+    pub struct TextureFlags(u32);
+    /// Returns the exact stored bits.
+    pub bits, _: 31, 0;
+    /// Returns or changes the `WRAP_WIDTH` bit.
+    pub wrap_width, set_wrap_width: 0;
+    /// Returns or changes the `WRAP_HEIGHT` bit.
+    pub wrap_height, set_wrap_height: 1;
 }
+
 const PATH_SIZE: usize = 256;
 
 /// A texture reference with its original reserved bytes intact.
@@ -80,22 +69,12 @@ impl Texture {
 
     /// Returns decoded texture wrapping flags.
     pub fn flags(&self) -> TextureFlags {
-        TextureFlags::from_bits(self.raw_flags())
-    }
-
-    /// Returns exact raw texture flag bits.
-    pub fn raw_flags(&self) -> u32 {
-        self.flags
+        TextureFlags(self.flags)
     }
 
     /// Sets decoded texture wrapping flags.
     pub fn set_flags(&mut self, flags: TextureFlags) {
-        self.set_raw_flags(flags.bits());
-    }
-
-    /// Sets exact raw texture flag bits.
-    pub fn set_raw_flags(&mut self, flags: u32) {
-        self.flags = flags;
+        self.flags = flags.bits();
     }
 }
 

@@ -2,6 +2,7 @@
 use crate::ModelVersion;
 use crate::ValueError;
 use crate::Vec3;
+use bitfield::bitfield;
 
 use crate::SequencesChunk;
 use crate::{Readable, Writable};
@@ -10,29 +11,16 @@ use std::borrow::Cow;
 use crate::FixedText;
 use crate::Model;
 
-/// Sequence playback flags, with unrecognized bits retained.
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub struct SequenceFlags(u32);
-
-impl SequenceFlags {
-    pub const NON_LOOPING: Self = Self(1);
-    pub const fn from_bits(bits: u32) -> Self {
-        Self(bits)
-    }
-    pub const fn bits(self) -> u32 {
-        self.0
-    }
-    pub const fn contains(self, other: Self) -> bool {
-        self.0 & other.0 == other.0
-    }
-    pub fn set(&mut self, other: Self, enabled: bool) {
-        if enabled {
-            self.0 |= other.0;
-        } else {
-            self.0 &= !other.0;
-        }
-    }
+bitfield! {
+    /// Sequence playback flags, with unrecognized bits retained.
+    #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+    pub struct SequenceFlags(u32);
+    /// Returns the exact stored bits.
+    pub bits, _: 31, 0;
+    /// Returns or changes the `NON_LOOPING` bit.
+    pub non_looping, set_non_looping: 0;
 }
+
 const NAME_SIZE: usize = 80;
 
 /// A fixed-size animation sequence, including reserved fields.
@@ -85,16 +73,10 @@ impl Sequence {
         self.move_speed = speed;
     }
     pub fn flags(&self) -> SequenceFlags {
-        SequenceFlags::from_bits(self.flags)
-    }
-    pub fn raw_flags(&self) -> u32 {
-        self.flags
+        SequenceFlags(self.flags)
     }
     pub fn set_flags(&mut self, flags: SequenceFlags) {
         self.flags = flags.bits();
-    }
-    pub fn set_raw_flags(&mut self, flags: u32) {
-        self.flags = flags;
     }
     pub fn rarity(&self) -> f32 {
         self.rarity

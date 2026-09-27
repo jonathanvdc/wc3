@@ -1,5 +1,6 @@
 //! Geoset animation records in `GEOA` chunks.
 use crate::ModelVersion;
+use bitfield::bitfield;
 crate::animation::track_group! {
     pub enum GeosetTrack {
         Alpha: GeosetAlpha,
@@ -14,29 +15,16 @@ use crate::GeosetAnimationsChunk;
 use crate::Model;
 use crate::{Readable, Writable};
 
-/// Geoset animation rendering flags, retaining unknown bits.
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub struct GeosetAnimationFlags(u32);
-
-impl GeosetAnimationFlags {
-    pub const DROP_SHADOW: Self = Self(1);
-    pub const COLOR: Self = Self(2);
-    pub const fn from_bits(bits: u32) -> Self {
-        Self(bits)
-    }
-    pub const fn bits(self) -> u32 {
-        self.0
-    }
-    pub const fn contains(self, other: Self) -> bool {
-        self.0 & other.0 == other.0
-    }
-    pub fn set(&mut self, other: Self, enabled: bool) {
-        if enabled {
-            self.0 |= other.0;
-        } else {
-            self.0 &= !other.0;
-        }
-    }
+bitfield! {
+    /// Geoset animation rendering flags, retaining unknown bits.
+    #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+    pub struct GeosetAnimationFlags(u32);
+    /// Returns the exact stored bits.
+    pub bits, _: 31, 0;
+    /// Returns or changes the `DROP_SHADOW` bit.
+    pub drop_shadow, set_drop_shadow: 0;
+    /// Returns or changes the `COLOR` bit.
+    pub color, set_color: 1;
 }
 
 /// A geoset animation with decoded alpha and color tracks.
@@ -72,19 +60,11 @@ impl GeosetAnimation {
     }
     /// Returns decoded rendering flags.
     pub fn flags(&self) -> GeosetAnimationFlags {
-        GeosetAnimationFlags::from_bits(self.raw_flags)
-    }
-    /// Returns exact rendering bits.
-    pub fn raw_flags(&self) -> u32 {
-        self.raw_flags
+        GeosetAnimationFlags(self.raw_flags)
     }
     /// Changes decoded rendering bits.
     pub fn set_flags(&mut self, flags: GeosetAnimationFlags) {
         self.raw_flags = flags.bits();
-    }
-    /// Changes exact rendering bits.
-    pub fn set_raw_flags(&mut self, flags: u32) {
-        self.raw_flags = flags;
     }
     /// Returns base RGB color.
     pub fn color(&self) -> Color {

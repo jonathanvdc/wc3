@@ -1,4 +1,5 @@
 //! Materials, shader fields, and version-specific layouts.
+use bitfield::bitfield;
 use std::{borrow::Cow, fmt::Debug, marker::PhantomData};
 
 use super::layer::{
@@ -12,30 +13,18 @@ use crate::{
     ModelVersion, Readable, SupportsMaterialShaderPath, Tag, ValueError, Version, Writable,
 };
 
-/// Material rendering bits, preserving unrecognized bits.
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Readable, Writable)]
-pub struct MaterialRenderFlags(u32);
-
-impl MaterialRenderFlags {
-    pub const CONSTANT_COLOR: Self = Self(1);
-    pub const SORT_PRIMITIVES_FAR_Z: Self = Self(16);
-    pub const FULL_RESOLUTION: Self = Self(32);
-    pub const fn from_bits(bits: u32) -> Self {
-        Self(bits)
-    }
-    pub const fn bits(self) -> u32 {
-        self.0
-    }
-    pub const fn contains(self, other: Self) -> bool {
-        self.0 & other.0 == other.0
-    }
-    pub fn set(&mut self, other: Self, enabled: bool) {
-        if enabled {
-            self.0 |= other.0;
-        } else {
-            self.0 &= !other.0;
-        }
-    }
+bitfield! {
+    /// Material rendering bits, preserving unrecognized bits.
+    #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Readable, Writable)]
+    pub struct MaterialRenderFlags(u32);
+    /// Returns the exact stored bits.
+    pub bits, _: 31, 0;
+    /// Returns or changes the `CONSTANT_COLOR` bit.
+    pub constant_color, set_constant_color: 0;
+    /// Returns or changes the `SORT_PRIMITIVES_FAR_Z` bit.
+    pub sort_primitives_far_z, set_sort_primitives_far_z: 4;
+    /// Returns or changes the `FULL_RESOLUTION` bit.
+    pub full_resolution, set_full_resolution: 5;
 }
 
 /// A material with directly accessible layers and an exact shader field.

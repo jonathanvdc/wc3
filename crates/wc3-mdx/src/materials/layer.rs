@@ -1,4 +1,5 @@
 //! Material layers, animation tracks, and version-specific texture slots.
+use bitfield::bitfield;
 use std::{fmt::Debug, marker::PhantomData};
 
 use super::write_count;
@@ -22,34 +23,26 @@ track_group! {
     }
 }
 
-/// Material layer shading bits, preserving unrecognized bits.
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub struct LayerShadingFlags(u32);
-
-impl LayerShadingFlags {
-    pub const UNSHADED: Self = Self(1);
-    pub const SPHERE_ENV_MAP: Self = Self(2);
-    pub const TWO_SIDED: Self = Self(16);
-    pub const UNFOGGED: Self = Self(32);
-    pub const NO_DEPTH_TEST: Self = Self(64);
-    pub const NO_DEPTH_SET: Self = Self(128);
-    pub const UNLIT: Self = Self(256);
-    pub const fn from_bits(bits: u32) -> Self {
-        Self(bits)
-    }
-    pub const fn bits(self) -> u32 {
-        self.0
-    }
-    pub const fn contains(self, other: Self) -> bool {
-        self.0 & other.0 == other.0
-    }
-    pub fn set(&mut self, other: Self, enabled: bool) {
-        if enabled {
-            self.0 |= other.0;
-        } else {
-            self.0 &= !other.0;
-        }
-    }
+bitfield! {
+    /// Material layer shading bits, preserving unrecognized bits.
+    #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+    pub struct LayerShadingFlags(u32);
+    /// Returns the exact stored bits.
+    pub bits, _: 31, 0;
+    /// Returns or changes the `UNSHADED` bit.
+    pub unshaded, set_unshaded: 0;
+    /// Returns or changes the `SPHERE_ENV_MAP` bit.
+    pub sphere_env_map, set_sphere_env_map: 1;
+    /// Returns or changes the `TWO_SIDED` bit.
+    pub two_sided, set_two_sided: 4;
+    /// Returns or changes the `UNFOGGED` bit.
+    pub unfogged, set_unfogged: 5;
+    /// Returns or changes the `NO_DEPTH_TEST` bit.
+    pub no_depth_test, set_no_depth_test: 6;
+    /// Returns or changes the `NO_DEPTH_SET` bit.
+    pub no_depth_set, set_no_depth_set: 7;
+    /// Returns or changes the `UNLIT` bit.
+    pub unlit, set_unlit: 8;
 }
 
 /// A Reforged layer texture slot, optionally animated by `KMTF`.
@@ -277,19 +270,11 @@ impl<V: ModelVersion> Layer<V> {
     }
     /// Returns decoded layer shading bits.
     pub fn shading_flags(&self) -> LayerShadingFlags {
-        LayerShadingFlags::from_bits(self.shading_flags)
-    }
-    /// Returns exact layer shading bits.
-    pub fn raw_shading_flags(&self) -> u32 {
-        self.shading_flags
+        LayerShadingFlags(self.shading_flags)
     }
     /// Changes decoded layer shading bits.
     pub fn set_shading_flags(&mut self, flags: LayerShadingFlags) {
         self.shading_flags = flags.bits();
-    }
-    /// Changes exact layer shading bits.
-    pub fn set_raw_shading_flags(&mut self, flags: u32) {
-        self.shading_flags = flags;
     }
     /// Returns the base texture index.
     pub fn texture_id(&self) -> u32 {

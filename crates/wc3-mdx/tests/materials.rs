@@ -35,7 +35,7 @@ fn check_version<V: ModelVersion>() {
     let version = V::NUMBER;
     let mut material = sample_material::<V>();
     material.set_priority_plane(3);
-    material.set_render_mode(MaterialRenderFlags::from_bits(7));
+    material.set_render_mode(MaterialRenderFlags(7));
     let mut model = Model::<V>::new();
     model.set_materials(&[material]);
     let decoded = Model::<V>::decode(&model.encode().unwrap()).unwrap();
@@ -43,9 +43,7 @@ fn check_version<V: ModelVersion>() {
     assert_eq!(materials[0].version(), version);
     assert_eq!(materials[0].priority_plane(), 3);
     assert_eq!(materials[0].render_mode().bits(), 7);
-    assert!(materials[0]
-        .render_mode()
-        .contains(MaterialRenderFlags::CONSTANT_COLOR));
+    assert!(materials[0].render_mode().constant_color());
     let layers = materials[0].layers();
     assert_eq!(layers[0].version(), version);
     assert_eq!(layers[0].filter_mode(), 1);
@@ -169,12 +167,12 @@ fn reforged_layer_texture_slot_and_tracks_round_trip() {
 fn unlit_layer_flag_round_trip() {
     let mut layer = Layer::<V1800>::new();
     let mut flags = layer.shading_flags();
-    flags.set(LayerShadingFlags::UNLIT, true);
+    flags.set_unlit(true);
     layer.set_shading_flags(flags);
     assert!(Layer::<V1800>::decode(&layer.encode().unwrap())
         .unwrap()
         .shading_flags()
-        .contains(LayerShadingFlags::UNLIT));
+        .unlit());
 }
 
 #[test]

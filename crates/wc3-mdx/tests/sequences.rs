@@ -6,7 +6,9 @@ use wc3_mdx::Model;
 fn sequence_fields_round_trip() {
     let mut stand = Sequence::new("Stand", [0, 1000]).unwrap();
     stand.set_move_speed(270.0);
-    stand.set_flags(SequenceFlags::NON_LOOPING);
+    let mut flags = SequenceFlags::default();
+    flags.set_non_looping(true);
+    stand.set_flags(flags);
     stand.set_rarity(0.5);
     stand.set_sync_point(500);
     stand.set_bounds_radius(42.0);
@@ -19,7 +21,7 @@ fn sequence_fields_round_trip() {
     assert_eq!(sequence.name(), "Stand");
     assert_eq!(sequence.interval(), [0, 1000]);
     assert_eq!(sequence.move_speed(), 270.0);
-    assert!(sequence.flags().contains(SequenceFlags::NON_LOOPING));
+    assert!(sequence.flags().non_looping());
     assert_eq!(sequence.rarity(), 0.5);
     assert_eq!(sequence.sync_point(), 500);
     assert_eq!(sequence.bounds_radius(), 42.0);

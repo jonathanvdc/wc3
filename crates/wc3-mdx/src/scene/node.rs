@@ -1,5 +1,6 @@
 //! Shared node headers used by bones and helpers.
 use crate::ModelVersion;
+use bitfield::bitfield;
 crate::animation::track_group! {
     pub enum NodeTrack {
         Translation: NodeTranslation,
@@ -22,53 +23,54 @@ use crate::{DecodeError, Model};
 
 const NAME_SIZE: usize = 80;
 
-/// Node behavior and object-kind bits. Unrecognized bits survive conversion.
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub struct NodeFlags(u32);
-
-impl NodeFlags {
-    pub const DONT_INHERIT_TRANSLATION: Self = Self(0x1);
-    pub const DONT_INHERIT_ROTATION: Self = Self(0x2);
-    pub const DONT_INHERIT_SCALING: Self = Self(0x4);
-    pub const BILLBOARDED: Self = Self(0x8);
-    pub const BILLBOARD_LOCK_X: Self = Self(0x10);
-    pub const BILLBOARD_LOCK_Y: Self = Self(0x20);
-    pub const BILLBOARD_LOCK_Z: Self = Self(0x40);
-    pub const CAMERA_ANCHORED: Self = Self(0x80);
-    pub const BONE: Self = Self(0x100);
-    pub const LIGHT: Self = Self(0x200);
-    pub const EVENT_OBJECT: Self = Self(0x400);
-    pub const ATTACHMENT: Self = Self(0x800);
-    pub const PARTICLE_EMITTER: Self = Self(0x1000);
-    pub const COLLISION_SHAPE: Self = Self(0x2000);
-    pub const RIBBON_EMITTER: Self = Self(0x4000);
-    pub const EMITTER_USES_MDL_OR_UNSHADED: Self = Self(0x8000);
-    pub const EMITTER_USES_TGA_OR_SORT_FAR_Z: Self = Self(0x10000);
-    pub const LINE_EMITTER: Self = Self(0x20000);
-    pub const UNFOGGED: Self = Self(0x40000);
-    pub const MODEL_SPACE: Self = Self(0x80000);
-    pub const XY_QUAD: Self = Self(0x100000);
-
-    /// Wraps all bits, including values not yet assigned a name.
-    pub const fn from_bits(bits: u32) -> Self {
-        Self(bits)
-    }
+bitfield! {
+    /// Node behavior and object-kind bits. Unrecognized bits survive conversion.
+    #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+    pub struct NodeFlags(u32);
     /// Returns the exact stored bits.
-    pub const fn bits(self) -> u32 {
-        self.0
-    }
-    /// Reports whether every bit in `other` is set.
-    pub const fn contains(self, other: Self) -> bool {
-        self.0 & other.0 == other.0
-    }
-    /// Changes only the requested bits.
-    pub fn set(&mut self, other: Self, enabled: bool) {
-        if enabled {
-            self.0 |= other.0;
-        } else {
-            self.0 &= !other.0;
-        }
-    }
+    pub bits, _: 31, 0;
+    /// Returns or changes the `DONT_INHERIT_TRANSLATION` bit.
+    pub dont_inherit_translation, set_dont_inherit_translation: 0;
+    /// Returns or changes the `DONT_INHERIT_ROTATION` bit.
+    pub dont_inherit_rotation, set_dont_inherit_rotation: 1;
+    /// Returns or changes the `DONT_INHERIT_SCALING` bit.
+    pub dont_inherit_scaling, set_dont_inherit_scaling: 2;
+    /// Returns or changes the `BILLBOARDED` bit.
+    pub billboarded, set_billboarded: 3;
+    /// Returns or changes the `BILLBOARD_LOCK_X` bit.
+    pub billboard_lock_x, set_billboard_lock_x: 4;
+    /// Returns or changes the `BILLBOARD_LOCK_Y` bit.
+    pub billboard_lock_y, set_billboard_lock_y: 5;
+    /// Returns or changes the `BILLBOARD_LOCK_Z` bit.
+    pub billboard_lock_z, set_billboard_lock_z: 6;
+    /// Returns or changes the `CAMERA_ANCHORED` bit.
+    pub camera_anchored, set_camera_anchored: 7;
+    /// Returns or changes the `BONE` bit.
+    pub bone, set_bone: 8;
+    /// Returns or changes the `LIGHT` bit.
+    pub light, set_light: 9;
+    /// Returns or changes the `EVENT_OBJECT` bit.
+    pub event_object, set_event_object: 10;
+    /// Returns or changes the `ATTACHMENT` bit.
+    pub attachment, set_attachment: 11;
+    /// Returns or changes the `PARTICLE_EMITTER` bit.
+    pub particle_emitter, set_particle_emitter: 12;
+    /// Returns or changes the `COLLISION_SHAPE` bit.
+    pub collision_shape, set_collision_shape: 13;
+    /// Returns or changes the `RIBBON_EMITTER` bit.
+    pub ribbon_emitter, set_ribbon_emitter: 14;
+    /// Returns or changes the `EMITTER_USES_MDL_OR_UNSHADED` bit.
+    pub emitter_uses_mdl_or_unshaded, set_emitter_uses_mdl_or_unshaded: 15;
+    /// Returns or changes the `EMITTER_USES_TGA_OR_SORT_FAR_Z` bit.
+    pub emitter_uses_tga_or_sort_far_z, set_emitter_uses_tga_or_sort_far_z: 16;
+    /// Returns or changes the `LINE_EMITTER` bit.
+    pub line_emitter, set_line_emitter: 17;
+    /// Returns or changes the `UNFOGGED` bit.
+    pub unfogged, set_unfogged: 18;
+    /// Returns or changes the `MODEL_SPACE` bit.
+    pub model_space, set_model_space: 19;
+    /// Returns or changes the `XY_QUAD` bit.
+    pub xy_quad, set_xy_quad: 20;
 }
 
 /// A shared node header with decoded transform tracks.
@@ -132,19 +134,11 @@ impl Node {
     }
     /// Returns decoded node flags.
     pub fn flags(&self) -> NodeFlags {
-        NodeFlags::from_bits(self.raw_flags)
-    }
-    /// Returns the exact flag bits.
-    pub fn raw_flags(&self) -> u32 {
-        self.raw_flags
+        NodeFlags(self.raw_flags)
     }
     /// Changes decoded node flags.
     pub fn set_flags(&mut self, flags: NodeFlags) {
         self.raw_flags = flags.bits();
-    }
-    /// Changes exact flag bits.
-    pub fn set_raw_flags(&mut self, flags: u32) {
-        self.raw_flags = flags;
     }
     /// Borrows decoded transform tracks without reparsing.
     pub fn tracks(&self) -> &[NodeTrack] {

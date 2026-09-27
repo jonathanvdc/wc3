@@ -8,7 +8,7 @@ use wc3_mdx::Model;
 fn texture_fields_round_trip() {
     let mut texture = Texture::new("Textures\\Footman.blp").unwrap();
     texture.set_replaceable_id(1);
-    texture.set_flags(TextureFlags::from_bits(3));
+    texture.set_flags(TextureFlags(3));
     let mut model = Model::<wc3_mdx::V1800>::new();
     model.set_textures(&[texture]);
 
@@ -16,8 +16,8 @@ fn texture_fields_round_trip() {
     let texture = &decoded.textures()[0];
     assert_eq!(texture.path(), "Textures\\Footman.blp");
     assert_eq!(texture.replaceable_id(), 1);
-    assert!(texture.flags().contains(TextureFlags::WRAP_WIDTH));
-    assert!(texture.flags().contains(TextureFlags::WRAP_HEIGHT));
+    assert!(texture.flags().wrap_width());
+    assert!(texture.flags().wrap_height());
 }
 
 #[test]
