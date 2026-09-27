@@ -277,33 +277,3 @@ impl TryModelAccess for AnyVersionModel {
         visit_model!(self, |model| model.try_set_popcorn_emitters(emitters))
     }
 }
-
-impl AnyVersionModel {
-    /// Returns `BPOS` records if this version supports them.
-    pub fn try_bind_poses(&self) -> Result<Vec<BindPoseMatrix>, ValueError> {
-        TryModelAccess::try_bind_poses(self)
-    }
-    /// Replaces `BPOS` records if this version supports them.
-    pub fn try_set_bind_poses(&mut self, poses: &[BindPoseMatrix]) -> Result<(), ValueError> {
-        TryModelAccess::try_set_bind_poses(self, poses)
-    }
-    /// Returns `FAFX` records if this version supports them.
-    pub fn try_face_fx(&self) -> Result<Vec<FaceFx>, ValueError> {
-        TryModelAccess::try_face_fx(self)
-    }
-    /// Replaces `FAFX` records if this version supports them.
-    pub fn try_set_face_fx(&mut self, entries: &[FaceFx]) -> Result<(), ValueError> {
-        TryModelAccess::try_set_face_fx(self, entries)
-    }
-    /// Returns `CORN` records if this version supports them.
-    pub fn try_popcorn_emitters(&self) -> Result<Vec<PopcornEmitter>, ValueError> {
-        TryModelAccess::try_popcorn_emitters(self)
-    }
-    /// Replaces `CORN` records if this version supports them.
-    pub fn try_set_popcorn_emitters(
-        &mut self,
-        emitters: &[PopcornEmitter],
-    ) -> Result<(), ValueError> {
-        TryModelAccess::try_set_popcorn_emitters(self, emitters)
-    }
-}
