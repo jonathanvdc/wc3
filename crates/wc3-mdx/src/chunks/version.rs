@@ -73,17 +73,14 @@ impl<V: ModelVersion> KnownChunk for VersionChunk<V> {
 #[cfg(test)]
 mod version_chunk_tests {
     use super::*;
-    use crate::{Readable, V800, V1800, Writable};
+    use crate::{Readable, Writable, V1800, V800};
 
     #[test]
     fn preserves_version_extension_bytes() {
         let mut original = VersionChunk::<V1800>::new();
         original.extension = vec![9, 8, 7];
         let payload = original.encode().unwrap();
-        assert_eq!(
-            VersionChunk::<V1800>::decode(&payload).unwrap(),
-            original
-        );
+        assert_eq!(VersionChunk::<V1800>::decode(&payload).unwrap(), original);
         assert_eq!(
             VersionChunk::<V800>::decode(
                 &[b"VERS".as_slice(), &3u32.to_le_bytes(), &[1, 2, 3]].concat()

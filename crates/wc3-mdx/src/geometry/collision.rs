@@ -33,7 +33,10 @@ impl Readable for CollisionGeometry {
             0 => Ok(Self::Box([cursor.read()?, cursor.read()?])),
             1 => Ok(Self::Plane([cursor.read()?, cursor.read()?])),
             2 => Ok(Self::Sphere(cursor.read()?, cursor.read()?)),
-            3 => Ok(Self::Cylinder([cursor.read()?, cursor.read()?], cursor.read()?)),
+            3 => Ok(Self::Cylinder(
+                [cursor.read()?, cursor.read()?],
+                cursor.read()?,
+            )),
             _ => Err(DecodeError::MalformedRecord {
                 tag: CollisionShapesChunk::TAG,
                 offset: kind_offset,
