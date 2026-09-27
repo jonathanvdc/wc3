@@ -124,8 +124,8 @@ impl Writable for Attachment {
         let marker = bytes.begin_sized();
         bytes.write(&self.node)?;
         bytes.write(&self.path)?;
-        bytes.write(&(self.reserved))?;
-        bytes.write(&(self.id))?;
+        bytes.write(&self.reserved)?;
+        bytes.write(&self.id)?;
         if let Some(track) = &self.visibility_track {
             bytes.write(track)?;
         }
