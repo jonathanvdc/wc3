@@ -1,5 +1,4 @@
 use wc3_mdx::animation::{GeosetAnimation, Sequence, TextureAnimation};
-use wc3_mdx::chunks::BindPoseChunk;
 use wc3_mdx::emitters::{ParticleEmitter, ParticleEmitter2, PopcornEmitter, RibbonEmitter};
 use wc3_mdx::geometry::BindPoseMatrix;
 use wc3_mdx::geometry::{CollisionShape, Geoset};
@@ -52,7 +51,7 @@ fn full_model<V: ModelVersion>() -> Model<V> {
     model.set_lights(&[Light::<V>::new(Node::new("Light", 8).unwrap(), 0)]);
     if version >= 900 {
         model.set_face_fx(&[FaceFx::new("Face", "Textures\\Face.blp").unwrap()]);
-        model.set_bind_pose(&BindPoseChunk::new(vec![BindPoseMatrix([0.0; 12])]));
+        model.set_bind_poses(&[BindPoseMatrix([0.0; 12])]);
         model.set_popcorn_emitters(&[PopcornEmitter::new(
             Node::new("Popcorn", 9).unwrap(),
             "Objects\\Effect.pkfx",

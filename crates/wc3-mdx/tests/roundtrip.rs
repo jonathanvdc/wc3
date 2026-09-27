@@ -94,16 +94,7 @@ fn check_accessors<V: ModelVersion>(mut model: Model<V>, bytes: &[u8], path: &st
     round_trip_records!(b"PRE2", particle_emitters2, set_particle_emitters2);
     round_trip_records!(b"RIBB", ribbon_emitters, set_ribbon_emitters);
     round_trip_records!(b"CORN", popcorn_emitters, set_popcorn_emitters);
-    if model
-        .chunks()
-        .iter()
-        .filter(|chunk| chunk.tag() == *b"BPOS")
-        .count()
-        == 1
-    {
-        let pose = model.bind_poses().remove(0);
-        model.set_bind_pose(&pose);
-    }
+    round_trip_records!(b"BPOS", bind_poses, set_bind_poses);
     assert_eq!(model.encode().unwrap(), bytes, "{}", path.display());
 }
 
