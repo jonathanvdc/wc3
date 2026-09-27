@@ -1,7 +1,7 @@
 use wc3_mdx::animation::{AnimationTrack, ValueKeyframe};
 use wc3_mdx::animation::{LightColor, LightVisibility};
 use wc3_mdx::io::{Readable, Writable};
-use wc3_mdx::scene::{Light, Node};
+use wc3_mdx::scene::{Light, LightFalloff, LightShadowRange, Node};
 use wc3_mdx::Model;
 
 #[test]
@@ -47,8 +47,21 @@ fn light_color_track_round_trip() {
 #[test]
 fn extended_light_fields_and_tracks_round_trip() {
     let mut light = Light::<wc3_mdx::V1800>::new(Node::new("Glow", 4).unwrap(), 0);
-    let words = [1, 2, 3, 4, 5, 6, 7];
-    light.set_extended_words(words);
+    light.try_set_shadow_casting(true).unwrap();
+    light.try_set_shadow_intensity(1.0).unwrap();
+    light
+        .try_set_shadow_casting_range(LightShadowRange {
+            start: 2.0,
+            end: 3.0,
+        })
+        .unwrap();
+    light
+        .try_set_falloff(LightFalloff {
+            quadratic: 4.0,
+            linear: 5.0,
+            damping: 6.0,
+        })
+        .unwrap();
     let track = AnimationTrack::<LightVisibility>::linear(
         vec![ValueKeyframe {
             frame: 10,
@@ -60,6 +73,140 @@ fn extended_light_fields_and_tracks_round_trip() {
     .into();
     light.set_tracks(std::slice::from_ref(&track));
     let parsed = Light::<wc3_mdx::V1800>::decode(&light.encode().unwrap()).unwrap();
-    assert_eq!(parsed.extended_words(), words);
+    assert!(parsed.try_shadow_casting().unwrap());
+    assert_eq!(parsed.try_shadow_intensity().unwrap(), 1.0);
+    assert_eq!(
+        parsed.try_shadow_casting_range().unwrap(),
+        LightShadowRange {
+            start: 2.0,
+            end: 3.0
+        }
+    );
+    assert_eq!(
+        parsed.falloff(),
+        LightFalloff {
+            quadratic: 4.0,
+            linear: 5.0,
+            damping: 6.0
+        }
+    );
     assert_eq!(parsed.tracks(), &[track]);
+}
+
+#[test]
+fn intermediate_light_layouts_follow_version_gates() {
+    use wc3_mdx::{V1300, V1400, V1600};
+
+    let base = Light::<wc3_mdx::V1200>::new(Node::new("Lamp", 1).unwrap(), 0)
+        .encode()
+        .unwrap();
+    let v1300 = Light::<V1300>::new(Node::new("Lamp", 1).unwrap(), 0)
+        .encode()
+        .unwrap();
+    let v1400 = Light::<V1400>::new(Node::new("Lamp", 1).unwrap(), 0)
+        .encode()
+        .unwrap();
+    let v1600 = Light::<V1600>::new(Node::new("Lamp", 1).unwrap(), 0)
+        .encode()
+        .unwrap();
+    assert_eq!(v1300.len(), base.len() + 12);
+    assert_eq!(v1400.len(), v1300.len());
+    assert_eq!(v1600.len(), v1300.len() + 12);
+    assert_eq!(
+        Light::<V1300>::decode(&v1300).unwrap().encode().unwrap(),
+        v1300
+    );
+    assert_eq!(
+        Light::<V1400>::decode(&v1400).unwrap().encode().unwrap(),
+        v1400
+    );
+    assert_eq!(
+        Light::<V1600>::decode(&v1600).unwrap().encode().unwrap(),
+        v1600
+    );
+}
+
+#[test]
+fn shadow_casting_and_falloff_round_trip() {
+    use wc3_mdx::{V1300, V1600};
+
+    let mut old = Light::<V1300>::new(Node::new("Old", 1).unwrap(), 0);
+    assert_eq!(old.falloff(), LightFalloff::default());
+    assert!(old
+        .try_set_falloff(LightFalloff {
+            quadratic: 1.0,
+            linear: 2.0,
+            damping: 3.0
+        })
+        .is_err());
+
+    let mut light = Light::<V1600>::new(Node::new("New", 2).unwrap(), 0);
+    assert_eq!(light.falloff(), LightFalloff::default());
+    light.try_set_shadow_casting(true).unwrap();
+    light
+        .try_set_falloff(LightFalloff {
+            quadratic: 1.0,
+            linear: 2.0,
+            damping: 3.0,
+        })
+        .unwrap();
+    let decoded = Light::<V1600>::decode(&light.encode().unwrap()).unwrap();
+    assert!(decoded.try_shadow_casting().unwrap());
+    assert_eq!(
+        decoded.falloff(),
+        LightFalloff {
+            quadratic: 1.0,
+            linear: 2.0,
+            damping: 3.0
+        }
+    );
+}
+
+#[test]
+fn infallible_light_accessors_cover_supported_versions() {
+    use wc3_mdx::{
+        SupportsLightFalloff, SupportsLightShadowCasting, SupportsLightShadowIntensity, V1200,
+        V1300, V1400, V1600, V1800,
+    };
+
+    fn check_intensity<V: SupportsLightShadowIntensity>() {
+        let mut light = Light::<V>::new(Node::new("Lamp", 1).unwrap(), 0);
+        light.set_shadow_intensity(0.5);
+        let decoded = Light::<V>::decode(&light.encode().unwrap()).unwrap();
+        assert_eq!(decoded.shadow_intensity(), 0.5);
+    }
+    fn check_casting<V: SupportsLightShadowCasting>() {
+        let mut light = Light::<V>::new(Node::new("Lamp", 1).unwrap(), 0);
+        let range = LightShadowRange {
+            start: 10.0,
+            end: 100.0,
+        };
+        light.set_shadow_casting(true);
+        light.set_shadow_casting_range(range);
+        let decoded = Light::<V>::decode(&light.encode().unwrap()).unwrap();
+        assert!(decoded.shadow_casting());
+        assert_eq!(decoded.shadow_casting_range(), range);
+    }
+    fn check_falloff<V: SupportsLightFalloff>() {
+        let mut light = Light::<V>::new(Node::new("Lamp", 1).unwrap(), 0);
+        let falloff = LightFalloff {
+            quadratic: 0.1,
+            linear: 0.2,
+            damping: 0.3,
+        };
+        light.set_falloff(falloff);
+        let decoded = Light::<V>::decode(&light.encode().unwrap()).unwrap();
+        assert_eq!(decoded.falloff(), falloff);
+    }
+    check_intensity::<V1200>();
+    check_intensity::<V1300>();
+    check_intensity::<V1400>();
+    check_intensity::<V1600>();
+    check_intensity::<V1800>();
+    check_casting::<V1300>();
+    check_casting::<V1400>();
+    check_casting::<V1600>();
+    check_casting::<V1800>();
+    check_falloff::<V1600>();
+    check_falloff::<V1800>();
 }

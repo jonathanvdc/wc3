@@ -143,7 +143,7 @@ impl SkinBoneField for OptionalSkinBones {
     }
 }
 
-use crate::{V1000, V1100, V1200, V1800, V800, V900};
+use crate::{V1000, V1100, V1200, V1300, V1400, V1600, V1800, V800, V900};
 impl GeosetLayout for V800 {
     type Header = ClassicGeosetHeader;
     type SkinBones = NoSkinBones;
@@ -163,6 +163,18 @@ impl GeosetLayout for V1100 {
 impl GeosetLayout for V1200 {
     type Header = GeosetHeaderExtension;
     type SkinBones = OptionalSkinBones;
+}
+impl GeosetLayout for V1300 {
+    type Header = GeosetHeaderExtension;
+    type SkinBones = NoSkinBones;
+}
+impl GeosetLayout for V1400 {
+    type Header = GeosetHeaderExtension;
+    type SkinBones = NoSkinBones;
+}
+impl GeosetLayout for V1600 {
+    type Header = GeosetHeaderExtension;
+    type SkinBones = NoSkinBones;
 }
 impl GeosetLayout for V1800 {
     type Header = GeosetHeaderExtension;
@@ -554,7 +566,7 @@ impl<V: ModelVersion> Geoset<V> {
             });
         }
         if let Some(indices) = bone_indices {
-            if V::NUMBER < 1200 {
+            if V::NUMBER < 1200 || matches!(V::NUMBER, 1300 | 1400 | 1600) {
                 return Err(ValueError::UnsupportedVersion {
                     tag: GeosetsChunk::<V>::TAG,
                     minimum: 1200,
@@ -570,6 +582,15 @@ impl<V: ModelVersion> Geoset<V> {
                     tag: GeosetsChunk::<V>::TAG,
                     expected: weights.len(),
                     actual: indices.len(),
+                });
+            }
+        }
+        if let Some(weights) = weights {
+            if V::NUMBER >= 1400 && weights.len() % 2 != 0 {
+                return Err(ValueError::LengthMismatch {
+                    tag: *b"GEOS",
+                    expected: weights.len() + 1,
+                    actual: weights.len(),
                 });
             }
         }
@@ -744,7 +765,12 @@ impl<V: ModelVersion> Readable for Geoset<V> {
                                 .iter()
                                 .any(|part| matches!(part, GeosetExtraSection::Skin { .. })) =>
                         {
-                            let weights = section(&mut cursor, *b"SKIN", 1)?.to_vec();
+                            let weights = section(
+                                &mut cursor,
+                                *b"SKIN",
+                                if V::NUMBER >= 1400 { 2 } else { 1 },
+                            )?
+                            .to_vec();
                             let bone_indices = V::SkinBones::decode(&mut cursor, weights.len())?;
                             extensions.push(GeosetExtraSection::Skin {
                                 weights,
@@ -835,7 +861,11 @@ impl<V: ModelVersion> Writable for Geoset<V> {
                     weights,
                     bone_indices,
                 } => {
-                    write_section_header(bytes, *b"SKIN", weights.len())?;
+                    write_section_header(
+                        bytes,
+                        *b"SKIN",
+                        weights.len() / if V::NUMBER >= 1400 { 2 } else { 1 },
+                    )?;
                     bytes.write_bytes(weights);
                     if let Some(indices) = bone_indices.indices() {
                         if V::NUMBER < 1200 || indices.len() != weights.len() {

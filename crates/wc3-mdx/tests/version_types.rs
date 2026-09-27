@@ -63,9 +63,11 @@ fn version_markers_select_record_fields() {
 
     let classic_light = Light::<V800>::new(Node::new("Classic", 1).unwrap(), 0);
     let modern_light = Light::<V1800>::new(Node::new("Modern", 2).unwrap(), 0);
-    assert!(classic_light.try_extended_words().is_err());
-    assert_eq!(modern_light.extended_words(), [0; 7]);
-    assert!(modern_light.try_extended_words().is_ok());
+    assert!(classic_light.try_shadow_intensity().is_err());
+    assert!(classic_light.try_shadow_casting_range().is_err());
+    assert_eq!(modern_light.try_shadow_intensity().unwrap(), 0.0);
+    assert_eq!(modern_light.try_shadow_casting_range().unwrap().start, 0.0);
+    assert_eq!(modern_light.try_shadow_casting_range().unwrap().end, 0.0);
 
     let classic_geoset = Geoset::<V800>::new(&[], &[], &[]).unwrap();
     let mut modern_geoset = Geoset::<V1800>::new(&[], &[], &[]).unwrap();

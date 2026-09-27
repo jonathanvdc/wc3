@@ -3,7 +3,7 @@ pub use node::{Bone, Node, NodeFlags};
 mod camera;
 pub use camera::{Camera, CameraLayout, CameraVariant};
 mod light;
-pub use light::{Light, LightLayout};
+pub use light::{Light, LightFalloff, LightLayout, LightShadowRange};
 mod attachment;
 pub use attachment::Attachment;
 mod event;

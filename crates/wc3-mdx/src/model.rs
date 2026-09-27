@@ -1,7 +1,9 @@
 //! A model in the Warcraft III MDX format.
 use crate::Encoder;
 use crate::{EncodeError, ValueError};
-use crate::{ModelVersion, Tag, Version, V1000, V1100, V1200, V1800, V800, V900};
+use crate::{
+    ModelVersion, Tag, Version, V1000, V1100, V1200, V1300, V1400, V1600, V1800, V800, V900,
+};
 
 use crate::Cursor;
 use crate::{CollectionChunk, DecodeError, ModelChunk, Readable, VersionChunk, Writable};
@@ -182,6 +184,9 @@ pub enum DynamicModel {
     V1000(Model<V1000>),
     V1100(Model<V1100>),
     V1200(Model<V1200>),
+    V1300(Model<V1300>),
+    V1400(Model<V1400>),
+    V1600(Model<V1600>),
     V1800(Model<V1800>),
 }
 
@@ -206,6 +211,9 @@ macro_rules! visit_model {
             $crate::DynamicModel::V1000($model) => $body,
             $crate::DynamicModel::V1100($model) => $body,
             $crate::DynamicModel::V1200($model) => $body,
+            $crate::DynamicModel::V1300($model) => $body,
+            $crate::DynamicModel::V1400($model) => $body,
+            $crate::DynamicModel::V1600($model) => $body,
             $crate::DynamicModel::V1800($model) => $body,
         }
     };
@@ -221,6 +229,9 @@ impl DynamicModel {
             1000 => Model::<V1000>::decode(bytes).map(Self::V1000),
             1100 => Model::<V1100>::decode(bytes).map(Self::V1100),
             1200 => Model::<V1200>::decode(bytes).map(Self::V1200),
+            1300 => Model::<V1300>::decode(bytes).map(Self::V1300),
+            1400 => Model::<V1400>::decode(bytes).map(Self::V1400),
+            1600 => Model::<V1600>::decode(bytes).map(Self::V1600),
             1800 => Model::<V1800>::decode(bytes).map(Self::V1800),
             _ => Err(DecodeError::UnsupportedVersion { version }),
         }

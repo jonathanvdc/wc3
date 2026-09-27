@@ -1,6 +1,8 @@
 use wc3_mdx::geometry::{Geoset, GeosetExtent};
 use wc3_mdx::io::{Readable, Writable};
-use wc3_mdx::{DynamicModel, Model, ModelVersion, V1100, V1200, V1800, V800, V900};
+use wc3_mdx::{
+    DynamicModel, Model, ModelVersion, V1100, V1200, V1300, V1400, V1600, V1800, V800, V900,
+};
 
 fn sample_geoset() -> Geoset<V1800> {
     let geoset = Geoset::<V1800>::new(&[[1.0, 2.0, 3.0]], &[[0.0, 0.0, 1.0]], &[0, 0, 0]).unwrap();
@@ -27,6 +29,9 @@ fn builds_complete_synthetic_geosets() {
     check_version::<V900>();
     check_version::<V1100>();
     check_version::<V1200>();
+    check_version::<V1300>();
+    check_version::<V1400>();
+    check_version::<V1600>();
     check_version::<V1800>();
 }
 
@@ -68,12 +73,12 @@ fn check_version<V: ModelVersion>() {
         geoset
             .try_set_skin_data(
                 Some(&weights),
-                (version >= 1200).then_some(indices.as_slice()),
+                matches!(version, 1200 | 1800).then_some(indices.as_slice()),
             )
             .unwrap();
         assert_eq!(geoset.try_tangents().unwrap().unwrap().len(), 2);
         assert_eq!(geoset.try_skin_weights().unwrap(), Some(weights.as_slice()));
-        if version >= 1200 {
+        if matches!(version, 1200 | 1800) {
             assert_eq!(
                 geoset.try_skin_bone_indices().unwrap(),
                 Some(indices.as_slice())
@@ -173,9 +178,43 @@ fn local_geosets_have_bounded_mesh_sections_when_available() {
                     DynamicModel::V1000(model) => check(model),
                     DynamicModel::V1100(model) => check(model),
                     DynamicModel::V1200(model) => check(model),
+                    DynamicModel::V1300(model) => check(model),
+                    DynamicModel::V1400(model) => check(model),
+                    DynamicModel::V1600(model) => check(model),
                     DynamicModel::V1800(model) => check(model),
                 }
             }
         }
     }
+}
+
+#[test]
+fn skin_elements_widen_at_v1400() {
+    use wc3_mdx::{V1300, V1400};
+
+    let mut narrow = Geoset::<V1300>::new(&[], &[], &[]).unwrap();
+    narrow.try_set_skin_weights(Some(&[1, 2, 3, 4])).unwrap();
+    let mut wide = Geoset::<V1400>::new(&[], &[], &[]).unwrap();
+    wide.try_set_skin_weights(Some(&[1, 0, 2, 0, 3, 0, 4, 0]))
+        .unwrap();
+    let narrow_bytes = narrow.encode().unwrap();
+    let wide_bytes = wide.encode().unwrap();
+    let narrow_skin = narrow_bytes
+        .windows(4)
+        .position(|bytes| bytes == b"SKIN")
+        .unwrap();
+    let wide_skin = wide_bytes
+        .windows(4)
+        .position(|bytes| bytes == b"SKIN")
+        .unwrap();
+    assert_eq!(
+        &narrow_bytes[narrow_skin + 4..narrow_skin + 8],
+        &4u32.to_le_bytes()
+    );
+    assert_eq!(
+        &wide_bytes[wide_skin + 4..wide_skin + 8],
+        &4u32.to_le_bytes()
+    );
+    assert_eq!(Geoset::<V1300>::decode(&narrow_bytes).unwrap(), narrow);
+    assert_eq!(Geoset::<V1400>::decode(&wide_bytes).unwrap(), wide);
 }

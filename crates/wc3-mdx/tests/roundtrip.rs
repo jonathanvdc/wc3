@@ -1,6 +1,8 @@
 use wc3_mdx::chunks::{ModelChunk, RawChunk, UnknownChunk};
 use wc3_mdx::io::{Readable, Writable};
-use wc3_mdx::{DynamicModel, Model, ModelVersion, V1000, V1100, V1200, V1800, V800, V900};
+use wc3_mdx::{
+    DynamicModel, Model, ModelVersion, V1000, V1100, V1200, V1300, V1400, V1600, V1800, V800, V900,
+};
 
 fn check_version<V: ModelVersion>() {
     let mut model = Model::<V>::new();
@@ -21,6 +23,9 @@ fn synthetic_versions_and_unknown_chunks_round_trip() {
     check_version::<V1000>();
     check_version::<V1100>();
     check_version::<V1200>();
+    check_version::<V1300>();
+    check_version::<V1400>();
+    check_version::<V1600>();
     check_version::<V1800>();
 }
 
@@ -135,6 +140,9 @@ fn typed_accessors_preserve_local_files_when_available() {
                 DynamicModel::V1000(model) => check_accessors(model, &bytes, &path),
                 DynamicModel::V1100(model) => check_accessors(model, &bytes, &path),
                 DynamicModel::V1200(model) => check_accessors(model, &bytes, &path),
+                DynamicModel::V1300(model) => check_accessors(model, &bytes, &path),
+                DynamicModel::V1400(model) => check_accessors(model, &bytes, &path),
+                DynamicModel::V1600(model) => check_accessors(model, &bytes, &path),
                 DynamicModel::V1800(model) => check_accessors(model, &bytes, &path),
             }
         }

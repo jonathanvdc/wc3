@@ -325,7 +325,7 @@ pub trait MaterialLayout {
     type LayerExtra: LayerExtra;
 }
 
-use crate::{V1000, V1100, V1200, V1800, V800, V900};
+use crate::{V1000, V1100, V1200, V1300, V1400, V1600, V1800, V800, V900};
 
 impl MaterialLayout for V800 {
     type Shader = NoShader;
@@ -344,6 +344,18 @@ impl MaterialLayout for V1100 {
     type LayerExtra = Layer1100Extra;
 }
 impl MaterialLayout for V1200 {
+    type Shader = NoShader;
+    type LayerExtra = Layer1100Extra;
+}
+impl MaterialLayout for V1300 {
+    type Shader = NoShader;
+    type LayerExtra = Layer1100Extra;
+}
+impl MaterialLayout for V1400 {
+    type Shader = NoShader;
+    type LayerExtra = Layer1100Extra;
+}
+impl MaterialLayout for V1600 {
     type Shader = NoShader;
     type LayerExtra = Layer1100Extra;
 }

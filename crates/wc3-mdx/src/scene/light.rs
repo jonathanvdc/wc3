@@ -1,5 +1,7 @@
 //! Light records in `LITE` chunks.
-use crate::{ModelVersion, SupportsLightExtendedWords};
+use crate::{
+    ModelVersion, SupportsLightFalloff, SupportsLightShadowCasting, SupportsLightShadowIntensity,
+};
 use std::fmt::Debug;
 crate::animation::track_group! {
     pub enum LightTrack {
@@ -10,100 +12,221 @@ crate::animation::track_group! {
         AmbientColor: LightAmbientColor,
         AmbientIntensity: LightAmbientIntensity,
         Visibility: LightVisibility,
+        ShadowCastingStart: LightShadowCastingStart,
+        ShadowCastingEnd: LightShadowCastingEnd,
+        QuadraticFalloff: LightQuadraticFalloff,
+        LinearFalloff: LightLinearFalloff,
+        Damping: LightDamping,
     }
 }
 
 use crate::Color;
-use crate::EncodeError;
-use crate::Encoder;
 use crate::KnownChunk;
 use crate::ValueError;
 use std::marker::PhantomData;
 
-use crate::{Cursor, LightsChunk};
-use crate::{DecodeError, Model, Node};
+use crate::LightsChunk;
+use crate::{Model, Node};
 use crate::{Readable, Writable};
 
-/// Extra fixed words selected by the light record's version.
-pub trait LightExtension: Default + Readable + Writable + Clone + Debug + PartialEq {
-    fn words(&self) -> Option<[u32; 7]> {
+/// Version-specific fields before and after the common light values.
+pub trait ShadowCastingField: Default + Readable + Writable + Clone + Debug + PartialEq {
+    fn shadow_casting(&self) -> Option<u32> {
         None
     }
-    fn words_mut(&mut self) -> Option<&mut [u32; 7]> {
+    fn shadow_casting_mut(&mut self) -> Option<&mut u32> {
         None
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
-pub struct ClassicLightExtension;
+#[derive(Clone, Debug, Default, PartialEq, Readable, Writable)]
+pub struct NoShadowCasting;
+impl ShadowCastingField for NoShadowCasting {}
 
-impl Default for ClassicLightExtension {
-    fn default() -> Self {
-        Self
-    }
-}
-
-impl Readable for ClassicLightExtension {
-    fn read_from(_: &mut Cursor<'_>) -> Result<Self, DecodeError> {
-        Ok(Self)
-    }
-}
-
-impl Writable for ClassicLightExtension {
-    fn write_to(&self, _: &mut Encoder<'_>) -> Result<(), EncodeError> {
-        Ok(())
-    }
-}
-
-impl LightExtension for ClassicLightExtension {}
-
-#[derive(Clone, Debug, Default, PartialEq)]
-pub struct ModernLightExtension([u32; 7]);
-
-impl Readable for ModernLightExtension {
-    fn read_from(cursor: &mut Cursor<'_>) -> Result<Self, DecodeError> {
-        Ok(Self(cursor.read()?))
-    }
-}
-
-impl Writable for ModernLightExtension {
-    fn write_to(&self, output: &mut Encoder<'_>) -> Result<(), EncodeError> {
-        output.write(&self.0)
-    }
-}
-
-impl LightExtension for ModernLightExtension {
-    fn words(&self) -> Option<[u32; 7]> {
+#[derive(Clone, Debug, Default, PartialEq, Readable, Writable)]
+pub struct ShadowCasting(u32);
+impl ShadowCastingField for ShadowCasting {
+    fn shadow_casting(&self) -> Option<u32> {
         Some(self.0)
     }
-    fn words_mut(&mut self) -> Option<&mut [u32; 7]> {
+    fn shadow_casting_mut(&mut self) -> Option<&mut u32> {
         Some(&mut self.0)
     }
 }
 
-pub trait LightLayout {
-    type Extension: LightExtension;
+pub trait ShadowIntensityField: Default + Readable + Writable + Clone + Debug + PartialEq {
+    fn shadow_intensity(&self) -> Option<f32> {
+        None
+    }
+    fn shadow_intensity_mut(&mut self) -> Option<&mut f32> {
+        None
+    }
 }
 
-use crate::{V1000, V1100, V1200, V1800, V800, V900};
-impl LightLayout for V800 {
-    type Extension = ClassicLightExtension;
+#[derive(Clone, Debug, Default, PartialEq, Readable, Writable)]
+pub struct NoShadowIntensity;
+impl ShadowIntensityField for NoShadowIntensity {}
+
+#[derive(Clone, Debug, Default, PartialEq, Readable, Writable)]
+pub struct LightShadowIntensity {
+    shadow_intensity: f32,
 }
-impl LightLayout for V900 {
-    type Extension = ClassicLightExtension;
+impl ShadowIntensityField for LightShadowIntensity {
+    fn shadow_intensity(&self) -> Option<f32> {
+        Some(self.shadow_intensity)
+    }
+    fn shadow_intensity_mut(&mut self) -> Option<&mut f32> {
+        Some(&mut self.shadow_intensity)
+    }
 }
-impl LightLayout for V1000 {
-    type Extension = ClassicLightExtension;
+
+pub trait ShadowRangeField: Default + Readable + Writable + Clone + Debug + PartialEq {
+    fn shadow_casting_range(&self) -> Option<LightShadowRange> {
+        None
+    }
+    fn shadow_casting_range_mut(&mut self) -> Option<&mut LightShadowRange> {
+        None
+    }
 }
-impl LightLayout for V1100 {
-    type Extension = ClassicLightExtension;
+
+#[derive(Clone, Debug, Default, PartialEq, Readable, Writable)]
+pub struct NoShadowRange;
+impl ShadowRangeField for NoShadowRange {}
+
+/// Start and end of a light's shadow-casting range in MDX order.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Readable, Writable)]
+pub struct LightShadowRange {
+    pub start: f32,
+    pub end: f32,
 }
-impl LightLayout for V1200 {
-    type Extension = ModernLightExtension;
+impl ShadowRangeField for LightShadowRange {
+    fn shadow_casting_range(&self) -> Option<LightShadowRange> {
+        Some(*self)
+    }
+    fn shadow_casting_range_mut(&mut self) -> Option<&mut LightShadowRange> {
+        Some(self)
+    }
 }
-impl LightLayout for V1800 {
-    type Extension = ModernLightExtension;
+
+pub trait FalloffField: Default + Readable + Writable + Clone + Debug + PartialEq {
+    fn falloff(&self) -> Option<LightFalloff> {
+        None
+    }
+    fn falloff_mut(&mut self) -> Option<&mut LightFalloff> {
+        None
+    }
 }
+
+#[derive(Clone, Debug, Default, PartialEq, Readable, Writable)]
+pub struct NoFalloff;
+impl FalloffField for NoFalloff {}
+
+/// The three falloff coefficients serialized from version 1600 onward.
+#[derive(Clone, Copy, Debug, PartialEq, Readable, Writable)]
+pub struct LightFalloff {
+    pub quadratic: f32,
+    pub linear: f32,
+    pub damping: f32,
+}
+impl Default for LightFalloff {
+    fn default() -> Self {
+        Self {
+            quadratic: 0.0005,
+            linear: 0.0,
+            damping: 0.00001,
+        }
+    }
+}
+impl FalloffField for LightFalloff {
+    fn falloff(&self) -> Option<LightFalloff> {
+        Some(*self)
+    }
+    fn falloff_mut(&mut self) -> Option<&mut LightFalloff> {
+        Some(self)
+    }
+}
+
+pub trait LightLayout {
+    type ShadowCasting: ShadowCastingField;
+    type ShadowIntensity: ShadowIntensityField;
+    type ShadowRange: ShadowRangeField;
+    type Falloff: FalloffField;
+}
+
+use crate::{V1000, V1100, V1200, V1300, V1400, V1600, V1800, V800, V900};
+macro_rules! light_layout {
+    ($version:ty, $casting:ty, $intensity:ty, $range:ty, $falloff:ty) => {
+        impl LightLayout for $version {
+            type ShadowCasting = $casting;
+            type ShadowIntensity = $intensity;
+            type ShadowRange = $range;
+            type Falloff = $falloff;
+        }
+    };
+}
+light_layout!(
+    V800,
+    NoShadowCasting,
+    NoShadowIntensity,
+    NoShadowRange,
+    NoFalloff
+);
+light_layout!(
+    V900,
+    NoShadowCasting,
+    NoShadowIntensity,
+    NoShadowRange,
+    NoFalloff
+);
+light_layout!(
+    V1000,
+    NoShadowCasting,
+    NoShadowIntensity,
+    NoShadowRange,
+    NoFalloff
+);
+light_layout!(
+    V1100,
+    NoShadowCasting,
+    NoShadowIntensity,
+    NoShadowRange,
+    NoFalloff
+);
+light_layout!(
+    V1200,
+    NoShadowCasting,
+    LightShadowIntensity,
+    NoShadowRange,
+    NoFalloff
+);
+light_layout!(
+    V1300,
+    ShadowCasting,
+    LightShadowIntensity,
+    LightShadowRange,
+    NoFalloff
+);
+light_layout!(
+    V1400,
+    ShadowCasting,
+    LightShadowIntensity,
+    LightShadowRange,
+    NoFalloff
+);
+light_layout!(
+    V1600,
+    ShadowCasting,
+    LightShadowIntensity,
+    LightShadowRange,
+    LightFalloff
+);
+light_layout!(
+    V1800,
+    ShadowCasting,
+    LightShadowIntensity,
+    LightShadowRange,
+    LightFalloff
+);
 
 /// A light node with decoded lighting values and animation tracks.
 #[derive(Clone, Debug, PartialEq, Readable, Writable)]
@@ -111,13 +234,16 @@ impl LightLayout for V1800 {
 pub struct Light<V: ModelVersion> {
     node: Node,
     light_type: u32,
+    shadow_casting: V::ShadowCasting,
     attenuation_start: f32,
     attenuation_end: f32,
     color: Color,
     intensity: f32,
     ambient_color: Color,
     ambient_intensity: f32,
-    extended_words: V::Extension,
+    shadow_intensity: V::ShadowIntensity,
+    shadow_range: V::ShadowRange,
+    falloff: V::Falloff,
     version: PhantomData<V>,
     tracks: Vec<LightTrack>,
 }
@@ -128,13 +254,16 @@ impl<V: ModelVersion> Light<V> {
         Self {
             node,
             light_type,
+            shadow_casting: V::ShadowCasting::default(),
             attenuation_start: 0.0,
             attenuation_end: 0.0,
             color: [0.0; 3],
             intensity: 0.0,
             ambient_color: [0.0; 3],
             ambient_intensity: 0.0,
-            extended_words: V::Extension::default(),
+            shadow_intensity: V::ShadowIntensity::default(),
+            shadow_range: V::ShadowRange::default(),
+            falloff: V::Falloff::default(),
             tracks: Vec::new(),
             version: PhantomData,
         }
@@ -206,26 +335,90 @@ impl<V: ModelVersion> Light<V> {
     pub fn set_ambient_intensity(&mut self, value: f32) {
         self.ambient_intensity = value;
     }
-    /// Returns the additional seven raw words in newer light records, when present.
-    pub fn try_extended_words(&self) -> Result<[u32; 7], ValueError> {
-        self.extended_words
-            .words()
+    /// Returns the shadow-casting flag available from version 1300.
+    pub fn try_shadow_casting(&self) -> Result<bool, ValueError> {
+        self.shadow_casting
+            .shadow_casting()
+            .map(|value| value != 0)
+            .ok_or(ValueError::UnsupportedVersion {
+                tag: LightsChunk::<V>::TAG,
+                minimum: 1300,
+                actual: V::NUMBER,
+            })
+    }
+    /// Sets the shadow-casting flag available from version 1300.
+    pub fn try_set_shadow_casting(&mut self, enabled: bool) -> Result<(), ValueError> {
+        *self
+            .shadow_casting
+            .shadow_casting_mut()
+            .ok_or(ValueError::UnsupportedVersion {
+                tag: LightsChunk::<V>::TAG,
+                minimum: 1300,
+                actual: V::NUMBER,
+            })? = u32::from(enabled);
+        Ok(())
+    }
+    /// Returns shadow intensity, available from version 1200.
+    pub fn try_shadow_intensity(&self) -> Result<f32, ValueError> {
+        self.shadow_intensity
+            .shadow_intensity()
             .ok_or(ValueError::UnsupportedVersion {
                 tag: LightsChunk::<V>::TAG,
                 minimum: 1200,
                 actual: V::NUMBER,
             })
     }
-    /// Sets the additional seven raw words in a newer light record.
-    pub fn try_set_extended_words(&mut self, words: [u32; 7]) -> Result<(), ValueError> {
+    /// Sets shadow intensity, available from version 1200.
+    pub fn try_set_shadow_intensity(&mut self, value: f32) -> Result<(), ValueError> {
         *self
-            .extended_words
-            .words_mut()
+            .shadow_intensity
+            .shadow_intensity_mut()
             .ok_or(ValueError::UnsupportedVersion {
                 tag: LightsChunk::<V>::TAG,
                 minimum: 1200,
                 actual: V::NUMBER,
-            })? = words;
+            })? = value;
+        Ok(())
+    }
+    /// Returns shadow-casting start and end, available from version 1300.
+    pub fn try_shadow_casting_range(&self) -> Result<LightShadowRange, ValueError> {
+        self.shadow_range
+            .shadow_casting_range()
+            .ok_or(ValueError::UnsupportedVersion {
+                tag: LightsChunk::<V>::TAG,
+                minimum: 1300,
+                actual: V::NUMBER,
+            })
+    }
+    /// Sets shadow-casting start and end, available from version 1300.
+    pub fn try_set_shadow_casting_range(
+        &mut self,
+        range: LightShadowRange,
+    ) -> Result<(), ValueError> {
+        *self
+            .shadow_range
+            .shadow_casting_range_mut()
+            .ok_or(ValueError::UnsupportedVersion {
+                tag: LightsChunk::<V>::TAG,
+                minimum: 1300,
+                actual: V::NUMBER,
+            })? = range;
+        Ok(())
+    }
+    /// Returns the falloff values used by the game, including older-version defaults.
+    pub fn falloff(&self) -> LightFalloff {
+        self.falloff.falloff().unwrap_or_default()
+    }
+    /// Sets the three serialized falloff fields from version 1600 onward.
+    pub fn try_set_falloff(&mut self, falloff: LightFalloff) -> Result<(), ValueError> {
+        *self
+            .falloff
+            .falloff_mut()
+            .ok_or(ValueError::UnsupportedVersion {
+                tag: LightsChunk::<V>::TAG,
+                minimum: 1600,
+                actual: V::NUMBER,
+            })? = falloff;
         Ok(())
     }
     /// Borrows decoded light animation tracks.
@@ -238,6 +431,50 @@ impl<V: ModelVersion> Light<V> {
     }
 }
 
+impl<V: SupportsLightShadowIntensity> Light<V> {
+    /// Returns shadow intensity.
+    pub fn shadow_intensity(&self) -> f32 {
+        self.try_shadow_intensity().expect("supported version")
+    }
+
+    /// Sets shadow intensity.
+    pub fn set_shadow_intensity(&mut self, value: f32) {
+        self.try_set_shadow_intensity(value)
+            .expect("supported version");
+    }
+}
+
+impl<V: SupportsLightShadowCasting> Light<V> {
+    /// Returns whether shadow casting is enabled.
+    pub fn shadow_casting(&self) -> bool {
+        self.try_shadow_casting().expect("supported version")
+    }
+
+    /// Enables or disables shadow casting.
+    pub fn set_shadow_casting(&mut self, enabled: bool) {
+        self.try_set_shadow_casting(enabled)
+            .expect("supported version");
+    }
+
+    /// Returns the shadow-casting range.
+    pub fn shadow_casting_range(&self) -> LightShadowRange {
+        self.try_shadow_casting_range().expect("supported version")
+    }
+
+    /// Sets the shadow-casting range.
+    pub fn set_shadow_casting_range(&mut self, range: LightShadowRange) {
+        self.try_set_shadow_casting_range(range)
+            .expect("supported version");
+    }
+}
+
+impl<V: SupportsLightFalloff> Light<V> {
+    /// Sets the serialized falloff coefficients.
+    pub fn set_falloff(&mut self, falloff: LightFalloff) {
+        self.try_set_falloff(falloff).expect("supported version");
+    }
+}
+
 impl<V: ModelVersion> Model<V> {
     /// Decodes all `LITE` records in file order.
     pub fn lights(&self) -> Vec<Light<V>> {
@@ -247,14 +484,5 @@ impl<V: ModelVersion> Model<V> {
     /// Replaces lights in the first `LITE` chunk.
     pub fn set_lights(&mut self, lights: &[Light<V>]) {
         self.replace_chunk(LightsChunk::new(lights.to_vec()));
-    }
-}
-
-impl<V: SupportsLightExtendedWords> Light<V> {
-    pub fn extended_words(&self) -> [u32; 7] {
-        self.extended_words.words().expect("supported version")
-    }
-    pub fn set_extended_words(&mut self, words: [u32; 7]) {
-        *self.extended_words.words_mut().expect("supported version") = words;
     }
 }

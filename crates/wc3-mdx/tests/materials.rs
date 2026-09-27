@@ -4,7 +4,9 @@ use wc3_mdx::io::{Readable, Writable};
 use wc3_mdx::materials::{
     Layer, LayerShadingFlags, LayerTextureSlot, Material, MaterialRenderFlags,
 };
-use wc3_mdx::{DynamicModel, Model, ModelVersion, V1000, V1100, V1200, V1800, V800, V900};
+use wc3_mdx::{
+    DynamicModel, Model, ModelVersion, V1000, V1100, V1200, V1300, V1400, V1600, V1800, V800, V900,
+};
 
 fn sample_material<V: ModelVersion>() -> Material<V> {
     let mut layer = Layer::<V>::new();
@@ -23,6 +25,9 @@ fn material_layers_round_trip_across_layouts() {
     check_version::<V1000>();
     check_version::<V1100>();
     check_version::<V1200>();
+    check_version::<V1300>();
+    check_version::<V1400>();
+    check_version::<V1600>();
     check_version::<V1800>();
 }
 
@@ -83,6 +88,9 @@ fn local_material_layers_are_bounded_when_available() {
                     DynamicModel::V1000(model) => check(model),
                     DynamicModel::V1100(model) => check(model),
                     DynamicModel::V1200(model) => check(model),
+                    DynamicModel::V1300(model) => check(model),
+                    DynamicModel::V1400(model) => check(model),
+                    DynamicModel::V1600(model) => check(model),
                     DynamicModel::V1800(model) => check(model),
                 }
             }

@@ -53,7 +53,7 @@ pub trait CameraLayout {
     const DEFAULT_VARIANT: CameraVariant;
 }
 
-use crate::{V1000, V1100, V1200, V1800, V800, V900};
+use crate::{V1000, V1100, V1200, V1300, V1400, V1600, V1800, V800, V900};
 impl CameraLayout for V800 {
     const DEFAULT_VARIANT: CameraVariant = CameraVariant::Variant0;
 }
@@ -67,6 +67,15 @@ impl CameraLayout for V1100 {
     const DEFAULT_VARIANT: CameraVariant = CameraVariant::Variant0;
 }
 impl CameraLayout for V1200 {
+    const DEFAULT_VARIANT: CameraVariant = CameraVariant::Variant3;
+}
+impl CameraLayout for V1300 {
+    const DEFAULT_VARIANT: CameraVariant = CameraVariant::Variant3;
+}
+impl CameraLayout for V1400 {
+    const DEFAULT_VARIANT: CameraVariant = CameraVariant::Variant3;
+}
+impl CameraLayout for V1600 {
     const DEFAULT_VARIANT: CameraVariant = CameraVariant::Variant3;
 }
 impl CameraLayout for V1800 {
