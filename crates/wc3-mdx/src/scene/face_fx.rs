@@ -1,6 +1,6 @@
 //! Reforged face-animation references in `FAFX` chunks.
-use crate::ModelVersion;
 use crate::ValueError;
+use crate::{ModelVersion, SupportsReforgedChunks};
 
 use crate::FaceFxChunk;
 use crate::{Readable, Writable};
@@ -53,12 +53,27 @@ impl FaceFx {
 }
 
 impl<V: ModelVersion> Model<V> {
-    /// Decodes every `FAFX` record in file order.
+    /// Returns an error if this model version does not support `FAFX`.
+    pub fn try_face_fx(&self) -> Result<Vec<FaceFx>, ValueError> {
+        self.check_chunk_version(*b"FAFX")?;
+        Ok(self.collect_chunk_records::<FaceFxChunk>())
+    }
+
+    /// Returns an error if this model version does not support `FAFX`.
+    pub fn try_set_face_fx(&mut self, entries: &[FaceFx]) -> Result<(), ValueError> {
+        self.check_chunk_version(*b"FAFX")?;
+        self.replace_chunk(FaceFxChunk::new(entries.to_vec()));
+        Ok(())
+    }
+}
+
+impl<V: SupportsReforgedChunks> Model<V> {
+    /// Returns decoded `FAFX` records.
     pub fn face_fx(&self) -> Vec<FaceFx> {
         self.collect_chunk_records::<FaceFxChunk>()
     }
 
-    /// Replaces face-animation records in the first `FAFX` chunk.
+    /// Replaces `FAFX` records.
     pub fn set_face_fx(&mut self, entries: &[FaceFx]) {
         self.replace_chunk(FaceFxChunk::new(entries.to_vec()));
     }

@@ -36,3 +36,17 @@ versions!(
     V1200 = 1200,
     V1800 = 1800
 );
+
+/// A model version supporting the `BPOS`, `FAFX`, and `CORN` chunks.
+///
+/// ```compile_fail
+/// use wc3_mdx::{Model, V800};
+/// Model::<V800>::new().bind_poses();
+/// ```
+pub trait SupportsReforgedChunks: ModelVersion {}
+
+impl SupportsReforgedChunks for V900 {}
+impl SupportsReforgedChunks for V1000 {}
+impl SupportsReforgedChunks for V1100 {}
+impl SupportsReforgedChunks for V1200 {}
+impl SupportsReforgedChunks for V1800 {}

@@ -4,7 +4,7 @@ use crate::geometry::{BindPoseMatrix, CollisionShape};
 use crate::materials::Texture;
 use crate::model::dispatch_model;
 use crate::scene::{Attachment, Bone, EventObject, FaceFx, ModelInfo, Node};
-use crate::{AnyVersionModel, Model, ModelVersion, Vec3};
+use crate::{AnyVersionModel, Model, ModelVersion, ValueError, Vec3};
 
 /// Accessors whose record types do not depend on the model version.
 pub trait ModelAccess {
@@ -36,12 +36,6 @@ pub trait ModelAccess {
     fn set_particle_emitters2(&mut self, emitters: &[ParticleEmitter2]);
     fn ribbon_emitters(&self) -> Vec<RibbonEmitter>;
     fn set_ribbon_emitters(&mut self, emitters: &[RibbonEmitter]);
-    fn popcorn_emitters(&self) -> Vec<PopcornEmitter>;
-    fn set_popcorn_emitters(&mut self, emitters: &[PopcornEmitter]);
-    fn face_fx(&self) -> Vec<FaceFx>;
-    fn set_face_fx(&mut self, entries: &[FaceFx]);
-    fn bind_poses(&self) -> Vec<BindPoseMatrix>;
-    fn set_bind_poses(&mut self, poses: &[BindPoseMatrix]);
     fn model_info(&self) -> Option<ModelInfo>;
     fn set_model_info(&mut self, info: &ModelInfo);
 }
@@ -130,24 +124,6 @@ impl<V: ModelVersion> ModelAccess for Model<V> {
     }
     fn set_ribbon_emitters(&mut self, emitters: &[RibbonEmitter]) {
         Model::set_ribbon_emitters(self, emitters)
-    }
-    fn popcorn_emitters(&self) -> Vec<PopcornEmitter> {
-        Model::popcorn_emitters(self)
-    }
-    fn set_popcorn_emitters(&mut self, emitters: &[PopcornEmitter]) {
-        Model::set_popcorn_emitters(self, emitters)
-    }
-    fn face_fx(&self) -> Vec<FaceFx> {
-        Model::face_fx(self)
-    }
-    fn set_face_fx(&mut self, entries: &[FaceFx]) {
-        Model::set_face_fx(self, entries)
-    }
-    fn bind_poses(&self) -> Vec<BindPoseMatrix> {
-        Model::bind_poses(self)
-    }
-    fn set_bind_poses(&mut self, poses: &[BindPoseMatrix]) {
-        Model::set_bind_poses(self, poses)
     }
     fn model_info(&self) -> Option<ModelInfo> {
         Model::model_info(self)
@@ -241,24 +217,6 @@ impl ModelAccess for AnyVersionModel {
     }
     fn set_ribbon_emitters(&mut self, emitters: &[RibbonEmitter]) {
         dispatch_model!(self, model => model.set_ribbon_emitters(emitters))
-    }
-    fn popcorn_emitters(&self) -> Vec<PopcornEmitter> {
-        dispatch_model!(self, model => model.popcorn_emitters())
-    }
-    fn set_popcorn_emitters(&mut self, emitters: &[PopcornEmitter]) {
-        dispatch_model!(self, model => model.set_popcorn_emitters(emitters))
-    }
-    fn face_fx(&self) -> Vec<FaceFx> {
-        dispatch_model!(self, model => model.face_fx())
-    }
-    fn set_face_fx(&mut self, entries: &[FaceFx]) {
-        dispatch_model!(self, model => model.set_face_fx(entries))
-    }
-    fn bind_poses(&self) -> Vec<BindPoseMatrix> {
-        dispatch_model!(self, model => model.bind_poses())
-    }
-    fn set_bind_poses(&mut self, poses: &[BindPoseMatrix]) {
-        dispatch_model!(self, model => model.set_bind_poses(poses))
     }
     fn model_info(&self) -> Option<ModelInfo> {
         dispatch_model!(self, model => model.model_info())
@@ -409,36 +367,6 @@ impl AnyVersionModel {
     pub fn set_ribbon_emitters(&mut self, emitters: &[RibbonEmitter]) {
         ModelAccess::set_ribbon_emitters(self, emitters)
     }
-    /// Returns popcorn emitters for this model.
-    #[inline]
-    pub fn popcorn_emitters(&self) -> Vec<PopcornEmitter> {
-        ModelAccess::popcorn_emitters(self)
-    }
-    /// Replaces popcorn emitters for this model.
-    #[inline]
-    pub fn set_popcorn_emitters(&mut self, emitters: &[PopcornEmitter]) {
-        ModelAccess::set_popcorn_emitters(self, emitters)
-    }
-    /// Returns face fx for this model.
-    #[inline]
-    pub fn face_fx(&self) -> Vec<FaceFx> {
-        ModelAccess::face_fx(self)
-    }
-    /// Replaces face fx for this model.
-    #[inline]
-    pub fn set_face_fx(&mut self, entries: &[FaceFx]) {
-        ModelAccess::set_face_fx(self, entries)
-    }
-    /// Returns bind poses for this model.
-    #[inline]
-    pub fn bind_poses(&self) -> Vec<BindPoseMatrix> {
-        ModelAccess::bind_poses(self)
-    }
-    /// Replaces bind poses for this model.
-    #[inline]
-    pub fn set_bind_poses(&mut self, poses: &[BindPoseMatrix]) {
-        ModelAccess::set_bind_poses(self, poses)
-    }
     /// Returns the first model information record.
     #[inline]
     pub fn model_info(&self) -> Option<ModelInfo> {
@@ -448,5 +376,87 @@ impl AnyVersionModel {
     #[inline]
     pub fn set_model_info(&mut self, info: &ModelInfo) {
         ModelAccess::set_model_info(self, info)
+    }
+}
+
+/// Checked access to chunks introduced in model version 900.
+pub trait TryModelAccess {
+    fn try_bind_poses(&self) -> Result<Vec<BindPoseMatrix>, ValueError>;
+    fn try_set_bind_poses(&mut self, poses: &[BindPoseMatrix]) -> Result<(), ValueError>;
+    fn try_face_fx(&self) -> Result<Vec<FaceFx>, ValueError>;
+    fn try_set_face_fx(&mut self, entries: &[FaceFx]) -> Result<(), ValueError>;
+    fn try_popcorn_emitters(&self) -> Result<Vec<PopcornEmitter>, ValueError>;
+    fn try_set_popcorn_emitters(&mut self, emitters: &[PopcornEmitter]) -> Result<(), ValueError>;
+}
+
+impl<V: ModelVersion> TryModelAccess for Model<V> {
+    fn try_bind_poses(&self) -> Result<Vec<BindPoseMatrix>, ValueError> {
+        Model::try_bind_poses(self)
+    }
+    fn try_set_bind_poses(&mut self, poses: &[BindPoseMatrix]) -> Result<(), ValueError> {
+        Model::try_set_bind_poses(self, poses)
+    }
+    fn try_face_fx(&self) -> Result<Vec<FaceFx>, ValueError> {
+        Model::try_face_fx(self)
+    }
+    fn try_set_face_fx(&mut self, entries: &[FaceFx]) -> Result<(), ValueError> {
+        Model::try_set_face_fx(self, entries)
+    }
+    fn try_popcorn_emitters(&self) -> Result<Vec<PopcornEmitter>, ValueError> {
+        Model::try_popcorn_emitters(self)
+    }
+    fn try_set_popcorn_emitters(&mut self, emitters: &[PopcornEmitter]) -> Result<(), ValueError> {
+        Model::try_set_popcorn_emitters(self, emitters)
+    }
+}
+
+impl TryModelAccess for AnyVersionModel {
+    fn try_bind_poses(&self) -> Result<Vec<BindPoseMatrix>, ValueError> {
+        dispatch_model!(self, model => model.try_bind_poses())
+    }
+    fn try_set_bind_poses(&mut self, poses: &[BindPoseMatrix]) -> Result<(), ValueError> {
+        dispatch_model!(self, model => model.try_set_bind_poses(poses))
+    }
+    fn try_face_fx(&self) -> Result<Vec<FaceFx>, ValueError> {
+        dispatch_model!(self, model => model.try_face_fx())
+    }
+    fn try_set_face_fx(&mut self, entries: &[FaceFx]) -> Result<(), ValueError> {
+        dispatch_model!(self, model => model.try_set_face_fx(entries))
+    }
+    fn try_popcorn_emitters(&self) -> Result<Vec<PopcornEmitter>, ValueError> {
+        dispatch_model!(self, model => model.try_popcorn_emitters())
+    }
+    fn try_set_popcorn_emitters(&mut self, emitters: &[PopcornEmitter]) -> Result<(), ValueError> {
+        dispatch_model!(self, model => model.try_set_popcorn_emitters(emitters))
+    }
+}
+
+impl AnyVersionModel {
+    /// Returns `BPOS` records if this version supports them.
+    pub fn try_bind_poses(&self) -> Result<Vec<BindPoseMatrix>, ValueError> {
+        TryModelAccess::try_bind_poses(self)
+    }
+    /// Replaces `BPOS` records if this version supports them.
+    pub fn try_set_bind_poses(&mut self, poses: &[BindPoseMatrix]) -> Result<(), ValueError> {
+        TryModelAccess::try_set_bind_poses(self, poses)
+    }
+    /// Returns `FAFX` records if this version supports them.
+    pub fn try_face_fx(&self) -> Result<Vec<FaceFx>, ValueError> {
+        TryModelAccess::try_face_fx(self)
+    }
+    /// Replaces `FAFX` records if this version supports them.
+    pub fn try_set_face_fx(&mut self, entries: &[FaceFx]) -> Result<(), ValueError> {
+        TryModelAccess::try_set_face_fx(self, entries)
+    }
+    /// Returns `CORN` records if this version supports them.
+    pub fn try_popcorn_emitters(&self) -> Result<Vec<PopcornEmitter>, ValueError> {
+        TryModelAccess::try_popcorn_emitters(self)
+    }
+    /// Replaces `CORN` records if this version supports them.
+    pub fn try_set_popcorn_emitters(
+        &mut self,
+        emitters: &[PopcornEmitter],
+    ) -> Result<(), ValueError> {
+        TryModelAccess::try_set_popcorn_emitters(self, emitters)
     }
 }

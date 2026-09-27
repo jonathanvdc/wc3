@@ -1,5 +1,5 @@
 //! Reforged popcorn particle emitters in `CORN` chunks.
-use crate::ModelVersion;
+use crate::{ModelVersion, SupportsReforgedChunks};
 crate::animation::track_group! {
     pub enum PopcornTrack {
         Alpha: PopcornAlpha,
@@ -143,12 +143,30 @@ impl PopcornEmitter {
 }
 
 impl<V: ModelVersion> Model<V> {
-    /// Decodes all popcorn emitters in `CORN` chunks.
+    /// Returns an error if this model version does not support `CORN`.
+    pub fn try_popcorn_emitters(&self) -> Result<Vec<PopcornEmitter>, ValueError> {
+        self.check_chunk_version(*b"CORN")?;
+        Ok(self.collect_chunk_records::<PopcornEmittersChunk>())
+    }
+
+    /// Returns an error if this model version does not support `CORN`.
+    pub fn try_set_popcorn_emitters(
+        &mut self,
+        emitters: &[PopcornEmitter],
+    ) -> Result<(), ValueError> {
+        self.check_chunk_version(*b"CORN")?;
+        self.replace_chunk(PopcornEmittersChunk::new(emitters.to_vec()));
+        Ok(())
+    }
+}
+
+impl<V: SupportsReforgedChunks> Model<V> {
+    /// Returns decoded `CORN` records.
     pub fn popcorn_emitters(&self) -> Vec<PopcornEmitter> {
         self.collect_chunk_records::<PopcornEmittersChunk>()
     }
 
-    /// Replaces popcorn emitters in the first `CORN` chunk.
+    /// Replaces `CORN` records.
     pub fn set_popcorn_emitters(&mut self, emitters: &[PopcornEmitter]) {
         self.replace_chunk(PopcornEmittersChunk::new(emitters.to_vec()));
     }

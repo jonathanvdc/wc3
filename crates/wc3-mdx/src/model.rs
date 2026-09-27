@@ -1,6 +1,6 @@
 //! A model in the Warcraft III MDX format.
-use crate::EncodeError;
 use crate::Encoder;
+use crate::{EncodeError, ValueError};
 use crate::{ModelVersion, Tag, Version, V1000, V1100, V1200, V1800, V800, V900};
 
 use crate::Cursor;
@@ -30,6 +30,16 @@ impl<V: ModelVersion> Default for Model<V> {
 }
 
 impl<V: ModelVersion> Model<V> {
+    pub(crate) fn check_chunk_version(&self, tag: Tag) -> Result<(), ValueError> {
+        (V::NUMBER >= 900)
+            .then_some(())
+            .ok_or(ValueError::UnsupportedVersion {
+                tag,
+                minimum: 900,
+                actual: V::NUMBER,
+            })
+    }
+
     pub(crate) fn decoded_chunks<'a, C: 'a>(&'a self) -> impl Iterator<Item = &'a C>
     where
         for<'b> &'b C: TryFrom<&'b ModelChunk<V>>,

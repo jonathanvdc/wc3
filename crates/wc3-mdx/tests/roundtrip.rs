@@ -76,6 +76,20 @@ fn check_accessors<V: ModelVersion>(mut model: Model<V>, bytes: &[u8], path: &st
             }
         };
     }
+    macro_rules! round_trip_checked_records {
+        ($tag:literal, $getter:ident, $setter:ident) => {
+            if model
+                .chunks()
+                .iter()
+                .filter(|chunk| chunk.tag() == *$tag)
+                .count()
+                == 1
+            {
+                let records = model.$getter().unwrap();
+                model.$setter(&records).unwrap();
+            }
+        };
+    }
     round_trip_records!(b"SEQS", sequences, set_sequences);
     round_trip_records!(b"TEXS", textures, set_textures);
     round_trip_records!(b"MTLS", materials, set_materials);
@@ -85,7 +99,7 @@ fn check_accessors<V: ModelVersion>(mut model: Model<V>, bytes: &[u8], path: &st
     round_trip_records!(b"EVTS", event_objects, set_event_objects);
     round_trip_records!(b"CLID", collision_shapes, set_collision_shapes);
     round_trip_records!(b"ATCH", attachments, set_attachments);
-    round_trip_records!(b"FAFX", face_fx, set_face_fx);
+    round_trip_checked_records!(b"FAFX", try_face_fx, try_set_face_fx);
     round_trip_records!(b"GEOA", geoset_animations, set_geoset_animations);
     round_trip_records!(b"LITE", lights, set_lights);
     round_trip_records!(b"TXAN", texture_animations, set_texture_animations);
@@ -93,8 +107,8 @@ fn check_accessors<V: ModelVersion>(mut model: Model<V>, bytes: &[u8], path: &st
     round_trip_records!(b"PREM", particle_emitters, set_particle_emitters);
     round_trip_records!(b"PRE2", particle_emitters2, set_particle_emitters2);
     round_trip_records!(b"RIBB", ribbon_emitters, set_ribbon_emitters);
-    round_trip_records!(b"CORN", popcorn_emitters, set_popcorn_emitters);
-    round_trip_records!(b"BPOS", bind_poses, set_bind_poses);
+    round_trip_checked_records!(b"CORN", try_popcorn_emitters, try_set_popcorn_emitters);
+    round_trip_checked_records!(b"BPOS", try_bind_poses, try_set_bind_poses);
     assert_eq!(model.encode().unwrap(), bytes, "{}", path.display());
 }
 
