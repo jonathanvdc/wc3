@@ -46,17 +46,14 @@ enum GeosetExtraSection<V: ModelVersion> {
 
 /// Fixed header fields added in version 900. Both fields are always present
 /// together, and the exact name bytes are retained for round-trip encoding.
-#[derive(Clone, Debug, PartialEq, Readable, Writable)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct GeosetHeaderExtension {
     level_of_detail: u32,
     name: FixedText<80>,
 }
 
 /// The fixed geoset header selected by a model version.
-pub trait GeosetHeader: Clone + Debug + PartialEq {
-    fn empty() -> Self;
-    fn decode(cursor: &mut Cursor<'_>) -> Result<Self, DecodeError>;
-    fn encode(&self, output: &mut Encoder<'_>) -> Result<(), EncodeError>;
+pub trait GeosetHeader: Default + Readable + Writable + Clone + Debug + PartialEq {
     fn level_of_detail(&self) -> Option<u32> {
         None
     }
@@ -74,31 +71,52 @@ pub trait GeosetHeader: Clone + Debug + PartialEq {
 #[derive(Clone, Debug, PartialEq)]
 pub struct ClassicGeosetHeader;
 
-impl GeosetHeader for ClassicGeosetHeader {
-    fn empty() -> Self {
+impl Default for ClassicGeosetHeader {
+    fn default() -> Self {
         Self
     }
-    fn decode(_: &mut Cursor<'_>) -> Result<Self, DecodeError> {
+}
+
+impl Readable for ClassicGeosetHeader {
+    fn read_from(_: &mut Cursor<'_>) -> Result<Self, DecodeError> {
         Ok(Self)
     }
-    fn encode(&self, _: &mut Encoder<'_>) -> Result<(), EncodeError> {
+}
+
+impl Writable for ClassicGeosetHeader {
+    fn write_to(&self, _: &mut Encoder<'_>) -> Result<(), EncodeError> {
         Ok(())
     }
 }
 
-impl GeosetHeader for GeosetHeaderExtension {
-    fn empty() -> Self {
+impl GeosetHeader for ClassicGeosetHeader {}
+
+impl Default for GeosetHeaderExtension {
+    fn default() -> Self {
         Self {
             level_of_detail: 0,
             name: FixedText::default(),
         }
     }
-    fn decode(cursor: &mut Cursor<'_>) -> Result<Self, DecodeError> {
-        cursor.read()
+}
+
+impl Readable for GeosetHeaderExtension {
+    fn read_from(cursor: &mut Cursor<'_>) -> Result<Self, DecodeError> {
+        Ok(Self {
+            level_of_detail: cursor.read()?,
+            name: cursor.read()?,
+        })
     }
-    fn encode(&self, output: &mut Encoder<'_>) -> Result<(), EncodeError> {
-        output.write(self)
+}
+
+impl Writable for GeosetHeaderExtension {
+    fn write_to(&self, output: &mut Encoder<'_>) -> Result<(), EncodeError> {
+        output.write(&self.level_of_detail)?;
+        output.write(&self.name)
     }
+}
+
+impl GeosetHeader for GeosetHeaderExtension {
     fn level_of_detail(&self) -> Option<u32> {
         Some(self.level_of_detail)
     }
@@ -246,7 +264,7 @@ impl<V: ModelVersion> Geoset<V> {
             material_id: 0,
             selection_group: 0,
             unselectable_raw: 0,
-            header_extension: V::Header::empty(),
+            header_extension: V::Header::default(),
             extent: GeosetExtent::default(),
             sequence_extents: Vec::new(),
             extensions: Vec::new(),
@@ -695,7 +713,7 @@ impl<V: ModelVersion> Readable for Geoset<V> {
             let material_id = cursor.read()?;
             let selection_group = cursor.read()?;
             let unselectable_raw = cursor.read()?;
-            let header_extension = V::Header::decode(&mut cursor)?;
+            let header_extension = cursor.read::<V::Header>()?;
             let extent = cursor.read()?;
             let sequence_count = cursor.read::<u32>()? as usize;
             let mut sequence_extents = Vec::new();
@@ -800,7 +818,7 @@ impl<V: ModelVersion> Writable for Geoset<V> {
         ] {
             bytes.write(&(word))?;
         }
-        self.header_extension.encode(bytes)?;
+        bytes.write(&self.header_extension)?;
         bytes.write(&self.extent)?;
         write_count(bytes, self.sequence_extents.len())?;
         for extent in &self.sequence_extents {

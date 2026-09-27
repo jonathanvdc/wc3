@@ -133,10 +133,7 @@ impl Default for Fresnel {
 }
 
 /// The fixed shader field selected by a model version.
-pub trait ShaderField: Clone + Debug + PartialEq {
-    fn empty() -> Self;
-    fn decode(cursor: &mut Cursor<'_>) -> Result<Self, DecodeError>;
-    fn encode(&self, output: &mut Encoder<'_>) -> Result<(), EncodeError>;
+pub trait ShaderField: Default + Readable + Writable + Clone + Debug + PartialEq {
     fn text(&self) -> Option<Cow<'_, str>>;
     fn set(&mut self, text: &str) -> Result<(), ValueError>;
 }
@@ -144,16 +141,25 @@ pub trait ShaderField: Clone + Debug + PartialEq {
 #[derive(Clone, Debug, PartialEq)]
 pub struct NoShader;
 
-impl ShaderField for NoShader {
-    fn empty() -> Self {
+impl Default for NoShader {
+    fn default() -> Self {
         Self
     }
-    fn decode(_: &mut Cursor<'_>) -> Result<Self, DecodeError> {
+}
+
+impl Readable for NoShader {
+    fn read_from(_: &mut Cursor<'_>) -> Result<Self, DecodeError> {
         Ok(Self)
     }
-    fn encode(&self, _: &mut Encoder<'_>) -> Result<(), EncodeError> {
+}
+
+impl Writable for NoShader {
+    fn write_to(&self, _: &mut Encoder<'_>) -> Result<(), EncodeError> {
         Ok(())
     }
+}
+
+impl ShaderField for NoShader {
     fn text(&self) -> Option<Cow<'_, str>> {
         None
     }
@@ -168,16 +174,25 @@ impl ShaderField for NoShader {
 #[derive(Clone, Debug, PartialEq)]
 pub struct ShaderText(FixedText<80>);
 
-impl ShaderField for ShaderText {
-    fn empty() -> Self {
+impl Default for ShaderText {
+    fn default() -> Self {
         Self(FixedText::default())
     }
-    fn decode(cursor: &mut Cursor<'_>) -> Result<Self, DecodeError> {
+}
+
+impl Readable for ShaderText {
+    fn read_from(cursor: &mut Cursor<'_>) -> Result<Self, DecodeError> {
         Ok(Self(cursor.read()?))
     }
-    fn encode(&self, output: &mut Encoder<'_>) -> Result<(), EncodeError> {
+}
+
+impl Writable for ShaderText {
+    fn write_to(&self, output: &mut Encoder<'_>) -> Result<(), EncodeError> {
         output.write(&self.0)
     }
+}
+
+impl ShaderField for ShaderText {
     fn text(&self) -> Option<Cow<'_, str>> {
         Some(self.0.text())
     }
@@ -187,10 +202,7 @@ impl ShaderField for ShaderText {
 }
 
 /// The fields following a layer's shared header.
-pub trait LayerExtra: Clone + Debug + PartialEq {
-    fn empty() -> Self;
-    fn decode(cursor: &mut Cursor<'_>) -> Result<Self, DecodeError>;
-    fn encode(&self, output: &mut Encoder<'_>) -> Result<(), EncodeError>;
+pub trait LayerExtra: Default + Readable + Writable + Clone + Debug + PartialEq {
     fn emissive_gain(&self) -> Option<f32> {
         None
     }
@@ -220,36 +232,53 @@ pub trait LayerExtra: Clone + Debug + PartialEq {
 #[derive(Clone, Debug, PartialEq)]
 pub struct ClassicLayerExtra;
 
-impl LayerExtra for ClassicLayerExtra {
-    fn empty() -> Self {
+impl Default for ClassicLayerExtra {
+    fn default() -> Self {
         Self
     }
-    fn decode(_: &mut Cursor<'_>) -> Result<Self, DecodeError> {
+}
+
+impl Readable for ClassicLayerExtra {
+    fn read_from(_: &mut Cursor<'_>) -> Result<Self, DecodeError> {
         Ok(Self)
     }
-    fn encode(&self, _: &mut Encoder<'_>) -> Result<(), EncodeError> {
+}
+
+impl Writable for ClassicLayerExtra {
+    fn write_to(&self, _: &mut Encoder<'_>) -> Result<(), EncodeError> {
         Ok(())
     }
 }
+
+impl LayerExtra for ClassicLayerExtra {}
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Layer900Extra {
     emissive_gain: f32,
 }
 
-impl LayerExtra for Layer900Extra {
-    fn empty() -> Self {
+impl Default for Layer900Extra {
+    fn default() -> Self {
         Self { emissive_gain: 1.0 }
     }
-    fn decode(cursor: &mut Cursor<'_>) -> Result<Self, DecodeError> {
+}
+
+impl Readable for Layer900Extra {
+    fn read_from(cursor: &mut Cursor<'_>) -> Result<Self, DecodeError> {
         Ok(Self {
             emissive_gain: cursor.read()?,
         })
     }
-    fn encode(&self, output: &mut Encoder<'_>) -> Result<(), EncodeError> {
+}
+
+impl Writable for Layer900Extra {
+    fn write_to(&self, output: &mut Encoder<'_>) -> Result<(), EncodeError> {
         output.write(&(self.emissive_gain))?;
         Ok(())
     }
+}
+
+impl LayerExtra for Layer900Extra {
     fn emissive_gain(&self) -> Option<f32> {
         Some(self.emissive_gain)
     }
@@ -264,16 +293,19 @@ pub struct Layer1000Extra {
     fresnel: Fresnel,
 }
 
-impl LayerExtra for Layer1000Extra {
-    fn empty() -> Self {
+impl Default for Layer1000Extra {
+    fn default() -> Self {
         Self {
-            base: Layer900Extra::empty(),
+            base: Layer900Extra::default(),
             fresnel: Fresnel::default(),
         }
     }
-    fn decode(cursor: &mut Cursor<'_>) -> Result<Self, DecodeError> {
+}
+
+impl Readable for Layer1000Extra {
+    fn read_from(cursor: &mut Cursor<'_>) -> Result<Self, DecodeError> {
         Ok(Self {
-            base: Layer900Extra::decode(cursor)?,
+            base: cursor.read::<Layer900Extra>()?,
             fresnel: Fresnel {
                 color: cursor.read()?,
                 opacity: cursor.read()?,
@@ -281,13 +313,19 @@ impl LayerExtra for Layer1000Extra {
             },
         })
     }
-    fn encode(&self, output: &mut Encoder<'_>) -> Result<(), EncodeError> {
-        self.base.encode(output)?;
+}
+
+impl Writable for Layer1000Extra {
+    fn write_to(&self, output: &mut Encoder<'_>) -> Result<(), EncodeError> {
+        output.write(&self.base)?;
         output.write(&(self.fresnel.color))?;
         output.write(&(self.fresnel.opacity))?;
         output.write(&(self.fresnel.team_color))?;
         Ok(())
     }
+}
+
+impl LayerExtra for Layer1000Extra {
     fn emissive_gain(&self) -> Option<f32> {
         self.base.emissive_gain()
     }
@@ -309,16 +347,19 @@ pub struct Layer1100Extra {
     texture_slots: Vec<LayerTextureSlot>,
 }
 
-impl LayerExtra for Layer1100Extra {
-    fn empty() -> Self {
+impl Default for Layer1100Extra {
+    fn default() -> Self {
         Self {
-            base: Layer1000Extra::empty(),
+            base: Layer1000Extra::default(),
             shader_type_id: 0,
             texture_slots: Vec::new(),
         }
     }
-    fn decode(cursor: &mut Cursor<'_>) -> Result<Self, DecodeError> {
-        let base = Layer1000Extra::decode(cursor)?;
+}
+
+impl Readable for Layer1100Extra {
+    fn read_from(cursor: &mut Cursor<'_>) -> Result<Self, DecodeError> {
+        let base = cursor.read::<Layer1000Extra>()?;
         let shader_type_id = cursor.read()?;
         let count = cursor.read::<u32>()? as usize;
         let mut texture_slots = Vec::new();
@@ -345,8 +386,11 @@ impl LayerExtra for Layer1100Extra {
             texture_slots,
         })
     }
-    fn encode(&self, output: &mut Encoder<'_>) -> Result<(), EncodeError> {
-        self.base.encode(output)?;
+}
+
+impl Writable for Layer1100Extra {
+    fn write_to(&self, output: &mut Encoder<'_>) -> Result<(), EncodeError> {
+        output.write(&self.base)?;
         output.write(&(self.shader_type_id))?;
         write_count(output, self.texture_slots.len(), LAYER_TAG)?;
         for slot in &self.texture_slots {
@@ -358,6 +402,9 @@ impl LayerExtra for Layer1100Extra {
         }
         Ok(())
     }
+}
+
+impl LayerExtra for Layer1100Extra {
     fn emissive_gain(&self) -> Option<f32> {
         self.base.emissive_gain()
     }
@@ -443,7 +490,7 @@ impl<V: ModelVersion> Material<V> {
             version: PhantomData,
             priority_plane: 0,
             render_mode: 0,
-            shader: V::Shader::empty(),
+            shader: V::Shader::default(),
             layers: Vec::new(),
         }
     }
@@ -509,7 +556,7 @@ impl<V: ModelVersion> Layer<V> {
             texture_animation_id: u32::MAX,
             coordinate_id: 0,
             alpha: 1.0,
-            extensions: V::LayerExtra::empty(),
+            extensions: V::LayerExtra::default(),
             tracks: Vec::new(),
         }
     }
@@ -687,7 +734,7 @@ impl<V: ModelVersion> Readable for Material<V> {
         let value = {
             let priority_plane = cursor.read()?;
             let render_mode = cursor.read()?;
-            let shader = V::Shader::decode(&mut cursor)?;
+            let shader = cursor.read::<V::Shader>()?;
             expect_tag(&mut cursor, LAYER_TAG, MaterialsChunk::<V>::TAG)?;
             let count = cursor.read::<u32>()? as usize;
             let mut layers = Vec::new();
@@ -713,7 +760,7 @@ impl<V: ModelVersion> Writable for Material<V> {
         let marker = bytes.begin_sized();
         bytes.write(&(self.priority_plane))?;
         bytes.write(&(self.render_mode))?;
-        self.shader.encode(bytes)?;
+        bytes.write(&self.shader)?;
         bytes.write_bytes(b"LAYS");
         write_count(bytes, self.layers.len(), MaterialsChunk::<V>::TAG)?;
         for layer in &self.layers {
@@ -734,7 +781,7 @@ impl<V: ModelVersion> Readable for Layer<V> {
             let texture_animation_id = cursor.read()?;
             let coordinate_id = cursor.read()?;
             let alpha = cursor.read()?;
-            let extensions = V::LayerExtra::decode(&mut cursor)?;
+            let extensions = cursor.read::<V::LayerExtra>()?;
             let mut tracks = Vec::new();
             while !cursor.remaining().is_empty() {
                 tracks.push(cursor.read::<LayerTrack>()?);
@@ -765,7 +812,7 @@ impl<V: ModelVersion> Writable for Layer<V> {
         bytes.write(&self.texture_animation_id)?;
         bytes.write(&self.coordinate_id)?;
         bytes.write(&self.alpha)?;
-        self.extensions.encode(bytes)?;
+        bytes.write(&self.extensions)?;
         for track in &self.tracks {
             bytes.write(track)?;
         }

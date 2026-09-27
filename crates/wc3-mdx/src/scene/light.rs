@@ -25,10 +25,7 @@ use crate::{DecodeError, Model, Node};
 use crate::{Readable, Writable};
 
 /// Extra fixed words selected by the light record's version.
-pub trait LightExtension: Clone + Debug + PartialEq {
-    fn empty() -> Self;
-    fn decode(cursor: &mut Cursor<'_>) -> Result<Self, DecodeError>;
-    fn encode(&self, output: &mut Encoder<'_>) -> Result<(), EncodeError>;
+pub trait LightExtension: Default + Readable + Writable + Clone + Debug + PartialEq {
     fn words(&self) -> Option<[u32; 7]> {
         None
     }
@@ -40,31 +37,48 @@ pub trait LightExtension: Clone + Debug + PartialEq {
 #[derive(Clone, Debug, PartialEq)]
 pub struct ClassicLightExtension;
 
-impl LightExtension for ClassicLightExtension {
-    fn empty() -> Self {
+impl Default for ClassicLightExtension {
+    fn default() -> Self {
         Self
     }
-    fn decode(_: &mut Cursor<'_>) -> Result<Self, DecodeError> {
+}
+
+impl Readable for ClassicLightExtension {
+    fn read_from(_: &mut Cursor<'_>) -> Result<Self, DecodeError> {
         Ok(Self)
     }
-    fn encode(&self, _: &mut Encoder<'_>) -> Result<(), EncodeError> {
+}
+
+impl Writable for ClassicLightExtension {
+    fn write_to(&self, _: &mut Encoder<'_>) -> Result<(), EncodeError> {
         Ok(())
     }
 }
 
+impl LightExtension for ClassicLightExtension {}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct ModernLightExtension([u32; 7]);
 
-impl LightExtension for ModernLightExtension {
-    fn empty() -> Self {
+impl Default for ModernLightExtension {
+    fn default() -> Self {
         Self([0; 7])
     }
-    fn decode(cursor: &mut Cursor<'_>) -> Result<Self, DecodeError> {
+}
+
+impl Readable for ModernLightExtension {
+    fn read_from(cursor: &mut Cursor<'_>) -> Result<Self, DecodeError> {
         Ok(Self(cursor.read()?))
     }
-    fn encode(&self, output: &mut Encoder<'_>) -> Result<(), EncodeError> {
+}
+
+impl Writable for ModernLightExtension {
+    fn write_to(&self, output: &mut Encoder<'_>) -> Result<(), EncodeError> {
         output.write(&self.0)
     }
+}
+
+impl LightExtension for ModernLightExtension {
     fn words(&self) -> Option<[u32; 7]> {
         Some(self.0)
     }
@@ -125,7 +139,7 @@ impl<V: ModelVersion> Light<V> {
             intensity: 0.0,
             ambient_color: [0.0; 3],
             ambient_intensity: 0.0,
-            extended_words: V::Extension::empty(),
+            extended_words: V::Extension::default(),
             tracks: Vec::new(),
             version: PhantomData,
         }
@@ -245,7 +259,7 @@ impl<V: ModelVersion> Readable for Light<V> {
         let intensity = cursor.read()?;
         let ambient_color = cursor.read()?;
         let ambient_intensity = cursor.read()?;
-        let extended_words = V::Extension::decode(&mut cursor)?;
+        let extended_words = cursor.read::<V::Extension>()?;
         let mut tracks = Vec::new();
         while !cursor.remaining().is_empty() {
             tracks.push(cursor.read::<LightTrack>()?);
@@ -278,7 +292,7 @@ impl<V: ModelVersion> Writable for Light<V> {
         bytes.write(&self.intensity)?;
         bytes.write(&self.ambient_color)?;
         bytes.write(&self.ambient_intensity)?;
-        self.extended_words.encode(bytes)?;
+        bytes.write(&self.extended_words)?;
         for track in &self.tracks {
             bytes.write(track)?;
         }

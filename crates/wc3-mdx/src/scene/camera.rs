@@ -26,8 +26,7 @@ const NAME_SIZE: usize = 80;
 const MAX_RECORD_SIZE: usize = 0x00ff_ffff;
 
 /// The high-byte record flags used by a camera layout.
-pub trait CameraFlags: Clone + Debug + PartialEq {
-    fn empty() -> Self;
+pub trait CameraFlags: Default + Clone + Debug + PartialEq {
     fn from_bits(bits: u8) -> Self;
     fn bits(&self) -> u8;
     fn set_bits(&mut self, bits: u8);
@@ -36,10 +35,13 @@ pub trait CameraFlags: Clone + Debug + PartialEq {
 #[derive(Clone, Debug, PartialEq)]
 pub struct ClassicCameraFlags(u8);
 
-impl CameraFlags for ClassicCameraFlags {
-    fn empty() -> Self {
+impl Default for ClassicCameraFlags {
+    fn default() -> Self {
         Self(0)
     }
+}
+
+impl CameraFlags for ClassicCameraFlags {
     fn from_bits(bits: u8) -> Self {
         Self(bits)
     }
@@ -54,10 +56,13 @@ impl CameraFlags for ClassicCameraFlags {
 #[derive(Clone, Debug, PartialEq)]
 pub struct ModernCameraFlags(u8);
 
-impl CameraFlags for ModernCameraFlags {
-    fn empty() -> Self {
+impl Default for ModernCameraFlags {
+    fn default() -> Self {
         Self(3)
     }
+}
+
+impl CameraFlags for ModernCameraFlags {
     fn from_bits(bits: u8) -> Self {
         Self(bits)
     }
@@ -111,7 +116,7 @@ impl<V: ModelVersion> Camera<V> {
     pub fn new(name: &str) -> Result<Self, ValueError> {
         let mut camera = Self {
             name: FixedText::default(),
-            record_flags: V::Flags::empty(),
+            record_flags: V::Flags::default(),
             position: [0.0; 3],
             field_of_view: 0.0,
             far_clip: 0.0,
