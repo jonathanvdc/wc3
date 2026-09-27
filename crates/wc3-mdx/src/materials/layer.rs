@@ -71,18 +71,65 @@ pub struct Layer<V: ModelVersion> {
     texture_animation_id: u32,
     coordinate_id: u32,
     alpha: f32,
-    extensions: V::LayerExtra,
+    emissive_gain: V::EmissiveGain,
+    fresnel: V::Fresnel,
+    shader_type_id: V::ShaderTypeId,
+    texture_slots: V::TextureSlots,
     tracks: Vec<LayerTrack>,
 }
 
-#[derive(Clone, Debug, PartialEq, Readable, Writable)]
-pub struct Fresnel {
-    color: Color,
-    opacity: f32,
-    team_color: f32,
+/// Version-selected storage for the layer's emissive gain.
+pub trait EmissiveGainField: Default + Readable + Writable + Clone + Debug + PartialEq {
+    fn emissive_gain(&self) -> Option<f32> {
+        None
+    }
+    fn emissive_gain_mut(&mut self) -> Option<&mut f32> {
+        None
+    }
 }
 
-impl Default for Fresnel {
+#[derive(Clone, Debug, Default, PartialEq, Readable, Writable)]
+pub struct NoEmissiveGain;
+impl EmissiveGainField for NoEmissiveGain {}
+
+#[derive(Clone, Debug, PartialEq, Readable, Writable)]
+pub struct EmissiveGain(f32);
+impl Default for EmissiveGain {
+    fn default() -> Self {
+        Self(1.0)
+    }
+}
+impl EmissiveGainField for EmissiveGain {
+    fn emissive_gain(&self) -> Option<f32> {
+        Some(self.0)
+    }
+    fn emissive_gain_mut(&mut self) -> Option<&mut f32> {
+        Some(&mut self.0)
+    }
+}
+
+/// Version-selected storage for the layer's fresnel.
+pub trait FresnelField: Default + Readable + Writable + Clone + Debug + PartialEq {
+    fn fresnel(&self) -> Option<LayerFresnel> {
+        None
+    }
+    fn fresnel_mut(&mut self) -> Option<&mut LayerFresnel> {
+        None
+    }
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Readable, Writable)]
+pub struct NoFresnel;
+impl FresnelField for NoFresnel {}
+
+/// The layer's RGB Fresnel color, opacity, and team-color contribution in MDX order.
+#[derive(Clone, Copy, Debug, PartialEq, Readable, Writable)]
+pub struct LayerFresnel {
+    pub color: Color,
+    pub opacity: f32,
+    pub team_color: f32,
+}
+impl Default for LayerFresnel {
     fn default() -> Self {
         Self {
             color: [1.0; 3],
@@ -91,86 +138,69 @@ impl Default for Fresnel {
         }
     }
 }
+impl FresnelField for LayerFresnel {
+    fn fresnel(&self) -> Option<LayerFresnel> {
+        Some(*self)
+    }
+    fn fresnel_mut(&mut self) -> Option<&mut LayerFresnel> {
+        Some(self)
+    }
+}
 
-/// The fields following a layer's shared header.
-pub trait LayerExtra: Default + Readable + Writable + Clone + Debug + PartialEq {
-    fn emissive_gain(&self) -> Option<f32> {
-        None
-    }
-    fn emissive_gain_mut(&mut self) -> Option<&mut f32> {
-        None
-    }
-    fn fresnel(&self) -> Option<&Fresnel> {
-        None
-    }
-    fn fresnel_mut(&mut self) -> Option<&mut Fresnel> {
-        None
-    }
+/// Version-selected storage for the layer's shader type id.
+pub trait LayerShaderTypeField: Default + Readable + Writable + Clone + Debug + PartialEq {
     fn shader_type_id(&self) -> Option<u32> {
         None
     }
     fn shader_type_id_mut(&mut self) -> Option<&mut u32> {
         None
     }
-    fn texture_slots(&self) -> &[LayerTextureSlot] {
-        &[]
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Readable, Writable)]
+pub struct NoLayerShaderType;
+impl LayerShaderTypeField for NoLayerShaderType {}
+
+#[derive(Clone, Debug, Default, PartialEq, Readable, Writable)]
+pub struct LayerShaderType(u32);
+impl LayerShaderTypeField for LayerShaderType {
+    fn shader_type_id(&self) -> Option<u32> {
+        Some(self.0)
+    }
+    fn shader_type_id_mut(&mut self) -> Option<&mut u32> {
+        Some(&mut self.0)
+    }
+}
+
+/// Version-selected storage for Reforged texture slots.
+pub trait LayerTextureSlotsField:
+    Default + Readable + Writable + Clone + Debug + PartialEq
+{
+    fn texture_slots(&self) -> Option<&[LayerTextureSlot]> {
+        None
     }
     fn texture_slots_mut(&mut self) -> Option<&mut Vec<LayerTextureSlot>> {
         None
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Default, Readable, Writable)]
-pub struct ClassicLayerExtra;
-
-impl LayerExtra for ClassicLayerExtra {}
-
-#[derive(Clone, Debug, PartialEq, Default, Readable, Writable)]
-pub struct Layer900Extra {
-    emissive_gain: f32,
-}
-
-impl LayerExtra for Layer900Extra {
-    fn emissive_gain(&self) -> Option<f32> {
-        Some(self.emissive_gain)
-    }
-    fn emissive_gain_mut(&mut self) -> Option<&mut f32> {
-        Some(&mut self.emissive_gain)
-    }
-}
-
 #[derive(Clone, Debug, Default, PartialEq, Readable, Writable)]
-pub struct Layer1000Extra {
-    base: Layer900Extra,
-    fresnel: Fresnel,
-}
-
-impl LayerExtra for Layer1000Extra {
-    fn emissive_gain(&self) -> Option<f32> {
-        self.base.emissive_gain()
-    }
-    fn emissive_gain_mut(&mut self) -> Option<&mut f32> {
-        self.base.emissive_gain_mut()
-    }
-    fn fresnel(&self) -> Option<&Fresnel> {
-        Some(&self.fresnel)
-    }
-    fn fresnel_mut(&mut self) -> Option<&mut Fresnel> {
-        Some(&mut self.fresnel)
-    }
-}
+pub struct NoLayerTextureSlots;
+impl LayerTextureSlotsField for NoLayerTextureSlots {}
 
 #[derive(Clone, Debug, Default, PartialEq)]
-pub struct Layer1100Extra {
-    base: Layer1000Extra,
-    shader_type_id: u32,
-    texture_slots: Vec<LayerTextureSlot>,
+pub struct LayerTextureSlots(Vec<LayerTextureSlot>);
+impl LayerTextureSlotsField for LayerTextureSlots {
+    fn texture_slots(&self) -> Option<&[LayerTextureSlot]> {
+        Some(&self.0)
+    }
+    fn texture_slots_mut(&mut self) -> Option<&mut Vec<LayerTextureSlot>> {
+        Some(&mut self.0)
+    }
 }
 
-impl Readable for Layer1100Extra {
+impl Readable for LayerTextureSlots {
     fn read_from(cursor: &mut Cursor<'_>) -> Result<Self, DecodeError> {
-        let base = cursor.read::<Layer1000Extra>()?;
-        let shader_type_id = cursor.read()?;
         let count = cursor.read::<u32>()? as usize;
         let mut texture_slots = Vec::new();
         for _ in 0..count {
@@ -190,20 +220,14 @@ impl Readable for Layer1100Extra {
                 track,
             });
         }
-        Ok(Self {
-            base,
-            shader_type_id,
-            texture_slots,
-        })
+        Ok(Self(texture_slots))
     }
 }
 
-impl Writable for Layer1100Extra {
+impl Writable for LayerTextureSlots {
     fn write_to(&self, output: &mut Encoder<'_>) -> Result<(), EncodeError> {
-        output.write(&self.base)?;
-        output.write(&self.shader_type_id)?;
-        write_count(output, self.texture_slots.len(), LAYER_TAG)?;
-        for slot in &self.texture_slots {
+        write_count(output, self.0.len(), LAYER_TAG)?;
+        for slot in &self.0 {
             output.write(&slot.texture_id)?;
             output.write(&slot.texture_type)?;
             if let Some(track) = &slot.track {
@@ -211,33 +235,6 @@ impl Writable for Layer1100Extra {
             }
         }
         Ok(())
-    }
-}
-
-impl LayerExtra for Layer1100Extra {
-    fn emissive_gain(&self) -> Option<f32> {
-        self.base.emissive_gain()
-    }
-    fn emissive_gain_mut(&mut self) -> Option<&mut f32> {
-        self.base.emissive_gain_mut()
-    }
-    fn fresnel(&self) -> Option<&Fresnel> {
-        self.base.fresnel()
-    }
-    fn fresnel_mut(&mut self) -> Option<&mut Fresnel> {
-        self.base.fresnel_mut()
-    }
-    fn shader_type_id(&self) -> Option<u32> {
-        Some(self.shader_type_id)
-    }
-    fn shader_type_id_mut(&mut self) -> Option<&mut u32> {
-        Some(&mut self.shader_type_id)
-    }
-    fn texture_slots(&self) -> &[LayerTextureSlot] {
-        &self.texture_slots
-    }
-    fn texture_slots_mut(&mut self) -> Option<&mut Vec<LayerTextureSlot>> {
-        Some(&mut self.texture_slots)
     }
 }
 
@@ -258,7 +255,10 @@ impl<V: ModelVersion> Layer<V> {
             texture_animation_id: u32::MAX,
             coordinate_id: 0,
             alpha: 1.0,
-            extensions: V::LayerExtra::default(),
+            emissive_gain: V::EmissiveGain::default(),
+            fresnel: V::Fresnel::default(),
+            shader_type_id: V::ShaderTypeId::default(),
+            texture_slots: V::TextureSlots::default(),
             tracks: Vec::new(),
         }
     }
@@ -323,20 +323,20 @@ impl<V: ModelVersion> Layer<V> {
     pub fn set_alpha(&mut self, value: f32) {
         self.alpha = value;
     }
-    /// Returns emissive gain when this layout includes it.
+    /// Returns the layer's emissive gain, available from version 900.
     pub fn try_emissive_gain(&self) -> Result<f32, ValueError> {
-        if !(V::NUMBER >= 900) {
-            return Err(ValueError::UnsupportedVersion {
-                tag: *b"LAYS",
+        self.emissive_gain
+            .emissive_gain()
+            .ok_or(ValueError::UnsupportedVersion {
+                tag: LAYER_TAG,
                 minimum: 900,
                 actual: V::NUMBER,
-            });
-        }
-        Ok(self.extensions.emissive_gain().expect("supported version"))
+            })
     }
+    /// Sets the layer's emissive gain, available from version 900.
     pub fn try_set_emissive_gain(&mut self, value: f32) -> Result<(), ValueError> {
         *self
-            .extensions
+            .emissive_gain
             .emissive_gain_mut()
             .ok_or(ValueError::UnsupportedVersion {
                 tag: LAYER_TAG,
@@ -345,22 +345,79 @@ impl<V: ModelVersion> Layer<V> {
             })? = value;
         Ok(())
     }
-    pub fn try_fresnel_color(&self) -> Result<Color, ValueError> {
-        if !(V::NUMBER >= 1000) {
-            return Err(ValueError::UnsupportedVersion {
-                tag: *b"LAYS",
+    /// Returns the layer's fresnel, available from version 1000.
+    pub fn try_fresnel(&self) -> Result<LayerFresnel, ValueError> {
+        self.fresnel
+            .fresnel()
+            .ok_or(ValueError::UnsupportedVersion {
+                tag: LAYER_TAG,
                 minimum: 1000,
                 actual: V::NUMBER,
-            });
-        }
-        Ok(self
-            .extensions
-            .fresnel()
-            .map(|f| f.color)
-            .expect("supported version"))
+            })
     }
+    /// Sets the layer's fresnel, available from version 1000.
+    pub fn try_set_fresnel(&mut self, value: LayerFresnel) -> Result<(), ValueError> {
+        *self
+            .fresnel
+            .fresnel_mut()
+            .ok_or(ValueError::UnsupportedVersion {
+                tag: LAYER_TAG,
+                minimum: 1000,
+                actual: V::NUMBER,
+            })? = value;
+        Ok(())
+    }
+    /// Returns the layer's shader type id, available from version 1100.
+    pub fn try_shader_type_id(&self) -> Result<u32, ValueError> {
+        self.shader_type_id
+            .shader_type_id()
+            .ok_or(ValueError::UnsupportedVersion {
+                tag: LAYER_TAG,
+                minimum: 1100,
+                actual: V::NUMBER,
+            })
+    }
+    /// Sets the layer's shader type id, available from version 1100.
+    pub fn try_set_shader_type_id(&mut self, value: u32) -> Result<(), ValueError> {
+        *self
+            .shader_type_id
+            .shader_type_id_mut()
+            .ok_or(ValueError::UnsupportedVersion {
+                tag: LAYER_TAG,
+                minimum: 1100,
+                actual: V::NUMBER,
+            })? = value;
+        Ok(())
+    }
+    /// Returns the layer's texture slots, available from version 1100.
+    pub fn try_texture_slots(&self) -> Result<&[LayerTextureSlot], ValueError> {
+        self.texture_slots
+            .texture_slots()
+            .ok_or(ValueError::UnsupportedVersion {
+                tag: LAYER_TAG,
+                minimum: 1100,
+                actual: V::NUMBER,
+            })
+    }
+    /// Sets the layer's texture slots, available from version 1100.
+    pub fn try_set_texture_slots(&mut self, value: &[LayerTextureSlot]) -> Result<(), ValueError> {
+        *self
+            .texture_slots
+            .texture_slots_mut()
+            .ok_or(ValueError::UnsupportedVersion {
+                tag: LAYER_TAG,
+                minimum: 1100,
+                actual: V::NUMBER,
+            })? = value.to_vec();
+        Ok(())
+    }
+    /// Returns the Fresnel color, available from version 1000.
+    pub fn try_fresnel_color(&self) -> Result<Color, ValueError> {
+        Ok(self.try_fresnel()?.color)
+    }
+    /// Sets the Fresnel color, available from version 1000.
     pub fn try_set_fresnel_color(&mut self, value: Color) -> Result<(), ValueError> {
-        self.extensions
+        self.fresnel
             .fresnel_mut()
             .ok_or(ValueError::UnsupportedVersion {
                 tag: LAYER_TAG,
@@ -370,22 +427,13 @@ impl<V: ModelVersion> Layer<V> {
             .color = value;
         Ok(())
     }
+    /// Returns the Fresnel opacity, available from version 1000.
     pub fn try_fresnel_opacity(&self) -> Result<f32, ValueError> {
-        if !(V::NUMBER >= 1000) {
-            return Err(ValueError::UnsupportedVersion {
-                tag: *b"LAYS",
-                minimum: 1000,
-                actual: V::NUMBER,
-            });
-        }
-        Ok(self
-            .extensions
-            .fresnel()
-            .map(|f| f.opacity)
-            .expect("supported version"))
+        Ok(self.try_fresnel()?.opacity)
     }
+    /// Sets the Fresnel opacity, available from version 1000.
     pub fn try_set_fresnel_opacity(&mut self, value: f32) -> Result<(), ValueError> {
-        self.extensions
+        self.fresnel
             .fresnel_mut()
             .ok_or(ValueError::UnsupportedVersion {
                 tag: LAYER_TAG,
@@ -395,22 +443,13 @@ impl<V: ModelVersion> Layer<V> {
             .opacity = value;
         Ok(())
     }
+    /// Returns the Fresnel team color, available from version 1000.
     pub fn try_fresnel_team_color(&self) -> Result<f32, ValueError> {
-        if !(V::NUMBER >= 1000) {
-            return Err(ValueError::UnsupportedVersion {
-                tag: *b"LAYS",
-                minimum: 1000,
-                actual: V::NUMBER,
-            });
-        }
-        Ok(self
-            .extensions
-            .fresnel()
-            .map(|f| f.team_color)
-            .expect("supported version"))
+        Ok(self.try_fresnel()?.team_color)
     }
+    /// Sets the Fresnel team color, available from version 1000.
     pub fn try_set_fresnel_team_color(&mut self, value: f32) -> Result<(), ValueError> {
-        self.extensions
+        self.fresnel
             .fresnel_mut()
             .ok_or(ValueError::UnsupportedVersion {
                 tag: LAYER_TAG,
@@ -418,48 +457,6 @@ impl<V: ModelVersion> Layer<V> {
                 actual: V::NUMBER,
             })?
             .team_color = value;
-        Ok(())
-    }
-    pub fn try_shader_type_id(&self) -> Result<u32, ValueError> {
-        if !(V::NUMBER >= 1100) {
-            return Err(ValueError::UnsupportedVersion {
-                tag: *b"LAYS",
-                minimum: 1100,
-                actual: V::NUMBER,
-            });
-        }
-        Ok(self.extensions.shader_type_id().expect("supported version"))
-    }
-    pub fn try_set_shader_type_id(&mut self, value: u32) -> Result<(), ValueError> {
-        *self
-            .extensions
-            .shader_type_id_mut()
-            .ok_or(ValueError::UnsupportedVersion {
-                tag: LAYER_TAG,
-                minimum: 1100,
-                actual: V::NUMBER,
-            })? = value;
-        Ok(())
-    }
-    pub fn try_texture_slots(&self) -> Result<&[LayerTextureSlot], ValueError> {
-        if !(V::NUMBER >= 1100) {
-            return Err(ValueError::UnsupportedVersion {
-                tag: *b"LAYS",
-                minimum: 1100,
-                actual: V::NUMBER,
-            });
-        }
-        Ok(self.extensions.texture_slots())
-    }
-    pub fn try_set_texture_slots(&mut self, slots: &[LayerTextureSlot]) -> Result<(), ValueError> {
-        *self
-            .extensions
-            .texture_slots_mut()
-            .ok_or(ValueError::UnsupportedVersion {
-                tag: LAYER_TAG,
-                minimum: 1100,
-                actual: V::NUMBER,
-            })? = slots.to_vec();
         Ok(())
     }
     /// Borrows layer animation tracks after any texture slots.
@@ -473,70 +470,84 @@ impl<V: ModelVersion> Layer<V> {
 }
 
 impl<V: SupportsEmissiveGain> Layer<V> {
+    /// Returns the layer's emissive gain.
     pub fn emissive_gain(&self) -> f32 {
-        self.extensions.emissive_gain().expect("supported version")
+        self.try_emissive_gain().expect("supported version")
     }
+    /// Sets the layer's emissive gain.
     pub fn set_emissive_gain(&mut self, value: f32) {
         self.try_set_emissive_gain(value)
-            .expect("supported version")
+            .expect("supported version");
     }
 }
 
 impl<V: SupportsFresnel> Layer<V> {
-    pub fn fresnel_color(&self) -> Color {
-        self.extensions
-            .fresnel()
-            .map(|f| f.color)
-            .expect("supported version")
+    /// Returns the layer's fresnel.
+    pub fn fresnel(&self) -> LayerFresnel {
+        self.try_fresnel().expect("supported version")
     }
+    /// Sets the layer's fresnel.
+    pub fn set_fresnel(&mut self, value: LayerFresnel) {
+        self.try_set_fresnel(value).expect("supported version");
+    }
+}
+
+impl<V: SupportsFresnel> Layer<V> {
+    /// Returns the layer's fresnel color.
+    pub fn fresnel_color(&self) -> Color {
+        self.try_fresnel_color().expect("supported version")
+    }
+    /// Sets the layer's fresnel color.
     pub fn set_fresnel_color(&mut self, value: Color) {
         self.try_set_fresnel_color(value)
-            .expect("supported version")
+            .expect("supported version");
     }
 }
 
 impl<V: SupportsFresnel> Layer<V> {
+    /// Returns the layer's fresnel opacity.
     pub fn fresnel_opacity(&self) -> f32 {
-        self.extensions
-            .fresnel()
-            .map(|f| f.opacity)
-            .expect("supported version")
+        self.try_fresnel_opacity().expect("supported version")
     }
+    /// Sets the layer's fresnel opacity.
     pub fn set_fresnel_opacity(&mut self, value: f32) {
         self.try_set_fresnel_opacity(value)
-            .expect("supported version")
+            .expect("supported version");
     }
 }
 
 impl<V: SupportsFresnel> Layer<V> {
+    /// Returns the layer's fresnel team color.
     pub fn fresnel_team_color(&self) -> f32 {
-        self.extensions
-            .fresnel()
-            .map(|f| f.team_color)
-            .expect("supported version")
+        self.try_fresnel_team_color().expect("supported version")
     }
+    /// Sets the layer's fresnel team color.
     pub fn set_fresnel_team_color(&mut self, value: f32) {
         self.try_set_fresnel_team_color(value)
-            .expect("supported version")
+            .expect("supported version");
     }
 }
 
 impl<V: SupportsLayerShaderTypeId> Layer<V> {
+    /// Returns the layer's shader type id.
     pub fn shader_type_id(&self) -> u32 {
-        self.extensions.shader_type_id().expect("supported version")
+        self.try_shader_type_id().expect("supported version")
     }
+    /// Sets the layer's shader type id.
     pub fn set_shader_type_id(&mut self, value: u32) {
         self.try_set_shader_type_id(value)
-            .expect("supported version")
+            .expect("supported version");
     }
 }
 
 impl<V: SupportsLayerTextureSlots> Layer<V> {
+    /// Returns the layer's texture slots.
     pub fn texture_slots(&self) -> &[LayerTextureSlot] {
-        self.extensions.texture_slots()
+        self.try_texture_slots().expect("supported version")
     }
-    pub fn set_texture_slots(&mut self, slots: &[LayerTextureSlot]) {
-        self.try_set_texture_slots(slots)
-            .expect("supported version")
+    /// Sets the layer's texture slots.
+    pub fn set_texture_slots(&mut self, value: &[LayerTextureSlot]) {
+        self.try_set_texture_slots(value)
+            .expect("supported version");
     }
 }

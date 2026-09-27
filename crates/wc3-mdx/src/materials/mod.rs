@@ -1,5 +1,5 @@
 mod layer;
-pub use layer::{Layer, LayerShadingFlags, LayerTextureSlot, LayerTrack};
+pub use layer::{Layer, LayerFresnel, LayerShadingFlags, LayerTextureSlot, LayerTrack};
 mod material;
 pub use material::{Material, MaterialLayout, MaterialRenderFlags};
 mod texture;

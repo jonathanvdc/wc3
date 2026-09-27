@@ -2,7 +2,9 @@
 use std::{borrow::Cow, fmt::Debug, marker::PhantomData};
 
 use super::layer::{
-    ClassicLayerExtra, Layer, Layer1000Extra, Layer1100Extra, Layer900Extra, LayerExtra, LAYER_TAG,
+    EmissiveGain, EmissiveGainField, FresnelField, Layer, LayerFresnel, LayerShaderType,
+    LayerShaderTypeField, LayerTextureSlots, LayerTextureSlotsField, NoEmissiveGain, NoFresnel,
+    NoLayerShaderType, NoLayerTextureSlots, LAYER_TAG,
 };
 use super::write_count;
 use crate::{
@@ -82,46 +84,76 @@ impl ShaderField for ShaderText {
 /// Chooses the material and layer fields for a version.
 pub trait MaterialLayout {
     type Shader: ShaderField;
-    type LayerExtra: LayerExtra;
+    type EmissiveGain: EmissiveGainField;
+    type Fresnel: FresnelField;
+    type ShaderTypeId: LayerShaderTypeField;
+    type TextureSlots: LayerTextureSlotsField;
 }
 
 use crate::{V1000, V1100, V1200, V1300, V1400, V1600, V1800, V800, V900};
 
 impl MaterialLayout for V800 {
     type Shader = NoShader;
-    type LayerExtra = ClassicLayerExtra;
+    type EmissiveGain = NoEmissiveGain;
+    type Fresnel = NoFresnel;
+    type ShaderTypeId = NoLayerShaderType;
+    type TextureSlots = NoLayerTextureSlots;
 }
 impl MaterialLayout for V900 {
     type Shader = ShaderText;
-    type LayerExtra = Layer900Extra;
+    type EmissiveGain = EmissiveGain;
+    type Fresnel = NoFresnel;
+    type ShaderTypeId = NoLayerShaderType;
+    type TextureSlots = NoLayerTextureSlots;
 }
 impl MaterialLayout for V1000 {
     type Shader = ShaderText;
-    type LayerExtra = Layer1000Extra;
+    type EmissiveGain = EmissiveGain;
+    type Fresnel = LayerFresnel;
+    type ShaderTypeId = NoLayerShaderType;
+    type TextureSlots = NoLayerTextureSlots;
 }
 impl MaterialLayout for V1100 {
     type Shader = NoShader;
-    type LayerExtra = Layer1100Extra;
+    type EmissiveGain = EmissiveGain;
+    type Fresnel = LayerFresnel;
+    type ShaderTypeId = LayerShaderType;
+    type TextureSlots = LayerTextureSlots;
 }
 impl MaterialLayout for V1200 {
     type Shader = NoShader;
-    type LayerExtra = Layer1100Extra;
+    type EmissiveGain = EmissiveGain;
+    type Fresnel = LayerFresnel;
+    type ShaderTypeId = LayerShaderType;
+    type TextureSlots = LayerTextureSlots;
 }
 impl MaterialLayout for V1300 {
     type Shader = NoShader;
-    type LayerExtra = Layer1100Extra;
+    type EmissiveGain = EmissiveGain;
+    type Fresnel = LayerFresnel;
+    type ShaderTypeId = LayerShaderType;
+    type TextureSlots = LayerTextureSlots;
 }
 impl MaterialLayout for V1400 {
     type Shader = NoShader;
-    type LayerExtra = Layer1100Extra;
+    type EmissiveGain = EmissiveGain;
+    type Fresnel = LayerFresnel;
+    type ShaderTypeId = LayerShaderType;
+    type TextureSlots = LayerTextureSlots;
 }
 impl MaterialLayout for V1600 {
     type Shader = NoShader;
-    type LayerExtra = Layer1100Extra;
+    type EmissiveGain = EmissiveGain;
+    type Fresnel = LayerFresnel;
+    type ShaderTypeId = LayerShaderType;
+    type TextureSlots = LayerTextureSlots;
 }
 impl MaterialLayout for V1800 {
     type Shader = NoShader;
-    type LayerExtra = Layer1100Extra;
+    type EmissiveGain = EmissiveGain;
+    type Fresnel = LayerFresnel;
+    type ShaderTypeId = LayerShaderType;
+    type TextureSlots = LayerTextureSlots;
 }
 
 fn expect_tag(cursor: &mut Cursor<'_>, expected: Tag, record_tag: Tag) -> Result<(), DecodeError> {
