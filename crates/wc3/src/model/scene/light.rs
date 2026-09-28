@@ -245,7 +245,7 @@ light_layout!(
         ambient_color, ambient_intensity, shadow_value, casting, shadow_start,
         shadow_end, quadratic, linear, damping, tracks),
     virtual_fields(
-        #[mdl(flags(Omnidirectional = 1, Directional = 2, Ambient = 4))]
+    #[mdl(flags(Omnidirectional = 1, Directional = 2, Ambient = 4))]
         #[mdl(get = "Self::mdl_kind", set = "Self::set_mdl_kind")]
         kind: u32,
         #[mdl(flag = "ShadowCasting", default)]
@@ -297,8 +297,10 @@ light_layout!(
 )]
 pub struct Light<V: ModelVersion> {
     #[mdl(flatten)]
+    /// Shared node.
     pub node: Node,
     #[mdl(skip, default)]
+    /// Raw light type ID.
     pub light_type: u32,
     #[mdl(skip, default)]
     shadow_casting: V::ShadowCasting,
@@ -307,32 +309,38 @@ pub struct Light<V: ModelVersion> {
         track = "LightTrack::AttenuationStart",
         default = "zero"
     )]
+    /// Attenuation start distance.
     pub attenuation_start: f32,
     #[mdl(
         animatable = "AttenuationEnd",
         track = "LightTrack::AttenuationEnd",
         default = "zero"
     )]
+    /// Attenuation end distance.
     pub attenuation_end: f32,
     #[mdl(animatable = "Color", track = "LightTrack::Color", default = "white")]
+    /// RGB light color.
     pub color: Color,
     #[mdl(
         animatable = "Intensity",
         track = "LightTrack::Intensity",
         default = "zero"
     )]
+    /// Light intensity.
     pub intensity: f32,
     #[mdl(
         animatable = "AmbColor",
         track = "LightTrack::AmbientColor",
         default = "white"
     )]
+    /// Ambient RGB color.
     pub ambient_color: Color,
     #[mdl(
         animatable = "AmbIntensity",
         track = "LightTrack::AmbientIntensity",
         default = "zero"
     )]
+    /// Ambient intensity.
     pub ambient_intensity: f32,
     #[mdl(skip, default)]
     shadow_intensity: V::ShadowIntensity,
@@ -343,6 +351,7 @@ pub struct Light<V: ModelVersion> {
     #[mdl(skip, default)]
     version: PhantomData<V>,
     #[mdl(tracks, channels(Visibility = "LightTrack::Visibility"))]
+    /// Light animation tracks.
     pub tracks: Vec<LightTrack>,
 }
 

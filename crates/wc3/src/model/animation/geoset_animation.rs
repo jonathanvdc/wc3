@@ -37,8 +37,10 @@ bitfield! {
 )]
 pub struct GeosetAnimation {
     #[mdl(animatable = "Alpha", track = "GeosetTrack::Alpha")]
+    /// Base alpha.
     pub alpha: f32,
     #[mdl(flags(DropShadow = 1), allow_bits = 2)]
+    /// Rendering flags.
     pub flags: GeosetAnimationFlags,
     #[mdl(
         animatable = "Color",
@@ -46,10 +48,13 @@ pub struct GeosetAnimation {
         enabled_if = "Self::uses_color",
         enable_with = "Self::enable_color"
     )]
+    /// Base RGB color.
     pub color: Color,
     #[mdl(property = "GeosetId", required)]
+    /// Referenced geoset index.
     pub geoset_id: u32,
     #[mdl(tracks)]
+    /// Alpha and color tracks without reparsing.
     pub tracks: Vec<GeosetTrack>,
 }
 

@@ -24,16 +24,22 @@ const ANIMATION_FILE_NAME_SIZE: usize = 260;
 )]
 pub struct ModelInfo {
     #[mdl(header)]
+    /// Fixed-width name preserving every stored byte.
     pub name: FixedText<NAME_SIZE>,
     #[mdl(skip, default)]
+    /// Fixed-width animation file name preserving every stored byte.
     pub animation_file_name: FixedText<ANIMATION_FILE_NAME_SIZE>,
     #[mdl(property = "BoundsRadius", default)]
+    /// Model's bounding sphere radius.
     pub bounds_radius: f32,
     #[mdl(property = "MinimumExtent", default)]
+    /// Minimum XYZ extent.
     pub minimum_extent: Vec3,
     #[mdl(property = "MaximumExtent", default)]
+    /// Maximum XYZ extent.
     pub maximum_extent: Vec3,
     #[mdl(property = "BlendTime", default, skip_if = "is_zero")]
+    /// Animation blend time in milliseconds.
     pub blend_time: u32,
 }
 

@@ -48,26 +48,35 @@ pub struct ParticleEmitter {
             EmitterUsesTga = 65536
         )
     )]
+    /// Shared node.
     pub node: Node,
     #[mdl(
         animatable = "EmissionRate",
         track = "ParticleTrack::EmissionRate",
         default
     )]
+    /// Emission rate.
     pub emission_rate: f32,
     #[mdl(animatable = "Gravity", track = "ParticleTrack::Gravity", default)]
+    /// Gravity.
     pub gravity: f32,
     #[mdl(animatable = "Longitude", track = "ParticleTrack::Longitude", default)]
+    /// Longitude.
     pub longitude: f32,
     #[mdl(animatable = "Latitude", track = "ParticleTrack::Latitude", default)]
+    /// Latitude.
     pub latitude: f32,
     #[mdl(property = "Path", default)]
+    /// Fixed-width path preserving every stored byte.
     pub path: FixedText<PATH_SIZE>,
     #[mdl(animatable = "LifeSpan", track = "ParticleTrack::Lifespan", default)]
+    /// Particle lifetime.
     pub life_span: f32,
     #[mdl(animatable = "InitVelocity", track = "ParticleTrack::Speed", default)]
+    /// Initial velocity.
     pub initial_velocity: f32,
     #[mdl(tracks, channels(Visibility = "ParticleTrack::Visibility"))]
+    /// Animation tracks.
     pub tracks: Vec<ParticleTrack>,
 }
 

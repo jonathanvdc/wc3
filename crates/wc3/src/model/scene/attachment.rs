@@ -22,10 +22,14 @@ const PATH_SIZE: usize = 256;
 /// matching node bits and a zero reserved word.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Attachment {
+    /// Shared node.
     pub node: Node,
+    /// Fixed-width path preserving every stored byte.
     pub path: FixedText<PATH_SIZE>,
     pub reserved: u32,
+    /// Attachment ID.
     pub id: u32,
+    /// Optional visibility track.
     pub visibility_track: Option<AnimationTrack<AttachmentVisibility>>,
 }
 

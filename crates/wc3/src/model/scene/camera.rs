@@ -113,20 +113,28 @@ impl CameraLayout for V1800 {
 )]
 pub struct Camera<V: ModelVersion> {
     #[mdl(header)]
+    /// Fixed-width name preserving every stored byte.
     pub name: FixedText<NAME_SIZE>,
     #[mdl(skip, default = "Self::mdl_variant")]
+    /// Record layout variant and any associated bytes.
     pub variant: CameraVariant,
     #[mdl(property = "Position", default)]
+    /// Camera XYZ position.
     pub position: Vec3,
     #[mdl(property = "FieldOfView")]
+    /// Field of view.
     pub field_of_view: f32,
     #[mdl(property = "FarClip")]
+    /// Far clipping distance.
     pub far_clip: f32,
     #[mdl(property = "NearClip", default)]
+    /// Near clipping distance.
     pub near_clip: f32,
     #[mdl(skip, default)]
+    /// Target XYZ position.
     pub target_position: Vec3,
     #[mdl(skip, default)]
+    /// Camera tracks without reparsing.
     pub tracks: Vec<CameraTrack>,
     #[mdl(skip, default)]
     version: PhantomData<V>,

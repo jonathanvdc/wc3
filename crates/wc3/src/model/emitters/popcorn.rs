@@ -47,32 +47,42 @@ pub struct PopcornEmitter {
             PopcornScaling = 262144
         )
     )]
+    /// Shared node.
     pub node: Node,
     #[mdl(
         animatable = "LifeSpan",
         track = "PopcornTrack::Lifespan",
         default = "one"
     )]
+    /// Particle lifetime.
     pub life_span: f32,
     #[mdl(
         animatable = "EmissionRate",
         track = "PopcornTrack::EmissionRate",
         default = "one"
     )]
+    /// Emission rate.
     pub emission_rate: f32,
     #[mdl(animatable = "Speed", track = "PopcornTrack::Speed", default = "one")]
+    /// Particle speed.
     pub speed: f32,
     #[mdl(animatable = "Color", track = "PopcornTrack::Color", default = "white")]
+    /// RGB particle color.
     pub color: Color,
     #[mdl(animatable = "Alpha", track = "PopcornTrack::Alpha", default = "one")]
+    /// Base alpha.
     pub alpha: f32,
     #[mdl(property = "ReplaceableId", default, skip_if = "is_zero")]
+    /// Replaceable texture ID.
     pub replaceable_id: u32,
     #[mdl(property = "Path", default)]
+    /// Fixed-width path preserving every stored byte.
     pub path: FixedText<PATH_SIZE>,
     #[mdl(property = "AnimVisibilityGuide", default)]
+    /// Fixed-width visibility guide preserving every stored byte.
     pub visibility_guide: FixedText<PATH_SIZE>,
     #[mdl(tracks, channels(Visibility = "PopcornTrack::Visibility"))]
+    /// Animation tracks.
     pub tracks: Vec<PopcornTrack>,
 }
 

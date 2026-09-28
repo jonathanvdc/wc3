@@ -20,8 +20,11 @@ const TRACK_TAG: Tag = *b"KEVT";
 /// node bits. Event frame counts exclude the optional GlobalSeqId metadata.
 #[derive(Clone, Debug, PartialEq)]
 pub struct EventObject {
+    /// Its shared node.
     pub node: Node,
+    /// Global sequence ID, or `u32::MAX` when absent.
     pub global_sequence_id: u32,
+    /// Signed event frame times in source order (including animation lead-in).
     pub frames: Vec<i32>,
 }
 

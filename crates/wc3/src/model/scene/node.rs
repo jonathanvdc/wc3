@@ -85,14 +85,17 @@ bitfield! {
 #[mdl(fields)]
 pub struct Node {
     #[mdl(header)]
+    /// Fixed-width name preserving every stored byte.
     pub name: FixedText<NAME_SIZE>,
     #[mdl(property = "ObjectId")]
+    /// Object ID.
     pub object_id: u32,
     #[mdl(
         property = "Parent",
         default = "no_reference",
         skip_if = "is_no_reference"
     )]
+    /// Parent ID, or `u32::MAX` for no parent.
     pub parent_id: u32,
     #[mdl(
         flags(
@@ -107,8 +110,10 @@ pub struct Node {
         ),
         allow_bits = 0x1fff00
     )]
+    /// Node flags.
     pub flags: NodeFlags,
     #[mdl(repeated(Translation, Rotation, Scaling), unique_by = "NodeTrack::tag")]
+    /// Transform tracks without reparsing.
     pub tracks: Vec<NodeTrack>,
 }
 
@@ -124,6 +129,7 @@ pub struct Node {
 )]
 pub struct Bone {
     #[mdl(flatten)]
+    /// Shared node.
     pub node: Node,
     #[mdl(
         property = "GeosetId",
@@ -131,6 +137,7 @@ pub struct Bone {
         read_with = "read_geoset",
         write_with = "write_geoset"
     )]
+    /// Geoset reference.
     pub geoset_id: u32,
     #[mdl(
         property = "GeosetAnimId",
@@ -138,6 +145,7 @@ pub struct Bone {
         read_with = "read_geoset_animation",
         write_with = "write_geoset_animation"
     )]
+    /// Geoset animation reference.
     pub geoset_animation_id: u32,
 }
 

@@ -29,6 +29,7 @@ pub struct TextureAnimation {
             Scaling = "TextureAnimationTrack::Scaling"
         )
     )]
+    /// Tracks without reparsing.
     pub tracks: Vec<TextureAnimationTrack>,
 }
 

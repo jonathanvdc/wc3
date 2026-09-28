@@ -97,6 +97,7 @@ pub struct ParticleEmitter2 {
             XYQuad = 1048576
         )
     )]
+    /// Embedded node.
     pub node: Node,
     #[mdl(animatable = "Speed", track = "Particle2Track::Speed", default)]
     pub speed: f32,
@@ -126,6 +127,7 @@ pub struct ParticleEmitter2 {
     pub columns: u32,
     /// Which particle parts are rendered.
     #[mdl(skip, default)]
+    /// Frame mode, including unnamed binary values.
     pub frames: Particle2Frames,
     #[mdl(property = "TailLength", default)]
     pub tail_length: f32,
@@ -149,6 +151,7 @@ pub struct ParticleEmitter2 {
     #[mdl(property = "ReplaceableId", default, skip_if = "is_zero")]
     pub replaceable_id: u32,
     #[mdl(tracks, channels(Visibility = "Particle2Track::Visibility"))]
+    /// Optional animation tracks.
     pub tracks: Vec<Particle2Track>,
 }
 

@@ -34,6 +34,7 @@ use crate::model::{Model, Node};
 )]
 pub struct RibbonEmitter {
     #[mdl(flatten)]
+    /// Embedded node.
     pub node: Node,
     #[mdl(
         animatable = "HeightAbove",
@@ -71,6 +72,7 @@ pub struct RibbonEmitter {
     #[mdl(property = "Gravity", default, skip_if = "zero_gravity")]
     pub gravity: f32,
     #[mdl(tracks, channels(Visibility = "RibbonTrack::Visibility"))]
+    /// Ribbon animation tracks.
     pub tracks: Vec<RibbonTrack>,
 }
 

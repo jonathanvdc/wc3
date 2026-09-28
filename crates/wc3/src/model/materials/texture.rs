@@ -30,10 +30,13 @@ const PATH_SIZE: usize = 260;
 #[mdl(block = "Bitmap", write_order(path, replaceable_id, flags))]
 pub struct Texture {
     #[mdl(property = "ReplaceableId", default, skip_if = "is_zero")]
+    /// Replaceable texture ID.
     pub replaceable_id: u32,
     #[mdl(property = "Image", default)]
+    /// Fixed-width path preserving every stored byte.
     pub path: FixedText<PATH_SIZE>,
     #[mdl(flags(WrapWidth = 1, WrapHeight = 2))]
+    /// Texture wrapping flags.
     pub flags: TextureFlags,
 }
 

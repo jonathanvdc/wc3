@@ -38,9 +38,12 @@ bitfield! {
 #[derive(Clone, Debug, PartialEq)]
 pub struct Material<V: ModelVersion> {
     version: PhantomData<V>,
+    /// Material priority plane.
     pub priority_plane: i32,
+    /// Rendering flags.
     pub render_mode: MaterialRenderFlags,
     shader: V::Shader,
+    /// Layers without decoding or allocating.
     pub layers: Vec<Layer<V>>,
 }
 

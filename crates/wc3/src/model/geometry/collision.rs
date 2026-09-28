@@ -20,6 +20,7 @@ use crate::model::{Model, Node, ReadError};
 /// Cylinder two. Only Sphere and Cylinder have a BoundsRadius property.
 #[derive(Clone, Debug, PartialEq, mdx::Read, mdx::Write)]
 pub struct CollisionShape {
+    /// Attached node.
     pub node: Node,
     pub geometry: CollisionGeometry,
 }

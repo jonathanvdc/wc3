@@ -16,8 +16,10 @@ const PATH_SIZE: usize = 260;
 #[mdl(block = "FaceFX")]
 pub struct FaceFx {
     #[mdl(header)]
+    /// Fixed-width name preserving every stored byte.
     pub name: FixedText<NAME_SIZE>,
     #[mdl(property = "Path", default)]
+    /// Fixed-width path preserving every stored byte.
     pub path: FixedText<PATH_SIZE>,
 }
 

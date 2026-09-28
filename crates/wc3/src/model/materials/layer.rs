@@ -198,18 +198,23 @@ pub struct Layer<V: ModelVersion> {
     #[mdl(skip, default)]
     version: PhantomData<V>,
     #[mdl(property = "FilterMode", default)]
+    /// Blend filter mode.
     pub filter_mode: LayerFilterMode,
     #[mdl(skip, default)]
+    /// Layer shading bits.
     pub shading_flags: LayerShadingFlags,
     #[mdl(skip, default)]
+    /// Base texture index.
     pub texture_id: u32,
     #[mdl(
         property = "TVertexAnimId",
         default = "no_reference",
         skip_if = "is_no_reference"
     )]
+    /// Texture animation reference.
     pub texture_animation_id: u32,
     #[mdl(property = "CoordId", default, skip_if = "zero_id")]
+    /// Texture coordinate set index.
     pub coordinate_id: u32,
     #[mdl(
         animatable = "Alpha",
@@ -217,6 +222,7 @@ pub struct Layer<V: ModelVersion> {
         default = "one",
         skip_if = "full"
     )]
+    /// Base alpha value.
     pub alpha: f32,
     #[mdl(skip, default)]
     emissive_gain: V::EmissiveGain,
@@ -227,6 +233,7 @@ pub struct Layer<V: ModelVersion> {
     #[mdl(skip, default)]
     texture_slots: V::TextureSlots,
     #[mdl(skip, default)]
+    /// Layer animation tracks after any texture slots.
     pub tracks: Vec<LayerTrack>,
 }
 

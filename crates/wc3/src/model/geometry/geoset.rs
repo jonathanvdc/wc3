@@ -255,16 +255,20 @@ pub struct Geoset<V: ModelVersion> {
     #[mdl(skip, default)]
     matrix_indices: Vec<u32>,
     #[mdl(property = "MaterialID", default)]
+    /// Referenced material index.
     pub material_id: u32,
     #[mdl(property = "SelectionGroup", default)]
+    /// Selection group index.
     pub selection_group: u32,
     #[mdl(skip, default)]
     unselectable_raw: u32,
     #[mdl(skip, default)]
     level_of_detail: V::LevelOfDetail,
     #[mdl(flatten)]
+    /// Overall geoset bounds.
     pub extent: GeosetExtent,
     #[mdl(skip, default)]
+    /// Per-sequence bounding volumes.
     pub sequence_extents: Vec<GeosetExtent>,
     #[mdl(skip, default)]
     extra_sections: V::ExtraSections,
