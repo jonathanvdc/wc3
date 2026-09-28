@@ -1,6 +1,6 @@
-//! Derived layer syntax with a focused adapter for slot-qualified textures.
+//! MDL accessors and slot-qualified texture bindings.
 use super::{
-    EmissiveGainField, FresnelField, Layer, LayerFresnel, LayerShaderTypeField, LayerTextureSlot,
+    EmissiveGainField, FresnelField, Layer, LayerShaderTypeField, LayerTextureSlot,
     LayerTextureSlotsField, LayerTrack, ShaderType,
 };
 use crate::model::mdl::{
@@ -9,7 +9,6 @@ use crate::model::mdl::{
 use crate::model::{mdl, FixedText};
 use crate::model::{AnimationTrack, Color, LayerTextureId, ModelVersion};
 use std::io::Write as IoWrite;
-use std::marker::PhantomData;
 
 #[derive(Clone, Copy, mdl::Read, mdl::Write)]
 #[mdl(value)]
@@ -22,10 +21,13 @@ enum FilterMode {
     Modulate,
     Modulate2x,
 }
-fn read_filter(parser: &mut Parser<'_>) -> Result<u32, mdl::ReadError> {
+pub(super) fn read_filter(parser: &mut Parser<'_>) -> Result<u32, mdl::ReadError> {
     Ok(parser.read::<FilterMode>()? as u32)
 }
-fn write_filter<W: IoWrite>(value: &u32, writer: &mut MdlWriter<W>) -> Result<(), mdl::WriteError> {
+pub(super) fn write_filter<W: IoWrite>(
+    value: &u32,
+    writer: &mut MdlWriter<W>,
+) -> Result<(), mdl::WriteError> {
     let mode = match value {
         0 => FilterMode::None,
         1 => FilterMode::Transparent,
@@ -38,145 +40,33 @@ fn write_filter<W: IoWrite>(value: &u32, writer: &mut MdlWriter<W>) -> Result<()
     };
     writer.write(&mode)
 }
-fn one() -> f32 {
+pub(super) fn one() -> f32 {
     1.0
 }
-fn white() -> Color {
+pub(super) fn white() -> Color {
     [1.0; 3]
 }
-fn is_no_reference(value: &u32) -> bool {
+pub(super) fn is_no_reference(value: &u32) -> bool {
     *value == u32::MAX
 }
-fn zero_id(value: &u32) -> bool {
+pub(super) fn zero_id(value: &u32) -> bool {
     *value == 0
 }
-fn full(value: &f32) -> bool {
+pub(super) fn full(value: &f32) -> bool {
     value.to_bits() == 1.0f32.to_bits()
 }
-fn zero(value: &f32) -> bool {
+pub(super) fn zero(value: &f32) -> bool {
     value.to_bits() == 0
 }
-fn is_white(value: &Color) -> bool {
+pub(super) fn is_white(value: &Color) -> bool {
     value.iter().all(full)
 }
-fn no_reference() -> u32 {
+pub(super) fn no_reference() -> u32 {
     u32::MAX
 }
 
-#[derive(mdl::Read, mdl::Write)]
-#[mdl(block = "Layer", validate_read = "Self::validate_read")]
-struct LayerMdl<V: ModelVersion> {
-    #[mdl(skip, default)]
-    version: PhantomData<V>,
-    #[mdl(
-        property = "FilterMode",
-        default,
-        read_with = "read_filter",
-        write_with = "write_filter"
-    )]
-    filter: u32,
-    #[mdl(flags(
-        Unshaded = 1,
-        SphereEnvMap = 2,
-        WrapWidth = 4,
-        WrapHeight = 8,
-        TwoSided = 16,
-        Unfogged = 32,
-        NoDepthTest = 64,
-        NoDepthSet = 128,
-        Unlit = 256,
-        BackFacesForShadows = 512,
-        AmbientOcclusion = 1024
-    ))]
-    flags: u32,
-    #[mdl(property = "Shader", delegate)]
-    shader: Option<FixedText<80>>,
-    #[mdl(flatten)]
-    textures: TextureBindings,
-    #[mdl(
-        property = "TVertexAnimId",
-        default = "no_reference",
-        skip_if = "is_no_reference"
-    )]
-    texture_animation: u32,
-    #[mdl(property = "CoordId", default, skip_if = "zero_id")]
-    coordinate: u32,
-    #[mdl(
-        animatable = "Alpha",
-        track = "LayerTrack::Alpha",
-        default = "one",
-        skip_if = "full"
-    )]
-    alpha: f32,
-    #[mdl(
-        animatable = "EmissiveGain",
-        track = "LayerTrack::EmissiveGain",
-        default = "one",
-        skip_if = "full",
-        enabled_if = "Self::has_emissive",
-        enable_with = "Self::mark_emissive"
-    )]
-    emissive: f32,
-    #[mdl(
-        animatable = "FresnelColor",
-        track = "LayerTrack::FresnelColor",
-        default = "white",
-        skip_if = "is_white",
-        enabled_if = "Self::has_fresnel",
-        enable_with = "Self::mark_fresnel"
-    )]
-    color: Color,
-    #[mdl(
-        animatable = "FresnelOpacity",
-        track = "LayerTrack::FresnelOpacity",
-        default,
-        skip_if = "zero",
-        enabled_if = "Self::has_fresnel",
-        enable_with = "Self::mark_fresnel"
-    )]
-    opacity: f32,
-    #[mdl(
-        animatable = "FresnelTeamColor",
-        track = "LayerTrack::FresnelTeamColor",
-        default,
-        skip_if = "zero",
-        enabled_if = "Self::has_fresnel",
-        enable_with = "Self::mark_fresnel"
-    )]
-    team_color: f32,
-    #[mdl(tracks)]
-    tracks: Vec<LayerTrack>,
-    #[mdl(skip, default)]
-    emissive_present: bool,
-    #[mdl(skip, default)]
-    fresnel_present: bool,
-}
-impl<V: ModelVersion> LayerMdl<V> {
-    fn has_emissive(&self) -> bool {
-        V::EmissiveGain::default().emissive_gain().is_some()
-    }
-    fn has_fresnel(&self) -> bool {
-        V::Fresnel::default().fresnel().is_some()
-    }
-    fn mark_emissive(&mut self) {
-        self.emissive_present = true;
-    }
-    fn mark_fresnel(&mut self) {
-        self.fresnel_present = true;
-    }
-    fn validate_read(&self, span: Span) -> Result<(), mdl::ReadError> {
-        if (self.emissive_present && !self.has_emissive())
-            || (self.fresnel_present && !self.has_fresnel())
-            || (self.shader.is_some() && V::ShaderType::default().shader_type().is_none())
-        {
-            return Err(mdl::ReadError::new(span, ReadErrorKind::UnsupportedField));
-        }
-        Ok(())
-    }
-}
-
 #[derive(Default)]
-struct TextureBindings {
+pub(super) struct TextureBindings {
     slots: Vec<LayerTextureSlot>,
 }
 impl ReadFields for TextureBindings {
@@ -252,21 +142,7 @@ impl WriteFields for TextureBindings {
         visitor("TextureID", true);
     }
     fn prepare_mdl_fields(&self) -> Result<(), mdl::WriteError> {
-        for (index, slot) in self.slots.iter().enumerate() {
-            if slot.texture_type > 5
-                || self.slots[..index]
-                    .iter()
-                    .any(|old| old.texture_type == slot.texture_type)
-            {
-                return Err(mdl::WriteError::Unsupported("texture slot"));
-            }
-            if slot.track.is_some() && (slot.texture_type != 0 || slot.texture_id != 0) {
-                return Err(mdl::WriteError::Unsupported(
-                    "non-diffuse texture animation or hidden texture base",
-                ));
-            }
-        }
-        Ok(())
+        validate_slots(&self.slots)
     }
     fn write_mdl_headers<W: IoWrite>(&self, _: &mut MdlWriter<W>) -> Result<(), mdl::WriteError> {
         Ok(())
@@ -277,87 +153,152 @@ impl WriteFields for TextureBindings {
         writer: &mut MdlWriter<W>,
     ) -> Result<(), mdl::WriteError> {
         self.prepare_mdl_fields()?;
-        for slot in &self.slots {
-            if let Some(track) = &slot.track {
-                writer.write(track)?;
-            } else {
-                writer.indent()?;
-                writer.raw("static TextureID ")?;
-                writer.write(&slot.texture_id)?;
-                writer.raw(" <= ")?;
-                writer.write(&slot.texture_type)?;
-                writer.raw(",\n")?;
+        write_slots(&self.slots, writer)
+    }
+}
+
+// The MDL texture grammar selects storage using the shader, so its writer borrows
+// a view of the whole layer instead of constructing an owned texture-slot list.
+pub(super) struct TextureBindingsView<'a, V: ModelVersion>(&'a Layer<V>);
+impl<V: ModelVersion> WriteFields for TextureBindingsView<'_, V> {
+    type State = ();
+    fn visit_mdl_names(visitor: &mut dyn FnMut(&'static str, bool)) {
+        <TextureBindings as WriteFields>::visit_mdl_names(visitor);
+    }
+    fn prepare_mdl_fields(&self) -> Result<(), mdl::WriteError> {
+        if self.0.mdl_hd() {
+            validate_slots(self.0.texture_slots.texture_slots().unwrap_or_default())
+        } else {
+            if self.0.mdl_texture_track().is_some() && self.0.texture_id != 0 {
+                return Err(mdl::WriteError::Unsupported("hidden texture base"));
+            }
+            Ok(())
+        }
+    }
+    fn write_mdl_headers<W: IoWrite>(&self, _: &mut MdlWriter<W>) -> Result<(), mdl::WriteError> {
+        Ok(())
+    }
+    fn write_mdl_fields<W: IoWrite>(
+        &self,
+        _: (),
+        writer: &mut MdlWriter<W>,
+    ) -> Result<(), mdl::WriteError> {
+        self.prepare_mdl_fields()?;
+        if self.0.mdl_hd() {
+            write_slots(
+                self.0.texture_slots.texture_slots().unwrap_or_default(),
+                writer,
+            )
+        } else if let Some(track) = self.0.mdl_texture_track() {
+            writer.write(track)
+        } else {
+            write_texture_id(self.0.texture_id, 0, writer)
+        }
+    }
+}
+impl<V: ModelVersion> Layer<V> {
+    fn mdl_hd(&self) -> bool {
+        self.shader_type
+            .shader_type()
+            .is_some_and(|shader| matches!(shader.id(), 1 | 24))
+    }
+    fn mdl_texture_track(&self) -> Option<&AnimationTrack<LayerTextureId>> {
+        match self.tracks.first() {
+            Some(LayerTrack::TextureId(track)) => Some(track),
+            _ => None,
+        }
+    }
+    pub(super) fn mdl_shader(&self) -> Option<FixedText<80>> {
+        self.shader_type.shader_type().map(|shader| {
+            let mut text = FixedText::default();
+            text.set_text(shader.name().expect("validated shader type"))
+                .expect("shader names fit");
+            text
+        })
+    }
+    pub(super) fn set_mdl_shader(
+        &mut self,
+        value: Option<FixedText<80>>,
+        _: bool,
+        span: Span,
+    ) -> Result<(), mdl::ReadError> {
+        if let Some(value) = value {
+            let shader = ShaderType::from_name(&value.text())
+                .ok_or_else(|| mdl::ReadError::new(span, ReadErrorKind::UnsupportedField))?;
+            let target = self
+                .shader_type
+                .shader_type_mut()
+                .ok_or_else(|| mdl::ReadError::new(span, ReadErrorKind::UnsupportedField))?;
+            *target = shader;
+        }
+        Ok(())
+    }
+    pub(super) fn mdl_textures(&self) -> TextureBindingsView<'_, V> {
+        TextureBindingsView(self)
+    }
+    pub(super) fn set_mdl_textures(
+        &mut self,
+        value: TextureBindings,
+        _: bool,
+        span: Span,
+    ) -> Result<(), mdl::ReadError> {
+        if self.mdl_hd() {
+            *self
+                .texture_slots
+                .texture_slots_mut()
+                .ok_or_else(|| mdl::ReadError::new(span, ReadErrorKind::UnsupportedField))? =
+                value.slots;
+        } else {
+            for slot in value.slots {
+                if slot.texture_type != 0 {
+                    return Err(mdl::ReadError::new(span, ReadErrorKind::UnsupportedField));
+                }
+                self.texture_id = slot.texture_id;
+                if let Some(track) = slot.track {
+                    self.tracks.push(LayerTrack::TextureId(track));
+                }
             }
         }
         Ok(())
     }
-}
-
-impl<V: ModelVersion> mdl::Read for Layer<V> {
-    fn read_mdl(parser: &mut Parser<'_>) -> Result<Self, mdl::ReadError> {
-        let start = parser.peek()?.map_or(0, |token| token.span.start);
-        let value = parser.read::<LayerMdl<V>>()?;
-        let error =
-            || mdl::ReadError::new(Span::new(start, start), ReadErrorKind::UnsupportedField);
-        let mut layer = Self::new();
-        layer.filter_mode = value.filter;
-        layer.shading_flags = value.flags;
-        layer.texture_animation_id = value.texture_animation;
-        layer.coordinate_id = value.coordinate;
-        layer.alpha = value.alpha;
-        if let Some(gain) = layer.emissive_gain.emissive_gain_mut() {
-            *gain = value.emissive;
-        }
-        if let Some(fresnel) = layer.fresnel.fresnel_mut() {
-            *fresnel = LayerFresnel {
-                color: value.color,
-                opacity: value.opacity,
-                team_color: value.team_color,
-            };
-        }
-        if let Some(shader) = value.shader {
-            let shader = ShaderType::from_name(&shader.text()).ok_or_else(error)?;
-            *layer.shader_type.shader_type_mut().ok_or_else(error)? = shader;
-        }
-        layer.tracks = value.tracks;
-        let hd = layer
-            .shader_type
-            .shader_type()
-            .is_some_and(|shader| matches!(shader.id(), 1 | 24));
-        if hd {
-            *layer.texture_slots.texture_slots_mut().ok_or_else(error)? = value.textures.slots;
+    pub(super) fn mdl_tracks(&self) -> &[LayerTrack] {
+        if self.mdl_texture_track().is_some() {
+            &self.tracks[1..]
         } else {
-            for slot in value.textures.slots {
-                if slot.texture_type != 0 {
-                    return Err(error());
-                }
-                layer.texture_id = slot.texture_id;
-                if let Some(track) = slot.track {
-                    layer.tracks.insert(0, LayerTrack::TextureId(track));
-                }
-            }
+            &self.tracks
         }
-        Ok(layer)
     }
-}
-impl<V: ModelVersion> mdl::Write for Layer<V> {
-    fn write_mdl<W: IoWrite>(&self, writer: &mut MdlWriter<W>) -> Result<(), mdl::WriteError> {
+    pub(super) fn set_mdl_tracks(
+        &mut self,
+        tracks: Vec<LayerTrack>,
+        _: bool,
+        _: Span,
+    ) -> Result<(), mdl::ReadError> {
+        self.tracks.extend(tracks);
+        Ok(())
+    }
+    pub(super) fn validate_mdl(&self) -> Result<(), mdl::WriteError> {
         if self.filter_mode > 6 {
             return Err(mdl::WriteError::Unsupported("filter mode"));
         }
-        let shader = self.shader_type.shader_type();
-        let hd = shader.is_some_and(|shader| matches!(shader.id(), 1 | 24));
-        let mut textures = TextureBindings::default();
-        let mut tracks = Vec::new();
-        if hd {
+        if self
+            .shader_type
+            .shader_type()
+            .is_some_and(|shader| shader.name().is_none())
+        {
+            return Err(mdl::WriteError::Unsupported("shader type"));
+        }
+        if self.mdl_hd() {
             if self.texture_id != 0 {
                 return Err(mdl::WriteError::Unsupported("HD legacy texture ID"));
             }
-            textures.slots = self
-                .texture_slots
-                .texture_slots()
-                .unwrap_or_default()
-                .to_vec();
+            if self
+                .tracks
+                .iter()
+                .any(|track| matches!(track, LayerTrack::TextureId(_)))
+            {
+                return Err(mdl::WriteError::Unsupported("texture animation storage"));
+            }
         } else {
             if self
                 .texture_slots
@@ -366,54 +307,85 @@ impl<V: ModelVersion> mdl::Write for Layer<V> {
             {
                 return Err(mdl::WriteError::Unsupported("SD texture slot storage"));
             }
-            textures.slots.push(LayerTextureSlot {
-                texture_id: self.texture_id,
-                texture_type: 0,
-                track: None,
-            });
-        }
-        for (index, track) in self.tracks.iter().enumerate() {
-            if let LayerTrack::TextureId(track) = track {
-                if index != 0 {
-                    return Err(mdl::WriteError::Unsupported(
-                        "noncanonical texture-track order",
-                    ));
-                }
-                if hd || textures.slots[0].track.is_some() {
-                    return Err(mdl::WriteError::Unsupported("texture animation storage"));
-                }
-                textures.slots[0].track = Some(track.clone());
-            } else {
-                tracks.push(track.clone());
+            if self
+                .tracks
+                .iter()
+                .enumerate()
+                .any(|(index, track)| index != 0 && matches!(track, LayerTrack::TextureId(_)))
+            {
+                return Err(mdl::WriteError::Unsupported(
+                    "noncanonical texture-track order",
+                ));
             }
         }
-        let shader = shader
-            .map(|shader| {
-                let name = shader
-                    .name()
-                    .ok_or(mdl::WriteError::Unsupported("shader type"))?;
-                let mut text = FixedText::default();
-                text.set_text(name).expect("shader registry names fit");
-                Ok::<_, mdl::WriteError>(text)
-            })
-            .transpose()?;
-        let fresnel = self.fresnel.fresnel().unwrap_or_default();
-        writer.write(&LayerMdl::<V> {
-            version: PhantomData,
-            filter: self.filter_mode,
-            flags: self.shading_flags,
-            shader,
-            textures,
-            texture_animation: self.texture_animation_id,
-            coordinate: self.coordinate_id,
-            alpha: self.alpha,
-            emissive: self.emissive_gain.emissive_gain().unwrap_or(1.0),
-            color: fresnel.color,
-            opacity: fresnel.opacity,
-            team_color: fresnel.team_color,
-            tracks,
-            emissive_present: false,
-            fresnel_present: false,
-        })
+        Ok(())
     }
+    pub(super) fn mdl_emissive(&self) -> Option<f32> {
+        self.emissive_gain.emissive_gain()
+    }
+    pub(super) fn mdl_emissive_mut(&mut self) -> Option<&mut f32> {
+        self.emissive_gain.emissive_gain_mut()
+    }
+    pub(super) fn mdl_color(&self) -> Option<Color> {
+        self.fresnel.fresnel().map(|value| value.color)
+    }
+    pub(super) fn mdl_color_mut(&mut self) -> Option<&mut Color> {
+        self.fresnel.fresnel_mut().map(|value| &mut value.color)
+    }
+    pub(super) fn mdl_opacity(&self) -> Option<f32> {
+        self.fresnel.fresnel().map(|value| value.opacity)
+    }
+    pub(super) fn mdl_opacity_mut(&mut self) -> Option<&mut f32> {
+        self.fresnel.fresnel_mut().map(|value| &mut value.opacity)
+    }
+    pub(super) fn mdl_team_color(&self) -> Option<f32> {
+        self.fresnel.fresnel().map(|value| value.team_color)
+    }
+    pub(super) fn mdl_team_color_mut(&mut self) -> Option<&mut f32> {
+        self.fresnel
+            .fresnel_mut()
+            .map(|value| &mut value.team_color)
+    }
+}
+fn validate_slots(slots: &[LayerTextureSlot]) -> Result<(), mdl::WriteError> {
+    for (index, slot) in slots.iter().enumerate() {
+        if slot.texture_type > 5
+            || slots[..index]
+                .iter()
+                .any(|old| old.texture_type == slot.texture_type)
+        {
+            return Err(mdl::WriteError::Unsupported("texture slot"));
+        }
+        if slot.track.is_some() && (slot.texture_type != 0 || slot.texture_id != 0) {
+            return Err(mdl::WriteError::Unsupported(
+                "non-diffuse texture animation or hidden texture base",
+            ));
+        }
+    }
+    Ok(())
+}
+fn write_slots<W: IoWrite>(
+    slots: &[LayerTextureSlot],
+    writer: &mut MdlWriter<W>,
+) -> Result<(), mdl::WriteError> {
+    for slot in slots {
+        if let Some(track) = &slot.track {
+            writer.write(track)?;
+        } else {
+            write_texture_id(slot.texture_id, slot.texture_type, writer)?;
+        }
+    }
+    Ok(())
+}
+fn write_texture_id<W: IoWrite>(
+    id: u32,
+    slot: u32,
+    writer: &mut MdlWriter<W>,
+) -> Result<(), mdl::WriteError> {
+    writer.indent()?;
+    writer.raw("static TextureID ")?;
+    writer.write(&id)?;
+    writer.raw(" <= ")?;
+    writer.write(&slot)?;
+    writer.raw(",\n")
 }

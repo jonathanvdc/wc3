@@ -231,7 +231,83 @@ pub(super) fn parse(input: &DeriveInput, options: &Container) -> Result<Schema> 
             normalized.push(field(source, normalized.len())?);
         }
     }
+    if let Some(virtual_fields) = &options.virtual_fields {
+        for source in virtual_fields {
+            let mut virtual_field = field(source, normalized.len())?;
+            if virtual_field.get.is_none()
+                || virtual_field.set.is_some() == virtual_field.slot.is_some()
+            {
+                return Err(Error::new_spanned(
+                    source,
+                    "virtual fields require get and exactly one of set or slot",
+                ));
+            }
+            if matches!(virtual_field.kind, Kind::Header | Kind::Skip)
+                || virtual_field.extra_flags.is_some()
+            {
+                return Err(Error::new_spanned(
+                    source,
+                    "virtual fields cannot be headers, skipped fields, or extra_flags",
+                ));
+            }
+            if normalized
+                .iter()
+                .any(|field| field.member == virtual_field.member && field.parent.is_none())
+            {
+                return Err(Error::new_spanned(source, "duplicate virtual field member"));
+            }
+            if virtual_field.slot.is_some()
+                && (virtual_field.default.is_none()
+                    || !matches!(
+                        virtual_field.kind,
+                        Kind::Property(_)
+                            | Kind::StaticProperty(_)
+                            | Kind::Animatable(_)
+                            | Kind::Flag(_)
+                    )
+                    || virtual_field.enabled_if.is_some()
+                    || virtual_field.enable_with.is_some())
+            {
+                return Err(Error::new_spanned(source, "slot requires an explicit default and a scalar property, animatable field, or flag without enable hooks"));
+            }
+            virtual_field.virtual_field = true;
+            normalized.push(virtual_field);
+        }
+    }
     let fields = normalized;
+    for field in &fields {
+        if !field.virtual_field && field.enabled_if.is_some() != field.enable_with.is_some() {
+            return Err(Error::new_spanned(
+                &field.member,
+                "enabled_if and enable_with must be supplied together",
+            ));
+        }
+        if !field.virtual_field
+            && (field.get.is_some() || field.set.is_some() || field.slot.is_some())
+        {
+            return Err(Error::new_spanned(
+                &field.member,
+                "get, set, and slot require virtual_fields",
+            ));
+        }
+        if field.virtual_field
+            && options.default
+            && field.default.is_none()
+            && !matches!(
+                field.kind,
+                Kind::Flags(_)
+                    | Kind::Flatten
+                    | Kind::Repeated(_)
+                    | Kind::Tracks
+                    | Kind::DelegatedProperty(_)
+            )
+        {
+            return Err(Error::new_spanned(
+                &field.member,
+                "virtual fields need explicit defaults instead of a container default",
+            ));
+        }
+    }
     for field in &fields {
         let has_default = field.default.is_some() || (options.default && !field.required);
         if matches!(field.kind, Kind::Animatable(_)) && !has_default {

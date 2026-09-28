@@ -196,6 +196,62 @@
 //! Read reconstruction ORs these bits into the flattened value. Use the owning
 //! record's validation hook to check its implicit kind and unrepresentable bits.
 //!
+//! ## Fields accessed through storage hooks
+//!
+//! Container `virtual_fields(...)` describes MDL fields that do not correspond
+//! to Rust members. These use the same properties, flags, tracks and structural
+//! codecs as stored fields, and are listed individually in `write_order`.
+//! Every real Rust member still needs its own MDL annotation; mark storage
+//! reconstructed by the hooks as `skip` with a default.
+//!
+//! Each virtual field needs `get = "function"` and either `slot = "function"`
+//! or `set = "function"`. A slot getter has signature `fn(&Self) -> Option<T>`;
+//! its slot hook returns `Option<&mut T>`. Both select the same version-specific
+//! storage. An explicit field default is required. Missing storage omits the
+//! property when writing, and any explicit scalar or animated presence rejects
+//! reading with UnsupportedField. Writers also reject tracks for unavailable
+//! storage and hidden nondefault bases. The derive supplies all these checks.
+//!
+//! A custom setter has signature `fn(&mut Self, T, bool, Span) -> Result<(),
+//! ReadError>`. The boolean distinguishes explicit presence from defaults,
+//! including empty blocks or tracks and explicit default-valued properties.
+//! The span covers the entire record. Its getter supplies the write value;
+//! collection getters may return borrowed slices. Structural getters may return
+//! a borrowed view implementing WriteFields with the same State type as the
+//! declared read type. Getters must be stable for an unchanged record.
+//!
+//! Reading first reconstructs every real member, then applies virtual hooks
+//! in their metadata order, then runs presence hooks, after_read and validation.
+//! Input field order does not change hook order. Custom hooks enforce any
+//! mapping-specific checks; they can use earlier hooks' reconstructed storage.
+//! Virtual scalar fields use explicit defaults rather than container defaults;
+//! virtual packed flags start at zero. Headers and skipped fields cannot be
+//! virtual. Light and Layer derive directly using these accessors, so writing
+//! borrows existing animation tracks and texture slots without cloning them.
+//!
+//! ```
+//! use wc3::model::mdl;
+//! use wc3::model::mdl::{Read as _, Write as _};
+//! #[derive(mdl::Read, mdl::Write)]
+//! #[mdl(block = "Example", virtual_fields(
+//!     #[mdl(property = "Value", default, get = "Self::value", slot = "Self::value_mut")]
+//!     value: u32,
+//! ))]
+//! struct Example {
+//!     #[mdl(skip, default = "Self::initial_storage")]
+//!     storage: Option<u32>,
+//! }
+//! impl Example {
+//!     fn initial_storage() -> Option<u32> { Some(0) }
+//!     fn value(&self) -> Option<u32> { self.storage }
+//!     fn value_mut(&mut self) -> Option<&mut u32> { self.storage.as_mut() }
+//! }
+//! let value = Example::decode_mdl("Example { Value 7, }")?;
+//! assert_eq!(value.storage, Some(7));
+//! assert_eq!(Example::decode_mdl(&value.encode_mdl()?)?.storage, Some(7));
+//! # Ok::<(), Box<dyn std::error::Error>>(())
+//! ```
+//!
 //! ## Flattened fields, nested blocks, and collections
 //!
 //! `#[mdl(fields)]` derives `ReadFields`/`WriteFields` for a named-field group

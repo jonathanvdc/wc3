@@ -641,3 +641,91 @@ fn projected_defaults_come_from_nested_storage() {
     let value = ProjectedDefaults::decode_mdl("ProjectedDefaults { Count 8, }").unwrap();
     assert!(value.encode_mdl().unwrap().contains("Count 8,"));
 }
+
+#[derive(Debug, PartialEq, mdl::Read, mdl::Write)]
+#[mdl(block = "VersionedView", write_order(alpha, channels), virtual_fields(
+    #[mdl(animatable = "Alpha", track = "GeosetTrack::Alpha", default, bare_static,
+        get = "Self::alpha", slot = "Self::alpha_mut")]
+    alpha: f32,
+    #[mdl(tracks, channels(Color = "GeosetTrack::Color"),
+        get = "Self::channels", set = "Self::set_channels")]
+    channels: Vec<GeosetTrack>,
+))]
+struct VersionedView<const ENABLED: bool> {
+    #[mdl(skip, default = "Self::initial_storage")]
+    storage: Option<f32>,
+    #[mdl(skip, default)]
+    tracks: Vec<GeosetTrack>,
+    #[mdl(skip, default)]
+    tracks_present: bool,
+}
+impl<const ENABLED: bool> VersionedView<ENABLED> {
+    fn initial_storage() -> Option<f32> {
+        ENABLED.then_some(0.0)
+    }
+    fn alpha(&self) -> Option<f32> {
+        self.storage
+    }
+    fn alpha_mut(&mut self) -> Option<&mut f32> {
+        self.storage.as_mut()
+    }
+    fn channels(&self) -> &[GeosetTrack] {
+        &self.tracks
+    }
+    fn set_channels(
+        &mut self,
+        tracks: Vec<GeosetTrack>,
+        present: bool,
+        _: mdl::Span,
+    ) -> Result<(), mdl::ReadError> {
+        self.tracks = tracks;
+        self.tracks_present = present;
+        Ok(())
+    }
+}
+#[test]
+fn virtual_slots_check_versions_presence_defaults_and_hidden_bases() {
+    let absent = VersionedView::<false>::decode_mdl("VersionedView {}").unwrap();
+    assert!(absent.storage.is_none());
+    assert!(!absent.tracks_present);
+    assert_eq!(absent.encode_mdl().unwrap(), "VersionedView {\n}\n");
+    for body in ["static Alpha 0.0,", "Alpha 0.0,", "Alpha 0 { Linear, }"] {
+        let source = format!("VersionedView {{ {body} }}");
+        assert_eq!(
+            VersionedView::<false>::decode_mdl(&source)
+                .unwrap_err()
+                .kind,
+            mdl::ReadErrorKind::UnsupportedField
+        );
+        let value = VersionedView::<true>::decode_mdl(&source).unwrap();
+        assert_eq!(value.storage, Some(0.0));
+        assert_eq!(value.tracks_present, !value.tracks.is_empty());
+        assert_eq!(
+            VersionedView::<true>::decode_mdl(&value.encode_mdl().unwrap()).unwrap(),
+            value
+        );
+    }
+    let scalar = VersionedView::<true>::decode_mdl("VersionedView { static Alpha -0.0, }").unwrap();
+    assert_eq!(scalar.storage.unwrap().to_bits(), (-0.0f32).to_bits());
+    assert!(scalar.encode_mdl().unwrap().contains("static Alpha -0.0,"));
+    let mut animated = VersionedView::<true>::decode_mdl(
+        "VersionedView { Color 0 { Linear, } Alpha 0 { Linear, } }",
+    )
+    .unwrap();
+    assert!(animated.tracks_present);
+    let text = animated.encode_mdl().unwrap();
+    assert!(text.find("Color").unwrap() < text.find("Alpha").unwrap());
+    animated.storage = Some(2.0);
+    assert!(animated.encode_mdl().is_err());
+    let mut unavailable = VersionedView::<false>::decode_mdl("VersionedView {}").unwrap();
+    unavailable.tracks = animated.tracks;
+    assert!(unavailable.encode_mdl().is_err());
+    assert_eq!(
+        VersionedView::<true>::decode_mdl(
+            "VersionedView { Alpha 0 { Linear, } static Alpha 0.0, }"
+        )
+        .unwrap_err()
+        .kind,
+        mdl::ReadErrorKind::DuplicateField
+    );
+}

@@ -1,10 +1,11 @@
 //! Light records in `LITE` chunks.
 use crate::model::conversion::ConversionContext;
-use crate::model::mdx;
 use crate::model::ConversionError;
+use crate::model::{mdl, mdx};
 use crate::model::{
     ModelVersion, SupportsLightFalloff, SupportsLightShadowCasting, SupportsLightShadowIntensity,
 };
+use mdl_codec::{damping, is_zero, quadratic, white, zero};
 use std::fmt::Debug;
 crate::model::animation::track_group! {
     pub enum LightTrack {
@@ -237,22 +238,111 @@ light_layout!(
 /// MDL reading reconstructs the light object-kind bit; writing requires matching
 /// node bits and representable base values. ShadowIntensity has only a verified
 /// static binary field, so its animated MDL form is unsupported.
-#[derive(Clone, Debug, PartialEq, mdx::Read, mdx::Write)]
+#[derive(Clone, Debug, PartialEq, mdx::Read, mdx::Write, mdl::Read, mdl::Write)]
 #[mdx(sized(tag = LightsChunk::<V>::TAG))]
+#[mdl(block = "Light", after_read = "Self::finish_mdl", validate_write = "Self::validate_mdl",
+    write_order(node, kind, attenuation_start, attenuation_end, color, intensity,
+        ambient_color, ambient_intensity, shadow_value, casting, shadow_start,
+        shadow_end, quadratic, linear, damping, tracks),
+    virtual_fields(
+        #[mdl(flags(Omnidirectional = 1, Directional = 2, Ambient = 4))]
+        #[mdl(get = "Self::mdl_kind", set = "Self::set_mdl_kind")]
+        kind: u32,
+        #[mdl(flag = "ShadowCasting", default)]
+        #[mdl(get = "Self::mdl_casting", set = "Self::set_mdl_casting")]
+        casting: bool,
+        #[mdl(
+            static_property = "ShadowIntensity",
+            default,
+            skip_if = "is_zero"
+        )]
+        #[mdl(get = "Self::mdl_shadow_intensity", slot = "Self::mdl_shadow_intensity_mut")]
+        shadow_value: f32,
+        #[mdl(
+            animatable = "ShadowCastingStart",
+            track = "LightTrack::ShadowCastingStart",
+            default = "zero"
+        )]
+        #[mdl(get = "Self::mdl_shadow_start", slot = "Self::mdl_shadow_start_mut")]
+        shadow_start: f32,
+        #[mdl(
+            animatable = "ShadowCastingEnd",
+            track = "LightTrack::ShadowCastingEnd",
+            default = "zero"
+        )]
+        #[mdl(get = "Self::mdl_shadow_end", slot = "Self::mdl_shadow_end_mut")]
+        shadow_end: f32,
+        #[mdl(
+            animatable = "QuadraticFalloff",
+            track = "LightTrack::QuadraticFalloff",
+            default = "quadratic"
+        )]
+        #[mdl(get = "Self::mdl_quadratic", slot = "Self::mdl_quadratic_mut")]
+        quadratic: f32,
+        #[mdl(
+            animatable = "LinearFalloff",
+            track = "LightTrack::LinearFalloff",
+            default = "zero"
+        )]
+        #[mdl(get = "Self::mdl_linear", slot = "Self::mdl_linear_mut")]
+        linear: f32,
+        #[mdl(
+            animatable = "Damping",
+            track = "LightTrack::Damping",
+            default = "damping"
+        )]
+        #[mdl(get = "Self::mdl_damping", slot = "Self::mdl_damping_mut")]
+        damping: f32
+    )
+)]
 pub struct Light<V: ModelVersion> {
+    #[mdl(flatten)]
     node: Node,
+    #[mdl(skip, default)]
     light_type: u32,
+    #[mdl(skip, default)]
     shadow_casting: V::ShadowCasting,
+    #[mdl(
+        animatable = "AttenuationStart",
+        track = "LightTrack::AttenuationStart",
+        default = "zero"
+    )]
     attenuation_start: f32,
+    #[mdl(
+        animatable = "AttenuationEnd",
+        track = "LightTrack::AttenuationEnd",
+        default = "zero"
+    )]
     attenuation_end: f32,
+    #[mdl(animatable = "Color", track = "LightTrack::Color", default = "white")]
     color: Color,
+    #[mdl(
+        animatable = "Intensity",
+        track = "LightTrack::Intensity",
+        default = "zero"
+    )]
     intensity: f32,
+    #[mdl(
+        animatable = "AmbColor",
+        track = "LightTrack::AmbientColor",
+        default = "white"
+    )]
     ambient_color: Color,
+    #[mdl(
+        animatable = "AmbIntensity",
+        track = "LightTrack::AmbientIntensity",
+        default = "zero"
+    )]
     ambient_intensity: f32,
+    #[mdl(skip, default)]
     shadow_intensity: V::ShadowIntensity,
+    #[mdl(skip, default)]
     shadow_range: V::ShadowRange,
+    #[mdl(skip, default)]
     falloff: V::Falloff,
+    #[mdl(skip, default)]
     version: PhantomData<V>,
+    #[mdl(tracks, channels(Visibility = "LightTrack::Visibility"))]
     tracks: Vec<LightTrack>,
 }
 

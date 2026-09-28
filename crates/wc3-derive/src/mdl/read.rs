@@ -37,6 +37,11 @@ pub(super) fn expand(
     let mut bit = 0u32;
     let mut flattened = Vec::new();
     for field in fields {
+        let presence = format_ident!("{}_present", field.local);
+        if field.virtual_field {
+            locals.push(quote!(let mut #presence = false;));
+        }
+        let mark_present = field.virtual_field.then(|| quote!(#presence = true;));
         let Field {
             member,
             local,
@@ -101,6 +106,7 @@ pub(super) fn expand(
                 if __wc3_mdl_body.position() == start { return Err(__wc3_mdl_body.error(::wc3::model::mdl::ReadErrorKind::NoProgress)); }
                 #unique
                 #local.push(value);
+                #mark_present
             }));
             }
             members.push(quote!(#member: #local));
@@ -112,6 +118,7 @@ pub(super) fn expand(
                     __wc3_mdl_fields.mark(#bit, __wc3_mdl_field)?;
                     *__wc3_mdl_body = __wc3_mdl_checkpoint;
                     #local.push(#variant(__wc3_mdl_body.read()?));
+                    #mark_present
                 }));
                 bit += 1;
             }
@@ -120,7 +127,7 @@ pub(super) fn expand(
             continue;
         }
         if let Kind::Flags(flags) = kind {
-            if options.default && default.is_none() {
+            if options.default && default.is_none() && !field.virtual_field {
                 let access = field.access();
                 locals.push(quote!(let mut #local: #ty = __wc3_mdl_defaults.#access;));
             } else {
@@ -133,6 +140,7 @@ pub(super) fn expand(
                 arms.push(quote!(#mdl_name => {
                         __wc3_mdl_fields.mark(#bit, __wc3_mdl_field)?;
                         __wc3_mdl_body.expect(::wc3::model::mdl::TokenKind::Comma)?;
+                        #mark_present
                         let __wc3_mdl_bits = ::wc3::model::mdl::BitRange::<u32>::bit_range(&#local, 31, 0);
                         ::wc3::model::mdl::BitRangeMut::<u32>::set_bit_range(&mut #local, 31, 0, __wc3_mdl_bits | #mask);
                     }));
@@ -148,6 +156,7 @@ pub(super) fn expand(
             arms.push(quote!(#mdl_name => {
                 __wc3_mdl_fields.mark(#bit, __wc3_mdl_field)?;
                 #local = ::core::option::Option::Some(<#ty as ::wc3::model::mdl::ReadProperty>::read_mdl_property(__wc3_mdl_body, __wc3_mdl_field)?);
+                #mark_present
             }));
             members.push(quote!(#member: match #local {
                 ::core::option::Option::Some(value) => value,
@@ -219,6 +228,7 @@ pub(super) fn expand(
         let static_arm = quote!(#mdl_name => {
             __wc3_mdl_fields.mark(#bit, __wc3_mdl_field)?;
             #assignment
+            #mark_present
             #mark_enabled
         });
         match kind {
@@ -228,10 +238,14 @@ pub(super) fn expand(
                     static_arms.push(static_arm);
                 }
                 let variant = field.track.as_ref().expect("track was checked");
-                let collection = &tracks.expect("tracks was checked").local;
+                let tracks = tracks.expect("tracks was checked");
+                let collection = &tracks.local;
+                let presence = format_ident!("{}_present", collection);
+                let mark_collection = tracks.virtual_field.then(|| quote!(#presence = true;));
                 let read_track = quote! {
                     *__wc3_mdl_body = __wc3_mdl_checkpoint;
                     #collection.push(#variant(__wc3_mdl_body.read()?));
+                    #mark_collection
                 };
                 let read = if field.bare_static {
                     quote! {
@@ -254,6 +268,7 @@ pub(super) fn expand(
                 arms.push(quote!(#mdl_name => {
                     __wc3_mdl_fields.mark(#bit, __wc3_mdl_field)?;
                     #read
+                    #mark_present
                     #mark_enabled
                 }));
             }
@@ -268,7 +283,7 @@ pub(super) fn expand(
     }
     let mut root_members = Vec::new();
     for (field, value) in fields.iter().zip(&members) {
-        if field.parent.is_none() {
+        if field.parent.is_none() && !field.virtual_field {
             root_members.push(value.clone());
         }
     }
@@ -280,6 +295,28 @@ pub(super) fn expand(
             .zip(&members)
             .filter_map(|(field, value)| (field.parent.as_ref() == Some(parent)).then_some(value));
         root_members.push(quote!(#parent: #constructor { #(#values,)* }));
+    }
+    let mut virtual_setters = Vec::new();
+    for (field, member) in fields.iter().zip(&members) {
+        if field.virtual_field {
+            let value = syn::parse2::<syn::FieldValue>(member.clone())?.expr;
+            let present = format_ident!("{}_present", field.local);
+            if let Some(slot) = &field.slot {
+                virtual_setters.push(quote! {
+                    let value = #value;
+                    match #slot(&mut __wc3_mdl_value) {
+                        ::core::option::Option::Some(target) => *target = value,
+                        ::core::option::Option::None if #present => return Err(::wc3::model::mdl::ReadError::new(__wc3_mdl_record_span, ::wc3::model::mdl::ReadErrorKind::UnsupportedField)),
+                        ::core::option::Option::None => {}
+                    }
+                });
+            } else {
+                let set = field.set.as_ref().expect("validated setter");
+                virtual_setters.push(
+                    quote!(#set(&mut __wc3_mdl_value, #value, #present, __wc3_mdl_record_span)?;),
+                );
+            }
+        }
     }
     let members = root_members;
     let capture_start = quote! {
@@ -307,6 +344,10 @@ pub(super) fn expand(
         };
         state_names.push(local.clone());
         state_types.push(state_type);
+        if field.virtual_field {
+            state_names.push(format_ident!("{}_present", local));
+            state_types.push(quote!(bool));
+        }
         if field.extra_flags.is_some() {
             state_names.push(format_ident!("{}_flags", local));
             state_types.push(quote!(u32));
@@ -327,10 +368,13 @@ pub(super) fn expand(
     let fallback = flattened.iter().map(|field| {
         let local = &field.local;
         let ty = &field.ty;
+        let present = format_ident!("{}_present", local);
+        let mark_present = field.virtual_field.then(|| quote!(#present = true;));
         quote! {
             if <#ty as ::wc3::model::mdl::ReadFields>::accepts_mdl_field(__wc3_mdl_dispatch_name, __wc3_mdl_static_form) {
                 *__wc3_mdl_body = __wc3_mdl_checkpoint;
                 __wc3_mdl_body.next_token()?;
+                #mark_present
                 #local = <#ty as ::wc3::model::mdl::ReadFields>::read_mdl_field(#local, __wc3_mdl_body, __wc3_mdl_original_field, __wc3_mdl_checkpoint)?;
                 return ::core::result::Result::Ok(#state_name { #state_values __wc3_mdl_marker: ::core::marker::PhantomData });
             }
@@ -340,7 +384,8 @@ pub(super) fn expand(
         .default
         .then(|| quote!(let __wc3_mdl_defaults: Self = ::core::default::Default::default();));
     let mutable_value =
-        (!enable_calls.is_empty() || options.after_read.is_some()).then(|| quote!(mut));
+        (!enable_calls.is_empty() || !virtual_setters.is_empty() || options.after_read.is_some())
+            .then(|| quote!(mut));
     let after_read = options
         .after_read
         .as_ref()
@@ -410,6 +455,7 @@ pub(super) fn expand(
             fn finish_mdl_fields(state: Self::State, __wc3_mdl_span: ::wc3::model::mdl::Span, __wc3_mdl_record_span: ::wc3::model::mdl::Span) -> ::core::result::Result<Self, ::wc3::model::mdl::ReadError> {
                 let #state_name { #state_values .. } = state;
                 let #mutable_value __wc3_mdl_value = Self { #(#members,)* };
+                #(#virtual_setters)*
                 #(#enable_calls)*
                 #after_read
                 #validate

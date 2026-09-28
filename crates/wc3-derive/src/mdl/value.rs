@@ -5,6 +5,12 @@ use quote::quote;
 use syn::{parse_quote, Data, DeriveInput, Error, Fields, Result};
 
 pub(super) fn expand(input: DeriveInput, options: Container, reading: bool) -> Result<TokenStream> {
+    if options.virtual_fields.is_some() {
+        return Err(Error::new_spanned(
+            &input.ident,
+            "virtual_fields requires blocks or field groups",
+        ));
+    }
     if options.after_read.is_some() {
         return Err(Error::new_spanned(
             &input.ident,

@@ -2,12 +2,14 @@
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
 use syn::{
-    meta::ParseNestedMeta, DeriveInput, Error, Field as SynField, GenericArgument, Ident, LitInt,
-    LitStr, Path, PathArguments, Result, Token, Type,
+    meta::ParseNestedMeta, parenthesized, punctuated::Punctuated, DeriveInput, Error,
+    Field as SynField, GenericArgument, Ident, LitInt, LitStr, Path, PathArguments, Result, Token,
+    Type,
 };
 
 #[derive(Default)]
 pub(super) struct Container {
+    pub(super) virtual_fields: Option<Vec<SynField>>,
     pub(super) block: Option<LitStr>,
     pub(super) property: Option<LitStr>,
     pub(super) entry: bool,
@@ -65,9 +67,33 @@ pub(super) struct Field {
     pub(super) parent: Option<Ident>,
     pub(super) channels: Vec<(LitStr, Path)>,
     pub(super) extra_flags: Option<ExtraFlags>,
+    pub(super) get: Option<Path>,
+    pub(super) set: Option<Path>,
+    pub(super) slot: Option<Path>,
+    pub(super) virtual_field: bool,
 }
 
 impl Field {
+    pub(super) fn value(&self, receiver: TokenStream) -> TokenStream {
+        match &self.get {
+            Some(get) if self.slot.is_some() => {
+                let default = match self
+                    .default
+                    .as_ref()
+                    .expect("optional accessor default was checked")
+                {
+                    DefaultValue::Trait => quote!(::core::default::Default::default),
+                    DefaultValue::Function(function) => quote!(#function),
+                };
+                quote!(#get(#receiver).unwrap_or_else(#default))
+            }
+            Some(get) => quote!(#get(#receiver)),
+            None => {
+                let access = self.access();
+                quote!((#receiver).#access)
+            }
+        }
+    }
     pub(super) fn access(&self) -> TokenStream {
         let member = &self.member;
         match &self.parent {
@@ -112,7 +138,15 @@ pub(super) fn container(input: &DeriveInput) -> Result<Container> {
             continue;
         }
         attr.parse_nested_meta(|meta| {
-            if meta.path.is_ident("block") {
+            if meta.path.is_ident("virtual_fields") {
+                if result.virtual_fields.is_some() { return Err(meta.error("duplicate virtual_fields")); }
+                let content;
+                parenthesized!(content in meta.input);
+                let fields = Punctuated::<SynField, Token![,]>::parse_terminated_with(&content, SynField::parse_named)?;
+                if fields.is_empty() { return Err(meta.error("virtual_fields needs at least one field")); }
+                result.virtual_fields = Some(fields.into_iter().collect());
+                Ok(())
+            } else if meta.path.is_ident("block") {
                 if result.block.is_some() {
                     return Err(meta.error("duplicate block"));
                 }
@@ -159,7 +193,7 @@ pub(super) fn container(input: &DeriveInput) -> Result<Container> {
             } else if meta.path.is_ident("validate_write") {
                 path(&meta, &mut result.validate_write)
             } else {
-                Err(meta.error("expected block, property, entry, fields, default, write_order, after_read, validate_read, or validate_write"))
+                Err(meta.error("expected block, property, entry, fields, default, write_order, virtual_fields, after_read, validate_read, or validate_write"))
             }
         })?;
     }
@@ -190,6 +224,9 @@ pub(super) fn field(field: &SynField, index: usize) -> Result<Field> {
     let mut channels = Vec::new();
     let mut channels_seen = false;
     let mut extra_flags = None;
+    let mut get = None;
+    let mut set = None;
+    let mut slot = None;
     for attr in &field.attrs {
         if !attr.path().is_ident("mdl") {
             continue;
@@ -282,6 +319,12 @@ pub(super) fn field(field: &SynField, index: usize) -> Result<Field> {
                     }
                 });
                 Ok(())
+            } else if meta.path.is_ident("get") {
+                path(&meta, &mut get)
+            } else if meta.path.is_ident("set") {
+                path(&meta, &mut set)
+            } else if meta.path.is_ident("slot") {
+                path(&meta, &mut slot)
             } else if meta.path.is_ident("delegate") {
                 if delegate { return Err(meta.error("duplicate delegate")); }
                 delegate = true;
@@ -435,7 +478,7 @@ pub(super) fn field(field: &SynField, index: usize) -> Result<Field> {
                 "animatable fields do not support value codec hooks",
             ));
         }
-        if enabled_if.is_some() != enable_with.is_some() {
+        if enable_with.is_some() && enabled_if.is_none() {
             return Err(Error::new_spanned(
                 field,
                 "enabled_if and enable_with must be supplied together",
@@ -566,6 +609,10 @@ pub(super) fn field(field: &SynField, index: usize) -> Result<Field> {
         parent: None,
         channels,
         extra_flags,
+        get,
+        set,
+        slot,
+        virtual_field: false,
     })
 }
 

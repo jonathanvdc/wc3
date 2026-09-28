@@ -27,10 +27,12 @@ pub(super) fn expand(
         let Field {
             kind, write_with, ..
         } = field;
+        let default_access = field.value(quote!(&__wc3_mdl_write_defaults));
+        let access = field.value(quote!(self));
         let member = &field.access();
         let value = match write_with {
-            Some(function) => quote!(#function(&self.#member, __wc3_mdl_writer)?;),
-            None => quote!(__wc3_mdl_writer.write(&self.#member)?;),
+            Some(function) => quote!(#function(&#access, __wc3_mdl_writer)?;),
+            None => quote!(__wc3_mdl_writer.write(&#access)?;),
         };
         match kind {
             Kind::Header => {}
@@ -40,13 +42,13 @@ pub(super) fn expand(
                 let local = &field.local;
                 state_names.push(local.clone());
                 state_types.push(quote!(<#ty as ::wc3::model::mdl::WriteFields>::State));
-                required_flags.push(quote!(let #local = <#ty as ::wc3::model::mdl::WriteFields>::prepare_mdl_fields(&self.#member)?;));
-                writes.push(quote!(<#ty as ::wc3::model::mdl::WriteFields>::write_mdl_fields(&self.#member, #local, __wc3_mdl_writer)?;));
+                required_flags.push(quote!(let #local = ::wc3::model::mdl::WriteFields::prepare_mdl_fields(&#access)?;));
+                writes.push(quote!(::wc3::model::mdl::WriteFields::write_mdl_fields(&#access, #local, __wc3_mdl_writer)?;));
                 if let Some(extra) = &field.extra_flags {
                     let get = &extra.get;
                     for (name, mask) in &extra.flags {
                         writes.push(quote! {
-                            if ::wc3::model::mdl::BitRange::<u32>::bit_range(&#get(&self.#member), 31, 0) & #mask != 0 {
+                            if ::wc3::model::mdl::BitRange::<u32>::bit_range(&#get(&#access), 31, 0) & #mask != 0 {
                                 __wc3_mdl_writer.flag(#name)?;
                             }
                         });
@@ -58,35 +60,34 @@ pub(super) fn expand(
                 let local = &field.local;
                 state_names.push(local.clone());
                 state_types.push(quote!(<#ty as ::wc3::model::mdl::WriteFields>::State));
-                required_flags.push(quote!(let #local = <#ty as ::wc3::model::mdl::WriteFields>::prepare_mdl_fields(&self.#member)?;));
+                required_flags.push(quote!(let #local = ::wc3::model::mdl::WriteFields::prepare_mdl_fields(&#access)?;));
                 writes.push(quote! {
                     __wc3_mdl_writer.indent()?;
                     __wc3_mdl_writer.identifier(#mdl_name)?;
-                    <#ty as ::wc3::model::mdl::WriteFields>::write_mdl_headers(&self.#member, __wc3_mdl_writer)?;
+                    ::wc3::model::mdl::WriteFields::write_mdl_headers(&#access, __wc3_mdl_writer)?;
                     __wc3_mdl_writer.open_body()?;
-                    <#ty as ::wc3::model::mdl::WriteFields>::write_mdl_fields(&self.#member, #local, __wc3_mdl_writer)?;
+                    ::wc3::model::mdl::WriteFields::write_mdl_fields(&#access, #local, __wc3_mdl_writer)?;
                     __wc3_mdl_writer.end_block()?;
                 });
             }
             Kind::Repeated(_) => {
                 if let Some(key) = &field.unique_by {
                     required_flags.push(quote! {
-                        for (index, item) in self.#member.iter().enumerate() {
-                            if self.#member[..index].iter().any(|previous| #key(previous) == #key(item)) {
+                        for (index, item) in #access.iter().enumerate() {
+                            if #access[..index].iter().any(|previous| #key(previous) == #key(item)) {
                                 return Err(::wc3::model::mdl::WriteError::Unsupported("duplicate repeated record"));
                             }
                         }
                     });
                 }
-                writes.push(quote!(for item in &self.#member { __wc3_mdl_writer.write(item)?; }))
+                writes.push(quote!(for item in (#access).iter() { __wc3_mdl_writer.write(item)?; }))
             }
             Kind::Counted(mdl_name) => {
-                writes.push(quote!(__wc3_mdl_writer.counted(#mdl_name, self.#member.iter())?;))
+                writes.push(quote!(__wc3_mdl_writer.counted(#mdl_name, #access.iter())?;))
             }
             Kind::DelegatedProperty(mdl_name) => {
-                let ty = &field.ty;
-                required_flags.push(quote!(<#ty as ::wc3::model::mdl::WriteProperty>::validate_mdl_property(&self.#member, #mdl_name)?;));
-                writes.push(quote!(<#ty as ::wc3::model::mdl::WriteProperty>::write_mdl_property(&self.#member, #mdl_name, __wc3_mdl_writer)?;));
+                required_flags.push(quote!(::wc3::model::mdl::WriteProperty::validate_mdl_property(&#access, #mdl_name)?;));
+                writes.push(quote!(::wc3::model::mdl::WriteProperty::write_mdl_property(&#access, #mdl_name, __wc3_mdl_writer)?;));
             }
             Kind::Property(mdl_name)
             | Kind::StaticProperty(mdl_name)
@@ -109,7 +110,7 @@ pub(super) fn expand(
                     let default = omission::default_value(field, options);
                     required_flags.push(quote! {
                         let #emit = #condition;
-                        if !#emit && !::wc3::model::mdl::ValueEq::eq_mdl(&self.#member, &#default) {
+                        if !#emit && !::wc3::model::mdl::ValueEq::eq_mdl(&#access, &#default) {
                             return ::core::result::Result::Err(::wc3::model::mdl::WriteError::Unsupported(concat!("nondefault omitted property ", #mdl_name)));
                         }
                     });
@@ -118,28 +119,38 @@ pub(super) fn expand(
                 writes.push(quote!(if #condition { #write }));
             }
             Kind::Tracks => {
-                writes.push(quote!(for track in &self.#member { __wc3_mdl_writer.write(track)?; }));
+                writes.push(
+                    quote!(for track in (#access).iter() { __wc3_mdl_writer.write(track)?; }),
+                );
                 let mut checks = Vec::new();
                 let mut choices = Vec::new();
                 for animated in &animated {
                     let variant = animated.track.as_ref().expect("track was checked");
                     checks.push(quote! {
-                            if self.#member.iter().filter(|track| matches!(track, #variant(_))).count() > 1 {
+                            if #access.iter().filter(|track| matches!(track, #variant(_))).count() > 1 {
                                 return ::core::result::Result::Err(::wc3::model::mdl::WriteError::Unsupported("duplicate animation track"));
                             }
                         });
                     if let Some(function) = &animated.enabled_if {
                         checks.push(quote! {
-                                if !#function(self) && self.#member.iter().any(|track| matches!(track, #variant(_))) {
+                                if !#function(self) && #access.iter().any(|track| matches!(track, #variant(_))) {
                                     return ::core::result::Result::Err(::wc3::model::mdl::WriteError::Unsupported("animation track for a disabled property"));
                                 }
                             });
+                    }
+                    if animated.slot.is_some() {
+                        let get = animated.get.as_ref().expect("optional getter was checked");
+                        checks.push(quote! {
+                            if #get(self).is_none() && #access.iter().any(|track| matches!(track, #variant(_))) {
+                                return Err(::wc3::model::mdl::WriteError::Unsupported("animation track for an unavailable property"));
+                            }
+                        });
                     }
                     choices.push(quote!(#variant(_) => {}));
                 }
                 for (_, variant) in &field.channels {
                     checks.push(quote! {
-                        if self.#member.iter().filter(|track| matches!(track, #variant(_))).count() > 1 {
+                        if #access.iter().filter(|track| matches!(track, #variant(_))).count() > 1 {
                             return Err(::wc3::model::mdl::WriteError::Unsupported("duplicate animation track"));
                         }
                     });
@@ -147,7 +158,7 @@ pub(super) fn expand(
                 }
                 required_flags.push(quote! {
                         #(#checks)*
-                        for track in &self.#member {
+                        for track in (#access).iter() {
                             #[allow(unreachable_patterns)]
                             match track {
                                 #(#choices,)*
@@ -161,52 +172,51 @@ pub(super) fn expand(
                     .iter()
                     .fold(field.allow_bits, |bits, (_, mask)| bits | mask);
                 required_flags.push(quote! {
-                        if ::wc3::model::mdl::BitRange::<u32>::bit_range(&self.#member, 31, 0) & !#known != 0 { return ::core::result::Result::Err(::wc3::model::mdl::WriteError::Unsupported(concat!("unknown flag bits in ", stringify!(#member)))); }
+                        if ::wc3::model::mdl::BitRange::<u32>::bit_range(&#access, 31, 0) & !#known != 0 { return ::core::result::Result::Err(::wc3::model::mdl::WriteError::Unsupported(concat!("unknown flag bits in ", stringify!(#member)))); }
                     });
-                if options.default && field.default.is_none() {
+                if options.default && field.default.is_none() && !field.virtual_field {
                     required_flags.push(quote! {
-                            let defaults = ::wc3::model::mdl::BitRange::<u32>::bit_range(&__wc3_mdl_write_defaults.#member, 31, 0);
-                            let actual = ::wc3::model::mdl::BitRange::<u32>::bit_range(&self.#member, 31, 0);
+                            let defaults = ::wc3::model::mdl::BitRange::<u32>::bit_range(&#default_access, 31, 0);
+                            let actual = ::wc3::model::mdl::BitRange::<u32>::bit_range(&#access, 31, 0);
                             if defaults & !actual != 0 {
                                 return ::core::result::Result::Err(::wc3::model::mdl::WriteError::Unsupported("cleared flag supplied by record default"));
                             }
                         });
                 }
                 for (mdl_name, mask) in flags {
-                    writes.push(quote!(if ::wc3::model::mdl::BitRange::<u32>::bit_range(&self.#member, 31, 0) & #mask != 0 { __wc3_mdl_writer.flag(#mdl_name)?; }));
+                    writes.push(quote!(if ::wc3::model::mdl::BitRange::<u32>::bit_range(&#access, 31, 0) & #mask != 0 { __wc3_mdl_writer.flag(#mdl_name)?; }));
                 }
             }
             Kind::Flag(mdl_name) => {
                 if field.default.is_none() && !options.default {
                     required_flags.push(quote! {
-                        if !self.#member { return ::core::result::Result::Err(::wc3::model::mdl::WriteError::Unsupported(concat!("absent required flag ", #mdl_name))); }
+                        if !#access { return ::core::result::Result::Err(::wc3::model::mdl::WriteError::Unsupported(concat!("absent required flag ", #mdl_name))); }
                     });
                 }
                 if options.default && field.default.is_none() {
                     required_flags.push(quote! {
-                            if __wc3_mdl_write_defaults.#member && !self.#member {
+                            if #default_access && !#access {
                                 return ::core::result::Result::Err(::wc3::model::mdl::WriteError::Unsupported("false flag supplied by record default"));
                             }
                         });
                 }
-                writes.push(quote!(if self.#member { __wc3_mdl_writer.flag(#mdl_name)?; }));
+                writes.push(quote!(if #access { __wc3_mdl_writer.flag(#mdl_name)?; }));
             }
         }
     }
     // Body write_order must not reorder flattened or direct header values.
     for field in &schema.fields {
-        let member = &field.access();
+        let access = field.value(quote!(self));
         match &field.kind {
             Kind::Header => {
                 let value = match &field.write_with {
-                    Some(function) => quote!(#function(&self.#member, __wc3_mdl_writer)?;),
-                    None => quote!(__wc3_mdl_writer.write(&self.#member)?;),
+                    Some(function) => quote!(#function(&#access, __wc3_mdl_writer)?;),
+                    None => quote!(__wc3_mdl_writer.write(&#access)?;),
                 };
                 headers.push(quote!(__wc3_mdl_writer.raw(" ")?; #value));
             }
             Kind::Flatten => {
-                let ty = &field.ty;
-                headers.push(quote!(<#ty as ::wc3::model::mdl::WriteFields>::write_mdl_headers(&self.#member, __wc3_mdl_writer)?;));
+                headers.push(quote!(::wc3::model::mdl::WriteFields::write_mdl_headers(&#access, __wc3_mdl_writer)?;));
             }
             _ => {}
         }

@@ -119,3 +119,27 @@ fn derived_records_write_existing_tracks_without_cloning() {
     });
     assert_eq!(count, 0);
 }
+
+#[test]
+fn version_selected_lights_and_layers_write_without_cloning_storage() {
+    use wc3::model::materials::Layer;
+    use wc3::model::scene::Light;
+    use wc3::model::{V1600, V1800, V800};
+    let light = Light::<V1600>::decode_mdl("Light \"a\" { ObjectId 0, Ambient, Translation 1 { Linear, 0: { 1, 2, 3 }, } Intensity 1 { Linear, 0: 1.0, } ShadowCastingStart 1 { Linear, 0: 2.0, } Damping 1 { Linear, 0: 0.00001, } }").unwrap();
+    let sd = Layer::<V800>::decode_mdl(
+        "Layer { Alpha 1 { Linear, 0: 1.0, } TextureID 1 { Linear, 0: 3, } }",
+    )
+    .unwrap();
+    // Shader follows the texture bindings in input: setters resolve storage after
+    // all fields have been parsed, independent of input order.
+    let hd = Layer::<V1800>::decode_mdl("Layer { TextureID 1 { Linear, 0: 3, } static TextureID 7 <= 4, Shader \"Shader_HD_DefaultUnit\", EmissiveGain 1 { Linear, 0: 1.0, } FresnelOpacity 1 { Linear, 0: 0.0, } }").unwrap();
+    let mut storage = [0u8; 8192];
+    let (_, count) = measured(|| {
+        let mut writer = MdlWriter::new(IoCursor::new(&mut storage[..]));
+        writer.write(&light).unwrap();
+        writer.write(&sd).unwrap();
+        writer.write(&hd).unwrap();
+        writer.finish().unwrap();
+    });
+    assert_eq!(count, 0);
+}

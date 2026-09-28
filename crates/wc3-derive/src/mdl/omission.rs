@@ -10,19 +10,24 @@ pub(super) fn needs_check(field: &Field) -> bool {
 }
 
 pub(super) fn predicate(field: &Field, tracks: Option<&Field>) -> TokenStream {
-    let member = &field.access();
+    let access = field.value(quote!(self));
     let mut condition = if field.animated_only {
         quote!(false)
     } else {
         quote!(true)
     };
+    if field.slot.is_some() {
+        let get = field.get.as_ref().expect("optional getter was checked");
+        condition = quote!(#condition && #get(self).is_some());
+    }
     if let Some(function) = &field.skip_if {
-        condition = quote!(#condition && !#function(&self.#member));
+        condition = quote!(#condition && !#function(&#access));
     }
     if matches!(field.kind, Kind::Animatable(_)) {
         let variant = field.track.as_ref().expect("track was checked");
-        let collection = &tracks.expect("tracks was checked").member;
-        condition = quote!(#condition && !self.#collection.iter().any(|track| matches!(track, #variant(_))));
+        let collection = tracks.expect("tracks was checked").value(quote!(self));
+        condition =
+            quote!(#condition && !(#collection).iter().any(|track| matches!(track, #variant(_))));
         if let Some(function) = &field.enabled_if {
             condition = quote!(#condition && #function(self));
         }
@@ -39,8 +44,7 @@ pub(super) fn default_value(field: &Field, options: &Container) -> TokenStream {
         Some(DefaultValue::Function(function)) => quote!(#function()),
         None => {
             assert!(options.default && !field.required, "default was checked");
-            let member = &field.access();
-            quote!(__wc3_mdl_write_defaults.#member)
+            field.value(quote!(&__wc3_mdl_write_defaults))
         }
     }
 }

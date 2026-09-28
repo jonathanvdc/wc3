@@ -974,3 +974,100 @@ fn validates_projection_channels_and_flattened_flags() {
         "distinct nonzero single",
     );
 }
+
+#[test]
+fn virtual_fields_validate_storage_access_and_schema_composition() {
+    rejects(
+        parse_quote!(
+            #[mdl(block = "A", virtual_fields())]
+            struct A {}
+        ),
+        "needs at least one",
+    );
+    rejects(
+        parse_quote!(
+            #[mdl(block = "A", virtual_fields(
+                #[mdl(property = "Value", default, get = "Self::value")]
+                value: u32,
+            ))]
+            struct A {}
+        ),
+        "exactly one of set or slot",
+    );
+    rejects(
+        parse_quote!(
+            #[mdl(block = "A", virtual_fields(
+                #[mdl(property = "Value", default, get = "Self::value", set = "Self::set", slot = "Self::slot")]
+                value: u32,
+            ))]
+            struct A {}
+        ),
+        "exactly one of set or slot",
+    );
+    rejects(
+        parse_quote!(
+            #[mdl(block = "A", virtual_fields(
+                #[mdl(property = "Value", get = "Self::value", slot = "Self::slot")]
+                value: u32,
+            ))]
+            struct A {}
+        ),
+        "explicit default",
+    );
+    rejects(
+        parse_quote!(
+            #[mdl(block = "A", virtual_fields(
+                #[mdl(header, get = "Self::value", set = "Self::set")]
+                value: u32,
+            ))]
+            struct A {}
+        ),
+        "cannot be headers",
+    );
+    rejects(
+        parse_quote!(
+            #[mdl(block = "A", virtual_fields(
+                #[mdl(property = "Value", get = "Self::value", set = "Self::set")]
+                value: u32,
+            ))]
+            struct A {
+                #[mdl(property = "Value")]
+                stored: u32,
+            }
+        ),
+        "duplicate MDL field name",
+    );
+    rejects(
+        parse_quote!(
+            #[mdl(block = "A", virtual_fields(
+                #[mdl(property = "Value", get = "Self::value", set = "Self::set")]
+                value: u32,
+            ))]
+            struct A {
+                #[mdl(skip, default)]
+                value: u32,
+            }
+        ),
+        "duplicate virtual field member",
+    );
+    rejects(
+        parse_quote!(
+            #[mdl(block = "A")]
+            struct A {
+                #[mdl(property = "Value", get = "Self::value", set = "Self::set")]
+                value: u32,
+            }
+        ),
+        "require virtual_fields",
+    );
+    rejects(
+        parse_quote!(
+            #[mdl(entry, virtual_fields(
+                #[mdl(property = "Value", get = "Self::value", set = "Self::set")]
+                value: u32,
+            ))]
+            struct A(u32);
+        ),
+        "requires blocks or field groups",
+    );
+}

@@ -86,7 +86,7 @@ pub(super) fn build(
                     .make_where_clause()
                     .predicates
                     .push(parse_quote!(#ty: ::wc3::model::mdl::BitRangeMut<u32>));
-                if !options.default || field.default.is_some() {
+                if !options.default || field.default.is_some() || field.virtual_field {
                     generics
                         .make_where_clause()
                         .predicates

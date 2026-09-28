@@ -1,14 +1,18 @@
 //! Material layers, animation tracks, and version-specific texture slots.
 use crate::model::conversion::ConversionContext;
-use crate::model::mdx;
 use crate::model::ConversionError;
+use crate::model::{mdl, mdx};
 use bitfield::bitfield;
+use mdl_codec::{
+    full, is_no_reference, is_white, no_reference, one, read_filter, white, write_filter, zero,
+    zero_id, TextureBindings,
+};
 use std::{fmt::Debug, marker::PhantomData};
 
 use super::{write_count, ShaderType};
 use crate::model::animation::track_group;
 use crate::model::{
-    AnimationTrack, Color, Cursor, Encoder, LayerTextureId, ModelVersion, ReadError,
+    AnimationTrack, Color, Cursor, Encoder, FixedText, LayerTextureId, ModelVersion, ReadError,
     SupportsEmissiveGain, SupportsFresnel, SupportsLayerShaderTypeId, SupportsLayerTextureSlots,
     Tag, TrackTag, ValueError, Version, WriteError,
 };
@@ -70,20 +74,105 @@ pub struct LayerTextureSlot {
 /// non-diffuse slots and binary storage that the text syntax cannot reconstruct.
 /// A classic texture-ID track must precede other channels in binary track order;
 /// text reading and writing use that canonical order.
-#[derive(Clone, Debug, PartialEq, mdx::Read, mdx::Write)]
+#[derive(Clone, Debug, PartialEq, mdx::Read, mdx::Write, mdl::Read, mdl::Write)]
 #[mdx(sized(tag = LAYER_TAG))]
+#[mdl(block = "Layer", validate_write = "Self::validate_mdl",
+    write_order(filter_mode, shading_flags, shader, textures, texture_animation_id,
+        coordinate_id, alpha, emissive, color, opacity, team_color, channels),
+    virtual_fields(
+        #[mdl(property = "Shader", delegate)]
+        #[mdl(get = "Self::mdl_shader", set = "Self::set_mdl_shader")]
+        shader: Option<FixedText<80>>,
+        #[mdl(flatten)]
+        #[mdl(get = "Self::mdl_textures", set = "Self::set_mdl_textures")]
+        textures: TextureBindings,
+        #[mdl(
+            animatable = "EmissiveGain",
+            track = "LayerTrack::EmissiveGain",
+            default = "one",
+            skip_if = "full"
+        )]
+        #[mdl(get = "Self::mdl_emissive", slot = "Self::mdl_emissive_mut")]
+        emissive: f32,
+        #[mdl(
+            animatable = "FresnelColor",
+            track = "LayerTrack::FresnelColor",
+            default = "white",
+            skip_if = "is_white"
+        )]
+        #[mdl(get = "Self::mdl_color", slot = "Self::mdl_color_mut")]
+        color: Color,
+        #[mdl(
+            animatable = "FresnelOpacity",
+            track = "LayerTrack::FresnelOpacity",
+            default,
+            skip_if = "zero"
+        )]
+        #[mdl(get = "Self::mdl_opacity", slot = "Self::mdl_opacity_mut")]
+        opacity: f32,
+        #[mdl(
+            animatable = "FresnelTeamColor",
+            track = "LayerTrack::FresnelTeamColor",
+            default,
+            skip_if = "zero"
+        )]
+        #[mdl(get = "Self::mdl_team_color", slot = "Self::mdl_team_color_mut")]
+        team_color: f32,
+        #[mdl(tracks)]
+        #[mdl(get = "Self::mdl_tracks", set = "Self::set_mdl_tracks")]
+        channels: Vec<LayerTrack>
+    )
+)]
 pub struct Layer<V: ModelVersion> {
+    #[mdl(skip, default)]
     version: PhantomData<V>,
+    #[mdl(
+        property = "FilterMode",
+        default,
+        read_with = "read_filter",
+        write_with = "write_filter"
+    )]
     filter_mode: u32,
+    #[mdl(flags(
+        Unshaded = 1,
+        SphereEnvMap = 2,
+        WrapWidth = 4,
+        WrapHeight = 8,
+        TwoSided = 16,
+        Unfogged = 32,
+        NoDepthTest = 64,
+        NoDepthSet = 128,
+        Unlit = 256,
+        BackFacesForShadows = 512,
+        AmbientOcclusion = 1024
+    ))]
     shading_flags: u32,
+    #[mdl(skip, default)]
     texture_id: u32,
+    #[mdl(
+        property = "TVertexAnimId",
+        default = "no_reference",
+        skip_if = "is_no_reference"
+    )]
     texture_animation_id: u32,
+    #[mdl(property = "CoordId", default, skip_if = "zero_id")]
     coordinate_id: u32,
+    #[mdl(
+        animatable = "Alpha",
+        track = "LayerTrack::Alpha",
+        default = "one",
+        skip_if = "full"
+    )]
     alpha: f32,
+    #[mdl(skip, default)]
     emissive_gain: V::EmissiveGain,
+    #[mdl(skip, default)]
     fresnel: V::Fresnel,
+    #[mdl(skip, default)]
     shader_type: V::ShaderType,
+    #[mdl(skip, default)]
     texture_slots: V::TextureSlots,
+    #[mdl(skip, default)]
     tracks: Vec<LayerTrack>,
 }
 
