@@ -8,6 +8,11 @@
 //!
 //! Record codecs cover Bitmap (`Texture`), Anim (`Sequence`), Model
 //! (`ModelInfo`), Duration (`GlobalSequence`) and anonymous `PivotPoint` entries.
+//! Typed animation tracks and TVertexAnim (`TextureAnimation`) records are also
+//! supported, including signed frame times, interpolation tangents and optional
+//! global sequences. CameraTrack's Read/Write codecs operate in the camera body;
+//! its read_mdl_target/write_mdl_target methods operate inside a Target body,
+//! whose framing and Position property belong to the enclosing record codec.
 //! Whole-model conversion is not implemented yet.
 //!
 //! ```

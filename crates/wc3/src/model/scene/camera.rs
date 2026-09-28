@@ -1,10 +1,16 @@
 //! Typed camera records in `CAMS` chunks.
+use crate::model::animation::{
+    AnimationTrack, CameraRotation, CameraTargetTranslation, CameraTranslation,
+};
 use crate::model::conversion::ConversionContext;
+use crate::model::mdl;
+use crate::model::mdl::{MdlWriter, Parser, ReadErrorKind, TokenKind};
 use crate::model::mdx;
 use crate::model::ConversionError;
 use crate::model::ModelVersion;
+use std::io::Write as IoWrite;
 crate::model::animation::track_group! {
-    pub enum CameraTrack {
+    @binary pub enum CameraTrack {
         Translation: CameraTranslation,
         TargetTranslation: CameraTargetTranslation,
         Rotation: CameraRotation,
@@ -290,5 +296,55 @@ impl<V: ModelVersion> Camera<V> {
             tracks: self.tracks.clone(),
             version: PhantomData,
         })
+    }
+}
+
+impl mdl::Read for CameraTrack {
+    /// Reads a track in the camera body. Target tracks require read_mdl_target.
+    fn read_mdl(parser: &mut Parser<'_>) -> Result<Self, mdl::ReadError> {
+        match parser.peek()?.map(|token| token.kind) {
+            Some(TokenKind::Ident("Translation")) => Ok(Self::Translation(
+                parser.read::<AnimationTrack<CameraTranslation>>()?,
+            )),
+            Some(TokenKind::Ident("Rotation")) => Ok(Self::Rotation(
+                parser.read::<AnimationTrack<CameraRotation>>()?,
+            )),
+            _ => Err(parser.error(ReadErrorKind::UnknownField)),
+        }
+    }
+}
+
+impl CameraTrack {
+    /// Reads a track inside an already opened Camera Target block.
+    /// The enclosing record reader owns Target framing and Position properties.
+    pub fn read_mdl_target(parser: &mut Parser<'_>) -> Result<Self, mdl::ReadError> {
+        Ok(Self::TargetTranslation(
+            parser.read::<AnimationTrack<CameraTargetTranslation>>()?,
+        ))
+    }
+
+    /// Writes a track inside an already opened Camera Target block.
+    pub fn write_mdl_target<W: IoWrite>(
+        &self,
+        writer: &mut MdlWriter<W>,
+    ) -> Result<(), mdl::WriteError> {
+        match self {
+            Self::TargetTranslation(track) => writer.write(track),
+            _ => Err(mdl::WriteError::Unsupported(
+                "camera eye track inside Target",
+            )),
+        }
+    }
+}
+
+impl mdl::Write for CameraTrack {
+    fn write_mdl<W: IoWrite>(&self, writer: &mut MdlWriter<W>) -> Result<(), mdl::WriteError> {
+        match self {
+            Self::Translation(track) => writer.write(track),
+            Self::Rotation(track) => writer.write(track),
+            Self::TargetTranslation(_) => Err(mdl::WriteError::Unsupported(
+                "target translation requires a Target block",
+            )),
+        }
     }
 }

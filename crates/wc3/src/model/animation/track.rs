@@ -1,7 +1,9 @@
 //! Typed keyframe tracks.
 use super::{Interpolation, TangentKeyframe, TrackKind, TrackTag, TrackValue, ValueKeyframe};
-use crate::model::mdx;
+use crate::model::mdl::{MdlWriter, Parser, ReadErrorKind, TokenKind};
+use crate::model::{mdl, mdx};
 use crate::model::{Cursor, Encoder, ReadError, Tag, ValueError, WriteError};
+use std::io::Write as IoWrite;
 use std::marker::PhantomData;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -209,4 +211,180 @@ impl<K: TrackKind> mdx::Write for AnimationTrack<K> {
         }
         Ok(())
     }
+}
+
+impl<K: TrackKind> mdl::Read for AnimationTrack<K>
+where
+    K::Value: mdl::Read,
+{
+    fn read_mdl(parser: &mut Parser<'_>) -> Result<Self, mdl::ReadError> {
+        parser.expect_ident(K::MDL_NAME)?;
+        let count = parser.read::<u32>()? as usize;
+        parser.expect(TokenKind::OpenBrace)?;
+        let mut interpolation = None;
+        let mut sequence = None;
+        while let Some(token) = parser.peek()? {
+            let TokenKind::Ident(name) = token.kind else {
+                break;
+            };
+            parser.next_token()?;
+            match name {
+                "DontInterp" | "Linear" | "Hermite" | "Bezier" => {
+                    if interpolation.is_some() {
+                        return Err(mdl::ReadError::new(
+                            token.span,
+                            ReadErrorKind::DuplicateField,
+                        ));
+                    }
+                    interpolation = Some(match name {
+                        "DontInterp" => Interpolation::Step,
+                        "Linear" => Interpolation::Linear,
+                        "Hermite" => Interpolation::Hermite,
+                        _ => Interpolation::Bezier,
+                    });
+                    parser.expect(TokenKind::Comma)?;
+                }
+                "GlobalSeqId" => {
+                    if sequence.is_some() {
+                        return Err(mdl::ReadError::new(
+                            token.span,
+                            ReadErrorKind::DuplicateField,
+                        ));
+                    }
+                    parser.peek()?;
+                    let span = parser
+                        .error(ReadErrorKind::InvalidNumber("global sequence ID"))
+                        .span;
+                    let id = parser.read_property::<u32>()?;
+                    if id == u32::MAX {
+                        return Err(mdl::ReadError::new(
+                            span,
+                            ReadErrorKind::InvalidNumber("global sequence ID"),
+                        ));
+                    }
+                    sequence = Some(id);
+                }
+                _ => return Err(mdl::ReadError::new(token.span, ReadErrorKind::UnknownField)),
+            }
+        }
+        let interpolation = interpolation
+            .ok_or_else(|| parser.error(ReadErrorKind::MissingField("interpolation")))?;
+        // Grow from actual input, rather than trusting the declared count.
+        let mut values = Vec::new();
+        let mut tangents = Vec::new();
+        let mut actual = 0;
+        loop {
+            if let Some(token) = parser.peek()? {
+                if token.kind == TokenKind::CloseBrace {
+                    if actual != count {
+                        return Err(mdl::ReadError::new(
+                            token.span,
+                            ReadErrorKind::CountMismatch {
+                                expected: count,
+                                actual,
+                            },
+                        ));
+                    }
+                    parser.next_token()?;
+                    break;
+                }
+            }
+            if actual == count {
+                return Err(parser.error(ReadErrorKind::CountMismatch {
+                    expected: count,
+                    actual: actual + 1,
+                }));
+            }
+            let frame = parser.read::<i32>()?;
+            parser.expect(TokenKind::Colon)?;
+            let value = parser.read_property::<K::Value>()?;
+            if matches!(
+                interpolation,
+                Interpolation::Hermite | Interpolation::Bezier
+            ) {
+                parser.expect_ident("InTan")?;
+                let in_tangent = parser.read_property()?;
+                parser.expect_ident("OutTan")?;
+                let out_tangent = parser.read_property()?;
+                tangents.push(TangentKeyframe {
+                    frame,
+                    value,
+                    in_tangent,
+                    out_tangent,
+                });
+            } else {
+                values.push(ValueKeyframe { frame, value });
+            }
+            actual += 1;
+        }
+        let keyframes = match interpolation {
+            Interpolation::Step => Keyframes::Step(values),
+            Interpolation::Linear => Keyframes::Linear(values),
+            Interpolation::Hermite => Keyframes::Hermite(tangents),
+            Interpolation::Bezier => Keyframes::Bezier(tangents),
+        };
+        Ok(Self {
+            global_sequence_id: sequence,
+            keyframes,
+            kind: PhantomData,
+        })
+    }
+}
+
+impl<K: TrackKind> mdl::Write for AnimationTrack<K>
+where
+    K::Value: mdl::Write,
+{
+    fn write_mdl<W: IoWrite>(&self, writer: &mut MdlWriter<W>) -> Result<(), mdl::WriteError> {
+        writer.begin_counted_block(K::MDL_NAME, self.keyframes.len())?;
+        writer.flag(match self.interpolation() {
+            Interpolation::Step => "DontInterp",
+            Interpolation::Linear => "Linear",
+            Interpolation::Hermite => "Hermite",
+            Interpolation::Bezier => "Bezier",
+        })?;
+        if let Some(sequence) = self.global_sequence_id {
+            writer.property("GlobalSeqId", &sequence)?;
+        }
+        match &self.keyframes {
+            Keyframes::Step(keys) | Keyframes::Linear(keys) => {
+                for key in keys {
+                    write_key(writer, key.frame, &key.value)?;
+                }
+            }
+            Keyframes::Hermite(keys) | Keyframes::Bezier(keys) => {
+                for key in keys {
+                    write_key(writer, key.frame, &key.value)?;
+                    write_tangent(writer, "InTan", &key.in_tangent)?;
+                    write_tangent(writer, "OutTan", &key.out_tangent)?;
+                }
+            }
+        }
+        writer.end_block()
+    }
+}
+
+fn write_key<W: IoWrite, T: mdl::Write>(
+    writer: &mut MdlWriter<W>,
+    frame: i32,
+    value: &T,
+) -> Result<(), mdl::WriteError> {
+    writer.indent()?;
+    writer.write(&frame)?;
+    writer.raw(": ")?;
+    writer.write(value)?;
+    writer.raw(",\n")
+}
+
+fn write_tangent<W: IoWrite, T: mdl::Write>(
+    writer: &mut MdlWriter<W>,
+    name: &str,
+    value: &T,
+) -> Result<(), mdl::WriteError> {
+    writer.indent()?;
+    writer.raw("\t")?;
+    writer.identifier(name)?;
+    writer.raw(" ")?;
+    writer.write(value)?;
+    writer.raw(",\n")
 }

@@ -13,8 +13,8 @@ pub enum Interpolation {
 /// A keyframe without interpolation tangents.
 #[derive(Clone, Debug, PartialEq, mdx::Read, mdx::Write)]
 pub struct ValueKeyframe<T> {
-    /// Frame time in milliseconds.
-    pub frame: u32,
+    /// Signed frame time in milliseconds; negative times represent animation lead-in.
+    pub frame: i32,
     /// The value at this frame.
     pub value: T,
 }
@@ -22,8 +22,8 @@ pub struct ValueKeyframe<T> {
 /// A keyframe with both interpolation tangents.
 #[derive(Clone, Debug, PartialEq, mdx::Read, mdx::Write)]
 pub struct TangentKeyframe<T> {
-    /// Frame time in milliseconds.
-    pub frame: u32,
+    /// Signed frame time in milliseconds; negative times represent animation lead-in.
+    pub frame: i32,
     /// The value at this frame.
     pub value: T,
     /// Incoming tangent.

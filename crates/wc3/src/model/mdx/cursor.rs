@@ -36,6 +36,14 @@ impl Read for u32 {
     }
 }
 
+impl Read for i32 {
+    fn read_mdx(cursor: &mut Cursor<'_>) -> Result<Self, ReadError> {
+        Ok(i32::from_le_bytes(
+            cursor.read_exact(4)?.try_into().expect("four-byte word"),
+        ))
+    }
+}
+
 impl Read for f32 {
     fn read_mdx(cursor: &mut Cursor<'_>) -> Result<Self, ReadError> {
         Ok(f32::from_bits(cursor.read::<u32>()?))

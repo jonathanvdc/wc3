@@ -1,6 +1,8 @@
 //! Typed texture animation tracks in `TXAN` chunks.
-use crate::model::mdx;
+use crate::model::mdl::{MdlWriter, Parser, ReadErrorKind, TokenKind};
 use crate::model::ModelVersion;
+use crate::model::{mdl, mdx};
+use std::io::Write as IoWrite;
 crate::model::animation::track_group! {
     pub enum TextureAnimationTrack {
         Translation: TextureTranslation,
@@ -47,5 +49,46 @@ impl<V: ModelVersion> Model<V> {
     /// Replaces texture animations in the first `TXAN` chunk.
     pub fn set_texture_animations(&mut self, animations: &[TextureAnimation]) {
         self.replace_chunk(TextureAnimationsChunk::new(animations.to_vec()));
+    }
+}
+
+impl mdl::Read for TextureAnimation {
+    fn read_mdl(parser: &mut Parser<'_>) -> Result<Self, mdl::ReadError> {
+        parser.expect_ident("TVertexAnim")?;
+        parser.expect(TokenKind::OpenBrace)?;
+        let mut tracks: Vec<TextureAnimationTrack> = Vec::new();
+        loop {
+            parser.peek()?;
+            if parser.consume(TokenKind::CloseBrace)? {
+                break;
+            }
+            let span = parser.error(ReadErrorKind::DuplicateField).span;
+            let track = parser.read::<TextureAnimationTrack>()?;
+            if tracks.iter().any(|previous| previous.tag() == track.tag()) {
+                return Err(mdl::ReadError::new(span, ReadErrorKind::DuplicateField));
+            }
+            tracks.push(track);
+        }
+        Ok(Self { tracks })
+    }
+}
+
+impl mdl::Write for TextureAnimation {
+    fn write_mdl<W: IoWrite>(&self, writer: &mut MdlWriter<W>) -> Result<(), mdl::WriteError> {
+        for (index, track) in self.tracks.iter().enumerate() {
+            if self.tracks[..index]
+                .iter()
+                .any(|previous| previous.tag() == track.tag())
+            {
+                return Err(mdl::WriteError::Unsupported(
+                    "duplicate texture animation track",
+                ));
+            }
+        }
+        writer.begin_block("TVertexAnim")?;
+        for track in &self.tracks {
+            writer.write(track)?;
+        }
+        writer.end_block()
     }
 }
