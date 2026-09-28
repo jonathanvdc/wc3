@@ -14,9 +14,9 @@ use wc3::model::mdx::{self, Cursor, Encoder, Read as _, Write as _};
 use wc3::model::scene::{Bone, Camera, Node};
 use wc3::model::{Model, V1800, V800};
 
-fn round_trip<T: mdx::Read + PartialEq + Debug>(value: &T)
+fn round_trip<T>(value: &T)
 where
-    T: mdx::Write,
+    T: mdx::Read + mdx::Write + PartialEq + Debug,
 {
     let bytes = value.encode_mdx().unwrap();
     let mut appended = vec![0xaa, 0xbb];
@@ -78,9 +78,9 @@ fn cursor_read_advances_through_records_and_decode_rejects_trailing_bytes() {
 
 #[test]
 fn cursor_decoders_stop_at_the_next_record() {
-    fn check<T: mdx::Read + PartialEq + Debug>(first: T, second: T)
+    fn check<T>(first: T, second: T)
     where
-        T: mdx::Write,
+        T: mdx::Read + mdx::Write + PartialEq + Debug,
     {
         let mut bytes = first.encode_mdx().unwrap();
         let first_len = bytes.len();

@@ -44,8 +44,8 @@ pub(crate) use emitters::*;
 
 pub use crate::visit_model;
 
-mod model;
-pub use model::{DynamicModel, Model};
+mod container;
+pub use container::{DynamicModel, Model};
 mod model_access;
 pub use model_access::{CommonModelAccess, TryModelAccess};
 mod versions;

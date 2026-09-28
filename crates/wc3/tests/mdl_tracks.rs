@@ -201,7 +201,7 @@ fn spec_property_spellings() {
 
 #[test]
 fn camera_translation_dispatch_requires_context() {
-    use wc3::model::mdl::{MdlWriter, Parser, TokenKind};
+    use wc3::model::mdl::{MdlWriter, Parser};
     use wc3::model::scene::CameraTrack;
     let source = "Translation 1 { Linear, -3600: { 1, 2, 3 }, }";
     let eye = CameraTrack::decode_mdl(source).unwrap();
@@ -227,8 +227,7 @@ fn camera_translation_dispatch_requires_context() {
     assert_eq!(block.next_field().unwrap().unwrap().name, "Position");
     assert_eq!(block.read_property::<[f32; 3]>().unwrap(), [0.0; 3]);
     assert_eq!(CameraTrack::read_mdl_target(&mut block).unwrap(), target);
-    block.expect(TokenKind::CloseBrace).unwrap();
-    drop(block);
+    block.finish().unwrap();
     parser.finish().unwrap();
     let mut writer = MdlWriter::new(Vec::new());
     assert!(eye.write_mdl_target(&mut writer).is_err());

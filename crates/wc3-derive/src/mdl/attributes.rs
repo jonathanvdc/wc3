@@ -322,13 +322,11 @@ pub(super) fn field(field: &SynField, index: usize) -> Result<Field> {
                 "headers cannot have default or skip_if",
             ))
         }
-        Kind::Skip => {
-            if skip_if.is_some() || read_with.is_some() || write_with.is_some() {
-                return Err(Error::new_spanned(
-                    field,
-                    "skipped fields cannot have codec hooks or skip_if",
-                ));
-            }
+        Kind::Skip if skip_if.is_some() || read_with.is_some() || write_with.is_some() => {
+            return Err(Error::new_spanned(
+                field,
+                "skipped fields cannot have codec hooks or skip_if",
+            ));
         }
         Kind::Flags(_)
             if read_with.is_some()
