@@ -1,6 +1,6 @@
 use mdl::{Read as _, Write as _};
 use mdx::{Read as _, Write as _};
-use wc3::model::emitters::{Particle2Fields, Particle2FilterMode, Particle2Frames};
+use wc3::model::emitters::{Particle2FilterMode, Particle2Frames, ParticleEmitter2};
 use wc3::model::materials::{Layer, LayerFilterMode, LayerShadingFlags};
 use wc3::model::V800;
 use wc3::model::{mdl, mdx};
@@ -53,14 +53,12 @@ fn typed_storage_retains_unknown_data_during_edits() {
     assert_eq!(decoded, layer);
     assert_eq!(decoded.shading_flags().bits(), 0x8000_0010);
     assert!(layer.encode_mdl().is_err());
-    let fields = Particle2Fields {
-        filter_mode: Particle2FilterMode::Unknown(99),
-        frames: Particle2Frames::Unknown(u32::MAX),
-        ..Default::default()
-    };
+    let mut emitter = ParticleEmitter2::new(wc3::model::scene::Node::new("p", 0).unwrap());
+    emitter.filter_mode = Particle2FilterMode::Unknown(99);
+    emitter.frames = Particle2Frames::Unknown(u32::MAX);
     assert_eq!(
-        Particle2Fields::decode_mdx(&fields.encode_mdx().unwrap()).unwrap(),
-        fields
+        ParticleEmitter2::decode_mdx(&emitter.encode_mdx().unwrap()).unwrap(),
+        emitter
     );
 }
 

@@ -59,66 +59,18 @@ pub enum Particle2FilterMode {
     Unknown(u32),
 }
 
-/// Fixed physical, texture, and color fields of a particle emitter 2.
-#[derive(Clone, Debug, Default, PartialEq, mdx::Read, mdx::Write)]
-pub struct Particle2Fields {
-    pub speed: f32,
-    pub variation: f32,
-    pub latitude: f32,
-    pub gravity: f32,
-    pub life_span: f32,
-    pub emission_rate: f32,
-    pub length: f32,
-    pub width: f32,
-    pub filter_mode: Particle2FilterMode,
-    pub rows: u32,
-    pub columns: u32,
-    /// Which particle parts are rendered.
-    pub frames: Particle2Frames,
-    pub tail_length: f32,
-    pub time: f32,
-    pub segment_colors: [Color; 3],
-    pub alpha: [u8; 3],
-    pub particle_scaling: Vec3,
-    /// Life span, decay, tail, and tail decay UV intervals.
-    pub uv_animations: [[u32; 3]; 4],
-    pub texture_id: u32,
-    pub squirt: u32,
-    pub priority_plane: u32,
-    pub replaceable_id: u32,
-}
-
-impl Particle2Fields {
-    /// Returns the frame mode, including unnamed binary values.
-    pub fn frames(&self) -> Particle2Frames {
-        self.frames
-    }
-    /// Sets the frame mode.
-    pub fn set_frames(&mut self, frames: Particle2Frames) {
-        self.frames = frames;
-    }
-    /// Reports whether newly emitted particles are animated in one burst.
-    pub fn squirt_enabled(&self) -> bool {
-        self.squirt != 0
-    }
-    /// Changes the squirt flag.
-    pub fn set_squirt_enabled(&mut self, enabled: bool) {
-        self.squirt = u32::from(enabled);
-    }
-}
-
 /// A particle emitter 2 with decoded fields and animation tracks.
 #[derive(Clone, Debug, PartialEq, mdx::Read, mdx::Write, mdl::Read, mdl::Write)]
 #[mdx(sized(tag = ParticleEmitters2Chunk::TAG))]
 #[mdl(block = "ParticleEmitter2", after_read = "Self::finish_mdl", validate_write = "Self::validate_mdl",
     write_order(node, speed, variation, latitude, gravity, life_span, emission_rate, length, width,
-        filter, rows, columns, frames, tail_length, time, segments, alpha, particle_scaling,
+        filter, rows, columns, frame_mode, tail_length, time, segments, alpha, particle_scaling,
         life_uv, decay_uv, tail_uv, tail_decay_uv, texture_id, squirt, priority_plane, replaceable_id, tracks),
     virtual_fields(
         #[mdl(flags(Blend = 1, Additive = 2, Modulate = 4, Modulate2x = 8, AlphaKey = 16), get = "Self::mdl_filter", set = "Self::set_mdl_filter")]
         filter: u32,
         #[mdl(flags(Head = 1, Tail = 2, Both = 4), get = "Self::mdl_frames", set = "Self::set_mdl_frames")]
-        frames: u32,
+        frame_mode: u32,
         #[mdl(property = "SegmentColor", delegate, get = "Self::mdl_segments", set = "Self::set_mdl_segments")]
         segments: SegmentColors,
         #[mdl(property = "LifeSpanUVAnim", default, get = "Self::mdl_life_uv", set = "Self::set_mdl_life_uv")]
@@ -146,41 +98,104 @@ pub struct ParticleEmitter2 {
         )
     )]
     node: Node,
-    #[mdl(project(
-        #[mdl(animatable = "Speed", track = "Particle2Track::Speed", default)] speed: f32,
-        #[mdl(animatable = "Variation", track = "Particle2Track::Variation", default)] variation: f32,
-        #[mdl(animatable = "Latitude", track = "Particle2Track::Latitude", default)] latitude: f32,
-        #[mdl(animatable = "Gravity", track = "Particle2Track::Gravity", default)] gravity: f32,
-        #[mdl(property = "LifeSpan", default)] life_span: f32,
-        #[mdl(animatable = "EmissionRate", track = "Particle2Track::EmissionRate", default)] emission_rate: f32,
-        #[mdl(animatable = "Length", track = "Particle2Track::Length", default)] length: f32,
-        #[mdl(animatable = "Width", track = "Particle2Track::Width", default)] width: f32,
-        #[mdl(property = "Rows", default)] rows: u32,
-        #[mdl(property = "Columns", default)] columns: u32,
-        #[mdl(property = "TailLength", default)] tail_length: f32,
-        #[mdl(property = "Time", default)] time: f32,
-        #[mdl(property = "Alpha", default)] alpha: [u8; 3],
-        #[mdl(property = "ParticleScaling", default)] particle_scaling: Vec3,
-        #[mdl(property = "TextureID", default)] texture_id: u32,
-        #[mdl(property = "Squirt", default, skip_if = "is_zero")] squirt: u32,
-        #[mdl(property = "PriorityPlane", default, skip_if = "is_zero")] priority_plane: u32,
-        #[mdl(property = "ReplaceableId", default, skip_if = "is_zero")] replaceable_id: u32,
-        #[mdl(skip, default)] filter_mode: Particle2FilterMode,
-        #[mdl(skip, default)] frames: Particle2Frames,
-        #[mdl(skip, default)] segment_colors: [Color; 3],
-        #[mdl(skip, default)] uv_animations: [[u32; 3]; 4],
-    ))]
-    fields: Particle2Fields,
+    #[mdl(animatable = "Speed", track = "Particle2Track::Speed", default)]
+    pub speed: f32,
+    #[mdl(animatable = "Variation", track = "Particle2Track::Variation", default)]
+    pub variation: f32,
+    #[mdl(animatable = "Latitude", track = "Particle2Track::Latitude", default)]
+    pub latitude: f32,
+    #[mdl(animatable = "Gravity", track = "Particle2Track::Gravity", default)]
+    pub gravity: f32,
+    #[mdl(property = "LifeSpan", default)]
+    pub life_span: f32,
+    #[mdl(
+        animatable = "EmissionRate",
+        track = "Particle2Track::EmissionRate",
+        default
+    )]
+    pub emission_rate: f32,
+    #[mdl(animatable = "Length", track = "Particle2Track::Length", default)]
+    pub length: f32,
+    #[mdl(animatable = "Width", track = "Particle2Track::Width", default)]
+    pub width: f32,
+    #[mdl(skip, default)]
+    pub filter_mode: Particle2FilterMode,
+    #[mdl(property = "Rows", default)]
+    pub rows: u32,
+    #[mdl(property = "Columns", default)]
+    pub columns: u32,
+    /// Which particle parts are rendered.
+    #[mdl(skip, default)]
+    pub frames: Particle2Frames,
+    #[mdl(property = "TailLength", default)]
+    pub tail_length: f32,
+    #[mdl(property = "Time", default)]
+    pub time: f32,
+    #[mdl(skip, default)]
+    pub segment_colors: [Color; 3],
+    #[mdl(property = "Alpha", default)]
+    pub alpha: [u8; 3],
+    #[mdl(property = "ParticleScaling", default)]
+    pub particle_scaling: Vec3,
+    /// Life span, decay, tail, and tail decay UV intervals.
+    #[mdl(skip, default)]
+    pub uv_animations: [[u32; 3]; 4],
+    #[mdl(property = "TextureID", default)]
+    pub texture_id: u32,
+    #[mdl(property = "Squirt", default, skip_if = "is_zero")]
+    pub squirt: u32,
+    #[mdl(property = "PriorityPlane", default, skip_if = "is_zero")]
+    pub priority_plane: u32,
+    #[mdl(property = "ReplaceableId", default, skip_if = "is_zero")]
+    pub replaceable_id: u32,
     #[mdl(tracks, channels(Visibility = "Particle2Track::Visibility"))]
     tracks: Vec<Particle2Track>,
 }
 
 impl ParticleEmitter2 {
+    /// Returns the frame mode, including unnamed binary values.
+    pub fn frames(&self) -> Particle2Frames {
+        self.frames
+    }
+    /// Sets the frame mode.
+    pub fn set_frames(&mut self, frames: Particle2Frames) {
+        self.frames = frames;
+    }
+    /// Reports whether newly emitted particles are animated in one burst.
+    pub fn squirt_enabled(&self) -> bool {
+        self.squirt != 0
+    }
+    /// Changes the squirt flag.
+    pub fn set_squirt_enabled(&mut self, enabled: bool) {
+        self.squirt = u32::from(enabled);
+    }
+
     /// Creates an emitter with zeroed fixed fields.
     pub fn new(node: Node) -> Self {
         Self {
             node,
-            fields: Particle2Fields::default(),
+            speed: Default::default(),
+            variation: Default::default(),
+            latitude: Default::default(),
+            gravity: Default::default(),
+            life_span: Default::default(),
+            emission_rate: Default::default(),
+            length: Default::default(),
+            width: Default::default(),
+            filter_mode: Default::default(),
+            rows: Default::default(),
+            columns: Default::default(),
+            frames: Default::default(),
+            tail_length: Default::default(),
+            time: Default::default(),
+            segment_colors: Default::default(),
+            alpha: Default::default(),
+            particle_scaling: Default::default(),
+            uv_animations: Default::default(),
+            texture_id: Default::default(),
+            squirt: Default::default(),
+            priority_plane: Default::default(),
+            replaceable_id: Default::default(),
             tracks: Vec::new(),
         }
     }
@@ -193,21 +208,6 @@ impl ParticleEmitter2 {
     /// Borrows the embedded node for editing.
     pub fn node_mut(&mut self) -> &mut Node {
         &mut self.node
-    }
-
-    /// Returns a copy of the fixed fields.
-    pub fn fields(&self) -> Particle2Fields {
-        self.fields.clone()
-    }
-
-    /// Borrows the fixed fields for editing.
-    pub fn fields_mut(&mut self) -> &mut Particle2Fields {
-        &mut self.fields
-    }
-
-    /// Replaces fixed fields without changing the node or tracks.
-    pub fn set_fields(&mut self, fields: &Particle2Fields) {
-        self.fields = fields.clone();
     }
 
     /// Borrows decoded optional animation tracks.

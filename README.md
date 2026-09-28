@@ -103,7 +103,11 @@ line emission but Popcorn unfogged rendering.
 
 Migration from the previous API requires replacing integer filter assignments
 with enum variants (or explicit `from_raw()` calls), and replacing
-`Particle2Fields::frame_flags` with the typed `frames` field.
+`frame_flags` with the typed `frames` field.
+ParticleEmitter2 and RibbonEmitter expose their fixed properties directly;
+replace `emitter.fields().speed` or `emitter.fields_mut().speed` with
+`emitter.speed`. The separate `Particle2Fields` and `RibbonFields` types and
+`set_fields()` methods have been removed.
 
 ## Version conversion
 

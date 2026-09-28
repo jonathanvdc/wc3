@@ -8,23 +8,21 @@ use wc3::model::Model;
 #[test]
 fn particle_emitter2_fields_round_trip() {
     let mut emitter = ParticleEmitter2::new(Node::new("Flame", 1).unwrap());
-    let mut fields = emitter.fields();
-    fields.speed = 5.0;
-    fields.emission_rate = 20.0;
-    fields.segment_colors = [[1.0, 0.0, 0.0], [0.5, 0.5, 0.0], [0.0, 0.0, 0.0]];
-    fields.alpha = [255, 128, 0];
-    fields.particle_scaling = [1.0, 2.0, 3.0];
-    fields.uv_animations[0] = [0, 4, 2];
-    fields.texture_id = 7;
-    fields.set_frames(Particle2Frames::Both);
-    fields.set_squirt_enabled(true);
-    assert_eq!(fields.frames(), Particle2Frames::Both);
-    assert!(fields.squirt_enabled());
-    emitter.set_fields(&fields);
+    emitter.speed = 5.0;
+    emitter.emission_rate = 20.0;
+    emitter.segment_colors = [[1.0, 0.0, 0.0], [0.5, 0.5, 0.0], [0.0, 0.0, 0.0]];
+    emitter.alpha = [255, 128, 0];
+    emitter.particle_scaling = [1.0, 2.0, 3.0];
+    emitter.uv_animations[0] = [0, 4, 2];
+    emitter.texture_id = 7;
+    emitter.set_frames(Particle2Frames::Both);
+    emitter.set_squirt_enabled(true);
+    assert_eq!(emitter.frames(), Particle2Frames::Both);
+    assert!(emitter.squirt_enabled());
     let mut model = Model::<wc3::model::V1800>::new();
-    model.set_particle_emitters2(&[emitter]);
+    model.set_particle_emitters2(std::slice::from_ref(&emitter));
     let parsed = Model::<wc3::model::V1800>::decode_mdx(&model.encode_mdx().unwrap()).unwrap();
-    assert_eq!(parsed.particle_emitters2()[0].fields(), fields);
+    assert_eq!(parsed.particle_emitters2()[0], emitter);
 }
 
 #[test]
@@ -42,12 +40,7 @@ fn local_particle_emitter2_round_trip_when_available() {
                 let bytes = std::fs::read(&path).unwrap();
                 let mut model = Model::<wc3::model::V1800>::decode_mdx(&bytes).unwrap();
                 if model.chunk(*b"PRE2").is_some() {
-                    let mut emitters = model.particle_emitters2();
-                    for emitter in &mut emitters {
-                        let fields = emitter.fields();
-                        emitter.set_fields(&fields);
-                        emitter.tracks();
-                    }
+                    let emitters = model.particle_emitters2();
                     model.set_particle_emitters2(&emitters);
                     assert_eq!(model.encode_mdx().unwrap(), bytes, "{}", path.display());
                 }

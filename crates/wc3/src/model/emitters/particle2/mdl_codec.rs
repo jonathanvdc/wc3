@@ -51,7 +51,7 @@ fn choice(value: u32, span: Span) -> Result<u32, mdl::ReadError> {
 }
 impl ParticleEmitter2 {
     pub(super) fn mdl_filter(&self) -> u32 {
-        1u32.checked_shl(self.fields.filter_mode.raw()).unwrap_or(0)
+        1u32.checked_shl(self.filter_mode.raw()).unwrap_or(0)
     }
     pub(super) fn set_mdl_filter(
         &mut self,
@@ -59,11 +59,11 @@ impl ParticleEmitter2 {
         _: bool,
         span: Span,
     ) -> Result<(), mdl::ReadError> {
-        self.fields.filter_mode = Particle2FilterMode::from_raw(choice(value, span)?);
+        self.filter_mode = Particle2FilterMode::from_raw(choice(value, span)?);
         Ok(())
     }
     pub(super) fn mdl_frames(&self) -> u32 {
-        1u32.checked_shl(self.fields.frames.raw()).unwrap_or(0)
+        1u32.checked_shl(self.frames.raw()).unwrap_or(0)
     }
     pub(super) fn set_mdl_frames(
         &mut self,
@@ -71,11 +71,11 @@ impl ParticleEmitter2 {
         _: bool,
         span: Span,
     ) -> Result<(), mdl::ReadError> {
-        self.fields.frames = Particle2Frames::from_raw(choice(value, span)?);
+        self.frames = Particle2Frames::from_raw(choice(value, span)?);
         Ok(())
     }
     pub(super) fn mdl_segments(&self) -> SegmentColorsRef<'_> {
-        SegmentColorsRef(&self.fields.segment_colors)
+        SegmentColorsRef(&self.segment_colors)
     }
     pub(super) fn set_mdl_segments(
         &mut self,
@@ -83,7 +83,7 @@ impl ParticleEmitter2 {
         _: bool,
         _: Span,
     ) -> Result<(), mdl::ReadError> {
-        self.fields.segment_colors = value.0;
+        self.segment_colors = value.0;
         Ok(())
     }
     pub(super) fn finish_mdl(&mut self, _: Span) -> Result<(), mdl::ReadError> {
@@ -92,10 +92,10 @@ impl ParticleEmitter2 {
     }
     pub(super) fn validate_mdl(&self) -> Result<(), mdl::WriteError> {
         validate_node_kind(&self.node, 0x1000 | (self.node.flags().bits() & 0x1f8000))?;
-        if self.fields.filter_mode.raw() > 4 {
+        if self.filter_mode.raw() > 4 {
             return Err(mdl::WriteError::Unsupported("particle2 filter mode"));
         }
-        if self.fields.frames.raw() > 2 {
+        if self.frames.raw() > 2 {
             return Err(mdl::WriteError::Unsupported("particle2 head/tail mode"));
         }
         Ok(())
@@ -104,7 +104,7 @@ impl ParticleEmitter2 {
 
 impl ParticleEmitter2 {
     pub(super) fn mdl_life_uv(&self) -> [u32; 3] {
-        self.fields.uv_animations[0]
+        self.uv_animations[0]
     }
     pub(super) fn set_mdl_life_uv(
         &mut self,
@@ -112,11 +112,11 @@ impl ParticleEmitter2 {
         _: bool,
         _: Span,
     ) -> Result<(), mdl::ReadError> {
-        self.fields.uv_animations[0] = value;
+        self.uv_animations[0] = value;
         Ok(())
     }
     pub(super) fn mdl_decay_uv(&self) -> [u32; 3] {
-        self.fields.uv_animations[1]
+        self.uv_animations[1]
     }
     pub(super) fn set_mdl_decay_uv(
         &mut self,
@@ -124,11 +124,11 @@ impl ParticleEmitter2 {
         _: bool,
         _: Span,
     ) -> Result<(), mdl::ReadError> {
-        self.fields.uv_animations[1] = value;
+        self.uv_animations[1] = value;
         Ok(())
     }
     pub(super) fn mdl_tail_uv(&self) -> [u32; 3] {
-        self.fields.uv_animations[2]
+        self.uv_animations[2]
     }
     pub(super) fn set_mdl_tail_uv(
         &mut self,
@@ -136,11 +136,11 @@ impl ParticleEmitter2 {
         _: bool,
         _: Span,
     ) -> Result<(), mdl::ReadError> {
-        self.fields.uv_animations[2] = value;
+        self.uv_animations[2] = value;
         Ok(())
     }
     pub(super) fn mdl_tail_decay_uv(&self) -> [u32; 3] {
-        self.fields.uv_animations[3]
+        self.uv_animations[3]
     }
     pub(super) fn set_mdl_tail_decay_uv(
         &mut self,
@@ -148,7 +148,7 @@ impl ParticleEmitter2 {
         _: bool,
         _: Span,
     ) -> Result<(), mdl::ReadError> {
-        self.fields.uv_animations[3] = value;
+        self.uv_animations[3] = value;
         Ok(())
     }
 }

@@ -10,11 +10,9 @@ use wc3::model::Model;
 #[test]
 fn ribbon_fields_and_integer_animation_round_trip() {
     let mut emitter = RibbonEmitter::new(Node::new("Trail", 4).unwrap());
-    let mut fields = emitter.fields();
-    fields.height_above = 3.0;
-    fields.color = [1.0, 0.5, 0.25];
-    fields.material_id = 9;
-    emitter.set_fields(&fields);
+    emitter.height_above = 3.0;
+    emitter.color = [1.0, 0.5, 0.25];
+    emitter.material_id = 9;
     let key = ValueKeyframe {
         frame: 100,
         value: 7u32,
@@ -25,11 +23,11 @@ fn ribbon_fields_and_integer_animation_round_trip() {
             .into()],
     );
     let mut model = Model::<wc3::model::V800>::new();
-    model.set_ribbon_emitters(&[emitter]);
+    model.set_ribbon_emitters(std::slice::from_ref(&emitter));
     let bytes = model.encode_mdx().unwrap();
     let parsed = Model::<wc3::model::V800>::decode_mdx(&bytes).unwrap();
     let ribbons = parsed.ribbon_emitters();
-    assert_eq!(ribbons[0].fields(), fields);
+    assert_eq!(ribbons[0], emitter);
     assert_eq!(
         ribbons[0].tracks()[0],
         RibbonTrack::TextureSlot(

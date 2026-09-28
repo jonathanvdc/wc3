@@ -1,6 +1,6 @@
 use wc3::model::animation::{AnimationTrack, CameraVisibility, ValueKeyframe};
 use wc3::model::chunks::{GlidersChunk, ModelChunk, RawChunk};
-use wc3::model::emitters::{Particle2Fields, PopcornEmitter};
+use wc3::model::emitters::{ParticleEmitter2, PopcornEmitter};
 use wc3::model::materials::{Layer, LayerShadingFlags, Material, MaterialRenderFlags, ShaderType};
 use wc3::model::mdl::{Read as _, Write as _};
 use wc3::model::mdx::{Read as _, Write as _};
@@ -245,5 +245,8 @@ fn constructors_use_documented_defaults_without_changing_decoded_values() {
     assert_eq!(decoded.life_span(), 0.0);
     assert_eq!(decoded.color(), [0.0; 3]);
     assert_eq!(decoded.visibility_guide(), "Always=on\r\nDeath=off");
-    assert_eq!(Particle2Fields::default().priority_plane, 0u32);
+    assert_eq!(
+        ParticleEmitter2::new(Node::new("p", 0).unwrap()).priority_plane,
+        0u32
+    );
 }

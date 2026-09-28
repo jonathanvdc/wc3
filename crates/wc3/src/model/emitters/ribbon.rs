@@ -20,22 +20,6 @@ use crate::model::KnownChunk;
 use crate::model::RibbonEmittersChunk;
 use crate::model::{Model, Node};
 
-/// Fixed properties of a ribbon emitter.
-#[derive(Clone, Copy, Debug, Default, PartialEq, mdx::Read, mdx::Write)]
-pub struct RibbonFields {
-    pub height_above: f32,
-    pub height_below: f32,
-    pub alpha: f32,
-    pub color: Color,
-    pub life_span: f32,
-    pub texture_slot: u32,
-    pub emission_rate: u32,
-    pub rows: u32,
-    pub columns: u32,
-    pub material_id: u32,
-    pub gravity: f32,
-}
-
 /// One ribbon emitter with decoded fixed properties and animation tracks.
 ///
 /// MDL reading restores the ribbon object-kind bit; writing requires matching
@@ -51,20 +35,41 @@ pub struct RibbonFields {
 pub struct RibbonEmitter {
     #[mdl(flatten)]
     node: Node,
-    #[mdl(project(
-        #[mdl(animatable = "HeightAbove", track = "RibbonTrack::HeightAbove", default)] height_above: f32,
-        #[mdl(animatable = "HeightBelow", track = "RibbonTrack::HeightBelow", default)] height_below: f32,
-        #[mdl(animatable = "Alpha", track = "RibbonTrack::Alpha", default)] alpha: f32,
-        #[mdl(animatable = "Color", track = "RibbonTrack::Color", default)] color: Color,
-        #[mdl(property = "LifeSpan", default)] life_span: f32,
-        #[mdl(animatable = "TextureSlot", track = "RibbonTrack::TextureSlot", default, bare_static)] texture_slot: u32,
-        #[mdl(property = "EmissionRate", default)] emission_rate: u32,
-        #[mdl(property = "Rows", default)] rows: u32,
-        #[mdl(property = "Columns", default)] columns: u32,
-        #[mdl(property = "MaterialID", default)] material_id: u32,
-        #[mdl(property = "Gravity", default, skip_if = "zero_gravity")] gravity: f32,
-    ))]
-    fields: RibbonFields,
+    #[mdl(
+        animatable = "HeightAbove",
+        track = "RibbonTrack::HeightAbove",
+        default
+    )]
+    pub height_above: f32,
+    #[mdl(
+        animatable = "HeightBelow",
+        track = "RibbonTrack::HeightBelow",
+        default
+    )]
+    pub height_below: f32,
+    #[mdl(animatable = "Alpha", track = "RibbonTrack::Alpha", default)]
+    pub alpha: f32,
+    #[mdl(animatable = "Color", track = "RibbonTrack::Color", default)]
+    pub color: Color,
+    #[mdl(property = "LifeSpan", default)]
+    pub life_span: f32,
+    #[mdl(
+        animatable = "TextureSlot",
+        track = "RibbonTrack::TextureSlot",
+        default,
+        bare_static
+    )]
+    pub texture_slot: u32,
+    #[mdl(property = "EmissionRate", default)]
+    pub emission_rate: u32,
+    #[mdl(property = "Rows", default)]
+    pub rows: u32,
+    #[mdl(property = "Columns", default)]
+    pub columns: u32,
+    #[mdl(property = "MaterialID", default)]
+    pub material_id: u32,
+    #[mdl(property = "Gravity", default, skip_if = "zero_gravity")]
+    pub gravity: f32,
     #[mdl(tracks, channels(Visibility = "RibbonTrack::Visibility"))]
     tracks: Vec<RibbonTrack>,
 }
@@ -74,7 +79,17 @@ impl RibbonEmitter {
     pub fn new(node: Node) -> Self {
         Self {
             node,
-            fields: RibbonFields::default(),
+            height_above: Default::default(),
+            height_below: Default::default(),
+            alpha: Default::default(),
+            color: Default::default(),
+            life_span: Default::default(),
+            texture_slot: Default::default(),
+            emission_rate: Default::default(),
+            rows: Default::default(),
+            columns: Default::default(),
+            material_id: Default::default(),
+            gravity: Default::default(),
             tracks: Vec::new(),
         }
     }
@@ -87,16 +102,6 @@ impl RibbonEmitter {
     /// Borrows the embedded node for editing.
     pub fn node_mut(&mut self) -> &mut Node {
         &mut self.node
-    }
-
-    /// Returns fixed properties.
-    pub fn fields(&self) -> RibbonFields {
-        self.fields
-    }
-
-    /// Replaces fixed properties while retaining animation data.
-    pub fn set_fields(&mut self, fields: &RibbonFields) {
-        self.fields = *fields;
     }
 
     /// Borrows decoded ribbon animation tracks.

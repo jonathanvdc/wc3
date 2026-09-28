@@ -20,8 +20,8 @@ fn spec_examples_match_independently_packed_binary_records() {
     let wire = include_bytes!("fixtures/mdl/smoke.mdx");
     assert_eq!(smoke.encode_mdx().unwrap(), wire);
     assert_eq!(ParticleEmitter2::decode_mdx(wire).unwrap(), smoke);
-    assert_eq!(smoke.fields().length, 16.0);
-    assert_eq!(smoke.fields().width, 17.0);
+    assert_eq!(smoke.length, 16.0);
+    assert_eq!(smoke.width, 17.0);
     assert_eq!(
         ParticleEmitter2::decode_mdl(&smoke.encode_mdl().unwrap()).unwrap(),
         smoke
@@ -47,7 +47,7 @@ fn spec_examples_match_independently_packed_binary_records() {
 fn particle2_choices_arrays_defaults_and_validation() {
     let base = "ParticleEmitter2 \"p\" { ObjectId 0, ";
     let empty = ParticleEmitter2::decode_mdl(&format!("{base}}}")).unwrap();
-    assert_eq!(empty.fields(), Default::default());
+    assert_eq!(empty, ParticleEmitter2::new(empty.node().clone()));
     assert_eq!(empty.node().flags().bits(), 0x1000);
     for (index, filter) in ["Blend", "Additive", "Modulate", "Modulate2x", "AlphaKey"]
         .iter()
@@ -57,14 +57,11 @@ fn particle2_choices_arrays_defaults_and_validation() {
             let text = format!("{base}{filter}, {keyword}, Squirt 7, PriorityPlane 4294967295, ReplaceableId 2, }}");
             let record = ParticleEmitter2::decode_mdl(&text).unwrap();
             assert_eq!(
-                record.fields().filter_mode,
+                record.filter_mode,
                 Particle2FilterMode::from_raw(index as u32)
             );
-            assert_eq!(
-                record.fields().frames,
-                Particle2Frames::from_raw(frame as u32)
-            );
-            assert_eq!(record.fields().squirt, 7);
+            assert_eq!(record.frames, Particle2Frames::from_raw(frame as u32));
+            assert_eq!(record.squirt, 7);
             assert_eq!(
                 ParticleEmitter2::decode_mdl(&record.encode_mdl().unwrap()).unwrap(),
                 record
@@ -75,10 +72,10 @@ fn particle2_choices_arrays_defaults_and_validation() {
         assert!(ParticleEmitter2::decode_mdl(&format!("{base}{body}}}")).is_err(), "{body}");
     }
     let mut invalid = empty.clone();
-    invalid.fields_mut().filter_mode = Particle2FilterMode::Unknown(5);
+    invalid.filter_mode = Particle2FilterMode::Unknown(5);
     assert!(invalid.encode_mdl().is_err());
-    invalid.fields_mut().filter_mode = Particle2FilterMode::Blend;
-    invalid.fields_mut().frames = Particle2Frames::Unknown(3);
+    invalid.filter_mode = Particle2FilterMode::Blend;
+    invalid.frames = Particle2Frames::Unknown(3);
     assert!(invalid.encode_mdl().is_err());
     let flags = ParticleEmitter2::decode_mdl(&format!(
         "{base}SortPrimsFarZ, LineEmitter, Unfogged, ModelSpace, Unshaded, XYQuad, }}"
@@ -112,7 +109,7 @@ fn emitter_tracks_preserve_signed_keys_splines_globals_and_hidden_bases() {
         ParticleEmitter2::decode_mdl(&record.encode_mdl().unwrap()).unwrap(),
         record
     );
-    record.fields_mut().speed = 10.0;
+    record.speed = 10.0;
     assert!(record.encode_mdl().is_err());
     let mut body = String::new();
     for name in ["LifeSpan", "EmissionRate", "Speed", "Alpha", "Visibility"] {

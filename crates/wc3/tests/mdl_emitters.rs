@@ -1,7 +1,5 @@
 use wc3::model::animation::{AnimationTrack, ParticleEmissionRate, RibbonAlpha, RibbonTextureSlot};
-use wc3::model::emitters::{
-    ParticleEmitter, ParticleTrack, RibbonEmitter, RibbonFields, RibbonTrack,
-};
+use wc3::model::emitters::{ParticleEmitter, ParticleTrack, RibbonEmitter, RibbonTrack};
 use wc3::model::mdl::{Read as _, Write as _};
 use wc3::model::mdx::{Read as _, Write as _};
 use wc3::model::scene::{Node, NodeFlags};
@@ -51,19 +49,17 @@ fn independent_emitter_fixtures_roundtrip() {
     roundtrip(&particle);
     node.set_flags(NodeFlags(0x4000));
     let mut ribbon = RibbonEmitter::new(node);
-    ribbon.set_fields(&RibbonFields {
-        height_above: 2.0,
-        height_below: 3.0,
-        alpha: 0.0,
-        color: [0.1, 0.2, 0.3],
-        life_span: 5.0,
-        texture_slot: 0,
-        emission_rate: u32::MAX,
-        rows: 2,
-        columns: 3,
-        material_id: 4,
-        gravity: -0.0,
-    });
+    ribbon.height_above = 2.0;
+    ribbon.height_below = 3.0;
+    ribbon.alpha = 0.0;
+    ribbon.color = [0.1, 0.2, 0.3];
+    ribbon.life_span = 5.0;
+    ribbon.texture_slot = 0;
+    ribbon.emission_rate = u32::MAX;
+    ribbon.rows = 2;
+    ribbon.columns = 3;
+    ribbon.material_id = 4;
+    ribbon.gravity = -0.0;
     ribbon.set_tracks(&[
         RibbonTrack::TextureSlot(
             AnimationTrack::<RibbonTextureSlot>::linear(vec![], None).unwrap(),
@@ -77,7 +73,7 @@ fn independent_emitter_fixtures_roundtrip() {
 fn ribbon_static_alias_and_all_channels_roundtrip() {
     let ribbon = RibbonEmitter::decode_mdl("RibbonEmitter \"Trail\" { ObjectId 22, Parent 6, static HeightAbove 4.0, static HeightBelow 4.0, static Alpha 1.0, static Color { 1.0, 1.0, 1.0 }, LifeSpan 0.5, TextureSlot 0, EmissionRate 30, Rows 1, Columns 1, MaterialID 1, }").unwrap();
     assert_eq!(ribbon.node().flags().bits(), 0x4000);
-    assert_eq!(ribbon.fields().emission_rate, 30);
+    assert_eq!(ribbon.emission_rate, 30);
     let text = ribbon.encode_mdl().unwrap();
     assert!(text.contains("static TextureSlot 0,"));
     assert!(!text.contains("Gravity"));
@@ -141,12 +137,9 @@ fn writers_reject_hidden_values_unknown_flags_and_path_padding() {
     let mut ribbon =
         RibbonEmitter::decode_mdl("RibbonEmitter \"a\" { ObjectId 0, TextureSlot 0 { Linear, } }")
             .unwrap();
-    let mut fields = ribbon.fields();
-    fields.texture_slot = 3;
-    ribbon.set_fields(&fields);
+    ribbon.texture_slot = 3;
     assert!(ribbon.encode_mdl().is_err());
-    fields.texture_slot = 0;
-    ribbon.set_fields(&fields);
+    ribbon.texture_slot = 0;
     ribbon.node_mut().set_flags(NodeFlags(0));
     assert!(ribbon.encode_mdl().is_err());
 }
