@@ -2,7 +2,7 @@ use std::io::Write;
 use std::marker::PhantomData;
 use wc3_mdx::mdl::{MdlWriter, Parser, ReadError, ReadErrorKind, Span, WriteError};
 use wc3_mdx::scene::ModelInfo;
-use wc3_mdx::{FixedText, MdlFlags, MdlRead, MdlWrite, Readable, Writable};
+use wc3_mdx::{FixedText, MdlRead, MdlWrite, Readable, Writable};
 
 fn print<T: MdlWrite>(value: &T) -> Result<String, WriteError> {
     let mut writer = MdlWriter::new(Vec::new());
@@ -291,15 +291,11 @@ fn read_write_and_default_bounds_are_independent() {
     .contains("Value 7,"));
 }
 
-// Packed storage needs only MdlFlags, not Default or either value codec.
-struct BareFlags(u32);
-impl MdlFlags for BareFlags {
-    fn from_bits(bits: u32) -> Self {
-        Self(bits)
-    }
-    fn bits(&self) -> u32 {
-        self.0
-    }
+// Packed storage uses bitfield traits without either value codec.
+bitfield::bitfield! {
+    #[derive(Default)]
+    struct BareFlags(u32);
+    bits, _: 31, 0;
 }
 #[derive(MdlRead, MdlWrite)]
 #[mdl(block = "Packed", write_order(flags, id))]

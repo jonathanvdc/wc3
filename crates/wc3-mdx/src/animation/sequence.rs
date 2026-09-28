@@ -1,5 +1,5 @@
 //! Animation sequence records in the `SEQS` chunk.
-use crate::mdl::{is_positive_zero, is_zero, MdlFlags, MdlRead, MdlWrite};
+use crate::mdl::{is_positive_zero, is_zero, MdlRead, MdlWrite};
 use crate::ModelVersion;
 use crate::ValueError;
 use crate::Vec3;
@@ -143,14 +143,5 @@ impl<V: ModelVersion> Model<V> {
     /// Additional `SEQS` chunks are removed after their records are replaced.
     pub fn set_sequences(&mut self, sequences: &[Sequence]) {
         self.replace_chunk(SequencesChunk::new(sequences.to_vec()));
-    }
-}
-
-impl MdlFlags for SequenceFlags {
-    fn from_bits(bits: u32) -> Self {
-        Self(bits)
-    }
-    fn bits(&self) -> u32 {
-        self.bits()
     }
 }

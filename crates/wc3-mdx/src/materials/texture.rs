@@ -1,5 +1,5 @@
 //! Fixed-width texture records in `TEXS` chunks.
-use crate::mdl::{is_zero, MdlFlags, MdlRead, MdlWrite};
+use crate::mdl::{is_zero, MdlRead, MdlWrite};
 use crate::ModelVersion;
 use crate::ValueError;
 use bitfield::bitfield;
@@ -90,14 +90,5 @@ impl<V: ModelVersion> Model<V> {
     /// chunks are removed after their records are replaced.
     pub fn set_textures(&mut self, textures: &[Texture]) {
         self.replace_chunk(TexturesChunk::new(textures.to_vec()));
-    }
-}
-
-impl MdlFlags for TextureFlags {
-    fn from_bits(bits: u32) -> Self {
-        Self(bits)
-    }
-    fn bits(&self) -> u32 {
-        self.bits()
     }
 }

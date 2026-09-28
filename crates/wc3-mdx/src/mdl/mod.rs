@@ -65,7 +65,7 @@
 //! | `header` | Required positional value before `{`. |
 //! | `property = "Name"` | Named value followed by a comma. |
 //! | `flag = "Name"` | Bare name followed by a comma; the field must be `bool`. |
-//! | `flags(Name = 1, Other = 2)` | Bare flags mapped to a shared MdlFlags value. |
+//! | `flags(Name = 1, Other = 2)` | Bare flags mapped to shared bitfield storage. |
 //! | `skip` | No text representation; an explicit default is required. |
 //!
 //! Properties and boolean flags are required unless annotated `default` (`Default::default()`) or
@@ -97,7 +97,8 @@
 //! general tuple structs remain handwritten.
 //!
 //! Packed mappings use nonzero single-bit u32 masks. Storage can be `u32` or
-//! any type implementing MdlFlags, such as SequenceFlags or TextureFlags.
+//! any type implementing BitRange<u32>; parsing also requires Default and
+//! BitRangeMut<u32>, as provided by SequenceFlags and TextureFlags.
 //! Mapped flags are independently optional and initialize storage to zero;
 //! repeating a name is an error, and writing unknown bits is an error. Mapping
 //! masks and MDL names must be unique. Only an optional bare `default` is allowed;
@@ -151,6 +152,10 @@ pub use parser::{Block, Counted, Field, Parser};
 mod writer;
 pub use writer::MdlWriter;
 
+// Re-export the bitfield traits for generated code in downstream crates.
+#[doc(hidden)]
+pub use bitfield::{BitRange, BitRangeMut};
+
 use std::io::Write;
 pub use wc3_mdx_derive::{MdlRead, MdlWrite};
 
@@ -194,21 +199,6 @@ impl Fields {
         } else {
             Ok(())
         }
-    }
-}
-
-/// A flags value backed by a lossless u32 bit pattern. Used by derived packed
-/// flag mappings; MDL output rejects bits outside the declared mapping.
-pub trait MdlFlags: Sized {
-    fn from_bits(bits: u32) -> Self;
-    fn bits(&self) -> u32;
-}
-impl MdlFlags for u32 {
-    fn from_bits(bits: u32) -> Self {
-        bits
-    }
-    fn bits(&self) -> u32 {
-        *self
     }
 }
 

@@ -158,7 +158,8 @@ Sequence, GlobalSequence, and PivotPoint now use derives as well.
 
 See the `mdl` module documentation for examples, hook signatures, and attribute
 rules. Packed `flags(Name = 1, Other = 2)` mappings work with `u32` or an
-`MdlFlags` type, initialize to zero, and reject duplicate names and unknown bits.
+`BitRange<u32>` type (with `Default` and `BitRangeMut<u32>` for parsing),
+initialize to zero, and reject duplicate names and unknown bits.
 `write_order(field_a, field_b, ...)` preserves MDL field order independently of
 binary layout. Single-field tuple structs support `#[mdl(property = "Name")]`
 and anonymous `#[mdl(entry)]` forms. The derives support at most 64 body names;

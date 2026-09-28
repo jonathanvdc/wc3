@@ -385,7 +385,12 @@ fn expand_checked(input: DeriveInput, reading: bool) -> Result<TokenStream> {
             generics
                 .make_where_clause()
                 .predicates
-                .push(parse_quote!(#ty: ::wc3_mdx::mdl::MdlFlags));
+                .push(parse_quote!(#ty: ::wc3_mdx::mdl::BitRange<u32>));
+            if reading {
+                generics.make_where_clause().predicates.push(
+                    parse_quote!(#ty: ::core::default::Default + ::wc3_mdx::mdl::BitRangeMut<u32>),
+                );
+            }
         }
         if reading
             && !matches!(field.kind, Kind::Flags(_))
@@ -426,14 +431,16 @@ fn expand_checked(input: DeriveInput, reading: bool) -> Result<TokenStream> {
                 continue;
             }
             if let Kind::Flags(flags) = kind {
-                locals.push(
-                    quote!(let mut #local: #ty = <#ty as ::wc3_mdx::mdl::MdlFlags>::from_bits(0);),
-                );
+                locals.push(quote! {
+                    let mut #local: #ty = ::core::default::Default::default();
+                    ::wc3_mdx::mdl::BitRangeMut::<u32>::set_bit_range(&mut #local, 31, 0, 0);
+                });
                 for (mdl_name, mask) in flags {
                     arms.push(quote!(#mdl_name => {
                         __wc3_mdl_fields.mark(#bit, __wc3_mdl_field)?;
                         __wc3_mdl_body.expect(::wc3_mdx::mdl::TokenKind::Comma)?;
-                        #local = <#ty as ::wc3_mdx::mdl::MdlFlags>::from_bits(::wc3_mdx::mdl::MdlFlags::bits(&#local) | #mask);
+                        let __wc3_mdl_bits = ::wc3_mdx::mdl::BitRange::<u32>::bit_range(&#local, 31, 0);
+                        ::wc3_mdx::mdl::BitRangeMut::<u32>::set_bit_range(&mut #local, 31, 0, __wc3_mdl_bits | #mask);
                     }));
                     bit += 1;
                 }
@@ -554,10 +561,10 @@ fn expand_checked(input: DeriveInput, reading: bool) -> Result<TokenStream> {
                 Kind::Flags(flags) => {
                     let known = flags.iter().fold(0u32, |bits, (_, mask)| bits | mask);
                     required_flags.push(quote! {
-                        if ::wc3_mdx::mdl::MdlFlags::bits(&self.#member) & !#known != 0 { return ::core::result::Result::Err(::wc3_mdx::mdl::WriteError::Unsupported(concat!("unknown flag bits in ", stringify!(#member)))); }
+                        if ::wc3_mdx::mdl::BitRange::<u32>::bit_range(&self.#member, 31, 0) & !#known != 0 { return ::core::result::Result::Err(::wc3_mdx::mdl::WriteError::Unsupported(concat!("unknown flag bits in ", stringify!(#member)))); }
                     });
                     for (mdl_name, mask) in flags {
-                        writes.push(quote!(if ::wc3_mdx::mdl::MdlFlags::bits(&self.#member) & #mask != 0 { __wc3_mdl_writer.flag(#mdl_name)?; }));
+                        writes.push(quote!(if ::wc3_mdx::mdl::BitRange::<u32>::bit_range(&self.#member, 31, 0) & #mask != 0 { __wc3_mdl_writer.flag(#mdl_name)?; }));
                     }
                 }
                 Kind::Flag(mdl_name) => {
