@@ -1,5 +1,5 @@
 //! Particle2 choice flags, three segment colors and projected UV intervals.
-use super::ParticleEmitter2;
+use super::{Particle2FilterMode, Particle2Frames, ParticleEmitter2};
 use crate::model::scene::{set_node_kind, validate_node_kind};
 use crate::model::{mdl, Color};
 use mdl::{Field, MdlWriter, Parser, ReadErrorKind, Span, TokenKind};
@@ -51,7 +51,7 @@ fn choice(value: u32, span: Span) -> Result<u32, mdl::ReadError> {
 }
 impl ParticleEmitter2 {
     pub(super) fn mdl_filter(&self) -> u32 {
-        1u32.checked_shl(self.fields.filter_mode).unwrap_or(0)
+        1u32.checked_shl(self.fields.filter_mode.raw()).unwrap_or(0)
     }
     pub(super) fn set_mdl_filter(
         &mut self,
@@ -59,11 +59,11 @@ impl ParticleEmitter2 {
         _: bool,
         span: Span,
     ) -> Result<(), mdl::ReadError> {
-        self.fields.filter_mode = choice(value, span)?;
+        self.fields.filter_mode = Particle2FilterMode::from_raw(choice(value, span)?);
         Ok(())
     }
     pub(super) fn mdl_frames(&self) -> u32 {
-        1u32.checked_shl(self.fields.frame_flags).unwrap_or(0)
+        1u32.checked_shl(self.fields.frames.raw()).unwrap_or(0)
     }
     pub(super) fn set_mdl_frames(
         &mut self,
@@ -71,7 +71,7 @@ impl ParticleEmitter2 {
         _: bool,
         span: Span,
     ) -> Result<(), mdl::ReadError> {
-        self.fields.frame_flags = choice(value, span)?;
+        self.fields.frames = Particle2Frames::from_raw(choice(value, span)?);
         Ok(())
     }
     pub(super) fn mdl_segments(&self) -> SegmentColorsRef<'_> {
@@ -92,10 +92,10 @@ impl ParticleEmitter2 {
     }
     pub(super) fn validate_mdl(&self) -> Result<(), mdl::WriteError> {
         validate_node_kind(&self.node, 0x1000 | (self.node.flags().bits() & 0x1f8000))?;
-        if self.fields.filter_mode > 4 {
+        if self.fields.filter_mode.raw() > 4 {
             return Err(mdl::WriteError::Unsupported("particle2 filter mode"));
         }
-        if self.fields.frame_flags > 2 {
+        if self.fields.frames.raw() > 2 {
             return Err(mdl::WriteError::Unsupported("particle2 head/tail mode"));
         }
         Ok(())

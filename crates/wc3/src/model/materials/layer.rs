@@ -4,8 +4,8 @@ use crate::model::ConversionError;
 use crate::model::{mdl, mdx};
 use bitfield::bitfield;
 use mdl_codec::{
-    full, is_no_reference, is_white, no_reference, one, read_filter, white, write_filter, zero,
-    zero_id, ShaderMarker, TextureBindings,
+    full, is_no_reference, is_white, no_reference, one, white, zero, zero_id, ShaderMarker,
+    TextureBindings,
 };
 use std::{fmt::Debug, marker::PhantomData};
 
@@ -28,6 +28,44 @@ track_group! {
         FresnelOpacity: LayerFresnelOpacity,
         FresnelTeamColor: LayerFresnelTeamColor,
     }
+}
+
+/// A numeric choice retaining unnamed binary values.
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Default,
+    Eq,
+    PartialEq,
+    Hash,
+    mdx::Read,
+    mdx::Write,
+    mdl::Read,
+    mdl::Write,
+    mdx::Value,
+)]
+#[mdx(value = u32)]
+#[mdl(value)]
+pub enum LayerFilterMode {
+    #[default]
+    #[mdx(value = 0)]
+    None,
+    #[mdx(value = 1)]
+    Transparent,
+    #[mdx(value = 2)]
+    Blend,
+    #[mdx(value = 3)]
+    Additive,
+    #[mdx(value = 4)]
+    AddAlpha,
+    #[mdx(value = 5)]
+    Modulate,
+    #[mdx(value = 6)]
+    Modulate2x,
+    #[mdx(unknown)]
+    #[mdl(unknown)]
+    Unknown(u32),
 }
 
 bitfield! {
@@ -60,6 +98,23 @@ bitfield! {
     pub ambient_occlusion, set_ambient_occlusion: 10;
 }
 
+impl LayerShadingFlags {
+    /// Retains every bit, including flags without known names.
+    pub const fn from_bits_retain(bits: u32) -> Self {
+        Self(bits)
+    }
+}
+impl mdx::Read for LayerShadingFlags {
+    fn read_mdx(cursor: &mut Cursor<'_>) -> Result<Self, mdx::ReadError> {
+        Ok(Self(cursor.read()?))
+    }
+}
+impl mdx::Write for LayerShadingFlags {
+    fn write_mdx(&self, encoder: &mut Encoder<'_>) -> Result<(), mdx::WriteError> {
+        encoder.write(&self.bits())
+    }
+}
+
 /// A Reforged layer texture slot, optionally animated by `KMTF`.
 #[derive(Clone, Debug, PartialEq)]
 pub struct LayerTextureSlot {
@@ -78,9 +133,24 @@ pub struct LayerTextureSlot {
 #[derive(Clone, Debug, PartialEq, mdx::Read, mdx::Write, mdl::Read, mdl::Write)]
 #[mdx(sized(tag = LAYER_TAG))]
 #[mdl(block = "Layer", validate_write = "Self::validate_mdl",
-    write_order(filter_mode, shading_flags, shader, textures, texture_animation_id,
+    write_order(filter_mode, shading, shader, textures, texture_animation_id,
         coordinate_id, alpha, emissive, color, opacity, team_color, channels),
     virtual_fields(
+    #[mdl(flags(
+        Unshaded = 1,
+        SphereEnvMap = 2,
+        WrapWidth = 4,
+        WrapHeight = 8,
+        TwoSided = 16,
+        Unfogged = 32,
+        NoDepthTest = 64,
+        NoDepthSet = 128,
+        Unlit = 256,
+        BackFacesForShadows = 512,
+        AmbientOcclusion = 1024
+    ))]
+    #[mdl(get = "Self::mdl_shading_flags", set = "Self::set_mdl_shading_flags")]
+    shading: u32,
         #[mdl(property = "Shader", hive_name = "ShaderTypeId", delegate)]
         #[mdl(get = "Self::mdl_shader", set = "Self::set_mdl_shader")]
         shader: ShaderMarker,
@@ -127,27 +197,10 @@ pub struct LayerTextureSlot {
 pub struct Layer<V: ModelVersion> {
     #[mdl(skip, default)]
     version: PhantomData<V>,
-    #[mdl(
-        property = "FilterMode",
-        default,
-        read_with = "read_filter",
-        write_with = "write_filter"
-    )]
-    filter_mode: u32,
-    #[mdl(flags(
-        Unshaded = 1,
-        SphereEnvMap = 2,
-        WrapWidth = 4,
-        WrapHeight = 8,
-        TwoSided = 16,
-        Unfogged = 32,
-        NoDepthTest = 64,
-        NoDepthSet = 128,
-        Unlit = 256,
-        BackFacesForShadows = 512,
-        AmbientOcclusion = 1024
-    ))]
-    shading_flags: u32,
+    #[mdl(property = "FilterMode", default)]
+    filter_mode: LayerFilterMode,
+    #[mdl(skip, default)]
+    shading_flags: LayerShadingFlags,
     #[mdl(skip, default)]
     texture_id: u32,
     #[mdl(
@@ -348,8 +401,8 @@ impl<V: ModelVersion> Layer<V> {
     pub fn new() -> Self {
         Self {
             version: PhantomData,
-            filter_mode: 0,
-            shading_flags: 0,
+            filter_mode: LayerFilterMode::default(),
+            shading_flags: LayerShadingFlags::default(),
             texture_id: 0,
             texture_animation_id: u32::MAX,
             coordinate_id: 0,
@@ -367,20 +420,20 @@ impl<V: ModelVersion> Layer<V> {
         V::NUMBER
     }
     /// Returns the blend filter mode.
-    pub fn filter_mode(&self) -> u32 {
+    pub fn filter_mode(&self) -> LayerFilterMode {
         self.filter_mode
     }
     /// Changes the blend filter mode.
-    pub fn set_filter_mode(&mut self, mode: u32) {
+    pub fn set_filter_mode(&mut self, mode: LayerFilterMode) {
         self.filter_mode = mode;
     }
     /// Returns decoded layer shading bits.
     pub fn shading_flags(&self) -> LayerShadingFlags {
-        LayerShadingFlags(self.shading_flags)
+        self.shading_flags
     }
     /// Changes decoded layer shading bits.
     pub fn set_shading_flags(&mut self, flags: LayerShadingFlags) {
-        self.shading_flags = flags.bits();
+        self.shading_flags = flags;
     }
     /// Returns the base texture index.
     pub fn texture_id(&self) -> u32 {

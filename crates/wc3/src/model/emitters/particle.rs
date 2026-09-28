@@ -1,8 +1,10 @@
 //! Classic particle emitters stored in `PREM` chunks.
 use crate::model::mdl::Span;
+use crate::model::scene::NodeFlags;
 use crate::model::scene::{set_node_kind, validate_node_kind};
 use crate::model::ModelVersion;
 use crate::model::{mdl, mdx};
+use bitfield::bitfield;
 crate::model::animation::track_group! {
     pub enum ParticleTrack {
         Visibility: ParticleVisibility,
@@ -187,4 +189,35 @@ fn finish_particle(value: &mut ParticleEmitter, _: Span) -> Result<(), mdl::Read
 }
 fn validate_particle(value: &ParticleEmitter) -> Result<(), mdl::WriteError> {
     validate_node_kind(&value.node, 0x1000 | (value.node.flags().bits() & 0x18000))
+}
+
+bitfield! {
+    /// Behavioral flags interpreted in this emitter's context.
+    #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+    pub struct ParticleEmitterFlags(u32);
+    /// Returns the stored bits.
+    pub bits, _: 31, 0;
+    /// Returns or changes `emitter_uses_mdl`.
+    pub emitter_uses_mdl, set_emitter_uses_mdl: 15;
+    /// Returns or changes `emitter_uses_tga`.
+    pub emitter_uses_tga, set_emitter_uses_tga: 16;
+}
+impl ParticleEmitterFlags {
+    const MASK: u32 = 0x18000;
+    /// Extracts this emitter's behavioral bits from a node word.
+    pub const fn from_bits(bits: u32) -> Self {
+        Self(bits & Self::MASK)
+    }
+}
+impl ParticleEmitter {
+    /// Returns behavioral flags using this emitter's bit meanings.
+    pub fn flags(&self) -> ParticleEmitterFlags {
+        ParticleEmitterFlags::from_bits(self.node.flags().bits())
+    }
+    /// Changes emitter behavior while preserving every unrelated node bit.
+    pub fn set_flags(&mut self, flags: ParticleEmitterFlags) {
+        let bits = (self.node.flags().bits() & !ParticleEmitterFlags::MASK)
+            | (flags.bits() & ParticleEmitterFlags::MASK);
+        self.node.set_flags(NodeFlags(bits));
+    }
 }

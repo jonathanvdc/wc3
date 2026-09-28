@@ -1,7 +1,7 @@
 //! MDL accessors and slot-qualified texture bindings.
 use super::{
-    EmissiveGainField, FresnelField, Layer, LayerShaderTypeField, LayerTextureSlot,
-    LayerTextureSlotsField, LayerTrack, ShaderType,
+    EmissiveGainField, FresnelField, Layer, LayerShaderTypeField, LayerShadingFlags,
+    LayerTextureSlot, LayerTextureSlotsField, LayerTrack, ShaderType,
 };
 use crate::model::mdl::{
     dispatch_name, Dialect, Field, MdlWriter, Parser, ReadErrorKind, ReadFields, Span, TokenKind,
@@ -11,36 +11,6 @@ use crate::model::{mdl, FixedText};
 use crate::model::{AnimationTrack, Color, LayerTextureId, ModelVersion};
 use std::io::Write as IoWrite;
 
-#[derive(Clone, Copy, mdl::Read, mdl::Write)]
-#[mdl(value)]
-enum FilterMode {
-    None,
-    Transparent,
-    Blend,
-    Additive,
-    AddAlpha,
-    Modulate,
-    Modulate2x,
-}
-pub(super) fn read_filter(parser: &mut Parser<'_>) -> Result<u32, mdl::ReadError> {
-    Ok(parser.read::<FilterMode>()? as u32)
-}
-pub(super) fn write_filter<W: IoWrite>(
-    value: &u32,
-    writer: &mut MdlWriter<W>,
-) -> Result<(), mdl::WriteError> {
-    let mode = match value {
-        0 => FilterMode::None,
-        1 => FilterMode::Transparent,
-        2 => FilterMode::Blend,
-        3 => FilterMode::Additive,
-        4 => FilterMode::AddAlpha,
-        5 => FilterMode::Modulate,
-        6 => FilterMode::Modulate2x,
-        _ => return Err(mdl::WriteError::Unsupported("filter mode")),
-    };
-    writer.write(&mode)
-}
 pub(super) fn one() -> f32 {
     1.0
 }
@@ -300,7 +270,7 @@ impl<V: ModelVersion> Layer<V> {
         Ok(())
     }
     pub(super) fn validate_mdl(&self) -> Result<(), mdl::WriteError> {
-        if self.filter_mode > 6 {
+        if self.filter_mode.raw() > 6 {
             return Err(mdl::WriteError::Unsupported("filter mode"));
         }
         if self.mdl_hd() {
@@ -466,6 +436,21 @@ impl mdl::WriteProperty for ShaderMarker {
                 writer.property(name, shader.name().expect("validated shader"))?;
             }
         }
+        Ok(())
+    }
+}
+
+impl<V: ModelVersion> Layer<V> {
+    pub(super) fn mdl_shading_flags(&self) -> u32 {
+        self.shading_flags.bits()
+    }
+    pub(super) fn set_mdl_shading_flags(
+        &mut self,
+        bits: u32,
+        _: bool,
+        _: Span,
+    ) -> Result<(), mdl::ReadError> {
+        self.shading_flags = LayerShadingFlags::from_bits_retain(bits);
         Ok(())
     }
 }

@@ -63,6 +63,9 @@ pub(crate) fn expand(input: DeriveInput, reading: bool) -> TokenStream {
 }
 
 fn expand_checked(input: DeriveInput, reading: bool) -> Result<TokenStream> {
+    if matches!(input.data, Data::Enum(_)) {
+        return expand_enum(&input, reading, false);
+    }
     let tag = sized_tag(&input)?;
     let name = input.ident;
     let fields = match input.data {
@@ -178,5 +181,283 @@ fn expand_checked(input: DeriveInput, reading: bool) -> Result<TokenStream> {
                 }
             }
         })
+    }
+}
+
+pub(crate) fn expand_value(input: DeriveInput) -> TokenStream {
+    if !matches!(input.data, Data::Enum(_)) {
+        return Error::new_spanned(input, "Value requires a numeric enum").to_compile_error();
+    }
+    match expand_enum(&input, false, true) {
+        Ok(tokens) => tokens,
+        Err(error) => error.to_compile_error(),
+    }
+}
+
+/// Numeric choices have an explicit wire representation independent of Rust layout.
+fn expand_enum(input: &DeriveInput, reading: bool, conversions: bool) -> Result<TokenStream> {
+    let mut wire = None;
+    for attr in input
+        .attrs
+        .iter()
+        .filter(|attr| attr.path().is_ident("mdx"))
+    {
+        attr.parse_nested_meta(|meta| {
+            if !meta.path.is_ident("value") || wire.is_some() {
+                return Err(meta.error("numeric enums require exactly one value = u32 attribute"));
+            }
+            let ty: Type = meta.value()?.parse()?;
+            if !matches!(&ty, Type::Path(path) if path.path.is_ident("u32")) {
+                return Err(meta.error("numeric enum wire type must be u32"));
+            }
+            wire = Some(ty);
+            Ok(())
+        })?;
+    }
+    let wire =
+        wire.ok_or_else(|| Error::new_spanned(input, "numeric enums require #[mdx(value = u32)]"))?;
+    let Data::Enum(data) = &input.data else {
+        unreachable!()
+    };
+    let mut values = Vec::new();
+    let mut read_arms = Vec::new();
+    let mut write_arms = Vec::new();
+    let mut unknown = None;
+    for variant in &data.variants {
+        let member = &variant.ident;
+        let mut value = None;
+        let mut fallback = false;
+        for attr in variant
+            .attrs
+            .iter()
+            .filter(|attr| attr.path().is_ident("mdx"))
+        {
+            attr.parse_nested_meta(|meta| {
+                if meta.path.is_ident("value") && value.is_none() && !fallback {
+                    let literal: syn::LitInt = meta.value()?.parse()?;
+                    let number = literal.base10_parse::<u32>()?;
+                    if !literal.suffix().is_empty() && literal.suffix() != "u32" {
+                        return Err(meta.error("wire values must be unsuffixed or u32 literals"));
+                    }
+                    value = Some(number);
+                    Ok(())
+                } else if meta.path.is_ident("unknown") && !fallback && value.is_none() {
+                    fallback = true;
+                    Ok(())
+                } else {
+                    Err(meta.error("expected one value = integer or unknown attribute"))
+                }
+            })?;
+        }
+        if variant.discriminant.is_some() {
+            return Err(Error::new_spanned(
+                variant,
+                "use #[mdx(value = ...)] instead of Rust discriminants",
+            ));
+        }
+        if fallback {
+            if unknown.is_some() {
+                return Err(Error::new_spanned(
+                    variant,
+                    "only one unknown variant is allowed",
+                ));
+            }
+            if !matches!(&variant.fields, Fields::Unnamed(fields) if fields.unnamed.len() == 1 && matches!(&fields.unnamed[0].ty, Type::Path(path) if path.path.is_ident("u32")))
+            {
+                return Err(Error::new_spanned(
+                    variant,
+                    "unknown variant must contain exactly one u32 field",
+                ));
+            }
+            unknown = Some(member);
+            write_arms.push(quote!(Self::#member(value) => *value));
+        } else {
+            if !matches!(variant.fields, Fields::Unit) {
+                return Err(Error::new_spanned(
+                    variant,
+                    "known numeric variants must be unit variants",
+                ));
+            }
+            let value = value.ok_or_else(|| {
+                Error::new_spanned(variant, "known variants require #[mdx(value = ...)]")
+            })?;
+            if values.contains(&value) {
+                return Err(Error::new_spanned(
+                    variant,
+                    "duplicate numeric enum wire value",
+                ));
+            }
+            values.push(value);
+            read_arms.push(quote!(#value => Self::#member));
+            write_arms.push(quote!(Self::#member => #value));
+        }
+    }
+    if data.variants.is_empty() {
+        return Err(Error::new_spanned(
+            input,
+            "numeric enums need at least one variant",
+        ));
+    }
+    let name = &input.ident;
+    let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
+    if conversions {
+        let (return_type, body) = if let Some(member) = unknown {
+            (
+                quote!(Self),
+                quote!(match value { #(#read_arms,)* value => Self::#member(value) }),
+            )
+        } else {
+            (
+                quote!(::core::option::Option<Self>),
+                quote!(::core::option::Option::Some(match value {
+                    #(#read_arms,)* _ => return ::core::option::Option::None,
+                })),
+            )
+        };
+        return Ok(quote! {
+            impl #impl_generics #name #ty_generics #where_clause {
+                /// Converts a binary value, preferring named variants.
+                pub const fn from_raw(value: #wire) -> #return_type { #body }
+                /// Returns the binary value, including an unknown payload verbatim.
+                pub const fn raw(self) -> #wire { match &self { #(#write_arms,)* } }
+            }
+        });
+    }
+    if reading {
+        let fallback = if let Some(member) = unknown {
+            quote!(value => Self::#member(value))
+        } else {
+            quote!(value => return Err(::wc3::model::mdx::ReadError::UnknownEnumValue { enum_name: stringify!(#name), value, offset }))
+        };
+        Ok(quote! {
+            impl #impl_generics ::wc3::model::mdx::Read for #name #ty_generics #where_clause {
+                fn read_mdx(cursor: &mut ::wc3::model::mdx::Cursor<'_>) -> Result<Self, ::wc3::model::mdx::ReadError> {
+                    let offset = cursor.absolute_position();
+                    let value = cursor.read::<#wire>()?;
+                    let _ = offset;
+                    Ok(match value { #(#read_arms,)* #fallback })
+                }
+            }
+        })
+    } else {
+        Ok(quote! {
+            impl #impl_generics ::wc3::model::mdx::Write for #name #ty_generics #where_clause {
+                fn write_mdx(&self, encoder: &mut ::wc3::model::mdx::Encoder<'_>) -> Result<(), ::wc3::model::mdx::WriteError> {
+                    let value: #wire = match self { #(#write_arms,)* };
+                    encoder.write(&value)
+                }
+            }
+        })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::expand_checked;
+    use syn::parse_quote;
+
+    #[test]
+    fn rejects_invalid_numeric_enum_declarations() {
+        let cases: [(syn::DeriveInput, &str); 9] = [
+            (
+                parse_quote!(
+                    enum Bad {
+                        A,
+                    }
+                ),
+                "require #[mdx(value = u32)]",
+            ),
+            (
+                parse_quote!(
+                    #[mdx(value = u16)]
+                    enum Bad {
+                        #[mdx(value = 0)]
+                        A,
+                    }
+                ),
+                "wire type must be u32",
+            ),
+            (
+                parse_quote!(
+                    #[mdx(value = u32)]
+                    enum Bad {
+                        A,
+                    }
+                ),
+                "known variants require",
+            ),
+            (
+                parse_quote!(
+                    #[mdx(value = u32)]
+                    enum Bad {
+                        #[mdx(value = 1)]
+                        A,
+                        #[mdx(value = 1)]
+                        B,
+                    }
+                ),
+                "duplicate numeric",
+            ),
+            (
+                parse_quote!(
+                    #[mdx(value = u32)]
+                    enum Bad {
+                        #[mdx(value = 4294967296)]
+                        A,
+                    }
+                ),
+                "number too large",
+            ),
+            (
+                parse_quote!(
+                    #[mdx(value = u32)]
+                    enum Bad {
+                        #[mdx(value = 0)]
+                        A(u32),
+                    }
+                ),
+                "must be unit",
+            ),
+            (
+                parse_quote!(
+                    #[mdx(value = u32)]
+                    enum Bad {
+                        #[mdx(unknown)]
+                        A(u16),
+                    }
+                ),
+                "exactly one u32",
+            ),
+            (
+                parse_quote!(
+                    #[mdx(value = u32)]
+                    enum Bad {
+                        #[mdx(unknown)]
+                        A(u32),
+                        #[mdx(unknown)]
+                        B(u32),
+                    }
+                ),
+                "only one unknown",
+            ),
+            (
+                parse_quote!(
+                    #[mdx(value = u32, sized(tag = TAG))]
+                    enum Bad {
+                        #[mdx(value = 0)]
+                        A,
+                    }
+                ),
+                "exactly one",
+            ),
+        ];
+        for (input, message) in cases {
+            for reading in [true, false] {
+                let error = expand_checked(input.clone(), reading)
+                    .unwrap_err()
+                    .to_string();
+                assert!(error.contains(message), "{error}");
+            }
+        }
     }
 }

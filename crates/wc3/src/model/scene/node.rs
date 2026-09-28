@@ -27,7 +27,12 @@ use crate::model::{Model, ReadError};
 const NAME_SIZE: usize = 80;
 
 bitfield! {
-    /// Node behavior and object-kind bits. Unrecognized bits survive conversion.
+    /// Node behavior and historical object-kind bits. Unrecognized bits survive conversion.
+    ///
+    /// Bits 15–20 depend on the containing emitter record. Prefer the emitter's
+    /// `flags()` and `set_flags()` methods for those bits: for example, bit 17
+    /// means Particle2 line emission but Popcorn unfogged rendering.
+    /// Historical kind bits are preserved storage, not an authoritative record kind.
     #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
     pub struct NodeFlags(u32);
     /// Returns the exact stored bits.

@@ -73,9 +73,40 @@ pub(super) fn expand(input: &DeriveInput, reading: bool) -> Result<TokenStream> 
             "MDL enums need at least one variant",
         ));
     }
+    let mut unknown = None;
     let mut variants = Vec::new();
     let mut literal_names = Vec::new();
     for variant in &data.variants {
+        let unknown_attrs = variant
+            .attrs
+            .iter()
+            .filter(|attr| {
+                attr.path().is_ident("mdl")
+                    && attr
+                        .parse_args::<Ident>()
+                        .is_ok_and(|name| name == "unknown")
+            })
+            .count();
+        if unknown_attrs > 0 {
+            if unknown.is_some()
+                || unknown_attrs != 1
+                || !matches!(mode, Mode::Value)
+                || !matches!(&variant.fields, Fields::Unnamed(fields) if fields.unnamed.len() == 1)
+                || variant
+                    .attrs
+                    .iter()
+                    .filter(|attr| attr.path().is_ident("mdl"))
+                    .count()
+                    != 1
+            {
+                return Err(Error::new_spanned(
+                    variant,
+                    "unknown requires a single payload variant in a value enum",
+                ));
+            }
+            unknown = Some(&variant.ident);
+            continue;
+        }
         let mut name = None;
         let mut framing = None;
         let mut delegate = false;
@@ -291,6 +322,9 @@ pub(super) fn expand(input: &DeriveInput, reading: bool) -> Result<TokenStream> 
                 },
             };
             choices.push(quote!(#pattern => { #write }));
+        }
+        if let Some(member) = unknown {
+            choices.push(quote!(Self::#member(_) => Err(::wc3::model::mdl::WriteError::Unsupported(concat!("unknown ", stringify!(#name), " value")))));
         }
         let validate = validate_write.map(|function| quote!(#function(self)?;));
         Ok(quote! {

@@ -60,6 +60,51 @@ tracks, and `encode_mdx()` reconstructs records while preserving field bits,
 fixed-width names, and optional section order. Geoset accessors such as
 `vertices()` borrow decoded data, and `vertices_mut()` supports bulk edits.
 
+## Numeric choices and flags
+
+Layer and Particle2 filter modes use separate `LayerFilterMode` and
+`Particle2FilterMode` enums because their binary values differ. Particle2's
+`frames` field uses `Particle2Frames`. All three retain unnamed binary values
+in `Unknown(u32)` variants. MDL output rejects choices without a text spelling.
+Layer shading is stored as `LayerShadingFlags` and retains unknown bits.
+
+Numeric enum derives use explicit wire mappings:
+
+```rust
+use wc3::model::mdx;
+
+#[derive(Clone, Copy, mdx::Read, mdx::Write, mdx::Value)]
+#[mdx(value = u32)]
+enum Choice {
+    #[mdx(value = 0)]
+    First,
+    #[mdx(value = 7)]
+    Second,
+    #[mdx(unknown)]
+    Unknown(u32),
+}
+
+assert_eq!(Choice::from_raw(99).raw(), 99);
+```
+
+`mdx::Value` generates const `from_raw()` and `raw()` methods from those same
+mappings. Without an unknown variant, `from_raw()` returns `Option<Self>` and
+MDX reading rejects unnamed values. With an unknown variant, it returns `Self`.
+Known raw values always decode to named variants, so `Unknown(7)` in this
+example writes the same bytes as `Second` and reads back as `Second`.
+MDL value enums may mark a payload variant `#[mdl(unknown)]` to reject it on
+text output without assigning it a keyword.
+
+Emitter `flags()` accessors return context-specific `bitfield` types:
+`ParticleEmitterFlags`, `Particle2Flags`, and `PopcornFlags`. Their setters
+preserve unrelated bits in the embedded node. Prefer these accessors to shared
+node flag names for emitter behavior; bit 17, for example, means Particle2
+line emission but Popcorn unfogged rendering.
+
+Migration from the previous API requires replacing integer filter assignments
+with enum variants (or explicit `from_raw()` calls), and replacing
+`Particle2Fields::frame_flags` with the typed `frames` field.
+
 ## Version conversion
 
 Conversions build a new typed model and leave the source intact:

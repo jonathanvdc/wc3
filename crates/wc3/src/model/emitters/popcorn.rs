@@ -1,8 +1,10 @@
 //! Reforged popcorn particle emitters in `CORN` chunks.
 use crate::model::mdl::{is_zero, Span};
+use crate::model::scene::NodeFlags;
 use crate::model::scene::{set_node_kind, validate_node_kind};
 use crate::model::{mdl, mdx};
 use crate::model::{ModelVersion, SupportsReforgedChunks};
+use bitfield::bitfield;
 crate::model::animation::track_group! {
     pub enum PopcornTrack {
         Alpha: PopcornAlpha,
@@ -220,4 +222,39 @@ fn finish_popcorn(value: &mut PopcornEmitter, _: Span) -> Result<(), mdl::ReadEr
 }
 fn validate_popcorn(value: &PopcornEmitter) -> Result<(), mdl::WriteError> {
     validate_node_kind(&value.node, 0x1000 | (value.node.flags().bits() & 0x78000))
+}
+
+bitfield! {
+    /// Behavioral flags interpreted in this emitter's context.
+    #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+    pub struct PopcornFlags(u32);
+    /// Returns the stored bits.
+    pub bits, _: 31, 0;
+    /// Returns or changes `unshaded`.
+    pub unshaded, set_unshaded: 15;
+    /// Returns or changes `sort_prims_far_z`.
+    pub sort_prims_far_z, set_sort_prims_far_z: 16;
+    /// Returns or changes `unfogged`.
+    pub unfogged, set_unfogged: 17;
+    /// Returns or changes `popcorn_scaling`.
+    pub popcorn_scaling, set_popcorn_scaling: 18;
+}
+impl PopcornFlags {
+    const MASK: u32 = 0x78000;
+    /// Extracts this emitter's behavioral bits from a node word.
+    pub const fn from_bits(bits: u32) -> Self {
+        Self(bits & Self::MASK)
+    }
+}
+impl PopcornEmitter {
+    /// Returns behavioral flags using this emitter's bit meanings.
+    pub fn flags(&self) -> PopcornFlags {
+        PopcornFlags::from_bits(self.node.flags().bits())
+    }
+    /// Changes emitter behavior while preserving every unrelated node bit.
+    pub fn set_flags(&mut self, flags: PopcornFlags) {
+        let bits =
+            (self.node.flags().bits() & !PopcornFlags::MASK) | (flags.bits() & PopcornFlags::MASK);
+        self.node.set_flags(NodeFlags(bits));
+    }
 }

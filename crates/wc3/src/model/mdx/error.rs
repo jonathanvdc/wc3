@@ -8,6 +8,12 @@ use std::{error::Error as StdError, fmt};
 pub enum ReadError {
     /// The input does not begin with `MDLX`.
     InvalidMagic,
+    /// A numeric choice without an unknown fallback encountered an unnamed value.
+    UnknownEnumValue {
+        enum_name: &'static str,
+        value: u32,
+        offset: usize,
+    },
     /// A typed chunk decoder encountered another chunk tag.
     UnexpectedChunkTag { expected: Tag, actual: Tag },
     /// The chunk header is incomplete.
@@ -39,6 +45,11 @@ pub enum ReadError {
 impl fmt::Display for ReadError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::UnknownEnumValue {
+                enum_name,
+                value,
+                offset,
+            } => write!(f, "unknown {enum_name} value {value} at byte {offset}"),
             Self::InvalidMagic => write!(f, "expected MDLX magic"),
             Self::UnexpectedChunkTag { expected, actual } => write!(
                 f,

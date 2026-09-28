@@ -4,7 +4,8 @@ use wc3::model::mdx::Read as _;
 use wc3::model::mdx::Write as _;
 
 use wc3::model::materials::{
-    Layer, LayerShadingFlags, LayerTextureSlot, Material, MaterialRenderFlags, ShaderType,
+    Layer, LayerFilterMode, LayerShadingFlags, LayerTextureSlot, Material, MaterialRenderFlags,
+    ShaderType,
 };
 use wc3::model::{
     DynamicModel, Model, ModelVersion, V1000, V1100, V1200, V1300, V1400, V1600, V1800, V800, V900,
@@ -12,7 +13,7 @@ use wc3::model::{
 
 fn sample_material<V: ModelVersion>() -> Material<V> {
     let mut layer = Layer::<V>::new();
-    layer.set_filter_mode(1);
+    layer.set_filter_mode(LayerFilterMode::Transparent);
     layer.set_texture_id(2);
     layer.set_alpha(0.5);
     let mut material = Material::<V>::new();
@@ -48,7 +49,7 @@ fn check_version<V: ModelVersion>() {
     assert!(materials[0].render_mode().constant_color());
     let layers = materials[0].layers();
     assert_eq!(layers[0].version(), version);
-    assert_eq!(layers[0].filter_mode(), 1);
+    assert_eq!(layers[0].filter_mode(), LayerFilterMode::Transparent);
     assert_eq!(layers[0].texture_id(), 2);
     assert_eq!(layers[0].alpha(), 0.5);
     assert_eq!(layers[0].shading_flags(), LayerShadingFlags::default());

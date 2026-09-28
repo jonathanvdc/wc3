@@ -1,3 +1,4 @@
+use wc3::model::emitters::{Particle2FilterMode, Particle2Frames};
 use wc3::model::emitters::{ParticleEmitter2, PopcornEmitter};
 use wc3::model::mdl::{Read as _, Write as _};
 use wc3::model::mdx::{Read as _, Write as _};
@@ -55,8 +56,14 @@ fn particle2_choices_arrays_defaults_and_validation() {
         for (frame, keyword) in ["Head", "Tail", "Both"].iter().enumerate() {
             let text = format!("{base}{filter}, {keyword}, Squirt 7, PriorityPlane 4294967295, ReplaceableId 2, }}");
             let record = ParticleEmitter2::decode_mdl(&text).unwrap();
-            assert_eq!(record.fields().filter_mode, index as u32);
-            assert_eq!(record.fields().frame_flags, frame as u32);
+            assert_eq!(
+                record.fields().filter_mode,
+                Particle2FilterMode::from_raw(index as u32)
+            );
+            assert_eq!(
+                record.fields().frames,
+                Particle2Frames::from_raw(frame as u32)
+            );
             assert_eq!(record.fields().squirt, 7);
             assert_eq!(
                 ParticleEmitter2::decode_mdl(&record.encode_mdl().unwrap()).unwrap(),
@@ -68,10 +75,10 @@ fn particle2_choices_arrays_defaults_and_validation() {
         assert!(ParticleEmitter2::decode_mdl(&format!("{base}{body}}}")).is_err(), "{body}");
     }
     let mut invalid = empty.clone();
-    invalid.fields_mut().filter_mode = 5;
+    invalid.fields_mut().filter_mode = Particle2FilterMode::Unknown(5);
     assert!(invalid.encode_mdl().is_err());
-    invalid.fields_mut().filter_mode = 0;
-    invalid.fields_mut().frame_flags = 3;
+    invalid.fields_mut().filter_mode = Particle2FilterMode::Blend;
+    invalid.fields_mut().frames = Particle2Frames::Unknown(3);
     assert!(invalid.encode_mdl().is_err());
     let flags = ParticleEmitter2::decode_mdl(&format!(
         "{base}SortPrimsFarZ, LineEmitter, Unfogged, ModelSpace, Unshaded, XYQuad, }}"

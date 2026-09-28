@@ -9,4 +9,4 @@ pub use error::{ReadError, ValueError, WriteError};
 mod fixed_text;
 pub use fixed_text::FixedText;
 
-pub use wc3_derive::{MdxRead as Read, MdxWrite as Write};
+pub use wc3_derive::{MdxRead as Read, MdxValue as Value, MdxWrite as Write};

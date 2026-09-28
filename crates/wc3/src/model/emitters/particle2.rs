@@ -1,6 +1,8 @@
 //! Particle emitter 2 records in `PRE2` chunks.
 use crate::model::mdl::is_zero;
+use crate::model::scene::NodeFlags;
 use crate::model::{mdl, mdx};
+use bitfield::bitfield;
 use mdl_codec::SegmentColors;
 mod mdl_codec;
 use crate::model::ModelVersion;
@@ -23,32 +25,38 @@ use crate::model::{Color, Vec3};
 use crate::model::ParticleEmitters2Chunk;
 use crate::model::{Model, Node};
 
-/// Which particle parts are rendered for each emitted particle.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+/// A numeric choice retaining unnamed binary values.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Hash, mdx::Read, mdx::Write, mdx::Value)]
+#[mdx(value = u32)]
 pub enum Particle2Frames {
+    #[default]
+    #[mdx(value = 0)]
     Head,
+    #[mdx(value = 1)]
     Tail,
+    #[mdx(value = 2)]
     Both,
+    #[mdx(unknown)]
     Unknown(u32),
 }
 
-impl Particle2Frames {
-    pub const fn from_raw(value: u32) -> Self {
-        match value {
-            0 => Self::Head,
-            1 => Self::Tail,
-            2 => Self::Both,
-            other => Self::Unknown(other),
-        }
-    }
-    pub const fn raw(self) -> u32 {
-        match self {
-            Self::Head => 0,
-            Self::Tail => 1,
-            Self::Both => 2,
-            Self::Unknown(value) => value,
-        }
-    }
+/// A numeric choice retaining unnamed binary values.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Hash, mdx::Read, mdx::Write, mdx::Value)]
+#[mdx(value = u32)]
+pub enum Particle2FilterMode {
+    #[default]
+    #[mdx(value = 0)]
+    Blend,
+    #[mdx(value = 1)]
+    Additive,
+    #[mdx(value = 2)]
+    Modulate,
+    #[mdx(value = 3)]
+    Modulate2x,
+    #[mdx(value = 4)]
+    AlphaKey,
+    #[mdx(unknown)]
+    Unknown(u32),
 }
 
 /// Fixed physical, texture, and color fields of a particle emitter 2.
@@ -62,11 +70,11 @@ pub struct Particle2Fields {
     pub emission_rate: f32,
     pub length: f32,
     pub width: f32,
-    pub filter_mode: u32,
+    pub filter_mode: Particle2FilterMode,
     pub rows: u32,
     pub columns: u32,
-    /// 0 = head, 1 = tail, 2 = both.
-    pub frame_flags: u32,
+    /// Which particle parts are rendered.
+    pub frames: Particle2Frames,
     pub tail_length: f32,
     pub time: f32,
     pub segment_colors: [Color; 3],
@@ -81,13 +89,13 @@ pub struct Particle2Fields {
 }
 
 impl Particle2Fields {
-    /// Decodes the frame mode while retaining unrecognized values.
+    /// Returns the frame mode, including unnamed binary values.
     pub fn frames(&self) -> Particle2Frames {
-        Particle2Frames::from_raw(self.frame_flags)
+        self.frames
     }
     /// Sets the frame mode.
     pub fn set_frames(&mut self, frames: Particle2Frames) {
-        self.frame_flags = frames.raw();
+        self.frames = frames;
     }
     /// Reports whether newly emitted particles are animated in one burst.
     pub fn squirt_enabled(&self) -> bool {
@@ -157,8 +165,8 @@ pub struct ParticleEmitter2 {
         #[mdl(property = "Squirt", default, skip_if = "is_zero")] squirt: u32,
         #[mdl(property = "PriorityPlane", default, skip_if = "is_zero")] priority_plane: u32,
         #[mdl(property = "ReplaceableId", default, skip_if = "is_zero")] replaceable_id: u32,
-        #[mdl(skip, default)] filter_mode: u32,
-        #[mdl(skip, default)] frame_flags: u32,
+        #[mdl(skip, default)] filter_mode: Particle2FilterMode,
+        #[mdl(skip, default)] frames: Particle2Frames,
         #[mdl(skip, default)] segment_colors: [Color; 3],
         #[mdl(skip, default)] uv_animations: [[u32; 3]; 4],
     ))]
@@ -222,5 +230,44 @@ impl<V: ModelVersion> Model<V> {
     /// Replaces particle emitter 2 records in the first `PRE2` chunk.
     pub fn set_particle_emitters2(&mut self, emitters: &[ParticleEmitter2]) {
         self.replace_chunk(ParticleEmitters2Chunk::new(emitters.to_vec()));
+    }
+}
+
+bitfield! {
+    /// Behavioral flags interpreted in this emitter's context.
+    #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+    pub struct Particle2Flags(u32);
+    /// Returns the stored bits.
+    pub bits, _: 31, 0;
+    /// Returns or changes `unshaded`.
+    pub unshaded, set_unshaded: 15;
+    /// Returns or changes `sort_prims_far_z`.
+    pub sort_prims_far_z, set_sort_prims_far_z: 16;
+    /// Returns or changes `line_emitter`.
+    pub line_emitter, set_line_emitter: 17;
+    /// Returns or changes `unfogged`.
+    pub unfogged, set_unfogged: 18;
+    /// Returns or changes `model_space`.
+    pub model_space, set_model_space: 19;
+    /// Returns or changes `xy_quad`.
+    pub xy_quad, set_xy_quad: 20;
+}
+impl Particle2Flags {
+    const MASK: u32 = 0x1f8000;
+    /// Extracts this emitter's behavioral bits from a node word.
+    pub const fn from_bits(bits: u32) -> Self {
+        Self(bits & Self::MASK)
+    }
+}
+impl ParticleEmitter2 {
+    /// Returns behavioral flags using this emitter's bit meanings.
+    pub fn flags(&self) -> Particle2Flags {
+        Particle2Flags::from_bits(self.node.flags().bits())
+    }
+    /// Changes emitter behavior while preserving every unrelated node bit.
+    pub fn set_flags(&mut self, flags: Particle2Flags) {
+        let bits = (self.node.flags().bits() & !Particle2Flags::MASK)
+            | (flags.bits() & Particle2Flags::MASK);
+        self.node.set_flags(NodeFlags(bits));
     }
 }

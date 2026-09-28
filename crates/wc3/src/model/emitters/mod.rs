@@ -1,9 +1,11 @@
 mod particle;
-pub use particle::ParticleEmitter;
+pub use particle::{ParticleEmitter, ParticleEmitterFlags};
 mod particle2;
-pub use particle2::{Particle2Fields, Particle2Frames, ParticleEmitter2};
+pub use particle2::{
+    Particle2Fields, Particle2FilterMode, Particle2Flags, Particle2Frames, ParticleEmitter2,
+};
 mod popcorn;
-pub use popcorn::PopcornEmitter;
+pub use popcorn::{PopcornEmitter, PopcornFlags};
 mod ribbon;
 pub use ribbon::{RibbonEmitter, RibbonFields};
 

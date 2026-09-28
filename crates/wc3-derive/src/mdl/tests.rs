@@ -1147,3 +1147,16 @@ fn dialect_attributes_reject_ambiguous_or_unmapped_names() {
         "distinct nonzero",
     );
 }
+
+#[test]
+fn value_enums_validate_unknown_variant_shape_and_context() {
+    for source in [
+        "#[mdl(value)] enum Bad { #[mdl(unknown)] Unknown }",
+        "#[mdl(value)] enum Bad { #[mdl(unknown)] Unknown(u32, u32) }",
+        "#[mdl(value)] enum Bad { #[mdl(unknown)] A(u32), #[mdl(unknown)] B(u32) }",
+        "#[mdl(tagged)] enum Bad { #[mdl(unknown)] Unknown(u32) }",
+        "#[mdl(value)] enum Bad { #[mdl(unknown)] #[mdl(name = \"Other\")] Unknown(u32) }",
+    ] {
+        rejects(syn::parse_str(source).unwrap(), "unknown requires");
+    }
+}
