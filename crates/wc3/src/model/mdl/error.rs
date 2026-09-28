@@ -35,6 +35,13 @@ pub enum ReadErrorKind {
     },
     NoProgress,
     TrailingInput,
+    VersionMismatch {
+        expected: u32,
+        actual: u32,
+    },
+    UnsupportedVersion {
+        version: u32,
+    },
 }
 
 /// An MDL syntax or value error. No source text is copied into the error.
@@ -104,6 +111,12 @@ impl Display for ReadErrorKind {
             }
             Self::NoProgress => f.write_str("list item reader consumed no input"),
             Self::TrailingInput => f.write_str("unexpected trailing input"),
+            Self::VersionMismatch { expected, actual } => {
+                write!(f, "expected format version {expected}, found {actual}")
+            }
+            Self::UnsupportedVersion { version } => {
+                write!(f, "unsupported format version {version}")
+            }
         }
     }
 }

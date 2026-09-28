@@ -1,6 +1,6 @@
 //! Fixed-size `MODL` model information.
 use crate::model::mdl;
-use crate::model::mdl::WriteError;
+use crate::model::mdl::{is_zero, WriteError};
 use crate::model::mdx;
 use crate::model::ModelVersion;
 use crate::model::ValueError;
@@ -19,7 +19,11 @@ const ANIMATION_FILE_NAME_SIZE: usize = 260;
 
 /// The 372-byte `MODL` record with separate name and animation-file fields.
 #[derive(Clone, Debug, PartialEq, mdx::Write, mdl::Read, mdl::Write)]
-#[mdl(block = "Model", validate_write = "ModelInfo::validate_mdl_write")]
+#[mdl(
+    block = "Model",
+    validate_write = "ModelInfo::validate_mdl_write",
+    write_order(blend_time, minimum_extent, maximum_extent, bounds_radius)
+)]
 pub struct ModelInfo {
     #[mdl(header)]
     name: FixedText<NAME_SIZE>,
@@ -31,7 +35,7 @@ pub struct ModelInfo {
     minimum_extent: Vec3,
     #[mdl(property = "MaximumExtent", default)]
     maximum_extent: Vec3,
-    #[mdl(property = "BlendTime", default)]
+    #[mdl(property = "BlendTime", default, skip_if = "is_zero")]
     blend_time: u32,
 }
 

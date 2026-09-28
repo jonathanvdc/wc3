@@ -175,8 +175,27 @@ binary layout. Single-field tuple structs support `#[mdl(property = "Name")]`
 and anonymous `#[mdl(entry)]` forms. The derives support at most 64 body names;
 flattened field groups, nested blocks, repeated records, and counted collections
 are derived too. Scalar keyword and tagged record enums are also supported.
-Whole-model MDL conversion is
-not implemented yet.
+`Model<V>` and `DynamicModel` now read and write whole MDL files using the
+`mdl::Read` / `mdl::Write` traits. Readers require Version first and a Model
+block, check counts and duplicates, and preserve record order and object IDs.
+Writers emit canonical order, merge known collection chunks and omit empty
+optional lists. Opaque chunks, duplicate or extended Version/Model chunks,
+and binary data without a faithful text representation are errors.
+Camera, ParticleEmitter2 and ParticleEmitterPopcorn record codecs remain
+pending; model I/O rejects those blocks and nonempty collections explicitly.
+
+```rust
+use wc3::model::{DynamicModel, Model, V800};
+use wc3::model::mdl::{Read as _, Write as _};
+use wc3::model::mdx::Write as _;
+let model = Model::<V800>::decode_mdl(
+    "Version { FormatVersion 800, } Model \"Example\" {}",
+).unwrap();
+let mdx = model.encode_mdx().unwrap();
+let canonical = model.encode_mdl().unwrap();
+let dynamic = DynamicModel::decode_mdl(&canonical).unwrap();
+assert_eq!(dynamic.version(), 800);
+```
 
 MDL structural fields use `#[mdl(flatten)]`, `#[mdl(block = "Target")]`,
 `#[mdl(repeated = "Layer")]`, or `#[mdl(counted = "Points")]`. A reusable

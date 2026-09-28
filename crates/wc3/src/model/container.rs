@@ -1,4 +1,4 @@
-//! A model in the Warcraft III MDX format.
+//! Typed and runtime Warcraft III models with MDX and MDL I/O.
 use crate::model::mdx;
 use crate::model::mdx::{Read as _, Write as _};
 use crate::model::Encoder;
@@ -14,6 +14,11 @@ use crate::model::{CollectionChunk, ModelChunk, ReadError, VersionChunk};
 pub const MAGIC: Tag = *b"MDLX";
 
 /// An ordered MDX model whose known chunks and versioned records use layout `V`.
+///
+/// The `mdl::Read` and `mdl::Write` traits also provide whole-file text I/O.
+/// MDL requires Version and Model blocks and checks FormatVersion against `V`.
+/// Text output canonicalizes chunk organization and rejects opaque data and
+/// records whose text codecs are unavailable; see [`crate::model::mdl`].
 ///
 /// ```compile_fail
 /// use wc3::model::{Model, V800, V1100};
@@ -178,7 +183,8 @@ impl<V: ModelVersion> mdx::Write for Model<V> {
     }
 }
 
-/// A decoded model whose version is determined by its `VERS` chunk.
+/// A decoded model whose version is determined by its `VERS` chunk or MDL
+/// Version block. `mdl::Read::decode_mdl` requires an explicit FormatVersion.
 #[derive(Clone, Debug)]
 pub enum DynamicModel {
     V800(Model<V800>),

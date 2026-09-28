@@ -1,10 +1,11 @@
 //! One matrix in a Reforged bind pose.
-use crate::model::mdx;
+use crate::model::{mdl, mdx};
 use crate::model::{BindPoseChunk, Model};
 use crate::model::{ModelVersion, SupportsReforgedChunks, ValueError};
 
 /// A 3-by-4 floating-point bind-pose matrix.
-#[derive(Clone, Copy, Debug, PartialEq, mdx::Read, mdx::Write)]
+#[derive(Clone, Copy, Debug, PartialEq, mdx::Read, mdx::Write, mdl::Read, mdl::Write)]
+#[mdl(entry)]
 pub struct BindPoseMatrix(pub [f32; 12]);
 
 impl<V: ModelVersion> Model<V> {

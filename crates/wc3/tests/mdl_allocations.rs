@@ -168,3 +168,26 @@ fn geosets_write_borrowed_mesh_sections_without_allocating() {
     });
     assert_eq!(count, 0);
 }
+
+#[test]
+fn model_assembly_writes_borrowed_collections_without_allocating() {
+    use wc3::model::chunks::{GlidersChunk, GlobalSequencesChunk};
+    use wc3::model::geometry::Geoset;
+    use wc3::model::scene::Glider;
+    use wc3::model::{Model, V800};
+    let mut model =
+        Model::<V800>::decode_mdl("Version { FormatVersion 800, } Model \"Borrowed\" {}").unwrap();
+    model.set_geosets(&[
+        Geoset::<V800>::decode_mdl(include_str!("fixtures/mdl/quad_geoset.mdl")).unwrap(),
+    ]);
+    model.push(GlobalSequencesChunk::new(vec![GlobalSequence(100)]).into());
+    model.push(GlobalSequencesChunk::new(vec![GlobalSequence(200)]).into());
+    model.push(GlidersChunk::new(vec![Glider { geoset_id: 0 }]).into());
+    let mut storage = [0u8; 8192];
+    let (_, count) = measured(|| {
+        let mut writer = MdlWriter::new(IoCursor::new(&mut storage[..]));
+        writer.write(&model).unwrap();
+        writer.finish().unwrap();
+    });
+    assert_eq!(count, 0);
+}

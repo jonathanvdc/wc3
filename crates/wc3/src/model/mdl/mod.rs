@@ -32,7 +32,28 @@
 //! visibility. Ribbon TextureSlot accepts the spec's bare scalar form and writes
 //! canonical static properties. Writers reject hidden bases and unrepresentable
 //! flag bits. ParticleEmitter's resource path occupies all 260 binary bytes.
-//! Whole-model conversion is not implemented yet.
+//! `Model<V>` and `DynamicModel` support complete-file MDL I/O for these records,
+//! plus Geoset, FaceFX, BindPose and Glider. Version must be first and Model must
+//! exist. Typed reads check FormatVersion; dynamic reads select the layout.
+//! Writers emit canonical block order, merge repeated collection chunks in
+//! record order and omit empty optional collections. IDs and references are
+//! preserved; hierarchy validation is separate. Opaque chunks, duplicate or
+//! extended Version/Model chunks and unrepresentable record data cause errors.
+//! Camera, ParticleEmitter2 and ParticleEmitterPopcorn record codecs are still
+//! pending: their input blocks and nonempty binary collections return explicit
+//! unsupported errors.
+//!
+//! ```
+//! use wc3::model::{Model, DynamicModel, V800};
+//! use wc3::model::mdl::{Read as _, Write as _};
+//! use wc3::model::mdx::Write as _;
+//! let source = "Version { FormatVersion 800, } Model \"Example\" {}";
+//! let model = Model::<V800>::decode_mdl(source)?;
+//! let binary = model.encode_mdx()?;
+//! let canonical = model.encode_mdl()?;
+//! assert_eq!(DynamicModel::decode_mdl(&canonical)?.version(), 800);
+//! # Ok::<(), Box<dyn std::error::Error>>(())
+//! ```
 //!
 //! ```
 //! use wc3::model::materials::Texture;
@@ -486,6 +507,7 @@ mod fields;
 pub use fields::{dispatch_name, field_names_unique, read_mdl_body};
 pub use fields::{ReadFields, WriteFields};
 mod lexer;
+mod model;
 pub use lexer::{Lexer, Token, TokenKind};
 mod parser;
 pub use parser::{Block, Counted, Field, Parser};

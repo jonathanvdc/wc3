@@ -1,6 +1,6 @@
 //! Reforged face-animation references in `FAFX` chunks.
-use crate::model::mdx;
 use crate::model::ValueError;
+use crate::model::{mdl, mdx};
 use crate::model::{ModelVersion, SupportsReforgedChunks};
 
 use crate::model::FaceFxChunk;
@@ -14,9 +14,12 @@ const NAME_SIZE: usize = 80;
 const PATH_SIZE: usize = 260;
 
 /// One fixed-size face-animation name and path pair.
-#[derive(Clone, Debug, Eq, PartialEq, mdx::Read, mdx::Write)]
+#[derive(Clone, Debug, Eq, PartialEq, mdx::Read, mdx::Write, mdl::Read, mdl::Write)]
+#[mdl(block = "FaceFX")]
 pub struct FaceFx {
+    #[mdl(header)]
     name: FixedText<NAME_SIZE>,
+    #[mdl(property = "Path", default)]
     path: FixedText<PATH_SIZE>,
 }
 

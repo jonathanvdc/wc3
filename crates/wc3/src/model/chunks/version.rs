@@ -1,16 +1,22 @@
 //! The complete version chunk.
 use crate::model::Encoder;
 use crate::model::WriteError;
-use crate::model::{ModelVersion, Tag};
+use crate::model::{mdl, ModelVersion, Tag};
 use std::marker::PhantomData;
 
 use crate::model::Cursor;
 use crate::model::{Chunk, KnownChunk, ReadError};
 
 /// A complete `VERS` chunk, including bytes after the version number.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, mdl::Read, mdl::Write)]
+#[mdl(block = "Version", validate_write = "Self::validate_mdl_write", virtual_fields(
+    #[mdl(property = "FormatVersion", get = "Self::mdl_version", set = "Self::set_mdl_version")]
+    format_version: u32,
+))]
 pub struct VersionChunk<V: ModelVersion> {
+    #[mdl(skip, default)]
     pub extension: Vec<u8>,
+    #[mdl(skip, default)]
     version: PhantomData<V>,
 }
 

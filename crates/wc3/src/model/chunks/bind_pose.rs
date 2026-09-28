@@ -1,13 +1,16 @@
 //! Reforged bind-pose matrices in `BPOS` chunks.
 use crate::model::{
-    BindPoseMatrix, Chunk, CollectionChunk, Cursor, Encoder, KnownChunk, ReadError, Tag, WriteError,
+    mdl, BindPoseMatrix, Chunk, CollectionChunk, Cursor, Encoder, KnownChunk, ReadError, Tag,
+    WriteError,
 };
 
 const MATRIX_SIZE: usize = 48;
 
 /// A `BPOS` chunk containing a counted collection of matrices.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, mdl::Read, mdl::Write)]
+#[mdl(block = "BindPose")]
 pub struct BindPoseChunk {
+    #[mdl(counted = "Matrices")]
     pub records: Vec<BindPoseMatrix>,
 }
 
