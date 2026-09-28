@@ -1,9 +1,7 @@
 //! Geoset animation records in `GEOA` chunks.
-use crate::model::mdl::{Field, Fields, MdlWriter, Parser, ReadErrorKind, TokenKind};
 use crate::model::ModelVersion;
 use crate::model::{mdl, mdx};
 use bitfield::bitfield;
-use std::io::Write as IoWrite;
 crate::model::animation::track_group! {
     pub enum GeosetTrack {
         Alpha: GeosetAlpha,
@@ -19,7 +17,7 @@ use crate::model::Model;
 
 bitfield! {
     /// Geoset animation rendering flags, retaining unknown bits.
-    #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+    #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, mdx::Read, mdx::Write)]
     pub struct GeosetAnimationFlags(u32);
     /// Returns the exact stored bits.
     pub bits, _: 31, 0;
@@ -30,25 +28,50 @@ bitfield! {
 }
 
 /// A geoset animation with decoded alpha and color tracks.
-#[derive(Clone, Debug, PartialEq, mdx::Read, mdx::Write)]
+#[derive(Clone, Debug, PartialEq, mdx::Read, mdx::Write, mdl::Read, mdl::Write)]
 #[mdx(sized(tag = GeosetAnimationsChunk::TAG))]
+#[mdl(
+    block = "GeosetAnim",
+    default,
+    validate_write = "Self::validate_mdl_write",
+    write_order(alpha, flags, geoset_id, color, tracks)
+)]
 pub struct GeosetAnimation {
+    #[mdl(animatable = "Alpha", track = "GeosetTrack::Alpha")]
     alpha: f32,
-    raw_flags: u32,
+    #[mdl(flags(DropShadow = 1), allow_bits = 2)]
+    flags: GeosetAnimationFlags,
+    #[mdl(
+        animatable = "Color",
+        track = "GeosetTrack::Color",
+        enabled_if = "Self::uses_color",
+        enable_with = "Self::enable_color"
+    )]
     color: Color,
+    #[mdl(property = "GeosetId", required)]
     geoset_id: u32,
+    #[mdl(tracks)]
     tracks: Vec<GeosetTrack>,
+}
+
+impl Default for GeosetAnimation {
+    fn default() -> Self {
+        Self {
+            alpha: 1.0,
+            flags: GeosetAnimationFlags::default(),
+            color: [1.0; 3],
+            geoset_id: 0,
+            tracks: Vec::new(),
+        }
+    }
 }
 
 impl GeosetAnimation {
     /// Creates a geoset animation with opaque white color and full alpha.
     pub fn new(geoset_id: u32) -> Self {
         Self {
-            alpha: 1.0,
-            raw_flags: 0,
-            color: [1.0; 3],
             geoset_id,
-            tracks: Vec::new(),
+            ..Self::default()
         }
     }
 
@@ -62,11 +85,11 @@ impl GeosetAnimation {
     }
     /// Returns decoded rendering flags.
     pub fn flags(&self) -> GeosetAnimationFlags {
-        GeosetAnimationFlags(self.raw_flags)
+        self.flags
     }
     /// Changes decoded rendering bits.
     pub fn set_flags(&mut self, flags: GeosetAnimationFlags) {
-        self.raw_flags = flags.bits();
+        self.flags = flags;
     }
     /// Returns base RGB color.
     pub fn color(&self) -> Color {
@@ -106,106 +129,25 @@ impl<V: ModelVersion> Model<V> {
     }
 }
 
-impl mdl::Read for GeosetAnimation {
-    fn read_mdl(parser: &mut Parser<'_>) -> Result<Self, mdl::ReadError> {
-        parser.expect_ident("GeosetAnim")?;
-        let mut body = parser.begin_block()?;
-        let mut value = Self::new(0);
-        let mut fields = Fields::default();
-        while let Some(token) = body.peek()? {
-            if token.kind == TokenKind::CloseBrace {
-                break;
-            }
-            let mut field = match token.kind {
-                TokenKind::Ident(name) => Field {
-                    name,
-                    span: token.span,
-                },
-                _ => return Err(body.error(ReadErrorKind::Expected("a field name or '}'"))),
-            };
-            if field.name == "static" {
-                body.next_token()?;
-                let token = body.next_token()?;
-                field = match token.kind {
-                    TokenKind::Ident(name) => Field {
-                        name,
-                        span: token.span,
-                    },
-                    _ => {
-                        return Err(mdl::ReadError::new(
-                            token.span,
-                            ReadErrorKind::Expected("an animatable property name"),
-                        ))
-                    }
-                };
-                match field.name {
-                    "Alpha" => {
-                        fields.mark(0, field)?;
-                        value.alpha = body.read_property()?;
-                    }
-                    "Color" => {
-                        fields.mark(1, field)?;
-                        value.color = body.read_property()?;
-                        value.raw_flags |= 2;
-                    }
-                    _ => return Err(mdl::ReadError::new(field.span, ReadErrorKind::UnknownField)),
-                }
-            } else {
-                match field.name {
-                    "Alpha" | "Color" => {
-                        fields.mark(if field.name == "Alpha" { 0 } else { 1 }, field)?;
-                        value.tracks.push(body.read::<GeosetTrack>()?);
-                        if field.name == "Color" {
-                            value.raw_flags |= 2;
-                        }
-                    }
-                    "DropShadow" => {
-                        fields.mark(2, field)?;
-                        body.next_token()?;
-                        body.expect(TokenKind::Comma)?;
-                        value.raw_flags |= 1;
-                    }
-                    "GeosetId" => {
-                        fields.mark(3, field)?;
-                        body.next_token()?;
-                        value.geoset_id = body.read_property()?;
-                    }
-                    _ => return Err(mdl::ReadError::new(field.span, ReadErrorKind::UnknownField)),
-                }
-            }
-        }
-        fields.require(
-            3,
-            "GeosetId",
-            body.error(ReadErrorKind::MissingField("GeosetId")).span,
-        )?;
-        body.finish()?;
-        Ok(value)
+impl GeosetAnimation {
+    fn uses_color(&self) -> bool {
+        self.flags.color()
     }
-}
+    fn enable_color(&mut self) {
+        self.flags.set_color(true);
+    }
 
-impl mdl::Write for GeosetAnimation {
-    fn write_mdl<W: IoWrite>(&self, writer: &mut MdlWriter<W>) -> Result<(), mdl::WriteError> {
-        if self.raw_flags & !3 != 0 {
-            return Err(mdl::WriteError::Unsupported(
-                "unknown geoset animation flags",
-            ));
-        }
-        let mut alpha_track = false;
-        let mut color_track = false;
-        for track in &self.tracks {
-            let seen = match track {
-                GeosetTrack::Alpha(_) => &mut alpha_track,
-                GeosetTrack::Color(_) => &mut color_track,
-            };
-            if *seen {
-                return Err(mdl::WriteError::Unsupported(
-                    "duplicate geoset animation track",
-                ));
-            }
-            *seen = true;
-        }
-        if alpha_track && self.alpha.to_bits() != 1.0f32.to_bits() {
+    fn validate_mdl_write(&self) -> Result<(), mdl::WriteError> {
+        let defaults = Self::default();
+        let alpha_track = self
+            .tracks
+            .iter()
+            .any(|track| matches!(track, GeosetTrack::Alpha(_)));
+        let color_track = self
+            .tracks
+            .iter()
+            .any(|track| matches!(track, GeosetTrack::Color(_)));
+        if alpha_track && self.alpha.to_bits() != defaults.alpha.to_bits() {
             return Err(mdl::WriteError::Unsupported(
                 "nondefault base alpha alongside an animation track",
             ));
@@ -213,7 +155,8 @@ impl mdl::Write for GeosetAnimation {
         let white = self
             .color
             .iter()
-            .all(|value| value.to_bits() == 1.0f32.to_bits());
+            .zip(defaults.color)
+            .all(|(value, default)| value.to_bits() == default.to_bits());
         let uses_color = self.flags().color();
         if color_track && !uses_color {
             return Err(mdl::WriteError::Unsupported(
@@ -223,21 +166,6 @@ impl mdl::Write for GeosetAnimation {
         if (color_track || !uses_color) && !white {
             return Err(mdl::WriteError::Unsupported("base color omitted by MDL"));
         }
-        writer.begin_block("GeosetAnim")?;
-        if !alpha_track {
-            writer.static_property("Alpha", &self.alpha)?;
-        }
-        if self.flags().drop_shadow() {
-            writer.flag("DropShadow")?;
-        }
-        writer.property("GeosetId", &self.geoset_id)?;
-        if uses_color && !color_track {
-            writer.static_property("Color", &self.color)?;
-        }
-        // Preserve the order of stored tracks through text round trips.
-        for track in &self.tracks {
-            writer.write(track)?;
-        }
-        writer.end_block()
+        Ok(())
     }
 }

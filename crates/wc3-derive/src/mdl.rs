@@ -3,7 +3,7 @@ use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
 use syn::{
     meta::ParseNestedMeta, parse_quote, Data, DeriveInput, Error, Field as SynField, Fields,
-    GenericParam, Ident, LitInt, LitStr, Path, Result, Token, Type,
+    GenericArgument, GenericParam, Ident, LitInt, LitStr, Path, PathArguments, Result, Token, Type,
 };
 
 #[derive(Default)]
@@ -11,6 +11,7 @@ struct Container {
     block: Option<LitStr>,
     property: Option<LitStr>,
     entry: bool,
+    default: bool,
     write_order: Option<Vec<Ident>>,
     validate_read: Option<Path>,
     validate_write: Option<Path>,
@@ -19,6 +20,9 @@ struct Container {
 enum Kind {
     Header,
     Property(LitStr),
+    StaticProperty(LitStr),
+    Animatable(LitStr),
+    Tracks,
     Flag(LitStr),
     Flags(Vec<(LitStr, u32)>),
     Skip,
@@ -38,6 +42,11 @@ struct Field {
     skip_if: Option<Path>,
     read_with: Option<Path>,
     write_with: Option<Path>,
+    track: Option<Path>,
+    enabled_if: Option<Path>,
+    enable_with: Option<Path>,
+    allow_bits: u32,
+    required: bool,
 }
 
 fn identifier(name: &LitStr) -> Result<()> {
@@ -94,6 +103,10 @@ fn container(input: &DeriveInput) -> Result<Container> {
                 if result.block.is_some() || result.property.is_some() || result.entry { return Err(meta.error("choose exactly one of block, property, or entry")); }
                 result.entry = true;
                 Ok(())
+            } else if meta.path.is_ident("default") {
+                if result.default { return Err(meta.error("duplicate container default")); }
+                result.default = true;
+                Ok(())
             } else if meta.path.is_ident("write_order") {
                 if result.write_order.is_some() { return Err(meta.error("duplicate write_order")); }
                 let mut order = Vec::new();
@@ -110,7 +123,7 @@ fn container(input: &DeriveInput) -> Result<Container> {
             } else if meta.path.is_ident("validate_write") {
                 path(&meta, &mut result.validate_write)
             } else {
-                Err(meta.error("expected block, property, entry, write_order, validate_read, or validate_write"))
+                Err(meta.error("expected block, property, entry, default, write_order, validate_read, or validate_write"))
             }
         })?;
     }
@@ -129,6 +142,11 @@ fn field(field: &SynField, index: usize) -> Result<Field> {
     let mut skip_if = None;
     let mut read_with = None;
     let mut write_with = None;
+    let mut track = None;
+    let mut enabled_if = None;
+    let mut enable_with = None;
+    let mut allow_bits = None;
+    let mut required = false;
     for attr in &field.attrs {
         if !attr.path().is_ident("mdl") {
             continue;
@@ -139,16 +157,21 @@ fn field(field: &SynField, index: usize) -> Result<Field> {
                 || meta.path.is_ident("flag")
                 || meta.path.is_ident("flags")
                 || meta.path.is_ident("skip")
+                || meta.path.is_ident("static_property")
+                || meta.path.is_ident("animatable")
+                || meta.path.is_ident("tracks")
             {
                 if kind.is_some() {
                     return Err(meta.error(
-                        "a field must have exactly one of header, property, flag, flags, or skip",
+                        "a field must have exactly one of header, property, static_property, animatable, tracks, flag, flags, or skip",
                     ));
                 }
                 kind = Some(if meta.path.is_ident("header") {
                     Kind::Header
                 } else if meta.path.is_ident("skip") {
                     Kind::Skip
+                } else if meta.path.is_ident("tracks") {
+                    Kind::Tracks
                 } else if meta.path.is_ident("flags") {
                     let mut flags = Vec::new();
                     let mut bits = 0u32;
@@ -180,10 +203,31 @@ fn field(field: &SynField, index: usize) -> Result<Field> {
                     identifier(&name)?;
                     if meta.path.is_ident("property") {
                         Kind::Property(name)
+                    } else if meta.path.is_ident("static_property") {
+                        Kind::StaticProperty(name)
+                    } else if meta.path.is_ident("animatable") {
+                        Kind::Animatable(name)
                     } else {
                         Kind::Flag(name)
                     }
                 });
+                Ok(())
+            } else if meta.path.is_ident("required") {
+                if required { return Err(meta.error("duplicate required")); }
+                required = true;
+                Ok(())
+            } else if meta.path.is_ident("track") {
+                path(&meta, &mut track)
+            } else if meta.path.is_ident("enabled_if") {
+                path(&meta, &mut enabled_if)
+            } else if meta.path.is_ident("enable_with") {
+                path(&meta, &mut enable_with)
+            } else if meta.path.is_ident("allow_bits") {
+                if allow_bits.is_some() {
+                    return Err(meta.error("duplicate allow_bits"));
+                }
+                let value: LitInt = meta.value()?.parse()?;
+                allow_bits = Some(value.base10_parse::<u32>()?);
                 Ok(())
             } else if meta.path.is_ident("default") {
                 if default.is_some() {
@@ -210,13 +254,66 @@ fn field(field: &SynField, index: usize) -> Result<Field> {
     let kind = kind.ok_or_else(|| {
         Error::new_spanned(
             field,
-            "each field needs an explicit MDL header, property, flag, flags, or skip attribute",
+            "each field needs an explicit MDL header, property, static_property, animatable, tracks, flag, flags, or skip attribute",
         )
     })?;
-    if skip_if.is_some() && matches!(kind, Kind::Property(_)) && default.is_none() {
+    if matches!(kind, Kind::Animatable(_)) {
+        if track.is_none() {
+            return Err(Error::new_spanned(
+                field,
+                "animatable fields require a track attribute",
+            ));
+        }
+        if read_with.is_some() || write_with.is_some() {
+            return Err(Error::new_spanned(
+                field,
+                "animatable fields do not support value codec hooks",
+            ));
+        }
+        if enabled_if.is_some() != enable_with.is_some() {
+            return Err(Error::new_spanned(
+                field,
+                "enabled_if and enable_with must be supplied together",
+            ));
+        }
+    } else if track.is_some() || enabled_if.is_some() || enable_with.is_some() {
         return Err(Error::new_spanned(
             field,
-            "skip_if requires an explicit default",
+            "track and enable hooks require an animatable field",
+        ));
+    }
+    if allow_bits.is_some() && !matches!(kind, Kind::Flags(_)) {
+        return Err(Error::new_spanned(
+            field,
+            "allow_bits requires packed flags",
+        ));
+    }
+    if let Kind::Flags(flags) = &kind {
+        let mapped = flags.iter().fold(0, |bits, (_, mask)| bits | mask);
+        if mapped & allow_bits.unwrap_or(0) != 0 {
+            return Err(Error::new_spanned(
+                field,
+                "allow_bits must not overlap mapped flags",
+            ));
+        }
+    }
+    if matches!(kind, Kind::Tracks) {
+        if default.is_some() || skip_if.is_some() || read_with.is_some() || write_with.is_some() {
+            return Err(Error::new_spanned(
+                field,
+                "tracks cannot have defaults, omission predicates, or codec hooks",
+            ));
+        }
+        track_element(&field.ty)?;
+    }
+    if required
+        && (default.is_some()
+            || skip_if.is_some()
+            || !matches!(kind, Kind::Property(_) | Kind::StaticProperty(_)))
+    {
+        return Err(Error::new_spanned(
+            field,
+            "required is only supported on properties without defaults or omission predicates",
         ));
     }
     match &kind {
@@ -227,12 +324,6 @@ fn field(field: &SynField, index: usize) -> Result<Field> {
             ))
         }
         Kind::Skip => {
-            if default.is_none() {
-                return Err(Error::new_spanned(
-                    field,
-                    "skipped fields need an explicit default",
-                ));
-            }
             if skip_if.is_some() || read_with.is_some() || write_with.is_some() {
                 return Err(Error::new_spanned(
                     field,
@@ -282,7 +373,29 @@ fn field(field: &SynField, index: usize) -> Result<Field> {
         skip_if,
         read_with,
         write_with,
+        track,
+        enabled_if,
+        enable_with,
+        allow_bits: allow_bits.unwrap_or(0),
+        required,
     })
+}
+
+fn track_element(ty: &Type) -> Result<&Type> {
+    if let Type::Path(path) = ty {
+        if let Some(segment) = path.path.segments.last() {
+            if segment.ident == "Vec" {
+                if let PathArguments::AngleBracketed(args) = &segment.arguments {
+                    if args.args.len() == 1 {
+                        if let Some(GenericArgument::Type(element)) = args.args.first() {
+                            return Ok(element);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    Err(Error::new_spanned(ty, "tracks requires Vec<TrackEnum>"))
 }
 
 pub(crate) fn expand(input: DeriveInput, reading: bool) -> TokenStream {
@@ -319,10 +432,40 @@ fn expand_checked(input: DeriveInput, reading: bool) -> Result<TokenStream> {
         .enumerate()
         .map(|(i, value)| field(value, i))
         .collect::<Result<Vec<_>>>()?;
+    for field in &fields {
+        let has_default = field.default.is_some() || (options.default && !field.required);
+        if matches!(field.kind, Kind::Animatable(_)) && !has_default {
+            return Err(Error::new_spanned(
+                &field.member,
+                "animatable fields require default and track attributes or a container default",
+            ));
+        }
+        if matches!(field.kind, Kind::Skip) && !has_default {
+            return Err(Error::new_spanned(
+                &field.member,
+                "skipped fields need an explicit default or container default",
+            ));
+        }
+        if field.skip_if.is_some() && !has_default {
+            return Err(Error::new_spanned(
+                &field.member,
+                "skip_if requires an explicit default or container default",
+            ));
+        }
+        if field.required && !options.default {
+            return Err(Error::new_spanned(
+                &field.member,
+                "required is only needed with a container default",
+            ));
+        }
+    }
     let mut names = Vec::new();
     for field in &fields {
         let field_names = match &field.kind {
-            Kind::Property(name) | Kind::Flag(name) => vec![name],
+            Kind::Property(name)
+            | Kind::StaticProperty(name)
+            | Kind::Animatable(name)
+            | Kind::Flag(name) => vec![name],
             Kind::Flags(flags) => flags.iter().map(|(name, _)| name).collect(),
             _ => Vec::new(),
         };
@@ -333,6 +476,39 @@ fn expand_checked(input: DeriveInput, reading: bool) -> Result<TokenStream> {
             names.push(name.value());
         }
     }
+    let tracks = fields
+        .iter()
+        .filter(|field| matches!(field.kind, Kind::Tracks))
+        .collect::<Vec<_>>();
+    let animated = fields
+        .iter()
+        .filter(|field| matches!(field.kind, Kind::Animatable(_)))
+        .collect::<Vec<_>>();
+    if tracks.len() > 1
+        || (!animated.is_empty() && tracks.len() != 1)
+        || (animated.is_empty() && !tracks.is_empty())
+    {
+        return Err(Error::new_spanned(&input.ident, "animatable fields require exactly one tracks collection, and tracks requires animatable fields"));
+    }
+    let mut variants = Vec::new();
+    for field in &animated {
+        let variant = field.track.as_ref().expect("track was checked");
+        let variant_key = quote!(#variant).to_string();
+        if variants.contains(&variant_key) {
+            return Err(Error::new_spanned(variant, "duplicate track variant"));
+        }
+        variants.push(variant_key);
+    }
+    let has_static = fields
+        .iter()
+        .any(|field| matches!(field.kind, Kind::StaticProperty(_) | Kind::Animatable(_)));
+    if has_static && names.iter().any(|name| name == "static") {
+        return Err(Error::new_spanned(
+            &input.ident,
+            "static is reserved when static properties are present",
+        ));
+    }
+    let tracks = tracks.first().copied();
     let mut ordered = fields.iter().collect::<Vec<_>>();
     if let Some(order) = &options.write_order {
         let body = fields
@@ -368,7 +544,10 @@ fn expand_checked(input: DeriveInput, reading: bool) -> Result<TokenStream> {
     let mut generics = input.generics.clone();
     for field in &fields {
         let ty = &field.ty;
-        if matches!(field.kind, Kind::Header | Kind::Property(_)) {
+        if matches!(
+            field.kind,
+            Kind::Header | Kind::Property(_) | Kind::StaticProperty(_) | Kind::Animatable(_)
+        ) {
             if reading && field.read_with.is_none() {
                 generics
                     .make_where_clause()
@@ -381,15 +560,29 @@ fn expand_checked(input: DeriveInput, reading: bool) -> Result<TokenStream> {
                     .push(parse_quote!(#ty: ::wc3::model::mdl::Write));
             }
         }
+        if !reading && matches!(field.kind, Kind::Tracks) {
+            let element = track_element(ty)?;
+            generics
+                .make_where_clause()
+                .predicates
+                .push(parse_quote!(#element: ::wc3::model::mdl::Write));
+        }
         if matches!(field.kind, Kind::Flags(_)) {
             generics
                 .make_where_clause()
                 .predicates
                 .push(parse_quote!(#ty: ::wc3::model::mdl::BitRange<u32>));
             if reading {
-                generics.make_where_clause().predicates.push(
-                    parse_quote!(#ty: ::core::default::Default + ::wc3::model::mdl::BitRangeMut<u32>),
-                );
+                generics
+                    .make_where_clause()
+                    .predicates
+                    .push(parse_quote!(#ty: ::wc3::model::mdl::BitRangeMut<u32>));
+                if !options.default || field.default.is_some() {
+                    generics
+                        .make_where_clause()
+                        .predicates
+                        .push(parse_quote!(#ty: ::core::default::Default));
+                }
             }
         }
         if reading
@@ -402,6 +595,16 @@ fn expand_checked(input: DeriveInput, reading: bool) -> Result<TokenStream> {
                 .push(parse_quote!(#ty: ::core::default::Default));
         }
     }
+    let write_defaults = options.default
+        && fields.iter().any(|field| {
+            field.default.is_none() && matches!(field.kind, Kind::Flag(_) | Kind::Flags(_))
+        });
+    if (reading && options.default) || (!reading && write_defaults) {
+        generics
+            .make_where_clause()
+            .predicates
+            .push(parse_quote!(Self: ::core::default::Default));
+    }
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
     if reading {
         // Runtime paths are qualified in generated code to avoid shadowing the
@@ -409,6 +612,8 @@ fn expand_checked(input: DeriveInput, reading: bool) -> Result<TokenStream> {
         let mut headers = Vec::new();
         let mut locals = Vec::new();
         let mut arms = Vec::new();
+        let mut static_arms = Vec::new();
+        let mut enable_calls = Vec::new();
         let mut members = Vec::new();
         let mut bit = 0u32;
         for field in &fields {
@@ -430,11 +635,20 @@ fn expand_checked(input: DeriveInput, reading: bool) -> Result<TokenStream> {
                 members.push(quote!(#member: #local));
                 continue;
             }
+            if matches!(kind, Kind::Tracks) {
+                locals.push(quote!(let mut #local: #ty = ::std::vec::Vec::new();));
+                members.push(quote!(#member: #local));
+                continue;
+            }
             if let Kind::Flags(flags) = kind {
-                locals.push(quote! {
-                    let mut #local: #ty = ::core::default::Default::default();
-                    ::wc3::model::mdl::BitRangeMut::<u32>::set_bit_range(&mut #local, 31, 0, 0);
-                });
+                if options.default && default.is_none() {
+                    locals.push(quote!(let mut #local: #ty = __wc3_mdl_defaults.#member;));
+                } else {
+                    locals.push(quote! {
+                        let mut #local: #ty = ::core::default::Default::default();
+                        ::wc3::model::mdl::BitRangeMut::<u32>::set_bit_range(&mut #local, 31, 0, 0);
+                    });
+                }
                 for (mdl_name, mask) in flags {
                     arms.push(quote!(#mdl_name => {
                         __wc3_mdl_fields.mark(#bit, __wc3_mdl_field)?;
@@ -450,8 +664,12 @@ fn expand_checked(input: DeriveInput, reading: bool) -> Result<TokenStream> {
             let initial = match default {
                 Some(DefaultValue::Trait) => Some(quote!(::core::default::Default::default())),
                 Some(DefaultValue::Function(function)) => Some(quote!(#function())),
+                None if options.default && !field.required => {
+                    Some(quote!(__wc3_mdl_defaults.#member))
+                }
                 None => None,
             };
+            let has_default = initial.is_some();
             if matches!(kind, Kind::Skip) {
                 locals.push(quote!(let #local: #ty = #initial;));
                 members.push(quote!(#member: #local));
@@ -463,7 +681,10 @@ fn expand_checked(input: DeriveInput, reading: bool) -> Result<TokenStream> {
                 locals.push(quote!(let mut #local: ::core::option::Option<#ty> = ::core::option::Option::None;));
             }
             let mdl_name = match kind {
-                Kind::Property(name) | Kind::Flag(name) => name,
+                Kind::Property(name)
+                | Kind::StaticProperty(name)
+                | Kind::Animatable(name)
+                | Kind::Flag(name) => name,
                 _ => unreachable!(),
             };
             let value = if matches!(kind, Kind::Flag(_)) {
@@ -478,15 +699,39 @@ fn expand_checked(input: DeriveInput, reading: bool) -> Result<TokenStream> {
                 };
                 quote!({ let value = #read; __wc3_mdl_body.expect(::wc3::model::mdl::TokenKind::Comma)?; value })
             };
-            let assignment = if default.is_some() {
+            let assignment = if has_default {
                 quote!(#local = #value;)
             } else {
                 quote!(#local = ::core::option::Option::Some(#value);)
             };
-            arms.push(
-                quote!(#mdl_name => { __wc3_mdl_fields.mark(#bit, __wc3_mdl_field)?; #assignment }),
-            );
-            if default.is_some() {
+            let mut mark_enabled = TokenStream::new();
+            if let Some(function) = &field.enable_with {
+                let enabled = format_ident!("{}_enabled", local);
+                locals.push(quote!(let mut #enabled = false;));
+                mark_enabled = quote!(#enabled = true;);
+                enable_calls.push(quote!(if #enabled { #function(&mut __wc3_mdl_value); }));
+            }
+            let static_arm = quote!(#mdl_name => {
+                __wc3_mdl_fields.mark(#bit, __wc3_mdl_field)?;
+                #assignment
+                #mark_enabled
+            });
+            match kind {
+                Kind::StaticProperty(_) => static_arms.push(static_arm),
+                Kind::Animatable(_) => {
+                    static_arms.push(static_arm);
+                    let variant = field.track.as_ref().expect("track was checked");
+                    let collection = &tracks.expect("tracks was checked").local;
+                    arms.push(quote!(#mdl_name => {
+                        __wc3_mdl_fields.mark(#bit, __wc3_mdl_field)?;
+                        *__wc3_mdl_body = __wc3_mdl_checkpoint;
+                        #collection.push(#variant(__wc3_mdl_body.read()?));
+                        #mark_enabled
+                    }));
+                }
+                _ => arms.push(static_arm),
+            }
+            if has_default {
                 members.push(quote!(#member: #local));
             } else {
                 members.push(quote!(#member: #local.ok_or_else(|| __wc3_mdl_body.error(::wc3::model::mdl::ReadErrorKind::MissingField(#mdl_name)))?));
@@ -502,24 +747,46 @@ fn expand_checked(input: DeriveInput, reading: bool) -> Result<TokenStream> {
         let validate = options.validate_read.map(|function| quote! {
             #function(&__wc3_mdl_value, ::wc3::model::mdl::Span::new(__wc3_mdl_start, __wc3_mdl_parser.position()))?;
         });
-        let field_tracking = (!arms.is_empty())
+        let field_tracking = (!arms.is_empty() || !static_arms.is_empty())
             .then(|| quote!(let mut __wc3_mdl_fields = ::wc3::model::mdl::Fields::default();));
+        let static_dispatch = has_static.then(|| quote! {
+            "static" => {
+                let token = __wc3_mdl_body.next_token()?;
+                let __wc3_mdl_field = match token.kind {
+                    ::wc3::model::mdl::TokenKind::Ident(name) => ::wc3::model::mdl::Field { name, span: token.span },
+                    _ => return ::core::result::Result::Err(::wc3::model::mdl::ReadError::new(token.span, ::wc3::model::mdl::ReadErrorKind::Expected("a static property name"))),
+                };
+                match __wc3_mdl_field.name {
+                    #(#static_arms,)*
+                    _ => return ::core::result::Result::Err(::wc3::model::mdl::ReadError::new(__wc3_mdl_field.span, ::wc3::model::mdl::ReadErrorKind::UnknownField)),
+                }
+            },
+        });
+        let initialize_defaults = options
+            .default
+            .then(|| quote!(let __wc3_mdl_defaults: Self = ::core::default::Default::default();));
+        let mutable_value = (!enable_calls.is_empty()).then(|| quote!(mut));
         Ok(quote! {
             impl #impl_generics ::wc3::model::mdl::Read for #name #ty_generics #where_clause {
                 fn read_mdl(__wc3_mdl_parser: &mut ::wc3::model::mdl::Parser<'_>) -> ::core::result::Result<Self, ::wc3::model::mdl::ReadError> {
                     #capture_start
                     __wc3_mdl_parser.expect_ident(#block)?;
                     #(#headers)*
+                    #initialize_defaults
                     #(#locals)*
                     #field_tracking
                     let mut __wc3_mdl_body = __wc3_mdl_parser.begin_block()?;
-                    while let ::core::option::Option::Some(__wc3_mdl_field) = __wc3_mdl_body.next_field()? {
+                    loop {
+                        let __wc3_mdl_checkpoint = *__wc3_mdl_body;
+                        let ::core::option::Option::Some(__wc3_mdl_field) = __wc3_mdl_body.next_field()? else { break; };
                         match __wc3_mdl_field.name {
+                            #static_dispatch
                             #(#arms,)*
                             _ => return ::core::result::Result::Err(::wc3::model::mdl::ReadError::new(__wc3_mdl_field.span, ::wc3::model::mdl::ReadErrorKind::UnknownField)),
                         }
                     }
-                    let __wc3_mdl_value = Self { #(#members,)* };
+                    let #mutable_value __wc3_mdl_value = Self { #(#members,)* };
+                    #(#enable_calls)*
                     __wc3_mdl_body.finish()?;
                     #validate
                     ::core::result::Result::Ok(__wc3_mdl_value)
@@ -545,33 +812,98 @@ fn expand_checked(input: DeriveInput, reading: bool) -> Result<TokenStream> {
             match kind {
                 Kind::Header => headers.push(quote! { __wc3_mdl_writer.raw(" ")?; #value }),
                 Kind::Skip => {}
-                Kind::Property(mdl_name) => {
+                Kind::Property(mdl_name)
+                | Kind::StaticProperty(mdl_name)
+                | Kind::Animatable(mdl_name) => {
+                    let prefix = (!matches!(kind, Kind::Property(_)))
+                        .then(|| quote!(__wc3_mdl_writer.raw("static ")?;));
                     let write = quote! {
                         __wc3_mdl_writer.indent()?;
+                        #prefix
                         __wc3_mdl_writer.identifier(#mdl_name)?;
                         __wc3_mdl_writer.raw(" ")?;
                         #value
                         __wc3_mdl_writer.raw(",\n")?;
                     };
-                    writes.push(match skip_if {
-                        Some(function) => quote!(if !#function(&self.#member) { #write }),
-                        None => write,
+                    let mut condition = quote!(true);
+                    if let Some(function) = skip_if {
+                        condition = quote!(#condition && !#function(&self.#member));
+                    }
+                    if let Kind::Animatable(_) = kind {
+                        let variant = field.track.as_ref().expect("track was checked");
+                        let collection = &tracks.expect("tracks was checked").member;
+                        condition = quote!(#condition && !self.#collection.iter().any(|track| matches!(track, #variant(_))));
+                        if let Some(function) = &field.enabled_if {
+                            condition = quote!(#condition && #function(self));
+                        }
+                    }
+                    writes.push(quote!(if #condition { #write }));
+                }
+                Kind::Tracks => {
+                    writes.push(
+                        quote!(for track in &self.#member { __wc3_mdl_writer.write(track)?; }),
+                    );
+                    let mut checks = Vec::new();
+                    let mut choices = Vec::new();
+                    for animated in &animated {
+                        let variant = animated.track.as_ref().expect("track was checked");
+                        checks.push(quote! {
+                            if self.#member.iter().filter(|track| matches!(track, #variant(_))).count() > 1 {
+                                return ::core::result::Result::Err(::wc3::model::mdl::WriteError::Unsupported("duplicate animation track"));
+                            }
+                        });
+                        if let Some(function) = &animated.enabled_if {
+                            checks.push(quote! {
+                                if !#function(self) && self.#member.iter().any(|track| matches!(track, #variant(_))) {
+                                    return ::core::result::Result::Err(::wc3::model::mdl::WriteError::Unsupported("animation track for a disabled property"));
+                                }
+                            });
+                        }
+                        choices.push(quote!(#variant(_) => {}));
+                    }
+                    required_flags.push(quote! {
+                        #(#checks)*
+                        for track in &self.#member {
+                            #[allow(unreachable_patterns)]
+                            match track {
+                                #(#choices,)*
+                                _ => return ::core::result::Result::Err(::wc3::model::mdl::WriteError::Unsupported("unmapped animation track")),
+                            }
+                        }
                     });
                 }
                 Kind::Flags(flags) => {
-                    let known = flags.iter().fold(0u32, |bits, (_, mask)| bits | mask);
+                    let known = flags
+                        .iter()
+                        .fold(field.allow_bits, |bits, (_, mask)| bits | mask);
                     required_flags.push(quote! {
                         if ::wc3::model::mdl::BitRange::<u32>::bit_range(&self.#member, 31, 0) & !#known != 0 { return ::core::result::Result::Err(::wc3::model::mdl::WriteError::Unsupported(concat!("unknown flag bits in ", stringify!(#member)))); }
                     });
+                    if options.default && field.default.is_none() {
+                        required_flags.push(quote! {
+                            let defaults = ::wc3::model::mdl::BitRange::<u32>::bit_range(&__wc3_mdl_write_defaults.#member, 31, 0);
+                            let actual = ::wc3::model::mdl::BitRange::<u32>::bit_range(&self.#member, 31, 0);
+                            if defaults & !actual != 0 {
+                                return ::core::result::Result::Err(::wc3::model::mdl::WriteError::Unsupported("cleared flag supplied by record default"));
+                            }
+                        });
+                    }
                     for (mdl_name, mask) in flags {
                         writes.push(quote!(if ::wc3::model::mdl::BitRange::<u32>::bit_range(&self.#member, 31, 0) & #mask != 0 { __wc3_mdl_writer.flag(#mdl_name)?; }));
                     }
                 }
                 Kind::Flag(mdl_name) => {
-                    if field.default.is_none() {
+                    if field.default.is_none() && !options.default {
                         required_flags.push(quote! {
                         if !self.#member { return ::core::result::Result::Err(::wc3::model::mdl::WriteError::Unsupported(concat!("absent required flag ", #mdl_name))); }
                     });
+                    }
+                    if options.default && field.default.is_none() {
+                        required_flags.push(quote! {
+                            if __wc3_mdl_write_defaults.#member && !self.#member {
+                                return ::core::result::Result::Err(::wc3::model::mdl::WriteError::Unsupported("false flag supplied by record default"));
+                            }
+                        });
                     }
                     writes.push(quote!(if self.#member { __wc3_mdl_writer.flag(#mdl_name)?; }));
                 }
@@ -580,11 +912,15 @@ fn expand_checked(input: DeriveInput, reading: bool) -> Result<TokenStream> {
         let validate = options
             .validate_write
             .map(|function| quote!(#function(self)?;));
+        let initialize_defaults = write_defaults.then(
+            || quote!(let __wc3_mdl_write_defaults: Self = ::core::default::Default::default();),
+        );
         let sink = sink_name(&input);
         Ok(quote! {
             impl #impl_generics ::wc3::model::mdl::Write for #name #ty_generics #where_clause {
                 fn write_mdl<#sink: ::std::io::Write>(&self, __wc3_mdl_writer: &mut ::wc3::model::mdl::MdlWriter<#sink>) -> ::core::result::Result<(), ::wc3::model::mdl::WriteError> {
                     #validate
+                    #initialize_defaults
                     #(#required_flags)*
                     __wc3_mdl_writer.indent()?;
                     __wc3_mdl_writer.identifier(#block)?;
@@ -613,6 +949,12 @@ fn sink_name(input: &DeriveInput) -> Ident {
 }
 
 fn expand_value(input: DeriveInput, options: Container, reading: bool) -> Result<TokenStream> {
+    if options.default {
+        return Err(Error::new_spanned(
+            &input.ident,
+            "container default is only supported on blocks",
+        ));
+    }
     if options.write_order.is_some() {
         return Err(Error::new_spanned(
             &input.ident,
@@ -1071,6 +1413,234 @@ mod tests {
         rejects(
             syn::parse2(quote!(#[mdl(block = "A")] struct Bad { #(#fields,)* })).unwrap(),
             "at most 64",
+        );
+    }
+    #[test]
+    fn rejects_invalid_static_and_animation_attributes() {
+        rejects(
+            parse_quote!(
+                #[mdl(block = "A")]
+                struct Bad {
+                    #[mdl(static_property = "Value", skip_if = "empty")]
+                    value: u32,
+                }
+            ),
+            "skip_if requires",
+        );
+        rejects(
+            parse_quote!(
+                #[mdl(block = "A")]
+                struct Bad {
+                    #[mdl(animatable = "Alpha", default)]
+                    alpha: f32,
+                }
+            ),
+            "track attribute",
+        );
+        rejects(
+            parse_quote!(
+                #[mdl(block = "A")]
+                struct Bad {
+                    #[mdl(animatable = "Alpha", track = "Track::Alpha", default)]
+                    alpha: f32,
+                }
+            ),
+            "exactly one tracks",
+        );
+        rejects(
+            parse_quote!(
+                #[mdl(block = "A")]
+                struct Bad {
+                    #[mdl(property = "Value", track = "Track::Alpha")]
+                    value: u32,
+                }
+            ),
+            "require an animatable",
+        );
+        rejects(
+            parse_quote!(
+                #[mdl(block = "A")]
+                struct Bad {
+                    #[mdl(
+                        animatable = "Alpha",
+                        track = "Track::Alpha",
+                        default,
+                        enabled_if = "enabled"
+                    )]
+                    alpha: f32,
+                    #[mdl(tracks)]
+                    tracks: Vec<Track>,
+                }
+            ),
+            "supplied together",
+        );
+        rejects(
+            parse_quote!(
+                #[mdl(block = "A")]
+                struct Bad {
+                    #[mdl(
+                        animatable = "Alpha",
+                        track = "Track::Alpha",
+                        default,
+                        read_with = "read"
+                    )]
+                    alpha: f32,
+                    #[mdl(tracks)]
+                    tracks: Vec<Track>,
+                }
+            ),
+            "value codec hooks",
+        );
+        rejects(
+            parse_quote!(
+                #[mdl(block = "A")]
+                struct Bad {
+                    #[mdl(tracks)]
+                    tracks: Vec<Track>,
+                }
+            ),
+            "tracks requires animatable",
+        );
+        rejects(
+            parse_quote!(
+                #[mdl(block = "A")]
+                struct Bad {
+                    #[mdl(tracks, default)]
+                    tracks: Vec<Track>,
+                }
+            ),
+            "tracks cannot",
+        );
+        rejects(
+            parse_quote!(
+                #[mdl(block = "A")]
+                struct Bad {
+                    #[mdl(tracks)]
+                    tracks: Option<Track>,
+                }
+            ),
+            "Vec<TrackEnum>",
+        );
+        rejects(
+            parse_quote!(
+                #[mdl(block = "A")]
+                struct Bad {
+                    #[mdl(animatable = "Alpha", track = "Track::Alpha", default)]
+                    alpha: f32,
+                    #[mdl(tracks)]
+                    a: Vec<Track>,
+                    #[mdl(tracks)]
+                    b: Vec<Track>,
+                }
+            ),
+            "exactly one tracks",
+        );
+        rejects(
+            parse_quote!(
+                #[mdl(block = "A")]
+                struct Bad {
+                    #[mdl(animatable = "Alpha", track = "Track::Alpha", default)]
+                    alpha: f32,
+                    #[mdl(animatable = "Other", track = "Track::Alpha", default)]
+                    other: f32,
+                    #[mdl(tracks)]
+                    tracks: Vec<Track>,
+                }
+            ),
+            "duplicate track variant",
+        );
+        rejects(
+            parse_quote!(
+                #[mdl(block = "A")]
+                struct Bad {
+                    #[mdl(static_property = "Value")]
+                    a: f32,
+                    #[mdl(property = "Value")]
+                    b: f32,
+                }
+            ),
+            "duplicate MDL field name",
+        );
+        rejects(
+            parse_quote!(
+                #[mdl(block = "A")]
+                struct Bad {
+                    #[mdl(static_property = "Value")]
+                    a: f32,
+                    #[mdl(property = "static")]
+                    b: f32,
+                }
+            ),
+            "static is reserved",
+        );
+        rejects(
+            parse_quote!(
+                #[mdl(block = "A")]
+                struct Bad {
+                    #[mdl(property = "Value", allow_bits = 2)]
+                    a: u32,
+                }
+            ),
+            "requires packed flags",
+        );
+        rejects(
+            parse_quote!(
+                #[mdl(block = "A")]
+                struct Bad {
+                    #[mdl(flags(A = 1), allow_bits = 1)]
+                    a: u32,
+                }
+            ),
+            "must not overlap",
+        );
+    }
+    #[test]
+    fn rejects_invalid_record_defaults() {
+        rejects(
+            parse_quote!(
+                #[mdl(block = "A", default, default)]
+                struct Bad {}
+            ),
+            "duplicate container default",
+        );
+        rejects(
+            parse_quote!(
+                #[mdl(entry, default)]
+                struct Bad(u32);
+            ),
+            "only supported on blocks",
+        );
+        rejects(
+            parse_quote!(
+                #[mdl(block = "A")]
+                struct Bad {
+                    #[mdl(property = "Value", required)]
+                    value: u32,
+                }
+            ),
+            "only needed with a container default",
+        );
+        rejects(
+            parse_quote!(
+                #[mdl(block = "A", default)]
+                struct Bad {
+                    #[mdl(property = "Value", required, default)]
+                    value: u32,
+                }
+            ),
+            "without defaults",
+        );
+        rejects(
+            parse_quote!(
+                #[mdl(block = "A", default)]
+                struct Bad {
+                    #[mdl(animatable = "Alpha", track = "Track::Alpha", required)]
+                    alpha: f32,
+                    #[mdl(tracks)]
+                    tracks: Vec<Track>,
+                }
+            ),
+            "required is only supported on properties",
         );
     }
 }

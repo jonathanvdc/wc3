@@ -75,16 +75,19 @@
 //! | --- | --- |
 //! | `header` | Required positional value before `{`. |
 //! | `property = "Name"` | Named value followed by a comma. |
+//! | `static_property = "Name"` | `static Name value,`; never a track. |
+//! | `animatable = "Name"` | Static base value or a linked animation track. |
+//! | `tracks` | One `Vec<TrackEnum>` holding linked animation tracks. |
 //! | `flag = "Name"` | Bare name followed by a comma; the field must be `bool`. |
 //! | `flags(Name = 1, Other = 2)` | Bare flags mapped to shared bitfield storage. |
 //! | `skip` | No text representation; an explicit default is required. |
 //!
-//! Properties and boolean flags are required unless annotated `default` (`Default::default()`) or
+//! Properties, static properties, and boolean flags are required unless annotated `default` (`Default::default()`) or
 //! `default = "factory"` (a zero-argument function returning the field's type).
 //! Flags support only the bare, false default. A required flag must be present
 //! when reading, and must be true when writing. Headers cannot have defaults.
 //! `skip_if = "predicate"` accepts `&T` and returns `bool`; it is supported only
-//! on properties with defaults. Omission is separate from parsing defaults:
+//! on properties, static properties, and animatable fields with defaults. Omission is separate from parsing defaults:
 //! choose a predicate that preserves the intended value, including signed zero.
 //!
 //! `read_with = "function"` has signature `fn(&mut Parser<'_>) -> Result<T,
@@ -105,16 +108,85 @@
 //! Derives preserve generics and existing where clauses, adding codec and
 //! Default bounds only for fields that use them. They support up to 64 body
 //! names (each mapped flag counts separately). Counted collections, enums, and
-//! general tuple structs remain handwritten.
+//! general tuple structs remain handwritten; linked track collections use `tracks`.
+//!
+//! Container `#[mdl(default)]` uses `Self::default()` as the source for omitted
+//! body fields, including skipped fields and packed flags. Headers stay required;
+//! `#[mdl(required)]` keeps a property or static property required. Explicit
+//! field defaults override the record default. A tracks collection always starts
+//! empty, because it records only channels present in the text. Reading requires
+//! Self: Default. Writing also requires it when inheriting flag defaults, so it
+//! can reject cleared flags that omission would restore to true.
+//!
+//! ## Static and animated properties
+//!
+//! An `animatable` field requires a field or container default and a `track`
+//! path naming a tuple variant in the record's single `#[mdl(tracks)]` Vec.
+//! The variant wraps a readable track whose MDL name matches the attribute.
+//! Reading `static Name value,` assigns the base field; reading a track appends
+//! it to the collection and keeps the default base value. Both forms share one
+//! duplicate marker. Missing properties also retain their defaults. Writers
+//! emit the track if present, otherwise the static value. The collection is
+//! emitted at its position in declaration order or `write_order`, preserving
+//! stored track order. Duplicate or unmapped variants are rejected before output.
+//!
+//! ```
+//! use wc3::model::animation::GeosetTrack;
+//! use wc3::model::mdl;
+//! use wc3::model::mdl::{Read as _, Write as _};
+//!
+//! fn check(value: &Example) -> Result<(), mdl::WriteError> {
+//!     if !value.tracks.is_empty() && value.alpha.to_bits() != 1.0f32.to_bits() {
+//!         return Err(mdl::WriteError::Unsupported("base alpha alongside track"));
+//!     }
+//!     Ok(())
+//! }
+//! #[derive(mdl::Read, mdl::Write)]
+//! #[mdl(block = "Example", default, validate_write = "check")]
+//! struct Example {
+//!     #[mdl(animatable = "Alpha", track = "GeosetTrack::Alpha")]
+//!     alpha: f32,
+//!     #[mdl(tracks)]
+//!     tracks: Vec<GeosetTrack>,
+//! }
+//! impl Default for Example {
+//!     fn default() -> Self { Self { alpha: 1.0, tracks: Vec::new() } }
+//! }
+//! let fixed = Example::decode_mdl("Example { static Alpha 0.5, }")?;
+//! assert_eq!(fixed.alpha, 0.5);
+//! assert!(fixed.tracks.is_empty());
+//! let animated = Example::decode_mdl("Example { Alpha 0 { Linear, } }")?;
+//! assert_eq!(animated.alpha, 1.0);
+//! assert!(!animated.encode_mdl()?.contains("static Alpha"));
+//! # Ok::<(), Box<dyn std::error::Error>>(())
+//! ```
+//!
+//! Optional paired hooks `enabled_if = "predicate"` (`fn(&Self) -> bool`) and
+//! `enable_with = "function"` (`fn(&mut Self)`) model properties whose presence
+//! enables a flag, such as GeosetAnim Color. The reader calls enable_with after
+//! constructing the record, before validate_read, when either form was present.
+//! The writer omits the static property when disabled and rejects a track for a
+//! disabled property. Enable hooks run in field declaration order.
+//!
+//! Keep representability rules in `validate_write`: the derive does not compare
+//! base values with defaults or detect hidden values omitted by predicates.
+//! Bitwise float checks preserve signed zero; ordinary PartialEq is insufficient.
+//! Animatable fields do not support read_with/write_with value hooks. Static
+//! properties support those hooks with the same comma framing as properties.
 //!
 //! Packed mappings use nonzero single-bit u32 masks. Storage can be `u32` or
-//! any type implementing BitRange<u32>; parsing also requires Default and
-//! BitRangeMut<u32>, as provided by SequenceFlags and TextureFlags.
-//! Mapped flags are independently optional and initialize storage to zero;
-//! repeating a name is an error, and writing unknown bits is an error. Mapping
+//! any type implementing BitRange<u32>; parsing also requires BitRangeMut<u32>
+//! and, without a container default, Default. SequenceFlags and TextureFlags
+//! provide these traits.
+//! Mapped flags are independently optional and initialize storage to zero
+//! unless inheriting a container default. Repeating a name is an error, and writing unknown bits is an error. Mapping
 //! masks and MDL names must be unique. Only an optional bare `default` is allowed;
 //! factory defaults, codec hooks, and omission predicates are not supported on
-//! a packed mapping. Flags are printed in their mapping declaration order.
+//! a packed mapping. `allow_bits = MASK` additionally permits bits represented
+//! indirectly by other properties or hooks; those bits are not printed as flags
+//! and must not overlap mapped masks. Use validate_write to ensure they are
+//! preserved. GeosetAnimation uses this for the color-use bit. Flags are printed
+//! in their mapping declaration order.
 //!
 //! Single-field tuple structs can represent complete properties or anonymous
 //! entries. Both forms consume/emit a trailing comma and support container

@@ -403,3 +403,248 @@ fn typed_record_flags_keep_their_original_binary_layout_and_unknown_bits() {
     sequence.set_sync_point(4);
     assert_eq!(print(&sequence).unwrap(), "Anim \"a\" {\n\tInterval { 0, 1 },\n\tNonLooping,\n\tMoveSpeed 2.0,\n\tRarity 3.0,\n\tSyncPoint 4,\n\tMinimumExtent { 0.0, 0.0, 0.0 },\n\tMaximumExtent { 0.0, 0.0, 0.0 },\n\tBoundsRadius 0.0,\n}\n");
 }
+
+#[derive(Debug, PartialEq, mdl::Read, mdl::Write)]
+#[mdl(block = "Static")]
+struct StaticProperties<T> {
+    #[mdl(static_property = "Required")]
+    required: T,
+    #[mdl(static_property = "Optional", default, skip_if = "positive_zero")]
+    optional: f32,
+}
+
+#[test]
+fn static_properties_require_prefix_and_preserve_defaults_and_bits() {
+    let value = StaticProperties::<u32>::decode_mdl("Static { static Required 7, }").unwrap();
+    assert_eq!(value.optional.to_bits(), 0);
+    assert_eq!(
+        print(&value).unwrap(),
+        "Static {\n\tstatic Required 7,\n}\n"
+    );
+    let value =
+        StaticProperties::<u32>::decode_mdl("Static { static Optional -0.0, static Required 8, }")
+            .unwrap();
+    assert!(print(&value).unwrap().contains("static Optional -0.0,"));
+    for source in [
+        "Static { Required 7, }",
+        "Static { static Unknown 7, }",
+        "Static { static Required 7 }",
+        "Static { }",
+    ] {
+        assert!(StaticProperties::<u32>::decode_mdl(source).is_err());
+    }
+    let error =
+        StaticProperties::<u32>::decode_mdl("Static { static Required 7, static Required 8, }")
+            .unwrap_err();
+    assert_eq!(error.kind, ReadErrorKind::DuplicateField);
+}
+
+use wc3::model::animation::{AnimationTrack, GeosetAlpha, GeosetColor, GeosetTrack};
+
+fn full_alpha() -> f32 {
+    1.0
+}
+
+#[derive(Debug, mdl::Read, mdl::Write)]
+#[mdl(
+    block = "Linked",
+    write_order(enabled, alpha, tracks),
+    validate_read = "Self::check_read"
+)]
+struct LinkedProperties<T> {
+    #[mdl(
+        animatable = "Alpha",
+        track = "GeosetTrack::Alpha",
+        default = "full_alpha",
+        enabled_if = "Self::is_enabled",
+        enable_with = "Self::enable"
+    )]
+    alpha: f32,
+    #[mdl(tracks)]
+    tracks: Vec<GeosetTrack>,
+    #[mdl(flag = "Enabled", default)]
+    enabled: bool,
+    #[mdl(skip, default)]
+    marker: PhantomData<T>,
+}
+
+impl<T> LinkedProperties<T> {
+    fn check_read(&self, span: Span) -> Result<(), ReadError> {
+        if (!self.tracks.is_empty() || self.alpha != 1.0) && !self.enabled {
+            return Err(ReadError::new(
+                span,
+                ReadErrorKind::MissingField("enabled property"),
+            ));
+        }
+        Ok(())
+    }
+    fn is_enabled(&self) -> bool {
+        self.enabled
+    }
+    fn enable(&mut self) {
+        self.enabled = true;
+    }
+}
+
+#[test]
+fn linked_properties_enable_both_forms_and_validate_the_collection() {
+    struct NoCodec;
+    let absent = LinkedProperties::<NoCodec>::decode_mdl("Linked { }").unwrap();
+    assert_eq!(absent.alpha, 1.0);
+    assert!(!absent.enabled);
+    assert_eq!(print(&absent).unwrap(), "Linked {\n}\n");
+    let fixed = LinkedProperties::<NoCodec>::decode_mdl("Linked { static Alpha 0.5, }").unwrap();
+    assert!(fixed.enabled);
+    assert_eq!(fixed.alpha, 0.5);
+    assert!(print(&fixed).unwrap().contains("static Alpha 0.5,"));
+    let animated =
+        LinkedProperties::<NoCodec>::decode_mdl("Linked { Alpha 0 { Linear, } }").unwrap();
+    assert!(animated.enabled);
+    assert_eq!(animated.alpha, 1.0);
+    assert_eq!(animated.tracks.len(), 1);
+    assert!(!print(&animated).unwrap().contains("static Alpha"));
+    assert!(print(&animated).unwrap().contains("Alpha 0 {"));
+    for source in [
+        "Linked { static Alpha 1, Alpha 0 { Linear, } }",
+        "Linked { Alpha 0 { Linear, } static Alpha 1, }",
+        "Linked { Alpha 0 { Linear, } Alpha 0 { Linear, } }",
+    ] {
+        assert_eq!(
+            LinkedProperties::<NoCodec>::decode_mdl(source)
+                .err()
+                .unwrap()
+                .kind,
+            ReadErrorKind::DuplicateField
+        );
+    }
+    let mut invalid = absent;
+    let alpha = AnimationTrack::<GeosetAlpha>::linear(Vec::new(), None).unwrap();
+    invalid.tracks = vec![alpha.clone().into(), alpha.into()];
+    let mut writer = MdlWriter::new(Vec::new());
+    assert!(writer.write(&invalid).is_err());
+    assert!(writer.finish().unwrap().is_empty());
+    invalid.tracks = vec![AnimationTrack::<GeosetColor>::linear(Vec::new(), None)
+        .unwrap()
+        .into()];
+    assert!(print(&invalid).is_err());
+}
+
+#[derive(mdl::Read, mdl::Write)]
+#[mdl(block = "CustomStatic")]
+struct CustomStatic {
+    #[mdl(
+        static_property = "Value",
+        read_with = "read_special",
+        write_with = "write_special"
+    )]
+    value: Special,
+}
+
+#[test]
+fn static_value_hooks_do_not_require_codec_traits() {
+    let value = CustomStatic::decode_mdl("CustomStatic { static Value 9, }").unwrap();
+    assert_eq!(
+        print(&value).unwrap(),
+        "CustomStatic {\n\tstatic Value 9,\n}\n"
+    );
+}
+
+// The collection enum deliberately has no Read implementation.
+enum LinkedTrack<T> {
+    Alpha(AnimationTrack<GeosetAlpha>),
+    Unmapped(PhantomData<T>),
+}
+impl<T> mdl::Write for LinkedTrack<T> {
+    fn write_mdl<W: Write>(&self, writer: &mut MdlWriter<W>) -> Result<(), WriteError> {
+        match self {
+            Self::Alpha(track) => writer.write(track),
+            Self::Unmapped(_) => Err(WriteError::Unsupported("unmapped track")),
+        }
+    }
+}
+
+#[derive(mdl::Read, mdl::Write)]
+#[mdl(block = "GenericLinked")]
+struct GenericLinked<T> {
+    #[mdl(
+        animatable = "Alpha",
+        track = "LinkedTrack::Alpha",
+        default = "full_alpha"
+    )]
+    alpha: f32,
+    #[mdl(tracks)]
+    tracks: Vec<LinkedTrack<T>>,
+}
+
+#[test]
+fn linked_enum_construction_preserves_generic_bounds() {
+    struct NoCodec;
+    let mut value =
+        GenericLinked::<NoCodec>::decode_mdl("GenericLinked { Alpha 0 { Linear, } }").unwrap();
+    assert_eq!(value.alpha, 1.0);
+    assert!(print(&value).unwrap().contains("Alpha 0 {"));
+    value.tracks.push(LinkedTrack::Unmapped(PhantomData));
+    assert!(print(&value).is_err());
+}
+
+fn count_override() -> u32 {
+    12
+}
+
+#[derive(mdl::Read, mdl::Write)]
+#[mdl(block = "Defaults", default)]
+struct RecordDefaults {
+    #[mdl(header)]
+    name: FixedText<16>,
+    #[mdl(property = "Id", required)]
+    id: u32,
+    #[mdl(static_property = "Alpha")]
+    alpha: f32,
+    #[mdl(property = "Count", default = "count_override")]
+    count: u32,
+    #[mdl(flags(A = 1, B = 2))]
+    flags: u32,
+    #[mdl(skip)]
+    hidden: Special,
+}
+
+impl Default for RecordDefaults {
+    fn default() -> Self {
+        Self {
+            name: FixedText::default(),
+            id: 0,
+            alpha: 1.0,
+            count: 9,
+            flags: 2,
+            hidden: Special(7),
+        }
+    }
+}
+
+#[test]
+fn record_default_supplies_fields_without_field_default_bounds() {
+    let value = RecordDefaults::decode_mdl("Defaults \"Example\" { Id 3, A, }").unwrap();
+    assert_eq!(value.name.text(), "Example");
+    assert_eq!(value.id, 3);
+    assert_eq!(value.alpha, 1.0);
+    assert_eq!(value.count, 12);
+    assert_eq!(value.flags, 3);
+    assert_eq!(value.hidden.0, 7);
+    assert!(print(&value).unwrap().contains("static Alpha 1.0,"));
+    let value =
+        RecordDefaults::decode_mdl("Defaults \"Example\" { Id 4, static Alpha -0.0, Count 20, }")
+            .unwrap();
+    assert_eq!(value.alpha.to_bits(), (-0.0f32).to_bits());
+    assert_eq!(value.count, 20);
+    assert_eq!(value.flags, 2);
+    let mut cleared = value;
+    cleared.flags = 0;
+    assert!(print(&cleared).is_err());
+    assert_eq!(
+        RecordDefaults::decode_mdl("Defaults \"Example\" { }")
+            .err()
+            .unwrap()
+            .kind,
+        ReadErrorKind::MissingField("Id")
+    );
+}
