@@ -5,7 +5,7 @@ use crate::model::ConversionError;
 use bitfield::bitfield;
 use std::{fmt::Debug, marker::PhantomData};
 
-use super::write_count;
+use super::{write_count, ShaderType};
 use crate::model::animation::track_group;
 use crate::model::{
     AnimationTrack, Color, Cursor, Encoder, LayerTextureId, ModelVersion, ReadError,
@@ -77,7 +77,7 @@ pub struct Layer<V: ModelVersion> {
     alpha: f32,
     emissive_gain: V::EmissiveGain,
     fresnel: V::Fresnel,
-    shader_type_id: V::ShaderTypeId,
+    shader_type: V::ShaderType,
     texture_slots: V::TextureSlots,
     tracks: Vec<LayerTrack>,
 }
@@ -151,14 +151,14 @@ impl FresnelField for LayerFresnel {
     }
 }
 
-/// Version-selected storage for the layer's shader type id.
+/// Version-selected storage for the layer's shader type.
 pub trait LayerShaderTypeField:
     Default + mdx::Read + mdx::Write + Clone + Debug + PartialEq
 {
-    fn shader_type_id(&self) -> Option<u32> {
+    fn shader_type(&self) -> Option<ShaderType> {
         None
     }
-    fn shader_type_id_mut(&mut self) -> Option<&mut u32> {
+    fn shader_type_mut(&mut self) -> Option<&mut ShaderType> {
         None
     }
 }
@@ -167,14 +167,12 @@ pub trait LayerShaderTypeField:
 pub struct NoLayerShaderType;
 impl LayerShaderTypeField for NoLayerShaderType {}
 
-#[derive(Clone, Debug, Default, PartialEq, mdx::Read, mdx::Write)]
-pub struct LayerShaderType(u32);
-impl LayerShaderTypeField for LayerShaderType {
-    fn shader_type_id(&self) -> Option<u32> {
-        Some(self.0)
+impl LayerShaderTypeField for ShaderType {
+    fn shader_type(&self) -> Option<ShaderType> {
+        Some(*self)
     }
-    fn shader_type_id_mut(&mut self) -> Option<&mut u32> {
-        Some(&mut self.0)
+    fn shader_type_mut(&mut self) -> Option<&mut ShaderType> {
+        Some(self)
     }
 }
 
@@ -263,7 +261,7 @@ impl<V: ModelVersion> Layer<V> {
             alpha: 1.0,
             emissive_gain: V::EmissiveGain::default(),
             fresnel: V::Fresnel::default(),
-            shader_type_id: V::ShaderTypeId::default(),
+            shader_type: V::ShaderType::default(),
             texture_slots: V::TextureSlots::default(),
             tracks: Vec::new(),
         }
@@ -365,21 +363,21 @@ impl<V: ModelVersion> Layer<V> {
             })? = value;
         Ok(())
     }
-    /// Returns the layer's shader type id, available from version 1100.
-    pub fn try_shader_type_id(&self) -> Result<u32, ValueError> {
-        self.shader_type_id
-            .shader_type_id()
+    /// Returns the layer's shader type, available from version 1100.
+    pub fn try_shader_type(&self) -> Result<ShaderType, ValueError> {
+        self.shader_type
+            .shader_type()
             .ok_or(ValueError::UnsupportedVersion {
                 tag: LAYER_TAG,
                 minimum: 1100,
                 actual: V::NUMBER,
             })
     }
-    /// Sets the layer's shader type id, available from version 1100.
-    pub fn try_set_shader_type_id(&mut self, value: u32) -> Result<(), ValueError> {
+    /// Sets the layer's shader type, available from version 1100.
+    pub fn try_set_shader_type(&mut self, value: ShaderType) -> Result<(), ValueError> {
         *self
-            .shader_type_id
-            .shader_type_id_mut()
+            .shader_type
+            .shader_type_mut()
             .ok_or(ValueError::UnsupportedVersion {
                 tag: LAYER_TAG,
                 minimum: 1100,
@@ -527,14 +525,13 @@ impl<V: SupportsFresnel> Layer<V> {
 }
 
 impl<V: SupportsLayerShaderTypeId> Layer<V> {
-    /// Returns the layer's shader type id.
-    pub fn shader_type_id(&self) -> u32 {
-        self.try_shader_type_id().expect("supported version")
+    /// Returns the layer's shader type.
+    pub fn shader_type(&self) -> ShaderType {
+        self.try_shader_type().expect("supported version")
     }
-    /// Sets the layer's shader type id.
-    pub fn set_shader_type_id(&mut self, value: u32) {
-        self.try_set_shader_type_id(value)
-            .expect("supported version");
+    /// Sets the layer's shader type.
+    pub fn set_shader_type(&mut self, value: ShaderType) {
+        self.try_set_shader_type(value).expect("supported version");
     }
 }
 
@@ -577,10 +574,10 @@ impl<V: ModelVersion> Layer<V> {
             &format!("{path}.fresnel"),
         )?;
         context.field(
-            self.shader_type_id.shader_type_id(),
-            target.shader_type_id.shader_type_id_mut(),
-            0,
-            &format!("{path}.shader_type_id"),
+            self.shader_type.shader_type(),
+            target.shader_type.shader_type_mut(),
+            ShaderType::SD_LEGACY,
+            &format!("{path}.shader_type"),
         )?;
         context.field(
             self.texture_slots.texture_slots().map(<[_]>::to_vec),

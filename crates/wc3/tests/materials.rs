@@ -4,7 +4,7 @@ use wc3::model::mdx::Read as _;
 use wc3::model::mdx::Write as _;
 
 use wc3::model::materials::{
-    Layer, LayerShadingFlags, LayerTextureSlot, Material, MaterialRenderFlags,
+    Layer, LayerShadingFlags, LayerTextureSlot, Material, MaterialRenderFlags, ShaderType,
 };
 use wc3::model::{
     DynamicModel, Model, ModelVersion, V1000, V1100, V1200, V1300, V1400, V1600, V1800, V800, V900,
@@ -102,14 +102,14 @@ fn local_material_layers_are_bounded_when_available() {
 fn builds_material_with_reforged_layer() {
     let mut layer = Layer::<V1100>::new();
     layer.set_texture_id(4);
-    layer.set_shader_type_id(2);
+    layer.set_shader_type(ShaderType::new(2));
     layer.set_fresnel_color([0.1, 0.2, 0.3]);
     let mut material = Material::<V1100>::new();
     material.set_layers(&[layer]);
     let parsed = Material::<V1100>::decode_mdx(&material.encode_mdx().unwrap()).unwrap();
     let layers = parsed.layers();
     assert_eq!(layers[0].texture_id(), 4);
-    assert_eq!(layers[0].shader_type_id(), 2);
+    assert_eq!(layers[0].shader_type(), ShaderType::SD_FIXED_FUNCTION);
     assert_eq!(layers[0].fresnel_color(), [0.1, 0.2, 0.3]);
     assert!(layers[0].texture_slots().is_empty());
 }
@@ -183,7 +183,7 @@ fn version_specific_fields_do_not_write_into_legacy_tracks() {
     let before = layer.encode_mdx().unwrap();
     assert!(layer.try_set_emissive_gain(0.5).is_err());
     assert!(layer.try_set_fresnel_opacity(0.5).is_err());
-    assert!(layer.try_set_shader_type_id(1).is_err());
+    assert!(layer.try_set_shader_type(ShaderType::new(1)).is_err());
     assert_eq!(layer.encode_mdx().unwrap(), before);
 }
 
@@ -227,8 +227,11 @@ fn independent_layer_fields_preserve_wire_order_across_versions() {
         assert_eq!(layer.try_fresnel_color().is_ok(), has_fresnel);
         assert_eq!(layer.try_fresnel_opacity().is_ok(), has_fresnel);
         assert_eq!(layer.try_fresnel_team_color().is_ok(), has_fresnel);
-        assert_eq!(layer.try_shader_type_id().is_ok(), has_slots);
-        assert_eq!(layer.try_set_shader_type_id(3).is_ok(), has_slots);
+        assert_eq!(layer.try_shader_type().is_ok(), has_slots);
+        assert_eq!(
+            layer.try_set_shader_type(ShaderType::new(3)).is_ok(),
+            has_slots
+        );
         assert_eq!(layer.try_texture_slots().is_ok(), has_slots);
         assert_eq!(layer.try_set_texture_slots(&[slot]).is_ok(), has_slots);
         if !has_gain {
@@ -331,15 +334,15 @@ fn infallible_layer_accessors_cover_supported_versions() {
     }
     fn check_slots<V: SupportsLayerShaderTypeId + SupportsLayerTextureSlots>() {
         let mut layer = Layer::<V>::new();
-        layer.set_shader_type_id(2);
+        layer.set_shader_type(ShaderType::new(2));
         layer.set_texture_slots(&[LayerTextureSlot {
             texture_id: 7,
             texture_type: 3,
             track: None,
         }]);
-        assert_eq!(layer.shader_type_id(), 2);
+        assert_eq!(layer.shader_type(), ShaderType::SD_FIXED_FUNCTION);
         assert_eq!(layer.texture_slots()[0].texture_id, 7);
-        assert_eq!(layer.try_shader_type_id().unwrap(), layer.shader_type_id());
+        assert_eq!(layer.try_shader_type().unwrap(), layer.shader_type());
         assert_eq!(layer.try_texture_slots().unwrap(), layer.texture_slots());
     }
 

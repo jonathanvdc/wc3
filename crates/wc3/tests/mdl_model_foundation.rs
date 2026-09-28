@@ -162,23 +162,38 @@ fn named_shader_mapping_and_new_flags_preserve_raw_storage() {
         (2, "Shader_SD_FixedFunction"),
         (24, "Shader_HD_Crystal"),
     ] {
-        let shader = ShaderType::from_id(id).unwrap();
+        let shader = ShaderType::new(id);
         assert_eq!(shader.id(), id);
-        assert_eq!(shader.name(), name);
+        assert_eq!(shader.name(), Some(name));
         assert_eq!(
             ShaderType::from_name(&name.to_ascii_lowercase()),
             Some(shader)
         );
         let mut layer = Layer::<V1100>::new();
-        layer.set_shader_type_id(id);
+        layer.set_shader_type(shader);
         assert_eq!(
             Layer::<V1100>::decode_mdx(&layer.encode_mdx().unwrap())
                 .unwrap()
-                .shader_type_id(),
-            id
+                .shader_type(),
+            shader
         );
     }
-    assert!(ShaderType::from_id(3).is_none());
+    assert_eq!(ShaderType::default(), ShaderType::SD_LEGACY);
+    for raw in [3u32, u32::MAX] {
+        let bytes = raw.to_le_bytes();
+        let shader = ShaderType::decode_mdx(&bytes).unwrap();
+        assert_eq!(shader, ShaderType::new(raw));
+        assert_eq!(shader.name(), None);
+        assert_eq!(shader.encode_mdx().unwrap(), bytes);
+        let mut layer = Layer::<V1100>::new();
+        layer.set_shader_type(shader);
+        let wire = layer.encode_mdx().unwrap();
+        assert_eq!(
+            Layer::<V1100>::decode_mdx(&wire).unwrap().shader_type(),
+            shader
+        );
+    }
+    assert!(ShaderType::new(3).name().is_none());
     assert!(ShaderType::from_name("typo").is_none());
     let mut flags = LayerShadingFlags(0);
     flags.set_wrap_width(true);

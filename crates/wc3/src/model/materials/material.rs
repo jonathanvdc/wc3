@@ -6,11 +6,11 @@ use bitfield::bitfield;
 use std::{borrow::Cow, fmt::Debug, marker::PhantomData};
 
 use super::layer::{
-    EmissiveGain, EmissiveGainField, FresnelField, Layer, LayerFresnel, LayerShaderType,
-    LayerShaderTypeField, LayerTextureSlots, LayerTextureSlotsField, NoEmissiveGain, NoFresnel,
-    NoLayerShaderType, NoLayerTextureSlots, LAYER_TAG,
+    EmissiveGain, EmissiveGainField, FresnelField, Layer, LayerFresnel, LayerShaderTypeField,
+    LayerTextureSlots, LayerTextureSlotsField, NoEmissiveGain, NoFresnel, NoLayerShaderType,
+    NoLayerTextureSlots, LAYER_TAG,
 };
-use super::write_count;
+use super::{write_count, ShaderType};
 use crate::model::{
     Cursor, Encoder, FixedText, KnownChunk, MaterialsChunk, Model, ModelVersion, ReadError,
     SupportsMaterialShaderPath, Tag, ValueError, Version, WriteError,
@@ -94,7 +94,7 @@ pub trait MaterialLayout {
     type Shader: ShaderField;
     type EmissiveGain: EmissiveGainField;
     type Fresnel: FresnelField;
-    type ShaderTypeId: LayerShaderTypeField;
+    type ShaderType: LayerShaderTypeField;
     type TextureSlots: LayerTextureSlotsField;
 }
 
@@ -104,63 +104,63 @@ impl MaterialLayout for V800 {
     type Shader = NoShader;
     type EmissiveGain = NoEmissiveGain;
     type Fresnel = NoFresnel;
-    type ShaderTypeId = NoLayerShaderType;
+    type ShaderType = NoLayerShaderType;
     type TextureSlots = NoLayerTextureSlots;
 }
 impl MaterialLayout for V900 {
     type Shader = ShaderText;
     type EmissiveGain = EmissiveGain;
     type Fresnel = NoFresnel;
-    type ShaderTypeId = NoLayerShaderType;
+    type ShaderType = NoLayerShaderType;
     type TextureSlots = NoLayerTextureSlots;
 }
 impl MaterialLayout for V1000 {
     type Shader = ShaderText;
     type EmissiveGain = EmissiveGain;
     type Fresnel = LayerFresnel;
-    type ShaderTypeId = NoLayerShaderType;
+    type ShaderType = NoLayerShaderType;
     type TextureSlots = NoLayerTextureSlots;
 }
 impl MaterialLayout for V1100 {
     type Shader = NoShader;
     type EmissiveGain = EmissiveGain;
     type Fresnel = LayerFresnel;
-    type ShaderTypeId = LayerShaderType;
+    type ShaderType = ShaderType;
     type TextureSlots = LayerTextureSlots;
 }
 impl MaterialLayout for V1200 {
     type Shader = NoShader;
     type EmissiveGain = EmissiveGain;
     type Fresnel = LayerFresnel;
-    type ShaderTypeId = LayerShaderType;
+    type ShaderType = ShaderType;
     type TextureSlots = LayerTextureSlots;
 }
 impl MaterialLayout for V1300 {
     type Shader = NoShader;
     type EmissiveGain = EmissiveGain;
     type Fresnel = LayerFresnel;
-    type ShaderTypeId = LayerShaderType;
+    type ShaderType = ShaderType;
     type TextureSlots = LayerTextureSlots;
 }
 impl MaterialLayout for V1400 {
     type Shader = NoShader;
     type EmissiveGain = EmissiveGain;
     type Fresnel = LayerFresnel;
-    type ShaderTypeId = LayerShaderType;
+    type ShaderType = ShaderType;
     type TextureSlots = LayerTextureSlots;
 }
 impl MaterialLayout for V1600 {
     type Shader = NoShader;
     type EmissiveGain = EmissiveGain;
     type Fresnel = LayerFresnel;
-    type ShaderTypeId = LayerShaderType;
+    type ShaderType = ShaderType;
     type TextureSlots = LayerTextureSlots;
 }
 impl MaterialLayout for V1800 {
     type Shader = NoShader;
     type EmissiveGain = EmissiveGain;
     type Fresnel = LayerFresnel;
-    type ShaderTypeId = LayerShaderType;
+    type ShaderType = ShaderType;
     type TextureSlots = LayerTextureSlots;
 }
 

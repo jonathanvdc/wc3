@@ -191,8 +191,13 @@ These signed API changes preserve the existing four-byte binary layout.
 `scene::CameraTrack` includes visibility and the three depth-of-field tracks.
 Its scalar DOF helpers construct stepped keys at frame zero, and MDL output
 uses the keyed spellings to avoid the client's scalar focal-length/f-stop swap.
-`materials::ShaderType` maps the four named shader IDs (0, 1, 2, 24), while
-layer storage continues retaining arbitrary raw IDs.
+`materials::ShaderType` is the layer's stored shader type, wrapping any `u32`
+ID. Use `layer.set_shader_type(ShaderType::HD_DEFAULT_UNIT)` for named shaders
+or `ShaderType::new(id)` for raw IDs. `shader_type()` returns the wrapper and
+`id()` retrieves its exact binary value; `name()` is optional for unnamed IDs.
+The checked accessors are `try_shader_type()` / `try_set_shader_type()`. These
+replace the previous raw `shader_type_id` accessors, and the layout associated
+type is now `MaterialLayout::ShaderType`.
 
 `scene::Glider` and `chunks::GlidersChunk` represent the `DILG` world-picking
 whitelist. `gliders()` / `set_gliders()` work on every typed version and through

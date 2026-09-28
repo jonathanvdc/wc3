@@ -8,7 +8,7 @@ use wc3::model::geometry::{Geoset, SkinWeights};
 use wc3::model::mdx::Read as _;
 use wc3::model::mdx::Write as _;
 
-use wc3::model::materials::{Layer, LayerFresnel, LayerTextureSlot, Material};
+use wc3::model::materials::{Layer, LayerFresnel, LayerTextureSlot, Material, ShaderType};
 use wc3::model::scene::{Camera, CameraVariant, Light, LightFalloff, LightShadowRange, Node};
 use wc3::model::{
     ConversionIssueKind, ConversionOptions, DynamicModel, Model, ModelVersion, UnknownChunkPolicy,
@@ -344,7 +344,7 @@ fn populated_versioned_fields_preserve_exact_storage_when_supported() {
         opacity: 0.75,
         team_color: 0.25,
     });
-    layer.set_shader_type_id(3);
+    layer.set_shader_type(ShaderType::new(3));
     layer.set_texture_slots(&[LayerTextureSlot {
         texture_id: 2,
         texture_type: 1,

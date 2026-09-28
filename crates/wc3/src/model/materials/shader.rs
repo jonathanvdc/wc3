@@ -1,50 +1,50 @@
-//! Named shader pipelines; other raw shader IDs remain valid binary data.
+//! Layer shader pipelines, including unnamed IDs retained from binary files.
+use crate::model::mdx;
 
-/// The four shader IDs with names in the Warcraft III registry.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-#[repr(u32)]
-pub enum ShaderType {
-    SdLegacy = 0,
-    HdDefaultUnit = 1,
-    SdFixedFunction = 2,
-    HdCrystal = 24,
-}
+/// A layer shader ID, preserving all u32 values, including unnamed pipelines.
+///
+/// Known names are available through [`Self::name`]. Unknown IDs have no MDL
+/// shader-name spelling but still round-trip exactly through MDX.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Hash, mdx::Read, mdx::Write)]
+pub struct ShaderType(u32);
 
 impl ShaderType {
-    /// Returns a named pipeline, leaving unnamed raw IDs unclassified.
-    pub const fn from_id(id: u32) -> Option<Self> {
-        match id {
-            0 => Some(Self::SdLegacy),
-            1 => Some(Self::HdDefaultUnit),
-            2 => Some(Self::SdFixedFunction),
-            24 => Some(Self::HdCrystal),
+    pub const SD_LEGACY: Self = Self(0);
+    pub const HD_DEFAULT_UNIT: Self = Self(1);
+    pub const SD_FIXED_FUNCTION: Self = Self(2);
+    pub const HD_CRYSTAL: Self = Self(24);
+
+    /// Wraps a raw ID without restricting it to known pipelines.
+    pub const fn new(id: u32) -> Self {
+        Self(id)
+    }
+
+    /// Returns the exact stored binary ID.
+    pub const fn id(self) -> u32 {
+        self.0
+    }
+
+    /// Returns the registry name, or None for an unnamed ID.
+    pub const fn name(self) -> Option<&'static str> {
+        match self.0 {
+            0 => Some("Shader_SD_Legacy"),
+            1 => Some("Shader_HD_DefaultUnit"),
+            2 => Some("Shader_SD_FixedFunction"),
+            24 => Some("Shader_HD_Crystal"),
             _ => None,
         }
     }
 
-    pub const fn id(self) -> u32 {
-        self as u32
-    }
-
-    pub const fn name(self) -> &'static str {
-        match self {
-            Self::SdLegacy => "Shader_SD_Legacy",
-            Self::HdDefaultUnit => "Shader_HD_DefaultUnit",
-            Self::SdFixedFunction => "Shader_SD_FixedFunction",
-            Self::HdCrystal => "Shader_HD_Crystal",
-        }
-    }
-
-    /// Matches registry names case-insensitively. Unknown names are not
-    /// silently downgraded to SD as they are by the game client's text reader.
+    /// Matches registry names case-insensitively without silently downgrading
+    /// unknown names to SD as the game client's text reader does.
     pub fn from_name(name: &str) -> Option<Self> {
         [
-            Self::SdLegacy,
-            Self::HdDefaultUnit,
-            Self::SdFixedFunction,
-            Self::HdCrystal,
+            Self::SD_LEGACY,
+            Self::HD_DEFAULT_UNIT,
+            Self::SD_FIXED_FUNCTION,
+            Self::HD_CRYSTAL,
         ]
         .into_iter()
-        .find(|shader| name.eq_ignore_ascii_case(shader.name()))
+        .find(|shader| name.eq_ignore_ascii_case(shader.name().expect("named pipeline")))
     }
 }
