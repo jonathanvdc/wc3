@@ -1,11 +1,11 @@
 //! Model accessors for global sequences.
-use crate::mdl::{ReadError as MdlError, MdlRead, MdlWrite, MdlWriter, Parser, WriteError};
+use crate::mdl::{MdlRead, MdlWrite};
 use crate::ModelVersion;
 use crate::{GlobalSequencesChunk, Model, Readable, Writable};
-use std::io::Write;
 
 /// One global sequence duration in milliseconds.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Readable, Writable)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Readable, Writable, MdlRead, MdlWrite)]
+#[mdl(property = "Duration")]
 pub struct GlobalSequence(pub u32);
 
 impl<V: ModelVersion> Model<V> {
@@ -22,17 +22,5 @@ impl<V: ModelVersion> Model<V> {
         self.replace_chunk(GlobalSequencesChunk::new(
             durations.iter().copied().map(GlobalSequence).collect(),
         ));
-    }
-}
-
-impl MdlRead for GlobalSequence {
-    fn read_mdl(parser: &mut Parser<'_>) -> Result<Self, MdlError> {
-        parser.expect_ident("Duration")?;
-        Ok(Self(parser.read_property()?))
-    }
-}
-impl MdlWrite for GlobalSequence {
-    fn write_mdl<W: Write>(&self, writer: &mut MdlWriter<W>) -> Result<(), WriteError> {
-        writer.property("Duration", &self.0)
     }
 }

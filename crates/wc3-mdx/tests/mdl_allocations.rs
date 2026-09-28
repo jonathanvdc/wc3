@@ -6,6 +6,7 @@ use std::io::{Cursor as IoCursor, Write};
 use wc3_mdx::animation::{GlobalSequence, Sequence};
 use wc3_mdx::materials::Texture;
 use wc3_mdx::mdl::{Lexer, MdlRead, MdlWriter, Parser};
+use wc3_mdx::scene::ModelInfo;
 use wc3_mdx::Encoder;
 
 struct CountingAllocator;
@@ -67,6 +68,10 @@ fn lexing_reading_writing_and_diagnostics_do_not_allocate() {
         let mut writer = MdlWriter::new(IoCursor::new(&mut storage[..]));
         writer.write(&texture).unwrap();
         writer.write(&sequence).unwrap();
+        let info =
+            ModelInfo::parse_mdl("Model \"Derived\" { BlendTime 150, BoundsRadius 1.2345678, }")
+                .unwrap();
+        writer.write(&info).unwrap();
         let mut sink = writer.finish().unwrap();
         let error = Texture::parse_mdl("Bitmap { Mystery 1, }").unwrap_err();
         write!(sink, "{}", error.diagnostic("Bitmap { Mystery 1, }")).unwrap();

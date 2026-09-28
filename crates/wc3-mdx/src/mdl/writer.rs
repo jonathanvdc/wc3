@@ -199,7 +199,7 @@ impl<T: MdlWrite, const N: usize> MdlWrite for [T; N] {
 
 /// Checks that fixed text has a faithful text representation, including padding.
 /// Do not use the existing lossy text() accessor for MDL conversion.
-pub(crate) fn fixed_text<const N: usize>(text: &FixedText<N>) -> Result<&str, WriteError> {
+fn fixed_text<const N: usize>(text: &FixedText<N>) -> Result<&str, WriteError> {
     let bytes = text.as_bytes();
     let end = bytes
         .iter()

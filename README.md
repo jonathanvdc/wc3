@@ -106,9 +106,9 @@ are supported. Numeric readers check ranges and accept the MDL non-finite float
 literals; finite float output round-trips exactly, including negative zero.
 NaN payload bits are not preserved by text output.
 
-Handwritten `MdlRead` / `MdlWrite` implementations currently cover `Texture`
-(`Bitmap`), `Sequence` (`Anim`, including `SyncPoint`), `GlobalSequence`
-(`Duration`), and `PivotPoint` (an anonymous vector entry). Readers accept fields
+`MdlRead` / `MdlWrite` implementations currently cover `Texture` (`Bitmap`),
+`Sequence` (`Anim`, including `SyncPoint`), `ModelInfo` (`Model`),
+`GlobalSequence` (`Duration`), and `PivotPoint` (an anonymous vector entry). Readers accept fields
 in any order, apply defaults, and reject unknown or duplicate fields. An `Anim`
 requires `Interval`. `parse_mdl()` requires exactly one record; `Parser::read()`
 consumes one record from a larger stream.
@@ -139,9 +139,34 @@ owns its entry punctuation. Dropping a block or list does not validate unread
 input. Parser copies are explicit checkpoints for speculative reads.
 
 The writer uses tabs, LF, and deterministic field order. It rejects unknown flag
-bits, reserved bytes, non-UTF-8 text, nonzero text padding, and unterminated fixed
+bits, model animation-file data, non-UTF-8 text, nonzero text padding, and unterminated fixed
 text rather than silently losing binary data. Literal quotes and NUL cannot be
 written inside strings. Errors may leave partial output. Use
 `error.diagnostic(source)` to display line/column and the offending source span.
 
-Whole-model MDL conversion and MDL derives are not implemented yet.
+`#[derive(MdlRead, MdlWrite)]` generates codecs for named-field structs with
+`#[mdl(block = "Name")]`. Fields explicitly specify `header`,
+`property = "Name"`, `flag = "Name"` (bool), or `skip`. Properties and flags are
+required unless given `default` or a `default = "factory"`; skipped fields need
+an explicit default. Optional bool flags use `default` to start false.
+`skip_if = "predicate"` controls property omission separately from defaults.
+Custom `read_with` / `write_with` value codecs and container `validate_read` /
+`validate_write` hooks cover irregular data and binary preservation checks.
+Generated codecs use stack locals and the existing parser/writer; ModelInfo
+uses these derives, including validation of its animation-file field. Texture,
+Sequence, GlobalSequence, and PivotPoint now use derives as well.
+
+See the `mdl` module documentation for examples, hook signatures, and attribute
+rules. Packed `flags(Name = 1, Other = 2)` mappings work with `u32` or an
+`MdlFlags` type, initialize to zero, and reject duplicate names and unknown bits.
+`write_order(field_a, field_b, ...)` preserves MDL field order independently of
+binary layout. Single-field tuple structs support `#[mdl(property = "Name")]`
+and anonymous `#[mdl(entry)]` forms. The derives support at most 64 body names;
+counted collections and enums remain handwritten. Whole-model MDL conversion is
+not implemented yet.
+
+Texture paths occupy 260 bytes (up to 259 UTF-8 bytes plus NUL). ModelInfo stores
+an 80-byte name followed by a separate 260-byte animation-file path, exposed by
+`animation_file_name()` and `set_animation_file_name()`. Editing the name preserves
+the animation-file bytes. The supported MDL Model block has no animation-file
+property, so nonzero animation-file data is rejected on MDL output.

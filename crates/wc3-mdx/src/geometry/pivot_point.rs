@@ -1,11 +1,11 @@
 //! Model accessors for pivot points.
-use crate::mdl::{ReadError as MdlError, MdlRead, MdlWrite, MdlWriter, Parser, WriteError};
+use crate::mdl::{MdlRead, MdlWrite};
 use crate::ModelVersion;
 use crate::{Model, PivotPointsChunk, Readable, Vec3, Writable};
-use std::io::Write;
 
 /// One model pivot point.
-#[derive(Clone, Copy, Debug, PartialEq, Readable, Writable)]
+#[derive(Clone, Copy, Debug, PartialEq, Readable, Writable, MdlRead, MdlWrite)]
+#[mdl(entry)]
 pub struct PivotPoint(pub Vec3);
 
 impl<V: ModelVersion> Model<V> {
@@ -22,16 +22,5 @@ impl<V: ModelVersion> Model<V> {
         self.replace_chunk(PivotPointsChunk::new(
             points.iter().copied().map(PivotPoint).collect(),
         ));
-    }
-}
-
-impl MdlRead for PivotPoint {
-    fn read_mdl(parser: &mut Parser<'_>) -> Result<Self, MdlError> {
-        Ok(Self(parser.read_property()?))
-    }
-}
-impl MdlWrite for PivotPoint {
-    fn write_mdl<W: Write>(&self, writer: &mut MdlWriter<W>) -> Result<(), WriteError> {
-        writer.entry(&self.0)
     }
 }

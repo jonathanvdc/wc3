@@ -6,9 +6,9 @@
 //! ranges; f32 supports case-insensitive nan/inf/-inf. The writer uses tabs and
 //! shortest round-tripping floats. NaN payload bits have no text representation.
 //!
-//! Handwritten record codecs currently cover Bitmap (`Texture`), Anim
-//! (`Sequence`), Duration (`GlobalSequence`) and anonymous `PivotPoint` entries.
-//! This is not yet a whole-model MDL codec or an MDL derive implementation.
+//! Record codecs cover Bitmap (`Texture`), Anim (`Sequence`), Model
+//! (`ModelInfo`), Duration (`GlobalSequence`) and anonymous `PivotPoint` entries.
+//! Whole-model conversion is not implemented yet.
 //!
 //! ```
 //! use wc3_mdx::materials::Texture;
@@ -21,6 +21,127 @@
 //! writer.finish()?;
 //! # Ok::<(), Box<dyn std::error::Error>>(())
 //! ```
+//!
+//! ## Deriving codecs
+//!
+//! `MdlRead` and `MdlWrite` derive named-field structs representing named blocks.
+//! Parsing matches borrowed field names, rejects duplicates and unknown fields,
+//! and constructs the struct without an AST. Writing follows declaration order
+//! unless the container specifies `write_order(field_a, field_b, ...)`, listing
+//! every body field once. This changes MDL output order without changing MDX
+//! storage order. Header arguments retain their declaration order before `{`.
+//!
+//! ```
+//! use wc3_mdx::{FixedText, MdlRead, MdlWrite};
+//! use wc3_mdx::mdl::MdlWriter;
+//!
+//! fn positive_zero(value: &f32) -> bool { value.to_bits() == 0 }
+//!
+//! #[derive(MdlRead, MdlWrite)]
+//! #[mdl(block = "Anim")]
+//! struct Example {
+//!     #[mdl(header)]
+//!     name: FixedText<80>,
+//!     #[mdl(property = "Interval")]
+//!     interval: [u32; 2],
+//!     #[mdl(property = "MoveSpeed", default, skip_if = "positive_zero")]
+//!     move_speed: f32,
+//!     #[mdl(flag = "NonLooping", default)]
+//!     non_looping: bool,
+//! }
+//!
+//! let value = Example::parse_mdl(r#"Anim "Stand" { Interval { 0, 1000 }, }"#)?;
+//! let mut writer = MdlWriter::new(Vec::new());
+//! writer.write(&value)?;
+//! let bytes = writer.finish()?;
+//! assert!(!std::str::from_utf8(&bytes)?.contains("MoveSpeed"));
+//! # Ok::<(), Box<dyn std::error::Error>>(())
+//! ```
+//!
+//! Each field must declare exactly one form:
+//!
+//! | Attribute | Representation |
+//! | --- | --- |
+//! | `header` | Required positional value before `{`. |
+//! | `property = "Name"` | Named value followed by a comma. |
+//! | `flag = "Name"` | Bare name followed by a comma; the field must be `bool`. |
+//! | `flags(Name = 1, Other = 2)` | Bare flags mapped to a shared MdlFlags value. |
+//! | `skip` | No text representation; an explicit default is required. |
+//!
+//! Properties and boolean flags are required unless annotated `default` (`Default::default()`) or
+//! `default = "factory"` (a zero-argument function returning the field's type).
+//! Flags support only the bare, false default. A required flag must be present
+//! when reading, and must be true when writing. Headers cannot have defaults.
+//! `skip_if = "predicate"` accepts `&T` and returns `bool`; it is supported only
+//! on properties with defaults. Omission is separate from parsing defaults:
+//! choose a predicate that preserves the intended value, including signed zero.
+//!
+//! `read_with = "function"` has signature `fn(&mut Parser<'_>) -> Result<T,
+//! ReadError>`. `write_with = "function"` has signature
+//! `fn<W: Write>(&T, &mut MdlWriter<W>) -> Result<(), WriteError>`. These hooks
+//! replace the field's value codec, not its header/property framing. The derive
+//! consumes/emits the property comma. Hooks are available on headers and
+//! properties, and remove the corresponding MdlRead/MdlWrite bound on the field.
+//!
+//! Container `validate_read = "function"` calls `fn(&Self, Span) -> Result<(),
+//! ReadError>` after parsing, with the entire record's byte range. Container
+//! `validate_write = "function"` calls `fn(&Self) -> Result<(), WriteError>`
+//! before output. Function paths may name associated functions (`Type::check`).
+//! Skipped fields are explicitly omitted on write; use validation to reject
+//! skipped binary data that must not be discarded. ModelInfo rejects nonzero
+//! animation-file data, which has no property in the supported MDL dialect.
+//!
+//! Derives preserve generics and existing where clauses, adding codec and
+//! Default bounds only for fields that use them. They support up to 64 body
+//! names (each mapped flag counts separately). Counted collections, enums, and
+//! general tuple structs remain handwritten.
+//!
+//! Packed mappings use nonzero single-bit u32 masks. Storage can be `u32` or
+//! any type implementing MdlFlags, such as SequenceFlags or TextureFlags.
+//! Mapped flags are independently optional and initialize storage to zero;
+//! repeating a name is an error, and writing unknown bits is an error. Mapping
+//! masks and MDL names must be unique. Only an optional bare `default` is allowed;
+//! factory defaults, codec hooks, and omission predicates are not supported on
+//! a packed mapping. Flags are printed in their mapping declaration order.
+//!
+//! Single-field tuple structs can represent complete properties or anonymous
+//! entries. Both forms consume/emit a trailing comma and support container
+//! validation hooks, but not MDL field attributes or `write_order`:
+//!
+//! ```
+//! use wc3_mdx::{MdlRead, MdlWrite};
+//! #[derive(MdlRead, MdlWrite)]
+//! #[mdl(property = "Duration")]
+//! struct Duration(u32);
+//! #[derive(MdlRead, MdlWrite)]
+//! #[mdl(entry)]
+//! struct Point([f32; 3]);
+//! assert_eq!(Duration::parse_mdl("Duration 1000,")?.0, 1000);
+//! assert_eq!(Point::parse_mdl("{ 1.0, 2.0, 3.0 },")?.0, [1.0, 2.0, 3.0]);
+//! # Ok::<(), Box<dyn std::error::Error>>(())
+//! ```
+//!
+//! Duplicate names and conflicting attributes are compile-time errors:
+//!
+//! ```compile_fail
+//! use wc3_mdx::MdlRead;
+//! #[derive(MdlRead)]
+//! #[mdl(block = "Example")]
+//! struct Duplicate {
+//!     #[mdl(property = "Value")] a: u32,
+//!     #[mdl(flag = "Value", default)] b: bool,
+//! }
+//! ```
+//!
+//! ```compile_fail
+//! use wc3_mdx::MdlRead;
+//! #[derive(MdlRead)]
+//! #[mdl(block = "Example")]
+//! struct Conflicting {
+//!     #[mdl(header, default)] name: u32,
+//! }
+//! ```
+
 mod error;
 pub use error::{Diagnostic, ReadError, ReadErrorKind, Span, WriteError};
 mod lexer;
@@ -28,10 +149,10 @@ pub use lexer::{Lexer, Token, TokenKind};
 mod parser;
 pub use parser::{Block, Counted, Field, Parser};
 mod writer;
-pub(crate) use writer::fixed_text;
 pub use writer::MdlWriter;
 
 use std::io::Write;
+pub use wc3_mdx_derive::{MdlRead, MdlWrite};
 
 /// Reads one value directly into its final representation.
 pub trait MdlRead: Sized {
@@ -74,4 +195,26 @@ impl Fields {
             Ok(())
         }
     }
+}
+
+/// A flags value backed by a lossless u32 bit pattern. Used by derived packed
+/// flag mappings; MDL output rejects bits outside the declared mapping.
+pub trait MdlFlags: Sized {
+    fn from_bits(bits: u32) -> Self;
+    fn bits(&self) -> u32;
+}
+impl MdlFlags for u32 {
+    fn from_bits(bits: u32) -> Self {
+        bits
+    }
+    fn bits(&self) -> u32 {
+        *self
+    }
+}
+
+pub(crate) fn is_zero(value: &u32) -> bool {
+    *value == 0
+}
+pub(crate) fn is_positive_zero(value: &f32) -> bool {
+    value.to_bits() == 0
 }

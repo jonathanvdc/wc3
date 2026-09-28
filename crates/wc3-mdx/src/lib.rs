@@ -44,6 +44,7 @@ pub(crate) use scene::*;
 pub mod emitters;
 pub(crate) use emitters::*;
 
+pub use mdl::{MdlFlags, MdlRead, MdlWrite};
 pub use wc3_mdx_derive::{Readable, Writable};
 mod model;
 pub use model::{DynamicModel, Model};

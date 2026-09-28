@@ -3,7 +3,8 @@ use wc3_mdx::animation::{GlobalSequence, Sequence, SequenceFlags};
 use wc3_mdx::geometry::PivotPoint;
 use wc3_mdx::materials::{Texture, TextureFlags};
 use wc3_mdx::mdl::{
-    ReadError, ReadErrorKind, Lexer, MdlRead, MdlWrite, MdlWriter, Parser, Span, TokenKind, WriteError,
+    Lexer, MdlRead, MdlWrite, MdlWriter, Parser, ReadError, ReadErrorKind, Span, TokenKind,
+    WriteError,
 };
 use wc3_mdx::{FixedText, Readable, Writable};
 
@@ -64,7 +65,10 @@ fn lexical_errors_are_precise_and_terminal() {
         ("<", ReadErrorKind::InvalidCharacter, Span::new(0, 1)),
     ] {
         let mut lexer = Lexer::new(source);
-        assert_eq!(lexer.next().unwrap().unwrap_err(), ReadError::new(span, kind));
+        assert_eq!(
+            lexer.next().unwrap().unwrap_err(),
+            ReadError::new(span, kind)
+        );
         assert!(lexer.next().is_none());
     }
     assert_eq!(
@@ -189,7 +193,10 @@ fn parser_checkpoints_nested_blocks_and_finish_are_explicit() {
     assert_eq!(parser.read::<u32>().unwrap(), 123);
     parser.finish().unwrap();
     parser = checkpoint;
-    assert_eq!(parser.finish().unwrap_err().kind, ReadErrorKind::TrailingInput);
+    assert_eq!(
+        parser.finish().unwrap_err().kind,
+        ReadErrorKind::TrailingInput
+    );
     assert_eq!(parser.read::<u32>().unwrap(), 123);
     let mut parser = Parser::new("{ Unread 1, }");
     assert!(parser.begin_block().unwrap().finish().is_err());
@@ -319,7 +326,10 @@ fn counted_lists_stream_and_validate_on_exhaustion_or_finish() {
                 break error;
             }
         };
-        assert_eq!(error.kind, ReadErrorKind::CountMismatch { expected, actual });
+        assert_eq!(
+            error.kind,
+            ReadErrorKind::CountMismatch { expected, actual }
+        );
         assert!(list.next().is_none());
         assert_eq!(list.finish().unwrap_err(), error);
     }

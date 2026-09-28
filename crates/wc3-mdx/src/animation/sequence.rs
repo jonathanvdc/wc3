@@ -1,13 +1,9 @@
 //! Animation sequence records in the `SEQS` chunk.
-use crate::mdl::{
-    fixed_text, ReadError as MdlError, ReadErrorKind, Fields, MdlRead, MdlWrite, MdlWriter, Parser,
-    TokenKind, WriteError,
-};
+use crate::mdl::{is_positive_zero, is_zero, MdlFlags, MdlRead, MdlWrite};
 use crate::ModelVersion;
 use crate::ValueError;
 use crate::Vec3;
 use bitfield::bitfield;
-use std::io::Write;
 
 use crate::SequencesChunk;
 use crate::{Readable, Writable};
@@ -18,7 +14,7 @@ use crate::Model;
 
 bitfield! {
     /// Sequence playback flags, with unrecognized bits retained.
-    #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+    #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Readable, Writable)]
     pub struct SequenceFlags(u32);
     /// Returns the exact stored bits.
     pub bits, _: 31, 0;
@@ -28,17 +24,39 @@ bitfield! {
 
 const NAME_SIZE: usize = 80;
 
-/// A fixed-size animation sequence, including reserved fields.
-#[derive(Clone, Debug, PartialEq, Default, Readable, Writable)]
+/// A fixed-size animation sequence with lossless playback flags.
+#[derive(Clone, Debug, PartialEq, Default, Readable, Writable, MdlRead, MdlWrite)]
+#[mdl(
+    block = "Anim",
+    write_order(
+        interval,
+        flags,
+        move_speed,
+        rarity,
+        sync_point,
+        minimum_extent,
+        maximum_extent,
+        bounds_radius
+    )
+)]
 pub struct Sequence {
+    #[mdl(header)]
     name: FixedText<NAME_SIZE>,
+    #[mdl(property = "Interval")]
     interval: [u32; 2],
+    #[mdl(property = "MoveSpeed", default, skip_if = "is_positive_zero")]
     move_speed: f32,
-    flags: u32,
+    #[mdl(flags(NonLooping = 1))]
+    flags: SequenceFlags,
+    #[mdl(property = "Rarity", default, skip_if = "is_positive_zero")]
     rarity: f32,
+    #[mdl(property = "SyncPoint", default, skip_if = "is_zero")]
     sync_point: u32,
+    #[mdl(property = "BoundsRadius", default)]
     bounds_radius: f32,
+    #[mdl(property = "MinimumExtent", default)]
     minimum_extent: Vec3,
+    #[mdl(property = "MaximumExtent", default)]
     maximum_extent: Vec3,
 }
 
@@ -48,7 +66,7 @@ impl Sequence {
             name: FixedText::default(),
             interval,
             move_speed: 0.0,
-            flags: 0,
+            flags: SequenceFlags::default(),
             rarity: 0.0,
             sync_point: 0,
             bounds_radius: 0.0,
@@ -78,10 +96,10 @@ impl Sequence {
         self.move_speed = speed;
     }
     pub fn flags(&self) -> SequenceFlags {
-        SequenceFlags(self.flags)
+        self.flags
     }
     pub fn set_flags(&mut self, flags: SequenceFlags) {
-        self.flags = flags.bits();
+        self.flags = flags;
     }
     pub fn rarity(&self) -> f32 {
         self.rarity
@@ -128,83 +146,11 @@ impl<V: ModelVersion> Model<V> {
     }
 }
 
-impl MdlRead for Sequence {
-    fn read_mdl(parser: &mut Parser<'_>) -> Result<Self, MdlError> {
-        parser.expect_ident("Anim")?;
-        let mut sequence = Self::default();
-        sequence.name = parser.read_fixed_text()?;
-        let mut fields = Fields::default();
-        let mut body = parser.begin_block()?;
-        while let Some(field) = body.next_field()? {
-            match field.name {
-                "Interval" => {
-                    fields.mark(0, field)?;
-                    sequence.interval = body.read_property()?;
-                }
-                "NonLooping" => {
-                    fields.mark(1, field)?;
-                    body.expect(TokenKind::Comma)?;
-                    sequence.flags = 1;
-                }
-                "MoveSpeed" => {
-                    fields.mark(2, field)?;
-                    sequence.move_speed = body.read_property()?;
-                }
-                "Rarity" => {
-                    fields.mark(3, field)?;
-                    sequence.rarity = body.read_property()?;
-                }
-                "SyncPoint" => {
-                    fields.mark(4, field)?;
-                    sequence.sync_point = body.read_property()?;
-                }
-                "MinimumExtent" => {
-                    fields.mark(5, field)?;
-                    sequence.minimum_extent = body.read_property()?;
-                }
-                "MaximumExtent" => {
-                    fields.mark(6, field)?;
-                    sequence.maximum_extent = body.read_property()?;
-                }
-                "BoundsRadius" => {
-                    fields.mark(7, field)?;
-                    sequence.bounds_radius = body.read_property()?;
-                }
-                _ => return Err(MdlError::new(field.span, ReadErrorKind::UnknownField)),
-            }
-        }
-        fields.require(
-            0,
-            "Interval",
-            body.error(ReadErrorKind::MissingField("Interval")).span,
-        )?;
-        body.finish()?;
-        Ok(sequence)
+impl MdlFlags for SequenceFlags {
+    fn from_bits(bits: u32) -> Self {
+        Self(bits)
     }
-}
-impl MdlWrite for Sequence {
-    fn write_mdl<W: Write>(&self, writer: &mut MdlWriter<W>) -> Result<(), WriteError> {
-        if self.flags & !1 != 0 {
-            return Err(WriteError::Unsupported("unknown sequence flags"));
-        }
-        writer.begin_named_block("Anim", fixed_text(&self.name)?)?;
-        writer.property("Interval", &self.interval)?;
-        if self.flags & 1 != 0 {
-            writer.flag("NonLooping")?;
-        }
-        // Check bits rather than equality so omission does not discard negative zero.
-        if self.move_speed.to_bits() != 0 {
-            writer.property("MoveSpeed", &self.move_speed)?;
-        }
-        if self.rarity.to_bits() != 0 {
-            writer.property("Rarity", &self.rarity)?;
-        }
-        if self.sync_point != 0 {
-            writer.property("SyncPoint", &self.sync_point)?;
-        }
-        writer.property("MinimumExtent", &self.minimum_extent)?;
-        writer.property("MaximumExtent", &self.maximum_extent)?;
-        writer.property("BoundsRadius", &self.bounds_radius)?;
-        writer.end_block()
+    fn bits(&self) -> u32 {
+        self.bits()
     }
 }

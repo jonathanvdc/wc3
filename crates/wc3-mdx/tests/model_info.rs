@@ -24,17 +24,25 @@ fn model_info_edit_round_trip() {
 }
 
 #[test]
-fn preserves_reserved_bytes_when_replacing_model_info() {
+fn renaming_preserves_the_separate_animation_file_field() {
     let mut model = Model::<wc3_mdx::V800>::new();
-    let mut data = ModelInfo::new("Old").unwrap().encode().unwrap();
+    let mut original = ModelInfo::new("Old").unwrap();
+    original
+        .set_animation_file_name("Animations\\Walk.mdx")
+        .unwrap();
+    let mut data = original.encode().unwrap();
     data[336..340].copy_from_slice(&[1, 2, 3, 4]);
     data.extend_from_slice(&[5, 6]);
     model.push(ModelChunk::from_raw(RawChunk::new(*b"MODL", data)).unwrap());
     let mut info = model.model_info().unwrap();
+    assert_eq!(info.animation_file_name(), "Animations\\Walk.mdx");
     info.set_name("New").unwrap();
+    assert_eq!(info.animation_file_name(), "Animations\\Walk.mdx");
     model.set_model_info(&info);
     let bytes = model.encode().unwrap();
     let payload = &bytes[24..];
+    assert_eq!(&payload[..4], b"New\0");
+    assert_eq!(&payload[80..100], b"Animations\\Walk.mdx\0");
     assert_eq!(&payload[336..340], &[1, 2, 3, 4]);
     assert_eq!(payload.len(), 372);
 }
@@ -60,4 +68,20 @@ fn model_info_rejects_malformed_chunks() {
     assert!(matches!(model.chunks()[1], ModelChunk::ModelInfo(_)));
     assert_eq!(model.chunks().len(), 2);
     assert_eq!(model.model_info(), Some(updated));
+}
+
+#[test]
+fn model_name_and_animation_file_have_independent_capacities() {
+    let mut info = ModelInfo::new(&"n".repeat(79)).unwrap();
+    assert!(info.set_name(&"n".repeat(80)).is_err());
+    let path = "a".repeat(259);
+    info.set_animation_file_name(&path).unwrap();
+    assert!(info.set_animation_file_name(&"a".repeat(260)).is_err());
+    let bytes = info.encode().unwrap();
+    assert_eq!(bytes.len(), 372);
+    assert_eq!(&bytes[80..339], path.as_bytes());
+    let parsed = ModelInfo::decode(&bytes).unwrap();
+    assert_eq!(parsed.name(), "n".repeat(79));
+    assert_eq!(parsed.animation_file_name(), path);
+    assert_eq!(parsed.encode().unwrap(), bytes);
 }

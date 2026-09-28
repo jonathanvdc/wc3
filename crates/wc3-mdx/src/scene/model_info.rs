@@ -1,4 +1,5 @@
 //! Fixed-size `MODL` model information.
+use crate::mdl::{MdlRead, MdlWrite, WriteError};
 use crate::ModelVersion;
 use crate::ValueError;
 use crate::{Tag, Vec3};
@@ -11,16 +12,24 @@ use crate::FixedText;
 use crate::{DecodeError, Model};
 
 const SIZE: usize = 372;
-const NAME_SIZE: usize = 336;
+const NAME_SIZE: usize = 80;
+const ANIMATION_FILE_NAME_SIZE: usize = 260;
 
-/// The 372-byte `MODL` record. Reserved bytes remain intact on edit.
-#[derive(Clone, Debug, PartialEq, Writable)]
+/// The 372-byte `MODL` record with separate name and animation-file fields.
+#[derive(Clone, Debug, PartialEq, Writable, MdlRead, MdlWrite)]
+#[mdl(block = "Model", validate_write = "ModelInfo::validate_mdl_write")]
 pub struct ModelInfo {
+    #[mdl(header)]
     name: FixedText<NAME_SIZE>,
-    reserved: Tag,
+    #[mdl(skip, default)]
+    animation_file_name: FixedText<ANIMATION_FILE_NAME_SIZE>,
+    #[mdl(property = "BoundsRadius", default)]
     bounds_radius: f32,
+    #[mdl(property = "MinimumExtent", default)]
     minimum_extent: Vec3,
+    #[mdl(property = "MaximumExtent", default)]
     maximum_extent: Vec3,
+    #[mdl(property = "BlendTime", default)]
     blend_time: u32,
 }
 
@@ -28,7 +37,7 @@ impl Default for ModelInfo {
     fn default() -> Self {
         Self {
             name: FixedText::default(),
-            reserved: [0; 4],
+            animation_file_name: FixedText::default(),
             bounds_radius: 0.0,
             minimum_extent: [0.0; 3],
             maximum_extent: [0.0; 3],
@@ -53,6 +62,16 @@ impl ModelInfo {
     /// Sets the model name, clearing the rest of its fixed-width field.
     pub fn set_name(&mut self, name: &str) -> Result<(), ValueError> {
         self.name.set_text(name)
+    }
+
+    /// Returns the animation-file path, replacing invalid UTF-8.
+    pub fn animation_file_name(&self) -> Cow<'_, str> {
+        self.animation_file_name.text()
+    }
+
+    /// Sets the animation-file path without changing the model name.
+    pub fn set_animation_file_name(&mut self, path: &str) -> Result<(), ValueError> {
+        self.animation_file_name.set_text(path)
     }
 
     /// Returns the model's bounding sphere radius.
@@ -122,14 +141,14 @@ impl Readable for ModelInfo {
             });
         }
         let name = cursor.read()?;
-        let reserved = cursor.read_exact(4)?.try_into().expect("fixed-width field");
+        let animation_file_name = cursor.read()?;
         let bounds_radius = cursor.read()?;
         let minimum_extent = cursor.read()?;
         let maximum_extent = cursor.read()?;
         let blend_time = cursor.read()?;
         Ok(Self {
             name,
-            reserved,
+            animation_file_name,
             bounds_radius,
             minimum_extent,
             maximum_extent,
@@ -141,4 +160,18 @@ impl Readable for ModelInfo {
 impl ModelInfo {
     /// The tag of the chunk containing this record.
     pub const TAG: Tag = *b"MODL";
+}
+
+impl ModelInfo {
+    fn validate_mdl_write(&self) -> Result<(), WriteError> {
+        if self
+            .animation_file_name
+            .as_bytes()
+            .iter()
+            .any(|&byte| byte != 0)
+        {
+            return Err(WriteError::Unsupported("model animation file name"));
+        }
+        Ok(())
+    }
 }

@@ -1,4 +1,4 @@
-use super::{ReadError, ReadErrorKind, Lexer, MdlRead, Span, Token, TokenKind};
+use super::{Lexer, MdlRead, ReadError, ReadErrorKind, Span, Token, TokenKind};
 use crate::FixedText;
 use std::iter::FusedIterator;
 use std::marker::PhantomData;
@@ -327,13 +327,19 @@ impl MdlRead for f32 {
         } else {
             // Do not accept Rust's additional spellings or overflow to infinity.
             if !matches!(token.kind, TokenKind::Number(_)) {
-                return Err(ReadError::new(token.span, ReadErrorKind::InvalidNumber("f32")));
+                return Err(ReadError::new(
+                    token.span,
+                    ReadErrorKind::InvalidNumber("f32"),
+                ));
             }
             let value: f32 = raw
                 .parse()
                 .map_err(|_| ReadError::new(token.span, ReadErrorKind::InvalidNumber("f32")))?;
             if !value.is_finite() {
-                return Err(ReadError::new(token.span, ReadErrorKind::InvalidNumber("f32")));
+                return Err(ReadError::new(
+                    token.span,
+                    ReadErrorKind::InvalidNumber("f32"),
+                ));
             }
             value
         };
