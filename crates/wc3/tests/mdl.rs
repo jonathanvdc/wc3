@@ -210,9 +210,9 @@ fn parser_checkpoints_nested_blocks_and_finish_are_explicit() {
 fn texture_and_sequence_roundtrip_through_mdx() {
     let source = r#"Bitmap { WrapHeight, ReplaceableId 2, Image "Textures\Unit.blp", WrapWidth, }"#;
     let texture = Texture::decode_mdl(source).unwrap();
-    assert_eq!(texture.path(), "Textures\\Unit.blp");
-    assert_eq!(texture.flags().bits(), 3);
-    assert_eq!(texture.replaceable_id(), 2);
+    assert_eq!(texture.path.text(), "Textures\\Unit.blp");
+    assert_eq!(texture.flags.bits(), 3);
+    assert_eq!(texture.replaceable_id, 2);
     let canonical = print(&texture);
     assert_eq!(canonical, "Bitmap {\n\tImage \"Textures\\Unit.blp\",\n\tReplaceableId 2,\n\tWrapWidth,\n\tWrapHeight,\n}\n");
     let bytes = texture.encode_mdx().unwrap();
@@ -231,9 +231,9 @@ fn texture_and_sequence_roundtrip_through_mdx() {
     let source = r#"Anim "Walk" { SyncPoint 1, BoundsRadius 85.0, MaximumExtent { 55.0, 55.0, 105.0 },
         MinimumExtent { -55.0, -55.0, 0.0 }, Rarity -0.0, MoveSpeed 270.0, NonLooping, Interval { 3334, 6667 }, }"#;
     let sequence = Sequence::decode_mdl(source).unwrap();
-    assert_eq!(sequence.interval(), [3334, 6667]);
-    assert_eq!(sequence.sync_point(), 1);
-    assert!(sequence.flags().non_looping());
+    assert_eq!(sequence.interval, [3334, 6667]);
+    assert_eq!(sequence.sync_point, 1);
+    assert!(sequence.flags.non_looping());
     let bytes = sequence.encode_mdx().unwrap();
     assert_eq!(
         Sequence::decode_mdl(&print(&Sequence::decode_mdx(&bytes).unwrap()))
@@ -387,13 +387,13 @@ fn encode_mdl_preserves_unicode_and_checks_block_balance() {
 #[test]
 fn printing_rejects_unrepresentable_binary_fields() {
     let mut texture = Texture::new("a").unwrap();
-    texture.set_flags(TextureFlags(4));
+    texture.flags = TextureFlags(4);
     assert!(matches!(
         MdlWriter::new(io::sink()).write(&texture),
         Err(WriteError::Unsupported(_))
     ));
     let mut sequence = Sequence::new("a", [0, 1]).unwrap();
-    sequence.set_flags(SequenceFlags(2));
+    sequence.flags = SequenceFlags(2);
     assert!(matches!(
         MdlWriter::new(io::sink()).write(&sequence),
         Err(WriteError::Unsupported(_))

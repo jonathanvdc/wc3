@@ -91,7 +91,7 @@ impl ParticleEmitter2 {
         Ok(())
     }
     pub(super) fn validate_mdl(&self) -> Result<(), mdl::WriteError> {
-        validate_node_kind(&self.node, 0x1000 | (self.node.flags().bits() & 0x1f8000))?;
+        validate_node_kind(&self.node, 0x1000 | (self.node.flags.bits() & 0x1f8000))?;
         if self.filter_mode.raw() > 4 {
             return Err(mdl::WriteError::Unsupported("particle2 filter mode"));
         }

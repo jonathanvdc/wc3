@@ -17,9 +17,12 @@ fn texture_animation_tracks_round_trip() {
     .unwrap()
     .into();
     let mut animation = TextureAnimation::new();
-    animation.set_tracks(std::slice::from_ref(&track));
+    animation.tracks = (std::slice::from_ref(&track)).to_vec();
     let mut model = Model::<wc3::model::V1100>::new();
     model.set_texture_animations(&[animation]);
     let parsed = Model::<wc3::model::V1100>::decode_mdx(&model.encode_mdx().unwrap()).unwrap();
-    assert_eq!(parsed.texture_animations()[0].tracks(), vec![track]);
+    assert_eq!(
+        parsed.texture_animations()[0].tracks.as_slice(),
+        vec![track]
+    );
 }

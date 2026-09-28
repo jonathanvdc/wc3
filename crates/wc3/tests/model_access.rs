@@ -38,7 +38,7 @@ fn check_bind_poses(model: &mut impl TryModelAccess, supported: bool) {
 fn checked_accessors_distinguish_unsupported_and_empty() {
     let mut old = Model::<V800>::new();
     check_bind_poses(&mut old, false);
-    assert_eq!(old.chunks().len(), 1);
+    assert_eq!(old.chunks.len(), 1);
 
     let mut modern = Model::<V1800>::new();
     check_bind_poses(&mut modern, true);

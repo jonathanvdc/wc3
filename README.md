@@ -35,15 +35,38 @@ let encoded = model.encode_mdx()?;
 let decoded = Model::<V800>::decode_mdx(&encoded)?;
 assert_eq!(decoded.version(), 800);
 let info = decoded.model_info().unwrap();
-assert_eq!(info.name(), "Example");
+assert_eq!(info.name.text(), "Example");
 assert!(matches!(DynamicModel::decode_mdx(&encoded, 800)?, DynamicModel::V800(_)));
 # Ok::<(), Box<dyn std::error::Error>>(())
 ```
 
+Plain record data is exposed through public fields: scalar values, flags,
+embedded nodes, and ordinary vectors. Edit collections directly, without an
+implicit clone. Fixed-width names and paths use `FixedText<N>`; call `text()`
+to view them and `set_text()` to validate text and clear unused bytes. Exact
+bytes remain available through `as_bytes()` and `from_bytes()`.
+
+```rust
+use wc3::model::{V800, scene::Camera};
+let mut camera = Camera::<V800>::new("Portrait")?;
+camera.position = [0.0, 0.0, 100.0];
+camera.name.set_text("Closeup")?;
+camera.tracks.clear();
+# Ok::<(), wc3::model::ValueError>(())
+```
+
+Methods remain for computed views, version-dependent fields, chunk lookup and
+replacement, and edits that coordinate geoset arrays. Geoset geometry storage
+and animation-track internals stay private to preserve structural invariants.
+Collision shapes expose `geometry::CollisionGeometry` for direct shape edits.
+Model collection getters collect owned records across chunks; setters replace
+chunks. To edit records in place, use the public ordered `model.chunks` vector
+or `chunk_mut()` and match the typed chunk variant.
+
 Constructors and setters that can reject values return `ValueError`. Binary
 decoding returns `mdx::ReadError`; encoding returns `mdx::WriteError`.
 
-`Model<V>::chunks()` exposes `chunks::ModelChunk<V>` variants. Versioned records
+`Model<V>::chunks` exposes `chunks::ModelChunk<V>` variants. Versioned records
 in those chunks also carry `V`. An `Unknown` chunk can only use a tag that the
 library does not recognize. Editing a typed chunk writes its new payload.
 
@@ -55,7 +78,7 @@ version-specific fields through traits implemented beside those records.
 Setters on `Model<V>` accept records with the same `V`.
 
 Geosets and variable-length records such as materials, nodes, lights,
-cameras, emitters, and bind poses store decoded sections. Track accessors borrow parsed
+cameras, emitters, and bind poses store decoded sections. Public track vectors hold parsed
 tracks, and `encode_mdx()` reconstructs records while preserving field bits,
 fixed-width names, and optional section order. Geoset accessors such as
 `vertices()` borrow decoded data, and `vertices_mut()` supports bulk edits.
@@ -288,7 +311,7 @@ Flattened fields retain their own defaults and duplicate checks; nested blocks
 and counted lists are required unless given defaults. Collection items own
 framing, and counted collections validate their declared size. `Sequence` uses
 this support to flatten its shared `GeosetExtent` bounding fields while preserving
-its MDX layout and public accessors.
+its MDX layout and public extent field.
 
 Enums use `#[mdl(value)]` for unit keyword variants or `#[mdl(tagged)]` for
 complete flag/property/block records. `#[mdl(name = "Blend")]` renames a scalar
@@ -299,8 +322,8 @@ names are validated without allocation before reading/writing. Interpolation
 and the default animation track groups now use these derives.
 
 Texture paths occupy 260 bytes (up to 259 UTF-8 bytes plus NUL). ModelInfo stores
-an 80-byte name followed by a separate 260-byte animation-file path, exposed by
-`animation_file_name()` and `set_animation_file_name()`. Editing the name preserves
+an 80-byte name followed by a separate 260-byte animation-file path, exposed as
+`animation_file_name: FixedText<260>`. Editing the name preserves
 the animation-file bytes. The supported MDL Model block has no animation-file
 property, so nonzero animation-file data is rejected on MDL output.
 

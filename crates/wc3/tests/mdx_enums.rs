@@ -45,13 +45,13 @@ fn numeric_choices_preserve_binary_values_and_report_offsets() {
 #[test]
 fn typed_storage_retains_unknown_data_during_edits() {
     let mut layer = Layer::<V800>::new();
-    layer.set_filter_mode(LayerFilterMode::Unknown(99));
+    layer.filter_mode = LayerFilterMode::Unknown(99);
     let mut flags = LayerShadingFlags::from_bits_retain(0x8000_0000);
     flags.set_two_sided(true);
-    layer.set_shading_flags(flags);
+    layer.shading_flags = flags;
     let decoded = Layer::<V800>::decode_mdx(&layer.encode_mdx().unwrap()).unwrap();
     assert_eq!(decoded, layer);
-    assert_eq!(decoded.shading_flags().bits(), 0x8000_0010);
+    assert_eq!(decoded.shading_flags.bits(), 0x8000_0010);
     assert!(layer.encode_mdl().is_err());
     let mut emitter = ParticleEmitter2::new(wc3::model::scene::Node::new("p", 0).unwrap());
     emitter.filter_mode = Particle2FilterMode::Unknown(99);
@@ -89,7 +89,7 @@ fn emitter_flags_interpret_overlapping_bits_and_preserve_other_bits() {
     use wc3::model::emitters::{ParticleEmitter, ParticleEmitter2, PopcornEmitter};
     use wc3::model::scene::{Node, NodeFlags};
     let mut node = Node::new("flags", 0).unwrap();
-    node.set_flags(NodeFlags(0x8002_0001));
+    node.flags = NodeFlags(0x8002_0001);
     let mut particles = ParticleEmitter2::new(node.clone());
     assert!(particles.flags().line_emitter());
     assert!(!particles.flags().unfogged());
@@ -99,14 +99,14 @@ fn emitter_flags_interpret_overlapping_bits_and_preserve_other_bits() {
     flags.set_unfogged(false);
     flags.set_popcorn_scaling(true);
     popcorn.set_flags(flags);
-    assert_eq!(popcorn.node().flags().bits(), 0x8004_0001);
+    assert_eq!(popcorn.node.flags.bits(), 0x8004_0001);
     let mut flags = particles.flags();
     flags.set_unfogged(true);
     particles.set_flags(flags);
-    assert_eq!(particles.node().flags().bits(), 0x8006_0001);
+    assert_eq!(particles.node.flags.bits(), 0x8006_0001);
     let mut classic = ParticleEmitter::new(node, "").unwrap();
     let mut flags = classic.flags();
     flags.set_emitter_uses_tga(true);
     classic.set_flags(flags);
-    assert_eq!(classic.node().flags().bits(), 0x8003_0001);
+    assert_eq!(classic.node.flags.bits(), 0x8003_0001);
 }

@@ -47,8 +47,8 @@ fn spec_examples_match_independently_packed_binary_records() {
 fn particle2_choices_arrays_defaults_and_validation() {
     let base = "ParticleEmitter2 \"p\" { ObjectId 0, ";
     let empty = ParticleEmitter2::decode_mdl(&format!("{base}}}")).unwrap();
-    assert_eq!(empty, ParticleEmitter2::new(empty.node().clone()));
-    assert_eq!(empty.node().flags().bits(), 0x1000);
+    assert_eq!(empty, ParticleEmitter2::new(empty.node.clone()));
+    assert_eq!(empty.node.flags.bits(), 0x1000);
     for (index, filter) in ["Blend", "Additive", "Modulate", "Modulate2x", "AlphaKey"]
         .iter()
         .enumerate()
@@ -81,7 +81,7 @@ fn particle2_choices_arrays_defaults_and_validation() {
         "{base}SortPrimsFarZ, LineEmitter, Unfogged, ModelSpace, Unshaded, XYQuad, }}"
     ))
     .unwrap();
-    assert_eq!(flags.node().flags().bits(), 0x1f9000);
+    assert_eq!(flags.node.flags.bits(), 0x1f9000);
 }
 
 #[test]
@@ -104,7 +104,7 @@ fn emitter_tracks_preserve_signed_keys_splines_globals_and_hidden_bases() {
     let mut record =
         ParticleEmitter2::decode_mdl(&format!("ParticleEmitter2 \"p\" {{ ObjectId 0, {body} }}"))
             .unwrap();
-    assert_eq!(record.tracks().len(), 8);
+    assert_eq!(record.tracks.len(), 8);
     assert_eq!(
         ParticleEmitter2::decode_mdl(&record.encode_mdl().unwrap()).unwrap(),
         record
@@ -122,22 +122,22 @@ fn emitter_tracks_preserve_signed_keys_splines_globals_and_hidden_bases() {
         "ParticleEmitterPopcorn \"p\" {{ ObjectId 0, {body} }}"
     ))
     .unwrap();
-    assert_eq!(record.tracks().len(), 6);
+    assert_eq!(record.tracks.len(), 6);
     assert_eq!(
         PopcornEmitter::decode_mdl(&record.encode_mdl().unwrap()).unwrap(),
         record
     );
-    record.set_alpha(0.0);
+    record.alpha = 0.0;
     assert!(record.encode_mdl().is_err());
 }
 
 #[test]
 fn popcorn_defaults_flags_and_literal_strings() {
     let record = PopcornEmitter::decode_mdl("ParticleEmitterPopcorn \"p\" { ObjectId 0, SortPrimsFarZ, Unshaded, Unfogged, PopcornScaling, Path \"a\\b.pkfx\", AnimVisibilityGuide \"Always=on,\nDeath=off\", }").unwrap();
-    assert_eq!(record.node().flags().bits(), 0x79000);
-    assert_eq!(record.life_span(), 1.0);
-    assert_eq!(record.color(), [1.0; 3]);
-    assert_eq!(record.visibility_guide(), "Always=on,\nDeath=off");
+    assert_eq!(record.node.flags.bits(), 0x79000);
+    assert_eq!(record.life_span, 1.0);
+    assert_eq!(record.color, [1.0; 3]);
+    assert_eq!(record.visibility_guide.text(), "Always=on,\nDeath=off");
     assert_eq!(
         PopcornEmitter::decode_mdl(&record.encode_mdl().unwrap()).unwrap(),
         record
@@ -170,7 +170,7 @@ fn camera_nested_tracks_aliases_required_fields_and_variants() {
     assert!(Camera::<V800>::decode_mdl("Camera \"c\" { FarClip 1, }").is_err());
     assert!(Camera::<V800>::decode_mdl("Camera \"c\" { FieldOfView 1, }").is_err());
     let record = Camera::<V800>::decode_mdl(&format!("{base} Visibility 1 {{ Linear, -2: 1, }} Target {{ Position {{ 1, 2, 3 }}, Translation 1 {{ Hermite, GlobalSeqId 4, -5: {{ 1, 2, 3 }}, InTan {{ 4, 5, 6 }}, OutTan {{ 7, 8, 9 }}, }} }} FStop 2.8, FocalLength 50, DOFDistance 180, Rotation 1 {{ Bezier, -3: 1, InTan 2, OutTan 3, }} Translation 1 {{ Linear, -1: {{ 3, 2, 1 }}, }} }}")).unwrap();
-    assert_eq!(record.tracks().len(), 7);
+    assert_eq!(record.tracks.len(), 7);
     assert_eq!(
         Camera::<V800>::decode_mdl(&record.encode_mdl().unwrap()).unwrap(),
         record
@@ -180,16 +180,16 @@ fn camera_nested_tracks_aliases_required_fields_and_variants() {
         record
     );
     assert!(matches!(
-        record.tracks()[5],
+        record.tracks[5],
         CameraTrack::TargetTranslation(_)
     ));
     let mut invalid = record.clone();
-    let mut tracks = record.tracks().to_vec();
+    let mut tracks = record.tracks.as_slice().to_vec();
     tracks.reverse();
-    invalid.set_tracks(&tracks);
+    invalid.tracks = (&tracks).to_vec();
     assert!(invalid.encode_mdl().is_err());
     invalid = record;
-    invalid.set_variant(CameraVariant::Variant1([0; 12]));
+    invalid.variant = CameraVariant::Variant1([0; 12]);
     assert!(invalid.encode_mdl().is_err());
 }
 

@@ -5,8 +5,6 @@ use crate::model::{ModelVersion, SupportsReforgedChunks};
 
 use crate::model::FaceFxChunk;
 
-use std::borrow::Cow;
-
 use crate::model::FixedText;
 use crate::model::Model;
 
@@ -18,9 +16,9 @@ const PATH_SIZE: usize = 260;
 #[mdl(block = "FaceFX")]
 pub struct FaceFx {
     #[mdl(header)]
-    name: FixedText<NAME_SIZE>,
+    pub name: FixedText<NAME_SIZE>,
     #[mdl(property = "Path", default)]
-    path: FixedText<PATH_SIZE>,
+    pub path: FixedText<PATH_SIZE>,
 }
 
 impl FaceFx {
@@ -30,29 +28,9 @@ impl FaceFx {
             name: FixedText::default(),
             path: FixedText::default(),
         };
-        entry.set_name(name)?;
-        entry.set_path(path)?;
+        entry.name.set_text(name)?;
+        entry.path.set_text(path)?;
         Ok(entry)
-    }
-
-    /// Returns the name up to the first NUL.
-    pub fn name(&self) -> Cow<'_, str> {
-        self.name.text()
-    }
-
-    /// Replaces the name.
-    pub fn set_name(&mut self, name: &str) -> Result<(), ValueError> {
-        self.name.set_text(name)
-    }
-
-    /// Returns the animation resource path up to the first NUL.
-    pub fn path(&self) -> Cow<'_, str> {
-        self.path.text()
-    }
-
-    /// Replaces the animation resource path.
-    pub fn set_path(&mut self, path: &str) -> Result<(), ValueError> {
-        self.path.set_text(path)
     }
 }
 

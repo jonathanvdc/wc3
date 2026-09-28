@@ -18,15 +18,16 @@ fn signed_event_times_and_material_priority_preserve_wire_bits() {
         .flat_map(|frame| frame.to_le_bytes())
         .collect();
     assert_eq!(&bytes[bytes.len() - 16..], expected);
-    assert_eq!(EventObject::decode_mdx(&bytes).unwrap().frames(), frames);
+    assert_eq!(
+        EventObject::decode_mdx(&bytes).unwrap().frames.as_slice(),
+        frames
+    );
     let mut material = Material::<V800>::new();
-    material.set_priority_plane(-7);
+    material.priority_plane = -7;
     let bytes = material.encode_mdx().unwrap();
     assert_eq!(&bytes[4..8], &(-7i32).to_le_bytes());
     assert_eq!(
-        Material::<V800>::decode_mdx(&bytes)
-            .unwrap()
-            .priority_plane(),
+        Material::<V800>::decode_mdx(&bytes).unwrap().priority_plane,
         -7
     );
     let mut model = Model::<V800>::new();
@@ -36,8 +37,8 @@ fn signed_event_times_and_material_priority_preserve_wire_bits() {
         .convert::<V1800>(&ConversionOptions::strict())
         .unwrap()
         .model;
-    assert_eq!(converted.materials()[0].priority_plane(), -7);
-    assert_eq!(converted.event_objects()[0].frames(), frames);
+    assert_eq!(converted.materials()[0].priority_plane, -7);
+    assert_eq!(converted.event_objects()[0].frames.as_slice(), frames);
 }
 
 #[test]
@@ -86,24 +87,25 @@ fn camera_extended_tracks_survive_model_io_and_conversion() {
         CameraTrack::f_stop(2.8),
     ];
     let mut camera = Camera::<V1800>::new("Portrait").unwrap();
-    camera.set_tracks(&tracks);
+    camera.tracks = (&tracks).to_vec();
     let mut model = Model::<V1800>::new();
     model.set_cameras(&[camera]);
     let bytes = model.encode_mdx().unwrap();
     let parsed = Model::<V1800>::decode_mdx(&bytes).unwrap();
-    assert_eq!(parsed.cameras()[0].tracks(), tracks);
+    assert_eq!(parsed.cameras()[0].tracks.as_slice(), tracks);
     assert_eq!(parsed.encode_mdx().unwrap(), bytes);
     // These track tags are recognized by the new client without a layout gate.
     let converted = model
         .convert::<V800>(&ConversionOptions::strict())
         .unwrap()
         .model;
-    assert_eq!(converted.cameras()[0].tracks(), tracks);
+    assert_eq!(converted.cameras()[0].tracks.as_slice(), tracks);
     assert_eq!(
         Model::<V800>::decode_mdx(&converted.encode_mdx().unwrap())
             .unwrap()
             .cameras()[0]
-            .tracks(),
+            .tracks
+            .as_slice(),
         tracks
     );
 }
@@ -146,7 +148,9 @@ fn gliders_keep_every_entry_in_all_versions_and_reject_partial_words() {
     assert!(matches!(chunk, ModelChunk::Gliders(_)));
     assert!(ModelChunk::<V800>::from_raw(RawChunk::new(*b"DILG", vec![1, 0, 0])).is_err());
     // Clearing removes every occurrence, including manually appended chunks.
-    model.push(GlidersChunk::new(entries.to_vec()).into());
+    model
+        .chunks
+        .push(GlidersChunk::new(entries.to_vec()).into());
     model.set_gliders(&[]);
     assert!(model.chunk(*b"DILG").is_none());
     assert!(model.gliders().is_empty());
@@ -202,11 +206,11 @@ fn named_shader_mapping_and_new_flags_preserve_raw_storage() {
     flags.set_ambient_occlusion(true);
     assert_eq!(flags.bits(), 0x60c);
     let mut layer = Layer::<V800>::new();
-    layer.set_shading_flags(flags);
+    layer.shading_flags = flags;
     assert_eq!(
         Layer::<V800>::decode_mdx(&layer.encode_mdx().unwrap())
             .unwrap()
-            .shading_flags(),
+            .shading_flags,
         flags
     );
     let mut material_flags = MaterialRenderFlags(0);
@@ -218,8 +222,8 @@ fn named_shader_mapping_and_new_flags_preserve_raw_storage() {
 #[test]
 fn constructors_use_documented_defaults_without_changing_decoded_values() {
     let light = Light::<V800>::new(Node::new("Light", 0).unwrap(), 0);
-    assert_eq!(light.color(), [1.0; 3]);
-    assert_eq!(light.ambient_color(), [1.0; 3]);
+    assert_eq!(light.color, [1.0; 3]);
+    assert_eq!(light.ambient_color, [1.0; 3]);
     assert_eq!(
         light.falloff(),
         LightFalloff {
@@ -234,17 +238,17 @@ fn constructors_use_documented_defaults_without_changing_decoded_values() {
         "Always=on\r\nDeath=off",
     )
     .unwrap();
-    assert_eq!(emitter.life_span(), 1.0);
-    assert_eq!(emitter.emission_rate(), 1.0);
-    assert_eq!(emitter.speed(), 1.0);
-    assert_eq!(emitter.alpha(), 1.0);
-    assert_eq!(emitter.color(), [1.0; 3]);
-    emitter.set_life_span(0.0);
-    emitter.set_color([0.0; 3]);
+    assert_eq!(emitter.life_span, 1.0);
+    assert_eq!(emitter.emission_rate, 1.0);
+    assert_eq!(emitter.speed, 1.0);
+    assert_eq!(emitter.alpha, 1.0);
+    assert_eq!(emitter.color, [1.0; 3]);
+    emitter.life_span = 0.0;
+    emitter.color = [0.0; 3];
     let decoded = PopcornEmitter::decode_mdx(&emitter.encode_mdx().unwrap()).unwrap();
-    assert_eq!(decoded.life_span(), 0.0);
-    assert_eq!(decoded.color(), [0.0; 3]);
-    assert_eq!(decoded.visibility_guide(), "Always=on\r\nDeath=off");
+    assert_eq!(decoded.life_span, 0.0);
+    assert_eq!(decoded.color, [0.0; 3]);
+    assert_eq!(decoded.visibility_guide.text(), "Always=on\r\nDeath=off");
     assert_eq!(
         ParticleEmitter2::new(Node::new("p", 0).unwrap()).priority_plane,
         0u32

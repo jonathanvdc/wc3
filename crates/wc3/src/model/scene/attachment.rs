@@ -11,8 +11,6 @@ use std::io::Write as IoWrite;
 
 use crate::model::{AttachmentVisibility, AttachmentsChunk, Cursor};
 
-use std::borrow::Cow;
-
 use crate::model::FixedText;
 use crate::model::{AnimationTrack, Model, Node, ReadError};
 
@@ -24,11 +22,11 @@ const PATH_SIZE: usize = 256;
 /// matching node bits and a zero reserved word.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Attachment {
-    node: Node,
-    path: FixedText<PATH_SIZE>,
-    reserved: u32,
-    id: u32,
-    visibility_track: Option<AnimationTrack<AttachmentVisibility>>,
+    pub node: Node,
+    pub path: FixedText<PATH_SIZE>,
+    pub reserved: u32,
+    pub id: u32,
+    pub visibility_track: Option<AnimationTrack<AttachmentVisibility>>,
 }
 
 impl Attachment {
@@ -41,48 +39,8 @@ impl Attachment {
             id,
             visibility_track: None,
         };
-        attachment.set_path(path)?;
+        attachment.path.set_text(path)?;
         Ok(attachment)
-    }
-
-    /// Borrows the shared node.
-    pub fn node(&self) -> &Node {
-        &self.node
-    }
-
-    /// Borrows the shared node for editing.
-    pub fn node_mut(&mut self) -> &mut Node {
-        &mut self.node
-    }
-
-    /// Returns the model path up to the first NUL.
-    pub fn path(&self) -> Cow<'_, str> {
-        self.path.text()
-    }
-
-    /// Sets the model path and clears the old path field.
-    pub fn set_path(&mut self, path: &str) -> Result<(), ValueError> {
-        self.path.set_text(path)
-    }
-
-    /// Returns the attachment ID.
-    pub fn id(&self) -> u32 {
-        self.id
-    }
-
-    /// Sets the attachment ID.
-    pub fn set_id(&mut self, id: u32) {
-        self.id = id;
-    }
-
-    /// Borrows the optional visibility track.
-    pub fn visibility_track(&self) -> Option<&AnimationTrack<AttachmentVisibility>> {
-        self.visibility_track.as_ref()
-    }
-
-    /// Replaces the optional visibility track.
-    pub fn set_visibility_track(&mut self, track: Option<&AnimationTrack<AttachmentVisibility>>) {
-        self.visibility_track = track.cloned();
     }
 }
 

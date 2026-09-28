@@ -4,7 +4,7 @@ pub use geoset::{
     ReforgedGeosetExtraSections, SkinWeights,
 };
 mod collision;
-pub use collision::CollisionShape;
+pub use collision::{CollisionGeometry, CollisionShape};
 mod pivot_point;
 pub use pivot_point::PivotPoint;
 mod bind_pose_matrix;

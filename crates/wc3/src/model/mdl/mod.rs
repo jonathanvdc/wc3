@@ -225,7 +225,7 @@
 //!
 //! `#[mdl(flatten, extra_flags(get = "Type::flags", set = "Type::set_flags",
 //! Extra = 1))]` adds context-specific flags stored inside a flattened record.
-//! The getter returns a BitRange/BitRangeMut<u32> value; the setter stores it.
+//! The getter returns a `BitRange<u32>`/`BitRangeMut<u32>` value; the setter stores it.
 //! Read reconstruction ORs these bits into the flattened value. Use the owning
 //! record's validation hook to check its implicit kind and unrepresentable bits.
 //!
@@ -456,7 +456,7 @@
 //! properties support those hooks with the same comma framing as properties.
 //!
 //! Packed mappings use nonzero single-bit u32 masks. Storage can be `u32` or
-//! any type implementing BitRange<u32>; parsing also requires BitRangeMut<u32>
+//! any type implementing `BitRange<u32>`; parsing also requires `BitRangeMut<u32>`
 //! and, without a container default, Default. SequenceFlags and TextureFlags
 //! provide these traits.
 //! Mapped flags are independently optional and initialize storage to zero

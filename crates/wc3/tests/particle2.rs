@@ -15,9 +15,9 @@ fn particle_emitter2_fields_round_trip() {
     emitter.particle_scaling = [1.0, 2.0, 3.0];
     emitter.uv_animations[0] = [0, 4, 2];
     emitter.texture_id = 7;
-    emitter.set_frames(Particle2Frames::Both);
+    emitter.frames = Particle2Frames::Both;
     emitter.set_squirt_enabled(true);
-    assert_eq!(emitter.frames(), Particle2Frames::Both);
+    assert_eq!(emitter.frames, Particle2Frames::Both);
     assert!(emitter.squirt_enabled());
     let mut model = Model::<wc3::model::V1800>::new();
     model.set_particle_emitters2(std::slice::from_ref(&emitter));

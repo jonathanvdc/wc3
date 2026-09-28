@@ -23,8 +23,8 @@ fn particle_flags_and_all_channels_roundtrip() {
         let expected = 0x1000
             | if flags.contains("Mdl") { 0x8000 } else { 0 }
             | if flags.contains("Tga") { 0x10000 } else { 0 };
-        assert_eq!(emitter.node().flags().bits(), expected);
-        assert_eq!(emitter.path(), "a\\b.mdl");
+        assert_eq!(emitter.node.flags.bits(), expected);
+        assert_eq!(emitter.path.text(), "a\\b.mdl");
         if !flags.is_empty() {
             let output = emitter.encode_mdl().unwrap();
             assert!(output.find("ObjectId").unwrap() < output.find("EmitterUses").unwrap());
@@ -36,18 +36,19 @@ fn particle_flags_and_all_channels_roundtrip() {
 #[test]
 fn independent_emitter_fixtures_roundtrip() {
     let mut node = Node::new("particle", 7).unwrap();
-    node.set_flags(NodeFlags(0x19008));
+    node.flags = NodeFlags(0x19008);
     let mut particle = ParticleEmitter::new(node.clone(), "a.mdl").unwrap();
-    particle.set_gravity(3.0);
-    particle.set_longitude(4.0);
-    particle.set_latitude(5.0);
-    particle.set_life_span(6.0);
-    particle.set_initial_velocity(7.0);
-    particle.set_tracks(&[ParticleTrack::EmissionRate(
+    particle.gravity = 3.0;
+    particle.longitude = 4.0;
+    particle.latitude = 5.0;
+    particle.life_span = 6.0;
+    particle.initial_velocity = 7.0;
+    particle.tracks = (&[ParticleTrack::EmissionRate(
         AnimationTrack::<ParticleEmissionRate>::linear(vec![], None).unwrap(),
-    )]);
+    )])
+        .to_vec();
     roundtrip(&particle);
-    node.set_flags(NodeFlags(0x4000));
+    node.flags = NodeFlags(0x4000);
     let mut ribbon = RibbonEmitter::new(node);
     ribbon.height_above = 2.0;
     ribbon.height_below = 3.0;
@@ -60,19 +61,20 @@ fn independent_emitter_fixtures_roundtrip() {
     ribbon.columns = 3;
     ribbon.material_id = 4;
     ribbon.gravity = -0.0;
-    ribbon.set_tracks(&[
+    ribbon.tracks = (&[
         RibbonTrack::TextureSlot(
             AnimationTrack::<RibbonTextureSlot>::linear(vec![], None).unwrap(),
         ),
         RibbonTrack::Alpha(AnimationTrack::<RibbonAlpha>::linear(vec![], None).unwrap()),
-    ]);
+    ])
+        .to_vec();
     roundtrip(&ribbon);
     assert!(ribbon.encode_mdl().unwrap().contains("Gravity -0.0,"));
 }
 #[test]
 fn ribbon_static_alias_and_all_channels_roundtrip() {
     let ribbon = RibbonEmitter::decode_mdl("RibbonEmitter \"Trail\" { ObjectId 22, Parent 6, static HeightAbove 4.0, static HeightBelow 4.0, static Alpha 1.0, static Color { 1.0, 1.0, 1.0 }, LifeSpan 0.5, TextureSlot 0, EmissionRate 30, Rows 1, Columns 1, MaterialID 1, }").unwrap();
-    assert_eq!(ribbon.node().flags().bits(), 0x4000);
+    assert_eq!(ribbon.node.flags.bits(), 0x4000);
     assert_eq!(ribbon.emission_rate, 30);
     let text = ribbon.encode_mdl().unwrap();
     assert!(text.contains("static TextureSlot 0,"));
@@ -120,12 +122,12 @@ fn writers_reject_hidden_values_unknown_flags_and_path_padding() {
         "ParticleEmitter \"a\" { ObjectId 0, EmissionRate 0 { Linear, } }",
     )
     .unwrap();
-    particle.set_emission_rate(1.0);
+    particle.emission_rate = 1.0;
     assert!(particle.encode_mdl().is_err());
-    particle.set_emission_rate(0.0);
-    particle.node_mut().set_flags(NodeFlags(0x21000));
+    particle.emission_rate = 0.0;
+    particle.node.flags = NodeFlags(0x21000);
     assert!(particle.encode_mdl().is_err());
-    particle.node_mut().set_flags(NodeFlags(0x1000));
+    particle.node.flags = NodeFlags(0x1000);
     let mut bytes = particle.encode_mdx().unwrap();
     let node_size = u32::from_le_bytes(bytes[4..8].try_into().unwrap()) as usize;
     let padding = 4 + node_size + 16 + 256;
@@ -140,7 +142,7 @@ fn writers_reject_hidden_values_unknown_flags_and_path_padding() {
     ribbon.texture_slot = 3;
     assert!(ribbon.encode_mdl().is_err());
     ribbon.texture_slot = 0;
-    ribbon.node_mut().set_flags(NodeFlags(0));
+    ribbon.node.flags = NodeFlags(0);
     assert!(ribbon.encode_mdl().is_err());
 }
 
@@ -148,10 +150,10 @@ fn writers_reject_hidden_values_unknown_flags_and_path_padding() {
 fn particle_path_is_a_single_260_byte_field() {
     let path = "a".repeat(259);
     let mut node = Node::new("long path", 0).unwrap();
-    node.set_flags(NodeFlags(0x1000));
+    node.flags = NodeFlags(0x1000);
     let mut emitter = ParticleEmitter::new(node, &path).unwrap();
-    emitter.set_life_span(123.0);
-    emitter.set_initial_velocity(456.0);
+    emitter.life_span = 123.0;
+    emitter.initial_velocity = 456.0;
     let bytes = emitter.encode_mdx().unwrap();
     let node_size = u32::from_le_bytes(bytes[4..8].try_into().unwrap()) as usize;
     let start = 4 + node_size + 16;
@@ -159,7 +161,10 @@ fn particle_path_is_a_single_260_byte_field() {
     assert_eq!(bytes[start + 259], 0);
     assert_eq!(&bytes[start + 260..start + 264], &123.0f32.to_le_bytes());
     assert_eq!(&bytes[start + 264..start + 268], &456.0f32.to_le_bytes());
-    assert_eq!(ParticleEmitter::decode_mdx(&bytes).unwrap().path(), path);
+    assert_eq!(
+        ParticleEmitter::decode_mdx(&bytes).unwrap().path.text(),
+        path
+    );
     roundtrip(&emitter);
-    assert!(emitter.set_path(&"a".repeat(260)).is_err());
+    assert!(emitter.path.set_text(&"a".repeat(260)).is_err());
 }

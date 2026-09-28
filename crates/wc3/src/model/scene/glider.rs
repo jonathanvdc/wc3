@@ -21,7 +21,7 @@ impl<V: ModelVersion> Model<V> {
     /// Replaces the whitelist, removing all DILG chunks when empty.
     pub fn set_gliders(&mut self, gliders: &[Glider]) {
         if gliders.is_empty() {
-            self.chunks_mut().retain(|chunk| chunk.tag() != *b"DILG");
+            self.chunks.retain(|chunk| chunk.tag() != *b"DILG");
         } else {
             self.replace_chunk(GlidersChunk::new(gliders.to_vec()));
         }

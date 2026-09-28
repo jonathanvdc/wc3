@@ -45,17 +45,18 @@ fn check_version<V: ModelVersion>() {
         &[0, 1, 0],
     )
     .unwrap();
-    geoset.set_material_id(7);
+    geoset.material_id = 7;
     geoset.set_matrix_groups(&[vec![1, 2], vec![3]]).unwrap();
     geoset.set_vertex_groups(&[0, 1]).unwrap();
-    geoset.set_sequence_extents(&[GeosetExtent {
+    geoset.sequence_extents = (&[GeosetExtent {
         bounds_radius: 2.0,
         minimum: [-2.0; 3],
         maximum: [2.0; 3],
-    }]);
+    }])
+        .to_vec();
     geoset.set_uv_sets(&[vec![[0.0, 0.0]; 2], vec![[1.0, 1.0]; 2]]);
     geoset.set_normal(1, [0.0, 1.0, 0.0]).unwrap();
-    geoset.set_selection_group(3);
+    geoset.selection_group = 3;
     geoset.set_unselectable(true);
     geoset.set_uv(0, 1, [0.25, 0.75]).unwrap();
     let extent = GeosetExtent {
@@ -63,7 +64,7 @@ fn check_version<V: ModelVersion>() {
         minimum: [-1.0; 3],
         maximum: [1.0; 3],
     };
-    geoset.set_extent(extent);
+    geoset.extent = extent;
     if version >= 900 {
         geoset.try_set_level_of_detail(2).unwrap();
         geoset.try_set_name("Body").unwrap();
@@ -87,15 +88,15 @@ fn check_version<V: ModelVersion>() {
         assert!(geoset.try_tangents().unwrap().is_none());
         assert_eq!(geoset.try_name().unwrap().as_ref(), "Body");
     }
-    assert_eq!(geoset.material_id(), 7);
+    assert_eq!(geoset.material_id, 7);
     assert_eq!(geoset.normals()[1], [0.0, 1.0, 0.0]);
-    assert_eq!(geoset.selection_group(), 3);
+    assert_eq!(geoset.selection_group, 3);
     assert!(geoset.unselectable());
-    assert_eq!(geoset.extent(), extent);
+    assert_eq!(geoset.extent, extent);
     assert_eq!(geoset.vertex_groups(), &[0, 1]);
     assert_eq!(geoset.matrix_group_sizes(), vec![2, 1]);
     assert_eq!(geoset.matrix_indices(), vec![1, 2, 3]);
-    assert_eq!(geoset.sequence_extents().len(), 1);
+    assert_eq!(geoset.sequence_extents.len(), 1);
     assert_eq!(
         geoset.uv_sets(),
         vec![vec![[0.0, 0.0], [0.25, 0.75]], vec![[1.0, 1.0]; 2]]
@@ -108,7 +109,7 @@ fn check_version<V: ModelVersion>() {
     model.set_geosets(&[geoset]);
     let parsed = Model::<V>::decode_mdx(&model.encode_mdx().unwrap()).unwrap();
     assert_eq!(parsed.geosets()[0].version(), version);
-    assert_eq!(parsed.geosets()[0].material_id(), 7);
+    assert_eq!(parsed.geosets()[0].material_id, 7);
 }
 
 #[test]
@@ -164,8 +165,8 @@ fn local_geosets_have_bounded_mesh_sections_when_available() {
                         geoset.vertex_groups();
                         geoset.matrix_group_sizes();
                         geoset.matrix_indices();
-                        geoset.extent();
-                        geoset.sequence_extents();
+                        geoset.extent;
+                        geoset.sequence_extents.as_slice();
                         let _ = geoset.try_tangents();
                         let _ = geoset.try_skin_weights();
                         geoset.uv_sets();

@@ -87,8 +87,8 @@ pub struct ParticleEmitter2 {
     #[mdl(
         flatten,
         extra_flags(
-            get = "Node::flags",
-            set = "Node::set_flags",
+            get = "Node::mdl_flags",
+            set = "Node::set_mdl_flags",
             SortPrimsFarZ = 65536,
             LineEmitter = 131072,
             Unfogged = 262144,
@@ -97,7 +97,7 @@ pub struct ParticleEmitter2 {
             XYQuad = 1048576
         )
     )]
-    node: Node,
+    pub node: Node,
     #[mdl(animatable = "Speed", track = "Particle2Track::Speed", default)]
     pub speed: f32,
     #[mdl(animatable = "Variation", track = "Particle2Track::Variation", default)]
@@ -149,18 +149,10 @@ pub struct ParticleEmitter2 {
     #[mdl(property = "ReplaceableId", default, skip_if = "is_zero")]
     pub replaceable_id: u32,
     #[mdl(tracks, channels(Visibility = "Particle2Track::Visibility"))]
-    tracks: Vec<Particle2Track>,
+    pub tracks: Vec<Particle2Track>,
 }
 
 impl ParticleEmitter2 {
-    /// Returns the frame mode, including unnamed binary values.
-    pub fn frames(&self) -> Particle2Frames {
-        self.frames
-    }
-    /// Sets the frame mode.
-    pub fn set_frames(&mut self, frames: Particle2Frames) {
-        self.frames = frames;
-    }
     /// Reports whether newly emitted particles are animated in one burst.
     pub fn squirt_enabled(&self) -> bool {
         self.squirt != 0
@@ -198,26 +190,6 @@ impl ParticleEmitter2 {
             replaceable_id: Default::default(),
             tracks: Vec::new(),
         }
-    }
-
-    /// Borrows the embedded node.
-    pub fn node(&self) -> &Node {
-        &self.node
-    }
-
-    /// Borrows the embedded node for editing.
-    pub fn node_mut(&mut self) -> &mut Node {
-        &mut self.node
-    }
-
-    /// Borrows decoded optional animation tracks.
-    pub fn tracks(&self) -> &[Particle2Track] {
-        &self.tracks
-    }
-
-    /// Replaces optional animation tracks.
-    pub fn set_tracks(&mut self, tracks: &[Particle2Track]) {
-        self.tracks = tracks.to_vec();
     }
 }
 
@@ -262,12 +234,12 @@ impl Particle2Flags {
 impl ParticleEmitter2 {
     /// Returns behavioral flags using this emitter's bit meanings.
     pub fn flags(&self) -> Particle2Flags {
-        Particle2Flags::from_bits(self.node.flags().bits())
+        Particle2Flags::from_bits(self.node.flags.bits())
     }
     /// Changes emitter behavior while preserving every unrelated node bit.
     pub fn set_flags(&mut self, flags: Particle2Flags) {
-        let bits = (self.node.flags().bits() & !Particle2Flags::MASK)
+        let bits = (self.node.flags.bits() & !Particle2Flags::MASK)
             | (flags.bits() & Particle2Flags::MASK);
-        self.node.set_flags(NodeFlags(bits));
+        self.node.flags = NodeFlags(bits);
     }
 }

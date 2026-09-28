@@ -159,7 +159,7 @@ fn geosets_write_borrowed_mesh_sections_without_allocating() {
             }; 4],
         ))
         .unwrap();
-    geoset.set_sequence_extents(&[geoset.extent(); 2]);
+    geoset.sequence_extents = vec![geoset.extent; 2];
     let mut storage = [0u8; 8192];
     let (_, count) = measured(|| {
         let mut writer = MdlWriter::new(IoCursor::new(&mut storage[..]));
@@ -180,9 +180,15 @@ fn model_assembly_writes_borrowed_collections_without_allocating() {
     model.set_geosets(&[
         Geoset::<V800>::decode_mdl(include_str!("fixtures/mdl/quad_geoset.mdl")).unwrap(),
     ]);
-    model.push(GlobalSequencesChunk::new(vec![GlobalSequence(100)]).into());
-    model.push(GlobalSequencesChunk::new(vec![GlobalSequence(200)]).into());
-    model.push(GlidersChunk::new(vec![Glider { geoset_id: 0 }]).into());
+    model
+        .chunks
+        .push(GlobalSequencesChunk::new(vec![GlobalSequence(100)]).into());
+    model
+        .chunks
+        .push(GlobalSequencesChunk::new(vec![GlobalSequence(200)]).into());
+    model
+        .chunks
+        .push(GlidersChunk::new(vec![Glider { geoset_id: 0 }]).into());
     let mut storage = [0u8; 8192];
     let (_, count) = measured(|| {
         let mut writer = MdlWriter::new(IoCursor::new(&mut storage[..]));

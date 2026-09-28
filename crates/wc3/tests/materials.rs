@@ -13,11 +13,11 @@ use wc3::model::{
 
 fn sample_material<V: ModelVersion>() -> Material<V> {
     let mut layer = Layer::<V>::new();
-    layer.set_filter_mode(LayerFilterMode::Transparent);
-    layer.set_texture_id(2);
-    layer.set_alpha(0.5);
+    layer.filter_mode = LayerFilterMode::Transparent;
+    layer.texture_id = 2;
+    layer.alpha = 0.5;
     let mut material = Material::<V>::new();
-    material.set_layers(&[layer]);
+    material.layers = (&[layer]).to_vec();
     Material::<V>::decode_mdx(&material.encode_mdx().unwrap()).unwrap()
 }
 
@@ -37,22 +37,22 @@ fn material_layers_round_trip_across_layouts() {
 fn check_version<V: ModelVersion>() {
     let version = V::NUMBER;
     let mut material = sample_material::<V>();
-    material.set_priority_plane(3);
-    material.set_render_mode(MaterialRenderFlags(7));
+    material.priority_plane = 3;
+    material.render_mode = MaterialRenderFlags(7);
     let mut model = Model::<V>::new();
     model.set_materials(&[material]);
     let decoded = Model::<V>::decode_mdx(&model.encode_mdx().unwrap()).unwrap();
     let materials = decoded.materials();
     assert_eq!(materials[0].version(), version);
-    assert_eq!(materials[0].priority_plane(), 3);
-    assert_eq!(materials[0].render_mode().bits(), 7);
-    assert!(materials[0].render_mode().constant_color());
-    let layers = materials[0].layers();
+    assert_eq!(materials[0].priority_plane, 3);
+    assert_eq!(materials[0].render_mode.bits(), 7);
+    assert!(materials[0].render_mode.constant_color());
+    let layers = materials[0].layers.as_slice();
     assert_eq!(layers[0].version(), version);
-    assert_eq!(layers[0].filter_mode(), LayerFilterMode::Transparent);
-    assert_eq!(layers[0].texture_id(), 2);
-    assert_eq!(layers[0].alpha(), 0.5);
-    assert_eq!(layers[0].shading_flags(), LayerShadingFlags::default());
+    assert_eq!(layers[0].filter_mode, LayerFilterMode::Transparent);
+    assert_eq!(layers[0].texture_id, 2);
+    assert_eq!(layers[0].alpha, 0.5);
+    assert_eq!(layers[0].shading_flags, LayerShadingFlags::default());
     assert_eq!(
         Layer::<V>::decode_mdx(&layers[0].encode_mdx().unwrap()).unwrap(),
         layers[0]
@@ -75,11 +75,11 @@ fn local_material_layers_are_bounded_when_available() {
                 let model = DynamicModel::decode_mdx(&bytes, 800).unwrap();
                 fn check<V: ModelVersion>(model: Model<V>) {
                     for material in model.materials() {
-                        for layer in material.layers() {
-                            layer.filter_mode();
-                            layer.alpha();
+                        for layer in material.layers.as_slice() {
+                            layer.filter_mode;
+                            layer.alpha;
                             let _ = layer.try_texture_slots();
-                            layer.tracks();
+                            layer.tracks.as_slice();
                         }
                     }
                 }
@@ -102,14 +102,14 @@ fn local_material_layers_are_bounded_when_available() {
 #[test]
 fn builds_material_with_reforged_layer() {
     let mut layer = Layer::<V1100>::new();
-    layer.set_texture_id(4);
+    layer.texture_id = 4;
     layer.set_shader_type(ShaderType::new(2));
     layer.set_fresnel_color([0.1, 0.2, 0.3]);
     let mut material = Material::<V1100>::new();
-    material.set_layers(&[layer]);
+    material.layers = (&[layer]).to_vec();
     let parsed = Material::<V1100>::decode_mdx(&material.encode_mdx().unwrap()).unwrap();
-    let layers = parsed.layers();
-    assert_eq!(layers[0].texture_id(), 4);
+    let layers = parsed.layers.as_slice();
+    assert_eq!(layers[0].texture_id, 4);
     assert_eq!(layers[0].shader_type(), ShaderType::SD_FIXED_FUNCTION);
     assert_eq!(layers[0].fresnel_color(), [0.1, 0.2, 0.3]);
     assert!(layers[0].texture_slots().is_empty());
@@ -151,7 +151,7 @@ fn reforged_layer_texture_slot_and_tracks_round_trip() {
     )
     .unwrap()
     .into();
-    layer.set_tracks(std::slice::from_ref(&alpha_track));
+    layer.tracks = (std::slice::from_ref(&alpha_track)).to_vec();
     let parsed = Layer::<V1800>::decode_mdx(&layer.encode_mdx().unwrap()).unwrap();
     assert_eq!(
         parsed.texture_slots()[0]
@@ -163,18 +163,18 @@ fn reforged_layer_texture_slot_and_tracks_round_trip() {
             .value,
         17
     );
-    assert_eq!(parsed.tracks(), vec![alpha_track]);
+    assert_eq!(parsed.tracks.as_slice(), vec![alpha_track]);
 }
 
 #[test]
 fn unlit_layer_flag_round_trip() {
     let mut layer = Layer::<V1800>::new();
-    let mut flags = layer.shading_flags();
+    let mut flags = layer.shading_flags;
     flags.set_unlit(true);
-    layer.set_shading_flags(flags);
+    layer.shading_flags = flags;
     assert!(Layer::<V1800>::decode_mdx(&layer.encode_mdx().unwrap())
         .unwrap()
-        .shading_flags()
+        .shading_flags
         .unlit());
 }
 
@@ -191,14 +191,14 @@ fn version_specific_fields_do_not_write_into_legacy_tracks() {
 #[test]
 fn preserves_shader_padding_and_float_bits() {
     let mut material = Material::<V1000>::new();
-    material.set_layers(&[Layer::<V1000>::new()]);
+    material.layers = (&[Layer::<V1000>::new()]).to_vec();
     let mut bytes = material.encode_mdx().unwrap();
     bytes[20] = 0xaf;
     let layer_start = 100;
     bytes[layer_start + 24..layer_start + 28].copy_from_slice(&0x7fa1_2345u32.to_le_bytes());
     let parsed = Material::<V1000>::decode_mdx(&bytes).unwrap();
     assert_eq!(parsed.encode_mdx().unwrap(), bytes);
-    assert_eq!(parsed.layers()[0].alpha().to_bits(), 0x7fa1_2345);
+    assert_eq!(parsed.layers[0].alpha.to_bits(), 0x7fa1_2345);
 }
 
 #[test]

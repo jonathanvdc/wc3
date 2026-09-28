@@ -2,14 +2,12 @@
 use crate::model::mdl;
 use crate::model::mdl::{is_positive_zero, is_zero};
 use crate::model::mdx;
+use crate::model::GeosetExtent;
 use crate::model::ModelVersion;
 use crate::model::ValueError;
-use crate::model::{GeosetExtent, Vec3};
 use bitfield::bitfield;
 
 use crate::model::SequencesChunk;
-
-use std::borrow::Cow;
 
 use crate::model::FixedText;
 use crate::model::Model;
@@ -34,19 +32,19 @@ const NAME_SIZE: usize = 80;
 )]
 pub struct Sequence {
     #[mdl(header)]
-    name: FixedText<NAME_SIZE>,
+    pub name: FixedText<NAME_SIZE>,
     #[mdl(property = "Interval")]
-    interval: [u32; 2],
+    pub interval: [u32; 2],
     #[mdl(property = "MoveSpeed", default, skip_if = "is_positive_zero")]
-    move_speed: f32,
+    pub move_speed: f32,
     #[mdl(flags(NonLooping = 1))]
-    flags: SequenceFlags,
+    pub flags: SequenceFlags,
     #[mdl(property = "Rarity", default, skip_if = "is_positive_zero")]
-    rarity: f32,
+    pub rarity: f32,
     #[mdl(property = "SyncPoint", default, skip_if = "is_zero")]
-    sync_point: u32,
+    pub sync_point: u32,
     #[mdl(flatten)]
-    extent: GeosetExtent,
+    pub extent: GeosetExtent,
 }
 
 impl Sequence {
@@ -60,63 +58,8 @@ impl Sequence {
             sync_point: 0,
             extent: GeosetExtent::default(),
         };
-        sequence.set_name(name)?;
+        sequence.name.set_text(name)?;
         Ok(sequence)
-    }
-
-    pub fn name(&self) -> Cow<'_, str> {
-        self.name.text()
-    }
-    pub fn set_name(&mut self, name: &str) -> Result<(), ValueError> {
-        self.name.set_text(name)
-    }
-    pub fn interval(&self) -> [u32; 2] {
-        self.interval
-    }
-    pub fn set_interval(&mut self, interval: [u32; 2]) {
-        self.interval = interval;
-    }
-    pub fn move_speed(&self) -> f32 {
-        self.move_speed
-    }
-    pub fn set_move_speed(&mut self, speed: f32) {
-        self.move_speed = speed;
-    }
-    pub fn flags(&self) -> SequenceFlags {
-        self.flags
-    }
-    pub fn set_flags(&mut self, flags: SequenceFlags) {
-        self.flags = flags;
-    }
-    pub fn rarity(&self) -> f32 {
-        self.rarity
-    }
-    pub fn set_rarity(&mut self, rarity: f32) {
-        self.rarity = rarity;
-    }
-    pub fn sync_point(&self) -> u32 {
-        self.sync_point
-    }
-    pub fn set_sync_point(&mut self, point: u32) {
-        self.sync_point = point;
-    }
-    pub fn bounds_radius(&self) -> f32 {
-        self.extent.bounds_radius
-    }
-    pub fn set_bounds_radius(&mut self, radius: f32) {
-        self.extent.bounds_radius = radius;
-    }
-    pub fn minimum_extent(&self) -> Vec3 {
-        self.extent.minimum
-    }
-    pub fn set_minimum_extent(&mut self, extent: Vec3) {
-        self.extent.minimum = extent;
-    }
-    pub fn maximum_extent(&self) -> Vec3 {
-        self.extent.maximum
-    }
-    pub fn set_maximum_extent(&mut self, extent: Vec3) {
-        self.extent.maximum = extent;
     }
 }
 

@@ -192,8 +192,8 @@ impl<V: ModelVersion> Model<V> {
     ) -> Result<Conversion<Model<T>>, ConversionError> {
         let mut context = ConversionContext::new::<V, T>(options);
         let mut model = Model::<T>::new();
-        model.chunks_mut().clear();
-        for (index, chunk) in self.chunks().iter().enumerate() {
+        model.chunks.clear();
+        for (index, chunk) in self.chunks.iter().enumerate() {
             let path = format!("chunks[{index}]");
             if T::NUMBER < 900
                 && matches!(
@@ -282,12 +282,10 @@ impl<V: ModelVersion> Model<V> {
                 ModelChunk::BindPose(value) => ModelChunk::BindPose(value.clone()),
                 ModelChunk::Gliders(value) => ModelChunk::Gliders(value.clone()),
             };
-            model.push(converted);
+            model.chunks.push(converted);
         }
         if model.stored_version().is_none() {
-            model
-                .chunks_mut()
-                .insert(0, VersionChunk::<T>::new().into());
+            model.chunks.insert(0, VersionChunk::<T>::new().into());
             context.issue(
                 "VERS",
                 ConversionIssueKind::Initialized,

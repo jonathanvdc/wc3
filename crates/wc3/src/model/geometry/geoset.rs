@@ -104,8 +104,8 @@ impl GeosetExtraSections for ReforgedGeosetExtraSections {
 /// together, and the exact name bytes are retained for round-trip encoding.
 #[derive(Clone, Debug, PartialEq, Default, mdx::Read, mdx::Write)]
 pub struct GeosetLevelOfDetailFields {
-    level_of_detail: u32,
-    name: FixedText<80>,
+    pub level_of_detail: u32,
+    pub name: FixedText<80>,
 }
 
 /// The level-of-detail fields selected by a model version.
@@ -255,17 +255,17 @@ pub struct Geoset<V: ModelVersion> {
     #[mdl(skip, default)]
     matrix_indices: Vec<u32>,
     #[mdl(property = "MaterialID", default)]
-    material_id: u32,
+    pub material_id: u32,
     #[mdl(property = "SelectionGroup", default)]
-    selection_group: u32,
+    pub selection_group: u32,
     #[mdl(skip, default)]
     unselectable_raw: u32,
     #[mdl(skip, default)]
     level_of_detail: V::LevelOfDetail,
     #[mdl(flatten)]
-    extent: GeosetExtent,
+    pub extent: GeosetExtent,
     #[mdl(skip, default)]
-    sequence_extents: Vec<GeosetExtent>,
+    pub sequence_extents: Vec<GeosetExtent>,
     #[mdl(skip, default)]
     extra_sections: V::ExtraSections,
     #[mdl(skip, default)]
@@ -358,14 +358,7 @@ impl<V: ModelVersion> Geoset<V> {
     pub fn matrix_indices(&self) -> &[u32] {
         &self.matrix_indices
     }
-    /// Returns the referenced material index.
-    pub fn material_id(&self) -> u32 {
-        self.material_id
-    }
-    /// Returns the selection group index.
-    pub fn selection_group(&self) -> u32 {
-        self.selection_group
-    }
+
     /// Returns the unselectable flag as a boolean.
     pub fn unselectable(&self) -> bool {
         self.unselectable_raw & 4 != 0
@@ -388,14 +381,7 @@ impl<V: ModelVersion> Geoset<V> {
             .level_of_detail()
             .expect("supported version"))
     }
-    /// Returns the overall geoset bounds.
-    pub fn extent(&self) -> GeosetExtent {
-        self.extent
-    }
-    /// Borrows per-sequence bounding volumes.
-    pub fn sequence_extents(&self) -> &[GeosetExtent] {
-        &self.sequence_extents
-    }
+
     /// Borrows every UV coordinate set.
     pub fn uv_sets(&self) -> &[Vec<[f32; 2]>] {
         &self.uv_sets
@@ -516,14 +502,6 @@ impl<V: ModelVersion> Geoset<V> {
         Ok(())
     }
 
-    /// Changes the material reference.
-    pub fn set_material_id(&mut self, id: u32) {
-        self.material_id = id;
-    }
-    /// Changes the selection group.
-    pub fn set_selection_group(&mut self, group: u32) {
-        self.selection_group = group;
-    }
     /// Changes the unselectable mask (4), preserving other selection flags.
     pub fn set_unselectable(&mut self, value: bool) {
         self.unselectable_raw = (self.unselectable_raw & !4) | (u32::from(value) * 4);
@@ -559,11 +537,6 @@ impl<V: ModelVersion> Geoset<V> {
         Ok(())
     }
 
-    /// Changes the overall geoset bounds.
-    pub fn set_extent(&mut self, extent: GeosetExtent) {
-        self.extent = extent;
-    }
-
     /// Changes one per-sequence bound.
     pub fn set_sequence_extent(
         &mut self,
@@ -580,11 +553,6 @@ impl<V: ModelVersion> Geoset<V> {
                 len,
             })? = extent;
         Ok(())
-    }
-
-    /// Replaces all per-sequence bounds.
-    pub fn set_sequence_extents(&mut self, extents: &[GeosetExtent]) {
-        self.sequence_extents = extents.to_vec();
     }
 
     /// Replaces or removes the Reforged tangent section, retaining its order.

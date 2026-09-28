@@ -9,24 +9,24 @@ use wc3::model::Model;
 #[test]
 fn light_fields_round_trip() {
     let mut light = Light::<wc3::model::V1200>::new(Node::new("Torch", 2).unwrap(), 1);
-    light.set_attenuation_start(100.0);
-    light.set_attenuation_end(500.0);
-    light.set_color([1.0, 0.5, 0.25]);
-    light.set_intensity(2.0);
-    light.set_ambient_color([0.1, 0.2, 0.3]);
-    light.set_ambient_intensity(0.5);
+    light.attenuation_start = 100.0;
+    light.attenuation_end = 500.0;
+    light.color = [1.0, 0.5, 0.25];
+    light.intensity = 2.0;
+    light.ambient_color = [0.1, 0.2, 0.3];
+    light.ambient_intensity = 0.5;
     let mut model = Model::<wc3::model::V1200>::new();
     model.set_lights(&[light]);
     let parsed = Model::<wc3::model::V1200>::decode_mdx(&model.encode_mdx().unwrap()).unwrap();
     let light = &parsed.lights()[0];
-    assert_eq!(light.node().name(), "Torch");
-    assert_eq!(light.light_type(), 1);
-    assert_eq!(light.attenuation_start(), 100.0);
-    assert_eq!(light.attenuation_end(), 500.0);
-    assert_eq!(light.color(), [1.0, 0.5, 0.25]);
-    assert_eq!(light.intensity(), 2.0);
-    assert_eq!(light.ambient_color(), [0.1, 0.2, 0.3]);
-    assert_eq!(light.ambient_intensity(), 0.5);
+    assert_eq!(light.node.name.text(), "Torch");
+    assert_eq!(light.light_type, 1);
+    assert_eq!(light.attenuation_start, 100.0);
+    assert_eq!(light.attenuation_end, 500.0);
+    assert_eq!(light.color, [1.0, 0.5, 0.25]);
+    assert_eq!(light.intensity, 2.0);
+    assert_eq!(light.ambient_color, [0.1, 0.2, 0.3]);
+    assert_eq!(light.ambient_intensity, 0.5);
 }
 
 #[test]
@@ -41,9 +41,9 @@ fn light_color_track_round_trip() {
     )
     .unwrap()
     .into();
-    light.set_tracks(std::slice::from_ref(&track));
+    light.tracks = (std::slice::from_ref(&track)).to_vec();
     let parsed = Light::<wc3::model::V800>::decode_mdx(&light.encode_mdx().unwrap()).unwrap();
-    assert_eq!(parsed.tracks(), &[track]);
+    assert_eq!(parsed.tracks.as_slice(), &[track]);
 }
 
 #[test]
@@ -73,7 +73,7 @@ fn extended_light_fields_and_tracks_round_trip() {
     )
     .unwrap()
     .into();
-    light.set_tracks(std::slice::from_ref(&track));
+    light.tracks = (std::slice::from_ref(&track)).to_vec();
     let parsed = Light::<wc3::model::V1800>::decode_mdx(&light.encode_mdx().unwrap()).unwrap();
     assert!(parsed.try_shadow_casting().unwrap());
     assert_eq!(parsed.try_shadow_intensity().unwrap(), 1.0);
@@ -92,7 +92,7 @@ fn extended_light_fields_and_tracks_round_trip() {
             damping: 6.0
         }
     );
-    assert_eq!(parsed.tracks(), &[track]);
+    assert_eq!(parsed.tracks.as_slice(), &[track]);
 }
 
 #[test]

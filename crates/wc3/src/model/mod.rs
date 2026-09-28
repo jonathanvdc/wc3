@@ -2,9 +2,16 @@
 //!
 //! MDX files start with `MDLX`, followed by tagged chunks. Each chunk has a
 //! four-byte identifier, a little-endian payload length, and its payload.
-//! [`Model<V>`] ties a model's version to its chunks and records.
-//! [`DynamicModel`] dispatches a file's runtime version to a typed model.
+//! [`Model<V>`](crate::model::Model) ties a model's version to its chunks and records.
+//! [`DynamicModel`](crate::model::DynamicModel) dispatches a file's runtime version to a typed model.
 //! Unknown chunks retain their raw payloads; malformed known chunks fail decoding.
+//!
+//! Plain records expose their scalar data, embedded records, and ordinary vectors
+//! as public fields. Names and paths use [`FixedText`](crate::model::FixedText): edit them with `set_text`
+//! or replace their exact bytes with `from_bytes`. Methods provide computed views,
+//! version-dependent properties, and edits that preserve structural invariants.
+//! Model collection getters return owned records collected across chunks; edit
+//! [`Model::chunks`](crate::model::Model::chunks) directly or use [`Model::chunk_mut`](crate::model::Model::chunk_mut) for in-place changes.
 //!
 //! ```
 //! use wc3::model::{Model, V800};

@@ -75,20 +75,21 @@ impl<V: ModelVersion> mdl::Read for Model<V> {
                 ($bit:expr, $chunk:ty) => {{
                     fields.mark($bit, field)?;
                     parser.next_token()?;
-                    model.push(read_collection::<$chunk>(parser)?.into());
+                    model.chunks.push(read_collection::<$chunk>(parser)?.into());
                 }};
             }
             macro_rules! repeated {
                 ($variant:ident, $chunk:ty) => {{
                     let record = parser.read()?;
-                    if let Some(chunk) = model.chunks_mut().iter_mut().find_map(|chunk| match chunk
-                    {
+                    if let Some(chunk) = model.chunks.iter_mut().find_map(|chunk| match chunk {
                         ModelChunk::$variant(chunk) => Some(chunk),
                         _ => None,
                     }) {
                         chunk.records.push(record);
                     } else {
-                        model.push(<$chunk>::from_records(vec![record]).into());
+                        model
+                            .chunks
+                            .push(<$chunk>::from_records(vec![record]).into());
                     }
                 }};
             }
@@ -101,7 +102,9 @@ impl<V: ModelVersion> mdl::Read for Model<V> {
                 }
                 "Model" => {
                     fields.mark(0, field)?;
-                    model.push(ModelInfoChunk::new(parser.read()?, Vec::new()).into());
+                    model
+                        .chunks
+                        .push(ModelInfoChunk::new(parser.read()?, Vec::new()).into());
                     has_info = true;
                 }
                 "Sequences" => counted!(1, SequencesChunk),
@@ -129,7 +132,7 @@ impl<V: ModelVersion> mdl::Read for Model<V> {
                 "FaceFX" if V::NUMBER >= 900 => repeated!(FaceFx, FaceFxChunk),
                 "BindPose" if V::NUMBER >= 900 => {
                     fields.mark(7, field)?;
-                    model.push(parser.read::<BindPoseChunk>()?.into());
+                    model.chunks.push(parser.read::<BindPoseChunk>()?.into());
                 }
                 "FaceFX" | "BindPose" | "ParticleEmitterPopcorn" => {
                     return Err(mdl::ReadError::new(
@@ -183,7 +186,7 @@ impl<V: ModelVersion> mdl::Write for Model<V> {
     fn write_mdl<W: IoWrite>(&self, writer: &mut MdlWriter<W>) -> Result<(), mdl::WriteError> {
         let mut version = None;
         let mut info = None;
-        for chunk in self.chunks() {
+        for chunk in self.chunks.as_slice() {
             match chunk {
                 ModelChunk::Version(chunk) => {
                     if version.replace(chunk).is_some() {

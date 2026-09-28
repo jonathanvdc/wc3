@@ -243,7 +243,7 @@ fn multiple_headers_empty_blocks_and_required_flags_work() {
 fn derived_model_info_roundtrips_binary_data_and_rejects_animation_file_data() {
     let source = "Model \"Example\" { BlendTime 150, BoundsRadius 10.0, MinimumExtent { -1.0, -2.0, -3.0 }, MaximumExtent { 1.0, 2.0, 3.0 }, }";
     let value = ModelInfo::decode_mdl(source).unwrap();
-    assert_eq!(value.name(), "Example");
+    assert_eq!(value.name.text(), "Example");
     let bytes = value.encode_mdx().unwrap();
     assert_eq!(
         ModelInfo::decode_mdl(&print(&ModelInfo::decode_mdx(&bytes).unwrap()).unwrap())
@@ -385,7 +385,7 @@ fn typed_record_flags_keep_their_original_binary_layout_and_unknown_bits() {
         raw
     );
     let mut texture = Texture::new("a").unwrap();
-    texture.set_flags(TextureFlags(0x80000003));
+    texture.flags = TextureFlags(0x80000003);
     let bytes = texture.encode_mdx().unwrap();
     assert_eq!(&bytes[264..268], &0x80000003u32.to_le_bytes());
     assert_eq!(
@@ -394,7 +394,7 @@ fn typed_record_flags_keep_their_original_binary_layout_and_unknown_bits() {
     );
     assert!(print(&texture).is_err());
     let mut sequence = Sequence::new("a", [0, 1]).unwrap();
-    sequence.set_flags(SequenceFlags(0x80000001));
+    sequence.flags = SequenceFlags(0x80000001);
     let bytes = sequence.encode_mdx().unwrap();
     assert_eq!(&bytes[92..96], &0x80000001u32.to_le_bytes());
     assert_eq!(
@@ -402,10 +402,10 @@ fn typed_record_flags_keep_their_original_binary_layout_and_unknown_bits() {
         bytes
     );
     assert!(print(&sequence).is_err());
-    sequence.set_flags(SequenceFlags(1));
-    sequence.set_move_speed(2.0);
-    sequence.set_rarity(3.0);
-    sequence.set_sync_point(4);
+    sequence.flags = SequenceFlags(1);
+    sequence.move_speed = 2.0;
+    sequence.rarity = 3.0;
+    sequence.sync_point = 4;
     assert_eq!(print(&sequence).unwrap(), "Anim \"a\" {\n\tInterval { 0, 1 },\n\tNonLooping,\n\tMoveSpeed 2.0,\n\tRarity 3.0,\n\tSyncPoint 4,\n\tMinimumExtent { 0.0, 0.0, 0.0 },\n\tMaximumExtent { 0.0, 0.0, 0.0 },\n\tBoundsRadius 0.0,\n}\n");
 }
 

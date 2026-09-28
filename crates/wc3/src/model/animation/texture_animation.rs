@@ -29,23 +29,13 @@ pub struct TextureAnimation {
             Scaling = "TextureAnimationTrack::Scaling"
         )
     )]
-    tracks: Vec<TextureAnimationTrack>,
+    pub tracks: Vec<TextureAnimationTrack>,
 }
 
 impl TextureAnimation {
     /// Creates an empty texture animation.
     pub fn new() -> Self {
         Self::default()
-    }
-
-    /// Borrows decoded tracks without reparsing.
-    pub fn tracks(&self) -> &[TextureAnimationTrack] {
-        &self.tracks
-    }
-
-    /// Replaces texture animation tracks.
-    pub fn set_tracks(&mut self, tracks: &[TextureAnimationTrack]) {
-        self.tracks = tracks.to_vec();
     }
 }
 

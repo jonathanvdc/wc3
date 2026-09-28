@@ -14,15 +14,15 @@ fn roundtrip<T: mdl::Read + mdl::Write + mdx::Read + mdx::Write>(value: &T) {
 fn light_roundtrips_at_all_versions() {
     macro_rules! check { ($($version:ty),*) => { $( {
         let light = Light::<$version>::decode_mdl("Light \"a\" { ObjectId 0, Omnidirectional, Translation 0 { Linear, } Visibility 0 { DontInterp, } Intensity 0 { Hermite, } static Color { 0.1, 0.2, 0.3 }, }").unwrap();
-        assert_eq!(light.node().flags().bits(), 0x200);
-        assert_eq!(light.color(), [0.1, 0.2, 0.3]);
+        assert_eq!(light.node.flags.bits(), 0x200);
+        assert_eq!(light.color, [0.1, 0.2, 0.3]);
         roundtrip(&light);
     } )* }; }
     check!(V800, V900, V1000, V1100, V1200, V1300, V1400, V1600, V1800);
     for (flag, id) in [("Directional", 1), ("Ambient", 2)] {
         let light =
             Light::<V800>::decode_mdl(&format!("Light \"a\" {{ ObjectId 0, {flag}, }}")).unwrap();
-        assert_eq!(light.light_type(), id);
+        assert_eq!(light.light_type, id);
         roundtrip(&light);
     }
 }
@@ -74,13 +74,13 @@ fn light_rejects_ambiguous_and_unrepresentable_data() {
     let mut light =
         Light::<V800>::decode_mdl("Light \"a\" { ObjectId 0, Ambient, Intensity 0 { Linear, } }")
             .unwrap();
-    light.set_intensity(1.0);
+    light.intensity = 1.0;
     assert!(light.encode_mdl().is_err());
-    light.set_intensity(0.0);
-    light.set_light_type(99);
+    light.intensity = 0.0;
+    light.light_type = 99;
     assert!(light.encode_mdl().is_err());
-    light.set_light_type(0);
-    light.node_mut().set_flags(NodeFlags(0x400));
+    light.light_type = 0;
+    light.node.flags = NodeFlags(0x400);
     assert!(light.encode_mdl().is_err());
     let light = Light::<V1300>::decode_mdl("Light \"a\" { ObjectId 0, Ambient, }").unwrap();
     let mut bytes = light.encode_mdx().unwrap();
@@ -101,15 +101,15 @@ fn event_frames_and_sequence_roundtrip() {
     ] {
         let text = format!("EventObject \"e\" {{ ObjectId 0, EventTrack {body} }}");
         let event = EventObject::decode_mdl(&text).unwrap();
-        assert_eq!(event.node().flags().bits(), 0x400);
+        assert_eq!(event.node.flags.bits(), 0x400);
         roundtrip(&event);
     }
     let event = EventObject::decode_mdl(
         "EventObject \"e\" { EventTrack 1 { 4, } ObjectId 0, Translation 0 { Linear, } }",
     )
     .unwrap();
-    assert_eq!(event.global_sequence_id(), u32::MAX);
-    assert_eq!(event.frames(), [4]);
+    assert_eq!(event.global_sequence_id, u32::MAX);
+    assert_eq!(event.frames.as_slice(), [4]);
     roundtrip(&event);
 }
 #[test]
@@ -129,7 +129,7 @@ fn event_rejects_counts_duplicates_and_track_syntax() {
     }
     let mut event =
         EventObject::decode_mdl("EventObject \"e\" { ObjectId 0, EventTrack 0 {} }").unwrap();
-    event.node_mut().set_flags(NodeFlags(0));
+    event.node.flags = NodeFlags(0);
     assert!(event.encode_mdl().is_err());
 }
 #[test]
@@ -147,7 +147,7 @@ fn all_collision_shapes_roundtrip() {
         let text =
             format!("CollisionShape \"c\" {{ {radius} Vertices {vertices} ObjectId 0, {kind}, }}");
         let shape = CollisionShape::decode_mdl(&text).unwrap();
-        assert_eq!(shape.node().flags().bits(), 0x2000);
+        assert_eq!(shape.node.flags.bits(), 0x2000);
         roundtrip(&shape);
     }
 }
@@ -173,13 +173,13 @@ fn independent_binary_record_fixtures_roundtrip() {
     use wc3::model::animation::{AnimationTrack, LightDamping};
     use wc3::model::scene::{LightFalloff, LightShadowRange, LightTrack, Node};
     let mut node = Node::new("fixture", 7).unwrap();
-    node.set_flags(NodeFlags(0x200));
+    node.flags = NodeFlags(0x200);
     let mut light = Light::<V1800>::new(node.clone(), 1);
-    light.set_attenuation_start(3.0);
-    light.set_attenuation_end(40.0);
-    light.set_color([0.2, 0.4, 0.8]);
-    light.set_intensity(2.0);
-    light.set_ambient_intensity(0.5);
+    light.attenuation_start = 3.0;
+    light.attenuation_end = 40.0;
+    light.color = [0.2, 0.4, 0.8];
+    light.intensity = 2.0;
+    light.ambient_intensity = 0.5;
     light.set_shadow_casting(true);
     light.set_shadow_intensity(0.75);
     light.set_shadow_casting_range(LightShadowRange {
@@ -193,13 +193,14 @@ fn independent_binary_record_fixtures_roundtrip() {
     });
     roundtrip(&light);
     let mut old_light = Light::<V800>::new(node.clone(), 0);
-    old_light.set_tracks(&[LightTrack::Damping(
+    old_light.tracks = (&[LightTrack::Damping(
         AnimationTrack::<LightDamping>::linear(vec![], None).unwrap(),
-    )]);
+    )])
+        .to_vec();
     assert!(old_light.encode_mdl().is_err());
-    node.set_flags(NodeFlags(0x400));
+    node.flags = NodeFlags(0x400);
     roundtrip(&EventObject::new(node.clone(), 2, &[50, -20, 50]));
-    node.set_flags(NodeFlags(0x2000));
+    node.flags = NodeFlags(0x2000);
     let points = [[-0.0, 2.0, 3.0], [4.0, 5.0, 6.0]];
     for shape in [
         CollisionShape::new_box(node.clone(), points),

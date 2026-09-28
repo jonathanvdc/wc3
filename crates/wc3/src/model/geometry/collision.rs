@@ -20,12 +20,13 @@ use crate::model::{Model, Node, ReadError};
 /// Cylinder two. Only Sphere and Cylinder have a BoundsRadius property.
 #[derive(Clone, Debug, PartialEq, mdx::Read, mdx::Write)]
 pub struct CollisionShape {
-    node: Node,
-    geometry: CollisionGeometry,
+    pub node: Node,
+    pub geometry: CollisionGeometry,
 }
 
 #[derive(Clone, Debug, PartialEq)]
-enum CollisionGeometry {
+/// The shape and dimensions of a collision primitive.
+pub enum CollisionGeometry {
     Box([Vec3; 2]),
     Plane([Vec3; 2]),
     Sphere(Vec3, f32),
@@ -108,16 +109,6 @@ impl CollisionShape {
             node,
             geometry: CollisionGeometry::Cylinder(endpoints, radius),
         }
-    }
-
-    /// Borrows the attached node.
-    pub fn node(&self) -> &Node {
-        &self.node
-    }
-
-    /// Borrows the attached node for editing.
-    pub fn node_mut(&mut self) -> &mut Node {
-        &mut self.node
     }
 
     /// Returns the two box corners, or `None` for other shapes.

@@ -8,8 +8,6 @@ use bitfield::bitfield;
 
 use crate::model::TexturesChunk;
 
-use std::borrow::Cow;
-
 use crate::model::FixedText;
 use crate::model::Model;
 
@@ -32,11 +30,11 @@ const PATH_SIZE: usize = 260;
 #[mdl(block = "Bitmap", write_order(path, replaceable_id, flags))]
 pub struct Texture {
     #[mdl(property = "ReplaceableId", default, skip_if = "is_zero")]
-    replaceable_id: u32,
+    pub replaceable_id: u32,
     #[mdl(property = "Image", default)]
-    path: FixedText<PATH_SIZE>,
+    pub path: FixedText<PATH_SIZE>,
     #[mdl(flags(WrapWidth = 1, WrapHeight = 2))]
-    flags: TextureFlags,
+    pub flags: TextureFlags,
 }
 
 impl Texture {
@@ -47,38 +45,8 @@ impl Texture {
             path: FixedText::default(),
             flags: TextureFlags::default(),
         };
-        texture.set_path(path)?;
+        texture.path.set_text(path)?;
         Ok(texture)
-    }
-
-    /// Returns the replaceable texture ID.
-    pub fn replaceable_id(&self) -> u32 {
-        self.replaceable_id
-    }
-
-    /// Sets the replaceable texture ID.
-    pub fn set_replaceable_id(&mut self, id: u32) {
-        self.replaceable_id = id;
-    }
-
-    /// Returns the path up to the first NUL, replacing invalid UTF-8.
-    pub fn path(&self) -> Cow<'_, str> {
-        self.path.text()
-    }
-
-    /// Sets the path, clearing the unused part of the fixed-width field.
-    pub fn set_path(&mut self, path: &str) -> Result<(), ValueError> {
-        self.path.set_text(path)
-    }
-
-    /// Returns decoded texture wrapping flags.
-    pub fn flags(&self) -> TextureFlags {
-        self.flags
-    }
-
-    /// Sets decoded texture wrapping flags.
-    pub fn set_flags(&mut self, flags: TextureFlags) {
-        self.flags = flags;
     }
 }
 

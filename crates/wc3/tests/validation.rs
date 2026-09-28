@@ -15,7 +15,7 @@ fn typed_known_chunks_and_unknown_chunks_round_trip() {
         Geoset::<V800>::new(&[[0.0, 0.0, 0.0]], &[[0.0, 0.0, 1.0]], &[0, 0, 0]).unwrap(),
     ]);
     model.set_ribbon_emitters(&[RibbonEmitter::new(Node::new("Trail", 1).unwrap())]);
-    model.push(ModelChunk::Unknown(
+    model.chunks.push(ModelChunk::Unknown(
         UnknownChunk::<V800>::new(RawChunk::new(*b"FUTR", vec![1, 2, 3])).unwrap(),
     ));
     let bytes = model.encode_mdx().unwrap();
@@ -68,14 +68,16 @@ fn repeated_versions_must_match_the_type() {
 #[test]
 fn version_extension_is_preserved_without_mutable_version_number() {
     let mut model = Model::<V800>::new();
-    let ModelChunk::Version(first) = &mut model.chunks_mut()[0] else {
+    let ModelChunk::Version(first) = &mut model.chunks[0] else {
         unreachable!()
     };
     first.extension = vec![7, 8];
-    model.push(ModelChunk::from(VersionChunk::<V800>::new()));
+    model
+        .chunks
+        .push(ModelChunk::from(VersionChunk::<V800>::new()));
     let bytes = model.encode_mdx().unwrap();
     let parsed = Model::<V800>::decode_mdx(&bytes).unwrap();
-    let ModelChunk::Version(first) = &parsed.chunks()[0] else {
+    let ModelChunk::Version(first) = &parsed.chunks[0] else {
         unreachable!()
     };
     assert_eq!(first.extension, [7, 8]);

@@ -34,7 +34,7 @@ use crate::model::{Model, Node};
 )]
 pub struct RibbonEmitter {
     #[mdl(flatten)]
-    node: Node,
+    pub node: Node,
     #[mdl(
         animatable = "HeightAbove",
         track = "RibbonTrack::HeightAbove",
@@ -71,7 +71,7 @@ pub struct RibbonEmitter {
     #[mdl(property = "Gravity", default, skip_if = "zero_gravity")]
     pub gravity: f32,
     #[mdl(tracks, channels(Visibility = "RibbonTrack::Visibility"))]
-    tracks: Vec<RibbonTrack>,
+    pub tracks: Vec<RibbonTrack>,
 }
 
 impl RibbonEmitter {
@@ -92,26 +92,6 @@ impl RibbonEmitter {
             gravity: Default::default(),
             tracks: Vec::new(),
         }
-    }
-
-    /// Borrows the embedded node.
-    pub fn node(&self) -> &Node {
-        &self.node
-    }
-
-    /// Borrows the embedded node for editing.
-    pub fn node_mut(&mut self) -> &mut Node {
-        &mut self.node
-    }
-
-    /// Borrows decoded ribbon animation tracks.
-    pub fn tracks(&self) -> &[RibbonTrack] {
-        &self.tracks
-    }
-
-    /// Replaces optional ribbon animation tracks.
-    pub fn set_tracks(&mut self, tracks: &[RibbonTrack]) {
-        self.tracks = tracks.to_vec();
     }
 }
 

@@ -34,9 +34,9 @@ fn node_transform_tracks_round_trip() {
     .unwrap()
     .into();
     let mut node = Node::new("Animated", 4).unwrap();
-    node.set_tracks(std::slice::from_ref(&track));
+    node.tracks = (std::slice::from_ref(&track)).to_vec();
     let parsed = Node::decode_mdx(&node.encode_mdx().unwrap()).unwrap();
-    assert_eq!(parsed.tracks(), vec![track]);
+    assert_eq!(parsed.tracks.as_slice(), vec![track]);
 }
 
 #[test]
@@ -54,12 +54,12 @@ fn node_keeps_name_padding_and_track_order() {
             .unwrap()
             .into(),
     ];
-    node.set_tracks(&tracks);
+    node.tracks = (&tracks).to_vec();
     let mut bytes = node.encode_mdx().unwrap();
     bytes[20] = 0xe1;
     let parsed = Node::decode_mdx(&bytes).unwrap();
     assert_eq!(parsed.encode_mdx().unwrap(), bytes);
-    assert_eq!(parsed.tracks()[0].tag(), TrackTag::NodeScaling);
+    assert_eq!(parsed.tracks[0].tag(), TrackTag::NodeScaling);
 }
 
 #[test]

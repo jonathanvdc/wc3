@@ -42,8 +42,8 @@ fn specification_quad_roundtrips_independent_text_and_binary_fixtures() {
             .unwrap(),
         BINARY
     );
-    assert_eq!(model.bones()[0].node().object_id(), 0);
-    assert_eq!(model.geosets()[0].material_id(), 0);
+    assert_eq!(model.bones()[0].node.object_id, 0);
+    assert_eq!(model.geosets()[0].material_id, 0);
     assert_eq!(
         DynamicModel::decode_mdl(QUAD)
             .unwrap()
@@ -100,7 +100,7 @@ fn noncanonical_input_preserves_record_order_ids_and_canonical_block_order() {
         model
             .helpers()
             .iter()
-            .map(|node| node.object_id())
+            .map(|node| node.object_id)
             .collect::<Vec<_>>(),
         [7, 3]
     );
@@ -114,7 +114,7 @@ fn noncanonical_input_preserves_record_order_ids_and_canonical_block_order() {
     );
     assert_eq!(
         model
-            .chunks()
+            .chunks
             .iter()
             .filter(|chunk| chunk.tag() == *b"HELP")
             .count(),
@@ -146,8 +146,8 @@ fn available_record_codecs_dispatch_through_model_io() {
     let model = Model::<V900>::decode_mdl(source).unwrap();
     assert_eq!(model.texture_animations().len(), 1);
     assert_eq!(model.lights().len(), 1);
-    assert_eq!(model.event_objects()[0].frames(), [-5, 10]);
-    assert_eq!(model.face_fx()[0].path(), "face.facefx");
+    assert_eq!(model.event_objects()[0].frames.as_slice(), [-5, 10]);
+    assert_eq!(model.face_fx()[0].path.text(), "face.facefx");
     assert_eq!(model.bind_poses().len(), 1);
     roundtrip(&model);
     for name in ["FaceFX \"Face\" {}", "BindPose { Matrices 0 {} }"] {
@@ -220,16 +220,32 @@ fn malformed_and_duplicate_top_level_blocks_retain_diagnostics() {
 fn writers_merge_known_collections_in_chunk_order_and_omit_empty_ones() {
     let mut model =
         Model::<V900>::decode_mdl("Version { FormatVersion 900, } Model \"Merged\" {}").unwrap();
-    model.push(SequencesChunk::new(vec![Sequence::new("One", [0, 10]).unwrap()]).into());
-    model.push(GlobalSequencesChunk::new(vec![]).into());
-    model.push(SequencesChunk::new(vec![Sequence::new("Two", [11, 20]).unwrap()]).into());
-    model.push(GlidersChunk::new(vec![Glider { geoset_id: 4 }, Glider { geoset_id: 4 }]).into());
-    model.push(GlidersChunk::new(vec![Glider { geoset_id: 1 }]).into());
-    model.push(GlobalSequencesChunk::new(vec![GlobalSequence(25)]).into());
-    model.push(GlobalSequencesChunk::new(vec![GlobalSequence(50)]).into());
-    model.push(BindPoseChunk::new(vec![BindPoseMatrix([1.0; 12])]).into());
-    model.push(BindPoseChunk::new(vec![BindPoseMatrix([2.0; 12])]).into());
-    model.push(CamerasChunk::<V900>::new(vec![]).into());
+    model
+        .chunks
+        .push(SequencesChunk::new(vec![Sequence::new("One", [0, 10]).unwrap()]).into());
+    model.chunks.push(GlobalSequencesChunk::new(vec![]).into());
+    model
+        .chunks
+        .push(SequencesChunk::new(vec![Sequence::new("Two", [11, 20]).unwrap()]).into());
+    model
+        .chunks
+        .push(GlidersChunk::new(vec![Glider { geoset_id: 4 }, Glider { geoset_id: 4 }]).into());
+    model
+        .chunks
+        .push(GlidersChunk::new(vec![Glider { geoset_id: 1 }]).into());
+    model
+        .chunks
+        .push(GlobalSequencesChunk::new(vec![GlobalSequence(25)]).into());
+    model
+        .chunks
+        .push(GlobalSequencesChunk::new(vec![GlobalSequence(50)]).into());
+    model
+        .chunks
+        .push(BindPoseChunk::new(vec![BindPoseMatrix([1.0; 12])]).into());
+    model
+        .chunks
+        .push(BindPoseChunk::new(vec![BindPoseMatrix([2.0; 12])]).into());
+    model.chunks.push(CamerasChunk::<V900>::new(vec![]).into());
     let text = model.encode_mdl().unwrap();
     assert_eq!(text.matches("Sequences 2").count(), 2); // includes GlobalSequences
     assert_eq!(text.matches("BindPose {").count(), 1);
@@ -239,7 +255,7 @@ fn writers_merge_known_collections_in_chunk_order_and_omit_empty_ones() {
         parsed
             .sequences()
             .iter()
-            .map(|sequence| sequence.name().into_owned())
+            .map(|sequence| sequence.name.text().into_owned())
             .collect::<Vec<_>>(),
         ["One", "Two"]
     );
@@ -262,49 +278,57 @@ fn writer_rejects_missing_duplicate_extended_opaque_and_unsupported_chunks() {
     let mut model = Model::<V800>::new();
     assert!(model.encode_mdl().is_err());
     model.set_model_info(&ModelInfo::new("a").unwrap());
-    model.chunks_mut().retain(|chunk| chunk.tag() != *b"VERS");
+    model.chunks.retain(|chunk| chunk.tag() != *b"VERS");
     assert!(model.encode_mdl().is_err());
     let base = Model::<V800>::decode_mdl(MINIMAL).unwrap();
     let mut model = base.clone();
-    model.push(VersionChunk::<V800>::new().into());
+    model.chunks.push(VersionChunk::<V800>::new().into());
     assert!(model.encode_mdl().is_err());
     let mut model = base.clone();
-    model.push(ModelInfoChunk::new(ModelInfo::new("other").unwrap(), vec![]).into());
+    model
+        .chunks
+        .push(ModelInfoChunk::new(ModelInfo::new("other").unwrap(), vec![]).into());
     assert!(model.encode_mdl().is_err());
     let mut model = base.clone();
     let mut version = VersionChunk::<V800>::new();
     version.extension.push(1);
-    model.chunks_mut()[0] = version.into();
+    model.chunks[0] = version.into();
     assert!(model.encode_mdl().is_err());
     let mut model = base.clone();
-    model.chunks_mut()[1] = ModelInfoChunk::new(ModelInfo::new("a").unwrap(), vec![1]).into();
+    model.chunks[1] = ModelInfoChunk::new(ModelInfo::new("a").unwrap(), vec![1]).into();
     assert!(model.encode_mdl().is_err());
     let mut model = base.clone();
-    model.push(
+    model.chunks.push(
         UnknownChunk::<V800>::new(RawChunk::new(*b"FUTR", vec![]))
             .map(ModelChunk::Unknown)
             .unwrap(),
     );
     assert!(model.encode_mdl().is_err());
     let mut model = base.clone();
-    model.push(FaceFxChunk::new(vec![FaceFx::new("Face", "face.facefx").unwrap()]).into());
+    model
+        .chunks
+        .push(FaceFxChunk::new(vec![FaceFx::new("Face", "face.facefx").unwrap()]).into());
     assert!(model.encode_mdl().is_err());
     let mut model = base.clone();
-    model.push(BindPoseChunk::new(vec![BindPoseMatrix([0.0; 12])]).into());
+    model
+        .chunks
+        .push(BindPoseChunk::new(vec![BindPoseMatrix([0.0; 12])]).into());
     assert!(model.encode_mdl().is_err());
     let mut model = base.clone();
     let mut camera = Camera::<V800>::new("camera").unwrap();
-    camera.set_variant(CameraVariant::Variant1([0; 12]));
-    model.push(CamerasChunk::<V800>::new(vec![camera]).into());
+    camera.variant = CameraVariant::Variant1([0; 12]);
+    model
+        .chunks
+        .push(CamerasChunk::<V800>::new(vec![camera]).into());
     assert!(model.encode_mdl().is_err());
     let mut model = base.clone();
-    model.push(
+    model.chunks.push(
         ParticleEmitters2Chunk::new(vec![ParticleEmitter2::new(Node::new("p2", 0).unwrap())])
             .into(),
     );
     assert!(model.encode_mdl().is_err());
     let mut model = base;
-    model.push(
+    model.chunks.push(
         PopcornEmittersChunk::new(vec![PopcornEmitter::new(
             Node::new("pop", 0).unwrap(),
             "fx.pkfx",
@@ -323,7 +347,7 @@ fn small_derived_record_codecs_keep_required_headers_counts_and_defaults() {
     assert!(Glider::decode_mdl("Glider {}").is_err());
     assert!(Glider::decode_mdl("Glider { GeosetId 1, GeosetId 2, }").is_err());
     let face = FaceFx::decode_mdl("FaceFX \"Face\" {}").unwrap();
-    assert_eq!(face.path(), "");
+    assert_eq!(face.path.text(), "");
     assert_eq!(
         face.encode_mdl().unwrap(),
         "FaceFX \"Face\" {\n\tPath \"\",\n}\n"

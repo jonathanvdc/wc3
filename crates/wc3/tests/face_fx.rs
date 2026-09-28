@@ -10,6 +10,6 @@ fn face_animation_references_round_trip() {
     model.set_face_fx(&[entry]);
     let parsed = Model::<wc3::model::V1800>::decode_mdx(&model.encode_mdx().unwrap()).unwrap();
     let entry = &parsed.face_fx()[0];
-    assert_eq!(entry.name(), "Talk");
-    assert_eq!(entry.path(), "FaceFX\\Footman.fafx");
+    assert_eq!(entry.name.text(), "Talk");
+    assert_eq!(entry.path.text(), "FaceFX\\Footman.fafx");
 }

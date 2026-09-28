@@ -29,7 +29,7 @@ fn malformed_bind_pose_chunk_is_rejected() {
     let pose = BindPoseChunk::new(vec![BindPoseMatrix([0.0; 12])]);
     model.set_bind_poses(&pose.records);
     assert_eq!(model.bind_poses(), pose.records);
-    assert_eq!(model.chunks().len(), 2);
+    assert_eq!(model.chunks.len(), 2);
 }
 
 #[test]

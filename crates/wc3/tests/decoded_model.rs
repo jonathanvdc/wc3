@@ -10,16 +10,18 @@ use wc3::model::{Model, V800};
 #[test]
 fn model_stores_known_and_unknown_chunks() {
     let mut model = Model::<V800>::new();
-    model.push(ModelChunk::from(SequencesChunk::new(vec![Sequence::new(
-        "Stand",
-        [0, 100],
-    )
-    .unwrap()])));
+    model
+        .chunks
+        .push(ModelChunk::from(SequencesChunk::new(vec![Sequence::new(
+            "Stand",
+            [0, 100],
+        )
+        .unwrap()])));
     let unknown = UnknownChunk::<V800>::new(RawChunk::new(*b"FUTR", vec![1, 2, 3])).unwrap();
-    model.push(ModelChunk::Unknown(unknown));
+    model.chunks.push(ModelChunk::Unknown(unknown));
 
-    assert!(matches!(model.chunks()[1], ModelChunk::Sequences(_)));
-    assert!(matches!(model.chunks()[2], ModelChunk::Unknown(_)));
+    assert!(matches!(model.chunks[1], ModelChunk::Sequences(_)));
+    assert!(matches!(model.chunks[2], ModelChunk::Unknown(_)));
     let bytes = model.encode_mdx().unwrap();
     let decoded = Model::<V800>::decode_mdx(&bytes).unwrap();
     assert_eq!(decoded.encode_mdx().unwrap(), bytes);
@@ -28,8 +30,10 @@ fn model_stores_known_and_unknown_chunks() {
 #[test]
 fn edits_to_decoded_records_are_written() {
     let mut model = Model::<V800>::new();
-    model.push(ModelChunk::from(SequencesChunk::new(Vec::new())));
-    let ModelChunk::Sequences(decoded) = &mut model.chunks_mut()[1] else {
+    model
+        .chunks
+        .push(ModelChunk::from(SequencesChunk::new(Vec::new())));
+    let ModelChunk::Sequences(decoded) = &mut model.chunks[1] else {
         panic!("expected typed sequence chunk");
     };
     decoded
@@ -38,7 +42,7 @@ fn edits_to_decoded_records_are_written() {
 
     let bytes = model.encode_mdx().unwrap();
     let reopened = Model::<V800>::decode_mdx(&bytes).unwrap();
-    assert_eq!(reopened.sequences()[0].name(), "Walk");
+    assert_eq!(reopened.sequences()[0].name.text(), "Walk");
 }
 
 #[test]
@@ -52,8 +56,12 @@ fn collection_setter_collapses_repeated_chunks() {
     let mut model = Model::<V800>::new();
     let first = Sequence::new("Stand", [0, 100]).unwrap();
     let second = Sequence::new("Walk", [101, 200]).unwrap();
-    model.push(ModelChunk::from(SequencesChunk::new(vec![first.clone()])));
-    model.push(ModelChunk::from(SequencesChunk::new(vec![second.clone()])));
+    model
+        .chunks
+        .push(ModelChunk::from(SequencesChunk::new(vec![first.clone()])));
+    model
+        .chunks
+        .push(ModelChunk::from(SequencesChunk::new(vec![second.clone()])));
     assert_eq!(model.sequences(), vec![first, second.clone()]);
 
     model.set_sequences(from_ref(&second));
@@ -63,7 +71,7 @@ fn collection_setter_collapses_repeated_chunks() {
     ));
     assert_eq!(
         model
-            .chunks()
+            .chunks
             .iter()
             .filter(|chunk| chunk.tag() == *b"SEQS")
             .count(),

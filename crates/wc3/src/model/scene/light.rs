@@ -74,7 +74,7 @@ impl ShadowIntensityField for NoShadowIntensity {}
 
 #[derive(Clone, Debug, Default, PartialEq, mdx::Read, mdx::Write)]
 pub struct LightShadowIntensity {
-    shadow_intensity: f32,
+    pub shadow_intensity: f32,
 }
 impl ShadowIntensityField for LightShadowIntensity {
     fn shadow_intensity(&self) -> Option<f32> {
@@ -297,9 +297,9 @@ light_layout!(
 )]
 pub struct Light<V: ModelVersion> {
     #[mdl(flatten)]
-    node: Node,
+    pub node: Node,
     #[mdl(skip, default)]
-    light_type: u32,
+    pub light_type: u32,
     #[mdl(skip, default)]
     shadow_casting: V::ShadowCasting,
     #[mdl(
@@ -307,33 +307,33 @@ pub struct Light<V: ModelVersion> {
         track = "LightTrack::AttenuationStart",
         default = "zero"
     )]
-    attenuation_start: f32,
+    pub attenuation_start: f32,
     #[mdl(
         animatable = "AttenuationEnd",
         track = "LightTrack::AttenuationEnd",
         default = "zero"
     )]
-    attenuation_end: f32,
+    pub attenuation_end: f32,
     #[mdl(animatable = "Color", track = "LightTrack::Color", default = "white")]
-    color: Color,
+    pub color: Color,
     #[mdl(
         animatable = "Intensity",
         track = "LightTrack::Intensity",
         default = "zero"
     )]
-    intensity: f32,
+    pub intensity: f32,
     #[mdl(
         animatable = "AmbColor",
         track = "LightTrack::AmbientColor",
         default = "white"
     )]
-    ambient_color: Color,
+    pub ambient_color: Color,
     #[mdl(
         animatable = "AmbIntensity",
         track = "LightTrack::AmbientIntensity",
         default = "zero"
     )]
-    ambient_intensity: f32,
+    pub ambient_intensity: f32,
     #[mdl(skip, default)]
     shadow_intensity: V::ShadowIntensity,
     #[mdl(skip, default)]
@@ -343,7 +343,7 @@ pub struct Light<V: ModelVersion> {
     #[mdl(skip, default)]
     version: PhantomData<V>,
     #[mdl(tracks, channels(Visibility = "LightTrack::Visibility"))]
-    tracks: Vec<LightTrack>,
+    pub tracks: Vec<LightTrack>,
 }
 
 impl<V: ModelVersion> Light<V> {
@@ -367,72 +367,6 @@ impl<V: ModelVersion> Light<V> {
         }
     }
 
-    /// Borrows the shared node.
-    pub fn node(&self) -> &Node {
-        &self.node
-    }
-
-    /// Borrows the shared node for editing.
-    pub fn node_mut(&mut self) -> &mut Node {
-        &mut self.node
-    }
-
-    /// Returns raw light type ID.
-    pub fn light_type(&self) -> u32 {
-        self.light_type
-    }
-    /// Sets raw light type ID.
-    pub fn set_light_type(&mut self, kind: u32) {
-        self.light_type = kind;
-    }
-    /// Returns attenuation start distance.
-    pub fn attenuation_start(&self) -> f32 {
-        self.attenuation_start
-    }
-    /// Sets attenuation start distance.
-    pub fn set_attenuation_start(&mut self, value: f32) {
-        self.attenuation_start = value;
-    }
-    /// Returns attenuation end distance.
-    pub fn attenuation_end(&self) -> f32 {
-        self.attenuation_end
-    }
-    /// Sets attenuation end distance.
-    pub fn set_attenuation_end(&mut self, value: f32) {
-        self.attenuation_end = value;
-    }
-    /// Returns RGB light color.
-    pub fn color(&self) -> Color {
-        self.color
-    }
-    /// Sets RGB light color.
-    pub fn set_color(&mut self, color: Color) {
-        self.color = color;
-    }
-    /// Returns light intensity.
-    pub fn intensity(&self) -> f32 {
-        self.intensity
-    }
-    /// Sets light intensity.
-    pub fn set_intensity(&mut self, value: f32) {
-        self.intensity = value;
-    }
-    /// Returns ambient RGB color.
-    pub fn ambient_color(&self) -> Color {
-        self.ambient_color
-    }
-    /// Sets ambient RGB color.
-    pub fn set_ambient_color(&mut self, color: Color) {
-        self.ambient_color = color;
-    }
-    /// Returns ambient intensity.
-    pub fn ambient_intensity(&self) -> f32 {
-        self.ambient_intensity
-    }
-    /// Sets ambient intensity.
-    pub fn set_ambient_intensity(&mut self, value: f32) {
-        self.ambient_intensity = value;
-    }
     /// Returns the shadow-casting flag available from version 1300.
     pub fn try_shadow_casting(&self) -> Result<bool, ValueError> {
         self.shadow_casting
@@ -518,14 +452,6 @@ impl<V: ModelVersion> Light<V> {
                 actual: V::NUMBER,
             })? = falloff;
         Ok(())
-    }
-    /// Borrows decoded light animation tracks.
-    pub fn tracks(&self) -> &[LightTrack] {
-        &self.tracks
-    }
-    /// Replaces optional light animation tracks.
-    pub fn set_tracks(&mut self, tracks: &[LightTrack]) {
-        self.tracks = tracks.to_vec();
     }
 }
 

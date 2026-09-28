@@ -19,7 +19,7 @@ fn full_model<V: ModelVersion>() -> Model<V> {
     model.set_global_sequences(&[1000]);
     model.set_textures(&[Texture::new("Textures\\Sample.blp").unwrap()]);
     let mut material = Material::<V>::new();
-    material.set_layers(&[Layer::<V>::new()]);
+    material.layers = (&[Layer::<V>::new()]).to_vec();
     model.set_materials(&[material]);
     model.set_texture_animations(&[TextureAnimation::new()]);
     model.set_geosets(&[
@@ -92,5 +92,5 @@ fn check_version<V: ModelVersion>() {
     let parsed = Model::<V>::decode_mdx(&bytes).unwrap();
     assert_eq!(parsed.encode_mdx().unwrap(), bytes, "version {version}");
     assert_eq!(parsed.version(), version);
-    assert_eq!(parsed.materials()[0].layers().len(), 1);
+    assert_eq!(parsed.materials()[0].layers.len(), 1);
 }

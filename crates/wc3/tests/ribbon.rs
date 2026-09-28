@@ -17,11 +17,10 @@ fn ribbon_fields_and_integer_animation_round_trip() {
         frame: 100,
         value: 7u32,
     };
-    emitter.set_tracks(
-        &[AnimationTrack::<RibbonTextureSlot>::linear(vec![key], None)
-            .unwrap()
-            .into()],
-    );
+    emitter.tracks = (&[AnimationTrack::<RibbonTextureSlot>::linear(vec![key], None)
+        .unwrap()
+        .into()])
+        .to_vec();
     let mut model = Model::<wc3::model::V800>::new();
     model.set_ribbon_emitters(std::slice::from_ref(&emitter));
     let bytes = model.encode_mdx().unwrap();
@@ -29,7 +28,7 @@ fn ribbon_fields_and_integer_animation_round_trip() {
     let ribbons = parsed.ribbon_emitters();
     assert_eq!(ribbons[0], emitter);
     assert_eq!(
-        ribbons[0].tracks()[0],
+        ribbons[0].tracks[0],
         RibbonTrack::TextureSlot(
             AnimationTrack::<RibbonTextureSlot>::linear(
                 vec![ValueKeyframe {
@@ -56,11 +55,12 @@ fn ribbon_color_animation_round_trip() {
     )
     .unwrap()
     .into();
-    emitter.set_tracks(std::slice::from_ref(&track));
+    emitter.tracks = (std::slice::from_ref(&track)).to_vec();
     assert_eq!(
         RibbonEmitter::decode_mdx(&emitter.encode_mdx().unwrap())
             .unwrap()
-            .tracks(),
+            .tracks
+            .as_slice(),
         vec![track]
     );
 }

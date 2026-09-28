@@ -8,8 +8,10 @@ use wc3::model::{
 
 fn check_version<V: ModelVersion>() {
     let mut model = Model::<V>::new();
-    model.push(ModelChunk::from_raw(RawChunk::new(*b"MODL", vec![0; 372])).unwrap());
-    model.push(ModelChunk::Unknown(
+    model
+        .chunks
+        .push(ModelChunk::from_raw(RawChunk::new(*b"MODL", vec![0; 372])).unwrap());
+    model.chunks.push(ModelChunk::Unknown(
         UnknownChunk::<V>::new(RawChunk::new(*b"FUTR", vec![0, 1, 2, 255])).unwrap(),
     ));
     let bytes = model.encode_mdx().unwrap();
@@ -35,13 +37,13 @@ fn synthetic_versions_and_unknown_chunks_round_trip() {
 fn preserves_repeated_chunks_and_order() {
     let mut model = Model::<V800>::new();
     for data in [vec![1], vec![2]] {
-        model.push(ModelChunk::Unknown(
+        model.chunks.push(ModelChunk::Unknown(
             UnknownChunk::<V800>::new(RawChunk::new(*b"ABCD", data)).unwrap(),
         ));
     }
     let parsed = Model::<V800>::decode_mdx(&model.encode_mdx().unwrap()).unwrap();
-    assert!(matches!(&parsed.chunks()[1], ModelChunk::Unknown(raw) if raw.raw().data == [1]));
-    assert!(matches!(&parsed.chunks()[2], ModelChunk::Unknown(raw) if raw.raw().data == [2]));
+    assert!(matches!(&parsed.chunks[1], ModelChunk::Unknown(raw) if raw.raw().data == [1]));
+    assert!(matches!(&parsed.chunks[2], ModelChunk::Unknown(raw) if raw.raw().data == [2]));
 }
 
 #[test]
@@ -72,7 +74,7 @@ fn check_accessors<V: ModelVersion>(mut model: Model<V>, bytes: &[u8], path: &st
     macro_rules! round_trip_records {
         ($tag:literal, $getter:ident, $setter:ident) => {
             if model
-                .chunks()
+                .chunks
                 .iter()
                 .filter(|chunk| chunk.tag() == *$tag)
                 .count()
@@ -86,7 +88,7 @@ fn check_accessors<V: ModelVersion>(mut model: Model<V>, bytes: &[u8], path: &st
     macro_rules! round_trip_checked_records {
         ($tag:literal, $getter:ident, $setter:ident) => {
             if model
-                .chunks()
+                .chunks
                 .iter()
                 .filter(|chunk| chunk.tag() == *$tag)
                 .count()

@@ -20,9 +20,9 @@ const TRACK_TAG: Tag = *b"KEVT";
 /// node bits. Event frame counts exclude the optional GlobalSeqId metadata.
 #[derive(Clone, Debug, PartialEq)]
 pub struct EventObject {
-    node: Node,
-    global_sequence_id: u32,
-    frames: Vec<i32>,
+    pub node: Node,
+    pub global_sequence_id: u32,
+    pub frames: Vec<i32>,
 }
 
 impl EventObject {
@@ -33,36 +33,6 @@ impl EventObject {
             global_sequence_id,
             frames: frames.to_vec(),
         }
-    }
-
-    /// Borrows its shared node.
-    pub fn node(&self) -> &Node {
-        &self.node
-    }
-
-    /// Borrows its shared node for editing.
-    pub fn node_mut(&mut self) -> &mut Node {
-        &mut self.node
-    }
-
-    /// Returns the global sequence ID, or `u32::MAX` when absent.
-    pub fn global_sequence_id(&self) -> u32 {
-        self.global_sequence_id
-    }
-
-    /// Sets the global sequence reference without changing event frames.
-    pub fn set_global_sequence_id(&mut self, id: u32) {
-        self.global_sequence_id = id;
-    }
-
-    /// Borrows signed event frame times in source order (including animation lead-in).
-    pub fn frames(&self) -> &[i32] {
-        &self.frames
-    }
-
-    /// Replaces event frame times.
-    pub fn set_frames(&mut self, frames: &[i32]) {
-        self.frames = frames.to_vec();
     }
 }
 

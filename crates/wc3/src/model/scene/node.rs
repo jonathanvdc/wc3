@@ -19,8 +19,6 @@ use crate::model::WriteError;
 
 use crate::model::{BonesChunk, Cursor, HelpersChunk};
 
-use std::borrow::Cow;
-
 use crate::model::FixedText;
 use crate::model::{Model, ReadError};
 
@@ -33,7 +31,7 @@ bitfield! {
     /// `flags()` and `set_flags()` methods for those bits: for example, bit 17
     /// means Particle2 line emission but Popcorn unfogged rendering.
     /// Historical kind bits are preserved storage, not an authoritative record kind.
-    #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+    #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, mdx::Read, mdx::Write)]
     pub struct NodeFlags(u32);
     /// Returns the exact stored bits.
     pub bits, _: 31, 0;
@@ -87,15 +85,15 @@ bitfield! {
 #[mdl(fields)]
 pub struct Node {
     #[mdl(header)]
-    name: FixedText<NAME_SIZE>,
+    pub name: FixedText<NAME_SIZE>,
     #[mdl(property = "ObjectId")]
-    object_id: u32,
+    pub object_id: u32,
     #[mdl(
         property = "Parent",
         default = "no_reference",
         skip_if = "is_no_reference"
     )]
-    parent_id: u32,
+    pub parent_id: u32,
     #[mdl(
         flags(
             DontInheritTranslation = 1,
@@ -109,9 +107,9 @@ pub struct Node {
         ),
         allow_bits = 0x1fff00
     )]
-    raw_flags: u32,
+    pub flags: NodeFlags,
     #[mdl(repeated(Translation, Rotation, Scaling), unique_by = "NodeTrack::tag")]
-    tracks: Vec<NodeTrack>,
+    pub tracks: Vec<NodeTrack>,
 }
 
 /// A bone with a decoded node and two geoset references.
@@ -126,78 +124,43 @@ pub struct Node {
 )]
 pub struct Bone {
     #[mdl(flatten)]
-    node: Node,
+    pub node: Node,
     #[mdl(
         property = "GeosetId",
         default = "no_reference",
         read_with = "read_geoset",
         write_with = "write_geoset"
     )]
-    geoset_id: u32,
+    pub geoset_id: u32,
     #[mdl(
         property = "GeosetAnimId",
         default = "no_reference",
         read_with = "read_geoset_animation",
         write_with = "write_geoset_animation"
     )]
-    geoset_animation_id: u32,
+    pub geoset_animation_id: u32,
 }
 
 impl Node {
+    pub(crate) fn mdl_flags(&self) -> NodeFlags {
+        self.flags
+    }
+
+    pub(crate) fn set_mdl_flags(&mut self, flags: NodeFlags) {
+        self.flags = flags;
+    }
+
     /// Creates a node without animation tracks.
     pub fn new(name: &str, object_id: u32) -> Result<Self, ValueError> {
         let mut node = Self {
             name: FixedText::default(),
             object_id,
             parent_id: u32::MAX,
-            raw_flags: 0,
+            flags: NodeFlags::default(),
             tracks: Vec::new(),
         };
-        node.set_name(name)?;
+        node.name.set_text(name)?;
         Ok(node)
-    }
-
-    /// Returns the name up to the first NUL, replacing invalid UTF-8.
-    pub fn name(&self) -> Cow<'_, str> {
-        self.name.text()
-    }
-
-    /// Sets the node name and clears unused bytes.
-    pub fn set_name(&mut self, name: &str) -> Result<(), ValueError> {
-        self.name.set_text(name)
-    }
-
-    /// Returns the object ID.
-    pub fn object_id(&self) -> u32 {
-        self.object_id
-    }
-    /// Changes the object ID.
-    pub fn set_object_id(&mut self, id: u32) {
-        self.object_id = id;
-    }
-    /// Returns the parent ID, or `u32::MAX` for no parent.
-    pub fn parent_id(&self) -> u32 {
-        self.parent_id
-    }
-    /// Changes the parent ID.
-    pub fn set_parent_id(&mut self, id: u32) {
-        self.parent_id = id;
-    }
-    /// Returns decoded node flags.
-    pub fn flags(&self) -> NodeFlags {
-        NodeFlags(self.raw_flags)
-    }
-    /// Changes decoded node flags.
-    pub fn set_flags(&mut self, flags: NodeFlags) {
-        self.raw_flags = flags.bits();
-    }
-    /// Borrows decoded transform tracks without reparsing.
-    pub fn tracks(&self) -> &[NodeTrack] {
-        &self.tracks
-    }
-    /// Replaces transform tracks.
-    pub fn set_tracks(&mut self, tracks: &[NodeTrack]) {
-        self.tracks = tracks.to_vec();
     }
 }
 
@@ -209,23 +172,6 @@ impl Bone {
             geoset_id,
             geoset_animation_id,
         }
-    }
-
-    /// Borrows the shared node.
-    pub fn node(&self) -> &Node {
-        &self.node
-    }
-    /// Mutably borrows the shared node.
-    pub fn node_mut(&mut self) -> &mut Node {
-        &mut self.node
-    }
-    /// Returns the geoset reference.
-    pub fn geoset_id(&self) -> u32 {
-        self.geoset_id
-    }
-    /// Returns the geoset animation reference.
-    pub fn geoset_animation_id(&self) -> u32 {
-        self.geoset_animation_id
     }
 }
 
@@ -280,20 +226,20 @@ fn is_no_reference(value: &u32) -> bool {
     *value == u32::MAX
 }
 fn finish_bone(value: &mut Bone, _: Span) -> Result<(), mdl::ReadError> {
-    value.node.raw_flags |= 0x100;
+    value.node.flags.0 |= 0x100;
     Ok(())
 }
 fn validate_bone(value: &Bone) -> Result<(), mdl::WriteError> {
     validate_node_kind(&value.node, 0x100)
 }
 pub(crate) fn validate_node_kind(node: &Node, kind: u32) -> Result<(), mdl::WriteError> {
-    if node.raw_flags & !0xff != kind {
+    if node.flags.bits() & !0xff != kind {
         return Err(mdl::WriteError::Unsupported("node object-kind bits"));
     }
     Ok(())
 }
 pub(crate) fn set_node_kind(node: &mut Node, kind: u32) {
-    node.raw_flags |= kind;
+    node.flags.0 |= kind;
 }
 fn read_reference(parser: &mut Parser<'_>, keyword: &str) -> Result<u32, mdl::ReadError> {
     if parser

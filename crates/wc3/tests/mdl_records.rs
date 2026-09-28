@@ -17,21 +17,21 @@ fn nodes_and_owned_kind_bits() {
     let helper =
         Node::decode_mdl("Helper \"a\" { ObjectId 3, Billboarded, Translation 0 { Linear, } }")
             .unwrap();
-    assert_eq!(helper.parent_id(), u32::MAX);
+    assert_eq!(helper.parent_id, u32::MAX);
     roundtrip(&helper);
     let bone = Bone::decode_mdl(
         "Bone \"b\" { GeosetAnimId None, ObjectId 4, GeosetId Multiple, Parent 3, }",
     )
     .unwrap();
-    assert_eq!(bone.node().flags().bits(), 0x100);
-    assert_eq!(bone.geoset_id(), u32::MAX);
+    assert_eq!(bone.node.flags.bits(), 0x100);
+    assert_eq!(bone.geoset_id, u32::MAX);
     roundtrip(&bone);
     let attachment = Attachment::decode_mdl("Attachment \"c\" { Visibility 0 { DontInterp, } ObjectId 5, Path \"a\\b.mdx\", AttachmentID 2, }").unwrap();
-    assert_eq!(attachment.node().flags().bits(), 0x800);
+    assert_eq!(attachment.node.flags.bits(), 0x800);
     roundtrip(&attachment);
-    assert!(attachment.node().encode_mdl().is_err());
+    assert!(attachment.node.encode_mdl().is_err());
     let mut bone = bone;
-    bone.node_mut().set_flags(NodeFlags(0));
+    bone.node.flags = NodeFlags(0);
     assert!(bone.encode_mdl().is_err());
     for text in [
         "Helper \"a\" { }",
@@ -49,20 +49,20 @@ fn nodes_and_owned_kind_bits() {
 fn material_directives_and_classic_layers() {
     let text = "Material { Layer { FilterMode Blend, static TextureID 2 <= 0, static Alpha 0.5, BackFacesForShadows, AmbientOcclusion, } TwoSided, Unfogged, ConstantColor, PriorityPlane -3, }";
     let material = Material::<V800>::decode_mdl(text).unwrap();
-    assert_eq!(material.priority_plane(), -3);
-    assert_eq!(material.render_mode().bits(), 3);
-    assert!(material.layers()[0].shading_flags().two_sided());
+    assert_eq!(material.priority_plane, -3);
+    assert_eq!(material.render_mode.bits(), 3);
+    assert!(material.layers[0].shading_flags.two_sided());
     roundtrip(&material);
     let layer =
         Layer::<V800>::decode_mdl("Layer { TextureID 0 { DontInterp, } static Alpha 1.0, }")
             .unwrap();
     roundtrip(&layer);
     let mut layer = layer;
-    layer.set_texture_id(5);
+    layer.texture_id = 5;
     assert!(layer.encode_mdl().is_err());
     let mut material = Material::<V800>::new();
-    material.set_render_mode(MaterialRenderFlags(2));
-    material.set_layers(&[Layer::new()]);
+    material.render_mode = MaterialRenderFlags(2);
+    material.layers = (&[Layer::new()]).to_vec();
     assert!(material.encode_mdl().is_err());
 }
 #[test]
@@ -115,7 +115,7 @@ fn malformed_and_unrepresentable_layers() {
     }]);
     assert!(layer.encode_mdl().is_err());
     layer.set_texture_slots(&[]);
-    layer.set_shading_flags(LayerShadingFlags(0x800));
+    layer.shading_flags = LayerShadingFlags(0x800);
     assert!(layer.encode_mdl().is_err());
 }
 
@@ -126,10 +126,11 @@ fn rejects_hidden_binary_storage_and_noncanonical_channel_order() {
     use wc3::model::mdx::Write as _;
     let layer = Layer::<V800>::decode_mdl("Layer { static TextureID 0 <= 0, }").unwrap();
     let mut layer = layer;
-    layer.set_tracks(&[
+    layer.tracks = (&[
         LayerTrack::Alpha(AnimationTrack::<LayerAlpha>::linear(vec![], None).unwrap()),
         LayerTrack::TextureId(AnimationTrack::<LayerTextureId>::linear(vec![], None).unwrap()),
-    ]);
+    ])
+        .to_vec();
     assert!(layer.encode_mdl().is_err());
     let attachment = Attachment::decode_mdl("Attachment \"a\" { ObjectId 0, }").unwrap();
     let mut bytes = attachment.encode_mdx().unwrap();
@@ -151,7 +152,7 @@ fn default_materials_roundtrip_at_every_supported_version() {
     macro_rules! check {
         ($($version:ty),*) => { $( {
             let mut material = Material::<$version>::new();
-            material.set_layers(&[Layer::new()]);
+            material.layers = (&[Layer::new()]).to_vec();
             roundtrip(&material);
         } )* };
     }

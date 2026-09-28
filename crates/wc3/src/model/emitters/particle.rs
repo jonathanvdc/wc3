@@ -22,8 +22,6 @@ use crate::model::ValueError;
 
 use crate::model::ParticleEmittersChunk;
 
-use std::borrow::Cow;
-
 use crate::model::FixedText;
 use crate::model::{Model, Node};
 
@@ -44,33 +42,33 @@ pub struct ParticleEmitter {
     #[mdl(
         flatten,
         extra_flags(
-            get = "Node::flags",
-            set = "Node::set_flags",
+            get = "Node::mdl_flags",
+            set = "Node::set_mdl_flags",
             EmitterUsesMdl = 32768,
             EmitterUsesTga = 65536
         )
     )]
-    node: Node,
+    pub node: Node,
     #[mdl(
         animatable = "EmissionRate",
         track = "ParticleTrack::EmissionRate",
         default
     )]
-    emission_rate: f32,
+    pub emission_rate: f32,
     #[mdl(animatable = "Gravity", track = "ParticleTrack::Gravity", default)]
-    gravity: f32,
+    pub gravity: f32,
     #[mdl(animatable = "Longitude", track = "ParticleTrack::Longitude", default)]
-    longitude: f32,
+    pub longitude: f32,
     #[mdl(animatable = "Latitude", track = "ParticleTrack::Latitude", default)]
-    latitude: f32,
+    pub latitude: f32,
     #[mdl(property = "Path", default)]
-    path: FixedText<PATH_SIZE>,
+    pub path: FixedText<PATH_SIZE>,
     #[mdl(animatable = "LifeSpan", track = "ParticleTrack::Lifespan", default)]
-    life_span: f32,
+    pub life_span: f32,
     #[mdl(animatable = "InitVelocity", track = "ParticleTrack::Speed", default)]
-    initial_velocity: f32,
+    pub initial_velocity: f32,
     #[mdl(tracks, channels(Visibility = "ParticleTrack::Visibility"))]
-    tracks: Vec<ParticleTrack>,
+    pub tracks: Vec<ParticleTrack>,
 }
 
 impl ParticleEmitter {
@@ -87,87 +85,8 @@ impl ParticleEmitter {
             initial_velocity: 0.0,
             tracks: Vec::new(),
         };
-        emitter.set_path(path)?;
+        emitter.path.set_text(path)?;
         Ok(emitter)
-    }
-
-    /// Borrows the shared node.
-    pub fn node(&self) -> &Node {
-        &self.node
-    }
-
-    /// Borrows the shared node for editing.
-    pub fn node_mut(&mut self) -> &mut Node {
-        &mut self.node
-    }
-
-    /// Returns emission rate.
-    pub fn emission_rate(&self) -> f32 {
-        self.emission_rate
-    }
-    /// Sets emission rate.
-    pub fn set_emission_rate(&mut self, value: f32) {
-        self.emission_rate = value;
-    }
-    /// Returns gravity.
-    pub fn gravity(&self) -> f32 {
-        self.gravity
-    }
-    /// Sets gravity.
-    pub fn set_gravity(&mut self, value: f32) {
-        self.gravity = value;
-    }
-    /// Returns longitude.
-    pub fn longitude(&self) -> f32 {
-        self.longitude
-    }
-    /// Sets longitude.
-    pub fn set_longitude(&mut self, value: f32) {
-        self.longitude = value;
-    }
-    /// Returns latitude.
-    pub fn latitude(&self) -> f32 {
-        self.latitude
-    }
-    /// Sets latitude.
-    pub fn set_latitude(&mut self, value: f32) {
-        self.latitude = value;
-    }
-    /// Returns particle lifetime.
-    pub fn life_span(&self) -> f32 {
-        self.life_span
-    }
-    /// Sets particle lifetime.
-    pub fn set_life_span(&mut self, value: f32) {
-        self.life_span = value;
-    }
-    /// Returns initial velocity.
-    pub fn initial_velocity(&self) -> f32 {
-        self.initial_velocity
-    }
-    /// Sets initial velocity.
-    pub fn set_initial_velocity(&mut self, value: f32) {
-        self.initial_velocity = value;
-    }
-
-    /// Returns the emitter resource path up to the first NUL.
-    pub fn path(&self) -> Cow<'_, str> {
-        self.path.text()
-    }
-
-    /// Sets the emitter path while retaining all other fields.
-    pub fn set_path(&mut self, path: &str) -> Result<(), ValueError> {
-        self.path.set_text(path)
-    }
-
-    /// Borrows decoded animation tracks.
-    pub fn tracks(&self) -> &[ParticleTrack] {
-        &self.tracks
-    }
-
-    /// Replaces optional animation tracks.
-    pub fn set_tracks(&mut self, tracks: &[ParticleTrack]) {
-        self.tracks = tracks.to_vec();
     }
 }
 
@@ -188,7 +107,7 @@ fn finish_particle(value: &mut ParticleEmitter, _: Span) -> Result<(), mdl::Read
     Ok(())
 }
 fn validate_particle(value: &ParticleEmitter) -> Result<(), mdl::WriteError> {
-    validate_node_kind(&value.node, 0x1000 | (value.node.flags().bits() & 0x18000))
+    validate_node_kind(&value.node, 0x1000 | (value.node.flags.bits() & 0x18000))
 }
 
 bitfield! {
@@ -212,12 +131,12 @@ impl ParticleEmitterFlags {
 impl ParticleEmitter {
     /// Returns behavioral flags using this emitter's bit meanings.
     pub fn flags(&self) -> ParticleEmitterFlags {
-        ParticleEmitterFlags::from_bits(self.node.flags().bits())
+        ParticleEmitterFlags::from_bits(self.node.flags.bits())
     }
     /// Changes emitter behavior while preserving every unrelated node bit.
     pub fn set_flags(&mut self, flags: ParticleEmitterFlags) {
-        let bits = (self.node.flags().bits() & !ParticleEmitterFlags::MASK)
+        let bits = (self.node.flags.bits() & !ParticleEmitterFlags::MASK)
             | (flags.bits() & ParticleEmitterFlags::MASK);
-        self.node.set_flags(NodeFlags(bits));
+        self.node.flags = NodeFlags(bits);
     }
 }

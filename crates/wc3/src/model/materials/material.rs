@@ -38,10 +38,10 @@ bitfield! {
 #[derive(Clone, Debug, PartialEq)]
 pub struct Material<V: ModelVersion> {
     version: PhantomData<V>,
-    priority_plane: i32,
-    render_mode: MaterialRenderFlags,
+    pub priority_plane: i32,
+    pub render_mode: MaterialRenderFlags,
     shader: V::Shader,
-    layers: Vec<Layer<V>>,
+    pub layers: Vec<Layer<V>>,
 }
 
 /// The fixed shader field selected by a model version.
@@ -201,22 +201,7 @@ impl<V: ModelVersion> Material<V> {
     pub fn version(&self) -> Version {
         V::NUMBER
     }
-    /// Returns the material priority plane.
-    pub fn priority_plane(&self) -> i32 {
-        self.priority_plane
-    }
-    /// Changes the material priority plane.
-    pub fn set_priority_plane(&mut self, value: i32) {
-        self.priority_plane = value;
-    }
-    /// Returns decoded rendering flags.
-    pub fn render_mode(&self) -> MaterialRenderFlags {
-        self.render_mode
-    }
-    /// Changes the rendering flags.
-    pub fn set_render_mode(&mut self, value: MaterialRenderFlags) {
-        self.render_mode = value;
-    }
+
     /// Returns the shader path in versions 900 through 1099.
     pub fn try_shader(&self) -> Result<Cow<'_, str>, ValueError> {
         if !(matches!(V::NUMBER, 900 | 1000)) {
@@ -238,18 +223,6 @@ impl<V: ModelVersion> Material<V> {
             });
         }
         self.shader.set(shader)
-    }
-    /// Borrows layers without decoding or allocating.
-    pub fn layers(&self) -> &[Layer<V>] {
-        &self.layers
-    }
-    /// Mutably borrows layers for bulk edits.
-    pub fn layers_mut(&mut self) -> &mut [Layer<V>] {
-        &mut self.layers
-    }
-    /// Replaces all layers.
-    pub fn set_layers(&mut self, layers: &[Layer<V>]) {
-        self.layers = layers.to_vec();
     }
 }
 

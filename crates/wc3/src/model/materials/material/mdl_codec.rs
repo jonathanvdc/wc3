@@ -90,9 +90,9 @@ impl<V: ModelVersion> MaterialMdl<V> {
         self.unfogged = false;
         if self.flags & 2 != 0 {
             for layer in &mut self.layers {
-                let mut flags = layer.shading_flags();
+                let mut flags = layer.shading_flags;
                 flags.set_two_sided(true);
-                layer.set_shading_flags(flags);
+                layer.shading_flags = flags;
             }
         }
         Ok(())
@@ -102,7 +102,7 @@ impl<V: ModelVersion> MaterialMdl<V> {
             && self
                 .layers
                 .iter()
-                .any(|layer| !layer.shading_flags().two_sided())
+                .any(|layer| !layer.shading_flags.two_sided())
         {
             return Err(mdl::WriteError::Unsupported(
                 "material TwoSided with one-sided layers",

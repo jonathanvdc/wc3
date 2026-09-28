@@ -198,26 +198,26 @@ pub struct Layer<V: ModelVersion> {
     #[mdl(skip, default)]
     version: PhantomData<V>,
     #[mdl(property = "FilterMode", default)]
-    filter_mode: LayerFilterMode,
+    pub filter_mode: LayerFilterMode,
     #[mdl(skip, default)]
-    shading_flags: LayerShadingFlags,
+    pub shading_flags: LayerShadingFlags,
     #[mdl(skip, default)]
-    texture_id: u32,
+    pub texture_id: u32,
     #[mdl(
         property = "TVertexAnimId",
         default = "no_reference",
         skip_if = "is_no_reference"
     )]
-    texture_animation_id: u32,
+    pub texture_animation_id: u32,
     #[mdl(property = "CoordId", default, skip_if = "zero_id")]
-    coordinate_id: u32,
+    pub coordinate_id: u32,
     #[mdl(
         animatable = "Alpha",
         track = "LayerTrack::Alpha",
         default = "one",
         skip_if = "full"
     )]
-    alpha: f32,
+    pub alpha: f32,
     #[mdl(skip, default)]
     emissive_gain: V::EmissiveGain,
     #[mdl(skip, default)]
@@ -227,7 +227,7 @@ pub struct Layer<V: ModelVersion> {
     #[mdl(skip, default)]
     texture_slots: V::TextureSlots,
     #[mdl(skip, default)]
-    tracks: Vec<LayerTrack>,
+    pub tracks: Vec<LayerTrack>,
 }
 
 /// Version-selected storage for the layer's emissive gain.
@@ -419,54 +419,7 @@ impl<V: ModelVersion> Layer<V> {
     pub fn version(&self) -> Version {
         V::NUMBER
     }
-    /// Returns the blend filter mode.
-    pub fn filter_mode(&self) -> LayerFilterMode {
-        self.filter_mode
-    }
-    /// Changes the blend filter mode.
-    pub fn set_filter_mode(&mut self, mode: LayerFilterMode) {
-        self.filter_mode = mode;
-    }
-    /// Returns decoded layer shading bits.
-    pub fn shading_flags(&self) -> LayerShadingFlags {
-        self.shading_flags
-    }
-    /// Changes decoded layer shading bits.
-    pub fn set_shading_flags(&mut self, flags: LayerShadingFlags) {
-        self.shading_flags = flags;
-    }
-    /// Returns the base texture index.
-    pub fn texture_id(&self) -> u32 {
-        self.texture_id
-    }
-    /// Changes the base texture index.
-    pub fn set_texture_id(&mut self, id: u32) {
-        self.texture_id = id;
-    }
-    /// Returns the texture animation reference.
-    pub fn texture_animation_id(&self) -> u32 {
-        self.texture_animation_id
-    }
-    /// Changes the texture animation reference.
-    pub fn set_texture_animation_id(&mut self, id: u32) {
-        self.texture_animation_id = id;
-    }
-    /// Returns the texture coordinate set index.
-    pub fn coordinate_id(&self) -> u32 {
-        self.coordinate_id
-    }
-    /// Changes the texture coordinate set index.
-    pub fn set_coordinate_id(&mut self, id: u32) {
-        self.coordinate_id = id;
-    }
-    /// Returns the base alpha value.
-    pub fn alpha(&self) -> f32 {
-        self.alpha
-    }
-    /// Changes the base alpha value.
-    pub fn set_alpha(&mut self, value: f32) {
-        self.alpha = value;
-    }
+
     /// Returns the layer's emissive gain, available from version 900.
     pub fn try_emissive_gain(&self) -> Result<f32, ValueError> {
         self.emissive_gain
@@ -602,14 +555,6 @@ impl<V: ModelVersion> Layer<V> {
             })?
             .team_color = value;
         Ok(())
-    }
-    /// Borrows layer animation tracks after any texture slots.
-    pub fn tracks(&self) -> &[LayerTrack] {
-        &self.tracks
-    }
-    /// Replaces layer animation tracks.
-    pub fn set_tracks(&mut self, tracks: &[LayerTrack]) {
-        self.tracks = tracks.to_vec();
     }
 }
 

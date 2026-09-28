@@ -31,7 +31,6 @@ use crate::model::WriteError;
 
 use crate::model::{CamerasChunk, Cursor};
 
-use std::borrow::Cow;
 use std::marker::PhantomData;
 
 use crate::model::FixedText;
@@ -114,21 +113,21 @@ impl CameraLayout for V1800 {
 )]
 pub struct Camera<V: ModelVersion> {
     #[mdl(header)]
-    name: FixedText<NAME_SIZE>,
+    pub name: FixedText<NAME_SIZE>,
     #[mdl(skip, default = "Self::mdl_variant")]
-    variant: CameraVariant,
+    pub variant: CameraVariant,
     #[mdl(property = "Position", default)]
-    position: Vec3,
+    pub position: Vec3,
     #[mdl(property = "FieldOfView")]
-    field_of_view: f32,
+    pub field_of_view: f32,
     #[mdl(property = "FarClip")]
-    far_clip: f32,
+    pub far_clip: f32,
     #[mdl(property = "NearClip", default)]
-    near_clip: f32,
+    pub near_clip: f32,
     #[mdl(skip, default)]
-    target_position: Vec3,
+    pub target_position: Vec3,
     #[mdl(skip, default)]
-    tracks: Vec<CameraTrack>,
+    pub tracks: Vec<CameraTrack>,
     #[mdl(skip, default)]
     version: PhantomData<V>,
 }
@@ -147,73 +146,8 @@ impl<V: ModelVersion> Camera<V> {
             tracks: Vec::new(),
             version: PhantomData,
         };
-        camera.set_name(name)?;
+        camera.name.set_text(name)?;
         Ok(camera)
-    }
-
-    /// Returns the record layout variant and any associated bytes.
-    pub fn variant(&self) -> CameraVariant {
-        self.variant
-    }
-    /// Changes the record layout variant.
-    pub fn set_variant(&mut self, variant: CameraVariant) {
-        self.variant = variant;
-    }
-    /// Returns the name up to its first NUL.
-    pub fn name(&self) -> Cow<'_, str> {
-        self.name.text()
-    }
-    /// Changes the name and clears unused bytes.
-    pub fn set_name(&mut self, name: &str) -> Result<(), ValueError> {
-        self.name.set_text(name)
-    }
-    /// Returns camera XYZ position.
-    pub fn position(&self) -> Vec3 {
-        self.position
-    }
-    /// Changes camera XYZ position.
-    pub fn set_position(&mut self, position: Vec3) {
-        self.position = position;
-    }
-    /// Returns field of view.
-    pub fn field_of_view(&self) -> f32 {
-        self.field_of_view
-    }
-    /// Changes field of view.
-    pub fn set_field_of_view(&mut self, value: f32) {
-        self.field_of_view = value;
-    }
-    /// Returns far clipping distance.
-    pub fn far_clip(&self) -> f32 {
-        self.far_clip
-    }
-    /// Changes far clipping distance.
-    pub fn set_far_clip(&mut self, value: f32) {
-        self.far_clip = value;
-    }
-    /// Returns near clipping distance.
-    pub fn near_clip(&self) -> f32 {
-        self.near_clip
-    }
-    /// Changes near clipping distance.
-    pub fn set_near_clip(&mut self, value: f32) {
-        self.near_clip = value;
-    }
-    /// Returns target XYZ position.
-    pub fn target_position(&self) -> Vec3 {
-        self.target_position
-    }
-    /// Changes target XYZ position.
-    pub fn set_target_position(&mut self, target: Vec3) {
-        self.target_position = target;
-    }
-    /// Borrows decoded camera tracks without reparsing.
-    pub fn tracks(&self) -> &[CameraTrack] {
-        &self.tracks
-    }
-    /// Replaces camera tracks.
-    pub fn set_tracks(&mut self, tracks: &[CameraTrack]) {
-        self.tracks = tracks.to_vec();
     }
 }
 

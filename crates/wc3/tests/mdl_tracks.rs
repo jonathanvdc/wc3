@@ -126,15 +126,15 @@ fn texture_animation_dispatch_and_roundtrip() {
     let source = "TVertexAnim { Translation 1 { Linear, 0: { 1, 2, 3 }, } Rotation 0 { DontInterp, } Scaling 0 { Hermite, } }";
     let animation = TextureAnimation::decode_mdl(source).unwrap();
     assert!(matches!(
-        animation.tracks()[0],
+        animation.tracks[0],
         TextureAnimationTrack::Translation(_)
     ));
     assert!(matches!(
-        animation.tracks()[1],
+        animation.tracks[1],
         TextureAnimationTrack::Rotation(_)
     ));
     assert!(matches!(
-        animation.tracks()[2],
+        animation.tracks[2],
         TextureAnimationTrack::Scaling(_)
     ));
     assert_eq!(
@@ -152,7 +152,7 @@ fn texture_animation_dispatch_and_roundtrip() {
     .is_err());
     let track = AnimationTrack::<TextureTranslation>::step(Vec::new(), None).unwrap();
     let mut duplicate = TextureAnimation::new();
-    duplicate.set_tracks(&[track.clone().into(), track.into()]);
+    duplicate.tracks = (&[track.clone().into(), track.into()]).to_vec();
     assert!(duplicate.encode_mdl().is_err());
 }
 
@@ -306,7 +306,7 @@ fn texture_animation_has_no_static_transform_fields() {
     }
     assert!(TextureAnimation::decode_mdl("TVertexAnim { }")
         .unwrap()
-        .tracks()
+        .tracks
         .is_empty());
     for name in ["Translation", "Rotation", "Scaling"] {
         let source = format!("TVertexAnim {{ {name} 0 {{ Linear, }} {name} 0 {{ Linear, }} }}");

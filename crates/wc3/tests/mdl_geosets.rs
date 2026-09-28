@@ -57,8 +57,8 @@ fn specification_quad_has_independent_canonical_output_and_wire_sections() {
 fn all_versions_defaults_and_multiple_mesh_groups_roundtrip() {
     macro_rules! check { ($($version:ty),*) => { $( {
         let value = Geoset::<$version>::decode_mdl(QUAD).unwrap();
-        assert_eq!(value.material_id(), 0);
-        assert_eq!(value.selection_group(), 0);
+        assert_eq!(value.material_id, 0);
+        assert_eq!(value.selection_group, 0);
         assert_eq!(value.raw_unselectable(), 0);
         roundtrip(&value);
         roundtrip(&Geoset::<$version>::decode_mdl(EMPTY).unwrap());
@@ -80,9 +80,9 @@ fn all_versions_defaults_and_multiple_mesh_groups_roundtrip() {
     assert_eq!(value.primitive_counts(), [3, 3]);
     assert_eq!(value.matrix_group_sizes(), [2, 0, 1]);
     assert_eq!(value.uv_sets().len(), 2);
-    assert_eq!(value.sequence_extents().len(), 2);
+    assert_eq!(value.sequence_extents.len(), 2);
     assert_eq!(
-        value.sequence_extents()[0].bounds_radius.to_bits(),
+        value.sequence_extents[0].bounds_radius.to_bits(),
         (-0.0f32).to_bits()
     );
     assert_eq!(value.raw_unselectable(), 4);
@@ -218,10 +218,10 @@ fn fields_reconstruct_independently_of_source_order() {
     }"#,
     )
     .unwrap();
-    assert_eq!(value.material_id(), 7);
-    assert_eq!(value.selection_group(), 0);
+    assert_eq!(value.material_id, 7);
+    assert_eq!(value.selection_group, 0);
     assert_eq!(value.level_of_detail(), 3);
-    assert_eq!(value.extent().bounds_radius.to_bits(), 0.0f32.to_bits());
+    assert_eq!(value.extent.bounds_radius.to_bits(), 0.0f32.to_bits());
     assert_eq!(value.vertices()[0][0].to_bits(), (-0.0f32).to_bits());
     roundtrip(&value);
 }

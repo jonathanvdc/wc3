@@ -37,20 +37,20 @@ bitfield! {
 )]
 pub struct GeosetAnimation {
     #[mdl(animatable = "Alpha", track = "GeosetTrack::Alpha")]
-    alpha: f32,
+    pub alpha: f32,
     #[mdl(flags(DropShadow = 1), allow_bits = 2)]
-    flags: GeosetAnimationFlags,
+    pub flags: GeosetAnimationFlags,
     #[mdl(
         animatable = "Color",
         track = "GeosetTrack::Color",
         enabled_if = "Self::uses_color",
         enable_with = "Self::enable_color"
     )]
-    color: Color,
+    pub color: Color,
     #[mdl(property = "GeosetId", required)]
-    geoset_id: u32,
+    pub geoset_id: u32,
     #[mdl(tracks)]
-    tracks: Vec<GeosetTrack>,
+    pub tracks: Vec<GeosetTrack>,
 }
 
 impl Default for GeosetAnimation {
@@ -72,47 +72,6 @@ impl GeosetAnimation {
             geoset_id,
             ..Self::default()
         }
-    }
-
-    /// Returns the base alpha.
-    pub fn alpha(&self) -> f32 {
-        self.alpha
-    }
-    /// Changes the base alpha.
-    pub fn set_alpha(&mut self, alpha: f32) {
-        self.alpha = alpha;
-    }
-    /// Returns decoded rendering flags.
-    pub fn flags(&self) -> GeosetAnimationFlags {
-        self.flags
-    }
-    /// Changes decoded rendering bits.
-    pub fn set_flags(&mut self, flags: GeosetAnimationFlags) {
-        self.flags = flags;
-    }
-    /// Returns base RGB color.
-    pub fn color(&self) -> Color {
-        self.color
-    }
-    /// Changes base RGB color.
-    pub fn set_color(&mut self, color: Color) {
-        self.color = color;
-    }
-    /// Returns the referenced geoset index.
-    pub fn geoset_id(&self) -> u32 {
-        self.geoset_id
-    }
-    /// Changes the referenced geoset index.
-    pub fn set_geoset_id(&mut self, id: u32) {
-        self.geoset_id = id;
-    }
-    /// Borrows alpha and color tracks without reparsing.
-    pub fn tracks(&self) -> &[GeosetTrack] {
-        &self.tracks
-    }
-    /// Replaces alpha and color tracks.
-    pub fn set_tracks(&mut self, tracks: &[GeosetTrack]) {
-        self.tracks = tracks.to_vec();
     }
 }
 

@@ -19,18 +19,18 @@ fn sample<V: ModelVersion>() -> Model<V> {
     let mut model = Model::<V>::new();
     let mut material = Material::<V>::new();
     let mut layer = Layer::<V>::new();
-    layer.set_texture_id(4);
-    layer.set_alpha(0.75);
-    material.set_priority_plane(12);
-    material.set_layers(&[layer]);
+    layer.texture_id = 4;
+    layer.alpha = 0.75;
+    material.priority_plane = 12;
+    material.layers = (&[layer]).to_vec();
     model.set_materials(&[material]);
     let mut geoset = Geoset::<V>::new(&[[1.0, 2.0, 3.0]], &[[0.0, 0.0, 1.0]], &[]).unwrap();
     geoset.set_raw_unselectable(0x8000_0002);
     model.set_geosets(&[geoset]);
     let mut light = Light::<V>::new(Node::new("Lamp", 7).unwrap(), 2);
-    light.set_color([1.0, 0.5, 0.25]);
-    light.set_intensity(2.5);
-    light.set_attenuation_end(200.0);
+    light.color = [1.0, 0.5, 0.25];
+    light.intensity = 2.5;
+    light.attenuation_end = 200.0;
     model.set_lights(&[light]);
     model.set_cameras(&[Camera::<V>::new("View").unwrap()]);
     model
@@ -125,7 +125,7 @@ fn texture_slots_including_animations_require_loss_permission() {
         .iter()
         .any(|issue| issue.path == "record.texture_slots"
             && issue.kind == ConversionIssueKind::Dropped));
-    assert_eq!(result.model.texture_id(), layer.texture_id());
+    assert_eq!(result.model.texture_id, layer.texture_id);
 }
 
 #[test]
@@ -140,15 +140,15 @@ fn tracks_are_checked_even_when_static_fields_are_neutral() {
     )
     .unwrap()
     .into();
-    layer.set_tracks(&[track]);
+    layer.tracks = (&[track]).to_vec();
     let error = layer
         .convert::<V800>(&ConversionOptions::strict())
         .unwrap_err();
     assert_eq!(error.path, "record.tracks[0]");
     let lossy = layer.convert::<V800>(&ConversionOptions::lossy()).unwrap();
-    assert!(lossy.model.tracks().is_empty());
+    assert!(lossy.model.tracks.is_empty());
     let mut light = Light::<V1800>::new(Node::new("Lamp", 1).unwrap(), 0);
-    light.set_tracks(&[AnimationTrack::<LightDamping>::step(
+    light.tracks = (&[AnimationTrack::<LightDamping>::step(
         vec![ValueKeyframe {
             frame: 0,
             value: 1.0,
@@ -156,7 +156,8 @@ fn tracks_are_checked_even_when_static_fields_are_neutral() {
         None,
     )
     .unwrap()
-    .into()]);
+    .into()])
+        .to_vec();
     assert_eq!(
         light
             .convert::<V1400>(&ConversionOptions::strict())
@@ -168,7 +169,7 @@ fn tracks_are_checked_even_when_static_fields_are_neutral() {
         .convert::<V1400>(&ConversionOptions::lossy())
         .unwrap()
         .model
-        .tracks()
+        .tracks
         .is_empty());
 }
 
@@ -212,7 +213,7 @@ fn skin_narrowing_checks_indices_and_never_truncates_them() {
 #[test]
 fn opaque_chunks_have_an_independent_policy() {
     let mut model = Model::<V800>::new();
-    model.push(ModelChunk::Unknown(
+    model.chunks.push(ModelChunk::Unknown(
         UnknownChunk::new(RawChunk::new(*b"FUTR", vec![1, 2, 3])).unwrap(),
     ));
     assert!(model.convert::<V900>(&ConversionOptions::lossy()).is_err());
@@ -225,7 +226,7 @@ fn opaque_chunks_have_an_independent_policy() {
         preserved.report.issues[0].kind,
         ConversionIssueKind::PreservedUnknown
     );
-    let ModelChunk::Unknown(chunk) = &preserved.model.chunks()[1] else {
+    let ModelChunk::Unknown(chunk) = &preserved.model.chunks[1] else {
         panic!("expected opaque chunk")
     };
     assert_eq!(chunk.raw().data, [1, 2, 3]);
@@ -234,7 +235,7 @@ fn opaque_chunks_have_an_independent_policy() {
         ..ConversionOptions::strict()
     };
     let dropped = model.convert::<V900>(&options).unwrap();
-    assert_eq!(dropped.model.chunks().len(), 1);
+    assert_eq!(dropped.model.chunks.len(), 1);
     assert_eq!(dropped.report.issues[0].kind, ConversionIssueKind::Dropped);
     assert_eq!(
         model
@@ -250,7 +251,7 @@ fn opaque_chunks_have_an_independent_policy() {
 #[test]
 fn unsupported_chunks_are_rejected_or_reported_and_removed() {
     let mut model = Model::<V900>::new();
-    model.push(BindPoseChunk::new(vec![]).into());
+    model.chunks.push(BindPoseChunk::new(vec![]).into());
     assert_eq!(
         model
             .convert::<V800>(&ConversionOptions::strict())
@@ -259,7 +260,7 @@ fn unsupported_chunks_are_rejected_or_reported_and_removed() {
         "chunks[1]"
     );
     let dropped = model.convert::<V800>(&ConversionOptions::lossy()).unwrap();
-    assert_eq!(dropped.model.chunks().len(), 1);
+    assert_eq!(dropped.model.chunks.len(), 1);
     assert_eq!(dropped.report.issues[0].kind, ConversionIssueKind::Dropped);
 }
 
@@ -268,26 +269,24 @@ fn chunk_order_duplicates_version_extensions_and_raw_names_are_preserved() {
     let mut model = sample::<V900>();
     let mut version = VersionChunk::<V900>::new();
     version.extension = vec![9, 8, 7];
-    model.push(version.into());
-    model.push(model.chunks()[1].clone());
+    model.chunks.push(version.into());
+    model.chunks.push(model.chunks[1].clone());
     // Deliberately preserve non-UTF8 shader bytes and trailing padding.
     let mut material_bytes = Material::<V900>::new().encode_mdx().unwrap();
     material_bytes[12] = 255;
     material_bytes[91] = 42;
     let material = Material::<V900>::decode_mdx(&material_bytes).unwrap();
-    model.push(MaterialsChunk::new(vec![material]).into());
+    model
+        .chunks
+        .push(MaterialsChunk::new(vec![material]).into());
     let converted = model
         .convert::<V1000>(&ConversionOptions::strict())
         .unwrap();
     assert_eq!(
-        model
-            .chunks()
-            .iter()
-            .map(ModelChunk::tag)
-            .collect::<Vec<_>>(),
+        model.chunks.iter().map(ModelChunk::tag).collect::<Vec<_>>(),
         converted
             .model
-            .chunks()
+            .chunks
             .iter()
             .map(ModelChunk::tag)
             .collect::<Vec<_>>()
@@ -305,7 +304,7 @@ fn chunk_order_duplicates_version_extensions_and_raw_names_are_preserved() {
 #[test]
 fn camera_variants_preserve_their_self_describing_layout_and_opaque_bytes() {
     let mut camera = Camera::<V1800>::new("Camera").unwrap();
-    camera.set_variant(CameraVariant::Variant2([37; 12]));
+    camera.variant = CameraVariant::Variant2([37; 12]);
     let result = camera
         .convert::<V800>(&ConversionOptions::strict())
         .unwrap();
@@ -380,7 +379,7 @@ fn populated_versioned_fields_preserve_exact_storage_when_supported() {
         damping: 3.0,
     });
     // A noncanonical nonzero shadow flag must retain its original bits.
-    let shadow_offset = 4 + light.node().encode_mdx().unwrap().len() + 4;
+    let shadow_offset = 4 + light.node.encode_mdx().unwrap().len() + 4;
     let mut bytes = light.encode_mdx().unwrap();
     bytes[shadow_offset..shadow_offset + 4].copy_from_slice(&0x8000_0002u32.to_le_bytes());
     let light = Light::<V1800>::decode_mdx(&bytes).unwrap();

@@ -14,7 +14,7 @@ use wc3::model::{DynamicModel, Model, V1000, V1800, V800, V900};
 #[test]
 fn version_is_shared_by_model_and_nested_records() {
     let mut material = Material::<V1800>::new();
-    material.set_layers(&[Layer::<V1800>::new()]);
+    material.layers = (&[Layer::<V1800>::new()]).to_vec();
 
     let mut model = Model::<V1800>::new();
     model.set_materials(&[material]);
@@ -27,7 +27,7 @@ fn version_is_shared_by_model_and_nested_records() {
     assert_eq!(parsed.materials().len(), 1);
     assert_eq!(parsed.geosets().len(), 1);
     assert_eq!(parsed.lights().len(), 1);
-    assert_eq!(parsed.cameras()[0].variant(), CameraVariant::Variant3);
+    assert_eq!(parsed.cameras()[0].variant, CameraVariant::Variant3);
     assert!(matches!(
         DynamicModel::decode_mdx(&bytes, 800),
         Ok(DynamicModel::V1800(_))
@@ -39,7 +39,7 @@ fn unknown_tags_are_explicit_and_known_tags_cannot_be_disguised() {
     assert!(UnknownChunk::<V800>::new(RawChunk::new(*b"VERS", vec![0; 4])).is_none());
     let unknown = UnknownChunk::<V800>::new(RawChunk::new(*b"FUTR", vec![1, 2])).unwrap();
     let mut model = Model::<V800>::new();
-    model.push(ModelChunk::Unknown(unknown));
+    model.chunks.push(ModelChunk::Unknown(unknown));
     let bytes = model.encode_mdx().unwrap();
     assert_eq!(
         Model::<V800>::decode_mdx(&bytes)

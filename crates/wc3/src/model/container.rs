@@ -29,7 +29,7 @@ pub const MAGIC: Tag = *b"MDLX";
 #[derive(Clone, Debug)]
 pub struct Model<V: ModelVersion> {
     /// The ordered list of chunks in the model.
-    chunks: Vec<ModelChunk<V>>,
+    pub chunks: Vec<ModelChunk<V>>,
 }
 
 impl<V: ModelVersion> Default for Model<V> {
@@ -92,20 +92,9 @@ impl<V: ModelVersion> Model<V> {
         })
     }
 
-    /// Returns the model version, producing the value from the `VERS` chunk
-    /// if there is such a chunk, or the default version otherwise.
+    /// Returns the version selected by the model type.
     pub fn version(&self) -> Version {
         V::NUMBER
-    }
-
-    /// Returns the ordered list of chunks.
-    pub fn chunks(&self) -> &[ModelChunk<V>] {
-        &self.chunks
-    }
-
-    /// Returns a mutable ordered list of chunks.
-    pub fn chunks_mut(&mut self) -> &mut Vec<ModelChunk<V>> {
-        &mut self.chunks
     }
 
     /// Finds the first chunk with the given tag.
@@ -118,22 +107,17 @@ impl<V: ModelVersion> Model<V> {
         self.chunks.iter_mut().find(|chunk| chunk.tag() == tag)
     }
 
-    /// Appends a chunk.
-    pub fn push(&mut self, chunk: ModelChunk<V>) {
-        self.chunks.push(chunk);
-    }
-
     pub(crate) fn replace_chunk(&mut self, chunk: impl Into<ModelChunk<V>>) {
         let chunk = chunk.into();
         let tag = chunk.tag();
         if let Some(index) = self
-            .chunks()
+            .chunks
             .iter()
             .position(|existing| existing.tag() == tag)
         {
-            self.chunks_mut()[index] = chunk;
+            self.chunks[index] = chunk;
             let mut seen = false;
-            self.chunks_mut().retain(|existing| {
+            self.chunks.retain(|existing| {
                 if existing.tag() != tag {
                     return true;
                 }
@@ -145,7 +129,7 @@ impl<V: ModelVersion> Model<V> {
                 }
             });
         } else {
-            self.push(chunk);
+            self.chunks.push(chunk);
         }
     }
 }
@@ -309,7 +293,7 @@ mod tests {
     #[test]
     fn unknown_chunks_round_trip_and_bad_known_chunks_fail() {
         let mut model = Model::<V800>::new();
-        model.push(ModelChunk::Unknown(
+        model.chunks.push(ModelChunk::Unknown(
             UnknownChunk::new(RawChunk::new(*b"FUTR", vec![1, 2])).unwrap(),
         ));
         let bytes = model.encode_mdx().unwrap();
