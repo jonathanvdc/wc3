@@ -1,0 +1,15 @@
+[package]
+name = "wc3"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.75"
+description = "Warcraft III model types and lossless MDX and streaming MDL codecs"
+license = "MIT OR Apache-2.0"
+readme = "../../README.md"
+documentation = "https://docs.rs/wc3"
+keywords = ["warcraft", "mdx", "mdl", "model", "binary"]
+categories = ["parser-implementations", "game-development"]
+
+[dependencies]
+bitfield = "0.19"
+wc3-derive = { path = "../wc3-derive", version = "0.1.0" }

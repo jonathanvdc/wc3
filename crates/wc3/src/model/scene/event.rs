@@ -1,0 +1,123 @@
+//! Event objects stored in `EVTS` chunks.
+use crate::model::mdx;
+use crate::model::Encoder;
+use crate::model::KnownChunk;
+use crate::model::ModelVersion;
+use crate::model::Tag;
+use crate::model::WriteError;
+
+use crate::model::{Cursor, EventObjectsChunk};
+use crate::model::{Model, Node, ReadError};
+
+const TRACK_TAG: Tag = *b"KEVT";
+
+/// A node followed by an event track.
+#[derive(Clone, Debug, PartialEq)]
+pub struct EventObject {
+    node: Node,
+    global_sequence_id: u32,
+    frames: Vec<u32>,
+}
+
+impl EventObject {
+    /// Creates an event object from a node, global sequence ID, and frame times.
+    pub fn new(node: Node, global_sequence_id: u32, frames: &[u32]) -> Self {
+        Self {
+            node,
+            global_sequence_id,
+            frames: frames.to_vec(),
+        }
+    }
+
+    /// Borrows its shared node.
+    pub fn node(&self) -> &Node {
+        &self.node
+    }
+
+    /// Borrows its shared node for editing.
+    pub fn node_mut(&mut self) -> &mut Node {
+        &mut self.node
+    }
+
+    /// Returns the global sequence ID, or `u32::MAX` when absent.
+    pub fn global_sequence_id(&self) -> u32 {
+        self.global_sequence_id
+    }
+
+    /// Sets the global sequence reference without changing event frames.
+    pub fn set_global_sequence_id(&mut self, id: u32) {
+        self.global_sequence_id = id;
+    }
+
+    /// Borrows event frame times in source order.
+    pub fn frames(&self) -> &[u32] {
+        &self.frames
+    }
+
+    /// Replaces event frame times.
+    pub fn set_frames(&mut self, frames: &[u32]) {
+        self.frames = frames.to_vec();
+    }
+}
+
+impl<V: ModelVersion> Model<V> {
+    /// Decodes all event objects in `EVTS` chunks.
+    pub fn event_objects(&self) -> Vec<EventObject> {
+        self.collect_chunk_records::<EventObjectsChunk>()
+    }
+
+    /// Replaces event objects in the first `EVTS` chunk.
+    pub fn set_event_objects(&mut self, events: &[EventObject]) {
+        self.replace_chunk(EventObjectsChunk::new(events.to_vec()));
+    }
+}
+
+impl mdx::Read for EventObject {
+    fn read_from(cursor: &mut Cursor<'_>) -> Result<Self, ReadError> {
+        let mut probe = *cursor;
+        let node_size = probe.read::<u32>()? as usize;
+        let node = Node::decode(cursor.read_exact(node_size)?)?;
+        let offset = cursor.absolute_position();
+        if cursor.read_exact(4)? != TRACK_TAG {
+            return Err(ReadError::MalformedRecord {
+                tag: EventObjectsChunk::TAG,
+                offset,
+            });
+        }
+        let count = cursor.read::<u32>()? as usize;
+        let global_sequence_id = cursor.read()?;
+        let mut frames = Vec::new();
+        for _ in 0..count {
+            frames.push(cursor.read()?);
+        }
+        Ok(Self {
+            node,
+            global_sequence_id,
+            frames,
+        })
+    }
+}
+
+impl mdx::Write for EventObject {
+    fn write_to(&self, bytes: &mut Encoder<'_>) -> Result<(), WriteError> {
+        let start = bytes.position();
+        bytes.write(&self.node)?;
+        bytes.write_bytes(&TRACK_TAG);
+        let count = u32::try_from(self.frames.len()).map_err(|_| WriteError::ChunkTooLarge {
+            tag: EventObjectsChunk::TAG,
+            size: self.frames.len(),
+        })?;
+        bytes.write(&(count))?;
+        bytes.write(&(self.global_sequence_id))?;
+        for frame in &self.frames {
+            bytes.write(frame)?;
+        }
+        if bytes.position() - start > u32::MAX as usize {
+            return Err(WriteError::ChunkTooLarge {
+                tag: EventObjectsChunk::TAG,
+                size: bytes.position() - start,
+            });
+        }
+        Ok(())
+    }
+}

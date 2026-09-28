@@ -1,6 +1,6 @@
-# wc3-mdx
+# wc3
 
-Pure Rust Warcraft III MDX reader and writer for Classic and Reforged models.
+Pure Rust Warcraft III model codecs, with MDX reading and writing for Classic and Reforged models.
 The crate keeps decoded chunks in file order. Unknown chunks retain their
 exact payload bytes. Known chunks that cannot be decoded return an error.
 Typed models are available for MDX versions 800, 900, 1000, 1100, 1200, and 1800.
@@ -16,10 +16,14 @@ coverage across the entire game collection has not yet been verified.
 
 ## Rust API
 
+Model types live under `wc3::model`. The `mdx` and `mdl` modules each expose
+`Read` and `Write` traits and derives; use qualified names such as
+`#[derive(mdx::Read, mdx::Write, mdl::Read, mdl::Write)]` to distinguish formats.
+
 ```rust
-use wc3_mdx::{DynamicModel, Model, V800};
-use wc3_mdx::io::{Readable, Writable};
-use wc3_mdx::scene::ModelInfo;
+use wc3::model::{DynamicModel, Model, V800};
+use wc3::model::mdx::{Read as _, Write as _};
+use wc3::model::scene::ModelInfo;
 
 let mut model = Model::<V800>::new();
 model.set_model_info(&ModelInfo::new("Example")?);
@@ -33,7 +37,7 @@ assert!(matches!(DynamicModel::decode(&encoded, 800)?, DynamicModel::V800(_)));
 ```
 
 Constructors and setters that can reject values return `ValueError`. Binary
-decoding returns `DecodeError`; encoding returns `EncodeError`.
+decoding returns `mdx::ReadError`; encoding returns `mdx::WriteError`.
 
 `Model<V>::chunks()` exposes `chunks::ModelChunk<V>` variants. Versioned records
 in those chunks also carry `V`. An `Unknown` chunk can only use a tag that the
@@ -57,13 +61,13 @@ fixed-width names, and optional section order. Geoset accessors such as
 Conversions build a new typed model and leave the source intact:
 
 ```rust
-use wc3_mdx::{ConversionOptions, Model, V800, V1100};
+use wc3::model::{ConversionOptions, Model, V800, V1100};
 
 let source = Model::<V800>::new();
 let converted = source.convert::<V1100>(&ConversionOptions::strict())?;
 let target: Model<V1100> = converted.model;
 let report = converted.report;
-# Ok::<(), wc3_mdx::ConversionError>(())
+# Ok::<(), wc3::model::ConversionError>(())
 ```
 
 `DynamicModel` and the versioned material, layer, geoset, light, and camera
@@ -98,15 +102,15 @@ format data; they do not guarantee identical rendering across game versions.
 
 ## MDL primitives
 
-`wc3_mdx::mdl` provides a borrowing `Lexer`, a copyable `Parser` with one token
-of lookahead, source-span diagnostics, and an `MdlWriter<W: std::io::Write>`.
+`wc3::model::mdl` provides a borrowing `Lexer`, a copyable `Parser` with one token
+of lookahead, source-span diagnostics, and an `mdl::Writer<W: std::io::Write>`.
 Parsing operates on resident UTF-8 text without an AST or a token buffer.
 Strings retain literal backslashes and embedded line breaks. Only `//` comments
 are supported. Numeric readers check ranges and accept the MDL non-finite float
 literals; finite float output round-trips exactly, including negative zero.
 NaN payload bits are not preserved by text output.
 
-`MdlRead` / `MdlWrite` implementations currently cover `Texture` (`Bitmap`),
+`mdl::Read` / `mdl::Write` implementations currently cover `Texture` (`Bitmap`),
 `Sequence` (`Anim`, including `SyncPoint`), `ModelInfo` (`Model`),
 `GlobalSequence` (`Duration`), and `PivotPoint` (an anonymous vector entry). Readers accept fields
 in any order, apply defaults, and reject unknown or duplicate fields. An `Anim`
@@ -117,9 +121,9 @@ Counted lists yield records on demand, so individual records can go directly
 into the binary encoder:
 
 ```rust
-use wc3_mdx::animation::GlobalSequence;
-use wc3_mdx::mdl::Parser;
-use wc3_mdx::Encoder;
+use wc3::model::animation::GlobalSequence;
+use wc3::model::mdl::Parser;
+use wc3::model::mdx::Encoder;
 
 let mut parser = Parser::new("GlobalSequences 2 { Duration 1000, Duration 2500, }");
 parser.expect_ident("GlobalSequences")?;
@@ -144,7 +148,7 @@ text rather than silently losing binary data. Literal quotes and NUL cannot be
 written inside strings. Errors may leave partial output. Use
 `error.diagnostic(source)` to display line/column and the offending source span.
 
-`#[derive(MdlRead, MdlWrite)]` generates codecs for named-field structs with
+`#[derive(mdl::Read, mdl::Write)]` generates codecs for named-field structs with
 `#[mdl(block = "Name")]`. Fields explicitly specify `header`,
 `property = "Name"`, `flag = "Name"` (bool), or `skip`. Properties and flags are
 required unless given `default` or a `default = "factory"`; skipped fields need
