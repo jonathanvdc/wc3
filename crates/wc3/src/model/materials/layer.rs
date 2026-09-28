@@ -36,6 +36,10 @@ bitfield! {
     pub unshaded, set_unshaded: 0;
     /// Returns or changes the `SPHERE_ENV_MAP` bit.
     pub sphere_env_map, set_sphere_env_map: 1;
+    /// Returns or changes the layer U wrap bit (separate from texture flags).
+    pub wrap_width, set_wrap_width: 2;
+    /// Returns or changes the layer V wrap bit (separate from texture flags).
+    pub wrap_height, set_wrap_height: 3;
     /// Returns or changes the `TWO_SIDED` bit.
     pub two_sided, set_two_sided: 4;
     /// Returns or changes the `UNFOGGED` bit.
@@ -46,6 +50,10 @@ bitfield! {
     pub no_depth_set, set_no_depth_set: 7;
     /// Returns or changes the `UNLIT` bit.
     pub unlit, set_unlit: 8;
+    /// Returns or changes back-face shadow casting.
+    pub back_faces_for_shadows, set_back_faces_for_shadows: 9;
+    /// Returns or changes ambient occlusion participation.
+    pub ambient_occlusion, set_ambient_occlusion: 10;
 }
 
 /// A Reforged layer texture slot, optionally animated by `KMTF`.

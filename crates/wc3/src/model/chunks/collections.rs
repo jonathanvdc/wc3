@@ -6,9 +6,9 @@ use crate::model::{ModelVersion, Tag};
 use std::marker::PhantomData;
 
 use crate::model::{
-    Attachment, Bone, Camera, CollisionShape, EventObject, FaceFx, Geoset, GeosetAnimation, Light,
-    Material, Node, ParticleEmitter, ParticleEmitter2, PopcornEmitter, RibbonEmitter, Sequence,
-    Texture, TextureAnimation,
+    Attachment, Bone, Camera, CollisionShape, EventObject, FaceFx, Geoset, GeosetAnimation, Glider,
+    Light, Material, Node, ParticleEmitter, ParticleEmitter2, PopcornEmitter, RibbonEmitter,
+    Sequence, Texture, TextureAnimation,
 };
 use crate::model::{Chunk, Cursor, KnownChunk, ReadError};
 use crate::model::{GlobalSequence, PivotPoint};
@@ -181,6 +181,7 @@ record_collection!(RibbonEmittersChunk, RibbonEmitter, *b"RIBB");
 record_collection!(TextureAnimationsChunk, TextureAnimation, *b"TXAN");
 record_collection!(GlobalSequencesChunk, GlobalSequence, *b"GLBS");
 record_collection!(PivotPointsChunk, PivotPoint, *b"PIVT");
+record_collection!(GlidersChunk, Glider, *b"DILG");
 
 #[cfg(test)]
 mod tests {

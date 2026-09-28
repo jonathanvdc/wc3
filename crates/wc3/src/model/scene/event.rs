@@ -16,12 +16,12 @@ const TRACK_TAG: Tag = *b"KEVT";
 pub struct EventObject {
     node: Node,
     global_sequence_id: u32,
-    frames: Vec<u32>,
+    frames: Vec<i32>,
 }
 
 impl EventObject {
     /// Creates an event object from a node, global sequence ID, and frame times.
-    pub fn new(node: Node, global_sequence_id: u32, frames: &[u32]) -> Self {
+    pub fn new(node: Node, global_sequence_id: u32, frames: &[i32]) -> Self {
         Self {
             node,
             global_sequence_id,
@@ -49,13 +49,13 @@ impl EventObject {
         self.global_sequence_id = id;
     }
 
-    /// Borrows event frame times in source order.
-    pub fn frames(&self) -> &[u32] {
+    /// Borrows signed event frame times in source order (including animation lead-in).
+    pub fn frames(&self) -> &[i32] {
         &self.frames
     }
 
     /// Replaces event frame times.
-    pub fn set_frames(&mut self, frames: &[u32]) {
+    pub fn set_frames(&mut self, frames: &[i32]) {
         self.frames = frames.to_vec();
     }
 }

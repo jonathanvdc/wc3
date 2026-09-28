@@ -253,7 +253,7 @@ pub struct Light<V: ModelVersion> {
 }
 
 impl<V: ModelVersion> Light<V> {
-    /// Creates a light with zeroed lighting values.
+    /// Creates a light with white colors and the format defaults for versioned fields.
     pub fn new(node: Node, light_type: u32) -> Self {
         Self {
             node,
@@ -261,9 +261,9 @@ impl<V: ModelVersion> Light<V> {
             shadow_casting: V::ShadowCasting::default(),
             attenuation_start: 0.0,
             attenuation_end: 0.0,
-            color: [0.0; 3],
+            color: [1.0; 3],
             intensity: 0.0,
-            ambient_color: [0.0; 3],
+            ambient_color: [1.0; 3],
             ambient_intensity: 0.0,
             shadow_intensity: V::ShadowIntensity::default(),
             shadow_range: V::ShadowRange::default(),

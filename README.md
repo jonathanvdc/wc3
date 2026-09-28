@@ -1,9 +1,13 @@
 # wc3
 
 Pure Rust Warcraft III model codecs, with MDX reading and writing for Classic and Reforged models.
+
+The [MDL support contract and coverage inventory](docs/MDL_SUPPORT.md) records
+the agreed dialect behavior, preservation rules, and remaining codec work.
 The crate keeps decoded chunks in file order. Unknown chunks retain their
 exact payload bytes. Known chunks that cannot be decoded return an error.
-Typed models are available for MDX versions 800, 900, 1000, 1100, 1200, and 1800.
+Typed models are available for MDX versions 800, 900, 1000, 1100, 1200, 1300,
+1400, 1600, and 1800.
 
 Typed access covers the standard model, sequence, material, texture, geoset,
 node, animation, emitter, light, camera, attachment, collision, face effect,
@@ -103,7 +107,7 @@ format data; they do not guarantee identical rendering across game versions.
 ## MDL primitives
 
 `wc3::model::mdl` provides a borrowing `Lexer`, a copyable `Parser` with one token
-of lookahead, source-span diagnostics, and an `mdl::Writer<W: std::io::Write>`.
+of lookahead, source-span diagnostics, and an `mdl::MdlWriter<W: std::io::Write>`.
 Parsing operates on resident UTF-8 text without an AST or a token buffer.
 Strings retain literal backslashes and embedded line breaks. Only `//` comments
 are supported. Numeric readers check ranges and accept the MDL non-finite float
@@ -177,3 +181,24 @@ an 80-byte name followed by a separate 260-byte animation-file path, exposed by
 `animation_file_name()` and `set_animation_file_name()`. Editing the name preserves
 the animation-file bytes. The supported MDL Model block has no animation-file
 property, so nonzero animation-file data is rejected on MDL output.
+
+## MDL model foundations
+
+Event frame APIs use signed `i32` times, including negative lead-in frames.
+Material priority planes also use `i32`; PRE2 priority remains unsigned.
+These signed API changes preserve the existing four-byte binary layout.
+
+`scene::CameraTrack` includes visibility and the three depth-of-field tracks.
+Its scalar DOF helpers construct stepped keys at frame zero, and MDL output
+uses the keyed spellings to avoid the client's scalar focal-length/f-stop swap.
+`materials::ShaderType` maps the four named shader IDs (0, 1, 2, 24), while
+layer storage continues retaining arbitrary raw IDs.
+
+`scene::Glider` and `chunks::GlidersChunk` represent the `DILG` world-picking
+whitelist. `gliders()` / `set_gliders()` work on every typed version and through
+`CommonModelAccess` on runtime models. Clearing the list removes its chunks.
+Gliders have no version gate and are preserved during conversion.
+
+New light constructors use white direct and ambient colors. New Popcorn
+emitters use white color and unit lifespan, emission rate, speed, and alpha.
+Binary decoding retains the values actually stored in the file.

@@ -42,15 +42,15 @@ pub struct PopcornEmitter {
 }
 
 impl PopcornEmitter {
-    /// Creates an emitter with zeroed physical values.
+    /// Creates an emitter with unit lifespan, emission rate, speed, alpha, and white color.
     pub fn new(node: Node, path: &str, visibility_guide: &str) -> Result<Self, ValueError> {
         let mut emitter = Self {
             node,
-            life_span: 0.0,
-            emission_rate: 0.0,
-            speed: 0.0,
-            color: [0.0; 3],
-            alpha: 0.0,
+            life_span: 1.0,
+            emission_rate: 1.0,
+            speed: 1.0,
+            color: [1.0; 3],
+            alpha: 1.0,
             replaceable_id: 0,
             path: FixedText::default(),
             visibility_guide: FixedText::default(),

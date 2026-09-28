@@ -12,3 +12,6 @@ fn write_count(bytes: &mut Encoder<'_>, count: usize, tag: Tag) -> Result<(), Wr
     bytes.write(&(value))?;
     Ok(())
 }
+
+mod shader;
+pub use shader::ShaderType;

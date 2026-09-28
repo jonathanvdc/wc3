@@ -16,3 +16,6 @@ pub use model_info::ModelInfo;
 pub use camera::CameraTrack;
 pub use light::LightTrack;
 pub use node::NodeTrack;
+
+mod glider;
+pub use glider::Glider;

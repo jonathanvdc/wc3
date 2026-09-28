@@ -2,12 +2,14 @@ use crate::model::animation::{GeosetAnimation, Sequence, TextureAnimation};
 use crate::model::emitters::{ParticleEmitter, ParticleEmitter2, PopcornEmitter, RibbonEmitter};
 use crate::model::geometry::{BindPoseMatrix, CollisionShape};
 use crate::model::materials::Texture;
-use crate::model::scene::{Attachment, Bone, EventObject, FaceFx, ModelInfo, Node};
+use crate::model::scene::{Attachment, Bone, EventObject, FaceFx, Glider, ModelInfo, Node};
 use crate::model::visit_model;
 use crate::model::{DynamicModel, Model, ModelVersion, ValueError, Vec3};
 
 /// Accessors whose record types do not depend on the model version.
 pub trait CommonModelAccess {
+    fn gliders(&self) -> Vec<Glider>;
+    fn set_gliders(&mut self, gliders: &[Glider]);
     fn sequences(&self) -> Vec<Sequence>;
     fn set_sequences(&mut self, sequences: &[Sequence]);
     fn global_sequences(&self) -> Vec<u32>;
@@ -41,6 +43,13 @@ pub trait CommonModelAccess {
 }
 
 impl<V: ModelVersion> CommonModelAccess for Model<V> {
+    fn gliders(&self) -> Vec<Glider> {
+        Model::gliders(self)
+    }
+    fn set_gliders(&mut self, gliders: &[Glider]) {
+        Model::set_gliders(self, gliders)
+    }
+
     fn sequences(&self) -> Vec<Sequence> {
         Model::sequences(self)
     }
@@ -134,6 +143,13 @@ impl<V: ModelVersion> CommonModelAccess for Model<V> {
 }
 
 impl CommonModelAccess for DynamicModel {
+    fn gliders(&self) -> Vec<Glider> {
+        visit_model!(self, |model| model.gliders())
+    }
+    fn set_gliders(&mut self, gliders: &[Glider]) {
+        visit_model!(self, |model| model.set_gliders(gliders))
+    }
+
     fn sequences(&self) -> Vec<Sequence> {
         visit_model!(self, |model| model.sequences())
     }

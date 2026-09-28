@@ -280,6 +280,7 @@ impl<V: ModelVersion> Model<V> {
                 ModelChunk::FaceFx(value) => ModelChunk::FaceFx(value.clone()),
                 ModelChunk::PivotPoints(value) => ModelChunk::PivotPoints(value.clone()),
                 ModelChunk::BindPose(value) => ModelChunk::BindPose(value.clone()),
+                ModelChunk::Gliders(value) => ModelChunk::Gliders(value.clone()),
             };
             model.push(converted);
         }

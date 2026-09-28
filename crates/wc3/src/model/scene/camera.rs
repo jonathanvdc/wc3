@@ -1,6 +1,6 @@
 //! Typed camera records in `CAMS` chunks.
 use crate::model::animation::{
-    AnimationTrack, CameraRotation, CameraTargetTranslation, CameraTranslation,
+    AnimationTrack, CameraRotation, CameraTargetTranslation, CameraTranslation, ValueKeyframe,
 };
 use crate::model::conversion::ConversionContext;
 use crate::model::mdl;
@@ -14,6 +14,10 @@ crate::model::animation::track_group! {
         Translation: CameraTranslation,
         TargetTranslation: CameraTargetTranslation,
         Rotation: CameraRotation,
+        Visibility: CameraVisibility,
+        FocusDistance: CameraFocusDistance,
+        FocalLength: CameraFocalLength,
+        FStop: CameraFStop,
     }
 }
 
@@ -309,12 +313,52 @@ impl mdl::Read for CameraTrack {
             Some(TokenKind::Ident("Rotation")) => Ok(Self::Rotation(
                 parser.read::<AnimationTrack<CameraRotation>>()?,
             )),
+            Some(TokenKind::Ident("DOFDistance")) => {
+                parser.next_token()?;
+                Ok(Self::focus_distance(parser.read_property()?))
+            }
+            Some(TokenKind::Ident("FocalLength")) => {
+                parser.next_token()?;
+                Ok(Self::focal_length(parser.read_property()?))
+            }
+            Some(TokenKind::Ident("FStop")) => {
+                parser.next_token()?;
+                Ok(Self::f_stop(parser.read_property()?))
+            }
+            Some(TokenKind::Ident("Visibility")) => Ok(Self::Visibility(parser.read()?)),
+            Some(TokenKind::Ident("FocusDistanceKeys")) => Ok(Self::FocusDistance(parser.read()?)),
+            Some(TokenKind::Ident("FocalLengthKeys")) => Ok(Self::FocalLength(parser.read()?)),
+            Some(TokenKind::Ident("FStopKeys")) => Ok(Self::FStop(parser.read()?)),
             _ => Err(parser.error(ReadErrorKind::UnknownField)),
         }
     }
 }
 
 impl CameraTrack {
+    /// Represents a constant focus distance as a stepped key at time zero.
+    pub fn focus_distance(value: f32) -> Self {
+        Self::FocusDistance(
+            AnimationTrack::step(vec![ValueKeyframe { frame: 0, value }], None)
+                .expect("one key without a global sequence is valid"),
+        )
+    }
+
+    /// Represents a constant focal length as a stepped key at time zero.
+    pub fn focal_length(value: f32) -> Self {
+        Self::FocalLength(
+            AnimationTrack::step(vec![ValueKeyframe { frame: 0, value }], None)
+                .expect("one key without a global sequence is valid"),
+        )
+    }
+
+    /// Represents a constant f-stop as a stepped key at time zero.
+    pub fn f_stop(value: f32) -> Self {
+        Self::FStop(
+            AnimationTrack::step(vec![ValueKeyframe { frame: 0, value }], None)
+                .expect("one key without a global sequence is valid"),
+        )
+    }
+
     /// Reads a track inside an already opened Camera Target block.
     /// The enclosing record reader owns Target framing and Position properties.
     pub fn read_mdl_target(parser: &mut Parser<'_>) -> Result<Self, mdl::ReadError> {
@@ -342,6 +386,10 @@ impl mdl::Write for CameraTrack {
         match self {
             Self::Translation(track) => writer.write(track),
             Self::Rotation(track) => writer.write(track),
+            Self::Visibility(track) => writer.write(track),
+            Self::FocusDistance(track) => writer.write(track),
+            Self::FocalLength(track) => writer.write(track),
+            Self::FStop(track) => writer.write(track),
             Self::TargetTranslation(_) => Err(mdl::WriteError::Unsupported(
                 "target translation requires a Target block",
             )),

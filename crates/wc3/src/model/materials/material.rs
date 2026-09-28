@@ -24,6 +24,10 @@ bitfield! {
     pub bits, _: 31, 0;
     /// Returns or changes the `CONSTANT_COLOR` bit.
     pub constant_color, set_constant_color: 0;
+    /// Returns or changes the historical `TWO_SIDED` bit.
+    pub two_sided, set_two_sided: 1;
+    /// Returns or changes the historical `SORT_PRIMITIVES_NEAR_Z` bit.
+    pub sort_primitives_near_z, set_sort_primitives_near_z: 3;
     /// Returns or changes the `SORT_PRIMITIVES_FAR_Z` bit.
     pub sort_primitives_far_z, set_sort_primitives_far_z: 4;
     /// Returns or changes the `FULL_RESOLUTION` bit.
@@ -34,7 +38,7 @@ bitfield! {
 #[derive(Clone, Debug, PartialEq)]
 pub struct Material<V: ModelVersion> {
     version: PhantomData<V>,
-    priority_plane: u32,
+    priority_plane: i32,
     render_mode: MaterialRenderFlags,
     shader: V::Shader,
     layers: Vec<Layer<V>>,
@@ -189,11 +193,11 @@ impl<V: ModelVersion> Material<V> {
         V::NUMBER
     }
     /// Returns the material priority plane.
-    pub fn priority_plane(&self) -> u32 {
+    pub fn priority_plane(&self) -> i32 {
         self.priority_plane
     }
     /// Changes the material priority plane.
-    pub fn set_priority_plane(&mut self, value: u32) {
+    pub fn set_priority_plane(&mut self, value: i32) {
         self.priority_plane = value;
     }
     /// Returns decoded rendering flags.

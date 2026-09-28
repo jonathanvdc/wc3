@@ -137,6 +137,7 @@ model_chunks! {
     FaceFx(FaceFxChunk),
     PivotPoints(PivotPointsChunk),
     BindPose(BindPoseChunk),
+    Gliders(GlidersChunk),
 }
 
 impl<V: ModelVersion> ModelChunk<V> {
