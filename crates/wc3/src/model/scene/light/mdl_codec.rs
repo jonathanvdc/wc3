@@ -49,7 +49,6 @@ fn read_shadow_intensity<V: ModelVersion>(parser: &mut Parser<'_>) -> Result<f32
         quadratic,
         linear,
         damping,
-        visibility,
         tracks
     ),
     after_read = "Self::finish",
@@ -105,13 +104,6 @@ struct LightMdl<V: ModelVersion> {
     )]
     ambient_intensity: f32,
     #[mdl(
-        animatable = "Visibility",
-        track = "LightTrack::Visibility",
-        default = "zero",
-        animated_only
-    )]
-    visibility: f32,
-    #[mdl(
         animatable = "ShadowCastingStart",
         track = "LightTrack::ShadowCastingStart",
         default = "zero",
@@ -151,7 +143,7 @@ struct LightMdl<V: ModelVersion> {
         enable_with = "Self::mark_falloff"
     )]
     damping: f32,
-    #[mdl(tracks)]
+    #[mdl(tracks, channels(Visibility = "LightTrack::Visibility"))]
     tracks: Vec<LightTrack>,
     #[mdl(skip, default)]
     range_present: bool,
@@ -254,7 +246,6 @@ impl<V: ModelVersion> mdl::Write for Light<V> {
             intensity: self.intensity,
             ambient_color: self.ambient_color,
             ambient_intensity: self.ambient_intensity,
-            visibility: 0.0,
             shadow_start: range.start,
             shadow_end: range.end,
             quadratic: falloff.quadratic,
