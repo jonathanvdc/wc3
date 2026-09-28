@@ -109,6 +109,19 @@ impl<W: IoWrite> MdlWriter<W> {
         self.write(value)?;
         self.raw(",\n")
     }
+    /// Writes the fixed form of an animatable property.
+    pub fn static_property<T: Write + ?Sized>(
+        &mut self,
+        name: &str,
+        value: &T,
+    ) -> Result<(), WriteError> {
+        self.indent()?;
+        self.raw("static ")?;
+        self.identifier(name)?;
+        self.raw(" ")?;
+        self.write(value)?;
+        self.raw(",\n")
+    }
     pub fn flag(&mut self, name: &str) -> Result<(), WriteError> {
         self.indent()?;
         self.identifier(name)?;

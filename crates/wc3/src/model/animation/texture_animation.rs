@@ -17,6 +17,8 @@ use crate::model::Model;
 use crate::model::TextureAnimationsChunk;
 
 /// A texture animation containing translation, rotation, and scaling tracks.
+/// MDL uses a `TVertexAnim` block inside `TextureAnims`. Its transform channels
+/// are animation tracks only; there are no `static` transform properties.
 #[derive(Clone, Debug, Default, PartialEq, mdx::Read, mdx::Write)]
 #[mdx(sized(tag = TextureAnimationsChunk::TAG))]
 pub struct TextureAnimation {

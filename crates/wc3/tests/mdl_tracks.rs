@@ -233,3 +233,87 @@ fn camera_translation_dispatch_requires_context() {
     let mut writer = MdlWriter::new(Vec::new());
     assert!(eye.write_mdl_target(&mut writer).is_err());
 }
+
+#[test]
+fn texture_anims_spec_container_transcodes_without_losing_tracks() {
+    use wc3::model::mdl::{MdlWriter, Parser};
+    use wc3::model::mdx::{Read as _, Write as _};
+    let source = r#"TextureAnims 2 {
+        TVertexAnim {
+            Translation 2 {
+                Linear,
+                0: { 0.0, 0.0, 0.0 },
+                1000: { 1.0, 0.0, 0.0 },
+            }
+        }
+        TVertexAnim {
+            Scaling 1 { DontInterp, -3600: { 1.0, 2.0, 3.0 }, }
+            Rotation 1 {
+                Hermite,
+                GlobalSeqId 0,
+                -3600: { 0.0, 0.0, 0.0, 1.0 },
+                    InTan { 0.0, 0.0, 0.0, 1.0 },
+                    OutTan { 0.0, 0.0, 0.0, 1.0 },
+            }
+            Translation 0 { Bezier, }
+        }
+    }"#;
+    let mut parser = Parser::new(source);
+    parser.expect_ident("TextureAnims").unwrap();
+    let animations = parser
+        .counted::<TextureAnimation>()
+        .unwrap()
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
+    parser.finish().unwrap();
+    let mut writer = MdlWriter::new(Vec::new());
+    writer.counted("TextureAnims", animations.iter()).unwrap();
+    let output = String::from_utf8(writer.finish().unwrap()).unwrap();
+    assert!(output.contains("\t\t\t\tInTan"));
+    let mut parser = Parser::new(&output);
+    parser.expect_ident("TextureAnims").unwrap();
+    let decoded = parser
+        .counted::<TextureAnimation>()
+        .unwrap()
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
+    parser.finish().unwrap();
+    assert_eq!(decoded, animations);
+    for animation in animations {
+        let bytes = animation.encode_mdx().unwrap();
+        let binary = TextureAnimation::decode_mdx(&bytes).unwrap();
+        let text = binary.encode_mdl().unwrap();
+        assert_eq!(
+            TextureAnimation::decode_mdl(&text)
+                .unwrap()
+                .encode_mdx()
+                .unwrap(),
+            bytes
+        );
+    }
+}
+
+#[test]
+fn texture_animation_has_no_static_transform_fields() {
+    for property in [
+        "static Translation { 0.0, 0.0, 0.0 },",
+        "static Rotation { 0.0, 0.0, 0.0, 1.0 },",
+        "static Scaling { 1.0, 1.0, 1.0 },",
+    ] {
+        let source = format!("TVertexAnim {{ {property} }}");
+        let error = TextureAnimation::decode_mdl(&source).unwrap_err();
+        assert_eq!(error.kind, ReadErrorKind::UnknownField);
+        assert_eq!(&source[error.span.start..error.span.end], "static");
+    }
+    assert!(TextureAnimation::decode_mdl("TVertexAnim { }")
+        .unwrap()
+        .tracks()
+        .is_empty());
+    for name in ["Translation", "Rotation", "Scaling"] {
+        let source = format!("TVertexAnim {{ {name} 0 {{ Linear, }} {name} 0 {{ Linear, }} }}");
+        assert_eq!(
+            TextureAnimation::decode_mdl(&source).unwrap_err().kind,
+            ReadErrorKind::DuplicateField
+        );
+    }
+}

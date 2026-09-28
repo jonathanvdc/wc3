@@ -13,6 +13,10 @@
 //! global sequences. CameraTrack's Read/Write codecs operate in the camera body;
 //! its read_mdl_target/write_mdl_target methods operate inside a Target body,
 //! whose framing and Position property belong to the enclosing record codec.
+//! GeosetAnim (`GeosetAnimation`) supports static or animated Alpha and Color.
+//! Missing channels keep full alpha and white color; a Color property enables
+//! the color-use flag. Writers reject unknown flags, duplicate tracks, and base
+//! values or color-use states that the text representation would discard.
 //! Whole-model conversion is not implemented yet.
 //!
 //! ```
