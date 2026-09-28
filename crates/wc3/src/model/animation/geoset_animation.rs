@@ -33,7 +33,6 @@ bitfield! {
 #[mdl(
     block = "GeosetAnim",
     default,
-    validate_write = "Self::validate_mdl_write",
     write_order(alpha, flags, geoset_id, color, tracks)
 )]
 pub struct GeosetAnimation {
@@ -135,37 +134,5 @@ impl GeosetAnimation {
     }
     fn enable_color(&mut self) {
         self.flags.set_color(true);
-    }
-
-    fn validate_mdl_write(&self) -> Result<(), mdl::WriteError> {
-        let defaults = Self::default();
-        let alpha_track = self
-            .tracks
-            .iter()
-            .any(|track| matches!(track, GeosetTrack::Alpha(_)));
-        let color_track = self
-            .tracks
-            .iter()
-            .any(|track| matches!(track, GeosetTrack::Color(_)));
-        if alpha_track && self.alpha.to_bits() != defaults.alpha.to_bits() {
-            return Err(mdl::WriteError::Unsupported(
-                "nondefault base alpha alongside an animation track",
-            ));
-        }
-        let white = self
-            .color
-            .iter()
-            .zip(defaults.color)
-            .all(|(value, default)| value.to_bits() == default.to_bits());
-        let uses_color = self.flags().color();
-        if color_track && !uses_color {
-            return Err(mdl::WriteError::Unsupported(
-                "color track without the color-use flag",
-            ));
-        }
-        if (color_track || !uses_color) && !white {
-            return Err(mdl::WriteError::Unsupported("base color omitted by MDL"));
-        }
-        Ok(())
     }
 }

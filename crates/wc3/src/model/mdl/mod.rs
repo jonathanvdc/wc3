@@ -116,7 +116,8 @@
 //! field defaults override the record default. A tracks collection always starts
 //! empty, because it records only channels present in the text. Reading requires
 //! Self: Default. Writing also requires it when inheriting flag defaults, so it
-//! can reject cleared flags that omission would restore to true.
+//! can reject cleared flags that omission would restore to true. Writers also
+//! evaluate defaults when checking omitted base values or skip_if properties.
 //!
 //! ## Static and animated properties
 //!
@@ -135,14 +136,8 @@
 //! use wc3::model::mdl;
 //! use wc3::model::mdl::{Read as _, Write as _};
 //!
-//! fn check(value: &Example) -> Result<(), mdl::WriteError> {
-//!     if !value.tracks.is_empty() && value.alpha.to_bits() != 1.0f32.to_bits() {
-//!         return Err(mdl::WriteError::Unsupported("base alpha alongside track"));
-//!     }
-//!     Ok(())
-//! }
 //! #[derive(mdl::Read, mdl::Write)]
-//! #[mdl(block = "Example", default, validate_write = "check")]
+//! #[mdl(block = "Example", default)]
 //! struct Example {
 //!     #[mdl(animatable = "Alpha", track = "GeosetTrack::Alpha")]
 //!     alpha: f32,
@@ -168,9 +163,15 @@
 //! The writer omits the static property when disabled and rejects a track for a
 //! disabled property. Enable hooks run in field declaration order.
 //!
-//! Keep representability rules in `validate_write`: the derive does not compare
-//! base values with defaults or detect hidden values omitted by predicates.
-//! Bitwise float checks preserve signed zero; ordinary PartialEq is insufficient.
+//! Writers compare omitted animatable base values and skip_if properties with
+//! the defaults the reader restores, rejecting differences before any output.
+//! The omission decision is evaluated once and reused when writing. Checked
+//! field types require ValueEq: floats compare by bits, preserving signed zero,
+//! while all NaNs compare alike because MDL preserves only their class. Arrays
+//! compare component by component. Custom value types with codec hooks can
+//! implement ValueEq using the equality appropriate to those hooks.
+//! `validate_write` remains available for record-specific constraints and opaque
+//! skipped storage whose representation the field attributes do not describe.
 //! Animatable fields do not support read_with/write_with value hooks. Static
 //! properties support those hooks with the same comma framing as properties.
 //!
@@ -184,9 +185,10 @@
 //! factory defaults, codec hooks, and omission predicates are not supported on
 //! a packed mapping. `allow_bits = MASK` additionally permits bits represented
 //! indirectly by other properties or hooks; those bits are not printed as flags
-//! and must not overlap mapped masks. Use validate_write to ensure they are
-//! preserved. GeosetAnimation uses this for the color-use bit. Flags are printed
-//! in their mapping declaration order.
+//! and must not overlap mapped masks. The hooks must account for those bits;
+//! validate_write can check constraints not expressed by the field attributes.
+//! GeosetAnimation uses allow_bits for its color-use bit. Flags are printed in
+//! their mapping declaration order.
 //!
 //! Single-field tuple structs can represent complete properties or anonymous
 //! entries. Both forms consume/emit a trailing comma and support container
@@ -233,6 +235,8 @@ mod lexer;
 pub use lexer::{Lexer, Token, TokenKind};
 mod parser;
 pub use parser::{Block, Counted, Field, Parser};
+mod value_eq;
+pub use value_eq::ValueEq;
 mod writer;
 pub use writer::MdlWriter;
 

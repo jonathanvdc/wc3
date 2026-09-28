@@ -85,6 +85,11 @@ fn required_duplicate_unknown_and_malformed_fields_have_source_spans() {
 
 #[derive(Debug, PartialEq)]
 struct Special(u32);
+impl mdl::ValueEq for Special {
+    fn eq_mdl(&self, other: &Self) -> bool {
+        self == other
+    }
+}
 fn special_default() -> Special {
     Special(7)
 }
