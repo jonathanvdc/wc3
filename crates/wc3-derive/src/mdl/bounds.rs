@@ -1,5 +1,5 @@
 //! Codec bounds, kept separate from emitted parsing and writing code.
-use super::attributes::{track_element, Container, DefaultValue, Field, Kind};
+use super::attributes::{vec_element, Container, DefaultValue, Field, Kind};
 use super::{omission, schema::Schema};
 use syn::{parse_quote, DeriveInput, Generics, Result};
 
@@ -22,6 +22,23 @@ pub(super) fn build(
     let mut generics = input.generics.clone();
     for field in fields {
         let ty = &field.ty;
+        if matches!(field.kind, Kind::Flatten | Kind::Block(_)) {
+            let bound = if reading {
+                parse_quote!(#ty: ::wc3::model::mdl::ReadFields)
+            } else {
+                parse_quote!(#ty: ::wc3::model::mdl::WriteFields)
+            };
+            generics.make_where_clause().predicates.push(bound);
+        }
+        if matches!(field.kind, Kind::Repeated(_) | Kind::Counted(_)) {
+            let element = vec_element(ty)?;
+            let bound = if reading {
+                parse_quote!(#element: ::wc3::model::mdl::Read)
+            } else {
+                parse_quote!(#element: ::wc3::model::mdl::Write)
+            };
+            generics.make_where_clause().predicates.push(bound);
+        }
         if matches!(field.kind, Kind::DelegatedProperty(_)) {
             let bound = if reading {
                 parse_quote!(#ty: ::wc3::model::mdl::ReadProperty)
@@ -53,7 +70,7 @@ pub(super) fn build(
                 .push(parse_quote!(#ty: ::wc3::model::mdl::ValueEq));
         }
         if !reading && matches!(field.kind, Kind::Tracks) {
-            let element = track_element(ty)?;
+            let element = vec_element(ty)?;
             generics
                 .make_where_clause()
                 .predicates

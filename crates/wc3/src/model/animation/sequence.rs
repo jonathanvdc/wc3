@@ -4,7 +4,7 @@ use crate::model::mdl::{is_positive_zero, is_zero};
 use crate::model::mdx;
 use crate::model::ModelVersion;
 use crate::model::ValueError;
-use crate::model::Vec3;
+use crate::model::{GeosetExtent, Vec3};
 use bitfield::bitfield;
 
 use crate::model::SequencesChunk;
@@ -30,16 +30,7 @@ const NAME_SIZE: usize = 80;
 #[derive(Clone, Debug, PartialEq, Default, mdx::Read, mdx::Write, mdl::Read, mdl::Write)]
 #[mdl(
     block = "Anim",
-    write_order(
-        interval,
-        flags,
-        move_speed,
-        rarity,
-        sync_point,
-        minimum_extent,
-        maximum_extent,
-        bounds_radius
-    )
+    write_order(interval, flags, move_speed, rarity, sync_point, extent)
 )]
 pub struct Sequence {
     #[mdl(header)]
@@ -54,12 +45,8 @@ pub struct Sequence {
     rarity: f32,
     #[mdl(property = "SyncPoint", default, skip_if = "is_zero")]
     sync_point: u32,
-    #[mdl(property = "BoundsRadius", default)]
-    bounds_radius: f32,
-    #[mdl(property = "MinimumExtent", default)]
-    minimum_extent: Vec3,
-    #[mdl(property = "MaximumExtent", default)]
-    maximum_extent: Vec3,
+    #[mdl(flatten)]
+    extent: GeosetExtent,
 }
 
 impl Sequence {
@@ -71,9 +58,7 @@ impl Sequence {
             flags: SequenceFlags::default(),
             rarity: 0.0,
             sync_point: 0,
-            bounds_radius: 0.0,
-            minimum_extent: [0.0; 3],
-            maximum_extent: [0.0; 3],
+            extent: GeosetExtent::default(),
         };
         sequence.set_name(name)?;
         Ok(sequence)
@@ -116,22 +101,22 @@ impl Sequence {
         self.sync_point = point;
     }
     pub fn bounds_radius(&self) -> f32 {
-        self.bounds_radius
+        self.extent.bounds_radius
     }
     pub fn set_bounds_radius(&mut self, radius: f32) {
-        self.bounds_radius = radius;
+        self.extent.bounds_radius = radius;
     }
     pub fn minimum_extent(&self) -> Vec3 {
-        self.minimum_extent
+        self.extent.minimum
     }
     pub fn set_minimum_extent(&mut self, extent: Vec3) {
-        self.minimum_extent = extent;
+        self.extent.minimum = extent;
     }
     pub fn maximum_extent(&self) -> Vec3 {
-        self.maximum_extent
+        self.extent.maximum
     }
     pub fn set_maximum_extent(&mut self, extent: Vec3) {
-        self.maximum_extent = extent;
+        self.extent.maximum = extent;
     }
 }
 

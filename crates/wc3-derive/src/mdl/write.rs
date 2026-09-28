@@ -1,6 +1,6 @@
 //! Generation of record writers and preflight validation.
 use super::attributes::{Container, Field, Kind};
-use super::{bounds, omission, schema::Schema, sink_name};
+use super::{bounds, omission, schema::Schema, sink_name, state_type};
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
 use syn::{DeriveInput, Result};
@@ -10,7 +10,7 @@ pub(super) fn expand(
     options: &Container,
     schema: &Schema,
 ) -> Result<TokenStream> {
-    let block = options.block.as_ref().expect("block was checked");
+    let block = options.block.as_ref();
     let name = &input.ident;
     let ordered = schema.ordered.iter().map(|index| &schema.fields[*index]);
     let tracks = schema.tracks();
@@ -21,6 +21,8 @@ pub(super) fn expand(
     let mut headers = Vec::new();
     let mut writes = Vec::new();
     let mut required_flags = Vec::new();
+    let mut state_names = Vec::new();
+    let mut state_types = Vec::new();
     for field in ordered {
         let Field {
             member,
@@ -33,8 +35,37 @@ pub(super) fn expand(
             None => quote!(__wc3_mdl_writer.write(&self.#member)?;),
         };
         match kind {
-            Kind::Header => headers.push(quote! { __wc3_mdl_writer.raw(" ")?; #value }),
+            Kind::Header => {}
             Kind::Skip => {}
+            Kind::Flatten => {
+                let ty = &field.ty;
+                let local = &field.local;
+                state_names.push(local.clone());
+                state_types.push(quote!(<#ty as ::wc3::model::mdl::WriteFields>::State));
+                required_flags.push(quote!(let #local = <#ty as ::wc3::model::mdl::WriteFields>::prepare_mdl_fields(&self.#member)?;));
+                writes.push(quote!(<#ty as ::wc3::model::mdl::WriteFields>::write_mdl_fields(&self.#member, #local, __wc3_mdl_writer)?;));
+            }
+            Kind::Block(mdl_name) => {
+                let ty = &field.ty;
+                let local = &field.local;
+                state_names.push(local.clone());
+                state_types.push(quote!(<#ty as ::wc3::model::mdl::WriteFields>::State));
+                required_flags.push(quote!(let #local = <#ty as ::wc3::model::mdl::WriteFields>::prepare_mdl_fields(&self.#member)?;));
+                writes.push(quote! {
+                    __wc3_mdl_writer.indent()?;
+                    __wc3_mdl_writer.identifier(#mdl_name)?;
+                    <#ty as ::wc3::model::mdl::WriteFields>::write_mdl_headers(&self.#member, __wc3_mdl_writer)?;
+                    __wc3_mdl_writer.open_body()?;
+                    <#ty as ::wc3::model::mdl::WriteFields>::write_mdl_fields(&self.#member, #local, __wc3_mdl_writer)?;
+                    __wc3_mdl_writer.end_block()?;
+                });
+            }
+            Kind::Repeated(_) => {
+                writes.push(quote!(for item in &self.#member { __wc3_mdl_writer.write(item)?; }))
+            }
+            Kind::Counted(mdl_name) => {
+                writes.push(quote!(__wc3_mdl_writer.counted(#mdl_name, self.#member.iter())?;))
+            }
             Kind::DelegatedProperty(mdl_name) => {
                 let ty = &field.ty;
                 required_flags.push(quote!(<#ty as ::wc3::model::mdl::WriteProperty>::validate_mdl_property(&self.#member, #mdl_name)?;));
@@ -56,6 +87,8 @@ pub(super) fn expand(
                 let mut condition = omission::predicate(field, tracks);
                 if omission::needs_check(field) {
                     let emit = format_ident!("{}_emit", field.local);
+                    state_names.push(emit.clone());
+                    state_types.push(quote!(bool));
                     let default = omission::default_value(field, options);
                     required_flags.push(quote! {
                         let #emit = #condition;
@@ -135,6 +168,24 @@ pub(super) fn expand(
             }
         }
     }
+    // Body write_order must not reorder flattened or direct header values.
+    for field in &schema.fields {
+        let member = &field.member;
+        match &field.kind {
+            Kind::Header => {
+                let value = match &field.write_with {
+                    Some(function) => quote!(#function(&self.#member, __wc3_mdl_writer)?;),
+                    None => quote!(__wc3_mdl_writer.write(&self.#member)?;),
+                };
+                headers.push(quote!(__wc3_mdl_writer.raw(" ")?; #value));
+            }
+            Kind::Flatten => {
+                let ty = &field.ty;
+                headers.push(quote!(<#ty as ::wc3::model::mdl::WriteFields>::write_mdl_headers(&self.#member, __wc3_mdl_writer)?;));
+            }
+            _ => {}
+        }
+    }
     let validate = options
         .validate_write
         .as_ref()
@@ -142,19 +193,49 @@ pub(super) fn expand(
     let initialize_defaults = write_defaults
         .then(|| quote!(let __wc3_mdl_write_defaults: Self = ::core::default::Default::default();));
     let sink = sink_name(input);
-    Ok(quote! {
+    let visit_names = schema.visit_names(false);
+    let (state_name, state_definition) =
+        state_type(input, &generics, "Write", &state_names, &state_types);
+    let check_names = schema.fields.iter().any(|field| matches!(field.kind, Kind::Flatten)).then(|| quote! {
+        if !::wc3::model::mdl::field_names_unique(<Self as ::wc3::model::mdl::WriteFields>::visit_mdl_names) {
+            return Err(::wc3::model::mdl::WriteError::Unsupported("overlapping flattened MDL field names"));
+        }
+    });
+    let write_impl = block.map(|block| quote! {
         impl #impl_generics ::wc3::model::mdl::Write for #name #ty_generics #where_clause {
             fn write_mdl<#sink: ::std::io::Write>(&self, __wc3_mdl_writer: &mut ::wc3::model::mdl::MdlWriter<#sink>) -> ::core::result::Result<(), ::wc3::model::mdl::WriteError> {
-                #validate
-                #initialize_defaults
-                #(#required_flags)*
+                let state = <Self as ::wc3::model::mdl::WriteFields>::prepare_mdl_fields(self)?;
                 __wc3_mdl_writer.indent()?;
                 __wc3_mdl_writer.identifier(#block)?;
-                #(#headers)*
+                <Self as ::wc3::model::mdl::WriteFields>::write_mdl_headers(self, __wc3_mdl_writer)?;
                 __wc3_mdl_writer.open_body()?;
-                #(#writes)*
+                <Self as ::wc3::model::mdl::WriteFields>::write_mdl_fields(self, state, __wc3_mdl_writer)?;
                 __wc3_mdl_writer.end_block()
             }
         }
+    });
+    Ok(quote! {
+        #state_definition
+        impl #impl_generics ::wc3::model::mdl::WriteFields for #name #ty_generics #where_clause {
+            type State = #state_name #ty_generics;
+            fn visit_mdl_names(visitor: &mut dyn FnMut(&'static str, bool)) { #visit_names }
+            fn write_mdl_headers<#sink: ::std::io::Write>(&self, __wc3_mdl_writer: &mut ::wc3::model::mdl::MdlWriter<#sink>) -> ::core::result::Result<(), ::wc3::model::mdl::WriteError> {
+                #(#headers)*
+                Ok(())
+            }
+            fn prepare_mdl_fields(&self) -> ::core::result::Result<Self::State, ::wc3::model::mdl::WriteError> {
+                #check_names
+                #validate
+                #initialize_defaults
+                #(#required_flags)*
+                Ok(#state_name { #(#state_names,)* __wc3_mdl_marker: ::core::marker::PhantomData })
+            }
+            fn write_mdl_fields<#sink: ::std::io::Write>(&self, state: Self::State, __wc3_mdl_writer: &mut ::wc3::model::mdl::MdlWriter<#sink>) -> ::core::result::Result<(), ::wc3::model::mdl::WriteError> {
+                let #state_name { #(#state_names,)* .. } = state;
+                #(#writes)*
+                Ok(())
+            }
+        }
+        #write_impl
     })
 }

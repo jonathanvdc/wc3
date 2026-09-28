@@ -474,7 +474,7 @@ fn rejects_invalid_static_and_animation_attributes() {
                 tracks: Option<Track>,
             }
         ),
-        "Vec<TrackEnum>",
+        "Vec<Item>",
     );
     rejects(
         parse_quote!(
@@ -688,5 +688,53 @@ fn delegate_requires_an_ordinary_property_and_cannot_repeat() {
             }
         ),
         "unknown MDL field attribute",
+    );
+}
+
+#[test]
+fn structural_fields_reject_conflicting_policies_and_names() {
+    for (kind, ty, modifier) in [
+        ("flatten", "Common", "default"),
+        ("repeated = \"Child\"", "Vec<Child>", "default"),
+        ("counted = \"Items\"", "Vec<Item>", "skip_if = \"skip\""),
+        ("block = \"Target\"", "Target", "read_with = \"read\""),
+    ] {
+        let input: DeriveInput = syn::parse_str(&format!(
+            "#[mdl(block = \"A\")] struct Bad {{ #[mdl({kind}, {modifier})] value: {ty} }}"
+        ))
+        .unwrap();
+        rejects(input, "structural fields");
+    }
+    rejects(
+        parse_quote!(
+            #[mdl(block = "A")]
+            struct Bad {
+                #[mdl(counted = "Items")]
+                items: u32,
+            }
+        ),
+        "requires Vec",
+    );
+    rejects(
+        parse_quote!(
+            #[mdl(fields, block = "A")]
+            struct Bad {
+                #[mdl(property = "Id")]
+                id: u32,
+            }
+        ),
+        "choose exactly one",
+    );
+    rejects(
+        parse_quote!(
+            #[mdl(block = "A")]
+            struct Bad {
+                #[mdl(repeated = "Child")]
+                children: Vec<Child>,
+                #[mdl(block = "Child")]
+                child: Child,
+            }
+        ),
+        "duplicate MDL field name",
     );
 }

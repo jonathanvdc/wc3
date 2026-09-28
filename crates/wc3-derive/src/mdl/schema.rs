@@ -1,5 +1,6 @@
 //! Validation across fields and the normalized layout used by code generation.
 use super::attributes::{field, Container, Field, Kind};
+use proc_macro2::TokenStream;
 use quote::quote;
 use syn::{Data, DeriveInput, Error, Fields, Result};
 
@@ -9,6 +10,69 @@ pub(super) struct Schema {
 }
 
 impl Schema {
+    pub(super) fn visit_names(&self, reading: bool) -> TokenStream {
+        let mut calls = Vec::new();
+        for field in &self.fields {
+            match &field.kind {
+                Kind::Flatten => {
+                    let ty = &field.ty;
+                    let trait_name = if reading {
+                        quote!(::wc3::model::mdl::ReadFields)
+                    } else {
+                        quote!(::wc3::model::mdl::WriteFields)
+                    };
+                    calls.push(quote!(<#ty as #trait_name>::visit_mdl_names(visitor);));
+                }
+                Kind::Property(name)
+                | Kind::DelegatedProperty(name)
+                | Kind::StaticProperty(name)
+                | Kind::Animatable(name)
+                | Kind::Flag(name)
+                | Kind::Block(name)
+                | Kind::Repeated(name)
+                | Kind::Counted(name) => {
+                    let static_form =
+                        matches!(field.kind, Kind::StaticProperty(_) | Kind::Animatable(_));
+                    calls.push(quote!(visitor(#name, #static_form);));
+                }
+                Kind::Flags(flags) => {
+                    for (name, _) in flags {
+                        calls.push(quote!(visitor(#name, false);));
+                    }
+                }
+                _ => {}
+            }
+        }
+        quote!(#(#calls)*)
+    }
+    pub(super) fn accepts(&self) -> TokenStream {
+        let mut conditions = Vec::new();
+        for field in &self.fields {
+            match &field.kind {
+                Kind::Flatten => {
+                    let ty = &field.ty;
+                    conditions.push(quote!(<#ty as ::wc3::model::mdl::ReadFields>::accepts_mdl_field(name, static_form)));
+                }
+                Kind::StaticProperty(value) => {
+                    conditions.push(quote!(static_form && name == #value))
+                }
+                Kind::Animatable(value) => conditions.push(quote!(name == #value)),
+                Kind::Property(value)
+                | Kind::DelegatedProperty(value)
+                | Kind::Flag(value)
+                | Kind::Block(value)
+                | Kind::Repeated(value)
+                | Kind::Counted(value) => conditions.push(quote!(!static_form && name == #value)),
+                Kind::Flags(flags) => {
+                    for (value, _) in flags {
+                        conditions.push(quote!(!static_form && name == #value));
+                    }
+                }
+                _ => {}
+            }
+        }
+        quote!(false #(|| (#conditions))*)
+    }
     pub(super) fn tracks(&self) -> Option<&Field> {
         self.fields
             .iter()
@@ -80,6 +144,9 @@ pub(super) fn parse(input: &DeriveInput, options: &Container) -> Result<Schema> 
     for field in &fields {
         let field_names = match &field.kind {
             Kind::Property(name)
+            | Kind::Block(name)
+            | Kind::Repeated(name)
+            | Kind::Counted(name)
             | Kind::DelegatedProperty(name)
             | Kind::StaticProperty(name)
             | Kind::Animatable(name)

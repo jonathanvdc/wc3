@@ -173,8 +173,18 @@ initialize to zero, and reject duplicate names and unknown bits.
 `write_order(field_a, field_b, ...)` preserves MDL field order independently of
 binary layout. Single-field tuple structs support `#[mdl(property = "Name")]`
 and anonymous `#[mdl(entry)]` forms. The derives support at most 64 body names;
-counted collections and enums remain handwritten. Whole-model MDL conversion is
+flattened field groups, nested blocks, repeated records, and counted collections
+are derived too. Enums remain handwritten. Whole-model MDL conversion is
 not implemented yet.
+
+MDL structural fields use `#[mdl(flatten)]`, `#[mdl(block = "Target")]`,
+`#[mdl(repeated = "Layer")]`, or `#[mdl(counted = "Points")]`. A reusable
+`#[mdl(fields)]` struct derives field codecs without a containing block.
+Flattened fields retain their own defaults and duplicate checks; nested blocks
+and counted lists are required unless given defaults. Collection items own
+framing, and counted collections validate their declared size. `Sequence` uses
+this support to flatten its shared `GeosetExtent` bounding fields while preserving
+its MDX layout and public accessors.
 
 Texture paths occupy 260 bytes (up to 259 UTF-8 bytes plus NUL). ModelInfo stores
 an 80-byte name followed by a separate 260-byte animation-file path, exposed by

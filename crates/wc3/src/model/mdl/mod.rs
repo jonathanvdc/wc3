@@ -100,8 +100,8 @@
 //! These codecs own defaults, requirements and omission, independently of a
 //! container default; field `default`, `required`, `skip_if`, `read_with`, and
 //! `write_with` cannot be combined with `delegate`. The initial form
-//! delegates one ordinary body name; static/animated channel delegation and
-//! flattened multi-name bodies are separate extensions, not version checks.
+//! delegates one ordinary body name; static/animated channel delegation is a
+//! separate extension. Multi-name bodies use flattening, without version checks.
 //! Version-selected field types can implement these interfaces without any
 //! version metadata in the record or derive. `Option<T>` already implements
 //! them for ordinary optional values:
@@ -146,17 +146,66 @@
 //!
 //! Derives preserve generics and existing where clauses, adding codec and
 //! Default bounds only for fields that use them. They support up to 64 body
-//! names (each mapped flag counts separately). Counted collections, enums, and
-//! general tuple structs remain handwritten; linked track collections use `tracks`.
+//! names per group (each mapped flag counts separately). Enums and general tuple
+//! structs remain handwritten; linked track collections use `tracks`.
 //!
 //! Container `#[mdl(default)]` uses `Self::default()` as the source for omitted
 //! body fields, including skipped fields and packed flags. Headers stay required;
-//! `#[mdl(required)]` keeps a property or static property required. Explicit
+//! `#[mdl(required)]` keeps a property, static property, singleton block, or
+//! counted list required. Explicit
 //! field defaults override the record default. A tracks collection always starts
 //! empty, because it records only channels present in the text. Reading requires
 //! Self: Default. Writing also requires it when inheriting flag defaults, so it
 //! can reject cleared flags that omission would restore to true. Writers also
 //! evaluate defaults when checking omitted base values or skip_if properties.
+//!
+//! ## Flattened fields, nested blocks, and collections
+//!
+//! `#[mdl(fields)]` derives `ReadFields`/`WriteFields` for a named-field group
+//! without a containing block. Block derives also implement these traits.
+//! `#[mdl(flatten)]` embeds a group's headers and properties in the parent.
+//! Body fields may interleave while retaining their own defaults, requirements,
+//! duplicate markers, tracks, and validation hooks. A parent's container default
+//! does not replace a flattened group's defaults. Overlapping names across
+//! groups are rejected before reading headers or writing output. Field-group
+//! read validation receives the containing record's span.
+//!
+//! `#[mdl(block = "Target")]` places a field group in a singleton nested block.
+//! The attribute supplies the name; the group owns headers and body fields.
+//! The block is required unless a field or container default supplies it.
+//! Nested blocks have no trailing comma. `write_order` includes structural fields;
+//! it orders their body output without reordering flattened header values.
+//!
+//! `#[mdl(repeated = "Anim")]` collects zero or more complete named records into
+//! a `Vec<T>`, preserving source order. Each item's `Read`/`Write` owns its name,
+//! headers, and punctuation, which must match the declared name.
+//! `#[mdl(counted = "Points")]` reads/writes a single `Points N { ... }` list
+//! into a `Vec<T>`, checking the declared count without preallocating from it.
+//! Items own their framing, so scalar/vector entries use an `#[mdl(entry)]`
+//! wrapper. Counted lists are required unless given a default, and an empty
+//! list is emitted with count zero. Collections reject nonadvancing readers.
+//! Structural fields do not support value codec hooks or omission predicates;
+//! flatten/repeated fields also initialize themselves rather than taking defaults.
+//!
+//! ```
+//! use wc3::model::{animation::Sequence, geometry::{GeosetExtent, PivotPoint}, mdl};
+//! use wc3::model::mdl::{Read as _, Write as _};
+//! #[derive(mdl::Read, mdl::Write)]
+//! #[mdl(block = "Envelope")]
+//! struct Envelope {
+//!     #[mdl(flatten)] extent: GeosetExtent,
+//!     #[mdl(block = "Target")] target: GeosetExtent,
+//!     #[mdl(repeated = "Anim")] sequences: Vec<Sequence>,
+//!     #[mdl(counted = "Points")] points: Vec<PivotPoint>,
+//! }
+//! let record = Envelope::decode_mdl(
+//!     "Envelope { Target {} Points 0 {} Anim \"Stand\" { Interval { 0, 1000 }, } }"
+//! )?;
+//! assert_eq!(record.sequences.len(), 1);
+//! assert!(record.points.is_empty());
+//! Envelope::decode_mdl(&record.encode_mdl()?)?;
+//! # Ok::<(), Box<dyn std::error::Error>>(())
+//! ```
 //!
 //! ## Static and animated properties
 //!
@@ -270,6 +319,10 @@
 
 mod error;
 pub use error::{Diagnostic, ReadError, ReadErrorKind, Span, WriteError};
+mod fields;
+#[doc(hidden)]
+pub use fields::{dispatch_name, field_names_unique, read_mdl_body};
+pub use fields::{ReadFields, WriteFields};
 mod lexer;
 pub use lexer::{Lexer, Token, TokenKind};
 mod parser;

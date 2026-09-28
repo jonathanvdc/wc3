@@ -1,11 +1,11 @@
 //! Typed geoset sections and lossless MDX serialization.
 use crate::model::conversion::ConversionContext;
-use crate::model::mdx;
 use crate::model::ConversionError;
 use crate::model::Encoder;
 use crate::model::KnownChunk;
 use crate::model::ValueError;
 use crate::model::WriteError;
+use crate::model::{mdl, mdx};
 use crate::model::{ModelVersion, SupportsReforgedChunks, Tag, Vec3, Version};
 
 use std::fmt::Debug;
@@ -19,10 +19,14 @@ use crate::model::FixedText;
 use crate::model::{Model, ReadError};
 
 /// A geoset's bounding volume, also used for each sequence extent.
-#[derive(Clone, Copy, Debug, PartialEq, mdx::Read, mdx::Write)]
+#[derive(Clone, Copy, Debug, PartialEq, mdx::Read, mdx::Write, mdl::Read, mdl::Write)]
+#[mdl(fields, write_order(minimum, maximum, bounds_radius))]
 pub struct GeosetExtent {
+    #[mdl(property = "BoundsRadius", default)]
     pub bounds_radius: f32,
+    #[mdl(property = "MinimumExtent", default)]
     pub minimum: Vec3,
+    #[mdl(property = "MaximumExtent", default)]
     pub maximum: Vec3,
 }
 

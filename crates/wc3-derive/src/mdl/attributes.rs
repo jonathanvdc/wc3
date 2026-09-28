@@ -10,6 +10,7 @@ pub(super) struct Container {
     pub(super) block: Option<LitStr>,
     pub(super) property: Option<LitStr>,
     pub(super) entry: bool,
+    pub(super) fields: bool,
     pub(super) default: bool,
     pub(super) write_order: Option<Vec<Ident>>,
     pub(super) validate_read: Option<Path>,
@@ -18,6 +19,10 @@ pub(super) struct Container {
 
 pub(super) enum Kind {
     Header,
+    Flatten,
+    Block(LitStr),
+    Repeated(LitStr),
+    Counted(LitStr),
     Property(LitStr),
     DelegatedProperty(LitStr),
     StaticProperty(LitStr),
@@ -88,20 +93,26 @@ pub(super) fn container(input: &DeriveInput) -> Result<Container> {
                 if result.block.is_some() {
                     return Err(meta.error("duplicate block"));
                 }
-                if result.property.is_some() || result.entry { return Err(meta.error("choose exactly one of block, property, or entry")); }
+                if result.property.is_some() || result.entry || result.fields { return Err(meta.error("choose exactly one of block, property, entry, or fields")); }
                 let name = meta.value()?.parse()?;
                 identifier(&name)?;
                 result.block = Some(name);
                 Ok(())
             } else if meta.path.is_ident("property") {
-                if result.block.is_some() || result.property.is_some() || result.entry { return Err(meta.error("choose exactly one of block, property, or entry")); }
+                if result.block.is_some() || result.property.is_some() || result.entry || result.fields { return Err(meta.error("choose exactly one of block, property, entry, or fields")); }
                 let name = meta.value()?.parse()?;
                 identifier(&name)?;
                 result.property = Some(name);
                 Ok(())
             } else if meta.path.is_ident("entry") {
-                if result.block.is_some() || result.property.is_some() || result.entry { return Err(meta.error("choose exactly one of block, property, or entry")); }
+                if result.block.is_some() || result.property.is_some() || result.entry || result.fields { return Err(meta.error("choose exactly one of block, property, entry, or fields")); }
                 result.entry = true;
+                Ok(())
+            } else if meta.path.is_ident("fields") {
+                if result.block.is_some() || result.property.is_some() || result.entry || result.fields {
+                    return Err(meta.error("choose exactly one of block, property, entry, or fields"));
+                }
+                result.fields = true;
                 Ok(())
             } else if meta.path.is_ident("default") {
                 if result.default { return Err(meta.error("duplicate container default")); }
@@ -123,14 +134,14 @@ pub(super) fn container(input: &DeriveInput) -> Result<Container> {
             } else if meta.path.is_ident("validate_write") {
                 path(&meta, &mut result.validate_write)
             } else {
-                Err(meta.error("expected block, property, entry, default, write_order, validate_read, or validate_write"))
+                Err(meta.error("expected block, property, entry, fields, default, write_order, validate_read, or validate_write"))
             }
         })?;
     }
-    if result.block.is_none() && result.property.is_none() && !result.entry {
+    if result.block.is_none() && result.property.is_none() && !result.entry && !result.fields {
         return Err(Error::new_spanned(
             &input.ident,
-            "MDL derives require a block, property, or entry attribute",
+            "MDL derives require a block, property, entry, or fields attribute",
         ));
     }
     Ok(result)
@@ -161,14 +172,20 @@ pub(super) fn field(field: &SynField, index: usize) -> Result<Field> {
                 || meta.path.is_ident("static_property")
                 || meta.path.is_ident("animatable")
                 || meta.path.is_ident("tracks")
+                || meta.path.is_ident("flatten")
+                || meta.path.is_ident("block")
+                || meta.path.is_ident("repeated")
+                || meta.path.is_ident("counted")
             {
                 if kind.is_some() {
                     return Err(meta.error(
-                        "a field must have exactly one of header, property, static_property, animatable, tracks, flag, flags, or skip",
+                        "a field must have exactly one of header, property, block, flatten, repeated, counted, static_property, animatable, tracks, flag, flags, or skip",
                     ));
                 }
                 kind = Some(if meta.path.is_ident("header") {
                     Kind::Header
+                } else if meta.path.is_ident("flatten") {
+                    Kind::Flatten
                 } else if meta.path.is_ident("skip") {
                     Kind::Skip
                 } else if meta.path.is_ident("tracks") {
@@ -202,7 +219,13 @@ pub(super) fn field(field: &SynField, index: usize) -> Result<Field> {
                 } else {
                     let name = meta.value()?.parse()?;
                     identifier(&name)?;
-                    if meta.path.is_ident("property") {
+                    if meta.path.is_ident("block") {
+                        Kind::Block(name)
+                    } else if meta.path.is_ident("repeated") {
+                        Kind::Repeated(name)
+                    } else if meta.path.is_ident("counted") {
+                        Kind::Counted(name)
+                    } else if meta.path.is_ident("property") {
                         Kind::Property(name)
                     } else if meta.path.is_ident("static_property") {
                         Kind::StaticProperty(name)
@@ -259,7 +282,7 @@ pub(super) fn field(field: &SynField, index: usize) -> Result<Field> {
     let kind = kind.ok_or_else(|| {
         Error::new_spanned(
             field,
-            "each field needs an explicit MDL header, property, static_property, animatable, tracks, flag, flags, or skip attribute",
+            "each field needs an explicit MDL header, property, block, flatten, repeated, counted, static_property, animatable, tracks, flag, flags, or skip attribute",
         )
     })?;
     let kind = if delegate {
@@ -324,6 +347,22 @@ pub(super) fn field(field: &SynField, index: usize) -> Result<Field> {
             ));
         }
     }
+    if matches!(
+        kind,
+        Kind::Flatten | Kind::Repeated(_) | Kind::Counted(_) | Kind::Block(_)
+    ) {
+        if skip_if.is_some()
+            || read_with.is_some()
+            || write_with.is_some()
+            || (matches!(kind, Kind::Flatten | Kind::Repeated(_))
+                && (default.is_some() || required))
+        {
+            return Err(Error::new_spanned(field, "structural fields do not support codec hooks or skip_if; flatten and repeated also own their initialization and presence policy"));
+        }
+        if matches!(kind, Kind::Repeated(_) | Kind::Counted(_)) {
+            vec_element(&field.ty)?;
+        }
+    }
     if matches!(kind, Kind::Tracks) {
         if default.is_some() || skip_if.is_some() || read_with.is_some() || write_with.is_some() {
             return Err(Error::new_spanned(
@@ -331,16 +370,19 @@ pub(super) fn field(field: &SynField, index: usize) -> Result<Field> {
                 "tracks cannot have defaults, omission predicates, or codec hooks",
             ));
         }
-        track_element(&field.ty)?;
+        vec_element(&field.ty)?;
     }
     if required
         && (default.is_some()
             || skip_if.is_some()
-            || !matches!(kind, Kind::Property(_) | Kind::StaticProperty(_)))
+            || !matches!(
+                kind,
+                Kind::Property(_) | Kind::StaticProperty(_) | Kind::Block(_) | Kind::Counted(_)
+            ))
     {
         return Err(Error::new_spanned(
             field,
-            "required is only supported on properties without defaults or omission predicates",
+            "required is only supported on properties, static properties, blocks, and counted lists without defaults or omission predicates",
         ));
     }
     match &kind {
@@ -406,7 +448,7 @@ pub(super) fn field(field: &SynField, index: usize) -> Result<Field> {
     })
 }
 
-pub(super) fn track_element(ty: &Type) -> Result<&Type> {
+pub(super) fn vec_element(ty: &Type) -> Result<&Type> {
     if let Type::Path(path) = ty {
         if let Some(segment) = path.path.segments.last() {
             if segment.ident == "Vec" {
@@ -420,5 +462,8 @@ pub(super) fn track_element(ty: &Type) -> Result<&Type> {
             }
         }
     }
-    Err(Error::new_spanned(ty, "tracks requires Vec<TrackEnum>"))
+    Err(Error::new_spanned(
+        ty,
+        "tracks or collection requires Vec<Item>",
+    ))
 }
