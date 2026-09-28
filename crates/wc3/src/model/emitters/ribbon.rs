@@ -1,6 +1,8 @@
 //! Ribbon emitter records in `RIBB` chunks.
-use crate::model::mdx;
+use crate::model::mdl::Span;
+use crate::model::scene::{set_node_kind, validate_node_kind};
 use crate::model::ModelVersion;
+use crate::model::{mdl, mdx};
 crate::model::animation::track_group! {
     pub enum RibbonTrack {
         Visibility: RibbonVisibility,
@@ -35,11 +37,35 @@ pub struct RibbonFields {
 }
 
 /// One ribbon emitter with decoded fixed properties and animation tracks.
-#[derive(Clone, Debug, PartialEq, mdx::Read, mdx::Write)]
+///
+/// MDL reading restores the ribbon object-kind bit; writing requires matching
+/// node bits and default hidden bases. TextureSlot accepts a bare scalar alias
+/// and writes the canonical static spelling.
+#[derive(Clone, Debug, PartialEq, mdx::Read, mdx::Write, mdl::Read, mdl::Write)]
 #[mdx(sized(tag = RibbonEmittersChunk::TAG))]
+#[mdl(
+    block = "RibbonEmitter",
+    after_read = "finish_ribbon",
+    validate_write = "validate_ribbon"
+)]
 pub struct RibbonEmitter {
+    #[mdl(flatten)]
     node: Node,
+    #[mdl(project(
+        #[mdl(animatable = "HeightAbove", track = "RibbonTrack::HeightAbove", default)] height_above: f32,
+        #[mdl(animatable = "HeightBelow", track = "RibbonTrack::HeightBelow", default)] height_below: f32,
+        #[mdl(animatable = "Alpha", track = "RibbonTrack::Alpha", default)] alpha: f32,
+        #[mdl(animatable = "Color", track = "RibbonTrack::Color", default)] color: Color,
+        #[mdl(property = "LifeSpan", default)] life_span: f32,
+        #[mdl(animatable = "TextureSlot", track = "RibbonTrack::TextureSlot", default, bare_static)] texture_slot: u32,
+        #[mdl(property = "EmissionRate", default)] emission_rate: u32,
+        #[mdl(property = "Rows", default)] rows: u32,
+        #[mdl(property = "Columns", default)] columns: u32,
+        #[mdl(property = "MaterialID", default)] material_id: u32,
+        #[mdl(property = "Gravity", default, skip_if = "zero_gravity")] gravity: f32,
+    ))]
     fields: RibbonFields,
+    #[mdl(tracks, channels(Visibility = "RibbonTrack::Visibility"))]
     tracks: Vec<RibbonTrack>,
 }
 
@@ -94,4 +120,15 @@ impl<V: ModelVersion> Model<V> {
     pub fn set_ribbon_emitters(&mut self, emitters: &[RibbonEmitter]) {
         self.replace_chunk(RibbonEmittersChunk::new(emitters.to_vec()));
     }
+}
+
+fn zero_gravity(value: &f32) -> bool {
+    value.to_bits() == 0
+}
+fn finish_ribbon(value: &mut RibbonEmitter, _: Span) -> Result<(), mdl::ReadError> {
+    set_node_kind(&mut value.node, 0x4000);
+    Ok(())
+}
+fn validate_ribbon(value: &RibbonEmitter) -> Result<(), mdl::WriteError> {
+    validate_node_kind(&value.node, 0x4000)
 }

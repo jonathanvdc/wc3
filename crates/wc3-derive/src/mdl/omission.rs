@@ -10,7 +10,7 @@ pub(super) fn needs_check(field: &Field) -> bool {
 }
 
 pub(super) fn predicate(field: &Field, tracks: Option<&Field>) -> TokenStream {
-    let member = &field.member;
+    let member = &field.access();
     let mut condition = if field.animated_only {
         quote!(false)
     } else {
@@ -39,7 +39,7 @@ pub(super) fn default_value(field: &Field, options: &Container) -> TokenStream {
         Some(DefaultValue::Function(function)) => quote!(#function()),
         None => {
             assert!(options.default && !field.required, "default was checked");
-            let member = &field.member;
+            let member = &field.access();
             quote!(__wc3_mdl_write_defaults.#member)
         }
     }

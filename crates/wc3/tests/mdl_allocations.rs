@@ -101,3 +101,18 @@ fn counted_records_can_transcode_without_an_owned_collection() {
     assert_eq!(bytes.len(), 12);
     assert_eq!(count, 0);
 }
+
+#[test]
+fn derived_emitters_write_existing_tracks_without_cloning() {
+    use wc3::model::emitters::{ParticleEmitter, RibbonEmitter};
+    let particle = ParticleEmitter::decode_mdl("ParticleEmitter \"a\" { ObjectId 0, EmitterUsesMdl, Translation 1 { Linear, 0: { 1, 2, 3 }, } EmissionRate 1 { Linear, 0: 2.0, } Visibility 1 { Linear, 0: 1.0, } }").unwrap();
+    let ribbon = RibbonEmitter::decode_mdl("RibbonEmitter \"a\" { ObjectId 0, HeightAbove 1 { Linear, 0: 2.0, } TextureSlot 1 { Linear, 0: 3, } Visibility 1 { Linear, 0: 1.0, } }").unwrap();
+    let mut storage = [0u8; 4096];
+    let (_, count) = measured(|| {
+        let mut writer = MdlWriter::new(IoCursor::new(&mut storage[..]));
+        writer.write(&particle).unwrap();
+        writer.write(&ribbon).unwrap();
+        writer.finish().unwrap();
+    });
+    assert_eq!(count, 0);
+}

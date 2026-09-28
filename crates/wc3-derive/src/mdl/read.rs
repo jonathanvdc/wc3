@@ -57,7 +57,31 @@ pub(super) fn expand(
         }
         if matches!(kind, Kind::Flatten) {
             headers.push(quote!(let mut #local: <#ty as ::wc3::model::mdl::ReadFields>::State = <#ty as ::wc3::model::mdl::ReadFields>::begin_mdl_fields(__wc3_mdl_parser)?;));
-            members.push(quote!(#member: <#ty as ::wc3::model::mdl::ReadFields>::finish_mdl_fields(#local, __wc3_mdl_span, __wc3_mdl_record_span)?));
+            let finish = quote!(<#ty as ::wc3::model::mdl::ReadFields>::finish_mdl_fields(#local, __wc3_mdl_span, __wc3_mdl_record_span)?);
+            if let Some(extra) = &field.extra_flags {
+                let overlay = format_ident!("{}_flags", local);
+                locals.push(quote!(let mut #overlay: u32 = 0;));
+                for (name, mask) in &extra.flags {
+                    arms.push(quote!(#name => {
+                        __wc3_mdl_fields.mark(#bit, __wc3_mdl_field)?;
+                        __wc3_mdl_body.expect(::wc3::model::mdl::TokenKind::Comma)?;
+                        #overlay |= #mask;
+                    }));
+                    bit += 1;
+                }
+                let get = &extra.get;
+                let set = &extra.set;
+                members.push(quote!(#member: {
+                    let mut value = #finish;
+                    let mut flags = #get(&value);
+                    let bits = ::wc3::model::mdl::BitRange::<u32>::bit_range(&flags, 31, 0);
+                    ::wc3::model::mdl::BitRangeMut::<u32>::set_bit_range(&mut flags, 31, 0, bits | #overlay);
+                    #set(&mut value, flags);
+                    value
+                }));
+            } else {
+                members.push(quote!(#member: #finish));
+            }
             flattened.push(field);
             continue;
         }
@@ -83,13 +107,22 @@ pub(super) fn expand(
             continue;
         }
         if matches!(kind, Kind::Tracks) {
+            for (name, variant) in &field.channels {
+                arms.push(quote!(#name => {
+                    __wc3_mdl_fields.mark(#bit, __wc3_mdl_field)?;
+                    *__wc3_mdl_body = __wc3_mdl_checkpoint;
+                    #local.push(#variant(__wc3_mdl_body.read()?));
+                }));
+                bit += 1;
+            }
             locals.push(quote!(let mut #local: #ty = ::std::vec::Vec::new();));
             members.push(quote!(#member: #local));
             continue;
         }
         if let Kind::Flags(flags) = kind {
             if options.default && default.is_none() {
-                locals.push(quote!(let mut #local: #ty = __wc3_mdl_defaults.#member;));
+                let access = field.access();
+                locals.push(quote!(let mut #local: #ty = __wc3_mdl_defaults.#access;));
             } else {
                 locals.push(quote! {
                     let mut #local: #ty = ::core::default::Default::default();
@@ -126,7 +159,10 @@ pub(super) fn expand(
         let initial = match default {
             Some(DefaultValue::Trait) => Some(quote!(::core::default::Default::default())),
             Some(DefaultValue::Function(function)) => Some(quote!(#function())),
-            None if options.default && !field.required => Some(quote!(__wc3_mdl_defaults.#member)),
+            None if options.default && !field.required => {
+                let access = field.access();
+                Some(quote!(__wc3_mdl_defaults.#access))
+            }
             None => None,
         };
         let has_default = initial.is_some();
@@ -193,10 +229,31 @@ pub(super) fn expand(
                 }
                 let variant = field.track.as_ref().expect("track was checked");
                 let collection = &tracks.expect("tracks was checked").local;
-                arms.push(quote!(#mdl_name => {
-                    __wc3_mdl_fields.mark(#bit, __wc3_mdl_field)?;
+                let read_track = quote! {
                     *__wc3_mdl_body = __wc3_mdl_checkpoint;
                     #collection.push(#variant(__wc3_mdl_body.read()?));
+                };
+                let read = if field.bare_static {
+                    quote! {
+                        let mut __wc3_mdl_probe = *__wc3_mdl_body;
+                        let __wc3_mdl_bare_value = match __wc3_mdl_probe.read::<#ty>() {
+                            ::core::result::Result::Ok(value) if __wc3_mdl_probe.peek()?.is_some_and(|token| token.kind == ::wc3::model::mdl::TokenKind::Comma) => {
+                                __wc3_mdl_probe.next_token()?;
+                                *__wc3_mdl_body = __wc3_mdl_probe;
+                                ::core::option::Option::Some(value)
+                            }
+                            _ => ::core::option::Option::None,
+                        };
+                        if let ::core::option::Option::Some(value) = __wc3_mdl_bare_value {
+                            #local = value;
+                        } else { #read_track }
+                    }
+                } else {
+                    read_track
+                };
+                arms.push(quote!(#mdl_name => {
+                    __wc3_mdl_fields.mark(#bit, __wc3_mdl_field)?;
+                    #read
                     #mark_enabled
                 }));
             }
@@ -209,6 +266,22 @@ pub(super) fn expand(
         }
         bit += 1;
     }
+    let mut root_members = Vec::new();
+    for (field, value) in fields.iter().zip(&members) {
+        if field.parent.is_none() {
+            root_members.push(value.clone());
+        }
+    }
+    for projection in &schema.projections {
+        let parent = &projection.member;
+        let constructor = super::schema::constructor(&projection.ty);
+        let values = fields
+            .iter()
+            .zip(&members)
+            .filter_map(|(field, value)| (field.parent.as_ref() == Some(parent)).then_some(value));
+        root_members.push(quote!(#parent: #constructor { #(#values,)* }));
+    }
+    let members = root_members;
     let capture_start = quote! {
         __wc3_mdl_parser.peek()?;
         let __wc3_mdl_start = __wc3_mdl_parser.position();
@@ -234,6 +307,10 @@ pub(super) fn expand(
         };
         state_names.push(local.clone());
         state_types.push(state_type);
+        if field.extra_flags.is_some() {
+            state_names.push(format_ident!("{}_flags", local));
+            state_types.push(quote!(u32));
+        }
         if field.enable_with.is_some() {
             state_names.push(format_ident!("{}_enabled", local));
             state_types.push(quote!(bool));

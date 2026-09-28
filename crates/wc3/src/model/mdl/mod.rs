@@ -27,6 +27,11 @@
 //! Light, EventObject and CollisionShape records are also supported. Light
 //! fields follow their version-selected storage. ShadowIntensity supports only
 //! the static form: no corresponding binary animation tag has been verified.
+//! Classic ParticleEmitter and RibbonEmitter records are also supported,
+//! including exact emitter flags, unsigned ribbon fields and track-only
+//! visibility. Ribbon TextureSlot accepts the spec's bare scalar form and writes
+//! canonical static properties. Writers reject hidden bases and unrepresentable
+//! flag bits. ParticleEmitter's resource path occupies all 260 binary bytes.
 //! Whole-model conversion is not implemented yet.
 //!
 //! ```
@@ -169,6 +174,27 @@
 //! Self: Default. Writing also requires it when inheriting flag defaults, so it
 //! can reject cleared flags that omission would restore to true. Writers also
 //! evaluate defaults when checking omitted base values or skip_if properties.
+//!
+//! ## Projected members and track-only channels
+//!
+//! `#[mdl(project(#[mdl(property = "Id")] id: u32, ...))]` on a named struct
+//! field describes its stored members in the enclosing record's MDL schema.
+//! List all members, including explicit `skip` entries for binary-only data.
+//! Their types are checked against the actual struct on read and write; no wire
+//! record or conversion is created. Projected animatable members link directly
+//! to the parent's `tracks` collection. Container defaults read the nested
+//! member from Self::default(), and write_order lists the containing field name.
+//!
+//! `#[mdl(tracks, channels(Visibility = "Track::Visibility"))]` adds track-only
+//! channels without dummy base fields. The same collection retains source order
+//! across ordinary and track-only channels, rejecting duplicates and static
+//! spellings for track-only channels.
+//!
+//! `#[mdl(flatten, extra_flags(get = "Type::flags", set = "Type::set_flags",
+//! Extra = 1))]` adds context-specific flags stored inside a flattened record.
+//! The getter returns a BitRange/BitRangeMut<u32> value; the setter stores it.
+//! Read reconstruction ORs these bits into the flattened value. Use the owning
+//! record's validation hook to check its implicit kind and unrepresentable bits.
 //!
 //! ## Flattened fields, nested blocks, and collections
 //!
@@ -318,6 +344,12 @@
 //! and omit its base on write. Its default then represents the absence of binary
 //! base storage; writing rejects a nondefault base even with no track. This is
 //! useful for channels such as Light visibility.
+//!
+//! `bare_static` is an opt-in modifier for animatable fields with a static form.
+//! It also accepts `Name value,` as a static alias, while `Name count { ... }`
+//! remains a track. Both spellings share duplicate detection and presence hooks.
+//! Writers always emit `static Name value,`. Ribbon TextureSlot uses this to
+//! accept the scalar spelling in the supplied MDL specification.
 //!
 //! Writers compare omitted animatable base values and skip_if properties with
 //! the defaults the reader restores, rejecting differences before any output.

@@ -869,3 +869,108 @@ fn animated_only_is_limited_to_animatable_fields() {
         "duplicate animated_only",
     );
 }
+
+#[test]
+fn bare_static_requires_a_static_animatable_channel() {
+    rejects(
+        parse_quote! {
+            #[mdl(block = "Record")]
+            struct Bad { #[mdl(property = "Value", bare_static)] value: f32 }
+        },
+        "bare_static requires",
+    );
+    rejects(
+        parse_quote! {
+            #[mdl(block = "Record")]
+            struct Bad {
+                #[mdl(animatable = "Value", track = "Track::Value", default, bare_static, animated_only)] value: f32,
+                #[mdl(tracks)] tracks: Vec<Track>,
+            }
+        },
+        "bare_static requires",
+    );
+    rejects(
+        parse_quote! {
+            #[mdl(block = "Record")]
+            struct Bad {
+                #[mdl(animatable = "Value", track = "Track::Value", default, bare_static, bare_static)] value: f32,
+                #[mdl(tracks)] tracks: Vec<Track>,
+            }
+        },
+        "duplicate bare_static",
+    );
+}
+
+#[test]
+fn validates_projection_channels_and_flattened_flags() {
+    rejects(
+        parse_quote! {
+            #[mdl(block = "Record")]
+            struct Bad { #[mdl(project())] data: Data }
+        },
+        "project needs",
+    );
+    rejects(
+        parse_quote! {
+            #[mdl(block = "Record")]
+            struct Bad { #[mdl(project(#[mdl(property = "A")] a: u32))] data: (u32,) }
+        },
+        "named struct type",
+    );
+    rejects(
+        parse_quote! {
+            #[mdl(block = "Record")]
+            struct Bad { #[mdl(project(#[mdl(property = "A")] a: u32, #[mdl(property = "B")] a: u32))] data: Data }
+        },
+        "duplicate projected member",
+    );
+    rejects(
+        parse_quote! {
+            #[mdl(block = "Record")]
+            struct Bad { #[mdl(project(#[mdl(tracks)] tracks: Vec<Track>))] data: Data }
+        },
+        "projected tracks",
+    );
+    rejects(
+        parse_quote! {
+            #[mdl(block = "Record")]
+            struct Bad { #[mdl(property = "A", channels(Value = "Track::Value"))] a: u32 }
+        },
+        "channels requires tracks",
+    );
+    rejects(
+        parse_quote! {
+            #[mdl(block = "Record")]
+            struct Bad { #[mdl(tracks, channels(A = "Track::Value", B = "Track::Value"))] tracks: Vec<Track> }
+        },
+        "duplicate track variant",
+    );
+    rejects(
+        parse_quote! {
+            #[mdl(block = "Record")]
+            struct Bad { #[mdl(tracks, channels(A = "Track::A", A = "Track::B"))] tracks: Vec<Track> }
+        },
+        "duplicate MDL field name",
+    );
+    rejects(
+        parse_quote! {
+            #[mdl(block = "Record")]
+            struct Bad { #[mdl(flatten, extra_flags(get = "get", A = 1))] data: Data }
+        },
+        "get and set",
+    );
+    rejects(
+        parse_quote! {
+            #[mdl(block = "Record")]
+            struct Bad { #[mdl(property = "A", extra_flags(get = "get", set = "set", Flag = 1))] data: Data }
+        },
+        "extra_flags requires flatten",
+    );
+    rejects(
+        parse_quote! {
+            #[mdl(block = "Record")]
+            struct Bad { #[mdl(flatten, extra_flags(get = "get", set = "set", A = 1, B = 1))] data: Data }
+        },
+        "distinct nonzero single",
+    );
+}

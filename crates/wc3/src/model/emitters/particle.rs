@@ -1,6 +1,8 @@
 //! Classic particle emitters stored in `PREM` chunks.
-use crate::model::mdx;
+use crate::model::mdl::Span;
+use crate::model::scene::{set_node_kind, validate_node_kind};
 use crate::model::ModelVersion;
+use crate::model::{mdl, mdx};
 crate::model::animation::track_group! {
     pub enum ParticleTrack {
         Visibility: ParticleVisibility,
@@ -23,21 +25,49 @@ use std::borrow::Cow;
 use crate::model::FixedText;
 use crate::model::{Model, Node};
 
-const PATH_SIZE: usize = 256;
+const PATH_SIZE: usize = 260;
 
 /// A Classic particle emitter with optional animated properties.
-#[derive(Clone, Debug, PartialEq, mdx::Read, mdx::Write)]
+///
+/// MDL reading restores the particle object-kind bit and resource flags. Writing
+/// requires matching node bits and default hidden bases.
+#[derive(Clone, Debug, PartialEq, mdx::Read, mdx::Write, mdl::Read, mdl::Write)]
 #[mdx(sized(tag = ParticleEmittersChunk::TAG))]
+#[mdl(
+    block = "ParticleEmitter",
+    after_read = "finish_particle",
+    validate_write = "validate_particle"
+)]
 pub struct ParticleEmitter {
+    #[mdl(
+        flatten,
+        extra_flags(
+            get = "Node::flags",
+            set = "Node::set_flags",
+            EmitterUsesMdl = 32768,
+            EmitterUsesTga = 65536
+        )
+    )]
     node: Node,
+    #[mdl(
+        animatable = "EmissionRate",
+        track = "ParticleTrack::EmissionRate",
+        default
+    )]
     emission_rate: f32,
+    #[mdl(animatable = "Gravity", track = "ParticleTrack::Gravity", default)]
     gravity: f32,
+    #[mdl(animatable = "Longitude", track = "ParticleTrack::Longitude", default)]
     longitude: f32,
+    #[mdl(animatable = "Latitude", track = "ParticleTrack::Latitude", default)]
     latitude: f32,
+    #[mdl(property = "Path", default)]
     path: FixedText<PATH_SIZE>,
-    reserved: u32,
+    #[mdl(animatable = "LifeSpan", track = "ParticleTrack::Lifespan", default)]
     life_span: f32,
+    #[mdl(animatable = "InitVelocity", track = "ParticleTrack::Speed", default)]
     initial_velocity: f32,
+    #[mdl(tracks, channels(Visibility = "ParticleTrack::Visibility"))]
     tracks: Vec<ParticleTrack>,
 }
 
@@ -51,7 +81,6 @@ impl ParticleEmitter {
             longitude: 0.0,
             latitude: 0.0,
             path: FixedText::default(),
-            reserved: 0,
             life_span: 0.0,
             initial_velocity: 0.0,
             tracks: Vec::new(),
@@ -129,11 +158,6 @@ impl ParticleEmitter {
         self.path.set_text(path)
     }
 
-    /// Returns the untyped reserved word following the path.
-    pub fn reserved(&self) -> u32 {
-        self.reserved
-    }
-
     /// Borrows decoded animation tracks.
     pub fn tracks(&self) -> &[ParticleTrack] {
         &self.tracks
@@ -155,4 +179,12 @@ impl<V: ModelVersion> Model<V> {
     pub fn set_particle_emitters(&mut self, emitters: &[ParticleEmitter]) {
         self.replace_chunk(ParticleEmittersChunk::new(emitters.to_vec()));
     }
+}
+
+fn finish_particle(value: &mut ParticleEmitter, _: Span) -> Result<(), mdl::ReadError> {
+    set_node_kind(&mut value.node, 0x1000);
+    Ok(())
+}
+fn validate_particle(value: &ParticleEmitter) -> Result<(), mdl::WriteError> {
+    validate_node_kind(&value.node, 0x1000 | (value.node.flags().bits() & 0x18000))
 }

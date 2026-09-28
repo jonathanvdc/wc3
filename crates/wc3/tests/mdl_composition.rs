@@ -516,3 +516,128 @@ fn counted_header_does_not_contribute_to_the_item_count() {
         }
     );
 }
+
+#[derive(Debug, mdl::Read, mdl::Write)]
+#[mdl(block = "Bare")]
+struct BareAlias {
+    #[mdl(
+        animatable = "Alpha",
+        track = "GeosetTrack::Alpha",
+        bare_static,
+        default,
+        enabled_if = "Self::enabled",
+        enable_with = "Self::enable"
+    )]
+    alpha: f32,
+    #[mdl(flag = "Enabled", default)]
+    enabled: bool,
+    #[mdl(tracks)]
+    tracks: Vec<GeosetTrack>,
+}
+impl BareAlias {
+    fn enabled(&self) -> bool {
+        self.enabled
+    }
+    fn enable(&mut self) {
+        self.enabled = true;
+    }
+}
+#[test]
+fn bare_static_alias_shares_duplicates_hooks_and_canonical_output() {
+    let scalar = BareAlias::decode_mdl("Bare { Alpha 2.5, }").unwrap();
+    assert_eq!(scalar.alpha, 2.5);
+    assert!(scalar.enabled);
+    assert!(scalar.tracks.is_empty());
+    assert!(scalar.encode_mdl().unwrap().contains("static Alpha 2.5,"));
+    let track = BareAlias::decode_mdl("Bare { Alpha 0 { Linear, } }").unwrap();
+    assert!(track.enabled);
+    assert_eq!(track.tracks.len(), 1);
+    assert!(!track.encode_mdl().unwrap().contains("static Alpha"));
+    for body in [
+        "Alpha 0.0, static Alpha 1.0,",
+        "static Alpha 0.0, Alpha 0 { Linear, }",
+        "Alpha 0 { Linear, } Alpha 1.0,",
+    ] {
+        let source = format!("Bare {{ {body} }}");
+        let error = BareAlias::decode_mdl(&source).unwrap_err();
+        assert_eq!(error.kind, mdl::ReadErrorKind::DuplicateField);
+        assert_eq!(error.span.start, source.rfind("Alpha").unwrap());
+    }
+    for body in ["Alpha 0.0", "Alpha 1.0 { Linear, }", "Alpha 2 { Linear, }"] {
+        assert!(BareAlias::decode_mdl(&format!("Bare {{ {body} }}")).is_err());
+    }
+}
+
+#[derive(Debug, PartialEq)]
+struct NestedStorage<T> {
+    id: u32,
+    alpha: f32,
+    label: T,
+}
+#[derive(Debug, PartialEq, mdl::Read, mdl::Write)]
+#[mdl(block = "Projected", write_order(tracks, data))]
+struct Projected<T> {
+    #[mdl(project(
+        #[mdl(header)] id: u32,
+        #[mdl(animatable = "Alpha", track = "GeosetTrack::Alpha", default)] alpha: f32,
+        #[mdl(property = "Label")] label: T,
+    ))]
+    data: NestedStorage<T>,
+    #[mdl(tracks, channels(Color = "GeosetTrack::Color"))]
+    tracks: Vec<GeosetTrack>,
+}
+#[test]
+fn projected_generic_storage_headers_and_shared_tracks() {
+    let source = "Projected 7 { Color 0 { Linear, } Label 9, Alpha 0 { Linear, } }";
+    let value = Projected::<u32>::decode_mdl(source).unwrap();
+    assert_eq!(
+        value.data,
+        NestedStorage {
+            id: 7,
+            alpha: 0.0,
+            label: 9
+        }
+    );
+    let text = value.encode_mdl().unwrap();
+    assert!(text.starts_with("Projected 7 {"));
+    assert!(text.find("Color").unwrap() < text.find("Alpha").unwrap());
+    assert!(text.find("Alpha").unwrap() < text.find("Label").unwrap());
+    assert_eq!(Projected::decode_mdl(&text).unwrap(), value);
+    let duplicate = Projected::<u32>::decode_mdl(
+        "Projected 7 { Label 9, static Alpha 0.0, Alpha 0 { Linear, } }",
+    )
+    .unwrap_err();
+    assert_eq!(duplicate.kind, mdl::ReadErrorKind::DuplicateField);
+    assert!(Projected::<u32>::decode_mdl("Projected 7 {}").is_err());
+    let mut value = value;
+    value.data.alpha = 1.0;
+    assert!(value.encode_mdl().is_err());
+}
+#[derive(Debug, PartialEq)]
+struct DefaultStorage {
+    count: u32,
+}
+#[derive(Debug, PartialEq, mdl::Read, mdl::Write)]
+#[mdl(block = "ProjectedDefaults", default)]
+struct ProjectedDefaults {
+    #[mdl(project(#[mdl(property = "Count", skip_if = "count_is_default")] count: u32))]
+    data: DefaultStorage,
+}
+impl Default for ProjectedDefaults {
+    fn default() -> Self {
+        Self {
+            data: DefaultStorage { count: 7 },
+        }
+    }
+}
+fn count_is_default(value: &u32) -> bool {
+    *value == 7
+}
+#[test]
+fn projected_defaults_come_from_nested_storage() {
+    let value = ProjectedDefaults::decode_mdl("ProjectedDefaults {}").unwrap();
+    assert_eq!(value.data.count, 7);
+    assert_eq!(value.encode_mdl().unwrap(), "ProjectedDefaults {\n}\n");
+    let value = ProjectedDefaults::decode_mdl("ProjectedDefaults { Count 8, }").unwrap();
+    assert!(value.encode_mdl().unwrap().contains("Count 8,"));
+}

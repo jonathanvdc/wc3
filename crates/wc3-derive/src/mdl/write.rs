@@ -25,11 +25,9 @@ pub(super) fn expand(
     let mut state_types = Vec::new();
     for field in ordered {
         let Field {
-            member,
-            kind,
-            write_with,
-            ..
+            kind, write_with, ..
         } = field;
+        let member = &field.access();
         let value = match write_with {
             Some(function) => quote!(#function(&self.#member, __wc3_mdl_writer)?;),
             None => quote!(__wc3_mdl_writer.write(&self.#member)?;),
@@ -44,6 +42,16 @@ pub(super) fn expand(
                 state_types.push(quote!(<#ty as ::wc3::model::mdl::WriteFields>::State));
                 required_flags.push(quote!(let #local = <#ty as ::wc3::model::mdl::WriteFields>::prepare_mdl_fields(&self.#member)?;));
                 writes.push(quote!(<#ty as ::wc3::model::mdl::WriteFields>::write_mdl_fields(&self.#member, #local, __wc3_mdl_writer)?;));
+                if let Some(extra) = &field.extra_flags {
+                    let get = &extra.get;
+                    for (name, mask) in &extra.flags {
+                        writes.push(quote! {
+                            if ::wc3::model::mdl::BitRange::<u32>::bit_range(&#get(&self.#member), 31, 0) & #mask != 0 {
+                                __wc3_mdl_writer.flag(#name)?;
+                            }
+                        });
+                    }
+                }
             }
             Kind::Block(mdl_name) => {
                 let ty = &field.ty;
@@ -129,6 +137,14 @@ pub(super) fn expand(
                     }
                     choices.push(quote!(#variant(_) => {}));
                 }
+                for (_, variant) in &field.channels {
+                    checks.push(quote! {
+                        if self.#member.iter().filter(|track| matches!(track, #variant(_))).count() > 1 {
+                            return Err(::wc3::model::mdl::WriteError::Unsupported("duplicate animation track"));
+                        }
+                    });
+                    choices.push(quote!(#variant(_) => {}));
+                }
                 required_flags.push(quote! {
                         #(#checks)*
                         for track in &self.#member {
@@ -179,7 +195,7 @@ pub(super) fn expand(
     }
     // Body write_order must not reorder flattened or direct header values.
     for field in &schema.fields {
-        let member = &field.member;
+        let member = &field.access();
         match &field.kind {
             Kind::Header => {
                 let value = match &field.write_with {
