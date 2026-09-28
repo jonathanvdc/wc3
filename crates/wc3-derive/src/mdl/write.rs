@@ -80,7 +80,16 @@ pub(super) fn expand(
                         }
                     });
                 }
-                writes.push(quote!(for item in (#access).iter() { __wc3_mdl_writer.write(item)?; }))
+                if field.virtual_field {
+                    writes.push(quote!(for item in (#access).iter() {
+                        use ::wc3::model::mdl::Write as _;
+                        item.write_mdl(__wc3_mdl_writer)?;
+                    }));
+                } else {
+                    writes.push(
+                        quote!(for item in (#access).iter() { __wc3_mdl_writer.write(item)?; }),
+                    );
+                }
             }
             Kind::Counted(mdl_name) => {
                 writes.push(quote!(__wc3_mdl_writer.counted(#mdl_name, #access.iter())?;))

@@ -216,7 +216,10 @@
 //! ReadError>`. The boolean distinguishes explicit presence from defaults,
 //! including empty blocks or tracks and explicit default-valued properties.
 //! The span covers the entire record. Its getter supplies the write value;
-//! collection getters may return borrowed slices. Structural getters may return
+//! collection getters may return borrowed slices or views whose `iter()` yields
+//! borrowed entry adapters. Delegated getters may return a borrowed value
+//! implementing WriteProperty; their declared read type need not implement it.
+//! Structural getters may return
 //! a borrowed view implementing WriteFields with the same State type as the
 //! declared read type. Getters must be stable for an unchanged record.
 //!

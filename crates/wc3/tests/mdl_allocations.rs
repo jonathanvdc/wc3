@@ -143,3 +143,28 @@ fn version_selected_lights_and_layers_write_without_cloning_storage() {
     });
     assert_eq!(count, 0);
 }
+
+#[test]
+fn geosets_write_borrowed_mesh_sections_without_allocating() {
+    use wc3::model::geometry::{Geoset, SkinWeights};
+    use wc3::model::V1400;
+    let mut geoset =
+        Geoset::<V1400>::decode_mdl(include_str!("fixtures/mdl/quad_geoset.mdl")).unwrap();
+    geoset.set_tangents(Some(&[[1.0, 0.0, 0.0, -1.0]; 4]));
+    geoset
+        .set_skin_weights(Some(
+            &[SkinWeights {
+                bone_indices: [0; 4],
+                weights: [255, 0, 0, 0],
+            }; 4],
+        ))
+        .unwrap();
+    geoset.set_sequence_extents(&[geoset.extent(); 2]);
+    let mut storage = [0u8; 8192];
+    let (_, count) = measured(|| {
+        let mut writer = MdlWriter::new(IoCursor::new(&mut storage[..]));
+        writer.write(&geoset).unwrap();
+        writer.finish().unwrap();
+    });
+    assert_eq!(count, 0);
+}

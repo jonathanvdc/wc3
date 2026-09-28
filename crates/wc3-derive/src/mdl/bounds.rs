@@ -30,7 +30,9 @@ pub(super) fn build(
             };
             generics.make_where_clause().predicates.push(bound);
         }
-        if matches!(field.kind, Kind::Repeated(_) | Kind::Counted(_)) {
+        if matches!(field.kind, Kind::Repeated(_) | Kind::Counted(_))
+            && (reading || !field.virtual_field)
+        {
             let element = vec_element(ty)?;
             let bound = if reading {
                 parse_quote!(#element: ::wc3::model::mdl::Read)
@@ -39,7 +41,7 @@ pub(super) fn build(
             };
             generics.make_where_clause().predicates.push(bound);
         }
-        if matches!(field.kind, Kind::DelegatedProperty(_)) {
+        if matches!(field.kind, Kind::DelegatedProperty(_)) && (reading || !field.virtual_field) {
             let bound = if reading {
                 parse_quote!(#ty: ::wc3::model::mdl::ReadProperty)
             } else {

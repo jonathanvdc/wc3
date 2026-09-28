@@ -1,4 +1,4 @@
-//! Typed geoset sections and lossless MDX serialization.
+//! Typed geoset sections, lossless MDX serialization and derived MDL codecs.
 use crate::model::conversion::ConversionContext;
 use crate::model::ConversionError;
 use crate::model::Encoder;
@@ -196,26 +196,79 @@ impl GeosetLayout for V1800 {
     type ExtraSections = ReforgedGeosetExtraSections;
 }
 
+mod mdl_codec;
+use mdl_codec::{
+    AnimExtent, Faces, Groups, List, OptionalList, Selection, SkinRow, Uncounted, UvSet,
+};
+
 /// A geoset as typed sections. The exact fixed-width name field is retained
 /// for byte-for-byte serialization.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, mdl::Read, mdl::Write)]
+#[mdl(block = "Geoset", validate_read = "Self::validate_mdl_read",
+    validate_write = "Self::validate_mdl_write",
+    write_order(positions, directions, uvs, tangents, skin, vertex_indices,
+        triangles, matrices, material_id, selection_group, selection, lod, lod_name, extent, bounds),
+    virtual_fields(
+        #[mdl(property = "Vertices", delegate, get = "Self::mdl_positions", set = "Self::set_mdl_positions")]
+        positions: List<Vec3>,
+        #[mdl(property = "Normals", delegate, get = "Self::mdl_directions", set = "Self::set_mdl_directions")]
+        directions: List<Vec3>,
+        #[mdl(repeated = "TVertices", get = "Self::mdl_uvs", set = "Self::set_mdl_uvs")]
+        uvs: Vec<UvSet>,
+        #[mdl(property = "VertexGroup", delegate, get = "Self::mdl_vertex_indices", set = "Self::set_mdl_vertex_indices")]
+        vertex_indices: Uncounted<u8>,
+        #[mdl(property = "Faces", delegate, get = "Self::mdl_triangles", set = "Self::set_mdl_triangles")]
+        triangles: Faces,
+        #[mdl(property = "Groups", delegate, get = "Self::mdl_matrices", set = "Self::set_mdl_matrices")]
+        matrices: Groups,
+        #[mdl(flatten, get = "Self::mdl_selection", set = "Self::set_mdl_selection")]
+        selection: Selection,
+        #[mdl(property = "LevelOfDetail", default, get = "Self::mdl_lod", slot = "Self::mdl_lod_mut")]
+        lod: u32,
+        #[mdl(property = "LevelOfDetailName", delegate, get = "Self::mdl_lod_name", set = "Self::set_mdl_lod_name")]
+        lod_name: Option<FixedText<80>>,
+        #[mdl(repeated = "Anim", get = "Self::mdl_bounds", set = "Self::set_mdl_bounds")]
+        bounds: Vec<AnimExtent>,
+        #[mdl(property = "Tangents", delegate, get = "Self::mdl_tangents", set = "Self::set_mdl_tangents")]
+        tangents: OptionalList<[f32; 4]>,
+        #[mdl(property = "SkinWeights", delegate, get = "Self::mdl_skin", set = "Self::set_mdl_skin")]
+        skin: OptionalList<SkinRow>,
+    )
+)]
 pub struct Geoset<V: ModelVersion> {
+    #[mdl(skip, default)]
     version: PhantomData<V>,
+    #[mdl(skip, default)]
     vertices: Vec<Vec3>,
+    #[mdl(skip, default)]
     normals: Vec<Vec3>,
+    #[mdl(skip, default)]
     primitive_types: Vec<u32>,
+    #[mdl(skip, default)]
     primitive_counts: Vec<u32>,
+    #[mdl(skip, default)]
     faces: Vec<u16>,
+    #[mdl(skip, default)]
     vertex_groups: Vec<u8>,
+    #[mdl(skip, default)]
     matrix_group_sizes: Vec<u32>,
+    #[mdl(skip, default)]
     matrix_indices: Vec<u32>,
+    #[mdl(property = "MaterialID", default)]
     material_id: u32,
+    #[mdl(property = "SelectionGroup", default)]
     selection_group: u32,
+    #[mdl(skip, default)]
     unselectable_raw: u32,
+    #[mdl(skip, default)]
     level_of_detail: V::LevelOfDetail,
+    #[mdl(flatten)]
     extent: GeosetExtent,
+    #[mdl(skip, default)]
     sequence_extents: Vec<GeosetExtent>,
+    #[mdl(skip, default)]
     extra_sections: V::ExtraSections,
+    #[mdl(skip, default)]
     uv_sets: Vec<Vec<[f32; 2]>>,
 }
 
@@ -315,7 +368,7 @@ impl<V: ModelVersion> Geoset<V> {
     }
     /// Returns the unselectable flag as a boolean.
     pub fn unselectable(&self) -> bool {
-        self.unselectable_raw != 0
+        self.unselectable_raw & 4 != 0
     }
     /// Returns the exact unselectable field, including nonstandard bits.
     pub fn raw_unselectable(&self) -> u32 {
@@ -471,9 +524,9 @@ impl<V: ModelVersion> Geoset<V> {
     pub fn set_selection_group(&mut self, group: u32) {
         self.selection_group = group;
     }
-    /// Sets the unselectable field to zero or one.
+    /// Changes the unselectable mask (4), preserving other selection flags.
     pub fn set_unselectable(&mut self, value: bool) {
-        self.unselectable_raw = u32::from(value);
+        self.unselectable_raw = (self.unselectable_raw & !4) | (u32::from(value) * 4);
     }
     /// Sets the exact unselectable field.
     pub fn set_raw_unselectable(&mut self, value: u32) {
