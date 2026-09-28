@@ -33,6 +33,7 @@ pub(crate) use chunks::*;
 pub mod io;
 pub use io::*;
 pub mod animation;
+pub mod mdl;
 pub(crate) use animation::*;
 pub mod geometry;
 pub(crate) use geometry::*;

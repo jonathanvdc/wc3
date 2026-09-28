@@ -95,3 +95,53 @@ Classic matrix groups. Skin indices above 255 cannot be represented before
 V1400: strict conversion fails, while lossy conversion drops the whole skin
 section rather than truncating indices. These operations convert supported
 format data; they do not guarantee identical rendering across game versions.
+
+## MDL primitives
+
+`wc3_mdx::mdl` provides a borrowing `Lexer`, a copyable `Parser` with one token
+of lookahead, source-span diagnostics, and an `MdlWriter<W: std::io::Write>`.
+Parsing operates on resident UTF-8 text without an AST or a token buffer.
+Strings retain literal backslashes and embedded line breaks. Only `//` comments
+are supported. Numeric readers check ranges and accept the MDL non-finite float
+literals; finite float output round-trips exactly, including negative zero.
+NaN payload bits are not preserved by text output.
+
+Handwritten `MdlRead` / `MdlWrite` implementations currently cover `Texture`
+(`Bitmap`), `Sequence` (`Anim`, including `SyncPoint`), `GlobalSequence`
+(`Duration`), and `PivotPoint` (an anonymous vector entry). Readers accept fields
+in any order, apply defaults, and reject unknown or duplicate fields. An `Anim`
+requires `Interval`. `parse_mdl()` requires exactly one record; `Parser::read()`
+consumes one record from a larger stream.
+
+Counted lists yield records on demand, so individual records can go directly
+into the binary encoder:
+
+```rust
+use wc3_mdx::animation::GlobalSequence;
+use wc3_mdx::mdl::Parser;
+use wc3_mdx::Encoder;
+
+let mut parser = Parser::new("GlobalSequences 2 { Duration 1000, Duration 2500, }");
+parser.expect_ident("GlobalSequences")?;
+let mut bytes = Vec::with_capacity(8);
+let mut encoder = Encoder::new(&mut bytes);
+for record in parser.counted::<GlobalSequence>()? {
+    encoder.write(&record?)?;
+}
+parser.finish()?;
+# Ok::<(), Box<dyn std::error::Error>>(())
+```
+
+This example writes the collection payload, not an entire MDX model. Counted
+readers validate the declared count and closing brace when exhausted; call
+`finish()` to drain and validate a list after stopping early. Each record codec
+owns its entry punctuation. Dropping a block or list does not validate unread
+input. Parser copies are explicit checkpoints for speculative reads.
+
+The writer uses tabs, LF, and deterministic field order. It rejects unknown flag
+bits, reserved bytes, non-UTF-8 text, nonzero text padding, and unterminated fixed
+text rather than silently losing binary data. Literal quotes and NUL cannot be
+written inside strings. Errors may leave partial output. Use
+`error.diagnostic(source)` to display line/column and the offending source span.
+
+Whole-model MDL conversion and MDL derives are not implemented yet.

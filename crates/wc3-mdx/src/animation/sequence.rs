@@ -1,8 +1,13 @@
 //! Animation sequence records in the `SEQS` chunk.
+use crate::mdl::{
+    fixed_text, ReadError as MdlError, ReadErrorKind, Fields, MdlRead, MdlWrite, MdlWriter, Parser,
+    TokenKind, WriteError,
+};
 use crate::ModelVersion;
 use crate::ValueError;
 use crate::Vec3;
 use bitfield::bitfield;
+use std::io::Write;
 
 use crate::SequencesChunk;
 use crate::{Readable, Writable};
@@ -24,7 +29,7 @@ bitfield! {
 const NAME_SIZE: usize = 80;
 
 /// A fixed-size animation sequence, including reserved fields.
-#[derive(Clone, Debug, PartialEq, Readable, Writable)]
+#[derive(Clone, Debug, PartialEq, Default, Readable, Writable)]
 pub struct Sequence {
     name: FixedText<NAME_SIZE>,
     interval: [u32; 2],
@@ -120,5 +125,86 @@ impl<V: ModelVersion> Model<V> {
     /// Additional `SEQS` chunks are removed after their records are replaced.
     pub fn set_sequences(&mut self, sequences: &[Sequence]) {
         self.replace_chunk(SequencesChunk::new(sequences.to_vec()));
+    }
+}
+
+impl MdlRead for Sequence {
+    fn read_mdl(parser: &mut Parser<'_>) -> Result<Self, MdlError> {
+        parser.expect_ident("Anim")?;
+        let mut sequence = Self::default();
+        sequence.name = parser.read_fixed_text()?;
+        let mut fields = Fields::default();
+        let mut body = parser.begin_block()?;
+        while let Some(field) = body.next_field()? {
+            match field.name {
+                "Interval" => {
+                    fields.mark(0, field)?;
+                    sequence.interval = body.read_property()?;
+                }
+                "NonLooping" => {
+                    fields.mark(1, field)?;
+                    body.expect(TokenKind::Comma)?;
+                    sequence.flags = 1;
+                }
+                "MoveSpeed" => {
+                    fields.mark(2, field)?;
+                    sequence.move_speed = body.read_property()?;
+                }
+                "Rarity" => {
+                    fields.mark(3, field)?;
+                    sequence.rarity = body.read_property()?;
+                }
+                "SyncPoint" => {
+                    fields.mark(4, field)?;
+                    sequence.sync_point = body.read_property()?;
+                }
+                "MinimumExtent" => {
+                    fields.mark(5, field)?;
+                    sequence.minimum_extent = body.read_property()?;
+                }
+                "MaximumExtent" => {
+                    fields.mark(6, field)?;
+                    sequence.maximum_extent = body.read_property()?;
+                }
+                "BoundsRadius" => {
+                    fields.mark(7, field)?;
+                    sequence.bounds_radius = body.read_property()?;
+                }
+                _ => return Err(MdlError::new(field.span, ReadErrorKind::UnknownField)),
+            }
+        }
+        fields.require(
+            0,
+            "Interval",
+            body.error(ReadErrorKind::MissingField("Interval")).span,
+        )?;
+        body.finish()?;
+        Ok(sequence)
+    }
+}
+impl MdlWrite for Sequence {
+    fn write_mdl<W: Write>(&self, writer: &mut MdlWriter<W>) -> Result<(), WriteError> {
+        if self.flags & !1 != 0 {
+            return Err(WriteError::Unsupported("unknown sequence flags"));
+        }
+        writer.begin_named_block("Anim", fixed_text(&self.name)?)?;
+        writer.property("Interval", &self.interval)?;
+        if self.flags & 1 != 0 {
+            writer.flag("NonLooping")?;
+        }
+        // Check bits rather than equality so omission does not discard negative zero.
+        if self.move_speed.to_bits() != 0 {
+            writer.property("MoveSpeed", &self.move_speed)?;
+        }
+        if self.rarity.to_bits() != 0 {
+            writer.property("Rarity", &self.rarity)?;
+        }
+        if self.sync_point != 0 {
+            writer.property("SyncPoint", &self.sync_point)?;
+        }
+        writer.property("MinimumExtent", &self.minimum_extent)?;
+        writer.property("MaximumExtent", &self.maximum_extent)?;
+        writer.property("BoundsRadius", &self.bounds_radius)?;
+        writer.end_block()
     }
 }
