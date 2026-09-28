@@ -174,7 +174,8 @@ initialize to zero, and reject duplicate names and unknown bits.
 binary layout. Single-field tuple structs support `#[mdl(property = "Name")]`
 and anonymous `#[mdl(entry)]` forms. The derives support at most 64 body names;
 flattened field groups, nested blocks, repeated records, and counted collections
-are derived too. Enums remain handwritten. Whole-model MDL conversion is
+are derived too. Scalar keyword and tagged record enums are also supported.
+Whole-model MDL conversion is
 not implemented yet.
 
 MDL structural fields use `#[mdl(flatten)]`, `#[mdl(block = "Target")]`,
@@ -185,6 +186,14 @@ and counted lists are required unless given defaults. Collection items own
 framing, and counted collections validate their declared size. `Sequence` uses
 this support to flatten its shared `GeosetExtent` bounding fields while preserving
 its MDX layout and public accessors.
+
+Enums use `#[mdl(value)]` for unit keyword variants or `#[mdl(tagged)]` for
+complete flag/property/block records. `#[mdl(name = "Blend")]` renames a scalar
+variant. Tagged payloads declare `property`, `block`, or `name` with `delegate`;
+delegation leaves complete framing to the payload codec. Name expressions also
+accept constant paths. Literal duplicate names are compile-time errors; constant
+names are validated without allocation before reading/writing. Interpolation
+and the default animation track groups now use these derives.
 
 Texture paths occupy 260 bytes (up to 259 UTF-8 bytes plus NUL). ModelInfo stores
 an 80-byte name followed by a separate 260-byte animation-file path, exposed by

@@ -1,9 +1,11 @@
 //! Keyframe values and their binary representations.
 
-use crate::model::mdx;
+use crate::model::{mdl, mdx};
 /// An interpolation mode shared by all keys in a track.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, mdl::Read, mdl::Write)]
+#[mdl(value)]
 pub enum Interpolation {
+    #[mdl(name = "DontInterp")]
     Step,
     Linear,
     Hermite,

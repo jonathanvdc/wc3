@@ -351,7 +351,7 @@ fn rejects_non_structs_tuple_structs_and_more_than_64_body_fields() {
                 A,
             }
         ),
-        "structs only",
+        "enums support",
     );
     rejects(
         parse_quote!(
@@ -737,4 +737,82 @@ fn structural_fields_reject_conflicting_policies_and_names() {
         ),
         "duplicate MDL field name",
     );
+}
+
+#[test]
+fn enums_reject_invalid_modes_names_and_shapes() {
+    for (source, expected) in [
+        ("enum Bad { A }", "require value or tagged"),
+        ("#[mdl(value, tagged)] enum Bad { A }", "exactly one"),
+        ("#[mdl(value)] enum Bad {}", "at least one"),
+        ("#[mdl(value)] enum Bad { A(u32) }", "only unit variants"),
+        (
+            "#[mdl(value)] enum Bad { A { value: u32 } }",
+            "unit or single-field tuple",
+        ),
+        (
+            "#[mdl(tagged)] enum Bad { #[mdl(property = \"A\")] A(u32, u32) }",
+            "unit or single-field tuple",
+        ),
+        (
+            "#[mdl(value)] enum Bad { #[mdl(name = \"Same\")] A, #[mdl(name = \"Same\")] B }",
+            "duplicate MDL enum variant name",
+        ),
+        (
+            "#[mdl(value)] enum Bad { #[mdl(name = \"Bad Name\")] A }",
+            "MDL identifier",
+        ),
+        ("#[mdl(value)] enum Bad { Nan }", "numeric literals"),
+        (
+            "#[mdl(value)] enum Bad { #[mdl(name = factory())] A }",
+            "constant paths",
+        ),
+        (
+            "#[mdl(value)] enum Bad { #[mdl(name = 1)] A }",
+            "constant paths",
+        ),
+    ] {
+        rejects(syn::parse_str(source).unwrap(), expected);
+    }
+}
+
+#[test]
+fn tagged_enum_framing_matches_variant_storage() {
+    for (source, expected) in [
+        ("#[mdl(tagged)] enum Bad { A }", "require explicit"),
+        (
+            "#[mdl(tagged)] enum Bad { #[mdl(name = \"A\")] A(u32) }",
+            "name with delegate",
+        ),
+        (
+            "#[mdl(tagged)] enum Bad { #[mdl(flag = \"A\")] A(u32) }",
+            "flag for unit",
+        ),
+        (
+            "#[mdl(tagged)] enum Bad { #[mdl(property = \"A\")] A }",
+            "flag for unit",
+        ),
+        (
+            "#[mdl(tagged)] enum Bad { #[mdl(name = \"A\", delegate)] A }",
+            "single-field tuple",
+        ),
+        (
+            "#[mdl(tagged)] enum Bad { #[mdl(block = \"A\", delegate)] A(u32) }",
+            "delegate requires name",
+        ),
+        (
+            "#[mdl(tagged)] enum Bad { #[mdl(name = \"A\", delegate, delegate)] A(u32) }",
+            "duplicate delegate",
+        ),
+        (
+            "#[mdl(tagged)] enum Bad { #[mdl(property = \"A\", block = \"B\")] A(u32) }",
+            "exactly one variant",
+        ),
+        (
+            "#[mdl(tagged)] enum Bad { #[mdl(property = \"A\")] A(#[mdl(default)] u32) }",
+            "payload fields",
+        ),
+    ] {
+        rejects(syn::parse_str(source).unwrap(), expected);
+    }
 }

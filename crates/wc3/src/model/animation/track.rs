@@ -227,44 +227,35 @@ where
             let TokenKind::Ident(name) = token.kind else {
                 break;
             };
-            parser.next_token()?;
-            match name {
-                "DontInterp" | "Linear" | "Hermite" | "Bezier" => {
-                    if interpolation.is_some() {
-                        return Err(mdl::ReadError::new(
-                            token.span,
-                            ReadErrorKind::DuplicateField,
-                        ));
-                    }
-                    interpolation = Some(match name {
-                        "DontInterp" => Interpolation::Step,
-                        "Linear" => Interpolation::Linear,
-                        "Hermite" => Interpolation::Hermite,
-                        _ => Interpolation::Bezier,
-                    });
-                    parser.expect(TokenKind::Comma)?;
+            if name == "GlobalSeqId" {
+                parser.next_token()?;
+                if sequence.is_some() {
+                    return Err(mdl::ReadError::new(
+                        token.span,
+                        ReadErrorKind::DuplicateField,
+                    ));
                 }
-                "GlobalSeqId" => {
-                    if sequence.is_some() {
-                        return Err(mdl::ReadError::new(
-                            token.span,
-                            ReadErrorKind::DuplicateField,
-                        ));
-                    }
-                    parser.peek()?;
-                    let span = parser
-                        .error(ReadErrorKind::InvalidNumber("global sequence ID"))
-                        .span;
-                    let id = parser.read_property::<u32>()?;
-                    if id == u32::MAX {
-                        return Err(mdl::ReadError::new(
-                            span,
-                            ReadErrorKind::InvalidNumber("global sequence ID"),
-                        ));
-                    }
-                    sequence = Some(id);
+                parser.peek()?;
+                let span = parser
+                    .error(ReadErrorKind::InvalidNumber("global sequence ID"))
+                    .span;
+                let id = parser.read_property::<u32>()?;
+                if id == u32::MAX {
+                    return Err(mdl::ReadError::new(
+                        span,
+                        ReadErrorKind::InvalidNumber("global sequence ID"),
+                    ));
                 }
-                _ => return Err(mdl::ReadError::new(token.span, ReadErrorKind::UnknownField)),
+                sequence = Some(id);
+            } else {
+                let mode = parser.read::<Interpolation>()?;
+                if interpolation.replace(mode).is_some() {
+                    return Err(mdl::ReadError::new(
+                        token.span,
+                        ReadErrorKind::DuplicateField,
+                    ));
+                }
+                parser.expect(TokenKind::Comma)?;
             }
         }
         let interpolation = interpolation
@@ -337,12 +328,9 @@ where
 {
     fn write_mdl<W: IoWrite>(&self, writer: &mut MdlWriter<W>) -> Result<(), mdl::WriteError> {
         writer.begin_counted_block(K::MDL_NAME, self.keyframes.len())?;
-        writer.flag(match self.interpolation() {
-            Interpolation::Step => "DontInterp",
-            Interpolation::Linear => "Linear",
-            Interpolation::Hermite => "Hermite",
-            Interpolation::Bezier => "Bezier",
-        })?;
+        writer.indent()?;
+        writer.write(&self.interpolation())?;
+        writer.raw(",\n")?;
         if let Some(sequence) = self.global_sequence_id {
             writer.property("GlobalSeqId", &sequence)?;
         }

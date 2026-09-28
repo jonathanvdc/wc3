@@ -146,8 +146,8 @@
 //!
 //! Derives preserve generics and existing where clauses, adding codec and
 //! Default bounds only for fields that use them. They support up to 64 body
-//! names per group (each mapped flag counts separately). Enums and general tuple
-//! structs remain handwritten; linked track collections use `tracks`.
+//! names per group (each mapped flag counts separately). General tuple structs
+//! remain handwritten; linked track collections use `tracks`.
 //!
 //! Container `#[mdl(default)]` uses `Self::default()` as the source for omitted
 //! body fields, including skipped fields and packed flags. Headers stay required;
@@ -204,6 +204,55 @@
 //! assert_eq!(record.sequences.len(), 1);
 //! assert!(record.points.is_empty());
 //! Envelope::decode_mdl(&record.encode_mdl()?)?;
+//! # Ok::<(), Box<dyn std::error::Error>>(())
+//! ```
+//!
+//! ## Enums
+//!
+//! `#[mdl(value)]` derives a scalar keyword enum with unit variants. Names default
+//! to the Rust variant identifier; `#[mdl(name = "DontInterp")]` renames a variant.
+//! Scalar enum codecs consume/emit only the identifier. Their containing property
+//! or entry owns its comma and indentation. Names are case-sensitive, and unknown
+//! names fail at the discriminator's source span. Interpolation uses this form.
+//!
+//! `#[mdl(tagged)]` derives complete records selected by their leading identifier.
+//! Every variant declares its framing explicitly:
+//! - `#[mdl(flag = "Ready")] Ready` owns a flag and its comma.
+//! - `#[mdl(property = "Duration")] Duration(u32)` owns a scalar property.
+//! - `#[mdl(block = "Target")] Target(Position)` uses the payload's field codecs.
+//! - `#[mdl(name = "Child", delegate)] Child(Child)` delegates the complete record
+//!   to the payload's `Read`/`Write`, leaving the discriminator unconsumed on read.
+//!
+//! Delegated codecs must use the declared discriminator. Variants cannot have
+//! multiple or named payload fields; use a derived record as the single payload.
+//! Tagged enums can be items in counted collections, preserving mixed variant
+//! order. Generic payloads gain only the bounds required by the chosen framing
+//! and derive direction. Enum validation hooks have the same signatures as block
+//! hooks and validate the complete enum value before output.
+//!
+//! Variant name expressions can also be constant paths, including associated
+//! constants such as `<Kind as TrackKind>::MDL_NAME`; ordinary Rust paths do not
+//! need quotes. Literal names and duplicates are checked by the derive. Constant
+//! names are checked for valid identifiers and duplicates without allocation
+//! before reading or writing. Default animation track groups use delegated
+//! variants with these associated-constant names.
+//!
+//! ```
+//! use wc3::model::mdl;
+//! use wc3::model::mdl::{Read as _, Write as _};
+//! #[derive(Debug, PartialEq, mdl::Read, mdl::Write)]
+//! #[mdl(value)]
+//! enum Filter { None, #[mdl(name = "Blend")] AlphaBlend }
+//! assert_eq!(Filter::decode_mdl("Blend")?, Filter::AlphaBlend);
+//! assert_eq!(Filter::None.encode_mdl()?, "None");
+//! #[derive(Debug, PartialEq, mdl::Read, mdl::Write)]
+//! #[mdl(tagged)]
+//! enum Record {
+//!     #[mdl(flag = "Ready")] Ready,
+//!     #[mdl(property = "Duration")] Duration(u32),
+//! }
+//! assert_eq!(Record::decode_mdl("Duration 1000,")?, Record::Duration(1000));
+//! assert_eq!(Record::Ready.encode_mdl()?, "Ready,\n");
 //! # Ok::<(), Box<dyn std::error::Error>>(())
 //! ```
 //!
@@ -317,6 +366,9 @@
 //! }
 //! ```
 
+mod enumeration;
+#[doc(hidden)]
+pub use enumeration::enum_names_valid;
 mod error;
 pub use error::{Diagnostic, ReadError, ReadErrorKind, Span, WriteError};
 mod fields;

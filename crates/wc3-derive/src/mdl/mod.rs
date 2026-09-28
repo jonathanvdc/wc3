@@ -1,6 +1,7 @@
 //! MDL derive entry point. Parsing, validation and codec generation are separate.
 mod attributes;
 mod bounds;
+mod enumeration;
 mod omission;
 mod read;
 mod schema;
@@ -12,7 +13,7 @@ mod write;
 use attributes::container;
 use proc_macro2::TokenStream;
 use quote::format_ident;
-use syn::{DeriveInput, GenericParam, Generics, Ident, Result};
+use syn::{Data, DeriveInput, GenericParam, Generics, Ident, Result};
 
 pub(crate) fn expand(input: DeriveInput, reading: bool) -> TokenStream {
     match expand_checked(input, reading) {
@@ -22,6 +23,9 @@ pub(crate) fn expand(input: DeriveInput, reading: bool) -> TokenStream {
 }
 
 fn expand_checked(input: DeriveInput, reading: bool) -> Result<TokenStream> {
+    if matches!(input.data, Data::Enum(_)) {
+        return enumeration::expand(&input, reading);
+    }
     let options = container(&input)?;
     if options.block.is_none() && !options.fields {
         return value::expand(input, options, reading);

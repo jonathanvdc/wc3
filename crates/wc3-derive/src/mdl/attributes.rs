@@ -54,7 +54,7 @@ pub(super) struct Field {
     pub(super) required: bool,
 }
 
-fn identifier(name: &LitStr) -> Result<()> {
+pub(super) fn identifier(name: &LitStr) -> Result<()> {
     let value = name.value();
     let mut bytes = value.bytes();
     if !bytes
