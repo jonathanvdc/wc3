@@ -136,16 +136,29 @@ impl<'a> Parser<'a> {
     /// Enters a count-prefixed body, yielding structured items on demand.
     /// Each item's Read implementation owns its punctuation.
     pub fn counted<T: Read>(&mut self) -> Result<Counted<'_, 'a, T>, ReadError> {
+        self.counted_with_header(|_| Ok(())).map(|(_, items)| items)
+    }
+    /// Enters a counted body whose metadata precedes its counted items.
+    /// The header reader runs after the opening brace; metadata does not count
+    /// toward the declared item count. Items still own their punctuation.
+    pub fn counted_with_header<T: Read, H>(
+        &mut self,
+        header: impl FnOnce(&mut Self) -> Result<H, ReadError>,
+    ) -> Result<(H, Counted<'_, 'a, T>), ReadError> {
         let expected = self.read::<u32>()? as usize;
         self.expect(TokenKind::OpenBrace)?;
-        Ok(Counted {
-            parser: self,
-            expected,
-            actual: 0,
-            ended: false,
-            failure: None,
-            marker: PhantomData,
-        })
+        let header = header(self)?;
+        Ok((
+            header,
+            Counted {
+                parser: self,
+                expected,
+                actual: 0,
+                ended: false,
+                failure: None,
+                marker: PhantomData,
+            },
+        ))
     }
     pub fn finish(&mut self) -> Result<(), ReadError> {
         if self.peek()?.is_none() {

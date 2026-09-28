@@ -1,10 +1,13 @@
 //! Event objects stored in `EVTS` chunks.
-use crate::model::mdx;
+use super::{set_node_kind, validate_node_kind};
+use crate::model::mdl::{Field, MdlWriter, Parser, Span, TokenKind};
 use crate::model::Encoder;
 use crate::model::KnownChunk;
 use crate::model::ModelVersion;
 use crate::model::Tag;
 use crate::model::WriteError;
+use crate::model::{mdl, mdx};
+use std::io::Write as IoWrite;
 
 use crate::model::{Cursor, EventObjectsChunk};
 use crate::model::{Model, Node, ReadError};
@@ -12,6 +15,9 @@ use crate::model::{Model, Node, ReadError};
 const TRACK_TAG: Tag = *b"KEVT";
 
 /// A node followed by an event track.
+///
+/// MDL reading reconstructs the event object-kind bit; writing requires matching
+/// node bits. Event frame counts exclude the optional GlobalSeqId metadata.
 #[derive(Clone, Debug, PartialEq)]
 pub struct EventObject {
     node: Node,
@@ -119,5 +125,102 @@ impl mdx::Write for EventObject {
             });
         }
         Ok(())
+    }
+}
+
+#[derive(mdl::Read, mdl::Write)]
+#[mdl(entry)]
+struct EventFrame(i32);
+struct EventTrackMdl {
+    sequence: u32,
+    frames: Vec<i32>,
+}
+impl mdl::ReadProperty for EventTrackMdl {
+    fn read_mdl_property(parser: &mut Parser<'_>, _: Field<'_>) -> Result<Self, mdl::ReadError> {
+        let (sequence, items) = parser.counted_with_header::<EventFrame, _>(|parser| {
+            if parser
+                .peek()?
+                .is_some_and(|token| token.kind == TokenKind::Ident("GlobalSeqId"))
+            {
+                parser.next_token()?;
+                let sequence = parser.read_property()?;
+                if parser
+                    .peek()?
+                    .is_some_and(|token| token.kind == TokenKind::Ident("GlobalSeqId"))
+                {
+                    return Err(parser.error(mdl::ReadErrorKind::DuplicateField));
+                }
+                Ok(sequence)
+            } else {
+                Ok(u32::MAX)
+            }
+        })?;
+        let frames = items
+            .map(|item| item.map(|frame| frame.0))
+            .collect::<Result<_, _>>()?;
+        Ok(Self { sequence, frames })
+    }
+}
+impl mdl::WriteProperty for EventTrackMdl {
+    fn validate_mdl_property(&self, _: &'static str) -> Result<(), mdl::WriteError> {
+        if self.frames.len() > u32::MAX as usize {
+            return Err(mdl::WriteError::Unsupported("event track count"));
+        }
+        Ok(())
+    }
+    fn write_mdl_property<W: IoWrite>(
+        &self,
+        name: &'static str,
+        writer: &mut MdlWriter<W>,
+    ) -> Result<(), mdl::WriteError> {
+        self.validate_mdl_property(name)?;
+        writer.begin_counted_block(name, self.frames.len())?;
+        if self.sequence != u32::MAX {
+            writer.property("GlobalSeqId", &self.sequence)?;
+        }
+        for frame in &self.frames {
+            writer.entry(frame)?;
+        }
+        writer.end_block()
+    }
+}
+#[derive(mdl::Read, mdl::Write)]
+#[mdl(
+    block = "EventObject",
+    after_read = "finish_event",
+    validate_write = "validate_event"
+)]
+struct EventMdl {
+    #[mdl(flatten)]
+    node: Node,
+    #[mdl(property = "EventTrack", delegate)]
+    track: EventTrackMdl,
+}
+fn finish_event(value: &mut EventMdl, _: Span) -> Result<(), mdl::ReadError> {
+    set_node_kind(&mut value.node, 0x400);
+    Ok(())
+}
+fn validate_event(value: &EventMdl) -> Result<(), mdl::WriteError> {
+    validate_node_kind(&value.node, 0x400)
+}
+impl mdl::Read for EventObject {
+    fn read_mdl(parser: &mut Parser<'_>) -> Result<Self, mdl::ReadError> {
+        let value = parser.read::<EventMdl>()?;
+        Ok(Self {
+            node: value.node,
+            global_sequence_id: value.track.sequence,
+            frames: value.track.frames,
+        })
+    }
+}
+impl mdl::Write for EventObject {
+    fn write_mdl<W: IoWrite>(&self, writer: &mut MdlWriter<W>) -> Result<(), mdl::WriteError> {
+        writer.write(&EventMdl {
+            node: self.node.clone(),
+            track: EventTrackMdl {
+                sequence: self.global_sequence_id,
+                frames: self.frames.clone(),
+            },
+        })
     }
 }

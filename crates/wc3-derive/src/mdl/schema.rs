@@ -31,7 +31,8 @@ impl Schema {
                 | Kind::Block(name)
                 | Kind::Counted(name) => {
                     let static_form =
-                        matches!(field.kind, Kind::StaticProperty(_) | Kind::Animatable(_));
+                        matches!(field.kind, Kind::StaticProperty(_) | Kind::Animatable(_))
+                            && !field.animated_only;
                     calls.push(quote!(visitor(#name, #static_form);));
                 }
                 Kind::Repeated(names) => {
@@ -60,7 +61,10 @@ impl Schema {
                 Kind::StaticProperty(value) => {
                     conditions.push(quote!(static_form && name == #value))
                 }
-                Kind::Animatable(value) => conditions.push(quote!(name == #value)),
+                Kind::Animatable(value) => {
+                    let allow_static = !field.animated_only;
+                    conditions.push(quote!(name == #value && (!static_form || #allow_static)));
+                }
                 Kind::Property(value)
                 | Kind::DelegatedProperty(value)
                 | Kind::Flag(value)
@@ -92,9 +96,10 @@ impl Schema {
             .filter(|field| matches!(field.kind, Kind::Animatable(_)))
     }
     pub(super) fn has_static(&self) -> bool {
-        self.fields
-            .iter()
-            .any(|field| matches!(field.kind, Kind::StaticProperty(_) | Kind::Animatable(_)))
+        self.fields.iter().any(|field| {
+            matches!(field.kind, Kind::StaticProperty(_) | Kind::Animatable(_))
+                && !field.animated_only
+        })
     }
 }
 
@@ -192,9 +197,9 @@ pub(super) fn parse(input: &DeriveInput, options: &Container) -> Result<Schema> 
         }
         variants.push(variant_key);
     }
-    let has_static = fields
-        .iter()
-        .any(|field| matches!(field.kind, Kind::StaticProperty(_) | Kind::Animatable(_)));
+    let has_static = fields.iter().any(|field| {
+        matches!(field.kind, Kind::StaticProperty(_) | Kind::Animatable(_)) && !field.animated_only
+    });
     if has_static && names.iter().any(|name| name == "static") {
         return Err(Error::new_spanned(
             &input.ident,

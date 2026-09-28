@@ -281,13 +281,13 @@ fn finish_bone(value: &mut Bone, _: Span) -> Result<(), mdl::ReadError> {
 fn validate_bone(value: &Bone) -> Result<(), mdl::WriteError> {
     validate_node_kind(&value.node, 0x100)
 }
-pub(super) fn validate_node_kind(node: &Node, kind: u32) -> Result<(), mdl::WriteError> {
+pub(crate) fn validate_node_kind(node: &Node, kind: u32) -> Result<(), mdl::WriteError> {
     if node.raw_flags & !0xff != kind {
         return Err(mdl::WriteError::Unsupported("node object-kind bits"));
     }
     Ok(())
 }
-pub(super) fn set_node_kind(node: &mut Node, kind: u32) {
+pub(crate) fn set_node_kind(node: &mut Node, kind: u32) {
     node.raw_flags |= kind;
 }
 fn read_reference(parser: &mut Parser<'_>, keyword: &str) -> Result<u32, mdl::ReadError> {

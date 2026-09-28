@@ -848,3 +848,24 @@ fn validates_unique_collections_and_reconstruction_hooks() {
         "duplicate",
     );
 }
+
+#[test]
+fn animated_only_is_limited_to_animatable_fields() {
+    rejects(
+        parse_quote! {
+            #[mdl(block = "Record")]
+            struct Bad { #[mdl(property = "Value", animated_only)] value: f32 }
+        },
+        "animated_only requires animatable",
+    );
+    rejects(
+        parse_quote! {
+            #[mdl(block = "Record")]
+            struct Bad {
+                #[mdl(animatable = "Value", track = "Track::Value", default, animated_only, animated_only)] value: f32,
+                #[mdl(tracks)] tracks: Vec<Track>,
+            }
+        },
+        "duplicate animated_only",
+    );
+}

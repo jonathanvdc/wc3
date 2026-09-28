@@ -54,6 +54,7 @@ pub(super) struct Field {
     pub(super) allow_bits: u32,
     pub(super) required: bool,
     pub(super) unique_by: Option<Path>,
+    pub(super) animated_only: bool,
 }
 
 pub(super) fn identifier(name: &LitStr) -> Result<()> {
@@ -164,6 +165,7 @@ pub(super) fn field(field: &SynField, index: usize) -> Result<Field> {
     let mut required = false;
     let mut delegate = false;
     let mut unique_by = None;
+    let mut animated_only = false;
     for attr in &field.attrs {
         if !attr.path().is_ident("mdl") {
             continue;
@@ -260,6 +262,10 @@ pub(super) fn field(field: &SynField, index: usize) -> Result<Field> {
                 if delegate { return Err(meta.error("duplicate delegate")); }
                 delegate = true;
                 Ok(())
+            } else if meta.path.is_ident("animated_only") {
+                if animated_only { return Err(meta.error("duplicate animated_only")); }
+                animated_only = true;
+                Ok(())
             } else if meta.path.is_ident("unique_by") {
                 path(&meta, &mut unique_by)
             } else if meta.path.is_ident("required") {
@@ -328,6 +334,12 @@ pub(super) fn field(field: &SynField, index: usize) -> Result<Field> {
             || required)
     {
         return Err(Error::new_spanned(field, "delegate owns defaults, requirements, omission, and codec framing; it cannot have default, required, skip_if, read_with, or write_with"));
+    }
+    if animated_only && !matches!(kind, Kind::Animatable(_)) {
+        return Err(Error::new_spanned(
+            field,
+            "animated_only requires animatable",
+        ));
     }
     if unique_by.is_some() && !matches!(kind, Kind::Repeated(_)) {
         return Err(Error::new_spanned(field, "unique_by requires repeated"));
@@ -471,6 +483,7 @@ pub(super) fn field(field: &SynField, index: usize) -> Result<Field> {
         allow_bits: allow_bits.unwrap_or(0),
         required,
         unique_by,
+        animated_only,
     })
 }
 

@@ -451,3 +451,68 @@ fn unique_collection_keys_and_reconstruction_before_validation() {
     };
     assert!(invalid.encode_mdl().is_err());
 }
+
+use wc3::model::scene::LightTrack;
+
+#[derive(Debug, mdl::Read, mdl::Write)]
+#[mdl(block = "TrackOnly")]
+struct TrackOnly {
+    #[mdl(
+        animatable = "Visibility",
+        track = "LightTrack::Visibility",
+        animated_only,
+        default
+    )]
+    visibility: f32,
+    #[mdl(tracks)]
+    tracks: Vec<LightTrack>,
+}
+#[test]
+fn animated_only_channel_has_no_static_spelling_or_output() {
+    let empty = TrackOnly::decode_mdl("TrackOnly {}").unwrap();
+    assert_eq!(empty.encode_mdl().unwrap(), "TrackOnly {\n}\n");
+    let value = TrackOnly::decode_mdl("TrackOnly { Visibility 0 { Linear, } }").unwrap();
+    let text = value.encode_mdl().unwrap();
+    assert!(!text.contains("static"));
+    assert_eq!(TrackOnly::decode_mdl(&text).unwrap().tracks.len(), 1);
+    assert!(TrackOnly::decode_mdl("TrackOnly { static Visibility 0.0, }").is_err());
+    let duplicate =
+        TrackOnly::decode_mdl("TrackOnly { Visibility 0 { Linear, } Visibility 0 { Linear, } }")
+            .unwrap_err();
+    assert_eq!(duplicate.kind, mdl::ReadErrorKind::DuplicateField);
+    let hidden = TrackOnly {
+        visibility: -0.0,
+        tracks: vec![],
+    };
+    assert!(hidden.encode_mdl().is_err());
+}
+#[test]
+fn counted_header_does_not_contribute_to_the_item_count() {
+    let mut parser = mdl::Parser::new("2 { Id 7, -10, 20, }");
+    let (header, items) = parser
+        .counted_with_header::<Frame, _>(|parser| {
+            parser.expect_ident("Id")?;
+            parser.read_property::<u32>()
+        })
+        .unwrap();
+    assert_eq!(header, 7);
+    assert_eq!(
+        items.collect::<Result<Vec<_>, _>>().unwrap(),
+        vec![Frame(-10), Frame(20)]
+    );
+    parser.finish().unwrap();
+    let mut parser = mdl::Parser::new("1 { Id 7, }");
+    let (_, items) = parser
+        .counted_with_header::<Frame, _>(|parser| {
+            parser.expect_ident("Id")?;
+            parser.read_property::<u32>()
+        })
+        .unwrap();
+    assert_eq!(
+        items.finish().unwrap_err().kind,
+        mdl::ReadErrorKind::CountMismatch {
+            expected: 1,
+            actual: 0
+        }
+    );
+}

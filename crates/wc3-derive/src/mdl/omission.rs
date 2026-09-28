@@ -11,7 +11,11 @@ pub(super) fn needs_check(field: &Field) -> bool {
 
 pub(super) fn predicate(field: &Field, tracks: Option<&Field>) -> TokenStream {
     let member = &field.member;
-    let mut condition = quote!(true);
+    let mut condition = if field.animated_only {
+        quote!(false)
+    } else {
+        quote!(true)
+    };
     if let Some(function) = &field.skip_if {
         condition = quote!(#condition && !#function(&self.#member));
     }

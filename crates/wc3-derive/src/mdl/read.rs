@@ -188,7 +188,9 @@ pub(super) fn expand(
         match kind {
             Kind::StaticProperty(_) => static_arms.push(static_arm),
             Kind::Animatable(_) => {
-                static_arms.push(static_arm);
+                if !field.animated_only {
+                    static_arms.push(static_arm);
+                }
                 let variant = field.track.as_ref().expect("track was checked");
                 let collection = &tracks.expect("tracks was checked").local;
                 arms.push(quote!(#mdl_name => {

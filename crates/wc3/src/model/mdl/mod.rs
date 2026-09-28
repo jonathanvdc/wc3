@@ -24,6 +24,9 @@
 //! Material/Layer layouts use the existing version-selected storage. Layer
 //! texture bindings support static slots and animated diffuse IDs; writers
 //! reject non-diffuse animations and noncanonical binary texture-track order.
+//! Light, EventObject and CollisionShape records are also supported. Light
+//! fields follow their version-selected storage. ShadowIntensity supports only
+//! the static form: no corresponding binary animation tag has been verified.
 //! Whole-model conversion is not implemented yet.
 //!
 //! ```
@@ -310,6 +313,11 @@
 //! constructing the record, before validate_read, when either form was present.
 //! The writer omits the static property when disabled and rejects a track for a
 //! disabled property. Enable hooks run in field declaration order.
+//!
+//! An animatable field may add `animated_only` to reject its static spelling
+//! and omit its base on write. Its default then represents the absence of binary
+//! base storage; writing rejects a nondefault base even with no track. This is
+//! useful for channels such as Light visibility.
 //!
 //! Writers compare omitted animatable base values and skip_if properties with
 //! the defaults the reader restores, rejecting differences before any output.
