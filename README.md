@@ -207,3 +207,20 @@ Gliders have no version gate and are preserved during conversion.
 New light constructors use white direct and ambient colors. New Popcorn
 emitters use white color and unit lifespan, emission rate, speed, and alpha.
 Binary decoding retains the values actually stored in the file.
+
+## Delegated MDL properties
+
+`#[mdl(property = "Name", delegate)]` delegates the property's payload, missing
+value policy, and complete output to the field type's `mdl::ReadProperty` /
+`mdl::WriteProperty` implementations. The derive retains name dispatch,
+duplicate checks and output ordering, and adds no version checks. A missing
+property is required by default; the field codec can instead supply a default
+or absent storage. Unavailable field types reject presence with a source span
+and omit the whole property on output. Delegated preflight validation runs
+before the record writes any bytes.
+
+`Option<T>` supports this interface directly: None omits the property and
+Some(value) writes it. Delegated codecs own defaults and omission, including
+in records with `#[mdl(default)]`; field-level default/required/skip_if and
+value hooks are incompatible. The current form covers ordinary named
+properties. Static/animated delegation remains a later extension.

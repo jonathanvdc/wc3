@@ -19,6 +19,7 @@ pub(super) struct Container {
 pub(super) enum Kind {
     Header,
     Property(LitStr),
+    DelegatedProperty(LitStr),
     StaticProperty(LitStr),
     Animatable(LitStr),
     Tracks,
@@ -146,6 +147,7 @@ pub(super) fn field(field: &SynField, index: usize) -> Result<Field> {
     let mut enable_with = None;
     let mut allow_bits = None;
     let mut required = false;
+    let mut delegate = false;
     for attr in &field.attrs {
         if !attr.path().is_ident("mdl") {
             continue;
@@ -211,6 +213,10 @@ pub(super) fn field(field: &SynField, index: usize) -> Result<Field> {
                     }
                 });
                 Ok(())
+            } else if meta.path.is_ident("delegate") {
+                if delegate { return Err(meta.error("duplicate delegate")); }
+                delegate = true;
+                Ok(())
             } else if meta.path.is_ident("required") {
                 if required { return Err(meta.error("duplicate required")); }
                 required = true;
@@ -256,6 +262,28 @@ pub(super) fn field(field: &SynField, index: usize) -> Result<Field> {
             "each field needs an explicit MDL header, property, static_property, animatable, tracks, flag, flags, or skip attribute",
         )
     })?;
+    let kind = if delegate {
+        match kind {
+            Kind::Property(name) => Kind::DelegatedProperty(name),
+            _ => {
+                return Err(Error::new_spanned(
+                    field,
+                    "delegate requires property = \"Name\"",
+                ))
+            }
+        }
+    } else {
+        kind
+    };
+    if matches!(kind, Kind::DelegatedProperty(_))
+        && (default.is_some()
+            || skip_if.is_some()
+            || read_with.is_some()
+            || write_with.is_some()
+            || required)
+    {
+        return Err(Error::new_spanned(field, "delegate owns defaults, requirements, omission, and codec framing; it cannot have default, required, skip_if, read_with, or write_with"));
+    }
     if matches!(kind, Kind::Animatable(_)) {
         if track.is_none() {
             return Err(Error::new_spanned(

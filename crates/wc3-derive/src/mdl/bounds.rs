@@ -22,6 +22,14 @@ pub(super) fn build(
     let mut generics = input.generics.clone();
     for field in fields {
         let ty = &field.ty;
+        if matches!(field.kind, Kind::DelegatedProperty(_)) {
+            let bound = if reading {
+                parse_quote!(#ty: ::wc3::model::mdl::ReadProperty)
+            } else {
+                parse_quote!(#ty: ::wc3::model::mdl::WriteProperty)
+            };
+            generics.make_where_clause().predicates.push(bound);
+        }
         if matches!(
             field.kind,
             Kind::Header | Kind::Property(_) | Kind::StaticProperty(_) | Kind::Animatable(_)

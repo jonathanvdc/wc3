@@ -80,6 +80,7 @@ pub(super) fn parse(input: &DeriveInput, options: &Container) -> Result<Schema> 
     for field in &fields {
         let field_names = match &field.kind {
             Kind::Property(name)
+            | Kind::DelegatedProperty(name)
             | Kind::StaticProperty(name)
             | Kind::Animatable(name)
             | Kind::Flag(name) => vec![name],

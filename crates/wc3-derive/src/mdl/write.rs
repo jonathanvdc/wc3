@@ -35,6 +35,11 @@ pub(super) fn expand(
         match kind {
             Kind::Header => headers.push(quote! { __wc3_mdl_writer.raw(" ")?; #value }),
             Kind::Skip => {}
+            Kind::DelegatedProperty(mdl_name) => {
+                let ty = &field.ty;
+                required_flags.push(quote!(<#ty as ::wc3::model::mdl::WriteProperty>::validate_mdl_property(&self.#member, #mdl_name)?;));
+                writes.push(quote!(<#ty as ::wc3::model::mdl::WriteProperty>::write_mdl_property(&self.#member, #mdl_name, __wc3_mdl_writer)?;));
+            }
             Kind::Property(mdl_name)
             | Kind::StaticProperty(mdl_name)
             | Kind::Animatable(mdl_name) => {

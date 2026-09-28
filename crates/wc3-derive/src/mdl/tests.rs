@@ -598,3 +598,95 @@ fn rejects_invalid_record_defaults() {
         "required is only supported on properties",
     );
 }
+
+#[test]
+fn delegated_properties_keep_name_validation_and_own_their_policies() {
+    for modifier in [
+        "default",
+        "required",
+        "skip_if = \"skip\"",
+        "read_with = \"read\"",
+        "write_with = \"write\"",
+    ] {
+        let input: DeriveInput = syn::parse_str(&format!(
+            "#[mdl(block = \"A\")] struct Bad {{ #[mdl(property = \"Value\", delegate, {modifier})] value: u32 }}"
+        )).unwrap();
+        rejects(input, "delegate owns");
+    }
+    rejects(
+        parse_quote!(
+            #[mdl(block = "A")]
+            struct Bad {
+                #[mdl(property = "Value", delegate)]
+                first: u32,
+                #[mdl(property = "Value")]
+                second: u32,
+            }
+        ),
+        "duplicate MDL field name",
+    );
+    rejects(
+        parse_quote!(
+            #[mdl(block = "A")]
+            struct Bad {
+                #[mdl(property = "Bad Name", delegate)]
+                value: u32,
+            }
+        ),
+        "MDL identifier",
+    );
+    rejects(
+        parse_quote!(
+            #[mdl(block = "A")]
+            struct Bad {
+                #[mdl(property = "Value", delegate, property = "Value")]
+                value: u32,
+            }
+        ),
+        "exactly one",
+    );
+}
+
+#[test]
+fn delegate_requires_an_ordinary_property_and_cannot_repeat() {
+    rejects(
+        parse_quote!(
+            #[mdl(block = "A")]
+            struct Bad {
+                #[mdl(header, delegate)]
+                value: u32,
+            }
+        ),
+        "delegate requires property",
+    );
+    rejects(
+        parse_quote!(
+            #[mdl(block = "A")]
+            struct Bad {
+                #[mdl(static_property = "Value", delegate)]
+                value: u32,
+            }
+        ),
+        "delegate requires property",
+    );
+    rejects(
+        parse_quote!(
+            #[mdl(block = "A")]
+            struct Bad {
+                #[mdl(property = "Value", delegate, delegate)]
+                value: u32,
+            }
+        ),
+        "duplicate delegate",
+    );
+    rejects(
+        parse_quote!(
+            #[mdl(block = "A")]
+            struct Bad {
+                #[mdl(property_codec = "Value")]
+                value: u32,
+            }
+        ),
+        "unknown MDL field attribute",
+    );
+}

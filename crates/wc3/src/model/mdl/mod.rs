@@ -78,12 +78,48 @@
 //! | --- | --- |
 //! | `header` | Required positional value before `{`. |
 //! | `property = "Name"` | Named value followed by a comma. |
+//! | `property = "Name", delegate` | Delegate payload, presence, and full output to the field type. |
 //! | `static_property = "Name"` | `static Name value,`; never a track. |
 //! | `animatable = "Name"` | Static base value or a linked animation track. |
 //! | `tracks` | One `Vec<TrackEnum>` holding linked animation tracks. |
 //! | `flag = "Name"` | Bare name followed by a comma; the field must be `bool`. |
 //! | `flags(Name = 1, Other = 2)` | Bare flags mapped to shared bitfield storage. |
 //! | `skip` | No text representation; an explicit default is required. |
+//!
+//! ## Delegated properties
+//!
+//! `property = "Name", delegate` uses [`ReadProperty`] / [`WriteProperty`] instead of
+//! value-level `Read` / `Write`. The record still dispatches the name, rejects
+//! duplicates and unknown fields, and follows `write_order`. The field codec
+//! reads the payload after the name (including its punctuation), resolves a
+//! missing property, and writes or omits the entire property including framing.
+//! Writer validation runs before any record output. No field `Default` or
+//! `ValueEq` bound is added. A recognized but unavailable property can report
+//! `ReadErrorKind::UnsupportedField` against the supplied name span.
+//!
+//! These codecs own defaults, requirements and omission, independently of a
+//! container default; field `default`, `required`, `skip_if`, `read_with`, and
+//! `write_with` cannot be combined with `delegate`. The initial form
+//! delegates one ordinary body name; static/animated channel delegation and
+//! flattened multi-name bodies are separate extensions, not version checks.
+//! Version-selected field types can implement these interfaces without any
+//! version metadata in the record or derive. `Option<T>` already implements
+//! them for ordinary optional values:
+//!
+//! ```
+//! use wc3::model::mdl;
+//! use wc3::model::mdl::{Read as _, Write as _};
+//! #[derive(mdl::Read, mdl::Write)]
+//! #[mdl(block = "Example")]
+//! struct Example {
+//!     #[mdl(property = "Value", delegate)]
+//!     value: Option<f32>,
+//! }
+//! let value = Example::decode_mdl("Example {}")?;
+//! assert!(value.value.is_none());
+//! assert_eq!(value.encode_mdl()?, "Example {\n}\n");
+//! # Ok::<(), Box<dyn std::error::Error>>(())
+//! ```
 //!
 //! Properties, static properties, and boolean flags are required unless annotated `default` (`Default::default()`) or
 //! `default = "factory"` (a zero-argument function returning the field's type).
@@ -238,6 +274,8 @@ mod lexer;
 pub use lexer::{Lexer, Token, TokenKind};
 mod parser;
 pub use parser::{Block, Counted, Field, Parser};
+mod property;
+pub use property::{ReadProperty, WriteProperty};
 mod value_eq;
 pub use value_eq::ValueEq;
 mod writer;

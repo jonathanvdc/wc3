@@ -71,6 +71,21 @@ pub(super) fn expand(
             members.push(quote!(#member: #local));
             continue;
         }
+        if let Kind::DelegatedProperty(mdl_name) = kind {
+            locals.push(
+                quote!(let mut #local: ::core::option::Option<#ty> = ::core::option::Option::None;),
+            );
+            arms.push(quote!(#mdl_name => {
+                __wc3_mdl_fields.mark(#bit, __wc3_mdl_field)?;
+                #local = ::core::option::Option::Some(<#ty as ::wc3::model::mdl::ReadProperty>::read_mdl_property(&mut __wc3_mdl_body, __wc3_mdl_field)?);
+            }));
+            members.push(quote!(#member: match #local {
+                ::core::option::Option::Some(value) => value,
+                ::core::option::Option::None => <#ty as ::wc3::model::mdl::ReadProperty>::missing_mdl_property(#mdl_name, __wc3_mdl_body.error(::wc3::model::mdl::ReadErrorKind::MissingField(#mdl_name)).span)?,
+            }));
+            bit += 1;
+            continue;
+        }
         let initial = match default {
             Some(DefaultValue::Trait) => Some(quote!(::core::default::Default::default())),
             Some(DefaultValue::Function(function)) => Some(quote!(#function())),

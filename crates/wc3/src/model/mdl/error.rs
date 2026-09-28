@@ -21,11 +21,18 @@ pub enum ReadErrorKind {
     UnterminatedString,
     Expected(&'static str),
     InvalidNumber(&'static str),
-    InvalidString { max_bytes: usize },
+    InvalidString {
+        max_bytes: usize,
+    },
     UnknownField,
+    /// A recognized property is unavailable for this field type.
+    UnsupportedField,
     DuplicateField,
     MissingField(&'static str),
-    CountMismatch { expected: usize, actual: usize },
+    CountMismatch {
+        expected: usize,
+        actual: usize,
+    },
     NoProgress,
     TrailingInput,
 }
@@ -88,6 +95,7 @@ impl Display for ReadErrorKind {
                 f,
                 "string must contain no NUL and at most {max_bytes} bytes"
             ),
+            Self::UnsupportedField => f.write_str("property is unavailable for this field type"),
             Self::UnknownField => f.write_str("unknown field"),
             Self::DuplicateField => f.write_str("duplicate field"),
             Self::MissingField(field) => write!(f, "missing required field {field}"),
