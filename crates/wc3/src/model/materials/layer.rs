@@ -65,6 +65,11 @@ pub struct LayerTextureSlot {
 }
 
 /// A material layer with parsed texture slots and animation tracks.
+///
+/// MDL uses slot-qualified texture bindings. Its writer rejects animated
+/// non-diffuse slots and binary storage that the text syntax cannot reconstruct.
+/// A classic texture-ID track must precede other channels in binary track order;
+/// text reading and writing use that canonical order.
 #[derive(Clone, Debug, PartialEq, mdx::Read, mdx::Write)]
 #[mdx(sized(tag = LAYER_TAG))]
 pub struct Layer<V: ModelVersion> {
@@ -606,3 +611,5 @@ impl<V: ModelVersion> Layer<V> {
         Ok(target)
     }
 }
+
+mod mdl_codec;

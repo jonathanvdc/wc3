@@ -29,11 +29,15 @@ impl Schema {
                 | Kind::Animatable(name)
                 | Kind::Flag(name)
                 | Kind::Block(name)
-                | Kind::Repeated(name)
                 | Kind::Counted(name) => {
                     let static_form =
                         matches!(field.kind, Kind::StaticProperty(_) | Kind::Animatable(_));
                     calls.push(quote!(visitor(#name, #static_form);));
+                }
+                Kind::Repeated(names) => {
+                    for name in names {
+                        calls.push(quote!(visitor(#name, false);));
+                    }
                 }
                 Kind::Flags(flags) => {
                     for (name, _) in flags {
@@ -61,8 +65,12 @@ impl Schema {
                 | Kind::DelegatedProperty(value)
                 | Kind::Flag(value)
                 | Kind::Block(value)
-                | Kind::Repeated(value)
                 | Kind::Counted(value) => conditions.push(quote!(!static_form && name == #value)),
+                Kind::Repeated(names) => {
+                    for value in names {
+                        conditions.push(quote!(!static_form && name == #value));
+                    }
+                }
                 Kind::Flags(flags) => {
                     for (value, _) in flags {
                         conditions.push(quote!(!static_form && name == #value));
@@ -145,12 +153,12 @@ pub(super) fn parse(input: &DeriveInput, options: &Container) -> Result<Schema> 
         let field_names = match &field.kind {
             Kind::Property(name)
             | Kind::Block(name)
-            | Kind::Repeated(name)
             | Kind::Counted(name)
             | Kind::DelegatedProperty(name)
             | Kind::StaticProperty(name)
             | Kind::Animatable(name)
             | Kind::Flag(name) => vec![name],
+            Kind::Repeated(names) => names.iter().collect(),
             Kind::Flags(flags) => flags.iter().map(|(name, _)| name).collect(),
             _ => Vec::new(),
         };

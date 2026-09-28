@@ -20,6 +20,10 @@
 //! Missing channels keep full alpha and white color; a Color property enables
 //! the color-use flag. Writers reject unknown flags, duplicate tracks, and base
 //! values or color-use states that the text representation would discard.
+//! Helper (`Node`), Bone, Attachment, Material and Layer records are supported.
+//! Material/Layer layouts use the existing version-selected storage. Layer
+//! texture bindings support static slots and animated diffuse IDs; writers
+//! reject non-diffuse animations and noncanonical binary texture-track order.
 //! Whole-model conversion is not implemented yet.
 //!
 //! ```
@@ -139,7 +143,11 @@
 //! Container `validate_read = "function"` calls `fn(&Self, Span) -> Result<(),
 //! ReadError>` after parsing, with the entire record's byte range. Container
 //! `validate_write = "function"` calls `fn(&Self) -> Result<(), WriteError>`
-//! before output. Function paths may name associated functions (`Type::check`).
+//! before output. Container `after_read = "function"` calls
+//! `fn(&mut Self, Span) -> Result<(), ReadError>` after field reconstruction and
+//! presence hooks, before validation. Use it to restore implicit binary values,
+//! such as the object-kind bit supplied by a containing Bone block.
+//! Function paths may name associated functions (`Type::check`).
 //! Skipped fields are explicitly omitted on write; use validation to reject
 //! skipped binary data that must not be discarded. ModelInfo rejects nonzero
 //! animation-file data, which has no property in the supported MDL dialect.
@@ -176,6 +184,9 @@
 //! Nested blocks have no trailing comma. `write_order` includes structural fields;
 //! it orders their body output without reordering flattened header values.
 //!
+//! `#[mdl(repeated(Translation, Rotation, Scaling))]` dispatches several names
+//! into the same collection. `unique_by = "Type::key"` rejects repeated keys on
+//! both read and write; without it repeated records may share their names.
 //! `#[mdl(repeated = "Anim")]` collects zero or more complete named records into
 //! a `Vec<T>`, preserving source order. Each item's `Read`/`Write` owns its name,
 //! headers, and punctuation, which must match the declared name.

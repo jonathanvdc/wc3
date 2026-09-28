@@ -816,3 +816,35 @@ fn tagged_enum_framing_matches_variant_storage() {
         rejects(syn::parse_str(source).unwrap(), expected);
     }
 }
+
+#[test]
+fn validates_unique_collections_and_reconstruction_hooks() {
+    rejects(
+        parse_quote! {
+            #[mdl(block = "Record")]
+            struct Bad { #[mdl(property = "Value", unique_by = "key")] value: u32 }
+        },
+        "unique_by requires repeated",
+    );
+    rejects(
+        parse_quote! {
+            #[mdl(block = "Record")]
+            struct Bad { #[mdl(repeated(Child, Child))] children: Vec<u32> }
+        },
+        "duplicate",
+    );
+    rejects(
+        parse_quote! {
+            #[mdl(entry, after_read = "finish")]
+            struct Bad(u32);
+        },
+        "after_read",
+    );
+    rejects(
+        parse_quote! {
+            #[mdl(block = "Record", after_read = "a", after_read = "b")]
+            struct Bad {}
+        },
+        "duplicate",
+    );
+}

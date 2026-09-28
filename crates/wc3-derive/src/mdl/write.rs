@@ -61,6 +61,15 @@ pub(super) fn expand(
                 });
             }
             Kind::Repeated(_) => {
+                if let Some(key) = &field.unique_by {
+                    required_flags.push(quote! {
+                        for (index, item) in self.#member.iter().enumerate() {
+                            if self.#member[..index].iter().any(|previous| #key(previous) == #key(item)) {
+                                return Err(::wc3::model::mdl::WriteError::Unsupported("duplicate repeated record"));
+                            }
+                        }
+                    });
+                }
                 writes.push(quote!(for item in &self.#member { __wc3_mdl_writer.write(item)?; }))
             }
             Kind::Counted(mdl_name) => {

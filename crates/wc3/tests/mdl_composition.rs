@@ -404,3 +404,50 @@ fn required_structural_fields_override_container_defaults_and_flatten_keeps_its_
         .unwrap();
     assert_eq!(frames.kind, mdl::ReadErrorKind::MissingField("Frames"));
 }
+
+#[derive(Debug, PartialEq, mdl::Read, mdl::Write)]
+#[mdl(
+    block = "Unique",
+    after_read = "finish_unique",
+    validate_read = "check_unique"
+)]
+struct Unique {
+    #[mdl(repeated(Child), unique_by = "child_id")]
+    children: Vec<Child>,
+    #[mdl(skip, default)]
+    reconstructed: bool,
+}
+fn child_id(child: &Child) -> u32 {
+    child.id
+}
+fn finish_unique(value: &mut Unique, _: mdl::Span) -> Result<(), mdl::ReadError> {
+    value.reconstructed = true;
+    Ok(())
+}
+fn check_unique(value: &Unique, span: mdl::Span) -> Result<(), mdl::ReadError> {
+    if !value.reconstructed {
+        return Err(mdl::ReadError::new(
+            span,
+            mdl::ReadErrorKind::UnsupportedField,
+        ));
+    }
+    Ok(())
+}
+#[test]
+fn unique_collection_keys_and_reconstruction_before_validation() {
+    let value = Unique::decode_mdl("Unique { Child { Id 1, } Child { Id 2, } }").unwrap();
+    assert!(value.reconstructed);
+    assert_eq!(
+        Unique::decode_mdl(&value.encode_mdl().unwrap()).unwrap(),
+        value
+    );
+    let source = "Unique { Child { Id 1, } Child { Id 1, } }";
+    let error = Unique::decode_mdl(source).unwrap_err();
+    assert_eq!(error.kind, mdl::ReadErrorKind::DuplicateField);
+    assert_eq!(error.span.start, source.rfind("Child").unwrap());
+    let invalid = Unique {
+        children: vec![Child { id: 1 }, Child { id: 1 }],
+        reconstructed: true,
+    };
+    assert!(invalid.encode_mdl().is_err());
+}

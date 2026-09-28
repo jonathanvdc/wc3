@@ -61,16 +61,24 @@ pub(super) fn expand(
             flattened.push(field);
             continue;
         }
-        if let Kind::Repeated(mdl_name) = kind {
+        if let Kind::Repeated(mdl_names) = kind {
             let element = vec_element(ty)?;
             locals.push(quote!(let mut #local: #ty = ::std::vec::Vec::new();));
-            arms.push(quote!(#mdl_name => {
+            for mdl_name in mdl_names {
+                let unique = field.unique_by.as_ref().map(|key| quote! {
+                    if #local.iter().any(|previous| #key(previous) == #key(&value)) {
+                        return Err(::wc3::model::mdl::ReadError::new(__wc3_mdl_field.span, ::wc3::model::mdl::ReadErrorKind::DuplicateField));
+                    }
+                });
+                arms.push(quote!(#mdl_name => {
                 *__wc3_mdl_body = __wc3_mdl_checkpoint;
                 let start = __wc3_mdl_body.position();
                 let value = __wc3_mdl_body.read::<#element>()?;
                 if __wc3_mdl_body.position() == start { return Err(__wc3_mdl_body.error(::wc3::model::mdl::ReadErrorKind::NoProgress)); }
+                #unique
                 #local.push(value);
             }));
+            }
             members.push(quote!(#member: #local));
             continue;
         }
@@ -252,7 +260,12 @@ pub(super) fn expand(
     let initialize_defaults = options
         .default
         .then(|| quote!(let __wc3_mdl_defaults: Self = ::core::default::Default::default();));
-    let mutable_value = (!enable_calls.is_empty()).then(|| quote!(mut));
+    let mutable_value =
+        (!enable_calls.is_empty() || options.after_read.is_some()).then(|| quote!(mut));
+    let after_read = options
+        .after_read
+        .as_ref()
+        .map(|function| quote!(#function(&mut __wc3_mdl_value, __wc3_mdl_record_span)?;));
     let fallback_tokens = quote! {
         #(#fallback)*
         return ::core::result::Result::Err(::wc3::model::mdl::ReadError::new(__wc3_mdl_field.span, ::wc3::model::mdl::ReadErrorKind::UnknownField));
@@ -319,6 +332,7 @@ pub(super) fn expand(
                 let #state_name { #state_values .. } = state;
                 let #mutable_value __wc3_mdl_value = Self { #(#members,)* };
                 #(#enable_calls)*
+                #after_read
                 #validate
                 Ok(__wc3_mdl_value)
             }

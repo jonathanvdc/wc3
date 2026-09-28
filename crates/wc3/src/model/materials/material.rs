@@ -1,7 +1,7 @@
 //! Materials, shader fields, and version-specific layouts.
 use crate::model::conversion::ConversionContext;
-use crate::model::mdx;
 use crate::model::ConversionError;
+use crate::model::{mdl, mdx};
 use bitfield::bitfield;
 use std::{borrow::Cow, fmt::Debug, marker::PhantomData};
 
@@ -45,7 +45,16 @@ pub struct Material<V: ModelVersion> {
 }
 
 /// The fixed shader field selected by a model version.
-pub trait ShaderField: Default + mdx::Read + mdx::Write + Clone + Debug + PartialEq {
+pub trait ShaderField:
+    Default
+    + mdx::Read
+    + mdx::Write
+    + mdl::ReadProperty
+    + mdl::WriteProperty
+    + Clone
+    + Debug
+    + PartialEq
+{
     fn text(&self) -> Option<Cow<'_, str>>;
     fn fixed_text(&self) -> Option<&FixedText<80>> {
         None
@@ -338,3 +347,5 @@ impl<V: ModelVersion> Material<V> {
         Ok(target)
     }
 }
+
+mod mdl_codec;

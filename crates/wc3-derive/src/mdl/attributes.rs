@@ -14,6 +14,7 @@ pub(super) struct Container {
     pub(super) default: bool,
     pub(super) write_order: Option<Vec<Ident>>,
     pub(super) validate_read: Option<Path>,
+    pub(super) after_read: Option<Path>,
     pub(super) validate_write: Option<Path>,
 }
 
@@ -21,7 +22,7 @@ pub(super) enum Kind {
     Header,
     Flatten,
     Block(LitStr),
-    Repeated(LitStr),
+    Repeated(Vec<LitStr>),
     Counted(LitStr),
     Property(LitStr),
     DelegatedProperty(LitStr),
@@ -52,6 +53,7 @@ pub(super) struct Field {
     pub(super) enable_with: Option<Path>,
     pub(super) allow_bits: u32,
     pub(super) required: bool,
+    pub(super) unique_by: Option<Path>,
 }
 
 pub(super) fn identifier(name: &LitStr) -> Result<()> {
@@ -129,12 +131,14 @@ pub(super) fn container(input: &DeriveInput) -> Result<Container> {
                 })?;
                 result.write_order = Some(order);
                 Ok(())
+            } else if meta.path.is_ident("after_read") {
+                path(&meta, &mut result.after_read)
             } else if meta.path.is_ident("validate_read") {
                 path(&meta, &mut result.validate_read)
             } else if meta.path.is_ident("validate_write") {
                 path(&meta, &mut result.validate_write)
             } else {
-                Err(meta.error("expected block, property, entry, fields, default, write_order, validate_read, or validate_write"))
+                Err(meta.error("expected block, property, entry, fields, default, write_order, after_read, validate_read, or validate_write"))
             }
         })?;
     }
@@ -159,6 +163,7 @@ pub(super) fn field(field: &SynField, index: usize) -> Result<Field> {
     let mut allow_bits = None;
     let mut required = false;
     let mut delegate = false;
+    let mut unique_by = None;
     for attr in &field.attrs {
         if !attr.path().is_ident("mdl") {
             continue;
@@ -190,6 +195,23 @@ pub(super) fn field(field: &SynField, index: usize) -> Result<Field> {
                     Kind::Skip
                 } else if meta.path.is_ident("tracks") {
                     Kind::Tracks
+                } else if meta.path.is_ident("repeated") {
+                    let mut names = Vec::new();
+                    if meta.input.peek(Token![=]) {
+                        let name = meta.value()?.parse()?;
+                        identifier(&name)?;
+                        names.push(name);
+                    } else {
+                        meta.parse_nested_meta(|item| {
+                            let ident = item.path.get_ident().ok_or_else(|| item.error("expected an MDL name"))?;
+                            let name = LitStr::new(&ident.to_string(), ident.span());
+                            identifier(&name)?;
+                            names.push(name);
+                            Ok(())
+                        })?;
+                    }
+                    if names.is_empty() { return Err(meta.error("repeated needs at least one name")); }
+                    Kind::Repeated(names)
                 } else if meta.path.is_ident("flags") {
                     let mut flags = Vec::new();
                     let mut bits = 0u32;
@@ -221,8 +243,6 @@ pub(super) fn field(field: &SynField, index: usize) -> Result<Field> {
                     identifier(&name)?;
                     if meta.path.is_ident("block") {
                         Kind::Block(name)
-                    } else if meta.path.is_ident("repeated") {
-                        Kind::Repeated(name)
                     } else if meta.path.is_ident("counted") {
                         Kind::Counted(name)
                     } else if meta.path.is_ident("property") {
@@ -240,6 +260,8 @@ pub(super) fn field(field: &SynField, index: usize) -> Result<Field> {
                 if delegate { return Err(meta.error("duplicate delegate")); }
                 delegate = true;
                 Ok(())
+            } else if meta.path.is_ident("unique_by") {
+                path(&meta, &mut unique_by)
             } else if meta.path.is_ident("required") {
                 if required { return Err(meta.error("duplicate required")); }
                 required = true;
@@ -306,6 +328,9 @@ pub(super) fn field(field: &SynField, index: usize) -> Result<Field> {
             || required)
     {
         return Err(Error::new_spanned(field, "delegate owns defaults, requirements, omission, and codec framing; it cannot have default, required, skip_if, read_with, or write_with"));
+    }
+    if unique_by.is_some() && !matches!(kind, Kind::Repeated(_)) {
+        return Err(Error::new_spanned(field, "unique_by requires repeated"));
     }
     if matches!(kind, Kind::Animatable(_)) {
         if track.is_none() {
@@ -445,6 +470,7 @@ pub(super) fn field(field: &SynField, index: usize) -> Result<Field> {
         enable_with,
         allow_bits: allow_bits.unwrap_or(0),
         required,
+        unique_by,
     })
 }
 

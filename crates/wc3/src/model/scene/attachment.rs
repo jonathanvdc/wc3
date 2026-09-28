@@ -1,10 +1,13 @@
 //! Attachment records in `ATCH` chunks.
-use crate::model::mdx;
+use super::node::{set_node_kind, validate_node_kind};
+use crate::model::mdl::{MdlWriter, Parser, Span};
 use crate::model::Encoder;
 use crate::model::KnownChunk;
 use crate::model::ModelVersion;
 use crate::model::ValueError;
 use crate::model::WriteError;
+use crate::model::{mdl, mdx};
+use std::io::Write as IoWrite;
 
 use crate::model::{AttachmentVisibility, AttachmentsChunk, Cursor};
 
@@ -16,6 +19,9 @@ use crate::model::{AnimationTrack, Model, Node, ReadError};
 const PATH_SIZE: usize = 256;
 
 /// An attachment node with a model path and optional visibility track.
+///
+/// MDL reading reconstructs the attachment object-kind bit; writing requires
+/// matching node bits and a zero reserved word.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Attachment {
     node: Node,
@@ -132,5 +138,57 @@ impl mdx::Write for Attachment {
         }
         bytes.finish_sized(marker, AttachmentsChunk::TAG)?;
         Ok(())
+    }
+}
+
+#[derive(mdl::Read, mdl::Write)]
+#[mdl(
+    block = "Attachment",
+    after_read = "finish_attachment",
+    validate_write = "validate_attachment"
+)]
+struct AttachmentMdl {
+    #[mdl(flatten)]
+    node: Node,
+    #[mdl(property = "Path", default)]
+    path: FixedText<PATH_SIZE>,
+    #[mdl(property = "AttachmentID", default)]
+    id: u32,
+    #[mdl(repeated = "Visibility", unique_by = "visibility_key")]
+    visibility: Vec<AnimationTrack<AttachmentVisibility>>,
+}
+fn visibility_key(_: &AnimationTrack<AttachmentVisibility>) -> bool {
+    true
+}
+fn finish_attachment(value: &mut AttachmentMdl, _: Span) -> Result<(), mdl::ReadError> {
+    set_node_kind(&mut value.node, 0x800);
+    Ok(())
+}
+fn validate_attachment(value: &AttachmentMdl) -> Result<(), mdl::WriteError> {
+    validate_node_kind(&value.node, 0x800)
+}
+impl mdl::Read for Attachment {
+    fn read_mdl(parser: &mut Parser<'_>) -> Result<Self, mdl::ReadError> {
+        let value = parser.read::<AttachmentMdl>()?;
+        Ok(Self {
+            node: value.node,
+            path: value.path,
+            reserved: 0,
+            id: value.id,
+            visibility_track: value.visibility.into_iter().next(),
+        })
+    }
+}
+impl mdl::Write for Attachment {
+    fn write_mdl<W: IoWrite>(&self, writer: &mut MdlWriter<W>) -> Result<(), mdl::WriteError> {
+        if self.reserved != 0 {
+            return Err(mdl::WriteError::Unsupported("attachment reserved word"));
+        }
+        writer.write(&AttachmentMdl {
+            node: self.node.clone(),
+            path: self.path,
+            id: self.id,
+            visibility: self.visibility_track.iter().cloned().collect(),
+        })
     }
 }

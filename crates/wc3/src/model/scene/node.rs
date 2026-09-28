@@ -1,7 +1,9 @@
 //! Shared node headers used by bones and helpers.
-use crate::model::mdx;
+use crate::model::mdl::{MdlWriter, Parser, Span, TokenKind, WriteFields as _};
 use crate::model::ModelVersion;
+use crate::model::{mdl, mdx};
 use bitfield::bitfield;
+use std::io::Write as IoWrite;
 crate::model::animation::track_group! {
     pub enum NodeTrack {
         Translation: NodeTranslation,
@@ -75,21 +77,64 @@ bitfield! {
 }
 
 /// A shared node header with decoded transform tracks.
-#[derive(Clone, Debug, PartialEq, mdx::Read, mdx::Write)]
+#[derive(Clone, Debug, PartialEq, mdx::Read, mdx::Write, mdl::Read, mdl::Write)]
 #[mdx(sized(tag = HelpersChunk::TAG))]
+#[mdl(fields)]
 pub struct Node {
+    #[mdl(header)]
     name: FixedText<NAME_SIZE>,
+    #[mdl(property = "ObjectId")]
     object_id: u32,
+    #[mdl(
+        property = "Parent",
+        default = "no_reference",
+        skip_if = "is_no_reference"
+    )]
     parent_id: u32,
+    #[mdl(
+        flags(
+            DontInheritTranslation = 1,
+            DontInheritRotation = 2,
+            DontInheritScaling = 4,
+            Billboarded = 8,
+            BillboardedLockX = 16,
+            BillboardedLockY = 32,
+            BillboardedLockZ = 64,
+            CameraAnchored = 128
+        ),
+        allow_bits = 0x1fff00
+    )]
     raw_flags: u32,
+    #[mdl(repeated(Translation, Rotation, Scaling), unique_by = "NodeTrack::tag")]
     tracks: Vec<NodeTrack>,
 }
 
 /// A bone with a decoded node and two geoset references.
-#[derive(Clone, Debug, PartialEq)]
+///
+/// Reading MDL reconstructs the node's bone bit. MDL writing requires that bit
+/// (and no other object-kind bits), preserving the exact binary representation.
+#[derive(Clone, Debug, PartialEq, mdl::Read, mdl::Write)]
+#[mdl(
+    block = "Bone",
+    after_read = "finish_bone",
+    validate_write = "validate_bone"
+)]
 pub struct Bone {
+    #[mdl(flatten)]
     node: Node,
+    #[mdl(
+        property = "GeosetId",
+        default = "no_reference",
+        read_with = "read_geoset",
+        write_with = "write_geoset"
+    )]
     geoset_id: u32,
+    #[mdl(
+        property = "GeosetAnimId",
+        default = "no_reference",
+        read_with = "read_geoset_animation",
+        write_with = "write_geoset_animation"
+    )]
     geoset_animation_id: u32,
 }
 
@@ -220,5 +265,84 @@ impl mdx::Write for Bone {
         bytes.write(&self.geoset_id)?;
         bytes.write(&self.geoset_animation_id)?;
         Ok(())
+    }
+}
+
+fn no_reference() -> u32 {
+    u32::MAX
+}
+fn is_no_reference(value: &u32) -> bool {
+    *value == u32::MAX
+}
+fn finish_bone(value: &mut Bone, _: Span) -> Result<(), mdl::ReadError> {
+    value.node.raw_flags |= 0x100;
+    Ok(())
+}
+fn validate_bone(value: &Bone) -> Result<(), mdl::WriteError> {
+    validate_node_kind(&value.node, 0x100)
+}
+pub(super) fn validate_node_kind(node: &Node, kind: u32) -> Result<(), mdl::WriteError> {
+    if node.raw_flags & !0xff != kind {
+        return Err(mdl::WriteError::Unsupported("node object-kind bits"));
+    }
+    Ok(())
+}
+pub(super) fn set_node_kind(node: &mut Node, kind: u32) {
+    node.raw_flags |= kind;
+}
+fn read_reference(parser: &mut Parser<'_>, keyword: &str) -> Result<u32, mdl::ReadError> {
+    if parser
+        .peek()?
+        .is_some_and(|token| token.kind == TokenKind::Ident(keyword))
+    {
+        parser.next_token()?;
+        Ok(u32::MAX)
+    } else {
+        parser.read()
+    }
+}
+fn read_geoset(parser: &mut Parser<'_>) -> Result<u32, mdl::ReadError> {
+    read_reference(parser, "Multiple")
+}
+fn read_geoset_animation(parser: &mut Parser<'_>) -> Result<u32, mdl::ReadError> {
+    read_reference(parser, "None")
+}
+fn write_reference<W: IoWrite>(
+    value: &u32,
+    writer: &mut MdlWriter<W>,
+    keyword: &str,
+) -> Result<(), mdl::WriteError> {
+    if *value == u32::MAX {
+        writer.identifier(keyword)
+    } else {
+        writer.write(value)
+    }
+}
+fn write_geoset<W: IoWrite>(value: &u32, writer: &mut MdlWriter<W>) -> Result<(), mdl::WriteError> {
+    write_reference(value, writer, "Multiple")
+}
+fn write_geoset_animation<W: IoWrite>(
+    value: &u32,
+    writer: &mut MdlWriter<W>,
+) -> Result<(), mdl::WriteError> {
+    write_reference(value, writer, "None")
+}
+impl mdl::Read for Node {
+    fn read_mdl(parser: &mut Parser<'_>) -> Result<Self, mdl::ReadError> {
+        let start = parser.peek()?.map_or(0, |token| token.span.start);
+        parser.expect_ident("Helper")?;
+        mdl::read_mdl_body(parser, start)
+    }
+}
+impl mdl::Write for Node {
+    fn write_mdl<W: IoWrite>(&self, writer: &mut MdlWriter<W>) -> Result<(), mdl::WriteError> {
+        validate_node_kind(self, 0)?;
+        let state = self.prepare_mdl_fields()?;
+        writer.indent()?;
+        writer.identifier("Helper")?;
+        self.write_mdl_headers(writer)?;
+        writer.open_body()?;
+        self.write_mdl_fields(state, writer)?;
+        writer.end_block()
     }
 }
