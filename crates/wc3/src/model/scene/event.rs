@@ -1,6 +1,6 @@
 //! Event objects stored in `EVTS` chunks.
 use super::{set_node_kind, validate_node_kind};
-use crate::model::mdl::{Field, MdlWriter, Parser, Span, TokenKind};
+use crate::model::mdl::{Dialect, Field, MdlWriter, Parser, Span, TokenKind};
 use crate::model::Encoder;
 use crate::model::KnownChunk;
 use crate::model::ModelVersion;
@@ -162,7 +162,7 @@ impl mdl::ReadProperty for EventTrackMdl {
     }
 }
 impl mdl::WriteProperty for EventTrackMdl {
-    fn validate_mdl_property(&self, _: &'static str) -> Result<(), mdl::WriteError> {
+    fn validate_mdl_property(&self, _: &'static str, _: Dialect) -> Result<(), mdl::WriteError> {
         if self.frames.len() > u32::MAX as usize {
             return Err(mdl::WriteError::Unsupported("event track count"));
         }
@@ -173,7 +173,7 @@ impl mdl::WriteProperty for EventTrackMdl {
         name: &'static str,
         writer: &mut MdlWriter<W>,
     ) -> Result<(), mdl::WriteError> {
-        self.validate_mdl_property(name)?;
+        self.validate_mdl_property(name, writer.dialect())?;
         writer.begin_counted_block(name, self.frames.len())?;
         if self.sequence != u32::MAX {
             writer.property("GlobalSeqId", &self.sequence)?;

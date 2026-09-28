@@ -3,7 +3,7 @@ use super::{Material, MaterialRenderFlags, NoShader, ShaderText};
 use crate::model::materials::Layer;
 use crate::model::mdl;
 use crate::model::mdl::{
-    Field, MdlWriter, Parser, ReadErrorKind, ReadProperty, Span, WriteProperty,
+    Dialect, Field, MdlWriter, Parser, ReadErrorKind, ReadProperty, Span, WriteProperty,
 };
 use crate::model::{FixedText, ModelVersion};
 use std::io::{sink, Write as IoWrite};
@@ -38,7 +38,7 @@ impl ReadProperty for ShaderText {
     }
 }
 impl WriteProperty for ShaderText {
-    fn validate_mdl_property(&self, _: &'static str) -> Result<(), mdl::WriteError> {
+    fn validate_mdl_property(&self, _: &'static str, _: Dialect) -> Result<(), mdl::WriteError> {
         MdlWriter::new(sink()).write(&self.0)
     }
     fn write_mdl_property<W: IoWrite>(
@@ -46,7 +46,7 @@ impl WriteProperty for ShaderText {
         name: &'static str,
         writer: &mut MdlWriter<W>,
     ) -> Result<(), mdl::WriteError> {
-        self.validate_mdl_property(name)?;
+        self.validate_mdl_property(name, writer.dialect())?;
         if self.0 != FixedText::default() {
             writer.property(name, &self.0)?;
         }
@@ -76,6 +76,7 @@ struct MaterialMdl<V: ModelVersion> {
         SortPrimsFarZ = 16,
         FullResolution = 32
     ))]
+    #[mdl(hive_flags(SortPrimitives = 16))]
     flags: u32,
     #[mdl(flag = "Unfogged", default)]
     unfogged: bool,

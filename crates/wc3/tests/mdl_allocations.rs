@@ -210,3 +210,25 @@ fn cameras_particle2_and_popcorn_write_borrowed_tracks_without_allocating() {
     });
     assert_eq!(count, 0);
 }
+
+#[test]
+fn hive_dialect_writes_named_tracks_and_mesh_data_without_allocating() {
+    use wc3::model::geometry::Geoset;
+    use wc3::model::materials::Layer;
+    use wc3::model::mdl::Dialect;
+    use wc3::model::{V1400, V1800};
+    let layer = Layer::<V1800>::decode_mdl("Layer { ShaderTypeId 1, NormalTextureID 1 { Hermite, GlobalSeqId 2, -1: 3, InTan 4, OutTan 5, } ORMTextureID 1 { Linear, 0: 1, } }").unwrap();
+    let source = include_str!("fixtures/mdl/quad_geoset.mdl");
+    let end = source.rfind('}').unwrap();
+    let source = format!("{} SelectionFlags 128, LevelOfDetailName \"LOD\", SkinWeights 4 {{ {{ 0, 0, 0, 0, 255, 0, 0, 0 }}, {{ 0, 0, 0, 0, 255, 0, 0, 0 }}, {{ 0, 0, 0, 0, 255, 0, 0, 0 }}, {{ 0, 0, 0, 0, 255, 0, 0, 0 }}, }} }}", &source[..end]);
+    let geoset = Geoset::<V1400>::decode_mdl(&source).unwrap();
+    let mut storage = [0u8; 8192];
+    let (_, count) = measured(|| {
+        let mut writer =
+            MdlWriter::with_dialect(IoCursor::new(&mut storage[..]), Dialect::HiveWorkshop);
+        writer.write(&layer).unwrap();
+        writer.write(&geoset).unwrap();
+        writer.finish().unwrap();
+    });
+    assert_eq!(count, 0);
+}

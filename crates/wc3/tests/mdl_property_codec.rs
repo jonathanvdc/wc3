@@ -60,7 +60,11 @@ impl mdl::ReadProperty for Absent {
     }
 }
 impl mdl::WriteProperty for Absent {
-    fn validate_mdl_property(&self, name: &'static str) -> Result<(), mdl::WriteError> {
+    fn validate_mdl_property(
+        &self,
+        name: &'static str,
+        _: mdl::Dialect,
+    ) -> Result<(), mdl::WriteError> {
         if self.reserved != 0 {
             return Err(mdl::WriteError::Unsupported(name));
         }
@@ -71,7 +75,7 @@ impl mdl::WriteProperty for Absent {
         name: &'static str,
         _writer: &mut MdlWriter<W>,
     ) -> Result<(), mdl::WriteError> {
-        self.validate_mdl_property(name)
+        self.validate_mdl_property(name, _writer.dialect())
     }
 }
 

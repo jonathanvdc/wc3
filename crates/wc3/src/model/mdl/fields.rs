@@ -1,5 +1,7 @@
 //! Streaming codecs for field groups embedded in another record's header/body.
-use super::{Field, MdlWriter, Parser, ReadError, ReadErrorKind, Span, TokenKind, WriteError};
+use super::{
+    Dialect, Field, MdlWriter, Parser, ReadError, ReadErrorKind, Span, TokenKind, WriteError,
+};
 use std::io::Write as IoWrite;
 
 /// A derived `#[mdl(fields)]` group, or the fields of a derived block.
@@ -31,8 +33,8 @@ pub trait ReadFields: Sized {
 pub trait WriteFields {
     type State;
     /// Validates and caches omission decisions before any output. Pass the returned
-    /// state to write_mdl_fields for this same unchanged value.
-    fn prepare_mdl_fields(&self) -> Result<Self::State, WriteError>;
+    /// state to write_mdl_fields for this same unchanged value and dialect.
+    fn prepare_mdl_fields(&self, dialect: Dialect) -> Result<Self::State, WriteError>;
     fn visit_mdl_names(visitor: &mut dyn FnMut(&'static str, bool));
     fn write_mdl_headers<W: IoWrite>(&self, writer: &mut MdlWriter<W>) -> Result<(), WriteError>;
     fn write_mdl_fields<W: IoWrite>(

@@ -52,6 +52,8 @@ pub(super) struct Field {
     pub(super) local: Ident,
     pub(super) ty: Type,
     pub(super) kind: Kind,
+    pub(super) hive_name: Option<LitStr>,
+    pub(super) hive_flags: Option<Vec<(LitStr, u32)>>,
     pub(super) default: Option<DefaultValue>,
     pub(super) skip_if: Option<Path>,
     pub(super) read_with: Option<Path>,
@@ -74,6 +76,21 @@ pub(super) struct Field {
 }
 
 impl Field {
+    pub(super) fn dialect_aliases(&self) -> Vec<&LitStr> {
+        let mut names = Vec::new();
+        if let Some(name) = &self.hive_name {
+            names.push(name);
+        }
+        if let (Kind::Flags(flags), Some(hive)) = (&self.kind, &self.hive_flags) {
+            names.extend(hive.iter().filter_map(|(name, _)| {
+                (!flags
+                    .iter()
+                    .any(|(original, _)| original.value() == name.value()))
+                .then_some(name)
+            }));
+        }
+        names
+    }
     pub(super) fn value(&self, receiver: TokenStream) -> TokenStream {
         match &self.get {
             Some(get) if self.slot.is_some() => {
@@ -208,6 +225,8 @@ pub(super) fn container(input: &DeriveInput) -> Result<Container> {
 
 pub(super) fn field(field: &SynField, index: usize) -> Result<Field> {
     let mut kind = None;
+    let mut hive_name = None;
+    let mut hive_flags = None;
     let mut default = None;
     let mut skip_if = None;
     let mut read_with = None;
@@ -232,7 +251,30 @@ pub(super) fn field(field: &SynField, index: usize) -> Result<Field> {
             continue;
         }
         attr.parse_nested_meta(|meta| {
-            if meta.path.is_ident("header")
+            if meta.path.is_ident("hive_name") {
+                if hive_name.is_some() { return Err(meta.error("duplicate hive_name")); }
+                let name: LitStr = meta.value()?.parse()?;
+                identifier(&name)?;
+                hive_name = Some(name);
+                Ok(())
+            } else if meta.path.is_ident("hive_flags") {
+                if hive_flags.is_some() { return Err(meta.error("duplicate hive_flags")); }
+                let mut mappings = Vec::new();
+                let mut bits = 0u32;
+                meta.parse_nested_meta(|flag| {
+                    let ident = flag.path.get_ident().ok_or_else(|| flag.error("expected a flag name"))?;
+                    let name = LitStr::new(&ident.to_string(), ident.span());
+                    identifier(&name)?;
+                    let mask: LitInt = flag.value()?.parse()?;
+                    let mask = mask.base10_parse::<u32>()?;
+                    if !mask.is_power_of_two() || bits & mask != 0 { return Err(flag.error("flag masks must be distinct nonzero single u32 bits")); }
+                    bits |= mask;
+                    mappings.push((name, mask));
+                    Ok(())
+                })?;
+                hive_flags = Some(mappings);
+                Ok(())
+            } else if meta.path.is_ident("header")
                 || meta.path.is_ident("property")
                 || meta.path.is_ident("flag")
                 || meta.path.is_ident("flags")
@@ -343,7 +385,7 @@ pub(super) fn field(field: &SynField, index: usize) -> Result<Field> {
                 if channels.is_empty() { return Err(meta.error("channels needs at least one channel")); }
                 Ok(())
             } else if meta.path.is_ident("extra_flags") {
-                if extra_flags.is_some() { return Err(meta.error("duplicate extra_flags")); }
+    if extra_flags.is_some() { return Err(meta.error("duplicate extra_flags")); }
                 let mut get = None;
                 let mut set = None;
                 let mut flags = Vec::new();
@@ -444,6 +486,44 @@ pub(super) fn field(field: &SynField, index: usize) -> Result<Field> {
     {
         return Err(Error::new_spanned(field, "delegate owns defaults, requirements, omission, and codec framing; it cannot have default, required, skip_if, read_with, or write_with"));
     }
+    if let Some(hive_name) = &hive_name {
+        match &kind {
+            Kind::Property(name) | Kind::DelegatedProperty(name)
+                if name.value() != hive_name.value() => {}
+            _ => {
+                return Err(Error::new_spanned(
+                    field,
+                    "hive_name requires a property and a distinct spelling",
+                ))
+            }
+        }
+    }
+    if let Some(hive_flags) = &hive_flags {
+        let Kind::Flags(flags) = &kind else {
+            return Err(Error::new_spanned(
+                field,
+                "hive_flags requires packed flags",
+            ));
+        };
+        for (name, mask) in hive_flags {
+            if !flags.iter().any(|(_, original)| original == mask) {
+                return Err(Error::new_spanned(
+                    name,
+                    "Hive flag mask must have an engine mapping",
+                ));
+            }
+            if flags
+                .iter()
+                .any(|(original, bit)| original.value() == name.value() && bit != mask)
+            {
+                return Err(Error::new_spanned(
+                    name,
+                    "dialect flag names must map to the same bit",
+                ));
+            }
+        }
+    }
+
     if extra_flags.is_some() && !matches!(kind, Kind::Flatten) {
         return Err(Error::new_spanned(field, "extra_flags requires flatten"));
     }
@@ -594,6 +674,8 @@ pub(super) fn field(field: &SynField, index: usize) -> Result<Field> {
         local: format_ident!("__wc3_mdl_field_{index}"),
         ty: field.ty.clone(),
         kind,
+        hive_name,
+        hive_flags,
         default,
         skip_if,
         read_with,

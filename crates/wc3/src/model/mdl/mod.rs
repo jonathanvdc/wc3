@@ -22,8 +22,9 @@
 //! values or color-use states that the text representation would discard.
 //! Helper (`Node`), Bone, Attachment, Material and Layer records are supported.
 //! Material/Layer layouts use the existing version-selected storage. Layer
-//! texture bindings support static slots and animated diffuse IDs; writers
-//! reject non-diffuse animations and noncanonical binary texture-track order.
+//! texture bindings support static slots and animated diffuse IDs in engine
+//! syntax; HiveWorkshop named slots support animations in all six HD slots.
+//! Writers reject noncanonical binary texture-track order and hidden bases.
 //! Light, EventObject and CollisionShape records are also supported. Light
 //! fields follow their version-selected storage. ShadowIntensity supports only
 //! the static form: no corresponding binary animation tag has been verified.
@@ -43,6 +44,16 @@
 //! codecs too. Popcorn model blocks require version 900 or newer. Camera
 //! writing requires the version's default binary variant and canonical channel
 //! order; scalar depth-of-field input writes as keyed tracks.
+//!
+//! Readers accept both Warcraft III and HiveWorkshop spellings, including mixed
+//! input; aliases share duplicate identity. Default output uses Warcraft III.
+//! Select [`Dialect::HiveWorkshop`] with [`Write::encode_mdl_with_dialect`] or
+//! [`MdlWriter::with_dialect`]. The selection propagates through whole models.
+//! HiveWorkshop output uses numeric layer shader IDs, named texture slots,
+//! SortPrimitives, braced skin rows, raw selection flags and LOD names. Both
+//! dialects preserve all known flags; unknown bits remain errors. Engine output
+//! rejects unnamed shader IDs, non-diffuse slot animations, noncanonical
+//! selection flags and nonempty LOD names that it cannot represent.
 //!
 //! ```
 //! use wc3::model::{Model, DynamicModel, V800};
@@ -519,6 +530,15 @@ pub use value_eq::ValueEq;
 mod writer;
 pub use writer::MdlWriter;
 
+/// Canonical text syntax selected independently of the binary model version.
+/// Readers accept both dialects; writers enforce the selected dialect's limits.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum Dialect {
+    #[default]
+    Warcraft3,
+    HiveWorkshop,
+}
+
 // Re-export the bitfield traits for generated code in downstream crates.
 #[doc(hidden)]
 pub use bitfield::{BitRange, BitRangeMut};
@@ -546,7 +566,12 @@ pub trait Write {
 
     /// Encodes one value as UTF-8 text and checks block balance.
     fn encode_mdl(&self) -> Result<String, WriteError> {
-        let mut writer = MdlWriter::new(Vec::new());
+        self.encode_mdl_with_dialect(Dialect::Warcraft3)
+    }
+
+    /// Encodes using the selected dialect without discarding unrepresentable data.
+    fn encode_mdl_with_dialect(&self, dialect: Dialect) -> Result<String, WriteError> {
+        let mut writer = MdlWriter::with_dialect(Vec::new(), dialect);
         writer.write(self)?;
         let bytes = writer.finish()?;
         // MdlWriter only writes UTF-8 strings and ASCII formatting.

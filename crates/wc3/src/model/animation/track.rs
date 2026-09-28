@@ -218,7 +218,19 @@ where
     K::Value: mdl::Read,
 {
     fn read_mdl(parser: &mut Parser<'_>) -> Result<Self, mdl::ReadError> {
-        parser.expect_ident(K::MDL_NAME)?;
+        Self::read_mdl_named(parser, K::MDL_NAME)
+    }
+}
+impl<K: TrackKind> AnimationTrack<K>
+where
+    K::Value: mdl::Read,
+{
+    /// Reads the ordinary track grammar under an enclosing record's alias.
+    pub(crate) fn read_mdl_named(
+        parser: &mut Parser<'_>,
+        name: &'static str,
+    ) -> Result<Self, mdl::ReadError> {
+        parser.expect_ident(name)?;
         let count = parser.read::<u32>()? as usize;
         parser.expect(TokenKind::OpenBrace)?;
         let mut interpolation = None;
@@ -327,7 +339,20 @@ where
     K::Value: mdl::Write,
 {
     fn write_mdl<W: IoWrite>(&self, writer: &mut MdlWriter<W>) -> Result<(), mdl::WriteError> {
-        writer.begin_counted_block(K::MDL_NAME, self.keyframes.len())?;
+        self.write_mdl_named(writer, K::MDL_NAME)
+    }
+}
+impl<K: TrackKind> AnimationTrack<K>
+where
+    K::Value: mdl::Write,
+{
+    /// Writes a borrowed track under an enclosing record's alias.
+    pub(crate) fn write_mdl_named<W: IoWrite>(
+        &self,
+        writer: &mut MdlWriter<W>,
+        name: &str,
+    ) -> Result<(), mdl::WriteError> {
+        writer.begin_counted_block(name, self.keyframes.len())?;
         writer.indent()?;
         writer.write(&self.interpolation())?;
         writer.raw(",\n")?;

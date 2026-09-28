@@ -3,8 +3,9 @@ use crate::model::mdx;
 
 /// A layer shader ID, preserving all u32 values, including unnamed pipelines.
 ///
-/// Known names are available through [`Self::name`]. Unknown IDs have no MDL
-/// shader-name spelling but still round-trip exactly through MDX.
+/// Known names are available through [`Self::name`]. Unknown IDs have no engine
+/// shader-name spelling; HiveWorkshop MDL stores them numerically. All IDs
+/// round-trip exactly through MDX.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Hash, mdx::Read, mdx::Write)]
 pub struct ShaderType(u32);
 

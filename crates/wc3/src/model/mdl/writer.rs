@@ -1,5 +1,5 @@
-use super::Write;
 use super::WriteError;
+use super::{Dialect, Write};
 use crate::model::FixedText;
 use std::fmt::Arguments;
 use std::io::{Cursor as IoCursor, Write as IoWrite};
@@ -11,10 +11,22 @@ use std::str::from_utf8;
 pub struct MdlWriter<W> {
     output: W,
     depth: usize,
+    dialect: Dialect,
 }
 impl<W: IoWrite> MdlWriter<W> {
     pub fn new(output: W) -> Self {
-        Self { output, depth: 0 }
+        Self::with_dialect(output, Dialect::Warcraft3)
+    }
+    /// Creates a streaming writer for the selected syntax.
+    pub fn with_dialect(output: W, dialect: Dialect) -> Self {
+        Self {
+            output,
+            depth: 0,
+            dialect,
+        }
+    }
+    pub fn dialect(&self) -> Dialect {
+        self.dialect
     }
     /// Access the sink without checking block balance; prefer finish on success.
     pub fn into_inner(self) -> W {

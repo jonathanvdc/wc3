@@ -4,8 +4,8 @@ use super::{
 };
 use crate::model::{mdl, FixedText, ModelVersion, Vec3};
 use mdl::WriteProperty as _;
-use mdl::{Field, MdlWriter, Parser, ReadErrorKind, Span, TokenKind};
-use std::io::Write as IoWrite;
+use mdl::{Dialect, Field, MdlWriter, Parser, ReadErrorKind, Span, TokenKind};
+use std::io::{sink, Write as IoWrite};
 
 #[derive(mdl::Read, mdl::Write)]
 #[mdl(entry)]
@@ -221,7 +221,7 @@ pub(super) struct GroupsRef<'a, T> {
     triangles: bool,
 }
 impl<T: mdl::Write> mdl::WriteProperty for GroupsRef<'_, T> {
-    fn validate_mdl_property(&self, _: &'static str) -> Result<(), mdl::WriteError> {
+    fn validate_mdl_property(&self, _: &'static str, _: Dialect) -> Result<(), mdl::WriteError> {
         let total = self
             .counts
             .iter()
@@ -242,7 +242,7 @@ impl<T: mdl::Write> mdl::WriteProperty for GroupsRef<'_, T> {
         name: &'static str,
         writer: &mut MdlWriter<W>,
     ) -> Result<(), mdl::WriteError> {
-        self.validate_mdl_property(name)?;
+        self.validate_mdl_property(name, writer.dialect())?;
         writer.indent()?;
         writer.identifier(name)?;
         writer.formatted(format_args!(
@@ -286,11 +286,11 @@ pub(super) struct Selection {
     #[mdl(flag = "Unselectable", default)]
     flag: bool,
     #[mdl(property = "SelectionFlags", delegate)]
-    raw: Option<u32>,
+    raw: RawSelection,
 }
 impl Selection {
     fn validate(&self, span: Span) -> Result<(), mdl::ReadError> {
-        if self.flag && self.raw.is_some() {
+        if self.flag && self.raw.0.is_some() {
             Err(mdl::ReadError::new(span, ReadErrorKind::DuplicateField))
         } else {
             Ok(())
@@ -327,7 +327,7 @@ impl mdl::Read for SkinRow {
 }
 pub(super) struct SkinRef<'a>(Option<&'a [SkinWeights]>);
 impl mdl::WriteProperty for SkinRef<'_> {
-    fn validate_mdl_property(&self, _: &'static str) -> Result<(), mdl::WriteError> {
+    fn validate_mdl_property(&self, _: &'static str, _: Dialect) -> Result<(), mdl::WriteError> {
         if self.0.is_some_and(|rows| {
             rows.iter()
                 .any(|row| row.bone_indices.iter().any(|&index| index > 255))
@@ -342,11 +342,14 @@ impl mdl::WriteProperty for SkinRef<'_> {
         name: &'static str,
         writer: &mut MdlWriter<W>,
     ) -> Result<(), mdl::WriteError> {
-        self.validate_mdl_property(name)?;
+        self.validate_mdl_property(name, writer.dialect())?;
         if let Some(rows) = self.0 {
             writer.begin_counted_block(name, rows.len())?;
             for row in rows {
                 writer.indent()?;
+                if writer.dialect() == Dialect::HiveWorkshop {
+                    writer.raw("{ ")?;
+                }
                 for (index, value) in row
                     .bone_indices
                     .iter()
@@ -358,6 +361,9 @@ impl mdl::WriteProperty for SkinRef<'_> {
                         writer.raw(", ")?;
                     }
                     writer.write(&value)?;
+                }
+                if writer.dialect() == Dialect::HiveWorkshop {
+                    writer.raw(" }")?;
                 }
                 writer.raw(",\n")?;
             }
@@ -466,7 +472,9 @@ impl<V: ModelVersion> Geoset<V> {
     pub(super) fn mdl_selection(&self) -> Selection {
         Selection {
             flag: self.unselectable_raw == 4,
-            raw: None,
+            raw: RawSelection(
+                (!matches!(self.unselectable_raw, 0 | 4)).then_some(self.unselectable_raw),
+            ),
         }
     }
     pub(super) fn set_mdl_selection(
@@ -475,7 +483,7 @@ impl<V: ModelVersion> Geoset<V> {
         _: bool,
         _: Span,
     ) -> Result<(), mdl::ReadError> {
-        self.unselectable_raw = value.raw.unwrap_or(if value.flag { 4 } else { 0 });
+        self.unselectable_raw = value.raw.0.unwrap_or(if value.flag { 4 } else { 0 });
         Ok(())
     }
     pub(super) fn mdl_lod(&self) -> Option<u32> {
@@ -484,8 +492,8 @@ impl<V: ModelVersion> Geoset<V> {
     pub(super) fn mdl_lod_mut(&mut self) -> Option<&mut u32> {
         self.level_of_detail.level_of_detail_mut()
     }
-    pub(super) fn mdl_lod_name(&self) -> Option<FixedText<80>> {
-        None
+    pub(super) fn mdl_lod_name(&self) -> LodNameRef<'_> {
+        LodNameRef(self.level_of_detail.fixed_name())
     }
     pub(super) fn set_mdl_lod_name(
         &mut self,
@@ -586,15 +594,71 @@ impl<V: ModelVersion> Geoset<V> {
                 "non-triangle primitive groups",
             ));
         }
-        if !matches!(self.unselectable_raw, 0 | 4) {
-            return Err(mdl::WriteError::Unsupported("geoset selection flags"));
+        Ok(())
+    }
+}
+
+pub(super) struct RawSelection(Option<u32>);
+impl mdl::ReadProperty for RawSelection {
+    fn read_mdl_property(parser: &mut Parser<'_>, _: Field<'_>) -> Result<Self, mdl::ReadError> {
+        parser.read_property().map(|value| Self(Some(value)))
+    }
+    fn missing_mdl_property(_: &'static str, _: Span) -> Result<Self, mdl::ReadError> {
+        Ok(Self(None))
+    }
+}
+impl mdl::WriteProperty for RawSelection {
+    fn validate_mdl_property(
+        &self,
+        _: &'static str,
+        dialect: Dialect,
+    ) -> Result<(), mdl::WriteError> {
+        if dialect == Dialect::Warcraft3 && self.0.is_some() {
+            return Err(mdl::WriteError::Unsupported(
+                "raw selection flags in Warcraft III dialect",
+            ));
         }
-        if self
-            .level_of_detail
-            .fixed_name()
-            .is_some_and(|name| *name != FixedText::default())
-        {
-            return Err(mdl::WriteError::Unsupported("geoset LOD name"));
+        Ok(())
+    }
+    fn write_mdl_property<W: IoWrite>(
+        &self,
+        name: &'static str,
+        writer: &mut MdlWriter<W>,
+    ) -> Result<(), mdl::WriteError> {
+        self.validate_mdl_property(name, writer.dialect())?;
+        if let Some(value) = self.0 {
+            writer.property(name, &value)?;
+        }
+        Ok(())
+    }
+}
+pub(super) struct LodNameRef<'a>(Option<&'a FixedText<80>>);
+impl mdl::WriteProperty for LodNameRef<'_> {
+    fn validate_mdl_property(
+        &self,
+        _: &'static str,
+        dialect: Dialect,
+    ) -> Result<(), mdl::WriteError> {
+        if let Some(name) = self.0 {
+            if *name != FixedText::default() {
+                if dialect == Dialect::Warcraft3 {
+                    return Err(mdl::WriteError::Unsupported(
+                        "LOD name in Warcraft III dialect",
+                    ));
+                }
+                MdlWriter::new(sink()).write(name)?;
+            }
+        }
+        Ok(())
+    }
+    fn write_mdl_property<W: IoWrite>(
+        &self,
+        name: &'static str,
+        writer: &mut MdlWriter<W>,
+    ) -> Result<(), mdl::WriteError> {
+        self.validate_mdl_property(name, writer.dialect())?;
+        if let Some(value) = self.0.filter(|value| **value != FixedText::default()) {
+            writer.property(name, value)?;
         }
         Ok(())
     }

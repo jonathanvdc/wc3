@@ -337,7 +337,7 @@ impl mdl::Read for Node {
 impl mdl::Write for Node {
     fn write_mdl<W: IoWrite>(&self, writer: &mut MdlWriter<W>) -> Result<(), mdl::WriteError> {
         validate_node_kind(self, 0)?;
-        let state = self.prepare_mdl_fields()?;
+        let state = self.prepare_mdl_fields(writer.dialect())?;
         writer.indent()?;
         writer.identifier("Helper")?;
         self.write_mdl_headers(writer)?;

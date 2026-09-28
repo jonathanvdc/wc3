@@ -5,14 +5,14 @@ use crate::model::{mdl, mdx};
 use bitfield::bitfield;
 use mdl_codec::{
     full, is_no_reference, is_white, no_reference, one, read_filter, white, write_filter, zero,
-    zero_id, TextureBindings,
+    zero_id, ShaderMarker, TextureBindings,
 };
 use std::{fmt::Debug, marker::PhantomData};
 
 use super::{write_count, ShaderType};
 use crate::model::animation::track_group;
 use crate::model::{
-    AnimationTrack, Color, Cursor, Encoder, FixedText, LayerTextureId, ModelVersion, ReadError,
+    AnimationTrack, Color, Cursor, Encoder, LayerTextureId, ModelVersion, ReadError,
     SupportsEmissiveGain, SupportsFresnel, SupportsLayerShaderTypeId, SupportsLayerTextureSlots,
     Tag, TrackTag, ValueError, Version, WriteError,
 };
@@ -70,8 +70,9 @@ pub struct LayerTextureSlot {
 
 /// A material layer with parsed texture slots and animation tracks.
 ///
-/// MDL uses slot-qualified texture bindings. Its writer rejects animated
-/// non-diffuse slots and binary storage that the text syntax cannot reconstruct.
+/// MDL uses slot-qualified engine bindings or named HiveWorkshop bindings.
+/// HiveWorkshop output supports all six animated HD texture slots; engine output
+/// rejects non-diffuse animations. Both reject hidden binary storage.
 /// A classic texture-ID track must precede other channels in binary track order;
 /// text reading and writing use that canonical order.
 #[derive(Clone, Debug, PartialEq, mdx::Read, mdx::Write, mdl::Read, mdl::Write)]
@@ -80,9 +81,9 @@ pub struct LayerTextureSlot {
     write_order(filter_mode, shading_flags, shader, textures, texture_animation_id,
         coordinate_id, alpha, emissive, color, opacity, team_color, channels),
     virtual_fields(
-        #[mdl(property = "Shader", delegate)]
+        #[mdl(property = "Shader", hive_name = "ShaderTypeId", delegate)]
         #[mdl(get = "Self::mdl_shader", set = "Self::set_mdl_shader")]
-        shader: Option<FixedText<80>>,
+        shader: ShaderMarker,
         #[mdl(flatten)]
         #[mdl(get = "Self::mdl_textures", set = "Self::set_mdl_textures")]
         textures: TextureBindings,

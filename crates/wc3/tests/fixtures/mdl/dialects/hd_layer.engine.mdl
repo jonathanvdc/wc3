@@ -1,0 +1,10 @@
+Layer {
+	FilterMode None,
+	Shader "Shader_HD_DefaultUnit",
+	static TextureID 11 <= 0,
+	static TextureID 12 <= 1,
+	static TextureID 13 <= 2,
+	static TextureID 14 <= 3,
+	static TextureID 15 <= 4,
+	static TextureID 16 <= 5,
+}

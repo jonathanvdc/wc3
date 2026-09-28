@@ -2,7 +2,7 @@
 use super::{Camera, CameraTrack, CameraVariant};
 use crate::model::animation::{AnimationTrack, CameraTargetTranslation};
 use crate::model::{mdl, ModelVersion, Vec3};
-use mdl::{MdlWriter, Span};
+use mdl::{Dialect, MdlWriter, Span};
 use std::io::Write as IoWrite;
 
 #[derive(Default, mdl::Read, mdl::Write)]
@@ -53,13 +53,13 @@ impl TargetRef<'_> {
 }
 impl mdl::WriteFields for TargetRef<'_> {
     type State = <Target as mdl::WriteFields>::State;
-    fn prepare_mdl_fields(&self) -> Result<Self::State, mdl::WriteError> {
+    fn prepare_mdl_fields(&self, dialect: Dialect) -> Result<Self::State, mdl::WriteError> {
         if self.tracks.iter().filter(|track| order(track) == 5).count() > 1 {
             return Err(mdl::WriteError::Unsupported(
                 "duplicate camera target translation",
             ));
         }
-        self.fields().prepare_mdl_fields()
+        self.fields().prepare_mdl_fields(dialect)
     }
     fn visit_mdl_names(visitor: &mut dyn FnMut(&'static str, bool)) {
         <Target as mdl::WriteFields>::visit_mdl_names(visitor);

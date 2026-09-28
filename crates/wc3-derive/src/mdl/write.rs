@@ -42,7 +42,7 @@ pub(super) fn expand(
                 let local = &field.local;
                 state_names.push(local.clone());
                 state_types.push(quote!(<#ty as ::wc3::model::mdl::WriteFields>::State));
-                required_flags.push(quote!(let #local = ::wc3::model::mdl::WriteFields::prepare_mdl_fields(&#access)?;));
+                required_flags.push(quote!(let #local = ::wc3::model::mdl::WriteFields::prepare_mdl_fields(&#access, __wc3_mdl_dialect)?;));
                 writes.push(quote!(::wc3::model::mdl::WriteFields::write_mdl_fields(&#access, #local, __wc3_mdl_writer)?;));
                 if let Some(extra) = &field.extra_flags {
                     let get = &extra.get;
@@ -60,7 +60,7 @@ pub(super) fn expand(
                 let local = &field.local;
                 state_names.push(local.clone());
                 state_types.push(quote!(<#ty as ::wc3::model::mdl::WriteFields>::State));
-                required_flags.push(quote!(let #local = ::wc3::model::mdl::WriteFields::prepare_mdl_fields(&#access)?;));
+                required_flags.push(quote!(let #local = ::wc3::model::mdl::WriteFields::prepare_mdl_fields(&#access, __wc3_mdl_dialect)?;));
                 writes.push(quote! {
                     __wc3_mdl_writer.indent()?;
                     __wc3_mdl_writer.identifier(#mdl_name)?;
@@ -95,18 +95,20 @@ pub(super) fn expand(
                 writes.push(quote!(__wc3_mdl_writer.counted(#mdl_name, #access.iter())?;))
             }
             Kind::DelegatedProperty(mdl_name) => {
-                required_flags.push(quote!(::wc3::model::mdl::WriteProperty::validate_mdl_property(&#access, #mdl_name)?;));
-                writes.push(quote!(::wc3::model::mdl::WriteProperty::write_mdl_property(&#access, #mdl_name, __wc3_mdl_writer)?;));
+                let hive_name = field.hive_name.as_ref().unwrap_or(mdl_name);
+                required_flags.push(quote!(::wc3::model::mdl::WriteProperty::validate_mdl_property(&#access, if __wc3_mdl_dialect == ::wc3::model::mdl::Dialect::HiveWorkshop { #hive_name } else { #mdl_name }, __wc3_mdl_dialect)?;));
+                writes.push(quote!(::wc3::model::mdl::WriteProperty::write_mdl_property(&#access, if __wc3_mdl_writer.dialect() == ::wc3::model::mdl::Dialect::HiveWorkshop { #hive_name } else { #mdl_name }, __wc3_mdl_writer)?;));
             }
             Kind::Property(mdl_name)
             | Kind::StaticProperty(mdl_name)
             | Kind::Animatable(mdl_name) => {
                 let prefix = (!matches!(kind, Kind::Property(_)))
                     .then(|| quote!(__wc3_mdl_writer.raw("static ")?;));
+                let hive_name = field.hive_name.as_ref().unwrap_or(mdl_name);
                 let write = quote! {
                     __wc3_mdl_writer.indent()?;
                     #prefix
-                    __wc3_mdl_writer.identifier(#mdl_name)?;
+                    __wc3_mdl_writer.identifier(if __wc3_mdl_writer.dialect() == ::wc3::model::mdl::Dialect::HiveWorkshop { #hive_name } else { #mdl_name })?;
                     __wc3_mdl_writer.raw(" ")?;
                     #value
                     __wc3_mdl_writer.raw(",\n")?;
@@ -192,9 +194,27 @@ pub(super) fn expand(
                             }
                         });
                 }
-                for (mdl_name, mask) in flags {
-                    writes.push(quote!(if ::wc3::model::mdl::BitRange::<u32>::bit_range(&#access, 31, 0) & #mask != 0 { __wc3_mdl_writer.flag(#mdl_name)?; }));
-                }
+                // Dialects share the full semantic flag set. Overrides change
+                // spellings only; unmapped names keep their common spelling.
+                let hive = flags
+                    .iter()
+                    .map(|(name, mask)| {
+                        field
+                            .hive_flags
+                            .as_ref()
+                            .and_then(|overrides| overrides.iter().find(|(_, bit)| bit == mask))
+                            .cloned()
+                            .unwrap_or_else(|| (name.clone(), *mask))
+                    })
+                    .collect::<Vec<_>>();
+                let emit = |mappings: &Vec<(syn::LitStr, u32)>| {
+                    mappings.iter().map(|(name, mask)| quote!(if ::wc3::model::mdl::BitRange::<u32>::bit_range(&#access, 31, 0) & #mask != 0 { __wc3_mdl_writer.flag(#name)?; })).collect::<Vec<_>>()
+                };
+                let engine_writes = emit(flags);
+                let hive_writes = emit(&hive);
+                writes.push(quote! {
+                    if __wc3_mdl_writer.dialect() == ::wc3::model::mdl::Dialect::HiveWorkshop { #(#hive_writes)* } else { #(#engine_writes)* }
+                });
             }
             Kind::Flag(mdl_name) => {
                 if field.default.is_none() && !options.default {
@@ -248,7 +268,7 @@ pub(super) fn expand(
     let write_impl = block.map(|block| quote! {
         impl #impl_generics ::wc3::model::mdl::Write for #name #ty_generics #where_clause {
             fn write_mdl<#sink: ::std::io::Write>(&self, __wc3_mdl_writer: &mut ::wc3::model::mdl::MdlWriter<#sink>) -> ::core::result::Result<(), ::wc3::model::mdl::WriteError> {
-                let state = <Self as ::wc3::model::mdl::WriteFields>::prepare_mdl_fields(self)?;
+                let state = <Self as ::wc3::model::mdl::WriteFields>::prepare_mdl_fields(self, __wc3_mdl_writer.dialect())?;
                 __wc3_mdl_writer.indent()?;
                 __wc3_mdl_writer.identifier(#block)?;
                 <Self as ::wc3::model::mdl::WriteFields>::write_mdl_headers(self, __wc3_mdl_writer)?;
@@ -267,7 +287,7 @@ pub(super) fn expand(
                 #(#headers)*
                 Ok(())
             }
-            fn prepare_mdl_fields(&self) -> ::core::result::Result<Self::State, ::wc3::model::mdl::WriteError> {
+            fn prepare_mdl_fields(&self, __wc3_mdl_dialect: ::wc3::model::mdl::Dialect) -> ::core::result::Result<Self::State, ::wc3::model::mdl::WriteError> {
                 #check_names
                 #validate
                 #initialize_defaults

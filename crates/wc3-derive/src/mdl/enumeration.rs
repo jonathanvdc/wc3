@@ -281,7 +281,7 @@ pub(super) fn expand(input: &DeriveInput, reading: bool) -> Result<TokenStream> 
                 }
                 Kind::Delegate => quote!(__wc3_mdl_writer.write(__wc3_mdl_value)),
                 Kind::Block => quote! {
-                    let __wc3_mdl_state = <#ty as ::wc3::model::mdl::WriteFields>::prepare_mdl_fields(__wc3_mdl_value)?;
+                    let __wc3_mdl_state = <#ty as ::wc3::model::mdl::WriteFields>::prepare_mdl_fields(__wc3_mdl_value, __wc3_mdl_writer.dialect())?;
                     __wc3_mdl_writer.indent()?;
                     __wc3_mdl_writer.identifier(__wc3_mdl_names[#index])?;
                     <#ty as ::wc3::model::mdl::WriteFields>::write_mdl_headers(__wc3_mdl_value, __wc3_mdl_writer)?;

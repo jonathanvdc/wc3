@@ -1,5 +1,7 @@
 //! Delegated named properties: field types own framing and presence policies.
-use super::{Field, MdlWriter, Parser, Read, ReadError, ReadErrorKind, Span, Write, WriteError};
+use super::{
+    Dialect, Field, MdlWriter, Parser, Read, ReadError, ReadErrorKind, Span, Write, WriteError,
+};
 use std::io::Write as IoWrite;
 
 /// Reads a whole property's payload after the enclosing record consumes its name.
@@ -29,7 +31,11 @@ pub trait WriteProperty {
     /// Checks representability before the enclosing record emits any output.
     /// Defaults to no additional checks. Implementations must repeat necessary
     /// checks in their writer if it is also callable directly.
-    fn validate_mdl_property(&self, _name: &'static str) -> Result<(), WriteError> {
+    fn validate_mdl_property(
+        &self,
+        _name: &'static str,
+        _dialect: Dialect,
+    ) -> Result<(), WriteError> {
         Ok(())
     }
 

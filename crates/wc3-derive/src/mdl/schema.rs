@@ -21,6 +21,9 @@ impl Schema {
     pub(super) fn visit_names(&self, reading: bool) -> TokenStream {
         let mut calls = Vec::new();
         for field in &self.fields {
+            for name in field.dialect_aliases() {
+                calls.push(quote!(visitor(#name, false);));
+            }
             if let Some(extra) = &field.extra_flags {
                 for (name, _) in &extra.flags {
                     calls.push(quote!(visitor(#name, false);));
@@ -69,6 +72,9 @@ impl Schema {
     pub(super) fn accepts(&self) -> TokenStream {
         let mut conditions = Vec::new();
         for field in &self.fields {
+            for value in field.dialect_aliases() {
+                conditions.push(quote!(!static_form && name == #value));
+            }
             if let Some(extra) = &field.extra_flags {
                 for (value, _) in &extra.flags {
                     conditions.push(quote!(!static_form && name == #value));
@@ -349,6 +355,7 @@ pub(super) fn parse(input: &DeriveInput, options: &Container) -> Result<Schema> 
             Kind::Flags(flags) => flags.iter().map(|(name, _)| name).collect(),
             _ => Vec::new(),
         };
+        field_names.extend(field.dialect_aliases());
         if let Some(extra) = &field.extra_flags {
             field_names.extend(extra.flags.iter().map(|(name, _)| name));
         }

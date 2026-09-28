@@ -137,7 +137,11 @@ pub(super) fn expand(
                 });
             }
             for (mdl_name, mask) in flags {
-                arms.push(quote!(#mdl_name => {
+                let aliases = field.hive_flags.iter().flatten().filter_map(|(name, bit)| {
+                    (bit == mask && name.value() != mdl_name.value()).then_some(name)
+                });
+                let pattern = quote!(#mdl_name #(| #aliases)*);
+                arms.push(quote!(#pattern => {
                         __wc3_mdl_fields.mark(#bit, __wc3_mdl_field)?;
                         __wc3_mdl_body.expect(::wc3::model::mdl::TokenKind::Comma)?;
                         #mark_present
@@ -149,11 +153,13 @@ pub(super) fn expand(
             members.push(quote!(#member: #local));
             continue;
         }
+        let aliases = field.hive_name.iter().collect::<Vec<_>>();
         if let Kind::DelegatedProperty(mdl_name) = kind {
+            let pattern = quote!(#mdl_name #(| #aliases)*);
             locals.push(
                 quote!(let mut #local: ::core::option::Option<#ty> = ::core::option::Option::None;),
             );
-            arms.push(quote!(#mdl_name => {
+            arms.push(quote!(#pattern => {
                 __wc3_mdl_fields.mark(#bit, __wc3_mdl_field)?;
                 #local = ::core::option::Option::Some(<#ty as ::wc3::model::mdl::ReadProperty>::read_mdl_property(__wc3_mdl_body, __wc3_mdl_field)?);
                 #mark_present
@@ -225,7 +231,8 @@ pub(super) fn expand(
             mark_enabled = quote!(#enabled = true;);
             enable_calls.push(quote!(if #enabled { #function(&mut __wc3_mdl_value); }));
         }
-        let static_arm = quote!(#mdl_name => {
+        let pattern = quote!(#mdl_name #(| #aliases)*);
+        let static_arm = quote!(#pattern => {
             __wc3_mdl_fields.mark(#bit, __wc3_mdl_field)?;
             #assignment
             #mark_present

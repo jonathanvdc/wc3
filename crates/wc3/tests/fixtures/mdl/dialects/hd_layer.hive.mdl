@@ -1,0 +1,10 @@
+Layer {
+	FilterMode None,
+	ShaderTypeId 1,
+	static TextureID 11,
+	static NormalTextureID 12,
+	static ORMTextureID 13,
+	static EmissiveTextureID 14,
+	static TeamColorTextureID 15,
+	static ReflectionsTextureID 16,
+}

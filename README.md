@@ -199,6 +199,39 @@ let dynamic = DynamicModel::decode_mdl(&canonical).unwrap();
 assert_eq!(dynamic.version(), 800);
 ```
 
+MDL readers accept Warcraft III and HiveWorkshop spellings, including mixed
+input, and treat aliases as the same assignment for duplicate checks. Output
+uses Warcraft III syntax by default. Select HiveWorkshop syntax explicitly:
+
+```rust
+use wc3::model::mdl::{Dialect, Read as _, Write as _};
+use wc3::model::materials::Layer;
+use wc3::model::V1800;
+let layer = Layer::<V1800>::decode_mdl(
+    "Layer { ShaderTypeId 1, NormalTextureID 1 { Linear, -1: 7, } }",
+).unwrap();
+let text = layer.encode_mdl_with_dialect(Dialect::HiveWorkshop).unwrap();
+assert!(text.contains("NormalTextureID 1"));
+assert!(layer.encode_mdl().is_err()); // engine syntax cannot identify this track's slot
+```
+
+`MdlWriter::with_dialect(sink, dialect)` selects the same behavior for streaming
+output and propagates it through whole models and nested codecs. HiveWorkshop
+uses numeric layer shader IDs, named texture slots, `SortPrimitives`, braced
+skin-weight rows, and raw geoset selection flags/LOD names. Both dialects accept
+and preserve the full known flag set, including flags usually omitted by Hive
+writers. Unknown bits and hidden animation bases still fail. Engine output
+rejects non-diffuse texture animations, unnamed shader IDs, raw selection flags
+other than 0/4, and nonempty LOD names rather than losing them. The material
+shader field in versions 900/1000 retains its string spelling in both dialects.
+
+Ordinary property aliases use `#[mdl(hive_name = "OtherName")]`. Packed flags
+declare the complete known set in `flags(...)`; `hive_flags(...)` overrides
+selected spellings by bit, with all remaining flags shared. Aliases share
+presence bits. `WriteFields::prepare_mdl_fields` and
+`WriteProperty::validate_mdl_property` receive the dialect directly so nested
+preflight checks use the same dialect as output.
+
 MDL structural fields use `#[mdl(flatten)]`, `#[mdl(block = "Target")]`,
 `#[mdl(repeated = "Layer")]`, or `#[mdl(counted = "Points")]`. A reusable
 `#[mdl(fields)]` struct derives field codecs without a containing block.

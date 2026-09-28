@@ -1071,3 +1071,79 @@ fn virtual_fields_validate_storage_access_and_schema_composition() {
         "requires blocks or field groups",
     );
 }
+
+#[test]
+fn dialect_attributes_reject_ambiguous_or_unmapped_names() {
+    rejects(
+        parse_quote!(
+            #[mdl(block = "A")]
+            struct A {
+                #[mdl(property = "Value", hive_name = "Value")]
+                value: u32,
+            }
+        ),
+        "distinct spelling",
+    );
+    rejects(
+        parse_quote!(
+            #[mdl(block = "A")]
+            struct A {
+                #[mdl(skip, default, hive_name = "Other")]
+                value: u32,
+            }
+        ),
+        "requires a property",
+    );
+    rejects(
+        parse_quote!(
+            #[mdl(block = "A")]
+            struct A {
+                #[mdl(property = "Value", hive_name = "Other")]
+                value: u32,
+                #[mdl(property = "Other")]
+                other: u32,
+            }
+        ),
+        "duplicate MDL field name",
+    );
+    rejects(
+        parse_quote!(
+            #[mdl(block = "A")]
+            struct A {
+                #[mdl(flags(A = 1), hive_flags(B = 2))]
+                bits: u32,
+            }
+        ),
+        "engine mapping",
+    );
+    rejects(
+        parse_quote!(
+            #[mdl(block = "A")]
+            struct A {
+                #[mdl(flags(A = 1, B = 2), hive_flags(A = 2))]
+                bits: u32,
+            }
+        ),
+        "same bit",
+    );
+    rejects(
+        parse_quote!(
+            #[mdl(block = "A")]
+            struct A {
+                #[mdl(flags(A = 1, B = 2), hive_flags(C = 1, C = 2))]
+                bits: u32,
+            }
+        ),
+        "duplicate MDL field name",
+    );
+    rejects(
+        parse_quote!(
+            #[mdl(block = "A")]
+            struct A {
+                #[mdl(flags(A = 1), hive_flags(B = 1, C = 1))]
+                bits: u32,
+            }
+        ),
+        "distinct nonzero",
+    );
+}
