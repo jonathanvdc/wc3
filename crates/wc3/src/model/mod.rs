@@ -11,7 +11,7 @@
 //! use wc3::model::mdx::Write;
 //! let model = Model::<V800>::new();
 //! // Populate the model
-//! let bytes = model.encode().unwrap();
+//! let bytes = model.encode_mdx().unwrap();
 //! ```
 
 /// A three-dimensional vector in MDX coordinates.

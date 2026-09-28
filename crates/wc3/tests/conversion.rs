@@ -38,15 +38,15 @@ fn sample<V: ModelVersion>() -> Model<V> {
 
 fn check_pair<S: ModelVersion, T: ModelVersion>() {
     let source = sample::<S>();
-    let original = source.encode().unwrap();
+    let original = source.encode_mdx().unwrap();
     let converted = source.convert::<T>(&ConversionOptions::strict()).unwrap();
     assert_eq!(converted.model.version(), T::NUMBER);
-    let bytes = converted.model.encode().unwrap();
-    let decoded = Model::<T>::decode(&bytes).unwrap();
+    let bytes = converted.model.encode_mdx().unwrap();
+    let decoded = Model::<T>::decode_mdx(&bytes).unwrap();
     assert_eq!(decoded.geosets()[0].raw_unselectable(), 0x8000_0002);
     let back = decoded.convert::<S>(&ConversionOptions::strict()).unwrap();
-    assert_eq!(back.model.encode().unwrap(), original);
-    assert_eq!(source.encode().unwrap(), original);
+    assert_eq!(back.model.encode_mdx().unwrap(), original);
+    assert_eq!(source.encode_mdx().unwrap(), original);
 }
 
 #[test]
@@ -81,7 +81,7 @@ fn shader_transition_is_explicit_and_source_is_unchanged() {
     material.set_shader("Shaders\\Unit.shader").unwrap();
     let mut model = Model::<V1000>::new();
     model.set_materials(&[material]);
-    let original = model.encode().unwrap();
+    let original = model.encode_mdx().unwrap();
     let error = model
         .convert::<V1100>(&ConversionOptions::strict())
         .unwrap_err();
@@ -94,8 +94,8 @@ fn shader_transition_is_explicit_and_source_is_unchanged() {
         .issues
         .iter()
         .any(|issue| issue.path == error.path && issue.kind == ConversionIssueKind::Dropped));
-    assert_eq!(model.encode().unwrap(), original);
-    Model::<V1100>::decode(&result.model.encode().unwrap()).unwrap();
+    assert_eq!(model.encode_mdx().unwrap(), original);
+    Model::<V1100>::decode_mdx(&result.model.encode_mdx().unwrap()).unwrap();
 }
 
 #[test]
@@ -191,7 +191,7 @@ fn skin_narrowing_checks_indices_and_never_truncates_them() {
         .unwrap();
     assert_eq!(lossy.model.skin_weights(), None);
     assert_eq!(lossy.model.tangents(), geoset.tangents());
-    Geoset::<V1300>::decode(&lossy.model.encode().unwrap()).unwrap();
+    Geoset::<V1300>::decode_mdx(&lossy.model.encode_mdx().unwrap()).unwrap();
     let wide = geoset
         .convert::<V1400>(&ConversionOptions::strict())
         .unwrap();
@@ -205,7 +205,7 @@ fn skin_narrowing_checks_indices_and_never_truncates_them() {
     let narrow = geoset
         .convert::<V900>(&ConversionOptions::strict())
         .unwrap();
-    let decoded = Geoset::<V900>::decode(&narrow.model.encode().unwrap()).unwrap();
+    let decoded = Geoset::<V900>::decode_mdx(&narrow.model.encode_mdx().unwrap()).unwrap();
     assert_eq!(decoded.skin_weights(), geoset.skin_weights());
 }
 
@@ -241,9 +241,9 @@ fn opaque_chunks_have_an_independent_policy() {
             .convert::<V800>(&ConversionOptions::strict())
             .unwrap()
             .model
-            .encode()
+            .encode_mdx()
             .unwrap(),
-        model.encode().unwrap()
+        model.encode_mdx().unwrap()
     );
 }
 
@@ -271,10 +271,10 @@ fn chunk_order_duplicates_version_extensions_and_raw_names_are_preserved() {
     model.push(version.into());
     model.push(model.chunks()[1].clone());
     // Deliberately preserve non-UTF8 shader bytes and trailing padding.
-    let mut material_bytes = Material::<V900>::new().encode().unwrap();
+    let mut material_bytes = Material::<V900>::new().encode_mdx().unwrap();
     material_bytes[12] = 255;
     material_bytes[91] = 42;
-    let material = Material::<V900>::decode(&material_bytes).unwrap();
+    let material = Material::<V900>::decode_mdx(&material_bytes).unwrap();
     model.push(MaterialsChunk::new(vec![material]).into());
     let converted = model
         .convert::<V1000>(&ConversionOptions::strict())
@@ -296,7 +296,10 @@ fn chunk_order_duplicates_version_extensions_and_raw_names_are_preserved() {
         .model
         .convert::<V900>(&ConversionOptions::strict())
         .unwrap();
-    assert_eq!(back.model.encode().unwrap(), model.encode().unwrap());
+    assert_eq!(
+        back.model.encode_mdx().unwrap(),
+        model.encode_mdx().unwrap()
+    );
 }
 
 #[test]
@@ -306,12 +309,15 @@ fn camera_variants_preserve_their_self_describing_layout_and_opaque_bytes() {
     let result = camera
         .convert::<V800>(&ConversionOptions::strict())
         .unwrap();
-    assert_eq!(result.model.encode().unwrap(), camera.encode().unwrap());
+    assert_eq!(
+        result.model.encode_mdx().unwrap(),
+        camera.encode_mdx().unwrap()
+    );
 }
 
 #[test]
 fn absent_version_is_inserted_and_dynamic_sources_convert() {
-    let source = Model::<V800>::decode(b"MDLX").unwrap();
+    let source = Model::<V800>::decode_mdx(b"MDLX").unwrap();
     let converted = source
         .convert::<V900>(&ConversionOptions::strict())
         .unwrap();
@@ -357,7 +363,10 @@ fn populated_versioned_fields_preserve_exact_storage_when_supported() {
         .convert::<V1600>(&ConversionOptions::strict())
         .unwrap();
     assert!(converted.report.issues.is_empty());
-    assert_eq!(converted.model.encode().unwrap(), layer.encode().unwrap());
+    assert_eq!(
+        converted.model.encode_mdx().unwrap(),
+        layer.encode_mdx().unwrap()
+    );
 
     let mut light = Light::<V1800>::new(Node::new("Shadow", 2).unwrap(), 1);
     light.set_shadow_intensity(0.5);
@@ -371,14 +380,14 @@ fn populated_versioned_fields_preserve_exact_storage_when_supported() {
         damping: 3.0,
     });
     // A noncanonical nonzero shadow flag must retain its original bits.
-    let shadow_offset = 4 + light.node().encode().unwrap().len() + 4;
-    let mut bytes = light.encode().unwrap();
+    let shadow_offset = 4 + light.node().encode_mdx().unwrap().len() + 4;
+    let mut bytes = light.encode_mdx().unwrap();
     bytes[shadow_offset..shadow_offset + 4].copy_from_slice(&0x8000_0002u32.to_le_bytes());
-    let light = Light::<V1800>::decode(&bytes).unwrap();
+    let light = Light::<V1800>::decode_mdx(&bytes).unwrap();
     let converted = light
         .convert::<V1600>(&ConversionOptions::strict())
         .unwrap();
-    assert_eq!(converted.model.encode().unwrap(), bytes);
+    assert_eq!(converted.model.encode_mdx().unwrap(), bytes);
     assert!(converted.report.issues.is_empty());
     assert_eq!(
         light

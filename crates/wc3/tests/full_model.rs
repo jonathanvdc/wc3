@@ -88,9 +88,9 @@ fn all_chunk_families_validate_and_round_trip_across_versions() {
 fn check_version<V: ModelVersion>() {
     let version = V::NUMBER;
     let model = full_model::<V>();
-    let bytes = model.encode().unwrap();
-    let parsed = Model::<V>::decode(&bytes).unwrap();
-    assert_eq!(parsed.encode().unwrap(), bytes, "version {version}");
+    let bytes = model.encode_mdx().unwrap();
+    let parsed = Model::<V>::decode_mdx(&bytes).unwrap();
+    assert_eq!(parsed.encode_mdx().unwrap(), bytes, "version {version}");
     assert_eq!(parsed.version(), version);
     assert_eq!(parsed.materials()[0].layers().len(), 1);
 }

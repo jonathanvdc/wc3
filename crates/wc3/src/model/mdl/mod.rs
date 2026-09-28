@@ -14,7 +14,7 @@
 //! use wc3::model::materials::Texture;
 //! use wc3::model::mdl::{Read, Write, MdlWriter};
 //!
-//! let texture = Texture::parse_mdl(r#"Bitmap { Image "Textures\Armor.blp", WrapWidth, }"#)?;
+//! let texture = Texture::decode_mdl(r#"Bitmap { Image "Textures\Armor.blp", WrapWidth, }"#)?;
 //! let mut bytes = Vec::new();
 //! let mut writer = MdlWriter::new(&mut bytes);
 //! texture.write_mdl(&mut writer)?;
@@ -52,7 +52,7 @@
 //!     non_looping: bool,
 //! }
 //!
-//! let value = Example::parse_mdl(r#"Anim "Stand" { Interval { 0, 1000 }, }"#)?;
+//! let value = Example::decode_mdl(r#"Anim "Stand" { Interval { 0, 1000 }, }"#)?;
 //! let mut writer = MdlWriter::new(Vec::new());
 //! writer.write(&value)?;
 //! let bytes = writer.finish()?;
@@ -120,8 +120,8 @@
 //! #[derive(mdl::Read, mdl::Write)]
 //! #[mdl(entry)]
 //! struct Point([f32; 3]);
-//! assert_eq!(Duration::parse_mdl("Duration 1000,")?.0, 1000);
-//! assert_eq!(Point::parse_mdl("{ 1.0, 2.0, 3.0 },")?.0, [1.0, 2.0, 3.0]);
+//! assert_eq!(Duration::decode_mdl("Duration 1000,")?.0, 1000);
+//! assert_eq!(Point::decode_mdl("{ 1.0, 2.0, 3.0 },")?.0, [1.0, 2.0, 3.0]);
 //! # Ok::<(), Box<dyn std::error::Error>>(())
 //! ```
 //!
@@ -166,7 +166,7 @@ pub use wc3_derive::{MdlRead as Read, MdlWrite as Write};
 pub trait Read: Sized {
     fn read_mdl(parser: &mut Parser<'_>) -> Result<Self, ReadError>;
     /// Reads one value and rejects trailing input.
-    fn parse_mdl(source: &str) -> Result<Self, ReadError> {
+    fn decode_mdl(source: &str) -> Result<Self, ReadError> {
         let mut parser = Parser::new(source);
         let value = parser.read()?;
         parser.finish()?;
@@ -179,6 +179,15 @@ pub trait Read: Sized {
 /// on error. Finite floats round-trip exactly; NaNs retain only their NaN class.
 pub trait Write {
     fn write_mdl<W: IoWrite>(&self, writer: &mut MdlWriter<W>) -> Result<(), WriteError>;
+
+    /// Encodes one value as UTF-8 text and checks block balance.
+    fn encode_mdl(&self) -> Result<String, WriteError> {
+        let mut writer = MdlWriter::new(Vec::new());
+        writer.write(self)?;
+        let bytes = writer.finish()?;
+        // MdlWriter only writes UTF-8 strings and ASCII formatting.
+        Ok(String::from_utf8(bytes).expect("MDL output is valid UTF-8"))
+    }
 }
 
 /// Stack bitset used by field readers.

@@ -3,18 +3,16 @@ use wc3::model::animation::{GlobalSequence, Sequence, SequenceFlags};
 use wc3::model::geometry::PivotPoint;
 use wc3::model::materials::{Texture, TextureFlags};
 use wc3::model::mdl;
-use wc3::model::mdl::Read as _;
 use wc3::model::mdl::{
     Lexer, MdlWriter, Parser, ReadError, ReadErrorKind, Span, TokenKind, WriteError,
 };
+use wc3::model::mdl::{Read as _, Write as _};
 use wc3::model::mdx::Read as _;
 use wc3::model::mdx::Write as _;
 use wc3::model::FixedText;
 
 fn print<T: mdl::Write>(value: &T) -> String {
-    let mut writer = MdlWriter::new(Vec::new());
-    writer.write(value).unwrap();
-    String::from_utf8(writer.finish().unwrap()).unwrap()
+    value.encode_mdl().unwrap()
 }
 
 #[test]
@@ -79,7 +77,7 @@ fn lexical_errors_are_precise_and_terminal() {
         (3, 1)
     );
     let source = "// é\r\nBitmap {\n Image \"ok\",\n Bogus 3,\n}";
-    let error = Texture::parse_mdl(source).unwrap_err();
+    let error = Texture::decode_mdl(source).unwrap_err();
     assert_eq!(error.kind, ReadErrorKind::UnknownField);
     assert_eq!(error.line_column(source), (4, 2));
     assert_eq!(&source[error.span.start..error.span.end], "Bogus");
@@ -95,13 +93,13 @@ fn strings_are_literal_and_fixed_text_checks_byte_capacity() {
     let mut parser = Parser::new(source);
     assert_eq!(parser.read_string().unwrap(), "a\\n\\\\\r\n雪\\");
     parser.finish().unwrap();
-    assert_eq!(print(&FixedText::<32>::parse_mdl(source).unwrap()), source);
-    assert_eq!(FixedText::<4>::parse_mdl("\"雪\"").unwrap().text(), "雪");
+    assert_eq!(print(&FixedText::<32>::decode_mdl(source).unwrap()), source);
+    assert_eq!(FixedText::<4>::decode_mdl("\"雪\"").unwrap().text(), "雪");
     assert!(matches!(
-        FixedText::<3>::parse_mdl("\"雪\"").unwrap_err().kind,
+        FixedText::<3>::decode_mdl("\"雪\"").unwrap_err().kind,
         ReadErrorKind::InvalidString { max_bytes: 2 }
     ));
-    assert!(FixedText::<8>::parse_mdl("\"a\0b\"").is_err());
+    assert!(FixedText::<8>::decode_mdl("\"a\0b\"").is_err());
     assert!(matches!(
         print_result("a\"b"),
         Err(WriteError::InvalidString)
@@ -117,23 +115,23 @@ fn print_result(value: &str) -> Result<(), WriteError> {
 
 #[test]
 fn typed_numbers_check_full_spelling_ranges_and_nonfinite_literals() {
-    assert_eq!(u32::parse_mdl("4294967295").unwrap(), u32::MAX);
-    assert_eq!(i32::parse_mdl("-2147483648").unwrap(), i32::MIN);
-    assert_eq!(i32::parse_mdl("-3600").unwrap(), -3600);
-    assert_eq!(f32::parse_mdl("1.5e-08").unwrap(), 1.5e-8);
+    assert_eq!(u32::decode_mdl("4294967295").unwrap(), u32::MAX);
+    assert_eq!(i32::decode_mdl("-2147483648").unwrap(), i32::MIN);
+    assert_eq!(i32::decode_mdl("-3600").unwrap(), -3600);
+    assert_eq!(f32::decode_mdl("1.5e-08").unwrap(), 1.5e-8);
     for raw in ["4294967296", "-1", "1.5", "1e2", "1foo", "++1"] {
-        assert!(u32::parse_mdl(raw).is_err(), "{raw}");
+        assert!(u32::decode_mdl(raw).is_err(), "{raw}");
     }
     for raw in ["1e", "1e1000", "Infinity", "1..2", "+"] {
-        assert!(f32::parse_mdl(raw).is_err(), "{raw}");
+        assert!(f32::decode_mdl(raw).is_err(), "{raw}");
     }
     for raw in ["nan", "NaN", "NAN"] {
-        assert!(f32::parse_mdl(raw).unwrap().is_nan());
+        assert!(f32::decode_mdl(raw).unwrap().is_nan());
     }
     for raw in ["inf", "INF", "+Inf"] {
-        assert_eq!(f32::parse_mdl(raw).unwrap(), f32::INFINITY);
+        assert_eq!(f32::decode_mdl(raw).unwrap(), f32::INFINITY);
     }
-    assert_eq!(f32::parse_mdl("-INF").unwrap(), f32::NEG_INFINITY);
+    assert_eq!(f32::decode_mdl("-INF").unwrap(), f32::NEG_INFINITY);
     assert_eq!(print(&f32::NAN), "nan");
     assert_eq!(print(&f32::INFINITY), "inf");
     assert_eq!(print(&f32::NEG_INFINITY), "-inf");
@@ -152,7 +150,7 @@ fn finite_float_output_preserves_bits_including_signed_zero() {
         let value = f32::from_bits(bits);
         if value.is_finite() {
             let text = print(&value);
-            assert_eq!(f32::parse_mdl(&text).unwrap().to_bits(), bits, "{text}");
+            assert_eq!(f32::decode_mdl(&text).unwrap().to_bits(), bits, "{text}");
         }
     }
     assert_eq!(print(&50.0f32), "50.0");
@@ -163,10 +161,10 @@ fn finite_float_output_preserves_bits_including_signed_zero() {
 #[test]
 fn vectors_require_exact_arity_and_separators() {
     assert_eq!(
-        <[f32; 3]>::parse_mdl("{ 1.0, -0.0, 2e-2 }").unwrap(),
+        <[f32; 3]>::decode_mdl("{ 1.0, -0.0, 2e-2 }").unwrap(),
         [1.0, -0.0, 0.02]
     );
-    assert_eq!(<[u32; 0]>::parse_mdl("{}").unwrap(), []);
+    assert_eq!(<[u32; 0]>::decode_mdl("{}").unwrap(), []);
     for raw in [
         "{ 1, 2 }",
         "{ 1, 2, 3, 4 }",
@@ -174,7 +172,7 @@ fn vectors_require_exact_arity_and_separators() {
         "{ 1, 2, 3",
         "{ 1, 2, 3 },",
     ] {
-        assert!(<[f32; 3]>::parse_mdl(raw).is_err(), "{raw}");
+        assert!(<[f32; 3]>::decode_mdl(raw).is_err(), "{raw}");
     }
 }
 
@@ -211,42 +209,42 @@ fn parser_checkpoints_nested_blocks_and_finish_are_explicit() {
 #[test]
 fn texture_and_sequence_roundtrip_through_mdx() {
     let source = r#"Bitmap { WrapHeight, ReplaceableId 2, Image "Textures\Unit.blp", WrapWidth, }"#;
-    let texture = Texture::parse_mdl(source).unwrap();
+    let texture = Texture::decode_mdl(source).unwrap();
     assert_eq!(texture.path(), "Textures\\Unit.blp");
     assert_eq!(texture.flags().bits(), 3);
     assert_eq!(texture.replaceable_id(), 2);
     let canonical = print(&texture);
     assert_eq!(canonical, "Bitmap {\n\tImage \"Textures\\Unit.blp\",\n\tReplaceableId 2,\n\tWrapWidth,\n\tWrapHeight,\n}\n");
-    let bytes = texture.encode().unwrap();
+    let bytes = texture.encode_mdx().unwrap();
     assert_eq!(
-        Texture::parse_mdl(&print(&Texture::decode(&bytes).unwrap()))
+        Texture::decode_mdl(&print(&Texture::decode_mdx(&bytes).unwrap()))
             .unwrap()
-            .encode()
+            .encode_mdx()
             .unwrap(),
         bytes
     );
     assert_eq!(
-        Texture::parse_mdl("Bitmap {}").unwrap(),
+        Texture::decode_mdl("Bitmap {}").unwrap(),
         Texture::new("").unwrap()
     );
 
     let source = r#"Anim "Walk" { SyncPoint 1, BoundsRadius 85.0, MaximumExtent { 55.0, 55.0, 105.0 },
         MinimumExtent { -55.0, -55.0, 0.0 }, Rarity -0.0, MoveSpeed 270.0, NonLooping, Interval { 3334, 6667 }, }"#;
-    let sequence = Sequence::parse_mdl(source).unwrap();
+    let sequence = Sequence::decode_mdl(source).unwrap();
     assert_eq!(sequence.interval(), [3334, 6667]);
     assert_eq!(sequence.sync_point(), 1);
     assert!(sequence.flags().non_looping());
-    let bytes = sequence.encode().unwrap();
+    let bytes = sequence.encode_mdx().unwrap();
     assert_eq!(
-        Sequence::parse_mdl(&print(&Sequence::decode(&bytes).unwrap()))
+        Sequence::decode_mdl(&print(&Sequence::decode_mdx(&bytes).unwrap()))
             .unwrap()
-            .encode()
+            .encode_mdx()
             .unwrap(),
         bytes
     );
     assert!(print(&sequence).contains("Rarity -0.0,"));
     assert_eq!(
-        Sequence::parse_mdl("Anim \"Stand\" { Interval { 0, 1000 }, }").unwrap(),
+        Sequence::decode_mdl("Anim \"Stand\" { Interval { 0, 1000 }, }").unwrap(),
         Sequence::new("Stand", [0, 1000]).unwrap()
     );
 }
@@ -254,23 +252,23 @@ fn texture_and_sequence_roundtrip_through_mdx() {
 #[test]
 fn record_readers_reject_duplicates_unknown_fields_missing_values_and_trailing_input() {
     assert_eq!(
-        Texture::parse_mdl("Bitmap { Image \"a\", Image \"b\", }")
+        Texture::decode_mdl("Bitmap { Image \"a\", Image \"b\", }")
             .unwrap_err()
             .kind,
         ReadErrorKind::DuplicateField
     );
     assert_eq!(
-        Texture::parse_mdl("Bitmap { WrapWidth, WrapWidth, }")
+        Texture::decode_mdl("Bitmap { WrapWidth, WrapWidth, }")
             .unwrap_err()
             .kind,
         ReadErrorKind::DuplicateField
     );
     assert_eq!(
-        Sequence::parse_mdl("Anim \"A\" {}").unwrap_err().kind,
+        Sequence::decode_mdl("Anim \"A\" {}").unwrap_err().kind,
         ReadErrorKind::MissingField("Interval")
     );
     assert_eq!(
-        Sequence::parse_mdl("Anim \"A\" { Interval { 0, 1 }, SyncPoint 1, SyncPoint 2, }")
+        Sequence::decode_mdl("Anim \"A\" { Interval { 0, 1 }, SyncPoint 1, SyncPoint 2, }")
             .unwrap_err()
             .kind,
         ReadErrorKind::DuplicateField
@@ -282,7 +280,7 @@ fn record_readers_reject_duplicates_unknown_fields_missing_values_and_trailing_i
         "Bitmap {} Bitmap {}",
         "Bitmap { BlendColors, }",
     ] {
-        assert!(Texture::parse_mdl(source).is_err(), "{source}");
+        assert!(Texture::decode_mdl(source).is_err(), "{source}");
     }
 }
 
@@ -368,6 +366,25 @@ fn counted_lists_reject_item_readers_that_make_no_progress() {
 }
 
 #[test]
+fn encode_mdl_preserves_unicode_and_checks_block_balance() {
+    let texture = Texture::new("雪.blp").unwrap();
+    let text = texture.encode_mdl().unwrap();
+    assert!(text.contains("雪.blp"));
+    assert_eq!(Texture::decode_mdl(&text).unwrap(), texture);
+
+    struct Unbalanced;
+    impl mdl::Write for Unbalanced {
+        fn write_mdl<W: Write>(&self, writer: &mut MdlWriter<W>) -> Result<(), WriteError> {
+            writer.begin_block("Unbalanced")
+        }
+    }
+    assert!(matches!(
+        Unbalanced.encode_mdl(),
+        Err(WriteError::UnbalancedBlocks)
+    ));
+}
+
+#[test]
 fn printing_rejects_unrepresentable_binary_fields() {
     let mut texture = Texture::new("a").unwrap();
     texture.set_flags(TextureFlags(4));
@@ -387,10 +404,10 @@ fn printing_rejects_unrepresentable_binary_fields() {
             Err(WriteError::Unsupported(_))
         ));
     }
-    let mut bytes = Texture::new("a").unwrap().encode().unwrap();
+    let mut bytes = Texture::new("a").unwrap().encode_mdx().unwrap();
     bytes[260] = 1;
     assert!(matches!(
-        MdlWriter::new(io::sink()).write(&Texture::decode(&bytes).unwrap()),
+        MdlWriter::new(io::sink()).write(&Texture::decode_mdx(&bytes).unwrap()),
         Err(WriteError::Unsupported(_))
     ));
 }

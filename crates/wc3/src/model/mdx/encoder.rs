@@ -11,9 +11,9 @@ pub struct SizeMarker(usize);
 
 /// A value with a little-endian MDX representation.
 pub trait Write {
-    fn write_to(&self, encoder: &mut Encoder<'_>) -> Result<(), WriteError>;
+    fn write_mdx(&self, encoder: &mut Encoder<'_>) -> Result<(), WriteError>;
 
-    fn encode(&self) -> Result<Vec<u8>, WriteError> {
+    fn encode_mdx(&self) -> Result<Vec<u8>, WriteError> {
         let mut bytes = Vec::new();
         Encoder::new(&mut bytes).write(self)?;
         Ok(bytes)
@@ -24,7 +24,7 @@ macro_rules! writable_scalars {
     ($($ty:ty),* $(,)?) => {
         $(
             impl Write for $ty {
-                fn write_to(&self, encoder: &mut Encoder<'_>) -> Result<(), WriteError> {
+                fn write_mdx(&self, encoder: &mut Encoder<'_>) -> Result<(), WriteError> {
                     encoder.write_bytes(&self.to_le_bytes());
                     Ok(())
                 }
@@ -35,7 +35,7 @@ macro_rules! writable_scalars {
 writable_scalars!(u8, u16, u32, i32, f32);
 
 impl<T: Write, const N: usize> Write for [T; N] {
-    fn write_to(&self, encoder: &mut Encoder<'_>) -> Result<(), WriteError> {
+    fn write_mdx(&self, encoder: &mut Encoder<'_>) -> Result<(), WriteError> {
         for value in self {
             encoder.write(value)?;
         }
@@ -44,7 +44,7 @@ impl<T: Write, const N: usize> Write for [T; N] {
 }
 
 impl<T: Write> Write for [T] {
-    fn write_to(&self, encoder: &mut Encoder<'_>) -> Result<(), WriteError> {
+    fn write_mdx(&self, encoder: &mut Encoder<'_>) -> Result<(), WriteError> {
         for value in self {
             encoder.write(value)?;
         }
@@ -70,7 +70,7 @@ impl<'a> Encoder<'a> {
 
     /// Appends a value in its little-endian MDX representation.
     pub fn write<T: Write + ?Sized>(&mut self, value: &T) -> Result<(), WriteError> {
-        value.write_to(self)
+        value.write_mdx(self)
     }
 
     /// Writes a placeholder for a size that includes its own four bytes.

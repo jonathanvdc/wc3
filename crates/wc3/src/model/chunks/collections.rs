@@ -194,9 +194,9 @@ mod tests {
             Sequence::new("Walk", [101, 200]).unwrap(),
         ];
         let original = SequencesChunk::new(records);
-        let payload = original.encode().unwrap();
-        assert_eq!(SequencesChunk::decode(&payload).unwrap(), original);
-        assert!(Sequence::decode(&payload).is_err());
+        let payload = original.encode_mdx().unwrap();
+        assert_eq!(SequencesChunk::decode_mdx(&payload).unwrap(), original);
+        assert!(Sequence::decode_mdx(&payload).is_err());
     }
 
     #[test]
@@ -206,9 +206,9 @@ mod tests {
             Geoset::<crate::model::V1800>::new(&[], &[], &[]).unwrap(),
         ];
         let original = GeosetsChunk::new(records);
-        let bytes = original.encode().unwrap();
+        let bytes = original.encode_mdx().unwrap();
         assert_eq!(
-            GeosetsChunk::<crate::model::V1800>::decode(&bytes).unwrap(),
+            GeosetsChunk::<crate::model::V1800>::decode_mdx(&bytes).unwrap(),
             original
         );
     }
@@ -225,18 +225,18 @@ mod tests {
             PivotPoint([4.0, 5.0, 6.0]),
         ]);
         assert_eq!(
-            GlobalSequencesChunk::decode(&durations.encode().unwrap()).unwrap(),
+            GlobalSequencesChunk::decode_mdx(&durations.encode_mdx().unwrap()).unwrap(),
             durations
         );
         assert_eq!(
-            PivotPointsChunk::decode(&points.encode().unwrap()).unwrap(),
+            PivotPointsChunk::decode_mdx(&points.encode_mdx().unwrap()).unwrap(),
             points
         );
-        assert!(GlobalSequencesChunk::decode(
+        assert!(GlobalSequencesChunk::decode_mdx(
             &[b"GLBS".as_slice(), &1u32.to_le_bytes(), &[1]].concat()
         )
         .is_err());
-        assert!(PivotPointsChunk::decode(
+        assert!(PivotPointsChunk::decode_mdx(
             &[b"PIVT".as_slice(), &1u32.to_le_bytes(), &[1]].concat()
         )
         .is_err());

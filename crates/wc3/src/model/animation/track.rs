@@ -127,7 +127,7 @@ impl<T> Keyframes<T> {
     }
 }
 impl<K: TrackKind> mdx::Read for AnimationTrack<K> {
-    fn read_from(cursor: &mut Cursor<'_>) -> Result<Self, ReadError> {
+    fn read_mdx(cursor: &mut Cursor<'_>) -> Result<Self, ReadError> {
         let mut next = *cursor;
         let offset = next.absolute_position();
         let tag: Tag = next.read_exact(4)?.try_into().expect("four-byte tag");
@@ -190,7 +190,7 @@ impl<K: TrackKind> mdx::Read for AnimationTrack<K> {
     }
 }
 impl<K: TrackKind> mdx::Write for AnimationTrack<K> {
-    fn write_to(&self, encoder: &mut Encoder<'_>) -> Result<(), WriteError> {
+    fn write_mdx(&self, encoder: &mut Encoder<'_>) -> Result<(), WriteError> {
         encoder.write_bytes(&K::TAG);
         encoder.write(&(self.keyframes.len() as u32))?;
         encoder.write(&(self.keyframes.interpolation()))?;

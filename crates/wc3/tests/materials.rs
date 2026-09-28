@@ -17,7 +17,7 @@ fn sample_material<V: ModelVersion>() -> Material<V> {
     layer.set_alpha(0.5);
     let mut material = Material::<V>::new();
     material.set_layers(&[layer]);
-    Material::<V>::decode(&material.encode().unwrap()).unwrap()
+    Material::<V>::decode_mdx(&material.encode_mdx().unwrap()).unwrap()
 }
 
 #[test]
@@ -40,7 +40,7 @@ fn check_version<V: ModelVersion>() {
     material.set_render_mode(MaterialRenderFlags(7));
     let mut model = Model::<V>::new();
     model.set_materials(&[material]);
-    let decoded = Model::<V>::decode(&model.encode().unwrap()).unwrap();
+    let decoded = Model::<V>::decode_mdx(&model.encode_mdx().unwrap()).unwrap();
     let materials = decoded.materials();
     assert_eq!(materials[0].version(), version);
     assert_eq!(materials[0].priority_plane(), 3);
@@ -53,7 +53,7 @@ fn check_version<V: ModelVersion>() {
     assert_eq!(layers[0].alpha(), 0.5);
     assert_eq!(layers[0].shading_flags(), LayerShadingFlags::default());
     assert_eq!(
-        Layer::<V>::decode(&layers[0].encode().unwrap()).unwrap(),
+        Layer::<V>::decode_mdx(&layers[0].encode_mdx().unwrap()).unwrap(),
         layers[0]
     );
 }
@@ -71,7 +71,7 @@ fn local_material_layers_are_bounded_when_available() {
                 pending.push(path);
             } else if path.extension().is_some_and(|extension| extension == "mdx") {
                 let bytes = std::fs::read(&path).unwrap();
-                let model = DynamicModel::decode(&bytes, 800).unwrap();
+                let model = DynamicModel::decode_mdx(&bytes, 800).unwrap();
                 fn check<V: ModelVersion>(model: Model<V>) {
                     for material in model.materials() {
                         for layer in material.layers() {
@@ -106,7 +106,7 @@ fn builds_material_with_reforged_layer() {
     layer.set_fresnel_color([0.1, 0.2, 0.3]);
     let mut material = Material::<V1100>::new();
     material.set_layers(&[layer]);
-    let parsed = Material::<V1100>::decode(&material.encode().unwrap()).unwrap();
+    let parsed = Material::<V1100>::decode_mdx(&material.encode_mdx().unwrap()).unwrap();
     let layers = parsed.layers();
     assert_eq!(layers[0].texture_id(), 4);
     assert_eq!(layers[0].shader_type_id(), 2);
@@ -119,7 +119,7 @@ fn shader_path_round_trip_in_legacy_reforged_material() {
     let mut material = Material::<V1000>::new();
     material.set_shader("Shaders\\Unit.shader").unwrap();
     assert_eq!(
-        Material::<V1000>::decode(&material.encode().unwrap())
+        Material::<V1000>::decode_mdx(&material.encode_mdx().unwrap())
             .unwrap()
             .shader()
             .as_ref(),
@@ -151,7 +151,7 @@ fn reforged_layer_texture_slot_and_tracks_round_trip() {
     .unwrap()
     .into();
     layer.set_tracks(std::slice::from_ref(&alpha_track));
-    let parsed = Layer::<V1800>::decode(&layer.encode().unwrap()).unwrap();
+    let parsed = Layer::<V1800>::decode_mdx(&layer.encode_mdx().unwrap()).unwrap();
     assert_eq!(
         parsed.texture_slots()[0]
             .track
@@ -171,7 +171,7 @@ fn unlit_layer_flag_round_trip() {
     let mut flags = layer.shading_flags();
     flags.set_unlit(true);
     layer.set_shading_flags(flags);
-    assert!(Layer::<V1800>::decode(&layer.encode().unwrap())
+    assert!(Layer::<V1800>::decode_mdx(&layer.encode_mdx().unwrap())
         .unwrap()
         .shading_flags()
         .unlit());
@@ -180,23 +180,23 @@ fn unlit_layer_flag_round_trip() {
 #[test]
 fn version_specific_fields_do_not_write_into_legacy_tracks() {
     let mut layer = Layer::<V800>::new();
-    let before = layer.encode().unwrap();
+    let before = layer.encode_mdx().unwrap();
     assert!(layer.try_set_emissive_gain(0.5).is_err());
     assert!(layer.try_set_fresnel_opacity(0.5).is_err());
     assert!(layer.try_set_shader_type_id(1).is_err());
-    assert_eq!(layer.encode().unwrap(), before);
+    assert_eq!(layer.encode_mdx().unwrap(), before);
 }
 
 #[test]
 fn preserves_shader_padding_and_float_bits() {
     let mut material = Material::<V1000>::new();
     material.set_layers(&[Layer::<V1000>::new()]);
-    let mut bytes = material.encode().unwrap();
+    let mut bytes = material.encode_mdx().unwrap();
     bytes[20] = 0xaf;
     let layer_start = 100;
     bytes[layer_start + 24..layer_start + 28].copy_from_slice(&0x7fa1_2345u32.to_le_bytes());
-    let parsed = Material::<V1000>::decode(&bytes).unwrap();
-    assert_eq!(parsed.encode().unwrap(), bytes);
+    let parsed = Material::<V1000>::decode_mdx(&bytes).unwrap();
+    assert_eq!(parsed.encode_mdx().unwrap(), bytes);
     assert_eq!(parsed.layers()[0].alpha().to_bits(), 0x7fa1_2345);
 }
 
@@ -216,7 +216,7 @@ fn independent_layer_fields_preserve_wire_order_across_versions() {
             texture_type: 2,
             track: None,
         };
-        let defaults = layer.encode().unwrap();
+        let defaults = layer.encode_mdx().unwrap();
         let has_gain = V::NUMBER >= 900;
         let has_fresnel = V::NUMBER >= 1000;
         let has_slots = V::NUMBER >= 1100;
@@ -232,7 +232,7 @@ fn independent_layer_fields_preserve_wire_order_across_versions() {
         assert_eq!(layer.try_texture_slots().is_ok(), has_slots);
         assert_eq!(layer.try_set_texture_slots(&[slot]).is_ok(), has_slots);
         if !has_gain {
-            assert_eq!(layer.encode().unwrap(), defaults);
+            assert_eq!(layer.encode_mdx().unwrap(), defaults);
         }
 
         let mut expected = vec![0; 4];
@@ -256,8 +256,8 @@ fn independent_layer_fields_preserve_wire_order_across_versions() {
         }
         let size = expected.len() as u32;
         expected[..4].copy_from_slice(&size.to_le_bytes());
-        assert_eq!(layer.encode().unwrap(), expected);
-        assert_eq!(Layer::<V>::decode(&expected).unwrap(), layer);
+        assert_eq!(layer.encode_mdx().unwrap(), expected);
+        assert_eq!(Layer::<V>::decode_mdx(&expected).unwrap(), layer);
     }
 
     check::<V800>();
@@ -291,11 +291,11 @@ fn fresnel_convenience_accessors_preserve_other_components() {
     assert_eq!(layer.try_fresnel().unwrap(), layer.fresnel());
 
     let mut legacy = Layer::<V900>::new();
-    let before = legacy.encode().unwrap();
+    let before = legacy.encode_mdx().unwrap();
     assert!(legacy.try_set_fresnel_color([0.0; 3]).is_err());
     assert!(legacy.try_set_fresnel_opacity(1.0).is_err());
     assert!(legacy.try_set_fresnel_team_color(1.0).is_err());
-    assert_eq!(legacy.encode().unwrap(), before);
+    assert_eq!(legacy.encode_mdx().unwrap(), before);
 }
 
 #[test]
@@ -308,9 +308,12 @@ fn infallible_layer_accessors_cover_supported_versions() {
     fn check_gain<V: SupportsEmissiveGain>() {
         let mut layer = Layer::<V>::new();
         assert_eq!(layer.emissive_gain(), 1.0);
-        let encoded = layer.encode().unwrap();
+        let encoded = layer.encode_mdx().unwrap();
         assert_eq!(&encoded[28..32], &1.0f32.to_le_bytes());
-        assert_eq!(Layer::<V>::decode(&encoded).unwrap().emissive_gain(), 1.0);
+        assert_eq!(
+            Layer::<V>::decode_mdx(&encoded).unwrap().emissive_gain(),
+            1.0
+        );
         layer.set_emissive_gain(1.5);
         assert_eq!(layer.emissive_gain(), 1.5);
         assert_eq!(layer.try_emissive_gain().unwrap(), layer.emissive_gain());

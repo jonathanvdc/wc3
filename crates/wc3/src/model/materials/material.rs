@@ -259,7 +259,7 @@ impl<V: ModelVersion> Model<V> {
 }
 
 impl<V: ModelVersion> mdx::Read for Material<V> {
-    fn read_from(source: &mut Cursor<'_>) -> Result<Self, ReadError> {
+    fn read_mdx(source: &mut Cursor<'_>) -> Result<Self, ReadError> {
         let mut cursor = source.slice_u32_sized()?;
         let value = {
             let priority_plane = cursor.read()?;
@@ -286,7 +286,7 @@ impl<V: ModelVersion> mdx::Read for Material<V> {
 }
 
 impl<V: ModelVersion> mdx::Write for Material<V> {
-    fn write_to(&self, bytes: &mut Encoder<'_>) -> Result<(), WriteError> {
+    fn write_mdx(&self, bytes: &mut Encoder<'_>) -> Result<(), WriteError> {
         let marker = bytes.begin_sized();
         bytes.write(&(self.priority_plane))?;
         bytes.write(&(self.render_mode))?;

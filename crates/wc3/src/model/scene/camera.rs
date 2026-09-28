@@ -196,7 +196,7 @@ impl<V: ModelVersion> Model<V> {
 }
 
 impl<V: ModelVersion> mdx::Read for Camera<V> {
-    fn read_from(source: &mut Cursor<'_>) -> Result<Self, ReadError> {
+    fn read_mdx(source: &mut Cursor<'_>) -> Result<Self, ReadError> {
         let start = source.absolute_position();
         let size_word: u32 = source.read()?;
         let length = (size_word & 0x00ff_ffff) as usize;
@@ -240,7 +240,7 @@ impl<V: ModelVersion> mdx::Read for Camera<V> {
 }
 
 impl<V: ModelVersion> mdx::Write for Camera<V> {
-    fn write_to(&self, bytes: &mut Encoder<'_>) -> Result<(), WriteError> {
+    fn write_mdx(&self, bytes: &mut Encoder<'_>) -> Result<(), WriteError> {
         let start = bytes.position();
         let marker = bytes.begin_sized();
         bytes.write(&self.name)?;

@@ -21,7 +21,7 @@ struct Pair(u16, u32);
 struct FailingField;
 
 impl mdx::Write for FailingField {
-    fn write_to(&self, _: &mut Encoder<'_>) -> Result<(), WriteError> {
+    fn write_mdx(&self, _: &mut Encoder<'_>) -> Result<(), WriteError> {
         Err(WriteError::ChunkTooLarge {
             tag: *b"TEST",
             size: usize::MAX,
@@ -116,7 +116,7 @@ fn sized_derive_bounds_the_final_vector_to_each_record() {
 
 #[test]
 fn sized_derive_rejects_truncated_vector_item() {
-    let error = SizedPacket::<()>::decode(&[8, 0, 0, 0, 7, 0, 11, 0]).unwrap_err();
+    let error = SizedPacket::<()>::decode_mdx(&[8, 0, 0, 0, 7, 0, 11, 0]).unwrap_err();
     assert_eq!(
         error,
         wc3::model::ReadError::UnexpectedEnd {
@@ -137,7 +137,7 @@ struct EmptyItem;
 
 #[test]
 fn sized_derive_rejects_zero_width_items() {
-    let error = EmptyItems::decode(&[5, 0, 0, 0, 42]).unwrap_err();
+    let error = EmptyItems::decode_mdx(&[5, 0, 0, 0, 42]).unwrap_err();
     assert_eq!(
         error,
         wc3::model::ReadError::MalformedRecord {

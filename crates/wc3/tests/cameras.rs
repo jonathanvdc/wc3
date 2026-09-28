@@ -26,7 +26,7 @@ fn camera_fields_and_tracks_round_trip() {
     camera.set_tracks(std::slice::from_ref(&track));
     let mut model = Model::<wc3::model::V1100>::new();
     model.set_cameras(&[camera]);
-    let decoded = Model::<wc3::model::V1100>::decode(&model.encode().unwrap()).unwrap();
+    let decoded = Model::<wc3::model::V1100>::decode_mdx(&model.encode_mdx().unwrap()).unwrap();
     let camera = &decoded.cameras()[0];
     assert_eq!(camera.name(), "Portrait");
     assert_eq!(camera.position(), [1.0, 2.0, 3.0]);
@@ -44,10 +44,10 @@ fn newer_camera_variant_round_trip() {
     camera.set_field_of_view(0.8);
     let mut model = Model::<wc3::model::V1800>::new();
     model.set_cameras(&[camera]);
-    let bytes = model.encode().unwrap();
-    let parsed = Model::<wc3::model::V1800>::decode(&bytes).unwrap();
+    let bytes = model.encode_mdx().unwrap();
+    let parsed = Model::<wc3::model::V1800>::decode_mdx(&bytes).unwrap();
     assert_eq!(parsed.cameras()[0].variant(), CameraVariant::Variant3);
-    assert_eq!(parsed.encode().unwrap(), bytes);
+    assert_eq!(parsed.encode_mdx().unwrap(), bytes);
 }
 
 #[test]
@@ -65,10 +65,10 @@ fn camera_variants_round_trip() {
         camera.set_target_position([4.0, 5.0, 6.0]);
         let mut model = Model::<wc3::model::V1200>::new();
         model.set_cameras(&[camera]);
-        let bytes = model.encode().unwrap();
-        let parsed = Model::<wc3::model::V1200>::decode(&bytes).unwrap();
+        let bytes = model.encode_mdx().unwrap();
+        let parsed = Model::<wc3::model::V1200>::decode_mdx(&bytes).unwrap();
         assert_eq!(parsed.cameras()[0].variant(), variant);
         assert_eq!(parsed.cameras()[0].target_position(), [4.0, 5.0, 6.0]);
-        assert_eq!(parsed.encode().unwrap(), bytes);
+        assert_eq!(parsed.encode_mdx().unwrap(), bytes);
     }
 }

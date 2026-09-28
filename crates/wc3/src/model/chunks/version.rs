@@ -83,10 +83,13 @@ mod version_chunk_tests {
     fn preserves_version_extension_bytes() {
         let mut original = VersionChunk::<V1800>::new();
         original.extension = vec![9, 8, 7];
-        let payload = original.encode().unwrap();
-        assert_eq!(VersionChunk::<V1800>::decode(&payload).unwrap(), original);
+        let payload = original.encode_mdx().unwrap();
         assert_eq!(
-            VersionChunk::<V800>::decode(
+            VersionChunk::<V1800>::decode_mdx(&payload).unwrap(),
+            original
+        );
+        assert_eq!(
+            VersionChunk::<V800>::decode_mdx(
                 &[b"VERS".as_slice(), &3u32.to_le_bytes(), &[1, 2, 3]].concat()
             ),
             Err(ReadError::InvalidVersionChunk)

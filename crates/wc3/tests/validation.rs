@@ -18,22 +18,25 @@ fn typed_known_chunks_and_unknown_chunks_round_trip() {
     model.push(ModelChunk::Unknown(
         UnknownChunk::<V800>::new(RawChunk::new(*b"FUTR", vec![1, 2, 3])).unwrap(),
     ));
-    let bytes = model.encode().unwrap();
+    let bytes = model.encode_mdx().unwrap();
     assert_eq!(
-        Model::<V800>::decode(&bytes).unwrap().encode().unwrap(),
+        Model::<V800>::decode_mdx(&bytes)
+            .unwrap()
+            .encode_mdx()
+            .unwrap(),
         bytes
     );
 }
 
 #[test]
 fn empty_mdlx_uses_the_requested_type() {
-    assert_eq!(Model::<V800>::decode(b"MDLX").unwrap().version(), 800);
+    assert_eq!(Model::<V800>::decode_mdx(b"MDLX").unwrap().version(), 800);
 }
 
 #[test]
 fn malformed_known_track_cannot_enter_typed_model() {
     let mut ribbon = RibbonEmitter::new(Node::new("Trail", 1).unwrap())
-        .encode()
+        .encode_mdx()
         .unwrap();
     ribbon.extend_from_slice(b"KRVS");
     let len = ribbon.len() as u32;
@@ -43,12 +46,12 @@ fn malformed_known_track_cannot_enter_typed_model() {
 
 #[test]
 fn repeated_versions_must_match_the_type() {
-    let mut bytes = Model::<V800>::new().encode().unwrap();
+    let mut bytes = Model::<V800>::new().encode_mdx().unwrap();
     bytes.extend_from_slice(b"VERS");
     bytes.extend_from_slice(&2u32.to_le_bytes());
     bytes.extend_from_slice(&[1, 2]);
     assert!(matches!(
-        Model::<V800>::decode(&bytes),
+        Model::<V800>::decode_mdx(&bytes),
         Err(ReadError::InvalidVersionChunk)
     ));
 
@@ -70,8 +73,8 @@ fn version_extension_is_preserved_without_mutable_version_number() {
     };
     first.extension = vec![7, 8];
     model.push(ModelChunk::from(VersionChunk::<V800>::new()));
-    let bytes = model.encode().unwrap();
-    let parsed = Model::<V800>::decode(&bytes).unwrap();
+    let bytes = model.encode_mdx().unwrap();
+    let parsed = Model::<V800>::decode_mdx(&bytes).unwrap();
     let ModelChunk::Version(first) = &parsed.chunks()[0] else {
         unreachable!()
     };
@@ -81,8 +84,8 @@ fn version_extension_is_preserved_without_mutable_version_number() {
 
 #[test]
 fn layer_layout_is_selected_by_its_type() {
-    let classic = Layer::<V800>::new().encode().unwrap();
-    assert!(Layer::<V1800>::decode(&classic).is_err());
+    let classic = Layer::<V800>::new().encode_mdx().unwrap();
+    assert!(Layer::<V1800>::decode_mdx(&classic).is_err());
 }
 
 #[test]
@@ -103,7 +106,7 @@ fn local_models_decode_when_available() {
                 pending.push(path);
             } else if path.extension().is_some_and(|extension| extension == "mdx") {
                 let bytes = std::fs::read(&path).unwrap();
-                DynamicModel::decode(&bytes, 800)
+                DynamicModel::decode_mdx(&bytes, 800)
                     .unwrap_or_else(|error| panic!("{}: {error}", path.display()));
             }
         }

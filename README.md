@@ -27,12 +27,12 @@ use wc3::model::scene::ModelInfo;
 
 let mut model = Model::<V800>::new();
 model.set_model_info(&ModelInfo::new("Example")?);
-let encoded = model.encode()?;
-let decoded = Model::<V800>::decode(&encoded)?;
+let encoded = model.encode_mdx()?;
+let decoded = Model::<V800>::decode_mdx(&encoded)?;
 assert_eq!(decoded.version(), 800);
 let info = decoded.model_info().unwrap();
 assert_eq!(info.name(), "Example");
-assert!(matches!(DynamicModel::decode(&encoded, 800)?, DynamicModel::V800(_)));
+assert!(matches!(DynamicModel::decode_mdx(&encoded, 800)?, DynamicModel::V800(_)));
 # Ok::<(), Box<dyn std::error::Error>>(())
 ```
 
@@ -52,7 +52,7 @@ Setters on `Model<V>` accept records with the same `V`.
 
 Geosets and variable-length records such as materials, nodes, lights,
 cameras, emitters, and bind poses store decoded sections. Track accessors borrow parsed
-tracks, and `encode()` reconstructs records while preserving field bits,
+tracks, and `encode_mdx()` reconstructs records while preserving field bits,
 fixed-width names, and optional section order. Geoset accessors such as
 `vertices()` borrow decoded data, and `vertices_mut()` supports bulk edits.
 
@@ -114,8 +114,10 @@ NaN payload bits are not preserved by text output.
 `Sequence` (`Anim`, including `SyncPoint`), `ModelInfo` (`Model`),
 `GlobalSequence` (`Duration`), and `PivotPoint` (an anonymous vector entry). Readers accept fields
 in any order, apply defaults, and reject unknown or duplicate fields. An `Anim`
-requires `Interval`. `parse_mdl()` requires exactly one record; `Parser::read()`
-consumes one record from a larger stream.
+requires `Interval`. `decode_mdl()` requires exactly one record; `Parser::read()`
+consumes one record from a larger stream. `encode_mdl()` returns an owned UTF-8
+`String`; `write_mdl()` writes to an existing `MdlWriter`. MDX uses the matching
+`decode_mdx()` / `encode_mdx()` and `read_mdx()` / `write_mdx()` methods.
 
 Counted lists yield records on demand, so individual records can go directly
 into the binary encoder:

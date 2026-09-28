@@ -133,7 +133,7 @@ impl<V: ModelVersion> Model<V> {
 }
 
 impl mdx::Read for ModelInfo {
-    fn read_from(cursor: &mut Cursor<'_>) -> Result<Self, ReadError> {
+    fn read_mdx(cursor: &mut Cursor<'_>) -> Result<Self, ReadError> {
         let size = cursor.remaining().len();
         if size < SIZE {
             return Err(ReadError::MalformedChunk {

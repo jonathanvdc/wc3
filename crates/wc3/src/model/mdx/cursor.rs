@@ -3,25 +3,25 @@ use crate::model::ReadError;
 
 /// A value that can be read from an MDX byte stream.
 pub trait Read: Sized {
-    fn read_from(cursor: &mut Cursor<'_>) -> Result<Self, ReadError>;
+    fn read_mdx(cursor: &mut Cursor<'_>) -> Result<Self, ReadError>;
 
     /// Reads a value and rejects trailing bytes.
-    fn decode(bytes: &[u8]) -> Result<Self, ReadError> {
+    fn decode_mdx(bytes: &[u8]) -> Result<Self, ReadError> {
         let mut cursor = Cursor::new(bytes);
-        let value = Self::read_from(&mut cursor)?;
+        let value = Self::read_mdx(&mut cursor)?;
         cursor.finish()?;
         Ok(value)
     }
 }
 
 impl Read for u8 {
-    fn read_from(cursor: &mut Cursor<'_>) -> Result<Self, ReadError> {
+    fn read_mdx(cursor: &mut Cursor<'_>) -> Result<Self, ReadError> {
         Ok(cursor.read_exact(1)?[0])
     }
 }
 
 impl Read for u16 {
-    fn read_from(cursor: &mut Cursor<'_>) -> Result<Self, ReadError> {
+    fn read_mdx(cursor: &mut Cursor<'_>) -> Result<Self, ReadError> {
         Ok(u16::from_le_bytes(
             cursor.read_exact(2)?.try_into().expect("two-byte word"),
         ))
@@ -29,7 +29,7 @@ impl Read for u16 {
 }
 
 impl Read for u32 {
-    fn read_from(cursor: &mut Cursor<'_>) -> Result<Self, ReadError> {
+    fn read_mdx(cursor: &mut Cursor<'_>) -> Result<Self, ReadError> {
         Ok(u32::from_le_bytes(
             cursor.read_exact(4)?.try_into().expect("four-byte word"),
         ))
@@ -37,13 +37,13 @@ impl Read for u32 {
 }
 
 impl Read for f32 {
-    fn read_from(cursor: &mut Cursor<'_>) -> Result<Self, ReadError> {
+    fn read_mdx(cursor: &mut Cursor<'_>) -> Result<Self, ReadError> {
         Ok(f32::from_bits(cursor.read::<u32>()?))
     }
 }
 
 impl<T: Read + Copy + Default, const N: usize> Read for [T; N] {
-    fn read_from(cursor: &mut Cursor<'_>) -> Result<Self, ReadError> {
+    fn read_mdx(cursor: &mut Cursor<'_>) -> Result<Self, ReadError> {
         let mut values = [T::default(); N];
         for value in &mut values {
             *value = cursor.read()?;
@@ -108,7 +108,7 @@ impl<'a> Cursor<'a> {
 
     /// Reads a value from the byte stream.
     pub fn read<T: Read>(&mut self) -> Result<T, ReadError> {
-        T::read_from(self)
+        T::read_mdx(self)
     }
 
     /// Advances this cursor and returns a cursor confined to those bytes.

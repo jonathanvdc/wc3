@@ -22,14 +22,14 @@ fn version_is_shared_by_model_and_nested_records() {
     model.set_lights(&[Light::<V1800>::new(Node::new("Lamp", 1).unwrap(), 0)]);
     model.set_cameras(&[Camera::<V1800>::new("View").unwrap()]);
 
-    let bytes = model.encode().unwrap();
-    let parsed = Model::<V1800>::decode(&bytes).unwrap();
+    let bytes = model.encode_mdx().unwrap();
+    let parsed = Model::<V1800>::decode_mdx(&bytes).unwrap();
     assert_eq!(parsed.materials().len(), 1);
     assert_eq!(parsed.geosets().len(), 1);
     assert_eq!(parsed.lights().len(), 1);
     assert_eq!(parsed.cameras()[0].variant(), CameraVariant::Variant3);
     assert!(matches!(
-        DynamicModel::decode(&bytes, 800),
+        DynamicModel::decode_mdx(&bytes, 800),
         Ok(DynamicModel::V1800(_))
     ));
 }
@@ -40,9 +40,12 @@ fn unknown_tags_are_explicit_and_known_tags_cannot_be_disguised() {
     let unknown = UnknownChunk::<V800>::new(RawChunk::new(*b"FUTR", vec![1, 2])).unwrap();
     let mut model = Model::<V800>::new();
     model.push(ModelChunk::Unknown(unknown));
-    let bytes = model.encode().unwrap();
+    let bytes = model.encode_mdx().unwrap();
     assert_eq!(
-        Model::<V800>::decode(&bytes).unwrap().encode().unwrap(),
+        Model::<V800>::decode_mdx(&bytes)
+            .unwrap()
+            .encode_mdx()
+            .unwrap(),
         bytes
     );
 }
@@ -86,10 +89,10 @@ fn version_markers_select_record_fields() {
 
 #[test]
 fn runtime_dispatch_rejects_versions_without_a_layout() {
-    let mut bytes = Model::<V800>::new().encode().unwrap();
+    let mut bytes = Model::<V800>::new().encode_mdx().unwrap();
     bytes[12..16].copy_from_slice(&777u32.to_le_bytes());
     assert!(matches!(
-        DynamicModel::decode(&bytes, 800),
+        DynamicModel::decode_mdx(&bytes, 800),
         Err(ReadError::UnsupportedVersion { version: 777 })
     ));
 }

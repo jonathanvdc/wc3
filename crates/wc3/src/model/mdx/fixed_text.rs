@@ -45,7 +45,7 @@ impl<const N: usize> Default for FixedText<N> {
 }
 
 impl<const N: usize> Read for FixedText<N> {
-    fn read_from(cursor: &mut Cursor<'_>) -> Result<Self, ReadError> {
+    fn read_mdx(cursor: &mut Cursor<'_>) -> Result<Self, ReadError> {
         Ok(Self(
             cursor.read_exact(N)?.try_into().expect("fixed-width text"),
         ))
@@ -53,7 +53,7 @@ impl<const N: usize> Read for FixedText<N> {
 }
 
 impl<const N: usize> Write for FixedText<N> {
-    fn write_to(&self, encoder: &mut Encoder<'_>) -> Result<(), WriteError> {
+    fn write_mdx(&self, encoder: &mut Encoder<'_>) -> Result<(), WriteError> {
         encoder.write(self.0.as_slice())?;
         Ok(())
     }

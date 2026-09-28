@@ -25,7 +25,7 @@ fn attachment_fields_and_visibility_round_trip() {
     attachment.set_visibility_track(Some(&track));
     let mut model = Model::<wc3::model::V1800>::new();
     model.set_attachments(&[attachment]);
-    let parsed = Model::<wc3::model::V1800>::decode(&model.encode().unwrap()).unwrap();
+    let parsed = Model::<wc3::model::V1800>::decode_mdx(&model.encode_mdx().unwrap()).unwrap();
     let attachment = &parsed.attachments()[0];
     assert_eq!(attachment.node().name(), "Weapon");
     assert_eq!(attachment.path(), "Abilities\\Weapons\\Sword.mdx");
@@ -37,13 +37,13 @@ fn attachment_fields_and_visibility_round_trip() {
 fn adjacent_attachments_decode_at_their_own_boundaries() {
     let first = Attachment::new(Node::new("First", 1).unwrap(), "first.mdx", 1).unwrap();
     let second = Attachment::new(Node::new("Second", 2).unwrap(), "second.mdx", 2).unwrap();
-    let mut bytes = first.encode().unwrap();
+    let mut bytes = first.encode_mdx().unwrap();
     let first_len = bytes.len();
-    bytes.extend_from_slice(&second.encode().unwrap());
+    bytes.extend_from_slice(&second.encode_mdx().unwrap());
     let mut cursor = Cursor::new(&bytes);
     assert_eq!(cursor.read::<Attachment>().unwrap(), first);
     assert_eq!(cursor.position(), first_len);
     assert_eq!(cursor.read::<Attachment>().unwrap(), second);
     cursor.finish().unwrap();
-    assert!(Attachment::decode(&bytes).is_err());
+    assert!(Attachment::decode_mdx(&bytes).is_err());
 }

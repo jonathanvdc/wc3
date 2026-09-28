@@ -62,19 +62,20 @@ fn lexing_reading_writing_and_diagnostics_do_not_allocate() {
         for token in Lexer::new(source) {
             token.unwrap();
         }
-        let texture = Texture::parse_mdl(source).unwrap();
-        let sequence =
-            Sequence::parse_mdl("Anim \"Stand\" { Interval { 0, 1000 }, BoundsRadius 1.2345678, }")
-                .unwrap();
+        let texture = Texture::decode_mdl(source).unwrap();
+        let sequence = Sequence::decode_mdl(
+            "Anim \"Stand\" { Interval { 0, 1000 }, BoundsRadius 1.2345678, }",
+        )
+        .unwrap();
         let mut writer = MdlWriter::new(IoCursor::new(&mut storage[..]));
         writer.write(&texture).unwrap();
         writer.write(&sequence).unwrap();
         let info =
-            ModelInfo::parse_mdl("Model \"Derived\" { BlendTime 150, BoundsRadius 1.2345678, }")
+            ModelInfo::decode_mdl("Model \"Derived\" { BlendTime 150, BoundsRadius 1.2345678, }")
                 .unwrap();
         writer.write(&info).unwrap();
         let mut sink = writer.finish().unwrap();
-        let error = Texture::parse_mdl("Bitmap { Mystery 1, }").unwrap_err();
+        let error = Texture::decode_mdl("Bitmap { Mystery 1, }").unwrap_err();
         write!(sink, "{}", error.diagnostic("Bitmap { Mystery 1, }")).unwrap();
         sink.position()
     });

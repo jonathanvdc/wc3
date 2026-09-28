@@ -20,9 +20,9 @@ fn model_stores_known_and_unknown_chunks() {
 
     assert!(matches!(model.chunks()[1], ModelChunk::Sequences(_)));
     assert!(matches!(model.chunks()[2], ModelChunk::Unknown(_)));
-    let bytes = model.encode().unwrap();
-    let decoded = Model::<V800>::decode(&bytes).unwrap();
-    assert_eq!(decoded.encode().unwrap(), bytes);
+    let bytes = model.encode_mdx().unwrap();
+    let decoded = Model::<V800>::decode_mdx(&bytes).unwrap();
+    assert_eq!(decoded.encode_mdx().unwrap(), bytes);
 }
 
 #[test]
@@ -36,8 +36,8 @@ fn edits_to_decoded_records_are_written() {
         .records
         .push(Sequence::new("Walk", [0, 100]).unwrap());
 
-    let bytes = model.encode().unwrap();
-    let reopened = Model::<V800>::decode(&bytes).unwrap();
+    let bytes = model.encode_mdx().unwrap();
+    let reopened = Model::<V800>::decode_mdx(&bytes).unwrap();
     assert_eq!(reopened.sequences()[0].name(), "Walk");
 }
 

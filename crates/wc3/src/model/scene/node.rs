@@ -202,7 +202,7 @@ impl<V: ModelVersion> Model<V> {
 }
 
 impl mdx::Read for Bone {
-    fn read_from(cursor: &mut Cursor<'_>) -> Result<Self, ReadError> {
+    fn read_mdx(cursor: &mut Cursor<'_>) -> Result<Self, ReadError> {
         let node = cursor.read()?;
         let geoset_id = cursor.read()?;
         let geoset_animation_id = cursor.read()?;
@@ -215,7 +215,7 @@ impl mdx::Read for Bone {
 }
 
 impl mdx::Write for Bone {
-    fn write_to(&self, bytes: &mut Encoder<'_>) -> Result<(), WriteError> {
+    fn write_mdx(&self, bytes: &mut Encoder<'_>) -> Result<(), WriteError> {
         bytes.write(&self.node)?;
         bytes.write(&self.geoset_id)?;
         bytes.write(&self.geoset_animation_id)?;

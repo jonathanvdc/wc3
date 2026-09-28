@@ -16,7 +16,7 @@ fn model_info_edit_round_trip() {
     info.set_blend_time(150);
     model.set_model_info(&info);
 
-    let parsed = Model::<wc3::model::V1800>::decode(&model.encode().unwrap()).unwrap();
+    let parsed = Model::<wc3::model::V1800>::decode_mdx(&model.encode_mdx().unwrap()).unwrap();
     let actual = parsed.model_info().unwrap();
     assert_eq!(actual.name(), "Footman");
     assert_eq!(actual.bounds_radius(), 42.5);
@@ -32,7 +32,7 @@ fn renaming_preserves_the_separate_animation_file_field() {
     original
         .set_animation_file_name("Animations\\Walk.mdx")
         .unwrap();
-    let mut data = original.encode().unwrap();
+    let mut data = original.encode_mdx().unwrap();
     data[336..340].copy_from_slice(&[1, 2, 3, 4]);
     data.extend_from_slice(&[5, 6]);
     model.push(ModelChunk::from_raw(RawChunk::new(*b"MODL", data)).unwrap());
@@ -41,7 +41,7 @@ fn renaming_preserves_the_separate_animation_file_field() {
     info.set_name("New").unwrap();
     assert_eq!(info.animation_file_name(), "Animations\\Walk.mdx");
     model.set_model_info(&info);
-    let bytes = model.encode().unwrap();
+    let bytes = model.encode_mdx().unwrap();
     let payload = &bytes[24..];
     assert_eq!(&payload[..4], b"New\0");
     assert_eq!(&payload[80..100], b"Animations\\Walk.mdx\0");
@@ -79,11 +79,11 @@ fn model_name_and_animation_file_have_independent_capacities() {
     let path = "a".repeat(259);
     info.set_animation_file_name(&path).unwrap();
     assert!(info.set_animation_file_name(&"a".repeat(260)).is_err());
-    let bytes = info.encode().unwrap();
+    let bytes = info.encode_mdx().unwrap();
     assert_eq!(bytes.len(), 372);
     assert_eq!(&bytes[80..339], path.as_bytes());
-    let parsed = ModelInfo::decode(&bytes).unwrap();
+    let parsed = ModelInfo::decode_mdx(&bytes).unwrap();
     assert_eq!(parsed.name(), "n".repeat(79));
     assert_eq!(parsed.animation_file_name(), path);
-    assert_eq!(parsed.encode().unwrap(), bytes);
+    assert_eq!(parsed.encode_mdx().unwrap(), bytes);
 }

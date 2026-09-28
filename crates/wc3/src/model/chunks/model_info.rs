@@ -64,7 +64,7 @@ mod tests {
     #[test]
     fn keeps_extension_bytes() {
         let original = ModelInfoChunk::new(ModelInfo::default(), vec![1, 2, 3]);
-        let payload = original.encode().unwrap();
-        assert_eq!(ModelInfoChunk::decode(&payload).unwrap(), original);
+        let payload = original.encode_mdx().unwrap();
+        assert_eq!(ModelInfoChunk::decode_mdx(&payload).unwrap(), original);
     }
 }

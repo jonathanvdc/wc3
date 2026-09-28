@@ -18,41 +18,44 @@ fn round_trip<T: mdx::Read + PartialEq + Debug>(value: &T)
 where
     T: mdx::Write,
 {
-    let bytes = value.encode().unwrap();
+    let bytes = value.encode_mdx().unwrap();
     let mut appended = vec![0xaa, 0xbb];
     Encoder::new(&mut appended).write(value).unwrap();
     assert_eq!(&appended[..2], &[0xaa, 0xbb]);
     assert_eq!(&appended[2..], bytes);
-    assert_eq!(T::decode(&bytes).unwrap(), *value);
+    assert_eq!(T::decode_mdx(&bytes).unwrap(), *value);
 }
 
 #[test]
 fn one_api_handles_model_fixed_and_versioned_records() {
     let model = Model::<V800>::new();
-    let bytes = model.encode().unwrap();
+    let bytes = model.encode_mdx().unwrap();
     assert_eq!(
-        Model::<V800>::decode(&bytes).unwrap().encode().unwrap(),
+        Model::<V800>::decode_mdx(&bytes)
+            .unwrap()
+            .encode_mdx()
+            .unwrap(),
         bytes
     );
     round_trip(&Sequence::new("Stand", [0, 100]).unwrap());
     round_trip(&Geoset::<V1800>::new(&[], &[], &[]).unwrap());
-    assert!(Sequence::decode(&[0; 131]).is_err());
+    assert!(Sequence::decode_mdx(&[0; 131]).is_err());
 }
 
 #[test]
 fn cursor_read_advances_through_records_and_decode_rejects_trailing_bytes() {
     let first = Sequence::new("Stand", [0, 100]).unwrap();
     let second = Sequence::new("Walk", [101, 200]).unwrap();
-    let mut bytes = first.encode().unwrap();
-    bytes.extend_from_slice(&second.encode().unwrap());
+    let mut bytes = first.encode_mdx().unwrap();
+    bytes.extend_from_slice(&second.encode_mdx().unwrap());
 
     let mut cursor = Cursor::new(&bytes);
     let decoded: Sequence = cursor.read().unwrap();
     assert_eq!(decoded, first);
     let consumed = cursor.position();
-    assert_eq!(consumed, first.encode().unwrap().len());
+    assert_eq!(consumed, first.encode_mdx().unwrap().len());
     assert_eq!(
-        Sequence::decode(&bytes),
+        Sequence::decode_mdx(&bytes),
         Err(mdx::ReadError::TrailingRecordBytes {
             consumed,
             total: bytes.len(),
@@ -61,14 +64,14 @@ fn cursor_read_advances_through_records_and_decode_rejects_trailing_bytes() {
 
     let first = Geoset::<V800>::new(&[], &[], &[]).unwrap();
     let second = Geoset::<V800>::new(&[], &[], &[]).unwrap();
-    let mut bytes = first.encode().unwrap();
-    bytes.extend_from_slice(&second.encode().unwrap());
+    let mut bytes = first.encode_mdx().unwrap();
+    bytes.extend_from_slice(&second.encode_mdx().unwrap());
     let mut cursor = Cursor::new(&bytes);
     let decoded: Geoset<V800> = cursor.read().unwrap();
     assert_eq!(decoded, first);
-    assert_eq!(cursor.position(), first.encode().unwrap().len());
+    assert_eq!(cursor.position(), first.encode_mdx().unwrap().len());
     assert!(matches!(
-        Geoset::<V800>::decode(&bytes),
+        Geoset::<V800>::decode_mdx(&bytes),
         Err(mdx::ReadError::TrailingRecordBytes { .. })
     ));
 }
@@ -79,9 +82,9 @@ fn cursor_decoders_stop_at_the_next_record() {
     where
         T: mdx::Write,
     {
-        let mut bytes = first.encode().unwrap();
+        let mut bytes = first.encode_mdx().unwrap();
         let first_len = bytes.len();
-        bytes.extend_from_slice(&second.encode().unwrap());
+        bytes.extend_from_slice(&second.encode_mdx().unwrap());
         let mut cursor = Cursor::new(&bytes);
         assert_eq!(cursor.read::<T>().unwrap(), first);
         assert_eq!(cursor.position(), first_len);

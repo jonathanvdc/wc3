@@ -155,7 +155,7 @@ fn expand_checked(input: DeriveInput, reading: bool) -> Result<TokenStream> {
         };
         Ok(quote! {
             impl #impl_generics ::wc3::model::mdx::Read for #name #ty_generics #where_clause {
-                fn read_from(source: &mut ::wc3::model::mdx::Cursor<'_>) -> Result<Self, ::wc3::model::mdx::ReadError> {
+                fn read_mdx(source: &mut ::wc3::model::mdx::Cursor<'_>) -> Result<Self, ::wc3::model::mdx::ReadError> {
                     #body
                 }
             }
@@ -172,7 +172,7 @@ fn expand_checked(input: DeriveInput, reading: bool) -> Result<TokenStream> {
         };
         Ok(quote! {
             impl #impl_generics ::wc3::model::mdx::Write for #name #ty_generics #where_clause {
-                fn write_to(&self, encoder: &mut ::wc3::model::mdx::Encoder<'_>) -> Result<(), ::wc3::model::mdx::WriteError> {
+                fn write_mdx(&self, encoder: &mut ::wc3::model::mdx::Encoder<'_>) -> Result<(), ::wc3::model::mdx::WriteError> {
                     #body
                     Ok(())
                 }

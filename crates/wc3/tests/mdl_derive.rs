@@ -9,9 +9,7 @@ use wc3::model::scene::ModelInfo;
 use wc3::model::FixedText;
 
 fn print<T: mdl::Write>(value: &T) -> Result<String, WriteError> {
-    let mut writer = MdlWriter::new(Vec::new());
-    writer.write(value)?;
-    Ok(String::from_utf8(writer.finish()?).unwrap())
+    value.encode_mdl()
 }
 fn positive_zero(value: &f32) -> bool {
     value.to_bits() == 0
@@ -32,7 +30,7 @@ struct DerivedSequence {
 
 #[test]
 fn derived_codecs_read_any_field_order_and_print_declaration_order() {
-    let value = DerivedSequence::parse_mdl(
+    let value = DerivedSequence::decode_mdl(
         r#"Anim "Walk" { NonLooping, MoveSpeed 270.0, Interval { 3334, 6667 }, }"#,
     )
     .unwrap();
@@ -43,8 +41,9 @@ fn derived_codecs_read_any_field_order_and_print_declaration_order() {
         text,
         "Anim \"Walk\" {\n\tInterval { 3334, 6667 },\n\tMoveSpeed 270.0,\n\tNonLooping,\n}\n"
     );
-    assert_eq!(DerivedSequence::parse_mdl(&text).unwrap(), value);
-    let mut value = DerivedSequence::parse_mdl("Anim \"Stand\" { Interval { 0, 1000 }, }").unwrap();
+    assert_eq!(DerivedSequence::decode_mdl(&text).unwrap(), value);
+    let mut value =
+        DerivedSequence::decode_mdl("Anim \"Stand\" { Interval { 0, 1000 }, }").unwrap();
     assert!(!value.non_looping);
     assert!(!print(&value).unwrap().contains("MoveSpeed"));
     value.move_speed = -0.0;
@@ -54,7 +53,7 @@ fn derived_codecs_read_any_field_order_and_print_declaration_order() {
 #[test]
 fn required_duplicate_unknown_and_malformed_fields_have_source_spans() {
     let source = "Anim \"A\" {}";
-    let error = DerivedSequence::parse_mdl(source).unwrap_err();
+    let error = DerivedSequence::decode_mdl(source).unwrap_err();
     assert_eq!(error.kind, ReadErrorKind::MissingField("Interval"));
     assert_eq!(&source[error.span.start..error.span.end], "}");
     for (source, kind, offending) in [
@@ -74,12 +73,14 @@ fn required_duplicate_unknown_and_malformed_fields_have_source_spans() {
             "Bogus",
         ),
     ] {
-        let error = DerivedSequence::parse_mdl(source).unwrap_err();
+        let error = DerivedSequence::decode_mdl(source).unwrap_err();
         assert_eq!(error.kind, kind);
         assert_eq!(&source[error.span.start..error.span.end], offending);
     }
-    assert!(DerivedSequence::parse_mdl("Anim \"A\" { Interval { 0, 1 } }").is_err());
-    assert!(DerivedSequence::parse_mdl("Anim \"A\" { NonLooping 1, Interval { 0, 1 }, }").is_err());
+    assert!(DerivedSequence::decode_mdl("Anim \"A\" { Interval { 0, 1 } }").is_err());
+    assert!(
+        DerivedSequence::decode_mdl("Anim \"A\" { NonLooping 1, Interval { 0, 1 }, }").is_err()
+    );
 }
 
 #[derive(Debug, PartialEq)]
@@ -142,14 +143,14 @@ impl Custom {
 
 #[test]
 fn hooks_do_not_require_codec_or_default_traits_on_the_field_type() {
-    let value = Custom::parse_mdl("Custom 42 {}").unwrap();
+    let value = Custom::decode_mdl("Custom 42 {}").unwrap();
     assert_eq!(value.value, Special(7));
     assert_eq!(value.reserved, [0; 4]);
     assert_eq!(print(&value).unwrap(), "Custom 42 {\n}\n");
-    let value = Custom::parse_mdl("Custom 42 { Value 8, }").unwrap();
-    assert_eq!(Custom::parse_mdl(&print(&value).unwrap()).unwrap(), value);
+    let value = Custom::decode_mdl("Custom 42 { Value 8, }").unwrap();
+    assert_eq!(Custom::decode_mdl(&print(&value).unwrap()).unwrap(), value);
     let source = "Custom 42 { Value 101, }";
-    let error = Custom::parse_mdl(source).unwrap_err();
+    let error = Custom::decode_mdl(source).unwrap_err();
     assert_eq!(error.span, Span::new(0, source.len()));
     let invalid = Custom {
         reserved: [1; 4],
@@ -182,10 +183,10 @@ where
 #[test]
 fn bounds_apply_only_to_fields_that_use_them() {
     let value =
-        Generic::<NotACodec, u32, 2>::parse_mdl("Generic { Vector { 1, 2 }, Value 9, }").unwrap();
+        Generic::<NotACodec, u32, 2>::decode_mdl("Generic { Vector { 1, 2 }, Value 9, }").unwrap();
     let text = print(&value).unwrap();
     assert_eq!(
-        Generic::<NotACodec, u32, 2>::parse_mdl(&text)
+        Generic::<NotACodec, u32, 2>::decode_mdl(&text)
             .unwrap()
             .value,
         9
@@ -214,20 +215,20 @@ struct RequiredFlag {
 
 #[test]
 fn multiple_headers_empty_blocks_and_required_flags_work() {
-    let value = Headers::parse_mdl("Headers \"a\\b\" -3 {}").unwrap();
+    let value = Headers::decode_mdl("Headers \"a\\b\" -3 {}").unwrap();
     assert_eq!(print(&value).unwrap(), "Headers \"a\\b\" -3 {\n}\n");
     assert_eq!(
-        print(&Empty::parse_mdl("Empty {}").unwrap()).unwrap(),
+        print(&Empty::decode_mdl("Empty {}").unwrap()).unwrap(),
         "Empty {\n}\n"
     );
-    assert!(Empty::parse_mdl("Empty { Bad, }").is_err());
-    assert!(RequiredFlag::parse_mdl("RequiredFlag {}").is_err());
+    assert!(Empty::decode_mdl("Empty { Bad, }").is_err());
+    assert!(RequiredFlag::decode_mdl("RequiredFlag {}").is_err());
     assert!(matches!(
         print(&RequiredFlag { enabled: false }),
         Err(WriteError::Unsupported(_))
     ));
     assert!(
-        RequiredFlag::parse_mdl(&print(&RequiredFlag { enabled: true }).unwrap())
+        RequiredFlag::decode_mdl(&print(&RequiredFlag { enabled: true }).unwrap())
             .unwrap()
             .enabled
     );
@@ -236,20 +237,20 @@ fn multiple_headers_empty_blocks_and_required_flags_work() {
 #[test]
 fn derived_model_info_roundtrips_binary_data_and_rejects_animation_file_data() {
     let source = "Model \"Example\" { BlendTime 150, BoundsRadius 10.0, MinimumExtent { -1.0, -2.0, -3.0 }, MaximumExtent { 1.0, 2.0, 3.0 }, }";
-    let value = ModelInfo::parse_mdl(source).unwrap();
+    let value = ModelInfo::decode_mdl(source).unwrap();
     assert_eq!(value.name(), "Example");
-    let bytes = value.encode().unwrap();
+    let bytes = value.encode_mdx().unwrap();
     assert_eq!(
-        ModelInfo::parse_mdl(&print(&ModelInfo::decode(&bytes).unwrap()).unwrap())
+        ModelInfo::decode_mdl(&print(&ModelInfo::decode_mdx(&bytes).unwrap()).unwrap())
             .unwrap()
-            .encode()
+            .encode_mdx()
             .unwrap(),
         bytes
     );
     let mut bytes = bytes;
     bytes[80..85].copy_from_slice(b"a.mdx");
     assert!(matches!(
-        print(&ModelInfo::decode(&bytes).unwrap()),
+        print(&ModelInfo::decode_mdx(&bytes).unwrap()),
         Err(WriteError::Unsupported(_))
     ));
 }
@@ -280,7 +281,7 @@ struct Optional<T> {
 }
 #[test]
 fn read_write_and_default_bounds_are_independent() {
-    let value = Independent::<ReadOnly>::parse_mdl("Independent { Value 42, }").unwrap();
+    let value = Independent::<ReadOnly>::decode_mdl("Independent { Value 42, }").unwrap();
     assert_eq!(value.value.0, 42);
     assert!(print(&Independent {
         value: WriteOnly(42)
@@ -311,16 +312,16 @@ struct Packed<T> {
 }
 #[test]
 fn packed_flags_share_storage_but_track_duplicates_independently() {
-    let value = Packed::<BareFlags>::parse_mdl("Packed { Id 7, Last, First, }").unwrap();
+    let value = Packed::<BareFlags>::decode_mdl("Packed { Id 7, Last, First, }").unwrap();
     assert_eq!(value.flags.bits(), 0x80000001);
     assert_eq!(
         print(&value).unwrap(),
         "Packed {\n\tFirst,\n\tLast,\n\tId 7,\n}\n"
     );
-    let empty = Packed::<BareFlags>::parse_mdl("Packed {}").unwrap();
+    let empty = Packed::<BareFlags>::decode_mdl("Packed {}").unwrap();
     assert_eq!(empty.flags.bits(), 0);
     let source = "Packed { Last, Last, }";
-    let error = Packed::<BareFlags>::parse_mdl(source).err().unwrap();
+    let error = Packed::<BareFlags>::decode_mdl(source).err().unwrap();
     assert_eq!(error.kind, ReadErrorKind::DuplicateField);
     assert_eq!(&source[error.span.start..error.span.end], "Last");
     let mut output = Vec::new();
@@ -343,19 +344,19 @@ struct Entry<T>(T);
 #[test]
 fn tuple_value_forms_preserve_prefixes_and_entry_punctuation() {
     assert_eq!(
-        print(&Number::<u32>::parse_mdl("Number 42,").unwrap()).unwrap(),
+        print(&Number::<u32>::decode_mdl("Number 42,").unwrap()).unwrap(),
         "Number 42,\n"
     );
     assert_eq!(
-        Entry::<[f32; 3]>::parse_mdl("{ 1.0, 2.0, 3.0 },")
+        Entry::<[f32; 3]>::decode_mdl("{ 1.0, 2.0, 3.0 },")
             .unwrap()
             .0,
         [1.0, 2.0, 3.0]
     );
     assert_eq!(print(&Entry(3u32)).unwrap(), "3,\n");
-    assert!(Number::<u32>::parse_mdl("Other 42,").is_err());
-    assert!(Number::<u32>::parse_mdl("Number 42").is_err());
-    assert!(Entry::<u32>::parse_mdl("3").is_err());
+    assert!(Number::<u32>::decode_mdl("Other 42,").is_err());
+    assert!(Number::<u32>::decode_mdl("Number 42").is_err());
+    assert!(Entry::<u32>::decode_mdl("3").is_err());
 }
 
 #[test]
@@ -363,20 +364,38 @@ fn typed_record_flags_keep_their_original_binary_layout_and_unknown_bits() {
     use wc3::model::animation::{Sequence, SequenceFlags};
     use wc3::model::materials::{Texture, TextureFlags};
     let raw = 0x80000003u32.to_le_bytes();
-    assert_eq!(TextureFlags::decode(&raw).unwrap().encode().unwrap(), raw);
+    assert_eq!(
+        TextureFlags::decode_mdx(&raw)
+            .unwrap()
+            .encode_mdx()
+            .unwrap(),
+        raw
+    );
     let raw = 0x80000001u32.to_le_bytes();
-    assert_eq!(SequenceFlags::decode(&raw).unwrap().encode().unwrap(), raw);
+    assert_eq!(
+        SequenceFlags::decode_mdx(&raw)
+            .unwrap()
+            .encode_mdx()
+            .unwrap(),
+        raw
+    );
     let mut texture = Texture::new("a").unwrap();
     texture.set_flags(TextureFlags(0x80000003));
-    let bytes = texture.encode().unwrap();
+    let bytes = texture.encode_mdx().unwrap();
     assert_eq!(&bytes[264..268], &0x80000003u32.to_le_bytes());
-    assert_eq!(Texture::decode(&bytes).unwrap().encode().unwrap(), bytes);
+    assert_eq!(
+        Texture::decode_mdx(&bytes).unwrap().encode_mdx().unwrap(),
+        bytes
+    );
     assert!(print(&texture).is_err());
     let mut sequence = Sequence::new("a", [0, 1]).unwrap();
     sequence.set_flags(SequenceFlags(0x80000001));
-    let bytes = sequence.encode().unwrap();
+    let bytes = sequence.encode_mdx().unwrap();
     assert_eq!(&bytes[92..96], &0x80000001u32.to_le_bytes());
-    assert_eq!(Sequence::decode(&bytes).unwrap().encode().unwrap(), bytes);
+    assert_eq!(
+        Sequence::decode_mdx(&bytes).unwrap().encode_mdx().unwrap(),
+        bytes
+    );
     assert!(print(&sequence).is_err());
     sequence.set_flags(SequenceFlags(1));
     sequence.set_move_speed(2.0);

@@ -146,7 +146,7 @@ impl<V: ModelVersion> Model<V> {
 }
 
 impl<V: ModelVersion> mdx::Read for Model<V> {
-    fn read_from(cursor: &mut Cursor<'_>) -> Result<Self, ReadError> {
+    fn read_mdx(cursor: &mut Cursor<'_>) -> Result<Self, ReadError> {
         if let Some(actual) = scan_version(*cursor)? {
             if actual != V::NUMBER {
                 return Err(ReadError::VersionMismatch {
@@ -169,7 +169,7 @@ impl<V: ModelVersion> mdx::Read for Model<V> {
 }
 
 impl<V: ModelVersion> mdx::Write for Model<V> {
-    fn write_to(&self, output: &mut Encoder<'_>) -> Result<(), WriteError> {
+    fn write_mdx(&self, output: &mut Encoder<'_>) -> Result<(), WriteError> {
         output.write_bytes(&MAGIC);
         for chunk in &self.chunks {
             output.write(chunk)?;
@@ -223,18 +223,18 @@ macro_rules! visit_model {
 
 impl DynamicModel {
     /// Decodes a model, using `default_version` when no `VERS` chunk is present.
-    pub fn decode(bytes: &[u8], default_version: Version) -> Result<Self, ReadError> {
+    pub fn decode_mdx(bytes: &[u8], default_version: Version) -> Result<Self, ReadError> {
         let version = scan_version(Cursor::new(bytes))?.unwrap_or(default_version);
         match version {
-            800 => Model::<V800>::decode(bytes).map(Self::V800),
-            900 => Model::<V900>::decode(bytes).map(Self::V900),
-            1000 => Model::<V1000>::decode(bytes).map(Self::V1000),
-            1100 => Model::<V1100>::decode(bytes).map(Self::V1100),
-            1200 => Model::<V1200>::decode(bytes).map(Self::V1200),
-            1300 => Model::<V1300>::decode(bytes).map(Self::V1300),
-            1400 => Model::<V1400>::decode(bytes).map(Self::V1400),
-            1600 => Model::<V1600>::decode(bytes).map(Self::V1600),
-            1800 => Model::<V1800>::decode(bytes).map(Self::V1800),
+            800 => Model::<V800>::decode_mdx(bytes).map(Self::V800),
+            900 => Model::<V900>::decode_mdx(bytes).map(Self::V900),
+            1000 => Model::<V1000>::decode_mdx(bytes).map(Self::V1000),
+            1100 => Model::<V1100>::decode_mdx(bytes).map(Self::V1100),
+            1200 => Model::<V1200>::decode_mdx(bytes).map(Self::V1200),
+            1300 => Model::<V1300>::decode_mdx(bytes).map(Self::V1300),
+            1400 => Model::<V1400>::decode_mdx(bytes).map(Self::V1400),
+            1600 => Model::<V1600>::decode_mdx(bytes).map(Self::V1600),
+            1800 => Model::<V1800>::decode_mdx(bytes).map(Self::V1800),
             _ => Err(ReadError::UnsupportedVersion { version }),
         }
     }
@@ -243,8 +243,8 @@ impl DynamicModel {
         visit_model!(self, |model| model.version())
     }
 
-    pub fn encode(&self) -> Result<Vec<u8>, WriteError> {
-        visit_model!(self, |model| model.encode())
+    pub fn encode_mdx(&self) -> Result<Vec<u8>, WriteError> {
+        visit_model!(self, |model| model.encode_mdx())
     }
 }
 
@@ -284,18 +284,18 @@ mod tests {
     #[test]
     fn rejects_bad_magic_and_lengths() {
         assert!(matches!(
-            Model::<V800>::decode(b"wrong"),
+            Model::<V800>::decode_mdx(b"wrong"),
             Err(ReadError::InvalidMagic)
         ));
         assert!(matches!(
-            Model::<V800>::decode(b"MDLXVE"),
+            Model::<V800>::decode_mdx(b"MDLXVE"),
             Err(ReadError::TruncatedHeader { offset: 4 })
         ));
         let mut bytes = b"MDLXTEST".to_vec();
         bytes.extend_from_slice(&5u32.to_le_bytes());
         bytes.push(1);
         assert!(matches!(
-            Model::<V800>::decode(&bytes),
+            Model::<V800>::decode_mdx(&bytes),
             Err(ReadError::TruncatedChunk { tag, offset: 4, size: 5 }) if tag == *b"TEST"
         ));
     }
@@ -306,26 +306,26 @@ mod tests {
         model.push(ModelChunk::Unknown(
             UnknownChunk::new(RawChunk::new(*b"FUTR", vec![1, 2])).unwrap(),
         ));
-        let bytes = model.encode().unwrap();
-        let decoded = Model::<V800>::decode(&bytes).unwrap();
-        assert_eq!(decoded.encode().unwrap(), bytes);
+        let bytes = model.encode_mdx().unwrap();
+        let decoded = Model::<V800>::decode_mdx(&bytes).unwrap();
+        assert_eq!(decoded.encode_mdx().unwrap(), bytes);
 
-        let mut malformed = Model::<V800>::new().encode().unwrap();
+        let mut malformed = Model::<V800>::new().encode_mdx().unwrap();
         malformed.extend_from_slice(b"TEXS");
         malformed.extend_from_slice(&267u32.to_le_bytes());
         malformed.extend_from_slice(&[0; 267]);
-        assert!(Model::<V800>::decode(&malformed).is_err());
+        assert!(Model::<V800>::decode_mdx(&malformed).is_err());
     }
 
     #[test]
     fn runtime_dispatch_preserves_the_typed_version() {
-        let bytes = Model::<V1100>::new().encode().unwrap();
+        let bytes = Model::<V1100>::new().encode_mdx().unwrap();
         assert!(matches!(
-            DynamicModel::decode(&bytes, 800),
+            DynamicModel::decode_mdx(&bytes, 800),
             Ok(DynamicModel::V1100(_))
         ));
         assert!(matches!(
-            Model::<V800>::decode(&bytes),
+            Model::<V800>::decode_mdx(&bytes),
             Err(ReadError::VersionMismatch { .. })
         ));
     }

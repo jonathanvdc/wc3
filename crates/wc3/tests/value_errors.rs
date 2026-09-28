@@ -22,6 +22,6 @@ fn construction_and_mutation_report_value_errors() {
     );
 
     let node = Node::new("Valid", 1).unwrap();
-    let encoded: Result<Vec<u8>, WriteError> = node.encode();
+    let encoded: Result<Vec<u8>, WriteError> = node.encode_mdx();
     assert!(encoded.is_ok());
 }

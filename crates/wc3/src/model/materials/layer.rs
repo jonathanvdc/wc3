@@ -198,7 +198,7 @@ impl LayerTextureSlotsField for LayerTextureSlots {
 }
 
 impl mdx::Read for LayerTextureSlots {
-    fn read_from(cursor: &mut Cursor<'_>) -> Result<Self, ReadError> {
+    fn read_mdx(cursor: &mut Cursor<'_>) -> Result<Self, ReadError> {
         let count = cursor.read::<u32>()? as usize;
         let mut texture_slots = Vec::new();
         for _ in 0..count {
@@ -223,7 +223,7 @@ impl mdx::Read for LayerTextureSlots {
 }
 
 impl mdx::Write for LayerTextureSlots {
-    fn write_to(&self, output: &mut Encoder<'_>) -> Result<(), WriteError> {
+    fn write_mdx(&self, output: &mut Encoder<'_>) -> Result<(), WriteError> {
         write_count(output, self.0.len(), LAYER_TAG)?;
         for slot in &self.0 {
             output.write(&slot.texture_id)?;

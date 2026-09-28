@@ -23,7 +23,7 @@ fn particle_emitter2_fields_round_trip() {
     emitter.set_fields(&fields);
     let mut model = Model::<wc3::model::V1800>::new();
     model.set_particle_emitters2(&[emitter]);
-    let parsed = Model::<wc3::model::V1800>::decode(&model.encode().unwrap()).unwrap();
+    let parsed = Model::<wc3::model::V1800>::decode_mdx(&model.encode_mdx().unwrap()).unwrap();
     assert_eq!(parsed.particle_emitters2()[0].fields(), fields);
 }
 
@@ -40,7 +40,7 @@ fn local_particle_emitter2_round_trip_when_available() {
                 pending.push(path);
             } else if path.extension().is_some_and(|extension| extension == "mdx") {
                 let bytes = std::fs::read(&path).unwrap();
-                let mut model = Model::<wc3::model::V1800>::decode(&bytes).unwrap();
+                let mut model = Model::<wc3::model::V1800>::decode_mdx(&bytes).unwrap();
                 if model.chunk(*b"PRE2").is_some() {
                     let mut emitters = model.particle_emitters2();
                     for emitter in &mut emitters {
@@ -49,7 +49,7 @@ fn local_particle_emitter2_round_trip_when_available() {
                         emitter.tracks();
                     }
                     model.set_particle_emitters2(&emitters);
-                    assert_eq!(model.encode().unwrap(), bytes, "{}", path.display());
+                    assert_eq!(model.encode_mdx().unwrap(), bytes, "{}", path.display());
                 }
             }
         }

@@ -12,10 +12,10 @@ fn check_version<V: ModelVersion>() {
     model.push(ModelChunk::Unknown(
         UnknownChunk::<V>::new(RawChunk::new(*b"FUTR", vec![0, 1, 2, 255])).unwrap(),
     ));
-    let bytes = model.encode().unwrap();
-    let parsed = Model::<V>::decode(&bytes).unwrap();
+    let bytes = model.encode_mdx().unwrap();
+    let parsed = Model::<V>::decode_mdx(&bytes).unwrap();
     assert_eq!(parsed.version(), V::NUMBER);
-    assert_eq!(parsed.encode().unwrap(), bytes);
+    assert_eq!(parsed.encode_mdx().unwrap(), bytes);
 }
 
 #[test]
@@ -39,7 +39,7 @@ fn preserves_repeated_chunks_and_order() {
             UnknownChunk::<V800>::new(RawChunk::new(*b"ABCD", data)).unwrap(),
         ));
     }
-    let parsed = Model::<V800>::decode(&model.encode().unwrap()).unwrap();
+    let parsed = Model::<V800>::decode_mdx(&model.encode_mdx().unwrap()).unwrap();
     assert!(matches!(&parsed.chunks()[1], ModelChunk::Unknown(raw) if raw.raw().data == [1]));
     assert!(matches!(&parsed.chunks()[2], ModelChunk::Unknown(raw) if raw.raw().data == [2]));
 }
@@ -57,9 +57,9 @@ fn local_files_round_trip_when_available() {
                 pending.push(path);
             } else if path.extension().is_some_and(|extension| extension == "mdx") {
                 let bytes = std::fs::read(&path).unwrap();
-                let model = DynamicModel::decode(&bytes, 800)
+                let model = DynamicModel::decode_mdx(&bytes, 800)
                     .unwrap_or_else(|error| panic!("{}: {error}", path.display()));
-                assert_eq!(model.encode().unwrap(), bytes, "{}", path.display());
+                assert_eq!(model.encode_mdx().unwrap(), bytes, "{}", path.display());
             }
         }
     }
@@ -116,7 +116,7 @@ fn check_accessors<V: ModelVersion>(mut model: Model<V>, bytes: &[u8], path: &st
     round_trip_records!(b"RIBB", ribbon_emitters, set_ribbon_emitters);
     round_trip_checked_records!(b"CORN", try_popcorn_emitters, try_set_popcorn_emitters);
     round_trip_checked_records!(b"BPOS", try_bind_poses, try_set_bind_poses);
-    assert_eq!(model.encode().unwrap(), bytes, "{}", path.display());
+    assert_eq!(model.encode_mdx().unwrap(), bytes, "{}", path.display());
 }
 
 #[test]
@@ -136,7 +136,7 @@ fn typed_accessors_preserve_local_files_when_available() {
                 continue;
             }
             let bytes = std::fs::read(&path).unwrap();
-            match DynamicModel::decode(&bytes, 800).unwrap() {
+            match DynamicModel::decode_mdx(&bytes, 800).unwrap() {
                 DynamicModel::V800(model) => check_accessors(model, &bytes, &path),
                 DynamicModel::V900(model) => check_accessors(model, &bytes, &path),
                 DynamicModel::V1000(model) => check_accessors(model, &bytes, &path),

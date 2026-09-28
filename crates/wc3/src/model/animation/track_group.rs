@@ -14,7 +14,7 @@ macro_rules! track_group {
             }
         }
         impl $crate::model::mdx::Read for $group {
-            fn read_from(cursor: &mut $crate::model::Cursor<'_>) -> Result<Self, $crate::model::ReadError> {
+            fn read_mdx(cursor: &mut $crate::model::Cursor<'_>) -> Result<Self, $crate::model::ReadError> {
                 let offset = cursor.absolute_position();
                 let tag: $crate::model::Tag = cursor.peek_exact(4)?.try_into().expect("four-byte tag");
                 $(if tag == <$crate::model::animation::$kind as $crate::model::animation::TrackKind>::TAG {
@@ -24,7 +24,7 @@ macro_rules! track_group {
             }
         }
         impl $crate::model::mdx::Write for $group {
-            fn write_to(&self, encoder: &mut $crate::model::Encoder<'_>) -> Result<(), $crate::model::WriteError> {
+            fn write_mdx(&self, encoder: &mut $crate::model::Encoder<'_>) -> Result<(), $crate::model::WriteError> {
                 match self { $( $group::$variant(track) => encoder.write(track), )+ }
             }
         }

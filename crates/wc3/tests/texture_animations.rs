@@ -20,6 +20,6 @@ fn texture_animation_tracks_round_trip() {
     animation.set_tracks(std::slice::from_ref(&track));
     let mut model = Model::<wc3::model::V1100>::new();
     model.set_texture_animations(&[animation]);
-    let parsed = Model::<wc3::model::V1100>::decode(&model.encode().unwrap()).unwrap();
+    let parsed = Model::<wc3::model::V1100>::decode_mdx(&model.encode_mdx().unwrap()).unwrap();
     assert_eq!(parsed.texture_animations()[0].tracks(), vec![track]);
 }

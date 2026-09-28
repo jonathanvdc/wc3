@@ -73,10 +73,10 @@ impl<V: ModelVersion> Model<V> {
 }
 
 impl mdx::Read for EventObject {
-    fn read_from(cursor: &mut Cursor<'_>) -> Result<Self, ReadError> {
+    fn read_mdx(cursor: &mut Cursor<'_>) -> Result<Self, ReadError> {
         let mut probe = *cursor;
         let node_size = probe.read::<u32>()? as usize;
-        let node = Node::decode(cursor.read_exact(node_size)?)?;
+        let node = Node::decode_mdx(cursor.read_exact(node_size)?)?;
         let offset = cursor.absolute_position();
         if cursor.read_exact(4)? != TRACK_TAG {
             return Err(ReadError::MalformedRecord {
@@ -99,7 +99,7 @@ impl mdx::Read for EventObject {
 }
 
 impl mdx::Write for EventObject {
-    fn write_to(&self, bytes: &mut Encoder<'_>) -> Result<(), WriteError> {
+    fn write_mdx(&self, bytes: &mut Encoder<'_>) -> Result<(), WriteError> {
         let start = bytes.position();
         bytes.write(&self.node)?;
         bytes.write_bytes(&TRACK_TAG);

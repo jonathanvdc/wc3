@@ -12,7 +12,7 @@ fn bones_and_helpers_round_trip() {
     let mut model = Model::<wc3::model::V1800>::new();
     model.set_bones(&[bone]);
     model.set_helpers(&[node]);
-    let parsed = Model::<wc3::model::V1800>::decode(&model.encode().unwrap()).unwrap();
+    let parsed = Model::<wc3::model::V1800>::decode_mdx(&model.encode_mdx().unwrap()).unwrap();
     let bone = &parsed.bones()[0];
     assert_eq!(bone.node().name(), "Root");
     assert_eq!(bone.node().object_id(), 7);
@@ -50,7 +50,7 @@ fn local_bones_are_bounded_when_available() {
                 pending.push(path);
             } else if path.extension().is_some_and(|extension| extension == "mdx") {
                 let bytes = std::fs::read(&path).unwrap();
-                let model = Model::<wc3::model::V1800>::decode(&bytes).unwrap();
+                let model = Model::<wc3::model::V1800>::decode_mdx(&bytes).unwrap();
                 for bone in model.bones() {
                     assert!(!bone.node().name().is_empty());
                 }

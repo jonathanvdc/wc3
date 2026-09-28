@@ -8,7 +8,7 @@ use wc3::model::{
 
 fn sample_geoset() -> Geoset<V1800> {
     let geoset = Geoset::<V1800>::new(&[[1.0, 2.0, 3.0]], &[[0.0, 0.0, 1.0]], &[0, 0, 0]).unwrap();
-    Geoset::<V1800>::decode(&geoset.encode().unwrap()).unwrap()
+    Geoset::<V1800>::decode_mdx(&geoset.encode_mdx().unwrap()).unwrap()
 }
 
 #[test]
@@ -20,7 +20,7 @@ fn geoset_mesh_edit_preserves_other_sections() {
     geoset.set_vertex(0, [4.0, 5.0, 6.0]).unwrap();
     let mut model = Model::<V1800>::new();
     model.set_geosets(&[geoset]);
-    let decoded = Model::<V1800>::decode(&model.encode().unwrap()).unwrap();
+    let decoded = Model::<V1800>::decode_mdx(&model.encode_mdx().unwrap()).unwrap();
     assert_eq!(decoded.geosets()[0].vertices(), vec![[4.0, 5.0, 6.0]]);
     assert_eq!(decoded.geosets()[0].normals(), vec![[0.0, 0.0, 1.0]]);
 }
@@ -78,7 +78,7 @@ fn check_version<V: ModelVersion>() {
         assert_eq!(geoset.try_tangents().unwrap().unwrap().len(), 2);
         assert_eq!(geoset.try_skin_weights().unwrap(), Some(weights.as_slice()));
         assert_eq!(
-            Geoset::<V>::decode(&geoset.encode().unwrap()).unwrap(),
+            Geoset::<V>::decode_mdx(&geoset.encode_mdx().unwrap()).unwrap(),
             geoset
         );
         geoset.try_set_skin_weights(None).unwrap();
@@ -101,12 +101,12 @@ fn check_version<V: ModelVersion>() {
         vec![vec![[0.0, 0.0], [0.25, 0.75]], vec![[1.0, 1.0]; 2]]
     );
     assert_eq!(
-        Geoset::<V>::decode(&geoset.encode().unwrap()).unwrap(),
+        Geoset::<V>::decode_mdx(&geoset.encode_mdx().unwrap()).unwrap(),
         geoset
     );
     let mut model = Model::<V>::new();
     model.set_geosets(&[geoset]);
-    let parsed = Model::<V>::decode(&model.encode().unwrap()).unwrap();
+    let parsed = Model::<V>::decode_mdx(&model.encode_mdx().unwrap()).unwrap();
     assert_eq!(parsed.geosets()[0].version(), version);
     assert_eq!(parsed.geosets()[0].material_id(), 7);
 }
@@ -123,7 +123,7 @@ fn preserves_float_bits_name_padding_and_extension_order() {
             weights: [1, 2, 3, 249],
         }]))
         .unwrap();
-    let mut bytes = geoset.encode().unwrap();
+    let mut bytes = geoset.encode_mdx().unwrap();
     bytes[12..16].copy_from_slice(&0x7fa1_2345u32.to_le_bytes());
     let mats = bytes.windows(4).position(|part| part == b"MATS").unwrap();
     let count = u32::from_le_bytes(bytes[mats + 4..mats + 8].try_into().unwrap()) as usize;
@@ -137,8 +137,8 @@ fn preserves_float_bits_name_padding_and_extension_order() {
     reordered.extend_from_slice(&bytes[skin..uv]);
     reordered.extend_from_slice(&bytes[tang..skin]);
     reordered.extend_from_slice(&bytes[uv..]);
-    let decoded = Geoset::<V1800>::decode(&reordered).unwrap();
-    assert_eq!(decoded.encode().unwrap(), reordered);
+    let decoded = Geoset::<V1800>::decode_mdx(&reordered).unwrap();
+    assert_eq!(decoded.encode_mdx().unwrap(), reordered);
     assert_eq!(decoded.vertices()[0][0].to_bits(), 0x7fa1_2345);
 }
 
@@ -155,7 +155,7 @@ fn local_geosets_have_bounded_mesh_sections_when_available() {
                 pending.push(path);
             } else if path.extension().is_some_and(|extension| extension == "mdx") {
                 let bytes = std::fs::read(&path).unwrap();
-                let model = DynamicModel::decode(&bytes, 800).unwrap();
+                let model = DynamicModel::decode_mdx(&bytes, 800).unwrap();
                 fn check<V: ModelVersion>(model: Model<V>) {
                     for geoset in model.geosets() {
                         geoset.vertices();
@@ -197,8 +197,8 @@ fn skin_elements_widen_at_v1400() {
     narrow.set_skin_weights(Some(&weights)).unwrap();
     let mut wide = Geoset::<V1400>::new(&[[0.0; 3]], &[[0.0; 3]], &[]).unwrap();
     wide.set_skin_weights(Some(&weights)).unwrap();
-    let narrow_bytes = narrow.encode().unwrap();
-    let wide_bytes = wide.encode().unwrap();
+    let narrow_bytes = narrow.encode_mdx().unwrap();
+    let wide_bytes = wide.encode_mdx().unwrap();
     for (bytes, payload) in [
         (&narrow_bytes, vec![1, 2, 3, 255, 128, 64, 32, 31]),
         (
@@ -214,8 +214,8 @@ fn skin_elements_widen_at_v1400() {
             b"UVAS"
         );
     }
-    assert_eq!(Geoset::<V1300>::decode(&narrow_bytes).unwrap(), narrow);
-    assert_eq!(Geoset::<V1400>::decode(&wide_bytes).unwrap(), wide);
+    assert_eq!(Geoset::<V1300>::decode_mdx(&narrow_bytes).unwrap(), narrow);
+    assert_eq!(Geoset::<V1400>::decode_mdx(&wide_bytes).unwrap(), wide);
 }
 
 #[test]
@@ -233,7 +233,7 @@ fn skin_version_gates_and_wide_indices() {
     let mut wide = Geoset::<V1400>::new(&[], &[], &[]).unwrap();
     wide.set_skin_weights(Some(&weights)).unwrap();
     assert_eq!(
-        Geoset::<V1400>::decode(&wide.encode().unwrap()).unwrap(),
+        Geoset::<V1400>::decode_mdx(&wide.encode_mdx().unwrap()).unwrap(),
         wide
     );
 }
@@ -247,12 +247,12 @@ fn rejects_incomplete_skin_vertices_and_out_of_range_wide_weights() {
             weights: [255, 0, 0, 0],
         }]))
         .unwrap();
-    let bytes = geoset.encode().unwrap();
+    let bytes = geoset.encode_mdx().unwrap();
     let skin = bytes.windows(4).position(|part| part == b"SKIN").unwrap();
     let mut invalid_weight = bytes.clone();
     invalid_weight[skin + 16..skin + 18].copy_from_slice(&256u16.to_le_bytes());
-    assert!(Geoset::<V1800>::decode(&invalid_weight).is_err());
+    assert!(Geoset::<V1800>::decode_mdx(&invalid_weight).is_err());
     let mut invalid_count = bytes;
     invalid_count[skin + 4..skin + 8].copy_from_slice(&7u32.to_le_bytes());
-    assert!(Geoset::<V1800>::decode(&invalid_count).is_err());
+    assert!(Geoset::<V1800>::decode_mdx(&invalid_count).is_err());
 }

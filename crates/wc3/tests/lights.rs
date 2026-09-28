@@ -17,7 +17,7 @@ fn light_fields_round_trip() {
     light.set_ambient_intensity(0.5);
     let mut model = Model::<wc3::model::V1200>::new();
     model.set_lights(&[light]);
-    let parsed = Model::<wc3::model::V1200>::decode(&model.encode().unwrap()).unwrap();
+    let parsed = Model::<wc3::model::V1200>::decode_mdx(&model.encode_mdx().unwrap()).unwrap();
     let light = &parsed.lights()[0];
     assert_eq!(light.node().name(), "Torch");
     assert_eq!(light.light_type(), 1);
@@ -42,7 +42,7 @@ fn light_color_track_round_trip() {
     .unwrap()
     .into();
     light.set_tracks(std::slice::from_ref(&track));
-    let parsed = Light::<wc3::model::V800>::decode(&light.encode().unwrap()).unwrap();
+    let parsed = Light::<wc3::model::V800>::decode_mdx(&light.encode_mdx().unwrap()).unwrap();
     assert_eq!(parsed.tracks(), &[track]);
 }
 
@@ -74,7 +74,7 @@ fn extended_light_fields_and_tracks_round_trip() {
     .unwrap()
     .into();
     light.set_tracks(std::slice::from_ref(&track));
-    let parsed = Light::<wc3::model::V1800>::decode(&light.encode().unwrap()).unwrap();
+    let parsed = Light::<wc3::model::V1800>::decode_mdx(&light.encode_mdx().unwrap()).unwrap();
     assert!(parsed.try_shadow_casting().unwrap());
     assert_eq!(parsed.try_shadow_intensity().unwrap(), 1.0);
     assert_eq!(
@@ -100,30 +100,39 @@ fn intermediate_light_layouts_follow_version_gates() {
     use wc3::model::{V1300, V1400, V1600};
 
     let base = Light::<wc3::model::V1200>::new(Node::new("Lamp", 1).unwrap(), 0)
-        .encode()
+        .encode_mdx()
         .unwrap();
     let v1300 = Light::<V1300>::new(Node::new("Lamp", 1).unwrap(), 0)
-        .encode()
+        .encode_mdx()
         .unwrap();
     let v1400 = Light::<V1400>::new(Node::new("Lamp", 1).unwrap(), 0)
-        .encode()
+        .encode_mdx()
         .unwrap();
     let v1600 = Light::<V1600>::new(Node::new("Lamp", 1).unwrap(), 0)
-        .encode()
+        .encode_mdx()
         .unwrap();
     assert_eq!(v1300.len(), base.len() + 12);
     assert_eq!(v1400.len(), v1300.len());
     assert_eq!(v1600.len(), v1300.len() + 12);
     assert_eq!(
-        Light::<V1300>::decode(&v1300).unwrap().encode().unwrap(),
+        Light::<V1300>::decode_mdx(&v1300)
+            .unwrap()
+            .encode_mdx()
+            .unwrap(),
         v1300
     );
     assert_eq!(
-        Light::<V1400>::decode(&v1400).unwrap().encode().unwrap(),
+        Light::<V1400>::decode_mdx(&v1400)
+            .unwrap()
+            .encode_mdx()
+            .unwrap(),
         v1400
     );
     assert_eq!(
-        Light::<V1600>::decode(&v1600).unwrap().encode().unwrap(),
+        Light::<V1600>::decode_mdx(&v1600)
+            .unwrap()
+            .encode_mdx()
+            .unwrap(),
         v1600
     );
 }
@@ -152,7 +161,7 @@ fn shadow_casting_and_falloff_round_trip() {
             damping: 3.0,
         })
         .unwrap();
-    let decoded = Light::<V1600>::decode(&light.encode().unwrap()).unwrap();
+    let decoded = Light::<V1600>::decode_mdx(&light.encode_mdx().unwrap()).unwrap();
     assert!(decoded.try_shadow_casting().unwrap());
     assert_eq!(
         decoded.falloff(),
@@ -174,7 +183,7 @@ fn infallible_light_accessors_cover_supported_versions() {
     fn check_intensity<V: SupportsLightShadowIntensity>() {
         let mut light = Light::<V>::new(Node::new("Lamp", 1).unwrap(), 0);
         light.set_shadow_intensity(0.5);
-        let decoded = Light::<V>::decode(&light.encode().unwrap()).unwrap();
+        let decoded = Light::<V>::decode_mdx(&light.encode_mdx().unwrap()).unwrap();
         assert_eq!(decoded.shadow_intensity(), 0.5);
     }
     fn check_casting<V: SupportsLightShadowCasting>() {
@@ -185,7 +194,7 @@ fn infallible_light_accessors_cover_supported_versions() {
         };
         light.set_shadow_casting(true);
         light.set_shadow_casting_range(range);
-        let decoded = Light::<V>::decode(&light.encode().unwrap()).unwrap();
+        let decoded = Light::<V>::decode_mdx(&light.encode_mdx().unwrap()).unwrap();
         assert!(decoded.shadow_casting());
         assert_eq!(decoded.shadow_casting_range(), range);
     }
@@ -197,7 +206,7 @@ fn infallible_light_accessors_cover_supported_versions() {
             damping: 0.3,
         };
         light.set_falloff(falloff);
-        let decoded = Light::<V>::decode(&light.encode().unwrap()).unwrap();
+        let decoded = Light::<V>::decode_mdx(&light.encode_mdx().unwrap()).unwrap();
         assert_eq!(decoded.falloff(), falloff);
     }
     check_intensity::<V1200>();

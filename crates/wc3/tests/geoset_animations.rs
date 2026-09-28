@@ -13,7 +13,7 @@ fn geoset_animation_fields_round_trip() {
     animation.set_color([0.1, 0.2, 0.3]);
     let mut model = Model::<wc3::model::V1800>::new();
     model.set_geoset_animations(&[animation]);
-    let parsed = Model::<wc3::model::V1800>::decode(&model.encode().unwrap()).unwrap();
+    let parsed = Model::<wc3::model::V1800>::decode_mdx(&model.encode_mdx().unwrap()).unwrap();
     let actual = &parsed.geoset_animations()[0];
     assert_eq!(actual.geoset_id(), 2);
     assert_eq!(actual.alpha(), 0.5);
@@ -36,11 +36,11 @@ fn local_geoset_animations_round_trip_when_available() {
                 pending.push(path);
             } else if path.extension().is_some_and(|extension| extension == "mdx") {
                 let bytes = std::fs::read(&path).unwrap();
-                let mut model = Model::<wc3::model::V1800>::decode(&bytes).unwrap();
+                let mut model = Model::<wc3::model::V1800>::decode_mdx(&bytes).unwrap();
                 if model.chunk(*b"GEOA").is_some() {
                     let records = model.geoset_animations();
                     model.set_geoset_animations(&records);
-                    assert_eq!(model.encode().unwrap(), bytes);
+                    assert_eq!(model.encode_mdx().unwrap(), bytes);
                 }
             }
         }
@@ -60,6 +60,6 @@ fn geoset_animation_color_track_round_trip() {
     .unwrap()
     .into();
     animation.set_tracks(std::slice::from_ref(&track));
-    let parsed = GeosetAnimation::decode(&animation.encode().unwrap()).unwrap();
+    let parsed = GeosetAnimation::decode_mdx(&animation.encode_mdx().unwrap()).unwrap();
     assert_eq!(parsed.tracks(), vec![track]);
 }

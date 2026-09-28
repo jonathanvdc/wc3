@@ -26,7 +26,7 @@ enum CollisionGeometry {
 }
 
 impl mdx::Read for CollisionGeometry {
-    fn read_from(cursor: &mut Cursor<'_>) -> Result<Self, ReadError> {
+    fn read_mdx(cursor: &mut Cursor<'_>) -> Result<Self, ReadError> {
         let kind_offset = cursor.absolute_position();
         let kind = cursor.read::<u32>()?;
         match kind {
@@ -46,7 +46,7 @@ impl mdx::Read for CollisionGeometry {
 }
 
 impl mdx::Write for CollisionGeometry {
-    fn write_to(&self, bytes: &mut Encoder<'_>) -> Result<(), WriteError> {
+    fn write_mdx(&self, bytes: &mut Encoder<'_>) -> Result<(), WriteError> {
         let kind = match self {
             Self::Box(_) => 0u32,
             Self::Plane(_) => 1,

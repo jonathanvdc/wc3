@@ -832,7 +832,7 @@ impl<V: ModelVersion> Model<V> {
 }
 
 impl<V: ModelVersion> mdx::Read for Geoset<V> {
-    fn read_from(source: &mut Cursor<'_>) -> Result<Self, ReadError> {
+    fn read_mdx(source: &mut Cursor<'_>) -> Result<Self, ReadError> {
         let mut cursor = source.slice_u32_sized()?;
 
         let value = {
@@ -895,7 +895,7 @@ impl<V: ModelVersion> mdx::Read for Geoset<V> {
 }
 
 impl<V: ModelVersion> mdx::Write for Geoset<V> {
-    fn write_to(&self, bytes: &mut Encoder<'_>) -> Result<(), WriteError> {
+    fn write_mdx(&self, bytes: &mut Encoder<'_>) -> Result<(), WriteError> {
         let start = bytes.position();
         let marker = bytes.begin_sized();
         write_vectors(bytes, *b"VRTX", &self.vertices)?;
