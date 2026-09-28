@@ -1,0 +1,12 @@
+Camera "Portrait" {
+	Position { 0.0, -180.0, 90.0 },
+	FieldOfView 0.7853982,
+	FarClip 1000.0,
+	NearClip 0.1,
+	DOFDistance 180.0,
+	FocalLength 50.0,
+	FStop 2.8,
+	Target {
+		Position { 0.0, 0.0, 70.0 },
+	}
+}

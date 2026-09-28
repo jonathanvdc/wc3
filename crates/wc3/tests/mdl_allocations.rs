@@ -191,3 +191,22 @@ fn model_assembly_writes_borrowed_collections_without_allocating() {
     });
     assert_eq!(count, 0);
 }
+
+#[test]
+fn cameras_particle2_and_popcorn_write_borrowed_tracks_without_allocating() {
+    use wc3::model::emitters::{ParticleEmitter2, PopcornEmitter};
+    use wc3::model::scene::Camera;
+    use wc3::model::V1800;
+    let camera = Camera::<V1800>::decode_mdl("Camera \"c\" { FieldOfView 1, FarClip 100, Translation 1 { Linear, -1: { 1, 2, 3 }, } DOFDistance 20, Target { Translation 1 { Linear, -2: { 3, 2, 1 }, } } Visibility 1 { Linear, 0: 1, } }").unwrap();
+    let particle = ParticleEmitter2::decode_mdl("ParticleEmitter2 \"p\" { ObjectId 0, Speed 1 { Linear, -1: 2, } Visibility 1 { Linear, 0: 1, } }").unwrap();
+    let popcorn = PopcornEmitter::decode_mdl("ParticleEmitterPopcorn \"p\" { ObjectId 0, Color 1 { Linear, -2: { 1, 2, 3 }, } LifeSpan 1 { Linear, 0: 1, } }").unwrap();
+    let mut storage = [0u8; 8192];
+    let (_, count) = measured(|| {
+        let mut writer = MdlWriter::new(IoCursor::new(&mut storage[..]));
+        writer.write(&camera).unwrap();
+        writer.write(&particle).unwrap();
+        writer.write(&popcorn).unwrap();
+        writer.finish().unwrap();
+    });
+    assert_eq!(count, 0);
+}

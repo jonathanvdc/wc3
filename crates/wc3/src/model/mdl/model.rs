@@ -2,12 +2,13 @@
 use super::{Field, Fields, MdlWriter, Parser, ReadErrorKind, Span, TokenKind};
 use crate::model::mdl;
 use crate::model::{
-    AttachmentsChunk, BindPoseChunk, BonesChunk, CollectionChunk, CollisionShapesChunk,
-    DynamicModel, EventObjectsChunk, FaceFxChunk, GeosetAnimationsChunk, GeosetsChunk,
-    GlidersChunk, GlobalSequencesChunk, HelpersChunk, LightsChunk, MaterialsChunk, Model,
-    ModelChunk, ModelInfoChunk, ModelVersion, ParticleEmittersChunk, PivotPointsChunk,
-    RibbonEmittersChunk, SequencesChunk, TextureAnimationsChunk, TexturesChunk, VersionChunk,
-    V1000, V1100, V1200, V1300, V1400, V1600, V1800, V800, V900,
+    AttachmentsChunk, BindPoseChunk, BonesChunk, CamerasChunk, CollectionChunk,
+    CollisionShapesChunk, DynamicModel, EventObjectsChunk, FaceFxChunk, GeosetAnimationsChunk,
+    GeosetsChunk, GlidersChunk, GlobalSequencesChunk, HelpersChunk, LightsChunk, MaterialsChunk,
+    Model, ModelChunk, ModelInfoChunk, ModelVersion, ParticleEmitters2Chunk, ParticleEmittersChunk,
+    PivotPointsChunk, PopcornEmittersChunk, RibbonEmittersChunk, SequencesChunk,
+    TextureAnimationsChunk, TexturesChunk, VersionChunk, V1000, V1100, V1200, V1300, V1400, V1600,
+    V1800, V800, V900,
 };
 use std::io::Write as IoWrite;
 
@@ -120,16 +121,17 @@ impl<V: ModelVersion> mdl::Read for Model<V> {
                 "EventObject" => repeated!(EventObjects, EventObjectsChunk),
                 "CollisionShape" => repeated!(CollisionShapes, CollisionShapesChunk),
                 "Glider" => repeated!(Gliders, GlidersChunk),
+                "Camera" => repeated!(Cameras, CamerasChunk<V>),
+                "ParticleEmitter2" => repeated!(ParticleEmitters2, ParticleEmitters2Chunk),
+                "ParticleEmitterPopcorn" if V::NUMBER >= 900 => {
+                    repeated!(PopcornEmitters, PopcornEmittersChunk)
+                }
                 "FaceFX" if V::NUMBER >= 900 => repeated!(FaceFx, FaceFxChunk),
                 "BindPose" if V::NUMBER >= 900 => {
                     fields.mark(7, field)?;
                     model.push(parser.read::<BindPoseChunk>()?.into());
                 }
-                "FaceFX"
-                | "BindPose"
-                | "Camera"
-                | "ParticleEmitter2"
-                | "ParticleEmitterPopcorn" => {
+                "FaceFX" | "BindPose" | "ParticleEmitterPopcorn" => {
                     return Err(mdl::ReadError::new(
                         field.span,
                         ReadErrorKind::UnsupportedField,
@@ -202,22 +204,10 @@ impl<V: ModelVersion> mdl::Write for Model<V> {
                 ModelChunk::Unknown(_) => {
                     return Err(mdl::WriteError::Unsupported("opaque binary chunk"))
                 }
-                ModelChunk::Cameras(chunk) => {
-                    if !chunk.records.is_empty() {
-                        return Err(mdl::WriteError::Unsupported("Camera record codec"));
-                    }
-                }
-                ModelChunk::ParticleEmitters2(chunk) => {
-                    if !chunk.records.is_empty() {
-                        return Err(mdl::WriteError::Unsupported(
-                            "ParticleEmitter2 record codec",
-                        ));
-                    }
-                }
                 ModelChunk::PopcornEmitters(chunk) => {
-                    if !chunk.records.is_empty() {
+                    if V::NUMBER < 900 && !chunk.records.is_empty() {
                         return Err(mdl::WriteError::Unsupported(
-                            "ParticleEmitterPopcorn record codec",
+                            "ParticleEmitterPopcorn before version 900",
                         ));
                     }
                 }
@@ -231,7 +221,9 @@ impl<V: ModelVersion> mdl::Write for Model<V> {
                         return Err(mdl::WriteError::Unsupported("BindPose before version 900"));
                     }
                 }
-                ModelChunk::Sequences(_)
+                ModelChunk::Cameras(_)
+                | ModelChunk::ParticleEmitters2(_)
+                | ModelChunk::Sequences(_)
                 | ModelChunk::GlobalSequences(_)
                 | ModelChunk::Textures(_)
                 | ModelChunk::Materials(_)
@@ -272,8 +264,11 @@ impl<V: ModelVersion> mdl::Write for Model<V> {
         collection!(AttachmentsChunk, None);
         collection!(PivotPointsChunk, Some("PivotPoints"));
         collection!(ParticleEmittersChunk, None);
+        collection!(ParticleEmitters2Chunk, None);
         collection!(RibbonEmittersChunk, None);
+        collection!(PopcornEmittersChunk, None);
         collection!(EventObjectsChunk, None);
+        collection!(CamerasChunk<V>, None);
         collection!(CollisionShapesChunk, None);
         collection!(FaceFxChunk, None);
         if self

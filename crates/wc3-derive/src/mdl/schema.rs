@@ -424,10 +424,16 @@ pub(super) fn parse(input: &DeriveInput, options: &Container) -> Result<Schema> 
                     .then_some(index)
                 }));
             } else if let Some(index) = fields.iter().position(|field| {
-                field.parent.is_none()
-                    && field.member == *name
-                    && !matches!(field.kind, Kind::Header | Kind::Skip)
+                field.member == *name && !matches!(field.kind, Kind::Header | Kind::Skip)
             }) {
+                if fields.iter().skip(index + 1).any(|field| {
+                    field.member == *name && !matches!(field.kind, Kind::Header | Kind::Skip)
+                }) {
+                    return Err(Error::new_spanned(
+                        name,
+                        "ambiguous write_order member; use its projection group",
+                    ));
+                }
                 body_order.push(index);
             } else {
                 return Err(Error::new_spanned(name, "write_order must list every body field exactly once, excluding headers and skipped fields"));

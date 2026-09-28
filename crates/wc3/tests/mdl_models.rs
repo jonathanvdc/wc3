@@ -8,7 +8,7 @@ use wc3::model::emitters::{ParticleEmitter2, PopcornEmitter};
 use wc3::model::geometry::BindPoseMatrix;
 use wc3::model::mdl::{Read as _, Write as _};
 use wc3::model::mdx::{Read as _, Write as _};
-use wc3::model::scene::{Camera, FaceFx, Glider, ModelInfo, Node};
+use wc3::model::scene::{Camera, CameraVariant, FaceFx, Glider, ModelInfo, Node};
 use wc3::model::{
     mdl, DynamicModel, Model, ModelVersion, V1000, V1100, V1200, V1300, V1400, V1600, V1800, V800,
     V900,
@@ -203,17 +203,12 @@ fn malformed_and_duplicate_top_level_blocks_retain_diagnostics() {
         assert_eq!(error.kind, mdl::ReadErrorKind::UnknownField);
         assert_eq!(&source[error.span.start..error.span.end], name);
     }
-    for name in ["Camera", "ParticleEmitter2", "ParticleEmitterPopcorn"] {
-        assert_eq!(
-            Model::<V900>::decode_mdl(&format!(
-                "{} {name} \"a\" {{}}",
-                MINIMAL.replace("800", "900")
-            ))
+    assert_eq!(
+        Model::<V800>::decode_mdl(&format!("{MINIMAL} ParticleEmitterPopcorn \"a\" {{}}"))
             .unwrap_err()
             .kind,
-            mdl::ReadErrorKind::UnsupportedField
-        );
-    }
+        mdl::ReadErrorKind::UnsupportedField
+    );
     assert_eq!(
         Model::<V800>::decode_mdl(&format!("{MINIMAL} ,"))
             .unwrap_err()
@@ -298,7 +293,9 @@ fn writer_rejects_missing_duplicate_extended_opaque_and_unsupported_chunks() {
     model.push(BindPoseChunk::new(vec![BindPoseMatrix([0.0; 12])]).into());
     assert!(model.encode_mdl().is_err());
     let mut model = base.clone();
-    model.push(CamerasChunk::<V800>::new(vec![Camera::<V800>::new("camera").unwrap()]).into());
+    let mut camera = Camera::<V800>::new("camera").unwrap();
+    camera.set_variant(CameraVariant::Variant1([0; 12]));
+    model.push(CamerasChunk::<V800>::new(vec![camera]).into());
     assert!(model.encode_mdl().is_err());
     let mut model = base.clone();
     model.push(

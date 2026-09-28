@@ -1,5 +1,8 @@
 //! Particle emitter 2 records in `PRE2` chunks.
-use crate::model::mdx;
+use crate::model::mdl::is_zero;
+use crate::model::{mdl, mdx};
+use mdl_codec::SegmentColors;
+mod mdl_codec;
 use crate::model::ModelVersion;
 crate::model::animation::track_group! {
     pub enum Particle2Track {
@@ -57,8 +60,8 @@ pub struct Particle2Fields {
     pub gravity: f32,
     pub life_span: f32,
     pub emission_rate: f32,
-    pub width: f32,
     pub length: f32,
+    pub width: f32,
     pub filter_mode: u32,
     pub rows: u32,
     pub columns: u32,
@@ -97,11 +100,70 @@ impl Particle2Fields {
 }
 
 /// A particle emitter 2 with decoded fields and animation tracks.
-#[derive(Clone, Debug, PartialEq, mdx::Read, mdx::Write)]
+#[derive(Clone, Debug, PartialEq, mdx::Read, mdx::Write, mdl::Read, mdl::Write)]
 #[mdx(sized(tag = ParticleEmitters2Chunk::TAG))]
+#[mdl(block = "ParticleEmitter2", after_read = "Self::finish_mdl", validate_write = "Self::validate_mdl",
+    write_order(node, speed, variation, latitude, gravity, life_span, emission_rate, length, width,
+        filter, rows, columns, frames, tail_length, time, segments, alpha, particle_scaling,
+        life_uv, decay_uv, tail_uv, tail_decay_uv, texture_id, squirt, priority_plane, replaceable_id, tracks),
+    virtual_fields(
+        #[mdl(flags(Blend = 1, Additive = 2, Modulate = 4, Modulate2x = 8, AlphaKey = 16), get = "Self::mdl_filter", set = "Self::set_mdl_filter")]
+        filter: u32,
+        #[mdl(flags(Head = 1, Tail = 2, Both = 4), get = "Self::mdl_frames", set = "Self::set_mdl_frames")]
+        frames: u32,
+        #[mdl(property = "SegmentColor", delegate, get = "Self::mdl_segments", set = "Self::set_mdl_segments")]
+        segments: SegmentColors,
+        #[mdl(property = "LifeSpanUVAnim", default, get = "Self::mdl_life_uv", set = "Self::set_mdl_life_uv")]
+        life_uv: [u32; 3],
+        #[mdl(property = "DecayUVAnim", default, get = "Self::mdl_decay_uv", set = "Self::set_mdl_decay_uv")]
+        decay_uv: [u32; 3],
+        #[mdl(property = "TailUVAnim", default, get = "Self::mdl_tail_uv", set = "Self::set_mdl_tail_uv")]
+        tail_uv: [u32; 3],
+        #[mdl(property = "TailDecayUVAnim", default, get = "Self::mdl_tail_decay_uv", set = "Self::set_mdl_tail_decay_uv")]
+        tail_decay_uv: [u32; 3],
+    )
+)]
 pub struct ParticleEmitter2 {
+    #[mdl(
+        flatten,
+        extra_flags(
+            get = "Node::flags",
+            set = "Node::set_flags",
+            SortPrimsFarZ = 65536,
+            LineEmitter = 131072,
+            Unfogged = 262144,
+            ModelSpace = 524288,
+            Unshaded = 32768,
+            XYQuad = 1048576
+        )
+    )]
     node: Node,
+    #[mdl(project(
+        #[mdl(animatable = "Speed", track = "Particle2Track::Speed", default)] speed: f32,
+        #[mdl(animatable = "Variation", track = "Particle2Track::Variation", default)] variation: f32,
+        #[mdl(animatable = "Latitude", track = "Particle2Track::Latitude", default)] latitude: f32,
+        #[mdl(animatable = "Gravity", track = "Particle2Track::Gravity", default)] gravity: f32,
+        #[mdl(property = "LifeSpan", default)] life_span: f32,
+        #[mdl(animatable = "EmissionRate", track = "Particle2Track::EmissionRate", default)] emission_rate: f32,
+        #[mdl(animatable = "Length", track = "Particle2Track::Length", default)] length: f32,
+        #[mdl(animatable = "Width", track = "Particle2Track::Width", default)] width: f32,
+        #[mdl(property = "Rows", default)] rows: u32,
+        #[mdl(property = "Columns", default)] columns: u32,
+        #[mdl(property = "TailLength", default)] tail_length: f32,
+        #[mdl(property = "Time", default)] time: f32,
+        #[mdl(property = "Alpha", default)] alpha: [u8; 3],
+        #[mdl(property = "ParticleScaling", default)] particle_scaling: Vec3,
+        #[mdl(property = "TextureID", default)] texture_id: u32,
+        #[mdl(property = "Squirt", default, skip_if = "is_zero")] squirt: u32,
+        #[mdl(property = "PriorityPlane", default, skip_if = "is_zero")] priority_plane: u32,
+        #[mdl(property = "ReplaceableId", default, skip_if = "is_zero")] replaceable_id: u32,
+        #[mdl(skip, default)] filter_mode: u32,
+        #[mdl(skip, default)] frame_flags: u32,
+        #[mdl(skip, default)] segment_colors: [Color; 3],
+        #[mdl(skip, default)] uv_animations: [[u32; 3]; 4],
+    ))]
     fields: Particle2Fields,
+    #[mdl(tracks, channels(Visibility = "Particle2Track::Visibility"))]
     tracks: Vec<Particle2Track>,
 }
 

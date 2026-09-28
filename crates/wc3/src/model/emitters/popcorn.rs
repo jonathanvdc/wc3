@@ -1,5 +1,7 @@
 //! Reforged popcorn particle emitters in `CORN` chunks.
-use crate::model::mdx;
+use crate::model::mdl::{is_zero, Span};
+use crate::model::scene::{set_node_kind, validate_node_kind};
+use crate::model::{mdl, mdx};
 use crate::model::{ModelVersion, SupportsReforgedChunks};
 crate::model::animation::track_group! {
     pub enum PopcornTrack {
@@ -26,18 +28,51 @@ use crate::model::{Model, Node};
 const PATH_SIZE: usize = 260;
 
 /// A popcorn particle emitter with decoded fields and animation tracks.
-#[derive(Clone, Debug, PartialEq, mdx::Read, mdx::Write)]
+#[derive(Clone, Debug, PartialEq, mdx::Read, mdx::Write, mdl::Read, mdl::Write)]
 #[mdx(sized(tag = PopcornEmittersChunk::TAG))]
+#[mdl(
+    block = "ParticleEmitterPopcorn",
+    after_read = "finish_popcorn",
+    validate_write = "validate_popcorn"
+)]
 pub struct PopcornEmitter {
+    #[mdl(
+        flatten,
+        extra_flags(
+            get = "Node::flags",
+            set = "Node::set_flags",
+            SortPrimsFarZ = 65536,
+            Unshaded = 32768,
+            Unfogged = 131072,
+            PopcornScaling = 262144
+        )
+    )]
     node: Node,
+    #[mdl(
+        animatable = "LifeSpan",
+        track = "PopcornTrack::Lifespan",
+        default = "one"
+    )]
     life_span: f32,
+    #[mdl(
+        animatable = "EmissionRate",
+        track = "PopcornTrack::EmissionRate",
+        default = "one"
+    )]
     emission_rate: f32,
+    #[mdl(animatable = "Speed", track = "PopcornTrack::Speed", default = "one")]
     speed: f32,
+    #[mdl(animatable = "Color", track = "PopcornTrack::Color", default = "white")]
     color: Color,
+    #[mdl(animatable = "Alpha", track = "PopcornTrack::Alpha", default = "one")]
     alpha: f32,
+    #[mdl(property = "ReplaceableId", default, skip_if = "is_zero")]
     replaceable_id: u32,
+    #[mdl(property = "Path", default)]
     path: FixedText<PATH_SIZE>,
+    #[mdl(property = "AnimVisibilityGuide", default)]
     visibility_guide: FixedText<PATH_SIZE>,
+    #[mdl(tracks, channels(Visibility = "PopcornTrack::Visibility"))]
     tracks: Vec<PopcornTrack>,
 }
 
@@ -171,4 +206,18 @@ impl<V: SupportsReforgedChunks> Model<V> {
     pub fn set_popcorn_emitters(&mut self, emitters: &[PopcornEmitter]) {
         self.replace_chunk(PopcornEmittersChunk::new(emitters.to_vec()));
     }
+}
+
+fn one() -> f32 {
+    1.0
+}
+fn white() -> Color {
+    [1.0; 3]
+}
+fn finish_popcorn(value: &mut PopcornEmitter, _: Span) -> Result<(), mdl::ReadError> {
+    set_node_kind(&mut value.node, 0x1000);
+    Ok(())
+}
+fn validate_popcorn(value: &PopcornEmitter) -> Result<(), mdl::WriteError> {
+    validate_node_kind(&value.node, 0x1000 | (value.node.flags().bits() & 0x78000))
 }

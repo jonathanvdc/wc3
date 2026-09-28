@@ -1,0 +1,11 @@
+ParticleEmitterPopcorn "PopcornFire" {
+	ObjectId 23,
+	Parent 0,
+	static LifeSpan 1.0,
+	static EmissionRate 1.0,
+	static Speed 1.0,
+	static Color { 1.0, 1.0, 1.0 },
+	static Alpha 1.0,
+	Path "SharedFX\Hero_Glow\Hero_Glow.pkfx",
+	AnimVisibilityGuide "Always=on, Death=off",
+}

@@ -39,9 +39,10 @@
 //! record order and omit empty optional collections. IDs and references are
 //! preserved; hierarchy validation is separate. Opaque chunks, duplicate or
 //! extended Version/Model chunks and unrepresentable record data cause errors.
-//! Camera, ParticleEmitter2 and ParticleEmitterPopcorn record codecs are still
-//! pending: their input blocks and nonempty binary collections return explicit
-//! unsupported errors.
+//! Camera, ParticleEmitter2 and ParticleEmitterPopcorn have derived record
+//! codecs too. Popcorn model blocks require version 900 or newer. Camera
+//! writing requires the version's default binary variant and canonical channel
+//! order; scalar depth-of-field input writes as keyed tracks.
 //!
 //! ```
 //! use wc3::model::{Model, DynamicModel, V800};

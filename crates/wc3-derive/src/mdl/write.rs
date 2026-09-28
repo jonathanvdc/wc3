@@ -73,8 +73,8 @@ pub(super) fn expand(
             Kind::Repeated(_) => {
                 if let Some(key) = &field.unique_by {
                     required_flags.push(quote! {
-                        for (index, item) in #access.iter().enumerate() {
-                            if #access[..index].iter().any(|previous| #key(previous) == #key(item)) {
+                        for (index, item) in (#access).iter().enumerate() {
+                            if (#access).iter().take(index).any(|previous| #key(previous) == #key(item)) {
                                 return Err(::wc3::model::mdl::WriteError::Unsupported("duplicate repeated record"));
                             }
                         }

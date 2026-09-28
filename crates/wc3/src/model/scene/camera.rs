@@ -8,7 +8,9 @@ use crate::model::mdl::{MdlWriter, Parser, ReadErrorKind, TokenKind};
 use crate::model::mdx;
 use crate::model::ConversionError;
 use crate::model::ModelVersion;
+use mdl_codec::Target;
 use std::io::Write as IoWrite;
+mod mdl_codec;
 crate::model::animation::track_group! {
     @binary pub enum CameraTrack {
         Translation: CameraTranslation,
@@ -96,16 +98,38 @@ impl CameraLayout for V1800 {
 }
 
 /// A camera with decoded fixed fields and animation tracks.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, mdl::Read, mdl::Write)]
+#[mdl(block = "Camera", validate_write = "Self::validate_mdl",
+    write_order(position, transforms, field_of_view, far_clip, near_clip, lens, target, visibility),
+    virtual_fields(
+        #[mdl(repeated(Translation, Rotation), unique_by = "CameraTrack::tag", get = "Self::mdl_transforms", set = "Self::set_mdl_transforms")]
+        transforms: Vec<CameraTrack>,
+        #[mdl(repeated(DOFDistance, FocusDistanceKeys, FocalLength, FocalLengthKeys, FStop, FStopKeys), unique_by = "CameraTrack::tag", get = "Self::mdl_lens", set = "Self::set_mdl_lens")]
+        lens: Vec<CameraTrack>,
+        #[mdl(block = "Target", default, get = "Self::mdl_target", set = "Self::set_mdl_target")]
+        target: Target,
+        #[mdl(repeated = "Visibility", unique_by = "CameraTrack::tag", get = "Self::mdl_visibility", set = "Self::set_mdl_visibility")]
+        visibility: Vec<CameraTrack>,
+    )
+)]
 pub struct Camera<V: ModelVersion> {
+    #[mdl(header)]
     name: FixedText<NAME_SIZE>,
+    #[mdl(skip, default = "Self::mdl_variant")]
     variant: CameraVariant,
+    #[mdl(property = "Position", default)]
     position: Vec3,
+    #[mdl(property = "FieldOfView")]
     field_of_view: f32,
+    #[mdl(property = "FarClip")]
     far_clip: f32,
+    #[mdl(property = "NearClip", default)]
     near_clip: f32,
+    #[mdl(skip, default)]
     target_position: Vec3,
+    #[mdl(skip, default)]
     tracks: Vec<CameraTrack>,
+    #[mdl(skip, default)]
     version: PhantomData<V>,
 }
 

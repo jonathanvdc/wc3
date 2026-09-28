@@ -181,8 +181,10 @@ block, check counts and duplicates, and preserve record order and object IDs.
 Writers emit canonical order, merge known collection chunks and omit empty
 optional lists. Opaque chunks, duplicate or extended Version/Model chunks,
 and binary data without a faithful text representation are errors.
-Camera, ParticleEmitter2 and ParticleEmitterPopcorn record codecs remain
-pending; model I/O rejects those blocks and nonempty collections explicitly.
+Camera, ParticleEmitter2 and ParticleEmitterPopcorn also have derived record
+codecs. Popcorn model blocks require version 900 or newer. Camera output uses
+the version's default binary variant and canonical channel order; other
+variants or channel orders return preservation errors.
 
 ```rust
 use wc3::model::{DynamicModel, Model, V800};
