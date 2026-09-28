@@ -1,4 +1,6 @@
 //! Typed geoset sections and lossless MDX serialization.
+use crate::conversion::ConversionContext;
+use crate::ConversionError;
 use crate::EncodeError;
 use crate::Encoder;
 use crate::KnownChunk;
@@ -103,6 +105,9 @@ pub struct GeosetLevelOfDetailFields {
 
 /// The level-of-detail fields selected by a model version.
 pub trait GeosetLevelOfDetail: Default + Readable + Writable + Clone + Debug + PartialEq {
+    fn fixed_name(&self) -> Option<&FixedText<80>> {
+        None
+    }
     fn level_of_detail(&self) -> Option<u32> {
         None
     }
@@ -123,6 +128,9 @@ pub struct NoGeosetLevelOfDetail;
 impl GeosetLevelOfDetail for NoGeosetLevelOfDetail {}
 
 impl GeosetLevelOfDetail for GeosetLevelOfDetailFields {
+    fn fixed_name(&self) -> Option<&FixedText<80>> {
+        Some(&self.name)
+    }
     fn level_of_detail(&self) -> Option<u32> {
         Some(self.level_of_detail)
     }
@@ -976,5 +984,71 @@ impl<V: SupportsReforgedChunks> Geoset<V> {
     }
     pub fn set_skin_weights(&mut self, weights: Option<&[SkinWeights]>) -> Result<(), ValueError> {
         self.try_set_skin_weights(weights)
+    }
+}
+
+impl<V: ModelVersion> Geoset<V> {
+    pub(crate) fn convert_with<T: ModelVersion>(
+        &self,
+        context: &mut ConversionContext<'_>,
+        path: &str,
+    ) -> Result<Geoset<T>, ConversionError> {
+        let mut level_of_detail = T::LevelOfDetail::default();
+        context.field(
+            self.level_of_detail.level_of_detail(),
+            level_of_detail.level_of_detail_mut(),
+            0,
+            &format!("{path}.level_of_detail"),
+        )?;
+        context.field(
+            self.level_of_detail.fixed_name().copied(),
+            level_of_detail.name_mut(),
+            FixedText::default(),
+            &format!("{path}.name"),
+        )?;
+        let mut extra_sections = T::ExtraSections::default();
+        if let Some(source) = self.extra_sections.reforged() {
+            for (index, section) in source.sections.iter().enumerate() {
+                let section_path = format!("{path}.extra_sections[{index}]");
+                let supported = T::NUMBER >= 900;
+                let fits = match section {
+                    GeosetExtraSection::Skin { weights } => {
+                        T::NUMBER >= 1400
+                            || weights
+                                .iter()
+                                .all(|vertex| vertex.bone_indices.iter().all(|&bone| bone <= 255))
+                    }
+                    _ => true,
+                };
+                if supported && fits {
+                    extra_sections
+                        .reforged_mut()
+                        .expect("supported extra sections")
+                        .sections
+                        .push(section.clone());
+                } else {
+                    context.drop(&section_path, if !supported { "geoset section is not supported by the target" } else { "skin bone indices exceed the target's 8-bit range; conversion requires dropping the whole skin section" })?;
+                }
+            }
+        }
+        Ok(Geoset {
+            version: PhantomData,
+            level_of_detail,
+            extra_sections,
+            vertices: self.vertices.clone(),
+            normals: self.normals.clone(),
+            primitive_types: self.primitive_types.clone(),
+            primitive_counts: self.primitive_counts.clone(),
+            faces: self.faces.clone(),
+            vertex_groups: self.vertex_groups.clone(),
+            matrix_group_sizes: self.matrix_group_sizes.clone(),
+            matrix_indices: self.matrix_indices.clone(),
+            material_id: self.material_id,
+            selection_group: self.selection_group,
+            unselectable_raw: self.unselectable_raw,
+            extent: self.extent,
+            sequence_extents: self.sequence_extents.clone(),
+            uv_sets: self.uv_sets.clone(),
+        })
     }
 }

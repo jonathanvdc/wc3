@@ -1,4 +1,6 @@
 //! Typed camera records in `CAMS` chunks.
+use crate::conversion::ConversionContext;
+use crate::ConversionError;
 use crate::ModelVersion;
 crate::animation::track_group! {
     pub enum CameraTrack {
@@ -267,5 +269,25 @@ impl<V: ModelVersion> Writable for Camera<V> {
             u32::from(self.variant.value()) << 24,
         )?;
         Ok(())
+    }
+}
+
+impl<V: ModelVersion> Camera<V> {
+    pub(crate) fn convert_with<T: ModelVersion>(
+        &self,
+        _: &mut ConversionContext<'_>,
+        _: &str,
+    ) -> Result<Camera<T>, ConversionError> {
+        Ok(Camera {
+            name: self.name,
+            variant: self.variant,
+            position: self.position,
+            field_of_view: self.field_of_view,
+            far_clip: self.far_clip,
+            near_clip: self.near_clip,
+            target_position: self.target_position,
+            tracks: self.tracks.clone(),
+            version: PhantomData,
+        })
     }
 }

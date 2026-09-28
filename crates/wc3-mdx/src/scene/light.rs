@@ -1,4 +1,6 @@
 //! Light records in `LITE` chunks.
+use crate::conversion::ConversionContext;
+use crate::ConversionError;
 use crate::{
     ModelVersion, SupportsLightFalloff, SupportsLightShadowCasting, SupportsLightShadowIntensity,
 };
@@ -484,5 +486,67 @@ impl<V: ModelVersion> Model<V> {
     /// Replaces lights in the first `LITE` chunk.
     pub fn set_lights(&mut self, lights: &[Light<V>]) {
         self.replace_chunk(LightsChunk::new(lights.to_vec()));
+    }
+}
+
+impl<V: ModelVersion> Light<V> {
+    pub(crate) fn convert_with<T: ModelVersion>(
+        &self,
+        context: &mut ConversionContext<'_>,
+        path: &str,
+    ) -> Result<Light<T>, ConversionError> {
+        let mut target = Light::<T>::new(self.node.clone(), self.light_type);
+        target.attenuation_start = self.attenuation_start;
+        target.attenuation_end = self.attenuation_end;
+        target.color = self.color;
+        target.intensity = self.intensity;
+        target.ambient_color = self.ambient_color;
+        target.ambient_intensity = self.ambient_intensity;
+
+        context.field(
+            self.shadow_casting.shadow_casting(),
+            target.shadow_casting.shadow_casting_mut(),
+            0,
+            &format!("{path}.shadow_casting"),
+        )?;
+        context.field(
+            self.shadow_intensity.shadow_intensity(),
+            target.shadow_intensity.shadow_intensity_mut(),
+            0.0,
+            &format!("{path}.shadow_intensity"),
+        )?;
+        context.field(
+            self.shadow_range.shadow_casting_range(),
+            target.shadow_range.shadow_casting_range_mut(),
+            LightShadowRange::default(),
+            &format!("{path}.shadow_range"),
+        )?;
+        context.field(
+            self.falloff.falloff(),
+            target.falloff.falloff_mut(),
+            LightFalloff::default(),
+            &format!("{path}.falloff"),
+        )?;
+        for (index, track) in self.tracks.iter().enumerate() {
+            let supported = V::NUMBER == T::NUMBER
+                || match track {
+                    LightTrack::ShadowCastingStart(_) | LightTrack::ShadowCastingEnd(_) => {
+                        T::NUMBER >= 1300
+                    }
+                    LightTrack::QuadraticFalloff(_)
+                    | LightTrack::LinearFalloff(_)
+                    | LightTrack::Damping(_) => T::NUMBER >= 1600,
+                    _ => true,
+                };
+            if supported {
+                target.tracks.push(track.clone());
+            } else {
+                context.drop(
+                    &format!("{path}.tracks[{index}]"),
+                    "animation track is not supported by the target",
+                )?;
+            }
+        }
+        Ok(target)
     }
 }

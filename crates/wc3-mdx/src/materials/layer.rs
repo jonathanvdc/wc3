@@ -1,4 +1,6 @@
 //! Material layers, animation tracks, and version-specific texture slots.
+use crate::conversion::ConversionContext;
+use crate::ConversionError;
 use bitfield::bitfield;
 use std::{fmt::Debug, marker::PhantomData};
 
@@ -534,5 +536,65 @@ impl<V: SupportsLayerTextureSlots> Layer<V> {
     pub fn set_texture_slots(&mut self, value: &[LayerTextureSlot]) {
         self.try_set_texture_slots(value)
             .expect("supported version");
+    }
+}
+
+impl<V: ModelVersion> Layer<V> {
+    pub(crate) fn convert_with<T: ModelVersion>(
+        &self,
+        context: &mut ConversionContext<'_>,
+        path: &str,
+    ) -> Result<Layer<T>, ConversionError> {
+        let mut target = Layer::<T>::new();
+        target.filter_mode = self.filter_mode;
+        target.shading_flags = self.shading_flags;
+        target.texture_id = self.texture_id;
+        target.texture_animation_id = self.texture_animation_id;
+        target.coordinate_id = self.coordinate_id;
+        target.alpha = self.alpha;
+
+        context.field(
+            self.emissive_gain.emissive_gain(),
+            target.emissive_gain.emissive_gain_mut(),
+            1.0,
+            &format!("{path}.emissive_gain"),
+        )?;
+        context.field(
+            self.fresnel.fresnel(),
+            target.fresnel.fresnel_mut(),
+            LayerFresnel::default(),
+            &format!("{path}.fresnel"),
+        )?;
+        context.field(
+            self.shader_type_id.shader_type_id(),
+            target.shader_type_id.shader_type_id_mut(),
+            0,
+            &format!("{path}.shader_type_id"),
+        )?;
+        context.field(
+            self.texture_slots.texture_slots().map(<[_]>::to_vec),
+            target.texture_slots.texture_slots_mut(),
+            Vec::new(),
+            &format!("{path}.texture_slots"),
+        )?;
+        for (index, track) in self.tracks.iter().enumerate() {
+            let supported = V::NUMBER == T::NUMBER
+                || match track {
+                    LayerTrack::EmissiveGain(_) => T::NUMBER >= 900,
+                    LayerTrack::FresnelColor(_)
+                    | LayerTrack::FresnelOpacity(_)
+                    | LayerTrack::FresnelTeamColor(_) => T::NUMBER >= 1000,
+                    _ => true,
+                };
+            if supported {
+                target.tracks.push(track.clone());
+            } else {
+                context.drop(
+                    &format!("{path}.tracks[{index}]"),
+                    "animation track is not supported by the target",
+                )?;
+            }
+        }
+        Ok(target)
     }
 }

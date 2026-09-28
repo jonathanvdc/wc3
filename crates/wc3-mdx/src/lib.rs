@@ -55,3 +55,9 @@ pub use versions::{
     SupportsLightShadowIntensity, SupportsMaterialShaderPath, SupportsReforgedChunks, V1000, V1100,
     V1200, V1300, V1400, V1600, V1800, V800, V900,
 };
+
+mod conversion;
+pub use conversion::{
+    Conversion, ConversionError, ConversionIssue, ConversionIssueKind, ConversionOptions,
+    ConversionReport, LossPolicy, UnknownChunkPolicy,
+};

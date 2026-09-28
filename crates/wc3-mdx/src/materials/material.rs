@@ -1,4 +1,6 @@
 //! Materials, shader fields, and version-specific layouts.
+use crate::conversion::ConversionContext;
+use crate::ConversionError;
 use bitfield::bitfield;
 use std::{borrow::Cow, fmt::Debug, marker::PhantomData};
 
@@ -40,6 +42,12 @@ pub struct Material<V: ModelVersion> {
 /// The fixed shader field selected by a model version.
 pub trait ShaderField: Default + Readable + Writable + Clone + Debug + PartialEq {
     fn text(&self) -> Option<Cow<'_, str>>;
+    fn fixed_text(&self) -> Option<&FixedText<80>> {
+        None
+    }
+    fn fixed_text_mut(&mut self) -> Option<&mut FixedText<80>> {
+        None
+    }
     fn set(&mut self, text: &str) -> Result<(), ValueError>;
 }
 
@@ -62,6 +70,12 @@ impl ShaderField for NoShader {
 pub struct ShaderText(FixedText<80>);
 
 impl ShaderField for ShaderText {
+    fn fixed_text(&self) -> Option<&FixedText<80>> {
+        Some(&self.0)
+    }
+    fn fixed_text_mut(&mut self) -> Option<&mut FixedText<80>> {
+        Some(&mut self.0)
+    }
     fn text(&self) -> Option<Cow<'_, str>> {
         Some(self.0.text())
     }
@@ -292,5 +306,30 @@ impl<V: SupportsMaterialShaderPath> Material<V> {
     }
     pub fn set_shader(&mut self, shader: &str) -> Result<(), ValueError> {
         self.try_set_shader(shader)
+    }
+}
+
+impl<V: ModelVersion> Material<V> {
+    pub(crate) fn convert_with<T: ModelVersion>(
+        &self,
+        context: &mut ConversionContext<'_>,
+        path: &str,
+    ) -> Result<Material<T>, ConversionError> {
+        let mut target = Material::<T>::new();
+        target.priority_plane = self.priority_plane;
+        target.render_mode = self.render_mode;
+        context.field(
+            self.shader.fixed_text().copied(),
+            target.shader.fixed_text_mut(),
+            FixedText::default(),
+            &format!("{path}.shader"),
+        )?;
+        target.layers = self
+            .layers
+            .iter()
+            .enumerate()
+            .map(|(i, layer)| layer.convert_with::<T>(context, &format!("{path}.layers[{i}]")))
+            .collect::<Result<_, _>>()?;
+        Ok(target)
     }
 }
