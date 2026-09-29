@@ -48,6 +48,8 @@ impl ConversionOptions {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ConversionIssueKind {
+    /// Equivalent storage was normalized to the target layout without losing values.
+    Normalized,
     /// A target-only field was initialized with its documented default.
     Initialized,
     /// A neutral source field was omitted because the target has no storage for it.
@@ -187,7 +189,8 @@ impl<V: ModelVersion> Model<V> {
     /// # Ok::<(), wc3::model::ConversionError>(())
     /// ```
     ///
-    /// Shared fields retain exact storage. New fields use constructor defaults.
+    /// Shared fields retain exact storage, except equivalent camera variants 0/3
+    /// are normalized to the target default and reported. New fields use constructor defaults.
     /// Unsupported non-default fields and tracks fail unless dropping is enabled.
     /// A missing VERS is inserted so the encoded result identifies its target layout.
     pub fn convert<T: ModelVersion>(

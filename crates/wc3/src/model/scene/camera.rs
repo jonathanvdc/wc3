@@ -7,8 +7,8 @@ use crate::model::conversion::ConversionContext;
 use crate::model::mdl;
 use crate::model::mdl::{Parser, ReadErrorKind, TokenKind, Writer};
 use crate::model::mdx;
-use crate::model::ConversionError;
 use crate::model::ModelVersion;
+use crate::model::{ConversionError, ConversionIssueKind};
 use mdl_codec::Target;
 use std::io::Write as IoWrite;
 mod mdl_codec;
@@ -42,6 +42,8 @@ const MAX_RECORD_SIZE: usize = 0x00ff_ffff;
 
 /// Binary camera layout. Preserve the decoded variant when editing MDX.
 /// MDL output requires the default variant for the model version.
+/// Version conversion normalizes equivalent variants 0/3 to the target default.
+/// Variants with extra bytes and unknown variants retain their exact layout.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum CameraVariant {
     Variant0,
@@ -253,12 +255,28 @@ impl<V: ModelVersion> mdx::Write for Camera<V> {
 impl<V: ModelVersion> Camera<V> {
     pub(crate) fn convert_with<T: ModelVersion>(
         &self,
-        _: &mut ConversionContext<'_>,
-        _: &str,
+        context: &mut ConversionContext<'_>,
+        path: &str,
     ) -> Result<Camera<T>, ConversionError> {
+        let variant = match self.variant {
+            CameraVariant::Variant0 | CameraVariant::Variant3 => T::DEFAULT_VARIANT,
+            variant => variant,
+        };
+        if variant != self.variant {
+            context.issue(
+                &format!("{path}.variant"),
+                ConversionIssueKind::Normalized,
+                &format!(
+                    "normalized camera variant {} to {} for version {}",
+                    self.variant.value(),
+                    variant.value(),
+                    T::NUMBER
+                ),
+            );
+        }
         Ok(Camera {
             name: self.name,
-            variant: self.variant,
+            variant,
             position: self.position,
             field_of_view: self.field_of_view,
             far_clip: self.far_clip,

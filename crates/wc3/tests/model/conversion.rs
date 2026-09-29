@@ -5,11 +5,14 @@ use wc3::model::chunks::{
     BindPoseChunk, MaterialsChunk, ModelChunk, RawChunk, UnknownChunk, VersionChunk,
 };
 use wc3::model::geometry::{Geoset, SkinWeights};
+use wc3::model::mdl::Write as _;
 use wc3::model::mdx::Read as _;
 use wc3::model::mdx::Write as _;
 
 use wc3::model::materials::{Layer, LayerFresnel, LayerTextureSlot, Material, ShaderType};
-use wc3::model::scene::{Camera, CameraVariant, Light, LightFalloff, LightShadowRange, Node};
+use wc3::model::scene::{
+    Camera, CameraTrack, CameraVariant, Light, LightFalloff, LightShadowRange, Node,
+};
 use wc3::model::{
     ConversionIssueKind, ConversionOptions, DynamicModel, Model, ModelVersion, UnknownChunkPolicy,
     V1000, V1100, V1200, V1300, V1400, V1600, V1800, V800, V900,
@@ -303,14 +306,127 @@ fn chunk_order_duplicates_version_extensions_and_raw_names_are_preserved() {
 
 #[test]
 fn camera_variants_preserve_their_self_describing_layout_and_opaque_bytes() {
-    let mut camera = Camera::<V1800>::new("Camera").unwrap();
-    camera.variant = CameraVariant::Variant2([37; 12]);
-    let result = camera
+    for variant in [
+        CameraVariant::Variant1([19; 12]),
+        CameraVariant::Variant2([37; 12]),
+        CameraVariant::Unknown(7),
+    ] {
+        let mut camera = Camera::<V1800>::new("Camera").unwrap();
+        camera.variant = variant;
+        let bytes = camera.encode_mdx().unwrap();
+        for options in [ConversionOptions::strict(), ConversionOptions::lossy()] {
+            let classic = camera.convert::<V800>(&options).unwrap();
+            let modern = camera.convert::<V1800>(&options).unwrap();
+            assert_eq!(classic.model.variant, variant);
+            assert_eq!(modern.model.variant, variant);
+            assert_eq!(classic.model.encode_mdx().unwrap(), bytes);
+            assert_eq!(modern.model.encode_mdx().unwrap(), bytes);
+            assert!(classic.report.issues.is_empty());
+            assert!(modern.report.issues.is_empty());
+        }
+    }
+}
+
+#[test]
+fn camera_conversion_normalizes_equivalent_variants_to_each_target_layout() {
+    fn check<S: ModelVersion, T: ModelVersion>() {
+        for variant in [CameraVariant::Variant0, CameraVariant::Variant3] {
+            let mut camera = Camera::<S>::new("Animated Camera").unwrap();
+            camera.variant = variant;
+            camera.position = [-0.0, 2.0, 3.0];
+            camera.target_position = [4.0, 5.0, 6.0];
+            camera.field_of_view = 0.9;
+            camera.tracks.push(CameraTrack::focus_distance(180.0));
+            let original = camera.encode_mdx().unwrap();
+            let converted = camera.convert::<T>(&ConversionOptions::strict()).unwrap();
+            let expected = if T::NUMBER >= 1200 {
+                CameraVariant::Variant3
+            } else {
+                CameraVariant::Variant0
+            };
+            assert_eq!(converted.model.variant, expected);
+            // Only the high variant byte changes; all fields and tracks survive.
+            let mut expected_bytes = original.clone();
+            expected_bytes[3] = expected.value();
+            assert_eq!(converted.model.encode_mdx().unwrap(), expected_bytes);
+            assert_eq!(
+                Camera::<T>::decode_mdx(&expected_bytes).unwrap().variant,
+                expected
+            );
+            assert!(converted.model.encode_mdl().is_ok());
+            assert_eq!(camera.encode_mdx().unwrap(), original);
+            if variant == expected {
+                assert!(converted.report.issues.is_empty());
+            } else {
+                assert_eq!(converted.report.issues.len(), 1);
+                assert_eq!(converted.report.issues[0].path, "record.variant");
+                assert_eq!(
+                    converted.report.issues[0].kind,
+                    ConversionIssueKind::Normalized
+                );
+            }
+        }
+    }
+    macro_rules! targets {
+        ($source:ty) => {
+            check::<$source, V800>();
+            check::<$source, V900>();
+            check::<$source, V1000>();
+            check::<$source, V1100>();
+            check::<$source, V1200>();
+            check::<$source, V1300>();
+            check::<$source, V1400>();
+            check::<$source, V1600>();
+            check::<$source, V1800>();
+        };
+    }
+    targets!(V800);
+    targets!(V1800);
+}
+
+#[test]
+fn model_camera_upgrade_downgrade_and_same_version_normalization_are_reported() {
+    let mut source = Model::<V800>::new();
+    source.set_cameras(&[Camera::<V800>::new("View").unwrap()]);
+    let bytes = source.encode_mdx().unwrap();
+    let upgraded = source
+        .convert::<V1800>(&ConversionOptions::strict())
+        .unwrap();
+    assert_eq!(upgraded.model.cameras()[0].variant, CameraVariant::Variant3);
+    assert_eq!(
+        upgraded.report.issues[0].path,
+        "chunks[1].cameras[0].variant"
+    );
+    assert_eq!(
+        upgraded.report.issues[0].kind,
+        ConversionIssueKind::Normalized
+    );
+    let downgraded = upgraded
+        .model
         .convert::<V800>(&ConversionOptions::strict())
         .unwrap();
     assert_eq!(
-        result.model.encode_mdx().unwrap(),
-        camera.encode_mdx().unwrap()
+        downgraded.model.cameras()[0].variant,
+        CameraVariant::Variant0
+    );
+    assert_eq!(downgraded.model.encode_mdx().unwrap(), bytes);
+    assert_eq!(
+        downgraded.report.issues[0].kind,
+        ConversionIssueKind::Normalized
+    );
+    assert_eq!(source.encode_mdx().unwrap(), bytes);
+
+    let mut noncanonical = Model::<V1800>::new();
+    let mut camera = Camera::<V1800>::new("Portrait").unwrap();
+    camera.variant = CameraVariant::Variant0;
+    noncanonical.set_cameras(&[camera]);
+    let result = DynamicModel::V1800(noncanonical)
+        .convert::<V1800>(&ConversionOptions::strict())
+        .unwrap();
+    assert_eq!(result.model.cameras()[0].variant, CameraVariant::Variant3);
+    assert_eq!(
+        result.report.issues[0].kind,
+        ConversionIssueKind::Normalized
     );
 }
 
