@@ -1,2 +1,6 @@
 data/
 target/
+
+# Local CMake builds and machine-specific editor configuration.
+/build/
+/.vscode/
