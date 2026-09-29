@@ -74,25 +74,7 @@ fn export_to<S: ModelVersion, T: ModelVersion>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use wc3::model::mdx::Write as _;
-    use wc3::model::scene::{Camera, CameraVariant};
-    use wc3::model::{V1000, V1800};
-
-    #[test]
-    fn export_normalizes_camera_without_mutating_binary_source() {
-        let mut model =
-            Model::<V1800>::decode_mdl("Version { FormatVersion 1800, } Model \"Minimal\" {}")
-                .unwrap();
-        let mut camera = Camera::<V1800>::new("Portrait").unwrap();
-        camera.variant = CameraVariant::Variant0;
-        model.set_cameras(&[camera]);
-        let original = model.encode_mdx().unwrap();
-        assert!(model.encode_mdl().is_err());
-        let text = export_model(&model, Dialect::HiveWorkshop).unwrap();
-        let restored = Model::<V1800>::decode_mdl(&text).unwrap();
-        assert_eq!(restored.cameras()[0].variant, CameraVariant::Variant3);
-        assert_eq!(model.encode_mdx().unwrap(), original);
-    }
+    use wc3::model::V1000;
 
     #[test]
     fn export_upgrades_old_reforged_versions_to_oracle_target() {

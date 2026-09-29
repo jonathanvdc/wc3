@@ -593,7 +593,7 @@ impl<V: ModelVersion> Geoset<V> {
         self.normals.len() == count
             && (self.vertex_groups.len() == count || (self.vertex_groups.is_empty() && skinned))
             && self.uv_sets.iter().all(|set| set.len() == count)
-            && self.extra_sections.reforged().map_or(true, |storage| {
+            && self.extra_sections.reforged().is_none_or(|storage| {
                 storage.sections.iter().all(|section| match section {
                     GeosetExtraSection::Tangents(values) => values.len() == count,
                     GeosetExtraSection::Skin { weights } => weights.len() == count,

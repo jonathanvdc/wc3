@@ -470,10 +470,10 @@ fn surrounding<'a, K: Keyframe>(
         if !interval.contains(&current) {
             continue;
         }
-        if f64::from(current) <= time && left.map_or(true, |k| current >= k.frame()) {
+        if f64::from(current) <= time && left.is_none_or(|k| current >= k.frame()) {
             left = Some(key);
         }
-        if f64::from(current) >= time && right.map_or(true, |k| current <= k.frame()) {
+        if f64::from(current) >= time && right.is_none_or(|k| current <= k.frame()) {
             right = Some(key);
         }
     }

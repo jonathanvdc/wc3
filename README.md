@@ -1,7 +1,8 @@
 # wc3
 
 A Rust library for reading, editing, and writing Warcraft III models in binary
-**MDX** and text **MDL** formats, covering Classic and Reforged layouts.
+**MDX** and text **MDL** formats, covering Classic and Reforged layouts. It also
+reads and writes **BLP1** and **BLP2** texture containers.
 
 Models share one typed representation across both formats. Use a compile-time
 version when you know the layout, or let `DynamicModel` select it from the file.
@@ -71,6 +72,25 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 MDL readers accept Warcraft III and Hive Workshop dialects, including mixed
 input. Writers use Warcraft III syntax by default; select
 `mdl::Dialect::HiveWorkshop` explicitly for its alternative spellings.
+
+### Inspect or edit a BLP texture
+
+```rust
+use wc3::blp::{Blp, BlpRef};
+
+fn update(bytes: &[u8]) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+    let view = BlpRef::read(bytes)?;
+    let mut texture = view.to_owned();
+    if let Blp::Blp1(blp1) = &mut texture {
+        blp1.header.extra = 5;
+    }
+    Ok(texture.write()?)
+}
+```
+
+The borrowed view keeps encoded mipmaps in the input buffer. The owned form
+supports edits. This container API does not decode JPEG, indexed, DXT, or BGRA
+pixels; writing recalculates mipmap offsets and discards source padding.
 
 ## Supported model data
 
