@@ -1,86 +1,83 @@
 # wc3
 
-A Rust library for reading, editing, and writing Warcraft III models in binary
-**MDX** and text **MDL** formats, covering Classic and Reforged layouts. It also
-reads and writes **BLP1** and **BLP2** texture containers.
+`wc3` is a Rust library for working with Warcraft III assets. It reads, edits,
+and writes models in binary **MDX** and text **MDL**, and textures in **BLP1**
+and **BLP2** containers.
 
-Models share one typed representation across both formats. Use a compile-time
-version when you know the layout, or let `DynamicModel` select it from the file.
-MDX preserves chunk order and opaque data; MDL produces canonical text and
-reports data it cannot faithfully represent.
+Models share one typed representation across MDX and MDL, with layouts for
+Classic and Reforged versions. Texture APIs can inspect and rewrite encoded
+BLP data without decoding pixels, or decode and encode images with optional
+features.
 
 ## Getting started
 
-The library crate is `wc3`.
-To use a local checkout, add this dependency to your project's `Cargo.toml`:
+The library crate is `wc3`. To use a local checkout, add it to your project's
+`Cargo.toml` (adjust the path to your checkout):
 
 ```toml
 [dependencies]
 wc3 = { path = "../wc3/crates/wc3" }
 ```
 
-Adjust the path to your checkout. Model types live under `wc3::model`. Import
-`mdx::Read` / `mdx::Write` and `mdl::Read` / `mdl::Write` as `_` to enable their
-methods without conflicting trait names.
+Add `features = ["blp-decode", "blp-encode"]` to that dependency when you need
+both BLP image operations. You can enable either feature on its own. Add a
+direct `image = "0.25"` dependency if you use `image` types in your code, as
+the examples below do.
 
-### Create a model and encode both formats
+| API | Cargo feature |
+| --- | --- |
+| MDX and MDL models; BLP container reading, editing, and writing | None |
+| BLP mipmap decoding to RGBA pixels; `image::ImageDecoder` adapter | `blp-decode` |
+| BLP image encoding from RGBA pixels; `image::ImageEncoder` adapter | `blp-encode` |
+
+### Models: read, edit, and write
+
+Model types live under `wc3::model`. Import the relevant `mdx::Read` /
+`mdx::Write` and `mdl::Read` / `mdl::Write` traits as `_` to enable their
+methods.
 
 ```rust
 use wc3::model::{Model, V800};
-use wc3::model::mdx::{Read as _, Write as _};
-use wc3::model::mdl::Write as _;
-use wc3::model::scene::ModelInfo;
-
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let mut model = Model::<V800>::new();
-    model.set_model_info(&ModelInfo::new("Example")?);
-
-    let bytes = model.encode_mdx()?;
-    let text = model.encode_mdl()?;
-    let decoded = Model::<V800>::decode_mdx(&bytes)?;
-
-    assert_eq!(decoded.model_info().unwrap().name.text(), "Example");
-    assert!(text.contains("FormatVersion 800"));
-    Ok(())
-}
-```
-
-This creates a minimal model container. Add geometry, materials, and other
-records to build a renderable model.
-
-### Read a model with a runtime version
-
-```rust
-use wc3::model::{mdl, DynamicModel};
 use wc3::model::mdl::{Read as _, Write as _};
+use wc3::model::mdx::Write as _;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let source = r#"Version { FormatVersion 800, } Model "Example" {}"#;
-    let model = DynamicModel::decode_mdl(source)?;
-    let bytes = model.encode_mdx()?;
+    let mut model = Model::<V800>::decode_mdl(source)?;
+    let mut info = model.model_info().unwrap();
+    info.name.set_text("Renamed")?;
+    model.set_model_info(&info);
 
-    // The fallback applies only when the MDX file has no VERS chunk.
-    let decoded = DynamicModel::decode_mdx(&bytes, 800)?;
-    assert_eq!(decoded.version(), 800);
-
-    let text = decoded.encode_mdl_with_dialect(mdl::Dialect::HiveWorkshop)?;
-    assert!(text.contains("FormatVersion 800"));
+    let mdx_bytes = model.encode_mdx()?;
+    let mdl_text = model.encode_mdl()?;
+    assert!(!mdx_bytes.is_empty());
+    assert!(mdl_text.contains("Renamed"));
     Ok(())
 }
 ```
 
-MDL readers accept Warcraft III and Hive Workshop dialects, including mixed
-input. Writers use Warcraft III syntax by default; select
-`mdl::Dialect::HiveWorkshop` explicitly for its alternative spellings.
+Use `Model<V>` when you know the version. `DynamicModel` selects the version
+from an MDL file or an MDX `VERS` chunk; MDX reading takes a fallback version
+for files without that chunk. Supported versions are **800, 900, 1000, 1100,
+1200, 1300, 1400, 1600, and 1800**.
 
-### Inspect or edit a BLP texture
+MDX preserves chunk order and opaque data. MDL writes canonical text and
+reports data it cannot faithfully represent. MDL readers accept Warcraft III
+and Hive Workshop spellings; writers use Warcraft III syntax by default.
+See the [`model`](https://docs.rs/wc3/latest/wc3/model/) and
+[`mdl`](https://docs.rs/wc3/latest/wc3/model/mdl/) module docs for editing
+collections, dialects, and field-level coverage.
+
+### Textures: inspect, decode, and encode
+
+`BlpRef` borrows encoded mipmaps from the input buffer. Convert it to an owned
+`Blp` to edit container fields, then write it back:
 
 ```rust
 use wc3::blp::{Blp, BlpRef};
 
 fn update(bytes: &[u8]) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
-    let view = BlpRef::read(bytes)?;
-    let mut texture = view.to_owned();
+    let mut texture = BlpRef::read(bytes)?.to_owned();
     if let Blp::Blp1(blp1) = &mut texture {
         blp1.header.extra = 5;
     }
@@ -88,12 +85,8 @@ fn update(bytes: &[u8]) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
 }
 ```
 
-The borrowed view keeps encoded mipmaps in the input buffer. The owned form
-supports edits. Writing recalculates mipmap offsets and discards source padding.
-The container reader and writer have no image dependencies.
-
-Enable `wc3/blp-decode` to decode any BLP1 or BLP2 mipmap to an
-`image::RgbaImage`:
+Writing recalculates mipmap offsets and discards source padding. With
+`blp-decode`, decode any BLP1 or BLP2 mipmap to an `image::RgbaImage`:
 
 ```rust
 use wc3::blp::BlpRef;
@@ -103,26 +96,8 @@ fn decode(bytes: &[u8]) -> Result<image::RgbaImage, Box<dyn std::error::Error>> 
 }
 ```
 
-For APIs that accept `image::ImageDecoder`, use `BlpDecoder`. It selects the
-largest mipmap by default; `with_mip` selects another level:
-
-```rust
-use wc3::blp::BlpDecoder;
-
-fn decode_dynamic(bytes: &[u8]) -> Result<image::DynamicImage, image::ImageError> {
-    image::DynamicImage::from_decoder(BlpDecoder::new(bytes)?)
-}
-```
-
-`BlpDecoder` writes RGBA8 pixels directly into the buffer supplied by `image`.
-For your own buffer, use `BlpRef::decode_mip_into(level, &mut pixels)`.
-JPEG decoding still uses a temporary CMYK buffer inside the JPEG decoder.
-
-Enable `wc3/blp-encode` to encode RGBA images as BLP JPEG, indexed colour with
-0, 1, 4, or 8-bit alpha, DXT1/3/5, or uncompressed BGRA.
-`Blp::encode_image` generates mipmaps; `Blp::encode_mipmaps` accepts
-authored mipmaps. Both return an editable container whose `write` method
-produces the BLP file:
+With `blp-encode`, encode an RGBA image to BLP JPEG, indexed colour with 0, 1,
+4, or 8-bit alpha, DXT1/3/5, or uncompressed BGRA:
 
 ```rust
 use wc3::blp::{Blp, BlpVersion, EncodeFormat, EncodeOptions, IndexedAlpha};
@@ -139,146 +114,27 @@ fn encode(image: &image::RgbaImage) -> Result<Vec<u8>, Box<dyn std::error::Error
 }
 ```
 
-JPEG encoding stores a complete four-component JPEG in each mipmap, with an
-empty shared header. Indexed encoding uses one palette across all mipmaps.
+`Blp::encode_image` generates mipmaps; `Blp::encode_mipmaps` accepts authored
+mipmaps. See the [`blp`](https://docs.rs/wc3/latest/wc3/blp/) module docs for
+the `image` crate adapters, options, and container behavior.
 
-For APIs that accept `image::ImageEncoder`, use `BlpEncoder` with a writer and
-`EncodeOptions`. It accepts RGBA8 pixels:
+## Version conversion
 
-```rust
-use image::{ExtendedColorType, ImageEncoder};
-use wc3::blp::BlpEncoder;
+`Model::convert` builds a model for another version and returns a report,
+leaving the source intact. Strict conversion rejects unsupported nondefault
+data; `ConversionOptions::lossy()` permits discarding it. Unknown chunks have
+a separate preserve or drop policy. Conversion cannot translate every feature
+between Classic and Reforged layouts and does not guarantee identical game
+rendering. See the [`model`](https://docs.rs/wc3/latest/wc3/model/) module
+docs for the conversion example and editing guidance.
 
-fn encode_with_trait(image: &image::RgbaImage) -> Result<Vec<u8>, image::ImageError> {
-    let mut bytes = Vec::new();
-    BlpEncoder::new(&mut bytes).write_image(
-        image.as_raw(), image.width(), image.height(), ExtendedColorType::Rgba8,
-    )?;
-    Ok(bytes)
-}
-```
+## API documentation
 
-## Supported model data
-
-Supported versions are **800, 900, 1000, 1100, 1200, 1300, 1400, 1600, and 1800**,
-with corresponding marker types `V800` through `V1800`. `Model<V>` ties chunks
-and versioned records to the selected layout; typed reads check the file version.
-
-Both formats support whole models, including:
-
-- Model information, sequences, global sequences, and animation tracks.
-- Materials, layers, textures, and texture animations.
-- Geosets, geoset animations, pivot points, and bind poses.
-- Bones, helpers, attachments, lights, cameras, events, and collision shapes.
-- Particle, Particle2, Popcorn, and ribbon emitters, plus face effects and gliders.
-
-Availability and representation depend on the version and output dialect.
-The `mdl` module documentation describes field-level coverage and restrictions.
-
-## Editing models
-
-Ordinary records expose public fields for scalars, flags, embedded nodes, and
-vectors. Names and paths use `FixedText<N>`: `text()` reads the text,
-`set_text()` validates a replacement and clears padding, and `as_bytes()` /
-`from_bytes()` provide exact byte access. Geoset geometry and animation-track
-internals use methods to preserve structural invariants.
-
-Model collection getters return owned records collected across chunks. Setters
-replace the corresponding chunks, so changing a getter's result requires
-setting it back. For edits in place, match variants in the public ordered
-`model.chunks` vector or use `chunk_mut()`.
-
-`DynamicModel` exposes shared operations through `CommonModelAccess` and
-`TryModelAccess`. Use `visit_model!` to run the same expression against each
-possible typed model when you need direct access to its records.
-
-## Converting versions
-
-Version conversion builds a new model and returns a report, leaving the source
-intact:
-
-```rust
-use wc3::model::{ConversionOptions, Model, V800, V1100};
-
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let source = Model::<V800>::new();
-    let converted = source.convert::<V1100>(&ConversionOptions::strict())?;
-    let target: Model<V1100> = converted.model;
-
-    assert_eq!(target.version(), 1100);
-    Ok(())
-}
-```
-
-Strict conversion preserves shared data, initializes target-only fields with
-constructor defaults, and rejects unsupported nondefault data. The report
-identifies normalized values, initialized fields, omitted neutral defaults,
-discarded data, and opaque compatibility caveats.
-
-Use `model.normalized()?` to apply normalization without changing its version.
-It returns the same model-and-report result and leaves the source intact.
-
-`ConversionOptions::lossy()` permits discarding unsupported data. Unknown chunks
-have a separate `UnknownChunkPolicy`: `Reject` by default, `Preserve`, or `Drop`.
-Preserving opaque bytes across versions does not guarantee game compatibility.
-Conversions do not translate weighted skinning into Classic matrix groups or
-shader paths into layer shader IDs, and do not guarantee identical rendering.
-
-## Codec APIs and documentation
-
-The `mdx` and `mdl` modules expose `Read` and `Write` traits for records and
-whole models. `mdx::Cursor` / `mdx::Encoder` handle binary streams;
-`mdl::Parser` / `mdl::Writer` handle text. MDL parsing borrows
-resident UTF-8 input without building an AST or token buffer.
-
-The module docs cover reading, writing, and dialect handling. Internal codec
-derive documentation lives in `wc3-derive`. Build the API documentation locally
-with:
+The [`mdx`](https://docs.rs/wc3/latest/wc3/model/mdx/) and
+[`mdl`](https://docs.rs/wc3/latest/wc3/model/mdl/) modules document their
+`Read` and `Write` traits, format behavior, and lower-level codecs. Build all
+workspace API docs locally with:
 
 ```sh
 cargo doc --workspace --no-deps --open
 ```
-
-Standard I/O adapters are available as `mdx::from_reader` / `mdx::to_writer`
-and `mdl::from_reader` / `mdl::to_writer`. Readers buffer through EOF and
-validate complete input. MDX output is buffered; MDL output streams. Neither
-writer adapter flushes its sink. Use `mdx::from_reader_with_version` for dynamic
-version detection with a fallback and `mdl::to_writer_with_dialect` to select
-text syntax.
-
-## Development
-
-Run the workspace checks from the repository root:
-
-```sh
-cargo test --workspace
-cargo fmt --all -- --check
-cargo clippy --workspace --all-targets -- -D warnings
-```
-
-Integration tests are grouped into `mdx`, `mdl`, `model`, `derive`, and
-`interoperability` targets with nested modules. Allocation checks run in their
-own `allocations` target. Run a target with `cargo test -p wc3 --test mdl`, or
-filter a module with `cargo test -p wc3 --test mdl core::parser`.
-
-Tests include synthetic models across all supported versions and independent
-binary/text fixtures. To enable additional byte-for-byte MDX round-trip checks
-against your own model collection:
-
-```sh
-WC3_FIXTURES=/path/to/models cargo test -p wc3 --test corpus -- --ignored
-WC3_FIXTURES=/path/to/models cargo test -p wc3 --features blp-decode --test blp -- --ignored
-```
-
-The corpus tests are ignored by default and require a directory containing
-files of the corresponding format.
-These checks supplement the synthetic suite; full semantic coverage of the
-entire game model collection has not been verified.
-
-For independent MDX → MDL conversion comparisons against pinned WhiteoutLib,
-see [the optional oracle workflow](tools/mdlx-compare/README.md). It retains
-outputs and diagnostics, compares canonicalized values, and cross-reads our MDL.
-
-## License
-
-MIT OR Apache-2.0, as declared in the crate manifests.

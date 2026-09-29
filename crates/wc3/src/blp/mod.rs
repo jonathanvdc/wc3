@@ -10,6 +10,40 @@
 //! With `blp-decode`, `decode_mip` converts encoded mipmaps to
 //! [`image::RgbaImage`]. With `blp-encode`, `encode_image` creates a container
 //! from RGBA pixels.
+//!
+//! # `image` crate adapters
+//!
+//! With `blp-decode`, [`BlpDecoder`] implements [`image::ImageDecoder`]. It
+//! selects the largest mipmap by default; [`BlpDecoder::with_mip`] selects
+//! another level. It writes RGBA8 pixels into the buffer supplied by `image`.
+//! Use [`BlpRef::decode_mip_into`] when you supply the pixel buffer yourself.
+//! JPEG decoding still uses a temporary CMYK buffer inside the JPEG decoder.
+//!
+//! ```
+//! # #[cfg(feature = "blp-decode")]
+//! # fn example(bytes: &[u8]) -> Result<image::DynamicImage, image::ImageError> {
+//! use wc3::blp::BlpDecoder;
+//! image::DynamicImage::from_decoder(BlpDecoder::new(bytes)?)
+//! # }
+//! ```
+//!
+//! With `blp-encode`, [`BlpEncoder`] implements [`image::ImageEncoder`] for
+//! RGBA8 pixels. Use [`BlpEncoder::with_options`] to select the BLP encoding
+//! format; [`BlpEncoder::new`] uses default options.
+//!
+//! ```
+//! # #[cfg(feature = "blp-encode")]
+//! # fn example(image: &image::RgbaImage) -> Result<Vec<u8>, image::ImageError> {
+//! use image::{ExtendedColorType, ImageEncoder};
+//! use wc3::blp::BlpEncoder;
+//!
+//! let mut bytes = Vec::new();
+//! BlpEncoder::new(&mut bytes).write_image(
+//!     image.as_raw(), image.width(), image.height(), ExtendedColorType::Rgba8,
+//! )?;
+//! Ok(bytes)
+//! # }
+//! ```
 
 mod container;
 mod error;
