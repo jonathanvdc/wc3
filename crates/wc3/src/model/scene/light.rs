@@ -236,8 +236,8 @@ light_layout!(
 /// A light node with decoded lighting values and animation tracks.
 ///
 /// MDL reading reconstructs the light object-kind bit; writing requires matching
-/// node bits and representable base values. ShadowIntensity has only a verified
-/// static binary field, so its animated MDL form is unsupported.
+/// node bits and representable base values. ShadowIntensity is static only under
+/// the MDL support contract; its animated form is rejected.
 #[derive(Clone, Debug, PartialEq, mdx::Read, mdx::Write, mdl::Read, mdl::Write)]
 #[mdx(sized(tag = LightsChunk::<V>::TAG))]
 #[mdl(block = "Light", after_read = "Self::finish_mdl", validate_write = "Self::validate_mdl",

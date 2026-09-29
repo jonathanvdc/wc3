@@ -107,7 +107,7 @@ must retain these defaults explicitly rather than infer them from example data.
 | Bone: node fields, GeosetId, GeosetAnimId | Bone | Multiple / None map to u32::MAX | Derived codec complete |
 | Helper | Node | Shared node only | Derived codec complete |
 | Light: node fields, Omnidirectional/Directional/Ambient, AttenuationStart/End, Color, Intensity, AmbColor, AmbIntensity, Visibility | Light<V>, LightTrack | White colors; other base values zero | Derived codec complete |
-| Light: ShadowIntensity | Version-selected field | Zero | ≥1200 storage; see track inventory caveat below |
+| Light: ShadowIntensity | Version-selected field | Zero; static only | ≥1200 storage; codec complete |
 | Light: ShadowCasting, ShadowCastingStart/End | Version-selected fields + LightTrack | False, zero | ≥1300 |
 | Light: QuadraticFalloff, LinearFalloff, Damping | LightFalloff + LightTrack | 0.0005, 0, 0.00001, also effective below 1600 | ≥1600 storage |
 | Attachment: node fields, AttachmentID, Path, Visibility | Attachment | Zero ID, empty path, no track | Derived codec complete |
@@ -140,10 +140,11 @@ tracks require both tangents per key. Counts and ordering are retained.
 EventTrack has signed times only, no interpolation or value. Color ordering
 is property-specific: GeosetAnim Color is BGR; do not reverse all colors.
 
-The supplied MDL spec describes animated ShadowIntensity, but the companion
-MDX track inventory defines no corresponding tag. The model stores its static
-field. Before adding that MDL track, verify its binary encoding; do not invent
-a tag. Likewise the documented engine animated TextureID form has no slot
+ShadowIntensity is treated as static only under the agreed support contract.
+The supplied MDL spec describes animation, but the companion MDX track inventory
+defines no corresponding tag and the inspected WhiteoutLib implementation
+provides only the static binary field. Animated ShadowIntensity is rejected;
+it is not pending codec work. The documented engine animated TextureID form has no slot
 selector: an HD non-diffuse slot track cannot be exported through that spelling
 without verified context. HiveWorkshop named slot tracks retain slot identity.
 These are explicit unsupported-representation errors until resolved, not
