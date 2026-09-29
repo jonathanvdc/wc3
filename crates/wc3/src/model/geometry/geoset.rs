@@ -204,6 +204,7 @@ use mdl_codec::{
 /// A mesh rendered with one material.
 ///
 /// Vertex positions, normals, UV sets, and skin influences must agree in count.
+/// Legacy vertex groups may be empty when Reforged skin weights cover every vertex.
 /// Use the editing methods to keep those arrays consistent. Material and bone
 /// references are model indices; changing collection order requires updating
 /// the affected references.

@@ -38,6 +38,11 @@ impl<T: mdl::Read> mdl::ReadProperty for Uncounted<T> {
     fn read_mdl_property(parser: &mut Parser<'_>, _: Field<'_>) -> Result<Self, mdl::ReadError> {
         read_values(parser).map(Self)
     }
+    fn missing_mdl_property(_: &'static str, _: Span) -> Result<Self, mdl::ReadError> {
+        // Reforged skinning can leave the legacy VertexGroup block absent.
+        // Geoset validation still checks that complete skin rows replace it.
+        Ok(Self(Vec::new()))
+    }
 }
 impl<T: mdl::Read> mdl::ReadProperty for OptionalList<T> {
     fn read_mdl_property(parser: &mut Parser<'_>, _: Field<'_>) -> Result<Self, mdl::ReadError> {
@@ -560,8 +565,11 @@ impl<V: ModelVersion> Geoset<V> {
     }
     fn mdl_lengths_match(&self) -> bool {
         let count = self.vertices.len();
+        let skinned = self
+            .try_skin_weights()
+            .is_ok_and(|weights| weights.is_some_and(|rows| rows.len() == count));
         self.normals.len() == count
-            && self.vertex_groups.len() == count
+            && (self.vertex_groups.len() == count || (self.vertex_groups.is_empty() && skinned))
             && self.uv_sets.iter().all(|set| set.len() == count)
             && self.extra_sections.reforged().map_or(true, |storage| {
                 storage.sections.iter().all(|section| match section {
@@ -575,7 +583,7 @@ impl<V: ModelVersion> Geoset<V> {
             return Err(mdl::ReadError::new(
                 span,
                 ReadErrorKind::Expected(
-                    "one normal, vertex group, UV, tangent or skin row per vertex",
+                    "one normal, UV, tangent or skin row per vertex; vertex groups may be empty with complete skin weights",
                 ),
             ));
         }

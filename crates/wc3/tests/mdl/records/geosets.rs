@@ -241,3 +241,85 @@ fn selection_accessors_use_the_text_mask_and_preserve_other_binary_bits() {
     assert_eq!(value.raw_unselectable(), 128);
     assert!(value.encode_mdl().is_err());
 }
+
+#[test]
+fn skinned_geosets_preserve_empty_legacy_vertex_groups() {
+    // Scarlet Footman and Highborn Vashj use SKIN with an empty GNDX array.
+    // Reduce that layout to the existing four-vertex synthetic quad.
+    let source = with_fields(
+        QUAD,
+        &format!(
+            "SkinWeights 4 {{ {} }}",
+            "0, 0, 0, 0, 255, 0, 0, 0,".repeat(4)
+        ),
+    );
+    macro_rules! check {
+        ($($version:ty),*) => { $( {
+            let mut binary = Geoset::<$version>::decode_mdl(&source).unwrap().encode_mdx().unwrap();
+            let group = binary.windows(4).position(|tag| tag == b"GNDX").unwrap();
+            binary[group + 4..group + 8].copy_from_slice(&0u32.to_le_bytes());
+            binary.drain(group + 8..group + 12);
+            let length = binary.len() as u32;
+            binary[..4].copy_from_slice(&length.to_le_bytes());
+            let geoset = Geoset::<$version>::decode_mdx(&binary).unwrap();
+            assert!(geoset.vertex_groups().is_empty());
+            for dialect in [mdl::Dialect::Warcraft3, mdl::Dialect::HiveWorkshop] {
+                let text = geoset.encode_mdl_with_dialect(dialect).unwrap();
+                let decoded = Geoset::<$version>::decode_mdl(&text).unwrap();
+                assert!(decoded.vertex_groups().is_empty());
+                assert_eq!(decoded.skin_weights(), geoset.skin_weights());
+                assert_eq!(decoded.encode_mdx().unwrap(), binary);
+                // Independent writers may omit the block entirely.
+                let start = text.find("\tVertexGroup {\n").unwrap();
+                let end = start + text[start..].find("\t}\n").unwrap() + 3;
+                let omitted = format!("{}{}", &text[..start], &text[end..]);
+                assert_eq!(Geoset::<$version>::decode_mdl(&omitted).unwrap().encode_mdx().unwrap(), binary);
+            }
+        } )* };
+    }
+    check!(V900, V1000, V1100, V1200, V1300, V1400, V1600, V1800);
+}
+
+#[test]
+fn skin_weights_only_replace_an_empty_legacy_group_array() {
+    let start = QUAD.find("\tVertexGroup {\n").unwrap();
+    let end = start + QUAD[start..].find("\t}\n").unwrap() + 3;
+    let omitted = format!("{}{}", &QUAD[..start], &QUAD[end..]);
+    let skin = format!(
+        "SkinWeights 4 {{ {} }}",
+        "0, 0, 0, 0, 255, 0, 0, 0,".repeat(4)
+    );
+    let valid = with_fields(&omitted, &skin);
+    assert!(Geoset::<V900>::decode_mdl(&valid).is_ok());
+    assert!(Geoset::<V900>::decode_mdl(&omitted).is_err());
+    assert!(Geoset::<V800>::decode_mdl(&omitted).is_err());
+    for fields in ["SkinWeights 0 {}", "VertexGroup { 0, }"] {
+        let source = if fields.starts_with("VertexGroup") {
+            with_fields(&valid, fields)
+        } else {
+            with_fields(&omitted, fields)
+        };
+        assert!(Geoset::<V900>::decode_mdl(&source).is_err());
+    }
+    // Complete skinning does not excuse missing normals or UVs.
+    for block in ["Normals", "TVertices"] {
+        let start = valid.find(&format!("\t{block} 4 {{\n")).unwrap();
+        let end = start + valid[start..].find("\t}\n").unwrap() + 3;
+        let invalid = format!("{}\t{block} 0 {{}}\n{}", &valid[..start], &valid[end..]);
+        assert!(Geoset::<V900>::decode_mdl(&invalid).is_err());
+    }
+    // Likewise, malformed nonempty GNDX remains unrepresentable on writing.
+    let mut binary = Geoset::<V900>::decode_mdl(&with_fields(QUAD, &skin))
+        .unwrap()
+        .encode_mdx()
+        .unwrap();
+    let group = binary.windows(4).position(|tag| tag == b"GNDX").unwrap();
+    binary[group + 4..group + 8].copy_from_slice(&1u32.to_le_bytes());
+    binary.drain(group + 9..group + 12);
+    let length = binary.len() as u32;
+    binary[..4].copy_from_slice(&length.to_le_bytes());
+    assert!(Geoset::<V900>::decode_mdx(&binary)
+        .unwrap()
+        .encode_mdl()
+        .is_err());
+}
