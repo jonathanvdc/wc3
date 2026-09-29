@@ -163,7 +163,7 @@ shader paths into layer shader IDs, and do not guarantee identical rendering.
 
 The `mdx` and `mdl` modules expose `Read` and `Write` traits for records and
 whole models. `mdx::Cursor` / `mdx::Encoder` handle binary streams;
-`mdl::Parser` / `mdl::MdlWriter` handle text. MDL parsing borrows
+`mdl::Parser` / `mdl::Writer` handle text. MDL parsing borrows
 resident UTF-8 input without building an AST or token buffer.
 
 The module docs cover reading, writing, and dialect handling. Internal codec

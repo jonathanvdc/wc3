@@ -1,6 +1,6 @@
 //! Streaming codecs for field groups embedded in another record's header/body.
 use super::{
-    Dialect, Field, MdlWriter, Parser, ReadError, ReadErrorKind, Span, TokenKind, WriteError,
+    Dialect, Field, Parser, ReadError, ReadErrorKind, Span, TokenKind, WriteError, Writer,
 };
 use std::io::Write as IoWrite;
 
@@ -36,11 +36,11 @@ pub trait WriteFields {
     /// state to write_mdl_fields for this same unchanged value and dialect.
     fn prepare_mdl_fields(&self, dialect: Dialect) -> Result<Self::State, WriteError>;
     fn visit_mdl_names(visitor: &mut dyn FnMut(&'static str, bool));
-    fn write_mdl_headers<W: IoWrite>(&self, writer: &mut MdlWriter<W>) -> Result<(), WriteError>;
+    fn write_mdl_headers<W: IoWrite>(&self, writer: &mut Writer<W>) -> Result<(), WriteError>;
     fn write_mdl_fields<W: IoWrite>(
         &self,
         state: Self::State,
-        writer: &mut MdlWriter<W>,
+        writer: &mut Writer<W>,
     ) -> Result<(), WriteError>;
 }
 

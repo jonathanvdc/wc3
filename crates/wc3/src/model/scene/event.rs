@@ -1,6 +1,6 @@
 //! Timed events attached to model nodes.
 use super::{set_node_kind, validate_node_kind};
-use crate::model::mdl::{Dialect, Field, MdlWriter, Parser, Span, TokenKind};
+use crate::model::mdl::{Dialect, Field, Parser, Span, TokenKind, Writer};
 use crate::model::Encoder;
 use crate::model::KnownChunk;
 use crate::model::ModelVersion;
@@ -55,9 +55,9 @@ impl mdx::Read for EventObject {
     fn read_mdx(cursor: &mut Cursor<'_>) -> Result<Self, ReadError> {
         let mut probe = *cursor;
         let node_size = probe.read::<u32>()? as usize;
-        let node = Node::decode_mdx(cursor.read_exact(node_size)?)?;
+        let node = Node::decode_mdx(cursor.read_bytes(node_size)?)?;
         let offset = cursor.absolute_position();
-        if cursor.read_exact(4)? != TRACK_TAG {
+        if cursor.read_bytes(4)? != TRACK_TAG {
             return Err(ReadError::MalformedRecord {
                 tag: EventObjectsChunk::TAG,
                 offset,
@@ -144,7 +144,7 @@ impl mdl::WriteProperty for EventTrackMdl {
     fn write_mdl_property<W: IoWrite>(
         &self,
         name: &'static str,
-        writer: &mut MdlWriter<W>,
+        writer: &mut Writer<W>,
     ) -> Result<(), mdl::WriteError> {
         self.validate_mdl_property(name, writer.dialect())?;
         writer.begin_counted_block(name, self.frames.len())?;
@@ -187,7 +187,7 @@ impl mdl::Read for EventObject {
     }
 }
 impl mdl::Write for EventObject {
-    fn write_mdl<W: IoWrite>(&self, writer: &mut MdlWriter<W>) -> Result<(), mdl::WriteError> {
+    fn write_mdl<W: IoWrite>(&self, writer: &mut Writer<W>) -> Result<(), mdl::WriteError> {
         writer.write(&EventMdl {
             node: self.node.clone(),
             track: EventTrackMdl {

@@ -2,7 +2,7 @@
 use super::{Particle2FilterMode, Particle2Frames, ParticleEmitter2};
 use crate::model::scene::{set_node_kind, validate_node_kind};
 use crate::model::{mdl, Color};
-use mdl::{Field, MdlWriter, Parser, ReadErrorKind, Span, TokenKind};
+use mdl::{Field, Parser, ReadErrorKind, Span, TokenKind, Writer};
 use std::io::Write as IoWrite;
 
 #[derive(mdl::Read, mdl::Write)]
@@ -28,7 +28,7 @@ impl mdl::WriteProperty for SegmentColorsRef<'_> {
     fn write_mdl_property<W: IoWrite>(
         &self,
         name: &'static str,
-        writer: &mut MdlWriter<W>,
+        writer: &mut Writer<W>,
     ) -> Result<(), mdl::WriteError> {
         writer.begin_block(name)?;
         for value in self.0 {

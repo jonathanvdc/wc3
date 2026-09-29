@@ -1,6 +1,6 @@
 use wc3::model::geometry::Geoset;
 use wc3::model::materials::{Layer, Material};
-use wc3::model::mdl::{Dialect, MdlWriter, Read as _, Write as _, WriteFields as _};
+use wc3::model::mdl::{Dialect, Read as _, Write as _, WriteFields as _, Writer};
 use wc3::model::mdx::{Read as _, Write as _};
 use wc3::model::{
     mdl, mdx, DynamicModel, Model, ModelVersion, V1000, V1100, V1200, V1300, V1400, V1600, V1800,
@@ -53,7 +53,7 @@ fn static_slots_match_independent_canonical_fixtures_in_both_dialects() {
         hive_layer.encode_mdx().unwrap()
     );
     roundtrip_hive(&engine);
-    let mut writer = MdlWriter::with_dialect(Vec::new(), Dialect::HiveWorkshop);
+    let mut writer = Writer::with_dialect(Vec::new(), Dialect::HiveWorkshop);
     assert_eq!(writer.dialect(), Dialect::HiveWorkshop);
     writer.write(&engine).unwrap();
     assert_eq!(writer.finish().unwrap(), HIVE.as_bytes());
@@ -305,7 +305,7 @@ fn derive_aliases_work_inside_flattened_groups_and_share_presence_bits() {
     assert!(value
         .encode_mdl_with_dialect(Dialect::HiveWorkshop)
         .is_err());
-    let mut writer = MdlWriter::with_dialect(Vec::new(), Dialect::HiveWorkshop);
+    let mut writer = Writer::with_dialect(Vec::new(), Dialect::HiveWorkshop);
     assert!(writer.write(&value).is_err());
     assert!(writer.into_inner().is_empty()); // preflight propagates through flatten
 }

@@ -230,7 +230,7 @@ Function attributes accept ordinary or associated function paths.
 | Attribute | Signature | When it runs |
 | --- | --- | --- |
 | Field `read_with` | `fn(&mut Parser<'_>) -> Result<T, mdl::ReadError>` | Reads a field value. |
-| Field `write_with` | `fn<W: std::io::Write>(&T, &mut MdlWriter<W>) -> Result<(), mdl::WriteError>` | Writes a field value. |
+| Field `write_with` | `fn<W: std::io::Write>(&T, &mut Writer<W>) -> Result<(), mdl::WriteError>` | Writes a field value. |
 | Record `after_read` | `fn(&mut Self, Span) -> Result<(), mdl::ReadError>` | Restores implicit values before validation. |
 | Record `validate_read` | `fn(&Self, Span) -> Result<(), mdl::ReadError>` | Validates the completed record. |
 | Record `validate_write` | `fn(&Self) -> Result<(), mdl::WriteError>` | Checks the record before output. |

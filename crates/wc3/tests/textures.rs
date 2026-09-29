@@ -5,7 +5,7 @@ use wc3::model::mdx::Read as _;
 use wc3::model::mdx::Write as _;
 
 use wc3::model::materials::{Texture, TextureFlags};
-use wc3::model::mdl::MdlWriter;
+use wc3::model::mdl::Writer;
 use wc3::model::Model;
 
 #[test]
@@ -52,7 +52,7 @@ fn texture_path_uses_all_260_bytes() {
     assert_eq!(bytes.len(), 268);
     assert_eq!(&bytes[4..263], path.as_bytes());
     assert_eq!(Texture::decode_mdx(&bytes).unwrap().path.text(), path);
-    let mut writer = MdlWriter::new(Vec::new());
+    let mut writer = Writer::new(Vec::new());
     writer.write(&texture).unwrap();
     let text = String::from_utf8(writer.finish().unwrap()).unwrap();
     assert_eq!(

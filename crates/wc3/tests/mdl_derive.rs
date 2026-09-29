@@ -2,7 +2,7 @@ use std::io::Write;
 use std::marker::PhantomData;
 use wc3::model::mdl;
 use wc3::model::mdl::Read as _;
-use wc3::model::mdl::{MdlWriter, Parser, ReadError, ReadErrorKind, Span, WriteError};
+use wc3::model::mdl::{Parser, ReadError, ReadErrorKind, Span, WriteError, Writer};
 use wc3::model::mdx::Read as _;
 use wc3::model::mdx::Write as _;
 use wc3::model::scene::ModelInfo;
@@ -96,7 +96,7 @@ fn special_default() -> Special {
 fn read_special(parser: &mut Parser<'_>) -> Result<Special, ReadError> {
     Ok(Special(parser.read()?))
 }
-fn write_special<W: Write>(value: &Special, writer: &mut MdlWriter<W>) -> Result<(), WriteError> {
+fn write_special<W: Write>(value: &Special, writer: &mut Writer<W>) -> Result<(), WriteError> {
     writer.write(&value.0)
 }
 fn special_is_default(value: &Special) -> bool {
@@ -163,7 +163,7 @@ fn hooks_do_not_require_codec_or_default_traits_on_the_field_type() {
     };
     let mut output = Vec::new();
     assert!(matches!(
-        MdlWriter::new(&mut output).write(&invalid),
+        Writer::new(&mut output).write(&invalid),
         Err(WriteError::Unsupported(_))
     ));
     assert!(output.is_empty());
@@ -268,7 +268,7 @@ impl mdl::Read for ReadOnly {
 }
 struct WriteOnly(u32);
 impl mdl::Write for WriteOnly {
-    fn write_mdl<W: Write>(&self, writer: &mut MdlWriter<W>) -> Result<(), WriteError> {
+    fn write_mdl<W: Write>(&self, writer: &mut Writer<W>) -> Result<(), WriteError> {
         writer.write(&self.0)
     }
 }
@@ -331,7 +331,7 @@ fn packed_flags_share_storage_but_track_duplicates_independently() {
     assert_eq!(&source[error.span.start..error.span.end], "Last");
     let mut output = Vec::new();
     assert!(matches!(
-        MdlWriter::new(&mut output).write(&Packed {
+        Writer::new(&mut output).write(&Packed {
             id: 7,
             flags: BareFlags(2)
         }),
@@ -525,7 +525,7 @@ fn linked_properties_enable_both_forms_and_validate_the_collection() {
     let mut invalid = absent;
     let alpha = AnimationTrack::<GeosetAlpha>::linear(Vec::new(), None).unwrap();
     invalid.tracks = vec![alpha.clone().into(), alpha.into()];
-    let mut writer = MdlWriter::new(Vec::new());
+    let mut writer = Writer::new(Vec::new());
     assert!(writer.write(&invalid).is_err());
     assert!(writer.finish().unwrap().is_empty());
     invalid.tracks = vec![AnimationTrack::<GeosetColor>::linear(Vec::new(), None)
@@ -560,7 +560,7 @@ enum LinkedTrack<T> {
     Unmapped(PhantomData<T>),
 }
 impl<T> mdl::Write for LinkedTrack<T> {
-    fn write_mdl<W: Write>(&self, writer: &mut MdlWriter<W>) -> Result<(), WriteError> {
+    fn write_mdl<W: Write>(&self, writer: &mut Writer<W>) -> Result<(), WriteError> {
         match self {
             Self::Alpha(track) => writer.write(track),
             Self::Unmapped(_) => Err(WriteError::Unsupported("unmapped track")),

@@ -4,8 +4,8 @@ use super::{
     LayerTextureSlot, LayerTextureSlotsField, LayerTrack, ShaderType,
 };
 use crate::model::mdl::{
-    dispatch_name, Dialect, Field, MdlWriter, Parser, ReadErrorKind, ReadFields, Span, TokenKind,
-    WriteFields,
+    dispatch_name, Dialect, Field, Parser, ReadErrorKind, ReadFields, Span, TokenKind, WriteFields,
+    Writer,
 };
 use crate::model::{mdl, FixedText};
 use crate::model::{AnimationTrack, Color, LayerTextureId, ModelVersion};
@@ -140,13 +140,13 @@ impl WriteFields for TextureBindings {
     fn prepare_mdl_fields(&self, dialect: Dialect) -> Result<(), mdl::WriteError> {
         validate_slots(&self.slots, dialect)
     }
-    fn write_mdl_headers<W: IoWrite>(&self, _: &mut MdlWriter<W>) -> Result<(), mdl::WriteError> {
+    fn write_mdl_headers<W: IoWrite>(&self, _: &mut Writer<W>) -> Result<(), mdl::WriteError> {
         Ok(())
     }
     fn write_mdl_fields<W: IoWrite>(
         &self,
         _: (),
-        writer: &mut MdlWriter<W>,
+        writer: &mut Writer<W>,
     ) -> Result<(), mdl::WriteError> {
         self.prepare_mdl_fields(writer.dialect())?;
         write_slots(&self.slots, writer)
@@ -174,13 +174,13 @@ impl<V: ModelVersion> WriteFields for TextureBindingsView<'_, V> {
             Ok(())
         }
     }
-    fn write_mdl_headers<W: IoWrite>(&self, _: &mut MdlWriter<W>) -> Result<(), mdl::WriteError> {
+    fn write_mdl_headers<W: IoWrite>(&self, _: &mut Writer<W>) -> Result<(), mdl::WriteError> {
         Ok(())
     }
     fn write_mdl_fields<W: IoWrite>(
         &self,
         _: (),
-        writer: &mut MdlWriter<W>,
+        writer: &mut Writer<W>,
     ) -> Result<(), mdl::WriteError> {
         self.prepare_mdl_fields(writer.dialect())?;
         if self.0.mdl_hd() {
@@ -353,7 +353,7 @@ fn validate_slots(slots: &[LayerTextureSlot], dialect: Dialect) -> Result<(), md
 }
 fn write_slots<W: IoWrite>(
     slots: &[LayerTextureSlot],
-    writer: &mut MdlWriter<W>,
+    writer: &mut Writer<W>,
 ) -> Result<(), mdl::WriteError> {
     validate_slots(slots, writer.dialect())?;
     for slot in slots {
@@ -369,7 +369,7 @@ fn write_slots<W: IoWrite>(
 fn write_texture_id<W: IoWrite>(
     id: u32,
     slot: u32,
-    writer: &mut MdlWriter<W>,
+    writer: &mut Writer<W>,
 ) -> Result<(), mdl::WriteError> {
     if slot > 5 {
         return Err(mdl::WriteError::Unsupported("texture slot"));
@@ -426,7 +426,7 @@ impl mdl::WriteProperty for ShaderMarker {
     fn write_mdl_property<W: IoWrite>(
         &self,
         name: &'static str,
-        writer: &mut MdlWriter<W>,
+        writer: &mut Writer<W>,
     ) -> Result<(), mdl::WriteError> {
         self.validate_mdl_property(name, writer.dialect())?;
         if let Some(shader) = self.0 {

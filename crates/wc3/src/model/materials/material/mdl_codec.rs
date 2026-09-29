@@ -3,7 +3,7 @@ use super::{Material, MaterialRenderFlags, NoShader, ShaderText};
 use crate::model::materials::Layer;
 use crate::model::mdl;
 use crate::model::mdl::{
-    Dialect, Field, MdlWriter, Parser, ReadErrorKind, ReadProperty, Span, WriteProperty,
+    Dialect, Field, Parser, ReadErrorKind, ReadProperty, Span, WriteProperty, Writer,
 };
 use crate::model::{FixedText, ModelVersion};
 use std::io::{sink, Write as IoWrite};
@@ -24,7 +24,7 @@ impl WriteProperty for NoShader {
     fn write_mdl_property<W: IoWrite>(
         &self,
         _: &'static str,
-        _: &mut MdlWriter<W>,
+        _: &mut Writer<W>,
     ) -> Result<(), mdl::WriteError> {
         Ok(())
     }
@@ -39,12 +39,12 @@ impl ReadProperty for ShaderText {
 }
 impl WriteProperty for ShaderText {
     fn validate_mdl_property(&self, _: &'static str, _: Dialect) -> Result<(), mdl::WriteError> {
-        MdlWriter::new(sink()).write(&self.0)
+        Writer::new(sink()).write(&self.0)
     }
     fn write_mdl_property<W: IoWrite>(
         &self,
         name: &'static str,
-        writer: &mut MdlWriter<W>,
+        writer: &mut Writer<W>,
     ) -> Result<(), mdl::WriteError> {
         self.validate_mdl_property(name, writer.dialect())?;
         if self.0 != FixedText::default() {
@@ -124,7 +124,7 @@ impl<V: ModelVersion> mdl::Read for Material<V> {
     }
 }
 impl<V: ModelVersion> mdl::Write for Material<V> {
-    fn write_mdl<W: IoWrite>(&self, writer: &mut MdlWriter<W>) -> Result<(), mdl::WriteError> {
+    fn write_mdl<W: IoWrite>(&self, writer: &mut Writer<W>) -> Result<(), mdl::WriteError> {
         writer.write(&MaterialMdl::<V> {
             version: PhantomData,
             priority: self.priority_plane,

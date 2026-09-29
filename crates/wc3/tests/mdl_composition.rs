@@ -145,7 +145,7 @@ fn conflicting_flattened_names_are_rejected_before_body_or_output() {
         second: Position { position: [0.0; 3] },
     };
     let mut output = Vec::new();
-    let mut writer = mdl::MdlWriter::new(&mut output);
+    let mut writer = mdl::Writer::new(&mut output);
     assert!(writer.write(&value).is_err());
     assert!(output.is_empty());
 }
@@ -318,7 +318,7 @@ fn nested_validation_receives_record_span_and_runs_before_parent_output() {
         nested: Validated { id: 0 },
     };
     let mut bytes = Vec::new();
-    assert!(mdl::MdlWriter::new(&mut bytes).write(&value).is_err());
+    assert!(mdl::Writer::new(&mut bytes).write(&value).is_err());
     assert!(bytes.is_empty());
 }
 

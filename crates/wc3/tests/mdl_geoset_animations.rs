@@ -1,7 +1,7 @@
 use wc3::model::animation::{
     AnimationTrack, GeosetAlpha, GeosetAnimation, GeosetAnimationFlags, GeosetColor, GeosetTrack,
 };
-use wc3::model::mdl::{MdlWriter, Read as _, ReadErrorKind, Write as _};
+use wc3::model::mdl::{Read as _, ReadErrorKind, Write as _, Writer};
 use wc3::model::mdx::{Read as _, Write as _};
 
 fn roundtrip(source: &str) -> GeosetAnimation {
@@ -98,7 +98,7 @@ fn rejects_invalid_fields_and_static_framing() {
 
 fn refuses_before_output(value: &GeosetAnimation) {
     let mut bytes = Vec::new();
-    let mut writer = MdlWriter::new(&mut bytes);
+    let mut writer = Writer::new(&mut bytes);
     assert!(writer.write(value).is_err());
     assert!(writer.finish().unwrap().is_empty());
 }

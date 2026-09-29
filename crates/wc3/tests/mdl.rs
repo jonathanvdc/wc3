@@ -4,7 +4,7 @@ use wc3::model::geometry::PivotPoint;
 use wc3::model::materials::{Texture, TextureFlags};
 use wc3::model::mdl;
 use wc3::model::mdl::{
-    Lexer, MdlWriter, Parser, ReadError, ReadErrorKind, Span, TokenKind, WriteError,
+    Lexer, Parser, ReadError, ReadErrorKind, Span, TokenKind, WriteError, Writer,
 };
 use wc3::model::mdl::{Read as _, Write as _};
 use wc3::model::mdx::Read as _;
@@ -110,7 +110,7 @@ fn strings_are_literal_and_fixed_text_checks_byte_capacity() {
     ));
 }
 fn print_result(value: &str) -> Result<(), WriteError> {
-    MdlWriter::new(io::sink()).write(value)
+    Writer::new(io::sink()).write(value)
 }
 
 #[test]
@@ -306,7 +306,7 @@ fn counted_lists_stream_and_validate_on_exhaustion_or_finish() {
     parser.finish().unwrap();
     assert_eq!(print(&GlobalSequence(1000)), "Duration 1000,\n");
     assert_eq!(print(&values[0]), "{ 0.0, 1.0, 2.0 },\n");
-    let mut writer = MdlWriter::new(Vec::new());
+    let mut writer = Writer::new(Vec::new());
     writer.counted("PivotPoints", values.iter()).unwrap();
     let text = String::from_utf8(writer.finish().unwrap()).unwrap();
     let mut parser = Parser::new(&text);
@@ -374,7 +374,7 @@ fn encode_mdl_preserves_unicode_and_checks_block_balance() {
 
     struct Unbalanced;
     impl mdl::Write for Unbalanced {
-        fn write_mdl<W: Write>(&self, writer: &mut MdlWriter<W>) -> Result<(), WriteError> {
+        fn write_mdl<W: Write>(&self, writer: &mut Writer<W>) -> Result<(), WriteError> {
             writer.begin_block("Unbalanced")
         }
     }
@@ -389,32 +389,32 @@ fn printing_rejects_unrepresentable_binary_fields() {
     let mut texture = Texture::new("a").unwrap();
     texture.flags = TextureFlags(4);
     assert!(matches!(
-        MdlWriter::new(io::sink()).write(&texture),
+        Writer::new(io::sink()).write(&texture),
         Err(WriteError::Unsupported(_))
     ));
     let mut sequence = Sequence::new("a", [0, 1]).unwrap();
     sequence.flags = SequenceFlags(2);
     assert!(matches!(
-        MdlWriter::new(io::sink()).write(&sequence),
+        Writer::new(io::sink()).write(&sequence),
         Err(WriteError::Unsupported(_))
     ));
     for bytes in [[b'a', 0, 1, 0], [0xff, 0, 0, 0], [b'a'; 4]] {
         assert!(matches!(
-            MdlWriter::new(io::sink()).write(&FixedText::from_bytes(bytes)),
+            Writer::new(io::sink()).write(&FixedText::from_bytes(bytes)),
             Err(WriteError::Unsupported(_))
         ));
     }
     let mut bytes = Texture::new("a").unwrap().encode_mdx().unwrap();
     bytes[260] = 1;
     assert!(matches!(
-        MdlWriter::new(io::sink()).write(&Texture::decode_mdx(&bytes).unwrap()),
+        Writer::new(io::sink()).write(&Texture::decode_mdx(&bytes).unwrap()),
         Err(WriteError::Unsupported(_))
     ));
 }
 
 #[test]
 fn writer_checks_balance_identifiers_and_io_errors() {
-    let mut writer = MdlWriter::new(io::sink());
+    let mut writer = Writer::new(io::sink());
     assert!(matches!(
         writer.end_block(),
         Err(WriteError::UnbalancedBlocks)
@@ -422,7 +422,7 @@ fn writer_checks_balance_identifiers_and_io_errors() {
     writer.begin_block("Outer").unwrap();
     assert!(matches!(writer.finish(), Err(WriteError::UnbalancedBlocks)));
     assert!(matches!(
-        MdlWriter::new(io::sink()).flag("Bad Name"),
+        Writer::new(io::sink()).flag("Bad Name"),
         Err(WriteError::InvalidIdentifier)
     ));
     struct Failing;
@@ -435,6 +435,6 @@ fn writer_checks_balance_identifiers_and_io_errors() {
         }
     }
     assert!(
-        matches!(MdlWriter::new(Failing).write(&1u32), Err(WriteError::Io(error)) if error.kind() == io::ErrorKind::BrokenPipe)
+        matches!(Writer::new(Failing).write(&1u32), Err(WriteError::Io(error)) if error.kind() == io::ErrorKind::BrokenPipe)
     );
 }

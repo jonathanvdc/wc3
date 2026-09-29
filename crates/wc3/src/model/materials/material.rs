@@ -178,7 +178,7 @@ impl MaterialLayout for V1800 {
 
 fn expect_tag(cursor: &mut Cursor<'_>, expected: Tag, record_tag: Tag) -> Result<(), ReadError> {
     let offset = cursor.absolute_position();
-    if cursor.read_exact(4)? == expected {
+    if cursor.read_bytes(4)? == expected {
         Ok(())
     } else {
         Err(ReadError::MalformedRecord {
@@ -249,7 +249,7 @@ impl<V: ModelVersion> Model<V> {
 
 impl<V: ModelVersion> mdx::Read for Material<V> {
     fn read_mdx(source: &mut Cursor<'_>) -> Result<Self, ReadError> {
-        let mut cursor = source.slice_u32_sized()?;
+        let mut cursor = source.subcursor_u32_sized()?;
         let value = {
             let priority_plane = cursor.read()?;
             let render_mode = cursor.read()?;

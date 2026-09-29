@@ -678,12 +678,12 @@ impl<V: ModelVersion> Geoset<V> {
 }
 
 fn peek_tag(cursor: &Cursor<'_>) -> Result<Tag, ReadError> {
-    Ok(cursor.peek_exact(4)?.try_into().expect("four-byte tag"))
+    Ok(cursor.peek_bytes(4)?.try_into().expect("four-byte tag"))
 }
 
 fn section<'a>(cursor: &mut Cursor<'a>, tag: Tag, stride: usize) -> Result<&'a [u8], ReadError> {
     let offset = cursor.absolute_position();
-    if cursor.read_exact(4)? != tag {
+    if cursor.read_bytes(4)? != tag {
         return Err(ReadError::MalformedRecord {
             tag: *b"GEOS",
             offset,
@@ -696,7 +696,7 @@ fn section<'a>(cursor: &mut Cursor<'a>, tag: Tag, stride: usize) -> Result<&'a [
             tag: *b"GEOS",
             offset,
         })?;
-    cursor.read_exact(size)
+    cursor.read_bytes(size)
 }
 
 fn decode_values<T: mdx::Read>(bytes: &[u8], width: usize) -> Result<Vec<T>, ReadError> {
@@ -866,7 +866,7 @@ impl<V: ModelVersion> Model<V> {
 
 impl<V: ModelVersion> mdx::Read for Geoset<V> {
     fn read_mdx(source: &mut Cursor<'_>) -> Result<Self, ReadError> {
-        let mut cursor = source.slice_u32_sized()?;
+        let mut cursor = source.subcursor_u32_sized()?;
 
         let value = {
             let vertices = decode_values::<[f32; 3]>(section(&mut cursor, *b"VRTX", 12)?, 12)?;
@@ -888,7 +888,7 @@ impl<V: ModelVersion> mdx::Read for Geoset<V> {
                 sequence_extents.push(cursor.read()?);
             }
             let extra_sections = V::ExtraSections::read::<V>(&mut cursor)?;
-            if cursor.read_exact(4)? != b"UVAS" {
+            if cursor.read_bytes(4)? != b"UVAS" {
                 return Err(ReadError::MalformedRecord {
                     tag: GeosetsChunk::<V>::TAG,
                     offset: cursor.absolute_position() - 4,

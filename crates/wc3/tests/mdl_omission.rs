@@ -1,9 +1,9 @@
 use std::sync::atomic::{AtomicUsize, Ordering};
 use wc3::model::animation::{AnimationTrack, GeosetAlpha, GeosetColor, GeosetTrack};
-use wc3::model::mdl::{self, MdlWriter, Read as _, ValueEq as _, Write as _};
+use wc3::model::mdl::{self, Read as _, ValueEq as _, Write as _, Writer};
 
 fn refuses_before_output<T: mdl::Write>(value: &T) {
-    let mut writer = MdlWriter::new(Vec::new());
+    let mut writer = Writer::new(Vec::new());
     assert!(writer.write(value).is_err());
     assert!(writer.finish().unwrap().is_empty());
 }

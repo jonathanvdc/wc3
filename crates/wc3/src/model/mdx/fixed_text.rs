@@ -47,7 +47,7 @@ impl<const N: usize> Default for FixedText<N> {
 impl<const N: usize> Read for FixedText<N> {
     fn read_mdx(cursor: &mut Cursor<'_>) -> Result<Self, ReadError> {
         Ok(Self(
-            cursor.read_exact(N)?.try_into().expect("fixed-width text"),
+            cursor.read_bytes(N)?.try_into().expect("fixed-width text"),
         ))
     }
 }

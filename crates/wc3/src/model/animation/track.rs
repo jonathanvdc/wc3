@@ -1,6 +1,6 @@
 //! Typed keyframe tracks.
 use super::{Interpolation, TangentKeyframe, TrackKind, TrackTag, TrackValue, ValueKeyframe};
-use crate::model::mdl::{MdlWriter, Parser, ReadErrorKind, TokenKind};
+use crate::model::mdl::{Parser, ReadErrorKind, TokenKind, Writer};
 use crate::model::{mdl, mdx};
 use crate::model::{Cursor, Encoder, ReadError, Tag, ValueError, WriteError};
 use std::io::Write as IoWrite;
@@ -141,7 +141,7 @@ impl<K: TrackKind> mdx::Read for AnimationTrack<K> {
     fn read_mdx(cursor: &mut Cursor<'_>) -> Result<Self, ReadError> {
         let mut next = *cursor;
         let offset = next.absolute_position();
-        let tag: Tag = next.read_exact(4)?.try_into().expect("four-byte tag");
+        let tag: Tag = next.read_bytes(4)?.try_into().expect("four-byte tag");
         let malformed = || ReadError::MalformedRecord { tag, offset };
         if tag != K::TAG {
             return Err(malformed());
@@ -160,7 +160,7 @@ impl<K: TrackKind> mdx::Read for AnimationTrack<K> {
             .and_then(|n| n.checked_add(4))
             .ok_or_else(malformed)?;
         let body_size = count.checked_mul(key_size).ok_or_else(malformed)?;
-        let mut body = next.slice(body_size).map_err(|_| malformed())?;
+        let mut body = next.subcursor(body_size).map_err(|_| malformed())?;
         let keyframes = match interpolation {
             0 | 1 => {
                 let mut keys = Vec::with_capacity(count);
@@ -347,7 +347,7 @@ impl<K: TrackKind> mdl::Write for AnimationTrack<K>
 where
     K::Value: mdl::Write,
 {
-    fn write_mdl<W: IoWrite>(&self, writer: &mut MdlWriter<W>) -> Result<(), mdl::WriteError> {
+    fn write_mdl<W: IoWrite>(&self, writer: &mut Writer<W>) -> Result<(), mdl::WriteError> {
         self.write_mdl_named(writer, K::MDL_NAME)
     }
 }
@@ -358,7 +358,7 @@ where
     /// Writes a borrowed track under an enclosing record's alias.
     pub(crate) fn write_mdl_named<W: IoWrite>(
         &self,
-        writer: &mut MdlWriter<W>,
+        writer: &mut Writer<W>,
         name: &str,
     ) -> Result<(), mdl::WriteError> {
         writer.begin_counted_block(name, self.keyframes.len())?;
@@ -387,7 +387,7 @@ where
 }
 
 fn write_key<W: IoWrite, T: mdl::Write>(
-    writer: &mut MdlWriter<W>,
+    writer: &mut Writer<W>,
     frame: i32,
     value: &T,
 ) -> Result<(), mdl::WriteError> {
@@ -399,7 +399,7 @@ fn write_key<W: IoWrite, T: mdl::Write>(
 }
 
 fn write_tangent<W: IoWrite, T: mdl::Write>(
-    writer: &mut MdlWriter<W>,
+    writer: &mut Writer<W>,
     name: &str,
     value: &T,
 ) -> Result<(), mdl::WriteError> {

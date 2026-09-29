@@ -83,11 +83,11 @@ impl<V: ModelVersion> Model<V> {
 
 impl mdx::Read for Attachment {
     fn read_mdx(source: &mut Cursor<'_>) -> Result<Self, ReadError> {
-        let mut cursor = source.slice_u32_sized()?;
+        let mut cursor = source.subcursor_u32_sized()?;
 
         let mut probe = cursor;
         let node_size = probe.read::<u32>()? as usize;
-        let node = Node::decode_mdx(cursor.read_exact(node_size)?)?;
+        let node = Node::decode_mdx(cursor.read_bytes(node_size)?)?;
         let path = cursor.read()?;
         let id = cursor.read()?;
         let visibility_track = if cursor.remaining().is_empty() {

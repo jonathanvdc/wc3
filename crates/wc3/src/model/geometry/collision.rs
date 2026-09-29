@@ -1,5 +1,5 @@
 //! Collision primitives attached to model nodes.
-use crate::model::mdl::{MdlWriter, Parser, ReadErrorKind, Span};
+use crate::model::mdl::{Parser, ReadErrorKind, Span, Writer};
 use crate::model::scene::{set_node_kind, validate_node_kind};
 use crate::model::Encoder;
 use crate::model::KnownChunk;
@@ -239,7 +239,7 @@ impl mdl::Read for CollisionShape {
     }
 }
 impl mdl::Write for CollisionShape {
-    fn write_mdl<W: IoWrite>(&self, writer: &mut MdlWriter<W>) -> Result<(), mdl::WriteError> {
+    fn write_mdl<W: IoWrite>(&self, writer: &mut Writer<W>) -> Result<(), mdl::WriteError> {
         let (kind, vertices, radius) = match self.geometry {
             CollisionGeometry::Box(points) => {
                 (1, points.into_iter().map(CollisionVertex).collect(), None)

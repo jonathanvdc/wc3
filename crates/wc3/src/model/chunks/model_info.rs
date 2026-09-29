@@ -48,7 +48,7 @@ impl KnownChunk for ModelInfoChunk {
     fn decode_payload(cursor: &mut Cursor<'_>) -> Result<Self, ReadError> {
         let info = cursor.read()?;
         let extension = cursor.remaining().to_vec();
-        cursor.read_exact(extension.len())?;
+        cursor.read_bytes(extension.len())?;
         Ok(Self::new(info, extension))
     }
 

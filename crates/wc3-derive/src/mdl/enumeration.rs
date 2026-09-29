@@ -329,7 +329,7 @@ pub(super) fn expand(input: &DeriveInput, reading: bool) -> Result<TokenStream> 
         let validate = validate_write.map(|function| quote!(#function(self)?;));
         Ok(quote! {
             impl #impl_generics ::wc3::model::mdl::Write for #name #ty_generics #where_clause {
-                fn write_mdl<#sink: ::std::io::Write>(&self, __wc3_mdl_writer: &mut ::wc3::model::mdl::MdlWriter<#sink>) -> ::core::result::Result<(), ::wc3::model::mdl::WriteError> {
+                fn write_mdl<#sink: ::std::io::Write>(&self, __wc3_mdl_writer: &mut ::wc3::model::mdl::Writer<#sink>) -> ::core::result::Result<(), ::wc3::model::mdl::WriteError> {
                     let __wc3_mdl_names: &[&str] = &[#(#names,)*];
                     if !::wc3::model::mdl::enum_names_valid(__wc3_mdl_names) { return ::core::result::Result::Err(::wc3::model::mdl::WriteError::Unsupported("invalid or duplicate MDL enum variant names")); }
                     #validate

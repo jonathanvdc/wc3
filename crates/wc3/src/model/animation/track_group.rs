@@ -32,7 +32,7 @@ macro_rules! track_group {
         impl $crate::model::mdx::Read for $group {
             fn read_mdx(cursor: &mut $crate::model::Cursor<'_>) -> Result<Self, $crate::model::ReadError> {
                 let offset = cursor.absolute_position();
-                let tag: $crate::model::Tag = cursor.peek_exact(4)?.try_into().expect("four-byte tag");
+                let tag: $crate::model::Tag = cursor.peek_bytes(4)?.try_into().expect("four-byte tag");
                 $(if tag == <$crate::model::animation::$kind as $crate::model::animation::TrackKind>::TAG {
                     return Ok(Self::$variant(cursor.read::<$crate::model::animation::AnimationTrack<$crate::model::animation::$kind>>()?));
                 })+

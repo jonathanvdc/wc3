@@ -201,7 +201,7 @@ fn spec_property_spellings() {
 
 #[test]
 fn camera_translation_dispatch_requires_context() {
-    use wc3::model::mdl::{MdlWriter, Parser};
+    use wc3::model::mdl::{Parser, Writer};
     use wc3::model::scene::CameraTrack;
     let source = "Translation 1 { Linear, -3600: { 1, 2, 3 }, }";
     let eye = CameraTrack::decode_mdl(source).unwrap();
@@ -215,7 +215,7 @@ fn camera_translation_dispatch_requires_context() {
     parser.finish().unwrap();
     assert!(matches!(target, CameraTrack::TargetTranslation(_)));
     assert!(target.encode_mdl().is_err());
-    let mut writer = MdlWriter::new(Vec::new());
+    let mut writer = Writer::new(Vec::new());
     writer.begin_block("Target").unwrap();
     writer.property("Position", &[0.0f32; 3]).unwrap();
     target.write_mdl_target(&mut writer).unwrap();
@@ -229,13 +229,13 @@ fn camera_translation_dispatch_requires_context() {
     assert_eq!(CameraTrack::read_mdl_target(&mut block).unwrap(), target);
     block.finish().unwrap();
     parser.finish().unwrap();
-    let mut writer = MdlWriter::new(Vec::new());
+    let mut writer = Writer::new(Vec::new());
     assert!(eye.write_mdl_target(&mut writer).is_err());
 }
 
 #[test]
 fn texture_anims_spec_container_transcodes_without_losing_tracks() {
-    use wc3::model::mdl::{MdlWriter, Parser};
+    use wc3::model::mdl::{Parser, Writer};
     use wc3::model::mdx::{Read as _, Write as _};
     let source = r#"TextureAnims 2 {
         TVertexAnim {
@@ -265,7 +265,7 @@ fn texture_anims_spec_container_transcodes_without_losing_tracks() {
         .collect::<Result<Vec<_>, _>>()
         .unwrap();
     parser.finish().unwrap();
-    let mut writer = MdlWriter::new(Vec::new());
+    let mut writer = Writer::new(Vec::new());
     writer.counted("TextureAnims", animations.iter()).unwrap();
     let output = String::from_utf8(writer.finish().unwrap()).unwrap();
     assert!(output.contains("\t\t\t\tInTan"));

@@ -4,7 +4,7 @@ use crate::model::animation::{
 };
 use crate::model::conversion::ConversionContext;
 use crate::model::mdl;
-use crate::model::mdl::{MdlWriter, Parser, ReadErrorKind, TokenKind};
+use crate::model::mdl::{Parser, ReadErrorKind, TokenKind, Writer};
 use crate::model::mdx;
 use crate::model::ConversionError;
 use crate::model::ModelVersion;
@@ -182,7 +182,7 @@ impl<V: ModelVersion> mdx::Read for Camera<V> {
                 offset: start,
                 length,
             })?;
-        let mut cursor = source.slice(body_len)?;
+        let mut cursor = source.subcursor(body_len)?;
         let name = cursor.read()?;
         let position = cursor.read()?;
         let field_of_view = cursor.read()?;
@@ -336,7 +336,7 @@ impl CameraTrack {
     /// Writes a track inside an already opened Camera Target block.
     pub fn write_mdl_target<W: IoWrite>(
         &self,
-        writer: &mut MdlWriter<W>,
+        writer: &mut Writer<W>,
     ) -> Result<(), mdl::WriteError> {
         match self {
             Self::TargetTranslation(track) => writer.write(track),
@@ -348,7 +348,7 @@ impl CameraTrack {
 }
 
 impl mdl::Write for CameraTrack {
-    fn write_mdl<W: IoWrite>(&self, writer: &mut MdlWriter<W>) -> Result<(), mdl::WriteError> {
+    fn write_mdl<W: IoWrite>(&self, writer: &mut Writer<W>) -> Result<(), mdl::WriteError> {
         match self {
             Self::Translation(track) => writer.write(track),
             Self::Rotation(track) => writer.write(track),

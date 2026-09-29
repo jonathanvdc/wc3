@@ -3,6 +3,8 @@
 //! Import [`Read`] and [`Write`] as `_` to use `decode_mdl()` and `encode_mdl()`.
 //! [`crate::model::Model`] checks an expected version;
 //! [`crate::model::DynamicModel`] selects it from the `Version` block.
+//! Models also implement `FromStr`: use `source.parse::<Model<V800>>()` or
+//! `source.parse::<DynamicModel>()`.
 //! Whole-model input requires `Version` first and a `Model` block.
 //!
 //! ```
@@ -21,7 +23,7 @@
 //!
 //! Readers accept Warcraft III and HiveWorkshop spellings, including mixed input.
 //! Output defaults to [`Dialect::Warcraft3`]. Select [`Dialect::HiveWorkshop`] with
-//! [`Write::encode_mdl_with_dialect`] or [`MdlWriter::with_dialect`]; the choice
+//! [`Write::encode_mdl_with_dialect`] or [`Writer::with_dialect`]; the choice
 //! applies to all nested records. HiveWorkshop output can represent numeric shader
 //! IDs, animations in non-diffuse HD texture slots, raw geoset selection flags,
 //! and LOD names that Warcraft III output cannot express.
@@ -52,7 +54,7 @@
 //! one at a time. Exhaust the list or call its `finish()` method to validate unread
 //! entries and the declared count; dropping it does not validate the remainder.
 //!
-//! [`MdlWriter`] writes to any standard I/O sink. Errors can leave partial output;
+//! [`Writer`] writes to any standard I/O sink. Errors can leave partial output;
 //! use `encode_mdl()` for an owned string before replacing a file.
 
 mod enumeration;
@@ -74,7 +76,7 @@ pub use property::{ReadProperty, WriteProperty};
 mod value_eq;
 pub use value_eq::ValueEq;
 mod writer;
-pub use writer::MdlWriter;
+pub use writer::Writer;
 
 /// Canonical text syntax selected independently of the binary model version.
 /// Readers accept both dialects; writers enforce the selected dialect's limits.
@@ -108,7 +110,7 @@ pub trait Read: Sized {
 /// including unknown flag bits and opaque binary padding. Output may be partial
 /// on error. Finite floats round-trip exactly; NaNs retain only their NaN class.
 pub trait Write {
-    fn write_mdl<W: IoWrite>(&self, writer: &mut MdlWriter<W>) -> Result<(), WriteError>;
+    fn write_mdl<W: IoWrite>(&self, writer: &mut Writer<W>) -> Result<(), WriteError>;
 
     /// Encodes one value as UTF-8 text and checks block balance.
     fn encode_mdl(&self) -> Result<String, WriteError> {
@@ -117,10 +119,10 @@ pub trait Write {
 
     /// Encodes using the selected dialect without discarding unrepresentable data.
     fn encode_mdl_with_dialect(&self, dialect: Dialect) -> Result<String, WriteError> {
-        let mut writer = MdlWriter::with_dialect(Vec::new(), dialect);
+        let mut writer = Writer::with_dialect(Vec::new(), dialect);
         writer.write(self)?;
         let bytes = writer.finish()?;
-        // MdlWriter only writes UTF-8 strings and ASCII formatting.
+        // Writer only writes UTF-8 strings and ASCII formatting.
         Ok(String::from_utf8(bytes).expect("MDL output is valid UTF-8"))
     }
 }

@@ -267,7 +267,7 @@ pub(super) fn expand(
     });
     let write_impl = block.map(|block| quote! {
         impl #impl_generics ::wc3::model::mdl::Write for #name #ty_generics #where_clause {
-            fn write_mdl<#sink: ::std::io::Write>(&self, __wc3_mdl_writer: &mut ::wc3::model::mdl::MdlWriter<#sink>) -> ::core::result::Result<(), ::wc3::model::mdl::WriteError> {
+            fn write_mdl<#sink: ::std::io::Write>(&self, __wc3_mdl_writer: &mut ::wc3::model::mdl::Writer<#sink>) -> ::core::result::Result<(), ::wc3::model::mdl::WriteError> {
                 let state = <Self as ::wc3::model::mdl::WriteFields>::prepare_mdl_fields(self, __wc3_mdl_writer.dialect())?;
                 __wc3_mdl_writer.indent()?;
                 __wc3_mdl_writer.identifier(#block)?;
@@ -283,7 +283,7 @@ pub(super) fn expand(
         impl #impl_generics ::wc3::model::mdl::WriteFields for #name #ty_generics #where_clause {
             type State = #state_name #ty_generics;
             fn visit_mdl_names(visitor: &mut dyn FnMut(&'static str, bool)) { #visit_names }
-            fn write_mdl_headers<#sink: ::std::io::Write>(&self, __wc3_mdl_writer: &mut ::wc3::model::mdl::MdlWriter<#sink>) -> ::core::result::Result<(), ::wc3::model::mdl::WriteError> {
+            fn write_mdl_headers<#sink: ::std::io::Write>(&self, __wc3_mdl_writer: &mut ::wc3::model::mdl::Writer<#sink>) -> ::core::result::Result<(), ::wc3::model::mdl::WriteError> {
                 #(#headers)*
                 Ok(())
             }
@@ -294,7 +294,7 @@ pub(super) fn expand(
                 #(#required_flags)*
                 Ok(#state_name { #(#state_names,)* __wc3_mdl_marker: ::core::marker::PhantomData })
             }
-            fn write_mdl_fields<#sink: ::std::io::Write>(&self, state: Self::State, __wc3_mdl_writer: &mut ::wc3::model::mdl::MdlWriter<#sink>) -> ::core::result::Result<(), ::wc3::model::mdl::WriteError> {
+            fn write_mdl_fields<#sink: ::std::io::Write>(&self, state: Self::State, __wc3_mdl_writer: &mut ::wc3::model::mdl::Writer<#sink>) -> ::core::result::Result<(), ::wc3::model::mdl::WriteError> {
                 let #state_name { #(#state_names,)* .. } = state;
                 #(#writes)*
                 Ok(())

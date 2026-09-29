@@ -364,3 +364,21 @@ fn small_derived_record_codecs_keep_required_headers_counts_and_defaults() {
         "Version {\n\tFormatVersion 800,\n}\n"
     );
 }
+
+#[test]
+fn models_parse_from_strings_and_preserve_validation() {
+    let typed: Model<V800> = QUAD.parse().unwrap();
+    let dynamic: DynamicModel = QUAD.parse().unwrap();
+    assert_eq!(typed.encode_mdl().unwrap(), CANONICAL);
+    assert_eq!(dynamic.encode_mdl().unwrap(), CANONICAL);
+
+    assert!(QUAD.parse::<Model<V900>>().is_err());
+    for source in [
+        "",
+        "Model \"Missing version\" {}",
+        &format!("{MINIMAL} garbage"),
+    ] {
+        assert!(source.parse::<Model<V800>>().is_err());
+        assert!(source.parse::<DynamicModel>().is_err());
+    }
+}

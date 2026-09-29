@@ -131,7 +131,7 @@ impl mdl::Read for Input {
 }
 struct Output(u32);
 impl mdl::Write for Output {
-    fn write_mdl<W: IoWrite>(&self, writer: &mut mdl::MdlWriter<W>) -> Result<(), mdl::WriteError> {
+    fn write_mdl<W: IoWrite>(&self, writer: &mut mdl::Writer<W>) -> Result<(), mdl::WriteError> {
         writer.write(&self.0)
     }
 }
@@ -167,13 +167,11 @@ fn constant_names_are_checked_for_duplicates_and_valid_identifiers() {
     assert!(Duplicate::decode_mdl("Same").is_err());
     assert!(Invalid::decode_mdl("bad").is_err());
     let mut bytes = Vec::new();
-    assert!(mdl::MdlWriter::new(&mut bytes)
+    assert!(mdl::Writer::new(&mut bytes)
         .write(&Duplicate::First)
         .is_err());
     assert!(bytes.is_empty());
-    assert!(mdl::MdlWriter::new(&mut bytes)
-        .write(&Invalid::Value)
-        .is_err());
+    assert!(mdl::Writer::new(&mut bytes).write(&Invalid::Value).is_err());
     assert!(bytes.is_empty());
 }
 
@@ -211,9 +209,7 @@ fn enum_validation_uses_complete_span_and_precedes_output() {
     let error = Checked::decode_mdl("  Id 0,").unwrap_err();
     assert_eq!(error.span, mdl::Span::new(2, 7));
     let mut bytes = Vec::new();
-    assert!(mdl::MdlWriter::new(&mut bytes)
-        .write(&Checked::Id(0))
-        .is_err());
+    assert!(mdl::Writer::new(&mut bytes).write(&Checked::Id(0)).is_err());
     assert!(bytes.is_empty());
 }
 

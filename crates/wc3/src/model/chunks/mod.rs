@@ -62,7 +62,7 @@ impl<T: KnownChunk> mdx::Read for T {
         if next.remaining().len() < 8 {
             return Err(ReadError::TruncatedHeader { offset });
         }
-        let tag: Tag = next.read_exact(4)?.try_into().expect("four-byte tag");
+        let tag: Tag = next.read_bytes(4)?.try_into().expect("four-byte tag");
         if tag != T::TAG {
             return Err(ReadError::UnexpectedChunkTag {
                 expected: T::TAG,
@@ -71,7 +71,7 @@ impl<T: KnownChunk> mdx::Read for T {
         }
         let size = next.read()?;
         let mut payload = next
-            .slice(size as usize)
+            .subcursor(size as usize)
             .map_err(|_| ReadError::TruncatedChunk { tag, offset, size })?;
         let decoded = T::decode_payload(&mut payload)?;
         payload.finish()?;

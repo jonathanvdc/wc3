@@ -7,16 +7,16 @@ use std::str::from_utf8;
 
 /// Write MDL records to a standard I/O sink.
 ///
-/// Use [`MdlWriter::with_dialect`] to choose output syntax and [`MdlWriter::finish`]
+/// Use [`Writer::with_dialect`] to choose output syntax and [`Writer::finish`]
 /// to check that all opened blocks were closed. Output uses tabs, LF, and
 /// round-tripping float literals. Errors may leave partial output; use
 /// [`Write::encode_mdl`] when you need a complete string before replacing a file.
-pub struct MdlWriter<W> {
+pub struct Writer<W> {
     output: W,
     depth: usize,
     dialect: Dialect,
 }
-impl<W: IoWrite> MdlWriter<W> {
+impl<W: IoWrite> Writer<W> {
     pub fn new(output: W) -> Self {
         Self::with_dialect(output, Dialect::Warcraft3)
     }
@@ -35,6 +35,7 @@ impl<W: IoWrite> MdlWriter<W> {
     pub fn into_inner(self) -> W {
         self.output
     }
+    /// Checks block balance and returns the sink without flushing it.
     pub fn finish(self) -> Result<W, WriteError> {
         if self.depth != 0 {
             Err(WriteError::UnbalancedBlocks)
@@ -169,14 +170,14 @@ impl<W: IoWrite> MdlWriter<W> {
 
 macro_rules! integers {
     ($($ty:ty),*) => { $(impl Write for $ty {
-        fn write_mdl<W: IoWrite>(&self, writer: &mut MdlWriter<W>) -> Result<(), WriteError> {
+        fn write_mdl<W: IoWrite>(&self, writer: &mut Writer<W>) -> Result<(), WriteError> {
             writer.formatted(format_args!("{self}"))
         }
     })* };
 }
 integers!(u8, u16, u32, i32);
 impl Write for f32 {
-    fn write_mdl<W: IoWrite>(&self, writer: &mut MdlWriter<W>) -> Result<(), WriteError> {
+    fn write_mdl<W: IoWrite>(&self, writer: &mut Writer<W>) -> Result<(), WriteError> {
         if self.is_nan() {
             writer.raw("nan")
         } else if *self == f32::INFINITY {
@@ -205,12 +206,12 @@ impl Write for f32 {
     }
 }
 impl Write for str {
-    fn write_mdl<W: IoWrite>(&self, writer: &mut MdlWriter<W>) -> Result<(), WriteError> {
+    fn write_mdl<W: IoWrite>(&self, writer: &mut Writer<W>) -> Result<(), WriteError> {
         writer.quoted(self)
     }
 }
 impl<T: Write, const N: usize> Write for [T; N] {
-    fn write_mdl<W: IoWrite>(&self, writer: &mut MdlWriter<W>) -> Result<(), WriteError> {
+    fn write_mdl<W: IoWrite>(&self, writer: &mut Writer<W>) -> Result<(), WriteError> {
         writer.raw("{ ")?;
         for (i, value) in self.iter().enumerate() {
             if i != 0 {
@@ -236,7 +237,7 @@ fn fixed_text<const N: usize>(text: &FixedText<N>) -> Result<&str, WriteError> {
     from_utf8(&bytes[..end]).map_err(|_| WriteError::Unsupported("non-UTF-8 fixed text"))
 }
 impl<const N: usize> Write for FixedText<N> {
-    fn write_mdl<W: IoWrite>(&self, writer: &mut MdlWriter<W>) -> Result<(), WriteError> {
+    fn write_mdl<W: IoWrite>(&self, writer: &mut Writer<W>) -> Result<(), WriteError> {
         writer.quoted(fixed_text(self)?)
     }
 }

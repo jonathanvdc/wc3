@@ -145,7 +145,7 @@ fn expand_checked(input: DeriveInput, reading: bool) -> Result<TokenStream> {
     if reading {
         let body = if tag.is_some() {
             quote! {
-                let mut cursor = source.slice_u32_sized()?;
+                let mut cursor = source.subcursor_u32_sized()?;
                 let value = #constructor;
                 cursor.finish()?;
                 Ok(value)

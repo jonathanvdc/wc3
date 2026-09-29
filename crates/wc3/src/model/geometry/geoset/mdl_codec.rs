@@ -4,7 +4,7 @@ use super::{
 };
 use crate::model::{mdl, FixedText, ModelVersion, Vec3};
 use mdl::WriteProperty as _;
-use mdl::{Dialect, Field, MdlWriter, Parser, ReadErrorKind, Span, TokenKind};
+use mdl::{Dialect, Field, Parser, ReadErrorKind, Span, TokenKind, Writer};
 use std::io::{sink, Write as IoWrite};
 
 #[derive(mdl::Read, mdl::Write)]
@@ -54,7 +54,7 @@ impl<T: mdl::Write> mdl::WriteProperty for ListRef<'_, T> {
     fn write_mdl_property<W: IoWrite>(
         &self,
         name: &'static str,
-        writer: &mut MdlWriter<W>,
+        writer: &mut Writer<W>,
     ) -> Result<(), mdl::WriteError> {
         writer.begin_counted_block(name, self.0.len())?;
         for value in self.0 {
@@ -67,7 +67,7 @@ impl<T: mdl::Write> mdl::WriteProperty for UncountedRef<'_, T> {
     fn write_mdl_property<W: IoWrite>(
         &self,
         name: &'static str,
-        writer: &mut MdlWriter<W>,
+        writer: &mut Writer<W>,
     ) -> Result<(), mdl::WriteError> {
         writer.begin_block(name)?;
         for value in self.0 {
@@ -80,7 +80,7 @@ impl<T: mdl::Write> mdl::WriteProperty for OptionalListRef<'_, T> {
     fn write_mdl_property<W: IoWrite>(
         &self,
         name: &'static str,
-        writer: &mut MdlWriter<W>,
+        writer: &mut Writer<W>,
     ) -> Result<(), mdl::WriteError> {
         if let Some(values) = self.0 {
             ListRef(values).write_mdl_property(name, writer)?;
@@ -103,7 +103,7 @@ impl UvSetsRef<'_> {
 }
 pub(super) struct UvRef<'a>(&'a [[f32; 2]]);
 impl mdl::Write for UvRef<'_> {
-    fn write_mdl<W: IoWrite>(&self, writer: &mut MdlWriter<W>) -> Result<(), mdl::WriteError> {
+    fn write_mdl<W: IoWrite>(&self, writer: &mut Writer<W>) -> Result<(), mdl::WriteError> {
         ListRef(self.0).write_mdl_property("TVertices", writer)
     }
 }
@@ -240,7 +240,7 @@ impl<T: mdl::Write> mdl::WriteProperty for GroupsRef<'_, T> {
     fn write_mdl_property<W: IoWrite>(
         &self,
         name: &'static str,
-        writer: &mut MdlWriter<W>,
+        writer: &mut Writer<W>,
     ) -> Result<(), mdl::WriteError> {
         self.validate_mdl_property(name, writer.dialect())?;
         writer.indent()?;
@@ -340,7 +340,7 @@ impl mdl::WriteProperty for SkinRef<'_> {
     fn write_mdl_property<W: IoWrite>(
         &self,
         name: &'static str,
-        writer: &mut MdlWriter<W>,
+        writer: &mut Writer<W>,
     ) -> Result<(), mdl::WriteError> {
         self.validate_mdl_property(name, writer.dialect())?;
         if let Some(rows) = self.0 {
@@ -623,7 +623,7 @@ impl mdl::WriteProperty for RawSelection {
     fn write_mdl_property<W: IoWrite>(
         &self,
         name: &'static str,
-        writer: &mut MdlWriter<W>,
+        writer: &mut Writer<W>,
     ) -> Result<(), mdl::WriteError> {
         self.validate_mdl_property(name, writer.dialect())?;
         if let Some(value) = self.0 {
@@ -646,7 +646,7 @@ impl mdl::WriteProperty for LodNameRef<'_> {
                         "LOD name in Warcraft III dialect",
                     ));
                 }
-                MdlWriter::new(sink()).write(name)?;
+                Writer::new(sink()).write(name)?;
             }
         }
         Ok(())
@@ -654,7 +654,7 @@ impl mdl::WriteProperty for LodNameRef<'_> {
     fn write_mdl_property<W: IoWrite>(
         &self,
         name: &'static str,
-        writer: &mut MdlWriter<W>,
+        writer: &mut Writer<W>,
     ) -> Result<(), mdl::WriteError> {
         self.validate_mdl_property(name, writer.dialect())?;
         if let Some(value) = self.0.filter(|value| **value != FixedText::default()) {

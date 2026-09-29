@@ -1,6 +1,6 @@
 use std::io::Write as IoWrite;
 use wc3::model::mdl;
-use wc3::model::mdl::{Field, MdlWriter, Parser, Read as _, ReadErrorKind, Span, Write as _};
+use wc3::model::mdl::{Field, Parser, Read as _, ReadErrorKind, Span, Write as _, Writer};
 
 trait Layout {
     type Extra;
@@ -35,7 +35,7 @@ impl mdl::WriteProperty for Present {
     fn write_mdl_property<W: IoWrite>(
         &self,
         name: &'static str,
-        writer: &mut MdlWriter<W>,
+        writer: &mut Writer<W>,
     ) -> Result<(), mdl::WriteError> {
         writer.property(name, &self.0)
     }
@@ -73,7 +73,7 @@ impl mdl::WriteProperty for Absent {
     fn write_mdl_property<W: IoWrite>(
         &self,
         name: &'static str,
-        _writer: &mut MdlWriter<W>,
+        _writer: &mut Writer<W>,
     ) -> Result<(), mdl::WriteError> {
         self.validate_mdl_property(name, _writer.dialect())
     }
@@ -144,7 +144,7 @@ fn delegated_preflight_rejects_omission_that_would_discard_data() {
         tail: 0,
     };
     let mut bytes = Vec::new();
-    let mut writer = MdlWriter::new(&mut bytes);
+    let mut writer = Writer::new(&mut bytes);
     assert!(matches!(
         writer.write(&record),
         Err(mdl::WriteError::Unsupported("Extra"))

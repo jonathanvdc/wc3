@@ -2,7 +2,7 @@
 use super::{Camera, CameraTrack, CameraVariant};
 use crate::model::animation::{AnimationTrack, CameraTargetTranslation};
 use crate::model::{mdl, ModelVersion, Vec3};
-use mdl::{Dialect, MdlWriter, Span};
+use mdl::{Dialect, Span, Writer};
 use std::io::Write as IoWrite;
 
 #[derive(Default, mdl::Read, mdl::Write)]
@@ -64,16 +64,13 @@ impl mdl::WriteFields for TargetRef<'_> {
     fn visit_mdl_names(visitor: &mut dyn FnMut(&'static str, bool)) {
         <Target as mdl::WriteFields>::visit_mdl_names(visitor);
     }
-    fn write_mdl_headers<W: IoWrite>(
-        &self,
-        writer: &mut MdlWriter<W>,
-    ) -> Result<(), mdl::WriteError> {
+    fn write_mdl_headers<W: IoWrite>(&self, writer: &mut Writer<W>) -> Result<(), mdl::WriteError> {
         self.fields().write_mdl_headers(writer)
     }
     fn write_mdl_fields<W: IoWrite>(
         &self,
         state: Self::State,
-        writer: &mut MdlWriter<W>,
+        writer: &mut Writer<W>,
     ) -> Result<(), mdl::WriteError> {
         self.fields().write_mdl_fields(state, writer)?;
         for track in self.tracks {

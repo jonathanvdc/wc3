@@ -1,6 +1,6 @@
 //! Delegated named properties: field types own framing and presence policies.
 use super::{
-    Dialect, Field, MdlWriter, Parser, Read, ReadError, ReadErrorKind, Span, Write, WriteError,
+    Dialect, Field, Parser, Read, ReadError, ReadErrorKind, Span, Write, WriteError, Writer,
 };
 use std::io::Write as IoWrite;
 
@@ -42,7 +42,7 @@ pub trait WriteProperty {
     fn write_mdl_property<W: IoWrite>(
         &self,
         name: &'static str,
-        writer: &mut MdlWriter<W>,
+        writer: &mut Writer<W>,
     ) -> Result<(), WriteError>;
 }
 
@@ -62,7 +62,7 @@ impl<T: Write> WriteProperty for Option<T> {
     fn write_mdl_property<W: IoWrite>(
         &self,
         name: &'static str,
-        writer: &mut MdlWriter<W>,
+        writer: &mut Writer<W>,
     ) -> Result<(), WriteError> {
         if let Some(value) = self {
             writer.property(name, value)?;

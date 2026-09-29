@@ -6,7 +6,7 @@ use std::io::{Cursor as IoCursor, Write};
 use wc3::model::animation::{GlobalSequence, Interpolation, Sequence};
 use wc3::model::materials::Texture;
 use wc3::model::mdl::Read as _;
-use wc3::model::mdl::{Lexer, MdlWriter, Parser};
+use wc3::model::mdl::{Lexer, Parser, Writer};
 use wc3::model::scene::{ModelInfo, NodeTrack};
 use wc3::model::Encoder;
 
@@ -69,7 +69,7 @@ fn lexing_reading_writing_and_diagnostics_do_not_allocate() {
         .unwrap();
         let interpolation = Interpolation::decode_mdl("Linear").unwrap();
         let track = NodeTrack::decode_mdl("Translation 0 { Linear, }").unwrap();
-        let mut writer = MdlWriter::new(IoCursor::new(&mut storage[..]));
+        let mut writer = Writer::new(IoCursor::new(&mut storage[..]));
         writer.entry(&interpolation).unwrap();
         writer.write(&track).unwrap();
         writer.write(&texture).unwrap();
@@ -111,7 +111,7 @@ fn derived_records_write_existing_tracks_without_cloning() {
     let ribbon = RibbonEmitter::decode_mdl("RibbonEmitter \"a\" { ObjectId 0, HeightAbove 1 { Linear, 0: 2.0, } TextureSlot 1 { Linear, 0: 3, } Visibility 1 { Linear, 0: 1.0, } }").unwrap();
     let mut storage = [0u8; 4096];
     let (_, count) = measured(|| {
-        let mut writer = MdlWriter::new(IoCursor::new(&mut storage[..]));
+        let mut writer = Writer::new(IoCursor::new(&mut storage[..]));
         writer.write(&texture_animation).unwrap();
         writer.write(&particle).unwrap();
         writer.write(&ribbon).unwrap();
@@ -135,7 +135,7 @@ fn version_selected_lights_and_layers_write_without_cloning_storage() {
     let hd = Layer::<V1800>::decode_mdl("Layer { TextureID 1 { Linear, 0: 3, } static TextureID 7 <= 4, Shader \"Shader_HD_DefaultUnit\", EmissiveGain 1 { Linear, 0: 1.0, } FresnelOpacity 1 { Linear, 0: 0.0, } }").unwrap();
     let mut storage = [0u8; 8192];
     let (_, count) = measured(|| {
-        let mut writer = MdlWriter::new(IoCursor::new(&mut storage[..]));
+        let mut writer = Writer::new(IoCursor::new(&mut storage[..]));
         writer.write(&light).unwrap();
         writer.write(&sd).unwrap();
         writer.write(&hd).unwrap();
@@ -162,7 +162,7 @@ fn geosets_write_borrowed_mesh_sections_without_allocating() {
     geoset.sequence_extents = vec![geoset.extent; 2];
     let mut storage = [0u8; 8192];
     let (_, count) = measured(|| {
-        let mut writer = MdlWriter::new(IoCursor::new(&mut storage[..]));
+        let mut writer = Writer::new(IoCursor::new(&mut storage[..]));
         writer.write(&geoset).unwrap();
         writer.finish().unwrap();
     });
@@ -191,7 +191,7 @@ fn model_assembly_writes_borrowed_collections_without_allocating() {
         .push(GlidersChunk::new(vec![Glider { geoset_id: 0 }]).into());
     let mut storage = [0u8; 8192];
     let (_, count) = measured(|| {
-        let mut writer = MdlWriter::new(IoCursor::new(&mut storage[..]));
+        let mut writer = Writer::new(IoCursor::new(&mut storage[..]));
         writer.write(&model).unwrap();
         writer.finish().unwrap();
     });
@@ -208,7 +208,7 @@ fn cameras_particle2_and_popcorn_write_borrowed_tracks_without_allocating() {
     let popcorn = PopcornEmitter::decode_mdl("ParticleEmitterPopcorn \"p\" { ObjectId 0, Color 1 { Linear, -2: { 1, 2, 3 }, } LifeSpan 1 { Linear, 0: 1, } }").unwrap();
     let mut storage = [0u8; 8192];
     let (_, count) = measured(|| {
-        let mut writer = MdlWriter::new(IoCursor::new(&mut storage[..]));
+        let mut writer = Writer::new(IoCursor::new(&mut storage[..]));
         writer.write(&camera).unwrap();
         writer.write(&particle).unwrap();
         writer.write(&popcorn).unwrap();
@@ -231,7 +231,7 @@ fn hive_dialect_writes_named_tracks_and_mesh_data_without_allocating() {
     let mut storage = [0u8; 8192];
     let (_, count) = measured(|| {
         let mut writer =
-            MdlWriter::with_dialect(IoCursor::new(&mut storage[..]), Dialect::HiveWorkshop);
+            Writer::with_dialect(IoCursor::new(&mut storage[..]), Dialect::HiveWorkshop);
         writer.write(&layer).unwrap();
         writer.write(&geoset).unwrap();
         writer.finish().unwrap();

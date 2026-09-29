@@ -1,5 +1,5 @@
 //! Transform hierarchy shared by helpers, bones, and scene objects.
-use crate::model::mdl::{MdlWriter, Parser, Span, TokenKind, WriteFields as _};
+use crate::model::mdl::{Parser, Span, TokenKind, WriteFields as _, Writer};
 use crate::model::ModelVersion;
 use crate::model::{mdl, mdx};
 use bitfield::bitfield;
@@ -279,7 +279,7 @@ fn read_geoset_animation(parser: &mut Parser<'_>) -> Result<u32, mdl::ReadError>
 }
 fn write_reference<W: IoWrite>(
     value: &u32,
-    writer: &mut MdlWriter<W>,
+    writer: &mut Writer<W>,
     keyword: &str,
 ) -> Result<(), mdl::WriteError> {
     if *value == u32::MAX {
@@ -288,12 +288,12 @@ fn write_reference<W: IoWrite>(
         writer.write(value)
     }
 }
-fn write_geoset<W: IoWrite>(value: &u32, writer: &mut MdlWriter<W>) -> Result<(), mdl::WriteError> {
+fn write_geoset<W: IoWrite>(value: &u32, writer: &mut Writer<W>) -> Result<(), mdl::WriteError> {
     write_reference(value, writer, "Multiple")
 }
 fn write_geoset_animation<W: IoWrite>(
     value: &u32,
-    writer: &mut MdlWriter<W>,
+    writer: &mut Writer<W>,
 ) -> Result<(), mdl::WriteError> {
     write_reference(value, writer, "None")
 }
@@ -305,7 +305,7 @@ impl mdl::Read for Node {
     }
 }
 impl mdl::Write for Node {
-    fn write_mdl<W: IoWrite>(&self, writer: &mut MdlWriter<W>) -> Result<(), mdl::WriteError> {
+    fn write_mdl<W: IoWrite>(&self, writer: &mut Writer<W>) -> Result<(), mdl::WriteError> {
         validate_node_kind(self, 0)?;
         let state = self.prepare_mdl_fields(writer.dialect())?;
         writer.indent()?;

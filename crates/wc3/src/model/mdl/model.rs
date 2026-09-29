@@ -1,5 +1,5 @@
 //! Whole-model assembly: top-level MDL blocks map to typed binary chunks.
-use super::{Field, Fields, MdlWriter, Parser, ReadErrorKind, Span, TokenKind};
+use super::{Field, Fields, Parser, ReadErrorKind, Span, TokenKind, Writer};
 use crate::model::mdl;
 use crate::model::{
     AttachmentsChunk, BindPoseChunk, BonesChunk, CamerasChunk, CollectionChunk,
@@ -10,7 +10,9 @@ use crate::model::{
     TextureAnimationsChunk, TexturesChunk, VersionChunk, V1000, V1100, V1200, V1300, V1400, V1600,
     V1800, V800, V900,
 };
+use mdl::Read as _;
 use std::io::Write as IoWrite;
+use std::str::FromStr;
 
 impl<V: ModelVersion> VersionChunk<V> {
     pub(crate) fn mdl_version(&self) -> u32 {
@@ -153,7 +155,7 @@ impl<V: ModelVersion> mdl::Read for Model<V> {
 fn write_collection<V: ModelVersion, C: CollectionChunk>(
     model: &Model<V>,
     name: Option<&str>,
-    writer: &mut MdlWriter<impl IoWrite>,
+    writer: &mut Writer<impl IoWrite>,
 ) -> Result<(), mdl::WriteError>
 where
     C::Item: mdl::Write,
@@ -183,7 +185,7 @@ where
 }
 
 impl<V: ModelVersion> mdl::Write for Model<V> {
-    fn write_mdl<W: IoWrite>(&self, writer: &mut MdlWriter<W>) -> Result<(), mdl::WriteError> {
+    fn write_mdl<W: IoWrite>(&self, writer: &mut Writer<W>) -> Result<(), mdl::WriteError> {
         let mut version = None;
         let mut info = None;
         for chunk in self.chunks.as_slice() {
@@ -307,8 +309,24 @@ impl mdl::Read for DynamicModel {
     }
 }
 impl mdl::Write for DynamicModel {
-    fn write_mdl<W: IoWrite>(&self, writer: &mut MdlWriter<W>) -> Result<(), mdl::WriteError> {
+    fn write_mdl<W: IoWrite>(&self, writer: &mut Writer<W>) -> Result<(), mdl::WriteError> {
         use crate::model::visit_model;
         visit_model!(self, |model| writer.write(model))
+    }
+}
+
+impl<V: ModelVersion> FromStr for Model<V> {
+    type Err = mdl::ReadError;
+
+    fn from_str(source: &str) -> Result<Self, Self::Err> {
+        Self::decode_mdl(source)
+    }
+}
+
+impl FromStr for DynamicModel {
+    type Err = mdl::ReadError;
+
+    fn from_str(source: &str) -> Result<Self, Self::Err> {
+        Self::decode_mdl(source)
     }
 }

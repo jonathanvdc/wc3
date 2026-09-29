@@ -64,7 +64,7 @@ impl<V: ModelVersion> KnownChunk for VersionChunk<V> {
     fn decode_payload(cursor: &mut Cursor<'_>) -> Result<Self, ReadError> {
         let version = cursor.read().map_err(|_| ReadError::InvalidVersionChunk)?;
         let extension = cursor.remaining().to_vec();
-        cursor.read_exact(extension.len())?;
+        cursor.read_bytes(extension.len())?;
         if version != V::NUMBER {
             return Err(ReadError::VersionMismatch {
                 expected: V::NUMBER,

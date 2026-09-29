@@ -100,7 +100,7 @@ pub(super) fn expand(input: DeriveInput, options: Container, reading: bool) -> R
         };
         Ok(quote! {
             impl #impl_generics ::wc3::model::mdl::Write for #name #ty_generics #where_clause {
-                fn write_mdl<#sink: ::std::io::Write>(&self, __wc3_mdl_writer: &mut ::wc3::model::mdl::MdlWriter<#sink>) -> ::core::result::Result<(), ::wc3::model::mdl::WriteError> {
+                fn write_mdl<#sink: ::std::io::Write>(&self, __wc3_mdl_writer: &mut ::wc3::model::mdl::Writer<#sink>) -> ::core::result::Result<(), ::wc3::model::mdl::WriteError> {
                     #validate
                     #write
                 }

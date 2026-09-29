@@ -141,7 +141,7 @@ impl<V: ModelVersion> mdx::Read for Model<V> {
         }
 
         let mut parse = *cursor;
-        parse.read_exact(4)?;
+        parse.read_bytes(4)?;
         let mut chunks = Vec::new();
         while !parse.remaining().is_empty() {
             let (tag, _, mut payload) = read_chunk(&mut parse)?;
@@ -234,7 +234,7 @@ impl DynamicModel {
 }
 
 fn scan_version(mut cursor: Cursor<'_>) -> Result<Option<Version>, ReadError> {
-    if cursor.read_exact(4).ok() != Some(MAGIC.as_slice()) {
+    if cursor.read_bytes(4).ok() != Some(MAGIC.as_slice()) {
         return Err(ReadError::InvalidMagic);
     }
     let mut version = None;
@@ -253,10 +253,10 @@ fn read_chunk<'a>(cursor: &mut Cursor<'a>) -> Result<(Tag, u32, Cursor<'a>), Rea
     if cursor.remaining().len() < 8 {
         return Err(ReadError::TruncatedHeader { offset });
     }
-    let tag = cursor.read_exact(4)?.try_into().expect("four-byte tag");
+    let tag = cursor.read_bytes(4)?.try_into().expect("four-byte tag");
     let size = cursor.read()?;
     let payload = cursor
-        .slice(size as usize)
+        .subcursor(size as usize)
         .map_err(|_| ReadError::TruncatedChunk { tag, offset, size })?;
     Ok((tag, size, payload))
 }
