@@ -150,8 +150,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 Strict conversion preserves shared data, initializes target-only fields with
 constructor defaults, and rejects unsupported nondefault data. The report
-identifies initialized fields, omitted neutral defaults, discarded data, and
-opaque compatibility caveats.
+identifies normalized values, initialized fields, omitted neutral defaults,
+discarded data, and opaque compatibility caveats.
 
 `ConversionOptions::lossy()` permits discarding unsupported data. Unknown chunks
 have a separate `UnknownChunkPolicy`: `Reject` by default, `Preserve`, or `Drop`.
@@ -207,6 +207,10 @@ WC3_MDX_FIXTURES=/path/to/models cargo test -p wc3 --test corpus -- --ignored
 The corpus tests are ignored by default and require a nonempty fixture directory.
 These checks supplement the synthetic suite; full semantic coverage of the
 entire game model collection has not been verified.
+
+For independent MDX → MDL conversion comparisons against pinned WhiteoutLib,
+see [the optional oracle workflow](tools/mdlx-compare/README.md). It retains both
+outputs and diagnostics, compares canonicalized values, and cross-reads our MDL.
 
 ## License
 
