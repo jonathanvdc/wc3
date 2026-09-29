@@ -331,9 +331,10 @@ impl<V: ModelVersion> Material<V> {
         target.priority_plane = self.priority_plane;
         target.render_mode = self.render_mode;
         if matches!(V::NUMBER, 900 | 1000) && T::NUMBER >= 1100 {
-            let shader = self.shader.fixed_text().and_then(|name| {
-                ShaderType::from_name(&name.text())
-            });
+            let shader = self
+                .shader
+                .fixed_text()
+                .and_then(|name| ShaderType::from_name(&name.text()));
             if let Some(shader) = shader {
                 let hd = shader == ShaderType::HD_DEFAULT_UNIT || shader == ShaderType::HD_CRYSTAL;
                 if hd && self.layers.len() != 6 {
