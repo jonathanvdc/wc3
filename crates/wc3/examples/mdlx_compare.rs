@@ -6,7 +6,7 @@ use std::path::Path;
 use std::process::exit;
 use std::str::from_utf8;
 use wc3::model::mdl::{Dialect, Read as _, Write as _};
-use wc3::model::{visit_model, ConversionOptions, DynamicModel, Model, ModelVersion};
+use wc3::model::{visit_model, ConversionOptions, DynamicModel, Model, ModelVersion, V1200};
 
 fn main() {
     if let Err(error) = run() {
@@ -47,7 +47,18 @@ fn export_model<V: ModelVersion>(
     model: &Model<V>,
     dialect: Dialect,
 ) -> Result<String, Box<dyn Error>> {
-    let converted = model.convert::<V>(&ConversionOptions::strict())?;
+    if matches!(V::NUMBER, 900 | 1000) {
+        export_to::<V, V1200>(model, dialect)
+    } else {
+        export_to::<V, V>(model, dialect)
+    }
+}
+
+fn export_to<S: ModelVersion, T: ModelVersion>(
+    model: &Model<S>,
+    dialect: Dialect,
+) -> Result<String, Box<dyn Error>> {
+    let converted = model.convert::<T>(&ConversionOptions::strict())?;
     for issue in &converted.report.issues {
         eprintln!(
             "conversion {:?} at {}: {}",
@@ -65,7 +76,7 @@ mod tests {
     use super::*;
     use wc3::model::mdx::Write as _;
     use wc3::model::scene::{Camera, CameraVariant};
-    use wc3::model::V1800;
+    use wc3::model::{V1000, V1800};
 
     #[test]
     fn export_normalizes_camera_without_mutating_binary_source() {
@@ -81,5 +92,25 @@ mod tests {
         let restored = Model::<V1800>::decode_mdl(&text).unwrap();
         assert_eq!(restored.cameras()[0].variant, CameraVariant::Variant3);
         assert_eq!(model.encode_mdx().unwrap(), original);
+    }
+
+    #[test]
+    fn export_upgrades_old_reforged_versions_to_oracle_target() {
+        let model =
+            Model::<V1000>::decode_mdl("Version { FormatVersion 1000, } Model \"Minimal\" {}")
+                .unwrap();
+        let text = export_model(&model, Dialect::HiveWorkshop).unwrap();
+        let restored = DynamicModel::decode_mdl(&text).unwrap();
+        assert_eq!(restored.version(), 1200);
+        assert_eq!(model.version(), 1000);
+    }
+
+    #[test]
+    fn export_does_not_discard_unsupported_material_shader_during_upgrade() {
+        let model = Model::<V1000>::decode_mdl(
+            "Version { FormatVersion 1000, } Model \"Minimal\" {} Materials 1 { Material { Shader \"UnsupportedShader\", } }",
+        ).unwrap();
+        let error = export_model(&model, Dialect::HiveWorkshop).unwrap_err();
+        assert!(error.to_string().contains("shader"));
     }
 }

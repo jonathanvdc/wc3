@@ -209,7 +209,7 @@ These checks supplement the synthetic suite; full semantic coverage of the
 entire game model collection has not been verified.
 
 For independent MDX → MDL conversion comparisons against pinned WhiteoutLib,
-see [the optional oracle workflow](tools/mdlx-compare/README.md). It retains both
+see [the optional oracle workflow](tools/mdlx-compare/README.md). It retains
 outputs and diagnostics, compares canonicalized values, and cross-reads our MDL.
 
 ## License

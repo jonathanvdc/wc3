@@ -171,6 +171,8 @@ def run(args):
         "repository_revision": checked(["git", "rev-parse", "HEAD"], cwd=ROOT),
         "repository_dirty": bool(checked(["git", "status", "--porcelain"], cwd=ROOT)),
         "corpus": str(corpus), "dialects": args.dialects, "timeout_seconds": args.timeout,
+        "upgrade": {"source_versions": [900, 1000], "target_version": 1200,
+                    "other_versions": "unchanged", "wc3_policy": "strict"},
         "comparison": "MDL decoded and re-encoded by wc3; conservative canonical text equality",
     })
     reports = []

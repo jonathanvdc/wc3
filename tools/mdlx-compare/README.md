@@ -34,12 +34,13 @@ python3 tools/mdlx-compare/compare.py build --source target/mdlx-compare/whiteou
 If Rust selects an incompatible macOS SDK too, set `SDKROOT` to the matching
 SDK path for the `run` command. This changes only that process's environment.
 
-Whiteout's parser uses `PreserveOriginal`, explicitly disabling its default
-version upgrade. Before MDL output, wc3 applies strict conversion to the input’s
-existing version, normalizing equivalent camera variants to that version’s
-default. Conversion reports are retained in each stage’s diagnostics, including
-when a later MDL write fails. Parser issues are retained and make the result require review,
-even if the adapter returns successfully.
+Whiteout uses its normal automatic upgrade mode. At the pinned revision this
+upgrades versions 900/1000 to 1200, leaving version 800 and versions 1100+
+unchanged. wc3 applies strict conversion to the same target before MDL output;
+equivalent camera variants are normalized even when the version stays unchanged.
+Conversion reports are retained in each stage’s diagnostics, including when a
+later MDL write fails. Unsupported upgrades are reported as failures rather than
+silently discarding fields. Whiteout parser issues also require review.
 
 ## Run
 

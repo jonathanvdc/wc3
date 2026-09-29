@@ -22,7 +22,7 @@ int main(int argc, char** argv) {
         if (argc != 4) throw runtime_error("usage: whiteout-adapter INPUT OUTPUT engine|hive");
         const string dialect = argv[3];
         if (dialect != "engine" && dialect != "hive") throw runtime_error("invalid dialect");
-        Parser parser(Parser::UpgradeMode::PreserveOriginal);
+        Parser parser(Parser::UpgradeMode::UpgradeOldVersions);
         const auto model = parser.parse(argv[1]);
         for (const auto& issue : parser.getIssues()) cerr << issue << '\n';
         Writer writer;
