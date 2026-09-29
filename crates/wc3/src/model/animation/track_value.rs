@@ -1,6 +1,6 @@
 //! Scalar and vector values supported by animation tracks.
 use crate::model::mdx;
-use crate::model::{Vec3, Vec4};
+use crate::model::{Quaternion, Vec3};
 use std::fmt::Debug;
 
 /// A scalar or vector value supported by MDX keyframe tracks.
@@ -17,6 +17,6 @@ impl TrackValue for u32 {
 impl TrackValue for Vec3 {
     const COMPONENTS: usize = 3;
 }
-impl TrackValue for Vec4 {
+impl TrackValue for Quaternion {
     const COMPONENTS: usize = 4;
 }

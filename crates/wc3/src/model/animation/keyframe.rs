@@ -1,6 +1,13 @@
 //! Timed animation values and spline tangents.
 
 use crate::model::{mdl, mdx};
+
+/// A keyframe with a timestamp in milliseconds.
+pub trait Keyframe {
+    /// Signed frame time; negative times represent animation lead-in.
+    fn frame(&self) -> i32;
+}
+
 /// An interpolation mode shared by all keys in a track.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, mdl::Read, mdl::Write)]
 #[mdl(value)]
@@ -32,4 +39,16 @@ pub struct TangentKeyframe<T> {
     pub in_tangent: T,
     /// Outgoing tangent.
     pub out_tangent: T,
+}
+
+impl<T> Keyframe for ValueKeyframe<T> {
+    fn frame(&self) -> i32 {
+        self.frame
+    }
+}
+
+impl<T> Keyframe for TangentKeyframe<T> {
+    fn frame(&self) -> i32 {
+        self.frame
+    }
 }

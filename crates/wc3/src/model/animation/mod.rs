@@ -7,7 +7,7 @@
 mod track_value;
 pub use track_value::TrackValue;
 mod keyframe;
-pub use keyframe::{Interpolation, TangentKeyframe, ValueKeyframe};
+pub use keyframe::{Interpolation, Keyframe, TangentKeyframe, ValueKeyframe};
 mod track;
 pub use track::Track;
 mod animatable;
@@ -20,3 +20,6 @@ mod geoset_animation;
 pub use geoset_animation::{GeosetAnimation, GeosetAnimationFlags};
 mod global_sequence;
 pub use global_sequence::GlobalSequence;
+
+mod interpolate;
+pub use interpolate::Interpolate;

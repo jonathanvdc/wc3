@@ -1,9 +1,10 @@
 //! A property's stored value and optional animation.
-use super::{Track, TrackValue};
+use super::{Interpolate, Track, TrackValue};
 use crate::model::mdl::{Parser, TokenKind, Writer};
 use crate::model::{mdl, mdx};
 use std::io::Write as IoWrite;
 use std::mem::replace;
+use std::ops::RangeInclusive;
 
 /// A static value, animation, or animation with a stored base value.
 ///
@@ -167,5 +168,23 @@ impl<T: TrackValue + mdl::Write> mdl::WriteAnimationProperty for Option<Track<T>
 impl<T: TrackValue> mdl::ValueEq for Option<Track<T>> {
     fn eq_mdl(&self, other: &Self) -> bool {
         self == other
+    }
+}
+
+impl<T: Interpolate> Animatable<T> {
+    /// Samples the animation, falling back to the stored base value if sampling
+    /// returns `None`. Static values are returned regardless of time.
+    pub fn evaluate(&self, time_ms: f64) -> Option<T> {
+        self.track()
+            .and_then(|track| track.evaluate(time_ms))
+            .or_else(|| self.value().copied())
+    }
+
+    /// Samples only keys in an inclusive sequence interval, falling back to
+    /// the stored base value when no animation value is available.
+    pub fn evaluate_in(&self, time_ms: f64, interval: RangeInclusive<i32>) -> Option<T> {
+        self.track()
+            .and_then(|track| track.evaluate_in(time_ms, interval))
+            .or_else(|| self.value().copied())
     }
 }

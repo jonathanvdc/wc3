@@ -2,7 +2,7 @@
 use crate::model::mdl::{Parser, Span, TokenKind, WriteFields as _, Writer};
 use crate::model::ModelVersion;
 use crate::model::{mdl, mdx};
-use crate::model::{Track, Vec3, Vec4};
+use crate::model::{Quaternion, Track, Vec3};
 use bitfield::bitfield;
 use std::io::Write as IoWrite;
 
@@ -101,7 +101,7 @@ pub struct Node<F = NodeFlags> {
     pub translation: Option<Track<Vec3>>,
     #[mdx(tag = *b"KGRT")]
     #[mdl(property = "Rotation")]
-    pub rotation: Option<Track<Vec4>>,
+    pub rotation: Option<Track<Quaternion>>,
     #[mdx(tag = *b"KGSC")]
     #[mdl(property = "Scaling")]
     pub scaling: Option<Track<Vec3>>,

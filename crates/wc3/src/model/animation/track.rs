@@ -1,9 +1,10 @@
 //! Typed keyframe tracks.
-use super::{Interpolation, TangentKeyframe, TrackValue, ValueKeyframe};
+use super::{Interpolate, Interpolation, Keyframe, TangentKeyframe, TrackValue, ValueKeyframe};
 use crate::model::mdl::{Parser, ReadErrorKind, TokenKind, Writer};
 use crate::model::{mdl, mdx};
 use crate::model::{Cursor, Encoder, ReadError, ValueError, WriteError};
 use std::io::Write as IoWrite;
+use std::ops::RangeInclusive;
 
 #[derive(Clone, Debug, PartialEq)]
 enum Keyframes<T> {
@@ -398,4 +399,74 @@ fn write_tangent<W: IoWrite, T: mdl::Write>(
     writer.raw(" ")?;
     writer.write(value)?;
     writer.raw(",\n")
+}
+
+impl<T: Interpolate> Track<T> {
+    /// Samples at a time in milliseconds in this track's timeline.
+    ///
+    /// Empty tracks and nonfinite times return `None`. Outside the key range,
+    /// the nearest endpoint is returned. Keys may be unordered; at duplicate
+    /// timestamps the last stored key wins. Evaluation takes O(n) time.
+    /// Global sequence IDs do not affect sampling: callers resolve clocks and
+    /// looping before calling this method.
+    pub fn evaluate(&self, time_ms: f64) -> Option<T> {
+        self.evaluate_in(time_ms, i32::MIN..=i32::MAX)
+    }
+
+    /// Samples using only keys within the inclusive sequence interval.
+    ///
+    /// Returns `None` when the interval contains no keys or is reversed.
+    /// Time is an absolute track timestamp, not an offset from the interval's
+    /// start. Endpoint clamping and duplicate handling match [`Self::evaluate`].
+    pub fn evaluate_in(&self, time_ms: f64, interval: RangeInclusive<i32>) -> Option<T> {
+        if !time_ms.is_finite() || interval.is_empty() {
+            return None;
+        }
+        match &self.keyframes {
+            Keyframes::Step(keys) | Keyframes::Linear(keys) => {
+                let (a, b) = surrounding(keys, time_ms, &interval)?;
+                if a.frame == b.frame || matches!(self.keyframes, Keyframes::Step(_)) {
+                    return Some(a.value);
+                }
+                let t = ((time_ms - f64::from(a.frame)) / (f64::from(b.frame) - f64::from(a.frame)))
+                    as f32;
+                Some(T::linear(a.value, b.value, t))
+            }
+            Keyframes::Hermite(keys) | Keyframes::Bezier(keys) => {
+                let (a, b) = surrounding(keys, time_ms, &interval)?;
+                if a.frame == b.frame {
+                    return Some(a.value);
+                }
+                let t = ((time_ms - f64::from(a.frame)) / (f64::from(b.frame) - f64::from(a.frame)))
+                    as f32;
+                Some(if matches!(self.keyframes, Keyframes::Hermite(_)) {
+                    T::hermite(a.value, a.out_tangent, b.in_tangent, b.value, t)
+                } else {
+                    T::bezier(a.value, a.out_tangent, b.in_tangent, b.value, t)
+                })
+            }
+        }
+    }
+}
+
+fn surrounding<'a, K: Keyframe>(
+    keys: &'a [K],
+    time: f64,
+    interval: &RangeInclusive<i32>,
+) -> Option<(&'a K, &'a K)> {
+    let mut left: Option<&K> = None;
+    let mut right: Option<&K> = None;
+    for key in keys {
+        let current = key.frame();
+        if !interval.contains(&current) {
+            continue;
+        }
+        if f64::from(current) <= time && left.map_or(true, |k| current >= k.frame()) {
+            left = Some(key);
+        }
+        if f64::from(current) >= time && right.map_or(true, |k| current <= k.frame()) {
+            right = Some(key);
+        }
+    }
+    Some((left.or(right)?, right.or(left)?))
 }

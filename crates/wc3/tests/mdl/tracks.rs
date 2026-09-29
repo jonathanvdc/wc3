@@ -1,7 +1,7 @@
 use wc3::model::animation::{Interpolation, TangentKeyframe, TextureAnimation, ValueKeyframe};
 use wc3::model::animation::{Track, TrackValue};
 use wc3::model::mdl::{self, Read as _, ReadErrorKind, Write as _};
-use wc3::model::{Vec3, Vec4};
+use wc3::model::{Quaternion, Vec3};
 
 fn roundtrip<K>(value: Track<K>)
 where
@@ -52,7 +52,7 @@ fn all_modes_and_value_shapes_roundtrip() {
         .unwrap(),
     );
     roundtrip(
-        Track::<Vec4>::bezier(
+        Track::<Quaternion>::bezier(
             vec![TangentKeyframe {
                 frame: 200,
                 value: [0.0, 0.0, 0.0, 1.0],
@@ -152,7 +152,7 @@ fn signed_frames_preserve_mdx_bits_and_mdl_spelling() {
     for frame in ["-2147483649", "2147483648", "4294967295"] {
         assert!(Track::<f32>::decode_mdl(&format!("Track 1 {{ Linear, {frame}: 0.5, }}")).is_err());
     }
-    let tangent = Track::<Vec4>::decode_mdl(
+    let tangent = Track::<Quaternion>::decode_mdl(
         "Track 1 { Hermite, -3600: { 0, 0, 0, 1 }, InTan { 0, 0, 0, 1 }, OutTan { 0, 0, 0, 1 }, }",
     )
     .unwrap();

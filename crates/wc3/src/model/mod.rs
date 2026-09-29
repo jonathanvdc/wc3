@@ -51,8 +51,11 @@
 
 /// A three-dimensional vector in MDX coordinates.
 pub type Vec3 = [f32; 3];
-/// A four-component vector, used for rotation tracks.
-pub type Vec4 = [f32; 4];
+/// A rotation quaternion in `[x, y, z, w]` order.
+///
+/// This is an alias for `[f32; 4]`. Rotation interpolation assumes unit
+/// quaternions; the identity rotation is `[0.0, 0.0, 0.0, 1.0]`.
+pub type Quaternion = [f32; 4];
 /// An RGB color.
 pub type Color = [f32; 3];
 /// An MDX format version number.

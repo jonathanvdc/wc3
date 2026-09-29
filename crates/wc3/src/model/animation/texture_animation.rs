@@ -1,7 +1,7 @@
 //! Animated texture translation, rotation, and scaling.
 use crate::model::ModelVersion;
 use crate::model::{mdl, mdx};
-use crate::model::{Track, Vec3, Vec4};
+use crate::model::{Quaternion, Track, Vec3};
 
 use crate::model::KnownChunk;
 
@@ -20,7 +20,7 @@ pub struct TextureAnimation {
     pub translation: Option<Track<Vec3>>,
     #[mdx(tag = *b"KTAR")]
     #[mdl(property = "Rotation")]
-    pub rotation: Option<Track<Vec4>>,
+    pub rotation: Option<Track<Quaternion>>,
     #[mdx(tag = *b"KTAS")]
     #[mdl(property = "Scaling")]
     pub scaling: Option<Track<Vec3>>,
