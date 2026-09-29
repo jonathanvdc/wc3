@@ -14,7 +14,7 @@ use wc3::model::{DynamicModel, Model, V1000, V1800, V800, V900};
 #[test]
 fn version_is_shared_by_model_and_nested_records() {
     let mut material = Material::<V1800>::new();
-    material.layers = (&[Layer::<V1800>::new()]).to_vec();
+    material.layers = [Layer::<V1800>::new()].to_vec();
 
     let mut model = Model::<V1800>::new();
     model.set_materials(&[material]);

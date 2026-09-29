@@ -17,7 +17,7 @@ fn sample_material<V: ModelVersion>() -> Material<V> {
     layer.texture_id = 2;
     layer.alpha = 0.5;
     let mut material = Material::<V>::new();
-    material.layers = (&[layer]).to_vec();
+    material.layers = [layer].to_vec();
     Material::<V>::decode_mdx(&material.encode_mdx().unwrap()).unwrap()
 }
 
@@ -106,7 +106,7 @@ fn builds_material_with_reforged_layer() {
     layer.set_shader_type(ShaderType::new(2));
     layer.set_fresnel_color([0.1, 0.2, 0.3]);
     let mut material = Material::<V1100>::new();
-    material.layers = (&[layer]).to_vec();
+    material.layers = [layer].to_vec();
     let parsed = Material::<V1100>::decode_mdx(&material.encode_mdx().unwrap()).unwrap();
     let layers = parsed.layers.as_slice();
     assert_eq!(layers[0].texture_id, 4);
@@ -191,7 +191,7 @@ fn version_specific_fields_do_not_write_into_legacy_tracks() {
 #[test]
 fn preserves_shader_padding_and_float_bits() {
     let mut material = Material::<V1000>::new();
-    material.layers = (&[Layer::<V1000>::new()]).to_vec();
+    material.layers = [Layer::<V1000>::new()].to_vec();
     let mut bytes = material.encode_mdx().unwrap();
     bytes[20] = 0xaf;
     let layer_start = 100;

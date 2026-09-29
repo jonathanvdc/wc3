@@ -62,7 +62,7 @@ fn material_directives_and_classic_layers() {
     assert!(layer.encode_mdl().is_err());
     let mut material = Material::<V800>::new();
     material.render_mode = MaterialRenderFlags(2);
-    material.layers = (&[Layer::new()]).to_vec();
+    material.layers = [Layer::new()].to_vec();
     assert!(material.encode_mdl().is_err());
 }
 #[test]
@@ -152,7 +152,7 @@ fn default_materials_roundtrip_at_every_supported_version() {
     macro_rules! check {
         ($($version:ty),*) => { $( {
             let mut material = Material::<$version>::new();
-            material.layers = (&[Layer::new()]).to_vec();
+            material.layers = [Layer::new()].to_vec();
             roundtrip(&material);
         } )* };
     }

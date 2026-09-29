@@ -19,7 +19,7 @@ fn full_model<V: ModelVersion>() -> Model<V> {
     model.set_global_sequences(&[1000]);
     model.set_textures(&[Texture::new("Textures\\Sample.blp").unwrap()]);
     let mut material = Material::<V>::new();
-    material.layers = (&[Layer::<V>::new()]).to_vec();
+    material.layers = [Layer::<V>::new()].to_vec();
     model.set_materials(&[material]);
     model.set_texture_animations(&[TextureAnimation::new()]);
     model.set_geosets(&[

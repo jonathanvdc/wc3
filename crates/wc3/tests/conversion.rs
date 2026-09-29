@@ -22,7 +22,7 @@ fn sample<V: ModelVersion>() -> Model<V> {
     layer.texture_id = 4;
     layer.alpha = 0.75;
     material.priority_plane = 12;
-    material.layers = (&[layer]).to_vec();
+    material.layers = [layer].to_vec();
     model.set_materials(&[material]);
     let mut geoset = Geoset::<V>::new(&[[1.0, 2.0, 3.0]], &[[0.0, 0.0, 1.0]], &[]).unwrap();
     geoset.set_raw_unselectable(0x8000_0002);
