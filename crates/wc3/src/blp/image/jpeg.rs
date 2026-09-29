@@ -1,5 +1,6 @@
 #[cfg(feature = "blp-decode")]
-use super::{image, output, DecodeError, MAX_DECODE_BYTES};
+use super::{DecodeError, MAX_DECODE_BYTES};
+#[cfg(feature = "blp-encode")]
 use image::RgbaImage;
 #[cfg(feature = "blp-decode")]
 use zune_jpeg::{
@@ -8,13 +9,14 @@ use zune_jpeg::{
 };
 
 #[cfg(feature = "blp-decode")]
-pub(super) fn decode(
+pub(super) fn decode_into(
     mip: &[u8],
     shared_header: &[u8],
     alpha_opaque: bool,
     width: u32,
     height: u32,
-) -> Result<RgbaImage, DecodeError> {
+    pixels: &mut [u8],
+) -> Result<(), DecodeError> {
     let len = shared_header
         .len()
         .checked_add(mip.len())
@@ -63,7 +65,7 @@ pub(super) fn decode(
             field: "JPEG output size",
         });
     }
-    let mut pixels = output(width, height)?;
+    pixels.fill(0);
     let width_usize = width as usize;
     for y in 0..height as usize {
         if y >= source_height {
@@ -80,7 +82,7 @@ pub(super) fn decode(
             ]);
         }
     }
-    image(width, height, pixels)
+    Ok(())
 }
 
 #[cfg(feature = "blp-encode")]

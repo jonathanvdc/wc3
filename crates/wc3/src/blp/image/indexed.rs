@@ -1,19 +1,18 @@
 #[cfg(feature = "blp-decode")]
-use super::{image, output, DecodeError};
+use super::DecodeError;
+#[cfg(feature = "blp-encode")]
 use image::RgbaImage;
 
 #[cfg(feature = "blp-decode")]
-pub(super) fn decode(
+pub(super) fn decode_into(
     data: &[u8],
     palette: &[u8; 1024],
     alpha_bits: u32,
-    width: u32,
-    height: u32,
-) -> Result<RgbaImage, DecodeError> {
+    pixels: &mut [u8],
+) -> Result<(), DecodeError> {
     if !matches!(alpha_bits, 0 | 1 | 4 | 8) {
         return Err(DecodeError::UnsupportedAlphaDepth { depth: alpha_bits });
     }
-    let mut pixels = output(width, height)?;
     let count = pixels.len() / 4;
     let alpha_len = count
         .checked_mul(alpha_bits as usize)
@@ -48,7 +47,7 @@ pub(super) fn decode(
             _ => unreachable!(),
         };
     }
-    image(width, height, pixels)
+    Ok(())
 }
 
 #[cfg(feature = "blp-encode")]

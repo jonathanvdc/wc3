@@ -1,7 +1,38 @@
 use std::{env, fs, path::Path};
 use wc3::blp::{
-    Blp1ContentRef, Blp1Header, Blp1Ref, Blp2ContentRef, Blp2Header, Blp2Ref, BlpRef, DxtFormat,
+    Blp1ContentRef, Blp1Header, Blp1Ref, Blp2ContentRef, Blp2Header, Blp2Ref, BlpDecoder, BlpRef,
+    DxtFormat,
 };
+
+#[test]
+fn image_decoder_integrates_with_dynamic_image() {
+    use image::{ColorType, DynamicImage, ImageDecoder};
+
+    let palette = [0; 1024];
+    let blp = blp2(
+        &[3, 2, 1, 4],
+        Blp2ContentRef::Bgra {
+            encoding: 3,
+            alpha_type: 8,
+            palette_region: &palette,
+        },
+        8,
+        1,
+        1,
+    );
+    let bytes = blp.write().unwrap();
+    let decoder = BlpDecoder::new(&bytes).unwrap();
+    assert_eq!(decoder.dimensions(), (1, 1));
+    assert_eq!(decoder.color_type(), ColorType::Rgba8);
+    assert_eq!(
+        DynamicImage::from_decoder(decoder)
+            .unwrap()
+            .to_rgba8()
+            .into_raw(),
+        [1, 2, 3, 4]
+    );
+    assert!(BlpDecoder::with_mip(&bytes, 1).is_err());
+}
 
 fn blp1<'a>(
     data: &'a [u8],

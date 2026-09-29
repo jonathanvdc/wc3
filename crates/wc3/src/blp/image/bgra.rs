@@ -1,10 +1,10 @@
 #[cfg(feature = "blp-decode")]
-use super::{image, output, DecodeError};
+use super::DecodeError;
+#[cfg(feature = "blp-encode")]
 use image::RgbaImage;
 
 #[cfg(feature = "blp-decode")]
-pub(super) fn decode(data: &[u8], width: u32, height: u32) -> Result<RgbaImage, DecodeError> {
-    let mut pixels = output(width, height)?;
+pub(super) fn decode_into(data: &[u8], pixels: &mut [u8]) -> Result<(), DecodeError> {
     if data.len() != pixels.len() {
         return Err(DecodeError::InvalidData {
             field: "BGRA mipmap size",
@@ -13,7 +13,7 @@ pub(super) fn decode(data: &[u8], width: u32, height: u32) -> Result<RgbaImage, 
     for (source, destination) in data.chunks_exact(4).zip(pixels.chunks_exact_mut(4)) {
         destination.copy_from_slice(&[source[2], source[1], source[0], source[3]]);
     }
-    image(width, height, pixels)
+    Ok(())
 }
 
 #[cfg(feature = "blp-encode")]

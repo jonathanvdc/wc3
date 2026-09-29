@@ -20,6 +20,10 @@ pub use container::blp1::{Blp1, Blp1Content, Blp1ContentRef, Blp1Header, Blp1Ref
 pub use container::blp2::{Blp2, Blp2Content, Blp2ContentRef, Blp2Header, Blp2Ref, DxtFormat};
 pub use error::{ReadError, ReadErrorKind, WriteError};
 #[cfg(feature = "blp-decode")]
+pub use image::BlpDecoder;
+#[cfg(feature = "blp-encode")]
+pub use image::BlpEncoder;
+#[cfg(feature = "blp-decode")]
 pub use image::DecodeError;
 #[cfg(feature = "blp-encode")]
 pub use image::{BlpVersion, EncodeError, EncodeFormat, EncodeOptions, IndexedAlpha};

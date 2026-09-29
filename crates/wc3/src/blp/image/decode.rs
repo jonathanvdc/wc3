@@ -40,7 +40,7 @@ impl fmt::Display for DecodeError {
 
 impl Error for DecodeError {}
 
-fn dimensions(width: u32, height: u32, level: usize) -> Result<(u32, u32), DecodeError> {
+pub(super) fn dimensions(width: u32, height: u32, level: usize) -> Result<(u32, u32), DecodeError> {
     if width == 0 || height == 0 || level >= MIPMAP_SLOTS {
         return Err(DecodeError::InvalidDimensions);
     }
@@ -80,6 +80,15 @@ pub(super) fn image(width: u32, height: u32, pixels: Vec<u8>) -> Result<RgbaImag
     RgbaImage::from_raw(width, height, pixels).ok_or(DecodeError::InvalidDimensions)
 }
 
+fn check_output(pixels: &[u8], width: u32, height: u32) -> Result<(), DecodeError> {
+    if pixels.len() != rgba_len(width, height)? {
+        return Err(DecodeError::InvalidData {
+            field: "RGBA output size",
+        });
+    }
+    Ok(())
+}
+
 fn mip<'a>(mips: &[Option<&'a [u8]>; MIPMAP_SLOTS], level: usize) -> Result<&'a [u8], DecodeError> {
     mips.get(level)
         .and_then(|mip| *mip)
@@ -90,17 +99,27 @@ impl Blp1Ref<'_> {
     /// Decodes one present mipmap to an image-rs RGBA image.
     pub fn decode_mip(&self, level: usize) -> Result<RgbaImage, DecodeError> {
         let (width, height) = dimensions(self.header.width, self.header.height, level)?;
+        let mut pixels = output(width, height)?;
+        self.decode_mip_into(level, &mut pixels)?;
+        image(width, height, pixels)
+    }
+
+    /// Decodes one present mipmap into a caller-provided RGBA8 buffer.
+    pub fn decode_mip_into(&self, level: usize, pixels: &mut [u8]) -> Result<(), DecodeError> {
+        let (width, height) = dimensions(self.header.width, self.header.height, level)?;
+        check_output(pixels, width, height)?;
         let data = mip(&self.mipmaps, level)?;
         match self.content {
             Blp1ContentRef::Indexed { palette } => {
-                indexed::decode(data, palette, self.header.alpha_bits, width, height)
+                indexed::decode_into(data, palette, self.header.alpha_bits, pixels)
             }
-            Blp1ContentRef::Jpeg { shared_header } => jpeg::decode(
+            Blp1ContentRef::Jpeg { shared_header } => jpeg::decode_into(
                 data,
                 shared_header,
                 self.header.alpha_bits == 0,
                 width,
                 height,
+                pixels,
             ),
         }
     }
@@ -110,26 +129,37 @@ impl Blp2Ref<'_> {
     /// Decodes one present mipmap to an image-rs RGBA image.
     pub fn decode_mip(&self, level: usize) -> Result<RgbaImage, DecodeError> {
         let (width, height) = dimensions(self.header.width, self.header.height, level)?;
+        let mut pixels = output(width, height)?;
+        self.decode_mip_into(level, &mut pixels)?;
+        image(width, height, pixels)
+    }
+
+    /// Decodes one present mipmap into a caller-provided RGBA8 buffer.
+    pub fn decode_mip_into(&self, level: usize, pixels: &mut [u8]) -> Result<(), DecodeError> {
+        let (width, height) = dimensions(self.header.width, self.header.height, level)?;
+        check_output(pixels, width, height)?;
         let data = mip(&self.mipmaps, level)?;
         match self.content {
-            Blp2ContentRef::Indexed { palette, .. } => indexed::decode(
-                data,
-                palette,
-                u32::from(self.header.alpha_bits),
-                width,
-                height,
-            ),
-            Blp2ContentRef::Jpeg { shared_header, .. } => jpeg::decode(
+            Blp2ContentRef::Indexed { palette, .. } => {
+                indexed::decode_into(data, palette, u32::from(self.header.alpha_bits), pixels)
+            }
+            Blp2ContentRef::Jpeg { shared_header, .. } => jpeg::decode_into(
                 data,
                 shared_header,
                 self.header.alpha_bits == 0,
                 width,
                 height,
+                pixels,
             ),
-            Blp2ContentRef::Dxt { format, .. } => {
-                dxt::decode(data, format, self.header.alpha_bits != 0, width, height)
-            }
-            Blp2ContentRef::Bgra { .. } => bgra::decode(data, width, height),
+            Blp2ContentRef::Dxt { format, .. } => dxt::decode_into(
+                data,
+                format,
+                self.header.alpha_bits != 0,
+                width,
+                height,
+                pixels,
+            ),
+            Blp2ContentRef::Bgra { .. } => bgra::decode_into(data, pixels),
         }
     }
 }
@@ -142,11 +172,24 @@ impl BlpRef<'_> {
             Self::Blp2(value) => value.decode_mip(level),
         }
     }
+
+    /// Decodes one present mipmap into a caller-provided RGBA8 buffer.
+    pub fn decode_mip_into(&self, level: usize, pixels: &mut [u8]) -> Result<(), DecodeError> {
+        match self {
+            Self::Blp1(value) => value.decode_mip_into(level, pixels),
+            Self::Blp2(value) => value.decode_mip_into(level, pixels),
+        }
+    }
 }
 
 impl Blp {
     /// Decodes one present mipmap to an image-rs RGBA image.
     pub fn decode_mip(&self, level: usize) -> Result<RgbaImage, DecodeError> {
         self.as_ref().decode_mip(level)
+    }
+
+    /// Decodes one present mipmap into a caller-provided RGBA8 buffer.
+    pub fn decode_mip_into(&self, level: usize, pixels: &mut [u8]) -> Result<(), DecodeError> {
+        self.as_ref().decode_mip_into(level, pixels)
     }
 }

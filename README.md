@@ -103,6 +103,21 @@ fn decode(bytes: &[u8]) -> Result<image::RgbaImage, Box<dyn std::error::Error>> 
 }
 ```
 
+For APIs that accept `image::ImageDecoder`, use `BlpDecoder`. It selects the
+largest mipmap by default; `with_mip` selects another level:
+
+```rust
+use wc3::blp::BlpDecoder;
+
+fn decode_dynamic(bytes: &[u8]) -> Result<image::DynamicImage, image::ImageError> {
+    image::DynamicImage::from_decoder(BlpDecoder::new(bytes)?)
+}
+```
+
+`BlpDecoder` writes RGBA8 pixels directly into the buffer supplied by `image`.
+For your own buffer, use `BlpRef::decode_mip_into(level, &mut pixels)`.
+JPEG decoding still uses a temporary CMYK buffer inside the JPEG decoder.
+
 Enable `wc3/blp-encode` to encode RGBA images as BLP JPEG, indexed colour with
 0, 1, 4, or 8-bit alpha, DXT1/3/5, or uncompressed BGRA.
 `Blp::encode_image` generates mipmaps; `Blp::encode_mipmaps` accepts
@@ -126,6 +141,22 @@ fn encode(image: &image::RgbaImage) -> Result<Vec<u8>, Box<dyn std::error::Error
 
 JPEG encoding stores a complete four-component JPEG in each mipmap, with an
 empty shared header. Indexed encoding uses one palette across all mipmaps.
+
+For APIs that accept `image::ImageEncoder`, use `BlpEncoder` with a writer and
+`EncodeOptions`. It accepts RGBA8 pixels:
+
+```rust
+use image::{ExtendedColorType, ImageEncoder};
+use wc3::blp::BlpEncoder;
+
+fn encode_with_trait(image: &image::RgbaImage) -> Result<Vec<u8>, image::ImageError> {
+    let mut bytes = Vec::new();
+    BlpEncoder::new(&mut bytes).write_image(
+        image.as_raw(), image.width(), image.height(), ExtendedColorType::Rgba8,
+    )?;
+    Ok(bytes)
+}
+```
 
 ## Supported model data
 

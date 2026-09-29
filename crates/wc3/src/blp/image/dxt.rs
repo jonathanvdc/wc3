@@ -1,6 +1,7 @@
 #[cfg(feature = "blp-decode")]
-use super::{image, output, DecodeError};
+use super::DecodeError;
 use crate::blp::DxtFormat;
+#[cfg(feature = "blp-encode")]
 use image::RgbaImage;
 
 #[cfg(feature = "blp-decode")]
@@ -66,14 +67,14 @@ fn alpha_bc3(bytes: &[u8], pixel: usize) -> u8 {
 }
 
 #[cfg(feature = "blp-decode")]
-pub(super) fn decode(
+pub(super) fn decode_into(
     data: &[u8],
     format: DxtFormat,
     alpha_enabled: bool,
     width: u32,
     height: u32,
-) -> Result<RgbaImage, DecodeError> {
-    let mut pixels = output(width, height)?;
+    pixels: &mut [u8],
+) -> Result<(), DecodeError> {
     let blocks_wide = usize::try_from(width.div_ceil(4)).map_err(|_| DecodeError::LimitExceeded)?;
     let blocks_high =
         usize::try_from(height.div_ceil(4)).map_err(|_| DecodeError::LimitExceeded)?;
@@ -124,7 +125,7 @@ pub(super) fn decode(
             }
         }
     }
-    image(width as u32, height as u32, pixels)
+    Ok(())
 }
 
 #[cfg(feature = "blp-encode")]

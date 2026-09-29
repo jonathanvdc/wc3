@@ -1,5 +1,31 @@
 use image::{Rgba, RgbaImage};
-use wc3::blp::{Blp, BlpRef, BlpVersion, EncodeFormat, EncodeOptions, IndexedAlpha};
+use wc3::blp::{Blp, BlpEncoder, BlpRef, BlpVersion, EncodeFormat, EncodeOptions, IndexedAlpha};
+
+#[test]
+fn image_encoder_writes_a_blp_file() {
+    use image::{ExtendedColorType, ImageEncoder};
+
+    let image = source();
+    let mut bytes = Vec::new();
+    let options = EncodeOptions {
+        format: EncodeFormat::Bgra,
+        mipmaps: false,
+    };
+    BlpEncoder::with_options(&mut bytes, options)
+        .write_image(
+            image.as_raw(),
+            image.width(),
+            image.height(),
+            ExtendedColorType::Rgba8,
+        )
+        .unwrap();
+    assert_eq!(BlpRef::read(&bytes).unwrap().decode_mip(0).unwrap(), image);
+
+    let error = BlpEncoder::new(Vec::new())
+        .write_image(&[0; 3], 1, 1, ExtendedColorType::Rgb8)
+        .unwrap_err();
+    assert!(matches!(error, image::ImageError::Unsupported(_)));
+}
 
 fn source() -> RgbaImage {
     RgbaImage::from_fn(8, 8, |x, y| {
@@ -46,6 +72,12 @@ fn all_encodings_write_read_and_decode_every_mip() {
         let encoded = Blp::encode_image(&image, options).unwrap();
         let bytes = encoded.write().unwrap();
         let parsed = BlpRef::read(&bytes).unwrap();
+        let expected = parsed.decode_mip(0).unwrap();
+        let mut direct = vec![0; expected.as_raw().len()];
+        parsed.decode_mip_into(0, &mut direct).unwrap();
+        assert_eq!(direct, *expected.as_raw());
+        let short_len = direct.len() - 1;
+        assert!(parsed.decode_mip_into(0, &mut direct[..short_len]).is_err());
         for level in 0..4 {
             let decoded = parsed
                 .decode_mip(level)
