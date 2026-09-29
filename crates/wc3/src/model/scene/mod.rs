@@ -1,6 +1,6 @@
 mod node;
-pub(crate) use node::{set_node_kind, validate_node_kind};
-pub use node::{Bone, Node, NodeFlags};
+pub(crate) use node::{impl_node_flags, set_node_kind, validate_node_kind};
+pub use node::{Bone, Node, NodeFlagInterpretation, NodeFlags};
 mod camera;
 pub use camera::{Camera, CameraLayout, CameraVariant};
 mod light;

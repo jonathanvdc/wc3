@@ -1,6 +1,6 @@
 //! Reforged popcorn particle emitters in `CORN` chunks.
 use crate::model::mdl::{is_zero, Span};
-use crate::model::scene::NodeFlags;
+use crate::model::scene::{impl_node_flags, NodeFlagInterpretation};
 use crate::model::scene::{set_node_kind, validate_node_kind};
 use crate::model::{mdl, mdx};
 use crate::model::{ModelVersion, SupportsReforgedChunks};
@@ -48,7 +48,7 @@ pub struct PopcornEmitter {
         )
     )]
     /// Shared node.
-    pub node: Node,
+    pub node: Node<PopcornFlags>,
     #[mdl(
         animatable = "LifeSpan",
         track = "PopcornTrack::Lifespan",
@@ -88,9 +88,13 @@ pub struct PopcornEmitter {
 
 impl PopcornEmitter {
     /// Creates an emitter with unit lifespan, emission rate, speed, alpha, and white color.
-    pub fn new(node: Node, path: &str, visibility_guide: &str) -> Result<Self, ValueError> {
+    pub fn new<F: NodeFlagInterpretation>(
+        node: Node<F>,
+        path: &str,
+        visibility_guide: &str,
+    ) -> Result<Self, ValueError> {
         let mut emitter = Self {
-            node,
+            node: node.cast_flags(),
             life_span: 1.0,
             emission_rate: 1.0,
             speed: 1.0,
@@ -152,8 +156,8 @@ fn validate_popcorn(value: &PopcornEmitter) -> Result<(), mdl::WriteError> {
 }
 
 bitfield! {
-    /// Behavioral flags interpreted in this emitter's context.
-    #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+    /// Complete node flag word interpreted in this emitter's context.
+    #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, mdx::Read, mdx::Write)]
     pub struct PopcornFlags(u32);
     /// Returns the stored bits.
     pub bits, _: 31, 0;
@@ -168,20 +172,22 @@ bitfield! {
 }
 impl PopcornFlags {
     const MASK: u32 = 0x78000;
-    /// Extracts this emitter's behavioral bits from a node word.
+    /// Interprets a node word, preserving every stored bit.
     pub const fn from_bits(bits: u32) -> Self {
-        Self(bits & Self::MASK)
+        Self(bits)
     }
 }
 impl PopcornEmitter {
     /// Returns behavioral flags using this emitter's bit meanings.
     pub fn flags(&self) -> PopcornFlags {
-        PopcornFlags::from_bits(self.node.flags.bits())
+        PopcornFlags::from_bits(self.node.flags.bits() & PopcornFlags::MASK)
     }
     /// Changes emitter behavior while preserving every unrelated node bit.
     pub fn set_flags(&mut self, flags: PopcornFlags) {
         let bits =
             (self.node.flags.bits() & !PopcornFlags::MASK) | (flags.bits() & PopcornFlags::MASK);
-        self.node.flags = NodeFlags(bits);
+        self.node.flags = PopcornFlags(bits);
     }
 }
+
+impl_node_flags!(PopcornFlags);

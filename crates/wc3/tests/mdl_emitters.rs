@@ -1,5 +1,7 @@
 use wc3::model::animation::{AnimationTrack, ParticleEmissionRate, RibbonAlpha, RibbonTextureSlot};
-use wc3::model::emitters::{ParticleEmitter, ParticleTrack, RibbonEmitter, RibbonTrack};
+use wc3::model::emitters::{
+    ParticleEmitter, ParticleEmitterFlags, ParticleTrack, RibbonEmitter, RibbonTrack,
+};
 use wc3::model::mdl::{Read as _, Write as _};
 use wc3::model::mdx::{Read as _, Write as _};
 use wc3::model::scene::{Node, NodeFlags};
@@ -125,9 +127,9 @@ fn writers_reject_hidden_values_unknown_flags_and_path_padding() {
     particle.emission_rate = 1.0;
     assert!(particle.encode_mdl().is_err());
     particle.emission_rate = 0.0;
-    particle.node.flags = NodeFlags(0x21000);
+    particle.node.flags = ParticleEmitterFlags(0x21000);
     assert!(particle.encode_mdl().is_err());
-    particle.node.flags = NodeFlags(0x1000);
+    particle.node.flags = ParticleEmitterFlags(0x1000);
     let mut bytes = particle.encode_mdx().unwrap();
     let node_size = u32::from_le_bytes(bytes[4..8].try_into().unwrap()) as usize;
     let padding = 4 + node_size + 16 + 256;
@@ -167,4 +169,28 @@ fn particle_path_is_a_single_260_byte_field() {
     );
     roundtrip(&emitter);
     assert!(emitter.path.set_text(&"a".repeat(260)).is_err());
+}
+
+#[test]
+fn typed_emitter_nodes_share_common_mdl_flags() {
+    use wc3::model::emitters::{ParticleEmitter2, PopcornEmitter};
+
+    let mut particle = ParticleEmitter2::decode_mdl(
+        "ParticleEmitter2 \"typed\" { ObjectId 1, DontInheritRotation, LineEmitter, }",
+    )
+    .unwrap();
+    assert!(particle.node.flags.dont_inherit_rotation());
+    assert!(particle.node.flags.line_emitter());
+    particle.node.flags.set_camera_anchored(true);
+    particle.node.flags.set_unfogged(true);
+    roundtrip(&particle);
+    let mut popcorn = PopcornEmitter::decode_mdl(
+        "ParticleEmitterPopcorn \"typed\" { ObjectId 1, Billboarded, Unfogged, }",
+    )
+    .unwrap();
+    assert!(popcorn.node.flags.billboarded());
+    assert!(popcorn.node.flags.unfogged());
+    popcorn.node.flags.set_dont_inherit_scaling(true);
+    popcorn.node.flags.set_popcorn_scaling(true);
+    roundtrip(&popcorn);
 }

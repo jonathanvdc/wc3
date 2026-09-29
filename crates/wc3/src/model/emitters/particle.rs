@@ -1,6 +1,6 @@
 //! Classic particle emitters stored in `PREM` chunks.
 use crate::model::mdl::Span;
-use crate::model::scene::NodeFlags;
+use crate::model::scene::{impl_node_flags, NodeFlagInterpretation};
 use crate::model::scene::{set_node_kind, validate_node_kind};
 use crate::model::ModelVersion;
 use crate::model::{mdl, mdx};
@@ -49,7 +49,7 @@ pub struct ParticleEmitter {
         )
     )]
     /// Shared node.
-    pub node: Node,
+    pub node: Node<ParticleEmitterFlags>,
     #[mdl(
         animatable = "EmissionRate",
         track = "ParticleTrack::EmissionRate",
@@ -82,9 +82,9 @@ pub struct ParticleEmitter {
 
 impl ParticleEmitter {
     /// Creates an emitter with zeroed physical values.
-    pub fn new(node: Node, path: &str) -> Result<Self, ValueError> {
+    pub fn new<F: NodeFlagInterpretation>(node: Node<F>, path: &str) -> Result<Self, ValueError> {
         let mut emitter = Self {
-            node,
+            node: node.cast_flags(),
             emission_rate: 0.0,
             gravity: 0.0,
             longitude: 0.0,
@@ -120,8 +120,8 @@ fn validate_particle(value: &ParticleEmitter) -> Result<(), mdl::WriteError> {
 }
 
 bitfield! {
-    /// Behavioral flags interpreted in this emitter's context.
-    #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+    /// Complete node flag word interpreted in this emitter's context.
+    #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, mdx::Read, mdx::Write)]
     pub struct ParticleEmitterFlags(u32);
     /// Returns the stored bits.
     pub bits, _: 31, 0;
@@ -132,20 +132,22 @@ bitfield! {
 }
 impl ParticleEmitterFlags {
     const MASK: u32 = 0x18000;
-    /// Extracts this emitter's behavioral bits from a node word.
+    /// Interprets a node word, preserving every stored bit.
     pub const fn from_bits(bits: u32) -> Self {
-        Self(bits & Self::MASK)
+        Self(bits)
     }
 }
 impl ParticleEmitter {
     /// Returns behavioral flags using this emitter's bit meanings.
     pub fn flags(&self) -> ParticleEmitterFlags {
-        ParticleEmitterFlags::from_bits(self.node.flags.bits())
+        ParticleEmitterFlags::from_bits(self.node.flags.bits() & ParticleEmitterFlags::MASK)
     }
     /// Changes emitter behavior while preserving every unrelated node bit.
     pub fn set_flags(&mut self, flags: ParticleEmitterFlags) {
         let bits = (self.node.flags.bits() & !ParticleEmitterFlags::MASK)
             | (flags.bits() & ParticleEmitterFlags::MASK);
-        self.node.flags = NodeFlags(bits);
+        self.node.flags = ParticleEmitterFlags(bits);
     }
 }
+
+impl_node_flags!(ParticleEmitterFlags);

@@ -58,3 +58,41 @@ fn local_bones_are_bounded_when_available() {
         }
     }
 }
+
+#[test]
+fn typed_node_flags_preserve_the_complete_word_and_node() {
+    use wc3::model::animation::{AnimationTrack, NodeTranslation};
+    use wc3::model::emitters::{Particle2Flags, ParticleEmitterFlags, PopcornFlags};
+    use wc3::model::scene::NodeTrack;
+
+    let bits = 0x8002_1001;
+    let mut original = Node::new("Typed", 9).unwrap();
+    original.parent_id = 4;
+    original.flags = NodeFlags(bits);
+    original.tracks.push(NodeTrack::Translation(
+        AnimationTrack::<NodeTranslation>::linear(vec![], None).unwrap(),
+    ));
+    let bytes = original.encode_mdx().unwrap();
+    let mut particle = original.clone().cast_flags::<Particle2Flags>();
+    assert!(particle.flags.line_emitter());
+    assert!(!particle.flags.unfogged());
+    assert!(particle.flags.dont_inherit_translation());
+    assert_eq!(particle.encode_mdx().unwrap(), bytes);
+    assert_eq!(
+        Node::<Particle2Flags>::decode_mdx(&bytes).unwrap(),
+        particle
+    );
+    particle.flags.set_billboarded(true);
+    assert_eq!(particle.flags.bits(), bits | 8);
+    particle.flags.set_billboarded(false);
+    let popcorn = particle.cast_flags::<PopcornFlags>();
+    assert!(popcorn.flags.unfogged());
+    assert_eq!(popcorn.encode_mdx().unwrap(), bytes);
+    assert_eq!(Node::<PopcornFlags>::decode_mdx(&bytes).unwrap(), popcorn);
+    let classic = popcorn.cast_flags::<ParticleEmitterFlags>();
+    assert_eq!(classic.flags.bits(), bits);
+    assert_eq!(classic.cast_flags::<NodeFlags>(), original);
+    assert_eq!(Particle2Flags::from_bits(bits).bits(), bits);
+    assert_eq!(PopcornFlags::from_bits(bits).bits(), bits);
+    assert_eq!(ParticleEmitterFlags::from_bits(bits).bits(), bits);
+}

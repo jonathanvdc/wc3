@@ -28,29 +28,13 @@ bitfield! {
     /// Node behavior and historical object-kind bits. Unrecognized bits survive conversion.
     ///
     /// Bits 15–20 depend on the containing emitter record. Prefer the emitter's
-    /// `flags()` and `set_flags()` methods for those bits: for example, bit 17
+    /// typed `node.flags` field for those bits: for example, bit 17
     /// means Particle2 line emission but Popcorn unfogged rendering.
     /// Historical kind bits are preserved storage, not an authoritative record kind.
     #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, mdx::Read, mdx::Write)]
     pub struct NodeFlags(u32);
     /// Returns the exact stored bits.
     pub bits, _: 31, 0;
-    /// Returns or changes the `DONT_INHERIT_TRANSLATION` bit.
-    pub dont_inherit_translation, set_dont_inherit_translation: 0;
-    /// Returns or changes the `DONT_INHERIT_ROTATION` bit.
-    pub dont_inherit_rotation, set_dont_inherit_rotation: 1;
-    /// Returns or changes the `DONT_INHERIT_SCALING` bit.
-    pub dont_inherit_scaling, set_dont_inherit_scaling: 2;
-    /// Returns or changes the `BILLBOARDED` bit.
-    pub billboarded, set_billboarded: 3;
-    /// Returns or changes the `BILLBOARD_LOCK_X` bit.
-    pub billboard_lock_x, set_billboard_lock_x: 4;
-    /// Returns or changes the `BILLBOARD_LOCK_Y` bit.
-    pub billboard_lock_y, set_billboard_lock_y: 5;
-    /// Returns or changes the `BILLBOARD_LOCK_Z` bit.
-    pub billboard_lock_z, set_billboard_lock_z: 6;
-    /// Returns or changes the `CAMERA_ANCHORED` bit.
-    pub camera_anchored, set_camera_anchored: 7;
     /// Returns or changes the `BONE` bit.
     pub bone, set_bone: 8;
     /// Returns or changes the `LIGHT` bit.
@@ -80,10 +64,15 @@ bitfield! {
 }
 
 /// A shared node header with decoded transform tracks.
+///
+/// `F` stores the complete flag word and selects its interpretation. Emitter
+/// records use their own flag types; ordinary nodes default to `NodeFlags`.
+/// Use [`Node::cast_flags`] to change interpretations without changing the bits.
+/// Standalone MDL `Helper` blocks use the default interpretation.
 #[derive(Clone, Debug, PartialEq, mdx::Read, mdx::Write, mdl::Read, mdl::Write)]
 #[mdx(sized(tag = HelpersChunk::TAG))]
 #[mdl(fields)]
-pub struct Node {
+pub struct Node<F = NodeFlags> {
     #[mdl(header)]
     /// Fixed-width name preserving every stored byte.
     pub name: FixedText<NAME_SIZE>,
@@ -111,7 +100,7 @@ pub struct Node {
         allow_bits = 0x1fff00
     )]
     /// Node flags.
-    pub flags: NodeFlags,
+    pub flags: F,
     #[mdl(repeated(Translation, Rotation, Scaling), unique_by = "NodeTrack::tag")]
     /// Transform tracks without reparsing.
     pub tracks: Vec<NodeTrack>,
@@ -149,15 +138,36 @@ pub struct Bone {
     pub geoset_animation_id: u32,
 }
 
-impl Node {
+/// A lossless interpretation of the complete 32-bit node flag word.
+pub trait NodeFlagInterpretation: Copy + Default {
+    /// Returns every stored bit, including unknown and historical kind bits.
+    fn bits(self) -> u32;
+    /// Interprets a word without discarding any bits.
+    fn from_bits(bits: u32) -> Self;
+}
+
+impl<F: NodeFlagInterpretation> Node<F> {
     pub(crate) fn mdl_flags(&self) -> NodeFlags {
-        self.flags
+        NodeFlags(self.flags.bits())
     }
 
     pub(crate) fn set_mdl_flags(&mut self, flags: NodeFlags) {
-        self.flags = flags;
+        self.flags = F::from_bits(flags.bits());
     }
 
+    /// Changes the flag interpretation while preserving every field and stored bit.
+    pub fn cast_flags<G: NodeFlagInterpretation>(self) -> Node<G> {
+        Node {
+            name: self.name,
+            object_id: self.object_id,
+            parent_id: self.parent_id,
+            flags: G::from_bits(self.flags.bits()),
+            tracks: self.tracks,
+        }
+    }
+}
+
+impl Node {
     /// Creates a node without animation tracks.
     pub fn new(name: &str, object_id: u32) -> Result<Self, ValueError> {
         let mut node = Self {
@@ -240,14 +250,17 @@ fn finish_bone(value: &mut Bone, _: Span) -> Result<(), mdl::ReadError> {
 fn validate_bone(value: &Bone) -> Result<(), mdl::WriteError> {
     validate_node_kind(&value.node, 0x100)
 }
-pub(crate) fn validate_node_kind(node: &Node, kind: u32) -> Result<(), mdl::WriteError> {
+pub(crate) fn validate_node_kind<F: NodeFlagInterpretation>(
+    node: &Node<F>,
+    kind: u32,
+) -> Result<(), mdl::WriteError> {
     if node.flags.bits() & !0xff != kind {
         return Err(mdl::WriteError::Unsupported("node object-kind bits"));
     }
     Ok(())
 }
-pub(crate) fn set_node_kind(node: &mut Node, kind: u32) {
-    node.flags.0 |= kind;
+pub(crate) fn set_node_kind<F: NodeFlagInterpretation>(node: &mut Node<F>, kind: u32) {
+    node.flags = F::from_bits(node.flags.bits() | kind);
 }
 fn read_reference(parser: &mut Parser<'_>, keyword: &str) -> Result<u32, mdl::ReadError> {
     if parser
@@ -305,3 +318,37 @@ impl mdl::Write for Node {
         writer.end_block()
     }
 }
+
+macro_rules! impl_node_flags {
+    ($flags:ident) => {
+        impl_node_flags!(@fields $flags,
+            (dont_inherit_translation, set_dont_inherit_translation, 0),
+            (dont_inherit_rotation, set_dont_inherit_rotation, 1),
+            (dont_inherit_scaling, set_dont_inherit_scaling, 2),
+            (billboarded, set_billboarded, 3),
+            (billboard_lock_x, set_billboard_lock_x, 4),
+            (billboard_lock_y, set_billboard_lock_y, 5),
+            (billboard_lock_z, set_billboard_lock_z, 6),
+            (camera_anchored, set_camera_anchored, 7)
+        );
+        impl NodeFlagInterpretation for $flags {
+            fn bits(self) -> u32 { self.0 }
+            fn from_bits(bits: u32) -> Self { Self(bits) }
+        }
+    };
+    (@fields $flags:ident, $(($get:ident, $set:ident, $bit:literal)),+) => {
+        impl $flags {
+            $(
+                #[doc = concat!("Returns the common `", stringify!($get), "` bit.")]
+                pub fn $get(&self) -> bool { self.0 & (1 << $bit) != 0 }
+                #[doc = concat!("Changes the common `", stringify!($get), "` bit, preserving all other bits.")]
+                pub fn $set(&mut self, value: bool) {
+                    self.0 = (self.0 & !(1 << $bit)) | (u32::from(value) << $bit);
+                }
+            )+
+        }
+    };
+}
+pub(crate) use impl_node_flags;
+
+impl_node_flags!(NodeFlags);
