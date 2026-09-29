@@ -106,32 +106,6 @@ setting it back. For edits in place, match variants in the public ordered
 `TryModelAccess`. Use `visit_model!` to run the same expression against each
 possible typed model when you need direct access to its records.
 
-## Preservation and errors
-
-**MDX:** decoding retains chunk order, duplicate chunks, unknown chunk payloads,
-fixed-width text bytes, and unknown flag bits. Known chunks with malformed
-payloads return errors instead of becoming opaque chunks. Encoding reconstructs
-typed records from their current values. Animation properties retain their stored base and
-last animation track. Duplicate track tags use last-wins behavior, and writing
-uses canonical field order rather than preserving the input track order.
-
-**MDL:** decoding preserves represented values, IDs, and references. Encoding
-writes deterministic field and block order, merges known collection chunks,
-and omits empty optional collections. Comments, whitespace, and original chunk
-organization do not survive a text round trip.
-
-MDL writers reject opaque chunks and binary values without a faithful text
-representation, including unknown flag bits, invalid fixed text, and certain
-hidden animation bases or noncanonical record layouts. NaN payload bits cannot
-survive text output. A successful format conversion does not imply byte equality
-with the original MDX file.
-
-Value validation uses `ValueError`; codec errors are `mdx::ReadError`,
-`mdx::WriteError`, `mdl::ReadError`, and `mdl::WriteError`. MDL read errors provide
-`diagnostic(source)` for source-span and line/column details. Streaming writers
-may leave partial output on error; use `encode_mdx()` or `encode_mdl()` to obtain
-an owned result before writing it to a file.
-
 ## Converting versions
 
 Version conversion builds a new model and returns a report, leaving the source

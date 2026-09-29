@@ -3,13 +3,18 @@ use wc3::model::animation::{Animatable, Track};
 use wc3::model::chunks::{
     BindPoseChunk, MaterialsChunk, ModelChunk, RawChunk, UnknownChunk, VersionChunk,
 };
+use wc3::model::emitters::PopcornEmitter;
 use wc3::model::geometry::{Geoset, SkinWeights};
+use wc3::model::mdl::Read as _;
 use wc3::model::mdl::Write as _;
 use wc3::model::mdx::Read as _;
 use wc3::model::mdx::Write as _;
 
 use wc3::model::materials::{Layer, LayerFresnel, LayerTextureSlot, Material, ShaderType};
-use wc3::model::scene::{Camera, CameraVariant, Light, LightFalloff, LightShadowRange, Node};
+use wc3::model::scene::{
+    Camera, CameraVariant, Light, LightFalloff, LightShadowRange, Node, NodeFlagInterpretation,
+    NodeFlags,
+};
 use wc3::model::{
     ConversionIssueKind, ConversionOptions, DynamicModel, Model, ModelVersion, UnknownChunkPolicy,
     V1000, V1100, V1200, V1300, V1400, V1600, V1800, V800, V900,
@@ -37,12 +42,89 @@ fn sample<V: ModelVersion>() -> Model<V> {
     geoset.set_raw_unselectable(0x8000_0002);
     model.set_geosets(&[geoset]);
     let mut light = Light::<V>::new(Node::new("Lamp", 7).unwrap(), 2);
+    light.node.flags.set_light(true);
     light.color = Animatable::Static([1.0, 0.5, 0.25]);
     light.intensity = Animatable::Static(2.5);
     light.attenuation_end = Animatable::Static(200.0);
     model.set_lights(&[light]);
     model.set_cameras(&[Camera::<V>::new("View").unwrap()]);
     model
+}
+
+#[test]
+fn missing_popcorn_kind_is_normalized_without_changing_source_or_behavior_flags() {
+    let mut source =
+        Model::<V1200>::decode_mdl("Version { FormatVersion 1200, } Model \"Minimal\" {}").unwrap();
+    let mut emitter = PopcornEmitter::new(Node::new("Hero_Glow", 153).unwrap(), "", "").unwrap();
+    emitter.node.flags.set_unfogged(true);
+    source.try_set_popcorn_emitters(&[emitter]).unwrap();
+    let bytes = source.encode_mdx().unwrap();
+    assert!(source.encode_mdl().is_err());
+
+    let converted = source
+        .convert::<V1200>(&ConversionOptions::strict())
+        .unwrap();
+    assert_eq!(
+        converted.model.try_popcorn_emitters().unwrap()[0]
+            .node
+            .flags
+            .bits(),
+        0x21000
+    );
+    assert_eq!(converted.report.issues.len(), 1);
+    assert_eq!(
+        converted.report.issues[0].kind,
+        ConversionIssueKind::Normalized
+    );
+    assert_eq!(
+        converted.report.issues[0].path,
+        "chunks[2].popcorn_emitters[0].node.flags"
+    );
+    let text = converted.model.encode_mdl().unwrap();
+    let restored = Model::<V1200>::decode_mdl(&text).unwrap();
+    assert_eq!(
+        restored.try_popcorn_emitters().unwrap(),
+        converted.model.try_popcorn_emitters().unwrap()
+    );
+    assert_eq!(source.encode_mdx().unwrap(), bytes);
+    assert!(converted
+        .model
+        .convert::<V1200>(&ConversionOptions::strict())
+        .unwrap()
+        .report
+        .issues
+        .is_empty());
+}
+
+#[test]
+fn conflicting_popcorn_kind_is_preserved_and_still_refused_by_mdl() {
+    let mut source = Model::<V1200>::new();
+    let mut node = Node::new("Conflicting", 0).unwrap();
+    node.flags.set_bone(true);
+    let emitter = PopcornEmitter::new(node, "", "").unwrap();
+    source.try_set_popcorn_emitters(&[emitter]).unwrap();
+    let converted = source
+        .convert::<V1200>(&ConversionOptions::strict())
+        .unwrap();
+    assert!(converted.report.issues.is_empty());
+    let emitter = &converted.model.try_popcorn_emitters().unwrap()[0];
+    assert_eq!(emitter.node.flags.bits(), 0x100);
+    assert!(emitter.encode_mdl().is_err());
+}
+
+#[test]
+fn kind_normalization_preserves_inheritance_and_unknown_bits() {
+    let mut source = Model::<V1200>::new();
+    let mut node = Node::new("UnknownFlags", 0).unwrap();
+    node.flags = NodeFlags::from_bits(0x8000_0004);
+    let emitter = PopcornEmitter::new(node, "", "").unwrap();
+    source.try_set_popcorn_emitters(&[emitter]).unwrap();
+    let converted = source
+        .convert::<V1200>(&ConversionOptions::strict())
+        .unwrap();
+    let emitter = &converted.model.try_popcorn_emitters().unwrap()[0];
+    assert_eq!(emitter.node.flags.bits(), 0x8000_1004);
+    assert!(emitter.encode_mdl().is_err());
 }
 
 fn check_pair<S: ModelVersion, T: ModelVersion>() {

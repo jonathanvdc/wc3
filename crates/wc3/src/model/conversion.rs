@@ -1,4 +1,5 @@
 //! Explicit conversions between typed MDX layouts.
+use crate::model::scene::{set_node_kind, Node, NodeFlagInterpretation};
 use crate::model::visit_model;
 use std::error::Error;
 use std::fmt::{self, Display, Formatter};
@@ -190,7 +191,9 @@ impl<V: ModelVersion> Model<V> {
     /// ```
     ///
     /// Shared fields retain exact storage, except equivalent camera variants 0/3
-    /// are normalized to the target default and reported. New fields use constructor defaults.
+    /// are normalized to the target default and reported. Missing node kind bits
+    /// are inferred from their record type and reported; conflicting kind bits are retained.
+    /// New fields use constructor defaults.
     /// Unsupported non-default fields and tracks fail unless dropping is enabled.
     /// A missing VERS is inserted so the encoded result identifies its target layout.
     pub fn convert<T: ModelVersion>(
@@ -227,7 +230,7 @@ impl<V: ModelVersion> Model<V> {
                     $collection::<T>::new(records).into()
                 }};
             }
-            let converted = match chunk {
+            let mut converted = match chunk {
                 ModelChunk::Version(value) => {
                     let mut version = VersionChunk::<T>::new();
                     version.extension = value.extension.clone();
@@ -289,6 +292,40 @@ impl<V: ModelVersion> Model<V> {
                 ModelChunk::BindPose(value) => ModelChunk::BindPose(value.clone()),
                 ModelChunk::Gliders(value) => ModelChunk::Gliders(value.clone()),
             };
+            macro_rules! normalize_nodes {
+                ($value:expr, $name:literal, $kind:expr) => {
+                    for (i, record) in $value.records.iter_mut().enumerate() {
+                        normalize_node_kind(
+                            &mut record.node,
+                            $kind,
+                            &mut context,
+                            &format!("{path}.{}[{i}].node.flags", $name),
+                        );
+                    }
+                };
+            }
+            match &mut converted {
+                ModelChunk::Bones(value) => normalize_nodes!(value, "bones", 0x100),
+                ModelChunk::Lights(value) => normalize_nodes!(value, "lights", 0x200),
+                ModelChunk::EventObjects(value) => normalize_nodes!(value, "event_objects", 0x400),
+                ModelChunk::Attachments(value) => normalize_nodes!(value, "attachments", 0x800),
+                ModelChunk::ParticleEmitters(value) => {
+                    normalize_nodes!(value, "particle_emitters", 0x1000)
+                }
+                ModelChunk::ParticleEmitters2(value) => {
+                    normalize_nodes!(value, "particle_emitters2", 0x1000)
+                }
+                ModelChunk::PopcornEmitters(value) => {
+                    normalize_nodes!(value, "popcorn_emitters", 0x1000)
+                }
+                ModelChunk::CollisionShapes(value) => {
+                    normalize_nodes!(value, "collision_shapes", 0x2000)
+                }
+                ModelChunk::RibbonEmitters(value) => {
+                    normalize_nodes!(value, "ribbon_emitters", 0x4000)
+                }
+                _ => {}
+            }
             model.chunks.push(converted);
         }
         if model.chunk(*b"VERS").is_none() {
@@ -303,6 +340,24 @@ impl<V: ModelVersion> Model<V> {
             model,
             report: context.report,
         })
+    }
+}
+
+fn normalize_node_kind<F: NodeFlagInterpretation>(
+    node: &mut Node<F>,
+    kind: u32,
+    context: &mut ConversionContext<'_>,
+    path: &str,
+) {
+    // Only the seven object-kind bits are redundant with the enclosing record.
+    // Transform, emitter behavior, and unknown bits must remain untouched.
+    if node.flags.bits() & 0x7f00 == 0 {
+        set_node_kind(node, kind);
+        context.issue(
+            path,
+            ConversionIssueKind::Normalized,
+            &format!("added missing node object-kind bit {kind:#x} inferred from record type"),
+        );
     }
 }
 
