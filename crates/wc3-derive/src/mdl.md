@@ -166,7 +166,10 @@ tracks with matching MDL names.
 Writing uses the track when present, otherwise the static base. A hidden base
 must equal the value restored by reading, or output fails. Tracks start empty
 on read and retain their order; duplicate or unmapped variants are errors.
-They are emitted at the vector's position in `write_order` or declaration order.
+Animated properties are emitted at their base field’s position in `write_order`
+or declaration order. Channels without base fields are emitted at the tracks
+field’s position, in `channels(...)` declaration order. Writing leaves stored
+track order unchanged.
 
 | Modifier | Purpose |
 | --- | --- |

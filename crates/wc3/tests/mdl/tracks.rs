@@ -271,24 +271,35 @@ fn texture_anims_spec_container_transcodes_without_losing_tracks() {
     assert!(output.contains("\t\t\t\tInTan"));
     let mut parser = Parser::new(&output);
     parser.expect_ident("TextureAnims").unwrap();
-    let decoded = parser
+    let mut decoded = parser
         .counted::<TextureAnimation>()
         .unwrap()
         .collect::<Result<Vec<_>, _>>()
         .unwrap();
     parser.finish().unwrap();
+    for (decoded, original) in decoded.iter_mut().zip(&animations) {
+        decoded.tracks.sort_by_key(|track| {
+            original
+                .tracks
+                .iter()
+                .position(|original| original.tag() == track.tag())
+                .unwrap()
+        });
+    }
     assert_eq!(decoded, animations);
     for animation in animations {
         let bytes = animation.encode_mdx().unwrap();
         let binary = TextureAnimation::decode_mdx(&bytes).unwrap();
         let text = binary.encode_mdl().unwrap();
-        assert_eq!(
-            TextureAnimation::decode_mdl(&text)
+        let mut decoded = TextureAnimation::decode_mdl(&text).unwrap();
+        decoded.tracks.sort_by_key(|track| {
+            animation
+                .tracks
+                .iter()
+                .position(|original| original.tag() == track.tag())
                 .unwrap()
-                .encode_mdx()
-                .unwrap(),
-            bytes
-        );
+        });
+        assert_eq!(decoded.encode_mdx().unwrap(), bytes);
     }
 }
 

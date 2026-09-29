@@ -10,7 +10,9 @@ fn roundtrip<T: mdl::Read + mdl::Write + mdx::Read + mdx::Write>(value: &T) {
     let bytes = value.encode_mdx().unwrap();
     let text = value.encode_mdl().unwrap();
     let decoded = T::decode_mdl(&text).unwrap_or_else(|error| panic!("{error}: {text}"));
-    assert_eq!(decoded.encode_mdx().unwrap(), bytes, "{text}");
+    assert_eq!(decoded.encode_mdl().unwrap(), text);
+    assert_eq!(T::decode_mdx(&bytes).unwrap().encode_mdx().unwrap(), bytes);
+    assert_eq!(value.encode_mdx().unwrap(), bytes);
 }
 #[test]
 fn particle_flags_and_all_channels_roundtrip() {

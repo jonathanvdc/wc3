@@ -39,10 +39,15 @@ fn emitter_tracks_preserve_signed_keys_splines_globals_and_hidden_bases() {
     ))
     .unwrap();
     assert_eq!(record.tracks.len(), 6);
-    assert_eq!(
-        PopcornEmitter::decode_mdl(&record.encode_mdl().unwrap()).unwrap(),
+    let mut decoded = PopcornEmitter::decode_mdl(&record.encode_mdl().unwrap()).unwrap();
+    decoded.tracks.sort_by_key(|track| {
         record
-    );
+            .tracks
+            .iter()
+            .position(|original| original.tag() == track.tag())
+            .unwrap()
+    });
+    assert_eq!(decoded, record);
     record.alpha = 0.0;
     assert!(record.encode_mdl().is_err());
 }

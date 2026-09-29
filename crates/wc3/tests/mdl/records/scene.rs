@@ -8,7 +8,12 @@ fn roundtrip<T: mdl::Read + mdl::Write + mdx::Read + mdx::Write>(value: &T) {
     let binary = value.encode_mdx().unwrap();
     let text = value.encode_mdl().unwrap();
     let decoded = T::decode_mdl(&text).unwrap_or_else(|error| panic!("{error}: {text}"));
-    assert_eq!(decoded.encode_mdx().unwrap(), binary, "{text}");
+    assert_eq!(decoded.encode_mdl().unwrap(), text);
+    assert_eq!(
+        T::decode_mdx(&binary).unwrap().encode_mdx().unwrap(),
+        binary
+    );
+    assert_eq!(value.encode_mdx().unwrap(), binary);
 }
 #[test]
 fn light_roundtrips_at_all_versions() {

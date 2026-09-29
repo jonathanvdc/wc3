@@ -714,7 +714,7 @@ fn virtual_slots_check_versions_presence_defaults_and_hidden_bases() {
     .unwrap();
     assert!(animated.tracks_present);
     let text = animated.encode_mdl().unwrap();
-    assert!(text.find("Color").unwrap() < text.find("Alpha").unwrap());
+    assert!(text.find("Alpha").unwrap() < text.find("Color").unwrap());
     animated.storage = Some(2.0);
     assert!(animated.encode_mdl().is_err());
     let mut unavailable = VersionedView::<false>::decode_mdl("VersionedView {}").unwrap();
@@ -727,5 +727,43 @@ fn virtual_slots_check_versions_presence_defaults_and_hidden_bases() {
         .unwrap_err()
         .kind,
         mdl::ReadErrorKind::DuplicateField
+    );
+}
+
+#[derive(Debug, PartialEq, mdl::Read, mdl::Write)]
+#[mdl(block = "OrderedTracks", write_order(color, marker, tracks, alpha))]
+struct OrderedTracks {
+    #[mdl(animatable = "Alpha", track = "GeosetTrack::Alpha", default)]
+    alpha: f32,
+    #[mdl(animatable = "Color", track = "GeosetTrack::Color", default)]
+    color: [f32; 3],
+    #[mdl(property = "Marker")]
+    marker: u32,
+    #[mdl(tracks)]
+    tracks: Vec<GeosetTrack>,
+}
+
+#[test]
+fn animated_properties_follow_write_order_without_reordering_storage() {
+    let first = OrderedTracks::decode_mdl(
+        "OrderedTracks { Alpha 0 { Linear, } Marker 7, Color 0 { Linear, } }",
+    )
+    .unwrap();
+    let second = OrderedTracks::decode_mdl(
+        "OrderedTracks { Color 0 { Linear, } Marker 7, Alpha 0 { Linear, } }",
+    )
+    .unwrap();
+    let original = first.tracks.clone();
+    let text = first.encode_mdl().unwrap();
+    assert_eq!(text, second.encode_mdl().unwrap());
+    assert!(text.find("Color").unwrap() < text.find("Marker").unwrap());
+    assert!(text.find("Marker").unwrap() < text.find("Alpha").unwrap());
+    assert_eq!(first.tracks, original);
+    assert_eq!(
+        OrderedTracks::decode_mdl(&text)
+            .unwrap()
+            .encode_mdl()
+            .unwrap(),
+        text
     );
 }

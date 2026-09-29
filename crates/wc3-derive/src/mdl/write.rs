@@ -128,11 +128,24 @@ pub(super) fn expand(
                     condition = quote!(#emit);
                 }
                 writes.push(quote!(if #condition { #write }));
+                if matches!(kind, Kind::Animatable(_)) {
+                    let variant = field.track.as_ref().expect("track was checked");
+                    let collection = tracks.expect("tracks was checked").value(quote!(self));
+                    writes.push(quote! {
+                        if let Some(track) = (#collection).iter().find(|track| matches!(track, #variant(_))) {
+                            __wc3_mdl_writer.write(track)?;
+                        }
+                    });
+                }
             }
             Kind::Tracks => {
-                writes.push(
-                    quote!(for track in (#access).iter() { __wc3_mdl_writer.write(track)?; }),
-                );
+                for (_, variant) in &field.channels {
+                    writes.push(quote! {
+                        if let Some(track) = (#access).iter().find(|track| matches!(track, #variant(_))) {
+                            __wc3_mdl_writer.write(track)?;
+                        }
+                    });
+                }
                 let mut checks = Vec::new();
                 let mut choices = Vec::new();
                 for animated in &animated {

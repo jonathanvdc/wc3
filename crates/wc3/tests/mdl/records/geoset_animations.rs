@@ -9,7 +9,14 @@ fn roundtrip(source: &str) -> GeosetAnimation {
     let bytes = value.encode_mdx().unwrap();
     let binary = GeosetAnimation::decode_mdx(&bytes).unwrap();
     let output = binary.encode_mdl().unwrap();
-    let decoded = GeosetAnimation::decode_mdl(&output).unwrap();
+    let mut decoded = GeosetAnimation::decode_mdl(&output).unwrap();
+    decoded.tracks.sort_by_key(|track| {
+        value
+            .tracks
+            .iter()
+            .position(|original| original.tag() == track.tag())
+            .unwrap()
+    });
     assert_eq!(decoded.encode_mdx().unwrap(), bytes);
     value
 }
