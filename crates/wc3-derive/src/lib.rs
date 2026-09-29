@@ -1,4 +1,12 @@
-//! Field-order MDX records, numeric choices, and streaming MDL codecs.
+//! Codec derives used to implement Warcraft III model records in `wc3`.
+//!
+//! These macros are for maintaining or extending the record implementations.
+//! Applications using the built-in model types only need the codec traits in
+//! `wc3::model::mdx` and `wc3::model::mdl`.
+//!
+//! Import macros through those format modules, for example
+//! `#[derive(mdl::Read, mdl::Write)]`. The MDL attribute reference follows.
+#![doc = include_str!("mdl.md")]
 mod mdl;
 mod mdx;
 

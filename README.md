@@ -161,15 +161,14 @@ shader paths into layer shader IDs, and do not guarantee identical rendering.
 
 ## Codec APIs and documentation
 
-The `mdx` and `mdl` modules expose record-level `Read` and `Write` traits and
-derives as well as whole-model codecs. `mdx::Cursor` / `mdx::Encoder` handle
-binary streams; `mdl::Parser` / `mdl::MdlWriter` handle text. MDL parsing borrows
+The `mdx` and `mdl` modules expose `Read` and `Write` traits for records and
+whole models. `mdx::Cursor` / `mdx::Encoder` handle binary streams;
+`mdl::Parser` / `mdl::MdlWriter` handle text. MDL parsing borrows
 resident UTF-8 input without building an AST or token buffer.
 
-For custom records, use format-qualified derives such as
-`#[derive(mdx::Read, mdx::Write, mdl::Read, mdl::Write)]`. The module docs explain
-wire mappings, MDL field attributes, custom property codecs, and dialect handling.
-Build the API documentation locally with:
+The module docs cover reading, writing, and dialect handling. Internal codec
+derive documentation lives in `wc3-derive`. Build the API documentation locally
+with:
 
 ```sh
 cargo doc --workspace --no-deps --open

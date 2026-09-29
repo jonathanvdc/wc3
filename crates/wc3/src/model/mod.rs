@@ -7,8 +7,7 @@
 //! # Read, edit, and write
 //!
 //! Import [`mdx::Read`](crate::model::mdx::Read) / [`mdx::Write`](crate::model::mdx::Write) for binary I/O and [`mdl::Read`](crate::model::mdl::Read) /
-//! [`mdl::Write`](crate::model::mdl::Write) for text I/O. The traits are also available as derives for custom
-//! records.
+//! [`mdl::Write`](crate::model::mdl::Write) for text I/O.
 //!
 //! ```
 //! use wc3::model::{Model, V800};
