@@ -22,6 +22,9 @@
 //! # Choosing a dialect
 //!
 //! Readers accept Warcraft III and HiveWorkshop spellings, including mixed input.
+//! HiveWorkshop output omits material `SortPrimsNearZ` and layer `WrapWidth`,
+//! `WrapHeight`, `Unlit`, `BackFacesForShadows`, and `AmbientOcclusion`.
+//! Use Warcraft III output to retain those flags.
 //! Output defaults to [`Dialect::Warcraft3`]. Select [`Dialect::HiveWorkshop`] with
 //! [`Write::encode_mdl_with_dialect`] or [`Writer::with_dialect`]; the choice
 //! applies to all nested records. HiveWorkshop output can represent numeric shader

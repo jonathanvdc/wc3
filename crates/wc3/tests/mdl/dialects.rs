@@ -265,7 +265,7 @@ fn numeric_shaders_preserve_unnamed_ids_without_panicking() {
     }
 }
 #[test]
-fn flags_use_context_specific_spellings_and_preserve_all_known_bits() {
+fn flags_use_context_specific_spellings_and_omit_engine_only_bits_in_hive() {
     let value = Material::<V800>::decode_mdl(
         "Material { SortPrimitives, FullResolution, Layer { TwoSided, } }",
     )
@@ -275,17 +275,42 @@ fn flags_use_context_specific_spellings_and_preserve_all_known_bits() {
     roundtrip_hive(&value);
     let material = Material::<V800>::decode_mdl("Material { SortPrimsNearZ, }").unwrap();
     assert!(material.encode_mdl().is_ok());
-    roundtrip_hive(&material);
-    for flag in ["WrapWidth", "WrapHeight", "Unlit"] {
+    assert!(!hive(&material).contains("SortPrimsNearZ"));
+    assert_eq!(
+        Material::<V800>::decode_mdl(&hive(&material))
+            .unwrap()
+            .render_mode
+            .bits(),
+        0
+    );
+    for flag in [
+        "WrapWidth",
+        "WrapHeight",
+        "Unlit",
+        "BackFacesForShadows",
+        "AmbientOcclusion",
+    ] {
         let layer = Layer::<V800>::decode_mdl(&format!("Layer {{ {flag}, }}")).unwrap();
         assert!(layer.encode_mdl().is_ok());
-        roundtrip_hive(&layer);
+        assert!(layer.encode_mdl().unwrap().contains(flag));
+        assert!(!hive(&layer).contains(flag));
+        let restored = Layer::<V800>::decode_mdl(&hive(&layer)).unwrap();
+        assert_eq!(restored.shading_flags.bits(), 0);
         let material =
             Material::<V800>::decode_mdl(&format!("Material {{ Layer {{ {flag}, }} }}")).unwrap();
-        roundtrip_hive(&material);
+        assert!(!hive(&material).contains(flag));
     }
     let layer = Layer::<V1800>::decode_mdl("Layer { Unshaded, SphereEnvMap, TwoSided, Unfogged, NoDepthTest, NoDepthSet, BackFacesForShadows, AmbientOcclusion, }").unwrap();
-    roundtrip_hive(&layer);
+    let output = hive(&layer);
+    let restored = Layer::<V1800>::decode_mdl(&output).unwrap();
+    assert_eq!(
+        restored.shading_flags.bits(),
+        layer.shading_flags.bits() & !0x70c
+    );
+    assert_eq!(
+        Layer::<V1800>::decode_mdl(&layer.encode_mdl().unwrap()).unwrap(),
+        layer
+    );
     // The far-Z alias belongs to materials, not emitter flag vocabulary.
     assert!(wc3::model::emitters::ParticleEmitter2::decode_mdl(
         "ParticleEmitter2 \"p\" { ObjectId 0, SortPrimitives, }"

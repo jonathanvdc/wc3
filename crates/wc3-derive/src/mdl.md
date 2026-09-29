@@ -199,6 +199,10 @@ Use `hive_name = "OtherName"` for an alternate HiveWorkshop property spelling.
 declares the complete set. Aliases share duplicate detection. The writer's
 dialect selects the output spelling throughout nested records.
 
+`hive_skip_bits = MASK` on packed flags omits the selected mapped bits in
+HiveWorkshop output while retaining them in engine output and parsed storage.
+This supports engine-only flags without changing dialect spellings for other bits.
+
 ## Tuple wrappers and enums
 
 Single-field tuple structs support `#[mdl(property = "Duration")]` for a complete

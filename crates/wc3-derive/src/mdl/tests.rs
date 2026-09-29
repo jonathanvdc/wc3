@@ -1160,3 +1160,37 @@ fn value_enums_validate_unknown_variant_shape_and_context() {
         rejects(syn::parse_str(source).unwrap(), "unknown requires");
     }
 }
+
+#[test]
+fn hive_skip_bits_require_mapped_packed_flags() {
+    rejects(
+        parse_quote!(
+            #[mdl(block = "A")]
+            struct Bad {
+                #[mdl(property = "Value", hive_skip_bits = 1)]
+                value: u32,
+            }
+        ),
+        "hive_skip_bits requires packed flags",
+    );
+    rejects(
+        parse_quote!(
+            #[mdl(block = "A")]
+            struct Bad {
+                #[mdl(flags(Visible = 1), hive_skip_bits = 2)]
+                flags: u32,
+            }
+        ),
+        "hive_skip_bits must use mapped flags",
+    );
+    rejects(
+        parse_quote!(
+            #[mdl(block = "A")]
+            struct Bad {
+                #[mdl(flags(Visible = 1), hive_skip_bits = 1, hive_skip_bits = 1)]
+                flags: u32,
+            }
+        ),
+        "duplicate hive_skip_bits",
+    );
+}

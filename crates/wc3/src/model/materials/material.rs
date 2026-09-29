@@ -59,7 +59,7 @@ pub struct Material<V: ModelVersion> {
         SortPrimsFarZ = 16,
         FullResolution = 32
     ))]
-    #[mdl(hive_flags(SortPrimitives = 16))]
+    #[mdl(hive_flags(SortPrimitives = 16), hive_skip_bits = 8)]
     /// Rendering flags.
     pub render_mode: MaterialRenderFlags,
     #[mdl(property = "Shader", delegate)]

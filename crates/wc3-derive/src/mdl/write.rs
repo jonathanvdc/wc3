@@ -216,8 +216,10 @@ pub(super) fn expand(
                 }
                 // Dialects share the full semantic flag set. Overrides change
                 // spellings only; unmapped names keep their common spelling.
+                // Engine-only bits are omitted when the schema marks them for Hive.
                 let hive = flags
                     .iter()
+                    .filter(|(_, mask)| field.hive_skip_bits & mask == 0)
                     .map(|(name, mask)| {
                         field
                             .hive_flags

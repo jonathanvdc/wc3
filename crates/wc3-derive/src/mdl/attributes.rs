@@ -62,6 +62,7 @@ pub(super) struct Field {
     pub(super) enabled_if: Option<Path>,
     pub(super) enable_with: Option<Path>,
     pub(super) allow_bits: u32,
+    pub(super) hive_skip_bits: u32,
     pub(super) required: bool,
     pub(super) unique_by: Option<Path>,
     pub(super) animated_only: bool,
@@ -235,6 +236,7 @@ pub(super) fn field(field: &SynField, index: usize) -> Result<Field> {
     let mut enabled_if = None;
     let mut enable_with = None;
     let mut allow_bits = None;
+    let mut hive_skip_bits = None;
     let mut required = false;
     let mut delegate = false;
     let mut unique_by = None;
@@ -429,6 +431,13 @@ pub(super) fn field(field: &SynField, index: usize) -> Result<Field> {
                 path(&meta, &mut enabled_if)
             } else if meta.path.is_ident("enable_with") {
                 path(&meta, &mut enable_with)
+            } else if meta.path.is_ident("hive_skip_bits") {
+                if hive_skip_bits.is_some() {
+                    return Err(meta.error("duplicate hive_skip_bits"));
+                }
+                let value: LitInt = meta.value()?.parse()?;
+                hive_skip_bits = Some(value.base10_parse::<u32>()?);
+                Ok(())
             } else if meta.path.is_ident("allow_bits") {
                 if allow_bits.is_some() {
                     return Err(meta.error("duplicate allow_bits"));
@@ -570,6 +579,21 @@ pub(super) fn field(field: &SynField, index: usize) -> Result<Field> {
             "track and enable hooks require an animatable field",
         ));
     }
+    if let Some(skipped) = hive_skip_bits {
+        let Kind::Flags(flags) = &kind else {
+            return Err(Error::new_spanned(
+                field,
+                "hive_skip_bits requires packed flags",
+            ));
+        };
+        let mapped = flags.iter().fold(0, |bits, (_, mask)| bits | mask);
+        if skipped & !mapped != 0 {
+            return Err(Error::new_spanned(
+                field,
+                "hive_skip_bits must use mapped flags",
+            ));
+        }
+    }
     if allow_bits.is_some() && !matches!(kind, Kind::Flags(_)) {
         return Err(Error::new_spanned(
             field,
@@ -684,6 +708,7 @@ pub(super) fn field(field: &SynField, index: usize) -> Result<Field> {
         enabled_if,
         enable_with,
         allow_bits: allow_bits.unwrap_or(0),
+        hive_skip_bits: hive_skip_bits.unwrap_or(0),
         required,
         unique_by,
         animated_only,

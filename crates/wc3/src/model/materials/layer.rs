@@ -148,7 +148,8 @@ pub struct LayerTextureSlot {
         BackFacesForShadows = 512,
         AmbientOcclusion = 1024
     ))]
-    #[mdl(get = "Self::mdl_shading_flags", set = "Self::set_mdl_shading_flags")]
+    #[mdl(get = "Self::mdl_shading_flags", set = "Self::set_mdl_shading_flags",
+        hive_skip_bits = 0x70c)]
     shading: u32,
         #[mdl(property = "Shader", hive_name = "ShaderTypeId", delegate)]
         #[mdl(get = "Self::mdl_shader", set = "Self::set_mdl_shader")]
