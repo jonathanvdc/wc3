@@ -1,13 +1,12 @@
 //! Attachment records in `ATCH` chunks.
 use super::node::{set_node_kind, validate_node_kind};
-use crate::model::mdl::{MdlWriter, Parser, Span};
+use crate::model::mdl::Span;
 use crate::model::Encoder;
 use crate::model::KnownChunk;
 use crate::model::ModelVersion;
 use crate::model::ValueError;
 use crate::model::WriteError;
 use crate::model::{mdl, mdx};
-use std::io::Write as IoWrite;
 
 use crate::model::{AttachmentVisibility, AttachmentsChunk, Cursor};
 
@@ -17,19 +16,46 @@ use crate::model::{AnimationTrack, Model, Node, ReadError};
 const PATH_SIZE: usize = 260;
 
 /// An attachment node with a model path and optional visibility track.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, mdl::Read, mdl::Write)]
+#[mdl(
+    block = "Attachment",
+    after_read = "finish_attachment",
+    validate_write = "validate_attachment",
+    virtual_fields(
+        #[mdl(repeated = "Visibility", unique_by = "visibility_key", get = "Self::mdl_visibility", set = "Self::set_mdl_visibility")]
+        visibility: Vec<AnimationTrack<AttachmentVisibility>>,
+    )
+)]
 pub struct Attachment {
     /// Shared node.
+    #[mdl(flatten)]
     pub node: Node,
     /// Fixed-width path preserving every stored byte.
+    #[mdl(property = "Path", default)]
     pub path: FixedText<PATH_SIZE>,
     /// Attachment ID.
+    #[mdl(property = "AttachmentID", default)]
     pub id: u32,
     /// Optional visibility track.
+    #[mdl(skip, default)]
     pub visibility_track: Option<AnimationTrack<AttachmentVisibility>>,
 }
 
 impl Attachment {
+    fn mdl_visibility(&self) -> &[AnimationTrack<AttachmentVisibility>] {
+        self.visibility_track.as_slice()
+    }
+
+    fn set_mdl_visibility(
+        &mut self,
+        visibility: Vec<AnimationTrack<AttachmentVisibility>>,
+        _: bool,
+        _: Span,
+    ) -> Result<(), mdl::ReadError> {
+        self.visibility_track = visibility.into_iter().next();
+        Ok(())
+    }
+
     /// Creates an attachment from a node, model path, and attachment ID.
     pub fn new(node: Node, path: &str, id: u32) -> Result<Self, ValueError> {
         let mut attachment = Self {
@@ -95,50 +121,13 @@ impl mdx::Write for Attachment {
     }
 }
 
-#[derive(mdl::Read, mdl::Write)]
-#[mdl(
-    block = "Attachment",
-    after_read = "finish_attachment",
-    validate_write = "validate_attachment"
-)]
-struct AttachmentMdl {
-    #[mdl(flatten)]
-    node: Node,
-    #[mdl(property = "Path", default)]
-    path: FixedText<PATH_SIZE>,
-    #[mdl(property = "AttachmentID", default)]
-    id: u32,
-    #[mdl(repeated = "Visibility", unique_by = "visibility_key")]
-    visibility: Vec<AnimationTrack<AttachmentVisibility>>,
-}
 fn visibility_key(_: &AnimationTrack<AttachmentVisibility>) -> bool {
     true
 }
-fn finish_attachment(value: &mut AttachmentMdl, _: Span) -> Result<(), mdl::ReadError> {
+fn finish_attachment(value: &mut Attachment, _: Span) -> Result<(), mdl::ReadError> {
     set_node_kind(&mut value.node, 0x800);
     Ok(())
 }
-fn validate_attachment(value: &AttachmentMdl) -> Result<(), mdl::WriteError> {
+fn validate_attachment(value: &Attachment) -> Result<(), mdl::WriteError> {
     validate_node_kind(&value.node, 0x800)
-}
-impl mdl::Read for Attachment {
-    fn read_mdl(parser: &mut Parser<'_>) -> Result<Self, mdl::ReadError> {
-        let value = parser.read::<AttachmentMdl>()?;
-        Ok(Self {
-            node: value.node,
-            path: value.path,
-            id: value.id,
-            visibility_track: value.visibility.into_iter().next(),
-        })
-    }
-}
-impl mdl::Write for Attachment {
-    fn write_mdl<W: IoWrite>(&self, writer: &mut MdlWriter<W>) -> Result<(), mdl::WriteError> {
-        writer.write(&AttachmentMdl {
-            node: self.node.clone(),
-            path: self.path,
-            id: self.id,
-            visibility: self.visibility_track.iter().cloned().collect(),
-        })
-    }
 }
