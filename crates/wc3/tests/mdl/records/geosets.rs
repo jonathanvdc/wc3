@@ -181,7 +181,8 @@ fn binary_only_values_are_rejected_instead_of_dropped() {
     let value =
         Geoset::<V900>::decode_mdl(&with_fields(QUAD, "LevelOfDetailName \"Mesh\",")).unwrap();
     assert_eq!(value.name(), "Mesh");
-    assert!(value.encode_mdl().is_err());
+    assert!(value.encode_mdl().unwrap().contains("Name \"Mesh\","));
+    roundtrip(&value);
     let value = Geoset::<V800>::decode_mdl(&with_fields(QUAD, "SelectionFlags 128,")).unwrap();
     assert_eq!(value.raw_unselectable(), 128);
     assert!(value.encode_mdl().is_err());
@@ -322,4 +323,38 @@ fn skin_weights_only_replace_an_empty_legacy_group_array() {
         .unwrap()
         .encode_mdl()
         .is_err());
+}
+
+#[test]
+fn geoset_names_use_dialect_aliases_and_preserve_binary_storage() {
+    use wc3::model::mdl::Dialect;
+    macro_rules! check {
+        ($($version:ty),*) => { $( {
+            for spelling in ["Name", "LevelOfDetailName"] {
+                let value = Geoset::<$version>::decode_mdl(&with_fields(QUAD,
+                    &format!("{spelling} \"LOD mesh\","))).unwrap();
+                let original = value.encode_mdx().unwrap();
+                for (dialect, expected) in [(Dialect::Warcraft3, "Name"),
+                    (Dialect::HiveWorkshop, "LevelOfDetailName")] {
+                    let text = value.encode_mdl_with_dialect(dialect).unwrap();
+                    assert!(text.contains(&format!("\n\t{expected} \"LOD mesh\",")));
+                    assert_eq!(Geoset::<$version>::decode_mdl(&text).unwrap().encode_mdx().unwrap(), original);
+                }
+            }
+        } )* };
+    }
+    check!(V900, V1000, V1100, V1200, V1300, V1400, V1600, V1800);
+    for spelling in ["Name", "LevelOfDetailName"] {
+        assert!(
+            Geoset::<V800>::decode_mdl(&with_fields(QUAD, &format!("{spelling} \"Mesh\",")))
+                .is_err()
+        );
+    }
+    for fields in [
+        "Name \"A\", LevelOfDetailName \"B\",",
+        "LevelOfDetailName \"A\", Name \"B\",",
+    ] {
+        let error = Geoset::<V900>::decode_mdl(&with_fields(QUAD, fields)).unwrap_err();
+        assert_eq!(error.kind, mdl::ReadErrorKind::DuplicateField);
+    }
 }

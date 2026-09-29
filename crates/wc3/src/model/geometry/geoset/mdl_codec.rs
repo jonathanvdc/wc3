@@ -642,18 +642,9 @@ impl mdl::WriteProperty for RawSelection {
 }
 pub(super) struct LodNameRef<'a>(Option<&'a FixedText<80>>);
 impl mdl::WriteProperty for LodNameRef<'_> {
-    fn validate_mdl_property(
-        &self,
-        _: &'static str,
-        dialect: Dialect,
-    ) -> Result<(), mdl::WriteError> {
+    fn validate_mdl_property(&self, _: &'static str, _: Dialect) -> Result<(), mdl::WriteError> {
         if let Some(name) = self.0 {
             if *name != FixedText::default() {
-                if dialect == Dialect::Warcraft3 {
-                    return Err(mdl::WriteError::Unsupported(
-                        "LOD name in Warcraft III dialect",
-                    ));
-                }
                 Writer::new(sink()).write(name)?;
             }
         }

@@ -28,8 +28,8 @@
 //! Output defaults to [`Dialect::Warcraft3`]. Select [`Dialect::HiveWorkshop`] with
 //! [`Write::encode_mdl_with_dialect`] or [`Writer::with_dialect`]; the choice
 //! applies to all nested records. HiveWorkshop output can represent numeric shader
-//! IDs, animations in non-diffuse HD texture slots, raw geoset selection flags,
-//! and LOD names that Warcraft III output cannot express.
+//! IDs, animations in non-diffuse HD texture slots, and raw geoset selection flags
+//! that Warcraft III output cannot express.
 //!
 //! # Round trips and errors
 //!

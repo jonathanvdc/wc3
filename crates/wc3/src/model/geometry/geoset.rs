@@ -230,7 +230,7 @@ use mdl_codec::{
         selection: Selection,
         #[mdl(property = "LevelOfDetail", default, get = "Self::mdl_lod", slot = "Self::mdl_lod_mut")]
         lod: u32,
-        #[mdl(property = "LevelOfDetailName", delegate, get = "Self::mdl_lod_name", set = "Self::set_mdl_lod_name")]
+        #[mdl(property = "Name", hive_name = "LevelOfDetailName", delegate, get = "Self::mdl_lod_name", set = "Self::set_mdl_lod_name")]
         lod_name: Option<FixedText<80>>,
         #[mdl(repeated = "Anim", get = "Self::mdl_bounds", set = "Self::set_mdl_bounds")]
         bounds: Vec<AnimExtent>,
