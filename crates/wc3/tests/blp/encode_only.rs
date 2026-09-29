@@ -5,7 +5,7 @@ use wc3::blp::{Blp, BlpRef, EncodeFormat, EncodeOptions};
 fn encode_feature_writes_container_without_decode_feature() {
     let image = RgbaImage::from_pixel(2, 2, Rgba([12, 34, 56, 78]));
     let options = EncodeOptions {
-        format: EncodeFormat::Blp2Bgra,
+        format: EncodeFormat::Bgra,
         mipmaps: false,
         ..Default::default()
     };

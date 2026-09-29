@@ -1,6 +1,6 @@
 //! BLP2 binary layout.
 use super::{Blp2, Blp2ContentRef, Blp2Header, Blp2Ref, DxtFormat};
-use crate::blp::codec::{
+use crate::blp::container::io::{
     append_u32, byte, checked_u32, palette, read_mips, slice, validate_dimensions, validate_write,
     word, write_mips,
 };

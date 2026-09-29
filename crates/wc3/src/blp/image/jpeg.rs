@@ -1,10 +1,13 @@
+#[cfg(feature = "blp-decode")]
 use super::{image, output, DecodeError, MAX_DECODE_BYTES};
 use image::RgbaImage;
+#[cfg(feature = "blp-decode")]
 use zune_jpeg::{
     zune_core::{bytestream::ZCursor, colorspace::ColorSpace, options::DecoderOptions},
     JpegDecoder,
 };
 
+#[cfg(feature = "blp-decode")]
 pub(super) fn decode(
     mip: &[u8],
     shared_header: &[u8],
@@ -79,3 +82,37 @@ pub(super) fn decode(
     }
     image(width, height, pixels)
 }
+
+#[cfg(feature = "blp-encode")]
+pub(super) fn encode(
+    image: &RgbaImage,
+    alpha_bits: u8,
+    quality: u8,
+) -> Result<Vec<u8>, EncodeError> {
+    let mut bgra = Vec::with_capacity(image.as_raw().len());
+    for pixel in image.pixels() {
+        // The CMYK JPEG path stores inverted samples. Invert input so the
+        // decoder's raw four components retain B, G, R, A values.
+        bgra.extend_from_slice(&[
+            !pixel[2],
+            !pixel[1],
+            !pixel[0],
+            if alpha_bits == 0 { 0 } else { !pixel[3] },
+        ]);
+    }
+    let mut bytes = Vec::new();
+    Encoder::new(&mut bytes, quality)
+        .encode(
+            &bgra,
+            image.width() as u16,
+            image.height() as u16,
+            ColorType::Cmyk,
+        )
+        .map_err(|error| EncodeError::Jpeg(error.to_string()))?;
+    Ok(bytes)
+}
+
+#[cfg(feature = "blp-encode")]
+use super::EncodeError;
+#[cfg(feature = "blp-encode")]
+use jpeg_encoder::{ColorType, Encoder};

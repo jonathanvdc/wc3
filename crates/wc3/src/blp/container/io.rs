@@ -1,7 +1,7 @@
 //! Shared checked byte and mipmap table operations.
-use super::{ReadError, ReadErrorKind, WriteError, MIPMAP_SLOTS, PALETTE_BYTES};
+use crate::blp::{ReadError, ReadErrorKind, WriteError, MIPMAP_SLOTS, PALETTE_BYTES};
 
-pub(super) fn slice(bytes: &[u8], start: usize, len: usize) -> Result<&[u8], ReadError> {
+pub(crate) fn slice(bytes: &[u8], start: usize, len: usize) -> Result<&[u8], ReadError> {
     let end = start
         .checked_add(len)
         .ok_or(ReadError::new(start, ReadErrorKind::UnexpectedEnd))?;

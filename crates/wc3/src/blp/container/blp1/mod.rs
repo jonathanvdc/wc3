@@ -1,5 +1,5 @@
 //! BLP1 container types.
-use super::{MIPMAP_SLOTS, PALETTE_BYTES};
+use crate::blp::{MIPMAP_SLOTS, PALETTE_BYTES};
 
 mod codec;
 mod owned;

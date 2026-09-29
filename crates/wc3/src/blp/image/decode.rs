@@ -1,19 +1,12 @@
 //! Optional conversion of encoded BLP mipmaps to and from RGBA pixels.
 use super::super::{Blp, Blp1ContentRef, Blp1Ref, Blp2ContentRef, Blp2Ref, BlpRef, MIPMAP_SLOTS};
 
-#[path = "bgra.rs"]
-mod bgra;
-#[path = "dxt.rs"]
-mod dxt;
-#[path = "indexed.rs"]
-mod indexed;
-#[path = "jpeg.rs"]
-mod jpeg;
+use super::{bgra, dxt, indexed, jpeg};
 use image::RgbaImage;
 use std::{error::Error, fmt};
 
 /// Maximum decoded RGBA buffer size, including JPEG decoder output.
-const MAX_DECODE_BYTES: usize = 512 * 1024 * 1024;
+pub(super) const MAX_DECODE_BYTES: usize = 512 * 1024 * 1024;
 
 /// A failure while converting an encoded mipmap to RGBA pixels.
 #[derive(Debug)]
@@ -73,7 +66,7 @@ fn rgba_len(width: u32, height: u32) -> Result<usize, DecodeError> {
     Ok(len)
 }
 
-fn output(width: u32, height: u32) -> Result<Vec<u8>, DecodeError> {
+pub(super) fn output(width: u32, height: u32) -> Result<Vec<u8>, DecodeError> {
     let len = rgba_len(width, height)?;
     let mut pixels = Vec::new();
     pixels
@@ -83,7 +76,7 @@ fn output(width: u32, height: u32) -> Result<Vec<u8>, DecodeError> {
     Ok(pixels)
 }
 
-fn image(width: u32, height: u32, pixels: Vec<u8>) -> Result<RgbaImage, DecodeError> {
+pub(super) fn image(width: u32, height: u32, pixels: Vec<u8>) -> Result<RgbaImage, DecodeError> {
     RgbaImage::from_raw(width, height, pixels).ok_or(DecodeError::InvalidDimensions)
 }
 

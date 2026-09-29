@@ -1,5 +1,5 @@
 use image::{Rgba, RgbaImage};
-use wc3::blp::{Blp, BlpRef, DxtFormat, EncodeFormat, EncodeOptions};
+use wc3::blp::{Blp, BlpRef, BlpVersion, EncodeFormat, EncodeOptions, IndexedAlpha};
 
 fn source() -> RgbaImage {
     RgbaImage::from_fn(8, 8, |x, y| {
@@ -15,19 +15,32 @@ fn source() -> RgbaImage {
 #[test]
 fn all_encodings_write_read_and_decode_every_mip() {
     let image = source();
-    for (format, alpha_bits) in [
-        (EncodeFormat::Blp1Indexed, 8),
-        (EncodeFormat::Blp2Indexed, 4),
-        (EncodeFormat::Blp1Jpeg, 8),
-        (EncodeFormat::Blp2Jpeg, 0),
-        (EncodeFormat::Blp2Dxt(DxtFormat::Dxt1), 1),
-        (EncodeFormat::Blp2Dxt(DxtFormat::Dxt3), 4),
-        (EncodeFormat::Blp2Dxt(DxtFormat::Dxt5), 8),
-        (EncodeFormat::Blp2Bgra, 8),
+    for format in [
+        EncodeFormat::Indexed {
+            version: BlpVersion::Blp1,
+            alpha: IndexedAlpha::Bit8,
+        },
+        EncodeFormat::Indexed {
+            version: BlpVersion::Blp2,
+            alpha: IndexedAlpha::Bit4,
+        },
+        EncodeFormat::Jpeg {
+            version: BlpVersion::Blp1,
+            alpha: true,
+            quality: 90,
+        },
+        EncodeFormat::Jpeg {
+            version: BlpVersion::Blp2,
+            alpha: false,
+            quality: 90,
+        },
+        EncodeFormat::Dxt1 { alpha: true },
+        EncodeFormat::Dxt3,
+        EncodeFormat::Dxt5,
+        EncodeFormat::Bgra,
     ] {
         let options = EncodeOptions {
             format,
-            alpha_bits,
             ..Default::default()
         };
         let encoded = Blp::encode_image(&image, options).unwrap();
@@ -46,7 +59,7 @@ fn all_encodings_write_read_and_decode_every_mip() {
 fn bgra_round_trip_is_exact() {
     let image = source();
     let options = EncodeOptions {
-        format: EncodeFormat::Blp2Bgra,
+        format: EncodeFormat::Bgra,
         ..Default::default()
     };
     let bytes = Blp::encode_image(&image, options).unwrap().write().unwrap();
@@ -56,12 +69,15 @@ fn bgra_round_trip_is_exact() {
 #[test]
 fn jpeg_preserves_component_order_and_alpha() {
     let image = RgbaImage::from_pixel(8, 8, Rgba([220, 40, 80, 160]));
-    for format in [EncodeFormat::Blp1Jpeg, EncodeFormat::Blp2Jpeg] {
+    for version in [BlpVersion::Blp1, BlpVersion::Blp2] {
+        let format = EncodeFormat::Jpeg {
+            version,
+            alpha: true,
+            quality: 100,
+        };
         let options = EncodeOptions {
             format,
-            alpha_bits: 8,
             mipmaps: false,
-            jpeg_quality: 100,
         };
         let bytes = Blp::encode_image(&image, options).unwrap().write().unwrap();
         let pixel = BlpRef::read(&bytes)
@@ -81,20 +97,18 @@ fn dxt_handles_partial_blocks_and_alpha() {
     let image = RgbaImage::from_fn(5, 3, |x, _| {
         Rgba([200, 30, 60, if x == 0 { 0 } else { 255 }])
     });
-    for (format, alpha_bits, expected_size) in [
-        (DxtFormat::Dxt1, 1, 16),
-        (DxtFormat::Dxt3, 4, 32),
-        (DxtFormat::Dxt5, 8, 32),
+    for (format, expected_size) in [
+        (EncodeFormat::Dxt1 { alpha: true }, 16),
+        (EncodeFormat::Dxt3, 32),
+        (EncodeFormat::Dxt5, 32),
     ] {
         let options = EncodeOptions {
-            format: EncodeFormat::Blp2Dxt(format),
-            alpha_bits,
+            format,
             mipmaps: false,
-            ..Default::default()
         };
         let blp = Blp::encode_image(&image, options).unwrap();
         let Blp::Blp2(ref container) = blp else {
-            panic!("expected BLP2");
+            panic!("expected BLP2")
         };
         assert_eq!(container.mipmaps[0].as_ref().unwrap().len(), expected_size);
         let decoded = BlpRef::read(&blp.write().unwrap())
@@ -108,16 +122,19 @@ fn dxt_handles_partial_blocks_and_alpha() {
 }
 
 #[test]
-fn rejects_invalid_alpha_and_mip_dimensions() {
+fn rejects_invalid_quality_and_mip_dimensions() {
     let image = source();
     let options = EncodeOptions {
-        format: EncodeFormat::Blp2Dxt(DxtFormat::Dxt3),
-        alpha_bits: 8,
+        format: EncodeFormat::Jpeg {
+            version: BlpVersion::Blp2,
+            alpha: true,
+            quality: 0,
+        },
         ..Default::default()
     };
     assert!(Blp::encode_image(&image, options).is_err());
     let options = EncodeOptions {
-        format: EncodeFormat::Blp2Bgra,
+        format: EncodeFormat::Bgra,
         ..Default::default()
     };
     assert!(Blp::encode_mipmaps(&[image.clone(), image], options).is_err());

@@ -110,11 +110,14 @@ authored mipmaps. Both return an editable container whose `write` method
 produces the BLP file:
 
 ```rust
-use wc3::blp::{Blp, EncodeFormat, EncodeOptions};
+use wc3::blp::{Blp, BlpVersion, EncodeFormat, EncodeOptions, IndexedAlpha};
 
 fn encode(image: &image::RgbaImage) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
     let options = EncodeOptions {
-        format: EncodeFormat::Blp1Indexed,
+        format: EncodeFormat::Indexed {
+            version: BlpVersion::Blp1,
+            alpha: IndexedAlpha::Bit8,
+        },
         ..Default::default()
     };
     Ok(Blp::encode_image(image, options)?.write()?)

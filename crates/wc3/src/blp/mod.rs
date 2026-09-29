@@ -4,24 +4,25 @@
 //! Call [`BlpRef::to_owned`] to edit the container, or write the borrowed view
 //! directly. Writing lays out mipmaps in level order and recalculates offsets;
 //! it does not reproduce arbitrary source padding or mipmap placement.
+//! Container types retain format fields and encoded bytes, including unused
+//! regions. Image encoding validates format settings, dimensions, and mipmaps;
+//! reading a container does not assert that every mipmap can be decoded.
 //! With `blp-decode`, `decode_mip` converts encoded mipmaps to
 //! [`image::RgbaImage`]. With `blp-encode`, `encode_image` creates a container
 //! from RGBA pixels.
 
-mod blp1;
-mod blp2;
-mod codec;
+mod container;
 mod error;
 #[cfg(any(feature = "blp-decode", feature = "blp-encode"))]
-mod pixels;
+mod image;
 
-pub use blp1::{Blp1, Blp1Content, Blp1ContentRef, Blp1Header, Blp1Ref};
-pub use blp2::{Blp2, Blp2Content, Blp2ContentRef, Blp2Header, Blp2Ref, DxtFormat};
+pub use container::blp1::{Blp1, Blp1Content, Blp1ContentRef, Blp1Header, Blp1Ref};
+pub use container::blp2::{Blp2, Blp2Content, Blp2ContentRef, Blp2Header, Blp2Ref, DxtFormat};
 pub use error::{ReadError, ReadErrorKind, WriteError};
 #[cfg(feature = "blp-decode")]
-pub use pixels::DecodeError;
+pub use image::DecodeError;
 #[cfg(feature = "blp-encode")]
-pub use pixels::{EncodeError, EncodeFormat, EncodeOptions};
+pub use image::{BlpVersion, EncodeError, EncodeFormat, EncodeOptions, IndexedAlpha};
 
 /// Number of slots in a BLP mipmap location table.
 pub const MIPMAP_SLOTS: usize = 16;
@@ -45,7 +46,7 @@ pub enum Blp {
 impl<'a> BlpRef<'a> {
     /// Parses a complete BLP1 or BLP2 file, borrowing its content bytes.
     pub fn read(bytes: &'a [u8]) -> Result<Self, ReadError> {
-        match codec::slice(bytes, 0, 4)? {
+        match container::io::slice(bytes, 0, 4)? {
             b"BLP1" => Blp1Ref::read(bytes).map(Self::Blp1),
             b"BLP2" => Blp2Ref::read(bytes).map(Self::Blp2),
             _ => Err(ReadError::new(0, ReadErrorKind::InvalidMagic)),

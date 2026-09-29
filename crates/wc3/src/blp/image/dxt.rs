@@ -1,7 +1,9 @@
+#[cfg(feature = "blp-decode")]
 use super::{image, output, DecodeError};
 use crate::blp::DxtFormat;
 use image::RgbaImage;
 
+#[cfg(feature = "blp-decode")]
 fn rgb565(value: u16) -> [u8; 3] {
     let r = ((value >> 11) & 31) as u8;
     let g = ((value >> 5) & 63) as u8;
@@ -13,6 +15,7 @@ fn rgb565(value: u16) -> [u8; 3] {
     ]
 }
 
+#[cfg(feature = "blp-decode")]
 fn colors(bytes: &[u8], four_color: bool, alpha_enabled: bool) -> [[u8; 4]; 4] {
     let c0 = u16::from_le_bytes([bytes[0], bytes[1]]);
     let c1 = u16::from_le_bytes([bytes[2], bytes[3]]);
@@ -38,6 +41,7 @@ fn colors(bytes: &[u8], four_color: bool, alpha_enabled: bool) -> [[u8; 4]; 4] {
     colors
 }
 
+#[cfg(feature = "blp-decode")]
 fn alpha_bc3(bytes: &[u8], pixel: usize) -> u8 {
     let a0 = bytes[0];
     let a1 = bytes[1];
@@ -61,6 +65,7 @@ fn alpha_bc3(bytes: &[u8], pixel: usize) -> u8 {
     table[((bits >> (3 * pixel)) & 7) as usize]
 }
 
+#[cfg(feature = "blp-decode")]
 pub(super) fn decode(
     data: &[u8],
     format: DxtFormat,
@@ -121,3 +126,25 @@ pub(super) fn decode(
     }
     image(width as u32, height as u32, pixels)
 }
+
+#[cfg(feature = "blp-encode")]
+pub(super) fn encode(image: &RgbaImage, format: DxtFormat, alpha_bits: u8) -> Vec<u8> {
+    let format = match format {
+        DxtFormat::Dxt1 => Format::Bc1,
+        DxtFormat::Dxt3 => Format::Bc2,
+        DxtFormat::Dxt5 => Format::Bc3,
+    };
+    let mut pixels = image.as_raw().clone();
+    if alpha_bits == 0 {
+        for pixel in pixels.chunks_exact_mut(4) {
+            pixel[3] = 255;
+        }
+    }
+    let (width, height) = (image.width() as usize, image.height() as usize);
+    let mut bytes = vec![0; format.compressed_size(width, height)];
+    format.compress(&pixels, width, height, Params::default(), &mut bytes);
+    bytes
+}
+
+#[cfg(feature = "blp-encode")]
+use squish::{Format, Params};
