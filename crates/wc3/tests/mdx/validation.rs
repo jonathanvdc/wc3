@@ -1,32 +1,11 @@
-use wc3::model::chunks::{ModelChunk, RawChunk, UnknownChunk, VersionChunk};
+use wc3::model::chunks::{ModelChunk, RawChunk, VersionChunk};
 use wc3::model::emitters::RibbonEmitter;
-use wc3::model::geometry::Geoset;
 use wc3::model::materials::Layer;
 use wc3::model::mdx::Read as _;
 use wc3::model::mdx::ReadError;
 use wc3::model::mdx::Write as _;
 use wc3::model::scene::Node;
-use wc3::model::{DynamicModel, Model, V1800, V800};
-
-#[test]
-fn typed_known_chunks_and_unknown_chunks_round_trip() {
-    let mut model = Model::<V800>::new();
-    model.set_geosets(&[
-        Geoset::<V800>::new(&[[0.0, 0.0, 0.0]], &[[0.0, 0.0, 1.0]], &[0, 0, 0]).unwrap(),
-    ]);
-    model.set_ribbon_emitters(&[RibbonEmitter::new(Node::new("Trail", 1).unwrap())]);
-    model.chunks.push(ModelChunk::Unknown(
-        UnknownChunk::<V800>::new(RawChunk::new(*b"FUTR", vec![1, 2, 3])).unwrap(),
-    ));
-    let bytes = model.encode_mdx().unwrap();
-    assert_eq!(
-        Model::<V800>::decode_mdx(&bytes)
-            .unwrap()
-            .encode_mdx()
-            .unwrap(),
-        bytes
-    );
-}
+use wc3::model::{Model, V1800, V800};
 
 #[test]
 fn empty_mdlx_uses_the_requested_type() {
@@ -93,24 +72,4 @@ fn layer_layout_is_selected_by_its_type() {
 #[test]
 fn malformed_model_info_chunk_is_rejected() {
     assert!(ModelChunk::<V800>::from_raw(RawChunk::new(*b"MODL", vec![0; 12])).is_err());
-}
-
-#[test]
-fn local_models_decode_when_available() {
-    let Ok(directory) = std::env::var("WC3_MDX_FIXTURES") else {
-        return;
-    };
-    let mut pending = vec![std::path::PathBuf::from(directory)];
-    while let Some(directory) = pending.pop() {
-        for entry in std::fs::read_dir(directory).unwrap() {
-            let path = entry.unwrap().path();
-            if path.is_dir() {
-                pending.push(path);
-            } else if path.extension().is_some_and(|extension| extension == "mdx") {
-                let bytes = std::fs::read(&path).unwrap();
-                DynamicModel::decode_mdx(&bytes, 800)
-                    .unwrap_or_else(|error| panic!("{}: {error}", path.display()));
-            }
-        }
-    }
 }

@@ -31,27 +31,3 @@ fn malformed_bind_pose_chunk_is_rejected() {
     assert_eq!(model.bind_poses(), pose.records);
     assert_eq!(model.chunks.len(), 2);
 }
-
-#[test]
-fn local_bind_poses_round_trip_when_available() {
-    let Ok(directory) = std::env::var("WC3_MDX_FIXTURES") else {
-        return;
-    };
-    let mut pending = vec![std::path::PathBuf::from(directory)];
-    while let Some(directory) = pending.pop() {
-        for entry in std::fs::read_dir(directory).unwrap() {
-            let path = entry.unwrap().path();
-            if path.is_dir() {
-                pending.push(path);
-            } else if path.extension().is_some_and(|extension| extension == "mdx") {
-                let bytes = std::fs::read(&path).unwrap();
-                let mut model = Model::<wc3::model::V1800>::decode_mdx(&bytes).unwrap();
-                if !model.bind_poses().is_empty() {
-                    let poses = model.bind_poses();
-                    model.set_bind_poses(&poses);
-                    assert_eq!(model.encode_mdx().unwrap(), bytes);
-                }
-            }
-        }
-    }
-}

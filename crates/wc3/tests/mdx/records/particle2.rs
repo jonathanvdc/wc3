@@ -24,27 +24,3 @@ fn particle_emitter2_fields_round_trip() {
     let parsed = Model::<wc3::model::V1800>::decode_mdx(&model.encode_mdx().unwrap()).unwrap();
     assert_eq!(parsed.particle_emitters2()[0], emitter);
 }
-
-#[test]
-fn local_particle_emitter2_round_trip_when_available() {
-    let Ok(directory) = std::env::var("WC3_MDX_FIXTURES") else {
-        return;
-    };
-    let mut pending = vec![std::path::PathBuf::from(directory)];
-    while let Some(directory) = pending.pop() {
-        for entry in std::fs::read_dir(directory).unwrap() {
-            let path = entry.unwrap().path();
-            if path.is_dir() {
-                pending.push(path);
-            } else if path.extension().is_some_and(|extension| extension == "mdx") {
-                let bytes = std::fs::read(&path).unwrap();
-                let mut model = Model::<wc3::model::V1800>::decode_mdx(&bytes).unwrap();
-                if model.chunk(*b"PRE2").is_some() {
-                    let emitters = model.particle_emitters2();
-                    model.set_particle_emitters2(&emitters);
-                    assert_eq!(model.encode_mdx().unwrap(), bytes, "{}", path.display());
-                }
-            }
-        }
-    }
-}

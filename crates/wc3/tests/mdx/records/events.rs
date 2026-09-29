@@ -33,27 +33,3 @@ fn adjacent_events_decode_at_their_own_boundaries() {
     cursor.finish().unwrap();
     assert!(EventObject::decode_mdx(&bytes).is_err());
 }
-
-#[test]
-fn local_event_objects_round_trip_when_available() {
-    let Ok(directory) = std::env::var("WC3_MDX_FIXTURES") else {
-        return;
-    };
-    let mut pending = vec![std::path::PathBuf::from(directory)];
-    while let Some(directory) = pending.pop() {
-        for entry in std::fs::read_dir(directory).unwrap() {
-            let path = entry.unwrap().path();
-            if path.is_dir() {
-                pending.push(path);
-            } else if path.extension().is_some_and(|extension| extension == "mdx") {
-                let bytes = std::fs::read(&path).unwrap();
-                let mut model = Model::<wc3::model::V800>::decode_mdx(&bytes).unwrap();
-                if model.chunk(*b"EVTS").is_some() {
-                    let events = model.event_objects();
-                    model.set_event_objects(&events);
-                    assert_eq!(model.encode_mdx().unwrap(), bytes);
-                }
-            }
-        }
-    }
-}

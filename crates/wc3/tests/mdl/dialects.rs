@@ -7,9 +7,9 @@ use wc3::model::{
     V800, V900,
 };
 
-const ENGINE: &str = include_str!("fixtures/mdl/dialects/hd_layer.engine.mdl");
-const HIVE: &str = include_str!("fixtures/mdl/dialects/hd_layer.hive.mdl");
-const QUAD: &str = include_str!("fixtures/mdl/quad_geoset.mdl");
+const ENGINE: &str = include_str!("../fixtures/mdl/dialects/hd_layer.engine.mdl");
+const HIVE: &str = include_str!("../fixtures/mdl/dialects/hd_layer.hive.mdl");
+const QUAD: &str = include_str!("../fixtures/mdl/quad_geoset.mdl");
 const SLOTS: [&str; 6] = [
     "TextureID",
     "NormalTextureID",
@@ -43,7 +43,7 @@ fn static_slots_match_independent_canonical_fixtures_in_both_dialects() {
     let hive_layer = Layer::<V1800>::decode_mdl(HIVE).unwrap();
     assert_eq!(engine, hive_layer);
     // Packed independently from the version-1800 MDX Layer specification.
-    let binary = include_bytes!("fixtures/mdl/dialects/hd_layer.mdx");
+    let binary = include_bytes!("../fixtures/mdl/dialects/hd_layer.mdx");
     assert_eq!(engine.encode_mdx().unwrap(), binary);
     assert_eq!(Layer::<V1800>::decode_mdx(binary).unwrap(), engine);
     assert_eq!(engine.encode_mdl().unwrap(), ENGINE);

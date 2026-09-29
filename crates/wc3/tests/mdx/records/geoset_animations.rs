@@ -24,30 +24,6 @@ fn geoset_animation_fields_round_trip() {
 }
 
 #[test]
-fn local_geoset_animations_round_trip_when_available() {
-    let Ok(directory) = std::env::var("WC3_MDX_FIXTURES") else {
-        return;
-    };
-    let mut pending = vec![std::path::PathBuf::from(directory)];
-    while let Some(directory) = pending.pop() {
-        for entry in std::fs::read_dir(directory).unwrap() {
-            let path = entry.unwrap().path();
-            if path.is_dir() {
-                pending.push(path);
-            } else if path.extension().is_some_and(|extension| extension == "mdx") {
-                let bytes = std::fs::read(&path).unwrap();
-                let mut model = Model::<wc3::model::V1800>::decode_mdx(&bytes).unwrap();
-                if model.chunk(*b"GEOA").is_some() {
-                    let records = model.geoset_animations();
-                    model.set_geoset_animations(&records);
-                    assert_eq!(model.encode_mdx().unwrap(), bytes);
-                }
-            }
-        }
-    }
-}
-
-#[test]
 fn geoset_animation_color_track_round_trip() {
     let mut animation = GeosetAnimation::new(1);
     let track = AnimationTrack::<GeosetColor>::linear(

@@ -191,14 +191,20 @@ cargo fmt --all -- --check
 cargo clippy --workspace --all-targets -- -D warnings
 ```
 
+Integration tests are grouped into `mdx`, `mdl`, `model`, `derive`, and
+`interoperability` targets with nested modules. Allocation checks run in their
+own `allocations` target. Run a target with `cargo test -p wc3 --test mdl`, or
+filter a module with `cargo test -p wc3 --test mdl core::parser`.
+
 Tests include synthetic models across all supported versions and independent
 binary/text fixtures. To enable additional byte-for-byte MDX round-trip checks
 against your own model collection:
 
 ```sh
-WC3_MDX_FIXTURES=/path/to/models cargo test -p wc3 --test roundtrip
+WC3_MDX_FIXTURES=/path/to/models cargo test -p wc3 --test corpus -- --ignored
 ```
 
+The corpus tests are ignored by default and require a nonempty fixture directory.
 These checks supplement the synthetic suite; full semantic coverage of the
 entire game model collection has not been verified.
 

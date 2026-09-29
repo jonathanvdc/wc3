@@ -3,8 +3,8 @@ use wc3::model::mdl::{Read as _, Write as _};
 use wc3::model::mdx::{Read as _, Write as _};
 use wc3::model::{mdl, ModelVersion, V1000, V1100, V1200, V1300, V1400, V1600, V1800, V800, V900};
 
-const QUAD: &str = include_str!("fixtures/mdl/quad_geoset.mdl");
-const CANONICAL: &str = include_str!("fixtures/mdl/quad_geoset.canonical.mdl");
+const QUAD: &str = include_str!("../../fixtures/mdl/quad_geoset.mdl");
+const CANONICAL: &str = include_str!("../../fixtures/mdl/quad_geoset.canonical.mdl");
 const EMPTY: &str =
     "Geoset { Vertices 0 {} Normals 0 {} VertexGroup {} Faces 0 0 {} Groups 0 0 {} }";
 fn with_fields(source: &str, fields: &str) -> String {
@@ -49,7 +49,7 @@ fn specification_quad_has_independent_canonical_output_and_wire_sections() {
     // Independently assembled from the companion MDX section layout.
     assert_eq!(
         value.encode_mdx().unwrap(),
-        include_bytes!("fixtures/mdl/quad_geoset.mdx")
+        include_bytes!("../../fixtures/mdl/quad_geoset.mdx")
     );
     roundtrip(&value);
 }

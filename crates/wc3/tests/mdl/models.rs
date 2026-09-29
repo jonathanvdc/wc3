@@ -14,9 +14,9 @@ use wc3::model::{
     V900,
 };
 
-const QUAD: &str = include_str!("fixtures/mdl/quad_model.mdl");
-const CANONICAL: &str = include_str!("fixtures/mdl/quad_model.canonical.mdl");
-const BINARY: &[u8] = include_bytes!("fixtures/mdl/quad_model.mdx");
+const QUAD: &str = include_str!("../fixtures/mdl/quad_model.mdl");
+const CANONICAL: &str = include_str!("../fixtures/mdl/quad_model.canonical.mdl");
+const BINARY: &[u8] = include_bytes!("../fixtures/mdl/quad_model.mdx");
 const MINIMAL: &str = "Version { FormatVersion 800, } Model \"Minimal\" {}";
 fn roundtrip<V: ModelVersion>(model: &Model<V>) {
     let text = model.encode_mdl().unwrap();

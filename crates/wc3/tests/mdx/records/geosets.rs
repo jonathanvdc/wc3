@@ -2,9 +2,7 @@ use wc3::model::geometry::{Geoset, GeosetExtent, SkinWeights};
 use wc3::model::mdx::Read as _;
 use wc3::model::mdx::Write as _;
 
-use wc3::model::{
-    DynamicModel, Model, ModelVersion, V1100, V1200, V1300, V1400, V1600, V1800, V800, V900,
-};
+use wc3::model::{Model, ModelVersion, V1100, V1200, V1300, V1400, V1600, V1800, V800, V900};
 
 fn sample_geoset() -> Geoset<V1800> {
     let geoset = Geoset::<V1800>::new(&[[1.0, 2.0, 3.0]], &[[0.0, 0.0, 1.0]], &[0, 0, 0]).unwrap();
@@ -141,50 +139,6 @@ fn preserves_float_bits_name_padding_and_extension_order() {
     let decoded = Geoset::<V1800>::decode_mdx(&reordered).unwrap();
     assert_eq!(decoded.encode_mdx().unwrap(), reordered);
     assert_eq!(decoded.vertices()[0][0].to_bits(), 0x7fa1_2345);
-}
-
-#[test]
-fn local_geosets_have_bounded_mesh_sections_when_available() {
-    let Ok(directory) = std::env::var("WC3_MDX_FIXTURES") else {
-        return;
-    };
-    let mut pending = vec![std::path::PathBuf::from(directory)];
-    while let Some(directory) = pending.pop() {
-        for entry in std::fs::read_dir(directory).unwrap() {
-            let path = entry.unwrap().path();
-            if path.is_dir() {
-                pending.push(path);
-            } else if path.extension().is_some_and(|extension| extension == "mdx") {
-                let bytes = std::fs::read(&path).unwrap();
-                let model = DynamicModel::decode_mdx(&bytes, 800).unwrap();
-                fn check<V: ModelVersion>(model: Model<V>) {
-                    for geoset in model.geosets() {
-                        geoset.vertices();
-                        geoset.normals();
-                        geoset.face_indices();
-                        geoset.vertex_groups();
-                        geoset.matrix_group_sizes();
-                        geoset.matrix_indices();
-                        geoset.sequence_extents.as_slice();
-                        let _ = geoset.try_tangents();
-                        let _ = geoset.try_skin_weights();
-                        geoset.uv_sets();
-                    }
-                }
-                match model {
-                    DynamicModel::V800(model) => check(model),
-                    DynamicModel::V900(model) => check(model),
-                    DynamicModel::V1000(model) => check(model),
-                    DynamicModel::V1100(model) => check(model),
-                    DynamicModel::V1200(model) => check(model),
-                    DynamicModel::V1300(model) => check(model),
-                    DynamicModel::V1400(model) => check(model),
-                    DynamicModel::V1600(model) => check(model),
-                    DynamicModel::V1800(model) => check(model),
-                }
-            }
-        }
-    }
 }
 
 #[test]

@@ -38,28 +38,6 @@ fn node_flags_preserve_unknown_bits() {
 }
 
 #[test]
-fn local_bones_are_bounded_when_available() {
-    let Ok(directory) = std::env::var("WC3_MDX_FIXTURES") else {
-        return;
-    };
-    let mut pending = vec![std::path::PathBuf::from(directory)];
-    while let Some(directory) = pending.pop() {
-        for entry in std::fs::read_dir(directory).unwrap() {
-            let path = entry.unwrap().path();
-            if path.is_dir() {
-                pending.push(path);
-            } else if path.extension().is_some_and(|extension| extension == "mdx") {
-                let bytes = std::fs::read(&path).unwrap();
-                let model = Model::<wc3::model::V1800>::decode_mdx(&bytes).unwrap();
-                for bone in model.bones() {
-                    assert!(!bone.node.name.text().is_empty());
-                }
-            }
-        }
-    }
-}
-
-#[test]
 fn typed_node_flags_preserve_the_complete_word_and_node() {
     use wc3::model::animation::{AnimationTrack, NodeTranslation};
     use wc3::model::emitters::{Particle2Flags, ParticleEmitterFlags, PopcornFlags};
