@@ -1,15 +1,15 @@
 //! Ordered rendering layers and material settings.
 use crate::model::conversion::ConversionContext;
-use crate::model::ConversionError;
 use crate::model::{mdl, mdx};
+use crate::model::{ConversionError, ConversionIssueKind};
 use bitfield::bitfield;
 use mdl_codec::zero_priority;
 use std::{borrow::Cow, fmt::Debug, marker::PhantomData};
 
 use super::layer::{
     EmissiveGain, EmissiveGainField, FresnelField, Layer, LayerFresnel, LayerShaderTypeField,
-    LayerTextureSlots, LayerTextureSlotsField, NoEmissiveGain, NoFresnel, NoLayerShaderType,
-    NoLayerTextureSlots, LAYER_TAG,
+    LayerTextureSlot, LayerTextureSlots, LayerTextureSlotsField, LayerTrack, NoEmissiveGain,
+    NoFresnel, NoLayerShaderType, NoLayerTextureSlots, LAYER_TAG,
 };
 use super::{write_count, ShaderType};
 use crate::model::{
@@ -330,6 +330,64 @@ impl<V: ModelVersion> Material<V> {
         let mut target = Material::<T>::new();
         target.priority_plane = self.priority_plane;
         target.render_mode = self.render_mode;
+        if matches!(V::NUMBER, 900 | 1000) && T::NUMBER >= 1100 {
+            let shader = self.shader.fixed_text().and_then(|name| {
+                ShaderType::from_name(&name.text())
+            });
+            if let Some(shader) = shader {
+                let hd = shader == ShaderType::HD_DEFAULT_UNIT || shader == ShaderType::HD_CRYSTAL;
+                if hd && self.layers.len() != 6 {
+                    context.drop(
+                        &format!("{path}.shader"),
+                        "HD shader upgrade requires six texture-role layers",
+                    )?;
+                } else {
+                    if hd {
+                        for (index, layer) in self.layers.iter().enumerate().skip(1) {
+                            if layer
+                                .tracks
+                                .iter()
+                                .any(|track| !matches!(track, LayerTrack::TextureId(_)))
+                                || layer.coordinate_id != self.layers[0].coordinate_id
+                                || layer.texture_animation_id != self.layers[0].texture_animation_id
+                            {
+                                return Err(context.error(&format!("{path}.layers[{index}]"),
+                                    "HD texture-role layer has independent animation or UV settings"));
+                            }
+                        }
+                        let mut slots = Vec::new();
+                        for (index, layer) in self.layers.iter().enumerate() {
+                            let converted = layer
+                                .convert_with::<T>(context, &format!("{path}.layers[{index}]"))?;
+                            let mut slot: LayerTextureSlot =
+                                converted.try_texture_slots().expect("target slots")[0].clone();
+                            slot.texture_type = index as u32;
+                            slots.push(slot);
+                            if index == 0 {
+                                target.layers.push(converted);
+                            }
+                        }
+                        let layer = &mut target.layers[0];
+                        layer.try_set_texture_slots(&slots).expect("target slots");
+                        layer.try_set_shader_type(shader).expect("target shader");
+                        if self.render_mode.two_sided() {
+                            layer.shading_flags.set_two_sided(true);
+                        }
+                    } else {
+                        for (index, layer) in self.layers.iter().enumerate() {
+                            let mut layer = layer
+                                .convert_with::<T>(context, &format!("{path}.layers[{index}]"))?;
+                            layer.try_set_shader_type(shader).expect("target shader");
+                            target.layers.push(layer);
+                        }
+                    }
+                    context.issue(&format!("{path}.shader"), ConversionIssueKind::Normalized,
+                        if hd { "upgraded six texture-role layers into one HD layer using the first layer's rendering properties" }
+                        else { "moved material shader assignment into layer shader fields" });
+                    return Ok(target);
+                }
+            }
+        }
         context.field(
             self.shader.fixed_text().copied(),
             target.shader.fixed_text_mut(),

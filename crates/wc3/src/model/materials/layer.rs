@@ -1,7 +1,7 @@
 //! Texture bindings, blend modes, and animated surface properties.
 use crate::model::conversion::ConversionContext;
-use crate::model::ConversionError;
 use crate::model::{mdl, mdx};
+use crate::model::{ConversionError, ConversionIssueKind};
 use bitfield::bitfield;
 use mdl_codec::{
     full, is_no_reference, is_white, no_reference, one, white, zero, zero_id, ShaderMarker,
@@ -679,12 +679,25 @@ impl<V: ModelVersion> Layer<V> {
             ShaderType::SD_LEGACY,
             &format!("{path}.shader_type"),
         )?;
-        context.field(
-            self.texture_slots.texture_slots().map(<[_]>::to_vec),
-            target.texture_slots.texture_slots_mut(),
-            Vec::new(),
-            &format!("{path}.texture_slots"),
-        )?;
+        let downgrade_diffuse = V::NUMBER >= 1100
+            && T::NUMBER < 1100
+            && self.texture_id == 0
+            && !self
+                .tracks
+                .iter()
+                .any(|track| matches!(track, LayerTrack::TextureId(_)))
+            && self
+                .texture_slots
+                .texture_slots()
+                .is_some_and(|slots| slots.len() == 1 && slots[0].texture_type == 0);
+        if !downgrade_diffuse {
+            context.field(
+                self.texture_slots.texture_slots().map(<[_]>::to_vec),
+                target.texture_slots.texture_slots_mut(),
+                Vec::new(),
+                &format!("{path}.texture_slots"),
+            )?;
+        }
         for (index, track) in self.tracks.iter().enumerate() {
             let supported = V::NUMBER == T::NUMBER
                 || match track {
@@ -702,6 +715,53 @@ impl<V: ModelVersion> Layer<V> {
                     "animation track is not supported by the target",
                 )?;
             }
+        }
+        if V::NUMBER < 1100 && T::NUMBER >= 1100 {
+            let texture_tracks = self
+                .tracks
+                .iter()
+                .filter_map(|track| match track {
+                    LayerTrack::TextureId(track) => Some(track),
+                    _ => None,
+                })
+                .collect::<Vec<_>>();
+            if texture_tracks.len() > 1 {
+                return Err(context.error(&format!("{path}.tracks"), "duplicate texture animation"));
+            }
+            let slot = LayerTextureSlot {
+                texture_id: self.texture_id,
+                texture_type: 0,
+                track: texture_tracks.first().map(|track| (*track).clone()),
+            };
+            *target
+                .texture_slots
+                .texture_slots_mut()
+                .expect("target texture slots") = vec![slot];
+            target.texture_id = 0;
+            target
+                .tracks
+                .retain(|track| !matches!(track, LayerTrack::TextureId(_)));
+            context.issue(
+                &format!("{path}.texture_slots"),
+                ConversionIssueKind::Normalized,
+                "moved legacy texture binding and animation into the diffuse slot",
+            );
+        } else if downgrade_diffuse {
+            let slot = &self
+                .texture_slots
+                .texture_slots()
+                .expect("source texture slots")[0];
+            target.texture_id = slot.texture_id;
+            if let Some(track) = &slot.track {
+                target
+                    .tracks
+                    .insert(0, LayerTrack::TextureId(track.clone()));
+            }
+            context.issue(
+                &format!("{path}.texture_slots"),
+                ConversionIssueKind::Normalized,
+                "moved diffuse slot binding and animation into legacy texture storage",
+            );
         }
         Ok(target)
     }

@@ -22,7 +22,17 @@ fn sample<V: ModelVersion>() -> Model<V> {
     let mut model = Model::<V>::new();
     let mut material = Material::<V>::new();
     let mut layer = Layer::<V>::new();
-    layer.texture_id = 4;
+    if V::NUMBER >= 1100 {
+        layer
+            .try_set_texture_slots(&[LayerTextureSlot {
+                texture_id: 4,
+                texture_type: 0,
+                track: None,
+            }])
+            .unwrap();
+    } else {
+        layer.texture_id = 4;
+    }
     layer.alpha = 0.75;
     material.priority_plane = 12;
     material.layers = [layer].to_vec();

@@ -120,7 +120,7 @@ impl<'a> ConversionContext<'a> {
             description: description.into(),
         });
     }
-    fn error(&self, path: &str, description: &str) -> ConversionError {
+    pub(crate) fn error(&self, path: &str, description: &str) -> ConversionError {
         ConversionError {
             source_version: self.source,
             target_version: self.target,
