@@ -31,8 +31,7 @@ const PATH_SIZE: usize = 260;
 /// A Classic particle emitter with optional animated properties.
 ///
 /// Choose model or image resources with the emitter flags, and animate emission
-/// through `tracks`. MDL output requires matching particle node flags and
-/// rejects nondefault base values hidden by animation tracks.
+/// through `tracks`.
 #[derive(Clone, Debug, PartialEq, mdx::Read, mdx::Write, mdl::Read, mdl::Write)]
 #[mdx(sized(tag = ParticleEmittersChunk::TAG))]
 #[mdl(

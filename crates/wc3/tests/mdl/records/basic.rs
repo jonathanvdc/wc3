@@ -59,7 +59,9 @@ fn material_directives_and_classic_layers() {
     roundtrip(&layer);
     let mut layer = layer;
     layer.texture_id = 5;
-    assert!(layer.encode_mdl().is_err());
+    let decoded = Layer::<V800>::decode_mdl(&layer.encode_mdl().unwrap()).unwrap();
+    assert_eq!(decoded.texture_id, 0);
+    assert_eq!(decoded.tracks, layer.tracks);
     let mut material = Material::<V800>::new();
     material.render_mode = MaterialRenderFlags(2);
     material.layers = [Layer::new()].to_vec();
@@ -157,4 +159,43 @@ fn default_materials_roundtrip_at_every_supported_version() {
         } )* };
     }
     check!(V800, V900, V1000, V1100, V1200, V1300, V1400, V1600, V1800);
+}
+
+#[test]
+fn animated_emissive_gain_ignores_nan_base_and_preserves_keys() {
+    use wc3::model::mdx::Write as _;
+    let mut layer = Layer::<V1000>::decode_mdl(
+        "Layer { EmissiveGain 1 { Hermite, GlobalSeqId 2, -7: 3, InTan 4, OutTan 5, } }",
+    )
+    .unwrap();
+    layer.set_emissive_gain(f32::from_bits(0x7fc12345));
+    let original = layer.encode_mdx().unwrap();
+    let text = layer.encode_mdl().unwrap();
+    assert!(!text.contains("static EmissiveGain"));
+    let decoded = Layer::<V1000>::decode_mdl(&text).unwrap();
+    assert_eq!(decoded.emissive_gain(), 1.0);
+    assert_eq!(decoded.tracks, layer.tracks);
+    assert_eq!(layer.encode_mdx().unwrap(), original);
+}
+
+#[test]
+fn animated_texture_slots_ignore_base_ids() {
+    use wc3::model::mdl::Dialect;
+    let mut layer = Layer::<V1100>::new();
+    layer.set_shader_type(ShaderType::HD_DEFAULT_UNIT);
+    layer.set_texture_slots(&[LayerTextureSlot {
+        texture_id: 37,
+        texture_type: 1,
+        track: Some(AnimationTrack::linear(vec![], None).unwrap()),
+    }]);
+    let text = layer
+        .encode_mdl_with_dialect(Dialect::HiveWorkshop)
+        .unwrap();
+    let decoded = Layer::<V1100>::decode_mdl(&text).unwrap();
+    assert_eq!(decoded.texture_slots()[0].texture_id, 0);
+    assert_eq!(
+        decoded.texture_slots()[0].track,
+        layer.texture_slots()[0].track
+    );
+    assert!(layer.encode_mdl().is_err()); // Engine syntax cannot identify this channel.
 }

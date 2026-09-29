@@ -128,8 +128,7 @@ pub struct LayerTextureSlot {
 /// Texture indices refer to the model texture collection. Reforged layers can
 /// bind multiple HD texture slots. Use HiveWorkshop MDL output when animating
 /// slots other than diffuse; Warcraft III syntax cannot identify those channels.
-/// MDL output also rejects track arrangements or hidden base values it cannot
-/// preserve.
+/// MDL output exports animation tracks in place of their base values.
 #[derive(Clone, Debug, PartialEq, mdx::Read, mdx::Write, mdl::Read, mdl::Write)]
 #[mdx(sized(tag = LAYER_TAG))]
 #[mdl(block = "Layer", validate_write = "Self::validate_mdl",

@@ -8,7 +8,7 @@ fn refuses_before_output<T: mdl::Write>(value: &T) {
     assert!(writer.finish().unwrap().is_empty());
 }
 
-// No record-specific validation hook: the derive must protect omitted bases.
+// Animated output replaces the base without changing stored values.
 #[derive(mdl::Read, mdl::Write)]
 #[mdl(block = "ZeroBase")]
 struct ZeroBase {
@@ -21,7 +21,7 @@ struct ZeroBase {
 }
 
 #[test]
-fn linked_omitted_bases_preserve_signed_zero_and_vector_components() {
+fn animations_override_nondefault_scalar_and_vector_bases() {
     let mut value = ZeroBase {
         alpha: 0.0,
         color: [0.0; 3],
@@ -31,7 +31,9 @@ fn linked_omitted_bases_preserve_signed_zero_and_vector_components() {
     };
     assert!(value.encode_mdl().is_ok());
     value.alpha = -0.0;
-    refuses_before_output(&value);
+    let output = value.encode_mdl().unwrap();
+    let decoded = ZeroBase::decode_mdl(&output).unwrap();
+    assert_eq!(decoded.tracks, value.tracks);
     value.tracks.clear();
     let decoded = ZeroBase::decode_mdl(&value.encode_mdl().unwrap()).unwrap();
     assert_eq!(decoded.alpha.to_bits(), (-0.0f32).to_bits());
@@ -42,11 +44,15 @@ fn linked_omitted_bases_preserve_signed_zero_and_vector_components() {
             .into(),
     );
     value.color[1] = -0.0;
-    refuses_before_output(&value);
+    let output = value.encode_mdl().unwrap();
+    let decoded = ZeroBase::decode_mdl(&output).unwrap();
+    assert_eq!(decoded.tracks, value.tracks);
     value.color = [0.0; 3];
     assert!(value.encode_mdl().is_ok());
     value.color[2] = 0.5;
-    refuses_before_output(&value);
+    let output = value.encode_mdl().unwrap();
+    let decoded = ZeroBase::decode_mdl(&output).unwrap();
+    assert_eq!(decoded.tracks, value.tracks);
 }
 
 #[derive(mdl::Read, mdl::Write)]
@@ -67,7 +73,7 @@ impl Default for NanBase {
 }
 
 #[test]
-fn omitted_nan_defaults_compare_by_class() {
+fn animated_output_ignores_base_even_when_default_is_nan() {
     let mut value = NanBase {
         alpha: f32::from_bits(0xffc12345),
         tracks: vec![AnimationTrack::<GeosetAlpha>::linear(Vec::new(), None)
@@ -79,7 +85,10 @@ fn omitted_nan_defaults_compare_by_class() {
     assert!(NanBase::decode_mdl(&output).unwrap().alpha.is_nan());
     for alpha in [0.0, f32::INFINITY, f32::NEG_INFINITY] {
         value.alpha = alpha;
-        refuses_before_output(&value);
+        let output = value.encode_mdl().unwrap();
+        let decoded = NanBase::decode_mdl(&output).unwrap();
+        assert!(decoded.alpha.is_nan());
+        assert_eq!(decoded.tracks, value.tracks);
     }
     assert!(f32::NAN.eq_mdl(&f32::from_bits(0xffc12345)));
     assert!(!f32::INFINITY.eq_mdl(&f32::NEG_INFINITY));

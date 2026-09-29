@@ -1,7 +1,7 @@
 use super::*;
 
 #[test]
-fn emitter_tracks_preserve_signed_keys_splines_globals_and_hidden_bases() {
+fn emitter_tracks_preserve_keys_and_override_bases() {
     let mut body = String::new();
     for name in [
         "Speed",
@@ -26,7 +26,9 @@ fn emitter_tracks_preserve_signed_keys_splines_globals_and_hidden_bases() {
         record
     );
     record.speed = 10.0;
-    assert!(record.encode_mdl().is_err());
+    let decoded = ParticleEmitter2::decode_mdl(&record.encode_mdl().unwrap()).unwrap();
+    assert_eq!(decoded.speed, 0.0);
+    assert_eq!(decoded.tracks, record.tracks);
     let mut body = String::new();
     for name in ["LifeSpan", "EmissionRate", "Speed", "Alpha", "Visibility"] {
         body.push_str(&format!(
@@ -49,5 +51,7 @@ fn emitter_tracks_preserve_signed_keys_splines_globals_and_hidden_bases() {
     });
     assert_eq!(decoded, record);
     record.alpha = 0.0;
-    assert!(record.encode_mdl().is_err());
+    let decoded = PopcornEmitter::decode_mdl(&record.encode_mdl().unwrap()).unwrap();
+    assert_eq!(decoded.alpha, 1.0);
+    assert_eq!(decoded.tracks.len(), record.tracks.len());
 }

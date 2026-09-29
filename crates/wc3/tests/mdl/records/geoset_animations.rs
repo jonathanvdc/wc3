@@ -125,11 +125,15 @@ fn refuses_binary_data_that_text_would_discard() {
     refuses_before_output(&value);
     value.flags = GeosetAnimationFlags(2);
     value.color = [0.5; 3];
-    refuses_before_output(&value);
+    let decoded = GeosetAnimation::decode_mdl(&value.encode_mdl().unwrap()).unwrap();
+    assert_eq!(decoded.color, [1.0; 3]);
+    assert_eq!(decoded.tracks, value.tracks);
     value.color = [1.0; 3];
     value.tracks = [alpha.clone().into()].to_vec();
     value.alpha = -0.0;
-    refuses_before_output(&value);
+    let decoded = GeosetAnimation::decode_mdl(&value.encode_mdl().unwrap()).unwrap();
+    assert_eq!(decoded.alpha, 1.0);
+    assert_eq!(decoded.tracks, value.tracks);
     value.alpha = 1.0;
     value.tracks = [alpha.clone().into(), alpha.into()].to_vec();
     refuses_before_output(&value);

@@ -38,9 +38,9 @@
 //!
 //! Writers return an error for data that text cannot faithfully represent, such as
 //! opaque binary chunks, unknown flag bits, non-UTF-8 fixed text, nonzero text
-//! padding, and nondefault base values hidden by animation tracks. NaN payload
-//! bits are not preserved. Consequently, an MDX–MDL–MDX round trip need not reproduce
-//! the original bytes.
+//! padding. Animation tracks replace their base values in output; reading the
+//! output restores those bases to their defaults. NaN payload bits are not
+//! preserved. Consequently, an MDX–MDL–MDX round trip need not reproduce the original bytes.
 //!
 //! Strings are literal: backslashes and line breaks are preserved, and there are
 //! no escape sequences. Quotes and NUL cannot be written inside strings. Only

@@ -41,7 +41,6 @@ const NAME_SIZE: usize = 80;
 const MAX_RECORD_SIZE: usize = 0x00ff_ffff;
 
 /// Binary camera layout. Preserve the decoded variant when editing MDX.
-/// MDL output requires the default variant for the model version.
 /// Version conversion normalizes equivalent variants 0/3 to the target default.
 /// Variants with extra bytes and unknown variants retain their exact layout.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

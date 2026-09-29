@@ -611,7 +611,9 @@ fn projected_generic_storage_headers_and_shared_tracks() {
     assert!(Projected::<u32>::decode_mdl("Projected 7 {}").is_err());
     let mut value = value;
     value.data.alpha = 1.0;
-    assert!(value.encode_mdl().is_err());
+    let decoded = Projected::<u32>::decode_mdl(&value.encode_mdl().unwrap()).unwrap();
+    assert_eq!(decoded.data.alpha, 0.0);
+    assert_eq!(decoded.tracks, value.tracks);
 }
 #[derive(Debug, PartialEq)]
 struct DefaultStorage {
@@ -684,7 +686,7 @@ impl<const ENABLED: bool> VersionedView<ENABLED> {
     }
 }
 #[test]
-fn virtual_slots_check_versions_presence_defaults_and_hidden_bases() {
+fn virtual_slots_check_availability_and_export_animation_over_base() {
     let absent = VersionedView::<false>::decode_mdl("VersionedView {}").unwrap();
     assert!(absent.storage.is_none());
     assert!(!absent.tracks_present);
@@ -716,7 +718,9 @@ fn virtual_slots_check_versions_presence_defaults_and_hidden_bases() {
     let text = animated.encode_mdl().unwrap();
     assert!(text.find("Alpha").unwrap() < text.find("Color").unwrap());
     animated.storage = Some(2.0);
-    assert!(animated.encode_mdl().is_err());
+    let decoded = VersionedView::<true>::decode_mdl(&animated.encode_mdl().unwrap()).unwrap();
+    assert_eq!(decoded.storage, Some(0.0));
+    assert_eq!(decoded.tracks.len(), animated.tracks.len());
     let mut unavailable = VersionedView::<false>::decode_mdl("VersionedView {}").unwrap();
     unavailable.tracks = animated.tracks;
     assert!(unavailable.encode_mdl().is_err());

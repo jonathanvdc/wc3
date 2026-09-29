@@ -23,9 +23,7 @@ use crate::model::{Model, Node};
 
 /// A trail emitted from an animated node and rendered with a model material.
 ///
-/// Height, opacity, color, and texture-cell selection can be animated. MDL
-/// output requires matching ribbon node flags and rejects nondefault base
-/// values hidden by animation tracks.
+/// Height, opacity, color, and texture-cell selection can be animated.
 #[derive(Clone, Debug, PartialEq, mdx::Read, mdx::Write, mdl::Read, mdl::Write)]
 #[mdx(sized(tag = RibbonEmittersChunk::TAG))]
 #[mdl(

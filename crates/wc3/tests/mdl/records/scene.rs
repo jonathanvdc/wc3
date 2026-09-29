@@ -80,7 +80,9 @@ fn light_rejects_ambiguous_and_unrepresentable_data() {
         Light::<V800>::decode_mdl("Light \"a\" { ObjectId 0, Ambient, Intensity 0 { Linear, } }")
             .unwrap();
     light.intensity = 1.0;
-    assert!(light.encode_mdl().is_err());
+    let decoded = Light::<V800>::decode_mdl(&light.encode_mdl().unwrap()).unwrap();
+    assert_eq!(decoded.intensity, 0.0);
+    assert_eq!(decoded.tracks, light.tracks);
     light.intensity = 0.0;
     light.light_type = 99;
     assert!(light.encode_mdl().is_err());

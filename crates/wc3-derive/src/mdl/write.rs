@@ -119,9 +119,16 @@ pub(super) fn expand(
                     state_names.push(emit.clone());
                     state_types.push(quote!(bool));
                     let default = omission::default_value(field, options);
+                    let check_base = if matches!(kind, Kind::Animatable(_)) {
+                        let variant = field.track.as_ref().expect("track was checked");
+                        let collection = tracks.expect("tracks was checked").value(quote!(self));
+                        quote!(!(#collection).iter().any(|track| matches!(track, #variant(_))))
+                    } else {
+                        quote!(true)
+                    };
                     required_flags.push(quote! {
                         let #emit = #condition;
-                        if !#emit && !::wc3::model::mdl::ValueEq::eq_mdl(&#access, &#default) {
+                        if !#emit && #check_base && !::wc3::model::mdl::ValueEq::eq_mdl(&#access, &#default) {
                             return ::core::result::Result::Err(::wc3::model::mdl::WriteError::Unsupported(concat!("nondefault omitted property ", #mdl_name)));
                         }
                     });

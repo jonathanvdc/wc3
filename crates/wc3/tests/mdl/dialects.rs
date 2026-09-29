@@ -211,9 +211,9 @@ fn every_named_slot_uses_the_shared_animation_grammar() {
     let mut slots = value.texture_slots().to_vec();
     slots[0].texture_id = 2;
     value.set_texture_slots(&slots);
-    assert!(value
-        .encode_mdl_with_dialect(Dialect::HiveWorkshop)
-        .is_err());
+    let decoded = Layer::<V1800>::decode_mdl(&hive(&value)).unwrap();
+    assert_eq!(decoded.texture_slots()[0].texture_id, 0);
+    assert_eq!(decoded.texture_slots()[0].track, slots[0].track);
 }
 #[test]
 fn aliases_share_duplicate_identity_and_error_spans() {

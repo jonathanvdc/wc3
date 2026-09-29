@@ -107,8 +107,6 @@ pub struct Node<F = NodeFlags> {
 }
 
 /// A skeletal node that influences mesh geometry.
-///
-/// MDL output requires the node bone flag and rejects conflicting object-kind flags.
 #[derive(Clone, Debug, PartialEq, mdl::Read, mdl::Write)]
 #[mdl(
     block = "Bone",

@@ -168,9 +168,6 @@ impl<V: ModelVersion> WriteFields for TextureBindingsView<'_, V> {
                 dialect,
             )
         } else {
-            if self.0.mdl_texture_track().is_some() && self.0.texture_id != 0 {
-                return Err(mdl::WriteError::Unsupported("hidden texture base"));
-            }
             Ok(())
         }
     }
@@ -347,11 +344,9 @@ fn validate_slots(slots: &[LayerTextureSlot], dialect: Dialect) -> Result<(), md
         {
             return Err(mdl::WriteError::Unsupported("texture slot"));
         }
-        if slot.track.is_some()
-            && (slot.texture_id != 0 || (dialect == Dialect::Warcraft3 && slot.texture_type != 0))
-        {
+        if slot.track.is_some() && dialect == Dialect::Warcraft3 && slot.texture_type != 0 {
             return Err(mdl::WriteError::Unsupported(
-                "non-diffuse texture animation or hidden texture base",
+                "non-diffuse texture animation",
             ));
         }
     }

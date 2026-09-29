@@ -163,9 +163,9 @@ adds a track and leaves the base at its default. Static and animated forms count
 as the same property for duplicate checks. Track variants must wrap readable
 tracks with matching MDL names.
 
-Writing uses the track when present, otherwise the static base. A hidden base
-must equal the value restored by reading, or output fails. Tracks start empty
-on read and retain their order; duplicate or unmapped variants are errors.
+Writing uses the track when present, otherwise the static base. An animation
+supersedes its base value; reading the output restores that base to its default.
+Tracks start empty on read and retain their order; duplicate or unmapped variants are errors.
 Animated properties are emitted at their base field’s position in `write_order`
 or declaration order. Channels without base fields are emitted at the tracks
 field’s position, in `channels(...)` declaration order. Writing leaves stored
@@ -273,7 +273,8 @@ default. List virtual fields individually in `write_order`.
 | Custom mapping | `get` supplies the output value; `set: fn(&mut Self, T, bool, Span) -> Result<(), mdl::ReadError>` | The setter maps parsed values into the record. The boolean indicates explicit presence. |
 
 Explicit presence includes empty blocks or tracks and default-valued input.
-Slot-backed animation rejects unavailable tracks and hidden nondefault bases.
+Slot-backed animation rejects unavailable tracks and exports animation in place
+of its base value.
 Custom setters are responsible for mapping-specific validation.
 
 Getters may borrow collections or property adapters. A delegated output view

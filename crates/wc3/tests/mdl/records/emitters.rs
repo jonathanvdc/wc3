@@ -121,13 +121,15 @@ fn duplicate_channels_and_scalar_ranges_are_strict() {
     assert_eq!(error.kind, mdl::ReadErrorKind::DuplicateField);
 }
 #[test]
-fn writers_reject_hidden_values_unknown_flags_and_path_padding() {
+fn writers_export_animation_over_base_and_reject_unknown_flags_and_padding() {
     let mut particle = ParticleEmitter::decode_mdl(
         "ParticleEmitter \"a\" { ObjectId 0, EmissionRate 0 { Linear, } }",
     )
     .unwrap();
     particle.emission_rate = 1.0;
-    assert!(particle.encode_mdl().is_err());
+    let decoded = ParticleEmitter::decode_mdl(&particle.encode_mdl().unwrap()).unwrap();
+    assert_eq!(decoded.emission_rate, 0.0);
+    assert_eq!(decoded.tracks, particle.tracks);
     particle.emission_rate = 0.0;
     particle.node.flags = ParticleEmitterFlags(0x21000);
     assert!(particle.encode_mdl().is_err());
@@ -144,7 +146,9 @@ fn writers_reject_hidden_values_unknown_flags_and_path_padding() {
         RibbonEmitter::decode_mdl("RibbonEmitter \"a\" { ObjectId 0, TextureSlot 0 { Linear, } }")
             .unwrap();
     ribbon.texture_slot = 3;
-    assert!(ribbon.encode_mdl().is_err());
+    let decoded = RibbonEmitter::decode_mdl(&ribbon.encode_mdl().unwrap()).unwrap();
+    assert_eq!(decoded.texture_slot, 0);
+    assert_eq!(decoded.tracks, ribbon.tracks);
     ribbon.texture_slot = 0;
     ribbon.node.flags = NodeFlags(0);
     assert!(ribbon.encode_mdl().is_err());
