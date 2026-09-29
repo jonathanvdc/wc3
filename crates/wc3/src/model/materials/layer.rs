@@ -58,7 +58,20 @@ pub enum LayerFilterMode {
 
 bitfield! {
     /// Material layer shading bits, preserving unrecognized bits.
-    #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+    #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, mdl::Read, mdl::Write)]
+    #[mdl(flags(
+        Unshaded = 1,
+        SphereEnvMap = 2,
+        WrapWidth = 4,
+        WrapHeight = 8,
+        TwoSided = 16,
+        Unfogged = 32,
+        NoDepthTest = 64,
+        NoDepthSet = 128,
+        Unlit = 256,
+        BackFacesForShadows = 512,
+        AmbientOcclusion = 1024
+    ), hive_skip_bits = 0x70c)]
     pub struct LayerShadingFlags(u32);
     /// Returns the exact stored bits.
     pub bits, _: 31, 0;
@@ -119,25 +132,10 @@ pub struct LayerTextureSlot {
 #[derive(Clone, Debug, PartialEq, mdx::Read, mdx::Write, mdl::Read, mdl::Write)]
 #[mdx(sized(tag = LAYER_TAG))]
 #[mdl(block = "Layer", validate_write = "Self::validate_mdl",
-    write_order(filter_mode, shading, shader, textures, texture_animation_id,
+    write_order(filter_mode, shading_flags, shader, textures, texture_animation_id,
         coordinate_id, alpha, emissive, color, opacity, team_color),
     virtual_fields(
-    #[mdl(flags(
-        Unshaded = 1,
-        SphereEnvMap = 2,
-        WrapWidth = 4,
-        WrapHeight = 8,
-        TwoSided = 16,
-        Unfogged = 32,
-        NoDepthTest = 64,
-        NoDepthSet = 128,
-        Unlit = 256,
-        BackFacesForShadows = 512,
-        AmbientOcclusion = 1024
-    ))]
-    #[mdl(get = "Self::mdl_shading_flags", set = "Self::set_mdl_shading_flags",
-        hive_skip_bits = 0x70c)]
-    shading: u32,
+
         #[mdl(property = "Shader", hive_name = "ShaderTypeId", delegate)]
         #[mdl(get = "Self::mdl_shader", set = "Self::set_mdl_shader")]
         shader: ShaderMarker,
@@ -180,7 +178,7 @@ pub struct Layer<V: ModelVersion> {
     #[mdl(property = "FilterMode", default)]
     /// Blend filter mode.
     pub filter_mode: LayerFilterMode,
-    #[mdl(skip, default)]
+    #[mdl(flatten)]
     /// Layer shading bits.
     pub shading_flags: LayerShadingFlags,
     #[mdl(skip, default)]

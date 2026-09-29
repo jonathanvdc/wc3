@@ -13,7 +13,8 @@ use crate::model::Model;
 
 bitfield! {
     /// Texture wrapping flags; unknown bits remain available through `bits`.
-    #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, mdx::Read, mdx::Write)]
+    #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, mdx::Read, mdx::Write, mdl::Read, mdl::Write)]
+    #[mdl(flags(WrapWidth = 1, WrapHeight = 2))]
     pub struct TextureFlags(u32);
     /// Returns the exact stored bits.
     pub bits, _: 31, 0;
@@ -35,7 +36,7 @@ pub struct Texture {
     #[mdl(property = "Image", default)]
     /// Image resource path, such as `Textures\\Armor.blp`.
     pub path: FixedText<PATH_SIZE>,
-    #[mdl(flags(WrapWidth = 1, WrapHeight = 2))]
+    #[mdl(flatten)]
     /// Texture wrapping flags.
     pub flags: TextureFlags,
 }

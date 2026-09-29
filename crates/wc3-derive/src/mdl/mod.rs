@@ -2,6 +2,7 @@
 mod attributes;
 mod bounds;
 mod enumeration;
+mod flags;
 mod omission;
 mod read;
 mod schema;
@@ -13,7 +14,10 @@ mod write;
 use attributes::container;
 use proc_macro2::TokenStream;
 use quote::format_ident;
-use syn::{Data, DeriveInput, GenericParam, Generics, Ident, Result};
+use syn::{
+    punctuated::Punctuated, Data, DeriveInput, Fields, GenericParam, Generics, Ident, Meta, Result,
+    Token,
+};
 
 pub(crate) fn expand(input: DeriveInput, reading: bool) -> TokenStream {
     match expand_checked(input, reading) {
@@ -25,6 +29,18 @@ pub(crate) fn expand(input: DeriveInput, reading: bool) -> TokenStream {
 fn expand_checked(input: DeriveInput, reading: bool) -> Result<TokenStream> {
     if matches!(input.data, Data::Enum(_)) {
         return enumeration::expand(&input, reading);
+    }
+    if matches!(&input.data, Data::Struct(data) if matches!(data.fields, Fields::Unnamed(_)))
+        && input
+            .attrs
+            .iter()
+            .filter(|attr| attr.path().is_ident("mdl"))
+            .any(|attr| {
+                attr.parse_args_with(Punctuated::<Meta, Token![,]>::parse_terminated)
+                    .is_ok_and(|items| items.iter().any(|meta| meta.path().is_ident("flags")))
+            })
+    {
+        return flags::expand(&input, reading);
     }
     let options = container(&input)?;
     if options.block.is_none() && !options.fields {

@@ -24,11 +24,7 @@ impl Schema {
             for name in field.dialect_aliases() {
                 calls.push(quote!(visitor(#name, false);));
             }
-            if let Some(extra) = &field.extra_flags {
-                for (name, _) in &extra.flags {
-                    calls.push(quote!(visitor(#name, false);));
-                }
-            }
+
             match &field.kind {
                 Kind::Flatten => {
                     let ty = &field.ty;
@@ -72,11 +68,7 @@ impl Schema {
             for value in field.dialect_aliases() {
                 conditions.push(quote!(!static_form && name == #value));
             }
-            if let Some(extra) = &field.extra_flags {
-                for (value, _) in &extra.flags {
-                    conditions.push(quote!(!static_form && name == #value));
-                }
-            }
+
             match &field.kind {
                 Kind::Flatten => {
                     let ty = &field.ty;
@@ -226,12 +218,10 @@ pub(super) fn parse(input: &DeriveInput, options: &Container) -> Result<Schema> 
                     "virtual fields require get and exactly one of set or slot",
                 ));
             }
-            if matches!(virtual_field.kind, Kind::Header | Kind::Skip)
-                || virtual_field.extra_flags.is_some()
-            {
+            if matches!(virtual_field.kind, Kind::Header | Kind::Skip) {
                 return Err(Error::new_spanned(
                     source,
-                    "virtual fields cannot be headers, skipped fields, or extra_flags",
+                    "virtual fields cannot be headers or skipped fields",
                 ));
             }
             if normalized
@@ -330,9 +320,7 @@ pub(super) fn parse(input: &DeriveInput, options: &Container) -> Result<Schema> 
             _ => Vec::new(),
         };
         field_names.extend(field.dialect_aliases());
-        if let Some(extra) = &field.extra_flags {
-            field_names.extend(extra.flags.iter().map(|(name, _)| name));
-        }
+
         for name in field_names {
             if names.contains(&name.value()) {
                 return Err(Error::new_spanned(name, "duplicate MDL field name"));

@@ -41,11 +41,6 @@ pub(super) enum DefaultValue {
     Function(Path),
 }
 
-pub(super) struct ExtraFlags {
-    pub(super) get: Path,
-    pub(super) set: Path,
-    pub(super) flags: Vec<(LitStr, u32)>,
-}
 pub(super) struct Field {
     pub(super) member: Ident,
     pub(super) local: Ident,
@@ -66,7 +61,6 @@ pub(super) struct Field {
     pub(super) unique_by: Option<Path>,
     pub(super) bare_static: bool,
     pub(super) parent: Option<Ident>,
-    pub(super) extra_flags: Option<ExtraFlags>,
     pub(super) get: Option<Path>,
     pub(super) set: Option<Path>,
     pub(super) slot: Option<Path>,
@@ -258,7 +252,6 @@ pub(super) fn field(field: &SynField, index: usize) -> Result<Field> {
     let mut delegate = false;
     let mut unique_by = None;
     let mut bare_static = false;
-    let mut extra_flags = None;
     let mut get = None;
     let mut set = None;
     let mut slot = None;
@@ -383,31 +376,6 @@ pub(super) fn field(field: &SynField, index: usize) -> Result<Field> {
             } else if meta.path.is_ident("delegate") {
                 if delegate { return Err(meta.error("duplicate delegate")); }
                 delegate = true;
-                Ok(())
-            } else if meta.path.is_ident("extra_flags") {
-    if extra_flags.is_some() { return Err(meta.error("duplicate extra_flags")); }
-                let mut get = None;
-                let mut set = None;
-                let mut flags = Vec::new();
-                let mut bits = 0u32;
-                meta.parse_nested_meta(|item| {
-                    if item.path.is_ident("get") { return path(&item, &mut get); }
-                    if item.path.is_ident("set") { return path(&item, &mut set); }
-                    let ident = item.path.get_ident().ok_or_else(|| item.error("expected a flag name"))?;
-                    let name = LitStr::new(&ident.to_string(), ident.span());
-                    identifier(&name)?;
-                    let mask: LitInt = item.value()?.parse()?;
-                    let mask = mask.base10_parse::<u32>()?;
-                    if !mask.is_power_of_two() || bits & mask != 0 { return Err(item.error("flag masks must be distinct nonzero single u32 bits")); }
-                    bits |= mask;
-                    flags.push((name, mask));
-                    Ok(())
-                })?;
-                if flags.is_empty() { return Err(meta.error("extra_flags needs at least one flag")); }
-                extra_flags = Some(ExtraFlags {
-                    get: get.ok_or_else(|| meta.error("extra_flags requires get and set"))?,
-                    set: set.ok_or_else(|| meta.error("extra_flags requires get and set"))?, flags,
-                });
                 Ok(())
             } else if meta.path.is_ident("bare_static") {
                 if bare_static { return Err(meta.error("duplicate bare_static")); }
@@ -548,9 +516,6 @@ pub(super) fn field(field: &SynField, index: usize) -> Result<Field> {
         }
     }
 
-    if extra_flags.is_some() && !matches!(kind, Kind::Flatten) {
-        return Err(Error::new_spanned(field, "extra_flags requires flatten"));
-    }
     if bare_static
         && (!matches!(kind, Kind::Animatable(_)) || type_argument(&field.ty, "Option").is_some())
     {
@@ -706,7 +671,6 @@ pub(super) fn field(field: &SynField, index: usize) -> Result<Field> {
         unique_by,
         bare_static,
         parent: None,
-        extra_flags,
         get,
         set,
         slot,

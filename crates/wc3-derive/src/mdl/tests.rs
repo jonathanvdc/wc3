@@ -750,28 +750,6 @@ fn validates_projection_channels_and_flattened_flags() {
         },
         "duplicate projected member",
     );
-
-    rejects(
-        parse_quote! {
-            #[mdl(block = "Record")]
-            struct Bad { #[mdl(flatten, extra_flags(get = "get", A = 1))] data: Data }
-        },
-        "get and set",
-    );
-    rejects(
-        parse_quote! {
-            #[mdl(block = "Record")]
-            struct Bad { #[mdl(property = "A", extra_flags(get = "get", set = "set", Flag = 1))] data: Data }
-        },
-        "extra_flags requires flatten",
-    );
-    rejects(
-        parse_quote! {
-            #[mdl(block = "Record")]
-            struct Bad { #[mdl(flatten, extra_flags(get = "get", set = "set", A = 1, B = 1))] data: Data }
-        },
-        "distinct nonzero single",
-    );
 }
 
 #[test]
@@ -1030,4 +1008,28 @@ fn animated_properties_are_inferred_from_storage() {
         parse_quote! { #[mdl(block = "Record")] struct Bad { #[mdl(property = "Keys", constant = "Value")] keys: Option<Track<f32>>, #[mdl(property = "Value")] value: u32 } },
         "duplicate MDL field name",
     );
+}
+
+#[test]
+fn bitfield_definitions_validate_their_schema() {
+    for input in [
+        parse_quote! { #[mdl(flags(A = 1))] struct Bad(u64); },
+        parse_quote! { #[mdl(flags(A = 1))] struct Bad(u32, u32); },
+    ] {
+        rejects(input, "single u32 tuple field");
+    }
+    rejects(
+        parse_quote! { #[mdl(flags(A = 1), default)] struct Bad(u32); },
+        "bitfield codecs support",
+    );
+    rejects(
+        parse_quote! { #[mdl(flags(A = 1, B = 1))] struct Bad(u32); },
+        "duplicate flag mask",
+    );
+    // Definition options need not start with flags.
+    let input = parse_quote! {
+        #[mdl(allow_bits = 2, flags(A = 1), hive_flags(Alias = 1))]
+        pub struct Flags(u32);
+    };
+    assert!(expand_checked(input, true).is_ok());
 }

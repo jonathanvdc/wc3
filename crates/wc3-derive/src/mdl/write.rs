@@ -42,16 +42,6 @@ pub(super) fn expand(
                 state_types.push(quote!(<#ty as ::wc3::model::mdl::WriteFields>::State));
                 required_flags.push(quote!(let #local = ::wc3::model::mdl::WriteFields::prepare_mdl_fields(&#access, __wc3_mdl_dialect)?;));
                 writes.push(quote!(::wc3::model::mdl::WriteFields::write_mdl_fields(&#access, #local, __wc3_mdl_writer)?;));
-                if let Some(extra) = &field.extra_flags {
-                    let get = &extra.get;
-                    for (name, mask) in &extra.flags {
-                        writes.push(quote! {
-                            if ::wc3::model::mdl::BitRange::<u32>::bit_range(&#get(&#access), 31, 0) & #mask != 0 {
-                                __wc3_mdl_writer.flag(#name)?;
-                            }
-                        });
-                    }
-                }
             }
             Kind::Block(mdl_name) => {
                 let ty = &field.ty;

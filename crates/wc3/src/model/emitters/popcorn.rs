@@ -27,17 +27,7 @@ const PATH_SIZE: usize = 260;
     validate_write = "validate_popcorn"
 )]
 pub struct PopcornEmitter {
-    #[mdl(
-        flatten,
-        extra_flags(
-            get = "Node::mdl_flags",
-            set = "Node::set_mdl_flags",
-            SortPrimsFarZ = 65536,
-            Unshaded = 32768,
-            Unfogged = 131072,
-            PopcornScaling = 262144
-        )
-    )]
+    #[mdl(flatten)]
     /// Shared node.
     pub node: Node<PopcornFlags>,
     #[mdx(tag = *b"KPPL")]
@@ -146,7 +136,24 @@ fn validate_popcorn(value: &PopcornEmitter) -> Result<(), mdl::WriteError> {
 
 bitfield! {
     /// Complete node flag word interpreted in this emitter's context.
-    #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, mdx::Read, mdx::Write)]
+    #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, mdx::Read, mdx::Write, mdl::Read, mdl::Write)]
+    #[mdl(
+        flags(
+            DontInheritTranslation = 1,
+            DontInheritRotation = 2,
+            DontInheritScaling = 4,
+            Billboarded = 8,
+            BillboardedLockX = 16,
+            BillboardedLockY = 32,
+            BillboardedLockZ = 64,
+            CameraAnchored = 128,
+            SortPrimsFarZ = 65536,
+            Unshaded = 32768,
+            Unfogged = 131072,
+            PopcornScaling = 262144,
+        ),
+        allow_bits = 0x1000
+    )]
     pub struct PopcornFlags(u32);
     /// Returns the stored bits.
     pub bits, _: 31, 0;

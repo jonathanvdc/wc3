@@ -62,30 +62,7 @@ pub(super) fn expand(
         if matches!(kind, Kind::Flatten) {
             headers.push(quote!(let mut #local: <#ty as ::wc3::model::mdl::ReadFields>::State = <#ty as ::wc3::model::mdl::ReadFields>::begin_mdl_fields(__wc3_mdl_parser)?;));
             let finish = quote!(<#ty as ::wc3::model::mdl::ReadFields>::finish_mdl_fields(#local, __wc3_mdl_span, __wc3_mdl_record_span)?);
-            if let Some(extra) = &field.extra_flags {
-                let overlay = format_ident!("{}_flags", local);
-                locals.push(quote!(let mut #overlay: u32 = 0;));
-                for (name, mask) in &extra.flags {
-                    arms.push(quote!(#name => {
-                        __wc3_mdl_fields.mark(#bit, __wc3_mdl_field)?;
-                        __wc3_mdl_body.expect(::wc3::model::mdl::TokenKind::Comma)?;
-                        #overlay |= #mask;
-                    }));
-                    bit += 1;
-                }
-                let get = &extra.get;
-                let set = &extra.set;
-                members.push(quote!(#member: {
-                    let mut value = #finish;
-                    let mut flags = #get(&value);
-                    let bits = ::wc3::model::mdl::BitRange::<u32>::bit_range(&flags, 31, 0);
-                    ::wc3::model::mdl::BitRangeMut::<u32>::set_bit_range(&mut flags, 31, 0, bits | #overlay);
-                    #set(&mut value, flags);
-                    value
-                }));
-            } else {
-                members.push(quote!(#member: #finish));
-            }
+            members.push(quote!(#member: #finish));
             flattened.push(field);
             continue;
         }
@@ -326,10 +303,7 @@ pub(super) fn expand(
             state_names.push(format_ident!("{}_present", local));
             state_types.push(quote!(bool));
         }
-        if field.extra_flags.is_some() {
-            state_names.push(format_ident!("{}_flags", local));
-            state_types.push(quote!(u32));
-        }
+
         if field.enable_with.is_some() {
             state_names.push(format_ident!("{}_enabled", local));
             state_types.push(quote!(bool));

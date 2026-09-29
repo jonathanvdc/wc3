@@ -80,6 +80,7 @@ dependencies = [
 name = "wc3-derive"
 version = "0.1.0"
 dependencies = [
+ "bitfield",
  "proc-macro2",
  "quote",
  "syn 2.0.119",

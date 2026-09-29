@@ -76,19 +76,7 @@ pub enum Particle2FilterMode {
     )
 )]
 pub struct ParticleEmitter2 {
-    #[mdl(
-        flatten,
-        extra_flags(
-            get = "Node::mdl_flags",
-            set = "Node::set_mdl_flags",
-            SortPrimsFarZ = 65536,
-            LineEmitter = 131072,
-            Unfogged = 262144,
-            ModelSpace = 524288,
-            Unshaded = 32768,
-            XYQuad = 1048576
-        )
-    )]
+    #[mdl(flatten)]
     /// Embedded node.
     pub node: Node<Particle2Flags>,
     #[mdx(tag = *b"KP2S")]
@@ -211,7 +199,26 @@ impl<V: ModelVersion> Model<V> {
 
 bitfield! {
     /// Complete node flag word interpreted in this emitter's context.
-    #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, mdx::Read, mdx::Write)]
+    #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, mdx::Read, mdx::Write, mdl::Read, mdl::Write)]
+    #[mdl(
+        flags(
+            DontInheritTranslation = 1,
+            DontInheritRotation = 2,
+            DontInheritScaling = 4,
+            Billboarded = 8,
+            BillboardedLockX = 16,
+            BillboardedLockY = 32,
+            BillboardedLockZ = 64,
+            CameraAnchored = 128,
+            SortPrimsFarZ = 65536,
+            LineEmitter = 131072,
+            Unfogged = 262144,
+            ModelSpace = 524288,
+            Unshaded = 32768,
+            XYQuad = 1048576,
+        ),
+        allow_bits = 0x1000
+    )]
     pub struct Particle2Flags(u32);
     /// Returns the stored bits.
     pub bits, _: 31, 0;

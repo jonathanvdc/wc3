@@ -29,15 +29,7 @@ const PATH_SIZE: usize = 260;
     validate_write = "validate_particle"
 )]
 pub struct ParticleEmitter {
-    #[mdl(
-        flatten,
-        extra_flags(
-            get = "Node::mdl_flags",
-            set = "Node::set_mdl_flags",
-            EmitterUsesMdl = 32768,
-            EmitterUsesTga = 65536
-        )
-    )]
+    #[mdl(flatten)]
     /// Shared node.
     pub node: Node<ParticleEmitterFlags>,
     #[mdx(tag = *b"KPEE")]
@@ -114,7 +106,22 @@ fn validate_particle(value: &ParticleEmitter) -> Result<(), mdl::WriteError> {
 
 bitfield! {
     /// Complete node flag word interpreted in this emitter's context.
-    #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, mdx::Read, mdx::Write)]
+    #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, mdx::Read, mdx::Write, mdl::Read, mdl::Write)]
+    #[mdl(
+        flags(
+            DontInheritTranslation = 1,
+            DontInheritRotation = 2,
+            DontInheritScaling = 4,
+            Billboarded = 8,
+            BillboardedLockX = 16,
+            BillboardedLockY = 32,
+            BillboardedLockZ = 64,
+            CameraAnchored = 128,
+            EmitterUsesMdl = 32768,
+            EmitterUsesTga = 65536,
+        ),
+        allow_bits = 0x1000
+    )]
     pub struct ParticleEmitterFlags(u32);
     /// Returns the stored bits.
     pub bits, _: 31, 0;

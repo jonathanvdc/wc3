@@ -249,11 +249,30 @@ struct into the enclosing MDL record. List every member, marking binary-only
 members `skip`. Animatable members own their tracks. Record defaults
 supply nested defaults, and `write_order` lists the containing field name.
 
-For flags stored inside a flattened record, use
-`flatten, extra_flags(get = "Type::flags", set = "Type::set_flags", Extra = 1)`.
-The getter returns a bitfield value; the setter stores it. Reading adds these
-bits to the flattened record. Validate implicit object-kind and unknown bits
-in the enclosing record's write hook.
+Flag bitfields implement field-group codecs on their definitions:
+
+```rust
+use bitfield::bitfield;
+use wc3::model::mdl;
+
+bitfield! {
+    #[derive(Default, mdl::Read, mdl::Write)]
+    #[mdl(flags(WrapWidth = 1, WrapHeight = 2))]
+    pub struct TextureFlags(u32);
+    pub wrap_width, set_wrap_width: 0;
+    pub wrap_height, set_wrap_height: 1;
+}
+```
+
+Use `#[mdl(flatten)]` wherever that type appears in a record. The definition owns
+mapping order, `hive_flags`, `hive_skip_bits`, and `allow_bits`. These derives
+implement `ReadFields` and `WriteFields`, rather than scalar value codecs.
+Reading starts with zero bits and detects each repeated flag independently.
+
+`Node<F>` flattens `F`, so concrete emitter flag types declare both common node
+flags and emitter-specific flags. The enclosing record restores and validates
+implicit object-kind bits; the flag definition permits them with `allow_bits`.
+MDX still preserves all stored bits, including unknown ones.
 
 ### Virtual fields
 

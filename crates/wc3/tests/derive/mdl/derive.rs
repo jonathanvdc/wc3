@@ -302,9 +302,10 @@ fn read_write_and_default_bounds_are_independent() {
     .contains("Value 7,"));
 }
 
-// Packed storage uses bitfield traits without either value codec.
+// Bitfield definitions provide a field group without scalar value codecs.
 bitfield::bitfield! {
-    #[derive(Default)]
+    #[derive(Default, mdl::Read, mdl::Write)]
+    #[mdl(flags(First = 1, Last = 0x80000000))]
     struct BareFlags(u32);
     bits, _: 31, 0;
 }
@@ -313,7 +314,7 @@ bitfield::bitfield! {
 struct Packed<T> {
     #[mdl(property = "Id", default)]
     id: u32,
-    #[mdl(flags(First = 1, Last = 0x80000000))]
+    #[mdl(flatten)]
     flags: T,
 }
 #[test]

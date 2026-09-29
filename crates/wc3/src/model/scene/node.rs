@@ -24,7 +24,20 @@ bitfield! {
     /// For emitters, use the emitter's typed flags: the same bit can mean
     /// different behavior for Particle2 and Popcorn effects. Unknown bits are
     /// retained in MDX but cannot be exported to MDL.
-    #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, mdx::Read, mdx::Write)]
+    #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, mdx::Read, mdx::Write, mdl::Read, mdl::Write)]
+    #[mdl(
+        flags(
+            DontInheritTranslation = 1,
+            DontInheritRotation = 2,
+            DontInheritScaling = 4,
+            Billboarded = 8,
+            BillboardedLockX = 16,
+            BillboardedLockY = 32,
+            BillboardedLockZ = 64,
+            CameraAnchored = 128,
+        ),
+        allow_bits = 0x7f00
+    )]
     pub struct NodeFlags(u32);
     /// Returns the exact stored bits.
     pub bits, _: 31, 0;
@@ -60,6 +73,7 @@ bitfield! {
 ///
 /// `F` stores the complete flag word and selects its interpretation. Emitter
 /// records use their own flag types; ordinary nodes default to `NodeFlags`.
+/// MDL delegates the complete flag schema to `F`, including emitter flags.
 /// Use [`Node::cast_flags`] to change interpretations without changing the bits.
 /// Standalone MDL `Helper` blocks use the default interpretation.
 #[derive(Clone, Debug, PartialEq, mdx::Read, mdx::Write, mdl::Read, mdl::Write)]
@@ -79,19 +93,7 @@ pub struct Node<F = NodeFlags> {
     )]
     /// Parent ID, or `u32::MAX` for no parent.
     pub parent_id: u32,
-    #[mdl(
-        flags(
-            DontInheritTranslation = 1,
-            DontInheritRotation = 2,
-            DontInheritScaling = 4,
-            Billboarded = 8,
-            BillboardedLockX = 16,
-            BillboardedLockY = 32,
-            BillboardedLockZ = 64,
-            CameraAnchored = 128
-        ),
-        allow_bits = 0x1fff00
-    )]
+    #[mdl(flatten)]
     /// Node flags.
     pub flags: F,
     #[mdx(tag = *b"KGTR")]
@@ -143,14 +145,6 @@ pub trait NodeFlagInterpretation: Copy + Default {
 }
 
 impl<F: NodeFlagInterpretation> Node<F> {
-    pub(crate) fn mdl_flags(&self) -> NodeFlags {
-        NodeFlags(self.flags.bits())
-    }
-
-    pub(crate) fn set_mdl_flags(&mut self, flags: NodeFlags) {
-        self.flags = F::from_bits(flags.bits());
-    }
-
     /// Changes the flag interpretation while preserving every field and stored bit.
     pub fn cast_flags<G: NodeFlagInterpretation>(self) -> Node<G> {
         Node {

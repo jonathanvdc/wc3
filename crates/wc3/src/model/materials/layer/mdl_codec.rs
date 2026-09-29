@@ -1,7 +1,7 @@
 //! MDL accessors and slot-qualified texture bindings.
 use super::{
-    EmissiveGainField, FresnelField, Layer, LayerShaderTypeField, LayerShadingFlags,
-    LayerTextureSlot, LayerTextureSlotsField, ShaderType,
+    EmissiveGainField, FresnelField, Layer, LayerShaderTypeField, LayerTextureSlot,
+    LayerTextureSlotsField, ShaderType,
 };
 use crate::model::mdl::{
     dispatch_name, Dialect, Field, Parser, ReadErrorKind, ReadFields, Span, TokenKind, WriteFields,
@@ -409,21 +409,6 @@ impl mdl::WriteProperty for ShaderMarker {
                 writer.property(name, shader.name().expect("validated shader"))?;
             }
         }
-        Ok(())
-    }
-}
-
-impl<V: ModelVersion> Layer<V> {
-    pub(super) fn mdl_shading_flags(&self) -> u32 {
-        self.shading_flags.bits()
-    }
-    pub(super) fn set_mdl_shading_flags(
-        &mut self,
-        bits: u32,
-        _: bool,
-        _: Span,
-    ) -> Result<(), mdl::ReadError> {
-        self.shading_flags = LayerShadingFlags::from_bits_retain(bits);
         Ok(())
     }
 }

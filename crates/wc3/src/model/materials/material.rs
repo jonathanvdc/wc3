@@ -19,7 +19,15 @@ use crate::model::{
 
 bitfield! {
     /// Material rendering bits, preserving unrecognized bits.
-    #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, mdx::Read, mdx::Write)]
+    #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, mdx::Read, mdx::Write, mdl::Read, mdl::Write)]
+    #[mdl(flags(
+        ConstantColor = 1,
+        TwoSided = 2,
+        SortPrimsNearZ = 8,
+        SortPrimsFarZ = 16,
+        FullResolution = 32
+    ))]
+    #[mdl(hive_flags(SortPrimitives = 16), hive_skip_bits = 8)]
     pub struct MaterialRenderFlags(u32);
     /// Returns the exact stored bits.
     pub bits, _: 31, 0;
@@ -52,14 +60,7 @@ pub struct Material<V: ModelVersion> {
     #[mdl(property = "PriorityPlane", default, skip_if = "zero_priority")]
     /// Signed render-order priority.
     pub priority_plane: i32,
-    #[mdl(flags(
-        ConstantColor = 1,
-        TwoSided = 2,
-        SortPrimsNearZ = 8,
-        SortPrimsFarZ = 16,
-        FullResolution = 32
-    ))]
-    #[mdl(hive_flags(SortPrimitives = 16), hive_skip_bits = 8)]
+    #[mdl(flatten)]
     /// Rendering flags.
     pub render_mode: MaterialRenderFlags,
     #[mdl(property = "Shader", delegate)]

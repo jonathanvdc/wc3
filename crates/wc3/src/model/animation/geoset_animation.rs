@@ -12,7 +12,8 @@ use crate::model::Model;
 
 bitfield! {
     /// Geoset animation rendering flags, retaining unknown bits.
-    #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, mdx::Read, mdx::Write)]
+    #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, mdx::Read, mdx::Write, mdl::Read, mdl::Write)]
+    #[mdl(flags(DropShadow = 1), allow_bits = 2)]
     pub struct GeosetAnimationFlags(u32);
     /// Returns the exact stored bits.
     pub bits, _: 31, 0;
@@ -35,7 +36,7 @@ pub struct GeosetAnimation {
     #[mdl(property = "Alpha")]
     /// Base alpha.
     pub alpha: Animatable<f32>,
-    #[mdl(flags(DropShadow = 1), allow_bits = 2)]
+    #[mdl(flatten)]
     /// Rendering flags.
     pub flags: GeosetAnimationFlags,
     #[mdx(tag = *b"KGAC")]

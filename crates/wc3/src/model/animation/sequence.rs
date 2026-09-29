@@ -14,7 +14,8 @@ use crate::model::Model;
 
 bitfield! {
     /// Sequence playback flags, with unrecognized bits retained.
-    #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, mdx::Read, mdx::Write)]
+    #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, mdx::Read, mdx::Write, mdl::Read, mdl::Write)]
+    #[mdl(flags(NonLooping = 1))]
     pub struct SequenceFlags(u32);
     /// Returns the exact stored bits.
     pub bits, _: 31, 0;
@@ -39,7 +40,7 @@ pub struct Sequence {
     pub interval: [u32; 2],
     #[mdl(property = "MoveSpeed", default, skip_if = "is_positive_zero")]
     pub move_speed: f32,
-    #[mdl(flags(NonLooping = 1))]
+    #[mdl(flatten)]
     pub flags: SequenceFlags,
     #[mdl(property = "Rarity", default, skip_if = "is_positive_zero")]
     /// Weight used for random animation selection.
