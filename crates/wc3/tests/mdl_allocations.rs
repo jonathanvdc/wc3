@@ -145,6 +145,24 @@ fn version_selected_lights_and_layers_write_without_cloning_storage() {
 }
 
 #[test]
+fn materials_write_layers_and_tracks_without_cloning() {
+    use wc3::model::materials::Material;
+    use wc3::model::V900;
+
+    let material = Material::<V900>::decode_mdl(
+        "Material { Shader \"Shader_HD_DefaultUnit\", Layer { Alpha 1 { Linear, 0: 0.5, } } }",
+    )
+    .unwrap();
+    let mut storage = [0u8; 4096];
+    let (_, count) = measured(|| {
+        let mut writer = Writer::new(IoCursor::new(&mut storage[..]));
+        writer.write(&material).unwrap();
+        writer.finish().unwrap();
+    });
+    assert_eq!(count, 0);
+}
+
+#[test]
 fn geosets_write_borrowed_mesh_sections_without_allocating() {
     use wc3::model::geometry::{Geoset, SkinWeights};
     use wc3::model::V1400;

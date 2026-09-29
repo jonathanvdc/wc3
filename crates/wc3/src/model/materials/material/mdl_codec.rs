@@ -1,13 +1,11 @@
 //! Material directives, including historical flags and version-selected shaders.
-use super::{Material, MaterialRenderFlags, NoShader, ShaderText};
-use crate::model::materials::Layer;
+use super::{Material, NoShader, ShaderText};
 use crate::model::mdl;
 use crate::model::mdl::{
     Dialect, Field, Parser, ReadErrorKind, ReadProperty, Span, WriteProperty, Writer,
 };
 use crate::model::{FixedText, ModelVersion};
 use std::io::{sink, Write as IoWrite};
-use std::marker::PhantomData;
 
 impl ReadProperty for NoShader {
     fn read_mdl_property(_: &mut Parser<'_>, field: Field<'_>) -> Result<Self, mdl::ReadError> {
@@ -54,51 +52,36 @@ impl WriteProperty for ShaderText {
     }
 }
 
-fn zero_priority(value: &i32) -> bool {
+pub(super) fn zero_priority(value: &i32) -> bool {
     *value == 0
 }
 
-#[derive(mdl::Read, mdl::Write)]
-#[mdl(
-    block = "Material",
-    after_read = "Self::finish",
-    validate_write = "Self::validate"
-)]
-struct MaterialMdl<V: ModelVersion> {
-    #[mdl(skip, default)]
-    version: PhantomData<V>,
-    #[mdl(property = "PriorityPlane", default, skip_if = "zero_priority")]
-    priority: i32,
-    #[mdl(flags(
-        ConstantColor = 1,
-        TwoSided = 2,
-        SortPrimsNearZ = 8,
-        SortPrimsFarZ = 16,
-        FullResolution = 32
-    ))]
-    #[mdl(hive_flags(SortPrimitives = 16))]
-    flags: u32,
-    #[mdl(flag = "Unfogged", default)]
-    unfogged: bool,
-    #[mdl(property = "Shader", delegate)]
-    shader: V::Shader,
-    #[mdl(repeated = "Layer")]
-    layers: Vec<Layer<V>>,
-}
-impl<V: ModelVersion> MaterialMdl<V> {
-    fn finish(&mut self, _: Span) -> Result<(), mdl::ReadError> {
-        self.unfogged = false;
-        if self.flags & 2 != 0 {
+impl<V: ModelVersion> Material<V> {
+    // Historical material-level Unfogged is accepted but has no stored effect.
+    pub(super) fn mdl_unfogged(&self) -> bool {
+        false
+    }
+
+    pub(super) fn set_mdl_unfogged(
+        &mut self,
+        _: bool,
+        _: bool,
+        _: Span,
+    ) -> Result<(), mdl::ReadError> {
+        Ok(())
+    }
+
+    pub(super) fn finish_mdl(&mut self, _: Span) -> Result<(), mdl::ReadError> {
+        if self.render_mode.two_sided() {
             for layer in &mut self.layers {
-                let mut flags = layer.shading_flags;
-                flags.set_two_sided(true);
-                layer.shading_flags = flags;
+                layer.shading_flags.set_two_sided(true);
             }
         }
         Ok(())
     }
-    fn validate(&self) -> Result<(), mdl::WriteError> {
-        if self.flags & 2 != 0
+
+    pub(super) fn validate_mdl(&self) -> Result<(), mdl::WriteError> {
+        if self.render_mode.two_sided()
             && self
                 .layers
                 .iter()
@@ -109,29 +92,5 @@ impl<V: ModelVersion> MaterialMdl<V> {
             ));
         }
         Ok(())
-    }
-}
-impl<V: ModelVersion> mdl::Read for Material<V> {
-    fn read_mdl(parser: &mut Parser<'_>) -> Result<Self, mdl::ReadError> {
-        let value = parser.read::<MaterialMdl<V>>()?;
-        Ok(Self {
-            version: PhantomData,
-            priority_plane: value.priority,
-            render_mode: MaterialRenderFlags(value.flags),
-            shader: value.shader,
-            layers: value.layers,
-        })
-    }
-}
-impl<V: ModelVersion> mdl::Write for Material<V> {
-    fn write_mdl<W: IoWrite>(&self, writer: &mut Writer<W>) -> Result<(), mdl::WriteError> {
-        writer.write(&MaterialMdl::<V> {
-            version: PhantomData,
-            priority: self.priority_plane,
-            flags: self.render_mode.bits(),
-            unfogged: false,
-            shader: self.shader.clone(),
-            layers: self.layers.clone(),
-        })
     }
 }

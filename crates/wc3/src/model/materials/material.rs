@@ -3,6 +3,7 @@ use crate::model::conversion::ConversionContext;
 use crate::model::ConversionError;
 use crate::model::{mdl, mdx};
 use bitfield::bitfield;
+use mdl_codec::zero_priority;
 use std::{borrow::Cow, fmt::Debug, marker::PhantomData};
 
 use super::layer::{
@@ -35,14 +36,37 @@ bitfield! {
 }
 
 /// Surface appearance composed of ordered rendering layers.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, mdl::Read, mdl::Write)]
+#[mdl(
+    block = "Material",
+    after_read = "Self::finish_mdl",
+    validate_write = "Self::validate_mdl",
+    write_order(priority_plane, render_mode, unfogged, shader, layers),
+    virtual_fields(
+        #[mdl(flag = "Unfogged", default)]
+        #[mdl(get = "Self::mdl_unfogged", set = "Self::set_mdl_unfogged")]
+        unfogged: bool
+    )
+)]
 pub struct Material<V: ModelVersion> {
+    #[mdl(skip, default)]
     version: PhantomData<V>,
+    #[mdl(property = "PriorityPlane", default, skip_if = "zero_priority")]
     /// Signed render-order priority.
     pub priority_plane: i32,
+    #[mdl(flags(
+        ConstantColor = 1,
+        TwoSided = 2,
+        SortPrimsNearZ = 8,
+        SortPrimsFarZ = 16,
+        FullResolution = 32
+    ))]
+    #[mdl(hive_flags(SortPrimitives = 16))]
     /// Rendering flags.
     pub render_mode: MaterialRenderFlags,
+    #[mdl(property = "Shader", delegate)]
     shader: V::Shader,
+    #[mdl(repeated = "Layer")]
     /// Rendering layers, in draw order.
     pub layers: Vec<Layer<V>>,
 }
