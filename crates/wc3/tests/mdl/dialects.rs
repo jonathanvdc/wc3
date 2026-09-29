@@ -58,6 +58,120 @@ fn static_slots_match_independent_canonical_fixtures_in_both_dialects() {
     writer.write(&engine).unwrap();
     assert_eq!(writer.finish().unwrap(), HIVE.as_bytes());
 }
+
+#[test]
+fn sd_bindings_use_subtextures_from_version_1100_in_both_dialects() {
+    fn check<V: ModelVersion>() {
+        for (shader, name) in [(0, "Shader_SD_Legacy"), (2, "Shader_SD_FixedFunction")] {
+            for animated in [false, true] {
+                // Pack the documented Layer and SubTexture fields independently
+                // of the library writer. KMTF follows the slot, not the layer.
+                let mut words = vec![
+                    if animated { 92 } else { 68 },
+                    0,
+                    0,
+                    0,
+                    u32::MAX,
+                    0,
+                    1.0f32.to_bits(),
+                    1.0f32.to_bits(),
+                    1.0f32.to_bits(),
+                    1.0f32.to_bits(),
+                    1.0f32.to_bits(),
+                    0,
+                    0,
+                    shader,
+                    1,
+                    if animated { 0 } else { 7 },
+                    0,
+                ];
+                if animated {
+                    words.extend([
+                        u32::from_le_bytes(*b"KMTF"),
+                        1,
+                        1,
+                        u32::MAX,
+                        (-7i32) as u32,
+                        7,
+                    ]);
+                }
+                let binary: Vec<u8> = words.into_iter().flat_map(u32::to_le_bytes).collect();
+                let decoded = Layer::<V>::decode_mdx(&binary).unwrap();
+                assert_eq!(decoded.texture_id, 0);
+                assert!(decoded.tracks.is_empty());
+                let slots = decoded.try_texture_slots().unwrap();
+                assert_eq!(slots.len(), 1);
+                assert_eq!(slots[0].texture_type, 0);
+                assert_eq!(slots[0].track.is_some(), animated);
+
+                for dialect in [Dialect::Warcraft3, Dialect::HiveWorkshop] {
+                    let binding = if animated {
+                        "TextureID 1 { Linear, -7: 7, }"
+                    } else if dialect == Dialect::Warcraft3 {
+                        "static TextureID 7 <= 0,"
+                    } else {
+                        "static TextureID 7,"
+                    };
+                    let shader_field = if dialect == Dialect::Warcraft3 {
+                        format!("Shader \"{name}\",")
+                    } else {
+                        format!("ShaderTypeId {shader},")
+                    };
+                    // Resolve storage even when the shader follows the binding.
+                    let source = format!("Layer {{ {binding} {shader_field} }}");
+                    let imported = Layer::<V>::decode_mdl(&source).unwrap();
+                    assert_eq!(imported.encode_mdx().unwrap(), binary);
+                    let exported = decoded.encode_mdl_with_dialect(dialect).unwrap();
+                    assert!(exported.contains(if animated {
+                        "TextureID 1"
+                    } else if dialect == Dialect::Warcraft3 {
+                        "static TextureID 7 <= 0,"
+                    } else {
+                        "static TextureID 7,"
+                    }));
+                    assert_eq!(
+                        Layer::<V>::decode_mdl(&exported)
+                            .unwrap()
+                            .encode_mdx()
+                            .unwrap(),
+                        binary
+                    );
+                    if shader == 0 {
+                        // SD is also the default when no shader is specified.
+                        assert_eq!(
+                            Layer::<V>::decode_mdl(&format!("Layer {{ {binding} }}"))
+                                .unwrap()
+                                .encode_mdx()
+                                .unwrap(),
+                            binary
+                        );
+                    }
+                }
+            }
+        }
+    }
+    check::<V1100>();
+    check::<V1200>();
+    check::<V1300>();
+    check::<V1400>();
+    check::<V1600>();
+    check::<V1800>();
+}
+
+#[test]
+fn sd_subtexture_export_rejects_hidden_legacy_values() {
+    use wc3::model::animation::{AnimationTrack, LayerTextureId};
+    use wc3::model::materials::LayerTrack;
+
+    let mut layer = Layer::<V1100>::decode_mdl("Layer { static TextureID 7 <= 0, }").unwrap();
+    layer.texture_id = 3;
+    assert!(layer.encode_mdl().is_err());
+    layer.texture_id = 0;
+    layer.tracks.push(LayerTrack::TextureId(
+        AnimationTrack::<LayerTextureId>::linear(vec![], None).unwrap(),
+    ));
+    assert!(layer.encode_mdl().is_err());
+}
 #[test]
 fn every_named_slot_uses_the_shared_animation_grammar() {
     for interpolation in ["DontInterp", "Linear", "Hermite", "Bezier"] {

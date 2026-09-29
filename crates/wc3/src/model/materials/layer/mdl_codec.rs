@@ -153,8 +153,8 @@ impl WriteFields for TextureBindings {
     }
 }
 
-// The MDL texture grammar selects storage using the shader, so its writer borrows
-// a view of the whole layer instead of constructing an owned texture-slot list.
+// Texture storage depends on the version, independently of the shader. Borrow
+// a view of the layer instead of constructing an owned texture-slot list.
 pub(super) struct TextureBindingsView<'a, V: ModelVersion>(&'a Layer<V>);
 impl<V: ModelVersion> WriteFields for TextureBindingsView<'_, V> {
     type State = ();
@@ -162,7 +162,7 @@ impl<V: ModelVersion> WriteFields for TextureBindingsView<'_, V> {
         <TextureBindings as WriteFields>::visit_mdl_names(visitor);
     }
     fn prepare_mdl_fields(&self, dialect: Dialect) -> Result<(), mdl::WriteError> {
-        if self.0.mdl_hd() {
+        if V::NUMBER >= 1100 {
             validate_slots(
                 self.0.texture_slots.texture_slots().unwrap_or_default(),
                 dialect,
@@ -183,7 +183,7 @@ impl<V: ModelVersion> WriteFields for TextureBindingsView<'_, V> {
         writer: &mut Writer<W>,
     ) -> Result<(), mdl::WriteError> {
         self.prepare_mdl_fields(writer.dialect())?;
-        if self.0.mdl_hd() {
+        if V::NUMBER >= 1100 {
             write_slots(
                 self.0.texture_slots.texture_slots().unwrap_or_default(),
                 writer,
@@ -234,7 +234,10 @@ impl<V: ModelVersion> Layer<V> {
         _: bool,
         span: Span,
     ) -> Result<(), mdl::ReadError> {
-        if self.mdl_hd() {
+        if V::NUMBER >= 1100 {
+            if !self.mdl_hd() && value.slots.iter().any(|slot| slot.texture_type != 0) {
+                return Err(mdl::ReadError::new(span, ReadErrorKind::UnsupportedField));
+            }
             *self
                 .texture_slots
                 .texture_slots_mut()
@@ -273,9 +276,19 @@ impl<V: ModelVersion> Layer<V> {
         if self.filter_mode.raw() > 6 {
             return Err(mdl::WriteError::Unsupported("filter mode"));
         }
-        if self.mdl_hd() {
+        if V::NUMBER >= 1100 {
+            if !self.mdl_hd()
+                && self
+                    .texture_slots
+                    .texture_slots()
+                    .is_some_and(|slots| slots.iter().any(|slot| slot.texture_type != 0))
+            {
+                return Err(mdl::WriteError::Unsupported("non-diffuse SD texture slot"));
+            }
             if self.texture_id != 0 {
-                return Err(mdl::WriteError::Unsupported("HD legacy texture ID"));
+                return Err(mdl::WriteError::Unsupported(
+                    "legacy texture ID in version 1100+",
+                ));
             }
             if self
                 .tracks
@@ -285,13 +298,6 @@ impl<V: ModelVersion> Layer<V> {
                 return Err(mdl::WriteError::Unsupported("texture animation storage"));
             }
         } else {
-            if self
-                .texture_slots
-                .texture_slots()
-                .is_some_and(|slots| !slots.is_empty())
-            {
-                return Err(mdl::WriteError::Unsupported("SD texture slot storage"));
-            }
             if self
                 .tracks
                 .iter()
