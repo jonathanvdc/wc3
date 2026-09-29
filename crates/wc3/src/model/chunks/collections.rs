@@ -186,6 +186,7 @@ record_collection!(GlidersChunk, Glider, *b"DILG");
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::model::V1800;
     use crate::model::{mdx::Read, mdx::Write};
 
     #[test]
@@ -203,15 +204,12 @@ mod tests {
     #[test]
     fn variable_width_collection_uses_the_whole_chunk() {
         let records = vec![
-            Geoset::<crate::model::V1800>::new(&[], &[], &[]).unwrap(),
-            Geoset::<crate::model::V1800>::new(&[], &[], &[]).unwrap(),
+            Geoset::<V1800>::new(&[], &[], &[]).unwrap(),
+            Geoset::<V1800>::new(&[], &[], &[]).unwrap(),
         ];
         let original = GeosetsChunk::new(records);
         let bytes = original.encode_mdx().unwrap();
-        assert_eq!(
-            GeosetsChunk::<crate::model::V1800>::decode_mdx(&bytes).unwrap(),
-            original
-        );
+        assert_eq!(GeosetsChunk::<V1800>::decode_mdx(&bytes).unwrap(), original);
     }
 
     #[test]

@@ -1,4 +1,5 @@
 //! Direct and ambient lighting with version-dependent shadow settings.
+use crate::model::animation::track_group;
 use crate::model::conversion::ConversionContext;
 use crate::model::ConversionError;
 use crate::model::{mdl, mdx};
@@ -7,7 +8,7 @@ use crate::model::{
 };
 use mdl_codec::{damping, is_zero, quadratic, white, zero};
 use std::fmt::Debug;
-crate::model::animation::track_group! {
+track_group! {
     pub enum LightTrack {
         AttenuationStart: LightAttenuationStart,
         AttenuationEnd: LightAttenuationEnd,

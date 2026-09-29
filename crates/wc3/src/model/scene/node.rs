@@ -1,10 +1,11 @@
 //! Transform hierarchy shared by helpers, bones, and scene objects.
+use crate::model::animation::track_group;
 use crate::model::mdl::{Parser, Span, TokenKind, WriteFields as _, Writer};
 use crate::model::ModelVersion;
 use crate::model::{mdl, mdx};
 use bitfield::bitfield;
 use std::io::Write as IoWrite;
-crate::model::animation::track_group! {
+track_group! {
     pub enum NodeTrack {
         Translation: NodeTranslation,
         Rotation: NodeRotation,

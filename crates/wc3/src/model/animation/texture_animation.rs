@@ -1,7 +1,8 @@
 //! Animated texture translation, rotation, and scaling.
+use crate::model::animation::track_group;
 use crate::model::ModelVersion;
 use crate::model::{mdl, mdx};
-crate::model::animation::track_group! {
+track_group! {
     pub enum TextureAnimationTrack {
         Translation: TextureTranslation,
         Rotation: TextureRotation,

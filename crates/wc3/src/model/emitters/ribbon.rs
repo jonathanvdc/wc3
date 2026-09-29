@@ -1,9 +1,10 @@
 //! Animated ribbon trails.
+use crate::model::animation::track_group;
 use crate::model::mdl::Span;
 use crate::model::scene::{set_node_kind, validate_node_kind};
 use crate::model::ModelVersion;
 use crate::model::{mdl, mdx};
-crate::model::animation::track_group! {
+track_group! {
     pub enum RibbonTrack {
         Visibility: RibbonVisibility,
         HeightAbove: RibbonHeightAbove,

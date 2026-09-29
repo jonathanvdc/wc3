@@ -171,30 +171,24 @@ impl<V: ModelVersion> ModelChunk<V> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::model::V800;
 
     #[test]
     fn typed_chunks_convert_in_both_directions() {
-        let version = VersionChunk::<crate::model::V800>::new();
-        let chunk: ModelChunk<crate::model::V800> = version.clone().into();
+        let version = VersionChunk::<V800>::new();
+        let chunk: ModelChunk<V800> = version.clone().into();
         assert!(matches!(chunk, ModelChunk::Version(_)));
-        assert_eq!(
-            <&VersionChunk<crate::model::V800>>::try_from(&chunk),
-            Ok(&version)
-        );
-        assert_eq!(
-            VersionChunk::<crate::model::V800>::try_from(chunk).unwrap(),
-            version
-        );
+        assert_eq!(<&VersionChunk<V800>>::try_from(&chunk), Ok(&version));
+        assert_eq!(VersionChunk::<V800>::try_from(chunk).unwrap(), version);
     }
 
     #[test]
     fn failed_extraction_preserves_the_chunk() {
         let chunk = ModelChunk::Unknown(
-            UnknownChunk::<crate::model::V800>::new(RawChunk::new(*b"FUTR", vec![1, 2, 3]))
-                .unwrap(),
+            UnknownChunk::<V800>::new(RawChunk::new(*b"FUTR", vec![1, 2, 3])).unwrap(),
         );
-        assert!(<&VersionChunk<crate::model::V800>>::try_from(&chunk).is_err());
-        let original = VersionChunk::<crate::model::V800>::try_from(chunk).unwrap_err();
+        assert!(<&VersionChunk<V800>>::try_from(&chunk).is_err());
+        let original = VersionChunk::<V800>::try_from(chunk).unwrap_err();
         assert!(matches!(original, ModelChunk::Unknown(raw) if raw.raw().data == [1, 2, 3]));
     }
 }

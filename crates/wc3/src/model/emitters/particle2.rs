@@ -1,4 +1,5 @@
 //! Textured particles with animated emission and head/tail rendering.
+use crate::model::animation::track_group;
 use crate::model::mdl::is_zero;
 use crate::model::scene::{impl_node_flags, NodeFlagInterpretation};
 use crate::model::{mdl, mdx};
@@ -6,7 +7,7 @@ use bitfield::bitfield;
 use mdl_codec::SegmentColors;
 mod mdl_codec;
 use crate::model::ModelVersion;
-crate::model::animation::track_group! {
+track_group! {
     pub enum Particle2Track {
         Visibility: Particle2Visibility,
         EmissionRate: Particle2EmissionRate,

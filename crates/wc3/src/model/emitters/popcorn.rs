@@ -1,11 +1,12 @@
 //! Reforged PopcornFX effect resources and emission settings.
+use crate::model::animation::track_group;
 use crate::model::mdl::{is_zero, Span};
 use crate::model::scene::{impl_node_flags, NodeFlagInterpretation};
 use crate::model::scene::{set_node_kind, validate_node_kind};
 use crate::model::{mdl, mdx};
 use crate::model::{ModelVersion, SupportsReforgedChunks};
 use bitfield::bitfield;
-crate::model::animation::track_group! {
+track_group! {
     pub enum PopcornTrack {
         Alpha: PopcornAlpha,
         Color: PopcornColor,

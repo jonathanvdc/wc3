@@ -1,8 +1,9 @@
 //! Animated opacity and color for individual geosets.
+use crate::model::animation::track_group;
 use crate::model::ModelVersion;
 use crate::model::{mdl, mdx};
 use bitfield::bitfield;
-crate::model::animation::track_group! {
+track_group! {
     pub enum GeosetTrack {
         Alpha: GeosetAlpha,
         Color: GeosetColor,

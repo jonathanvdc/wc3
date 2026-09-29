@@ -1,4 +1,5 @@
 //! Camera views, targets, and lens animation.
+use crate::model::animation::track_group;
 use crate::model::animation::{
     AnimationTrack, CameraRotation, CameraTargetTranslation, CameraTranslation, ValueKeyframe,
 };
@@ -11,7 +12,7 @@ use crate::model::ModelVersion;
 use mdl_codec::Target;
 use std::io::Write as IoWrite;
 mod mdl_codec;
-crate::model::animation::track_group! {
+track_group! {
     @binary pub enum CameraTrack {
         Translation: CameraTranslation,
         TargetTranslation: CameraTargetTranslation,
