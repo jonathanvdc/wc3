@@ -152,7 +152,7 @@ fn texture_animation_dispatch_and_roundtrip() {
     .is_err());
     let track = AnimationTrack::<TextureTranslation>::step(Vec::new(), None).unwrap();
     let mut duplicate = TextureAnimation::new();
-    duplicate.tracks = (&[track.clone().into(), track.into()]).to_vec();
+    duplicate.tracks = [track.clone().into(), track.into()].to_vec();
     assert!(duplicate.encode_mdl().is_err());
 }
 
