@@ -215,10 +215,12 @@ binary/text fixtures. To enable additional byte-for-byte MDX round-trip checks
 against your own model collection:
 
 ```sh
-WC3_MDX_FIXTURES=/path/to/models cargo test -p wc3 --test corpus -- --ignored
+WC3_FIXTURES=/path/to/models cargo test -p wc3 --test corpus -- --ignored
+WC3_FIXTURES=/path/to/models cargo test -p wc3 --features blp-image --test blp -- --ignored
 ```
 
-The corpus tests are ignored by default and require a nonempty fixture directory.
+The corpus tests are ignored by default and require a directory containing
+files of the corresponding format.
 These checks supplement the synthetic suite; full semantic coverage of the
 entire game model collection has not been verified.
 

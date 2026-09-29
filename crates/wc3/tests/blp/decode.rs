@@ -1,4 +1,4 @@
-use std::{fs, path::Path};
+use std::{env, fs, path::Path};
 use wc3::blp::{
     Blp1ContentRef, Blp1Header, Blp1Ref, Blp2ContentRef, Blp2Header, Blp2Ref, BlpRef, DxtFormat,
 };
@@ -158,6 +158,7 @@ fn dxt3_and_dxt5_decode_alpha_and_clip_edge_blocks() {
 }
 
 #[test]
+#[ignore = "requires WC3_FIXTURES"]
 fn local_blp_corpus_decodes_all_present_mips() {
     fn visit(path: &Path, count: &mut usize) {
         let Ok(entries) = fs::read_dir(path) else {
@@ -189,12 +190,8 @@ fn local_blp_corpus_decodes_all_present_mips() {
             }
         }
     }
+    let directory = env::var("WC3_FIXTURES").expect("set WC3_FIXTURES to a model directory");
     let mut count = 0;
-    visit(
-        Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../data")),
-        &mut count,
-    );
-    if Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../data")).exists() {
-        assert!(count > 0);
-    }
+    visit(Path::new(&directory), &mut count);
+    assert!(count > 0, "WC3_FIXTURES contains no BLP files");
 }

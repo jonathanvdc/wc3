@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use std::{env, fs};
 
 #[test]
-#[ignore = "requires WC3_MDX_FIXTURES"]
+#[ignore = "requires WC3_FIXTURES"]
 fn local_files_round_trip() {
     for path in fixture_paths() {
         let bytes = fs::read(&path).unwrap();
@@ -86,7 +86,7 @@ fn check_accessors<V: ModelVersion>(mut model: Model<V>, bytes: &[u8], path: &Pa
 }
 
 #[test]
-#[ignore = "requires WC3_MDX_FIXTURES"]
+#[ignore = "requires WC3_FIXTURES"]
 fn typed_accessors_preserve_local_files() {
     for path in fixture_paths() {
         let bytes = fs::read(&path).unwrap();
@@ -97,8 +97,7 @@ fn typed_accessors_preserve_local_files() {
 }
 
 fn fixture_paths() -> Vec<PathBuf> {
-    let directory =
-        env::var("WC3_MDX_FIXTURES").expect("set WC3_MDX_FIXTURES to a model directory");
+    let directory = env::var("WC3_FIXTURES").expect("set WC3_FIXTURES to a model directory");
     let mut pending = vec![PathBuf::from(directory)];
     let mut paths = Vec::new();
     while let Some(directory) = pending.pop() {
@@ -112,6 +111,6 @@ fn fixture_paths() -> Vec<PathBuf> {
         }
     }
     paths.sort();
-    assert!(!paths.is_empty(), "WC3_MDX_FIXTURES contains no MDX files");
+    assert!(!paths.is_empty(), "WC3_FIXTURES contains no MDX files");
     paths
 }
