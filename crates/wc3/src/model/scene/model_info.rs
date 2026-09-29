@@ -1,15 +1,13 @@
 //! Model name, bounds, and animation blending settings.
 use crate::model::mdl;
-use crate::model::mdl::{is_zero, WriteError};
+use crate::model::mdl::is_zero;
 use crate::model::mdx;
+use crate::model::FixedText;
+use crate::model::Model;
 use crate::model::ModelVersion;
 use crate::model::ValueError;
-use crate::model::{Tag, Vec3};
-
 use crate::model::{Cursor, ModelInfoChunk};
-
-use crate::model::FixedText;
-use crate::model::{Model, ReadError};
+use crate::model::{Tag, Vec3};
 
 const SIZE: usize = 372;
 const NAME_SIZE: usize = 80;
@@ -81,14 +79,17 @@ impl<V: ModelVersion> Model<V> {
 }
 
 impl mdx::Read for ModelInfo {
-    fn read_mdx(cursor: &mut Cursor<'_>) -> Result<Self, ReadError> {
+    fn read_mdx(cursor: &mut Cursor<'_>) -> Result<Self, mdx::ReadError> {
         let size = cursor.remaining().len();
         if size < SIZE {
-            return Err(ReadError::MalformedChunk {
-                tag: Self::TAG,
-                size,
-                expected: SIZE,
-            });
+            return Err(mdx::ReadError::new(
+                cursor.absolute_position(),
+                mdx::ReadErrorKind::UnexpectedEnd {
+                    needed: SIZE,
+                    remaining: size,
+                },
+            )
+            .with_tag(Self::TAG));
         }
         let name = cursor.read()?;
         let animation_file_name = cursor.read()?;
@@ -113,14 +114,16 @@ impl ModelInfo {
 }
 
 impl ModelInfo {
-    fn validate_mdl_write(&self) -> Result<(), WriteError> {
+    fn validate_mdl_write(&self) -> Result<(), mdl::WriteError> {
         if self
             .animation_file_name
             .as_bytes()
             .iter()
             .any(|&byte| byte != 0)
         {
-            return Err(WriteError::Unsupported("model animation file name"));
+            return Err(mdl::WriteError::Unrepresentable {
+                field: "model animation file name",
+            });
         }
         Ok(())
     }

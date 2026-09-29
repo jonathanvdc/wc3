@@ -1,7 +1,7 @@
 //! Delegated named properties: field types own framing and presence policies.
-use super::{
-    Dialect, Field, Parser, Read, ReadError, ReadErrorKind, Span, Write, WriteError, Writer,
-};
+use super::{Dialect, Field, Parser, Read, Span, Write, Writer};
+use crate::model::mdl;
+use crate::model::IoError;
 use std::io::Write as IoWrite;
 
 /// Reads a whole property's payload after the enclosing record consumes its name.
@@ -12,13 +12,17 @@ use std::io::Write as IoWrite;
 /// reject presence using the supplied field's span. No value-level `Read` or
 /// `Default` implementation is required.
 pub trait ReadProperty: Sized {
-    fn read_mdl_property(parser: &mut Parser<'_>, field: Field<'_>) -> Result<Self, ReadError>;
+    fn read_mdl_property(parser: &mut Parser<'_>, field: Field<'_>)
+        -> Result<Self, mdl::ReadError>;
 
     /// Resolves an omitted property. The default makes the property required;
     /// optional or unavailable field types override this to reconstruct storage.
     /// Called once at the closing brace, only when the property was absent.
-    fn missing_mdl_property(name: &'static str, span: Span) -> Result<Self, ReadError> {
-        Err(ReadError::new(span, ReadErrorKind::MissingField(name)))
+    fn missing_mdl_property(name: &'static str, span: Span) -> Result<Self, mdl::ReadError> {
+        Err(mdl::ReadError::new(
+            span,
+            mdl::ReadErrorKind::MissingField(name),
+        ))
     }
 }
 
@@ -35,7 +39,7 @@ pub trait WriteProperty {
         &self,
         _name: &'static str,
         _dialect: Dialect,
-    ) -> Result<(), WriteError> {
+    ) -> Result<(), mdl::WriteError> {
         Ok(())
     }
 
@@ -43,17 +47,20 @@ pub trait WriteProperty {
         &self,
         name: &'static str,
         writer: &mut Writer<W>,
-    ) -> Result<(), WriteError>;
+    ) -> Result<(), IoError<mdl::WriteError>>;
 }
 
 /// An ordinary optional scalar/vector/string property. Missing means None;
 /// Some(value) always emits its complete property, even if value is a default.
 impl<T: Read> ReadProperty for Option<T> {
-    fn read_mdl_property(parser: &mut Parser<'_>, _field: Field<'_>) -> Result<Self, ReadError> {
+    fn read_mdl_property(
+        parser: &mut Parser<'_>,
+        _field: Field<'_>,
+    ) -> Result<Self, mdl::ReadError> {
         parser.read_property().map(Some)
     }
 
-    fn missing_mdl_property(_name: &'static str, _span: Span) -> Result<Self, ReadError> {
+    fn missing_mdl_property(_name: &'static str, _span: Span) -> Result<Self, mdl::ReadError> {
         Ok(None)
     }
 }
@@ -63,7 +70,7 @@ impl<T: Write> WriteProperty for Option<T> {
         &self,
         name: &'static str,
         writer: &mut Writer<W>,
-    ) -> Result<(), WriteError> {
+    ) -> Result<(), IoError<mdl::WriteError>> {
         if let Some(value) = self {
             writer.property(name, value)?;
         }
@@ -79,7 +86,7 @@ pub trait ReadAnimationProperty {
         parser: &mut Parser<'_>,
         static_form: bool,
         bare_static: bool,
-    ) -> Result<(), ReadError>;
+    ) -> Result<(), mdl::ReadError>;
 }
 
 /// Writes the animation when present, otherwise the static value or nothing.
@@ -89,5 +96,5 @@ pub trait WriteAnimationProperty {
         &self,
         name: &'static str,
         writer: &mut Writer<W>,
-    ) -> Result<(), WriteError>;
+    ) -> Result<(), IoError<mdl::WriteError>>;
 }

@@ -1,4 +1,5 @@
 use super::*;
+use wc3::model::IoError;
 
 #[test]
 fn finite_float_output_preserves_bits_including_signed_zero() {
@@ -30,7 +31,7 @@ fn encode_mdl_preserves_unicode_and_checks_block_balance() {
 
     struct Unbalanced;
     impl mdl::Write for Unbalanced {
-        fn write_mdl<W: Write>(&self, writer: &mut Writer<W>) -> Result<(), WriteError> {
+        fn write_mdl<W: Write>(&self, writer: &mut Writer<W>) -> Result<(), IoError<WriteError>> {
             writer.begin_block("Unbalanced")
         }
     }
@@ -46,25 +47,25 @@ fn printing_rejects_unrepresentable_binary_fields() {
     texture.flags = TextureFlags(4);
     assert!(matches!(
         Writer::new(io::sink()).write(&texture),
-        Err(WriteError::Unsupported(_))
+        Err(IoError::Codec(WriteError::Unrepresentable { field: _ }))
     ));
     let mut sequence = Sequence::new("a", [0, 1]).unwrap();
     sequence.flags = SequenceFlags(2);
     assert!(matches!(
         Writer::new(io::sink()).write(&sequence),
-        Err(WriteError::Unsupported(_))
+        Err(IoError::Codec(WriteError::Unrepresentable { field: _ }))
     ));
     for bytes in [[b'a', 0, 1, 0], [0xff, 0, 0, 0], [b'a'; 4]] {
         assert!(matches!(
             Writer::new(io::sink()).write(&FixedText::from_bytes(bytes)),
-            Err(WriteError::Unsupported(_))
+            Err(IoError::Codec(WriteError::Unrepresentable { field: _ }))
         ));
     }
     let mut bytes = Texture::new("a").unwrap().encode_mdx().unwrap();
     bytes[260] = 1;
     assert!(matches!(
         Writer::new(io::sink()).write(&Texture::decode_mdx(&bytes).unwrap()),
-        Err(WriteError::Unsupported(_))
+        Err(IoError::Codec(WriteError::Unrepresentable { field: _ }))
     ));
 }
 
@@ -73,13 +74,13 @@ fn writer_checks_balance_identifiers_and_io_errors() {
     let mut writer = Writer::new(io::sink());
     assert!(matches!(
         writer.end_block(),
-        Err(WriteError::UnbalancedBlocks)
+        Err(IoError::Codec(WriteError::UnbalancedBlocks))
     ));
     writer.begin_block("Outer").unwrap();
     assert!(matches!(writer.finish(), Err(WriteError::UnbalancedBlocks)));
     assert!(matches!(
         Writer::new(io::sink()).flag("Bad Name"),
-        Err(WriteError::InvalidIdentifier)
+        Err(IoError::Codec(WriteError::InvalidIdentifier))
     ));
     struct Failing;
     impl Write for Failing {
@@ -91,6 +92,6 @@ fn writer_checks_balance_identifiers_and_io_errors() {
         }
     }
     assert!(
-        matches!(Writer::new(Failing).write(&1u32), Err(WriteError::Io(error)) if error.kind() == io::ErrorKind::BrokenPipe)
+        matches!(Writer::new(Failing).write(&1u32), Err(IoError::Io(error)) if error.kind() == io::ErrorKind::BrokenPipe)
     );
 }

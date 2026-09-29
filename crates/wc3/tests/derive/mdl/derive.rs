@@ -8,6 +8,7 @@ use wc3::model::mdx::Read as _;
 use wc3::model::mdx::Write as _;
 use wc3::model::scene::ModelInfo;
 use wc3::model::FixedText;
+use wc3::model::IoError;
 
 fn print<T: mdl::Write>(value: &T) -> Result<String, WriteError> {
     value.encode_mdl()
@@ -97,7 +98,10 @@ fn special_default() -> Special {
 fn read_special(parser: &mut Parser<'_>) -> Result<Special, ReadError> {
     Ok(Special(parser.read()?))
 }
-fn write_special<W: Write>(value: &Special, writer: &mut Writer<W>) -> Result<(), WriteError> {
+fn write_special<W: Write>(
+    value: &Special,
+    writer: &mut Writer<W>,
+) -> Result<(), IoError<WriteError>> {
     writer.write(&value.0)
 }
 fn special_is_default(value: &Special) -> bool {
@@ -140,7 +144,9 @@ impl Custom {
     }
     fn validate_write(&self) -> Result<(), WriteError> {
         if self.reserved != [0; 4] || self.value.0 > 100 {
-            Err(WriteError::Unsupported("custom data"))
+            Err(WriteError::Unrepresentable {
+                field: "custom data",
+            })
         } else {
             Ok(())
         }
@@ -165,7 +171,7 @@ fn hooks_do_not_require_codec_or_default_traits_on_the_field_type() {
     let mut output = Vec::new();
     assert!(matches!(
         Writer::new(&mut output).write(&invalid),
-        Err(WriteError::Unsupported(_))
+        Err(IoError::Codec(WriteError::Unrepresentable { field: _ }))
     ));
     assert!(output.is_empty());
 }
@@ -231,7 +237,7 @@ fn multiple_headers_empty_blocks_and_required_flags_work() {
     assert!(RequiredFlag::decode_mdl("RequiredFlag {}").is_err());
     assert!(matches!(
         print(&RequiredFlag { enabled: false }),
-        Err(WriteError::Unsupported(_))
+        Err(WriteError::InvalidStructure { field: _ })
     ));
     assert!(
         RequiredFlag::decode_mdl(&print(&RequiredFlag { enabled: true }).unwrap())
@@ -257,7 +263,7 @@ fn derived_model_info_roundtrips_binary_data_and_rejects_animation_file_data() {
     bytes[80..85].copy_from_slice(b"a.mdx");
     assert!(matches!(
         print(&ModelInfo::decode_mdx(&bytes).unwrap()),
-        Err(WriteError::Unsupported(_))
+        Err(WriteError::Unrepresentable { field: _ })
     ));
 }
 
@@ -269,7 +275,7 @@ impl mdl::Read for ReadOnly {
 }
 struct WriteOnly(u32);
 impl mdl::Write for WriteOnly {
-    fn write_mdl<W: Write>(&self, writer: &mut Writer<W>) -> Result<(), WriteError> {
+    fn write_mdl<W: Write>(&self, writer: &mut Writer<W>) -> Result<(), IoError<WriteError>> {
         writer.write(&self.0)
     }
 }
@@ -337,7 +343,7 @@ fn packed_flags_share_storage_but_track_duplicates_independently() {
             id: 7,
             flags: BareFlags(2)
         }),
-        Err(WriteError::Unsupported(_))
+        Err(IoError::Codec(WriteError::Unrepresentable { field: _ }))
     ));
     assert!(output.is_empty());
 }

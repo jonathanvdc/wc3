@@ -1,14 +1,12 @@
 //! Animated ribbon trails.
 use crate::model::mdl::Span;
 use crate::model::scene::{set_node_kind, validate_node_kind};
-use crate::model::ModelVersion;
-use crate::model::{mdl, mdx};
-use crate::model::{Animatable, Track};
-
 use crate::model::Color;
 use crate::model::KnownChunk;
-
+use crate::model::ModelVersion;
 use crate::model::RibbonEmittersChunk;
+use crate::model::{mdl, mdx};
+use crate::model::{Animatable, Track};
 use crate::model::{Model, Node};
 
 /// A trail emitted from an animated node and rendered with a model material.

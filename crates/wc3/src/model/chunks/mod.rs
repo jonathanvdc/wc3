@@ -9,10 +9,7 @@
 //! codecs for whole files; `encode_payload_to()` writes neither the chunk tag
 //! nor its size header.
 use crate::model::mdx;
-use crate::model::WriteError;
 use crate::model::{Cursor, Encoder, Tag};
-
-use crate::model::ReadError;
 
 mod raw;
 pub use raw::RawChunk;
@@ -33,11 +30,11 @@ pub trait Chunk {
     fn tag(&self) -> Tag;
 
     /// Writes only the contents of the chunk, without its tag or size.
-    fn encode_payload_to(&self, output: &mut Encoder<'_>) -> Result<(), WriteError>;
+    fn encode_payload_to(&self, output: &mut Encoder<'_>) -> Result<(), mdx::WriteError>;
 }
 
 impl<T: Chunk + ?Sized> mdx::Write for T {
-    fn write_mdx(&self, output: &mut Encoder<'_>) -> Result<(), WriteError> {
+    fn write_mdx(&self, output: &mut Encoder<'_>) -> Result<(), mdx::WriteError> {
         let tag = self.tag();
         output.write_bytes(&tag);
         let marker = output.begin_sized();
@@ -52,29 +49,38 @@ pub trait KnownChunk: Chunk + Sized {
     const TAG: Tag;
 
     /// Decodes a bounded chunk payload, without the tag or size.
-    fn decode_payload(cursor: &mut Cursor<'_>) -> Result<Self, ReadError>;
+    fn decode_payload(cursor: &mut Cursor<'_>) -> Result<Self, mdx::ReadError>;
 }
 
 impl<T: KnownChunk> mdx::Read for T {
-    fn read_mdx(cursor: &mut Cursor<'_>) -> Result<Self, ReadError> {
+    fn read_mdx(cursor: &mut Cursor<'_>) -> Result<Self, mdx::ReadError> {
         let mut next = *cursor;
         let offset = next.absolute_position();
         if next.remaining().len() < 8 {
-            return Err(ReadError::TruncatedHeader { offset });
+            return Err(mdx::ReadError::new(
+                offset,
+                mdx::ReadErrorKind::UnexpectedEnd {
+                    needed: 8,
+                    remaining: next.remaining().len(),
+                },
+            ));
         }
         let tag: Tag = next.read_bytes(4)?.try_into().expect("four-byte tag");
         if tag != T::TAG {
-            return Err(ReadError::UnexpectedChunkTag {
-                expected: T::TAG,
-                actual: tag,
-            });
+            return Err(mdx::ReadError::new(
+                offset,
+                mdx::ReadErrorKind::UnexpectedTag {
+                    expected: T::TAG,
+                    actual: tag,
+                },
+            ));
         }
-        let size = next.read()?;
+        let size: u32 = next.read()?;
         let mut payload = next
             .subcursor(size as usize)
-            .map_err(|_| ReadError::TruncatedChunk { tag, offset, size })?;
-        let decoded = T::decode_payload(&mut payload)?;
-        payload.finish()?;
+            .map_err(|error| error.with_tag(tag))?;
+        let decoded = T::decode_payload(&mut payload).map_err(|error| error.in_chunk(tag))?;
+        payload.finish().map_err(|error| error.in_chunk(tag))?;
         *cursor = next;
         Ok(decoded)
     }
@@ -120,22 +126,35 @@ mod tests {
         wrong[..4].copy_from_slice(b"MODL");
         assert_eq!(
             VersionChunk::<V800>::decode_mdx(&wrong),
-            Err(ReadError::UnexpectedChunkTag {
-                expected: *b"VERS",
-                actual: *b"MODL",
+            Err(mdx::ReadError {
+                offset: 0,
+                tag: None,
+                kind: mdx::ReadErrorKind::UnexpectedTag {
+                    expected: *b"VERS",
+                    actual: *b"MODL"
+                }
             })
         );
         let mut short = bytes.clone();
         short[4..8].copy_from_slice(&5u32.to_le_bytes());
         assert!(matches!(
             VersionChunk::<V800>::decode_mdx(&short),
-            Err(ReadError::TruncatedChunk { .. })
+            Err(mdx::ReadError {
+                kind: mdx::ReadErrorKind::UnexpectedEnd {
+                    needed: 5,
+                    remaining: 4
+                },
+                ..
+            })
         ));
         let mut trailing = bytes.clone();
         trailing.push(0);
         assert!(matches!(
             VersionChunk::<V800>::decode_mdx(&trailing),
-            Err(ReadError::TrailingRecordBytes { .. })
+            Err(mdx::ReadError {
+                kind: mdx::ReadErrorKind::TrailingBytes { remaining: 1 },
+                ..
+            })
         ));
         let joined = [bytes.clone(), bytes].concat();
         let mut cursor = Cursor::new(&joined);

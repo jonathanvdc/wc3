@@ -66,6 +66,9 @@
 //! [`from_reader`] buffers the entire source through EOF and rejects trailing
 //! input. [`to_writer`] streams output and checks block balance.
 //! Writers do not flush their sinks; I/O failures may leave partial output.
+//! Standard I/O adapters and streaming write methods return
+//! [`crate::model::IoError`], separating sink/source failures from codec errors.
+//! Owned `encode_mdl()` methods return only [`WriteError`].
 //!
 //! ```
 //! use wc3::model::{mdl, Model, V800};
@@ -77,7 +80,7 @@
 //! assert_eq!(decoded.version(), 800);
 //! # Ok::<(), Box<dyn std::error::Error>>(())
 //! ```
-
+use crate::model::IoError;
 mod enumeration;
 #[doc(hidden)]
 pub use enumeration::enum_names_valid;
@@ -97,6 +100,7 @@ pub use property::{ReadAnimationProperty, ReadProperty, WriteAnimationProperty, 
 mod value_eq;
 pub use value_eq::ValueEq;
 mod writer;
+pub(crate) use writer::validate_fixed_text;
 pub use writer::Writer;
 
 /// Canonical text syntax selected independently of the binary model version.
@@ -111,7 +115,6 @@ pub enum Dialect {
 // Re-export the bitfield traits for generated code in downstream crates.
 #[doc(hidden)]
 pub use bitfield::{BitRange, BitRangeMut};
-
 use std::io::Write as IoWrite;
 pub use wc3_derive::{MdlRead as Read, MdlWrite as Write};
 
@@ -131,7 +134,7 @@ pub trait Read: Sized {
 /// including unknown flag bits and opaque binary padding. Output may be partial
 /// on error. Finite floats round-trip exactly; NaNs retain only their NaN class.
 pub trait Write {
-    fn write_mdl<W: IoWrite>(&self, writer: &mut Writer<W>) -> Result<(), WriteError>;
+    fn write_mdl<W: IoWrite>(&self, writer: &mut Writer<W>) -> Result<(), IoError<WriteError>>;
 
     /// Encodes one value as UTF-8 text and checks block balance.
     fn encode_mdl(&self) -> Result<String, WriteError> {
@@ -141,7 +144,7 @@ pub trait Write {
     /// Encodes using the selected dialect without discarding unrepresentable data.
     fn encode_mdl_with_dialect(&self, dialect: Dialect) -> Result<String, WriteError> {
         let mut writer = Writer::with_dialect(Vec::new(), dialect);
-        writer.write(self)?;
+        writer.write(self).map_err(buffer_error)?;
         let bytes = writer.finish()?;
         // Writer only writes UTF-8 strings and ASCII formatting.
         Ok(String::from_utf8(bytes).expect("MDL output is valid UTF-8"))
@@ -180,4 +183,11 @@ pub(crate) fn is_positive_zero(value: &f32) -> bool {
 }
 
 mod io;
-pub use io::{from_reader, to_writer, to_writer_with_dialect, FromReaderError};
+pub use io::{from_reader, to_writer, to_writer_with_dialect};
+
+fn buffer_error(error: IoError<WriteError>) -> WriteError {
+    match error {
+        IoError::Codec(error) => error,
+        IoError::Io(_) => unreachable!("writing to Vec cannot fail"),
+    }
+}

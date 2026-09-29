@@ -1,6 +1,6 @@
+use crate::model::IoError;
 use std::error::Error as StdError;
 use std::fmt::{self, Display, Formatter};
-use std::io;
 
 /// Half-open byte range in the original MDL input.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -144,35 +144,37 @@ impl Display for Diagnostic<'_> {
     }
 }
 
-#[derive(Debug)]
+/// A value or writer operation rejected by the MDL codec.
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum WriteError {
-    Io(io::Error),
+    /// A string contains characters that cannot be emitted literally.
     InvalidString,
+    /// A field/block name is not a valid MDL identifier.
     InvalidIdentifier,
+    /// A writer block was closed without being opened, or left open at finish.
     UnbalancedBlocks,
-    Unsupported(&'static str),
+    /// A valid binary value has no faithful representation in this dialect.
+    Unrepresentable { field: &'static str },
+    /// Required structure is absent, duplicated, or inconsistent.
+    InvalidStructure { field: &'static str },
+    /// A collection count exceeds the format's limit.
+    SizeOverflow { field: &'static str },
 }
-impl From<io::Error> for WriteError {
-    fn from(value: io::Error) -> Self {
-        Self::Io(value)
+impl From<WriteError> for IoError<WriteError> {
+    fn from(error: WriteError) -> Self {
+        Self::Codec(error)
     }
 }
 impl Display for WriteError {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Io(error) => Display::fmt(error, f),
             Self::InvalidString => f.write_str("MDL strings cannot contain NUL or double quotes"),
             Self::InvalidIdentifier => f.write_str("invalid MDL identifier"),
             Self::UnbalancedBlocks => f.write_str("unbalanced MDL writer blocks"),
-            Self::Unsupported(field) => write!(f, "MDL cannot represent {field}"),
+            Self::Unrepresentable { field } => write!(f, "MDL cannot represent {field}"),
+            Self::InvalidStructure { field } => write!(f, "invalid MDL structure: {field}"),
+            Self::SizeOverflow { field } => write!(f, "{field} exceeds the MDL count limit"),
         }
     }
 }
-impl StdError for WriteError {
-    fn source(&self) -> Option<&(dyn StdError + 'static)> {
-        match self {
-            Self::Io(error) => Some(error),
-            _ => None,
-        }
-    }
-}
+impl StdError for WriteError {}

@@ -2,18 +2,15 @@
 use crate::model::mdl::Span;
 use crate::model::scene::{impl_node_flags, NodeFlagInterpretation};
 use crate::model::scene::{set_node_kind, validate_node_kind};
+use crate::model::FixedText;
+use crate::model::KnownChunk;
 use crate::model::ModelVersion;
+use crate::model::ParticleEmittersChunk;
+use crate::model::ValueError;
 use crate::model::{mdl, mdx};
 use crate::model::{Animatable, Track};
-use bitfield::bitfield;
-
-use crate::model::KnownChunk;
-use crate::model::ValueError;
-
-use crate::model::ParticleEmittersChunk;
-
-use crate::model::FixedText;
 use crate::model::{Model, Node};
+use bitfield::bitfield;
 
 const PATH_SIZE: usize = 260;
 

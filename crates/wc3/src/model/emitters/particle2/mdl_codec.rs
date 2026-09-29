@@ -1,6 +1,7 @@
 //! Particle2 choice flags, three segment colors and projected UV intervals.
 use super::ParticleEmitter2;
 use crate::model::scene::{set_node_kind, validate_node_kind};
+use crate::model::IoError;
 use crate::model::{mdl, Color};
 use mdl::{Field, Parser, Span, TokenKind, Writer};
 use std::io::Write as IoWrite;
@@ -29,7 +30,7 @@ impl mdl::WriteProperty for SegmentColorsRef<'_> {
         &self,
         name: &'static str,
         writer: &mut Writer<W>,
-    ) -> Result<(), mdl::WriteError> {
+    ) -> Result<(), IoError<mdl::WriteError>> {
         writer.begin_block(name)?;
         for value in self.0 {
             writer.write(&ColorEntry(*value))?;

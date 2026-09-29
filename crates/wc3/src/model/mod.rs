@@ -67,7 +67,7 @@ pub mod chunks;
 pub(crate) use chunks::*;
 
 pub mod mdx;
-pub use mdx::{Cursor, Encoder, FixedText, ReadError, SizeMarker, ValueError, WriteError};
+pub use mdx::{Cursor, Encoder, FixedText, SizeMarker};
 pub mod animation;
 pub mod mdl;
 pub(crate) use animation::*;
@@ -99,3 +99,6 @@ pub use conversion::{
     Conversion, ConversionError, ConversionIssue, ConversionIssueKind, ConversionOptions,
     ConversionReport, LossPolicy, UnknownChunkPolicy,
 };
+
+mod error;
+pub use error::{IoError, ValueError};

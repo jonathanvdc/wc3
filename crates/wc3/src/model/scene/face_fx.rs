@@ -1,12 +1,10 @@
 //! Reforged facial-animation resource references.
+use crate::model::FaceFxChunk;
+use crate::model::FixedText;
+use crate::model::Model;
 use crate::model::ValueError;
 use crate::model::{mdl, mdx};
 use crate::model::{ModelVersion, SupportsReforgedChunks};
-
-use crate::model::FaceFxChunk;
-
-use crate::model::FixedText;
-use crate::model::Model;
 
 const NAME_SIZE: usize = 80;
 const PATH_SIZE: usize = 260;

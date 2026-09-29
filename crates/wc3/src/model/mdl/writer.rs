@@ -1,6 +1,7 @@
-use super::WriteError;
 use super::{Dialect, Write};
+use crate::model::mdl;
 use crate::model::FixedText;
+use crate::model::IoError;
 use std::fmt::Arguments;
 use std::io::{Cursor as IoCursor, Write as IoWrite};
 use std::str::from_utf8;
@@ -36,64 +37,75 @@ impl<W: IoWrite> Writer<W> {
         self.output
     }
     /// Checks block balance and returns the sink without flushing it.
-    pub fn finish(self) -> Result<W, WriteError> {
+    pub fn finish(self) -> Result<W, mdl::WriteError> {
         if self.depth != 0 {
-            Err(WriteError::UnbalancedBlocks)
+            Err(mdl::WriteError::UnbalancedBlocks)
         } else {
             Ok(self.output)
         }
     }
-    pub fn write<T: Write + ?Sized>(&mut self, value: &T) -> Result<(), WriteError> {
+    pub fn write<T: Write + ?Sized>(&mut self, value: &T) -> Result<(), IoError<mdl::WriteError>> {
         value.write_mdl(self)
     }
     /// Writes literal punctuation or formatting; does not change indentation.
-    pub fn raw(&mut self, value: &str) -> Result<(), WriteError> {
+    pub fn raw(&mut self, value: &str) -> Result<(), IoError<mdl::WriteError>> {
         self.output.write_all(value.as_bytes())?;
         Ok(())
     }
-    pub fn identifier(&mut self, value: &str) -> Result<(), WriteError> {
+    pub fn identifier(&mut self, value: &str) -> Result<(), IoError<mdl::WriteError>> {
         let mut bytes = value.bytes();
         if !bytes
             .next()
             .is_some_and(|b| b.is_ascii_alphabetic() || b == b'_')
             || !bytes.all(|b| b.is_ascii_alphanumeric() || b == b'_')
         {
-            return Err(WriteError::InvalidIdentifier);
+            return Err(mdl::WriteError::InvalidIdentifier.into());
         }
         self.raw(value)
     }
     /// Strings have no escaping. Quotes and NUL cannot be represented; CR/LF
     /// and backslashes are written literally, per the Warcraft III dialect.
-    pub fn quoted(&mut self, value: &str) -> Result<(), WriteError> {
+    pub fn quoted(&mut self, value: &str) -> Result<(), IoError<mdl::WriteError>> {
         if value.contains(['"', '\0']) {
-            return Err(WriteError::InvalidString);
+            return Err(mdl::WriteError::InvalidString.into());
         }
         self.raw("\"")?;
         self.raw(value)?;
         self.raw("\"")
     }
-    pub fn indent(&mut self) -> Result<(), WriteError> {
+    pub fn indent(&mut self) -> Result<(), IoError<mdl::WriteError>> {
         for _ in 0..self.depth {
             self.raw("\t")?;
         }
         Ok(())
     }
     /// Begins a block without parameters.
-    pub fn begin_block(&mut self, name: &str) -> Result<(), WriteError> {
+    pub fn begin_block(&mut self, name: &str) -> Result<(), IoError<mdl::WriteError>> {
         self.indent()?;
         self.identifier(name)?;
         self.open_body()
     }
-    pub fn begin_named_block(&mut self, name: &str, value: &str) -> Result<(), WriteError> {
+    pub fn begin_named_block(
+        &mut self,
+        name: &str,
+        value: &str,
+    ) -> Result<(), IoError<mdl::WriteError>> {
         self.indent()?;
         self.identifier(name)?;
         self.raw(" ")?;
         self.quoted(value)?;
         self.open_body()
     }
-    pub fn begin_counted_block(&mut self, name: &str, count: usize) -> Result<(), WriteError> {
+    pub fn begin_counted_block(
+        &mut self,
+        name: &str,
+        count: usize,
+    ) -> Result<(), IoError<mdl::WriteError>> {
         if count > u32::MAX as usize {
-            return Err(WriteError::Unsupported("list count above u32::MAX"));
+            return Err(mdl::WriteError::SizeOverflow {
+                field: "list count above u32::MAX",
+            }
+            .into());
         }
         self.indent()?;
         self.identifier(name)?;
@@ -101,24 +113,28 @@ impl<W: IoWrite> Writer<W> {
         self.open_body()
     }
     /// Opens a body after a header written with the lower-level methods.
-    pub fn open_body(&mut self) -> Result<(), WriteError> {
+    pub fn open_body(&mut self) -> Result<(), IoError<mdl::WriteError>> {
         let depth = self
             .depth
             .checked_add(1)
-            .ok_or(WriteError::UnbalancedBlocks)?;
+            .ok_or(mdl::WriteError::UnbalancedBlocks)?;
         self.raw(" {\n")?;
         self.depth = depth;
         Ok(())
     }
-    pub fn end_block(&mut self) -> Result<(), WriteError> {
+    pub fn end_block(&mut self) -> Result<(), IoError<mdl::WriteError>> {
         self.depth = self
             .depth
             .checked_sub(1)
-            .ok_or(WriteError::UnbalancedBlocks)?;
+            .ok_or(mdl::WriteError::UnbalancedBlocks)?;
         self.indent()?;
         self.raw("}\n")
     }
-    pub fn property<T: Write + ?Sized>(&mut self, name: &str, value: &T) -> Result<(), WriteError> {
+    pub fn property<T: Write + ?Sized>(
+        &mut self,
+        name: &str,
+        value: &T,
+    ) -> Result<(), IoError<mdl::WriteError>> {
         self.indent()?;
         self.identifier(name)?;
         self.raw(" ")?;
@@ -130,7 +146,7 @@ impl<W: IoWrite> Writer<W> {
         &mut self,
         name: &str,
         value: &T,
-    ) -> Result<(), WriteError> {
+    ) -> Result<(), IoError<mdl::WriteError>> {
         self.indent()?;
         self.raw("static ")?;
         self.identifier(name)?;
@@ -138,13 +154,13 @@ impl<W: IoWrite> Writer<W> {
         self.write(value)?;
         self.raw(",\n")
     }
-    pub fn flag(&mut self, name: &str) -> Result<(), WriteError> {
+    pub fn flag(&mut self, name: &str) -> Result<(), IoError<mdl::WriteError>> {
         self.indent()?;
         self.identifier(name)?;
         self.raw(",\n")
     }
     /// Writes an anonymous value and its entry separator.
-    pub fn entry<T: Write + ?Sized>(&mut self, value: &T) -> Result<(), WriteError> {
+    pub fn entry<T: Write + ?Sized>(&mut self, value: &T) -> Result<(), IoError<mdl::WriteError>> {
         self.indent()?;
         self.write(value)?;
         self.raw(",\n")
@@ -155,14 +171,17 @@ impl<W: IoWrite> Writer<W> {
         &mut self,
         name: &str,
         items: impl ExactSizeIterator<Item = &'a T>,
-    ) -> Result<(), WriteError> {
+    ) -> Result<(), IoError<mdl::WriteError>> {
         self.begin_counted_block(name, items.len())?;
         for item in items {
             self.write(item)?;
         }
         self.end_block()
     }
-    pub(crate) fn formatted(&mut self, args: Arguments<'_>) -> Result<(), WriteError> {
+    pub(crate) fn formatted(
+        &mut self,
+        args: Arguments<'_>,
+    ) -> Result<(), IoError<mdl::WriteError>> {
         self.output.write_fmt(args)?;
         Ok(())
     }
@@ -170,14 +189,17 @@ impl<W: IoWrite> Writer<W> {
 
 macro_rules! integers {
     ($($ty:ty),*) => { $(impl Write for $ty {
-        fn write_mdl<W: IoWrite>(&self, writer: &mut Writer<W>) -> Result<(), WriteError> {
+        fn write_mdl<W: IoWrite>(&self, writer: &mut Writer<W>) -> Result<(), IoError<mdl::WriteError>> {
             writer.formatted(format_args!("{self}"))
         }
     })* };
 }
 integers!(u8, u16, u32, i32);
 impl Write for f32 {
-    fn write_mdl<W: IoWrite>(&self, writer: &mut Writer<W>) -> Result<(), WriteError> {
+    fn write_mdl<W: IoWrite>(
+        &self,
+        writer: &mut Writer<W>,
+    ) -> Result<(), IoError<mdl::WriteError>> {
         if self.is_nan() {
             writer.raw("nan")
         } else if *self == f32::INFINITY {
@@ -206,12 +228,18 @@ impl Write for f32 {
     }
 }
 impl Write for str {
-    fn write_mdl<W: IoWrite>(&self, writer: &mut Writer<W>) -> Result<(), WriteError> {
+    fn write_mdl<W: IoWrite>(
+        &self,
+        writer: &mut Writer<W>,
+    ) -> Result<(), IoError<mdl::WriteError>> {
         writer.quoted(self)
     }
 }
 impl<T: Write, const N: usize> Write for [T; N] {
-    fn write_mdl<W: IoWrite>(&self, writer: &mut Writer<W>) -> Result<(), WriteError> {
+    fn write_mdl<W: IoWrite>(
+        &self,
+        writer: &mut Writer<W>,
+    ) -> Result<(), IoError<mdl::WriteError>> {
         writer.raw("{ ")?;
         for (i, value) in self.iter().enumerate() {
             if i != 0 {
@@ -225,19 +253,39 @@ impl<T: Write, const N: usize> Write for [T; N] {
 
 /// Checks that fixed text has a faithful text representation, including padding.
 /// Do not use the existing lossy text() accessor for MDL conversion.
-fn fixed_text<const N: usize>(text: &FixedText<N>) -> Result<&str, WriteError> {
+fn fixed_text<const N: usize>(text: &FixedText<N>) -> Result<&str, mdl::WriteError> {
     let bytes = text.as_bytes();
     let end = bytes
         .iter()
         .position(|&b| b == 0)
-        .ok_or(WriteError::Unsupported("unterminated fixed text"))?;
+        .ok_or(mdl::WriteError::Unrepresentable {
+            field: "unterminated fixed text",
+        })?;
     if bytes[end..].iter().any(|&b| b != 0) {
-        return Err(WriteError::Unsupported("nonzero fixed-text padding"));
+        return Err(mdl::WriteError::Unrepresentable {
+            field: "nonzero fixed-text padding",
+        });
     }
-    from_utf8(&bytes[..end]).map_err(|_| WriteError::Unsupported("non-UTF-8 fixed text"))
+    from_utf8(&bytes[..end]).map_err(|_| mdl::WriteError::Unrepresentable {
+        field: "non-UTF-8 fixed text",
+    })
 }
 impl<const N: usize> Write for FixedText<N> {
-    fn write_mdl<W: IoWrite>(&self, writer: &mut Writer<W>) -> Result<(), WriteError> {
+    fn write_mdl<W: IoWrite>(
+        &self,
+        writer: &mut Writer<W>,
+    ) -> Result<(), IoError<mdl::WriteError>> {
         writer.quoted(fixed_text(self)?)
     }
+}
+
+/// Checks whether fixed text can be emitted without losing its bytes.
+pub(crate) fn validate_fixed_text<const N: usize>(
+    text: &FixedText<N>,
+) -> Result<(), mdl::WriteError> {
+    let value = fixed_text(text)?;
+    if value.contains(['"', '\0']) {
+        return Err(mdl::WriteError::InvalidString);
+    }
+    Ok(())
 }

@@ -1,10 +1,9 @@
 //! Decoded and unknown model chunks.
-use crate::model::Encoder;
-use crate::model::WriteError;
-use crate::model::{ModelVersion, Tag};
-
 use super::*;
-use crate::model::{Chunk, Cursor, KnownChunk, RawChunk, ReadError};
+use crate::model::mdx;
+use crate::model::Encoder;
+use crate::model::{Chunk, Cursor, KnownChunk, RawChunk};
+use crate::model::{ModelVersion, Tag};
 use std::marker::PhantomData;
 
 /// An opaque chunk whose tag is not defined by this library.
@@ -75,7 +74,7 @@ macro_rules! model_chunks {
 
         impl<V: ModelVersion> Chunk for ModelChunk<V> {
             fn tag(&self) -> Tag { ModelChunk::tag(self) }
-            fn encode_payload_to(&self, output: &mut Encoder<'_>) -> Result<(), WriteError> {
+            fn encode_payload_to(&self, output: &mut Encoder<'_>) -> Result<(), mdx::WriteError> {
                 match self {
                     $( Self::$variant(value) => value.encode_payload_to(output), )*
                     Self::Unknown(unknown) => unknown.raw.encode_payload_to(output),
@@ -91,14 +90,14 @@ macro_rules! model_chunks {
             fn decode_payload(
                 tag: Tag,
                 payload: &mut Cursor<'_>,
-            ) -> Result<Option<Self>, ReadError> {
+            ) -> Result<Option<Self>, mdx::ReadError> {
                 let mut cursor = *payload;
                 let decoded = match tag {
                     $( <$chunk>::TAG => <$chunk>::decode_payload(&mut cursor).map(Self::from), )*
                     _ => return Ok(None),
                 };
-                let chunk = decoded?;
-                cursor.finish()?;
+                let chunk = decoded.map_err(|error| error.in_chunk(tag))?;
+                cursor.finish().map_err(|error| error.in_chunk(tag))?;
                 Ok(Some(chunk))
             }
 
@@ -142,7 +141,7 @@ model_chunks! {
 
 impl<V: ModelVersion> ModelChunk<V> {
     /// Decodes a known chunk or retains an unknown one.
-    pub fn from_raw(raw: RawChunk) -> Result<Self, ReadError> {
+    pub fn from_raw(raw: RawChunk) -> Result<Self, mdx::ReadError> {
         let decoded = Self::decode_payload(raw.tag, &mut Cursor::new(&raw.data));
         match decoded {
             Ok(Some(chunk)) => Ok(chunk),
@@ -156,7 +155,7 @@ impl<V: ModelVersion> ModelChunk<V> {
 
     /// Decodes directly from a bounded payload, copying bytes only when they
     /// must be retained for an unknown chunk.
-    pub(crate) fn decode_from(tag: Tag, payload: &mut Cursor<'_>) -> Result<Self, ReadError> {
+    pub(crate) fn decode_from(tag: Tag, payload: &mut Cursor<'_>) -> Result<Self, mdx::ReadError> {
         match Self::decode_payload(tag, payload) {
             Ok(Some(chunk)) => Ok(chunk),
             Ok(None) => Ok(Self::Unknown(UnknownChunk {

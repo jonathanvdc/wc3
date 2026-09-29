@@ -1,7 +1,12 @@
 //! Texture bindings, blend modes, and animated surface properties.
+use super::{write_count, ShaderType};
 use crate::model::conversion::ConversionContext;
 use crate::model::Animatable;
 use crate::model::{mdl, mdx};
+use crate::model::{
+    Color, Cursor, Encoder, ModelVersion, SupportsEmissiveGain, SupportsFresnel,
+    SupportsLayerShaderTypeId, SupportsLayerTextureSlots, Tag, ValueError, Version,
+};
 use crate::model::{ConversionError, ConversionIssueKind};
 use bitfield::bitfield;
 use mdl_codec::{
@@ -9,12 +14,6 @@ use mdl_codec::{
     TextureBindings,
 };
 use std::{fmt::Debug, marker::PhantomData};
-
-use super::{write_count, ShaderType};
-use crate::model::{
-    Color, Cursor, Encoder, ModelVersion, ReadError, SupportsEmissiveGain, SupportsFresnel,
-    SupportsLayerShaderTypeId, SupportsLayerTextureSlots, Tag, ValueError, Version, WriteError,
-};
 
 pub(super) const LAYER_TAG: Tag = *b"LAYS";
 
@@ -340,7 +339,7 @@ impl LayerTextureSlotsField for LayerTextureSlots {
 }
 
 impl mdx::Read for LayerTextureSlots {
-    fn read_mdx(cursor: &mut Cursor<'_>) -> Result<Self, ReadError> {
+    fn read_mdx(cursor: &mut Cursor<'_>) -> Result<Self, mdx::ReadError> {
         let count = cursor.read::<u32>()? as usize;
         let mut texture_slots = Vec::new();
         for _ in 0..count {
@@ -360,7 +359,7 @@ impl mdx::Read for LayerTextureSlots {
 }
 
 impl mdx::Write for LayerTextureSlots {
-    fn write_mdx(&self, output: &mut Encoder<'_>) -> Result<(), WriteError> {
+    fn write_mdx(&self, output: &mut Encoder<'_>) -> Result<(), mdx::WriteError> {
         write_count(output, self.0.len(), LAYER_TAG)?;
         for slot in &self.0 {
             output.write(&slot.texture_id)?;

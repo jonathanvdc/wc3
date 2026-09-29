@@ -129,10 +129,10 @@ pub(super) fn expand(input: &DeriveInput, reading: bool) -> Result<TokenStream> 
                 type State = ();
                 #visit
                 fn prepare_mdl_fields(&self, _: ::wc3::model::mdl::Dialect) -> ::core::result::Result<(), ::wc3::model::mdl::WriteError> {
-                    if self.0 & !#known != 0 { return Err(::wc3::model::mdl::WriteError::Unsupported(concat!("unknown flag bits in ", stringify!(#name)))); } Ok(())
+                    if self.0 & !#known != 0 { return Err(::wc3::model::mdl::WriteError::Unrepresentable { field: concat!("unknown flag bits in ", stringify!(#name)) }.into()); } Ok(())
                 }
-                fn write_mdl_headers<W: ::std::io::Write>(&self, _: &mut ::wc3::model::mdl::Writer<W>) -> ::core::result::Result<(), ::wc3::model::mdl::WriteError> { Ok(()) }
-                fn write_mdl_fields<W: ::std::io::Write>(&self, _: (), writer: &mut ::wc3::model::mdl::Writer<W>) -> ::core::result::Result<(), ::wc3::model::mdl::WriteError> { #(#writes)* Ok(()) }
+                fn write_mdl_headers<W: ::std::io::Write>(&self, _: &mut ::wc3::model::mdl::Writer<W>) -> ::core::result::Result<(), ::wc3::model::IoError<::wc3::model::mdl::WriteError>> { Ok(()) }
+                fn write_mdl_fields<W: ::std::io::Write>(&self, _: (), writer: &mut ::wc3::model::mdl::Writer<W>) -> ::core::result::Result<(), ::wc3::model::IoError<::wc3::model::mdl::WriteError>> { #(#writes)* Ok(()) }
             }
         })
     }

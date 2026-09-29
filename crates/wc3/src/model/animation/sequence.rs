@@ -2,15 +2,13 @@
 use crate::model::mdl;
 use crate::model::mdl::{is_positive_zero, is_zero};
 use crate::model::mdx;
+use crate::model::FixedText;
 use crate::model::GeosetExtent;
+use crate::model::Model;
 use crate::model::ModelVersion;
+use crate::model::SequencesChunk;
 use crate::model::ValueError;
 use bitfield::bitfield;
-
-use crate::model::SequencesChunk;
-
-use crate::model::FixedText;
-use crate::model::Model;
 
 bitfield! {
     /// Sequence playback flags, with unrecognized bits retained.

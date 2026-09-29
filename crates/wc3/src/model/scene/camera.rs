@@ -7,19 +7,14 @@ use crate::model::ModelVersion;
 use crate::model::{ConversionError, ConversionIssueKind};
 use mdl_codec::Target;
 mod mdl_codec;
-
 use crate::model::Encoder;
+use crate::model::FixedText;
 use crate::model::KnownChunk;
+use crate::model::Model;
 use crate::model::ValueError;
 use crate::model::Vec3;
-use crate::model::WriteError;
-
 use crate::model::{CamerasChunk, Cursor};
-
 use std::marker::PhantomData;
-
-use crate::model::FixedText;
-use crate::model::{Model, ReadError};
 
 const NAME_SIZE: usize = 80;
 const MAX_RECORD_SIZE: usize = 0x00ff_ffff;
@@ -52,7 +47,6 @@ impl CameraVariant {
 pub trait CameraLayout {
     const DEFAULT_VARIANT: CameraVariant;
 }
-
 use crate::model::{V1000, V1100, V1200, V1300, V1400, V1600, V1800, V800, V900};
 impl CameraLayout for V800 {
     const DEFAULT_VARIANT: CameraVariant = CameraVariant::Variant0;
@@ -170,16 +164,14 @@ impl<V: ModelVersion> Model<V> {
 }
 
 impl<V: ModelVersion> mdx::Read for Camera<V> {
-    fn read_mdx(source: &mut Cursor<'_>) -> Result<Self, ReadError> {
+    fn read_mdx(source: &mut Cursor<'_>) -> Result<Self, mdx::ReadError> {
         let start = source.absolute_position();
         let size_word: u32 = source.read()?;
         let length = (size_word & 0x00ff_ffff) as usize;
-        let body_len = length
-            .checked_sub(4)
-            .ok_or(ReadError::InvalidRecordLength {
-                offset: start,
-                length,
-            })?;
+        let body_len = length.checked_sub(4).ok_or(mdx::ReadError::new(
+            start,
+            mdx::ReadErrorKind::InvalidRecordLength { length },
+        ))?;
         let mut cursor = source.subcursor(body_len)?;
         let name = cursor.read()?;
         let position = cursor.read()?;
@@ -206,7 +198,13 @@ impl<V: ModelVersion> mdx::Read for Camera<V> {
                 b"IDUF" => value.focus_distance = Some(cursor.read()?),
                 b"ELAF" => value.focal_length = Some(cursor.read()?),
                 b"PTSF" => value.f_stop = Some(cursor.read()?),
-                _ => return Err(ReadError::MalformedRecord { tag, offset }),
+                _ => {
+                    return Err(mdx::ReadError::new(
+                        offset,
+                        mdx::ReadErrorKind::UnknownTag { actual: tag },
+                    )
+                    .with_tag(tag))
+                }
             }
         }
         cursor.finish()?;
@@ -231,7 +229,7 @@ impl<V: ModelVersion> mdx::Read for Camera<V> {
 }
 
 impl<V: ModelVersion> mdx::Write for Camera<V> {
-    fn write_mdx(&self, bytes: &mut Encoder<'_>) -> Result<(), WriteError> {
+    fn write_mdx(&self, bytes: &mut Encoder<'_>) -> Result<(), mdx::WriteError> {
         let start = bytes.position();
         let marker = bytes.begin_sized();
         bytes.write(&self.name)?;
@@ -258,7 +256,8 @@ impl<V: ModelVersion> mdx::Write for Camera<V> {
         mdx::WriteTrackProperty::write_mdx_track_property(&self.focal_length, *b"ELAF", bytes)?;
         mdx::WriteTrackProperty::write_mdx_track_property(&self.f_stop, *b"PTSF", bytes)?;
         if bytes.position() - start > MAX_RECORD_SIZE {
-            return Err(WriteError::ChunkTooLarge {
+            return Err(mdx::WriteError::SizeOverflow {
+                field: "encoded size",
                 tag: CamerasChunk::<V>::TAG,
                 size: bytes.position() - start,
             });

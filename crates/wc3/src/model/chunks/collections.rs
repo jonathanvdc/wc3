@@ -1,17 +1,15 @@
 //! Complete chunks containing a sequence of records.
 use crate::model::mdx;
 use crate::model::Encoder;
-use crate::model::WriteError;
-use crate::model::{ModelVersion, Tag};
-use std::marker::PhantomData;
-
 use crate::model::{
     Attachment, Bone, Camera, CollisionShape, EventObject, FaceFx, Geoset, GeosetAnimation, Glider,
     Light, Material, Node, ParticleEmitter, ParticleEmitter2, PopcornEmitter, RibbonEmitter,
     Sequence, Texture, TextureAnimation,
 };
-use crate::model::{Chunk, Cursor, KnownChunk, ReadError};
+use crate::model::{Chunk, Cursor, KnownChunk};
 use crate::model::{GlobalSequence, PivotPoint};
+use crate::model::{ModelVersion, Tag};
+use std::marker::PhantomData;
 
 /// A complete chunk made of consecutive records of one type.
 pub trait CollectionChunk: Sized {
@@ -28,26 +26,28 @@ pub trait CollectionChunk: Sized {
     fn from_records(records: Vec<Self::Item>) -> Self;
 }
 
-fn decode_records<C: CollectionChunk>(cursor: &mut Cursor<'_>) -> Result<C, ReadError>
+fn decode_records<C: CollectionChunk>(cursor: &mut Cursor<'_>) -> Result<C, mdx::ReadError>
 where
     C::Item: mdx::Read,
 {
     let mut records = Vec::new();
     while !cursor.remaining().is_empty() {
-        let start = cursor.position();
+        let start = cursor.absolute_position();
         let record = cursor.read()?;
-        if cursor.position() <= start {
-            return Err(ReadError::MalformedRecord {
-                tag: C::tag(),
-                offset: start,
-            });
+        if cursor.absolute_position() <= start {
+            return Err(
+                mdx::ReadError::new(start, mdx::ReadErrorKind::NoProgress).with_tag(C::tag())
+            );
         }
         records.push(record);
     }
     Ok(C::from_records(records))
 }
 
-fn encode_records<C: CollectionChunk>(chunk: &C, bytes: &mut Encoder<'_>) -> Result<(), WriteError>
+fn encode_records<C: CollectionChunk>(
+    chunk: &C,
+    bytes: &mut Encoder<'_>,
+) -> Result<(), mdx::WriteError>
 where
     C::Item: mdx::Write,
 {
@@ -55,7 +55,8 @@ where
     for record in chunk.records() {
         bytes.write(record)?;
         if bytes.position() - start > u32::MAX as usize {
-            return Err(WriteError::ChunkTooLarge {
+            return Err(mdx::WriteError::SizeOverflow {
+                field: "encoded size",
                 tag: C::tag(),
                 size: bytes.position() - start,
             });
@@ -98,7 +99,7 @@ macro_rules! record_collection {
                 Self::TAG
             }
 
-            fn encode_payload_to(&self, bytes: &mut Encoder<'_>) -> Result<(), WriteError> {
+            fn encode_payload_to(&self, bytes: &mut Encoder<'_>) -> Result<(), mdx::WriteError> {
                 encode_records(self, bytes)
             }
         }
@@ -106,7 +107,7 @@ macro_rules! record_collection {
         impl KnownChunk for $name {
             const TAG: Tag = $tag;
 
-            fn decode_payload(cursor: &mut Cursor<'_>) -> Result<Self, ReadError> {
+            fn decode_payload(cursor: &mut Cursor<'_>) -> Result<Self, mdx::ReadError> {
                 decode_records(cursor)
             }
         }
@@ -147,14 +148,14 @@ macro_rules! versioned_record_collection {
             fn tag(&self) -> Tag {
                 Self::TAG
             }
-            fn encode_payload_to(&self, bytes: &mut Encoder<'_>) -> Result<(), WriteError> {
+            fn encode_payload_to(&self, bytes: &mut Encoder<'_>) -> Result<(), mdx::WriteError> {
                 encode_records(self, bytes)
             }
         }
 
         impl<V: ModelVersion> KnownChunk for $name<V> {
             const TAG: Tag = $tag;
-            fn decode_payload(cursor: &mut Cursor<'_>) -> Result<Self, ReadError> {
+            fn decode_payload(cursor: &mut Cursor<'_>) -> Result<Self, mdx::ReadError> {
                 decode_records(cursor)
             }
         }

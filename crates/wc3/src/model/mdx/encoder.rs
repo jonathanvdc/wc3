@@ -1,5 +1,6 @@
 //! Sequential MDX writing into a caller-owned byte buffer.
-use crate::model::{Tag, WriteError};
+use crate::model::mdx;
+use crate::model::Tag;
 
 /// Writes little-endian MDX fields into one growing buffer.
 pub struct Encoder<'a> {
@@ -11,9 +12,9 @@ pub struct SizeMarker(usize);
 
 /// A value with a little-endian MDX representation.
 pub trait Write {
-    fn write_mdx(&self, encoder: &mut Encoder<'_>) -> Result<(), WriteError>;
+    fn write_mdx(&self, encoder: &mut Encoder<'_>) -> Result<(), mdx::WriteError>;
 
-    fn encode_mdx(&self) -> Result<Vec<u8>, WriteError> {
+    fn encode_mdx(&self) -> Result<Vec<u8>, mdx::WriteError> {
         let mut bytes = Vec::new();
         Encoder::new(&mut bytes).write(self)?;
         Ok(bytes)
@@ -24,7 +25,7 @@ macro_rules! writable_scalars {
     ($($ty:ty),* $(,)?) => {
         $(
             impl Write for $ty {
-                fn write_mdx(&self, encoder: &mut Encoder<'_>) -> Result<(), WriteError> {
+                fn write_mdx(&self, encoder: &mut Encoder<'_>) -> Result<(), mdx::WriteError> {
                     encoder.write_bytes(&self.to_le_bytes());
                     Ok(())
                 }
@@ -35,7 +36,7 @@ macro_rules! writable_scalars {
 writable_scalars!(u8, u16, u32, i32, f32);
 
 impl<T: Write, const N: usize> Write for [T; N] {
-    fn write_mdx(&self, encoder: &mut Encoder<'_>) -> Result<(), WriteError> {
+    fn write_mdx(&self, encoder: &mut Encoder<'_>) -> Result<(), mdx::WriteError> {
         for value in self {
             encoder.write(value)?;
         }
@@ -44,7 +45,7 @@ impl<T: Write, const N: usize> Write for [T; N] {
 }
 
 impl<T: Write> Write for [T] {
-    fn write_mdx(&self, encoder: &mut Encoder<'_>) -> Result<(), WriteError> {
+    fn write_mdx(&self, encoder: &mut Encoder<'_>) -> Result<(), mdx::WriteError> {
         for value in self {
             encoder.write(value)?;
         }
@@ -69,7 +70,7 @@ impl<'a> Encoder<'a> {
     }
 
     /// Appends a value in its little-endian MDX representation.
-    pub fn write<T: Write + ?Sized>(&mut self, value: &T) -> Result<(), WriteError> {
+    pub fn write<T: Write + ?Sized>(&mut self, value: &T) -> Result<(), mdx::WriteError> {
         value.write_mdx(self)
     }
 
@@ -81,14 +82,18 @@ impl<'a> Encoder<'a> {
     }
 
     /// Fills a record size word after its contents have been written.
-    pub fn finish_sized(&mut self, marker: SizeMarker, tag: Tag) -> Result<(), WriteError> {
+    pub fn finish_sized(&mut self, marker: SizeMarker, tag: Tag) -> Result<(), mdx::WriteError> {
         self.finish_sized_with_flags(marker, tag, 0)
     }
 
     /// Fills a chunk size word with the payload length, excluding the word itself.
-    pub fn finish_payload(&mut self, marker: SizeMarker, tag: Tag) -> Result<(), WriteError> {
+    pub fn finish_payload(&mut self, marker: SizeMarker, tag: Tag) -> Result<(), mdx::WriteError> {
         let size = self.position() - marker.0 - 4;
-        let size = u32::try_from(size).map_err(|_| WriteError::ChunkTooLarge { tag, size })?;
+        let size = u32::try_from(size).map_err(|_| mdx::WriteError::SizeOverflow {
+            field: "encoded size",
+            tag,
+            size,
+        })?;
         self.bytes[marker.0..marker.0 + 4].copy_from_slice(&size.to_le_bytes());
         Ok(())
     }
@@ -99,9 +104,13 @@ impl<'a> Encoder<'a> {
         marker: SizeMarker,
         tag: Tag,
         flags: u32,
-    ) -> Result<(), WriteError> {
+    ) -> Result<(), mdx::WriteError> {
         let size = self.position() - marker.0;
-        let size = u32::try_from(size).map_err(|_| WriteError::ChunkTooLarge { tag, size })?;
+        let size = u32::try_from(size).map_err(|_| mdx::WriteError::SizeOverflow {
+            field: "encoded size",
+            tag,
+            size,
+        })?;
         self.bytes[marker.0..marker.0 + 4].copy_from_slice(&(size | flags).to_le_bytes());
         Ok(())
     }

@@ -1,4 +1,5 @@
 use super::*;
+use wc3::model::IoError;
 
 #[test]
 fn tokens_borrow_source_and_cover_all_punctuation() {
@@ -87,10 +88,10 @@ fn strings_are_literal_and_fixed_text_checks_byte_capacity() {
     assert!(FixedText::<8>::decode_mdl("\"a\0b\"").is_err());
     assert!(matches!(
         print_result("a\"b"),
-        Err(WriteError::InvalidString)
+        Err(IoError::Codec(WriteError::InvalidString))
     ));
     assert!(matches!(
         print_result("a\0b"),
-        Err(WriteError::InvalidString)
+        Err(IoError::Codec(WriteError::InvalidString))
     ));
 }

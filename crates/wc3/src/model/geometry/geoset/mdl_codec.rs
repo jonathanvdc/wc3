@@ -2,10 +2,11 @@
 use super::{
     Geoset, GeosetExtent, GeosetExtraSection, GeosetExtraSections, GeosetLevelOfDetail, SkinWeights,
 };
+use crate::model::IoError;
 use crate::model::{mdl, FixedText, ModelVersion, Vec3};
 use mdl::WriteProperty as _;
-use mdl::{Dialect, Field, Parser, ReadErrorKind, Span, TokenKind, Writer};
-use std::io::{sink, Write as IoWrite};
+use mdl::{Dialect, Field, Parser, Span, TokenKind, Writer};
+use std::io::Write as IoWrite;
 
 #[derive(mdl::Read, mdl::Write)]
 #[mdl(entry)]
@@ -60,7 +61,7 @@ impl<T: mdl::Write> mdl::WriteProperty for ListRef<'_, T> {
         &self,
         name: &'static str,
         writer: &mut Writer<W>,
-    ) -> Result<(), mdl::WriteError> {
+    ) -> Result<(), IoError<mdl::WriteError>> {
         writer.begin_counted_block(name, self.0.len())?;
         for value in self.0 {
             writer.entry(value)?;
@@ -73,7 +74,7 @@ impl<T: mdl::Write> mdl::WriteProperty for UncountedRef<'_, T> {
         &self,
         name: &'static str,
         writer: &mut Writer<W>,
-    ) -> Result<(), mdl::WriteError> {
+    ) -> Result<(), IoError<mdl::WriteError>> {
         writer.begin_block(name)?;
         for value in self.0 {
             writer.entry(value)?;
@@ -86,7 +87,7 @@ impl<T: mdl::Write> mdl::WriteProperty for OptionalListRef<'_, T> {
         &self,
         name: &'static str,
         writer: &mut Writer<W>,
-    ) -> Result<(), mdl::WriteError> {
+    ) -> Result<(), IoError<mdl::WriteError>> {
         if let Some(values) = self.0 {
             ListRef(values).write_mdl_property(name, writer)?;
         }
@@ -108,7 +109,10 @@ impl UvSetsRef<'_> {
 }
 pub(super) struct UvRef<'a>(&'a [[f32; 2]]);
 impl mdl::Write for UvRef<'_> {
-    fn write_mdl<W: IoWrite>(&self, writer: &mut Writer<W>) -> Result<(), mdl::WriteError> {
+    fn write_mdl<W: IoWrite>(
+        &self,
+        writer: &mut Writer<W>,
+    ) -> Result<(), IoError<mdl::WriteError>> {
         ListRef(self.0).write_mdl_property("TVertices", writer)
     }
 }
@@ -135,7 +139,7 @@ pub(super) struct Groups {
 }
 fn check_count(parser: &Parser<'_>, expected: usize, actual: usize) -> Result<(), mdl::ReadError> {
     if expected != actual {
-        Err(parser.error(ReadErrorKind::CountMismatch { expected, actual }))
+        Err(parser.error(mdl::ReadErrorKind::CountMismatch { expected, actual }))
     } else {
         Ok(())
     }
@@ -153,7 +157,10 @@ fn read_groups<T: mdl::Read>(
     let mut body = parser.begin_block()?;
     while let Some(field) = body.next_field()? {
         if field.name != name {
-            return Err(mdl::ReadError::new(field.span, ReadErrorKind::UnknownField));
+            return Err(mdl::ReadError::new(
+                field.span,
+                mdl::ReadErrorKind::UnknownField,
+            ));
         }
         if triangles {
             body.expect(TokenKind::OpenBrace)?;
@@ -163,13 +170,13 @@ fn read_groups<T: mdl::Read>(
                 body.expect(TokenKind::Comma)?;
             }
             if values.len() % 3 != 0 {
-                return Err(body.error(ReadErrorKind::Expected("triangle index triples")));
+                return Err(body.error(mdl::ReadErrorKind::Expected("triangle index triples")));
             }
             counts.push(
                 values
                     .len()
                     .try_into()
-                    .map_err(|_| body.error(ReadErrorKind::InvalidNumber("u32 count")))?,
+                    .map_err(|_| body.error(mdl::ReadErrorKind::InvalidNumber("u32 count")))?,
             );
             indices.extend(values);
         } else {
@@ -178,7 +185,7 @@ fn read_groups<T: mdl::Read>(
                 values
                     .len()
                     .try_into()
-                    .map_err(|_| body.error(ReadErrorKind::InvalidNumber("u32 count")))?,
+                    .map_err(|_| body.error(mdl::ReadErrorKind::InvalidNumber("u32 count")))?,
             );
             indices.extend(values);
             body.consume(TokenKind::Comma)?;
@@ -235,10 +242,14 @@ impl<T: mdl::Write> mdl::WriteProperty for GroupsRef<'_, T> {
             || self.counts.len() > u32::MAX as usize
             || self.indices.len() > u32::MAX as usize
         {
-            return Err(mdl::WriteError::Unsupported("mesh group counts"));
+            return Err(mdl::WriteError::InvalidStructure {
+                field: "mesh group counts",
+            });
         }
         if self.triangles && self.counts.iter().any(|count| count % 3 != 0) {
-            return Err(mdl::WriteError::Unsupported("triangle index triples"));
+            return Err(mdl::WriteError::InvalidStructure {
+                field: "triangle index triples",
+            });
         }
         Ok(())
     }
@@ -246,7 +257,7 @@ impl<T: mdl::Write> mdl::WriteProperty for GroupsRef<'_, T> {
         &self,
         name: &'static str,
         writer: &mut Writer<W>,
-    ) -> Result<(), mdl::WriteError> {
+    ) -> Result<(), IoError<mdl::WriteError>> {
         self.validate_mdl_property(name, writer.dialect())?;
         writer.indent()?;
         writer.identifier(name)?;
@@ -296,7 +307,10 @@ pub(super) struct Selection {
 impl Selection {
     fn validate(&self, span: Span) -> Result<(), mdl::ReadError> {
         if self.flag && self.raw.0.is_some() {
-            Err(mdl::ReadError::new(span, ReadErrorKind::DuplicateField))
+            Err(mdl::ReadError::new(
+                span,
+                mdl::ReadErrorKind::DuplicateField,
+            ))
         } else {
             Ok(())
         }
@@ -337,7 +351,9 @@ impl mdl::WriteProperty for SkinRef<'_> {
             rows.iter()
                 .any(|row| row.bone_indices.iter().any(|&index| index > 255))
         }) {
-            Err(mdl::WriteError::Unsupported("skin bone index above 255"))
+            Err(mdl::WriteError::Unrepresentable {
+                field: "skin bone index above 255",
+            })
         } else {
             Ok(())
         }
@@ -346,7 +362,7 @@ impl mdl::WriteProperty for SkinRef<'_> {
         &self,
         name: &'static str,
         writer: &mut Writer<W>,
-    ) -> Result<(), mdl::WriteError> {
+    ) -> Result<(), IoError<mdl::WriteError>> {
         self.validate_mdl_property(name, writer.dialect())?;
         if let Some(rows) = self.0 {
             writer.begin_counted_block(name, rows.len())?;
@@ -507,10 +523,10 @@ impl<V: ModelVersion> Geoset<V> {
         span: Span,
     ) -> Result<(), mdl::ReadError> {
         if let Some(value) = value {
-            let target = self
-                .level_of_detail
-                .name_mut()
-                .ok_or(mdl::ReadError::new(span, ReadErrorKind::UnsupportedField))?;
+            let target = self.level_of_detail.name_mut().ok_or(mdl::ReadError::new(
+                span,
+                mdl::ReadErrorKind::UnsupportedField,
+            ))?;
             *target = value;
         }
         Ok(())
@@ -533,7 +549,10 @@ impl<V: ModelVersion> Geoset<V> {
             let storage = self
                 .extra_sections
                 .reforged_mut()
-                .ok_or(mdl::ReadError::new(span, ReadErrorKind::UnsupportedField))?;
+                .ok_or(mdl::ReadError::new(
+                    span,
+                    mdl::ReadErrorKind::UnsupportedField,
+                ))?;
             storage.sections.push(GeosetExtraSection::Tangents(values));
         }
         Ok(())
@@ -556,7 +575,10 @@ impl<V: ModelVersion> Geoset<V> {
             let storage = self
                 .extra_sections
                 .reforged_mut()
-                .ok_or(mdl::ReadError::new(span, ReadErrorKind::UnsupportedField))?;
+                .ok_or(mdl::ReadError::new(
+                    span,
+                    mdl::ReadErrorKind::UnsupportedField,
+                ))?;
             storage.sections.push(GeosetExtraSection::Skin {
                 weights: values.into_iter().map(|row| row.0).collect(),
             });
@@ -582,7 +604,7 @@ impl<V: ModelVersion> Geoset<V> {
         if !self.mdl_lengths_match() {
             return Err(mdl::ReadError::new(
                 span,
-                ReadErrorKind::Expected(
+                mdl::ReadErrorKind::Expected(
                     "one normal, UV, tangent or skin row per vertex; vertex groups may be empty with complete skin weights",
                 ),
             ));
@@ -591,16 +613,16 @@ impl<V: ModelVersion> Geoset<V> {
     }
     pub(super) fn validate_mdl_write(&self) -> Result<(), mdl::WriteError> {
         if !self.mdl_lengths_match() {
-            return Err(mdl::WriteError::Unsupported(
-                "inconsistent per-vertex section lengths",
-            ));
+            return Err(mdl::WriteError::Unrepresentable {
+                field: "inconsistent per-vertex section lengths",
+            });
         }
         if self.primitive_types.len() != self.primitive_counts.len()
             || self.primitive_types.iter().any(|&kind| kind != 4)
         {
-            return Err(mdl::WriteError::Unsupported(
-                "non-triangle primitive groups",
-            ));
+            return Err(mdl::WriteError::Unrepresentable {
+                field: "non-triangle primitive groups",
+            });
         }
         Ok(())
     }
@@ -622,9 +644,9 @@ impl mdl::WriteProperty for RawSelection {
         dialect: Dialect,
     ) -> Result<(), mdl::WriteError> {
         if dialect == Dialect::Warcraft3 && self.0.is_some() {
-            return Err(mdl::WriteError::Unsupported(
-                "raw selection flags in Warcraft III dialect",
-            ));
+            return Err(mdl::WriteError::Unrepresentable {
+                field: "raw selection flags in Warcraft III dialect",
+            });
         }
         Ok(())
     }
@@ -632,7 +654,7 @@ impl mdl::WriteProperty for RawSelection {
         &self,
         name: &'static str,
         writer: &mut Writer<W>,
-    ) -> Result<(), mdl::WriteError> {
+    ) -> Result<(), IoError<mdl::WriteError>> {
         self.validate_mdl_property(name, writer.dialect())?;
         if let Some(value) = self.0 {
             writer.property(name, &value)?;
@@ -645,7 +667,7 @@ impl mdl::WriteProperty for LodNameRef<'_> {
     fn validate_mdl_property(&self, _: &'static str, _: Dialect) -> Result<(), mdl::WriteError> {
         if let Some(name) = self.0 {
             if *name != FixedText::default() {
-                Writer::new(sink()).write(name)?;
+                mdl::validate_fixed_text(name)?;
             }
         }
         Ok(())
@@ -654,7 +676,7 @@ impl mdl::WriteProperty for LodNameRef<'_> {
         &self,
         name: &'static str,
         writer: &mut Writer<W>,
-    ) -> Result<(), mdl::WriteError> {
+    ) -> Result<(), IoError<mdl::WriteError>> {
         self.validate_mdl_property(name, writer.dialect())?;
         if let Some(value) = self.0.filter(|value| **value != FixedText::default()) {
             writer.property(name, value)?;

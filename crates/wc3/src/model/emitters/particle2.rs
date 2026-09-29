@@ -6,12 +6,10 @@ use crate::model::{Animatable, Track};
 use bitfield::bitfield;
 use mdl_codec::SegmentColors;
 mod mdl_codec;
-use crate::model::ModelVersion;
-
 use crate::model::KnownChunk;
-use crate::model::{Color, Vec3};
-
+use crate::model::ModelVersion;
 use crate::model::ParticleEmitters2Chunk;
+use crate::model::{Color, Vec3};
 use crate::model::{Model, Node};
 
 /// Which parts of each particle are rendered: head, tail, or both.

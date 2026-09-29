@@ -1,17 +1,16 @@
 //! Material directives, including historical flags and version-selected shaders.
 use super::{Material, NoShader, ShaderText};
 use crate::model::mdl;
-use crate::model::mdl::{
-    Dialect, Field, Parser, ReadErrorKind, ReadProperty, Span, WriteProperty, Writer,
-};
+use crate::model::mdl::{Dialect, Field, Parser, ReadProperty, Span, WriteProperty, Writer};
+use crate::model::IoError;
 use crate::model::{FixedText, ModelVersion};
-use std::io::{sink, Write as IoWrite};
+use std::io::Write as IoWrite;
 
 impl ReadProperty for NoShader {
     fn read_mdl_property(_: &mut Parser<'_>, field: Field<'_>) -> Result<Self, mdl::ReadError> {
         Err(mdl::ReadError::new(
             field.span,
-            ReadErrorKind::UnsupportedField,
+            mdl::ReadErrorKind::UnsupportedField,
         ))
     }
     fn missing_mdl_property(_: &'static str, _: Span) -> Result<Self, mdl::ReadError> {
@@ -23,7 +22,7 @@ impl WriteProperty for NoShader {
         &self,
         _: &'static str,
         _: &mut Writer<W>,
-    ) -> Result<(), mdl::WriteError> {
+    ) -> Result<(), IoError<mdl::WriteError>> {
         Ok(())
     }
 }
@@ -37,13 +36,13 @@ impl ReadProperty for ShaderText {
 }
 impl WriteProperty for ShaderText {
     fn validate_mdl_property(&self, _: &'static str, _: Dialect) -> Result<(), mdl::WriteError> {
-        Writer::new(sink()).write(&self.0)
+        mdl::validate_fixed_text(&self.0)
     }
     fn write_mdl_property<W: IoWrite>(
         &self,
         name: &'static str,
         writer: &mut Writer<W>,
-    ) -> Result<(), mdl::WriteError> {
+    ) -> Result<(), IoError<mdl::WriteError>> {
         self.validate_mdl_property(name, writer.dialect())?;
         if self.0 != FixedText::default() {
             writer.property(name, &self.0)?;

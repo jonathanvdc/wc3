@@ -1,12 +1,10 @@
 //! Animated texture translation, rotation, and scaling.
+use crate::model::KnownChunk;
+use crate::model::Model;
 use crate::model::ModelVersion;
+use crate::model::TextureAnimationsChunk;
 use crate::model::{mdl, mdx};
 use crate::model::{Quaternion, Track, Vec3};
-
-use crate::model::KnownChunk;
-
-use crate::model::Model;
-use crate::model::TextureAnimationsChunk;
 
 /// A texture animation containing translation, rotation, and scaling tracks.
 /// MDL uses a `TVertexAnim` block inside `TextureAnims`. Its transform channels

@@ -294,7 +294,7 @@ impl Validated {
     }
     fn validate_write(&self) -> Result<(), mdl::WriteError> {
         if self.id == 0 {
-            Err(mdl::WriteError::Unsupported("zero id"))
+            Err(mdl::WriteError::Unrepresentable { field: "zero id" })
         } else {
             Ok(())
         }

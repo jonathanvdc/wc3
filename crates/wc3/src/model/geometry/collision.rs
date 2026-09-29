@@ -1,17 +1,16 @@
 //! Collision primitives attached to model nodes.
-use crate::model::mdl::{Parser, ReadErrorKind, Span, Writer};
+use crate::model::mdl::{Parser, Span, Writer};
 use crate::model::scene::{set_node_kind, validate_node_kind};
+use crate::model::CollisionShapesChunk;
+use crate::model::Cursor;
 use crate::model::Encoder;
+use crate::model::IoError;
 use crate::model::KnownChunk;
 use crate::model::ModelVersion;
 use crate::model::Vec3;
-use crate::model::WriteError;
 use crate::model::{mdl, mdx};
+use crate::model::{Model, Node};
 use std::io::Write as IoWrite;
-
-use crate::model::CollisionShapesChunk;
-use crate::model::Cursor;
-use crate::model::{Model, Node, ReadError};
 
 /// A collision primitive attached to a node.
 ///
@@ -35,7 +34,7 @@ pub enum CollisionGeometry {
 }
 
 impl mdx::Read for CollisionGeometry {
-    fn read_mdx(cursor: &mut Cursor<'_>) -> Result<Self, ReadError> {
+    fn read_mdx(cursor: &mut Cursor<'_>) -> Result<Self, mdx::ReadError> {
         let kind_offset = cursor.absolute_position();
         let kind = cursor.read::<u32>()?;
         match kind {
@@ -46,16 +45,20 @@ impl mdx::Read for CollisionGeometry {
                 [cursor.read()?, cursor.read()?],
                 cursor.read()?,
             )),
-            _ => Err(ReadError::MalformedRecord {
-                tag: CollisionShapesChunk::TAG,
-                offset: kind_offset,
-            }),
+            _ => Err(mdx::ReadError::new(
+                kind_offset,
+                mdx::ReadErrorKind::UnknownEnumValue {
+                    enum_name: "CollisionShape",
+                    value: kind,
+                },
+            )
+            .with_tag(CollisionShapesChunk::TAG)),
         }
     }
 }
 
 impl mdx::Write for CollisionGeometry {
-    fn write_mdx(&self, bytes: &mut Encoder<'_>) -> Result<(), WriteError> {
+    fn write_mdx(&self, bytes: &mut Encoder<'_>) -> Result<(), mdx::WriteError> {
         let kind = match self {
             Self::Box(_) => 0u32,
             Self::Plane(_) => 1,
@@ -204,7 +207,7 @@ fn validate_collision_read(value: &CollisionMdl, span: Span) -> Result<(), mdl::
     if value.vertices.len() != expected {
         return Err(mdl::ReadError::new(
             span,
-            ReadErrorKind::CountMismatch {
+            mdl::ReadErrorKind::CountMismatch {
                 expected,
                 actual: value.vertices.len(),
             },
@@ -214,11 +217,14 @@ fn validate_collision_read(value: &CollisionMdl, span: Span) -> Result<(), mdl::
         if value.radius.is_none() {
             return Err(mdl::ReadError::new(
                 span,
-                ReadErrorKind::MissingField("BoundsRadius"),
+                mdl::ReadErrorKind::MissingField("BoundsRadius"),
             ));
         }
     } else if value.radius.is_some() {
-        return Err(mdl::ReadError::new(span, ReadErrorKind::UnsupportedField));
+        return Err(mdl::ReadError::new(
+            span,
+            mdl::ReadErrorKind::UnsupportedField,
+        ));
     }
     Ok(())
 }
@@ -247,7 +253,10 @@ impl mdl::Read for CollisionShape {
     }
 }
 impl mdl::Write for CollisionShape {
-    fn write_mdl<W: IoWrite>(&self, writer: &mut Writer<W>) -> Result<(), mdl::WriteError> {
+    fn write_mdl<W: IoWrite>(
+        &self,
+        writer: &mut Writer<W>,
+    ) -> Result<(), IoError<mdl::WriteError>> {
         let (kind, vertices, radius) = match self.geometry {
             CollisionGeometry::Box(points) => (
                 CollisionKind::Box,

@@ -1,3 +1,4 @@
+use std::ops::RangeInclusive;
 use wc3::model::animation::{Animatable, Interpolate, TangentKeyframe, Track, ValueKeyframe};
 use wc3::model::Quaternion;
 
@@ -40,7 +41,8 @@ fn intervals_and_base_fallback() {
     let track = Track::linear(vec![key(0, 0.0), key(10, 10.0), key(100, 100.0)], Some(0)).unwrap();
     assert_eq!(track.evaluate_in(50.0, 0..=10), Some(10.0));
     assert_eq!(track.evaluate_in(50.0, 20..=90), None);
-    assert_eq!(track.evaluate_in(0.0, 10..=0), None);
+    let backwards_interval = RangeInclusive::new(10, 0);
+    assert_eq!(track.evaluate_in(0.0, backwards_interval), None);
     let both = Animatable::Both { value: 7.0, track };
     assert_eq!(both.evaluate_in(50.0, 20..=90), Some(7.0));
     assert_eq!(both.evaluate(5.0), Some(5.0));

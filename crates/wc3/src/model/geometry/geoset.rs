@@ -1,22 +1,18 @@
 //! Mesh geometry, material references, bounds, and skinning.
 use crate::model::conversion::ConversionContext;
 use crate::model::ConversionError;
+use crate::model::Cursor;
 use crate::model::Encoder;
+use crate::model::FixedText;
+use crate::model::GeosetsChunk;
 use crate::model::KnownChunk;
+use crate::model::Model;
 use crate::model::ValueError;
-use crate::model::WriteError;
 use crate::model::{mdl, mdx};
 use crate::model::{ModelVersion, SupportsReforgedChunks, Tag, Vec3, Version};
-
+use std::borrow::Cow;
 use std::fmt::Debug;
 use std::marker::PhantomData;
-
-use crate::model::Cursor;
-use crate::model::GeosetsChunk;
-use std::borrow::Cow;
-
-use crate::model::FixedText;
-use crate::model::{Model, ReadError};
 
 /// A geoset's bounding volume, also used for each sequence extent.
 #[derive(Clone, Copy, Debug, PartialEq, mdx::Read, mdx::Write, mdl::Read, mdl::Write)]
@@ -57,10 +53,10 @@ enum GeosetExtraSection {
 
 /// Storage and serialization of the optional TANG and SKIN sections for a version.
 pub trait GeosetExtraSections: Default + Clone + Debug + PartialEq {
-    fn read<V: ModelVersion>(_: &mut Cursor<'_>) -> Result<Self, ReadError> {
+    fn read<V: ModelVersion>(_: &mut Cursor<'_>) -> Result<Self, mdx::ReadError> {
         Ok(Self::default())
     }
-    fn write<V: ModelVersion>(&self, _: &mut Encoder<'_>) -> Result<(), WriteError> {
+    fn write<V: ModelVersion>(&self, _: &mut Encoder<'_>) -> Result<(), mdx::WriteError> {
         Ok(())
     }
     fn reforged(&self) -> Option<&ReforgedGeosetExtraSections> {
@@ -84,12 +80,12 @@ pub struct ReforgedGeosetExtraSections {
 }
 
 impl GeosetExtraSections for ReforgedGeosetExtraSections {
-    fn read<V: ModelVersion>(cursor: &mut Cursor<'_>) -> Result<Self, ReadError> {
+    fn read<V: ModelVersion>(cursor: &mut Cursor<'_>) -> Result<Self, mdx::ReadError> {
         Ok(Self {
             sections: read_extra_sections::<V>(cursor)?,
         })
     }
-    fn write<V: ModelVersion>(&self, bytes: &mut Encoder<'_>) -> Result<(), WriteError> {
+    fn write<V: ModelVersion>(&self, bytes: &mut Encoder<'_>) -> Result<(), mdx::WriteError> {
         write_extra_sections::<V>(bytes, &self.sections)
     }
     fn reforged(&self) -> Option<&Self> {
@@ -157,7 +153,6 @@ pub trait GeosetLayout {
     type LevelOfDetail: GeosetLevelOfDetail;
     type ExtraSections: GeosetExtraSections;
 }
-
 use crate::model::{V1000, V1100, V1200, V1300, V1400, V1600, V1800, V800, V900};
 impl GeosetLayout for V800 {
     type LevelOfDetail = NoGeosetLevelOfDetail;
@@ -678,31 +673,39 @@ impl<V: ModelVersion> Geoset<V> {
     }
 }
 
-fn peek_tag(cursor: &Cursor<'_>) -> Result<Tag, ReadError> {
+fn peek_tag(cursor: &Cursor<'_>) -> Result<Tag, mdx::ReadError> {
     Ok(cursor.peek_bytes(4)?.try_into().expect("four-byte tag"))
 }
 
-fn section<'a>(cursor: &mut Cursor<'a>, tag: Tag, stride: usize) -> Result<&'a [u8], ReadError> {
+fn section<'a>(
+    cursor: &mut Cursor<'a>,
+    tag: Tag,
+    stride: usize,
+) -> Result<Cursor<'a>, mdx::ReadError> {
     let offset = cursor.absolute_position();
-    if cursor.read_bytes(4)? != tag {
-        return Err(ReadError::MalformedRecord {
-            tag: *b"GEOS",
+    let actual = cursor.read()?;
+    if actual != tag {
+        return Err(mdx::ReadError::new(
             offset,
-        });
+            mdx::ReadErrorKind::UnexpectedTag {
+                expected: tag,
+                actual,
+            },
+        )
+        .with_tag(*b"GEOS"));
     }
     let count = cursor.read::<u32>()? as usize;
     let size = count
         .checked_mul(stride)
-        .ok_or(ReadError::MalformedRecord {
-            tag: *b"GEOS",
-            offset,
-        })?;
-    cursor.read_bytes(size)
+        .ok_or(mdx::ReadError::new(offset, mdx::ReadErrorKind::SizeOverflow).with_tag(*b"GEOS"))?;
+    cursor.subcursor(size)
 }
 
-fn decode_values<T: mdx::Read>(bytes: &[u8], width: usize) -> Result<Vec<T>, ReadError> {
-    let mut cursor = Cursor::new(bytes);
-    let values = (0..bytes.len() / width)
+fn decode_values<T: mdx::Read>(
+    mut cursor: Cursor<'_>,
+    width: usize,
+) -> Result<Vec<T>, mdx::ReadError> {
+    let values = (0..cursor.remaining().len() / width)
         .map(|_| cursor.read())
         .collect::<Result<Vec<_>, _>>()?;
     cursor.finish()?;
@@ -711,34 +714,38 @@ fn decode_values<T: mdx::Read>(bytes: &[u8], width: usize) -> Result<Vec<T>, Rea
 
 fn read_skin_weights<V: ModelVersion>(
     cursor: &mut Cursor<'_>,
-) -> Result<Vec<SkinWeights>, ReadError> {
+) -> Result<Vec<SkinWeights>, mdx::ReadError> {
     let offset = cursor.absolute_position();
     let wide = V::NUMBER >= 1400;
-    let data = section(cursor, *b"SKIN", if wide { 2 } else { 1 })?;
+    let mut data = section(cursor, *b"SKIN", if wide { 2 } else { 1 })?;
     let stride = if wide { 16 } else { 8 };
-    let malformed = || ReadError::MalformedRecord {
-        tag: *b"SKIN",
-        offset,
+    let malformed = || {
+        mdx::ReadError::new(
+            offset,
+            mdx::ReadErrorKind::InvalidValue {
+                field: "skin weights",
+            },
+        )
+        .with_tag(*b"SKIN")
     };
-    if data.len() % stride != 0 {
+    if data.remaining().len() % stride != 0 {
         return Err(malformed());
     }
-    let mut cursor = Cursor::new(data);
-    (0..data.len() / stride)
+    (0..data.remaining().len() / stride)
         .map(|_| {
             let bone_indices = if wide {
-                cursor.read::<[u16; 4]>()?
+                data.read::<[u16; 4]>()?
             } else {
-                cursor.read::<[u8; 4]>()?.map(u16::from)
+                data.read::<[u8; 4]>()?.map(u16::from)
             };
             let weights = if wide {
-                let values = cursor.read::<[u16; 4]>()?;
+                let values = data.read::<[u16; 4]>()?;
                 if values.iter().any(|&weight| weight > u8::MAX as u16) {
                     return Err(malformed());
                 }
                 values.map(|weight| weight as u8)
             } else {
-                cursor.read::<[u8; 4]>()?
+                data.read::<[u8; 4]>()?
             };
             Ok(SkinWeights {
                 bone_indices,
@@ -750,7 +757,7 @@ fn read_skin_weights<V: ModelVersion>(
 
 fn read_extra_sections<V: ModelVersion>(
     cursor: &mut Cursor<'_>,
-) -> Result<Vec<GeosetExtraSection>, ReadError> {
+) -> Result<Vec<GeosetExtraSection>, mdx::ReadError> {
     let mut extra_sections = Vec::new();
     while peek_tag(cursor)? != *b"UVAS" {
         let offset = cursor.absolute_position();
@@ -775,10 +782,11 @@ fn read_extra_sections<V: ModelVersion>(
                 extra_sections.push(GeosetExtraSection::Skin { weights });
             }
             _ => {
-                return Err(ReadError::MalformedRecord {
-                    tag: GeosetsChunk::<V>::TAG,
+                return Err(mdx::ReadError::new(
                     offset,
-                })
+                    mdx::ReadErrorKind::UnknownTag { actual: tag },
+                )
+                .with_tag(GeosetsChunk::<V>::TAG))
             }
         }
     }
@@ -788,7 +796,7 @@ fn read_extra_sections<V: ModelVersion>(
 fn write_extra_sections<V: ModelVersion>(
     bytes: &mut Encoder<'_>,
     sections: &[GeosetExtraSection],
-) -> Result<(), WriteError> {
+) -> Result<(), mdx::WriteError> {
     for extension in sections {
         match extension {
             GeosetExtraSection::Tangents(tangents) => write_vectors(bytes, *b"TANG", tangents)?,
@@ -800,9 +808,9 @@ fn write_extra_sections<V: ModelVersion>(
                             bytes.write(&index)?;
                         } else {
                             let index =
-                                u8::try_from(index).map_err(|_| WriteError::MalformedRecord {
+                                u8::try_from(index).map_err(|_| mdx::WriteError::InvalidValue {
+                                    field: "skin bone index",
                                     tag: *b"SKIN",
-                                    offset: bytes.position(),
                                 })?;
                             bytes.write(&index)?;
                         }
@@ -821,8 +829,9 @@ fn write_extra_sections<V: ModelVersion>(
     Ok(())
 }
 
-fn write_count(bytes: &mut Encoder<'_>, count: usize) -> Result<(), WriteError> {
-    let count = u32::try_from(count).map_err(|_| WriteError::ChunkTooLarge {
+fn write_count(bytes: &mut Encoder<'_>, count: usize) -> Result<(), mdx::WriteError> {
+    let count = u32::try_from(count).map_err(|_| mdx::WriteError::SizeOverflow {
+        field: "section count",
         tag: *b"GEOS",
         size: count,
     })?;
@@ -830,12 +839,16 @@ fn write_count(bytes: &mut Encoder<'_>, count: usize) -> Result<(), WriteError> 
     Ok(())
 }
 
-fn write_section_header(bytes: &mut Encoder<'_>, tag: Tag, count: usize) -> Result<(), WriteError> {
+fn write_section_header(
+    bytes: &mut Encoder<'_>,
+    tag: Tag,
+    count: usize,
+) -> Result<(), mdx::WriteError> {
     bytes.write_bytes(&tag);
     write_count(bytes, count)
 }
 
-fn write_words(bytes: &mut Encoder<'_>, tag: Tag, words: &[u32]) -> Result<(), WriteError> {
+fn write_words(bytes: &mut Encoder<'_>, tag: Tag, words: &[u32]) -> Result<(), mdx::WriteError> {
     write_section_header(bytes, tag, words.len())?;
     for word in words {
         bytes.write(word)?;
@@ -847,7 +860,7 @@ fn write_vectors<const N: usize>(
     bytes: &mut Encoder<'_>,
     tag: Tag,
     vectors: &[[f32; N]],
-) -> Result<(), WriteError> {
+) -> Result<(), mdx::WriteError> {
     write_section_header(bytes, tag, vectors.len())?;
     bytes.write(vectors)?;
     Ok(())
@@ -866,7 +879,7 @@ impl<V: ModelVersion> Model<V> {
 }
 
 impl<V: ModelVersion> mdx::Read for Geoset<V> {
-    fn read_mdx(source: &mut Cursor<'_>) -> Result<Self, ReadError> {
+    fn read_mdx(source: &mut Cursor<'_>) -> Result<Self, mdx::ReadError> {
         let mut cursor = source.subcursor_u32_sized()?;
 
         let value = {
@@ -875,7 +888,7 @@ impl<V: ModelVersion> mdx::Read for Geoset<V> {
             let primitive_types = decode_values::<u32>(section(&mut cursor, *b"PTYP", 4)?, 4)?;
             let primitive_counts = decode_values::<u32>(section(&mut cursor, *b"PCNT", 4)?, 4)?;
             let faces = decode_values::<u16>(section(&mut cursor, *b"PVTX", 2)?, 2)?;
-            let vertex_groups = section(&mut cursor, *b"GNDX", 1)?.to_vec();
+            let vertex_groups = section(&mut cursor, *b"GNDX", 1)?.remaining().to_vec();
             let matrix_group_sizes = decode_values::<u32>(section(&mut cursor, *b"MTGC", 4)?, 4)?;
             let matrix_indices = decode_values::<u32>(section(&mut cursor, *b"MATS", 4)?, 4)?;
             let material_id = cursor.read()?;
@@ -889,11 +902,16 @@ impl<V: ModelVersion> mdx::Read for Geoset<V> {
                 sequence_extents.push(cursor.read()?);
             }
             let extra_sections = V::ExtraSections::read::<V>(&mut cursor)?;
-            if cursor.read_bytes(4)? != b"UVAS" {
-                return Err(ReadError::MalformedRecord {
-                    tag: GeosetsChunk::<V>::TAG,
-                    offset: cursor.absolute_position() - 4,
-                });
+            let actual = cursor.read()?;
+            if actual != *b"UVAS" {
+                return Err(mdx::ReadError::new(
+                    cursor.absolute_position() - 4,
+                    mdx::ReadErrorKind::UnexpectedTag {
+                        expected: *b"UVAS",
+                        actual,
+                    },
+                )
+                .with_tag(GeosetsChunk::<V>::TAG));
             }
             let uv_count = cursor.read::<u32>()? as usize;
             let mut uv_sets = Vec::new();
@@ -929,7 +947,7 @@ impl<V: ModelVersion> mdx::Read for Geoset<V> {
 }
 
 impl<V: ModelVersion> mdx::Write for Geoset<V> {
-    fn write_mdx(&self, bytes: &mut Encoder<'_>) -> Result<(), WriteError> {
+    fn write_mdx(&self, bytes: &mut Encoder<'_>) -> Result<(), mdx::WriteError> {
         let start = bytes.position();
         let marker = bytes.begin_sized();
         write_vectors(bytes, *b"VRTX", &self.vertices)?;
@@ -964,7 +982,8 @@ impl<V: ModelVersion> mdx::Write for Geoset<V> {
             write_vectors(bytes, *b"UVBS", uv_set)?;
         }
         if bytes.position() - start > u32::MAX as usize {
-            return Err(WriteError::ChunkTooLarge {
+            return Err(mdx::WriteError::SizeOverflow {
+                field: "encoded size",
                 tag: GeosetsChunk::<V>::TAG,
                 size: bytes.position() - start,
             });

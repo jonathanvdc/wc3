@@ -1,14 +1,12 @@
 //! Animated opacity and color for individual geosets.
 use crate::model::Animatable;
+use crate::model::Color;
+use crate::model::GeosetAnimationsChunk;
+use crate::model::KnownChunk;
+use crate::model::Model;
 use crate::model::ModelVersion;
 use crate::model::{mdl, mdx};
 use bitfield::bitfield;
-
-use crate::model::Color;
-use crate::model::KnownChunk;
-
-use crate::model::GeosetAnimationsChunk;
-use crate::model::Model;
 
 bitfield! {
     /// Geoset animation rendering flags, retaining unknown bits.

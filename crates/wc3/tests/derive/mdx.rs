@@ -22,7 +22,8 @@ struct FailingField;
 
 impl mdx::Write for FailingField {
     fn write_mdx(&self, _: &mut Encoder<'_>) -> Result<(), WriteError> {
-        Err(WriteError::ChunkTooLarge {
+        Err(WriteError::SizeOverflow {
+            field: "encoded size",
             tag: *b"TEST",
             size: usize::MAX,
         })
@@ -72,7 +73,8 @@ fn derived_writer_propagates_field_errors() {
     let error = Encoder::new(&mut bytes).write(&packet).unwrap_err();
     assert_eq!(
         error,
-        WriteError::ChunkTooLarge {
+        WriteError::SizeOverflow {
+            field: "encoded size",
             tag: *b"TEST",
             size: usize::MAX,
         }
@@ -119,9 +121,13 @@ fn sized_derive_rejects_truncated_vector_item() {
     let error = SizedPacket::<()>::decode_mdx(&[8, 0, 0, 0, 7, 0, 11, 0]).unwrap_err();
     assert_eq!(
         error,
-        wc3::model::ReadError::UnexpectedEnd {
+        wc3::model::mdx::ReadError {
             offset: 6,
-            needed: 4
+            tag: Some(TEST_TAG),
+            kind: wc3::model::mdx::ReadErrorKind::UnexpectedEnd {
+                needed: 4,
+                remaining: 2
+            }
         }
     );
 }
@@ -140,9 +146,10 @@ fn sized_derive_rejects_zero_width_items() {
     let error = EmptyItems::decode_mdx(&[5, 0, 0, 0, 42]).unwrap_err();
     assert_eq!(
         error,
-        wc3::model::ReadError::MalformedRecord {
-            tag: TEST_TAG,
-            offset: 4
+        wc3::model::mdx::ReadError {
+            offset: 4,
+            tag: Some(TEST_TAG),
+            kind: wc3::model::mdx::ReadErrorKind::NoProgress
         }
     );
 }

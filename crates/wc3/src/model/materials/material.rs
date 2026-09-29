@@ -1,21 +1,20 @@
 //! Ordered rendering layers and material settings.
-use crate::model::conversion::ConversionContext;
-use crate::model::{mdl, mdx};
-use crate::model::{ConversionError, ConversionIssueKind};
-use bitfield::bitfield;
-use mdl_codec::zero_priority;
-use std::{borrow::Cow, fmt::Debug, marker::PhantomData};
-
 use super::layer::{
     EmissiveGain, EmissiveGainField, FresnelField, Layer, LayerFresnel, LayerShaderTypeField,
     LayerTextureSlot, LayerTextureSlots, LayerTextureSlotsField, NoEmissiveGain, NoFresnel,
     NoLayerShaderType, NoLayerTextureSlots, LAYER_TAG,
 };
 use super::{write_count, ShaderType};
+use crate::model::conversion::ConversionContext;
+use crate::model::{mdl, mdx};
+use crate::model::{ConversionError, ConversionIssueKind};
 use crate::model::{
-    Cursor, Encoder, FixedText, KnownChunk, MaterialsChunk, Model, ModelVersion, ReadError,
-    SupportsMaterialShaderPath, Tag, ValueError, Version, WriteError,
+    Cursor, Encoder, FixedText, KnownChunk, MaterialsChunk, Model, ModelVersion,
+    SupportsMaterialShaderPath, Tag, ValueError, Version,
 };
+use bitfield::bitfield;
+use mdl_codec::zero_priority;
+use std::{borrow::Cow, fmt::Debug, marker::PhantomData};
 
 bitfield! {
     /// Material rendering bits, preserving unrecognized bits.
@@ -132,7 +131,6 @@ pub trait MaterialLayout {
     type ShaderType: LayerShaderTypeField;
     type TextureSlots: LayerTextureSlotsField;
 }
-
 use crate::model::{V1000, V1100, V1200, V1300, V1400, V1600, V1800, V800, V900};
 
 impl MaterialLayout for V800 {
@@ -199,15 +197,21 @@ impl MaterialLayout for V1800 {
     type TextureSlots = LayerTextureSlots;
 }
 
-fn expect_tag(cursor: &mut Cursor<'_>, expected: Tag, record_tag: Tag) -> Result<(), ReadError> {
+fn expect_tag(
+    cursor: &mut Cursor<'_>,
+    expected: Tag,
+    record_tag: Tag,
+) -> Result<(), mdx::ReadError> {
     let offset = cursor.absolute_position();
-    if cursor.read_bytes(4)? == expected {
+    let actual = cursor.read()?;
+    if actual == expected {
         Ok(())
     } else {
-        Err(ReadError::MalformedRecord {
-            tag: record_tag,
+        Err(mdx::ReadError::new(
             offset,
-        })
+            mdx::ReadErrorKind::UnexpectedTag { expected, actual },
+        )
+        .with_tag(record_tag))
     }
 }
 
@@ -271,7 +275,7 @@ impl<V: ModelVersion> Model<V> {
 }
 
 impl<V: ModelVersion> mdx::Read for Material<V> {
-    fn read_mdx(source: &mut Cursor<'_>) -> Result<Self, ReadError> {
+    fn read_mdx(source: &mut Cursor<'_>) -> Result<Self, mdx::ReadError> {
         let mut cursor = source.subcursor_u32_sized()?;
         let value = {
             let priority_plane = cursor.read()?;
@@ -298,7 +302,7 @@ impl<V: ModelVersion> mdx::Read for Material<V> {
 }
 
 impl<V: ModelVersion> mdx::Write for Material<V> {
-    fn write_mdx(&self, bytes: &mut Encoder<'_>) -> Result<(), WriteError> {
+    fn write_mdx(&self, bytes: &mut Encoder<'_>) -> Result<(), mdx::WriteError> {
         let marker = bytes.begin_sized();
         bytes.write(&(self.priority_plane))?;
         bytes.write(&(self.render_mode))?;

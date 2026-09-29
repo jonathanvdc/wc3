@@ -1,14 +1,12 @@
 //! Named attachment points and optional attached models.
 use super::node::{set_node_kind, validate_node_kind};
 use crate::model::mdl::Span;
+use crate::model::AttachmentsChunk;
+use crate::model::FixedText;
 use crate::model::KnownChunk;
 use crate::model::ModelVersion;
 use crate::model::ValueError;
 use crate::model::{mdl, mdx};
-
-use crate::model::AttachmentsChunk;
-
-use crate::model::FixedText;
 use crate::model::{Model, Node, Track};
 
 const PATH_SIZE: usize = 260;

@@ -1,9 +1,8 @@
 //! The complete model-information chunk.
+use crate::model::mdx;
 use crate::model::Encoder;
 use crate::model::Tag;
-use crate::model::WriteError;
-
-use crate::model::{Chunk, KnownChunk, ReadError};
+use crate::model::{Chunk, KnownChunk};
 use crate::model::{Cursor, ModelInfo};
 
 /// A complete `MODL` chunk, including bytes after the standard record.
@@ -24,15 +23,18 @@ impl Chunk for ModelInfoChunk {
         Self::TAG
     }
 
-    fn encode_payload_to(&self, bytes: &mut Encoder<'_>) -> Result<(), WriteError> {
-        let size = 372usize
-            .checked_add(self.extension.len())
-            .ok_or(WriteError::ChunkTooLarge {
-                tag: Self::TAG,
-                size: usize::MAX,
-            })?;
+    fn encode_payload_to(&self, bytes: &mut Encoder<'_>) -> Result<(), mdx::WriteError> {
+        let size =
+            372usize
+                .checked_add(self.extension.len())
+                .ok_or(mdx::WriteError::SizeOverflow {
+                    field: "encoded size",
+                    tag: Self::TAG,
+                    size: usize::MAX,
+                })?;
         if size > u32::MAX as usize {
-            return Err(WriteError::ChunkTooLarge {
+            return Err(mdx::WriteError::SizeOverflow {
+                field: "encoded size",
                 tag: Self::TAG,
                 size,
             });
@@ -45,7 +47,7 @@ impl Chunk for ModelInfoChunk {
 }
 
 impl KnownChunk for ModelInfoChunk {
-    fn decode_payload(cursor: &mut Cursor<'_>) -> Result<Self, ReadError> {
+    fn decode_payload(cursor: &mut Cursor<'_>) -> Result<Self, mdx::ReadError> {
         let info = cursor.read()?;
         let extension = cursor.remaining().to_vec();
         cursor.read_bytes(extension.len())?;

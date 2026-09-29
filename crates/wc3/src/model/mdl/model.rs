@@ -1,6 +1,7 @@
 //! Whole-model assembly: top-level MDL blocks map to typed binary chunks.
-use super::{Field, Fields, Parser, ReadErrorKind, Span, TokenKind, Writer};
+use super::{Field, Fields, Parser, Span, TokenKind, Writer};
 use crate::model::mdl;
+use crate::model::IoError;
 use crate::model::{
     AttachmentsChunk, BindPoseChunk, BonesChunk, CamerasChunk, CollectionChunk,
     CollisionShapesChunk, DynamicModel, EventObjectsChunk, FaceFxChunk, GeosetAnimationsChunk,
@@ -27,7 +28,7 @@ impl<V: ModelVersion> VersionChunk<V> {
         if actual != V::NUMBER {
             return Err(mdl::ReadError::new(
                 span,
-                ReadErrorKind::VersionMismatch {
+                mdl::ReadErrorKind::VersionMismatch {
                     expected: V::NUMBER,
                     actual,
                 },
@@ -37,7 +38,9 @@ impl<V: ModelVersion> VersionChunk<V> {
     }
     pub(crate) fn validate_mdl_write(&self) -> Result<(), mdl::WriteError> {
         if !self.extension.is_empty() {
-            return Err(mdl::WriteError::Unsupported("version chunk extension"));
+            return Err(mdl::WriteError::Unrepresentable {
+                field: "version chunk extension",
+            });
         }
         Ok(())
     }
@@ -46,7 +49,7 @@ impl<V: ModelVersion> VersionChunk<V> {
 fn require_version_first(parser: &mut Parser<'_>) -> Result<(), mdl::ReadError> {
     match parser.peek()? {
         Some(token) if token.kind == TokenKind::Ident("Version") => Ok(()),
-        _ => Err(parser.error(ReadErrorKind::Expected("Version as the first block"))),
+        _ => Err(parser.error(mdl::ReadErrorKind::Expected("Version as the first block"))),
     }
 }
 fn read_collection<C: CollectionChunk>(parser: &mut Parser<'_>) -> Result<C, mdl::ReadError>
@@ -67,7 +70,7 @@ impl<V: ModelVersion> mdl::Read for Model<V> {
         while let Some(token) = parser.peek()? {
             let name = match token.kind {
                 TokenKind::Ident(name) => name,
-                _ => return Err(parser.error(ReadErrorKind::TrailingInput)),
+                _ => return Err(parser.error(mdl::ReadErrorKind::TrailingInput)),
             };
             let field = Field {
                 name,
@@ -99,7 +102,7 @@ impl<V: ModelVersion> mdl::Read for Model<V> {
                 "Version" => {
                     return Err(mdl::ReadError::new(
                         field.span,
-                        ReadErrorKind::DuplicateField,
+                        mdl::ReadErrorKind::DuplicateField,
                     ))
                 }
                 "Model" => {
@@ -139,14 +142,19 @@ impl<V: ModelVersion> mdl::Read for Model<V> {
                 "FaceFX" | "BindPose" | "ParticleEmitterPopcorn" => {
                     return Err(mdl::ReadError::new(
                         field.span,
-                        ReadErrorKind::UnsupportedField,
+                        mdl::ReadErrorKind::UnsupportedField,
                     ))
                 }
-                _ => return Err(mdl::ReadError::new(field.span, ReadErrorKind::UnknownField)),
+                _ => {
+                    return Err(mdl::ReadError::new(
+                        field.span,
+                        mdl::ReadErrorKind::UnknownField,
+                    ))
+                }
             }
         }
         if !has_info {
-            return Err(parser.error(ReadErrorKind::MissingField("Model")));
+            return Err(parser.error(mdl::ReadErrorKind::MissingField("Model")));
         }
         Ok(model)
     }
@@ -156,7 +164,7 @@ fn write_collection<V: ModelVersion, C: CollectionChunk>(
     model: &Model<V>,
     name: Option<&str>,
     writer: &mut Writer<impl IoWrite>,
-) -> Result<(), mdl::WriteError>
+) -> Result<(), IoError<mdl::WriteError>>
 where
     C::Item: mdl::Write,
     for<'a> &'a C: TryFrom<&'a ModelChunk<V>>,
@@ -166,7 +174,9 @@ where
         .try_fold(0usize, |total, chunk| {
             total.checked_add(chunk.records().len())
         })
-        .ok_or(mdl::WriteError::Unsupported("collection count overflow"))?;
+        .ok_or(mdl::WriteError::SizeOverflow {
+            field: "collection count overflow",
+        })?;
     if count == 0 {
         return Ok(());
     }
@@ -185,45 +195,65 @@ where
 }
 
 impl<V: ModelVersion> mdl::Write for Model<V> {
-    fn write_mdl<W: IoWrite>(&self, writer: &mut Writer<W>) -> Result<(), mdl::WriteError> {
+    fn write_mdl<W: IoWrite>(
+        &self,
+        writer: &mut Writer<W>,
+    ) -> Result<(), IoError<mdl::WriteError>> {
         let mut version = None;
         let mut info = None;
         for chunk in self.chunks.as_slice() {
             match chunk {
                 ModelChunk::Version(chunk) => {
                     if version.replace(chunk).is_some() {
-                        return Err(mdl::WriteError::Unsupported("multiple Version chunks"));
+                        return Err(mdl::WriteError::InvalidStructure {
+                            field: "multiple Version chunks",
+                        }
+                        .into());
                     }
                     chunk.validate_mdl_write()?;
                 }
                 ModelChunk::ModelInfo(chunk) => {
                     if info.replace(&chunk.info).is_some() {
-                        return Err(mdl::WriteError::Unsupported("multiple Model chunks"));
+                        return Err(mdl::WriteError::InvalidStructure {
+                            field: "multiple Model chunks",
+                        }
+                        .into());
                     }
                     if !chunk.extension.is_empty() {
-                        return Err(mdl::WriteError::Unsupported(
-                            "model information chunk extension",
-                        ));
+                        return Err(mdl::WriteError::Unrepresentable {
+                            field: "model information chunk extension",
+                        }
+                        .into());
                     }
                 }
                 ModelChunk::Unknown(_) => {
-                    return Err(mdl::WriteError::Unsupported("opaque binary chunk"))
+                    return Err(mdl::WriteError::Unrepresentable {
+                        field: "opaque binary chunk",
+                    }
+                    .into())
                 }
                 ModelChunk::PopcornEmitters(chunk) => {
                     if V::NUMBER < 900 && !chunk.records.is_empty() {
-                        return Err(mdl::WriteError::Unsupported(
-                            "ParticleEmitterPopcorn before version 900",
-                        ));
+                        return Err(mdl::WriteError::Unrepresentable {
+                            field: "ParticleEmitterPopcorn before version 900",
+                        }
+                        .into());
                     }
                 }
                 ModelChunk::FaceFx(chunk) => {
                     if V::NUMBER < 900 && !chunk.records.is_empty() {
-                        return Err(mdl::WriteError::Unsupported("FaceFX before version 900"));
+                        return Err(mdl::WriteError::Unrepresentable {
+                            field: "FaceFX before version 900",
+                        }
+                        .into());
                     }
                 }
                 ModelChunk::BindPose(chunk) => {
                     if V::NUMBER < 900 && !chunk.records.is_empty() {
-                        return Err(mdl::WriteError::Unsupported("BindPose before version 900"));
+                        return Err(mdl::WriteError::Unrepresentable {
+                            field: "BindPose before version 900",
+                        }
+                        .into());
                     }
                 }
                 ModelChunk::Cameras(_)
@@ -247,8 +277,12 @@ impl<V: ModelVersion> mdl::Write for Model<V> {
                 | ModelChunk::Gliders(_) => {}
             }
         }
-        let version = version.ok_or(mdl::WriteError::Unsupported("missing Version chunk"))?;
-        let info = info.ok_or(mdl::WriteError::Unsupported("missing Model chunk"))?;
+        let version = version.ok_or(mdl::WriteError::InvalidStructure {
+            field: "missing Version chunk",
+        })?;
+        let info = info.ok_or(mdl::WriteError::InvalidStructure {
+            field: "missing Model chunk",
+        })?;
         writer.write(version.as_ref())?;
         writer.write(info)?;
         macro_rules! collection {
@@ -303,13 +337,16 @@ impl mdl::Read for DynamicModel {
         let version = checkpoint.read::<VersionHeader>()?.version;
         macro_rules! dispatch { ($($number:literal => $variant:ident($ty:ty)),*) => { match version {
             $($number => parser.read::<Model<$ty>>().map(Self::$variant),)*
-            _ => Err(mdl::ReadError::new(Span::new(start, checkpoint.position()), ReadErrorKind::UnsupportedVersion { version })),
+            _ => Err(mdl::ReadError::new(Span::new(start, checkpoint.position()), mdl::ReadErrorKind::UnsupportedVersion { version })),
         } }; }
         dispatch!(800 => V800(V800), 900 => V900(V900), 1000 => V1000(V1000), 1100 => V1100(V1100), 1200 => V1200(V1200), 1300 => V1300(V1300), 1400 => V1400(V1400), 1600 => V1600(V1600), 1800 => V1800(V1800))
     }
 }
 impl mdl::Write for DynamicModel {
-    fn write_mdl<W: IoWrite>(&self, writer: &mut Writer<W>) -> Result<(), mdl::WriteError> {
+    fn write_mdl<W: IoWrite>(
+        &self,
+        writer: &mut Writer<W>,
+    ) -> Result<(), IoError<mdl::WriteError>> {
         use crate::model::visit_model;
         visit_model!(self, |model| writer.write(model))
     }

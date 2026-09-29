@@ -1,4 +1,5 @@
-use super::{ReadError, ReadErrorKind, Span};
+use super::Span;
+use crate::model::mdl;
 use std::iter::FusedIterator;
 
 /// A borrowed lexical token. String contents are not unescaped by the lexer.
@@ -50,7 +51,7 @@ impl<'a> Lexer<'a> {
         self.source
     }
 
-    fn scan(&mut self) -> Result<Option<Token<'a>>, ReadError> {
+    fn scan(&mut self) -> Result<Option<Token<'a>>, mdl::ReadError> {
         let bytes = self.source.as_bytes();
         loop {
             while bytes.get(self.offset).is_some_and(u8::is_ascii_whitespace) {
@@ -91,9 +92,9 @@ impl<'a> Lexer<'a> {
                     }
                     self.offset += 1;
                 }
-                return Err(ReadError::new(
+                return Err(mdl::ReadError::new(
                     Span::new(start, bytes.len()),
-                    ReadErrorKind::UnterminatedString,
+                    mdl::ReadErrorKind::UnterminatedString,
                 ));
             }
             b if b.is_ascii_alphabetic() || b == b'_' => {
@@ -121,9 +122,9 @@ impl<'a> Lexer<'a> {
             }
             _ => {
                 self.offset = start + self.source[start..].chars().next().unwrap().len_utf8();
-                return Err(ReadError::new(
+                return Err(mdl::ReadError::new(
                     Span::new(start, self.offset),
-                    ReadErrorKind::InvalidCharacter,
+                    mdl::ReadErrorKind::InvalidCharacter,
                 ));
             }
         };
@@ -135,7 +136,7 @@ impl<'a> Lexer<'a> {
 }
 
 impl<'a> Iterator for Lexer<'a> {
-    type Item = Result<Token<'a>, ReadError>;
+    type Item = Result<Token<'a>, mdl::ReadError>;
     fn next(&mut self) -> Option<Self::Item> {
         if self.failed {
             return None;

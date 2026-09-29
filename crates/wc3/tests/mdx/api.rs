@@ -56,9 +56,12 @@ fn cursor_read_advances_through_records_and_decode_rejects_trailing_bytes() {
     assert_eq!(consumed, first.encode_mdx().unwrap().len());
     assert_eq!(
         Sequence::decode_mdx(&bytes),
-        Err(mdx::ReadError::TrailingRecordBytes {
-            consumed,
-            total: bytes.len(),
+        Err(mdx::ReadError {
+            offset: consumed,
+            tag: None,
+            kind: mdx::ReadErrorKind::TrailingBytes {
+                remaining: bytes.len() - consumed
+            }
         })
     );
 
@@ -72,7 +75,10 @@ fn cursor_read_advances_through_records_and_decode_rejects_trailing_bytes() {
     assert_eq!(cursor.position(), first.encode_mdx().unwrap().len());
     assert!(matches!(
         Geoset::<V800>::decode_mdx(&bytes),
-        Err(mdx::ReadError::TrailingRecordBytes { .. })
+        Err(mdx::ReadError {
+            kind: mdx::ReadErrorKind::TrailingBytes { .. },
+            ..
+        })
     ));
 }
 

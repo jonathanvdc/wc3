@@ -39,6 +39,10 @@
 //! [`from_reader`] buffers the entire source through EOF and rejects trailing
 //! input. [`to_writer`] buffers the encoded value before writing it.
 //! Writers do not flush their sinks; I/O failures may leave partial output.
+//! Standard I/O adapters return [`crate::model::IoError`], separating transport
+//! failures from codec errors. Slice and buffer codecs return [`ReadError`] or
+//! [`WriteError`] directly. Read errors carry an absolute byte offset, an
+//! optional chunk/section tag, and a structured [`ReadErrorKind`].
 //!
 //! ```
 //! use wc3::model::{mdx, Model, V800};
@@ -56,14 +60,14 @@ pub use cursor::{Cursor, Read};
 mod encoder;
 pub use encoder::{Encoder, SizeMarker, Write};
 mod error;
-pub use error::{ReadError, ValueError, WriteError};
+pub use error::{ReadError, ReadErrorKind, WriteError};
 mod fixed_text;
 pub use fixed_text::FixedText;
 
 pub use wc3_derive::{MdxRead as Read, MdxValue as Value, MdxWrite as Write};
 
 mod io;
-pub use io::{from_reader, from_reader_with_version, to_writer, FromReaderError, ToWriterError};
+pub use io::{from_reader, from_reader_with_version, to_writer};
 
 mod tracks;
 pub use tracks::{ReadTrackProperty, ReadTracks, WriteTrackProperty, WriteTracks};

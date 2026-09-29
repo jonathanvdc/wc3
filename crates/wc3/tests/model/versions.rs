@@ -2,13 +2,15 @@ use std::mem::size_of;
 use wc3::model::animation::Animatable;
 use wc3::model::chunks::{ModelChunk, RawChunk, UnknownChunk};
 use wc3::model::mdx::Read as _;
+use wc3::model::mdx::ReadErrorKind;
 use wc3::model::mdx::Write as _;
+use wc3::model::ValueError;
 
 use wc3::model::geometry::{
     Geoset, GeosetLayout, NoGeosetExtraSections, ReforgedGeosetExtraSections,
 };
 use wc3::model::materials::{Layer, Material};
-use wc3::model::mdx::{ReadError, ValueError};
+use wc3::model::mdx::ReadError;
 use wc3::model::scene::{Camera, CameraVariant, Light, LightType, Node};
 use wc3::model::{DynamicModel, Model, V1000, V1800, V800, V900};
 
@@ -105,7 +107,11 @@ fn runtime_dispatch_rejects_versions_without_a_layout() {
     bytes[12..16].copy_from_slice(&777u32.to_le_bytes());
     assert!(matches!(
         DynamicModel::decode_mdx(&bytes, 800),
-        Err(ReadError::UnsupportedVersion { version: 777 })
+        Err(ReadError {
+            offset: 12,
+            tag: Some([86, 69, 82, 83]),
+            kind: ReadErrorKind::UnsupportedVersion { version: 777 }
+        })
     ));
 }
 

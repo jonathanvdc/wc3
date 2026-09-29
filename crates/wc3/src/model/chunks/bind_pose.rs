@@ -1,8 +1,6 @@
 //! Reforged bind-pose matrices in `BPOS` chunks.
-use crate::model::{
-    mdl, BindPoseMatrix, Chunk, CollectionChunk, Cursor, Encoder, KnownChunk, ReadError, Tag,
-    WriteError,
-};
+use crate::model::mdx;
+use crate::model::{mdl, BindPoseMatrix, Chunk, CollectionChunk, Cursor, Encoder, KnownChunk, Tag};
 
 const MATRIX_SIZE: usize = 48;
 
@@ -49,18 +47,20 @@ impl Chunk for BindPoseChunk {
         Self::TAG
     }
 
-    fn encode_payload_to(&self, bytes: &mut Encoder<'_>) -> Result<(), WriteError> {
+    fn encode_payload_to(&self, bytes: &mut Encoder<'_>) -> Result<(), mdx::WriteError> {
         let size = self
             .records
             .len()
             .checked_mul(MATRIX_SIZE)
             .and_then(|n| n.checked_add(4))
-            .ok_or(WriteError::ChunkTooLarge {
+            .ok_or(mdx::WriteError::SizeOverflow {
+                field: "encoded size",
                 tag: Self::TAG,
                 size: usize::MAX,
             })?;
         if size > u32::MAX as usize {
-            return Err(WriteError::ChunkTooLarge {
+            return Err(mdx::WriteError::SizeOverflow {
+                field: "encoded size",
                 tag: Self::TAG,
                 size,
             });
@@ -76,28 +76,27 @@ impl Chunk for BindPoseChunk {
 impl KnownChunk for BindPoseChunk {
     const TAG: Tag = *b"BPOS";
 
-    fn decode_payload(cursor: &mut Cursor<'_>) -> Result<Self, ReadError> {
+    fn decode_payload(cursor: &mut Cursor<'_>) -> Result<Self, mdx::ReadError> {
+        let offset = cursor.absolute_position();
         let size = cursor.remaining().len();
         let count = cursor
             .read::<u32>()
-            .map_err(|_| ReadError::MalformedChunk {
-                tag: Self::TAG,
-                size,
-                expected: 4,
-            })? as usize;
+            .map_err(|error| error.with_tag(Self::TAG))? as usize;
         let expected = count
             .checked_mul(MATRIX_SIZE)
             .and_then(|n| n.checked_add(4))
-            .ok_or(ReadError::MalformedRecord {
-                tag: Self::TAG,
-                offset: 0,
-            })?;
+            .ok_or(
+                mdx::ReadError::new(offset, mdx::ReadErrorKind::SizeOverflow).with_tag(Self::TAG),
+            )?;
         if size != expected {
-            return Err(ReadError::MalformedChunk {
-                tag: Self::TAG,
-                size,
-                expected,
-            });
+            return Err(mdx::ReadError::new(
+                offset,
+                mdx::ReadErrorKind::SizeMismatch {
+                    actual: size,
+                    expected,
+                },
+            )
+            .with_tag(Self::TAG));
         }
         let mut records = Vec::with_capacity(count);
         for _ in 0..count {

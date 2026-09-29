@@ -1,12 +1,11 @@
 //! Checked, bounded reads over immutable bytes.
-use crate::model::ReadError;
-
+use crate::model::mdx;
 /// A value that can be read from an MDX byte stream.
 pub trait Read: Sized {
-    fn read_mdx(cursor: &mut Cursor<'_>) -> Result<Self, ReadError>;
+    fn read_mdx(cursor: &mut Cursor<'_>) -> Result<Self, mdx::ReadError>;
 
     /// Reads a value and rejects trailing bytes.
-    fn decode_mdx(bytes: &[u8]) -> Result<Self, ReadError> {
+    fn decode_mdx(bytes: &[u8]) -> Result<Self, mdx::ReadError> {
         let mut cursor = Cursor::new(bytes);
         let value = Self::read_mdx(&mut cursor)?;
         cursor.finish()?;
@@ -15,13 +14,13 @@ pub trait Read: Sized {
 }
 
 impl Read for u8 {
-    fn read_mdx(cursor: &mut Cursor<'_>) -> Result<Self, ReadError> {
+    fn read_mdx(cursor: &mut Cursor<'_>) -> Result<Self, mdx::ReadError> {
         Ok(cursor.read_bytes(1)?[0])
     }
 }
 
 impl Read for u16 {
-    fn read_mdx(cursor: &mut Cursor<'_>) -> Result<Self, ReadError> {
+    fn read_mdx(cursor: &mut Cursor<'_>) -> Result<Self, mdx::ReadError> {
         Ok(u16::from_le_bytes(
             cursor.read_bytes(2)?.try_into().expect("two-byte word"),
         ))
@@ -29,7 +28,7 @@ impl Read for u16 {
 }
 
 impl Read for u32 {
-    fn read_mdx(cursor: &mut Cursor<'_>) -> Result<Self, ReadError> {
+    fn read_mdx(cursor: &mut Cursor<'_>) -> Result<Self, mdx::ReadError> {
         Ok(u32::from_le_bytes(
             cursor.read_bytes(4)?.try_into().expect("four-byte word"),
         ))
@@ -37,7 +36,7 @@ impl Read for u32 {
 }
 
 impl Read for i32 {
-    fn read_mdx(cursor: &mut Cursor<'_>) -> Result<Self, ReadError> {
+    fn read_mdx(cursor: &mut Cursor<'_>) -> Result<Self, mdx::ReadError> {
         Ok(i32::from_le_bytes(
             cursor.read_bytes(4)?.try_into().expect("four-byte word"),
         ))
@@ -45,13 +44,13 @@ impl Read for i32 {
 }
 
 impl Read for f32 {
-    fn read_mdx(cursor: &mut Cursor<'_>) -> Result<Self, ReadError> {
+    fn read_mdx(cursor: &mut Cursor<'_>) -> Result<Self, mdx::ReadError> {
         Ok(f32::from_bits(cursor.read::<u32>()?))
     }
 }
 
 impl<T: Read + Copy + Default, const N: usize> Read for [T; N] {
-    fn read_mdx(cursor: &mut Cursor<'_>) -> Result<Self, ReadError> {
+    fn read_mdx(cursor: &mut Cursor<'_>) -> Result<Self, mdx::ReadError> {
         let mut values = [T::default(); N];
         for value in &mut values {
             *value = cursor.read()?;
@@ -98,34 +97,40 @@ impl<'a> Cursor<'a> {
     }
 
     /// Reads exactly `len` bytes and advances only on success.
-    pub fn read_bytes(&mut self, len: usize) -> Result<&'a [u8], ReadError> {
+    pub fn read_bytes(&mut self, len: usize) -> Result<&'a [u8], mdx::ReadError> {
         let start = self.offset;
-        let end = start.checked_add(len).ok_or(ReadError::UnexpectedEnd {
-            offset: self.absolute_position(),
-            needed: len,
-        })?;
-        let value = self.bytes.get(start..end).ok_or(ReadError::UnexpectedEnd {
-            offset: self.absolute_position(),
-            needed: len,
-        })?;
+        let end = start.checked_add(len).ok_or(mdx::ReadError::new(
+            self.absolute_position(),
+            mdx::ReadErrorKind::UnexpectedEnd {
+                needed: len,
+                remaining: self.remaining().len(),
+            },
+        ))?;
+        let value = self.bytes.get(start..end).ok_or(mdx::ReadError::new(
+            self.absolute_position(),
+            mdx::ReadErrorKind::UnexpectedEnd {
+                needed: len,
+                remaining: self.remaining().len(),
+            },
+        ))?;
         self.offset = end;
         Ok(value)
     }
 
     /// Borrows the next `len` bytes without advancing.
-    pub fn peek_bytes(&self, len: usize) -> Result<&'a [u8], ReadError> {
+    pub fn peek_bytes(&self, len: usize) -> Result<&'a [u8], mdx::ReadError> {
         let mut copy = *self;
         copy.read_bytes(len)
     }
 
     /// Reads a value from the byte stream.
-    pub fn read<T: Read>(&mut self) -> Result<T, ReadError> {
+    pub fn read<T: Read>(&mut self) -> Result<T, mdx::ReadError> {
         T::read_mdx(self)
     }
 
     /// Advances this cursor and returns a cursor confined to those bytes.
     /// Copy the parent first if parsing the child may need to be rolled back.
-    pub fn subcursor(&mut self, len: usize) -> Result<Self, ReadError> {
+    pub fn subcursor(&mut self, len: usize) -> Result<Self, mdx::ReadError> {
         let base = self.absolute_position();
         let bytes = self.read_bytes(len)?;
         Ok(Self {
@@ -138,30 +143,30 @@ impl<'a> Cursor<'a> {
     /// Reads a little-endian size that includes its own four bytes, then
     /// returns a cursor bounded to the remaining record body.
     /// Leaves the parent in place if the size or body is invalid.
-    pub fn subcursor_u32_sized(&mut self) -> Result<Self, ReadError> {
+    pub fn subcursor_u32_sized(&mut self) -> Result<Self, mdx::ReadError> {
         let mut next = *self;
         let start = next.absolute_position();
         let length = next.read::<u32>()? as usize;
-        let body_len = length
-            .checked_sub(4)
-            .ok_or(ReadError::InvalidRecordLength {
-                offset: start,
-                length,
-            })?;
+        let body_len = length.checked_sub(4).ok_or(mdx::ReadError::new(
+            start,
+            mdx::ReadErrorKind::InvalidRecordLength { length },
+        ))?;
         let body = next.subcursor(body_len)?;
         *self = next;
         Ok(body)
     }
 
     /// Requires that all bytes in this cursor's slice were consumed.
-    pub fn finish(self) -> Result<(), ReadError> {
+    pub fn finish(self) -> Result<(), mdx::ReadError> {
         if self.offset == self.bytes.len() {
             Ok(())
         } else {
-            Err(ReadError::TrailingRecordBytes {
-                consumed: self.offset,
-                total: self.bytes.len(),
-            })
+            Err(mdx::ReadError::new(
+                self.absolute_position(),
+                mdx::ReadErrorKind::TrailingBytes {
+                    remaining: self.bytes.len() - self.offset,
+                },
+            ))
         }
     }
 }
@@ -194,9 +199,13 @@ mod tests {
         assert_eq!(child.read_bytes(2).unwrap(), &[10, 11]);
         assert_eq!(
             child.read_bytes(1),
-            Err(ReadError::UnexpectedEnd {
+            Err(mdx::ReadError {
                 offset: 2,
-                needed: 1
+                tag: None,
+                kind: mdx::ReadErrorKind::UnexpectedEnd {
+                    needed: 1,
+                    remaining: 0
+                }
             })
         );
         assert_eq!(child.position(), 2);
@@ -209,17 +218,22 @@ mod tests {
         assert_eq!(inner.absolute_position(), 1);
         assert_eq!(
             inner.read_bytes(2),
-            Err(ReadError::UnexpectedEnd {
+            Err(mdx::ReadError {
                 offset: 1,
-                needed: 2
+                tag: None,
+                kind: mdx::ReadErrorKind::UnexpectedEnd {
+                    needed: 2,
+                    remaining: 1
+                }
             })
         );
         assert_eq!(inner.position(), 0);
         assert_eq!(
             middle.finish(),
-            Err(ReadError::TrailingRecordBytes {
-                consumed: 1,
-                total: 2
+            Err(mdx::ReadError {
+                offset: 2,
+                tag: None,
+                kind: mdx::ReadErrorKind::TrailingBytes { remaining: 1 }
             })
         );
     }
@@ -237,9 +251,10 @@ mod tests {
         let mut short = Cursor::new(&[3, 0, 0, 0]);
         assert_eq!(
             short.subcursor_u32_sized().unwrap_err(),
-            ReadError::InvalidRecordLength {
+            mdx::ReadError {
                 offset: 0,
-                length: 3
+                tag: None,
+                kind: mdx::ReadErrorKind::InvalidRecordLength { length: 3 }
             }
         );
         assert_eq!(short.position(), 0);
@@ -247,9 +262,13 @@ mod tests {
         let mut truncated = Cursor::new(&[8, 0, 0, 0, 1]);
         assert_eq!(
             truncated.subcursor_u32_sized().unwrap_err(),
-            ReadError::UnexpectedEnd {
+            mdx::ReadError {
                 offset: 4,
-                needed: 4
+                tag: None,
+                kind: mdx::ReadErrorKind::UnexpectedEnd {
+                    needed: 4,
+                    remaining: 1
+                }
             }
         );
         assert_eq!(truncated.position(), 0);

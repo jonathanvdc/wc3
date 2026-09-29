@@ -133,7 +133,7 @@ fn expand_checked(input: DeriveInput, reading: bool) -> Result<TokenStream> {
             generics.make_where_clause().predicates.push(bound);
             track_reads.push(quote! {
                 if tag == #track_tag {
-                    ::wc3::model::mdx::ReadTrackProperty::read_mdx_track_property(&mut self.#member, cursor)?;
+                    ::wc3::model::mdx::ReadTrackProperty::read_mdx_track_property(&mut self.#member, cursor).map_err(|error| error.in_chunk(tag))?;
                     return Ok(true);
                 }
             });
@@ -173,7 +173,7 @@ fn expand_checked(input: DeriveInput, reading: bool) -> Result<TokenStream> {
                     let offset = cursor.absolute_position();
                     let value = cursor.read::<#item>()?;
                     if cursor.absolute_position() == offset {
-                        return Err(::wc3::model::mdx::ReadError::MalformedRecord { tag: #tag, offset });
+                        return Err(::wc3::model::mdx::ReadError { offset, tag: Some(#tag), kind: ::wc3::model::mdx::ReadErrorKind::NoProgress });
                     }
                     values.push(value);
                 }
@@ -205,19 +205,21 @@ fn expand_checked(input: DeriveInput, reading: bool) -> Result<TokenStream> {
     };
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
     if reading {
-        let body = if tag.is_some() {
+        let body = if let Some(record_tag) = tag {
             quote! {
+                (|| {
                 let mut cursor = source.subcursor_u32_sized()?;
                 let mut value = #constructor;
                 while !cursor.remaining().is_empty() {
                     let offset = cursor.absolute_position();
                     let tag = cursor.read()?;
                     if !::wc3::model::mdx::ReadTracks::read_mdx_track(&mut value, tag, &mut cursor)? {
-                        return Err(::wc3::model::mdx::ReadError::MalformedRecord { tag, offset });
+                        return Err(::wc3::model::mdx::ReadError { offset, tag: Some(#record_tag), kind: ::wc3::model::mdx::ReadErrorKind::UnknownTag { actual: tag } });
                     }
                 }
                 cursor.finish()?;
                 Ok(value)
+                })().map_err(|error: ::wc3::model::mdx::ReadError| error.in_chunk(#record_tag))
             }
         } else {
             quote! {
@@ -411,7 +413,7 @@ fn expand_enum(input: &DeriveInput, reading: bool, conversions: bool) -> Result<
         let fallback = if let Some(member) = unknown {
             quote!(value => Self::#member(value))
         } else {
-            quote!(value => return Err(::wc3::model::mdx::ReadError::UnknownEnumValue { enum_name: stringify!(#name), value, offset }))
+            quote!(value => return Err(::wc3::model::mdx::ReadError { offset, tag: None, kind: ::wc3::model::mdx::ReadErrorKind::UnknownEnumValue { enum_name: stringify!(#name), value } }))
         };
         Ok(quote! {
             impl #impl_generics ::wc3::model::mdx::Read for #name #ty_generics #where_clause {

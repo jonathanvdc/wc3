@@ -1,4 +1,5 @@
-use wc3::model::mdx::{Cursor, Encoder, FixedText, ValueError};
+use wc3::model::mdx::{Cursor, Encoder, FixedText};
+use wc3::model::ValueError;
 
 #[test]
 fn fixed_text_preserves_raw_bytes_until_edited() {

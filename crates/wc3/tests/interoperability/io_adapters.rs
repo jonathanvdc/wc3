@@ -2,6 +2,7 @@ use std::error::Error as _;
 use std::io::{self, Read as IoRead, Write as IoWrite};
 use wc3::model::mdl::Write as _;
 use wc3::model::mdx::Write as _;
+use wc3::model::IoError;
 use wc3::model::{mdl, mdx, DynamicModel, Model, V800};
 
 struct ShortIo {
@@ -92,31 +93,50 @@ fn adapters_handle_short_io_interruptions_and_dynamic_models() {
 fn adapters_preserve_io_and_codec_errors() {
     let error = mdx::from_reader::<Model<V800>>(Failing).unwrap_err();
     assert!(error.source().is_some());
+    assert!(matches!(error, IoError::Io(error) if error.kind() == io::ErrorKind::PermissionDenied));
     assert!(
-        matches!(error, mdx::FromReaderError::Io(error) if error.kind() == io::ErrorKind::PermissionDenied)
+        matches!(mdl::from_reader::<Model<V800>>(Failing), Err(IoError::Io(error)) if error.kind() == io::ErrorKind::PermissionDenied)
     );
     assert!(
-        matches!(mdl::from_reader::<Model<V800>>(Failing), Err(mdl::FromReaderError::Io(error)) if error.kind() == io::ErrorKind::PermissionDenied)
-    );
-    assert!(
-        matches!(mdl::from_reader::<Model<V800>>([0xff].as_slice()), Err(mdl::FromReaderError::Io(error)) if error.kind() == io::ErrorKind::InvalidData)
+        matches!(mdl::from_reader::<Model<V800>>([0xff].as_slice()), Err(IoError::Io(error)) if error.kind() == io::ErrorKind::InvalidData)
     );
     assert!(matches!(
         mdx::from_reader::<u32>([0, 0, 0, 0, 1].as_slice()),
-        Err(mdx::FromReaderError::Decode(
-            mdx::ReadError::TrailingRecordBytes { .. }
-        ))
+        Err(IoError::Codec(mdx::ReadError {
+            kind: mdx::ReadErrorKind::TrailingBytes { .. },
+            ..
+        }))
     ));
     assert!(matches!(
         mdl::from_reader::<u32>(b"42 extra".as_slice()),
-        Err(mdl::FromReaderError::Decode(_))
+        Err(IoError::Codec(_))
     ));
     assert!(
-        matches!(mdx::to_writer(Failing, &42u32), Err(mdx::ToWriterError::Io(error)) if error.kind() == io::ErrorKind::BrokenPipe)
+        matches!(mdx::to_writer(Failing, &42u32), Err(IoError::Io(error)) if error.kind() == io::ErrorKind::BrokenPipe)
     );
     assert!(
-        matches!(mdl::to_writer(Failing, &42u32), Err(mdl::WriteError::Io(error)) if error.kind() == io::ErrorKind::BrokenPipe)
+        matches!(mdl::to_writer(Failing, &42u32), Err(IoError::Io(error)) if error.kind() == io::ErrorKind::BrokenPipe)
     );
+}
+
+#[test]
+fn transport_wrappers_expose_the_original_error_as_their_source() {
+    let error = mdx::from_reader::<u32>([0, 0, 0, 0, 1].as_slice()).unwrap_err();
+    let source = error
+        .source()
+        .unwrap()
+        .downcast_ref::<mdx::ReadError>()
+        .unwrap();
+    assert_eq!(source.offset, 4);
+    assert_eq!(
+        source.kind,
+        mdx::ReadErrorKind::TrailingBytes { remaining: 1 }
+    );
+    assert_eq!(error.to_string(), source.to_string());
+
+    let error = mdl::to_writer(Failing, &42u32).unwrap_err();
+    let source = error.source().unwrap().downcast_ref::<io::Error>().unwrap();
+    assert_eq!(source.kind(), io::ErrorKind::BrokenPipe);
 }
 
 #[test]
@@ -125,16 +145,16 @@ fn mdx_encoding_failure_leaves_sink_untouched() {
     impl mdx::Write for Invalid {
         fn write_mdx(&self, encoder: &mut mdx::Encoder<'_>) -> Result<(), mdx::WriteError> {
             encoder.write_bytes(b"partial");
-            Err(mdx::WriteError::MalformedRecord {
+            Err(mdx::WriteError::InvalidValue {
+                field: "record value",
                 tag: *b"TEST",
-                offset: 0,
             })
         }
     }
     let mut sink = vec![123];
     assert!(matches!(
         mdx::to_writer(&mut sink, &Invalid),
-        Err(mdx::ToWriterError::Encode(_))
+        Err(IoError::Codec(_))
     ));
     assert_eq!(sink, [123]);
 }
@@ -146,12 +166,12 @@ fn mdl_adapter_checks_block_balance() {
         fn write_mdl<W: IoWrite>(
             &self,
             writer: &mut mdl::Writer<W>,
-        ) -> Result<(), mdl::WriteError> {
+        ) -> Result<(), IoError<mdl::WriteError>> {
             writer.begin_block("Example")
         }
     }
     assert!(matches!(
         mdl::to_writer(Vec::new(), &Unbalanced),
-        Err(mdl::WriteError::UnbalancedBlocks)
+        Err(IoError::Codec(mdl::WriteError::UnbalancedBlocks))
     ));
 }

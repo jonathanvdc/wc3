@@ -2,15 +2,14 @@
 use super::{set_node_kind, validate_node_kind};
 use crate::model::mdl::{Dialect, Field, Parser, Span, TokenKind, Writer};
 use crate::model::Encoder;
+use crate::model::IoError;
 use crate::model::KnownChunk;
 use crate::model::ModelVersion;
 use crate::model::Tag;
-use crate::model::WriteError;
 use crate::model::{mdl, mdx};
-use std::io::Write as IoWrite;
-
 use crate::model::{Cursor, EventObjectsChunk};
-use crate::model::{Model, Node, ReadError};
+use crate::model::{Model, Node};
+use std::io::Write as IoWrite;
 
 const TRACK_TAG: Tag = *b"KEVT";
 
@@ -52,16 +51,23 @@ impl<V: ModelVersion> Model<V> {
 }
 
 impl mdx::Read for EventObject {
-    fn read_mdx(cursor: &mut Cursor<'_>) -> Result<Self, ReadError> {
+    fn read_mdx(cursor: &mut Cursor<'_>) -> Result<Self, mdx::ReadError> {
         let mut probe = *cursor;
         let node_size = probe.read::<u32>()? as usize;
-        let node = Node::decode_mdx(cursor.read_bytes(node_size)?)?;
+        let mut node_cursor = cursor.subcursor(node_size)?;
+        let node = node_cursor.read::<Node>()?;
+        node_cursor.finish()?;
         let offset = cursor.absolute_position();
-        if cursor.read_bytes(4)? != TRACK_TAG {
-            return Err(ReadError::MalformedRecord {
-                tag: EventObjectsChunk::TAG,
+        let actual = cursor.read()?;
+        if actual != TRACK_TAG {
+            return Err(mdx::ReadError::new(
                 offset,
-            });
+                mdx::ReadErrorKind::UnexpectedTag {
+                    expected: TRACK_TAG,
+                    actual,
+                },
+            )
+            .with_tag(EventObjectsChunk::TAG));
         }
         let count = cursor.read::<u32>()? as usize;
         let global_sequence_id = cursor.read()?;
@@ -78,21 +84,24 @@ impl mdx::Read for EventObject {
 }
 
 impl mdx::Write for EventObject {
-    fn write_mdx(&self, bytes: &mut Encoder<'_>) -> Result<(), WriteError> {
+    fn write_mdx(&self, bytes: &mut Encoder<'_>) -> Result<(), mdx::WriteError> {
         let start = bytes.position();
         bytes.write(&self.node)?;
         bytes.write_bytes(&TRACK_TAG);
-        let count = u32::try_from(self.frames.len()).map_err(|_| WriteError::ChunkTooLarge {
-            tag: EventObjectsChunk::TAG,
-            size: self.frames.len(),
-        })?;
+        let count =
+            u32::try_from(self.frames.len()).map_err(|_| mdx::WriteError::SizeOverflow {
+                field: "frame count",
+                tag: EventObjectsChunk::TAG,
+                size: self.frames.len(),
+            })?;
         bytes.write(&(count))?;
         bytes.write(&(self.global_sequence_id))?;
         for frame in &self.frames {
             bytes.write(frame)?;
         }
         if bytes.position() - start > u32::MAX as usize {
-            return Err(WriteError::ChunkTooLarge {
+            return Err(mdx::WriteError::SizeOverflow {
+                field: "encoded size",
                 tag: EventObjectsChunk::TAG,
                 size: bytes.position() - start,
             });
@@ -137,7 +146,9 @@ impl mdl::ReadProperty for EventTrackMdl {
 impl mdl::WriteProperty for EventTrackMdl {
     fn validate_mdl_property(&self, _: &'static str, _: Dialect) -> Result<(), mdl::WriteError> {
         if self.frames.len() > u32::MAX as usize {
-            return Err(mdl::WriteError::Unsupported("event track count"));
+            return Err(mdl::WriteError::SizeOverflow {
+                field: "event track count",
+            });
         }
         Ok(())
     }
@@ -145,7 +156,7 @@ impl mdl::WriteProperty for EventTrackMdl {
         &self,
         name: &'static str,
         writer: &mut Writer<W>,
-    ) -> Result<(), mdl::WriteError> {
+    ) -> Result<(), IoError<mdl::WriteError>> {
         self.validate_mdl_property(name, writer.dialect())?;
         writer.begin_counted_block(name, self.frames.len())?;
         if self.sequence != u32::MAX {
@@ -187,7 +198,10 @@ impl mdl::Read for EventObject {
     }
 }
 impl mdl::Write for EventObject {
-    fn write_mdl<W: IoWrite>(&self, writer: &mut Writer<W>) -> Result<(), mdl::WriteError> {
+    fn write_mdl<W: IoWrite>(
+        &self,
+        writer: &mut Writer<W>,
+    ) -> Result<(), IoError<mdl::WriteError>> {
         writer.write(&EventMdl {
             node: self.node.clone(),
             track: EventTrackMdl {

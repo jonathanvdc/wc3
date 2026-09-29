@@ -1,6 +1,7 @@
 //! A property's stored value and optional animation.
 use super::{Interpolate, Track, TrackValue};
 use crate::model::mdl::{Parser, TokenKind, Writer};
+use crate::model::IoError;
 use crate::model::{mdl, mdx};
 use std::io::Write as IoWrite;
 use std::mem::replace;
@@ -73,7 +74,7 @@ impl<T: TrackValue + mdl::Write> Animatable<T> {
         &self,
         name: &str,
         writer: &mut Writer<W>,
-    ) -> Result<(), mdl::WriteError> {
+    ) -> Result<(), IoError<mdl::WriteError>> {
         if let Some(track) = self.track() {
             track.write_mdl_named(writer, name)
         } else {
@@ -132,7 +133,7 @@ impl<T: TrackValue + mdl::Write> mdl::WriteAnimationProperty for Animatable<T> {
         &self,
         name: &'static str,
         writer: &mut Writer<W>,
-    ) -> Result<(), mdl::WriteError> {
+    ) -> Result<(), IoError<mdl::WriteError>> {
         self.write_mdl_property(name, writer)
     }
 }
@@ -158,7 +159,7 @@ impl<T: TrackValue + mdl::Write> mdl::WriteAnimationProperty for Option<Track<T>
         &self,
         name: &'static str,
         writer: &mut Writer<W>,
-    ) -> Result<(), mdl::WriteError> {
+    ) -> Result<(), IoError<mdl::WriteError>> {
         if let Some(track) = self {
             track.write_mdl_named(writer, name)?;
         }

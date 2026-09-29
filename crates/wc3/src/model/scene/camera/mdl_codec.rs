@@ -1,5 +1,6 @@
 //! MDL camera target framing.
 use super::{Camera, CameraVariant};
+use crate::model::IoError;
 use crate::model::{mdl, ModelVersion, Track, Vec3};
 use mdl::Span;
 use std::io::Write as IoWrite;
@@ -37,7 +38,9 @@ impl<V: ModelVersion> Camera<V> {
             self.variant,
             CameraVariant::Variant0 | CameraVariant::Variant3
         ) {
-            return Err(mdl::WriteError::Unsupported("camera layout variant"));
+            return Err(mdl::WriteError::Unrepresentable {
+                field: "camera layout variant",
+            });
         }
         Ok(())
     }
@@ -56,14 +59,17 @@ impl mdl::WriteFields for TargetView<'_> {
     fn prepare_mdl_fields(&self, _: mdl::Dialect) -> Result<(), mdl::WriteError> {
         Ok(())
     }
-    fn write_mdl_headers<W: IoWrite>(&self, _: &mut mdl::Writer<W>) -> Result<(), mdl::WriteError> {
+    fn write_mdl_headers<W: IoWrite>(
+        &self,
+        _: &mut mdl::Writer<W>,
+    ) -> Result<(), IoError<mdl::WriteError>> {
         Ok(())
     }
     fn write_mdl_fields<W: IoWrite>(
         &self,
         _: (),
         writer: &mut mdl::Writer<W>,
-    ) -> Result<(), mdl::WriteError> {
+    ) -> Result<(), IoError<mdl::WriteError>> {
         writer.property("Position", self.position)?;
         if let Some(track) = self.translation {
             track.write_mdl_named(writer, "Translation")?;
@@ -80,14 +86,17 @@ impl mdl::WriteFields for Target {
     fn prepare_mdl_fields(&self, _: mdl::Dialect) -> Result<(), mdl::WriteError> {
         Ok(())
     }
-    fn write_mdl_headers<W: IoWrite>(&self, _: &mut mdl::Writer<W>) -> Result<(), mdl::WriteError> {
+    fn write_mdl_headers<W: IoWrite>(
+        &self,
+        _: &mut mdl::Writer<W>,
+    ) -> Result<(), IoError<mdl::WriteError>> {
         Ok(())
     }
     fn write_mdl_fields<W: IoWrite>(
         &self,
         _: (),
         writer: &mut mdl::Writer<W>,
-    ) -> Result<(), mdl::WriteError> {
+    ) -> Result<(), IoError<mdl::WriteError>> {
         TargetView {
             position: &self.position,
             translation: &self.translation,

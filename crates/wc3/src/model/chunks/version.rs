@@ -1,11 +1,10 @@
 //! The complete version chunk.
-use crate::model::Encoder;
-use crate::model::WriteError;
-use crate::model::{mdl, ModelVersion, Tag};
-use std::marker::PhantomData;
-
+use crate::model::mdx;
 use crate::model::Cursor;
-use crate::model::{Chunk, KnownChunk, ReadError};
+use crate::model::Encoder;
+use crate::model::{mdl, ModelVersion, Tag};
+use crate::model::{Chunk, KnownChunk};
+use std::marker::PhantomData;
 
 /// A complete `VERS` chunk, including bytes after the version number.
 #[derive(Clone, Debug, Eq, PartialEq, mdl::Read, mdl::Write)]
@@ -40,15 +39,18 @@ impl<V: ModelVersion> Chunk for VersionChunk<V> {
         Self::TAG
     }
 
-    fn encode_payload_to(&self, bytes: &mut Encoder<'_>) -> Result<(), WriteError> {
-        let size = 4usize
-            .checked_add(self.extension.len())
-            .ok_or(WriteError::ChunkTooLarge {
-                tag: Self::TAG,
-                size: usize::MAX,
-            })?;
+    fn encode_payload_to(&self, bytes: &mut Encoder<'_>) -> Result<(), mdx::WriteError> {
+        let size =
+            4usize
+                .checked_add(self.extension.len())
+                .ok_or(mdx::WriteError::SizeOverflow {
+                    field: "encoded size",
+                    tag: Self::TAG,
+                    size: usize::MAX,
+                })?;
         if size > u32::MAX as usize {
-            return Err(WriteError::ChunkTooLarge {
+            return Err(mdx::WriteError::SizeOverflow {
+                field: "encoded size",
                 tag: Self::TAG,
                 size,
             });
@@ -61,15 +63,20 @@ impl<V: ModelVersion> Chunk for VersionChunk<V> {
 }
 
 impl<V: ModelVersion> KnownChunk for VersionChunk<V> {
-    fn decode_payload(cursor: &mut Cursor<'_>) -> Result<Self, ReadError> {
-        let version = cursor.read().map_err(|_| ReadError::InvalidVersionChunk)?;
+    fn decode_payload(cursor: &mut Cursor<'_>) -> Result<Self, mdx::ReadError> {
+        let offset = cursor.absolute_position();
+        let version = cursor.read().map_err(|error| error.with_tag(Self::TAG))?;
         let extension = cursor.remaining().to_vec();
         cursor.read_bytes(extension.len())?;
         if version != V::NUMBER {
-            return Err(ReadError::VersionMismatch {
-                expected: V::NUMBER,
-                actual: version,
-            });
+            return Err(mdx::ReadError::new(
+                offset,
+                mdx::ReadErrorKind::VersionMismatch {
+                    expected: V::NUMBER,
+                    actual: version,
+                },
+            )
+            .with_tag(Self::TAG));
         }
         Ok(Self {
             extension,
@@ -98,7 +105,14 @@ mod version_chunk_tests {
             VersionChunk::<V800>::decode_mdx(
                 &[b"VERS".as_slice(), &3u32.to_le_bytes(), &[1, 2, 3]].concat()
             ),
-            Err(ReadError::InvalidVersionChunk)
+            Err(mdx::ReadError {
+                offset: 8,
+                tag: Some(*b"VERS"),
+                kind: mdx::ReadErrorKind::UnexpectedEnd {
+                    needed: 4,
+                    remaining: 3
+                }
+            })
         );
     }
 }

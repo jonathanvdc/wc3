@@ -3,7 +3,7 @@ use super::{
     FalloffField, Light, LightFalloff, ShadowCastingField, ShadowIntensityField, ShadowRangeField,
 };
 use crate::model::mdl;
-use crate::model::mdl::{ReadErrorKind, Span};
+use crate::model::mdl::Span;
 use crate::model::scene::{set_node_kind, validate_node_kind};
 use crate::model::{Animatable, Color, ModelVersion};
 pub(super) fn zero() -> Animatable<f32> {
@@ -23,7 +23,10 @@ pub(super) fn is_zero(value: &f32) -> bool {
 }
 fn require_supported(present: bool, supported: bool, span: Span) -> Result<(), mdl::ReadError> {
     if present && !supported {
-        return Err(mdl::ReadError::new(span, ReadErrorKind::UnsupportedField));
+        return Err(mdl::ReadError::new(
+            span,
+            mdl::ReadErrorKind::UnsupportedField,
+        ));
     }
     Ok(())
 }
@@ -54,7 +57,9 @@ impl<V: ModelVersion> Light<V> {
     pub(super) fn validate_mdl(&self) -> Result<(), mdl::WriteError> {
         validate_node_kind(&self.node, 0x200)?;
         if self.shadow_casting.shadow_casting().unwrap_or(0) > 1 {
-            return Err(mdl::WriteError::Unsupported("nonboolean shadow casting"));
+            return Err(mdl::WriteError::Unrepresentable {
+                field: "nonboolean shadow casting",
+            });
         }
         Ok(())
     }

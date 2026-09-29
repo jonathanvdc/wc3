@@ -30,15 +30,21 @@ fn numeric_choices_preserve_binary_values_and_report_offsets() {
     cursor.read::<u32>().unwrap();
     assert_eq!(
         cursor.read::<Strict>(),
-        Err(mdx::ReadError::UnknownEnumValue {
-            enum_name: "Strict",
-            value: 8,
+        Err(mdx::ReadError {
             offset: 4,
+            tag: None,
+            kind: mdx::ReadErrorKind::UnknownEnumValue {
+                enum_name: "Strict",
+                value: 8
+            }
         })
     );
     assert!(matches!(
         Strict::decode_mdx(&[7, 0]),
-        Err(mdx::ReadError::UnexpectedEnd { .. })
+        Err(mdx::ReadError {
+            kind: mdx::ReadErrorKind::UnexpectedEnd { .. },
+            ..
+        })
     ));
 }
 

@@ -1,8 +1,9 @@
 //! Typed keyframe tracks.
 use super::{Interpolate, Interpolation, Keyframe, TangentKeyframe, TrackValue, ValueKeyframe};
-use crate::model::mdl::{Parser, ReadErrorKind, TokenKind, Writer};
+use crate::model::mdl::{Parser, TokenKind, Writer};
+use crate::model::IoError;
 use crate::model::{mdl, mdx};
-use crate::model::{Cursor, Encoder, ReadError, ValueError, WriteError};
+use crate::model::{Cursor, Encoder, ValueError};
 use std::io::Write as IoWrite;
 use std::ops::RangeInclusive;
 
@@ -135,31 +136,36 @@ impl<T> Keyframes<T> {
     }
 }
 impl<T: TrackValue> mdx::Read for Track<T> {
-    fn read_mdx(cursor: &mut Cursor<'_>) -> Result<Self, ReadError> {
+    fn read_mdx(cursor: &mut Cursor<'_>) -> Result<Self, mdx::ReadError> {
         let mut next = *cursor;
         let offset = next.absolute_position();
-        let tag = *b"TRAK";
-        let malformed = || ReadError::MalformedRecord { tag, offset };
-        let count = next.read::<u32>().map_err(|_| malformed())? as usize;
-        let interpolation = next.read::<u32>().map_err(|_| malformed())?;
+        let overflow = || mdx::ReadError::new(offset, mdx::ReadErrorKind::SizeOverflow);
+        let count = next.read::<u32>()? as usize;
+        let interpolation = next.read::<u32>()?;
         if interpolation > 3 {
-            return Err(malformed());
+            return Err(mdx::ReadError::new(
+                offset + 4,
+                mdx::ReadErrorKind::UnknownEnumValue {
+                    enum_name: "Interpolation",
+                    value: interpolation,
+                },
+            ));
         }
-        let sequence = next.read::<u32>().map_err(|_| malformed())?;
+        let sequence = next.read::<u32>()?;
         let components = T::COMPONENTS;
         let vector_count = if interpolation >= 2 { 3usize } else { 1usize };
         let key_size = components
             .checked_mul(vector_count)
             .and_then(|n| n.checked_mul(4))
             .and_then(|n| n.checked_add(4))
-            .ok_or_else(malformed)?;
-        let body_size = count.checked_mul(key_size).ok_or_else(malformed)?;
-        let mut body = next.subcursor(body_size).map_err(|_| malformed())?;
+            .ok_or_else(overflow)?;
+        let body_size = count.checked_mul(key_size).ok_or_else(overflow)?;
+        let mut body = next.subcursor(body_size)?;
         let keyframes = match interpolation {
             0 | 1 => {
                 let mut keys = Vec::with_capacity(count);
                 for _ in 0..count {
-                    keys.push(body.read::<ValueKeyframe<T>>().map_err(|_| malformed())?);
+                    keys.push(body.read::<ValueKeyframe<T>>()?);
                 }
                 if interpolation == 0 {
                     Keyframes::Step(keys)
@@ -170,7 +176,7 @@ impl<T: TrackValue> mdx::Read for Track<T> {
             2 | 3 => {
                 let mut keys = Vec::with_capacity(count);
                 for _ in 0..count {
-                    keys.push(body.read::<TangentKeyframe<T>>().map_err(|_| malformed())?);
+                    keys.push(body.read::<TangentKeyframe<T>>()?);
                 }
                 if interpolation == 2 {
                     Keyframes::Hermite(keys)
@@ -188,7 +194,7 @@ impl<T: TrackValue> mdx::Read for Track<T> {
     }
 }
 impl<T: TrackValue> mdx::Write for Track<T> {
-    fn write_mdx(&self, encoder: &mut Encoder<'_>) -> Result<(), WriteError> {
+    fn write_mdx(&self, encoder: &mut Encoder<'_>) -> Result<(), mdx::WriteError> {
         encoder.write(&(self.keyframes.len() as u32))?;
         encoder.write(&(self.keyframes.interpolation()))?;
         encoder.write(&(self.global_sequence_id.unwrap_or(u32::MAX)))?;
@@ -244,18 +250,18 @@ where
                 if sequence.is_some() {
                     return Err(mdl::ReadError::new(
                         token.span,
-                        ReadErrorKind::DuplicateField,
+                        mdl::ReadErrorKind::DuplicateField,
                     ));
                 }
                 parser.peek()?;
                 let span = parser
-                    .error(ReadErrorKind::InvalidNumber("global sequence ID"))
+                    .error(mdl::ReadErrorKind::InvalidNumber("global sequence ID"))
                     .span;
                 let id = parser.read_property::<u32>()?;
                 if id == u32::MAX {
                     return Err(mdl::ReadError::new(
                         span,
-                        ReadErrorKind::InvalidNumber("global sequence ID"),
+                        mdl::ReadErrorKind::InvalidNumber("global sequence ID"),
                     ));
                 }
                 sequence = Some(id);
@@ -264,14 +270,14 @@ where
                 if interpolation.replace(mode).is_some() {
                     return Err(mdl::ReadError::new(
                         token.span,
-                        ReadErrorKind::DuplicateField,
+                        mdl::ReadErrorKind::DuplicateField,
                     ));
                 }
                 parser.expect(TokenKind::Comma)?;
             }
         }
         let interpolation = interpolation
-            .ok_or_else(|| parser.error(ReadErrorKind::MissingField("interpolation")))?;
+            .ok_or_else(|| parser.error(mdl::ReadErrorKind::MissingField("interpolation")))?;
         // Grow from actual input, rather than trusting the declared count.
         let mut values = Vec::new();
         let mut tangents = Vec::new();
@@ -282,7 +288,7 @@ where
                     if actual != count {
                         return Err(mdl::ReadError::new(
                             token.span,
-                            ReadErrorKind::CountMismatch {
+                            mdl::ReadErrorKind::CountMismatch {
                                 expected: count,
                                 actual,
                             },
@@ -293,7 +299,7 @@ where
                 }
             }
             if actual == count {
-                return Err(parser.error(ReadErrorKind::CountMismatch {
+                return Err(parser.error(mdl::ReadErrorKind::CountMismatch {
                     expected: count,
                     actual: actual + 1,
                 }));
@@ -337,7 +343,10 @@ impl<T: TrackValue> mdl::Write for Track<T>
 where
     T: mdl::Write,
 {
-    fn write_mdl<W: IoWrite>(&self, writer: &mut Writer<W>) -> Result<(), mdl::WriteError> {
+    fn write_mdl<W: IoWrite>(
+        &self,
+        writer: &mut Writer<W>,
+    ) -> Result<(), IoError<mdl::WriteError>> {
         self.write_mdl_named(writer, "Track")
     }
 }
@@ -350,7 +359,7 @@ where
         &self,
         writer: &mut Writer<W>,
         name: &str,
-    ) -> Result<(), mdl::WriteError> {
+    ) -> Result<(), IoError<mdl::WriteError>> {
         writer.begin_counted_block(name, self.keyframes.len())?;
         writer.indent()?;
         writer.write(&self.interpolation())?;
@@ -380,7 +389,7 @@ fn write_key<W: IoWrite, T: mdl::Write>(
     writer: &mut Writer<W>,
     frame: i32,
     value: &T,
-) -> Result<(), mdl::WriteError> {
+) -> Result<(), IoError<mdl::WriteError>> {
     writer.indent()?;
     writer.write(&frame)?;
     writer.raw(": ")?;
@@ -392,7 +401,7 @@ fn write_tangent<W: IoWrite, T: mdl::Write>(
     writer: &mut Writer<W>,
     name: &str,
     value: &T,
-) -> Result<(), mdl::WriteError> {
+) -> Result<(), IoError<mdl::WriteError>> {
     writer.indent()?;
     writer.raw("\t")?;
     writer.identifier(name)?;

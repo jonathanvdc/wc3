@@ -1,5 +1,6 @@
 use super::Read;
-use super::{Lexer, ReadError, ReadErrorKind, Span, Token, TokenKind};
+use super::{Lexer, Span, Token, TokenKind};
+use crate::model::mdl;
 use crate::model::FixedText;
 use std::iter::FusedIterator;
 use std::marker::PhantomData;
@@ -13,7 +14,7 @@ use std::ops::{Deref, DerefMut};
 #[derive(Clone, Copy, Debug)]
 pub struct Parser<'a> {
     lexer: Lexer<'a>,
-    lookahead: Option<Result<Token<'a>, ReadError>>,
+    lookahead: Option<Result<Token<'a>, mdl::ReadError>>,
 }
 
 impl<'a> Parser<'a> {
@@ -33,28 +34,28 @@ impl<'a> Parser<'a> {
             None => self.lexer.position(),
         }
     }
-    pub fn peek(&mut self) -> Result<Option<Token<'a>>, ReadError> {
+    pub fn peek(&mut self) -> Result<Option<Token<'a>>, mdl::ReadError> {
         if self.lookahead.is_none() {
             self.lookahead = self.lexer.next();
         }
         self.lookahead.transpose()
     }
-    pub fn next_token(&mut self) -> Result<Token<'a>, ReadError> {
+    pub fn next_token(&mut self) -> Result<Token<'a>, mdl::ReadError> {
         let token = self
             .peek()?
-            .ok_or_else(|| self.error(ReadErrorKind::Expected("a token")))?;
+            .ok_or_else(|| self.error(mdl::ReadErrorKind::Expected("a token")))?;
         self.lookahead = None;
         Ok(token)
     }
-    pub fn error(&self, kind: ReadErrorKind) -> ReadError {
+    pub fn error(&self, kind: mdl::ReadErrorKind) -> mdl::ReadError {
         let span = match self.lookahead {
             Some(Ok(token)) => token.span,
             Some(Err(error)) => error.span,
             None => Span::new(self.position(), self.position()),
         };
-        ReadError::new(span, kind)
+        mdl::ReadError::new(span, kind)
     }
-    pub fn expect(&mut self, kind: TokenKind<'a>) -> Result<Token<'a>, ReadError> {
+    pub fn expect(&mut self, kind: TokenKind<'a>) -> Result<Token<'a>, mdl::ReadError> {
         let expected = match kind {
             TokenKind::Ident(_) => "the named identifier",
             TokenKind::Number(_) => "the numeric literal",
@@ -67,10 +68,10 @@ impl<'a> Parser<'a> {
         };
         match self.peek()? {
             Some(token) if token.kind == kind => self.next_token(),
-            _ => Err(self.error(ReadErrorKind::Expected(expected))),
+            _ => Err(self.error(mdl::ReadErrorKind::Expected(expected))),
         }
     }
-    pub fn expect_ident(&mut self, name: &'static str) -> Result<(), ReadError> {
+    pub fn expect_ident(&mut self, name: &'static str) -> Result<(), mdl::ReadError> {
         match self.peek()? {
             Some(Token {
                 kind: TokenKind::Ident(actual),
@@ -79,10 +80,10 @@ impl<'a> Parser<'a> {
                 self.next_token()?;
                 Ok(())
             }
-            _ => Err(self.error(ReadErrorKind::Expected(name))),
+            _ => Err(self.error(mdl::ReadErrorKind::Expected(name))),
         }
     }
-    pub fn consume(&mut self, kind: TokenKind<'a>) -> Result<bool, ReadError> {
+    pub fn consume(&mut self, kind: TokenKind<'a>) -> Result<bool, mdl::ReadError> {
         if self.peek()?.is_some_and(|token| token.kind == kind) {
             self.next_token()?;
             Ok(true)
@@ -90,16 +91,16 @@ impl<'a> Parser<'a> {
             Ok(false)
         }
     }
-    pub fn read<T: Read>(&mut self) -> Result<T, ReadError> {
+    pub fn read<T: Read>(&mut self) -> Result<T, mdl::ReadError> {
         T::read_mdl(self)
     }
-    pub fn read_property<T: Read>(&mut self) -> Result<T, ReadError> {
+    pub fn read_property<T: Read>(&mut self) -> Result<T, mdl::ReadError> {
         let value = self.read()?;
         self.expect(TokenKind::Comma)?;
         Ok(value)
     }
     /// Borrows a literal string. Backslashes and embedded CR/LF are unchanged.
-    pub fn read_string(&mut self) -> Result<&'a str, ReadError> {
+    pub fn read_string(&mut self) -> Result<&'a str, mdl::ReadError> {
         match self.peek()? {
             Some(Token {
                 kind: TokenKind::Quoted(value),
@@ -108,19 +109,21 @@ impl<'a> Parser<'a> {
                 self.next_token()?;
                 Ok(value)
             }
-            _ => Err(self.error(ReadErrorKind::Expected("a quoted string"))),
+            _ => Err(self.error(mdl::ReadErrorKind::Expected("a quoted string"))),
         }
     }
     /// Reads a quoted string into a fixed-width text field.
-    pub fn read_fixed_text<const N: usize>(&mut self) -> Result<FixedText<N>, ReadError> {
+    pub fn read_fixed_text<const N: usize>(&mut self) -> Result<FixedText<N>, mdl::ReadError> {
         self.peek()?;
-        let span = self.error(ReadErrorKind::Expected("a quoted string")).span;
+        let span = self
+            .error(mdl::ReadErrorKind::Expected("a quoted string"))
+            .span;
         let value = self.read_string()?;
         let mut text = FixedText::default();
         text.set_text(value).map_err(|_| {
-            ReadError::new(
+            mdl::ReadError::new(
                 span,
-                ReadErrorKind::InvalidString {
+                mdl::ReadErrorKind::InvalidString {
                     max_bytes: N.saturating_sub(1),
                 },
             )
@@ -128,7 +131,7 @@ impl<'a> Parser<'a> {
         Ok(text)
     }
     /// Enters a body at its opening brace; does not scan ahead to its end.
-    pub fn begin_block(&mut self) -> Result<Block<'_, 'a>, ReadError> {
+    pub fn begin_block(&mut self) -> Result<Block<'_, 'a>, mdl::ReadError> {
         self.expect(TokenKind::OpenBrace)?;
         Ok(Block {
             parser: self,
@@ -138,7 +141,7 @@ impl<'a> Parser<'a> {
     }
     /// Enters a count-prefixed body, yielding structured items on demand.
     /// Each item's Read implementation owns its punctuation.
-    pub fn counted<T: Read>(&mut self) -> Result<Counted<'_, 'a, T>, ReadError> {
+    pub fn counted<T: Read>(&mut self) -> Result<Counted<'_, 'a, T>, mdl::ReadError> {
         self.counted_with_header(|_| Ok(())).map(|(_, items)| items)
     }
     /// Enters a counted body whose metadata precedes its counted items.
@@ -146,8 +149,8 @@ impl<'a> Parser<'a> {
     /// toward the declared item count. Items still own their punctuation.
     pub fn counted_with_header<T: Read, H>(
         &mut self,
-        header: impl FnOnce(&mut Self) -> Result<H, ReadError>,
-    ) -> Result<(H, Counted<'_, 'a, T>), ReadError> {
+        header: impl FnOnce(&mut Self) -> Result<H, mdl::ReadError>,
+    ) -> Result<(H, Counted<'_, 'a, T>), mdl::ReadError> {
         let expected = self.read::<u32>()? as usize;
         self.expect(TokenKind::OpenBrace)?;
         let header = header(self)?;
@@ -163,11 +166,11 @@ impl<'a> Parser<'a> {
             },
         ))
     }
-    pub fn finish(&mut self) -> Result<(), ReadError> {
+    pub fn finish(&mut self) -> Result<(), mdl::ReadError> {
         if self.peek()?.is_none() {
             Ok(())
         } else {
-            Err(self.error(ReadErrorKind::TrailingInput))
+            Err(self.error(mdl::ReadErrorKind::TrailingInput))
         }
     }
 }
@@ -190,7 +193,7 @@ pub struct Block<'p, 'a> {
 impl<'a> Block<'_, 'a> {
     /// Returns the next field name, or consumes the closing brace and returns None.
     /// The caller must consume the field's value and punctuation before calling again.
-    pub fn next_field(&mut self) -> Result<Option<Field<'a>>, ReadError> {
+    pub fn next_field(&mut self) -> Result<Option<Field<'a>>, mdl::ReadError> {
         if self.ended {
             return Ok(None);
         }
@@ -212,18 +215,18 @@ impl<'a> Block<'_, 'a> {
             }
             _ => Err(self
                 .parser
-                .error(ReadErrorKind::Expected("a field name or '}'"))),
+                .error(mdl::ReadErrorKind::Expected("a field name or '}'"))),
         }
     }
     /// Reports an error at the closing brace when this body has ended.
-    pub fn error(&self, kind: ReadErrorKind) -> ReadError {
+    pub fn error(&self, kind: mdl::ReadErrorKind) -> mdl::ReadError {
         match self.closing_span {
-            Some(span) => ReadError::new(span, kind),
+            Some(span) => mdl::ReadError::new(span, kind),
             None => self.parser.error(kind),
         }
     }
     /// Rejects an unread field rather than silently skipping it.
-    pub fn finish(mut self) -> Result<(), ReadError> {
+    pub fn finish(mut self) -> Result<(), mdl::ReadError> {
         if !self.ended {
             self.parser.expect(TokenKind::CloseBrace)?;
             self.ended = true;
@@ -250,31 +253,31 @@ pub struct Counted<'p, 'a, T> {
     expected: usize,
     actual: usize,
     ended: bool,
-    failure: Option<ReadError>,
+    failure: Option<mdl::ReadError>,
     marker: PhantomData<T>,
 }
 impl<T: Read> Counted<'_, '_, T> {
     pub fn declared_count(&self) -> usize {
         self.expected
     }
-    pub fn finish(mut self) -> Result<(), ReadError> {
+    pub fn finish(mut self) -> Result<(), mdl::ReadError> {
         for value in self.by_ref() {
             value?;
         }
         self.failure.map_or(Ok(()), Err)
     }
-    fn read_next(&mut self) -> Result<Option<T>, ReadError> {
+    fn read_next(&mut self) -> Result<Option<T>, mdl::ReadError> {
         let token = self
             .parser
             .peek()?
-            .ok_or_else(|| self.parser.error(ReadErrorKind::Expected("'}'")))?;
+            .ok_or_else(|| self.parser.error(mdl::ReadErrorKind::Expected("'}'")))?;
         if token.kind == TokenKind::CloseBrace {
             self.parser.next_token()?;
             self.ended = true;
             if self.actual != self.expected {
-                return Err(ReadError::new(
+                return Err(mdl::ReadError::new(
                     token.span,
-                    ReadErrorKind::CountMismatch {
+                    mdl::ReadErrorKind::CountMismatch {
                         expected: self.expected,
                         actual: self.actual,
                     },
@@ -283,7 +286,7 @@ impl<T: Read> Counted<'_, '_, T> {
             return Ok(None);
         }
         if self.actual == self.expected {
-            return Err(self.parser.error(ReadErrorKind::CountMismatch {
+            return Err(self.parser.error(mdl::ReadErrorKind::CountMismatch {
                 expected: self.expected,
                 actual: self.actual + 1,
             }));
@@ -291,14 +294,14 @@ impl<T: Read> Counted<'_, '_, T> {
         let start = self.parser.position();
         let value = self.parser.read()?;
         if self.parser.position() == start {
-            return Err(self.parser.error(ReadErrorKind::NoProgress));
+            return Err(self.parser.error(mdl::ReadErrorKind::NoProgress));
         }
         self.actual += 1;
         Ok(Some(value))
     }
 }
 impl<T: Read> Iterator for Counted<'_, '_, T> {
-    type Item = Result<T, ReadError>;
+    type Item = Result<T, mdl::ReadError>;
     fn next(&mut self) -> Option<Self::Item> {
         if self.ended {
             return None;
@@ -318,22 +321,27 @@ impl<T: Read> FusedIterator for Counted<'_, '_, T> {}
 
 macro_rules! integers {
     ($($ty:ty),*) => { $(impl Read for $ty {
-        fn read_mdl(parser: &mut Parser<'_>) -> Result<Self, ReadError> {
+        fn read_mdl(parser: &mut Parser<'_>) -> Result<Self, mdl::ReadError> {
             let token = parser.next_token()?;
             match token.kind {
-                TokenKind::Number(raw) => raw.parse().map_err(|_| ReadError::new(token.span, ReadErrorKind::InvalidNumber(stringify!($ty)))),
-                _ => Err(ReadError::new(token.span, ReadErrorKind::Expected(stringify!($ty)))),
+                TokenKind::Number(raw) => raw.parse().map_err(|_| mdl::ReadError::new(token.span, mdl::ReadErrorKind::InvalidNumber(stringify!($ty)))),
+                _ => Err(mdl::ReadError::new(token.span, mdl::ReadErrorKind::Expected(stringify!($ty)))),
             }
         }
     })* };
 }
 integers!(u8, u16, u32, i32);
 impl Read for f32 {
-    fn read_mdl(parser: &mut Parser<'_>) -> Result<Self, ReadError> {
+    fn read_mdl(parser: &mut Parser<'_>) -> Result<Self, mdl::ReadError> {
         let token = parser.next_token()?;
         let raw = match token.kind {
             TokenKind::Number(raw) | TokenKind::Ident(raw) => raw,
-            _ => return Err(ReadError::new(token.span, ReadErrorKind::Expected("f32"))),
+            _ => {
+                return Err(mdl::ReadError::new(
+                    token.span,
+                    mdl::ReadErrorKind::Expected("f32"),
+                ))
+            }
         };
         let value = if raw.eq_ignore_ascii_case("nan") {
             f32::NAN
@@ -344,18 +352,18 @@ impl Read for f32 {
         } else {
             // Do not accept Rust's additional spellings or overflow to infinity.
             if !matches!(token.kind, TokenKind::Number(_)) {
-                return Err(ReadError::new(
+                return Err(mdl::ReadError::new(
                     token.span,
-                    ReadErrorKind::InvalidNumber("f32"),
+                    mdl::ReadErrorKind::InvalidNumber("f32"),
                 ));
             }
-            let value: f32 = raw
-                .parse()
-                .map_err(|_| ReadError::new(token.span, ReadErrorKind::InvalidNumber("f32")))?;
+            let value: f32 = raw.parse().map_err(|_| {
+                mdl::ReadError::new(token.span, mdl::ReadErrorKind::InvalidNumber("f32"))
+            })?;
             if !value.is_finite() {
-                return Err(ReadError::new(
+                return Err(mdl::ReadError::new(
                     token.span,
-                    ReadErrorKind::InvalidNumber("f32"),
+                    mdl::ReadErrorKind::InvalidNumber("f32"),
                 ));
             }
             value
@@ -364,7 +372,7 @@ impl Read for f32 {
     }
 }
 impl<T: Read + Default + Copy, const N: usize> Read for [T; N] {
-    fn read_mdl(parser: &mut Parser<'_>) -> Result<Self, ReadError> {
+    fn read_mdl(parser: &mut Parser<'_>) -> Result<Self, mdl::ReadError> {
         parser.expect(TokenKind::OpenBrace)?;
         let mut values = [T::default(); N];
         for (i, value) in values.iter_mut().enumerate() {
@@ -378,7 +386,7 @@ impl<T: Read + Default + Copy, const N: usize> Read for [T; N] {
     }
 }
 impl<const N: usize> Read for FixedText<N> {
-    fn read_mdl(parser: &mut Parser<'_>) -> Result<Self, ReadError> {
+    fn read_mdl(parser: &mut Parser<'_>) -> Result<Self, mdl::ReadError> {
         parser.read_fixed_text()
     }
 }

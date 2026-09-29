@@ -1,14 +1,13 @@
 //! Typed and runtime Warcraft III models with MDX and MDL I/O.
 use crate::model::mdx;
 use crate::model::mdx::{Read as _, Write as _};
+use crate::model::Cursor;
 use crate::model::Encoder;
+use crate::model::ValueError;
+use crate::model::{CollectionChunk, ModelChunk, VersionChunk};
 use crate::model::{
     ModelVersion, Tag, Version, V1000, V1100, V1200, V1300, V1400, V1600, V1800, V800, V900,
 };
-use crate::model::{ValueError, WriteError};
-
-use crate::model::Cursor;
-use crate::model::{CollectionChunk, ModelChunk, ReadError, VersionChunk};
 
 /// The four bytes at the start of an MDX file.
 pub const MAGIC: Tag = *b"MDLX";
@@ -130,13 +129,17 @@ impl<V: ModelVersion> Model<V> {
 }
 
 impl<V: ModelVersion> mdx::Read for Model<V> {
-    fn read_mdx(cursor: &mut Cursor<'_>) -> Result<Self, ReadError> {
-        if let Some(actual) = scan_version(*cursor)? {
+    fn read_mdx(cursor: &mut Cursor<'_>) -> Result<Self, mdx::ReadError> {
+        if let Some((actual, offset)) = scan_version(*cursor)? {
             if actual != V::NUMBER {
-                return Err(ReadError::VersionMismatch {
-                    expected: V::NUMBER,
-                    actual,
-                });
+                return Err(mdx::ReadError::new(
+                    offset,
+                    mdx::ReadErrorKind::VersionMismatch {
+                        expected: V::NUMBER,
+                        actual,
+                    },
+                )
+                .with_tag(*b"VERS"));
             }
         }
 
@@ -145,7 +148,9 @@ impl<V: ModelVersion> mdx::Read for Model<V> {
         let mut chunks = Vec::new();
         while !parse.remaining().is_empty() {
             let (tag, _, mut payload) = read_chunk(&mut parse)?;
-            chunks.push(ModelChunk::decode_from(tag, &mut payload)?);
+            chunks.push(
+                ModelChunk::decode_from(tag, &mut payload).map_err(|error| error.in_chunk(tag))?,
+            );
         }
         *cursor = parse;
         Ok(Self { chunks })
@@ -153,7 +158,7 @@ impl<V: ModelVersion> mdx::Read for Model<V> {
 }
 
 impl<V: ModelVersion> mdx::Write for Model<V> {
-    fn write_mdx(&self, output: &mut Encoder<'_>) -> Result<(), WriteError> {
+    fn write_mdx(&self, output: &mut Encoder<'_>) -> Result<(), mdx::WriteError> {
         output.write_bytes(&MAGIC);
         for chunk in &self.chunks {
             output.write(chunk)?;
@@ -208,8 +213,9 @@ macro_rules! visit_model {
 
 impl DynamicModel {
     /// Decodes a model, using `default_version` when no `VERS` chunk is present.
-    pub fn decode_mdx(bytes: &[u8], default_version: Version) -> Result<Self, ReadError> {
-        let version = scan_version(Cursor::new(bytes))?.unwrap_or(default_version);
+    pub fn decode_mdx(bytes: &[u8], default_version: Version) -> Result<Self, mdx::ReadError> {
+        let declared_version = scan_version(Cursor::new(bytes))?;
+        let (version, offset) = declared_version.unwrap_or((default_version, 0));
         match version {
             800 => Model::<V800>::decode_mdx(bytes).map(Self::V800),
             900 => Model::<V900>::decode_mdx(bytes).map(Self::V900),
@@ -220,7 +226,11 @@ impl DynamicModel {
             1400 => Model::<V1400>::decode_mdx(bytes).map(Self::V1400),
             1600 => Model::<V1600>::decode_mdx(bytes).map(Self::V1600),
             1800 => Model::<V1800>::decode_mdx(bytes).map(Self::V1800),
-            _ => Err(ReadError::UnsupportedVersion { version }),
+            _ => Err(mdx::ReadError {
+                offset,
+                tag: declared_version.map(|_| *b"VERS"),
+                kind: mdx::ReadErrorKind::UnsupportedVersion { version },
+            }),
         }
     }
 
@@ -228,7 +238,7 @@ impl DynamicModel {
         visit_model!(self, |model| model.version())
     }
 
-    pub fn encode_mdx(&self) -> Result<Vec<u8>, WriteError> {
+    pub fn encode_mdx(&self) -> Result<Vec<u8>, mdx::WriteError> {
         visit_model!(self, |model| model.encode_mdx())
     }
 }
@@ -239,31 +249,42 @@ impl mdx::Write for DynamicModel {
     }
 }
 
-fn scan_version(mut cursor: Cursor<'_>) -> Result<Option<Version>, ReadError> {
+fn scan_version(mut cursor: Cursor<'_>) -> Result<Option<(Version, usize)>, mdx::ReadError> {
+    let offset = cursor.absolute_position();
     if cursor.read_bytes(4).ok() != Some(MAGIC.as_slice()) {
-        return Err(ReadError::InvalidMagic);
+        return Err(mdx::ReadError::new(
+            offset,
+            mdx::ReadErrorKind::InvalidMagic,
+        ));
     }
     let mut version = None;
     while !cursor.remaining().is_empty() {
         let (tag, _, mut payload) = read_chunk(&mut cursor)?;
         if tag == *b"VERS" {
-            let found = payload.read().map_err(|_| ReadError::InvalidVersionChunk)?;
-            version.get_or_insert(found);
+            let offset = payload.absolute_position();
+            let found = payload.read().map_err(|error| error.with_tag(tag))?;
+            version.get_or_insert((found, offset));
         }
     }
     Ok(version)
 }
 
-fn read_chunk<'a>(cursor: &mut Cursor<'a>) -> Result<(Tag, u32, Cursor<'a>), ReadError> {
+fn read_chunk<'a>(cursor: &mut Cursor<'a>) -> Result<(Tag, u32, Cursor<'a>), mdx::ReadError> {
     let offset = cursor.absolute_position();
     if cursor.remaining().len() < 8 {
-        return Err(ReadError::TruncatedHeader { offset });
+        return Err(mdx::ReadError::new(
+            offset,
+            mdx::ReadErrorKind::UnexpectedEnd {
+                needed: 8,
+                remaining: cursor.remaining().len(),
+            },
+        ));
     }
     let tag = cursor.read_bytes(4)?.try_into().expect("four-byte tag");
     let size = cursor.read()?;
     let payload = cursor
         .subcursor(size as usize)
-        .map_err(|_| ReadError::TruncatedChunk { tag, offset, size })?;
+        .map_err(|error| error.with_tag(tag))?;
     Ok((tag, size, payload))
 }
 
@@ -276,18 +297,29 @@ mod tests {
     fn rejects_bad_magic_and_lengths() {
         assert!(matches!(
             Model::<V800>::decode_mdx(b"wrong"),
-            Err(ReadError::InvalidMagic)
+            Err(mdx::ReadError {
+                offset: 0,
+                tag: None,
+                kind: mdx::ReadErrorKind::InvalidMagic
+            })
         ));
         assert!(matches!(
             Model::<V800>::decode_mdx(b"MDLXVE"),
-            Err(ReadError::TruncatedHeader { offset: 4 })
+            Err(mdx::ReadError {
+                offset: 4,
+                tag: None,
+                kind: mdx::ReadErrorKind::UnexpectedEnd {
+                    needed: 8,
+                    remaining: 2
+                }
+            })
         ));
         let mut bytes = b"MDLXTEST".to_vec();
         bytes.extend_from_slice(&5u32.to_le_bytes());
         bytes.push(1);
         assert!(matches!(
             Model::<V800>::decode_mdx(&bytes),
-            Err(ReadError::TruncatedChunk { tag, offset: 4, size: 5 }) if tag == *b"TEST"
+            Err(mdx::ReadError { offset: 12, tag: Some(tag), kind: mdx::ReadErrorKind::UnexpectedEnd { needed: 5, remaining: 1 } }) if tag == *b"TEST"
         ));
     }
 
@@ -317,7 +349,10 @@ mod tests {
         ));
         assert!(matches!(
             Model::<V800>::decode_mdx(&bytes),
-            Err(ReadError::VersionMismatch { .. })
+            Err(mdx::ReadError {
+                kind: mdx::ReadErrorKind::VersionMismatch { .. },
+                ..
+            })
         ));
     }
 }

@@ -1,6 +1,7 @@
 use std::io::Write as IoWrite;
 use wc3::model::mdl;
 use wc3::model::mdl::{Field, Parser, Read as _, ReadErrorKind, Span, Write as _, Writer};
+use wc3::model::IoError;
 
 trait Layout {
     type Extra;
@@ -36,7 +37,7 @@ impl mdl::WriteProperty for Present {
         &self,
         name: &'static str,
         writer: &mut Writer<W>,
-    ) -> Result<(), mdl::WriteError> {
+    ) -> Result<(), IoError<mdl::WriteError>> {
         writer.property(name, &self.0)
     }
 }
@@ -66,7 +67,7 @@ impl mdl::WriteProperty for Absent {
         _: mdl::Dialect,
     ) -> Result<(), mdl::WriteError> {
         if self.reserved != 0 {
-            return Err(mdl::WriteError::Unsupported(name));
+            return Err(mdl::WriteError::Unrepresentable { field: name });
         }
         Ok(())
     }
@@ -74,8 +75,9 @@ impl mdl::WriteProperty for Absent {
         &self,
         name: &'static str,
         _writer: &mut Writer<W>,
-    ) -> Result<(), mdl::WriteError> {
+    ) -> Result<(), IoError<mdl::WriteError>> {
         self.validate_mdl_property(name, _writer.dialect())
+            .map_err(IoError::Codec)
     }
 }
 
@@ -147,7 +149,9 @@ fn delegated_preflight_rejects_omission_that_would_discard_data() {
     let mut writer = Writer::new(&mut bytes);
     assert!(matches!(
         writer.write(&record),
-        Err(mdl::WriteError::Unsupported("Extra"))
+        Err(IoError::Codec(mdl::WriteError::Unrepresentable {
+            field: "Extra"
+        }))
     ));
     assert!(bytes.is_empty());
 }

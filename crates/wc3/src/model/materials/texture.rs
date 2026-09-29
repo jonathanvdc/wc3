@@ -2,14 +2,12 @@
 use crate::model::mdl;
 use crate::model::mdl::is_zero;
 use crate::model::mdx;
-use crate::model::ModelVersion;
-use crate::model::ValueError;
-use bitfield::bitfield;
-
-use crate::model::TexturesChunk;
-
 use crate::model::FixedText;
 use crate::model::Model;
+use crate::model::ModelVersion;
+use crate::model::TexturesChunk;
+use crate::model::ValueError;
+use bitfield::bitfield;
 
 bitfield! {
     /// Texture wrapping flags; unknown bits remain available through `bits`.

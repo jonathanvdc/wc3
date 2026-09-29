@@ -63,7 +63,7 @@ pub(super) fn expand(
                     required_flags.push(quote! {
                         for (index, item) in (#access).iter().enumerate() {
                             if (#access).iter().take(index).any(|previous| #key(previous) == #key(item)) {
-                                return Err(::wc3::model::mdl::WriteError::Unsupported("duplicate repeated record"));
+                                return Err(::wc3::model::mdl::WriteError::InvalidStructure { field: "duplicate repeated record" }.into());
                             }
                         }
                     });
@@ -110,7 +110,7 @@ pub(super) fn expand(
                 required_flags.push(quote! {
                     let #emit = (#enabled && #available && ::wc3::model::mdl::WriteAnimationProperty::has_animation(#access)) || #condition;
                     if !#emit && !::wc3::model::mdl::ValueEq::eq_mdl(#access, &#default) {
-                        return Err(::wc3::model::mdl::WriteError::Unsupported(concat!("nondefault omitted property ", #mdl_name)));
+                        return Err(::wc3::model::mdl::WriteError::Unrepresentable { field: concat!("nondefault omitted property ", #mdl_name) }.into());
                     }
                 });
                 writes.push(quote!(if #emit { ::wc3::model::mdl::WriteAnimationProperty::write_mdl_animation_property(#access, #mdl_name, __wc3_mdl_writer)?; }));
@@ -133,7 +133,7 @@ pub(super) fn expand(
                     required_flags.push(quote! {
                         let #emit = #condition;
                         if !#emit && !::wc3::model::mdl::ValueEq::eq_mdl(&#access, &#default) {
-                            return Err(::wc3::model::mdl::WriteError::Unsupported(concat!("nondefault omitted property ", #mdl_name)));
+                            return Err(::wc3::model::mdl::WriteError::Unrepresentable { field: concat!("nondefault omitted property ", #mdl_name) }.into());
                         }
                     });
                     condition = quote!(#emit);
@@ -145,14 +145,14 @@ pub(super) fn expand(
                     .iter()
                     .fold(field.allow_bits, |bits, (_, mask)| bits | mask);
                 required_flags.push(quote! {
-                        if ::wc3::model::mdl::BitRange::<u32>::bit_range(&#access, 31, 0) & !#known != 0 { return ::core::result::Result::Err(::wc3::model::mdl::WriteError::Unsupported(concat!("unknown flag bits in ", stringify!(#member)))); }
+                        if ::wc3::model::mdl::BitRange::<u32>::bit_range(&#access, 31, 0) & !#known != 0 { return ::core::result::Result::Err(::wc3::model::mdl::WriteError::Unrepresentable { field: concat!("unknown flag bits in ", stringify!(#member)) }.into()); }
                     });
                 if options.default && field.default.is_none() && !field.virtual_field {
                     required_flags.push(quote! {
                             let defaults = ::wc3::model::mdl::BitRange::<u32>::bit_range(&#default_access, 31, 0);
                             let actual = ::wc3::model::mdl::BitRange::<u32>::bit_range(&#access, 31, 0);
                             if defaults & !actual != 0 {
-                                return ::core::result::Result::Err(::wc3::model::mdl::WriteError::Unsupported("cleared flag supplied by record default"));
+                                return ::core::result::Result::Err(::wc3::model::mdl::WriteError::Unrepresentable { field: "cleared flag supplied by record default" }.into());
                             }
                         });
                 }
@@ -183,13 +183,13 @@ pub(super) fn expand(
             Kind::Flag(mdl_name) => {
                 if field.default.is_none() && !options.default {
                     required_flags.push(quote! {
-                        if !#access { return ::core::result::Result::Err(::wc3::model::mdl::WriteError::Unsupported(concat!("absent required flag ", #mdl_name))); }
+                        if !#access { return ::core::result::Result::Err(::wc3::model::mdl::WriteError::InvalidStructure { field: concat!("absent required flag ", #mdl_name) }.into()); }
                     });
                 }
                 if options.default && field.default.is_none() {
                     required_flags.push(quote! {
                             if #default_access && !#access {
-                                return ::core::result::Result::Err(::wc3::model::mdl::WriteError::Unsupported("false flag supplied by record default"));
+                                return ::core::result::Result::Err(::wc3::model::mdl::WriteError::Unrepresentable { field: "false flag supplied by record default" }.into());
                             }
                         });
                 }
@@ -226,12 +226,12 @@ pub(super) fn expand(
         state_type(input, &generics, "Write", &state_names, &state_types);
     let check_names = schema.fields.iter().any(|field| matches!(field.kind, Kind::Flatten)).then(|| quote! {
         if !::wc3::model::mdl::field_names_unique(<Self as ::wc3::model::mdl::WriteFields>::visit_mdl_names) {
-            return Err(::wc3::model::mdl::WriteError::Unsupported("overlapping flattened MDL field names"));
+            return Err(::wc3::model::mdl::WriteError::InvalidStructure { field: "overlapping flattened MDL field names" }.into());
         }
     });
     let write_impl = block.map(|block| quote! {
         impl #impl_generics ::wc3::model::mdl::Write for #name #ty_generics #where_clause {
-            fn write_mdl<#sink: ::std::io::Write>(&self, __wc3_mdl_writer: &mut ::wc3::model::mdl::Writer<#sink>) -> ::core::result::Result<(), ::wc3::model::mdl::WriteError> {
+            fn write_mdl<#sink: ::std::io::Write>(&self, __wc3_mdl_writer: &mut ::wc3::model::mdl::Writer<#sink>) -> ::core::result::Result<(), ::wc3::model::IoError<::wc3::model::mdl::WriteError>> {
                 let state = <Self as ::wc3::model::mdl::WriteFields>::prepare_mdl_fields(self, __wc3_mdl_writer.dialect())?;
                 __wc3_mdl_writer.indent()?;
                 __wc3_mdl_writer.identifier(#block)?;
@@ -247,7 +247,7 @@ pub(super) fn expand(
         impl #impl_generics ::wc3::model::mdl::WriteFields for #name #ty_generics #where_clause {
             type State = #state_name #ty_generics;
             fn visit_mdl_names(visitor: &mut dyn FnMut(&'static str, bool)) { #visit_names }
-            fn write_mdl_headers<#sink: ::std::io::Write>(&self, __wc3_mdl_writer: &mut ::wc3::model::mdl::Writer<#sink>) -> ::core::result::Result<(), ::wc3::model::mdl::WriteError> {
+            fn write_mdl_headers<#sink: ::std::io::Write>(&self, __wc3_mdl_writer: &mut ::wc3::model::mdl::Writer<#sink>) -> ::core::result::Result<(), ::wc3::model::IoError<::wc3::model::mdl::WriteError>> {
                 #(#headers)*
                 Ok(())
             }
@@ -258,7 +258,7 @@ pub(super) fn expand(
                 #(#required_flags)*
                 Ok(#state_name { #(#state_names,)* __wc3_mdl_marker: ::core::marker::PhantomData })
             }
-            fn write_mdl_fields<#sink: ::std::io::Write>(&self, state: Self::State, __wc3_mdl_writer: &mut ::wc3::model::mdl::Writer<#sink>) -> ::core::result::Result<(), ::wc3::model::mdl::WriteError> {
+            fn write_mdl_fields<#sink: ::std::io::Write>(&self, state: Self::State, __wc3_mdl_writer: &mut ::wc3::model::mdl::Writer<#sink>) -> ::core::result::Result<(), ::wc3::model::IoError<::wc3::model::mdl::WriteError>> {
                 let #state_name { #(#state_names,)* .. } = state;
                 #(#writes)*
                 Ok(())

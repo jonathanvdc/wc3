@@ -3,6 +3,7 @@ use wc3::model::animation::Interpolation;
 use wc3::model::animation::Track;
 use wc3::model::mdl;
 use wc3::model::mdl::{Read as _, Write as _};
+use wc3::model::IoError;
 use wc3::model::Vec3;
 
 #[derive(Debug, PartialEq, mdl::Read, mdl::Write)]
@@ -132,7 +133,10 @@ impl mdl::Read for Input {
 }
 struct Output(u32);
 impl mdl::Write for Output {
-    fn write_mdl<W: IoWrite>(&self, writer: &mut mdl::Writer<W>) -> Result<(), mdl::WriteError> {
+    fn write_mdl<W: IoWrite>(
+        &self,
+        writer: &mut mdl::Writer<W>,
+    ) -> Result<(), IoError<mdl::WriteError>> {
         writer.write(&self.0)
     }
 }
@@ -199,7 +203,7 @@ impl Checked {
     }
     fn check_write(&self) -> Result<(), mdl::WriteError> {
         if matches!(self, Self::Id(0)) {
-            Err(mdl::WriteError::Unsupported("zero id"))
+            Err(mdl::WriteError::Unrepresentable { field: "zero id" })
         } else {
             Ok(())
         }

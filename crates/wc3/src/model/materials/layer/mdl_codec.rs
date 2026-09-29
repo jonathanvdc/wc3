@@ -4,9 +4,9 @@ use super::{
     LayerTextureSlotsField, ShaderType,
 };
 use crate::model::mdl::{
-    dispatch_name, Dialect, Field, Parser, ReadErrorKind, ReadFields, Span, TokenKind, WriteFields,
-    Writer,
+    dispatch_name, Dialect, Field, Parser, ReadFields, Span, TokenKind, WriteFields, Writer,
 };
+use crate::model::IoError;
 use crate::model::{mdl, FixedText};
 use crate::model::{Animatable, Color, ModelVersion, Track};
 use std::io::Write as IoWrite;
@@ -90,7 +90,7 @@ impl ReadFields for TextureBindings {
                 if named_slot != 0 {
                     return Err(mdl::ReadError::new(
                         field.span,
-                        ReadErrorKind::UnsupportedField,
+                        mdl::ReadErrorKind::UnsupportedField,
                     ));
                 }
                 parser.next_token()?;
@@ -114,7 +114,7 @@ impl ReadFields for TextureBindings {
         if slot.texture_type > 5 {
             return Err(mdl::ReadError::new(
                 field.span,
-                ReadErrorKind::UnsupportedField,
+                mdl::ReadErrorKind::UnsupportedField,
             ));
         }
         if state
@@ -124,7 +124,7 @@ impl ReadFields for TextureBindings {
         {
             return Err(mdl::ReadError::new(
                 field.span,
-                ReadErrorKind::DuplicateField,
+                mdl::ReadErrorKind::DuplicateField,
             ));
         }
         state.slots.push(slot);
@@ -144,14 +144,17 @@ impl WriteFields for TextureBindings {
     fn prepare_mdl_fields(&self, dialect: Dialect) -> Result<(), mdl::WriteError> {
         validate_slots(&self.slots, dialect)
     }
-    fn write_mdl_headers<W: IoWrite>(&self, _: &mut Writer<W>) -> Result<(), mdl::WriteError> {
+    fn write_mdl_headers<W: IoWrite>(
+        &self,
+        _: &mut Writer<W>,
+    ) -> Result<(), IoError<mdl::WriteError>> {
         Ok(())
     }
     fn write_mdl_fields<W: IoWrite>(
         &self,
         _: (),
         writer: &mut Writer<W>,
-    ) -> Result<(), mdl::WriteError> {
+    ) -> Result<(), IoError<mdl::WriteError>> {
         self.prepare_mdl_fields(writer.dialect())?;
         write_slots(&self.slots, writer)
     }
@@ -175,14 +178,17 @@ impl<V: ModelVersion> WriteFields for TextureBindingsView<'_, V> {
             Ok(())
         }
     }
-    fn write_mdl_headers<W: IoWrite>(&self, _: &mut Writer<W>) -> Result<(), mdl::WriteError> {
+    fn write_mdl_headers<W: IoWrite>(
+        &self,
+        _: &mut Writer<W>,
+    ) -> Result<(), IoError<mdl::WriteError>> {
         Ok(())
     }
     fn write_mdl_fields<W: IoWrite>(
         &self,
         _: (),
         writer: &mut Writer<W>,
-    ) -> Result<(), mdl::WriteError> {
+    ) -> Result<(), IoError<mdl::WriteError>> {
         self.prepare_mdl_fields(writer.dialect())?;
         if V::NUMBER >= 1100 {
             write_slots(
@@ -219,7 +225,7 @@ impl<V: ModelVersion> Layer<V> {
             let target = self
                 .shader_type
                 .shader_type_mut()
-                .ok_or_else(|| mdl::ReadError::new(span, ReadErrorKind::UnsupportedField))?;
+                .ok_or_else(|| mdl::ReadError::new(span, mdl::ReadErrorKind::UnsupportedField))?;
             *target = value;
         }
         Ok(())
@@ -235,17 +241,23 @@ impl<V: ModelVersion> Layer<V> {
     ) -> Result<(), mdl::ReadError> {
         if V::NUMBER >= 1100 {
             if !self.mdl_hd() && value.slots.iter().any(|slot| slot.texture_type != 0) {
-                return Err(mdl::ReadError::new(span, ReadErrorKind::UnsupportedField));
+                return Err(mdl::ReadError::new(
+                    span,
+                    mdl::ReadErrorKind::UnsupportedField,
+                ));
             }
             *self
                 .texture_slots
                 .texture_slots_mut()
-                .ok_or_else(|| mdl::ReadError::new(span, ReadErrorKind::UnsupportedField))? =
+                .ok_or_else(|| mdl::ReadError::new(span, mdl::ReadErrorKind::UnsupportedField))? =
                 value.slots;
         } else {
             for slot in value.slots {
                 if slot.texture_type != 0 {
-                    return Err(mdl::ReadError::new(span, ReadErrorKind::UnsupportedField));
+                    return Err(mdl::ReadError::new(
+                        span,
+                        mdl::ReadErrorKind::UnsupportedField,
+                    ));
                 }
                 self.texture_id = slot.texture_id;
             }
@@ -254,7 +266,9 @@ impl<V: ModelVersion> Layer<V> {
     }
     pub(super) fn validate_mdl(&self) -> Result<(), mdl::WriteError> {
         if self.filter_mode.raw() > 6 {
-            return Err(mdl::WriteError::Unsupported("filter mode"));
+            return Err(mdl::WriteError::Unrepresentable {
+                field: "filter mode",
+            });
         }
         if V::NUMBER >= 1100 {
             if !self.mdl_hd()
@@ -263,12 +277,14 @@ impl<V: ModelVersion> Layer<V> {
                     .texture_slots()
                     .is_some_and(|slots| slots.iter().any(|slot| slot.texture_type != 0))
             {
-                return Err(mdl::WriteError::Unsupported("non-diffuse SD texture slot"));
+                return Err(mdl::WriteError::Unrepresentable {
+                    field: "non-diffuse SD texture slot",
+                });
             }
             if self.texture_id != Animatable::Static(0) {
-                return Err(mdl::WriteError::Unsupported(
-                    "legacy texture binding in version 1100+",
-                ));
+                return Err(mdl::WriteError::Unrepresentable {
+                    field: "legacy texture binding in version 1100+",
+                });
             }
         }
         Ok(())
@@ -307,15 +323,17 @@ fn validate_slots(slots: &[LayerTextureSlot], dialect: Dialect) -> Result<(), md
                 .iter()
                 .any(|old| old.texture_type == slot.texture_type)
         {
-            return Err(mdl::WriteError::Unsupported("texture slot"));
+            return Err(mdl::WriteError::Unrepresentable {
+                field: "texture slot",
+            });
         }
         if slot.texture_id.track().is_some()
             && dialect == Dialect::Warcraft3
             && slot.texture_type != 0
         {
-            return Err(mdl::WriteError::Unsupported(
-                "non-diffuse texture animation",
-            ));
+            return Err(mdl::WriteError::Unrepresentable {
+                field: "non-diffuse texture animation",
+            });
         }
     }
     Ok(())
@@ -323,7 +341,7 @@ fn validate_slots(slots: &[LayerTextureSlot], dialect: Dialect) -> Result<(), md
 fn write_slots<W: IoWrite>(
     slots: &[LayerTextureSlot],
     writer: &mut Writer<W>,
-) -> Result<(), mdl::WriteError> {
+) -> Result<(), IoError<mdl::WriteError>> {
     validate_slots(slots, writer.dialect())?;
     for slot in slots {
         if let Some(track) = slot.texture_id.track() {
@@ -343,9 +361,12 @@ fn write_texture_id<W: IoWrite>(
     id: u32,
     slot: u32,
     writer: &mut Writer<W>,
-) -> Result<(), mdl::WriteError> {
+) -> Result<(), IoError<mdl::WriteError>> {
     if slot > 5 {
-        return Err(mdl::WriteError::Unsupported("texture slot"));
+        return Err(mdl::WriteError::Unrepresentable {
+            field: "texture slot",
+        }
+        .into());
     }
     if writer.dialect() == Dialect::HiveWorkshop {
         writer.indent()?;
@@ -374,8 +395,9 @@ impl mdl::ReadProperty for ShaderMarker {
             ShaderType::new(parser.read_property()?)
         } else {
             let name = parser.read_property::<FixedText<80>>()?;
-            ShaderType::from_name(&name.text())
-                .ok_or_else(|| mdl::ReadError::new(field.span, ReadErrorKind::UnsupportedField))?
+            ShaderType::from_name(&name.text()).ok_or_else(|| {
+                mdl::ReadError::new(field.span, mdl::ReadErrorKind::UnsupportedField)
+            })?
         };
         Ok(Self(Some(value)))
     }
@@ -390,9 +412,9 @@ impl mdl::WriteProperty for ShaderMarker {
         dialect: Dialect,
     ) -> Result<(), mdl::WriteError> {
         if dialect == Dialect::Warcraft3 && self.0.is_some_and(|shader| shader.name().is_none()) {
-            return Err(mdl::WriteError::Unsupported(
-                "unnamed shader in Warcraft III dialect",
-            ));
+            return Err(mdl::WriteError::Unrepresentable {
+                field: "unnamed shader in Warcraft III dialect",
+            });
         }
         Ok(())
     }
@@ -400,7 +422,7 @@ impl mdl::WriteProperty for ShaderMarker {
         &self,
         name: &'static str,
         writer: &mut Writer<W>,
-    ) -> Result<(), mdl::WriteError> {
+    ) -> Result<(), IoError<mdl::WriteError>> {
         self.validate_mdl_property(name, writer.dialect())?;
         if let Some(shader) = self.0 {
             if writer.dialect() == Dialect::HiveWorkshop {

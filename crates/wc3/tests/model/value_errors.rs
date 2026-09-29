@@ -1,7 +1,8 @@
 use wc3::model::geometry::Geoset;
 use wc3::model::mdx::Write as _;
-use wc3::model::mdx::{ValueError, WriteError};
+use wc3::model::mdx::WriteError;
 use wc3::model::scene::Node;
+use wc3::model::ValueError;
 
 #[test]
 fn construction_and_mutation_report_value_errors() {

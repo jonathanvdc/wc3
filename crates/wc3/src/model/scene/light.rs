@@ -1,21 +1,19 @@
 //! Direct and ambient lighting with version-dependent shadow settings.
 use crate::model::conversion::ConversionContext;
+use crate::model::Color;
 use crate::model::ConversionError;
+use crate::model::KnownChunk;
+use crate::model::LightsChunk;
+use crate::model::ValueError;
 use crate::model::{mdl, mdx};
 use crate::model::{Animatable, Track};
+use crate::model::{Model, Node};
 use crate::model::{
     ModelVersion, SupportsLightFalloff, SupportsLightShadowCasting, SupportsLightShadowIntensity,
 };
 use mdl_codec::{damping, is_zero, quadratic, white, zero};
 use std::fmt::Debug;
-
-use crate::model::Color;
-use crate::model::KnownChunk;
-use crate::model::ValueError;
 use std::marker::PhantomData;
-
-use crate::model::LightsChunk;
-use crate::model::{Model, Node};
 
 /// How a light illuminates the model. Unknown values round-trip through MDX.
 #[derive(
@@ -181,7 +179,6 @@ pub trait LightLayout {
     type ShadowRange: ShadowRangeField;
     type Falloff: FalloffField;
 }
-
 use crate::model::{V1000, V1100, V1200, V1300, V1400, V1600, V1800, V800, V900};
 macro_rules! light_layout {
     ($version:ty, $casting:ty, $intensity:ty, $range:ty, $falloff:ty) => {

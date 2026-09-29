@@ -1,20 +1,17 @@
 //! Transform hierarchy shared by helpers, bones, and scene objects.
 use crate::model::mdl::{Parser, Span, TokenKind, WriteFields as _, Writer};
+use crate::model::Encoder;
+use crate::model::FixedText;
+use crate::model::IoError;
+use crate::model::KnownChunk;
+use crate::model::Model;
 use crate::model::ModelVersion;
+use crate::model::ValueError;
 use crate::model::{mdl, mdx};
+use crate::model::{BonesChunk, Cursor, HelpersChunk};
 use crate::model::{Quaternion, Track, Vec3};
 use bitfield::bitfield;
 use std::io::Write as IoWrite;
-
-use crate::model::Encoder;
-use crate::model::KnownChunk;
-use crate::model::ValueError;
-use crate::model::WriteError;
-
-use crate::model::{BonesChunk, Cursor, HelpersChunk};
-
-use crate::model::FixedText;
-use crate::model::{Model, ReadError};
 
 const NAME_SIZE: usize = 80;
 
@@ -210,7 +207,7 @@ impl<V: ModelVersion> Model<V> {
 }
 
 impl mdx::Read for Bone {
-    fn read_mdx(cursor: &mut Cursor<'_>) -> Result<Self, ReadError> {
+    fn read_mdx(cursor: &mut Cursor<'_>) -> Result<Self, mdx::ReadError> {
         let node = cursor.read()?;
         let geoset_id = cursor.read()?;
         let geoset_animation_id = cursor.read()?;
@@ -223,7 +220,7 @@ impl mdx::Read for Bone {
 }
 
 impl mdx::Write for Bone {
-    fn write_mdx(&self, bytes: &mut Encoder<'_>) -> Result<(), WriteError> {
+    fn write_mdx(&self, bytes: &mut Encoder<'_>) -> Result<(), mdx::WriteError> {
         bytes.write(&self.node)?;
         bytes.write(&self.geoset_id)?;
         bytes.write(&self.geoset_animation_id)?;
@@ -249,7 +246,9 @@ pub(crate) fn validate_node_kind<F: NodeFlagInterpretation>(
     kind: u32,
 ) -> Result<(), mdl::WriteError> {
     if node.flags.bits() & !0xff != kind {
-        return Err(mdl::WriteError::Unsupported("node object-kind bits"));
+        return Err(mdl::WriteError::Unrepresentable {
+            field: "node object-kind bits",
+        });
     }
     Ok(())
 }
@@ -277,20 +276,23 @@ fn write_reference<W: IoWrite>(
     value: &u32,
     writer: &mut Writer<W>,
     keyword: &str,
-) -> Result<(), mdl::WriteError> {
+) -> Result<(), IoError<mdl::WriteError>> {
     if *value == u32::MAX {
         writer.identifier(keyword)
     } else {
         writer.write(value)
     }
 }
-fn write_geoset<W: IoWrite>(value: &u32, writer: &mut Writer<W>) -> Result<(), mdl::WriteError> {
+fn write_geoset<W: IoWrite>(
+    value: &u32,
+    writer: &mut Writer<W>,
+) -> Result<(), IoError<mdl::WriteError>> {
     write_reference(value, writer, "Multiple")
 }
 fn write_geoset_animation<W: IoWrite>(
     value: &u32,
     writer: &mut Writer<W>,
-) -> Result<(), mdl::WriteError> {
+) -> Result<(), IoError<mdl::WriteError>> {
     write_reference(value, writer, "None")
 }
 impl mdl::Read for Node {
@@ -301,7 +303,10 @@ impl mdl::Read for Node {
     }
 }
 impl mdl::Write for Node {
-    fn write_mdl<W: IoWrite>(&self, writer: &mut Writer<W>) -> Result<(), mdl::WriteError> {
+    fn write_mdl<W: IoWrite>(
+        &self,
+        writer: &mut Writer<W>,
+    ) -> Result<(), IoError<mdl::WriteError>> {
         validate_node_kind(self, 0)?;
         let state = self.prepare_mdl_fields(writer.dialect())?;
         writer.indent()?;
