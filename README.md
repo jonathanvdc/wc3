@@ -111,7 +111,9 @@ possible typed model when you need direct access to its records.
 **MDX:** decoding retains chunk order, duplicate chunks, unknown chunk payloads,
 fixed-width text bytes, and unknown flag bits. Known chunks with malformed
 payloads return errors instead of becoming opaque chunks. Encoding reconstructs
-typed records from their current values.
+typed records from their current values. Animation properties retain their stored base and
+last animation track. Duplicate track tags use last-wins behavior, and writing
+uses canonical field order rather than preserving the input track order.
 
 **MDL:** decoding preserves represented values, IDs, and references. Encoding
 writes deterministic field and block order, merges known collection chunks,

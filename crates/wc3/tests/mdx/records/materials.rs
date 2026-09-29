@@ -1,5 +1,6 @@
-use wc3::model::animation::{AnimationTrack, ValueKeyframe};
-use wc3::model::animation::{LayerAlpha, LayerTextureId};
+use wc3::model::animation::ValueKeyframe;
+use wc3::model::animation::{Animatable, Track};
+
 use wc3::model::mdx::Read as _;
 use wc3::model::mdx::Write as _;
 
@@ -14,8 +15,8 @@ use wc3::model::{
 fn sample_material<V: ModelVersion>() -> Material<V> {
     let mut layer = Layer::<V>::new();
     layer.filter_mode = LayerFilterMode::Transparent;
-    layer.texture_id = 2;
-    layer.alpha = 0.5;
+    layer.texture_id = Animatable::Static(2);
+    layer.alpha = Animatable::Static(0.5);
     let mut material = Material::<V>::new();
     material.layers = [layer].to_vec();
     Material::<V>::decode_mdx(&material.encode_mdx().unwrap()).unwrap()
@@ -50,8 +51,8 @@ fn check_version<V: ModelVersion>() {
     let layers = materials[0].layers.as_slice();
     assert_eq!(layers[0].version(), version);
     assert_eq!(layers[0].filter_mode, LayerFilterMode::Transparent);
-    assert_eq!(layers[0].texture_id, 2);
-    assert_eq!(layers[0].alpha, 0.5);
+    assert_eq!(layers[0].texture_id, Animatable::Static(2));
+    assert_eq!(layers[0].alpha, Animatable::Static(0.5));
     assert_eq!(layers[0].shading_flags, LayerShadingFlags::default());
     assert_eq!(
         Layer::<V>::decode_mdx(&layers[0].encode_mdx().unwrap()).unwrap(),
@@ -62,16 +63,19 @@ fn check_version<V: ModelVersion>() {
 #[test]
 fn builds_material_with_reforged_layer() {
     let mut layer = Layer::<V1100>::new();
-    layer.texture_id = 4;
+    layer.texture_id = Animatable::Static(4);
     layer.set_shader_type(ShaderType::new(2));
-    layer.set_fresnel_color([0.1, 0.2, 0.3]);
+    layer.set_fresnel_color(Animatable::Static([0.1, 0.2, 0.3]));
     let mut material = Material::<V1100>::new();
     material.layers = [layer].to_vec();
     let parsed = Material::<V1100>::decode_mdx(&material.encode_mdx().unwrap()).unwrap();
     let layers = parsed.layers.as_slice();
-    assert_eq!(layers[0].texture_id, 4);
+    assert_eq!(layers[0].texture_id, Animatable::Static(4));
     assert_eq!(layers[0].shader_type(), ShaderType::SD_FIXED_FUNCTION);
-    assert_eq!(layers[0].fresnel_color(), [0.1, 0.2, 0.3]);
+    assert_eq!(
+        layers[0].fresnel_color(),
+        Animatable::Static([0.1, 0.2, 0.3])
+    );
     assert!(layers[0].texture_slots().is_empty());
 }
 
@@ -96,34 +100,35 @@ fn reforged_layer_texture_slot_and_tracks_round_trip() {
         frame: 100,
         value: 17u32,
     };
-    let texture_track = AnimationTrack::<LayerTextureId>::linear(vec![texture_key], None).unwrap();
+    let texture_track = Track::<u32>::linear(vec![texture_key], None).unwrap();
     layer.set_texture_slots(&[LayerTextureSlot {
-        texture_id: 3,
+        texture_id: Animatable::Both {
+            value: 3,
+            track: texture_track.clone(),
+        },
         texture_type: 2,
-        track: Some(texture_track.clone()),
     }]);
-    let alpha_track = AnimationTrack::<LayerAlpha>::linear(
+    let alpha_track = Track::<f32>::linear(
         vec![ValueKeyframe {
             frame: 100,
             value: 0.5,
         }],
         None,
     )
-    .unwrap()
-    .into();
-    layer.tracks = (std::slice::from_ref(&alpha_track)).to_vec();
+    .unwrap();
+    layer.alpha.set_track(alpha_track.clone());
     let parsed = Layer::<V1800>::decode_mdx(&layer.encode_mdx().unwrap()).unwrap();
     assert_eq!(
         parsed.texture_slots()[0]
-            .track
-            .as_ref()
+            .texture_id
+            .track()
             .unwrap()
             .linear_keys()
             .unwrap()[0]
             .value,
         17
     );
-    assert_eq!(parsed.tracks.as_slice(), vec![alpha_track]);
+    assert_eq!(parsed.alpha.track(), Some(&alpha_track));
 }
 
 #[test]
@@ -142,8 +147,12 @@ fn unlit_layer_flag_round_trip() {
 fn version_specific_fields_do_not_write_into_legacy_tracks() {
     let mut layer = Layer::<V800>::new();
     let before = layer.encode_mdx().unwrap();
-    assert!(layer.try_set_emissive_gain(0.5).is_err());
-    assert!(layer.try_set_fresnel_opacity(0.5).is_err());
+    assert!(layer
+        .try_set_emissive_gain(Animatable::Static(0.5))
+        .is_err());
+    assert!(layer
+        .try_set_fresnel_opacity(Animatable::Static(0.5))
+        .is_err());
     assert!(layer.try_set_shader_type(ShaderType::new(1)).is_err());
     assert_eq!(layer.encode_mdx().unwrap(), before);
 }
@@ -158,7 +167,10 @@ fn preserves_shader_padding_and_float_bits() {
     bytes[layer_start + 24..layer_start + 28].copy_from_slice(&0x7fa1_2345u32.to_le_bytes());
     let parsed = Material::<V1000>::decode_mdx(&bytes).unwrap();
     assert_eq!(parsed.encode_mdx().unwrap(), bytes);
-    assert_eq!(parsed.layers[0].alpha.to_bits(), 0x7fa1_2345);
+    assert_eq!(
+        parsed.layers[0].alpha.value().unwrap().to_bits(),
+        0x7fa1_2345
+    );
 }
 
 #[test]
@@ -168,23 +180,25 @@ fn independent_layer_fields_preserve_wire_order_across_versions() {
 
         let mut layer = Layer::<V>::new();
         let fresnel = LayerFresnel {
-            color: [0.1, 0.2, 0.3],
-            opacity: 0.4,
-            team_color: 0.5,
+            color: Animatable::Static([0.1, 0.2, 0.3]),
+            opacity: Animatable::Static(0.4),
+            team_color: Animatable::Static(0.5),
         };
         let slot = LayerTextureSlot {
-            texture_id: 7,
+            texture_id: Animatable::Static(7),
             texture_type: 2,
-            track: None,
         };
         let defaults = layer.encode_mdx().unwrap();
         let has_gain = V::NUMBER >= 900;
         let has_fresnel = V::NUMBER >= 1000;
         let has_slots = V::NUMBER >= 1100;
         assert_eq!(layer.try_emissive_gain().is_ok(), has_gain);
-        assert_eq!(layer.try_set_emissive_gain(1.5).is_ok(), has_gain);
+        assert_eq!(
+            layer.try_set_emissive_gain(Animatable::Static(1.5)).is_ok(),
+            has_gain
+        );
         assert_eq!(layer.try_fresnel().is_ok(), has_fresnel);
-        assert_eq!(layer.try_set_fresnel(fresnel).is_ok(), has_fresnel);
+        assert_eq!(layer.try_set_fresnel(fresnel.clone()).is_ok(), has_fresnel);
         assert_eq!(layer.try_fresnel_color().is_ok(), has_fresnel);
         assert_eq!(layer.try_fresnel_opacity().is_ok(), has_fresnel);
         assert_eq!(layer.try_fresnel_team_color().is_ok(), has_fresnel);
@@ -205,7 +219,7 @@ fn independent_layer_fields_preserve_wire_order_across_versions() {
         }
         if has_gain {
             expected.extend(1.5f32.to_le_bytes());
-            assert_eq!(layer.try_emissive_gain().unwrap(), 1.5);
+            assert_eq!(layer.try_emissive_gain().unwrap(), Animatable::Static(1.5));
         }
         if has_fresnel {
             for value in [0.1f32, 0.2, 0.3, 0.4, 0.5] {
@@ -242,23 +256,29 @@ fn fresnel_convenience_accessors_preserve_other_components() {
     let mut layer = Layer::<V1000>::new();
     assert_eq!(layer.fresnel(), LayerFresnel::default());
     layer.set_fresnel(LayerFresnel {
-        color: [0.1, 0.2, 0.3],
-        opacity: 0.4,
-        team_color: 0.5,
+        color: Animatable::Static([0.1, 0.2, 0.3]),
+        opacity: Animatable::Static(0.4),
+        team_color: Animatable::Static(0.5),
     });
-    layer.set_fresnel_color([0.6, 0.7, 0.8]);
-    layer.set_fresnel_opacity(0.9);
-    layer.set_fresnel_team_color(1.0);
-    assert_eq!(layer.fresnel_color(), [0.6, 0.7, 0.8]);
-    assert_eq!(layer.fresnel_opacity(), 0.9);
-    assert_eq!(layer.fresnel_team_color(), 1.0);
+    layer.set_fresnel_color(Animatable::Static([0.6, 0.7, 0.8]));
+    layer.set_fresnel_opacity(Animatable::Static(0.9));
+    layer.set_fresnel_team_color(Animatable::Static(1.0));
+    assert_eq!(layer.fresnel_color(), Animatable::Static([0.6, 0.7, 0.8]));
+    assert_eq!(layer.fresnel_opacity(), Animatable::Static(0.9));
+    assert_eq!(layer.fresnel_team_color(), Animatable::Static(1.0));
     assert_eq!(layer.try_fresnel().unwrap(), layer.fresnel());
 
     let mut legacy = Layer::<V900>::new();
     let before = legacy.encode_mdx().unwrap();
-    assert!(legacy.try_set_fresnel_color([0.0; 3]).is_err());
-    assert!(legacy.try_set_fresnel_opacity(1.0).is_err());
-    assert!(legacy.try_set_fresnel_team_color(1.0).is_err());
+    assert!(legacy
+        .try_set_fresnel_color(Animatable::Static([0.0; 3]))
+        .is_err());
+    assert!(legacy
+        .try_set_fresnel_opacity(Animatable::Static(1.0))
+        .is_err());
+    assert!(legacy
+        .try_set_fresnel_team_color(Animatable::Static(1.0))
+        .is_err());
     assert_eq!(legacy.encode_mdx().unwrap(), before);
 }
 
@@ -271,38 +291,37 @@ fn infallible_layer_accessors_cover_supported_versions() {
 
     fn check_gain<V: SupportsEmissiveGain>() {
         let mut layer = Layer::<V>::new();
-        assert_eq!(layer.emissive_gain(), 1.0);
+        assert_eq!(layer.emissive_gain(), Animatable::Static(1.0));
         let encoded = layer.encode_mdx().unwrap();
         assert_eq!(&encoded[28..32], &1.0f32.to_le_bytes());
         assert_eq!(
             Layer::<V>::decode_mdx(&encoded).unwrap().emissive_gain(),
-            1.0
+            Animatable::Static(1.0)
         );
-        layer.set_emissive_gain(1.5);
-        assert_eq!(layer.emissive_gain(), 1.5);
+        layer.set_emissive_gain(Animatable::Static(1.5));
+        assert_eq!(layer.emissive_gain(), Animatable::Static(1.5));
         assert_eq!(layer.try_emissive_gain().unwrap(), layer.emissive_gain());
     }
     fn check_fresnel<V: SupportsFresnel>() {
         let mut layer = Layer::<V>::new();
         layer.set_fresnel(LayerFresnel::default());
-        layer.set_fresnel_color([0.1, 0.2, 0.3]);
-        layer.set_fresnel_opacity(0.4);
-        layer.set_fresnel_team_color(0.5);
-        assert_eq!(layer.fresnel_color(), [0.1, 0.2, 0.3]);
-        assert_eq!(layer.fresnel_opacity(), 0.4);
-        assert_eq!(layer.fresnel_team_color(), 0.5);
+        layer.set_fresnel_color(Animatable::Static([0.1, 0.2, 0.3]));
+        layer.set_fresnel_opacity(Animatable::Static(0.4));
+        layer.set_fresnel_team_color(Animatable::Static(0.5));
+        assert_eq!(layer.fresnel_color(), Animatable::Static([0.1, 0.2, 0.3]));
+        assert_eq!(layer.fresnel_opacity(), Animatable::Static(0.4));
+        assert_eq!(layer.fresnel_team_color(), Animatable::Static(0.5));
         assert_eq!(layer.try_fresnel().unwrap(), layer.fresnel());
     }
     fn check_slots<V: SupportsLayerShaderTypeId + SupportsLayerTextureSlots>() {
         let mut layer = Layer::<V>::new();
         layer.set_shader_type(ShaderType::new(2));
         layer.set_texture_slots(&[LayerTextureSlot {
-            texture_id: 7,
+            texture_id: Animatable::Static(7),
             texture_type: 3,
-            track: None,
         }]);
         assert_eq!(layer.shader_type(), ShaderType::SD_FIXED_FUNCTION);
-        assert_eq!(layer.texture_slots()[0].texture_id, 7);
+        assert_eq!(layer.texture_slots()[0].texture_id, Animatable::Static(7));
         assert_eq!(layer.try_shader_type().unwrap(), layer.shader_type());
         assert_eq!(layer.try_texture_slots().unwrap(), layer.texture_slots());
     }

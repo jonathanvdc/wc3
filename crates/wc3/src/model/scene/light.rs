@@ -1,29 +1,13 @@
 //! Direct and ambient lighting with version-dependent shadow settings.
-use crate::model::animation::track_group;
 use crate::model::conversion::ConversionContext;
 use crate::model::ConversionError;
 use crate::model::{mdl, mdx};
+use crate::model::{Animatable, Track};
 use crate::model::{
     ModelVersion, SupportsLightFalloff, SupportsLightShadowCasting, SupportsLightShadowIntensity,
 };
 use mdl_codec::{damping, is_zero, quadratic, white, zero};
 use std::fmt::Debug;
-track_group! {
-    pub enum LightTrack {
-        AttenuationStart: LightAttenuationStart,
-        AttenuationEnd: LightAttenuationEnd,
-        Color: LightColor,
-        Intensity: LightIntensity,
-        AmbientColor: LightAmbientColor,
-        AmbientIntensity: LightAmbientIntensity,
-        Visibility: LightVisibility,
-        ShadowCastingStart: LightShadowCastingStart,
-        ShadowCastingEnd: LightShadowCastingEnd,
-        QuadraticFalloff: LightQuadraticFalloff,
-        LinearFalloff: LightLinearFalloff,
-        Damping: LightDamping,
-    }
-}
 
 use crate::model::Color;
 use crate::model::KnownChunk;
@@ -86,8 +70,10 @@ impl ShadowIntensityField for LightShadowIntensity {
     }
 }
 
-pub trait ShadowRangeField: Default + mdx::Read + mdx::Write + Clone + Debug + PartialEq {
-    fn shadow_casting_range(&self) -> Option<LightShadowRange> {
+pub trait ShadowRangeField:
+    Default + mdx::Read + mdx::Write + mdx::ReadTracks + mdx::WriteTracks + Clone + Debug + PartialEq
+{
+    fn shadow_casting_range(&self) -> Option<&LightShadowRange> {
         None
     }
     fn shadow_casting_range_mut(&mut self) -> Option<&mut LightShadowRange> {
@@ -100,22 +86,26 @@ pub struct NoShadowRange;
 impl ShadowRangeField for NoShadowRange {}
 
 /// Start and end distances for a light's shadow-casting range.
-#[derive(Clone, Copy, Debug, Default, PartialEq, mdx::Read, mdx::Write)]
+#[derive(Clone, Debug, Default, PartialEq, mdx::Read, mdx::Write)]
 pub struct LightShadowRange {
-    pub start: f32,
-    pub end: f32,
+    #[mdx(tag = *b"KLSS")]
+    pub start: Animatable<f32>,
+    #[mdx(tag = *b"KLSE")]
+    pub end: Animatable<f32>,
 }
 impl ShadowRangeField for LightShadowRange {
-    fn shadow_casting_range(&self) -> Option<LightShadowRange> {
-        Some(*self)
+    fn shadow_casting_range(&self) -> Option<&LightShadowRange> {
+        Some(self)
     }
     fn shadow_casting_range_mut(&mut self) -> Option<&mut LightShadowRange> {
         Some(self)
     }
 }
 
-pub trait FalloffField: Default + mdx::Read + mdx::Write + Clone + Debug + PartialEq {
-    fn falloff(&self) -> Option<LightFalloff> {
+pub trait FalloffField:
+    Default + mdx::Read + mdx::Write + mdx::ReadTracks + mdx::WriteTracks + Clone + Debug + PartialEq
+{
+    fn falloff(&self) -> Option<&LightFalloff> {
         None
     }
     fn falloff_mut(&mut self) -> Option<&mut LightFalloff> {
@@ -128,24 +118,27 @@ pub struct NoFalloff;
 impl FalloffField for NoFalloff {}
 
 /// Distance falloff coefficients, editable in version 1600 and newer.
-#[derive(Clone, Copy, Debug, PartialEq, mdx::Read, mdx::Write)]
+#[derive(Clone, Debug, PartialEq, mdx::Read, mdx::Write)]
 pub struct LightFalloff {
-    pub quadratic: f32,
-    pub linear: f32,
-    pub damping: f32,
+    #[mdx(tag = *b"KLQF")]
+    pub quadratic: Animatable<f32>,
+    #[mdx(tag = *b"KLLF")]
+    pub linear: Animatable<f32>,
+    #[mdx(tag = *b"KLDA")]
+    pub damping: Animatable<f32>,
 }
 impl Default for LightFalloff {
     fn default() -> Self {
         Self {
-            quadratic: 0.0005,
-            linear: 0.0,
-            damping: 0.00001,
+            quadratic: Animatable::Static(0.0005),
+            linear: Animatable::Static(0.0),
+            damping: Animatable::Static(0.00001),
         }
     }
 }
 impl FalloffField for LightFalloff {
-    fn falloff(&self) -> Option<LightFalloff> {
-        Some(*self)
+    fn falloff(&self) -> Option<&LightFalloff> {
+        Some(self)
     }
     fn falloff_mut(&mut self) -> Option<&mut LightFalloff> {
         Some(self)
@@ -244,7 +237,7 @@ light_layout!(
 #[mdl(block = "Light", after_read = "Self::finish_mdl", validate_write = "Self::validate_mdl",
     write_order(node, kind, attenuation_start, attenuation_end, color, intensity,
         ambient_color, ambient_intensity, shadow_value, casting, shadow_start,
-        shadow_end, quadratic, linear, damping, tracks),
+        shadow_end, quadratic, linear, damping, visibility),
     virtual_fields(
     #[mdl(flags(Omnidirectional = 1, Directional = 2, Ambient = 4))]
         #[mdl(get = "Self::mdl_kind", set = "Self::set_mdl_kind")]
@@ -260,40 +253,35 @@ light_layout!(
         #[mdl(get = "Self::mdl_shadow_intensity", slot = "Self::mdl_shadow_intensity_mut")]
         shadow_value: f32,
         #[mdl(
-            animatable = "ShadowCastingStart",
-            track = "LightTrack::ShadowCastingStart",
+            property = "ShadowCastingStart",
             default = "zero"
         )]
         #[mdl(get = "Self::mdl_shadow_start", slot = "Self::mdl_shadow_start_mut")]
-        shadow_start: f32,
+        shadow_start: Animatable<f32>,
         #[mdl(
-            animatable = "ShadowCastingEnd",
-            track = "LightTrack::ShadowCastingEnd",
+            property = "ShadowCastingEnd",
             default = "zero"
         )]
         #[mdl(get = "Self::mdl_shadow_end", slot = "Self::mdl_shadow_end_mut")]
-        shadow_end: f32,
+        shadow_end: Animatable<f32>,
         #[mdl(
-            animatable = "QuadraticFalloff",
-            track = "LightTrack::QuadraticFalloff",
+            property = "QuadraticFalloff",
             default = "quadratic"
         )]
         #[mdl(get = "Self::mdl_quadratic", slot = "Self::mdl_quadratic_mut")]
-        quadratic: f32,
+        quadratic: Animatable<f32>,
         #[mdl(
-            animatable = "LinearFalloff",
-            track = "LightTrack::LinearFalloff",
+            property = "LinearFalloff",
             default = "zero"
         )]
         #[mdl(get = "Self::mdl_linear", slot = "Self::mdl_linear_mut")]
-        linear: f32,
+        linear: Animatable<f32>,
         #[mdl(
-            animatable = "Damping",
-            track = "LightTrack::Damping",
+            property = "Damping",
             default = "damping"
         )]
         #[mdl(get = "Self::mdl_damping", slot = "Self::mdl_damping_mut")]
-        damping: f32
+        damping: Animatable<f32>
     )
 )]
 pub struct Light<V: ModelVersion> {
@@ -305,55 +293,44 @@ pub struct Light<V: ModelVersion> {
     pub light_type: u32,
     #[mdl(skip, default)]
     shadow_casting: V::ShadowCasting,
-    #[mdl(
-        animatable = "AttenuationStart",
-        track = "LightTrack::AttenuationStart",
-        default = "zero"
-    )]
+    #[mdx(tag = *b"KLAS")]
+    #[mdl(property = "AttenuationStart", default = "zero")]
     /// Attenuation start distance.
-    pub attenuation_start: f32,
-    #[mdl(
-        animatable = "AttenuationEnd",
-        track = "LightTrack::AttenuationEnd",
-        default = "zero"
-    )]
+    pub attenuation_start: Animatable<f32>,
+    #[mdx(tag = *b"KLAE")]
+    #[mdl(property = "AttenuationEnd", default = "zero")]
     /// Attenuation end distance.
-    pub attenuation_end: f32,
-    #[mdl(animatable = "Color", track = "LightTrack::Color", default = "white")]
+    pub attenuation_end: Animatable<f32>,
+    #[mdx(tag = *b"KLAC")]
+    #[mdl(property = "Color", default = "white")]
     /// RGB light color.
-    pub color: Color,
-    #[mdl(
-        animatable = "Intensity",
-        track = "LightTrack::Intensity",
-        default = "zero"
-    )]
+    pub color: Animatable<Color>,
+    #[mdx(tag = *b"KLAI")]
+    #[mdl(property = "Intensity", default = "zero")]
     /// Light intensity.
-    pub intensity: f32,
-    #[mdl(
-        animatable = "AmbColor",
-        track = "LightTrack::AmbientColor",
-        default = "white"
-    )]
+    pub intensity: Animatable<f32>,
+    #[mdx(tag = *b"KLBC")]
+    #[mdl(property = "AmbColor", default = "white")]
     /// Ambient RGB color.
-    pub ambient_color: Color,
-    #[mdl(
-        animatable = "AmbIntensity",
-        track = "LightTrack::AmbientIntensity",
-        default = "zero"
-    )]
+    pub ambient_color: Animatable<Color>,
+    #[mdx(tag = *b"KLBI")]
+    #[mdl(property = "AmbIntensity", default = "zero")]
     /// Ambient intensity.
-    pub ambient_intensity: f32,
+    pub ambient_intensity: Animatable<f32>,
     #[mdl(skip, default)]
     shadow_intensity: V::ShadowIntensity,
     #[mdl(skip, default)]
+    #[mdx(flatten)]
     shadow_range: V::ShadowRange,
     #[mdl(skip, default)]
+    #[mdx(flatten)]
     falloff: V::Falloff,
     #[mdl(skip, default)]
     version: PhantomData<V>,
-    #[mdl(tracks, channels(Visibility = "LightTrack::Visibility"))]
-    /// Light animation tracks.
-    pub tracks: Vec<LightTrack>,
+    #[mdx(tag = *b"KLAV")]
+    #[mdl(property = "Visibility")]
+    /// Optional visibility animation.
+    pub visibility: Option<Track<f32>>,
 }
 
 impl<V: ModelVersion> Light<V> {
@@ -363,16 +340,16 @@ impl<V: ModelVersion> Light<V> {
             node,
             light_type,
             shadow_casting: V::ShadowCasting::default(),
-            attenuation_start: 0.0,
-            attenuation_end: 0.0,
-            color: [1.0; 3],
-            intensity: 0.0,
-            ambient_color: [1.0; 3],
-            ambient_intensity: 0.0,
+            attenuation_start: Animatable::Static(0.0),
+            attenuation_end: Animatable::Static(0.0),
+            color: Animatable::Static([1.0; 3]),
+            intensity: Animatable::Static(0.0),
+            ambient_color: Animatable::Static([1.0; 3]),
+            ambient_intensity: Animatable::Static(0.0),
             shadow_intensity: V::ShadowIntensity::default(),
             shadow_range: V::ShadowRange::default(),
             falloff: V::Falloff::default(),
-            tracks: Vec::new(),
+            visibility: None,
             version: PhantomData,
         }
     }
@@ -426,6 +403,7 @@ impl<V: ModelVersion> Light<V> {
     pub fn try_shadow_casting_range(&self) -> Result<LightShadowRange, ValueError> {
         self.shadow_range
             .shadow_casting_range()
+            .cloned()
             .ok_or(ValueError::UnsupportedVersion {
                 tag: LightsChunk::<V>::TAG,
                 minimum: 1300,
@@ -449,7 +427,7 @@ impl<V: ModelVersion> Light<V> {
     }
     /// Returns the falloff values used by the game, including older-version defaults.
     pub fn falloff(&self) -> LightFalloff {
-        self.falloff.falloff().unwrap_or_default()
+        self.falloff.falloff().cloned().unwrap_or_default()
     }
     /// Sets the three serialized falloff fields from version 1600 onward.
     pub fn try_set_falloff(&mut self, falloff: LightFalloff) -> Result<(), ValueError> {
@@ -528,12 +506,12 @@ impl<V: ModelVersion> Light<V> {
         path: &str,
     ) -> Result<Light<T>, ConversionError> {
         let mut target = Light::<T>::new(self.node.clone(), self.light_type);
-        target.attenuation_start = self.attenuation_start;
-        target.attenuation_end = self.attenuation_end;
-        target.color = self.color;
-        target.intensity = self.intensity;
-        target.ambient_color = self.ambient_color;
-        target.ambient_intensity = self.ambient_intensity;
+        target.attenuation_start = self.attenuation_start.clone();
+        target.attenuation_end = self.attenuation_end.clone();
+        target.color = self.color.clone();
+        target.intensity = self.intensity.clone();
+        target.ambient_color = self.ambient_color.clone();
+        target.ambient_intensity = self.ambient_intensity.clone();
 
         context.field(
             self.shadow_casting.shadow_casting(),
@@ -548,37 +526,18 @@ impl<V: ModelVersion> Light<V> {
             &format!("{path}.shadow_intensity"),
         )?;
         context.field(
-            self.shadow_range.shadow_casting_range(),
+            self.shadow_range.shadow_casting_range().cloned(),
             target.shadow_range.shadow_casting_range_mut(),
             LightShadowRange::default(),
             &format!("{path}.shadow_range"),
         )?;
         context.field(
-            self.falloff.falloff(),
+            self.falloff.falloff().cloned(),
             target.falloff.falloff_mut(),
             LightFalloff::default(),
             &format!("{path}.falloff"),
         )?;
-        for (index, track) in self.tracks.iter().enumerate() {
-            let supported = V::NUMBER == T::NUMBER
-                || match track {
-                    LightTrack::ShadowCastingStart(_) | LightTrack::ShadowCastingEnd(_) => {
-                        T::NUMBER >= 1300
-                    }
-                    LightTrack::QuadraticFalloff(_)
-                    | LightTrack::LinearFalloff(_)
-                    | LightTrack::Damping(_) => T::NUMBER >= 1600,
-                    _ => true,
-                };
-            if supported {
-                target.tracks.push(track.clone());
-            } else {
-                context.drop(
-                    &format!("{path}.tracks[{index}]"),
-                    "animation track is not supported by the target",
-                )?;
-            }
-        }
+        target.visibility = self.visibility.clone();
         Ok(target)
     }
 }

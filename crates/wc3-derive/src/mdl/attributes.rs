@@ -31,7 +31,6 @@ pub(super) enum Kind {
     DelegatedProperty(LitStr),
     StaticProperty(LitStr),
     Animatable(LitStr),
-    Tracks,
     Flag(LitStr),
     Flags(Vec<(LitStr, u32)>),
     Skip,
@@ -53,22 +52,20 @@ pub(super) struct Field {
     pub(super) ty: Type,
     pub(super) kind: Kind,
     pub(super) hive_name: Option<LitStr>,
+    pub(super) constant: Option<LitStr>,
     pub(super) hive_flags: Option<Vec<(LitStr, u32)>>,
     pub(super) default: Option<DefaultValue>,
     pub(super) skip_if: Option<Path>,
     pub(super) read_with: Option<Path>,
     pub(super) write_with: Option<Path>,
-    pub(super) track: Option<Path>,
     pub(super) enabled_if: Option<Path>,
     pub(super) enable_with: Option<Path>,
     pub(super) allow_bits: u32,
     pub(super) hive_skip_bits: u32,
     pub(super) required: bool,
     pub(super) unique_by: Option<Path>,
-    pub(super) animated_only: bool,
     pub(super) bare_static: bool,
     pub(super) parent: Option<Ident>,
-    pub(super) channels: Vec<(LitStr, Path)>,
     pub(super) extra_flags: Option<ExtraFlags>,
     pub(super) get: Option<Path>,
     pub(super) set: Option<Path>,
@@ -77,8 +74,15 @@ pub(super) struct Field {
 }
 
 impl Field {
+    pub(super) fn animation_only(&self) -> bool {
+        matches!(self.kind, Kind::Animatable(_)) && type_argument(&self.ty, "Option").is_some()
+    }
+
     pub(super) fn dialect_aliases(&self) -> Vec<&LitStr> {
         let mut names = Vec::new();
+        if let Some(name) = &self.constant {
+            names.push(name);
+        }
         if let Some(name) = &self.hive_name {
             names.push(name);
         }
@@ -91,6 +95,19 @@ impl Field {
             }));
         }
         names
+    }
+    pub(super) fn borrow(&self, receiver: TokenStream) -> TokenStream {
+        if let Some(get) = &self.get {
+            if self.slot.is_some() && matches!(self.kind, Kind::Animatable(_)) {
+                let default = match self.default.as_ref().expect("slot default") {
+                    DefaultValue::Trait => quote!(::core::default::Default::default()),
+                    DefaultValue::Function(function) => quote!(#function()),
+                };
+                return quote!(#get(#receiver).unwrap_or(&#default));
+            }
+        }
+        let value = self.value(receiver);
+        quote!(&#value)
     }
     pub(super) fn value(&self, receiver: TokenStream) -> TokenStream {
         match &self.get {
@@ -227,12 +244,12 @@ pub(super) fn container(input: &DeriveInput) -> Result<Container> {
 pub(super) fn field(field: &SynField, index: usize) -> Result<Field> {
     let mut kind = None;
     let mut hive_name = None;
+    let mut constant = None;
     let mut hive_flags = None;
     let mut default = None;
     let mut skip_if = None;
     let mut read_with = None;
     let mut write_with = None;
-    let mut track = None;
     let mut enabled_if = None;
     let mut enable_with = None;
     let mut allow_bits = None;
@@ -240,10 +257,7 @@ pub(super) fn field(field: &SynField, index: usize) -> Result<Field> {
     let mut required = false;
     let mut delegate = false;
     let mut unique_by = None;
-    let mut animated_only = false;
     let mut bare_static = false;
-    let mut channels = Vec::new();
-    let mut channels_seen = false;
     let mut extra_flags = None;
     let mut get = None;
     let mut set = None;
@@ -253,7 +267,10 @@ pub(super) fn field(field: &SynField, index: usize) -> Result<Field> {
             continue;
         }
         attr.parse_nested_meta(|meta| {
-            if meta.path.is_ident("hive_name") {
+            if meta.path.is_ident("constant") {
+                if constant.is_some() { return Err(meta.error("duplicate constant")); }
+                let name = meta.value()?.parse()?; identifier(&name)?; constant = Some(name); Ok(())
+            } else if meta.path.is_ident("hive_name") {
                 if hive_name.is_some() { return Err(meta.error("duplicate hive_name")); }
                 let name: LitStr = meta.value()?.parse()?;
                 identifier(&name)?;
@@ -282,8 +299,6 @@ pub(super) fn field(field: &SynField, index: usize) -> Result<Field> {
                 || meta.path.is_ident("flags")
                 || meta.path.is_ident("skip")
                 || meta.path.is_ident("static_property")
-                || meta.path.is_ident("animatable")
-                || meta.path.is_ident("tracks")
                 || meta.path.is_ident("flatten")
                 || meta.path.is_ident("block")
                 || meta.path.is_ident("repeated")
@@ -291,7 +306,7 @@ pub(super) fn field(field: &SynField, index: usize) -> Result<Field> {
             {
                 if kind.is_some() {
                     return Err(meta.error(
-                        "a field must have exactly one of header, property, block, flatten, repeated, counted, static_property, animatable, tracks, flag, flags, or skip",
+                        "a field must have exactly one of header, property, block, flatten, repeated, counted, static_property, flag, flags, or skip",
                     ));
                 }
                 kind = Some(if meta.path.is_ident("header") {
@@ -300,8 +315,6 @@ pub(super) fn field(field: &SynField, index: usize) -> Result<Field> {
                     Kind::Flatten
                 } else if meta.path.is_ident("skip") {
                     Kind::Skip
-                } else if meta.path.is_ident("tracks") {
-                    Kind::Tracks
                 } else if meta.path.is_ident("repeated") {
                     let mut names = Vec::new();
                     if meta.input.peek(Token![=]) {
@@ -356,8 +369,6 @@ pub(super) fn field(field: &SynField, index: usize) -> Result<Field> {
                         Kind::Property(name)
                     } else if meta.path.is_ident("static_property") {
                         Kind::StaticProperty(name)
-                    } else if meta.path.is_ident("animatable") {
-                        Kind::Animatable(name)
                     } else {
                         Kind::Flag(name)
                     }
@@ -372,19 +383,6 @@ pub(super) fn field(field: &SynField, index: usize) -> Result<Field> {
             } else if meta.path.is_ident("delegate") {
                 if delegate { return Err(meta.error("duplicate delegate")); }
                 delegate = true;
-                Ok(())
-            } else if meta.path.is_ident("channels") {
-                if channels_seen { return Err(meta.error("duplicate channels")); }
-                channels_seen = true;
-                meta.parse_nested_meta(|item| {
-                    let ident = item.path.get_ident().ok_or_else(|| item.error("expected a channel name"))?;
-                    let name = LitStr::new(&ident.to_string(), ident.span());
-                    identifier(&name)?;
-                    let value: LitStr = item.value()?.parse()?;
-                    channels.push((name, value.parse()?));
-                    Ok(())
-                })?;
-                if channels.is_empty() { return Err(meta.error("channels needs at least one channel")); }
                 Ok(())
             } else if meta.path.is_ident("extra_flags") {
     if extra_flags.is_some() { return Err(meta.error("duplicate extra_flags")); }
@@ -415,18 +413,12 @@ pub(super) fn field(field: &SynField, index: usize) -> Result<Field> {
                 if bare_static { return Err(meta.error("duplicate bare_static")); }
                 bare_static = true;
                 Ok(())
-            } else if meta.path.is_ident("animated_only") {
-                if animated_only { return Err(meta.error("duplicate animated_only")); }
-                animated_only = true;
-                Ok(())
             } else if meta.path.is_ident("unique_by") {
                 path(&meta, &mut unique_by)
             } else if meta.path.is_ident("required") {
                 if required { return Err(meta.error("duplicate required")); }
                 required = true;
                 Ok(())
-            } else if meta.path.is_ident("track") {
-                path(&meta, &mut track)
             } else if meta.path.is_ident("enabled_if") {
                 path(&meta, &mut enabled_if)
             } else if meta.path.is_ident("enable_with") {
@@ -470,9 +462,24 @@ pub(super) fn field(field: &SynField, index: usize) -> Result<Field> {
     let kind = kind.ok_or_else(|| {
         Error::new_spanned(
             field,
-            "each field needs an explicit MDL header, property, block, flatten, repeated, counted, static_property, animatable, tracks, flag, flags, or skip attribute",
+            "each field needs an explicit MDL header, property, block, flatten, repeated, counted, static_property, flag, flags, or skip attribute",
         )
     })?;
+    let kind = match kind {
+        Kind::Property(name) if type_argument(&field.ty, "Animatable").is_some() => {
+            Kind::Animatable(name)
+        }
+        Kind::Property(name)
+            if type_argument(&field.ty, "Option")
+                .is_some_and(|ty| type_argument(&ty, "Track").is_some()) =>
+        {
+            if default.is_none() {
+                default = Some(DefaultValue::Trait);
+            }
+            Kind::Animatable(name)
+        }
+        kind => kind,
+    };
     let kind = if delegate {
         match kind {
             Kind::Property(name) => Kind::DelegatedProperty(name),
@@ -494,6 +501,14 @@ pub(super) fn field(field: &SynField, index: usize) -> Result<Field> {
             || required)
     {
         return Err(Error::new_spanned(field, "delegate owns defaults, requirements, omission, and codec framing; it cannot have default, required, skip_if, read_with, or write_with"));
+    }
+    if constant.is_some()
+        && !(matches!(kind, Kind::Animatable(_)) && type_argument(&field.ty, "Option").is_some())
+    {
+        return Err(Error::new_spanned(
+            field,
+            "constant requires an optional Track property",
+        ));
     }
     if let Some(hive_name) = &hive_name {
         match &kind {
@@ -536,31 +551,18 @@ pub(super) fn field(field: &SynField, index: usize) -> Result<Field> {
     if extra_flags.is_some() && !matches!(kind, Kind::Flatten) {
         return Err(Error::new_spanned(field, "extra_flags requires flatten"));
     }
-    if channels_seen && !matches!(kind, Kind::Tracks) {
-        return Err(Error::new_spanned(field, "channels requires tracks"));
-    }
-    if bare_static && (!matches!(kind, Kind::Animatable(_)) || animated_only) {
+    if bare_static
+        && (!matches!(kind, Kind::Animatable(_)) || type_argument(&field.ty, "Option").is_some())
+    {
         return Err(Error::new_spanned(
             field,
-            "bare_static requires an animatable field with a static form",
-        ));
-    }
-    if animated_only && !matches!(kind, Kind::Animatable(_)) {
-        return Err(Error::new_spanned(
-            field,
-            "animated_only requires animatable",
+            "bare_static requires an Animatable property",
         ));
     }
     if unique_by.is_some() && !matches!(kind, Kind::Repeated(_)) {
         return Err(Error::new_spanned(field, "unique_by requires repeated"));
     }
     if matches!(kind, Kind::Animatable(_)) {
-        if track.is_none() {
-            return Err(Error::new_spanned(
-                field,
-                "animatable fields require a track attribute",
-            ));
-        }
         if read_with.is_some() || write_with.is_some() {
             return Err(Error::new_spanned(
                 field,
@@ -573,10 +575,10 @@ pub(super) fn field(field: &SynField, index: usize) -> Result<Field> {
                 "enabled_if and enable_with must be supplied together",
             ));
         }
-    } else if track.is_some() || enabled_if.is_some() || enable_with.is_some() {
+    } else if enabled_if.is_some() || enable_with.is_some() {
         return Err(Error::new_spanned(
             field,
-            "track and enable hooks require an animatable field",
+            "enable hooks require an Animatable property",
         ));
     }
     if let Some(skipped) = hive_skip_bits {
@@ -624,15 +626,6 @@ pub(super) fn field(field: &SynField, index: usize) -> Result<Field> {
         if matches!(kind, Kind::Repeated(_) | Kind::Counted(_)) {
             vec_element(&field.ty)?;
         }
-    }
-    if matches!(kind, Kind::Tracks) {
-        if default.is_some() || skip_if.is_some() || read_with.is_some() || write_with.is_some() {
-            return Err(Error::new_spanned(
-                field,
-                "tracks cannot have defaults, omission predicates, or codec hooks",
-            ));
-        }
-        vec_element(&field.ty)?;
     }
     if required
         && (default.is_some()
@@ -699,22 +692,20 @@ pub(super) fn field(field: &SynField, index: usize) -> Result<Field> {
         ty: field.ty.clone(),
         kind,
         hive_name,
+        constant,
         hive_flags,
         default,
         skip_if,
         read_with,
         write_with,
-        track,
         enabled_if,
         enable_with,
         allow_bits: allow_bits.unwrap_or(0),
         hive_skip_bits: hive_skip_bits.unwrap_or(0),
         required,
         unique_by,
-        animated_only,
         bare_static,
         parent: None,
-        channels,
         extra_flags,
         get,
         set,
@@ -741,4 +732,22 @@ pub(super) fn vec_element(ty: &Type) -> Result<&Type> {
         ty,
         "tracks or collection requires Vec<Item>",
     ))
+}
+
+pub(super) fn type_argument(ty: &Type, name: &str) -> Option<Type> {
+    let Type::Path(path) = ty else { return None };
+    let segment = path.path.segments.last()?;
+    if segment.ident != name {
+        return None;
+    }
+    let PathArguments::AngleBracketed(args) = &segment.arguments else {
+        return None;
+    };
+    if args.args.len() != 1 {
+        return None;
+    }
+    match args.args.first()? {
+        GenericArgument::Type(ty) => Some(ty.clone()),
+        _ => None,
+    }
 }

@@ -3,12 +3,14 @@
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::cell::Cell;
 use std::io::{Cursor as IoCursor, Write};
+use wc3::model::animation::Track;
 use wc3::model::animation::{GlobalSequence, Interpolation, Sequence};
 use wc3::model::materials::Texture;
 use wc3::model::mdl::Read as _;
 use wc3::model::mdl::{Lexer, Parser, Writer};
-use wc3::model::scene::{ModelInfo, NodeTrack};
+use wc3::model::scene::ModelInfo;
 use wc3::model::Encoder;
+use wc3::model::Vec3;
 
 struct CountingAllocator;
 thread_local! { static ALLOCATIONS: Cell<Option<usize>> = const { Cell::new(None) }; }
@@ -68,7 +70,7 @@ fn lexing_reading_writing_and_diagnostics_do_not_allocate() {
         )
         .unwrap();
         let interpolation = Interpolation::decode_mdl("Linear").unwrap();
-        let track = NodeTrack::decode_mdl("Translation 0 { Linear, }").unwrap();
+        let track = Track::<Vec3>::decode_mdl("Track 0 { Linear, }").unwrap();
         let mut writer = Writer::new(IoCursor::new(&mut storage[..]));
         writer.entry(&interpolation).unwrap();
         writer.write(&track).unwrap();

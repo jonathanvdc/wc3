@@ -1,5 +1,6 @@
 use std::sync::atomic::{AtomicUsize, Ordering};
-use wc3::model::animation::{AnimationTrack, GeosetAlpha, GeosetColor, GeosetTrack};
+use wc3::model::animation::{Animatable, Track};
+
 use wc3::model::mdl::{self, Read as _, ValueEq as _, Write as _, Writer};
 
 fn refuses_before_output<T: mdl::Write>(value: &T) {
@@ -12,83 +13,69 @@ fn refuses_before_output<T: mdl::Write>(value: &T) {
 #[derive(mdl::Read, mdl::Write)]
 #[mdl(block = "ZeroBase")]
 struct ZeroBase {
-    #[mdl(animatable = "Alpha", track = "GeosetTrack::Alpha", default)]
-    alpha: f32,
-    #[mdl(animatable = "Color", track = "GeosetTrack::Color", default)]
-    color: [f32; 3],
-    #[mdl(tracks)]
-    tracks: Vec<GeosetTrack>,
+    #[mdl(property = "Alpha", default)]
+    alpha: Animatable<f32>,
+    #[mdl(property = "Color", default)]
+    color: Animatable<[f32; 3]>,
 }
 
 #[test]
 fn animations_override_nondefault_scalar_and_vector_bases() {
     let mut value = ZeroBase {
-        alpha: 0.0,
-        color: [0.0; 3],
-        tracks: vec![AnimationTrack::<GeosetAlpha>::linear(Vec::new(), None)
-            .unwrap()
-            .into()],
+        alpha: Animatable::Static(-0.0),
+        color: Animatable::Static([0.0; 3]),
     };
-    assert!(value.encode_mdl().is_ok());
-    value.alpha = -0.0;
-    let output = value.encode_mdl().unwrap();
-    let decoded = ZeroBase::decode_mdl(&output).unwrap();
-    assert_eq!(decoded.tracks, value.tracks);
-    value.tracks.clear();
     let decoded = ZeroBase::decode_mdl(&value.encode_mdl().unwrap()).unwrap();
-    assert_eq!(decoded.alpha.to_bits(), (-0.0f32).to_bits());
-    value.alpha = 0.0;
-    value.tracks.push(
-        AnimationTrack::<GeosetColor>::linear(Vec::new(), None)
-            .unwrap()
-            .into(),
+    assert_eq!(
+        decoded.alpha.value().unwrap().to_bits(),
+        (-0.0f32).to_bits()
     );
-    value.color[1] = -0.0;
+    value
+        .alpha
+        .set_track(Track::linear(Vec::new(), None).unwrap());
+    value.alpha.set_value(0.5);
+    value
+        .color
+        .set_track(Track::linear(Vec::new(), None).unwrap());
+    value.color.set_value([0.5; 3]);
     let output = value.encode_mdl().unwrap();
+    assert!(!output.contains("static"));
     let decoded = ZeroBase::decode_mdl(&output).unwrap();
-    assert_eq!(decoded.tracks, value.tracks);
-    value.color = [0.0; 3];
-    assert!(value.encode_mdl().is_ok());
-    value.color[2] = 0.5;
-    let output = value.encode_mdl().unwrap();
-    let decoded = ZeroBase::decode_mdl(&output).unwrap();
-    assert_eq!(decoded.tracks, value.tracks);
+    assert_eq!(decoded.alpha.track(), value.alpha.track());
+    assert_eq!(decoded.color.track(), value.color.track());
 }
 
 #[derive(mdl::Read, mdl::Write)]
 #[mdl(block = "NanBase", default)]
 struct NanBase {
-    #[mdl(animatable = "Alpha", track = "GeosetTrack::Alpha")]
-    alpha: f32,
-    #[mdl(tracks)]
-    tracks: Vec<GeosetTrack>,
+    #[mdl(property = "Alpha")]
+    alpha: Animatable<f32>,
 }
 impl Default for NanBase {
     fn default() -> Self {
         Self {
-            alpha: f32::NAN,
-            tracks: Vec::new(),
+            alpha: Animatable::Static(f32::NAN),
         }
     }
 }
-
 #[test]
 fn animated_output_ignores_base_even_when_default_is_nan() {
-    let mut value = NanBase {
-        alpha: f32::from_bits(0xffc12345),
-        tracks: vec![AnimationTrack::<GeosetAlpha>::linear(Vec::new(), None)
-            .unwrap()
-            .into()],
-    };
-    let output = value.encode_mdl().unwrap();
-    assert!(!output.contains("static Alpha"));
-    assert!(NanBase::decode_mdl(&output).unwrap().alpha.is_nan());
-    for alpha in [0.0, f32::INFINITY, f32::NEG_INFINITY] {
-        value.alpha = alpha;
+    let mut value = NanBase::default();
+    value
+        .alpha
+        .set_track(Track::linear(Vec::new(), None).unwrap());
+    for base in [
+        f32::from_bits(0xffc12345),
+        0.0,
+        f32::INFINITY,
+        f32::NEG_INFINITY,
+    ] {
+        value.alpha.set_value(base);
         let output = value.encode_mdl().unwrap();
+        assert!(!output.contains("static Alpha"));
         let decoded = NanBase::decode_mdl(&output).unwrap();
-        assert!(decoded.alpha.is_nan());
-        assert_eq!(decoded.tracks, value.tracks);
+        assert!(decoded.alpha.value().unwrap().is_nan());
+        assert_eq!(decoded.alpha.track(), value.alpha.track());
     }
     assert!(f32::NAN.eq_mdl(&f32::from_bits(0xffc12345)));
     assert!(!f32::INFINITY.eq_mdl(&f32::NEG_INFINITY));

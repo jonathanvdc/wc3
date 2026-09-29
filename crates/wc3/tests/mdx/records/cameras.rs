@@ -1,5 +1,6 @@
-use wc3::model::animation::CameraRotation;
-use wc3::model::animation::{AnimationTrack, ValueKeyframe};
+use wc3::model::animation::Track;
+
+use wc3::model::animation::ValueKeyframe;
 use wc3::model::mdx::Read as _;
 use wc3::model::mdx::Write as _;
 
@@ -14,16 +15,15 @@ fn camera_fields_and_tracks_round_trip() {
     camera.field_of_view = 0.7;
     camera.far_clip = 1000.0;
     camera.near_clip = 10.0;
-    let track = AnimationTrack::<CameraRotation>::linear(
+    let track = Track::<f32>::linear(
         vec![ValueKeyframe {
             frame: 100,
             value: 0.5,
         }],
         None,
     )
-    .unwrap()
-    .into();
-    camera.tracks = (std::slice::from_ref(&track)).to_vec();
+    .unwrap();
+    camera.rotation = Some(track.clone());
     let mut model = Model::<wc3::model::V1100>::new();
     model.set_cameras(&[camera]);
     let decoded = Model::<wc3::model::V1100>::decode_mdx(&model.encode_mdx().unwrap()).unwrap();
@@ -34,7 +34,7 @@ fn camera_fields_and_tracks_round_trip() {
     assert_eq!(camera.field_of_view, 0.7);
     assert_eq!(camera.far_clip, 1000.0);
     assert_eq!(camera.near_clip, 10.0);
-    assert_eq!(camera.tracks.as_slice(), vec![track]);
+    assert_eq!(camera.rotation.as_ref(), Some(&track));
 }
 
 #[test]

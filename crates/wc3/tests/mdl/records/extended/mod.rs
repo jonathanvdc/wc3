@@ -2,7 +2,7 @@ use wc3::model::emitters::{Particle2FilterMode, Particle2Frames};
 use wc3::model::emitters::{ParticleEmitter2, PopcornEmitter};
 use wc3::model::mdl::{Read as _, Write as _};
 use wc3::model::mdx::{Read as _, Write as _};
-use wc3::model::scene::{Camera, CameraTrack, CameraVariant};
+use wc3::model::scene::{Camera, CameraVariant};
 use wc3::model::{
     mdl, DynamicModel, Model, ModelVersion, V1000, V1100, V1200, V1300, V1400, V1600, V1800, V800,
     V900,

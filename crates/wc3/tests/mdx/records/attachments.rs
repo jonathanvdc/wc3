@@ -1,5 +1,6 @@
-use wc3::model::animation::AttachmentVisibility;
-use wc3::model::animation::{AnimationTrack, ValueKeyframe};
+use wc3::model::animation::Track;
+
+use wc3::model::animation::ValueKeyframe;
 use wc3::model::mdx::Cursor;
 use wc3::model::mdx::Read as _;
 use wc3::model::mdx::Write as _;
@@ -14,7 +15,7 @@ fn attachment_fields_and_visibility_round_trip() {
         2,
     )
     .unwrap();
-    let track = AnimationTrack::<AttachmentVisibility>::linear(
+    let track = Track::<f32>::linear(
         vec![ValueKeyframe {
             frame: 50,
             value: 1.0,
@@ -22,7 +23,7 @@ fn attachment_fields_and_visibility_round_trip() {
         None,
     )
     .unwrap();
-    attachment.visibility_track = (Some(&track)).cloned();
+    attachment.visibility = (Some(&track)).cloned();
     let mut model = Model::<wc3::model::V1800>::new();
     model.set_attachments(&[attachment]);
     let parsed = Model::<wc3::model::V1800>::decode_mdx(&model.encode_mdx().unwrap()).unwrap();
@@ -30,7 +31,7 @@ fn attachment_fields_and_visibility_round_trip() {
     assert_eq!(attachment.node.name.text(), "Weapon");
     assert_eq!(attachment.path.text(), "Abilities\\Weapons\\Sword.mdx");
     assert_eq!(attachment.id, 2);
-    assert_eq!(attachment.visibility_track.as_ref(), Some(&track));
+    assert_eq!(attachment.visibility.as_ref(), Some(&track));
 }
 
 #[test]

@@ -1,6 +1,5 @@
-use wc3::model::animation::{
-    AnimationTrack, LayerEmissiveGain, LayerTextureId, LightDamping, ValueKeyframe,
-};
+use wc3::model::animation::ValueKeyframe;
+use wc3::model::animation::{Animatable, Track};
 use wc3::model::chunks::{
     BindPoseChunk, MaterialsChunk, ModelChunk, RawChunk, UnknownChunk, VersionChunk,
 };
@@ -10,9 +9,7 @@ use wc3::model::mdx::Read as _;
 use wc3::model::mdx::Write as _;
 
 use wc3::model::materials::{Layer, LayerFresnel, LayerTextureSlot, Material, ShaderType};
-use wc3::model::scene::{
-    Camera, CameraTrack, CameraVariant, Light, LightFalloff, LightShadowRange, Node,
-};
+use wc3::model::scene::{Camera, CameraVariant, Light, LightFalloff, LightShadowRange, Node};
 use wc3::model::{
     ConversionIssueKind, ConversionOptions, DynamicModel, Model, ModelVersion, UnknownChunkPolicy,
     V1000, V1100, V1200, V1300, V1400, V1600, V1800, V800, V900,
@@ -25,15 +22,14 @@ fn sample<V: ModelVersion>() -> Model<V> {
     if V::NUMBER >= 1100 {
         layer
             .try_set_texture_slots(&[LayerTextureSlot {
-                texture_id: 4,
+                texture_id: Animatable::Static(4),
                 texture_type: 0,
-                track: None,
             }])
             .unwrap();
     } else {
-        layer.texture_id = 4;
+        layer.texture_id = Animatable::Static(4);
     }
-    layer.alpha = 0.75;
+    layer.alpha = Animatable::Static(0.75);
     material.priority_plane = 12;
     material.layers = [layer].to_vec();
     model.set_materials(&[material]);
@@ -41,9 +37,9 @@ fn sample<V: ModelVersion>() -> Model<V> {
     geoset.set_raw_unselectable(0x8000_0002);
     model.set_geosets(&[geoset]);
     let mut light = Light::<V>::new(Node::new("Lamp", 7).unwrap(), 2);
-    light.color = [1.0, 0.5, 0.25];
-    light.intensity = 2.5;
-    light.attenuation_end = 200.0;
+    light.color = Animatable::Static([1.0, 0.5, 0.25]);
+    light.intensity = Animatable::Static(2.5);
+    light.attenuation_end = Animatable::Static(200.0);
     model.set_lights(&[light]);
     model.set_cameras(&[Camera::<V>::new("View").unwrap()]);
     model
@@ -115,10 +111,9 @@ fn shader_transition_is_explicit_and_source_is_unchanged() {
 fn texture_slots_including_animations_require_loss_permission() {
     let mut layer = Layer::<V1100>::new();
     layer.set_texture_slots(&[LayerTextureSlot {
-        texture_id: 8,
-        texture_type: 2,
-        track: Some(
-            AnimationTrack::<LayerTextureId>::step(
+        texture_id: Animatable::Both {
+            value: 8,
+            track: Track::<u32>::step(
                 vec![ValueKeyframe {
                     frame: 20,
                     value: 9,
@@ -126,7 +121,8 @@ fn texture_slots_including_animations_require_loss_permission() {
                 None,
             )
             .unwrap(),
-        ),
+        },
+        texture_type: 2,
     }]);
     assert!(layer
         .convert::<V1000>(&ConversionOptions::strict())
@@ -144,46 +140,40 @@ fn texture_slots_including_animations_require_loss_permission() {
 #[test]
 fn tracks_are_checked_even_when_static_fields_are_neutral() {
     let mut layer = Layer::<V900>::new();
-    let track = AnimationTrack::<LayerEmissiveGain>::linear(
+    let track = Track::<f32>::linear(
         vec![ValueKeyframe {
             frame: 100,
             value: 2.0,
         }],
         Some(3),
     )
-    .unwrap()
-    .into();
-    layer.tracks = [track].to_vec();
+    .unwrap();
+    layer.set_emissive_gain(Animatable::Both { value: 1.0, track });
     let error = layer
         .convert::<V800>(&ConversionOptions::strict())
         .unwrap_err();
-    assert_eq!(error.path, "record.tracks[0]");
+    assert_eq!(error.path, "record.emissive_gain");
     let lossy = layer.convert::<V800>(&ConversionOptions::lossy()).unwrap();
-    assert!(lossy.model.tracks.is_empty());
+    assert!(lossy.model.try_emissive_gain().is_err());
     let mut light = Light::<V1800>::new(Node::new("Lamp", 1).unwrap(), 0);
-    light.tracks = [AnimationTrack::<LightDamping>::step(
-        vec![ValueKeyframe {
-            frame: 0,
-            value: 1.0,
-        }],
-        None,
-    )
-    .unwrap()
-    .into()]
-    .to_vec();
+    let mut falloff = light.falloff();
+    falloff.damping.set_track(Track::constant(1.0));
+    light.set_falloff(falloff);
     assert_eq!(
         light
             .convert::<V1400>(&ConversionOptions::strict())
             .unwrap_err()
             .path,
-        "record.tracks[0]"
+        "record.falloff"
     );
     assert!(light
         .convert::<V1400>(&ConversionOptions::lossy())
         .unwrap()
         .model
-        .tracks
-        .is_empty());
+        .falloff()
+        .damping
+        .track()
+        .is_none());
 }
 
 #[test]
@@ -346,7 +336,7 @@ fn camera_conversion_normalizes_equivalent_variants_to_each_target_layout() {
             camera.position = [-0.0, 2.0, 3.0];
             camera.target_position = [4.0, 5.0, 6.0];
             camera.field_of_view = 0.9;
-            camera.tracks.push(CameraTrack::focus_distance(180.0));
+            camera.focus_distance = Some(Track::constant(180.0));
             let original = camera.encode_mdx().unwrap();
             let converted = camera.convert::<T>(&ConversionOptions::strict()).unwrap();
             let expected = if T::NUMBER >= 1200 {
@@ -467,18 +457,17 @@ fn absent_version_is_inserted_and_dynamic_sources_convert() {
 #[test]
 fn populated_versioned_fields_preserve_exact_storage_when_supported() {
     let mut layer = Layer::<V1800>::new();
-    layer.set_emissive_gain(2.5);
+    layer.set_emissive_gain(Animatable::Static(2.5));
     layer.set_fresnel(LayerFresnel {
-        color: [0.25, 0.5, 1.0],
-        opacity: 0.75,
-        team_color: 0.25,
+        color: Animatable::Static([0.25, 0.5, 1.0]),
+        opacity: Animatable::Static(0.75),
+        team_color: Animatable::Static(0.25),
     });
     layer.set_shader_type(ShaderType::new(3));
     layer.set_texture_slots(&[LayerTextureSlot {
-        texture_id: 2,
-        texture_type: 1,
-        track: Some(
-            AnimationTrack::<LayerTextureId>::linear(
+        texture_id: Animatable::Both {
+            value: 2,
+            track: Track::<u32>::linear(
                 vec![ValueKeyframe {
                     frame: 200,
                     value: 5,
@@ -486,7 +475,8 @@ fn populated_versioned_fields_preserve_exact_storage_when_supported() {
                 Some(2),
             )
             .unwrap(),
-        ),
+        },
+        texture_type: 1,
     }]);
     let converted = layer
         .convert::<V1600>(&ConversionOptions::strict())
@@ -500,13 +490,13 @@ fn populated_versioned_fields_preserve_exact_storage_when_supported() {
     let mut light = Light::<V1800>::new(Node::new("Shadow", 2).unwrap(), 1);
     light.set_shadow_intensity(0.5);
     light.set_shadow_casting_range(LightShadowRange {
-        start: 1.0,
-        end: 10.0,
+        start: Animatable::Static(1.0),
+        end: Animatable::Static(10.0),
     });
     light.set_falloff(LightFalloff {
-        quadratic: 1.0,
-        linear: 2.0,
-        damping: 3.0,
+        quadratic: Animatable::Static(1.0),
+        linear: Animatable::Static(2.0),
+        damping: Animatable::Static(3.0),
     });
     // A noncanonical nonzero shadow flag must retain its original bits.
     let shadow_offset = 4 + light.node.encode_mdx().unwrap().len() + 4;

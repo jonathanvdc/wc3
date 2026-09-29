@@ -1,14 +1,7 @@
 //! Animated texture translation, rotation, and scaling.
-use crate::model::animation::track_group;
 use crate::model::ModelVersion;
 use crate::model::{mdl, mdx};
-track_group! {
-    pub enum TextureAnimationTrack {
-        Translation: TextureTranslation,
-        Rotation: TextureRotation,
-        Scaling: TextureScaling,
-    }
-}
+use crate::model::{Track, Vec3, Vec4};
 
 use crate::model::KnownChunk;
 
@@ -22,16 +15,15 @@ use crate::model::TextureAnimationsChunk;
 #[mdx(sized(tag = TextureAnimationsChunk::TAG))]
 #[mdl(block = "TVertexAnim")]
 pub struct TextureAnimation {
-    #[mdl(
-        tracks,
-        channels(
-            Translation = "TextureAnimationTrack::Translation",
-            Rotation = "TextureAnimationTrack::Rotation",
-            Scaling = "TextureAnimationTrack::Scaling"
-        )
-    )]
-    /// Tracks for this record.
-    pub tracks: Vec<TextureAnimationTrack>,
+    #[mdx(tag = *b"KTAT")]
+    #[mdl(property = "Translation")]
+    pub translation: Option<Track<Vec3>>,
+    #[mdx(tag = *b"KTAR")]
+    #[mdl(property = "Rotation")]
+    pub rotation: Option<Track<Vec4>>,
+    #[mdx(tag = *b"KTAS")]
+    #[mdl(property = "Scaling")]
+    pub scaling: Option<Track<Vec3>>,
 }
 
 impl TextureAnimation {

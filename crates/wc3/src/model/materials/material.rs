@@ -8,8 +8,8 @@ use std::{borrow::Cow, fmt::Debug, marker::PhantomData};
 
 use super::layer::{
     EmissiveGain, EmissiveGainField, FresnelField, Layer, LayerFresnel, LayerShaderTypeField,
-    LayerTextureSlot, LayerTextureSlots, LayerTextureSlotsField, LayerTrack, NoEmissiveGain,
-    NoFresnel, NoLayerShaderType, NoLayerTextureSlots, LAYER_TAG,
+    LayerTextureSlot, LayerTextureSlots, LayerTextureSlotsField, NoEmissiveGain, NoFresnel,
+    NoLayerShaderType, NoLayerTextureSlots, LAYER_TAG,
 };
 use super::{write_count, ShaderType};
 use crate::model::{
@@ -345,10 +345,15 @@ impl<V: ModelVersion> Material<V> {
                 } else {
                     if hd {
                         for (index, layer) in self.layers.iter().enumerate().skip(1) {
-                            if layer
-                                .tracks
-                                .iter()
-                                .any(|track| !matches!(track, LayerTrack::TextureId(_)))
+                            if layer.alpha.track().is_some()
+                                || layer
+                                    .try_emissive_gain()
+                                    .is_ok_and(|value| value.track().is_some())
+                                || layer.try_fresnel().is_ok_and(|value| {
+                                    value.color.track().is_some()
+                                        || value.opacity.track().is_some()
+                                        || value.team_color.track().is_some()
+                                })
                                 || layer.coordinate_id != self.layers[0].coordinate_id
                                 || layer.texture_animation_id != self.layers[0].texture_animation_id
                             {

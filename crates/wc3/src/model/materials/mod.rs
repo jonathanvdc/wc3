@@ -5,9 +5,7 @@
 //! texture collection; coordinate IDs select a geoset UV set. Reforged versions
 //! add shader choices and HD texture slots.
 mod layer;
-pub use layer::{
-    Layer, LayerFilterMode, LayerFresnel, LayerShadingFlags, LayerTextureSlot, LayerTrack,
-};
+pub use layer::{Layer, LayerFilterMode, LayerFresnel, LayerShadingFlags, LayerTextureSlot};
 mod material;
 pub use material::{Material, MaterialLayout, MaterialRenderFlags};
 mod texture;

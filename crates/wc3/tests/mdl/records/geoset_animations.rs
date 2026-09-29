@@ -1,22 +1,15 @@
-use wc3::model::animation::{
-    AnimationTrack, GeosetAlpha, GeosetAnimation, GeosetAnimationFlags, GeosetColor, GeosetTrack,
-};
+use wc3::model::animation::{Animatable, Track};
+use wc3::model::animation::{GeosetAnimation, GeosetAnimationFlags};
 use wc3::model::mdl::{Read as _, ReadErrorKind, Write as _, Writer};
 use wc3::model::mdx::{Read as _, Write as _};
+use wc3::model::Color;
 
 fn roundtrip(source: &str) -> GeosetAnimation {
     let value = GeosetAnimation::decode_mdl(source).unwrap();
     let bytes = value.encode_mdx().unwrap();
     let binary = GeosetAnimation::decode_mdx(&bytes).unwrap();
     let output = binary.encode_mdl().unwrap();
-    let mut decoded = GeosetAnimation::decode_mdl(&output).unwrap();
-    decoded.tracks.sort_by_key(|track| {
-        value
-            .tracks
-            .iter()
-            .position(|original| original.tag() == track.tag())
-            .unwrap()
-    });
+    let decoded = GeosetAnimation::decode_mdl(&output).unwrap();
     assert_eq!(decoded.encode_mdx().unwrap(), bytes);
     value
 }
@@ -27,28 +20,31 @@ fn spec_static_example_and_omitted_defaults() {
         "GeosetAnim { static Alpha 1.0, DropShadow, GeosetId 0, static Color { 1.0, 1.0, 1.0 }, }";
     let value = roundtrip(source);
     assert_eq!(value.flags.bits(), 3);
-    assert!(value.tracks.is_empty());
+    assert!(value.alpha.track().is_none() && value.color.track().is_none());
     assert_eq!(value.encode_mdl().unwrap(), "GeosetAnim {\n\tstatic Alpha 1.0,\n\tDropShadow,\n\tGeosetId 0,\n\tstatic Color { 1.0, 1.0, 1.0 },\n}\n");
     let omitted = roundtrip("GeosetAnim { GeosetId 2, }");
-    assert_eq!(omitted.alpha, 1.0);
-    assert_eq!(omitted.color, [1.0; 3]);
+    assert_eq!(omitted.alpha, Animatable::Static(1.0));
+    assert_eq!(omitted.color, Animatable::Static([1.0; 3]));
     assert_eq!(omitted.flags.bits(), 0);
     assert!(!omitted.encode_mdl().unwrap().contains("Color"));
     let nondefault = roundtrip(
         "GeosetAnim { static Color { 0.25, 0.5, 0.75 }, GeosetId 3, static Alpha -0.0, }",
     );
-    assert_eq!(nondefault.alpha.to_bits(), (-0.0f32).to_bits());
-    assert_eq!(nondefault.color, [0.25, 0.5, 0.75]);
+    assert_eq!(
+        nondefault.alpha.value().unwrap().to_bits(),
+        (-0.0f32).to_bits()
+    );
+    assert_eq!(nondefault.color, Animatable::Static([0.25, 0.5, 0.75]));
 }
 
 #[test]
 fn animated_and_mixed_properties_restore_defaults_and_flags() {
     let source = "GeosetAnim { Color 1 { Hermite, -3600: { 0.25, 0.5, 0.75 }, InTan { 0, 0, 0 }, OutTan { 1, 1, 1 }, } GeosetId 1, Alpha 1 { Linear, GlobalSeqId 0, 0: 0.5, } }";
     let value = roundtrip(source);
-    assert_eq!(value.alpha, 1.0);
-    assert_eq!(value.color, [1.0; 3]);
+    assert_eq!(value.alpha.value(), Some(&1.0));
+    assert_eq!(value.color.value(), Some(&[1.0; 3]));
     assert!(value.flags.color());
-    assert!(matches!(value.tracks[0], GeosetTrack::Color(_)));
+    assert!(value.color.track().is_some());
     let output = value.encode_mdl().unwrap();
     assert!(!output.contains("static Alpha"));
     assert!(!output.contains("static Color"));
@@ -112,31 +108,25 @@ fn refuses_before_output(value: &GeosetAnimation) {
 
 #[test]
 fn refuses_binary_data_that_text_would_discard() {
-    let alpha = AnimationTrack::<GeosetAlpha>::linear(Vec::new(), None).unwrap();
-    let color = AnimationTrack::<GeosetColor>::linear(Vec::new(), None).unwrap();
+    let alpha = Track::<f32>::linear(Vec::new(), None).unwrap();
+    let color = Track::<Color>::linear(Vec::new(), None).unwrap();
     let mut value = GeosetAnimation::new(0);
     value.flags = GeosetAnimationFlags(4);
     refuses_before_output(&value);
     value.flags = GeosetAnimationFlags(0);
-    value.color = [0.0; 3];
+    value.color = Animatable::Static([0.0; 3]);
     refuses_before_output(&value);
-    value.color = [1.0; 3];
-    value.tracks = [color.clone().into()].to_vec();
+    value.color = Animatable::Static([1.0; 3]);
+    value.color.set_track(color);
     refuses_before_output(&value);
     value.flags = GeosetAnimationFlags(2);
-    value.color = [0.5; 3];
+    value.color.set_value([0.5; 3]);
     let decoded = GeosetAnimation::decode_mdl(&value.encode_mdl().unwrap()).unwrap();
-    assert_eq!(decoded.color, [1.0; 3]);
-    assert_eq!(decoded.tracks, value.tracks);
-    value.color = [1.0; 3];
-    value.tracks = [alpha.clone().into()].to_vec();
-    value.alpha = -0.0;
+    assert_eq!(decoded.color.value(), Some(&[1.0; 3]));
+    assert_eq!(decoded.color.track(), value.color.track());
+    value.alpha.set_track(alpha);
+    value.alpha.set_value(-0.0);
     let decoded = GeosetAnimation::decode_mdl(&value.encode_mdl().unwrap()).unwrap();
-    assert_eq!(decoded.alpha, 1.0);
-    assert_eq!(decoded.tracks, value.tracks);
-    value.alpha = 1.0;
-    value.tracks = [alpha.clone().into(), alpha.into()].to_vec();
-    refuses_before_output(&value);
-    value.tracks = [color.clone().into(), color.into()].to_vec();
-    refuses_before_output(&value);
+    assert_eq!(decoded.alpha.value(), Some(&1.0));
+    assert_eq!(decoded.alpha.track(), value.alpha.track());
 }

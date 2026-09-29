@@ -1,28 +1,12 @@
 //! Camera views, targets, and lens animation.
-use crate::model::animation::track_group;
-use crate::model::animation::{
-    AnimationTrack, CameraRotation, CameraTargetTranslation, CameraTranslation, ValueKeyframe,
-};
+use crate::model::animation::Track;
 use crate::model::conversion::ConversionContext;
 use crate::model::mdl;
-use crate::model::mdl::{Parser, ReadErrorKind, TokenKind, Writer};
 use crate::model::mdx;
 use crate::model::ModelVersion;
 use crate::model::{ConversionError, ConversionIssueKind};
 use mdl_codec::Target;
-use std::io::Write as IoWrite;
 mod mdl_codec;
-track_group! {
-    @binary pub enum CameraTrack {
-        Translation: CameraTranslation,
-        TargetTranslation: CameraTargetTranslation,
-        Rotation: CameraRotation,
-        Visibility: CameraVisibility,
-        FocusDistance: CameraFocusDistance,
-        FocalLength: CameraFocalLength,
-        FStop: CameraFStop,
-    }
-}
 
 use crate::model::Encoder;
 use crate::model::KnownChunk;
@@ -101,16 +85,11 @@ impl CameraLayout for V1800 {
 /// A camera view with a position, look-at target, clipping planes, and animation.
 #[derive(Clone, Debug, PartialEq, mdl::Read, mdl::Write)]
 #[mdl(block = "Camera", validate_write = "Self::validate_mdl",
-    write_order(position, transforms, field_of_view, far_clip, near_clip, lens, target, visibility),
+    write_order(position, translation, rotation, field_of_view, far_clip, near_clip,
+        focus_distance, focal_length, f_stop, target, visibility),
     virtual_fields(
-        #[mdl(repeated(Translation, Rotation), unique_by = "CameraTrack::tag", get = "Self::mdl_transforms", set = "Self::set_mdl_transforms")]
-        transforms: Vec<CameraTrack>,
-        #[mdl(repeated(DOFDistance, FocusDistanceKeys, FocalLength, FocalLengthKeys, FStop, FStopKeys), unique_by = "CameraTrack::tag", get = "Self::mdl_lens", set = "Self::set_mdl_lens")]
-        lens: Vec<CameraTrack>,
         #[mdl(block = "Target", default, get = "Self::mdl_target", set = "Self::set_mdl_target")]
         target: Target,
-        #[mdl(repeated = "Visibility", unique_by = "CameraTrack::tag", get = "Self::mdl_visibility", set = "Self::set_mdl_visibility")]
-        visibility: Vec<CameraTrack>,
     )
 )]
 pub struct Camera<V: ModelVersion> {
@@ -135,9 +114,20 @@ pub struct Camera<V: ModelVersion> {
     #[mdl(skip, default)]
     /// Target XYZ position.
     pub target_position: Vec3,
+    #[mdl(property = "Translation")]
+    pub translation: Option<Track<Vec3>>,
+    #[mdl(property = "Rotation")]
+    pub rotation: Option<Track<f32>>,
     #[mdl(skip, default)]
-    /// Animated camera position, target, rotation, visibility, and lens settings.
-    pub tracks: Vec<CameraTrack>,
+    pub target_translation: Option<Track<Vec3>>,
+    #[mdl(property = "Visibility")]
+    pub visibility: Option<Track<f32>>,
+    #[mdl(property = "FocusDistanceKeys", constant = "DOFDistance")]
+    pub focus_distance: Option<Track<f32>>,
+    #[mdl(property = "FocalLengthKeys", constant = "FocalLength")]
+    pub focal_length: Option<Track<f32>>,
+    #[mdl(property = "FStopKeys", constant = "FStop")]
+    pub f_stop: Option<Track<f32>>,
     #[mdl(skip, default)]
     version: PhantomData<V>,
 }
@@ -153,7 +143,13 @@ impl<V: ModelVersion> Camera<V> {
             far_clip: 0.0,
             near_clip: 0.0,
             target_position: [0.0; 3],
-            tracks: Vec::new(),
+            translation: None,
+            rotation: None,
+            target_translation: None,
+            visibility: None,
+            focus_distance: None,
+            focal_length: None,
+            f_stop: None,
             version: PhantomData,
         };
         camera.name.set_text(name)?;
@@ -198,9 +194,20 @@ impl<V: ModelVersion> mdx::Read for Camera<V> {
             value => CameraVariant::Unknown(value),
         };
         let target_position = cursor.read()?;
-        let mut tracks = Vec::new();
+        let mut value = Self::new("").expect("empty camera name");
         while !cursor.remaining().is_empty() {
-            tracks.push(cursor.read::<CameraTrack>()?);
+            let offset = cursor.absolute_position();
+            let tag = cursor.read()?;
+            match &tag {
+                b"KCTR" => value.translation = Some(cursor.read()?),
+                b"KCRL" => value.rotation = Some(cursor.read()?),
+                b"KTTR" => value.target_translation = Some(cursor.read()?),
+                b"KCVS" => value.visibility = Some(cursor.read()?),
+                b"IDUF" => value.focus_distance = Some(cursor.read()?),
+                b"ELAF" => value.focal_length = Some(cursor.read()?),
+                b"PTSF" => value.f_stop = Some(cursor.read()?),
+                _ => return Err(ReadError::MalformedRecord { tag, offset }),
+            }
         }
         cursor.finish()?;
         Ok(Self {
@@ -211,7 +218,13 @@ impl<V: ModelVersion> mdx::Read for Camera<V> {
             far_clip,
             near_clip,
             target_position,
-            tracks,
+            translation: value.translation,
+            rotation: value.rotation,
+            target_translation: value.target_translation,
+            visibility: value.visibility,
+            focus_distance: value.focus_distance,
+            focal_length: value.focal_length,
+            f_stop: value.f_stop,
             version: PhantomData,
         })
     }
@@ -233,9 +246,17 @@ impl<V: ModelVersion> mdx::Write for Camera<V> {
             _ => {}
         }
         bytes.write(&self.target_position)?;
-        for track in &self.tracks {
-            bytes.write(track)?;
-        }
+        mdx::WriteTrackProperty::write_mdx_track_property(&self.translation, *b"KCTR", bytes)?;
+        mdx::WriteTrackProperty::write_mdx_track_property(&self.rotation, *b"KCRL", bytes)?;
+        mdx::WriteTrackProperty::write_mdx_track_property(
+            &self.target_translation,
+            *b"KTTR",
+            bytes,
+        )?;
+        mdx::WriteTrackProperty::write_mdx_track_property(&self.visibility, *b"KCVS", bytes)?;
+        mdx::WriteTrackProperty::write_mdx_track_property(&self.focus_distance, *b"IDUF", bytes)?;
+        mdx::WriteTrackProperty::write_mdx_track_property(&self.focal_length, *b"ELAF", bytes)?;
+        mdx::WriteTrackProperty::write_mdx_track_property(&self.f_stop, *b"PTSF", bytes)?;
         if bytes.position() - start > MAX_RECORD_SIZE {
             return Err(WriteError::ChunkTooLarge {
                 tag: CamerasChunk::<V>::TAG,
@@ -281,102 +302,14 @@ impl<V: ModelVersion> Camera<V> {
             far_clip: self.far_clip,
             near_clip: self.near_clip,
             target_position: self.target_position,
-            tracks: self.tracks.clone(),
+            translation: self.translation.clone(),
+            rotation: self.rotation.clone(),
+            target_translation: self.target_translation.clone(),
+            visibility: self.visibility.clone(),
+            focus_distance: self.focus_distance.clone(),
+            focal_length: self.focal_length.clone(),
+            f_stop: self.f_stop.clone(),
             version: PhantomData,
         })
-    }
-}
-
-impl mdl::Read for CameraTrack {
-    /// Reads a track in the camera body. Target tracks require read_mdl_target.
-    fn read_mdl(parser: &mut Parser<'_>) -> Result<Self, mdl::ReadError> {
-        match parser.peek()?.map(|token| token.kind) {
-            Some(TokenKind::Ident("Translation")) => Ok(Self::Translation(
-                parser.read::<AnimationTrack<CameraTranslation>>()?,
-            )),
-            Some(TokenKind::Ident("Rotation")) => Ok(Self::Rotation(
-                parser.read::<AnimationTrack<CameraRotation>>()?,
-            )),
-            Some(TokenKind::Ident("DOFDistance")) => {
-                parser.next_token()?;
-                Ok(Self::focus_distance(parser.read_property()?))
-            }
-            Some(TokenKind::Ident("FocalLength")) => {
-                parser.next_token()?;
-                Ok(Self::focal_length(parser.read_property()?))
-            }
-            Some(TokenKind::Ident("FStop")) => {
-                parser.next_token()?;
-                Ok(Self::f_stop(parser.read_property()?))
-            }
-            Some(TokenKind::Ident("Visibility")) => Ok(Self::Visibility(parser.read()?)),
-            Some(TokenKind::Ident("FocusDistanceKeys")) => Ok(Self::FocusDistance(parser.read()?)),
-            Some(TokenKind::Ident("FocalLengthKeys")) => Ok(Self::FocalLength(parser.read()?)),
-            Some(TokenKind::Ident("FStopKeys")) => Ok(Self::FStop(parser.read()?)),
-            _ => Err(parser.error(ReadErrorKind::UnknownField)),
-        }
-    }
-}
-
-impl CameraTrack {
-    /// Represents a constant focus distance as a stepped key at time zero.
-    pub fn focus_distance(value: f32) -> Self {
-        Self::FocusDistance(
-            AnimationTrack::step(vec![ValueKeyframe { frame: 0, value }], None)
-                .expect("one key without a global sequence is valid"),
-        )
-    }
-
-    /// Represents a constant focal length as a stepped key at time zero.
-    pub fn focal_length(value: f32) -> Self {
-        Self::FocalLength(
-            AnimationTrack::step(vec![ValueKeyframe { frame: 0, value }], None)
-                .expect("one key without a global sequence is valid"),
-        )
-    }
-
-    /// Represents a constant f-stop as a stepped key at time zero.
-    pub fn f_stop(value: f32) -> Self {
-        Self::FStop(
-            AnimationTrack::step(vec![ValueKeyframe { frame: 0, value }], None)
-                .expect("one key without a global sequence is valid"),
-        )
-    }
-
-    /// Reads a track inside an already opened Camera Target block.
-    /// The enclosing record reader owns Target framing and Position properties.
-    pub fn read_mdl_target(parser: &mut Parser<'_>) -> Result<Self, mdl::ReadError> {
-        Ok(Self::TargetTranslation(
-            parser.read::<AnimationTrack<CameraTargetTranslation>>()?,
-        ))
-    }
-
-    /// Writes a track inside an already opened Camera Target block.
-    pub fn write_mdl_target<W: IoWrite>(
-        &self,
-        writer: &mut Writer<W>,
-    ) -> Result<(), mdl::WriteError> {
-        match self {
-            Self::TargetTranslation(track) => writer.write(track),
-            _ => Err(mdl::WriteError::Unsupported(
-                "camera eye track inside Target",
-            )),
-        }
-    }
-}
-
-impl mdl::Write for CameraTrack {
-    fn write_mdl<W: IoWrite>(&self, writer: &mut Writer<W>) -> Result<(), mdl::WriteError> {
-        match self {
-            Self::Translation(track) => writer.write(track),
-            Self::Rotation(track) => writer.write(track),
-            Self::Visibility(track) => writer.write(track),
-            Self::FocusDistance(track) => writer.write(track),
-            Self::FocalLength(track) => writer.write(track),
-            Self::FStop(track) => writer.write(track),
-            Self::TargetTranslation(_) => Err(mdl::WriteError::Unsupported(
-                "target translation requires a Target block",
-            )),
-        }
     }
 }

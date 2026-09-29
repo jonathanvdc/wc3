@@ -25,7 +25,13 @@
 //! to a buffer. `read_mdx()` consumes one value; `decode_mdx()` additionally rejects
 //! trailing bytes. A record codec encodes that record, not a complete model file.
 //! The [`Read`] and [`Write`] derives support fields in declaration order and
-//! explicit numeric enum mappings.
+//! explicit numeric enum mappings. An `#[mdx(tag = *b"XXXX")]` field binds an
+//! `Animatable<T>` or `Option<Track<T>>` to an animation tag. Sized records read
+//! their fixed fields first, then dispatch the animation tail. Repeated tags
+//! replace the previous animation; writers emit tracks in field order.
+//! `#[mdx(flatten)]` forwards track dispatch to a nested fixed field group.
+//! Unsized groups read and write their fixed fields through `Read`/`Write`, and
+//! their parent handles the tail through `ReadTracks`/`WriteTracks`.
 
 //!
 //! # Standard I/O
@@ -58,3 +64,6 @@ pub use wc3_derive::{MdxRead as Read, MdxValue as Value, MdxWrite as Write};
 
 mod io;
 pub use io::{from_reader, from_reader_with_version, to_writer, FromReaderError, ToWriterError};
+
+mod tracks;
+pub use tracks::{ReadTrackProperty, ReadTracks, WriteTrackProperty, WriteTracks};

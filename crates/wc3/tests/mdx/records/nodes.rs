@@ -1,7 +1,9 @@
+use wc3::model::animation::Track;
 use wc3::model::mdx::Read as _;
 use wc3::model::mdx::Write as _;
 use wc3::model::scene::{Bone, Node, NodeFlags};
 use wc3::model::Model;
+use wc3::model::Vec3;
 
 #[test]
 fn bones_and_helpers_round_trip() {
@@ -39,17 +41,13 @@ fn node_flags_preserve_unknown_bits() {
 
 #[test]
 fn typed_node_flags_preserve_the_complete_word_and_node() {
-    use wc3::model::animation::{AnimationTrack, NodeTranslation};
     use wc3::model::emitters::{Particle2Flags, ParticleEmitterFlags, PopcornFlags};
-    use wc3::model::scene::NodeTrack;
 
     let bits = 0x8002_1001;
     let mut original = Node::new("Typed", 9).unwrap();
     original.parent_id = 4;
     original.flags = NodeFlags(bits);
-    original.tracks.push(NodeTrack::Translation(
-        AnimationTrack::<NodeTranslation>::linear(vec![], None).unwrap(),
-    ));
+    original.translation = Some(Track::<Vec3>::linear(vec![], None).unwrap());
     let bytes = original.encode_mdx().unwrap();
     let mut particle = original.clone().cast_flags::<Particle2Flags>();
     assert!(particle.flags.line_emitter());

@@ -1,8 +1,9 @@
 use std::io::Write as IoWrite;
-use wc3::model::animation::{AnimationTrack, Interpolation, NodeTranslation};
+use wc3::model::animation::Interpolation;
+use wc3::model::animation::Track;
 use wc3::model::mdl;
 use wc3::model::mdl::{Read as _, Write as _};
-use wc3::model::scene::NodeTrack;
+use wc3::model::Vec3;
 
 #[derive(Debug, PartialEq, mdl::Read, mdl::Write)]
 #[mdl(value)]
@@ -224,14 +225,11 @@ fn existing_interpolation_and_track_group_enums_roundtrip() {
         assert_eq!(Interpolation::decode_mdl(name).unwrap(), mode);
         assert_eq!(mode.encode_mdl().unwrap(), name);
     }
-    let track = NodeTrack::decode_mdl("Translation 0 { Linear, }").unwrap();
-    assert!(matches!(track, NodeTrack::Translation(_)));
+    let track = Track::<Vec3>::decode_mdl("Track 0 { Linear, }").unwrap();
     assert_eq!(
-        NodeTrack::decode_mdl(&track.encode_mdl().unwrap()).unwrap(),
+        Track::<Vec3>::decode_mdl(&track.encode_mdl().unwrap()).unwrap(),
         track
     );
-    let typed = AnimationTrack::<NodeTranslation>::decode_mdl("Translation 0 { Linear, }").unwrap();
-    assert_eq!(track, NodeTrack::Translation(typed));
 }
 
 #[allow(dead_code)]

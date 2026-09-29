@@ -1,3 +1,4 @@
+use wc3::model::animation::{Animatable, Track};
 use wc3::model::geometry::CollisionShape;
 use wc3::model::mdl::{Read as _, Write as _};
 use wc3::model::mdx::{Read as _, Write as _};
@@ -20,7 +21,7 @@ fn light_roundtrips_at_all_versions() {
     macro_rules! check { ($($version:ty),*) => { $( {
         let light = Light::<$version>::decode_mdl("Light \"a\" { ObjectId 0, Omnidirectional, Translation 0 { Linear, } Visibility 0 { DontInterp, } Intensity 0 { Hermite, } static Color { 0.1, 0.2, 0.3 }, }").unwrap();
         assert_eq!(light.node.flags.bits(), 0x200);
-        assert_eq!(light.color, [0.1, 0.2, 0.3]);
+        assert_eq!(light.color, Animatable::Static([0.1, 0.2, 0.3]));
         roundtrip(&light);
     } )* }; }
     check!(V800, V900, V1000, V1100, V1200, V1300, V1400, V1600, V1800);
@@ -79,11 +80,11 @@ fn light_rejects_ambiguous_and_unrepresentable_data() {
     let mut light =
         Light::<V800>::decode_mdl("Light \"a\" { ObjectId 0, Ambient, Intensity 0 { Linear, } }")
             .unwrap();
-    light.intensity = 1.0;
+    light.intensity.set_value(1.0);
     let decoded = Light::<V800>::decode_mdl(&light.encode_mdl().unwrap()).unwrap();
-    assert_eq!(decoded.intensity, 0.0);
-    assert_eq!(decoded.tracks, light.tracks);
-    light.intensity = 0.0;
+    assert_eq!(decoded.intensity.value(), Some(&0.0));
+    assert_eq!(decoded.intensity.track(), light.intensity.track());
+    light.intensity = Animatable::Static(0.0);
     light.light_type = 99;
     assert!(light.encode_mdl().is_err());
     light.light_type = 0;
@@ -177,34 +178,40 @@ fn collision_rejects_inconsistent_geometry() {
 
 #[test]
 fn independent_binary_record_fixtures_roundtrip() {
-    use wc3::model::animation::{AnimationTrack, LightDamping};
-    use wc3::model::scene::{LightFalloff, LightShadowRange, LightTrack, Node};
+    use wc3::model::scene::{LightFalloff, LightShadowRange, Node};
     let mut node = Node::new("fixture", 7).unwrap();
     node.flags = NodeFlags(0x200);
     let mut light = Light::<V1800>::new(node.clone(), 1);
-    light.attenuation_start = 3.0;
-    light.attenuation_end = 40.0;
-    light.color = [0.2, 0.4, 0.8];
-    light.intensity = 2.0;
-    light.ambient_intensity = 0.5;
+    light.attenuation_start = Animatable::Static(3.0);
+    light.attenuation_end = Animatable::Static(40.0);
+    light.color = Animatable::Static([0.2, 0.4, 0.8]);
+    light.intensity = Animatable::Static(2.0);
+    light.ambient_intensity = Animatable::Static(0.5);
     light.set_shadow_casting(true);
     light.set_shadow_intensity(0.75);
     light.set_shadow_casting_range(LightShadowRange {
-        start: 4.0,
-        end: 50.0,
+        start: Animatable::Static(4.0),
+        end: Animatable::Static(50.0),
     });
     light.set_falloff(LightFalloff {
-        quadratic: 0.0005,
-        linear: -0.0,
-        damping: 0.001,
+        quadratic: Animatable::Static(0.0005),
+        linear: Animatable::Static(-0.0),
+        damping: Animatable::Static(0.001),
     });
     roundtrip(&light);
-    let mut old_light = Light::<V800>::new(node.clone(), 0);
-    old_light.tracks = [LightTrack::Damping(
-        AnimationTrack::<LightDamping>::linear(vec![], None).unwrap(),
-    )]
-    .to_vec();
-    assert!(old_light.encode_mdl().is_err());
+    // Downgrade the layout rather than manufacture a field absent from V800.
+    let old_light = Light::<V800>::new(node.clone(), 0);
+    let mut unsupported = old_light.encode_mdx().unwrap();
+    unsupported.extend_from_slice(b"KLDA");
+    unsupported.extend_from_slice(
+        &Track::<f32>::linear(vec![], None)
+            .unwrap()
+            .encode_mdx()
+            .unwrap(),
+    );
+    let length = unsupported.len() as u32;
+    unsupported[..4].copy_from_slice(&length.to_le_bytes());
+    assert!(Light::<V800>::decode_mdx(&unsupported).is_err());
     node.flags = NodeFlags(0x400);
     roundtrip(&EventObject::new(node.clone(), 2, &[50, -20, 50]));
     node.flags = NodeFlags(0x2000);

@@ -1,21 +1,21 @@
 //! MDL accessors and slot-qualified texture bindings.
 use super::{
     EmissiveGainField, FresnelField, Layer, LayerShaderTypeField, LayerShadingFlags,
-    LayerTextureSlot, LayerTextureSlotsField, LayerTrack, ShaderType,
+    LayerTextureSlot, LayerTextureSlotsField, ShaderType,
 };
 use crate::model::mdl::{
     dispatch_name, Dialect, Field, Parser, ReadErrorKind, ReadFields, Span, TokenKind, WriteFields,
     Writer,
 };
 use crate::model::{mdl, FixedText};
-use crate::model::{AnimationTrack, Color, LayerTextureId, ModelVersion};
+use crate::model::{Animatable, Color, ModelVersion, Track};
 use std::io::Write as IoWrite;
 
-pub(super) fn one() -> f32 {
-    1.0
+pub(super) fn one() -> Animatable<f32> {
+    Animatable::Static(1.0)
 }
-pub(super) fn white() -> Color {
-    [1.0; 3]
+pub(super) fn white() -> Animatable<Color> {
+    Animatable::Static([1.0; 3])
 }
 pub(super) fn is_no_reference(value: &u32) -> bool {
     *value == u32::MAX
@@ -23,14 +23,20 @@ pub(super) fn is_no_reference(value: &u32) -> bool {
 pub(super) fn zero_id(value: &u32) -> bool {
     *value == 0
 }
-pub(super) fn full(value: &f32) -> bool {
-    value.to_bits() == 1.0f32.to_bits()
+pub(super) fn full(value: &Animatable<f32>) -> bool {
+    value
+        .value()
+        .is_some_and(|value| value.to_bits() == 1.0f32.to_bits())
 }
-pub(super) fn zero(value: &f32) -> bool {
-    value.to_bits() == 0
+pub(super) fn zero(value: &Animatable<f32>) -> bool {
+    value.value().is_some_and(|value| value.to_bits() == 0)
 }
-pub(super) fn is_white(value: &Color) -> bool {
-    value.iter().all(full)
+pub(super) fn is_white(value: &Animatable<Color>) -> bool {
+    value.value().is_some_and(|value| {
+        value
+            .iter()
+            .all(|value| value.to_bits() == 1.0f32.to_bits())
+    })
 }
 pub(super) fn no_reference() -> u32 {
     u32::MAX
@@ -94,17 +100,15 @@ impl ReadFields for TextureBindings {
             };
             parser.expect(TokenKind::Comma)?;
             LayerTextureSlot {
-                texture_id,
+                texture_id: Animatable::Static(texture_id),
                 texture_type,
-                track: None,
             }
         } else {
-            let track = AnimationTrack::<LayerTextureId>::read_mdl_named(&mut checkpoint, name)?;
+            let track = Track::<u32>::read_mdl_named(&mut checkpoint, name)?;
             *parser = checkpoint;
             LayerTextureSlot {
-                texture_id: 0,
+                texture_id: Animatable::Both { value: 0, track },
                 texture_type: named_slot,
-                track: Some(track),
             }
         };
         if slot.texture_type > 5 {
@@ -185,10 +189,14 @@ impl<V: ModelVersion> WriteFields for TextureBindingsView<'_, V> {
                 self.0.texture_slots.texture_slots().unwrap_or_default(),
                 writer,
             )
-        } else if let Some(track) = self.0.mdl_texture_track() {
-            writer.write(track)
+        } else if let Some(track) = self.0.texture_id.track() {
+            track.write_mdl_named(writer, "TextureID")
         } else {
-            write_texture_id(self.0.texture_id, 0, writer)
+            write_texture_id(
+                *self.0.texture_id.value().expect("static texture ID"),
+                0,
+                writer,
+            )
         }
     }
 }
@@ -197,12 +205,6 @@ impl<V: ModelVersion> Layer<V> {
         self.shader_type
             .shader_type()
             .is_some_and(|shader| matches!(shader.id(), 1 | 24))
-    }
-    fn mdl_texture_track(&self) -> Option<&AnimationTrack<LayerTextureId>> {
-        match self.tracks.first() {
-            Some(LayerTrack::TextureId(track)) => Some(track),
-            _ => None,
-        }
     }
     pub(super) fn mdl_shader(&self) -> ShaderMarker {
         ShaderMarker(self.shader_type.shader_type())
@@ -246,27 +248,8 @@ impl<V: ModelVersion> Layer<V> {
                     return Err(mdl::ReadError::new(span, ReadErrorKind::UnsupportedField));
                 }
                 self.texture_id = slot.texture_id;
-                if let Some(track) = slot.track {
-                    self.tracks.push(LayerTrack::TextureId(track));
-                }
             }
         }
-        Ok(())
-    }
-    pub(super) fn mdl_tracks(&self) -> &[LayerTrack] {
-        if self.mdl_texture_track().is_some() {
-            &self.tracks[1..]
-        } else {
-            &self.tracks
-        }
-    }
-    pub(super) fn set_mdl_tracks(
-        &mut self,
-        tracks: Vec<LayerTrack>,
-        _: bool,
-        _: Span,
-    ) -> Result<(), mdl::ReadError> {
-        self.tracks.extend(tracks);
         Ok(())
     }
     pub(super) fn validate_mdl(&self) -> Result<(), mdl::WriteError> {
@@ -282,54 +265,36 @@ impl<V: ModelVersion> Layer<V> {
             {
                 return Err(mdl::WriteError::Unsupported("non-diffuse SD texture slot"));
             }
-            if self.texture_id != 0 {
+            if self.texture_id != Animatable::Static(0) {
                 return Err(mdl::WriteError::Unsupported(
-                    "legacy texture ID in version 1100+",
-                ));
-            }
-            if self
-                .tracks
-                .iter()
-                .any(|track| matches!(track, LayerTrack::TextureId(_)))
-            {
-                return Err(mdl::WriteError::Unsupported("texture animation storage"));
-            }
-        } else {
-            if self
-                .tracks
-                .iter()
-                .enumerate()
-                .any(|(index, track)| index != 0 && matches!(track, LayerTrack::TextureId(_)))
-            {
-                return Err(mdl::WriteError::Unsupported(
-                    "noncanonical texture-track order",
+                    "legacy texture binding in version 1100+",
                 ));
             }
         }
         Ok(())
     }
-    pub(super) fn mdl_emissive(&self) -> Option<f32> {
+    pub(super) fn mdl_emissive(&self) -> Option<&Animatable<f32>> {
         self.emissive_gain.emissive_gain()
     }
-    pub(super) fn mdl_emissive_mut(&mut self) -> Option<&mut f32> {
+    pub(super) fn mdl_emissive_mut(&mut self) -> Option<&mut Animatable<f32>> {
         self.emissive_gain.emissive_gain_mut()
     }
-    pub(super) fn mdl_color(&self) -> Option<Color> {
-        self.fresnel.fresnel().map(|value| value.color)
+    pub(super) fn mdl_color(&self) -> Option<&Animatable<Color>> {
+        self.fresnel.fresnel().map(|value| &value.color)
     }
-    pub(super) fn mdl_color_mut(&mut self) -> Option<&mut Color> {
+    pub(super) fn mdl_color_mut(&mut self) -> Option<&mut Animatable<Color>> {
         self.fresnel.fresnel_mut().map(|value| &mut value.color)
     }
-    pub(super) fn mdl_opacity(&self) -> Option<f32> {
-        self.fresnel.fresnel().map(|value| value.opacity)
+    pub(super) fn mdl_opacity(&self) -> Option<&Animatable<f32>> {
+        self.fresnel.fresnel().map(|value| &value.opacity)
     }
-    pub(super) fn mdl_opacity_mut(&mut self) -> Option<&mut f32> {
+    pub(super) fn mdl_opacity_mut(&mut self) -> Option<&mut Animatable<f32>> {
         self.fresnel.fresnel_mut().map(|value| &mut value.opacity)
     }
-    pub(super) fn mdl_team_color(&self) -> Option<f32> {
-        self.fresnel.fresnel().map(|value| value.team_color)
+    pub(super) fn mdl_team_color(&self) -> Option<&Animatable<f32>> {
+        self.fresnel.fresnel().map(|value| &value.team_color)
     }
-    pub(super) fn mdl_team_color_mut(&mut self) -> Option<&mut f32> {
+    pub(super) fn mdl_team_color_mut(&mut self) -> Option<&mut Animatable<f32>> {
         self.fresnel
             .fresnel_mut()
             .map(|value| &mut value.team_color)
@@ -344,7 +309,10 @@ fn validate_slots(slots: &[LayerTextureSlot], dialect: Dialect) -> Result<(), md
         {
             return Err(mdl::WriteError::Unsupported("texture slot"));
         }
-        if slot.track.is_some() && dialect == Dialect::Warcraft3 && slot.texture_type != 0 {
+        if slot.texture_id.track().is_some()
+            && dialect == Dialect::Warcraft3
+            && slot.texture_type != 0
+        {
             return Err(mdl::WriteError::Unsupported(
                 "non-diffuse texture animation",
             ));
@@ -358,11 +326,15 @@ fn write_slots<W: IoWrite>(
 ) -> Result<(), mdl::WriteError> {
     validate_slots(slots, writer.dialect())?;
     for slot in slots {
-        if let Some(track) = &slot.track {
+        if let Some(track) = slot.texture_id.track() {
             let name = SLOT_NAMES[slot.texture_type as usize];
             track.write_mdl_named(writer, name)?;
         } else {
-            write_texture_id(slot.texture_id, slot.texture_type, writer)?;
+            write_texture_id(
+                *slot.texture_id.value().expect("static texture ID"),
+                slot.texture_type,
+                writer,
+            )?;
         }
     }
     Ok(())

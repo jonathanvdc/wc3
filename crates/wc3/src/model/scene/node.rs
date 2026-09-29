@@ -1,17 +1,10 @@
 //! Transform hierarchy shared by helpers, bones, and scene objects.
-use crate::model::animation::track_group;
 use crate::model::mdl::{Parser, Span, TokenKind, WriteFields as _, Writer};
 use crate::model::ModelVersion;
 use crate::model::{mdl, mdx};
+use crate::model::{Track, Vec3, Vec4};
 use bitfield::bitfield;
 use std::io::Write as IoWrite;
-track_group! {
-    pub enum NodeTrack {
-        Translation: NodeTranslation,
-        Rotation: NodeRotation,
-        Scaling: NodeScaling,
-    }
-}
 
 use crate::model::Encoder;
 use crate::model::KnownChunk;
@@ -101,9 +94,15 @@ pub struct Node<F = NodeFlags> {
     )]
     /// Node flags.
     pub flags: F,
-    #[mdl(repeated(Translation, Rotation, Scaling), unique_by = "NodeTrack::tag")]
-    /// Animated translation, rotation, and scaling.
-    pub tracks: Vec<NodeTrack>,
+    #[mdx(tag = *b"KGTR")]
+    #[mdl(property = "Translation")]
+    pub translation: Option<Track<Vec3>>,
+    #[mdx(tag = *b"KGRT")]
+    #[mdl(property = "Rotation")]
+    pub rotation: Option<Track<Vec4>>,
+    #[mdx(tag = *b"KGSC")]
+    #[mdl(property = "Scaling")]
+    pub scaling: Option<Track<Vec3>>,
 }
 
 /// A skeletal node that influences mesh geometry.
@@ -159,7 +158,9 @@ impl<F: NodeFlagInterpretation> Node<F> {
             object_id: self.object_id,
             parent_id: self.parent_id,
             flags: G::from_bits(self.flags.bits()),
-            tracks: self.tracks,
+            translation: self.translation,
+            rotation: self.rotation,
+            scaling: self.scaling,
         }
     }
 }
@@ -172,7 +173,9 @@ impl Node {
             object_id,
             parent_id: u32::MAX,
             flags: NodeFlags::default(),
-            tracks: Vec::new(),
+            translation: None,
+            rotation: None,
+            scaling: None,
         };
         node.name.set_text(name)?;
         Ok(node)

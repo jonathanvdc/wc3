@@ -1,6 +1,8 @@
-use wc3::model::animation::{GeosetTrack, Sequence};
+use wc3::model::animation::Sequence;
+use wc3::model::animation::{Animatable, Track};
 use wc3::model::mdl;
 use wc3::model::mdl::{Read as _, Write as _};
+use wc3::model::Vec3;
 
 #[derive(Debug, PartialEq, mdl::Read, mdl::Write)]
 #[mdl(fields)]
@@ -153,10 +155,8 @@ fn conflicting_flattened_names_are_rejected_before_body_or_output() {
 #[derive(mdl::Read, mdl::Write)]
 #[mdl(fields)]
 struct Animated {
-    #[mdl(animatable = "Alpha", default, track = "GeosetTrack::Alpha")]
-    alpha: f32,
-    #[mdl(tracks)]
-    tracks: Vec<GeosetTrack>,
+    #[mdl(property = "Alpha", default)]
+    alpha: Animatable<f32>,
     #[mdl(property = "Optional", delegate)]
     optional: Option<u32>,
 }
@@ -172,11 +172,11 @@ struct FlattenedAnimated {
 fn flattened_static_animated_and_delegated_properties_share_dispatch() {
     let fixed =
         FlattenedAnimated::decode_mdl("Animated { static Alpha 0.5, Optional 3, }").unwrap();
-    assert_eq!(fixed.inner.alpha, 0.5);
+    assert_eq!(fixed.inner.alpha.value(), Some(&0.5));
     assert_eq!(fixed.inner.optional, Some(3));
     assert!(fixed.encode_mdl().unwrap().contains("static Alpha 0.5,"));
     let animated = FlattenedAnimated::decode_mdl("Animated { Alpha 0 { Linear, } }").unwrap();
-    assert_eq!(animated.inner.tracks.len(), 1);
+    assert!(animated.inner.alpha.track().is_some());
     assert!(animated.inner.optional.is_none());
     assert!(!animated.encode_mdl().unwrap().contains("static Alpha"));
     assert_eq!(
@@ -452,68 +452,26 @@ fn unique_collection_keys_and_reconstruction_before_validation() {
     assert!(invalid.encode_mdl().is_err());
 }
 
-use wc3::model::scene::LightTrack;
-
 #[derive(Debug, mdl::Read, mdl::Write)]
 #[mdl(block = "TrackOnly")]
 struct TrackOnly {
-    #[mdl(
-        animatable = "Visibility",
-        track = "LightTrack::Visibility",
-        animated_only,
-        default
-    )]
-    visibility: f32,
-    #[mdl(tracks)]
-    tracks: Vec<LightTrack>,
+    #[mdl(property = "Visibility")]
+    visibility: Option<Track<f32>>,
 }
 #[test]
-fn animated_only_channel_has_no_static_spelling_or_output() {
+fn animation_only_properties_reject_static_and_duplicate_forms() {
     let empty = TrackOnly::decode_mdl("TrackOnly {}").unwrap();
     assert_eq!(empty.encode_mdl().unwrap(), "TrackOnly {\n}\n");
     let value = TrackOnly::decode_mdl("TrackOnly { Visibility 0 { Linear, } }").unwrap();
+    assert!(value.visibility.is_some());
     let text = value.encode_mdl().unwrap();
-    assert!(!text.contains("static"));
-    assert_eq!(TrackOnly::decode_mdl(&text).unwrap().tracks.len(), 1);
+    assert!(TrackOnly::decode_mdl(&text).unwrap().visibility.is_some());
     assert!(TrackOnly::decode_mdl("TrackOnly { static Visibility 0.0, }").is_err());
-    let duplicate =
+    assert_eq!(
         TrackOnly::decode_mdl("TrackOnly { Visibility 0 { Linear, } Visibility 0 { Linear, } }")
-            .unwrap_err();
-    assert_eq!(duplicate.kind, mdl::ReadErrorKind::DuplicateField);
-    let hidden = TrackOnly {
-        visibility: -0.0,
-        tracks: vec![],
-    };
-    assert!(hidden.encode_mdl().is_err());
-}
-#[test]
-fn counted_header_does_not_contribute_to_the_item_count() {
-    let mut parser = mdl::Parser::new("2 { Id 7, -10, 20, }");
-    let (header, items) = parser
-        .counted_with_header::<Frame, _>(|parser| {
-            parser.expect_ident("Id")?;
-            parser.read_property::<u32>()
-        })
-        .unwrap();
-    assert_eq!(header, 7);
-    assert_eq!(
-        items.collect::<Result<Vec<_>, _>>().unwrap(),
-        vec![Frame(-10), Frame(20)]
-    );
-    parser.finish().unwrap();
-    let mut parser = mdl::Parser::new("1 { Id 7, }");
-    let (_, items) = parser
-        .counted_with_header::<Frame, _>(|parser| {
-            parser.expect_ident("Id")?;
-            parser.read_property::<u32>()
-        })
-        .unwrap();
-    assert_eq!(
-        items.finish().unwrap_err().kind,
-        mdl::ReadErrorKind::CountMismatch {
-            expected: 1,
-            actual: 0
-        }
+            .unwrap_err()
+            .kind,
+        mdl::ReadErrorKind::DuplicateField
     );
 }
 
@@ -521,18 +479,15 @@ fn counted_header_does_not_contribute_to_the_item_count() {
 #[mdl(block = "Bare")]
 struct BareAlias {
     #[mdl(
-        animatable = "Alpha",
-        track = "GeosetTrack::Alpha",
+        property = "Alpha",
         bare_static,
         default,
         enabled_if = "Self::enabled",
         enable_with = "Self::enable"
     )]
-    alpha: f32,
+    alpha: Animatable<f32>,
     #[mdl(flag = "Enabled", default)]
     enabled: bool,
-    #[mdl(tracks)]
-    tracks: Vec<GeosetTrack>,
 }
 impl BareAlias {
     fn enabled(&self) -> bool {
@@ -545,13 +500,13 @@ impl BareAlias {
 #[test]
 fn bare_static_alias_shares_duplicates_hooks_and_canonical_output() {
     let scalar = BareAlias::decode_mdl("Bare { Alpha 2.5, }").unwrap();
-    assert_eq!(scalar.alpha, 2.5);
+    assert_eq!(scalar.alpha.value(), Some(&2.5));
     assert!(scalar.enabled);
-    assert!(scalar.tracks.is_empty());
+    assert!(scalar.alpha.track().is_none());
     assert!(scalar.encode_mdl().unwrap().contains("static Alpha 2.5,"));
     let track = BareAlias::decode_mdl("Bare { Alpha 0 { Linear, } }").unwrap();
     assert!(track.enabled);
-    assert_eq!(track.tracks.len(), 1);
+    assert!(track.alpha.track().is_some());
     assert!(!track.encode_mdl().unwrap().contains("static Alpha"));
     for body in [
         "Alpha 0.0, static Alpha 1.0,",
@@ -571,20 +526,20 @@ fn bare_static_alias_shares_duplicates_hooks_and_canonical_output() {
 #[derive(Debug, PartialEq)]
 struct NestedStorage<T> {
     id: u32,
-    alpha: f32,
+    alpha: Animatable<f32>,
     label: T,
 }
 #[derive(Debug, PartialEq, mdl::Read, mdl::Write)]
-#[mdl(block = "Projected", write_order(tracks, data))]
+#[mdl(block = "Projected", write_order(color, data))]
 struct Projected<T> {
     #[mdl(project(
         #[mdl(header)] id: u32,
-        #[mdl(animatable = "Alpha", track = "GeosetTrack::Alpha", default)] alpha: f32,
+        #[mdl(property = "Alpha", default)] alpha: Animatable<f32>,
         #[mdl(property = "Label")] label: T,
     ))]
     data: NestedStorage<T>,
-    #[mdl(tracks, channels(Color = "GeosetTrack::Color"))]
-    tracks: Vec<GeosetTrack>,
+    #[mdl(property = "Color")]
+    color: Option<Track<Vec3>>,
 }
 #[test]
 fn projected_generic_storage_headers_and_shared_tracks() {
@@ -594,7 +549,7 @@ fn projected_generic_storage_headers_and_shared_tracks() {
         value.data,
         NestedStorage {
             id: 7,
-            alpha: 0.0,
+            alpha: value.data.alpha.clone(),
             label: 9
         }
     );
@@ -610,10 +565,10 @@ fn projected_generic_storage_headers_and_shared_tracks() {
     assert_eq!(duplicate.kind, mdl::ReadErrorKind::DuplicateField);
     assert!(Projected::<u32>::decode_mdl("Projected 7 {}").is_err());
     let mut value = value;
-    value.data.alpha = 1.0;
+    value.data.alpha.set_value(1.0);
     let decoded = Projected::<u32>::decode_mdl(&value.encode_mdl().unwrap()).unwrap();
-    assert_eq!(decoded.data.alpha, 0.0);
-    assert_eq!(decoded.tracks, value.tracks);
+    assert_eq!(decoded.data.alpha.value(), Some(&0.0));
+    assert_eq!(decoded.data.alpha.track(), value.data.alpha.track());
 }
 #[derive(Debug, PartialEq)]
 struct DefaultStorage {
@@ -645,51 +600,29 @@ fn projected_defaults_come_from_nested_storage() {
 }
 
 #[derive(Debug, PartialEq, mdl::Read, mdl::Write)]
-#[mdl(block = "VersionedView", write_order(alpha, channels), virtual_fields(
-    #[mdl(animatable = "Alpha", track = "GeosetTrack::Alpha", default, bare_static,
-        get = "Self::alpha", slot = "Self::alpha_mut")]
-    alpha: f32,
-    #[mdl(tracks, channels(Color = "GeosetTrack::Color"),
-        get = "Self::channels", set = "Self::set_channels")]
-    channels: Vec<GeosetTrack>,
+#[mdl(block = "VersionedView", virtual_fields(
+    #[mdl(property = "Alpha", default, bare_static, get = "Self::alpha", slot = "Self::alpha_mut")]
+    alpha: Animatable<f32>,
 ))]
 struct VersionedView<const ENABLED: bool> {
     #[mdl(skip, default = "Self::initial_storage")]
-    storage: Option<f32>,
-    #[mdl(skip, default)]
-    tracks: Vec<GeosetTrack>,
-    #[mdl(skip, default)]
-    tracks_present: bool,
+    storage: Option<Animatable<f32>>,
 }
 impl<const ENABLED: bool> VersionedView<ENABLED> {
-    fn initial_storage() -> Option<f32> {
-        ENABLED.then_some(0.0)
+    fn initial_storage() -> Option<Animatable<f32>> {
+        ENABLED.then_some(Animatable::Static(0.0))
     }
-    fn alpha(&self) -> Option<f32> {
-        self.storage
+    fn alpha(&self) -> Option<&Animatable<f32>> {
+        self.storage.as_ref()
     }
-    fn alpha_mut(&mut self) -> Option<&mut f32> {
+    fn alpha_mut(&mut self) -> Option<&mut Animatable<f32>> {
         self.storage.as_mut()
-    }
-    fn channels(&self) -> &[GeosetTrack] {
-        &self.tracks
-    }
-    fn set_channels(
-        &mut self,
-        tracks: Vec<GeosetTrack>,
-        present: bool,
-        _: mdl::Span,
-    ) -> Result<(), mdl::ReadError> {
-        self.tracks = tracks;
-        self.tracks_present = present;
-        Ok(())
     }
 }
 #[test]
 fn virtual_slots_check_availability_and_export_animation_over_base() {
     let absent = VersionedView::<false>::decode_mdl("VersionedView {}").unwrap();
     assert!(absent.storage.is_none());
-    assert!(!absent.tracks_present);
     assert_eq!(absent.encode_mdl().unwrap(), "VersionedView {\n}\n");
     for body in ["static Alpha 0.0,", "Alpha 0.0,", "Alpha 0 { Linear, }"] {
         let source = format!("VersionedView {{ {body} }}");
@@ -700,30 +633,25 @@ fn virtual_slots_check_availability_and_export_animation_over_base() {
             mdl::ReadErrorKind::UnsupportedField
         );
         let value = VersionedView::<true>::decode_mdl(&source).unwrap();
-        assert_eq!(value.storage, Some(0.0));
-        assert_eq!(value.tracks_present, !value.tracks.is_empty());
         assert_eq!(
             VersionedView::<true>::decode_mdl(&value.encode_mdl().unwrap()).unwrap(),
             value
         );
     }
     let scalar = VersionedView::<true>::decode_mdl("VersionedView { static Alpha -0.0, }").unwrap();
-    assert_eq!(scalar.storage.unwrap().to_bits(), (-0.0f32).to_bits());
-    assert!(scalar.encode_mdl().unwrap().contains("static Alpha -0.0,"));
-    let mut animated = VersionedView::<true>::decode_mdl(
-        "VersionedView { Color 0 { Linear, } Alpha 0 { Linear, } }",
-    )
-    .unwrap();
-    assert!(animated.tracks_present);
-    let text = animated.encode_mdl().unwrap();
-    assert!(text.find("Alpha").unwrap() < text.find("Color").unwrap());
-    animated.storage = Some(2.0);
+    assert_eq!(
+        scalar.storage.as_ref().unwrap().value().unwrap().to_bits(),
+        (-0.0f32).to_bits()
+    );
+    let mut animated =
+        VersionedView::<true>::decode_mdl("VersionedView { Alpha 0 { Linear, } }").unwrap();
+    animated.storage.as_mut().unwrap().set_value(2.0);
     let decoded = VersionedView::<true>::decode_mdl(&animated.encode_mdl().unwrap()).unwrap();
-    assert_eq!(decoded.storage, Some(0.0));
-    assert_eq!(decoded.tracks.len(), animated.tracks.len());
-    let mut unavailable = VersionedView::<false>::decode_mdl("VersionedView {}").unwrap();
-    unavailable.tracks = animated.tracks;
-    assert!(unavailable.encode_mdl().is_err());
+    assert_eq!(decoded.storage.as_ref().unwrap().value(), Some(&0.0));
+    assert_eq!(
+        decoded.storage.as_ref().unwrap().track(),
+        animated.storage.as_ref().unwrap().track()
+    );
     assert_eq!(
         VersionedView::<true>::decode_mdl(
             "VersionedView { Alpha 0 { Linear, } static Alpha 0.0, }"
@@ -735,16 +663,14 @@ fn virtual_slots_check_availability_and_export_animation_over_base() {
 }
 
 #[derive(Debug, PartialEq, mdl::Read, mdl::Write)]
-#[mdl(block = "OrderedTracks", write_order(color, marker, tracks, alpha))]
+#[mdl(block = "OrderedTracks", write_order(color, marker, alpha))]
 struct OrderedTracks {
-    #[mdl(animatable = "Alpha", track = "GeosetTrack::Alpha", default)]
-    alpha: f32,
-    #[mdl(animatable = "Color", track = "GeosetTrack::Color", default)]
-    color: [f32; 3],
+    #[mdl(property = "Alpha", default)]
+    alpha: Animatable<f32>,
+    #[mdl(property = "Color", default)]
+    color: Animatable<[f32; 3]>,
     #[mdl(property = "Marker")]
     marker: u32,
-    #[mdl(tracks)]
-    tracks: Vec<GeosetTrack>,
 }
 
 #[test]
@@ -757,12 +683,12 @@ fn animated_properties_follow_write_order_without_reordering_storage() {
         "OrderedTracks { Color 0 { Linear, } Marker 7, Alpha 0 { Linear, } }",
     )
     .unwrap();
-    let original = first.tracks.clone();
+    let original = first.alpha.clone();
     let text = first.encode_mdl().unwrap();
     assert_eq!(text, second.encode_mdl().unwrap());
     assert!(text.find("Color").unwrap() < text.find("Marker").unwrap());
     assert!(text.find("Marker").unwrap() < text.find("Alpha").unwrap());
-    assert_eq!(first.tracks, original);
+    assert_eq!(first.alpha, original);
     assert_eq!(
         OrderedTracks::decode_mdl(&text)
             .unwrap()

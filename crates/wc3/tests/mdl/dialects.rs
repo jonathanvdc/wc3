@@ -1,3 +1,4 @@
+use wc3::model::animation::{Animatable, Track};
 use wc3::model::geometry::Geoset;
 use wc3::model::materials::{Layer, Material};
 use wc3::model::mdl::{Dialect, Read as _, Write as _, WriteFields as _, Writer};
@@ -97,12 +98,12 @@ fn sd_bindings_use_subtextures_from_version_1100_in_both_dialects() {
                 }
                 let binary: Vec<u8> = words.into_iter().flat_map(u32::to_le_bytes).collect();
                 let decoded = Layer::<V>::decode_mdx(&binary).unwrap();
-                assert_eq!(decoded.texture_id, 0);
-                assert!(decoded.tracks.is_empty());
+                assert_eq!(decoded.texture_id, Animatable::Static(0));
+                assert!(decoded.alpha.track().is_none());
                 let slots = decoded.try_texture_slots().unwrap();
                 assert_eq!(slots.len(), 1);
                 assert_eq!(slots[0].texture_type, 0);
-                assert_eq!(slots[0].track.is_some(), animated);
+                assert_eq!(slots[0].texture_id.track().is_some(), animated);
 
                 for dialect in [Dialect::Warcraft3, Dialect::HiveWorkshop] {
                     let binding = if animated {
@@ -160,16 +161,13 @@ fn sd_bindings_use_subtextures_from_version_1100_in_both_dialects() {
 
 #[test]
 fn sd_subtexture_export_rejects_hidden_legacy_values() {
-    use wc3::model::animation::{AnimationTrack, LayerTextureId};
-    use wc3::model::materials::LayerTrack;
-
     let mut layer = Layer::<V1100>::decode_mdl("Layer { static TextureID 7 <= 0, }").unwrap();
-    layer.texture_id = 3;
+    layer.texture_id = Animatable::Static(3);
     assert!(layer.encode_mdl().is_err());
-    layer.texture_id = 0;
-    layer.tracks.push(LayerTrack::TextureId(
-        AnimationTrack::<LayerTextureId>::linear(vec![], None).unwrap(),
-    ));
+    layer.texture_id = Animatable::Static(0);
+    layer
+        .texture_id
+        .set_track(Track::<u32>::linear(vec![], None).unwrap());
     assert!(layer.encode_mdl().is_err());
 }
 #[test]
@@ -194,7 +192,7 @@ fn every_named_slot_uses_the_shared_animation_grammar() {
         assert!(value
             .texture_slots()
             .iter()
-            .all(|slot| slot.track.is_some()));
+            .all(|slot| slot.texture_id.track().is_some()));
         assert!(value.encode_mdl().is_err());
         assert!(value.prepare_mdl_fields(Dialect::Warcraft3).is_err());
         assert!(value.prepare_mdl_fields(Dialect::HiveWorkshop).is_ok());
@@ -209,11 +207,14 @@ fn every_named_slot_uses_the_shared_animation_grammar() {
         Layer::<V1800>::decode_mdl("Layer { ShaderTypeId 1, NormalTextureID 0 { Linear, } }")
             .unwrap();
     let mut slots = value.texture_slots().to_vec();
-    slots[0].texture_id = 2;
+    slots[0].texture_id.set_value(2);
     value.set_texture_slots(&slots);
     let decoded = Layer::<V1800>::decode_mdl(&hive(&value)).unwrap();
-    assert_eq!(decoded.texture_slots()[0].texture_id, 0);
-    assert_eq!(decoded.texture_slots()[0].track, slots[0].track);
+    assert_eq!(decoded.texture_slots()[0].texture_id.value(), Some(&0));
+    assert_eq!(
+        decoded.texture_slots()[0].texture_id.track(),
+        slots[0].texture_id.track()
+    );
 }
 #[test]
 fn aliases_share_duplicate_identity_and_error_spans() {

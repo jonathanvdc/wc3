@@ -13,8 +13,6 @@ pub(super) fn expand(
     let block = options.block.as_ref();
     let name = &input.ident;
     let ordered = schema.ordered.iter().map(|index| &schema.fields[*index]);
-    let tracks = schema.tracks();
-    let animated = schema.animated().collect::<Vec<_>>();
     let write_defaults = bounds::uses_writer_defaults(options, &schema.fields);
     let generics = bounds::build(input, options, schema, false)?;
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
@@ -99,104 +97,58 @@ pub(super) fn expand(
                 required_flags.push(quote!(::wc3::model::mdl::WriteProperty::validate_mdl_property(&#access, if __wc3_mdl_dialect == ::wc3::model::mdl::Dialect::HiveWorkshop { #hive_name } else { #mdl_name }, __wc3_mdl_dialect)?;));
                 writes.push(quote!(::wc3::model::mdl::WriteProperty::write_mdl_property(&#access, if __wc3_mdl_writer.dialect() == ::wc3::model::mdl::Dialect::HiveWorkshop { #hive_name } else { #mdl_name }, __wc3_mdl_writer)?;));
             }
-            Kind::Property(mdl_name)
-            | Kind::StaticProperty(mdl_name)
-            | Kind::Animatable(mdl_name) => {
-                let prefix = (!matches!(kind, Kind::Property(_)))
+            Kind::Animatable(mdl_name) => {
+                let access = field.borrow(quote!(self));
+                let condition = omission::predicate(field);
+                let default = omission::default_value(field, options);
+                let enabled = field
+                    .enabled_if
+                    .as_ref()
+                    .map(|function| quote!(#function(self)))
+                    .unwrap_or_else(|| quote!(true));
+                let available = field
+                    .slot
+                    .as_ref()
+                    .map(|_| {
+                        let get = field.get.as_ref().unwrap();
+                        quote!(#get(self).is_some())
+                    })
+                    .unwrap_or_else(|| quote!(true));
+                let emit = format_ident!("{}_emit", field.local);
+                state_names.push(emit.clone());
+                state_types.push(quote!(bool));
+                required_flags.push(quote! {
+                    let #emit = (#enabled && #available && ::wc3::model::mdl::WriteAnimationProperty::has_animation(#access)) || #condition;
+                    if !#emit && !::wc3::model::mdl::ValueEq::eq_mdl(#access, &#default) {
+                        return Err(::wc3::model::mdl::WriteError::Unsupported(concat!("nondefault omitted property ", #mdl_name)));
+                    }
+                });
+                writes.push(quote!(if #emit { ::wc3::model::mdl::WriteAnimationProperty::write_mdl_animation_property(#access, #mdl_name, __wc3_mdl_writer)?; }));
+            }
+            Kind::Property(mdl_name) | Kind::StaticProperty(mdl_name) => {
+                let prefix = matches!(kind, Kind::StaticProperty(_))
                     .then(|| quote!(__wc3_mdl_writer.raw("static ")?;));
                 let hive_name = field.hive_name.as_ref().unwrap_or(mdl_name);
                 let write = quote! {
-                    __wc3_mdl_writer.indent()?;
-                    #prefix
+                    __wc3_mdl_writer.indent()?; #prefix
                     __wc3_mdl_writer.identifier(if __wc3_mdl_writer.dialect() == ::wc3::model::mdl::Dialect::HiveWorkshop { #hive_name } else { #mdl_name })?;
-                    __wc3_mdl_writer.raw(" ")?;
-                    #value
-                    __wc3_mdl_writer.raw(",\n")?;
+                    __wc3_mdl_writer.raw(" ")?; #value __wc3_mdl_writer.raw(",\n")?;
                 };
-                let mut condition = omission::predicate(field, tracks);
+                let mut condition = omission::predicate(field);
                 if omission::needs_check(field) {
                     let emit = format_ident!("{}_emit", field.local);
                     state_names.push(emit.clone());
                     state_types.push(quote!(bool));
                     let default = omission::default_value(field, options);
-                    let check_base = if matches!(kind, Kind::Animatable(_)) {
-                        let variant = field.track.as_ref().expect("track was checked");
-                        let collection = tracks.expect("tracks was checked").value(quote!(self));
-                        quote!(!(#collection).iter().any(|track| matches!(track, #variant(_))))
-                    } else {
-                        quote!(true)
-                    };
                     required_flags.push(quote! {
                         let #emit = #condition;
-                        if !#emit && #check_base && !::wc3::model::mdl::ValueEq::eq_mdl(&#access, &#default) {
-                            return ::core::result::Result::Err(::wc3::model::mdl::WriteError::Unsupported(concat!("nondefault omitted property ", #mdl_name)));
+                        if !#emit && !::wc3::model::mdl::ValueEq::eq_mdl(&#access, &#default) {
+                            return Err(::wc3::model::mdl::WriteError::Unsupported(concat!("nondefault omitted property ", #mdl_name)));
                         }
                     });
                     condition = quote!(#emit);
                 }
                 writes.push(quote!(if #condition { #write }));
-                if matches!(kind, Kind::Animatable(_)) {
-                    let variant = field.track.as_ref().expect("track was checked");
-                    let collection = tracks.expect("tracks was checked").value(quote!(self));
-                    writes.push(quote! {
-                        if let Some(track) = (#collection).iter().find(|track| matches!(track, #variant(_))) {
-                            __wc3_mdl_writer.write(track)?;
-                        }
-                    });
-                }
-            }
-            Kind::Tracks => {
-                for (_, variant) in &field.channels {
-                    writes.push(quote! {
-                        if let Some(track) = (#access).iter().find(|track| matches!(track, #variant(_))) {
-                            __wc3_mdl_writer.write(track)?;
-                        }
-                    });
-                }
-                let mut checks = Vec::new();
-                let mut choices = Vec::new();
-                for animated in &animated {
-                    let variant = animated.track.as_ref().expect("track was checked");
-                    checks.push(quote! {
-                            if #access.iter().filter(|track| matches!(track, #variant(_))).count() > 1 {
-                                return ::core::result::Result::Err(::wc3::model::mdl::WriteError::Unsupported("duplicate animation track"));
-                            }
-                        });
-                    if let Some(function) = &animated.enabled_if {
-                        checks.push(quote! {
-                                if !#function(self) && #access.iter().any(|track| matches!(track, #variant(_))) {
-                                    return ::core::result::Result::Err(::wc3::model::mdl::WriteError::Unsupported("animation track for a disabled property"));
-                                }
-                            });
-                    }
-                    if animated.slot.is_some() {
-                        let get = animated.get.as_ref().expect("optional getter was checked");
-                        checks.push(quote! {
-                            if #get(self).is_none() && #access.iter().any(|track| matches!(track, #variant(_))) {
-                                return Err(::wc3::model::mdl::WriteError::Unsupported("animation track for an unavailable property"));
-                            }
-                        });
-                    }
-                    choices.push(quote!(#variant(_) => {}));
-                }
-                for (_, variant) in &field.channels {
-                    checks.push(quote! {
-                        if #access.iter().filter(|track| matches!(track, #variant(_))).count() > 1 {
-                            return Err(::wc3::model::mdl::WriteError::Unsupported("duplicate animation track"));
-                        }
-                    });
-                    choices.push(quote!(#variant(_) => {}));
-                }
-                required_flags.push(quote! {
-                        #(#checks)*
-                        for track in (#access).iter() {
-                            #[allow(unreachable_patterns)]
-                            match track {
-                                #(#choices,)*
-                                _ => return ::core::result::Result::Err(::wc3::model::mdl::WriteError::Unsupported("unmapped animation track")),
-                            }
-                        }
-                    });
             }
             Kind::Flags(flags) => {
                 let known = flags

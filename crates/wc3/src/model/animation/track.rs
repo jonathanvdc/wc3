@@ -1,10 +1,9 @@
 //! Typed keyframe tracks.
-use super::{Interpolation, TangentKeyframe, TrackKind, TrackTag, TrackValue, ValueKeyframe};
+use super::{Interpolation, TangentKeyframe, TrackValue, ValueKeyframe};
 use crate::model::mdl::{Parser, ReadErrorKind, TokenKind, Writer};
 use crate::model::{mdl, mdx};
-use crate::model::{Cursor, Encoder, ReadError, Tag, ValueError, WriteError};
+use crate::model::{Cursor, Encoder, ReadError, ValueError, WriteError};
 use std::io::Write as IoWrite;
-use std::marker::PhantomData;
 
 #[derive(Clone, Debug, PartialEq)]
 enum Keyframes<T> {
@@ -16,53 +15,55 @@ enum Keyframes<T> {
 
 /// Keyframes for one animated property.
 ///
-/// The kind `K` selects the property and its value type. Constructors select the
+/// The type `T` selects the keyframe value type. Constructors select the
 /// interpolation and matching keyframe shape. Times are in milliseconds;
 /// `global_sequence_id` is an index into the model global-sequence collection,
 /// or `None` to use the current model sequence.
 #[derive(Clone, Debug, PartialEq)]
-pub struct AnimationTrack<K: TrackKind> {
+pub struct Track<T: TrackValue> {
     global_sequence_id: Option<u32>,
-    keyframes: Keyframes<K::Value>,
-    kind: PhantomData<K>,
+    keyframes: Keyframes<T>,
 }
 
-impl<K: TrackKind> AnimationTrack<K> {
+impl<T: TrackValue> Track<T> {
+    /// A constant animation represented by one stepped key at time zero.
+    pub fn constant(value: T) -> Self {
+        Self::step(vec![ValueKeyframe { frame: 0, value }], None)
+            .expect("one key without a global sequence is valid")
+    }
+
     /// Creates stepped animation: each key value holds until the next key.
     pub fn step(
-        keys: Vec<ValueKeyframe<K::Value>>,
+        keys: Vec<ValueKeyframe<T>>,
         global_sequence_id: Option<u32>,
     ) -> Result<Self, ValueError> {
         Self::new(Keyframes::Step(keys), global_sequence_id)
     }
     /// Creates animation that interpolates linearly between adjacent key values.
     pub fn linear(
-        keys: Vec<ValueKeyframe<K::Value>>,
+        keys: Vec<ValueKeyframe<T>>,
         global_sequence_id: Option<u32>,
     ) -> Result<Self, ValueError> {
         Self::new(Keyframes::Linear(keys), global_sequence_id)
     }
     /// Creates a Hermite track whose keys each have two tangents.
     pub fn hermite(
-        keys: Vec<TangentKeyframe<K::Value>>,
+        keys: Vec<TangentKeyframe<T>>,
         global_sequence_id: Option<u32>,
     ) -> Result<Self, ValueError> {
         Self::new(Keyframes::Hermite(keys), global_sequence_id)
     }
     /// Creates a Bezier track whose keys each have two tangents.
     pub fn bezier(
-        keys: Vec<TangentKeyframe<K::Value>>,
+        keys: Vec<TangentKeyframe<T>>,
         global_sequence_id: Option<u32>,
     ) -> Result<Self, ValueError> {
         Self::new(Keyframes::Bezier(keys), global_sequence_id)
     }
-    fn new(
-        keyframes: Keyframes<K::Value>,
-        global_sequence_id: Option<u32>,
-    ) -> Result<Self, ValueError> {
+    fn new(keyframes: Keyframes<T>, global_sequence_id: Option<u32>) -> Result<Self, ValueError> {
         if keyframes.len() > u32::MAX as usize {
             return Err(ValueError::CountTooLarge {
-                tag: K::TAG,
+                tag: *b"TRAK",
                 count: keyframes.len(),
             });
         }
@@ -72,7 +73,6 @@ impl<K: TrackKind> AnimationTrack<K> {
         Ok(Self {
             global_sequence_id,
             keyframes,
-            kind: PhantomData,
         })
     }
     /// Returns the optional global sequence index.
@@ -89,36 +89,32 @@ impl<K: TrackKind> AnimationTrack<K> {
         }
     }
     /// Returns keys only when this track uses stepped interpolation.
-    pub fn step_keys(&self) -> Option<&[ValueKeyframe<K::Value>]> {
+    pub fn step_keys(&self) -> Option<&[ValueKeyframe<T>]> {
         match &self.keyframes {
             Keyframes::Step(keys) => Some(keys),
             _ => None,
         }
     }
     /// Returns keys only when this track uses linear interpolation.
-    pub fn linear_keys(&self) -> Option<&[ValueKeyframe<K::Value>]> {
+    pub fn linear_keys(&self) -> Option<&[ValueKeyframe<T>]> {
         match &self.keyframes {
             Keyframes::Linear(keys) => Some(keys),
             _ => None,
         }
     }
     /// Returns keys and tangents only when this track uses Hermite interpolation.
-    pub fn hermite_keys(&self) -> Option<&[TangentKeyframe<K::Value>]> {
+    pub fn hermite_keys(&self) -> Option<&[TangentKeyframe<T>]> {
         match &self.keyframes {
             Keyframes::Hermite(keys) => Some(keys),
             _ => None,
         }
     }
     /// Returns keys and tangents only when this track uses Bezier interpolation.
-    pub fn bezier_keys(&self) -> Option<&[TangentKeyframe<K::Value>]> {
+    pub fn bezier_keys(&self) -> Option<&[TangentKeyframe<T>]> {
         match &self.keyframes {
             Keyframes::Bezier(keys) => Some(keys),
             _ => None,
         }
-    }
-    /// Returns this track's tag.
-    pub fn tag(&self) -> TrackTag {
-        K::TAG_KIND
     }
 }
 impl<T> Keyframes<T> {
@@ -137,22 +133,19 @@ impl<T> Keyframes<T> {
         }
     }
 }
-impl<K: TrackKind> mdx::Read for AnimationTrack<K> {
+impl<T: TrackValue> mdx::Read for Track<T> {
     fn read_mdx(cursor: &mut Cursor<'_>) -> Result<Self, ReadError> {
         let mut next = *cursor;
         let offset = next.absolute_position();
-        let tag: Tag = next.read_bytes(4)?.try_into().expect("four-byte tag");
+        let tag = *b"TRAK";
         let malformed = || ReadError::MalformedRecord { tag, offset };
-        if tag != K::TAG {
-            return Err(malformed());
-        }
         let count = next.read::<u32>().map_err(|_| malformed())? as usize;
         let interpolation = next.read::<u32>().map_err(|_| malformed())?;
         if interpolation > 3 {
             return Err(malformed());
         }
         let sequence = next.read::<u32>().map_err(|_| malformed())?;
-        let components = K::Value::COMPONENTS;
+        let components = T::COMPONENTS;
         let vector_count = if interpolation >= 2 { 3usize } else { 1usize };
         let key_size = components
             .checked_mul(vector_count)
@@ -165,10 +158,7 @@ impl<K: TrackKind> mdx::Read for AnimationTrack<K> {
             0 | 1 => {
                 let mut keys = Vec::with_capacity(count);
                 for _ in 0..count {
-                    keys.push(
-                        body.read::<ValueKeyframe<K::Value>>()
-                            .map_err(|_| malformed())?,
-                    );
+                    keys.push(body.read::<ValueKeyframe<T>>().map_err(|_| malformed())?);
                 }
                 if interpolation == 0 {
                     Keyframes::Step(keys)
@@ -179,10 +169,7 @@ impl<K: TrackKind> mdx::Read for AnimationTrack<K> {
             2 | 3 => {
                 let mut keys = Vec::with_capacity(count);
                 for _ in 0..count {
-                    keys.push(
-                        body.read::<TangentKeyframe<K::Value>>()
-                            .map_err(|_| malformed())?,
-                    );
+                    keys.push(body.read::<TangentKeyframe<T>>().map_err(|_| malformed())?);
                 }
                 if interpolation == 2 {
                     Keyframes::Hermite(keys)
@@ -196,13 +183,11 @@ impl<K: TrackKind> mdx::Read for AnimationTrack<K> {
         Ok(Self {
             global_sequence_id: (sequence != u32::MAX).then_some(sequence),
             keyframes,
-            kind: PhantomData,
         })
     }
 }
-impl<K: TrackKind> mdx::Write for AnimationTrack<K> {
+impl<T: TrackValue> mdx::Write for Track<T> {
     fn write_mdx(&self, encoder: &mut Encoder<'_>) -> Result<(), WriteError> {
-        encoder.write_bytes(&K::TAG);
         encoder.write(&(self.keyframes.len() as u32))?;
         encoder.write(&(self.keyframes.interpolation()))?;
         encoder.write(&(self.global_sequence_id.unwrap_or(u32::MAX)))?;
@@ -222,24 +207,29 @@ impl<K: TrackKind> mdx::Write for AnimationTrack<K> {
     }
 }
 
-impl<K: TrackKind> mdl::Read for AnimationTrack<K>
+impl<T: TrackValue> mdl::Read for Track<T>
 where
-    K::Value: mdl::Read,
+    T: mdl::Read,
 {
     fn read_mdl(parser: &mut Parser<'_>) -> Result<Self, mdl::ReadError> {
-        Self::read_mdl_named(parser, K::MDL_NAME)
+        parser.expect_ident("Track")?;
+        Self::read_mdl_payload(parser)
     }
 }
-impl<K: TrackKind> AnimationTrack<K>
+impl<T: TrackValue> Track<T>
 where
-    K::Value: mdl::Read,
+    T: mdl::Read,
 {
     /// Reads the ordinary track grammar under an enclosing record's alias.
-    pub(crate) fn read_mdl_named(
+    pub fn read_mdl_named(
         parser: &mut Parser<'_>,
         name: &'static str,
     ) -> Result<Self, mdl::ReadError> {
         parser.expect_ident(name)?;
+        Self::read_mdl_payload(parser)
+    }
+
+    pub fn read_mdl_payload(parser: &mut Parser<'_>) -> Result<Self, mdl::ReadError> {
         let count = parser.read::<u32>()? as usize;
         parser.expect(TokenKind::OpenBrace)?;
         let mut interpolation = None;
@@ -309,7 +299,7 @@ where
             }
             let frame = parser.read::<i32>()?;
             parser.expect(TokenKind::Colon)?;
-            let value = parser.read_property::<K::Value>()?;
+            let value = parser.read_property::<T>()?;
             if matches!(
                 interpolation,
                 Interpolation::Hermite | Interpolation::Bezier
@@ -338,25 +328,24 @@ where
         Ok(Self {
             global_sequence_id: sequence,
             keyframes,
-            kind: PhantomData,
         })
     }
 }
 
-impl<K: TrackKind> mdl::Write for AnimationTrack<K>
+impl<T: TrackValue> mdl::Write for Track<T>
 where
-    K::Value: mdl::Write,
+    T: mdl::Write,
 {
     fn write_mdl<W: IoWrite>(&self, writer: &mut Writer<W>) -> Result<(), mdl::WriteError> {
-        self.write_mdl_named(writer, K::MDL_NAME)
+        self.write_mdl_named(writer, "Track")
     }
 }
-impl<K: TrackKind> AnimationTrack<K>
+impl<T: TrackValue> Track<T>
 where
-    K::Value: mdl::Write,
+    T: mdl::Write,
 {
     /// Writes a borrowed track under an enclosing record's alias.
-    pub(crate) fn write_mdl_named<W: IoWrite>(
+    pub fn write_mdl_named<W: IoWrite>(
         &self,
         writer: &mut Writer<W>,
         name: &str,

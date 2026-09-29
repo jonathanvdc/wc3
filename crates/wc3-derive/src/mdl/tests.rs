@@ -382,128 +382,7 @@ fn rejects_invalid_static_and_animation_attributes() {
         ),
         "skip_if requires",
     );
-    rejects(
-        parse_quote!(
-            #[mdl(block = "A")]
-            struct Bad {
-                #[mdl(animatable = "Alpha", default)]
-                alpha: f32,
-            }
-        ),
-        "track attribute",
-    );
-    rejects(
-        parse_quote!(
-            #[mdl(block = "A")]
-            struct Bad {
-                #[mdl(animatable = "Alpha", track = "Track::Alpha", default)]
-                alpha: f32,
-            }
-        ),
-        "exactly one tracks",
-    );
-    rejects(
-        parse_quote!(
-            #[mdl(block = "A")]
-            struct Bad {
-                #[mdl(property = "Value", track = "Track::Alpha")]
-                value: u32,
-            }
-        ),
-        "require an animatable",
-    );
-    rejects(
-        parse_quote!(
-            #[mdl(block = "A")]
-            struct Bad {
-                #[mdl(
-                    animatable = "Alpha",
-                    track = "Track::Alpha",
-                    default,
-                    enabled_if = "enabled"
-                )]
-                alpha: f32,
-                #[mdl(tracks)]
-                tracks: Vec<Track>,
-            }
-        ),
-        "supplied together",
-    );
-    rejects(
-        parse_quote!(
-            #[mdl(block = "A")]
-            struct Bad {
-                #[mdl(
-                    animatable = "Alpha",
-                    track = "Track::Alpha",
-                    default,
-                    read_with = "read"
-                )]
-                alpha: f32,
-                #[mdl(tracks)]
-                tracks: Vec<Track>,
-            }
-        ),
-        "value codec hooks",
-    );
-    rejects(
-        parse_quote!(
-            #[mdl(block = "A")]
-            struct Bad {
-                #[mdl(tracks)]
-                tracks: Vec<Track>,
-            }
-        ),
-        "tracks requires animatable",
-    );
-    rejects(
-        parse_quote!(
-            #[mdl(block = "A")]
-            struct Bad {
-                #[mdl(tracks, default)]
-                tracks: Vec<Track>,
-            }
-        ),
-        "tracks cannot",
-    );
-    rejects(
-        parse_quote!(
-            #[mdl(block = "A")]
-            struct Bad {
-                #[mdl(tracks)]
-                tracks: Option<Track>,
-            }
-        ),
-        "Vec<Item>",
-    );
-    rejects(
-        parse_quote!(
-            #[mdl(block = "A")]
-            struct Bad {
-                #[mdl(animatable = "Alpha", track = "Track::Alpha", default)]
-                alpha: f32,
-                #[mdl(tracks)]
-                a: Vec<Track>,
-                #[mdl(tracks)]
-                b: Vec<Track>,
-            }
-        ),
-        "exactly one tracks",
-    );
-    rejects(
-        parse_quote!(
-            #[mdl(block = "A")]
-            struct Bad {
-                #[mdl(animatable = "Alpha", track = "Track::Alpha", default)]
-                alpha: f32,
-                #[mdl(animatable = "Other", track = "Track::Alpha", default)]
-                other: f32,
-                #[mdl(tracks)]
-                tracks: Vec<Track>,
-            }
-        ),
-        "duplicate track variant",
-    );
+
     rejects(
         parse_quote!(
             #[mdl(block = "A")]
@@ -584,18 +463,6 @@ fn rejects_invalid_record_defaults() {
             }
         ),
         "without defaults",
-    );
-    rejects(
-        parse_quote!(
-            #[mdl(block = "A", default)]
-            struct Bad {
-                #[mdl(animatable = "Alpha", track = "Track::Alpha", required)]
-                alpha: f32,
-                #[mdl(tracks)]
-                tracks: Vec<Track>,
-            }
-        ),
-        "required is only supported on properties",
     );
 }
 
@@ -850,27 +717,6 @@ fn validates_unique_collections_and_reconstruction_hooks() {
 }
 
 #[test]
-fn animated_only_is_limited_to_animatable_fields() {
-    rejects(
-        parse_quote! {
-            #[mdl(block = "Record")]
-            struct Bad { #[mdl(property = "Value", animated_only)] value: f32 }
-        },
-        "animated_only requires animatable",
-    );
-    rejects(
-        parse_quote! {
-            #[mdl(block = "Record")]
-            struct Bad {
-                #[mdl(animatable = "Value", track = "Track::Value", default, animated_only, animated_only)] value: f32,
-                #[mdl(tracks)] tracks: Vec<Track>,
-            }
-        },
-        "duplicate animated_only",
-    );
-}
-
-#[test]
 fn bare_static_requires_a_static_animatable_channel() {
     rejects(
         parse_quote! {
@@ -878,26 +724,6 @@ fn bare_static_requires_a_static_animatable_channel() {
             struct Bad { #[mdl(property = "Value", bare_static)] value: f32 }
         },
         "bare_static requires",
-    );
-    rejects(
-        parse_quote! {
-            #[mdl(block = "Record")]
-            struct Bad {
-                #[mdl(animatable = "Value", track = "Track::Value", default, bare_static, animated_only)] value: f32,
-                #[mdl(tracks)] tracks: Vec<Track>,
-            }
-        },
-        "bare_static requires",
-    );
-    rejects(
-        parse_quote! {
-            #[mdl(block = "Record")]
-            struct Bad {
-                #[mdl(animatable = "Value", track = "Track::Value", default, bare_static, bare_static)] value: f32,
-                #[mdl(tracks)] tracks: Vec<Track>,
-            }
-        },
-        "duplicate bare_static",
     );
 }
 
@@ -924,34 +750,7 @@ fn validates_projection_channels_and_flattened_flags() {
         },
         "duplicate projected member",
     );
-    rejects(
-        parse_quote! {
-            #[mdl(block = "Record")]
-            struct Bad { #[mdl(project(#[mdl(tracks)] tracks: Vec<Track>))] data: Data }
-        },
-        "projected tracks",
-    );
-    rejects(
-        parse_quote! {
-            #[mdl(block = "Record")]
-            struct Bad { #[mdl(property = "A", channels(Value = "Track::Value"))] a: u32 }
-        },
-        "channels requires tracks",
-    );
-    rejects(
-        parse_quote! {
-            #[mdl(block = "Record")]
-            struct Bad { #[mdl(tracks, channels(A = "Track::Value", B = "Track::Value"))] tracks: Vec<Track> }
-        },
-        "duplicate track variant",
-    );
-    rejects(
-        parse_quote! {
-            #[mdl(block = "Record")]
-            struct Bad { #[mdl(tracks, channels(A = "Track::A", A = "Track::B"))] tracks: Vec<Track> }
-        },
-        "duplicate MDL field name",
-    );
+
     rejects(
         parse_quote! {
             #[mdl(block = "Record")]
@@ -1192,5 +991,43 @@ fn hive_skip_bits_require_mapped_packed_flags() {
             }
         ),
         "duplicate hive_skip_bits",
+    );
+}
+
+#[test]
+fn animated_properties_are_inferred_from_storage() {
+    let inputs: [DeriveInput; 3] = [
+        parse_quote! { #[mdl(block = "Record")] struct Record { #[mdl(property = "Color", default)] color: Animatable<Color> } },
+        parse_quote! { #[mdl(block = "Record")] struct Record { #[mdl(property = "Translation")] translation: Option<Track<Vec3>> } },
+        parse_quote! { #[mdl(block = "Record")] struct Record { #[mdl(property = "FocusDistanceKeys", constant = "DOFDistance")] focus_distance: Option<Track<f32>> } },
+    ];
+    for input in inputs {
+        for reading in [true, false] {
+            assert!(!expand_checked(input.clone(), reading).unwrap().is_empty());
+        }
+    }
+    rejects(
+        parse_quote! { #[mdl(block = "Record")] struct Bad { #[mdl(property = "Color")] color: Animatable<Color> } },
+        "require a field or container default",
+    );
+    rejects(
+        parse_quote! { #[mdl(block = "Record")] struct Bad { #[mdl(property = "Color", default, read_with = "read")] color: Animatable<Color> } },
+        "value codec hooks",
+    );
+    rejects(
+        parse_quote! { #[mdl(block = "Record")] struct Bad { #[mdl(property = "Color", default, enabled_if = "enabled")] color: Animatable<Color> } },
+        "supplied together",
+    );
+    rejects(
+        parse_quote! { #[mdl(block = "Record")] struct Bad { #[mdl(property = "Visibility", bare_static)] visibility: Option<Track<f32>> } },
+        "bare_static requires",
+    );
+    rejects(
+        parse_quote! { #[mdl(block = "Record")] struct Bad { #[mdl(property = "Color", default, constant = "ColorValue")] color: Animatable<Color> } },
+        "constant requires",
+    );
+    rejects(
+        parse_quote! { #[mdl(block = "Record")] struct Bad { #[mdl(property = "Keys", constant = "Value")] keys: Option<Track<f32>>, #[mdl(property = "Value")] value: u32 } },
+        "duplicate MDL field name",
     );
 }

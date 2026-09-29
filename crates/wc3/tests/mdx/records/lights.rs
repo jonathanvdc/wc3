@@ -1,5 +1,7 @@
-use wc3::model::animation::{AnimationTrack, ValueKeyframe};
-use wc3::model::animation::{LightColor, LightVisibility};
+use wc3::model::animation::ValueKeyframe;
+use wc3::model::animation::{Animatable, Track};
+use wc3::model::Color;
+
 use wc3::model::mdx::Read as _;
 use wc3::model::mdx::Write as _;
 
@@ -9,41 +11,40 @@ use wc3::model::Model;
 #[test]
 fn light_fields_round_trip() {
     let mut light = Light::<wc3::model::V1200>::new(Node::new("Torch", 2).unwrap(), 1);
-    light.attenuation_start = 100.0;
-    light.attenuation_end = 500.0;
-    light.color = [1.0, 0.5, 0.25];
-    light.intensity = 2.0;
-    light.ambient_color = [0.1, 0.2, 0.3];
-    light.ambient_intensity = 0.5;
+    light.attenuation_start = Animatable::Static(100.0);
+    light.attenuation_end = Animatable::Static(500.0);
+    light.color = Animatable::Static([1.0, 0.5, 0.25]);
+    light.intensity = Animatable::Static(2.0);
+    light.ambient_color = Animatable::Static([0.1, 0.2, 0.3]);
+    light.ambient_intensity = Animatable::Static(0.5);
     let mut model = Model::<wc3::model::V1200>::new();
     model.set_lights(&[light]);
     let parsed = Model::<wc3::model::V1200>::decode_mdx(&model.encode_mdx().unwrap()).unwrap();
     let light = &parsed.lights()[0];
     assert_eq!(light.node.name.text(), "Torch");
     assert_eq!(light.light_type, 1);
-    assert_eq!(light.attenuation_start, 100.0);
-    assert_eq!(light.attenuation_end, 500.0);
-    assert_eq!(light.color, [1.0, 0.5, 0.25]);
-    assert_eq!(light.intensity, 2.0);
-    assert_eq!(light.ambient_color, [0.1, 0.2, 0.3]);
-    assert_eq!(light.ambient_intensity, 0.5);
+    assert_eq!(light.attenuation_start, Animatable::Static(100.0));
+    assert_eq!(light.attenuation_end, Animatable::Static(500.0));
+    assert_eq!(light.color, Animatable::Static([1.0, 0.5, 0.25]));
+    assert_eq!(light.intensity, Animatable::Static(2.0));
+    assert_eq!(light.ambient_color, Animatable::Static([0.1, 0.2, 0.3]));
+    assert_eq!(light.ambient_intensity, Animatable::Static(0.5));
 }
 
 #[test]
 fn light_color_track_round_trip() {
     let mut light = Light::<wc3::model::V800>::new(Node::new("Lamp", 3).unwrap(), 0);
-    let track = AnimationTrack::<LightColor>::linear(
+    let track = Track::<Color>::linear(
         vec![ValueKeyframe {
             frame: 250,
             value: [1.0, 0.5, 0.25],
         }],
         None,
     )
-    .unwrap()
-    .into();
-    light.tracks = (std::slice::from_ref(&track)).to_vec();
+    .unwrap();
+    light.color.set_track(track.clone());
     let parsed = Light::<wc3::model::V800>::decode_mdx(&light.encode_mdx().unwrap()).unwrap();
-    assert_eq!(parsed.tracks.as_slice(), &[track]);
+    assert_eq!(parsed.color.track(), Some(&track));
 }
 
 #[test]
@@ -53,46 +54,45 @@ fn extended_light_fields_and_tracks_round_trip() {
     light.try_set_shadow_intensity(1.0).unwrap();
     light
         .try_set_shadow_casting_range(LightShadowRange {
-            start: 2.0,
-            end: 3.0,
+            start: Animatable::Static(2.0),
+            end: Animatable::Static(3.0),
         })
         .unwrap();
     light
         .try_set_falloff(LightFalloff {
-            quadratic: 4.0,
-            linear: 5.0,
-            damping: 6.0,
+            quadratic: Animatable::Static(4.0),
+            linear: Animatable::Static(5.0),
+            damping: Animatable::Static(6.0),
         })
         .unwrap();
-    let track = AnimationTrack::<LightVisibility>::linear(
+    let track = Track::<f32>::linear(
         vec![ValueKeyframe {
             frame: 10,
             value: 1.0,
         }],
         None,
     )
-    .unwrap()
-    .into();
-    light.tracks = (std::slice::from_ref(&track)).to_vec();
+    .unwrap();
+    light.visibility = Some(track.clone());
     let parsed = Light::<wc3::model::V1800>::decode_mdx(&light.encode_mdx().unwrap()).unwrap();
     assert!(parsed.try_shadow_casting().unwrap());
     assert_eq!(parsed.try_shadow_intensity().unwrap(), 1.0);
     assert_eq!(
         parsed.try_shadow_casting_range().unwrap(),
         LightShadowRange {
-            start: 2.0,
-            end: 3.0
+            start: Animatable::Static(2.0),
+            end: Animatable::Static(3.0)
         }
     );
     assert_eq!(
         parsed.falloff(),
         LightFalloff {
-            quadratic: 4.0,
-            linear: 5.0,
-            damping: 6.0
+            quadratic: Animatable::Static(4.0),
+            linear: Animatable::Static(5.0),
+            damping: Animatable::Static(6.0)
         }
     );
-    assert_eq!(parsed.tracks.as_slice(), &[track]);
+    assert_eq!(parsed.visibility.as_ref(), Some(&track));
 }
 
 #[test]
@@ -145,9 +145,9 @@ fn shadow_casting_and_falloff_round_trip() {
     assert_eq!(old.falloff(), LightFalloff::default());
     assert!(old
         .try_set_falloff(LightFalloff {
-            quadratic: 1.0,
-            linear: 2.0,
-            damping: 3.0
+            quadratic: Animatable::Static(1.0),
+            linear: Animatable::Static(2.0),
+            damping: Animatable::Static(3.0)
         })
         .is_err());
 
@@ -156,9 +156,9 @@ fn shadow_casting_and_falloff_round_trip() {
     light.try_set_shadow_casting(true).unwrap();
     light
         .try_set_falloff(LightFalloff {
-            quadratic: 1.0,
-            linear: 2.0,
-            damping: 3.0,
+            quadratic: Animatable::Static(1.0),
+            linear: Animatable::Static(2.0),
+            damping: Animatable::Static(3.0),
         })
         .unwrap();
     let decoded = Light::<V1600>::decode_mdx(&light.encode_mdx().unwrap()).unwrap();
@@ -166,9 +166,9 @@ fn shadow_casting_and_falloff_round_trip() {
     assert_eq!(
         decoded.falloff(),
         LightFalloff {
-            quadratic: 1.0,
-            linear: 2.0,
-            damping: 3.0
+            quadratic: Animatable::Static(1.0),
+            linear: Animatable::Static(2.0),
+            damping: Animatable::Static(3.0)
         }
     );
 }
@@ -189,11 +189,11 @@ fn infallible_light_accessors_cover_supported_versions() {
     fn check_casting<V: SupportsLightShadowCasting>() {
         let mut light = Light::<V>::new(Node::new("Lamp", 1).unwrap(), 0);
         let range = LightShadowRange {
-            start: 10.0,
-            end: 100.0,
+            start: Animatable::Static(10.0),
+            end: Animatable::Static(100.0),
         };
         light.set_shadow_casting(true);
-        light.set_shadow_casting_range(range);
+        light.set_shadow_casting_range(range.clone());
         let decoded = Light::<V>::decode_mdx(&light.encode_mdx().unwrap()).unwrap();
         assert!(decoded.shadow_casting());
         assert_eq!(decoded.shadow_casting_range(), range);
@@ -201,11 +201,11 @@ fn infallible_light_accessors_cover_supported_versions() {
     fn check_falloff<V: SupportsLightFalloff>() {
         let mut light = Light::<V>::new(Node::new("Lamp", 1).unwrap(), 0);
         let falloff = LightFalloff {
-            quadratic: 0.1,
-            linear: 0.2,
-            damping: 0.3,
+            quadratic: Animatable::Static(0.1),
+            linear: Animatable::Static(0.2),
+            damping: Animatable::Static(0.3),
         };
-        light.set_falloff(falloff);
+        light.set_falloff(falloff.clone());
         let decoded = Light::<V>::decode_mdx(&light.encode_mdx().unwrap()).unwrap();
         assert_eq!(decoded.falloff(), falloff);
     }

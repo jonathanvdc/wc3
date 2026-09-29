@@ -22,7 +22,6 @@ pub(super) fn expand(
     }
     let source_lifetime = Lifetime::new(&format!("'{lifetime_name}"), input.ident.span());
     let fields = &schema.fields;
-    let tracks = schema.tracks();
     let has_static = schema.has_static();
     let generics = bounds::build(input, options, schema, true)?;
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
@@ -112,20 +111,6 @@ pub(super) fn expand(
             members.push(quote!(#member: #local));
             continue;
         }
-        if matches!(kind, Kind::Tracks) {
-            for (name, variant) in &field.channels {
-                arms.push(quote!(#name => {
-                    __wc3_mdl_fields.mark(#bit, __wc3_mdl_field)?;
-                    *__wc3_mdl_body = __wc3_mdl_checkpoint;
-                    #local.push(#variant(__wc3_mdl_body.read()?));
-                    #mark_present
-                }));
-                bit += 1;
-            }
-            locals.push(quote!(let mut #local: #ty = ::std::vec::Vec::new();));
-            members.push(quote!(#member: #local));
-            continue;
-        }
         if let Kind::Flags(flags) = kind {
             if options.default && default.is_none() && !field.virtual_field {
                 let access = field.access();
@@ -202,7 +187,9 @@ pub(super) fn expand(
             | Kind::Flag(name) => name,
             _ => unreachable!(),
         };
-        let value = if let Kind::Counted(_) = kind {
+        let value = if matches!(kind, Kind::Animatable(_)) {
+            quote!(<#ty>::read_mdl_property(__wc3_mdl_body, true, false)?)
+        } else if let Kind::Counted(_) = kind {
             let element = vec_element(ty)?;
             quote!(__wc3_mdl_body.counted::<#element>()?.collect::<::core::result::Result<::std::vec::Vec<_>, _>>()?)
         } else if matches!(kind, Kind::Block(_)) {
@@ -219,7 +206,9 @@ pub(super) fn expand(
             };
             quote!({ let value = #read; __wc3_mdl_body.expect(::wc3::model::mdl::TokenKind::Comma)?; value })
         };
-        let assignment = if has_default {
+        let assignment = if matches!(kind, Kind::Animatable(_)) {
+            quote!(::wc3::model::mdl::ReadAnimationProperty::read_mdl_animation_property(&mut #local, __wc3_mdl_body, true, false)?;)
+        } else if has_default {
             quote!(#local = #value;)
         } else {
             quote!(#local = ::core::option::Option::Some(#value);)
@@ -241,40 +230,22 @@ pub(super) fn expand(
         match kind {
             Kind::StaticProperty(_) => static_arms.push(static_arm),
             Kind::Animatable(_) => {
-                if !field.animated_only {
+                if !field.animation_only() {
                     static_arms.push(static_arm);
                 }
-                let variant = field.track.as_ref().expect("track was checked");
-                let tracks = tracks.expect("tracks was checked");
-                let collection = &tracks.local;
-                let presence = format_ident!("{}_present", collection);
-                let mark_collection = tracks.virtual_field.then(|| quote!(#presence = true;));
-                let read_track = quote! {
-                    *__wc3_mdl_body = __wc3_mdl_checkpoint;
-                    #collection.push(#variant(__wc3_mdl_body.read()?));
-                    #mark_collection
-                };
-                let read = if field.bare_static {
-                    quote! {
-                        let mut __wc3_mdl_probe = *__wc3_mdl_body;
-                        let __wc3_mdl_bare_value = match __wc3_mdl_probe.read::<#ty>() {
-                            ::core::result::Result::Ok(value) if __wc3_mdl_probe.peek()?.is_some_and(|token| token.kind == ::wc3::model::mdl::TokenKind::Comma) => {
-                                __wc3_mdl_probe.next_token()?;
-                                *__wc3_mdl_body = __wc3_mdl_probe;
-                                ::core::option::Option::Some(value)
-                            }
-                            _ => ::core::option::Option::None,
-                        };
-                        if let ::core::option::Option::Some(value) = __wc3_mdl_bare_value {
-                            #local = value;
-                        } else { #read_track }
-                    }
-                } else {
-                    read_track
-                };
-                arms.push(quote!(#mdl_name => {
+                if let Some(constant) = &field.constant {
+                    let inner =
+                        super::attributes::type_argument(ty, "Option").expect("optional Track");
+                    arms.push(quote!(#constant => {
+                        __wc3_mdl_fields.mark(#bit, __wc3_mdl_field)?;
+                        #local = Some(<#inner>::constant(__wc3_mdl_body.read_property()?));
+                        #mark_present
+                    }));
+                }
+                let bare_static = field.bare_static;
+                arms.push(quote!(#pattern => {
                     __wc3_mdl_fields.mark(#bit, __wc3_mdl_field)?;
-                    #read
+                    ::wc3::model::mdl::ReadAnimationProperty::read_mdl_animation_property(&mut #local, __wc3_mdl_body, false, #bare_static)?;
                     #mark_present
                     #mark_enabled
                 }));
@@ -343,7 +314,7 @@ pub(super) fn expand(
         let state_type = match &field.kind {
             Kind::Flatten => quote!(<#ty as ::wc3::model::mdl::ReadFields>::State),
             Kind::DelegatedProperty(_) => quote!(::core::option::Option<#ty>),
-            Kind::Header | Kind::Flags(_) | Kind::Tracks | Kind::Repeated(_) | Kind::Skip => {
+            Kind::Header | Kind::Flags(_) | Kind::Repeated(_) | Kind::Skip => {
                 quote!(#ty)
             }
             _ if has_default => quote!(#ty),

@@ -1,4 +1,5 @@
 use super::*;
+use wc3::model::animation::Animatable;
 
 #[test]
 fn spec_examples_match_independently_packed_binary_records() {
@@ -8,8 +9,8 @@ fn spec_examples_match_independently_packed_binary_records() {
     let wire = include_bytes!("../../../fixtures/mdl/smoke.mdx");
     assert_eq!(smoke.encode_mdx().unwrap(), wire);
     assert_eq!(ParticleEmitter2::decode_mdx(wire).unwrap(), smoke);
-    assert_eq!(smoke.length, 16.0);
-    assert_eq!(smoke.width, 17.0);
+    assert_eq!(smoke.length, Animatable::Static(16.0));
+    assert_eq!(smoke.width, Animatable::Static(17.0));
     assert_eq!(
         ParticleEmitter2::decode_mdl(&smoke.encode_mdl().unwrap()).unwrap(),
         smoke

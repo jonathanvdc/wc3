@@ -5,17 +5,17 @@ use super::{
 use crate::model::mdl;
 use crate::model::mdl::{ReadErrorKind, Span};
 use crate::model::scene::{set_node_kind, validate_node_kind};
-use crate::model::{Color, ModelVersion};
-pub(super) fn zero() -> f32 {
-    0.0
+use crate::model::{Animatable, Color, ModelVersion};
+pub(super) fn zero() -> Animatable<f32> {
+    Animatable::Static(0.0)
 }
-pub(super) fn white() -> Color {
-    [1.0; 3]
+pub(super) fn white() -> Animatable<Color> {
+    Animatable::Static([1.0; 3])
 }
-pub(super) fn quadratic() -> f32 {
+pub(super) fn quadratic() -> Animatable<f32> {
     LightFalloff::default().quadratic
 }
-pub(super) fn damping() -> f32 {
+pub(super) fn damping() -> Animatable<f32> {
     LightFalloff::default().damping
 }
 pub(super) fn is_zero(value: &f32) -> bool {
@@ -85,42 +85,42 @@ impl<V: ModelVersion> Light<V> {
     pub(super) fn mdl_shadow_intensity_mut(&mut self) -> Option<&mut f32> {
         self.shadow_intensity.shadow_intensity_mut()
     }
-    pub(super) fn mdl_shadow_start(&self) -> Option<f32> {
+    pub(super) fn mdl_shadow_start(&self) -> Option<&Animatable<f32>> {
         self.shadow_range
             .shadow_casting_range()
-            .map(|value| value.start)
+            .map(|value| &value.start)
     }
-    pub(super) fn mdl_shadow_start_mut(&mut self) -> Option<&mut f32> {
+    pub(super) fn mdl_shadow_start_mut(&mut self) -> Option<&mut Animatable<f32>> {
         self.shadow_range
             .shadow_casting_range_mut()
             .map(|value| &mut value.start)
     }
-    pub(super) fn mdl_shadow_end(&self) -> Option<f32> {
+    pub(super) fn mdl_shadow_end(&self) -> Option<&Animatable<f32>> {
         self.shadow_range
             .shadow_casting_range()
-            .map(|value| value.end)
+            .map(|value| &value.end)
     }
-    pub(super) fn mdl_shadow_end_mut(&mut self) -> Option<&mut f32> {
+    pub(super) fn mdl_shadow_end_mut(&mut self) -> Option<&mut Animatable<f32>> {
         self.shadow_range
             .shadow_casting_range_mut()
             .map(|value| &mut value.end)
     }
-    pub(super) fn mdl_quadratic(&self) -> Option<f32> {
-        self.falloff.falloff().map(|value| value.quadratic)
+    pub(super) fn mdl_quadratic(&self) -> Option<&Animatable<f32>> {
+        self.falloff.falloff().map(|value| &value.quadratic)
     }
-    pub(super) fn mdl_quadratic_mut(&mut self) -> Option<&mut f32> {
+    pub(super) fn mdl_quadratic_mut(&mut self) -> Option<&mut Animatable<f32>> {
         self.falloff.falloff_mut().map(|value| &mut value.quadratic)
     }
-    pub(super) fn mdl_linear(&self) -> Option<f32> {
-        self.falloff.falloff().map(|value| value.linear)
+    pub(super) fn mdl_linear(&self) -> Option<&Animatable<f32>> {
+        self.falloff.falloff().map(|value| &value.linear)
     }
-    pub(super) fn mdl_linear_mut(&mut self) -> Option<&mut f32> {
+    pub(super) fn mdl_linear_mut(&mut self) -> Option<&mut Animatable<f32>> {
         self.falloff.falloff_mut().map(|value| &mut value.linear)
     }
-    pub(super) fn mdl_damping(&self) -> Option<f32> {
-        self.falloff.falloff().map(|value| value.damping)
+    pub(super) fn mdl_damping(&self) -> Option<&Animatable<f32>> {
+        self.falloff.falloff().map(|value| &value.damping)
     }
-    pub(super) fn mdl_damping_mut(&mut self) -> Option<&mut f32> {
+    pub(super) fn mdl_damping_mut(&mut self) -> Option<&mut Animatable<f32>> {
         self.falloff.falloff_mut().map(|value| &mut value.damping)
     }
 }

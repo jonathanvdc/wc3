@@ -1,21 +1,11 @@
 //! Reforged PopcornFX effect resources and emission settings.
-use crate::model::animation::track_group;
 use crate::model::mdl::{is_zero, Span};
 use crate::model::scene::{impl_node_flags, NodeFlagInterpretation};
 use crate::model::scene::{set_node_kind, validate_node_kind};
 use crate::model::{mdl, mdx};
+use crate::model::{Animatable, Track};
 use crate::model::{ModelVersion, SupportsReforgedChunks};
 use bitfield::bitfield;
-track_group! {
-    pub enum PopcornTrack {
-        Alpha: PopcornAlpha,
-        Color: PopcornColor,
-        EmissionRate: PopcornEmissionRate,
-        Lifespan: PopcornLifespan,
-        Speed: PopcornSpeed,
-        Visibility: PopcornVisibility,
-    }
-}
 
 use crate::model::Color;
 use crate::model::KnownChunk;
@@ -50,29 +40,26 @@ pub struct PopcornEmitter {
     )]
     /// Shared node.
     pub node: Node<PopcornFlags>,
-    #[mdl(
-        animatable = "LifeSpan",
-        track = "PopcornTrack::Lifespan",
-        default = "one"
-    )]
+    #[mdx(tag = *b"KPPL")]
+    #[mdl(property = "LifeSpan", default = "one")]
     /// Particle lifetime.
-    pub life_span: f32,
-    #[mdl(
-        animatable = "EmissionRate",
-        track = "PopcornTrack::EmissionRate",
-        default = "one"
-    )]
+    pub life_span: Animatable<f32>,
+    #[mdx(tag = *b"KPPE")]
+    #[mdl(property = "EmissionRate", default = "one")]
     /// Emission rate.
-    pub emission_rate: f32,
-    #[mdl(animatable = "Speed", track = "PopcornTrack::Speed", default = "one")]
+    pub emission_rate: Animatable<f32>,
+    #[mdx(tag = *b"KPPS")]
+    #[mdl(property = "Speed", default = "one")]
     /// Particle speed.
-    pub speed: f32,
-    #[mdl(animatable = "Color", track = "PopcornTrack::Color", default = "white")]
+    pub speed: Animatable<f32>,
+    #[mdx(tag = *b"KPPC")]
+    #[mdl(property = "Color", default = "white")]
     /// RGB particle color.
-    pub color: Color,
-    #[mdl(animatable = "Alpha", track = "PopcornTrack::Alpha", default = "one")]
+    pub color: Animatable<Color>,
+    #[mdx(tag = *b"KPPA")]
+    #[mdl(property = "Alpha", default = "one")]
     /// Base alpha.
-    pub alpha: f32,
+    pub alpha: Animatable<f32>,
     #[mdl(property = "ReplaceableId", default, skip_if = "is_zero")]
     /// Replaceable texture ID.
     pub replaceable_id: u32,
@@ -82,9 +69,10 @@ pub struct PopcornEmitter {
     #[mdl(property = "AnimVisibilityGuide", default)]
     /// Animation-name rules controlling effect visibility. Line breaks are literal.
     pub visibility_guide: FixedText<PATH_SIZE>,
-    #[mdl(tracks, channels(Visibility = "PopcornTrack::Visibility"))]
-    /// Animation tracks.
-    pub tracks: Vec<PopcornTrack>,
+    #[mdx(tag = *b"KPPV")]
+    #[mdl(property = "Visibility")]
+    /// Optional visibility animation.
+    pub visibility: Option<Track<f32>>,
 }
 
 impl PopcornEmitter {
@@ -96,15 +84,15 @@ impl PopcornEmitter {
     ) -> Result<Self, ValueError> {
         let mut emitter = Self {
             node: node.cast_flags(),
-            life_span: 1.0,
-            emission_rate: 1.0,
-            speed: 1.0,
-            color: [1.0; 3],
-            alpha: 1.0,
+            life_span: Animatable::Static(1.0),
+            emission_rate: Animatable::Static(1.0),
+            speed: Animatable::Static(1.0),
+            color: Animatable::Static([1.0; 3]),
+            alpha: Animatable::Static(1.0),
             replaceable_id: 0,
             path: FixedText::default(),
             visibility_guide: FixedText::default(),
-            tracks: Vec::new(),
+            visibility: None,
         };
         emitter.path.set_text(path)?;
         emitter.visibility_guide.set_text(visibility_guide)?;
@@ -142,11 +130,11 @@ impl<V: SupportsReforgedChunks> Model<V> {
     }
 }
 
-fn one() -> f32 {
-    1.0
+fn one() -> Animatable<f32> {
+    Animatable::Static(1.0)
 }
-fn white() -> Color {
-    [1.0; 3]
+fn white() -> Animatable<Color> {
+    Animatable::Static([1.0; 3])
 }
 fn finish_popcorn(value: &mut PopcornEmitter, _: Span) -> Result<(), mdl::ReadError> {
     set_node_kind(&mut value.node, 0x1000);

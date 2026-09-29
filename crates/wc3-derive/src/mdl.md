@@ -129,58 +129,49 @@ collections. It does not reorder headers. Nested blocks have no trailing comma.
 
 ## Animation
 
-An animatable property has a base value and a track variant. Put its tracks in
-the record's single `#[mdl(tracks)]` vector:
+Animated properties use the same `property` attribute as ordinary values. The
+field type selects the syntax: `Animatable<T>` accepts static values and tracks;
+`Option<Track<T>>` accepts tracks only and defaults to `None`.
 
 ```rust
-use wc3::model::animation::GeosetTrack;
-use wc3::model::mdl;
-use wc3::model::mdl::{Read as _, Write as _};
+use wc3::model::animation::{Animatable, Track};
+use wc3::model::{mdl, mdx, Color};
 
-#[derive(mdl::Read, mdl::Write)]
-#[mdl(block = "Example", default)]
+#[derive(mdx::Read, mdx::Write, mdl::Read, mdl::Write)]
+#[mdx(sized(tag = *b"EXMP"))]
+#[mdl(block = "Example")]
 struct Example {
-    #[mdl(animatable = "Alpha", track = "GeosetTrack::Alpha")]
-    alpha: f32,
-    #[mdl(tracks)]
-    tracks: Vec<GeosetTrack>,
+    #[mdx(tag = *b"COLR")]
+    #[mdl(property = "Color", default)]
+    color: Animatable<Color>,
+    #[mdx(tag = *b"VISI")]
+    #[mdl(property = "Visibility")]
+    visibility: Option<Track<f32>>,
 }
-
-impl Default for Example {
-    fn default() -> Self { Self { alpha: 1.0, tracks: Vec::new() } }
-}
-
-let fixed = Example::decode_mdl("Example { static Alpha 0.5, }")?;
-assert_eq!(fixed.alpha, 0.5);
-let animated = Example::decode_mdl("Example { Alpha 0 { Linear, } }")?;
-assert_eq!(animated.alpha, 1.0);
-assert!(!animated.encode_mdl()?.contains("static Alpha"));
-# Ok::<(), Box<dyn std::error::Error>>(())
 ```
 
-The base needs a field or record default. Static input sets it; animated input
-adds a track and leaves the base at its default. Static and animated forms count
-as the same property for duplicate checks. Track variants must wrap readable
-tracks with matching MDL names.
+`Animatable<T>` has `Static(T)`, `Animated(Track<T>)`, and
+`Both { value: T, track: Track<T> }` variants. Its base needs a field or record
+default. Static input replaces the property; animated input keeps the default
+base and sets its track. MDL rejects duplicate assignments, including a static
+value and a track for the same property.
 
-Writing uses the track when present, otherwise the static base. An animation
-supersedes its base value; reading the output restores that base to its default.
-Tracks start empty on read and retain their order; duplicate or unmapped variants are errors.
-Animated properties are emitted at their base field’s position in `write_order`
-or declaration order. Channels without base fields are emitted at the tracks
-field’s position, in `channels(...)` declaration order. Writing leaves stored
-track order unchanged.
+Writing emits the track when present, otherwise the static base. Reading MDL
+output restores an overridden base to its declared default. Properties are
+emitted in `write_order` or declaration order, independent of input order.
+MDX stores base values in the fixed layout and tracks in a canonical tail. A
+repeated track tag replaces the previous track while retaining the base.
 
 | Modifier | Purpose |
 | --- | --- |
-| `tracks, channels(Visibility = "Track::Visibility")` | Add a channel with no base field; static input is rejected. |
-| `animated_only` | Accept only a track for an animatable field; the base must remain at its default. |
-| `bare_static` | Also accept `Name value,` as static input; output still uses `static Name value,`. |
+| `bare_static` | Also accept `Name value,` for an `Animatable<T>`; output uses `static Name value,`. |
+| `constant = "Alias"` | Accept a scalar alias for an optional track, converted to a stepped key at time zero; output uses the track property name. |
 | `enabled_if = "predicate", enable_with = "function"` | Tie a property's presence to a flag. |
 
 The paired enable hooks take `&Self -> bool` and `&mut Self`. Reading calls the
-enable hook if either form was present. Writing omits a disabled static property
-and rejects a disabled track. Animatable fields cannot use value codec hooks.
+enable hook when the property is present. Writing omits a disabled default
+property and rejects a disabled animation. Animated properties cannot use
+value codec hooks.
 
 ## Flags and dialect aliases
 
@@ -255,7 +246,7 @@ These forms are for records whose Rust layout differs from their MDL fields.
 A field annotation such as
 `project(#[mdl(property = "Id")] id: u32, ...)` maps members of a nested Rust
 struct into the enclosing MDL record. List every member, marking binary-only
-members `skip`. Animatable members use the parent's tracks. Record defaults
+members `skip`. Animatable members own their tracks. Record defaults
 supply nested defaults, and `write_order` lists the containing field name.
 
 For flags stored inside a flattened record, use
@@ -277,7 +268,7 @@ default. List virtual fields individually in `write_order`.
 | Custom mapping | `get` supplies the output value; `set: fn(&mut Self, T, bool, Span) -> Result<(), mdl::ReadError>` | The setter maps parsed values into the record. The boolean indicates explicit presence. |
 
 Explicit presence includes empty blocks or tracks and default-valued input.
-Slot-backed animation rejects unavailable tracks and exports animation in place
+Slot-backed animation borrows `Option<&Animatable<T>>` on write, rejects unavailable tracks and exports animation in place
 of its base value.
 Custom setters are responsible for mapping-specific validation.
 

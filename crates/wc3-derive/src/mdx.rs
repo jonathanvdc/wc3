@@ -82,6 +82,9 @@ fn expand_checked(input: DeriveInput, reading: bool) -> Result<TokenStream> {
     let mut reads = Vec::new();
     let mut writes = Vec::new();
     let mut names = Vec::new();
+    let mut track_reads = Vec::new();
+    let mut track_writes = Vec::new();
+    let mut seen_tags = Vec::new();
     for (index, field) in fields.iter().enumerate() {
         let ty = &field.ty;
         let member = field
@@ -92,6 +95,63 @@ fn expand_checked(input: DeriveInput, reading: bool) -> Result<TokenStream> {
                 let index = Index::from(index);
                 quote!(#index)
             });
+        let mut track_tag: Option<Expr> = None;
+        let mut flatten = false;
+        for attr in field
+            .attrs
+            .iter()
+            .filter(|attr| attr.path().is_ident("mdx"))
+        {
+            attr.parse_nested_meta(|meta| {
+                if meta.path.is_ident("tag") && track_tag.is_none() {
+                    track_tag = Some(meta.value()?.parse()?);
+                } else if meta.path.is_ident("flatten") && !flatten {
+                    flatten = true;
+                } else {
+                    return Err(meta.error("expected tag = ... or flatten"));
+                }
+                Ok(())
+            })?;
+        }
+        if flatten && track_tag.is_some() {
+            return Err(Error::new_spanned(
+                field,
+                "tag and flatten cannot be combined",
+            ));
+        }
+        if let Some(track_tag) = &track_tag {
+            let key = quote!(#track_tag).to_string();
+            if seen_tags.contains(&key) {
+                return Err(Error::new_spanned(track_tag, "duplicate track tag"));
+            }
+            seen_tags.push(key);
+            let bound = if reading {
+                parse_quote!(#ty: ::wc3::model::mdx::ReadTrackProperty)
+            } else {
+                parse_quote!(#ty: ::wc3::model::mdx::WriteTrackProperty)
+            };
+            generics.make_where_clause().predicates.push(bound);
+            track_reads.push(quote! {
+                if tag == #track_tag {
+                    ::wc3::model::mdx::ReadTrackProperty::read_mdx_track_property(&mut self.#member, cursor)?;
+                    return Ok(true);
+                }
+            });
+            track_writes.push(quote!(::wc3::model::mdx::WriteTrackProperty::write_mdx_track_property(&self.#member, #track_tag, encoder)?;));
+        }
+        if flatten {
+            let bound = if reading {
+                parse_quote!(#ty: ::wc3::model::mdx::ReadTracks)
+            } else {
+                parse_quote!(#ty: ::wc3::model::mdx::WriteTracks)
+            };
+            generics.make_where_clause().predicates.push(bound);
+            track_reads.push(quote!(if ::wc3::model::mdx::ReadTracks::read_mdx_track(&mut self.#member, tag, cursor)? { return Ok(true); }));
+            track_writes.push(
+                quote!(::wc3::model::mdx::WriteTracks::write_mdx_tracks(&self.#member, encoder)?;),
+            );
+        }
+        let track_only = track_tag.is_some() && type_argument(ty, "Option").is_some();
         let phantom = type_argument(ty, "PhantomData").is_some();
         let vec_item = type_argument(ty, "Vec");
         if vec_item.is_some() && (tag.is_none() || index + 1 != field_count) {
@@ -120,6 +180,8 @@ fn expand_checked(input: DeriveInput, reading: bool) -> Result<TokenStream> {
                 values
             }));
             writes.push(quote!(for value in &self.#member { encoder.write(value)?; }));
+        } else if track_only {
+            reads.push(quote!(None));
         } else if phantom {
             reads.push(quote!(::std::marker::PhantomData));
         } else {
@@ -146,7 +208,14 @@ fn expand_checked(input: DeriveInput, reading: bool) -> Result<TokenStream> {
         let body = if tag.is_some() {
             quote! {
                 let mut cursor = source.subcursor_u32_sized()?;
-                let value = #constructor;
+                let mut value = #constructor;
+                while !cursor.remaining().is_empty() {
+                    let offset = cursor.absolute_position();
+                    let tag = cursor.read()?;
+                    if !::wc3::model::mdx::ReadTracks::read_mdx_track(&mut value, tag, &mut cursor)? {
+                        return Err(::wc3::model::mdx::ReadError::MalformedRecord { tag, offset });
+                    }
+                }
                 cursor.finish()?;
                 Ok(value)
             }
@@ -157,6 +226,13 @@ fn expand_checked(input: DeriveInput, reading: bool) -> Result<TokenStream> {
             }
         };
         Ok(quote! {
+            impl #impl_generics ::wc3::model::mdx::ReadTracks for #name #ty_generics #where_clause {
+                fn read_mdx_track(&mut self, tag: ::wc3::model::Tag, cursor: &mut ::wc3::model::mdx::Cursor<'_>) -> Result<bool, ::wc3::model::mdx::ReadError> {
+                    #(#track_reads)*
+                    let _ = (tag, cursor);
+                    Ok(false)
+                }
+            }
             impl #impl_generics ::wc3::model::mdx::Read for #name #ty_generics #where_clause {
                 fn read_mdx(source: &mut ::wc3::model::mdx::Cursor<'_>) -> Result<Self, ::wc3::model::mdx::ReadError> {
                     #body
@@ -168,12 +244,20 @@ fn expand_checked(input: DeriveInput, reading: bool) -> Result<TokenStream> {
             quote! {
                 let marker = encoder.begin_sized();
                 #(#writes)*
+                ::wc3::model::mdx::WriteTracks::write_mdx_tracks(self, encoder)?;
                 encoder.finish_sized(marker, #tag)?;
             }
         } else {
             quote!(#(#writes)*)
         };
         Ok(quote! {
+            impl #impl_generics ::wc3::model::mdx::WriteTracks for #name #ty_generics #where_clause {
+                fn write_mdx_tracks(&self, encoder: &mut ::wc3::model::mdx::Encoder<'_>) -> Result<(), ::wc3::model::mdx::WriteError> {
+                    #(#track_writes)*
+                    let _ = encoder;
+                    Ok(())
+                }
+            }
             impl #impl_generics ::wc3::model::mdx::Write for #name #ty_generics #where_clause {
                 fn write_mdx(&self, encoder: &mut ::wc3::model::mdx::Encoder<'_>) -> Result<(), ::wc3::model::mdx::WriteError> {
                     #body

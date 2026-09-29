@@ -29,9 +29,6 @@ impl Schema {
                     calls.push(quote!(visitor(#name, false);));
                 }
             }
-            for (name, _) in &field.channels {
-                calls.push(quote!(visitor(#name, false);));
-            }
             match &field.kind {
                 Kind::Flatten => {
                     let ty = &field.ty;
@@ -50,8 +47,8 @@ impl Schema {
                 | Kind::Block(name)
                 | Kind::Counted(name) => {
                     let static_form =
-                        matches!(field.kind, Kind::StaticProperty(_) | Kind::Animatable(_))
-                            && !field.animated_only;
+                        (matches!(field.kind, Kind::StaticProperty(_) | Kind::Animatable(_))
+                            && !field.animation_only());
                     calls.push(quote!(visitor(#name, #static_form);));
                 }
                 Kind::Repeated(names) => {
@@ -80,9 +77,6 @@ impl Schema {
                     conditions.push(quote!(!static_form && name == #value));
                 }
             }
-            for (value, _) in &field.channels {
-                conditions.push(quote!(!static_form && name == #value));
-            }
             match &field.kind {
                 Kind::Flatten => {
                     let ty = &field.ty;
@@ -92,7 +86,7 @@ impl Schema {
                     conditions.push(quote!(static_form && name == #value))
                 }
                 Kind::Animatable(value) => {
-                    let allow_static = !field.animated_only;
+                    let allow_static = !field.animation_only();
                     conditions.push(quote!(name == #value && (!static_form || #allow_static)));
                 }
                 Kind::Property(value)
@@ -115,20 +109,10 @@ impl Schema {
         }
         quote!(false #(|| (#conditions))*)
     }
-    pub(super) fn tracks(&self) -> Option<&Field> {
-        self.fields
-            .iter()
-            .find(|field| matches!(field.kind, Kind::Tracks))
-    }
-    pub(super) fn animated(&self) -> impl Iterator<Item = &Field> {
-        self.fields
-            .iter()
-            .filter(|field| matches!(field.kind, Kind::Animatable(_)))
-    }
     pub(super) fn has_static(&self) -> bool {
         self.fields.iter().any(|field| {
-            matches!(field.kind, Kind::StaticProperty(_) | Kind::Animatable(_))
-                && !field.animated_only
+            (matches!(field.kind, Kind::StaticProperty(_) | Kind::Animatable(_))
+                && !field.animation_only())
         })
     }
 }
@@ -219,12 +203,6 @@ pub(super) fn parse(input: &DeriveInput, options: &Container) -> Result<Schema> 
                 if names.contains(&projected.member) {
                     return Err(Error::new_spanned(source, "duplicate projected member"));
                 }
-                if matches!(projected.kind, Kind::Tracks) {
-                    return Err(Error::new_spanned(
-                        source,
-                        "projected tracks are not supported; link to the parent's tracks",
-                    ));
-                }
                 names.push(projected.member.clone());
                 projected.parent = Some(parent.clone());
                 normalized.push(projected);
@@ -301,11 +279,7 @@ pub(super) fn parse(input: &DeriveInput, options: &Container) -> Result<Schema> 
             && field.default.is_none()
             && !matches!(
                 field.kind,
-                Kind::Flags(_)
-                    | Kind::Flatten
-                    | Kind::Repeated(_)
-                    | Kind::Tracks
-                    | Kind::DelegatedProperty(_)
+                Kind::Flags(_) | Kind::Flatten | Kind::Repeated(_) | Kind::DelegatedProperty(_)
             )
         {
             return Err(Error::new_spanned(
@@ -319,7 +293,7 @@ pub(super) fn parse(input: &DeriveInput, options: &Container) -> Result<Schema> 
         if matches!(field.kind, Kind::Animatable(_)) && !has_default {
             return Err(Error::new_spanned(
                 &field.member,
-                "animatable fields require default and track attributes or a container default",
+                "Animatable properties require a field or container default",
             ));
         }
         if matches!(field.kind, Kind::Skip) && !has_default {
@@ -359,7 +333,6 @@ pub(super) fn parse(input: &DeriveInput, options: &Container) -> Result<Schema> 
         if let Some(extra) = &field.extra_flags {
             field_names.extend(extra.flags.iter().map(|(name, _)| name));
         }
-        field_names.extend(field.channels.iter().map(|(name, _)| name));
         for name in field_names {
             if names.contains(&name.value()) {
                 return Err(Error::new_spanned(name, "duplicate MDL field name"));
@@ -367,41 +340,9 @@ pub(super) fn parse(input: &DeriveInput, options: &Container) -> Result<Schema> 
             names.push(name.value());
         }
     }
-    let tracks = fields
-        .iter()
-        .filter(|field| matches!(field.kind, Kind::Tracks))
-        .collect::<Vec<_>>();
-    let animated = fields
-        .iter()
-        .filter(|field| matches!(field.kind, Kind::Animatable(_)))
-        .collect::<Vec<_>>();
-    let has_channels = tracks.iter().any(|field| !field.channels.is_empty());
-    if tracks.len() > 1
-        || (!animated.is_empty() && tracks.len() != 1)
-        || (animated.is_empty() && !has_channels && !tracks.is_empty())
-    {
-        return Err(Error::new_spanned(&input.ident, "animatable fields require exactly one tracks collection, and tracks requires animatable fields"));
-    }
-    let mut variants = Vec::new();
-    for field in &animated {
-        let variant = field.track.as_ref().expect("track was checked");
-        let variant_key = quote!(#variant).to_string();
-        if variants.contains(&variant_key) {
-            return Err(Error::new_spanned(variant, "duplicate track variant"));
-        }
-        variants.push(variant_key);
-    }
-    for field in &tracks {
-        for (_, variant) in &field.channels {
-            let key = quote!(#variant).to_string();
-            if variants.contains(&key) {
-                return Err(Error::new_spanned(variant, "duplicate track variant"));
-            }
-            variants.push(key);
-        }
-    }
     let has_static = fields.iter().any(|field| {
-        matches!(field.kind, Kind::StaticProperty(_) | Kind::Animatable(_)) && !field.animated_only
+        (matches!(field.kind, Kind::StaticProperty(_) | Kind::Animatable(_))
+            && !field.animation_only())
     });
     if has_static && names.iter().any(|name| name == "static") {
         return Err(Error::new_spanned(

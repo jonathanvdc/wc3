@@ -93,7 +93,7 @@ pub use lexer::{Lexer, Token, TokenKind};
 mod parser;
 pub use parser::{Block, Counted, Field, Parser};
 mod property;
-pub use property::{ReadProperty, WriteProperty};
+pub use property::{ReadAnimationProperty, ReadProperty, WriteAnimationProperty, WriteProperty};
 mod value_eq;
 pub use value_eq::ValueEq;
 mod writer;

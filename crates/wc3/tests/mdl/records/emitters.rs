@@ -1,7 +1,6 @@
-use wc3::model::animation::{AnimationTrack, ParticleEmissionRate, RibbonAlpha, RibbonTextureSlot};
-use wc3::model::emitters::{
-    ParticleEmitter, ParticleEmitterFlags, ParticleTrack, RibbonEmitter, RibbonTrack,
-};
+use wc3::model::animation::{Animatable, Track};
+
+use wc3::model::emitters::{ParticleEmitter, ParticleEmitterFlags, RibbonEmitter};
 use wc3::model::mdl::{Read as _, Write as _};
 use wc3::model::mdx::{Read as _, Write as _};
 use wc3::model::scene::{Node, NodeFlags};
@@ -42,36 +41,32 @@ fn independent_emitter_fixtures_roundtrip() {
     let mut node = Node::new("particle", 7).unwrap();
     node.flags = NodeFlags(0x19008);
     let mut particle = ParticleEmitter::new(node.clone(), "a.mdl").unwrap();
-    particle.gravity = 3.0;
-    particle.longitude = 4.0;
-    particle.latitude = 5.0;
-    particle.life_span = 6.0;
-    particle.initial_velocity = 7.0;
-    particle.tracks = [ParticleTrack::EmissionRate(
-        AnimationTrack::<ParticleEmissionRate>::linear(vec![], None).unwrap(),
-    )]
-    .to_vec();
+    particle.gravity = Animatable::Static(3.0);
+    particle.longitude = Animatable::Static(4.0);
+    particle.latitude = Animatable::Static(5.0);
+    particle.life_span = Animatable::Static(6.0);
+    particle.initial_velocity = Animatable::Static(7.0);
+    particle
+        .emission_rate
+        .set_track(Track::linear(vec![], None).unwrap());
     roundtrip(&particle);
     node.flags = NodeFlags(0x4000);
     let mut ribbon = RibbonEmitter::new(node);
-    ribbon.height_above = 2.0;
-    ribbon.height_below = 3.0;
-    ribbon.alpha = 0.0;
-    ribbon.color = [0.1, 0.2, 0.3];
+    ribbon.height_above = Animatable::Static(2.0);
+    ribbon.height_below = Animatable::Static(3.0);
+    ribbon.alpha = Animatable::Static(0.0);
+    ribbon.color = Animatable::Static([0.1, 0.2, 0.3]);
     ribbon.life_span = 5.0;
-    ribbon.texture_slot = 0;
+    ribbon.texture_slot = Animatable::Static(0);
     ribbon.emission_rate = u32::MAX;
     ribbon.rows = 2;
     ribbon.columns = 3;
     ribbon.material_id = 4;
     ribbon.gravity = -0.0;
-    ribbon.tracks = [
-        RibbonTrack::TextureSlot(
-            AnimationTrack::<RibbonTextureSlot>::linear(vec![], None).unwrap(),
-        ),
-        RibbonTrack::Alpha(AnimationTrack::<RibbonAlpha>::linear(vec![], None).unwrap()),
-    ]
-    .to_vec();
+    ribbon
+        .texture_slot
+        .set_track(Track::linear(vec![], None).unwrap());
+    ribbon.alpha.set_track(Track::linear(vec![], None).unwrap());
     roundtrip(&ribbon);
     assert!(ribbon.encode_mdl().unwrap().contains("Gravity -0.0,"));
 }
@@ -126,11 +121,14 @@ fn writers_export_animation_over_base_and_reject_unknown_flags_and_padding() {
         "ParticleEmitter \"a\" { ObjectId 0, EmissionRate 0 { Linear, } }",
     )
     .unwrap();
-    particle.emission_rate = 1.0;
+    particle.emission_rate.set_value(1.0);
     let decoded = ParticleEmitter::decode_mdl(&particle.encode_mdl().unwrap()).unwrap();
-    assert_eq!(decoded.emission_rate, 0.0);
-    assert_eq!(decoded.tracks, particle.tracks);
-    particle.emission_rate = 0.0;
+    assert_eq!(decoded.emission_rate.value(), Some(&0.0));
+    assert_eq!(
+        decoded.emission_rate.track(),
+        particle.emission_rate.track()
+    );
+    particle.emission_rate = Animatable::Static(0.0);
     particle.node.flags = ParticleEmitterFlags(0x21000);
     assert!(particle.encode_mdl().is_err());
     particle.node.flags = ParticleEmitterFlags(0x1000);
@@ -145,11 +143,11 @@ fn writers_export_animation_over_base_and_reject_unknown_flags_and_padding() {
     let mut ribbon =
         RibbonEmitter::decode_mdl("RibbonEmitter \"a\" { ObjectId 0, TextureSlot 0 { Linear, } }")
             .unwrap();
-    ribbon.texture_slot = 3;
+    ribbon.texture_slot.set_value(3);
     let decoded = RibbonEmitter::decode_mdl(&ribbon.encode_mdl().unwrap()).unwrap();
-    assert_eq!(decoded.texture_slot, 0);
-    assert_eq!(decoded.tracks, ribbon.tracks);
-    ribbon.texture_slot = 0;
+    assert_eq!(decoded.texture_slot.value(), Some(&0));
+    assert_eq!(decoded.texture_slot.track(), ribbon.texture_slot.track());
+    ribbon.texture_slot = Animatable::Static(0);
     ribbon.node.flags = NodeFlags(0);
     assert!(ribbon.encode_mdl().is_err());
 }
@@ -160,8 +158,8 @@ fn particle_path_is_a_single_260_byte_field() {
     let mut node = Node::new("long path", 0).unwrap();
     node.flags = NodeFlags(0x1000);
     let mut emitter = ParticleEmitter::new(node, &path).unwrap();
-    emitter.life_span = 123.0;
-    emitter.initial_velocity = 456.0;
+    emitter.life_span = Animatable::Static(123.0);
+    emitter.initial_velocity = Animatable::Static(456.0);
     let bytes = emitter.encode_mdx().unwrap();
     let node_size = u32::from_le_bytes(bytes[4..8].try_into().unwrap()) as usize;
     let start = 4 + node_size + 16;

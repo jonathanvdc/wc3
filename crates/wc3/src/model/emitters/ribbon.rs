@@ -1,19 +1,9 @@
 //! Animated ribbon trails.
-use crate::model::animation::track_group;
 use crate::model::mdl::Span;
 use crate::model::scene::{set_node_kind, validate_node_kind};
 use crate::model::ModelVersion;
 use crate::model::{mdl, mdx};
-track_group! {
-    pub enum RibbonTrack {
-        Visibility: RibbonVisibility,
-        HeightAbove: RibbonHeightAbove,
-        HeightBelow: RibbonHeightBelow,
-        Alpha: RibbonAlpha,
-        Color: RibbonColor,
-        TextureSlot: RibbonTextureSlot,
-    }
-}
+use crate::model::{Animatable, Track};
 
 use crate::model::Color;
 use crate::model::KnownChunk;
@@ -35,35 +25,27 @@ pub struct RibbonEmitter {
     #[mdl(flatten)]
     /// Embedded node.
     pub node: Node,
-    #[mdl(
-        animatable = "HeightAbove",
-        track = "RibbonTrack::HeightAbove",
-        default
-    )]
+    #[mdx(tag = *b"KRHA")]
+    #[mdl(property = "HeightAbove", default)]
     /// Ribbon height above its emission point.
-    pub height_above: f32,
-    #[mdl(
-        animatable = "HeightBelow",
-        track = "RibbonTrack::HeightBelow",
-        default
-    )]
+    pub height_above: Animatable<f32>,
+    #[mdx(tag = *b"KRHB")]
+    #[mdl(property = "HeightBelow", default)]
     /// Ribbon height below its emission point.
-    pub height_below: f32,
-    #[mdl(animatable = "Alpha", track = "RibbonTrack::Alpha", default)]
+    pub height_below: Animatable<f32>,
+    #[mdx(tag = *b"KRAL")]
+    #[mdl(property = "Alpha", default)]
     /// Opacity when no alpha track is active.
-    pub alpha: f32,
-    #[mdl(animatable = "Color", track = "RibbonTrack::Color", default)]
-    pub color: Color,
+    pub alpha: Animatable<f32>,
+    #[mdx(tag = *b"KRCO")]
+    #[mdl(property = "Color", default)]
+    pub color: Animatable<Color>,
     #[mdl(property = "LifeSpan", default)]
     pub life_span: f32,
-    #[mdl(
-        animatable = "TextureSlot",
-        track = "RibbonTrack::TextureSlot",
-        default,
-        bare_static
-    )]
+    #[mdx(tag = *b"KRTX")]
+    #[mdl(property = "TextureSlot", default, bare_static)]
     /// Texture-atlas cell used when no texture-slot track is active.
-    pub texture_slot: u32,
+    pub texture_slot: Animatable<u32>,
     #[mdl(property = "EmissionRate", default)]
     pub emission_rate: u32,
     #[mdl(property = "Rows", default)]
@@ -77,9 +59,10 @@ pub struct RibbonEmitter {
     pub material_id: u32,
     #[mdl(property = "Gravity", default, skip_if = "zero_gravity")]
     pub gravity: f32,
-    #[mdl(tracks, channels(Visibility = "RibbonTrack::Visibility"))]
-    /// Ribbon animation tracks.
-    pub tracks: Vec<RibbonTrack>,
+    #[mdx(tag = *b"KRVS")]
+    #[mdl(property = "Visibility")]
+    /// Optional visibility animation.
+    pub visibility: Option<Track<f32>>,
 }
 
 impl RibbonEmitter {
@@ -98,7 +81,7 @@ impl RibbonEmitter {
             columns: Default::default(),
             material_id: Default::default(),
             gravity: Default::default(),
-            tracks: Vec::new(),
+            visibility: None,
         }
     }
 }

@@ -49,9 +49,17 @@ pub(super) fn build(
             };
             generics.make_where_clause().predicates.push(bound);
         }
+        if matches!(field.kind, Kind::Animatable(_)) && (reading || !field.virtual_field) {
+            let bound = if reading {
+                parse_quote!(#ty: ::wc3::model::mdl::ReadAnimationProperty)
+            } else {
+                parse_quote!(#ty: ::wc3::model::mdl::WriteAnimationProperty)
+            };
+            generics.make_where_clause().predicates.push(bound);
+        }
         if matches!(
             field.kind,
-            Kind::Header | Kind::Property(_) | Kind::StaticProperty(_) | Kind::Animatable(_)
+            Kind::Header | Kind::Property(_) | Kind::StaticProperty(_)
         ) {
             if reading && field.read_with.is_none() {
                 generics
@@ -70,13 +78,6 @@ pub(super) fn build(
                 .make_where_clause()
                 .predicates
                 .push(parse_quote!(#ty: ::wc3::model::mdl::ValueEq));
-        }
-        if !reading && matches!(field.kind, Kind::Tracks) {
-            let element = vec_element(ty)?;
-            generics
-                .make_where_clause()
-                .predicates
-                .push(parse_quote!(#element: ::wc3::model::mdl::Write));
         }
         if matches!(field.kind, Kind::Flags(_)) {
             generics

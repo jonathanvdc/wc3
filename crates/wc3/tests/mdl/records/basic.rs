@@ -1,4 +1,5 @@
-use wc3::model::animation::AnimationTrack;
+use wc3::model::animation::{Animatable, Track};
+
 use wc3::model::materials::{
     Layer, LayerShadingFlags, LayerTextureSlot, Material, MaterialRenderFlags, ShaderType,
 };
@@ -58,10 +59,10 @@ fn material_directives_and_classic_layers() {
             .unwrap();
     roundtrip(&layer);
     let mut layer = layer;
-    layer.texture_id = 5;
+    layer.texture_id.set_value(5);
     let decoded = Layer::<V800>::decode_mdl(&layer.encode_mdl().unwrap()).unwrap();
-    assert_eq!(decoded.texture_id, 0);
-    assert_eq!(decoded.tracks, layer.tracks);
+    assert_eq!(decoded.texture_id.value(), Some(&0));
+    assert_eq!(decoded.texture_id.track(), layer.texture_id.track());
     let mut material = Material::<V800>::new();
     material.render_mode = MaterialRenderFlags(2);
     material.layers = [Layer::new()].to_vec();
@@ -111,9 +112,11 @@ fn malformed_and_unrepresentable_layers() {
     assert!(layer.encode_mdl().is_err());
     layer.set_shader_type(ShaderType::HD_DEFAULT_UNIT);
     layer.set_texture_slots(&[LayerTextureSlot {
-        texture_id: 0,
+        texture_id: Animatable::Both {
+            value: 0,
+            track: Track::linear(vec![], None).unwrap(),
+        },
         texture_type: 1,
-        track: Some(AnimationTrack::linear(vec![], None).unwrap()),
     }]);
     assert!(layer.encode_mdl().is_err());
     layer.set_texture_slots(&[]);
@@ -123,17 +126,14 @@ fn malformed_and_unrepresentable_layers() {
 
 #[test]
 fn rejects_hidden_binary_storage_and_noncanonical_channel_order() {
-    use wc3::model::animation::{LayerAlpha, LayerTextureId};
-    use wc3::model::materials::LayerTrack;
     use wc3::model::mdx::Write as _;
     let layer = Layer::<V800>::decode_mdl("Layer { static TextureID 0 <= 0, }").unwrap();
     let mut layer = layer;
-    layer.tracks = [
-        LayerTrack::Alpha(AnimationTrack::<LayerAlpha>::linear(vec![], None).unwrap()),
-        LayerTrack::TextureId(AnimationTrack::<LayerTextureId>::linear(vec![], None).unwrap()),
-    ]
-    .to_vec();
-    assert!(layer.encode_mdl().is_err());
+    layer.alpha.set_track(Track::linear(vec![], None).unwrap());
+    layer
+        .texture_id
+        .set_track(Track::linear(vec![], None).unwrap());
+    assert!(layer.encode_mdl().is_ok());
     let attachment = Attachment::decode_mdl("Attachment \"a\" { ObjectId 0, }").unwrap();
     let mut bytes = attachment.encode_mdx().unwrap();
     let node_size = u32::from_le_bytes(bytes[4..8].try_into().unwrap()) as usize;
@@ -168,13 +168,18 @@ fn animated_emissive_gain_ignores_nan_base_and_preserves_keys() {
         "Layer { EmissiveGain 1 { Hermite, GlobalSeqId 2, -7: 3, InTan 4, OutTan 5, } }",
     )
     .unwrap();
-    layer.set_emissive_gain(f32::from_bits(0x7fc12345));
+    let mut emissive = layer.emissive_gain();
+    emissive.set_value(f32::from_bits(0x7fc12345));
+    layer.set_emissive_gain(emissive);
     let original = layer.encode_mdx().unwrap();
     let text = layer.encode_mdl().unwrap();
     assert!(!text.contains("static EmissiveGain"));
     let decoded = Layer::<V1000>::decode_mdl(&text).unwrap();
-    assert_eq!(decoded.emissive_gain(), 1.0);
-    assert_eq!(decoded.tracks, layer.tracks);
+    assert_eq!(decoded.emissive_gain().value(), Some(&1.0));
+    assert_eq!(
+        decoded.emissive_gain().track(),
+        layer.emissive_gain().track()
+    );
     assert_eq!(layer.encode_mdx().unwrap(), original);
 }
 
@@ -184,18 +189,20 @@ fn animated_texture_slots_ignore_base_ids() {
     let mut layer = Layer::<V1100>::new();
     layer.set_shader_type(ShaderType::HD_DEFAULT_UNIT);
     layer.set_texture_slots(&[LayerTextureSlot {
-        texture_id: 37,
+        texture_id: Animatable::Both {
+            value: 37,
+            track: Track::linear(vec![], None).unwrap(),
+        },
         texture_type: 1,
-        track: Some(AnimationTrack::linear(vec![], None).unwrap()),
     }]);
     let text = layer
         .encode_mdl_with_dialect(Dialect::HiveWorkshop)
         .unwrap();
     let decoded = Layer::<V1100>::decode_mdl(&text).unwrap();
-    assert_eq!(decoded.texture_slots()[0].texture_id, 0);
+    assert_eq!(decoded.texture_slots()[0].texture_id.value(), Some(&0));
     assert_eq!(
-        decoded.texture_slots()[0].track,
-        layer.texture_slots()[0].track
+        decoded.texture_slots()[0].texture_id.track(),
+        layer.texture_slots()[0].texture_id.track()
     );
     assert!(layer.encode_mdl().is_err()); // Engine syntax cannot identify this channel.
 }

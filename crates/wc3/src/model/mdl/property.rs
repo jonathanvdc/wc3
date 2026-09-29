@@ -70,3 +70,24 @@ impl<T: Write> WriteProperty for Option<T> {
         Ok(())
     }
 }
+
+/// Reads a static or animated property into its field, retaining any base value
+/// when the input supplies animation. The record owns dispatch and duplicates.
+pub trait ReadAnimationProperty {
+    fn read_mdl_animation_property(
+        &mut self,
+        parser: &mut Parser<'_>,
+        static_form: bool,
+        bare_static: bool,
+    ) -> Result<(), ReadError>;
+}
+
+/// Writes the animation when present, otherwise the static value or nothing.
+pub trait WriteAnimationProperty {
+    fn has_animation(&self) -> bool;
+    fn write_mdl_animation_property<W: IoWrite>(
+        &self,
+        name: &'static str,
+        writer: &mut Writer<W>,
+    ) -> Result<(), WriteError>;
+}

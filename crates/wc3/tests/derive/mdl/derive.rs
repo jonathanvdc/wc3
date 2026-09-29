@@ -1,5 +1,6 @@
 use std::io::Write;
 use std::marker::PhantomData;
+use wc3::model::animation::{Animatable, Track, TrackValue};
 use wc3::model::mdl;
 use wc3::model::mdl::Read as _;
 use wc3::model::mdl::{Parser, ReadError, ReadErrorKind, Span, WriteError, Writer};
@@ -444,29 +445,24 @@ fn static_properties_require_prefix_and_preserve_defaults_and_bits() {
     assert_eq!(error.kind, ReadErrorKind::DuplicateField);
 }
 
-use wc3::model::animation::{AnimationTrack, GeosetAlpha, GeosetColor, GeosetTrack};
-
-fn full_alpha() -> f32 {
-    1.0
+fn full_alpha() -> Animatable<f32> {
+    Animatable::Static(1.0)
 }
 
 #[derive(Debug, mdl::Read, mdl::Write)]
 #[mdl(
     block = "Linked",
-    write_order(enabled, alpha, tracks),
+    write_order(enabled, alpha),
     validate_read = "Self::check_read"
 )]
 struct LinkedProperties<T> {
     #[mdl(
-        animatable = "Alpha",
-        track = "GeosetTrack::Alpha",
+        property = "Alpha",
         default = "full_alpha",
         enabled_if = "Self::is_enabled",
         enable_with = "Self::enable"
     )]
-    alpha: f32,
-    #[mdl(tracks)]
-    tracks: Vec<GeosetTrack>,
+    alpha: Animatable<f32>,
     #[mdl(flag = "Enabled", default)]
     enabled: bool,
     #[mdl(skip, default)]
@@ -475,7 +471,7 @@ struct LinkedProperties<T> {
 
 impl<T> LinkedProperties<T> {
     fn check_read(&self, span: Span) -> Result<(), ReadError> {
-        if (!self.tracks.is_empty() || self.alpha != 1.0) && !self.enabled {
+        if (self.alpha.track().is_some() || self.alpha.value() != Some(&1.0)) && !self.enabled {
             return Err(ReadError::new(
                 span,
                 ReadErrorKind::MissingField("enabled property"),
@@ -495,18 +491,18 @@ impl<T> LinkedProperties<T> {
 fn linked_properties_enable_both_forms_and_validate_the_collection() {
     struct NoCodec;
     let absent = LinkedProperties::<NoCodec>::decode_mdl("Linked { }").unwrap();
-    assert_eq!(absent.alpha, 1.0);
+    assert_eq!(absent.alpha.value(), Some(&1.0));
     assert!(!absent.enabled);
     assert_eq!(print(&absent).unwrap(), "Linked {\n}\n");
     let fixed = LinkedProperties::<NoCodec>::decode_mdl("Linked { static Alpha 0.5, }").unwrap();
     assert!(fixed.enabled);
-    assert_eq!(fixed.alpha, 0.5);
+    assert_eq!(fixed.alpha.value(), Some(&0.5));
     assert!(print(&fixed).unwrap().contains("static Alpha 0.5,"));
     let animated =
         LinkedProperties::<NoCodec>::decode_mdl("Linked { Alpha 0 { Linear, } }").unwrap();
     assert!(animated.enabled);
-    assert_eq!(animated.alpha, 1.0);
-    assert_eq!(animated.tracks.len(), 1);
+    assert_eq!(animated.alpha.value(), Some(&1.0));
+    assert!(animated.alpha.track().is_some());
     assert!(!print(&animated).unwrap().contains("static Alpha"));
     assert!(print(&animated).unwrap().contains("Alpha 0 {"));
     for source in [
@@ -523,15 +519,12 @@ fn linked_properties_enable_both_forms_and_validate_the_collection() {
         );
     }
     let mut invalid = absent;
-    let alpha = AnimationTrack::<GeosetAlpha>::linear(Vec::new(), None).unwrap();
-    invalid.tracks = vec![alpha.clone().into(), alpha.into()];
+    invalid
+        .alpha
+        .set_track(Track::linear(Vec::new(), None).unwrap());
     let mut writer = Writer::new(Vec::new());
     assert!(writer.write(&invalid).is_err());
     assert!(writer.finish().unwrap().is_empty());
-    invalid.tracks = vec![AnimationTrack::<GeosetColor>::linear(Vec::new(), None)
-        .unwrap()
-        .into()];
-    assert!(print(&invalid).is_err());
 }
 
 #[derive(mdl::Read, mdl::Write)]
@@ -554,42 +547,17 @@ fn static_value_hooks_do_not_require_codec_traits() {
     );
 }
 
-// The collection enum deliberately has no Read implementation.
-enum LinkedTrack<T> {
-    Alpha(AnimationTrack<GeosetAlpha>),
-    Unmapped(PhantomData<T>),
-}
-impl<T> mdl::Write for LinkedTrack<T> {
-    fn write_mdl<W: Write>(&self, writer: &mut Writer<W>) -> Result<(), WriteError> {
-        match self {
-            Self::Alpha(track) => writer.write(track),
-            Self::Unmapped(_) => Err(WriteError::Unsupported("unmapped track")),
-        }
-    }
-}
-
 #[derive(mdl::Read, mdl::Write)]
 #[mdl(block = "GenericLinked")]
-struct GenericLinked<T> {
-    #[mdl(
-        animatable = "Alpha",
-        track = "LinkedTrack::Alpha",
-        default = "full_alpha"
-    )]
-    alpha: f32,
-    #[mdl(tracks)]
-    tracks: Vec<LinkedTrack<T>>,
+struct GenericLinked<T: TrackValue> {
+    #[mdl(property = "Alpha", default)]
+    alpha: Animatable<T>,
 }
-
 #[test]
-fn linked_enum_construction_preserves_generic_bounds() {
-    struct NoCodec;
-    let mut value =
-        GenericLinked::<NoCodec>::decode_mdl("GenericLinked { Alpha 0 { Linear, } }").unwrap();
-    assert_eq!(value.alpha, 1.0);
+fn animated_properties_preserve_generic_bounds() {
+    let value = GenericLinked::<f32>::decode_mdl("GenericLinked { Alpha 0 { Linear, } }").unwrap();
+    assert!(value.alpha.track().is_some());
     assert!(print(&value).unwrap().contains("Alpha 0 {"));
-    value.tracks.push(LinkedTrack::Unmapped(PhantomData));
-    assert!(print(&value).is_err());
 }
 
 fn count_override() -> u32 {

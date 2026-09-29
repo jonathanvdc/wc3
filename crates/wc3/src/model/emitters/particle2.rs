@@ -1,24 +1,12 @@
 //! Textured particles with animated emission and head/tail rendering.
-use crate::model::animation::track_group;
 use crate::model::mdl::is_zero;
 use crate::model::scene::{impl_node_flags, NodeFlagInterpretation};
 use crate::model::{mdl, mdx};
+use crate::model::{Animatable, Track};
 use bitfield::bitfield;
 use mdl_codec::SegmentColors;
 mod mdl_codec;
 use crate::model::ModelVersion;
-track_group! {
-    pub enum Particle2Track {
-        Visibility: Particle2Visibility,
-        EmissionRate: Particle2EmissionRate,
-        Width: Particle2Width,
-        Length: Particle2Length,
-        Speed: Particle2Speed,
-        Latitude: Particle2Latitude,
-        Gravity: Particle2Gravity,
-        Variation: Particle2Variation,
-    }
-}
 
 use crate::model::KnownChunk;
 use crate::model::{Color, Vec3};
@@ -69,7 +57,7 @@ pub enum Particle2FilterMode {
 #[mdl(block = "ParticleEmitter2", after_read = "Self::finish_mdl", validate_write = "Self::validate_mdl",
     write_order(node, speed, variation, latitude, gravity, life_span, emission_rate, length, width,
         filter, rows, columns, frame_mode, tail_length, time, segments, alpha, particle_scaling,
-        life_uv, decay_uv, tail_uv, tail_decay_uv, texture_id, squirt, priority_plane, replaceable_id, tracks),
+        life_uv, decay_uv, tail_uv, tail_decay_uv, texture_id, squirt, priority_plane, replaceable_id, visibility),
     virtual_fields(
         #[mdl(flags(Blend = 1, Additive = 2, Modulate = 4, Modulate2x = 8, AlphaKey = 16), get = "Self::mdl_filter", set = "Self::set_mdl_filter")]
         filter: u32,
@@ -103,26 +91,29 @@ pub struct ParticleEmitter2 {
     )]
     /// Embedded node.
     pub node: Node<Particle2Flags>,
-    #[mdl(animatable = "Speed", track = "Particle2Track::Speed", default)]
-    pub speed: f32,
-    #[mdl(animatable = "Variation", track = "Particle2Track::Variation", default)]
-    pub variation: f32,
-    #[mdl(animatable = "Latitude", track = "Particle2Track::Latitude", default)]
-    pub latitude: f32,
-    #[mdl(animatable = "Gravity", track = "Particle2Track::Gravity", default)]
-    pub gravity: f32,
+    #[mdx(tag = *b"KP2S")]
+    #[mdl(property = "Speed", default)]
+    pub speed: Animatable<f32>,
+    #[mdx(tag = *b"KP2R")]
+    #[mdl(property = "Variation", default)]
+    pub variation: Animatable<f32>,
+    #[mdx(tag = *b"KP2L")]
+    #[mdl(property = "Latitude", default)]
+    pub latitude: Animatable<f32>,
+    #[mdx(tag = *b"KP2G")]
+    #[mdl(property = "Gravity", default)]
+    pub gravity: Animatable<f32>,
     #[mdl(property = "LifeSpan", default)]
     pub life_span: f32,
-    #[mdl(
-        animatable = "EmissionRate",
-        track = "Particle2Track::EmissionRate",
-        default
-    )]
-    pub emission_rate: f32,
-    #[mdl(animatable = "Length", track = "Particle2Track::Length", default)]
-    pub length: f32,
-    #[mdl(animatable = "Width", track = "Particle2Track::Width", default)]
-    pub width: f32,
+    #[mdx(tag = *b"KP2E")]
+    #[mdl(property = "EmissionRate", default)]
+    pub emission_rate: Animatable<f32>,
+    #[mdx(tag = *b"KP2N")]
+    #[mdl(property = "Length", default)]
+    pub length: Animatable<f32>,
+    #[mdx(tag = *b"KP2W")]
+    #[mdl(property = "Width", default)]
+    pub width: Animatable<f32>,
     #[mdl(skip, default)]
     pub filter_mode: Particle2FilterMode,
     #[mdl(property = "Rows", default)]
@@ -159,9 +150,10 @@ pub struct ParticleEmitter2 {
     pub priority_plane: u32,
     #[mdl(property = "ReplaceableId", default, skip_if = "is_zero")]
     pub replaceable_id: u32,
-    #[mdl(tracks, channels(Visibility = "Particle2Track::Visibility"))]
-    /// Optional animation tracks.
-    pub tracks: Vec<Particle2Track>,
+    #[mdx(tag = *b"KP2V")]
+    #[mdl(property = "Visibility")]
+    /// Optional visibility animation.
+    pub visibility: Option<Track<f32>>,
 }
 
 impl ParticleEmitter2 {
@@ -200,7 +192,7 @@ impl ParticleEmitter2 {
             squirt: Default::default(),
             priority_plane: Default::default(),
             replaceable_id: Default::default(),
-            tracks: Vec::new(),
+            visibility: None,
         }
     }
 }

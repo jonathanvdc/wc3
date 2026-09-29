@@ -1,22 +1,11 @@
 //! Particles that use model or image resources.
-use crate::model::animation::track_group;
 use crate::model::mdl::Span;
 use crate::model::scene::{impl_node_flags, NodeFlagInterpretation};
 use crate::model::scene::{set_node_kind, validate_node_kind};
 use crate::model::ModelVersion;
 use crate::model::{mdl, mdx};
+use crate::model::{Animatable, Track};
 use bitfield::bitfield;
-track_group! {
-    pub enum ParticleTrack {
-        Visibility: ParticleVisibility,
-        EmissionRate: ParticleEmissionRate,
-        Gravity: ParticleGravity,
-        Longitude: ParticleLongitude,
-        Latitude: ParticleLatitude,
-        Lifespan: ParticleLifespan,
-        Speed: ParticleSpeed,
-    }
-}
 
 use crate::model::KnownChunk;
 use crate::model::ValueError;
@@ -51,34 +40,37 @@ pub struct ParticleEmitter {
     )]
     /// Shared node.
     pub node: Node<ParticleEmitterFlags>,
-    #[mdl(
-        animatable = "EmissionRate",
-        track = "ParticleTrack::EmissionRate",
-        default
-    )]
+    #[mdx(tag = *b"KPEE")]
+    #[mdl(property = "EmissionRate", default)]
     /// Emission rate.
-    pub emission_rate: f32,
-    #[mdl(animatable = "Gravity", track = "ParticleTrack::Gravity", default)]
+    pub emission_rate: Animatable<f32>,
+    #[mdx(tag = *b"KPEG")]
+    #[mdl(property = "Gravity", default)]
     /// Gravity.
-    pub gravity: f32,
-    #[mdl(animatable = "Longitude", track = "ParticleTrack::Longitude", default)]
+    pub gravity: Animatable<f32>,
+    #[mdx(tag = *b"KPLN")]
+    #[mdl(property = "Longitude", default)]
     /// Longitude.
-    pub longitude: f32,
-    #[mdl(animatable = "Latitude", track = "ParticleTrack::Latitude", default)]
+    pub longitude: Animatable<f32>,
+    #[mdx(tag = *b"KPLT")]
+    #[mdl(property = "Latitude", default)]
     /// Latitude.
-    pub latitude: f32,
+    pub latitude: Animatable<f32>,
     #[mdl(property = "Path", default)]
     /// Model or image resource used for each particle.
     pub path: FixedText<PATH_SIZE>,
-    #[mdl(animatable = "LifeSpan", track = "ParticleTrack::Lifespan", default)]
+    #[mdx(tag = *b"KPEL")]
+    #[mdl(property = "LifeSpan", default)]
     /// Particle lifetime.
-    pub life_span: f32,
-    #[mdl(animatable = "InitVelocity", track = "ParticleTrack::Speed", default)]
+    pub life_span: Animatable<f32>,
+    #[mdx(tag = *b"KPES")]
+    #[mdl(property = "InitVelocity", default)]
     /// Initial velocity.
-    pub initial_velocity: f32,
-    #[mdl(tracks, channels(Visibility = "ParticleTrack::Visibility"))]
-    /// Animation tracks.
-    pub tracks: Vec<ParticleTrack>,
+    pub initial_velocity: Animatable<f32>,
+    #[mdx(tag = *b"KPEV")]
+    #[mdl(property = "Visibility")]
+    /// Optional visibility animation.
+    pub visibility: Option<Track<f32>>,
 }
 
 impl ParticleEmitter {
@@ -86,14 +78,14 @@ impl ParticleEmitter {
     pub fn new<F: NodeFlagInterpretation>(node: Node<F>, path: &str) -> Result<Self, ValueError> {
         let mut emitter = Self {
             node: node.cast_flags(),
-            emission_rate: 0.0,
-            gravity: 0.0,
-            longitude: 0.0,
-            latitude: 0.0,
+            emission_rate: Animatable::Static(0.0),
+            gravity: Animatable::Static(0.0),
+            longitude: Animatable::Static(0.0),
+            latitude: Animatable::Static(0.0),
             path: FixedText::default(),
-            life_span: 0.0,
-            initial_velocity: 0.0,
-            tracks: Vec::new(),
+            life_span: Animatable::Static(0.0),
+            initial_velocity: Animatable::Static(0.0),
+            visibility: None,
         };
         emitter.path.set_text(path)?;
         Ok(emitter)

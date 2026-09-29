@@ -9,9 +9,9 @@ pub(super) fn needs_check(field: &Field) -> bool {
             && matches!(field.kind, Kind::Property(_) | Kind::StaticProperty(_)))
 }
 
-pub(super) fn predicate(field: &Field, tracks: Option<&Field>) -> TokenStream {
-    let access = field.value(quote!(self));
-    let mut condition = if field.animated_only {
+pub(super) fn predicate(field: &Field) -> TokenStream {
+    let access = field.borrow(quote!(self));
+    let mut condition = if field.animation_only() {
         quote!(false)
     } else {
         quote!(true)
@@ -21,13 +21,10 @@ pub(super) fn predicate(field: &Field, tracks: Option<&Field>) -> TokenStream {
         condition = quote!(#condition && #get(self).is_some());
     }
     if let Some(function) = &field.skip_if {
-        condition = quote!(#condition && !#function(&#access));
+        condition = quote!(#condition && !#function(#access));
     }
     if matches!(field.kind, Kind::Animatable(_)) {
-        let variant = field.track.as_ref().expect("track was checked");
-        let collection = tracks.expect("tracks was checked").value(quote!(self));
-        condition =
-            quote!(#condition && !(#collection).iter().any(|track| matches!(track, #variant(_))));
+        condition = quote!(#condition && !::wc3::model::mdl::WriteAnimationProperty::has_animation(#access));
         if let Some(function) = &field.enabled_if {
             condition = quote!(#condition && #function(self));
         }

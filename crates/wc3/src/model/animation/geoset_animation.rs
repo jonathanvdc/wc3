@@ -1,14 +1,8 @@
 //! Animated opacity and color for individual geosets.
-use crate::model::animation::track_group;
+use crate::model::Animatable;
 use crate::model::ModelVersion;
 use crate::model::{mdl, mdx};
 use bitfield::bitfield;
-track_group! {
-    pub enum GeosetTrack {
-        Alpha: GeosetAlpha,
-        Color: GeosetColor,
-    }
-}
 
 use crate::model::Color;
 use crate::model::KnownChunk;
@@ -34,39 +28,36 @@ bitfield! {
 #[mdl(
     block = "GeosetAnim",
     default,
-    write_order(alpha, flags, geoset_id, color, tracks)
+    write_order(alpha, flags, geoset_id, color)
 )]
 pub struct GeosetAnimation {
-    #[mdl(animatable = "Alpha", track = "GeosetTrack::Alpha")]
+    #[mdx(tag = *b"KGAO")]
+    #[mdl(property = "Alpha")]
     /// Base alpha.
-    pub alpha: f32,
+    pub alpha: Animatable<f32>,
     #[mdl(flags(DropShadow = 1), allow_bits = 2)]
     /// Rendering flags.
     pub flags: GeosetAnimationFlags,
+    #[mdx(tag = *b"KGAC")]
     #[mdl(
-        animatable = "Color",
-        track = "GeosetTrack::Color",
+        property = "Color",
         enabled_if = "Self::uses_color",
         enable_with = "Self::enable_color"
     )]
     /// Base RGB color.
-    pub color: Color,
+    pub color: Animatable<Color>,
     #[mdl(property = "GeosetId", required)]
     /// Referenced geoset index.
     pub geoset_id: u32,
-    #[mdl(tracks)]
-    /// Animated opacity and color channels.
-    pub tracks: Vec<GeosetTrack>,
 }
 
 impl Default for GeosetAnimation {
     fn default() -> Self {
         Self {
-            alpha: 1.0,
+            alpha: Animatable::Static(1.0),
             flags: GeosetAnimationFlags::default(),
-            color: [1.0; 3],
+            color: Animatable::Static([1.0; 3]),
             geoset_id: 0,
-            tracks: Vec::new(),
         }
     }
 }

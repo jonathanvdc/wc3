@@ -20,15 +20,24 @@ fn emitter_tracks_preserve_keys_and_override_bases() {
     let mut record =
         ParticleEmitter2::decode_mdl(&format!("ParticleEmitter2 \"p\" {{ ObjectId 0, {body} }}"))
             .unwrap();
-    assert_eq!(record.tracks.len(), 8);
+    assert!(
+        record.speed.track().is_some()
+            && record.variation.track().is_some()
+            && record.latitude.track().is_some()
+            && record.gravity.track().is_some()
+            && record.emission_rate.track().is_some()
+            && record.length.track().is_some()
+            && record.width.track().is_some()
+            && record.visibility.is_some()
+    );
     assert_eq!(
         ParticleEmitter2::decode_mdl(&record.encode_mdl().unwrap()).unwrap(),
         record
     );
-    record.speed = 10.0;
+    record.speed.set_value(10.0);
     let decoded = ParticleEmitter2::decode_mdl(&record.encode_mdl().unwrap()).unwrap();
-    assert_eq!(decoded.speed, 0.0);
-    assert_eq!(decoded.tracks, record.tracks);
+    assert_eq!(decoded.speed.value(), Some(&0.0));
+    assert_eq!(decoded.speed.track(), record.speed.track());
     let mut body = String::new();
     for name in ["LifeSpan", "EmissionRate", "Speed", "Alpha", "Visibility"] {
         body.push_str(&format!(
@@ -40,18 +49,18 @@ fn emitter_tracks_preserve_keys_and_override_bases() {
         "ParticleEmitterPopcorn \"p\" {{ ObjectId 0, {body} }}"
     ))
     .unwrap();
-    assert_eq!(record.tracks.len(), 6);
-    let mut decoded = PopcornEmitter::decode_mdl(&record.encode_mdl().unwrap()).unwrap();
-    decoded.tracks.sort_by_key(|track| {
-        record
-            .tracks
-            .iter()
-            .position(|original| original.tag() == track.tag())
-            .unwrap()
-    });
-    assert_eq!(decoded, record);
-    record.alpha = 0.0;
+    assert!(
+        record.life_span.track().is_some()
+            && record.emission_rate.track().is_some()
+            && record.speed.track().is_some()
+            && record.alpha.track().is_some()
+            && record.color.track().is_some()
+            && record.visibility.is_some()
+    );
     let decoded = PopcornEmitter::decode_mdl(&record.encode_mdl().unwrap()).unwrap();
-    assert_eq!(decoded.alpha, 1.0);
-    assert_eq!(decoded.tracks.len(), record.tracks.len());
+    assert_eq!(decoded, record);
+    record.alpha.set_value(0.0);
+    let decoded = PopcornEmitter::decode_mdl(&record.encode_mdl().unwrap()).unwrap();
+    assert_eq!(decoded.alpha.value(), Some(&1.0));
+    assert_eq!(decoded.alpha.track(), record.alpha.track());
 }

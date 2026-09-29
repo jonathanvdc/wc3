@@ -1,4 +1,5 @@
 use std::mem::size_of;
+use wc3::model::animation::Animatable;
 use wc3::model::chunks::{ModelChunk, RawChunk, UnknownChunk};
 use wc3::model::mdx::Read as _;
 use wc3::model::mdx::Write as _;
@@ -65,18 +66,24 @@ fn version_markers_select_record_fields() {
     assert_eq!(shader.shader().as_ref(), "Shaders\\Unit.shader");
 
     let mut layer = Layer::<V1000>::new();
-    layer.set_emissive_gain(0.5);
-    layer.set_fresnel_opacity(0.25);
-    assert_eq!(layer.emissive_gain(), 0.5);
-    assert_eq!(layer.fresnel_opacity(), 0.25);
+    layer.set_emissive_gain(Animatable::Static(0.5));
+    layer.set_fresnel_opacity(Animatable::Static(0.25));
+    assert_eq!(layer.emissive_gain(), Animatable::Static(0.5));
+    assert_eq!(layer.fresnel_opacity(), Animatable::Static(0.25));
 
     let classic_light = Light::<V800>::new(Node::new("Classic", 1).unwrap(), 0);
     let modern_light = Light::<V1800>::new(Node::new("Modern", 2).unwrap(), 0);
     assert!(classic_light.try_shadow_intensity().is_err());
     assert!(classic_light.try_shadow_casting_range().is_err());
     assert_eq!(modern_light.try_shadow_intensity().unwrap(), 0.0);
-    assert_eq!(modern_light.try_shadow_casting_range().unwrap().start, 0.0);
-    assert_eq!(modern_light.try_shadow_casting_range().unwrap().end, 0.0);
+    assert_eq!(
+        modern_light.try_shadow_casting_range().unwrap().start,
+        Animatable::Static(0.0)
+    );
+    assert_eq!(
+        modern_light.try_shadow_casting_range().unwrap().end,
+        Animatable::Static(0.0)
+    );
 
     let classic_geoset = Geoset::<V800>::new(&[], &[], &[]).unwrap();
     let mut modern_geoset = Geoset::<V1800>::new(&[], &[], &[]).unwrap();
