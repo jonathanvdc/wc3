@@ -84,14 +84,6 @@ impl<V: ModelVersion> Model<V> {
         }
     }
 
-    /// Returns the first `VERS` value, if present.
-    pub fn stored_version(&self) -> Option<u32> {
-        self.chunks.iter().find_map(|chunk| match chunk {
-            ModelChunk::Version(_) => Some(V::NUMBER),
-            _ => None,
-        })
-    }
-
     /// Returns the version selected by the model type.
     pub fn version(&self) -> Version {
         V::NUMBER

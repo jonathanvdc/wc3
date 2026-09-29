@@ -284,7 +284,7 @@ impl<V: ModelVersion> Model<V> {
             };
             model.chunks.push(converted);
         }
-        if model.stored_version().is_none() {
+        if model.chunk(*b"VERS").is_none() {
             model.chunks.insert(0, VersionChunk::<T>::new().into());
             context.issue(
                 "VERS",

@@ -320,7 +320,11 @@ fn absent_version_is_inserted_and_dynamic_sources_convert() {
     let converted = source
         .convert::<V900>(&ConversionOptions::strict())
         .unwrap();
-    assert_eq!(converted.model.stored_version(), Some(900));
+    assert!(matches!(
+        converted.model.chunk(*b"VERS"),
+        Some(ModelChunk::Version(_))
+    ));
+    assert_eq!(converted.model.version(), 900);
     assert_eq!(converted.report.issues[0].path, "VERS");
     let dynamic = DynamicModel::V800(sample::<V800>());
     let converted = dynamic
