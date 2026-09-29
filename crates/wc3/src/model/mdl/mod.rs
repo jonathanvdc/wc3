@@ -57,6 +57,24 @@
 //! [`Writer`] writes to any standard I/O sink. Errors can leave partial output;
 //! use `encode_mdl()` for an owned string before replacing a file.
 
+//!
+//! # Standard I/O
+//!
+//! [`from_reader`] buffers the entire source through EOF and rejects trailing
+//! input. [`to_writer`] streams output and checks block balance.
+//! Writers do not flush their sinks; I/O failures may leave partial output.
+//!
+//! ```
+//! use wc3::model::{mdl, Model, V800};
+//!
+//! let model = "Version { FormatVersion 800, } Model \"Example\" {}".parse::<Model<V800>>()?;
+//! let mut output = Vec::new();
+//! mdl::to_writer(&mut output, &model)?;
+//! let decoded: Model<V800> = mdl::from_reader(output.as_slice())?;
+//! assert_eq!(decoded.version(), 800);
+//! # Ok::<(), Box<dyn std::error::Error>>(())
+//! ```
+
 mod enumeration;
 #[doc(hidden)]
 pub use enumeration::enum_names_valid;
@@ -157,3 +175,6 @@ pub(crate) fn is_zero(value: &u32) -> bool {
 pub(crate) fn is_positive_zero(value: &f32) -> bool {
     value.to_bits() == 0
 }
+
+mod io;
+pub use io::{from_reader, to_writer, to_writer_with_dialect, FromReaderError};

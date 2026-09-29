@@ -174,6 +174,13 @@ with:
 cargo doc --workspace --no-deps --open
 ```
 
+Standard I/O adapters are available as `mdx::from_reader` / `mdx::to_writer`
+and `mdl::from_reader` / `mdl::to_writer`. Readers buffer through EOF and
+validate complete input. MDX output is buffered; MDL output streams. Neither
+writer adapter flushes its sink. Use `mdx::from_reader_with_version` for dynamic
+version detection with a fallback and `mdl::to_writer_with_dialect` to select
+text syntax.
+
 ## Development
 
 Run the workspace checks from the repository root:

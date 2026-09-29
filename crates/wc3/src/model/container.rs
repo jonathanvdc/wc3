@@ -233,6 +233,12 @@ impl DynamicModel {
     }
 }
 
+impl mdx::Write for DynamicModel {
+    fn write_mdx(&self, encoder: &mut Encoder<'_>) -> Result<(), mdx::WriteError> {
+        visit_model!(self, |model| model.write_mdx(encoder))
+    }
+}
+
 fn scan_version(mut cursor: Cursor<'_>) -> Result<Option<Version>, ReadError> {
     if cursor.read_bytes(4).ok() != Some(MAGIC.as_slice()) {
         return Err(ReadError::InvalidMagic);

@@ -27,6 +27,24 @@
 //! The [`Read`] and [`Write`] derives support fields in declaration order and
 //! explicit numeric enum mappings.
 
+//!
+//! # Standard I/O
+//!
+//! [`from_reader`] buffers the entire source through EOF and rejects trailing
+//! input. [`to_writer`] buffers the encoded value before writing it.
+//! Writers do not flush their sinks; I/O failures may leave partial output.
+//!
+//! ```
+//! use wc3::model::{mdx, Model, V800};
+//!
+//! let model = Model::<V800>::new();
+//! let mut output = Vec::new();
+//! mdx::to_writer(&mut output, &model)?;
+//! let decoded: Model<V800> = mdx::from_reader(output.as_slice())?;
+//! assert_eq!(decoded.version(), 800);
+//! # Ok::<(), Box<dyn std::error::Error>>(())
+//! ```
+
 mod cursor;
 pub use cursor::{Cursor, Read};
 mod encoder;
@@ -37,3 +55,6 @@ mod fixed_text;
 pub use fixed_text::FixedText;
 
 pub use wc3_derive::{MdxRead as Read, MdxValue as Value, MdxWrite as Write};
+
+mod io;
+pub use io::{from_reader, from_reader_with_version, to_writer, FromReaderError, ToWriterError};
