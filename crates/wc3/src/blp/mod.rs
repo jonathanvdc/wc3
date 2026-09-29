@@ -4,21 +4,24 @@
 //! Call [`BlpRef::to_owned`] to edit the container, or write the borrowed view
 //! directly. Writing lays out mipmaps in level order and recalculates offsets;
 //! it does not reproduce arbitrary source padding or mipmap placement.
-//! With the `blp-image` feature, `decode_mip` converts encoded mipmaps to
-//! [`image::RgbaImage`].
+//! With `blp-decode`, `decode_mip` converts encoded mipmaps to
+//! [`image::RgbaImage`]. With `blp-encode`, `encode_image` creates a container
+//! from RGBA pixels.
 
 mod blp1;
 mod blp2;
 mod codec;
 mod error;
-#[cfg(feature = "blp-image")]
+#[cfg(any(feature = "blp-decode", feature = "blp-encode"))]
 mod pixels;
 
 pub use blp1::{Blp1, Blp1Content, Blp1ContentRef, Blp1Header, Blp1Ref};
 pub use blp2::{Blp2, Blp2Content, Blp2ContentRef, Blp2Header, Blp2Ref, DxtFormat};
 pub use error::{ReadError, ReadErrorKind, WriteError};
-#[cfg(feature = "blp-image")]
+#[cfg(feature = "blp-decode")]
 pub use pixels::DecodeError;
+#[cfg(feature = "blp-encode")]
+pub use pixels::{EncodeError, EncodeFormat, EncodeOptions};
 
 /// Number of slots in a BLP mipmap location table.
 pub const MIPMAP_SLOTS: usize = 16;

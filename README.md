@@ -92,7 +92,7 @@ The borrowed view keeps encoded mipmaps in the input buffer. The owned form
 supports edits. Writing recalculates mipmap offsets and discards source padding.
 The container reader and writer have no image dependencies.
 
-Enable `wc3/blp-image` to decode any BLP1 or BLP2 mipmap to an
+Enable `wc3/blp-decode` to decode any BLP1 or BLP2 mipmap to an
 `image::RgbaImage`:
 
 ```rust
@@ -103,9 +103,26 @@ fn decode(bytes: &[u8]) -> Result<image::RgbaImage, Box<dyn std::error::Error>> 
 }
 ```
 
-This feature supports BLP JPEG, indexed colour with 0, 1, 4, or 8-bit alpha,
-DXT1/3/5, and uncompressed BGRA. JPEG decoding uses `zune-jpeg`. Pixel encoding
-is not yet available.
+Enable `wc3/blp-encode` to encode RGBA images as BLP JPEG, indexed colour with
+0, 1, 4, or 8-bit alpha, DXT1/3/5, or uncompressed BGRA.
+`Blp::encode_image` generates mipmaps; `Blp::encode_mipmaps` accepts
+authored mipmaps. Both return an editable container whose `write` method
+produces the BLP file:
+
+```rust
+use wc3::blp::{Blp, EncodeFormat, EncodeOptions};
+
+fn encode(image: &image::RgbaImage) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+    let options = EncodeOptions {
+        format: EncodeFormat::Blp1Indexed,
+        ..Default::default()
+    };
+    Ok(Blp::encode_image(image, options)?.write()?)
+}
+```
+
+JPEG encoding stores a complete four-component JPEG in each mipmap, with an
+empty shared header. Indexed encoding uses one palette across all mipmaps.
 
 ## Supported model data
 
@@ -216,7 +233,7 @@ against your own model collection:
 
 ```sh
 WC3_FIXTURES=/path/to/models cargo test -p wc3 --test corpus -- --ignored
-WC3_FIXTURES=/path/to/models cargo test -p wc3 --features blp-image --test blp -- --ignored
+WC3_FIXTURES=/path/to/models cargo test -p wc3 --features blp-decode --test blp -- --ignored
 ```
 
 The corpus tests are ignored by default and require a directory containing
