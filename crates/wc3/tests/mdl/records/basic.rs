@@ -51,7 +51,7 @@ fn material_directives_and_classic_layers() {
     let material = Material::<V800>::decode_mdl(text).unwrap();
     assert_eq!(material.priority_plane, -3);
     assert_eq!(material.render_mode.bits(), 3);
-    assert!(material.layers[0].shading_flags.two_sided());
+    assert!(!material.layers[0].shading_flags.two_sided());
     roundtrip(&material);
     let layer =
         Layer::<V800>::decode_mdl("Layer { TextureID 0 { DontInterp, } static Alpha 1.0, }")
@@ -65,7 +65,7 @@ fn material_directives_and_classic_layers() {
     let mut material = Material::<V800>::new();
     material.render_mode = MaterialRenderFlags(2);
     material.layers = [Layer::new()].to_vec();
-    assert!(material.encode_mdl().is_err());
+    roundtrip(&material);
 }
 #[test]
 fn version_selected_pbr_and_shaders() {
@@ -198,4 +198,29 @@ fn animated_texture_slots_ignore_base_ids() {
         layer.texture_slots()[0].track
     );
     assert!(layer.encode_mdl().is_err()); // Engine syntax cannot identify this channel.
+}
+
+#[test]
+fn material_and_layer_two_sided_flags_roundtrip_independently() {
+    use wc3::model::mdl::Dialect;
+    use wc3::model::mdx::{Read as _, Write as _};
+    macro_rules! check {
+        ($($version:ty),*) => { $( {
+            for material_flag in ["", "TwoSided,"] {
+                let source = format!("Material {{ {material_flag} Layer {{ FilterMode Blend, }} Layer {{ TwoSided, FilterMode Additive, }} }}");
+                let value = Material::<$version>::decode_mdl(&source).unwrap();
+                assert_eq!(value.render_mode.two_sided(), !material_flag.is_empty());
+                assert!(!value.layers[0].shading_flags.two_sided());
+                assert!(value.layers[1].shading_flags.two_sided());
+                let original = value.encode_mdx().unwrap();
+                for dialect in [Dialect::Warcraft3, Dialect::HiveWorkshop] {
+                    let binary = Material::<$version>::decode_mdx(&original).unwrap();
+                    let text = binary.encode_mdl_with_dialect(dialect).unwrap();
+                    let restored = Material::<$version>::decode_mdl(&text).unwrap();
+                    assert_eq!(restored.encode_mdx().unwrap(), original);
+                }
+            }
+        } )* };
+    }
+    check!(V800, V900, V1000, V1100, V1800);
 }

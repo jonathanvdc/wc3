@@ -39,8 +39,6 @@ bitfield! {
 #[derive(Clone, Debug, PartialEq, mdl::Read, mdl::Write)]
 #[mdl(
     block = "Material",
-    after_read = "Self::finish_mdl",
-    validate_write = "Self::validate_mdl",
     write_order(priority_plane, render_mode, unfogged, shader, layers),
     virtual_fields(
         #[mdl(flag = "Unfogged", default)]

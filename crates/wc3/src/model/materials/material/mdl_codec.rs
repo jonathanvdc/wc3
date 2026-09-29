@@ -70,27 +70,4 @@ impl<V: ModelVersion> Material<V> {
     ) -> Result<(), mdl::ReadError> {
         Ok(())
     }
-
-    pub(super) fn finish_mdl(&mut self, _: Span) -> Result<(), mdl::ReadError> {
-        if self.render_mode.two_sided() {
-            for layer in &mut self.layers {
-                layer.shading_flags.set_two_sided(true);
-            }
-        }
-        Ok(())
-    }
-
-    pub(super) fn validate_mdl(&self) -> Result<(), mdl::WriteError> {
-        if self.render_mode.two_sided()
-            && self
-                .layers
-                .iter()
-                .any(|layer| !layer.shading_flags.two_sided())
-        {
-            return Err(mdl::WriteError::Unsupported(
-                "material TwoSided with one-sided layers",
-            ));
-        }
-        Ok(())
-    }
 }
