@@ -11,18 +11,16 @@ features.
 
 ## Getting started
 
-The library crate is `wc3`. To use a local checkout, add it to your project's
-`Cargo.toml` (adjust the path to your checkout):
+The library crate is `wc3`. Add the latest published version to your project:
 
-```toml
-[dependencies]
-wc3 = { path = "../wc3/crates/wc3" }
+```sh
+cargo add wc3
 ```
 
-Add `features = ["blp-decode", "blp-encode"]` to that dependency when you need
-both BLP image operations. You can enable either feature on its own. Add a
-direct `image = "0.25"` dependency if you use `image` types in your code, as
-the examples below do.
+Enable both BLP image operations with
+`cargo add wc3 --features blp-decode,blp-encode`. You can enable either feature
+on its own. Add a direct `image = "0.25"` dependency if you use `image` types in
+your code, as the examples below do.
 
 | API | Cargo feature |
 | --- | --- |
