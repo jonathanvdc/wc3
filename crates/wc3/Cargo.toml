@@ -12,4 +12,10 @@ categories = ["parser-implementations", "game-development"]
 
 [dependencies]
 bitfield = "0.19"
+image = { version = "0.25.10", default-features = false, optional = true }
+zune-jpeg = { version = "0.5.15", default-features = false, optional = true }
 wc3-derive = { path = "../wc3-derive", version = "0.1.0" }
+
+[features]
+default = []
+blp-image = ["dep:image", "dep:zune-jpeg"]

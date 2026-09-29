@@ -89,8 +89,23 @@ fn update(bytes: &[u8]) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
 ```
 
 The borrowed view keeps encoded mipmaps in the input buffer. The owned form
-supports edits. This container API does not decode JPEG, indexed, DXT, or BGRA
-pixels; writing recalculates mipmap offsets and discards source padding.
+supports edits. Writing recalculates mipmap offsets and discards source padding.
+The container reader and writer have no image dependencies.
+
+Enable `wc3/blp-image` to decode any BLP1 or BLP2 mipmap to an
+`image::RgbaImage`:
+
+```rust
+use wc3::blp::BlpRef;
+
+fn decode(bytes: &[u8]) -> Result<image::RgbaImage, Box<dyn std::error::Error>> {
+    Ok(BlpRef::read(bytes)?.decode_mip(0)?)
+}
+```
+
+This feature supports BLP JPEG, indexed colour with 0, 1, 4, or 8-bit alpha,
+DXT1/3/5, and uncompressed BGRA. JPEG decoding uses `zune-jpeg`. Pixel encoding
+is not yet available.
 
 ## Supported model data
 
