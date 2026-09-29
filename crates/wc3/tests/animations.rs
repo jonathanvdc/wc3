@@ -54,7 +54,7 @@ fn node_keeps_name_padding_and_track_order() {
             .unwrap()
             .into(),
     ];
-    node.tracks = (&tracks).to_vec();
+    node.tracks = tracks.to_vec();
     let mut bytes = node.encode_mdx().unwrap();
     bytes[20] = 0xe1;
     let parsed = Node::decode_mdx(&bytes).unwrap();

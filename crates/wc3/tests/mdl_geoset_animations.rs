@@ -114,18 +114,18 @@ fn refuses_binary_data_that_text_would_discard() {
     value.color = [0.0; 3];
     refuses_before_output(&value);
     value.color = [1.0; 3];
-    value.tracks = (&[color.clone().into()]).to_vec();
+    value.tracks = [color.clone().into()].to_vec();
     refuses_before_output(&value);
     value.flags = GeosetAnimationFlags(2);
     value.color = [0.5; 3];
     refuses_before_output(&value);
     value.color = [1.0; 3];
-    value.tracks = (&[alpha.clone().into()]).to_vec();
+    value.tracks = [alpha.clone().into()].to_vec();
     value.alpha = -0.0;
     refuses_before_output(&value);
     value.alpha = 1.0;
-    value.tracks = (&[alpha.clone().into(), alpha.into()]).to_vec();
+    value.tracks = [alpha.clone().into(), alpha.into()].to_vec();
     refuses_before_output(&value);
-    value.tracks = (&[color.clone().into(), color.into()]).to_vec();
+    value.tracks = [color.clone().into(), color.into()].to_vec();
     refuses_before_output(&value);
 }

@@ -140,7 +140,7 @@ fn tracks_are_checked_even_when_static_fields_are_neutral() {
     )
     .unwrap()
     .into();
-    layer.tracks = (&[track]).to_vec();
+    layer.tracks = [track].to_vec();
     let error = layer
         .convert::<V800>(&ConversionOptions::strict())
         .unwrap_err();
@@ -148,7 +148,7 @@ fn tracks_are_checked_even_when_static_fields_are_neutral() {
     let lossy = layer.convert::<V800>(&ConversionOptions::lossy()).unwrap();
     assert!(lossy.model.tracks.is_empty());
     let mut light = Light::<V1800>::new(Node::new("Lamp", 1).unwrap(), 0);
-    light.tracks = (&[AnimationTrack::<LightDamping>::step(
+    light.tracks = [AnimationTrack::<LightDamping>::step(
         vec![ValueKeyframe {
             frame: 0,
             value: 1.0,
@@ -156,8 +156,8 @@ fn tracks_are_checked_even_when_static_fields_are_neutral() {
         None,
     )
     .unwrap()
-    .into()])
-        .to_vec();
+    .into()]
+    .to_vec();
     assert_eq!(
         light
             .convert::<V1400>(&ConversionOptions::strict())

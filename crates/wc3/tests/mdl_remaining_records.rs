@@ -186,7 +186,7 @@ fn camera_nested_tracks_aliases_required_fields_and_variants() {
     let mut invalid = record.clone();
     let mut tracks = record.tracks.as_slice().to_vec();
     tracks.reverse();
-    invalid.tracks = (&tracks).to_vec();
+    invalid.tracks = tracks.to_vec();
     assert!(invalid.encode_mdl().is_err());
     invalid = record;
     invalid.variant = CameraVariant::Variant1([0; 12]);

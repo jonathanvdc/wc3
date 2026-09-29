@@ -43,10 +43,10 @@ fn independent_emitter_fixtures_roundtrip() {
     particle.latitude = 5.0;
     particle.life_span = 6.0;
     particle.initial_velocity = 7.0;
-    particle.tracks = (&[ParticleTrack::EmissionRate(
+    particle.tracks = [ParticleTrack::EmissionRate(
         AnimationTrack::<ParticleEmissionRate>::linear(vec![], None).unwrap(),
-    )])
-        .to_vec();
+    )]
+    .to_vec();
     roundtrip(&particle);
     node.flags = NodeFlags(0x4000);
     let mut ribbon = RibbonEmitter::new(node);
@@ -61,13 +61,13 @@ fn independent_emitter_fixtures_roundtrip() {
     ribbon.columns = 3;
     ribbon.material_id = 4;
     ribbon.gravity = -0.0;
-    ribbon.tracks = (&[
+    ribbon.tracks = [
         RibbonTrack::TextureSlot(
             AnimationTrack::<RibbonTextureSlot>::linear(vec![], None).unwrap(),
         ),
         RibbonTrack::Alpha(AnimationTrack::<RibbonAlpha>::linear(vec![], None).unwrap()),
-    ])
-        .to_vec();
+    ]
+    .to_vec();
     roundtrip(&ribbon);
     assert!(ribbon.encode_mdl().unwrap().contains("Gravity -0.0,"));
 }

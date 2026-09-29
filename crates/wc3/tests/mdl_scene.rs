@@ -193,10 +193,10 @@ fn independent_binary_record_fixtures_roundtrip() {
     });
     roundtrip(&light);
     let mut old_light = Light::<V800>::new(node.clone(), 0);
-    old_light.tracks = (&[LightTrack::Damping(
+    old_light.tracks = [LightTrack::Damping(
         AnimationTrack::<LightDamping>::linear(vec![], None).unwrap(),
-    )])
-        .to_vec();
+    )]
+    .to_vec();
     assert!(old_light.encode_mdl().is_err());
     node.flags = NodeFlags(0x400);
     roundtrip(&EventObject::new(node.clone(), 2, &[50, -20, 50]));

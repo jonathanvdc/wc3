@@ -9,7 +9,7 @@ fn event_object_round_trip() {
     let node = Node::new("Sound", 2).unwrap();
     let mut event = EventObject::new(node, u32::MAX, &[100, 200]);
     event.global_sequence_id = 3;
-    event.frames = (&[100, 200, 300]).to_vec();
+    event.frames = [100, 200, 300].to_vec();
     let mut model = Model::<wc3::model::V800>::new();
     model.set_event_objects(&[event]);
     let parsed = Model::<wc3::model::V800>::decode_mdx(&model.encode_mdx().unwrap()).unwrap();

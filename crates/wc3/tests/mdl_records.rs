@@ -126,11 +126,11 @@ fn rejects_hidden_binary_storage_and_noncanonical_channel_order() {
     use wc3::model::mdx::Write as _;
     let layer = Layer::<V800>::decode_mdl("Layer { static TextureID 0 <= 0, }").unwrap();
     let mut layer = layer;
-    layer.tracks = (&[
+    layer.tracks = [
         LayerTrack::Alpha(AnimationTrack::<LayerAlpha>::linear(vec![], None).unwrap()),
         LayerTrack::TextureId(AnimationTrack::<LayerTextureId>::linear(vec![], None).unwrap()),
-    ])
-        .to_vec();
+    ]
+    .to_vec();
     assert!(layer.encode_mdl().is_err());
     let attachment = Attachment::decode_mdl("Attachment \"a\" { ObjectId 0, }").unwrap();
     let mut bytes = attachment.encode_mdx().unwrap();

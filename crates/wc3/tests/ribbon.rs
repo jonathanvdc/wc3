@@ -17,10 +17,10 @@ fn ribbon_fields_and_integer_animation_round_trip() {
         frame: 100,
         value: 7u32,
     };
-    emitter.tracks = (&[AnimationTrack::<RibbonTextureSlot>::linear(vec![key], None)
+    emitter.tracks = [AnimationTrack::<RibbonTextureSlot>::linear(vec![key], None)
         .unwrap()
-        .into()])
-        .to_vec();
+        .into()]
+    .to_vec();
     let mut model = Model::<wc3::model::V800>::new();
     model.set_ribbon_emitters(std::slice::from_ref(&emitter));
     let bytes = model.encode_mdx().unwrap();

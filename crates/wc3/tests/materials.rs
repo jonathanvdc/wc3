@@ -76,8 +76,6 @@ fn local_material_layers_are_bounded_when_available() {
                 fn check<V: ModelVersion>(model: Model<V>) {
                     for material in model.materials() {
                         for layer in material.layers.as_slice() {
-                            layer.filter_mode;
-                            layer.alpha;
                             let _ = layer.try_texture_slots();
                             layer.tracks.as_slice();
                         }

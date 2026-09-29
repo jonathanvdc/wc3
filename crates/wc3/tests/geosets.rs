@@ -48,12 +48,12 @@ fn check_version<V: ModelVersion>() {
     geoset.material_id = 7;
     geoset.set_matrix_groups(&[vec![1, 2], vec![3]]).unwrap();
     geoset.set_vertex_groups(&[0, 1]).unwrap();
-    geoset.sequence_extents = (&[GeosetExtent {
+    geoset.sequence_extents = [GeosetExtent {
         bounds_radius: 2.0,
         minimum: [-2.0; 3],
         maximum: [2.0; 3],
-    }])
-        .to_vec();
+    }]
+    .to_vec();
     geoset.set_uv_sets(&[vec![[0.0, 0.0]; 2], vec![[1.0, 1.0]; 2]]);
     geoset.set_normal(1, [0.0, 1.0, 0.0]).unwrap();
     geoset.selection_group = 3;
@@ -165,7 +165,6 @@ fn local_geosets_have_bounded_mesh_sections_when_available() {
                         geoset.vertex_groups();
                         geoset.matrix_group_sizes();
                         geoset.matrix_indices();
-                        geoset.extent;
                         geoset.sequence_extents.as_slice();
                         let _ = geoset.try_tangents();
                         let _ = geoset.try_skin_weights();

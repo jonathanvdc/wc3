@@ -87,7 +87,7 @@ fn camera_extended_tracks_survive_model_io_and_conversion() {
         CameraTrack::f_stop(2.8),
     ];
     let mut camera = Camera::<V1800>::new("Portrait").unwrap();
-    camera.tracks = (&tracks).to_vec();
+    camera.tracks = tracks.to_vec();
     let mut model = Model::<V1800>::new();
     model.set_cameras(&[camera]);
     let bytes = model.encode_mdx().unwrap();
