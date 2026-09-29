@@ -11,6 +11,7 @@ use syn::{
 enum Mode {
     Value,
     Tagged,
+    Choice,
 }
 enum Kind {
     Value,
@@ -28,6 +29,7 @@ struct Variant {
 
 pub(super) fn expand(input: &DeriveInput, reading: bool) -> Result<TokenStream> {
     let mut mode = None;
+    let mut default = false;
     let mut validate_read: Option<Path> = None;
     let mut validate_write: Option<Path> = None;
     for attr in &input.attrs {
@@ -35,15 +37,21 @@ pub(super) fn expand(input: &DeriveInput, reading: bool) -> Result<TokenStream> 
             continue;
         }
         attr.parse_nested_meta(|meta| {
-            if meta.path.is_ident("value") || meta.path.is_ident("tagged") {
+            if meta.path.is_ident("value") || meta.path.is_ident("tagged") || meta.path.is_ident("choice") {
                 if mode.is_some() {
-                    return Err(meta.error("choose exactly one of value or tagged"));
+                    return Err(meta.error("choose exactly one of value, tagged, or choice"));
                 }
                 mode = Some(if meta.path.is_ident("value") {
                     Mode::Value
-                } else {
+                } else if meta.path.is_ident("tagged") {
                     Mode::Tagged
+                } else {
+                    Mode::Choice
                 });
+                Ok(())
+            } else if meta.path.is_ident("default") {
+                if default { return Err(meta.error("duplicate default")); }
+                default = true;
                 Ok(())
             } else if meta.path.is_ident("validate_read") || meta.path.is_ident("validate_write") {
                 let target = if meta.path.is_ident("validate_read") {
@@ -58,12 +66,25 @@ pub(super) fn expand(input: &DeriveInput, reading: bool) -> Result<TokenStream> 
                 *target = Some(value.parse()?);
                 Ok(())
             } else {
-                Err(meta.error("enums support value, tagged, validate_read, and validate_write"))
+                Err(meta.error("enums support value, tagged, choice, default, validate_read, and validate_write"))
             }
         })?;
     }
-    let mode =
-        mode.ok_or_else(|| Error::new_spanned(&input.ident, "MDL enums require value or tagged"))?;
+    let mode = mode.ok_or_else(|| {
+        Error::new_spanned(&input.ident, "MDL enums require value or tagged, or choice")
+    })?;
+    if default && !matches!(mode, Mode::Choice) {
+        return Err(Error::new_spanned(
+            input,
+            "enum default is supported only with choice",
+        ));
+    }
+    if matches!(mode, Mode::Choice) && (validate_read.is_some() || validate_write.is_some()) {
+        return Err(Error::new_spanned(
+            input,
+            "choice enums do not support validation hooks",
+        ));
+    }
     let Data::Enum(data) = &input.data else {
         unreachable!()
     };
@@ -90,7 +111,7 @@ pub(super) fn expand(input: &DeriveInput, reading: bool) -> Result<TokenStream> 
         if unknown_attrs > 0 {
             if unknown.is_some()
                 || unknown_attrs != 1
-                || !matches!(mode, Mode::Value)
+                || !matches!(mode, Mode::Value | Mode::Choice)
                 || !matches!(&variant.fields, Fields::Unnamed(fields) if fields.unnamed.len() == 1)
                 || variant
                     .attrs
@@ -101,7 +122,7 @@ pub(super) fn expand(input: &DeriveInput, reading: bool) -> Result<TokenStream> 
             {
                 return Err(Error::new_spanned(
                     variant,
-                    "unknown requires a single payload variant in a value enum",
+                    "unknown requires a single payload variant in a value or choice enum",
                 ));
             }
             unknown = Some(&variant.ident);
@@ -175,7 +196,7 @@ pub(super) fn expand(input: &DeriveInput, reading: bool) -> Result<TokenStream> 
             }
         };
         let (name, kind) = match mode {
-            Mode::Value => {
+            Mode::Value | Mode::Choice => {
                 if ty.is_some() || delegate || !matches!(framing, None | Some(Kind::Value)) {
                     return Err(Error::new_spanned(
                         variant,
@@ -233,6 +254,15 @@ pub(super) fn expand(input: &DeriveInput, reading: bool) -> Result<TokenStream> 
             kind,
             ty,
         });
+    }
+    if matches!(mode, Mode::Choice) {
+        if variants.is_empty() {
+            return Err(Error::new_spanned(
+                input,
+                "choice enums need at least one known variant",
+            ));
+        }
+        return expand_choice(input, &variants, unknown, default, reading);
     }
     let name = &input.ident;
     let names = variants
@@ -334,6 +364,111 @@ pub(super) fn expand(input: &DeriveInput, reading: bool) -> Result<TokenStream> 
                     if !::wc3::model::mdl::enum_names_valid(__wc3_mdl_names) { return ::core::result::Result::Err(::wc3::model::mdl::WriteError::Unsupported("invalid or duplicate MDL enum variant names")); }
                     #validate
                     match self { #(#choices,)* }
+                }
+            }
+        })
+    }
+}
+
+/// A choice is one comma-terminated keyword embedded among other record fields.
+/// Its state is the selected variant, so every second keyword is a duplicate.
+fn expand_choice(
+    input: &DeriveInput,
+    variants: &[Variant],
+    unknown: Option<&Ident>,
+    default: bool,
+    reading: bool,
+) -> Result<TokenStream> {
+    let name = &input.ident;
+    let names: Vec<_> = variants.iter().map(|variant| &variant.name).collect();
+    let members: Vec<_> = variants.iter().map(|variant| &variant.member).collect();
+    let mut generics = input.generics.clone();
+    if reading && default {
+        generics
+            .make_where_clause()
+            .predicates
+            .push(parse_quote!(Self: ::core::default::Default));
+    }
+    let (impl_generics, ty_generics, clause) = generics.split_for_impl();
+    let visit = quote! {
+        fn visit_mdl_names(visitor: &mut dyn ::core::ops::FnMut(&'static str, bool)) {
+            #(visitor(#names, false);)*
+        }
+    };
+    if reading {
+        let members_index = 0..members.len();
+        let missing = if default {
+            quote!(::core::result::Result::Ok(
+                ::core::default::Default::default()
+            ))
+        } else {
+            quote!(::core::result::Result::Err(
+                ::wc3::model::mdl::ReadError::new(
+                    span,
+                    ::wc3::model::mdl::ReadErrorKind::Expected(concat!(
+                        "a ",
+                        stringify!(#name),
+                        " choice"
+                    )),
+                )
+            ))
+        };
+        Ok(quote! {
+            impl #impl_generics ::wc3::model::mdl::ReadFields for #name #ty_generics #clause {
+                type State = ::core::option::Option<Self>;
+                #visit
+                fn accepts_mdl_field(name: &str, static_form: bool) -> bool {
+                    !static_form && [#(#names,)*].contains(&name)
+                }
+                fn begin_mdl_fields(parser: &mut ::wc3::model::mdl::Parser<'_>) -> ::core::result::Result<Self::State, ::wc3::model::mdl::ReadError> {
+                    if !::wc3::model::mdl::enum_names_valid(&[#(#names,)*]) {
+                        return ::core::result::Result::Err(parser.error(::wc3::model::mdl::ReadErrorKind::UnsupportedField));
+                    }
+                    ::core::result::Result::Ok(::core::option::Option::None)
+                }
+                fn read_mdl_field<'a>(state: Self::State, parser: &mut ::wc3::model::mdl::Parser<'a>, field: ::wc3::model::mdl::Field<'a>, _: ::wc3::model::mdl::Parser<'a>) -> ::core::result::Result<Self::State, ::wc3::model::mdl::ReadError> {
+                    if state.is_some() {
+                        return ::core::result::Result::Err(::wc3::model::mdl::ReadError::new(field.span, ::wc3::model::mdl::ReadErrorKind::DuplicateField));
+                    }
+                    let names = [#(#names,)*];
+                    let value = match names.iter().position(|name| *name == field.name) {
+                        #(::core::option::Option::Some(#members_index) => Self::#members,)*
+                        _ => return ::core::result::Result::Err(::wc3::model::mdl::ReadError::new(field.span, ::wc3::model::mdl::ReadErrorKind::UnknownField)),
+                    };
+                    parser.expect(::wc3::model::mdl::TokenKind::Comma)?;
+                    ::core::result::Result::Ok(::core::option::Option::Some(value))
+                }
+                fn finish_mdl_fields(state: Self::State, span: ::wc3::model::mdl::Span, _: ::wc3::model::mdl::Span) -> ::core::result::Result<Self, ::wc3::model::mdl::ReadError> {
+                    match state { ::core::option::Option::Some(value) => ::core::result::Result::Ok(value), ::core::option::Option::None => #missing }
+                }
+            }
+        })
+    } else {
+        let sink = sink_name(input);
+        let reject_unknown = unknown.map(|member| quote! {
+            if let Self::#member(_) = self {
+                return ::core::result::Result::Err(::wc3::model::mdl::WriteError::Unsupported(concat!("unknown ", stringify!(#name), " value")));
+            }
+        });
+        let unknown_arm = unknown.map(|member| quote! {
+            Self::#member(_) => return ::core::result::Result::Err(::wc3::model::mdl::WriteError::Unsupported(concat!("unknown ", stringify!(#name), " value"))),
+        });
+        Ok(quote! {
+            impl #impl_generics ::wc3::model::mdl::WriteFields for #name #ty_generics #clause {
+                type State = ();
+                #visit
+                fn prepare_mdl_fields(&self, _: ::wc3::model::mdl::Dialect) -> ::core::result::Result<(), ::wc3::model::mdl::WriteError> {
+                    if !::wc3::model::mdl::enum_names_valid(&[#(#names,)*]) {
+                        return ::core::result::Result::Err(::wc3::model::mdl::WriteError::Unsupported("invalid or duplicate MDL enum variant names"));
+                    }
+                    #reject_unknown
+                    ::core::result::Result::Ok(())
+                }
+                fn write_mdl_headers<#sink: ::std::io::Write>(&self, _: &mut ::wc3::model::mdl::Writer<#sink>) -> ::core::result::Result<(), ::wc3::model::mdl::WriteError> {
+                    ::core::result::Result::Ok(())
+                }
+                fn write_mdl_fields<#sink: ::std::io::Write>(&self, _: (), writer: &mut ::wc3::model::mdl::Writer<#sink>) -> ::core::result::Result<(), ::wc3::model::mdl::WriteError> {
+                    writer.flag(match self { #(Self::#members => #names,)* #unknown_arm })
                 }
             }
         })

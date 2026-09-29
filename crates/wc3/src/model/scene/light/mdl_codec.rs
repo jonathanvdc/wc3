@@ -28,24 +28,6 @@ fn require_supported(present: bool, supported: bool, span: Span) -> Result<(), m
     Ok(())
 }
 impl<V: ModelVersion> Light<V> {
-    pub(super) fn mdl_kind(&self) -> u32 {
-        1u32.checked_shl(self.light_type).unwrap_or(0)
-    }
-    pub(super) fn set_mdl_kind(
-        &mut self,
-        value: u32,
-        _: bool,
-        span: Span,
-    ) -> Result<(), mdl::ReadError> {
-        if !value.is_power_of_two() {
-            return Err(mdl::ReadError::new(
-                span,
-                ReadErrorKind::Expected("one light-type flag"),
-            ));
-        }
-        self.light_type = value.trailing_zeros();
-        Ok(())
-    }
     pub(super) fn mdl_casting(&self) -> bool {
         self.shadow_casting.shadow_casting().unwrap_or(0) != 0
     }
@@ -71,9 +53,6 @@ impl<V: ModelVersion> Light<V> {
     }
     pub(super) fn validate_mdl(&self) -> Result<(), mdl::WriteError> {
         validate_node_kind(&self.node, 0x200)?;
-        if self.light_type > 2 {
-            return Err(mdl::WriteError::Unsupported("light type"));
-        }
         if self.shadow_casting.shadow_casting().unwrap_or(0) > 1 {
             return Err(mdl::WriteError::Unsupported("nonboolean shadow casting"));
         }

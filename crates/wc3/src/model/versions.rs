@@ -80,24 +80,24 @@ version_capabilities! {
     /// Versions with a serialized light shadow intensity.
     ///
     /// ```compile_fail
-    /// use wc3::model::{scene::{Light, Node}, V1100};
-    /// Light::<V1100>::new(Node::new("Lamp", 1).unwrap(), 0).set_shadow_intensity(0.5);
+    /// use wc3::model::{scene::{Light, LightType, Node}, V1100};
+    /// Light::<V1100>::new(Node::new("Lamp", 1).unwrap(), LightType::Omnidirectional).set_shadow_intensity(0.5);
     /// ```
     pub trait SupportsLightShadowIntensity for V1200, V1300, V1400, V1600, V1800;
 
     /// Versions with light shadow casting and its range.
     ///
     /// ```compile_fail
-    /// use wc3::model::{scene::{Light, Node}, V1200};
-    /// Light::<V1200>::new(Node::new("Lamp", 1).unwrap(), 0).set_shadow_casting(true);
+    /// use wc3::model::{scene::{Light, LightType, Node}, V1200};
+    /// Light::<V1200>::new(Node::new("Lamp", 1).unwrap(), LightType::Omnidirectional).set_shadow_casting(true);
     /// ```
     pub trait SupportsLightShadowCasting for V1300, V1400, V1600, V1800;
 
     /// Versions with serialized light falloff coefficients.
     ///
     /// ```compile_fail
-    /// use wc3::model::{scene::{Light, LightFalloff, Node}, V1400};
-    /// Light::<V1400>::new(Node::new("Lamp", 1).unwrap(), 0).set_falloff(LightFalloff::default());
+    /// use wc3::model::{scene::{Light, LightType, LightFalloff, Node}, V1400};
+    /// Light::<V1400>::new(Node::new("Lamp", 1).unwrap(), LightType::Omnidirectional).set_falloff(LightFalloff::default());
     /// ```
     pub trait SupportsLightFalloff for V1600, V1800;
 

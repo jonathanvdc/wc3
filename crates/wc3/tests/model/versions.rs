@@ -9,7 +9,7 @@ use wc3::model::geometry::{
 };
 use wc3::model::materials::{Layer, Material};
 use wc3::model::mdx::{ReadError, ValueError};
-use wc3::model::scene::{Camera, CameraVariant, Light, Node};
+use wc3::model::scene::{Camera, CameraVariant, Light, LightType, Node};
 use wc3::model::{DynamicModel, Model, V1000, V1800, V800, V900};
 
 #[test]
@@ -20,7 +20,10 @@ fn version_is_shared_by_model_and_nested_records() {
     let mut model = Model::<V1800>::new();
     model.set_materials(&[material]);
     model.set_geosets(&[Geoset::<V1800>::new(&[], &[], &[]).unwrap()]);
-    model.set_lights(&[Light::<V1800>::new(Node::new("Lamp", 1).unwrap(), 0)]);
+    model.set_lights(&[Light::<V1800>::new(
+        Node::new("Lamp", 1).unwrap(),
+        LightType::Omnidirectional,
+    )]);
     model.set_cameras(&[Camera::<V1800>::new("View").unwrap()]);
 
     let bytes = model.encode_mdx().unwrap();
@@ -71,8 +74,10 @@ fn version_markers_select_record_fields() {
     assert_eq!(layer.emissive_gain(), Animatable::Static(0.5));
     assert_eq!(layer.fresnel_opacity(), Animatable::Static(0.25));
 
-    let classic_light = Light::<V800>::new(Node::new("Classic", 1).unwrap(), 0);
-    let modern_light = Light::<V1800>::new(Node::new("Modern", 2).unwrap(), 0);
+    let classic_light =
+        Light::<V800>::new(Node::new("Classic", 1).unwrap(), LightType::Omnidirectional);
+    let modern_light =
+        Light::<V1800>::new(Node::new("Modern", 2).unwrap(), LightType::Omnidirectional);
     assert!(classic_light.try_shadow_intensity().is_err());
     assert!(classic_light.try_shadow_casting_range().is_err());
     assert_eq!(modern_light.try_shadow_intensity().unwrap(), 0.0);

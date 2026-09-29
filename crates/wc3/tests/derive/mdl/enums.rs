@@ -266,3 +266,78 @@ mod hygiene {
         );
     }
 }
+
+#[derive(Debug, Default, PartialEq, mdl::Read, mdl::Write)]
+#[mdl(choice, default)]
+enum OptionalChoice {
+    #[default]
+    First,
+    #[mdl(name = "Other")]
+    Second,
+    #[mdl(unknown)]
+    Unknown(u32),
+}
+
+#[derive(Debug, PartialEq, mdl::Read, mdl::Write)]
+#[mdl(choice)]
+enum RequiredChoice {
+    Ready,
+    Waiting,
+}
+
+#[derive(Debug, PartialEq, mdl::Read, mdl::Write)]
+#[mdl(block = "Choices")]
+struct Choices {
+    #[mdl(flatten)]
+    optional: OptionalChoice,
+    #[mdl(property = "Id")]
+    id: u32,
+    #[mdl(flatten)]
+    required: RequiredChoice,
+}
+
+#[test]
+fn flattened_choices_interleave_with_properties_and_enforce_one_variant() {
+    let value = Choices::decode_mdl("Choices { Ready, Id 4, }").unwrap();
+    assert_eq!(value.optional, OptionalChoice::First);
+    assert_eq!(value.required, RequiredChoice::Ready);
+    assert_eq!(
+        value.encode_mdl().unwrap(),
+        "Choices {\n\tFirst,\n\tId 4,\n\tReady,\n}\n"
+    );
+    let other = Choices::decode_mdl("Choices { Waiting, Other, Id 4, }").unwrap();
+    assert_eq!(other.optional, OptionalChoice::Second);
+    assert_eq!(
+        Choices::decode_mdl(&other.encode_mdl().unwrap()).unwrap(),
+        other
+    );
+    assert!(Choices::decode_mdl("Choices { Id 4, }").is_err());
+    for (source, second) in [
+        ("Choices { First, Id 4, Other, Ready, }", "Other"),
+        ("Choices { Ready, Id 4, Waiting, }", "Waiting"),
+        ("Choices { Ready, Id 4, Ready, }", "Ready"),
+    ] {
+        let error = Choices::decode_mdl(source).unwrap_err();
+        assert_eq!(error.kind, mdl::ReadErrorKind::DuplicateField);
+        assert_eq!(&source[error.span.start..error.span.end], second);
+    }
+    for source in [
+        "Choices { Id 4, Unknown, Ready, }",
+        "Choices { Id 4, static Ready, }",
+        "Choices { Id 4, Ready }",
+    ] {
+        assert!(Choices::decode_mdl(source).is_err());
+    }
+}
+
+#[test]
+fn unknown_choices_fail_before_record_output() {
+    let value = Choices {
+        optional: OptionalChoice::Unknown(99),
+        id: 4,
+        required: RequiredChoice::Ready,
+    };
+    let mut output = Vec::new();
+    assert!(mdl::Writer::new(&mut output).write(&value).is_err());
+    assert!(output.is_empty());
+}

@@ -206,16 +206,50 @@ Enums have two forms:
 | Record attribute | Variant syntax | Meaning |
 | --- | --- | --- |
 | `value` | Unit variants; optional `name = "Blend"` | One keyword, without punctuation. |
+| `choice` | Unit variants; optional `name = "Blend"` | One comma-terminated keyword in a flattened field group. |
 | `tagged` | `flag = "Ready"` | Complete flag and comma. |
 | `tagged` | `property = "Duration"` on one payload | Complete named property. |
 | `tagged` | `block = "Target"` on one payload | Nested block using the payload's field codecs. |
 | `tagged` | `name = "Child", delegate` on one payload | Complete record handled by the payload codec. |
 
 Keyword names default to the Rust variant name and are case-sensitive.
-A value enum may mark one payload variant `unknown`; it has no text spelling
+A value or choice enum may mark one payload variant `unknown`; it has no text spelling
 and is rejected on output. Tagged payloads must be single unnamed fields;
 use a record type to group multiple values. Delegated payloads must use the
 declared name. Tagged enums can appear in counted lists.
+
+Choice enums implement `ReadFields` and `WriteFields`. Use `#[mdl(flatten)]`
+on the record field. They require exactly one keyword, reject a second keyword
+from the same enum, and write the selected keyword followed by a comma.
+`#[mdl(choice, default)]` permits omission and supplies the enum's `Default`;
+writing still emits the selected variant. Choice enums support no validation
+hooks or payload variants other than `unknown`.
+
+```rust
+use wc3::model::mdl;
+use wc3::model::mdl::{Read as _, Write as _};
+
+#[derive(Debug, Default, PartialEq, mdl::Read, mdl::Write)]
+#[mdl(choice, default)]
+enum Frames {
+    #[default]
+    Head,
+    Tail,
+    Both,
+}
+
+#[derive(mdl::Read, mdl::Write)]
+#[mdl(block = "Emitter")]
+struct Emitter {
+    #[mdl(flatten)]
+    frames: Frames,
+}
+
+assert_eq!(Emitter::decode_mdl("Emitter {}")?.frames, Frames::Head);
+assert!(Emitter::decode_mdl("Emitter { Head, Tail, }").is_err());
+assert_eq!(Emitter { frames: Frames::Both }.encode_mdl()?, "Emitter {\n\tBoth,\n}\n");
+# Ok::<(), Box<dyn std::error::Error>>(())
+```
 
 Name expressions can use constant paths, including associated constants.
 Literal names are checked during derivation; constant names are checked before
@@ -235,7 +269,7 @@ Function attributes accept ordinary or associated function paths.
 
 Value hooks work on headers, properties, and static properties. They handle
 only the value; the derive handles the name and property comma. Record hook
-spans cover the complete record. Enum validation hooks use the same signatures.
+spans cover the complete record. Value and tagged enum validation hooks use the same signatures.
 
 ## Adapting existing storage
 

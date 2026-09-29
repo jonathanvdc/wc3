@@ -17,6 +17,36 @@ use std::marker::PhantomData;
 use crate::model::LightsChunk;
 use crate::model::{Model, Node};
 
+/// How a light illuminates the model. Unknown values round-trip through MDX.
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Default,
+    Eq,
+    PartialEq,
+    Hash,
+    mdx::Read,
+    mdx::Write,
+    mdx::Value,
+    mdl::Read,
+    mdl::Write,
+)]
+#[mdx(value = u32)]
+#[mdl(choice)]
+pub enum LightType {
+    #[default]
+    #[mdx(value = 0)]
+    Omnidirectional,
+    #[mdx(value = 1)]
+    Directional,
+    #[mdx(value = 2)]
+    Ambient,
+    #[mdx(unknown)]
+    #[mdl(unknown)]
+    Unknown(u32),
+}
+
 /// Light features available in a particular model version.
 pub trait ShadowCastingField: Default + mdx::Read + mdx::Write + Clone + Debug + PartialEq {
     fn shadow_casting(&self) -> Option<u32> {
@@ -235,13 +265,10 @@ light_layout!(
 #[derive(Clone, Debug, PartialEq, mdx::Read, mdx::Write, mdl::Read, mdl::Write)]
 #[mdx(sized(tag = LightsChunk::<V>::TAG))]
 #[mdl(block = "Light", after_read = "Self::finish_mdl", validate_write = "Self::validate_mdl",
-    write_order(node, kind, attenuation_start, attenuation_end, color, intensity,
+    write_order(node, light_type, attenuation_start, attenuation_end, color, intensity,
         ambient_color, ambient_intensity, shadow_value, casting, shadow_start,
         shadow_end, quadratic, linear, damping, visibility),
     virtual_fields(
-    #[mdl(flags(Omnidirectional = 1, Directional = 2, Ambient = 4))]
-        #[mdl(get = "Self::mdl_kind", set = "Self::set_mdl_kind")]
-        kind: u32,
         #[mdl(flag = "ShadowCasting", default)]
         #[mdl(get = "Self::mdl_casting", set = "Self::set_mdl_casting")]
         casting: bool,
@@ -288,9 +315,9 @@ pub struct Light<V: ModelVersion> {
     #[mdl(flatten)]
     /// Shared node.
     pub node: Node,
-    #[mdl(skip, default)]
-    /// Light type: 0 for omnidirectional, 1 for directional, and 2 for ambient.
-    pub light_type: u32,
+    #[mdl(flatten)]
+    /// The kind of illumination.
+    pub light_type: LightType,
     #[mdl(skip, default)]
     shadow_casting: V::ShadowCasting,
     #[mdx(tag = *b"KLAS")]
@@ -335,7 +362,7 @@ pub struct Light<V: ModelVersion> {
 
 impl<V: ModelVersion> Light<V> {
     /// Creates a light with white colors and the format defaults for versioned fields.
-    pub fn new(node: Node, light_type: u32) -> Self {
+    pub fn new(node: Node, light_type: LightType) -> Self {
         Self {
             node,
             light_type,

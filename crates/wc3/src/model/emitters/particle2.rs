@@ -15,8 +15,22 @@ use crate::model::ParticleEmitters2Chunk;
 use crate::model::{Model, Node};
 
 /// Which parts of each particle are rendered: head, tail, or both.
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Hash, mdx::Read, mdx::Write, mdx::Value)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Default,
+    Eq,
+    PartialEq,
+    Hash,
+    mdx::Read,
+    mdx::Write,
+    mdx::Value,
+    mdl::Read,
+    mdl::Write,
+)]
 #[mdx(value = u32)]
+#[mdl(choice, default)]
 pub enum Particle2Frames {
     #[default]
     #[mdx(value = 0)]
@@ -26,12 +40,27 @@ pub enum Particle2Frames {
     #[mdx(value = 2)]
     Both,
     #[mdx(unknown)]
+    #[mdl(unknown)]
     Unknown(u32),
 }
 
 /// How particle colors blend with the scene. Unknown values round-trip in MDX.
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Hash, mdx::Read, mdx::Write, mdx::Value)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Default,
+    Eq,
+    PartialEq,
+    Hash,
+    mdx::Read,
+    mdx::Write,
+    mdx::Value,
+    mdl::Read,
+    mdl::Write,
+)]
 #[mdx(value = u32)]
+#[mdl(choice, default)]
 pub enum Particle2FilterMode {
     #[default]
     #[mdx(value = 0)]
@@ -45,6 +74,7 @@ pub enum Particle2FilterMode {
     #[mdx(value = 4)]
     AlphaKey,
     #[mdx(unknown)]
+    #[mdl(unknown)]
     Unknown(u32),
 }
 
@@ -56,13 +86,9 @@ pub enum Particle2FilterMode {
 #[mdx(sized(tag = ParticleEmitters2Chunk::TAG))]
 #[mdl(block = "ParticleEmitter2", after_read = "Self::finish_mdl", validate_write = "Self::validate_mdl",
     write_order(node, speed, variation, latitude, gravity, life_span, emission_rate, length, width,
-        filter, rows, columns, frame_mode, tail_length, time, segments, alpha, particle_scaling,
+        filter_mode, rows, columns, frames, tail_length, time, segments, alpha, particle_scaling,
         life_uv, decay_uv, tail_uv, tail_decay_uv, texture_id, squirt, priority_plane, replaceable_id, visibility),
     virtual_fields(
-        #[mdl(flags(Blend = 1, Additive = 2, Modulate = 4, Modulate2x = 8, AlphaKey = 16), get = "Self::mdl_filter", set = "Self::set_mdl_filter")]
-        filter: u32,
-        #[mdl(flags(Head = 1, Tail = 2, Both = 4), get = "Self::mdl_frames", set = "Self::set_mdl_frames")]
-        frame_mode: u32,
         #[mdl(property = "SegmentColor", delegate, get = "Self::mdl_segments", set = "Self::set_mdl_segments")]
         segments: SegmentColors,
         #[mdl(property = "LifeSpanUVAnim", default, get = "Self::mdl_life_uv", set = "Self::set_mdl_life_uv")]
@@ -102,7 +128,7 @@ pub struct ParticleEmitter2 {
     #[mdx(tag = *b"KP2W")]
     #[mdl(property = "Width", default)]
     pub width: Animatable<f32>,
-    #[mdl(skip, default)]
+    #[mdl(flatten)]
     pub filter_mode: Particle2FilterMode,
     #[mdl(property = "Rows", default)]
     /// Number of rows in the particle texture atlas.
@@ -111,7 +137,7 @@ pub struct ParticleEmitter2 {
     /// Number of columns in the particle texture atlas.
     pub columns: u32,
     /// Which particle parts are rendered.
-    #[mdl(skip, default)]
+    #[mdl(flatten)]
     pub frames: Particle2Frames,
     #[mdl(property = "TailLength", default)]
     pub tail_length: f32,

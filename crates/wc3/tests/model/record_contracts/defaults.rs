@@ -1,9 +1,10 @@
 use super::*;
 use wc3::model::animation::Animatable;
+use wc3::model::scene::LightType;
 
 #[test]
 fn constructors_use_documented_defaults_without_changing_decoded_values() {
-    let light = Light::<V800>::new(Node::new("Light", 0).unwrap(), 0);
+    let light = Light::<V800>::new(Node::new("Light", 0).unwrap(), LightType::Omnidirectional);
     assert_eq!(light.color, Animatable::Static([1.0; 3]));
     assert_eq!(light.ambient_color, Animatable::Static([1.0; 3]));
     assert_eq!(

@@ -12,8 +12,8 @@ use wc3::model::mdx::Write as _;
 
 use wc3::model::materials::{Layer, LayerFresnel, LayerTextureSlot, Material, ShaderType};
 use wc3::model::scene::{
-    Camera, CameraVariant, Light, LightFalloff, LightShadowRange, Node, NodeFlagInterpretation,
-    NodeFlags,
+    Camera, CameraVariant, Light, LightFalloff, LightShadowRange, LightType, Node,
+    NodeFlagInterpretation, NodeFlags,
 };
 use wc3::model::{
     ConversionIssueKind, ConversionOptions, DynamicModel, Model, ModelVersion, UnknownChunkPolicy,
@@ -41,7 +41,7 @@ fn sample<V: ModelVersion>() -> Model<V> {
     let mut geoset = Geoset::<V>::new(&[[1.0, 2.0, 3.0]], &[[0.0, 0.0, 1.0]], &[]).unwrap();
     geoset.set_raw_unselectable(0x8000_0002);
     model.set_geosets(&[geoset]);
-    let mut light = Light::<V>::new(Node::new("Lamp", 7).unwrap(), 2);
+    let mut light = Light::<V>::new(Node::new("Lamp", 7).unwrap(), LightType::Ambient);
     light.node.flags.set_light(true);
     light.color = Animatable::Static([1.0, 0.5, 0.25]);
     light.intensity = Animatable::Static(2.5);
@@ -262,7 +262,7 @@ fn tracks_are_checked_even_when_static_fields_are_neutral() {
     assert_eq!(error.path, "record.emissive_gain");
     let lossy = layer.convert::<V800>(&ConversionOptions::lossy()).unwrap();
     assert!(lossy.model.try_emissive_gain().is_err());
-    let mut light = Light::<V1800>::new(Node::new("Lamp", 1).unwrap(), 0);
+    let mut light = Light::<V1800>::new(Node::new("Lamp", 1).unwrap(), LightType::Omnidirectional);
     let mut falloff = light.falloff();
     falloff.damping.set_track(Track::constant(1.0));
     light.set_falloff(falloff);
@@ -594,7 +594,7 @@ fn populated_versioned_fields_preserve_exact_storage_when_supported() {
         layer.encode_mdx().unwrap()
     );
 
-    let mut light = Light::<V1800>::new(Node::new("Shadow", 2).unwrap(), 1);
+    let mut light = Light::<V1800>::new(Node::new("Shadow", 2).unwrap(), LightType::Directional);
     light.set_shadow_intensity(0.5);
     light.set_shadow_casting_range(LightShadowRange {
         start: Animatable::Static(1.0),

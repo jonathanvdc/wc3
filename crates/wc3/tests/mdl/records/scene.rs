@@ -2,7 +2,7 @@ use wc3::model::animation::{Animatable, Track};
 use wc3::model::geometry::CollisionShape;
 use wc3::model::mdl::{Read as _, Write as _};
 use wc3::model::mdx::{Read as _, Write as _};
-use wc3::model::scene::{EventObject, Light, NodeFlags};
+use wc3::model::scene::{EventObject, Light, LightType, NodeFlags};
 use wc3::model::{mdl, mdx, V1000, V1100, V1200, V1300, V1400, V1600, V1800, V800, V900};
 
 fn roundtrip<T: mdl::Read + mdl::Write + mdx::Read + mdx::Write>(value: &T) {
@@ -25,7 +25,10 @@ fn light_roundtrips_at_all_versions() {
         roundtrip(&light);
     } )* }; }
     check!(V800, V900, V1000, V1100, V1200, V1300, V1400, V1600, V1800);
-    for (flag, id) in [("Directional", 1), ("Ambient", 2)] {
+    for (flag, id) in [
+        ("Directional", LightType::Directional),
+        ("Ambient", LightType::Ambient),
+    ] {
         let light =
             Light::<V800>::decode_mdl(&format!("Light \"a\" {{ ObjectId 0, {flag}, }}")).unwrap();
         assert_eq!(light.light_type, id);
@@ -85,9 +88,9 @@ fn light_rejects_ambiguous_and_unrepresentable_data() {
     assert_eq!(decoded.intensity.value(), Some(&0.0));
     assert_eq!(decoded.intensity.track(), light.intensity.track());
     light.intensity = Animatable::Static(0.0);
-    light.light_type = 99;
+    light.light_type = LightType::Unknown(99);
     assert!(light.encode_mdl().is_err());
-    light.light_type = 0;
+    light.light_type = LightType::Omnidirectional;
     light.node.flags = NodeFlags(0x400);
     assert!(light.encode_mdl().is_err());
     let light = Light::<V1300>::decode_mdl("Light \"a\" { ObjectId 0, Ambient, }").unwrap();
@@ -181,7 +184,7 @@ fn independent_binary_record_fixtures_roundtrip() {
     use wc3::model::scene::{LightFalloff, LightShadowRange, Node};
     let mut node = Node::new("fixture", 7).unwrap();
     node.flags = NodeFlags(0x200);
-    let mut light = Light::<V1800>::new(node.clone(), 1);
+    let mut light = Light::<V1800>::new(node.clone(), LightType::Directional);
     light.attenuation_start = Animatable::Static(3.0);
     light.attenuation_end = Animatable::Static(40.0);
     light.color = Animatable::Static([0.2, 0.4, 0.8]);
@@ -200,7 +203,7 @@ fn independent_binary_record_fixtures_roundtrip() {
     });
     roundtrip(&light);
     // Downgrade the layout rather than manufacture a field absent from V800.
-    let old_light = Light::<V800>::new(node.clone(), 0);
+    let old_light = Light::<V800>::new(node.clone(), LightType::Omnidirectional);
     let mut unsupported = old_light.encode_mdx().unwrap();
     unsupported.extend_from_slice(b"KLDA");
     unsupported.extend_from_slice(

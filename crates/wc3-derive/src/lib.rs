@@ -32,14 +32,14 @@ pub fn derive_mdx_write(input: TokenStream) -> TokenStream {
 }
 
 /// Reads an MDL block, single-value property, anonymous entry, or keyword enum.
-/// Value enums may mark one payload variant `#[mdl(unknown)]`; it has no text spelling.
+/// Value and choice enums may mark one payload variant `#[mdl(unknown)]`; it has no text spelling.
 #[proc_macro_derive(MdlRead, attributes(mdl))]
 pub fn derive_mdl_read(input: TokenStream) -> TokenStream {
     expand_mdl(parse_macro_input!(input as DeriveInput), true).into()
 }
 
 /// Writes an MDL block, single-value property, anonymous entry, or keyword enum.
-/// Writing a value enum's `#[mdl(unknown)]` variant returns an unsupported-value error.
+/// Writing a value or choice enum's `#[mdl(unknown)]` variant returns an unsupported-value error.
 #[proc_macro_derive(MdlWrite, attributes(mdl))]
 pub fn derive_mdl_write(input: TokenStream) -> TokenStream {
     expand_mdl(parse_macro_input!(input as DeriveInput), false).into()

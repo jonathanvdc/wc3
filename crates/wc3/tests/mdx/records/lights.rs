@@ -5,12 +5,13 @@ use wc3::model::Color;
 use wc3::model::mdx::Read as _;
 use wc3::model::mdx::Write as _;
 
-use wc3::model::scene::{Light, LightFalloff, LightShadowRange, Node};
+use wc3::model::scene::{Light, LightFalloff, LightShadowRange, LightType, Node};
 use wc3::model::Model;
 
 #[test]
 fn light_fields_round_trip() {
-    let mut light = Light::<wc3::model::V1200>::new(Node::new("Torch", 2).unwrap(), 1);
+    let mut light =
+        Light::<wc3::model::V1200>::new(Node::new("Torch", 2).unwrap(), LightType::Directional);
     light.attenuation_start = Animatable::Static(100.0);
     light.attenuation_end = Animatable::Static(500.0);
     light.color = Animatable::Static([1.0, 0.5, 0.25]);
@@ -22,7 +23,7 @@ fn light_fields_round_trip() {
     let parsed = Model::<wc3::model::V1200>::decode_mdx(&model.encode_mdx().unwrap()).unwrap();
     let light = &parsed.lights()[0];
     assert_eq!(light.node.name.text(), "Torch");
-    assert_eq!(light.light_type, 1);
+    assert_eq!(light.light_type, LightType::Directional);
     assert_eq!(light.attenuation_start, Animatable::Static(100.0));
     assert_eq!(light.attenuation_end, Animatable::Static(500.0));
     assert_eq!(light.color, Animatable::Static([1.0, 0.5, 0.25]));
@@ -33,7 +34,8 @@ fn light_fields_round_trip() {
 
 #[test]
 fn light_color_track_round_trip() {
-    let mut light = Light::<wc3::model::V800>::new(Node::new("Lamp", 3).unwrap(), 0);
+    let mut light =
+        Light::<wc3::model::V800>::new(Node::new("Lamp", 3).unwrap(), LightType::Omnidirectional);
     let track = Track::<Color>::linear(
         vec![ValueKeyframe {
             frame: 250,
@@ -49,7 +51,8 @@ fn light_color_track_round_trip() {
 
 #[test]
 fn extended_light_fields_and_tracks_round_trip() {
-    let mut light = Light::<wc3::model::V1800>::new(Node::new("Glow", 4).unwrap(), 0);
+    let mut light =
+        Light::<wc3::model::V1800>::new(Node::new("Glow", 4).unwrap(), LightType::Omnidirectional);
     light.try_set_shadow_casting(true).unwrap();
     light.try_set_shadow_intensity(1.0).unwrap();
     light
@@ -99,16 +102,17 @@ fn extended_light_fields_and_tracks_round_trip() {
 fn intermediate_light_layouts_follow_version_gates() {
     use wc3::model::{V1300, V1400, V1600};
 
-    let base = Light::<wc3::model::V1200>::new(Node::new("Lamp", 1).unwrap(), 0)
+    let base =
+        Light::<wc3::model::V1200>::new(Node::new("Lamp", 1).unwrap(), LightType::Omnidirectional)
+            .encode_mdx()
+            .unwrap();
+    let v1300 = Light::<V1300>::new(Node::new("Lamp", 1).unwrap(), LightType::Omnidirectional)
         .encode_mdx()
         .unwrap();
-    let v1300 = Light::<V1300>::new(Node::new("Lamp", 1).unwrap(), 0)
+    let v1400 = Light::<V1400>::new(Node::new("Lamp", 1).unwrap(), LightType::Omnidirectional)
         .encode_mdx()
         .unwrap();
-    let v1400 = Light::<V1400>::new(Node::new("Lamp", 1).unwrap(), 0)
-        .encode_mdx()
-        .unwrap();
-    let v1600 = Light::<V1600>::new(Node::new("Lamp", 1).unwrap(), 0)
+    let v1600 = Light::<V1600>::new(Node::new("Lamp", 1).unwrap(), LightType::Omnidirectional)
         .encode_mdx()
         .unwrap();
     assert_eq!(v1300.len(), base.len() + 12);
@@ -141,7 +145,7 @@ fn intermediate_light_layouts_follow_version_gates() {
 fn shadow_casting_and_falloff_round_trip() {
     use wc3::model::{V1300, V1600};
 
-    let mut old = Light::<V1300>::new(Node::new("Old", 1).unwrap(), 0);
+    let mut old = Light::<V1300>::new(Node::new("Old", 1).unwrap(), LightType::Omnidirectional);
     assert_eq!(old.falloff(), LightFalloff::default());
     assert!(old
         .try_set_falloff(LightFalloff {
@@ -151,7 +155,7 @@ fn shadow_casting_and_falloff_round_trip() {
         })
         .is_err());
 
-    let mut light = Light::<V1600>::new(Node::new("New", 2).unwrap(), 0);
+    let mut light = Light::<V1600>::new(Node::new("New", 2).unwrap(), LightType::Omnidirectional);
     assert_eq!(light.falloff(), LightFalloff::default());
     light.try_set_shadow_casting(true).unwrap();
     light
@@ -181,13 +185,13 @@ fn infallible_light_accessors_cover_supported_versions() {
     };
 
     fn check_intensity<V: SupportsLightShadowIntensity>() {
-        let mut light = Light::<V>::new(Node::new("Lamp", 1).unwrap(), 0);
+        let mut light = Light::<V>::new(Node::new("Lamp", 1).unwrap(), LightType::Omnidirectional);
         light.set_shadow_intensity(0.5);
         let decoded = Light::<V>::decode_mdx(&light.encode_mdx().unwrap()).unwrap();
         assert_eq!(decoded.shadow_intensity(), 0.5);
     }
     fn check_casting<V: SupportsLightShadowCasting>() {
-        let mut light = Light::<V>::new(Node::new("Lamp", 1).unwrap(), 0);
+        let mut light = Light::<V>::new(Node::new("Lamp", 1).unwrap(), LightType::Omnidirectional);
         let range = LightShadowRange {
             start: Animatable::Static(10.0),
             end: Animatable::Static(100.0),
@@ -199,7 +203,7 @@ fn infallible_light_accessors_cover_supported_versions() {
         assert_eq!(decoded.shadow_casting_range(), range);
     }
     fn check_falloff<V: SupportsLightFalloff>() {
-        let mut light = Light::<V>::new(Node::new("Lamp", 1).unwrap(), 0);
+        let mut light = Light::<V>::new(Node::new("Lamp", 1).unwrap(), LightType::Omnidirectional);
         let falloff = LightFalloff {
             quadratic: Animatable::Static(0.1),
             linear: Animatable::Static(0.2),

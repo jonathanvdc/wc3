@@ -162,6 +162,15 @@ impl<V: ModelVersion> Model<V> {
 }
 
 #[derive(mdl::Read, mdl::Write)]
+#[mdl(choice)]
+enum CollisionKind {
+    Box,
+    Plane,
+    Sphere,
+    Cylinder,
+}
+
+#[derive(mdl::Read, mdl::Write)]
 #[mdl(entry)]
 struct CollisionVertex(Vec3);
 
@@ -175,8 +184,8 @@ struct CollisionVertex(Vec3);
 struct CollisionMdl {
     #[mdl(flatten)]
     node: Node,
-    #[mdl(flags(Box = 1, Plane = 2, Sphere = 4, Cylinder = 8))]
-    kind: u32,
+    #[mdl(flatten)]
+    kind: CollisionKind,
     #[mdl(counted = "Vertices")]
     vertices: Vec<CollisionVertex>,
     #[mdl(property = "BoundsRadius", delegate)]
@@ -187,13 +196,11 @@ fn finish_collision(value: &mut CollisionMdl, _: Span) -> Result<(), mdl::ReadEr
     Ok(())
 }
 fn validate_collision_read(value: &CollisionMdl, span: Span) -> Result<(), mdl::ReadError> {
-    if !value.kind.is_power_of_two() {
-        return Err(mdl::ReadError::new(
-            span,
-            ReadErrorKind::Expected("one collision-type flag"),
-        ));
-    }
-    let expected = if value.kind == 4 { 1 } else { 2 };
+    let expected = if matches!(value.kind, CollisionKind::Sphere) {
+        1
+    } else {
+        2
+    };
     if value.vertices.len() != expected {
         return Err(mdl::ReadError::new(
             span,
@@ -203,7 +210,7 @@ fn validate_collision_read(value: &CollisionMdl, span: Span) -> Result<(), mdl::
             },
         ));
     }
-    if matches!(value.kind, 4 | 8) {
+    if matches!(value.kind, CollisionKind::Sphere | CollisionKind::Cylinder) {
         if value.radius.is_none() {
             return Err(mdl::ReadError::new(
                 span,
@@ -223,14 +230,15 @@ impl mdl::Read for CollisionShape {
         let value = parser.read::<CollisionMdl>()?;
         let first = value.vertices[0].0;
         let geometry = match value.kind {
-            1 => CollisionGeometry::Box([first, value.vertices[1].0]),
-            2 => CollisionGeometry::Plane([first, value.vertices[1].0]),
-            4 => CollisionGeometry::Sphere(first, value.radius.expect("validated radius")),
-            8 => CollisionGeometry::Cylinder(
+            CollisionKind::Box => CollisionGeometry::Box([first, value.vertices[1].0]),
+            CollisionKind::Plane => CollisionGeometry::Plane([first, value.vertices[1].0]),
+            CollisionKind::Sphere => {
+                CollisionGeometry::Sphere(first, value.radius.expect("validated radius"))
+            }
+            CollisionKind::Cylinder => CollisionGeometry::Cylinder(
                 [first, value.vertices[1].0],
                 value.radius.expect("validated radius"),
             ),
-            _ => unreachable!("validated collision type"),
         };
         Ok(Self {
             node: value.node,
@@ -241,17 +249,23 @@ impl mdl::Read for CollisionShape {
 impl mdl::Write for CollisionShape {
     fn write_mdl<W: IoWrite>(&self, writer: &mut Writer<W>) -> Result<(), mdl::WriteError> {
         let (kind, vertices, radius) = match self.geometry {
-            CollisionGeometry::Box(points) => {
-                (1, points.into_iter().map(CollisionVertex).collect(), None)
-            }
-            CollisionGeometry::Plane(points) => {
-                (2, points.into_iter().map(CollisionVertex).collect(), None)
-            }
-            CollisionGeometry::Sphere(center, radius) => {
-                (4, vec![CollisionVertex(center)], Some(radius))
-            }
+            CollisionGeometry::Box(points) => (
+                CollisionKind::Box,
+                points.into_iter().map(CollisionVertex).collect(),
+                None,
+            ),
+            CollisionGeometry::Plane(points) => (
+                CollisionKind::Plane,
+                points.into_iter().map(CollisionVertex).collect(),
+                None,
+            ),
+            CollisionGeometry::Sphere(center, radius) => (
+                CollisionKind::Sphere,
+                vec![CollisionVertex(center)],
+                Some(radius),
+            ),
             CollisionGeometry::Cylinder(points, radius) => (
-                8,
+                CollisionKind::Cylinder,
                 points.into_iter().map(CollisionVertex).collect(),
                 Some(radius),
             ),

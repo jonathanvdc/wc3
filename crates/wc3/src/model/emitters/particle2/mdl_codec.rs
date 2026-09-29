@@ -1,8 +1,8 @@
 //! Particle2 choice flags, three segment colors and projected UV intervals.
-use super::{Particle2FilterMode, Particle2Frames, ParticleEmitter2};
+use super::ParticleEmitter2;
 use crate::model::scene::{set_node_kind, validate_node_kind};
 use crate::model::{mdl, Color};
-use mdl::{Field, Parser, ReadErrorKind, Span, TokenKind, Writer};
+use mdl::{Field, Parser, Span, TokenKind, Writer};
 use std::io::Write as IoWrite;
 
 #[derive(mdl::Read, mdl::Write)]
@@ -37,43 +37,7 @@ impl mdl::WriteProperty for SegmentColorsRef<'_> {
         writer.end_block()
     }
 }
-fn choice(value: u32, span: Span) -> Result<u32, mdl::ReadError> {
-    if value == 0 {
-        return Ok(0);
-    }
-    if !value.is_power_of_two() {
-        return Err(mdl::ReadError::new(
-            span,
-            ReadErrorKind::Expected("one choice flag"),
-        ));
-    }
-    Ok(value.trailing_zeros())
-}
 impl ParticleEmitter2 {
-    pub(super) fn mdl_filter(&self) -> u32 {
-        1u32.checked_shl(self.filter_mode.raw()).unwrap_or(0)
-    }
-    pub(super) fn set_mdl_filter(
-        &mut self,
-        value: u32,
-        _: bool,
-        span: Span,
-    ) -> Result<(), mdl::ReadError> {
-        self.filter_mode = Particle2FilterMode::from_raw(choice(value, span)?);
-        Ok(())
-    }
-    pub(super) fn mdl_frames(&self) -> u32 {
-        1u32.checked_shl(self.frames.raw()).unwrap_or(0)
-    }
-    pub(super) fn set_mdl_frames(
-        &mut self,
-        value: u32,
-        _: bool,
-        span: Span,
-    ) -> Result<(), mdl::ReadError> {
-        self.frames = Particle2Frames::from_raw(choice(value, span)?);
-        Ok(())
-    }
     pub(super) fn mdl_segments(&self) -> SegmentColorsRef<'_> {
         SegmentColorsRef(&self.segment_colors)
     }
@@ -92,12 +56,6 @@ impl ParticleEmitter2 {
     }
     pub(super) fn validate_mdl(&self) -> Result<(), mdl::WriteError> {
         validate_node_kind(&self.node, 0x1000 | (self.node.flags.bits() & 0x1f8000))?;
-        if self.filter_mode.raw() > 4 {
-            return Err(mdl::WriteError::Unsupported("particle2 filter mode"));
-        }
-        if self.frames.raw() > 2 {
-            return Err(mdl::WriteError::Unsupported("particle2 head/tail mode"));
-        }
         Ok(())
     }
 }

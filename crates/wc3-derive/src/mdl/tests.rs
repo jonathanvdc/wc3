@@ -1033,3 +1033,21 @@ fn bitfield_definitions_validate_their_schema() {
     };
     assert!(expand_checked(input, true).is_ok());
 }
+
+#[test]
+fn choice_enums_reject_payloads_and_irrelevant_options() {
+    for (source, message) in [
+        ("#[mdl(choice)] enum Bad { A(u32) }", "only unit variants"),
+        ("#[mdl(value, default)] enum Bad { A }", "only with choice"),
+        (
+            "#[mdl(choice, validate_read = \"check\")] enum Bad { A }",
+            "validation hooks",
+        ),
+        (
+            "#[mdl(choice)] enum Bad { #[mdl(unknown)] Unknown(u32) }",
+            "known variant",
+        ),
+    ] {
+        rejects(syn::parse_str(source).unwrap(), message);
+    }
+}

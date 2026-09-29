@@ -6,7 +6,9 @@ use wc3::model::mdx::Read as _;
 use wc3::model::mdx::Write as _;
 
 use wc3::model::materials::{Layer, Material, Texture};
-use wc3::model::scene::{Attachment, Bone, Camera, EventObject, FaceFx, Light, ModelInfo, Node};
+use wc3::model::scene::{
+    Attachment, Bone, Camera, EventObject, FaceFx, Light, LightType, ModelInfo, Node,
+};
 use wc3::model::{
     Model, ModelVersion, V1000, V1100, V1200, V1300, V1400, V1600, V1800, V800, V900,
 };
@@ -52,7 +54,10 @@ fn full_model<V: ModelVersion>() -> Model<V> {
     model.set_particle_emitters2(&[ParticleEmitter2::new(Node::new("Emitter2", 6).unwrap())]);
     model.set_ribbon_emitters(&[RibbonEmitter::new(Node::new("Ribbon", 7).unwrap())]);
     model.set_cameras(&[Camera::<V>::new("Camera").unwrap()]);
-    model.set_lights(&[Light::<V>::new(Node::new("Light", 8).unwrap(), 0)]);
+    model.set_lights(&[Light::<V>::new(
+        Node::new("Light", 8).unwrap(),
+        LightType::Omnidirectional,
+    )]);
     if version >= 900 {
         model
             .try_set_face_fx(&[FaceFx::new("Face", "Textures\\Face.blp").unwrap()])
