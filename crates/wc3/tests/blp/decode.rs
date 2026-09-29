@@ -1,8 +1,35 @@
 use std::{env, fs, path::Path};
 use wc3::blp::{
-    Blp1ContentRef, Blp1Header, Blp1Ref, Blp2ContentRef, Blp2Header, Blp2Ref, BlpDecoder, BlpRef,
-    DxtFormat,
+    register_decoding_hook, Blp1ContentRef, Blp1Header, Blp1Ref, Blp2ContentRef, Blp2Header,
+    Blp2Ref, BlpDecoder, BlpRef, DxtFormat,
 };
+
+#[test]
+fn decoding_hook_reads_blp_from_memory() {
+    let palette = [0; 1024];
+    let bytes = blp2(
+        &[3, 2, 1, 4],
+        Blp2ContentRef::Bgra {
+            encoding: 3,
+            alpha_type: 8,
+            palette_region: &palette,
+        },
+        8,
+        1,
+        1,
+    )
+    .write()
+    .unwrap();
+    assert!(register_decoding_hook());
+    assert!(!register_decoding_hook());
+    assert_eq!(
+        image::load_from_memory(&bytes)
+            .unwrap()
+            .to_rgba8()
+            .into_raw(),
+        [1, 2, 3, 4]
+    );
+}
 
 #[test]
 fn image_decoder_integrates_with_dynamic_image() {

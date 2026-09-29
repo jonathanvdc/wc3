@@ -1,7 +1,9 @@
 //! Adapter for image-rs's decoder interface.
 use crate::blp::{BlpRef, DecodeError, ReadError, MIPMAP_SLOTS};
 use image::error::{DecodingError, ImageFormatHint};
+use image::hooks;
 use image::{ColorType, ImageDecoder, ImageError, ImageResult};
+use std::io::Read;
 
 /// Decodes one BLP mipmap through the `image` crate's general decoder API.
 pub struct BlpDecoder<'a> {
@@ -63,6 +65,51 @@ impl ImageDecoder for BlpDecoder<'_> {
         self.blp
             .decode_mip_into(self.level, buf)
             .map_err(image_error)
+    }
+
+    fn read_image_boxed(self: Box<Self>, buf: &mut [u8]) -> ImageResult<()> {
+        (*self).read_image(buf)
+    }
+}
+
+/// Registers BLP decoding with `image` for `.blp` paths and BLP1/BLP2 signatures.
+///
+/// Returns `false` if another decoder is already registered for the extension.
+pub fn register_decoding_hook() -> bool {
+    let registered = hooks::register_decoding_hook(
+        "blp".into(),
+        Box::new(|mut reader| {
+            let mut bytes = Vec::new();
+            reader
+                .read_to_end(&mut bytes)
+                .map_err(ImageError::IoError)?;
+            let dimensions = BlpDecoder::new(&bytes)?.dimensions();
+            Ok(Box::new(OwnedBlpDecoder { bytes, dimensions }))
+        }),
+    );
+    if registered {
+        hooks::register_format_detection_hook("blp".into(), b"BLP1", None);
+        hooks::register_format_detection_hook("blp".into(), b"BLP2", None);
+    }
+    registered
+}
+
+struct OwnedBlpDecoder {
+    bytes: Vec<u8>,
+    dimensions: (u32, u32),
+}
+
+impl ImageDecoder for OwnedBlpDecoder {
+    fn dimensions(&self) -> (u32, u32) {
+        self.dimensions
+    }
+
+    fn color_type(&self) -> ColorType {
+        ColorType::Rgba8
+    }
+
+    fn read_image(self, buf: &mut [u8]) -> ImageResult<()> {
+        BlpDecoder::new(&self.bytes)?.read_image(buf)
     }
 
     fn read_image_boxed(self: Box<Self>, buf: &mut [u8]) -> ImageResult<()> {

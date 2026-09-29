@@ -23,7 +23,7 @@ mod mipmaps;
 #[cfg(feature = "blp-decode")]
 pub use decode::DecodeError;
 #[cfg(feature = "blp-decode")]
-pub use decoder::BlpDecoder;
+pub use decoder::{register_decoding_hook, BlpDecoder};
 #[cfg(feature = "blp-encode")]
 pub use encode::{BlpVersion, EncodeError, EncodeFormat, EncodeOptions, IndexedAlpha};
 #[cfg(feature = "blp-encode")]
