@@ -129,6 +129,9 @@ constructor defaults, and rejects unsupported nondefault data. The report
 identifies normalized values, initialized fields, omitted neutral defaults,
 discarded data, and opaque compatibility caveats.
 
+Use `model.normalized()?` to apply normalization without changing its version.
+It returns the same model-and-report result and leaves the source intact.
+
 `ConversionOptions::lossy()` permits discarding unsupported data. Unknown chunks
 have a separate `UnknownChunkPolicy`: `Reject` by default, `Preserve`, or `Drop`.
 Preserving opaque bytes across versions does not guarantee game compatibility.

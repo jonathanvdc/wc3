@@ -180,6 +180,15 @@ macro_rules! record_conversion {
 record_conversion!(Material, Layer, Geoset, Light, Camera);
 
 impl<V: ModelVersion> Model<V> {
+    /// Returns a normalized copy and its report, preserving the model version.
+    ///
+    /// Equivalent camera variants and missing node kind bits are normalized.
+    /// The source is unchanged. This is strict conversion to the same version;
+    /// it does not guarantee that every binary value can be exported to MDL.
+    pub fn normalized(&self) -> Result<Conversion<Self>, ConversionError> {
+        self.convert::<V>(&ConversionOptions::strict())
+    }
+
     /// Converts ordered chunks to another layout without modifying the source.
     ///
     /// ```
@@ -362,6 +371,25 @@ fn normalize_node_kind<F: NodeFlagInterpretation>(
 }
 
 impl DynamicModel {
+    /// Returns a normalized copy and its report without changing the runtime version.
+    /// Uses the same rules as [`Model::normalized`] and leaves the source unchanged.
+    pub fn normalized(&self) -> Result<Conversion<Self>, ConversionError> {
+        macro_rules! normalize {
+            ($($variant:ident),+) => {
+                match self {
+                    $(Self::$variant(model) => {
+                        let converted = model.normalized()?;
+                        Ok(Conversion {
+                            model: Self::$variant(converted.model),
+                            report: converted.report,
+                        })
+                    }),+
+                }
+            };
+        }
+        normalize!(V800, V900, V1000, V1100, V1200, V1300, V1400, V1600, V1800)
+    }
+
     /// Converts a runtime-dispatched source to a typed target layout.
     pub fn convert<T: ModelVersion>(
         &self,

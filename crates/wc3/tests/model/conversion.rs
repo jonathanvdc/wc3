@@ -61,9 +61,7 @@ fn missing_popcorn_kind_is_normalized_without_changing_source_or_behavior_flags(
     let bytes = source.encode_mdx().unwrap();
     assert!(source.encode_mdl().is_err());
 
-    let converted = source
-        .convert::<V1200>(&ConversionOptions::strict())
-        .unwrap();
+    let converted = source.normalized().unwrap();
     assert_eq!(
         converted.model.try_popcorn_emitters().unwrap()[0]
             .node
@@ -125,6 +123,33 @@ fn kind_normalization_preserves_inheritance_and_unknown_bits() {
     let emitter = &converted.model.try_popcorn_emitters().unwrap()[0];
     assert_eq!(emitter.node.flags.bits(), 0x8000_1004);
     assert!(emitter.encode_mdl().is_err());
+}
+
+#[test]
+fn runtime_normalization_preserves_each_version_and_matches_typed_normalization() {
+    macro_rules! check {
+        ($($version:ident),+) => {$(
+            let mut source = sample::<$version>();
+            let mut camera = Camera::<$version>::new("Noncanonical").unwrap();
+            camera.variant = if $version::NUMBER >= 1200 {
+                CameraVariant::Variant0
+            } else {
+                CameraVariant::Variant3
+            };
+            source.set_cameras(&[camera]);
+            let original = source.encode_mdx().unwrap();
+            let expected = source.normalized().unwrap();
+            let dynamic = DynamicModel::$version(source);
+            let normalized = dynamic.normalized().unwrap();
+            assert_eq!(normalized.model.version(), $version::NUMBER);
+            assert_eq!(normalized.model.encode_mdx().unwrap(), expected.model.encode_mdx().unwrap());
+            assert_eq!(normalized.report, expected.report);
+            assert!(normalized.report.issues.iter().any(|issue| issue.kind == ConversionIssueKind::Normalized));
+            assert_eq!(dynamic.encode_mdx().unwrap(), original);
+            assert!(normalized.model.normalized().unwrap().report.issues.is_empty());
+        )+};
+    }
+    check!(V800, V900, V1000, V1100, V1200, V1300, V1400, V1600, V1800);
 }
 
 fn check_pair<S: ModelVersion, T: ModelVersion>() {
