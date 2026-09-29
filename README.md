@@ -1,371 +1,201 @@
 # wc3
 
-Pure Rust Warcraft III model codecs, with MDX reading and writing for Classic and Reforged models.
+A Rust library for reading, editing, and writing Warcraft III models in binary
+**MDX** and text **MDL** formats, covering Classic and Reforged layouts.
 
-The [MDL support contract and coverage inventory](docs/MDL_SUPPORT.md) records
-the agreed dialect behavior, preservation rules, and remaining codec work.
-The crate keeps decoded chunks in file order. Unknown chunks retain their
-exact payload bytes. Known chunks that cannot be decoded return an error.
-Typed models are available for MDX versions 800, 900, 1000, 1100, 1200, 1300,
-1400, 1600, and 1800.
+Models share one typed representation across both formats. Use a compile-time
+version when you know the layout, or let `DynamicModel` select it from the file.
+MDX preserves chunk order and opaque data; MDL produces canonical text and
+reports data it cannot faithfully represent.
 
-Typed access covers the standard model, sequence, material, texture, geoset,
-node, animation, emitter, light, camera, attachment, collision, face effect,
-and bind pose chunks. Flag fields expose named bits while retaining unknown
-bits. The package has no runtime dependencies.
+## Getting started
 
-The tests cover synthetic models across the supported versions. Optional
-fixture tests check byte-for-byte round trips on local models. Full semantic
-coverage across the entire game collection has not yet been verified.
+The library crate is `wc3`.
+To use a local checkout, add this dependency to your project's `Cargo.toml`:
 
-## Rust API
+```toml
+[dependencies]
+wc3 = { path = "../wc3/crates/wc3" }
+```
 
-Model types live under `wc3::model`. The `mdx` and `mdl` modules each expose
-`Read` and `Write` traits and derives; use qualified names such as
-`#[derive(mdx::Read, mdx::Write, mdl::Read, mdl::Write)]` to distinguish formats.
+Adjust the path to your checkout. Model types live under `wc3::model`. Import
+`mdx::Read` / `mdx::Write` and `mdl::Read` / `mdl::Write` as `_` to enable their
+methods without conflicting trait names.
+
+### Create a model and encode both formats
 
 ```rust
-use wc3::model::{DynamicModel, Model, V800};
+use wc3::model::{Model, V800};
 use wc3::model::mdx::{Read as _, Write as _};
+use wc3::model::mdl::Write as _;
 use wc3::model::scene::ModelInfo;
 
-let mut model = Model::<V800>::new();
-model.set_model_info(&ModelInfo::new("Example")?);
-let encoded = model.encode_mdx()?;
-let decoded = Model::<V800>::decode_mdx(&encoded)?;
-assert_eq!(decoded.version(), 800);
-let info = decoded.model_info().unwrap();
-assert_eq!(info.name.text(), "Example");
-assert!(matches!(DynamicModel::decode_mdx(&encoded, 800)?, DynamicModel::V800(_)));
-# Ok::<(), Box<dyn std::error::Error>>(())
-```
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let mut model = Model::<V800>::new();
+    model.set_model_info(&ModelInfo::new("Example")?);
 
-Plain record data is exposed through public fields: scalar values, flags,
-embedded nodes, and ordinary vectors. Edit collections directly, without an
-implicit clone. Fixed-width names and paths use `FixedText<N>`; call `text()`
-to view them and `set_text()` to validate text and clear unused bytes. Exact
-bytes remain available through `as_bytes()` and `from_bytes()`.
+    let bytes = model.encode_mdx()?;
+    let text = model.encode_mdl()?;
+    let decoded = Model::<V800>::decode_mdx(&bytes)?;
 
-```rust
-use wc3::model::{V800, scene::Camera};
-let mut camera = Camera::<V800>::new("Portrait")?;
-camera.position = [0.0, 0.0, 100.0];
-camera.name.set_text("Closeup")?;
-camera.tracks.clear();
-# Ok::<(), wc3::model::ValueError>(())
-```
-
-Methods remain for computed views, version-dependent fields, chunk lookup and
-replacement, and edits that coordinate geoset arrays. Geoset geometry storage
-and animation-track internals stay private to preserve structural invariants.
-Collision shapes expose `geometry::CollisionGeometry` for direct shape edits.
-Model collection getters collect owned records across chunks; setters replace
-chunks. To edit records in place, use the public ordered `model.chunks` vector
-or `chunk_mut()` and match the typed chunk variant.
-
-Constructors and setters that can reject values return `ValueError`. Binary
-decoding returns `mdx::ReadError`; encoding returns `mdx::WriteError`.
-
-`Model<V>::chunks` exposes `chunks::ModelChunk<V>` variants. Versioned records
-in those chunks also carry `V`. An `Unknown` chunk can only use a tag that the
-library does not recognize. Editing a typed chunk writes its new payload.
-
-Run the full test suite with `cargo test --workspace`. Set `WC3_MDX_FIXTURES`
-to a directory of local `.mdx` files for additional round-trip checks.
-
-`Geoset<V>`, `Material<V>`, `Layer<V>`, `Camera<V>`, and `Light<V>` select their
-version-specific fields through traits implemented beside those records.
-Setters on `Model<V>` accept records with the same `V`.
-
-Geosets and variable-length records such as materials, nodes, lights,
-cameras, emitters, and bind poses store decoded sections. Public track vectors hold parsed
-tracks, and `encode_mdx()` reconstructs records while preserving field bits,
-fixed-width names, and optional section order. Geoset accessors such as
-`vertices()` borrow decoded data, and `vertices_mut()` supports bulk edits.
-
-## Numeric choices and flags
-
-Layer and Particle2 filter modes use separate `LayerFilterMode` and
-`Particle2FilterMode` enums because their binary values differ. Particle2's
-`frames` field uses `Particle2Frames`. All three retain unnamed binary values
-in `Unknown(u32)` variants. MDL output rejects choices without a text spelling.
-Layer shading is stored as `LayerShadingFlags` and retains unknown bits.
-
-Numeric enum derives use explicit wire mappings:
-
-```rust
-use wc3::model::mdx;
-
-#[derive(Clone, Copy, mdx::Read, mdx::Write, mdx::Value)]
-#[mdx(value = u32)]
-enum Choice {
-    #[mdx(value = 0)]
-    First,
-    #[mdx(value = 7)]
-    Second,
-    #[mdx(unknown)]
-    Unknown(u32),
+    assert_eq!(decoded.model_info().unwrap().name.text(), "Example");
+    assert!(text.contains("FormatVersion 800"));
+    Ok(())
 }
-
-assert_eq!(Choice::from_raw(99).raw(), 99);
 ```
 
-`mdx::Value` generates const `from_raw()` and `raw()` methods from those same
-mappings. Without an unknown variant, `from_raw()` returns `Option<Self>` and
-MDX reading rejects unnamed values. With an unknown variant, it returns `Self`.
-Known raw values always decode to named variants, so `Unknown(7)` in this
-example writes the same bytes as `Second` and reads back as `Second`.
-MDL value enums may mark a payload variant `#[mdl(unknown)]` to reject it on
-text output without assigning it a keyword.
+This creates a minimal model container. Add geometry, materials, and other
+records to build a renderable model.
 
-Emitter `flags()` accessors return context-specific `bitfield` types:
-`ParticleEmitterFlags`, `Particle2Flags`, and `PopcornFlags`. Their setters
-preserve unrelated bits in the embedded node. Prefer these accessors to shared
-node flag names for emitter behavior; bit 17, for example, means Particle2
-line emission but Popcorn unfogged rendering.
+### Read a model with a runtime version
 
-Migration from the previous API requires replacing integer filter assignments
-with enum variants (or explicit `from_raw()` calls), and replacing
-`frame_flags` with the typed `frames` field.
-ParticleEmitter2 and RibbonEmitter expose their fixed properties directly;
-replace `emitter.fields().speed` or `emitter.fields_mut().speed` with
-`emitter.speed`. The separate `Particle2Fields` and `RibbonFields` types and
-`set_fields()` methods have been removed.
+```rust
+use wc3::model::{mdl, DynamicModel};
+use wc3::model::mdl::{Read as _, Write as _};
 
-## Version conversion
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let source = r#"Version { FormatVersion 800, } Model "Example" {}"#;
+    let model = DynamicModel::decode_mdl(source)?;
+    let bytes = model.encode_mdx()?;
 
-Conversions build a new typed model and leave the source intact:
+    // The fallback applies only when the MDX file has no VERS chunk.
+    let decoded = DynamicModel::decode_mdx(&bytes, 800)?;
+    assert_eq!(decoded.version(), 800);
+
+    let text = decoded.encode_mdl_with_dialect(mdl::Dialect::HiveWorkshop)?;
+    assert!(text.contains("FormatVersion 800"));
+    Ok(())
+}
+```
+
+MDL readers accept Warcraft III and Hive Workshop dialects, including mixed
+input. Writers use Warcraft III syntax by default; select
+`mdl::Dialect::HiveWorkshop` explicitly for its alternative spellings.
+
+## Supported model data
+
+Supported versions are **800, 900, 1000, 1100, 1200, 1300, 1400, 1600, and 1800**,
+with corresponding marker types `V800` through `V1800`. `Model<V>` ties chunks
+and versioned records to the selected layout; typed reads check the file version.
+
+Both formats support whole models, including:
+
+- Model information, sequences, global sequences, and animation tracks.
+- Materials, layers, textures, and texture animations.
+- Geosets, geoset animations, pivot points, and bind poses.
+- Bones, helpers, attachments, lights, cameras, events, and collision shapes.
+- Particle, Particle2, Popcorn, and ribbon emitters, plus face effects and gliders.
+
+Availability and representation depend on the version and output dialect.
+The `mdl` module documentation describes field-level coverage and restrictions.
+
+## Editing models
+
+Ordinary records expose public fields for scalars, flags, embedded nodes, and
+vectors. Names and paths use `FixedText<N>`: `text()` reads the text,
+`set_text()` validates a replacement and clears padding, and `as_bytes()` /
+`from_bytes()` provide exact byte access. Geoset geometry and animation-track
+internals use methods to preserve structural invariants.
+
+Model collection getters return owned records collected across chunks. Setters
+replace the corresponding chunks, so changing a getter's result requires
+setting it back. For edits in place, match variants in the public ordered
+`model.chunks` vector or use `chunk_mut()`.
+
+`DynamicModel` exposes shared operations through `CommonModelAccess` and
+`TryModelAccess`. Use `visit_model!` to run the same expression against each
+possible typed model when you need direct access to its records.
+
+## Preservation and errors
+
+**MDX:** decoding retains chunk order, duplicate chunks, unknown chunk payloads,
+fixed-width text bytes, and unknown flag bits. Known chunks with malformed
+payloads return errors instead of becoming opaque chunks. Encoding reconstructs
+typed records from their current values.
+
+**MDL:** decoding preserves represented values, IDs, and references. Encoding
+writes deterministic field and block order, merges known collection chunks,
+and omits empty optional collections. Comments, whitespace, and original chunk
+organization do not survive a text round trip.
+
+MDL writers reject opaque chunks and binary values without a faithful text
+representation, including unknown flag bits, invalid fixed text, and certain
+hidden animation bases or noncanonical record layouts. NaN payload bits cannot
+survive text output. A successful format conversion does not imply byte equality
+with the original MDX file.
+
+Value validation uses `ValueError`; codec errors are `mdx::ReadError`,
+`mdx::WriteError`, `mdl::ReadError`, and `mdl::WriteError`. MDL read errors provide
+`diagnostic(source)` for source-span and line/column details. Streaming writers
+may leave partial output on error; use `encode_mdx()` or `encode_mdl()` to obtain
+an owned result before writing it to a file.
+
+## Converting versions
+
+Version conversion builds a new model and returns a report, leaving the source
+intact:
 
 ```rust
 use wc3::model::{ConversionOptions, Model, V800, V1100};
 
-let source = Model::<V800>::new();
-let converted = source.convert::<V1100>(&ConversionOptions::strict())?;
-let target: Model<V1100> = converted.model;
-let report = converted.report;
-# Ok::<(), wc3::model::ConversionError>(())
-```
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let source = Model::<V800>::new();
+    let converted = source.convert::<V1100>(&ConversionOptions::strict())?;
+    let target: Model<V1100> = converted.model;
 
-`DynamicModel` and the versioned material, layer, geoset, light, and camera
-records also expose `convert::<TargetVersion>()`. The result contains the
-converted value in `model` and a report with paths identifying initialized
-fields, omitted neutral defaults, discarded data, and opaque compatibility
-caveats. Errors identify the source and target versions and the first field
-or chunk that cannot be converted under the selected policies.
-
-Strict conversion preserves shared storage, including raw names, flag bits,
-track and optional-section order, duplicate chunks, and version extensions.
-Target-only fields use their existing constructor defaults. Unsupported
-fields may be omitted when equal to their neutral defaults (for example,
-emissive gain 1.0, zero shadow intensity, or empty texture slots); other
-values, unsupported animation tracks, and unsupported chunks cause an error.
-A missing `VERS` chunk is inserted. Camera variants retain their explicit,
-self-describing layout rather than adopting the target constructor's default.
-
-`ConversionOptions::lossy()` explicitly permits discarding unsupported data.
-Unknown chunks still require a separate `unknown_chunks` policy:
-`UnknownChunkPolicy::Reject` (the default), `Preserve`, or `Drop`. Preserving
-opaque bytes across versions does not guarantee compatibility with the game.
-Unknown chunks are always retained when the source and target versions match.
-
-Shader paths are preserved between V900 and V1000. Nonempty shader paths
-cannot yet be translated to layer shader IDs, so conversion to other layouts
-requires explicit loss permission. Weighted skinning is not translated into
-Classic matrix groups. Skin indices above 255 cannot be represented before
-V1400: strict conversion fails, while lossy conversion drops the whole skin
-section rather than truncating indices. These operations convert supported
-format data; they do not guarantee identical rendering across game versions.
-
-## MDL primitives
-
-`wc3::model::mdl` provides a borrowing `Lexer`, a copyable `Parser` with one token
-of lookahead, source-span diagnostics, and an `mdl::MdlWriter<W: std::io::Write>`.
-Parsing operates on resident UTF-8 text without an AST or a token buffer.
-Strings retain literal backslashes and embedded line breaks. Only `//` comments
-are supported. Numeric readers check ranges and accept the MDL non-finite float
-literals; finite float output round-trips exactly, including negative zero.
-NaN payload bits are not preserved by text output.
-
-`mdl::Read` / `mdl::Write` implementations currently cover `Texture` (`Bitmap`),
-`Sequence` (`Anim`, including `SyncPoint`), `ModelInfo` (`Model`),
-`GlobalSequence` (`Duration`), and `PivotPoint` (an anonymous vector entry). Readers accept fields
-in any order, apply defaults, and reject unknown or duplicate fields. An `Anim`
-requires `Interval`. `decode_mdl()` requires exactly one record; `Parser::read()`
-consumes one record from a larger stream. `encode_mdl()` returns an owned UTF-8
-`String`; `write_mdl()` writes to an existing `MdlWriter`. MDX uses the matching
-`decode_mdx()` / `encode_mdx()` and `read_mdx()` / `write_mdx()` methods.
-
-Counted lists yield records on demand, so individual records can go directly
-into the binary encoder:
-
-```rust
-use wc3::model::animation::GlobalSequence;
-use wc3::model::mdl::Parser;
-use wc3::model::mdx::Encoder;
-
-let mut parser = Parser::new("GlobalSequences 2 { Duration 1000, Duration 2500, }");
-parser.expect_ident("GlobalSequences")?;
-let mut bytes = Vec::with_capacity(8);
-let mut encoder = Encoder::new(&mut bytes);
-for record in parser.counted::<GlobalSequence>()? {
-    encoder.write(&record?)?;
+    assert_eq!(target.version(), 1100);
+    Ok(())
 }
-parser.finish()?;
-# Ok::<(), Box<dyn std::error::Error>>(())
 ```
 
-This example writes the collection payload, not an entire MDX model. Counted
-readers validate the declared count and closing brace when exhausted; call
-`finish()` to drain and validate a list after stopping early. Each record codec
-owns its entry punctuation. Dropping a block or list does not validate unread
-input. Parser copies are explicit checkpoints for speculative reads.
+Strict conversion preserves shared data, initializes target-only fields with
+constructor defaults, and rejects unsupported nondefault data. The report
+identifies initialized fields, omitted neutral defaults, discarded data, and
+opaque compatibility caveats.
 
-The writer uses tabs, LF, and deterministic field order. It rejects unknown flag
-bits, model animation-file data, non-UTF-8 text, nonzero text padding, and unterminated fixed
-text rather than silently losing binary data. Literal quotes and NUL cannot be
-written inside strings. Errors may leave partial output. Use
-`error.diagnostic(source)` to display line/column and the offending source span.
+`ConversionOptions::lossy()` permits discarding unsupported data. Unknown chunks
+have a separate `UnknownChunkPolicy`: `Reject` by default, `Preserve`, or `Drop`.
+Preserving opaque bytes across versions does not guarantee game compatibility.
+Conversions do not translate weighted skinning into Classic matrix groups or
+shader paths into layer shader IDs, and do not guarantee identical rendering.
 
-`#[derive(mdl::Read, mdl::Write)]` generates codecs for named-field structs with
-`#[mdl(block = "Name")]`. Fields explicitly specify `header`,
-`property = "Name"`, `flag = "Name"` (bool), or `skip`. Properties and flags are
-required unless given `default` or a `default = "factory"`; skipped fields need
-an explicit default. Optional bool flags use `default` to start false.
-`skip_if = "predicate"` controls property omission separately from defaults.
-Custom `read_with` / `write_with` value codecs and container `validate_read` /
-`validate_write` hooks cover irregular data and binary preservation checks.
-Generated codecs use stack locals and the existing parser/writer; ModelInfo
-uses these derives, including validation of its animation-file field. Texture,
-Sequence, GlobalSequence, and PivotPoint now use derives as well.
+## Codec APIs and documentation
 
-See the `mdl` module documentation for examples, hook signatures, and attribute
-rules. Packed `flags(Name = 1, Other = 2)` mappings work with `u32` or an
-`BitRange<u32>` type (with `Default` and `BitRangeMut<u32>` for parsing),
-initialize to zero, and reject duplicate names and unknown bits.
-`write_order(field_a, field_b, ...)` preserves MDL field order independently of
-binary layout. Single-field tuple structs support `#[mdl(property = "Name")]`
-and anonymous `#[mdl(entry)]` forms. The derives support at most 64 body names;
-flattened field groups, nested blocks, repeated records, and counted collections
-are derived too. Scalar keyword and tagged record enums are also supported.
-`Model<V>` and `DynamicModel` now read and write whole MDL files using the
-`mdl::Read` / `mdl::Write` traits. Readers require Version first and a Model
-block, check counts and duplicates, and preserve record order and object IDs.
-Writers emit canonical order, merge known collection chunks and omit empty
-optional lists. Opaque chunks, duplicate or extended Version/Model chunks,
-and binary data without a faithful text representation are errors.
-Camera, ParticleEmitter2 and ParticleEmitterPopcorn also have derived record
-codecs. Popcorn model blocks require version 900 or newer. Camera output uses
-the version's default binary variant and canonical channel order; other
-variants or channel orders return preservation errors.
+The `mdx` and `mdl` modules expose record-level `Read` and `Write` traits and
+derives as well as whole-model codecs. `mdx::Cursor` / `mdx::Encoder` handle
+binary streams; `mdl::Parser` / `mdl::MdlWriter` handle text. MDL parsing borrows
+resident UTF-8 input without building an AST or token buffer.
 
-```rust
-use wc3::model::{DynamicModel, Model, V800};
-use wc3::model::mdl::{Read as _, Write as _};
-use wc3::model::mdx::Write as _;
-let model = Model::<V800>::decode_mdl(
-    "Version { FormatVersion 800, } Model \"Example\" {}",
-).unwrap();
-let mdx = model.encode_mdx().unwrap();
-let canonical = model.encode_mdl().unwrap();
-let dynamic = DynamicModel::decode_mdl(&canonical).unwrap();
-assert_eq!(dynamic.version(), 800);
+For custom records, use format-qualified derives such as
+`#[derive(mdx::Read, mdx::Write, mdl::Read, mdl::Write)]`. The module docs explain
+wire mappings, MDL field attributes, custom property codecs, and dialect handling.
+Build the API documentation locally with:
+
+```sh
+cargo doc --workspace --no-deps --open
 ```
 
-MDL readers accept Warcraft III and HiveWorkshop spellings, including mixed
-input, and treat aliases as the same assignment for duplicate checks. Output
-uses Warcraft III syntax by default. Select HiveWorkshop syntax explicitly:
+## Development
 
-```rust
-use wc3::model::mdl::{Dialect, Read as _, Write as _};
-use wc3::model::materials::Layer;
-use wc3::model::V1800;
-let layer = Layer::<V1800>::decode_mdl(
-    "Layer { ShaderTypeId 1, NormalTextureID 1 { Linear, -1: 7, } }",
-).unwrap();
-let text = layer.encode_mdl_with_dialect(Dialect::HiveWorkshop).unwrap();
-assert!(text.contains("NormalTextureID 1"));
-assert!(layer.encode_mdl().is_err()); // engine syntax cannot identify this track's slot
+Run the workspace checks from the repository root:
+
+```sh
+cargo test --workspace
+cargo fmt --all -- --check
+cargo clippy --workspace --all-targets -- -D warnings
 ```
 
-`MdlWriter::with_dialect(sink, dialect)` selects the same behavior for streaming
-output and propagates it through whole models and nested codecs. HiveWorkshop
-uses numeric layer shader IDs, named texture slots, `SortPrimitives`, braced
-skin-weight rows, and raw geoset selection flags/LOD names. Both dialects accept
-and preserve the full known flag set, including flags usually omitted by Hive
-writers. Unknown bits and hidden animation bases still fail. Engine output
-rejects non-diffuse texture animations, unnamed shader IDs, raw selection flags
-other than 0/4, and nonempty LOD names rather than losing them. The material
-shader field in versions 900/1000 retains its string spelling in both dialects.
+Tests include synthetic models across all supported versions and independent
+binary/text fixtures. To enable additional byte-for-byte MDX round-trip checks
+against your own model collection:
 
-Ordinary property aliases use `#[mdl(hive_name = "OtherName")]`. Packed flags
-declare the complete known set in `flags(...)`; `hive_flags(...)` overrides
-selected spellings by bit, with all remaining flags shared. Aliases share
-presence bits. `WriteFields::prepare_mdl_fields` and
-`WriteProperty::validate_mdl_property` receive the dialect directly so nested
-preflight checks use the same dialect as output.
+```sh
+WC3_MDX_FIXTURES=/path/to/models cargo test -p wc3 --test roundtrip
+```
 
-MDL structural fields use `#[mdl(flatten)]`, `#[mdl(block = "Target")]`,
-`#[mdl(repeated = "Layer")]`, or `#[mdl(counted = "Points")]`. A reusable
-`#[mdl(fields)]` struct derives field codecs without a containing block.
-Flattened fields retain their own defaults and duplicate checks; nested blocks
-and counted lists are required unless given defaults. Collection items own
-framing, and counted collections validate their declared size. `Sequence` uses
-this support to flatten its shared `GeosetExtent` bounding fields while preserving
-its MDX layout and public extent field.
+These checks supplement the synthetic suite; full semantic coverage of the
+entire game model collection has not been verified.
 
-Enums use `#[mdl(value)]` for unit keyword variants or `#[mdl(tagged)]` for
-complete flag/property/block records. `#[mdl(name = "Blend")]` renames a scalar
-variant. Tagged payloads declare `property`, `block`, or `name` with `delegate`;
-delegation leaves complete framing to the payload codec. Name expressions also
-accept constant paths. Literal duplicate names are compile-time errors; constant
-names are validated without allocation before reading/writing. Interpolation
-and the default animation track groups now use these derives.
+## License
 
-Texture paths occupy 260 bytes (up to 259 UTF-8 bytes plus NUL). ModelInfo stores
-an 80-byte name followed by a separate 260-byte animation-file path, exposed as
-`animation_file_name: FixedText<260>`. Editing the name preserves
-the animation-file bytes. The supported MDL Model block has no animation-file
-property, so nonzero animation-file data is rejected on MDL output.
-
-## MDL model foundations
-
-Event frame APIs use signed `i32` times, including negative lead-in frames.
-Material priority planes also use `i32`; PRE2 priority remains unsigned.
-These signed API changes preserve the existing four-byte binary layout.
-
-`scene::CameraTrack` includes visibility and the three depth-of-field tracks.
-Its scalar DOF helpers construct stepped keys at frame zero, and MDL output
-uses the keyed spellings to avoid the client's scalar focal-length/f-stop swap.
-`materials::ShaderType` is the layer's stored shader type, wrapping any `u32`
-ID. Use `layer.set_shader_type(ShaderType::HD_DEFAULT_UNIT)` for named shaders
-or `ShaderType::new(id)` for raw IDs. `shader_type()` returns the wrapper and
-`id()` retrieves its exact binary value; `name()` is optional for unnamed IDs.
-The checked accessors are `try_shader_type()` / `try_set_shader_type()`. These
-replace the previous raw `shader_type_id` accessors, and the layout associated
-type is now `MaterialLayout::ShaderType`.
-
-`scene::Glider` and `chunks::GlidersChunk` represent the `DILG` world-picking
-whitelist. `gliders()` / `set_gliders()` work on every typed version and through
-`CommonModelAccess` on runtime models. Clearing the list removes its chunks.
-Gliders have no version gate and are preserved during conversion.
-
-New light constructors use white direct and ambient colors. New Popcorn
-emitters use white color and unit lifespan, emission rate, speed, and alpha.
-Binary decoding retains the values actually stored in the file.
-
-## Delegated MDL properties
-
-`#[mdl(property = "Name", delegate)]` delegates the property's payload, missing
-value policy, and complete output to the field type's `mdl::ReadProperty` /
-`mdl::WriteProperty` implementations. The derive retains name dispatch,
-duplicate checks and output ordering, and adds no version checks. A missing
-property is required by default; the field codec can instead supply a default
-or absent storage. Unavailable field types reject presence with a source span
-and omit the whole property on output. Delegated preflight validation runs
-before the record writes any bytes.
-
-`Option<T>` supports this interface directly: None omits the property and
-Some(value) writes it. Delegated codecs own defaults and omission, including
-in records with `#[mdl(default)]`; field-level default/required/skip_if and
-value hooks are incompatible. The current form covers ordinary named
-properties. Static/animated delegation remains a later extension.
+MIT OR Apache-2.0, as declared in the crate manifests.
