@@ -5,6 +5,7 @@ edition = "2021"
 rust-version = "1.88"
 license = "MIT OR Apache-2.0"
 description = "Binary MDX and streaming MDL codec derives for wc3"
+repository = "https://github.com/jonathanvdc/wc3"
 
 [lib]
 proc-macro = true

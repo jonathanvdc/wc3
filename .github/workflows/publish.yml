@@ -1,0 +1,55 @@
+name: Publish crates
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    if: github.ref_type != 'tag'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo publish --dry-run --locked -p wc3-derive
+      - run: cargo publish --dry-run --locked -p wc3
+
+  publish:
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Check tag and crate versions
+        shell: bash
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "Expected a version tag such as v0.2.0" >&2
+            exit 1
+          fi
+          metadata="$(cargo metadata --no-deps --format-version 1)"
+          for crate in wc3-derive wc3; do
+            crate_version="$(jq -r --arg crate "$crate" '.packages[] | select(.name == $crate) | .version' <<< "$metadata")"
+            if [[ "$crate_version" != "$version" ]]; then
+              echo "$crate is $crate_version, but the tag is v$version" >&2
+              exit 1
+            fi
+          done
+      - run: cargo test --workspace --locked
+      - uses: rust-lang/crates-io-auth-action@v1
+        id: auth
+      - run: cargo publish --locked -p wc3-derive
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+      - run: cargo publish --locked -p wc3
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
