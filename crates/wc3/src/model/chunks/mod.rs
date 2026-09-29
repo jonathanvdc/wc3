@@ -1,4 +1,13 @@
-//! Raw and typed top-level MDX chunks.
+//! Access model records while preserving their MDX chunk organization.
+//!
+//! Match [`ModelChunk`] variants in a model's `chunks` vector to edit records
+//! in place. This retains duplicate chunks and their order, unlike collection
+//! setters that replace a complete collection. [`UnknownChunk`] keeps payloads
+//! whose tags are not recognized; [`RawChunk`] is available for direct byte access.
+//!
+//! The chunk traits distinguish a complete chunk from its payload. Use model
+//! codecs for whole files; `encode_payload_to()` writes neither the chunk tag
+//! nor its size header.
 use crate::model::mdx;
 use crate::model::WriteError;
 use crate::model::{Cursor, Encoder, Tag};

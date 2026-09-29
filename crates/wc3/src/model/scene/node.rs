@@ -1,4 +1,4 @@
-//! Shared node headers used by bones and helpers.
+//! Transform hierarchy shared by helpers, bones, and scene objects.
 use crate::model::mdl::{MdlWriter, Parser, Span, TokenKind, WriteFields as _};
 use crate::model::ModelVersion;
 use crate::model::{mdl, mdx};
@@ -25,12 +25,11 @@ use crate::model::{Model, ReadError};
 const NAME_SIZE: usize = 80;
 
 bitfield! {
-    /// Node behavior and historical object-kind bits. Unrecognized bits survive conversion.
+    /// Transform inheritance, billboarding, and object flags.
     ///
-    /// Bits 15–20 depend on the containing emitter record. Prefer the emitter's
-    /// typed `node.flags` field for those bits: for example, bit 17
-    /// means Particle2 line emission but Popcorn unfogged rendering.
-    /// Historical kind bits are preserved storage, not an authoritative record kind.
+    /// For emitters, use the emitter's typed flags: the same bit can mean
+    /// different behavior for Particle2 and Popcorn effects. Unknown bits are
+    /// retained in MDX but cannot be exported to MDL.
     #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, mdx::Read, mdx::Write)]
     pub struct NodeFlags(u32);
     /// Returns the exact stored bits.
@@ -63,7 +62,7 @@ bitfield! {
     pub xy_quad, set_xy_quad: 20;
 }
 
-/// A shared node header with decoded transform tracks.
+/// A named object in the model transform hierarchy.
 ///
 /// `F` stores the complete flag word and selects its interpretation. Emitter
 /// records use their own flag types; ordinary nodes default to `NodeFlags`.
@@ -74,10 +73,10 @@ bitfield! {
 #[mdl(fields)]
 pub struct Node<F = NodeFlags> {
     #[mdl(header)]
-    /// Fixed-width name preserving every stored byte.
+    /// Object name; event and attachment naming conventions may give it game-specific meaning.
     pub name: FixedText<NAME_SIZE>,
     #[mdl(property = "ObjectId")]
-    /// Object ID.
+    /// Identifier used by parent references and as an index into model pivot points.
     pub object_id: u32,
     #[mdl(
         property = "Parent",
@@ -102,14 +101,13 @@ pub struct Node<F = NodeFlags> {
     /// Node flags.
     pub flags: F,
     #[mdl(repeated(Translation, Rotation, Scaling), unique_by = "NodeTrack::tag")]
-    /// Transform tracks without reparsing.
+    /// Animated translation, rotation, and scaling.
     pub tracks: Vec<NodeTrack>,
 }
 
-/// A bone with a decoded node and two geoset references.
+/// A skeletal node that influences mesh geometry.
 ///
-/// Reading MDL reconstructs the node's bone bit. MDL writing requires that bit
-/// (and no other object-kind bits), preserving the exact binary representation.
+/// MDL output requires the node bone flag and rejects conflicting object-kind flags.
 #[derive(Clone, Debug, PartialEq, mdl::Read, mdl::Write)]
 #[mdl(
     block = "Bone",
@@ -126,7 +124,7 @@ pub struct Bone {
         read_with = "read_geoset",
         write_with = "write_geoset"
     )]
-    /// Geoset reference.
+    /// Geoset index, or `u32::MAX` for a bone that spans multiple geosets.
     pub geoset_id: u32,
     #[mdl(
         property = "GeosetAnimId",
@@ -134,7 +132,7 @@ pub struct Bone {
         read_with = "read_geoset_animation",
         write_with = "write_geoset_animation"
     )]
-    /// Geoset animation reference.
+    /// Geoset-animation index, or `u32::MAX` when none is assigned.
     pub geoset_animation_id: u32,
 }
 
@@ -194,7 +192,7 @@ impl Bone {
 }
 
 impl<V: ModelVersion> Model<V> {
-    /// Decodes every bone in `BONE` chunks.
+    /// Returns owned copies of all bones in model order.
     pub fn bones(&self) -> Vec<Bone> {
         self.collect_chunk_records::<BonesChunk>()
     }
@@ -204,7 +202,7 @@ impl<V: ModelVersion> Model<V> {
         self.replace_chunk(BonesChunk::new(bones.to_vec()));
     }
 
-    /// Decodes every helper node in `HELP` chunks.
+    /// Returns owned copies of all helper nodes in model order.
     pub fn helpers(&self) -> Vec<Node> {
         self.collect_chunk_records::<HelpersChunk>()
     }

@@ -28,7 +28,7 @@ impl<V: ModelVersion> Model<V> {
 }
 
 impl<V: SupportsReforgedChunks> Model<V> {
-    /// Returns decoded `BPOS` records.
+    /// Returns owned bind-pose matrices in model order.
     pub fn bind_poses(&self) -> Vec<BindPoseMatrix> {
         self.decoded_chunks::<BindPoseChunk>()
             .flat_map(|chunk| chunk.records.iter())

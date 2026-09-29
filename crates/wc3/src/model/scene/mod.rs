@@ -1,3 +1,9 @@
+//! Model metadata and objects in the transform hierarchy.
+//!
+//! [`Node`] supplies a name, object ID, parent reference, and transform animation.
+//! Bones, attachments, lights, and other scene objects build on that hierarchy.
+//! Cameras define a view and target independently. Object IDs also index the
+//! model pivot-point collection.
 mod node;
 pub(crate) use node::{impl_node_flags, set_node_kind, validate_node_kind};
 pub use node::{Bone, Node, NodeFlagInterpretation, NodeFlags};

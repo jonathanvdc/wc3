@@ -21,7 +21,9 @@ pub struct Token<'a> {
     pub span: Span,
 }
 
-/// Allocation-free token iterator over resident UTF-8 text.
+/// Tokenize an MDL source string for custom syntax readers.
+///
+/// For models and records, prefer [`super::Parser`] or [`super::Read::decode_mdl`].
 ///
 /// Skips whitespace, a leading BOM and line comments. An error
 /// terminates iteration. Numeric spelling is validated by the typed reader.

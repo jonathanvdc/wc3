@@ -13,12 +13,15 @@ use crate::model::{CollectionChunk, ModelChunk, ReadError, VersionChunk};
 /// The four bytes at the start of an MDX file.
 pub const MAGIC: Tag = *b"MDLX";
 
-/// An ordered MDX model whose known chunks and versioned records use layout `V`.
+/// A model with a known format version.
 ///
-/// The `mdl::Read` and `mdl::Write` traits also provide whole-file text I/O.
-/// MDL requires Version and Model blocks and checks FormatVersion against `V`.
-/// Text output canonicalizes chunk organization and rejects opaque data and
-/// records whose text codecs are unavailable; see [`crate::model::mdl`].
+/// `V` keeps version-dependent records compatible with the model. Import the
+/// [`mdx`] or [`crate::model::mdl`] codec traits for whole-file reading and writing.
+/// MDX retains chunk organization; MDL produces canonical text and rejects
+/// data without a faithful text representation.
+///
+/// Collection getters return owned copies. Set edited copies back on the model,
+/// or use [`Model::chunks`] to edit records in place.
 ///
 /// ```compile_fail
 /// use wc3::model::{Model, V800, V1100};

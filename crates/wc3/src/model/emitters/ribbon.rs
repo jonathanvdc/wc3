@@ -1,4 +1,4 @@
-//! Ribbon emitter records in `RIBB` chunks.
+//! Animated ribbon trails.
 use crate::model::mdl::Span;
 use crate::model::scene::{set_node_kind, validate_node_kind};
 use crate::model::ModelVersion;
@@ -20,11 +20,11 @@ use crate::model::KnownChunk;
 use crate::model::RibbonEmittersChunk;
 use crate::model::{Model, Node};
 
-/// One ribbon emitter with decoded fixed properties and animation tracks.
+/// A trail emitted from an animated node and rendered with a model material.
 ///
-/// MDL reading restores the ribbon object-kind bit; writing requires matching
-/// node bits and default hidden bases. TextureSlot accepts a bare scalar alias
-/// and writes the canonical static spelling.
+/// Height, opacity, color, and texture-cell selection can be animated. MDL
+/// output requires matching ribbon node flags and rejects nondefault base
+/// values hidden by animation tracks.
 #[derive(Clone, Debug, PartialEq, mdx::Read, mdx::Write, mdl::Read, mdl::Write)]
 #[mdx(sized(tag = RibbonEmittersChunk::TAG))]
 #[mdl(
@@ -41,14 +41,17 @@ pub struct RibbonEmitter {
         track = "RibbonTrack::HeightAbove",
         default
     )]
+    /// Ribbon height above its emission point.
     pub height_above: f32,
     #[mdl(
         animatable = "HeightBelow",
         track = "RibbonTrack::HeightBelow",
         default
     )]
+    /// Ribbon height below its emission point.
     pub height_below: f32,
     #[mdl(animatable = "Alpha", track = "RibbonTrack::Alpha", default)]
+    /// Opacity when no alpha track is active.
     pub alpha: f32,
     #[mdl(animatable = "Color", track = "RibbonTrack::Color", default)]
     pub color: Color,
@@ -60,14 +63,18 @@ pub struct RibbonEmitter {
         default,
         bare_static
     )]
+    /// Texture-atlas cell used when no texture-slot track is active.
     pub texture_slot: u32,
     #[mdl(property = "EmissionRate", default)]
     pub emission_rate: u32,
     #[mdl(property = "Rows", default)]
+    /// Number of rows in the texture atlas.
     pub rows: u32,
     #[mdl(property = "Columns", default)]
+    /// Number of columns in the texture atlas.
     pub columns: u32,
     #[mdl(property = "MaterialID", default)]
+    /// Index into the model material collection.
     pub material_id: u32,
     #[mdl(property = "Gravity", default, skip_if = "zero_gravity")]
     pub gravity: f32,
@@ -98,7 +105,7 @@ impl RibbonEmitter {
 }
 
 impl<V: ModelVersion> Model<V> {
-    /// Decodes all ribbon emitter records in file order.
+    /// Returns owned copies of ribbon emitter records in file order.
     pub fn ribbon_emitters(&self) -> Vec<RibbonEmitter> {
         self.collect_chunk_records::<RibbonEmittersChunk>()
     }

@@ -1,4 +1,4 @@
-//! Keyframe values and their binary representations.
+//! Timed animation values and spline tangents.
 
 use crate::model::{mdl, mdx};
 /// An interpolation mode shared by all keys in a track.

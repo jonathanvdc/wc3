@@ -1,4 +1,4 @@
-//! Animation sequence records in the `SEQS` chunk.
+//! Named animation ranges and playback settings.
 use crate::model::mdl;
 use crate::model::mdl::{is_positive_zero, is_zero};
 use crate::model::mdx;
@@ -18,13 +18,13 @@ bitfield! {
     pub struct SequenceFlags(u32);
     /// Returns the exact stored bits.
     pub bits, _: 31, 0;
-    /// Returns or changes the `NON_LOOPING` bit.
+    /// Plays the sequence once instead of looping.
     pub non_looping, set_non_looping: 0;
 }
 
 const NAME_SIZE: usize = 80;
 
-/// A fixed-size animation sequence with lossless playback flags.
+/// A named animation range on the model timeline.
 #[derive(Clone, Debug, PartialEq, Default, mdx::Read, mdx::Write, mdl::Read, mdl::Write)]
 #[mdl(
     block = "Anim",
@@ -32,14 +32,17 @@ const NAME_SIZE: usize = 80;
 )]
 pub struct Sequence {
     #[mdl(header)]
+    /// Animation name, such as `Stand`, `Walk`, or `Death`.
     pub name: FixedText<NAME_SIZE>,
     #[mdl(property = "Interval")]
+    /// Start and end times in milliseconds on the model timeline.
     pub interval: [u32; 2],
     #[mdl(property = "MoveSpeed", default, skip_if = "is_positive_zero")]
     pub move_speed: f32,
     #[mdl(flags(NonLooping = 1))]
     pub flags: SequenceFlags,
     #[mdl(property = "Rarity", default, skip_if = "is_positive_zero")]
+    /// Weight used for random animation selection.
     pub rarity: f32,
     #[mdl(property = "SyncPoint", default, skip_if = "is_zero")]
     pub sync_point: u32,
@@ -64,7 +67,7 @@ impl Sequence {
 }
 
 impl<V: ModelVersion> Model<V> {
-    /// Decodes every `SEQS` chunk in file order.
+    /// Returns owned copies of `SEQS` chunk in file order.
     pub fn sequences(&self) -> Vec<Sequence> {
         self.collect_chunk_records::<SequencesChunk>()
     }

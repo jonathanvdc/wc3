@@ -1,4 +1,4 @@
-//! Reforged face-animation references in `FAFX` chunks.
+//! Reforged facial-animation resource references.
 use crate::model::ValueError;
 use crate::model::{mdl, mdx};
 use crate::model::{ModelVersion, SupportsReforgedChunks};
@@ -11,15 +11,15 @@ use crate::model::Model;
 const NAME_SIZE: usize = 80;
 const PATH_SIZE: usize = 260;
 
-/// One fixed-size face-animation name and path pair.
+/// A named facial-animation resource for a Reforged model.
 #[derive(Clone, Debug, Eq, PartialEq, mdx::Read, mdx::Write, mdl::Read, mdl::Write)]
 #[mdl(block = "FaceFX")]
 pub struct FaceFx {
     #[mdl(header)]
-    /// Fixed-width name preserving every stored byte.
+    /// Name identifying the facial-animation target.
     pub name: FixedText<NAME_SIZE>,
     #[mdl(property = "Path", default)]
-    /// Fixed-width path preserving every stored byte.
+    /// Path to the facial-animation resource.
     pub path: FixedText<PATH_SIZE>,
 }
 
@@ -52,7 +52,7 @@ impl<V: ModelVersion> Model<V> {
 }
 
 impl<V: SupportsReforgedChunks> Model<V> {
-    /// Returns decoded `FAFX` records.
+    /// Returns owned facial-animation references in model order.
     pub fn face_fx(&self) -> Vec<FaceFx> {
         self.collect_chunk_records::<FaceFxChunk>()
     }

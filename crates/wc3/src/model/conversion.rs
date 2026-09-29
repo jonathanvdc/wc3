@@ -33,6 +33,7 @@ pub struct ConversionOptions {
     pub unknown_chunks: UnknownChunkPolicy,
 }
 impl ConversionOptions {
+    /// Rejects unsupported nondefault data and opaque chunks when changing versions.
     pub fn strict() -> Self {
         Self::default()
     }
@@ -64,16 +65,19 @@ pub struct ConversionIssue {
     pub kind: ConversionIssueKind,
     pub description: String,
 }
+/// Changes and compatibility caveats to inspect after a successful conversion.
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct ConversionReport {
     pub issues: Vec<ConversionIssue>,
 }
+/// A converted model or record together with the changes made to produce it.
 #[derive(Clone, Debug)]
 pub struct Conversion<T> {
     pub model: T,
     pub report: ConversionReport,
 }
 
+/// The first field or chunk that cannot be converted under the selected policy.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ConversionError {
     pub source_version: Version,

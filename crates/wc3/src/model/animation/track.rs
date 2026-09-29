@@ -14,7 +14,12 @@ enum Keyframes<T> {
     Bezier(Vec<TangentKeyframe<T>>),
 }
 
-/// An animation track whose tag, value type, and tangent shape are linked.
+/// Keyframes for one animated property.
+///
+/// The kind `K` selects the property and its value type. Constructors select the
+/// interpolation and matching keyframe shape. Times are in milliseconds;
+/// `global_sequence_id` is an index into the model global-sequence collection,
+/// or `None` to use the current model sequence.
 #[derive(Clone, Debug, PartialEq)]
 pub struct AnimationTrack<K: TrackKind> {
     global_sequence_id: Option<u32>,
@@ -23,14 +28,14 @@ pub struct AnimationTrack<K: TrackKind> {
 }
 
 impl<K: TrackKind> AnimationTrack<K> {
-    /// Creates a track with no interpolation or tangents.
+    /// Creates stepped animation: each key value holds until the next key.
     pub fn step(
         keys: Vec<ValueKeyframe<K::Value>>,
         global_sequence_id: Option<u32>,
     ) -> Result<Self, ValueError> {
         Self::new(Keyframes::Step(keys), global_sequence_id)
     }
-    /// Creates a track with linear interpolation and no tangents.
+    /// Creates animation that interpolates linearly between adjacent key values.
     pub fn linear(
         keys: Vec<ValueKeyframe<K::Value>>,
         global_sequence_id: Option<u32>,
@@ -83,24 +88,28 @@ impl<K: TrackKind> AnimationTrack<K> {
             Keyframes::Bezier(_) => Interpolation::Bezier,
         }
     }
+    /// Returns keys only when this track uses stepped interpolation.
     pub fn step_keys(&self) -> Option<&[ValueKeyframe<K::Value>]> {
         match &self.keyframes {
             Keyframes::Step(keys) => Some(keys),
             _ => None,
         }
     }
+    /// Returns keys only when this track uses linear interpolation.
     pub fn linear_keys(&self) -> Option<&[ValueKeyframe<K::Value>]> {
         match &self.keyframes {
             Keyframes::Linear(keys) => Some(keys),
             _ => None,
         }
     }
+    /// Returns keys and tangents only when this track uses Hermite interpolation.
     pub fn hermite_keys(&self) -> Option<&[TangentKeyframe<K::Value>]> {
         match &self.keyframes {
             Keyframes::Hermite(keys) => Some(keys),
             _ => None,
         }
     }
+    /// Returns keys and tangents only when this track uses Bezier interpolation.
     pub fn bezier_keys(&self) -> Option<&[TangentKeyframe<K::Value>]> {
         match &self.keyframes {
             Keyframes::Bezier(keys) => Some(keys),

@@ -1,4 +1,4 @@
-//! Fixed-size `MODL` model information.
+//! Model name, bounds, and animation blending settings.
 use crate::model::mdl;
 use crate::model::mdl::{is_zero, WriteError};
 use crate::model::mdx;
@@ -15,7 +15,7 @@ const SIZE: usize = 372;
 const NAME_SIZE: usize = 80;
 const ANIMATION_FILE_NAME_SIZE: usize = 260;
 
-/// The 372-byte `MODL` record with separate name and animation-file fields.
+/// The model name, overall bounds, and animation cross-fade duration.
 #[derive(Clone, Debug, PartialEq, mdx::Write, mdl::Read, mdl::Write)]
 #[mdl(
     block = "Model",
@@ -24,10 +24,10 @@ const ANIMATION_FILE_NAME_SIZE: usize = 260;
 )]
 pub struct ModelInfo {
     #[mdl(header)]
-    /// Fixed-width name preserving every stored byte.
+    /// Display name of the model.
     pub name: FixedText<NAME_SIZE>,
     #[mdl(skip, default)]
-    /// Fixed-width animation file name preserving every stored byte.
+    /// External animation resource path. Nonempty binary data here cannot be exported to MDL.
     pub animation_file_name: FixedText<ANIMATION_FILE_NAME_SIZE>,
     #[mdl(property = "BoundsRadius", default)]
     /// Model's bounding sphere radius.
@@ -57,7 +57,7 @@ impl Default for ModelInfo {
 }
 
 impl ModelInfo {
-    /// Creates a zero-initialized model record with a name.
+    /// Creates model information with the supplied name and zero bounds and blend time.
     pub fn new(name: &str) -> Result<Self, ValueError> {
         let mut info = Self::default();
         info.name.set_text(name)?;
@@ -66,15 +66,15 @@ impl ModelInfo {
 }
 
 impl<V: ModelVersion> Model<V> {
-    /// Returns the first decoded `MODL` record, if present.
+    /// Returns an owned copy of the model information, if present.
     pub fn model_info(&self) -> Option<ModelInfo> {
         self.decoded_chunks::<ModelInfoChunk>()
             .next()
             .map(|decoded| decoded.info.clone())
     }
 
-    /// Replaces all `MODL` chunks with one decoded chunk at the first one's
-    /// position, or appends one if none exists.
+    /// Replaces the model information, creating it if absent.
+    /// Any additional model-information chunks and their extensions are removed.
     pub fn set_model_info(&mut self, info: &ModelInfo) {
         self.replace_chunk(ModelInfoChunk::new(info.clone(), Vec::new()));
     }

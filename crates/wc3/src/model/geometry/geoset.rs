@@ -1,4 +1,4 @@
-//! Typed geoset sections, lossless MDX serialization and derived MDL codecs.
+//! Mesh geometry, material references, bounds, and skinning.
 use crate::model::conversion::ConversionContext;
 use crate::model::ConversionError;
 use crate::model::Encoder;
@@ -41,7 +41,7 @@ impl Default for GeosetExtent {
 }
 
 /// Four bone influences for one vertex. Weights use the range 0..=255
-/// and are normalized by dividing by 255, even in the wide wire format.
+/// and represent fractions of full influence when divided by 255.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct SkinWeights {
     pub bone_indices: [u16; 4],
@@ -201,8 +201,12 @@ use mdl_codec::{
     AnimExtent, Faces, Groups, List, OptionalList, Selection, SkinRow, Uncounted, UvSet,
 };
 
-/// A geoset as typed sections. The exact fixed-width name field is retained
-/// for byte-for-byte serialization.
+/// A mesh rendered with one material.
+///
+/// Vertex positions, normals, UV sets, and skin influences must agree in count.
+/// Use the editing methods to keep those arrays consistent. Material and bone
+/// references are model indices; changing collection order requires updating
+/// the affected references.
 #[derive(Clone, Debug, PartialEq, mdl::Read, mdl::Write)]
 #[mdl(block = "Geoset", validate_read = "Self::validate_mdl_read",
     validate_write = "Self::validate_mdl_write",
@@ -318,7 +322,7 @@ impl<V: ModelVersion> Geoset<V> {
         V::NUMBER
     }
 
-    /// Borrows all vertex positions without decoding or allocating.
+    /// Vertex positions in model coordinates.
     pub fn vertices(&self) -> &[Vec3] {
         &self.vertices
     }
@@ -334,15 +338,15 @@ impl<V: ModelVersion> Geoset<V> {
     pub fn normals_mut(&mut self) -> &mut [Vec3] {
         &mut self.normals
     }
-    /// Borrows primitive type identifiers from `PTYP`.
+    /// Primitive type for each face group; triangle groups use type 4.
     pub fn primitive_types(&self) -> &[u32] {
         &self.primitive_types
     }
-    /// Borrows primitive counts from `PCNT`.
+    /// Number of vertex indices in each primitive group.
     pub fn primitive_counts(&self) -> &[u32] {
         &self.primitive_counts
     }
-    /// Borrows vertex indices from `PVTX`.
+    /// Face indices into the vertex-position array.
     pub fn face_indices(&self) -> &[u16] {
         &self.faces
     }
@@ -354,11 +358,11 @@ impl<V: ModelVersion> Geoset<V> {
     pub fn vertex_groups(&self) -> &[u8] {
         &self.vertex_groups
     }
-    /// Borrows matrix group sizes from `MTGC`.
+    /// Number of bone references in each matrix group.
     pub fn matrix_group_sizes(&self) -> &[u32] {
         &self.matrix_group_sizes
     }
-    /// Borrows flattened matrix indices from `MATS`.
+    /// Bone object IDs, concatenated in matrix-group order.
     pub fn matrix_indices(&self) -> &[u32] {
         &self.matrix_indices
     }
@@ -395,7 +399,7 @@ impl<V: ModelVersion> Geoset<V> {
         self.uv_sets.get_mut(index).map(Vec::as_mut_slice)
     }
 
-    /// Returns the fixed-width name without changing nonzero padding bytes.
+    /// Returns the level-of-detail name, if this version supports it.
     pub fn try_name(&self) -> Result<Cow<'_, str>, ValueError> {
         if V::NUMBER < 900 {
             return Err(ValueError::UnsupportedVersion {
@@ -506,7 +510,7 @@ impl<V: ModelVersion> Geoset<V> {
         Ok(())
     }
 
-    /// Changes the unselectable mask (4), preserving other selection flags.
+    /// Enables or disables unselectability while preserving other selection flags.
     pub fn set_unselectable(&mut self, value: bool) {
         self.unselectable_raw = (self.unselectable_raw & !4) | (u32::from(value) * 4);
     }
@@ -849,7 +853,7 @@ fn write_vectors<const N: usize>(
 }
 
 impl<V: ModelVersion> Model<V> {
-    /// Decodes geosets from every `GEOS` chunk in file order.
+    /// Returns owned geosets in chunk and record order.
     pub fn geosets(&self) -> Vec<Geoset<V>> {
         self.collect_chunk_records::<GeosetsChunk<V>>()
     }

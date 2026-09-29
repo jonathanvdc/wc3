@@ -60,7 +60,11 @@ impl<T: Read + Copy + Default, const N: usize> Read for [T; N] {
     }
 }
 
-/// A copyable position within immutable bytes. Child cursors are bounded slices.
+/// Read MDX values from a byte slice.
+///
+/// Use [`Read::decode_mdx`] for a complete value. For custom record readers,
+/// bounded child cursors keep reads inside the current record. Copy a cursor
+/// before a speculative read to retain a checkpoint.
 #[derive(Clone, Copy, Debug)]
 pub struct Cursor<'a> {
     bytes: &'a [u8],

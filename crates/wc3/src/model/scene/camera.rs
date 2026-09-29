@@ -1,4 +1,4 @@
-//! Typed camera records in `CAMS` chunks.
+//! Camera views, targets, and lens animation.
 use crate::model::animation::{
     AnimationTrack, CameraRotation, CameraTargetTranslation, CameraTranslation, ValueKeyframe,
 };
@@ -39,8 +39,8 @@ use crate::model::{Model, ReadError};
 const NAME_SIZE: usize = 80;
 const MAX_RECORD_SIZE: usize = 0x00ff_ffff;
 
-/// Camera record layout selected by the high byte of its size word.
-/// Variants 1 and 2 contain twelve otherwise uninterpreted bytes.
+/// Binary camera layout. Preserve the decoded variant when editing MDX.
+/// MDL output requires the default variant for the model version.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum CameraVariant {
     Variant0,
@@ -96,7 +96,7 @@ impl CameraLayout for V1800 {
     const DEFAULT_VARIANT: CameraVariant = CameraVariant::Variant3;
 }
 
-/// A camera with decoded fixed fields and animation tracks.
+/// A camera view with a position, look-at target, clipping planes, and animation.
 #[derive(Clone, Debug, PartialEq, mdl::Read, mdl::Write)]
 #[mdl(block = "Camera", validate_write = "Self::validate_mdl",
     write_order(position, transforms, field_of_view, far_clip, near_clip, lens, target, visibility),
@@ -113,7 +113,7 @@ impl CameraLayout for V1800 {
 )]
 pub struct Camera<V: ModelVersion> {
     #[mdl(header)]
-    /// Fixed-width name preserving every stored byte.
+    /// Name used to identify this camera view.
     pub name: FixedText<NAME_SIZE>,
     #[mdl(skip, default = "Self::mdl_variant")]
     /// Record layout variant and any associated bytes.
@@ -122,7 +122,7 @@ pub struct Camera<V: ModelVersion> {
     /// Camera XYZ position.
     pub position: Vec3,
     #[mdl(property = "FieldOfView")]
-    /// Field of view.
+    /// Vertical field of view in radians.
     pub field_of_view: f32,
     #[mdl(property = "FarClip")]
     /// Far clipping distance.
@@ -134,7 +134,7 @@ pub struct Camera<V: ModelVersion> {
     /// Target XYZ position.
     pub target_position: Vec3,
     #[mdl(skip, default)]
-    /// Camera tracks without reparsing.
+    /// Animated camera position, target, rotation, visibility, and lens settings.
     pub tracks: Vec<CameraTrack>,
     #[mdl(skip, default)]
     version: PhantomData<V>,
@@ -160,7 +160,7 @@ impl<V: ModelVersion> Camera<V> {
 }
 
 impl<V: ModelVersion> Model<V> {
-    /// Decodes all camera records in `CAMS` chunks.
+    /// Returns owned copies of camera records in `CAMS` chunks.
     pub fn cameras(&self) -> Vec<Camera<V>> {
         self.collect_chunk_records::<CamerasChunk<V>>()
     }

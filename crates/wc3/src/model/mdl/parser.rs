@@ -5,8 +5,11 @@ use std::iter::FusedIterator;
 use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
 
-/// Pull parser with one borrowed lookahead token. Copies are cheap checkpoints.
-/// Failed reads may advance; use a copy explicitly when rollback is needed.
+/// Read records, properties, or list entries from an MDL source string.
+///
+/// For a whole value, prefer [`Read::decode_mdl`], which also checks trailing
+/// input. Failed reads may advance this parser; copy it before a speculative
+/// read when you need to restore the earlier position.
 #[derive(Clone, Copy, Debug)]
 pub struct Parser<'a> {
     lexer: Lexer<'a>,
@@ -108,7 +111,7 @@ impl<'a> Parser<'a> {
             _ => Err(self.error(ReadErrorKind::Expected("a quoted string"))),
         }
     }
-    /// Copies directly into inline fixed-width storage, without a temporary String.
+    /// Reads a quoted string into a fixed-width text field.
     pub fn read_fixed_text<const N: usize>(&mut self) -> Result<FixedText<N>, ReadError> {
         self.peek()?;
         let span = self.error(ReadErrorKind::Expected("a quoted string")).span;

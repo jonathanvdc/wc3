@@ -1,4 +1,4 @@
-//! Light records in `LITE` chunks.
+//! Direct and ambient lighting with version-dependent shadow settings.
 use crate::model::conversion::ConversionContext;
 use crate::model::ConversionError;
 use crate::model::{mdl, mdx};
@@ -32,7 +32,7 @@ use std::marker::PhantomData;
 use crate::model::LightsChunk;
 use crate::model::{Model, Node};
 
-/// Version-specific fields before and after the common light values.
+/// Light features available in a particular model version.
 pub trait ShadowCastingField: Default + mdx::Read + mdx::Write + Clone + Debug + PartialEq {
     fn shadow_casting(&self) -> Option<u32> {
         None
@@ -98,7 +98,7 @@ pub trait ShadowRangeField: Default + mdx::Read + mdx::Write + Clone + Debug + P
 pub struct NoShadowRange;
 impl ShadowRangeField for NoShadowRange {}
 
-/// Start and end of a light's shadow-casting range in MDX order.
+/// Start and end distances for a light's shadow-casting range.
 #[derive(Clone, Copy, Debug, Default, PartialEq, mdx::Read, mdx::Write)]
 pub struct LightShadowRange {
     pub start: f32,
@@ -126,7 +126,7 @@ pub trait FalloffField: Default + mdx::Read + mdx::Write + Clone + Debug + Parti
 pub struct NoFalloff;
 impl FalloffField for NoFalloff {}
 
-/// The three falloff coefficients serialized from version 1600 onward.
+/// Distance falloff coefficients, editable in version 1600 and newer.
 #[derive(Clone, Copy, Debug, PartialEq, mdx::Read, mdx::Write)]
 pub struct LightFalloff {
     pub quadratic: f32,
@@ -233,11 +233,11 @@ light_layout!(
     LightFalloff
 );
 
-/// A light node with decoded lighting values and animation tracks.
+/// A node that supplies direct and ambient lighting.
 ///
-/// MDL reading reconstructs the light object-kind bit; writing requires matching
-/// node bits and representable base values. ShadowIntensity is static only under
-/// the MDL support contract; its animated form is rejected.
+/// Shadow settings depend on the model version; checked accessors report
+/// unavailable features. MDL supports static shadow intensity, not an animated
+/// shadow-intensity channel.
 #[derive(Clone, Debug, PartialEq, mdx::Read, mdx::Write, mdl::Read, mdl::Write)]
 #[mdx(sized(tag = LightsChunk::<V>::TAG))]
 #[mdl(block = "Light", after_read = "Self::finish_mdl", validate_write = "Self::validate_mdl",
@@ -300,7 +300,7 @@ pub struct Light<V: ModelVersion> {
     /// Shared node.
     pub node: Node,
     #[mdl(skip, default)]
-    /// Raw light type ID.
+    /// Light type: 0 for omnidirectional, 1 for directional, and 2 for ambient.
     pub light_type: u32,
     #[mdl(skip, default)]
     shadow_casting: V::ShadowCasting,
@@ -509,7 +509,7 @@ impl<V: SupportsLightFalloff> Light<V> {
 }
 
 impl<V: ModelVersion> Model<V> {
-    /// Decodes all `LITE` records in file order.
+    /// Returns owned copies of `LITE` records in file order.
     pub fn lights(&self) -> Vec<Light<V>> {
         self.collect_chunk_records::<LightsChunk<V>>()
     }

@@ -1,4 +1,4 @@
-//! Classic particle emitters stored in `PREM` chunks.
+//! Particles that use model or image resources.
 use crate::model::mdl::Span;
 use crate::model::scene::{impl_node_flags, NodeFlagInterpretation};
 use crate::model::scene::{set_node_kind, validate_node_kind};
@@ -29,8 +29,9 @@ const PATH_SIZE: usize = 260;
 
 /// A Classic particle emitter with optional animated properties.
 ///
-/// MDL reading restores the particle object-kind bit and resource flags. Writing
-/// requires matching node bits and default hidden bases.
+/// Choose model or image resources with the emitter flags, and animate emission
+/// through `tracks`. MDL output requires matching particle node flags and
+/// rejects nondefault base values hidden by animation tracks.
 #[derive(Clone, Debug, PartialEq, mdx::Read, mdx::Write, mdl::Read, mdl::Write)]
 #[mdx(sized(tag = ParticleEmittersChunk::TAG))]
 #[mdl(
@@ -67,7 +68,7 @@ pub struct ParticleEmitter {
     /// Latitude.
     pub latitude: f32,
     #[mdl(property = "Path", default)]
-    /// Fixed-width path preserving every stored byte.
+    /// Model or image resource used for each particle.
     pub path: FixedText<PATH_SIZE>,
     #[mdl(animatable = "LifeSpan", track = "ParticleTrack::Lifespan", default)]
     /// Particle lifetime.
@@ -100,7 +101,7 @@ impl ParticleEmitter {
 }
 
 impl<V: ModelVersion> Model<V> {
-    /// Decodes all `PREM` records in file order.
+    /// Returns owned copies of `PREM` records in file order.
     pub fn particle_emitters(&self) -> Vec<ParticleEmitter> {
         self.collect_chunk_records::<ParticleEmittersChunk>()
     }

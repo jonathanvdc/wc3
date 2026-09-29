@@ -1,4 +1,4 @@
-//! Box and sphere collision shapes in `CLID` chunks.
+//! Collision primitives attached to model nodes.
 use crate::model::mdl::{MdlWriter, Parser, ReadErrorKind, Span};
 use crate::model::scene::{set_node_kind, validate_node_kind};
 use crate::model::Encoder;
@@ -15,9 +15,9 @@ use crate::model::{Model, Node, ReadError};
 
 /// A collision primitive attached to a node.
 ///
-/// MDL reading reconstructs the collision object-kind bit; writing requires
-/// matching node bits. Box and Plane carry two vertices, Sphere one, and
-/// Cylinder two. Only Sphere and Cylinder have a BoundsRadius property.
+/// Use the shape constructors to initialize the dimensions and node flags.
+/// Edit [`CollisionGeometry`] to change the shape directly. Sphere and cylinder
+/// shapes have a radius; boxes and planes are described by two points.
 #[derive(Clone, Debug, PartialEq, mdx::Read, mdx::Write)]
 pub struct CollisionShape {
     /// Attached node.
@@ -150,7 +150,7 @@ impl CollisionShape {
 }
 
 impl<V: ModelVersion> Model<V> {
-    /// Decodes all collision shapes in `CLID` chunks.
+    /// Returns owned copies of collision shapes in `CLID` chunks.
     pub fn collision_shapes(&self) -> Vec<CollisionShape> {
         self.collect_chunk_records::<CollisionShapesChunk>()
     }

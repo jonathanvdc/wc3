@@ -1,4 +1,4 @@
-//! Geoset animation records in `GEOA` chunks.
+//! Animated opacity and color for individual geosets.
 use crate::model::ModelVersion;
 use crate::model::{mdl, mdx};
 use bitfield::bitfield;
@@ -27,7 +27,7 @@ bitfield! {
     pub color, set_color: 1;
 }
 
-/// A geoset animation with decoded alpha and color tracks.
+/// Opacity and optional color animation applied to one geoset.
 #[derive(Clone, Debug, PartialEq, mdx::Read, mdx::Write, mdl::Read, mdl::Write)]
 #[mdx(sized(tag = GeosetAnimationsChunk::TAG))]
 #[mdl(
@@ -54,7 +54,7 @@ pub struct GeosetAnimation {
     /// Referenced geoset index.
     pub geoset_id: u32,
     #[mdl(tracks)]
-    /// Alpha and color tracks without reparsing.
+    /// Animated opacity and color channels.
     pub tracks: Vec<GeosetTrack>,
 }
 
@@ -81,7 +81,7 @@ impl GeosetAnimation {
 }
 
 impl<V: ModelVersion> Model<V> {
-    /// Decodes all `GEOA` records in file order.
+    /// Returns owned copies of `GEOA` records in file order.
     pub fn geoset_animations(&self) -> Vec<GeosetAnimation> {
         self.collect_chunk_records::<GeosetAnimationsChunk>()
     }

@@ -1,4 +1,4 @@
-//! Reforged popcorn particle emitters in `CORN` chunks.
+//! Reforged PopcornFX effect resources and emission settings.
 use crate::model::mdl::{is_zero, Span};
 use crate::model::scene::{impl_node_flags, NodeFlagInterpretation};
 use crate::model::scene::{set_node_kind, validate_node_kind};
@@ -27,7 +27,7 @@ use crate::model::{Model, Node};
 
 const PATH_SIZE: usize = 260;
 
-/// A popcorn particle emitter with decoded fields and animation tracks.
+/// A Reforged particle effect loaded from a PopcornFX resource.
 #[derive(Clone, Debug, PartialEq, mdx::Read, mdx::Write, mdl::Read, mdl::Write)]
 #[mdx(sized(tag = PopcornEmittersChunk::TAG))]
 #[mdl(
@@ -76,10 +76,10 @@ pub struct PopcornEmitter {
     /// Replaceable texture ID.
     pub replaceable_id: u32,
     #[mdl(property = "Path", default)]
-    /// Fixed-width path preserving every stored byte.
+    /// Path to the PopcornFX effect resource, typically a `.pkfx` file.
     pub path: FixedText<PATH_SIZE>,
     #[mdl(property = "AnimVisibilityGuide", default)]
-    /// Fixed-width visibility guide preserving every stored byte.
+    /// Animation-name rules controlling effect visibility. Line breaks are literal.
     pub visibility_guide: FixedText<PATH_SIZE>,
     #[mdl(tracks, channels(Visibility = "PopcornTrack::Visibility"))]
     /// Animation tracks.

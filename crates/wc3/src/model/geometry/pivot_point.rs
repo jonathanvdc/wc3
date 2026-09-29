@@ -1,11 +1,11 @@
-//! Model accessors for pivot points.
+//! Node transform origins, indexed by object ID.
 
 use crate::model::mdl;
 use crate::model::mdx;
 use crate::model::ModelVersion;
 use crate::model::{Model, PivotPointsChunk, Vec3};
 
-/// One model pivot point.
+/// Transform origin for the node whose object ID matches this point's index.
 #[derive(Clone, Copy, Debug, PartialEq, mdx::Read, mdx::Write, mdl::Read, mdl::Write)]
 #[mdl(entry)]
 pub struct PivotPoint(pub Vec3);
@@ -19,7 +19,7 @@ impl<V: ModelVersion> Model<V> {
             .collect()
     }
 
-    /// Writes XYZ pivot points to a `PIVT` chunk.
+    /// Replaces pivot points. Point indices must match the corresponding node object IDs.
     pub fn set_pivot_points(&mut self, points: &[Vec3]) {
         self.replace_chunk(PivotPointsChunk::new(
             points.iter().copied().map(PivotPoint).collect(),

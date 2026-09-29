@@ -1,4 +1,4 @@
-//! Material layers, animation tracks, and version-specific texture slots.
+//! Texture bindings, blend modes, and animated surface properties.
 use crate::model::conversion::ConversionContext;
 use crate::model::ConversionError;
 use crate::model::{mdl, mdx};
@@ -30,7 +30,7 @@ track_group! {
     }
 }
 
-/// A numeric choice retaining unnamed binary values.
+/// How the layer blends with the surfaces behind it. Unknown values round-trip in MDX.
 #[derive(
     Clone,
     Copy,
@@ -74,7 +74,7 @@ bitfield! {
     pub struct LayerShadingFlags(u32);
     /// Returns the exact stored bits.
     pub bits, _: 31, 0;
-    /// Returns or changes the `UNSHADED` bit.
+    /// Disables shading for the layer.
     pub unshaded, set_unshaded: 0;
     /// Returns or changes the `SPHERE_ENV_MAP` bit.
     pub sphere_env_map, set_sphere_env_map: 1;
@@ -82,13 +82,13 @@ bitfield! {
     pub wrap_width, set_wrap_width: 2;
     /// Returns or changes the layer V wrap bit (separate from texture flags).
     pub wrap_height, set_wrap_height: 3;
-    /// Returns or changes the `TWO_SIDED` bit.
+    /// Renders both sides of the surface.
     pub two_sided, set_two_sided: 4;
-    /// Returns or changes the `UNFOGGED` bit.
+    /// Excludes the layer from fog.
     pub unfogged, set_unfogged: 5;
-    /// Returns or changes the `NO_DEPTH_TEST` bit.
+    /// Disables depth testing for this rendering pass.
     pub no_depth_test, set_no_depth_test: 6;
-    /// Returns or changes the `NO_DEPTH_SET` bit.
+    /// Prevents this rendering pass from writing depth.
     pub no_depth_set, set_no_depth_set: 7;
     /// Returns or changes the `UNLIT` bit.
     pub unlit, set_unlit: 8;
@@ -115,7 +115,7 @@ impl mdx::Write for LayerShadingFlags {
     }
 }
 
-/// A Reforged layer texture slot, optionally animated by `KMTF`.
+/// A Reforged texture binding with an optional animated texture index.
 #[derive(Clone, Debug, PartialEq)]
 pub struct LayerTextureSlot {
     pub texture_id: u32,
@@ -123,13 +123,13 @@ pub struct LayerTextureSlot {
     pub track: Option<AnimationTrack<LayerTextureId>>,
 }
 
-/// A material layer with parsed texture slots and animation tracks.
+/// One rendering pass within a material.
 ///
-/// MDL uses slot-qualified engine bindings or named HiveWorkshop bindings.
-/// HiveWorkshop output supports all six animated HD texture slots; engine output
-/// rejects non-diffuse animations. Both reject hidden binary storage.
-/// A classic texture-ID track must precede other channels in binary track order;
-/// text reading and writing use that canonical order.
+/// Texture indices refer to the model texture collection. Reforged layers can
+/// bind multiple HD texture slots. Use HiveWorkshop MDL output when animating
+/// slots other than diffuse; Warcraft III syntax cannot identify those channels.
+/// MDL output also rejects track arrangements or hidden base values it cannot
+/// preserve.
 #[derive(Clone, Debug, PartialEq, mdx::Read, mdx::Write, mdl::Read, mdl::Write)]
 #[mdx(sized(tag = LAYER_TAG))]
 #[mdl(block = "Layer", validate_write = "Self::validate_mdl",
@@ -204,17 +204,17 @@ pub struct Layer<V: ModelVersion> {
     /// Layer shading bits.
     pub shading_flags: LayerShadingFlags,
     #[mdl(skip, default)]
-    /// Base texture index.
+    /// Index into the model texture collection when no texture-ID track is active.
     pub texture_id: u32,
     #[mdl(
         property = "TVertexAnimId",
         default = "no_reference",
         skip_if = "is_no_reference"
     )]
-    /// Texture animation reference.
+    /// Texture-animation index, or `u32::MAX` for no texture animation.
     pub texture_animation_id: u32,
     #[mdl(property = "CoordId", default, skip_if = "zero_id")]
-    /// Texture coordinate set index.
+    /// Index of the UV coordinate set to use on the geoset.
     pub coordinate_id: u32,
     #[mdl(
         animatable = "Alpha",
@@ -222,7 +222,7 @@ pub struct Layer<V: ModelVersion> {
         default = "one",
         skip_if = "full"
     )]
-    /// Base alpha value.
+    /// Opacity when no alpha track is active; 1.0 is fully opaque.
     pub alpha: f32,
     #[mdl(skip, default)]
     emissive_gain: V::EmissiveGain,
@@ -281,7 +281,7 @@ pub trait FresnelField: Default + mdx::Read + mdx::Write + Clone + Debug + Parti
 pub struct NoFresnel;
 impl FresnelField for NoFresnel {}
 
-/// The layer's RGB Fresnel color, opacity, and team-color contribution in MDX order.
+/// Fresnel color, opacity, and team-color contribution for a Reforged layer.
 #[derive(Clone, Copy, Debug, PartialEq, mdx::Read, mdx::Write)]
 pub struct LayerFresnel {
     pub color: Color,

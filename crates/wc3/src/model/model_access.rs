@@ -6,7 +6,11 @@ use crate::model::scene::{Attachment, Bone, EventObject, FaceFx, Glider, ModelIn
 use crate::model::visit_model;
 use crate::model::{DynamicModel, Model, ModelVersion, ValueError, Vec3};
 
-/// Accessors whose record types do not depend on the model version.
+/// Read and replace collections shared by every model version.
+///
+/// Import this trait to use these operations on [`DynamicModel`]. Getters return
+/// owned copies; edit them and pass them to a setter to update the model.
+/// Collection setters replace all chunks of that kind with one collection.
 pub trait CommonModelAccess {
     fn gliders(&self) -> Vec<Glider>;
     fn set_gliders(&mut self, gliders: &[Glider]);
@@ -242,7 +246,10 @@ impl CommonModelAccess for DynamicModel {
     }
 }
 
-/// Checked access to chunks introduced in model version 900.
+/// Access Reforged features on models whose version is known at runtime.
+///
+/// Methods return `ValueError` for versions before 900. Getters return owned
+/// copies; setters replace the corresponding model collection.
 pub trait TryModelAccess {
     fn try_bind_poses(&self) -> Result<Vec<BindPoseMatrix>, ValueError>;
     fn try_set_bind_poses(&mut self, poses: &[BindPoseMatrix]) -> Result<(), ValueError>;

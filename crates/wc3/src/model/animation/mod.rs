@@ -1,3 +1,9 @@
+//! Animation sequences, looping timelines, and typed keyframes.
+//!
+//! Sequence intervals and keyframe times are in milliseconds. Tracks can use a
+//! model sequence or a global sequence that loops independently. Use
+//! [`AnimationTrack`] constructors to choose stepped, linear, Hermite, or Bezier
+//! interpolation; [`ValueKeyframe`] and [`TangentKeyframe`] hold the matching keys.
 mod track_kind;
 pub use track_kind::*;
 mod keyframe;

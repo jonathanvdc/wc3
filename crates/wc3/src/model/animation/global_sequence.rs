@@ -1,4 +1,4 @@
-//! Model accessors for global sequences.
+//! Loop durations for animations that run independently of model sequences.
 
 use crate::model::mdl;
 use crate::model::mdx;
@@ -11,7 +11,8 @@ use crate::model::{GlobalSequencesChunk, Model};
 pub struct GlobalSequence(pub u32);
 
 impl<V: ModelVersion> Model<V> {
-    /// Returns durations from every `GLBS` chunk in file order.
+    /// Returns loop durations in milliseconds, in model order.
+    /// Tracks refer to these durations by collection index.
     pub fn global_sequences(&self) -> Vec<u32> {
         self.collect_chunk_records::<GlobalSequencesChunk>()
             .into_iter()
@@ -19,7 +20,7 @@ impl<V: ModelVersion> Model<V> {
             .collect()
     }
 
-    /// Writes global sequence durations to a `GLBS` chunk.
+    /// Replaces global sequence durations. Track indices are not adjusted.
     pub fn set_global_sequences(&mut self, durations: &[u32]) {
         self.replace_chunk(GlobalSequencesChunk::new(
             durations.iter().copied().map(GlobalSequence).collect(),

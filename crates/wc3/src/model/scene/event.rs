@@ -1,4 +1,4 @@
-//! Event objects stored in `EVTS` chunks.
+//! Timed events attached to model nodes.
 use super::{set_node_kind, validate_node_kind};
 use crate::model::mdl::{Dialect, Field, MdlWriter, Parser, Span, TokenKind};
 use crate::model::Encoder;
@@ -14,17 +14,17 @@ use crate::model::{Model, Node, ReadError};
 
 const TRACK_TAG: Tag = *b"KEVT";
 
-/// A node followed by an event track.
+/// A named event triggered at specific times in an animation.
 ///
-/// MDL reading reconstructs the event object-kind bit; writing requires matching
-/// node bits. Event frame counts exclude the optional GlobalSeqId metadata.
+/// Event names identify game effects such as sounds or footprints. Frame times
+/// use milliseconds; a global sequence makes the event loop independently.
 #[derive(Clone, Debug, PartialEq)]
 pub struct EventObject {
     /// Its shared node.
     pub node: Node,
     /// Global sequence ID, or `u32::MAX` when absent.
     pub global_sequence_id: u32,
-    /// Signed event frame times in source order (including animation lead-in).
+    /// Event times in milliseconds, in source order. Negative times allow animation lead-in.
     pub frames: Vec<i32>,
 }
 
@@ -40,7 +40,7 @@ impl EventObject {
 }
 
 impl<V: ModelVersion> Model<V> {
-    /// Decodes all event objects in `EVTS` chunks.
+    /// Returns owned copies of event objects in `EVTS` chunks.
     pub fn event_objects(&self) -> Vec<EventObject> {
         self.collect_chunk_records::<EventObjectsChunk>()
     }

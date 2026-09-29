@@ -3,12 +3,13 @@ use crate::model::{mdl, mdx, GlidersChunk, Model, ModelVersion};
 
 /// A geoset that a world-picking ray may hit.
 ///
-/// `DILG` has no version gate. Entries retain their order, including duplicates;
-/// the library does not emulate the client's defect that overwrites slot zero.
+/// This whitelist controls world ray picking independently of collision shapes.
+/// Entries are supported in every model version and retain their order.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, mdx::Read, mdx::Write, mdl::Read, mdl::Write)]
 #[mdl(block = "Glider")]
 pub struct Glider {
     #[mdl(property = "GeosetId")]
+    /// Index into the model geoset collection.
     pub geoset_id: u32,
 }
 

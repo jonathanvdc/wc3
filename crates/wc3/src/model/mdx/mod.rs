@@ -1,4 +1,31 @@
-//! Binary Warcraft III MDX decoding and encoding.
+//! Read and write binary Warcraft III models and individual records.
+//!
+//! Import [`Read`] and [`Write`] as `_` for `decode_mdx()` and `encode_mdx()`.
+//! Use [`crate::model::Model`] for a known version, or
+//! [`crate::model::DynamicModel::decode_mdx`] to select the version from a file.
+//! The runtime reader requires a fallback version for files without a version chunk.
+//!
+//! ```
+//! use wc3::model::{Model, V800};
+//! use wc3::model::mdx::{Read as _, Write as _};
+//! use wc3::model::scene::ModelInfo;
+//!
+//! let mut model = Model::<V800>::new();
+//! model.set_model_info(&ModelInfo::new("Example")?);
+//! let bytes = model.encode_mdx()?;
+//! let decoded = Model::<V800>::decode_mdx(&bytes)?;
+//! assert_eq!(decoded.version(), 800);
+//! # Ok::<(), Box<dyn std::error::Error>>(())
+//! ```
+//!
+//! Decoding preserves chunk order, unknown chunk payloads, unknown flag bits, and
+//! fixed-width text bytes. Malformed known records return [`ReadError`].
+//!
+//! For custom codecs, [`Cursor`] reads within a byte slice and [`Encoder`] appends
+//! to a buffer. `read_mdx()` consumes one value; `decode_mdx()` additionally rejects
+//! trailing bytes. A record codec encodes that record, not a complete model file.
+//! The [`Read`] and [`Write`] derives support fields in declaration order and
+//! explicit numeric enum mappings.
 
 mod cursor;
 pub use cursor::{Cursor, Read};

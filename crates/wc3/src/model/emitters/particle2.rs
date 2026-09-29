@@ -1,4 +1,4 @@
-//! Particle emitter 2 records in `PRE2` chunks.
+//! Textured particles with animated emission and head/tail rendering.
 use crate::model::mdl::is_zero;
 use crate::model::scene::{impl_node_flags, NodeFlagInterpretation};
 use crate::model::{mdl, mdx};
@@ -25,7 +25,7 @@ use crate::model::{Color, Vec3};
 use crate::model::ParticleEmitters2Chunk;
 use crate::model::{Model, Node};
 
-/// A numeric choice retaining unnamed binary values.
+/// Which parts of each particle are rendered: head, tail, or both.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Hash, mdx::Read, mdx::Write, mdx::Value)]
 #[mdx(value = u32)]
 pub enum Particle2Frames {
@@ -40,7 +40,7 @@ pub enum Particle2Frames {
     Unknown(u32),
 }
 
-/// A numeric choice retaining unnamed binary values.
+/// How particle colors blend with the scene. Unknown values round-trip in MDX.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Hash, mdx::Read, mdx::Write, mdx::Value)]
 #[mdx(value = u32)]
 pub enum Particle2FilterMode {
@@ -59,7 +59,10 @@ pub enum Particle2FilterMode {
     Unknown(u32),
 }
 
-/// A particle emitter 2 with decoded fields and animation tracks.
+/// An emitter of textured particle heads and tails.
+///
+/// Rows and columns divide the texture into animation cells. Color, alpha, and
+/// scaling arrays describe three stages of each particle lifetime.
 #[derive(Clone, Debug, PartialEq, mdx::Read, mdx::Write, mdl::Read, mdl::Write)]
 #[mdx(sized(tag = ParticleEmitters2Chunk::TAG))]
 #[mdl(block = "ParticleEmitter2", after_read = "Self::finish_mdl", validate_write = "Self::validate_mdl",
@@ -122,27 +125,32 @@ pub struct ParticleEmitter2 {
     #[mdl(skip, default)]
     pub filter_mode: Particle2FilterMode,
     #[mdl(property = "Rows", default)]
+    /// Number of rows in the particle texture atlas.
     pub rows: u32,
     #[mdl(property = "Columns", default)]
+    /// Number of columns in the particle texture atlas.
     pub columns: u32,
     /// Which particle parts are rendered.
     #[mdl(skip, default)]
-    /// Frame mode, including unnamed binary values.
     pub frames: Particle2Frames,
     #[mdl(property = "TailLength", default)]
     pub tail_length: f32,
     #[mdl(property = "Time", default)]
     pub time: f32,
     #[mdl(skip, default)]
+    /// RGB color at the start, middle, and end of particle life.
     pub segment_colors: [Color; 3],
     #[mdl(property = "Alpha", default)]
+    /// Opacity from 0 to 255 at the three lifetime stages.
     pub alpha: [u8; 3],
     #[mdl(property = "ParticleScaling", default)]
+    /// Scale at the start, middle, and end of particle life.
     pub particle_scaling: Vec3,
     /// Life span, decay, tail, and tail decay UV intervals.
     #[mdl(skip, default)]
     pub uv_animations: [[u32; 3]; 4],
     #[mdl(property = "TextureID", default)]
+    /// Index into the model texture collection.
     pub texture_id: u32,
     #[mdl(property = "Squirt", default, skip_if = "is_zero")]
     pub squirt: u32,
@@ -197,7 +205,7 @@ impl ParticleEmitter2 {
 }
 
 impl<V: ModelVersion> Model<V> {
-    /// Decodes all `PRE2` records in file order.
+    /// Returns owned copies of `PRE2` records in file order.
     pub fn particle_emitters2(&self) -> Vec<ParticleEmitter2> {
         self.collect_chunk_records::<ParticleEmitters2Chunk>()
     }

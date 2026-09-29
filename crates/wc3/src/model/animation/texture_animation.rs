@@ -1,4 +1,4 @@
-//! Typed texture animation tracks in `TXAN` chunks.
+//! Animated texture translation, rotation, and scaling.
 use crate::model::ModelVersion;
 use crate::model::{mdl, mdx};
 crate::model::animation::track_group! {
@@ -29,7 +29,7 @@ pub struct TextureAnimation {
             Scaling = "TextureAnimationTrack::Scaling"
         )
     )]
-    /// Tracks without reparsing.
+    /// Tracks for this record.
     pub tracks: Vec<TextureAnimationTrack>,
 }
 
@@ -41,7 +41,7 @@ impl TextureAnimation {
 }
 
 impl<V: ModelVersion> Model<V> {
-    /// Decodes all texture animations in `TXAN` chunks.
+    /// Returns owned copies of texture animations in `TXAN` chunks.
     pub fn texture_animations(&self) -> Vec<TextureAnimation> {
         self.collect_chunk_records::<TextureAnimationsChunk>()
     }

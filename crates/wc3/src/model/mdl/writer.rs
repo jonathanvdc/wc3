@@ -5,9 +5,12 @@ use std::fmt::Arguments;
 use std::io::{Cursor as IoCursor, Write as IoWrite};
 use std::str::from_utf8;
 
-/// Sequential MDL output to a caller-owned sink, with no intermediate String.
-/// Canonical output uses tabs, LF, and round-tripping f32 decimal literals.
-/// An error can leave partial output; discard it or roll back your sink.
+/// Write MDL records to a standard I/O sink.
+///
+/// Use [`MdlWriter::with_dialect`] to choose output syntax and [`MdlWriter::finish`]
+/// to check that all opened blocks were closed. Output uses tabs, LF, and
+/// round-tripping float literals. Errors may leave partial output; use
+/// [`Write::encode_mdl`] when you need a complete string before replacing a file.
 pub struct MdlWriter<W> {
     output: W,
     depth: usize,

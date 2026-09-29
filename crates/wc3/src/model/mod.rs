@@ -1,25 +1,54 @@
-//! Warcraft III MDX container parsing and writing.
+//! Warcraft III model data shared by the MDX and MDL codecs.
 //!
-//! MDX files start with `MDLX`, followed by tagged chunks. Each chunk has a
-//! four-byte identifier, a little-endian payload length, and its payload.
-//! [`Model<V>`](crate::model::Model) ties a model's version to its chunks and records.
-//! [`DynamicModel`](crate::model::DynamicModel) dispatches a file's runtime version to a typed model.
-//! Unknown chunks retain their raw payloads; malformed known chunks fail decoding.
+//! Use [`Model<V>`](crate::model::Model) when the format version is known and [`DynamicModel`](crate::model::DynamicModel) when
+//! reading files of different versions. Version markers such as [`V800`](crate::model::V800) and
+//! [`V1100`](crate::model::V1100) ensure that records added to a typed model use a compatible layout.
 //!
-//! Plain records expose their scalar data, embedded records, and ordinary vectors
-//! as public fields. Names and paths use [`FixedText`](crate::model::FixedText): edit them with `set_text`
-//! or replace their exact bytes with `from_bytes`. Methods provide computed views,
-//! version-dependent properties, and edits that preserve structural invariants.
-//! Model collection getters return owned records collected across chunks; edit
-//! [`Model::chunks`](crate::model::Model::chunks) directly or use [`Model::chunk_mut`](crate::model::Model::chunk_mut) for in-place changes.
+//! # Read, edit, and write
+//!
+//! Import [`mdx::Read`](crate::model::mdx::Read) / [`mdx::Write`](crate::model::mdx::Write) for binary I/O and [`mdl::Read`](crate::model::mdl::Read) /
+//! [`mdl::Write`](crate::model::mdl::Write) for text I/O. The traits are also available as derives for custom
+//! records.
 //!
 //! ```
 //! use wc3::model::{Model, V800};
-//! use wc3::model::mdx::Write;
-//! let model = Model::<V800>::new();
-//! // Populate the model
-//! let bytes = model.encode_mdx().unwrap();
+//! use wc3::model::mdl::{Read as _, Write as _};
+//! use wc3::model::mdx::Write as _;
+//!
+//! let source = r#"Version { FormatVersion 800, } Model "Example" {}"#;
+//! let mut model = Model::<V800>::decode_mdl(source)?;
+//! let mut info = model.model_info().unwrap();
+//! info.name.set_text("Renamed")?;
+//! model.set_model_info(&info);
+//!
+//! let binary = model.encode_mdx()?;
+//! let text = model.encode_mdl()?;
+//! assert!(text.contains("Renamed"));
+//! # Ok::<(), Box<dyn std::error::Error>>(())
 //! ```
+//!
+//! # Editing records
+//!
+//! Collection getters return owned copies in file order. After editing a copy,
+//! pass it to the corresponding setter to replace the model's collection. To
+//! preserve chunk organization while editing in place, match the typed variants
+//! in [`Model::chunks`](crate::model::Model::chunks) or use [`Model::chunk_mut`](crate::model::Model::chunk_mut).
+//!
+//! Names and paths use [`FixedText`](crate::model::FixedText); use `set_text()` for a validated replacement.
+//! Ordinary record fields are public. Geometry methods coordinate arrays that
+//! must agree in size, and animation-track constructors select the interpolation
+//! and keyframe types together.
+//!
+//! # Format conversion
+//!
+//! MDX retains unknown chunks, flag bits, and fixed-text bytes. MDL writes
+//! canonical text and rejects data it cannot represent faithfully; it does not
+//! preserve comments, formatting, or binary chunk organization. See [`mdl`](crate::model::mdl) for
+//! output dialects and text restrictions.
+//!
+//! [`Model::convert`](crate::model::Model::convert) changes the format version without modifying the source.
+//! Choose a loss policy explicitly and inspect the returned [`ConversionReport`](crate::model::ConversionReport);
+//! changing a version does not guarantee identical rendering in the game.
 
 /// A three-dimensional vector in MDX coordinates.
 pub type Vec3 = [f32; 3];

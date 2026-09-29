@@ -1,4 +1,4 @@
-//! Materials, shader fields, and version-specific layouts.
+//! Ordered rendering layers and material settings.
 use crate::model::conversion::ConversionContext;
 use crate::model::ConversionError;
 use crate::model::{mdl, mdx};
@@ -34,16 +34,16 @@ bitfield! {
     pub full_resolution, set_full_resolution: 5;
 }
 
-/// A material with directly accessible layers and an exact shader field.
+/// Surface appearance composed of ordered rendering layers.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Material<V: ModelVersion> {
     version: PhantomData<V>,
-    /// Material priority plane.
+    /// Signed render-order priority.
     pub priority_plane: i32,
     /// Rendering flags.
     pub render_mode: MaterialRenderFlags,
     shader: V::Shader,
-    /// Layers without decoding or allocating.
+    /// Rendering layers, in draw order.
     pub layers: Vec<Layer<V>>,
 }
 
@@ -236,7 +236,7 @@ impl<V: ModelVersion> Default for Material<V> {
 }
 
 impl<V: ModelVersion> Model<V> {
-    /// Decodes all `MTLS` records in file order.
+    /// Returns owned copies of `MTLS` records in file order.
     pub fn materials(&self) -> Vec<Material<V>> {
         self.collect_chunk_records::<MaterialsChunk<V>>()
     }

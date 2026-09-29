@@ -1,4 +1,4 @@
-//! Attachment records in `ATCH` chunks.
+//! Named attachment points and optional attached models.
 use super::node::{set_node_kind, validate_node_kind};
 use crate::model::mdl::Span;
 use crate::model::Encoder;
@@ -70,7 +70,7 @@ impl Attachment {
 }
 
 impl<V: ModelVersion> Model<V> {
-    /// Decodes all attachments in `ATCH` chunks.
+    /// Returns owned copies of attachments in `ATCH` chunks.
     pub fn attachments(&self) -> Vec<Attachment> {
         self.collect_chunk_records::<AttachmentsChunk>()
     }

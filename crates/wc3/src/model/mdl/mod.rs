@@ -1,92 +1,67 @@
-//! Streaming Warcraft III MDL primitives over resident UTF-8 input.
+//! Text Warcraft III models, records, and custom codecs.
 //!
-//! The lexer borrows token spelling and the parser keeps one token of lookahead;
-//! neither constructs an AST or allocates. Strings are literal, including
-//! backslashes and CR/LF. Only `//` comments are accepted. Numeric readers check
-//! ranges; f32 supports case-insensitive nan/inf/-inf. The writer uses tabs and
-//! shortest round-tripping floats. NaN payload bits have no text representation.
-//!
-//! Record codecs cover Bitmap (`Texture`), Anim (`Sequence`), Model
-//! (`ModelInfo`), Duration (`GlobalSequence`) and anonymous `PivotPoint` entries.
-//! Typed animation tracks and TVertexAnim (`TextureAnimation`) records are also
-//! supported, including signed frame times, interpolation tangents and optional
-//! global sequences. CameraTrack's Read/Write codecs operate in the camera body;
-//! its read_mdl_target/write_mdl_target methods operate inside a Target body,
-//! whose framing and Position property belong to the enclosing record codec.
-//! CameraTrack also supports visibility and depth-of-field tracks; scalar
-//! DOFDistance/FocalLength/FStop become time-zero stepped keys and write using
-//! the keyed spellings to avoid the client's scalar swap defect.
-//! GeosetAnim (`GeosetAnimation`) supports static or animated Alpha and Color.
-//! Missing channels keep full alpha and white color; a Color property enables
-//! the color-use flag. Writers reject unknown flags, duplicate tracks, and base
-//! values or color-use states that the text representation would discard.
-//! Helper (`Node`), Bone, Attachment, Material and Layer records are supported.
-//! Material/Layer layouts use the existing version-selected storage. Layer
-//! texture bindings support static slots and animated diffuse IDs in engine
-//! syntax; HiveWorkshop named slots support animations in all six HD slots.
-//! Writers reject noncanonical binary texture-track order and hidden bases.
-//! Light, EventObject and CollisionShape records are also supported. Light
-//! fields follow their version-selected storage. ShadowIntensity supports only
-//! the static form: no corresponding binary animation tag has been verified.
-//! Classic ParticleEmitter and RibbonEmitter records are also supported,
-//! including exact emitter flags, unsigned ribbon fields and track-only
-//! visibility. Ribbon TextureSlot accepts the spec's bare scalar form and writes
-//! canonical static properties. Writers reject hidden bases and unrepresentable
-//! flag bits. ParticleEmitter's resource path occupies all 260 binary bytes.
-//! `Model<V>` and `DynamicModel` support complete-file MDL I/O for these records,
-//! plus Geoset, FaceFX, BindPose and Glider. Version must be first and Model must
-//! exist. Typed reads check FormatVersion; dynamic reads select the layout.
-//! Writers emit canonical block order, merge repeated collection chunks in
-//! record order and omit empty optional collections. IDs and references are
-//! preserved; hierarchy validation is separate. Opaque chunks, duplicate or
-//! extended Version/Model chunks and unrepresentable record data cause errors.
-//! Camera, ParticleEmitter2 and ParticleEmitterPopcorn have derived record
-//! codecs too. Popcorn model blocks require version 900 or newer. Camera
-//! writing requires the version's default binary variant and canonical channel
-//! order; scalar depth-of-field input writes as keyed tracks.
-//!
-//! Readers accept both Warcraft III and HiveWorkshop spellings, including mixed
-//! input; aliases share duplicate identity. Default output uses Warcraft III.
-//! Select [`Dialect::HiveWorkshop`] with [`Write::encode_mdl_with_dialect`] or
-//! [`MdlWriter::with_dialect`]. The selection propagates through whole models.
-//! HiveWorkshop output uses numeric layer shader IDs, named texture slots,
-//! SortPrimitives, braced skin rows, raw selection flags and LOD names. Both
-//! dialects preserve all known flags; unknown bits remain errors. Engine output
-//! rejects unnamed shader IDs, non-diffuse slot animations, noncanonical
-//! selection flags and nonempty LOD names that it cannot represent.
+//! Import [`Read`] and [`Write`] as `_` to use `decode_mdl()` and `encode_mdl()`.
+//! [`crate::model::Model`] checks an expected version;
+//! [`crate::model::DynamicModel`] selects it from the `Version` block.
+//! Whole-model input requires `Version` first and a `Model` block.
 //!
 //! ```
-//! use wc3::model::{Model, DynamicModel, V800};
+//! use wc3::model::{DynamicModel, mdl};
 //! use wc3::model::mdl::{Read as _, Write as _};
-//! use wc3::model::mdx::Write as _;
-//! let source = "Version { FormatVersion 800, } Model \"Example\" {}";
-//! let model = Model::<V800>::decode_mdl(source)?;
-//! let binary = model.encode_mdx()?;
-//! let canonical = model.encode_mdl()?;
-//! assert_eq!(DynamicModel::decode_mdl(&canonical)?.version(), 800);
+//!
+//! let source = r#"Version { FormatVersion 800, } Model "Example" {}"#;
+//! let model = DynamicModel::decode_mdl(source)?;
+//! let text = model.encode_mdl()?;
+//! let hive = model.encode_mdl_with_dialect(mdl::Dialect::HiveWorkshop)?;
+//! assert_eq!(model.version(), 800);
 //! # Ok::<(), Box<dyn std::error::Error>>(())
 //! ```
 //!
-//! ```
-//! use wc3::model::materials::Texture;
-//! use wc3::model::mdl::{Read, Write, MdlWriter};
+//! # Choosing a dialect
 //!
-//! let texture = Texture::decode_mdl(r#"Bitmap { Image "Textures\Armor.blp", WrapWidth, }"#)?;
-//! let mut bytes = Vec::new();
-//! let mut writer = MdlWriter::new(&mut bytes);
-//! texture.write_mdl(&mut writer)?;
-//! writer.finish()?;
-//! # Ok::<(), Box<dyn std::error::Error>>(())
-//! ```
+//! Readers accept Warcraft III and HiveWorkshop spellings, including mixed input.
+//! Output defaults to [`Dialect::Warcraft3`]. Select [`Dialect::HiveWorkshop`] with
+//! [`Write::encode_mdl_with_dialect`] or [`MdlWriter::with_dialect`]; the choice
+//! applies to all nested records. HiveWorkshop output can represent numeric shader
+//! IDs, animations in non-diffuse HD texture slots, raw geoset selection flags,
+//! and LOD names that Warcraft III output cannot express.
+//!
+//! # Round trips and errors
+//!
+//! Output preserves represented values, object IDs, and references, while
+//! canonicalizing field order and model collections. Comments and source formatting
+//! are discarded. Readers reject unknown names, duplicate assignments, incorrect
+//! counts, and invalid values. Use [`ReadError::diagnostic`] with the original source
+//! for line/column diagnostics.
+//!
+//! Writers return an error for data that text cannot faithfully represent, such as
+//! opaque binary chunks, unknown flag bits, non-UTF-8 fixed text, nonzero text
+//! padding, and nondefault base values hidden by animation tracks. NaN payload
+//! bits are not preserved. Consequently, an MDX–MDL–MDX round trip need not reproduce
+//! the original bytes.
+//!
+//! Strings are literal: backslashes and line breaks are preserved, and there are
+//! no escape sequences. Quotes and NUL cannot be written inside strings. Only
+//! `//` comments are accepted. Finite floats round-trip exactly, including negative
+//! zero.
+//!
+//! # Reading or writing part of a file
+//!
+//! [`Parser::read`] consumes one record from a larger input; `decode_mdl()` requires
+//! exactly one value with no trailing input. [`Parser::counted`] reads list entries
+//! one at a time. Exhaust the list or call its `finish()` method to validate unread
+//! entries and the declared count; dropping it does not validate the remainder.
+//!
+//! [`MdlWriter`] writes to any standard I/O sink. Errors can leave partial output;
+//! use `encode_mdl()` for an owned string before replacing a file.
+//!
 //!
 //! ## Deriving codecs
 //!
-//! `Read` and `Write` derive named-field structs representing named blocks.
-//! Parsing matches borrowed field names, rejects duplicates and unknown fields,
-//! and constructs the struct without an AST. Writing follows declaration order
-//! unless the container specifies `write_order(field_a, field_b, ...)`, listing
-//! every body field once. This changes MDL output order without changing MDX
-//! storage order. Header arguments retain their declaration order before `{`.
+//! Use `#[derive(mdl::Read, mdl::Write)]` and `#[mdl(block = "Name")]` to
+//! give a named-field struct a text codec. Annotate each field with its MDL form.
+//! Output follows declaration order; `write_order(field_a, field_b, ...)` can
+//! choose a different order without changing the Rust struct or MDX layout.
 //!
 //! ```
 //! use wc3::model::FixedText;
@@ -133,23 +108,14 @@
 //!
 //! ## Delegated properties
 //!
-//! `property = "Name", delegate` uses [`ReadProperty`] / [`WriteProperty`] instead of
-//! value-level `Read` / `Write`. The record still dispatches the name, rejects
-//! duplicates and unknown fields, and follows `write_order`. The field codec
-//! reads the payload after the name (including its punctuation), resolves a
-//! missing property, and writes or omits the entire property including framing.
-//! Writer validation runs before any record output. No field `Default` or
-//! `ValueEq` bound is added. A recognized but unavailable property can report
-//! `ReadErrorKind::UnsupportedField` against the supplied name span.
+//! Use `property = "Name", delegate` for optional values or custom properties
+//! that need to control their own punctuation, defaults, or omission. Implement
+//! [`ReadProperty`] and [`WriteProperty`] on the field type. `Option<T>` already
+//! supports this form: an absent property becomes `None`, and `Some(value)`
+//! always writes the property.
 //!
-//! These codecs own defaults, requirements and omission, independently of a
-//! container default; field `default`, `required`, `skip_if`, `read_with`, and
-//! `write_with` cannot be combined with `delegate`. The initial form
-//! delegates one ordinary body name; static/animated channel delegation is a
-//! separate extension. Multi-name bodies use flattening, without version checks.
-//! Version-selected field types can implement these interfaces without any
-//! version metadata in the record or derive. `Option<T>` already implements
-//! them for ordinary optional values:
+//! Delegated fields cannot also use `default`, `required`, `skip_if`,
+//! `read_with`, or `write_with`; the property codec supplies those policies.
 //!
 //! ```
 //! use wc3::model::mdl;
@@ -193,10 +159,8 @@
 //! skipped binary data that must not be discarded. ModelInfo rejects nonzero
 //! animation-file data, which has no property in the supported MDL dialect.
 //!
-//! Derives preserve generics and existing where clauses, adding codec and
-//! Default bounds only for fields that use them. They support up to 64 body
-//! names per group (each mapped flag counts separately). General tuple structs
-//! remain handwritten; linked track collections use `tracks`.
+//! Derives support generics and add the traits required by each field's codec.
+//! A field group may have at most 64 body names, counting each mapped flag.
 //!
 //! Container `#[mdl(default)]` uses `Self::default()` as the source for omitted
 //! body fields, including skipped fields and packed flags. Headers stay required;
@@ -213,8 +177,7 @@
 //! `#[mdl(project(#[mdl(property = "Id")] id: u32, ...))]` on a named struct
 //! field describes its stored members in the enclosing record's MDL schema.
 //! List all members, including explicit `skip` entries for binary-only data.
-//! Their types are checked against the actual struct on read and write; no wire
-//! record or conversion is created. Projected animatable members link directly
+//! Projected animatable members link directly
 //! to the parent's `tracks` collection. Container defaults read the nested
 //! member from Self::default(), and write_order lists the containing field name.
 //!
@@ -262,8 +225,7 @@
 //! mapping-specific checks; they can use earlier hooks' reconstructed storage.
 //! Virtual scalar fields use explicit defaults rather than container defaults;
 //! virtual packed flags start at zero. Headers and skipped fields cannot be
-//! virtual. Light and Layer derive directly using these accessors, so writing
-//! borrows existing animation tracks and texture slots without cloning them.
+//! virtual.
 //!
 //! ```
 //! use wc3::model::mdl;
@@ -312,7 +274,7 @@
 //! a `Vec<T>`, preserving source order. Each item's `Read`/`Write` owns its name,
 //! headers, and punctuation, which must match the declared name.
 //! `#[mdl(counted = "Points")]` reads/writes a single `Points N { ... }` list
-//! into a `Vec<T>`, checking the declared count without preallocating from it.
+//! into a `Vec<T>`, checking the declared count.
 //! Items own their framing, so scalar/vector entries use an `#[mdl(entry)]`
 //! wrapper. Counted lists are required unless given a default, and an empty
 //! list is emitted with count zero. Collections reject nonadvancing readers.
@@ -365,9 +327,7 @@
 //! Variant name expressions can also be constant paths, including associated
 //! constants such as `<Kind as TrackKind>::MDL_NAME`; ordinary Rust paths do not
 //! need quotes. Literal names and duplicates are checked by the derive. Constant
-//! names are checked for valid identifiers and duplicates without allocation
-//! before reading or writing. Default animation track groups use delegated
-//! variants with these associated-constant names.
+//! names are checked for valid identifiers and duplicates before I/O.
 //!
 //! ```
 //! use wc3::model::mdl;
@@ -445,8 +405,7 @@
 //!
 //! Writers compare omitted animatable base values and skip_if properties with
 //! the defaults the reader restores, rejecting differences before any output.
-//! The omission decision is evaluated once and reused when writing. Checked
-//! field types require ValueEq: floats compare by bits, preserving signed zero,
+//! Checked field types require [`ValueEq`]: floats compare by bits, preserving signed zero,
 //! while all NaNs compare alike because MDL preserves only their class. Arrays
 //! compare component by component. Custom value types with codec hooks can
 //! implement ValueEq using the equality appropriate to those hooks.
