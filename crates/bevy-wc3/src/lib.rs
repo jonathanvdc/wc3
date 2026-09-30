@@ -1,9 +1,15 @@
 //! Bevy integration for Warcraft III models.
 //!
-//! `Wc3Model::decode` normalizes MDX versions at the boundary. `spawn_model`
-//! creates an independently animated instance with GPU skinned meshes.
+//! Load an MDX through Bevy's `AssetServer` and attach `Wc3ModelInstance` to
+//! each desired root entity. The plugin resolves model textures and shares
+//! prepared meshes and static materials across those instances.
+//!
+//! `Wc3Model::decode`, `prepare_model`, and `spawn_prepared_model` remain
+//! available for callers with custom model or texture sources.
 
 mod animation;
+mod asset;
+mod instance;
 mod material;
 mod mesh;
 mod model;
@@ -12,15 +18,22 @@ mod spawn;
 use bevy::prelude::*;
 
 pub use animation::Wc3Animation;
+pub use asset::Wc3ModelAsset;
+pub use instance::Wc3ModelInstance;
 pub use material::{Wc3LayerMaterial, Wc3LayerState};
 pub use model::{ModelError, Wc3Model};
-pub use spawn::spawn_model;
+pub use spawn::{prepare_model, spawn_model, spawn_prepared_model, PreparedModel};
 
 pub struct Wc3BevyPlugin;
 
 impl Plugin for Wc3BevyPlugin {
     fn build(&self, app: &mut App) {
+        app.init_asset::<Wc3ModelAsset>();
+        app.init_asset_loader::<asset::Wc3ModelLoader>();
+        app.init_asset_loader::<asset::BlpImageLoader>();
+        app.init_resource::<instance::PreparedModelCache>();
         app.add_plugins(MaterialPlugin::<Wc3LayerMaterial>::default());
+        app.add_systems(Update, instance::spawn_loaded_instances);
         app.add_systems(
             Update,
             (
