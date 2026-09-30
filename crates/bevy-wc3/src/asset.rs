@@ -1,11 +1,13 @@
 //! File-backed model and texture loading through Bevy's asset server.
 use bevy::asset::RenderAssetUsages;
 use bevy::asset::{io::Reader, AssetLoader, LoadContext};
+use bevy::image::{ImageAddressMode, ImageLoaderSettings, ImageSampler, ImageSamplerDescriptor};
 use bevy::prelude::*;
 use bevy::reflect::TypePath;
 use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
 use std::path::Path;
 use wc3::blp::BlpRef;
+use wc3::model::materials::TextureFlags;
 
 use crate::model::{ModelError, Wc3Model};
 
@@ -53,7 +55,15 @@ impl AssetLoader for Wc3ModelLoader {
             let mut resolved = None;
             for path in texture_paths(&model_path, &texture.path.text()) {
                 if context.read_asset_bytes(path.clone()).await.is_ok() {
-                    resolved = Some(context.load(path));
+                    let sampler = texture_sampler(texture.flags);
+                    resolved = Some(
+                        context
+                            .load_builder()
+                            .with_settings::<ImageLoaderSettings>(move |settings| {
+                                settings.sampler = sampler.clone();
+                            })
+                            .load(path),
+                    );
                     break;
                 }
             }
@@ -72,6 +82,21 @@ impl AssetLoader for Wc3ModelLoader {
     fn extensions(&self) -> &[&str] {
         &["mdx"]
     }
+}
+
+fn texture_sampler(flags: TextureFlags) -> ImageSampler {
+    let mut descriptor = ImageSamplerDescriptor::linear();
+    descriptor.address_mode_u = if flags.wrap_width() {
+        ImageAddressMode::Repeat
+    } else {
+        ImageAddressMode::ClampToEdge
+    };
+    descriptor.address_mode_v = if flags.wrap_height() {
+        ImageAddressMode::Repeat
+    } else {
+        ImageAddressMode::ClampToEdge
+    };
+    ImageSampler::Descriptor(descriptor)
 }
 
 /// Resolve beside the MDX first, then from the Bevy asset root.
@@ -102,13 +127,13 @@ pub(crate) struct BlpImageLoader;
 
 impl AssetLoader for BlpImageLoader {
     type Asset = Image;
-    type Settings = ();
+    type Settings = ImageLoaderSettings;
     type Error = ModelError;
 
     async fn load(
         &self,
         reader: &mut dyn Reader,
-        _settings: &(),
+        settings: &ImageLoaderSettings,
         _context: &mut LoadContext<'_>,
     ) -> Result<Image, ModelError> {
         let mut bytes = Vec::new();
@@ -120,7 +145,7 @@ impl AssetLoader for BlpImageLoader {
         let rgba = blp
             .decode_mip(0)
             .map_err(|error| ModelError(error.to_string()))?;
-        Ok(Image::new(
+        let mut image = Image::new(
             Extent3d {
                 width: rgba.width(),
                 height: rgba.height(),
@@ -130,7 +155,9 @@ impl AssetLoader for BlpImageLoader {
             rgba.into_raw(),
             TextureFormat::Rgba8UnormSrgb,
             RenderAssetUsages::default(),
-        ))
+        );
+        image.sampler = settings.sampler.clone();
+        Ok(image)
     }
 
     fn extensions(&self) -> &[&str] {
@@ -157,6 +184,25 @@ mod tests {
             ["units/Textures/armor.blp", "Textures/armor.blp"]
         );
         assert!(texture_paths(model, "../secret.blp").is_empty());
+    }
+
+    #[test]
+    fn texture_sampler_uses_wrap_flags_per_axis() {
+        let mut flags = TextureFlags::default();
+        flags.set_wrap_width(true);
+        let ImageSampler::Descriptor(sampler) = texture_sampler(flags) else {
+            panic!("expected a texture sampler descriptor");
+        };
+        assert_eq!(sampler.address_mode_u, ImageAddressMode::Repeat);
+        assert_eq!(sampler.address_mode_v, ImageAddressMode::ClampToEdge);
+
+        flags.set_wrap_width(false);
+        flags.set_wrap_height(true);
+        let ImageSampler::Descriptor(sampler) = texture_sampler(flags) else {
+            panic!("expected a texture sampler descriptor");
+        };
+        assert_eq!(sampler.address_mode_u, ImageAddressMode::ClampToEdge);
+        assert_eq!(sampler.address_mode_v, ImageAddressMode::Repeat);
     }
 
     #[test]
