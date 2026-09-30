@@ -8,7 +8,10 @@ use bevy::render::render_resource::{
     AsBindGroup, BlendComponent, BlendFactor, BlendOperation, BlendState, CompareFunction,
     RenderPipelineDescriptor, SpecializedMeshPipelineError,
 };
+use bevy::shader::{ShaderDefVal, ShaderRef};
 use wc3::model::materials::LayerFilterMode;
+
+use crate::mesh::{EXTRA_JOINT_INDEX, EXTRA_JOINT_WEIGHT};
 
 /// A Bevy PBR material with WC3 layer render state.
 pub type Wc3LayerMaterial = ExtendedMaterial<StandardMaterial, Wc3LayerState>;
@@ -48,12 +51,62 @@ impl From<&Wc3LayerState> for Wc3LayerKey {
 }
 
 impl MaterialExtension for Wc3LayerState {
+    fn vertex_shader() -> ShaderRef {
+        "embedded://bevy_wc3/shaders/wc3_mesh.wgsl".into()
+    }
+
+    fn prepass_vertex_shader() -> ShaderRef {
+        "embedded://bevy_wc3/shaders/wc3_prepass.wgsl".into()
+    }
+
+    fn deferred_vertex_shader() -> ShaderRef {
+        Self::prepass_vertex_shader()
+    }
+
     fn specialize(
         _pipeline: &MaterialExtensionPipeline,
         descriptor: &mut RenderPipelineDescriptor,
-        _layout: &MeshVertexBufferLayoutRef,
+        layout: &MeshVertexBufferLayoutRef,
         key: MaterialExtensionKey<Self>,
     ) -> Result<(), SpecializedMeshPipelineError> {
+        if layout.0.contains(EXTRA_JOINT_INDEX) && layout.0.contains(EXTRA_JOINT_WEIGHT) {
+            descriptor
+                .vertex
+                .shader_defs
+                .push("WC3_EXTRA_INFLUENCES".into());
+            let prepass = descriptor.vertex.shader_defs.iter().any(
+                |def| matches!(def, ShaderDefVal::Bool(name, true) if name == "PREPASS_PIPELINE"),
+            );
+            let mut attrs = Vec::new();
+            let mut add = |attribute: bevy::mesh::MeshVertexAttribute, location| {
+                if layout.0.contains(attribute) {
+                    attrs.push(attribute.at_shader_location(location));
+                }
+            };
+            add(Mesh::ATTRIBUTE_POSITION, 0);
+            if prepass {
+                add(Mesh::ATTRIBUTE_UV_0, 1);
+                add(Mesh::ATTRIBUTE_UV_1, 2);
+                if descriptor.vertex.shader_defs.iter().any(|def| matches!(def, ShaderDefVal::Bool(name, true) if name == "NORMAL_PREPASS_OR_DEFERRED_PREPASS")) {
+                    add(Mesh::ATTRIBUTE_NORMAL, 3);
+                    add(Mesh::ATTRIBUTE_TANGENT, 4);
+                }
+                add(Mesh::ATTRIBUTE_JOINT_INDEX, 5);
+                add(Mesh::ATTRIBUTE_JOINT_WEIGHT, 6);
+                add(Mesh::ATTRIBUTE_COLOR, 7);
+            } else {
+                add(Mesh::ATTRIBUTE_NORMAL, 1);
+                add(Mesh::ATTRIBUTE_UV_0, 2);
+                add(Mesh::ATTRIBUTE_UV_1, 3);
+                add(Mesh::ATTRIBUTE_TANGENT, 4);
+                add(Mesh::ATTRIBUTE_COLOR, 5);
+                add(Mesh::ATTRIBUTE_JOINT_INDEX, 6);
+                add(Mesh::ATTRIBUTE_JOINT_WEIGHT, 7);
+            }
+            add(EXTRA_JOINT_INDEX, 8);
+            add(EXTRA_JOINT_WEIGHT, 9);
+            descriptor.vertex.buffers = vec![layout.0.get_layout(&attrs)?];
+        }
         let state = key.bind_group_data;
         if let Some(depth) = descriptor.depth_stencil.as_mut() {
             if state.no_depth_test {

@@ -76,7 +76,9 @@ pub(crate) fn prepare_resolved_model(
         if material_records.get(geoset.material_id as usize).is_none() {
             continue;
         }
-        let mesh = meshes.add(build_mesh(&geoset, &joint_index, !joint_ids.is_empty())?);
+        let mesh = build_mesh(&geoset, &joint_index, !joint_ids.is_empty())
+            .map_err(|error| ModelError(format!("geoset {geoset_id}: {error}")))?;
+        let mesh = meshes.add(mesh);
         geosets.push(PreparedGeoset {
             mesh,
             material_id: geoset.material_id as usize,

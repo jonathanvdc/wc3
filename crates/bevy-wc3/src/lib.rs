@@ -15,6 +15,7 @@ mod mesh;
 mod model;
 mod spawn;
 
+use bevy::asset::embedded_asset;
 use bevy::prelude::*;
 
 pub use animation::Wc3Animation;
@@ -28,6 +29,8 @@ pub struct Wc3BevyPlugin;
 
 impl Plugin for Wc3BevyPlugin {
     fn build(&self, app: &mut App) {
+        embedded_asset!(app, "shaders/wc3_mesh.wgsl");
+        embedded_asset!(app, "shaders/wc3_prepass.wgsl");
         app.init_asset::<Wc3ModelAsset>();
         app.init_asset_loader::<asset::Wc3ModelLoader>();
         app.init_asset_loader::<asset::BlpImageLoader>();
