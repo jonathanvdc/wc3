@@ -28,7 +28,8 @@ cargo run -p bevy-wc3 --example viewer -- path/to/model.mdx
 ```
 
 The viewer uses the MDX's directory as its Bevy asset root. Referenced textures
-are resolved beside the MDX first, then from that root; Space cycles sequences.
+are resolved beside the MDX first, then from that root. Left drag rotates the
+camera, right drag pans, the scroll wheel zooms, and Space cycles sequences.
 The `inspect` and `compile` examples validate
 models without opening a GPU window:
 

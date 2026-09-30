@@ -1,13 +1,24 @@
 //! Run with `cargo run -p bevy-wc3 --example viewer -- path/to/model.mdx`.
 use bevy::asset::AssetPlugin;
+use bevy::input::mouse::{AccumulatedMouseMotion, AccumulatedMouseScroll, MouseScrollUnit};
 use bevy::prelude::*;
 use bevy_wc3::{Wc3Animation, Wc3BevyPlugin, Wc3ModelAsset, Wc3ModelInstance};
+use std::f32::consts::FRAC_PI_2;
 use std::path::PathBuf;
 
 #[derive(Resource)]
 struct Source {
     path: PathBuf,
     handle: Handle<Wc3ModelAsset>,
+}
+
+#[derive(Component)]
+struct OrbitCamera {
+    target: Vec3,
+    distance: f32,
+    yaw: f32,
+    pitch: f32,
+    min_distance: f32,
 }
 
 fn main() {
@@ -46,7 +57,7 @@ fn main() {
                 ));
             },
         )
-        .add_systems(Update, (frame_model, controls))
+        .add_systems(Update, (frame_model, orbit_camera, controls).chain())
         .run();
 }
 
@@ -54,7 +65,7 @@ fn frame_model(
     mut commands: Commands,
     source: Res<Source>,
     models: Res<Assets<Wc3ModelAsset>>,
-    cameras: Query<Entity, With<Camera3d>>,
+    cameras: Query<Entity, With<OrbitCamera>>,
 ) {
     if !cameras.is_empty() {
         return;
@@ -74,15 +85,53 @@ fn frame_model(
         .map(|info| info.bounds_radius)
         .unwrap_or(100.0)
         .max(10.0);
+    let offset = Vec3::new(0.7, -1.5, 0.55).normalize();
+    let distance = radius * 4.0;
     commands.spawn((
         Camera3d::default(),
-        Transform::from_translation(center + Vec3::new(radius * 1.6, -radius * 2.2, radius * 0.9))
-            .looking_at(center, Vec3::Z),
+        Transform::from_translation(center + offset * distance).looking_at(center, Vec3::Z),
+        OrbitCamera {
+            target: center,
+            distance,
+            yaw: offset.x.atan2(-offset.y),
+            pitch: offset.z.asin(),
+            min_distance: radius * 0.1,
+        },
     ));
     info!(
-        "loaded {:?}, source version {}; press Space to change sequence",
+        "loaded {:?}, source version {}; left drag rotates, right drag pans, scroll zooms, Space changes sequence",
         source.path, model.source_version
     );
+}
+
+fn orbit_camera(
+    buttons: Res<ButtonInput<MouseButton>>,
+    motion: Res<AccumulatedMouseMotion>,
+    scroll: Res<AccumulatedMouseScroll>,
+    mut cameras: Query<(&mut Transform, &mut OrbitCamera)>,
+) {
+    let Ok((mut transform, mut orbit)) = cameras.single_mut() else {
+        return;
+    };
+    let delta = motion.delta;
+    if buttons.pressed(MouseButton::Left) {
+        orbit.yaw -= delta.x * 0.005;
+        orbit.pitch = (orbit.pitch + delta.y * 0.005).clamp(-FRAC_PI_2 + 0.01, FRAC_PI_2 - 0.01);
+    } else if buttons.pressed(MouseButton::Right) {
+        let scale = orbit.distance * 0.0015;
+        orbit.target += transform.rotation * Vec3::new(-delta.x * scale, delta.y * scale, 0.0);
+    }
+    let wheel = match scroll.unit {
+        MouseScrollUnit::Line => scroll.delta.y,
+        MouseScrollUnit::Pixel => scroll.delta.y / 100.0,
+    };
+    orbit.distance = (orbit.distance * (-wheel * 0.15).exp())
+        .clamp(orbit.min_distance, orbit.min_distance * 500.0);
+    let (sin_yaw, cos_yaw) = orbit.yaw.sin_cos();
+    let (sin_pitch, cos_pitch) = orbit.pitch.sin_cos();
+    let offset = Vec3::new(sin_yaw * cos_pitch, -cos_yaw * cos_pitch, sin_pitch);
+    transform.translation = orbit.target + offset * orbit.distance;
+    transform.look_at(orbit.target, Vec3::Z);
 }
 
 fn controls(keys: Res<ButtonInput<KeyCode>>, mut animations: Query<&mut Wc3Animation>) {
