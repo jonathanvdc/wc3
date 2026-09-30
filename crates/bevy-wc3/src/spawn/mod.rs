@@ -12,6 +12,7 @@ mod rig;
 
 pub(crate) use prepare::prepare_resolved_model;
 pub use prepare::{prepare_model, PreparedModel};
+pub use rig::Wc3NodeEntities;
 use rig::{spawn_animation_root, spawn_rig};
 
 /// Spawn an independently animated instance from prepared assets.

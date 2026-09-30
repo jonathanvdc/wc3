@@ -11,6 +11,21 @@ pub(super) struct Rig {
     pub(super) inverse_bindposes: Handle<SkinnedMeshInverseBindposes>,
 }
 
+/// Entities for a model instance's animated nodes, keyed by MDX object ID.
+///
+/// The component lives on the model's animation root. Effects can use these
+/// entities as their transforms when their record types are implemented.
+#[derive(Component)]
+pub struct Wc3NodeEntities {
+    by_object_id: HashMap<u32, Entity>,
+}
+
+impl Wc3NodeEntities {
+    pub fn get(&self, object_id: u32) -> Option<Entity> {
+        self.by_object_id.get(&object_id).copied()
+    }
+}
+
 pub(super) fn joint_ids(model: &Model<V1800>) -> Vec<u32> {
     let mut ids: Vec<_> = model
         .bones()
@@ -73,6 +88,9 @@ pub(super) fn spawn_rig(
     }
     let joint_ids = joint_ids(model);
     let joints = joint_ids.iter().map(|id| nodes[id]).collect();
+    commands.entity(root).insert(Wc3NodeEntities {
+        by_object_id: nodes,
+    });
     Rig {
         joints,
         inverse_bindposes: inverse_bindposes.clone(),
@@ -88,23 +106,83 @@ fn rig_nodes(model: &Model<V1800>) -> Vec<Node> {
             .into_iter()
             .map(|attachment| attachment.node),
     );
+    nodes.extend(model.lights().into_iter().map(|light| light.node));
+    nodes.extend(model.event_objects().into_iter().map(|event| event.node));
+    nodes.extend(model.collision_shapes().into_iter().map(|shape| shape.node));
+    nodes.extend(
+        model
+            .ribbon_emitters()
+            .into_iter()
+            .map(|ribbon| ribbon.node),
+    );
+    nodes.extend(
+        model
+            .particle_emitters()
+            .into_iter()
+            .map(|emitter| emitter.node.cast_flags()),
+    );
+    nodes.extend(
+        model
+            .particle_emitters2()
+            .into_iter()
+            .map(|emitter| emitter.node.cast_flags()),
+    );
+    nodes.extend(
+        model
+            .popcorn_emitters()
+            .into_iter()
+            .map(|emitter| emitter.node.cast_flags()),
+    );
     nodes
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use bevy::ecs::world::{CommandQueue, World};
     use wc3::model::mdl::Read as _;
 
     #[test]
-    fn weapon_bone_keeps_attachment_parent_from_mdl() {
+    fn every_node_type_keeps_its_entity_and_parent_from_mdl() {
         let source = include_str!("../../tests/fixtures/attachment_parent.mdl");
         let model = Model::<V1800>::decode_mdl(source).unwrap();
-        let nodes = rig_nodes(&model);
-        let by_id: HashMap<_, _> = nodes.iter().map(|node| (node.object_id, node)).collect();
-        assert_eq!(by_id[&2].parent_id, 1);
-        assert_eq!(by_id[&1].parent_id, 0);
-        assert!(by_id[&0].rotation.is_some());
-        assert_eq!(model.geosets()[0].matrix_indices(), [2]);
+        assert_eq!(model.geosets()[0].matrix_indices(), [2, 10]);
+        let mut world = World::new();
+        let root = world.spawn(Transform::default()).id();
+        let mut bindposes = Assets::<SkinnedMeshInverseBindposes>::default();
+        let inverse_bindposes = bindposes.add(vec![Mat4::IDENTITY]);
+        let mut queue = CommandQueue::default();
+        let mut commands = Commands::new(&mut queue, &world);
+        let rig = spawn_rig(&mut commands, &model, root, &inverse_bindposes);
+        queue.apply(&mut world);
+
+        let entities = world.entity(root).get::<Wc3NodeEntities>().unwrap();
+        for object_id in 0..11 {
+            assert!(
+                entities.get(object_id).is_some(),
+                "missing node {object_id}"
+            );
+        }
+        let bone = entities.get(2).unwrap();
+        let attached_bone = entities.get(10).unwrap();
+        assert_eq!(rig.joints, [bone, attached_bone]);
+        assert_eq!(
+            world.entity(bone).get::<ChildOf>(),
+            Some(&ChildOf(entities.get(9).unwrap()))
+        );
+        assert_eq!(
+            world.entity(attached_bone).get::<ChildOf>(),
+            Some(&ChildOf(entities.get(1).unwrap()))
+        );
+        for object_id in 1..10 {
+            if object_id == 2 {
+                continue;
+            }
+            let entity = entities.get(object_id).unwrap();
+            assert_eq!(
+                world.entity(entity).get::<ChildOf>(),
+                Some(&ChildOf(entities.get(0).unwrap()))
+            );
+        }
     }
 }

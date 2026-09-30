@@ -23,7 +23,7 @@ pub use asset::Wc3ModelAsset;
 pub use instance::Wc3ModelInstance;
 pub use material::{Wc3LayerMaterial, Wc3LayerState};
 pub use model::{ModelError, Wc3Model};
-pub use spawn::{prepare_model, spawn_model, spawn_prepared_model, PreparedModel};
+pub use spawn::{prepare_model, spawn_model, spawn_prepared_model, PreparedModel, Wc3NodeEntities};
 
 pub struct Wc3BevyPlugin;
 
