@@ -1,7 +1,7 @@
 //! Check model conversion without starting a GPU renderer.
+use bevy_wc3::Wc3Model;
 use std::error::Error;
 use std::fs;
-use bevy_wc3::Wc3Model;
 
 fn main() -> Result<(), Box<dyn Error>> {
     for path in std::env::args().skip(1) {

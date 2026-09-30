@@ -2,7 +2,7 @@
 use bevy::asset::AssetId;
 use bevy::mesh::skinning::SkinnedMeshInverseBindposes;
 use bevy::prelude::*;
-use std::collections::{HashMap, HashSet};
+use std::collections::{hash_map::Entry, HashMap, HashSet};
 
 use crate::animation::Wc3Animation;
 use crate::asset::Wc3ModelAsset;
@@ -46,7 +46,7 @@ pub(crate) fn spawn_loaded_instances(
         if cache.failed.contains(&id) {
             continue;
         }
-        if !cache.prepared.contains_key(&id) {
+        if let Entry::Vacant(entry) = cache.prepared.entry(id) {
             match prepare_resolved_model(
                 &mut meshes,
                 &mut materials,
@@ -55,7 +55,7 @@ pub(crate) fn spawn_loaded_instances(
                 asset.textures.clone(),
             ) {
                 Ok(prepared) => {
-                    cache.prepared.insert(id, prepared);
+                    entry.insert(prepared);
                 }
                 Err(error) => {
                     warn!("Could not prepare WC3 model {:?}: {error}", instance.0);
