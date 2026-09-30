@@ -79,7 +79,7 @@ pub(crate) fn animate_layers(
                     .unwrap_or(1.0)
             })
             .unwrap_or(1.0);
-        *visibility = if geoset_alpha <= 0.0 {
+        *visibility = if alpha * geoset_alpha <= 0.0 {
             Visibility::Hidden
         } else {
             Visibility::Visible
@@ -291,6 +291,16 @@ mod tests {
             .get(&material)
             .unwrap();
         assert_eq!(material.base.alpha_mode, AlphaMode::Opaque);
+        app.world_mut()
+            .entity_mut(entity)
+            .get_mut::<AnimatedLayer>()
+            .unwrap()
+            .alpha = Animatable::Static(0.0);
+        app.update();
+        assert_eq!(
+            *app.world().entity(entity).get::<Visibility>().unwrap(),
+            Visibility::Hidden
+        );
     }
 
     #[test]
