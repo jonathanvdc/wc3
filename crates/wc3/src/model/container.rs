@@ -1,6 +1,7 @@
 //! Typed and runtime Warcraft III models with MDX and MDL I/O.
 use crate::model::mdx;
 use crate::model::mdx::{Read as _, Write as _};
+use crate::model::scene::Node;
 use crate::model::Cursor;
 use crate::model::Encoder;
 use crate::model::ValueError;
@@ -91,6 +92,57 @@ impl<V: ModelVersion> Model<V> {
         V::NUMBER
     }
 
+    /// Returns owned copies of every transform node in chunk and record order.
+    ///
+    /// Emitter-specific flags are reinterpreted as ordinary node flags without
+    /// changing their stored bits. Unknown chunks do not contribute nodes.
+    pub fn nodes(&self) -> Vec<Node> {
+        let mut nodes = Vec::new();
+        for chunk in &self.chunks {
+            match chunk {
+                ModelChunk::Bones(chunk) => {
+                    nodes.extend(chunk.records.iter().map(|record| record.node.clone()))
+                }
+                ModelChunk::Helpers(chunk) => nodes.extend(chunk.records.iter().cloned()),
+                ModelChunk::Attachments(chunk) => {
+                    nodes.extend(chunk.records.iter().map(|record| record.node.clone()))
+                }
+                ModelChunk::Lights(chunk) => {
+                    nodes.extend(chunk.records.iter().map(|record| record.node.clone()))
+                }
+                ModelChunk::EventObjects(chunk) => {
+                    nodes.extend(chunk.records.iter().map(|record| record.node.clone()))
+                }
+                ModelChunk::CollisionShapes(chunk) => {
+                    nodes.extend(chunk.records.iter().map(|record| record.node.clone()))
+                }
+                ModelChunk::RibbonEmitters(chunk) => {
+                    nodes.extend(chunk.records.iter().map(|record| record.node.clone()))
+                }
+                ModelChunk::ParticleEmitters(chunk) => nodes.extend(
+                    chunk
+                        .records
+                        .iter()
+                        .map(|record| record.node.clone().cast_flags()),
+                ),
+                ModelChunk::ParticleEmitters2(chunk) => nodes.extend(
+                    chunk
+                        .records
+                        .iter()
+                        .map(|record| record.node.clone().cast_flags()),
+                ),
+                ModelChunk::PopcornEmitters(chunk) => nodes.extend(
+                    chunk
+                        .records
+                        .iter()
+                        .map(|record| record.node.clone().cast_flags()),
+                ),
+                _ => {}
+            }
+        }
+        nodes
+    }
+
     /// Finds the first chunk with the given tag.
     pub fn chunk(&self, tag: Tag) -> Option<&ModelChunk<V>> {
         self.chunks.iter().find(|chunk| chunk.tag() == tag)
@@ -125,6 +177,29 @@ impl<V: ModelVersion> Model<V> {
         } else {
             self.chunks.push(chunk);
         }
+    }
+}
+
+#[cfg(test)]
+mod node_tests {
+    use super::*;
+    use crate::model::scene::Bone;
+    use crate::model::{BonesChunk, HelpersChunk};
+
+    #[test]
+    fn nodes_follow_chunk_and_record_order_including_duplicate_chunks() {
+        let first = Node::new("first", 4).unwrap();
+        let second = Node::new("second", 2).unwrap();
+        let third = Node::new("third", 9).unwrap();
+        let model = Model::<V800> {
+            chunks: vec![
+                HelpersChunk::new(vec![first, second]).into(),
+                BonesChunk::new(vec![Bone::new(third, u32::MAX, u32::MAX)]).into(),
+                HelpersChunk::new(vec![Node::new("fourth", 1).unwrap()]).into(),
+            ],
+        };
+        let ids: Vec<_> = model.nodes().iter().map(|node| node.object_id).collect();
+        assert_eq!(ids, [4, 2, 9, 1]);
     }
 }
 

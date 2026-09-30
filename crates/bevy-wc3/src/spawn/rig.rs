@@ -1,7 +1,6 @@
 use bevy::mesh::skinning::SkinnedMeshInverseBindposes;
 use bevy::prelude::*;
 use std::collections::HashMap;
-use wc3::model::scene::Node;
 use wc3::model::{Model, V1800};
 
 use crate::animation::{AnimatedNode, Wc3Animation};
@@ -53,7 +52,7 @@ pub(super) fn spawn_rig(
     root: Entity,
     inverse_bindposes: &Handle<SkinnedMeshInverseBindposes>,
 ) -> Rig {
-    let source_nodes = rig_nodes(model);
+    let source_nodes = model.nodes();
     let pivots = model.pivot_points();
     let mut nodes = HashMap::new();
     for node in &source_nodes {
@@ -95,45 +94,6 @@ pub(super) fn spawn_rig(
         joints,
         inverse_bindposes: inverse_bindposes.clone(),
     }
-}
-
-fn rig_nodes(model: &Model<V1800>) -> Vec<Node> {
-    let mut nodes: Vec<_> = model.bones().iter().map(|bone| bone.node.clone()).collect();
-    nodes.extend(model.helpers());
-    nodes.extend(
-        model
-            .attachments()
-            .into_iter()
-            .map(|attachment| attachment.node),
-    );
-    nodes.extend(model.lights().into_iter().map(|light| light.node));
-    nodes.extend(model.event_objects().into_iter().map(|event| event.node));
-    nodes.extend(model.collision_shapes().into_iter().map(|shape| shape.node));
-    nodes.extend(
-        model
-            .ribbon_emitters()
-            .into_iter()
-            .map(|ribbon| ribbon.node),
-    );
-    nodes.extend(
-        model
-            .particle_emitters()
-            .into_iter()
-            .map(|emitter| emitter.node.cast_flags()),
-    );
-    nodes.extend(
-        model
-            .particle_emitters2()
-            .into_iter()
-            .map(|emitter| emitter.node.cast_flags()),
-    );
-    nodes.extend(
-        model
-            .popcorn_emitters()
-            .into_iter()
-            .map(|emitter| emitter.node.cast_flags()),
-    );
-    nodes
 }
 
 #[cfg(test)]
