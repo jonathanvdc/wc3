@@ -3,7 +3,7 @@ use bevy::prelude::*;
 use std::collections::HashMap;
 
 use crate::asset::ResolvedModelTextures;
-use crate::material::Wc3LayerMaterial;
+use crate::particle_render::ParticleInstances;
 
 /// A texture use in the source model. Indices follow the MDX bitmap and PRE2 lists.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
@@ -26,20 +26,17 @@ pub struct Wc3TextureBindings {
 
 pub(crate) fn update_particle_textures(
     roots: Query<&Wc3TextureBindings, Changed<Wc3TextureBindings>>,
-    particles: Query<(
+    mut particles: Query<(
         &crate::particle2::Particle2State,
         &ParticleTextureSlot,
-        &MeshMaterial3d<Wc3LayerMaterial>,
+        &mut ParticleInstances,
     )>,
-    mut materials: ResMut<Assets<Wc3LayerMaterial>>,
 ) {
-    for (particle, slot, handle) in &particles {
+    for (particle, slot, mut instances) in &mut particles {
         let Ok(bindings) = roots.get(particle.root) else {
             continue;
         };
-        if let Some(mut material) = materials.get_mut(&handle.0) {
-            material.base.base_color_texture = bindings.particle(slot.0);
-        }
+        instances.texture = bindings.particle(slot.0);
     }
 }
 
@@ -137,13 +134,12 @@ mod tests {
     }
 
     #[test]
-    fn changing_particle_binding_updates_its_material() {
+    fn changing_particle_binding_updates_its_render_data() {
         let model =
             Model::<V1800>::decode_mdl(include_str!("../tests/fixtures/attachment_parent.mdl"))
                 .unwrap();
         let emitter = model.particle_emitters2().remove(0);
         let mut app = App::new();
-        app.insert_resource(Assets::<Wc3LayerMaterial>::default());
         app.add_systems(Update, update_particle_textures);
         let image = Assets::<Image>::default().add(Image::default());
         let root = app
@@ -158,15 +154,20 @@ mod tests {
                 }),
             )
             .id();
-        let material = app
+        let particle = app
             .world_mut()
-            .resource_mut::<Assets<Wc3LayerMaterial>>()
-            .add(crate::particle2::material(&emitter, None));
-        app.world_mut().spawn((
-            Particle2State::new(root, root, emitter, Handle::default()),
-            ParticleTextureSlot(0),
-            MeshMaterial3d(material.clone()),
-        ));
+            .spawn((
+                Particle2State::new(root, root, emitter.clone()),
+                ParticleTextureSlot(0),
+                ParticleInstances {
+                    particles: Vec::new(),
+                    texture: None,
+                    filter: emitter.filter_mode,
+                    priority_plane: emitter.priority_plane,
+                    sort_far: false,
+                },
+            ))
+            .id();
         app.update();
         app.world_mut()
             .entity_mut(root)
@@ -176,11 +177,10 @@ mod tests {
         app.update();
         assert_eq!(
             app.world()
-                .resource::<Assets<Wc3LayerMaterial>>()
-                .get(&material)
+                .entity(particle)
+                .get::<ParticleInstances>()
                 .unwrap()
-                .base
-                .base_color_texture,
+                .texture,
             Some(image)
         );
     }

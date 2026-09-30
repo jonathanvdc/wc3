@@ -7,7 +7,8 @@ use wc3::model::materials::LayerFilterMode;
 use crate::animation::AnimatedLayer;
 use crate::material::Wc3LayerMaterial;
 use crate::model::{ModelError, Wc3Model};
-use crate::particle2::{empty_mesh, material as particle_material, Particle2State};
+use crate::particle2::Particle2State;
+use crate::particle_render::ParticleInstances;
 use crate::texture_bindings::{ParticleTextureSlot, Wc3TextureBindings};
 
 mod prepare;
@@ -65,13 +66,19 @@ pub(crate) fn spawn_prepared_into(
             continue;
         };
         let texture = bindings.particle(emitter_id);
-        let mesh = meshes.add(empty_mesh());
-        let material = materials.add(particle_material(&definition, texture));
+        let mesh = meshes.add(Rectangle::new(2.0, 2.0));
+        let render = ParticleInstances {
+            particles: Vec::new(),
+            texture,
+            filter: definition.filter_mode,
+            priority_plane: definition.priority_plane,
+            sort_far: definition.node.flags.sort_prims_far_z(),
+        };
         let entity = commands
             .spawn((
                 Mesh3d(mesh.clone()),
-                MeshMaterial3d(material),
-                Particle2State::new(root, node, definition, mesh),
+                render,
+                Particle2State::new(root, node, definition),
                 ParticleTextureSlot(emitter_id),
                 Transform::default(),
                 NoFrustumCulling,

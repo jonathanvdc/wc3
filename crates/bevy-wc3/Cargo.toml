@@ -9,3 +9,4 @@ license = "MIT OR Apache-2.0"
 [dependencies]
 bevy = { version = "0.19.1", features = ["dds"] }
 wc3 = { path = "../wc3", features = ["blp-decode"] }
+bytemuck = { version = "1", features = ["derive"] }

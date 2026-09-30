@@ -1,66 +1,13 @@
 //! Per-instance simulation and batched drawing for PRE2 emitters.
-use bevy::asset::RenderAssetUsages;
-use bevy::mesh::{Indices, PrimitiveTopology};
 use bevy::prelude::*;
 use std::f32::consts::FRAC_PI_2;
 use wc3::model::animation::Animatable;
-use wc3::model::emitters::{Particle2FilterMode, Particle2Frames, ParticleEmitter2};
-use wc3::model::materials::LayerFilterMode;
+use wc3::model::emitters::{Particle2Frames, ParticleEmitter2};
 
 use crate::animation::{sample, sample_value, Wc3Animation};
-use crate::material::{Wc3LayerMaterial, Wc3LayerState};
+use crate::particle_render::{ParticleInstance, ParticleInstances};
 
 const MAX_PARTICLES: usize = 8192;
-
-pub(crate) fn material(
-    emitter: &ParticleEmitter2,
-    texture: Option<Handle<Image>>,
-) -> Wc3LayerMaterial {
-    let filter = match emitter.filter_mode {
-        Particle2FilterMode::Blend => LayerFilterMode::Blend,
-        Particle2FilterMode::Additive => LayerFilterMode::Additive,
-        Particle2FilterMode::Modulate => LayerFilterMode::Modulate,
-        Particle2FilterMode::Modulate2x => LayerFilterMode::Modulate2x,
-        Particle2FilterMode::AlphaKey => LayerFilterMode::Transparent,
-        Particle2FilterMode::Unknown(_) => LayerFilterMode::Blend,
-    };
-    Wc3LayerMaterial {
-        base: StandardMaterial {
-            base_color_texture: texture,
-            alpha_mode: if matches!(emitter.filter_mode, Particle2FilterMode::AlphaKey) {
-                AlphaMode::Mask(0.5)
-            } else {
-                AlphaMode::Blend
-            },
-            unlit: emitter.node.flags.unshaded(),
-            fog_enabled: !emitter.node.flags.unfogged(),
-            depth_bias: emitter.priority_plane as f32,
-            double_sided: true,
-            cull_mode: None,
-            ..default()
-        },
-        extension: Wc3LayerState {
-            filter,
-            no_depth_test: false,
-            no_depth_set: true,
-        },
-    }
-}
-
-pub(crate) fn empty_mesh() -> Mesh {
-    let mut mesh = Mesh::new(
-        PrimitiveTopology::TriangleList,
-        RenderAssetUsages::default(),
-    );
-    // Bevy 0.19's mesh allocator does not allocate zero-byte meshes, but its
-    // upload path still attempts to copy their vertex and index data.
-    mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, vec![[0.0; 3]; 3]);
-    mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, vec![[0.0; 3]; 3]);
-    mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, vec![[0.0; 2]; 3]);
-    mesh.insert_attribute(Mesh::ATTRIBUTE_COLOR, vec![[0.0; 4]; 3]);
-    mesh.insert_indices(Indices::U32(vec![0, 1, 2]));
-    mesh
-}
 
 #[derive(Clone)]
 struct Particle {
@@ -78,7 +25,6 @@ pub(crate) struct Particle2State {
     pub(crate) root: Entity,
     pub(crate) node: Entity,
     pub(crate) definition: ParticleEmitter2,
-    pub(crate) mesh: Handle<Mesh>,
     particles: Vec<Particle>,
     emission_remainder: f32,
     last_sequence: usize,
@@ -89,18 +35,12 @@ pub(crate) struct Particle2State {
 }
 
 impl Particle2State {
-    pub(crate) fn new(
-        root: Entity,
-        node: Entity,
-        definition: ParticleEmitter2,
-        mesh: Handle<Mesh>,
-    ) -> Self {
+    pub(crate) fn new(root: Entity, node: Entity, definition: ParticleEmitter2) -> Self {
         Self {
             root,
             node,
             rng: u64::from(definition.node.object_id).wrapping_add(1),
             definition,
-            mesh,
             particles: Vec::new(),
             emission_remainder: 0.0,
             last_sequence: usize::MAX,
@@ -376,122 +316,58 @@ fn atlas_uv(definition: &ParticleEmitter2, tail: bool, phase: usize, t: f32) -> 
     [[u, v + dv], [u + du, v + dv], [u + du, v], [u, v]]
 }
 
-fn rebuild_mesh(
-    mesh: &mut Mesh,
-    state: &Particle2State,
-    transform: &GlobalTransform,
-    root: &GlobalTransform,
-    camera: &GlobalTransform,
-) {
-    let mut positions = Vec::with_capacity(state.particles.len() * 4);
-    let mut normals = Vec::with_capacity(state.particles.len() * 4);
-    let mut colors = Vec::with_capacity(state.particles.len() * 4);
-    let mut uvs = Vec::with_capacity(state.particles.len() * 4);
-    let mut indices = Vec::with_capacity(state.particles.len() * 6);
-    let right = camera.right().as_vec3();
-    let up = camera.up().as_vec3();
-    let forward = camera.forward().as_vec3();
-    let mut particles: Vec<_> = state.particles.iter().collect();
-    if state.definition.node.flags.sort_prims_far_z() {
-        let eye = camera.translation();
-        particles.sort_by(|a, b| {
-            let world_position = |particle: &Particle| {
-                if state.definition.node.flags.model_space() {
-                    transform.transform_point(particle.position)
-                } else {
-                    particle.position
-                }
+fn collect_instances(state: &Particle2State, transform: &GlobalTransform) -> Vec<ParticleInstance> {
+    state
+        .particles
+        .iter()
+        .filter_map(|particle| {
+            let life = (particle.age / particle.lifetime).clamp(0.0, 1.0);
+            let (color, scale, phase, phase_t) = stage(&state.definition, life);
+            if color[3] <= 0.0 || scale <= 0.0 {
+                return None;
+            }
+            let model_space = state.definition.node.flags.model_space();
+            let center = if model_space {
+                transform.transform_point(particle.position)
+            } else {
+                particle.position
             };
-            let a = world_position(a).distance_squared(eye);
-            let b = world_position(b).distance_squared(eye);
-            b.total_cmp(&a)
-        });
-    }
-    for particle in particles {
-        let life = (particle.age / particle.lifetime).clamp(0.0, 1.0);
-        let (color, scale, phase, phase_t) = stage(&state.definition, life);
-        if color[3] <= 0.0 || scale <= 0.0 {
-            continue;
-        }
-        let mut center = if state.definition.node.flags.model_space() {
-            transform.transform_point(particle.position)
-        } else {
-            particle.position
-        };
-        let velocity = if state.definition.node.flags.model_space() {
-            transform.affine().transform_vector3(particle.velocity)
-        } else {
-            particle.velocity
-        };
-        if particle.tail {
-            center -= velocity * state.definition.tail_length * 0.5;
-        }
-        let size = scale * particle.size_scale;
-        let (side, vertical) = if particle.tail {
-            let axis = velocity.normalize_or_zero();
-            let side = axis.cross(forward).normalize_or_zero();
-            (
-                side * size * 0.5,
-                velocity * state.definition.tail_length * 0.5,
-            )
-        } else if state.definition.node.flags.xy_quad() {
-            let axis = velocity.normalize_or_zero();
-            (
-                Vec3::new(-axis.y, axis.x, 0.0) * size * 0.5,
-                axis * size * 0.5,
-            )
-        } else {
-            (right * size * 0.5, up * size * 0.5)
-        };
-        let corners = [
-            center - side - vertical,
-            center + side - vertical,
-            center + side + vertical,
-            center - side + vertical,
-        ];
-        let base = positions.len() as u32;
-        let inverse_root = root.affine().inverse();
-        positions.extend(corners.map(|corner| inverse_root.transform_point3(corner).to_array()));
-        normals.extend(
-            [root.affine()
-                .inverse()
-                .transform_vector3(-forward)
-                .normalize_or_zero()
-                .to_array(); 4],
-        );
-        colors.extend([color; 4]);
-        uvs.extend(atlas_uv(&state.definition, particle.tail, phase, phase_t));
-        indices.extend([base, base + 1, base + 2, base, base + 2, base + 3]);
-    }
-    if positions.is_empty() {
-        positions.resize(3, [0.0; 3]);
-        normals.resize(3, [0.0; 3]);
-        uvs.resize(3, [0.0; 2]);
-        colors.resize(3, [0.0; 4]);
-        indices.extend([0, 1, 2]);
-    }
-    mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
-    mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
-    mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uvs);
-    mesh.insert_attribute(Mesh::ATTRIBUTE_COLOR, colors);
-    mesh.insert_indices(Indices::U32(indices));
+            let velocity = if model_space {
+                transform.affine().transform_vector3(particle.velocity)
+            } else {
+                particle.velocity
+            };
+            let uv = atlas_uv(&state.definition, particle.tail, phase, phase_t);
+            Some(ParticleInstance {
+                center_size: [center.x, center.y, center.z, scale * particle.size_scale],
+                velocity_tail: [
+                    velocity.x,
+                    velocity.y,
+                    velocity.z,
+                    state.definition.tail_length,
+                ],
+                color,
+                uv_rect: [uv[3][0], uv[2][1], uv[2][0] - uv[3][0], uv[0][1] - uv[3][1]],
+                flags: [
+                    f32::from(particle.tail),
+                    f32::from(state.definition.node.flags.xy_quad()),
+                    0.0,
+                    0.0,
+                ],
+            })
+        })
+        .collect()
 }
 
 pub(crate) fn update_particles(
     time: Res<Time>,
     animations: Query<&Wc3Animation>,
     nodes: Query<&GlobalTransform>,
-    cameras: Query<&GlobalTransform, With<Camera3d>>,
-    mut emitters: Query<&mut Particle2State>,
-    mut meshes: ResMut<Assets<Mesh>>,
+    mut emitters: Query<(&mut Particle2State, &mut ParticleInstances)>,
 ) {
-    let camera = cameras.iter().next();
-    for mut state in &mut emitters {
-        let (Ok(animation), Ok(transform), Ok(root)) = (
-            animations.get(state.root),
-            nodes.get(state.node),
-            nodes.get(state.root),
-        ) else {
+    for (mut state, mut instances) in &mut emitters {
+        let (Ok(animation), Ok(transform)) = (animations.get(state.root), nodes.get(state.node))
+        else {
             continue;
         };
         let dt = if animation.playing {
@@ -500,9 +376,7 @@ pub(crate) fn update_particles(
             0.0
         };
         state.advance(animation, transform, dt);
-        if let (Some(camera), Some(mut mesh)) = (camera, meshes.get_mut(&state.mesh)) {
-            rebuild_mesh(&mut mesh, &state, transform, root, camera);
-        }
+        instances.particles = collect_instances(&state, transform);
     }
 }
 
@@ -540,7 +414,7 @@ mod tests {
     #[test]
     fn emission_is_fractional_and_head_tail_are_independent() {
         let root = Entity::from_bits(1);
-        let mut state = Particle2State::new(root, root, emitter(), Handle::default());
+        let mut state = Particle2State::new(root, root, emitter());
         let animation = animation();
         state.advance(&animation, &GlobalTransform::default(), 0.15);
         assert_eq!(state.particles.len(), 2);
@@ -554,33 +428,17 @@ mod tests {
                 .count(),
             3
         );
-        let mut mesh = empty_mesh();
-        rebuild_mesh(
-            &mut mesh,
-            &state,
-            &GlobalTransform::default(),
-            &GlobalTransform::default(),
-            &GlobalTransform::default(),
+        assert_eq!(
+            collect_instances(&state, &GlobalTransform::default()).len(),
+            6
         );
-        assert_eq!(mesh.count_vertices(), 24);
     }
 
     #[test]
-    fn particle_mesh_never_has_zero_sized_gpu_buffers() {
+    fn no_live_particles_produce_no_gpu_instances() {
         let root = Entity::from_bits(1);
-        let state = Particle2State::new(root, root, emitter(), Handle::default());
-        let mut mesh = empty_mesh();
-        assert_eq!(mesh.count_vertices(), 3);
-        assert_eq!(mesh.indices().unwrap().len(), 3);
-        rebuild_mesh(
-            &mut mesh,
-            &state,
-            &GlobalTransform::default(),
-            &GlobalTransform::default(),
-            &GlobalTransform::default(),
-        );
-        assert_eq!(mesh.count_vertices(), 3);
-        assert_eq!(mesh.indices().unwrap().len(), 3);
+        let state = Particle2State::new(root, root, emitter());
+        assert!(collect_instances(&state, &GlobalTransform::default()).is_empty());
     }
 
     #[test]
@@ -605,7 +463,7 @@ mod tests {
             )
             .unwrap(),
         );
-        let mut state = Particle2State::new(root, root, definition, Handle::default());
+        let mut state = Particle2State::new(root, root, definition);
         let mut animation = animation();
         state.advance(&animation, &GlobalTransform::default(), 0.01);
         assert_eq!(state.particles.len(), 2);

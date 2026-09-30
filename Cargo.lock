@@ -381,6 +381,7 @@ name = "bevy-wc3"
 version = "0.1.0"
 dependencies = [
  "bevy",
+ "bytemuck",
  "wc3",
 ]
 

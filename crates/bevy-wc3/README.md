@@ -57,8 +57,10 @@ cargo run -p bevy-wc3 --example compile -- path/to/model.mdx
 
 The current renderer uses Bevy PBR shading with WC3 layer blend and depth
 states. PRE2 textured particles are simulated per model instance and rendered
-as batched head and tail quads. `spawn_prepared_model` now also takes mutable
-mesh assets to create those per-instance particle meshes. Bitmap and PRE2 replaceable IDs use the same per-instance bindings.
+as GPU-instanced head and tail quads. The CPU simulates compact particle records;
+the vertex shader constructs camera-facing geometry independently for each view.
+`spawn_prepared_model` takes mutable mesh assets to create a static emitter quad.
+Bitmap and PRE2 replaceable IDs use the same per-instance bindings.
 The renderer does not yet implement Reforged normal/ORM slots, geoset and UV
 animation, node billboards, Classic PREM particles,
 ribbons, WC3 pass ordering, or skin groups with more than four influences.

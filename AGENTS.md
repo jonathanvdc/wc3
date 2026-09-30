@@ -5,3 +5,7 @@
 - Model format code belongs under `wc3::model`; binary MDX codecs belong under `wc3::model::mdx` and text MDL codecs under `wc3::model::mdl`.
 - Both codec modules expose `Read` and `Write` traits and derives. Import the modules and use `mdx::Read`, `mdx::Write`, `mdl::Read`, and `mdl::Write` in bounds, implementations, and derives to distinguish formats. For method syntax, import the needed trait as `_`; alias standard I/O traits when needed to avoid ambiguity.
 - Codec errors follow the same format-qualified naming: `mdx::ReadError`, `mdx::WriteError`, `mdl::ReadError`, and `mdl::WriteError`.
+
+# Rendering references
+
+- When implementing or investigating Warcraft III model rendering, consult Retera Model Studio, mdx-m3-viewer, and Warsmash as reference implementations. Compare their behavior for animation, skinning, materials, pass ordering, and effects against models in `data/`; do not assume any one implementation is definitive.

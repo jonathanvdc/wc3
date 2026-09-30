@@ -14,6 +14,7 @@ mod material;
 mod mesh;
 mod model;
 mod particle2;
+mod particle_render;
 mod spawn;
 mod texture_bindings;
 
@@ -37,11 +38,13 @@ impl Plugin for Wc3BevyPlugin {
     fn build(&self, app: &mut App) {
         embedded_asset!(app, "shaders/wc3_mesh.wgsl");
         embedded_asset!(app, "shaders/wc3_prepass.wgsl");
+        embedded_asset!(app, "shaders/wc3_particle.wgsl");
         app.init_asset::<Wc3ModelAsset>();
         app.init_asset_loader::<asset::Wc3ModelLoader>();
         app.init_asset_loader::<asset::BlpImageLoader>();
         app.init_resource::<instance::PreparedModelCache>();
         app.add_plugins(MaterialPlugin::<Wc3LayerMaterial>::default());
+        app.add_plugins(particle_render::ParticleRenderPlugin);
         app.add_systems(Update, instance::spawn_loaded_instances);
         app.add_systems(
             Update,
