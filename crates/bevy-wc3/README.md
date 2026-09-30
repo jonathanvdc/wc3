@@ -1,4 +1,4 @@
-# wc3-bevy
+# bevy-wc3
 
 An initial Bevy 0.19 renderer for MDX models. `Wc3Model::decode` strictly
 converts supported MDX versions to V1800. `spawn_model` creates a node hierarchy,
@@ -9,7 +9,7 @@ alpha, and texture selection.
 Run the viewer with any local model path:
 
 ```sh
-cargo run -p wc3-bevy --example viewer -- path/to/model.mdx
+cargo run -p bevy-wc3 --example viewer -- path/to/model.mdx
 ```
 
 The viewer searches beside the model for referenced BLP and DDS files and
@@ -17,7 +17,7 @@ cycles sequences with Space. The `inspect` and `compile` examples validate
 models without opening a GPU window:
 
 ```sh
-cargo run -p wc3-bevy --example compile -- path/to/model.mdx
+cargo run -p bevy-wc3 --example compile -- path/to/model.mdx
 ```
 
 The current renderer uses Bevy PBR shading with WC3 layer blend and depth

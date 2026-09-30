@@ -1,4 +1,4 @@
-//! Run with `cargo run -p wc3-bevy --example viewer -- path/to/model.mdx`.
+//! Run with `cargo run -p bevy-wc3 --example viewer -- path/to/model.mdx`.
 use bevy::asset::RenderAssetUsages;
 use bevy::image::{CompressedImageFormats, ImageSampler, ImageType};
 use bevy::mesh::skinning::SkinnedMeshInverseBindposes;
@@ -8,7 +8,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use wc3::blp::BlpRef;
-use wc3_bevy::{spawn_model, Wc3Animation, Wc3BevyPlugin, Wc3LayerMaterial, Wc3Model};
+use bevy_wc3::{spawn_model, Wc3Animation, Wc3BevyPlugin, Wc3LayerMaterial, Wc3Model};
 
 #[derive(Resource)]
 struct Source(PathBuf);

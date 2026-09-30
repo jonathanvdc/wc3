@@ -9,7 +9,7 @@ Classic and Reforged versions. Texture APIs can inspect and rewrite encoded
 BLP data without decoding pixels, or decode and encode images with optional
 features.
 
-The workspace also contains an experimental [Bevy renderer](crates/wc3-bevy/README.md)
+The workspace also contains an experimental [Bevy renderer](crates/bevy-wc3/README.md)
 with an animated MDX viewer.
 
 ## Getting started

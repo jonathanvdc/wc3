@@ -4,7 +4,7 @@ use bevy::mesh::skinning::SkinnedMeshInverseBindposes;
 use bevy::prelude::*;
 use std::error::Error;
 use std::fs;
-use wc3_bevy::{spawn_model, Wc3LayerMaterial, Wc3Model};
+use bevy_wc3::{spawn_model, Wc3LayerMaterial, Wc3Model};
 
 fn main() -> Result<(), Box<dyn Error>> {
     for path in std::env::args().skip(1) {
