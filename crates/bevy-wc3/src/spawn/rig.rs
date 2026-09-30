@@ -8,6 +8,7 @@ use crate::animation::{AnimatedNode, Wc3Animation};
 pub(super) struct Rig {
     pub(super) joints: Vec<Entity>,
     pub(super) inverse_bindposes: Handle<SkinnedMeshInverseBindposes>,
+    pub(super) by_object_id: HashMap<u32, Entity>,
 }
 
 /// Entities for a model instance's animated nodes, keyed by MDX object ID.
@@ -88,11 +89,12 @@ pub(super) fn spawn_rig(
     let joint_ids = joint_ids(model);
     let joints = joint_ids.iter().map(|id| nodes[id]).collect();
     commands.entity(root).insert(Wc3NodeEntities {
-        by_object_id: nodes,
+        by_object_id: nodes.clone(),
     });
     Rig {
         joints,
         inverse_bindposes: inverse_bindposes.clone(),
+        by_object_id: nodes,
     }
 }
 

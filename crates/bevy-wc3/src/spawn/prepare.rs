@@ -6,6 +6,9 @@ use wc3::model::materials::{Layer, LayerFilterMode};
 use wc3::model::{Model, V1800};
 
 use super::rig::joint_ids;
+use crate::asset::{
+    resolve_texture as resolve_texture_binding, ResolvedModelTextures, ResolvedTexture,
+};
 use crate::material::{Wc3LayerMaterial, Wc3LayerState};
 use crate::mesh::build_mesh;
 use crate::model::{ModelError, Wc3Model};
@@ -14,7 +17,6 @@ pub(super) struct PreparedLayer {
     pub(super) alpha: Animatable<f32>,
     pub(super) texture_id: Animatable<u32>,
     pub(super) material: Wc3LayerMaterial,
-    pub(super) shared: Option<Handle<Wc3LayerMaterial>>,
 }
 
 pub(super) struct PreparedGeoset {
@@ -31,12 +33,12 @@ pub struct PreparedModel {
     pub(super) geosets: Vec<PreparedGeoset>,
     pub(super) geoset_alphas: Vec<Option<Animatable<f32>>>,
     pub(super) layers: Vec<Vec<PreparedLayer>>,
-    pub(super) textures: Vec<Option<Handle<Image>>>,
+    pub(super) textures: ResolvedModelTextures,
     pub(super) inverse_bindposes: Handle<SkinnedMeshInverseBindposes>,
 }
 
-/// Build shareable meshes, bind poses, and static layer materials once.
-/// Animated layers retain a template and receive a private material per spawn.
+/// Build shareable meshes and bind poses once. Each instance receives private
+/// layer materials so its texture bindings can change independently.
 pub fn prepare_model(
     meshes: &mut Assets<Mesh>,
     materials: &mut Assets<Wc3LayerMaterial>,
@@ -44,18 +46,40 @@ pub fn prepare_model(
     source: &Wc3Model,
     mut resolve_texture: impl FnMut(&str) -> Option<Handle<Image>>,
 ) -> Result<PreparedModel, ModelError> {
-    let textures = resolve_textures(&source.model, &mut resolve_texture);
+    let textures = ResolvedModelTextures {
+        bitmaps: source
+            .model
+            .textures()
+            .iter()
+            .map(|bitmap| resolve_texture_binding(bitmap, &mut resolve_texture))
+            .collect(),
+        particles: source
+            .model
+            .particle_emitters2()
+            .iter()
+            .map(|emitter| ResolvedTexture {
+                replaceable_id: emitter.replaceable_id,
+                bitmap_id: (emitter.replaceable_id == 0).then_some(emitter.texture_id as usize),
+                ..default()
+            })
+            .collect(),
+    };
     prepare_resolved_model(meshes, materials, inverse_bindposes, source, textures)
 }
 
 pub(crate) fn prepare_resolved_model(
     meshes: &mut Assets<Mesh>,
-    materials: &mut Assets<Wc3LayerMaterial>,
+    _materials: &mut Assets<Wc3LayerMaterial>,
     inverse_bindposes: &mut Assets<SkinnedMeshInverseBindposes>,
     source: &Wc3Model,
-    textures: Vec<Option<Handle<Image>>>,
+    textures: ResolvedModelTextures,
 ) -> Result<PreparedModel, ModelError> {
     let model = &source.model;
+    let default_bitmaps: Vec<_> = textures
+        .bitmaps
+        .iter()
+        .map(|binding| binding.default.clone())
+        .collect();
     let joint_ids = joint_ids(model);
     let joint_index: HashMap<_, _> = joint_ids
         .iter()
@@ -107,17 +131,11 @@ pub(crate) fn prepare_resolved_model(
                 .iter()
                 .map(|layer| {
                     let texture_id = layer_texture_id(layer);
-                    let value = build_layer_material(layer, &texture_id, &textures);
-                    let shared = if layer.alpha.track().is_none() && texture_id.track().is_none() {
-                        Some(materials.add(value.clone()))
-                    } else {
-                        None
-                    };
+                    let value = build_layer_material(layer, &texture_id, &default_bitmaps);
                     PreparedLayer {
                         alpha: layer.alpha.clone(),
                         texture_id,
                         material: value,
-                        shared,
                     }
                 })
                 .collect()
@@ -131,23 +149,6 @@ pub(crate) fn prepare_resolved_model(
         textures,
         inverse_bindposes: inverse_bindposes.add(binds),
     })
-}
-
-fn resolve_textures(
-    model: &Model<V1800>,
-    resolve: &mut impl FnMut(&str) -> Option<Handle<Image>>,
-) -> Vec<Option<Handle<Image>>> {
-    model
-        .textures()
-        .iter()
-        .map(|texture| {
-            if texture.replaceable_id == 0 {
-                resolve(&texture.path.text())
-            } else {
-                None
-            }
-        })
-        .collect()
 }
 
 fn layer_texture_id(layer: &Layer<V1800>) -> wc3::model::animation::Animatable<u32> {
@@ -199,5 +200,31 @@ fn build_layer_material(
             no_depth_test: layer.shading_flags.no_depth_test(),
             no_depth_set: layer.shading_flags.no_depth_set(),
         },
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use wc3::model::materials::Texture;
+
+    #[test]
+    fn bitmap_keeps_replaceable_id_and_only_resolves_explicit_path() {
+        let mut bitmap = Texture::new("").unwrap();
+        bitmap.replaceable_id = 11;
+        let mut requested = Vec::new();
+        let binding = resolve_texture_binding(&bitmap, &mut |path| {
+            requested.push(path.to_owned());
+            None
+        });
+        assert!(requested.is_empty());
+        assert_eq!(binding.replaceable_id, 11);
+
+        bitmap.path.set_text("Custom/Cliff.blp").unwrap();
+        resolve_texture_binding(&bitmap, &mut |path| {
+            requested.push(path.to_owned());
+            None
+        });
+        assert_eq!(requested, ["Custom/Cliff.blp"]);
     }
 }

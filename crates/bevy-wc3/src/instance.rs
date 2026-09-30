@@ -8,6 +8,7 @@ use crate::animation::Wc3Animation;
 use crate::asset::Wc3ModelAsset;
 use crate::material::Wc3LayerMaterial;
 use crate::spawn::{prepare_resolved_model, spawn_prepared_into, PreparedModel};
+use crate::texture_bindings::Wc3TextureBindings;
 
 /// Attach to an entity to spawn an MDX asset beneath it when loading finishes.
 /// The entity remains the transform and animation root.
@@ -29,7 +30,10 @@ pub(crate) struct PreparedModelCache {
 
 pub(crate) fn spawn_loaded_instances(
     mut commands: Commands,
-    instances: Query<(Entity, &Wc3ModelInstance), Without<Wc3Animation>>,
+    instances: Query<
+        (Entity, &Wc3ModelInstance, Option<&Wc3TextureBindings>),
+        Without<Wc3Animation>,
+    >,
     sources: Res<Assets<Wc3ModelAsset>>,
     mut cache: ResMut<PreparedModelCache>,
     mut meshes: ResMut<Assets<Mesh>>,
@@ -38,7 +42,7 @@ pub(crate) fn spawn_loaded_instances(
 ) {
     cache.prepared.retain(|id, _| sources.contains(*id));
     cache.failed.retain(|id| sources.contains(*id));
-    for (root, instance) in &instances {
+    for (root, instance, bindings) in &instances {
         let id = instance.0.id();
         let Some(asset) = sources.get(id) else {
             continue;
@@ -64,13 +68,21 @@ pub(crate) fn spawn_loaded_instances(
                 }
             }
         }
-        spawn_prepared_into(&mut commands, &mut materials, &cache.prepared[&id], root);
+        spawn_prepared_into(
+            &mut commands,
+            &mut meshes,
+            &mut materials,
+            &cache.prepared[&id],
+            root,
+            bindings.cloned().unwrap_or_default(),
+        );
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::animation::{animate_layers, AnimatedLayer};
     use crate::model::Wc3Model;
 
     #[test]
@@ -79,7 +91,7 @@ mod tests {
             "../../wc3/tests/fixtures/mdl/quad_model.mdx"
         ))
         .unwrap();
-        let textures = vec![None; source.model.textures().len()];
+        let textures = crate::asset::ResolvedModelTextures::default();
         let mut app = App::new();
         app.insert_resource(Assets::<Wc3ModelAsset>::default());
         app.insert_resource(Assets::<Mesh>::default());
@@ -115,15 +127,78 @@ mod tests {
         app.world_mut().spawn(Wc3ModelInstance::new(handle));
         app.update();
         assert_eq!(app.world().resource::<Assets<Mesh>>().len(), meshes);
-        assert_eq!(
-            app.world().resource::<Assets<Wc3LayerMaterial>>().len(),
-            materials
-        );
+        assert!(app.world().resource::<Assets<Wc3LayerMaterial>>().len() > materials);
         assert_eq!(
             app.world()
                 .resource::<Assets<SkinnedMeshInverseBindposes>>()
                 .len(),
             bindposes
         );
+    }
+
+    #[test]
+    fn changing_bindings_updates_only_the_target_instance() {
+        let mut source = Wc3Model::decode(include_bytes!(
+            "../../wc3/tests/fixtures/mdl/quad_model.mdx"
+        ))
+        .unwrap();
+        let mut bitmaps = source.model.textures();
+        bitmaps[0].path.set_text("").unwrap();
+        bitmaps[0].replaceable_id = 31;
+        source.model.set_textures(&bitmaps);
+        let mut app = App::new();
+        app.insert_resource(Assets::<Wc3ModelAsset>::default());
+        app.insert_resource(Assets::<Image>::default());
+        app.insert_resource(Assets::<Mesh>::default());
+        app.insert_resource(Assets::<Wc3LayerMaterial>::default());
+        app.insert_resource(Assets::<SkinnedMeshInverseBindposes>::default());
+        app.init_resource::<PreparedModelCache>();
+        app.add_systems(Update, (spawn_loaded_instances, animate_layers).chain());
+        let image = app
+            .world_mut()
+            .resource_mut::<Assets<Image>>()
+            .add(Image::default());
+        let model = app
+            .world_mut()
+            .resource_mut::<Assets<Wc3ModelAsset>>()
+            .add(Wc3ModelAsset {
+                source,
+                textures: crate::asset::ResolvedModelTextures {
+                    bitmaps: vec![crate::asset::ResolvedTexture {
+                        replaceable_id: 31,
+                        ..default()
+                    }],
+                    ..default()
+                },
+            });
+        let first = app
+            .world_mut()
+            .spawn(Wc3ModelInstance::new(model.clone()))
+            .id();
+        let second = app.world_mut().spawn(Wc3ModelInstance::new(model)).id();
+        app.update();
+        app.world_mut()
+            .entity_mut(first)
+            .get_mut::<Wc3TextureBindings>()
+            .unwrap()
+            .set_replaceable(31, image.clone());
+        app.update();
+        let mut query = app
+            .world_mut()
+            .query::<(&AnimatedLayer, &MeshMaterial3d<Wc3LayerMaterial>)>();
+        let handles: Vec<_> = query
+            .iter(app.world())
+            .map(|(layer, material)| (layer.root, material.0.clone()))
+            .collect();
+        let materials = app.world().resource::<Assets<Wc3LayerMaterial>>();
+        assert!(handles.iter().any(|(root, handle)| *root == first
+            && materials.get(handle).unwrap().base.base_color_texture == Some(image.clone())));
+        assert!(handles.iter().any(|(root, handle)| *root == second
+            && materials
+                .get(handle)
+                .unwrap()
+                .base
+                .base_color_texture
+                .is_none()));
     }
 }

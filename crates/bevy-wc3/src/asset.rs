@@ -7,6 +7,7 @@ use bevy::reflect::TypePath;
 use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
 use std::path::Path;
 use wc3::blp::BlpRef;
+use wc3::model::materials::Texture;
 use wc3::model::materials::TextureFlags;
 
 use crate::model::{ModelError, Wc3Model};
@@ -15,7 +16,65 @@ use crate::model::{ModelError, Wc3Model};
 #[derive(Asset, TypePath)]
 pub struct Wc3ModelAsset {
     pub(crate) source: Wc3Model,
-    pub(crate) textures: Vec<Option<Handle<Image>>>,
+    pub(crate) textures: ResolvedModelTextures,
+}
+
+#[derive(Clone, Default)]
+pub(crate) struct ResolvedTexture {
+    pub(crate) default: Option<Handle<Image>>,
+    pub(crate) replaceable_id: u32,
+    pub(crate) bitmap_id: Option<usize>,
+}
+
+#[derive(Clone, Default)]
+pub(crate) struct ResolvedModelTextures {
+    pub(crate) bitmaps: Vec<ResolvedTexture>,
+    pub(crate) particles: Vec<ResolvedTexture>,
+}
+
+pub(crate) fn resolve_texture(
+    texture: &Texture,
+    resolve: &mut impl FnMut(&str) -> Option<Handle<Image>>,
+) -> ResolvedTexture {
+    let path = texture.path.text();
+    ResolvedTexture {
+        default: if path.is_empty() {
+            None
+        } else {
+            resolve(&path)
+        },
+        replaceable_id: texture.replaceable_id,
+        bitmap_id: None,
+    }
+}
+
+async fn load_texture(
+    context: &mut LoadContext<'_>,
+    model_path: &Path,
+    texture: &Texture,
+) -> ResolvedTexture {
+    let path = texture.path.text();
+    let mut resolved = ResolvedTexture {
+        replaceable_id: texture.replaceable_id,
+        ..default()
+    };
+    if !path.is_empty() {
+        for candidate in texture_paths(model_path, &path) {
+            if context.read_asset_bytes(candidate.clone()).await.is_ok() {
+                let sampler = texture_sampler(texture.flags);
+                resolved.default = Some(
+                    context
+                        .load_builder()
+                        .with_settings::<ImageLoaderSettings>(move |settings| {
+                            settings.sampler = sampler.clone()
+                        })
+                        .load(candidate),
+                );
+                break;
+            }
+        }
+    }
+    resolved
 }
 
 impl Wc3ModelAsset {
@@ -46,35 +105,24 @@ impl AssetLoader for Wc3ModelLoader {
             .map_err(|error| ModelError(error.to_string()))?;
         let source = Wc3Model::decode(&bytes)?;
         let model_path = context.path().path().to_owned();
-        let mut textures = Vec::new();
+        let mut textures = ResolvedModelTextures::default();
         for texture in source.model.textures() {
-            if texture.replaceable_id != 0 {
-                textures.push(None);
-                continue;
-            }
-            let mut resolved = None;
-            for path in texture_paths(&model_path, &texture.path.text()) {
-                if context.read_asset_bytes(path.clone()).await.is_ok() {
-                    let sampler = texture_sampler(texture.flags);
-                    resolved = Some(
-                        context
-                            .load_builder()
-                            .with_settings::<ImageLoaderSettings>(move |settings| {
-                                settings.sampler = sampler.clone();
-                            })
-                            .load(path),
-                    );
-                    break;
-                }
-            }
-            if resolved.is_none() && !texture.path.text().is_empty() {
+            let binding = load_texture(context, &model_path, &texture).await;
+            if binding.default.is_none() && !texture.path.text().is_empty() {
                 warn!(
                     "Could not resolve WC3 texture {} for {}",
                     texture.path.text(),
                     model_path.display()
                 );
             }
-            textures.push(resolved);
+            textures.bitmaps.push(binding);
+        }
+        for emitter in source.model.particle_emitters2() {
+            textures.particles.push(ResolvedTexture {
+                replaceable_id: emitter.replaceable_id,
+                bitmap_id: (emitter.replaceable_id == 0).then_some(emitter.texture_id as usize),
+                ..default()
+            });
         }
         Ok(Wc3ModelAsset { source, textures })
     }
@@ -203,6 +251,19 @@ mod tests {
         };
         assert_eq!(sampler.address_mode_u, ImageAddressMode::ClampToEdge);
         assert_eq!(sampler.address_mode_v, ImageAddressMode::Repeat);
+    }
+
+    #[test]
+    fn replaceable_bitmap_has_no_guessed_path() {
+        let mut bitmap = Texture::new("").unwrap();
+        bitmap.replaceable_id = 31;
+        let mut requested = Vec::new();
+        let binding = resolve_texture(&bitmap, &mut |path| {
+            requested.push(path.to_owned());
+            None
+        });
+        assert!(requested.is_empty());
+        assert_eq!(binding.replaceable_id, 31);
     }
 
     #[test]

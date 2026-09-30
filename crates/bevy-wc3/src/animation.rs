@@ -1,6 +1,7 @@
 use super::material::Wc3LayerMaterial;
+use crate::texture_bindings::Wc3TextureBindings;
 use bevy::prelude::*;
-use wc3::model::animation::{Animatable, Sequence, Track};
+use wc3::model::animation::{Animatable, Interpolate, Sequence, Track};
 use wc3::model::materials::LayerFilterMode;
 
 #[derive(Component)]
@@ -43,11 +44,10 @@ pub(crate) struct AnimatedLayer {
     pub(crate) alpha: Animatable<f32>,
     pub(crate) geoset_alpha: Option<Animatable<f32>>,
     pub(crate) texture_id: Animatable<u32>,
-    pub(crate) textures: Vec<Option<Handle<Image>>>,
 }
 
 pub(crate) fn animate_layers(
-    instances: Query<&Wc3Animation>,
+    instances: Query<(&Wc3Animation, Option<&Wc3TextureBindings>)>,
     mut layers: Query<(
         &AnimatedLayer,
         &MeshMaterial3d<Wc3LayerMaterial>,
@@ -56,7 +56,7 @@ pub(crate) fn animate_layers(
     mut materials: ResMut<Assets<Wc3LayerMaterial>>,
 ) {
     for (layer, material_handle, mut visibility) in &mut layers {
-        let Ok(animation) = instances.get(layer.root) else {
+        let Ok((animation, bindings)) = instances.get(layer.root) else {
             continue;
         };
         let Some(mut material) = materials.get_mut(&material_handle.0) else {
@@ -111,8 +111,9 @@ pub(crate) fn animate_layers(
             .or_else(|| layer.texture_id.value().copied())
             .unwrap_or(0);
         material.base.base_color = Color::srgba(1.0, 1.0, 1.0, alpha * geoset_alpha);
-        material.base.base_color_texture =
-            layer.textures.get(texture_id as usize).cloned().flatten();
+        if let Some(bindings) = bindings {
+            material.base.base_color_texture = bindings.bitmap(texture_id as usize);
+        }
     }
 }
 
@@ -124,10 +125,7 @@ pub(crate) fn advance_animation(time: Res<Time>, mut instances: Query<&mut Wc3An
     }
 }
 
-fn sample<T: wc3::model::animation::Interpolate>(
-    track: &Track<T>,
-    animation: &Wc3Animation,
-) -> Option<T> {
+pub(crate) fn sample<T: Interpolate>(track: &Track<T>, animation: &Wc3Animation) -> Option<T> {
     if let Some(global_id) = track.global_sequence_id() {
         let length = *animation.global_sequences.get(global_id as usize)?;
         if length == 0 {
@@ -150,6 +148,14 @@ fn sample<T: wc3::model::animation::Interpolate>(
         start + elapsed,
         sequence.interval[0] as i32..=sequence.interval[1] as i32,
     )
+}
+
+pub(crate) fn sample_value<T: Interpolate>(value: &Animatable<T>, animation: &Wc3Animation) -> T {
+    value
+        .track()
+        .and_then(|track| sample(track, animation))
+        .or_else(|| value.value().copied())
+        .unwrap_or_default()
 }
 
 pub(crate) fn animate_nodes(
@@ -238,7 +244,6 @@ mod tests {
                         .unwrap(),
                     )),
                     texture_id: Animatable::Static(0),
-                    textures: vec![],
                 },
                 MeshMaterial3d(material.clone()),
                 Visibility::Visible,

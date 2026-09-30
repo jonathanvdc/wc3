@@ -1,8 +1,8 @@
 //! Bevy integration for Warcraft III models.
 //!
 //! Load an MDX through Bevy's `AssetServer` and attach `Wc3ModelInstance` to
-//! each desired root entity. The plugin resolves model textures and shares
-//! prepared meshes and static materials across those instances.
+//! each desired root entity. The plugin loads literal bitmap paths and shares
+//! prepared meshes; texture bindings and materials belong to each instance.
 //!
 //! `Wc3Model::decode`, `prepare_model`, and `spawn_prepared_model` remain
 //! available for callers with custom model or texture sources.
@@ -13,7 +13,9 @@ mod instance;
 mod material;
 mod mesh;
 mod model;
+mod particle2;
 mod spawn;
+mod texture_bindings;
 
 use bevy::asset::embedded_asset;
 use bevy::prelude::*;
@@ -23,7 +25,11 @@ pub use asset::Wc3ModelAsset;
 pub use instance::Wc3ModelInstance;
 pub use material::{Wc3LayerMaterial, Wc3LayerState};
 pub use model::{ModelError, Wc3Model};
-pub use spawn::{prepare_model, spawn_model, spawn_prepared_model, PreparedModel, Wc3NodeEntities};
+pub use spawn::{
+    prepare_model, spawn_model, spawn_prepared_model, spawn_prepared_model_with_bindings,
+    PreparedModel, Wc3NodeEntities,
+};
+pub use texture_bindings::{Wc3TextureBindings, Wc3TextureSlot};
 
 pub struct Wc3BevyPlugin;
 
@@ -39,12 +45,21 @@ impl Plugin for Wc3BevyPlugin {
         app.add_systems(Update, instance::spawn_loaded_instances);
         app.add_systems(
             Update,
+            texture_bindings::update_particle_textures.after(instance::spawn_loaded_instances),
+        );
+        app.add_systems(
+            Update,
             (
                 animation::advance_animation,
                 animation::animate_nodes,
                 animation::animate_layers,
             )
-                .chain(),
+                .chain()
+                .after(instance::spawn_loaded_instances),
+        );
+        app.add_systems(
+            PostUpdate,
+            particle2::update_particles.after(bevy::transform::TransformSystems::Propagate),
         );
     }
 }

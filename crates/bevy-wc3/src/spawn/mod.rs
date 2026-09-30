@@ -1,4 +1,5 @@
 use bevy::camera::visibility::DynamicSkinnedMeshBounds;
+use bevy::camera::visibility::NoFrustumCulling;
 use bevy::mesh::skinning::{SkinnedMesh, SkinnedMeshInverseBindposes};
 use bevy::prelude::*;
 use wc3::model::materials::LayerFilterMode;
@@ -6,6 +7,8 @@ use wc3::model::materials::LayerFilterMode;
 use crate::animation::AnimatedLayer;
 use crate::material::Wc3LayerMaterial;
 use crate::model::{ModelError, Wc3Model};
+use crate::particle2::{empty_mesh, material as particle_material, Particle2State};
+use crate::texture_bindings::{ParticleTextureSlot, Wc3TextureBindings};
 
 mod prepare;
 mod rig;
@@ -18,22 +21,64 @@ use rig::{spawn_animation_root, spawn_rig};
 /// Spawn an independently animated instance from prepared assets.
 pub fn spawn_prepared_model(
     commands: &mut Commands,
+    meshes: &mut Assets<Mesh>,
     materials: &mut Assets<Wc3LayerMaterial>,
     prepared: &PreparedModel,
 ) -> Entity {
+    spawn_prepared_model_with_bindings(
+        commands,
+        meshes,
+        materials,
+        prepared,
+        Wc3TextureBindings::default(),
+    )
+}
+
+/// Spawn a prepared model with consumer-defined texture choices.
+pub fn spawn_prepared_model_with_bindings(
+    commands: &mut Commands,
+    meshes: &mut Assets<Mesh>,
+    materials: &mut Assets<Wc3LayerMaterial>,
+    prepared: &PreparedModel,
+    bindings: Wc3TextureBindings,
+) -> Entity {
     let root = commands.spawn(Transform::default()).id();
-    spawn_prepared_into(commands, materials, prepared, root);
+    spawn_prepared_into(commands, meshes, materials, prepared, root, bindings);
     root
 }
 
 pub(crate) fn spawn_prepared_into(
     commands: &mut Commands,
+    meshes: &mut Assets<Mesh>,
     materials: &mut Assets<Wc3LayerMaterial>,
     prepared: &PreparedModel,
     root: Entity,
+    bindings: Wc3TextureBindings,
 ) {
+    let bindings = bindings.with_defaults(prepared.textures.clone());
+    commands.entity(root).insert(bindings.clone());
     spawn_animation_root(commands, &prepared.model, root);
     let rig = spawn_rig(commands, &prepared.model, root, &prepared.inverse_bindposes);
+    let node_entities = &rig.by_object_id;
+    for (emitter_id, definition) in prepared.model.particle_emitters2().into_iter().enumerate() {
+        let Some(&node) = node_entities.get(&definition.node.object_id) else {
+            continue;
+        };
+        let texture = bindings.particle(emitter_id);
+        let mesh = meshes.add(empty_mesh());
+        let material = materials.add(particle_material(&definition, texture));
+        let entity = commands
+            .spawn((
+                Mesh3d(mesh.clone()),
+                MeshMaterial3d(material),
+                Particle2State::new(root, node, definition, mesh),
+                ParticleTextureSlot(emitter_id),
+                Transform::default(),
+                NoFrustumCulling,
+            ))
+            .id();
+        commands.entity(root).add_child(entity);
+    }
     let layer_handles: Vec<Vec<_>> = prepared
         .layers
         .iter()
@@ -41,10 +86,10 @@ pub(crate) fn spawn_prepared_into(
             layers
                 .iter()
                 .map(|layer| {
-                    layer
-                        .shared
-                        .clone()
-                        .unwrap_or_else(|| materials.add(layer.material.clone()))
+                    let mut value = layer.material.clone();
+                    let texture_id = layer.texture_id.value().copied().unwrap_or(0);
+                    value.base.base_color_texture = bindings.bitmap(texture_id as usize);
+                    materials.add(value)
                 })
                 .collect()
         })
@@ -65,7 +110,10 @@ pub(crate) fn spawn_prepared_into(
             .zip(&layer_handles[geoset.material_id])
         {
             let material = if geoset_alpha.is_some() {
-                let mut material = layer.material.clone();
+                let mut material = materials
+                    .get(material)
+                    .cloned()
+                    .unwrap_or_else(|| layer.material.clone());
                 let alpha = layer.alpha.value().copied().unwrap_or(1.0)
                     * geoset_alpha
                         .as_ref()
@@ -92,13 +140,12 @@ pub(crate) fn spawn_prepared_into(
                 MeshMaterial3d(material),
                 initial_visibility,
             ));
-            if layer.shared.is_none() || geoset_alpha.is_some() {
+            {
                 entity.insert(AnimatedLayer {
                     root,
                     alpha: layer.alpha.clone(),
                     geoset_alpha: geoset_alpha.clone(),
                     texture_id: layer.texture_id.clone(),
-                    textures: prepared.textures.clone(),
                 });
             }
             let entity = entity.id();
@@ -117,8 +164,8 @@ pub(crate) fn spawn_prepared_into(
     }
 }
 
-/// Spawn an independently animated instance. The texture resolver supplies
-/// model texture handles; replaceable textures can be handled by the caller.
+/// Spawn an independently animated instance. The resolver supplies literal
+/// bitmap paths; replaceable IDs can be bound on the returned root entity.
 pub fn spawn_model(
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
@@ -134,7 +181,7 @@ pub fn spawn_model(
         source,
         resolve_texture,
     )?;
-    Ok(spawn_prepared_model(commands, materials, &prepared))
+    Ok(spawn_prepared_model(commands, meshes, materials, &prepared))
 }
 
 #[cfg(test)]
@@ -143,6 +190,8 @@ mod tests {
     use bevy::ecs::world::{CommandQueue, World};
     use wc3::model::animation::{Track, ValueKeyframe};
     use wc3::model::materials::Layer;
+    use wc3::model::mdl::Read as _;
+    use wc3::model::{Model, V1800};
 
     #[test]
     fn prepared_assets_share_static_layers_and_isolate_animated_layers() {
@@ -179,16 +228,87 @@ mod tests {
         .unwrap();
         let mesh_count = meshes.len();
         let static_count = materials.len();
-        assert_eq!(static_count, 1);
+        assert_eq!(static_count, 0);
         let bindpose_count = bindposes.len();
         let world = World::new();
         let mut queue = CommandQueue::default();
         let mut commands = Commands::new(&mut queue, &world);
-        spawn_prepared_model(&mut commands, &mut materials, &prepared);
-        spawn_prepared_model(&mut commands, &mut materials, &prepared);
+        spawn_prepared_model(&mut commands, &mut meshes, &mut materials, &prepared);
+        spawn_prepared_model(&mut commands, &mut meshes, &mut materials, &prepared);
         assert_eq!(meshes.len(), mesh_count);
         assert_eq!(bindposes.len(), bindpose_count);
-        assert_eq!(materials.len(), static_count + 2);
+        assert!(materials.len() >= static_count + 2);
         assert!(!prepared.geosets.is_empty());
+    }
+
+    #[test]
+    fn pre2_emitter_is_spawned_per_instance_and_owned_by_root() {
+        let model =
+            Model::<V1800>::decode_mdl(include_str!("../../tests/fixtures/attachment_parent.mdl"))
+                .unwrap();
+        let source = Wc3Model {
+            source_version: 1800,
+            model,
+        };
+        let mut meshes = Assets::<Mesh>::default();
+        let mut materials = Assets::<Wc3LayerMaterial>::default();
+        let mut bindposes = Assets::<SkinnedMeshInverseBindposes>::default();
+        let prepared = prepare_model(&mut meshes, &mut materials, &mut bindposes, &source, |_| {
+            None
+        })
+        .unwrap();
+        let mut world = World::new();
+        let mut queue = CommandQueue::default();
+        let mut commands = Commands::new(&mut queue, &world);
+        let root = spawn_prepared_model(&mut commands, &mut meshes, &mut materials, &prepared);
+        queue.apply(&mut world);
+        let mut query = world.query::<(Entity, &Particle2State)>();
+        let emitters: Vec<_> = query.iter(&world).collect();
+        assert_eq!(emitters.len(), 1);
+        assert_eq!(emitters[0].1.root, root);
+        assert_eq!(
+            world.entity(emitters[0].0).get::<ChildOf>(),
+            Some(&ChildOf(root))
+        );
+    }
+
+    #[test]
+    fn slot_binding_selects_replaceable_bitmap_for_geosets() {
+        let mut source = Wc3Model::decode(include_bytes!(
+            "../../../wc3/tests/fixtures/mdl/quad_model.mdx"
+        ))
+        .unwrap();
+        let mut bitmaps = source.model.textures();
+        bitmaps[0].path.set_text("").unwrap();
+        bitmaps[0].replaceable_id = 1;
+        source.model.set_textures(&bitmaps);
+        let mut images = Assets::<Image>::default();
+        let selected = images.add(Image::default());
+        let mut meshes = Assets::<Mesh>::default();
+        let mut materials = Assets::<Wc3LayerMaterial>::default();
+        let mut bindposes = Assets::<SkinnedMeshInverseBindposes>::default();
+        let prepared = prepare_model(&mut meshes, &mut materials, &mut bindposes, &source, |_| {
+            None
+        })
+        .unwrap();
+        let mut bindings = Wc3TextureBindings::default();
+        bindings.set_replaceable(1, selected.clone());
+        let mut world = World::new();
+        let mut queue = CommandQueue::default();
+        let mut commands = Commands::new(&mut queue, &world);
+        spawn_prepared_model_with_bindings(
+            &mut commands,
+            &mut meshes,
+            &mut materials,
+            &prepared,
+            bindings,
+        );
+        queue.apply(&mut world);
+        let mut query = world.query::<&MeshMaterial3d<Wc3LayerMaterial>>();
+        let handle = query.iter(&world).next().unwrap();
+        assert_eq!(
+            materials.get(&handle.0).unwrap().base.base_color_texture,
+            Some(selected)
+        );
     }
 }

@@ -2,7 +2,10 @@
 use bevy::asset::AssetPlugin;
 use bevy::input::mouse::{AccumulatedMouseMotion, AccumulatedMouseScroll, MouseScrollUnit};
 use bevy::prelude::*;
-use bevy_wc3::{Wc3Animation, Wc3BevyPlugin, Wc3ModelAsset, Wc3ModelInstance};
+use bevy_wc3::{
+    Wc3Animation, Wc3BevyPlugin, Wc3ModelAsset, Wc3ModelInstance, Wc3TextureBindings,
+    Wc3TextureSlot,
+};
 use std::f32::consts::FRAC_PI_2;
 use std::path::PathBuf;
 
@@ -22,9 +25,23 @@ struct OrbitCamera {
 }
 
 fn main() {
-    let path = PathBuf::from(std::env::args().nth(1).expect("pass an MDX path"))
+    let mut arguments = std::env::args().skip(1);
+    let path = PathBuf::from(arguments.next().expect("pass an MDX path"))
         .canonicalize()
         .expect("find MDX file");
+    let mut choices = Vec::new();
+    while let Some(option) = arguments.next() {
+        let choice = arguments.next().expect("pass ID=path after texture option");
+        let (index, texture_path) = choice.split_once('=').expect("expected ID=path");
+        let index: usize = index.parse().expect("expected numeric texture ID or slot");
+        let slot = match option.as_str() {
+            "--replaceable" => None,
+            "--bitmap" => Some(Wc3TextureSlot::Bitmap(index)),
+            "--particle2" => Some(Wc3TextureSlot::Particle2(index)),
+            _ => panic!("unknown option {option}"),
+        };
+        choices.push((index, slot, texture_path.to_owned()));
+    }
     let directory = path.parent().expect("MDX parent directory");
     let filename = path
         .file_name()
@@ -43,7 +60,16 @@ fn main() {
             Startup,
             move |mut commands: Commands, assets: Res<AssetServer>| {
                 let handle = assets.load(filename.clone());
-                commands.spawn(Wc3ModelInstance::new(handle.clone()));
+                let mut bindings = Wc3TextureBindings::default();
+                for (index, slot, texture_path) in &choices {
+                    let image = assets.load(texture_path.clone());
+                    if let Some(slot) = slot {
+                        bindings.set_slot(*slot, image);
+                    } else {
+                        bindings.set_replaceable(*index as u32, image);
+                    }
+                }
+                commands.spawn((Wc3ModelInstance::new(handle.clone()), bindings));
                 commands.insert_resource(Source {
                     path: path.clone(),
                     handle,

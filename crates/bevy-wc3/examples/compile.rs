@@ -18,8 +18,8 @@ fn main() -> Result<(), Box<dyn Error>> {
         let prepared = prepare_model(&mut meshes, &mut materials, &mut bindposes, &model, |_| {
             None
         })?;
-        spawn_prepared_model(&mut commands, &mut materials, &prepared);
-        spawn_prepared_model(&mut commands, &mut materials, &prepared);
+        spawn_prepared_model(&mut commands, &mut meshes, &mut materials, &prepared);
+        spawn_prepared_model(&mut commands, &mut meshes, &mut materials, &prepared);
         println!(
             "{path}: two instances, {} shared meshes and {} material assets",
             meshes.len(),
