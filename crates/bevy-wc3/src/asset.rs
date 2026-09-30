@@ -16,6 +16,13 @@ pub struct Wc3ModelAsset {
     pub(crate) textures: Vec<Option<Handle<Image>>>,
 }
 
+impl Wc3ModelAsset {
+    /// The decoded and normalized source model.
+    pub fn source(&self) -> &Wc3Model {
+        &self.source
+    }
+}
+
 #[derive(Default, TypePath)]
 pub(crate) struct Wc3ModelLoader;
 

@@ -27,8 +27,9 @@ Run the viewer with any local model path:
 cargo run -p bevy-wc3 --example viewer -- path/to/model.mdx
 ```
 
-The viewer searches beside the model for referenced BLP and DDS files and
-cycles sequences with Space. The `inspect` and `compile` examples validate
+The viewer uses the MDX's directory as its Bevy asset root. Referenced textures
+are resolved beside the MDX first, then from that root; Space cycles sequences.
+The `inspect` and `compile` examples validate
 models without opening a GPU window:
 
 ```sh
