@@ -1,0 +1,11 @@
+[package]
+name = "wc3-bevy"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.88"
+description = "Bevy renderer for Warcraft III models"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+bevy = { version = "0.19.1", features = ["dds"] }
+wc3 = { path = "../wc3", features = ["blp-decode"] }
