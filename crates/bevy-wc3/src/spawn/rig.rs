@@ -1,6 +1,7 @@
 use bevy::mesh::skinning::SkinnedMeshInverseBindposes;
 use bevy::prelude::*;
 use std::collections::HashMap;
+use wc3::model::scene::Node;
 use wc3::model::{Model, V1800};
 
 use crate::animation::{AnimatedNode, Wc3Animation};
@@ -37,8 +38,7 @@ pub(super) fn spawn_rig(
     root: Entity,
     inverse_bindposes: &Handle<SkinnedMeshInverseBindposes>,
 ) -> Rig {
-    let mut source_nodes: Vec<_> = model.bones().iter().map(|bone| bone.node.clone()).collect();
-    source_nodes.extend(model.helpers());
+    let source_nodes = rig_nodes(model);
     let pivots = model.pivot_points();
     let mut nodes = HashMap::new();
     for node in &source_nodes {
@@ -76,5 +76,35 @@ pub(super) fn spawn_rig(
     Rig {
         joints,
         inverse_bindposes: inverse_bindposes.clone(),
+    }
+}
+
+fn rig_nodes(model: &Model<V1800>) -> Vec<Node> {
+    let mut nodes: Vec<_> = model.bones().iter().map(|bone| bone.node.clone()).collect();
+    nodes.extend(model.helpers());
+    nodes.extend(
+        model
+            .attachments()
+            .into_iter()
+            .map(|attachment| attachment.node),
+    );
+    nodes
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use wc3::model::mdl::Read as _;
+
+    #[test]
+    fn weapon_bone_keeps_attachment_parent_from_mdl() {
+        let source = include_str!("../../tests/fixtures/attachment_parent.mdl");
+        let model = Model::<V1800>::decode_mdl(source).unwrap();
+        let nodes = rig_nodes(&model);
+        let by_id: HashMap<_, _> = nodes.iter().map(|node| (node.object_id, node)).collect();
+        assert_eq!(by_id[&2].parent_id, 1);
+        assert_eq!(by_id[&1].parent_id, 0);
+        assert!(by_id[&0].rotation.is_some());
+        assert_eq!(model.geosets()[0].matrix_indices(), [2]);
     }
 }
