@@ -89,6 +89,7 @@ fn frame_model(
     let distance = radius * 4.0;
     commands.spawn((
         Camera3d::default(),
+        Msaa::Sample4,
         Transform::from_translation(center + offset * distance).looking_at(center, Vec3::Z),
         OrbitCamera {
             target: center,

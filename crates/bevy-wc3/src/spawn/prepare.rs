@@ -20,6 +20,7 @@ pub(super) struct PreparedLayer {
 pub(super) struct PreparedGeoset {
     pub(super) mesh: Handle<Mesh>,
     pub(super) material_id: usize,
+    pub(super) geoset_id: usize,
 }
 
 /// Reusable Bevy assets for one model and one set of resolved textures.
@@ -28,6 +29,7 @@ pub(super) struct PreparedGeoset {
 pub struct PreparedModel {
     pub(super) model: Model<V1800>,
     pub(super) geosets: Vec<PreparedGeoset>,
+    pub(super) geoset_alphas: Vec<Option<Animatable<f32>>>,
     pub(super) layers: Vec<Vec<PreparedLayer>>,
     pub(super) textures: Vec<Option<Handle<Image>>>,
     pub(super) inverse_bindposes: Handle<SkinnedMeshInverseBindposes>,
@@ -62,7 +64,7 @@ pub(crate) fn prepare_resolved_model(
         .collect();
     let material_records = model.materials();
     let mut geosets = Vec::new();
-    for geoset in model.geosets() {
+    for (geoset_id, geoset) in model.geosets().iter().enumerate() {
         if geoset
             .try_level_of_detail()
             .is_ok_and(|lod| lod != 0 && lod != u32::MAX)
@@ -78,7 +80,14 @@ pub(crate) fn prepare_resolved_model(
         geosets.push(PreparedGeoset {
             mesh,
             material_id: geoset.material_id as usize,
+            geoset_id,
         });
+    }
+    let mut geoset_alphas = vec![None; model.geosets().len()];
+    for animation in model.geoset_animations() {
+        if let Some(alpha) = geoset_alphas.get_mut(animation.geoset_id as usize) {
+            *alpha = Some(animation.alpha);
+        }
     }
     let pivots = model.pivot_points();
     let binds = joint_ids
@@ -115,6 +124,7 @@ pub(crate) fn prepare_resolved_model(
     Ok(PreparedModel {
         model: model.clone(),
         geosets,
+        geoset_alphas,
         layers,
         textures,
         inverse_bindposes: inverse_bindposes.add(binds),

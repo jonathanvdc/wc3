@@ -1,6 +1,7 @@
 use bevy::camera::visibility::DynamicSkinnedMeshBounds;
 use bevy::mesh::skinning::{SkinnedMesh, SkinnedMeshInverseBindposes};
 use bevy::prelude::*;
+use wc3::model::materials::LayerFilterMode;
 
 use crate::animation::AnimatedLayer;
 use crate::material::Wc3LayerMaterial;
@@ -48,18 +49,53 @@ pub(crate) fn spawn_prepared_into(
         })
         .collect();
     for geoset in &prepared.geosets {
+        let geoset_alpha = prepared.geoset_alphas[geoset.geoset_id].clone();
+        let initial_visibility = if geoset_alpha
+            .as_ref()
+            .and_then(|alpha| alpha.value())
+            .is_some_and(|alpha| *alpha <= 0.0)
+        {
+            Visibility::Hidden
+        } else {
+            Visibility::Visible
+        };
         for (layer, material) in prepared.layers[geoset.material_id]
             .iter()
             .zip(&layer_handles[geoset.material_id])
         {
+            let material = if geoset_alpha.is_some() {
+                let mut material = layer.material.clone();
+                let alpha = layer.alpha.value().copied().unwrap_or(1.0)
+                    * geoset_alpha
+                        .as_ref()
+                        .and_then(|alpha| alpha.value().copied())
+                        .unwrap_or(1.0);
+                material.base.base_color = Color::srgba(1.0, 1.0, 1.0, alpha);
+                if geoset_alpha
+                    .as_ref()
+                    .and_then(|alpha| alpha.value().copied())
+                    .is_some_and(|alpha| (0.0..1.0).contains(&alpha))
+                    && matches!(
+                        layer.material.extension.filter,
+                        LayerFilterMode::None | LayerFilterMode::Transparent
+                    )
+                {
+                    material.base.alpha_mode = AlphaMode::AlphaToCoverage;
+                }
+                materials.add(material)
+            } else {
+                material.clone()
+            };
             let mut entity = commands.spawn((
                 Mesh3d(geoset.mesh.clone()),
-                MeshMaterial3d(material.clone()),
+                MeshMaterial3d(material),
+                initial_visibility,
             ));
-            if layer.shared.is_none() {
+            if layer.shared.is_none() || geoset_alpha.is_some() {
                 entity.insert(AnimatedLayer {
                     root,
                     alpha: layer.alpha.clone(),
+                    geoset_alpha: geoset_alpha.clone(),
                     texture_id: layer.texture_id.clone(),
                     textures: prepared.textures.clone(),
                 });

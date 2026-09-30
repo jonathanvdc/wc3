@@ -1,6 +1,7 @@
 use super::material::Wc3LayerMaterial;
 use bevy::prelude::*;
 use wc3::model::animation::{Animatable, Sequence, Track};
+use wc3::model::materials::LayerFilterMode;
 
 #[derive(Component)]
 pub struct Wc3Animation {
@@ -40,19 +41,21 @@ pub(crate) struct AnimatedNode {
 pub(crate) struct AnimatedLayer {
     pub(crate) root: Entity,
     pub(crate) alpha: Animatable<f32>,
+    pub(crate) geoset_alpha: Option<Animatable<f32>>,
     pub(crate) texture_id: Animatable<u32>,
     pub(crate) textures: Vec<Option<Handle<Image>>>,
 }
 
 pub(crate) fn animate_layers(
     instances: Query<&Wc3Animation>,
-    layers: Query<(&AnimatedLayer, &MeshMaterial3d<Wc3LayerMaterial>)>,
+    mut layers: Query<(
+        &AnimatedLayer,
+        &MeshMaterial3d<Wc3LayerMaterial>,
+        &mut Visibility,
+    )>,
     mut materials: ResMut<Assets<Wc3LayerMaterial>>,
 ) {
-    for (layer, material_handle) in &layers {
-        if layer.alpha.track().is_none() && layer.texture_id.track().is_none() {
-            continue;
-        }
+    for (layer, material_handle, mut visibility) in &mut layers {
         let Ok(animation) = instances.get(layer.root) else {
             continue;
         };
@@ -65,13 +68,49 @@ pub(crate) fn animate_layers(
             .and_then(|track| sample(track, animation))
             .or_else(|| layer.alpha.value().copied())
             .unwrap_or(1.0);
+        let geoset_alpha = layer
+            .geoset_alpha
+            .as_ref()
+            .map(|alpha| {
+                alpha
+                    .track()
+                    .and_then(|track| sample(track, animation))
+                    .or_else(|| alpha.value().copied())
+                    .unwrap_or(1.0)
+            })
+            .unwrap_or(1.0);
+        *visibility = if geoset_alpha <= 0.0 {
+            Visibility::Hidden
+        } else {
+            Visibility::Visible
+        };
+        if layer.geoset_alpha.is_some() {
+            let partial = (0.0..1.0).contains(&geoset_alpha);
+            match material.extension.filter {
+                LayerFilterMode::None => {
+                    material.base.alpha_mode = if partial {
+                        AlphaMode::AlphaToCoverage
+                    } else {
+                        AlphaMode::Opaque
+                    };
+                }
+                LayerFilterMode::Transparent => {
+                    material.base.alpha_mode = if partial {
+                        AlphaMode::AlphaToCoverage
+                    } else {
+                        AlphaMode::Mask(0.5)
+                    };
+                }
+                _ => {}
+            }
+        }
         let texture_id = layer
             .texture_id
             .track()
             .and_then(|track| sample(track, animation))
             .or_else(|| layer.texture_id.value().copied())
             .unwrap_or(0);
-        material.base.base_color = Color::srgba(1.0, 1.0, 1.0, alpha);
+        material.base.base_color = Color::srgba(1.0, 1.0, 1.0, alpha * geoset_alpha);
         material.base.base_color_texture =
             layer.textures.get(texture_id as usize).cloned().flatten();
     }
@@ -145,7 +184,114 @@ pub(crate) fn animate_nodes(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::material::Wc3LayerState;
     use wc3::model::animation::ValueKeyframe;
+    use wc3::model::materials::LayerFilterMode;
+
+    #[test]
+    fn geoset_alpha_hides_decay_geometry_and_combines_with_layer_alpha() {
+        let mut app = App::new();
+        app.insert_resource(Assets::<Wc3LayerMaterial>::default());
+        app.add_systems(Update, animate_layers);
+        let root = app
+            .world_mut()
+            .spawn(Wc3Animation {
+                sequence: 0,
+                elapsed_ms: 0.0,
+                speed: 1.0,
+                playing: false,
+                sequences: vec![Sequence::new("Stand", [0, 101]).unwrap()],
+                global_sequences: vec![],
+            })
+            .id();
+        let material = app
+            .world_mut()
+            .resource_mut::<Assets<Wc3LayerMaterial>>()
+            .add(Wc3LayerMaterial {
+                base: StandardMaterial::default(),
+                extension: Wc3LayerState {
+                    filter: LayerFilterMode::None,
+                    no_depth_test: false,
+                    no_depth_set: false,
+                },
+            });
+        let entity = app
+            .world_mut()
+            .spawn((
+                AnimatedLayer {
+                    root,
+                    alpha: Animatable::Static(0.5),
+                    geoset_alpha: Some(Animatable::Animated(
+                        Track::linear(
+                            vec![
+                                ValueKeyframe {
+                                    frame: 0,
+                                    value: 0.0,
+                                },
+                                ValueKeyframe {
+                                    frame: 100,
+                                    value: 1.0,
+                                },
+                            ],
+                            None,
+                        )
+                        .unwrap(),
+                    )),
+                    texture_id: Animatable::Static(0),
+                    textures: vec![],
+                },
+                MeshMaterial3d(material.clone()),
+                Visibility::Visible,
+            ))
+            .id();
+        app.update();
+        assert_eq!(
+            *app.world().entity(entity).get::<Visibility>().unwrap(),
+            Visibility::Hidden
+        );
+        app.world_mut()
+            .entity_mut(root)
+            .get_mut::<Wc3Animation>()
+            .unwrap()
+            .elapsed_ms = 50.0;
+        app.update();
+        assert_eq!(
+            *app.world().entity(entity).get::<Visibility>().unwrap(),
+            Visibility::Visible
+        );
+        assert_eq!(
+            app.world()
+                .resource::<Assets<Wc3LayerMaterial>>()
+                .get(&material)
+                .unwrap()
+                .base
+                .base_color
+                .to_srgba()
+                .alpha,
+            0.25,
+        );
+        assert_eq!(
+            app.world()
+                .resource::<Assets<Wc3LayerMaterial>>()
+                .get(&material)
+                .unwrap()
+                .base
+                .alpha_mode,
+            AlphaMode::AlphaToCoverage,
+        );
+        app.world_mut()
+            .entity_mut(root)
+            .get_mut::<Wc3Animation>()
+            .unwrap()
+            .elapsed_ms = 100.0;
+        app.update();
+        let material = app
+            .world()
+            .resource::<Assets<Wc3LayerMaterial>>()
+            .get(&material)
+            .unwrap();
+        assert_eq!(material.base.alpha_mode, AlphaMode::Opaque);
+    }
 
     #[test]
     fn sequence_clock_loops_and_global_clock_runs_independently() {
