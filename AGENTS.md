@@ -12,6 +12,8 @@
 
 # Rendering references
 
+- When working on `bevy-wc3`, read `crates/bevy-wc3/docs/README.md` and the relevant documents under `crates/bevy-wc3/docs/visual-fidelity/`, including `renderer.md`. Keep these documents and their index updated as part of the work when rendering behavior, implementation gaps, limitations, or verification results change. Distinguish missing features from partial implementations and implemented behavior whose game fidelity remains unverified.
+
 - When implementing or investigating Warcraft III model rendering, consult Retera Model Studio, mdx-m3-viewer, and Warsmash as reference implementations. Compare their behavior for animation, skinning, materials, pass ordering, and effects against models in `data/`; do not assume any one implementation is definitive.
 
 # Rendering captures and synthetic models
