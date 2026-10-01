@@ -5,6 +5,9 @@
 //! independent of simulation FPS.
 mod render;
 mod simulation;
+mod spawn;
 
 pub(crate) use render::{RibbonInstances, RibbonRenderPlugin};
 pub(crate) use simulation::{update_ribbons, RibbonLayer, RibbonState};
+
+pub(crate) use spawn::spawn_ribbons;

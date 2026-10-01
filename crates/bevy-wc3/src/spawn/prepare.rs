@@ -41,6 +41,11 @@ pub struct PreparedModel {
 }
 
 impl PreparedModel {
+    /// Normalized diffuse binding shared by geosets and ribbon layers.
+    pub(crate) fn layer_texture_id(&self, material: usize, layer: usize) -> &Animatable<u32> {
+        &self.layers[material][layer].texture_id
+    }
+
     /// Resolved attachment and Classic particle model references.
     pub fn model_resources(&self) -> &Wc3ModelResources {
         &self.models

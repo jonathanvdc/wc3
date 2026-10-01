@@ -12,6 +12,9 @@ use crate::effects::simulation::{
 };
 use crate::instance::{Wc3ModelInstance, Wc3ModelOwner};
 
+mod spawn;
+pub(crate) use spawn::spawn_particles;
+
 const MAX_PARTICLES: usize = 1024;
 
 #[derive(Component)]
@@ -260,5 +263,5 @@ pub(crate) fn update_particles(
 }
 
 #[cfg(test)]
-#[path = "particle_emitter_tests.rs"]
+#[path = "tests.rs"]
 mod tests;

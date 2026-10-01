@@ -35,7 +35,7 @@ fn setup() -> (App, Entity, Entity) {
         update_particles.before(TransformSystems::Propagate),
     );
     let source = Wc3Model::decode_mdl(include_str!(
-        "../tests/fixtures/attachment_capture_child.mdl"
+        "../../tests/fixtures/attachment_capture_child.mdl"
     ))
     .unwrap();
     let model = app
@@ -225,7 +225,8 @@ fn backward_seek_retires_old_particles() {
 fn moving_nodes_are_sampled_at_birth() {
     let (mut app, root, emitter) = setup();
     let node = app.world().get::<ParticleState>(emitter).unwrap().node;
-    let source = Wc3Model::decode_mdl(include_str!("../tests/fixtures/prem_capture.mdl")).unwrap();
+    let source =
+        Wc3Model::decode_mdl(include_str!("../../tests/fixtures/prem_capture.mdl")).unwrap();
     app.world_mut()
         .get_mut::<Wc3Animation>(root)
         .unwrap()

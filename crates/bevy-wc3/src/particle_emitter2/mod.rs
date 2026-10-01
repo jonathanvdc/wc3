@@ -10,6 +10,7 @@
 mod emission;
 mod render;
 mod simulation;
+mod spawn;
 
 use bevy::prelude::Component;
 
@@ -19,3 +20,5 @@ pub(crate) use simulation::{update_particles, Particle2State};
 /// Associates a spawned emitter with its texture binding slot.
 #[derive(Component)]
 pub(crate) struct ParticleTextureSlot(pub(crate) usize);
+
+pub(crate) use spawn::spawn_particles2;

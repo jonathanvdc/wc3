@@ -1,0 +1,119 @@
+use super::prepare::PreparedLayer;
+use bevy::camera::visibility::DynamicSkinnedMeshBounds;
+use bevy::mesh::skinning::SkinnedMesh;
+use bevy::prelude::*;
+use wc3::model::animation::Animatable;
+use wc3::model::materials::LayerFilterMode;
+
+use super::{rig::Rig, PreparedModel};
+use crate::animation::AnimatedLayer;
+use crate::material::Wc3LayerMaterial;
+use crate::texture_bindings::Wc3TextureBindings;
+
+pub(super) fn spawn_geosets(
+    commands: &mut Commands,
+    materials: &mut Assets<Wc3LayerMaterial>,
+    prepared: &PreparedModel,
+    root: Entity,
+    rig: &Rig,
+    bindings: &Wc3TextureBindings,
+) {
+    let layer_handles = instantiate_materials(materials, prepared, bindings);
+    for geoset in &prepared.geosets {
+        let geoset_alpha = prepared.geoset_alphas[geoset.geoset_id].clone();
+        let initial_visibility = if geoset_alpha
+            .as_ref()
+            .and_then(|alpha| alpha.value())
+            .is_some_and(|alpha| *alpha <= 0.0)
+        {
+            Visibility::Hidden
+        } else {
+            Visibility::Inherited
+        };
+        for (layer, material) in prepared.layers[geoset.material_id]
+            .iter()
+            .zip(&layer_handles[geoset.material_id])
+        {
+            let material =
+                instantiate_geoset_material(materials, layer, material, geoset_alpha.as_ref());
+            let mut entity = commands.spawn((
+                Mesh3d(geoset.mesh.clone()),
+                MeshMaterial3d(material),
+                initial_visibility,
+            ));
+            entity.insert(AnimatedLayer {
+                root,
+                alpha: layer.alpha.clone(),
+                geoset_alpha: geoset_alpha.clone(),
+                texture_id: layer.texture_id.clone(),
+            });
+            let entity = entity.id();
+            if !rig.joints.is_empty() {
+                commands.entity(entity).insert((
+                    SkinnedMesh {
+                        inverse_bindposes: rig.inverse_bindposes.clone(),
+                        joints: rig.joints.clone(),
+                    },
+                    DynamicSkinnedMeshBounds,
+                ));
+            }
+            // Joint matrices already contain world transforms; skinning ignores
+            // this mesh transform. Parenting supplies visibility and ownership.
+            commands.entity(root).add_child(entity);
+        }
+    }
+}
+
+fn instantiate_materials(
+    materials: &mut Assets<Wc3LayerMaterial>,
+    prepared: &PreparedModel,
+    bindings: &Wc3TextureBindings,
+) -> Vec<Vec<Handle<Wc3LayerMaterial>>> {
+    prepared
+        .layers
+        .iter()
+        .map(|layers| {
+            layers
+                .iter()
+                .map(|layer| {
+                    let mut value = layer.material.clone();
+                    let texture_id = layer.texture_id.value().copied().unwrap_or(0);
+                    value.base.base_color_texture = bindings.bitmap(texture_id as usize);
+                    materials.add(value)
+                })
+                .collect()
+        })
+        .collect()
+}
+
+fn instantiate_geoset_material(
+    materials: &mut Assets<Wc3LayerMaterial>,
+    layer: &PreparedLayer,
+    material: &Handle<Wc3LayerMaterial>,
+    geoset_alpha: Option<&Animatable<f32>>,
+) -> Handle<Wc3LayerMaterial> {
+    if geoset_alpha.is_some() {
+        let mut material = materials
+            .get(material)
+            .cloned()
+            .unwrap_or_else(|| layer.material.clone());
+        let alpha = layer.alpha.value().copied().unwrap_or(1.0)
+            * geoset_alpha
+                .and_then(|alpha| alpha.value().copied())
+                .unwrap_or(1.0);
+        material.base.base_color = Color::srgba(1.0, 1.0, 1.0, alpha);
+        if geoset_alpha
+            .and_then(|alpha| alpha.value().copied())
+            .is_some_and(|alpha| (0.0..1.0).contains(&alpha))
+            && matches!(
+                layer.material.extension.filter,
+                LayerFilterMode::None | LayerFilterMode::Transparent
+            )
+        {
+            material.base.alpha_mode = AlphaMode::AlphaToCoverage;
+        }
+        materials.add(material)
+    } else {
+        material.clone()
+    }
+}
