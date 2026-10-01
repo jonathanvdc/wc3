@@ -72,8 +72,12 @@ Each instance root owns its rig, geometry, and PRE2 render entities through the
 Bevy hierarchy. Hiding the root hides its geometry and effects; despawning it
 cleans them up, including its attachment models. `Wc3ModelOwner` also supports
 detached child instances: omit `ChildOf` to keep world-space transforms and
-visibility independent while retaining cleanup when the owner despawns. PREM
-model references are resolved, but their particle simulation remains unimplemented.
+visibility independent while retaining cleanup when the owner despawns. Model-based
+PREM emitters spawn world-space child models with independent sequence-zero
+animation, sampled birth transforms and physical properties, gravity, and lifetime
+cleanup. Parent playback pause/speed controls particle time; sequence changes and
+backward seeks clear particles. Image-based PREM is unsupported. See
+[PREM fidelity and capture instructions](docs/visual-fidelity/prem.md).
 
 Capture the animated attachment fixture with the existing offscreen renderer:
 

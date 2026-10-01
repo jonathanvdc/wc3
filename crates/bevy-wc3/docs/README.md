@@ -8,6 +8,8 @@ own file under `visual-fidelity/` and link it here as it is documented.
 
 - [General renderer gaps](visual-fidelity/renderer.md): materials, geoset and UV
   animation, billboards, other effects, pass ordering, and skinning limits.
+- [Classic PREM particles](visual-fidelity/prem.md): model spawning, motion,
+  child animation, resource ownership, and remaining limits.
 - [PRE2 particle emitters](visual-fidelity/pre2.md): fog, lighting, textures,
   pass ordering, emission timing, spawn motion, and orientation.
 

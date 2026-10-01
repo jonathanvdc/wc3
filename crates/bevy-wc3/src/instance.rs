@@ -6,7 +6,6 @@ use std::collections::{hash_map::Entry, HashMap, HashSet};
 
 use crate::animation::Wc3Animation;
 use crate::asset::Wc3ModelAsset;
-use crate::attachment::AttachmentModel;
 use crate::material::Wc3LayerMaterial;
 use crate::spawn::{prepare_resolved_model, spawn_prepared_into, PreparedModel};
 use crate::texture_bindings::Wc3TextureBindings;
@@ -43,7 +42,7 @@ impl Wc3OwnedModels {
 }
 
 #[derive(Component)]
-pub(crate) struct BlockedAttachment;
+pub(crate) struct BlockedChildModel;
 
 #[derive(Resource, Default)]
 pub(crate) struct PreparedModelCache {
@@ -51,18 +50,22 @@ pub(crate) struct PreparedModelCache {
     failed: HashSet<AssetId<Wc3ModelAsset>>,
 }
 
+type UnloadedInstances<'w, 's> = Query<
+    'w,
+    's,
+    (
+        Entity,
+        &'static Wc3ModelInstance,
+        Option<&'static Wc3TextureBindings>,
+        Option<&'static Wc3ModelOwner>,
+    ),
+    (Without<Wc3Animation>, Without<BlockedChildModel>),
+>;
+
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn spawn_loaded_instances(
     mut commands: Commands,
-    instances: Query<
-        (
-            Entity,
-            &Wc3ModelInstance,
-            Option<&Wc3TextureBindings>,
-            Option<&AttachmentModel>,
-        ),
-        (Without<Wc3Animation>, Without<BlockedAttachment>),
-    >,
+    instances: UnloadedInstances,
     owners: Query<(Option<&Wc3ModelInstance>, Option<&Wc3ModelOwner>)>,
     sources: Res<Assets<Wc3ModelAsset>>,
     mut cache: ResMut<PreparedModelCache>,
@@ -72,9 +75,9 @@ pub(crate) fn spawn_loaded_instances(
 ) {
     cache.prepared.retain(|id, _| sources.contains(*id));
     cache.failed.retain(|id| sources.contains(*id));
-    for (root, instance, bindings, attachment) in &instances {
+    for (root, instance, bindings, owner) in &instances {
         let id = instance.0.id();
-        if attachment.is_some() {
+        if owner.is_some() {
             let mut ancestor = owners
                 .get(root)
                 .ok()
@@ -96,10 +99,10 @@ pub(crate) fn spawn_loaded_instances(
                 ancestor = owner.map(|owner| owner.0);
             }
             if cyclic {
-                warn!("Skipping cyclic WC3 attachment {:?}", instance.0);
+                warn!("Skipping cyclic WC3 child model {:?}", instance.0);
                 commands
                     .entity(root)
-                    .insert((BlockedAttachment, Visibility::Hidden));
+                    .insert((BlockedChildModel, Visibility::Hidden));
                 continue;
             }
         }

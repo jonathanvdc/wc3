@@ -8,6 +8,7 @@ use crate::animation::AnimatedLayer;
 use crate::attachment::spawn_attachments;
 use crate::material::Wc3LayerMaterial;
 use crate::model::{ModelError, Wc3Model};
+use crate::particle_emitter::ParticleState;
 use crate::particle_emitter2::{Particle2State, ParticleInstances, ParticleTextureSlot};
 use crate::texture_bindings::Wc3TextureBindings;
 
@@ -68,6 +69,18 @@ pub(crate) fn spawn_prepared_into(
     let rig = spawn_rig(commands, &prepared.model, root, &prepared.inverse_bindposes);
     let node_entities = &rig.by_object_id;
     spawn_attachments(commands, prepared, root, node_entities);
+    for (index, definition) in prepared.model.particle_emitters().into_iter().enumerate() {
+        let Some(model) = prepared.model_resources().particle(index) else {
+            continue;
+        };
+        let Some(&node) = node_entities.get(&definition.node.object_id) else {
+            continue;
+        };
+        commands.spawn((
+            ParticleState::new(root, node, definition, model),
+            ChildOf(root),
+        ));
+    }
     for (emitter_id, definition) in prepared.model.particle_emitters2().into_iter().enumerate() {
         let Some(&node) = node_entities.get(&definition.node.object_id) else {
             continue;

@@ -1,0 +1,50 @@
+Version { FormatVersion 800, }
+Model "Classic model particles" {
+    MinimumExtent { -5, -2, -1 },
+    MaximumExtent { 5, 2, 5 },
+    BoundsRadius 8,
+}
+Sequences 1 {
+    Anim "Stand" { Interval { 0, 2000 }, }
+}
+ParticleEmitter "Moving emitter" {
+    ObjectId 0,
+    EmitterUsesMdl,
+    Path "attachment_capture_child.mdl",
+    static EmissionRate 4,
+    static Gravity 2,
+    static Longitude 0,
+    static Latitude 0,
+    static LifeSpan 1.5,
+    static InitVelocity 3,
+    Translation 3 {
+        Linear,
+        0: { -3, 0, 0 },
+        1000: { 3, 0, 0 },
+        2000: { -3, 0, 0 },
+    }
+    Visibility 4 {
+        DontInterp,
+        0: 1,
+        750: 0,
+        1250: 1,
+        2000: 1,
+    }
+}
+ParticleEmitter "Scaled cone" {
+    ObjectId 1,
+    EmitterUsesMdl,
+    Path "attachment_capture_child.mdl",
+    static EmissionRate 3,
+    static Gravity 1,
+    static Longitude 0,
+    static Latitude 0.5,
+    static LifeSpan 1,
+    static InitVelocity 2,
+    Translation 1 { DontInterp, 0: { 0, 1.5, 0 }, }
+    Scaling 1 { DontInterp, 0: { 0.5, 0.5, 2 }, }
+}
+PivotPoints 2 {
+    { 0, 0, 0 },
+    { 0, 0, 0 },
+}

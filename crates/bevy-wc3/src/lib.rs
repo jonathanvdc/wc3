@@ -15,12 +15,14 @@ mod material;
 mod mesh;
 mod model;
 mod model_resources;
+mod particle_emitter;
 mod particle_emitter2;
 mod spawn;
 mod texture_bindings;
 
 use bevy::asset::embedded_asset;
 use bevy::prelude::*;
+use bevy::transform::TransformSystems;
 
 pub use animation::Wc3Animation;
 pub use asset::Wc3ModelAsset;
@@ -57,6 +59,7 @@ impl Plugin for Wc3BevyPlugin {
             Update,
             (
                 animation::advance_animation,
+                particle_emitter::animate_particle_models,
                 attachment::animate_attachments,
                 animation::animate_nodes,
                 animation::animate_layers,
@@ -66,7 +69,11 @@ impl Plugin for Wc3BevyPlugin {
         );
         app.add_systems(
             PostUpdate,
-            particle_emitter2::update_particles.after(bevy::transform::TransformSystems::Propagate),
+            particle_emitter::update_particles.before(TransformSystems::Propagate),
+        );
+        app.add_systems(
+            PostUpdate,
+            particle_emitter2::update_particles.after(TransformSystems::Propagate),
         );
     }
 }
