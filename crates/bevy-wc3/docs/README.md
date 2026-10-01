@@ -10,6 +10,8 @@ own file under `visual-fidelity/` and link it here as it is documented.
   animation, billboards, other effects, pass ordering, and skinning limits.
 - [Classic PREM particles](visual-fidelity/prem.md): model spawning, motion,
   child animation, resource ownership, and remaining limits.
+- [Ribbon emitters](visual-fidelity/ribbons.md): GPU trails, material layers,
+  atlas animation, ballistic gravity, and capture verification.
 - [PRE2 particle emitters](visual-fidelity/pre2.md): fog, lighting, textures,
   pass ordering, emission timing, spawn motion, and orientation.
 

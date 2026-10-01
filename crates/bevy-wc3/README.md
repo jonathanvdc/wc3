@@ -68,7 +68,7 @@ or when the parent animation seeks backward. Each child has its own rig,
 materials, texture bindings, and animation clock. Nested attachments are updated
 from outer to inner models; recursive model paths are blocked during spawning.
 
-Each instance root owns its rig, geometry, and PRE2 render entities through the
+Each instance root owns its rig, geometry, and PRE2/ribbon render entities through the
 Bevy hierarchy. Hiding the root hides its geometry and effects; despawning it
 cleans them up, including its attachment models. `Wc3ModelOwner` also supports
 detached child instances: omit `ChildOf` to keep world-space transforms and
@@ -122,6 +122,15 @@ Unshaded particles use texture and segment color directly. Billboard heads and t
 use the camera-facing normal; XYQuad heads use world +Z. Lighting leaves alpha intact.
 `spawn_prepared_model` takes mutable mesh assets to create a static emitter quad.
 Bitmap and PRE2 replaceable IDs use the same per-instance bindings.
+
+RIBB ribbon emitters retain world-space cross-sections sampled at subframe births.
+The GPU builds connected quads, applies ballistic gravity (`0.5 * gravity * age²`),
+and maps an animated atlas cell across each live chain. Animated color/alpha,
+material layers, texture bindings, and UV transforms update without rebuilding a
+CPU mesh. Pause/speed and lifetime follow the instance animation; sequence changes,
+backward seeks, and sampled visibility gaps break the chain. See
+[ribbon behavior and capture checks](docs/visual-fidelity/ribbons.md), including the
+gravity semantics and remaining game-fidelity checks.
 
 See the [renderer documentation](docs/README.md) for visual fidelity gaps and
 verification work by rendering topic.

@@ -17,6 +17,7 @@ mod model;
 mod model_resources;
 mod particle_emitter;
 mod particle_emitter2;
+mod ribbon_emitter;
 mod spawn;
 mod texture_bindings;
 
@@ -44,12 +45,14 @@ impl Plugin for Wc3BevyPlugin {
         embedded_asset!(app, "shaders/wc3_mesh.wgsl");
         embedded_asset!(app, "shaders/wc3_prepass.wgsl");
         embedded_asset!(app, "shaders/wc3_particle.wgsl");
+        embedded_asset!(app, "shaders/wc3_ribbon.wgsl");
         app.init_asset::<Wc3ModelAsset>();
         app.init_asset_loader::<asset::Wc3ModelLoader>();
         app.init_asset_loader::<asset::BlpImageLoader>();
         app.init_resource::<instance::PreparedModelCache>();
         app.add_plugins(MaterialPlugin::<Wc3LayerMaterial>::default());
         app.add_plugins(particle_emitter2::ParticleRenderPlugin);
+        app.add_plugins(ribbon_emitter::RibbonRenderPlugin);
         app.add_systems(Update, instance::spawn_loaded_instances);
         app.add_systems(
             Update,
@@ -73,7 +76,11 @@ impl Plugin for Wc3BevyPlugin {
         );
         app.add_systems(
             PostUpdate,
-            particle_emitter2::update_particles.after(TransformSystems::Propagate),
+            (
+                particle_emitter2::update_particles,
+                ribbon_emitter::update_ribbons,
+            )
+                .after(TransformSystems::Propagate),
         );
     }
 }

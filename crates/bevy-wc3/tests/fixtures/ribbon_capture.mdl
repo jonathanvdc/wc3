@@ -1,0 +1,38 @@
+Version { FormatVersion 800, }
+Model "Ribbon capture" {
+    MinimumExtent { -5.0, -3.0, -2.0 },
+    MaximumExtent { 5.0, 3.0, 5.0 },
+    BoundsRadius 8.0,
+}
+Sequences 1 { Anim "Stand" { Interval { 0, 4000 }, } }
+Textures 1 { Bitmap { Image "capture_white.png", } }
+Materials 1 {
+    Material {
+        SortPrimsFarZ,
+        Layer { FilterMode Blend, Unshaded, TwoSided, static TextureID 0, static Alpha 1.0, }
+    }
+}
+Helper "Moving parent" {
+    ObjectId 0,
+    Translation 3 {
+        Linear,
+        0: { -4.0, 0.0, 0.0 },
+        2000: { 4.0, 0.0, 0.0 },
+        4000: { -4.0, 0.0, 0.0 },
+    }
+}
+RibbonEmitter "Trail" {
+    ObjectId 1,
+    Parent 0,
+    static HeightAbove 0.6,
+    static HeightBelow 0.4,
+    static Alpha 0.8,
+    static Color { 0.1, 0.6, 1.0 },
+    LifeSpan 1.0,
+    EmissionRate 20,
+    Rows 1,
+    Columns 1,
+    MaterialID 0,
+    Gravity 2.0,
+}
+PivotPoints 2 { { 0.0, 0.0, 0.0 }, { 0.0, 0.0, 2.0 }, }

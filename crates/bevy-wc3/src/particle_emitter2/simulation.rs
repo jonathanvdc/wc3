@@ -1,5 +1,4 @@
 //! Per-instance PRE2 spawning and lifetime bookkeeping; motion is evaluated on the GPU.
-use bevy::math::Affine3A;
 use bevy::prelude::*;
 use std::collections::VecDeque;
 use std::f32::consts::FRAC_PI_2;
@@ -8,7 +7,9 @@ use wc3::model::animation::Animatable;
 use wc3::model::emitters::{Particle2Frames, ParticleEmitter2};
 
 use super::render::{ParticleEmitterUniform, ParticleInstance, ParticleInstances};
-use crate::animation::{sample, sample_value, track_time, AnimatedNode, Wc3Animation};
+use crate::animation::{
+    sample, sample_emitter_transform, sample_value, track_time, AnimatedNode, Wc3Animation,
+};
 
 const MAX_PARTICLES: usize = 8192;
 
@@ -310,25 +311,6 @@ fn emission_key(value: &Animatable<f32>, animation: &Wc3Animation) -> Option<i32
     let track = value.track()?;
     let (time, interval) = track_time(track, animation)?;
     track.key_frame_at_or_before_in(time, interval)
-}
-
-fn sample_emitter_transform(
-    mut entity: Entity,
-    root: Entity,
-    animation: &Wc3Animation,
-    nodes: &Query<(&GlobalTransform, Option<&AnimatedNode>, Option<&ChildOf>)>,
-) -> Option<GlobalTransform> {
-    let mut local = Affine3A::IDENTITY;
-    loop {
-        let (global, node, parent) = nodes.get(entity).ok()?;
-        match node.filter(|node| node.root == root) {
-            Some(node) => {
-                local = node.sample_transform(animation).compute_affine() * local;
-                entity = parent?.parent();
-            }
-            None => return Some(GlobalTransform::from(Mat4::from(global.affine() * local))),
-        }
-    }
 }
 
 pub(crate) fn update_particles(

@@ -1,5 +1,6 @@
 use super::material::Wc3LayerMaterial;
 use crate::texture_bindings::Wc3TextureBindings;
+use bevy::math::Affine3A;
 use bevy::prelude::*;
 use std::ops::RangeInclusive;
 use wc3::model::animation::{Animatable, Interpolate, Sequence, Track, TrackValue};
@@ -204,6 +205,25 @@ pub(crate) fn animate_nodes(
             continue;
         };
         *transform = node.sample_transform(animation);
+    }
+}
+
+pub(crate) fn sample_emitter_transform(
+    mut entity: Entity,
+    root: Entity,
+    animation: &Wc3Animation,
+    nodes: &Query<(&GlobalTransform, Option<&AnimatedNode>, Option<&ChildOf>)>,
+) -> Option<GlobalTransform> {
+    let mut local = Affine3A::IDENTITY;
+    loop {
+        let (global, node, parent) = nodes.get(entity).ok()?;
+        match node.filter(|node| node.root == root) {
+            Some(node) => {
+                local = node.sample_transform(animation).compute_affine() * local;
+                entity = parent?.parent();
+            }
+            None => return Some(GlobalTransform::from(Mat4::from(global.affine() * local))),
+        }
     }
 }
 

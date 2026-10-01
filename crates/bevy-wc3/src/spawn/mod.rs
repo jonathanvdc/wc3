@@ -10,6 +10,7 @@ use crate::material::Wc3LayerMaterial;
 use crate::model::{ModelError, Wc3Model};
 use crate::particle_emitter::ParticleState;
 use crate::particle_emitter2::{Particle2State, ParticleInstances, ParticleTextureSlot};
+use crate::ribbon_emitter::{RibbonInstances, RibbonLayer, RibbonState};
 use crate::texture_bindings::Wc3TextureBindings;
 
 mod prepare;
@@ -107,6 +108,64 @@ pub(crate) fn spawn_prepared_into(
             ))
             .id();
         commands.entity(root).add_child(entity);
+    }
+    let source_materials = prepared.model.materials();
+    let texture_animations = prepared.model.texture_animations();
+    for definition in prepared.model.ribbon_emitters() {
+        let Some(&node) = node_entities.get(&definition.node.object_id) else {
+            continue;
+        };
+        let Some(material) = source_materials.get(definition.material_id as usize) else {
+            warn!(
+                "Ribbon {} references missing material {}",
+                definition.node.object_id, definition.material_id
+            );
+            continue;
+        };
+        let emitter = commands
+            .spawn((
+                RibbonState::new(root, node, definition.clone()),
+                ChildOf(root),
+            ))
+            .id();
+        let mesh = meshes.add(Rectangle::new(2.0, 2.0));
+        for (layer_index, layer) in material.layers.iter().enumerate() {
+            let mut layer = layer.clone();
+            // Prepared layers normalize Classic and HD diffuse texture bindings.
+            layer.texture_id = prepared.layers[definition.material_id as usize][layer_index]
+                .texture_id
+                .clone();
+            let texture = bindings.bitmap(layer.texture_id.value().copied().unwrap_or(0) as usize);
+            let flags = layer.shading_flags;
+            commands.spawn((
+                Mesh3d(mesh.clone()),
+                RibbonInstances {
+                    records: Default::default(),
+                    live_indices: Default::default(),
+                    uniform: Default::default(),
+                    texture,
+                    filter: layer.filter_mode,
+                    priority_plane: material.priority_plane,
+                    emitter,
+                    layer_index,
+                    sort_far: material.render_mode.sort_primitives_far_z(),
+                    sort_near: material.render_mode.sort_primitives_near_z(),
+                    no_depth_test: flags.no_depth_test(),
+                    no_depth_set: flags.no_depth_set(),
+                    two_sided: flags.two_sided() || material.render_mode.two_sided(),
+                },
+                RibbonLayer {
+                    emitter,
+                    texture_animation: texture_animations
+                        .get(layer.texture_animation_id as usize)
+                        .cloned(),
+                    definition: layer,
+                },
+                Transform::default(),
+                NoFrustumCulling,
+                ChildOf(root),
+            ));
+        }
     }
     let layer_handles: Vec<Vec<_>> = prepared
         .layers
@@ -456,6 +515,129 @@ mod tests {
         assert_eq!(bindposes.len(), bindpose_count);
         assert!(materials.len() >= static_count + 2);
         assert!(!prepared.geosets.is_empty());
+    }
+
+    #[test]
+    fn ribbons_share_sections_across_layers_and_keep_instances_bindings_and_ownership_separate() {
+        use crate::animation::advance_animation;
+        use crate::ribbon_emitter::update_ribbons;
+        use crate::texture_bindings::Wc3TextureSlot;
+        use bevy::transform::TransformSystems;
+        use std::sync::Arc;
+        use std::time::Duration;
+
+        let mut source =
+            Wc3Model::decode_mdl(include_str!("../../tests/fixtures/ribbon_capture.mdl")).unwrap();
+        let mut definitions = source.model.materials();
+        let mut second = definitions[0].layers[0].clone();
+        second.alpha = 0.5.into();
+        second.filter_mode = LayerFilterMode::Additive;
+        definitions[0].layers.push(second);
+        source.model.set_materials(&definitions);
+        let mut app = App::new();
+        app.add_plugins((TransformPlugin, VisibilityPlugin));
+        app.insert_resource(Time::<()>::default());
+        app.add_systems(Update, (advance_animation, animate_nodes).chain());
+        app.add_systems(
+            PostUpdate,
+            update_ribbons.after(TransformSystems::Propagate),
+        );
+        let mut meshes = Assets::<Mesh>::default();
+        let mut materials = Assets::<Wc3LayerMaterial>::default();
+        let mut bindposes = Assets::<SkinnedMeshInverseBindposes>::default();
+        let prepared = prepare_model(&mut meshes, &mut materials, &mut bindposes, &source, |_| {
+            None
+        })
+        .unwrap();
+        let mut images = Assets::<Image>::default();
+        let chosen = images.add(Image::default());
+        let mut bindings = Wc3TextureBindings::default();
+        bindings.set_slot(Wc3TextureSlot::Bitmap(0), chosen.clone());
+        let mut queue = CommandQueue::default();
+        let mut commands = Commands::new(&mut queue, app.world());
+        let fast = spawn_prepared_model_with_bindings(
+            &mut commands,
+            &mut meshes,
+            &mut materials,
+            &prepared,
+            bindings,
+        );
+        let normal = spawn_prepared_model(&mut commands, &mut meshes, &mut materials, &prepared);
+        queue.apply(app.world_mut());
+        app.insert_resource(meshes);
+        app.insert_resource(materials);
+        app.insert_resource(bindposes);
+        app.world_mut().get_mut::<Wc3Animation>(fast).unwrap().speed = 2.0;
+        app.world_mut()
+            .resource_mut::<Time>()
+            .advance_by(Duration::from_secs_f64(0.25));
+        app.update();
+        let mut query = app
+            .world_mut()
+            .query::<(Entity, &RibbonLayer, &RibbonInstances, &ChildOf)>();
+        let layers: Vec<_> = query
+            .iter(app.world())
+            .map(|(entity, layer, data, parent)| {
+                assert_eq!(
+                    parent.parent(),
+                    app.world().get::<RibbonState>(layer.emitter).unwrap().root
+                );
+                (entity, layer.emitter, data.clone(), parent.parent())
+            })
+            .collect();
+        assert_eq!(layers.len(), 4);
+        let fast_layers: Vec<_> = layers
+            .iter()
+            .filter(|(_, _, _, root)| *root == fast)
+            .collect();
+        let normal_layers: Vec<_> = layers
+            .iter()
+            .filter(|(_, _, _, root)| *root == normal)
+            .collect();
+        assert_eq!(fast_layers[0].2.live_indices.len(), 9);
+        assert_eq!(normal_layers[0].2.live_indices.len(), 4);
+        assert!(Arc::ptr_eq(
+            &fast_layers[0].2.records,
+            &fast_layers[1].2.records
+        ));
+        assert!(!Arc::ptr_eq(
+            &fast_layers[0].2.records,
+            &normal_layers[0].2.records
+        ));
+        for (_, _, data, _) in &fast_layers {
+            assert_eq!(data.texture, Some(chosen.clone()));
+        }
+        assert!(fast_layers
+            .iter()
+            .any(|(_, _, data, _)| data.uniform.color[3] == 0.4));
+        let snapshot = fast_layers[0].2.records.clone();
+        app.world_mut()
+            .get_mut::<Wc3Animation>(fast)
+            .unwrap()
+            .playing = false;
+        let replacement = images.add(Image::default());
+        app.world_mut()
+            .get_mut::<Wc3TextureBindings>(fast)
+            .unwrap()
+            .set_slot(Wc3TextureSlot::Bitmap(0), replacement.clone());
+        *app.world_mut().get_mut::<Visibility>(fast).unwrap() = Visibility::Hidden;
+        app.update();
+        for (entity, _, _, _) in &fast_layers {
+            let data = app.world().get::<RibbonInstances>(*entity).unwrap();
+            assert!(Arc::ptr_eq(&snapshot, &data.records));
+            assert_eq!(data.texture, Some(replacement.clone()));
+            assert!(!app
+                .world()
+                .get::<InheritedVisibility>(*entity)
+                .unwrap()
+                .get());
+        }
+        app.world_mut().entity_mut(fast).despawn();
+        for (entity, emitter, _, _) in &fast_layers {
+            assert!(app.world().get_entity(*entity).is_err());
+            assert!(app.world().get_entity(*emitter).is_err());
+        }
+        assert!(app.world().get_entity(normal).is_ok());
     }
 
     #[test]

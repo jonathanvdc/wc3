@@ -8,11 +8,11 @@ These gaps cover model rendering beyond [PRE2 particle emitters](pre2.md).
 | --- | --- |
 | Reforged materials | Reforged normal and ORM texture slots are not implemented. Models use Bevy PBR shading with WC3 layer blend and depth states. |
 | Geoset animation | Geoset alpha is sampled and combined with layer alpha, including visibility changes. Geoset color animation is not applied. |
-| UV animation | Layer alpha and texture selection animate, but texture-animation transforms are not applied to UVs. |
+| UV animation | Layer alpha and texture selection animate. Texture-animation transforms are supported for ribbons, but not geoset UVs. |
 | Node billboards | Node transforms animate, but camera-facing node billboard flags are not implemented. |
 | Classic PREM particles | Model particles spawn and simulate world-space motion, independent animation, and lifetime cleanup. Image particles remain unsupported; see [PREM fidelity](prem.md). |
 | Attachments | Resolved paths spawn independently animated child models. Visibility tracks gate separate mounts; children follow node transforms, loop their first sequence, restart on show/parent sequence changes, and clean up with their owner. Points are exposed by ID/name for consumer-supplied models. |
-| Ribbons | Node entities exist, but ribbon emitters do not yet render ribbon geometry. |
+| Ribbons | GPU-instanced trails support birth-time node poses, animated heights/color/alpha/atlas slots, and material layers. See [ribbon fidelity](ribbons.md) for gravity choices and remaining verification. |
 | WC3 pass ordering | Geometry uses Bevy render phases and WC3 layer blend/depth states. Warcraft's ordering across material layers and effects is not implemented as a dedicated ordering scheme. |
 | Skinning limits | GPU skinning supports up to eight influences per vertex. Larger Classic matrix groups are rejected; they need a rendering strategy before they can be displayed. |
 
