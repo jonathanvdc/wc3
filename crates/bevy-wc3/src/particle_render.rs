@@ -198,6 +198,7 @@ fn filter_key(filter: Particle2FilterMode) -> u8 {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn queue_particles(
     draws: Res<DrawFunctions<Transparent3d>>,
     pipeline: Res<ParticlePipeline>,
@@ -277,6 +278,7 @@ struct ParticleBuffer {
     texture: BindGroup,
     sorted: HashMap<RetainedViewEntity, Buffer>,
 }
+#[allow(clippy::too_many_arguments)]
 fn prepare_particles(
     mut commands: Commands,
     query: Query<(Entity, &ParticleInstances, Option<&ParticleBuffer>)>,

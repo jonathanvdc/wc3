@@ -5,12 +5,17 @@ use image::RgbaImage;
 
 #[cfg(feature = "blp-decode")]
 pub(super) fn decode_into(data: &[u8], pixels: &mut [u8]) -> Result<(), DecodeError> {
-    if data.len() != pixels.len() {
+    let (source_pixels, source_remainder) = data.as_chunks::<4>();
+    let (destination_pixels, destination_remainder) = pixels.as_chunks_mut::<4>();
+    if !source_remainder.is_empty()
+        || !destination_remainder.is_empty()
+        || source_pixels.len() != destination_pixels.len()
+    {
         return Err(DecodeError::InvalidData {
             field: "BGRA mipmap size",
         });
     }
-    for (source, destination) in data.chunks_exact(4).zip(pixels.chunks_exact_mut(4)) {
+    for (source, destination) in source_pixels.iter().zip(destination_pixels) {
         destination.copy_from_slice(&[source[2], source[1], source[0], source[3]]);
     }
     Ok(())
