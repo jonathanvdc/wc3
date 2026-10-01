@@ -13,6 +13,7 @@ mod attachment;
 mod effect_ring;
 mod effects;
 mod instance;
+mod light;
 mod material;
 mod material_animation;
 mod mesh;
@@ -32,6 +33,7 @@ pub use animation::Wc3Animation;
 pub use asset::{BlpImageLoader, Wc3ModelAsset, Wc3ModelLoader};
 pub use attachment::{Wc3AttachmentPoint, Wc3Attachments};
 pub use instance::{Wc3ModelInstance, Wc3ModelOwner, Wc3OwnedModels};
+pub use light::{Wc3Light, Wc3LightSettings};
 pub use material::{Wc3LayerMaterial, Wc3LayerState};
 pub use model::{ModelError, Wc3Model};
 pub use model_resources::Wc3ModelResources;
@@ -70,6 +72,7 @@ impl Plugin for Wc3BevyPlugin {
                 particle_emitter::animate_particle_models,
                 attachment::animate_attachments,
                 animation::animate_nodes,
+                light::animate_lights,
                 animation::animate_layers,
                 material_animation::animate_surface,
             )

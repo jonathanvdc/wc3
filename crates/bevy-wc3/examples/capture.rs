@@ -2,7 +2,7 @@
 //! Run `cargo run -p bevy-wc3 --example capture -- --help` for options.
 use bevy::app::PluginsState;
 use bevy::asset::{AssetPlugin, LoadState, RecursiveDependencyLoadState};
-use bevy::camera::RenderTarget;
+use bevy::camera::{RenderTarget, ShadowLodOrigin};
 use bevy::core_pipeline::prepass::{DepthPrepass, MotionVectorPrepass, NormalPrepass};
 use bevy::prelude::*;
 use bevy::render::pipelined_rendering::PipelinedRenderingPlugin;
@@ -31,6 +31,7 @@ const HELP: &str = "Usage: capture MODEL.{mdx,mdl} OUTPUT_DIR [options]
 
 Render offscreen and write frame-0000-1.000s.png, etc. Requires a GPU.
   --prepasses           Enable depth/normal/motion prepasses and shadows
+  --no-default-light    Omit the capture scene light (isolate model lights)
   --bevy-reference      Add a StandardMaterial sphere at (0, 2, 0)
   --times SECONDS,...    Increasing capture times (default: 1)
   --sequence INDEX       Animation sequence index (default: 0)
@@ -53,6 +54,7 @@ struct TextureChoice {
 struct Options {
     prepasses: bool,
     bevy_reference: bool,
+    no_default_light: bool,
     model: PathBuf,
     output: PathBuf,
     times: Vec<f64>,
@@ -80,6 +82,7 @@ impl Options {
         let mut options = Self {
             prepasses: false,
             bevy_reference: false,
+            no_default_light: false,
             model: model.into(),
             output: output.into(),
             times: vec![1.0],
@@ -94,6 +97,10 @@ impl Options {
         while let Some(option) = arguments.next() {
             if option == "--help" || option == "-h" {
                 return Ok(None);
+            }
+            if option == "--no-default-light" {
+                options.no_default_light = true;
+                continue;
             }
             if option == "--prepasses" {
                 options.prepasses = true;
@@ -311,6 +318,7 @@ fn main() -> CaptureResult<()> {
         .world_mut()
         .spawn((
             Camera3d::default(),
+            ShadowLodOrigin,
             Msaa::Sample4,
             RenderTarget::Image(image.clone().into()),
             camera,
@@ -343,14 +351,16 @@ fn main() -> CaptureResult<()> {
             Transform::from_xyz(0.0, 2.0, 0.0),
         ));
     }
-    app.world_mut().spawn((
-        DirectionalLight {
-            illuminance: 20_000.0,
-            shadow_maps_enabled: options.prepasses,
-            ..default()
-        },
-        Transform::from_xyz(1.0, -1.0, 2.0).looking_at(Vec3::ZERO, Vec3::Z),
-    ));
+    if !options.no_default_light {
+        app.world_mut().spawn((
+            DirectionalLight {
+                illuminance: 20_000.0,
+                shadow_maps_enabled: options.prepasses,
+                ..default()
+            },
+            Transform::from_xyz(1.0, -1.0, 2.0).looking_at(Vec3::ZERO, Vec3::Z),
+        ));
+    }
     let deadline = Instant::now() + TIMEOUT;
     loop {
         step(&mut app, Duration::ZERO)?;

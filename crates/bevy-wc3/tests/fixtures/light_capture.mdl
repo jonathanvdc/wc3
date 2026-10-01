@@ -1,0 +1,61 @@
+Version { FormatVersion 1600, }
+Model "Bevy model lights" {
+    MinimumExtent { -3, -1, 0 },
+    MaximumExtent { 3, 3, 3 },
+    BoundsRadius 5,
+}
+Sequences 1 {
+    Anim "Stand" { Interval { 0, 1000 }, NonLooping, }
+}
+GlobalSequences 1 { Duration 1000, }
+Textures 1 { Bitmap { Image "capture_white.png", } }
+Materials 1 {
+    Material {
+        Layer {
+            FilterMode None,
+            Shader "Shader_HD_DefaultUnit",
+            static TextureID 0 <= 0,
+        }
+    }
+}
+Geoset {
+    Vertices 4 { { -3, -1, 0 }, { 3, -1, 0 }, { 3, 3, 0 }, { -3, 3, 0 }, }
+    Normals 4 { { 0, 0, 1 }, { 0, 0, 1 }, { 0, 0, 1 }, { 0, 0, 1 }, }
+    TVertices 4 { { 0, 0 }, { 1, 0 }, { 1, 1 }, { 0, 1 }, }
+    VertexGroup { 0, 0, 0, 0, }
+    Faces 1 6 { Triangles { { 0, 1, 2, 0, 2, 3 }, } }
+    Groups 1 1 { Matrices { 0 }, }
+    MaterialID 0,
+    SelectionGroup 0,
+    MinimumExtent { -3, -1, 0 }, MaximumExtent { 3, 3, 0 }, BoundsRadius 5,
+}
+Bone "Root" { ObjectId 0, GeosetId 0, GeosetAnimId None, }
+Helper "Light mount" {
+    ObjectId 1, Parent 0,
+    Translation 2 { Linear, 0: { -1.5, 0, 0 }, 1000: { 1.5, 0, 0 }, }
+}
+Light "Animated point" {
+    ObjectId 2, Parent 1,
+    Omnidirectional,
+    ShadowCasting,
+    static AttenuationStart 1,
+    AttenuationEnd 2 { Linear, 0: 8, 1000: 12, }
+    Color 3 { Linear, 0: { 0, 0, 1 }, 500: { 1, 0, 0 }, 1000: { 0, 1, 0 }, }
+    Intensity 2 { Linear, GlobalSeqId 0, 0: 50, 1000: 100, }
+    static AmbColor { 1, 1, 1 }, static AmbIntensity 0,
+    Visibility 3 { DontInterp, 0: 1, 750: 0, 1000: 0, }
+}
+Light "Directional" {
+    ObjectId 3, Parent 0,
+    Directional,
+    ShadowCasting,
+    static Color { 1, 1, 1 }, static Intensity 0,
+    static AmbColor { 1, 1, 1 }, static AmbIntensity 0,
+}
+Light "Ambient" {
+    ObjectId 4, Parent 0,
+    Ambient,
+    static Color { 1, 1, 1 }, static Intensity 0,
+    static AmbColor { 1, 1, 1 }, static AmbIntensity 0.5,
+}
+PivotPoints 5 { { 0, 0, 0 }, { 0, 0, 0 }, { 0, 0, 2 }, { 0, 0, 0 }, { 0, 0, 0 }, }

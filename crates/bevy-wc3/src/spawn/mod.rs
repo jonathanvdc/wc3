@@ -2,6 +2,7 @@ use bevy::mesh::skinning::SkinnedMeshInverseBindposes;
 use bevy::prelude::*;
 
 use crate::attachment::spawn_attachments;
+use crate::light::spawn_lights;
 use crate::material::Wc3LayerMaterial;
 use crate::model::{ModelError, Wc3Model};
 use crate::particle_emitter::spawn_particles;
@@ -62,6 +63,7 @@ pub(crate) fn spawn_prepared_into(
     spawn_animation_root(commands, &prepared.model, root);
     let rig = spawn_rig(commands, &prepared.model, root, &prepared.inverse_bindposes);
     let node_entities = &rig.by_object_id;
+    spawn_lights(commands, prepared, root, node_entities);
     spawn_attachments(commands, prepared, root, node_entities);
     spawn_particles(commands, prepared, root, node_entities);
     spawn_particles2(commands, meshes, prepared, root, node_entities, &bindings);

@@ -12,6 +12,8 @@ own file under `visual-fidelity/` and link it here as it is documented.
   Reforged effects, plus an overview of implemented effects and fidelity checks.
 - [Reforged materials](visual-fidelity/reforged-materials.md): HD texture roles,
   animated controls, Bevy integration, captures, and remaining fidelity work.
+- [Model lights](visual-fidelity/lights.md): animated Bevy scene lights,
+  conversion controls, shadows, unsupported mappings, and capture checks.
 - [Geoset animation](visual-fidelity/geoset-animation.md): alpha/color sampling,
   RGB codec normalization, material isolation, capture checks, and remaining fidelity work.
 - [Classic PREM particles](visual-fidelity/prem.md): model spawning, motion,

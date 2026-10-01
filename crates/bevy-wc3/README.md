@@ -36,6 +36,29 @@ emitter with `ReplaceableId == 0` uses its `TextureID` bitmap slot, including
 bitmap overrides. `prepare_model` and `spawn_prepared_model_with_bindings` offer
 the same behavior for custom model sources.
 
+Model point and directional lights spawn as ordinary Bevy scene lights, illuminating
+both WC3 and Bevy materials. Their transforms, colors, intensities, ranges, and
+visibility animate; authored ShadowCasting flags enable Bevy shadows. Supply
+`Wc3LightSettings` on the instance root to tune power/range conversion or disable
+imported lights and shadows:
+
+```rust
+commands.spawn((
+    Wc3ModelInstance::new(model),
+    Wc3LightSettings {
+        point_intensity_scale: 2_000.0,
+        shadows_enabled: false,
+        ..default()
+    },
+));
+```
+
+Query `Wc3Light` to inspect the source record or disable a particular light with
+its `enabled` field. Ambient contributions and custom Reforged falloff/shadow
+ranges have no native mapping; scene ambient lighting remains application-owned.
+See [model lights](docs/visual-fidelity/lights.md) for conversion defaults,
+consumer customization, capture checks, and remaining fidelity limits.
+
 Attachment paths and model-based Classic PREM paths are also resolved beside the
 parent model, then at the asset root. Backslashes are normalized. At each location,
 a real `.mdl` is preferred, with `.mdx` as its fallback. Empty and missing paths
