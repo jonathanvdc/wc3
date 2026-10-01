@@ -28,7 +28,7 @@ use bevy::prelude::*;
 use bevy::transform::TransformSystems;
 
 pub use animation::Wc3Animation;
-pub use asset::Wc3ModelAsset;
+pub use asset::{BlpImageLoader, Wc3ModelAsset, Wc3ModelLoader};
 pub use attachment::{Wc3AttachmentPoint, Wc3Attachments};
 pub use instance::{Wc3ModelInstance, Wc3ModelOwner, Wc3OwnedModels};
 pub use material::{Wc3LayerMaterial, Wc3LayerState};

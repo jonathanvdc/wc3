@@ -6,6 +6,10 @@
 - Both codec modules expose `Read` and `Write` traits and derives. Import the modules and use `mdx::Read`, `mdx::Write`, `mdl::Read`, and `mdl::Write` in bounds, implementations, and derives to distinguish formats. For method syntax, import the needed trait as `_`; alias standard I/O traits when needed to avoid ambiguity.
 - Codec errors follow the same format-qualified naming: `mdx::ReadError`, `mdx::WriteError`, `mdl::ReadError`, and `mdl::WriteError`.
 
+# Tests
+
+- Keep unit tests that exercise private implementation details in the module they test. When an inline `#[cfg(test)] mod tests` becomes large, move its contents into a dedicated test file and declare it with `#[cfg(test)] #[path = "…"] mod tests;` so the tests retain private access. Put tests of public crate behavior in `crates/*/tests/` as integration tests; keep their fixtures under `crates/*/tests/fixtures/`.
+
 # Rendering references
 
 - When implementing or investigating Warcraft III model rendering, consult Retera Model Studio, mdx-m3-viewer, and Warsmash as reference implementations. Compare their behavior for animation, skinning, materials, pass ordering, and effects against models in `data/`; do not assume any one implementation is definitive.
