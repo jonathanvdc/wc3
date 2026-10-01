@@ -1,4 +1,3 @@
-use bevy::math::Affine3A;
 use bevy::prelude::*;
 use bytemuck::Pod;
 use std::collections::VecDeque;
@@ -228,33 +227,6 @@ impl<R: Pod, M> LiveRecords<R, M> {
     pub(crate) fn push(&mut self, record: R, metadata: M, limit: usize) {
         Arc::make_mut(&mut self.records).push(record, limit);
         self.metadata.push_back(metadata);
-    }
-}
-
-/// A sampled local pose continues up the hierarchy; a world pose ends it.
-pub(crate) enum SampledPose {
-    Local(GlobalTransform, Option<Entity>),
-    World(GlobalTransform),
-}
-
-pub(crate) fn compose_emitter_transform(
-    mut entity: Entity,
-    mut lookup: impl FnMut(Entity) -> Option<SampledPose>,
-) -> Option<GlobalTransform> {
-    let mut local = Affine3A::IDENTITY;
-    loop {
-        match lookup(entity)? {
-            SampledPose::World(world) => {
-                return Some(GlobalTransform::from(Mat4::from(world.affine() * local)))
-            }
-            SampledPose::Local(pose, parent) => {
-                local = pose.affine() * local;
-                let Some(parent) = parent else {
-                    return Some(GlobalTransform::from(Mat4::from(local)));
-                };
-                entity = parent;
-            }
-        }
     }
 }
 

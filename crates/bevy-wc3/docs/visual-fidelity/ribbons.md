@@ -92,4 +92,6 @@ Remaining verification and renderer limits:
   still absent.
 - Shaded ribbons use Bevy scene lighting, rather than Classic lighting. Fog,
   environment mapping, and Reforged normal/ORM material slots are not implemented.
-- Animated node billboard flags retain the general renderer's limitations.
+- Animated node flags use the shared CPU evaluator and one driving camera per
+  instance. Subframe births sample authored tracks with the current camera pose;
+  see [node flags](node-flags.md) for implemented semantics and fidelity limits.

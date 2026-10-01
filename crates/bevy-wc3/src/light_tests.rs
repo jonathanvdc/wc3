@@ -1,7 +1,7 @@
 use super::*;
-use crate::animation::animate_nodes;
 use crate::material::Wc3LayerMaterial;
 use crate::model::Wc3Model;
+use crate::node_pose::animate_nodes;
 use crate::spawn::{prepare_model, spawn_prepared_model, Wc3NodeEntities};
 use bevy::camera::visibility::VisibilityPlugin;
 use bevy::ecs::world::CommandQueue;

@@ -1,7 +1,8 @@
 use super::*;
 use crate::animation::AnimatedLayer;
-use crate::animation::{animate_layers, animate_nodes, Wc3Animation};
+use crate::animation::{animate_layers, Wc3Animation};
 use crate::instance::{Wc3ModelOwner, Wc3OwnedModels};
+use crate::node_pose::animate_nodes;
 use crate::particle_emitter2::Particle2State;
 use crate::ribbon_emitter::{RibbonInstances, RibbonLayer, RibbonState};
 use bevy::camera::visibility::VisibilityPlugin;

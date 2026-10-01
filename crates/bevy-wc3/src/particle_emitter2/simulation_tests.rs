@@ -322,6 +322,8 @@ fn birth_transform_samples_the_animated_parent_chain() {
         .world_mut()
         .spawn((
             AnimatedNode {
+                flags: Default::default(),
+                camera: None,
                 root,
                 pivot: Vec3::ZERO,
                 parent_pivot: Vec3::ZERO,
@@ -352,6 +354,8 @@ fn birth_transform_samples_the_animated_parent_chain() {
         .world_mut()
         .spawn((
             AnimatedNode {
+                flags: Default::default(),
+                camera: None,
                 root,
                 pivot: Vec3::X * 2.0,
                 parent_pivot: Vec3::ZERO,

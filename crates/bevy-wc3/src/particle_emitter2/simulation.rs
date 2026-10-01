@@ -233,11 +233,16 @@ impl Particle2State {
 pub(crate) fn update_particles(
     time: Res<Time>,
     animations: Query<&Wc3Animation>,
-    nodes: Query<(&GlobalTransform, Option<&AnimatedNode>, Option<&ChildOf>)>,
+    nodes: Query<(
+        &GlobalTransform,
+        Option<&Transform>,
+        Option<&AnimatedNode>,
+        Option<&ChildOf>,
+    )>,
     mut emitters: Query<(&mut Particle2State, &mut ParticleInstances)>,
 ) {
     for (mut state, mut instances) in &mut emitters {
-        let (Ok(animation), Ok((transform, _, _))) =
+        let (Ok(animation), Ok((transform, _, _, _))) =
             (animations.get(state.root), nodes.get(state.node))
         else {
             continue;

@@ -1,10 +1,12 @@
 use super::material::Wc3LayerMaterial;
-use crate::effects::simulation::{compose_emitter_transform, SampledPose};
+use crate::node_pose::{camera_anchor, resolve_pose, world_input, NodeSample, PoseInput};
 use crate::texture_bindings::Wc3TextureBindings;
 use bevy::prelude::*;
+use std::collections::{HashMap, HashSet};
 use std::ops::RangeInclusive;
 use wc3::model::animation::{Animatable, Interpolate, Sequence, Track, TrackValue};
 use wc3::model::materials::LayerFilterMode;
+use wc3::model::scene::NodeFlags;
 
 #[derive(Component, Clone)]
 pub struct Wc3Animation {
@@ -33,6 +35,8 @@ impl Wc3Animation {
 #[derive(Component)]
 pub(crate) struct AnimatedNode {
     pub(crate) root: Entity,
+    pub(crate) flags: NodeFlags,
+    pub(crate) camera: Option<Transform>,
     pub(crate) pivot: Vec3,
     pub(crate) parent_pivot: Vec3,
     pub(crate) translation: Option<Track<[f32; 3]>>,
@@ -189,6 +193,23 @@ pub(crate) fn sample_value<T: Interpolate>(value: &Animatable<T>, animation: &Wc
 }
 
 impl AnimatedNode {
+    pub(crate) fn camera_anchor(&self) -> Option<Vec3> {
+        self.flags
+            .camera_anchored()
+            .then_some(self.camera)
+            .flatten()
+            .map(|camera| camera.translation)
+    }
+
+    pub(crate) fn pose_sample(&self, camera: Option<Transform>) -> NodeSample {
+        NodeSample {
+            root: self.root,
+            flags: self.flags,
+            pivot_offset: self.pivot - self.parent_pivot,
+            camera,
+        }
+    }
+
     pub(crate) fn sample_transform(&self, animation: &Wc3Animation) -> Transform {
         let translation = self
             .translation
@@ -213,34 +234,48 @@ impl AnimatedNode {
     }
 }
 
-pub(crate) fn animate_nodes(
-    instances: Query<&Wc3Animation>,
-    mut nodes: Query<(&AnimatedNode, &mut Transform)>,
-) {
-    for (node, mut transform) in &mut nodes {
-        let Ok(animation) = instances.get(node.root) else {
-            continue;
-        };
-        *transform = node.sample_transform(animation);
-    }
-}
-
 pub(crate) fn sample_emitter_transform(
     entity: Entity,
     root: Entity,
     animation: &Wc3Animation,
-    nodes: &Query<(&GlobalTransform, Option<&AnimatedNode>, Option<&ChildOf>)>,
+    nodes: &Query<(
+        &GlobalTransform,
+        Option<&Transform>,
+        Option<&AnimatedNode>,
+        Option<&ChildOf>,
+    )>,
 ) -> Option<GlobalTransform> {
-    compose_emitter_transform(entity, |entity| {
-        let (global, node, parent) = nodes.get(entity).ok()?;
+    let lookup = |entity| {
+        let (global, transform, node, parent) = nodes.get(entity).ok()?;
         match node.filter(|node| node.root == root) {
-            Some(node) => Some(SampledPose::Local(
-                GlobalTransform::from(node.sample_transform(animation)),
-                Some(parent?.parent()),
-            )),
-            None => Some(SampledPose::World(*global)),
+            Some(node) => Some(PoseInput {
+                world: None,
+                anchor: None,
+                local: node.sample_transform(animation),
+                parent: parent.map(ChildOf::parent),
+                node: Some(node.pose_sample(node.camera)),
+            }),
+            None if transform.is_some() => Some(PoseInput {
+                local: *transform?,
+                parent: parent.map(ChildOf::parent),
+                node: None,
+                world: None,
+                anchor: node.and_then(AnimatedNode::camera_anchor),
+            }),
+            None => {
+                let anchor = camera_anchor(entity, |entity| {
+                    let (_, _, node, parent) = nodes.get(entity).ok()?;
+                    Some((
+                        node.and_then(AnimatedNode::camera_anchor),
+                        parent.map(ChildOf::parent),
+                    ))
+                });
+                Some(world_input(global, anchor))
+            }
         }
-    })
+    };
+    resolve_pose(entity, &lookup, &mut HashMap::new(), &mut HashSet::new())
+        .map(|pose| GlobalTransform::from(Mat4::from(pose.affine)))
 }
 
 #[cfg(test)]

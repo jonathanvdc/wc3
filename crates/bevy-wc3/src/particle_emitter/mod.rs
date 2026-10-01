@@ -7,10 +7,13 @@ use wc3::model::emitters::ParticleEmitter;
 use crate::animation::{sample, sample_value, AnimatedNode, Wc3Animation};
 use crate::asset::Wc3ModelAsset;
 use crate::effects::simulation::{
-    birth_animation, compose_emitter_transform, sequence_ended, simulation_delta, EmissionPhase,
-    EmissionRounding, EmitterRng, SampledPose, SimulationClock,
+    birth_animation, sequence_ended, simulation_delta, EmissionPhase, EmissionRounding, EmitterRng,
+    SimulationClock,
 };
 use crate::instance::{Wc3ModelInstance, Wc3ModelOwner};
+
+use crate::node_pose::{resolve_pose, PoseInput};
+use std::collections::{HashMap, HashSet};
 
 mod spawn;
 pub(crate) use spawn::spawn_particles;
@@ -127,16 +130,21 @@ fn sample_emitter_transform(
     animation: &Wc3Animation,
     nodes: &NodeTransforms,
 ) -> Option<GlobalTransform> {
-    compose_emitter_transform(entity, |entity| {
+    let lookup = |entity| {
         let (transform, node, parent, _) = nodes.get(entity).ok()?;
-        let local = node
-            .filter(|node| node.root == root)
-            .map_or(*transform, |node| node.sample_transform(animation));
-        Some(SampledPose::Local(
-            GlobalTransform::from(local),
-            parent.map(ChildOf::parent),
-        ))
-    })
+        let sampled = node.filter(|node| node.root == root);
+        Some(PoseInput {
+            world: None,
+            anchor: node
+                .filter(|node| node.root != root)
+                .and_then(AnimatedNode::camera_anchor),
+            local: sampled.map_or(*transform, |node| node.sample_transform(animation)),
+            parent: parent.map(ChildOf::parent),
+            node: sampled.map(|node| node.pose_sample(node.camera)),
+        })
+    };
+    resolve_pose(entity, &lookup, &mut HashMap::new(), &mut HashSet::new())
+        .map(|pose| GlobalTransform::from(Mat4::from(pose.affine)))
 }
 
 pub(crate) fn update_particles(

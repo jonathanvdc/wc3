@@ -10,6 +10,8 @@ own file under `visual-fidelity/` and link it here as it is documented.
   materials, UV animation, node flags, pass ordering, skinning
   and bind poses, LOD, replaceable textures, lights, cameras, events, and
   Reforged effects, plus an overview of implemented effects and fidelity checks.
+- [Node flags](visual-fidelity/node-flags.md): CPU inheritance, billboarding,
+  camera anchoring, camera selection, effect birth sampling, and verification.
 - [Reforged materials](visual-fidelity/reforged-materials.md): HD texture roles,
   animated controls, Bevy integration, captures, and remaining fidelity work.
 - [Model lights](visual-fidelity/lights.md): animated Bevy scene lights,

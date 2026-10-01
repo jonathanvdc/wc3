@@ -70,6 +70,8 @@ pub(super) fn spawn_rig(
                 Visibility::default(),
                 AnimatedNode {
                     root,
+                    flags: node.flags,
+                    camera: None,
                     pivot: Vec3::from_array(pivot),
                     parent_pivot: Vec3::from_array(parent_pivot),
                     translation: node.translation.clone(),

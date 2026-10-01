@@ -225,7 +225,12 @@ fn uv_transform(definition: Option<&TextureAnimation>, animation: &Wc3Animation)
 pub(crate) fn update_ribbons(
     time: Res<Time>,
     animations: Query<(&Wc3Animation, Option<&Wc3TextureBindings>)>,
-    nodes: Query<(&GlobalTransform, Option<&AnimatedNode>, Option<&ChildOf>)>,
+    nodes: Query<(
+        &GlobalTransform,
+        Option<&Transform>,
+        Option<&AnimatedNode>,
+        Option<&ChildOf>,
+    )>,
     mut emitters: Query<&mut RibbonState>,
     mut layers: Query<(&RibbonLayer, &mut RibbonInstances)>,
 ) {
@@ -233,7 +238,7 @@ pub(crate) fn update_ribbons(
         let Ok((animation, _)) = animations.get(state.root) else {
             continue;
         };
-        let Ok((transform, _, _)) = nodes.get(state.node) else {
+        let Ok((transform, _, _, _)) = nodes.get(state.node) else {
             continue;
         };
         let dt = simulation_delta(&time, animation);

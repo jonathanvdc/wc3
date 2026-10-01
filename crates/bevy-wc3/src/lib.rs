@@ -19,6 +19,7 @@ mod material_animation;
 mod mesh;
 mod model;
 mod model_resources;
+mod node_pose;
 mod particle_emitter;
 mod particle_emitter2;
 mod ribbon_emitter;
@@ -37,6 +38,7 @@ pub use light::{Wc3Light, Wc3LightSettings};
 pub use material::{Wc3LayerMaterial, Wc3LayerState};
 pub use model::{ModelError, Wc3Model};
 pub use model_resources::Wc3ModelResources;
+pub use node_pose::{Wc3DefaultNodeCamera, Wc3NodeCamera, Wc3NodePoseSystems};
 pub use spawn::{
     prepare_model, prepare_model_with_resources, spawn_model, spawn_prepared_model,
     spawn_prepared_model_with_bindings, PreparedModel, Wc3NodeEntities,
@@ -71,7 +73,6 @@ impl Plugin for Wc3BevyPlugin {
                 animation::advance_animation,
                 particle_emitter::animate_particle_models,
                 attachment::animate_attachments,
-                animation::animate_nodes,
                 light::animate_lights,
                 animation::animate_layers,
                 material_animation::animate_surface,
@@ -81,7 +82,12 @@ impl Plugin for Wc3BevyPlugin {
         );
         app.add_systems(
             PostUpdate,
-            particle_emitter::update_particles.before(TransformSystems::Propagate),
+            (
+                node_pose::animate_nodes.in_set(Wc3NodePoseSystems::Evaluate),
+                particle_emitter::update_particles,
+            )
+                .chain()
+                .before(TransformSystems::Propagate),
         );
         app.add_systems(
             PostUpdate,

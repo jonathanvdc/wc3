@@ -1,11 +1,12 @@
 use super::*;
+use crate::node_pose::animate_nodes;
 use bevy::camera::visibility::VisibilityPlugin;
 use bevy::ecs::world::CommandQueue;
 use bevy::mesh::skinning::SkinnedMeshInverseBindposes;
 use wc3::model::animation::{Sequence, ValueKeyframe};
 use wc3::model::scene::{Attachment, Node};
 
-use crate::animation::{animate_layers, animate_nodes, AnimatedLayer};
+use crate::animation::{animate_layers, AnimatedLayer};
 use crate::asset::ResolvedModelTextures;
 use crate::instance::{spawn_loaded_instances, PreparedModelCache};
 use crate::material::Wc3LayerMaterial;

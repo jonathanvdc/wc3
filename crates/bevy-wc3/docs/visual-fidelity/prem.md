@@ -31,7 +31,8 @@ Remaining limits:
 - Each emitter is capped at 1,024 live model particles and 1,024 attempted births
   per update. Excess births are discarded, rather than queued after a stall.
 - Models use the existing mesh material pipeline, including its documented
-  limitations in billboarding, shading, and effect/material pass ordering.
+  limitations in shading and effect/material pass ordering. Node billboarding uses
+  the configured driving camera; see [node flags](node-flags.md).
 - Exact game fidelity, mirrored transforms, and attachment/particle combinations
   need comparison against Warcraft III captures.
 

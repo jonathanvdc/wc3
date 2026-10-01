@@ -1,11 +1,12 @@
 use super::*;
+use crate::node_pose::animate_nodes;
 use bevy::camera::visibility::VisibilityPlugin;
 use bevy::mesh::skinning::SkinnedMeshInverseBindposes;
 use bevy::transform::TransformSystems;
 use std::time::Duration;
 use wc3::model::scene::Node;
 
-use crate::animation::{advance_animation, animate_layers, animate_nodes};
+use crate::animation::{advance_animation, animate_layers};
 use crate::instance::{spawn_loaded_instances, PreparedModelCache, Wc3OwnedModels};
 use crate::material::Wc3LayerMaterial;
 use crate::model::Wc3Model;
@@ -233,6 +234,8 @@ fn moving_nodes_are_sampled_at_birth() {
         .sequences = source.model.sequences();
     let definition = source.model.particle_emitters().remove(0);
     app.world_mut().entity_mut(node).insert(AnimatedNode {
+        flags: Default::default(),
+        camera: None,
         root,
         pivot: Vec3::ZERO,
         parent_pivot: Vec3::ZERO,
