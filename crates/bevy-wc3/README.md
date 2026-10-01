@@ -70,6 +70,6 @@ Unshaded particles use texture and segment color directly. Billboard heads and t
 use the camera-facing normal; XYQuad heads use world +Z. Lighting leaves alpha intact.
 `spawn_prepared_model` takes mutable mesh assets to create a static emitter quad.
 Bitmap and PRE2 replaceable IDs use the same per-instance bindings.
-The renderer does not yet implement Reforged normal/ORM slots, geoset and UV
-animation, node billboards, Classic PREM particles,
-ribbons, WC3 pass ordering, or skin groups with more than four influences.
+
+See the [renderer documentation](docs/README.md) for visual fidelity gaps and
+verification work by rendering topic.
