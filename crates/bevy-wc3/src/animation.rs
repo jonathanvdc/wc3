@@ -1,7 +1,8 @@
 use super::material::Wc3LayerMaterial;
 use crate::texture_bindings::Wc3TextureBindings;
 use bevy::prelude::*;
-use wc3::model::animation::{Animatable, Interpolate, Sequence, Track};
+use std::ops::RangeInclusive;
+use wc3::model::animation::{Animatable, Interpolate, Sequence, Track, TrackValue};
 use wc3::model::materials::LayerFilterMode;
 
 #[derive(Component)]
@@ -125,13 +126,19 @@ pub(crate) fn advance_animation(time: Res<Time>, mut instances: Query<&mut Wc3An
     }
 }
 
-pub(crate) fn sample<T: Interpolate>(track: &Track<T>, animation: &Wc3Animation) -> Option<T> {
+pub(crate) fn track_time<T: TrackValue>(
+    track: &Track<T>,
+    animation: &Wc3Animation,
+) -> Option<(f64, RangeInclusive<i32>)> {
     if let Some(global_id) = track.global_sequence_id() {
         let length = *animation.global_sequences.get(global_id as usize)?;
         if length == 0 {
-            return track.evaluate(0.0);
+            return Some((0.0, i32::MIN..=i32::MAX));
         }
-        return track.evaluate(animation.elapsed_ms.rem_euclid(length as f64));
+        return Some((
+            animation.elapsed_ms.rem_euclid(length as f64),
+            i32::MIN..=i32::MAX,
+        ));
     }
     let sequence = animation.sequences.get(animation.sequence)?;
     let start = sequence.interval[0] as f64;
@@ -144,10 +151,15 @@ pub(crate) fn sample<T: Interpolate>(track: &Track<T>, animation: &Wc3Animation)
     } else {
         0.0
     };
-    track.evaluate_in(
+    Some((
         start + elapsed,
         sequence.interval[0] as i32..=sequence.interval[1] as i32,
-    )
+    ))
+}
+
+pub(crate) fn sample<T: Interpolate>(track: &Track<T>, animation: &Wc3Animation) -> Option<T> {
+    let (time, interval) = track_time(track, animation)?;
+    track.evaluate_in(time, interval)
 }
 
 pub(crate) fn sample_value<T: Interpolate>(value: &Animatable<T>, animation: &Wc3Animation) -> T {

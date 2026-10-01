@@ -5,7 +5,7 @@ use wc3::model::animation::Animatable;
 use wc3::model::emitters::{Particle2Frames, ParticleEmitter2};
 
 use super::render::{ParticleInstance, ParticleInstances};
-use crate::animation::{sample, sample_value, Wc3Animation};
+use crate::animation::{sample, sample_value, track_time, Wc3Animation};
 
 const MAX_PARTICLES: usize = 8192;
 
@@ -220,58 +220,8 @@ impl Particle2State {
 
 fn emission_key(value: &Animatable<f32>, animation: &Wc3Animation) -> Option<i32> {
     let track = value.track()?;
-    let time = if let Some(id) = track.global_sequence_id() {
-        let length = *animation.global_sequences.get(id as usize)? as f64;
-        if length > 0.0 {
-            animation.elapsed_ms.rem_euclid(length)
-        } else {
-            0.0
-        }
-    } else {
-        let sequence = animation.sequences.get(animation.sequence)?;
-        let start = sequence.interval[0] as f64;
-        let length = (sequence.interval[1] as f64 - start).max(0.0);
-        start
-            + if sequence.flags.non_looping() {
-                animation.elapsed_ms.clamp(0.0, length)
-            } else if length > 0.0 {
-                animation.elapsed_ms.rem_euclid(length)
-            } else {
-                0.0
-            }
-    };
-    track
-        .step_keys()
-        .and_then(|keys| {
-            keys.iter()
-                .take_while(|key| key.frame as f64 <= time)
-                .last()
-                .map(|key| key.frame)
-        })
-        .or_else(|| {
-            track.linear_keys().and_then(|keys| {
-                keys.iter()
-                    .take_while(|key| key.frame as f64 <= time)
-                    .last()
-                    .map(|key| key.frame)
-            })
-        })
-        .or_else(|| {
-            track.hermite_keys().and_then(|keys| {
-                keys.iter()
-                    .take_while(|key| key.frame as f64 <= time)
-                    .last()
-                    .map(|key| key.frame)
-            })
-        })
-        .or_else(|| {
-            track.bezier_keys().and_then(|keys| {
-                keys.iter()
-                    .take_while(|key| key.frame as f64 <= time)
-                    .last()
-                    .map(|key| key.frame)
-            })
-        })
+    let (time, interval) = track_time(track, animation)?;
+    track.key_frame_at_or_before_in(time, interval)
 }
 
 fn stage(definition: &ParticleEmitter2, life: f32) -> ([f32; 4], f32, usize, f32) {

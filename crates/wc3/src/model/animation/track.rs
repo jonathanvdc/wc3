@@ -410,6 +410,47 @@ fn write_tangent<W: IoWrite, T: mdl::Write>(
     writer.raw(",\n")
 }
 
+impl<T: TrackValue> Track<T> {
+    /// Returns the latest key timestamp at or before an absolute track time.
+    ///
+    /// Keys may be unordered. Empty tracks, nonfinite times, and times before
+    /// the first key return `None`. Callers resolve clocks and looping.
+    pub fn key_frame_at_or_before(&self, time_ms: f64) -> Option<i32> {
+        self.key_frame_at_or_before_in(time_ms, i32::MIN..=i32::MAX)
+    }
+
+    /// Returns the latest key timestamp at or before an absolute track time,
+    /// considering only keys within the inclusive sequence interval.
+    pub fn key_frame_at_or_before_in(
+        &self,
+        time_ms: f64,
+        interval: RangeInclusive<i32>,
+    ) -> Option<i32> {
+        if !time_ms.is_finite() || interval.is_empty() {
+            return None;
+        }
+        match &self.keyframes {
+            Keyframes::Step(keys) | Keyframes::Linear(keys) => {
+                latest_frame(keys, time_ms, &interval)
+            }
+            Keyframes::Hermite(keys) | Keyframes::Bezier(keys) => {
+                latest_frame(keys, time_ms, &interval)
+            }
+        }
+    }
+}
+
+fn latest_frame<K: Keyframe>(
+    keys: &[K],
+    time_ms: f64,
+    interval: &RangeInclusive<i32>,
+) -> Option<i32> {
+    keys.iter()
+        .map(Keyframe::frame)
+        .filter(|frame| interval.contains(frame) && f64::from(*frame) <= time_ms)
+        .max()
+}
+
 impl<T: Interpolate> Track<T> {
     /// Samples at a time in milliseconds in this track's timeline.
     ///
@@ -478,4 +519,36 @@ fn surrounding<'a, K: Keyframe>(
         }
     }
     Some((left.or(right)?, right.or(left)?))
+}
+
+#[cfg(test)]
+mod key_lookup_tests {
+    use super::*;
+
+    #[test]
+    fn lookup_respects_time_and_sequence_for_unordered_keys() {
+        let track = Track::step(
+            vec![
+                ValueKeyframe {
+                    frame: 200,
+                    value: 1.0,
+                },
+                ValueKeyframe {
+                    frame: 50,
+                    value: 2.0,
+                },
+                ValueKeyframe {
+                    frame: 150,
+                    value: 3.0,
+                },
+            ],
+            None,
+        )
+        .unwrap();
+        assert_eq!(track.key_frame_at_or_before(175.0), Some(150));
+        assert_eq!(track.key_frame_at_or_before(25.0), None);
+        assert_eq!(track.key_frame_at_or_before_in(125.0, 100..=200), None);
+        assert_eq!(track.key_frame_at_or_before_in(250.0, 100..=175), Some(150));
+        assert_eq!(track.key_frame_at_or_before(f64::NAN), None);
+    }
 }
