@@ -31,7 +31,7 @@ pub(super) struct PreparedGeoset {
 /// Keep this value alive while spawning instances. Reprepare after changing
 /// the source model or its texture resolution.
 pub struct PreparedModel {
-    pub(super) model: Model<V1800>,
+    pub(crate) model: Model<V1800>,
     pub(super) geosets: Vec<PreparedGeoset>,
     pub(super) geoset_alphas: Vec<Option<Animatable<f32>>>,
     pub(super) layers: Vec<Vec<PreparedLayer>>,

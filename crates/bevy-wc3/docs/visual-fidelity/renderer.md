@@ -11,7 +11,7 @@ These gaps cover model rendering beyond [PRE2 particle emitters](pre2.md).
 | UV animation | Layer alpha and texture selection animate, but texture-animation transforms are not applied to UVs. |
 | Node billboards | Node transforms animate, but camera-facing node billboard flags are not implemented. |
 | Classic PREM particles | Node entities and resolved model-resource handles exist. Child instances support independent animation and lifetime ownership, but Classic particle emitters do not yet spawn or simulate particles. |
-| Attachments | Nodes and model-resource handles exist. Instances support inherited visibility and recursive cleanup; attachment paths are not yet instantiated automatically and attachment visibility tracks are not yet sampled. |
+| Attachments | Resolved paths spawn independently animated child models. Visibility tracks gate separate mounts; children follow node transforms, loop their first sequence, restart on show/parent sequence changes, and clean up with their owner. Points are exposed by ID/name for consumer-supplied models. |
 | Ribbons | Node entities exist, but ribbon emitters do not yet render ribbon geometry. |
 | WC3 pass ordering | Geometry uses Bevy render phases and WC3 layer blend/depth states. Warcraft's ordering across material layers and effects is not implemented as a dedicated ordering scheme. |
 | Skinning limits | GPU skinning supports up to eight influences per vertex. Larger Classic matrix groups are rejected; they need a rendering strategy before they can be displayed. |

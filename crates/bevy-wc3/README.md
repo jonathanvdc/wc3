@@ -46,24 +46,43 @@ keep their record slots; PREM image resources are excluded. Read handles through
 Custom sources can use `prepare_model_with_resources` with texture and model
 resolver callbacks; the existing `prepare_model` API remains available.
 
-Each instance root owns its rig, geometry, and PRE2 render entities through the
-Bevy hierarchy. Hiding the root hides its geometry and effects; despawning it
-cleans them up. To create a following child model, use both transform parenting
-and lifetime ownership:
+Resolved attachment paths automatically spawn child model instances. Query
+`Wc3Attachments` on the parent root to find points by record index (`get`),
+attachment ID (`by_id`), or full name (`by_name`, ignoring ASCII case). Empty or
+missing paths still expose points for consumer-supplied models:
 
 ```rust
-commands.spawn((
-    Wc3ModelInstance::new(child_model),
-    ChildOf(attachment_node),
-    Wc3ModelOwner(parent_model_root),
-));
+let point = attachments.by_name("Weapon Ref").unwrap();
+let child = point.spawn_model(&mut commands, child_model);
+commands.entity(child).insert(child_texture_bindings);
 ```
 
-`Wc3ModelOwner` also supports detached child instances: omit `ChildOf` to keep
-world-space transforms and visibility independent while retaining cleanup when
-the owner despawns. Child instances have their own animation, rig, and materials.
-Attachment spawning/visibility tracks and PREM particle simulation remain to be
-implemented; resolving their resources does not automatically spawn them.
+The returned entity is the child model's transform and animation root. The
+point's `node` is the original animated MDX node; its separate `mount` follows
+that node and gates attached content with the attachment visibility track.
+Mounts inherit translation, rotation, and scale. Visibility uses the parent
+sequence/global-sequence clock and is shown above `0.1`, with missing keys
+falling back to visible. Attached models loop sequence zero, pause while their
+mount is hidden, and restart when shown again, when the parent changes sequence,
+or when the parent animation seeks backward. Each child has its own rig,
+materials, texture bindings, and animation clock. Nested attachments are updated
+from outer to inner models; recursive model paths are blocked during spawning.
+
+Each instance root owns its rig, geometry, and PRE2 render entities through the
+Bevy hierarchy. Hiding the root hides its geometry and effects; despawning it
+cleans them up, including its attachment models. `Wc3ModelOwner` also supports
+detached child instances: omit `ChildOf` to keep world-space transforms and
+visibility independent while retaining cleanup when the owner despawns. PREM
+model references are resolved, but their particle simulation remains unimplemented.
+
+Capture the animated attachment fixture with the existing offscreen renderer:
+
+```sh
+cargo run -p bevy-wc3 --example capture -- \
+  crates/bevy-wc3/tests/fixtures/attachment_capture.mdl /tmp/wc3-attachments \
+  --times 0,0.25,0.75,1.25 --fps 60 --size 640x480 \
+  --eye 0,-18,12 --target 0,0,0
+```
 
 Run the viewer with any local model path:
 

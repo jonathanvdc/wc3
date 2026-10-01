@@ -6,6 +6,7 @@ use std::collections::{hash_map::Entry, HashMap, HashSet};
 
 use crate::animation::Wc3Animation;
 use crate::asset::Wc3ModelAsset;
+use crate::attachment::AttachmentModel;
 use crate::material::Wc3LayerMaterial;
 use crate::spawn::{prepare_resolved_model, spawn_prepared_into, PreparedModel};
 use crate::texture_bindings::Wc3TextureBindings;
@@ -41,18 +42,28 @@ impl Wc3OwnedModels {
     }
 }
 
+#[derive(Component)]
+pub(crate) struct BlockedAttachment;
+
 #[derive(Resource, Default)]
 pub(crate) struct PreparedModelCache {
     prepared: HashMap<AssetId<Wc3ModelAsset>, PreparedModel>,
     failed: HashSet<AssetId<Wc3ModelAsset>>,
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn spawn_loaded_instances(
     mut commands: Commands,
     instances: Query<
-        (Entity, &Wc3ModelInstance, Option<&Wc3TextureBindings>),
-        Without<Wc3Animation>,
+        (
+            Entity,
+            &Wc3ModelInstance,
+            Option<&Wc3TextureBindings>,
+            Option<&AttachmentModel>,
+        ),
+        (Without<Wc3Animation>, Without<BlockedAttachment>),
     >,
+    owners: Query<(Option<&Wc3ModelInstance>, Option<&Wc3ModelOwner>)>,
     sources: Res<Assets<Wc3ModelAsset>>,
     mut cache: ResMut<PreparedModelCache>,
     mut meshes: ResMut<Assets<Mesh>>,
@@ -61,8 +72,37 @@ pub(crate) fn spawn_loaded_instances(
 ) {
     cache.prepared.retain(|id, _| sources.contains(*id));
     cache.failed.retain(|id| sources.contains(*id));
-    for (root, instance, bindings) in &instances {
+    for (root, instance, bindings, attachment) in &instances {
         let id = instance.0.id();
+        if attachment.is_some() {
+            let mut ancestor = owners
+                .get(root)
+                .ok()
+                .and_then(|(_, owner)| owner.map(|owner| owner.0));
+            let mut visited = HashSet::new();
+            let mut cyclic = false;
+            while let Some(entity) = ancestor {
+                if !visited.insert(entity) {
+                    cyclic = true;
+                    break;
+                }
+                let Ok((model, owner)) = owners.get(entity) else {
+                    break;
+                };
+                if model.is_some_and(|model| model.0.id() == id) {
+                    cyclic = true;
+                    break;
+                }
+                ancestor = owner.map(|owner| owner.0);
+            }
+            if cyclic {
+                warn!("Skipping cyclic WC3 attachment {:?}", instance.0);
+                commands
+                    .entity(root)
+                    .insert((BlockedAttachment, Visibility::Hidden));
+                continue;
+            }
+        }
         let Some(asset) = sources.get(id) else {
             continue;
         };

@@ -1,0 +1,116 @@
+Version {
+    FormatVersion 800,
+}
+Model "Attachment capture" {
+    MinimumExtent { -6.0, -6.0, -1.0 },
+    MaximumExtent { 6.0, 6.0, 3.0 },
+    BoundsRadius 9.0,
+}
+Sequences 1 {
+    Anim "Stand" {
+        Interval { 0, 2000 },
+        MinimumExtent { -0.3, -0.3, 0.0 },
+        MaximumExtent { 0.3, 0.3, 0.0 },
+        BoundsRadius 1.0,
+    }
+}
+GlobalSequences 1 { Duration 1000, }
+Textures 1 {
+    Bitmap {
+        Image "capture_white.png",
+    }
+}
+Materials 1 {
+    Material {
+        Layer {
+            FilterMode None,
+            Unshaded,
+            static TextureID 0 <= 0,
+        }
+    }
+}
+Geoset {
+    Vertices 4 {
+        { -0.3, -0.3, 0.0 },
+        {  0.3, -0.3, 0.0 },
+        {  0.3,  0.3, 0.0 },
+        { -0.3,  0.3, 0.0 },
+    }
+    Normals 4 {
+        { 0.0, 0.0, 1.0 },
+        { 0.0, 0.0, 1.0 },
+        { 0.0, 0.0, 1.0 },
+        { 0.0, 0.0, 1.0 },
+    }
+    TVertices 4 {
+        { 0.0, 1.0 },
+        { 1.0, 1.0 },
+        { 1.0, 0.0 },
+        { 0.0, 0.0 },
+    }
+    VertexGroup {
+        0,
+        0,
+        0,
+        0,
+    }
+    Faces 1 6 {
+        Triangles {
+            { 0, 1, 2, 0, 2, 3 },
+        }
+    }
+    Groups 1 1 {
+        Matrices { 0 },
+    }
+    MaterialID 0,
+    SelectionGroup 0,
+    MinimumExtent { -0.3, -0.3, 0.0 },
+    MaximumExtent { 0.3, 0.3, 0.0 },
+    BoundsRadius 1.0,
+}
+Helper "Rotating arm" {
+    ObjectId 0,
+    Rotation 2 {
+        Linear,
+        0: { 0.0, 0.0, 0.0, 1.0 },
+        2000: { 0.0, 0.0, 0.7071068, 0.7071068 },
+    }
+}
+Attachment "Weapon Ref" {
+    ObjectId 2,
+    Parent 0,
+    AttachmentID 7,
+    Path "attachment_capture_child.mdl",
+    Visibility 3 {
+        DontInterp,
+        0: 1.0,
+        500: 0.0,
+        1000: 1.0,
+    }
+}
+Attachment "Shield Ref" {
+    ObjectId 4,
+    Parent 0,
+    AttachmentID 13,
+    Path "attachment_capture_child.mdl",
+    Visibility 3 {
+        DontInterp,
+        GlobalSeqId 0,
+        0: 1.0,
+        400: 0.1,
+        800: 1.0,
+    }
+}
+Attachment "Origin Ref" {
+    ObjectId 6,
+    AttachmentID 42,
+}
+PivotPoints 7 {
+    { 0.0, 0.0, 0.0 },
+    { 0.0, 0.0, 0.0 },
+    { 3.0, 0.0, 0.0 },
+    { 0.0, 0.0, 0.0 },
+    { -3.0, 0.0, 0.0 },
+    { 0.0, 0.0, 0.0 },
+    { 0.0, 0.0, 0.0 },
+}

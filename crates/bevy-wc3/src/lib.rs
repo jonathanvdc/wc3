@@ -9,6 +9,7 @@
 
 mod animation;
 mod asset;
+mod attachment;
 mod instance;
 mod material;
 mod mesh;
@@ -23,6 +24,7 @@ use bevy::prelude::*;
 
 pub use animation::Wc3Animation;
 pub use asset::Wc3ModelAsset;
+pub use attachment::{Wc3AttachmentPoint, Wc3Attachments};
 pub use instance::{Wc3ModelInstance, Wc3ModelOwner, Wc3OwnedModels};
 pub use material::{Wc3LayerMaterial, Wc3LayerState};
 pub use model::{ModelError, Wc3Model};
@@ -55,6 +57,7 @@ impl Plugin for Wc3BevyPlugin {
             Update,
             (
                 animation::advance_animation,
+                attachment::animate_attachments,
                 animation::animate_nodes,
                 animation::animate_layers,
             )

@@ -5,6 +5,7 @@ use bevy::prelude::*;
 use wc3::model::materials::LayerFilterMode;
 
 use crate::animation::AnimatedLayer;
+use crate::attachment::spawn_attachments;
 use crate::material::Wc3LayerMaterial;
 use crate::model::{ModelError, Wc3Model};
 use crate::particle_emitter2::{Particle2State, ParticleInstances, ParticleTextureSlot};
@@ -66,6 +67,7 @@ pub(crate) fn spawn_prepared_into(
     spawn_animation_root(commands, &prepared.model, root);
     let rig = spawn_rig(commands, &prepared.model, root, &prepared.inverse_bindposes);
     let node_entities = &rig.by_object_id;
+    spawn_attachments(commands, prepared, root, node_entities);
     for (emitter_id, definition) in prepared.model.particle_emitters2().into_iter().enumerate() {
         let Some(&node) = node_entities.get(&definition.node.object_id) else {
             continue;
