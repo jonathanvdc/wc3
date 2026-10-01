@@ -157,7 +157,9 @@ mod tests {
                 Particle2State::new(root, root, emitter.clone()),
                 ParticleTextureSlot(0),
                 ParticleInstances {
-                    particles: Vec::new(),
+                    records: Default::default(),
+                    live_indices: Default::default(),
+                    uniform: Default::default(),
                     texture: None,
                     filter: emitter.filter_mode,
                     priority_plane: emitter.priority_plane,

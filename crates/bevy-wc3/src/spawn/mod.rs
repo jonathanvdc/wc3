@@ -67,7 +67,9 @@ pub(crate) fn spawn_prepared_into(
         let texture = bindings.particle(emitter_id);
         let mesh = meshes.add(Rectangle::new(2.0, 2.0));
         let render = ParticleInstances {
-            particles: Vec::new(),
+            records: Default::default(),
+            live_indices: Default::default(),
+            uniform: Default::default(),
             texture,
             filter: definition.filter_mode,
             priority_plane: definition.priority_plane,

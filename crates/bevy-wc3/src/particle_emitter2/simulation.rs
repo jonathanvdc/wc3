@@ -1,23 +1,19 @@
-//! Per-instance simulation for PRE2 emitters.
+//! Per-instance PRE2 spawning and lifetime bookkeeping; motion is evaluated on the GPU.
 use bevy::prelude::*;
 use std::f32::consts::FRAC_PI_2;
+use std::sync::Arc;
 use wc3::model::animation::Animatable;
 use wc3::model::emitters::{Particle2Frames, ParticleEmitter2};
 
-use super::render::{ParticleInstance, ParticleInstances};
+use super::render::{ParticleEmitterUniform, ParticleInstance, ParticleInstances};
 use crate::animation::{sample, sample_value, track_time, Wc3Animation};
 
 const MAX_PARTICLES: usize = 8192;
 
-#[derive(Clone)]
 struct Particle {
-    position: Vec3,
-    velocity: Vec3,
-    gravity: f32,
-    age: f32,
+    slot: u32,
+    birth_time: f64,
     lifetime: f32,
-    tail: bool,
-    size_scale: f32,
 }
 
 #[derive(Component)]
@@ -26,6 +22,10 @@ pub(crate) struct Particle2State {
     pub(crate) node: Entity,
     pub(crate) definition: ParticleEmitter2,
     particles: Vec<Particle>,
+    records: Arc<Vec<ParticleInstance>>,
+    live_indices: Arc<Vec<u32>>,
+    free_slots: Vec<u32>,
+    simulation_time: f64,
     emission_remainder: f32,
     last_sequence: usize,
     last_elapsed_ms: f64,
@@ -42,6 +42,10 @@ impl Particle2State {
             rng: u64::from(definition.node.object_id).wrapping_add(1),
             definition,
             particles: Vec::new(),
+            records: Arc::default(),
+            live_indices: Arc::default(),
+            free_slots: Vec::new(),
+            simulation_time: 0.0,
             emission_remainder: 0.0,
             last_sequence: usize::MAX,
             last_elapsed_ms: 0.0,
@@ -105,29 +109,43 @@ impl Particle2State {
         };
         let size_scale = world_scale.x_axis.length();
         let gravity = gravity * world_scale.z_axis.length();
-        let make = |tail| Particle {
+        let record = ParticleInstance::new(
             position,
             velocity,
             gravity,
-            age: 0.0,
+            self.simulation_time,
             lifetime,
-            tail,
             size_scale,
-        };
+            self.definition.frames == Particle2Frames::Tail,
+        );
         match self.definition.frames {
-            Particle2Frames::Head => self.particles.push(make(false)),
-            Particle2Frames::Tail => self.particles.push(make(true)),
+            Particle2Frames::Head | Particle2Frames::Tail => self.insert_particle(record, lifetime),
             Particle2Frames::Both => {
-                self.particles.push(make(false));
+                self.insert_particle(record, lifetime);
                 if self.particles.len() < MAX_PARTICLES {
-                    self.particles.push(make(true));
+                    self.insert_particle(record.as_tail(), lifetime);
                 }
             }
             Particle2Frames::Unknown(_) => {}
         }
     }
 
-    fn advance(&mut self, animation: &Wc3Animation, transform: &GlobalTransform, dt: f32) {
+    fn insert_particle(&mut self, record: ParticleInstance, lifetime: f32) {
+        let slot = self.free_slots.pop().unwrap_or(self.records.len() as u32);
+        let records = Arc::make_mut(&mut self.records);
+        if slot as usize == records.len() {
+            records.push(record);
+        } else {
+            records[slot as usize] = record;
+        }
+        self.particles.push(Particle {
+            slot,
+            birth_time: self.simulation_time,
+            lifetime,
+        });
+    }
+
+    fn advance(&mut self, animation: &Wc3Animation, transform: &GlobalTransform, dt: f64) {
         let reset =
             animation.sequence != self.last_sequence || animation.elapsed_ms < self.last_elapsed_ms;
         let cycle = if let Some(global_id) = self
@@ -170,13 +188,14 @@ impl Particle2State {
         self.last_sequence = animation.sequence;
         self.last_elapsed_ms = animation.elapsed_ms;
         self.last_cycle = cycle;
-        for particle in &mut self.particles {
-            particle.age += dt;
-            particle.velocity.z -= particle.gravity * dt;
-            particle.position += particle.velocity * dt;
-        }
-        self.particles
-            .retain(|particle| particle.age < particle.lifetime);
+        self.simulation_time += dt;
+        self.particles.retain(|particle| {
+            let alive = self.simulation_time - particle.birth_time < f64::from(particle.lifetime);
+            if !alive {
+                self.free_slots.push(particle.slot);
+            }
+            alive
+        });
         if !animation.playing || dt <= 0.0 {
             return;
         }
@@ -208,7 +227,7 @@ impl Particle2State {
                 self.last_squirt_key = key;
             }
         } else {
-            self.emission_remainder += rate * dt;
+            self.emission_remainder += rate * dt as f32;
         }
         let count = (self.emission_remainder.floor() as usize).min(MAX_PARTICLES);
         self.emission_remainder = (self.emission_remainder - count as f32).min(1.0);
@@ -224,91 +243,6 @@ fn emission_key(value: &Animatable<f32>, animation: &Wc3Animation) -> Option<i32
     track.key_frame_at_or_before_in(time, interval)
 }
 
-fn stage(definition: &ParticleEmitter2, life: f32) -> ([f32; 4], f32, usize, f32) {
-    let middle = definition.time.clamp(0.001, 0.999);
-    let (a, b, t, phase) = if life < middle {
-        (0, 1, life / middle, 0)
-    } else {
-        (1, 2, (life - middle) / (1.0 - middle), 1)
-    };
-    let color_a = definition.segment_colors[a];
-    let color_b = definition.segment_colors[b];
-    let alpha_a = definition.alpha[a] as f32 / 255.0;
-    let alpha_b = definition.alpha[b] as f32 / 255.0;
-    let color = [
-        color_a[0] + (color_b[0] - color_a[0]) * t,
-        color_a[1] + (color_b[1] - color_a[1]) * t,
-        color_a[2] + (color_b[2] - color_a[2]) * t,
-        alpha_a + (alpha_b - alpha_a) * t,
-    ];
-    let scaling = definition.particle_scaling;
-    let size = scaling[a] + (scaling[b] - scaling[a]) * t;
-    (color, size, phase, t)
-}
-
-fn atlas_uv(definition: &ParticleEmitter2, tail: bool, phase: usize, t: f32) -> [[f32; 2]; 4] {
-    let rows = definition.rows.max(1);
-    let columns = definition.columns.max(1);
-    let interval = definition.uv_animations[usize::from(tail) * 2 + phase];
-    let first = interval[0];
-    let count = interval[1].saturating_sub(first);
-    let cell = if count > 0 {
-        let offset = ((count as f32 * interval[2] as f32 * t).floor() as u32) % count;
-        first.saturating_add(offset)
-    } else {
-        first
-    }
-    .min(rows.saturating_mul(columns).saturating_sub(1));
-    let u = (cell % columns) as f32 / columns as f32;
-    let v = (cell / columns) as f32 / rows as f32;
-    let du = 1.0 / columns as f32;
-    let dv = 1.0 / rows as f32;
-    [[u, v + dv], [u + du, v + dv], [u + du, v], [u, v]]
-}
-
-fn collect_instances(state: &Particle2State, transform: &GlobalTransform) -> Vec<ParticleInstance> {
-    state
-        .particles
-        .iter()
-        .filter_map(|particle| {
-            let life = (particle.age / particle.lifetime).clamp(0.0, 1.0);
-            let (color, scale, phase, phase_t) = stage(&state.definition, life);
-            if color[3] <= 0.0 || scale <= 0.0 {
-                return None;
-            }
-            let model_space = state.definition.node.flags.model_space();
-            let center = if model_space {
-                transform.transform_point(particle.position)
-            } else {
-                particle.position
-            };
-            let velocity = if model_space {
-                transform.affine().transform_vector3(particle.velocity)
-            } else {
-                particle.velocity
-            };
-            let uv = atlas_uv(&state.definition, particle.tail, phase, phase_t);
-            Some(ParticleInstance {
-                center_size: [center.x, center.y, center.z, scale * particle.size_scale],
-                velocity_tail: [
-                    velocity.x,
-                    velocity.y,
-                    velocity.z,
-                    state.definition.tail_length,
-                ],
-                color,
-                uv_rect: [uv[3][0], uv[2][1], uv[2][0] - uv[3][0], uv[0][1] - uv[3][1]],
-                flags: [
-                    f32::from(particle.tail),
-                    f32::from(state.definition.node.flags.xy_quad()),
-                    0.0,
-                    0.0,
-                ],
-            })
-        })
-        .collect()
-}
-
 pub(crate) fn update_particles(
     time: Res<Time>,
     animations: Query<&Wc3Animation>,
@@ -321,12 +255,29 @@ pub(crate) fn update_particles(
             continue;
         };
         let dt = if animation.playing {
-            (time.delta_secs_f64() * animation.speed).max(0.0) as f32
+            (time.delta_secs_f64() * animation.speed).max(0.0)
         } else {
             0.0
         };
         state.advance(animation, transform, dt);
-        instances.particles = collect_instances(&state, transform);
+        if state
+            .live_indices
+            .iter()
+            .copied()
+            .ne(state.particles.iter().map(|particle| particle.slot))
+        {
+            state.live_indices = Arc::new(
+                state
+                    .particles
+                    .iter()
+                    .map(|particle| particle.slot)
+                    .collect(),
+            );
+        }
+        instances.records = state.records.clone();
+        instances.live_indices = state.live_indices.clone();
+        instances.uniform =
+            ParticleEmitterUniform::new(&state.definition, transform, state.simulation_time);
     }
 }
 
@@ -374,21 +325,18 @@ mod tests {
             state
                 .particles
                 .iter()
-                .filter(|particle| particle.tail)
+                .filter(|particle| state.records[particle.slot as usize].is_tail())
                 .count(),
             3
         );
-        assert_eq!(
-            collect_instances(&state, &GlobalTransform::default()).len(),
-            6
-        );
+        assert_eq!(state.records.len(), 6);
     }
 
     #[test]
     fn no_live_particles_produce_no_gpu_instances() {
         let root = Entity::from_bits(1);
         let state = Particle2State::new(root, root, emitter());
-        assert!(collect_instances(&state, &GlobalTransform::default()).is_empty());
+        assert!(state.records.is_empty());
     }
 
     #[test]
@@ -426,22 +374,115 @@ mod tests {
     }
 
     #[test]
-    fn lifetime_stage_interpolates_color_alpha_and_size() {
+    fn particles_keep_spawn_records_and_reuse_expired_slots() {
+        let root = Entity::from_bits(1);
+        let mut definition = emitter();
+        definition.frames = Particle2Frames::Head;
+        definition.gravity = 10.0.into();
+        let mut state = Particle2State::new(root, root, definition);
+        let mut animation = animation();
+        state.advance(&animation, &GlobalTransform::default(), 0.1);
+        let records = state.records.clone();
+        animation.playing = false;
+        state.advance(&animation, &GlobalTransform::default(), 1.0);
+        assert!(Arc::ptr_eq(&records, &state.records));
+        assert_eq!(state.particles.len(), 1);
+        state.advance(&animation, &GlobalTransform::default(), 1.0);
+        assert!(state.particles.is_empty());
+        animation.playing = true;
+        state.advance(&animation, &GlobalTransform::default(), 0.1);
+        assert_eq!(state.records.len(), 1);
+        assert_eq!(state.particles[0].slot, 0);
+        assert_ne!(records[0], state.records[0]);
+    }
+    #[test]
+    fn update_respects_pause_speed_and_keeps_clock_across_sequence_reset() {
+        use std::time::Duration;
+        let mut app = App::new();
+        app.insert_resource(Time::<()>::default());
+        app.add_systems(Update, update_particles);
+        let mut animation = animation();
+        animation.speed = 2.0;
+        let root = app
+            .world_mut()
+            .spawn((animation, GlobalTransform::default()))
+            .id();
         let definition = emitter();
-        let (color, size, phase, _) = stage(&definition, definition.time * 0.5);
-        assert_eq!(phase, 0);
-        assert_eq!(color[0], 0.5);
-        assert_eq!(color[1], 0.5);
-        assert_eq!(size, 1.5);
-        assert!(color[3] < 1.0);
+        let entity = app
+            .world_mut()
+            .spawn((
+                Particle2State::new(root, root, definition.clone()),
+                ParticleInstances {
+                    records: Arc::default(),
+                    live_indices: Arc::default(),
+                    uniform: ParticleEmitterUniform::default(),
+                    texture: None,
+                    filter: definition.filter_mode,
+                    priority_plane: 0,
+                    sort_far: false,
+                },
+            ))
+            .id();
+        app.world_mut()
+            .resource_mut::<Time>()
+            .advance_by(Duration::from_secs_f64(0.25));
+        app.update();
+        assert_eq!(
+            app.world()
+                .get::<Particle2State>(entity)
+                .unwrap()
+                .simulation_time,
+            0.5
+        );
+        let records = app
+            .world()
+            .get::<ParticleInstances>(entity)
+            .unwrap()
+            .records
+            .clone();
+        app.world_mut()
+            .get_mut::<Wc3Animation>(root)
+            .unwrap()
+            .playing = false;
+        app.update();
+        assert_eq!(
+            app.world()
+                .get::<Particle2State>(entity)
+                .unwrap()
+                .simulation_time,
+            0.5
+        );
+        assert!(Arc::ptr_eq(
+            &records,
+            &app.world()
+                .get::<ParticleInstances>(entity)
+                .unwrap()
+                .records
+        ));
+        let mut animation = app.world_mut().get_mut::<Wc3Animation>(root).unwrap();
+        animation.playing = true;
+        animation.elapsed_ms = 0.0;
+        animation.sequence = 1;
+        app.update();
+        let state = app.world().get::<Particle2State>(entity).unwrap();
+        assert_eq!(state.simulation_time, 1.0);
+        assert_eq!(state.particles[0].birth_time, 0.5);
+        assert_eq!(state.records[0], records[0]);
     }
 
     #[test]
-    fn atlas_interval_uses_exclusive_end_and_repeat_count() {
-        let mut definition = emitter();
-        definition.uv_animations[0] = [0, 4, 2];
-        assert_eq!(atlas_uv(&definition, false, 0, 0.0)[3], [0.0, 0.0]);
-        assert_eq!(atlas_uv(&definition, false, 0, 0.25)[3], [0.0, 0.5]);
-        assert_eq!(atlas_uv(&definition, false, 0, 0.5)[3], [0.0, 0.0]);
+    fn head_tail_pair_never_exceeds_particle_limit() {
+        let root = Entity::from_bits(1);
+        let mut state = Particle2State::new(root, root, emitter());
+        let animation = animation();
+        let transform = GlobalTransform::default();
+        for _ in 0..MAX_PARTICLES / 2 {
+            state.spawn(&animation, &transform);
+        }
+        let records = state.records.clone();
+        state.spawn(&animation, &transform);
+        assert_eq!(state.particles.len(), MAX_PARTICLES);
+        assert_eq!(state.records.len(), MAX_PARTICLES);
+        assert!(Arc::ptr_eq(&records, &state.records));
     }
 }
