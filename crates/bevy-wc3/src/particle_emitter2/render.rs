@@ -35,6 +35,7 @@ use bevy::render::{
 use bytemuck::{bytes_of, cast_slice, Pod, Zeroable};
 use std::array::from_fn;
 use std::collections::HashMap;
+use std::f32::consts::{FRAC_PI_8, PI};
 use std::num::NonZeroU64;
 use std::ops::Range;
 use std::sync::Arc;
@@ -46,7 +47,9 @@ use wc3::model::emitters::{Particle2FilterMode, ParticleEmitter2};
 pub(crate) struct ParticleInstance {
     position_birth: [f32; 4],
     velocity_gravity: [f32; 4],
-    lifetime_scale_tail: [f32; 4],
+    // Lifetime, tail marker, low birth time, padding.
+    lifetime_tail_birth: [f32; 4],
+    scale_facing: [f32; 4],
 }
 
 // Splitting the clock keeps short particle ages precise in long-running scenes.
@@ -62,30 +65,42 @@ impl ParticleInstance {
         gravity: f32,
         birth_time: f64,
         lifetime: f32,
-        size_scale: f32,
+        size_scale: Vec3,
         tail: bool,
     ) -> Self {
         let [high, low] = split_time(birth_time);
         Self {
             position_birth: [position.x, position.y, position.z, high],
             velocity_gravity: [velocity.x, velocity.y, velocity.z, gravity],
-            lifetime_scale_tail: [lifetime, size_scale, f32::from(tail), low],
+            lifetime_tail_birth: [lifetime, f32::from(tail), low, 0.0],
+            // Facing is fixed at birth, including vertical/zero speed.
+            scale_facing: [
+                size_scale.x,
+                size_scale.y,
+                size_scale.z,
+                velocity.y.atan2(velocity.x) - PI + FRAC_PI_8,
+            ],
         }
     }
 
     pub(crate) fn as_tail(mut self) -> Self {
-        self.lifetime_scale_tail[2] = 1.0;
+        self.lifetime_tail_birth[1] = 1.0;
         self
     }
 
     #[cfg(test)]
+    pub(crate) fn spawn_scale(&self) -> Vec3 {
+        Vec3::from_slice(&self.scale_facing[..3])
+    }
+
+    #[cfg(test)]
     pub(crate) fn is_tail(&self) -> bool {
-        self.lifetime_scale_tail[2] > 0.5
+        self.lifetime_tail_birth[1] > 0.5
     }
 
     pub(crate) fn center(&self, uniform: &ParticleEmitterUniform) -> Vec3 {
         let age = ((uniform.clock_tail[0] - self.position_birth[3])
-            + (uniform.clock_tail[1] - self.lifetime_scale_tail[3]))
+            + (uniform.clock_tail[1] - self.lifetime_tail_birth[2]))
             .max(0.0);
         let position = Vec3::from_slice(&self.position_birth[..3]);
         let velocity = Vec3::from_slice(&self.velocity_gravity[..3]);
@@ -109,6 +124,8 @@ pub(crate) struct ParticleEmitterUniform {
     intervals: [[u32; 4]; 4],
     atlas_flags: [u32; 4],
     clock_tail: [f32; 4],
+    // Unshaded, followed by reserved lanes.
+    render_flags: [u32; 4],
 }
 
 impl ParticleEmitterUniform {
@@ -145,6 +162,7 @@ impl ParticleEmitterUniform {
                 u32::from(definition.node.flags.xy_quad()),
             ],
             clock_tail: [high, low, definition.tail_length, 0.0],
+            render_flags: [u32::from(definition.node.flags.unshaded()), 0, 0, 0],
         }
     }
 }
@@ -635,7 +653,6 @@ mod tests {
     use naga::front::wgsl::parse_str;
     use naga::valid::{Capabilities, ValidationFlags, Validator};
     use naga::TypeInner;
-    use std::f32::consts::PI;
     use wc3::model::scene::Node;
 
     fn emitter() -> ParticleEmitter2 {
@@ -658,6 +675,40 @@ mod tests {
     }
 
     #[test]
+    fn xy_facing_survives_gravity_and_tail_conversion() {
+        let record = ParticleInstance::new(
+            Vec3::ZERO,
+            Vec3::new(0.0, 2.0, 3.0),
+            20.0,
+            0.0,
+            4.0,
+            Vec3::new(2.0, 0.5, 3.0),
+            false,
+        );
+        let facing = record.scale_facing[3];
+        assert!((facing - (-PI * 0.5 + FRAC_PI_8)).abs() < 0.00001);
+        let uniform = ParticleEmitterUniform::new(&emitter(), &GlobalTransform::default(), 1.0);
+        assert!(record.center(&uniform).z < 0.0);
+        assert_eq!(record.as_tail().scale_facing, record.scale_facing);
+        for velocity in [Vec3::ZERO, Vec3::Z, -Vec3::Z] {
+            let stationary =
+                ParticleInstance::new(Vec3::ZERO, velocity, 0.0, 0.0, 4.0, Vec3::ONE, false);
+            assert!(stationary.scale_facing[3].is_finite());
+        }
+    }
+
+    #[test]
+    fn unshaded_is_a_render_flag_independent_of_clock_and_tail_length() {
+        let mut definition = emitter();
+        let shaded = ParticleEmitterUniform::new(&definition, &GlobalTransform::default(), 12.0);
+        definition.node.flags.set_unshaded(true);
+        let unshaded = ParticleEmitterUniform::new(&definition, &GlobalTransform::default(), 12.0);
+        assert_eq!(shaded.render_flags[0], 0);
+        assert_eq!(unshaded.render_flags[0], 1);
+        assert_eq!(shaded.clock_tail, unshaded.clock_tail);
+    }
+
+    #[test]
     fn analytic_motion_and_model_space_follow_current_transform() {
         let record = ParticleInstance::new(
             Vec3::new(1.0, 2.0, 3.0),
@@ -665,7 +716,7 @@ mod tests {
             2.0,
             10.0,
             5.0,
-            1.0,
+            Vec3::ONE,
             false,
         );
         let mut definition = emitter();
@@ -680,7 +731,7 @@ mod tests {
     #[test]
     fn split_clock_preserves_short_ages_after_long_runtime() {
         let birth = 1_000_000_000.0;
-        let record = ParticleInstance::new(Vec3::ZERO, Vec3::X, 0.0, birth, 1.0, 1.0, false);
+        let record = ParticleInstance::new(Vec3::ZERO, Vec3::X, 0.0, birth, 1.0, Vec3::ONE, false);
         let uniform =
             ParticleEmitterUniform::new(&emitter(), &GlobalTransform::default(), birth + 0.125);
         assert_eq!(record.center(&uniform), Vec3::new(0.125, 0.0, 0.0));
@@ -695,7 +746,7 @@ mod tests {
                 0.0,
                 0.0,
                 5.0,
-                1.0,
+                Vec3::ONE,
                 false,
             ),
             ParticleInstance::new(
@@ -704,7 +755,7 @@ mod tests {
                 0.0,
                 0.0,
                 5.0,
-                1.0,
+                Vec3::ONE,
                 false,
             ),
         ];
@@ -717,7 +768,7 @@ mod tests {
 
     #[test]
     fn uploads_only_changed_and_appended_slots() {
-        let a = ParticleInstance::new(Vec3::ZERO, Vec3::X, 0.0, 0.0, 1.0, 1.0, false);
+        let a = ParticleInstance::new(Vec3::ZERO, Vec3::X, 0.0, 0.0, 1.0, Vec3::ONE, false);
         let b = a.as_tail();
         assert!(changed_record_ranges(&[a, b], &[a, b]).is_empty());
         assert_eq!(
@@ -732,7 +783,19 @@ mod tests {
         // Bevy supplies these imports. Stubs let Naga validate the complete
         // particle shader without starting a renderer or requiring a GPU.
         let body = &shader[shader.find("@group(3)").unwrap()..];
-        let imports = "struct View { world_from_view: mat4x4<f32> };\n@group(0) @binding(0) var<uniform> view: View;\nfn position_world_to_clip(p: vec3<f32>) -> vec4<f32> { return vec4(p, 1.0); }\n";
+        let imports = r#"
+struct View { world_from_view: mat4x4<f32>, clip_from_view: mat4x4<f32> };
+@group(0) @binding(0) var<uniform> view: View;
+fn position_world_to_clip(p: vec3<f32>) -> vec4<f32> { return vec4(p, 1.0); }
+struct Material { base_color: vec4<f32>, reflectance: vec3<f32>, perceptual_roughness: f32 };
+struct Lighting {
+    material: Material, frag_coord: vec4<f32>, world_position: vec4<f32>,
+    world_normal: vec3<f32>, N: vec3<f32>, V: vec3<f32>, is_orthographic: bool,
+};
+fn pbr_input_new() -> Lighting { var result: Lighting; return result; }
+fn calculate_view(p: vec4<f32>, orthographic: bool) -> vec3<f32> { return vec3(0.0, 0.0, 1.0); }
+fn apply_pbr_lighting(p: Lighting) -> vec4<f32> { return p.material.base_color; }
+"#;
         for alpha_key in [false, true] {
             let mut enabled = true;
             let mut source = imports.to_owned();

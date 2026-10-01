@@ -109,7 +109,12 @@ impl Particle2State {
         } else {
             transform.affine().transform_vector3(direction * speed)
         };
-        let size_scale = world_scale.x_axis.length();
+        // Freeze all world scale components at birth, also for ModelSpace particles.
+        let size_scale = Vec3::new(
+            world_scale.x_axis.length(),
+            world_scale.y_axis.length(),
+            world_scale.z_axis.length(),
+        );
         let gravity = gravity * world_scale.z_axis.length();
         let record = ParticleInstance::new(
             position,
@@ -457,6 +462,33 @@ mod tests {
         animation.elapsed_ms = 1100.0;
         state.advance(&animation, 0.01, |_| GlobalTransform::default());
         assert_eq!(state.particles.len(), 7);
+    }
+
+    #[test]
+    fn spawn_freezes_xyz_scale_for_heads_and_tails_in_both_spaces() {
+        let root = Entity::from_bits(1);
+        let scale = Vec3::new(2.0, 0.5, 3.0);
+        let transform = GlobalTransform::from(Transform {
+            translation: Vec3::new(5.0, 2.0, 1.0),
+            rotation: Quat::from_rotation_y(0.7),
+            scale,
+        });
+        for model_space in [false, true] {
+            let mut definition = emitter();
+            definition.node.flags.set_model_space(model_space);
+            let mut state = Particle2State::new(root, root, definition);
+            state.spawn(&animation(), &transform, 0.0);
+            assert_eq!(state.records.len(), 2);
+            for record in state.records.iter() {
+                assert!(record.spawn_scale().abs_diff_eq(scale, 0.00001));
+            }
+            assert!(state.records[1].is_tail());
+            let records = state.records.clone();
+            let mut paused = animation();
+            paused.playing = false;
+            state.advance(&paused, 0.25, |_| GlobalTransform::default());
+            assert_eq!(*state.records, *records);
+        }
     }
 
     #[test]

@@ -59,6 +59,15 @@ The current renderer uses Bevy PBR shading with WC3 layer blend and depth
 states. PRE2 textured particles are simulated per model instance and rendered
 as GPU-instanced head and tail quads. The CPU simulates compact particle records;
 the vertex shader constructs camera-facing geometry independently for each view.
+Heads and tail widths retain XYZ scale sampled at birth and apply it componentwise
+in world space after orienting the quad. Tail length follows velocity, which already
+contains the emitter scale. ModelSpace moves live centers and tails with the current
+node transform while retaining the scale sampled at birth for quad dimensions.
+XYQuad heads stay in world XY with a facing angle sampled from the initial XY
+velocity; vertical and stationary particles still produce complete quads.
+Shaded particles use Bevy scene lighting with a matte, zero-reflectance material;
+Unshaded particles use texture and segment color directly. Billboard heads and tails
+use the camera-facing normal; XYQuad heads use world +Z. Lighting leaves alpha intact.
 `spawn_prepared_model` takes mutable mesh assets to create a static emitter quad.
 Bitmap and PRE2 replaceable IDs use the same per-instance bindings.
 The renderer does not yet implement Reforged normal/ORM slots, geoset and UV
