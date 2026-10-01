@@ -14,6 +14,7 @@ mod effect_ring;
 mod effects;
 mod instance;
 mod material;
+mod material_animation;
 mod mesh;
 mod model;
 mod model_resources;
@@ -45,6 +46,8 @@ pub struct Wc3BevyPlugin;
 impl Plugin for Wc3BevyPlugin {
     fn build(&self, app: &mut App) {
         embedded_asset!(app, "shaders/wc3_mesh.wgsl");
+        embedded_asset!(app, "shaders/wc3_material.wgsl");
+        embedded_asset!(app, "shaders/wc3_material_prepass.wgsl");
         embedded_asset!(app, "shaders/wc3_prepass.wgsl");
         embedded_asset!(app, "shaders/wc3_particle.wgsl");
         embedded_asset!(app, "shaders/wc3_ribbon.wgsl");
@@ -68,6 +71,7 @@ impl Plugin for Wc3BevyPlugin {
                 attachment::animate_attachments,
                 animation::animate_nodes,
                 animation::animate_layers,
+                material_animation::animate_surface,
             )
                 .chain()
                 .after(instance::spawn_loaded_instances),

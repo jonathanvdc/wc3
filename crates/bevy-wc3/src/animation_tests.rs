@@ -28,6 +28,7 @@ fn geoset_alpha_hides_decay_geometry_and_combines_with_layer_alpha() {
                 filter: LayerFilterMode::None,
                 no_depth_test: false,
                 no_depth_set: false,
+                ..default()
             },
         });
     let entity = app
@@ -236,6 +237,7 @@ fn missing_color_keys_reset_to_white_after_sequence_change() {
                 filter: LayerFilterMode::Blend,
                 no_depth_test: false,
                 no_depth_set: false,
+                ..default()
             },
         });
     app.world_mut().spawn((

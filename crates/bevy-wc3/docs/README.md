@@ -10,6 +10,8 @@ own file under `visual-fidelity/` and link it here as it is documented.
   materials, UV animation, node flags, pass ordering, skinning
   and bind poses, LOD, replaceable textures, lights, cameras, events, and
   Reforged effects, plus an overview of implemented effects and fidelity checks.
+- [Reforged materials](visual-fidelity/reforged-materials.md): HD texture roles,
+  animated controls, Bevy integration, captures, and remaining fidelity work.
 - [Geoset animation](visual-fidelity/geoset-animation.md): alpha/color sampling,
   RGB codec normalization, material isolation, capture checks, and remaining fidelity work.
 - [Classic PREM particles](visual-fidelity/prem.md): model spawning, motion,

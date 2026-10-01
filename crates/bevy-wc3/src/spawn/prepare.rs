@@ -1,8 +1,10 @@
+use bevy::material::OpaqueRendererMethod;
 use bevy::mesh::skinning::SkinnedMeshInverseBindposes;
 use bevy::prelude::*;
+use bevy::render::render_resource::Face;
 use std::collections::HashMap;
 use wc3::model::animation::{Animatable, GeosetAnimation};
-use wc3::model::materials::{Layer, LayerFilterMode};
+use wc3::model::materials::{Layer, LayerFilterMode, ShaderType};
 use wc3::model::{Model, V1800};
 
 use super::rig::joint_ids;
@@ -11,7 +13,8 @@ use crate::asset::{
     resolve_texture as resolve_texture_binding, ResolvedModelTextures, ResolvedTexture,
 };
 use crate::material::{Wc3LayerMaterial, Wc3LayerState};
-use crate::mesh::build_mesh;
+use crate::material_animation::AnimatedSurface;
+use crate::mesh::{build_mesh_with_uv, canonical_uv_coordinate};
 use crate::model::{ModelError, Wc3Model};
 use crate::model_resources::Wc3ModelResources;
 
@@ -19,10 +22,11 @@ pub(super) struct PreparedLayer {
     pub(super) alpha: Animatable<f32>,
     pub(super) texture_id: Animatable<u32>,
     pub(super) material: Wc3LayerMaterial,
+    pub(super) surface: AnimatedSurface,
 }
 
 pub(super) struct PreparedGeoset {
-    pub(super) mesh: Handle<Mesh>,
+    pub(super) meshes: Vec<Handle<Mesh>>,
     pub(super) material_id: usize,
     pub(super) geoset_id: usize,
 }
@@ -144,11 +148,25 @@ pub(crate) fn prepare_resolved_model(
         if material_records.get(geoset.material_id as usize).is_none() {
             continue;
         }
-        let mesh = build_mesh(geoset, &joint_index, !joint_ids.is_empty())
-            .map_err(|error| ModelError(format!("geoset {geoset_id}: {error}")))?;
-        let mesh = meshes.add(mesh);
+        let material = &material_records[geoset.material_id as usize];
+        let mut variants: HashMap<u32, Handle<Mesh>> = HashMap::new();
+        let mut layer_meshes = Vec::new();
+        for layer in &material.layers {
+            let coordinate = canonical_uv_coordinate(geoset, layer.coordinate_id);
+            let handle = if let Some(handle) = variants.get(&coordinate) {
+                handle.clone()
+            } else {
+                let mesh =
+                    build_mesh_with_uv(geoset, &joint_index, !joint_ids.is_empty(), coordinate)
+                        .map_err(|error| ModelError(format!("geoset {geoset_id}: {error}")))?;
+                let handle = meshes.add(mesh);
+                variants.insert(coordinate, handle.clone());
+                handle
+            };
+            layer_meshes.push(handle);
+        }
         geosets.push(PreparedGeoset {
-            mesh,
+            meshes: layer_meshes,
             material_id: geoset.material_id as usize,
             geoset_id,
         });
@@ -167,6 +185,7 @@ pub(crate) fn prepare_resolved_model(
             Mat4::from_translation(-Vec3::from_array(pivot))
         })
         .collect::<Vec<_>>();
+    let texture_animations = model.texture_animations();
     let layers = material_records
         .iter()
         .map(|material| {
@@ -174,12 +193,30 @@ pub(crate) fn prepare_resolved_model(
                 .layers
                 .iter()
                 .map(|layer| {
+                    if !matches!(
+                        layer.shader_type(),
+                        ShaderType::SD_LEGACY
+                            | ShaderType::SD_FIXED_FUNCTION
+                            | ShaderType::HD_DEFAULT_UNIT
+                    ) {
+                        warn!(
+                            "Unsupported WC3 shader {:?}; rendering diffuse fallback",
+                            layer.shader_type()
+                        );
+                    }
                     let texture_id = layer_texture_id(layer);
                     let value = build_layer_material(layer, &texture_id, &default_bitmaps);
                     PreparedLayer {
                         alpha: layer.alpha.clone(),
                         texture_id,
                         material: value,
+                        surface: AnimatedSurface::new(
+                            layer,
+                            texture_animations
+                                .get(layer.texture_animation_id as usize)
+                                .cloned(),
+                            material.priority_plane,
+                        ),
                     }
                 })
                 .collect()
@@ -233,12 +270,21 @@ fn build_layer_material(
         base: StandardMaterial {
             base_color: Color::srgba(1.0, 1.0, 1.0, alpha),
             base_color_texture: texture,
-            alpha_mode: layer_alpha_mode(layer.filter_mode),
+            alpha_mode: if layer.shader_type() == ShaderType::HD_DEFAULT_UNIT
+                && layer.filter_mode == LayerFilterMode::Transparent
+            {
+                AlphaMode::Mask(0.75)
+            } else {
+                layer_alpha_mode(layer.filter_mode)
+            },
+            opaque_render_method: OpaqueRendererMethod::Forward,
+            unlit: layer.shading_flags.unshaded(),
+            fog_enabled: !layer.shading_flags.unfogged(),
             double_sided: layer.shading_flags.two_sided(),
             cull_mode: if layer.shading_flags.two_sided() {
                 None
             } else {
-                Some(bevy::render::render_resource::Face::Back)
+                Some(Face::Back)
             },
             ..default()
         },
@@ -246,6 +292,7 @@ fn build_layer_material(
             filter: layer.filter_mode,
             no_depth_test: layer.shading_flags.no_depth_test(),
             no_depth_set: layer.shading_flags.no_depth_set(),
+            ..default()
         },
     }
 }

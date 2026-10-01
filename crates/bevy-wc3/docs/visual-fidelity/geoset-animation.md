@@ -62,6 +62,8 @@ a pre-existing byte mismatch on VashjHighborn.mdx.
 
 Exact Warcraft lighting, gamma/color-space behavior, filter-mode fade semantics,
 and pass ordering remain unverified. PBR lighting and tonemapping affect the
-observed tint, and Unshaded mesh flags are still not applied. The DropShadow
+observed tint, and Unshaded mesh flags now select Bevy unlit rendering. The DropShadow
 flag remains decoded but has no dedicated game-equivalent shadow behavior.
-This implementation does not add UV animation or alter skeletal deformation.
+Geoset UV animation and HD materials are now implemented separately; see
+[Reforged materials](reforged-materials.md). Skeletal deformation still has the
+general renderer limitations.

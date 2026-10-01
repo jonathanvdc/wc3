@@ -3,6 +3,7 @@
 use bevy::app::PluginsState;
 use bevy::asset::{AssetPlugin, LoadState, RecursiveDependencyLoadState};
 use bevy::camera::RenderTarget;
+use bevy::core_pipeline::prepass::{DepthPrepass, MotionVectorPrepass, NormalPrepass};
 use bevy::prelude::*;
 use bevy::render::pipelined_rendering::PipelinedRenderingPlugin;
 use bevy::render::render_resource::{CachedPipelineState, PipelineCache, TextureFormat};
@@ -29,6 +30,8 @@ const TIMEOUT: Duration = Duration::from_secs(30);
 const HELP: &str = "Usage: capture MODEL.{mdx,mdl} OUTPUT_DIR [options]
 
 Render offscreen and write frame-0000-1.000s.png, etc. Requires a GPU.
+  --prepasses           Enable depth/normal/motion prepasses and shadows
+  --bevy-reference      Add a StandardMaterial sphere at (0, 2, 0)
   --times SECONDS,...    Increasing capture times (default: 1)
   --sequence INDEX       Animation sequence index (default: 0)
   --fps NUMBER           Simulation steps per second (default: 60)
@@ -48,6 +51,8 @@ struct TextureChoice {
 }
 
 struct Options {
+    prepasses: bool,
+    bevy_reference: bool,
     model: PathBuf,
     output: PathBuf,
     times: Vec<f64>,
@@ -73,6 +78,8 @@ impl Options {
             .next()
             .ok_or("pass an output directory after the model path")?;
         let mut options = Self {
+            prepasses: false,
+            bevy_reference: false,
             model: model.into(),
             output: output.into(),
             times: vec![1.0],
@@ -87,6 +94,14 @@ impl Options {
         while let Some(option) = arguments.next() {
             if option == "--help" || option == "-h" {
                 return Ok(None);
+            }
+            if option == "--prepasses" {
+                options.prepasses = true;
+                continue;
+            }
+            if option == "--bevy-reference" {
+                options.bevy_reference = true;
+                continue;
             }
             let value = arguments
                 .next()
@@ -292,15 +307,46 @@ fn main() -> CaptureResult<()> {
             TextureFormat::Rgba8UnormSrgb,
             None,
         ));
-    app.world_mut().spawn((
-        Camera3d::default(),
-        Msaa::Sample4,
-        RenderTarget::Image(image.clone().into()),
-        camera,
-    ));
+    let camera_entity = app
+        .world_mut()
+        .spawn((
+            Camera3d::default(),
+            Msaa::Sample4,
+            RenderTarget::Image(image.clone().into()),
+            camera,
+        ))
+        .id();
+    if options.prepasses {
+        app.world_mut().entity_mut(camera_entity).insert((
+            DepthPrepass,
+            NormalPrepass,
+            MotionVectorPrepass,
+        ));
+    }
+    if options.bevy_reference {
+        let mesh = app
+            .world_mut()
+            .resource_mut::<Assets<Mesh>>()
+            .add(Sphere::new(0.5));
+        let material = app
+            .world_mut()
+            .resource_mut::<Assets<StandardMaterial>>()
+            .add(StandardMaterial {
+                base_color: Color::srgb(0.8, 0.15, 0.05),
+                metallic: 0.6,
+                perceptual_roughness: 0.3,
+                ..default()
+            });
+        app.world_mut().spawn((
+            Mesh3d(mesh),
+            MeshMaterial3d(material),
+            Transform::from_xyz(0.0, 2.0, 0.0),
+        ));
+    }
     app.world_mut().spawn((
         DirectionalLight {
             illuminance: 20_000.0,
+            shadow_maps_enabled: options.prepasses,
             ..default()
         },
         Transform::from_xyz(1.0, -1.0, 2.0).looking_at(Vec3::ZERO, Vec3::Z),

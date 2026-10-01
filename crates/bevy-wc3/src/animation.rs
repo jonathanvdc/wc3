@@ -101,7 +101,11 @@ pub(crate) fn animate_layers(
                     material.base.alpha_mode = if partial {
                         AlphaMode::AlphaToCoverage
                     } else {
-                        AlphaMode::Mask(0.5)
+                        AlphaMode::Mask(if material.extension.hd.maps.x != 0 {
+                            0.75
+                        } else {
+                            0.5
+                        })
                     };
                 }
                 _ => {}

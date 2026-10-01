@@ -158,10 +158,113 @@ pub(crate) fn build_mesh(
     Ok(mesh)
 }
 
+/// Select a layer's UV set as Bevy UV0. Authored tangents belong to UV0;
+/// other sets get a generated basis matching their own texture coordinates.
+pub(crate) fn canonical_uv_coordinate(geoset: &Geoset<V1800>, coordinate: u32) -> u32 {
+    // UV0's authored tangent basis must remain distinct from generated bases,
+    // even when its UVs match another set. Equality is exact: tolerance-based
+    // merging can change sampling near atlas edges and tangent directions.
+    if coordinate == 0 && geoset.tangents().is_some() {
+        return coordinate;
+    }
+    let sets = geoset.uv_sets();
+    let Some(selected) = sets.get(coordinate as usize) else {
+        return coordinate;
+    };
+    sets.iter()
+        .enumerate()
+        .find(|(index, uv)| (*index != 0 || geoset.tangents().is_none()) && *uv == selected)
+        .map(|(index, _)| index as u32)
+        .unwrap_or(coordinate)
+}
+
+/// Build geometry with the selected UVs and their corresponding tangent basis.
+pub(crate) fn build_mesh_with_uv(
+    geoset: &Geoset<V1800>,
+    joint_index: &HashMap<u32, u16>,
+    skinned: bool,
+    coordinate: u32,
+) -> Result<Mesh, ModelError> {
+    let mut mesh = build_mesh(geoset, joint_index, skinned)?;
+    if let Some(uv) = geoset.uv_sets().get(coordinate as usize) {
+        mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uv.clone());
+    } else if coordinate != 0 || !geoset.uv_sets().is_empty() {
+        return Err(ModelError(format!("missing UV set {coordinate}")));
+    }
+    if coordinate == 0 {
+        if let Some(tangents) = geoset.tangents() {
+            mesh.insert_attribute(Mesh::ATTRIBUTE_TANGENT, tangents.to_vec());
+        }
+    }
+    if !mesh.contains_attribute(Mesh::ATTRIBUTE_TANGENT)
+        && mesh.contains_attribute(Mesh::ATTRIBUTE_UV_0)
+    {
+        mesh.generate_tangents()
+            .map_err(|error| ModelError(error.to_string()))?;
+    }
+    Ok(mesh)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use wc3::model::geometry::SkinWeights;
+
+    #[test]
+    fn selected_uv_set_uses_matching_generated_tangents() {
+        let mut geoset = Geoset::<V1800>::new(
+            &[[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]],
+            &[[0.0, 0.0, 1.0]; 3],
+            &[0, 1, 2],
+        )
+        .unwrap();
+        let uv = vec![[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]];
+        let mirrored = vec![[1.0, 0.0], [0.0, 0.0], [1.0, 1.0]];
+        geoset.set_uv_sets(&[uv.clone(), uv.clone(), mirrored.clone()]);
+        assert_eq!(canonical_uv_coordinate(&geoset, 1), 0);
+        assert_eq!(canonical_uv_coordinate(&geoset, 2), 2);
+        let authored = [[0.0, 1.0, 0.0, 1.0]; 3];
+        geoset.set_tangents(Some(&authored));
+        assert_eq!(canonical_uv_coordinate(&geoset, 0), 0);
+        assert_eq!(canonical_uv_coordinate(&geoset, 1), 1);
+        let first = build_mesh_with_uv(&geoset, &HashMap::new(), false, 0).unwrap();
+        assert_eq!(
+            first.attribute(Mesh::ATTRIBUTE_TANGENT),
+            Some(&VertexAttributeValues::Float32x4(authored.to_vec()))
+        );
+        let third = build_mesh_with_uv(&geoset, &HashMap::new(), false, 2).unwrap();
+        assert_eq!(
+            third.attribute(Mesh::ATTRIBUTE_UV_0),
+            Some(&VertexAttributeValues::Float32x2(mirrored))
+        );
+        let Some(VertexAttributeValues::Float32x4(tangents)) =
+            third.attribute(Mesh::ATTRIBUTE_TANGENT)
+        else {
+            panic!("missing tangent basis");
+        };
+        for tangent in tangents {
+            assert!(Vec4::from_array(*tangent).abs_diff_eq(Vec4::new(-1.0, 0.0, 0.0, 1.0), 1e-5));
+        }
+        assert!(build_mesh_with_uv(&geoset, &HashMap::new(), false, 3)
+            .unwrap_err()
+            .to_string()
+            .contains("missing UV set 3"));
+    }
+
+    #[test]
+    fn identical_uv_sets_share_but_nearby_coordinates_remain_distinct() {
+        let mut geoset = Geoset::<V1800>::new(&[[0.0; 3]; 3], &[[0.0, 0.0, 1.0]; 3], &[]).unwrap();
+        let uv = vec![[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]];
+        let mut near = uv.clone();
+        near[0][0] += 0.000001;
+        geoset.set_uv_sets(&[uv.clone(), uv.clone(), near, uv]);
+        assert_eq!(canonical_uv_coordinate(&geoset, 1), 0);
+        assert_eq!(canonical_uv_coordinate(&geoset, 2), 2);
+        assert_eq!(canonical_uv_coordinate(&geoset, 3), 0);
+        geoset.set_tangents(Some(&[[1.0, 0.0, 0.0, 1.0]; 3]));
+        assert_eq!(canonical_uv_coordinate(&geoset, 0), 0);
+        assert_eq!(canonical_uv_coordinate(&geoset, 3), 1);
+    }
 
     #[test]
     fn reforged_skin_indices_address_nodes_directly() {

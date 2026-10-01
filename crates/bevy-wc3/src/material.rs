@@ -6,7 +6,7 @@ use bevy::prelude::*;
 use bevy::reflect::TypePath;
 use bevy::render::render_resource::{
     AsBindGroup, BlendComponent, BlendFactor, BlendOperation, BlendState, CompareFunction,
-    RenderPipelineDescriptor, SpecializedMeshPipelineError,
+    RenderPipelineDescriptor, ShaderType, SpecializedMeshPipelineError,
 };
 use bevy::shader::{ShaderDefVal, ShaderRef};
 use wc3::model::materials::LayerFilterMode;
@@ -16,12 +16,43 @@ use crate::mesh::{EXTRA_JOINT_INDEX, EXTRA_JOINT_WEIGHT};
 /// A Bevy PBR material with WC3 layer render state.
 pub type Wc3LayerMaterial = ExtendedMaterial<StandardMaterial, Wc3LayerState>;
 
-#[derive(Asset, TypePath, AsBindGroup, Debug, Clone)]
+#[derive(Asset, TypePath, AsBindGroup, Debug, Clone, Default)]
 #[bind_group_data(Wc3LayerKey)]
 pub struct Wc3LayerState {
+    #[uniform(100)]
+    pub(crate) hd: Wc3HdUniform,
+    #[texture(101)]
+    #[sampler(102)]
+    pub(crate) orm: Option<Handle<Image>>,
+    #[texture(103)]
+    #[sampler(104)]
+    pub(crate) team_color: Option<Handle<Image>>,
+    #[texture(105)]
+    #[sampler(106)]
+    pub(crate) environment: Option<Handle<Image>>,
     pub(crate) filter: LayerFilterMode,
     pub(crate) no_depth_test: bool,
     pub(crate) no_depth_set: bool,
+}
+
+/// Continuous HD controls; flags describe bound optional maps, not pipeline variants.
+#[derive(Clone, Copy, Debug, ShaderType)]
+pub(crate) struct Wc3HdUniform {
+    pub(crate) fresnel_color: Vec4,
+    // x = opacity, y = team-color contribution, zw reserved.
+    pub(crate) fresnel: Vec4,
+    // x = HD enabled, y = ORM present, z = team map present, w = environment present.
+    pub(crate) maps: UVec4,
+}
+
+impl Default for Wc3HdUniform {
+    fn default() -> Self {
+        Self {
+            fresnel_color: Vec4::ONE,
+            fresnel: Vec4::ZERO,
+            maps: UVec4::ZERO,
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
@@ -51,6 +82,14 @@ impl From<&Wc3LayerState> for Wc3LayerKey {
 }
 
 impl MaterialExtension for Wc3LayerState {
+    fn fragment_shader() -> ShaderRef {
+        "embedded://bevy_wc3/shaders/wc3_material.wgsl".into()
+    }
+
+    fn prepass_fragment_shader() -> ShaderRef {
+        "embedded://bevy_wc3/shaders/wc3_material_prepass.wgsl".into()
+    }
+
     fn vertex_shader() -> ShaderRef {
         "embedded://bevy_wc3/shaders/wc3_mesh.wgsl".into()
     }

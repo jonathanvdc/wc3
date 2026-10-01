@@ -268,7 +268,11 @@ impl AssetLoader for BlpImageLoader {
             },
             TextureDimension::D2,
             rgba.into_raw(),
-            TextureFormat::Rgba8UnormSrgb,
+            if settings.is_srgb {
+                TextureFormat::Rgba8UnormSrgb
+            } else {
+                TextureFormat::Rgba8Unorm
+            },
             RenderAssetUsages::default(),
         );
         image.sampler = settings.sampler.clone();

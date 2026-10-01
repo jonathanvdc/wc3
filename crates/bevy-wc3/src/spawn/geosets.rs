@@ -34,14 +34,15 @@ pub(super) fn spawn_geosets(
         } else {
             Visibility::Inherited
         };
-        for (layer, material) in prepared.layers[geoset.material_id]
+        for ((layer, material), mesh) in prepared.layers[geoset.material_id]
             .iter()
             .zip(&layer_handles[geoset.material_id])
+            .zip(&geoset.meshes)
         {
             let material =
                 instantiate_geoset_material(materials, layer, material, geoset_animation);
             let mut entity = commands.spawn((
-                Mesh3d(geoset.mesh.clone()),
+                Mesh3d(mesh.clone()),
                 MeshMaterial3d(material),
                 initial_visibility,
             ));
@@ -52,6 +53,9 @@ pub(super) fn spawn_geosets(
                 geoset_color: geoset_color.clone(),
                 texture_id: layer.texture_id.clone(),
             });
+            let mut surface = layer.surface.clone();
+            surface.root = root;
+            entity.insert(surface);
             let entity = entity.id();
             if !rig.joints.is_empty() {
                 commands.entity(entity).insert((
