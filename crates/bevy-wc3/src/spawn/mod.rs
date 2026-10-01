@@ -7,9 +7,8 @@ use wc3::model::materials::LayerFilterMode;
 use crate::animation::AnimatedLayer;
 use crate::material::Wc3LayerMaterial;
 use crate::model::{ModelError, Wc3Model};
-use crate::particle2::Particle2State;
-use crate::particle_render::ParticleInstances;
-use crate::texture_bindings::{ParticleTextureSlot, Wc3TextureBindings};
+use crate::particle_emitter2::{Particle2State, ParticleInstances, ParticleTextureSlot};
+use crate::texture_bindings::Wc3TextureBindings;
 
 mod prepare;
 mod rig;

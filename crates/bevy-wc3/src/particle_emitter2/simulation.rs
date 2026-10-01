@@ -1,11 +1,11 @@
-//! Per-instance simulation and batched drawing for PRE2 emitters.
+//! Per-instance simulation for PRE2 emitters.
 use bevy::prelude::*;
 use std::f32::consts::FRAC_PI_2;
 use wc3::model::animation::Animatable;
 use wc3::model::emitters::{Particle2Frames, ParticleEmitter2};
 
+use super::render::{ParticleInstance, ParticleInstances};
 use crate::animation::{sample, sample_value, Wc3Animation};
-use crate::particle_render::{ParticleInstance, ParticleInstances};
 
 const MAX_PARTICLES: usize = 8192;
 

@@ -3,7 +3,7 @@ use bevy::prelude::*;
 use std::collections::HashMap;
 
 use crate::asset::ResolvedModelTextures;
-use crate::particle_render::ParticleInstances;
+use crate::particle_emitter2::{Particle2State, ParticleInstances, ParticleTextureSlot};
 
 /// A texture use in the source model. Indices follow the MDX bitmap and PRE2 lists.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
@@ -11,9 +11,6 @@ pub enum Wc3TextureSlot {
     Bitmap(usize),
     Particle2(usize),
 }
-
-#[derive(Component)]
-pub(crate) struct ParticleTextureSlot(pub(crate) usize);
 
 /// Per-instance texture choices. Attach this to a model root before spawning, or
 /// mutate it later to change the images used by that instance.
@@ -27,7 +24,7 @@ pub struct Wc3TextureBindings {
 pub(crate) fn update_particle_textures(
     roots: Query<&Wc3TextureBindings, Changed<Wc3TextureBindings>>,
     mut particles: Query<(
-        &crate::particle2::Particle2State,
+        &Particle2State,
         &ParticleTextureSlot,
         &mut ParticleInstances,
     )>,
@@ -96,7 +93,7 @@ impl Wc3TextureBindings {
 mod tests {
     use super::*;
     use crate::asset::ResolvedTexture;
-    use crate::particle2::Particle2State;
+    use crate::particle_emitter2::Particle2State;
     use wc3::model::mdl::Read as _;
     use wc3::model::{Model, V1800};
 

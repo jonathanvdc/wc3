@@ -13,8 +13,7 @@ mod instance;
 mod material;
 mod mesh;
 mod model;
-mod particle2;
-mod particle_render;
+mod particle_emitter2;
 mod spawn;
 mod texture_bindings;
 
@@ -44,7 +43,7 @@ impl Plugin for Wc3BevyPlugin {
         app.init_asset_loader::<asset::BlpImageLoader>();
         app.init_resource::<instance::PreparedModelCache>();
         app.add_plugins(MaterialPlugin::<Wc3LayerMaterial>::default());
-        app.add_plugins(particle_render::ParticleRenderPlugin);
+        app.add_plugins(particle_emitter2::ParticleRenderPlugin);
         app.add_systems(Update, instance::spawn_loaded_instances);
         app.add_systems(
             Update,
@@ -62,7 +61,7 @@ impl Plugin for Wc3BevyPlugin {
         );
         app.add_systems(
             PostUpdate,
-            particle2::update_particles.after(bevy::transform::TransformSystems::Propagate),
+            particle_emitter2::update_particles.after(bevy::transform::TransformSystems::Propagate),
         );
     }
 }
