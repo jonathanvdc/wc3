@@ -1,12 +1,14 @@
 //! Per-instance PRE2 spawning and lifetime bookkeeping; motion is evaluated on the GPU.
+use bevy::math::Affine3A;
 use bevy::prelude::*;
+use std::collections::VecDeque;
 use std::f32::consts::FRAC_PI_2;
 use std::sync::Arc;
 use wc3::model::animation::Animatable;
 use wc3::model::emitters::{Particle2Frames, ParticleEmitter2};
 
 use super::render::{ParticleEmitterUniform, ParticleInstance, ParticleInstances};
-use crate::animation::{sample, sample_value, track_time, Wc3Animation};
+use crate::animation::{sample, sample_value, track_time, AnimatedNode, Wc3Animation};
 
 const MAX_PARTICLES: usize = 8192;
 
@@ -21,12 +23,12 @@ pub(crate) struct Particle2State {
     pub(crate) root: Entity,
     pub(crate) node: Entity,
     pub(crate) definition: ParticleEmitter2,
-    particles: Vec<Particle>,
+    particles: VecDeque<Particle>,
     records: Arc<Vec<ParticleInstance>>,
     live_indices: Arc<Vec<u32>>,
     free_slots: Vec<u32>,
     simulation_time: f64,
-    emission_remainder: f32,
+    emission_remainder: f64,
     last_sequence: usize,
     last_elapsed_ms: f64,
     last_cycle: i64,
@@ -41,7 +43,7 @@ impl Particle2State {
             node,
             rng: u64::from(definition.node.object_id).wrapping_add(1),
             definition,
-            particles: Vec::new(),
+            particles: VecDeque::new(),
             records: Arc::default(),
             live_indices: Arc::default(),
             free_slots: Vec::new(),
@@ -65,7 +67,7 @@ impl Particle2State {
         self.random() * 2.0 - 1.0
     }
 
-    fn spawn(&mut self, animation: &Wc3Animation, transform: &GlobalTransform) {
+    fn spawn(&mut self, animation: &Wc3Animation, transform: &GlobalTransform, birth_time: f64) {
         if self.particles.len() >= MAX_PARTICLES {
             return;
         }
@@ -113,24 +115,26 @@ impl Particle2State {
             position,
             velocity,
             gravity,
-            self.simulation_time,
+            birth_time,
             lifetime,
             size_scale,
             self.definition.frames == Particle2Frames::Tail,
         );
         match self.definition.frames {
-            Particle2Frames::Head | Particle2Frames::Tail => self.insert_particle(record, lifetime),
+            Particle2Frames::Head | Particle2Frames::Tail => {
+                self.insert_particle(record, birth_time, lifetime)
+            }
             Particle2Frames::Both => {
-                self.insert_particle(record, lifetime);
+                self.insert_particle(record, birth_time, lifetime);
                 if self.particles.len() < MAX_PARTICLES {
-                    self.insert_particle(record.as_tail(), lifetime);
+                    self.insert_particle(record.as_tail(), birth_time, lifetime);
                 }
             }
             Particle2Frames::Unknown(_) => {}
         }
     }
 
-    fn insert_particle(&mut self, record: ParticleInstance, lifetime: f32) {
+    fn insert_particle(&mut self, record: ParticleInstance, birth_time: f64, lifetime: f32) {
         let slot = self.free_slots.pop().unwrap_or(self.records.len() as u32);
         let records = Arc::make_mut(&mut self.records);
         if slot as usize == records.len() {
@@ -138,14 +142,19 @@ impl Particle2State {
         } else {
             records[slot as usize] = record;
         }
-        self.particles.push(Particle {
+        self.particles.push_back(Particle {
             slot,
-            birth_time: self.simulation_time,
+            birth_time,
             lifetime,
         });
     }
 
-    fn advance(&mut self, animation: &Wc3Animation, transform: &GlobalTransform, dt: f64) {
+    fn advance(
+        &mut self,
+        animation: &Wc3Animation,
+        dt: f64,
+        mut transform_at: impl FnMut(&Wc3Animation) -> GlobalTransform,
+    ) {
         let reset =
             animation.sequence != self.last_sequence || animation.elapsed_ms < self.last_elapsed_ms;
         let cycle = if let Some(global_id) = self
@@ -189,13 +198,29 @@ impl Particle2State {
         self.last_elapsed_ms = animation.elapsed_ms;
         self.last_cycle = cycle;
         self.simulation_time += dt;
-        self.particles.retain(|particle| {
-            let alive = self.simulation_time - particle.birth_time < f64::from(particle.lifetime);
-            if !alive {
-                self.free_slots.push(particle.slot);
-            }
-            alive
-        });
+        self.emit(animation, dt, &mut transform_at);
+        self.retire(self.simulation_time);
+    }
+
+    fn retire(&mut self, time: f64) {
+        // PRE2 lifespan is fixed per emitter, so birth order is expiry order.
+        // Visiting only expired particles keeps subframe births inexpensive.
+        while self
+            .particles
+            .front()
+            .is_some_and(|particle| time - particle.birth_time >= f64::from(particle.lifetime))
+        {
+            self.free_slots
+                .push(self.particles.pop_front().unwrap().slot);
+        }
+    }
+
+    fn emit(
+        &mut self,
+        animation: &Wc3Animation,
+        dt: f64,
+        transform_at: &mut impl FnMut(&Wc3Animation) -> GlobalTransform,
+    ) {
         if !animation.playing || dt <= 0.0 {
             return;
         }
@@ -219,20 +244,57 @@ impl Particle2State {
         if visible <= 0.0 {
             return;
         }
-        let rate = sample_value(&self.definition.emission_rate, animation).max(0.0);
-        if self.definition.squirt_enabled() {
-            let key = emission_key(&self.definition.emission_rate, animation).or(Some(0));
-            if self.last_squirt_key != key {
-                self.emission_remainder += rate;
-                self.last_squirt_key = key;
-            }
-        } else {
-            self.emission_remainder += rate * dt as f32;
+        let rate = f64::from(sample_value(&self.definition.emission_rate, animation).max(0.0));
+        if !rate.is_finite() {
+            return;
         }
-        let count = (self.emission_remainder.floor() as usize).min(MAX_PARTICLES);
-        self.emission_remainder = (self.emission_remainder - count as f32).min(1.0);
-        for _ in 0..count {
-            self.spawn(animation, transform);
+        let remainder = self.emission_remainder;
+        let squirt = self.definition.squirt_enabled();
+        let burst_age = if squirt {
+            let key = emission_key(&self.definition.emission_rate, animation).or(Some(0));
+            if self.last_squirt_key == key {
+                return;
+            }
+            self.last_squirt_key = key;
+            self.emission_remainder += rate;
+            self.definition
+                .emission_rate
+                .track()
+                .and_then(|track| track_time(track, animation))
+                .map(|(time, _)| (time - f64::from(key.unwrap_or(0))).max(0.0) * 0.001)
+                .unwrap_or(dt)
+                .min(dt)
+        } else {
+            if rate <= 0.0 {
+                return;
+            }
+            self.emission_remainder += rate * dt;
+            0.0
+        };
+        // Round-off at an integer boundary must not defer a birth to the next
+        // update. Keep the phase in f64; f32 made partial updates lose births.
+        let tolerance = 16.0 * f64::EPSILON * self.emission_remainder.max(1.0);
+        let count = ((self.emission_remainder + tolerance).floor() as usize).min(MAX_PARTICLES);
+        self.emission_remainder = (self.emission_remainder - count as f64).clamp(0.0, 1.0);
+        if self.emission_remainder < tolerance {
+            self.emission_remainder = 0.0;
+        }
+        if count == 0 {
+            return;
+        }
+        let mut birth_animation = animation.clone();
+        for i in 0..count {
+            let birth_time = if squirt {
+                self.simulation_time - burst_age
+            } else {
+                let offset = ((i as f64 + 1.0 - remainder) / rate).clamp(0.0, dt);
+                self.simulation_time - dt + offset
+            };
+            birth_animation.elapsed_ms =
+                animation.elapsed_ms - (self.simulation_time - birth_time) * 1000.0;
+            self.retire(birth_time);
+            let transform = transform_at(&birth_animation);
+            self.spawn(&birth_animation, &transform, birth_time);
         }
     }
 }
@@ -243,14 +305,34 @@ fn emission_key(value: &Animatable<f32>, animation: &Wc3Animation) -> Option<i32
     track.key_frame_at_or_before_in(time, interval)
 }
 
+fn sample_emitter_transform(
+    mut entity: Entity,
+    root: Entity,
+    animation: &Wc3Animation,
+    nodes: &Query<(&GlobalTransform, Option<&AnimatedNode>, Option<&ChildOf>)>,
+) -> Option<GlobalTransform> {
+    let mut local = Affine3A::IDENTITY;
+    loop {
+        let (global, node, parent) = nodes.get(entity).ok()?;
+        match node.filter(|node| node.root == root) {
+            Some(node) => {
+                local = node.sample_transform(animation).compute_affine() * local;
+                entity = parent?.parent();
+            }
+            None => return Some(GlobalTransform::from(Mat4::from(global.affine() * local))),
+        }
+    }
+}
+
 pub(crate) fn update_particles(
     time: Res<Time>,
     animations: Query<&Wc3Animation>,
-    nodes: Query<&GlobalTransform>,
+    nodes: Query<(&GlobalTransform, Option<&AnimatedNode>, Option<&ChildOf>)>,
     mut emitters: Query<(&mut Particle2State, &mut ParticleInstances)>,
 ) {
     for (mut state, mut instances) in &mut emitters {
-        let (Ok(animation), Ok(transform)) = (animations.get(state.root), nodes.get(state.node))
+        let (Ok(animation), Ok((transform, _, _))) =
+            (animations.get(state.root), nodes.get(state.node))
         else {
             continue;
         };
@@ -259,7 +341,11 @@ pub(crate) fn update_particles(
         } else {
             0.0
         };
-        state.advance(animation, transform, dt);
+        let node = state.node;
+        let root = state.root;
+        state.advance(animation, dt, |birth_animation| {
+            sample_emitter_transform(node, root, birth_animation, &nodes).unwrap_or(*transform)
+        });
         if state
             .live_indices
             .iter()
@@ -317,9 +403,9 @@ mod tests {
         let root = Entity::from_bits(1);
         let mut state = Particle2State::new(root, root, emitter());
         let animation = animation();
-        state.advance(&animation, &GlobalTransform::default(), 0.15);
+        state.advance(&animation, 0.15, |_| GlobalTransform::default());
         assert_eq!(state.particles.len(), 2);
-        state.advance(&animation, &GlobalTransform::default(), 0.15);
+        state.advance(&animation, 0.15, |_| GlobalTransform::default());
         assert_eq!(state.particles.len(), 6);
         assert_eq!(
             state
@@ -363,13 +449,13 @@ mod tests {
         );
         let mut state = Particle2State::new(root, root, definition);
         let mut animation = animation();
-        state.advance(&animation, &GlobalTransform::default(), 0.01);
+        state.advance(&animation, 0.01, |_| GlobalTransform::default());
         assert_eq!(state.particles.len(), 2);
         animation.elapsed_ms = 600.0;
-        state.advance(&animation, &GlobalTransform::default(), 0.01);
+        state.advance(&animation, 0.01, |_| GlobalTransform::default());
         assert_eq!(state.particles.len(), 5);
         animation.elapsed_ms = 1100.0;
-        state.advance(&animation, &GlobalTransform::default(), 0.01);
+        state.advance(&animation, 0.01, |_| GlobalTransform::default());
         assert_eq!(state.particles.len(), 7);
     }
 
@@ -381,16 +467,16 @@ mod tests {
         definition.gravity = 10.0.into();
         let mut state = Particle2State::new(root, root, definition);
         let mut animation = animation();
-        state.advance(&animation, &GlobalTransform::default(), 0.1);
+        state.advance(&animation, 0.1, |_| GlobalTransform::default());
         let records = state.records.clone();
         animation.playing = false;
-        state.advance(&animation, &GlobalTransform::default(), 1.0);
+        state.advance(&animation, 1.0, |_| GlobalTransform::default());
         assert!(Arc::ptr_eq(&records, &state.records));
         assert_eq!(state.particles.len(), 1);
-        state.advance(&animation, &GlobalTransform::default(), 1.0);
+        state.advance(&animation, 1.0, |_| GlobalTransform::default());
         assert!(state.particles.is_empty());
         animation.playing = true;
-        state.advance(&animation, &GlobalTransform::default(), 0.1);
+        state.advance(&animation, 0.1, |_| GlobalTransform::default());
         assert_eq!(state.records.len(), 1);
         assert_eq!(state.particles[0].slot, 0);
         assert_ne!(records[0], state.records[0]);
@@ -466,7 +552,7 @@ mod tests {
         app.update();
         let state = app.world().get::<Particle2State>(entity).unwrap();
         assert_eq!(state.simulation_time, 1.0);
-        assert_eq!(state.particles[0].birth_time, 0.5);
+        assert_eq!(state.particles[0].birth_time, 0.1);
         assert_eq!(state.records[0], records[0]);
     }
 
@@ -477,12 +563,177 @@ mod tests {
         let animation = animation();
         let transform = GlobalTransform::default();
         for _ in 0..MAX_PARTICLES / 2 {
-            state.spawn(&animation, &transform);
+            state.spawn(&animation, &transform, state.simulation_time);
         }
         let records = state.records.clone();
-        state.spawn(&animation, &transform);
+        state.spawn(&animation, &transform, state.simulation_time);
         assert_eq!(state.particles.len(), MAX_PARTICLES);
         assert_eq!(state.records.len(), MAX_PARTICLES);
         assert!(Arc::ptr_eq(&records, &state.records));
+    }
+    #[test]
+    fn continuous_births_and_spawn_parameters_do_not_depend_on_update_partition() {
+        let root = Entity::from_bits(1);
+        let mut definition = emitter();
+        definition.frames = Particle2Frames::Head;
+        definition.emission_rate = 20.0.into();
+        definition.gravity = 1.0.into();
+        definition.speed = Animatable::Animated(
+            Track::linear(
+                vec![
+                    ValueKeyframe {
+                        frame: 0,
+                        value: 0.0,
+                    },
+                    ValueKeyframe {
+                        frame: 2000,
+                        value: 20.0,
+                    },
+                ],
+                None,
+            )
+            .unwrap(),
+        );
+        let run = |steps: &[f64]| {
+            let mut state = Particle2State::new(root, root, definition.clone());
+            let mut animation = animation();
+            animation.sequences = vec![Sequence::new("Stand", [0, 2000]).unwrap()];
+            for &dt in steps {
+                animation.elapsed_ms += dt * 1000.0;
+                state.advance(&animation, dt, |birth| {
+                    GlobalTransform::from_translation(Vec3::X * (birth.elapsed_ms * 0.001) as f32)
+                });
+            }
+            state
+        };
+        let whole = run(&[1.0]);
+        let split = run(&[0.3, 0.2, 0.5]);
+        assert_eq!(whole.particles.len(), 20);
+        assert_eq!(split.particles.len(), 20);
+        let uniform = ParticleEmitterUniform::new(&definition, &GlobalTransform::default(), 1.0);
+        for (i, (a, b)) in whole.particles.iter().zip(&split.particles).enumerate() {
+            let expected_birth = (i + 1) as f64 / 20.0;
+            assert!((a.birth_time - expected_birth).abs() < 1e-12);
+            assert!((a.birth_time - b.birth_time).abs() < 1e-12);
+            let age = (1.0 - expected_birth) as f32;
+            let expected = Vec3::new(
+                expected_birth as f32,
+                0.0,
+                expected_birth as f32 * 10.0 * age - 0.5 * age * age,
+            );
+            let center_a = whole.records[a.slot as usize].center(&uniform);
+            let center_b = split.records[b.slot as usize].center(&uniform);
+            assert!(
+                center_a.abs_diff_eq(expected, 1e-6),
+                "{center_a:?} != {expected:?}"
+            );
+            assert!(center_a.abs_diff_eq(center_b, 1e-6));
+        }
+    }
+
+    #[test]
+    fn birth_transform_samples_the_animated_parent_chain() {
+        use std::time::Duration;
+        let mut app = App::new();
+        let mut time = Time::<()>::default();
+        time.advance_by(Duration::from_millis(400));
+        app.insert_resource(time);
+        app.add_systems(Update, update_particles);
+        let mut animation = animation();
+        animation.elapsed_ms = 1000.0;
+        animation.sequences = vec![Sequence::new("Stand", [0, 2000]).unwrap()];
+        let root = app
+            .world_mut()
+            .spawn((
+                animation,
+                GlobalTransform::from_translation(Vec3::X * 100.0),
+            ))
+            .id();
+        let parent = app
+            .world_mut()
+            .spawn((
+                AnimatedNode {
+                    root,
+                    pivot: Vec3::ZERO,
+                    parent_pivot: Vec3::ZERO,
+                    translation: Some(
+                        Track::linear(
+                            vec![
+                                ValueKeyframe {
+                                    frame: 0,
+                                    value: [0.0; 3],
+                                },
+                                ValueKeyframe {
+                                    frame: 2000,
+                                    value: [20.0, 0.0, 0.0],
+                                },
+                            ],
+                            None,
+                        )
+                        .unwrap(),
+                    ),
+                    rotation: None,
+                    scaling: None,
+                },
+                GlobalTransform::from_translation(Vec3::X * 110.0),
+                ChildOf(root),
+            ))
+            .id();
+        let node = app
+            .world_mut()
+            .spawn((
+                AnimatedNode {
+                    root,
+                    pivot: Vec3::X * 2.0,
+                    parent_pivot: Vec3::ZERO,
+                    translation: None,
+                    rotation: None,
+                    scaling: None,
+                },
+                GlobalTransform::from_translation(Vec3::X * 112.0),
+                ChildOf(parent),
+            ))
+            .id();
+        let mut definition = emitter();
+        definition.frames = Particle2Frames::Head;
+        let entity = app
+            .world_mut()
+            .spawn((
+                Particle2State::new(root, node, definition.clone()),
+                ParticleInstances {
+                    records: Arc::default(),
+                    live_indices: Arc::default(),
+                    uniform: ParticleEmitterUniform::default(),
+                    texture: None,
+                    filter: definition.filter_mode,
+                    priority_plane: 0,
+                    sort_far: false,
+                },
+            ))
+            .id();
+        app.update();
+        let data = app.world().get::<ParticleInstances>(entity).unwrap();
+        assert_eq!(data.live_indices.len(), 4);
+        for (i, &slot) in data.live_indices.iter().enumerate() {
+            assert_eq!(
+                data.records[slot as usize].center(&data.uniform).x,
+                109.0 + i as f32
+            );
+        }
+    }
+
+    #[test]
+    fn large_updates_retire_particles_between_births() {
+        let root = Entity::from_bits(1);
+        let mut definition = emitter();
+        definition.frames = Particle2Frames::Head;
+        definition.life_span = 0.05;
+        let mut state = Particle2State::new(root, root, definition);
+        let mut animation = animation();
+        animation.elapsed_ms = 1000.0;
+        state.advance(&animation, 1.0, |_| GlobalTransform::default());
+        assert_eq!(state.particles.len(), 1);
+        assert_eq!(state.particles[0].birth_time, 1.0);
+        assert_eq!(state.records.len(), 1);
     }
 }

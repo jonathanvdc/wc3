@@ -1,4 +1,4 @@
-//! Run with `cargo run -p bevy-wc3 --example viewer -- path/to/model.mdx`.
+//! Run with `cargo run -p bevy-wc3 --example viewer -- path/to/model.mdx` (or `.mdl`).
 use bevy::asset::AssetPlugin;
 use bevy::input::mouse::{AccumulatedMouseMotion, AccumulatedMouseScroll, MouseScrollUnit};
 use bevy::prelude::*;
@@ -26,9 +26,9 @@ struct OrbitCamera {
 
 fn main() {
     let mut arguments = std::env::args().skip(1);
-    let path = PathBuf::from(arguments.next().expect("pass an MDX path"))
+    let path = PathBuf::from(arguments.next().expect("pass an MDX or MDL path"))
         .canonicalize()
-        .expect("find MDX file");
+        .expect("find model file");
     let mut choices = Vec::new();
     while let Some(option) = arguments.next() {
         let choice = arguments.next().expect("pass ID=path after texture option");
@@ -42,10 +42,10 @@ fn main() {
         };
         choices.push((index, slot, texture_path.to_owned()));
     }
-    let directory = path.parent().expect("MDX parent directory");
+    let directory = path.parent().expect("model parent directory");
     let filename = path
         .file_name()
-        .expect("MDX filename")
+        .expect("model filename")
         .to_string_lossy()
         .into_owned();
     App::new()

@@ -12,7 +12,7 @@ use wc3::model::materials::TextureFlags;
 
 use crate::model::{ModelError, Wc3Model};
 
-/// An MDX file with its resolved image dependencies.
+/// An MDX or MDL file with its resolved image dependencies.
 #[derive(Asset, TypePath)]
 pub struct Wc3ModelAsset {
     pub(crate) source: Wc3Model,
@@ -128,7 +128,7 @@ impl AssetLoader for Wc3ModelLoader {
     }
 
     fn extensions(&self) -> &[&str] {
-        &["mdx"]
+        &["mdx", "mdl"]
     }
 }
 
@@ -147,7 +147,7 @@ fn texture_sampler(flags: TextureFlags) -> ImageSampler {
     ImageSampler::Descriptor(descriptor)
 }
 
-/// Resolve beside the MDX first, then from the Bevy asset root.
+/// Resolve beside the model first, then from the Bevy asset root.
 fn texture_paths(model_path: &Path, name: &str) -> Vec<String> {
     let normalized = name.replace('\\', "/");
     if normalized.is_empty() {
@@ -219,6 +219,7 @@ mod tests {
     use bevy::asset::AssetPlugin;
     use std::fs;
     use std::time::{Duration, Instant};
+    use wc3::model::mdl::Write as _;
 
     #[test]
     fn texture_paths_try_model_then_asset_root() {
@@ -267,7 +268,7 @@ mod tests {
     }
 
     #[test]
-    fn asset_server_loads_mdx_file() {
+    fn asset_server_loads_mdx_and_mdl_files() {
         let directory = std::env::temp_dir().join(format!(
             "bevy-wc3-assets-{}-{}",
             std::process::id(),
@@ -277,6 +278,11 @@ mod tests {
         fs::write(
             directory.join("quad.mdx"),
             include_bytes!("../../wc3/tests/fixtures/mdl/quad_model.mdx"),
+        )
+        .unwrap();
+        fs::write(
+            directory.join("quad.mdl"),
+            include_str!("../../wc3/tests/fixtures/mdl/quad_model.mdl"),
         )
         .unwrap();
         let mut app = App::new();
@@ -290,23 +296,38 @@ mod tests {
         app.init_asset::<Image>();
         app.init_asset::<Wc3ModelAsset>();
         app.init_asset_loader::<Wc3ModelLoader>();
-        let handle = app.world().resource::<AssetServer>().load("quad.mdx");
+        let handles: [Handle<Wc3ModelAsset>; 2] =
+            ["quad.mdx", "quad.mdl"].map(|path| app.world().resource::<AssetServer>().load(path));
         let deadline = Instant::now() + Duration::from_secs(5);
         while Instant::now() < deadline {
             app.update();
-            if app
-                .world()
-                .resource::<Assets<Wc3ModelAsset>>()
-                .contains(&handle)
-            {
+            if handles.iter().all(|handle| {
+                app.world()
+                    .resource::<Assets<Wc3ModelAsset>>()
+                    .contains(handle)
+            }) {
                 break;
             }
             std::thread::sleep(Duration::from_millis(5));
         }
-        assert!(app
-            .world()
-            .resource::<Assets<Wc3ModelAsset>>()
-            .contains(&handle));
+        let assets = app.world().resource::<Assets<Wc3ModelAsset>>();
+        assert!(handles.iter().all(|handle| assets.contains(handle)));
+        assert_eq!(
+            assets
+                .get(&handles[0])
+                .unwrap()
+                .source
+                .model
+                .encode_mdl()
+                .unwrap(),
+            assets
+                .get(&handles[1])
+                .unwrap()
+                .source
+                .model
+                .encode_mdl()
+                .unwrap()
+        );
         fs::remove_dir_all(directory).unwrap();
     }
 }

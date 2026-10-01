@@ -83,7 +83,7 @@ impl ParticleInstance {
         self.lifetime_scale_tail[2] > 0.5
     }
 
-    fn center(&self, uniform: &ParticleEmitterUniform) -> Vec3 {
+    pub(crate) fn center(&self, uniform: &ParticleEmitterUniform) -> Vec3 {
         let age = ((uniform.clock_tail[0] - self.position_birth[3])
             + (uniform.clock_tail[1] - self.lifetime_scale_tail[3]))
             .max(0.0);

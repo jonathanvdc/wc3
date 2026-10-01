@@ -10,7 +10,7 @@ use crate::material::Wc3LayerMaterial;
 use crate::spawn::{prepare_resolved_model, spawn_prepared_into, PreparedModel};
 use crate::texture_bindings::Wc3TextureBindings;
 
-/// Attach to an entity to spawn an MDX asset beneath it when loading finishes.
+/// Attach to an entity to spawn an MDX or MDL asset beneath it when loading finishes.
 /// The entity remains the transform and animation root.
 #[derive(Component)]
 #[require(Transform)]

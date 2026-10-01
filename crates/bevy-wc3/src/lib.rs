@@ -1,6 +1,6 @@
 //! Bevy integration for Warcraft III models.
 //!
-//! Load an MDX through Bevy's `AssetServer` and attach `Wc3ModelInstance` to
+//! Load an MDX or MDL through Bevy's `AssetServer` and attach `Wc3ModelInstance` to
 //! each desired root entity. The plugin loads literal bitmap paths and shares
 //! prepared meshes; texture bindings and materials belong to each instance.
 //!

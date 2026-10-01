@@ -1,0 +1,90 @@
+Version { FormatVersion 800, }
+Model "Particle capture" {
+    MinimumExtent { -5.0, -5.0, 0.0 },
+    MaximumExtent { 5.0, 5.0, 6.0 },
+    BoundsRadius 8.0,
+}
+Sequences 1 {
+    Anim "Stand" { Interval { 0, 2000 }, }
+}
+Textures 1 {
+    Bitmap { Image "capture_white.png", }
+}
+Helper "Rotating parent" {
+    ObjectId 0,
+    Rotation 2 {
+        Linear,
+        0: { 0.0, 0.0, 0.0, 1.0 },
+        2000: { 0.0, 0.0, 1.0, 0.0 },
+    }
+}
+ParticleEmitter2 "World particles" {
+    ObjectId 1,
+    Parent 0,
+    Unshaded,
+    SortPrimsFarZ,
+    static Speed 3.0,
+    static Variation 0.3,
+    static Latitude 30.0,
+    static Gravity 1.0,
+    LifeSpan 2.0,
+    static EmissionRate 20.0,
+    static Length 1.0,
+    static Width 1.0,
+    Blend,
+    Rows 1,
+    Columns 1,
+    Both,
+    TailLength 0.2,
+    Time 0.5,
+    SegmentColor {
+        Color { 1.0, 0.2, 0.0 },
+        Color { 0.0, 1.0, 0.3 },
+        Color { 0.0, 0.0, 1.0 },
+    }
+    Alpha { 255, 200, 0 },
+    ParticleScaling { 0.2, 0.4, 0.0 },
+    LifeSpanUVAnim { 0, 1, 1 },
+    DecayUVAnim { 0, 1, 1 },
+    TailUVAnim { 0, 1, 1 },
+    TailDecayUVAnim { 0, 1, 1 },
+    TextureID 0,
+}
+ParticleEmitter2 "Model particles" {
+    ObjectId 2,
+    Parent 0,
+    Unshaded,
+    SortPrimsFarZ,
+    ModelSpace,
+    static Speed 3.0,
+    static Variation 0.3,
+    static Latitude 30.0,
+    static Gravity 1.0,
+    LifeSpan 2.0,
+    static EmissionRate 20.0,
+    static Length 1.0,
+    static Width 1.0,
+    Additive,
+    Rows 1,
+    Columns 1,
+    Both,
+    TailLength 0.2,
+    Time 0.5,
+    SegmentColor {
+        Color { 1.0, 0.2, 0.0 },
+        Color { 0.0, 1.0, 0.3 },
+        Color { 0.0, 0.0, 1.0 },
+    }
+    Alpha { 255, 200, 0 },
+    ParticleScaling { 0.2, 0.4, 0.0 },
+    LifeSpanUVAnim { 0, 1, 1 },
+    DecayUVAnim { 0, 1, 1 },
+    TailUVAnim { 0, 1, 1 },
+    TailDecayUVAnim { 0, 1, 1 },
+    TextureID 0,
+}
+PivotPoints 3 {
+    { 0.0, 0.0, 0.0 },
+    { -2.0, 0.0, 0.0 },
+    { 2.0, 0.0, 0.0 },
+}

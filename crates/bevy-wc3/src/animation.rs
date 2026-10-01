@@ -5,7 +5,7 @@ use std::ops::RangeInclusive;
 use wc3::model::animation::{Animatable, Interpolate, Sequence, Track, TrackValue};
 use wc3::model::materials::LayerFilterMode;
 
-#[derive(Component)]
+#[derive(Component, Clone)]
 pub struct Wc3Animation {
     pub sequence: usize,
     pub elapsed_ms: f64,
@@ -170,6 +170,31 @@ pub(crate) fn sample_value<T: Interpolate>(value: &Animatable<T>, animation: &Wc
         .unwrap_or_default()
 }
 
+impl AnimatedNode {
+    pub(crate) fn sample_transform(&self, animation: &Wc3Animation) -> Transform {
+        let translation = self
+            .translation
+            .as_ref()
+            .and_then(|track| sample(track, animation))
+            .unwrap_or([0.0; 3]);
+        let rotation = self
+            .rotation
+            .as_ref()
+            .and_then(|track| sample(track, animation))
+            .unwrap_or([0.0, 0.0, 0.0, 1.0]);
+        let scaling = self
+            .scaling
+            .as_ref()
+            .and_then(|track| sample(track, animation))
+            .unwrap_or([1.0; 3]);
+        Transform {
+            translation: self.pivot - self.parent_pivot + Vec3::from_array(translation),
+            rotation: Quat::from_xyzw(rotation[0], rotation[1], rotation[2], rotation[3]),
+            scale: Vec3::from_array(scaling),
+        }
+    }
+}
+
 pub(crate) fn animate_nodes(
     instances: Query<&Wc3Animation>,
     mut nodes: Query<(&AnimatedNode, &mut Transform)>,
@@ -178,24 +203,7 @@ pub(crate) fn animate_nodes(
         let Ok(animation) = instances.get(node.root) else {
             continue;
         };
-        let translation = node
-            .translation
-            .as_ref()
-            .and_then(|track| sample(track, animation))
-            .unwrap_or([0.0; 3]);
-        let rotation = node
-            .rotation
-            .as_ref()
-            .and_then(|track| sample(track, animation))
-            .unwrap_or([0.0, 0.0, 0.0, 1.0]);
-        let scaling = node
-            .scaling
-            .as_ref()
-            .and_then(|track| sample(track, animation))
-            .unwrap_or([1.0; 3]);
-        transform.translation = node.pivot - node.parent_pivot + Vec3::from_array(translation);
-        transform.rotation = Quat::from_xyzw(rotation[0], rotation[1], rotation[2], rotation[3]);
-        transform.scale = Vec3::from_array(scaling);
+        *transform = node.sample_transform(animation);
     }
 }
 
