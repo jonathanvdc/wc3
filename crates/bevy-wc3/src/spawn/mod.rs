@@ -14,7 +14,7 @@ mod prepare;
 mod rig;
 
 pub(crate) use prepare::prepare_resolved_model;
-pub use prepare::{prepare_model, PreparedModel};
+pub use prepare::{prepare_model, prepare_model_with_resources, PreparedModel};
 pub use rig::Wc3NodeEntities;
 use rig::{spawn_animation_root, spawn_rig};
 
@@ -42,7 +42,9 @@ pub fn spawn_prepared_model_with_bindings(
     prepared: &PreparedModel,
     bindings: Wc3TextureBindings,
 ) -> Entity {
-    let root = commands.spawn(Transform::default()).id();
+    let root = commands
+        .spawn((Transform::default(), Visibility::default()))
+        .id();
     spawn_prepared_into(commands, meshes, materials, prepared, root, bindings);
     root
 }
@@ -56,7 +58,11 @@ pub(crate) fn spawn_prepared_into(
     bindings: Wc3TextureBindings,
 ) {
     let bindings = bindings.with_defaults(prepared.textures.clone());
-    commands.entity(root).insert(bindings.clone());
+    commands
+        .entity(root)
+        .insert((bindings.clone(), prepared.models.clone()));
+    // Preserve consumer visibility when spawning into an existing root.
+    commands.entity(root).insert_if_new(Visibility::default());
     spawn_animation_root(commands, &prepared.model, root);
     let rig = spawn_rig(commands, &prepared.model, root, &prepared.inverse_bindposes);
     let node_entities = &rig.by_object_id;
@@ -111,7 +117,7 @@ pub(crate) fn spawn_prepared_into(
         {
             Visibility::Hidden
         } else {
-            Visibility::Visible
+            Visibility::Inherited
         };
         for (layer, material) in prepared.layers[geoset.material_id]
             .iter()
@@ -165,9 +171,10 @@ pub(crate) fn spawn_prepared_into(
                     },
                     DynamicSkinnedMeshBounds,
                 ));
-            } else {
-                commands.entity(root).add_child(entity);
             }
+            // Joint matrices already contain world transforms; skinning ignores
+            // this mesh transform. Parenting supplies visibility and ownership.
+            commands.entity(root).add_child(entity);
         }
     }
 }
@@ -195,11 +202,198 @@ pub fn spawn_model(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::animation::{animate_layers, animate_nodes, Wc3Animation};
+    use crate::instance::{Wc3ModelOwner, Wc3OwnedModels};
+    use bevy::camera::visibility::VisibilityPlugin;
     use bevy::ecs::world::{CommandQueue, World};
     use wc3::model::animation::{Track, ValueKeyframe};
     use wc3::model::materials::Layer;
     use wc3::model::mdl::Read as _;
     use wc3::model::{Model, V1800};
+
+    #[test]
+    fn child_instances_inherit_visibility_and_cleanup_without_sharing_animation() {
+        let source = Wc3Model::decode(include_bytes!(
+            "../../../wc3/tests/fixtures/mdl/quad_model.mdx"
+        ))
+        .unwrap();
+        let mut app = App::new();
+        app.add_plugins((MinimalPlugins, TransformPlugin, VisibilityPlugin));
+        let mut meshes = Assets::<Mesh>::default();
+        let mut materials = Assets::<Wc3LayerMaterial>::default();
+        let mut bindposes = Assets::<SkinnedMeshInverseBindposes>::default();
+        let prepared = prepare_model(&mut meshes, &mut materials, &mut bindposes, &source, |_| {
+            None
+        })
+        .unwrap();
+        let owner = app
+            .world_mut()
+            .spawn((Transform::from_xyz(100.0, 0.0, 0.0), Visibility::Inherited))
+            .id();
+        let mut queue = CommandQueue::default();
+        let mut commands = Commands::new(&mut queue, app.world());
+        let following = spawn_prepared_model(&mut commands, &mut meshes, &mut materials, &prepared);
+        commands.entity(following).insert((
+            ChildOf(owner),
+            Wc3ModelOwner(owner),
+            Transform::from_xyz(5.0, 0.0, 0.0),
+        ));
+        let detached = spawn_prepared_model(&mut commands, &mut meshes, &mut materials, &prepared);
+        commands
+            .entity(detached)
+            .insert((Wc3ModelOwner(owner), Transform::from_xyz(20.0, 0.0, 0.0)));
+        // Include effects in the same ownership/visibility check.
+        let particles =
+            Wc3Model::decode_mdl(include_str!("../../tests/fixtures/particle_capture.mdl"))
+                .unwrap();
+        let particle_prepared = prepare_model(
+            &mut meshes,
+            &mut materials,
+            &mut bindposes,
+            &particles,
+            |_| None,
+        )
+        .unwrap();
+        let effects = spawn_prepared_model(
+            &mut commands,
+            &mut meshes,
+            &mut materials,
+            &particle_prepared,
+        );
+        commands
+            .entity(effects)
+            .insert((ChildOf(following), Wc3ModelOwner(following)));
+        queue.apply(app.world_mut());
+        app.insert_resource(meshes);
+        app.insert_resource(materials);
+        app.insert_resource(bindposes);
+        app.add_systems(Update, (animate_nodes, animate_layers));
+        app.update();
+        assert_eq!(
+            app.world()
+                .get::<Wc3OwnedModels>(owner)
+                .unwrap()
+                .iter()
+                .count(),
+            2
+        );
+        let following_nodes = app.world().get::<Wc3NodeEntities>(following).unwrap();
+        let following_bone = following_nodes.get(0).unwrap();
+        let detached_bone = app
+            .world()
+            .get::<Wc3NodeEntities>(detached)
+            .unwrap()
+            .get(0)
+            .unwrap();
+        assert_ne!(following_bone, detached_bone);
+        assert_eq!(
+            app.world()
+                .get::<GlobalTransform>(following_bone)
+                .unwrap()
+                .translation()
+                .x,
+            105.0
+        );
+        assert_eq!(
+            app.world()
+                .get::<GlobalTransform>(detached_bone)
+                .unwrap()
+                .translation()
+                .x,
+            20.0
+        );
+        let mut layers = app
+            .world_mut()
+            .query::<(Entity, &AnimatedLayer, &SkinnedMesh, &ChildOf)>();
+        let geometry: Vec<_> = layers
+            .iter(app.world())
+            .map(|(entity, layer, skin, parent)| {
+                assert_eq!(parent.parent(), layer.root);
+                assert_eq!(
+                    skin.joints,
+                    if layer.root == following {
+                        vec![following_bone]
+                    } else {
+                        vec![detached_bone]
+                    }
+                );
+                entity
+            })
+            .collect();
+        assert_eq!(geometry.len(), 2);
+        app.world_mut()
+            .get_mut::<Wc3Animation>(following)
+            .unwrap()
+            .elapsed_ms = 500.0;
+        assert_eq!(
+            app.world()
+                .get::<Wc3Animation>(detached)
+                .unwrap()
+                .elapsed_ms,
+            0.0
+        );
+        *app.world_mut().get_mut::<Visibility>(owner).unwrap() = Visibility::Hidden;
+        app.update();
+        for entity in [following, effects, following_bone] {
+            assert!(!app
+                .world()
+                .get::<InheritedVisibility>(entity)
+                .unwrap()
+                .get());
+        }
+        for entity in &geometry {
+            let root = app.world().get::<AnimatedLayer>(*entity).unwrap().root;
+            assert_eq!(
+                app.world()
+                    .get::<InheritedVisibility>(*entity)
+                    .unwrap()
+                    .get(),
+                root == detached
+            );
+        }
+        let mut emitter_query = app.world_mut().query::<(Entity, &Particle2State)>();
+        let emitters: Vec<_> = emitter_query
+            .iter(app.world())
+            .map(|(entity, state)| {
+                assert_eq!(state.root, effects);
+                assert!(!app
+                    .world()
+                    .get::<InheritedVisibility>(entity)
+                    .unwrap()
+                    .get());
+                entity
+            })
+            .collect();
+        assert_eq!(emitters.len(), 2);
+        assert!(app
+            .world()
+            .get::<InheritedVisibility>(detached)
+            .unwrap()
+            .get());
+        *app.world_mut().get_mut::<Visibility>(owner).unwrap() = Visibility::Inherited;
+        app.update();
+        assert!(app
+            .world()
+            .get::<InheritedVisibility>(effects)
+            .unwrap()
+            .get());
+        app.world_mut().entity_mut(owner).despawn();
+        for entity in geometry.into_iter().chain(emitters).chain([
+            owner,
+            following,
+            detached,
+            effects,
+            following_bone,
+            detached_bone,
+        ]) {
+            assert!(
+                app.world().get_entity(entity).is_err(),
+                "orphaned {entity:?}"
+            );
+        }
+        let mut transforms = app.world_mut().query::<&Transform>();
+        assert_eq!(transforms.iter(app.world()).count(), 0);
+    }
 
     #[test]
     fn prepared_assets_share_static_layers_and_isolate_animated_layers() {

@@ -36,6 +36,35 @@ emitter with `ReplaceableId == 0` uses its `TextureID` bitmap slot, including
 bitmap overrides. `prepare_model` and `spawn_prepared_model_with_bindings` offer
 the same behavior for custom model sources.
 
+Attachment paths and model-based Classic PREM paths are also resolved beside the
+parent model, then at the asset root. Backslashes are normalized. At each location,
+a real `.mdl` is preferred, with `.mdx` as its fallback. Empty and missing paths
+keep their record slots; PREM image resources are excluded. Read handles through
+`Wc3ModelAsset::model_resources()`, `PreparedModel::model_resources()`, or the
+`Wc3ModelResources` component on a spawned instance. `attachment(index)` and
+`particle(index)` use source record indices, not attachment IDs or node object IDs.
+Custom sources can use `prepare_model_with_resources` with texture and model
+resolver callbacks; the existing `prepare_model` API remains available.
+
+Each instance root owns its rig, geometry, and PRE2 render entities through the
+Bevy hierarchy. Hiding the root hides its geometry and effects; despawning it
+cleans them up. To create a following child model, use both transform parenting
+and lifetime ownership:
+
+```rust
+commands.spawn((
+    Wc3ModelInstance::new(child_model),
+    ChildOf(attachment_node),
+    Wc3ModelOwner(parent_model_root),
+));
+```
+
+`Wc3ModelOwner` also supports detached child instances: omit `ChildOf` to keep
+world-space transforms and visibility independent while retaining cleanup when
+the owner despawns. Child instances have their own animation, rig, and materials.
+Attachment spawning/visibility tracks and PREM particle simulation remain to be
+implemented; resolving their resources does not automatically spawn them.
+
 Run the viewer with any local model path:
 
 ```sh

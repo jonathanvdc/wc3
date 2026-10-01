@@ -5,18 +5,21 @@ use bevy::image::{ImageAddressMode, ImageLoaderSettings, ImageSampler, ImageSamp
 use bevy::prelude::*;
 use bevy::reflect::TypePath;
 use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
-use std::path::Path;
+use std::path::{Component, Path};
+
 use wc3::blp::BlpRef;
 use wc3::model::materials::Texture;
 use wc3::model::materials::TextureFlags;
 
 use crate::model::{ModelError, Wc3Model};
+use crate::model_resources::Wc3ModelResources;
 
-/// An MDX or MDL file with its resolved image dependencies.
+/// An MDX or MDL file with its resolved image and child model dependencies.
 #[derive(Asset, TypePath)]
 pub struct Wc3ModelAsset {
     pub(crate) source: Wc3Model,
     pub(crate) textures: ResolvedModelTextures,
+    pub(crate) models: Wc3ModelResources,
 }
 
 #[derive(Clone, Default)]
@@ -78,6 +81,11 @@ async fn load_texture(
 }
 
 impl Wc3ModelAsset {
+    /// Resolved attachment and Classic particle model dependencies.
+    pub fn model_resources(&self) -> &Wc3ModelResources {
+        &self.models
+    }
+
     /// The decoded and normalized source model.
     pub fn source(&self) -> &Wc3Model {
         &self.source
@@ -124,7 +132,24 @@ impl AssetLoader for Wc3ModelLoader {
                 ..default()
             });
         }
-        Ok(Wc3ModelAsset { source, textures })
+        let mut attachments = Vec::new();
+        for attachment in source.model.attachments() {
+            attachments.push(load_model(context, &model_path, &attachment.path.text()).await);
+        }
+        let mut particles = Vec::new();
+        for emitter in source.model.particle_emitters() {
+            particles.push(if emitter.flags().emitter_uses_mdl() {
+                load_model(context, &model_path, &emitter.path.text()).await
+            } else {
+                None
+            });
+        }
+        let models = Wc3ModelResources::from_handles(attachments, particles);
+        Ok(Wc3ModelAsset {
+            source,
+            textures,
+            models,
+        })
     }
 
     fn extensions(&self) -> &[&str] {
@@ -157,7 +182,7 @@ fn texture_paths(model_path: &Path, name: &str) -> Vec<String> {
     if path.is_absolute()
         || path
             .components()
-            .any(|part| matches!(part, std::path::Component::ParentDir))
+            .any(|part| matches!(part, Component::ParentDir))
     {
         return Vec::new();
     }
@@ -168,6 +193,48 @@ fn texture_paths(model_path: &Path, name: &str) -> Vec<String> {
     } else {
         vec![local, normalized]
     }
+}
+
+/// Model lookup uses the same locations as textures. Try a real MDL before
+/// falling back to the MDX commonly shipped for a Warcraft `.mdl` reference.
+fn model_paths(model_path: &Path, name: &str) -> Vec<String> {
+    let mut candidates = Vec::new();
+    for path in texture_paths(model_path, name) {
+        let extension = Path::new(&path)
+            .extension()
+            .and_then(|value| value.to_str());
+        if extension.is_some_and(|value| value.eq_ignore_ascii_case("mdl")) {
+            let mdx = Path::new(&path)
+                .with_extension("mdx")
+                .to_string_lossy()
+                .into_owned();
+            candidates.push(path);
+            candidates.push(mdx);
+        } else if extension.is_some_and(|value| value.eq_ignore_ascii_case("mdx")) {
+            candidates.push(path);
+        }
+    }
+    candidates
+}
+
+async fn load_model(
+    context: &mut LoadContext<'_>,
+    model_path: &Path,
+    name: &str,
+) -> Option<Handle<Wc3ModelAsset>> {
+    if name.is_empty() {
+        return None;
+    }
+    for candidate in model_paths(model_path, name) {
+        if context.read_asset_bytes(candidate.clone()).await.is_ok() {
+            return Some(context.load(candidate));
+        }
+    }
+    warn!(
+        "Could not resolve WC3 model {name} for {}",
+        model_path.display()
+    );
+    None
 }
 
 #[derive(Default, TypePath)]
@@ -220,6 +287,114 @@ mod tests {
     use std::fs;
     use std::time::{Duration, Instant};
     use wc3::model::mdl::Write as _;
+    use wc3::model::mdx::Write as _;
+
+    #[test]
+    fn model_paths_preserve_locations_and_support_mdl_fallback() {
+        let model = Path::new("units/parent.mdx");
+        assert_eq!(
+            model_paths(model, "Effects\\Spark.MDL"),
+            [
+                "units/Effects/Spark.MDL",
+                "units/Effects/Spark.mdx",
+                "Effects/Spark.MDL",
+                "Effects/Spark.mdx",
+            ]
+        );
+        assert_eq!(
+            model_paths(model, "Spark.mdx"),
+            ["units/Spark.mdx", "Spark.mdx"]
+        );
+        assert_eq!(
+            model_paths(Path::new("parent.mdl"), "Spark.mdl"),
+            ["Spark.mdl", "Spark.mdx"]
+        );
+        for path in ["", "../secret.mdl", "/secret.mdx", "Spark.tga"] {
+            assert!(model_paths(model, path).is_empty());
+        }
+    }
+
+    #[test]
+    fn asset_server_resolves_child_models_and_keeps_missing_slots() {
+        let directory =
+            std::env::temp_dir().join(format!("bevy-wc3-child-assets-{}", std::process::id()));
+        fs::create_dir_all(directory.join("units")).unwrap();
+        let child = "Version { FormatVersion 800, } Model \"Child\" {}";
+        // Local MDX fallback wins over an MDL at the asset root.
+        let source = Wc3Model::decode_mdl(child).unwrap();
+        fs::write(
+            directory.join("units/spark.mdx"),
+            source.model.encode_mdx().unwrap(),
+        )
+        .unwrap();
+        fs::write(directory.join("spark.mdl"), child).unwrap();
+        // A real local MDL wins over its MDX sibling.
+        fs::write(directory.join("units/weapon.mdl"), child).unwrap();
+        fs::write(
+            directory.join("units/weapon.mdx"),
+            source.model.encode_mdx().unwrap(),
+        )
+        .unwrap();
+        fs::write(directory.join("root.mdl"), child).unwrap();
+        fs::write(
+            directory.join("units/parent.mdl"),
+            r#"
+            Version { FormatVersion 800, } Model "Parent" {}
+            Attachment "Empty" { ObjectId 0, }
+            Attachment "Weapon" { ObjectId 1, Path "weapon.mdl", }
+            Attachment "Root" { ObjectId 2, Path "root.mdl", }
+            Attachment "Missing" { ObjectId 3, Path "missing.mdx", }
+            ParticleEmitter "Spark" { ObjectId 4, EmitterUsesMdl, Path "spark.mdl", }
+            ParticleEmitter "Image" { ObjectId 5, EmitterUsesTga, Path "spark.tga", }
+        "#,
+        )
+        .unwrap();
+        let mut app = App::new();
+        app.add_plugins((
+            MinimalPlugins,
+            AssetPlugin {
+                file_path: directory.to_string_lossy().into_owned(),
+                ..default()
+            },
+        ));
+        app.init_asset::<Image>();
+        app.init_asset::<Wc3ModelAsset>();
+        app.init_asset_loader::<Wc3ModelLoader>();
+        let handle: Handle<Wc3ModelAsset> = app
+            .world()
+            .resource::<AssetServer>()
+            .load("units/parent.mdl");
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while Instant::now() < deadline {
+            app.update();
+            if app
+                .world()
+                .resource::<AssetServer>()
+                .is_loaded_with_dependencies(&handle)
+            {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        assert!(app
+            .world()
+            .resource::<AssetServer>()
+            .is_loaded_with_dependencies(&handle));
+        let assets = app.world().resource::<Assets<Wc3ModelAsset>>();
+        let resources = assets.get(&handle).unwrap().model_resources();
+        assert!(resources.attachment(0).is_none());
+        assert!(resources.attachment(3).is_none());
+        assert!(resources.particle(1).is_none());
+        for (child, path) in [
+            (resources.attachment(1).unwrap(), "units/weapon.mdl"),
+            (resources.attachment(2).unwrap(), "root.mdl"),
+            (resources.particle(0).unwrap(), "units/spark.mdx"),
+        ] {
+            assert_eq!(child.path().unwrap().path(), Path::new(path));
+            assert!(assets.contains(&child));
+        }
+        fs::remove_dir_all(directory).unwrap();
+    }
 
     #[test]
     fn texture_paths_try_model_then_asset_root() {

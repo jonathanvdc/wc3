@@ -6,12 +6,14 @@ use wc3::model::materials::{Layer, LayerFilterMode};
 use wc3::model::{Model, V1800};
 
 use super::rig::joint_ids;
+use crate::asset::Wc3ModelAsset;
 use crate::asset::{
     resolve_texture as resolve_texture_binding, ResolvedModelTextures, ResolvedTexture,
 };
 use crate::material::{Wc3LayerMaterial, Wc3LayerState};
 use crate::mesh::build_mesh;
 use crate::model::{ModelError, Wc3Model};
+use crate::model_resources::Wc3ModelResources;
 
 pub(super) struct PreparedLayer {
     pub(super) alpha: Animatable<f32>,
@@ -34,7 +36,15 @@ pub struct PreparedModel {
     pub(super) geoset_alphas: Vec<Option<Animatable<f32>>>,
     pub(super) layers: Vec<Vec<PreparedLayer>>,
     pub(super) textures: ResolvedModelTextures,
+    pub(super) models: Wc3ModelResources,
     pub(super) inverse_bindposes: Handle<SkinnedMeshInverseBindposes>,
+}
+
+impl PreparedModel {
+    /// Resolved attachment and Classic particle model references.
+    pub fn model_resources(&self) -> &Wc3ModelResources {
+        &self.models
+    }
 }
 
 /// Build shareable meshes and bind poses once. Each instance receives private
@@ -46,6 +56,27 @@ pub fn prepare_model(
     source: &Wc3Model,
     mut resolve_texture: impl FnMut(&str) -> Option<Handle<Image>>,
 ) -> Result<PreparedModel, ModelError> {
+    prepare_model_with_resources(
+        meshes,
+        materials,
+        inverse_bindposes,
+        source,
+        &mut resolve_texture,
+        |_| None,
+    )
+}
+
+/// Prepare textures and child model references through consumer-defined sources.
+/// Model resolution does not spawn attachments or particles.
+pub fn prepare_model_with_resources(
+    meshes: &mut Assets<Mesh>,
+    materials: &mut Assets<Wc3LayerMaterial>,
+    inverse_bindposes: &mut Assets<SkinnedMeshInverseBindposes>,
+    source: &Wc3Model,
+    mut resolve_texture: impl FnMut(&str) -> Option<Handle<Image>>,
+    resolve_model: impl FnMut(&str) -> Option<Handle<Wc3ModelAsset>>,
+) -> Result<PreparedModel, ModelError> {
+    let models = Wc3ModelResources::resolve(&source.model, resolve_model);
     let textures = ResolvedModelTextures {
         bitmaps: source
             .model
@@ -64,7 +95,14 @@ pub fn prepare_model(
             })
             .collect(),
     };
-    prepare_resolved_model(meshes, materials, inverse_bindposes, source, textures)
+    prepare_resolved_model(
+        meshes,
+        materials,
+        inverse_bindposes,
+        source,
+        textures,
+        models,
+    )
 }
 
 pub(crate) fn prepare_resolved_model(
@@ -73,6 +111,7 @@ pub(crate) fn prepare_resolved_model(
     inverse_bindposes: &mut Assets<SkinnedMeshInverseBindposes>,
     source: &Wc3Model,
     textures: ResolvedModelTextures,
+    models: Wc3ModelResources,
 ) -> Result<PreparedModel, ModelError> {
     let model = &source.model;
     let default_bitmaps: Vec<_> = textures
@@ -147,11 +186,12 @@ pub(crate) fn prepare_resolved_model(
         geoset_alphas,
         layers,
         textures,
+        models,
         inverse_bindposes: inverse_bindposes.add(binds),
     })
 }
 
-fn layer_texture_id(layer: &Layer<V1800>) -> wc3::model::animation::Animatable<u32> {
+fn layer_texture_id(layer: &Layer<V1800>) -> Animatable<u32> {
     layer
         .texture_slots()
         .iter()

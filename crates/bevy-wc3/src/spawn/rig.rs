@@ -67,6 +67,7 @@ pub(super) fn spawn_rig(
             .unwrap_or([0.0; 3]);
         let entity = commands
             .spawn((
+                Visibility::default(),
                 AnimatedNode {
                     root,
                     pivot: Vec3::from_array(pivot),

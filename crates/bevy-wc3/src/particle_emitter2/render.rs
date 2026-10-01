@@ -185,11 +185,11 @@ impl SyncComponent for ParticleInstances {
     type Target = Self;
 }
 impl ExtractComponent for ParticleInstances {
-    type QueryData = &'static ParticleInstances;
+    type QueryData = (&'static ParticleInstances, &'static InheritedVisibility);
     type QueryFilter = ();
     type Out = Self;
     fn extract_component(item: QueryItem<'_, '_, Self::QueryData>) -> Option<Self> {
-        Some(item.clone())
+        item.1.get().then(|| item.0.clone())
     }
 }
 
@@ -675,6 +675,20 @@ mod tests {
             priority_plane: 0,
             sort_far: true,
         }
+    }
+
+    #[test]
+    fn hidden_emitters_are_removed_from_render_extraction_and_can_reappear() {
+        let data = instances(Vec::new(), ParticleEmitterUniform::default());
+        assert!(
+            ParticleInstances::extract_component((&data, &InheritedVisibility::VISIBLE)).is_some()
+        );
+        assert!(
+            ParticleInstances::extract_component((&data, &InheritedVisibility::HIDDEN)).is_none()
+        );
+        assert!(
+            ParticleInstances::extract_component((&data, &InheritedVisibility::VISIBLE)).is_some()
+        );
     }
 
     #[test]

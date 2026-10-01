@@ -13,12 +13,31 @@ use crate::texture_bindings::Wc3TextureBindings;
 /// Attach to an entity to spawn an MDX or MDL asset beneath it when loading finishes.
 /// The entity remains the transform and animation root.
 #[derive(Component)]
-#[require(Transform)]
+#[require(Transform, Visibility)]
 pub struct Wc3ModelInstance(pub Handle<Wc3ModelAsset>);
 
 impl Wc3ModelInstance {
     pub fn new(handle: Handle<Wc3ModelAsset>) -> Self {
         Self(handle)
+    }
+}
+
+/// Lifetime owner of a child model root. Unlike `ChildOf`, this relationship
+/// does not inherit transforms or visibility. Use both relationships for a
+/// following attachment; use ownership alone for particles moving in world space.
+/// Despawning the owner recursively despawns its owned models and their contents.
+#[derive(Component)]
+#[relationship(relationship_target = Wc3OwnedModels)]
+pub struct Wc3ModelOwner(pub Entity);
+
+/// Child model roots owned by this entity, maintained by `Wc3ModelOwner`.
+#[derive(Component)]
+#[relationship_target(relationship = Wc3ModelOwner, linked_spawn)]
+pub struct Wc3OwnedModels(Vec<Entity>);
+
+impl Wc3OwnedModels {
+    pub fn iter(&self) -> impl Iterator<Item = Entity> + '_ {
+        self.0.iter().copied()
     }
 }
 
@@ -57,6 +76,7 @@ pub(crate) fn spawn_loaded_instances(
                 &mut inverse_bindposes,
                 &asset.source,
                 asset.textures.clone(),
+                asset.models.clone(),
             ) {
                 Ok(prepared) => {
                     entry.insert(prepared);
@@ -102,7 +122,11 @@ mod tests {
         let handle = app
             .world_mut()
             .resource_mut::<Assets<Wc3ModelAsset>>()
-            .add(Wc3ModelAsset { source, textures });
+            .add(Wc3ModelAsset {
+                source,
+                textures,
+                models: default(),
+            });
         let first = app
             .world_mut()
             .spawn(Wc3ModelInstance::new(handle.clone()))
@@ -163,6 +187,7 @@ mod tests {
             .resource_mut::<Assets<Wc3ModelAsset>>()
             .add(Wc3ModelAsset {
                 source,
+                models: default(),
                 textures: crate::asset::ResolvedModelTextures {
                     bitmaps: vec![crate::asset::ResolvedTexture {
                         replaceable_id: 31,

@@ -83,7 +83,7 @@ pub(crate) fn animate_layers(
         *visibility = if alpha * geoset_alpha <= 0.0 {
             Visibility::Hidden
         } else {
-            Visibility::Visible
+            Visibility::Inherited
         };
         if layer.geoset_alpha.is_some() {
             let partial = (0.0..1.0).contains(&geoset_alpha);
@@ -266,7 +266,7 @@ mod tests {
                     texture_id: Animatable::Static(0),
                 },
                 MeshMaterial3d(material.clone()),
-                Visibility::Visible,
+                Visibility::Inherited,
             ))
             .id();
         app.update();
@@ -282,7 +282,7 @@ mod tests {
         app.update();
         assert_eq!(
             *app.world().entity(entity).get::<Visibility>().unwrap(),
-            Visibility::Visible
+            Visibility::Inherited
         );
         assert_eq!(
             app.world()

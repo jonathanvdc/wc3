@@ -13,6 +13,7 @@ mod instance;
 mod material;
 mod mesh;
 mod model;
+mod model_resources;
 mod particle_emitter2;
 mod spawn;
 mod texture_bindings;
@@ -22,12 +23,13 @@ use bevy::prelude::*;
 
 pub use animation::Wc3Animation;
 pub use asset::Wc3ModelAsset;
-pub use instance::Wc3ModelInstance;
+pub use instance::{Wc3ModelInstance, Wc3ModelOwner, Wc3OwnedModels};
 pub use material::{Wc3LayerMaterial, Wc3LayerState};
 pub use model::{ModelError, Wc3Model};
+pub use model_resources::Wc3ModelResources;
 pub use spawn::{
-    prepare_model, spawn_model, spawn_prepared_model, spawn_prepared_model_with_bindings,
-    PreparedModel, Wc3NodeEntities,
+    prepare_model, prepare_model_with_resources, spawn_model, spawn_prepared_model,
+    spawn_prepared_model_with_bindings, PreparedModel, Wc3NodeEntities,
 };
 pub use texture_bindings::{Wc3TextureBindings, Wc3TextureSlot};
 
