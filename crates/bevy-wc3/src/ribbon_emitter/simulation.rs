@@ -7,6 +7,8 @@ use wc3::model::emitters::RibbonEmitter;
 use wc3::model::materials::Layer;
 use wc3::model::V1800;
 
+use crate::effect_ring::{RecordRing, RingCursor};
+
 use super::render::{split_time, RibbonInstances, RibbonSection, RibbonSegment, RibbonUniform};
 use crate::animation::{
     sample, sample_emitter_transform, sample_value, AnimatedNode, Wc3Animation,
@@ -26,7 +28,6 @@ fn sample_clock(mut animation: Wc3Animation) -> Wc3Animation {
 }
 
 struct Section {
-    slot: u32,
     birth: f64,
     chain: u64,
 }
@@ -37,9 +38,9 @@ pub(crate) struct RibbonState {
     pub(crate) node: Entity,
     pub(crate) definition: RibbonEmitter,
     sections: VecDeque<Section>,
-    records: Arc<Vec<RibbonSection>>,
+    records: Arc<RecordRing<RibbonSection>>,
     segments: Arc<Vec<RibbonSegment>>,
-    free_slots: Vec<u32>,
+    segments_version: Option<(RingCursor, usize)>,
     clock: f64,
     remainder: f64,
     chain: u64,
@@ -57,7 +58,7 @@ impl RibbonState {
             sections: VecDeque::new(),
             records: Arc::default(),
             segments: Arc::default(),
-            free_slots: Vec::new(),
+            segments_version: None,
             clock: 0.0,
             remainder: 0.0,
             chain: 0,
@@ -78,25 +79,18 @@ impl RibbonState {
         while self.sections.front().is_some_and(|section| {
             time - section.birth + 1e-9 >= f64::from(self.definition.life_span)
         }) {
-            self.free_slots
-                .push(self.sections.pop_front().unwrap().slot);
+            self.sections.pop_front();
+            Arc::make_mut(&mut self.records).pop_front();
         }
     }
 
     fn insert(&mut self, record: RibbonSection, birth: f64) {
         if self.sections.len() >= MAX_SECTIONS {
-            self.free_slots
-                .push(self.sections.pop_front().unwrap().slot);
+            self.sections.pop_front();
+            Arc::make_mut(&mut self.records).pop_front();
         }
-        let slot = self.free_slots.pop().unwrap_or(self.records.len() as u32);
-        let records = Arc::make_mut(&mut self.records);
-        if slot as usize == records.len() {
-            records.push(record);
-        } else {
-            records[slot as usize] = record;
-        }
+        Arc::make_mut(&mut self.records).push(record, MAX_SECTIONS);
         self.sections.push_back(Section {
-            slot,
             birth,
             chain: self.chain,
         });
@@ -104,8 +98,13 @@ impl RibbonState {
     }
 
     fn rebuild_segments(&mut self) {
+        let version = (self.records.cursor(), self.records.len());
+        if self.segments_version == Some(version) {
+            return;
+        }
+        self.segments_version = Some(version);
         let mut segments = Vec::with_capacity(self.sections.len().saturating_sub(1));
-        let sections = self.sections.make_contiguous();
+        let sections = &self.sections;
         let mut start = 0;
         while start < sections.len() {
             let mut end = start + 1;
@@ -115,8 +114,8 @@ impl RibbonState {
             let count = (end - start - 1) as u32;
             for i in start..end - 1 {
                 segments.push(RibbonSegment([
-                    sections[i].slot,
-                    sections[i + 1].slot,
+                    self.records.index(i),
+                    self.records.index(i + 1),
                     (i - start) as u32,
                     count,
                 ]));
@@ -458,8 +457,8 @@ mod tests {
         );
         advance(&mut state, &mut animation, 1.0);
         for segment in state.segments.iter() {
-            assert!((segment.0[0] as usize) < state.records.len());
-            assert!((segment.0[1] as usize) < state.records.len());
+            assert!((segment.0[0] as usize) < state.records.capacity());
+            assert!((segment.0[1] as usize) < state.records.capacity());
         }
         assert!(state
             .sections
@@ -504,6 +503,36 @@ mod tests {
         assert_eq!(state.sections.len(), MAX_SECTIONS);
         assert!(state.records.len() <= MAX_SECTIONS);
         assert_eq!(state.segments.len(), MAX_SECTIONS - 1);
+    }
+
+    #[test]
+    fn wrapped_and_growing_sections_keep_chain_endpoints_and_birth_history() {
+        let mut state = state();
+        let mut animation = animation();
+        for _ in 0..20 {
+            advance(&mut state, &mut animation, 0.1);
+        }
+        assert_eq!(state.records.capacity(), 16);
+        assert!(state
+            .segments
+            .iter()
+            .any(|segment| segment.0[0] == 15 && segment.0[1] == 0));
+        let before = state.records.clone();
+        state.definition.emission_rate = 100;
+        advance(&mut state, &mut animation, 0.2);
+        assert_eq!(state.records.capacity(), 32);
+        for (i, section) in state.sections.iter().enumerate() {
+            let record = state.records[state.records.index(i) as usize];
+            assert!((record.above_birth[0] - section.birth as f32).abs() < 1e-5);
+        }
+        for (i, segment) in state.segments.iter().enumerate() {
+            assert_eq!(segment.0[0], state.records.index(i));
+            assert_eq!(segment.0[1], state.records.index(i + 1));
+            assert_eq!(segment.0[2], i as u32);
+            assert_eq!(segment.0[3], state.segments.len() as u32);
+        }
+        assert_eq!(before.capacity(), 16);
+        assert_eq!(before.len(), 10);
     }
 
     #[test]

@@ -37,11 +37,12 @@ use std::array::from_fn;
 use std::collections::HashMap;
 use std::f32::consts::{FRAC_PI_8, PI};
 use std::num::NonZeroU64;
-use std::ops::Range;
 use std::sync::Arc;
 use wc3::model::emitters::{Particle2FilterMode, ParticleEmitter2};
 
-/// Immutable spawn data. Slots remain stable until the particle expires.
+use crate::effect_ring::{upload_records, RecordRing, RingCursor};
+
+/// Immutable spawn data indexed by the growing record ring.
 #[derive(Clone, Copy, Debug, PartialEq, Pod, Zeroable)]
 #[repr(C)]
 pub(crate) struct ParticleInstance {
@@ -172,7 +173,7 @@ impl ParticleEmitterUniform {
 
 #[derive(Component, Clone)]
 pub(crate) struct ParticleInstances {
-    pub(crate) records: Arc<Vec<ParticleInstance>>,
+    pub(crate) records: Arc<RecordRing<ParticleInstance>>,
     pub(crate) live_indices: Arc<Vec<u32>>,
     pub(crate) uniform: ParticleEmitterUniform,
     pub(crate) texture: Option<Handle<Image>>,
@@ -416,32 +417,12 @@ struct ParticleOrderBuffer {
 struct ParticleBuffer {
     records: Buffer,
     capacity: usize,
-    source: Arc<Vec<ParticleInstance>>,
+    cursor: RingCursor,
     live_indices: Arc<Vec<u32>>,
     uniform: Buffer,
     order: ParticleOrderBuffer,
     texture: BindGroup,
     sorted: HashMap<RetainedViewEntity, ParticleOrderBuffer>,
-}
-
-/// Coalesce adjacent changed slots; unchanged live records are never uploaded.
-fn changed_record_ranges(
-    previous: &[ParticleInstance],
-    current: &[ParticleInstance],
-) -> Vec<Range<usize>> {
-    let mut ranges = Vec::new();
-    let mut start = None;
-    for (i, record) in current.iter().enumerate() {
-        if previous.get(i) != Some(record) {
-            start.get_or_insert(i);
-        } else if let Some(start) = start.take() {
-            ranges.push(start..i);
-        }
-    }
-    if let Some(start) = start {
-        ranges.push(start..current.len());
-    }
-    ranges
 }
 
 fn prepare_order(
@@ -497,6 +478,7 @@ fn prepare_particles(
     images: Res<RenderAssets<GpuImage>>,
     fallback: Res<FallbackImage>,
     views: Query<&ExtractedView>,
+    mut scratch: Local<Vec<ParticleInstance>>,
 ) {
     for (entity, data, previous) in &query {
         if data.live_indices.is_empty() {
@@ -504,27 +486,25 @@ fn prepare_particles(
             continue;
         }
         let (records, capacity) = if let Some(previous) =
-            previous.filter(|previous| previous.capacity >= data.records.len())
+            previous.filter(|previous| previous.capacity >= data.records.capacity())
         {
-            if !Arc::ptr_eq(&previous.source, &data.records) {
-                for range in changed_record_ranges(&previous.source, &data.records) {
-                    queue.write_buffer(
-                        &previous.records,
-                        (range.start * size_of::<ParticleInstance>()) as u64,
-                        cast_slice(&data.records[range]),
-                    );
-                }
-            }
+            upload_records(
+                &data.records,
+                Some(previous.cursor),
+                &previous.records,
+                &queue,
+                &mut scratch,
+            );
             (previous.records.clone(), previous.capacity)
         } else {
-            let capacity = data.records.len().next_power_of_two();
+            let capacity = data.records.capacity();
             let records = device.create_buffer(&BufferDescriptor {
                 label: Some("wc3 immutable particle records"),
                 size: (capacity * size_of::<ParticleInstance>()) as u64,
                 usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
                 mapped_at_creation: false,
             });
-            queue.write_buffer(&records, 0, cast_slice(data.records.as_slice()));
+            upload_records(&data.records, None, &records, &queue, &mut scratch);
             (records, capacity)
         };
         let uniform = if let Some(previous) = previous {
@@ -576,7 +556,7 @@ fn prepare_particles(
         commands.entity(entity).insert(ParticleBuffer {
             records,
             capacity,
-            source: data.records.clone(),
+            cursor: data.records.cursor(),
             live_indices: data.live_indices.clone(),
             uniform,
             order,
@@ -670,7 +650,7 @@ mod tests {
     ) -> ParticleInstances {
         ParticleInstances {
             live_indices: Arc::new((0..records.len() as u32).collect()),
-            records: Arc::new(records),
+            records: Arc::new(records.into()),
             uniform,
             texture: None,
             filter: Particle2FilterMode::Blend,
@@ -691,6 +671,28 @@ mod tests {
         assert!(
             ParticleInstances::extract_component((&data, &InheritedVisibility::VISIBLE)).is_some()
         );
+    }
+
+    #[test]
+    fn wrapped_particle_indices_sort_by_depth_instead_of_physical_position() {
+        let mut records = RecordRing::default();
+        let record = |z: f32| {
+            ParticleInstance::new(Vec3::Z * z, Vec3::ZERO, 0.0, 0.0, 1.0, Vec3::ONE, false)
+        };
+        for z in [0.0, 1.0, 2.0, 3.0] {
+            records.push(record(z), 4);
+        }
+        records.pop_front();
+        records.pop_front();
+        records.push(record(4.0), 4);
+        records.push(record(5.0), 4);
+        let mut data = instances(Vec::new(), ParticleEmitterUniform::default());
+        data.live_indices = Arc::new((0..records.len()).map(|i| records.index(i)).collect());
+        data.records = Arc::new(records);
+        assert_eq!(*data.live_indices, vec![2, 3, 0, 1]);
+        assert_eq!(sorted_indices(&data, &Affine3A::IDENTITY), vec![2, 3, 0, 1]);
+        let reverse = Affine3A::from_quat(Quat::from_rotation_y(PI));
+        assert_eq!(sorted_indices(&data, &reverse), vec![1, 0, 3, 2]);
     }
 
     #[test]
@@ -783,17 +785,6 @@ mod tests {
         assert_eq!(sorted_indices(&data, &Affine3A::IDENTITY), vec![1, 0]);
         let reverse = Affine3A::from_quat(Quat::from_rotation_y(PI));
         assert_eq!(sorted_indices(&data, &reverse), vec![0, 1]);
-    }
-
-    #[test]
-    fn uploads_only_changed_and_appended_slots() {
-        let a = ParticleInstance::new(Vec3::ZERO, Vec3::X, 0.0, 0.0, 1.0, Vec3::ONE, false);
-        let b = a.as_tail();
-        assert!(changed_record_ranges(&[a, b], &[a, b]).is_empty());
-        assert_eq!(
-            changed_record_ranges(&[a, a, a, a], &[b, b, a, b, a]),
-            vec![0..2, 3..5]
-        );
     }
 
     #[test]

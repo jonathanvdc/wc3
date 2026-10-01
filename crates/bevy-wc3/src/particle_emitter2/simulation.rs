@@ -6,6 +6,8 @@ use std::sync::Arc;
 use wc3::model::animation::Animatable;
 use wc3::model::emitters::{Particle2Frames, ParticleEmitter2};
 
+use crate::effect_ring::RecordRing;
+
 use super::render::{ParticleEmitterUniform, ParticleInstance, ParticleInstances};
 use crate::animation::{
     sample, sample_emitter_transform, sample_value, track_time, AnimatedNode, Wc3Animation,
@@ -14,7 +16,6 @@ use crate::animation::{
 const MAX_PARTICLES: usize = 8192;
 
 struct Particle {
-    slot: u32,
     birth_time: f64,
     lifetime: f32,
 }
@@ -25,9 +26,8 @@ pub(crate) struct Particle2State {
     pub(crate) node: Entity,
     pub(crate) definition: ParticleEmitter2,
     particles: VecDeque<Particle>,
-    records: Arc<Vec<ParticleInstance>>,
+    records: Arc<RecordRing<ParticleInstance>>,
     live_indices: Arc<Vec<u32>>,
-    free_slots: Vec<u32>,
     simulation_time: f64,
     emission_remainder: f64,
     last_sequence: usize,
@@ -47,7 +47,6 @@ impl Particle2State {
             particles: VecDeque::new(),
             records: Arc::default(),
             live_indices: Arc::default(),
-            free_slots: Vec::new(),
             simulation_time: 0.0,
             emission_remainder: 0.0,
             last_sequence: usize::MAX,
@@ -143,15 +142,8 @@ impl Particle2State {
     }
 
     fn insert_particle(&mut self, record: ParticleInstance, birth_time: f64, lifetime: f32) {
-        let slot = self.free_slots.pop().unwrap_or(self.records.len() as u32);
-        let records = Arc::make_mut(&mut self.records);
-        if slot as usize == records.len() {
-            records.push(record);
-        } else {
-            records[slot as usize] = record;
-        }
+        Arc::make_mut(&mut self.records).push(record, MAX_PARTICLES);
         self.particles.push_back(Particle {
-            slot,
             birth_time,
             lifetime,
         });
@@ -218,8 +210,8 @@ impl Particle2State {
             .front()
             .is_some_and(|particle| time - particle.birth_time >= f64::from(particle.lifetime))
         {
-            self.free_slots
-                .push(self.particles.pop_front().unwrap().slot);
+            self.particles.pop_front();
+            Arc::make_mut(&mut self.records).pop_front();
         }
     }
 
@@ -335,17 +327,14 @@ pub(crate) fn update_particles(
         state.advance(animation, dt, |birth_animation| {
             sample_emitter_transform(node, root, birth_animation, &nodes).unwrap_or(*transform)
         });
-        if state
-            .live_indices
-            .iter()
-            .copied()
-            .ne(state.particles.iter().map(|particle| particle.slot))
+        // Physical draw indices change only when the head or live count changes.
+        if state.live_indices.len() != state.records.len()
+            || (!state.records.is_empty()
+                && state.live_indices.first().copied() != Some(state.records.index(0)))
         {
             state.live_indices = Arc::new(
-                state
-                    .particles
-                    .iter()
-                    .map(|particle| particle.slot)
+                (0..state.records.len())
+                    .map(|i| state.records.index(i))
                     .collect(),
             );
         }
@@ -398,9 +387,9 @@ mod tests {
         assert_eq!(state.particles.len(), 6);
         assert_eq!(
             state
-                .particles
+                .records
                 .iter()
-                .filter(|particle| state.records[particle.slot as usize].is_tail())
+                .filter(|record| record.is_tail())
                 .count(),
             3
         );
@@ -476,7 +465,7 @@ mod tests {
     }
 
     #[test]
-    fn particles_keep_spawn_records_and_reuse_expired_slots() {
+    fn particles_keep_spawn_records_and_append_after_retirement() {
         let root = Entity::from_bits(1);
         let mut definition = emitter();
         definition.frames = Particle2Frames::Head;
@@ -494,8 +483,8 @@ mod tests {
         animation.playing = true;
         state.advance(&animation, 0.1, |_| GlobalTransform::default());
         assert_eq!(state.records.len(), 1);
-        assert_eq!(state.particles[0].slot, 0);
-        assert_ne!(records[0], state.records[0]);
+        assert_eq!(state.records.index(0), 1);
+        assert_ne!(records[0], state.records[state.records.index(0) as usize]);
     }
     #[test]
     fn update_respects_pause_speed_and_keeps_clock_across_sequence_reset() {
@@ -637,8 +626,8 @@ mod tests {
                 0.0,
                 expected_birth as f32 * 10.0 * age - 0.5 * age * age,
             );
-            let center_a = whole.records[a.slot as usize].center(&uniform);
-            let center_b = split.records[b.slot as usize].center(&uniform);
+            let center_a = whole.records[whole.records.index(i) as usize].center(&uniform);
+            let center_b = split.records[split.records.index(i) as usize].center(&uniform);
             assert!(
                 center_a.abs_diff_eq(expected, 1e-6),
                 "{center_a:?} != {expected:?}"

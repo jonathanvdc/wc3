@@ -2,6 +2,15 @@
 
 [Documentation index](../README.md)
 
+Spawn records use a growing ring, with chronological retirement and no free-slot
+list. Capacity starts at 16 records and doubles with the live population, up to
+8,192 records. Render extraction shares immutable blocks of up to 64 records,
+so births copy only touched blocks. GPU preparation tracks the last uploaded
+birth cursor and writes at most two contiguous ranges across wraparound. Growth
+or a full ring lap between rendered frames uploads the entire current buffer.
+Retirement alone does not upload spawn records. Per-view depth sorting still
+uses a separate draw-order index buffer.
+
 The following behavior is missing or still needs comparison against Warcraft III
 captures. Verification tasks describe implemented behavior whose exact visual
 match has not been established.

@@ -4,8 +4,8 @@
 //! retires particles using a per-emitter simulation clock. The vertex shader
 //! evaluates analytic constant-gravity motion, lifetime curves, and atlas UVs.
 //!
-//! Stable slots keep records resident on the GPU; draw-order indices select
-//! live particles and provide per-view CPU depth sorting for SortPrimsFarZ.
+//! Growing rings keep records resident on the GPU. Birth cursors select upload
+//! ranges; draw-order indices provide per-view depth sorting for SortPrimsFarZ.
 
 mod render;
 mod simulation;

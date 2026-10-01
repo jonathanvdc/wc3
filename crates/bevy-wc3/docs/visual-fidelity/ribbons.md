@@ -12,7 +12,12 @@ The GPU stores immutable endpoints and split birth timestamps. Each instanced
 quad references two adjacent live sections. The vertex shader constructs the
 quad, evaluates ballistic motion independently at each endpoint, derives its
 normal, and maps one texture-atlas cell across each connected live chain. Only
-new or overwritten section records are uploaded. Material layers share CPU
+birth ranges are uploaded, using at most two contiguous writes across ring
+wraparound. Storage starts at 16 records and doubles with the live population,
+up to 8,192 records. Growth rebases live sections and uploads the resized buffer.
+Immutable extraction snapshots share blocks of up to 64 records; births copy only
+touched blocks, rather than the entire ring. GPU cursors account for skipped
+frames, requesting a full upload when a whole ring has been overwritten. Material layers share CPU
 records and the GPU section buffer; each layer has separate uniforms and texture
 bindings. No compute simulation or per-frame CPU mesh rebuilding is required.
 

@@ -33,9 +33,10 @@ use bevy::render::{
 use bytemuck::{bytes_of, cast_slice, Pod, Zeroable};
 use std::collections::HashMap;
 use std::num::NonZeroU64;
-use std::ops::Range;
 use std::sync::Arc;
 use wc3::model::materials::LayerFilterMode;
+
+use crate::effect_ring::{upload_records, RecordRing, RingCursor};
 
 /// Birth-time endpoints. The split clock retains precision in long-running scenes.
 #[derive(Clone, Copy, Debug, PartialEq, Pod, Zeroable)]
@@ -68,14 +69,14 @@ impl RibbonSection {
     }
 }
 
-/// Endpoint slots, position in the chain, and number of segments in that chain.
+/// Endpoint ring indices, position in the chain, and number of segments in that chain.
 /// Draw sorting moves this entire record without changing connectivity or UVs.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Pod, Zeroable)]
 #[repr(C)]
 pub(crate) struct RibbonSegment(pub(crate) [u32; 4]);
 
 fn segment_center(
-    records: &[RibbonSection],
+    records: &RecordRing<RibbonSection>,
     segment: RibbonSegment,
     uniform: &RibbonUniform,
 ) -> Vec3 {
@@ -95,7 +96,7 @@ pub(crate) struct RibbonUniform {
 
 #[derive(Component, Clone)]
 pub(crate) struct RibbonInstances {
-    pub(crate) records: Arc<Vec<RibbonSection>>,
+    pub(crate) records: Arc<RecordRing<RibbonSection>>,
     pub(crate) live_indices: Arc<Vec<RibbonSegment>>,
     pub(crate) uniform: RibbonUniform,
     pub(crate) texture: Option<Handle<Image>>,
@@ -359,32 +360,12 @@ struct RibbonOrderBuffer {
 struct RibbonBuffer {
     records: Buffer,
     capacity: usize,
-    source: Arc<Vec<RibbonSection>>,
+    cursor: RingCursor,
     live_indices: Arc<Vec<RibbonSegment>>,
     uniform: Buffer,
     order: RibbonOrderBuffer,
     texture: BindGroup,
     sorted: HashMap<RetainedViewEntity, RibbonOrderBuffer>,
-}
-
-/// Coalesce adjacent changed slots; unchanged live records are never uploaded.
-fn changed_record_ranges(
-    previous: &[RibbonSection],
-    current: &[RibbonSection],
-) -> Vec<Range<usize>> {
-    let mut ranges = Vec::new();
-    let mut start = None;
-    for (i, record) in current.iter().enumerate() {
-        if previous.get(i) != Some(record) {
-            start.get_or_insert(i);
-        } else if let Some(start) = start.take() {
-            ranges.push(start..i);
-        }
-    }
-    if let Some(start) = start {
-        ranges.push(start..current.len());
-    }
-    ranges
 }
 
 fn prepare_order(
@@ -446,6 +427,7 @@ fn prepare_ribbons(
     images: Res<RenderAssets<GpuImage>>,
     fallback: Res<FallbackImage>,
     views: Query<&ExtractedView>,
+    mut scratch: Local<Vec<RibbonSection>>,
 ) {
     // All material layers of an emitter share the same resident section buffer.
     // Uniforms, texture bindings, and draw ordering remain specific to each pass.
@@ -459,27 +441,25 @@ fn prepare_ribbons(
             if let Some((records, capacity)) = shared_sections.get(&data.emitter) {
                 (records.clone(), *capacity)
             } else if let Some(previous) =
-                previous.filter(|previous| previous.capacity >= data.records.len())
+                previous.filter(|previous| previous.capacity >= data.records.capacity())
             {
-                if !Arc::ptr_eq(&previous.source, &data.records) {
-                    for range in changed_record_ranges(&previous.source, &data.records) {
-                        queue.write_buffer(
-                            &previous.records,
-                            (range.start * size_of::<RibbonSection>()) as u64,
-                            cast_slice(&data.records[range]),
-                        );
-                    }
-                }
+                upload_records(
+                    &data.records,
+                    Some(previous.cursor),
+                    &previous.records,
+                    &queue,
+                    &mut scratch,
+                );
                 (previous.records.clone(), previous.capacity)
             } else {
-                let capacity = data.records.len().next_power_of_two();
+                let capacity = data.records.capacity();
                 let records = device.create_buffer(&BufferDescriptor {
                     label: Some("wc3 immutable ribbon records"),
                     size: (capacity * size_of::<RibbonSection>()) as u64,
                     usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
                     mapped_at_creation: false,
                 });
-                queue.write_buffer(&records, 0, cast_slice(data.records.as_slice()));
+                upload_records(&data.records, None, &records, &queue, &mut scratch);
                 (records, capacity)
             };
         shared_sections.insert(data.emitter, (records.clone(), capacity));
@@ -532,7 +512,7 @@ fn prepare_ribbons(
         commands.entity(entity).insert(RibbonBuffer {
             records,
             capacity,
-            source: data.records.clone(),
+            cursor: data.records.cursor(),
             live_indices: data.live_indices.clone(),
             uniform,
             order,
@@ -636,7 +616,7 @@ mod tests {
         let first = RibbonSegment([0, 1, 0, 2]);
         let second = RibbonSegment([1, 2, 1, 2]);
         let mut data = RibbonInstances {
-            records: Arc::new(records),
+            records: Arc::new(records.into()),
             live_indices: Arc::new(vec![second, first]),
             uniform,
             texture: None,
