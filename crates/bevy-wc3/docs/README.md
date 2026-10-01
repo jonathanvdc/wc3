@@ -7,9 +7,11 @@ needs comparison against Warcraft III captures. Keep each rendering topic in its
 own file under `visual-fidelity/` and link it here as it is documented.
 
 - [General renderer gaps](visual-fidelity/renderer.md): Classic/Reforged
-  materials, geoset color and UV animation, node flags, pass ordering, skinning
+  materials, UV animation, node flags, pass ordering, skinning
   and bind poses, LOD, replaceable textures, lights, cameras, events, and
   Reforged effects, plus an overview of implemented effects and fidelity checks.
+- [Geoset animation](visual-fidelity/geoset-animation.md): alpha/color sampling,
+  RGB codec normalization, material isolation, capture checks, and remaining fidelity work.
 - [Classic PREM particles](visual-fidelity/prem.md): model spawning, motion,
   child animation, resource ownership, and remaining limits.
 - [Ribbon emitters](visual-fidelity/ribbons.md): GPU trails, material layers,

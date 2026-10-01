@@ -7,7 +7,7 @@ use crate::ribbon_emitter::{RibbonInstances, RibbonLayer, RibbonState};
 use bevy::camera::visibility::VisibilityPlugin;
 use bevy::ecs::world::{CommandQueue, World};
 use bevy::mesh::skinning::SkinnedMesh;
-use wc3::model::animation::{Track, ValueKeyframe};
+use wc3::model::animation::{Animatable, Track, ValueKeyframe};
 use wc3::model::materials::Layer;
 use wc3::model::materials::LayerFilterMode;
 use wc3::model::mdl::Read as _;
@@ -436,4 +436,106 @@ fn slot_binding_selects_replaceable_bitmap_for_geosets() {
         materials.get(&handle.0).unwrap().base.base_color_texture,
         Some(selected)
     );
+}
+
+#[test]
+fn geoset_tints_isolate_shared_materials_and_model_instances() {
+    let mut source =
+        Wc3Model::decode_mdl(include_str!("../../tests/fixtures/geoset_capture.mdl")).unwrap();
+    // A third geoset has nonwhite color data with the color flag disabled.
+    let mut geosets = source.model.geosets();
+    geosets.push(geosets[0].clone());
+    let mut skipped = geosets[0].clone();
+    skipped.set_level_of_detail(1);
+    geosets.insert(0, skipped);
+    source.model.set_geosets(&geosets);
+    let mut animations = source.model.geoset_animations();
+    let mut disabled = animations[0].clone();
+    disabled.geoset_id = 2;
+    disabled.flags.set_color(false);
+    animations.push(disabled.clone());
+    for animation in &mut animations {
+        animation.geoset_id += 1;
+    }
+    let mut invalid = disabled;
+    invalid.geoset_id = u32::MAX;
+    animations.push(invalid);
+    source.model.set_geoset_animations(&animations);
+    let mut records = source.model.materials();
+    let mut extra_layer = records[0].layers[0].clone();
+    extra_layer.alpha = Animatable::Static(0.5);
+    records[0].layers.push(extra_layer);
+    source.model.set_materials(&records);
+    let mut app = App::new();
+    app.add_systems(Update, animate_layers);
+    let mut meshes = Assets::<Mesh>::default();
+    let mut materials = Assets::<Wc3LayerMaterial>::default();
+    let mut bindposes = Assets::<SkinnedMeshInverseBindposes>::default();
+    let prepared = prepare_model(&mut meshes, &mut materials, &mut bindposes, &source, |_| {
+        None
+    })
+    .unwrap();
+    assert_eq!(
+        prepared
+            .geosets
+            .iter()
+            .map(|geoset| geoset.geoset_id)
+            .collect::<Vec<_>>(),
+        [1, 2, 3]
+    );
+    let mut queue = CommandQueue::default();
+    let mut commands = Commands::new(&mut queue, app.world());
+    let first = spawn_prepared_model(&mut commands, &mut meshes, &mut materials, &prepared);
+    let second = spawn_prepared_model(&mut commands, &mut meshes, &mut materials, &prepared);
+    queue.apply(app.world_mut());
+    app.insert_resource(materials);
+    app.world_mut()
+        .entity_mut(first)
+        .get_mut::<Wc3Animation>()
+        .unwrap()
+        .elapsed_ms = 500.0;
+    app.update();
+    let mut query = app
+        .world_mut()
+        .query::<(&AnimatedLayer, &MeshMaterial3d<Wc3LayerMaterial>)>();
+    let layers: Vec<_> = query
+        .iter(app.world())
+        .map(|(layer, handle)| (layer.root, handle.0.clone()))
+        .collect();
+    assert_eq!(layers.len(), 12);
+    for (index, (_, handle)) in layers.iter().enumerate() {
+        for (_, other) in &layers[index + 1..] {
+            assert_ne!(handle, other);
+        }
+    }
+    let colors: Vec<_> = layers
+        .iter()
+        .map(|(root, handle)| {
+            (
+                *root,
+                app.world()
+                    .resource::<Assets<Wc3LayerMaterial>>()
+                    .get(handle)
+                    .unwrap()
+                    .base
+                    .base_color
+                    .to_linear(),
+            )
+        })
+        .collect();
+    let first_colors: Vec<_> = colors
+        .iter()
+        .filter(|(root, _)| *root == first)
+        .map(|(_, color)| *color)
+        .collect();
+    let second_colors: Vec<_> = colors
+        .iter()
+        .filter(|(root, _)| *root == second)
+        .map(|(_, color)| *color)
+        .collect();
+    assert!(first_colors.contains(&LinearRgba::new(1.0, 0.0, 0.0, 1.0)));
+    assert!(first_colors.contains(&LinearRgba::new(0.0, 0.5, 0.5, 1.0)));
+    assert!(first_colors.contains(&LinearRgba::WHITE));
+    assert!(first_colors.contains(&LinearRgba::new(0.0, 0.5, 0.5, 0.5)));
+    assert!(second_colors.contains(&LinearRgba::new(0.0, 0.0, 1.0, 1.0)));
 }

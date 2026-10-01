@@ -1,7 +1,7 @@
 use bevy::mesh::skinning::SkinnedMeshInverseBindposes;
 use bevy::prelude::*;
 use std::collections::HashMap;
-use wc3::model::animation::Animatable;
+use wc3::model::animation::{Animatable, GeosetAnimation};
 use wc3::model::materials::{Layer, LayerFilterMode};
 use wc3::model::{Model, V1800};
 
@@ -33,7 +33,7 @@ pub(super) struct PreparedGeoset {
 pub struct PreparedModel {
     pub(crate) model: Model<V1800>,
     pub(super) geosets: Vec<PreparedGeoset>,
-    pub(super) geoset_alphas: Vec<Option<Animatable<f32>>>,
+    pub(super) geoset_animations: Vec<Option<GeosetAnimation>>,
     pub(super) layers: Vec<Vec<PreparedLayer>>,
     pub(super) textures: ResolvedModelTextures,
     pub(super) models: Wc3ModelResources,
@@ -153,10 +153,10 @@ pub(crate) fn prepare_resolved_model(
             geoset_id,
         });
     }
-    let mut geoset_alphas = vec![None; model.geosets().len()];
+    let mut geoset_animations = vec![None; model.geosets().len()];
     for animation in model.geoset_animations() {
-        if let Some(alpha) = geoset_alphas.get_mut(animation.geoset_id as usize) {
-            *alpha = Some(animation.alpha);
+        if let Some(slot) = geoset_animations.get_mut(animation.geoset_id as usize) {
+            *slot = Some(animation);
         }
     }
     let pivots = model.pivot_points();
@@ -188,7 +188,7 @@ pub(crate) fn prepare_resolved_model(
     Ok(PreparedModel {
         model: model.clone(),
         geosets,
-        geoset_alphas,
+        geoset_animations,
         layers,
         textures,
         models,
@@ -210,7 +210,9 @@ fn layer_alpha_mode(mode: LayerFilterMode) -> AlphaMode {
         LayerFilterMode::None => AlphaMode::Opaque,
         LayerFilterMode::Transparent => AlphaMode::Mask(0.5),
         LayerFilterMode::Blend => AlphaMode::Blend,
-        LayerFilterMode::Additive | LayerFilterMode::AddAlpha => AlphaMode::Add,
+        // Bevy's Add shader path clears alpha. WC3's custom blend state needs
+        // the sampled alpha as its source factor, so retain it with Blend.
+        LayerFilterMode::Additive | LayerFilterMode::AddAlpha => AlphaMode::Blend,
         LayerFilterMode::Modulate | LayerFilterMode::Modulate2x => AlphaMode::Multiply,
         LayerFilterMode::Unknown(_) => AlphaMode::Blend,
     }
@@ -252,6 +254,18 @@ fn build_layer_material(
 mod tests {
     use super::*;
     use wc3::model::materials::Texture;
+
+    #[test]
+    fn additive_layers_preserve_shader_alpha_for_custom_blending() {
+        assert_eq!(
+            layer_alpha_mode(LayerFilterMode::Additive),
+            AlphaMode::Blend
+        );
+        assert_eq!(
+            layer_alpha_mode(LayerFilterMode::AddAlpha),
+            AlphaMode::Blend
+        );
+    }
 
     #[test]
     fn bitmap_keeps_replaceable_id_and_only_resolves_explicit_path() {

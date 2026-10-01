@@ -45,6 +45,7 @@ pub(crate) struct AnimatedLayer {
     pub(crate) root: Entity,
     pub(crate) alpha: Animatable<f32>,
     pub(crate) geoset_alpha: Option<Animatable<f32>>,
+    pub(crate) geoset_color: Option<Animatable<[f32; 3]>>,
     pub(crate) texture_id: Animatable<u32>,
 }
 
@@ -112,7 +113,19 @@ pub(crate) fn animate_layers(
             .and_then(|track| sample(track, animation))
             .or_else(|| layer.texture_id.value().copied())
             .unwrap_or(0);
-        material.base.base_color = Color::srgba(1.0, 1.0, 1.0, alpha * geoset_alpha);
+        let [red, green, blue] = layer
+            .geoset_color
+            .as_ref()
+            .map(|color| {
+                color
+                    .track()
+                    .and_then(|track| sample(track, animation))
+                    .or_else(|| color.value().copied())
+                    .unwrap_or([1.0; 3])
+            })
+            .unwrap_or([1.0; 3]);
+        // Tint is a multiplier in the shader, not an sRGB display color.
+        material.base.base_color = Color::linear_rgba(red, green, blue, alpha * geoset_alpha);
         if let Some(bindings) = bindings {
             material.base.base_color_texture = bindings.bitmap(texture_id as usize);
         }
@@ -227,165 +240,5 @@ pub(crate) fn sample_emitter_transform(
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::material::Wc3LayerState;
-    use wc3::model::animation::ValueKeyframe;
-    use wc3::model::materials::LayerFilterMode;
-
-    #[test]
-    fn geoset_alpha_hides_decay_geometry_and_combines_with_layer_alpha() {
-        let mut app = App::new();
-        app.insert_resource(Assets::<Wc3LayerMaterial>::default());
-        app.add_systems(Update, animate_layers);
-        let root = app
-            .world_mut()
-            .spawn(Wc3Animation {
-                sequence: 0,
-                elapsed_ms: 0.0,
-                speed: 1.0,
-                playing: false,
-                sequences: vec![Sequence::new("Stand", [0, 101]).unwrap()],
-                global_sequences: vec![],
-            })
-            .id();
-        let material = app
-            .world_mut()
-            .resource_mut::<Assets<Wc3LayerMaterial>>()
-            .add(Wc3LayerMaterial {
-                base: StandardMaterial::default(),
-                extension: Wc3LayerState {
-                    filter: LayerFilterMode::None,
-                    no_depth_test: false,
-                    no_depth_set: false,
-                },
-            });
-        let entity = app
-            .world_mut()
-            .spawn((
-                AnimatedLayer {
-                    root,
-                    alpha: Animatable::Static(0.5),
-                    geoset_alpha: Some(Animatable::Animated(
-                        Track::linear(
-                            vec![
-                                ValueKeyframe {
-                                    frame: 0,
-                                    value: 0.0,
-                                },
-                                ValueKeyframe {
-                                    frame: 100,
-                                    value: 1.0,
-                                },
-                            ],
-                            None,
-                        )
-                        .unwrap(),
-                    )),
-                    texture_id: Animatable::Static(0),
-                },
-                MeshMaterial3d(material.clone()),
-                Visibility::Inherited,
-            ))
-            .id();
-        app.update();
-        assert_eq!(
-            *app.world().entity(entity).get::<Visibility>().unwrap(),
-            Visibility::Hidden
-        );
-        app.world_mut()
-            .entity_mut(root)
-            .get_mut::<Wc3Animation>()
-            .unwrap()
-            .elapsed_ms = 50.0;
-        app.update();
-        assert_eq!(
-            *app.world().entity(entity).get::<Visibility>().unwrap(),
-            Visibility::Inherited
-        );
-        assert_eq!(
-            app.world()
-                .resource::<Assets<Wc3LayerMaterial>>()
-                .get(&material)
-                .unwrap()
-                .base
-                .base_color
-                .to_srgba()
-                .alpha,
-            0.25,
-        );
-        assert_eq!(
-            app.world()
-                .resource::<Assets<Wc3LayerMaterial>>()
-                .get(&material)
-                .unwrap()
-                .base
-                .alpha_mode,
-            AlphaMode::AlphaToCoverage,
-        );
-        app.world_mut()
-            .entity_mut(root)
-            .get_mut::<Wc3Animation>()
-            .unwrap()
-            .elapsed_ms = 100.0;
-        app.update();
-        let material = app
-            .world()
-            .resource::<Assets<Wc3LayerMaterial>>()
-            .get(&material)
-            .unwrap();
-        assert_eq!(material.base.alpha_mode, AlphaMode::Opaque);
-        app.world_mut()
-            .entity_mut(entity)
-            .get_mut::<AnimatedLayer>()
-            .unwrap()
-            .alpha = Animatable::Static(0.0);
-        app.update();
-        assert_eq!(
-            *app.world().entity(entity).get::<Visibility>().unwrap(),
-            Visibility::Hidden
-        );
-    }
-
-    #[test]
-    fn sequence_clock_loops_and_global_clock_runs_independently() {
-        let animation = Wc3Animation {
-            sequence: 0,
-            elapsed_ms: 150.0,
-            speed: 1.0,
-            playing: true,
-            sequences: vec![Sequence::new("Stand", [1000, 1100]).unwrap()],
-            global_sequences: vec![200],
-        };
-        let sequence_track = Track::linear(
-            vec![
-                ValueKeyframe {
-                    frame: 1000,
-                    value: 0.0f32,
-                },
-                ValueKeyframe {
-                    frame: 1100,
-                    value: 1.0f32,
-                },
-            ],
-            None,
-        )
-        .unwrap();
-        let global_track = Track::linear(
-            vec![
-                ValueKeyframe {
-                    frame: 0,
-                    value: 0.0f32,
-                },
-                ValueKeyframe {
-                    frame: 200,
-                    value: 1.0f32,
-                },
-            ],
-            Some(0),
-        )
-        .unwrap();
-        assert_eq!(sample(&sequence_track, &animation), Some(0.5));
-        assert_eq!(sample(&global_track, &animation), Some(0.75));
-    }
-}
+#[path = "animation_tests.rs"]
+mod tests;

@@ -13,7 +13,7 @@ implementation inventory, not a claim of visual equivalence to Warcraft III.
 | --- | --- |
 | Classic materials | Meshes use Bevy PBR shading with WC3 layer blend and depth states, rather than Warcraft's lighting equation. Mesh layer Unshaded/Unlit and Unfogged flags are not applied; sphere environment mapping is absent. PRE2 and ribbons do support unshaded rendering. |
 | Reforged materials | Only the diffuse texture binding is used. Normal/ORM and other non-diffuse slots, emissive gain, Fresnel controls, and the Reforged HD shader behavior are not implemented. |
-| Geoset animation | Geoset alpha is sampled and combined with layer alpha, including visibility changes. Static and animated geoset color are not applied. |
+| Geoset animation | Static and animated geoset color and alpha apply to all material layers, including visibility changes and per-geoset/instance material isolation. See [geoset animation](geoset-animation.md) for captures and remaining color-space, shadow, and game-fidelity checks. |
 | Geoset UVs | Layer alpha and texture selection animate. Texture-animation translation, rotation, and scaling are supported for ribbons, but not geoset UVs. Mesh construction uses only the first UV set; additional sets and layer CoordinateId selection are absent. |
 | Node flags | Node transforms animate through an ordinary Bevy hierarchy. Billboarded, axis-locked billboards, CameraAnchored, and DontInheritTranslation/Rotation/Scaling behavior are not implemented. |
 | WC3 pass ordering | Geometry uses Bevy render phases and WC3 layer blend/depth states. Warcraft's ordering across material layers and effects is not implemented as a dedicated ordering scheme. Mesh material PriorityPlane and SortPrimsFarZ/SortPrimsNearZ are not applied. PRE2 and ribbons have their own sorting/bias behavior, with remaining fidelity checks described below. |
@@ -54,7 +54,7 @@ and clean up with their owner. Points are exposed by ID/name for
 consumer-supplied models. Attached and PREM child models inherit the general
 renderer limitations above.
 
-Geoset alpha, eight-influence skinning, attachments, PRE2 heads/tails, model-based
+Geoset color/alpha, eight-influence skinning, attachments, PRE2 heads/tails, model-based
 PREM, and ribbons should not be listed as entirely missing features.
 
 The existing `capture` example produces images for visual verification.

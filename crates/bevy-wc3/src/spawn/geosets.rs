@@ -2,7 +2,7 @@ use super::prepare::PreparedLayer;
 use bevy::camera::visibility::DynamicSkinnedMeshBounds;
 use bevy::mesh::skinning::SkinnedMesh;
 use bevy::prelude::*;
-use wc3::model::animation::Animatable;
+use wc3::model::animation::GeosetAnimation;
 use wc3::model::materials::LayerFilterMode;
 
 use super::{rig::Rig, PreparedModel};
@@ -20,7 +20,11 @@ pub(super) fn spawn_geosets(
 ) {
     let layer_handles = instantiate_materials(materials, prepared, bindings);
     for geoset in &prepared.geosets {
-        let geoset_alpha = prepared.geoset_alphas[geoset.geoset_id].clone();
+        let geoset_animation = prepared.geoset_animations[geoset.geoset_id].as_ref();
+        let geoset_alpha = geoset_animation.map(|animation| animation.alpha.clone());
+        let geoset_color = geoset_animation
+            .filter(|animation| animation.flags.color())
+            .map(|animation| animation.color.clone());
         let initial_visibility = if geoset_alpha
             .as_ref()
             .and_then(|alpha| alpha.value())
@@ -35,7 +39,7 @@ pub(super) fn spawn_geosets(
             .zip(&layer_handles[geoset.material_id])
         {
             let material =
-                instantiate_geoset_material(materials, layer, material, geoset_alpha.as_ref());
+                instantiate_geoset_material(materials, layer, material, geoset_animation);
             let mut entity = commands.spawn((
                 Mesh3d(geoset.mesh.clone()),
                 MeshMaterial3d(material),
@@ -45,6 +49,7 @@ pub(super) fn spawn_geosets(
                 root,
                 alpha: layer.alpha.clone(),
                 geoset_alpha: geoset_alpha.clone(),
+                geoset_color: geoset_color.clone(),
                 texture_id: layer.texture_id.clone(),
             });
             let entity = entity.id();
@@ -90,9 +95,10 @@ fn instantiate_geoset_material(
     materials: &mut Assets<Wc3LayerMaterial>,
     layer: &PreparedLayer,
     material: &Handle<Wc3LayerMaterial>,
-    geoset_alpha: Option<&Animatable<f32>>,
+    geoset_animation: Option<&GeosetAnimation>,
 ) -> Handle<Wc3LayerMaterial> {
-    if geoset_alpha.is_some() {
+    if let Some(animation) = geoset_animation {
+        let geoset_alpha = Some(&animation.alpha);
         let mut material = materials
             .get(material)
             .cloned()
@@ -101,7 +107,12 @@ fn instantiate_geoset_material(
             * geoset_alpha
                 .and_then(|alpha| alpha.value().copied())
                 .unwrap_or(1.0);
-        material.base.base_color = Color::srgba(1.0, 1.0, 1.0, alpha);
+        let [red, green, blue] = if animation.flags.color() {
+            animation.color.value().copied().unwrap_or([1.0; 3])
+        } else {
+            [1.0; 3]
+        };
+        material.base.base_color = Color::linear_rgba(red, green, blue, alpha);
         if geoset_alpha
             .and_then(|alpha| alpha.value().copied())
             .is_some_and(|alpha| (0.0..1.0).contains(&alpha))
