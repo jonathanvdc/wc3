@@ -13,7 +13,13 @@ pub(super) fn decode_into(
     if !matches!(alpha_bits, 0 | 1 | 4 | 8) {
         return Err(DecodeError::UnsupportedAlphaDepth { depth: alpha_bits });
     }
-    let count = pixels.len() / 4;
+    let (pixels, remainder) = pixels.as_chunks_mut::<4>();
+    if !remainder.is_empty() {
+        return Err(DecodeError::InvalidData {
+            field: "RGBA output size",
+        });
+    }
+    let count = pixels.len();
     let alpha_len = count
         .checked_mul(alpha_bits as usize)
         .and_then(|bits| bits.checked_add(7))
@@ -25,11 +31,10 @@ pub(super) fn decode_into(
         });
     }
     let (indices, alpha) = data.split_at(count);
-    for (pixel, &index) in pixels.chunks_exact_mut(4).zip(indices) {
-        let entry = &palette[usize::from(index) * 4..usize::from(index) * 4 + 4];
+    let (palette, _) = palette.as_chunks::<4>();
+    for (i, (pixel, &index)) in pixels.iter_mut().zip(indices.iter()).enumerate() {
+        let entry = &palette[usize::from(index)];
         pixel[..3].copy_from_slice(&[entry[2], entry[1], entry[0]]);
-    }
-    for (i, pixel) in pixels.chunks_exact_mut(4).enumerate() {
         pixel[3] = match alpha_bits {
             0 => 255,
             1 => {
