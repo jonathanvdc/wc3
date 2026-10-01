@@ -6,6 +6,10 @@ use wc3::model::emitters::ParticleEmitter;
 
 use crate::animation::{sample, sample_value, AnimatedNode, Wc3Animation};
 use crate::asset::Wc3ModelAsset;
+use crate::effects::simulation::{
+    birth_animation, compose_emitter_transform, sequence_ended, simulation_delta, EmissionPhase,
+    EmissionRounding, EmitterRng, SampledPose, SimulationClock,
+};
 use crate::instance::{Wc3ModelInstance, Wc3ModelOwner};
 
 const MAX_PARTICLES: usize = 1024;
@@ -17,10 +21,9 @@ pub(crate) struct ParticleState {
     definition: ParticleEmitter,
     model: Handle<Wc3ModelAsset>,
     particles: Vec<Particle>,
-    remainder: f64,
-    last_sequence: usize,
-    last_elapsed_ms: f64,
-    rng: u64,
+    emission: EmissionPhase,
+    clock: SimulationClock,
+    rng: EmitterRng,
 }
 
 struct Particle {
@@ -50,21 +53,13 @@ impl ParticleState {
         Self {
             root,
             node,
-            rng: u64::from(definition.node.object_id) + 1,
+            rng: EmitterRng::new(definition.node.object_id),
             definition,
             model,
             particles: Vec::new(),
-            remainder: 0.0,
-            last_sequence: usize::MAX,
-            last_elapsed_ms: 0.0,
+            emission: EmissionPhase::default(),
+            clock: SimulationClock::default(),
         }
-    }
-
-    fn random(&mut self) -> f32 {
-        self.rng ^= self.rng << 13;
-        self.rng ^= self.rng >> 7;
-        self.rng ^= self.rng << 17;
-        (self.rng >> 40) as f32 / (1u32 << 24) as f32
     }
 }
 
@@ -88,15 +83,6 @@ pub(crate) fn animate_particle_models(
         // age, including the partial update at birth and any loading delay.
         animation.playing = playing;
         animation.speed = speed;
-    }
-}
-
-fn simulation_delta(time: &Time, animation: &Wc3Animation) -> f64 {
-    let dt = time.delta_secs_f64() * animation.speed;
-    if animation.playing && dt.is_finite() {
-        dt.max(0.0)
-    } else {
-        0.0
     }
 }
 
@@ -133,23 +119,21 @@ fn root_visible(mut entity: Entity, nodes: &NodeTransforms) -> bool {
 }
 
 fn sample_emitter_transform(
-    mut entity: Entity,
+    entity: Entity,
     root: Entity,
     animation: &Wc3Animation,
     nodes: &NodeTransforms,
 ) -> Option<GlobalTransform> {
-    let mut world = GlobalTransform::IDENTITY;
-    loop {
+    compose_emitter_transform(entity, |entity| {
         let (transform, node, parent, _) = nodes.get(entity).ok()?;
         let local = node
             .filter(|node| node.root == root)
             .map_or(*transform, |node| node.sample_transform(animation));
-        world = GlobalTransform::from(local) * world;
-        let Some(parent) = parent else {
-            return Some(world);
-        };
-        entity = parent.parent();
-    }
+        Some(SampledPose::Local(
+            GlobalTransform::from(local),
+            parent.map(ChildOf::parent),
+        ))
+    })
 }
 
 pub(crate) fn update_particles(
@@ -165,15 +149,13 @@ pub(crate) fn update_particles(
             continue;
         };
         let dt = simulation_delta(&time, animation);
-        if state.last_sequence != animation.sequence || animation.elapsed_ms < state.last_elapsed_ms
-        {
+        if state.clock.observe(animation) {
             for particle in state.particles.drain(..) {
                 commands.entity(particle.entity).despawn();
             }
-            state.remainder = 0.0;
+            state.emission.reset();
         }
-        state.last_sequence = animation.sequence;
-        state.last_elapsed_ms = animation.elapsed_ms;
+        state.clock.advance(dt);
         let root_visible = root_visible(state.root, &transforms.p0());
         {
             let mut models = transforms.p1();
@@ -203,14 +185,7 @@ pub(crate) fn update_particles(
             .as_ref()
             .and_then(|track| sample(track, animation))
             .unwrap_or(1.0);
-        let ended = animation
-            .sequences
-            .get(animation.sequence)
-            .is_some_and(|sequence| {
-                sequence.flags.non_looping()
-                    && animation.elapsed_ms
-                        >= f64::from(sequence.interval[1].saturating_sub(sequence.interval[0]))
-            });
+        let ended = sequence_ended(animation);
         if dt <= 0.0
             || ended
             || visible <= 0.1
@@ -223,22 +198,15 @@ pub(crate) fn update_particles(
         if !rate.is_finite() || rate <= 0.0 {
             continue;
         }
-        let remainder = state.remainder;
-        let emission = remainder + rate * dt;
-        if !emission.is_finite() {
-            state.remainder = 0.0;
-            continue;
-        }
-        let tolerance = 16.0 * f64::EPSILON * emission.max(1.0);
-        let count = ((emission + tolerance).floor() as usize).min(MAX_PARTICLES);
-        state.remainder = (emission - (emission + tolerance).floor()).clamp(0.0, 1.0);
-        for index in 0..count {
+        let schedule = state
+            .emission
+            .continuous(rate, dt, MAX_PARTICLES, EmissionRounding::Model);
+        for index in 0..schedule.count as usize {
             if state.particles.len() >= MAX_PARTICLES {
                 break;
             }
-            let age = dt - ((index as f64 + 1.0 - remainder) / rate).clamp(0.0, dt);
-            let mut birth = animation.clone();
-            birth.elapsed_ms -= age * 1000.0;
+            let age = schedule.age(index);
+            let birth = birth_animation(animation, age);
             let lifetime = f64::from(sample_value(&state.definition.life_span, &birth));
             let speed = sample_value(&state.definition.initial_velocity, &birth);
             let gravity = sample_value(&state.definition.gravity, &birth);
@@ -257,13 +225,13 @@ pub(crate) fn update_particles(
                 continue;
             };
             let (scale, rotation, origin) = world.to_scale_rotation_translation();
-            let yaw = state.random() * TAU;
-            let pitch = (state.random() * 2.0 - 1.0) * latitude;
+            let yaw = state.rng.random() * TAU;
+            let pitch = (state.rng.random() * 2.0 - 1.0) * latitude;
             let direction = Quat::from_rotation_z(yaw) * Quat::from_rotation_y(pitch) * Vec3::Z;
             let velocity = (rotation * direction) * speed * scale;
             let mut transform = Transform {
                 translation: origin,
-                rotation: Quat::from_rotation_z(state.random() * TAU),
+                rotation: Quat::from_rotation_z(state.rng.random() * TAU),
                 scale,
             };
             let entity = commands

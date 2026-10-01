@@ -7,6 +7,7 @@
 //! Growing rings keep records resident on the GPU. Birth cursors select upload
 //! ranges; draw-order indices provide per-view depth sorting for SortPrimsFarZ.
 
+mod emission;
 mod render;
 mod simulation;
 

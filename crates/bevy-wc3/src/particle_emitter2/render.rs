@@ -29,18 +29,19 @@ use bevy::render::{
     sync_component::SyncComponent,
     sync_world::MainEntity,
     texture::{FallbackImage, GpuImage},
-    view::{ExtractedView, NoIndirectDrawing, RetainedViewEntity},
+    view::{ExtractedView, NoIndirectDrawing},
     Render, RenderApp, RenderStartup, RenderSystems,
 };
-use bytemuck::{bytes_of, cast_slice, Pod, Zeroable};
+use bytemuck::{Pod, Zeroable};
 use std::array::from_fn;
-use std::collections::HashMap;
 use std::f32::consts::{FRAC_PI_8, PI};
 use std::num::NonZeroU64;
 use std::sync::Arc;
 use wc3::model::emitters::{Particle2FilterMode, ParticleEmitter2};
 
-use crate::effect_ring::{upload_records, RecordRing, RingCursor};
+use crate::effect_ring::RecordRing;
+use crate::effects::render::{EffectBuffer, PassResources, ResidentRecordBuffer};
+use crate::effects::simulation::split_time;
 
 /// Immutable spawn data indexed by the growing record ring.
 #[derive(Clone, Copy, Debug, PartialEq, Pod, Zeroable)]
@@ -52,12 +53,6 @@ pub(crate) struct ParticleInstance {
     lifetime_tail_birth: [f32; 4],
     // XYZ size multipliers sampled at birth, then XYQuad facing in radians.
     scale_facing: [f32; 4],
-}
-
-// Splitting the clock keeps short particle ages precise in long-running scenes.
-fn split_time(time: f64) -> [f32; 2] {
-    let high = time as f32;
-    [high, (time - f64::from(high)) as f32]
 }
 
 impl ParticleInstance {
@@ -408,49 +403,7 @@ fn queue_particles(
     }
 }
 
-struct ParticleOrderBuffer {
-    buffer: Buffer,
-    capacity: usize,
-}
-
-#[derive(Component)]
-struct ParticleBuffer {
-    records: Buffer,
-    capacity: usize,
-    cursor: RingCursor,
-    live_indices: Arc<Vec<u32>>,
-    uniform: Buffer,
-    order: ParticleOrderBuffer,
-    texture: BindGroup,
-    sorted: HashMap<RetainedViewEntity, ParticleOrderBuffer>,
-}
-
-fn prepare_order(
-    indices: &[u32],
-    previous: Option<&ParticleOrderBuffer>,
-    device: &RenderDevice,
-    queue: &RenderQueue,
-    changed: bool,
-) -> ParticleOrderBuffer {
-    if let Some(previous) = previous.filter(|previous| previous.capacity >= indices.len()) {
-        if changed {
-            queue.write_buffer(&previous.buffer, 0, cast_slice(indices));
-        }
-        return ParticleOrderBuffer {
-            buffer: previous.buffer.clone(),
-            capacity: previous.capacity,
-        };
-    }
-    let capacity = indices.len().next_power_of_two();
-    let buffer = device.create_buffer(&BufferDescriptor {
-        label: Some("wc3 particle draw order"),
-        size: (capacity * size_of::<u32>()) as u64,
-        usage: BufferUsages::VERTEX | BufferUsages::COPY_DST,
-        mapped_at_creation: false,
-    });
-    queue.write_buffer(&buffer, 0, cast_slice(indices));
-    ParticleOrderBuffer { buffer, capacity }
-}
+type ParticleBuffer = EffectBuffer<u32>;
 
 fn sorted_indices(data: &ParticleInstances, world_from_view: &Affine3A) -> Vec<u32> {
     let eye = world_from_view.translation;
@@ -485,84 +438,38 @@ fn prepare_particles(
             // Keep resident records and allocated capacity across emission gaps.
             continue;
         }
-        let (records, capacity) = if let Some(previous) =
-            previous.filter(|previous| previous.capacity >= data.records.capacity())
-        {
-            upload_records(
-                &data.records,
-                Some(previous.cursor),
-                &previous.records,
-                &queue,
-                &mut scratch,
-            );
-            (previous.records.clone(), previous.capacity)
-        } else {
-            let capacity = data.records.capacity();
-            let records = device.create_buffer(&BufferDescriptor {
-                label: Some("wc3 immutable particle records"),
-                size: (capacity * size_of::<ParticleInstance>()) as u64,
-                usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
-                mapped_at_creation: false,
-            });
-            upload_records(&data.records, None, &records, &queue, &mut scratch);
-            (records, capacity)
-        };
-        let uniform = if let Some(previous) = previous {
-            queue.write_buffer(&previous.uniform, 0, bytes_of(&data.uniform));
-            previous.uniform.clone()
-        } else {
-            device.create_buffer_with_data(&BufferInitDescriptor {
-                label: Some("wc3 particle emitter parameters"),
-                contents: bytes_of(&data.uniform),
-                usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
-            })
-        };
-        let order = prepare_order(
-            &data.live_indices,
-            previous.map(|p| &p.order),
+        let records = ResidentRecordBuffer::prepare(
+            &data.records,
+            previous.map(|p| &p.records),
             &device,
             &queue,
-            previous.is_none_or(|p| !Arc::ptr_eq(&p.live_indices, &data.live_indices)),
+            &mut scratch,
         );
         let image = data
             .texture
             .as_ref()
             .and_then(|handle| images.get(handle))
             .unwrap_or(&fallback.d2);
-        let texture = device.create_bind_group(
-            "wc3 particle data",
-            &pipeline.texture_bind_group_layout,
-            &BindGroupEntries::sequential((
-                &image.texture_view,
-                &image.sampler,
-                uniform.as_entire_binding(),
-                records.as_entire_binding(),
-            )),
-        );
-        let mut sorted = HashMap::new();
-        if data.sort_far {
-            for view in &views {
-                let indices = sorted_indices(data, &view.world_from_view.affine());
-                let buffer = prepare_order(
-                    &indices,
-                    previous.and_then(|p| p.sorted.get(&view.retained_view_entity)),
-                    &device,
-                    &queue,
-                    true,
-                );
-                sorted.insert(view.retained_view_entity, buffer);
-            }
-        }
-        commands.entity(entity).insert(ParticleBuffer {
-            records,
-            capacity,
-            cursor: data.records.cursor(),
-            live_indices: data.live_indices.clone(),
-            uniform,
-            order,
-            texture,
-            sorted,
+        let sorted_orders = views.iter().filter(|_| data.sort_far).map(|view| {
+            (
+                view.retained_view_entity,
+                sorted_indices(data, &view.world_from_view.affine()),
+            )
         });
+        let buffer = ParticleBuffer::prepare(
+            records,
+            &data.live_indices,
+            &data.uniform,
+            previous,
+            PassResources {
+                device: &device,
+                queue: &queue,
+                layout: &pipeline.texture_bind_group_layout,
+                image,
+            },
+            sorted_orders,
+        );
+        commands.entity(entity).insert(buffer);
     }
 }
 

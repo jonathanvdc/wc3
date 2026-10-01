@@ -11,6 +11,7 @@ mod animation;
 mod asset;
 mod attachment;
 mod effect_ring;
+mod effects;
 mod instance;
 mod material;
 mod mesh;

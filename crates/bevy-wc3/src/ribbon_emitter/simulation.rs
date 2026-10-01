@@ -1,31 +1,24 @@
 //! Sample historical node poses only when emitting a new cross-section.
 use bevy::prelude::*;
-use std::collections::VecDeque;
 use std::sync::Arc;
 use wc3::model::animation::TextureAnimation;
 use wc3::model::emitters::RibbonEmitter;
 use wc3::model::materials::Layer;
 use wc3::model::V1800;
 
-use crate::effect_ring::{RecordRing, RingCursor};
+use crate::effect_ring::RingCursor;
+use crate::effects::simulation::{
+    birth_animation, sample_clock, sequence_ended, simulation_delta, split_time, EmissionPhase,
+    EmissionRounding, LiveRecords, SimulationClock,
+};
 
-use super::render::{split_time, RibbonInstances, RibbonSection, RibbonSegment, RibbonUniform};
+use super::render::{RibbonInstances, RibbonSection, RibbonSegment, RibbonUniform};
 use crate::animation::{
     sample, sample_emitter_transform, sample_value, AnimatedNode, Wc3Animation,
 };
 use crate::texture_bindings::Wc3TextureBindings;
 
 const MAX_SECTIONS: usize = 8192;
-
-// Tracks use integer milliseconds. Eliminate arithmetic noise at exact keys so
-// visibility and atlas changes have the same boundary behavior at every FPS.
-fn sample_clock(mut animation: Wc3Animation) -> Wc3Animation {
-    let rounded = animation.elapsed_ms.round();
-    if (animation.elapsed_ms - rounded).abs() < 1e-6 {
-        animation.elapsed_ms = rounded;
-    }
-    animation
-}
 
 struct Section {
     birth: f64,
@@ -37,16 +30,13 @@ pub(crate) struct RibbonState {
     pub(crate) root: Entity,
     pub(crate) node: Entity,
     pub(crate) definition: RibbonEmitter,
-    sections: VecDeque<Section>,
-    records: Arc<RecordRing<RibbonSection>>,
+    live: LiveRecords<RibbonSection, Section>,
     segments: Arc<Vec<RibbonSegment>>,
     segments_version: Option<(RingCursor, usize)>,
-    clock: f64,
-    remainder: f64,
+    clock: SimulationClock,
+    emission: EmissionPhase,
     chain: u64,
     connected: bool,
-    last_sequence: usize,
-    last_elapsed: f64,
 }
 
 impl RibbonState {
@@ -55,16 +45,13 @@ impl RibbonState {
             root,
             node,
             definition,
-            sections: VecDeque::new(),
-            records: Arc::default(),
+            live: LiveRecords::default(),
             segments: Arc::default(),
             segments_version: None,
-            clock: 0.0,
-            remainder: 0.0,
+            clock: SimulationClock::default(),
+            emission: EmissionPhase::default(),
             chain: 0,
             connected: false,
-            last_sequence: usize::MAX,
-            last_elapsed: 0.0,
         }
     }
 
@@ -76,35 +63,34 @@ impl RibbonState {
     }
 
     fn retire(&mut self, time: f64) {
-        while self.sections.front().is_some_and(|section| {
-            time - section.birth + 1e-9 >= f64::from(self.definition.life_span)
-        }) {
-            self.sections.pop_front();
-            Arc::make_mut(&mut self.records).pop_front();
-        }
+        let lifespan = f64::from(self.definition.life_span);
+        self.live
+            .retire(|section| time - section.birth + 1e-9 >= lifespan);
     }
 
     fn insert(&mut self, record: RibbonSection, birth: f64) {
-        if self.sections.len() >= MAX_SECTIONS {
-            self.sections.pop_front();
-            Arc::make_mut(&mut self.records).pop_front();
+        if self.live.len() >= MAX_SECTIONS {
+            self.live.pop_front();
         }
-        Arc::make_mut(&mut self.records).push(record, MAX_SECTIONS);
-        self.sections.push_back(Section {
-            birth,
-            chain: self.chain,
-        });
+        self.live.push(
+            record,
+            Section {
+                birth,
+                chain: self.chain,
+            },
+            MAX_SECTIONS,
+        );
         self.connected = true;
     }
 
     fn rebuild_segments(&mut self) {
-        let version = (self.records.cursor(), self.records.len());
+        let version = (self.live.records.cursor(), self.live.records.len());
         if self.segments_version == Some(version) {
             return;
         }
         self.segments_version = Some(version);
-        let mut segments = Vec::with_capacity(self.sections.len().saturating_sub(1));
-        let sections = &self.sections;
+        let mut segments = Vec::with_capacity(self.live.len().saturating_sub(1));
+        let sections = self.live.metadata();
         let mut start = 0;
         while start < sections.len() {
             let mut end = start + 1;
@@ -114,8 +100,8 @@ impl RibbonState {
             let count = (end - start - 1) as u32;
             for i in start..end - 1 {
                 segments.push(RibbonSegment([
-                    self.records.index(i),
-                    self.records.index(i + 1),
+                    self.live.records.index(i),
+                    self.live.records.index(i + 1),
                     (i - start) as u32,
                     count,
                 ]));
@@ -133,20 +119,18 @@ impl RibbonState {
         dt: f64,
         mut transform_at: impl FnMut(&Wc3Animation) -> GlobalTransform,
     ) {
-        if animation.sequence != self.last_sequence || animation.elapsed_ms < self.last_elapsed {
+        if self.clock.observe(animation) {
             self.break_chain();
-            self.remainder = 0.0;
+            self.emission.reset();
         }
-        self.last_sequence = animation.sequence;
-        self.last_elapsed = animation.elapsed_ms;
         if !dt.is_finite() || dt <= 0.0 {
             return;
         }
         let sampled_animation = sample_clock(animation.clone());
         let animation = &sampled_animation;
-        let start = self.clock;
-        self.clock += dt;
-        self.retire(self.clock);
+        let start = self.clock.time;
+        self.clock.advance(dt);
+        self.retire(self.clock.time);
         let rate = f64::from(self.definition.emission_rate);
         let lifespan = f64::from(self.definition.life_span);
         if rate <= 0.0 || !lifespan.is_finite() || lifespan <= 0.0 {
@@ -154,31 +138,18 @@ impl RibbonState {
             self.rebuild_segments();
             return;
         }
-        let total = self.remainder + rate * dt;
-        let births = (total + 1e-9).floor();
-        let first_birth = start + (1.0 - self.remainder) / rate;
-        self.remainder = (total - births).max(0.0);
-        // Skip births already dead at the end of this step and bound pathological
-        // rate/delta inputs. Sampling the last capacity births avoids coincident
-        // sections and keeps memory and work bounded.
-        let skip = ((self.clock - lifespan - first_birth) * rate).floor() + 1.0;
-        let skip = skip.max(0.0).max(births - MAX_SECTIONS as f64).min(births);
+        let schedule = self
+            .emission
+            .continuous(rate, dt, MAX_SECTIONS, EmissionRounding::Ribbon);
+        let first_birth = schedule.first_birth(start);
+        let skip = schedule.skip(first_birth, self.clock.time, lifespan, MAX_SECTIONS);
         if skip > 0.0 {
             self.break_chain();
         }
-        for index in 0..(births - skip) as usize {
-            let birth = first_birth + (skip + index as f64) / rate;
-            let mut at_birth = animation.clone();
-            at_birth.elapsed_ms = animation.elapsed_ms - (self.clock - birth) * 1000.0;
-            let at_birth = sample_clock(at_birth);
-            let ended = animation
-                .sequences
-                .get(animation.sequence)
-                .is_some_and(|sequence| {
-                    sequence.flags.non_looping()
-                        && at_birth.elapsed_ms
-                            >= f64::from(sequence.interval[1].saturating_sub(sequence.interval[0]))
-                });
+        for index in 0..(schedule.count - skip) as usize {
+            let birth = schedule.birth(first_birth, skip + index as f64);
+            let at_birth = sample_clock(birth_animation(animation, self.clock.time - birth));
+            let ended = sequence_ended(&at_birth);
             let visible = self
                 .definition
                 .visibility
@@ -265,11 +236,7 @@ pub(crate) fn update_ribbons(
         let Ok((transform, _, _)) = nodes.get(state.node) else {
             continue;
         };
-        let dt = if animation.playing {
-            (time.delta_secs_f64() * animation.speed).max(0.0)
-        } else {
-            0.0
-        };
+        let dt = simulation_delta(&time, animation);
         let node = state.node;
         let root = state.root;
         state.advance(animation, dt, |at_birth| {
@@ -289,12 +256,12 @@ pub(crate) fn update_ribbons(
         let color = sample_value(&definition.color, animation);
         let alpha = sample_value(&definition.alpha, animation)
             * sample_value(&layer.definition.alpha, animation);
-        let [high, low] = split_time(state.clock);
+        let [high, low] = split_time(state.clock.time);
         let rows = definition.rows.max(1);
         let columns = definition.columns.max(1);
         let slot = sample_value(&definition.texture_slot, animation)
             .min(rows.saturating_mul(columns).saturating_sub(1));
-        instances.records = state.records.clone();
+        instances.records = state.live.records.clone();
         instances.live_indices = state.segments.clone();
         instances.uniform = RibbonUniform {
             color: [color[0], color[1], color[2], alpha.clamp(0.0, 1.0)],
@@ -363,9 +330,9 @@ mod tests {
         for _ in 0..5 {
             advance(&mut fine, &mut b, 0.1);
         }
-        assert_eq!(coarse.sections.len(), 5);
+        assert_eq!(coarse.live.metadata().len(), 5);
         assert_eq!(coarse.segments.len(), 4);
-        for (x, y) in coarse.records.iter().zip(fine.records.iter()) {
+        for (x, y) in coarse.live.records.iter().zip(fine.live.records.iter()) {
             for (x, y) in x.above_birth.iter().zip(y.above_birth.iter()) {
                 assert!((x - y).abs() < 1e-6);
             }
@@ -373,12 +340,12 @@ mod tests {
                 assert!((x - y).abs() < 1e-6);
             }
         }
-        assert_eq!(coarse.records[0].above_birth[..3], [0.1, 2.0, 0.0]);
-        assert_eq!(coarse.records[0].below_birth[..3], [0.1, -1.0, 0.0]);
+        assert_eq!(coarse.live.records[0].above_birth[..3], [0.1, 2.0, 0.0]);
+        assert_eq!(coarse.live.records[0].below_birth[..3], [0.1, -1.0, 0.0]);
         assert_eq!(coarse.segments[0], RibbonSegment([0, 1, 0, 4]));
-        let first = coarse.records[0];
+        let first = coarse.live.records[0];
         advance(&mut coarse, &mut a, 0.2);
-        assert_eq!(coarse.records[0], first);
+        assert_eq!(coarse.live.records[0], first);
     }
 
     #[test]
@@ -414,9 +381,9 @@ mod tests {
         };
         let a = run(30);
         let b = run(60);
-        assert_eq!(a.sections.len(), b.sections.len());
+        assert_eq!(a.live.metadata().len(), b.live.metadata().len());
         assert_eq!(a.segments.len(), b.segments.len());
-        for (a, b) in a.sections.iter().zip(b.sections.iter()) {
+        for (a, b) in a.live.metadata().iter().zip(b.live.metadata().iter()) {
             assert!((a.birth - b.birth).abs() < 1e-9);
             assert_eq!(a.chain, b.chain);
         }
@@ -450,20 +417,21 @@ mod tests {
         );
         let mut animation = animation();
         advance(&mut state, &mut animation, 0.6);
-        assert_eq!(state.sections.len(), 4);
+        assert_eq!(state.live.metadata().len(), 4);
         assert_eq!(
             *state.segments,
             vec![RibbonSegment([0, 1, 0, 1]), RibbonSegment([2, 3, 0, 1])]
         );
         advance(&mut state, &mut animation, 1.0);
         for segment in state.segments.iter() {
-            assert!((segment.0[0] as usize) < state.records.capacity());
-            assert!((segment.0[1] as usize) < state.records.capacity());
+            assert!((segment.0[0] as usize) < state.live.records.capacity());
+            assert!((segment.0[1] as usize) < state.live.records.capacity());
         }
         assert!(state
-            .sections
+            .live
+            .metadata()
             .iter()
-            .all(|section| state.clock - section.birth < 1.0));
+            .all(|section| state.clock.time - section.birth < 1.0));
     }
 
     #[test]
@@ -471,20 +439,20 @@ mod tests {
         let mut state = state();
         let mut animation = animation();
         advance(&mut state, &mut animation, 0.2);
-        let records = state.records.clone();
+        let records = state.live.records.clone();
         let segments = state.segments.clone();
         advance(&mut state, &mut animation, 0.0);
-        assert!(Arc::ptr_eq(&records, &state.records));
+        assert!(Arc::ptr_eq(&records, &state.live.records));
         assert!(Arc::ptr_eq(&segments, &state.segments));
         animation.elapsed_ms = 0.0;
         advance(&mut state, &mut animation, 0.1);
-        assert_eq!(state.sections.len(), 3);
+        assert_eq!(state.live.metadata().len(), 3);
         assert_eq!(state.segments.len(), 1);
         advance(&mut state, &mut animation, 0.1);
         assert_eq!(state.segments.len(), 2);
         state.definition.emission_rate = 0;
         advance(&mut state, &mut animation, 1.0);
-        assert!(state.sections.is_empty());
+        assert!(state.live.metadata().is_empty());
         assert!(state.segments.is_empty());
     }
 
@@ -493,15 +461,16 @@ mod tests {
         let mut state = state();
         let mut animation = animation();
         advance(&mut state, &mut animation, 100.0);
-        assert!(state.sections.len() <= 10);
+        assert!(state.live.metadata().len() <= 10);
         assert!(state
-            .sections
+            .live
+            .metadata()
             .iter()
-            .all(|section| state.clock - section.birth < 1.0));
+            .all(|section| state.clock.time - section.birth < 1.0));
         state.definition.emission_rate = u32::MAX;
         advance(&mut state, &mut animation, 1.0);
-        assert_eq!(state.sections.len(), MAX_SECTIONS);
-        assert!(state.records.len() <= MAX_SECTIONS);
+        assert_eq!(state.live.metadata().len(), MAX_SECTIONS);
+        assert!(state.live.records.len() <= MAX_SECTIONS);
         assert_eq!(state.segments.len(), MAX_SECTIONS - 1);
     }
 
@@ -512,22 +481,22 @@ mod tests {
         for _ in 0..20 {
             advance(&mut state, &mut animation, 0.1);
         }
-        assert_eq!(state.records.capacity(), 16);
+        assert_eq!(state.live.records.capacity(), 16);
         assert!(state
             .segments
             .iter()
             .any(|segment| segment.0[0] == 15 && segment.0[1] == 0));
-        let before = state.records.clone();
+        let before = state.live.records.clone();
         state.definition.emission_rate = 100;
         advance(&mut state, &mut animation, 0.2);
-        assert_eq!(state.records.capacity(), 32);
-        for (i, section) in state.sections.iter().enumerate() {
-            let record = state.records[state.records.index(i) as usize];
+        assert_eq!(state.live.records.capacity(), 32);
+        for (i, section) in state.live.metadata().iter().enumerate() {
+            let record = state.live.records[state.live.records.index(i) as usize];
             assert!((record.above_birth[0] - section.birth as f32).abs() < 1e-5);
         }
         for (i, segment) in state.segments.iter().enumerate() {
-            assert_eq!(segment.0[0], state.records.index(i));
-            assert_eq!(segment.0[1], state.records.index(i + 1));
+            assert_eq!(segment.0[0], state.live.records.index(i));
+            assert_eq!(segment.0[1], state.live.records.index(i + 1));
             assert_eq!(segment.0[2], i as u32);
             assert_eq!(segment.0[3], state.segments.len() as u32);
         }
@@ -542,10 +511,10 @@ mod tests {
         animation.sequences[0].interval = [0, 250];
         animation.sequences[0].flags.set_non_looping(true);
         advance(&mut state, &mut animation, 0.5);
-        assert_eq!(state.sections.len(), 2);
+        assert_eq!(state.live.metadata().len(), 2);
         assert_eq!(state.segments.len(), 1);
         advance(&mut state, &mut animation, 1.0);
-        assert!(state.sections.is_empty());
+        assert!(state.live.metadata().is_empty());
         assert!(state.segments.is_empty());
     }
 
@@ -594,9 +563,9 @@ mod tests {
                     .with_scale(Vec3::splat(2.0)),
             )
         });
-        assert!((state.records[0].above_birth[0] - 8.0).abs() < 1e-5);
-        assert!((state.records[1].above_birth[0] - 6.0).abs() < 1e-5);
-        assert!((state.records[0].below_birth[0] - 12.0).abs() < 1e-5);
-        assert_eq!(state.records[0].above_birth[2], 30.0);
+        assert!((state.live.records[0].above_birth[0] - 8.0).abs() < 1e-5);
+        assert!((state.live.records[1].above_birth[0] - 6.0).abs() < 1e-5);
+        assert!((state.live.records[0].below_birth[0] - 12.0).abs() < 1e-5);
+        assert_eq!(state.live.records[0].above_birth[2], 30.0);
     }
 }
