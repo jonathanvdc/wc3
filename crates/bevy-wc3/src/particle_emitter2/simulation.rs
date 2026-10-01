@@ -109,7 +109,9 @@ impl Particle2State {
         } else {
             transform.affine().transform_vector3(direction * speed)
         };
-        // Freeze all world scale components at birth, also for ModelSpace particles.
+        // Quad dimensions use the lengths of the transformed local axes, frozen
+        // at birth in both spaces. ModelSpace later transforms particle motion,
+        // while the shader applies these size multipliers to world-space offsets.
         let size_scale = Vec3::new(
             world_scale.x_axis.length(),
             world_scale.y_axis.length(),

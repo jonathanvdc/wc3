@@ -89,12 +89,16 @@ fn vertex(input: VertexInput) -> VertexOutput {
     let forward = -view.world_from_view[2].xyz;
     let half_size = max(scale, 0.0) * 0.5;
     let size_scale = particle.scale_facing.xyz;
+    // Billboard heads and tails use the camera-facing lighting normal;
+    // XYQuad heads override it with world +Z.
     var normal = -forward;
     var side = right * half_size;
     var vertical = up * half_size;
     if tail {
         let axis = safe_normalize(velocity);
         side = safe_normalize(cross(axis, forward)) * half_size * size_scale;
+        // Velocity already contains the motion scale. Scale only the width
+        // here; scaling the tail length again would apply that scale twice.
         vertical = velocity * emitter.clock_tail.z * 0.5;
         center -= vertical;
     } else if emitter.atlas_flags.w != 0u {
@@ -128,7 +132,9 @@ fn fragment(input: VertexOutput) -> @location(0) vec4<f32> {
     if color.a < 0.5 { discard; }
 #endif
     if emitter.render_flags.x != 0u { return color; }
-    // Matte scene lighting: PRE2 sprites have no specular material parameters.
+    // Use scene lighting with a matte, zero-reflectance material. This is
+    // Bevy lighting, rather than the Classic clamped lighting equation.
+    // Keep the texture/segment alpha unchanged by lighting.
     var lighting = pbr_input_new();
     lighting.material.base_color = color;
     lighting.material.reflectance = vec3(0.0);

@@ -49,6 +49,7 @@ pub(crate) struct ParticleInstance {
     velocity_gravity: [f32; 4],
     // Lifetime, tail marker, low birth time, padding.
     lifetime_tail_birth: [f32; 4],
+    // XYZ size multipliers sampled at birth, then XYQuad facing in radians.
     scale_facing: [f32; 4],
 }
 
@@ -73,7 +74,9 @@ impl ParticleInstance {
             position_birth: [position.x, position.y, position.z, high],
             velocity_gravity: [velocity.x, velocity.y, velocity.z, gravity],
             lifetime_tail_birth: [lifetime, f32::from(tail), low, 0.0],
-            // Facing is fixed at birth, including vertical/zero speed.
+            // XYQuad rotates its texture axes by the initial XY velocity angle
+            // minus pi plus pi/8. Store it independently of later velocity changes.
+            // atan2 also yields a finite facing for vertical/zero speed.
             scale_facing: [
                 size_scale.x,
                 size_scale.y,
