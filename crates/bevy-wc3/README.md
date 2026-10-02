@@ -7,6 +7,12 @@ and ribbon trails.
 
 ## Get started
 
+Add Bevy and the renderer to your application:
+
+```sh
+cargo add bevy bevy-wc3
+```
+
 Register `Wc3BevyPlugin` alongside Bevy’s default plugins, put the model and its
 textures under `assets/`, and spawn a model root:
 

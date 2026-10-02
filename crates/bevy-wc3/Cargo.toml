@@ -1,14 +1,19 @@
 [package]
 name = "bevy-wc3"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
-rust-version = "1.88"
+rust-version = "1.95"
 description = "Bevy renderer for Warcraft III models"
 license = "MIT OR Apache-2.0"
+readme = "README.md"
+documentation = "https://docs.rs/bevy-wc3"
+repository = "https://github.com/jonathanvdc/wc3"
+keywords = ["warcraft", "bevy", "mdx", "mdl", "renderer"]
+categories = ["game-development", "rendering"]
 
 [dependencies]
 bevy = { version = "0.19.1", features = ["dds"] }
-wc3 = { path = "../wc3", features = ["blp-decode"] }
+wc3 = { path = "../wc3", version = "0.2.0", features = ["blp-decode"] }
 bytemuck = { version = "1", features = ["derive"] }
 
 [dev-dependencies]

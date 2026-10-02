@@ -3,10 +3,7 @@ use wc3::model::mdl::Write as _;
 
 #[test]
 fn classic_fixture_converts_to_runtime_version() {
-    let model = Wc3Model::decode(include_bytes!(
-        "../../wc3/tests/fixtures/mdl/quad_model.mdx"
-    ))
-    .unwrap();
+    let model = Wc3Model::decode(include_bytes!("fixtures/quad_model.mdx")).unwrap();
     assert_eq!(model.source_version, 800);
     assert_eq!(model.model.version(), 1800);
     assert!(!model.model.geosets().is_empty());
@@ -14,12 +11,9 @@ fn classic_fixture_converts_to_runtime_version() {
 
 #[test]
 fn mdl_and_mdx_normalize_to_the_same_model() {
-    let text = include_str!("../../wc3/tests/fixtures/mdl/quad_model.mdl");
+    let text = include_str!("fixtures/quad_model.mdl");
     let mdl = Wc3Model::decode_mdl(text).unwrap();
-    let mdx = Wc3Model::decode_mdx(include_bytes!(
-        "../../wc3/tests/fixtures/mdl/quad_model.mdx"
-    ))
-    .unwrap();
+    let mdx = Wc3Model::decode_mdx(include_bytes!("fixtures/quad_model.mdx")).unwrap();
     assert_eq!(mdl.source_version, 800);
     assert_eq!(
         mdl.model.encode_mdl().unwrap(),

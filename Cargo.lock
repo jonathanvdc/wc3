@@ -378,7 +378,7 @@ dependencies = [
 
 [[package]]
 name = "bevy-wc3"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "bevy",
  "bytemuck",
@@ -5463,7 +5463,7 @@ dependencies = [
 
 [[package]]
 name = "wc3"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "bitfield",
  "color_quant",
@@ -5476,7 +5476,7 @@ dependencies = [
 
 [[package]]
 name = "wc3-derive"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "bitfield",
  "proc-macro2",

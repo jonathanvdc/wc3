@@ -15,10 +15,8 @@ use wc3::model::{Model, V1800};
 
 #[test]
 fn child_instances_inherit_visibility_and_cleanup_without_sharing_animation() {
-    let source = Wc3Model::decode(include_bytes!(
-        "../../../../wc3/tests/fixtures/mdl/quad_model.mdx"
-    ))
-    .unwrap();
+    let source =
+        Wc3Model::decode(include_bytes!("../../../tests/fixtures/quad_model.mdx")).unwrap();
     let mut app = App::new();
     app.add_plugins((MinimalPlugins, TransformPlugin, VisibilityPlugin));
     let mut meshes = Assets::<Mesh>::default();
@@ -189,7 +187,7 @@ fn child_instances_inherit_visibility_and_cleanup_without_sharing_animation() {
 
 #[test]
 fn prepared_assets_share_static_layers_and_isolate_animated_layers() {
-    let bytes = include_bytes!("../../../../wc3/tests/fixtures/mdl/quad_model.mdx");
+    let bytes = include_bytes!("../../../tests/fixtures/quad_model.mdx");
     let mut source = Wc3Model::decode(bytes).unwrap();
     let mut material_records = source.model.materials();
     assert!(!material_records.is_empty());
@@ -383,10 +381,8 @@ fn pre2_emitter_is_spawned_per_instance_and_owned_by_root() {
 
 #[test]
 fn slot_binding_selects_replaceable_bitmap_for_geosets() {
-    let mut source = Wc3Model::decode(include_bytes!(
-        "../../../../wc3/tests/fixtures/mdl/quad_model.mdx"
-    ))
-    .unwrap();
+    let mut source =
+        Wc3Model::decode(include_bytes!("../../../tests/fixtures/quad_model.mdx")).unwrap();
     let mut bitmaps = source.model.textures();
     bitmaps[0].path.set_text("").unwrap();
     bitmaps[0].replaceable_id = 1;

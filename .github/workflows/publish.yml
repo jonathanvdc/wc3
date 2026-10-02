@@ -16,8 +16,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - run: cargo publish --dry-run --locked -p wc3-derive
-      - run: cargo publish --dry-run --locked -p wc3
+      - run: sudo apt-get update && sudo apt-get install -y libwayland-dev libasound2-dev libudev-dev
+      - run: cargo publish --workspace --dry-run --locked
 
   publish:
     if: github.ref_type == 'tag'
@@ -28,6 +28,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+      - run: sudo apt-get update && sudo apt-get install -y libwayland-dev libasound2-dev libudev-dev
       - name: Check tag and crate versions
         shell: bash
         run: |
@@ -37,19 +38,16 @@ jobs:
             exit 1
           fi
           metadata="$(cargo metadata --no-deps --format-version 1)"
-          for crate in wc3-derive wc3; do
+          for crate in wc3-derive wc3 bevy-wc3; do
             crate_version="$(jq -r --arg crate "$crate" '.packages[] | select(.name == $crate) | .version' <<< "$metadata")"
             if [[ "$crate_version" != "$version" ]]; then
               echo "$crate is $crate_version, but the tag is v$version" >&2
               exit 1
             fi
           done
-      - run: cargo test --workspace --locked
+      - run: cargo test --workspace --all-targets --locked
       - uses: rust-lang/crates-io-auth-action@v1
         id: auth
-      - run: cargo publish --locked -p wc3-derive
-        env:
-          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
-      - run: cargo publish --locked -p wc3
+      - run: cargo publish --workspace --locked
         env:
           CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}

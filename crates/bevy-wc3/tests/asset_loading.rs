@@ -40,12 +40,12 @@ fn asset_server_loads_mdx_and_mdl_files() {
     fs::create_dir_all(&directory).unwrap();
     fs::write(
         directory.join("quad.mdx"),
-        include_bytes!("../../wc3/tests/fixtures/mdl/quad_model.mdx"),
+        include_bytes!("fixtures/quad_model.mdx"),
     )
     .unwrap();
     fs::write(
         directory.join("quad.mdl"),
-        include_str!("../../wc3/tests/fixtures/mdl/quad_model.mdl"),
+        include_str!("fixtures/quad_model.mdl"),
     )
     .unwrap();
 
