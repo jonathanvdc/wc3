@@ -1,5 +1,7 @@
 //! Run with `cargo run -p bevy-wc3 --example viewer -- path/to/model.mdx` (or `.mdl`).
+//! Use `--tonemapping tony-mcmapface` to enable tonemapping and `--illuminance LUX` to set lighting.
 use bevy::asset::AssetPlugin;
+use bevy::core_pipeline::tonemapping::Tonemapping;
 use bevy::input::mouse::{AccumulatedMouseMotion, AccumulatedMouseScroll, MouseScrollUnit};
 use bevy::prelude::*;
 use bevy_wc3::{
@@ -13,6 +15,7 @@ use std::path::PathBuf;
 struct Source {
     path: PathBuf,
     handle: Handle<Wc3ModelAsset>,
+    tonemapping: Tonemapping,
 }
 
 #[derive(Component)]
@@ -30,7 +33,29 @@ fn main() {
         .canonicalize()
         .expect("find model file");
     let mut choices = Vec::new();
+    let mut tonemapping = Tonemapping::None;
+    let mut illuminance = 5_000.0;
     while let Some(option) = arguments.next() {
+        if option == "--tonemapping" {
+            tonemapping = match arguments.next().as_deref() {
+                Some("none") => Tonemapping::None,
+                Some("tony-mcmapface") => Tonemapping::TonyMcMapface,
+                _ => panic!("pass none or tony-mcmapface after --tonemapping"),
+            };
+            continue;
+        }
+        if option == "--illuminance" {
+            illuminance = arguments
+                .next()
+                .expect("pass lux after --illuminance")
+                .parse::<f32>()
+                .expect("illuminance must be numeric");
+            assert!(
+                illuminance.is_finite() && illuminance >= 0.0,
+                "illuminance must be finite and nonnegative"
+            );
+            continue;
+        }
         let choice = arguments.next().expect("pass ID=path after texture option");
         let (index, texture_path) = choice.split_once('=').expect("expected ID=path");
         let index: usize = index.parse().expect("expected numeric texture ID or slot");
@@ -73,10 +98,11 @@ fn main() {
                 commands.insert_resource(Source {
                     path: path.clone(),
                     handle,
+                    tonemapping,
                 });
                 commands.spawn((
                     DirectionalLight {
-                        illuminance: 20_000.0,
+                        illuminance,
                         ..default()
                     },
                     Transform::from_xyz(1.0, -1.0, 2.0).looking_at(Vec3::ZERO, Vec3::Z),
@@ -115,6 +141,7 @@ fn frame_model(
     let distance = radius * 4.0;
     commands.spawn((
         Camera3d::default(),
+        source.tonemapping,
         Msaa::Sample4,
         Transform::from_translation(center + offset * distance).looking_at(center, Vec3::Z),
         OrbitCamera {

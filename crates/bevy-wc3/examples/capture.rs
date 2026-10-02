@@ -4,6 +4,7 @@ use bevy::app::PluginsState;
 use bevy::asset::{AssetPlugin, LoadState, RecursiveDependencyLoadState};
 use bevy::camera::{RenderTarget, ShadowLodOrigin};
 use bevy::core_pipeline::prepass::{DepthPrepass, MotionVectorPrepass, NormalPrepass};
+use bevy::core_pipeline::tonemapping::Tonemapping;
 use bevy::prelude::*;
 use bevy::render::pipelined_rendering::PipelinedRenderingPlugin;
 use bevy::render::render_resource::{CachedPipelineState, PipelineCache, TextureFormat};
@@ -33,6 +34,8 @@ Render offscreen and write frame-0000-1.000s.png, etc. Requires a GPU.
   --prepasses           Enable depth/normal/motion prepasses and shadows
   --no-default-light    Omit the capture scene light (isolate model lights)
   --bevy-reference      Add a StandardMaterial sphere at (0, 2, 0)
+  --tonemapping MODE    none or tony-mcmapface (default: none)
+  --illuminance LUX     Scene directional light intensity (default: 5000)
   --times SECONDS,...    Increasing capture times (default: 1)
   --sequence INDEX       Animation sequence index (default: 0)
   --fps NUMBER           Simulation steps per second (default: 60)
@@ -55,6 +58,8 @@ struct Options {
     prepasses: bool,
     bevy_reference: bool,
     no_default_light: bool,
+    tonemapping: Tonemapping,
+    illuminance: f32,
     model: PathBuf,
     output: PathBuf,
     times: Vec<f64>,
@@ -83,6 +88,8 @@ impl Options {
             prepasses: false,
             bevy_reference: false,
             no_default_light: false,
+            tonemapping: Tonemapping::None,
+            illuminance: 5_000.0,
             model: model.into(),
             output: output.into(),
             times: vec![1.0],
@@ -114,6 +121,14 @@ impl Options {
                 .next()
                 .ok_or_else(|| format!("missing value for {option}"))?;
             match option.as_str() {
+                "--tonemapping" => {
+                    options.tonemapping = match value.as_str() {
+                        "tony-mcmapface" => Tonemapping::TonyMcMapface,
+                        "none" => Tonemapping::None,
+                        _ => return Err("tonemapping must be none or tony-mcmapface".into()),
+                    };
+                }
+                "--illuminance" => options.illuminance = value.parse()?,
                 "--times" => {
                     options.times = value.split(',').map(str::parse).collect::<Result<_, _>>()?
                 }
@@ -148,6 +163,9 @@ impl Options {
         }
         if !options.fps.is_finite() || !(1.0..=1000.0).contains(&options.fps) {
             return Err("fps must be between 1 and 1000".into());
+        }
+        if !options.illuminance.is_finite() || options.illuminance < 0.0 {
+            return Err("illuminance must be finite and nonnegative".into());
         }
         if options.size.min_element() == 0 {
             return Err("image dimensions must be positive".into());
@@ -318,6 +336,7 @@ fn main() -> CaptureResult<()> {
         .world_mut()
         .spawn((
             Camera3d::default(),
+            options.tonemapping,
             ShadowLodOrigin,
             Msaa::Sample4,
             RenderTarget::Image(image.clone().into()),
@@ -354,7 +373,7 @@ fn main() -> CaptureResult<()> {
     if !options.no_default_light {
         app.world_mut().spawn((
             DirectionalLight {
-                illuminance: 20_000.0,
+                illuminance: options.illuminance,
                 shadow_maps_enabled: options.prepasses,
                 ..default()
             },
@@ -520,6 +539,10 @@ mod tests {
         assert!(parse(&["--eye", "1,2"]).is_err());
         assert!(parse(&["--eye", "1,2,NaN"]).is_err());
         assert!(parse(&["--times"]).is_err());
+        for illuminance in ["NaN", "inf", "-1"] {
+            assert!(parse(&["--illuminance", illuminance]).is_err());
+        }
+        assert!(parse(&["--tonemapping", "unknown"]).is_err());
         let options = parse(&[
             "--times", "0,0.5,1", "--size", "320x240", "--eye", "0,-15,5",
         ])
@@ -528,5 +551,12 @@ mod tests {
         assert_eq!(options.times, vec![0.0, 0.5, 1.0]);
         assert_eq!(options.size, UVec2::new(320, 240));
         assert_eq!(options.eye, Some(Vec3::new(0.0, -15.0, 5.0)));
+        assert_eq!(options.tonemapping, Tonemapping::None);
+        assert_eq!(options.illuminance, 5_000.0);
+        let original = parse(&["--tonemapping", "tony-mcmapface", "--illuminance", "20000"])
+            .unwrap()
+            .unwrap();
+        assert_eq!(original.tonemapping, Tonemapping::TonyMcMapface);
+        assert_eq!(original.illuminance, 20_000.0);
     }
 }
