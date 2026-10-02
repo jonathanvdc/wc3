@@ -23,3 +23,6 @@ pub use global_sequence::GlobalSequence;
 
 mod interpolate;
 pub use interpolate::Interpolate;
+
+mod time;
+pub use time::AnimationTime;

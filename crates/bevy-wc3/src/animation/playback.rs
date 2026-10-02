@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use wc3::model::animation::Sequence;
+use wc3::model::animation::{AnimationTime, Sequence};
 
 #[derive(Component, Clone)]
 pub struct Wc3Animation {
@@ -12,6 +12,15 @@ pub struct Wc3Animation {
 }
 
 impl Wc3Animation {
+    /// Returns the current model and global sequence sampling clocks.
+    pub fn time(&self) -> AnimationTime<'_> {
+        AnimationTime {
+            sequence: self.sequences.get(self.sequence),
+            elapsed_ms: self.elapsed_ms,
+            global_sequences: &self.global_sequences,
+        }
+    }
+
     pub fn sequences(&self) -> &[Sequence] {
         &self.sequences
     }

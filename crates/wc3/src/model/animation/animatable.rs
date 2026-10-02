@@ -1,5 +1,5 @@
 //! A property's stored value and optional animation.
-use super::{Interpolate, Track, TrackValue};
+use super::{AnimationTime, Interpolate, Track, TrackValue};
 use crate::model::mdl::{Parser, TokenKind, Writer};
 use crate::model::IoError;
 use crate::model::{mdl, mdx};
@@ -173,6 +173,15 @@ impl<T: TrackValue> mdl::ValueEq for Option<Track<T>> {
 }
 
 impl<T: Interpolate> Animatable<T> {
+    /// Samples the animation using its sequence clock, falling back to the stored
+    /// base value when no animation value is available. Property-specific defaults
+    /// remain the caller's choice when neither animation nor base supplies a value.
+    pub fn sample(&self, time: &AnimationTime<'_>) -> Option<T> {
+        self.track()
+            .and_then(|track| track.sample(time))
+            .or_else(|| self.value().copied())
+    }
+
     /// Samples the animation, falling back to the stored base value if sampling
     /// returns `None`. Static values are returned regardless of time.
     pub fn evaluate(&self, time_ms: f64) -> Option<T> {

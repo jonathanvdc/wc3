@@ -33,7 +33,9 @@ can remain in world space while still being cleaned up with their owner.
 ## Animation and rendering features
 
 `animation/playback.rs` owns the sequence clock and playback controls.
-`animation/sampling.rs` evaluates sequence/global-sequence tracks.
+`Wc3Animation::time()` exposes a borrowed `wc3::model::animation::AnimationTime`.
+`wc3` resolves sequence/global-sequence clocks and samples tracks and properties;
+`animation/sampling.rs` adapts those operations for Bevy effect callers.
 `animation/pose/` owns animated node data, camera selection, pose evaluation,
 and birth-time transform sampling. The ECS node system and effect birth sampling
 reuse the same evaluation rules.

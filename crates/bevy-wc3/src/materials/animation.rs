@@ -52,11 +52,7 @@ fn value<T: TrackValue + Interpolate + Copy>(
     animation: &Wc3Animation,
     fallback: T,
 ) -> T {
-    input
-        .track()
-        .and_then(|track| sample(track, animation))
-        .or_else(|| input.value().copied())
-        .unwrap_or(fallback)
+    input.sample(&animation.time()).unwrap_or(fallback)
 }
 
 pub(crate) fn texture_transform(

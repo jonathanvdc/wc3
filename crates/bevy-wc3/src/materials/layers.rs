@@ -1,6 +1,6 @@
 use super::textures::Wc3TextureBindings;
 use super::Wc3LayerMaterial;
-use crate::animation::{sample, Wc3Animation};
+use crate::animation::Wc3Animation;
 use bevy::prelude::*;
 use wc3::model::animation::Animatable;
 use wc3::model::materials::LayerFilterMode;
@@ -30,22 +30,12 @@ pub(crate) fn animate_layers(
         let Some(mut material) = materials.get_mut(&material_handle.0) else {
             continue;
         };
-        let alpha = layer
-            .alpha
-            .track()
-            .and_then(|track| sample(track, animation))
-            .or_else(|| layer.alpha.value().copied())
-            .unwrap_or(1.0);
+        let time = animation.time();
+        let alpha = layer.alpha.sample(&time).unwrap_or(1.0);
         let geoset_alpha = layer
             .geoset_alpha
             .as_ref()
-            .map(|alpha| {
-                alpha
-                    .track()
-                    .and_then(|track| sample(track, animation))
-                    .or_else(|| alpha.value().copied())
-                    .unwrap_or(1.0)
-            })
+            .map(|alpha| alpha.sample(&time).unwrap_or(1.0))
             .unwrap_or(1.0);
         *visibility = if alpha * geoset_alpha <= 0.0 {
             Visibility::Hidden
@@ -76,22 +66,11 @@ pub(crate) fn animate_layers(
                 _ => {}
             }
         }
-        let texture_id = layer
-            .texture_id
-            .track()
-            .and_then(|track| sample(track, animation))
-            .or_else(|| layer.texture_id.value().copied())
-            .unwrap_or(0);
+        let texture_id = layer.texture_id.sample(&time).unwrap_or(0);
         let [red, green, blue] = layer
             .geoset_color
             .as_ref()
-            .map(|color| {
-                color
-                    .track()
-                    .and_then(|track| sample(track, animation))
-                    .or_else(|| color.value().copied())
-                    .unwrap_or([1.0; 3])
-            })
+            .map(|color| color.sample(&time).unwrap_or([1.0; 3]))
             .unwrap_or([1.0; 3]);
         // Tint is a multiplier in the shader, not an sRGB display color.
         material.base.base_color = Color::linear_rgba(red, green, blue, alpha * geoset_alpha);

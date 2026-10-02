@@ -1,5 +1,7 @@
 //! Typed keyframe tracks.
-use super::{Interpolate, Interpolation, Keyframe, TangentKeyframe, TrackValue, ValueKeyframe};
+use super::{
+    AnimationTime, Interpolate, Interpolation, Keyframe, TangentKeyframe, TrackValue, ValueKeyframe,
+};
 use crate::model::mdl::{Parser, TokenKind, Writer};
 use crate::model::IoError;
 use crate::model::{mdl, mdx};
@@ -452,6 +454,12 @@ fn latest_frame<K: Keyframe>(
 }
 
 impl<T: Interpolate> Track<T> {
+    /// Samples this track using its model or global sequence clock.
+    pub fn sample(&self, time: &AnimationTime<'_>) -> Option<T> {
+        let (time_ms, interval) = time.track_time(self)?;
+        self.evaluate_in(time_ms, interval)
+    }
+
     /// Samples at a time in milliseconds in this track's timeline.
     ///
     /// Empty tracks and nonfinite times return `None`. Outside the key range,
