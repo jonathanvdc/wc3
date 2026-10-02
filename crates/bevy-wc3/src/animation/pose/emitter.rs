@@ -1,5 +1,5 @@
 use super::evaluation::{camera_anchor, resolve_pose, world_input, PoseInput};
-use super::AnimatedNode;
+use super::{AnimatedNode, NodeFrame};
 use crate::animation::Wc3Animation;
 use bevy::prelude::*;
 use std::collections::{HashMap, HashSet};
@@ -22,13 +22,23 @@ pub(crate) fn sample_emitter_transform(
     animation: &Wc3Animation,
     nodes: &EmitterNodes,
 ) -> Option<GlobalTransform> {
+    sample_emitter_transform_at_frame(entity, root, animation, nodes, None)
+}
+
+pub(crate) fn sample_emitter_transform_at_frame(
+    entity: Entity,
+    root: Entity,
+    animation: &Wc3Animation,
+    nodes: &EmitterNodes,
+    frame: Option<NodeFrame>,
+) -> Option<GlobalTransform> {
     let lookup = |entity| {
         let (global, transform, node, parent) = nodes.get(entity).ok()?;
         match node.filter(|node| node.root == root) {
             Some(node) => Some(PoseInput {
                 world: None,
                 anchor: None,
-                local: node.sample_transform(animation),
+                local: node.sample_transform_at_frame(animation, frame),
                 parent: parent.map(ChildOf::parent),
                 node: Some(node.pose_sample(node.camera)),
             }),

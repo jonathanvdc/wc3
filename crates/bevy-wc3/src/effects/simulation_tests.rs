@@ -9,6 +9,7 @@ fn seeks_report_discontinuities_without_rewinding_simulation_time() {
         playing: true,
         sequences: Vec::new(),
         global_sequences: Vec::new(),
+        event_playback: Default::default(),
     };
     let mut clock = SimulationClock::default();
     assert!(clock.observe(&animation));

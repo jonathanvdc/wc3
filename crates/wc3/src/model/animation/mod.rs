@@ -26,3 +26,5 @@ pub use interpolate::Interpolate;
 
 mod time;
 pub use time::AnimationTime;
+mod events;
+pub use events::EventOccurrence;

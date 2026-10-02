@@ -58,6 +58,7 @@ fn setup() -> (App, Entity, Entity) {
                 playing: true,
                 sequences: Vec::new(),
                 global_sequences: Vec::new(),
+                event_playback: Default::default(),
             },
             Transform::default(),
             Visibility::default(),

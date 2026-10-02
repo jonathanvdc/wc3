@@ -21,7 +21,7 @@ fn spawned_instances_expose_authored_views_without_creating_bevy_cameras() {
     let second = spawn_prepared_model(&mut commands, &mut meshes, &mut materials, &prepared);
     queue.apply(&mut world);
     assert_eq!(world.query::<&Camera3d>().iter(&world).count(), 0);
-    world.get_mut::<Wc3Animation>(first).unwrap().elapsed_ms = 500.0;
+    world.get_mut::<Wc3Animation>(first).unwrap().seek(500.0);
     let cameras = world.get::<Wc3ModelCameras>(first).unwrap();
     assert_eq!(cameras.definitions()[0].name.text(), "Portrait");
     assert_eq!(cameras.definitions()[1].name.text(), "Alternate");

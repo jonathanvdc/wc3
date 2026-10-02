@@ -36,6 +36,7 @@ pub(super) fn spawn_animation_root(commands: &mut Commands, model: &Model<V1800>
         playing: true,
         sequences: model.sequences(),
         global_sequences: model.global_sequences(),
+        event_playback: Default::default(),
     });
 }
 

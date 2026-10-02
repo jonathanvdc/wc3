@@ -12,6 +12,7 @@ mod assets;
 mod attachment;
 mod camera;
 mod effects;
+mod event;
 mod instance;
 mod light;
 mod materials;
@@ -26,6 +27,7 @@ pub use assets::{
 };
 pub use attachment::{Wc3AttachmentPoint, Wc3Attachments};
 pub use camera::{Wc3CameraBinding, Wc3CameraSample, Wc3ModelCameras};
+pub use event::Wc3ModelEvent;
 pub use instance::spawn::{
     spawn_model, spawn_prepared_model, spawn_prepared_model_with_bindings, Wc3NodeEntities,
 };

@@ -146,7 +146,7 @@ fn available_record_codecs_dispatch_through_model_io() {
     let model = Model::<V900>::decode_mdl(source).unwrap();
     assert_eq!(model.texture_animations().len(), 1);
     assert_eq!(model.lights().len(), 1);
-    assert_eq!(model.event_objects()[0].frames.as_slice(), [-5, 10]);
+    assert_eq!(model.event_objects()[0].frames(), [-5, 10]);
     assert_eq!(model.face_fx()[0].path.text(), "face.facefx");
     assert_eq!(model.bind_poses().len(), 1);
     roundtrip(&model);

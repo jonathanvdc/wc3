@@ -193,7 +193,7 @@ fn controls(keys: Res<ButtonInput<KeyCode>>, mut animations: Query<&mut Wc3Anima
         return;
     }
     for mut animation in &mut animations {
-        let next = (animation.sequence + 1) % animation.sequences().len().max(1);
+        let next = (animation.sequence() + 1) % animation.sequences().len().max(1);
         animation.play(next);
         info!("sequence {}", next);
     }

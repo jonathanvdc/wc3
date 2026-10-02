@@ -12,6 +12,7 @@ fn animation() -> Wc3Animation {
         playing: true,
         sequences: vec![Sequence::new("Stand", [0, 1000]).unwrap()],
         global_sequences: vec![],
+        event_playback: Default::default(),
     }
 }
 

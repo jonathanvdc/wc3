@@ -1,0 +1,48 @@
+Version { FormatVersion 1800, }
+Model "Event timing" {
+    MinimumExtent { -10, -10, -10 },
+    MaximumExtent { 20, 10, 10 },
+    BoundsRadius 25,
+}
+Sequences 2 {
+    Anim "Loop" { Interval { 1000, 2000 }, }
+    Anim "Once" { Interval { 3000, 4000 }, NonLooping, }
+}
+GlobalSequences 1 { Duration 500, }
+Helper "Moving parent" {
+    ObjectId 0,
+    Translation 4 {
+        Linear,
+        1000: { 0, 0, 0 },
+        2000: { 10, 0, 0 },
+        3000: { 0, 0, 0 },
+        4000: { 10, 0, 0 },
+    }
+}
+EventObject "Custom notification" {
+    ObjectId 1,
+    Parent 0,
+    Translation 2 {
+        DontInterp,
+        1000: { 1, 0, 0 },
+        3000: { 1, 0, 0 },
+    }
+    EventTrack 7 { 2000, 1250, 1000, 1250, 4000, 3250, 3000, }
+}
+EventObject "SNDxUnresolved" {
+    ObjectId 2,
+    Parent 0,
+    EventTrack 1 { 1250, }
+}
+EventObject "Independent" {
+    ObjectId 3,
+    Parent 0,
+    Translation 2 {
+        Linear,
+        GlobalSeqId 0,
+        0: { 0, 0, 0 },
+        500: { 0, 5, 0 },
+    }
+    EventTrack 1 { GlobalSeqId 0, 125, }
+}
+PivotPoints 4 { { 0, 0, 0 }, { 2, 0, 0 }, { 0, 0, 0 }, { 0, 0, 0 }, }

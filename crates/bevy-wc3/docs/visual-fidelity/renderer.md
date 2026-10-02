@@ -23,7 +23,7 @@ implementation inventory, not a claim of visual equivalence to Warcraft III.
 | Replaceable textures | Explicit per-instance replaceable and slot bindings work. Automatic team-color/glow and other game-specific replaceable texture selection are not implemented; the consumer supplies images. |
 | Model lights | Animated point/directional records create ordinary Bevy scene lights, with configurable power/range scales and authored shadow-casting flags. Ambient contributions, attenuation start, Reforged falloff, shadow intensity/ranges, and unknown types have no mapping. See [model lights](lights.md) for integration semantics, captures, and fidelity limits. |
 | Model cameras | Opt-in bindings drive application-owned perspective cameras from authored eye/target animation, roll, FOV, and clips. Visibility switching and modern lens/DOF tracks are not mapped; game fidelity is unverified. See [model cameras](cameras.md). |
-| Event objects | Event nodes exist, but event tracks are not dispatched. Event-driven visual effects are not implemented. |
+| Event objects | Crossed event keys dispatch application-facing messages with occurrence poses. Sound/effect resolution belongs to the application; exact game trigger semantics remain unverified. See [model event objects](events.md). |
 | Reforged effects | Popcorn emitters and FaceFX playback are not implemented. |
 
 ## Effects and remaining fidelity checks

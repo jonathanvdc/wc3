@@ -15,6 +15,7 @@ use crate::effects::particle_emitter2::{
     update_particles as update_quad_particles, ParticleRenderPlugin,
 };
 use crate::effects::ribbon_emitter::{update_ribbons, RibbonRenderPlugin};
+use crate::event::{dispatch_events, Wc3ModelEvent};
 use crate::instance::{spawn_loaded_instances, PreparedModelCache};
 use crate::light::animate_lights;
 use crate::materials::animation::animate_surface;
@@ -40,6 +41,11 @@ impl Plugin for Wc3BevyPlugin {
         app.add_plugins(ParticleRenderPlugin);
         app.add_plugins(RibbonRenderPlugin);
         configure(app);
+        app.add_message::<Wc3ModelEvent>();
+        app.add_systems(
+            PostUpdate,
+            dispatch_events.in_set(Wc3Systems::DispatchEvents),
+        );
         app.add_systems(
             Update,
             spawn_loaded_instances.in_set(Wc3Systems::SpawnInstances),

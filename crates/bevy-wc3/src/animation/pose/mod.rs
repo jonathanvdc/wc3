@@ -3,9 +3,11 @@ use bevy::camera::RenderTarget;
 use bevy::prelude::*;
 use std::collections::{HashMap, HashSet};
 
-pub(crate) use self::emitter::{sample_emitter_transform, EmitterNodes};
+pub(crate) use self::emitter::{
+    sample_emitter_transform, sample_emitter_transform_at_frame, EmitterNodes,
+};
 pub(crate) use self::evaluation::{resolve_pose, PoseInput};
-pub(crate) use self::node::AnimatedNode;
+pub(crate) use self::node::{AnimatedNode, NodeFrame};
 use crate::animation::Wc3Animation;
 mod emitter;
 mod evaluation;

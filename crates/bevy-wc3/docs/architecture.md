@@ -40,6 +40,11 @@ can remain in world space while still being cleaned up with their owner.
 and birth-time transform sampling. The ECS node system and effect birth sampling
 reuse the same evaluation rules.
 
+`event.rs` dispatches crossed event keys as `Wc3ModelEvent` messages. Prepared
+instances share event definitions and retain independent cursors. Interval
+traversal lives under `wc3::model::animation`; explicit playback restart/seek
+metadata lives with `Wc3Animation`. Event names are interpreted by applications.
+
 `materials/` owns Bevy material specialization, layer/geoset animation, surface
 and UV animation, texture binding precedence, and private linear image variants.
 `attachment.rs` and `light.rs` own their spawning and animation behavior.
@@ -76,6 +81,7 @@ Set ordering applies only within the schedule where the set is configured.
 | `PostUpdate` | `EvaluateNodePoses` | Evaluates current node poses before model-particle simulation and transform propagation. |
 | `PostUpdate` | `SimulateModelParticles` | Updates model particles using local poses before `TransformSystems::Propagate`. |
 | `PostUpdate` | `SimulateEffects` | Updates PRE2 and ribbons after propagation, using current global transforms. |
+| `PostUpdate` | `DispatchEvents` | Emits crossed model event keys after propagation, with occurrence-time node poses. Read messages after this set or in the next `Update`. |
 
 Applications moving driving cameras or model roots in `PostUpdate` should run
 before `Wc3Systems::EvaluateNodePoses`; when playing model-camera bindings, move

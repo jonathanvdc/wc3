@@ -23,18 +23,32 @@ pub struct EventObject {
     pub node: Node,
     /// Global sequence ID, or `u32::MAX` when absent.
     pub global_sequence_id: u32,
-    /// Event times in milliseconds, in source order. Negative times allow animation lead-in.
-    pub frames: Vec<i32>,
+    /// Sorted event times in milliseconds. Negative times allow animation lead-in.
+    frames: Vec<i32>,
 }
 
 impl EventObject {
-    /// Creates an event object from a node, global sequence ID, and frame times.
+    /// Creates an event object, sorting its frame times in ascending order.
+    /// Duplicate timestamps are retained.
     pub fn new(node: Node, global_sequence_id: u32, frames: &[i32]) -> Self {
+        let mut frames = frames.to_vec();
+        frames.sort();
         Self {
             node,
             global_sequence_id,
-            frames: frames.to_vec(),
+            frames,
         }
+    }
+
+    /// Returns the event times in ascending order, including duplicates.
+    pub fn frames(&self) -> &[i32] {
+        &self.frames
+    }
+
+    /// Replaces the event times, sorting them in ascending order.
+    pub fn set_frames(&mut self, frames: &[i32]) {
+        self.frames = frames.to_vec();
+        self.frames.sort();
     }
 }
 
@@ -75,11 +89,7 @@ impl mdx::Read for EventObject {
         for _ in 0..count {
             frames.push(cursor.read()?);
         }
-        Ok(Self {
-            node,
-            global_sequence_id,
-            frames,
-        })
+        Ok(Self::new(node, global_sequence_id, &frames))
     }
 }
 
@@ -190,11 +200,11 @@ fn validate_event(value: &EventMdl) -> Result<(), mdl::WriteError> {
 impl mdl::Read for EventObject {
     fn read_mdl(parser: &mut Parser<'_>) -> Result<Self, mdl::ReadError> {
         let value = parser.read::<EventMdl>()?;
-        Ok(Self {
-            node: value.node,
-            global_sequence_id: value.track.sequence,
-            frames: value.track.frames,
-        })
+        Ok(Self::new(
+            value.node,
+            value.track.sequence,
+            &value.track.frames,
+        ))
     }
 }
 impl mdl::Write for EventObject {

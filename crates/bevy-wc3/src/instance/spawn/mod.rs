@@ -7,6 +7,7 @@ use crate::camera::Wc3ModelCameras;
 use crate::effects::particle_emitter::spawn_particles;
 use crate::effects::particle_emitter2::spawn_particles2;
 use crate::effects::ribbon_emitter::spawn_ribbons;
+use crate::event::spawn_events;
 use crate::light::spawn_lights;
 use crate::materials::textures::Wc3TextureBindings;
 use crate::materials::Wc3LayerMaterial;
@@ -65,6 +66,7 @@ pub(crate) fn spawn_prepared_into(
         .insert(Wc3ModelCameras(prepared.model.cameras()));
     let rig = spawn_rig(commands, &prepared.model, root, &prepared.inverse_bindposes);
     let node_entities = &rig.by_object_id;
+    spawn_events(commands, prepared, root, node_entities);
     spawn_lights(commands, prepared, root, node_entities);
     spawn_attachments(commands, prepared, root, node_entities);
     spawn_particles(commands, prepared, root, node_entities);

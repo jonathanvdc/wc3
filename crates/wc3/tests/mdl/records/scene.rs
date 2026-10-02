@@ -120,7 +120,7 @@ fn event_frames_and_sequence_roundtrip() {
     )
     .unwrap();
     assert_eq!(event.global_sequence_id, u32::MAX);
-    assert_eq!(event.frames.as_slice(), [4]);
+    assert_eq!(event.frames(), [4]);
     roundtrip(&event);
 }
 #[test]

@@ -205,8 +205,11 @@ pub(crate) fn animate_attachments(
             {
                 animation.playing = visible;
                 if visible {
-                    animation.sequence = 0;
-                    animation.elapsed_ms = 0.0;
+                    if animation.sequences().is_empty() {
+                        animation.restart();
+                    } else {
+                        animation.play(0);
+                    }
                 }
             }
             model.initialized = true;

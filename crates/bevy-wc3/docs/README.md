@@ -23,6 +23,8 @@ own file under `visual-fidelity/` and link it here as it is documented.
   conversion controls, shadows, unsupported mappings, and capture checks.
 - [Model cameras](visual-fidelity/cameras.md): opt-in view playback, sampling,
   projection controls, scheduling, and limitations.
+- [Model event objects](visual-fidelity/events.md): discrete notifications,
+  playback discontinuities, occurrence poses, and application integration.
 - [Geoset animation](visual-fidelity/geoset-animation.md): alpha/color sampling,
   RGB codec normalization, material isolation, capture checks, and remaining fidelity work.
 - [Classic PREM particles](visual-fidelity/prem.md): model spawning, motion,

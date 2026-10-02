@@ -18,6 +18,7 @@ fn animation() -> Wc3Animation {
         playing: false,
         sequences: model.model.sequences(),
         global_sequences: vec![],
+        event_playback: Default::default(),
     }
 }
 

@@ -2,8 +2,10 @@
 use bevy::mesh::skinning::SkinnedMeshInverseBindposes;
 use bevy::prelude::*;
 use std::collections::HashMap;
+use std::sync::Arc;
 use wc3::model::animation::{Animatable, GeosetAnimation};
 use wc3::model::materials::ShaderType;
+use wc3::model::scene::EventObject;
 use wc3::model::{Model, V1800};
 
 mod materials;
@@ -39,6 +41,7 @@ pub(crate) struct PreparedGeoset {
 /// the source model or its texture resolution.
 pub struct PreparedModel {
     pub(crate) model: Model<V1800>,
+    pub(crate) events: Arc<[EventObject]>,
     pub(crate) geosets: Vec<PreparedGeoset>,
     pub(crate) geoset_animations: Vec<Option<GeosetAnimation>>,
     pub(crate) layers: Vec<Vec<PreparedLayer>>,
@@ -202,6 +205,7 @@ pub(crate) fn prepare_resolved_model(
         })
         .collect();
     Ok(PreparedModel {
+        events: model.event_objects().into(),
         model: model.clone(),
         geosets,
         geoset_animations,

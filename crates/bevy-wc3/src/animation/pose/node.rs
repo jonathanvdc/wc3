@@ -1,8 +1,15 @@
 use super::evaluation::NodeSample;
-use crate::animation::{sample, Wc3Animation};
+use crate::animation::Wc3Animation;
 use bevy::prelude::*;
-use wc3::model::animation::Track;
+use wc3::model::animation::{Interpolate, Track};
 use wc3::model::scene::NodeFlags;
+
+/// An event key's exact authored clock position, including loop-end keys.
+#[derive(Clone, Copy)]
+pub(crate) struct NodeFrame {
+    pub(crate) frame: i32,
+    pub(crate) global_sequence_id: Option<u32>,
+}
 
 #[derive(Component)]
 pub(crate) struct AnimatedNode {
@@ -35,25 +42,50 @@ impl AnimatedNode {
     }
 
     pub(crate) fn sample_transform(&self, animation: &Wc3Animation) -> Transform {
+        self.sample_transform_at_frame(animation, None)
+    }
+
+    /// An explicit frame preserves end-key poses at a loop boundary.
+    /// Tracks on other clocks use the occurrence's elapsed time.
+    pub(crate) fn sample_transform_at_frame(
+        &self,
+        animation: &Wc3Animation,
+        frame: Option<NodeFrame>,
+    ) -> Transform {
         let translation = self
             .translation
             .as_ref()
-            .and_then(|track| sample(track, animation))
+            .and_then(|track| sample_node_track(track, animation, frame))
             .unwrap_or([0.0; 3]);
         let rotation = self
             .rotation
             .as_ref()
-            .and_then(|track| sample(track, animation))
+            .and_then(|track| sample_node_track(track, animation, frame))
             .unwrap_or([0.0, 0.0, 0.0, 1.0]);
         let scaling = self
             .scaling
             .as_ref()
-            .and_then(|track| sample(track, animation))
+            .and_then(|track| sample_node_track(track, animation, frame))
             .unwrap_or([1.0; 3]);
         Transform {
             translation: self.pivot - self.parent_pivot + Vec3::from_array(translation),
             rotation: Quat::from_xyzw(rotation[0], rotation[1], rotation[2], rotation[3]),
             scale: Vec3::from_array(scaling),
         }
+    }
+}
+
+fn sample_node_track<T: Interpolate>(
+    track: &Track<T>,
+    animation: &Wc3Animation,
+    frame: Option<NodeFrame>,
+) -> Option<T> {
+    if let Some(frame) =
+        frame.filter(|frame| frame.global_sequence_id == track.global_sequence_id())
+    {
+        let (_, interval) = animation.time().track_time(track)?;
+        track.evaluate_in(f64::from(frame.frame), interval)
+    } else {
+        track.sample(&animation.time())
     }
 }

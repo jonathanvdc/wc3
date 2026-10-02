@@ -10,7 +10,8 @@ use bevy::transform::TransformSystems;
 /// instance animation. Texture binding updates may run alongside animation.
 ///
 /// The remaining sets run in `PostUpdate`: cameras precede node poses and model particles,
-/// both precede transform propagation, and quad particles/ribbons follow it.
+/// both precede transform propagation, and quad particles/ribbons and event
+/// dispatch follow it.
 /// Order application systems in the same schedule as their target set.
 #[derive(SystemSet, Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Wc3Systems {
@@ -22,6 +23,8 @@ pub enum Wc3Systems {
     EvaluateNodePoses,
     SimulateModelParticles,
     SimulateEffects,
+    /// Publishes model event messages after transform propagation in `PostUpdate`.
+    DispatchEvents,
 }
 
 pub(crate) fn configure(app: &mut App) {
@@ -49,6 +52,7 @@ pub(crate) fn configure(app: &mut App) {
                 .chain()
                 .before(TransformSystems::Propagate),
             Wc3Systems::SimulateEffects.after(TransformSystems::Propagate),
+            Wc3Systems::DispatchEvents.after(TransformSystems::Propagate),
         ),
     );
 }
