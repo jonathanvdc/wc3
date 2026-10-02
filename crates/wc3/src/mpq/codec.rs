@@ -1,8 +1,10 @@
-#[cfg(feature = "mpq-decode")]
-use std::io::Read;
-#[cfg(feature = "mpq-encode")]
+#[cfg(all(feature = "mpq-encode", not(feature = "mpq-decode")))]
 use std::io::Write;
+#[cfg(feature = "mpq-decode")]
+use std::io::{self, Read, Write as IoWrite};
 
+#[cfg(feature = "mpq-decode")]
+use super::{adpcm, huffman};
 use super::{Compression, Error};
 
 /// MPQ sector checksums are Adler-32 over decrypted, encoded bytes, seeded zero.
@@ -41,27 +43,87 @@ pub(super) fn decode(input: &[u8], expected: usize, implode: bool) -> Result<Vec
             (mask, data)
         };
         // 0x12 identifies LZMA, not a zlib/bzip2 combination.
-        if mask == 0 || mask == 0x12 || mask & !0x3a != 0 {
+        if mask == 0 || mask & 4 != 0 || mask & 0xc0 == 0xc0 {
             return Err(Error::UnsupportedCompression(mask));
         }
         let mut output = data.to_vec();
-        // Reverse of MPQ's compression order.
-        if mask & 0x10 != 0 {
-            output = bounded(BzDecoder::new(output.as_slice()), expected)?;
-        }
-        if mask & 8 != 0 {
-            output = bounded(ExplodeReader::new(output.as_slice()), expected)?;
-        }
-        if mask & 2 != 0 {
-            output = bounded(ZlibDecoder::new(output.as_slice()), expected)?;
-        }
-        if mask & 0x20 != 0 {
-            output = sparse(&output, expected)?;
+        if mask == 0x12 {
+            output = lzma(data, expected)?;
+        } else {
+            // Reverse of MPQ's compression order.
+            if mask & 0x10 != 0 {
+                output = bounded(BzDecoder::new(output.as_slice()), expected)?;
+            }
+            if mask & 8 != 0 {
+                output = bounded(ExplodeReader::new(output.as_slice()), expected)?;
+            }
+            if mask & 2 != 0 {
+                output = bounded(ZlibDecoder::new(output.as_slice()), expected)?;
+            }
+            if mask & 1 != 0 {
+                output = huffman::decode(&output, expected)?;
+            }
+            if mask & 0xc0 != 0 {
+                output = adpcm::decode(&output, if mask & 0x80 != 0 { 2 } else { 1 }, expected)?;
+            }
+            if mask & 0x20 != 0 {
+                output = sparse(&output, expected)?;
+            }
         }
         if output.len() != expected {
             return Err(Error::InvalidArchive("decompressed length mismatch"));
         }
         Ok(output)
+    }
+}
+
+#[cfg(feature = "mpq-decode")]
+fn lzma(input: &[u8], limit: usize) -> Result<Vec<u8>, Error> {
+    use lzma_rs::{decompress::Options, lzma_decompress_with_options};
+
+    // MPQ adds a filter byte before the standard LZMA-alone header.
+    if input.len() < 15 || input[0] != 0 {
+        return Err(Error::InvalidArchive("invalid MPQ LZMA header"));
+    }
+    let size = u64::from_le_bytes(input[6..14].try_into().unwrap());
+    if size != u64::MAX && size != limit as u64 {
+        return Err(Error::InvalidArchive("LZMA decompressed length mismatch"));
+    }
+    let mut output = LimitedOutput {
+        bytes: Vec::new(),
+        limit,
+    };
+    let options = Options {
+        // Bound the dynamically allocated dictionary, independently of the header.
+        memlimit: Some(limit.max(4096)),
+        ..Options::default()
+    };
+    lzma_decompress_with_options(&mut &input[1..], &mut output, &options)
+        .map_err(|_| Error::InvalidArchive("invalid or oversized LZMA stream"))?;
+    Ok(output.bytes)
+}
+
+#[cfg(feature = "mpq-decode")]
+struct LimitedOutput {
+    bytes: Vec<u8>,
+    limit: usize,
+}
+
+#[cfg(feature = "mpq-decode")]
+impl IoWrite for LimitedOutput {
+    fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+        if bytes.len() > self.limit - self.bytes.len() {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "decompression exceeds declared size",
+            ));
+        }
+        self.bytes.extend_from_slice(bytes);
+        Ok(bytes.len())
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
     }
 }
 
@@ -159,3 +221,7 @@ pub(super) fn encode(input: &[u8], compression: Compression) -> Result<Vec<u8>, 
         })
     }
 }
+
+#[cfg(all(test, feature = "mpq-decode"))]
+#[path = "codec_tests.rs"]
+mod tests;

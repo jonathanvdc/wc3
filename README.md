@@ -31,7 +31,7 @@ your code, as the examples below do.
 | BLP mipmap decoding to RGBA pixels; `image::ImageDecoder` adapter | `blp-decode` |
 | BLP image encoding from RGBA pixels; `image::ImageEncoder` adapter | `blp-encode` |
 | MPQ indexing, stored entries, encryption, creation, and encoded archive editing | None |
-| MPQ zlib, bzip2, PKWARE DCL, and sparse decompression | `mpq-decode` |
+| MPQ zlib, bzip2, PKWARE DCL, sparse, Huffman, ADPCM, and LZMA decompression | `mpq-decode` |
 | MPQ zlib and bzip2 compression | `mpq-encode` |
 
 ### Models: read, edit, and write
@@ -167,8 +167,8 @@ normalization. Locale/platform matching is exact, neutral by default.
 `known_names` returns listfile hints; it cannot enumerate every original name.
 `index` and `encoded_file` work independently of payload codec support.
 
-Header versions other than zero, patch-file application, Huffman/ADPCM/LZMA
-decoding, signature verification, and protected-map repair are unsupported.
+Header versions other than zero, patch-file application, signature verification,
+and protected-map repair are unsupported.
 Archive edits do not regenerate existing attributes or signatures. Game loading
 has not been verified. Automated tests cover the public API, binary format
 contracts, encryption, compression, corruption handling, and streaming limits;

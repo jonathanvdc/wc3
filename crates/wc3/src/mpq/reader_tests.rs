@@ -344,7 +344,7 @@ fn rejects_sector_offsets_bombs_unknown_masks_and_bad_checksums() {
         Err(Error::ChecksumMismatch(0))
     ));
     let mut corrupt = bytes.clone();
-    corrupt[start + first] = 1; // MPQ's unsupported Huffman mask.
+    corrupt[start + first] = 4; // Unknown compression bit.
     let mut archive = Archive::with_options(
         Cursor::new(corrupt),
         ReadOptions {
@@ -355,7 +355,7 @@ fn rejects_sector_offsets_bombs_unknown_masks_and_bad_checksums() {
     .unwrap();
     assert!(matches!(
         archive.read_file("data"),
-        Err(Error::UnsupportedCompression(1))
+        Err(Error::UnsupportedCompression(4))
     ));
     // Reduce declared size without changing the compressed stream's output.
     let mut bomb = bytes;
@@ -416,4 +416,53 @@ fn full_hash_tables_allow_replacement_and_reuse_tombstones() {
         .read_to_end(&mut original)
         .unwrap();
     assert_eq!(original, b"payload");
+}
+
+#[cfg(feature = "mpq-decode")]
+#[test]
+fn reads_new_codecs_through_archive_framing() {
+    use super::super::codec_test_vectors::{
+        HUFFMAN_ZEROS, LZMA_EOS, LZMA_SIZED, MONO, MONO_CHAIN, MONO_PCM, RAW, STEREO, STEREO_CHAIN,
+        STEREO_PCM,
+    };
+
+    let zeros = [0u8; 64];
+    let cases: &[(u8, &[u8], &[u8])] = &[
+        (1, HUFFMAN_ZEROS, &zeros),
+        (0x40, MONO, MONO_PCM),
+        (0x80, STEREO, STEREO_PCM),
+        (0x41, MONO_CHAIN, MONO_PCM),
+        (0x81, STEREO_CHAIN, STEREO_PCM),
+        (0x12, LZMA_EOS, RAW),
+        (0x12, LZMA_SIZED, RAW),
+    ];
+    for &(mask, compressed, expected) in cases {
+        let mut encoded = vec![mask];
+        encoded.extend_from_slice(compressed);
+        for single_unit in [true, false] {
+            let payload = if single_unit {
+                encoded.clone()
+            } else {
+                let end = 8 + encoded.len() as u32;
+                let mut sectors = 8u32.to_le_bytes().to_vec();
+                sectors.extend_from_slice(&end.to_le_bytes());
+                sectors.extend_from_slice(&encoded);
+                sectors
+            };
+            let mut bytes = encoded_unit(&payload, expected.len() as u32, FileFlags::COMPRESS);
+            if !single_unit {
+                change_table(&mut bytes, false, |table| {
+                    table[12..16]
+                        .copy_from_slice(&(FileFlags::EXISTS | FileFlags::COMPRESS).to_le_bytes());
+                });
+            }
+            assert_eq!(
+                Archive::open(Cursor::new(bytes))
+                    .unwrap()
+                    .read_file("data")
+                    .unwrap(),
+                expected
+            );
+        }
+    }
 }

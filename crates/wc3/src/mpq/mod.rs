@@ -7,10 +7,10 @@
 //! means bounded payload memory, not forward-only archive I/O.
 //!
 //! Container indexing, stored entries, encryption, and encoded copying have no
-//! optional dependencies. `mpq-decode` adds zlib, bzip2, PKWARE DCL, and sparse
-//! decoding (including supported compression chains). `mpq-encode` adds zlib
-//! and bzip2 encoding. All compression dependencies use Rust implementations.
-//! Files compressed with Huffman, ADPCM, or LZMA report an unsupported codec.
+//! optional dependencies. `mpq-decode` adds zlib, bzip2, PKWARE DCL, sparse,
+//! Huffman, mono/stereo ADPCM, and LZMA decoding (including supported compression
+//! chains). `mpq-encode` adds zlib and bzip2 encoding. All compression
+//! dependencies use Rust implementations.
 //! Sector checksums are verified by default and can be written for compressed
 //! entries. Header versions other than zero, patch-file semantics, and signature
 //! verification are not implemented. Protected/malformed map repair
@@ -55,10 +55,18 @@
 //! or abandoned entry prevents archive completion. Output is not transactional:
 //! use a separate destination and replace a source file only after success.
 
+#[cfg(feature = "mpq-decode")]
+mod adpcm;
 mod codec;
+#[cfg(all(test, feature = "mpq-decode"))]
+mod codec_test_vectors;
 mod crypto;
 mod error;
 mod format;
+#[cfg(feature = "mpq-decode")]
+mod huffman;
+#[cfg(feature = "mpq-decode")]
+mod huffman_tables;
 mod reader;
 mod writer;
 
