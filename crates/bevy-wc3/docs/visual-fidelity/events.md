@@ -65,7 +65,7 @@ fn handle_model_events(mut events: MessageReader<Wc3ModelEvent>) {
   authored end/start frames, preserving distinct poses at the boundary. Other
   clocks sample the occurrence's elapsed time normally.
 
-## Pose sampling and verification limits
+## Occurrence poses and verification
 
 Occurrence poses reuse CPU node evaluation, including hierarchy, pivots,
 inheritance flags, and the currently selected driving camera. Model animation is

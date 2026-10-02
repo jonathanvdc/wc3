@@ -67,8 +67,8 @@ and render shader-generated geometry. Shared `effects/records.rs` and
 `effects/render.rs` implement record storage and GPU upload/allocation mechanics.
 Each renderer retains its own shader layouts, pipeline specialization, sorting,
 and pass semantics. Classic particles instead spawn independently animated model
-instances. The current shading and ordering limitations remain documented in
-[visual fidelity](visual-fidelity/renderer.md).
+instances. The [renderer overview](visual-fidelity/renderer.md) connects these paths to
+materials, animation, and the supported rendering features.
 
 ## Scheduling contract
 

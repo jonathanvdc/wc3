@@ -24,6 +24,7 @@ use crate::preparation::prepare_resolved_model;
 pub struct Wc3ModelInstance(pub Handle<Wc3ModelAsset>);
 
 impl Wc3ModelInstance {
+    /// Create an instance request for an asset loaded through Bevy.
     pub fn new(handle: Handle<Wc3ModelAsset>) -> Self {
         Self(handle)
     }

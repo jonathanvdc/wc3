@@ -44,7 +44,7 @@ Evaluation runs in `PostUpdate`, in `Wc3Systems::EvaluateNodePoses`, before Bevy
 in `Update` is visible in the same frame. Applications moving these entities in
 `PostUpdate` should order those systems before `Wc3Systems::EvaluateNodePoses`.
 
-## Implemented semantics
+## Flag evaluation
 
 | Flag | Current behavior |
 | --- | --- |
@@ -67,7 +67,7 @@ rotation. Zero parent scale cannot be inverted exactly: compensated collapsed
 axes remain collapsed, and finite fallbacks avoid infinities. Nonuniform scale
 combined with rotated descendants can still produce shear.
 
-## Remaining game-fidelity work
+## Camera constraints and game comparison
 
 The renderer's node-flag semantics are explicit above; equivalence to Warcraft III
 remains unverified. Full billboarding retains authored rotation after camera

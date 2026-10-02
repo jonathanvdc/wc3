@@ -8,12 +8,18 @@ use crate::assets::loader::ResolvedModelTextures;
 /// A texture use in the source model. Indices follow the MDX bitmap and PRE2 lists.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum Wc3TextureSlot {
+    /// A bitmap record index in the source texture list.
     Bitmap(usize),
+    /// A PRE2 emitter record index, rather than its TextureID.
     Particle2(usize),
 }
 
 /// Per-instance texture choices. Attach this to a model root before spawning, or
 /// mutate it later to change the images used by that instance.
+///
+/// Exact slot overrides take precedence over replaceable-ID bindings, followed
+/// by resolved defaults. A PRE2 emitter with a zero replaceable ID falls back
+/// to its TextureID bitmap binding. Other instances retain their own choices.
 #[derive(Component, Clone, Default)]
 pub struct Wc3TextureBindings {
     replaceable: HashMap<u32, Handle<Image>>,
@@ -22,18 +28,22 @@ pub struct Wc3TextureBindings {
 }
 
 impl Wc3TextureBindings {
+    /// Bind an image to all uses of this replaceable ID in the instance.
     pub fn set_replaceable(&mut self, id: u32, image: Handle<Image>) {
         self.replaceable.insert(id, image);
     }
 
+    /// Remove an ID override, restoring resolved defaults where available.
     pub fn clear_replaceable(&mut self, id: u32) {
         self.replaceable.remove(&id);
     }
 
+    /// Override one source slot, taking precedence over replaceable bindings.
     pub fn set_slot(&mut self, slot: Wc3TextureSlot, image: Handle<Image>) {
         self.slots.insert(slot, image);
     }
 
+    /// Remove a slot override and resume ID/default resolution.
     pub fn clear_slot(&mut self, slot: Wc3TextureSlot) {
         self.slots.remove(&slot);
     }

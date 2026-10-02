@@ -8,6 +8,8 @@ HeightAbove/HeightBelow at each birth, and retains world-space cross-sections.
 Height extends along local Y; the Bevy node transform already incorporates its
 pivot. Moving or rotating the emitter later does not move existing sections.
 
+## GPU geometry and storage
+
 The GPU stores immutable endpoints and split birth timestamps. Each instanced
 quad references two adjacent live sections. The vertex shader constructs the
 quad, evaluates ballistic motion independently at each endpoint, derives its
@@ -21,6 +23,8 @@ frames, requesting a full upload when a whole ring has been overwritten. Materia
 records and the GPU section buffer; each layer has separate uniforms and texture
 bindings. No compute simulation or per-frame CPU mesh rebuilding is required.
 
+## Materials and atlas animation
+
 Color, Alpha, TextureSlot, layer alpha, and layer texture selection update across
 the live trail using the current sequence/global-sequence time. Layer texture
 translation, rotation, and scaling are applied to atlas UVs, around UV (0.5, 0.5).
@@ -31,6 +35,8 @@ alpha testing, TwoSided, Unshaded/Unlit, NoDepthTest, and NoDepthSet are respect
 Material PriorityPlane is a signed bias in Bevy's transparent phase. Material
 SortPrimsFarZ/SortPrimsNearZ sorts segment centers per view without changing their
 endpoint pairs or UV ranks; NearZ takes precedence if both flags are set.
+
+## Playback and lifetime
 
 Pause and playback speed control the effect clock. Visibility stops new births
 but lets existing sections age. Sequence changes, backward seeks, and sampled
@@ -50,7 +56,7 @@ Births are distributed within each update, avoiding coincident sections after a
 slow update. Each connected chain occupies exactly one atlas cell using
 floating-point UVs.
 
-## Captures and remaining verification
+## Capture checks
 
 Capture the checked-in fixture:
 
@@ -81,7 +87,8 @@ expiry at 0.5, 1, 1.5, and 2.25 seconds: the trail shrinks at 1.5 seconds and
 is absent at 2.25 seconds. Ribbon and PRE2 draws use transient phase items,
 so empty or hidden emitters do not retain their last GPU draw.
 
-Remaining verification and renderer limits:
+## Implementation limits and game comparison
+
 
 - Compare gravity, emission density, UV direction, visibility thresholds, and
   material-layer semantics against actual Warcraft III captures.

@@ -52,7 +52,7 @@ Directional lights affect the whole scene unless the application scopes them.
 Negative/nonfinite colors, powers, and scales are sanitized; point range has a
 small positive floor to avoid degenerate Bevy light projections.
 
-## Missing mappings and fidelity limits
+## Mapping limits and game comparison
 
 Ambient records remain inspectable `Wc3Light` entities without a Bevy light.
 They log an unsupported-mapping warning. Direct lights' ambient contribution is

@@ -1,190 +1,69 @@
 # bevy-wc3
 
-A Bevy 0.19 renderer for MDX and MDL models. `Wc3Model::decode` strictly
-converts supported MDX versions to V1800. `spawn_model` creates a node hierarchy,
-GPU skinned geosets, and one material pass per layer. Per-instance animation
-samples MDX sequence and global sequence tracks for node transforms, layer
-alpha, and texture selection.
+Load and render Warcraft III MDX and MDL models in Bevy 0.19. The crate provides
+GPU-skinned meshes, sequence animation and pose blending, Classic and Reforged
+materials, attachments, model lights and cameras, event notifications, particles,
+and ribbon trails.
 
-`Wc3Animation::play(sequence)` blends node poses using the model's `BlendTime`.
-Use `play_immediately(sequence)` for an immediate switch or
-`play_with_blend(sequence, Duration)` for a custom duration. Interrupted transitions
-start from the latest evaluated pose. Call these controls when changing animations;
-playing the current sequence restarts it. See [animation blending](docs/visual-fidelity/animation-blending.md)
-for clocks, effects, and fidelity limits.
+## Get started
 
-For repeated instances, put the MDX and textures under Bevy's `assets/`
-directory and let `Wc3BevyPlugin` load and prepare the model:
+Register `Wc3BevyPlugin` alongside Bevy’s default plugins, put the model and its
+textures under `assets/`, and spawn a model root:
 
 ```rust
-let model = asset_server.load("units/footman.mdx");
-commands.spawn((Wc3ModelInstance::new(model.clone()), Transform::default()));
-commands.spawn((Wc3ModelInstance::new(model), Transform::from_xyz(150.0, 0.0, 0.0)));
+use bevy::prelude::*;
+use bevy_wc3::{Wc3BevyPlugin, Wc3ModelInstance};
+
+fn main() {
+    App::new()
+        .add_plugins((DefaultPlugins, Wc3BevyPlugin))
+        .add_systems(Startup, setup)
+        .run();
+}
+
+fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
+    commands.spawn((
+        Wc3ModelInstance::new(asset_server.load("units/footman.mdx")),
+        Transform::default(),
+    ));
+    commands.spawn((
+        Camera3d::default(),
+        Transform::from_xyz(0.0, -400.0, 200.0)
+            .looking_at(Vec3::new(0.0, 0.0, 80.0), Vec3::Z),
+    ));
+    commands.spawn((
+        DirectionalLight::default(),
+        Transform::from_xyz(100.0, -100.0, 200.0).looking_at(Vec3::ZERO, Vec3::Z),
+    ));
+}
 ```
 
-Literal bitmap paths are checked beside the MDX first, then at the asset root.
-BLP files are decoded by the plugin. Replaceable IDs remain unresolved until a
-consumer supplies an image handle. Meshes and bind poses are shared; materials
-belong to each instance so texture changes remain local.
+The root is populated when the asset is ready. Literal texture paths resolve
+beside the model first, then from the asset root; BLP decoding is included.
+Supply replaceable textures, such as team colors, through `Wc3TextureBindings`.
+Instances share meshes and bind poses and own their animation and materials.
 
-A viewer or game can choose textures using the decoded model (`Wc3ModelAsset::source`)
-and its own state, including model type, team, and blight. Bind by replaceable ID
-or by exact bitmap/PRE2 slot. Slot bindings take precedence:
-
-```rust
-let mut textures = Wc3TextureBindings::default();
-textures.set_replaceable(31, healthy_tree);
-textures.set_slot(Wc3TextureSlot::Bitmap(2), blighted_tree);
-commands.spawn((Wc3ModelInstance::new(model), textures));
-```
-
-Change `Wc3TextureBindings` on that root entity later to hot swap images. A PRE2
-emitter with `ReplaceableId == 0` uses its `TextureID` bitmap slot, including
-bitmap overrides. `prepare_model` and `spawn_prepared_model_with_bindings` offer
-the same behavior for custom model sources.
-
-For custom model sources, prepare shared geometry once and spawn it repeatedly.
-Only spawning needs the material asset store:
-
-```rust
-let prepared = prepare_model(
-    &mut meshes,
-    &mut inverse_bindposes,
-    &source,
-    |path| Some(asset_server.load(path.to_owned())),
-)?;
-let root = spawn_prepared_model(
-    &mut commands,
-    &mut meshes,
-    &mut materials,
-    &prepared,
-);
-```
-
-Use `prepare_model_with_resources` to additionally resolve child-model paths, and
-`spawn_prepared_model_with_bindings` to supply per-instance texture choices.
-
-Model point and directional lights spawn as ordinary Bevy scene lights, illuminating
-both WC3 and Bevy materials. Their transforms, colors, intensities, ranges, and
-visibility animate; authored ShadowCasting flags enable Bevy shadows. Supply
-`Wc3LightSettings` on the instance root to tune power/range conversion or disable
-imported lights and shadows:
-
-```rust
-commands.spawn((
-    Wc3ModelInstance::new(model),
-    Wc3LightSettings {
-        point_intensity_scale: 2_000.0,
-        shadows_enabled: false,
-        ..default()
-    },
-));
-```
-
-Query `Wc3Light` to inspect the source record or disable a particular light with
-its `enabled` field. Ambient contributions and custom Reforged falloff/shadow
-ranges have no native mapping; scene ambient lighting remains application-owned.
-See [model lights](docs/visual-fidelity/lights.md) for conversion defaults,
-consumer customization, capture checks, and remaining fidelity limits.
-
-Attachment paths and model-based Classic PREM paths are also resolved beside the
-parent model, then at the asset root. Backslashes are normalized. At each location,
-a real `.mdl` is preferred, with `.mdx` as its fallback. Empty and missing paths
-keep their record slots; PREM image resources are excluded. Read handles through
-`Wc3ModelAsset::model_resources()`, `PreparedModel::model_resources()`, or the
-`Wc3ModelResources` component on a spawned instance. `attachment(index)` and
-`particle(index)` use source record indices, not attachment IDs or node object IDs.
-Custom sources can use `prepare_model_with_resources` with texture and model
-resolver callbacks; the existing `prepare_model` API remains available.
-
-Resolved attachment paths automatically spawn child model instances. Query
-`Wc3Attachments` on the parent root to find points by record index (`get`),
-attachment ID (`by_id`), or full name (`by_name`, ignoring ASCII case). Empty or
-missing paths still expose points for consumer-supplied models:
-
-```rust
-let point = attachments.by_name("Weapon Ref").unwrap();
-let child = point.spawn_model(&mut commands, child_model);
-commands.entity(child).insert(child_texture_bindings);
-```
-
-The returned entity is the child model's transform and animation root. The
-point's `node` is the original animated MDX node; its separate `mount` follows
-that node and gates attached content with the attachment visibility track.
-Mounts inherit translation, rotation, and scale. Visibility uses the parent
-sequence/global-sequence clock and is shown above `0.1`, with missing keys
-falling back to visible. Attached models loop sequence zero, pause while their
-mount is hidden, and restart when shown again, when the parent changes sequence,
-or when the parent animation seeks backward. Each child has its own rig,
-materials, texture bindings, and animation clock. Nested attachments are updated
-from outer to inner models; recursive model paths are blocked during spawning.
-
-Each instance root owns its rig, geometry, and PRE2/ribbon render entities through the
-Bevy hierarchy. Hiding the root hides its geometry and effects; despawning it
-cleans them up, including its attachment models. `Wc3ModelOwner` also supports
-detached child instances: omit `ChildOf` to keep world-space transforms and
-visibility independent while retaining cleanup when the owner despawns. Model-based
-PREM emitters spawn world-space child models with independent sequence-zero
-animation, sampled birth transforms and physical properties, gravity, and lifetime
-cleanup. Parent playback pause/speed controls particle time; sequence changes and
-backward seeks clear particles. Image-based PREM is unsupported. See
-[PREM fidelity and capture instructions](docs/visual-fidelity/prem.md).
-
-Capture the animated attachment fixture with the existing offscreen renderer:
-
-```sh
-cargo run -p bevy-wc3 --example capture -- \
-  crates/bevy-wc3/tests/fixtures/attachment_capture.mdl /tmp/wc3-attachments \
-  --times 0,0.25,0.75,1.25 --fps 60 --size 640x480 \
-  --eye 0,-18,12 --target 0,0,0
-```
-
-Run the viewer with any local model path:
+## Try a model
 
 ```sh
 cargo run -p bevy-wc3 --example viewer -- path/to/model.mdx
-cargo run -p bevy-wc3 --example viewer -- path/to/tree.mdx --replaceable 31=Textures/BlightedTree.blp
 ```
 
-The viewer uses the MDX's directory as its Bevy asset root. Literal bitmap
-paths are resolved beside the MDX first, then from that root. Left drag rotates the
-camera, right drag pans, the scroll wheel zooms, and Space cycles sequences.
-Use `--replaceable ID=PATH`, `--bitmap INDEX=PATH`, or `--particle2 INDEX=PATH`
-to bind viewer textures relative to that asset root.
-The `inspect` and `compile` examples validate
-models without opening a GPU window:
+Left drag rotates, right drag pans, the scroll wheel zooms, and Space cycles
+sequences. The viewer also accepts MDL and texture overrides. For offscreen PNGs,
+use the existing `capture` example; run it with `--help` for options.
 
-```sh
-cargo run -p bevy-wc3 --example compile -- path/to/model.mdx
-```
+## Documentation
 
-The current renderer uses Bevy PBR shading with WC3 layer blend and depth
-states. PRE2 textured particles are simulated per model instance and rendered
-as GPU-instanced head and tail quads. The CPU simulates compact particle records;
-the vertex shader constructs camera-facing geometry independently for each view.
-Heads and tail widths retain XYZ scale sampled at birth and apply it componentwise
-in world space after orienting the quad. Tail length follows velocity, which already
-contains the emitter scale. ModelSpace moves live centers and tails with the current
-node transform while retaining the scale sampled at birth for quad dimensions.
-XYQuad heads stay in world XY with a facing angle sampled from the initial XY
-velocity; vertical and stationary particles still produce complete quads.
-Shaded particles use Bevy scene lighting with a matte, zero-reflectance material;
-Unshaded particles use texture and segment color directly. Billboard heads and tails
-use the camera-facing normal; XYQuad heads use world +Z. Lighting leaves alpha intact.
-`spawn_prepared_model` takes mutable mesh assets to create a static emitter quad.
-Bitmap and PRE2 replaceable IDs use the same per-instance bindings.
+- [Application guide](docs/usage.md): loading, textures, animation, attachments,
+  lights, custom sources, and instance lifetime.
+- [Renderer guide](docs/visual-fidelity/renderer.md): geometry, materials,
+  animation, and effects, with links to each implementation topic.
+- [Architecture](docs/architecture.md): module responsibilities, asset ownership,
+  and system scheduling.
+- [Documentation index](docs/README.md): all guides and rendering topics.
+- API reference: run `cargo doc -p bevy-wc3 --no-deps --open`.
 
-RIBB ribbon emitters retain world-space cross-sections sampled at subframe births.
-The GPU builds connected quads, applies ballistic gravity (`0.5 * gravity * age²`),
-and maps an animated atlas cell across each live chain. Animated color/alpha,
-material layers, texture bindings, and UV transforms update without rebuilding a
-CPU mesh. Pause/speed and lifetime follow the instance animation; sequence changes,
-backward seeks, and sampled visibility gaps break the chain. See
-[ribbon behavior and capture checks](docs/visual-fidelity/ribbons.md), including the
-gravity semantics and remaining game-fidelity checks.
-
-See the [renderer documentation](docs/README.md) for visual fidelity gaps and
-verification work by rendering topic.
-
-See the [architecture guide](docs/architecture.md) for module responsibilities,
-asset ownership, and the public `Wc3Systems` scheduling contract.
+Rendering integrates with Bevy lighting and render phases. Individual renderer
+notes describe supported behavior, implementation limits, and the scope of
+visual checks; exact Warcraft III appearance has not been established.

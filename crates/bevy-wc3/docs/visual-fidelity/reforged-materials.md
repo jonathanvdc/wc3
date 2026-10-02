@@ -2,7 +2,7 @@
 
 [Documentation index](../README.md)
 
-## Implemented behavior
+## Evaluation and rendering
 
 `Shader_HD_DefaultUnit` uses one mesh pass per normalized HD layer. Older
 version-900/1000 six-layer materials are normalized by `wc3` into texture roles;
@@ -10,11 +10,15 @@ SD shader IDs in newer files still use the SD material path. HD Crystal and
 unknown shader IDs log a warning and render a diffuse fallback. They are not
 implemented HD shaders.
 
+## Bevy integration
+
 The renderer keeps `ExtendedMaterial<StandardMaterial, Wc3LayerState>` and Bevy's
 forward lighting, shadows, fog, decals, and post-processing. It registers local
 shaders without replacing any global Bevy shader. WC3 opaque materials explicitly
 use forward rendering, including in scenes whose default is deferred. Forcing a
 WC3 material's `opaque_render_method` to Deferred is unsupported.
+
+## Texture roles and color spaces
 
 | Slot | Interpretation |
 | --- | --- |
@@ -32,7 +36,9 @@ mips; they are reused and invalidated by image modification/removal events.
 This also applies to per-instance overrides and animated texture choices. Custom
 image sources must remain accessible in `Assets<Image>` to create variants
 (use `RenderAssetUsages::MAIN_WORLD`, included in the default usage).
-The BLP loader now honors `ImageLoaderSettings::is_srgb`.
+The BLP loader honors `ImageLoaderSettings::is_srgb`.
+
+## Animated surfaces and UV sets
 
 Every texture-role track, emissive gain, and Fresnel color/opacity/team-color track
 samples the existing sequence/global clocks. UV translation/rotation/scaling
@@ -50,6 +56,8 @@ enter the lit path before Bevy's post-lighting processing. Unshaded layers use
 Bevy's unlit path; Unfogged layers disable Bevy fog. Missing ORM defaults to a
 nonmetallic, rough surface; absent team/environment maps have no contribution.
 
+## Render passes
+
 HD Transparent layers use a 0.75 alpha cutoff. The forward, shadow/depth, normal,
 and motion-vector passes share diffuse alpha, UV transforms, and skinning. The
 normal prepass uses the same RG normal reconstruction as the forward pass.
@@ -57,7 +65,7 @@ Existing WC3 blend/depth settings remain. PriorityPlane is an approximate Bevy
 material depth/sort bias; a dedicated Warcraft pass-ordering scheme remains
 missing, including SortPrimsFarZ/SortPrimsNearZ semantics.
 
-## Remaining fidelity work
+## Implementation limits and game comparison
 
 The implementation uses continuous team-mask interpolation and Bevy lighting.
 Emission uses a linear gain, Fresnel uses a fifth-power view-angle rim, and

@@ -1,6 +1,42 @@
-# PRE2 visual fidelity
+# Quad particles (PRE2)
 
 [Documentation index](../README.md)
+
+PRE2 emitters render textured, GPU-instanced head and tail quads for each model
+instance. CPU simulation schedules births and stores immutable spawn records;
+the vertex shader evaluates motion, lifetime color/alpha/size curves, atlas UVs,
+and geometry independently for each view.
+
+## Emission and motion
+
+Continuous emission distributes births within each update. Spawn parameters and
+node transforms are sampled at those subframe times, while emission rate and
+visibility use the update endpoint. Squirt emission observes the current emission
+key. Playback pause and speed control the emitter simulation clock.
+
+World-space velocity uses the emitter’s full affine transform, with multiplicative
+speed variation. Gravity is scaled by the emitter’s Z-axis length at birth.
+ModelSpace transforms live local motion through the current node transform.
+
+## Geometry, textures, and lighting
+
+Billboard heads face the current view; tails follow particle velocity. Head sizes
+and tail widths retain XYZ scale sampled at birth and apply it componentwise in
+world space after orientation. Tail velocity already contains emitter scale.
+ModelSpace retains birth scale for quad dimensions while moving centers and tails
+with the current node. XYQuad heads stay in world XY, retaining an initial
+XY-velocity facing angle; stationary and vertical particles still form full quads.
+
+Unshaded particles use texture and segment color directly. Shaded particles use
+Bevy scene lighting with a matte, zero-reflectance material. Billboard heads and
+tails use a camera-facing normal; XYQuad heads use world +Z. Lighting preserves
+alpha. Bitmap and replaceable textures use per-instance bindings; a zero
+replaceable ID resolves TextureID through the bitmap slot.
+
+PriorityPlane biases Bevy transparent sorting. SortPrimsFarZ orders particles
+by analytic center depth along each camera’s forward axis.
+
+## Record storage and GPU uploads
 
 Spawn records use a growing ring, with chronological retirement and no free-slot
 list. Capacity starts at 16 records and doubles with the live population, up to
@@ -11,23 +47,27 @@ or a full ring lap between rendered frames uploads the entire current buffer.
 Retirement alone does not upload spawn records. Per-view depth sorting still
 uses a separate draw-order index buffer.
 
-The following behavior is missing or still needs comparison against Warcraft III
-captures. Verification tasks describe implemented behavior whose exact visual
-match has not been established.
+## Implementation limits
 
-| Area | Current behavior and remaining work |
-| --- | --- |
-| Fog | The particle shader applies no fog, so all emitters behave as Unfogged. Apply scene fog to emitters without that flag. |
-| Shaded lighting | Unshaded bypasses lighting, while shaded particles use Bevy scene lighting with a matte, zero-reflectance material. This differs from the Classic clamped lighting equation; brightness, color, and light response still need matching. |
-| Replaceable textures and team color/glow | Explicit per-instance bindings work, but PRE2 replaceable IDs have no automatically loaded defaults. Team-specific texture selection and any required atlas selection remain unimplemented. |
-| PriorityPlane and pass ordering | PriorityPlane is a bias in Bevy's transparent sorting. Verify Warcraft's ordering between emitters and its interaction with model materials and other effects. |
-| Squirt timing | Only the current emission key is observed, so an update crossing multiple keys or loops can miss bursts. Schedule every crossed burst at its actual birth time. |
-| Animated continuous emission | Continuous births have subframe timestamps and sample spawn parameters and transforms at birth. Emission rate and visibility are sampled at the update endpoint, so changes within an update can alter particle counts and birth times. Integrate rate and visibility over the interval, including sequence boundaries. |
-| Spawn motion | Speed variation is multiplicative, and world-space velocity uses the emitter's full affine transform. Verify variation semantics and rotation/scale order with rotated, nonuniformly scaled emitters. |
-| ModelSpace gravity | Gravity is multiplied by the emitter's Z-axis length at birth, then local motion is transformed by the current node transform. Verify the intended gravity space and scaling to avoid an extra scale factor. |
-| XYQuad orientation | Heads stay in world XY and retain the initial XY velocity angle minus pi plus pi/8. Verify the exact facing offset and UV orientation against asymmetric textures and Warcraft captures. |
-| Mirrored transforms | Quad size multipliers use transformed axis lengths, which discard scale signs. Verify mirrored emitters and determine whether quad or texture orientation must retain those signs. |
+The shader applies no fog. Replaceable IDs require application-supplied textures.
+Endpoint emission-rate/visibility sampling can miss changes within an update;
+squirt updates crossing multiple keys or loops can miss bursts. A dedicated WC3
+ordering scheme across model materials and effects is not implemented.
+Quad size uses transformed axis lengths, so mirrored scale signs are discarded.
 
-SortPrimsFarZ already sorts live particles by analytic center depth along each
-camera's forward axis, rather than radial distance. Continuous births are also
-already distributed within an update; they are not all grouped at its endpoint.
+## Capture checks and game comparison
+
+Capture the checked-in fixture from the repository root:
+
+```sh
+cargo run -p bevy-wc3 --example capture -- \
+  crates/bevy-wc3/tests/fixtures/particle_capture.mdl /tmp/wc3-particle-captures \
+  --times 0,0.5,1,2 --fps 60 --size 640x480 \
+  --eye 0,-18,8 --target 0,0,2
+```
+
+Inspect placement, motion, color/alpha, atlas frames, head/tail geometry, and
+blending at the same camera and simulation FPS. This command is a reproducible
+check, not a report of new captures. Warcraft comparisons are still needed for
+lighting, ordering, speed variation, rotation/scale order, ModelSpace gravity,
+XYQuad facing offsets, and mirrored emitters.

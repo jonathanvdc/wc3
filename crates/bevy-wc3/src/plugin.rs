@@ -23,6 +23,11 @@ use crate::materials::layers::animate_layers;
 use crate::materials::Wc3LayerMaterial;
 use crate::schedule::{configure, Wc3Systems};
 
+/// Registers model/BLP loaders, WC3 materials, animation, and effect rendering.
+///
+/// Add alongside Bevy's `DefaultPlugins`. Applications supply cameras, scene
+/// lighting, and replaceable textures. Use [`crate::Wc3Systems`] to order systems
+/// around the plugin's loading, animation, and simulation stages.
 pub struct Wc3BevyPlugin;
 
 impl Plugin for Wc3BevyPlugin {

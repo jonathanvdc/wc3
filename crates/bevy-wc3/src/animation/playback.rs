@@ -5,12 +5,17 @@ use std::time::Duration;
 use wc3::model::animation::{AnimationTime, Sequence};
 
 /// Per-instance sequence playback and local-pose transitions.
-/// Properties outside node transforms sample the selected sequence directly.
+/// Query this component on a spawned model root. Call [`Self::play`] when the
+/// desired sequence changes; calling it again restarts that sequence. Set
+/// [`Self::playing`] to pause and [`Self::speed`] to control clock advancement.
+/// Only local node transforms blend; other properties sample the destination.
 #[derive(Component, Clone)]
 pub struct Wc3Animation {
     pub(crate) sequence: usize,
     pub(crate) elapsed_ms: f64,
+    /// Clock multiplier: 1.0 is normal speed; negative values reverse playback.
     pub speed: f64,
+    /// Whether the clock and pose transition advance.
     pub playing: bool,
     pub(crate) sequences: Vec<Sequence>,
     pub(crate) global_sequences: Vec<u32>,
@@ -80,6 +85,7 @@ impl Wc3Animation {
         }
     }
 
+    /// Authored sequences in the order used by playback indices.
     pub fn sequences(&self) -> &[Sequence] {
         &self.sequences
     }

@@ -4,6 +4,7 @@ use std::str::from_utf8;
 use wc3::model::mdl::Read as _;
 use wc3::model::{ConversionOptions, DynamicModel, Model, V1800};
 
+/// A model decoding, strict conversion, or geometry preparation failure.
 #[derive(Debug)]
 pub struct ModelError(pub(crate) String);
 
@@ -18,7 +19,9 @@ impl Error for ModelError {}
 /// A version-independent source model. Conversion is strict: unsupported data
 /// is reported rather than silently discarded.
 pub struct Wc3Model {
+    /// Format version recorded before normalization.
     pub source_version: u32,
+    /// Source data normalized to the common runtime model version.
     pub model: Model<V1800>,
 }
 

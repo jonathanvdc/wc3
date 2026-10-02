@@ -12,10 +12,15 @@ use crate::preparation::PreparedModel;
 /// `mount` follows it and gates only attached content with the visibility track.
 #[derive(Clone, Debug)]
 pub struct Wc3AttachmentPoint {
+    /// Parent model animation root and lifetime owner.
     pub root: Entity,
+    /// Animated source node, before attachment visibility gating.
     pub node: Entity,
+    /// Child mount that inherits the node transform and attachment visibility.
     pub mount: Entity,
+    /// Authored attachment ID, independent of the node object ID.
     pub id: u32,
+    /// Full authored attachment name.
     pub name: String,
     /// Automatically spawned path model, if the resource was resolved.
     pub model: Option<Entity>,
@@ -49,10 +54,12 @@ impl Wc3AttachmentPoint {
 pub struct Wc3Attachments(Vec<Wc3AttachmentPoint>);
 
 impl Wc3Attachments {
+    /// Look up a point by attachment record index.
     pub fn get(&self, index: usize) -> Option<&Wc3AttachmentPoint> {
         self.0.get(index)
     }
 
+    /// Return the first point with this authored attachment ID.
     pub fn by_id(&self, id: u32) -> Option<&Wc3AttachmentPoint> {
         self.0.iter().find(|point| point.id == id)
     }
@@ -64,6 +71,7 @@ impl Wc3Attachments {
             .find(|point| point.name.eq_ignore_ascii_case(name))
     }
 
+    /// Iterate points in source record order.
     pub fn iter(&self) -> impl Iterator<Item = &Wc3AttachmentPoint> {
         self.0.iter()
     }

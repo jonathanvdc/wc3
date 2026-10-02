@@ -2,7 +2,7 @@
 
 [Documentation index](../README.md)
 
-## Implemented behavior
+## Evaluation and rendering
 
 `Wc3Animation::play(sequence)` starts or restarts the selected sequence and blends
 from the latest evaluated authored local pose using the model's `BlendTime` in
@@ -11,6 +11,8 @@ milliseconds. `play_with_blend(sequence, Duration)` overrides the duration;
 model-info record or zero BlendTime disables the default fade. Before the first
 pose evaluation, playback switches immediately rather than inventing a source pose.
 Invalid sequence indices leave the player unchanged.
+
+## Pose transitions
 
 Each instance caches its evaluated local node transforms before inheritance,
 billboarding, or camera anchoring. A transition freezes that pose while the
@@ -54,7 +56,7 @@ survive sequence changes. Ribbon sections also survive, but sequence changes
 break ribbon connectivity and reset the emission phase. Attachment child models
 retain their independent clocks and existing visibility/restart policy.
 
-## Fidelity and verification
+## Verification and game comparison
 
 The renderer implements frozen-source transitions into an advancing destination.
 Exact Warcraft III transition semantics remain unverified; game captures are

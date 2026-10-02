@@ -64,6 +64,16 @@ impl PreparedModel {
 
 /// Build shareable meshes and bind poses once. Each instance receives private
 /// layer materials so its texture bindings can change independently.
+///
+/// The resolver receives literal bitmap paths and may return `None` for missing
+/// images. Replaceable IDs are supplied when spawning or through instance texture
+/// bindings. This convenience function leaves child-model resources unresolved;
+/// use [`prepare_model_with_resources`] to resolve attachments and PREM models.
+///
+/// # Errors
+///
+/// Returns [`ModelError`] when geometry cannot be prepared, including unsupported
+/// influence counts or unavailable texture-coordinate sets.
 pub fn prepare_model(
     meshes: &mut Assets<Mesh>,
     inverse_bindposes: &mut Assets<SkinnedMeshInverseBindposes>,
@@ -75,6 +85,14 @@ pub fn prepare_model(
 
 /// Prepare shared geometry, material templates, and dependencies through
 /// consumer-defined image and child-model resolvers. This does not spawn entities.
+///
+/// Resolvers receive authored resource paths; the application chooses their lookup
+/// policy. Missing child models retain their resource slots. Meshes and bind poses
+/// can be reused by multiple calls to [`crate::spawn_prepared_model`].
+///
+/// # Errors
+///
+/// Returns [`ModelError`] for geometry preparation failures, as in [`prepare_model`].
 pub fn prepare_model_with_resources(
     meshes: &mut Assets<Mesh>,
     inverse_bindposes: &mut Assets<SkinnedMeshInverseBindposes>,
