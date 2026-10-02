@@ -1,7 +1,7 @@
 //! Read and write BLP1 and BLP2 texture containers.
 //!
-//! [`BlpRef::read`] borrows encoded mipmap data from an input byte slice.
-//! Call [`BlpRef::to_owned`] to edit the container, or write the borrowed view
+//! [`BlpRef::read`](crate::blp::BlpRef::read) borrows encoded mipmap data from an input byte slice.
+//! Call [`BlpRef::to_owned`](crate::blp::BlpRef::to_owned) to edit the container, or write the borrowed view
 //! directly. Writing lays out mipmaps in level order and recalculates offsets;
 //! it does not reproduce arbitrary source padding or mipmap placement.
 //! Container types retain format fields and encoded bytes, including unused
@@ -13,10 +13,10 @@
 //!
 //! # `image` crate adapters
 //!
-//! With `blp-decode`, [`BlpDecoder`] implements [`image::ImageDecoder`]. It
-//! selects the largest mipmap by default; [`BlpDecoder::with_mip`] selects
+//! With `blp-decode`, [`BlpDecoder`](crate::blp::BlpDecoder) implements [`image::ImageDecoder`]. It
+//! selects the largest mipmap by default; [`BlpDecoder::with_mip`](crate::blp::BlpDecoder::with_mip) selects
 //! another level. It writes RGBA8 pixels into the buffer supplied by `image`.
-//! Use [`BlpRef::decode_mip_into`] when you supply the pixel buffer yourself.
+//! Use [`BlpRef::decode_mip_into`](crate::blp::BlpRef::decode_mip_into) when you supply the pixel buffer yourself.
 //! JPEG decoding still uses a temporary CMYK buffer inside the JPEG decoder.
 //!
 //! ```
@@ -26,12 +26,12 @@
 //! image::DynamicImage::from_decoder(BlpDecoder::new(bytes)?)
 //! # }
 //! ```
-//! Call [`register_decoding_hook`] once to let `image` load `.blp` paths and
+//! Call [`register_decoding_hook`](crate::blp::register_decoding_hook) once to let `image` load `.blp` paths and
 //! detect BLP1/BLP2 data from its magic bytes.
 //!
-//! With `blp-encode`, [`BlpEncoder`] implements [`image::ImageEncoder`] for
-//! RGBA8 pixels. Use [`BlpEncoder::with_options`] to select the BLP encoding
-//! format; [`BlpEncoder::new`] uses default options.
+//! With `blp-encode`, [`BlpEncoder`](crate::blp::BlpEncoder) implements [`image::ImageEncoder`] for
+//! RGBA8 pixels. Use [`BlpEncoder::with_options`](crate::blp::BlpEncoder::with_options) to select the BLP encoding
+//! format; [`BlpEncoder::new`](crate::blp::BlpEncoder::new) uses default options.
 //!
 //! ```
 //! # #[cfg(feature = "blp-encode")]

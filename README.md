@@ -2,7 +2,7 @@
 
 `wc3` is a Rust library for working with Warcraft III assets. It reads, edits,
 and writes models in binary **MDX** and text **MDL**, and textures in **BLP1**
-and **BLP2** containers.
+and **BLP2** containers, and classic **MPQ** archives.
 
 Models share one typed representation across MDX and MDL, with layouts for
 Classic and Reforged versions. Texture APIs can inspect and rewrite encoded
@@ -30,6 +30,9 @@ your code, as the examples below do.
 | MDX and MDL models; BLP container reading, editing, and writing | None |
 | BLP mipmap decoding to RGBA pixels; `image::ImageDecoder` adapter | `blp-decode` |
 | BLP image encoding from RGBA pixels; `image::ImageEncoder` adapter | `blp-encode` |
+| MPQ indexing, stored entries, encryption, creation, and encoded archive editing | None |
+| MPQ zlib, bzip2, PKWARE DCL, and sparse decompression | `mpq-decode` |
+| MPQ zlib and bzip2 compression | `mpq-encode` |
 
 ### Models: read, edit, and write
 
@@ -118,6 +121,67 @@ fn encode(image: &image::RgbaImage) -> Result<Vec<u8>, Box<dyn std::error::Error
 `Blp::encode_image` generates mipmaps; `Blp::encode_mipmaps` accepts authored
 mipmaps. See the [`blp`](https://docs.rs/wc3/latest/wc3/blp/) module docs for
 the `image` crate adapters, options, and container behavior.
+
+### Archives: stream, create, and edit
+
+MPQ support lives under `wc3::mpq`. Enable compressed extraction and writing
+with `cargo add wc3 --features mpq-decode,mpq-encode`. Compression uses optional
+Rust libraries; ordinary model/texture users gain no compression dependencies.
+
+```rust
+use std::io::{Cursor, Read};
+use wc3::mpq::{Archive, ArchiveWriter, FileOptions, WriteOptions};
+
+fn example() -> Result<(), wc3::mpq::Error> {
+    let mut writer = ArchiveWriter::new(Cursor::new(Vec::new()), WriteOptions::default())?;
+    writer.add_file("war3map.j", 5, &mut b"hello".as_slice(), FileOptions::default())?;
+    let bytes = writer.finish()?.into_inner();
+
+    let mut archive = Archive::open(Cursor::new(bytes))?;
+    let mut entry = archive.open_file("war3map.j")?;
+    let mut text = String::new();
+    entry.read_to_string(&mut text)?;
+    assert_eq!(text, "hello");
+    Ok(())
+}
+```
+
+Sources require `Read + Seek`, sinks `Write + Seek`. Entry readers implement
+`Read`; `start_file` returns a `Write` entry sink. Provide the decoded entry
+size up front and call `finish` on both entry and archive writers. Sector files
+use bounded payload memory; single-unit input files use a configurable buffer
+limit. Index and sector tables remain in memory. Sector checksums are verified
+by default, and `FileOptions::sector_checksums` enables writing them.
+
+`ArchiveWriter::from_archive` creates an editable copy without decoding original
+files. `replace_file` and `remove_file` change exact filename/locale/platform
+matches. Original hash slots and relative block offsets remain intact, preserving
+unnamed entries, unknown codecs, and adjusted encryption keys. Edits append data;
+they do not compact or grow the original hash table. The original `(listfile)`
+is preserved unless explicitly replaced, and map prefixes/user-data wrappers
+outside the MPQ region are not copied. Use a separate output file for edits.
+
+The reader discovers classic headers after map prefixes and user-data wrappers.
+Filename lookup follows MPQ byte hashing, ASCII case folding, and slash
+normalization. Locale/platform matching is exact, neutral by default.
+`known_names` returns listfile hints; it cannot enumerate every original name.
+`index` and `encoded_file` work independently of payload codec support.
+
+Header versions other than zero, patch-file application, Huffman/ADPCM/LZMA
+decoding, signature verification, and protected-map repair are unsupported.
+Archive edits do not regenerate existing attributes or signatures. Game loading
+has not been verified. Automated tests cover the public API, binary format
+contracts, encryption, compression, corruption handling, and streaming limits;
+they require no reference implementation or checked-in MPQ archives.
+
+The `mpq` example supplies streaming `list`, `extract`, `create`, and `edit`
+commands. Run it without arguments for usage:
+
+```sh
+cargo run -p wc3 --example mpq --features mpq-decode,mpq-encode -- \
+  create /tmp/assets.mpq zlib adjusted \
+  'Units\\Example.mdx=crates/wc3/tests/fixtures/mdl/quad_model.mdx'
+```
 
 ## Version conversion
 
