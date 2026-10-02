@@ -12,6 +12,7 @@ keywords = ["warcraft", "mdx", "mdl", "model", "binary"]
 categories = ["parser-implementations", "game-development"]
 
 [dependencies]
+md5 = "0.8"
 bitfield = "0.19"
 image = { version = "0.25.10", default-features = false, optional = true }
 zune-jpeg = { version = "0.5.15", default-features = false, optional = true }

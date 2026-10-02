@@ -13,6 +13,7 @@ fn classic_header_matches_fixed_wire_layout() {
         block_table_offset: 224,
         hash_table_entries: 8,
         block_table_entries: 2,
+        ..Header::default()
     };
     assert_eq!(Header::decode(&bytes).unwrap(), header);
     assert_eq!(header.sector_size(), Some(4096));

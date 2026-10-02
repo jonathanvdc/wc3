@@ -446,3 +446,284 @@ fn removed_names_do_not_survive_generated_listfile() {
     let mut archive = Archive::open(Cursor::new(writer.finish().unwrap().into_inner())).unwrap();
     assert_eq!(archive.known_names().unwrap(), vec![b"(listfile)".to_vec()]);
 }
+
+#[test]
+fn newer_headers_round_trip_and_edit() {
+    for version in 0..=3 {
+        for extended_index in [false, true] {
+            if extended_index && version < 2 {
+                continue;
+            }
+            let mut writer = ArchiveWriter::new(
+                Cursor::new(Vec::new()),
+                WriteOptions {
+                    header_version: version,
+                    extended_index,
+                    listfile: false,
+                    ..WriteOptions::default()
+                },
+            )
+            .unwrap();
+            for name in ["Units/Encrypted.bin", "stored.bin", "removed.bin"] {
+                writer
+                    .add_file(
+                        name,
+                        7,
+                        &mut b"payload".as_slice(),
+                        FileOptions {
+                            encrypted: true,
+                            adjusted_key: true,
+                            ..FileOptions::default()
+                        },
+                    )
+                    .unwrap();
+            }
+            let bytes = writer.finish().unwrap().into_inner();
+            let mut archive = Archive::open(Cursor::new(bytes)).unwrap();
+            assert_eq!(archive.index().header.version, version);
+            assert_eq!(archive.index().extended.is_some(), extended_index);
+            assert_eq!(
+                archive.read_file("UNITS\\ENCRYPTED.BIN").unwrap(),
+                b"payload"
+            );
+            let mut writer =
+                ArchiveWriter::from_archive(Cursor::new(Vec::new()), &mut archive).unwrap();
+            writer.remove_file("removed.bin", 0, 0).unwrap();
+            writer
+                .replace_file(
+                    "stored.bin",
+                    3,
+                    &mut b"new".as_slice(),
+                    FileOptions::default(),
+                )
+                .unwrap();
+            let mut archive =
+                Archive::open(Cursor::new(writer.finish().unwrap().into_inner())).unwrap();
+            assert_eq!(archive.read_file("stored.bin").unwrap(), b"new");
+            assert!(matches!(
+                archive.open_file("removed.bin"),
+                Err(Error::FileNotFound)
+            ));
+            assert_eq!(
+                archive.read_file("Units/Encrypted.bin").unwrap(),
+                b"payload"
+            );
+        }
+    }
+}
+
+#[cfg(feature = "mpq-decode")]
+#[test]
+fn stormlib_newer_archives_and_het_only_lookup() {
+    for fixture in [
+        include_bytes!("fixtures/mpq/storm-v2.mpq").as_slice(),
+        include_bytes!("fixtures/mpq/storm-v3.mpq").as_slice(),
+        include_bytes!("fixtures/mpq/storm-v4.mpq").as_slice(),
+    ] {
+        let mut archive = Archive::open(Cursor::new(fixture)).unwrap();
+        assert_eq!(archive.read_file("stored.bin").unwrap(), b"payload");
+        let expected: Vec<_> = (0..17003).map(|i| (i % 7) as u8).collect();
+        assert_eq!(archive.read_file("units/encrypted.bin").unwrap(), expected);
+        if archive.index().header.version >= 2 {
+            let mut bytes = fixture.to_vec();
+            // Remove the classic tables from the header to require HET/BET.
+            bytes[16..32].fill(0);
+            bytes[40..44].fill(0);
+            if archive.index().header.version == 2 {
+                let end =
+                    archive.index().header.bet_table_offset + archive.index().header.table_sizes[4];
+                bytes.truncate(end as usize);
+                bytes[44..52].copy_from_slice(&end.to_le_bytes());
+            }
+            if archive.index().header.version == 3 {
+                bytes[68..84].fill(0);
+                bytes[112..144].fill(0);
+                let digest = md5::compute(&bytes[..192]).0;
+                bytes[192..208].copy_from_slice(&digest);
+            }
+            let mut archive = Archive::open(Cursor::new(bytes)).unwrap();
+            assert!(archive.index().hashes.is_empty());
+            assert_eq!(archive.read_file("UNITS/ENCRYPTED.BIN").unwrap(), expected);
+            let mut writer =
+                ArchiveWriter::from_archive(Cursor::new(Vec::new()), &mut archive).unwrap();
+            writer
+                .replace_file(
+                    "stored.bin",
+                    3,
+                    &mut b"new".as_slice(),
+                    FileOptions::default(),
+                )
+                .unwrap();
+            let mut edited =
+                Archive::open(Cursor::new(writer.finish().unwrap().into_inner())).unwrap();
+            assert_eq!(edited.read_file("units/encrypted.bin").unwrap(), expected);
+            assert_eq!(edited.read_file("stored.bin").unwrap(), b"new");
+        }
+    }
+}
+
+#[test]
+fn v4_raw_digests_cover_chunks_and_detect_corruption() {
+    for chunk in [1, 7, 1024, 4096] {
+        for compression in [Compression::Stored, Compression::Zlib] {
+            if compression != Compression::Stored
+                && !cfg!(all(feature = "mpq-encode", feature = "mpq-decode"))
+            {
+                continue;
+            }
+            let mut writer = ArchiveWriter::new(
+                Cursor::new(Vec::new()),
+                WriteOptions {
+                    header_version: 3,
+                    extended_index: true,
+                    raw_chunk_size: chunk,
+                    listfile: false,
+                    ..WriteOptions::default()
+                },
+            )
+            .unwrap();
+            let data = payload(17003);
+            writer
+                .add_file(
+                    "data",
+                    data.len() as u32,
+                    &mut data.as_slice(),
+                    FileOptions {
+                        compression,
+                        encrypted: true,
+                        adjusted_key: true,
+                        ..FileOptions::default()
+                    },
+                )
+                .unwrap();
+            let bytes = writer.finish().unwrap().into_inner();
+            let mut archive = Archive::open(Cursor::new(&bytes)).unwrap();
+            assert_eq!(archive.read_file("data").unwrap(), data);
+            let block = archive.index().blocks[0];
+            for offset in [block.offset, block.offset + block.stored_size as u64] {
+                let mut corrupt = bytes.clone();
+                corrupt[offset as usize] ^= 1;
+                let mut archive = Archive::open(Cursor::new(corrupt)).unwrap();
+                assert!(archive.open_file("data").is_err());
+            }
+            let mut corrupt = bytes.clone();
+            corrupt[14] ^= 1;
+            assert!(Archive::open(Cursor::new(corrupt)).is_err());
+            let mut corrupt = bytes.clone();
+            let header = &archive.index().header;
+            corrupt[(header.het_table_offset + header.table_sizes[3]) as usize] ^= 1;
+            assert!(Archive::open(Cursor::new(corrupt)).is_err());
+        }
+    }
+}
+
+#[test]
+fn shortened_v3_headers_survive_encoded_editing() {
+    let mut writer = ArchiveWriter::new(
+        Cursor::new(Vec::new()),
+        WriteOptions {
+            header_version: 1,
+            listfile: false,
+            ..WriteOptions::default()
+        },
+    )
+    .unwrap();
+    writer
+        .add_file(
+            "data",
+            7,
+            &mut b"payload".as_slice(),
+            FileOptions::default(),
+        )
+        .unwrap();
+    let mut bytes = writer.finish().unwrap().into_inner();
+    bytes[12..14].copy_from_slice(&2u16.to_le_bytes());
+    let mut archive = Archive::open(Cursor::new(bytes)).unwrap();
+    assert_eq!(archive.index().header.header_size(), 44);
+    let writer = ArchiveWriter::from_archive(Cursor::new(Vec::new()), &mut archive).unwrap();
+    let mut edited = Archive::open(Cursor::new(writer.finish().unwrap().into_inner())).unwrap();
+    assert_eq!(edited.index().header.header_size(), 44);
+    assert_eq!(edited.read_file("data").unwrap(), b"payload");
+}
+
+#[test]
+fn editing_het_only_archives_preserves_unknown_hashes() {
+    let mut writer = ArchiveWriter::new(
+        Cursor::new(Vec::new()),
+        WriteOptions {
+            header_version: 3,
+            extended_index: true,
+            listfile: false,
+            ..WriteOptions::default()
+        },
+    )
+    .unwrap();
+    for i in 0..40 {
+        writer
+            .add_file(
+                format!("file-{i}"),
+                7,
+                &mut b"payload".as_slice(),
+                FileOptions::default(),
+            )
+            .unwrap();
+    }
+    let mut bytes = writer.finish().unwrap().into_inner();
+    bytes[16..32].fill(0);
+    bytes[40..44].fill(0);
+    bytes[68..84].fill(0);
+    bytes[112..144].fill(0);
+    let digest = md5::compute(&bytes[..192]).0;
+    bytes[192..208].copy_from_slice(&digest);
+    let mut archive = Archive::open(Cursor::new(bytes)).unwrap();
+    let mut writer = ArchiveWriter::from_archive(Cursor::new(Vec::new()), &mut archive).unwrap();
+    for _ in 0..12 {
+        writer
+            .replace_file("file-0", 3, &mut b"new".as_slice(), FileOptions::default())
+            .unwrap();
+    }
+    let mut archive = Archive::open(Cursor::new(writer.finish().unwrap().into_inner())).unwrap();
+    assert_eq!(archive.index().blocks.len(), 40);
+    assert!(
+        archive.index().header.hash_table_entries >= archive.index().header.block_table_entries
+    );
+    for i in 1..40 {
+        assert_eq!(archive.read_file(format!("file-{i}")).unwrap(), b"payload");
+    }
+    assert_eq!(archive.read_file("file-0").unwrap(), b"new");
+}
+
+#[test]
+fn v4_table_md5s_detect_corruption_without_raw_chunks() {
+    let mut writer = ArchiveWriter::new(
+        Cursor::new(Vec::new()),
+        WriteOptions {
+            header_version: 3,
+            extended_index: true,
+            listfile: false,
+            ..WriteOptions::default()
+        },
+    )
+    .unwrap();
+    writer
+        .add_file(
+            "file",
+            7,
+            &mut b"payload".as_slice(),
+            FileOptions::default(),
+        )
+        .unwrap();
+    let bytes = writer.finish().unwrap().into_inner();
+    let archive = Archive::open(Cursor::new(&bytes)).unwrap();
+    let h = &archive.index().header;
+    for offset in [
+        h.hash_table_offset,
+        h.block_table_offset,
+        h.het_table_offset,
+        h.bet_table_offset,
+    ] {
+        let mut corrupt = bytes.clone();
+        corrupt[offset as usize] ^= 1;
+        assert!(Archive::open(Cursor::new(corrupt)).is_err());
+    }
+}

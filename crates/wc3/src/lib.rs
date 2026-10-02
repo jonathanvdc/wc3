@@ -5,7 +5,7 @@
 //! for binary MDX and text MDL; import the corresponding codec traits to enable I/O.
 //! See [`model`] for a complete example and guidance on editing records.
 //! [`blp`] reads and writes BLP1 and BLP2 encoded texture containers.
-//! [`mpq`] indexes, streams, creates, and edits classic MPQ archives.
+//! [`mpq`] indexes, streams, creates, and edits MPQ v1–v4 archives.
 
 extern crate self as wc3;
 

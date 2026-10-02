@@ -1,16 +1,22 @@
+use std::collections::HashMap;
 use std::io::{self, Read, Seek, SeekFrom};
 
 use super::codec::{decode, sector_checksum};
 use super::crypto::{crypt, file_key};
+use super::extended::read_extended;
 use super::format::{
-    offset_table_size, read_blocks, read_hashes, sector_count, u32_at, validate_name, HEADER_SIZE,
+    offset_table_size, read_blocks, read_hashes, sector_count, u32_at, validate_name, verify_md5,
+    HEADER_SIZE,
 };
+use super::raw;
 use super::{BlockEntry, Error, FileFlags, Header, Index};
 
 /// Allocation and discovery bounds for untrusted archives.
 #[derive(Clone, Debug)]
 pub struct ReadOptions {
     pub max_table_entries: u32,
+    /// Maximum stored or decoded table allocation.
+    pub max_table_bytes: u64,
     pub max_sector_size: u32,
     pub max_sector_table_bytes: u32,
     pub max_file_size: u32,
@@ -25,6 +31,7 @@ impl Default for ReadOptions {
     fn default() -> Self {
         Self {
             max_table_entries: 2 << 20,
+            max_table_bytes: 128 << 20,
             max_sector_size: 1 << 20,
             max_sector_table_bytes: 16 << 20,
             max_file_size: u32::MAX,
@@ -96,11 +103,25 @@ impl<R: Read + Seek> Archive<R> {
             return Err(Error::InvalidArchive("header outside source"));
         }
         source.seek(SeekFrom::Start(base))?;
-        let mut bytes = [0; 32];
+        let mut bytes = vec![0; 32];
         source.read_exact(&mut bytes)?;
-        let header = Header::decode(&bytes)?;
-        let size = header.archive_size as u64;
-        if size < HEADER_SIZE as u64 || base.checked_add(size).is_none_or(|end| end > len) {
+        let header_size = u32_at(&bytes, 4) as usize;
+        let version = u16::from_le_bytes(bytes[12..14].try_into().unwrap());
+        if version > 3 {
+            return Err(Error::UnsupportedVersion(version));
+        }
+        if !(32..=208).contains(&header_size) {
+            return Err(Error::InvalidArchive("header size"));
+        }
+        bytes.resize(header_size, 0);
+        source.read_exact(&mut bytes[32..])?;
+        let mut header = Header::decode(&bytes)?;
+        // V2 has no usable 64-bit size field. Bound it by the containing source.
+        if header.version == 1 || (header.version == 2 && header.shortened_header_size != 0) {
+            header.archive_size = len - base;
+        }
+        let size = header.archive_size;
+        if size < header_size as u64 || base.checked_add(size).is_none_or(|end| end > len) {
             return Err(Error::InvalidArchive("archive size outside source"));
         }
         let sector_size = header
@@ -109,32 +130,147 @@ impl<R: Read + Seek> Archive<R> {
         if sector_size > options.max_sector_size {
             return Err(Error::LimitExceeded("sector size"));
         }
-        if !header.hash_table_entries.is_power_of_two() {
+        if header.hash_table_entries != 0 && !header.hash_table_entries.is_power_of_two() {
             return Err(Error::InvalidArchive(
                 "hash table size is not a power of two",
             ));
         }
-        for (offset, count) in [
-            (header.hash_table_offset, header.hash_table_entries),
-            (header.block_table_offset, header.block_table_entries),
-        ] {
-            if count > options.max_table_entries {
-                return Err(Error::LimitExceeded("table entries"));
+        let positions = [
+            header.hash_table_offset,
+            header.block_table_offset,
+            header.hi_block_table_offset,
+            header.het_table_offset,
+            header.bet_table_offset,
+        ];
+        let expected = [
+            header.hash_table_entries as u64 * 16,
+            header.block_table_entries as u64 * 16,
+            header.block_table_entries as u64 * 2,
+            0,
+            0,
+        ];
+        if header.hash_table_entries > options.max_table_entries
+            || header.block_table_entries > options.max_table_entries
+        {
+            return Err(Error::LimitExceeded("table entries"));
+        }
+        for i in 0..5 {
+            if header.version < 3 {
+                header.table_sizes[i] = if positions[i] == 0 {
+                    0
+                } else {
+                    let end = positions
+                        .iter()
+                        .copied()
+                        .filter(|&p| p > positions[i])
+                        .min()
+                        .unwrap_or(size);
+                    let available = end
+                        .checked_sub(positions[i])
+                        .ok_or(Error::InvalidArchive("table offset"))?;
+                    if i < 3 {
+                        available.min(expected[i])
+                    } else {
+                        available
+                    }
+                };
             }
-            if count != 0 && (offset < HEADER_SIZE || offset as u64 + count as u64 * 16 > size) {
+            let stored = header.table_sizes[i];
+            if stored > options.max_table_bytes || expected[i] > options.max_table_bytes {
+                return Err(Error::LimitExceeded("table bytes"));
+            }
+            if (positions[i] == 0 && stored != 0)
+                || (positions[i] != 0
+                    && (positions[i] < header_size as u64
+                        || positions[i]
+                            .checked_add(stored)
+                            .is_none_or(|end| end > size)))
+                || (i < 2 && expected[i] != 0 && stored == 0)
+            {
                 return Err(Error::InvalidArchive("index table outside archive"));
+            }
+        }
+        for i in [3, 4] {
+            if positions[i] != 0 {
+                raw::verify(
+                    &mut source,
+                    base,
+                    positions[i],
+                    header.table_sizes[i],
+                    &header,
+                    &options,
+                )?;
             }
         }
         let hashes = read_hashes(
             &mut source,
-            base + header.hash_table_offset as u64,
+            base + header.hash_table_offset,
             header.hash_table_entries,
+            header.table_sizes[0],
+            &header.md5[1],
         )?;
-        let blocks = read_blocks(
+        let mut blocks = read_blocks(
             &mut source,
-            base + header.block_table_offset as u64,
+            base + header.block_table_offset,
             header.block_table_entries,
+            header.table_sizes[1],
+            &header.md5[0],
         )?;
+        if header.hi_block_table_offset != 0 {
+            if header.table_sizes[2] != expected[2] {
+                return Err(Error::InvalidArchive("high block table size"));
+            }
+            let mut high = vec![0; expected[2] as usize];
+            source.seek(SeekFrom::Start(base + header.hi_block_table_offset))?;
+            source.read_exact(&mut high)?;
+            verify_md5(&high, &header.md5[2])?;
+            for (block, word) in blocks.iter_mut().zip(high.chunks_exact(2)) {
+                block.offset |= (u16::from_le_bytes(word.try_into().unwrap()) as u64) << 32;
+            }
+        }
+        let extended = match (header.het_table_offset != 0, header.bet_table_offset != 0) {
+            (false, false) => None,
+            (true, true) => {
+                let (mut index, extended_blocks) =
+                    read_extended(&mut source, base, &header, &options)?;
+                if blocks.is_empty() {
+                    blocks = extended_blocks;
+                } else if blocks != extended_blocks {
+                    // Classic and BET indexes need not use the same record order.
+                    // Keep classic IDs stable and remap HET IDs into the unified list.
+                    let identity =
+                        |b: &BlockEntry| (b.offset, b.stored_size, b.file_size, b.flags.0);
+                    let mut ids: HashMap<_, _> = blocks
+                        .iter()
+                        .enumerate()
+                        .map(|(i, b)| (identity(b), i as u32))
+                        .collect();
+                    let mut remap = Vec::with_capacity(extended_blocks.len());
+                    for block in extended_blocks {
+                        let key = identity(&block);
+                        let id = if let Some(&id) = ids.get(&key) {
+                            id
+                        } else {
+                            if blocks.len() >= options.max_table_entries as usize {
+                                return Err(Error::LimitExceeded("merged table entries"));
+                            }
+                            let id = blocks.len() as u32;
+                            blocks.push(block);
+                            ids.insert(key, id);
+                            id
+                        };
+                        remap.push(id);
+                    }
+                    for (_, id) in index.slots.iter_mut().flatten() {
+                        if *id != u32::MAX {
+                            *id = remap[*id as usize];
+                        }
+                    }
+                }
+                Some(index)
+            }
+            _ => return Err(Error::InvalidArchive("incomplete HET/BET tables")),
+        };
         for entry in &hashes {
             if entry.is_file()
                 && (entry.block_index as usize >= blocks.len()
@@ -148,8 +284,11 @@ impl<R: Read + Seek> Archive<R> {
         for block in &blocks {
             let empty_at_zero = block.offset == 0 && block.file_size == 0 && block.stored_size == 0;
             if block.flags.contains(FileFlags::EXISTS)
-                && ((block.offset < HEADER_SIZE && !empty_at_zero)
-                    || block.offset as u64 + block.stored_size as u64 > size)
+                && ((block.offset < header_size as u64 && !empty_at_zero)
+                    || block
+                        .offset
+                        .checked_add(block.stored_size as u64)
+                        .is_none_or(|end| end > size))
             {
                 return Err(Error::InvalidArchive("file block outside archive"));
             }
@@ -161,6 +300,7 @@ impl<R: Read + Seek> Archive<R> {
                 header,
                 hashes,
                 blocks,
+                extended,
             },
             options,
         })
@@ -196,6 +336,9 @@ impl<R: Read + Seek> Archive<R> {
             .find(name, locale, platform)
             .ok_or(Error::FileNotFound)?;
         let block = self.index.blocks[id as usize];
+        if !block.flags.contains(FileFlags::EXISTS) {
+            return Err(Error::FileNotFound);
+        }
         block.flags.validate_codec()?;
         if block.file_size > self.options.max_file_size {
             return Err(Error::LimitExceeded("file size"));
@@ -209,10 +352,18 @@ impl<R: Read + Seek> Archive<R> {
         if !block.flags.compressed() && block.file_size != block.stored_size {
             return Err(Error::InvalidArchive("stored file size mismatch"));
         }
+        raw::verify(
+            &mut self.source,
+            self.base,
+            block.offset,
+            block.stored_size as u64,
+            &self.index.header,
+            &self.options,
+        )?;
         let key = block.flags.contains(FileFlags::ENCRYPTED).then(|| {
             file_key(
                 name,
-                block.offset,
+                block.offset as u32,
                 block.file_size,
                 block.flags.contains(FileFlags::FIX_KEY),
             )
@@ -240,9 +391,8 @@ impl<R: Read + Seek> Archive<R> {
                     return Err(Error::InvalidArchive("checksum table length"));
                 }
                 let mut bytes = vec![0; stored as usize];
-                self.source.seek(SeekFrom::Start(
-                    self.base + block.offset as u64 + start as u64,
-                ))?;
+                self.source
+                    .seek(SeekFrom::Start(self.base + block.offset + start as u64))?;
                 self.source.read_exact(&mut bytes)?;
                 if bytes.len() < expected {
                     bytes = decode(&bytes, expected, false)?;
@@ -307,7 +457,7 @@ impl<R: Read + Seek> Archive<R> {
             .filter(|b| b.flags.contains(FileFlags::EXISTS))
             .ok_or(Error::FileNotFound)?;
         self.source
-            .seek(SeekFrom::Start(self.base + block.offset as u64))?;
+            .seek(SeekFrom::Start(self.base + block.offset))?;
         Ok((&mut self.source).take(block.stored_size as u64))
     }
 }
@@ -342,7 +492,7 @@ pub(super) fn load_offsets(
         return Err(Error::InvalidArchive("truncated sector table"));
     }
     let mut bytes = vec![0; size as usize];
-    source.seek(SeekFrom::Start(base + block.offset as u64))?;
+    source.seek(SeekFrom::Start(base + block.offset))?;
     source.read_exact(&mut bytes)?;
     if let Some(key) = key {
         crypt(&mut bytes, key.wrapping_sub(1), true);
@@ -408,7 +558,7 @@ impl<R: Read + Seek> EntryReader<'_, R> {
         }
         self.buffer.resize(size as usize, 0);
         self.source.seek(SeekFrom::Start(
-            self.base + self.block.offset as u64 + offset as u64,
+            self.base + self.block.offset + offset as u64,
         ))?;
         self.source.read_exact(&mut self.buffer)?;
         if let Some(key) = self.key {

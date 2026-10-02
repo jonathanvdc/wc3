@@ -2,7 +2,7 @@
 
 `wc3` is a Rust library for working with Warcraft III assets. It reads, edits,
 and writes models in binary **MDX** and text **MDL**, and textures in **BLP1**
-and **BLP2** containers, and classic **MPQ** archives.
+and **BLP2** containers, and **MPQ v1–v4** archives.
 
 Models share one typed representation across MDX and MDL, with layouts for
 Classic and Reforged versions. Texture APIs can inspect and rewrite encoded
@@ -161,18 +161,34 @@ they do not compact or grow the original hash table. The original `(listfile)`
 is preserved unless explicitly replaced, and map prefixes/user-data wrappers
 outside the MPQ region are not copied. Use a separate output file for edits.
 
-The reader discovers classic headers after map prefixes and user-data wrappers.
+The reader discovers MPQ v1–v4 headers after map prefixes and user-data wrappers.
+It supports 64-bit offsets, extended block tables, compressed index tables, and
+HET/BET lookup, including archives without classic tables. Compressed tables
+require `mpq-decode`. V4 header/table MD5s are verified when present; raw file
+chunk MD5s are verified on opening an entry. HET/BET lookup uses Jenkins hashes
+and supports neutral locale/platform; classic tables retain exact locale lookup.
+
+Writers default to classic headers. Set `WriteOptions::header_version` to 1, 2,
+or 3 for MPQ v2, v3, or v4. `extended_index` adds HET/BET tables for v3/v4;
+`raw_chunk_size` enables v4 chunk MD5s (zero disables them). New index tables
+are written without compression. Writers bound raw chunks and digest buffers
+to 16 MiB each; payloads continue to stream. Encoded editing preserves the
+source header version, extended filename hashes, raw chunk settings, and file
+offsets, including files whose names are unknown. HET/BET edits compact block
+records and remap IDs; payload space is retained.
+
 Filename lookup follows MPQ byte hashing, ASCII case folding, and slash
 normalization. Locale/platform matching is exact, neutral by default.
 `known_names` returns listfile hints; it cannot enumerate every original name.
 `index` and `encoded_file` work independently of payload codec support.
 
-Header versions other than zero, patch-file application, signature verification,
-and protected-map repair are unsupported.
+Patch-file application, signature verification, and protected-map repair are
+unsupported.
 Archive edits do not regenerate existing attributes or signatures. Game loading
 has not been verified. Automated tests cover the public API, binary format
 contracts, encryption, compression, corruption handling, and streaming limits;
-they require no reference implementation or checked-in MPQ archives.
+newer-format tests also use tiny synthetic StormLib fixtures. Running the tests
+does not require StormLib.
 
 The `mpq` example supplies streaming `list`, `extract`, `create`, and `edit`
 commands. Run it without arguments for usage:

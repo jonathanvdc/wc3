@@ -70,3 +70,74 @@ pub(super) fn crypt(bytes: &mut [u8], mut key: u32, decrypt: bool) {
 #[cfg(test)]
 #[path = "crypto_tests.rs"]
 mod tests;
+
+/// lookup3 hashlittle2 over at most 264 lowercase, slash-normalized filename bytes.
+/// The primary and secondary seeds are 1 and 2.
+pub(super) fn jenkins(name: &[u8]) -> u64 {
+    let data: Vec<u8> = name
+        .iter()
+        .take(0x108)
+        .map(|&b| {
+            if b == b'/' {
+                b'\\'
+            } else {
+                b.to_ascii_lowercase()
+            }
+        })
+        .collect();
+    let mut a = 0xdeadbeefu32
+        .wrapping_add(data.len() as u32)
+        .wrapping_add(2);
+    let mut b = a;
+    let mut c = a.wrapping_add(1);
+    let mut tail = data.as_slice();
+    while tail.len() > 12 {
+        a = a.wrapping_add(u32::from_le_bytes(tail[..4].try_into().unwrap()));
+        b = b.wrapping_add(u32::from_le_bytes(tail[4..8].try_into().unwrap()));
+        c = c.wrapping_add(u32::from_le_bytes(tail[8..12].try_into().unwrap()));
+        a = a.wrapping_sub(c);
+        a ^= c.rotate_left(4);
+        c = c.wrapping_add(b);
+        b = b.wrapping_sub(a);
+        b ^= a.rotate_left(6);
+        a = a.wrapping_add(c);
+        c = c.wrapping_sub(b);
+        c ^= b.rotate_left(8);
+        b = b.wrapping_add(a);
+        a = a.wrapping_sub(c);
+        a ^= c.rotate_left(16);
+        c = c.wrapping_add(b);
+        b = b.wrapping_sub(a);
+        b ^= a.rotate_left(19);
+        a = a.wrapping_add(c);
+        c = c.wrapping_sub(b);
+        c ^= b.rotate_left(4);
+        b = b.wrapping_add(a);
+        tail = &tail[12..];
+    }
+    if !tail.is_empty() {
+        for (i, &byte) in tail.iter().enumerate() {
+            let n = (byte as u32) << ((i % 4) * 8);
+            match i / 4 {
+                0 => a = a.wrapping_add(n),
+                1 => b = b.wrapping_add(n),
+                _ => c = c.wrapping_add(n),
+            }
+        }
+        c ^= b;
+        c = c.wrapping_sub(b.rotate_left(14));
+        a ^= c;
+        a = a.wrapping_sub(c.rotate_left(11));
+        b ^= a;
+        b = b.wrapping_sub(a.rotate_left(25));
+        c ^= b;
+        c = c.wrapping_sub(b.rotate_left(16));
+        a ^= c;
+        a = a.wrapping_sub(c.rotate_left(4));
+        b ^= a;
+        b = b.wrapping_sub(a.rotate_left(14));
+        c ^= b;
+        c = c.wrapping_sub(b.rotate_left(24));
+    }
+    ((b as u64) << 32) | c as u64
+}

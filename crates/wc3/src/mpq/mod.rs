@@ -1,4 +1,4 @@
-//! Index, extract, create, and edit classic Warcraft III MPQ archives.
+//! Index, extract, create, and edit MPQ archives (formats v1 through v4).
 //!
 //! [`Archive`](crate::mpq::Archive) loads the header and encrypted hash/block tables, then opens
 //! payloads on demand. [`ArchiveWriter`](crate::mpq::ArchiveWriter) streams entries to a seekable sink and
@@ -12,8 +12,13 @@
 //! chains). `mpq-encode` adds zlib and bzip2 encoding. All compression
 //! dependencies use Rust implementations.
 //! Sector checksums are verified by default and can be written for compressed
-//! entries. Header versions other than zero, patch-file semantics, and signature
-//! verification are not implemented. Protected/malformed map repair
+//! entries. All four header versions, 64-bit offsets, compressed index tables,
+//! and HET/BET lookup are supported. V4 header/table MD5s are checked when present;
+//! raw file chunks are checked when opening a file. Compressed tables require
+//! `mpq-decode`. HET/BET filename lookup is neutral-locale/platform only.
+//! Writers default to classic headers; use [`WriteOptions`] to select newer
+//! headers, HET/BET indexes, or v4 raw chunk digests. Patch-file semantics and
+//! signature verification are not implemented. Protected/malformed map repair
 //! is deliberately outside the strict reader's contract.
 //!
 //! # Streaming a file
@@ -47,6 +52,8 @@
 //! offset-adjusted encrypted files survive without decryption. This preserves
 //! unused bytes rather than compacting, cannot grow the original hash table,
 //! and leaves the original listfile unchanged unless you replace it explicitly.
+//! HET/BET edits compact block records and remap IDs while retaining payload
+//! offsets and unknown filename hashes.
 //! Outer map prefixes, user-data wrappers, and signatures outside the archive
 //! region are not copied. Existing signatures/attributes may become stale after
 //! edits; managing those special files is the caller's responsibility.
@@ -62,15 +69,18 @@ mod codec;
 mod codec_test_vectors;
 mod crypto;
 mod error;
+mod extended;
 mod format;
 #[cfg(feature = "mpq-decode")]
 mod huffman;
 #[cfg(feature = "mpq-decode")]
 mod huffman_tables;
+mod raw;
 mod reader;
 mod writer;
 
 pub use error::Error;
+pub use extended::ExtendedIndex;
 pub use format::{BlockEntry, FileFlags, HashEntry, Header, Index};
 pub use reader::{Archive, EntryReader, ReadOptions};
 pub use writer::{ArchiveWriter, Compression, EntryWriter, FileOptions, WriteOptions};

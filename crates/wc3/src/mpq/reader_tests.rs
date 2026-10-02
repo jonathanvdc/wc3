@@ -466,3 +466,128 @@ fn reads_new_codecs_through_archive_framing() {
         }
     }
 }
+
+#[cfg(all(feature = "mpq-decode", feature = "mpq-encode"))]
+#[test]
+fn compressed_classic_and_extended_tables() {
+    use super::super::codec::encode;
+    use super::super::Header;
+
+    for version in 1..=3 {
+        let fixture = if version == 1 {
+            include_bytes!("../../tests/fixtures/mpq/storm-v2.mpq").as_slice()
+        } else if version == 2 {
+            include_bytes!("../../tests/fixtures/mpq/storm-v3.mpq").as_slice()
+        } else {
+            include_bytes!("../../tests/fixtures/mpq/storm-v4.mpq").as_slice()
+        };
+        let archive = Archive::open(Cursor::new(fixture)).unwrap();
+        let mut header = archive.index().header.clone();
+        let offsets = [
+            header.hash_table_offset,
+            header.block_table_offset,
+            header.hi_block_table_offset,
+            header.het_table_offset,
+            header.bet_table_offset,
+        ];
+        let first = offsets.iter().copied().filter(|&n| n != 0).min().unwrap();
+        let mut output = fixture[..first as usize].to_vec();
+        let mut tables: [Vec<u8>; 5] = Default::default();
+        for i in 0..5 {
+            if offsets[i] == 0 {
+                continue;
+            }
+            let start = offsets[i] as usize;
+            let stored = header.table_sizes[i] as usize;
+            let mut bytes = fixture[start..start + stored].to_vec();
+            if i != 2 {
+                let key = hash(
+                    if i == 0 || i == 3 {
+                        b"(hash table)"
+                    } else {
+                        b"(block table)"
+                    },
+                    3,
+                );
+                let prefix = if i >= 3 { 12 } else { 0 };
+                crypt(&mut bytes[prefix..], key, true);
+                let encoded = encode(&bytes[prefix..], Compression::Zlib).unwrap();
+                bytes.truncate(prefix);
+                bytes.extend(encoded);
+                crypt(&mut bytes[prefix..], key, false);
+            }
+            tables[i] = bytes;
+        }
+        let mut positions = [0; 5];
+        for i in [3, 4, 0, 1, 2] {
+            if offsets[i] != 0 {
+                positions[i] = output.len() as u64;
+                header.table_sizes[i] = tables[i].len() as u64;
+                let digest_index = [1, 0, 2, 4, 3][i];
+                header.md5[digest_index] = md5::compute(&tables[i]).0;
+                output.extend_from_slice(&tables[i]);
+            }
+        }
+        header.hash_table_offset = positions[0];
+        header.block_table_offset = positions[1];
+        header.hi_block_table_offset = positions[2];
+        header.het_table_offset = positions[3];
+        header.bet_table_offset = positions[4];
+        header.archive_size = output.len() as u64;
+        header.raw_chunk_size = 0;
+        header.write(&mut Cursor::new(&mut output)).unwrap();
+        let mut archive = Archive::open(Cursor::new(&output)).unwrap();
+        assert_eq!(archive.read_file("stored.bin").unwrap(), b"payload");
+        assert_eq!(
+            archive.read_file("units/encrypted.bin").unwrap(),
+            (0..17003).map(|i| (i % 7) as u8).collect::<Vec<_>>()
+        );
+        let options = super::ReadOptions {
+            max_table_bytes: 16,
+            ..Default::default()
+        };
+        assert!(Archive::with_options(Cursor::new(&output), options).is_err());
+        // Header codec still accepts the expected version after table repacking.
+        assert_eq!(
+            Header::decode(&output[..header.header_size() as usize])
+                .unwrap()
+                .version,
+            version
+        );
+    }
+}
+
+#[test]
+fn differing_classic_and_bet_record_order_is_remapped() {
+    let fixture = include_bytes!("../../tests/fixtures/mpq/storm-v3.mpq");
+    let header = Archive::open(Cursor::new(fixture))
+        .unwrap()
+        .index()
+        .header
+        .clone();
+    let mut bytes = fixture.to_vec();
+    let start = header.block_table_offset as usize;
+    let table = &mut bytes[start..start + header.block_table_entries as usize * 16];
+    let key = hash(b"(block table)", 3);
+    crypt(table, key, true);
+    let first: Vec<_> = table[..16].to_vec();
+    table.copy_within(16..32, 0);
+    table[16..32].copy_from_slice(&first);
+    crypt(table, key, false);
+    // Adjust the classic filename references to retain their original meaning.
+    let start = header.hash_table_offset as usize;
+    let table = &mut bytes[start..start + header.hash_table_entries as usize * 16];
+    let key = hash(b"(hash table)", 3);
+    crypt(table, key, true);
+    for record in table.chunks_exact_mut(16) {
+        let id = u32::from_le_bytes(record[12..16].try_into().unwrap());
+        if id < 2 {
+            record[12..16].copy_from_slice(&(1 - id).to_le_bytes());
+        }
+    }
+    crypt(table, key, false);
+    let mut archive = Archive::open(Cursor::new(bytes)).unwrap();
+    assert_eq!(archive.read_file("stored.bin").unwrap(), b"payload");
+    assert_eq!(archive.index().blocks.len(), 2);
+    assert_eq!(archive.index().find("Units/Encrypted.bin", 0, 0), Some(1));
+}

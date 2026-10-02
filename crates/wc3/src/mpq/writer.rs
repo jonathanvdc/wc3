@@ -1,9 +1,13 @@
 use std::io::{self, Read, Seek, SeekFrom, Write};
 
+use md5::compute;
+
 use super::codec::{check_encoder, encode, sector_checksum};
 use super::crypto::{crypt, file_key, hash};
-use super::format::{offset_table_size, validate_name, write_table, DELETED, HEADER_SIZE};
-use super::{Archive, BlockEntry, Error, FileFlags, HashEntry, Header, Index};
+use super::extended::{encode_extended, ExtendedIndex};
+use super::format::{offset_table_size, validate_name, DELETED};
+use super::raw::{self, Digests};
+use super::{Archive, BlockEntry, Error, FileFlags, HashEntry, Header};
 
 /// Entry compression used by the writer. Compressed sectors that would grow
 /// are stored raw, as required by MPQ's framing rules.
@@ -36,6 +40,12 @@ pub struct WriteOptions {
     /// Generate `(listfile)` on finish, including itself. Names remain bytes.
     pub listfile: bool,
     pub max_entries: u32,
+    /// On-disk header version, 0 through 3. Defaults to classic MPQ.
+    pub header_version: u16,
+    /// Include HET/BET tables (requires header version 2 or 3).
+    pub extended_index: bool,
+    /// Raw encoded chunk MD5s; zero disables them. Requires header version 3.
+    pub raw_chunk_size: u32,
 }
 
 impl Default for WriteOptions {
@@ -44,11 +54,14 @@ impl Default for WriteOptions {
             sector_size_shift: 3,
             listfile: true,
             max_entries: 1 << 20,
+            header_version: 0,
+            extended_index: false,
+            raw_chunk_size: 0,
         }
     }
 }
 
-/// A streaming classic MPQ writer. `finish` is mandatory; dropping an entry
+/// A streaming MPQ writer supporting all four header versions. `finish` is mandatory; dropping an entry
 /// before its own `finish`, or encountering a payload I/O error, poisons it.
 /// Memory holds the index, names, sector buffers, and the current sector table.
 pub struct ArchiveWriter<W> {
@@ -62,10 +75,25 @@ pub struct ArchiveWriter<W> {
     names: Vec<Vec<u8>>,
     name_bytes: usize,
     failed: bool,
+    extended: Option<ExtendedIndex>,
+    shortened_header_size: u32,
 }
 
 impl<W: Write + Seek> ArchiveWriter<W> {
     pub fn new(output: W, options: WriteOptions) -> Result<Self, Error> {
+        if options.header_version > 3 {
+            return Err(Error::UnsupportedVersion(options.header_version));
+        }
+        if options.extended_index && options.header_version < 2 {
+            return Err(Error::InvalidArchive("HET/BET requires MPQ v3"));
+        }
+        if options.raw_chunk_size != 0
+            && (options.header_version != 3 || options.raw_chunk_size > 16 << 20)
+        {
+            return Err(Error::InvalidArchive(
+                "raw chunks require MPQ v4 and at most 16 MiB",
+            ));
+        }
         if options.sector_size_shift > 11 {
             return Err(Error::LimitExceeded("writer sector size"));
         }
@@ -76,7 +104,15 @@ impl<W: Write + Seek> ArchiveWriter<W> {
                 "writer base must be 512-byte aligned",
             ));
         }
-        output.write_all(&[0; HEADER_SIZE as usize])?;
+        let header = Header {
+            version: options.header_version,
+            ..Header::default()
+        };
+        output.write_all(&vec![0; header.header_size() as usize])?;
+        let extended = options.extended_index.then(|| ExtendedIndex {
+            hash_bits: 64,
+            slots: vec![None; 4],
+        });
         Ok(Self {
             output,
             base,
@@ -87,6 +123,8 @@ impl<W: Write + Seek> ArchiveWriter<W> {
             names: Vec::new(),
             name_bytes: 0,
             failed: false,
+            extended,
+            shortened_header_size: 0,
         })
     }
 
@@ -102,19 +140,27 @@ impl<W: Write + Seek> ArchiveWriter<W> {
         let options = WriteOptions {
             sector_size_shift: archive.index.header.sector_size_shift,
             listfile: false,
+            header_version: archive.index.header.version,
+            extended_index: archive.index.extended.is_some(),
+            raw_chunk_size: archive.index.header.raw_chunk_size,
             ..WriteOptions::default()
         };
         let mut writer = Self::new(output, options)?;
-        archive
-            .source
-            .seek(SeekFrom::Start(archive.base + HEADER_SIZE as u64))?;
-        let size = archive.index.header.archive_size as u64 - HEADER_SIZE as u64;
+        writer.shortened_header_size = archive.index.header.shortened_header_size;
+        writer.output.seek(SeekFrom::Start(
+            writer.base + archive.index.header.header_size() as u64,
+        ))?;
+        archive.source.seek(SeekFrom::Start(
+            archive.base + archive.index.header.header_size() as u64,
+        ))?;
+        let size = archive.index.header.archive_size - archive.index.header.header_size() as u64;
         let copied = io::copy(&mut (&mut archive.source).take(size), &mut writer.output)?;
         if copied != size {
             return Err(Error::InvalidArchive("truncated archive copy"));
         }
         writer.blocks = archive.index.blocks.clone();
-        writer.seeded = Some(archive.index.hashes.clone());
+        writer.seeded = (!archive.index.hashes.is_empty()).then(|| archive.index.hashes.clone());
+        writer.extended = archive.index.extended.clone();
         Ok(writer)
     }
 
@@ -172,7 +218,13 @@ impl<W: Write + Seek> ArchiveWriter<W> {
         let name = name.as_ref();
         validate_name(name)?;
         let identity = (hash(name, 1), hash(name, 2), locale, platform);
-        let mut found = false;
+        let mut found = if locale == 0 && platform == 0 {
+            self.extended
+                .as_mut()
+                .is_some_and(|index| index.remove(name).is_some())
+        } else {
+            false
+        };
         self.pending.retain(|(_, entry)| {
             let matches = Self::identity(entry) == identity;
             found |= matches;
@@ -260,10 +312,16 @@ impl<W: Write + Seek> ArchiveWriter<W> {
             options.locale,
             options.platform,
         );
-        let exists = self
-            .pending
-            .iter()
-            .any(|(_, e)| Self::identity(e) == identity)
+        let exists = (options.locale == 0
+            && options.platform == 0
+            && self
+                .extended
+                .as_ref()
+                .is_some_and(|i| i.find(name).is_some()))
+            || self
+                .pending
+                .iter()
+                .any(|(_, e)| Self::identity(e) == identity)
             || self.seeded.as_ref().is_some_and(|t| {
                 t.iter()
                     .any(|e| e.is_file() && Self::identity(e) == identity)
@@ -291,16 +349,28 @@ impl<W: Write + Seek> ArchiveWriter<W> {
             return Err(Error::LimitExceeded("writer sector table"));
         }
         let offset = self.relative_position()?;
-        // Ensure the worst case fits classic MPQ's 32-bit address space.
+        // Bound both the address space and raw digest allocation before writing.
         let checksum_size = if options.sector_checksums {
             size.div_ceil(sector_size) * 4
         } else {
             0
         };
+        let stored = table_size as u64 + size as u64 + checksum_size as u64;
+        if self.options.raw_chunk_size != 0
+            && stored.div_ceil(self.options.raw_chunk_size as u64) * 16 > 16 << 20
+        {
+            return Err(Error::LimitExceeded("writer raw digest table"));
+        }
+        let max = if self.options.header_version == 0 {
+            u32::MAX as u64
+        } else {
+            (1u64 << 48) - 1
+        };
         offset
-            .checked_add(table_size)
-            .and_then(|n| n.checked_add(size))
-            .and_then(|n| n.checked_add(checksum_size))
+            .checked_add(table_size as u64)
+            .and_then(|n| n.checked_add(size as u64))
+            .and_then(|n| n.checked_add(checksum_size as u64))
+            .filter(|&n| n <= max)
             .ok_or(Error::LimitExceeded("archive size"))?;
         self.failed = true;
         // Reserve without constructing a potentially large zero-filled buffer.
@@ -326,7 +396,9 @@ impl<W: Write + Seek> ArchiveWriter<W> {
         }
         let key = options
             .encrypted
-            .then(|| file_key(name, offset, size, options.adjusted_key));
+            .then(|| file_key(name, offset as u32, size, options.adjusted_key));
+        let raw = (self.options.raw_chunk_size != 0)
+            .then(|| Digests::new(self.options.raw_chunk_size, table_size));
         Ok(EntryWriter {
             archive: self,
             name: name.to_vec(),
@@ -338,6 +410,7 @@ impl<W: Write + Seek> ArchiveWriter<W> {
                 flags: FileFlags(flags),
             },
             key,
+            raw,
             remaining: size,
             sector_size,
             sector: 0,
@@ -353,15 +426,21 @@ impl<W: Write + Seek> ArchiveWriter<W> {
         })
     }
 
-    fn relative_position(&mut self) -> Result<u32, Error> {
+    fn relative_position(&mut self) -> Result<u64, Error> {
         let position = self
             .output
             .stream_position()?
             .checked_sub(self.base)
             .ok_or(Error::InvalidArchive("writer cursor before archive"))?;
-        position
-            .try_into()
-            .map_err(|_| Error::LimitExceeded("archive size"))
+        let max = if self.options.header_version == 0 {
+            u32::MAX as u64
+        } else {
+            (1u64 << 48) - 1
+        };
+        if position > max {
+            return Err(Error::LimitExceeded("archive size"));
+        }
+        Ok(position)
     }
 
     fn mark_unreferenced(&mut self) {
@@ -374,6 +453,13 @@ impl<W: Write + Seek> ArchiveWriter<W> {
         {
             if entry.is_file() {
                 referenced[entry.block_index as usize] = true;
+            }
+        }
+        if let Some(index) = &self.extended {
+            for (_, id) in index.slots.iter().flatten() {
+                if *id != u32::MAX {
+                    referenced[*id as usize] = true;
+                }
             }
         }
         for (block, referenced) in self.blocks.iter_mut().zip(referenced) {
@@ -413,6 +499,11 @@ impl<W: Write + Seek> ArchiveWriter<W> {
             let count = self
                 .pending
                 .len()
+                .max(if self.extended.is_some() {
+                    self.blocks.len()
+                } else {
+                    0
+                })
                 .checked_mul(2)
                 .and_then(|n| n.max(4).checked_next_power_of_two())
                 .ok_or(Error::LimitExceeded("hash table size"))?;
@@ -426,38 +517,108 @@ impl<W: Write + Seek> ArchiveWriter<W> {
                 .ok_or(Error::LimitExceeded("hash table capacity"))?;
             hashes[slot] = entry;
         }
-        let hash_offset = self.relative_position()?;
-        let table_bytes = hashes.len() as u64 * 16 + self.blocks.len() as u64 * 16;
-        if hash_offset as u64 + table_bytes > u32::MAX as u64 {
-            return Err(Error::LimitExceeded("archive index size"));
+        if let Some(index) = &mut self.extended {
+            // Compact metadata after edits, retaining all unknown filename hashes
+            // and payload offsets. BET record count must fit the classic hash table.
+            let mut referenced = vec![false; self.blocks.len()];
+            for entry in &hashes {
+                if entry.is_file() {
+                    referenced[entry.block_index as usize] = true;
+                }
+            }
+            for (_, id) in index.slots.iter().flatten() {
+                if *id != u32::MAX {
+                    referenced[*id as usize] = true;
+                }
+            }
+            let mut remap = vec![u32::MAX; self.blocks.len()];
+            let mut blocks = Vec::new();
+            for (id, block) in self.blocks.into_iter().enumerate() {
+                if referenced[id] {
+                    remap[id] = blocks.len() as u32;
+                    blocks.push(block);
+                }
+            }
+            self.blocks = blocks;
+            for entry in &mut hashes {
+                if entry.is_file() {
+                    entry.block_index = remap[entry.block_index as usize];
+                }
+            }
+            for (_, id) in index.slots.iter_mut().flatten() {
+                if *id != u32::MAX {
+                    *id = remap[*id as usize];
+                }
+            }
         }
-        write_table(
-            &mut self.output,
-            hashes.iter().copied().map(HashEntry::bytes),
-            b"(hash table)",
-        )?;
-        let block_offset = self.relative_position()?;
-        write_table(
-            &mut self.output,
-            self.blocks.iter().copied().map(BlockEntry::bytes),
-            b"(block table)",
-        )?;
-        let size = self.relative_position()?;
-        let index = Index {
-            header: Header {
-                archive_size: size,
-                sector_size_shift: self.options.sector_size_shift,
-                hash_table_offset: hash_offset,
-                block_table_offset: block_offset,
-                hash_table_entries: hashes.len() as u32,
-                block_table_entries: self.blocks.len() as u32,
-            },
-            hashes,
-            blocks: self.blocks,
+        if self.extended.is_some() && self.blocks.len() > hashes.len() {
+            return Err(Error::LimitExceeded(
+                "preserved hash table capacity for BET records",
+            ));
+        }
+        let mut header = Header {
+            version: self.options.header_version,
+            shortened_header_size: self.shortened_header_size,
+            sector_size_shift: self.options.sector_size_shift,
+            raw_chunk_size: self.options.raw_chunk_size,
+            hash_table_entries: hashes.len() as u32,
+            block_table_entries: self.blocks.len() as u32,
+            ..Header::default()
         };
+        if let Some(index) = &self.extended {
+            let [het, bet] = encode_extended(index, &self.blocks)?;
+            header.het_table_offset = self.relative_position()?;
+            header.table_sizes[3] = het.len() as u64;
+            header.md5[4] = compute(&het).0;
+            self.output.write_all(&het)?;
+            raw::write(&het, header.raw_chunk_size, &mut self.output)?;
+            header.bet_table_offset = self.relative_position()?;
+            header.table_sizes[4] = bet.len() as u64;
+            header.md5[3] = compute(&bet).0;
+            self.output.write_all(&bet)?;
+            raw::write(&bet, header.raw_chunk_size, &mut self.output)?;
+        }
+        header.hash_table_offset = self.relative_position()?;
+        let table = |records: Vec<[u8; 16]>, name: &[u8]| {
+            let mut bytes: Vec<u8> = records.into_iter().flatten().collect();
+            crypt(&mut bytes, hash(name, 3), false);
+            bytes
+        };
+        let hash_bytes = table(
+            hashes.iter().copied().map(HashEntry::bytes).collect(),
+            b"(hash table)",
+        );
+        header.table_sizes[0] = hash_bytes.len() as u64;
+        header.md5[1] = compute(&hash_bytes).0;
+        self.output.write_all(&hash_bytes)?;
+        header.block_table_offset = self.relative_position()?;
+        let block_bytes = table(
+            self.blocks.iter().copied().map(BlockEntry::bytes).collect(),
+            b"(block table)",
+        );
+        header.table_sizes[1] = block_bytes.len() as u64;
+        header.md5[0] = compute(&block_bytes).0;
+        self.output.write_all(&block_bytes)?;
+        if self.blocks.iter().any(|b| b.offset > u32::MAX as u64) {
+            header.hi_block_table_offset = self.relative_position()?;
+            let high: Vec<u8> = self
+                .blocks
+                .iter()
+                .flat_map(|b| ((b.offset >> 32) as u16).to_le_bytes())
+                .collect();
+            header.table_sizes[2] = high.len() as u64;
+            header.md5[2] = compute(&high).0;
+            self.output.write_all(&high)?;
+        }
+        header.archive_size = self.relative_position()?;
+        let size = header.archive_size;
+        // Validate the final size even when writing the index crosses a limit.
+        if self.options.header_version == 0 && size > u32::MAX as u64 {
+            return Err(Error::LimitExceeded("archive size"));
+        }
         self.output.seek(SeekFrom::Start(self.base))?;
-        index.header.write(&mut self.output)?;
-        self.output.seek(SeekFrom::Start(self.base + size as u64))?;
+        header.write(&mut self.output)?;
+        self.output.seek(SeekFrom::Start(self.base + size))?;
         self.output.flush()?;
         Ok(self.output)
     }
@@ -470,6 +631,7 @@ pub struct EntryWriter<'a, W> {
     name: Vec<u8>,
     options: FileOptions,
     block: BlockEntry,
+    raw: Option<Digests>,
     key: Option<u32>,
     remaining: u32,
     sector_size: u32,
@@ -494,6 +656,9 @@ impl<W: Write + Seek> EntryWriter<'_, W> {
             crypt(&mut bytes, key.wrapping_add(self.sector), false);
         }
         self.archive.output.write_all(&bytes)?;
+        if let Some(raw) = &mut self.raw {
+            raw.update(&bytes);
+        }
         self.block.stored_size = self
             .block
             .stored_size
@@ -518,6 +683,9 @@ impl<W: Write + Seek> EntryWriter<'_, W> {
         if !self.checksums.is_empty() {
             for checksum in &self.checksums {
                 self.archive.output.write_all(&checksum.to_le_bytes())?;
+                if let Some(raw) = &mut self.raw {
+                    raw.update(&checksum.to_le_bytes());
+                }
             }
             self.block.stored_size = self
                 .block
@@ -526,17 +694,22 @@ impl<W: Write + Seek> EntryWriter<'_, W> {
                 .ok_or(Error::LimitExceeded("checksum storage"))?;
             self.offsets.push(self.block.stored_size);
         }
+        let mut table = Vec::new();
         if !self.offsets.is_empty() {
             let end = self.archive.output.stream_position()?;
             let mut bytes: Vec<u8> = self.offsets.iter().flat_map(|n| n.to_le_bytes()).collect();
             if let Some(key) = self.key {
                 crypt(&mut bytes, key.wrapping_sub(1), false);
             }
-            self.archive.output.seek(SeekFrom::Start(
-                self.archive.base + self.block.offset as u64,
-            ))?;
+            self.archive
+                .output
+                .seek(SeekFrom::Start(self.archive.base + self.block.offset))?;
             self.archive.output.write_all(&bytes)?;
             self.archive.output.seek(SeekFrom::Start(end))?;
+            table = bytes;
+        }
+        if let Some(raw) = self.raw.take() {
+            raw.finish(&table, &mut self.archive.output)?;
         }
         if self.replace {
             // Entry writing keeps the parent poisoned until its metadata commits.
@@ -555,6 +728,11 @@ impl<W: Write + Seek> EntryWriter<'_, W> {
         }
         let block_index = self.archive.blocks.len() as u32;
         self.archive.blocks.push(self.block);
+        if self.options.locale == 0 && self.options.platform == 0 {
+            if let Some(index) = &mut self.archive.extended {
+                index.insert(&self.name, block_index)?;
+            }
+        }
         self.archive.pending.push((
             hash(&self.name, 0),
             HashEntry {
@@ -610,3 +788,7 @@ impl<W: Write + Seek> Write for EntryWriter<'_, W> {
         result
     }
 }
+
+#[cfg(test)]
+#[path = "writer_tests.rs"]
+mod tests;
