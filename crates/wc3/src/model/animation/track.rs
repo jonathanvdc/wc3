@@ -23,6 +23,10 @@ enum Keyframes<T> {
 /// interpolation and matching keyframe shape. Times are in milliseconds;
 /// `global_sequence_id` is an index into the model global-sequence collection,
 /// or `None` to use the current model sequence.
+///
+/// Constructors and readers stably sort keys by ascending frame time. Duplicate
+/// timestamps retain their input order, and evaluation uses the last key at each
+/// timestamp. Writing a parsed track emits this sorted order.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Track<T: TrackValue> {
     global_sequence_id: Option<u32>,
@@ -76,7 +80,7 @@ impl<T: TrackValue> Track<T> {
         }
         Ok(Self {
             global_sequence_id,
-            keyframes,
+            keyframes: keyframes.into_sorted(),
         })
     }
     /// Returns the optional global sequence index.
@@ -92,28 +96,28 @@ impl<T: TrackValue> Track<T> {
             Keyframes::Bezier(_) => Interpolation::Bezier,
         }
     }
-    /// Returns keys only when this track uses stepped interpolation.
+    /// Returns keys in ascending frame order only for stepped interpolation.
     pub fn step_keys(&self) -> Option<&[ValueKeyframe<T>]> {
         match &self.keyframes {
             Keyframes::Step(keys) => Some(keys),
             _ => None,
         }
     }
-    /// Returns keys only when this track uses linear interpolation.
+    /// Returns keys in ascending frame order only for linear interpolation.
     pub fn linear_keys(&self) -> Option<&[ValueKeyframe<T>]> {
         match &self.keyframes {
             Keyframes::Linear(keys) => Some(keys),
             _ => None,
         }
     }
-    /// Returns keys and tangents only when this track uses Hermite interpolation.
+    /// Returns keys and tangents in ascending frame order only for Hermite interpolation.
     pub fn hermite_keys(&self) -> Option<&[TangentKeyframe<T>]> {
         match &self.keyframes {
             Keyframes::Hermite(keys) => Some(keys),
             _ => None,
         }
     }
-    /// Returns keys and tangents only when this track uses Bezier interpolation.
+    /// Returns keys and tangents in ascending frame order only for Bezier interpolation.
     pub fn bezier_keys(&self) -> Option<&[TangentKeyframe<T>]> {
         match &self.keyframes {
             Keyframes::Bezier(keys) => Some(keys),
@@ -122,6 +126,14 @@ impl<T: TrackValue> Track<T> {
     }
 }
 impl<T> Keyframes<T> {
+    fn into_sorted(mut self) -> Self {
+        match &mut self {
+            Self::Step(keys) | Self::Linear(keys) => keys.sort_by_key(Keyframe::frame),
+            Self::Hermite(keys) | Self::Bezier(keys) => keys.sort_by_key(Keyframe::frame),
+        }
+        self
+    }
+
     fn len(&self) -> usize {
         match self {
             Self::Step(v) | Self::Linear(v) => v.len(),
@@ -191,7 +203,7 @@ impl<T: TrackValue> mdx::Read for Track<T> {
         *cursor = next;
         Ok(Self {
             global_sequence_id: (sequence != u32::MAX).then_some(sequence),
-            keyframes,
+            keyframes: keyframes.into_sorted(),
         })
     }
 }
@@ -336,7 +348,7 @@ where
         };
         Ok(Self {
             global_sequence_id: sequence,
-            keyframes,
+            keyframes: keyframes.into_sorted(),
         })
     }
 }
@@ -415,7 +427,7 @@ fn write_tangent<W: IoWrite, T: mdl::Write>(
 impl<T: TrackValue> Track<T> {
     /// Returns the latest key timestamp at or before an absolute track time.
     ///
-    /// Keys may be unordered. Empty tracks, nonfinite times, and times before
+    /// Lookup takes O(log n) time. Empty tracks, nonfinite times, and times before
     /// the first key return `None`. Callers resolve clocks and looping.
     pub fn key_frame_at_or_before(&self, time_ms: f64) -> Option<i32> {
         self.key_frame_at_or_before_in(time_ms, i32::MIN..=i32::MAX)
@@ -447,10 +459,9 @@ fn latest_frame<K: Keyframe>(
     time_ms: f64,
     interval: &RangeInclusive<i32>,
 ) -> Option<i32> {
-    keys.iter()
-        .map(Keyframe::frame)
-        .filter(|frame| interval.contains(frame) && f64::from(*frame) <= time_ms)
-        .max()
+    let keys = keys_in(keys, interval);
+    let end = keys.partition_point(|key| f64::from(key.frame()) <= time_ms);
+    end.checked_sub(1).map(|index| keys[index].frame())
 }
 
 impl<T: Interpolate> Track<T> {
@@ -463,8 +474,8 @@ impl<T: Interpolate> Track<T> {
     /// Samples at a time in milliseconds in this track's timeline.
     ///
     /// Empty tracks and nonfinite times return `None`. Outside the key range,
-    /// the nearest endpoint is returned. Keys may be unordered; at duplicate
-    /// timestamps the last stored key wins. Evaluation takes O(n) time.
+    /// the nearest endpoint is returned. At duplicate timestamps the last
+    /// stored key wins. Evaluation takes O(log n) time.
     /// Global sequence IDs do not affect sampling: callers resolve clocks and
     /// looping before calling this method.
     pub fn evaluate(&self, time_ms: f64) -> Option<T> {
@@ -512,21 +523,26 @@ fn surrounding<'a, K: Keyframe>(
     time: f64,
     interval: &RangeInclusive<i32>,
 ) -> Option<(&'a K, &'a K)> {
-    let mut left: Option<&K> = None;
-    let mut right: Option<&K> = None;
-    for key in keys {
-        let current = key.frame();
-        if !interval.contains(&current) {
-            continue;
-        }
-        if f64::from(current) <= time && left.is_none_or(|k| current >= k.frame()) {
-            left = Some(key);
-        }
-        if f64::from(current) >= time && right.is_none_or(|k| current <= k.frame()) {
-            right = Some(key);
-        }
-    }
+    let keys = keys_in(keys, interval);
+    let end = keys.partition_point(|key| f64::from(key.frame()) <= time);
+    let left = end.checked_sub(1).map(|index| &keys[index]);
+    let right = if left.is_some_and(|key| f64::from(key.frame()) == time) {
+        left
+    } else {
+        keys.get(end).map(|first| {
+            // Use the last duplicate for the right endpoint, too.
+            let after = keys.partition_point(|key| key.frame() <= first.frame());
+            &keys[after - 1]
+        })
+    };
     Some((left.or(right)?, right.or(left)?))
+}
+
+/// Restricts a sorted track to an inclusive sequence interval.
+fn keys_in<'a, K: Keyframe>(keys: &'a [K], interval: &RangeInclusive<i32>) -> &'a [K] {
+    let start = keys.partition_point(|key| key.frame() < *interval.start());
+    let end = keys.partition_point(|key| key.frame() <= *interval.end());
+    &keys[start..end]
 }
 
 #[cfg(test)]
