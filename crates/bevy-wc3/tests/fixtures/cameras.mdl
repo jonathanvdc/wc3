@@ -1,0 +1,28 @@
+Version { FormatVersion 800, }
+Model "Camera views" {
+    MinimumExtent { -2, -2, -2 },
+    MaximumExtent { 2, 2, 2 },
+    BoundsRadius 4,
+}
+Sequences 1 {
+    Anim "Stand" { Interval { 0, 1000 }, NonLooping, }
+}
+Camera "Portrait" {
+    Position { 0, -10, 0 },
+    Translation 2 { Linear, 0: { 0, 0, 0 }, 1000: { 2, 0, 0 }, }
+    Rotation 2 { Linear, 0: 0, 1000: 1.5707963, }
+    FieldOfView 0.8,
+    NearClip 0.5,
+    FarClip 100,
+    Target {
+        Position { 0, 0, 0 },
+        Translation 2 { Linear, 0: { 0, 0, 0 }, 1000: { 2, 0, 0 }, }
+    }
+}
+Camera "Alternate" {
+    Position { 10, 0, 0 },
+    FieldOfView 1,
+    NearClip 1,
+    FarClip 200,
+    Target { Position { 0, 0, 0 }, }
+}

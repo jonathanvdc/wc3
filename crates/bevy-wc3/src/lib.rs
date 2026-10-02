@@ -10,6 +10,7 @@
 mod animation;
 mod assets;
 mod attachment;
+mod camera;
 mod effects;
 mod instance;
 mod light;
@@ -24,6 +25,7 @@ pub use assets::{
     BlpImageLoader, ModelError, Wc3Model, Wc3ModelAsset, Wc3ModelLoader, Wc3ModelResources,
 };
 pub use attachment::{Wc3AttachmentPoint, Wc3Attachments};
+pub use camera::{Wc3CameraBinding, Wc3CameraSample, Wc3ModelCameras};
 pub use instance::spawn::{
     spawn_model, spawn_prepared_model, spawn_prepared_model_with_bindings, Wc3NodeEntities,
 };

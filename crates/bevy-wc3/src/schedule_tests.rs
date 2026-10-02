@@ -1,4 +1,5 @@
 use super::*;
+use bevy::camera::CameraUpdateSystems;
 use bevy::transform::TransformPlugin;
 
 #[derive(Component)]
@@ -6,6 +7,37 @@ struct Spawned;
 
 #[derive(Resource, Default)]
 struct Observed(Vec<&'static str>);
+
+#[test]
+fn camera_playback_precedes_projection_updates_and_node_poses() {
+    let mut app = App::new();
+    configure(&mut app);
+    app.init_resource::<Observed>();
+    app.add_systems(
+        PostUpdate,
+        (
+            (|mut observed: ResMut<Observed>| {
+                assert!(observed.0.contains(&"camera"));
+                observed.0.push("projection");
+            })
+            .in_set(CameraUpdateSystems),
+            (|mut observed: ResMut<Observed>| {
+                assert!(observed.0.contains(&"camera"));
+                observed.0.push("nodes");
+            })
+            .in_set(Wc3Systems::EvaluateNodePoses),
+            (|mut observed: ResMut<Observed>| {
+                observed.0.push("camera");
+            })
+            .in_set(Wc3Systems::AnimateCameras),
+        ),
+    );
+    app.update();
+    assert_eq!(
+        app.world().resource::<Observed>().0.first(),
+        Some(&"camera")
+    );
+}
 
 #[test]
 fn update_consumers_see_spawned_entities_and_advanced_state() {

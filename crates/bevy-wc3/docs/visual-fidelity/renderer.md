@@ -22,7 +22,7 @@ implementation inventory, not a claim of visual equivalence to Warcraft III.
 | LOD | Preparation keeps LOD 0/default geosets and skips other levels. Runtime LOD selection is not implemented. |
 | Replaceable textures | Explicit per-instance replaceable and slot bindings work. Automatic team-color/glow and other game-specific replaceable texture selection are not implemented; the consumer supplies images. |
 | Model lights | Animated point/directional records create ordinary Bevy scene lights, with configurable power/range scales and authored shadow-casting flags. Ambient contributions, attenuation start, Reforged falloff, shadow intensity/ranges, and unknown types have no mapping. See [model lights](lights.md) for integration semantics, captures, and fidelity limits. |
-| Model cameras | Model camera records and their animation are not used to create or drive Bevy cameras. Viewers and capture code supply their own cameras. |
+| Model cameras | Opt-in bindings drive application-owned perspective cameras from authored eye/target animation, roll, FOV, and clips. Visibility switching and modern lens/DOF tracks are not mapped; game fidelity is unverified. See [model cameras](cameras.md). |
 | Event objects | Event nodes exist, but event tracks are not dispatched. Event-driven visual effects are not implemented. |
 | Reforged effects | Popcorn emitters and FaceFX playback are not implemented. |
 

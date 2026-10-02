@@ -43,6 +43,8 @@ reuse the same evaluation rules.
 `materials/` owns Bevy material specialization, layer/geoset animation, surface
 and UV animation, texture binding precedence, and private linear image variants.
 `attachment.rs` and `light.rs` own their spawning and animation behavior.
+`camera.rs` exposes authored views on instance roots and plays explicit bindings
+on application-owned Bevy cameras without automatically creating active views.
 
 `effects/` contains Classic model particles, PRE2 quad particles, and ribbons.
 Shared simulation helpers provide clocks, emission arithmetic, and live record
@@ -70,12 +72,14 @@ Set ordering applies only within the schedule where the set is configured.
 | `Update` | `BindTextures` | Updates PRE2 bindings after spawning; independent of the animation chain. |
 | `Update` | `AdvanceAnimation` | Advances root clocks after spawning and before instance animation. |
 | `Update` | `AnimateInstances` | Updates model-particle animation, attachments, lights, layers, and surfaces, in that order. |
+| `PostUpdate` | `AnimateCameras` | Samples bound model cameras using current root/parent transforms, before Bevy camera projection updates and node poses. |
 | `PostUpdate` | `EvaluateNodePoses` | Evaluates current node poses before model-particle simulation and transform propagation. |
 | `PostUpdate` | `SimulateModelParticles` | Updates model particles using local poses before `TransformSystems::Propagate`. |
 | `PostUpdate` | `SimulateEffects` | Updates PRE2 and ribbons after propagation, using current global transforms. |
 
 Applications moving driving cameras or model roots in `PostUpdate` should run
-before `Wc3Systems::EvaluateNodePoses`. This single scheduling enum covers both
+before `Wc3Systems::EvaluateNodePoses`; when playing model-camera bindings, move
+source roots and camera parents before `Wc3Systems::AnimateCameras`. This enum covers both
 node poses and the other runtime stages.
 
 Feature systems are registered in the top-level plugin so the ordering across

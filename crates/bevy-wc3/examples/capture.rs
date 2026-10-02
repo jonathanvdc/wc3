@@ -16,8 +16,8 @@ use bevy::time::TimeUpdateStrategy;
 use bevy::window::ExitCondition;
 use bevy::winit::WinitPlugin;
 use bevy_wc3::{
-    Wc3Animation, Wc3BevyPlugin, Wc3Model, Wc3ModelAsset, Wc3ModelInstance, Wc3TextureBindings,
-    Wc3TextureSlot,
+    Wc3Animation, Wc3BevyPlugin, Wc3CameraBinding, Wc3CameraSample, Wc3Model, Wc3ModelAsset,
+    Wc3ModelCameras, Wc3ModelInstance, Wc3NodeCamera, Wc3TextureBindings, Wc3TextureSlot,
 };
 use std::env::args;
 use std::error::Error;
@@ -42,6 +42,8 @@ Render offscreen and write frame-0000-1.000s.png, etc. Requires a GPU.
   --size WIDTHxHEIGHT    PNG dimensions (default: 640x480)
   --eye X,Y,Z            Camera position (default: frame model bounds)
   --target X,Y,Z         Camera target (default: model bounds center)
+  --model-camera INDEX   Play an authored model camera (excludes --eye/--target)
+  --camera-fov-multiplier NUMBER  Authored FOV scale (default: 1; portraits: 0.75)
   --asset-root PATH      Texture asset root (default: model's directory)
   --replaceable ID=PATH  Replaceable texture override
   --bitmap INDEX=PATH    Model bitmap override
@@ -68,6 +70,8 @@ struct Options {
     size: UVec2,
     eye: Option<Vec3>,
     target: Option<Vec3>,
+    model_camera: Option<usize>,
+    camera_fov_multiplier: f32,
     asset_root: Option<PathBuf>,
     textures: Vec<TextureChoice>,
 }
@@ -98,6 +102,8 @@ impl Options {
             size: UVec2::new(640, 480),
             eye: None,
             target: None,
+            model_camera: None,
+            camera_fov_multiplier: 1.0,
             asset_root: None,
             textures: Vec::new(),
         };
@@ -140,6 +146,8 @@ impl Options {
                 }
                 "--eye" => options.eye = Some(parse_vector(&value)?),
                 "--target" => options.target = Some(parse_vector(&value)?),
+                "--model-camera" => options.model_camera = Some(value.parse()?),
+                "--camera-fov-multiplier" => options.camera_fov_multiplier = value.parse()?,
                 "--asset-root" => options.asset_root = Some(value.into()),
                 "--replaceable" | "--bitmap" | "--particle2" => {
                     let (index, path) = value.split_once('=').ok_or("expected ID=PATH")?;
@@ -163,6 +171,15 @@ impl Options {
         }
         if !options.fps.is_finite() || !(1.0..=1000.0).contains(&options.fps) {
             return Err("fps must be between 1 and 1000".into());
+        }
+        if options.model_camera.is_some() && (options.eye.is_some() || options.target.is_some()) {
+            return Err("model-camera cannot be combined with eye or target".into());
+        }
+        if !options.camera_fov_multiplier.is_finite() || options.camera_fov_multiplier <= 0.0 {
+            return Err("camera-fov-multiplier must be finite and positive".into());
+        }
+        if options.model_camera.is_none() && options.camera_fov_multiplier != 1.0 {
+            return Err("camera-fov-multiplier requires model-camera".into());
         }
         if !options.illuminance.is_finite() || options.illuminance < 0.0 {
             return Err("illuminance must be finite and nonnegative".into());
@@ -188,6 +205,28 @@ impl Options {
     }
 
     fn camera(&self, model: &Wc3Model) -> CaptureResult<Transform> {
+        if let Some(index) = self.model_camera {
+            let definitions = model.model.cameras();
+            let definition = definitions.get(index).ok_or_else(|| {
+                format!(
+                    "model camera {index} is out of range ({} cameras)",
+                    definitions.len()
+                )
+            })?;
+            let sample = Wc3CameraSample {
+                position: Vec3::from_array(definition.position),
+                target: Vec3::from_array(definition.target_position),
+                roll: 0.0,
+                field_of_view: definition.field_of_view,
+                near_clip: definition.near_clip,
+                far_clip: definition.far_clip,
+            };
+            sample
+                .perspective_projection(self.camera_fov_multiplier)
+                .ok_or("model camera has invalid FOV or clipping distances")?;
+            // Animated pose is resolved after the instance has loaded.
+            return Ok(Transform::default());
+        }
         let info = model.model.model_info();
         let center = info
             .as_ref()
@@ -343,6 +382,17 @@ fn main() -> CaptureResult<()> {
             camera,
         ))
         .id();
+    if let Some(index) = options.model_camera {
+        app.world_mut()
+            .entity_mut(camera_entity)
+            .insert(Wc3CameraBinding {
+                fov_multiplier: options.camera_fov_multiplier,
+                ..Wc3CameraBinding::new(root, index)
+            });
+        app.world_mut()
+            .entity_mut(root)
+            .insert(Wc3NodeCamera(camera_entity));
+    }
     if options.prepasses {
         app.world_mut().entity_mut(camera_entity).insert((
             DepthPrepass,
@@ -413,6 +463,27 @@ fn main() -> CaptureResult<()> {
             elapsed += dt.as_secs_f64();
         }
         settle(&mut app)?;
+        if let Some(index) = options.model_camera {
+            let world = app.world();
+            let definitions = world
+                .get::<Wc3ModelCameras>(root)
+                .ok_or("model cameras are missing")?;
+            let animation = world
+                .get::<Wc3Animation>(root)
+                .ok_or("model animation is missing")?;
+            let sample = definitions
+                .sample(index, animation)
+                .ok_or("model camera is missing")?;
+            let transform = world
+                .get::<GlobalTransform>(root)
+                .ok_or("model transform is missing")?;
+            sample
+                .world_transform(transform)
+                .ok_or("model camera has an invalid animated view")?;
+            sample
+                .perspective_projection(options.camera_fov_multiplier)
+                .ok_or("model camera has an invalid lens")?;
+        }
         let path = options
             .output
             .join(format!("frame-{index:04}-{time:.3}s.png"));
@@ -543,6 +614,14 @@ mod tests {
             assert!(parse(&["--illuminance", illuminance]).is_err());
         }
         assert!(parse(&["--tonemapping", "unknown"]).is_err());
+        assert!(parse(&["--model-camera", "0", "--eye", "0,-10,0"]).is_err());
+        assert!(parse(&["--model-camera", "0", "--target", "0,0,0"]).is_err());
+        for multiplier in ["0", "-1", "NaN", "inf"] {
+            assert!(
+                parse(&["--model-camera", "0", "--camera-fov-multiplier", multiplier]).is_err()
+            );
+        }
+        assert!(parse(&["--camera-fov-multiplier", "0.75"]).is_err());
         let options = parse(&[
             "--times", "0,0.5,1", "--size", "320x240", "--eye", "0,-15,5",
         ])
@@ -558,5 +637,28 @@ mod tests {
             .unwrap();
         assert_eq!(original.tonemapping, Tonemapping::TonyMcMapface);
         assert_eq!(original.illuminance, 20_000.0);
+    }
+
+    #[test]
+    fn authored_camera_selection_validates_index_and_lens_before_loading_gpu() {
+        let model = Wc3Model::decode_mdl(include_str!("../tests/fixtures/cameras.mdl")).unwrap();
+        let options = parse(&["--model-camera", "0", "--camera-fov-multiplier", "0.75"])
+            .unwrap()
+            .unwrap();
+        assert_eq!(options.model_camera, Some(0));
+        assert_eq!(options.camera_fov_multiplier, 0.75);
+        assert!(options.camera(&model).is_ok());
+        assert!(parse(&["--model-camera", "2"])
+            .unwrap()
+            .unwrap()
+            .camera(&model)
+            .is_err());
+        assert!(
+            parse(&["--model-camera", "0", "--camera-fov-multiplier", "10"])
+                .unwrap()
+                .unwrap()
+                .camera(&model)
+                .is_err()
+        );
     }
 }

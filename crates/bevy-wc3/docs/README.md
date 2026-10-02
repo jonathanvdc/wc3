@@ -21,6 +21,8 @@ own file under `visual-fidelity/` and link it here as it is documented.
   animated controls, Bevy integration, captures, and remaining fidelity work.
 - [Model lights](visual-fidelity/lights.md): animated Bevy scene lights,
   conversion controls, shadows, unsupported mappings, and capture checks.
+- [Model cameras](visual-fidelity/cameras.md): opt-in view playback, sampling,
+  projection controls, scheduling, and limitations.
 - [Geoset animation](visual-fidelity/geoset-animation.md): alpha/color sampling,
   RGB codec normalization, material isolation, capture checks, and remaining fidelity work.
 - [Classic PREM particles](visual-fidelity/prem.md): model spawning, motion,

@@ -6,6 +6,7 @@ use crate::animation::advance_animation;
 use crate::animation::pose::animate_nodes;
 use crate::assets::{BlpImageLoader, Wc3ModelAsset, Wc3ModelLoader};
 use crate::attachment::animate_attachments;
+use crate::camera::animate_cameras;
 use crate::effects::particle_emitter::{
     animate_particle_models, update_particles as update_model_particles,
 };
@@ -62,6 +63,10 @@ impl Plugin for Wc3BevyPlugin {
             )
                 .chain()
                 .in_set(Wc3Systems::AnimateInstances),
+        );
+        app.add_systems(
+            PostUpdate,
+            animate_cameras.in_set(Wc3Systems::AnimateCameras),
         );
         app.add_systems(
             PostUpdate,

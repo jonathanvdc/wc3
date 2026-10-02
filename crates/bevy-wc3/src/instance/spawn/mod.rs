@@ -3,6 +3,7 @@ use bevy::prelude::*;
 
 use crate::assets::model::{ModelError, Wc3Model};
 use crate::attachment::spawn_attachments;
+use crate::camera::Wc3ModelCameras;
 use crate::effects::particle_emitter::spawn_particles;
 use crate::effects::particle_emitter2::spawn_particles2;
 use crate::effects::ribbon_emitter::spawn_ribbons;
@@ -59,6 +60,9 @@ pub(crate) fn spawn_prepared_into(
 ) {
     let bindings = initialize_root(commands, prepared, root, bindings);
     spawn_animation_root(commands, &prepared.model, root);
+    commands
+        .entity(root)
+        .insert(Wc3ModelCameras(prepared.model.cameras()));
     let rig = spawn_rig(commands, &prepared.model, root, &prepared.inverse_bindposes);
     let node_entities = &rig.by_object_id;
     spawn_lights(commands, prepared, root, node_entities);
