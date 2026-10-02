@@ -16,7 +16,13 @@ commands.spawn((Wc3ModelInstance::new(model.clone()), Transform::default()));
 commands.spawn((Wc3ModelInstance::new(model), Transform::from_xyz(150.0, 0.0, 0.0)));
 ```
 
-Literal bitmap paths are checked beside the MDX first, then at the asset root.
+Bitmap paths are checked beside the model first, then at the asset root.
+At each location, the literal filename is tried first, followed by the same path
+with `.blp`, `.dds`, `.png`, and `.tga` extensions, in that order. This allows
+references such as `Textures\Body.tif` to resolve to `Textures/Body.blp`.
+The first readable file wins; decoder failures do not try another candidate.
+File contents must match the selected filename’s format. Explicit texture
+overrides remain exact.
 BLP files are decoded by the plugin. Replaceable IDs remain unresolved until a
 consumer supplies an image handle. Meshes and bind poses are shared; materials
 belong to each instance so texture changes remain local.

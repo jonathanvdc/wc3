@@ -45,7 +45,10 @@ ORM, emissive, team-color, and environment roles in one normalized layer pass.
 Surface controls animate on the instance clock. Normal and ORM maps use private
 linear image variants, preserving the original image for other consumers.
 
-Literal paths resolve beside the model and then at the asset root. Applications
+Texture paths resolve beside the model and then at the asset root. At each
+location, lookup tries the literal filename followed by `.blp`, `.dds`, `.png`,
+and `.tga` alternatives. The first readable file wins; decoding errors do not
+trigger further fallback. Applications
 choose replaceable textures and exact bitmap/emitter overrides with
 `Wc3TextureBindings`; slot overrides take precedence. See the
 [texture guide](../usage.md#choose-textures).

@@ -1,7 +1,7 @@
 use std::path::{Component, Path};
 
 /// Resolve beside the model first, then from the Bevy asset root.
-pub(super) fn texture_paths(model_path: &Path, name: &str) -> Vec<String> {
+fn resource_paths(model_path: &Path, name: &str) -> Vec<String> {
     let normalized = name.replace('\\', "/");
     if normalized.is_empty() {
         return Vec::new();
@@ -23,11 +23,29 @@ pub(super) fn texture_paths(model_path: &Path, name: &str) -> Vec<String> {
     }
 }
 
+/// Try the literal filename, then supported alternate extensions at each location.
+pub(super) fn texture_paths(model_path: &Path, name: &str) -> Vec<String> {
+    let mut candidates = Vec::new();
+    for path in resource_paths(model_path, name) {
+        candidates.push(path.clone());
+        for extension in ["blp", "dds", "png", "tga"] {
+            let alternate = Path::new(&path)
+                .with_extension(extension)
+                .to_string_lossy()
+                .into_owned();
+            if !candidates.contains(&alternate) {
+                candidates.push(alternate);
+            }
+        }
+    }
+    candidates
+}
+
 /// Model lookup uses the same locations as textures. Try a real MDL before
 /// falling back to the MDX commonly shipped for a Warcraft `.mdl` reference.
 pub(super) fn model_paths(model_path: &Path, name: &str) -> Vec<String> {
     let mut candidates = Vec::new();
-    for path in texture_paths(model_path, name) {
+    for path in resource_paths(model_path, name) {
         let extension = Path::new(&path)
             .extension()
             .and_then(|value| value.to_str());

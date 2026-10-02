@@ -24,7 +24,8 @@
 //! ```
 //!
 //! Supply a Bevy camera and scene lighting to render the model. Bitmap paths
-//! resolve beside the model first, then from the asset root. BLP decoding is
+//! resolve beside the model first, then from the asset root, trying the literal
+//! filename and then BLP, DDS, PNG, and TGA extensions at each location. BLP decoding is
 //! included. [`Wc3TextureBindings`] supplies replaceable images and slot overrides.
 //!
 //! # Work with an instance

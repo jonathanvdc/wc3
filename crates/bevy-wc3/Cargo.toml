@@ -12,7 +12,7 @@ keywords = ["warcraft", "bevy", "mdx", "mdl", "renderer"]
 categories = ["game-development", "rendering"]
 
 [dependencies]
-bevy = { version = "0.19.1", features = ["dds"] }
+bevy = { version = "0.19.1", features = ["dds", "png", "tga"] }
 wc3 = { path = "../wc3", version = "0.2.0", features = ["blp-decode"] }
 bytemuck = { version = "1", features = ["derive"] }
 

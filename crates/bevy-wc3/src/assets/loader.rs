@@ -59,8 +59,13 @@ async fn load_texture(
         ..default()
     };
     if !path.is_empty() {
-        for candidate in texture_paths(model_path, &path) {
+        let candidates = texture_paths(model_path, &path);
+        for candidate in &candidates {
             if context.read_asset_bytes(candidate.clone()).await.is_ok() {
+                debug!(
+                    "Resolved WC3 texture {path} for {} to {candidate}",
+                    model_path.display()
+                );
                 let sampler = texture_sampler(texture.flags);
                 resolved.default = Some(
                     context
@@ -68,10 +73,16 @@ async fn load_texture(
                         .with_settings::<ImageLoaderSettings>(move |settings| {
                             settings.sampler = sampler.clone()
                         })
-                        .load(candidate),
+                        .load(candidate.clone()),
                 );
                 break;
             }
+        }
+        if resolved.default.is_none() {
+            warn!(
+                "Could not resolve WC3 texture {path} for {}; tried {candidates:?}",
+                model_path.display()
+            );
         }
     }
     resolved
@@ -113,13 +124,6 @@ impl AssetLoader for Wc3ModelLoader {
         let mut textures = ResolvedModelTextures::default();
         for texture in source.model.textures() {
             let binding = load_texture(context, &model_path, &texture).await;
-            if binding.default.is_none() && !texture.path.text().is_empty() {
-                warn!(
-                    "Could not resolve WC3 texture {} for {}",
-                    texture.path.text(),
-                    model_path.display()
-                );
-            }
             textures.bitmaps.push(binding);
         }
         for emitter in source.model.particle_emitters2() {

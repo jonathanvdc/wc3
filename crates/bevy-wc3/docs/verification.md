@@ -336,3 +336,15 @@ pause/reverse playback, instance isolation, scheduling, and sampled node poses.
 These establish the dispatch contract, not exact Warcraft III trigger semantics
 or visual equivalence. No visual effect is rendered by dispatch, so no new
 rendering capture is claimed.
+
+## Texture extension fallback
+
+[Texture selection and lookup](usage.md#choose-textures)
+
+Asset unit tests cover literal-first extension ordering, model-directory precedence
+over the asset root, duplicate removal, uppercase reference extensions, empty and
+unsafe paths, and unchanged child-model candidate generation. A file-backed Bevy
+loader test decodes a one-pixel TGA for missing `.tif` references at both search
+locations and verifies that an exact local filename beats an alternate extension.
+These checks establish asset selection and decoding; no GPU capture or Warcraft III
+visual fidelity comparison is claimed.
