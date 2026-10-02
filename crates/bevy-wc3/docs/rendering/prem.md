@@ -1,6 +1,6 @@
-# Classic PREM particles
+# Classic model particles (PREM)
 
-[Documentation index](../README.md)
+[Documentation index](../README.md) · [Verification notes](../verification.md)
 
 ## Emission and child animation
 
@@ -30,34 +30,13 @@ velocity. Gravity is multiplied by world Z scale, and each child receives a
 random world Z heading. Position is evaluated analytically from age, initial
 velocity, and constant gravity.
 
-## Implementation limits
-
+## Resource support and emission limits
 
 - `EmitterUsesTga` image particles are not rendered.
 - Emission rate and visibility use the update endpoint. Updates crossing keys or
-  sequence boundaries can miss births; interval integration remains work.
+  sequence boundaries can miss births because emission is not integrated across
+  the interval.
 - Each emitter is capped at 1,024 live model particles and 1,024 attempted births
   per update. Excess births are discarded, rather than queued after a stall.
-- Models use the existing mesh material pipeline, including its documented
-  limitations in shading and effect/material pass ordering. Node billboarding uses
+- Child models use the [mesh material pipeline](renderer.md#materials-and-textures). Node billboarding uses
   the configured driving camera; see [node flags](node-flags.md).
-- Exact game fidelity, mirrored transforms, and attachment/particle combinations
-  need comparison against Warcraft III captures.
-
-## Capture checks
-
-Capture the fixture with the existing offscreen example:
-
-```sh
-cargo run -p bevy-wc3 --example capture -- \
-  crates/bevy-wc3/tests/fixtures/prem_capture.mdl /tmp/wc3-prem-captures \
-  --times 0,0.5,1,1.5,2 --fps 60 --size 640x480 \
-  --eye 0,-18,9 --target 0,0,2
-```
-
-The fixture reuses `attachment_capture_child.mdl` and `capture_white.png`. It
-isolates a moving emitter with visibility keys and a nonuniformly scaled cone.
-GPU captures at the listed times were visually inspected for detached birth
-positions, motion, model scale, and independently animated geometry. The current
-`data/` corpus has no populated PREM chunks, so it cannot establish game-model
-PREM fidelity.

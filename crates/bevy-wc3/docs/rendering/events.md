@@ -1,6 +1,6 @@
 # Model event objects
 
-[Documentation index](../README.md)
+[Documentation index](../README.md) · [Verification notes](../verification.md)
 
 ## Dispatch and application integration
 
@@ -65,18 +65,10 @@ fn handle_model_events(mut events: MessageReader<Wc3ModelEvent>) {
   authored end/start frames, preserving distinct poses at the boundary. Other
   clocks sample the occurrence's elapsed time normally.
 
-## Occurrence poses and verification
+## Occurrence poses
 
 Occurrence poses reuse CPU node evaluation, including hierarchy, pivots,
 inheritance flags, and the currently selected driving camera. Model animation is
 sampled at each key rather than at the update endpoint. Application-owned root
 and ancestor transforms and driving-camera inputs use current update values;
 their movement history is not reconstructed.
-
-Tests cover sorted MDX/MDL decoding and replacement, duplicates, interval
-partitioning, multiple loops, sequence/global boundaries, missing and
-zero-duration clocks, sequence switching, same-sequence restart, seeking,
-pause/reverse playback, instance isolation, scheduling, and sampled node poses.
-These establish the dispatch contract, not exact Warcraft III trigger semantics
-or visual equivalence. No visual effect is rendered by dispatch, so no new
-rendering capture is claimed.

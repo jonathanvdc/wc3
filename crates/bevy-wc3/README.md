@@ -57,7 +57,7 @@ use the existing `capture` example; run it with `--help` for options.
 
 - [Application guide](docs/usage.md): loading, textures, animation, attachments,
   lights, custom sources, and instance lifetime.
-- [Renderer guide](docs/visual-fidelity/renderer.md): geometry, materials,
+- [Renderer guide](docs/rendering/renderer.md): geometry, materials,
   animation, and effects, with links to each implementation topic.
 - [Architecture](docs/architecture.md): module responsibilities, asset ownership,
   and system scheduling.

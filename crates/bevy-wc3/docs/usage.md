@@ -84,7 +84,7 @@ commands.spawn((
 Query `Wc3Light` to inspect the source record or disable a particular light with
 its `enabled` field. Ambient contributions and custom Reforged falloff/shadow
 ranges have no native mapping; scene ambient lighting remains application-owned.
-See [model lights](visual-fidelity/lights.md) for conversion defaults,
+See [model lights](rendering/lights.md) for conversion defaults,
 customization, and rendering semantics.
 
 ## Resolve child models
@@ -134,7 +134,7 @@ PREM emitters spawn world-space child models with independent sequence-zero
 animation, sampled birth transforms and physical properties, gravity, and lifetime
 cleanup. Parent playback pause/speed controls particle time; immediate sequence
 changes and backward seeks clear particles, while blended changes retain them. Image-based PREM is unsupported. See
-[Classic model particles](visual-fidelity/prem.md).
+[Classic model particles](rendering/prem.md).
 
 ## Inspect and capture models
 
@@ -174,11 +174,11 @@ Call it when the desired animation changes. Use `play_immediately(index)` for
 an immediate switch or `play_with_blend(index, Duration)` for a custom fade.
 Set `playing` to pause/resume and `speed` to change playback speed.
 `seek(milliseconds)` changes the sampling clock without replaying skipped
-particle births or events. See [animation blending](visual-fidelity/animation-blending.md).
+particle births or events. See [animation blending](rendering/animation-blending.md).
 
 ## Integrate with application systems
 
 Use `Wc3Systems` to order application systems around loading, animation, and
 effect simulation. See the [scheduling contract](architecture.md#scheduling-contract).
-[Model cameras](visual-fidelity/cameras.md) explains opt-in camera playback;
-[model events](visual-fidelity/events.md) explains reading animation notifications.
+[Model cameras](rendering/cameras.md) explains opt-in camera playback;
+[model events](rendering/events.md) explains reading animation notifications.

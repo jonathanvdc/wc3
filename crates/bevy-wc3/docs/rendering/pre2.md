@@ -1,6 +1,6 @@
 # Quad particles (PRE2)
 
-[Documentation index](../README.md)
+[Documentation index](../README.md) · [Verification notes](../verification.md)
 
 PRE2 emitters render textured, GPU-instanced head and tail quads for each model
 instance. CPU simulation schedules births and stores immutable spawn records;
@@ -54,20 +54,3 @@ Endpoint emission-rate/visibility sampling can miss changes within an update;
 squirt updates crossing multiple keys or loops can miss bursts. A dedicated WC3
 ordering scheme across model materials and effects is not implemented.
 Quad size uses transformed axis lengths, so mirrored scale signs are discarded.
-
-## Capture checks and game comparison
-
-Capture the checked-in fixture from the repository root:
-
-```sh
-cargo run -p bevy-wc3 --example capture -- \
-  crates/bevy-wc3/tests/fixtures/particle_capture.mdl /tmp/wc3-particle-captures \
-  --times 0,0.5,1,2 --fps 60 --size 640x480 \
-  --eye 0,-18,8 --target 0,0,2
-```
-
-Inspect placement, motion, color/alpha, atlas frames, head/tail geometry, and
-blending at the same camera and simulation FPS. This command is a reproducible
-check, not a report of new captures. Warcraft comparisons are still needed for
-lighting, ordering, speed variation, rotation/scale order, ModelSpace gravity,
-XYQuad facing offsets, and mirrored emitters.

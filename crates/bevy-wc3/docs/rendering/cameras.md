@@ -1,6 +1,6 @@
 # Model cameras
 
-[Documentation index](../README.md)
+[Documentation index](../README.md) · [Verification notes](../verification.md)
 
 ## Integration
 
@@ -33,7 +33,7 @@ still control camera lifetime. An unparented view retains its previous pose.
 
 `new(root, index)` uses authored vertical FOV radians directly. `portrait(root,
 index)` uses a 0.75 multiplier. The public `fov_multiplier` can be changed at
-runtime. These framing policies remain unverified against Warcraft III.
+runtime.
 
 ## Evaluation and scheduling
 
@@ -61,7 +61,7 @@ and nonfinite/degenerate views retain the previous transform and projection and
 warn once per camera/failure reason, recovering when the inputs become valid.
 FOV must be finite and in (0, pi); near must be positive and far greater than near.
 
-## Limits and verification
+## Projection and application controls
 
 Visibility tracks do not change camera activation or select another view.
 Modern focus distance, focal length, and f-stop tracks remain available in source
@@ -73,25 +73,9 @@ Projection uses Bevy's standard infinite reverse-depth perspective matrix. The
 authored far distance feeds Bevy's frustum/culling behavior; it is not a finite
 fragment clipping plane, particularly for geometry exempt from frustum culling.
 
-Unit and public integration tests cover authored discovery, independent instance
-clocks, sequence/global sampling, roll across view directions, transformed roots,
-camera-parent compensation, invalid input recovery, binding removal, and
-same-frame billboard/projection scheduling.
+## Offscreen captures
 
-The shared capture example supports `--model-camera INDEX` and
-`--camera-fov-multiplier NUMBER`. Model-camera selection excludes `--eye` and
-`--target`; invalid indices/lenses fail before GPU initialization and invalid
-sampled views fail before writing a capture. Exact Warcraft III framing, roll
-sign, and Reforged lens fidelity remain unverified.
-
-GPU captures at 640x480 and 60 FPS verified a controlled two-panel MDL with static
-geometry/color: additive eye/target translation and 0/45/90-degree roll at
-0/0.5/1 seconds, with depth/normal/motion prepasses enabled. A second authored
-camera with FOV multiplier 0.75 increased panel size at the same pose. A near
-distance of 11 clipped panels 10 units from the eye. These images were inspected
-for placement, orientation, size, and clipping, rather than just file creation.
-
-Scarlet Footman's authored portrait camera also rendered at 0 and 0.5 seconds
-with multiplier 0.75, producing a stable face close-up. Several normal/ORM,
-environment, and background textures were unavailable, so this check establishes
-camera integration, not complete material fidelity or game-equivalent framing.
+The shared capture example accepts `--model-camera INDEX` and
+`--camera-fov-multiplier NUMBER`. Selecting a model camera excludes `--eye` and
+`--target`. Invalid indices or lens values fail before GPU initialization;
+invalid sampled views fail before writing a capture.

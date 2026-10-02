@@ -140,7 +140,7 @@ impl Wc3CameraBinding {
         }
     }
 
-    /// Uses a 0.75 FOV multiplier for portrait framing. Game fidelity is unverified.
+    /// Uses a 0.75 FOV multiplier for portrait framing.
     pub fn portrait(model: Entity, camera_index: usize) -> Self {
         Self {
             fov_multiplier: 0.75,

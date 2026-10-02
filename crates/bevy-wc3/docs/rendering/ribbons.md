@@ -1,6 +1,6 @@
-# Ribbon emitters
+# Ribbon trails (RIBB)
 
-[Documentation index](../README.md)
+[Documentation index](../README.md) · [Verification notes](../verification.md)
 
 RIBB emitters render for both MDX and MDL model instances. The CPU schedules
 births at the fixed emission rate, samples the animated node hierarchy and
@@ -51,47 +51,13 @@ births or large time steps retain only the newest live capacity.
 
 Gravity uses frame-rate-independent world -Z displacement
 `0.5 * gravity * age²`, with zero initial falling velocity and no additional
-emitter-scale multiplier. Exact Warcraft III ribbon gravity remains unverified.
+emitter-scale multiplier.
 Births are distributed within each update, avoiding coincident sections after a
 slow update. Each connected chain occupies exactly one atlas cell using
 floating-point UVs.
 
-## Capture checks
+## Sampling and render-pass limits
 
-Capture the checked-in fixture:
-
-```sh
-cargo run -p bevy-wc3 --example capture -- \
-  crates/bevy-wc3/tests/fixtures/ribbon_capture.mdl /tmp/wc3-ribbon-captures \
-  --times 0,0.5,1,2 --fps 60 --size 640x480 \
-  --eye 0,-12,12 --target 0,0,1
-```
-
-The fixture reuses `capture_white.png` and covers the empty initial frame,
-detached birth positions, continuous geometry, and gravity bend.
-Additional capture checks cover animated heights, parent rotation, a four-cell
-asymmetric atlas, texture-slot changes, and separate chains across visibility
-gaps. Captures at 0.5, 1, 1.5, and 2 seconds produce byte-identical PNGs at
-30 FPS and 60 FPS. Two-layer checks cover matching geometry across an unshaded
-blend pass and a shaded additive pass sharing the GPU section buffer.
-
-Game-model geometry checks cover Winter Cenarius (sequence 8) and Thrall
-Shadowlands (sequence 1) from `data/` at 0.15, 0.3, 0.45, and 0.6 seconds.
-White bitmap substitutions are required because the shared game textures are
-absent. These checks exercise animated parent rigs, three Cenarius emitters,
-and Thrall's weapon trail; texture fidelity remains unverified. Those emitters
-all have zero gravity, so they do not exercise falling motion.
-
-A non-looping variant ending at 1 second with a 1-second ribbon lifespan covers
-expiry at 0.5, 1, 1.5, and 2.25 seconds: the trail shrinks at 1.5 seconds and
-is absent at 2.25 seconds. Ribbon and PRE2 draws use transient phase items,
-so empty or hidden emitters do not retain their last GPU draw.
-
-## Implementation limits and game comparison
-
-
-- Compare gravity, emission density, UV direction, visibility thresholds, and
-  material-layer semantics against actual Warcraft III captures.
 - Visibility is sampled at births and update endpoints; a hidden interval entirely
   between those samples can go undetected.
 - All ribbon passes use Bevy's transparent phase, including opaque/alpha-tested
@@ -101,4 +67,4 @@ so empty or hidden emitters do not retain their last GPU draw.
   environment mapping, and Reforged normal/ORM material slots are not implemented.
 - Animated node flags use the shared CPU evaluator and one driving camera per
   instance. Subframe births sample authored tracks with the current camera pose;
-  see [node flags](node-flags.md) for implemented semantics and fidelity limits.
+  see [node flags](node-flags.md) for camera selection and transform rules.

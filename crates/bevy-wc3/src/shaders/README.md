@@ -17,5 +17,5 @@ The material fragment shader adds HD team masking, RG normal reconstruction, and
 explicit Fresnel/environment approximations around Bevy PBR. Its prepass fragment
 uses the same normal reconstruction while retaining upstream alpha discard and
 motion vectors. Bindings 100–106 are local to the WC3 material extension. Neither
-shader replaces Bevy global shaders. See [Reforged materials](../../docs/visual-fidelity/reforged-materials.md)
+shader replaces Bevy global shaders. See [Reforged materials](../../docs/rendering/reforged-materials.md)
 for texture roles, animated controls, and render-pass behavior.

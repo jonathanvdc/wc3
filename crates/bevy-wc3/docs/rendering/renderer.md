@@ -89,10 +89,11 @@ lifecycle. Each effect topic documents its playback and visibility rules.
 | Lights and cameras | Ambient light records and several Reforged attenuation/shadow controls have no native mapping. Camera visibility and modern lens/DOF tracks do not control views. |
 | Effects | Image-based PREM, Popcorn, and FaceFX are unsupported. PRE2/ribbons do not apply fog. Emission sampling limits are described in the effect topics. |
 
-## Visual verification
+## Rendering checks
 
-The existing `capture` example renders MDX and MDL through the plugin with
-controlled simulation times and cameras. Topic notes include fixture commands
-and earlier observations. Synthetic captures establish this renderer’s behavior;
-exact game lighting, transition semantics, ordering, and other appearance details
-remain unverified against Warcraft III.
+The existing `capture` example renders MDX and MDL through the plugin at
+controlled simulation times and camera settings. See the
+[application guide](../usage.md#inspect-and-capture-models) for commands and
+[verification notes](../verification.md) for earlier test and capture reports.
+The lighting, transition, and ordering rules described here are this renderer’s
+semantics; exact Warcraft III appearance remains unverified.
