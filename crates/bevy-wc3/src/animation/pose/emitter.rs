@@ -38,7 +38,7 @@ pub(crate) fn sample_emitter_transform_at_frame(
             Some(node) => Some(PoseInput {
                 world: None,
                 anchor: None,
-                local: node.sample_transform_at_frame(animation, frame),
+                local: node.sample_transform_at_frame(entity, animation, frame),
                 parent: parent.map(ChildOf::parent),
                 node: Some(node.pose_sample(node.camera)),
             }),

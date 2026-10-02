@@ -38,6 +38,8 @@ Render offscreen and write frame-0000-1.000s.png, etc. Requires a GPU.
   --illuminance LUX     Scene directional light intensity (default: 5000)
   --times SECONDS,...    Increasing capture times (default: 1)
   --sequence INDEX       Animation sequence index (default: 0)
+  --play SECONDS=INDEX   Switch sequence at this simulation time (repeatable)
+  --blend-ms NUMBER      Override BlendTime for scheduled switches (0: immediate)
   --fps NUMBER           Simulation steps per second (default: 60)
   --size WIDTHxHEIGHT    PNG dimensions (default: 640x480)
   --eye X,Y,Z            Camera position (default: frame model bounds)
@@ -56,6 +58,11 @@ struct TextureChoice {
     path: String,
 }
 
+struct PlaybackChange {
+    time: f64,
+    sequence: usize,
+}
+
 struct Options {
     prepasses: bool,
     bevy_reference: bool,
@@ -66,6 +73,8 @@ struct Options {
     output: PathBuf,
     times: Vec<f64>,
     sequence: usize,
+    plays: Vec<PlaybackChange>,
+    blend: Option<Duration>,
     fps: f64,
     size: UVec2,
     eye: Option<Vec3>,
@@ -98,6 +107,8 @@ impl Options {
             output: output.into(),
             times: vec![1.0],
             sequence: 0,
+            plays: Vec::new(),
+            blend: None,
             fps: 60.0,
             size: UVec2::new(640, 480),
             eye: None,
@@ -139,6 +150,25 @@ impl Options {
                     options.times = value.split(',').map(str::parse).collect::<Result<_, _>>()?
                 }
                 "--sequence" => options.sequence = value.parse()?,
+                "--play" => {
+                    let (time, sequence) = value.split_once('=').ok_or("expected SECONDS=INDEX")?;
+                    let time: f64 = time.parse()?;
+                    if !time.is_finite() || time < 0.0 {
+                        return Err("play time must be finite and nonnegative".into());
+                    }
+                    if options
+                        .plays
+                        .last()
+                        .is_some_and(|previous| previous.time >= time)
+                    {
+                        return Err("play times must be strictly increasing".into());
+                    }
+                    options.plays.push(PlaybackChange {
+                        time,
+                        sequence: sequence.parse()?,
+                    });
+                }
+                "--blend-ms" => options.blend = Some(Duration::from_millis(value.parse()?)),
                 "--fps" => options.fps = value.parse()?,
                 "--size" => {
                     let (width, height) = value.split_once('x').ok_or("expected WIDTHxHEIGHT")?;
@@ -304,6 +334,11 @@ fn main() -> CaptureResult<()> {
         )
         .into());
     }
+    for change in &options.plays {
+        if change.sequence >= sequences.len() {
+            return Err(format!("scheduled sequence {} is out of range", change.sequence).into());
+        }
+    }
     let camera = options.camera(&source)?;
     let mut app = App::new();
     app.add_plugins((
@@ -451,14 +486,36 @@ fn main() -> CaptureResult<()> {
     app.world_mut()
         .get_mut::<Wc3Animation>(root)
         .unwrap()
-        .play(options.sequence);
+        .play_immediately(options.sequence);
     settle(&mut app)?;
     create_dir_all(&options.output)?;
     let mut elapsed = 0.0;
+    let mut next_play = 0;
     for (index, &time) in options.times.iter().enumerate() {
         // Simulate from zero; seeking the animation alone would omit live particles.
-        while elapsed + 1e-9 < time {
-            let dt = Duration::try_from_secs_f64((time - elapsed).min(1.0 / options.fps))?;
+        loop {
+            if let Some(change) = options
+                .plays
+                .get(next_play)
+                .filter(|change| change.time <= elapsed + 1e-9 && change.time <= time + 1e-9)
+            {
+                let mut animation = app.world_mut().get_mut::<Wc3Animation>(root).unwrap();
+                if let Some(duration) = options.blend {
+                    animation.play_with_blend(change.sequence, duration);
+                } else {
+                    animation.play(change.sequence);
+                }
+                next_play += 1;
+                continue;
+            }
+            if elapsed + 1e-9 >= time {
+                break;
+            }
+            let target = options
+                .plays
+                .get(next_play)
+                .map_or(time, |change| time.min(change.time));
+            let dt = Duration::try_from_secs_f64((target - elapsed).min(1.0 / options.fps))?;
             step(&mut app, dt)?;
             elapsed += dt.as_secs_f64();
         }
@@ -521,7 +578,7 @@ fn main() -> CaptureResult<()> {
         println!(
             "{} (sequence {}, time {time:.6}s)",
             path.display(),
-            options.sequence
+            app.world().get::<Wc3Animation>(root).unwrap().sequence()
         );
     }
     Ok(())
@@ -598,6 +655,21 @@ mod tests {
                 .chain(options.iter().copied())
                 .map(str::to_owned),
         )
+    }
+
+    #[test]
+    fn validates_scheduled_sequence_switches() {
+        for invalid in ["NaN=1", "-1=1", "inf=1", "0.5", "0.5=x"] {
+            assert!(parse(&["--play", invalid]).is_err());
+        }
+        assert!(parse(&["--play", "1=0", "--play", "0.5=1"]).is_err());
+        assert!(parse(&["--play", "1=0", "--play", "1=1"]).is_err());
+        let options = parse(&["--play", "0=1", "--play", "0.75=0", "--blend-ms", "0"])
+            .unwrap()
+            .unwrap();
+        assert_eq!(options.plays.len(), 2);
+        assert_eq!(options.plays[1].time, 0.75);
+        assert_eq!(options.blend, Some(Duration::ZERO));
     }
 
     #[test]

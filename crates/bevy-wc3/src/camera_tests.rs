@@ -24,6 +24,7 @@ fn animation() -> Wc3Animation {
         sequences: vec![Sequence::new("Stand", [1000, 2000]).unwrap()],
         global_sequences: vec![200],
         event_playback: Default::default(),
+        pose_playback: Default::default(),
     }
 }
 

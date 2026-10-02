@@ -19,6 +19,7 @@ fn animation() -> Wc3Animation {
         sequences: model.model.sequences(),
         global_sequences: vec![],
         event_playback: Default::default(),
+        pose_playback: Default::default(),
     }
 }
 
@@ -555,5 +556,114 @@ fn node_flags_survive_mdl_loading_and_reach_the_spawned_rig() {
     assert_eq!(
         world.get::<AnimatedNode>(bone).unwrap().flags.bits() & 0xff,
         0xff
+    );
+}
+
+#[test]
+fn transitions_cache_authored_poses_and_share_birth_sampling() {
+    use std::time::Duration;
+    use wc3::model::animation::Sequence;
+
+    let (mut app, root) = scene();
+    {
+        let mut animation = app.world_mut().get_mut::<Wc3Animation>(root).unwrap();
+        animation.sequences = vec![
+            Sequence::new("Source", [0, 1000]).unwrap(),
+            Sequence::new("Destination", [2000, 3000]).unwrap(),
+        ];
+        animation.pose_playback.blend_time = Duration::from_millis(1000);
+    }
+    let pivot = Vec3::new(3.0, 0.0, 0.0);
+    let mut animated = node(root, pivot, Vec3::ZERO, 0);
+    animated.translation = Some(
+        Track::linear(
+            vec![
+                ValueKeyframe {
+                    frame: 0,
+                    value: [0.0, 0.0, 0.0],
+                },
+                ValueKeyframe {
+                    frame: 1000,
+                    value: [0.0, 0.0, 0.0],
+                },
+                ValueKeyframe {
+                    frame: 2000,
+                    value: [10.0, 0.0, 0.0],
+                },
+                ValueKeyframe {
+                    frame: 3000,
+                    value: [20.0, 0.0, 0.0],
+                },
+            ],
+            None,
+        )
+        .unwrap(),
+    );
+    let parent = spawn_node(&mut app, root, animated);
+    let child = spawn_node(&mut app, parent, node(root, pivot + Vec3::Y, pivot, 0));
+    app.world_mut()
+        .get_mut::<Transform>(root)
+        .unwrap()
+        .translation = Vec3::new(100.0, 0.0, 0.0);
+    app.update();
+    close(
+        app.world().get::<Transform>(parent).unwrap().translation,
+        pivot,
+    );
+    app.world_mut()
+        .get_mut::<Wc3Animation>(root)
+        .unwrap()
+        .play(1);
+    app.update();
+    close(
+        app.world().get::<Transform>(parent).unwrap().translation,
+        pivot,
+    );
+    let halfway = app
+        .world()
+        .get::<Wc3Animation>(root)
+        .unwrap()
+        .sample_at_elapsed(500.0);
+    *app.world_mut().get_mut::<Wc3Animation>(root).unwrap() = halfway;
+    app.update();
+    // The destination has advanced to 15, then blends halfway from zero.
+    close(
+        app.world().get::<Transform>(parent).unwrap().translation,
+        pivot + Vec3::X * 7.5,
+    );
+    close(
+        app.world()
+            .get::<GlobalTransform>(child)
+            .unwrap()
+            .translation(),
+        Vec3::new(110.5, 1.0, 0.0),
+    );
+    let birth = app
+        .world()
+        .get::<Wc3Animation>(root)
+        .unwrap()
+        .sample_at_elapsed(250.0);
+    let mut state = SystemState::<EmitterNodes>::new(app.world_mut());
+    let nodes = state.get(app.world()).unwrap();
+    let sampled = sample_emitter_transform(child, root, &birth, &nodes).unwrap();
+    close(sampled.translation(), Vec3::new(106.125, 1.0, 0.0));
+    // Interruption starts at the cached authored pose, never root placement.
+    app.world_mut()
+        .get_mut::<Wc3Animation>(root)
+        .unwrap()
+        .play(0);
+    app.update();
+    close(
+        app.world().get::<Transform>(parent).unwrap().translation,
+        pivot + Vec3::X * 7.5,
+    );
+    app.world_mut()
+        .get_mut::<Wc3Animation>(root)
+        .unwrap()
+        .play_immediately(1);
+    app.update();
+    close(
+        app.world().get::<Transform>(parent).unwrap().translation,
+        pivot + Vec3::X * 10.0,
     );
 }

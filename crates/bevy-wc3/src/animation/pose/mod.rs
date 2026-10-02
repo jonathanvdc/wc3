@@ -2,6 +2,7 @@
 use bevy::camera::RenderTarget;
 use bevy::prelude::*;
 use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
 
 pub(crate) use self::emitter::{
     sample_emitter_transform, sample_emitter_transform_at_frame, EmitterNodes,
@@ -49,7 +50,7 @@ type NodeCameras<'w, 's> = Query<
 >;
 
 pub(crate) fn animate_nodes(
-    animations: Query<&Wc3Animation>,
+    mut animations: Query<&mut Wc3Animation>,
     animated_entities: Query<Entity, With<AnimatedNode>>,
     cameras: NodeCameras,
     mut nodes: ParamSet<(NodeInputs, Query<(&mut AnimatedNode, &mut Transform)>)>,
@@ -145,15 +146,22 @@ pub(crate) fn animate_nodes(
         }
     }
     last_warnings.retain(|root, _| selections.contains_key(root));
+    let mut authored = HashMap::<Entity, HashMap<Entity, Transform>>::new();
+    for entity in &animated_entities {
+        let Ok((_, _, Some(node), _, _)) = inputs.get(entity) else {
+            continue;
+        };
+        if let Ok(animation) = animations.get(node.root) {
+            authored
+                .entry(node.root)
+                .or_default()
+                .insert(entity, node.sample_transform(entity, animation));
+        }
+    }
     let lookup = |entity| {
         let (_, transform, node, parent, _) = inputs.get(entity).ok()?;
         let local = node
-            .and_then(|node| {
-                animations
-                    .get(node.root)
-                    .ok()
-                    .map(|animation| node.sample_transform(animation))
-            })
+            .and_then(|node| authored.get(&node.root)?.get(&entity).copied())
             .unwrap_or(*transform);
         Some(PoseInput {
             local,
@@ -183,6 +191,11 @@ pub(crate) fn animate_nodes(
         if let Ok((mut node, mut transform)) = outputs.get_mut(entity) {
             node.camera = camera;
             *transform = local;
+        }
+    }
+    for (root, pose) in authored {
+        if let Ok(mut animation) = animations.get_mut(root) {
+            animation.pose_playback.current = Arc::new(pose);
         }
     }
 }

@@ -59,6 +59,7 @@ fn setup() -> (App, Entity, Entity) {
                 sequences: Vec::new(),
                 global_sequences: Vec::new(),
                 event_playback: Default::default(),
+                pose_playback: Default::default(),
             },
             Transform::default(),
             Visibility::default(),
@@ -270,4 +271,60 @@ fn recursive_particle_models_are_blocked() {
     step(&mut app, 0.0);
     assert!(app.world().get::<BlockedChildModel>(child).is_some());
     assert!(app.world().get::<Wc3Animation>(child).is_none());
+}
+
+#[test]
+fn blended_switch_keeps_live_model_particles_but_immediate_switch_retires_them() {
+    use wc3::model::animation::Sequence;
+
+    let (mut app, root, emitter) = setup();
+    let node_entity = app.world().get::<ParticleState>(emitter).unwrap().node;
+    app.world_mut()
+        .entity_mut(node_entity)
+        .insert(AnimatedNode {
+            root,
+            flags: Default::default(),
+            camera: None,
+            pivot: Vec3::ZERO,
+            parent_pivot: Vec3::ZERO,
+            translation: None,
+            rotation: None,
+            scaling: None,
+        });
+    {
+        let mut animation = app.world_mut().get_mut::<Wc3Animation>(root).unwrap();
+        animation.sequences = vec![
+            Sequence::new("A", [0, 1000]).unwrap(),
+            Sequence::new("B", [2000, 3000]).unwrap(),
+        ];
+        animation.pose_playback.blend_time = Duration::from_millis(150);
+    }
+    step(&mut app, 0.25);
+    let particle = app.world().get::<ParticleState>(emitter).unwrap().particles[0].entity;
+    app.world_mut()
+        .get_mut::<Wc3Animation>(root)
+        .unwrap()
+        .play(1);
+    step(&mut app, 0.0);
+    assert!(app.world().get_entity(particle).is_ok());
+    assert_eq!(
+        app.world()
+            .get::<ParticleState>(emitter)
+            .unwrap()
+            .particles
+            .len(),
+        1
+    );
+    app.world_mut()
+        .get_mut::<Wc3Animation>(root)
+        .unwrap()
+        .play_immediately(0);
+    step(&mut app, 0.0);
+    assert!(app.world().get_entity(particle).is_err());
+    assert!(app
+        .world()
+        .get::<ParticleState>(emitter)
+        .unwrap()
+        .particles
+        .is_empty());
 }

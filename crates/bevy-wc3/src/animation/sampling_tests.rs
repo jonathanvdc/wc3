@@ -10,6 +10,7 @@ fn sequence_clock_loops_and_global_clock_runs_independently() {
         sequences: vec![Sequence::new("Stand", [1000, 1100]).unwrap()],
         global_sequences: vec![200],
         event_playback: Default::default(),
+        pose_playback: Default::default(),
     };
     let sequence_track = Track::linear(
         vec![
@@ -56,6 +57,7 @@ fn color_tracks_use_sequence_and_global_clocks_with_neutral_fallback() {
         ],
         global_sequences: vec![100],
         event_playback: Default::default(),
+        pose_playback: Default::default(),
     };
     let track = Track::linear(
         vec![

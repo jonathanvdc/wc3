@@ -61,9 +61,7 @@ pub(crate) fn sequence_ended(animation: &Wc3Animation) -> bool {
 }
 
 pub(crate) fn birth_animation(animation: &Wc3Animation, age: f64) -> Wc3Animation {
-    let mut birth = animation.clone();
-    birth.elapsed_ms -= age * 1000.0;
-    birth
+    animation.sample_at_elapsed(animation.elapsed_ms - age * 1000.0)
 }
 
 /// Integer-millisecond tracks need stable sampling at exact key boundaries.

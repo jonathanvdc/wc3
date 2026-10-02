@@ -32,7 +32,11 @@ can remain in world space while still being cleaned up with their owner.
 
 ## Animation and rendering features
 
-`animation/playback.rs` owns the sequence clock and playback controls.
+`animation/playback.rs` owns the sequence clock, playback controls, and per-instance
+pose transition state. `play` uses model BlendTime; immediate and duration-override
+controls use the same playback path. The node system caches authored local poses
+before inheritance/camera corrections. Transitions retain a frozen source and
+blend into the advancing destination, including effect births and event poses.
 `Wc3Animation::time()` exposes a borrowed `wc3::model::animation::AnimationTime`.
 `wc3` resolves sequence/global-sequence clocks and samples tracks and properties;
 `animation/sampling.rs` adapts those operations for Bevy effect callers.

@@ -132,7 +132,7 @@ pub(crate) fn dispatch_events(
         for (event_index, occurrence) in crossed {
             let event = &state.definitions[event_index];
             let node = state.nodes[event_index];
-            birth.elapsed_ms = occurrence.elapsed_ms;
+            birth.set_sample_time(occurrence.elapsed_ms);
             let frame = Some(NodeFrame {
                 frame: occurrence.frame,
                 global_sequence_id: (event.global_sequence_id != u32::MAX)

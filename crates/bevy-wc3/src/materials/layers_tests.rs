@@ -16,6 +16,7 @@ fn geoset_alpha_hides_decay_geometry_and_combines_with_layer_alpha() {
             sequences: vec![Sequence::new("Stand", [0, 101]).unwrap()],
             global_sequences: vec![],
             event_playback: Default::default(),
+            pose_playback: Default::default(),
         })
         .id();
     let material = app
@@ -136,6 +137,7 @@ fn missing_color_keys_reset_to_white_after_sequence_change() {
             ],
             global_sequences: vec![],
             event_playback: Default::default(),
+            pose_playback: Default::default(),
         })
         .id();
     let handle = app

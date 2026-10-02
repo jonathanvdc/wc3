@@ -41,14 +41,15 @@ impl AnimatedNode {
         }
     }
 
-    pub(crate) fn sample_transform(&self, animation: &Wc3Animation) -> Transform {
-        self.sample_transform_at_frame(animation, None)
+    pub(crate) fn sample_transform(&self, entity: Entity, animation: &Wc3Animation) -> Transform {
+        self.sample_transform_at_frame(entity, animation, None)
     }
 
     /// An explicit frame preserves end-key poses at a loop boundary.
     /// Tracks on other clocks use the occurrence's elapsed time.
     pub(crate) fn sample_transform_at_frame(
         &self,
+        entity: Entity,
         animation: &Wc3Animation,
         frame: Option<NodeFrame>,
     ) -> Transform {
@@ -67,11 +68,14 @@ impl AnimatedNode {
             .as_ref()
             .and_then(|track| sample_node_track(track, animation, frame))
             .unwrap_or([1.0; 3]);
-        Transform {
-            translation: self.pivot - self.parent_pivot + Vec3::from_array(translation),
-            rotation: Quat::from_xyzw(rotation[0], rotation[1], rotation[2], rotation[3]),
-            scale: Vec3::from_array(scaling),
-        }
+        animation.blend_transform(
+            entity,
+            Transform {
+                translation: self.pivot - self.parent_pivot + Vec3::from_array(translation),
+                rotation: Quat::from_xyzw(rotation[0], rotation[1], rotation[2], rotation[3]),
+                scale: Vec3::from_array(scaling),
+            },
+        )
     }
 }
 

@@ -5,7 +5,8 @@ use std::collections::HashMap;
 use wc3::model::{Model, V1800};
 
 use crate::animation::pose::AnimatedNode;
-use crate::animation::Wc3Animation;
+use crate::animation::{PosePlayback, Wc3Animation};
+use std::time::Duration;
 
 pub(super) struct Rig {
     pub(super) joints: Vec<Entity>,
@@ -37,6 +38,11 @@ pub(super) fn spawn_animation_root(commands: &mut Commands, model: &Model<V1800>
         sequences: model.sequences(),
         global_sequences: model.global_sequences(),
         event_playback: Default::default(),
+        pose_playback: PosePlayback::new(Duration::from_millis(
+            model
+                .model_info()
+                .map_or(0, |info| u64::from(info.blend_time)),
+        )),
     });
 }
 

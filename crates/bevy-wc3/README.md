@@ -6,6 +6,13 @@ GPU skinned geosets, and one material pass per layer. Per-instance animation
 samples MDX sequence and global sequence tracks for node transforms, layer
 alpha, and texture selection.
 
+`Wc3Animation::play(sequence)` blends node poses using the model's `BlendTime`.
+Use `play_immediately(sequence)` for an immediate switch or
+`play_with_blend(sequence, Duration)` for a custom duration. Interrupted transitions
+start from the latest evaluated pose. Call these controls when changing animations;
+playing the current sequence restarts it. See [animation blending](docs/visual-fidelity/animation-blending.md)
+for clocks, effects, and fidelity limits.
+
 For repeated instances, put the MDX and textures under Bevy's `assets/`
 directory and let `Wc3BevyPlugin` load and prepare the model:
 

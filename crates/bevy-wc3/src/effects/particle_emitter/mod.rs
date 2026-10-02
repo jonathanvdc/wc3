@@ -140,7 +140,7 @@ fn sample_emitter_transform(
             anchor: node
                 .filter(|node| node.root != root)
                 .and_then(AnimatedNode::camera_anchor),
-            local: sampled.map_or(*transform, |node| node.sample_transform(animation)),
+            local: sampled.map_or(*transform, |node| node.sample_transform(entity, animation)),
             parent: parent.map(ChildOf::parent),
             node: sampled.map(|node| node.pose_sample(node.camera)),
         })
@@ -163,8 +163,10 @@ pub(crate) fn update_particles(
         };
         let dt = simulation_delta(&time, animation);
         if state.clock.observe(animation) {
-            for particle in state.particles.drain(..) {
-                commands.entity(particle.entity).despawn();
+            if !animation.preserves_particles() {
+                for particle in state.particles.drain(..) {
+                    commands.entity(particle.entity).despawn();
+                }
             }
             state.emission.reset();
         }

@@ -293,3 +293,47 @@ fn global_only_models_dispatch_and_restart_without_a_sequence() {
     assert_eq!(advance(&mut app, root, 125.0).len(), 1);
     assert!(advance(&mut app, root, 125.0).is_empty());
 }
+
+#[test]
+fn blended_switch_dispatches_only_destination_events_at_blended_occurrence_poses() {
+    use std::time::Duration;
+
+    let (mut app, root, _) = scene();
+    advance(&mut app, root, 500.0);
+    app.world_mut()
+        .get_mut::<Wc3Animation>(root)
+        .unwrap()
+        .play_with_blend(1, Duration::from_millis(1000));
+    let sampled = app
+        .world()
+        .get::<Wc3Animation>(root)
+        .unwrap()
+        .sample_at_elapsed(500.0);
+    *app.world_mut().get_mut::<Wc3Animation>(root).unwrap() = sampled;
+    app.update();
+    let events = drain(&mut app);
+    let local: Vec<_> = events
+        .iter()
+        .filter(|event| event.global_sequence_id.is_none())
+        .collect();
+    assert_eq!(local.len(), 2);
+    assert_eq!(
+        local.iter().map(|event| event.frame).collect::<Vec<_>>(),
+        [3000, 3250]
+    );
+    assert!(local
+        .iter()
+        .all(|event| event.sequence == Some(1) && event.event_index == 0));
+    // Frozen parent source is x=5. Destination is x=0 at its start and
+    // x=2.5 at 250ms, with transition weights 0 and 0.25 respectively.
+    assert!(local[0]
+        .transform
+        .translation()
+        .abs_diff_eq(Vec3::new(108.0, 0.0, 0.0), 1e-5));
+    assert!(local[1]
+        .transform
+        .translation()
+        .abs_diff_eq(Vec3::new(107.375, 0.0, 0.0), 1e-5));
+    app.update();
+    assert!(drain(&mut app).is_empty());
+}

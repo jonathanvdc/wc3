@@ -11,6 +11,7 @@ implementation inventory, not a claim of visual equivalence to Warcraft III.
 
 | Area | Current behavior and remaining work |
 | --- | --- |
+| Animation blending | Sequence changes blend from the latest evaluated local pose into an advancing destination using model BlendTime, with interruption and immediate overrides. Properties outside node transforms switch directly. Exact Warcraft transition semantics remain unverified. See [animation blending](animation-blending.md). |
 | Classic materials | Meshes use Bevy PBR shading with WC3 layer blend and depth states, rather than Warcraft's lighting equation. Mesh Unshaded/Unlit and Unfogged flags select Bevy's unlit/fog behavior; Classic sphere environment mapping is absent. PRE2 and ribbons do support unshaded rendering. |
 | Reforged materials | HD DefaultUnit binds all six texture roles, animates material controls, and uses Bevy forward PBR. Fresnel/environment shading is approximate, game fidelity is unverified, and Crystal/unknown shaders use a warned diffuse fallback. See [Reforged materials](reforged-materials.md). |
 | Geoset animation | Static and animated geoset color and alpha apply to all material layers, including visibility changes and per-geoset/instance material isolation. See [geoset animation](geoset-animation.md) for captures and remaining color-space, shadow, and game-fidelity checks. |
