@@ -15,9 +15,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         let mut meshes = Assets::<Mesh>::default();
         let mut materials = Assets::<Wc3LayerMaterial>::default();
         let mut bindposes = Assets::<SkinnedMeshInverseBindposes>::default();
-        let prepared = prepare_model(&mut meshes, &mut materials, &mut bindposes, &model, |_| {
-            None
-        })?;
+        let prepared = prepare_model(&mut meshes, &mut bindposes, &model, |_| None)?;
         spawn_prepared_model(&mut commands, &mut meshes, &mut materials, &prepared);
         spawn_prepared_model(&mut commands, &mut meshes, &mut materials, &prepared);
         println!(

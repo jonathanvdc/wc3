@@ -4,7 +4,7 @@ use std::collections::VecDeque;
 use std::sync::Arc;
 
 use crate::animation::Wc3Animation;
-use crate::effect_ring::RecordRing;
+use crate::effects::records::RecordRing;
 
 pub(crate) fn simulation_delta(time: &Time, animation: &Wc3Animation) -> f64 {
     let dt = time.delta_secs_f64() * animation.speed;

@@ -11,7 +11,7 @@ use bytemuck::{bytes_of, cast_slice, Pod};
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use crate::effect_ring::{upload_records, RecordRing, RingCursor};
+use crate::effects::records::{upload_records, RecordRing, RingCursor};
 
 #[derive(Clone)]
 pub(crate) struct ResidentRecordBuffer {

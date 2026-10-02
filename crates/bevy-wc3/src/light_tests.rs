@@ -1,8 +1,9 @@
 use super::*;
-use crate::material::Wc3LayerMaterial;
-use crate::model::Wc3Model;
-use crate::node_pose::animate_nodes;
-use crate::spawn::{prepare_model, spawn_prepared_model, Wc3NodeEntities};
+use crate::animation::pose::animate_nodes;
+use crate::assets::model::Wc3Model;
+use crate::instance::spawn::{spawn_prepared_model, Wc3NodeEntities};
+use crate::materials::Wc3LayerMaterial;
+use crate::preparation::prepare_model;
 use bevy::camera::visibility::VisibilityPlugin;
 use bevy::ecs::world::CommandQueue;
 use bevy::mesh::skinning::SkinnedMeshInverseBindposes;
@@ -20,8 +21,7 @@ fn scene() -> (App, Entity, Entity) {
     let mut meshes = Assets::<Mesh>::default();
     let mut materials = Assets::<Wc3LayerMaterial>::default();
     let mut poses = Assets::<SkinnedMeshInverseBindposes>::default();
-    let prepared =
-        prepare_model(&mut meshes, &mut materials, &mut poses, &source, |_| None).unwrap();
+    let prepared = prepare_model(&mut meshes, &mut poses, &source, |_| None).unwrap();
     let mut queue = CommandQueue::default();
     let mut commands = Commands::new(&mut queue, app.world());
     let first = spawn_prepared_model(&mut commands, &mut meshes, &mut materials, &prepared);
@@ -198,10 +198,11 @@ fn directional_light_uses_parent_rotation_and_ambient_creates_no_scene_light() {
 fn invalid_properties_do_not_reach_bevy_lights() {
     let (mut app, first, _) = scene();
     let entity = light_entity(&mut app, first, 2);
-    let mut light = app.world_mut().get_mut::<Wc3Light>(entity).unwrap();
-    light.definition.attenuation_end = Animatable::Static(f32::NAN);
-    light.definition.intensity = Animatable::Static(-1.0);
-    drop(light);
+    {
+        let mut light = app.world_mut().get_mut::<Wc3Light>(entity).unwrap();
+        light.definition.attenuation_end = Animatable::Static(f32::NAN);
+        light.definition.intensity = Animatable::Static(-1.0);
+    }
     app.world_mut().entity_mut(first).insert(Wc3LightSettings {
         fallback_range: 42.0,
         ..default()

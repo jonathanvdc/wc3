@@ -1,6 +1,6 @@
 # bevy-wc3
 
-An initial Bevy 0.19 renderer for MDX models. `Wc3Model::decode` strictly
+A Bevy 0.19 renderer for MDX and MDL models. `Wc3Model::decode` strictly
 converts supported MDX versions to V1800. `spawn_model` creates a node hierarchy,
 GPU skinned geosets, and one material pass per layer. Per-instance animation
 samples MDX sequence and global sequence tracks for node transforms, layer
@@ -35,6 +35,27 @@ Change `Wc3TextureBindings` on that root entity later to hot swap images. A PRE2
 emitter with `ReplaceableId == 0` uses its `TextureID` bitmap slot, including
 bitmap overrides. `prepare_model` and `spawn_prepared_model_with_bindings` offer
 the same behavior for custom model sources.
+
+For custom model sources, prepare shared geometry once and spawn it repeatedly.
+Only spawning needs the material asset store:
+
+```rust
+let prepared = prepare_model(
+    &mut meshes,
+    &mut inverse_bindposes,
+    &source,
+    |path| Some(asset_server.load(path.to_owned())),
+)?;
+let root = spawn_prepared_model(
+    &mut commands,
+    &mut meshes,
+    &mut materials,
+    &prepared,
+);
+```
+
+Use `prepare_model_with_resources` to additionally resolve child-model paths, and
+`spawn_prepared_model_with_bindings` to supply per-instance texture choices.
 
 Model point and directional lights spawn as ordinary Bevy scene lights, illuminating
 both WC3 and Bevy materials. Their transforms, colors, intensities, ranges, and
@@ -157,3 +178,6 @@ gravity semantics and remaining game-fidelity checks.
 
 See the [renderer documentation](docs/README.md) for visual fidelity gaps and
 verification work by rendering topic.
+
+See the [architecture guide](docs/architecture.md) for module responsibilities,
+asset ownership, and the public `Wc3Systems` scheduling contract.

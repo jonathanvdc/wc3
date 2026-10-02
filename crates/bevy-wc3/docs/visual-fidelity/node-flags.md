@@ -39,10 +39,10 @@ commands.entity(viewport_camera).insert(Wc3DefaultNodeCamera);
 commands.entity(preview_model).insert(Wc3NodeCamera(preview_camera));
 ```
 
-Evaluation runs in `PostUpdate`, in `Wc3NodePoseSystems::Evaluate`, before Bevy's
+Evaluation runs in `PostUpdate`, in `Wc3Systems::EvaluateNodePoses`, before Bevy's
 `TransformSystems::Propagate` and PREM simulation. Camera/root movement performed
 in `Update` is visible in the same frame. Applications moving these entities in
-`PostUpdate` should order those systems before `Wc3NodePoseSystems::Evaluate`.
+`PostUpdate` should order those systems before `Wc3Systems::EvaluateNodePoses`.
 
 ## Implemented semantics
 

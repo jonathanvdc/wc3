@@ -4,9 +4,9 @@ use std::collections::{HashMap, HashSet};
 use wc3::model::animation::Track;
 
 use crate::animation::{sample, Wc3Animation};
-use crate::asset::Wc3ModelAsset;
+use crate::assets::loader::Wc3ModelAsset;
 use crate::instance::{Wc3ModelInstance, Wc3ModelOwner};
-use crate::spawn::PreparedModel;
+use crate::preparation::PreparedModel;
 
 /// One attachment point in a model instance. `node` is the animated MDX node;
 /// `mount` follows it and gates only attached content with the visibility track.

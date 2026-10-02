@@ -8,94 +8,29 @@
 //! available for callers with custom model or texture sources.
 
 mod animation;
-mod asset;
+mod assets;
 mod attachment;
-mod effect_ring;
 mod effects;
 mod instance;
 mod light;
-mod material;
-mod material_animation;
-mod mesh;
-mod model;
-mod model_resources;
-mod node_pose;
-mod particle_emitter;
-mod particle_emitter2;
-mod ribbon_emitter;
-mod spawn;
-mod texture_bindings;
+mod materials;
+mod plugin;
+mod preparation;
+mod schedule;
 
-use bevy::asset::embedded_asset;
-use bevy::prelude::*;
-use bevy::transform::TransformSystems;
-
+pub use animation::pose::{Wc3DefaultNodeCamera, Wc3NodeCamera};
 pub use animation::Wc3Animation;
-pub use asset::{BlpImageLoader, Wc3ModelAsset, Wc3ModelLoader};
+pub use assets::{
+    BlpImageLoader, ModelError, Wc3Model, Wc3ModelAsset, Wc3ModelLoader, Wc3ModelResources,
+};
 pub use attachment::{Wc3AttachmentPoint, Wc3Attachments};
+pub use instance::spawn::{
+    spawn_model, spawn_prepared_model, spawn_prepared_model_with_bindings, Wc3NodeEntities,
+};
 pub use instance::{Wc3ModelInstance, Wc3ModelOwner, Wc3OwnedModels};
 pub use light::{Wc3Light, Wc3LightSettings};
-pub use material::{Wc3LayerMaterial, Wc3LayerState};
-pub use model::{ModelError, Wc3Model};
-pub use model_resources::Wc3ModelResources;
-pub use node_pose::{Wc3DefaultNodeCamera, Wc3NodeCamera, Wc3NodePoseSystems};
-pub use spawn::{
-    prepare_model, prepare_model_with_resources, spawn_model, spawn_prepared_model,
-    spawn_prepared_model_with_bindings, PreparedModel, Wc3NodeEntities,
-};
-pub use texture_bindings::{Wc3TextureBindings, Wc3TextureSlot};
-
-pub struct Wc3BevyPlugin;
-
-impl Plugin for Wc3BevyPlugin {
-    fn build(&self, app: &mut App) {
-        embedded_asset!(app, "shaders/wc3_mesh.wgsl");
-        embedded_asset!(app, "shaders/wc3_material.wgsl");
-        embedded_asset!(app, "shaders/wc3_material_prepass.wgsl");
-        embedded_asset!(app, "shaders/wc3_prepass.wgsl");
-        embedded_asset!(app, "shaders/wc3_particle.wgsl");
-        embedded_asset!(app, "shaders/wc3_ribbon.wgsl");
-        app.init_asset::<Wc3ModelAsset>();
-        app.init_asset_loader::<asset::Wc3ModelLoader>();
-        app.init_asset_loader::<asset::BlpImageLoader>();
-        app.init_resource::<instance::PreparedModelCache>();
-        app.add_plugins(MaterialPlugin::<Wc3LayerMaterial>::default());
-        app.add_plugins(particle_emitter2::ParticleRenderPlugin);
-        app.add_plugins(ribbon_emitter::RibbonRenderPlugin);
-        app.add_systems(Update, instance::spawn_loaded_instances);
-        app.add_systems(
-            Update,
-            texture_bindings::update_particle_textures.after(instance::spawn_loaded_instances),
-        );
-        app.add_systems(
-            Update,
-            (
-                animation::advance_animation,
-                particle_emitter::animate_particle_models,
-                attachment::animate_attachments,
-                light::animate_lights,
-                animation::animate_layers,
-                material_animation::animate_surface,
-            )
-                .chain()
-                .after(instance::spawn_loaded_instances),
-        );
-        app.add_systems(
-            PostUpdate,
-            (
-                node_pose::animate_nodes.in_set(Wc3NodePoseSystems::Evaluate),
-                particle_emitter::update_particles,
-            )
-                .chain()
-                .before(TransformSystems::Propagate),
-        );
-        app.add_systems(
-            PostUpdate,
-            (
-                particle_emitter2::update_particles,
-                ribbon_emitter::update_ribbons,
-            )
-                .after(TransformSystems::Propagate),
-        );
-    }
-}
+pub use materials::textures::{Wc3TextureBindings, Wc3TextureSlot};
+pub use materials::{Wc3LayerMaterial, Wc3LayerState};
+pub use plugin::Wc3BevyPlugin;
+pub use preparation::{prepare_model, prepare_model_with_resources, PreparedModel};
+pub use schedule::Wc3Systems;

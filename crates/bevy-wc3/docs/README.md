@@ -1,5 +1,10 @@
 # bevy-wc3 documentation
 
+## Architecture
+
+- [Crate architecture](architecture.md): module responsibilities, shared assets,
+  instance ownership, rendering boundaries, and scheduling integration points.
+
 ## Visual fidelity
 
 These notes track missing rendering behavior and implemented behavior that still

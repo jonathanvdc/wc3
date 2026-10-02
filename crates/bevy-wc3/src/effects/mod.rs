@@ -8,3 +8,8 @@
 //! local poses before propagation and propagated world poses afterward.
 pub(crate) mod render;
 pub(crate) mod simulation;
+
+pub(crate) mod particle_emitter;
+pub(crate) mod particle_emitter2;
+pub(crate) mod records;
+pub(crate) mod ribbon_emitter;

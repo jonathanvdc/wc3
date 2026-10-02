@@ -1,18 +1,18 @@
 use super::*;
-use crate::node_pose::animate_nodes;
+use crate::animation::pose::animate_nodes;
 use bevy::camera::visibility::VisibilityPlugin;
 use bevy::ecs::world::CommandQueue;
 use bevy::mesh::skinning::SkinnedMeshInverseBindposes;
 use wc3::model::animation::{Sequence, ValueKeyframe};
 use wc3::model::scene::{Attachment, Node};
 
-use crate::animation::{animate_layers, AnimatedLayer};
-use crate::asset::ResolvedModelTextures;
+use crate::assets::loader::ResolvedModelTextures;
+use crate::assets::model::Wc3Model;
+use crate::assets::resources::Wc3ModelResources;
+use crate::instance::spawn::Wc3NodeEntities;
 use crate::instance::{spawn_loaded_instances, PreparedModelCache};
-use crate::material::Wc3LayerMaterial;
-use crate::model::Wc3Model;
-use crate::model_resources::Wc3ModelResources;
-use crate::spawn::Wc3NodeEntities;
+use crate::materials::layers::{animate_layers, AnimatedLayer};
+use crate::materials::Wc3LayerMaterial;
 
 fn app() -> App {
     let mut app = App::new();

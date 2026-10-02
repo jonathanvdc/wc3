@@ -5,7 +5,7 @@ use wc3::model::scene::{Light, LightType};
 use wc3::model::V1800;
 
 use crate::animation::{sample, sample_value, Wc3Animation};
-use crate::spawn::PreparedModel;
+use crate::preparation::PreparedModel;
 
 /// Conversion controls on a model's animation root. Absence uses the defaults.
 /// These are integration scales, not calibrated Warcraft-to-physical conversions.

@@ -1,6 +1,6 @@
 use bevy::mesh::skinning::SkinnedMeshInverseBindposes;
 use bevy::prelude::{Assets, Mesh};
-use bevy_wc3::{prepare_model, Wc3LayerMaterial, Wc3Model};
+use bevy_wc3::{prepare_model, Wc3Model};
 
 #[test]
 fn preparation_shares_identical_uv_meshes_and_preserves_distinct_tangent_sources() {
@@ -22,10 +22,8 @@ fn preparation_shares_identical_uv_meshes_and_preserves_distinct_tangent_sources
         .collect();
     source.model.set_materials(&[material]);
     let mut meshes = Assets::<Mesh>::default();
-    let mut materials = Assets::<Wc3LayerMaterial>::default();
     let mut binds = Assets::<SkinnedMeshInverseBindposes>::default();
-    let prepared =
-        prepare_model(&mut meshes, &mut materials, &mut binds, &source, |_| None).unwrap();
+    let prepared = prepare_model(&mut meshes, &mut binds, &source, |_| None).unwrap();
     assert_eq!(
         meshes.len(),
         2,
@@ -37,8 +35,7 @@ fn preparation_shares_identical_uv_meshes_and_preserves_distinct_tangent_sources
     geoset.set_tangents(Some(&authored));
     source.model.set_geosets(&[geoset]);
     let mut meshes = Assets::<Mesh>::default();
-    let _prepared =
-        prepare_model(&mut meshes, &mut materials, &mut binds, &source, |_| None).unwrap();
+    let _prepared = prepare_model(&mut meshes, &mut binds, &source, |_| None).unwrap();
     assert_eq!(
         meshes.len(),
         3,
