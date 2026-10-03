@@ -101,6 +101,9 @@ or `write_with`.
 
 ## Nested records and lists
 
+Choose a structural attribute according to whether a field should contribute
+its contents directly, create a nested block, or collect repeated records:
+
 | Field attribute | Use |
 | --- | --- |
 | `flatten` | Put a field group's headers and body fields in the parent. |
@@ -273,7 +276,9 @@ spans cover the complete record. Value and tagged enum validation hooks use the 
 
 ## Adapting existing storage
 
-These forms are for records whose Rust layout differs from their MDL fields.
+When an existing Rust layout differs from its MDL representation, projected
+members expose nested storage and virtual fields provide getter/setter mappings.
+Use these forms to adapt the layout without changing the record's public storage.
 
 ### Projected members
 

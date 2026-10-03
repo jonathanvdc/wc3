@@ -7,7 +7,7 @@ oracle dependency to the ordinary Rust tests.
 
 ## Setup
 
-Requires Python 3.9+, Git, CMake 3.20+, Ninja, a C++20 compiler, and Rust. Fetch
+The comparison requires Python 3.9+, Git, CMake 3.20+, Ninja, a C++20 compiler, and Rust. Fetch
 WhiteoutLib into an ignored directory and check out the revision in
 [whiteout.lock.json](whiteout.lock.json):
 
@@ -34,7 +34,10 @@ python3 tools/mdlx-compare/compare.py build --source target/mdlx-compare/whiteou
 If Rust selects an incompatible macOS SDK too, set `SDKROOT` to the matching
 SDK path for the `run` command. This changes only that process's environment.
 
-Whiteout uses its normal automatic upgrade mode. At the pinned revision this
+## Version normalization
+
+Both converters target the same model layout before comparing text. Whiteout
+uses its normal automatic upgrade mode. At the pinned revision this
 upgrades versions 900/1000 to 1200, leaving version 800 and versions 1100+
 unchanged. wc3 applies strict conversion to the same target before MDL output;
 equivalent camera variants are normalized even when the version stays unchanged.
@@ -44,14 +47,15 @@ silently discarding fields. Whiteout parser issues also require review.
 
 ## Run
 
-From the repository root:
+Run the comparison from the repository root after building the adapter:
 
 ```sh
 python3 tools/mdlx-compare/compare.py run
 ```
 
 By default this scans all MDX files recursively under `data/hive-workshop-models`
-and runs both engine and Hive dialects. No texture files are needed. Options:
+and runs both engine and Hive dialects. No texture files are needed. To choose another corpus, dialect, timeout, or
+output directory, pass the corresponding options:
 
 ```sh
 python3 tools/mdlx-compare/compare.py run --corpus /absolute/path/to/models \
@@ -63,6 +67,8 @@ conversion, or unreadable output is recorded; the remaining stages/models still
 run. Setup and internal runner errors return exit code 2. Findings are informational by default;
 `--fail-on-review` returns 1 if any case needs review. Results paths must be new,
 so previous evidence cannot be accidentally overwritten.
+
+## Read the results
 
 Outputs default to `target/mdlx-compare/results/<UTC timestamp>/`:
 
@@ -118,6 +124,10 @@ oracle output as a golden baseline.
 
 ## Turn a finding into a fixture
 
+Reduce a reviewed disagreement to a small regression case before adding it to
+the ordinary test suite. Preserve the original evidence during reduction so the
+fixture protects the actual behavior in question:
+
 1. Identify the exact field/chunk and assertion from the report and diff.
 2. Extract original bytes for that record, retaining the version context. For
    decoding failures, reduce raw bytes rather than decoding/re-encoding first.
@@ -134,7 +144,9 @@ No automatic reducer or fixture promotion is included: first use the reports
 to choose a concrete disagreement and its reduction predicate. Full models,
 third-party source, build artifacts, and compatibility reports stay local.
 
-Runner checks (no oracle installation required):
+## Check the runner
+
+The runner has its own tests, which do not require an oracle installation:
 
 ```sh
 python3 -m unittest discover -s tools/mdlx-compare -p 'test_*.py' -v

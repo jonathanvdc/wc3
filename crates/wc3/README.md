@@ -156,33 +156,9 @@ includes command-line examples for inspecting, editing, and converting assets:
 - [`blp_to_png` example](examples/blp_to_png.rs): texture metadata and PNG export of a selected mip level; requires `blp-decode`.
 - [`mdlx_compare` example](examples/mdlx_compare.rs): model round-trip comparisons.
 
-Run the tools from a workspace checkout. All examples support `--help`, including
-help for individual `mpq` subcommands. `model_convert`, `model_dependencies`,
-`model_info`, and `model_repath` recognize MDX by its header and otherwise read
-UTF-8 MDL. For conversion and repathing, an output filename ending in `.mdx` or
-`.mdl` selects the format. `mdlx_compare` selects the input format by its `.mdl`
-extension and always writes canonical MDL in the requested dialect.
-
-```sh
-cargo run -p wc3 --example model_dependencies -- model.mdx
-cargo run -p wc3 --example model_info -- model.mdl
-cargo run -p wc3 --example model_convert -- model.mdx model.mdl
-cargo run -p wc3 --example model_convert -- model.mdx classic.mdx --version 800 --lossy
-cargo run -p wc3 --example model_repath -- model.mdx repathed.mdx 'Textures\' 'Custom\'
-cargo run -p wc3 --features blp-decode --example blp_to_png -- texture.blp texture.png --mip 0
-```
-
-The dependency tool lists declared texture, attachment, particle-emitter,
-popcorn FX, FaceFX, and external animation paths, including unused references.
-It does not resolve files, follow references recursively, or infer resources
-selected by game logic. Replaceable IDs identify game-provided resources rather
-than fixed file paths. Repath edits these same path fields, preserving empty
-paths and replaceable IDs; it reports each change to stderr.
-
-Version conversion is strict by default. `--lossy` permits conversion losses
-and prints the conversion report to stderr; it does not bypass MDL writer
-limitations. Without `--version`, conversion preserves the source version.
-Model writes canonicalize the selected format, and output files are overwritten.
+The [command-line guide](docs/tools.md) collects invocation examples and explains
+format detection, dependency reporting, repathing, and conversion losses. Each
+example also provides `--help` for its options.
 
 From a workspace checkout, build the crate documentation with all optional APIs:
 

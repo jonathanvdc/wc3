@@ -4,6 +4,8 @@
 or plugin dependency. Applications choose source names, archive precedence,
 locale/platform selection, and archive parsing limits.
 
+## Register an asset source
+
 Open an archive with `wc3::mpq::Archive`, then wrap it in `MpqAssetReader`.
 Register its source before adding Bevy's `AssetPlugin` (including through
 `DefaultPlugins`). Use `OverlayAssetReader` to search any combination of MPQ
@@ -28,6 +30,8 @@ app.register_asset_source("warcraft", AssetSourceBuilder::new(move || {
 // Load with asset_server.load("warcraft://units/human/footman/footman.mdx").
 ```
 
+## Lookup and overlay precedence
+
 The first mount containing an entry wins. Only missing entries permit fallback;
 I/O, checksum, and decoding failures stop the search and identify the archive
 and entry. Metadata comes from the selected asset mount, so a lower-priority
@@ -39,6 +43,8 @@ locale on the same platform within that archive. The next overlay mount is
 consulted only if neither exists. MPQ name lookup is ASCII case insensitive and
 accepts either slash direction. Known paths work without a listfile. Parent
 traversal and absolute asset paths are rejected by the MPQ reader.
+
+## Runtime behavior and limits
 
 Archive indexing happens when the caller opens the archive. Reads and
 extraction run on blocking workers, with a lock per archive. The returned Bevy
@@ -54,7 +60,10 @@ map stacks to keep Bevy handles isolated. There is no decoded-byte cache:
 existence probes, metadata selection, and the eventual load may extract the
 same entry repeatedly. Bevy still caches the loaded asset handles normally.
 
-The runnable `bevy-wc3` example demonstrates caller-owned archive composition:
+## Try archive-backed models
+
+The runnable `bevy-wc3` example demonstrates caller-owned archive composition
+and rendering through the [model plugin](../bevy-wc3/README.md):
 
 ```sh
 cargo run -p bevy-wc3 --example mpq -- \

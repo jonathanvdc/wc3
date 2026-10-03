@@ -49,6 +49,10 @@ in `Update` is visible in the same frame. Applications moving these entities in
 
 ## Flag evaluation
 
+Inheritance flags modify skeletal motion while retaining model-instance
+placement. Billboard and camera-anchor flags then use the selected driving
+camera. The table describes each flag and how combinations are resolved:
+
 | Flag | Current behavior |
 | --- | --- |
 | DontInheritTranslation | Removes accumulated skeletal translation-track displacement from the node's position. Rest-pivot offsets, parent rotation/scale acting on those offsets, the node's own translation, and model-instance placement remain. Evaluation is independent of the previously rendered pose. |

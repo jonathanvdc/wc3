@@ -25,7 +25,7 @@ and geoset alpha multiply. Zero combined alpha hides a pass independently of its
 [LOD visibility group](lod.md); partial geoset
 alpha retains the existing AlphaToCoverage behavior for opaque/masked layers.
 Blended and additive passes retain their WC3 blend state. Additive/AddAlpha use
-Bevy's Blend shader path to preserve source alpha for the custom blend factors;
+Bevy's Blend shader path to preserve source alpha for the custom blend factors.
 
 ## Material ownership
 

@@ -1,13 +1,22 @@
 # bevy-wc3 documentation
 
 Start with the [crate README](../README.md) for a minimal Bevy application.
+These guides separate application setup, model inspection, rendering behavior,
+and implementation details so you can choose the depth needed for your task.
 
 ## Application and architecture
 
+The application guide covers runtime integration; the tool guide helps inspect
+assets before integrating them. Architecture is intended for contributors and
+applications that need explicit control over scheduling or preparation.
+
 - [Using bevy-wc3](usage.md): load instances from files or named MPQ sources,
-  resolve texture extension fallbacks, choose textures, control playback, mount child models, configure lights, and use the examples.
+  choose textures, control playback, mount child models, and configure lights.
+- [Viewer and captures](tools.md): inspect assets, override textures, and render
+  PNGs at controlled simulation times.
 - [Architecture](architecture.md): loading and preparation, shared and per-instance
-  state, renderer modules, and the `Wc3Systems` scheduling contract.
+  state, renderer modules, effect record storage, and the `Wc3Systems` scheduling
+  contract.
 - API reference: `cargo doc -p bevy-wc3 --no-deps --open`.
 
 ## Rendering
@@ -33,7 +42,7 @@ then choose a topic:
 - [Classic model particles (PREM)](rendering/prem.md): child models,
   world-space motion, animation, and lifetime.
 - [Quad particles (PRE2)](rendering/pre2.md): emission, head/tail geometry,
-  lifetime animation, GPU records, and sorting.
+  lifetime animation, and sorting.
 - [Ribbon trails](rendering/ribbons.md): birth-time sections, connected
   geometry, atlas animation, gravity, and material passes.
 

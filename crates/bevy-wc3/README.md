@@ -51,6 +51,8 @@ Instances share meshes and bind poses and own their animation and materials.
 
 ## Try a model
 
+From a workspace checkout, open a local MDX or MDL file in the viewer:
+
 ```sh
 cargo run -p bevy-wc3 --example viewer -- path/to/model.mdx
 ```
@@ -60,9 +62,13 @@ sequences. The viewer also accepts MDL and texture overrides. Add `--lod auto`
 to switch authored geometry while zooming, and tune `--lod-bias` for the desired
 quality. Global presets and per-instance overrides are described in the
 [geometry LOD guide](docs/rendering/lod.md). For offscreen PNGs,
-use the existing `capture` example; run it with `--help` for options.
+see the [viewer and capture guide](docs/tools.md), which covers camera setup,
+texture overrides, and controlled animation times.
 
 ## Documentation
+
+Continue with the application guide to configure instances, or the renderer
+and architecture guides to understand and extend the implementation:
 
 - [Application guide](docs/usage.md): loading, textures, animation, attachments,
   lights, geometry quality, custom sources, and instance lifetime.

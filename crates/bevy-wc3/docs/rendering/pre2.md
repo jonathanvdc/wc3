@@ -34,18 +34,11 @@ replaceable ID resolves TextureID through the bitmap slot.
 PriorityPlane biases Bevy transparent sorting. SortPrimsFarZ orders particles
 by analytic center depth along each camera’s forward axis.
 
-## Record storage and GPU uploads
-
-Spawn records use a growing ring, with chronological retirement and no free-slot
-list. Capacity starts at 16 records and doubles with the live population, up to
-8,192 records. Render extraction shares immutable blocks of up to 64 records,
-so births copy only touched blocks. GPU preparation tracks the last uploaded
-birth cursor and writes at most two contiguous ranges across wraparound. Growth
-or a full ring lap between rendered frames uploads the entire current buffer.
-Retirement alone does not upload spawn records. Per-view depth sorting still
-uses a separate draw-order index buffer.
-
 ## Implementation limits
+
+Each emitter is limited to 8,192 live spawn records. Storage grows with the
+population; [architecture](../architecture.md#effect-record-storage) describes
+record extraction and GPU uploads for contributors.
 
 The shader applies no fog. Replaceable IDs require application-supplied textures.
 Endpoint emission-rate/visibility sampling can miss changes within an update;

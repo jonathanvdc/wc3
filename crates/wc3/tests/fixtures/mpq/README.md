@@ -1,3 +1,5 @@
+# Synthetic MPQ fixtures
+
 These tiny archives were generated with [StormLib 9.40](https://github.com/ladislav-zezula/StormLib)
 using `generate.cpp`. They contain only synthetic data:
 

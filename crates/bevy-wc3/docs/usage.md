@@ -7,7 +7,7 @@ resolving child models, and integrating the renderer with application systems.
 
 ## Load and spawn models
 
-For repeated instances, put the MDX and textures under Bevy's `assets/`
+For repeated instances, put the MDX or MDL and its textures under Bevy's `assets/`
 directory and let `Wc3BevyPlugin` load and prepare the model:
 
 ```rust
@@ -22,8 +22,9 @@ with `.blp`, `.dds`, `.png`, and `.tga` extensions, in that order. This allows
 references such as `Textures\Body.tif` to resolve to `Textures/Body.blp`.
 Missing files advance to the next candidate; other read failures stop model
 loading. Decoder failures do not try another candidate.
-File contents must match the selected filename’s format. Explicit texture
+File contents must match the selected filename’s format, and explicit texture
 overrides remain exact.
+
 BLP files are decoded by the plugin. Replaceable IDs remain unresolved until a
 consumer supplies an image handle. Meshes and bind poses are shared; materials
 belong to each instance so texture changes remain local.
@@ -76,6 +77,16 @@ emitter with `ReplaceableId == 0` uses its `TextureID` bitmap slot, including
 bitmap overrides. `prepare_model` and `spawn_prepared_model_with_bindings` offer
 the same behavior for custom model sources.
 
+## Control animation
+
+Query `Wc3Animation` on a spawned root. `sequences()` lists the available
+sequences; `play(index)` starts or restarts one using the model’s BlendTime.
+Call it when the desired animation changes. Use `play_immediately(index)` for
+an immediate switch or `play_with_blend(index, Duration)` for a custom fade.
+Set `playing` to pause/resume and `speed` to change playback speed.
+`seek(milliseconds)` changes the sampling clock without replaying skipped
+particle births or events. See [animation blending](rendering/animation-blending.md).
+
 ## Choose geometry quality
 
 Models initially select authored level zero, resolving to the next coarser level
@@ -96,29 +107,6 @@ pixel thresholds and hysteresis to stabilize transitions. Put
 Query `Wc3LodState` after loading to inspect available and selected levels.
 See [geometry LOD](rendering/lod.md) for override precedence, camera selection,
 and limits. Models need authored levels to benefit from switching.
-
-## Prepare custom model sources
-
-For custom model sources, prepare shared geometry once and spawn it repeatedly.
-Only spawning needs the material asset store:
-
-```rust
-let prepared = prepare_model(
-    &mut meshes,
-    &mut inverse_bindposes,
-    &source,
-    |path| Some(asset_server.load(path.to_owned())),
-)?;
-let root = spawn_prepared_model(
-    &mut commands,
-    &mut meshes,
-    &mut materials,
-    &prepared,
-);
-```
-
-Use `prepare_model_with_resources` to additionally resolve child-model paths, and
-`spawn_prepared_model_with_bindings` to supply per-instance texture choices.
 
 ## Configure model lights
 
@@ -187,59 +175,33 @@ Each instance root owns its rig, geometry, and PRE2/ribbon render entities throu
 Bevy hierarchy. Hiding the root hides its geometry and effects; despawning it
 cleans them up, including its attachment models. `Wc3ModelOwner` also supports
 detached child instances: omit `ChildOf` to keep world-space transforms and
-visibility independent while retaining cleanup when the owner despawns. Model-based
-PREM emitters spawn world-space child models with independent sequence-zero
-animation, sampled birth transforms and physical properties, gravity, and lifetime
-cleanup. Parent playback pause/speed controls particle time; immediate sequence
-changes and backward seeks clear particles, while blended changes retain them. Image-based PREM is unsupported. See
+visibility independent while retaining cleanup when the owner despawns.
+Model-based PREM particles use this ownership relationship for their world-space
+child models. Their playback and cleanup rules are described in
 [Classic model particles](rendering/prem.md).
 
-## Inspect and capture models
+## Prepare custom model sources
 
-Capture the animated attachment fixture with the existing offscreen renderer:
+For custom model sources, prepare shared geometry once and spawn it repeatedly.
+Only spawning needs the material asset store:
 
-```sh
-cargo run -p bevy-wc3 --example capture -- \
-  crates/bevy-wc3/tests/fixtures/attachment_capture.mdl /tmp/wc3-attachments \
-  --times 0,0.25,0.75,1.25 --fps 60 --size 640x480 \
-  --eye 0,-18,12 --target 0,0,0
+```rust
+let prepared = prepare_model(
+    &mut meshes,
+    &mut inverse_bindposes,
+    &source,
+    |path| Some(asset_server.load(path.to_owned())),
+)?;
+let root = spawn_prepared_model(
+    &mut commands,
+    &mut meshes,
+    &mut materials,
+    &prepared,
+);
 ```
 
-The capture tool also accepts `--lod LEVEL|auto` and quality overrides; see
-[LOD captures](rendering/lod.md#capture-levels).
-
-Run the viewer with any local model path:
-
-```sh
-cargo run -p bevy-wc3 --example viewer -- path/to/model.mdx
-cargo run -p bevy-wc3 --example viewer -- path/to/tree.mdx --replaceable 31=Textures/BlightedTree.blp
-```
-
-Use `--lod auto` to switch authored geometry while zooming. The viewer accepts
-the same `--lod-bias`, `--lod-thresholds`, `--lod-hysteresis`, and `--lod-minimum`
-quality controls as the capture tool; its default remains fixed level zero.
-
-The viewer uses the MDX's directory as its Bevy asset root. Literal bitmap
-paths are resolved beside the MDX first, then from that root. Left drag rotates the
-camera, right drag pans, the scroll wheel zooms, and Space cycles sequences.
-Use `--replaceable ID=PATH`, `--bitmap INDEX=PATH`, or `--particle2 INDEX=PATH`
-to bind viewer textures relative to that asset root.
-The `inspect` and `compile` examples validate
-models without opening a GPU window:
-
-```sh
-cargo run -p bevy-wc3 --example compile -- path/to/model.mdx
-```
-
-## Control animation
-
-Query `Wc3Animation` on a spawned root. `sequences()` lists the available
-sequences; `play(index)` starts or restarts one using the model’s BlendTime.
-Call it when the desired animation changes. Use `play_immediately(index)` for
-an immediate switch or `play_with_blend(index, Duration)` for a custom fade.
-Set `playing` to pause/resume and `speed` to change playback speed.
-`seek(milliseconds)` changes the sampling clock without replaying skipped
-particle births or events. See [animation blending](rendering/animation-blending.md).
+Use `prepare_model_with_resources` to additionally resolve child-model paths, and
+`spawn_prepared_model_with_bindings` to supply per-instance texture choices.
 
 ## Integrate with application systems
 
@@ -247,3 +209,5 @@ Use `Wc3Systems` to order application systems around loading, animation, and
 effect simulation. See the [scheduling contract](architecture.md#scheduling-contract).
 [Model cameras](rendering/cameras.md) explains opt-in camera playback;
 [model events](rendering/events.md) explains reading animation notifications.
+For interactive inspection and controlled PNG output, see
+[viewer and captures](tools.md).

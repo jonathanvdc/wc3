@@ -10,7 +10,7 @@ UV animation, render passes, and shader coverage.
 `Shader_HD_DefaultUnit` uses one mesh pass per normalized HD layer. Older
 version-900/1000 six-layer materials are normalized by `wc3` into texture roles;
 SD shader IDs in newer files still use the SD material path. HD Crystal and
-unknown shader IDs log a warning and render a diffuse fallback. The fallback uses their diffuse texture.
+unknown shader IDs log a warning and render using their diffuse texture as a fallback.
 
 ## Bevy integration
 
@@ -21,6 +21,10 @@ use forward rendering, including in scenes whose default is deferred. Forcing a
 WC3 material's `opaque_render_method` to Deferred is unsupported.
 
 ## Texture roles and color spaces
+
+A normalized DefaultUnit layer assigns six slots to surface properties. Color
+textures and data textures use different color spaces so lighting receives the
+intended values:
 
 | Slot | Interpretation |
 | --- | --- |
@@ -68,8 +72,7 @@ SortPrimsFarZ/SortPrimsNearZ do not reorder mesh primitives.
 
 ## Shader coverage
 
-DefaultUnit uses the texture-role and Bevy shading rules above. Team masks
-interpolate continuously, emissive gain is linear, Fresnel uses a fifth-power
-view-angle rim, and environment color uses reflection coordinates. Crystal and
-unknown shader variants render a warned diffuse fallback. Popcorn emitters and
-FaceFX playback are separate unsupported features.
+The surface rules above apply to DefaultUnit. Crystal and unknown shader
+variants have only the diffuse fallback described under material selection;
+full shader support is absent. Popcorn emitters and FaceFX playback are separate
+unsupported features.

@@ -35,11 +35,13 @@ velocity, and constant gravity.
 
 ## Resource support and emission limits
 
-- `EmitterUsesTga` image particles are not rendered.
-- Emission rate and visibility use the update endpoint. Updates crossing keys or
-  sequence boundaries can miss births because emission is not integrated across
-  the interval.
-- Each emitter is capped at 1,024 live model particles and 1,024 attempted births
-  per update. Excess births are discarded, rather than queued after a stall.
-- Child models use the [mesh material pipeline](renderer.md#materials-and-textures). Node billboarding uses
-  the configured driving camera; see [node flags](node-flags.md).
+Only model-based PREM resources are rendered; `EmitterUsesTga` image particles
+are unsupported. Child models use the
+[mesh material pipeline](renderer.md#materials-and-textures), and their node
+billboards use the configured [driving camera](node-flags.md).
+
+Emission rate and visibility use the update endpoint. Updates crossing keys or
+sequence boundaries can miss births because emission is not integrated across
+the interval. Each emitter is capped at 1,024 live model particles and 1,024
+attempted births per update. Excess births are discarded rather than queued
+after a stall.

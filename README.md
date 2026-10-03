@@ -8,9 +8,10 @@ loading, modifying, and rendering them.
 
 ## Crates
 
-The workspace contains four crates. The asset library can be used on its own,
-with companion crates for custom model codecs, Bevy rendering, and archive
-asset sources.
+Choose `wc3` for asset tools, `bevy-wc3` for model rendering, and `bevy-mpq`
+for archive-backed Bevy assets. The fourth crate, `wc3-derive`, supports
+contributors defining model codecs. These crates can be used separately or
+combined according to your application's needs.
 
 [`wc3`](crates/wc3/README.md) is the starting point for applications that need to
 read, edit, or write assets. It represents binary MDX and text MDL models using

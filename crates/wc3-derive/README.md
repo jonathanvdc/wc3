@@ -6,6 +6,9 @@ the codec traits in `wc3`; the derives are re-exported through its format module
 
 ## Derives
 
+Import `wc3::model::{mdx, mdl}` to distinguish the binary and text derives.
+The format modules re-export the following macros alongside their codec traits:
+
 | Derive through `wc3` | Purpose |
 | --- | --- |
 | `mdx::Read`, `mdx::Write` | Read and write binary MDX records. |
@@ -49,6 +52,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 A record codec encodes that record, rather than a complete model file.
 
 ## Documentation
+
+Use the attribute reference when defining records, and the codec and model
+guides when connecting those records to whole-model operations:
 
 - [MDL attribute reference](src/mdl.md): record shapes, field mappings, defaults,
   animation, and validation hooks. Also included in the

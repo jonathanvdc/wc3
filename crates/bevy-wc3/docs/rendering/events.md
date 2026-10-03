@@ -40,33 +40,34 @@ fn handle_model_events(mut events: MessageReader<Wc3ModelEvent>) {
 
 ## Timing contract
 
-- `EventObject` constructors, MDX/MDL readers, and `set_frames` sort timestamps.
-  `frames()` exposes a read-only slice. Duplicate keys remain separate events;
-  serialization emits sorted timestamps.
-- Traversal emits every crossed key in `(previous, current]`, including multiple
-  keys or loops crossed in one update. Model keys use the selected sequence's
-  inclusive interval; global keys use `0..=duration`.
-- Initial playback and `Wc3Animation::play` include start-time events once.
-  Restarting the same sequence is an explicit restart. Invalid sequence indices
-  leave playback unchanged. `restart()` restarts the current clock, including
-  global tracks in models without animation sequences.
-- `sequence()` and `elapsed_ms()` expose read-only playback state.
-  `seek(ms)` moves the clock without emitting skipped keys or keys exactly at the
-  destination. Forward advancement after the seek still emits crossed keys,
-  including advancement before the next dispatch. Nonfinite seeks are rejected.
-- Paused and reverse playback emit no events. Resuming forward playback traverses
-  from the most recently observed position. Start events remain pending while
-  paused at their initial position.
-- Non-looping model keys fire once per playback. Global tracks retain the existing
-  animation-clock behavior: they share elapsed time, pause and reverse with the
-  instance, and reset when `play` restarts it. They continue looping after a
-  non-looping model sequence ends and work without a model sequence.
-- A zero-duration clock fires its zero-offset keys once at playback start.
-  Invalid global IDs and reversed sequence intervals dispatch nothing.
-- A loop-end key and the next loop-start key are distinct notifications at the
-  same elapsed time. Their own clock's animated tracks sample their respective
-  authored end/start frames, preserving distinct poses at the boundary. Other
-  clocks sample the occurrence's elapsed time normally.
+Dispatch follows forward clock traversal rather than sampling only the current
+frame. Every key crossed in `(previous, current]` is emitted, including multiple
+keys or loops in one update. Model keys use the selected sequence's inclusive
+interval; global keys use `0..=duration`. Constructors, MDX/MDL readers, and
+`set_frames` sort timestamps, and `frames()` exposes a read-only slice. Duplicate
+keys remain separate events and serialization emits them in sorted order.
+
+Initial playback and `Wc3Animation::play` include start-time events once.
+Playing the current sequence explicitly restarts it; invalid indices leave
+playback unchanged. `restart()` restarts the current clock, including global
+tracks in models without animation sequences. A zero-duration clock fires its
+zero-offset keys once at playback start. Invalid global IDs and reversed sequence
+intervals dispatch nothing.
+
+Use `sequence()` and `elapsed_ms()` to inspect playback state. `seek(ms)` moves
+the clock without emitting skipped keys or keys at the destination. Later forward
+advancement still emits crossed keys, including advancement before the next
+dispatch. Nonfinite seeks are rejected. Paused and reverse playback emit no events;
+resuming forward playback traverses from the most recently observed position.
+Start events remain pending while paused at their initial position.
+
+Non-looping model keys fire once per playback. Global tracks share elapsed time
+with the instance, pause and reverse with it, and reset when `play` restarts it.
+They continue looping after a non-looping model sequence ends and work without
+a model sequence. A loop-end key and the next loop-start key are distinct
+notifications at the same elapsed time. Their own clocks sample their respective
+authored end/start frames, preserving distinct poses at the boundary; other clocks
+sample the occurrence's elapsed time normally.
 
 ## Occurrence poses
 

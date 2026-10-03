@@ -13,6 +13,11 @@ systems. `src/schedule.rs` owns the cross-feature execution order.
 
 ## Loading, preparation, and instantiation
 
+A model moves through three stages: decoding its source and dependencies,
+preparing reusable render assets, and creating an entity hierarchy for each
+instance. The corresponding modules keep file handling separate from asset
+construction and runtime ownership:
+
 - `assets/` adapts `wc3::model` decoding and strict version conversion to Bevy,
   loads MDX/MDL and BLP assets, resolves dependency paths, and preserves child
   model resource slots. The format definitions and codecs remain in `wc3`.
@@ -75,6 +80,22 @@ and pass semantics. Classic particles instead spawn independently animated model
 instances. The [renderer overview](rendering/renderer.md) connects these paths to
 materials, animation, and the supported rendering features.
 
+## Effect record storage
+
+PRE2 and ribbons use shared ring storage to keep immutable birth records resident
+on the GPU while the shader evaluates their changing appearance. Records retire
+chronologically without a free-slot list. Capacity starts at 16 and doubles with
+the live population, up to each emitter's 8,192-record limit. Growth rebases live
+records. Immutable extraction snapshots share blocks of up to 64 records, so new
+births copy only the blocks they touch.
+
+GPU preparation tracks the last uploaded birth cursor. Normal updates write at
+most two contiguous ranges across ring wraparound; retirement alone requires no
+record upload. Growth or a full ring lap between rendered frames uploads the
+current buffer in full. Per-view sorting uses a separate draw-order index buffer,
+leaving the birth records unchanged. Ribbon material layers share the section
+buffer while retaining their own uniforms and texture bindings.
+
 ## Scheduling contract
 
 Applications can use the root-exported `Wc3Systems` sets to order their systems.
@@ -95,8 +116,7 @@ Set ordering applies only within the schedule where the set is configured.
 
 Applications moving driving cameras or model roots in `PostUpdate` should run
 before `Wc3Systems::EvaluateNodePoses`; when playing model-camera bindings, move
-source roots and camera parents before `Wc3Systems::AnimateCameras`. This enum covers both
-node poses and the other runtime stages.
+source roots and camera parents before `Wc3Systems::AnimateCameras`.
 
 Feature systems are registered in the top-level plugin so the ordering across
 features stays visible. PRE2 and ribbon GPU registration remains in their render
@@ -108,5 +128,6 @@ feature plugins.
 Private implementation tests live beside their modules, using dedicated test
 files for larger suites. Public decoding/loading/material tests and their fixtures
 remain under `tests/`. `examples/capture.rs` is the shared offscreen capture tool;
-use the same simulation FPS, times, and camera when comparing revisions. Captures
-verify controlled fixture behavior, not equivalence to Warcraft III.
+the [viewer and capture guide](tools.md) explains repeatable simulation and
+visual comparison. Captures verify controlled fixture behavior, not equivalence
+to Warcraft III.

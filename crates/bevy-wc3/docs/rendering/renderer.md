@@ -47,10 +47,9 @@ Surface controls animate on the instance clock. Normal and ORM maps use private
 linear image variants, preserving the original image for other consumers.
 
 Texture paths resolve beside the model and then at the root of the model’s
-Bevy asset source, preserving named sources for textures and child models. At each
-location, lookup tries the literal filename followed by `.blp`, `.dds`, `.png`,
-and `.tga` alternatives. Missing files permit fallback; other read errors stop
-model loading. Decoding errors do not trigger further fallback. Applications
+Bevy asset source, preserving named sources for textures and child models.
+The [loading guide](../usage.md#load-and-spawn-models) describes extension
+fallbacks and failure handling. Applications
 choose replaceable textures and exact bitmap/emitter overrides with
 `Wc3TextureBindings`; slot overrides take precedence. See the
 [texture guide](../usage.md#choose-textures).
@@ -72,6 +71,9 @@ emit crossed-key messages with occurrence-time poses for application handling.
 
 ## Effects
 
+The three effect paths share animation clocks and instance ownership, but
+produce different geometry and have distinct motion and lifetime rules:
+
 - [Classic PREM](prem.md) spawns model particles with sampled birth transforms,
   world-space ballistic motion, independent animation, and lifetime cleanup.
 - [PRE2](pre2.md) renders GPU-instanced head and tail quads. The CPU samples
@@ -86,6 +88,11 @@ lifecycle. Each effect topic documents its playback and visibility rules.
 
 ## Implementation limits
 
+Support varies by feature: some records are not rendered, some have a partial
+Bevy mapping, and implemented behavior can still differ from the game. The
+following limits help assess whether a model fits the renderer; topic guides
+provide the detailed rules.
+
 | Area | Limit |
 | --- | --- |
 | Skinning | More than eight influences is rejected. Explicit model bind-pose records are not consumed. |
@@ -98,6 +105,7 @@ lifecycle. Each effect topic documents its playback and visibility rules.
 
 The existing `capture` example renders MDX and MDL through the plugin at
 controlled simulation times and camera settings. See the
-[application guide](../usage.md#inspect-and-capture-models) for commands.
+[viewer and capture guide](../tools.md#capture-animation-frames) for commands
+and comparison guidance.
 The lighting, transition, and ordering rules described here are this renderer’s
 semantics; exact Warcraft III appearance remains unverified.
