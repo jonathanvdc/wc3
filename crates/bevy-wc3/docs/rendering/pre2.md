@@ -1,7 +1,5 @@
 # Quad particles (PRE2)
 
-[Documentation index](../README.md) · [Verification notes](../verification.md)
-
 PRE2 emitters render textured, GPU-instanced head and tail quads for each model
 instance. CPU simulation schedules births and stores immutable spawn records;
 the vertex shader evaluates motion, lifetime color/alpha/size curves, atlas UVs,

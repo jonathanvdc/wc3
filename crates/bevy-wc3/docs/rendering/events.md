@@ -1,6 +1,9 @@
 # Model event objects
 
-[Documentation index](../README.md) · [Verification notes](../verification.md)
+Model event objects mark animation times at which an application may play
+sounds, spawn effects, or perform other game actions. The renderer publishes
+these occurrences as `Wc3ModelEvent` messages with sampled poses. This guide
+explains how to consume them and how playback, loops, and seeking affect dispatch.
 
 ## Dispatch and application integration
 

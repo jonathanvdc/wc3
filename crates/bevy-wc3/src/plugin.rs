@@ -18,6 +18,7 @@ use crate::effects::ribbon_emitter::{update_ribbons, RibbonRenderPlugin};
 use crate::event::{dispatch_events, Wc3ModelEvent};
 use crate::instance::{spawn_loaded_instances, PreparedModelCache};
 use crate::light::animate_lights;
+use crate::lod::{update_lod, Wc3LodSettings};
 use crate::materials::animation::animate_surface;
 use crate::materials::layers::animate_layers;
 use crate::materials::Wc3LayerMaterial;
@@ -42,11 +43,13 @@ impl Plugin for Wc3BevyPlugin {
         app.init_asset_loader::<Wc3ModelLoader>();
         app.init_asset_loader::<BlpImageLoader>();
         app.init_resource::<PreparedModelCache>();
+        app.init_resource::<Wc3LodSettings>();
         app.add_plugins(MaterialPlugin::<Wc3LayerMaterial>::default());
         app.add_plugins(ParticleRenderPlugin);
         app.add_plugins(RibbonRenderPlugin);
         configure(app);
         app.add_message::<Wc3ModelEvent>();
+        app.add_systems(PostUpdate, update_lod.in_set(Wc3Systems::SelectLod));
         app.add_systems(
             PostUpdate,
             dispatch_events.in_set(Wc3Systems::DispatchEvents),

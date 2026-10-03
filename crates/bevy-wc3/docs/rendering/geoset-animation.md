@@ -1,11 +1,15 @@
 # Geoset animation
 
-[Documentation index](../README.md) · [Verification notes](../verification.md)
+Geoset animation controls the color and opacity of individual pieces of a
+model. The renderer applies those tracks across every material layer while
+keeping each geoset's tint independent. This guide explains track sampling,
+alpha visibility, and material ownership across instances and geometry levels.
 
 ## Track sampling
 
 Geoset animation records bind through their original `GeosetId`, including when
-preparation skips empty or non-default LOD geosets. Static and animated alpha and
+preparation skips empty geometry. Records for every authored LOD retain their
+original bindings. Static and animated alpha and
 color apply to every material layer of the geoset. Color is enabled by the COLOR
 flag; disabled or absent color uses white. Sampling uses the existing sequence
 interval, interpolation, and global-sequence clock. When sampling cannot find a
@@ -17,11 +21,11 @@ Sequence changes resample the tint instead of retaining the previous color.
 The public `GeosetAnimation` color is RGB. The MDX codec swaps only the fixed
 BGR color on read/write; KGAC keys and tangents remain RGB, as does MDL color.
 Tint enters Bevy as a linear multiplier on the textured PBR base color. Layer
-and geoset alpha multiply. Zero combined alpha hides a pass; partial geoset
+and geoset alpha multiply. Zero combined alpha hides a pass independently of its parent
+[LOD visibility group](lod.md); partial geoset
 alpha retains the existing AlphaToCoverage behavior for opaque/masked layers.
 Blended and additive passes retain their WC3 blend state. Additive/AddAlpha use
 Bevy's Blend shader path to preserve source alpha for the custom blend factors;
-The custom blend factors consume the preserved source alpha.
 
 ## Material ownership
 

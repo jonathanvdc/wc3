@@ -20,6 +20,7 @@ use crate::assets::loader::{
 };
 use crate::assets::model::{ModelError, Wc3Model};
 use crate::assets::resources::Wc3ModelResources;
+use crate::lod::LodBounds;
 use crate::materials::animation::AnimatedSurface;
 use crate::materials::Wc3LayerMaterial;
 
@@ -34,6 +35,7 @@ pub(crate) struct PreparedGeoset {
     pub(crate) meshes: Vec<Handle<Mesh>>,
     pub(crate) material_id: usize,
     pub(crate) geoset_id: usize,
+    pub(crate) lod: Option<u32>,
 }
 
 /// Reusable Bevy assets for one model and one set of resolved textures.
@@ -43,6 +45,8 @@ pub struct PreparedModel {
     pub(crate) model: Model<V1800>,
     pub(crate) events: Arc<[EventObject]>,
     pub(crate) geosets: Vec<PreparedGeoset>,
+    pub(crate) lod_levels: Vec<u32>,
+    pub(crate) lod_bounds: LodBounds,
     pub(crate) geoset_animations: Vec<Option<GeosetAnimation>>,
     pub(crate) layers: Vec<Vec<PreparedLayer>>,
     pub(crate) textures: ResolvedModelTextures,
@@ -51,6 +55,12 @@ pub struct PreparedModel {
 }
 
 impl PreparedModel {
+    /// Sorted authored levels with drawable geometry; larger numbers are coarser.
+    /// Models containing only common geometry expose level zero.
+    pub fn lod_levels(&self) -> &[u32] {
+        &self.lod_levels
+    }
+
     /// Normalized diffuse binding shared by geosets and ribbon layers.
     pub(crate) fn layer_texture_id(&self, material: usize, layer: usize) -> &Animatable<u32> {
         &self.layers[material][layer].texture_id
@@ -144,12 +154,7 @@ pub(crate) fn prepare_resolved_model(
     let material_records = model.materials();
     let mut geosets = Vec::new();
     for (geoset_id, geoset) in model.geosets().iter().enumerate() {
-        if geoset
-            .try_level_of_detail()
-            .is_ok_and(|lod| lod != 0 && lod != u32::MAX)
-            || geoset.vertices().is_empty()
-            || geoset.face_indices().is_empty()
-        {
+        if geoset.vertices().is_empty() || geoset.face_indices().is_empty() {
             continue;
         }
         if material_records.get(geoset.material_id as usize).is_none() {
@@ -172,10 +177,17 @@ pub(crate) fn prepare_resolved_model(
             };
             layer_meshes.push(handle);
         }
+        if layer_meshes.is_empty() {
+            continue;
+        }
         geosets.push(PreparedGeoset {
             meshes: layer_meshes,
             material_id: geoset.material_id as usize,
             geoset_id,
+            lod: geoset
+                .try_level_of_detail()
+                .ok()
+                .filter(|&lod| lod != u32::MAX),
         });
     }
     let mut geoset_animations = vec![None; model.geosets().len()];
@@ -222,7 +234,15 @@ pub(crate) fn prepare_resolved_model(
                 .collect()
         })
         .collect();
+    let mut lod_levels: Vec<_> = geosets.iter().filter_map(|geoset| geoset.lod).collect();
+    lod_levels.sort_unstable();
+    lod_levels.dedup();
+    if lod_levels.is_empty() {
+        lod_levels.push(0);
+    }
     Ok(PreparedModel {
+        lod_levels,
+        lod_bounds: LodBounds::from_model(model),
         events: model.event_objects().into(),
         model: model.clone(),
         geosets,

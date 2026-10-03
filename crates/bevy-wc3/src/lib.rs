@@ -35,6 +35,10 @@
 //! [`Wc3ModelOwner`] ties detached child lifetimes to their owner. Model particles,
 //! quad particles, and ribbons follow instance playback and ownership.
 //!
+//! [`Wc3Lod`] selects authored geometry levels. [`Wc3LodSettings`] provides global
+//! quality presets and automatic selection controls; [`Wc3LodOverride`] supplies
+//! instance overrides and [`Wc3LodState`] exposes the selected level.
+//!
 //! [`Wc3LightSettings`] configures imported scene lights. [`Wc3ModelCameras`]
 //! exposes authored views, and [`Wc3CameraBinding`] plays them on an existing
 //! camera. Read [`Wc3ModelEvent`] messages to interpret model event names in your
@@ -64,6 +68,7 @@ mod effects;
 mod event;
 mod instance;
 mod light;
+mod lod;
 mod materials;
 mod plugin;
 mod preparation;
@@ -82,6 +87,7 @@ pub use instance::spawn::{
 };
 pub use instance::{Wc3ModelInstance, Wc3ModelOwner, Wc3OwnedModels};
 pub use light::{Wc3Light, Wc3LightSettings};
+pub use lod::{Wc3Lod, Wc3LodOverride, Wc3LodSettings, Wc3LodState};
 pub use materials::textures::{Wc3TextureBindings, Wc3TextureSlot};
 pub use materials::{Wc3LayerMaterial, Wc3LayerState};
 pub use plugin::Wc3BevyPlugin;

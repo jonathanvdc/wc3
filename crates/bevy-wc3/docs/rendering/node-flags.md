@@ -1,6 +1,9 @@
 # Node transforms and flags
 
-[Documentation index](../README.md) · [Verification notes](../verification.md)
+Node transform flags control how model parts inherit their parents' motion,
+face a camera, or follow the camera's position. The renderer evaluates these
+rules on the CPU before Bevy propagates transforms. This guide explains pose
+evaluation, driving-camera selection, and the limits of camera-dependent geometry.
 
 ## CPU pose evaluation and camera selection
 

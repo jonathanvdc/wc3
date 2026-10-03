@@ -1,4 +1,5 @@
 //! Ordering contracts shared by the plugin and consuming applications.
+use bevy::camera::visibility::VisibilitySystems;
 use bevy::camera::CameraUpdateSystems;
 use bevy::prelude::*;
 use bevy::transform::TransformSystems;
@@ -25,6 +26,8 @@ pub enum Wc3Systems {
     SimulateEffects,
     /// Publishes model event messages after transform propagation in `PostUpdate`.
     DispatchEvents,
+    /// Selects geometry LOD after camera/transform updates, before visibility.
+    SelectLod,
 }
 
 pub(crate) fn configure(app: &mut App) {
@@ -53,6 +56,11 @@ pub(crate) fn configure(app: &mut App) {
                 .before(TransformSystems::Propagate),
             Wc3Systems::SimulateEffects.after(TransformSystems::Propagate),
             Wc3Systems::DispatchEvents.after(TransformSystems::Propagate),
+            Wc3Systems::SelectLod
+                .after(CameraUpdateSystems)
+                .after(TransformSystems::Propagate)
+                .before(VisibilitySystems::VisibilityPropagate)
+                .before(VisibilitySystems::CheckVisibility),
         ),
     );
 }

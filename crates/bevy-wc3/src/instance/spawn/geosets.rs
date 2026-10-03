@@ -1,7 +1,9 @@
+use crate::lod::{LodGroup, Wc3LodState};
 use crate::preparation::PreparedLayer;
 use bevy::camera::visibility::DynamicSkinnedMeshBounds;
 use bevy::mesh::skinning::SkinnedMesh;
 use bevy::prelude::*;
+use std::collections::HashMap;
 use wc3::model::animation::GeosetAnimation;
 use wc3::model::materials::LayerFilterMode;
 
@@ -19,6 +21,30 @@ pub(super) fn spawn_geosets(
     bindings: &Wc3TextureBindings,
 ) {
     let layer_handles = instantiate_materials(materials, prepared, bindings);
+    let selected = prepared.lod_levels[0];
+    commands.entity(root).insert(Wc3LodState::new(prepared));
+    let mut groups = HashMap::new();
+    for geoset in &prepared.geosets {
+        groups.entry(geoset.lod).or_insert_with(|| {
+            let visibility = if geoset.lod.is_none_or(|level| level == selected) {
+                Visibility::Inherited
+            } else {
+                Visibility::Hidden
+            };
+            let group = commands
+                .spawn((
+                    Transform::default(),
+                    visibility,
+                    LodGroup {
+                        root,
+                        level: geoset.lod,
+                    },
+                ))
+                .id();
+            commands.entity(root).add_child(group);
+            group
+        });
+    }
     for geoset in &prepared.geosets {
         let geoset_animation = prepared.geoset_animations[geoset.geoset_id].as_ref();
         let geoset_alpha = geoset_animation.map(|animation| animation.alpha.clone());
@@ -68,7 +94,7 @@ pub(super) fn spawn_geosets(
             }
             // Joint matrices already contain world transforms; skinning ignores
             // this mesh transform. Parenting supplies visibility and ownership.
-            commands.entity(root).add_child(entity);
+            commands.entity(groups[&geoset.lod]).add_child(entity);
         }
     }
 }

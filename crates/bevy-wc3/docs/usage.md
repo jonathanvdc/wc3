@@ -1,9 +1,9 @@
 # Using bevy-wc3
 
-[Documentation index](README.md)
-
 Register `Wc3BevyPlugin` alongside Bevy’s `DefaultPlugins`. Each model root
 has its own animation, materials, and texture choices; geometry is shared.
+This guide covers loading models, configuring their appearance and playback,
+resolving child models, and integrating the renderer with application systems.
 
 ## Load and spawn models
 
@@ -44,6 +44,27 @@ Change `Wc3TextureBindings` on that root entity later to hot swap images. A PRE2
 emitter with `ReplaceableId == 0` uses its `TextureID` bitmap slot, including
 bitmap overrides. `prepare_model` and `spawn_prepared_model_with_bindings` offer
 the same behavior for custom model sources.
+
+## Choose geometry quality
+
+Models initially select authored level zero, resolving to the next coarser level
+if zero is absent. Enable automatic LOD globally with a quality preset, then
+adjust individual roots when needed:
+
+```rust
+app.insert_resource(Wc3LodSettings::medium());
+commands.entity(root).insert(Wc3LodOverride(Wc3LodSettings::high()));
+commands.entity(other_root).insert(Wc3Lod::Fixed(2));
+```
+
+The presets use projected screen size, so camera zoom and viewport resolution
+influence selection. Larger quality bias keeps more detailed geometry visible;
+`minimum_level` caps detail for weaker machines. Settings also expose descending
+pixel thresholds and hysteresis to stabilize transitions. Put
+`Wc3Lod::Automatic` on a root to opt in without changing the global default.
+Query `Wc3LodState` after loading to inspect available and selected levels.
+See [geometry LOD](rendering/lod.md) for override precedence, camera selection,
+and limits. Models need authored levels to benefit from switching.
 
 ## Prepare custom model sources
 
@@ -153,12 +174,19 @@ cargo run -p bevy-wc3 --example capture -- \
   --eye 0,-18,12 --target 0,0,0
 ```
 
+The capture tool also accepts `--lod LEVEL|auto` and quality overrides; see
+[LOD captures](rendering/lod.md#capture-levels).
+
 Run the viewer with any local model path:
 
 ```sh
 cargo run -p bevy-wc3 --example viewer -- path/to/model.mdx
 cargo run -p bevy-wc3 --example viewer -- path/to/tree.mdx --replaceable 31=Textures/BlightedTree.blp
 ```
+
+Use `--lod auto` to switch authored geometry while zooming. The viewer accepts
+the same `--lod-bias`, `--lod-thresholds`, `--lod-hysteresis`, and `--lod-minimum`
+quality controls as the capture tool; its default remains fixed level zero.
 
 The viewer uses the MDX's directory as its Bevy asset root. Literal bitmap
 paths are resolved beside the MDX first, then from that root. Left drag rotates the

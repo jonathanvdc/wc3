@@ -25,6 +25,41 @@ pub struct Wc3NodeCamera(pub Entity);
 #[derive(Component, Clone, Copy, Debug, Default)]
 pub struct Wc3DefaultNodeCamera;
 
+/// Shared driving-camera precedence for node poses and LOD selection.
+pub(crate) fn default_node_camera(
+    cameras: impl IntoIterator<Item = (Entity, bool, bool)>,
+) -> Option<Entity> {
+    let active: Vec<_> = cameras.into_iter().collect();
+    let marked: Vec<_> = active.iter().filter(|(_, _, marked)| *marked).collect();
+    let windows: Vec<_> = active.iter().filter(|(_, window, _)| *window).collect();
+    if !marked.is_empty() {
+        (marked.len() == 1).then(|| marked[0].0)
+    } else if !windows.is_empty() {
+        (windows.len() == 1).then(|| windows[0].0)
+    } else {
+        (active.len() == 1).then(|| active[0].0)
+    }
+}
+
+pub(crate) fn inherited_node_camera(
+    root: Entity,
+    lookup: impl Fn(Entity) -> Option<(Option<Entity>, Option<Entity>)>,
+) -> Option<Entity> {
+    let mut ancestor = Some(root);
+    let mut visited = HashSet::new();
+    while let Some(entity) = ancestor {
+        if !visited.insert(entity) {
+            break;
+        }
+        let (parent, selection) = lookup(entity)?;
+        if selection.is_some() {
+            return selection;
+        }
+        ancestor = parent;
+    }
+    None
+}
+
 type NodeInputs<'w, 's> = Query<
     'w,
     's,
@@ -60,25 +95,13 @@ pub(crate) fn animate_nodes(
         .iter()
         .filter(|(_, camera, _, _)| camera.is_active)
         .collect();
-    let marked: Vec<_> = active
-        .iter()
-        .filter(|(_, _, _, marked)| *marked)
-        .map(|(entity, _, _, _)| *entity)
-        .collect();
-    let windows: Vec<_> = active
-        .iter()
-        .filter(|(_, _, target, _)| {
-            target.is_none_or(|target| matches!(target, RenderTarget::Window(_)))
-        })
-        .map(|(entity, _, _, _)| *entity)
-        .collect();
-    let default_camera = if !marked.is_empty() {
-        (marked.len() == 1).then(|| marked[0])
-    } else if !windows.is_empty() {
-        (windows.len() == 1).then(|| windows[0])
-    } else {
-        (active.len() == 1).then(|| active[0].0)
-    };
+    let default_camera = default_node_camera(active.iter().map(|(entity, _, target, marked)| {
+        (
+            *entity,
+            target.is_none_or(|target| matches!(target, RenderTarget::Window(_))),
+            *marked,
+        )
+    }));
     let inputs = nodes.p0();
     let mut selections = HashMap::new();
     let mut camera_roots = HashSet::new();
@@ -90,21 +113,14 @@ pub(crate) fn animate_nodes(
             camera_roots.insert(node.root);
         }
         selections.entry(node.root).or_insert_with(|| {
-            let mut ancestor = Some(node.root);
-            let mut visited = HashSet::new();
-            while let Some(entity) = ancestor {
-                if !visited.insert(entity) {
-                    break;
-                }
-                let Ok((_, _, _, parent, selection)) = inputs.get(entity) else {
-                    break;
-                };
-                if let Some(selection) = selection {
-                    return Some(selection.0);
-                }
-                ancestor = parent.map(ChildOf::parent);
-            }
-            default_camera
+            inherited_node_camera(node.root, |entity| {
+                let (_, _, _, parent, selection) = inputs.get(entity).ok()?;
+                Some((
+                    parent.map(ChildOf::parent),
+                    selection.map(|selection| selection.0),
+                ))
+            })
+            .or(default_camera)
         });
     }
     // Camera transforms are read from current local transforms, avoiding a frame

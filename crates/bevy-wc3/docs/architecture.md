@@ -1,6 +1,9 @@
 # bevy-wc3 architecture
 
-[Documentation index](README.md)
+bevy-wc3 separates model loading and shared asset preparation from per-instance
+animation and rendering. This guide describes the module responsibilities,
+asset ownership, and scheduling contracts used when extending the renderer or
+integrating it with an application.
 
 The crate keeps an explicit public facade in `src/lib.rs`. Implementation modules
 are private; the facade exports model assets, instance components, preparation
@@ -18,7 +21,7 @@ systems. `src/schedule.rs` owns the cross-feature execution order.
   and resolved image/child-model dependencies. Preparation does not spawn entities.
 - `instance/` waits for assets, caches prepared models, checks recursive child
   references, and manages ownership. `instance/spawn/` creates the root state,
-  rig, geosets, and feature entities from a prepared model.
+  rig, geosets grouped by LOD, and feature entities from a prepared model.
 
 Meshes and inverse bind poses are shared between instances. Spawned materials,
 texture bindings, animation clocks, rigs, and emitter simulation states belong to
@@ -51,6 +54,8 @@ metadata lives with `Wc3Animation`. Event names are interpreted by applications.
 
 `materials/` owns Bevy material specialization, layer/geoset animation, surface
 and UV animation, texture binding precedence, and private linear image variants.
+`lod.rs` selects authored geometry per instance from fixed policies or projected
+size, using shared driving-camera precedence and independent visibility groups.
 `attachment.rs` and `light.rs` own their spawning and animation behavior.
 `camera.rs` exposes authored views on instance roots and plays explicit bindings
 on application-owned Bevy cameras without automatically creating active views.
@@ -84,6 +89,7 @@ Set ordering applies only within the schedule where the set is configured.
 | `PostUpdate` | `AnimateCameras` | Samples bound model cameras using current root/parent transforms, before Bevy camera projection updates and node poses. |
 | `PostUpdate` | `EvaluateNodePoses` | Evaluates current node poses before model-particle simulation and transform propagation. |
 | `PostUpdate` | `SimulateModelParticles` | Updates model particles using local poses before `TransformSystems::Propagate`. |
+| `PostUpdate` | `SelectLod` | Selects authored geometry after camera updates and transform propagation, before Bevy visibility propagation and view checks. |
 | `PostUpdate` | `SimulateEffects` | Updates PRE2 and ribbons after propagation, using current global transforms. |
 | `PostUpdate` | `DispatchEvents` | Emits crossed model event keys after propagation, with occurrence-time node poses. Read messages after this set or in the next `Update`. |
 

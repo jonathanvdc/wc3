@@ -1,7 +1,5 @@
 # Renderer overview
 
-[Documentation index](../README.md)
-
 bevy-wc3 turns a decoded Warcraft III model into shared Bevy assets and an
 independently animated entity hierarchy for each instance. The renderer uses
 Bevy lighting, GPU skinning, and render phases; effect renderers generate their
@@ -9,13 +7,16 @@ geometry from immutable birth records.
 
 ## Geometry and skinning
 
-Preparation builds meshes for LOD 0/default geosets and selects each layer’s
+Preparation builds meshes for every drawable authored LOD and selects each layer’s
 `CoordinateId` UV set. Layers using identical UV arrays can share mesh variants.
 Authored UV0 tangents are preserved; other sets receive a matching generated
 basis. GPU skinning supports up to eight influences per vertex. Joint ordering
 and pivot-derived inverse bind matrices are shared across instances.
 
-Spawning creates animated nodes and one mesh pass per material layer. Each
+Spawning creates animated nodes and one mesh pass per material layer beneath
+LOD visibility groups. Fixed or automatic selection chooses one level per
+instance, with configurable screen-size thresholds, quality bias, and hysteresis.
+Common geosets remain visible across levels. See [geometry LOD](lod.md). Each
 instance owns its rig, material handles, texture bindings, and animation clock.
 [Architecture](../architecture.md) describes preparation and ownership in detail.
 
@@ -87,7 +88,7 @@ lifecycle. Each effect topic documents its playback and visibility rules.
 | Area | Limit |
 | --- | --- |
 | Skinning | More than eight influences is rejected. Explicit model bind-pose records are not consumed. |
-| LOD | Preparation selects LOD 0/default; there is no runtime LOD switching. |
+| LOD | Authored geometry switching is implemented. Generated simplification, per-view selection, animation throttling, and effect budgets are absent; exact game LOD semantics remain unverified. |
 | Materials and ordering | Classic sphere environment mapping and a dedicated WC3 ordering scheme across meshes/effects are absent. Mesh SortPrimsFarZ/NearZ is not applied. Crystal and unknown shaders use a warned diffuse fallback. |
 | Lights and cameras | Ambient light records and several Reforged attenuation/shadow controls have no native mapping. Camera visibility and modern lens/DOF tracks do not control views. |
 | Effects | Image-based PREM, Popcorn, and FaceFX are unsupported. PRE2/ribbons do not apply fog. Emission sampling limits are described in the effect topics. |
@@ -96,7 +97,6 @@ lifecycle. Each effect topic documents its playback and visibility rules.
 
 The existing `capture` example renders MDX and MDL through the plugin at
 controlled simulation times and camera settings. See the
-[application guide](../usage.md#inspect-and-capture-models) for commands and
-[verification notes](../verification.md) for earlier test and capture reports.
+[application guide](../usage.md#inspect-and-capture-models) for commands.
 The lighting, transition, and ordering rules described here are this renderer’s
 semantics; exact Warcraft III appearance remains unverified.

@@ -1,6 +1,9 @@
 # Classic model particles (PREM)
 
-[Documentation index](../README.md) · [Verification notes](../verification.md)
+Classic PREM emitters create particles from animated child models. Each
+particle has its own playback and world-space motion while sharing prepared
+assets with other instances. This guide explains emission, birth transforms,
+visibility, lifetime ownership, and the supported resource types.
 
 ## Emission and child animation
 

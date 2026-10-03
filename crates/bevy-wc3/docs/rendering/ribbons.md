@@ -1,7 +1,5 @@
 # Ribbon trails (RIBB)
 
-[Documentation index](../README.md) · [Verification notes](../verification.md)
-
 RIBB emitters render for both MDX and MDL model instances. The CPU schedules
 births at the fixed emission rate, samples the animated node hierarchy and
 HeightAbove/HeightBelow at each birth, and retains world-space cross-sections.

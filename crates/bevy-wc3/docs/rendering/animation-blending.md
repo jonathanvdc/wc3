@@ -1,6 +1,8 @@
 # Animation blending
 
-[Documentation index](../README.md) · [Verification notes](../verification.md)
+Sequence changes can blend a model's current pose into a new animation while
+playback continues. This guide explains the transition controls, how local node
+poses blend, and how sequence changes affect events, materials, and effects.
 
 ## Playback controls
 

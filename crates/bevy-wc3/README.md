@@ -56,13 +56,16 @@ cargo run -p bevy-wc3 --example viewer -- path/to/model.mdx
 ```
 
 Left drag rotates, right drag pans, the scroll wheel zooms, and Space cycles
-sequences. The viewer also accepts MDL and texture overrides. For offscreen PNGs,
+sequences. The viewer also accepts MDL and texture overrides. Add `--lod auto`
+to switch authored geometry while zooming, and tune `--lod-bias` for the desired
+quality. Global presets and per-instance overrides are described in the
+[geometry LOD guide](docs/rendering/lod.md). For offscreen PNGs,
 use the existing `capture` example; run it with `--help` for options.
 
 ## Documentation
 
 - [Application guide](docs/usage.md): loading, textures, animation, attachments,
-  lights, custom sources, and instance lifetime.
+  lights, geometry quality, custom sources, and instance lifetime.
 - [Renderer guide](docs/rendering/renderer.md): geometry, materials,
   animation, and effects, with links to each implementation topic.
 - [Architecture](docs/architecture.md): module responsibilities, asset ownership,

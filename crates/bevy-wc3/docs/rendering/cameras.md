@@ -1,6 +1,9 @@
 # Model cameras
 
-[Documentation index](../README.md) · [Verification notes](../verification.md)
+Warcraft III models can contain authored cameras with animated eye, target,
+roll, and lens properties. The renderer exposes these views and can play them
+on an application-owned Bevy camera. This guide covers binding a view, evaluating
+its tracks, and coordinating camera playback with the rest of the scene.
 
 ## Integration
 

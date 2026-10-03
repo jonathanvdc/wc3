@@ -16,8 +16,9 @@ use bevy::time::TimeUpdateStrategy;
 use bevy::window::ExitCondition;
 use bevy::winit::WinitPlugin;
 use bevy_wc3::{
-    Wc3Animation, Wc3BevyPlugin, Wc3CameraBinding, Wc3CameraSample, Wc3Model, Wc3ModelAsset,
-    Wc3ModelCameras, Wc3ModelInstance, Wc3NodeCamera, Wc3TextureBindings, Wc3TextureSlot,
+    Wc3Animation, Wc3BevyPlugin, Wc3CameraBinding, Wc3CameraSample, Wc3Lod, Wc3LodOverride,
+    Wc3LodSettings, Wc3LodState, Wc3Model, Wc3ModelAsset, Wc3ModelCameras, Wc3ModelInstance,
+    Wc3NodeCamera, Wc3TextureBindings, Wc3TextureSlot,
 };
 use std::env::args;
 use std::error::Error;
@@ -37,6 +38,11 @@ Render offscreen and write frame-0000-1.000s.png, etc. Requires a GPU.
   --tonemapping MODE    none or tony-mcmapface (default: none)
   --illuminance LUX     Scene directional light intensity (default: 5000)
   --times SECONDS,...    Increasing capture times (default: 1)
+  --lod LEVEL|auto       Geometry LOD (default: 0)
+  --lod-bias NUMBER       Automatic quality bias (default: 1)
+  --lod-thresholds PIXELS,...  Descending LOD transition diameters
+  --lod-hysteresis NUMBER  LOD dead band fraction (default: 0.15)
+  --lod-minimum LEVEL     Finest permitted authored level (default: 0)
   --sequence INDEX       Animation sequence index (default: 0)
   --play SECONDS=INDEX   Switch sequence at this simulation time (repeatable)
   --blend-ms NUMBER      Override BlendTime for scheduled switches (0: immediate)
@@ -73,6 +79,8 @@ struct Options {
     output: PathBuf,
     times: Vec<f64>,
     sequence: usize,
+    lod: Wc3Lod,
+    lod_settings: Wc3LodSettings,
     plays: Vec<PlaybackChange>,
     blend: Option<Duration>,
     fps: f64,
@@ -107,6 +115,8 @@ impl Options {
             output: output.into(),
             times: vec![1.0],
             sequence: 0,
+            lod: Wc3Lod::default(),
+            lod_settings: Wc3LodSettings::default(),
             plays: Vec::new(),
             blend: None,
             fps: 60.0,
@@ -150,6 +160,20 @@ impl Options {
                     options.times = value.split(',').map(str::parse).collect::<Result<_, _>>()?
                 }
                 "--sequence" => options.sequence = value.parse()?,
+                "--lod" => {
+                    options.lod = if value == "auto" {
+                        Wc3Lod::Automatic
+                    } else {
+                        Wc3Lod::Fixed(value.parse()?)
+                    }
+                }
+                "--lod-bias" => options.lod_settings.quality_bias = value.parse()?,
+                "--lod-thresholds" => {
+                    options.lod_settings.thresholds =
+                        value.split(',').map(str::parse).collect::<Result<_, _>>()?
+                }
+                "--lod-hysteresis" => options.lod_settings.hysteresis = value.parse()?,
+                "--lod-minimum" => options.lod_settings.minimum_level = value.parse()?,
                 "--play" => {
                     let (time, sequence) = value.split_once('=').ok_or("expected SECONDS=INDEX")?;
                     let time: f64 = time.parse()?;
@@ -199,6 +223,7 @@ impl Options {
                 _ => return Err(format!("unknown option: {option}").into()),
             }
         }
+        options.lod_settings.validate()?;
         if !options.fps.is_finite() || !(1.0..=1000.0).contains(&options.fps) {
             return Err("fps must be between 1 and 1000".into());
         }
@@ -395,7 +420,12 @@ fn main() -> CaptureResult<()> {
     }
     let root = app
         .world_mut()
-        .spawn((Wc3ModelInstance::new(handle.clone()), bindings))
+        .spawn((
+            Wc3ModelInstance::new(handle.clone()),
+            bindings,
+            options.lod,
+            Wc3LodOverride(options.lod_settings.clone()),
+        ))
         .id();
     let image = app
         .world_mut()
@@ -576,6 +606,13 @@ fn main() -> CaptureResult<()> {
             sleep(Duration::from_millis(5));
         }
         println!(
+            "Selected geometry LOD: {}",
+            app.world()
+                .get::<Wc3LodState>(root)
+                .unwrap()
+                .selected_level()
+        );
+        println!(
             "{} (sequence {}, time {time:.6}s)",
             path.display(),
             app.world().get::<Wc3Animation>(root).unwrap().sequence()
@@ -655,6 +692,38 @@ mod tests {
                 .chain(options.iter().copied())
                 .map(str::to_owned),
         )
+    }
+
+    #[test]
+    fn validates_lod_capture_configuration() {
+        let options = parse(&[
+            "--lod",
+            "auto",
+            "--lod-bias",
+            "2",
+            "--lod-thresholds",
+            "300,150",
+            "--lod-minimum",
+            "2",
+        ])
+        .unwrap()
+        .unwrap();
+        assert_eq!(options.lod, Wc3Lod::Automatic);
+        assert_eq!(options.lod_settings.quality_bias, 2.0);
+        assert_eq!(options.lod_settings.minimum_level, 2);
+        assert_eq!(options.lod_settings.thresholds, [300.0, 150.0]);
+        assert_eq!(
+            parse(&["--lod", "2"]).unwrap().unwrap().lod,
+            Wc3Lod::Fixed(2)
+        );
+        for arguments in [
+            vec!["--lod", "bad"],
+            vec!["--lod-bias", "NaN"],
+            vec!["--lod-thresholds", "100,200"],
+            vec!["--lod-hysteresis", "1"],
+        ] {
+            assert!(parse(&arguments).is_err());
+        }
     }
 
     #[test]

@@ -1,6 +1,9 @@
 # Reforged materials
 
-[Documentation index](../README.md) · [Verification notes](../verification.md)
+Reforged materials combine diffuse, normal, surface, emissive, team-color, and
+environment textures with animated controls. The renderer maps supported shaders
+into Bevy's material pipeline. This guide explains texture roles, color spaces,
+UV animation, render passes, and shader coverage.
 
 ## Material selection
 

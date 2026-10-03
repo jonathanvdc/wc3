@@ -1,0 +1,165 @@
+Version {
+    FormatVersion 1800,
+}
+Model "LOD capture" {
+    MinimumExtent { -2.0, -0.6, 0.0 },
+    MaximumExtent { 2.0, 0.6, 0.0 },
+    BoundsRadius 3.0,
+}
+Sequences 1 {
+    Anim "Stand" {
+        Interval { 0, 1000 },
+        NonLooping,
+        MinimumExtent { -2.0, -0.6, 0.0 },
+        MaximumExtent { 2.0, 0.6, 0.0 },
+        BoundsRadius 3.0,
+    }
+}
+Textures 1 {
+    Bitmap {
+        Image "capture_white.png",
+    }
+}
+Materials 1 {
+    Material {
+        Layer {
+            FilterMode None,
+            Unshaded,
+            static TextureID 0 <= 0,
+        }
+    }
+}
+Geoset {
+    Vertices 4 {
+        { -1.8, -0.6, 0.0 },
+        { -0.6, -0.6, 0.0 },
+        { -0.6, 0.6, 0.0 },
+        { -1.8, 0.6, 0.0 },
+    }
+    Normals 4 {
+        { 0.0, 0.0, 1.0 },
+        { 0.0, 0.0, 1.0 },
+        { 0.0, 0.0, 1.0 },
+        { 0.0, 0.0, 1.0 },
+    }
+    TVertices 4 {
+        { 0.0, 1.0 },
+        { 1.0, 1.0 },
+        { 1.0, 0.0 },
+        { 0.0, 0.0 },
+    }
+    VertexGroup {
+        0,
+        0,
+        0,
+        0,
+    }
+    Faces 1 6 {
+        Triangles {
+            { 0, 1, 2, 0, 2, 3 },
+        }
+    }
+    Groups 1 1 {
+        Matrices { 0 },
+    }
+    LevelOfDetail 0,
+    MaterialID 0,
+    SelectionGroup 0,
+    MinimumExtent { -2.0, -0.6, 0.0 },
+    MaximumExtent { 2.0, 0.6, 0.0 },
+    BoundsRadius 3.0,
+}
+Geoset {
+    Vertices 4 {
+        { -1.8, -0.6, 0.0 },
+        { -0.6, -0.6, 0.0 },
+        { -0.6, 0.6, 0.0 },
+        { -1.8, 0.6, 0.0 },
+    }
+    Normals 4 {
+        { 0.0, 0.0, 1.0 },
+        { 0.0, 0.0, 1.0 },
+        { 0.0, 0.0, 1.0 },
+        { 0.0, 0.0, 1.0 },
+    }
+    TVertices 4 {
+        { 0.0, 1.0 },
+        { 1.0, 1.0 },
+        { 1.0, 0.0 },
+        { 0.0, 0.0 },
+    }
+    VertexGroup {
+        0,
+        0,
+        0,
+        0,
+    }
+    Faces 1 3 {
+        Triangles {
+            { 0, 1, 2 },
+        }
+    }
+    Groups 1 1 {
+        Matrices { 0 },
+    }
+    LevelOfDetail 2,
+    MaterialID 0,
+    SelectionGroup 0,
+    MinimumExtent { -2.0, -0.6, 0.0 },
+    MaximumExtent { 2.0, 0.6, 0.0 },
+    BoundsRadius 3.0,
+}
+Geoset {
+    Vertices 4 {
+        { 0.6, -0.6, 0.0 },
+        { 1.8, -0.6, 0.0 },
+        { 1.8, 0.6, 0.0 },
+        { 0.6, 0.6, 0.0 },
+    }
+    Normals 4 {
+        { 0.0, 0.0, 1.0 },
+        { 0.0, 0.0, 1.0 },
+        { 0.0, 0.0, 1.0 },
+        { 0.0, 0.0, 1.0 },
+    }
+    TVertices 4 {
+        { 0.0, 1.0 },
+        { 1.0, 1.0 },
+        { 1.0, 0.0 },
+        { 0.0, 0.0 },
+    }
+    VertexGroup {
+        0,
+        0,
+        0,
+        0,
+    }
+    Faces 1 6 {
+        Triangles {
+            { 0, 1, 2, 0, 2, 3 },
+        }
+    }
+    Groups 1 1 {
+        Matrices { 0 },
+    }
+    LevelOfDetail 4294967295,
+    MaterialID 0,
+    SelectionGroup 0,
+    MinimumExtent { -2.0, -0.6, 0.0 },
+    MaximumExtent { 2.0, 0.6, 0.0 },
+    BoundsRadius 3.0,
+}
+Bone "Bone_Root" {
+    ObjectId 0,
+    GeosetId Multiple,
+    GeosetAnimId None,
+    Translation 2 { Linear, 0: { 0, 0, 0 }, 1000: { 0.2, 0, 0 }, }
+}
+PivotPoints 1 { { 0, 0, 0 }, }
+GeosetAnim { GeosetId 0, static Color { 1, 0, 0 }, static Alpha 1, }
+GeosetAnim {
+    GeosetId 1,
+    static Color { 0, 1, 0 },
+    Alpha 3 { Linear, 0: 1, 500: 1, 1000: 0, }
+}
+GeosetAnim { GeosetId 2, static Color { 0, 0, 1 }, static Alpha 1, }

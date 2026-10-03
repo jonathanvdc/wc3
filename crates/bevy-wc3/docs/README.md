@@ -20,6 +20,8 @@ then choose a topic:
   local-pose transitions, interruption, and effect/event sampling.
 - [Node transforms and flags](rendering/node-flags.md): inheritance,
   billboarding, camera anchoring, and driving-camera selection.
+- [Geometry LOD](rendering/lod.md): authored levels, automatic screen-size
+  selection, quality controls, and camera policy.
 - [Geoset animation](rendering/geoset-animation.md): color, opacity,
   material isolation, and sampling.
 - [Reforged materials](rendering/reforged-materials.md): texture roles,
@@ -36,6 +38,5 @@ then choose a topic:
   geometry, atlas animation, gravity, and material passes.
 
 Each guide describes the implemented behavior and relevant input, resource,
-or integration limits. [Verification notes](verification.md) retain earlier test
-and capture reports, including the scope of those checks. Update the behavior
-guide when an implementation changes and record new verification separately.
+or integration limits. Update the relevant guide when an implementation changes,
+keeping implemented behavior distinct from unverified game fidelity.

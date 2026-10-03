@@ -98,7 +98,13 @@ fn child_instances_inherit_visibility_and_cleanup_without_sharing_animation() {
     let geometry: Vec<_> = layers
         .iter(app.world())
         .map(|(entity, layer, skin, parent)| {
-            assert_eq!(parent.parent(), layer.root);
+            assert_eq!(
+                app.world()
+                    .get::<ChildOf>(parent.parent())
+                    .unwrap()
+                    .parent(),
+                layer.root
+            );
             assert_eq!(
                 skin.joints,
                 if layer.root == following {
@@ -421,9 +427,9 @@ fn geoset_tints_isolate_shared_materials_and_model_instances() {
     // A third geoset has nonwhite color data with the color flag disabled.
     let mut geosets = source.model.geosets();
     geosets.push(geosets[0].clone());
-    let mut skipped = geosets[0].clone();
-    skipped.set_level_of_detail(1);
-    geosets.insert(0, skipped);
+    let mut alternate = geosets[0].clone();
+    alternate.set_level_of_detail(1);
+    geosets.insert(0, alternate);
     source.model.set_geosets(&geosets);
     let mut animations = source.model.geoset_animations();
     let mut disabled = animations[0].clone();
@@ -454,7 +460,7 @@ fn geoset_tints_isolate_shared_materials_and_model_instances() {
             .iter()
             .map(|geoset| geoset.geoset_id)
             .collect::<Vec<_>>(),
-        [1, 2, 3]
+        [0, 1, 2, 3]
     );
     let mut queue = CommandQueue::default();
     let mut commands = Commands::new(&mut queue, app.world());
@@ -475,7 +481,7 @@ fn geoset_tints_isolate_shared_materials_and_model_instances() {
         .iter(app.world())
         .map(|(layer, handle)| (layer.root, handle.0.clone()))
         .collect();
-    assert_eq!(layers.len(), 12);
+    assert_eq!(layers.len(), 16);
     for (index, (_, handle)) in layers.iter().enumerate() {
         for (_, other) in &layers[index + 1..] {
             assert_ne!(handle, other);

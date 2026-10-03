@@ -1,6 +1,9 @@
 # Model lights
 
-[Documentation index](../README.md) · [Verification notes](../verification.md)
+Authored point and directional lights become animated Bevy scene lights that
+illuminate WC3 models and other scene geometry. This guide explains their conversion, how to
+configure imported lights and shadows, and which Warcraft III lighting properties
+have a native Bevy mapping.
 
 ## Bevy integration
 

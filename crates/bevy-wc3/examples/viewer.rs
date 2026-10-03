@@ -1,12 +1,13 @@
 //! Run with `cargo run -p bevy-wc3 --example viewer -- path/to/model.mdx` (or `.mdl`).
+//! Use `--lod auto --lod-bias 2` to retain more detail during automatic LOD selection.
 //! Use `--tonemapping tony-mcmapface` to enable tonemapping and `--illuminance LUX` to set lighting.
 use bevy::asset::AssetPlugin;
 use bevy::core_pipeline::tonemapping::Tonemapping;
 use bevy::input::mouse::{AccumulatedMouseMotion, AccumulatedMouseScroll, MouseScrollUnit};
 use bevy::prelude::*;
 use bevy_wc3::{
-    Wc3Animation, Wc3BevyPlugin, Wc3ModelAsset, Wc3ModelInstance, Wc3TextureBindings,
-    Wc3TextureSlot,
+    Wc3Animation, Wc3BevyPlugin, Wc3Lod, Wc3LodSettings, Wc3ModelAsset, Wc3ModelInstance,
+    Wc3TextureBindings, Wc3TextureSlot,
 };
 use std::f32::consts::FRAC_PI_2;
 use std::path::PathBuf;
@@ -33,9 +34,41 @@ fn main() {
         .canonicalize()
         .expect("find model file");
     let mut choices = Vec::new();
+    let mut lod = Wc3Lod::default();
+    let mut lod_settings = Wc3LodSettings::default();
     let mut tonemapping = Tonemapping::None;
     let mut illuminance = 5_000.0;
     while let Some(option) = arguments.next() {
+        if option.starts_with("--lod") {
+            let value = arguments.next().expect("pass a value after LOD option");
+            match option.as_str() {
+                "--lod" => {
+                    lod = if value == "auto" {
+                        Wc3Lod::Automatic
+                    } else {
+                        Wc3Lod::Fixed(value.parse().expect("LOD must be auto or a level number"))
+                    }
+                }
+                "--lod-bias" => {
+                    lod_settings.quality_bias = value.parse().expect("LOD bias must be numeric")
+                }
+                "--lod-thresholds" => {
+                    lod_settings.thresholds = value
+                        .split(',')
+                        .map(|value| value.parse().expect("LOD thresholds must be numeric"))
+                        .collect()
+                }
+                "--lod-minimum" => {
+                    lod_settings.minimum_level =
+                        value.parse().expect("LOD minimum must be a level number")
+                }
+                "--lod-hysteresis" => {
+                    lod_settings.hysteresis = value.parse().expect("LOD hysteresis must be numeric")
+                }
+                _ => panic!("unknown option {option}"),
+            }
+            continue;
+        }
         if option == "--tonemapping" {
             tonemapping = match arguments.next().as_deref() {
                 Some("none") => Tonemapping::None,
@@ -67,6 +100,7 @@ fn main() {
         };
         choices.push((index, slot, texture_path.to_owned()));
     }
+    lod_settings.validate().expect("valid LOD quality settings");
     let directory = path.parent().expect("model parent directory");
     let filename = path
         .file_name()
@@ -74,6 +108,7 @@ fn main() {
         .to_string_lossy()
         .into_owned();
     App::new()
+        .insert_resource(lod_settings)
         .add_plugins((
             DefaultPlugins.set(AssetPlugin {
                 file_path: directory.to_string_lossy().into_owned(),
@@ -94,7 +129,7 @@ fn main() {
                         bindings.set_replaceable(*index as u32, image);
                     }
                 }
-                commands.spawn((Wc3ModelInstance::new(handle.clone()), bindings));
+                commands.spawn((Wc3ModelInstance::new(handle.clone()), bindings, lod));
                 commands.insert_resource(Source {
                     path: path.clone(),
                     handle,
