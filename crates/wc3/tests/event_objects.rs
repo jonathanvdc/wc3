@@ -41,7 +41,12 @@ fn every_construction_and_replacement_path_sorts_and_retains_duplicates() {
     // Rewrite independent wire timestamps to verify sorting by the MDX reader.
     let mut bytes = value.encode_mdx().unwrap();
     let tail = bytes.len() - 16;
-    for (chunk, frame) in bytes[tail..].chunks_exact_mut(4).zip([30i32, -10, 20, 20]) {
+    for (chunk, frame) in bytes[tail..]
+        .as_chunks_mut::<4>()
+        .0
+        .iter_mut()
+        .zip([30i32, -10, 20, 20])
+    {
         chunk.copy_from_slice(&frame.to_le_bytes());
     }
     assert_eq!(

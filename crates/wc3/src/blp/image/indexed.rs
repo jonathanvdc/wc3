@@ -68,7 +68,7 @@ pub(super) fn encode(
     }
     let quant = NeuQuant::new(10, 256, &training);
     let mut palette = Box::new([0; PALETTE_BYTES]);
-    for (i, color) in quant.color_map_rgba().chunks_exact(4).enumerate() {
+    for (i, color) in quant.color_map_rgba().as_chunks::<4>().0.iter().enumerate() {
         palette[i * 4..i * 4 + 3].copy_from_slice(&[color[2], color[1], color[0]]);
     }
     let mipmaps = images
@@ -83,7 +83,7 @@ pub(super) fn encode(
                 1 => {
                     for pixels in image.as_raw().chunks(32) {
                         let mut byte = 0;
-                        for (i, pixel) in pixels.chunks_exact(4).enumerate() {
+                        for (i, pixel) in pixels.as_chunks::<4>().0.iter().enumerate() {
                             if pixel[3] >= 128 {
                                 byte |= 1 << i;
                             }
@@ -94,7 +94,7 @@ pub(super) fn encode(
                 4 => {
                     for pixels in image.as_raw().chunks(8) {
                         let mut byte = 0;
-                        for (i, pixel) in pixels.chunks_exact(4).enumerate() {
+                        for (i, pixel) in pixels.as_chunks::<4>().0.iter().enumerate() {
                             byte |= (pixel[3] / 17) << (i * 4);
                         }
                         data.push(byte);

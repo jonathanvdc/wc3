@@ -16,6 +16,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: '1.99.0'
       - run: sudo apt-get update && sudo apt-get install -y libwayland-dev libasound2-dev libudev-dev
       - run: cargo publish --workspace --dry-run --locked
 
@@ -28,6 +30,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: '1.99.0'
       - run: sudo apt-get update && sudo apt-get install -y libwayland-dev libasound2-dev libudev-dev
       - name: Check tag and crate versions
         shell: bash

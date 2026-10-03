@@ -50,8 +50,10 @@ fn static_wire_color_is_bgr_but_tracks_and_public_color_are_rgb() {
     assert_eq!(animation.color, Animatable::Static([0.25, 0.5, 0.75]));
     let bytes = animation.encode_mdx().unwrap();
     let wire: Vec<f32> = bytes[12..24]
-        .chunks_exact(4)
-        .map(|bytes| f32::from_le_bytes(bytes.try_into().unwrap()))
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .map(|bytes| f32::from_le_bytes(*bytes))
         .collect();
     assert_eq!(wire, [0.75, 0.5, 0.25]);
     assert_eq!(

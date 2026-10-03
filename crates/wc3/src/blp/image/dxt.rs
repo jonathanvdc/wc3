@@ -137,7 +137,7 @@ pub(super) fn encode(image: &RgbaImage, format: DxtFormat, alpha_bits: u8) -> Ve
     };
     let mut pixels = image.as_raw().clone();
     if alpha_bits == 0 {
-        for pixel in pixels.chunks_exact_mut(4) {
+        for pixel in pixels.as_chunks_mut::<4>().0.iter_mut() {
             pixel[3] = 255;
         }
     }
