@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::io::{self, Read, Seek, SeekFrom};
 
 use super::codec::{decode, sector_checksum};
+use super::compat::{address, load_layout, read_index, report, EntryLayout, LayoutRequest};
 use super::crypto::{crypt, file_key};
 use super::extended::read_extended;
 use super::format::{
@@ -10,10 +11,16 @@ use super::format::{
 };
 use super::raw;
 use super::{BlockEntry, Error, FileFlags, Header, Index};
+use super::{ReadMode, RecoveryDiagnostic};
+
+trait ReadSeek: Read + Seek {}
+impl<T: Read + Seek> ReadSeek for T {}
 
 /// Allocation and discovery bounds for untrusted archives.
 #[derive(Clone, Debug)]
 pub struct ReadOptions {
+    /// Strict by default; permissive mode recovers known malformed classic layouts.
+    pub mode: ReadMode,
     pub max_table_entries: u32,
     /// Maximum stored or decoded table allocation.
     pub max_table_bytes: u64,
@@ -30,6 +37,7 @@ pub struct ReadOptions {
 impl Default for ReadOptions {
     fn default() -> Self {
         Self {
+            mode: ReadMode::Strict,
             max_table_entries: 2 << 20,
             max_table_bytes: 128 << 20,
             max_sector_size: 1 << 20,
@@ -45,6 +53,8 @@ impl Default for ReadOptions {
 /// A seekable MPQ source with an eagerly decoded index and lazy payloads.
 pub struct Archive<R> {
     pub(super) source: R,
+    source_len: u64,
+    diagnostics: Vec<RecoveryDiagnostic>,
     pub(super) base: u64,
     pub(super) index: Index,
     pub(super) options: ReadOptions,
@@ -63,15 +73,72 @@ impl<R: Read + Seek> Archive<R> {
         let last = start
             .saturating_add(options.max_header_search_bytes)
             .min(len.saturating_sub(4));
+        let mut discovery_diagnostics: Vec<RecoveryDiagnostic> = Vec::new();
         let mut at = start;
         while at <= last && at.checked_add(4).is_some_and(|end| end <= len) {
             source.seek(SeekFrom::Start(at))?;
             let mut magic = [0; 4];
             source.read_exact(&mut magic)?;
             if &magic == b"MPQ\x1a" {
-                return Self::at(source, at, options);
+                if options.mode == ReadMode::Strict {
+                    return Self::at(source, at, options);
+                }
+                match Archive::at(&mut source as &mut dyn ReadSeek, at, options.clone()) {
+                    Ok(archive) => {
+                        let index = archive.index;
+                        let mut diagnostics = archive.diagnostics;
+                        for diagnostic in discovery_diagnostics {
+                            report(&mut diagnostics, diagnostic.reason, diagnostic.entry);
+                        }
+                        return Ok(Self {
+                            source,
+                            base: at,
+                            index,
+                            options,
+                            source_len: len,
+                            diagnostics,
+                        });
+                    }
+                    Err(Error::InvalidArchive(_)) | Err(Error::UnsupportedVersion(_)) => {
+                        report(&mut discovery_diagnostics, "fake header skipped", None);
+                    }
+                    Err(error) => return Err(error),
+                }
             }
-            if &magic == b"MPQ\x1b" {
+            if &magic == b"MPQ\x1b" && options.mode == ReadMode::Permissive && at + 16 <= len {
+                let mut data = [0; 12];
+                source.read_exact(&mut data)?;
+                let relative = u32_at(&data, 4) as u64;
+                if relative >= 16 {
+                    if let Some(base) = at.checked_add(relative).filter(|base| *base <= last) {
+                        match Archive::at(&mut source as &mut dyn ReadSeek, base, options.clone()) {
+                            Ok(archive) => {
+                                let index = archive.index;
+                                let mut diagnostics = archive.diagnostics;
+                                for diagnostic in discovery_diagnostics {
+                                    report(&mut diagnostics, diagnostic.reason, diagnostic.entry);
+                                }
+                                return Ok(Self {
+                                    source,
+                                    base,
+                                    index,
+                                    options,
+                                    source_len: len,
+                                    diagnostics,
+                                });
+                            }
+                            Err(Error::InvalidArchive(_)) | Err(Error::UnsupportedVersion(_)) => {}
+                            Err(error) => return Err(error),
+                        }
+                    }
+                }
+                report(
+                    &mut discovery_diagnostics,
+                    "invalid user-data wrapper ignored",
+                    None,
+                );
+            }
+            if &magic == b"MPQ\x1b" && options.mode == ReadMode::Strict {
                 let mut data = [0; 12];
                 source.read_exact(&mut data)?;
                 let relative = u32_at(&data, 4) as u64;
@@ -107,6 +174,66 @@ impl<R: Read + Seek> Archive<R> {
         source.read_exact(&mut bytes)?;
         let header_size = u32_at(&bytes, 4) as usize;
         let version = u16::from_le_bytes(bytes[12..14].try_into().unwrap());
+        if options.mode == ReadMode::Permissive && (version != 3 || header_size == 32) {
+            if version <= 2 && (32..=208).contains(&header_size) {
+                let mut strict_options = options.clone();
+                strict_options.mode = ReadMode::Strict;
+                match Archive::at(&mut source as &mut dyn ReadSeek, base, strict_options) {
+                    Ok(archive) => {
+                        let mut index = archive.index;
+                        let mut diagnostics = Vec::new();
+                        for (slot, entry) in
+                            index.hashes.iter_mut().enumerate().filter(|_| version == 0)
+                        {
+                            if entry.is_file() && entry.platform & 0xff00 != 0 {
+                                entry.platform &= 0xff;
+                                report(
+                                    &mut diagnostics,
+                                    "hash reserved byte ignored",
+                                    Some(slot as u32),
+                                );
+                            }
+                        }
+                        return Ok(Self {
+                            source,
+                            base,
+                            index,
+                            options,
+                            source_len: len,
+                            diagnostics,
+                        });
+                    }
+                    Err(Error::InvalidArchive(_))
+                    | Err(Error::LimitExceeded(_))
+                    | Err(Error::UnsupportedCompression(_))
+                    | Err(Error::UnsupportedFlags(_)) => {}
+                    Err(Error::FeatureDisabled(_))
+                        if [16usize, 20].iter().any(|at| {
+                            let count_at = if *at == 16 { 24 } else { 28 };
+                            address(
+                                base,
+                                u32_at(&bytes, *at) as u64,
+                                u32_at(&bytes, count_at) as u64 * 16,
+                                len,
+                                true,
+                            )
+                            .is_err()
+                        }) => {}
+                    Err(error) => return Err(error),
+                }
+            }
+            source.seek(SeekFrom::Start(base + 32))?;
+            let mut diagnostics = Vec::new();
+            let index = read_index(&mut source, base, len, &bytes, &options, &mut diagnostics)?;
+            return Ok(Self {
+                source,
+                base,
+                index,
+                options,
+                source_len: len,
+                diagnostics,
+            });
+        }
         if version > 3 {
             return Err(Error::UnsupportedVersion(version));
         }
@@ -295,6 +422,8 @@ impl<R: Read + Seek> Archive<R> {
         }
         Ok(Self {
             source,
+            source_len: len,
+            diagnostics: Vec::new(),
             base,
             index: Index {
                 header,
@@ -304,6 +433,11 @@ impl<R: Read + Seek> Archive<R> {
             },
             options,
         })
+    }
+
+    /// Recoveries encountered so far, including payload metadata inspected on open.
+    pub fn diagnostics(&self) -> &[RecoveryDiagnostic] {
+        &self.diagnostics
     }
 
     pub fn index(&self) -> &Index {
@@ -335,7 +469,22 @@ impl<R: Read + Seek> Archive<R> {
             .index
             .find(name, locale, platform)
             .ok_or(Error::FileNotFound)?;
-        let block = self.index.blocks[id as usize];
+        self.open_block(id, Some(name))
+    }
+
+    /// Opens a block without a filename. Permissive mode can recover some encryption keys.
+    pub fn open_file_by_index(&mut self, id: u32) -> Result<EntryReader<'_, R>, Error> {
+        self.open_block(id, None)
+    }
+
+    fn open_block(&mut self, id: u32, name: Option<&[u8]>) -> Result<EntryReader<'_, R>, Error> {
+        let block = *self
+            .index
+            .blocks
+            .get(id as usize)
+            .ok_or(Error::FileNotFound)?;
+        let wrapping = self.options.mode == ReadMode::Permissive && self.index.header.version == 0;
+        address(self.base, block.offset, 0, self.source_len, wrapping)?;
         if !block.flags.contains(FileFlags::EXISTS) {
             return Err(Error::FileNotFound);
         }
@@ -349,6 +498,15 @@ impl<R: Read + Seek> Archive<R> {
         {
             return Err(Error::LimitExceeded("single-unit buffer"));
         }
+        if !block.flags.compressed() || block.flags.contains(FileFlags::SINGLE_UNIT) {
+            address(
+                self.base,
+                block.offset,
+                block.stored_size as u64,
+                self.source_len,
+                wrapping,
+            )?;
+        }
         if !block.flags.compressed() && block.file_size != block.stored_size {
             return Err(Error::InvalidArchive("stored file size mismatch"));
         }
@@ -360,50 +518,38 @@ impl<R: Read + Seek> Archive<R> {
             &self.index.header,
             &self.options,
         )?;
-        let key = block.flags.contains(FileFlags::ENCRYPTED).then(|| {
-            file_key(
-                name,
-                block.offset as u32,
-                block.file_size,
-                block.flags.contains(FileFlags::FIX_KEY),
-            )
-        });
-        let offsets = load_offsets(
-            &mut self.source,
-            self.base,
-            block,
-            sector_size,
+        let key = name
+            .filter(|_| block.flags.contains(FileFlags::ENCRYPTED))
+            .map(|name| {
+                file_key(
+                    name,
+                    block.offset as u32,
+                    block.file_size,
+                    block.flags.contains(FileFlags::FIX_KEY),
+                )
+            });
+        let EntryLayout {
             key,
-            &self.options,
+            offsets,
+            checksums,
+        } = load_layout(
+            &mut self.source,
+            LayoutRequest {
+                base: self.base,
+                len: self.source_len,
+                block,
+                id,
+                sector_size,
+                key,
+                wrapping,
+                options: &self.options,
+            },
+            &mut self.diagnostics,
         )?;
-        let checksums = if self.options.verify_sector_checksums
-            && block.flags.contains(FileFlags::SECTOR_CRC)
-            && !offsets.is_empty()
-        {
-            let count = sector_count(block.file_size, sector_size) as usize;
-            let start = offsets[count];
-            let stored = offsets[count + 1] - start;
-            if stored == 0 {
-                Vec::new()
-            } else {
-                let expected = count * 4;
-                if stored as usize > expected {
-                    return Err(Error::InvalidArchive("checksum table length"));
-                }
-                let mut bytes = vec![0; stored as usize];
-                self.source
-                    .seek(SeekFrom::Start(self.base + block.offset + start as u64))?;
-                self.source.read_exact(&mut bytes)?;
-                if bytes.len() < expected {
-                    bytes = decode(&bytes, expected, false)?;
-                }
-                bytes.chunks_exact(4).map(|b| u32_at(b, 0)).collect()
-            }
-        } else {
-            Vec::new()
-        };
         Ok(EntryReader {
             source: &mut self.source,
+            source_len: self.source_len,
+            wrapping,
             base: self.base,
             block,
             sector_size,
@@ -456,8 +602,15 @@ impl<R: Read + Seek> Archive<R> {
             .get(block_index as usize)
             .filter(|b| b.flags.contains(FileFlags::EXISTS))
             .ok_or(Error::FileNotFound)?;
-        self.source
-            .seek(SeekFrom::Start(self.base + block.offset))?;
+        let wrapping = self.options.mode == ReadMode::Permissive && self.index.header.version == 0;
+        let at = address(
+            self.base,
+            block.offset,
+            block.stored_size as u64,
+            self.source_len,
+            wrapping,
+        )?;
+        self.source.seek(SeekFrom::Start(at))?;
         Ok((&mut self.source).take(block.stored_size as u64))
     }
 }
@@ -480,6 +633,9 @@ pub(super) fn load_offsets(
     {
         return Ok(Vec::new());
     }
+    if block.flags.contains(FileFlags::ENCRYPTED) && key.is_none() {
+        return Err(Error::InvalidArchive("unknown encryption key"));
+    }
     let size = offset_table_size(
         block.file_size,
         sector_size,
@@ -488,19 +644,23 @@ pub(super) fn load_offsets(
     if size > options.max_sector_table_bytes {
         return Err(Error::LimitExceeded("sector offset table"));
     }
-    if size > block.stored_size {
+    let permissive = options.mode == ReadMode::Permissive;
+    if !permissive && size > block.stored_size {
         return Err(Error::InvalidArchive("truncated sector table"));
     }
     let mut bytes = vec![0; size as usize];
-    source.seek(SeekFrom::Start(base + block.offset))?;
+    let len = source.seek(SeekFrom::End(0))?;
+    let at = address(base, block.offset, size as u64, len, permissive)?;
+    source.seek(SeekFrom::Start(at))?;
     source.read_exact(&mut bytes)?;
     if let Some(key) = key {
         crypt(&mut bytes, key.wrapping_sub(1), true);
     }
     let offsets: Vec<u32> = bytes.chunks_exact(4).map(|b| u32_at(b, 0)).collect();
-    if offsets[0] < size
-        || offsets.last().is_none_or(|&n| n > block.stored_size)
-        || offsets.windows(2).any(|pair| pair[0] > pair[1])
+    if !permissive
+        && (offsets[0] < size
+            || offsets.last().is_none_or(|&n| n > block.stored_size)
+            || offsets.windows(2).any(|pair| pair[0] > pair[1]))
     {
         return Err(Error::InvalidArchive("invalid sector offsets"));
     }
@@ -508,7 +668,18 @@ pub(super) fn load_offsets(
     for (i, pair) in offsets.windows(2).take(count).enumerate() {
         let expected =
             (block.file_size as u64 - i as u64 * sector_size as u64).min(sector_size as u64);
-        let stored = pair[1] - pair[0];
+        let stored = pair[1]
+            .checked_sub(pair[0])
+            .ok_or(Error::InvalidArchive("invalid sector offsets"))?;
+        if permissive {
+            address(
+                base,
+                block.offset + pair[0] as u64,
+                stored as u64,
+                len,
+                true,
+            )?;
+        }
         if stored == 0 || stored as u64 > expected {
             return Err(Error::InvalidArchive("invalid sector length"));
         }
@@ -520,6 +691,8 @@ pub(super) fn load_offsets(
 /// Payload buffers are bounded by the sector size (or a limited single-unit file).
 pub struct EntryReader<'a, R> {
     source: &'a mut R,
+    source_len: u64,
+    wrapping: bool,
     base: u64,
     block: BlockEntry,
     sector_size: u32,
@@ -557,9 +730,14 @@ impl<R: Read + Seek> EntryReader<'_, R> {
             return Err(Error::InvalidArchive("encoded unit exceeds decoded size"));
         }
         self.buffer.resize(size as usize, 0);
-        self.source.seek(SeekFrom::Start(
-            self.base + self.block.offset + offset as u64,
-        ))?;
+        let at = address(
+            self.base,
+            self.block.offset + offset as u64,
+            size as u64,
+            self.source_len,
+            self.wrapping,
+        )?;
+        self.source.seek(SeekFrom::Start(at))?;
         self.source.read_exact(&mut self.buffer)?;
         if let Some(key) = self.key {
             crypt(

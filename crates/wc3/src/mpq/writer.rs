@@ -137,6 +137,9 @@ impl<W: Write + Seek> ArchiveWriter<W> {
         output: W,
         archive: &mut Archive<R>,
     ) -> Result<Self, Error> {
+        if !archive.diagnostics().is_empty() {
+            return Err(Error::InvalidArchive("cannot edit a recovered archive"));
+        }
         let options = WriteOptions {
             sector_size_shift: archive.index.header.sector_size_shift,
             listfile: false,

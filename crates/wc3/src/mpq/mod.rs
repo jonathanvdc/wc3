@@ -18,8 +18,14 @@
 //! `mpq-decode`. HET/BET filename lookup is neutral-locale/platform only.
 //! Writers default to classic headers; use [`WriteOptions`] to select newer
 //! headers, HET/BET indexes, or v4 raw chunk digests. Patch-file semantics and
-//! signature verification are not implemented. Protected/malformed map repair
-//! is deliberately outside the strict reader's contract.
+//! signature verification are not implemented. Use [`ReadMode::Permissive`] for
+//! bounded recovery of known malformed classic MPQs. Valid extended formats
+//! retain strict checks; recovered archives cannot be edited. Recovery does not
+//! restore missing filenames or deleted editor data. [`Archive::diagnostics`]
+//! reports indexing and payload recoveries (at most 1024 records plus a notice).
+//! [`Archive::open_file_by_index`] can extract unnamed entries, with limited
+//! encryption-key recovery from sector tables or RIFF/EXE/XML signatures in
+//! permissive mode. Recovery is limited to these documented cases.
 //!
 //! # Streaming a file
 //!
@@ -67,6 +73,7 @@ mod adpcm;
 mod codec;
 #[cfg(all(test, feature = "mpq-decode"))]
 mod codec_test_vectors;
+mod compat;
 mod crypto;
 mod error;
 mod extended;
@@ -79,8 +86,12 @@ mod raw;
 mod reader;
 mod writer;
 
+pub use compat::{ReadMode, RecoveryDiagnostic};
 pub use error::Error;
 pub use extended::ExtendedIndex;
 pub use format::{BlockEntry, FileFlags, HashEntry, Header, Index};
 pub use reader::{Archive, EntryReader, ReadOptions};
 pub use writer::{ArchiveWriter, Compression, EntryWriter, FileOptions, WriteOptions};
+
+#[cfg(test)]
+mod permissive_tests;

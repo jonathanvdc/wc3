@@ -182,8 +182,28 @@ normalization. Locale/platform matching is exact, neutral by default.
 `known_names` returns listfile hints; it cannot enumerate every original name.
 `index` and `encoded_file` work independently of payload codec support.
 
-Patch-file application, signature verification, and protected-map repair are
-unsupported.
+`ReadOptions { mode: ReadMode::Permissive, ..Default::default() }` opts into
+bounded recovery of malformed classic MPQs. Strict mode remains the default.
+Permissive mode handles misleading classic header fields, table-count and
+block-index high bits, reserved hash bytes, truncated tables, invalid unrelated
+records, fake headers and user-data wrappers, and wrapped 32-bit table/block/
+sector addresses. It tolerates extra sector-table bytes and unusable checksum
+metadata; actual checksum mismatches still fail. Allocation, decompression, and
+physical source bounds remain enforced. Valid newer-format archives retain their
+strict indexing and integrity checks; malformed older headers may fall back to
+classic interpretation, while v4 integrity failures are never downgraded.
+
+`open_file_by_index` extracts a block without its original filename. In
+permissive mode, encrypted sector tables can supply a recoverable key; stored
+RIFF, EXE, and XML signatures also permit limited key recovery. This does not
+recover arbitrary encryption keys, missing filenames, or deleted editor data.
+`diagnostics()` reports recoveries as they occur, including when opening a file;
+it retains at most 1024 records plus an omission notice. Recovered archives
+cannot be passed to `ArchiveWriter::from_archive`; clean permissive archives can.
+Synthetic tests cover these recovery cases. Compatibility with a corpus of
+protected game maps has not been verified.
+
+Patch-file application and signature verification are unsupported.
 Archive edits do not regenerate existing attributes or signatures. Game loading
 has not been verified. Automated tests cover the public API, binary format
 contracts, encryption, compression, corruption handling, and streaming limits;

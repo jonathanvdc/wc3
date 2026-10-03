@@ -141,3 +141,38 @@ pub(super) fn jenkins(name: &[u8]) -> u64 {
     }
     ((b as u64) << 32) | c as u64
 }
+
+/// Candidate keys for a known first plaintext word, checked against its low byte.
+pub(super) fn known_word_keys(bytes: &[u8], plain: u32) -> Vec<u32> {
+    if bytes.len() < 4 {
+        return Vec::new();
+    }
+    let encrypted = u32::from_le_bytes(bytes[..4].try_into().unwrap());
+    let combined = (encrypted ^ plain).wrapping_sub(0xeeeeeeee);
+    (0..256)
+        .filter_map(|i| {
+            let key = combined.wrapping_sub(TABLE[1024 + i]);
+            ((key & 255) as usize == i).then_some(key)
+        })
+        .collect()
+}
+
+pub(super) fn content_key(bytes: &[u8], size: u32) -> Option<u32> {
+    if bytes.len() < 8 {
+        return None;
+    }
+    for (first, second) in [
+        (0x46464952, size.wrapping_sub(8)),
+        (0x00905a4d, 3),
+        (0x6d783f3c, 0x6576206c),
+    ] {
+        for key in known_word_keys(bytes, first) {
+            let mut words = bytes[..8].to_vec();
+            crypt(&mut words, key, true);
+            if u32::from_le_bytes(words[4..8].try_into().unwrap()) == second {
+                return Some(key);
+            }
+        }
+    }
+    None
+}

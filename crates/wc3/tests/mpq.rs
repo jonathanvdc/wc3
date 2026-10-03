@@ -727,3 +727,33 @@ fn v4_table_md5s_detect_corruption_without_raw_chunks() {
         assert!(Archive::open(Cursor::new(corrupt)).is_err());
     }
 }
+
+#[cfg(feature = "mpq-decode")]
+#[test]
+fn permissive_mode_preserves_newer_format_lookup_and_integrity() {
+    use wc3::mpq::ReadMode;
+
+    let options = ReadOptions {
+        mode: ReadMode::Permissive,
+        ..ReadOptions::default()
+    };
+    for bytes in [
+        include_bytes!("fixtures/mpq/storm-v2.mpq").as_slice(),
+        include_bytes!("fixtures/mpq/storm-v3.mpq").as_slice(),
+        include_bytes!("fixtures/mpq/storm-v4.mpq").as_slice(),
+    ] {
+        let mut archive = Archive::with_options(Cursor::new(bytes), options.clone()).unwrap();
+        assert_eq!(archive.read_file("stored.bin").unwrap(), b"payload");
+        assert_eq!(
+            archive.read_file("units/encrypted.bin").unwrap(),
+            (0..17003).map(|i| (i % 7) as u8).collect::<Vec<_>>()
+        );
+        assert!(archive.diagnostics().is_empty());
+    }
+    let mut bytes = include_bytes!("fixtures/mpq/storm-v4.mpq").to_vec();
+    bytes[14] ^= 1;
+    assert!(Archive::with_options(Cursor::new(bytes), options.clone()).is_err());
+    let mut bytes = include_bytes!("fixtures/mpq/storm-v4.mpq").to_vec();
+    bytes[4..8].copy_from_slice(&999u32.to_le_bytes());
+    assert!(Archive::with_options(Cursor::new(bytes), options).is_err());
+}
