@@ -19,10 +19,13 @@ use std::marker::PhantomData;
 #[mdl(fields, write_order(minimum, maximum, bounds_radius))]
 pub struct GeosetExtent {
     #[mdl(property = "BoundsRadius", default)]
+    /// Authored bounding-sphere radius in model units.
     pub bounds_radius: f32,
     #[mdl(property = "MinimumExtent", default)]
+    /// Minimum corner of the model-space axis-aligned bounds.
     pub minimum: Vec3,
     #[mdl(property = "MaximumExtent", default)]
+    /// Maximum corner of the model-space axis-aligned bounds.
     pub maximum: Vec3,
 }
 
@@ -40,7 +43,9 @@ impl Default for GeosetExtent {
 /// and represent fractions of full influence when divided by 255.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct SkinWeights {
+    /// Four node indices corresponding to the stored weights.
     pub bone_indices: [u16; 4],
+    /// Four integer influence weights, expressed as fractions of 255.
     pub weights: [u8; 4],
 }
 
@@ -53,15 +58,19 @@ enum GeosetExtraSection {
 
 /// Storage and serialization of the optional TANG and SKIN sections for a version.
 pub trait GeosetExtraSections: Default + Clone + Debug + PartialEq {
+    /// Reads the optional sections supported by the selected model version.
     fn read<V: ModelVersion>(_: &mut Cursor<'_>) -> Result<Self, mdx::ReadError> {
         Ok(Self::default())
     }
+    /// Writes the stored optional sections for the selected model version.
     fn write<V: ModelVersion>(&self, _: &mut Encoder<'_>) -> Result<(), mdx::WriteError> {
         Ok(())
     }
+    /// Borrows Reforged sections, or returns `None` for layouts without them.
     fn reforged(&self) -> Option<&ReforgedGeosetExtraSections> {
         None
     }
+    /// Mutably borrows Reforged sections, or returns `None` for layouts without them.
     fn reforged_mut(&mut self) -> Option<&mut ReforgedGeosetExtraSections> {
         None
     }
@@ -150,7 +159,9 @@ impl GeosetLevelOfDetail for GeosetLevelOfDetailFields {
 
 /// Chooses geoset fields for a model version.
 pub trait GeosetLayout {
+    /// Storage for the authored LOD number and name.
     type LevelOfDetail: GeosetLevelOfDetail;
+    /// Storage for optional tangent and skinning sections.
     type ExtraSections: GeosetExtraSections;
 }
 use crate::model::{V1000, V1100, V1200, V1300, V1400, V1600, V1800, V800, V900};
@@ -994,14 +1005,17 @@ impl<V: ModelVersion> mdx::Write for Geoset<V> {
 }
 
 impl<V: SupportsReforgedChunks> Geoset<V> {
+    /// Returns the authored level-of-detail number.
     pub fn level_of_detail(&self) -> u32 {
         self.level_of_detail
             .level_of_detail()
             .expect("supported version")
     }
+    /// Returns the geoset name, decoding invalid UTF-8 lossily.
     pub fn name(&self) -> Cow<'_, str> {
         self.level_of_detail.name().expect("supported version")
     }
+    /// Borrows optional tangent vectors and their handedness components.
     pub fn tangents(&self) -> Option<&[[f32; 4]]> {
         self.extra_sections
             .reforged()
@@ -1013,6 +1027,7 @@ impl<V: SupportsReforgedChunks> Geoset<V> {
                 _ => None,
             })
     }
+    /// Borrows optional per-vertex skin influences.
     pub fn skin_weights(&self) -> Option<&[SkinWeights]> {
         self.extra_sections
             .reforged()
@@ -1024,16 +1039,21 @@ impl<V: SupportsReforgedChunks> Geoset<V> {
                 _ => None,
             })
     }
+    /// Sets the authored level-of-detail number.
     pub fn set_level_of_detail(&mut self, level: u32) {
         self.try_set_level_of_detail(level)
             .expect("supported version")
     }
+    /// Sets the geoset name; rejects embedded NUL and names beyond the fixed capacity.
     pub fn set_name(&mut self, name: &str) -> Result<(), ValueError> {
         self.try_set_name(name)
     }
+    /// Replaces tangents, or removes the section when passed `None`.
     pub fn set_tangents(&mut self, tangents: Option<&[[f32; 4]]>) {
         self.try_set_tangents(tangents).expect("supported version")
     }
+    /// Replaces skin influences, or removes the section when passed `None`.
+    /// Rejects node indices that cannot fit the selected version's storage.
     pub fn set_skin_weights(&mut self, weights: Option<&[SkinWeights]>) -> Result<(), ValueError> {
         self.try_set_skin_weights(weights)
     }

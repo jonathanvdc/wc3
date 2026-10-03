@@ -12,6 +12,7 @@ use std::io::Write as IoWrite;
 /// reject presence using the supplied field's span. No value-level `Read` or
 /// `Default` implementation is required.
 pub trait ReadProperty: Sized {
+    /// Reads the payload and punctuation after the property name was consumed.
     fn read_mdl_property(parser: &mut Parser<'_>, field: Field<'_>)
         -> Result<Self, mdl::ReadError>;
 
@@ -43,6 +44,7 @@ pub trait WriteProperty {
         Ok(())
     }
 
+    /// Emits the complete named property, or omits it according to storage policy.
     fn write_mdl_property<W: IoWrite>(
         &self,
         name: &'static str,
@@ -81,6 +83,9 @@ impl<T: Write> WriteProperty for Option<T> {
 /// Reads a static or animated property into its field, retaining any base value
 /// when the input supplies animation. The record owns dispatch and duplicates.
 pub trait ReadAnimationProperty {
+    /// Reads the static value or track into this field.
+    /// `static_form` records an explicit `static` prefix; `bare_static` permits
+    /// a scalar without that prefix when the property schema allows it.
     fn read_mdl_animation_property(
         &mut self,
         parser: &mut Parser<'_>,
@@ -91,7 +96,9 @@ pub trait ReadAnimationProperty {
 
 /// Writes the animation when present, otherwise the static value or nothing.
 pub trait WriteAnimationProperty {
+    /// Returns whether this field contains an animation track.
     fn has_animation(&self) -> bool;
+    /// Writes the named track when present, otherwise the static value or nothing.
     fn write_mdl_animation_property<W: IoWrite>(
         &self,
         name: &'static str,

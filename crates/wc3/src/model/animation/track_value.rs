@@ -5,6 +5,7 @@ use std::fmt::Debug;
 
 /// A scalar or vector value supported by MDX keyframe tracks.
 pub trait TrackValue: mdx::Read + mdx::Write + Copy + Default + PartialEq + Debug {
+    /// Number of scalar components serialized for each value.
     const COMPONENTS: usize;
 }
 

@@ -13,17 +13,28 @@ pub(super) const DELETED: u32 = u32::MAX - 1;
 
 /// Raw MPQ block flags, retained even when the entry codec is unsupported.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub struct FileFlags(pub u32);
+pub struct FileFlags(
+    /// Unmodified MPQ block flag bitmask, including any unknown bits.
+    pub u32,
+);
 
 impl FileFlags {
+    /// Entry sectors use PKWARE DCL compression.
     pub const IMPLODE: u32 = 0x100;
+    /// Entry sectors use compression masks to select their codecs.
     pub const COMPRESS: u32 = 0x200;
+    /// Entry payloads are encrypted using a filename-derived key.
     pub const ENCRYPTED: u32 = 0x10000;
+    /// Encryption keys incorporate the entry offset and decoded size.
     pub const FIX_KEY: u32 = 0x20000;
+    /// The payload is stored as one unit instead of sector framing.
     pub const SINGLE_UNIT: u32 = 0x1000000;
+    /// The payload includes a sector checksum block.
     pub const SECTOR_CRC: u32 = 0x4000000;
+    /// The block represents an existing file.
     pub const EXISTS: u32 = 0x80000000;
 
+    /// Returns whether every bit in `bits` is set.
     pub fn contains(self, bits: u32) -> bool {
         self.0 & bits == bits
     }
@@ -57,23 +68,35 @@ pub struct Header {
     pub version: u16,
     /// Original shortened v3 header size; zero selects the canonical size.
     pub shortened_header_size: u32,
+    /// Declared archive region size in bytes.
     pub archive_size: u64,
+    /// Sector size exponent: a sector contains `512 << sector_size_shift` bytes.
     pub sector_size_shift: u16,
+    /// Classic hash table byte offset relative to the archive header.
     pub hash_table_offset: u64,
+    /// Classic block table byte offset relative to the archive header.
     pub block_table_offset: u64,
+    /// Number of slots in the classic hash table, including empty and deleted slots.
     pub hash_table_entries: u32,
+    /// Number of records in the block table.
     pub block_table_entries: u32,
+    /// High block-offset table byte offset relative to the archive header; zero if absent.
     pub hi_block_table_offset: u64,
+    /// BET byte offset relative to the archive header; zero if absent.
     pub bet_table_offset: u64,
+    /// HET byte offset relative to the archive header; zero if absent.
     pub het_table_offset: u64,
-    /// Stored sizes: hash, block, high-block, HET, BET.
+    /// Stored table sizes in bytes, ordered as hash, block, high-block, HET, BET.
     pub table_sizes: [u64; 5],
+    /// Raw encoded chunk size in bytes for MD5 verification; zero disables chunk digests.
     pub raw_chunk_size: u32,
     /// Digests: block, hash, high-block, BET, HET, header.
     pub md5: [[u8; 16]; 6],
 }
 
 impl Header {
+    /// Returns the header size in bytes, honoring a shortened v3 header.
+    /// Returns zero for an unsupported version.
     pub fn header_size(&self) -> u32 {
         if self.version == 2 && self.shortened_header_size != 0 {
             return self.shortened_header_size;
@@ -195,6 +218,7 @@ impl Header {
         output.write_all(&b)?;
         Ok(())
     }
+    /// Returns the sector size in bytes, or `None` if the shift overflows `u32`.
     pub fn sector_size(&self) -> Option<u32> {
         1u32.checked_shl(9 + u32::from(self.sector_size_shift))
     }
@@ -214,9 +238,13 @@ pub(super) fn verify_md5(bytes: &[u8], expected: &[u8; 16]) -> Result<(), Error>
 /// An on-disk filename hash and locale record. Filenames are not stored here.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct HashEntry {
+    /// First classic MPQ filename hash.
     pub name_hash_a: u32,
+    /// Second classic MPQ filename hash.
     pub name_hash_b: u32,
+    /// Locale identifier; zero selects the neutral locale.
     pub locale: u16,
+    /// Platform identifier; zero selects the neutral platform.
     pub platform: u16,
     /// `u32::MAX` is empty and `u32::MAX - 1` is deleted.
     pub block_index: u32,
@@ -232,6 +260,7 @@ impl HashEntry {
             block_index: EMPTY,
         }
     }
+    /// Returns whether this slot is neither empty nor deleted.
     pub fn is_file(&self) -> bool {
         self.block_index < DELETED
     }
@@ -249,9 +278,13 @@ impl HashEntry {
 /// Encoded storage metadata, independent of entry decompression.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct BlockEntry {
+    /// Payload byte offset relative to the archive header.
     pub offset: u64,
+    /// Encoded payload size in bytes, including sector framing.
     pub stored_size: u32,
+    /// Decoded file size in bytes.
     pub file_size: u32,
+    /// Raw storage and existence flags for the block.
     pub flags: FileFlags,
 }
 
@@ -273,9 +306,13 @@ impl BlockEntry {
 /// Decoded container tables. Reading these does not decode file payloads.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Index {
+    /// Decoded archive header.
     pub header: Header,
+    /// Classic filename hash slots, including empty and deleted slots.
     pub hashes: Vec<HashEntry>,
+    /// Block metadata indexed by the IDs returned by filename lookup.
     pub blocks: Vec<BlockEntry>,
+    /// Optional HET/BET filename lookup metadata.
     pub extended: Option<ExtendedIndex>,
 }
 

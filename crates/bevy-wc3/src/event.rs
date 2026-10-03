@@ -21,7 +21,9 @@ pub struct Wc3ModelEvent {
     pub root: Entity,
     /// Animated event node in that instance's rig.
     pub node: Entity,
+    /// Authored object ID of the event node, rather than its collection index.
     pub object_id: u32,
+    /// Authored event-node name for the application to interpret.
     pub name: String,
     /// Event record index in the source model's event-object collection.
     pub event_index: usize,

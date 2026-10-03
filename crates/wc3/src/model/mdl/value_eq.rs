@@ -7,6 +7,7 @@ use crate::model::FixedText;
 /// Arrays compare each component using the same rules. Custom value types can
 /// implement this trait to match the representation used by their codec hooks.
 pub trait ValueEq {
+    /// Compares values under the equality rules of their MDL representation.
     fn eq_mdl(&self, other: &Self) -> bool;
 }
 

@@ -14,6 +14,7 @@ use super::{BlockEntry, Error, FileFlags, HashEntry, Header, Index, ReadOptions}
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub enum ReadMode {
     #[default]
+    /// Reject malformed archive layouts without recovery.
     Strict,
     /// Recover known classic MPQ quirks, retaining all resource limits.
     Permissive,
@@ -22,6 +23,7 @@ pub enum ReadMode {
 /// A recovery applied while indexing or opening an entry.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct RecoveryDiagnostic {
+    /// Description of the recovery applied to the archive or entry.
     pub reason: &'static str,
     /// Table slot or block ID, when the recovery concerns a record.
     pub entry: Option<u32>,

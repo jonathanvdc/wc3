@@ -37,21 +37,29 @@ pub(super) const LAYER_TAG: Tag = *b"LAYS";
 pub enum LayerFilterMode {
     #[default]
     #[mdx(value = 0)]
+    /// Opaque rendering without alpha blending.
     None,
     #[mdx(value = 1)]
+    /// Alpha-tested rendering.
     Transparent,
     #[mdx(value = 2)]
+    /// Source-alpha blending.
     Blend,
     #[mdx(value = 3)]
+    /// Additive blending.
     Additive,
     #[mdx(value = 4)]
+    /// Additive blending weighted by source alpha.
     AddAlpha,
     #[mdx(value = 5)]
+    /// Multiplicative blending.
     Modulate,
     #[mdx(value = 6)]
+    /// Multiplicative blending with doubled contribution.
     Modulate2x,
     #[mdx(unknown)]
     #[mdl(unknown)]
+    /// An unrecognized wire value preserved by MDX; unsupported in MDL.
     Unknown(u32),
 }
 
@@ -118,7 +126,9 @@ impl mdx::Write for LayerShadingFlags {
 /// A Reforged texture binding with an optional animated texture index.
 #[derive(Clone, Debug, PartialEq)]
 pub struct LayerTextureSlot {
+    /// Animated index into the model texture collection.
     pub texture_id: Animatable<u32>,
+    /// Authored texture-role identifier for this slot.
     pub texture_type: u32,
 }
 
@@ -262,10 +272,13 @@ impl FresnelField for NoFresnel {}
 #[derive(Clone, Debug, PartialEq, mdx::Read, mdx::Write)]
 pub struct LayerFresnel {
     #[mdx(tag = *b"KFC3")]
+    /// Animated Fresnel color.
     pub color: Animatable<Color>,
     #[mdx(tag = *b"KFCA")]
+    /// Animated Fresnel opacity.
     pub opacity: Animatable<f32>,
     #[mdx(tag = *b"KFTC")]
+    /// Animated team-color contribution to the Fresnel effect.
     pub team_color: Animatable<f32>,
 }
 impl Default for LayerFresnel {

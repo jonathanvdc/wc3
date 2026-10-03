@@ -1,6 +1,8 @@
 //! MPQ asset readers and caller-ordered overlays for Bevy.
 //! Register readers before adding `AssetPlugin`. Archives are immutable snapshots;
 //! directory enumeration, asset processing, patch deltas and watching are unsupported.
+#![deny(missing_docs)]
+
 use bevy_asset::io::{
     AssetReader, AssetReaderError, ErasedAssetReader, PathStream, Reader, VecReader,
 };
@@ -42,7 +44,9 @@ impl<R: Read + Seek + Send + 'static> MpqAssetReader<R> {
         }
     }
 
-    /// Try this exact locale/platform, then neutral locale on the same platform.
+    /// Selects the requested locale/platform, falling back to neutral locale on
+    /// the same platform only when the requested entry is absent from the index.
+    /// Extraction errors for an indexed entry do not trigger locale fallback.
     pub fn with_locale(mut self, locale: u16, platform: u16) -> Self {
         self.locale = locale;
         self.platform = platform;
@@ -137,6 +141,11 @@ pub struct OverlayAssetReader {
 }
 
 impl OverlayAssetReader {
+    /// Creates an overlay that searches `readers` from first to last.
+    ///
+    /// Missing assets fall through to the next reader; other errors stop the
+    /// search. An empty overlay reports every asset as missing. Metadata comes
+    /// from the reader containing the asset, even when that reader has no metadata.
     pub fn new(readers: Vec<Box<dyn ErasedAssetReader>>) -> Self {
         Self { readers }
     }

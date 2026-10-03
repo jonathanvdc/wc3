@@ -2,6 +2,8 @@
 use crate::model::mdx;
 /// A value that can be read from an MDX byte stream.
 pub trait Read: Sized {
+    /// Reads one value at the current position, leaving subsequent bytes unread.
+    /// Errors may leave the cursor advanced; copy it first for speculative reads.
     fn read_mdx(cursor: &mut Cursor<'_>) -> Result<Self, mdx::ReadError>;
 
     /// Reads a value and rejects trailing bytes.

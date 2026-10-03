@@ -5,10 +5,13 @@ use std::fmt::{self, Display, Formatter};
 /// Half-open byte range in the original MDL input.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Span {
+    /// Inclusive byte offset of the range start.
     pub start: usize,
+    /// Exclusive byte offset of the range end.
     pub end: usize,
 }
 impl Span {
+    /// Creates a half-open byte range without checking source bounds.
     pub const fn new(start: usize, end: usize) -> Self {
         Self { start, end }
     }
@@ -17,29 +20,48 @@ impl Span {
 /// Allocation-free diagnostic details. Field names borrow the source via spans.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ReadErrorKind {
+    /// A character is not recognized by the MDL lexer.
     InvalidCharacter,
+    /// A quoted string reaches EOF without a closing quote.
     UnterminatedString,
+    /// The next token does not match the required syntax described by the payload.
     Expected(&'static str),
+    /// A numeric spelling is invalid or out of range for the named type.
     InvalidNumber(&'static str),
+    /// A fixed-width string contains NUL or exceeds its available text capacity.
     InvalidString {
+        /// Maximum permitted UTF-8 byte length, excluding the terminating NUL.
         max_bytes: usize,
     },
+    /// The field name is not recognized in the current record.
     UnknownField,
     /// A recognized property is unavailable for this field type.
     UnsupportedField,
+    /// The same field was assigned more than once.
     DuplicateField,
+    /// The named required field is absent at the end of its record.
     MissingField(&'static str),
+    /// A list contains a different number of entries than declared.
     CountMismatch {
+        /// Item count declared in the input.
         expected: usize,
+        /// Number of entries found (or the first excess entry).
         actual: usize,
     },
+    /// A list entry reader succeeded without consuming input.
     NoProgress,
+    /// A complete-value read left a token unconsumed.
     TrailingInput,
+    /// The input version differs from the requested model version.
     VersionMismatch {
+        /// Version requested by the caller.
         expected: u32,
+        /// Version specified by the input.
         actual: u32,
     },
+    /// No model codec is available for the input version.
     UnsupportedVersion {
+        /// Model version specified by the input.
         version: u32,
     },
 }
@@ -47,10 +69,13 @@ pub enum ReadErrorKind {
 /// An MDL syntax or value error. No source text is copied into the error.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ReadError {
+    /// Byte range associated with the failing token, field, or record.
     pub span: Span,
+    /// Structured reason parsing failed.
     pub kind: ReadErrorKind,
 }
 impl ReadError {
+    /// Creates a syntax or value error at the supplied source range.
     pub const fn new(span: Span, kind: ReadErrorKind) -> Self {
         Self { span, kind }
     }
@@ -127,6 +152,8 @@ impl Display for ReadError {
 }
 impl StdError for ReadError {}
 
+/// A borrowed display adapter that adds source line, column, and nearby text.
+/// Create it with [`ReadError::diagnostic`] using the original source.
 pub struct Diagnostic<'a> {
     error: &'a ReadError,
     source: &'a str,
@@ -154,11 +181,20 @@ pub enum WriteError {
     /// A writer block was closed without being opened, or left open at finish.
     UnbalancedBlocks,
     /// A valid binary value has no faithful representation in this dialect.
-    Unrepresentable { field: &'static str },
+    Unrepresentable {
+        /// Field or constraint that cannot be represented faithfully.
+        field: &'static str,
+    },
     /// Required structure is absent, duplicated, or inconsistent.
-    InvalidStructure { field: &'static str },
+    InvalidStructure {
+        /// Missing or inconsistent structural requirement.
+        field: &'static str,
+    },
     /// A collection count exceeds the format's limit.
-    SizeOverflow { field: &'static str },
+    SizeOverflow {
+        /// Collection or count that exceeds the format limit.
+        field: &'static str,
+    },
 }
 impl From<WriteError> for IoError<WriteError> {
     fn from(error: WriteError) -> Self {

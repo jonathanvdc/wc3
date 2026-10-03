@@ -108,7 +108,9 @@ pub use writer::Writer;
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub enum Dialect {
     #[default]
+    /// Warcraft III syntax, preserving supported game material flags.
     Warcraft3,
+    /// HiveWorkshop syntax, with its alternate names and representability limits.
     HiveWorkshop,
 }
 
@@ -120,6 +122,8 @@ pub use wc3_derive::{MdlRead as Read, MdlWrite as Write};
 
 /// Reads one value directly into its final representation.
 pub trait Read: Sized {
+    /// Reads one value at the current parser position.
+    /// Implementations own their value framing; failed reads may consume input.
     fn read_mdl(parser: &mut Parser<'_>) -> Result<Self, ReadError>;
     /// Reads one value and rejects trailing input.
     fn decode_mdl(source: &str) -> Result<Self, ReadError> {
@@ -134,6 +138,7 @@ pub trait Read: Sized {
 /// including unknown flag bits and opaque binary padding. Output may be partial
 /// on error. Finite floats round-trip exactly; NaNs retain only their NaN class.
 pub trait Write {
+    /// Streams one value using the writer's dialect. Errors may leave partial output.
     fn write_mdl<W: IoWrite>(&self, writer: &mut Writer<W>) -> Result<(), IoError<WriteError>>;
 
     /// Encodes one value as UTF-8 text and checks block balance.
@@ -141,7 +146,9 @@ pub trait Write {
         self.encode_mdl_with_dialect(Dialect::Warcraft3)
     }
 
-    /// Encodes using the selected dialect without discarding unrepresentable data.
+    /// Encodes using the selected dialect and checks block balance.
+    /// Rejects unrepresentable values, except the material flags explicitly
+    /// omitted by HiveWorkshop output as described in the module documentation.
     fn encode_mdl_with_dialect(&self, dialect: Dialect) -> Result<String, WriteError> {
         let mut writer = Writer::with_dialect(Vec::new(), dialect);
         writer.write(self).map_err(buffer_error)?;
@@ -156,6 +163,11 @@ pub trait Write {
 #[derive(Default)]
 pub struct Fields(u64);
 impl Fields {
+    /// Marks a field as present, rejecting a duplicate at the field's span.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `bit` is 64 or greater.
     pub fn mark(&mut self, bit: u32, field: Field<'_>) -> Result<(), ReadError> {
         assert!(bit < 64, "field bit must be below 64");
         let mask = 1u64 << bit;
@@ -165,6 +177,11 @@ impl Fields {
         self.0 |= mask;
         Ok(())
     }
+    /// Checks that a required field was marked, reporting absence at `span`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `bit` is 64 or greater.
     pub fn require(&self, bit: u32, name: &'static str, span: Span) -> Result<(), ReadError> {
         assert!(bit < 64, "field bit must be below 64");
         if self.0 & (1u64 << bit) == 0 {

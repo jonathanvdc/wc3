@@ -5,28 +5,85 @@ use std::{error::Error as StdError, fmt};
 /// Why an MDX value could not be decoded.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ReadErrorKind {
+    /// The file does not begin with `MDLX`.
     InvalidMagic,
-    UnknownEnumValue { enum_name: &'static str, value: u32 },
-    UnexpectedTag { expected: Tag, actual: Tag },
-    UnknownTag { actual: Tag },
-    VersionMismatch { expected: Version, actual: Version },
-    UnsupportedVersion { version: Version },
-    SizeMismatch { actual: usize, expected: usize },
-    InvalidValue { field: &'static str },
+    /// An enum discriminator has no recognized variant.
+    UnknownEnumValue {
+        /// Name of the enum being decoded.
+        enum_name: &'static str,
+        /// Unrecognized numeric discriminator.
+        value: u32,
+    },
+    /// A required section tag differs from the input.
+    UnexpectedTag {
+        /// Required tag.
+        expected: Tag,
+        /// Tag encountered in the input.
+        actual: Tag,
+    },
+    /// A record contains an unrecognized section or animation tag.
+    UnknownTag {
+        /// Unrecognized tag.
+        actual: Tag,
+    },
+    /// The file version differs from the requested model version.
+    VersionMismatch {
+        /// Version requested by the caller.
+        expected: Version,
+        /// Version stored in the input.
+        actual: Version,
+    },
+    /// No codec is available for the file version.
+    UnsupportedVersion {
+        /// Version stored in the input.
+        version: Version,
+    },
+    /// A fixed-size payload has an incorrect length.
+    SizeMismatch {
+        /// Number of bytes supplied.
+        actual: usize,
+        /// Number of bytes required.
+        expected: usize,
+    },
+    /// A decoded field violates its format constraints.
+    InvalidValue {
+        /// Field or constraint that failed validation.
+        field: &'static str,
+    },
+    /// An encoded size exceeds the addressable input range.
     SizeOverflow,
+    /// A record reader succeeded without consuming bytes.
     NoProgress,
-    TrailingBytes { remaining: usize },
-    UnexpectedEnd { needed: usize, remaining: usize },
-    InvalidRecordLength { length: usize },
+    /// A complete-value read left bytes unconsumed.
+    TrailingBytes {
+        /// Number of unconsumed bytes.
+        remaining: usize,
+    },
+    /// The input ends before the requested read can be satisfied.
+    UnexpectedEnd {
+        /// Number of bytes requested by the read.
+        needed: usize,
+        /// Number of bytes available at that position.
+        remaining: usize,
+    },
+    /// An inclusive record length is smaller than its own size prefix.
+    InvalidRecordLength {
+        /// Inclusive length read from the input.
+        length: usize,
+    },
 }
 /// A failure located in the original input, with optional chunk/section context.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ReadError {
+    /// Absolute byte offset in the original input.
     pub offset: usize,
+    /// Optional enclosing chunk or more specific section tag.
     pub tag: Option<Tag>,
+    /// Structured reason decoding failed.
     pub kind: ReadErrorKind,
 }
 impl ReadError {
+    /// Creates an error at an absolute offset without tag context.
     pub const fn new(offset: usize, kind: ReadErrorKind) -> Self {
         Self {
             offset,
@@ -41,6 +98,7 @@ impl ReadError {
         }
         self
     }
+    /// Sets the tag context, replacing any existing tag.
     pub fn with_tag(mut self, tag: Tag) -> Self {
         self.tag = Some(tag);
         self
@@ -98,13 +156,20 @@ impl StdError for ReadError {}
 /// Values that cannot be encoded as MDX.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum WriteError {
+    /// An encoded size or count exceeds its 32-bit MDX representation.
     SizeOverflow {
+        /// Chunk or section containing the field.
         tag: Tag,
+        /// Field or constraint that could not be encoded.
         field: &'static str,
+        /// Size or count that exceeded the format limit.
         size: usize,
     },
+    /// A value violates the constraints of its MDX field.
     InvalidValue {
+        /// Chunk or section containing the field.
         tag: Tag,
+        /// Field or constraint that could not be encoded.
         field: &'static str,
     },
 }

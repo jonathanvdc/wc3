@@ -5,38 +5,64 @@ use std::{error::Error as StdError, fmt, io};
 /// Errors caused by a value supplied to a constructor or setter.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ValueError {
+    /// The text contains NUL or exceeds its fixed-width byte capacity.
     InvalidString {
+        /// Maximum text length in bytes.
         max_bytes: usize,
     },
+    /// The chunk is unavailable in this model version.
     UnsupportedVersion {
+        /// Tag of the affected chunk.
         tag: Tag,
+        /// Earliest supported model version.
         minimum: Version,
+        /// Model version selected by the caller.
         actual: Version,
     },
+    /// The field is unavailable in this model version.
     UnsupportedField {
+        /// Tag of the affected chunk.
         tag: Tag,
+        /// Name of the affected field.
         field: &'static str,
+        /// Model version selected by the caller.
         actual: Version,
     },
+    /// The optional field is absent from this record.
     UnavailableField {
+        /// Tag of the affected chunk.
         tag: Tag,
+        /// Name of the affected field.
         field: &'static str,
     },
+    /// An index is outside the referenced collection.
     IndexOutOfBounds {
+        /// Tag of the affected chunk.
         tag: Tag,
+        /// Index supplied by the caller.
         index: usize,
+        /// Number of available entries.
         len: usize,
     },
+    /// A supplied array has an unexpected length.
     LengthMismatch {
+        /// Tag of the affected chunk.
         tag: Tag,
+        /// Required number of entries.
         expected: usize,
+        /// Number of entries supplied by the caller.
         actual: usize,
     },
+    /// The record count exceeds the wire-format capacity.
     CountTooLarge {
+        /// Tag of the affected chunk.
         tag: Tag,
+        /// Number of entries supplied by the caller.
         count: usize,
     },
+    /// The global-sequence ID cannot be represented as a signed wire value.
     InvalidGlobalSequenceId {
+        /// Global-sequence ID supplied by the caller.
         id: u32,
     },
 }
@@ -97,7 +123,9 @@ impl StdError for ValueError {}
 /// A transport failure or an error produced by a codec.
 #[derive(Debug)]
 pub enum IoError<E> {
+    /// An underlying stream operation failed.
     Io(io::Error),
+    /// The format codec rejected the data.
     Codec(E),
 }
 impl<E> From<io::Error> for IoError<E> {

@@ -8,9 +8,11 @@ use std::io::Write as IoWrite;
 /// State stores presence markers independently of the final record, so required
 /// fields and duplicates remain checked when fields from several groups interleave.
 pub trait ReadFields: Sized {
+    /// Temporary header values, body storage, and field presence markers.
     type State;
     /// Visits each body name once; the boolean indicates support for `static`.
     fn visit_mdl_names(visitor: &mut dyn FnMut(&'static str, bool));
+    /// Reports whether the group recognizes a name in the requested static form.
     fn accepts_mdl_field(name: &str, static_form: bool) -> bool;
     /// Reads header values and initializes body storage.
     fn begin_mdl_fields(parser: &mut Parser<'_>) -> Result<Self::State, mdl::ReadError>;
@@ -31,15 +33,19 @@ pub trait ReadFields: Sized {
 
 /// Writes a field group's headers and body without a containing block.
 pub trait WriteFields {
+    /// Cached validation results and omission decisions for this value.
     type State;
     /// Validates and caches omission decisions before any output. Pass the returned
     /// state to write_mdl_fields for this same unchanged value and dialect.
     fn prepare_mdl_fields(&self, dialect: Dialect) -> Result<Self::State, mdl::WriteError>;
+    /// Visits each possible body name and whether it supports `static`.
     fn visit_mdl_names(visitor: &mut dyn FnMut(&'static str, bool));
+    /// Writes header values without the block name or opening brace.
     fn write_mdl_headers<W: IoWrite>(
         &self,
         writer: &mut Writer<W>,
     ) -> Result<(), IoError<mdl::WriteError>>;
+    /// Writes body fields using state prepared for this unchanged value and dialect.
     fn write_mdl_fields<W: IoWrite>(
         &self,
         state: Self::State,

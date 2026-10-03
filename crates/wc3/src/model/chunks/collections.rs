@@ -67,7 +67,7 @@ where
 
 macro_rules! record_collection {
     ($name:ident, $item:ty, $tag:expr) => {
-        #[doc = concat!("The complete `", stringify!($name), "` chunk.")]
+        #[doc = concat!("A complete chunk of [`", stringify!($item), "`] records in file order.")]
         #[derive(Clone, Debug, PartialEq)]
         pub struct $name {
             /// Records in their original order.
@@ -117,12 +117,15 @@ macro_rules! record_collection {
 macro_rules! versioned_record_collection {
     ($name:ident, $item:ident, $tag:expr) => {
         #[derive(Clone, Debug, PartialEq)]
+        #[doc = concat!("A complete chunk of version-dependent [`", stringify!($item), "`] records in file order.")]
         pub struct $name<V: ModelVersion> {
+            /// Records in their original order.
             pub records: Vec<$item<V>>,
             version: PhantomData<V>,
         }
 
         impl<V: ModelVersion> $name<V> {
+            /// Creates a chunk payload from its records.
             pub fn new(records: Vec<$item<V>>) -> Self {
                 Self {
                     records,

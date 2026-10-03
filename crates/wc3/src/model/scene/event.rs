@@ -58,7 +58,7 @@ impl<V: ModelVersion> Model<V> {
         self.collect_chunk_records::<EventObjectsChunk>()
     }
 
-    /// Replaces event objects in the first `EVTS` chunk.
+    /// Replaces event objects with one `EVTS` chunk, removing any duplicate chunks.
     pub fn set_event_objects(&mut self, events: &[EventObject]) {
         self.replace_chunk(EventObjectsChunk::new(events.to_vec()));
     }

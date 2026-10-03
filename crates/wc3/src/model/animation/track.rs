@@ -250,6 +250,8 @@ where
         Self::read_mdl_payload(parser)
     }
 
+    /// Reads a counted MDL track body after its property name.
+    /// The payload includes the key count, interpolation mode, and optional global sequence.
     pub fn read_mdl_payload(parser: &mut Parser<'_>) -> Result<Self, mdl::ReadError> {
         let count = parser.read::<u32>()? as usize;
         parser.expect(TokenKind::OpenBrace)?;

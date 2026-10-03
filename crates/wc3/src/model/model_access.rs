@@ -12,37 +12,70 @@ use crate::model::{DynamicModel, Model, ModelVersion, ValueError, Vec3};
 /// owned copies; edit them and pass them to a setter to update the model.
 /// Collection setters replace all chunks of that kind with one collection.
 pub trait CommonModelAccess {
+    /// Returns owned copies of glider records in file order.
     fn gliders(&self) -> Vec<Glider>;
+    /// Replaces all glider chunks with one collection of the supplied records.
     fn set_gliders(&mut self, gliders: &[Glider]);
+    /// Returns owned copies of sequence records in file order.
     fn sequences(&self) -> Vec<Sequence>;
+    /// Replaces all sequence chunks with one collection of the supplied records.
     fn set_sequences(&mut self, sequences: &[Sequence]);
+    /// Returns global-sequence durations in milliseconds, in file order.
     fn global_sequences(&self) -> Vec<u32>;
+    /// Replaces all global-sequence chunks with the supplied millisecond durations.
     fn set_global_sequences(&mut self, durations: &[u32]);
+    /// Returns owned copies of texture-animation records in file order.
     fn texture_animations(&self) -> Vec<TextureAnimation>;
+    /// Replaces all texture-animation chunks with one collection of the supplied records.
     fn set_texture_animations(&mut self, animations: &[TextureAnimation]);
+    /// Returns owned copies of geoset-animation records in file order.
     fn geoset_animations(&self) -> Vec<GeosetAnimation>;
+    /// Replaces all geoset-animation chunks with one collection of the supplied records.
     fn set_geoset_animations(&mut self, animations: &[GeosetAnimation]);
+    /// Returns owned copies of texture records in file order.
     fn textures(&self) -> Vec<Texture>;
+    /// Replaces all texture chunks with one collection of the supplied records.
     fn set_textures(&mut self, textures: &[Texture]);
+    /// Returns owned copies of bone records in file order.
     fn bones(&self) -> Vec<Bone>;
+    /// Replaces all bone chunks with one collection of the supplied records.
     fn set_bones(&mut self, bones: &[Bone]);
+    /// Returns owned copies of helper records in file order.
     fn helpers(&self) -> Vec<Node>;
+    /// Replaces all helper chunks with one collection of the supplied records.
     fn set_helpers(&mut self, helpers: &[Node]);
+    /// Returns owned copies of attachment records in file order.
     fn attachments(&self) -> Vec<Attachment>;
+    /// Replaces all attachment chunks with one collection of the supplied records.
     fn set_attachments(&mut self, attachments: &[Attachment]);
+    /// Returns owned copies of event-object records in file order.
     fn event_objects(&self) -> Vec<EventObject>;
+    /// Replaces all event-object chunks with one collection of the supplied records.
     fn set_event_objects(&mut self, events: &[EventObject]);
+    /// Returns owned copies of collision-shape records in file order.
     fn collision_shapes(&self) -> Vec<CollisionShape>;
+    /// Replaces all collision-shape chunks with one collection of the supplied records.
     fn set_collision_shapes(&mut self, shapes: &[CollisionShape]);
+    /// Returns owned copies of pivot-point records in file order.
     fn pivot_points(&self) -> Vec<Vec3>;
+    /// Replaces all pivot-point chunks with one collection of the supplied records.
     fn set_pivot_points(&mut self, points: &[Vec3]);
+    /// Returns owned copies of particle-emitter records in file order.
     fn particle_emitters(&self) -> Vec<ParticleEmitter>;
+    /// Replaces all particle-emitter chunks with one collection of the supplied records.
     fn set_particle_emitters(&mut self, emitters: &[ParticleEmitter]);
+    /// Returns owned copies of particle-emitter-2 records in file order.
     fn particle_emitters2(&self) -> Vec<ParticleEmitter2>;
+    /// Replaces all particle-emitter-2 chunks with one collection of the supplied records.
     fn set_particle_emitters2(&mut self, emitters: &[ParticleEmitter2]);
+    /// Returns owned copies of ribbon-emitter records in file order.
     fn ribbon_emitters(&self) -> Vec<RibbonEmitter>;
+    /// Replaces all ribbon-emitter chunks with one collection of the supplied records.
     fn set_ribbon_emitters(&mut self, emitters: &[RibbonEmitter]);
+    /// Returns an owned copy of the first model-info record, or `None` if absent.
     fn model_info(&self) -> Option<ModelInfo>;
+    /// Replaces model metadata with an owned copy, creating a chunk if absent.
+    /// Removes duplicate metadata chunks and discards MDX extension bytes.
     fn set_model_info(&mut self, info: &ModelInfo);
 }
 
@@ -251,11 +284,23 @@ impl CommonModelAccess for DynamicModel {
 /// Methods return `ValueError` for versions before 900. Getters return owned
 /// copies; setters replace the corresponding model collection.
 pub trait TryModelAccess {
+    /// Returns owned copies of bind-pose records in file order.
+    /// Returns an error if the model version does not support this collection.
     fn try_bind_poses(&self) -> Result<Vec<BindPoseMatrix>, ValueError>;
+    /// Replaces all bind-pose chunks with one collection of the supplied records.
+    /// Returns an error if the model version does not support this collection.
     fn try_set_bind_poses(&mut self, poses: &[BindPoseMatrix]) -> Result<(), ValueError>;
+    /// Returns owned copies of FaceFX records in file order.
+    /// Returns an error if the model version does not support this collection.
     fn try_face_fx(&self) -> Result<Vec<FaceFx>, ValueError>;
+    /// Replaces all FaceFX chunks with one collection of the supplied records.
+    /// Returns an error if the model version does not support this collection.
     fn try_set_face_fx(&mut self, entries: &[FaceFx]) -> Result<(), ValueError>;
+    /// Returns owned copies of Popcorn-emitter records in file order.
+    /// Returns an error if the model version does not support this collection.
     fn try_popcorn_emitters(&self) -> Result<Vec<PopcornEmitter>, ValueError>;
+    /// Replaces all Popcorn-emitter chunks with one collection of the supplied records.
+    /// Returns an error if the model version does not support this collection.
     fn try_set_popcorn_emitters(&mut self, emitters: &[PopcornEmitter]) -> Result<(), ValueError>;
 }
 

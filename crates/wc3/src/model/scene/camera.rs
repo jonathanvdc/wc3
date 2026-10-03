@@ -24,10 +24,15 @@ const MAX_RECORD_SIZE: usize = 0x00ff_ffff;
 /// Variants with extra bytes and unknown variants retain their exact layout.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum CameraVariant {
+    /// Variant 0, without an additional prefix payload.
     Variant0,
+    /// Variant 1, preserving its twelve uninterpreted prefix bytes.
     Variant1([u8; 12]),
+    /// Variant 2, preserving its twelve uninterpreted prefix bytes.
     Variant2([u8; 12]),
+    /// Variant 3, without an additional prefix payload.
     Variant3,
+    /// An unrecognized variant identifier.
     Unknown(u8),
 }
 
@@ -44,7 +49,9 @@ impl CameraVariant {
     }
 }
 
+/// Selects the default camera prefix for a model version.
 pub trait CameraLayout {
+    /// Camera variant used when creating a new camera.
     const DEFAULT_VARIANT: CameraVariant;
 }
 use crate::model::{V1000, V1100, V1200, V1300, V1400, V1600, V1800, V800, V900};
@@ -109,18 +116,25 @@ pub struct Camera<V: ModelVersion> {
     /// Target XYZ position.
     pub target_position: Vec3,
     #[mdl(property = "Translation")]
+    /// Optional eye-position offset animation.
     pub translation: Option<Track<Vec3>>,
     #[mdl(property = "Rotation")]
+    /// Optional camera roll animation in radians.
     pub rotation: Option<Track<f32>>,
     #[mdl(skip, default)]
+    /// Optional target-position offset animation.
     pub target_translation: Option<Track<Vec3>>,
     #[mdl(property = "Visibility")]
+    /// Optional authored visibility animation.
     pub visibility: Option<Track<f32>>,
     #[mdl(property = "FocusDistanceKeys", constant = "DOFDistance")]
+    /// Optional depth-of-field focus-distance animation.
     pub focus_distance: Option<Track<f32>>,
     #[mdl(property = "FocalLengthKeys", constant = "FocalLength")]
+    /// Optional focal-length animation.
     pub focal_length: Option<Track<f32>>,
     #[mdl(property = "FStopKeys", constant = "FStop")]
+    /// Optional aperture f-stop animation.
     pub f_stop: Option<Track<f32>>,
     #[mdl(skip, default)]
     version: PhantomData<V>,
@@ -157,7 +171,7 @@ impl<V: ModelVersion> Model<V> {
         self.collect_chunk_records::<CamerasChunk<V>>()
     }
 
-    /// Replaces cameras in the first `CAMS` chunk.
+    /// Replaces cameras with one `CAMS` chunk, removing any duplicate chunks.
     pub fn set_cameras(&mut self, cameras: &[Camera<V>]) {
         self.replace_chunk(CamerasChunk::new(cameras.to_vec()));
     }

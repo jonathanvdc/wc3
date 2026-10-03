@@ -37,14 +37,17 @@ pub struct RibbonEmitter {
     pub alpha: Animatable<f32>,
     #[mdx(tag = *b"KRCO")]
     #[mdl(property = "Color", default)]
+    /// Animated ribbon color.
     pub color: Animatable<Color>,
     #[mdl(property = "LifeSpan", default)]
+    /// Lifetime of each trail section in seconds.
     pub life_span: f32,
     #[mdx(tag = *b"KRTX")]
     #[mdl(property = "TextureSlot", default, bare_static)]
     /// Texture-atlas cell used when no texture-slot track is active.
     pub texture_slot: Animatable<u32>,
     #[mdl(property = "EmissionRate", default)]
+    /// Number of trail sections emitted per second.
     pub emission_rate: u32,
     #[mdl(property = "Rows", default)]
     /// Number of rows in the texture atlas.
@@ -56,6 +59,7 @@ pub struct RibbonEmitter {
     /// Index into the model material collection.
     pub material_id: u32,
     #[mdl(property = "Gravity", default, skip_if = "zero_gravity")]
+    /// Gravity applied to trail sections in model units per second squared.
     pub gravity: f32,
     #[mdx(tag = *b"KRVS")]
     #[mdl(property = "Visibility")]
@@ -90,7 +94,7 @@ impl<V: ModelVersion> Model<V> {
         self.collect_chunk_records::<RibbonEmittersChunk>()
     }
 
-    /// Replaces ribbon emitters in the first `RIBB` chunk.
+    /// Replaces ribbon emitters with one `RIBB` chunk, removing any duplicate chunks.
     pub fn set_ribbon_emitters(&mut self, emitters: &[RibbonEmitter]) {
         self.replace_chunk(RibbonEmittersChunk::new(emitters.to_vec()));
     }

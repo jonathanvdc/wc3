@@ -7,20 +7,27 @@ use std::{error::Error, fmt};
 /// BLP container version for formats available in both versions.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum BlpVersion {
+    /// The original BLP1 container format.
     Blp1,
+    /// The BLP2 container format.
     Blp2,
 }
 
 /// Alpha storage supported by indexed BLP images.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum IndexedAlpha {
+    /// No alpha storage; every pixel is opaque.
     Opaque,
+    /// One alpha bit per pixel, representing transparency or opacity.
     Bit1,
+    /// Four alpha bits per pixel.
     Bit4,
+    /// Eight alpha bits per pixel.
     Bit8,
 }
 
 impl IndexedAlpha {
+    /// Returns the number of stored alpha bits per pixel.
     pub const fn bits(self) -> u8 {
         match self {
             Self::Opaque => 0,
@@ -34,24 +41,37 @@ impl IndexedAlpha {
 /// Pixel encoding, with only the settings supported by that encoding.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum EncodeFormat {
+    /// Palette-indexed pixels with packed alpha storage.
     Indexed {
+        /// Container version to produce.
         version: BlpVersion,
+        /// Alpha precision for the separate alpha plane.
         alpha: IndexedAlpha,
     },
+    /// JPEG-compressed color and optional alpha components.
     Jpeg {
+        /// Container version to produce.
         version: BlpVersion,
+        /// Whether to preserve alpha instead of forcing opaque pixels.
         alpha: bool,
+        /// JPEG quality from 1 (lowest) through 100 (highest).
         quality: u8,
     },
+    /// BC1 block compression in a BLP2 container.
     Dxt1 {
+        /// Whether to preserve alpha instead of forcing opaque pixels.
         alpha: bool,
     },
+    /// BC2 block compression with explicit alpha in a BLP2 container.
     Dxt3,
+    /// BC3 block compression with interpolated alpha in a BLP2 container.
     Dxt5,
+    /// Uncompressed BGRA pixels in a BLP2 container.
     Bgra,
 }
 
 impl EncodeFormat {
+    /// Returns the alpha depth recorded for this encoding, in bits per pixel.
     pub const fn alpha_bits(self) -> u8 {
         match self {
             Self::Indexed { alpha, .. } => alpha.bits(),
@@ -78,7 +98,9 @@ impl EncodeFormat {
 /// Options for turning RGBA pixels into a BLP container.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct EncodeOptions {
+    /// Container version, pixel encoding, and encoding-specific settings.
     pub format: EncodeFormat,
+    /// Generate mipmaps when encoding an image; validate a complete chain when encoding supplied levels.
     pub mipmaps: bool,
 }
 
@@ -97,10 +119,15 @@ impl Default for EncodeOptions {
 /// An image or option that cannot be encoded as the requested BLP format.
 #[derive(Debug)]
 pub enum EncodeError {
+    /// A supplied image has zero or unsupported dimensions.
     InvalidDimensions,
+    /// JPEG quality is outside the inclusive range 1 through 100.
     InvalidJpegQuality,
+    /// The mipmap count or dimensions do not form the requested chain.
     InvalidMipmaps,
+    /// The encoded image exceeds the supported size limit.
     LimitExceeded,
+    /// The JPEG encoder failed; the contained string describes its failure.
     Jpeg(String),
 }
 
@@ -135,6 +162,11 @@ impl Blp {
     }
 
     /// Encodes a caller-supplied mipmap sequence, with level zero first.
+    ///
+    /// Each subsequent level must halve both dimensions, clamped to one pixel.
+    /// When `options.mipmaps` is enabled, the chain must end at 1×1; otherwise
+    /// exactly one image is required. At most 16 levels are accepted.
+    /// Returns an error for invalid dimensions, chains, or JPEG settings.
     pub fn encode_mipmaps(
         images: &[RgbaImage],
         options: EncodeOptions,

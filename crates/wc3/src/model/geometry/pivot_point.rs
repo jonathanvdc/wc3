@@ -8,7 +8,10 @@ use crate::model::{Model, PivotPointsChunk, Vec3};
 /// Transform origin for the node whose object ID matches this point's index.
 #[derive(Clone, Copy, Debug, PartialEq, mdx::Read, mdx::Write, mdl::Read, mdl::Write)]
 #[mdl(entry)]
-pub struct PivotPoint(pub Vec3);
+pub struct PivotPoint(
+    /// XYZ transform origin in model coordinates.
+    pub Vec3,
+);
 
 impl<V: ModelVersion> Model<V> {
     /// Returns XYZ pivot points from every `PIVT` chunk in file order.

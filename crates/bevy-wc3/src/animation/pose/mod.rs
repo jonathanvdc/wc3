@@ -17,7 +17,10 @@ mod node;
 /// Selects the camera driving camera-dependent node flags on a model root.
 /// Attached models inherit the nearest ancestor selection unless overridden.
 #[derive(Component, Clone, Copy, Debug)]
-pub struct Wc3NodeCamera(pub Entity);
+pub struct Wc3NodeCamera(
+    /// Entity of the camera driving this instance's node poses.
+    pub Entity,
+);
 
 /// Marks the default active 3D camera for WC3 node flags.
 /// Without a marker, the sole active window camera (or sole active 3D camera)

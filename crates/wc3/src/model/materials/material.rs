@@ -125,10 +125,15 @@ impl ShaderField for ShaderText {
 
 /// Chooses the material and layer fields for a version.
 pub trait MaterialLayout {
+    /// Storage for the material shader path.
     type Shader: ShaderField;
+    /// Storage for layer emissive gain.
     type EmissiveGain: EmissiveGainField;
+    /// Storage for layer Fresnel controls.
     type Fresnel: FresnelField;
+    /// Storage for the layer shader-type identifier.
     type ShaderType: LayerShaderTypeField;
+    /// Storage for layer texture-role slots.
     type TextureSlots: LayerTextureSlotsField;
 }
 use crate::model::{V1000, V1100, V1200, V1300, V1400, V1600, V1800, V800, V900};
@@ -268,7 +273,7 @@ impl<V: ModelVersion> Model<V> {
         self.collect_chunk_records::<MaterialsChunk<V>>()
     }
 
-    /// Replaces all material records in the first `MTLS` chunk.
+    /// Replaces all material records with one `MTLS` chunk, removing any duplicate chunks.
     pub fn set_materials(&mut self, materials: &[Material<V>]) {
         self.replace_chunk(MaterialsChunk::new(materials.to_vec()));
     }
@@ -318,9 +323,11 @@ impl<V: ModelVersion> mdx::Write for Material<V> {
 }
 
 impl<V: SupportsMaterialShaderPath> Material<V> {
+    /// Returns the shader path, decoding invalid UTF-8 lossily.
     pub fn shader(&self) -> Cow<'_, str> {
         self.shader.text().expect("supported version")
     }
+    /// Sets the shader path; rejects embedded NUL and paths beyond the fixed capacity.
     pub fn set_shader(&mut self, shader: &str) -> Result<(), ValueError> {
         self.try_set_shader(shader)
     }

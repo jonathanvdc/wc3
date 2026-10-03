@@ -14,12 +14,14 @@ use std::marker::PhantomData;
 ))]
 pub struct VersionChunk<V: ModelVersion> {
     #[mdl(skip, default)]
+    /// Uninterpreted bytes after the version number; omitted from MDL.
     pub extension: Vec<u8>,
     #[mdl(skip, default)]
     version: PhantomData<V>,
 }
 
 impl<V: ModelVersion> VersionChunk<V> {
+    /// Creates a version chunk with no extension bytes.
     pub fn new() -> Self {
         Self {
             extension: Vec::new(),

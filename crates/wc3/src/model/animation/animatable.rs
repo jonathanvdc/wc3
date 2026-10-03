@@ -15,9 +15,17 @@ use std::ops::RangeInclusive;
 /// MDL decoding retains the enclosing field's declared default as a base.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Animatable<T: TrackValue> {
+    /// A constant property with no animation.
     Static(T),
+    /// An animation without an explicitly stored base value.
     Animated(Track<T>),
-    Both { value: T, track: Track<T> },
+    /// An animation together with its stored base value.
+    Both {
+        /// Base value used when animation cannot supply a value.
+        value: T,
+        /// Animation that takes precedence over the base value.
+        track: Track<T>,
+    },
 }
 impl<T: TrackValue> Default for Animatable<T> {
     fn default() -> Self {
@@ -70,6 +78,7 @@ impl<T: TrackValue> mdx::Write for Animatable<T> {
     }
 }
 impl<T: TrackValue + mdl::Write> Animatable<T> {
+    /// Writes a named static property or track, giving animation precedence.
     pub fn write_mdl_property<W: IoWrite>(
         &self,
         name: &str,

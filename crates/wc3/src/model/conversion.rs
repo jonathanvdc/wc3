@@ -13,7 +13,9 @@ use crate::model::{
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub enum LossPolicy {
     #[default]
+    /// Rejects conversion that would lose nondefault data.
     Reject,
+    /// Allows unsupported data to be dropped and records it in the report.
     Drop,
 }
 
@@ -21,16 +23,20 @@ pub enum LossPolicy {
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub enum UnknownChunkPolicy {
     #[default]
+    /// Rejects opaque chunks when changing model versions.
     Reject,
     /// Retain exact bytes without guaranteeing target-version compatibility.
     Preserve,
+    /// Drops opaque chunks when changing model versions.
     Drop,
 }
 
 /// Conversion policies. Unknown chunks require a separate explicit choice.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct ConversionOptions {
+    /// Handling of fields and records unsupported by the target version.
     pub loss_policy: LossPolicy,
+    /// Handling of opaque chunks when changing versions.
     pub unknown_chunks: UnknownChunkPolicy,
 }
 impl ConversionOptions {
@@ -48,6 +54,7 @@ impl ConversionOptions {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+/// Classification of a change or caveat produced by conversion.
 pub enum ConversionIssueKind {
     /// Equivalent storage was normalized to the target layout without losing values.
     Normalized,
@@ -64,28 +71,38 @@ pub enum ConversionIssueKind {
 /// A change or compatibility caveat at a concrete source location.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ConversionIssue {
+    /// Path identifying the affected chunk, record, or field.
     pub path: String,
+    /// Classification of this change or caveat.
     pub kind: ConversionIssueKind,
+    /// Human-readable explanation of the conversion result.
     pub description: String,
 }
 /// Changes and compatibility caveats to inspect after a successful conversion.
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct ConversionReport {
+    /// Changes and caveats in conversion traversal order.
     pub issues: Vec<ConversionIssue>,
 }
 /// A converted model or record together with the changes made to produce it.
 #[derive(Clone, Debug)]
 pub struct Conversion<T> {
+    /// The converted model or record.
     pub model: T,
+    /// Changes and caveats generated while producing the result.
     pub report: ConversionReport,
 }
 
 /// The first field or chunk that cannot be converted under the selected policy.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ConversionError {
+    /// Numeric version of the input model or record.
     pub source_version: Version,
+    /// Requested numeric destination version.
     pub target_version: Version,
+    /// Path identifying the field or chunk that prevented conversion.
     pub path: String,
+    /// Human-readable reason conversion failed.
     pub description: String,
 }
 impl Display for ConversionError {

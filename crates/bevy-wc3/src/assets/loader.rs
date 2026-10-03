@@ -105,6 +105,11 @@ impl Wc3ModelAsset {
     }
 }
 
+/// Bevy loader for `.mdx` and `.mdl` model assets and their dependencies.
+///
+/// Registered by [`crate::Wc3BevyPlugin`]. Models are decoded and strictly
+/// normalized with [`Wc3Model::decode`]; textures and child models retain the
+/// source asset's named source and resolve beside the model before its asset root.
 #[derive(Default, TypePath)]
 pub struct Wc3ModelLoader;
 

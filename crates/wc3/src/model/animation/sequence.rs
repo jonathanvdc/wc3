@@ -37,19 +37,25 @@ pub struct Sequence {
     /// Start and end times in milliseconds on the model timeline.
     pub interval: [u32; 2],
     #[mdl(property = "MoveSpeed", default, skip_if = "is_positive_zero")]
+    /// Authored movement speed associated with this sequence.
     pub move_speed: f32,
     #[mdl(flatten)]
+    /// Playback flags, including whether the sequence loops.
     pub flags: SequenceFlags,
     #[mdl(property = "Rarity", default, skip_if = "is_positive_zero")]
     /// Weight used for random animation selection.
     pub rarity: f32,
     #[mdl(property = "SyncPoint", default, skip_if = "is_zero")]
+    /// Authored synchronization point.
     pub sync_point: u32,
     #[mdl(flatten)]
+    /// Bounds for the model during this sequence.
     pub extent: GeosetExtent,
 }
 
 impl Sequence {
+    /// Creates a named sequence with the supplied millisecond interval.
+    /// Returns an error if the name contains NUL or exceeds the fixed text capacity.
     pub fn new(name: &str, interval: [u32; 2]) -> Result<Self, ValueError> {
         let mut sequence = Self {
             name: FixedText::default(),
@@ -66,7 +72,7 @@ impl Sequence {
 }
 
 impl<V: ModelVersion> Model<V> {
-    /// Returns owned copies of `SEQS` chunk in file order.
+    /// Returns owned copies of sequence records from every `SEQS` chunk in file order.
     pub fn sequences(&self) -> Vec<Sequence> {
         self.collect_chunk_records::<SequencesChunk>()
     }

@@ -9,18 +9,22 @@ const MATRIX_SIZE: usize = 48;
 #[mdl(block = "BindPose")]
 pub struct BindPoseChunk {
     #[mdl(counted = "Matrices")]
+    /// Bind-pose matrices in file order.
     pub records: Vec<BindPoseMatrix>,
 }
 
 impl BindPoseChunk {
+    /// Creates a chunk from its bind-pose matrices.
     pub fn new(records: Vec<BindPoseMatrix>) -> Self {
         Self { records }
     }
 
+    /// Returns the number of matrices.
     pub fn len(&self) -> usize {
         self.records.len()
     }
 
+    /// Returns whether the chunk contains no matrices.
     pub fn is_empty(&self) -> bool {
         self.records.is_empty()
     }

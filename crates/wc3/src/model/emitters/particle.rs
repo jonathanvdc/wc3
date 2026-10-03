@@ -87,7 +87,7 @@ impl<V: ModelVersion> Model<V> {
         self.collect_chunk_records::<ParticleEmittersChunk>()
     }
 
-    /// Replaces particle emitters in the first `PREM` chunk.
+    /// Replaces particle emitters with one `PREM` chunk, removing any duplicate chunks.
     pub fn set_particle_emitters(&mut self, emitters: &[ParticleEmitter]) {
         self.replace_chunk(ParticleEmittersChunk::new(emitters.to_vec()));
     }

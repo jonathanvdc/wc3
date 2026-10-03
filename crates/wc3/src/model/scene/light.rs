@@ -35,13 +35,17 @@ use std::marker::PhantomData;
 pub enum LightType {
     #[default]
     #[mdx(value = 0)]
+    /// A point source radiating in all directions.
     Omnidirectional,
     #[mdx(value = 1)]
+    /// A source with a fixed illumination direction.
     Directional,
     #[mdx(value = 2)]
+    /// Ambient illumination without a directional source.
     Ambient,
     #[mdx(unknown)]
     #[mdl(unknown)]
+    /// An unrecognized wire value preserved by MDX; unsupported in MDL.
     Unknown(u32),
 }
 
@@ -117,8 +121,10 @@ impl ShadowRangeField for NoShadowRange {}
 #[derive(Clone, Debug, Default, PartialEq, mdx::Read, mdx::Write)]
 pub struct LightShadowRange {
     #[mdx(tag = *b"KLSS")]
+    /// Animated start distance of the shadow-casting range.
     pub start: Animatable<f32>,
     #[mdx(tag = *b"KLSE")]
+    /// Animated end distance of the shadow-casting range.
     pub end: Animatable<f32>,
 }
 impl ShadowRangeField for LightShadowRange {
@@ -149,10 +155,13 @@ impl FalloffField for NoFalloff {}
 #[derive(Clone, Debug, PartialEq, mdx::Read, mdx::Write)]
 pub struct LightFalloff {
     #[mdx(tag = *b"KLQF")]
+    /// Animated quadratic distance-falloff coefficient.
     pub quadratic: Animatable<f32>,
     #[mdx(tag = *b"KLLF")]
+    /// Animated linear distance-falloff coefficient.
     pub linear: Animatable<f32>,
     #[mdx(tag = *b"KLDA")]
+    /// Animated damping coefficient.
     pub damping: Animatable<f32>,
 }
 impl Default for LightFalloff {
@@ -173,10 +182,15 @@ impl FalloffField for LightFalloff {
     }
 }
 
+/// Selects version-dependent light fields.
 pub trait LightLayout {
+    /// Storage for the shadow-casting flag.
     type ShadowCasting: ShadowCastingField;
+    /// Storage for shadow intensity.
     type ShadowIntensity: ShadowIntensityField;
+    /// Storage for the animated shadow range.
     type ShadowRange: ShadowRangeField;
+    /// Storage for animated distance-falloff controls.
     type Falloff: FalloffField;
 }
 use crate::model::{V1000, V1100, V1200, V1300, V1400, V1600, V1800, V800, V900};
@@ -517,7 +531,7 @@ impl<V: ModelVersion> Model<V> {
         self.collect_chunk_records::<LightsChunk<V>>()
     }
 
-    /// Replaces lights in the first `LITE` chunk.
+    /// Replaces lights with one `LITE` chunk, removing any duplicate chunks.
     pub fn set_lights(&mut self, lights: &[Light<V>]) {
         self.replace_chunk(LightsChunk::new(lights.to_vec()));
     }

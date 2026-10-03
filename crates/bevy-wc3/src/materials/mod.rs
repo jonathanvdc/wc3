@@ -16,6 +16,11 @@ use crate::preparation::mesh::{EXTRA_JOINT_INDEX, EXTRA_JOINT_WEIGHT};
 /// A Bevy PBR material with WC3 layer render state.
 pub type Wc3LayerMaterial = ExtendedMaterial<StandardMaterial, Wc3LayerState>;
 
+/// WC3 shader bindings and blend/depth state extending a Bevy standard material.
+///
+/// Model preparation and instance animation populate this state. Its fields are
+/// private; customize the standard-material portion of [`Wc3LayerMaterial`] for
+/// application-controlled PBR properties.
 #[derive(Asset, TypePath, AsBindGroup, Debug, Clone, Default)]
 #[bind_group_data(Wc3LayerKey)]
 pub struct Wc3LayerState {
@@ -55,6 +60,7 @@ impl Default for Wc3HdUniform {
     }
 }
 
+/// Pipeline specialization key derived from a WC3 layer's filter and depth flags.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
 pub struct Wc3LayerKey {
     filter: u8,

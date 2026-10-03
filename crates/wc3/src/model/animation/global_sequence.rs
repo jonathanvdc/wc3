@@ -8,7 +8,10 @@ use crate::model::{GlobalSequencesChunk, Model};
 /// One global sequence duration in milliseconds.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, mdx::Read, mdx::Write, mdl::Read, mdl::Write)]
 #[mdl(property = "Duration")]
-pub struct GlobalSequence(pub u32);
+pub struct GlobalSequence(
+    /// Loop duration in milliseconds.
+    pub u32,
+);
 
 impl<V: ModelVersion> Model<V> {
     /// Returns loop durations in milliseconds, in model order.

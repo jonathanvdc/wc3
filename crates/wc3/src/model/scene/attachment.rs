@@ -55,7 +55,7 @@ impl<V: ModelVersion> Model<V> {
         self.collect_chunk_records::<AttachmentsChunk>()
     }
 
-    /// Replaces attachments in the first `ATCH` chunk.
+    /// Replaces attachments with one `ATCH` chunk, removing any duplicate chunks.
     pub fn set_attachments(&mut self, attachments: &[Attachment]) {
         self.replace_chunk(AttachmentsChunk::new(attachments.to_vec()));
     }

@@ -21,6 +21,10 @@ pub use rig::Wc3NodeEntities;
 use rig::{spawn_animation_root, spawn_rig};
 
 /// Spawn an independently animated instance from prepared assets.
+///
+/// Returns its transform and animation root. Commands take effect when Bevy
+/// applies the command queue. Meshes and bind poses remain shared; layer
+/// materials and playback state are created for this instance.
 pub fn spawn_prepared_model(
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
@@ -37,6 +41,9 @@ pub fn spawn_prepared_model(
 }
 
 /// Spawn a prepared model with consumer-defined texture choices.
+///
+/// Returns the new root and installs `bindings` there with the prepared model's
+/// resolved defaults. Commands take effect when Bevy applies the command queue.
 pub fn spawn_prepared_model_with_bindings(
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
@@ -92,6 +99,11 @@ fn initialize_root(
 
 /// Spawn an independently animated instance. The resolver supplies literal
 /// bitmap paths; replaceable IDs can be bound on the returned root entity.
+///
+/// Prepares geometry on every call. Use [`prepare_model`] and
+/// [`spawn_prepared_model`] to share preparation across instances. Child-model
+/// resources remain unresolved, as with [`prepare_model`]. Geometry preparation
+/// failures return [`ModelError`] before any instance entities are queued.
 pub fn spawn_model(
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,

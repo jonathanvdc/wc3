@@ -14,16 +14,17 @@ pub(super) struct Rig {
     pub(super) by_object_id: HashMap<u32, Entity>,
 }
 
-/// Entities for a model instance's animated nodes, keyed by MDX object ID.
+/// Entities for a model instance's animated nodes, keyed by authored object ID.
 ///
 /// The component lives on the model's animation root. Effects can use these
-/// entities as their transforms when their record types are implemented.
+/// entities to follow the corresponding animated node transforms.
 #[derive(Component)]
 pub struct Wc3NodeEntities {
     by_object_id: HashMap<u32, Entity>,
 }
 
 impl Wc3NodeEntities {
+    /// Returns the spawned rig entity for an authored object ID, if present.
     pub fn get(&self, object_id: u32) -> Option<Entity> {
         self.by_object_id.get(&object_id).copied()
     }

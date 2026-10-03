@@ -18,15 +18,18 @@ pub struct Parser<'a> {
 }
 
 impl<'a> Parser<'a> {
+    /// Starts a parser at the beginning of the source.
     pub fn new(source: &'a str) -> Self {
         Self {
             lexer: Lexer::new(source),
             lookahead: None,
         }
     }
+    /// Returns the original source for diagnostic formatting.
     pub fn source(&self) -> &'a str {
         self.lexer.source()
     }
+    /// Returns the next buffered token's start, or the lexer's current byte offset.
     pub fn position(&self) -> usize {
         match self.lookahead {
             Some(Ok(token)) => token.span.start,
@@ -34,12 +37,14 @@ impl<'a> Parser<'a> {
             None => self.lexer.position(),
         }
     }
+    /// Returns the next token without consuming it, or `None` at EOF.
     pub fn peek(&mut self) -> Result<Option<Token<'a>>, mdl::ReadError> {
         if self.lookahead.is_none() {
             self.lookahead = self.lexer.next();
         }
         self.lookahead.transpose()
     }
+    /// Consumes the next token, reporting an error at EOF.
     pub fn next_token(&mut self) -> Result<Token<'a>, mdl::ReadError> {
         let token = self
             .peek()?
@@ -47,6 +52,7 @@ impl<'a> Parser<'a> {
         self.lookahead = None;
         Ok(token)
     }
+    /// Builds a diagnostic at the buffered token or current byte position.
     pub fn error(&self, kind: mdl::ReadErrorKind) -> mdl::ReadError {
         let span = match self.lookahead {
             Some(Ok(token)) => token.span,
@@ -55,6 +61,7 @@ impl<'a> Parser<'a> {
         };
         mdl::ReadError::new(span, kind)
     }
+    /// Consumes a token only if its kind and contents exactly match `kind`.
     pub fn expect(&mut self, kind: TokenKind<'a>) -> Result<Token<'a>, mdl::ReadError> {
         let expected = match kind {
             TokenKind::Ident(_) => "the named identifier",
@@ -71,6 +78,7 @@ impl<'a> Parser<'a> {
             _ => Err(self.error(mdl::ReadErrorKind::Expected(expected))),
         }
     }
+    /// Consumes the named identifier, matching its spelling exactly.
     pub fn expect_ident(&mut self, name: &'static str) -> Result<(), mdl::ReadError> {
         match self.peek()? {
             Some(Token {
@@ -83,6 +91,7 @@ impl<'a> Parser<'a> {
             _ => Err(self.error(mdl::ReadErrorKind::Expected(name))),
         }
     }
+    /// Consumes a matching token and returns `true`; a mismatch leaves it buffered.
     pub fn consume(&mut self, kind: TokenKind<'a>) -> Result<bool, mdl::ReadError> {
         if self.peek()?.is_some_and(|token| token.kind == kind) {
             self.next_token()?;
@@ -91,9 +100,11 @@ impl<'a> Parser<'a> {
             Ok(false)
         }
     }
+    /// Reads one value using its MDL codec.
     pub fn read<T: Read>(&mut self) -> Result<T, mdl::ReadError> {
         T::read_mdl(self)
     }
+    /// Reads a value followed by its required comma separator.
     pub fn read_property<T: Read>(&mut self) -> Result<T, mdl::ReadError> {
         let value = self.read()?;
         self.expect(TokenKind::Comma)?;
@@ -166,6 +177,7 @@ impl<'a> Parser<'a> {
             },
         ))
     }
+    /// Requires EOF after skipping whitespace and comments.
     pub fn finish(&mut self) -> Result<(), mdl::ReadError> {
         if self.peek()?.is_none() {
             Ok(())
@@ -179,7 +191,9 @@ impl<'a> Parser<'a> {
 /// Unlike a lexical token, a field always has an identifier name.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Field<'a> {
+    /// The field identifier borrowed from the source.
     pub name: &'a str,
+    /// The byte range of the field name, excluding its value.
     pub span: Span,
 }
 
@@ -257,9 +271,11 @@ pub struct Counted<'p, 'a, T> {
     marker: PhantomData<T>,
 }
 impl<T: Read> Counted<'_, '_, T> {
+    /// Returns the count declared before the opening brace.
     pub fn declared_count(&self) -> usize {
         self.expected
     }
+    /// Drains unread items and validates the closing brace and declared count.
     pub fn finish(mut self) -> Result<(), mdl::ReadError> {
         for value in self.by_ref() {
             value?;

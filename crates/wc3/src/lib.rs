@@ -7,6 +7,8 @@
 //! [`blp`] reads and writes BLP1 and BLP2 encoded texture containers.
 //! [`mpq`] indexes, streams, creates, and edits MPQ v1–v4 archives.
 
+#![deny(missing_docs)]
+
 extern crate self as wc3;
 
 /// Warcraft III models and their MDX and MDL codecs.

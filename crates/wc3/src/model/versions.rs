@@ -14,12 +14,14 @@ mod sealed {
 pub trait ModelVersion:
     sealed::Sealed + MaterialLayout + GeosetLayout + CameraLayout + LightLayout + Clone + Debug + Eq
 {
+    /// Numeric format version written in the `VERS` chunk.
     const NUMBER: Version;
 }
 
 macro_rules! versions {
     ($($name:ident = $number:literal),* $(,)?) => {$ (
         #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        #[doc = concat!("A marker selecting model format version ", stringify!($number), " and its record layout.")]
         pub struct $name;
         impl sealed::Sealed for $name {}
         impl ModelVersion for $name {

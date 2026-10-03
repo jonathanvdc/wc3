@@ -11,8 +11,11 @@ use crate::model::{Quaternion, Vec3};
 /// `Quaternion` is a type alias, these semantics also apply to `[f32; 4]`.
 /// `u32` holds the left value for every interpolation mode.
 pub trait Interpolate: TrackValue {
+    /// Interpolates from `a` to `b` at normalized segment time `t`.
     fn linear(a: Self, b: Self, t: f32) -> Self;
+    /// Evaluates a Hermite segment using the outgoing tangent of `a` and incoming tangent of `b`.
     fn hermite(a: Self, out_tangent: Self, in_tangent: Self, b: Self, t: f32) -> Self;
+    /// Evaluates a Bezier segment using the outgoing control point of `a` and incoming control point of `b`.
     fn bezier(a: Self, out_tangent: Self, in_tangent: Self, b: Self, t: f32) -> Self;
 }
 

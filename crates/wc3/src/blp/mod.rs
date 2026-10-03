@@ -8,15 +8,15 @@
 //! regions. Image encoding validates format settings, dimensions, and mipmaps;
 //! reading a container does not assert that every mipmap can be decoded.
 //! With `blp-decode`, `decode_mip` converts encoded mipmaps to
-//! [`image::RgbaImage`]. With `blp-encode`, `encode_image` creates a container
+//! `image::RgbaImage`. With `blp-encode`, `encode_image` creates a container
 //! from RGBA pixels.
 //!
 //! # `image` crate adapters
 //!
-//! With `blp-decode`, [`BlpDecoder`](crate::blp::BlpDecoder) implements [`image::ImageDecoder`]. It
-//! selects the largest mipmap by default; [`BlpDecoder::with_mip`](crate::blp::BlpDecoder::with_mip) selects
+//! With `blp-decode`, `BlpDecoder` implements `image::ImageDecoder`. It
+//! selects the largest mipmap by default; `BlpDecoder::with_mip` selects
 //! another level. It writes RGBA8 pixels into the buffer supplied by `image`.
-//! Use [`BlpRef::decode_mip_into`](crate::blp::BlpRef::decode_mip_into) when you supply the pixel buffer yourself.
+//! Use `BlpRef::decode_mip_into` when you supply the pixel buffer yourself.
 //! JPEG decoding still uses a temporary CMYK buffer inside the JPEG decoder.
 //!
 //! ```
@@ -26,12 +26,12 @@
 //! image::DynamicImage::from_decoder(BlpDecoder::new(bytes)?)
 //! # }
 //! ```
-//! Call [`register_decoding_hook`](crate::blp::register_decoding_hook) once to let `image` load `.blp` paths and
+//! Call `register_decoding_hook` once to let `image` load `.blp` paths and
 //! detect BLP1/BLP2 data from its magic bytes.
 //!
-//! With `blp-encode`, [`BlpEncoder`](crate::blp::BlpEncoder) implements [`image::ImageEncoder`] for
-//! RGBA8 pixels. Use [`BlpEncoder::with_options`](crate::blp::BlpEncoder::with_options) to select the BLP encoding
-//! format; [`BlpEncoder::new`](crate::blp::BlpEncoder::new) uses default options.
+//! With `blp-encode`, `BlpEncoder` implements `image::ImageEncoder` for
+//! RGBA8 pixels. Use `BlpEncoder::with_options` to select the BLP encoding
+//! format; `BlpEncoder::new` uses default options.
 //!
 //! ```
 //! # #[cfg(feature = "blp-encode")]
@@ -72,14 +72,18 @@ pub const PALETTE_BYTES: usize = 1024;
 /// A borrowed BLP1 or BLP2 texture container.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum BlpRef<'a> {
+    /// A borrowed BLP1 container.
     Blp1(Blp1Ref<'a>),
+    /// A borrowed BLP2 container.
     Blp2(Blp2Ref<'a>),
 }
 
 /// An editable BLP1 or BLP2 texture container.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Blp {
+    /// An owned BLP1 container.
     Blp1(Blp1),
+    /// An owned BLP2 container.
     Blp2(Blp2),
 }
 

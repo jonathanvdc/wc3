@@ -5,20 +5,30 @@ use std::iter::FusedIterator;
 /// A borrowed lexical token. String contents are not unescaped by the lexer.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TokenKind<'a> {
+    /// An ASCII identifier, borrowing its spelling.
     Ident(&'a str),
+    /// A numeric spelling, including `nan` and `inf`; typed readers validate it.
     Number(&'a str),
+    /// Literal string contents without surrounding quotes.
     Quoted(&'a str),
+    /// The opening `{` delimiter.
     OpenBrace,
+    /// The closing `}` delimiter.
     CloseBrace,
+    /// The `,` property or entry separator.
     Comma,
+    /// The `:` separator between a keyframe time and value.
     Colon,
+    /// The `<=` delimiter used for a texture slot.
     Slot,
 }
 
 /// A token and its byte range, including quotes for a quoted token.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Token<'a> {
+    /// The token's lexical category and borrowed contents.
     pub kind: TokenKind<'a>,
+    /// The token's half-open byte range in the source.
     pub span: Span,
 }
 
@@ -36,6 +46,7 @@ pub struct Lexer<'a> {
 }
 
 impl<'a> Lexer<'a> {
+    /// Starts tokenization at the source beginning, skipping a leading BOM.
     pub fn new(source: &'a str) -> Self {
         Self {
             source,
@@ -44,9 +55,11 @@ impl<'a> Lexer<'a> {
         }
     }
 
+    /// Returns the byte offset after the last scanned token or skipped input.
     pub fn position(&self) -> usize {
         self.offset
     }
+    /// Returns the complete original source string.
     pub fn source(&self) -> &'a str {
         self.source
     }

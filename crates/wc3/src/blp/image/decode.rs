@@ -11,12 +11,28 @@ pub(super) const MAX_DECODE_BYTES: usize = 512 * 1024 * 1024;
 /// A failure while converting an encoded mipmap to RGBA pixels.
 #[derive(Debug)]
 pub enum DecodeError {
-    MissingMipmap { level: usize },
+    /// A required or requested mipmap level is absent.
+    MissingMipmap {
+        /// Zero-based mipmap level, with level zero at full resolution.
+        level: usize,
+    },
+    /// An image dimension is zero or the mipmap dimensions are invalid.
     InvalidDimensions,
-    InvalidData { field: &'static str },
-    UnsupportedAlphaDepth { depth: u32 },
+    /// Encoded pixels or the supplied output buffer have an invalid layout.
+    InvalidData {
+        /// Name of the invalid field.
+        field: &'static str,
+    },
+    /// The requested alpha depth is unsupported by the pixel decoder.
+    UnsupportedAlphaDepth {
+        /// Unsupported alpha depth, in bits per pixel.
+        depth: u32,
+    },
+    /// The image exceeds the allocation or size limit.
     LimitExceeded,
+    /// The JPEG codec failed; the contained string describes its failure.
     Jpeg(String),
+    /// The JPEG stream does not have the four unconverted components required by BLP.
     UnsupportedJpegColor,
 }
 
@@ -97,6 +113,9 @@ fn mip<'a>(mips: &[Option<&'a [u8]>; MIPMAP_SLOTS], level: usize) -> Result<&'a 
 
 impl Blp1Ref<'_> {
     /// Decodes one present mipmap to an image-rs RGBA image.
+    ///
+    /// `level` is zero-based, with level zero at full resolution. Returns an
+    /// error for missing levels, malformed pixels, or exceeded allocation limits.
     pub fn decode_mip(&self, level: usize) -> Result<RgbaImage, DecodeError> {
         let (width, height) = dimensions(self.header.width, self.header.height, level)?;
         let mut pixels = output(width, height)?;
@@ -105,6 +124,11 @@ impl Blp1Ref<'_> {
     }
 
     /// Decodes one present mipmap into a caller-provided RGBA8 buffer.
+    ///
+    /// `level` is zero-based. The buffer must contain exactly four bytes per
+    /// pixel at that level, in row-major red, green, blue, alpha order.
+    /// Invalid dimensions, missing levels, malformed pixels, or an incorrectly
+    /// sized buffer return an error.
     pub fn decode_mip_into(&self, level: usize, pixels: &mut [u8]) -> Result<(), DecodeError> {
         let (width, height) = dimensions(self.header.width, self.header.height, level)?;
         check_output(pixels, width, height)?;
@@ -127,6 +151,9 @@ impl Blp1Ref<'_> {
 
 impl Blp2Ref<'_> {
     /// Decodes one present mipmap to an image-rs RGBA image.
+    ///
+    /// `level` is zero-based, with level zero at full resolution. Returns an
+    /// error for missing levels, malformed pixels, or exceeded allocation limits.
     pub fn decode_mip(&self, level: usize) -> Result<RgbaImage, DecodeError> {
         let (width, height) = dimensions(self.header.width, self.header.height, level)?;
         let mut pixels = output(width, height)?;
@@ -135,6 +162,11 @@ impl Blp2Ref<'_> {
     }
 
     /// Decodes one present mipmap into a caller-provided RGBA8 buffer.
+    ///
+    /// `level` is zero-based. The buffer must contain exactly four bytes per
+    /// pixel at that level, in row-major red, green, blue, alpha order.
+    /// Invalid dimensions, missing levels, malformed pixels, or an incorrectly
+    /// sized buffer return an error.
     pub fn decode_mip_into(&self, level: usize, pixels: &mut [u8]) -> Result<(), DecodeError> {
         let (width, height) = dimensions(self.header.width, self.header.height, level)?;
         check_output(pixels, width, height)?;
@@ -166,6 +198,9 @@ impl Blp2Ref<'_> {
 
 impl BlpRef<'_> {
     /// Decodes one present mipmap to an image-rs RGBA image.
+    ///
+    /// `level` is zero-based, with level zero at full resolution. Returns an
+    /// error for missing levels, malformed pixels, or exceeded allocation limits.
     pub fn decode_mip(&self, level: usize) -> Result<RgbaImage, DecodeError> {
         match self {
             Self::Blp1(value) => value.decode_mip(level),
@@ -174,6 +209,11 @@ impl BlpRef<'_> {
     }
 
     /// Decodes one present mipmap into a caller-provided RGBA8 buffer.
+    ///
+    /// `level` is zero-based. The buffer must contain exactly four bytes per
+    /// pixel at that level, in row-major red, green, blue, alpha order.
+    /// Invalid dimensions, missing levels, malformed pixels, or an incorrectly
+    /// sized buffer return an error.
     pub fn decode_mip_into(&self, level: usize, pixels: &mut [u8]) -> Result<(), DecodeError> {
         match self {
             Self::Blp1(value) => value.decode_mip_into(level, pixels),
@@ -184,11 +224,19 @@ impl BlpRef<'_> {
 
 impl Blp {
     /// Decodes one present mipmap to an image-rs RGBA image.
+    ///
+    /// `level` is zero-based, with level zero at full resolution. Returns an
+    /// error for missing levels, malformed pixels, or exceeded allocation limits.
     pub fn decode_mip(&self, level: usize) -> Result<RgbaImage, DecodeError> {
         self.as_ref().decode_mip(level)
     }
 
     /// Decodes one present mipmap into a caller-provided RGBA8 buffer.
+    ///
+    /// `level` is zero-based. The buffer must contain exactly four bytes per
+    /// pixel at that level, in row-major red, green, blue, alpha order.
+    /// Invalid dimensions, missing levels, malformed pixels, or an incorrectly
+    /// sized buffer return an error.
     pub fn decode_mip_into(&self, level: usize, pixels: &mut [u8]) -> Result<(), DecodeError> {
         self.as_ref().decode_mip_into(level, pixels)
     }

@@ -52,7 +52,10 @@ pub struct Wc3LodSettings {
 /// Complete quality configuration override on one model root.
 /// An explicit [`Wc3Lod`] component takes precedence over its default policy.
 #[derive(Component, Clone, Debug)]
-pub struct Wc3LodOverride(pub Wc3LodSettings);
+pub struct Wc3LodOverride(
+    /// Settings applied to this instance in place of the global resource.
+    pub Wc3LodSettings,
+);
 
 impl Default for Wc3LodSettings {
     fn default() -> Self {
@@ -91,6 +94,10 @@ impl Wc3LodSettings {
         }
     }
 
+    /// Checks that quality bias, hysteresis, and transition thresholds are valid.
+    ///
+    /// Returns the first invalid setting's explanation without changing the
+    /// configuration. Authored level availability is resolved per model later.
     pub fn validate(&self) -> Result<(), &'static str> {
         if !self.quality_bias.is_finite() || self.quality_bias <= 0.0 {
             return Err("quality_bias must be finite and positive");

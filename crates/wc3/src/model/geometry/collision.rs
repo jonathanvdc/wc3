@@ -21,15 +21,20 @@ use std::io::Write as IoWrite;
 pub struct CollisionShape {
     /// Attached node.
     pub node: Node,
+    /// Shape and dimensions in the node's local coordinate system.
     pub geometry: CollisionGeometry,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 /// The shape and dimensions of a collision primitive.
 pub enum CollisionGeometry {
+    /// An axis-aligned box described by two corners.
     Box([Vec3; 2]),
+    /// A plane primitive described by two stored vertices.
     Plane([Vec3; 2]),
+    /// A sphere described by its center and radius.
     Sphere(Vec3, f32),
+    /// A cylinder described by two stored vertices and a radius.
     Cylinder([Vec3; 2], f32),
 }
 
@@ -158,7 +163,7 @@ impl<V: ModelVersion> Model<V> {
         self.collect_chunk_records::<CollisionShapesChunk>()
     }
 
-    /// Replaces collision shapes in the first `CLID` chunk.
+    /// Replaces collision shapes with one `CLID` chunk, removing any duplicate chunks.
     pub fn set_collision_shapes(&mut self, shapes: &[CollisionShape]) {
         self.replace_chunk(CollisionShapesChunk::new(shapes.to_vec()));
     }

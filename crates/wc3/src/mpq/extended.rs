@@ -7,12 +7,15 @@ use super::format::{u32_at, verify_md5};
 use super::{BlockEntry, Error, FileFlags, Header, ReadOptions};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+/// Decoded HET/BET filename lookup metadata for neutral locale and platform entries.
 pub struct ExtendedIndex {
     pub(super) hash_bits: u32,
     pub(super) slots: Vec<Option<(u64, u32)>>,
 }
 
 impl ExtendedIndex {
+    /// Returns the block index for a filename, using MPQ case and slash normalization.
+    /// Returns `None` when no matching filename hash is present.
     pub fn find(&self, name: &[u8]) -> Option<u32> {
         if self.slots.is_empty() {
             return None;

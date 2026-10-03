@@ -27,6 +27,9 @@ pub struct Wc3Model {
 
 impl Wc3Model {
     /// Detects binary MDX by its `MDLX` header; otherwise reads UTF-8 MDL.
+    ///
+    /// Returns an error for invalid UTF-8, malformed model data, or data that
+    /// cannot be strictly converted to the runtime model version.
     pub fn decode(bytes: &[u8]) -> Result<Self, ModelError> {
         if bytes.starts_with(b"MDLX") {
             Self::decode_mdx(bytes)
@@ -38,6 +41,7 @@ impl Wc3Model {
     }
 
     /// Reads binary MDX, using version 800 when there is no `VERS` chunk.
+    /// Returns an error for malformed data or a failed strict conversion.
     pub fn decode_mdx(bytes: &[u8]) -> Result<Self, ModelError> {
         let source =
             DynamicModel::decode_mdx(bytes, 800).map_err(|error| ModelError(error.to_string()))?;
@@ -45,6 +49,7 @@ impl Wc3Model {
     }
 
     /// Reads MDL text and applies the same strict conversion as MDX loading.
+    /// Returns an error for malformed text or a failed strict conversion.
     pub fn decode_mdl(source: &str) -> Result<Self, ModelError> {
         let source =
             DynamicModel::decode_mdl(source).map_err(|error| ModelError(error.to_string()))?;

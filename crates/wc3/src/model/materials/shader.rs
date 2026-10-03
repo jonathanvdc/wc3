@@ -10,9 +10,13 @@ use crate::model::mdx;
 pub struct ShaderType(u32);
 
 impl ShaderType {
+    /// Legacy standard-definition shader (ID 0).
     pub const SD_LEGACY: Self = Self(0);
+    /// Reforged DefaultUnit shader (ID 1).
     pub const HD_DEFAULT_UNIT: Self = Self(1);
+    /// Standard-definition fixed-function shader (ID 2).
     pub const SD_FIXED_FUNCTION: Self = Self(2);
+    /// Reforged Crystal shader (ID 24).
     pub const HD_CRYSTAL: Self = Self(24);
 
     /// Wraps a raw ID without restricting it to known pipelines.

@@ -13,9 +13,13 @@ pub trait Keyframe {
 #[mdl(value)]
 pub enum Interpolation {
     #[mdl(name = "DontInterp")]
+    /// Holds the preceding key value until the next key.
     Step,
+    /// Interpolates between adjacent values without tangents.
     Linear,
+    /// Uses outgoing and incoming Hermite tangents.
     Hermite,
+    /// Uses outgoing and incoming Bezier control points.
     Bezier,
 }
 

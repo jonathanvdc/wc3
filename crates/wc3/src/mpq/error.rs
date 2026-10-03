@@ -6,18 +6,31 @@ use std::io;
 #[derive(Debug)]
 #[non_exhaustive]
 pub enum Error {
+    /// The underlying archive source or destination failed an I/O operation.
     Io(io::Error),
+    /// The archive layout is invalid; the contained string identifies the failed check.
     InvalidArchive(&'static str),
+    /// An unsupported on-disk header version was encountered.
     UnsupportedVersion(u16),
+    /// The entry uses unsupported or inconsistent raw file flags.
     UnsupportedFlags(u32),
+    /// The entry uses an unsupported compression mask.
     UnsupportedCompression(u8),
+    /// The operation requires the Cargo feature named by the contained string.
     FeatureDisabled(&'static str),
+    /// A resource limit was exceeded; the contained string identifies the limit.
     LimitExceeded(&'static str),
+    /// No entry matches the requested name, locale, platform, or block index.
     FileNotFound,
+    /// The filename is empty or contains NUL, CR, or LF.
     InvalidName,
+    /// The filename hashes and locale/platform conflict with an existing entry.
     DuplicateFile,
+    /// The bytes supplied to an entry writer differ from its declared decoded size.
     SizeMismatch,
+    /// A prior failure or unfinished entry prevents archive completion.
     WriterFailed,
+    /// A sector checksum differs from its stored value; the number is the zero-based sector index.
     ChecksumMismatch(u32),
 }
 

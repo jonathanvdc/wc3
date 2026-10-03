@@ -21,7 +21,10 @@ use crate::preparation::prepare_resolved_model;
 /// The entity remains the transform and animation root.
 #[derive(Component)]
 #[require(Transform, Visibility)]
-pub struct Wc3ModelInstance(pub Handle<Wc3ModelAsset>);
+pub struct Wc3ModelInstance(
+    /// Model asset to instantiate beneath this root.
+    pub Handle<Wc3ModelAsset>,
+);
 
 impl Wc3ModelInstance {
     /// Create an instance request for an asset loaded through Bevy.

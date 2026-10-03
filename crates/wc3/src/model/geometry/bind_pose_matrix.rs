@@ -6,9 +6,13 @@ use crate::model::{ModelVersion, SupportsReforgedChunks, ValueError};
 /// A 3-by-4 floating-point bind-pose matrix.
 #[derive(Clone, Copy, Debug, PartialEq, mdx::Read, mdx::Write, mdl::Read, mdl::Write)]
 #[mdl(entry)]
-pub struct BindPoseMatrix(pub [f32; 12]);
+pub struct BindPoseMatrix(
+    /// The twelve matrix components in serialized order.
+    pub [f32; 12],
+);
 
 impl<V: ModelVersion> Model<V> {
+    /// Returns owned bind-pose matrices in file order.
     /// Returns an error if this model version does not support `BPOS`.
     pub fn try_bind_poses(&self) -> Result<Vec<BindPoseMatrix>, ValueError> {
         self.check_chunk_version(*b"BPOS")?;
@@ -19,6 +23,7 @@ impl<V: ModelVersion> Model<V> {
             .collect())
     }
 
+    /// Replaces bind-pose matrices with one `BPOS` chunk, removing duplicate chunks.
     /// Returns an error if this model version does not support `BPOS`.
     pub fn try_set_bind_poses(&mut self, poses: &[BindPoseMatrix]) -> Result<(), ValueError> {
         self.check_chunk_version(*b"BPOS")?;

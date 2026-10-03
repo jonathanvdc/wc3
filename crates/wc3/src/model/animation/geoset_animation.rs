@@ -74,7 +74,7 @@ impl<V: ModelVersion> Model<V> {
         self.collect_chunk_records::<GeosetAnimationsChunk>()
     }
 
-    /// Replaces geoset animations in the first `GEOA` chunk.
+    /// Replaces geoset animations with one `GEOA` chunk, removing any duplicate chunks.
     pub fn set_geoset_animations(&mut self, animations: &[GeosetAnimation]) {
         self.replace_chunk(GeosetAnimationsChunk::new(animations.to_vec()));
     }

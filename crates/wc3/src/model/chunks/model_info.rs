@@ -8,11 +8,14 @@ use crate::model::{Cursor, ModelInfo};
 /// A complete `MODL` chunk, including bytes after the standard record.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ModelInfoChunk {
+    /// Decoded model metadata and bounds.
     pub info: ModelInfo,
+    /// Uninterpreted trailing MDX bytes, preserved when writing MDX.
     pub extension: Vec<u8>,
 }
 
 impl ModelInfoChunk {
+    /// Creates a chunk from metadata and trailing extension bytes.
     pub fn new(info: ModelInfo, extension: Vec<u8>) -> Self {
         Self { info, extension }
     }

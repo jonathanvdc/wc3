@@ -21,12 +21,17 @@ impl<T: Read + Seek> ReadSeek for T {}
 pub struct ReadOptions {
     /// Strict by default; permissive mode recovers known malformed classic layouts.
     pub mode: ReadMode,
+    /// Maximum number of entries accepted in an index table.
     pub max_table_entries: u32,
     /// Maximum stored or decoded table allocation.
     pub max_table_bytes: u64,
+    /// Maximum decoded sector size in bytes.
     pub max_sector_size: u32,
+    /// Maximum allocation for an entry sector-offset table, in bytes.
     pub max_sector_table_bytes: u32,
+    /// Maximum decoded size accepted for an entry, in bytes.
     pub max_file_size: u32,
+    /// Maximum allocation for a single-unit payload, in bytes.
     pub max_single_unit_bytes: u32,
     /// Maximum distance searched in 512-byte steps from the initial cursor.
     pub max_header_search_bytes: u64,
@@ -61,6 +66,8 @@ pub struct Archive<R> {
 }
 
 impl<R: Read + Seek> Archive<R> {
+    /// Discovers and indexes an archive using the default strict read options.
+    /// Returns an error for invalid layouts, exceeded limits, or source I/O failures.
     pub fn open(source: R) -> Result<Self, Error> {
         Self::with_options(source, ReadOptions::default())
     }
@@ -440,12 +447,15 @@ impl<R: Read + Seek> Archive<R> {
         &self.diagnostics
     }
 
+    /// Returns the decoded archive header and lookup tables.
     pub fn index(&self) -> &Index {
         &self.index
     }
+    /// Returns the archive header byte offset in the underlying source.
     pub fn archive_offset(&self) -> u64 {
         self.base
     }
+    /// Consumes the archive and returns its source at the current cursor position.
     pub fn into_inner(self) -> R {
         self.source
     }
@@ -712,6 +722,7 @@ pub struct EntryReader<'a, R> {
 }
 
 impl<R: Read + Seek> EntryReader<'_, R> {
+    /// Returns the encoded storage metadata for this entry.
     pub fn metadata(&self) -> &BlockEntry {
         &self.block
     }

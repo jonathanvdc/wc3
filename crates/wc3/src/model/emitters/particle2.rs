@@ -32,13 +32,17 @@ use crate::model::{Model, Node};
 pub enum Particle2Frames {
     #[default]
     #[mdx(value = 0)]
+    /// Renders particle heads only.
     Head,
     #[mdx(value = 1)]
+    /// Renders particle tails only.
     Tail,
     #[mdx(value = 2)]
+    /// Renders both heads and tails.
     Both,
     #[mdx(unknown)]
     #[mdl(unknown)]
+    /// An unrecognized wire value preserved by MDX; unsupported in MDL.
     Unknown(u32),
 }
 
@@ -62,17 +66,23 @@ pub enum Particle2Frames {
 pub enum Particle2FilterMode {
     #[default]
     #[mdx(value = 0)]
+    /// Source-alpha blending.
     Blend,
     #[mdx(value = 1)]
+    /// Additive blending.
     Additive,
     #[mdx(value = 2)]
+    /// Multiplicative blending.
     Modulate,
     #[mdx(value = 3)]
+    /// Multiplicative blending with doubled contribution.
     Modulate2x,
     #[mdx(value = 4)]
+    /// Alpha-tested rendering.
     AlphaKey,
     #[mdx(unknown)]
     #[mdl(unknown)]
+    /// An unrecognized wire value preserved by MDX; unsupported in MDL.
     Unknown(u32),
 }
 
@@ -105,28 +115,37 @@ pub struct ParticleEmitter2 {
     pub node: Node<Particle2Flags>,
     #[mdx(tag = *b"KP2S")]
     #[mdl(property = "Speed", default)]
+    /// Initial particle speed in model units per second.
     pub speed: Animatable<f32>,
     #[mdx(tag = *b"KP2R")]
     #[mdl(property = "Variation", default)]
+    /// Authored variation factor for initial particle speed.
     pub variation: Animatable<f32>,
     #[mdx(tag = *b"KP2L")]
     #[mdl(property = "Latitude", default)]
+    /// Emission-cone latitude in degrees.
     pub latitude: Animatable<f32>,
     #[mdx(tag = *b"KP2G")]
     #[mdl(property = "Gravity", default)]
+    /// Acceleration due to gravity in model units per second squared.
     pub gravity: Animatable<f32>,
     #[mdl(property = "LifeSpan", default)]
+    /// Particle lifetime in seconds.
     pub life_span: f32,
     #[mdx(tag = *b"KP2E")]
     #[mdl(property = "EmissionRate", default)]
+    /// Emission rate in particles per second, or burst count when squirt is enabled.
     pub emission_rate: Animatable<f32>,
     #[mdx(tag = *b"KP2N")]
     #[mdl(property = "Length", default)]
+    /// Length of the emission region in model units.
     pub length: Animatable<f32>,
     #[mdx(tag = *b"KP2W")]
     #[mdl(property = "Width", default)]
+    /// Width of the emission region in model units.
     pub width: Animatable<f32>,
     #[mdl(flatten)]
+    /// How particles blend with the scene.
     pub filter_mode: Particle2FilterMode,
     #[mdl(property = "Rows", default)]
     /// Number of rows in the particle texture atlas.
@@ -138,8 +157,10 @@ pub struct ParticleEmitter2 {
     #[mdl(flatten)]
     pub frames: Particle2Frames,
     #[mdl(property = "TailLength", default)]
+    /// Time span represented by a particle tail, in seconds.
     pub tail_length: f32,
     #[mdl(property = "Time", default)]
+    /// Fraction of particle lifetime at the middle color, alpha, and scale stage.
     pub time: f32,
     #[mdl(skip, default)]
     /// RGB color at the start, middle, and end of particle life.
@@ -157,10 +178,13 @@ pub struct ParticleEmitter2 {
     /// Index into the model texture collection.
     pub texture_id: u32,
     #[mdl(property = "Squirt", default, skip_if = "is_zero")]
+    /// Nonzero enables burst emission at emission-rate keys.
     pub squirt: u32,
     #[mdl(property = "PriorityPlane", default, skip_if = "is_zero")]
+    /// Authored rendering priority plane.
     pub priority_plane: u32,
     #[mdl(property = "ReplaceableId", default, skip_if = "is_zero")]
+    /// Replaceable-texture identifier; zero uses the texture collection entry.
     pub replaceable_id: u32,
     #[mdx(tag = *b"KP2V")]
     #[mdl(property = "Visibility")]
@@ -215,7 +239,7 @@ impl<V: ModelVersion> Model<V> {
         self.collect_chunk_records::<ParticleEmitters2Chunk>()
     }
 
-    /// Replaces particle emitter 2 records in the first `PRE2` chunk.
+    /// Replaces particle emitter 2 records with one `PRE2` chunk, removing any duplicate chunks.
     pub fn set_particle_emitters2(&mut self, emitters: &[ParticleEmitter2]) {
         self.replace_chunk(ParticleEmitters2Chunk::new(emitters.to_vec()));
     }

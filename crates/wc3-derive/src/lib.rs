@@ -7,6 +7,7 @@
 //! Import macros through those format modules, for example
 //! `#[derive(mdl::Read, mdl::Write)]`. The MDL attribute reference follows.
 #![doc = include_str!("mdl.md")]
+#![deny(missing_docs)]
 mod mdl;
 mod mdx;
 

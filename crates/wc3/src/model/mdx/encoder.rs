@@ -12,8 +12,10 @@ pub struct SizeMarker(usize);
 
 /// A value with a little-endian MDX representation.
 pub trait Write {
+    /// Appends one value to the encoder. Errors may leave partial output.
     fn write_mdx(&self, encoder: &mut Encoder<'_>) -> Result<(), mdx::WriteError>;
 
+    /// Encodes one value into a new owned byte buffer.
     fn encode_mdx(&self) -> Result<Vec<u8>, mdx::WriteError> {
         let mut bytes = Vec::new();
         Encoder::new(&mut bytes).write(self)?;

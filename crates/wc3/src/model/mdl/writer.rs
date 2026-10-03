@@ -18,6 +18,7 @@ pub struct Writer<W> {
     dialect: Dialect,
 }
 impl<W: IoWrite> Writer<W> {
+    /// Creates a streaming writer using the Warcraft III dialect.
     pub fn new(output: W) -> Self {
         Self::with_dialect(output, Dialect::Warcraft3)
     }
@@ -29,6 +30,7 @@ impl<W: IoWrite> Writer<W> {
             dialect,
         }
     }
+    /// Returns the syntax selected for this writer and all nested values.
     pub fn dialect(&self) -> Dialect {
         self.dialect
     }
@@ -44,6 +46,7 @@ impl<W: IoWrite> Writer<W> {
             Ok(self.output)
         }
     }
+    /// Streams a value through its MDL codec using this writer.
     pub fn write<T: Write + ?Sized>(&mut self, value: &T) -> Result<(), IoError<mdl::WriteError>> {
         value.write_mdl(self)
     }
@@ -52,6 +55,7 @@ impl<W: IoWrite> Writer<W> {
         self.output.write_all(value.as_bytes())?;
         Ok(())
     }
+    /// Writes an ASCII identifier, rejecting invalid characters before output.
     pub fn identifier(&mut self, value: &str) -> Result<(), IoError<mdl::WriteError>> {
         let mut bytes = value.bytes();
         if !bytes
@@ -73,6 +77,7 @@ impl<W: IoWrite> Writer<W> {
         self.raw(value)?;
         self.raw("\"")
     }
+    /// Writes one tab for each currently open block.
     pub fn indent(&mut self) -> Result<(), IoError<mdl::WriteError>> {
         for _ in 0..self.depth {
             self.raw("\t")?;
@@ -85,6 +90,7 @@ impl<W: IoWrite> Writer<W> {
         self.identifier(name)?;
         self.open_body()
     }
+    /// Writes an indented block header with a quoted name and opens its body.
     pub fn begin_named_block(
         &mut self,
         name: &str,
@@ -96,6 +102,8 @@ impl<W: IoWrite> Writer<W> {
         self.quoted(value)?;
         self.open_body()
     }
+    /// Writes a count-prefixed block header and opens its body.
+    /// Rejects counts above `u32::MAX` before output.
     pub fn begin_counted_block(
         &mut self,
         name: &str,
@@ -122,6 +130,8 @@ impl<W: IoWrite> Writer<W> {
         self.depth = depth;
         Ok(())
     }
+    /// Closes the current block and writes its indented closing brace.
+    /// Returns an error if no block is open.
     pub fn end_block(&mut self) -> Result<(), IoError<mdl::WriteError>> {
         self.depth = self
             .depth
@@ -130,6 +140,7 @@ impl<W: IoWrite> Writer<W> {
         self.indent()?;
         self.raw("}\n")
     }
+    /// Writes an indented named value followed by a comma and newline.
     pub fn property<T: Write + ?Sized>(
         &mut self,
         name: &str,
@@ -154,6 +165,7 @@ impl<W: IoWrite> Writer<W> {
         self.write(value)?;
         self.raw(",\n")
     }
+    /// Writes an indented flag name followed by a comma and newline.
     pub fn flag(&mut self, name: &str) -> Result<(), IoError<mdl::WriteError>> {
         self.indent()?;
         self.identifier(name)?;

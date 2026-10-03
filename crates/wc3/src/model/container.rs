@@ -246,14 +246,23 @@ impl<V: ModelVersion> mdx::Write for Model<V> {
 /// Version block. `mdl::Read::decode_mdl` requires an explicit FormatVersion.
 #[derive(Clone, Debug)]
 pub enum DynamicModel {
+    /// A model using format version 800.
     V800(Model<V800>),
+    /// A model using format version 900.
     V900(Model<V900>),
+    /// A model using format version 1000.
     V1000(Model<V1000>),
+    /// A model using format version 1100.
     V1100(Model<V1100>),
+    /// A model using format version 1200.
     V1200(Model<V1200>),
+    /// A model using format version 1300.
     V1300(Model<V1300>),
+    /// A model using format version 1400.
     V1400(Model<V1400>),
+    /// A model using format version 1600.
     V1600(Model<V1600>),
+    /// A model using format version 1800.
     V1800(Model<V1800>),
 }
 
@@ -309,10 +318,12 @@ impl DynamicModel {
         }
     }
 
+    /// Returns the format version of the contained model.
     pub fn version(&self) -> Version {
         visit_model!(self, |model| model.version())
     }
 
+    /// Encodes the contained model as a complete MDX file.
     pub fn encode_mdx(&self) -> Result<Vec<u8>, mdx::WriteError> {
         visit_model!(self, |model| model.encode_mdx())
     }

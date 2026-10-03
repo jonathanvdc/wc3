@@ -3,17 +3,35 @@ use std::{error::Error, fmt};
 /// Reason a BLP container could not be read.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ReadErrorKind {
+    /// The input does not begin with a BLP1 or BLP2 signature.
     InvalidMagic,
+    /// The input ends before a required header or content field.
     UnexpectedEnd,
-    InvalidValue { field: &'static str, value: u32 },
-    InvalidRange { level: usize },
-    MissingMipmap { level: usize },
+    /// A container field has an invalid or unsupported value.
+    InvalidValue {
+        /// Name of the invalid field.
+        field: &'static str,
+        /// Rejected value as stored in the container.
+        value: u32,
+    },
+    /// A mipmap byte range is invalid or extends outside the input.
+    InvalidRange {
+        /// Zero-based mipmap level, with level zero at full resolution.
+        level: usize,
+    },
+    /// A required or requested mipmap level is absent.
+    MissingMipmap {
+        /// Zero-based mipmap level, with level zero at full resolution.
+        level: usize,
+    },
 }
 
 /// A read failure at an absolute byte offset.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ReadError {
+    /// Absolute byte offset in the input where the failure was detected.
     pub offset: usize,
+    /// Reason the container could not be read.
     pub kind: ReadErrorKind,
 }
 
@@ -47,8 +65,17 @@ impl Error for ReadError {}
 /// A container that cannot be represented as a BLP file.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum WriteError {
-    InvalidValue { field: &'static str },
-    MissingMipmap { level: usize },
+    /// A container field has an invalid or unsupported value.
+    InvalidValue {
+        /// Name of the invalid field.
+        field: &'static str,
+    },
+    /// A required or requested mipmap level is absent.
+    MissingMipmap {
+        /// Zero-based mipmap level, with level zero at full resolution.
+        level: usize,
+    },
+    /// An encoded size or offset cannot be represented by the BLP format.
     SizeOverflow,
 }
 

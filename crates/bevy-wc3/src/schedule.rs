@@ -16,13 +16,21 @@ use bevy::transform::TransformSystems;
 /// Order application systems in the same schedule as their target set.
 #[derive(SystemSet, Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Wc3Systems {
+    /// Prepares loaded models and populates pending instance roots in `Update`.
     SpawnInstances,
+    /// Applies changed quad-particle texture bindings in `Update`.
     BindTextures,
+    /// Advances instance playback clocks and pose transitions in `Update`.
     AdvanceAnimation,
+    /// Samples materials, lights, attachments, and child-particle animation in `Update`.
     AnimateInstances,
+    /// Plays authored views on bound application cameras in `PostUpdate`.
     AnimateCameras,
+    /// Evaluates animated node transforms before propagation in `PostUpdate`.
     EvaluateNodePoses,
+    /// Spawns and advances Classic model particles before transform propagation.
     SimulateModelParticles,
+    /// Samples quad-particle births and ribbon sections after transform propagation.
     SimulateEffects,
     /// Publishes model event messages after transform propagation in `PostUpdate`.
     DispatchEvents,

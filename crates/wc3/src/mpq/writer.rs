@@ -14,19 +14,26 @@ use super::{Archive, BlockEntry, Error, FileFlags, HashEntry, Header};
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub enum Compression {
     #[default]
+    /// Store entry bytes without compression.
     Stored,
+    /// Compress sectors with zlib; requires the `mpq-encode` feature.
     Zlib,
+    /// Compress sectors with bzip2; requires the `mpq-encode` feature.
     Bzip2,
 }
 
 /// Per-entry storage and lookup settings.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct FileOptions {
+    /// Compression applied to entry sectors.
     pub compression: Compression,
+    /// Encrypt payload bytes using the filename-derived MPQ key.
     pub encrypted: bool,
     /// Include the entry's archive-relative offset and decoded size in its key.
     pub adjusted_key: bool,
+    /// Locale used for filename lookup; zero selects the neutral locale.
     pub locale: u16,
+    /// Platform used for filename lookup; zero selects the neutral platform.
     pub platform: u16,
     /// Store Adler-32 records for compressed sector entries.
     pub sector_checksums: bool,
@@ -39,6 +46,7 @@ pub struct WriteOptions {
     pub sector_size_shift: u16,
     /// Generate `(listfile)` on finish, including itself. Names remain bytes.
     pub listfile: bool,
+    /// Maximum number of block records allowed in the archive.
     pub max_entries: u32,
     /// On-disk header version, 0 through 3. Defaults to classic MPQ.
     pub header_version: u16,
@@ -80,6 +88,8 @@ pub struct ArchiveWriter<W> {
 }
 
 impl<W: Write + Seek> ArchiveWriter<W> {
+    /// Starts an archive at the destination cursor, which must be 512-byte aligned.
+    /// Returns an error for invalid options, exceeded limits, or destination I/O failures.
     pub fn new(output: W, options: WriteOptions) -> Result<Self, Error> {
         if options.header_version > 3 {
             return Err(Error::UnsupportedVersion(options.header_version));
@@ -675,6 +685,9 @@ impl<W: Write + Seek> EntryWriter<'_, W> {
         Ok(())
     }
 
+    /// Flushes the final sector and commits this entry to its archive writer.
+    /// Returns an error if the supplied byte count differs from the declared size or
+    /// if encoding or I/O fails. The archive cannot finish after an entry failure.
     pub fn finish(mut self) -> Result<(), Error> {
         if self.failed {
             return Err(Error::WriterFailed);

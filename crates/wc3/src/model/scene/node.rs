@@ -95,12 +95,15 @@ pub struct Node<F = NodeFlags> {
     pub flags: F,
     #[mdx(tag = *b"KGTR")]
     #[mdl(property = "Translation")]
+    /// Optional local translation animation.
     pub translation: Option<Track<Vec3>>,
     #[mdx(tag = *b"KGRT")]
     #[mdl(property = "Rotation")]
+    /// Optional local quaternion rotation animation.
     pub rotation: Option<Track<Quaternion>>,
     #[mdx(tag = *b"KGSC")]
     #[mdl(property = "Scaling")]
+    /// Optional local scale animation.
     pub scaling: Option<Track<Vec3>>,
 }
 
@@ -190,7 +193,7 @@ impl<V: ModelVersion> Model<V> {
         self.collect_chunk_records::<BonesChunk>()
     }
 
-    /// Replaces all bones in the first `BONE` chunk.
+    /// Replaces all bones with one `BONE` chunk, removing any duplicate chunks.
     pub fn set_bones(&mut self, bones: &[Bone]) {
         self.replace_chunk(BonesChunk::new(bones.to_vec()));
     }
@@ -200,7 +203,7 @@ impl<V: ModelVersion> Model<V> {
         self.collect_chunk_records::<HelpersChunk>()
     }
 
-    /// Replaces all helpers in the first `HELP` chunk.
+    /// Replaces all helpers with one `HELP` chunk, removing any duplicate chunks.
     pub fn set_helpers(&mut self, helpers: &[Node]) {
         self.replace_chunk(HelpersChunk::new(helpers.to_vec()));
     }

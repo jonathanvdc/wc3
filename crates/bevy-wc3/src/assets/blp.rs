@@ -6,6 +6,10 @@ use bevy::reflect::TypePath;
 use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
 use wc3::blp::BlpRef;
 
+/// Bevy loader for `.blp` images, registered by [`crate::Wc3BevyPlugin`].
+///
+/// Decodes the first mip level to RGBA and honors the image loader's sRGB and
+/// sampler settings. Authored mip levels are not uploaded.
 #[derive(Default, TypePath)]
 pub struct BlpImageLoader;
 

@@ -50,12 +50,17 @@ impl Wc3ModelCameras {
 /// An evaluated authored view. Coordinates are model-local; angles are radians.
 #[derive(Clone, Copy, Debug)]
 pub struct Wc3CameraSample {
+    /// Evaluated eye position in model-local coordinates.
     pub position: Vec3,
+    /// Evaluated look-at target in model-local coordinates.
     pub target: Vec3,
     /// Right-handed rotation about the eye-to-target direction.
     pub roll: f32,
+    /// Authored vertical field of view in radians, before any binding multiplier.
     pub field_of_view: f32,
+    /// Authored near clipping distance in model units.
     pub near_clip: f32,
+    /// Authored far clipping distance in model units.
     pub far_clip: f32,
 }
 
@@ -124,7 +129,9 @@ impl Wc3CameraSample {
 /// camera when in doubt. Visibility and modern lens tracks do not control views.
 #[derive(Component, Clone, Copy, Debug)]
 pub struct Wc3CameraBinding {
+    /// Model root containing the authored cameras and playback clock.
     pub model: Entity,
+    /// Zero-based index into the model's authored camera collection.
     pub camera_index: usize,
     /// Multiplies authored vertical FOV. Must produce a finite angle in (0, pi).
     pub fov_multiplier: f32,

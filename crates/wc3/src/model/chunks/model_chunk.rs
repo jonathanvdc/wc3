@@ -22,6 +22,7 @@ impl<V: ModelVersion> UnknownChunk<V> {
         })
     }
 
+    /// Borrows the opaque tag and payload.
     pub fn raw(&self) -> &RawChunk {
         &self.raw
     }
@@ -38,7 +39,9 @@ macro_rules! model_chunks {
         /// One ordered chunk in a model. Known variants contain complete decoded payloads.
         #[derive(Clone, Debug)]
         pub enum ModelChunk<V: ModelVersion> {
-            $( $variant(Box<$chunk>), )*
+            $( #[doc = concat!("Decoded `", stringify!($variant), "` chunk payload.")]
+               $variant(Box<$chunk>), )*
+            /// An unrecognized chunk retained as opaque bytes.
             Unknown(UnknownChunk<V>),
         }
 

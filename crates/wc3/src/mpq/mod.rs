@@ -16,14 +16,14 @@
 //! and HET/BET lookup are supported. V4 header/table MD5s are checked when present;
 //! raw file chunks are checked when opening a file. Compressed tables require
 //! `mpq-decode`. HET/BET filename lookup is neutral-locale/platform only.
-//! Writers default to classic headers; use [`WriteOptions`] to select newer
+//! Writers default to classic headers; use [`WriteOptions`](crate::mpq::WriteOptions) to select newer
 //! headers, HET/BET indexes, or v4 raw chunk digests. Patch-file semantics and
-//! signature verification are not implemented. Use [`ReadMode::Permissive`] for
+//! signature verification are not implemented. Use [`ReadMode::Permissive`](crate::mpq::ReadMode::Permissive) for
 //! bounded recovery of known malformed classic MPQs. Valid extended formats
 //! retain strict checks; recovered archives cannot be edited. Recovery does not
-//! restore missing filenames or deleted editor data. [`Archive::diagnostics`]
+//! restore missing filenames or deleted editor data. [`Archive::diagnostics`](crate::mpq::Archive::diagnostics)
 //! reports indexing and payload recoveries (at most 1024 records plus a notice).
-//! [`Archive::open_file_by_index`] can extract unnamed entries, with limited
+//! [`Archive::open_file_by_index`](crate::mpq::Archive::open_file_by_index) can extract unnamed entries, with limited
 //! encryption-key recovery from sector tables or RIFF/EXE/XML signatures in
 //! permissive mode. Recovery is limited to these documented cases.
 //!

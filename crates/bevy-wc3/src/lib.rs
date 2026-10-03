@@ -60,6 +60,8 @@
 //! appearance is unverified. The repository's `docs/` guides explain the renderer
 //! and feature-specific limits.
 
+#![deny(missing_docs)]
+
 mod animation;
 mod assets;
 mod attachment;

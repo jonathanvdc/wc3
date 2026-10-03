@@ -4,7 +4,10 @@ use crate::model::mdx;
 use crate::model::{Cursor, Encoder, ValueError};
 use std::borrow::Cow;
 
-/// A fixed-width, NUL-terminated text field that retains every source byte.
+/// A fixed-width text field that retains every source byte.
+///
+/// New text is NUL-terminated, but decoded or explicitly supplied bytes may
+/// be unterminated, contain invalid UTF-8, or have nonzero padding.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct FixedText<const N: usize>([u8; N]);
 
@@ -25,7 +28,9 @@ impl<const N: usize> FixedText<N> {
         String::from_utf8_lossy(&self.0[..end])
     }
 
-    /// Sets text and clears the rest of the field.
+    /// Sets UTF-8 text and clears the rest of the field.
+    /// The text must contain no NUL and occupy fewer than `N` bytes so a
+    /// terminator fits. Invalid input leaves the field unchanged.
     pub fn set_text(&mut self, value: &str) -> Result<(), ValueError> {
         if value.len() >= N || value.as_bytes().contains(&0) {
             return Err(ValueError::InvalidString {
