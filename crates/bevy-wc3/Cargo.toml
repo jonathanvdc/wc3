@@ -1,6 +1,6 @@
 [package]
 name = "bevy-wc3"
-version = "0.2.0"
+version.workspace = true
 edition = "2021"
 rust-version = "1.95"
 description = "Bevy renderer for Warcraft III models"
@@ -13,9 +13,9 @@ categories = ["game-development", "rendering"]
 
 [dependencies]
 bevy = { version = "0.19.1", features = ["dds", "png", "tga"] }
-wc3 = { path = "../wc3", version = "0.2.0", features = ["blp-decode"] }
+wc3 = { workspace = true, features = ["blp-decode"] }
 bytemuck = { version = "1", features = ["derive"] }
 
 [dev-dependencies]
-bevy-mpq = { path = "../bevy-mpq", version = "0.2.0" }
+bevy-mpq = { workspace = true }
 naga = { version = "29", features = ["wgsl-in"] }

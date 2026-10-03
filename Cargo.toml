@@ -1,3 +1,11 @@
 [workspace]
 members = ["crates/wc3", "crates/wc3-derive", "crates/bevy-wc3", "crates/bevy-mpq"]
 resolver = "2"
+
+[workspace.package]
+version = "0.3.0"
+
+[workspace.dependencies]
+wc3 = { path = "crates/wc3", version = "0.3.0" }
+wc3-derive = { path = "crates/wc3-derive", version = "0.3.0" }
+bevy-mpq = { path = "crates/bevy-mpq", version = "0.3.0" }

@@ -1,6 +1,6 @@
 [package]
 name = "bevy-mpq"
-version = "0.2.0"
+version.workspace = true
 edition = "2021"
 rust-version = "1.95"
 description = "Caller-configured MPQ asset sources for Bevy"
@@ -11,8 +11,8 @@ repository = "https://github.com/jonathanvdc/wc3"
 [dependencies]
 bevy_asset = "0.19.1"
 blocking = "1"
-wc3 = { path = "../wc3", version = "0.2.0", features = ["mpq-decode"] }
+wc3 = { workspace = true, features = ["mpq-decode"] }
 
 [dev-dependencies]
-wc3 = { path = "../wc3", version = "0.2.0", features = ["mpq-encode"] }
+wc3 = { workspace = true, features = ["mpq-encode"] }
 futures-lite = "2"

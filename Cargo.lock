@@ -434,7 +434,7 @@ dependencies = [
 
 [[package]]
 name = "bevy-mpq"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "bevy_asset",
  "blocking",
@@ -444,7 +444,7 @@ dependencies = [
 
 [[package]]
 name = "bevy-wc3"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "bevy",
  "bevy-mpq",
@@ -5661,7 +5661,7 @@ dependencies = [
 
 [[package]]
 name = "wc3"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "bitfield",
  "bzip2",
@@ -5680,7 +5680,7 @@ dependencies = [
 
 [[package]]
 name = "wc3-derive"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "bitfield",
  "proc-macro2",
