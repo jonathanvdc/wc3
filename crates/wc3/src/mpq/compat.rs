@@ -151,7 +151,9 @@ pub(super) fn read_index(
     let (hash_bytes, hash_count) = &tables[0];
     let (block_bytes, block_count) = &tables[1];
     let blocks: Vec<_> = block_bytes
-        .chunks_exact(16)
+        .as_chunks::<16>()
+        .0
+        .iter()
         .map(|b| BlockEntry {
             offset: u32_at(b, 0) as u64,
             stored_size: u32_at(b, 4),
@@ -160,7 +162,7 @@ pub(super) fn read_index(
         })
         .collect();
     let mut hashes = Vec::with_capacity(*hash_count as usize);
-    for (slot, b) in hash_bytes.chunks_exact(16).enumerate() {
+    for (slot, b) in hash_bytes.as_chunks::<16>().0.iter().enumerate() {
         let mut id = u32_at(b, 12);
         if id < DELETED {
             let masked = id & 0x0fff_ffff;
@@ -393,7 +395,12 @@ pub(super) fn load_layout(
                     if bytes.len() < expected {
                         bytes = decode(&bytes, expected, false)?;
                     }
-                    bytes.chunks_exact(4).map(|b| u32_at(b, 0)).collect()
+                    bytes
+                        .as_chunks::<4>()
+                        .0
+                        .iter()
+                        .map(|b| u32_at(b, 0))
+                        .collect()
                 }
             } else {
                 Vec::new()

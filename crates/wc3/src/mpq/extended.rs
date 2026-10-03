@@ -74,8 +74,18 @@ pub(super) fn read_extended(
     if het.len() < 32 || bet.len() < 76 {
         return Err(Error::InvalidArchive("extended table header"));
     }
-    let h: Vec<u32> = het[..32].chunks_exact(4).map(|b| u32_at(b, 0)).collect();
-    let b: Vec<u32> = bet[..76].chunks_exact(4).map(|b| u32_at(b, 0)).collect();
+    let h: Vec<u32> = het[..32]
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .map(|b| u32_at(b, 0))
+        .collect();
+    let b: Vec<u32> = bet[..76]
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .map(|b| u32_at(b, 0))
+        .collect();
     if h[0] as usize > het.len()
         || h[0] < 32
         || b[0] as usize > bet.len()

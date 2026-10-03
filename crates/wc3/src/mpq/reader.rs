@@ -351,8 +351,8 @@ impl<R: Read + Seek> Archive<R> {
             source.seek(SeekFrom::Start(base + header.hi_block_table_offset))?;
             source.read_exact(&mut high)?;
             verify_md5(&high, &header.md5[2])?;
-            for (block, word) in blocks.iter_mut().zip(high.chunks_exact(2)) {
-                block.offset |= (u16::from_le_bytes(word.try_into().unwrap()) as u64) << 32;
+            for (block, word) in blocks.iter_mut().zip(high.as_chunks::<2>().0.iter()) {
+                block.offset |= (u16::from_le_bytes(*word) as u64) << 32;
             }
         }
         let extended = match (header.het_table_offset != 0, header.bet_table_offset != 0) {
@@ -656,7 +656,12 @@ pub(super) fn load_offsets(
     if let Some(key) = key {
         crypt(&mut bytes, key.wrapping_sub(1), true);
     }
-    let offsets: Vec<u32> = bytes.chunks_exact(4).map(|b| u32_at(b, 0)).collect();
+    let offsets: Vec<u32> = bytes
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .map(|b| u32_at(b, 0))
+        .collect();
     if !permissive
         && (offsets[0] < size
             || offsets.last().is_none_or(|&n| n > block.stored_size)

@@ -29,8 +29,8 @@ pub(super) fn decode(input: &[u8], channels: usize, limit: usize) -> Result<Vec<
     let mut samples = [0i32; 2];
     let mut indices = [44i32; 2];
     let mut output = Vec::new();
-    for (channel, bytes) in input[2..header_len].chunks_exact(2).enumerate() {
-        samples[channel] = i16::from_le_bytes(bytes.try_into().unwrap()) as i32;
+    for (channel, bytes) in input[2..header_len].as_chunks::<2>().0.iter().enumerate() {
+        samples[channel] = i16::from_le_bytes(*bytes) as i32;
         output.extend_from_slice(bytes);
     }
     let mut channel = channels - 1;

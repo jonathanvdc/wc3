@@ -52,7 +52,7 @@ fn change_table(bytes: &mut [u8], hash_table: bool, mutate: impl FnOnce(&mut [u8
 fn rejects_dangling_hashes_and_block_extents() {
     let mut bytes = archive();
     change_table(&mut bytes, true, |table| {
-        for entry in table.chunks_exact_mut(16) {
+        for entry in table.as_chunks_mut::<16>().0.iter_mut() {
             if u32::from_le_bytes(entry[12..16].try_into().unwrap()) == 0 {
                 entry[12..16].copy_from_slice(&999u32.to_le_bytes());
             }
@@ -378,13 +378,13 @@ fn rejects_sector_offsets_bombs_unknown_masks_and_bad_checksums() {
 fn full_hash_tables_allow_replacement_and_reuse_tombstones() {
     let mut bytes = archive();
     change_table(&mut bytes, true, |table| {
-        let existing: [u8; 16] = table
-            .chunks_exact(16)
+        let existing: [u8; 16] = *table
+            .as_chunks::<16>()
+            .0
+            .iter()
             .find(|e| u32::from_le_bytes(e[12..16].try_into().unwrap()) == 0)
-            .unwrap()
-            .try_into()
             .unwrap();
-        for (i, entry) in table.chunks_exact_mut(16).enumerate() {
+        for (i, entry) in table.as_chunks_mut::<16>().0.iter_mut().enumerate() {
             entry.copy_from_slice(&existing);
             entry[8..10].copy_from_slice(&(i as u16).to_le_bytes());
         }
@@ -579,7 +579,7 @@ fn differing_classic_and_bet_record_order_is_remapped() {
     let table = &mut bytes[start..start + header.hash_table_entries as usize * 16];
     let key = hash(b"(hash table)", 3);
     crypt(table, key, true);
-    for record in table.chunks_exact_mut(16) {
+    for record in table.as_chunks_mut::<16>().0.iter_mut() {
         let id = u32::from_le_bytes(record[12..16].try_into().unwrap());
         if id < 2 {
             record[12..16].copy_from_slice(&(1 - id).to_le_bytes());

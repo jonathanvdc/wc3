@@ -53,9 +53,9 @@ pub(super) fn file_key(name: &[u8], offset: u32, size: u32, adjusted: bool) -> u
 /// MPQ encrypts complete little-endian words; trailing bytes remain unchanged.
 pub(super) fn crypt(bytes: &mut [u8], mut key: u32, decrypt: bool) {
     let mut seed = 0xeeeeeeeeu32;
-    for word in bytes.chunks_exact_mut(4) {
+    for word in bytes.as_chunks_mut::<4>().0.iter_mut() {
         seed = seed.wrapping_add(TABLE[1024 + (key & 255) as usize]);
-        let input = u32::from_le_bytes(word.try_into().unwrap());
+        let input = u32::from_le_bytes(*word);
         let output = input ^ key.wrapping_add(seed);
         let plain = if decrypt { output } else { input };
         word.copy_from_slice(&output.to_le_bytes());

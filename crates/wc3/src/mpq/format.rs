@@ -258,7 +258,7 @@ pub struct BlockEntry {
 impl BlockEntry {
     pub(super) fn bytes(self) -> [u8; 16] {
         let mut bytes = [0; 16];
-        for (out, word) in bytes.chunks_exact_mut(4).zip([
+        for (out, word) in bytes.as_chunks_mut::<4>().0.iter_mut().zip([
             self.offset as u32,
             self.stored_size,
             self.file_size,
@@ -330,7 +330,9 @@ pub(super) fn read_hashes(
 ) -> Result<Vec<HashEntry>, Error> {
     let bytes = read_table(input, offset, count, stored, digest, b"(hash table)")?;
     Ok(bytes
-        .chunks_exact(16)
+        .as_chunks::<16>()
+        .0
+        .iter()
         .map(|b| HashEntry {
             name_hash_a: u32_at(b, 0),
             name_hash_b: u32_at(b, 4),
@@ -350,7 +352,9 @@ pub(super) fn read_blocks(
 ) -> Result<Vec<BlockEntry>, Error> {
     let bytes = read_table(input, offset, count, stored, digest, b"(block table)")?;
     Ok(bytes
-        .chunks_exact(16)
+        .as_chunks::<16>()
+        .0
+        .iter()
         .map(|b| BlockEntry {
             offset: u32_at(b, 0) as u64,
             stored_size: u32_at(b, 4),
