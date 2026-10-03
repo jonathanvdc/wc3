@@ -4,8 +4,8 @@ Start with the [crate README](../README.md) for a minimal Bevy application.
 
 ## Application and architecture
 
-- [Using bevy-wc3](usage.md): load instances, resolve texture extension fallbacks, choose textures, control playback,
-  mount child models, configure lights, and use the examples.
+- [Using bevy-wc3](usage.md): load instances from files or named MPQ sources,
+  resolve texture extension fallbacks, choose textures, control playback, mount child models, configure lights, and use the examples.
 - [Architecture](architecture.md): loading and preparation, shared and per-instance
   state, renderer modules, and the `Wc3Systems` scheduling contract.
 - API reference: `cargo doc -p bevy-wc3 --no-deps --open`.

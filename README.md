@@ -8,9 +8,9 @@ loading, modifying, and rendering them.
 
 ## Crates
 
-The workspace contains three crates. The asset library can be used on its own,
-while the derive and Bevy crates support custom model codecs and rendering,
-respectively.
+The workspace contains four crates. The asset library can be used on its own,
+with companion crates for custom model codecs, Bevy rendering, and archive
+asset sources.
 
 [`wc3`](crates/wc3/README.md) is the starting point for applications that need to
 read, edit, or write assets. It represents binary MDX and text MDL models using
@@ -38,6 +38,11 @@ particles, and ribbon trails. A model viewer lets you explore assets, while an
 offscreen capture example helps check their appearance at particular animation
 times. The renderer is experimental, and its guides explain the current
 limitations and which aspects of its appearance have been visually verified.
+
+[`bevy-mpq`](crates/bevy-mpq/README.md) exposes MPQ archives as Bevy asset
+readers. Applications configure named sources and compose archives with loose
+files using an ordered overlay. The adapter is independent of the renderer;
+`bevy-wc3` preserves the source when resolving a model's dependencies.
 
 Each crate's README explains how to get started and links to further examples.
 API references are available for [`wc3`](https://docs.rs/wc3/latest/wc3/) and

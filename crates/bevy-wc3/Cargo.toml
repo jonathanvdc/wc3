@@ -17,4 +17,5 @@ wc3 = { path = "../wc3", version = "0.2.0", features = ["blp-decode"] }
 bytemuck = { version = "1", features = ["derive"] }
 
 [dev-dependencies]
+bevy-mpq = { path = "../bevy-mpq", version = "0.2.0" }
 naga = { version = "29", features = ["wgsl-in"] }

@@ -20,12 +20,43 @@ Bitmap paths are checked beside the model first, then at the asset root.
 At each location, the literal filename is tried first, followed by the same path
 with `.blp`, `.dds`, `.png`, and `.tga` extensions, in that order. This allows
 references such as `Textures\Body.tif` to resolve to `Textures/Body.blp`.
-The first readable file wins; decoder failures do not try another candidate.
+Missing files advance to the next candidate; other read failures stop model
+loading. Decoder failures do not try another candidate.
 File contents must match the selected filename’s format. Explicit texture
 overrides remain exact.
 BLP files are decoded by the plugin. Replaceable IDs remain unresolved until a
 consumer supplies an image handle. Meshes and bind poses are shared; materials
 belong to each instance so texture changes remain local.
+
+## Load from named sources and MPQs
+
+The model loader preserves the model's Bevy asset source for bitmap textures,
+attachments, and Classic PREM child models, including recursive dependencies.
+For example, a model loaded as `warcraft://units/footman.mdx` searches beside
+that model and at the root of the `warcraft` source. It does not fall back to
+Bevy's default source. Each candidate is looked up through the source before
+trying the next location or extension, so candidate order takes precedence over
+any mount order inside that source.
+
+Applications register sources before adding `DefaultPlugins`. The separate
+[`bevy-mpq` crate](../../bevy-mpq/README.md) provides `MpqAssetReader` and a
+caller-ordered `OverlayAssetReader`; `bevy-wc3` itself has no MPQ dependency.
+An application can combine loose overrides, a map archive, and base archives
+under one source name, or give different maps separate source names to isolate
+identical asset paths. Archive order, locales, and parsing limits belong to the
+application. Replacement texture handles can use any source explicitly.
+
+Run the archive-backed example with an internal model path followed by archives
+in highest-to-lowest priority order:
+
+```sh
+cargo run -p bevy-wc3 --example mpq -- \
+  units/human/footman/footman.mdx map.w3x base.mpq
+```
+
+This example loads complete archive entries; MPQ patch deltas, archive watching,
+and directory enumeration are unsupported. See the adapter README for setup
+with loose-file overrides and the reader's memory and concurrency behavior.
 
 ## Choose textures
 

@@ -383,10 +383,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "bevy-mpq"
+version = "0.2.0"
+dependencies = [
+ "bevy_asset",
+ "blocking",
+ "futures-lite",
+ "wc3",
+]
+
+[[package]]
 name = "bevy-wc3"
 version = "0.2.0"
 dependencies = [
  "bevy",
+ "bevy-mpq",
  "bytemuck",
  "naga",
  "wc3",

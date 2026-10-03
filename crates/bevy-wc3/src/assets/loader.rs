@@ -1,6 +1,9 @@
-//! File-backed model and texture loading through Bevy's asset server.
+//! Source-aware model and texture loading through Bevy's asset server.
 use super::paths::{model_paths, texture_paths};
-use bevy::asset::{io::Reader, AssetLoader, LoadContext};
+use bevy::asset::{
+    io::{AssetReaderError, Reader},
+    AssetLoader, AssetPath, LoadContext, ReadAssetBytesError,
+};
 use bevy::image::{ImageAddressMode, ImageLoaderSettings, ImageSampler, ImageSamplerDescriptor};
 use bevy::prelude::*;
 use bevy::reflect::TypePath;
@@ -50,21 +53,23 @@ pub(crate) fn resolve_texture(
 
 async fn load_texture(
     context: &mut LoadContext<'_>,
-    model_path: &Path,
+    model_path: &AssetPath<'_>,
     texture: &Texture,
-) -> ResolvedTexture {
+) -> Result<ResolvedTexture, ModelError> {
     let path = texture.path.text();
     let mut resolved = ResolvedTexture {
         replaceable_id: texture.replaceable_id,
         ..default()
     };
     if !path.is_empty() {
-        let candidates = texture_paths(model_path, &path);
+        let candidates = texture_paths(model_path.path(), &path);
         for candidate in &candidates {
-            if context.read_asset_bytes(candidate.clone()).await.is_ok() {
+            let candidate = AssetPath::from(Path::new(candidate).to_owned())
+                .with_source(model_path.source().clone_owned());
+            if candidate_exists(context, &candidate).await? {
                 debug!(
                     "Resolved WC3 texture {path} for {} to {candidate}",
-                    model_path.display()
+                    model_path
                 );
                 let sampler = texture_sampler(texture.flags);
                 resolved.default = Some(
@@ -81,11 +86,11 @@ async fn load_texture(
         if resolved.default.is_none() {
             warn!(
                 "Could not resolve WC3 texture {path} for {}; tried {candidates:?}",
-                model_path.display()
+                model_path
             );
         }
     }
-    resolved
+    Ok(resolved)
 }
 
 impl Wc3ModelAsset {
@@ -120,10 +125,10 @@ impl AssetLoader for Wc3ModelLoader {
             .await
             .map_err(|error| ModelError(error.to_string()))?;
         let source = Wc3Model::decode(&bytes)?;
-        let model_path = context.path().path().to_owned();
+        let model_path = context.path().clone_owned();
         let mut textures = ResolvedModelTextures::default();
         for texture in source.model.textures() {
-            let binding = load_texture(context, &model_path, &texture).await;
+            let binding = load_texture(context, &model_path, &texture).await?;
             textures.bitmaps.push(binding);
         }
         for emitter in source.model.particle_emitters2() {
@@ -135,12 +140,12 @@ impl AssetLoader for Wc3ModelLoader {
         }
         let mut attachments = Vec::new();
         for attachment in source.model.attachments() {
-            attachments.push(load_model(context, &model_path, &attachment.path.text()).await);
+            attachments.push(load_model(context, &model_path, &attachment.path.text()).await?);
         }
         let mut particles = Vec::new();
         for emitter in source.model.particle_emitters() {
             particles.push(if emitter.flags().emitter_uses_mdl() {
-                load_model(context, &model_path, &emitter.path.text()).await
+                load_model(context, &model_path, &emitter.path.text()).await?
             } else {
                 None
             });
@@ -175,22 +180,32 @@ fn texture_sampler(flags: TextureFlags) -> ImageSampler {
 
 async fn load_model(
     context: &mut LoadContext<'_>,
-    model_path: &Path,
+    model_path: &AssetPath<'_>,
     name: &str,
-) -> Option<Handle<Wc3ModelAsset>> {
+) -> Result<Option<Handle<Wc3ModelAsset>>, ModelError> {
     if name.is_empty() {
-        return None;
+        return Ok(None);
     }
-    for candidate in model_paths(model_path, name) {
-        if context.read_asset_bytes(candidate.clone()).await.is_ok() {
-            return Some(context.load(candidate));
+    for candidate in model_paths(model_path.path(), name) {
+        let candidate = AssetPath::from(Path::new(&candidate).to_owned())
+            .with_source(model_path.source().clone_owned());
+        if candidate_exists(context, &candidate).await? {
+            return Ok(Some(context.load(candidate)));
         }
     }
-    warn!(
-        "Could not resolve WC3 model {name} for {}",
-        model_path.display()
-    );
-    None
+    warn!("Could not resolve WC3 model {name} for {}", model_path);
+    Ok(None)
+}
+
+async fn candidate_exists(
+    context: &mut LoadContext<'_>,
+    path: &AssetPath<'static>,
+) -> Result<bool, ModelError> {
+    match context.read_asset_bytes(path.clone()).await {
+        Ok(_) => Ok(true),
+        Err(ReadAssetBytesError::AssetReaderError(AssetReaderError::NotFound(_))) => Ok(false),
+        Err(error) => Err(ModelError(format!("Could not read {path}: {error}"))),
+    }
 }
 
 #[cfg(test)]

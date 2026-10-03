@@ -42,7 +42,7 @@ jobs:
             exit 1
           fi
           metadata="$(cargo metadata --no-deps --format-version 1)"
-          for crate in wc3-derive wc3 bevy-wc3; do
+          for crate in wc3-derive wc3 bevy-mpq bevy-wc3; do
             crate_version="$(jq -r --arg crate "$crate" '.packages[] | select(.name == $crate) | .version' <<< "$metadata")"
             if [[ "$crate_version" != "$version" ]]; then
               echo "$crate is $crate_version, but the tag is v$version" >&2
