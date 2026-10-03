@@ -145,11 +145,44 @@ compatibility limits and integrity checks that apply to reading and editing.
 ## Documentation and examples
 
 The API reference provides examples for each asset type, and the repository
-includes command-line examples for archive operations and model comparisons:
+includes command-line examples for inspecting, editing, and converting assets:
 
 - [API reference](https://docs.rs/wc3/latest/wc3/).
 - [`mpq` example](examples/mpq.rs): archive listing, extraction, creation, and editing.
+- [`model_dependencies` example](examples/model_dependencies.rs): deduplicated direct file references with their locations, plus replaceable resource IDs.
+- [`model_info` example](examples/model_info.rs): model metadata, geometry and emitter counts, and animation intervals.
+- [`model_convert` example](examples/model_convert.rs): MDX/MDL and model-version conversion with loss reports.
+- [`model_repath` example](examples/model_repath.rs): literal, case-sensitive prefix replacement in declared asset paths.
+- [`blp_to_png` example](examples/blp_to_png.rs): texture metadata and PNG export of a selected mip level; requires `blp-decode`.
 - [`mdlx_compare` example](examples/mdlx_compare.rs): model round-trip comparisons.
+
+Run the tools from a workspace checkout. All examples support `--help`, including
+help for individual `mpq` subcommands. `model_convert`, `model_dependencies`,
+`model_info`, and `model_repath` recognize MDX by its header and otherwise read
+UTF-8 MDL. For conversion and repathing, an output filename ending in `.mdx` or
+`.mdl` selects the format. `mdlx_compare` selects the input format by its `.mdl`
+extension and always writes canonical MDL in the requested dialect.
+
+```sh
+cargo run -p wc3 --example model_dependencies -- model.mdx
+cargo run -p wc3 --example model_info -- model.mdl
+cargo run -p wc3 --example model_convert -- model.mdx model.mdl
+cargo run -p wc3 --example model_convert -- model.mdx classic.mdx --version 800 --lossy
+cargo run -p wc3 --example model_repath -- model.mdx repathed.mdx 'Textures\' 'Custom\'
+cargo run -p wc3 --features blp-decode --example blp_to_png -- texture.blp texture.png --mip 0
+```
+
+The dependency tool lists declared texture, attachment, particle-emitter,
+popcorn FX, FaceFX, and external animation paths, including unused references.
+It does not resolve files, follow references recursively, or infer resources
+selected by game logic. Replaceable IDs identify game-provided resources rather
+than fixed file paths. Repath edits these same path fields, preserving empty
+paths and replaceable IDs; it reports each change to stderr.
+
+Version conversion is strict by default. `--lossy` permits conversion losses
+and prints the conversion report to stderr; it does not bypass MDL writer
+limitations. Without `--version`, conversion preserves the source version.
+Model writes canonicalize the selected format, and output files are overwritten.
 
 From a workspace checkout, build the crate documentation with all optional APIs:
 

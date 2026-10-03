@@ -1,35 +1,45 @@
 //! Local converter and canonicalizer for tools/mdlx-compare. No oracle dependency.
-use std::env;
+use clap::{Parser, ValueEnum};
 use std::error::Error;
 use std::fs;
-use std::path::Path;
+use std::path::PathBuf;
 use std::process::exit;
 use std::str::from_utf8;
 use wc3::model::mdl::{Dialect, Read as _, Write as _};
 use wc3::model::{visit_model, ConversionOptions, DynamicModel, Model, ModelVersion, V1200};
 
+#[derive(Parser)]
+#[command(about = "Convert and canonicalize a model for mdlx-compare")]
+struct Args {
+    /// Input MDX or MDL model.
+    input: PathBuf,
+    /// Output canonical MDL file.
+    output: PathBuf,
+    /// Output MDL dialect.
+    #[arg(value_enum)]
+    dialect: OutputDialect,
+}
+
+#[derive(Clone, Copy, ValueEnum)]
+enum OutputDialect {
+    Engine,
+    Hive,
+}
+
 fn main() {
-    if let Err(error) = run() {
+    if let Err(error) = run(Args::parse()) {
         eprintln!("{error}");
         exit(1);
     }
 }
 
-fn run() -> Result<(), Box<dyn Error>> {
-    let args: Vec<_> = env::args().collect();
-    if args.len() != 4 {
-        return Err("usage: mdlx_compare INPUT OUTPUT engine|hive".into());
-    }
-    let dialect = match args[3].as_str() {
-        "engine" => Dialect::Warcraft3,
-        "hive" => Dialect::HiveWorkshop,
-        _ => return Err("invalid dialect".into()),
+fn run(args: Args) -> Result<(), Box<dyn Error>> {
+    let dialect = match args.dialect {
+        OutputDialect::Engine => Dialect::Warcraft3,
+        OutputDialect::Hive => Dialect::HiveWorkshop,
     };
-    let input = fs::read(&args[1])?;
-    let model = if Path::new(&args[1])
-        .extension()
-        .is_some_and(|ext| ext == "mdl")
-    {
+    let input = fs::read(&args.input)?;
+    let model = if args.input.extension().is_some_and(|ext| ext == "mdl") {
         let source = from_utf8(&input)?;
         DynamicModel::decode_mdl(source)
             .map_err(|error| format!("MDL parse: {}", error.diagnostic(source)))?
@@ -39,7 +49,7 @@ fn run() -> Result<(), Box<dyn Error>> {
     // Reading text then writing it provides stable field spelling/order, float
     // formatting and defaults without ignoring IDs, flags, or track values.
     let text = visit_model!(&model, |typed| export_model(typed, dialect))?;
-    fs::write(&args[2], text)?;
+    fs::write(&args.output, text)?;
     Ok(())
 }
 

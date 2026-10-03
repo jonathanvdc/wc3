@@ -1,70 +1,136 @@
 //! Streaming archive inspection, extraction, creation, and copy-and-append editing.
-use std::env;
+use clap::{Parser, Subcommand, ValueEnum};
 use std::error::Error;
 use std::fs::File;
-use std::io::{self, ErrorKind, Seek, Write};
-use std::path::Path;
+use std::io::{self, Seek, Write};
+use std::path::PathBuf;
+use std::str::FromStr;
 
 use wc3::mpq::{Archive, ArchiveWriter, Compression, FileOptions, WriteOptions};
 
-fn usage() -> io::Error {
-    io::Error::new(ErrorKind::InvalidInput,
-        "usage: mpq list ARCHIVE | extract ARCHIVE NAME OUTPUT | create OUTPUT stored|zlib|bzip2 plain|encrypted|adjusted NAME=PATH... | edit ARCHIVE OUTPUT NAME=PATH...")
+#[derive(Parser)]
+#[command(about = "List, extract, create, and edit MPQ archives")]
+struct Args {
+    #[command(subcommand)]
+    command: Command,
+}
+
+#[derive(Subcommand)]
+enum Command {
+    /// List known archive entry names.
+    List { archive: PathBuf },
+    /// Extract one entry to a new file.
+    Extract {
+        archive: PathBuf,
+        name: String,
+        output: PathBuf,
+    },
+    /// Create an archive, optionally adding NAME=PATH entries.
+    Create {
+        output: PathBuf,
+        #[arg(value_enum)]
+        compression: CompressionArg,
+        #[arg(value_enum)]
+        encryption: Encryption,
+        #[arg(value_name = "NAME=PATH")]
+        entries: Vec<Entry>,
+    },
+    /// Copy an archive and add or replace NAME=PATH entries.
+    Edit {
+        archive: PathBuf,
+        output: PathBuf,
+        #[arg(value_name = "NAME=PATH")]
+        entries: Vec<Entry>,
+    },
+}
+
+#[derive(Clone, Copy, ValueEnum)]
+enum CompressionArg {
+    Stored,
+    Zlib,
+    Bzip2,
+}
+
+#[derive(Clone, Copy, ValueEnum)]
+enum Encryption {
+    Plain,
+    Encrypted,
+    Adjusted,
+}
+
+#[derive(Clone, Debug)]
+struct Entry {
+    name: String,
+    path: PathBuf,
+}
+
+impl FromStr for Entry {
+    type Err = String;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        let (name, path) = value.split_once('=').ok_or("expected NAME=PATH")?;
+        if name.is_empty() || path.is_empty() {
+            return Err("NAME and PATH must both be nonempty".into());
+        }
+        Ok(Self {
+            name: name.into(),
+            path: path.into(),
+        })
+    }
 }
 
 fn add<W: Write + Seek>(
     writer: &mut ArchiveWriter<W>,
-    specification: &str,
+    entry: &Entry,
     options: FileOptions,
     replace: bool,
 ) -> Result<(), Box<dyn Error>> {
-    let (name, path) = specification.split_once('=').ok_or_else(usage)?;
-    let mut source = File::open(path)?;
+    let mut source = File::open(&entry.path)?;
     let size = source.metadata()?.len().try_into()?;
     if replace {
-        writer.replace_file(name, size, &mut source, options)?;
+        writer.replace_file(&entry.name, size, &mut source, options)?;
     } else {
-        writer.add_file(name, size, &mut source, options)?;
+        writer.add_file(&entry.name, size, &mut source, options)?;
     }
     Ok(())
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let args: Vec<String> = env::args().skip(1).collect();
-    match args.first().map(String::as_str) {
-        Some("list") if args.len() == 2 => {
-            let mut archive = Archive::open(File::open(&args[1])?)?;
+    match Args::parse().command {
+        Command::List { archive } => {
+            let mut archive = Archive::open(File::open(archive)?)?;
             for name in archive.known_names()? {
                 println!("{}", String::from_utf8_lossy(&name));
             }
         }
-        Some("extract") if args.len() == 4 => {
-            let mut archive = Archive::open(File::open(&args[1])?)?;
-            let mut entry = archive.open_file(&args[2])?;
+        Command::Extract {
+            archive,
+            name,
+            output,
+        } => {
+            let mut archive = Archive::open(File::open(archive)?)?;
+            let mut entry = archive.open_file(&name)?;
             // Avoid implicit extraction paths from untrusted archive filenames.
-            let mut output = File::options()
-                .write(true)
-                .create_new(true)
-                .open(&args[3])?;
+            let mut output = File::options().write(true).create_new(true).open(output)?;
             io::copy(&mut entry, &mut output)?;
         }
-        Some("create") if args.len() >= 4 => {
-            let compression = match args[2].as_str() {
-                "stored" => Compression::Stored,
-                "zlib" => Compression::Zlib,
-                "bzip2" => Compression::Bzip2,
-                _ => return Err(usage().into()),
+        Command::Create {
+            output,
+            compression,
+            encryption,
+            entries,
+        } => {
+            let compression = match compression {
+                CompressionArg::Stored => Compression::Stored,
+                CompressionArg::Zlib => Compression::Zlib,
+                CompressionArg::Bzip2 => Compression::Bzip2,
             };
-            let (encrypted, adjusted_key) = match args[3].as_str() {
-                "plain" => (false, false),
-                "encrypted" => (true, false),
-                "adjusted" => (true, true),
-                _ => return Err(usage().into()),
+            let (encrypted, adjusted_key) = match encryption {
+                Encryption::Plain => (false, false),
+                Encryption::Encrypted => (true, false),
+                Encryption::Adjusted => (true, true),
             };
-            let output = File::options()
-                .write(true)
-                .create_new(true)
-                .open(&args[1])?;
+            let output = File::options().write(true).create_new(true).open(output)?;
             let mut writer = ArchiveWriter::new(output, WriteOptions::default())?;
             let options = FileOptions {
                 compression,
@@ -73,27 +139,49 @@ fn main() -> Result<(), Box<dyn Error>> {
                 sector_checksums: compression != Compression::Stored,
                 ..FileOptions::default()
             };
-            for specification in &args[4..] {
-                add(&mut writer, specification, options, false)?;
+            for entry in &entries {
+                add(&mut writer, entry, options, false)?;
             }
             writer.finish()?;
         }
-        Some("edit") if args.len() >= 3 => {
-            if Path::new(&args[1]) == Path::new(&args[2]) {
-                return Err(usage().into());
+        Command::Edit {
+            archive,
+            output,
+            entries,
+        } => {
+            if archive == output {
+                return Err("input and output archive paths must differ".into());
             }
-            let mut archive = Archive::open(File::open(&args[1])?)?;
-            let output = File::options()
-                .write(true)
-                .create_new(true)
-                .open(&args[2])?;
+            let mut archive = Archive::open(File::open(archive)?)?;
+            let output = File::options().write(true).create_new(true).open(output)?;
             let mut writer = ArchiveWriter::from_archive(output, &mut archive)?;
-            for specification in &args[3..] {
-                add(&mut writer, specification, FileOptions::default(), true)?;
+            for entry in &entries {
+                add(&mut writer, entry, FileOptions::default(), true)?;
             }
             writer.finish()?;
         }
-        _ => return Err(usage().into()),
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn entry_paths_can_contain_equals() {
+        let entry: Entry = "units\\model.mdx=/tmp/model=variant.mdx".parse().unwrap();
+        assert_eq!(entry.name, "units\\model.mdx");
+        assert_eq!(entry.path, PathBuf::from("/tmp/model=variant.mdx"));
+    }
+
+    #[test]
+    fn malformed_entries_are_rejected_before_archive_creation() {
+        for value in ["missing-separator", "=path", "name="] {
+            assert!(
+                Args::try_parse_from(["mpq", "create", "out.mpq", "stored", "plain", value])
+                    .is_err()
+            );
+        }
+    }
 }

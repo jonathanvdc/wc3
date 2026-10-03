@@ -31,3 +31,11 @@ blp-decode = ["dep:image", "dep:zune-jpeg"]
 blp-encode = ["dep:image", "dep:color_quant", "dep:jpeg-encoder", "dep:squish"]
 mpq-decode = ["dep:flate2", "dep:bzip2", "dep:explode", "dep:lzma-rs"]
 mpq-encode = ["dep:flate2", "dep:bzip2"]
+
+[dev-dependencies]
+clap = { version = "4", features = ["derive"] }
+image = { version = "0.25.10", default-features = false, features = ["png"] }
+
+[[example]]
+name = "blp_to_png"
+required-features = ["blp-decode"]
