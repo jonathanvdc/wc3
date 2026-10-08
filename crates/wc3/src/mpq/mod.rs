@@ -50,6 +50,40 @@
 //! extracting any file, and [`Archive::encoded_file`](crate::mpq::Archive::encoded_file) accesses raw payloads by
 //! block index even if their names or codecs are unknown.
 //!
+//! # Copying encoded files into a fresh archive
+//!
+//! [`Archive::open_encoded_file`] pairs a bounded raw payload stream with
+//! [`EncodedFileMetadata`], which carries sizes, storage flags, source sector
+//! size, and locale/platform without retaining original offsets or block IDs.
+//! [`ArchiveWriter::add_encoded_file`] imports that representation into a new
+//! archive. [`ArchiveWriter::copy_file_from`] combines lookup and import when
+//! the destination name is unchanged. Both operations are available without
+//! compression features, including for unsupported compression masks.
+//!
+//! ```
+//! use std::io::Cursor;
+//! use wc3::mpq::{Archive, ArchiveWriter, FileOptions, WriteOptions};
+//!
+//! let mut original = ArchiveWriter::new(Cursor::new(Vec::new()), WriteOptions::default())?;
+//! original.add_file("file.txt", 5, &mut b"hello".as_slice(), FileOptions::default())?;
+//! let mut source = Archive::open(Cursor::new(original.finish()?.into_inner()))?;
+//! let mut destination = ArchiveWriter::new(Cursor::new(Vec::new()), WriteOptions::default())?;
+//! destination.copy_file_from(&mut source, "file.txt")?;
+//! let bytes = destination.finish()?.into_inner();
+//! assert_eq!(Archive::open(Cursor::new(bytes))?.read_file("file.txt")?, b"hello");
+//! # Ok::<(), wc3::mpq::Error>(())
+//! ```
+//!
+//! Encoded import rejects encrypted entries and incompatible sector framing.
+//! Uncompressed and single-unit files can move between sector sizes; compressed
+//! sector files require matching sector sizes. Destination indexes and raw chunk
+//! digests are generated normally. Entries retain no obsolete payloads from the
+//! source archive. Copied compressed contents are not decoded or validated;
+//! callers must supply metadata matching the payload and verify content as needed.
+//! Source raw chunk MD5s are checked by `open_encoded_file`. Short streams and
+//! payload I/O failures prevent destination completion, just as decoded writes do.
+//! [`EncodedEntry::new`] also supports importing standalone encoded cache entries.
+//!
 //! # Editing without recompressing
 //!
 //! [`ArchiveWriter::from_archive`](crate::mpq::ArchiveWriter::from_archive) copies the original encoded archive region
@@ -75,6 +109,7 @@ mod codec;
 mod codec_test_vectors;
 mod compat;
 mod crypto;
+mod encoded;
 mod error;
 mod extended;
 mod format;
@@ -87,6 +122,7 @@ mod reader;
 mod writer;
 
 pub use compat::{ReadMode, RecoveryDiagnostic};
+pub use encoded::{EncodedEntry, EncodedFileMetadata};
 pub use error::Error;
 pub use extended::ExtendedIndex;
 pub use format::{BlockEntry, FileFlags, HashEntry, Header, Index};

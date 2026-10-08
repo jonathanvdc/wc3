@@ -90,6 +90,15 @@ copy of an existing archive while preserving its original encoded entries,
 which avoids decoding and recompressing files you have not changed. These
 operations require sources and destinations that support seeking.
 
+To assemble a compact new archive from existing files, `copy_file_from` copies
+an unencrypted entry's encoded payload and builds fresh destination indexes.
+The lower-level `open_encoded_file` and `add_encoded_file` APIs pair the stream
+with its storage metadata, allowing renamed entries and standalone encoded
+caches. Compressed sector entries require matching sector sizes; source offsets
+are reassigned and destination raw chunk digests are generated normally. Copying
+these payloads does not require compression features or validate their decoded
+contents.
+
 Compressed entries need the `mpq-decode` feature for extraction, and
 `mpq-encode` enables compression when writing. The
 [`mpq` module documentation](https://docs.rs/wc3/latest/wc3/mpq/) walks through

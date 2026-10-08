@@ -7,7 +7,7 @@ use super::crypto::{crypt, file_key, hash};
 use super::extended::{encode_extended, ExtendedIndex};
 use super::format::{offset_table_size, validate_name, DELETED};
 use super::raw::{self, Digests};
-use super::{Archive, BlockEntry, Error, FileFlags, HashEntry, Header};
+use super::{Archive, BlockEntry, EncodedEntry, Error, FileFlags, HashEntry, Header};
 
 /// Entry compression used by the writer. Compressed sectors that would grow
 /// are stored raw, as required by MPQ's framing rules.
@@ -203,6 +203,139 @@ impl<W: Write + Seek> ArchiveWriter<W> {
         entry.finish()
     }
 
+    /// Imports an encoded entry without decompression or recompression.
+    /// Rejects encrypted entries, unsupported flags, and incompatible sector
+    /// framing before writing. Single-unit and uncompressed entries do not
+    /// depend on the destination sector size. Payload contents are not decoded
+    /// or validated; callers must supply metadata matching the encoded bytes.
+    /// A short stream or I/O failure poisons the writer. Raw chunk digests are
+    /// generated according to the destination archive's settings.
+    pub fn add_encoded_file<R: Read>(
+        &mut self,
+        name: impl AsRef<[u8]>,
+        mut entry: EncodedEntry<R>,
+    ) -> Result<(), Error> {
+        let name = name.as_ref();
+        let metadata = *entry.metadata();
+        self.validate_entry(name, metadata.locale, metadata.platform, false)?;
+        let flags = metadata.flags;
+        flags.validate_codec()?;
+        if !flags.contains(FileFlags::EXISTS) || flags.contains(FileFlags::ENCRYPTED) {
+            return Err(Error::UnsupportedFlags(flags.0));
+        }
+        if !metadata.sector_size.is_power_of_two()
+            || metadata.sector_size < 512
+            || metadata.sector_size > 1 << 20
+        {
+            return Err(Error::InvalidArchive("encoded sector size"));
+        }
+        if flags.compressed() && !flags.contains(FileFlags::SINGLE_UNIT) && metadata.file_size != 0
+        {
+            if metadata.sector_size != 512u32 << self.options.sector_size_shift {
+                return Err(Error::InvalidArchive(
+                    "encoded sector size differs from destination",
+                ));
+            }
+            let table_size = offset_table_size(
+                metadata.file_size,
+                metadata.sector_size,
+                flags.contains(FileFlags::SECTOR_CRC),
+            )?;
+            if table_size > 16 << 20 {
+                return Err(Error::LimitExceeded("writer sector table"));
+            }
+            if metadata.stored_size < table_size {
+                return Err(Error::SizeMismatch);
+            }
+        } else if !flags.compressed() && metadata.file_size != metadata.stored_size {
+            return Err(Error::SizeMismatch);
+        }
+        if (metadata.file_size == 0) != (metadata.stored_size == 0) {
+            return Err(Error::SizeMismatch);
+        }
+        let digest_size = if self.options.raw_chunk_size == 0 {
+            0
+        } else {
+            (metadata.stored_size as u64).div_ceil(self.options.raw_chunk_size as u64) * 16
+        };
+        if digest_size > 16 << 20 {
+            return Err(Error::LimitExceeded("writer raw digest table"));
+        }
+        let offset = self.relative_position()?;
+        let max = if self.options.header_version == 0 {
+            u32::MAX as u64
+        } else {
+            (1u64 << 48) - 1
+        };
+        offset
+            .checked_add(metadata.stored_size as u64)
+            .and_then(|n| n.checked_add(digest_size))
+            .filter(|&n| n <= max)
+            .ok_or(Error::LimitExceeded("archive size"))?;
+        self.failed = true;
+        let mut raw = (self.options.raw_chunk_size != 0)
+            .then(|| Digests::new(self.options.raw_chunk_size, 0));
+        let copied = if let Some(raw) = &mut raw {
+            let mut count = 0;
+            let mut buffer = [0; 64 * 1024];
+            loop {
+                let n = entry.read(&mut buffer)?;
+                if n == 0 {
+                    break;
+                }
+                self.output.write_all(&buffer[..n])?;
+                raw.update(&buffer[..n]);
+                count += n as u64;
+            }
+            count
+        } else {
+            io::copy(&mut entry, &mut self.output)?
+        };
+        if copied != metadata.stored_size as u64 {
+            return Err(Error::SizeMismatch);
+        }
+        if let Some(raw) = raw {
+            raw.finish(&[], &mut self.output)?;
+        }
+        self.commit_entry(
+            name.to_vec(),
+            metadata.locale,
+            metadata.platform,
+            BlockEntry {
+                offset,
+                stored_size: metadata.stored_size,
+                file_size: metadata.file_size,
+                flags,
+            },
+            false,
+        )
+    }
+
+    /// Copies a named neutral entry into this archive, retaining its encoded representation.
+    /// Uses `open_encoded_file` and `add_encoded_file`; encrypted entries are rejected.
+    pub fn copy_file_from<R: Read + Seek>(
+        &mut self,
+        source: &mut Archive<R>,
+        name: impl AsRef<[u8]>,
+    ) -> Result<(), Error> {
+        let name = name.as_ref();
+        let entry = source.open_encoded_file(name)?;
+        self.add_encoded_file(name, entry)
+    }
+
+    /// Copies a named entry for an exact locale/platform, preserving that lookup identity.
+    pub fn copy_file_from_with_locale<R: Read + Seek>(
+        &mut self,
+        source: &mut Archive<R>,
+        name: impl AsRef<[u8]>,
+        locale: u16,
+        platform: u16,
+    ) -> Result<(), Error> {
+        let name = name.as_ref();
+        let entry = source.open_encoded_file_with_locale(name, locale, platform)?;
+        self.add_encoded_file(name, entry)
+    }
+
     /// Replaces an exact filename/locale/platform, or inserts if absent.
     pub fn replace_file(
         &mut self,
@@ -290,13 +423,13 @@ impl<W: Write + Seek> ArchiveWriter<W> {
         }
     }
 
-    fn start(
-        &mut self,
+    fn validate_entry(
+        &self,
         name: &[u8],
-        size: u32,
-        options: FileOptions,
+        locale: u16,
+        platform: u16,
         replace: bool,
-    ) -> Result<EntryWriter<'_, W>, Error> {
+    ) -> Result<(), Error> {
         self.check_state()?;
         validate_name(name)?;
         if self
@@ -306,27 +439,15 @@ impl<W: Write + Seek> ArchiveWriter<W> {
         {
             return Err(Error::LimitExceeded("writer names"));
         }
-        check_encoder(options.compression)?;
-        if options.adjusted_key && !options.encrypted {
-            return Err(Error::UnsupportedFlags(FileFlags::FIX_KEY));
-        }
-        if options.sector_checksums && options.compression == Compression::Stored {
-            return Err(Error::UnsupportedFlags(FileFlags::SECTOR_CRC));
-        }
         if self.options.listfile
             && hash(name, 1) == hash(b"(listfile)", 1)
             && hash(name, 2) == hash(b"(listfile)", 2)
         {
             return Err(Error::DuplicateFile);
         }
-        let identity = (
-            hash(name, 1),
-            hash(name, 2),
-            options.locale,
-            options.platform,
-        );
-        let exists = (options.locale == 0
-            && options.platform == 0
+        let identity = (hash(name, 1), hash(name, 2), locale, platform);
+        let exists = (locale == 0
+            && platform == 0
             && self
                 .extended
                 .as_ref()
@@ -351,6 +472,24 @@ impl<W: Write + Seek> ArchiveWriter<W> {
             if !exists && insertions >= available {
                 return Err(Error::LimitExceeded("preserved hash table capacity"));
             }
+        }
+        Ok(())
+    }
+
+    fn start(
+        &mut self,
+        name: &[u8],
+        size: u32,
+        options: FileOptions,
+        replace: bool,
+    ) -> Result<EntryWriter<'_, W>, Error> {
+        self.validate_entry(name, options.locale, options.platform, replace)?;
+        check_encoder(options.compression)?;
+        if options.adjusted_key && !options.encrypted {
+            return Err(Error::UnsupportedFlags(FileFlags::FIX_KEY));
+        }
+        if options.sector_checksums && options.compression == Compression::Stored {
+            return Err(Error::UnsupportedFlags(FileFlags::SECTOR_CRC));
         }
         let sector_size = 512u32 << self.options.sector_size_shift;
         let table_size = if options.compression != Compression::Stored && size != 0 {
@@ -437,6 +576,49 @@ impl<W: Write + Seek> ArchiveWriter<W> {
             replace,
             failed: false,
         })
+    }
+
+    fn commit_entry(
+        &mut self,
+        name: Vec<u8>,
+        locale: u16,
+        platform: u16,
+        block: BlockEntry,
+        replace: bool,
+    ) -> Result<(), Error> {
+        if replace {
+            // Entry writing keeps the parent poisoned until its metadata commits.
+            self.failed = false;
+            match self.remove_file(&name, locale, platform) {
+                Ok(()) | Err(Error::FileNotFound) => {}
+                Err(e) => {
+                    self.failed = true;
+                    return Err(e);
+                }
+            }
+            self.failed = true;
+        }
+        let block_index = self.blocks.len() as u32;
+        self.blocks.push(block);
+        if locale == 0 && platform == 0 {
+            if let Some(index) = &mut self.extended {
+                index.insert(&name, block_index)?;
+            }
+        }
+        self.pending.push((
+            hash(&name, 0),
+            HashEntry {
+                name_hash_a: hash(&name, 1),
+                name_hash_b: hash(&name, 2),
+                locale,
+                platform,
+                block_index,
+            },
+        ));
+        self.names.push(name);
+        self.name_bytes += self.names.last().unwrap().len();
+        self.failed = false;
+        Ok(())
     }
 
     fn relative_position(&mut self) -> Result<u64, Error> {
@@ -727,42 +909,13 @@ impl<W: Write + Seek> EntryWriter<'_, W> {
         if let Some(raw) = self.raw.take() {
             raw.finish(&table, &mut self.archive.output)?;
         }
-        if self.replace {
-            // Entry writing keeps the parent poisoned until its metadata commits.
-            self.archive.failed = false;
-            match self
-                .archive
-                .remove_file(&self.name, self.options.locale, self.options.platform)
-            {
-                Ok(()) | Err(Error::FileNotFound) => {}
-                Err(e) => {
-                    self.archive.failed = true;
-                    return Err(e);
-                }
-            }
-            self.archive.failed = true;
-        }
-        let block_index = self.archive.blocks.len() as u32;
-        self.archive.blocks.push(self.block);
-        if self.options.locale == 0 && self.options.platform == 0 {
-            if let Some(index) = &mut self.archive.extended {
-                index.insert(&self.name, block_index)?;
-            }
-        }
-        self.archive.pending.push((
-            hash(&self.name, 0),
-            HashEntry {
-                name_hash_a: hash(&self.name, 1),
-                name_hash_b: hash(&self.name, 2),
-                locale: self.options.locale,
-                platform: self.options.platform,
-                block_index,
-            },
-        ));
-        self.archive.names.push(self.name);
-        self.archive.name_bytes += self.archive.names.last().unwrap().len();
-        self.archive.failed = false;
-        Ok(())
+        self.archive.commit_entry(
+            self.name,
+            self.options.locale,
+            self.options.platform,
+            self.block,
+            self.replace,
+        )
     }
 }
 

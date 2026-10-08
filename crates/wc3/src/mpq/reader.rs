@@ -10,7 +10,7 @@ use super::format::{
     HEADER_SIZE,
 };
 use super::raw;
-use super::{BlockEntry, Error, FileFlags, Header, Index};
+use super::{BlockEntry, EncodedEntry, EncodedFileMetadata, Error, FileFlags, Header, Index};
 use super::{ReadMode, RecoveryDiagnostic};
 
 trait ReadSeek: Read + Seek {}
@@ -601,6 +601,57 @@ impl<R: Read + Seek> Archive<R> {
             .filter(|line| !line.is_empty())
             .map(<[u8]>::to_vec)
             .collect())
+    }
+
+    /// Opens a named encoded payload without decoding or decrypting it.
+    /// Metadata retains its sector size, flags, and neutral locale/platform.
+    /// Compressed payload contents are not validated; raw chunk MD5s are checked.
+    pub fn open_encoded_file(
+        &mut self,
+        name: impl AsRef<[u8]>,
+    ) -> Result<EncodedEntry<impl Read + '_>, Error> {
+        self.open_encoded_file_with_locale(name, 0, 0)
+    }
+
+    /// Opens encoded bytes for an exact locale/platform match.
+    /// Recovered archives cannot supply entries for encoded import.
+    pub fn open_encoded_file_with_locale(
+        &mut self,
+        name: impl AsRef<[u8]>,
+        locale: u16,
+        platform: u16,
+    ) -> Result<EncodedEntry<impl Read + '_>, Error> {
+        if !self.diagnostics().is_empty() {
+            return Err(Error::InvalidArchive("cannot copy a recovered archive"));
+        }
+        let name = name.as_ref();
+        validate_name(name)?;
+        let id = self
+            .index
+            .find(name, locale, platform)
+            .ok_or(Error::FileNotFound)?;
+        let block = self.index.blocks[id as usize];
+        raw::verify(
+            &mut self.source,
+            self.base,
+            block.offset,
+            block.stored_size as u64,
+            &self.index.header,
+            &self.options,
+        )?;
+        let metadata = EncodedFileMetadata {
+            file_size: block.file_size,
+            stored_size: block.stored_size,
+            flags: block.flags,
+            sector_size: self
+                .index
+                .header
+                .sector_size()
+                .ok_or(Error::InvalidArchive("sector size"))?,
+            locale,
+            platform,
+        };
+        Ok(EncodedEntry::new(metadata, self.encoded_file(id)?))
     }
 
     /// Reads encoded bytes by block index, including entries with unknown names
