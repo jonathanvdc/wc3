@@ -50,6 +50,9 @@
 //! [`prepare_model`] or [`prepare_model_with_resources`], and spawn instances with
 //! [`spawn_prepared_model`] or [`spawn_prepared_model_with_bindings`]. Resolvers
 //! supply image and child-model handles without requiring file-backed sources.
+//! [`PreparedModel::parts`] and [`Wc3PartId`] expose stable normalized source indices.
+//! [`Wc3PoseBaker`] freezes geometry and materials at explicit sequence/global clocks
+//! without an ECS world or renderer, preserving original texture provenance.
 //!
 //! # Rendering semantics
 //!
@@ -93,5 +96,9 @@ pub use lod::{Wc3Lod, Wc3LodOverride, Wc3LodSettings, Wc3LodState};
 pub use materials::textures::{Wc3TextureBindings, Wc3TextureSlot};
 pub use materials::{Wc3LayerMaterial, Wc3LayerState};
 pub use plugin::Wc3BevyPlugin;
-pub use preparation::{prepare_model, prepare_model_with_resources, PreparedModel};
+pub use preparation::{
+    prepare_model, prepare_model_asset, prepare_model_with_resources, BakedModelPart,
+    BakedModelPose, PreparedModel, PreparedPart, Wc3MaterialSnapshot, Wc3PartId, Wc3PoseBaker,
+    Wc3PoseOptions, Wc3TextureColorSpace, Wc3TextureReference, Wc3TextureRole,
+};
 pub use schedule::Wc3Systems;

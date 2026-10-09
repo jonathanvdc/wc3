@@ -61,6 +61,13 @@ Images are named `frame-0000-0.000s.png`, and so on; reruns overwrite matching
 files. The tool requires a GPU even though it does not open a window. Loading,
 pipeline, or readback failures terminate with an error.
 
+Use `--bake-pose` to render static meshes and material snapshots from the offline
+baker at each capture time. The same camera, textures, authored LOD selection,
+lighting, and prepass options apply, making paired captures useful for comparing
+live GPU skinning with CPU-baked geometry. This mode excludes the live hierarchy
+and its effects from rendering and rejects scheduled `--play` transitions. See
+[static pose baking](usage.md#bake-a-static-pose) for the snapshot's scope.
+
 ## Compare rendering behavior
 
 Use identical simulation FPS, times, and camera settings when comparing model

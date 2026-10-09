@@ -2,20 +2,21 @@ use bevy::math::Affine3A;
 use bevy::prelude::*;
 use std::collections::{HashMap, HashSet};
 use std::f32::consts::FRAC_PI_2;
+use std::hash::Hash;
 use wc3::model::scene::NodeFlags;
 
 #[derive(Clone, Copy)]
-pub(crate) struct NodeSample {
-    pub(crate) root: Entity,
+pub(crate) struct NodeSample<K = Entity> {
+    pub(crate) root: K,
     pub(crate) flags: NodeFlags,
     pub(crate) pivot_offset: Vec3,
     pub(crate) camera: Option<Transform>,
 }
 
-pub(crate) struct PoseInput {
+pub(crate) struct PoseInput<K = Entity> {
     pub(crate) local: Transform,
-    pub(crate) parent: Option<Entity>,
-    pub(crate) node: Option<NodeSample>,
+    pub(crate) parent: Option<K>,
+    pub(crate) node: Option<NodeSample<K>>,
     pub(crate) world: Option<GlobalTransform>,
     pub(crate) anchor: Option<Vec3>,
 }
@@ -92,7 +93,12 @@ fn inverse_vector(parent: &Pose, vector: Vec3) -> Vec3 {
     }
 }
 
-fn compose(mut local: Transform, node: Option<NodeSample>, parent: Pose, instance: Pose) -> Pose {
+fn compose<K>(
+    mut local: Transform,
+    node: Option<NodeSample<K>>,
+    parent: Pose,
+    instance: Pose,
+) -> Pose {
     let mut motion = parent.motion;
     let mut anchor = parent.anchor;
     if let Some(node) = node {
@@ -153,11 +159,11 @@ fn compose(mut local: Transform, node: Option<NodeSample>, parent: Pose, instanc
 
 /// Resolve parents first, keeping signed scale/rotation separate from the affine
 /// matrix. Cycle detection also protects callers sampling malformed hierarchies.
-pub(crate) fn resolve_pose(
-    entity: Entity,
-    lookup: &impl Fn(Entity) -> Option<PoseInput>,
-    cache: &mut HashMap<Entity, Pose>,
-    visiting: &mut HashSet<Entity>,
+pub(crate) fn resolve_pose<K: Copy + Eq + Hash>(
+    entity: K,
+    lookup: &impl Fn(K) -> Option<PoseInput<K>>,
+    cache: &mut HashMap<K, Pose>,
+    visiting: &mut HashSet<K>,
 ) -> Option<Pose> {
     if let Some(pose) = cache.get(&entity) {
         return Some(*pose);

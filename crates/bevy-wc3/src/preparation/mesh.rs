@@ -1,25 +1,17 @@
 use crate::assets::model::ModelError;
 use bevy::asset::RenderAssetUsages;
 use bevy::mesh::skinning::{JointAabb, JointIndex, SkinnedMeshBounds};
-use bevy::mesh::{Indices, PrimitiveTopology, VertexAttributeValues};
+use bevy::mesh::{Indices, MeshVertexAttribute, PrimitiveTopology, VertexAttributeValues};
 use bevy::prelude::*;
 use bevy::render::render_resource::VertexFormat;
 use std::collections::HashMap;
 use wc3::model::geometry::Geoset;
 use wc3::model::V1800;
 
-pub(crate) const EXTRA_JOINT_INDEX: bevy::mesh::MeshVertexAttribute =
-    bevy::mesh::MeshVertexAttribute::new(
-        "Wc3_ExtraJointIndex",
-        138_000_001,
-        VertexFormat::Uint16x4,
-    );
-pub(crate) const EXTRA_JOINT_WEIGHT: bevy::mesh::MeshVertexAttribute =
-    bevy::mesh::MeshVertexAttribute::new(
-        "Wc3_ExtraJointWeight",
-        138_000_002,
-        VertexFormat::Float32x4,
-    );
+pub(crate) const EXTRA_JOINT_INDEX: MeshVertexAttribute =
+    MeshVertexAttribute::new("Wc3_ExtraJointIndex", 138_000_001, VertexFormat::Uint16x4);
+pub(crate) const EXTRA_JOINT_WEIGHT: MeshVertexAttribute =
+    MeshVertexAttribute::new("Wc3_ExtraJointWeight", 138_000_002, VertexFormat::Float32x4);
 
 type JointRows = (Vec<[u16; 4]>, Vec<[f32; 4]>, Vec<[u16; 4]>, Vec<[f32; 4]>);
 

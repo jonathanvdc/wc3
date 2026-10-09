@@ -8,7 +8,7 @@ use wc3::model::animation::{Animatable, Interpolate, TextureAnimation, TrackValu
 use wc3::model::materials::{Layer, LayerFresnel, ShaderType};
 use wc3::model::V1800;
 
-use crate::animation::{sample, Wc3Animation};
+use crate::animation::{clocks::SamplingTime, Wc3Animation};
 use crate::materials::textures::Wc3TextureBindings;
 use crate::materials::Wc3LayerMaterial;
 
@@ -49,15 +49,15 @@ impl AnimatedSurface {
 
 fn value<T: TrackValue + Interpolate + Copy>(
     input: &Animatable<T>,
-    animation: &Wc3Animation,
+    time: SamplingTime<'_>,
     fallback: T,
 ) -> T {
-    input.sample(&animation.time()).unwrap_or(fallback)
+    time.sample(input).unwrap_or(fallback)
 }
 
-pub(crate) fn texture_transform(
+fn texture_transform_at_time(
     definition: Option<&TextureAnimation>,
-    animation: &Wc3Animation,
+    time: SamplingTime<'_>,
 ) -> Affine2 {
     let Some(definition) = definition else {
         return Affine2::IDENTITY;
@@ -65,20 +65,20 @@ pub(crate) fn texture_transform(
     let translation = definition
         .translation
         .as_ref()
-        .and_then(|track| sample(track, animation))
+        .and_then(|track| time.track(track))
         .map(Vec3::from_array)
         .unwrap_or(Vec3::ZERO);
     let rotation = definition
         .rotation
         .as_ref()
-        .and_then(|track| sample(track, animation))
+        .and_then(|track| time.track(track))
         .map(Quat::from_array)
         .unwrap_or(Quat::IDENTITY)
         .normalize();
     let scale = definition
         .scaling
         .as_ref()
-        .and_then(|track| sample(track, animation))
+        .and_then(|track| time.track(track))
         .map(Vec3::from_array)
         .unwrap_or(Vec3::ONE);
     let matrix = Mat4::from_translation(translation + Vec3::new(0.5, 0.5, 0.0))
@@ -115,26 +115,45 @@ pub(crate) fn animate_surface(
         let Some(mut material) = materials.get_mut(&handle.0) else {
             continue;
         };
+        surface.evaluate(
+            &mut material,
+            bindings,
+            SamplingTime::live(animation.time()),
+            &mut images,
+            &mut cache,
+        );
+    }
+}
+
+impl AnimatedSurface {
+    pub(crate) fn evaluate(
+        &self,
+        material: &mut Wc3LayerMaterial,
+        bindings: &Wc3TextureBindings,
+        time: SamplingTime<'_>,
+        images: &mut Assets<Image>,
+        cache: &mut LinearImages,
+    ) {
         material.base.uv_transform =
-            texture_transform(surface.texture_animation.as_ref(), animation);
-        material.base.depth_bias = surface.priority_plane as f32;
-        if !surface.hd {
-            continue;
+            texture_transform_at_time(self.texture_animation.as_ref(), time);
+        material.base.depth_bias = self.priority_plane as f32;
+        if !self.hd {
+            return;
         }
         let textures: [Option<Handle<Image>>; 6] = from_fn(|role| {
-            surface.slots[role]
+            self.slots[role]
                 .as_ref()
-                .and_then(|track| bindings.bitmap(value(track, animation, 0) as usize))
+                .and_then(|track| bindings.bitmap(value(track, time, 0) as usize))
         });
-        material.base.normal_map_texture = cache.resolve(textures[1].clone(), &mut images);
-        let orm = cache.resolve(textures[2].clone(), &mut images);
+        material.base.normal_map_texture = cache.resolve(textures[1].clone(), images);
+        let orm = cache.resolve(textures[2].clone(), images);
         material.base.occlusion_texture = orm.clone();
         material.base.metallic_roughness_texture = orm.clone();
         material.base.metallic = if orm.is_some() { 1.0 } else { 0.0 };
         material.base.perceptual_roughness = 1.0;
         material.base.emissive_texture = textures[3].clone();
         let gain = if textures[3].is_some() {
-            value(&surface.emissive_gain, animation, 1.0)
+            value(&self.emissive_gain, time, 1.0)
         } else {
             0.0
         };
@@ -151,10 +170,10 @@ pub(crate) fn animate_surface(
             textures[5].is_some() as u32,
         );
         material.extension.hd.fresnel_color =
-            Vec3::from_array(value(&surface.fresnel.color, animation, [1.0; 3])).extend(1.0);
+            Vec3::from_array(value(&self.fresnel.color, time, [1.0; 3])).extend(1.0);
         material.extension.hd.fresnel = Vec4::new(
-            value(&surface.fresnel.opacity, animation, 0.0),
-            value(&surface.fresnel.team_color, animation, 0.0),
+            value(&self.fresnel.opacity, time, 0.0),
+            value(&self.fresnel.team_color, time, 0.0),
             0.0,
             0.0,
         );

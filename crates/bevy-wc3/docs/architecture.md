@@ -23,7 +23,10 @@ construction and runtime ownership:
   model resource slots. The format definitions and codecs remain in `wc3`.
 - `preparation/` builds shared meshes, UV variants, joint mappings, inverse bind
   poses, and material templates. `PreparedModel` also retains the source model
-  and resolved image/child-model dependencies. Preparation does not spawn entities.
+  and resolved image/child-model dependencies. Preparation does not spawn
+  entities. `preparation/pose.rs` evaluates explicit
+  sequence/global clocks, skins prepared meshes on the CPU, and returns geometry
+  and material snapshots with stable source indices and original texture uses.
 - `instance/` waits for assets, caches prepared models, checks recursive child
   references, and manages ownership. `instance/spawn/` creates the root state,
   rig, geosets grouped by LOD, and feature entities from a prepared model.
@@ -49,8 +52,8 @@ blend into the advancing destination, including effect births and event poses.
 `wc3` resolves sequence/global-sequence clocks and samples tracks and properties;
 `animation/sampling.rs` adapts those operations for Bevy effect callers.
 `animation/pose/` owns animated node data, camera selection, pose evaluation,
-and birth-time transform sampling. The ECS node system and effect birth sampling
-reuse the same evaluation rules.
+and birth-time transform sampling. The ECS node system, effect birth sampling,
+and offline pose baking reuse the same hierarchy composition rules.
 
 `event.rs` dispatches crossed event keys as `Wc3ModelEvent` messages. Prepared
 instances share event definitions and retain independent cursors. Interval
@@ -59,6 +62,9 @@ metadata lives with `Wc3Animation`. Event names are interpreted by applications.
 
 `materials/` owns Bevy material specialization, layer/geoset animation, surface
 and UV animation, texture binding precedence, and private linear image variants.
+Shared layer and surface evaluators serve both
+live animation systems and the offline baker; `animation/clocks.rs` supplies
+independent clocks for offline sampling while live playback retains its shared clock.
 `lod.rs` selects authored geometry per instance from fixed policies or projected
 size, using shared driving-camera precedence and independent visibility groups.
 `attachment.rs` and `light.rs` own their spawning and animation behavior.

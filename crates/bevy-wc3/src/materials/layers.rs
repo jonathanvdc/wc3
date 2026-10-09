@@ -1,6 +1,6 @@
 use super::textures::Wc3TextureBindings;
 use super::Wc3LayerMaterial;
-use crate::animation::Wc3Animation;
+use crate::animation::{clocks::SamplingTime, Wc3Animation};
 use bevy::prelude::*;
 use wc3::model::animation::Animatable;
 use wc3::model::materials::LayerFilterMode;
@@ -30,19 +30,33 @@ pub(crate) fn animate_layers(
         let Some(mut material) = materials.get_mut(&material_handle.0) else {
             continue;
         };
-        let time = animation.time();
-        let alpha = layer.alpha.sample(&time).unwrap_or(1.0);
-        let geoset_alpha = layer
+        *visibility = if layer.evaluate(
+            &mut material,
+            bindings,
+            SamplingTime::live(animation.time()),
+        ) {
+            Visibility::Inherited
+        } else {
+            Visibility::Hidden
+        };
+    }
+}
+
+impl AnimatedLayer {
+    pub(crate) fn evaluate(
+        &self,
+        material: &mut Wc3LayerMaterial,
+        bindings: Option<&Wc3TextureBindings>,
+        time: SamplingTime<'_>,
+    ) -> bool {
+        let alpha = time.sample(&self.alpha).unwrap_or(1.0);
+        let geoset_alpha = self
             .geoset_alpha
             .as_ref()
-            .map(|alpha| alpha.sample(&time).unwrap_or(1.0))
+            .map(|alpha| time.sample(alpha).unwrap_or(1.0))
             .unwrap_or(1.0);
-        *visibility = if alpha * geoset_alpha <= 0.0 {
-            Visibility::Hidden
-        } else {
-            Visibility::Inherited
-        };
-        if layer.geoset_alpha.is_some() {
+        let visible = alpha * geoset_alpha > 0.0;
+        if self.geoset_alpha.is_some() {
             let partial = (0.0..1.0).contains(&geoset_alpha);
             match material.extension.filter {
                 LayerFilterMode::None => {
@@ -66,17 +80,18 @@ pub(crate) fn animate_layers(
                 _ => {}
             }
         }
-        let texture_id = layer.texture_id.sample(&time).unwrap_or(0);
-        let [red, green, blue] = layer
+        let texture_id = time.sample(&self.texture_id).unwrap_or(0);
+        let [red, green, blue] = self
             .geoset_color
             .as_ref()
-            .map(|color| color.sample(&time).unwrap_or([1.0; 3]))
+            .map(|color| time.sample(color).unwrap_or([1.0; 3]))
             .unwrap_or([1.0; 3]);
         // Tint is a multiplier in the shader, not an sRGB display color.
         material.base.base_color = Color::linear_rgba(red, green, blue, alpha * geoset_alpha);
         if let Some(bindings) = bindings {
             material.base.base_color_texture = bindings.bitmap(texture_id as usize);
         }
+        visible
     }
 }
 

@@ -91,7 +91,7 @@ impl LinearImages {
         self.0.remove(&id);
     }
 
-    pub(super) fn retain_loaded(&mut self, images: &Assets<Image>) {
+    pub(crate) fn retain_loaded(&mut self, images: &Assets<Image>) {
         self.0.retain(|id, _| images.contains(*id));
     }
 

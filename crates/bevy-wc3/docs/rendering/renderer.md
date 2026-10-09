@@ -20,6 +20,13 @@ Common geosets remain visible across levels. See [geometry LOD](lod.md). Each
 instance owns its rig, material handles, texture bindings, and animation clock.
 [Architecture](../architecture.md) describes preparation and ownership in detail.
 
+Prepared and spawned mesh passes expose `Wc3PartId` with normalized source
+geoset, material, and layer indices. Offline consumers can use `Wc3PoseBaker`
+to freeze those passes into model-space meshes and material snapshots, including
+visibility and bounds for every authored level. See
+[static pose baking](../usage.md#bake-a-static-pose) for clocks, texture provenance,
+and the limits of this geometry-only snapshot.
+
 ## Animation and node transforms
 
 Sequence and global-sequence clocks sample node transforms and animated model

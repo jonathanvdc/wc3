@@ -57,7 +57,8 @@ fn uv_animation_rotates_and_scales_around_center() {
             .unwrap(),
         ),
     };
-    let transform = texture_transform(Some(&definition), &animation());
+    let transform =
+        texture_transform_at_time(Some(&definition), SamplingTime::live(animation().time()));
     assert!(transform
         .transform_point2(Vec2::splat(0.5))
         .abs_diff_eq(Vec2::new(0.7, 0.5), 1e-5));

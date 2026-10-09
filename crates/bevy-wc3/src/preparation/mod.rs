@@ -9,6 +9,11 @@ use wc3::model::scene::EventObject;
 use wc3::model::{Model, V1800};
 
 mod materials;
+mod pose;
+pub use pose::{
+    BakedModelPart, BakedModelPose, PreparedPart, Wc3MaterialSnapshot, Wc3PartId, Wc3PoseBaker,
+    Wc3PoseOptions, Wc3TextureColorSpace, Wc3TextureReference, Wc3TextureRole,
+};
 pub(crate) mod mesh;
 pub(crate) mod rig;
 use self::materials::{build_layer_material, layer_texture_id};
@@ -52,9 +57,29 @@ pub struct PreparedModel {
     pub(crate) textures: ResolvedModelTextures,
     pub(crate) models: Wc3ModelResources,
     pub(crate) inverse_bindposes: Handle<SkinnedMeshInverseBindposes>,
+    pub(crate) joint_bindings: Vec<(u32, Mat4)>,
 }
 
 impl PreparedModel {
+    /// Enumerate mesh passes in source order, preserving original source indices.
+    pub fn parts(&self) -> impl Iterator<Item = PreparedPart<'_>> {
+        self.geosets.iter().flat_map(|geoset| {
+            geoset
+                .meshes
+                .iter()
+                .enumerate()
+                .map(move |(layer, mesh)| PreparedPart {
+                    id: Wc3PartId {
+                        geoset: geoset.geoset_id,
+                        material: geoset.material_id,
+                        layer,
+                    },
+                    mesh,
+                    lod: geoset.lod,
+                })
+        })
+    }
+
     /// Sorted authored levels with drawable geometry; larger numbers are coarser.
     /// Models containing only common geometry expose level zero.
     pub fn lod_levels(&self) -> &[u32] {
@@ -70,6 +95,25 @@ impl PreparedModel {
     pub fn model_resources(&self) -> &Wc3ModelResources {
         &self.models
     }
+}
+
+/// Prepare an already loaded model asset, retaining its resolved textures and
+/// child-model resources. No asset loading or entity spawning occurs here.
+///
+/// # Errors
+/// Returns [`ModelError`] for geometry preparation failures, as in [`prepare_model`].
+pub fn prepare_model_asset(
+    meshes: &mut Assets<Mesh>,
+    inverse_bindposes: &mut Assets<SkinnedMeshInverseBindposes>,
+    asset: &Wc3ModelAsset,
+) -> Result<PreparedModel, ModelError> {
+    prepare_resolved_model(
+        meshes,
+        inverse_bindposes,
+        &asset.source,
+        asset.textures.clone(),
+        asset.models.clone(),
+    )
 }
 
 /// Build shareable meshes and bind poses once. Each instance receives private
@@ -250,6 +294,7 @@ pub(crate) fn prepare_resolved_model(
         layers,
         textures,
         models,
+        joint_bindings: joint_ids.into_iter().zip(binds.iter().copied()).collect(),
         inverse_bindposes: inverse_bindposes.add(binds),
     })
 }

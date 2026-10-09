@@ -201,7 +201,67 @@ let root = spawn_prepared_model(
 ```
 
 Use `prepare_model_with_resources` to additionally resolve child-model paths, and
-`spawn_prepared_model_with_bindings` to supply per-instance texture choices.
+`spawn_prepared_model_with_bindings` to supply per-instance texture choices. If
+you already loaded a `Wc3ModelAsset`, `prepare_model_asset` retains its resolved
+textures and child-model resources without resolving them again.
+
+## Bake a static pose
+
+Offline tools can decode and prepare a model using ordinary `Assets` stores, then
+freeze its geometry and materials without creating an `App`, loading through an
+`AssetServer`, or initializing a renderer. Keep a `Wc3PoseBaker` when sampling
+multiple times so normal and ORM image variants can be reused:
+
+```rust
+let mut baker = Wc3PoseBaker::default();
+let pose = baker.bake(
+    &prepared,
+    &meshes,
+    &mut images,
+    &texture_bindings,
+    Wc3PoseOptions {
+        sequence: Some(stand_sequence),
+        elapsed_ms: 0.0,
+        global_elapsed_ms: 250.0,
+        camera: None,
+    },
+)?;
+for part in pose.parts.into_iter().filter(|part| part.visible) {
+    // The posed mesh has no joint attributes and is already in model space.
+    let mesh = meshes.add(part.mesh);
+    let material = materials.add(part.material.material);
+    commands.spawn((Mesh3d(mesh), MeshMaterial3d(material), Transform::default()));
+}
+```
+
+The sequence and global clocks are independent elapsed milliseconds. Sequence
+tracks retain their authored looping or clamping behavior; `sequence: None`
+samples static properties and global tracks only. The default options use no
+sequence and both clocks at zero. Camera-dependent nodes require an explicit
+camera transform in model space. The baker rejects invalid sequence indices,
+nonfinite clocks, and cyclic or missing node parents rather than relying on ECS
+update order. It does not blend transitions, dispatch events, simulate effects,
+or recursively bake attachments. Explicit model bind-pose records remain outside
+the renderer's supported skinning path.
+
+A pose includes every prepared geoset and authored LOD. Each pass reports its
+opacity visibility and posed bounds; the aggregate bounds cover visible passes
+across all levels. Consumers choose their LOD and omit hidden passes explicitly.
+`PreparedModel::parts()` and the `Wc3PartId` component on spawned mesh passes
+expose the same geoset, material, and layer indices. These indices refer to the
+normalized model, so skipped empty geosets and shared meshes do not renumber them.
+Use the owning model/root together with the indices when distinguishing instances.
+
+Each `Wc3MaterialSnapshot` includes the evaluated Bevy material, blend/depth
+settings, Fresnel controls, and six normalized texture roles. Texture references
+retain the authored path, bitmap index, replaceable ID, original resolved or
+overridden image handle, sampler, authored wrap flags, and expected color space.
+A literal path is provenance, not a resolved filesystem path; applications choose
+lookup policy and can associate their own paths with the original image handles.
+The material may bind a private linear variant while the reference still identifies
+its source image. Unresolved roles retain their source information without an
+image handle. Original images must stay available in `Assets<Image>`; call
+`clear_image_cache()` on the baker after editing their contents or samplers.
 
 ## Integrate with application systems
 

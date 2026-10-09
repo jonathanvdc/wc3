@@ -11,7 +11,8 @@ assets before integrating them. Architecture is intended for contributors and
 applications that need explicit control over scheduling or preparation.
 
 - [Using bevy-wc3](usage.md): load instances from files or named MPQ sources,
-  choose textures, control playback, mount child models, and configure lights.
+  choose textures, control playback, bake static poses, mount child models, and
+  configure lights.
 - [Viewer and captures](tools.md): inspect assets, override textures, and render
   PNGs at controlled simulation times.
 - [Architecture](architecture.md): loading and preparation, shared and per-instance

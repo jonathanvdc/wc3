@@ -1,4 +1,5 @@
 //! Playback, track sampling, and node pose evaluation.
+pub(crate) mod clocks;
 mod playback;
 pub(crate) mod pose;
 mod sampling;

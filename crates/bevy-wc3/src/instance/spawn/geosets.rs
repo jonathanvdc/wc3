@@ -1,5 +1,5 @@
 use crate::lod::{LodGroup, Wc3LodState};
-use crate::preparation::PreparedLayer;
+use crate::preparation::{PreparedLayer, Wc3PartId};
 use bevy::camera::visibility::DynamicSkinnedMeshBounds;
 use bevy::mesh::skinning::SkinnedMesh;
 use bevy::prelude::*;
@@ -60,14 +60,20 @@ pub(super) fn spawn_geosets(
         } else {
             Visibility::Inherited
         };
-        for ((layer, material), mesh) in prepared.layers[geoset.material_id]
+        for (layer_id, ((layer, material), mesh)) in prepared.layers[geoset.material_id]
             .iter()
             .zip(&layer_handles[geoset.material_id])
             .zip(&geoset.meshes)
+            .enumerate()
         {
             let material =
                 instantiate_geoset_material(materials, layer, material, geoset_animation);
             let mut entity = commands.spawn((
+                Wc3PartId {
+                    geoset: geoset.geoset_id,
+                    material: geoset.material_id,
+                    layer: layer_id,
+                },
                 Mesh3d(mesh.clone()),
                 MeshMaterial3d(material),
                 initial_visibility,

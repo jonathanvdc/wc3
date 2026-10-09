@@ -5,6 +5,7 @@ use bevy::asset::{AssetPlugin, LoadState, RecursiveDependencyLoadState};
 use bevy::camera::{RenderTarget, ShadowLodOrigin};
 use bevy::core_pipeline::prepass::{DepthPrepass, MotionVectorPrepass, NormalPrepass};
 use bevy::core_pipeline::tonemapping::Tonemapping;
+use bevy::mesh::skinning::SkinnedMeshInverseBindposes;
 use bevy::prelude::*;
 use bevy::render::pipelined_rendering::PipelinedRenderingPlugin;
 use bevy::render::render_resource::{CachedPipelineState, PipelineCache, TextureFormat};
@@ -16,9 +17,10 @@ use bevy::time::TimeUpdateStrategy;
 use bevy::window::ExitCondition;
 use bevy::winit::WinitPlugin;
 use bevy_wc3::{
-    Wc3Animation, Wc3BevyPlugin, Wc3CameraBinding, Wc3CameraSample, Wc3Lod, Wc3LodOverride,
-    Wc3LodSettings, Wc3LodState, Wc3Model, Wc3ModelAsset, Wc3ModelCameras, Wc3ModelInstance,
-    Wc3NodeCamera, Wc3TextureBindings, Wc3TextureSlot,
+    prepare_model_asset, PreparedModel, Wc3Animation, Wc3BevyPlugin, Wc3CameraBinding,
+    Wc3CameraSample, Wc3LayerMaterial, Wc3Lod, Wc3LodOverride, Wc3LodSettings, Wc3LodState,
+    Wc3Model, Wc3ModelAsset, Wc3ModelCameras, Wc3ModelInstance, Wc3NodeCamera, Wc3PoseBaker,
+    Wc3PoseOptions, Wc3TextureBindings, Wc3TextureSlot,
 };
 use std::env::args;
 use std::error::Error;
@@ -32,6 +34,7 @@ const TIMEOUT: Duration = Duration::from_secs(30);
 const HELP: &str = "Usage: capture MODEL.{mdx,mdl} OUTPUT_DIR [options]
 
 Render offscreen and write frame-0000-1.000s.png, etc. Requires a GPU.
+  --bake-pose           Render offline-baked geometry instead of the live hierarchy
   --prepasses           Enable depth/normal/motion prepasses and shadows
   --no-default-light    Omit the capture scene light (isolate model lights)
   --bevy-reference      Add a StandardMaterial sphere at (0, 2, 0)
@@ -70,6 +73,7 @@ struct PlaybackChange {
 }
 
 struct Options {
+    bake_pose: bool,
     prepasses: bool,
     bevy_reference: bool,
     no_default_light: bool,
@@ -106,6 +110,7 @@ impl Options {
             .next()
             .ok_or("pass an output directory after the model path")?;
         let mut options = Self {
+            bake_pose: false,
             prepasses: false,
             bevy_reference: false,
             no_default_light: false,
@@ -134,6 +139,10 @@ impl Options {
             }
             if option == "--no-default-light" {
                 options.no_default_light = true;
+                continue;
+            }
+            if option == "--bake-pose" {
+                options.bake_pose = true;
                 continue;
             }
             if option == "--prepasses" {
@@ -222,6 +231,9 @@ impl Options {
                 }
                 _ => return Err(format!("unknown option: {option}").into()),
             }
+        }
+        if options.bake_pose && !options.plays.is_empty() {
+            return Err("bake-pose does not support pose transitions (--play)".into());
         }
         options.lod_settings.validate()?;
         if !options.fps.is_finite() || !(1.0..=1000.0).contains(&options.fps) {
@@ -331,6 +343,60 @@ fn parse_vector(value: &str) -> CaptureResult<Vec3> {
 
 #[derive(Resource, Default)]
 struct ScreenshotResult(Option<Result<(), String>>);
+
+fn replace_with_baked_pose(
+    app: &mut App,
+    prepared: &PreparedModel,
+    baker: &mut Wc3PoseBaker,
+    root: Entity,
+    camera: Entity,
+    entities: &mut Vec<Entity>,
+) -> CaptureResult<()> {
+    let world = app.world_mut();
+    for entity in entities.drain(..) {
+        world.despawn(entity);
+    }
+    let animation = world.get::<Wc3Animation>(root).unwrap();
+    let options = Wc3PoseOptions {
+        sequence: (!animation.sequences().is_empty()).then_some(animation.sequence()),
+        elapsed_ms: animation.elapsed_ms(),
+        global_elapsed_ms: animation.elapsed_ms(),
+        camera: Some(
+            world
+                .get::<GlobalTransform>(camera)
+                .unwrap()
+                .compute_transform(),
+        ),
+    };
+    let bindings = world.get::<Wc3TextureBindings>(root).unwrap().clone();
+    let selected = world.get::<Wc3LodState>(root).unwrap().selected_level();
+    let pose = world.resource_scope(|world, mut images: Mut<Assets<Image>>| {
+        baker.bake(
+            prepared,
+            world.resource::<Assets<Mesh>>(),
+            &mut images,
+            &bindings,
+            options,
+        )
+    })?;
+    for part in pose
+        .parts
+        .into_iter()
+        .filter(|part| part.visible && part.lod.is_none_or(|lod| lod == selected))
+    {
+        let mesh = world.resource_mut::<Assets<Mesh>>().add(part.mesh);
+        let material = world
+            .resource_mut::<Assets<Wc3LayerMaterial>>()
+            .add(part.material.material);
+        entities.push(
+            world
+                .spawn((Mesh3d(mesh), MeshMaterial3d(material), Transform::default()))
+                .id(),
+        );
+    }
+    world.entity_mut(root).insert(Visibility::Hidden);
+    Ok(())
+}
 
 fn main() -> CaptureResult<()> {
     let Some(options) = Options::parse(args().skip(1))? else {
@@ -518,6 +584,27 @@ fn main() -> CaptureResult<()> {
         .unwrap()
         .play_immediately(options.sequence);
     settle(&mut app)?;
+    let prepared_pose = if options.bake_pose {
+        Some(
+            app.world_mut()
+                .resource_scope(|world, mut meshes: Mut<Assets<Mesh>>| {
+                    world.resource_scope(
+                        |world, mut binds: Mut<Assets<SkinnedMeshInverseBindposes>>| {
+                            let models = world.resource::<Assets<Wc3ModelAsset>>();
+                            prepare_model_asset(
+                                &mut meshes,
+                                &mut binds,
+                                models.get(&handle).unwrap(),
+                            )
+                        },
+                    )
+                })?,
+        )
+    } else {
+        None
+    };
+    let mut pose_baker = Wc3PoseBaker::default();
+    let mut baked_entities = Vec::new();
     create_dir_all(&options.output)?;
     let mut elapsed = 0.0;
     let mut next_play = 0;
@@ -570,6 +657,17 @@ fn main() -> CaptureResult<()> {
             sample
                 .perspective_projection(options.camera_fov_multiplier)
                 .ok_or("model camera has an invalid lens")?;
+        }
+        if let Some(prepared) = &prepared_pose {
+            replace_with_baked_pose(
+                &mut app,
+                prepared,
+                &mut pose_baker,
+                root,
+                camera_entity,
+                &mut baked_entities,
+            )?;
+            settle(&mut app)?;
         }
         let path = options
             .output

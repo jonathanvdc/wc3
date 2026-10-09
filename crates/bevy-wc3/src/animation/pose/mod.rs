@@ -11,7 +11,7 @@ pub(crate) use self::evaluation::{resolve_pose, PoseInput};
 pub(crate) use self::node::{AnimatedNode, NodeFrame};
 use crate::animation::Wc3Animation;
 mod emitter;
-mod evaluation;
+pub(crate) mod evaluation;
 mod node;
 
 /// Selects the camera driving camera-dependent node flags on a model root.
