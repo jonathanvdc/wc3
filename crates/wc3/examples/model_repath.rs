@@ -1,9 +1,10 @@
 //! Rewrite declared external paths with a literal prefix replacement.
 mod support;
 use clap::{builder::NonEmptyStringValueParser, Parser};
+use std::convert::Infallible;
 use std::path::PathBuf;
-use support::{load, paths, save, Result};
-use wc3::model::visit_model;
+use support::{load, save, Result};
+use wc3::model::resources::{ResourceEdit, ResourceValue};
 
 #[derive(Parser)]
 #[command(about = "Rewrite declared model paths with a case-sensitive prefix replacement")]
@@ -22,18 +23,23 @@ struct Args {
 fn main() -> Result<()> {
     let args = Args::parse();
     let mut model = load(&args.input)?;
-    let mut count = 0;
-    visit_model!(&mut model, |typed| paths(typed, |location, path| {
-        let old = path.text().into_owned();
-        if let Some(suffix) = old.strip_prefix(&args.from_prefix) {
-            let new = format!("{}{suffix}", args.to_prefix);
-            path.set_text(&new)?;
-            eprintln!("{location}: {old} -> {new}");
-            count += 1;
-        }
-        Ok(())
-    }))?;
+    let report = model.rewrite_resources(|reference| {
+        let edit = match reference.value {
+            ResourceValue::Path(path) => {
+                let old = path.text();
+                match old.strip_prefix(&args.from_prefix) {
+                    Some(suffix) => ResourceEdit::SetPath(format!("{}{suffix}", args.to_prefix)),
+                    None => ResourceEdit::Keep,
+                }
+            }
+            ResourceValue::ReplaceableId(_) => ResourceEdit::Keep,
+        };
+        Ok::<_, Infallible>(edit)
+    })?;
+    for change in &report.changes {
+        eprintln!("{}: {} -> {}", change.location, change.before, change.after);
+    }
     save(&model, &args.output)?;
-    eprintln!("Rewrote {count} paths");
+    eprintln!("Rewrote {} paths", report.changes.len());
     Ok(())
 }

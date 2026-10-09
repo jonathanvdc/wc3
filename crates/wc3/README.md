@@ -68,6 +68,15 @@ animation, and effects. The
 [`model` module documentation](https://docs.rs/wc3/latest/wc3/model/) explains
 how to edit those collections and convert between supported versions.
 
+Resource tools can use `resources()` on either model type to enumerate direct
+literal paths and replaceable IDs with typed source locations. `rewrite_resources()`
+validates every proposed change before modifying the model and reports actual edits,
+retaining chunk organization and unchanged bytes. The
+[`resources` API](https://docs.rs/wc3/latest/wc3/model/resources/) includes an example.
+File resolution, recursive discovery, path normalization, and packaging policy remain
+application-owned, so enumeration includes PopcornFX and FaceFX even when a renderer
+does not support them.
+
 ### Textures
 
 For BLP textures, you can choose whether to work with the encoded container or

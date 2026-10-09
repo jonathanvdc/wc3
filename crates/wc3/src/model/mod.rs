@@ -38,6 +38,15 @@
 //! must agree in size, and animation-track constructors select the interpolation
 //! and keyframe types together.
 //!
+//! # Resource references
+//!
+//! [`Model::resources`](crate::model::Model::resources) and
+//! [`DynamicModel::resources`](crate::model::DynamicModel::resources) enumerate literal paths
+//! and replaceable IDs with typed chunk/record/field locations. Repeated references,
+//! duplicate chunks, and empty path fields remain visible. The [`resources`](crate::model::resources) module
+//! explains transactional rewriting through `rewrite_resources`, including byte
+//! preservation and caller-owned resolution and packaging policy.
+//!
 //! # Format conversion
 //!
 //! MDX retains unknown chunks, flag bits, and fixed-text bytes. MDL writes
@@ -74,6 +83,7 @@ pub(crate) use animation::*;
 pub mod geometry;
 pub(crate) use geometry::*;
 pub mod materials;
+pub mod resources;
 pub(crate) use materials::*;
 pub mod scene;
 pub(crate) use scene::*;

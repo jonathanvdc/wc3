@@ -21,6 +21,16 @@ Dependency reporting covers texture, attachment, particle-emitter, popcorn FX,
 FaceFX, and external animation paths, including unused references. It does not
 resolve files, follow references recursively, or infer resources selected by game
 logic. Replaceable IDs identify game-provided resources rather than fixed paths.
+The tool groups identical nonempty paths for display, retaining every source
+location. A bitmap with both a literal path and a nonzero replaceable ID appears
+in both forms. ID locations identify the `replaceable_id` field explicitly.
+
+Library consumers can enumerate these occurrences with `resources()` on
+`Model<V>` or `DynamicModel`. The iterator also exposes empty paths and preserves
+original spelling and fixed-field bytes. Internal texture indices are not external
+resources, and opaque chunks are not searched for strings. See the
+[`resources` API](https://docs.rs/wc3/latest/wc3/model/resources/) for typed sites,
+locations, and value kinds.
 
 These tools, along with `model_convert` and `model_repath`, recognize MDX by its
 header and otherwise read UTF-8 MDL. The separate `mdlx_compare` example selects
@@ -56,7 +66,14 @@ cargo run -p wc3 --example model_repath -- model.mdx repathed.mdx 'Textures\' 'C
 
 As with conversion, the output extension selects MDX or MDL, writing canonicalizes
 the selected format, and an existing output file is overwritten. Repath changes
-model references; it does not move the referenced files.
+model references; it does not move the referenced files. The tool uses the
+transactional `rewrite_resources()` API: callback failures, overlong paths,
+embedded NULs, and edits to the wrong value kind leave the model unchanged. It
+reports only actual changes after all edits validate. Paths with unchanged UTF-8 text
+retain their original padding, and path edits leave replaceable IDs untouched.
+Library callers can separately change or clear IDs and receive lossless before
+and after field values. Rewrite errors retain the original callback error as their
+source and attach the exact field location.
 
 ## Export textures and work with archives
 
