@@ -4,6 +4,7 @@ use crate::model::Color;
 use crate::model::ConversionError;
 use crate::model::KnownChunk;
 use crate::model::LightsChunk;
+use crate::model::ModelDialect;
 use crate::model::ValueError;
 use crate::model::{mdl, mdx};
 use crate::model::{Animatable, Track};
@@ -525,14 +526,14 @@ impl<V: SupportsLightFalloff> Light<V> {
     }
 }
 
-impl<V: ModelVersion> Model<V> {
+impl<D: ModelDialect> Model<D> {
     /// Returns owned copies of `LITE` records in file order.
-    pub fn lights(&self) -> Vec<Light<V>> {
-        self.collect_chunk_records::<LightsChunk<V>>()
+    pub fn lights(&self) -> Vec<Light<D::Version>> {
+        self.collect_chunk_records::<LightsChunk<D::Version>>()
     }
 
     /// Replaces lights with one `LITE` chunk, removing any duplicate chunks.
-    pub fn set_lights(&mut self, lights: &[Light<V>]) {
+    pub fn set_lights(&mut self, lights: &[Light<D::Version>]) {
         self.replace_chunk(LightsChunk::new(lights.to_vec()));
     }
 }

@@ -1,7 +1,8 @@
 //! One matrix in a Reforged bind pose.
+use crate::model::ModelDialect;
 use crate::model::{mdl, mdx};
 use crate::model::{BindPoseChunk, Model};
-use crate::model::{ModelVersion, SupportsReforgedChunks, ValueError};
+use crate::model::{SupportsReforgedChunks, ValueError};
 
 /// A 3-by-4 floating-point bind-pose matrix.
 #[derive(Clone, Copy, Debug, PartialEq, mdx::Read, mdx::Write, mdl::Read, mdl::Write)]
@@ -11,7 +12,7 @@ pub struct BindPoseMatrix(
     pub [f32; 12],
 );
 
-impl<V: ModelVersion> Model<V> {
+impl<D: ModelDialect> Model<D> {
     /// Returns owned bind-pose matrices in file order.
     /// Returns an error if this model version does not support `BPOS`.
     pub fn try_bind_poses(&self) -> Result<Vec<BindPoseMatrix>, ValueError> {
@@ -32,7 +33,10 @@ impl<V: ModelVersion> Model<V> {
     }
 }
 
-impl<V: SupportsReforgedChunks> Model<V> {
+impl<D: ModelDialect> Model<D>
+where
+    D::Version: SupportsReforgedChunks,
+{
     /// Returns owned bind-pose matrices in model order.
     pub fn bind_poses(&self) -> Vec<BindPoseMatrix> {
         self.decoded_chunks::<BindPoseChunk>()

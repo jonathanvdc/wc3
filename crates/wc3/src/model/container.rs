@@ -6,6 +6,7 @@ use crate::model::Cursor;
 use crate::model::Encoder;
 use crate::model::ValueError;
 use crate::model::{CollectionChunk, ModelChunk, VersionChunk};
+use crate::model::{Extended, ModelDialect, ModelExtension, NoExtensions};
 use crate::model::{
     ModelVersion, Tag, Version, V1000, V1100, V1200, V1300, V1400, V1600, V1800, V800, V900,
 };
@@ -13,9 +14,11 @@ use crate::model::{
 /// The four bytes at the start of an MDX file.
 pub const MAGIC: Tag = *b"MDLX";
 
-/// A model with a known format version.
+/// A model with a statically selected dialect.
 ///
-/// `V` keeps version-dependent records compatible with the model. Import the
+/// `D` selects a standard format version and application extension codec. Standard
+/// markers such as `V800` are dialects with no extensions. Records use `D::Version`,
+/// so extended models accept the same records as their base format. Import the
 /// [`mdx`] or [`crate::model::mdl`] codec traits for whole-file reading and writing.
 /// MDX retains chunk organization; MDL produces canonical text and rejects
 /// data without a faithful text representation.
@@ -30,31 +33,31 @@ pub const MAGIC: Tag = *b"MDLX";
 /// model.set_materials(&[Material::<V1100>::new()]);
 /// ```
 #[derive(Clone, Debug)]
-pub struct Model<V: ModelVersion> {
+pub struct Model<D: ModelDialect> {
     /// The ordered list of chunks in the model.
-    pub chunks: Vec<ModelChunk<V>>,
+    pub chunks: Vec<ModelChunk<D>>,
 }
 
-impl<V: ModelVersion> Default for Model<V> {
+impl<D: ModelDialect> Default for Model<D> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<V: ModelVersion> Model<V> {
+impl<D: ModelDialect> Model<D> {
     pub(crate) fn check_chunk_version(&self, tag: Tag) -> Result<(), ValueError> {
-        (V::NUMBER >= 900)
+        (D::Version::NUMBER >= 900)
             .then_some(())
             .ok_or(ValueError::UnsupportedVersion {
                 tag,
                 minimum: 900,
-                actual: V::NUMBER,
+                actual: D::Version::NUMBER,
             })
     }
 
     pub(crate) fn decoded_chunks<'a, C: 'a>(&'a self) -> impl Iterator<Item = &'a C>
     where
-        for<'b> &'b C: TryFrom<&'b ModelChunk<V>>,
+        for<'b> &'b C: TryFrom<&'b ModelChunk<D>>,
     {
         self.chunks
             .iter()
@@ -64,14 +67,14 @@ impl<V: ModelVersion> Model<V> {
     pub(crate) fn collect_chunk_records<C: CollectionChunk>(&self) -> Vec<C::Item>
     where
         C::Item: Clone,
-        for<'a> &'a C: TryFrom<&'a ModelChunk<V>>,
+        for<'a> &'a C: TryFrom<&'a ModelChunk<D>>,
     {
         self.collect_chunk_items::<C, _>(|collection| collection.records())
     }
 
     pub(crate) fn collect_chunk_items<C, T: Clone>(&self, items: impl Fn(&C) -> &[T]) -> Vec<T>
     where
-        for<'a> &'a C: TryFrom<&'a ModelChunk<V>>,
+        for<'a> &'a C: TryFrom<&'a ModelChunk<D>>,
     {
         let mut result = Vec::new();
         for chunk in self.decoded_chunks::<C>() {
@@ -83,13 +86,13 @@ impl<V: ModelVersion> Model<V> {
     /// Creates a model with a `VERS` chunk for this type's version.
     pub fn new() -> Self {
         Self {
-            chunks: vec![ModelChunk::from(VersionChunk::<V>::new())],
+            chunks: vec![ModelChunk::from(VersionChunk::<D::Version>::new())],
         }
     }
 
     /// Returns the version selected by the model type.
     pub fn version(&self) -> Version {
-        V::NUMBER
+        D::Version::NUMBER
     }
 
     /// Returns owned copies of every transform node in chunk and record order.
@@ -144,16 +147,16 @@ impl<V: ModelVersion> Model<V> {
     }
 
     /// Finds the first chunk with the given tag.
-    pub fn chunk(&self, tag: Tag) -> Option<&ModelChunk<V>> {
+    pub fn chunk(&self, tag: Tag) -> Option<&ModelChunk<D>> {
         self.chunks.iter().find(|chunk| chunk.tag() == tag)
     }
 
     /// Finds the first mutable chunk with the given tag.
-    pub fn chunk_mut(&mut self, tag: Tag) -> Option<&mut ModelChunk<V>> {
+    pub fn chunk_mut(&mut self, tag: Tag) -> Option<&mut ModelChunk<D>> {
         self.chunks.iter_mut().find(|chunk| chunk.tag() == tag)
     }
 
-    pub(crate) fn replace_chunk(&mut self, chunk: impl Into<ModelChunk<V>>) {
+    pub(crate) fn replace_chunk(&mut self, chunk: impl Into<ModelChunk<D>>) {
         let chunk = chunk.into();
         let tag = chunk.tag();
         if let Some(index) = self
@@ -203,14 +206,14 @@ mod node_tests {
     }
 }
 
-impl<V: ModelVersion> mdx::Read for Model<V> {
+impl<D: ModelDialect> mdx::Read for Model<D> {
     fn read_mdx(cursor: &mut Cursor<'_>) -> Result<Self, mdx::ReadError> {
         if let Some((actual, offset)) = scan_version(*cursor)? {
-            if actual != V::NUMBER {
+            if actual != D::Version::NUMBER {
                 return Err(mdx::ReadError::new(
                     offset,
                     mdx::ReadErrorKind::VersionMismatch {
-                        expected: V::NUMBER,
+                        expected: D::Version::NUMBER,
                         actual,
                     },
                 )
@@ -232,7 +235,7 @@ impl<V: ModelVersion> mdx::Read for Model<V> {
     }
 }
 
-impl<V: ModelVersion> mdx::Write for Model<V> {
+impl<D: ModelDialect> mdx::Write for Model<D> {
     fn write_mdx(&self, output: &mut Encoder<'_>) -> Result<(), mdx::WriteError> {
         output.write_bytes(&MAGIC);
         for chunk in &self.chunks {
@@ -243,27 +246,33 @@ impl<V: ModelVersion> mdx::Write for Model<V> {
 }
 
 /// A decoded model whose version is determined by its `VERS` chunk or MDL
-/// Version block. `mdl::Read::decode_mdl` requires an explicit FormatVersion.
+/// Version block. `E` selects the application extension codec while the standard
+/// record version is selected at runtime. Variants contain `Model<Extended<V, E>>`.
+/// `mdl::Read::decode_mdl` requires an explicit FormatVersion.
+///
+/// The default extension type is [`NoExtensions`]. For standalone decoding calls,
+/// supply a result type (`let model: DynamicModel = ...`) or an explicit extension
+/// argument (`DynamicModel::<NoExtensions>::decode_mdx(...)`).
 #[derive(Clone, Debug)]
-pub enum DynamicModel {
+pub enum DynamicModel<E: ModelExtension = NoExtensions> {
     /// A model using format version 800.
-    V800(Model<V800>),
+    V800(Model<Extended<V800, E>>),
     /// A model using format version 900.
-    V900(Model<V900>),
+    V900(Model<Extended<V900, E>>),
     /// A model using format version 1000.
-    V1000(Model<V1000>),
+    V1000(Model<Extended<V1000, E>>),
     /// A model using format version 1100.
-    V1100(Model<V1100>),
+    V1100(Model<Extended<V1100, E>>),
     /// A model using format version 1200.
-    V1200(Model<V1200>),
+    V1200(Model<Extended<V1200, E>>),
     /// A model using format version 1300.
-    V1300(Model<V1300>),
+    V1300(Model<Extended<V1300, E>>),
     /// A model using format version 1400.
-    V1400(Model<V1400>),
+    V1400(Model<Extended<V1400, E>>),
     /// A model using format version 1600.
-    V1600(Model<V1600>),
+    V1600(Model<Extended<V1600, E>>),
     /// A model using format version 1800.
-    V1800(Model<V1800>),
+    V1800(Model<Extended<V1800, E>>),
 }
 
 /// Runs an expression against the typed model inside an [`DynamicModel`].
@@ -273,8 +282,8 @@ pub enum DynamicModel {
 /// matching a mutable reference allows edits.
 ///
 /// ```
-/// use wc3::model::{visit_model, DynamicModel, Model, V800};
-/// let model = DynamicModel::V800(Model::<V800>::new());
+/// use wc3::model::{visit_model, DynamicModel, Model};
+/// let model: DynamicModel = DynamicModel::V800(Model::new());
 /// let count = visit_model!(&model, |typed| typed.geosets().len());
 /// assert_eq!(count, 0);
 /// ```
@@ -295,21 +304,21 @@ macro_rules! visit_model {
     };
 }
 
-impl DynamicModel {
+impl<E: ModelExtension> DynamicModel<E> {
     /// Decodes a model, using `default_version` when no `VERS` chunk is present.
     pub fn decode_mdx(bytes: &[u8], default_version: Version) -> Result<Self, mdx::ReadError> {
         let declared_version = scan_version(Cursor::new(bytes))?;
         let (version, offset) = declared_version.unwrap_or((default_version, 0));
         match version {
-            800 => Model::<V800>::decode_mdx(bytes).map(Self::V800),
-            900 => Model::<V900>::decode_mdx(bytes).map(Self::V900),
-            1000 => Model::<V1000>::decode_mdx(bytes).map(Self::V1000),
-            1100 => Model::<V1100>::decode_mdx(bytes).map(Self::V1100),
-            1200 => Model::<V1200>::decode_mdx(bytes).map(Self::V1200),
-            1300 => Model::<V1300>::decode_mdx(bytes).map(Self::V1300),
-            1400 => Model::<V1400>::decode_mdx(bytes).map(Self::V1400),
-            1600 => Model::<V1600>::decode_mdx(bytes).map(Self::V1600),
-            1800 => Model::<V1800>::decode_mdx(bytes).map(Self::V1800),
+            800 => Model::<Extended<V800, E>>::decode_mdx(bytes).map(Self::V800),
+            900 => Model::<Extended<V900, E>>::decode_mdx(bytes).map(Self::V900),
+            1000 => Model::<Extended<V1000, E>>::decode_mdx(bytes).map(Self::V1000),
+            1100 => Model::<Extended<V1100, E>>::decode_mdx(bytes).map(Self::V1100),
+            1200 => Model::<Extended<V1200, E>>::decode_mdx(bytes).map(Self::V1200),
+            1300 => Model::<Extended<V1300, E>>::decode_mdx(bytes).map(Self::V1300),
+            1400 => Model::<Extended<V1400, E>>::decode_mdx(bytes).map(Self::V1400),
+            1600 => Model::<Extended<V1600, E>>::decode_mdx(bytes).map(Self::V1600),
+            1800 => Model::<Extended<V1800, E>>::decode_mdx(bytes).map(Self::V1800),
             _ => Err(mdx::ReadError {
                 offset,
                 tag: declared_version.map(|_| *b"VERS"),
@@ -329,7 +338,7 @@ impl DynamicModel {
     }
 }
 
-impl mdx::Write for DynamicModel {
+impl<E: ModelExtension> mdx::Write for DynamicModel<E> {
     fn write_mdx(&self, encoder: &mut Encoder<'_>) -> Result<(), mdx::WriteError> {
         visit_model!(self, |model| model.write_mdx(encoder))
     }
@@ -430,7 +439,7 @@ mod tests {
     fn runtime_dispatch_preserves_the_typed_version() {
         let bytes = Model::<V1100>::new().encode_mdx().unwrap();
         assert!(matches!(
-            DynamicModel::decode_mdx(&bytes, 800),
+            DynamicModel::<NoExtensions>::decode_mdx(&bytes, 800),
             Ok(DynamicModel::V1100(_))
         ));
         assert!(matches!(

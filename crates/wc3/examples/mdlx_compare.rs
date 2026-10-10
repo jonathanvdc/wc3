@@ -6,7 +6,8 @@ use std::path::PathBuf;
 use std::process::exit;
 use std::str::from_utf8;
 use wc3::model::mdl::{Dialect, Read as _, Write as _};
-use wc3::model::{visit_model, ConversionOptions, DynamicModel, Model, ModelVersion, V1200};
+use wc3::model::{visit_model, ConversionOptions, DynamicModel, Model, ModelDialect, V1200};
+use wc3::model::{ModelVersion, NoExtensions};
 
 #[derive(Parser)]
 #[command(about = "Convert and canonicalize a model for mdlx-compare")]
@@ -41,10 +42,11 @@ fn run(args: Args) -> Result<(), Box<dyn Error>> {
     let input = fs::read(&args.input)?;
     let model = if args.input.extension().is_some_and(|ext| ext == "mdl") {
         let source = from_utf8(&input)?;
-        DynamicModel::decode_mdl(source)
+        DynamicModel::<NoExtensions>::decode_mdl(source)
             .map_err(|error| format!("MDL parse: {}", error.diagnostic(source)))?
     } else {
-        DynamicModel::decode_mdx(&input, 800).map_err(|error| format!("MDX decode: {error}"))?
+        DynamicModel::<NoExtensions>::decode_mdx(&input, 800)
+            .map_err(|error| format!("MDX decode: {error}"))?
     };
     // Reading text then writing it provides stable field spelling/order, float
     // formatting and defaults without ignoring IDs, flags, or track values.
@@ -53,18 +55,18 @@ fn run(args: Args) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-fn export_model<V: ModelVersion>(
+fn export_model<V: ModelDialect>(
     model: &Model<V>,
     dialect: Dialect,
 ) -> Result<String, Box<dyn Error>> {
-    if matches!(V::NUMBER, 900 | 1000) {
+    if matches!(V::Version::NUMBER, 900 | 1000) {
         export_to::<V, V1200>(model, dialect)
     } else {
         export_to::<V, V>(model, dialect)
     }
 }
 
-fn export_to<S: ModelVersion, T: ModelVersion>(
+fn export_to<S: ModelDialect, T: ModelDialect>(
     model: &Model<S>,
     dialect: Dialect,
 ) -> Result<String, Box<dyn Error>> {
@@ -92,7 +94,7 @@ mod tests {
             Model::<V1000>::decode_mdl("Version { FormatVersion 1000, } Model \"Minimal\" {}")
                 .unwrap();
         let text = export_model(&model, Dialect::HiveWorkshop).unwrap();
-        let restored = DynamicModel::decode_mdl(&text).unwrap();
+        let restored = DynamicModel::<NoExtensions>::decode_mdl(&text).unwrap();
         assert_eq!(restored.version(), 1200);
         assert_eq!(model.version(), 1000);
     }

@@ -67,9 +67,9 @@ fn adapters_handle_short_io_interruptions_and_dynamic_models() {
     let text = model.encode_mdl().unwrap();
     let decoded: Model<V800> = mdx::from_reader(short(binary.clone())).unwrap();
     assert_eq!(decoded.encode_mdx().unwrap(), binary);
-    let dynamic = mdx::from_reader_with_version(short(binary.clone()), 900).unwrap();
+    let dynamic: DynamicModel = mdx::from_reader_with_version(short(binary.clone()), 900).unwrap();
     assert_eq!(dynamic.version(), 800);
-    let fallback = mdx::from_reader_with_version(b"MDLX".as_slice(), 800).unwrap();
+    let fallback: DynamicModel = mdx::from_reader_with_version(b"MDLX".as_slice(), 800).unwrap();
     assert_eq!(fallback.version(), 800);
     let mut sink = short(Vec::new());
     mdx::to_writer(&mut sink, &dynamic).unwrap();

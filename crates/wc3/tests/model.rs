@@ -12,3 +12,6 @@ mod record_contracts;
 mod value_errors;
 #[path = "model/versions.rs"]
 mod versions;
+
+#[path = "model/extensions.rs"]
+mod extensions;

@@ -4,7 +4,7 @@ use crate::model::mdl::is_zero;
 use crate::model::mdx;
 use crate::model::FixedText;
 use crate::model::Model;
-use crate::model::ModelVersion;
+use crate::model::ModelDialect;
 use crate::model::ValueError;
 use crate::model::{Cursor, ModelInfoChunk};
 use crate::model::{Tag, Vec3};
@@ -63,7 +63,7 @@ impl ModelInfo {
     }
 }
 
-impl<V: ModelVersion> Model<V> {
+impl<D: ModelDialect> Model<D> {
     /// Returns an owned copy of the model information, if present.
     pub fn model_info(&self) -> Option<ModelInfo> {
         self.decoded_chunks::<ModelInfoChunk>()

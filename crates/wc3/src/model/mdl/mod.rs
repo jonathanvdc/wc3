@@ -8,11 +8,11 @@
 //! Whole-model input requires `Version` first and a `Model` block.
 //!
 //! ```
-//! use wc3::model::{DynamicModel, mdl};
+//! use wc3::model::{DynamicModel, NoExtensions, mdl};
 //! use wc3::model::mdl::{Read as _, Write as _};
 //!
 //! let source = r#"Version { FormatVersion 800, } Model "Example" {}"#;
-//! let model = DynamicModel::decode_mdl(source)?;
+//! let model = DynamicModel::<NoExtensions>::decode_mdl(source)?;
 //! let text = model.encode_mdl()?;
 //! let hive = model.encode_mdl_with_dialect(mdl::Dialect::HiveWorkshop)?;
 //! assert_eq!(model.version(), 800);

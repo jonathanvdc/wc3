@@ -2,7 +2,7 @@
 
 use crate::model::mdl;
 use crate::model::mdx;
-use crate::model::ModelVersion;
+use crate::model::ModelDialect;
 use crate::model::{GlobalSequencesChunk, Model};
 
 /// One global sequence duration in milliseconds.
@@ -13,7 +13,7 @@ pub struct GlobalSequence(
     pub u32,
 );
 
-impl<V: ModelVersion> Model<V> {
+impl<D: ModelDialect> Model<D> {
     /// Returns loop durations in milliseconds, in model order.
     /// Tracks refer to these durations by collection index.
     pub fn global_sequences(&self) -> Vec<u32> {

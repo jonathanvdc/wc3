@@ -1,8 +1,10 @@
 //! Warcraft III model data shared by the MDX and MDL codecs.
 //!
-//! Use [`Model<V>`](crate::model::Model) when the format version is known and [`DynamicModel`](crate::model::DynamicModel) when
+//! Use [`Model<D>`](crate::model::Model) when the dialect is known and [`DynamicModel`](crate::model::DynamicModel) when
 //! reading files of different versions. Version markers such as [`V800`](crate::model::V800) and
-//! [`V1100`](crate::model::V1100) ensure that records added to a typed model use a compatible layout.
+//! [`V1100`](crate::model::V1100) are standard dialects: they select record layouts and
+//! leave application chunks opaque. Extended dialects select an application codec
+//! alongside one of those same layouts.
 //!
 //! # Read, edit, and write
 //!
@@ -47,6 +49,56 @@
 //! explains transactional rewriting through `rewrite_resources`, including byte
 //! preservation and caller-owned resolution and packaging policy.
 //!
+//! # Application chunks
+//!
+//! A [`ModelDialect`](crate::model::ModelDialect) selects a standard [`ModelVersion`](crate::model::ModelVersion) and a [`ModelExtension`](crate::model::ModelExtension)
+//! codec. Use [`Extended<V, E>`](crate::model::Extended) to combine a standard version with your
+//! application's chunk type, or implement `ModelDialect` for a named dialect.
+//! Standard records remain parameterized by the base version, so
+//! `Model<Extended<V1800, E>>` accepts ordinary `Geoset<V1800>` and `Material<V1800>`
+//! values. The numeric `VERS` field still contains `1800`.
+//!
+//! An extension type can be a single chunk struct or an enum of application chunks.
+//! Its codec receives the numeric base version and a bounded payload cursor. Return
+//! `None` for unrecognized tags and an error for malformed recognized payloads.
+//! Successful reads must consume the payload completely and retain the input tag.
+//! Standard tags are decoded by `wc3` first and cannot be written by an extension.
+//!
+//! ```
+//! use wc3::model::{Cursor, DynamicModel, Encoder, Extended, Model, ModelExtension, Tag, Version, V1800, mdx};
+//! use wc3::model::chunks::ModelChunk;
+//! use mdx::{Read as _, Write as _};
+//!
+//! #[derive(Clone, Debug)]
+//! struct Note { value: u32 }
+//! impl ModelExtension for Note {
+//!     fn tag(&self) -> Tag { *b"NOTE" }
+//!     fn encode_payload(&self, _: Version, output: &mut Encoder<'_>) -> Result<(), mdx::WriteError> {
+//!         output.write(&self.value)
+//!     }
+//!     fn decode_payload(_: Version, tag: Tag, input: &mut Cursor<'_>) -> Result<Option<Self>, mdx::ReadError> {
+//!         if tag != *b"NOTE" { return Ok(None); }
+//!         Ok(Some(Self { value: input.read()? }))
+//!     }
+//! }
+//!
+//! type ApplicationDialect = Extended<V1800, Note>;
+//! let mut model = Model::<ApplicationDialect>::new();
+//! model.chunks.push(ModelChunk::Extension(Note { value: 42 }));
+//! let bytes = model.encode_mdx()?;
+//! let dynamic = DynamicModel::<Note>::decode_mdx(&bytes, 800)?;
+//! assert_eq!(dynamic.version(), 1800);
+//! # Ok::<(), Box<dyn std::error::Error>>(())
+//! ```
+//!
+//! `DynamicModel<E>` uses the same extension codec across every supported base
+//! version. Its variants contain `Model<Extended<V, E>>`, and the common accessors,
+//! resource operations, and `visit_model!` macro also work with extensions. Resource
+//! enumeration covers standard chunks; applications own references inside custom
+//! payloads. Chunk placement, duplicate rules, and dependencies on other model data
+//! also belong to the application. Typed extension codecs control their own payload
+//! representation; retaining exact bytes for an interpreted payload is their responsibility.
+//!
 //! # Format conversion
 //!
 //! MDX retains unknown chunks, flag bits, and fixed-text bytes. MDL writes
@@ -54,7 +106,15 @@
 //! preserve comments, formatting, or binary chunk organization. See [`mdl`](crate::model::mdl) for
 //! output dialects and text restrictions.
 //!
-//! [`Model::convert`](crate::model::Model::convert) changes the format version without modifying the source.
+//! [`Model::convert`](crate::model::Model::convert) changes the dialect without modifying the source.
+//! Standard records convert between the base versions. Application chunks are encoded
+//! using the source version and decoded by the target extension codec, which may reject
+//! an incompatible payload. Unknown chunks are also offered to that codec. A tag the
+//! target does not recognize becomes opaque; when the base version changes, the
+//! unknown-chunk policy decides whether to reject, preserve, or drop it. At the same
+//! base version, opaque bytes are retained. `normalized()` applies these same conversion
+//! rules within the original dialect, including re-encoding application chunks.
+//! MDL has no representation for application binary chunks and rejects their export.
 //! Choose a loss policy explicitly and inspect the returned [`ConversionReport`](crate::model::ConversionReport);
 //! changing a version does not guarantee identical rendering in the game.
 
@@ -112,3 +172,6 @@ pub use conversion::{
 
 mod error;
 pub use error::{IoError, ValueError};
+
+mod dialect;
+pub use dialect::{Extended, ModelDialect, ModelExtension, NoExtensions};

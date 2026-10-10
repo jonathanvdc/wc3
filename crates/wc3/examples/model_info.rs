@@ -3,7 +3,7 @@ mod support;
 use clap::Parser;
 use std::path::PathBuf;
 use support::{load, Result};
-use wc3::model::{visit_model, Model, ModelVersion};
+use wc3::model::{visit_model, Model, ModelDialect};
 
 #[derive(Parser)]
 #[command(about = "Inspect model metadata, geometry, and animations")]
@@ -19,7 +19,7 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-fn dump<V: ModelVersion>(model: &Model<V>) {
+fn dump<V: ModelDialect>(model: &Model<V>) {
     println!("Version: {}", model.version());
     if let Some(info) = model.model_info() {
         println!(

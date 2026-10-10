@@ -3,7 +3,7 @@ use crate::model::mdl::Span;
 use crate::model::scene::{set_node_kind, validate_node_kind};
 use crate::model::Color;
 use crate::model::KnownChunk;
-use crate::model::ModelVersion;
+use crate::model::ModelDialect;
 use crate::model::RibbonEmittersChunk;
 use crate::model::{mdl, mdx};
 use crate::model::{Animatable, Track};
@@ -88,7 +88,7 @@ impl RibbonEmitter {
     }
 }
 
-impl<V: ModelVersion> Model<V> {
+impl<D: ModelDialect> Model<D> {
     /// Returns owned copies of ribbon emitter records in file order.
     pub fn ribbon_emitters(&self) -> Vec<RibbonEmitter> {
         self.collect_chunk_records::<RibbonEmittersChunk>()

@@ -7,6 +7,7 @@ use crate::model::FixedText;
 use crate::model::GeosetsChunk;
 use crate::model::KnownChunk;
 use crate::model::Model;
+use crate::model::ModelDialect;
 use crate::model::ValueError;
 use crate::model::{mdl, mdx};
 use crate::model::{ModelVersion, SupportsReforgedChunks, Tag, Vec3, Version};
@@ -877,14 +878,14 @@ fn write_vectors<const N: usize>(
     Ok(())
 }
 
-impl<V: ModelVersion> Model<V> {
+impl<D: ModelDialect> Model<D> {
     /// Returns owned geosets in chunk and record order.
-    pub fn geosets(&self) -> Vec<Geoset<V>> {
-        self.collect_chunk_records::<GeosetsChunk<V>>()
+    pub fn geosets(&self) -> Vec<Geoset<D::Version>> {
+        self.collect_chunk_records::<GeosetsChunk<D::Version>>()
     }
 
     /// Replaces geosets.
-    pub fn set_geosets(&mut self, geosets: &[Geoset<V>]) {
+    pub fn set_geosets(&mut self, geosets: &[Geoset<D::Version>]) {
         self.replace_chunk(GeosetsChunk::new(geosets.to_vec()));
     }
 }

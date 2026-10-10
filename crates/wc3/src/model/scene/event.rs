@@ -4,7 +4,7 @@ use crate::model::mdl::{Dialect, Field, Parser, Span, TokenKind, Writer};
 use crate::model::Encoder;
 use crate::model::IoError;
 use crate::model::KnownChunk;
-use crate::model::ModelVersion;
+use crate::model::ModelDialect;
 use crate::model::Tag;
 use crate::model::{mdl, mdx};
 use crate::model::{Cursor, EventObjectsChunk};
@@ -52,7 +52,7 @@ impl EventObject {
     }
 }
 
-impl<V: ModelVersion> Model<V> {
+impl<D: ModelDialect> Model<D> {
     /// Returns owned copies of event objects in `EVTS` chunks.
     pub fn event_objects(&self) -> Vec<EventObject> {
         self.collect_chunk_records::<EventObjectsChunk>()

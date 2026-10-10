@@ -5,12 +5,13 @@ use crate::model::scene::{set_node_kind, validate_node_kind};
 use crate::model::Color;
 use crate::model::FixedText;
 use crate::model::KnownChunk;
+use crate::model::ModelDialect;
 use crate::model::PopcornEmittersChunk;
+use crate::model::SupportsReforgedChunks;
 use crate::model::ValueError;
 use crate::model::{mdl, mdx};
 use crate::model::{Animatable, Track};
 use crate::model::{Model, Node};
-use crate::model::{ModelVersion, SupportsReforgedChunks};
 use bitfield::bitfield;
 
 const PATH_SIZE: usize = 260;
@@ -87,7 +88,7 @@ impl PopcornEmitter {
     }
 }
 
-impl<V: ModelVersion> Model<V> {
+impl<D: ModelDialect> Model<D> {
     /// Returns an error if this model version does not support `CORN`.
     pub fn try_popcorn_emitters(&self) -> Result<Vec<PopcornEmitter>, ValueError> {
         self.check_chunk_version(*b"CORN")?;
@@ -105,7 +106,10 @@ impl<V: ModelVersion> Model<V> {
     }
 }
 
-impl<V: SupportsReforgedChunks> Model<V> {
+impl<D: ModelDialect> Model<D>
+where
+    D::Version: SupportsReforgedChunks,
+{
     /// Returns decoded `CORN` records.
     pub fn popcorn_emitters(&self) -> Vec<PopcornEmitter> {
         self.collect_chunk_records::<PopcornEmittersChunk>()

@@ -1,6 +1,7 @@
 use wc3::model::mdx::Write as _;
+use wc3::model::NoExtensions;
 
-use wc3::model::{DynamicModel, Model, ModelVersion};
+use wc3::model::{DynamicModel, Model, ModelDialect};
 
 use std::path::{Path, PathBuf};
 use std::{env, fs};
@@ -10,13 +11,13 @@ use std::{env, fs};
 fn local_files_round_trip() {
     for path in fixture_paths() {
         let bytes = fs::read(&path).unwrap();
-        let model = DynamicModel::decode_mdx(&bytes, 800)
+        let model = DynamicModel::<NoExtensions>::decode_mdx(&bytes, 800)
             .unwrap_or_else(|error| panic!("{}: {error}", path.display()));
         assert_eq!(model.encode_mdx().unwrap(), bytes, "{}", path.display());
     }
 }
 
-fn check_accessors<V: ModelVersion>(mut model: Model<V>, bytes: &[u8], path: &Path) {
+fn check_accessors<V: ModelDialect>(mut model: Model<V>, bytes: &[u8], path: &Path) {
     if let Some(info) = model.model_info() {
         model.set_model_info(&info);
     }
@@ -90,7 +91,7 @@ fn check_accessors<V: ModelVersion>(mut model: Model<V>, bytes: &[u8], path: &Pa
 fn typed_accessors_preserve_local_files() {
     for path in fixture_paths() {
         let bytes = fs::read(&path).unwrap();
-        let model = DynamicModel::decode_mdx(&bytes, 800)
+        let model = DynamicModel::<NoExtensions>::decode_mdx(&bytes, 800)
             .unwrap_or_else(|error| panic!("{}: {error}", path.display()));
         wc3::visit_model!(model, |model| check_accessors(model, &bytes, &path));
     }

@@ -1,5 +1,6 @@
 //! Geoset whitelist entries for world ray picking, independent of collision shapes.
-use crate::model::{mdl, mdx, GlidersChunk, Model, ModelVersion};
+use crate::model::ModelDialect;
+use crate::model::{mdl, mdx, GlidersChunk, Model};
 
 /// A geoset that a world-picking ray may hit.
 ///
@@ -13,7 +14,7 @@ pub struct Glider {
     pub geoset_id: u32,
 }
 
-impl<V: ModelVersion> Model<V> {
+impl<D: ModelDialect> Model<D> {
     /// Returns world-picking whitelist entries in chunk and record order.
     pub fn gliders(&self) -> Vec<Glider> {
         self.collect_chunk_records::<GlidersChunk>()

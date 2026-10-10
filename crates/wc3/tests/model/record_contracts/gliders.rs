@@ -1,4 +1,6 @@
 use super::*;
+use wc3::model::ConversionOptions;
+use wc3::model::NoExtensions;
 
 #[test]
 fn gliders_keep_every_entry_in_all_versions_and_reject_partial_words() {
@@ -30,7 +32,9 @@ fn gliders_keep_every_entry_in_all_versions_and_reject_partial_words() {
         .unwrap()
         .model;
     assert_eq!(older.gliders(), entries);
-    let mut dynamic = DynamicModel::V1800(newer);
+    let mut dynamic = DynamicModel::<NoExtensions>::V1800(
+        newer.convert(&ConversionOptions::strict()).unwrap().model,
+    );
     assert_eq!(dynamic.gliders(), entries);
     dynamic.set_gliders(&[entries[1], entries[0], entries[1]]);
     assert_eq!(dynamic.gliders(), [entries[1], entries[0], entries[1]]);

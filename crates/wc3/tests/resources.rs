@@ -14,6 +14,8 @@ use wc3::model::resources::{
     RewriteError,
 };
 use wc3::model::scene::{Attachment, FaceFx, ModelInfo, Node};
+use wc3::model::ConversionOptions;
+use wc3::model::NoExtensions;
 use wc3::model::{DynamicModel, FixedText, Model, V1800, V800};
 
 fn fixture() -> Model<V1800> {
@@ -375,7 +377,7 @@ fn path_and_replaceable_id_are_independent_and_can_be_cleared() {
 fn dynamic_models_keep_source_versions_and_duplicate_chunks_for_every_layout() {
     for version in [800, 900, 1000, 1100, 1200, 1300, 1400, 1600, 1800] {
         let text = format!("Version {{ FormatVersion {version}, }} Model \"resources\" {{}} Textures 1 {{ Bitmap {{ Image \"old.blp\", }} }}");
-        let mut model = DynamicModel::decode_mdl(&text).unwrap();
+        let mut model = DynamicModel::<NoExtensions>::decode_mdl(&text).unwrap();
         let report = model
             .rewrite_resources(|reference| {
                 Ok::<_, Infallible>(match reference.value {
@@ -388,16 +390,22 @@ fn dynamic_models_keep_source_versions_and_duplicate_chunks_for_every_layout() {
             .unwrap();
         assert_eq!(report.changes.len(), 1);
         let binary = model.encode_mdx().unwrap();
-        let decoded = DynamicModel::decode_mdx(&binary, 800).unwrap();
+        let decoded = DynamicModel::<NoExtensions>::decode_mdx(&binary, 800).unwrap();
         assert_eq!(decoded.version(), version);
         assert!(decoded.resources().any(|reference| matches!(reference.value, ResourceValue::Path(path) if path.text() == "new.blp")));
         let mdl = model.encode_mdl().unwrap();
-        let decoded = DynamicModel::decode_mdl(&mdl).unwrap();
+        let decoded = DynamicModel::<NoExtensions>::decode_mdl(&mdl).unwrap();
         assert_eq!(decoded.version(), version);
         assert!(decoded.resources().any(|reference| matches!(reference.value, ResourceValue::Path(path) if path.text() == "new.blp")));
     }
     let typed = fixture();
-    let mut dynamic = DynamicModel::V1800(typed.clone());
+    let mut dynamic = DynamicModel::<NoExtensions>::V1800(
+        typed
+            .clone()
+            .convert(&ConversionOptions::strict())
+            .unwrap()
+            .model,
+    );
     assert_eq!(
         typed.resources().collect::<Vec<_>>(),
         dynamic.resources().collect::<Vec<_>>()
@@ -483,6 +491,7 @@ fn every_resource_site_can_be_rewritten_without_reenumerating_cleared_ids() {
         })
         .collect();
     assert_eq!(actual, expected);
-    let decoded = DynamicModel::decode_mdx(&model.encode_mdx().unwrap(), 800).unwrap();
+    let decoded =
+        DynamicModel::<NoExtensions>::decode_mdx(&model.encode_mdx().unwrap(), 800).unwrap();
     assert_eq!(decoded.resources().count(), actual.len());
 }

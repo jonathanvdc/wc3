@@ -103,7 +103,9 @@ mod tests {
         .concat();
         assert_eq!(known.encode_mdx().unwrap(), expected);
         assert_eq!(
-            ModelChunk::from(known.clone()).encode_mdx().unwrap(),
+            ModelChunk::<V800>::from(known.clone())
+                .encode_mdx()
+                .unwrap(),
             expected
         );
         assert_eq!(VersionChunk::<V800>::decode_mdx(&expected).unwrap(), known);

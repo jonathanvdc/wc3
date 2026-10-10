@@ -6,7 +6,7 @@ use crate::model::Cursor;
 use crate::model::Encoder;
 use crate::model::IoError;
 use crate::model::KnownChunk;
-use crate::model::ModelVersion;
+use crate::model::ModelDialect;
 use crate::model::Vec3;
 use crate::model::{mdl, mdx};
 use crate::model::{Model, Node};
@@ -157,7 +157,7 @@ impl CollisionShape {
     }
 }
 
-impl<V: ModelVersion> Model<V> {
+impl<D: ModelDialect> Model<D> {
     /// Returns owned copies of collision shapes in `CLID` chunks.
     pub fn collision_shapes(&self) -> Vec<CollisionShape> {
         self.collect_chunk_records::<CollisionShapesChunk>()

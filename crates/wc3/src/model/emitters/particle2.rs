@@ -1,13 +1,13 @@
 //! Textured particles with animated emission and head/tail rendering.
 use crate::model::mdl::is_zero;
 use crate::model::scene::{impl_node_flags, NodeFlagInterpretation};
+use crate::model::ModelDialect;
 use crate::model::{mdl, mdx};
 use crate::model::{Animatable, Track};
 use bitfield::bitfield;
 use mdl_codec::SegmentColors;
 mod mdl_codec;
 use crate::model::KnownChunk;
-use crate::model::ModelVersion;
 use crate::model::ParticleEmitters2Chunk;
 use crate::model::{Color, Vec3};
 use crate::model::{Model, Node};
@@ -233,7 +233,7 @@ impl ParticleEmitter2 {
     }
 }
 
-impl<V: ModelVersion> Model<V> {
+impl<D: ModelDialect> Model<D> {
     /// Returns owned copies of `PRE2` records in file order.
     pub fn particle_emitters2(&self) -> Vec<ParticleEmitter2> {
         self.collect_chunk_records::<ParticleEmitters2Chunk>()

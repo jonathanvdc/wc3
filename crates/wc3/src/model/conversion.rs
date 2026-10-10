@@ -1,12 +1,13 @@
 //! Explicit conversions between typed MDX layouts.
 use crate::model::scene::{set_node_kind, Node, NodeFlagInterpretation};
 use crate::model::visit_model;
+use crate::model::{Chunk, Encoder, ModelDialect, ModelExtension, RawChunk};
 use std::error::Error;
 use std::fmt::{self, Display, Formatter};
 
 use crate::model::{
     Camera, CamerasChunk, DynamicModel, Geoset, GeosetsChunk, Layer, Light, LightsChunk, Material,
-    MaterialsChunk, Model, ModelChunk, ModelVersion, UnknownChunk, Version, VersionChunk,
+    MaterialsChunk, Model, ModelChunk, ModelVersion, Version, VersionChunk,
 };
 
 /// Whether conversion may discard data that the target cannot represent.
@@ -196,7 +197,7 @@ macro_rules! record_conversion {
 }
 record_conversion!(Material, Layer, Geoset, Light, Camera);
 
-impl<V: ModelVersion> Model<V> {
+impl<V: ModelDialect> Model<V> {
     /// Returns a normalized copy and its report, preserving the model version.
     ///
     /// Equivalent camera variants and missing node kind bits are normalized.
@@ -206,7 +207,12 @@ impl<V: ModelVersion> Model<V> {
         self.convert::<V>(&ConversionOptions::strict())
     }
 
-    /// Converts ordered chunks to another layout without modifying the source.
+    /// Converts ordered chunks to another dialect without modifying the source.
+    ///
+    /// Application chunks are encoded using the source version and offered to the
+    /// target dialect's decoder. Unknown payloads are offered to it as well. Tags
+    /// not recognized by the target remain opaque and follow `unknown_chunks` when
+    /// the base version changes. Malformed recognized payloads fail conversion.
     ///
     /// ```
     /// use wc3::model::{ConversionOptions, Model, V800, V1100};
@@ -222,16 +228,16 @@ impl<V: ModelVersion> Model<V> {
     /// New fields use constructor defaults.
     /// Unsupported non-default fields and tracks fail unless dropping is enabled.
     /// A missing VERS is inserted so the encoded result identifies its target layout.
-    pub fn convert<T: ModelVersion>(
+    pub fn convert<T: ModelDialect>(
         &self,
         options: &ConversionOptions,
     ) -> Result<Conversion<Model<T>>, ConversionError> {
-        let mut context = ConversionContext::new::<V, T>(options);
+        let mut context = ConversionContext::new::<V::Version, T::Version>(options);
         let mut model = Model::<T>::new();
         model.chunks.clear();
         for (index, chunk) in self.chunks.iter().enumerate() {
             let path = format!("chunks[{index}]");
-            if T::NUMBER < 900
+            if T::Version::NUMBER < 900
                 && matches!(
                     chunk,
                     ModelChunk::BindPose(_)
@@ -249,16 +255,18 @@ impl<V: ModelVersion> Model<V> {
                         .iter()
                         .enumerate()
                         .map(|(i, record)| {
-                            record
-                                .convert_with::<T>(&mut context, &format!("{path}.{}[{i}]", $name))
+                            record.convert_with::<T::Version>(
+                                &mut context,
+                                &format!("{path}.{}[{i}]", $name),
+                            )
                         })
                         .collect::<Result<Vec<_>, _>>()?;
-                    $collection::<T>::new(records).into()
+                    $collection::<T::Version>::new(records).into()
                 }};
             }
             let mut converted = match chunk {
                 ModelChunk::Version(value) => {
-                    let mut version = VersionChunk::<T>::new();
+                    let mut version = VersionChunk::<T::Version>::new();
                     version.extension = value.extension.clone();
                     version.into()
                 }
@@ -266,8 +274,33 @@ impl<V: ModelVersion> Model<V> {
                 ModelChunk::Geosets(value) => records!(value, GeosetsChunk, "geosets"),
                 ModelChunk::Lights(value) => records!(value, LightsChunk, "lights"),
                 ModelChunk::Cameras(value) => records!(value, CamerasChunk, "cameras"),
-                ModelChunk::Unknown(value) => {
-                    if V::NUMBER != T::NUMBER {
+                ModelChunk::Extension(_) | ModelChunk::Unknown(_) => {
+                    let raw = match chunk {
+                        ModelChunk::Unknown(value) => value.raw().clone(),
+                        _ => {
+                            let mut payload = Vec::new();
+                            chunk
+                                .encode_payload_to(&mut Encoder::new(&mut payload))
+                                .map_err(|error| {
+                                    context.error(
+                                        &path,
+                                        &format!("extension payload could not be encoded: {error}"),
+                                    )
+                                })?;
+                            RawChunk::new(chunk.tag(), payload)
+                        }
+                    };
+                    let converted = ModelChunk::<T>::from_raw(raw).map_err(|error| {
+                        context.error(
+                            &path,
+                            &format!(
+                                "chunk payload is incompatible with the target dialect: {error}"
+                            ),
+                        )
+                    })?;
+                    if V::Version::NUMBER != T::Version::NUMBER
+                        && matches!(converted, ModelChunk::Unknown(_))
+                    {
                         match options.unknown_chunks {
                             UnknownChunkPolicy::Reject => {
                                 return Err(
@@ -289,10 +322,7 @@ impl<V: ModelVersion> Model<V> {
                             ),
                         }
                     }
-                    ModelChunk::Unknown(
-                        UnknownChunk::<T>::new(value.raw().clone())
-                            .expect("unknown tag remains unknown"),
-                    )
+                    converted
                 }
                 ModelChunk::ModelInfo(value) => ModelChunk::ModelInfo(value.clone()),
                 ModelChunk::Sequences(value) => ModelChunk::Sequences(value.clone()),
@@ -355,7 +385,9 @@ impl<V: ModelVersion> Model<V> {
             model.chunks.push(converted);
         }
         if model.chunk(*b"VERS").is_none() {
-            model.chunks.insert(0, VersionChunk::<T>::new().into());
+            model
+                .chunks
+                .insert(0, VersionChunk::<T::Version>::new().into());
             context.issue(
                 "VERS",
                 ConversionIssueKind::Initialized,
@@ -387,7 +419,7 @@ fn normalize_node_kind<F: NodeFlagInterpretation>(
     }
 }
 
-impl DynamicModel {
+impl<E: ModelExtension> DynamicModel<E> {
     /// Returns a normalized copy and its report without changing the runtime version.
     /// Uses the same rules as [`Model::normalized`] and leaves the source unchanged.
     pub fn normalized(&self) -> Result<Conversion<Self>, ConversionError> {
@@ -408,7 +440,7 @@ impl DynamicModel {
     }
 
     /// Converts a runtime-dispatched source to a typed target layout.
-    pub fn convert<T: ModelVersion>(
+    pub fn convert<T: ModelDialect>(
         &self,
         options: &ConversionOptions,
     ) -> Result<Conversion<Model<T>>, ConversionError> {

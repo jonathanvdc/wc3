@@ -9,6 +9,7 @@ use wc3::model::geometry::BindPoseMatrix;
 use wc3::model::mdl::{Read as _, Write as _};
 use wc3::model::mdx::{Read as _, Write as _};
 use wc3::model::scene::{Camera, CameraVariant, FaceFx, Glider, ModelInfo, Node};
+use wc3::model::NoExtensions;
 use wc3::model::{
     mdl, DynamicModel, Model, ModelVersion, V1000, V1100, V1200, V1300, V1400, V1600, V1800, V800,
     V900,
@@ -45,7 +46,7 @@ fn specification_quad_roundtrips_independent_text_and_binary_fixtures() {
     assert_eq!(model.bones()[0].node.object_id, 0);
     assert_eq!(model.geosets()[0].material_id, 0);
     assert_eq!(
-        DynamicModel::decode_mdl(QUAD)
+        DynamicModel::<NoExtensions>::decode_mdl(QUAD)
             .unwrap()
             .encode_mdl()
             .unwrap(),
@@ -60,7 +61,7 @@ fn typed_and_dynamic_models_cover_every_supported_version() {
         roundtrip(&model);
         let text = model.encode_mdl().unwrap();
         assert_eq!(Model::<$version>::decode_mdl(&text).unwrap().encode_mdx().unwrap(), model.encode_mdx().unwrap());
-        let dynamic = DynamicModel::decode_mdl(&source).unwrap();
+        let dynamic = DynamicModel::<NoExtensions>::decode_mdl(&source).unwrap();
         assert_eq!(dynamic.version(), <$version>::NUMBER);
         assert_eq!(dynamic.encode_mdl().unwrap(), text);
     } )* }; }
@@ -75,7 +76,7 @@ fn typed_and_dynamic_models_cover_every_supported_version() {
     );
     assert!(error.to_string().contains("expected format version 900"));
     let source = MINIMAL.replace("800", "1500");
-    let error = DynamicModel::decode_mdl(&source).unwrap_err();
+    let error = DynamicModel::<NoExtensions>::decode_mdl(&source).unwrap_err();
     assert_eq!(
         error.kind,
         mdl::ReadErrorKind::UnsupportedVersion { version: 1500 }

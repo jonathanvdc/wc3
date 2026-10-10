@@ -1,4 +1,5 @@
 //! Convert model formats and optionally versions, reporting conversion losses.
+use wc3::model::{Extended, NoExtensions};
 mod support;
 use clap::Parser;
 use std::path::PathBuf;
@@ -52,8 +53,11 @@ fn main() -> Result<()> {
     save(&model, &args.output)
 }
 
-fn convert<V: ModelVersion>(model: &DynamicModel, options: &ConversionOptions) -> Result<Model<V>> {
-    let converted = model.convert::<V>(options)?;
+fn convert<V: ModelVersion>(
+    model: &DynamicModel,
+    options: &ConversionOptions,
+) -> Result<Model<Extended<V, NoExtensions>>> {
+    let converted = model.convert::<Extended<V, NoExtensions>>(options)?;
     for issue in converted.report.issues {
         eprintln!("{:?} at {}: {}", issue.kind, issue.path, issue.description);
     }

@@ -31,7 +31,8 @@
 //! ```
 
 use crate::model::chunks::ModelChunk;
-use crate::model::{visit_model, DynamicModel, FixedText, Model, ModelVersion, ValueError};
+use crate::model::{visit_model, DynamicModel, FixedText, Model, ValueError};
+use crate::model::{ModelDialect, ModelExtension};
 use std::error::Error;
 use std::fmt::{self, Display, Formatter};
 use std::iter::FusedIterator;
@@ -295,28 +296,28 @@ macro_rules! resource_fields {
     }};
 }
 
-fn fields<V: ModelVersion>(
+fn fields<V: ModelDialect>(
     chunk: &ModelChunk<V>,
     record: usize,
 ) -> Option<Fields<&FixedText<260>, &u32>> {
     resource_fields!(chunk, record, get)
 }
 
-fn fields_mut<V: ModelVersion>(
+fn fields_mut<V: ModelDialect>(
     chunk: &mut ModelChunk<V>,
     record: usize,
 ) -> Option<Fields<&mut FixedText<260>, &mut u32>> {
     resource_fields!(chunk, record, get_mut, mut)
 }
 
-struct Resources<'a, V: ModelVersion> {
+struct Resources<'a, V: ModelDialect> {
     chunks: &'a [ModelChunk<V>],
     chunk: usize,
     record: usize,
     field: ResourceField,
 }
 
-impl<'a, V: ModelVersion> Iterator for Resources<'a, V> {
+impl<'a, V: ModelDialect> Iterator for Resources<'a, V> {
     type Item = ResourceReference<'a>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -354,9 +355,9 @@ impl<'a, V: ModelVersion> Iterator for Resources<'a, V> {
     }
 }
 
-impl<V: ModelVersion> FusedIterator for Resources<'_, V> {}
+impl<V: ModelDialect> FusedIterator for Resources<'_, V> {}
 
-impl<V: ModelVersion> Model<V> {
+impl<D: ModelDialect> Model<D> {
     /// Enumerate all direct authored references in chunk, record, and field order.
     /// Paths precede IDs within each record. Empty paths and duplicate occurrences
     /// remain; zero replaceable IDs and internal indices are excluded.
@@ -441,7 +442,7 @@ impl<V: ModelVersion> Model<V> {
     }
 }
 
-impl DynamicModel {
+impl<X: ModelExtension> DynamicModel<X> {
     /// Enumerate direct authored references with the same order and guarantees as
     /// [`Model::resources`], preserving the decoded source version and chunk layout.
     pub fn resources(&self) -> impl Iterator<Item = ResourceReference<'_>> + '_ {

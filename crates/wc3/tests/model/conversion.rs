@@ -9,6 +9,7 @@ use wc3::model::mdl::Read as _;
 use wc3::model::mdl::Write as _;
 use wc3::model::mdx::Read as _;
 use wc3::model::mdx::Write as _;
+use wc3::model::NoExtensions;
 
 use wc3::model::materials::{Layer, LayerFresnel, LayerTextureSlot, Material, ShaderType};
 use wc3::model::scene::{
@@ -139,7 +140,7 @@ fn runtime_normalization_preserves_each_version_and_matches_typed_normalization(
             source.set_cameras(&[camera]);
             let original = source.encode_mdx().unwrap();
             let expected = source.normalized().unwrap();
-            let dynamic = DynamicModel::$version(source);
+            let dynamic = DynamicModel::<NoExtensions>::decode_mdx(&original, 800).unwrap();
             let normalized = dynamic.normalized().unwrap();
             assert_eq!(normalized.model.version(), $version::NUMBER);
             assert_eq!(normalized.model.encode_mdx().unwrap(), expected.model.encode_mdx().unwrap());
@@ -527,7 +528,8 @@ fn model_camera_upgrade_downgrade_and_same_version_normalization_are_reported() 
     let mut camera = Camera::<V1800>::new("Portrait").unwrap();
     camera.variant = CameraVariant::Variant0;
     noncanonical.set_cameras(&[camera]);
-    let result = DynamicModel::V1800(noncanonical)
+    let result = DynamicModel::<NoExtensions>::decode_mdx(&noncanonical.encode_mdx().unwrap(), 800)
+        .unwrap()
         .convert::<V1800>(&ConversionOptions::strict())
         .unwrap();
     assert_eq!(result.model.cameras()[0].variant, CameraVariant::Variant3);
@@ -549,7 +551,12 @@ fn absent_version_is_inserted_and_dynamic_sources_convert() {
     ));
     assert_eq!(converted.model.version(), 900);
     assert_eq!(converted.report.issues[0].path, "VERS");
-    let dynamic = DynamicModel::V800(sample::<V800>());
+    let dynamic = DynamicModel::<NoExtensions>::V800(
+        sample::<V800>()
+            .convert(&ConversionOptions::strict())
+            .unwrap()
+            .model,
+    );
     let converted = dynamic
         .convert::<V1800>(&ConversionOptions::strict())
         .unwrap();

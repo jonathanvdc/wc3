@@ -3,6 +3,7 @@ use wc3::model::emitters::{ParticleEmitter2, PopcornEmitter};
 use wc3::model::mdl::{Read as _, Write as _};
 use wc3::model::mdx::{Read as _, Write as _};
 use wc3::model::scene::{Camera, CameraVariant};
+use wc3::model::NoExtensions;
 use wc3::model::{
     mdl, DynamicModel, Model, ModelVersion, V1000, V1100, V1200, V1300, V1400, V1600, V1800, V800,
     V900,
@@ -21,7 +22,7 @@ fn whole_model<V: ModelVersion>() {
     let record = Model::<V>::decode_mdl(&source).unwrap();
     let text = record.encode_mdl().unwrap();
     assert_eq!(
-        DynamicModel::decode_mdl(&text)
+        DynamicModel::<NoExtensions>::decode_mdl(&text)
             .unwrap()
             .encode_mdl()
             .unwrap(),

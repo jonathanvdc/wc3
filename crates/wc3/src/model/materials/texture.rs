@@ -4,7 +4,7 @@ use crate::model::mdl::is_zero;
 use crate::model::mdx;
 use crate::model::FixedText;
 use crate::model::Model;
-use crate::model::ModelVersion;
+use crate::model::ModelDialect;
 use crate::model::TexturesChunk;
 use crate::model::ValueError;
 use bitfield::bitfield;
@@ -52,7 +52,7 @@ impl Texture {
     }
 }
 
-impl<V: ModelVersion> Model<V> {
+impl<D: ModelDialect> Model<D> {
     /// Returns owned copies of `TEXS` chunks in file order.
     pub fn textures(&self) -> Vec<Texture> {
         self.collect_chunk_records::<TexturesChunk>()

@@ -3,6 +3,7 @@ use crate::model::animation::Track;
 use crate::model::conversion::ConversionContext;
 use crate::model::mdl;
 use crate::model::mdx;
+use crate::model::ModelDialect;
 use crate::model::ModelVersion;
 use crate::model::{ConversionError, ConversionIssueKind};
 use mdl_codec::Target;
@@ -165,14 +166,14 @@ impl<V: ModelVersion> Camera<V> {
     }
 }
 
-impl<V: ModelVersion> Model<V> {
+impl<D: ModelDialect> Model<D> {
     /// Returns owned copies of camera records in `CAMS` chunks.
-    pub fn cameras(&self) -> Vec<Camera<V>> {
-        self.collect_chunk_records::<CamerasChunk<V>>()
+    pub fn cameras(&self) -> Vec<Camera<D::Version>> {
+        self.collect_chunk_records::<CamerasChunk<D::Version>>()
     }
 
     /// Replaces cameras with one `CAMS` chunk, removing any duplicate chunks.
-    pub fn set_cameras(&mut self, cameras: &[Camera<V>]) {
+    pub fn set_cameras(&mut self, cameras: &[Camera<D::Version>]) {
         self.replace_chunk(CamerasChunk::new(cameras.to_vec()));
     }
 }

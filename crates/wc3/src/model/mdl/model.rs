@@ -11,6 +11,7 @@ use crate::model::{
     TextureAnimationsChunk, TexturesChunk, VersionChunk, V1000, V1100, V1200, V1300, V1400, V1600,
     V1800, V800, V900,
 };
+use crate::model::{Extended, ModelDialect, ModelExtension};
 use mdl::Read as _;
 use std::io::Write as IoWrite;
 use std::str::FromStr;
@@ -60,10 +61,10 @@ where
     Ok(C::from_records(records))
 }
 
-impl<V: ModelVersion> mdl::Read for Model<V> {
+impl<V: ModelDialect> mdl::Read for Model<V> {
     fn read_mdl(parser: &mut Parser<'_>) -> Result<Self, mdl::ReadError> {
         require_version_first(parser)?;
-        parser.read::<VersionChunk<V>>()?;
+        parser.read::<VersionChunk<V::Version>>()?;
         let mut model = Self::new();
         let mut fields = Fields::default();
         let mut has_info = false;
@@ -115,13 +116,13 @@ impl<V: ModelVersion> mdl::Read for Model<V> {
                 "Sequences" => counted!(1, SequencesChunk),
                 "GlobalSequences" => counted!(2, GlobalSequencesChunk),
                 "Textures" => counted!(3, TexturesChunk),
-                "Materials" => counted!(4, MaterialsChunk<V>),
+                "Materials" => counted!(4, MaterialsChunk<V::Version>),
                 "TextureAnims" => counted!(5, TextureAnimationsChunk),
                 "PivotPoints" => counted!(6, PivotPointsChunk),
-                "Geoset" => repeated!(Geosets, GeosetsChunk<V>),
+                "Geoset" => repeated!(Geosets, GeosetsChunk<V::Version>),
                 "GeosetAnim" => repeated!(GeosetAnimations, GeosetAnimationsChunk),
                 "Bone" => repeated!(Bones, BonesChunk),
-                "Light" => repeated!(Lights, LightsChunk<V>),
+                "Light" => repeated!(Lights, LightsChunk<V::Version>),
                 "Helper" => repeated!(Helpers, HelpersChunk),
                 "Attachment" => repeated!(Attachments, AttachmentsChunk),
                 "ParticleEmitter" => repeated!(ParticleEmitters, ParticleEmittersChunk),
@@ -129,13 +130,13 @@ impl<V: ModelVersion> mdl::Read for Model<V> {
                 "EventObject" => repeated!(EventObjects, EventObjectsChunk),
                 "CollisionShape" => repeated!(CollisionShapes, CollisionShapesChunk),
                 "Glider" => repeated!(Gliders, GlidersChunk),
-                "Camera" => repeated!(Cameras, CamerasChunk<V>),
+                "Camera" => repeated!(Cameras, CamerasChunk<V::Version>),
                 "ParticleEmitter2" => repeated!(ParticleEmitters2, ParticleEmitters2Chunk),
-                "ParticleEmitterPopcorn" if V::NUMBER >= 900 => {
+                "ParticleEmitterPopcorn" if V::Version::NUMBER >= 900 => {
                     repeated!(PopcornEmitters, PopcornEmittersChunk)
                 }
-                "FaceFX" if V::NUMBER >= 900 => repeated!(FaceFx, FaceFxChunk),
-                "BindPose" if V::NUMBER >= 900 => {
+                "FaceFX" if V::Version::NUMBER >= 900 => repeated!(FaceFx, FaceFxChunk),
+                "BindPose" if V::Version::NUMBER >= 900 => {
                     fields.mark(7, field)?;
                     model.chunks.push(parser.read::<BindPoseChunk>()?.into());
                 }
@@ -160,7 +161,7 @@ impl<V: ModelVersion> mdl::Read for Model<V> {
     }
 }
 
-fn write_collection<V: ModelVersion, C: CollectionChunk>(
+fn write_collection<V: ModelDialect, C: CollectionChunk>(
     model: &Model<V>,
     name: Option<&str>,
     writer: &mut Writer<impl IoWrite>,
@@ -194,7 +195,7 @@ where
     Ok(())
 }
 
-impl<V: ModelVersion> mdl::Write for Model<V> {
+impl<V: ModelDialect> mdl::Write for Model<V> {
     fn write_mdl<W: IoWrite>(
         &self,
         writer: &mut Writer<W>,
@@ -232,8 +233,14 @@ impl<V: ModelVersion> mdl::Write for Model<V> {
                     }
                     .into())
                 }
+                ModelChunk::Extension(_) => {
+                    return Err(mdl::WriteError::Unrepresentable {
+                        field: "application binary chunk",
+                    }
+                    .into())
+                }
                 ModelChunk::PopcornEmitters(chunk) => {
-                    if V::NUMBER < 900 && !chunk.records.is_empty() {
+                    if V::Version::NUMBER < 900 && !chunk.records.is_empty() {
                         return Err(mdl::WriteError::Unrepresentable {
                             field: "ParticleEmitterPopcorn before version 900",
                         }
@@ -241,7 +248,7 @@ impl<V: ModelVersion> mdl::Write for Model<V> {
                     }
                 }
                 ModelChunk::FaceFx(chunk) => {
-                    if V::NUMBER < 900 && !chunk.records.is_empty() {
+                    if V::Version::NUMBER < 900 && !chunk.records.is_empty() {
                         return Err(mdl::WriteError::Unrepresentable {
                             field: "FaceFX before version 900",
                         }
@@ -249,7 +256,7 @@ impl<V: ModelVersion> mdl::Write for Model<V> {
                     }
                 }
                 ModelChunk::BindPose(chunk) => {
-                    if V::NUMBER < 900 && !chunk.records.is_empty() {
+                    if V::Version::NUMBER < 900 && !chunk.records.is_empty() {
                         return Err(mdl::WriteError::Unrepresentable {
                             field: "BindPose before version 900",
                         }
@@ -293,12 +300,12 @@ impl<V: ModelVersion> mdl::Write for Model<V> {
         collection!(SequencesChunk, Some("Sequences"));
         collection!(GlobalSequencesChunk, Some("GlobalSequences"));
         collection!(TexturesChunk, Some("Textures"));
-        collection!(MaterialsChunk<V>, Some("Materials"));
+        collection!(MaterialsChunk<V::Version>, Some("Materials"));
         collection!(TextureAnimationsChunk, Some("TextureAnims"));
-        collection!(GeosetsChunk<V>, None);
+        collection!(GeosetsChunk<V::Version>, None);
         collection!(GeosetAnimationsChunk, None);
         collection!(BonesChunk, None);
-        collection!(LightsChunk<V>, None);
+        collection!(LightsChunk<V::Version>, None);
         collection!(HelpersChunk, None);
         collection!(AttachmentsChunk, None);
         collection!(PivotPointsChunk, Some("PivotPoints"));
@@ -307,7 +314,7 @@ impl<V: ModelVersion> mdl::Write for Model<V> {
         collection!(RibbonEmittersChunk, None);
         collection!(PopcornEmittersChunk, None);
         collection!(EventObjectsChunk, None);
-        collection!(CamerasChunk<V>, None);
+        collection!(CamerasChunk<V::Version>, None);
         collection!(CollisionShapesChunk, None);
         collection!(FaceFxChunk, None);
         if self
@@ -329,20 +336,20 @@ struct VersionHeader {
     #[mdl(property = "FormatVersion")]
     version: u32,
 }
-impl mdl::Read for DynamicModel {
+impl<E: ModelExtension> mdl::Read for DynamicModel<E> {
     fn read_mdl(parser: &mut Parser<'_>) -> Result<Self, mdl::ReadError> {
         require_version_first(parser)?;
         let start = parser.position();
         let mut checkpoint = *parser;
         let version = checkpoint.read::<VersionHeader>()?.version;
         macro_rules! dispatch { ($($number:literal => $variant:ident($ty:ty)),*) => { match version {
-            $($number => parser.read::<Model<$ty>>().map(Self::$variant),)*
+            $($number => parser.read::<Model<Extended<$ty, E>>>().map(Self::$variant),)*
             _ => Err(mdl::ReadError::new(Span::new(start, checkpoint.position()), mdl::ReadErrorKind::UnsupportedVersion { version })),
         } }; }
         dispatch!(800 => V800(V800), 900 => V900(V900), 1000 => V1000(V1000), 1100 => V1100(V1100), 1200 => V1200(V1200), 1300 => V1300(V1300), 1400 => V1400(V1400), 1600 => V1600(V1600), 1800 => V1800(V1800))
     }
 }
-impl mdl::Write for DynamicModel {
+impl<E: ModelExtension> mdl::Write for DynamicModel<E> {
     fn write_mdl<W: IoWrite>(
         &self,
         writer: &mut Writer<W>,
@@ -352,7 +359,7 @@ impl mdl::Write for DynamicModel {
     }
 }
 
-impl<V: ModelVersion> FromStr for Model<V> {
+impl<V: ModelDialect> FromStr for Model<V> {
     type Err = mdl::ReadError;
 
     fn from_str(source: &str) -> Result<Self, Self::Err> {
@@ -360,7 +367,7 @@ impl<V: ModelVersion> FromStr for Model<V> {
     }
 }
 
-impl FromStr for DynamicModel {
+impl<E: ModelExtension> FromStr for DynamicModel<E> {
     type Err = mdl::ReadError;
 
     fn from_str(source: &str) -> Result<Self, Self::Err> {

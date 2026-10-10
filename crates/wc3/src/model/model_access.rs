@@ -4,7 +4,8 @@ use crate::model::geometry::{BindPoseMatrix, CollisionShape};
 use crate::model::materials::Texture;
 use crate::model::scene::{Attachment, Bone, EventObject, FaceFx, Glider, ModelInfo, Node};
 use crate::model::visit_model;
-use crate::model::{DynamicModel, Model, ModelVersion, ValueError, Vec3};
+use crate::model::{DynamicModel, Model, ValueError, Vec3};
+use crate::model::{ModelDialect, ModelExtension};
 
 /// Read and replace collections shared by every model version.
 ///
@@ -79,7 +80,7 @@ pub trait CommonModelAccess {
     fn set_model_info(&mut self, info: &ModelInfo);
 }
 
-impl<V: ModelVersion> CommonModelAccess for Model<V> {
+impl<D: ModelDialect> CommonModelAccess for Model<D> {
     fn gliders(&self) -> Vec<Glider> {
         Model::gliders(self)
     }
@@ -179,7 +180,7 @@ impl<V: ModelVersion> CommonModelAccess for Model<V> {
     }
 }
 
-impl CommonModelAccess for DynamicModel {
+impl<E: ModelExtension> CommonModelAccess for DynamicModel<E> {
     fn gliders(&self) -> Vec<Glider> {
         visit_model!(self, |model| model.gliders())
     }
@@ -304,7 +305,7 @@ pub trait TryModelAccess {
     fn try_set_popcorn_emitters(&mut self, emitters: &[PopcornEmitter]) -> Result<(), ValueError>;
 }
 
-impl<V: ModelVersion> TryModelAccess for Model<V> {
+impl<D: ModelDialect> TryModelAccess for Model<D> {
     fn try_bind_poses(&self) -> Result<Vec<BindPoseMatrix>, ValueError> {
         Model::try_bind_poses(self)
     }
@@ -325,7 +326,7 @@ impl<V: ModelVersion> TryModelAccess for Model<V> {
     }
 }
 
-impl TryModelAccess for DynamicModel {
+impl<E: ModelExtension> TryModelAccess for DynamicModel<E> {
     fn try_bind_poses(&self) -> Result<Vec<BindPoseMatrix>, ValueError> {
         visit_model!(self, |model| model.try_bind_poses())
     }

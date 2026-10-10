@@ -3,20 +3,20 @@ use super::*;
 use crate::model::mdx;
 use crate::model::Encoder;
 use crate::model::{Chunk, Cursor, KnownChunk, RawChunk};
-use crate::model::{ModelVersion, Tag};
+use crate::model::{ModelDialect, ModelExtension, ModelVersion, Tag};
 use std::marker::PhantomData;
 
 /// An opaque chunk whose tag is not defined by this library.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct UnknownChunk<V: ModelVersion> {
+pub struct UnknownChunk<D: ModelDialect> {
     raw: RawChunk,
-    version: PhantomData<V>,
+    version: PhantomData<D>,
 }
 
-impl<V: ModelVersion> UnknownChunk<V> {
+impl<D: ModelDialect> UnknownChunk<D> {
     /// Returns `None` when the tag belongs to a known chunk.
     pub fn new(raw: RawChunk) -> Option<Self> {
-        (!ModelChunk::<V>::is_known_tag(raw.tag)).then_some(Self {
+        (!ModelChunk::<D>::is_known_tag(raw.tag)).then_some(Self {
             raw,
             version: PhantomData,
         })
@@ -38,24 +38,26 @@ macro_rules! model_chunks {
     ($( $variant:ident($chunk:ty), )*) => {
         /// One ordered chunk in a model. Known variants contain complete decoded payloads.
         #[derive(Clone, Debug)]
-        pub enum ModelChunk<V: ModelVersion> {
+        pub enum ModelChunk<D: ModelDialect> {
             $( #[doc = concat!("Decoded `", stringify!($variant), "` chunk payload.")]
                $variant(Box<$chunk>), )*
             /// An unrecognized chunk retained as opaque bytes.
-            Unknown(UnknownChunk<V>),
+            Unknown(UnknownChunk<D>),
+            /// An application-defined decoded chunk.
+            Extension(D::Extension),
         }
 
         $(
-            impl<V: ModelVersion> From<$chunk> for ModelChunk<V> {
+            impl<D: ModelDialect> From<$chunk> for ModelChunk<D> {
                 fn from(chunk: $chunk) -> Self {
                     Self::$variant(Box::new(chunk))
                 }
             }
 
-            impl<V: ModelVersion> TryFrom<ModelChunk<V>> for $chunk {
-                type Error = ModelChunk<V>;
+            impl<D: ModelDialect> TryFrom<ModelChunk<D>> for $chunk {
+                type Error = ModelChunk<D>;
 
-                fn try_from(chunk: ModelChunk<V>) -> Result<Self, Self::Error> {
+                fn try_from(chunk: ModelChunk<D>) -> Result<Self, Self::Error> {
                     match chunk {
                         ModelChunk::$variant(value) => Ok(*value),
                         other => Err(other),
@@ -63,10 +65,10 @@ macro_rules! model_chunks {
                 }
             }
 
-            impl<'a, V: ModelVersion> TryFrom<&'a ModelChunk<V>> for &'a $chunk {
+            impl<'a, D: ModelDialect> TryFrom<&'a ModelChunk<D>> for &'a $chunk {
                 type Error = ();
 
-                fn try_from(chunk: &'a ModelChunk<V>) -> Result<Self, Self::Error> {
+                fn try_from(chunk: &'a ModelChunk<D>) -> Result<Self, Self::Error> {
                     match chunk {
                         ModelChunk::$variant(value) => Ok(value.as_ref()),
                         _ => Err(()),
@@ -75,17 +77,23 @@ macro_rules! model_chunks {
             }
         )*
 
-        impl<V: ModelVersion> Chunk for ModelChunk<V> {
+        impl<D: ModelDialect> Chunk for ModelChunk<D> {
             fn tag(&self) -> Tag { ModelChunk::tag(self) }
             fn encode_payload_to(&self, output: &mut Encoder<'_>) -> Result<(), mdx::WriteError> {
                 match self {
                     $( Self::$variant(value) => value.encode_payload_to(output), )*
                     Self::Unknown(unknown) => unknown.raw.encode_payload_to(output),
+                    Self::Extension(extension) => {
+                        if Self::is_known_tag(extension.tag()) {
+                            return Err(mdx::WriteError::InvalidValue { tag: extension.tag(), field: "extension uses a standard chunk tag" });
+                        }
+                        extension.encode_payload(D::Version::NUMBER, output)
+                    },
                 }
             }
         }
 
-        impl<V: ModelVersion> ModelChunk<V> {
+        impl<D: ModelDialect> ModelChunk<D> {
             fn is_known_tag(tag: Tag) -> bool {
                 matches!(tag, $( <$chunk>::TAG )|*)
             }
@@ -97,7 +105,18 @@ macro_rules! model_chunks {
                 let mut cursor = *payload;
                 let decoded = match tag {
                     $( <$chunk>::TAG => <$chunk>::decode_payload(&mut cursor).map(Self::from), )*
-                    _ => return Ok(None),
+                    _ => {
+                        let extension = D::Extension::decode_payload(D::Version::NUMBER, tag, &mut cursor)
+                            .map_err(|error| error.in_chunk(tag))?;
+                        if let Some(extension) = extension {
+                            cursor.finish().map_err(|error| error.in_chunk(tag))?;
+                            if extension.tag() != tag {
+                                return Err(mdx::ReadError::new(payload.absolute_position(), mdx::ReadErrorKind::InvalidValue { field: "extension changed its chunk tag" }).in_chunk(tag));
+                            }
+                            return Ok(Some(Self::Extension(extension)));
+                        }
+                        return Ok(None);
+                    },
                 };
                 let chunk = decoded.map_err(|error| error.in_chunk(tag))?;
                 cursor.finish().map_err(|error| error.in_chunk(tag))?;
@@ -109,6 +128,7 @@ macro_rules! model_chunks {
                 match self {
                     $( Self::$variant(_) => <$chunk>::TAG, )*
                     Self::Unknown(unknown) => unknown.raw.tag,
+                    Self::Extension(extension) => extension.tag(),
                 }
             }
         }
@@ -116,13 +136,13 @@ macro_rules! model_chunks {
 }
 
 model_chunks! {
-    Version(VersionChunk<V>),
+    Version(VersionChunk<D::Version>),
     ModelInfo(ModelInfoChunk),
     Sequences(SequencesChunk),
     GlobalSequences(GlobalSequencesChunk),
     Textures(TexturesChunk),
-    Materials(MaterialsChunk<V>),
-    Geosets(GeosetsChunk<V>),
+    Materials(MaterialsChunk<D::Version>),
+    Geosets(GeosetsChunk<D::Version>),
     GeosetAnimations(GeosetAnimationsChunk),
     Bones(BonesChunk),
     Helpers(HelpersChunk),
@@ -133,8 +153,8 @@ model_chunks! {
     ParticleEmitters2(ParticleEmitters2Chunk),
     RibbonEmitters(RibbonEmittersChunk),
     PopcornEmitters(PopcornEmittersChunk),
-    Cameras(CamerasChunk<V>),
-    Lights(LightsChunk<V>),
+    Cameras(CamerasChunk<D::Version>),
+    Lights(LightsChunk<D::Version>),
     TextureAnimations(TextureAnimationsChunk),
     FaceFx(FaceFxChunk),
     PivotPoints(PivotPointsChunk),
@@ -142,8 +162,8 @@ model_chunks! {
     Gliders(GlidersChunk),
 }
 
-impl<V: ModelVersion> ModelChunk<V> {
-    /// Decodes a known chunk or retains an unknown one.
+impl<D: ModelDialect> ModelChunk<D> {
+    /// Decodes standard and application chunks, retaining unrecognized payloads.
     pub fn from_raw(raw: RawChunk) -> Result<Self, mdx::ReadError> {
         let decoded = Self::decode_payload(raw.tag, &mut Cursor::new(&raw.data));
         match decoded {

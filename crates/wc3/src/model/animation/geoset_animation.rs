@@ -4,7 +4,7 @@ use crate::model::Color;
 use crate::model::GeosetAnimationsChunk;
 use crate::model::KnownChunk;
 use crate::model::Model;
-use crate::model::ModelVersion;
+use crate::model::ModelDialect;
 use crate::model::{mdl, mdx};
 use bitfield::bitfield;
 
@@ -68,7 +68,7 @@ impl GeosetAnimation {
     }
 }
 
-impl<V: ModelVersion> Model<V> {
+impl<D: ModelDialect> Model<D> {
     /// Returns owned copies of `GEOA` records in file order.
     pub fn geoset_animations(&self) -> Vec<GeosetAnimation> {
         self.collect_chunk_records::<GeosetAnimationsChunk>()

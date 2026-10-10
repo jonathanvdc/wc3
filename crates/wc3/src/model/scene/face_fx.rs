@@ -2,9 +2,10 @@
 use crate::model::FaceFxChunk;
 use crate::model::FixedText;
 use crate::model::Model;
+use crate::model::ModelDialect;
+use crate::model::SupportsReforgedChunks;
 use crate::model::ValueError;
 use crate::model::{mdl, mdx};
-use crate::model::{ModelVersion, SupportsReforgedChunks};
 
 const NAME_SIZE: usize = 80;
 const PATH_SIZE: usize = 260;
@@ -34,7 +35,7 @@ impl FaceFx {
     }
 }
 
-impl<V: ModelVersion> Model<V> {
+impl<D: ModelDialect> Model<D> {
     /// Returns an error if this model version does not support `FAFX`.
     pub fn try_face_fx(&self) -> Result<Vec<FaceFx>, ValueError> {
         self.check_chunk_version(*b"FAFX")?;
@@ -49,7 +50,10 @@ impl<V: ModelVersion> Model<V> {
     }
 }
 
-impl<V: SupportsReforgedChunks> Model<V> {
+impl<D: ModelDialect> Model<D>
+where
+    D::Version: SupportsReforgedChunks,
+{
     /// Returns owned facial-animation references in model order.
     pub fn face_fx(&self) -> Vec<FaceFx> {
         self.collect_chunk_records::<FaceFxChunk>()

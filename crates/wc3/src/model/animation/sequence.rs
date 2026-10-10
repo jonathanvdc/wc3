@@ -5,7 +5,7 @@ use crate::model::mdx;
 use crate::model::FixedText;
 use crate::model::GeosetExtent;
 use crate::model::Model;
-use crate::model::ModelVersion;
+use crate::model::ModelDialect;
 use crate::model::SequencesChunk;
 use crate::model::ValueError;
 use bitfield::bitfield;
@@ -71,7 +71,7 @@ impl Sequence {
     }
 }
 
-impl<V: ModelVersion> Model<V> {
+impl<D: ModelDialect> Model<D> {
     /// Returns owned copies of sequence records from every `SEQS` chunk in file order.
     pub fn sequences(&self) -> Vec<Sequence> {
         self.collect_chunk_records::<SequencesChunk>()

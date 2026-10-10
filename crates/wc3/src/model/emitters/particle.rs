@@ -4,7 +4,7 @@ use crate::model::scene::{impl_node_flags, NodeFlagInterpretation};
 use crate::model::scene::{set_node_kind, validate_node_kind};
 use crate::model::FixedText;
 use crate::model::KnownChunk;
-use crate::model::ModelVersion;
+use crate::model::ModelDialect;
 use crate::model::ParticleEmittersChunk;
 use crate::model::ValueError;
 use crate::model::{mdl, mdx};
@@ -81,7 +81,7 @@ impl ParticleEmitter {
     }
 }
 
-impl<V: ModelVersion> Model<V> {
+impl<D: ModelDialect> Model<D> {
     /// Returns owned copies of `PREM` records in file order.
     pub fn particle_emitters(&self) -> Vec<ParticleEmitter> {
         self.collect_chunk_records::<ParticleEmittersChunk>()

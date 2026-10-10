@@ -4,7 +4,7 @@ use crate::model::mdl::Span;
 use crate::model::AttachmentsChunk;
 use crate::model::FixedText;
 use crate::model::KnownChunk;
-use crate::model::ModelVersion;
+use crate::model::ModelDialect;
 use crate::model::ValueError;
 use crate::model::{mdl, mdx};
 use crate::model::{Model, Node, Track};
@@ -49,7 +49,7 @@ impl Attachment {
     }
 }
 
-impl<V: ModelVersion> Model<V> {
+impl<D: ModelDialect> Model<D> {
     /// Returns owned copies of attachments in `ATCH` chunks.
     pub fn attachments(&self) -> Vec<Attachment> {
         self.collect_chunk_records::<AttachmentsChunk>()

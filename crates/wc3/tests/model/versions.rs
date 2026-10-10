@@ -4,6 +4,7 @@ use wc3::model::chunks::{ModelChunk, RawChunk, UnknownChunk};
 use wc3::model::mdx::Read as _;
 use wc3::model::mdx::ReadErrorKind;
 use wc3::model::mdx::Write as _;
+use wc3::model::NoExtensions;
 use wc3::model::ValueError;
 
 use wc3::model::geometry::{
@@ -35,7 +36,7 @@ fn version_is_shared_by_model_and_nested_records() {
     assert_eq!(parsed.lights().len(), 1);
     assert_eq!(parsed.cameras()[0].variant, CameraVariant::Variant3);
     assert!(matches!(
-        DynamicModel::decode_mdx(&bytes, 800),
+        DynamicModel::<NoExtensions>::decode_mdx(&bytes, 800),
         Ok(DynamicModel::V1800(_))
     ));
 }
@@ -106,7 +107,7 @@ fn runtime_dispatch_rejects_versions_without_a_layout() {
     let mut bytes = Model::<V800>::new().encode_mdx().unwrap();
     bytes[12..16].copy_from_slice(&777u32.to_le_bytes());
     assert!(matches!(
-        DynamicModel::decode_mdx(&bytes, 800),
+        DynamicModel::<NoExtensions>::decode_mdx(&bytes, 800),
         Err(ReadError {
             offset: 12,
             tag: Some([86, 69, 82, 83]),

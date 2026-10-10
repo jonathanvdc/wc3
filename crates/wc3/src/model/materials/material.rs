@@ -6,6 +6,7 @@ use super::layer::{
 };
 use super::{write_count, ShaderType};
 use crate::model::conversion::ConversionContext;
+use crate::model::ModelDialect;
 use crate::model::{mdl, mdx};
 use crate::model::{ConversionError, ConversionIssueKind};
 use crate::model::{
@@ -267,14 +268,14 @@ impl<V: ModelVersion> Default for Material<V> {
     }
 }
 
-impl<V: ModelVersion> Model<V> {
+impl<D: ModelDialect> Model<D> {
     /// Returns owned copies of `MTLS` records in file order.
-    pub fn materials(&self) -> Vec<Material<V>> {
-        self.collect_chunk_records::<MaterialsChunk<V>>()
+    pub fn materials(&self) -> Vec<Material<D::Version>> {
+        self.collect_chunk_records::<MaterialsChunk<D::Version>>()
     }
 
     /// Replaces all material records with one `MTLS` chunk, removing any duplicate chunks.
-    pub fn set_materials(&mut self, materials: &[Material<V>]) {
+    pub fn set_materials(&mut self, materials: &[Material<D::Version>]) {
         self.replace_chunk(MaterialsChunk::new(materials.to_vec()));
     }
 }

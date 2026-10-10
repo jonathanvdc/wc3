@@ -3,6 +3,7 @@ use wc3::model::geometry::Geoset;
 use wc3::model::materials::{Layer, Material};
 use wc3::model::mdl::{Dialect, Read as _, Write as _, WriteFields as _, Writer};
 use wc3::model::mdx::{Read as _, Write as _};
+use wc3::model::NoExtensions;
 use wc3::model::{
     mdl, mdx, DynamicModel, Model, ModelVersion, V1000, V1100, V1200, V1300, V1400, V1600, V1800,
     V800, V900,
@@ -365,7 +366,7 @@ fn version<V: ModelVersion>() {
     let text = hive(&value);
     assert!(text.contains("SortPrimitives,"));
     assert_eq!(
-        DynamicModel::decode_mdl(&text)
+        DynamicModel::<NoExtensions>::decode_mdl(&text)
             .unwrap()
             .encode_mdl_with_dialect(Dialect::HiveWorkshop)
             .unwrap(),
@@ -458,11 +459,13 @@ fn whole_model_preserves_hive_only_data_and_rejects_engine_export() {
     roundtrip_hive(&model);
     assert!(model.encode_mdl().is_err());
     let text = hive(&model);
-    let dynamic = DynamicModel::decode_mdl(&text).unwrap();
+    let dynamic = DynamicModel::<NoExtensions>::decode_mdl(&text).unwrap();
     assert_eq!(hive(&dynamic), text);
     assert_eq!(dynamic.encode_mdx().unwrap(), model.encode_mdx().unwrap());
     assert_eq!(
-        hive(&DynamicModel::decode_mdx(&model.encode_mdx().unwrap(), 1800).unwrap()),
+        hive(
+            &DynamicModel::<NoExtensions>::decode_mdx(&model.encode_mdx().unwrap(), 1800).unwrap()
+        ),
         text
     );
 }

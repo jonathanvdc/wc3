@@ -1,7 +1,7 @@
 //! Animated texture translation, rotation, and scaling.
 use crate::model::KnownChunk;
 use crate::model::Model;
-use crate::model::ModelVersion;
+use crate::model::ModelDialect;
 use crate::model::TextureAnimationsChunk;
 use crate::model::{mdl, mdx};
 use crate::model::{Quaternion, Track, Vec3};
@@ -34,7 +34,7 @@ impl TextureAnimation {
     }
 }
 
-impl<V: ModelVersion> Model<V> {
+impl<D: ModelDialect> Model<D> {
     /// Returns owned copies of texture animations in `TXAN` chunks.
     pub fn texture_animations(&self) -> Vec<TextureAnimation> {
         self.collect_chunk_records::<TextureAnimationsChunk>()
