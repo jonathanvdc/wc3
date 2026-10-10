@@ -1,4 +1,6 @@
-use wc3::model::chunks::{ModelChunk, RawChunk, UnknownChunk};
+use std::marker::PhantomData;
+
+use wc3::model::chunks::{Chunk, KnownChunk, ModelChunk, RawChunk, UnknownChunk};
 use wc3::model::geometry::{BindPoseMatrix, Geoset};
 use wc3::model::materials::Material;
 use wc3::model::mdl::{self, Write as _};
@@ -6,62 +8,56 @@ use wc3::model::mdx::{self, Read as _, Write as _};
 use wc3::model::scene::ModelInfo;
 use wc3::model::{
     visit_model, CommonModelAccess, ConversionIssueKind, ConversionOptions, Cursor, DynamicModel,
-    Encoder, Extended, Model, ModelDialect, ModelExtension, NoExtensions, Tag, TryModelAccess,
-    UnknownChunkPolicy, Version, V1800, V800,
+    Encoder, Extended, Model, ModelDialect, ModelExtension, ModelVersion, NoExtensions, Tag,
+    TryModelAccess, UnknownChunkPolicy, V1800, V800,
 };
 
 #[derive(Clone, Debug, PartialEq)]
-enum ApplicationChunk {
+enum ApplicationChunk<V: ModelVersion = V1800> {
     Note(u32),
-    VersionBound(u32),
+    VersionBound(u32, PhantomData<V>),
     Reserved,
     WrongTag,
 }
 
-impl ModelExtension for ApplicationChunk {
+impl<V: ModelVersion> Chunk for ApplicationChunk<V> {
     fn tag(&self) -> Tag {
         match self {
             Self::Note(_) => *b"NOTE",
-            Self::VersionBound(_) => *b"VBND",
+            Self::VersionBound(_, _) => *b"VBND",
             Self::Reserved => *b"VERS",
             Self::WrongTag => *b"DIFF",
         }
     }
 
-    fn encode_payload(
-        &self,
-        version: Version,
-        output: &mut Encoder<'_>,
-    ) -> Result<(), mdx::WriteError> {
+    fn encode_payload_to(&self, output: &mut Encoder<'_>) -> Result<(), mdx::WriteError> {
         match self {
             Self::Note(value) => output.write(value),
-            Self::VersionBound(value) => {
-                output.write(&version)?;
+            Self::VersionBound(value, _) => {
+                output.write(&V::NUMBER)?;
                 output.write(value)
             }
             Self::Reserved | Self::WrongTag => Ok(()),
         }
     }
+}
 
-    fn decode_payload(
-        version: Version,
-        tag: Tag,
-        input: &mut Cursor<'_>,
-    ) -> Result<Option<Self>, mdx::ReadError> {
+impl<V: ModelVersion> ModelExtension for ApplicationChunk<V> {
+    fn read_extension(tag: Tag, input: &mut Cursor<'_>) -> Result<Option<Self>, mdx::ReadError> {
         Ok(match &tag {
             b"NOTE" => Some(Self::Note(input.read()?)),
             b"VBND" => {
                 let encoded_version: u32 = input.read()?;
-                if encoded_version != version {
+                if encoded_version != V::NUMBER {
                     return Err(mdx::ReadError::new(
                         input.absolute_position(),
                         mdx::ReadErrorKind::VersionMismatch {
-                            expected: version,
+                            expected: V::NUMBER,
                             actual: encoded_version,
                         },
                     ));
                 }
-                Some(Self::VersionBound(input.read()?))
+                Some(Self::VersionBound(input.read()?, PhantomData))
             }
             b"WRNG" => Some(Self::WrongTag),
             _ => None,
@@ -70,7 +66,7 @@ impl ModelExtension for ApplicationChunk {
 }
 
 type Application1800 = Extended<V1800, ApplicationChunk>;
-type Application800 = Extended<V800, ApplicationChunk>;
+type Application800 = Extended<V800, ApplicationChunk<V800>>;
 
 #[test]
 fn standard_records_use_the_base_version_and_custom_dialects_are_open() {
@@ -138,19 +134,18 @@ fn runtime_dispatch_supports_extensions_in_every_version() {
         RawChunk::new(*b"VERS", version.to_le_bytes().to_vec())
             .write_mdx(&mut output)
             .unwrap();
-        let mut payload = version.to_le_bytes().to_vec();
-        payload.extend_from_slice(&17u32.to_le_bytes());
-        RawChunk::new(*b"VBND", payload)
+        let payload = 17u32.to_le_bytes().to_vec();
+        RawChunk::new(*b"NOTE", payload)
             .write_mdx(&mut output)
             .unwrap();
-        let mut model = DynamicModel::<ApplicationChunk>::decode_mdx(&bytes, 800).unwrap();
+        let mut model = DynamicModel::<NoteChunk>::decode_mdx(&bytes, 800).unwrap();
         assert_eq!(model.version(), version);
         model.set_global_sequences(&[100]);
         assert_eq!(model.global_sequences(), [100]);
         assert_eq!(model.try_bind_poses().is_ok(), version >= 900);
         visit_model!(&model, |typed| assert!(matches!(
             typed.chunks[1],
-            ModelChunk::Extension(ApplicationChunk::VersionBound(17))
+            ModelChunk::Extension(NoteChunk(NotePayload { value: 17 }))
         )));
         let normalized = model.normalized().unwrap().model;
         assert_eq!(
@@ -163,14 +158,14 @@ fn runtime_dispatch_supports_extensions_in_every_version() {
 #[test]
 fn missing_vers_uses_the_runtime_fallback_for_extensions() {
     let mut bytes = b"MDLX".to_vec();
-    let payload = [1800u32.to_le_bytes(), 5u32.to_le_bytes()].concat();
-    RawChunk::new(*b"VBND", payload)
+    RawChunk::new(*b"NOTE", 5u32.to_le_bytes().to_vec())
         .write_mdx(&mut Encoder::new(&mut bytes))
         .unwrap();
-    let model = DynamicModel::<ApplicationChunk>::decode_mdx(&bytes, 1800).unwrap();
-    assert_eq!(model.version(), 1800);
-    assert_eq!(model.encode_mdx().unwrap(), bytes);
-    assert!(DynamicModel::<ApplicationChunk>::decode_mdx(&bytes, 800).is_err());
+    for version in [800, 1800] {
+        let model = DynamicModel::<NoteChunk>::decode_mdx(&bytes, version).unwrap();
+        assert_eq!(model.version(), version);
+        assert_eq!(model.encode_mdx().unwrap(), bytes);
+    }
 }
 
 #[test]
@@ -250,7 +245,10 @@ fn conversion_checks_version_bound_extensions_and_reports_invalid_targets() {
     let mut model = Model::<Application1800>::new();
     model
         .chunks
-        .push(ModelChunk::Extension(ApplicationChunk::VersionBound(7)));
+        .push(ModelChunk::Extension(ApplicationChunk::VersionBound(
+            7,
+            PhantomData,
+        )));
     let original = model.encode_mdx().unwrap();
     let error = model
         .convert::<Application800>(&ConversionOptions::strict())
@@ -334,4 +332,56 @@ fn io_adapter_uses_the_selected_extension_codec() {
         typed.chunks[1],
         ModelChunk::Extension(ApplicationChunk::Note(42))
     )));
+}
+
+#[derive(Clone, Debug, PartialEq, mdx::Read, mdx::Write)]
+struct NotePayload {
+    value: u32,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+struct NoteChunk(NotePayload);
+
+impl Chunk for NoteChunk {
+    fn tag(&self) -> Tag {
+        Self::TAG
+    }
+
+    fn encode_payload_to(&self, output: &mut Encoder<'_>) -> Result<(), mdx::WriteError> {
+        output.write(&self.0)
+    }
+}
+
+impl KnownChunk for NoteChunk {
+    const TAG: Tag = *b"NOTE";
+
+    fn decode_payload(input: &mut Cursor<'_>) -> Result<Self, mdx::ReadError> {
+        input.read().map(Self)
+    }
+}
+
+#[test]
+fn known_chunks_reuse_standard_codecs_and_dispatch_automatically() {
+    type Dialect = Extended<V1800, NoteChunk>;
+    let note = NoteChunk(NotePayload { value: 42 });
+    let mut model = Model::<Dialect>::new();
+    model.chunks.push(ModelChunk::Extension(note.clone()));
+    let bytes = model.encode_mdx().unwrap();
+    let decoded = Model::<Dialect>::decode_mdx(&bytes).unwrap();
+    assert!(matches!(&decoded.chunks[1], ModelChunk::Extension(value) if value == &note));
+    assert_eq!(decoded.encode_mdx().unwrap(), bytes);
+    // Chunk codecs include exactly one header when used independently.
+    assert_eq!(
+        NoteChunk::decode_mdx(&note.encode_mdx().unwrap()).unwrap(),
+        note
+    );
+
+    let mut input = Cursor::new(&[1, 2, 3]);
+    assert_eq!(
+        NoteChunk::read_extension(*b"ELSE", &mut input).unwrap(),
+        None
+    );
+    assert_eq!(input.remaining(), &[1, 2, 3]);
+    assert!(NoteChunk::read_extension(*b"NOTE", &mut input).is_err());
+    assert!(ModelChunk::<Dialect>::from_raw(RawChunk::new(*b"NOTE", vec![0; 5])).is_err());
 }

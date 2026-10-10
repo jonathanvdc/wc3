@@ -3,7 +3,7 @@ use super::*;
 use crate::model::mdx;
 use crate::model::Encoder;
 use crate::model::{Chunk, Cursor, KnownChunk, RawChunk};
-use crate::model::{ModelDialect, ModelExtension, ModelVersion, Tag};
+use crate::model::{ModelDialect, ModelExtension, Tag};
 use std::marker::PhantomData;
 
 /// An opaque chunk whose tag is not defined by this library.
@@ -87,7 +87,7 @@ macro_rules! model_chunks {
                         if Self::is_known_tag(extension.tag()) {
                             return Err(mdx::WriteError::InvalidValue { tag: extension.tag(), field: "extension uses a standard chunk tag" });
                         }
-                        extension.encode_payload(D::Version::NUMBER, output)
+                        extension.encode_payload_to(output)
                     },
                 }
             }
@@ -106,7 +106,7 @@ macro_rules! model_chunks {
                 let decoded = match tag {
                     $( <$chunk>::TAG => <$chunk>::decode_payload(&mut cursor).map(Self::from), )*
                     _ => {
-                        let extension = D::Extension::decode_payload(D::Version::NUMBER, tag, &mut cursor)
+                        let extension = D::Extension::read_extension(tag, &mut cursor)
                             .map_err(|error| error.in_chunk(tag))?;
                         if let Some(extension) = extension {
                             cursor.finish().map_err(|error| error.in_chunk(tag))?;

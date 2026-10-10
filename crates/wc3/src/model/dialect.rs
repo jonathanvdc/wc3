@@ -1,25 +1,29 @@
 //! Application dialects layered on standard Warcraft record layouts.
-use crate::model::{mdx, Cursor, Encoder, ModelVersion, Tag, Version};
+use crate::model::{mdx, Chunk, Cursor, Encoder, KnownChunk, ModelVersion, Tag};
 use std::{fmt::Debug, marker::PhantomData};
 
-/// Application-defined chunks. Return `None` only for tags this codec does not own.
-/// Recognized malformed payloads must return an error. The container checks that
-/// successful decoding consumes the complete bounded payload.
-pub trait ModelExtension: Clone + Debug {
-    /// Four-byte tag identifying this extension value.
-    fn tag(&self) -> Tag;
-    /// Write a payload for the enclosing model's standard format version.
-    fn encode_payload(
-        &self,
-        version: Version,
-        output: &mut Encoder<'_>,
-    ) -> Result<(), mdx::WriteError>;
-    /// Decode an owned tag, or return `None` without consuming input.
-    fn decode_payload(
-        version: Version,
-        tag: Tag,
-        input: &mut Cursor<'_>,
-    ) -> Result<Option<Self>, mdx::ReadError>;
+/// Dispatches application chunk tags to their payload codecs.
+///
+/// The container supplies a bounded payload cursor and checks that decoded values
+/// consume the complete payload and retain its tag. Fixed-tag types implementing
+/// `KnownChunk`, `Clone`, and `Debug` receive an automatic implementation.
+pub trait ModelExtension: Chunk + Clone + Debug {
+    /// Decodes the payload for a recognized tag.
+    ///
+    /// Returns `Some` for a decoded value, `None` without consuming input for an
+    /// unrecognized tag, and an error for a malformed recognized payload.
+    fn read_extension(tag: Tag, input: &mut Cursor<'_>) -> Result<Option<Self>, mdx::ReadError>;
+}
+
+/// Fixed-tag chunks automatically participate in extension dispatch.
+impl<T: KnownChunk + Clone + Debug> ModelExtension for T {
+    fn read_extension(tag: Tag, input: &mut Cursor<'_>) -> Result<Option<Self>, mdx::ReadError> {
+        if tag == T::TAG {
+            T::decode_payload(input).map(Some)
+        } else {
+            Ok(None)
+        }
+    }
 }
 
 /// An MDX dialect selects standard record layouts and application chunks.
@@ -33,18 +37,16 @@ pub trait ModelDialect: Clone + Debug {
 /// Standard Warcraft dialects do not interpret application chunks.
 #[derive(Clone, Debug)]
 pub enum NoExtensions {}
-impl ModelExtension for NoExtensions {
+impl Chunk for NoExtensions {
     fn tag(&self) -> Tag {
         match *self {}
     }
-    fn encode_payload(&self, _: Version, _: &mut Encoder<'_>) -> Result<(), mdx::WriteError> {
+    fn encode_payload_to(&self, _: &mut Encoder<'_>) -> Result<(), mdx::WriteError> {
         match *self {}
     }
-    fn decode_payload(
-        _: Version,
-        _: Tag,
-        _: &mut Cursor<'_>,
-    ) -> Result<Option<Self>, mdx::ReadError> {
+}
+impl ModelExtension for NoExtensions {
+    fn read_extension(_: Tag, _: &mut Cursor<'_>) -> Result<Option<Self>, mdx::ReadError> {
         Ok(None)
     }
 }

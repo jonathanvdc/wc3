@@ -58,27 +58,29 @@
 //! `Model<Extended<V1800, E>>` accepts ordinary `Geoset<V1800>` and `Material<V1800>`
 //! values. The numeric `VERS` field still contains `1800`.
 //!
-//! An extension type can be a single chunk struct or an enum of application chunks.
-//! Its codec receives the numeric base version and a bounded payload cursor. Return
-//! `None` for unrecognized tags and an error for malformed recognized payloads.
-//! Successful reads must consume the payload completely and retain the input tag.
-//! Standard tags are decoded by `wc3` first and cannot be written by an extension.
+//! Application chunks use the same binary codecs as standard chunks. `Chunk`
+//! supplies the tag and payload writer, and `KnownChunk` supplies the payload
+//! reader for a fixed tag. Types implementing `KnownChunk`, `Clone`, and `Debug`
+//! automatically implement `ModelExtension`, as the following example shows.
+//! Payload records can use the `mdx::Read` and `mdx::Write` derives.
 //!
 //! ```
-//! use wc3::model::{Cursor, DynamicModel, Encoder, Extended, Model, ModelExtension, Tag, Version, V1800, mdx};
-//! use wc3::model::chunks::ModelChunk;
+//! use wc3::model::{Cursor, DynamicModel, Encoder, Extended, Model, Tag, V1800, mdx};
+//! use wc3::model::chunks::{Chunk, KnownChunk, ModelChunk};
 //! use mdx::{Read as _, Write as _};
 //!
 //! #[derive(Clone, Debug)]
 //! struct Note { value: u32 }
-//! impl ModelExtension for Note {
+//! impl Chunk for Note {
 //!     fn tag(&self) -> Tag { *b"NOTE" }
-//!     fn encode_payload(&self, _: Version, output: &mut Encoder<'_>) -> Result<(), mdx::WriteError> {
+//!     fn encode_payload_to(&self, output: &mut Encoder<'_>) -> Result<(), mdx::WriteError> {
 //!         output.write(&self.value)
 //!     }
-//!     fn decode_payload(_: Version, tag: Tag, input: &mut Cursor<'_>) -> Result<Option<Self>, mdx::ReadError> {
-//!         if tag != *b"NOTE" { return Ok(None); }
-//!         Ok(Some(Self { value: input.read()? }))
+//! }
+//! impl KnownChunk for Note {
+//!     const TAG: Tag = *b"NOTE";
+//!     fn decode_payload(input: &mut Cursor<'_>) -> Result<Self, mdx::ReadError> {
+//!         Ok(Self { value: input.read()? })
 //!     }
 //! }
 //!
@@ -91,13 +93,19 @@
 //! # Ok::<(), Box<dyn std::error::Error>>(())
 //! ```
 //!
-//! `DynamicModel<E>` uses the same extension codec across every supported base
-//! version. Its variants contain `Model<Extended<V, E>>`, and the common accessors,
-//! resource operations, and `visit_model!` macro also work with extensions. Resource
-//! enumeration covers standard chunks; applications own references inside custom
-//! payloads. Chunk placement, duplicate rules, and dependencies on other model data
-//! also belong to the application. Typed extension codecs control their own payload
-//! representation; retaining exact bytes for an interpreted payload is their responsibility.
+//! To support several application chunk kinds, use an enum implementing `Chunk`
+//! and `ModelExtension`. Its `read_extension` method dispatches on the input tag,
+//! returning a decoded value for recognized tags and `None` for unknown tags.
+//! The container preserves unknown chunks and validates decoded payload boundaries
+//! and tags. Applications define chunk placement, duplicate rules, and references
+//! within custom payloads.
+//!
+//! Version-dependent codecs can parameterize their chunk types by
+//! `V: ModelVersion`, using `V::NUMBER` and versioned records in their implementations.
+//! For example, `Extended<V1800, ApplicationChunk<V1800>>` selects version 1800 for
+//! both standard records and application chunks. `DynamicModel<E>` uses one
+//! extension type across its `Model<Extended<V, E>>` variants and supports the same
+//! accessors, resource operations, and `visit_model!` macro as standard models.
 //!
 //! # Format conversion
 //!
@@ -108,7 +116,7 @@
 //!
 //! [`Model::convert`](crate::model::Model::convert) changes the dialect without modifying the source.
 //! Standard records convert between the base versions. Application chunks are encoded
-//! using the source version and decoded by the target extension codec, which may reject
+//! by their `Chunk` implementation and decoded by the target extension codec, which may reject
 //! an incompatible payload. Unknown chunks are also offered to that codec. A tag the
 //! target does not recognize becomes opaque; when the base version changes, the
 //! unknown-chunk policy decides whether to reject, preserve, or drop it. At the same
