@@ -1,8 +1,10 @@
 //! Explicit conversions between typed MDX layouts.
+use crate::model::mdx;
 use crate::model::scene::{set_node_kind, Node, NodeFlagInterpretation};
 use crate::model::visit_model;
-use crate::model::{Chunk, Encoder, ModelDialect, ModelExtension, RawChunk};
+use crate::model::{Chunk, Encoder, ModelDialect, RawChunk};
 use std::error::Error;
+use std::fmt::Debug;
 use std::fmt::{self, Display, Formatter};
 
 use crate::model::{
@@ -197,19 +199,25 @@ macro_rules! record_conversion {
 }
 record_conversion!(Material, Layer, Geoset, Light, Camera);
 
-impl<V: ModelDialect> Model<V> {
+impl<V: ModelDialect> Model<V>
+where
+    V::Extension: Chunk,
+{
     /// Returns a normalized copy and its report, preserving the model version.
     ///
     /// Equivalent camera variants and missing node kind bits are normalized.
     /// The source is unchanged. This is strict conversion to the same version;
     /// it does not guarantee that every binary value can be exported to MDL.
-    pub fn normalized(&self) -> Result<Conversion<Self>, ConversionError> {
+    pub fn normalized(&self) -> Result<Conversion<Self>, ConversionError>
+    where
+        V::Extension: mdx::Extension,
+    {
         self.convert::<V>(&ConversionOptions::strict())
     }
 
     /// Converts ordered chunks to another dialect without modifying the source.
     ///
-    /// Application chunks are encoded using the source version and offered to the
+    /// Application chunks are encoded by their chunk codec and offered to the
     /// target dialect's decoder. Unknown payloads are offered to it as well. Tags
     /// not recognized by the target remain opaque and follow `unknown_chunks` when
     /// the base version changes. Malformed recognized payloads fail conversion.
@@ -231,7 +239,10 @@ impl<V: ModelDialect> Model<V> {
     pub fn convert<T: ModelDialect>(
         &self,
         options: &ConversionOptions,
-    ) -> Result<Conversion<Model<T>>, ConversionError> {
+    ) -> Result<Conversion<Model<T>>, ConversionError>
+    where
+        T::Extension: mdx::Extension,
+    {
         let mut context = ConversionContext::new::<V::Version, T::Version>(options);
         let mut model = Model::<T>::new();
         model.chunks.clear();
@@ -419,10 +430,13 @@ fn normalize_node_kind<F: NodeFlagInterpretation>(
     }
 }
 
-impl<E: ModelExtension> DynamicModel<E> {
+impl<E: Clone + Debug + Chunk> DynamicModel<E> {
     /// Returns a normalized copy and its report without changing the runtime version.
     /// Uses the same rules as [`Model::normalized`] and leaves the source unchanged.
-    pub fn normalized(&self) -> Result<Conversion<Self>, ConversionError> {
+    pub fn normalized(&self) -> Result<Conversion<Self>, ConversionError>
+    where
+        E: mdx::Extension,
+    {
         macro_rules! normalize {
             ($($variant:ident),+) => {
                 match self {
@@ -443,7 +457,10 @@ impl<E: ModelExtension> DynamicModel<E> {
     pub fn convert<T: ModelDialect>(
         &self,
         options: &ConversionOptions,
-    ) -> Result<Conversion<Model<T>>, ConversionError> {
+    ) -> Result<Conversion<Model<T>>, ConversionError>
+    where
+        T::Extension: mdx::Extension,
+    {
         visit_model!(self, |model| model.convert::<T>(options))
     }
 }

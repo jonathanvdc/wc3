@@ -55,7 +55,7 @@ fn run(args: Args) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-fn export_model<V: ModelDialect>(
+fn export_model<V: ModelDialect<Extension = NoExtensions>>(
     model: &Model<V>,
     dialect: Dialect,
 ) -> Result<String, Box<dyn Error>> {
@@ -66,7 +66,10 @@ fn export_model<V: ModelDialect>(
     }
 }
 
-fn export_to<S: ModelDialect, T: ModelDialect>(
+fn export_to<
+    S: ModelDialect<Extension = NoExtensions>,
+    T: ModelDialect<Extension = NoExtensions>,
+>(
     model: &Model<S>,
     dialect: Dialect,
 ) -> Result<String, Box<dyn Error>> {

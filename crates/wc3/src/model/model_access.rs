@@ -4,8 +4,9 @@ use crate::model::geometry::{BindPoseMatrix, CollisionShape};
 use crate::model::materials::Texture;
 use crate::model::scene::{Attachment, Bone, EventObject, FaceFx, Glider, ModelInfo, Node};
 use crate::model::visit_model;
+use crate::model::ModelDialect;
 use crate::model::{DynamicModel, Model, ValueError, Vec3};
-use crate::model::{ModelDialect, ModelExtension};
+use std::fmt::Debug;
 
 /// Read and replace collections shared by every model version.
 ///
@@ -180,7 +181,7 @@ impl<D: ModelDialect> CommonModelAccess for Model<D> {
     }
 }
 
-impl<E: ModelExtension> CommonModelAccess for DynamicModel<E> {
+impl<E: Clone + Debug> CommonModelAccess for DynamicModel<E> {
     fn gliders(&self) -> Vec<Glider> {
         visit_model!(self, |model| model.gliders())
     }
@@ -326,7 +327,7 @@ impl<D: ModelDialect> TryModelAccess for Model<D> {
     }
 }
 
-impl<E: ModelExtension> TryModelAccess for DynamicModel<E> {
+impl<E: Clone + Debug> TryModelAccess for DynamicModel<E> {
     fn try_bind_poses(&self) -> Result<Vec<BindPoseMatrix>, ValueError> {
         visit_model!(self, |model| model.try_bind_poses())
     }

@@ -1,14 +1,15 @@
+use std::io::Write as IoWrite;
 use std::marker::PhantomData;
 
 use wc3::model::chunks::{Chunk, KnownChunk, ModelChunk, RawChunk, UnknownChunk};
 use wc3::model::geometry::{BindPoseMatrix, Geoset};
 use wc3::model::materials::Material;
-use wc3::model::mdl::{self, Write as _};
-use wc3::model::mdx::{self, Read as _, Write as _};
+use wc3::model::mdl::{self, Read as _, Write as _};
+use wc3::model::mdx::{self, Extension as _, Read as _, Write as _};
 use wc3::model::scene::ModelInfo;
 use wc3::model::{
     visit_model, CommonModelAccess, ConversionIssueKind, ConversionOptions, Cursor, DynamicModel,
-    Encoder, Extended, Model, ModelDialect, ModelExtension, ModelVersion, NoExtensions, Tag,
+    Encoder, Extended, IoError, Model, ModelDialect, ModelVersion, NoExtensions, Tag,
     TryModelAccess, UnknownChunkPolicy, V1800, V800,
 };
 
@@ -42,7 +43,7 @@ impl<V: ModelVersion> Chunk for ApplicationChunk<V> {
     }
 }
 
-impl<V: ModelVersion> ModelExtension for ApplicationChunk<V> {
+impl<V: ModelVersion> mdx::Extension for ApplicationChunk<V> {
     fn read_extension(tag: Tag, input: &mut Cursor<'_>) -> Result<Option<Self>, mdx::ReadError> {
         Ok(match &tag {
             b"NOTE" => Some(Self::Note(input.read()?)),
@@ -265,27 +266,37 @@ fn conversion_checks_version_bound_extensions_and_reports_invalid_targets() {
 }
 
 #[test]
-fn mdl_rejects_binary_extensions_and_reads_standard_models_with_a_dialect() {
+fn mdl_extensions_round_trip_with_standard_records_and_dynamic_dispatch() {
     let mut model = Model::<Application1800>::new();
     model.set_model_info(&ModelInfo::new("Example").unwrap());
-    model
-        .chunks
-        .push(ModelChunk::Extension(ApplicationChunk::Note(42)));
+    for value in [42, 7] {
+        model
+            .chunks
+            .push(ModelChunk::Extension(ApplicationChunk::Note(value)));
+    }
+    let source = model.encode_mdl().unwrap();
+    let decoded = Model::<Application1800>::decode_mdl(&source).unwrap();
+    assert_eq!(decoded.encode_mdx().unwrap(), model.encode_mdx().unwrap());
+    assert_eq!(decoded.encode_mdl().unwrap(), source);
+    let dynamic = DynamicModel::<ApplicationChunk>::decode_mdl(&source).unwrap();
+    assert_eq!(dynamic.version(), 1800);
+    assert_eq!(dynamic.encode_mdl().unwrap(), source);
+    assert!(DynamicModel::<NoExtensions>::decode_mdl(&source).is_err());
+    assert!(Model::<Application1800>::decode_mdl(
+        "Version { FormatVersion 1800, } Model \"Example\" {} Note { Value \"bad\", }"
+    )
+    .is_err());
+    assert!(Model::<Application1800>::decode_mdl(
+        "Version { FormatVersion 1800, } Model \"Example\" {} Future {}"
+    )
+    .is_err());
+    model.chunks.push(ModelChunk::Unknown(
+        UnknownChunk::new(RawChunk::new(*b"FUTR", vec![1])).unwrap(),
+    ));
     assert!(matches!(
         model.encode_mdl(),
         Err(mdl::WriteError::Unrepresentable { .. })
     ));
-    let dynamic =
-        DynamicModel::<ApplicationChunk>::decode_mdx(&model.encode_mdx().unwrap(), 800).unwrap();
-    assert!(dynamic.encode_mdl().is_err());
-    let mut empty = Model::<Application1800>::new();
-    empty.set_model_info(&ModelInfo::new("Example").unwrap());
-    let source = empty.encode_mdl().unwrap();
-    use mdl::Read as _;
-    let decoded = DynamicModel::<ApplicationChunk>::decode_mdl(&source).unwrap();
-    assert_eq!(decoded.version(), 1800);
-    let standard: DynamicModel<NoExtensions> = source.parse().unwrap();
-    assert_eq!(standard.version(), 1800);
 }
 
 #[test]
@@ -384,4 +395,116 @@ fn known_chunks_reuse_standard_codecs_and_dispatch_automatically() {
     assert_eq!(input.remaining(), &[1, 2, 3]);
     assert!(NoteChunk::read_extension(*b"NOTE", &mut input).is_err());
     assert!(ModelChunk::<Dialect>::from_raw(RawChunk::new(*b"NOTE", vec![0; 5])).is_err());
+}
+
+#[derive(Clone, Debug, mdl::Read, mdl::Write)]
+#[mdl(block = "Note")]
+struct NoteText {
+    #[mdl(property = "Value")]
+    value: u32,
+}
+
+impl<V: ModelVersion> mdl::Extension for ApplicationChunk<V> {
+    fn read_extension(
+        name: &str,
+        parser: &mut mdl::Parser<'_>,
+    ) -> Result<Option<Self>, mdl::ReadError> {
+        match name {
+            "Note" => parser
+                .read::<NoteText>()
+                .map(|note| Some(Self::Note(note.value))),
+            _ => Ok(None),
+        }
+    }
+}
+
+impl<V: ModelVersion> mdl::Write for ApplicationChunk<V> {
+    fn write_mdl<W: IoWrite>(
+        &self,
+        writer: &mut mdl::Writer<W>,
+    ) -> Result<(), IoError<mdl::WriteError>> {
+        match self {
+            Self::Note(value) => writer.write(&NoteText { value: *value }),
+            _ => Err(mdl::WriteError::Unrepresentable {
+                field: "application chunk",
+            }
+            .into()),
+        }
+    }
+}
+
+impl mdl::Extension for NoteText {
+    fn read_extension(
+        name: &str,
+        parser: &mut mdl::Parser<'_>,
+    ) -> Result<Option<Self>, mdl::ReadError> {
+        if name == "Note" {
+            parser.read().map(Some)
+        } else {
+            Ok(None)
+        }
+    }
+}
+
+#[test]
+fn mdl_only_extensions_support_model_io_and_standard_accessors() {
+    type TextDialect = Extended<V800, NoteText>;
+    let mut model = Model::<TextDialect>::decode_mdl(
+        "Version { FormatVersion 800, } Model \"Example\" {} Note { Value 9, }",
+    )
+    .unwrap();
+    model.set_global_sequences(&[100]);
+    model.set_gliders(&[]);
+    assert_eq!(model.global_sequences(), [100]);
+    let source = model.encode_mdl().unwrap();
+    let mut dynamic = DynamicModel::<NoteText>::decode_mdl(&source).unwrap();
+    assert_eq!(dynamic.version(), 800);
+    dynamic.set_global_sequences(&[200]);
+    assert_eq!(dynamic.global_sequences(), [200]);
+    assert!(dynamic.encode_mdl().unwrap().contains("Value 9,"));
+}
+
+#[derive(Clone, Debug)]
+struct ReadOnlyNote(NoteText);
+
+impl mdl::Extension for ReadOnlyNote {
+    fn read_extension(
+        name: &str,
+        parser: &mut mdl::Parser<'_>,
+    ) -> Result<Option<Self>, mdl::ReadError> {
+        if name == "Note" {
+            parser.read().map(|value| Some(Self(value)))
+        } else {
+            Ok(None)
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+struct WriteOnlyNote(NoteText);
+
+impl mdl::Write for WriteOnlyNote {
+    fn write_mdl<W: IoWrite>(
+        &self,
+        writer: &mut mdl::Writer<W>,
+    ) -> Result<(), IoError<mdl::WriteError>> {
+        writer.write(&self.0)
+    }
+}
+
+#[test]
+fn mdl_reading_and_writing_require_only_their_respective_codecs() {
+    let source = "Version { FormatVersion 800, } Model \"Example\" {} Note { Value 9, }";
+    let model: Model<Extended<V800, ReadOnlyNote>> = source.parse().unwrap();
+    assert!(matches!(&model.chunks[2], ModelChunk::Extension(note) if note.0.value == 9));
+    let dynamic = DynamicModel::<ReadOnlyNote>::decode_mdl(source).unwrap();
+    assert_eq!(dynamic.version(), 800);
+
+    let mut output = Model::<Extended<V800, WriteOnlyNote>>::new();
+    output.set_model_info(&ModelInfo::new("Example").unwrap());
+    output
+        .chunks
+        .push(ModelChunk::Extension(WriteOnlyNote(NoteText { value: 9 })));
+    let dynamic = DynamicModel::V800(output);
+    assert!(dynamic.encode_mdl().unwrap().contains("Value 9,"));
 }

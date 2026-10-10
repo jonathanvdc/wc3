@@ -11,8 +11,9 @@ use crate::model::{
     TextureAnimationsChunk, TexturesChunk, VersionChunk, V1000, V1100, V1200, V1300, V1400, V1600,
     V1800, V800, V900,
 };
-use crate::model::{Extended, ModelDialect, ModelExtension};
-use mdl::Read as _;
+use crate::model::{Extended, ModelDialect};
+use mdl::{Extension as _, Read as _};
+use std::fmt::Debug;
 use std::io::Write as IoWrite;
 use std::str::FromStr;
 
@@ -61,7 +62,10 @@ where
     Ok(C::from_records(records))
 }
 
-impl<V: ModelDialect> mdl::Read for Model<V> {
+impl<V: ModelDialect> mdl::Read for Model<V>
+where
+    V::Extension: mdl::Extension,
+{
     fn read_mdl(parser: &mut Parser<'_>) -> Result<Self, mdl::ReadError> {
         require_version_first(parser)?;
         parser.read::<VersionChunk<V::Version>>()?;
@@ -147,10 +151,21 @@ impl<V: ModelDialect> mdl::Read for Model<V> {
                     ))
                 }
                 _ => {
+                    let mut candidate = *parser;
+                    if let Some(extension) = V::Extension::read_extension(name, &mut candidate)? {
+                        if candidate.position() <= parser.position() {
+                            return Err(
+                                parser.error(mdl::ReadErrorKind::Expected("an application block"))
+                            );
+                        }
+                        *parser = candidate;
+                        model.chunks.push(ModelChunk::Extension(extension));
+                        continue;
+                    }
                     return Err(mdl::ReadError::new(
                         field.span,
                         mdl::ReadErrorKind::UnknownField,
-                    ))
+                    ));
                 }
             }
         }
@@ -195,7 +210,10 @@ where
     Ok(())
 }
 
-impl<V: ModelDialect> mdl::Write for Model<V> {
+impl<V: ModelDialect> mdl::Write for Model<V>
+where
+    V::Extension: mdl::Write,
+{
     fn write_mdl<W: IoWrite>(
         &self,
         writer: &mut Writer<W>,
@@ -233,12 +251,7 @@ impl<V: ModelDialect> mdl::Write for Model<V> {
                     }
                     .into())
                 }
-                ModelChunk::Extension(_) => {
-                    return Err(mdl::WriteError::Unrepresentable {
-                        field: "application binary chunk",
-                    }
-                    .into())
-                }
+                ModelChunk::Extension(_) => {}
                 ModelChunk::PopcornEmitters(chunk) => {
                     if V::Version::NUMBER < 900 && !chunk.records.is_empty() {
                         return Err(mdl::WriteError::Unrepresentable {
@@ -326,6 +339,11 @@ impl<V: ModelDialect> mdl::Write for Model<V> {
             writer.end_block()?;
         }
         collection!(GlidersChunk, None);
+        for chunk in &self.chunks {
+            if let ModelChunk::Extension(extension) = chunk {
+                writer.write(extension)?;
+            }
+        }
         Ok(())
     }
 }
@@ -336,7 +354,7 @@ struct VersionHeader {
     #[mdl(property = "FormatVersion")]
     version: u32,
 }
-impl<E: ModelExtension> mdl::Read for DynamicModel<E> {
+impl<E: Clone + Debug + mdl::Extension> mdl::Read for DynamicModel<E> {
     fn read_mdl(parser: &mut Parser<'_>) -> Result<Self, mdl::ReadError> {
         require_version_first(parser)?;
         let start = parser.position();
@@ -349,7 +367,7 @@ impl<E: ModelExtension> mdl::Read for DynamicModel<E> {
         dispatch!(800 => V800(V800), 900 => V900(V900), 1000 => V1000(V1000), 1100 => V1100(V1100), 1200 => V1200(V1200), 1300 => V1300(V1300), 1400 => V1400(V1400), 1600 => V1600(V1600), 1800 => V1800(V1800))
     }
 }
-impl<E: ModelExtension> mdl::Write for DynamicModel<E> {
+impl<E: Clone + Debug + mdl::Write> mdl::Write for DynamicModel<E> {
     fn write_mdl<W: IoWrite>(
         &self,
         writer: &mut Writer<W>,
@@ -359,7 +377,10 @@ impl<E: ModelExtension> mdl::Write for DynamicModel<E> {
     }
 }
 
-impl<V: ModelDialect> FromStr for Model<V> {
+impl<V: ModelDialect> FromStr for Model<V>
+where
+    V::Extension: mdl::Extension,
+{
     type Err = mdl::ReadError;
 
     fn from_str(source: &str) -> Result<Self, Self::Err> {
@@ -367,7 +388,7 @@ impl<V: ModelDialect> FromStr for Model<V> {
     }
 }
 
-impl<E: ModelExtension> FromStr for DynamicModel<E> {
+impl<E: Clone + Debug + mdl::Extension> FromStr for DynamicModel<E> {
     type Err = mdl::ReadError;
 
     fn from_str(source: &str) -> Result<Self, Self::Err> {

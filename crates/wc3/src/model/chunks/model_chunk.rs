@@ -3,7 +3,8 @@ use super::*;
 use crate::model::mdx;
 use crate::model::Encoder;
 use crate::model::{Chunk, Cursor, KnownChunk, RawChunk};
-use crate::model::{ModelDialect, ModelExtension, Tag};
+use crate::model::{ModelDialect, Tag};
+use mdx::Extension as _;
 use std::marker::PhantomData;
 
 /// An opaque chunk whose tag is not defined by this library.
@@ -77,7 +78,7 @@ macro_rules! model_chunks {
             }
         )*
 
-        impl<D: ModelDialect> Chunk for ModelChunk<D> {
+        impl<D: ModelDialect> Chunk for ModelChunk<D> where D::Extension: Chunk {
             fn tag(&self) -> Tag { ModelChunk::tag(self) }
             fn encode_payload_to(&self, output: &mut Encoder<'_>) -> Result<(), mdx::WriteError> {
                 match self {
@@ -101,7 +102,7 @@ macro_rules! model_chunks {
             fn decode_payload(
                 tag: Tag,
                 payload: &mut Cursor<'_>,
-            ) -> Result<Option<Self>, mdx::ReadError> {
+            ) -> Result<Option<Self>, mdx::ReadError> where D::Extension: mdx::Extension {
                 let mut cursor = *payload;
                 let decoded = match tag {
                     $( <$chunk>::TAG => <$chunk>::decode_payload(&mut cursor).map(Self::from), )*
@@ -123,8 +124,16 @@ macro_rules! model_chunks {
                 Ok(Some(chunk))
             }
 
+            pub(crate) fn standard_tag(&self) -> Option<Tag> {
+                match self {
+                    $( Self::$variant(_) => Some(<$chunk>::TAG), )*
+                    Self::Unknown(unknown) => Some(unknown.raw.tag),
+                    Self::Extension(_) => None,
+                }
+            }
+
             /// Returns this chunk's tag.
-            pub fn tag(&self) -> Tag {
+            pub fn tag(&self) -> Tag where D::Extension: Chunk {
                 match self {
                     $( Self::$variant(_) => <$chunk>::TAG, )*
                     Self::Unknown(unknown) => unknown.raw.tag,
@@ -162,7 +171,10 @@ model_chunks! {
     Gliders(GlidersChunk),
 }
 
-impl<D: ModelDialect> ModelChunk<D> {
+impl<D: ModelDialect> ModelChunk<D>
+where
+    D::Extension: mdx::Extension,
+{
     /// Decodes standard and application chunks, retaining unrecognized payloads.
     pub fn from_raw(raw: RawChunk) -> Result<Self, mdx::ReadError> {
         let decoded = Self::decode_payload(raw.tag, &mut Cursor::new(&raw.data));

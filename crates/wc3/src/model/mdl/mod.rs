@@ -35,7 +35,9 @@
 //!
 //! Output preserves represented values, object IDs, and references, while
 //! canonicalizing field order and model collections. Comments and source formatting
-//! are discarded. Readers reject unknown names, duplicate assignments, incorrect
+//! are discarded. Application blocks use [`Extension`] for name dispatch and
+//! [`Write`] for output; see the [model guide](crate::model) for dialect setup.
+//! Readers reject unknown names, duplicate assignments, incorrect
 //! counts, and invalid values. Use [`ReadError::diagnostic`] with the original source
 //! for line/column diagnostics.
 //!
@@ -208,3 +210,6 @@ fn buffer_error(error: IoError<WriteError>) -> WriteError {
         IoError::Io(_) => unreachable!("writing to Vec cannot fail"),
     }
 }
+
+mod extension;
+pub use extension::Extension;

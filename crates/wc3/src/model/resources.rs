@@ -31,9 +31,10 @@
 //! ```
 
 use crate::model::chunks::ModelChunk;
+use crate::model::ModelDialect;
 use crate::model::{visit_model, DynamicModel, FixedText, Model, ValueError};
-use crate::model::{ModelDialect, ModelExtension};
 use std::error::Error;
+use std::fmt::Debug;
 use std::fmt::{self, Display, Formatter};
 use std::iter::FusedIterator;
 
@@ -442,7 +443,7 @@ impl<D: ModelDialect> Model<D> {
     }
 }
 
-impl<X: ModelExtension> DynamicModel<X> {
+impl<X: Clone + Debug> DynamicModel<X> {
     /// Enumerate direct authored references with the same order and guarantees as
     /// [`Model::resources`], preserving the decoded source version and chunk layout.
     pub fn resources(&self) -> impl Iterator<Item = ResourceReference<'_>> + '_ {

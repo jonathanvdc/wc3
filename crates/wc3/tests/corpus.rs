@@ -1,3 +1,4 @@
+use wc3::model::chunks::Chunk;
 use wc3::model::mdx::Write as _;
 use wc3::model::NoExtensions;
 
@@ -17,7 +18,10 @@ fn local_files_round_trip() {
     }
 }
 
-fn check_accessors<V: ModelDialect>(mut model: Model<V>, bytes: &[u8], path: &Path) {
+fn check_accessors<V: ModelDialect>(mut model: Model<V>, bytes: &[u8], path: &Path)
+where
+    V::Extension: Chunk,
+{
     if let Some(info) = model.model_info() {
         model.set_model_info(&info);
     }

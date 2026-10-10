@@ -5,11 +5,12 @@ use crate::model::scene::Node;
 use crate::model::Cursor;
 use crate::model::Encoder;
 use crate::model::ValueError;
-use crate::model::{CollectionChunk, ModelChunk, VersionChunk};
-use crate::model::{Extended, ModelDialect, ModelExtension, NoExtensions};
+use crate::model::{Chunk, CollectionChunk, ModelChunk, VersionChunk};
+use crate::model::{Extended, ModelDialect, NoExtensions};
 use crate::model::{
     ModelVersion, Tag, Version, V1000, V1100, V1200, V1300, V1400, V1600, V1800, V800, V900,
 };
+use std::fmt::Debug;
 
 /// The four bytes at the start of an MDX file.
 pub const MAGIC: Tag = *b"MDLX";
@@ -147,27 +148,35 @@ impl<D: ModelDialect> Model<D> {
     }
 
     /// Finds the first chunk with the given tag.
-    pub fn chunk(&self, tag: Tag) -> Option<&ModelChunk<D>> {
+    pub fn chunk(&self, tag: Tag) -> Option<&ModelChunk<D>>
+    where
+        D::Extension: Chunk,
+    {
         self.chunks.iter().find(|chunk| chunk.tag() == tag)
     }
 
     /// Finds the first mutable chunk with the given tag.
-    pub fn chunk_mut(&mut self, tag: Tag) -> Option<&mut ModelChunk<D>> {
+    pub fn chunk_mut(&mut self, tag: Tag) -> Option<&mut ModelChunk<D>>
+    where
+        D::Extension: Chunk,
+    {
         self.chunks.iter_mut().find(|chunk| chunk.tag() == tag)
     }
 
     pub(crate) fn replace_chunk(&mut self, chunk: impl Into<ModelChunk<D>>) {
         let chunk = chunk.into();
-        let tag = chunk.tag();
+        let tag = chunk
+            .standard_tag()
+            .expect("replacement is a standard chunk");
         if let Some(index) = self
             .chunks
             .iter()
-            .position(|existing| existing.tag() == tag)
+            .position(|existing| existing.standard_tag() == Some(tag))
         {
             self.chunks[index] = chunk;
             let mut seen = false;
             self.chunks.retain(|existing| {
-                if existing.tag() != tag {
+                if existing.standard_tag() != Some(tag) {
                     return true;
                 }
                 if seen {
@@ -206,7 +215,10 @@ mod node_tests {
     }
 }
 
-impl<D: ModelDialect> mdx::Read for Model<D> {
+impl<D: ModelDialect> mdx::Read for Model<D>
+where
+    D::Extension: mdx::Extension,
+{
     fn read_mdx(cursor: &mut Cursor<'_>) -> Result<Self, mdx::ReadError> {
         if let Some((actual, offset)) = scan_version(*cursor)? {
             if actual != D::Version::NUMBER {
@@ -235,7 +247,10 @@ impl<D: ModelDialect> mdx::Read for Model<D> {
     }
 }
 
-impl<D: ModelDialect> mdx::Write for Model<D> {
+impl<D: ModelDialect> mdx::Write for Model<D>
+where
+    D::Extension: Chunk,
+{
     fn write_mdx(&self, output: &mut Encoder<'_>) -> Result<(), mdx::WriteError> {
         output.write_bytes(&MAGIC);
         for chunk in &self.chunks {
@@ -254,7 +269,7 @@ impl<D: ModelDialect> mdx::Write for Model<D> {
 /// supply a result type (`let model: DynamicModel = ...`) or an explicit extension
 /// argument (`DynamicModel::<NoExtensions>::decode_mdx(...)`).
 #[derive(Clone, Debug)]
-pub enum DynamicModel<E: ModelExtension = NoExtensions> {
+pub enum DynamicModel<E: Clone + Debug = NoExtensions> {
     /// A model using format version 800.
     V800(Model<Extended<V800, E>>),
     /// A model using format version 900.
@@ -304,7 +319,7 @@ macro_rules! visit_model {
     };
 }
 
-impl<E: ModelExtension> DynamicModel<E> {
+impl<E: Clone + Debug + mdx::Extension> DynamicModel<E> {
     /// Decodes a model, using `default_version` when no `VERS` chunk is present.
     pub fn decode_mdx(bytes: &[u8], default_version: Version) -> Result<Self, mdx::ReadError> {
         let declared_version = scan_version(Cursor::new(bytes))?;
@@ -326,19 +341,24 @@ impl<E: ModelExtension> DynamicModel<E> {
             }),
         }
     }
+}
 
+impl<E: Clone + Debug> DynamicModel<E> {
     /// Returns the format version of the contained model.
     pub fn version(&self) -> Version {
         visit_model!(self, |model| model.version())
     }
 
     /// Encodes the contained model as a complete MDX file.
-    pub fn encode_mdx(&self) -> Result<Vec<u8>, mdx::WriteError> {
+    pub fn encode_mdx(&self) -> Result<Vec<u8>, mdx::WriteError>
+    where
+        E: Chunk,
+    {
         visit_model!(self, |model| model.encode_mdx())
     }
 }
 
-impl<E: ModelExtension> mdx::Write for DynamicModel<E> {
+impl<E: Clone + Debug + Chunk> mdx::Write for DynamicModel<E> {
     fn write_mdx(&self, encoder: &mut Encoder<'_>) -> Result<(), mdx::WriteError> {
         visit_model!(self, |model| model.write_mdx(encoder))
     }

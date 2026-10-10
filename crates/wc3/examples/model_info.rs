@@ -3,6 +3,7 @@ mod support;
 use clap::Parser;
 use std::path::PathBuf;
 use support::{load, Result};
+use wc3::model::chunks::Chunk;
 use wc3::model::{visit_model, Model, ModelDialect};
 
 #[derive(Parser)]
@@ -19,7 +20,10 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-fn dump<V: ModelDialect>(model: &Model<V>) {
+fn dump<V: ModelDialect>(model: &Model<V>)
+where
+    V::Extension: Chunk,
+{
     println!("Version: {}", model.version());
     if let Some(info) = model.model_info() {
         println!(

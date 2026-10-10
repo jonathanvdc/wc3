@@ -23,7 +23,8 @@ impl<D: ModelDialect> Model<D> {
     /// Replaces the whitelist, removing all DILG chunks when empty.
     pub fn set_gliders(&mut self, gliders: &[Glider]) {
         if gliders.is_empty() {
-            self.chunks.retain(|chunk| chunk.tag() != *b"DILG");
+            self.chunks
+                .retain(|chunk| chunk.standard_tag() != Some(*b"DILG"));
         } else {
             self.replace_chunk(GlidersChunk::new(gliders.to_vec()));
         }

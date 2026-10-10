@@ -51,8 +51,9 @@
 //!
 //! # Application chunks
 //!
-//! A [`ModelDialect`](crate::model::ModelDialect) selects a standard [`ModelVersion`](crate::model::ModelVersion) and a [`ModelExtension`](crate::model::ModelExtension)
-//! codec. Use [`Extended<V, E>`](crate::model::Extended) to combine a standard version with your
+//! A [`ModelDialect`](crate::model::ModelDialect) selects a standard
+//! [`ModelVersion`](crate::model::ModelVersion) and an application chunk type.
+//! Use [`Extended<V, E>`](crate::model::Extended) to combine a standard version with your
 //! application's chunk type, or implement `ModelDialect` for a named dialect.
 //! Standard records remain parameterized by the base version, so
 //! `Model<Extended<V1800, E>>` accepts ordinary `Geoset<V1800>` and `Material<V1800>`
@@ -60,8 +61,7 @@
 //!
 //! Application chunks use the same binary codecs as standard chunks. `Chunk`
 //! supplies the tag and payload writer, and `KnownChunk` supplies the payload
-//! reader for a fixed tag. Types implementing `KnownChunk`, `Clone`, and `Debug`
-//! automatically implement `ModelExtension`, as the following example shows.
+//! reader for a fixed tag. Types implementing `KnownChunk` automatically implement `mdx::Extension`, as the following example shows.
 //! Payload records can use the `mdx::Read` and `mdx::Write` derives.
 //!
 //! ```
@@ -94,11 +94,44 @@
 //! ```
 //!
 //! To support several application chunk kinds, use an enum implementing `Chunk`
-//! and `ModelExtension`. Its `read_extension` method dispatches on the input tag,
+//! and `mdx::Extension`. Its `read_extension` method dispatches on the input tag,
 //! returning a decoded value for recognized tags and `None` for unknown tags.
 //! The container preserves unknown chunks and validates decoded payload boundaries
 //! and tags. Applications define chunk placement, duplicate rules, and references
 //! within custom payloads.
+//!
+//! MDL extensions implement `mdl::Extension` to dispatch block names to ordinary
+//! `mdl::Read` codecs, with the parser positioned at the opening identifier.
+//! Their `mdl::Write` implementations write complete blocks. The model writer
+//! emits these blocks after the standard collections, preserving extension order.
+//!
+//! ```
+//! use wc3::model::{Extended, Model, V800, mdl};
+//! use mdl::{Read as _, Write as _};
+//!
+//! #[derive(Clone, Debug, mdl::Read, mdl::Write)]
+//! #[mdl(block = "Note")]
+//! struct Note {
+//!     #[mdl(property = "Value")]
+//!     value: u32,
+//! }
+//! impl mdl::Extension for Note {
+//!     fn read_extension(name: &str, parser: &mut mdl::Parser<'_>) -> Result<Option<Self>, mdl::ReadError> {
+//!         match name {
+//!             "Note" => parser.read().map(Some),
+//!             _ => Ok(None),
+//!         }
+//!     }
+//! }
+//!
+//! let source = r#"Version { FormatVersion 800, } Model "Example" {} Note { Value 42, }"#;
+//! let model = Model::<Extended<V800, Note>>::decode_mdl(source)?;
+//! assert!(model.encode_mdl()?.contains("Value 42,"));
+//! # Ok::<(), Box<dyn std::error::Error>>(())
+//! ```
+//!
+//! Each format's model codecs require its own extension traits; application values
+//! can support MDX, MDL, or both.
 //!
 //! Version-dependent codecs can parameterize their chunk types by
 //! `V: ModelVersion`, using `V::NUMBER` and versioned records in their implementations.
@@ -122,7 +155,7 @@
 //! unknown-chunk policy decides whether to reject, preserve, or drop it. At the same
 //! base version, opaque bytes are retained. `normalized()` applies these same conversion
 //! rules within the original dialect, including re-encoding application chunks.
-//! MDL has no representation for application binary chunks and rejects their export.
+//! MDL exports application chunks through their `mdl::Write` implementations.
 //! Choose a loss policy explicitly and inspect the returned [`ConversionReport`](crate::model::ConversionReport);
 //! changing a version does not guarantee identical rendering in the game.
 
@@ -182,4 +215,4 @@ mod error;
 pub use error::{IoError, ValueError};
 
 mod dialect;
-pub use dialect::{Extended, ModelDialect, ModelExtension, NoExtensions};
+pub use dialect::{Extended, ModelDialect, NoExtensions};

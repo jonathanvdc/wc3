@@ -71,3 +71,6 @@ pub use io::{from_reader, from_reader_with_version, to_writer};
 
 mod tracks;
 pub use tracks::{ReadTrackProperty, ReadTracks, WriteTrackProperty, WriteTracks};
+
+mod extension;
+pub use extension::Extension;
