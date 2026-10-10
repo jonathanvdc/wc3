@@ -93,20 +93,21 @@ provides examples and explains the available encoding options.
 
 ### Archives
 
-The MPQ API lets you open an archive and read its entries on demand through
-`Archive`, or create an archive through `ArchiveWriter`. You can also edit a
-copy of an existing archive while preserving its original encoded entries,
-which avoids decoding and recompressing files you have not changed. These
-operations require sources and destinations that support seeking.
+Use `Archive` to read entries from a seekable source, or `SharedArchive` when
+several entries need to be read concurrently. Both index the archive when it is
+opened and decode payloads on demand. `SharedArchive` accepts files, shared
+memory, and custom random-access sources. [`bevy-mpq`](../bevy-mpq/README.md)
+integrates archives with Bevy asset sources.
 
-To assemble a compact new archive from existing files, `copy_file_from` copies
-an unencrypted entry's encoded payload and builds fresh destination indexes.
-The lower-level `open_encoded_file` and `add_encoded_file` APIs pair the stream
-with its storage metadata, allowing renamed entries and standalone encoded
-caches. Compressed sector entries require matching sector sizes; source offsets
-are reassigned and destination raw chunk digests are generated normally. Copying
-these payloads does not require compression features or validate their decoded
-contents.
+`ArchiveWriter` creates archives and edits copies of existing archives. It can
+preserve encoded entries, avoiding decompression and recompression of files you
+have not changed. Writing requires a seekable destination.
+
+To assemble a compact new archive, `copy_file_from` imports an unencrypted
+entry's encoded payload into an `ArchiveWriter`. The lower-level
+`open_encoded_file` and `add_encoded_file` APIs also support renamed entries
+and standalone encoded caches. Encoded copying does not require compression
+features; it preserves the payload without validating its decoded contents.
 
 Compressed entries need the `mpq-decode` feature for extraction, and
 `mpq-encode` enables compression when writing. The
@@ -167,6 +168,7 @@ includes command-line examples for inspecting, editing, and converting assets:
 
 - [API reference](https://docs.rs/wc3/latest/wc3/).
 - [`mpq` example](examples/mpq.rs): archive listing, extraction, creation, and editing.
+- [`mpq_concurrent` example](examples/mpq_concurrent.rs): a synthetic benchmark comparing serialized and concurrent extraction; requires `mpq-decode` and `mpq-encode`.
 - [`model_dependencies` example](examples/model_dependencies.rs): deduplicated direct file references with their locations, plus replaceable resource IDs.
 - [`model_info` example](examples/model_info.rs): model metadata, geometry and emitter counts, and animation intervals.
 - [`model_convert` example](examples/model_convert.rs): MDX/MDL and model-version conversion with loss reports.
@@ -176,7 +178,7 @@ includes command-line examples for inspecting, editing, and converting assets:
 
 The [command-line guide](docs/tools.md) collects invocation examples and explains
 format detection, dependency reporting, repathing, and conversion losses. Each
-example also provides `--help` for its options.
+command-line tool also provides `--help` for its options.
 
 From a workspace checkout, build the crate documentation with all optional APIs:
 

@@ -1,10 +1,11 @@
 //! Index, extract, create, and edit MPQ archives (formats v1 through v4).
 //!
-//! [`Archive`](crate::mpq::Archive) loads the header and encrypted hash/block tables, then opens
-//! payloads on demand. [`ArchiveWriter`](crate::mpq::ArchiveWriter) streams entries to a seekable sink and
-//! commits the tables/header on `finish`. Both use the same [`Index`](crate::mpq::Index), hashing,
-//! cryptography, and sector framing. Sources and sinks need seeking; streaming
-//! means bounded payload memory, not forward-only archive I/O.
+//! [`Archive`](crate::mpq::Archive) reads entries from a seekable source, while [`SharedArchive`](crate::mpq::SharedArchive) opens
+//! independent readers for concurrent extraction from a random-access source.
+//! Both decode the archive index when opened and read payloads on demand.
+//! [`ArchiveWriter`](crate::mpq::ArchiveWriter) writes entries to a seekable destination and commits the
+//! tables and header on `finish`. Entry streaming bounds payload memory; archive
+//! sources and destinations still require random access.
 //!
 //! Container indexing, stored entries, encryption, and encoded copying have no
 //! optional dependencies. `mpq-decode` adds zlib, bzip2, PKWARE DCL, sparse,
@@ -50,13 +51,50 @@
 //! extracting any file, and [`Archive::encoded_file`](crate::mpq::Archive::encoded_file) accesses raw payloads by
 //! block index even if their names or codecs are unknown.
 //!
+//! # Concurrent extraction
+//!
+//! Use [`SharedArchive`](crate::mpq::SharedArchive) when multiple entries need to be read at the same time.
+//! Its clones share the parsed index, and `open_file` takes `&self`. Each entry
+//! reader owns its decoding state and keeps the source alive until it is dropped.
+//! The application supplies threads or other worker scheduling and controls how
+//! many reads run at once.
+//!
+//! Files use positional reads on Unix and Windows. `Arc<[u8]>` provides a shared
+//! memory source; implement [`ReadAt`](crate::mpq::ReadAt) for other sources. The following example
+//! reads two entries on separate threads from the same archive:
+//!
+//! ```no_run
+//! use std::fs::File;
+//! use std::thread;
+//! use wc3::mpq::{Error, SharedArchive};
+//!
+//! let archive = SharedArchive::open(File::open("map.w3x")?)?;
+//! let (script, strings) = thread::scope(|scope| {
+//!     let script = scope.spawn(|| archive.read_file("war3map.j"));
+//!     let strings = scope.spawn(|| archive.read_file("war3map.wts"));
+//!     Ok::<_, Error>((script.join().unwrap()?, strings.join().unwrap()?))
+//! })?;
+//! # Ok::<(), Error>(())
+//! ```
+//!
+//! `read_file` allocates the complete decoded entry. For streaming, use `open_file`
+//! and the standard I/O `Read` trait. Configure [`ReadOptions`](crate::mpq::ReadOptions) through
+//! [`SharedArchive::with_options`](crate::mpq::SharedArchive::with_options) to limit allocations and select recovery policy.
+//! Keep source contents unchanged for the lifetime of the archive and its readers.
+//! Indexing recoveries are available from [`SharedArchive::diagnostics`](crate::mpq::SharedArchive::diagnostics); payload
+//! recoveries are reported by [`SharedEntryReader::diagnostics`](crate::mpq::SharedEntryReader::diagnostics).
+//!
+//! For a source that only implements `Read + Seek`, [`Archive::into_shared`](crate::mpq::Archive::into_shared)
+//! preserves its parsed index and options. The [`SeekSource`](crate::mpq::SeekSource) adapter serializes
+//! source seek/read operations while allowing entry decompression to overlap.
+//!
 //! # Copying encoded files into a fresh archive
 //!
-//! [`Archive::open_encoded_file`] pairs a bounded raw payload stream with
-//! [`EncodedFileMetadata`], which carries sizes, storage flags, source sector
+//! [`Archive::open_encoded_file`](crate::mpq::Archive::open_encoded_file) pairs a bounded raw payload stream with
+//! [`EncodedFileMetadata`](crate::mpq::EncodedFileMetadata), which carries sizes, storage flags, source sector
 //! size, and locale/platform without retaining original offsets or block IDs.
-//! [`ArchiveWriter::add_encoded_file`] imports that representation into a new
-//! archive. [`ArchiveWriter::copy_file_from`] combines lookup and import when
+//! [`ArchiveWriter::add_encoded_file`](crate::mpq::ArchiveWriter::add_encoded_file) imports that representation into a new
+//! archive. [`ArchiveWriter::copy_file_from`](crate::mpq::ArchiveWriter::copy_file_from) combines lookup and import when
 //! the destination name is unchanged. Both operations are available without
 //! compression features, including for unsupported compression masks.
 //!
@@ -82,7 +120,7 @@
 //! callers must supply metadata matching the payload and verify content as needed.
 //! Source raw chunk MD5s are checked by `open_encoded_file`. Short streams and
 //! payload I/O failures prevent destination completion, just as decoded writes do.
-//! [`EncodedEntry::new`] also supports importing standalone encoded cache entries.
+//! [`EncodedEntry::new`](crate::mpq::EncodedEntry::new) also supports importing standalone encoded cache entries.
 //!
 //! # Editing without recompressing
 //!
@@ -119,6 +157,7 @@ mod huffman;
 mod huffman_tables;
 mod raw;
 mod reader;
+mod shared;
 mod writer;
 
 pub use compat::{ReadMode, RecoveryDiagnostic};
@@ -127,6 +166,7 @@ pub use error::Error;
 pub use extended::ExtendedIndex;
 pub use format::{BlockEntry, FileFlags, HashEntry, Header, Index};
 pub use reader::{Archive, EntryReader, ReadOptions};
+pub use shared::{ReadAt, SeekSource, SharedArchive, SharedEntryReader};
 pub use writer::{ArchiveWriter, Compression, EntryWriter, FileOptions, WriteOptions};
 
 #[cfg(test)]

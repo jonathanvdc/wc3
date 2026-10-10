@@ -1,16 +1,13 @@
 //! cargo run -p bevy-wc3 --example mpq -- units/human/footman/footman.mdx map.w3x base.mpq
 //! Archives are searched in argument order. The application chooses the namespace
 //! and precedence; bevy-wc3 only resolves dependencies within that namespace.
-use bevy::asset::{
-    io::{AssetSourceBuilder, ErasedAssetReader},
-    AssetApp,
-};
+use bevy::asset::{io::AssetSourceBuilder, AssetApp};
 use bevy::prelude::*;
-use bevy_mpq::{MpqAssetReader, OverlayAssetReader};
+use bevy_mpq::{MpqAssetReader, OverlayAssetReader, OverlayMount};
 use bevy_wc3::{Wc3BevyPlugin, Wc3ModelAsset, Wc3ModelInstance};
 use std::env::args;
 use std::fs::File;
-use wc3::mpq::{Archive, ReadOptions};
+use wc3::mpq::{ReadOptions, SharedArchive};
 
 #[derive(Resource)]
 struct ModelPath(String);
@@ -23,7 +20,7 @@ fn main() {
     let readers: Vec<_> = arguments
         .map(|path| {
             let file = File::open(&path).expect("open archive");
-            let archive = Archive::with_options(
+            let archive = SharedArchive::with_options(
                 file,
                 ReadOptions {
                     max_file_size: 128 << 20,
@@ -42,7 +39,7 @@ fn main() {
             Box::new(OverlayAssetReader::new(
                 readers
                     .iter()
-                    .map(|reader| Box::new(reader.clone()) as Box<dyn ErasedAssetReader>)
+                    .map(|reader| OverlayMount::mpq(reader.clone()))
                     .collect(),
             ))
         }),

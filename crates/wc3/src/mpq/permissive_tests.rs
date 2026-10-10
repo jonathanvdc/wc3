@@ -194,6 +194,22 @@ fn encryption_recovery_from_sector_table_and_known_content() {
     crypt(&mut data, key, false);
     payload.extend_from_slice(&data);
     let bytes = fixture(FileFlags::COMPRESS | FileFlags::ENCRYPTED, &payload, 7);
+    let shared = Archive::with_options(Cursor::new(bytes.clone()), options())
+        .unwrap()
+        .into_shared();
+    let initial = shared.diagnostics().len();
+    let mut first = shared.open_file_by_index(0).unwrap();
+    let mut second = shared.open_file("data").unwrap();
+    assert!(!first.diagnostics().is_empty());
+    assert!(!second.diagnostics().is_empty());
+    assert_eq!(shared.diagnostics().len(), initial);
+    let mut first_bytes = Vec::new();
+    let mut second_bytes = Vec::new();
+    use std::io::Read as _;
+    first.read_to_end(&mut first_bytes).unwrap();
+    second.read_to_end(&mut second_bytes).unwrap();
+    assert_eq!(first_bytes, b"payload");
+    assert_eq!(second_bytes, first_bytes);
     for named in [false, true] {
         let mut archive = Archive::with_options(Cursor::new(&bytes), options()).unwrap();
         let mut reader = if named {

@@ -39,3 +39,7 @@ image = { version = "0.25.10", default-features = false, features = ["png"] }
 [[example]]
 name = "blp_to_png"
 required-features = ["blp-decode"]
+
+[[example]]
+name = "mpq_concurrent"
+required-features = ["mpq-decode", "mpq-encode"]

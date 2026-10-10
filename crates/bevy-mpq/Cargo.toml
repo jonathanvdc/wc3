@@ -11,6 +11,7 @@ repository = "https://github.com/jonathanvdc/wc3"
 [dependencies]
 bevy_asset = "0.19.1"
 blocking = "1"
+async-lock = "3"
 wc3 = { workspace = true, features = ["mpq-decode"] }
 
 [dev-dependencies]

@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::io::{self, Read, Seek, SeekFrom};
+use std::sync::Arc;
 
 use super::codec::{decode, sector_checksum};
 use super::compat::{address, load_layout, read_index, report, EntryLayout, LayoutRequest};
@@ -58,10 +59,10 @@ impl Default for ReadOptions {
 /// A seekable MPQ source with an eagerly decoded index and lazy payloads.
 pub struct Archive<R> {
     pub(super) source: R,
-    source_len: u64,
-    diagnostics: Vec<RecoveryDiagnostic>,
+    pub(super) source_len: u64,
+    pub(super) diagnostics: Vec<RecoveryDiagnostic>,
     pub(super) base: u64,
-    pub(super) index: Index,
+    pub(super) index: Arc<Index>,
     pub(super) options: ReadOptions,
 }
 
@@ -189,8 +190,11 @@ impl<R: Read + Seek> Archive<R> {
                     Ok(archive) => {
                         let mut index = archive.index;
                         let mut diagnostics = Vec::new();
-                        for (slot, entry) in
-                            index.hashes.iter_mut().enumerate().filter(|_| version == 0)
+                        for (slot, entry) in Arc::make_mut(&mut index)
+                            .hashes
+                            .iter_mut()
+                            .enumerate()
+                            .filter(|_| version == 0)
                         {
                             if entry.is_file() && entry.platform & 0xff00 != 0 {
                                 entry.platform &= 0xff;
@@ -235,7 +239,7 @@ impl<R: Read + Seek> Archive<R> {
             return Ok(Self {
                 source,
                 base,
-                index,
+                index: Arc::new(index),
                 options,
                 source_len: len,
                 diagnostics,
@@ -432,12 +436,12 @@ impl<R: Read + Seek> Archive<R> {
             source_len: len,
             diagnostics: Vec::new(),
             base,
-            index: Index {
+            index: Arc::new(Index {
                 header,
                 hashes,
                 blocks,
                 extended,
-            },
+            }),
             options,
         })
     }
@@ -461,7 +465,7 @@ impl<R: Read + Seek> Archive<R> {
     }
 
     /// Opens a neutral-locale, platform-zero entry.
-    pub fn open_file(&mut self, name: impl AsRef<[u8]>) -> Result<EntryReader<'_, R>, Error> {
+    pub fn open_file(&mut self, name: impl AsRef<[u8]>) -> Result<EntryReader<&mut R>, Error> {
         self.open_file_with_locale(name, 0, 0)
     }
 
@@ -472,7 +476,7 @@ impl<R: Read + Seek> Archive<R> {
         name: impl AsRef<[u8]>,
         locale: u16,
         platform: u16,
-    ) -> Result<EntryReader<'_, R>, Error> {
+    ) -> Result<EntryReader<&mut R>, Error> {
         let name = name.as_ref();
         validate_name(name)?;
         let id = self
@@ -483,11 +487,11 @@ impl<R: Read + Seek> Archive<R> {
     }
 
     /// Opens a block without a filename. Permissive mode can recover some encryption keys.
-    pub fn open_file_by_index(&mut self, id: u32) -> Result<EntryReader<'_, R>, Error> {
+    pub fn open_file_by_index(&mut self, id: u32) -> Result<EntryReader<&mut R>, Error> {
         self.open_block(id, None)
     }
 
-    fn open_block(&mut self, id: u32, name: Option<&[u8]>) -> Result<EntryReader<'_, R>, Error> {
+    fn open_block(&mut self, id: u32, name: Option<&[u8]>) -> Result<EntryReader<&mut R>, Error> {
         let block = *self
             .index
             .blocks
@@ -753,10 +757,10 @@ pub(super) fn load_offsets(
     Ok(offsets)
 }
 
-/// A sequential entry stream. The archive is exclusively borrowed until drop.
+/// A sequential entry decoder over an owned or borrowed seekable source.
 /// Payload buffers are bounded by the sector size (or a limited single-unit file).
-pub struct EntryReader<'a, R> {
-    source: &'a mut R,
+pub struct EntryReader<R> {
+    source: R,
     source_len: u64,
     wrapping: bool,
     base: u64,
@@ -772,7 +776,7 @@ pub struct EntryReader<'a, R> {
     failed: bool,
 }
 
-impl<R: Read + Seek> EntryReader<'_, R> {
+impl<R: Read + Seek> EntryReader<R> {
     /// Returns the encoded storage metadata for this entry.
     pub fn metadata(&self) -> &BlockEntry {
         &self.block
@@ -834,7 +838,7 @@ impl<R: Read + Seek> EntryReader<'_, R> {
     }
 }
 
-impl<R: Read + Seek> Read for EntryReader<'_, R> {
+impl<R: Read + Seek> Read for EntryReader<R> {
     fn read(&mut self, output: &mut [u8]) -> io::Result<usize> {
         if output.is_empty() {
             return Ok(0);
@@ -856,5 +860,26 @@ impl<R: Read + Seek> Read for EntryReader<'_, R> {
         self.cursor += len;
         self.delivered += len as u32;
         Ok(len)
+    }
+}
+
+impl<R> EntryReader<R> {
+    pub(super) fn map_source<T>(self, map: impl FnOnce(R) -> T) -> EntryReader<T> {
+        EntryReader {
+            source: map(self.source),
+            source_len: self.source_len,
+            wrapping: self.wrapping,
+            base: self.base,
+            block: self.block,
+            sector_size: self.sector_size,
+            key: self.key,
+            offsets: self.offsets,
+            checksums: self.checksums,
+            sector: self.sector,
+            delivered: self.delivered,
+            buffer: self.buffer,
+            cursor: self.cursor,
+            failed: self.failed,
+        }
     }
 }

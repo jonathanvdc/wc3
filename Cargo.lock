@@ -436,6 +436,7 @@ dependencies = [
 name = "bevy-mpq"
 version = "0.3.0"
 dependencies = [
+ "async-lock",
  "bevy_asset",
  "blocking",
  "futures-lite",

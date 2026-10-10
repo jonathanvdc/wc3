@@ -1,9 +1,9 @@
 use bevy_asset::io::{AssetReader, AssetReaderError, Reader};
-use bevy_mpq::{MpqAssetReader, OverlayAssetReader};
+use bevy_mpq::{MpqAssetReader, OverlayAssetReader, OverlayMount};
 use futures_lite::future::block_on;
 use std::io::Cursor;
 use std::path::Path;
-use wc3::mpq::{Archive, ArchiveWriter, Compression, FileOptions, WriteOptions};
+use wc3::mpq::{Archive, ArchiveWriter, Compression, FileOptions, SeekSource, WriteOptions};
 
 fn archive(entries: &[(&str, &[u8], u16)]) -> Vec<u8> {
     let mut writer = ArchiveWriter::new(
@@ -30,8 +30,11 @@ fn archive(entries: &[(&str, &[u8], u16)]) -> Vec<u8> {
     writer.finish().unwrap().into_inner()
 }
 
-fn mount(bytes: Vec<u8>) -> MpqAssetReader<Cursor<Vec<u8>>> {
-    MpqAssetReader::new(Archive::open(Cursor::new(bytes)).unwrap(), "test archive")
+fn mount(bytes: Vec<u8>) -> MpqAssetReader<SeekSource<Cursor<Vec<u8>>>> {
+    MpqAssetReader::new(
+        Archive::open(Cursor::new(bytes)).unwrap().into_shared(),
+        "test archive",
+    )
 }
 
 fn read(reader: &impl AssetReader, path: &str) -> Result<Vec<u8>, AssetReaderError> {
@@ -66,8 +69,8 @@ fn names_work_without_listfile_and_locale_falls_back_to_neutral() {
 #[test]
 fn overlay_respects_order_and_missing_fallback() {
     let reader = OverlayAssetReader::new(vec![
-        Box::new(mount(archive(&[("shared", b"map", 0)]))),
-        Box::new(mount(archive(&[
+        OverlayMount::mpq(mount(archive(&[("shared", b"map", 0)]))),
+        OverlayMount::mpq(mount(archive(&[
             ("shared", b"base", 0),
             ("base-only", b"fallback", 0),
         ]))),
@@ -94,12 +97,13 @@ fn payload_errors_do_not_fall_through() {
             inner: Cursor::new(bytes),
             offset: offset as u64,
         })
-        .unwrap(),
+        .unwrap()
+        .into_shared(),
         "broken.mpq",
     );
     let overlay = OverlayAssetReader::new(vec![
-        Box::new(reader),
-        Box::new(mount(archive(&[("broken", b"good", 0)]))),
+        OverlayMount::mpq(reader),
+        OverlayMount::mpq(mount(archive(&[("broken", b"good", 0)]))),
     ]);
     let error = read(&overlay, "broken").unwrap_err();
     assert!(!matches!(error, AssetReaderError::NotFound(_)));
@@ -127,8 +131,8 @@ impl std::io::Seek for FailingPayload {
 #[test]
 fn overlay_metadata_does_not_come_from_a_shadowed_mount() {
     let reader = OverlayAssetReader::new(vec![
-        Box::new(mount(archive(&[("shared", b"map", 0)]))),
-        Box::new(MetadataReader),
+        OverlayMount::mpq(mount(archive(&[("shared", b"map", 0)]))),
+        OverlayMount::reader(Box::new(MetadataReader)),
     ]);
     let result = block_on(reader.read_meta(Path::new("shared")));
     assert!(matches!(result, Err(AssetReaderError::NotFound(_))));
@@ -175,4 +179,87 @@ fn compressed_encrypted_entries_are_decoded_on_read() {
         .unwrap();
     let reader = mount(writer.finish().unwrap().into_inner());
     assert_eq!(read(&reader, "compressed.blp").unwrap(), bytes);
+}
+
+#[test]
+fn indexed_metadata_selection_does_not_read_payloads() {
+    let bytes = archive(&[("broken", b"bad", 0)]);
+    let indexed = Archive::open(Cursor::new(bytes.clone())).unwrap();
+    let offset =
+        indexed.index().blocks[indexed.index().find("broken", 0, 0).unwrap() as usize].offset;
+    let reader = MpqAssetReader::new(
+        Archive::open(FailingPayload {
+            inner: Cursor::new(bytes),
+            offset,
+        })
+        .unwrap()
+        .into_shared(),
+        "broken",
+    );
+    let overlay = OverlayAssetReader::new(vec![
+        OverlayMount::mpq(reader),
+        OverlayMount::reader(Box::new(MetadataReader)),
+    ]);
+    assert!(matches!(
+        block_on(overlay.read_meta(Path::new("broken"))),
+        Err(AssetReaderError::NotFound(_))
+    ));
+    assert!(read(&overlay, "broken").is_err());
+}
+
+#[test]
+fn concurrent_clones_share_extraction_limit() {
+    use std::num::NonZeroUsize;
+    use std::sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    };
+    use std::thread;
+    use std::time::Duration;
+    use wc3::mpq::{ReadAt, SharedArchive};
+    struct Source {
+        bytes: Arc<[u8]>,
+        offset: u64,
+        active: AtomicUsize,
+        peak: AtomicUsize,
+    }
+    impl ReadAt for Source {
+        fn len(&self) -> std::io::Result<u64> {
+            Ok(self.bytes.as_ref().len() as u64)
+        }
+        fn read_at(&self, output: &mut [u8], offset: u64) -> std::io::Result<usize> {
+            if offset == self.offset {
+                let active = self.active.fetch_add(1, Ordering::SeqCst) + 1;
+                self.peak.fetch_max(active, Ordering::SeqCst);
+                thread::sleep(Duration::from_millis(20));
+                let result = self.bytes.read_at(output, offset);
+                self.active.fetch_sub(1, Ordering::SeqCst);
+                result
+            } else {
+                self.bytes.read_at(output, offset)
+            }
+        }
+    }
+    let bytes = archive(&[("asset", &[42; 512], 0)]);
+    let indexed = Archive::open(Cursor::new(&bytes)).unwrap();
+    let offset =
+        indexed.index().blocks[indexed.index().find("asset", 0, 0).unwrap() as usize].offset;
+    for limit in [1, 2] {
+        let source = Arc::new(Source {
+            bytes: bytes.clone().into(),
+            offset,
+            active: AtomicUsize::new(0),
+            peak: AtomicUsize::new(0),
+        });
+        let reader =
+            MpqAssetReader::new(SharedArchive::open(source.clone()).unwrap(), "concurrent")
+                .with_max_concurrent_reads(NonZeroUsize::new(limit).unwrap());
+        thread::scope(|scope| {
+            for _ in 0..8 {
+                let reader = reader.clone();
+                scope.spawn(move || assert_eq!(read(&reader, "asset").unwrap(), [42; 512]));
+            }
+        });
+        assert_eq!(source.peak.load(Ordering::SeqCst), limit);
+    }
 }

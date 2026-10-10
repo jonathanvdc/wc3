@@ -1,42 +1,51 @@
 # bevy-mpq
 
-`bevy-mpq` supplies MPQ readers for Bevy 0.19 asset sources. It has no renderer
-or plugin dependency. Applications choose source names, archive precedence,
-locale/platform selection, and archive parsing limits.
+`bevy-mpq` mounts MPQ archives as Bevy 0.19 asset sources and combines them
+with other readers in ordered overlays. Applications choose source names,
+archive precedence, locale/platform selection, and archive parsing limits.
 
 ## Register an asset source
 
-Open an archive with `wc3::mpq::Archive`, then wrap it in `MpqAssetReader`.
-Register its source before adding Bevy's `AssetPlugin` (including through
-`DefaultPlugins`). Use `OverlayAssetReader` to search any combination of MPQ
+Open an archive with `wc3::mpq::SharedArchive` and pass it to
+`MpqAssetReader::new`. Register its source before adding Bevy's `AssetPlugin`
+(including through `DefaultPlugins`). Use `OverlayAssetReader` to search any combination of MPQ
 and loose-file readers in the order you supply:
 
 ```rust,ignore
 use bevy::asset::{io::{AssetSourceBuilder, file::FileAssetReader}, AssetApp};
-use bevy_mpq::{MpqAssetReader, OverlayAssetReader};
+use bevy_mpq::{MpqAssetReader, OverlayAssetReader, OverlayMount};
 use std::fs::File;
-use wc3::mpq::Archive;
+use wc3::mpq::SharedArchive;
 
-let map = MpqAssetReader::new(Archive::open(File::open("map.w3x")?)?, "map.w3x");
-let base = MpqAssetReader::new(Archive::open(File::open("base.mpq")?)?, "base.mpq");
+let map = MpqAssetReader::new(SharedArchive::open(File::open("map.w3x")?)?, "map.w3x");
+let base = MpqAssetReader::new(SharedArchive::open(File::open("base.mpq")?)?, "base.mpq");
 app.register_asset_source("warcraft", AssetSourceBuilder::new(move || {
     Box::new(OverlayAssetReader::new(vec![
-        Box::new(FileAssetReader::new("overrides")),
-        Box::new(map.clone()),
-        Box::new(base.clone()),
+        OverlayMount::reader(Box::new(FileAssetReader::new("overrides"))),
+        OverlayMount::mpq(map.clone()),
+        OverlayMount::mpq(base.clone()),
     ]))
 }));
 // Add DefaultPlugins after registering the source.
 // Load with asset_server.load("warcraft://units/human/footman/footman.mdx").
 ```
 
+The source name is part of each asset path, such as `warcraft://units/model.mdx`.
+Use distinct source names for separate map stacks so their Bevy handles remain
+independent. The label passed to `MpqAssetReader::new` identifies the archive in
+error messages.
+
 ## Lookup and overlay precedence
 
 The first mount containing an entry wins. Only missing entries permit fallback;
 I/O, checksum, and decoding failures stop the search and identify the archive
 and entry. Metadata comes from the selected asset mount, so a lower-priority
-mount cannot supply settings for an overridden file. MPQs have no Bevy metadata
-by default; configure Bevy to skip metadata checks if desired.
+mount cannot supply settings for an overridden file.
+
+MPQ mounts do not supply Bevy metadata. `OverlayMount::mpq` uses the archive
+index to select the mount during metadata lookup, without extracting the asset.
+Generic mounts created with `OverlayMount::reader` select metadata by reading
+the asset, which can repeat work during the subsequent load.
 
 `with_locale(locale, platform)` tries the requested locale and then neutral
 locale on the same platform within that archive. The next overlay mount is
@@ -46,19 +55,23 @@ traversal and absolute asset paths are rejected by the MPQ reader.
 
 ## Runtime behavior and limits
 
-Archive indexing happens when the caller opens the archive. Reads and
-extraction run on blocking workers, with a lock per archive. The returned Bevy
-reader owns its decoded bytes, so consumers never hold that lock. Cloned MPQ
-readers share the archive. Use `Archive::with_options` to bound file sizes and
-other allocations and to select strict or permissive parsing.
+Reads extract complete entries on blocking workers and return readers that own
+the decoded bytes. Clones share the archive and allow up to four extractions at
+once. Use `with_max_concurrent_reads` with a `NonZeroUsize` value before cloning
+to choose a different limit. Requests wait asynchronously for capacity, which
+is released when extraction finishes.
 
-This implementation supports direct reads of immutable archive snapshots.
+The extraction limit controls work in progress. Decoded bytes can remain in use
+after extraction finishes, and their memory is not covered by that limit.
+Configure `SharedArchive::with_options` to bound individual file sizes and other
+allocations, and to choose strict or permissive parsing. Keep the archive source
+unchanged while it is mounted. See the [MPQ API documentation](https://docs.rs/wc3/latest/wc3/mpq/)
+for supported sources and recovery diagnostics.
+
+The readers have no decoded-byte cache; Bevy caches loaded assets normally.
 Directory enumeration, asset processing, filesystem watching, and MPQ patch
-delta application are unsupported. Directory queries return false and listing
-returns an unsupported-operation error. Use separate source names for distinct
-map stacks to keep Bevy handles isolated. There is no decoded-byte cache:
-existence probes, metadata selection, and the eventual load may extract the
-same entry repeatedly. Bevy still caches the loaded asset handles normally.
+delta application are unsupported. Directory queries return false, and directory
+listing returns an unsupported-operation error.
 
 ## Try archive-backed models
 

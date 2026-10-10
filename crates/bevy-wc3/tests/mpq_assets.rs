@@ -2,14 +2,14 @@ use bevy::asset::{io::AssetSourceBuilder, AssetApp, AssetPlugin};
 use bevy::image::ImageLoader;
 use bevy::prelude::*;
 use bevy::tasks::{AsyncComputeTaskPool, ComputeTaskPool, IoTaskPool, TaskPoolBuilder};
-use bevy_mpq::{MpqAssetReader, OverlayAssetReader};
+use bevy_mpq::{MpqAssetReader, OverlayAssetReader, OverlayMount};
 use bevy_wc3::{Wc3ModelAsset, Wc3ModelLoader};
 use std::io::Cursor;
 use std::thread::sleep;
 use std::time::{Duration, Instant};
-use wc3::mpq::{Archive, ArchiveWriter, FileOptions, WriteOptions};
+use wc3::mpq::{Archive, ArchiveWriter, FileOptions, SeekSource, WriteOptions};
 
-fn mount(entries: &[(&str, &[u8])]) -> MpqAssetReader<Cursor<Vec<u8>>> {
+fn mount(entries: &[(&str, &[u8])]) -> MpqAssetReader<SeekSource<Cursor<Vec<u8>>>> {
     let mut writer = ArchiveWriter::new(
         Cursor::new(Vec::new()),
         WriteOptions {
@@ -29,7 +29,9 @@ fn mount(entries: &[(&str, &[u8])]) -> MpqAssetReader<Cursor<Vec<u8>>> {
             .unwrap();
     }
     MpqAssetReader::new(
-        Archive::open(Cursor::new(writer.finish().unwrap().into_inner())).unwrap(),
+        Archive::open(Cursor::new(writer.finish().unwrap().into_inner()))
+            .unwrap()
+            .into_shared(),
         "fixture",
     )
 }
@@ -67,8 +69,8 @@ fn named_source_loads_recursive_models_and_images_across_archives() {
         "map",
         AssetSourceBuilder::new(move || {
             Box::new(OverlayAssetReader::new(vec![
-                Box::new(map.clone()),
-                Box::new(base.clone()),
+                OverlayMount::mpq(map.clone()),
+                OverlayMount::mpq(base.clone()),
             ]))
         }),
     );
