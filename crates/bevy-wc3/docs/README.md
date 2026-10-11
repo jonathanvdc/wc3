@@ -14,7 +14,7 @@ applications that need explicit control over scheduling or preparation.
   choose textures, control playback, bake static poses, mount child models, and
   configure lights.
 - [Viewer and captures](tools.md): inspect assets, override textures, and render
-  PNGs at controlled simulation times.
+  PNGs at controlled simulation times, including synchronized frame measurements.
 - [Architecture](architecture.md): loading and preparation, shared and per-instance
   state, renderer modules, effect record storage, and the `Wc3Systems` scheduling
   contract.

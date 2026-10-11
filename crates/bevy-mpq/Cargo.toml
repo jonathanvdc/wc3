@@ -15,5 +15,10 @@ async-lock = "3"
 wc3 = { workspace = true, features = ["mpq-decode"] }
 
 [dev-dependencies]
+criterion = { workspace = true }
 wc3 = { workspace = true, features = ["mpq-encode"] }
 futures-lite = "2"
+
+[[bench]]
+name = "assets"
+harness = false

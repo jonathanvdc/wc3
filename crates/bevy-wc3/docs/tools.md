@@ -2,8 +2,9 @@
 
 The examples let you inspect a model interactively, validate its preparation,
 or render PNGs at repeatable animation times. The viewer and capture tools load
-both MDX and MDL through `Wc3BevyPlugin`, using the same renderer as an application. Run the commands below
-from the repository root. For application setup, see [Using bevy-wc3](usage.md).
+both MDX and MDL through `Wc3BevyPlugin`, using the same renderer as an
+application. Run the commands below from the repository root. For application
+setup, see [Using bevy-wc3](usage.md).
 
 ## Explore a model
 
@@ -51,9 +52,9 @@ can replace the explicit eye/target; see [model cameras](rendering/cameras.md#of
 
 Capture times are nonnegative, strictly increasing seconds from the initial
 sequence start. Select a sequence with `--sequence INDEX`; indices start at zero.
-The tool simulates from time
-zero in steps of at most `1 / FPS`, splitting steps to reach requested times
-exactly. Loading, pipeline warmup, and GPU readback use zero simulation delta,
+The tool simulates from time zero in steps of at most `1 / FPS`, splitting steps
+to reach requested times exactly. Loading, pipeline warmup, and GPU readback
+use zero simulation delta,
 so wall-clock delays do not advance animation. Seeking directly to a time skips
 particle births and events and produces a different effect population.
 
@@ -87,6 +88,18 @@ or the capture must use an explicit camera.
 shows scheduled sequence switches, and [LOD captures](rendering/lod.md#capture-levels)
 shows fixed and automatic geometry selection. Run `capture --help` through Cargo
 for the complete set of options.
+
+## Measure completed frames
+
+Pass `--benchmark-frames N` to measure completed frames at each requested capture
+pose. The tool warms the pose with eight synchronized frames, then measures `N`
+frames while keeping simulation time fixed. It writes a timing CSV beside the
+PNG and prints median and p95 wall times.
+
+Each sample includes CPU update, render submission, and waiting for the submitted
+GPU work to finish. Loading, screenshot readback, and file writes are excluded.
+Use the [benchmark guide](../../../benchmarks/README.md#host-gpu-measurements)
+for synthetic asset export and instructions for comparing renderer revisions.
 
 ## Validate without rendering
 

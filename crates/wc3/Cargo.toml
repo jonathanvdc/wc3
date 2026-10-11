@@ -33,6 +33,7 @@ mpq-decode = ["dep:flate2", "dep:bzip2", "dep:explode", "dep:lzma-rs"]
 mpq-encode = ["dep:flate2", "dep:bzip2"]
 
 [dev-dependencies]
+criterion = { workspace = true }
 clap = { version = "4", features = ["derive"] }
 image = { version = "0.25.10", default-features = false, features = ["png"] }
 
@@ -43,3 +44,25 @@ required-features = ["blp-decode"]
 [[example]]
 name = "mpq_concurrent"
 required-features = ["mpq-decode", "mpq-encode"]
+
+[[bench]]
+name = "model"
+harness = false
+
+[[bench]]
+name = "animation"
+harness = false
+
+[[bench]]
+name = "blp"
+harness = false
+required-features = ["blp-decode", "blp-encode"]
+
+[[bench]]
+name = "mpq"
+harness = false
+required-features = ["mpq-decode", "mpq-encode"]
+
+[[example]]
+name = "benchmark_fixtures"
+required-features = ["blp-encode"]

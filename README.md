@@ -60,6 +60,12 @@ with the optional texture and archive codecs enabled, use:
 cargo test --workspace --all-features
 ```
 
+Criterion suites measure the formats, animation, and Bevy integration with
+self-contained synthetic inputs. Run `bash benchmarks/run-quick.sh` for the
+representative optimized measurements used on every CI push and pull request.
+The [benchmark guide](benchmarks/README.md) explains targeted runs, smoke checks,
+scaling cases, baselines, and host GPU measurements.
+
 You can also build and browse the API documentation locally. Enabling all
 features includes the optional image and archive APIs in the generated docs:
 

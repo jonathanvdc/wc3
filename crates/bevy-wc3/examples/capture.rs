@@ -8,7 +8,7 @@ use bevy::core_pipeline::tonemapping::Tonemapping;
 use bevy::mesh::skinning::SkinnedMeshInverseBindposes;
 use bevy::prelude::*;
 use bevy::render::pipelined_rendering::PipelinedRenderingPlugin;
-use bevy::render::render_resource::{CachedPipelineState, PipelineCache, TextureFormat};
+use bevy::render::render_resource::{CachedPipelineState, PipelineCache, PollType, TextureFormat};
 use bevy::render::renderer::RenderDevice;
 use bevy::render::view::screenshot::{Screenshot, ScreenshotCaptured};
 use bevy::render::{RenderApp, RenderPlugin};
@@ -24,7 +24,8 @@ use bevy_wc3::{
 };
 use std::env::args;
 use std::error::Error;
-use std::fs::{create_dir_all, read};
+use std::fs::{create_dir_all, read, File};
+use std::io::Write as _;
 use std::path::PathBuf;
 use std::thread::sleep;
 use std::time::{Duration, Instant};
@@ -41,6 +42,7 @@ Render offscreen and write frame-0000-1.000s.png, etc. Requires a GPU.
   --tonemapping MODE    none or tony-mcmapface (default: none)
   --illuminance LUX     Scene directional light intensity (default: 5000)
   --times SECONDS,...    Increasing capture times (default: 1)
+  --benchmark-frames N   Measure N synchronized frames at each captured pose; write CSV
   --lod LEVEL|auto       Geometry LOD (default: 0)
   --lod-bias NUMBER       Automatic quality bias (default: 1)
   --lod-thresholds PIXELS,...  Descending LOD transition diameters
@@ -82,6 +84,7 @@ struct Options {
     model: PathBuf,
     output: PathBuf,
     times: Vec<f64>,
+    benchmark_frames: Option<usize>,
     sequence: usize,
     lod: Wc3Lod,
     lod_settings: Wc3LodSettings,
@@ -119,6 +122,7 @@ impl Options {
             model: model.into(),
             output: output.into(),
             times: vec![1.0],
+            benchmark_frames: None,
             sequence: 0,
             lod: Wc3Lod::default(),
             lod_settings: Wc3LodSettings::default(),
@@ -169,6 +173,13 @@ impl Options {
                     options.times = value.split(',').map(str::parse).collect::<Result<_, _>>()?
                 }
                 "--sequence" => options.sequence = value.parse()?,
+                "--benchmark-frames" => {
+                    let count = value.parse()?;
+                    if count == 0 {
+                        return Err("benchmark-frames must be positive".into());
+                    }
+                    options.benchmark_frames = Some(count);
+                }
                 "--lod" => {
                     options.lod = if value == "auto" {
                         Wc3Lod::Automatic
@@ -669,6 +680,9 @@ fn main() -> CaptureResult<()> {
             )?;
             settle(&mut app)?;
         }
+        if let Some(frames) = options.benchmark_frames {
+            benchmark_pose(&mut app, &options, index, time, frames)?;
+        }
         let path = options
             .output
             .join(format!("frame-{index:04}-{time:.3}s.png"));
@@ -731,6 +745,54 @@ fn check_asset<A: Asset>(assets: &AssetServer, handle: &Handle<A>) -> CaptureRes
     Ok(())
 }
 
+fn benchmark_pose(
+    app: &mut App,
+    options: &Options,
+    index: usize,
+    time: f64,
+    frames: usize,
+) -> CaptureResult<()> {
+    let path = options
+        .output
+        .join(format!("timings-{index:04}-{time:.3}s.csv"));
+    let mut output = File::create(&path)?;
+    writeln!(output, "frame,pose_seconds,wall_ms")?;
+    let synchronize = |app: &App| -> CaptureResult<()> {
+        app.sub_app(RenderApp)
+            .world()
+            .resource::<RenderDevice>()
+            .poll(PollType::Wait {
+                submission_index: None,
+                timeout: Some(TIMEOUT),
+            })?;
+        Ok(())
+    };
+    synchronize(app)?;
+    // Warm resource residency and driver caches at the measured pose.
+    for _ in 0..8 {
+        step(app, Duration::ZERO)?;
+        synchronize(app)?;
+    }
+    let mut samples = Vec::with_capacity(frames);
+    for frame in 0..frames {
+        let start = Instant::now();
+        step(app, Duration::ZERO)?;
+        synchronize(app)?;
+        let milliseconds = start.elapsed().as_secs_f64() * 1000.0;
+        samples.push(milliseconds);
+        // File writes and image readback are outside the measured interval.
+        writeln!(output, "{frame},{time:.9},{milliseconds:.6}")?;
+    }
+    samples.sort_by(f64::total_cmp);
+    println!(
+        "{}: {frames} synchronized frames, median {:.3} ms, p95 {:.3} ms",
+        path.display(),
+        samples[frames / 2],
+        samples[frames - frames / 20 - 1]
+    );
+    Ok(())
+}
+
 fn check_deadline(deadline: Instant, operation: &str) -> CaptureResult<()> {
     if Instant::now() >= deadline {
         return Err(format!("timed out {operation}").into());
@@ -790,6 +852,20 @@ mod tests {
                 .chain(options.iter().copied())
                 .map(str::to_owned),
         )
+    }
+
+    #[test]
+    fn validates_benchmark_frame_count() {
+        assert_eq!(
+            parse(&["--benchmark-frames", "120"])
+                .unwrap()
+                .unwrap()
+                .benchmark_frames,
+            Some(120)
+        );
+        for value in ["0", "-1", "1.5"] {
+            assert!(parse(&["--benchmark-frames", value]).is_err());
+        }
     }
 
     #[test]

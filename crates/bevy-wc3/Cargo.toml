@@ -17,5 +17,14 @@ wc3 = { workspace = true, features = ["blp-decode"] }
 bytemuck = { version = "1", features = ["derive"] }
 
 [dev-dependencies]
+criterion = { workspace = true }
 bevy-mpq = { workspace = true }
 naga = { version = "29", features = ["wgsl-in"] }
+
+[[bench]]
+name = "preparation"
+harness = false
+
+[[bench]]
+name = "runtime"
+harness = false

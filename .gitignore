@@ -1,5 +1,6 @@
 data/
 target/
+.DS_Store
 
 # Local CMake builds and machine-specific editor configuration.
 /build/
