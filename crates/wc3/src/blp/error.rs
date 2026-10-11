@@ -65,6 +65,8 @@ impl Error for ReadError {}
 /// A container that cannot be represented as a BLP file.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum WriteError {
+    /// Single-file output cannot represent BLP0 external mipmaps.
+    ExternalMipmapsRequired,
     /// A container field has an invalid or unsupported value.
     InvalidValue {
         /// Name of the invalid field.
@@ -84,6 +86,9 @@ impl fmt::Display for WriteError {
         match self {
             Self::InvalidValue { field } => write!(f, "invalid BLP {field}"),
             Self::MissingMipmap { level } => write!(f, "missing BLP mipmap {level}"),
+            Self::ExternalMipmapsRequired => {
+                f.write_str("BLP0 requires external mipmap output; use write_files")
+            }
             Self::SizeOverflow => f.write_str("BLP file exceeds u32 offset or size limit"),
         }
     }

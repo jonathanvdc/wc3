@@ -28,7 +28,13 @@ impl<'a> BlpDecoder<'a> {
     /// Reads a BLP file and selects a mipmap by level.
     pub fn with_mip(bytes: &'a [u8], level: usize) -> ImageResult<Self> {
         let blp = BlpRef::read(bytes).map_err(|error: ReadError| image_error(error))?;
+        Self::from_blp(blp, level)
+    }
+
+    /// Selects a mipmap from an assembled container, including BLP0 sidecars.
+    pub fn from_blp(blp: BlpRef<'a>, level: usize) -> ImageResult<Self> {
         let (width, height, present) = match &blp {
+            BlpRef::Blp0(value) => (value.header.width, value.header.height, &value.mipmaps),
             BlpRef::Blp1(value) => (value.header.width, value.header.height, &value.mipmaps),
             BlpRef::Blp2(value) => (value.header.width, value.header.height, &value.mipmaps),
         };

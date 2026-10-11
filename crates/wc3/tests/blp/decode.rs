@@ -235,6 +235,7 @@ fn local_blp_corpus_decodes_all_present_mips() {
                     .unwrap_or_else(|error| panic!("{}: {error}", path.display()));
                 for level in 0..16 {
                     let present = match &blp {
+                        BlpRef::Blp0(value) => value.mipmaps[level].is_some(),
                         BlpRef::Blp1(value) => value.mipmaps[level].is_some(),
                         BlpRef::Blp2(value) => value.mipmaps[level].is_some(),
                     };

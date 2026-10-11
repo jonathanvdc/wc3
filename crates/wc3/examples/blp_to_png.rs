@@ -28,6 +28,7 @@ fn main() -> Result<()> {
     let bytes = fs::read(&args.input)?;
     let blp = BlpRef::read(&bytes)?;
     match &blp {
+        BlpRef::Blp0(value) => println!("BLP0 {}x{}", value.header.width, value.header.height),
         BlpRef::Blp1(value) => println!(
             "BLP1: {:?}\nMip levels: {}",
             value.header,

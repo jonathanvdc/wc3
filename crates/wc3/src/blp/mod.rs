@@ -59,6 +59,7 @@ mod error;
 #[cfg(any(feature = "blp-decode", feature = "blp-encode"))]
 mod image;
 
+pub use container::blp0::{Blp0, Blp0Content, Blp0ContentRef, Blp0Header, Blp0Ref};
 pub use container::blp1::{Blp1, Blp1Content, Blp1ContentRef, Blp1Header, Blp1Ref};
 pub use container::blp2::{Blp2, Blp2Content, Blp2ContentRef, Blp2Header, Blp2Ref, DxtFormat};
 pub use error::{ReadError, ReadErrorKind, WriteError};
@@ -81,6 +82,8 @@ pub const PALETTE_BYTES: usize = 1024;
 /// A borrowed BLP1 or BLP2 texture container.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum BlpRef<'a> {
+    /// A BLP0 container with externally supplied mipmaps.
+    Blp0(Blp0Ref<'a>),
     /// A borrowed BLP1 container.
     Blp1(Blp1Ref<'a>),
     /// A borrowed BLP2 container.
@@ -90,6 +93,8 @@ pub enum BlpRef<'a> {
 /// An editable BLP1 or BLP2 texture container.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Blp {
+    /// A BLP0 container with externally supplied mipmaps.
+    Blp0(Blp0),
     /// An owned BLP1 container.
     Blp1(Blp1),
     /// An owned BLP2 container.
@@ -98,8 +103,10 @@ pub enum Blp {
 
 impl<'a> BlpRef<'a> {
     /// Parses a complete BLP1 or BLP2 file, borrowing its content bytes.
+    /// Reads root metadata without loading external mipmaps.
     pub fn read(bytes: &'a [u8]) -> Result<Self, ReadError> {
         match container::io::slice(bytes, 0, 4)? {
+            b"BLP0" => Blp0Ref::read(bytes).map(Self::Blp0),
             b"BLP1" => Blp1Ref::read(bytes).map(Self::Blp1),
             b"BLP2" => Blp2Ref::read(bytes).map(Self::Blp2),
             _ => Err(ReadError::new(0, ReadErrorKind::InvalidMagic)),
@@ -109,6 +116,7 @@ impl<'a> BlpRef<'a> {
     /// Copies encoded content into an editable container.
     pub fn to_owned(&self) -> Blp {
         match self {
+            Self::Blp0(value) => Blp::Blp0(value.to_owned()),
             Self::Blp1(value) => Blp::Blp1(value.to_owned()),
             Self::Blp2(value) => Blp::Blp2(value.to_owned()),
         }
@@ -117,6 +125,7 @@ impl<'a> BlpRef<'a> {
     /// Writes a canonical layout without copying mipmaps into an owned `Blp`.
     pub fn write(&self) -> Result<Vec<u8>, WriteError> {
         match self {
+            Self::Blp0(value) => value.write(),
             Self::Blp1(value) => value.write(),
             Self::Blp2(value) => value.write(),
         }
@@ -127,6 +136,7 @@ impl Blp {
     /// Borrows the current encoded content and mipmaps.
     pub fn as_ref(&self) -> BlpRef<'_> {
         match self {
+            Self::Blp0(value) => BlpRef::Blp0(value.as_ref()),
             Self::Blp1(value) => BlpRef::Blp1(value.as_ref()),
             Self::Blp2(value) => BlpRef::Blp2(value.as_ref()),
         }
@@ -135,5 +145,34 @@ impl Blp {
     /// Writes the texture with recalculated mipmap offsets and sizes.
     pub fn write(&self) -> Result<Vec<u8>, WriteError> {
         self.as_ref().write()
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+/// Serialized root file and any external mipmap payloads.
+pub struct BlpOutput {
+    /// Bytes of the root `.blp` file.
+    pub root: Vec<u8>,
+    /// External payloads by level; empty for BLP1 and BLP2.
+    pub mipmaps: [Option<Vec<u8>>; MIPMAP_SLOTS],
+}
+
+impl BlpRef<'_> {
+    /// Serializes the root and external mipmap payloads.
+    pub fn write_files(&self) -> Result<BlpOutput, WriteError> {
+        match self {
+            Self::Blp0(value) => value.write_files(),
+            _ => Ok(BlpOutput {
+                root: self.write()?,
+                mipmaps: std::array::from_fn(|_| None),
+            }),
+        }
+    }
+}
+
+impl Blp {
+    /// Serializes the root and external mipmap payloads.
+    pub fn write_files(&self) -> Result<BlpOutput, WriteError> {
+        self.as_ref().write_files()
     }
 }

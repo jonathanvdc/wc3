@@ -10,8 +10,12 @@ const TABLE: usize = 28;
 const CONTENT: usize = 156;
 
 impl Blp1Header {
-    fn read(bytes: &[u8]) -> Result<(Self, u32), ReadError> {
-        if slice(bytes, 0, 4)? != b"BLP1" {
+    pub(super) fn read(bytes: &[u8]) -> Result<(Self, u32), ReadError> {
+        Self::read_version(bytes, b"BLP1")
+    }
+
+    pub(crate) fn read_version(bytes: &[u8], magic: &[u8; 4]) -> Result<(Self, u32), ReadError> {
+        if slice(bytes, 0, 4)? != magic {
             return Err(ReadError::new(0, ReadErrorKind::InvalidMagic));
         }
         let content_type = word(bytes, 4)?;
@@ -27,8 +31,17 @@ impl Blp1Header {
     }
 
     fn write(&self, bytes: &mut Vec<u8>, content_type: u32) -> Result<(), WriteError> {
+        self.write_version(bytes, content_type, b"BLP1")
+    }
+
+    pub(crate) fn write_version(
+        &self,
+        bytes: &mut Vec<u8>,
+        content_type: u32,
+        magic: &[u8; 4],
+    ) -> Result<(), WriteError> {
         validate_write(self.width, self.height)?;
-        bytes.extend_from_slice(b"BLP1");
+        bytes.extend_from_slice(magic);
         append_u32(bytes, content_type);
         append_u32(bytes, self.alpha_bits);
         append_u32(bytes, self.width);
@@ -41,20 +54,28 @@ impl Blp1Header {
 
 impl<'a> Blp1ContentRef<'a> {
     fn read(bytes: &'a [u8], content_type: u32) -> Result<(Self, usize), ReadError> {
+        Self::read_at(bytes, content_type, CONTENT)
+    }
+
+    pub(crate) fn read_at(
+        bytes: &'a [u8],
+        content_type: u32,
+        start: usize,
+    ) -> Result<(Self, usize), ReadError> {
         match content_type {
             0 => {
-                let size = word(bytes, CONTENT)? as usize;
-                let shared_header = slice(bytes, CONTENT + 4, size)?;
-                let end = (CONTENT + 4)
+                let size = word(bytes, start)? as usize;
+                let shared_header = slice(bytes, start + 4, size)?;
+                let end = (start + 4)
                     .checked_add(size)
-                    .ok_or(ReadError::new(CONTENT, ReadErrorKind::UnexpectedEnd))?;
+                    .ok_or(ReadError::new(start, ReadErrorKind::UnexpectedEnd))?;
                 Ok((Self::Jpeg { shared_header }, end))
             }
             1 => Ok((
                 Self::Indexed {
-                    palette: palette(bytes, CONTENT)?,
+                    palette: palette(bytes, start)?,
                 },
-                CONTENT + PALETTE_BYTES,
+                start + PALETTE_BYTES,
             )),
             value => Err(ReadError::new(
                 4,
@@ -66,14 +87,14 @@ impl<'a> Blp1ContentRef<'a> {
         }
     }
 
-    fn content_type(&self) -> u32 {
+    pub(crate) fn content_type(&self) -> u32 {
         match self {
             Self::Jpeg { .. } => 0,
             Self::Indexed { .. } => 1,
         }
     }
 
-    fn write(&self, bytes: &mut Vec<u8>) -> Result<(), WriteError> {
+    pub(crate) fn write(&self, bytes: &mut Vec<u8>) -> Result<(), WriteError> {
         match self {
             Self::Jpeg { shared_header } => {
                 append_u32(bytes, checked_u32(shared_header.len())?);

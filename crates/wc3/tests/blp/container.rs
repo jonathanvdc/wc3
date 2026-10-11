@@ -177,3 +177,40 @@ fn blp1_jpeg_and_blp2_indexed_bgra_round_trip() {
     ));
     assert_eq!(bgra.write().unwrap(), blp2);
 }
+
+#[test]
+fn blp0_root_and_sparse_external_mips_round_trip() {
+    use wc3::blp::{Blp0, Blp0Content, Blp0Header, WriteError};
+
+    let texture = Blp0 {
+        header: Blp0Header {
+            width: 2,
+            height: 1,
+            alpha_bits: 8,
+            extra: 4,
+            has_mipmaps: 1,
+        },
+        content: Blp0Content::Indexed {
+            palette: Box::new([0; 1024]),
+        },
+        mipmaps: std::array::from_fn(|level| match level {
+            0 => Some(vec![0, 1, 255, 0]),
+            3 => Some(vec![1, 127]),
+            _ => None,
+        }),
+    };
+    assert_eq!(texture.write(), Err(WriteError::ExternalMipmapsRequired));
+    let output = texture.write_files().unwrap();
+    assert_eq!(output.root.len(), 28 + 1024);
+    let mut parsed = BlpRef::read(&output.root).unwrap();
+    let BlpRef::Blp0(value) = &mut parsed else {
+        panic!("expected BLP0")
+    };
+    assert!(value.mipmaps.iter().all(Option::is_none));
+    value.mipmaps = output.mipmaps.each_ref().map(|mip| mip.as_deref());
+    assert_eq!(value.to_owned(), texture);
+    assert_eq!(parsed.write_files().unwrap(), output);
+    for end in 0..output.root.len() {
+        assert!(BlpRef::read(&output.root[..end]).is_err());
+    }
+}
