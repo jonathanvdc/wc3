@@ -94,6 +94,7 @@ pub fn register_decoding_hook() -> bool {
         }),
     );
     if registered {
+        hooks::register_format_detection_hook("blp".into(), b"BLP0", None);
         hooks::register_format_detection_hook("blp".into(), b"BLP1", None);
         hooks::register_format_detection_hook("blp".into(), b"BLP2", None);
     }

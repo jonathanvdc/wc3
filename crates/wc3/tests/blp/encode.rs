@@ -260,3 +260,92 @@ fn dxt_algorithms_produce_decodable_blocks_and_affect_compression() {
         assert_ne!(outputs[0], outputs[1], "{format:?}");
     }
 }
+
+#[test]
+fn blp0_encodings_decode_from_external_payloads() {
+    use image::DynamicImage;
+    use wc3::blp::{BlpDecoder, DecodeError};
+
+    let image = source();
+    for format in [
+        EncodeFormat::Indexed {
+            version: BlpVersion::Blp0,
+            alpha: IndexedAlpha::Opaque,
+        },
+        EncodeFormat::Indexed {
+            version: BlpVersion::Blp0,
+            alpha: IndexedAlpha::Bit1,
+        },
+        EncodeFormat::Indexed {
+            version: BlpVersion::Blp0,
+            alpha: IndexedAlpha::Bit4,
+        },
+        EncodeFormat::Indexed {
+            version: BlpVersion::Blp0,
+            alpha: IndexedAlpha::Bit8,
+        },
+        EncodeFormat::Jpeg {
+            version: BlpVersion::Blp0,
+            alpha: true,
+            quality: 100,
+        },
+        EncodeFormat::Jpeg {
+            version: BlpVersion::Blp0,
+            alpha: false,
+            quality: 100,
+        },
+    ] {
+        let encoded = Blp::encode_image(
+            &image,
+            EncodeOptions {
+                format,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        let output = encoded.write_files().unwrap();
+        let mut parsed = BlpRef::read(&output.root).unwrap();
+        assert!(matches!(
+            parsed.decode_mip(0),
+            Err(DecodeError::MissingMipmap { level: 0 })
+        ));
+        let BlpRef::Blp0(value) = &mut parsed else {
+            panic!("expected BLP0")
+        };
+        value.mipmaps = output.mipmaps.each_ref().map(|mip| mip.as_deref());
+        for level in 0..4 {
+            let decoded = parsed.decode_mip(level).unwrap();
+            assert_eq!(decoded, encoded.decode_mip(level).unwrap());
+            let via_image =
+                DynamicImage::from_decoder(BlpDecoder::from_blp(parsed.clone(), level).unwrap())
+                    .unwrap()
+                    .into_rgba8();
+            assert_eq!(decoded, via_image);
+        }
+        assert_eq!(parsed.write_files().unwrap(), output);
+    }
+}
+
+#[test]
+fn blp0_image_encoder_rejects_single_file_output() {
+    use image::{ExtendedColorType, ImageEncoder};
+    let image = source();
+    let mut output = Vec::new();
+    let options = EncodeOptions {
+        format: EncodeFormat::Jpeg {
+            version: BlpVersion::Blp0,
+            alpha: true,
+            quality: 90,
+        },
+        ..Default::default()
+    };
+    assert!(BlpEncoder::with_options(&mut output, options)
+        .write_image(
+            image.as_raw(),
+            image.width(),
+            image.height(),
+            ExtendedColorType::Rgba8
+        )
+        .is_err());
+    assert!(output.is_empty());
+}

@@ -8,6 +8,8 @@ use std::{error::Error, fmt};
 /// BLP container version for formats available in both versions.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum BlpVersion {
+    /// BLP0 root metadata with external mipmaps.
+    Blp0,
     /// The original BLP1 container format.
     Blp1,
     /// The BLP2 container format.

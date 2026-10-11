@@ -22,3 +22,24 @@ fn image_encoder_is_available_without_decode_feature() {
         .unwrap();
     assert!(matches!(BlpRef::read(&bytes).unwrap(), BlpRef::Blp1(_)));
 }
+
+#[test]
+fn blp0_encoding_returns_external_payloads_without_decode_feature() {
+    use wc3::blp::{BlpVersion, IndexedAlpha};
+    let image = image::RgbaImage::from_pixel(1, 1, image::Rgba([40, 80, 120, 160]));
+    let blp = Blp::encode_image(
+        &image,
+        EncodeOptions {
+            format: EncodeFormat::Indexed {
+                version: BlpVersion::Blp0,
+                alpha: IndexedAlpha::Bit8,
+            },
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    let output = blp.write_files().unwrap();
+    assert_eq!(&output.root[..4], b"BLP0");
+    assert_eq!(output.mipmaps[0].as_ref().unwrap().len(), 2);
+    assert!(output.mipmaps[1..].iter().all(Option::is_none));
+}

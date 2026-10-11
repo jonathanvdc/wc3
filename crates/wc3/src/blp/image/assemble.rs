@@ -1,8 +1,8 @@
 //! Construct version-specific BLP containers from encoded mipmaps.
 use super::{BlpVersion, EncodeFormat};
 use crate::blp::{
-    Blp, Blp1, Blp1Content, Blp1Header, Blp2, Blp2Content, Blp2Header, DxtFormat, MIPMAP_SLOTS,
-    PALETTE_BYTES,
+    Blp, Blp0, Blp0Content, Blp0Header, Blp1, Blp1Content, Blp1Header, Blp2, Blp2Content,
+    Blp2Header, DxtFormat, MIPMAP_SLOTS, PALETTE_BYTES,
 };
 
 pub(super) fn container(
@@ -15,6 +15,29 @@ pub(super) fn container(
     let has_mipmaps = mipmaps[1].is_some();
     let alpha_bits = format.alpha_bits();
     match format {
+        EncodeFormat::Indexed {
+            version: BlpVersion::Blp0,
+            ..
+        }
+        | EncodeFormat::Jpeg {
+            version: BlpVersion::Blp0,
+            ..
+        } => Blp::Blp0(Blp0 {
+            header: Blp0Header {
+                width,
+                height,
+                alpha_bits: alpha_bits.into(),
+                extra: if palette.is_some() { 4 } else { 5 },
+                has_mipmaps: u32::from(has_mipmaps),
+            },
+            content: match palette {
+                Some(palette) => Blp0Content::Indexed { palette },
+                None => Blp0Content::Jpeg {
+                    shared_header: Vec::new(),
+                },
+            },
+            mipmaps,
+        }),
         EncodeFormat::Indexed {
             version: BlpVersion::Blp1,
             ..

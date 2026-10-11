@@ -1,5 +1,5 @@
 //! Adapter for image-rs's encoder interface.
-use crate::blp::{Blp, EncodeError, EncodeOptions};
+use crate::blp::{Blp, BlpVersion, EncodeError, EncodeFormat, EncodeOptions, WriteError};
 use image::error::{EncodingError, ImageFormatHint, UnsupportedError, UnsupportedErrorKind};
 use image::{ExtendedColorType, ImageEncoder, ImageError, ImageResult, RgbaImage};
 use std::io::Write;
@@ -30,6 +30,21 @@ impl<W: Write> ImageEncoder for BlpEncoder<W> {
         height: u32,
         color_type: ExtendedColorType,
     ) -> ImageResult<()> {
+        if matches!(
+            self.options.format,
+            EncodeFormat::Indexed {
+                version: BlpVersion::Blp0,
+                ..
+            } | EncodeFormat::Jpeg {
+                version: BlpVersion::Blp0,
+                ..
+            }
+        ) {
+            return Err(ImageError::Encoding(EncodingError::new(
+                ImageFormatHint::Name("BLP".into()),
+                WriteError::ExternalMipmapsRequired,
+            )));
+        }
         if color_type != ExtendedColorType::Rgba8 {
             return Err(ImageError::Unsupported(
                 UnsupportedError::from_format_and_kind(

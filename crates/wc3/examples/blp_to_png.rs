@@ -26,7 +26,12 @@ fn main() -> Result<()> {
     let args = Args::parse();
     let level = usize::from(args.mip);
     let bytes = fs::read(&args.input)?;
-    let blp = BlpRef::read(&bytes)?;
+    let mut blp = BlpRef::read(&bytes)?;
+    let external;
+    if let BlpRef::Blp0(value) = &mut blp {
+        external = fs::read(args.input.with_extension(format!("b{level:02}")))?;
+        value.mipmaps[level] = Some(&external);
+    }
     match &blp {
         BlpRef::Blp0(value) => println!("BLP0 {}x{}", value.header.width, value.header.height),
         BlpRef::Blp1(value) => println!(
