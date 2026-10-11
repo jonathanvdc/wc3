@@ -2,13 +2,14 @@
 mod support;
 use clap::{value_parser, Parser};
 use image::{codecs::png::PngEncoder, ExtendedColorType, ImageEncoder};
+use std::borrow::Cow;
 use std::path::PathBuf;
 use std::{
     fs,
     io::{BufWriter, Write as IoWrite},
 };
 use support::Result;
-use wc3::blp::BlpRef;
+use wc3::blp::Blp;
 
 #[derive(Parser)]
 #[command(about = "Inspect a BLP texture and export a mipmap as PNG")]
@@ -26,20 +27,20 @@ fn main() -> Result<()> {
     let args = Args::parse();
     let level = usize::from(args.mip);
     let bytes = fs::read(&args.input)?;
-    let mut blp = BlpRef::read(&bytes)?;
+    let mut blp = Blp::read(&bytes)?;
     let external;
-    if let BlpRef::Blp0(value) = &mut blp {
+    if let Blp::Blp0(value) = &mut blp {
         external = fs::read(args.input.with_extension(format!("b{level:02}")))?;
-        value.mipmaps[level] = Some(&external);
+        value.mipmaps[level] = Some(Cow::Borrowed(&external));
     }
     match &blp {
-        BlpRef::Blp0(value) => println!("BLP0 {}x{}", value.header.width, value.header.height),
-        BlpRef::Blp1(value) => println!(
+        Blp::Blp0(value) => println!("BLP0 {}x{}", value.header.width, value.header.height),
+        Blp::Blp1(value) => println!(
             "BLP1: {:?}\nMip levels: {}",
             value.header,
             value.mipmaps.iter().flatten().count()
         ),
-        BlpRef::Blp2(value) => println!(
+        Blp::Blp2(value) => println!(
             "BLP2: {:?}\nMip levels: {}",
             value.header,
             value.mipmaps.iter().flatten().count()

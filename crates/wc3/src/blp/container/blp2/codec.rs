@@ -1,10 +1,11 @@
 //! BLP2 binary layout.
-use super::{Blp2, Blp2ContentRef, Blp2Header, Blp2Ref, DxtFormat};
+use super::{Blp2, Blp2Content, Blp2Header, DxtFormat};
 use crate::blp::container::io::{
     append_u32, byte, checked_u32, palette, read_mips, slice, validate_dimensions, validate_write,
     word, write_mips,
 };
 use crate::blp::{ReadError, ReadErrorKind, WriteError, PALETTE_BYTES};
+use std::borrow::Cow;
 
 const REGION: usize = 148;
 const END: usize = REGION + PALETTE_BYTES;
@@ -48,7 +49,7 @@ impl Blp2Header {
     }
 }
 
-impl<'a> Blp2ContentRef<'a> {
+impl<'a> Blp2Content<'a> {
     fn read(bytes: &'a [u8], encoding: u8, alpha_type: u8) -> Result<Self, ReadError> {
         let region = palette(bytes, REGION)?;
         match encoding {
@@ -65,13 +66,13 @@ impl<'a> Blp2ContentRef<'a> {
                 }
                 Ok(Self::Jpeg {
                     alpha_type,
-                    shared_header: &region[4..4 + size],
-                    unused: &region[4 + size..],
+                    shared_header: Cow::Borrowed(&region[4..4 + size]),
+                    unused: Cow::Borrowed(&region[4 + size..]),
                 })
             }
             1 => Ok(Self::Indexed {
                 alpha_type,
-                palette: region,
+                palette: region.into(),
             }),
             2 => Ok(Self::Dxt {
                 format: match alpha_type {
@@ -88,12 +89,12 @@ impl<'a> Blp2ContentRef<'a> {
                         ));
                     }
                 },
-                palette_region: region,
+                palette_region: region.into(),
             }),
             3 | 4 => Ok(Self::Bgra {
                 encoding,
                 alpha_type,
-                palette_region: region,
+                palette_region: region.into(),
             }),
             value => Err(ReadError::new(
                 8,
@@ -146,26 +147,26 @@ impl<'a> Blp2ContentRef<'a> {
                 bytes.extend_from_slice(&unused[..unused.len().min(remaining)]);
                 bytes.resize(END, 0);
             }
-            Self::Indexed { palette, .. } => bytes.extend_from_slice(*palette),
+            Self::Indexed { palette, .. } => bytes.extend_from_slice(palette.as_bytes()),
             Self::Dxt { palette_region, .. } | Self::Bgra { palette_region, .. } => {
-                bytes.extend_from_slice(*palette_region);
+                bytes.extend_from_slice(palette_region.as_bytes());
             }
         }
         Ok(())
     }
 }
 
-pub(super) fn read(bytes: &[u8]) -> Result<Blp2Ref<'_>, ReadError> {
+pub(super) fn read(bytes: &[u8]) -> Result<Blp2<'_>, ReadError> {
     let (header, encoding, alpha_type) = Blp2Header::read(bytes)?;
-    let content = Blp2ContentRef::read(bytes, encoding, alpha_type)?;
-    Ok(Blp2Ref {
+    let content = Blp2Content::read(bytes, encoding, alpha_type)?;
+    Ok(Blp2 {
         header,
         content,
         mipmaps: read_mips(bytes, TABLE, END)?,
     })
 }
 
-pub(super) fn write(value: &Blp2Ref<'_>) -> Result<Vec<u8>, WriteError> {
+pub(super) fn write(value: &Blp2<'_>) -> Result<Vec<u8>, WriteError> {
     let mut bytes = Vec::new();
     let (encoding, alpha_type) = value.content.encoding()?;
     value.header.write(&mut bytes, encoding, alpha_type)?;
@@ -175,21 +176,14 @@ pub(super) fn write(value: &Blp2Ref<'_>) -> Result<Vec<u8>, WriteError> {
     Ok(bytes)
 }
 
-impl Blp2Ref<'_> {
+impl Blp2<'_> {
     /// Reads a complete BLP2 file.
-    pub fn read(bytes: &[u8]) -> Result<Blp2Ref<'_>, ReadError> {
+    pub fn read(bytes: &[u8]) -> Result<Blp2<'_>, ReadError> {
         read(bytes)
     }
 
     /// Writes this borrowed container.
     pub fn write(&self) -> Result<Vec<u8>, WriteError> {
         write(self)
-    }
-}
-
-impl Blp2 {
-    /// Writes this editable container.
-    pub fn write(&self) -> Result<Vec<u8>, WriteError> {
-        self.as_ref().write()
     }
 }

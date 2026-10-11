@@ -1,5 +1,5 @@
 use image::{ExtendedColorType, ImageEncoder, Rgba, RgbaImage};
-use wc3::blp::{Blp, BlpEncoder, BlpRef, EncodeFormat, EncodeOptions};
+use wc3::blp::{Blp, BlpEncoder, EncodeFormat, EncodeOptions};
 
 #[test]
 fn encode_feature_writes_container_without_decode_feature() {
@@ -10,7 +10,7 @@ fn encode_feature_writes_container_without_decode_feature() {
         ..Default::default()
     };
     let bytes = Blp::encode_image(&image, options).unwrap().write().unwrap();
-    assert!(matches!(BlpRef::read(&bytes).unwrap(), BlpRef::Blp2(_)));
+    assert!(matches!(Blp::read(&bytes).unwrap(), Blp::Blp2(_)));
 }
 
 #[test]
@@ -20,7 +20,7 @@ fn image_encoder_is_available_without_decode_feature() {
     BlpEncoder::new(&mut bytes)
         .write_image(image.as_raw(), 2, 2, ExtendedColorType::Rgba8)
         .unwrap();
-    assert!(matches!(BlpRef::read(&bytes).unwrap(), BlpRef::Blp1(_)));
+    assert!(matches!(Blp::read(&bytes).unwrap(), Blp::Blp1(_)));
 }
 
 #[test]

@@ -3,6 +3,7 @@ use bevy::image::{Image, ImageLoaderSettings};
 use bevy::prelude::{default, App, Assets, Handle};
 use bevy::tasks::{ComputeTaskPool, IoTaskPool, TaskPoolBuilder};
 use bevy_wc3::{BlpImageLoader, Wc3ModelAsset, Wc3ModelLoader};
+use std::borrow::Cow;
 use std::fs;
 use std::path::Path;
 use std::time::{Duration, Instant};
@@ -176,8 +177,10 @@ fn blp0_file_loader_reads_base_sidecar_and_reports_missing_sidecar() {
             extra: 4,
             has_mipmaps: 0,
         },
-        content: Blp0Content::Indexed { palette },
-        mipmaps: std::array::from_fn(|level| (level == 0).then(|| vec![0, 160])),
+        content: Blp0Content::Indexed {
+            palette: palette.into(),
+        },
+        mipmaps: std::array::from_fn(|level| (level == 0).then(|| Cow::Owned(vec![0, 160]))),
     }
     .write_files()
     .unwrap();

@@ -4,6 +4,7 @@ use bevy::prelude::*;
 use bevy::tasks::{AsyncComputeTaskPool, ComputeTaskPool, IoTaskPool, TaskPoolBuilder};
 use bevy_mpq::{MpqAssetReader, OverlayAssetReader, OverlayMount};
 use bevy_wc3::{Wc3ModelAsset, Wc3ModelLoader};
+use std::borrow::Cow;
 use std::io::Cursor;
 use std::thread::sleep;
 use std::time::{Duration, Instant};
@@ -146,8 +147,10 @@ fn blp0_base_mipmap_loads_from_named_archive_source() {
             extra: 4,
             has_mipmaps: 1,
         },
-        content: Blp0Content::Indexed { palette },
-        mipmaps: std::array::from_fn(|level| (level == 0).then(|| vec![0, 160])),
+        content: Blp0Content::Indexed {
+            palette: palette.into(),
+        },
+        mipmaps: std::array::from_fn(|level| (level == 0).then(|| Cow::Owned(vec![0, 160]))),
     }
     .write_files()
     .unwrap();

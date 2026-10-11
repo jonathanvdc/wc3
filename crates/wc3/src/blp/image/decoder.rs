@@ -1,5 +1,5 @@
 //! Adapter for image-rs's decoder interface.
-use crate::blp::{BlpRef, DecodeError, ReadError, MIPMAP_SLOTS};
+use crate::blp::{Blp, DecodeError, ReadError, MIPMAP_SLOTS};
 use image::error::{DecodingError, ImageFormatHint};
 use image::hooks;
 use image::{ColorType, ImageDecoder, ImageError, ImageResult};
@@ -7,7 +7,7 @@ use std::io::Read;
 
 /// Decodes one BLP mipmap through the `image` crate's general decoder API.
 pub struct BlpDecoder<'a> {
-    blp: BlpRef<'a>,
+    blp: Blp<'a>,
     level: usize,
     dimensions: (u32, u32),
 }
@@ -31,16 +31,16 @@ impl<'a> BlpDecoder<'a> {
     ///
     /// BLP0 requires external payloads; attach them and use [`Self::from_blp`].
     pub fn with_mip(bytes: &'a [u8], level: usize) -> ImageResult<Self> {
-        let blp = BlpRef::read(bytes).map_err(|error: ReadError| image_error(error))?;
+        let blp = Blp::read(bytes).map_err(|error: ReadError| image_error(error))?;
         Self::from_blp(blp, level)
     }
 
     /// Selects a mipmap from an assembled container, including BLP0 sidecars.
-    pub fn from_blp(blp: BlpRef<'a>, level: usize) -> ImageResult<Self> {
+    pub fn from_blp(blp: Blp<'a>, level: usize) -> ImageResult<Self> {
         let (width, height, present) = match &blp {
-            BlpRef::Blp0(value) => (value.header.width, value.header.height, &value.mipmaps),
-            BlpRef::Blp1(value) => (value.header.width, value.header.height, &value.mipmaps),
-            BlpRef::Blp2(value) => (value.header.width, value.header.height, &value.mipmaps),
+            Blp::Blp0(value) => (value.header.width, value.header.height, &value.mipmaps),
+            Blp::Blp1(value) => (value.header.width, value.header.height, &value.mipmaps),
+            Blp::Blp2(value) => (value.header.width, value.header.height, &value.mipmaps),
         };
         if width == 0 || height == 0 || level >= MIPMAP_SLOTS {
             return Err(image_error(DecodeError::InvalidDimensions));

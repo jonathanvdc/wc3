@@ -1,10 +1,11 @@
 //! BLP1 binary layout.
-use super::{Blp1, Blp1ContentRef, Blp1Header, Blp1Ref};
+use super::{Blp1, Blp1Content, Blp1Header};
 use crate::blp::container::io::{
     append_u32, checked_u32, palette, read_mips, slice, validate_dimensions, validate_write, word,
     write_mips,
 };
 use crate::blp::{ReadError, ReadErrorKind, WriteError, PALETTE_BYTES};
+use std::borrow::Cow;
 
 const TABLE: usize = 28;
 const CONTENT: usize = 156;
@@ -52,7 +53,7 @@ impl Blp1Header {
     }
 }
 
-impl<'a> Blp1ContentRef<'a> {
+impl<'a> Blp1Content<'a> {
     fn read(bytes: &'a [u8], content_type: u32) -> Result<(Self, usize), ReadError> {
         Self::read_at(bytes, content_type, CONTENT)
     }
@@ -69,11 +70,16 @@ impl<'a> Blp1ContentRef<'a> {
                 let end = (start + 4)
                     .checked_add(size)
                     .ok_or(ReadError::new(start, ReadErrorKind::UnexpectedEnd))?;
-                Ok((Self::Jpeg { shared_header }, end))
+                Ok((
+                    Self::Jpeg {
+                        shared_header: Cow::Borrowed(shared_header),
+                    },
+                    end,
+                ))
             }
             1 => Ok((
                 Self::Indexed {
-                    palette: palette(bytes, start)?,
+                    palette: palette(bytes, start)?.into(),
                 },
                 start + PALETTE_BYTES,
             )),
@@ -100,24 +106,24 @@ impl<'a> Blp1ContentRef<'a> {
                 append_u32(bytes, checked_u32(shared_header.len())?);
                 bytes.extend_from_slice(shared_header);
             }
-            Self::Indexed { palette } => bytes.extend_from_slice(*palette),
+            Self::Indexed { palette } => bytes.extend_from_slice(palette.as_bytes()),
         }
         Ok(())
     }
 }
 
-pub(super) fn read(bytes: &[u8]) -> Result<Blp1Ref<'_>, ReadError> {
+pub(super) fn read(bytes: &[u8]) -> Result<Blp1<'_>, ReadError> {
     let (header, content_type) = Blp1Header::read(bytes)?;
     slice(bytes, TABLE, 128)?;
-    let (content, content_end) = Blp1ContentRef::read(bytes, content_type)?;
-    Ok(Blp1Ref {
+    let (content, content_end) = Blp1Content::read(bytes, content_type)?;
+    Ok(Blp1 {
         header,
         content,
         mipmaps: read_mips(bytes, TABLE, content_end)?,
     })
 }
 
-pub(super) fn write(value: &Blp1Ref<'_>) -> Result<Vec<u8>, WriteError> {
+pub(super) fn write(value: &Blp1<'_>) -> Result<Vec<u8>, WriteError> {
     let mut bytes = Vec::new();
     value
         .header
@@ -128,21 +134,14 @@ pub(super) fn write(value: &Blp1Ref<'_>) -> Result<Vec<u8>, WriteError> {
     Ok(bytes)
 }
 
-impl Blp1Ref<'_> {
+impl Blp1<'_> {
     /// Reads a complete BLP1 file.
-    pub fn read(bytes: &[u8]) -> Result<Blp1Ref<'_>, ReadError> {
+    pub fn read(bytes: &[u8]) -> Result<Blp1<'_>, ReadError> {
         read(bytes)
     }
 
     /// Writes this borrowed container.
     pub fn write(&self) -> Result<Vec<u8>, WriteError> {
         write(self)
-    }
-}
-
-impl Blp1 {
-    /// Writes this editable container.
-    pub fn write(&self) -> Result<Vec<u8>, WriteError> {
-        self.as_ref().write()
     }
 }

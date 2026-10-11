@@ -1,5 +1,6 @@
 use image::{Rgba, RgbaImage};
-use wc3::blp::{Blp, BlpEncoder, BlpRef, BlpVersion, EncodeFormat, EncodeOptions, IndexedAlpha};
+use std::borrow::Cow;
+use wc3::blp::{Blp, BlpEncoder, BlpVersion, EncodeFormat, EncodeOptions, IndexedAlpha};
 
 #[test]
 fn image_encoder_writes_a_blp_file() {
@@ -20,7 +21,7 @@ fn image_encoder_writes_a_blp_file() {
             ExtendedColorType::Rgba8,
         )
         .unwrap();
-    assert_eq!(BlpRef::read(&bytes).unwrap().decode_mip(0).unwrap(), image);
+    assert_eq!(Blp::read(&bytes).unwrap().decode_mip(0).unwrap(), image);
 
     let error = BlpEncoder::new(Vec::new())
         .write_image(&[0; 3], 1, 1, ExtendedColorType::Rgb8)
@@ -72,7 +73,7 @@ fn all_encodings_write_read_and_decode_every_mip() {
         };
         let encoded = Blp::encode_image(&image, options).unwrap();
         let bytes = encoded.write().unwrap();
-        let parsed = BlpRef::read(&bytes).unwrap();
+        let parsed = Blp::read(&bytes).unwrap();
         let expected = parsed.decode_mip(0).unwrap();
         let mut direct = vec![0; expected.as_raw().len()];
         parsed.decode_mip_into(0, &mut direct).unwrap();
@@ -96,7 +97,7 @@ fn bgra_round_trip_is_exact() {
         ..Default::default()
     };
     let bytes = Blp::encode_image(&image, options).unwrap().write().unwrap();
-    assert_eq!(BlpRef::read(&bytes).unwrap().decode_mip(0).unwrap(), image);
+    assert_eq!(Blp::read(&bytes).unwrap().decode_mip(0).unwrap(), image);
 }
 
 #[test]
@@ -114,7 +115,7 @@ fn jpeg_preserves_component_order_and_alpha() {
             ..Default::default()
         };
         let bytes = Blp::encode_image(&image, options).unwrap().write().unwrap();
-        let pixel = BlpRef::read(&bytes)
+        let pixel = Blp::read(&bytes)
             .unwrap()
             .decode_mip(0)
             .unwrap()
@@ -146,7 +147,7 @@ fn dxt_handles_partial_blocks_and_alpha() {
             panic!("expected BLP2")
         };
         assert_eq!(container.mipmaps[0].as_ref().unwrap().len(), expected_size);
-        let decoded = BlpRef::read(&blp.write().unwrap())
+        let decoded = Blp::read(&blp.write().unwrap())
             .unwrap()
             .decode_mip(0)
             .unwrap();
@@ -304,15 +305,18 @@ fn blp0_encodings_decode_from_external_payloads() {
         )
         .unwrap();
         let output = encoded.write_files().unwrap();
-        let mut parsed = BlpRef::read(&output.root).unwrap();
+        let mut parsed = Blp::read(&output.root).unwrap();
         assert!(matches!(
             parsed.decode_mip(0),
             Err(DecodeError::MissingMipmap { level: 0 })
         ));
-        let BlpRef::Blp0(value) = &mut parsed else {
+        let Blp::Blp0(value) = &mut parsed else {
             panic!("expected BLP0")
         };
-        value.mipmaps = output.mipmaps.each_ref().map(|mip| mip.as_deref());
+        value.mipmaps = output
+            .mipmaps
+            .each_ref()
+            .map(|mip| mip.as_deref().map(Cow::Borrowed));
         for level in 0..4 {
             let decoded = parsed.decode_mip(level).unwrap();
             assert_eq!(decoded, encoded.decode_mip(level).unwrap());
@@ -371,17 +375,20 @@ fn blp0_shared_jpeg_prefix_and_malformed_external_data() {
     };
     // Move the common SOI marker into root metadata, leaving mipmap JPEG chunks.
     for mip in texture.mipmaps.iter_mut().flatten() {
-        assert_eq!(mip.drain(..2).collect::<Vec<_>>(), [255, 216]);
+        assert_eq!(mip.to_mut().drain(..2).collect::<Vec<_>>(), [255, 216]);
     }
     texture.content = Blp0Content::Jpeg {
-        shared_header: vec![255, 216],
+        shared_header: Cow::Owned(vec![255, 216]),
     };
     let output = encoded.write_files().unwrap();
-    let mut parsed = BlpRef::read(&output.root).unwrap();
-    let BlpRef::Blp0(texture) = &mut parsed else {
+    let mut parsed = Blp::read(&output.root).unwrap();
+    let Blp::Blp0(texture) = &mut parsed else {
         panic!("expected BLP0")
     };
-    texture.mipmaps = output.mipmaps.each_ref().map(|mip| mip.as_deref());
+    texture.mipmaps = output
+        .mipmaps
+        .each_ref()
+        .map(|mip| mip.as_deref().map(Cow::Borrowed));
     for (level, dimensions) in [(0, (8, 2)), (1, (4, 1)), (2, (2, 1)), (3, (1, 1))] {
         let decoded = parsed.decode_mip(level).unwrap();
         assert_eq!(decoded.dimensions(), dimensions);
@@ -394,10 +401,10 @@ fn blp0_shared_jpeg_prefix_and_malformed_external_data() {
             assert!(actual.abs_diff(expected) <= 5);
         }
     }
-    let BlpRef::Blp0(texture) = &mut parsed else {
+    let Blp::Blp0(texture) = &mut parsed else {
         unreachable!()
     };
-    texture.mipmaps[0] = Some(&[0]);
+    texture.mipmaps[0] = Some(Cow::Borrowed(&[0]));
     assert!(matches!(parsed.decode_mip(0), Err(DecodeError::Jpeg(_))));
 }
 

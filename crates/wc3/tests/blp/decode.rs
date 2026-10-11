@@ -1,7 +1,8 @@
+use std::borrow::Cow;
 use std::{env, fs, path::Path};
 use wc3::blp::{
-    register_decoding_hook, Blp1ContentRef, Blp1Header, Blp1Ref, Blp2ContentRef, Blp2Header,
-    Blp2Ref, BlpDecoder, BlpRef, DxtFormat,
+    register_decoding_hook, Blp, Blp1, Blp1Content, Blp1Header, Blp2, Blp2Content, Blp2Header,
+    BlpDecoder, DxtFormat,
 };
 
 #[test]
@@ -9,10 +10,10 @@ fn decoding_hook_reads_blp_from_memory() {
     let palette = [0; 1024];
     let bytes = blp2(
         &[3, 2, 1, 4],
-        Blp2ContentRef::Bgra {
+        Blp2Content::Bgra {
             encoding: 3,
             alpha_type: 8,
-            palette_region: &palette,
+            palette_region: (&palette).into(),
         },
         8,
         1,
@@ -38,10 +39,10 @@ fn image_decoder_integrates_with_dynamic_image() {
     let palette = [0; 1024];
     let blp = blp2(
         &[3, 2, 1, 4],
-        Blp2ContentRef::Bgra {
+        Blp2Content::Bgra {
             encoding: 3,
             alpha_type: 8,
-            palette_region: &palette,
+            palette_region: (&palette).into(),
         },
         8,
         1,
@@ -61,15 +62,10 @@ fn image_decoder_integrates_with_dynamic_image() {
     assert!(BlpDecoder::with_mip(&bytes, 1).is_err());
 }
 
-fn blp1<'a>(
-    data: &'a [u8],
-    content: Blp1ContentRef<'a>,
-    alpha_bits: u32,
-    width: u32,
-) -> Blp1Ref<'a> {
-    let mut mipmaps = [None; 16];
-    mipmaps[0] = Some(data);
-    Blp1Ref {
+fn blp1<'a>(data: &'a [u8], content: Blp1Content<'a>, alpha_bits: u32, width: u32) -> Blp1<'a> {
+    let mut mipmaps = std::array::from_fn(|_| None);
+    mipmaps[0] = Some(Cow::Borrowed(data));
+    Blp1 {
         header: Blp1Header {
             width,
             height: 1,
@@ -84,14 +80,14 @@ fn blp1<'a>(
 
 fn blp2<'a>(
     data: &'a [u8],
-    content: Blp2ContentRef<'a>,
+    content: Blp2Content<'a>,
     alpha_bits: u8,
     width: u32,
     height: u32,
-) -> Blp2Ref<'a> {
-    let mut mipmaps = [None; 16];
-    mipmaps[0] = Some(data);
-    Blp2Ref {
+) -> Blp2<'a> {
+    let mut mipmaps = std::array::from_fn(|_| None);
+    mipmaps[0] = Some(Cow::Borrowed(data));
+    Blp2 {
         header: Blp2Header {
             width,
             height,
@@ -108,10 +104,10 @@ fn bgra_swaps_channels_and_preserves_alpha() {
     let palette = [0; 1024];
     let blp = blp2(
         &[3, 2, 1, 4, 30, 20, 10, 40],
-        Blp2ContentRef::Bgra {
+        Blp2Content::Bgra {
             encoding: 3,
             alpha_type: 8,
-            palette_region: &palette,
+            palette_region: (&palette).into(),
         },
         8,
         2,
@@ -128,23 +124,27 @@ fn bgra_swaps_channels_and_preserves_alpha() {
 fn indexed_alpha_depths_and_palette_order() {
     let mut palette = [0; 1024];
     palette[..8].copy_from_slice(&[3, 2, 1, 0, 30, 20, 10, 0]);
-    let content = Blp1ContentRef::Indexed { palette: &palette };
+    let content = Blp1Content::Indexed {
+        palette: (&palette).into(),
+    };
     for (bits, data, alpha) in [
         (0, vec![0, 1, 0], [255, 255, 255]),
         (1, vec![0, 1, 0, 0b101], [255, 0, 255]),
         (4, vec![0, 1, 0, 0x80, 0x0f], [0, 136, 255]),
         (8, vec![0, 1, 0, 7, 128, 255], [7, 128, 255]),
     ] {
-        let image = blp1(&data, content, bits, 3).decode_mip(0).unwrap();
+        let image = blp1(&data, content.as_ref(), bits, 3)
+            .decode_mip(0)
+            .unwrap();
         assert_eq!(image.get_pixel(0, 0).0, [1, 2, 3, alpha[0]]);
         assert_eq!(image.get_pixel(1, 0).0, [10, 20, 30, alpha[1]]);
         assert_eq!(image.get_pixel(2, 0).0, [1, 2, 3, alpha[2]]);
     }
     let blp = blp2(
         &[1, 0x0f],
-        Blp2ContentRef::Indexed {
+        Blp2Content::Indexed {
             alpha_type: 4,
-            palette: &palette,
+            palette: (&palette).into(),
         },
         4,
         1,
@@ -162,9 +162,9 @@ fn dxt1_color_and_binary_alpha() {
     let block = [0, 0, 0xff, 0xff, 0b11_10_01_00, 0, 0, 0];
     let blp = blp2(
         &block,
-        Blp2ContentRef::Dxt {
+        Blp2Content::Dxt {
             format: DxtFormat::Dxt1,
-            palette_region: &palette,
+            palette_region: (&palette).into(),
         },
         1,
         4,
@@ -185,9 +185,9 @@ fn dxt3_and_dxt5_decode_alpha_and_clip_edge_blocks() {
     bc2[8..12].copy_from_slice(&[0, 0xf8, 0, 0]);
     let blp = blp2(
         &bc2,
-        Blp2ContentRef::Dxt {
+        Blp2Content::Dxt {
             format: DxtFormat::Dxt3,
-            palette_region: &palette,
+            palette_region: (&palette).into(),
         },
         4,
         2,
@@ -202,9 +202,9 @@ fn dxt3_and_dxt5_decode_alpha_and_clip_edge_blocks() {
     bc3[8..12].copy_from_slice(&[0, 0xf8, 0, 0]);
     let blp = blp2(
         &bc3,
-        Blp2ContentRef::Dxt {
+        Blp2Content::Dxt {
             format: DxtFormat::Dxt5,
-            palette_region: &palette,
+            palette_region: (&palette).into(),
         },
         8,
         2,
@@ -231,13 +231,13 @@ fn local_blp_corpus_decodes_all_present_mips() {
                 .is_some_and(|extension| extension.eq_ignore_ascii_case("blp"))
             {
                 let bytes = fs::read(&path).unwrap();
-                let blp = BlpRef::read(&bytes)
-                    .unwrap_or_else(|error| panic!("{}: {error}", path.display()));
+                let blp =
+                    Blp::read(&bytes).unwrap_or_else(|error| panic!("{}: {error}", path.display()));
                 for level in 0..16 {
                     let present = match &blp {
-                        BlpRef::Blp0(value) => value.mipmaps[level].is_some(),
-                        BlpRef::Blp1(value) => value.mipmaps[level].is_some(),
-                        BlpRef::Blp2(value) => value.mipmaps[level].is_some(),
+                        Blp::Blp0(value) => value.mipmaps[level].is_some(),
+                        Blp::Blp1(value) => value.mipmaps[level].is_some(),
+                        Blp::Blp2(value) => value.mipmaps[level].is_some(),
                     };
                     if present {
                         blp.decode_mip(level).unwrap_or_else(|error| {

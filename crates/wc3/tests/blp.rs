@@ -12,3 +12,6 @@ mod encode;
 #[cfg(feature = "blp-encode")]
 #[path = "blp/encode_only.rs"]
 mod encode_only;
+
+#[path = "blp/ownership.rs"]
+mod ownership;

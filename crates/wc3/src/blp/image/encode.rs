@@ -175,7 +175,7 @@ fn validate(images: &[RgbaImage], options: EncodeOptions) -> Result<(), EncodeEr
     Ok(())
 }
 
-impl Blp {
+impl Blp<'static> {
     /// Encodes an RGBA image, optionally generating mipmaps through 1×1.
     pub fn encode_image(image: &RgbaImage, options: EncodeOptions) -> Result<Self, EncodeError> {
         let images = mipmaps::generate(image, options.mipmaps, options.mipmap_filter);

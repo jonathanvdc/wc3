@@ -1,5 +1,6 @@
 //! Shared checked byte and mipmap table operations.
 use crate::blp::{ReadError, ReadErrorKind, WriteError, MIPMAP_SLOTS, PALETTE_BYTES};
+use std::borrow::Cow;
 
 pub(crate) fn slice(bytes: &[u8], start: usize, len: usize) -> Result<&[u8], ReadError> {
     let end = start
@@ -30,8 +31,8 @@ pub(super) fn read_mips(
     bytes: &[u8],
     table: usize,
     content_end: usize,
-) -> Result<[Option<&[u8]>; MIPMAP_SLOTS], ReadError> {
-    let mut mips = [None; MIPMAP_SLOTS];
+) -> Result<[Option<Cow<'_, [u8]>>; MIPMAP_SLOTS], ReadError> {
+    let mut mips = std::array::from_fn(|_| None);
     for (level, slot) in mips.iter_mut().enumerate() {
         let offset_position = table + level * 4;
         let size_position = table + 64 + level * 4;
@@ -46,10 +47,9 @@ pub(super) fn read_mips(
                 ReadErrorKind::InvalidRange { level },
             ));
         }
-        *slot =
-            Some(slice(bytes, offset, size).map_err(|_| {
-                ReadError::new(offset_position, ReadErrorKind::InvalidRange { level })
-            })?);
+        *slot = Some(Cow::Borrowed(slice(bytes, offset, size).map_err(|_| {
+            ReadError::new(offset_position, ReadErrorKind::InvalidRange { level })
+        })?));
     }
     if mips[0].is_none() {
         return Err(ReadError::new(
@@ -93,7 +93,7 @@ pub(super) fn append_u32(bytes: &mut Vec<u8>, value: u32) {
 pub(super) fn write_mips(
     bytes: &mut Vec<u8>,
     table: usize,
-    mips: &[Option<&[u8]>; MIPMAP_SLOTS],
+    mips: &[Option<Cow<'_, [u8]>>; MIPMAP_SLOTS],
 ) -> Result<(), WriteError> {
     if mips[0].is_none() {
         return Err(WriteError::MissingMipmap { level: 0 });

@@ -4,6 +4,7 @@ use crate::blp::{
     Blp, Blp0, Blp0Content, Blp0Header, Blp1, Blp1Content, Blp1Header, Blp2, Blp2Content,
     Blp2Header, DxtFormat, MIPMAP_SLOTS, PALETTE_BYTES,
 };
+use std::borrow::Cow;
 
 pub(super) fn container(
     width: u32,
@@ -11,7 +12,8 @@ pub(super) fn container(
     format: EncodeFormat,
     palette: Option<Box<[u8; PALETTE_BYTES]>>,
     mipmaps: [Option<Vec<u8>>; MIPMAP_SLOTS],
-) -> Blp {
+) -> Blp<'static> {
+    let mipmaps = mipmaps.map(|mip| mip.map(Cow::Owned));
     let has_mipmaps = mipmaps[1].is_some();
     let alpha_bits = format.alpha_bits();
     match format {
@@ -31,9 +33,11 @@ pub(super) fn container(
                 has_mipmaps: u32::from(has_mipmaps),
             },
             content: match palette {
-                Some(palette) => Blp0Content::Indexed { palette },
+                Some(palette) => Blp0Content::Indexed {
+                    palette: palette.into(),
+                },
                 None => Blp0Content::Jpeg {
-                    shared_header: Vec::new(),
+                    shared_header: Cow::Owned(Vec::new()),
                 },
             },
             mipmaps,
@@ -54,9 +58,11 @@ pub(super) fn container(
                 has_mipmaps: u32::from(has_mipmaps),
             },
             content: match palette {
-                Some(palette) => Blp1Content::Indexed { palette },
+                Some(palette) => Blp1Content::Indexed {
+                    palette: palette.into(),
+                },
                 None => Blp1Content::Jpeg {
-                    shared_header: Vec::new(),
+                    shared_header: Cow::Owned(Vec::new()),
                 },
             },
             mipmaps,
@@ -71,12 +77,12 @@ pub(super) fn container(
             content: match format {
                 EncodeFormat::Indexed { .. } => Blp2Content::Indexed {
                     alpha_type: alpha_bits,
-                    palette: palette.expect("indexed palette"),
+                    palette: palette.expect("indexed palette").into(),
                 },
                 EncodeFormat::Jpeg { .. } => Blp2Content::Jpeg {
                     alpha_type: 0,
-                    shared_header: Vec::new(),
-                    unused: vec![0; PALETTE_BYTES - 4],
+                    shared_header: Cow::Owned(Vec::new()),
+                    unused: Cow::Owned(vec![0; PALETTE_BYTES - 4]),
                 },
                 EncodeFormat::Dxt1 { .. } => dxt_content(DxtFormat::Dxt1),
                 EncodeFormat::Dxt3 => dxt_content(DxtFormat::Dxt3),
@@ -84,7 +90,7 @@ pub(super) fn container(
                 EncodeFormat::Bgra => Blp2Content::Bgra {
                     encoding: 3,
                     alpha_type: 0,
-                    palette_region: Box::new([0; PALETTE_BYTES]),
+                    palette_region: Box::new([0; PALETTE_BYTES]).into(),
                 },
             },
             mipmaps,
@@ -92,9 +98,9 @@ pub(super) fn container(
     }
 }
 
-fn dxt_content(format: DxtFormat) -> Blp2Content {
+fn dxt_content(format: DxtFormat) -> Blp2Content<'static> {
     Blp2Content::Dxt {
         format,
-        palette_region: Box::new([0; PALETTE_BYTES]),
+        palette_region: Box::new([0; PALETTE_BYTES]).into(),
     }
 }
