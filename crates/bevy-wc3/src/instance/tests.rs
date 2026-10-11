@@ -32,10 +32,7 @@ fn repeated_instances_prepare_one_model() {
     app.update();
     assert!(app.world().entity(first).contains::<Wc3Animation>());
     assert!(app.world().entity(second).contains::<Wc3Animation>());
-    assert_eq!(
-        app.world().resource::<PreparedModelCache>().prepared.len(),
-        1
-    );
+    assert_eq!(app.world().resource::<PreparedModelCache>().len(), 1);
     let meshes = app.world().resource::<Assets<Mesh>>().len();
     let materials = app.world().resource::<Assets<Wc3LayerMaterial>>().len();
     let bindposes = app

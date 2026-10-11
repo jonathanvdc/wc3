@@ -28,7 +28,10 @@ construction and runtime ownership:
   sequence/global clocks, skins prepared meshes on the CPU, and returns geometry
   and material snapshots with stable source indices and original texture uses.
 - `instance/` waits for assets, caches prepared models, checks recursive child
-  references, and manages ownership. `instance/spawn/` creates the root state,
+  references, and manages ownership. The cache owns preparation and failure
+  suppression, and source asset events invalidate successful and failed entries
+  before pending instances spawn. Existing spawned instances retain their assets;
+  invalidation applies to future instances. `instance/spawn/` creates the root state,
   rig, geosets grouped by LOD, and feature entities from a prepared model.
 
 Meshes and inverse bind poses are shared between instances. Spawned materials,

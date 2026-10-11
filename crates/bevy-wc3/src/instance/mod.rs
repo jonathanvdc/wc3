@@ -2,20 +2,19 @@
 mod cache;
 mod ownership;
 pub(crate) mod spawn;
-pub(crate) use cache::PreparedModelCache;
+pub(crate) use cache::{invalidate_prepared_models, PreparedModelCache};
+use ownership::has_model_cycle;
 pub(crate) use ownership::BlockedChildModel;
 pub use ownership::{Wc3ModelOwner, Wc3OwnedModels};
 
 use bevy::mesh::skinning::SkinnedMeshInverseBindposes;
 use bevy::prelude::*;
-use std::collections::{hash_map::Entry, HashSet};
 
 use crate::animation::Wc3Animation;
 use crate::assets::loader::Wc3ModelAsset;
 use crate::instance::spawn::spawn_prepared_into;
 use crate::materials::textures::Wc3TextureBindings;
 use crate::materials::Wc3LayerMaterial;
-use crate::preparation::prepare_resolved_model;
 
 /// Attach to an entity to spawn an MDX or MDL asset beneath it when loading finishes.
 /// The entity remains the transform and animation root.
@@ -56,68 +55,37 @@ pub(crate) fn spawn_loaded_instances(
     mut materials: ResMut<Assets<Wc3LayerMaterial>>,
     mut inverse_bindposes: ResMut<Assets<SkinnedMeshInverseBindposes>>,
 ) {
-    cache.prepared.retain(|id, _| sources.contains(*id));
-    cache.failed.retain(|id| sources.contains(*id));
+    cache.retain_live(&sources);
     for (root, instance, bindings, owner) in &instances {
         let id = instance.0.id();
-        if owner.is_some() {
-            let mut ancestor = owners
-                .get(root)
-                .ok()
-                .and_then(|(_, owner)| owner.map(|owner| owner.0));
-            let mut visited = HashSet::new();
-            let mut cyclic = false;
-            while let Some(entity) = ancestor {
-                if !visited.insert(entity) {
-                    cyclic = true;
-                    break;
-                }
-                let Ok((model, owner)) = owners.get(entity) else {
-                    break;
-                };
-                if model.is_some_and(|model| model.0.id() == id) {
-                    cyclic = true;
-                    break;
-                }
-                ancestor = owner.map(|owner| owner.0);
-            }
-            if cyclic {
-                warn!("Skipping cyclic WC3 child model {:?}", instance.0);
-                commands
-                    .entity(root)
-                    .insert((BlockedChildModel, Visibility::Hidden));
-                continue;
-            }
+        if owner.is_some()
+            && has_model_cycle(root, id, |entity| {
+                let (model, owner) = owners.get(entity).ok()?;
+                Some((model.map(|model| model.0.id()), owner.map(|owner| owner.0)))
+            })
+        {
+            warn!("Skipping cyclic WC3 child model {:?}", instance.0);
+            commands
+                .entity(root)
+                .insert((BlockedChildModel, Visibility::Hidden));
+            continue;
         }
         let Some(asset) = sources.get(id) else {
             continue;
         };
-        if cache.failed.contains(&id) {
-            continue;
-        }
-        if let Entry::Vacant(entry) = cache.prepared.entry(id) {
-            match prepare_resolved_model(
-                &mut meshes,
-                &mut inverse_bindposes,
-                &asset.source,
-                asset.textures.clone(),
-                asset.models.clone(),
-            ) {
-                Ok(prepared) => {
-                    entry.insert(prepared);
-                }
-                Err(error) => {
-                    warn!("Could not prepare WC3 model {:?}: {error}", instance.0);
-                    cache.failed.insert(id);
-                    continue;
-                }
+        let prepared = match cache.get_or_prepare(id, asset, &mut meshes, &mut inverse_bindposes) {
+            Ok(Some(prepared)) => prepared,
+            Ok(None) => continue,
+            Err(error) => {
+                warn!("Could not prepare WC3 model {:?}: {error}", instance.0);
+                continue;
             }
-        }
+        };
         spawn_prepared_into(
             &mut commands,
             &mut meshes,
             &mut materials,
-            &cache.prepared[&id],
+            prepared,
             root,
             bindings.cloned().unwrap_or_default(),
         );
