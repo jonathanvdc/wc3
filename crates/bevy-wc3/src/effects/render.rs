@@ -1,14 +1,22 @@
-//! GPU allocation and upload mechanics shared by quads and ribbon passes.
-use bevy::prelude::Component;
+//! GPU buffers, binding layouts, and draw plumbing shared by quads and ribbons.
+use bevy::core_pipeline::core_3d::{Transparent3d, TransparentSortingInfo3d};
+use bevy::mesh::VertexBufferLayout;
+use bevy::prelude::*;
+use bevy::render::render_phase::{DrawFunctionId, PhaseItemExtraIndex};
 use bevy::render::render_resource::{
-    BindGroup, BindGroupEntries, BindGroupLayout, Buffer, BufferDescriptor, BufferInitDescriptor,
-    BufferUsages,
+    binding_types::{sampler, storage_buffer_read_only_sized, texture_2d, uniform_buffer_sized},
+    BindGroup, BindGroupEntries, BindGroupLayout, BindGroupLayoutDescriptor,
+    BindGroupLayoutEntries, Buffer, BufferDescriptor, BufferInitDescriptor, BufferUsages,
+    CachedRenderPipelineId, SamplerBindingType, ShaderStages, TextureSampleType, VertexAttribute,
+    VertexFormat, VertexStepMode,
 };
 use bevy::render::renderer::{RenderDevice, RenderQueue};
+use bevy::render::sync_world::MainEntity;
 use bevy::render::texture::GpuImage;
-use bevy::render::view::RetainedViewEntity;
+use bevy::render::view::{NoIndirectDrawing, RetainedViewEntity};
 use bytemuck::{bytes_of, cast_slice, Pod};
 use std::collections::HashMap;
+use std::num::NonZeroU64;
 use std::sync::Arc;
 
 use crate::effects::records::{upload_records, RecordRing, RingCursor};
@@ -165,5 +173,70 @@ impl<I: Pod + Send + Sync> EffectBuffer<I> {
             texture,
             sorted,
         }
+    }
+}
+
+/// Effect draw commands need direct mesh bindings from Bevy's GPU preprocessing.
+pub(crate) fn configure_effect_views(
+    mut commands: Commands,
+    cameras: Query<Entity, (With<Camera3d>, Without<NoIndirectDrawing>)>,
+) {
+    for camera in &cameras {
+        commands.entity(camera).insert(NoIndirectDrawing);
+    }
+}
+
+/// Both effect shaders bind a texture, sampler, uniform, and resident birth records.
+pub(crate) fn effect_texture_layout<U: Pod, R: Pod>(
+    label: &'static str,
+) -> BindGroupLayoutDescriptor {
+    BindGroupLayoutDescriptor::new(
+        label,
+        &BindGroupLayoutEntries::sequential(
+            ShaderStages::VERTEX_FRAGMENT,
+            (
+                texture_2d(TextureSampleType::Float { filterable: true }),
+                sampler(SamplerBindingType::Filtering),
+                uniform_buffer_sized(false, NonZeroU64::new(size_of::<U>() as u64)),
+                storage_buffer_read_only_sized(false, NonZeroU64::new(size_of::<R>() as u64)),
+            ),
+        ),
+    )
+}
+
+/// Instance attributes select records without changing the shared quad mesh.
+pub(crate) fn effect_vertex_layout<I: Pod>(format: VertexFormat) -> VertexBufferLayout {
+    VertexBufferLayout {
+        array_stride: size_of::<I>() as u64,
+        step_mode: VertexStepMode::Instance,
+        attributes: vec![VertexAttribute {
+            format,
+            offset: 0,
+            shader_location: 3,
+        }],
+    }
+}
+
+/// Requeue transient draws each frame so empty or hidden emitters cannot retain stale buffers.
+pub(crate) fn transparent_effect_draw(
+    entity: Entity,
+    main_entity: MainEntity,
+    pipeline: CachedRenderPipelineId,
+    draw_function: DrawFunctionId,
+    center: Vec3,
+    depth_bias: f32,
+) -> Transparent3d {
+    Transparent3d {
+        sorting_info: TransparentSortingInfo3d::Sorted {
+            mesh_center: center,
+            depth_bias,
+        },
+        entity: (entity, main_entity),
+        pipeline,
+        draw_function,
+        distance: 0.0,
+        batch_range: 0..1,
+        extra_index: PhaseItemExtraIndex::None,
+        indexed: true,
     }
 }

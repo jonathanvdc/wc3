@@ -1,8 +1,8 @@
 //! Instanced PRE2 quads evaluated from immutable spawn records.
-use bevy::core_pipeline::core_3d::{Transparent3d, TransparentSortingInfo3d};
+use bevy::core_pipeline::core_3d::Transparent3d;
 use bevy::ecs::system::{lifetimeless::*, SystemParamItem};
 use bevy::math::{Affine3A, Vec3A};
-use bevy::mesh::{MeshVertexBufferLayoutRef, VertexBufferLayout};
+use bevy::mesh::MeshVertexBufferLayoutRef;
 use bevy::pbr::{
     self, MeshInputUniform, MeshPipeline, MeshPipelineKey, MeshPipelineSystems, MeshUniform,
     RenderMeshInstances, SetMeshBindGroup, SetMeshViewBindGroup, SetMeshViewBindingArrayBindGroup,
@@ -15,34 +15,30 @@ use bevy::render::{
     mesh::{allocator::MeshAllocator, RenderMesh, RenderMeshBufferInfo},
     render_asset::RenderAssets,
     render_phase::{
-        AddRenderCommand, DrawFunctions, PhaseItem, PhaseItemExtraIndex, RenderCommand,
-        RenderCommandResult, SetItemPipeline, TrackedRenderPass, ViewSortedRenderPhases,
+        AddRenderCommand, DrawFunctions, PhaseItem, RenderCommand, RenderCommandResult,
+        SetItemPipeline, TrackedRenderPass, ViewSortedRenderPhases,
     },
-    render_resource::{
-        binding_types::{
-            sampler, storage_buffer_read_only_sized, texture_2d, uniform_buffer_sized,
-        },
-        *,
-    },
+    render_resource::*,
     renderer::{RenderDevice, RenderQueue},
     sync_world::MainEntity,
     texture::{FallbackImage, GpuImage},
-    view::{ExtractedView, NoIndirectDrawing},
+    view::ExtractedView,
     Render, RenderApp, RenderStartup, RenderSystems,
 };
-use std::num::NonZeroU64;
 use wc3::model::emitters::Particle2FilterMode;
 
 use super::records::{ParticleEmitterUniform, ParticleInstance, ParticleInstances};
 #[cfg(test)]
 use crate::effects::records::RecordRing;
-use crate::effects::render::{EffectBuffer, PassResources, ResidentRecordBuffer};
+use crate::effects::render::{
+    effect_texture_layout, effect_vertex_layout, transparent_effect_draw, EffectBuffer,
+    PassResources, ResidentRecordBuffer,
+};
 
 pub(crate) struct ParticleRenderPlugin;
 impl Plugin for ParticleRenderPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins(ExtractComponentPlugin::<ParticleInstances>::default());
-        app.add_systems(PostUpdate, configure_particle_views);
         let Some(render_app) = app.get_sub_app_mut(RenderApp) else {
             return;
         };
@@ -60,17 +56,6 @@ impl Plugin for ParticleRenderPlugin {
     }
 }
 
-// The custom draw command issues direct instanced draws. Bevy's GPU
-// preprocessing must keep direct mesh bindings for views using this pass.
-fn configure_particle_views(
-    mut commands: Commands,
-    cameras: Query<Entity, (With<Camera3d>, Without<NoIndirectDrawing>)>,
-) {
-    for camera in &cameras {
-        commands.entity(camera).insert(NoIndirectDrawing);
-    }
-}
-
 #[derive(Resource)]
 struct ParticlePipeline {
     shader: Handle<Shader>,
@@ -84,23 +69,8 @@ fn init_pipeline(
     mesh_pipeline: Res<MeshPipeline>,
     cache: Res<PipelineCache>,
 ) {
-    let texture_layout = BindGroupLayoutDescriptor::new(
+    let texture_layout = effect_texture_layout::<ParticleEmitterUniform, ParticleInstance>(
         "wc3 particle texture layout",
-        &BindGroupLayoutEntries::sequential(
-            ShaderStages::VERTEX_FRAGMENT,
-            (
-                texture_2d(TextureSampleType::Float { filterable: true }),
-                sampler(SamplerBindingType::Filtering),
-                uniform_buffer_sized(
-                    false,
-                    NonZeroU64::new(size_of::<ParticleEmitterUniform>() as u64),
-                ),
-                storage_buffer_read_only_sized(
-                    false,
-                    NonZeroU64::new(size_of::<ParticleInstance>() as u64),
-                ),
-            ),
-        ),
     );
     commands.insert_resource(ParticlePipeline {
         shader: asset_server.load("embedded://bevy_wc3/shaders/wc3_particle.wgsl"),
@@ -132,15 +102,10 @@ impl SpecializedMeshPipeline for ParticlePipeline {
                 .shader_defs
                 .push("ALPHA_KEY".into());
         }
-        descriptor.vertex.buffers.push(VertexBufferLayout {
-            array_stride: size_of::<u32>() as u64,
-            step_mode: VertexStepMode::Instance,
-            attributes: vec![VertexAttribute {
-                format: VertexFormat::Uint32,
-                offset: 0,
-                shader_location: 3,
-            }],
-        });
+        descriptor
+            .vertex
+            .buffers
+            .push(effect_vertex_layout::<u32>(VertexFormat::Uint32));
         descriptor.layout.push(self.texture_layout.clone());
         if let Some(fragment) = descriptor.fragment.as_mut() {
             fragment.shader = self.shader.clone();
@@ -233,21 +198,14 @@ fn queue_particles(
                 batched.as_deref(),
             )
             .transform_point3(mesh.aabb_center);
-            // Requeued each frame: empty or hidden emitters must not retain a
-            // draw referencing their last nonempty GPU buffer.
-            phase.add_transient(Transparent3d {
-                sorting_info: TransparentSortingInfo3d::Sorted {
-                    mesh_center: center,
-                    depth_bias: data.priority_plane as f32,
-                },
-                entity: (entity, *main_entity),
-                pipeline: id,
-                draw_function: draw,
-                distance: 0.0,
-                batch_range: 0..1,
-                extra_index: PhaseItemExtraIndex::None,
-                indexed: true,
-            });
+            phase.add_transient(transparent_effect_draw(
+                entity,
+                *main_entity,
+                id,
+                draw,
+                center,
+                data.priority_plane as f32,
+            ));
         }
     }
 }

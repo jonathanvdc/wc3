@@ -86,7 +86,9 @@ these snapshots without depending on pipeline or GPU allocation code. Their rend
 plugins extract snapshots, prepare resident GPU buffers, queue per-view draws,
 and render shader-generated geometry. Shared `effects/records.rs` and
 `effects/render.rs` implement record storage and GPU upload/allocation mechanics.
-Each renderer retains its own shader layouts, pipeline specialization, sorting,
+The shared renderer helpers also define texture layouts, record-index vertex
+attributes, direct-draw camera setup, and transient transparent-phase entries.
+Each renderer retains its own shader geometry, pipeline specialization, sorting,
 and pass semantics. Classic particles instead spawn independently animated model
 instances. The [renderer overview](rendering/renderer.md) connects these paths to
 materials, animation, and the supported rendering features.
