@@ -1,4 +1,4 @@
-//! RGBA image encoding for BLP1 and BLP2.
+//! RGBA image encoding for BLP0, BLP1, and BLP2.
 use super::{assemble, bgra, dxt, indexed, jpeg, mipmaps};
 use crate::blp::{Blp, DxtFormat, MIPMAP_SLOTS};
 pub use image::imageops::FilterType as MipmapFilter;

@@ -17,7 +17,7 @@ operations and archive compression when your application needs them.
 | Assets | Operations |
 | --- | --- |
 | MDX and MDL models | Read, edit, write, and convert between supported model versions. |
-| BLP1 and BLP2 textures | Inspect and edit encoded containers; optionally decode pixels and encode images. |
+| BLP0, BLP1, and BLP2 textures | Inspect and edit encoded containers; optionally decode pixels and encode images. |
 | MPQ v1–v4 archives | Index, extract, create, and edit archives; optionally decompress and compress entries. |
 
 For model loading, animation, and rendering in Bevy, see the companion
@@ -80,9 +80,13 @@ does not support them.
 ### Textures
 
 For BLP textures, you can choose whether to work with the encoded container or
-with decoded pixels. `BlpRef` borrows the encoded mipmaps from your input buffer;
+with decoded pixels. `BlpRef` borrows encoded content from your input buffer;
 converting it to an owned `Blp` lets you change the container and write it back.
 This is enough for operations that do not need to inspect the image itself.
+BLP1 and BLP2 contain their mipmaps in the root file. BLP0 uses sibling `.b00`,
+`.b01`, and subsequent files; parsing its root leaves empty mipmap slots that
+callers fill explicitly. `write_files()` returns the root and attached external
+payloads, while single-file `write()` rejects BLP0.
 
 When you need pixels, the `blp-decode` feature lets you decode mipmaps to RGBA
 images. The corresponding `blp-encode` feature creates BLP textures from images,
@@ -158,6 +162,12 @@ leaving the source intact. Strict conversion rejects unsupported nondefault
 data; you can opt into lossy conversion to allow that data to be dropped.
 Because some Classic and Reforged features have no equivalent in another layout,
 conversion cannot guarantee identical rendering in the game.
+
+BLP container writing canonicalizes layout rather than preserving arbitrary
+padding. BLP0 indexed and JPEG parsing, encoding, and external mipmap assembly
+are implemented, but compatibility with real beta-game textures remains
+unverified. The generic `image` decoder hook cannot resolve BLP0 sidecars, and
+its single-writer encoder cannot output them; use the explicit container APIs.
 
 Archive support also has limits: MPQ patch-file application and signature
 verification are not implemented. The

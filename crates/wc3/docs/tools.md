@@ -84,6 +84,11 @@ level. Enable `blp-decode` to access decoded pixels:
 cargo run -p wc3 --features blp-decode --example blp_to_png -- texture.blp texture.png --mip 0
 ```
 
+For BLP0, the tool reads the selected level from the sibling file with the
+same stem and a `.bNN` extension: `--mip 0` requires `texture.b00`, while
+`--mip 1` requires `texture.b01`. Only that payload is read; a missing file fails
+the export. BLP1 and BLP2 mipmaps come from the input `.blp` itself.
+
 For archive listing, extraction, creation, and editing, use the
 [`mpq` example](../examples/mpq.rs). Its subcommand help describes arguments
 and options. Compressed entry extraction requires `mpq-decode`, and compression

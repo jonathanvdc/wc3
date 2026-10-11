@@ -3,7 +3,7 @@ use std::{error::Error, fmt};
 /// Reason a BLP container could not be read.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ReadErrorKind {
-    /// The input does not begin with a BLP1 or BLP2 signature.
+    /// The input does not begin with a BLP0, BLP1, or BLP2 signature.
     InvalidMagic,
     /// The input ends before a required header or content field.
     UnexpectedEnd,
@@ -45,7 +45,7 @@ impl fmt::Display for ReadError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "BLP read error at byte {}: ", self.offset)?;
         match &self.kind {
-            ReadErrorKind::InvalidMagic => f.write_str("expected BLP1 or BLP2 magic"),
+            ReadErrorKind::InvalidMagic => f.write_str("expected BLP0, BLP1, or BLP2 magic"),
             ReadErrorKind::UnexpectedEnd => f.write_str("unexpected end of input"),
             ReadErrorKind::InvalidValue { field, value } => {
                 write!(f, "invalid {field} value {value}")

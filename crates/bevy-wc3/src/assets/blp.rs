@@ -8,8 +8,10 @@ use wc3::blp::BlpRef;
 
 /// Bevy loader for `.blp` images, registered by [`crate::Wc3BevyPlugin`].
 ///
-/// Decodes the first mip level to RGBA and honors the image loader's sRGB and
-/// sampler settings. Authored mip levels are not uploaded.
+/// Decodes mipmap level zero to RGBA and honors the image loader's sRGB and
+/// sampler settings. BLP0 reads its sibling `.b00` payload through the root's
+/// asset source and tracks it as a loader dependency. Missing payloads fail
+/// loading; other authored mip levels are not read or uploaded.
 #[derive(Default, TypePath)]
 pub struct BlpImageLoader;
 

@@ -61,6 +61,12 @@ choose replaceable textures and exact bitmap/emitter overrides with
 `Wc3TextureBindings`; slot overrides take precedence. See the
 [texture guide](../usage.md#choose-textures).
 
+The BLP loader decodes base-level pixels for BLP0, BLP1, and BLP2. BLP0 reads
+its sibling `.b00` payload through the same asset source and tracks it as a
+loader dependency; a missing payload fails texture loading. Authored BLP mip
+chains are not uploaded. See the [loading guide](../usage.md#load-and-spawn-models)
+for placement and failure handling.
+
 ## Attachments, lights, cameras, and events
 
 Attachment paths spawn child models on animated mounts. Mount visibility gates
@@ -102,6 +108,7 @@ provide the detailed rules.
 
 | Area | Limit |
 | --- | --- |
+| Textures | BLP0 external base-level loading is implemented; real beta-game compatibility remains unverified. Authored BLP mip chains are not uploaded. |
 | Skinning | More than eight influences is rejected. Explicit model bind-pose records are not consumed. |
 | LOD | Authored geometry switching is implemented. Generated simplification, per-view selection, animation throttling, and effect budgets are absent; exact game LOD semantics remain unverified. |
 | Materials and ordering | Classic sphere environment mapping and a dedicated WC3 ordering scheme across meshes/effects are absent. Mesh SortPrimsFarZ/NearZ is not applied. Crystal and unknown shaders use a warned diffuse fallback. |

@@ -15,6 +15,9 @@ impl Blp0Header {
 
 impl Blp0Ref<'_> {
     /// Reads root metadata without loading external mipmaps.
+    ///
+    /// All mipmap slots are empty. JPEG content borrows exactly the declared
+    /// shared-prefix length; trailing root padding is ignored.
     pub fn read(bytes: &[u8]) -> Result<Blp0Ref<'_>, ReadError> {
         let (header, kind) = Blp1Header::read_version(bytes, b"BLP0")?;
         let (content, _) = Blp1ContentRef::read_at(bytes, kind, 28)?;
@@ -34,7 +37,9 @@ impl Blp0Ref<'_> {
         })
     }
 
-    /// Serializes the root and external mipmap payloads.
+    /// Serializes the root and attached external mipmap payloads.
+    ///
+    /// Empty slots are retained, so root-only metadata editing is supported.
     pub fn write_files(&self) -> Result<BlpOutput, WriteError> {
         let content = match self.content {
             Blp0ContentRef::Indexed { palette } => Blp1ContentRef::Indexed { palette },
@@ -58,7 +63,9 @@ impl Blp0Ref<'_> {
 }
 
 impl Blp0 {
-    /// Serializes the root and external mipmap payloads.
+    /// Serializes the root and attached external mipmap payloads.
+    ///
+    /// Empty slots are retained, so root-only metadata editing is supported.
     pub fn write_files(&self) -> Result<BlpOutput, WriteError> {
         self.as_ref().write_files()
     }

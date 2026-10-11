@@ -25,9 +25,16 @@ loading. Decoder failures do not try another candidate.
 File contents must match the selected filename’s format, and explicit texture
 overrides remain exact.
 
-BLP files are decoded by the plugin. Replaceable IDs remain unresolved until a
-consumer supplies an image handle. Meshes and bind poses are shared; materials
-belong to each instance so texture changes remain local.
+The plugin decodes mipmap level zero from BLP0, BLP1, and BLP2 textures.
+For BLP0, place the base payload beside the root file: `Textures/Body.blp`
+requires `Textures/Body.b00` in the same Bevy asset source. The loader tracks
+that payload as a loader dependency and fails with its path if it cannot be
+read. It does not fetch `.b01` or other authored levels or upload authored BLP
+mip chains. Compatibility with real beta-game BLP0 assets remains unverified.
+
+Replaceable IDs remain unresolved until a consumer supplies an image handle.
+Meshes and bind poses are shared; materials belong to each instance so texture
+changes remain local.
 
 ## Load from named sources and MPQs
 

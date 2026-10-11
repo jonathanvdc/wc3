@@ -20,12 +20,16 @@ fn image_error(error: impl std::error::Error + Send + Sync + 'static) -> ImageEr
 }
 
 impl<'a> BlpDecoder<'a> {
-    /// Reads a BLP file and selects its largest mipmap.
+    /// Reads a BLP file and selects mipmap level zero.
+    ///
+    /// BLP0 requires external payloads; attach them and use [`Self::from_blp`].
     pub fn new(bytes: &'a [u8]) -> ImageResult<Self> {
         Self::with_mip(bytes, 0)
     }
 
     /// Reads a BLP file and selects a mipmap by level.
+    ///
+    /// BLP0 requires external payloads; attach them and use [`Self::from_blp`].
     pub fn with_mip(bytes: &'a [u8], level: usize) -> ImageResult<Self> {
         let blp = BlpRef::read(bytes).map_err(|error: ReadError| image_error(error))?;
         Self::from_blp(blp, level)
@@ -78,7 +82,10 @@ impl ImageDecoder for BlpDecoder<'_> {
     }
 }
 
-/// Registers BLP decoding with `image` for `.blp` paths and BLP1/BLP2 signatures.
+/// Registers BLP decoding with `image` for `.blp` paths and BLP0/BLP1/BLP2 signatures.
+///
+/// The byte-stream hook cannot resolve BLP0 sidecars and reports a missing mipmap.
+/// Use [`BlpDecoder::from_blp`] with attached payloads to decode BLP0.
 ///
 /// Returns `false` if another decoder is already registered for the extension.
 pub fn register_decoding_hook() -> bool {

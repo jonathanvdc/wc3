@@ -4,7 +4,10 @@ use image::error::{EncodingError, ImageFormatHint, UnsupportedError, Unsupported
 use image::{ExtendedColorType, ImageEncoder, ImageError, ImageResult, RgbaImage};
 use std::io::Write;
 
-/// Encodes RGBA pixels as a BLP file through the `image` crate's encoder API.
+/// Encodes RGBA pixels as a BLP1 or BLP2 file through the `image` crate's encoder API.
+///
+/// BLP0 options fail when writing because this adapter has only one output
+/// writer. Use [`Blp::encode_image`] and [`Blp::write_files`] for BLP0.
 pub struct BlpEncoder<W> {
     writer: W,
     options: EncodeOptions,

@@ -13,7 +13,7 @@ use wc3::blp::BlpRef;
 #[derive(Parser)]
 #[command(about = "Inspect a BLP texture and export a mipmap as PNG")]
 struct Args {
-    /// Input BLP1 or BLP2 texture.
+    /// Input BLP0, BLP1, or BLP2 texture.
     input: PathBuf,
     /// Output PNG file.
     output: PathBuf,

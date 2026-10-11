@@ -49,7 +49,10 @@ pub enum Blp0Content {
     },
 }
 
-/// Borrowed BLP0 container.
+/// Borrowed BLP0 root metadata and externally supplied mipmaps.
+///
+/// [`Self::read`] leaves all mipmap slots empty. Attach payloads from sibling
+/// `.b00`, `.b01`, and subsequent files before decoding those levels.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Blp0Ref<'a> {
     /// Dimensions and encoding-independent header fields.
@@ -60,7 +63,7 @@ pub struct Blp0Ref<'a> {
     pub mipmaps: [Option<&'a [u8]>; MIPMAP_SLOTS],
 }
 
-/// Editable BLP0 container.
+/// Editable BLP0 root metadata and externally supplied mipmaps.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Blp0 {
     /// Dimensions and encoding-independent header fields.
