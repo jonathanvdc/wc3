@@ -46,11 +46,21 @@ pub(super) fn spawn_geosets(
         });
     }
     for geoset in &prepared.geosets {
-        let geoset_animation = prepared.geoset_animations[geoset.geoset_id].as_ref();
-        let geoset_alpha = geoset_animation.map(|animation| animation.alpha.clone());
+        let geoset_animation = prepared.geoset_animations[geoset.geoset_id].as_deref();
+        let geoset_alpha = geoset_animation.map(|_| {
+            prepared.geoset_animations[geoset.geoset_id]
+                .as_ref()
+                .unwrap()
+                .map(|animation| &animation.alpha)
+        });
         let geoset_color = geoset_animation
             .filter(|animation| animation.flags.color())
-            .map(|animation| animation.color.clone());
+            .map(|_| {
+                prepared.geoset_animations[geoset.geoset_id]
+                    .as_ref()
+                    .unwrap()
+                    .map(|animation| &animation.color)
+            });
         let initial_visibility = if geoset_alpha
             .as_ref()
             .and_then(|alpha| alpha.value())
@@ -127,11 +137,11 @@ fn instantiate_materials(
         .collect()
 }
 
-fn instantiate_geoset_material(
+fn instantiate_geoset_material<'data>(
     materials: &mut Assets<Wc3LayerMaterial>,
     layer: &PreparedLayer,
     material: &Handle<Wc3LayerMaterial>,
-    geoset_animation: Option<&GeosetAnimation>,
+    geoset_animation: Option<&GeosetAnimation<'data>>,
 ) -> Handle<Wc3LayerMaterial> {
     if let Some(animation) = geoset_animation {
         let geoset_alpha = Some(&animation.alpha);

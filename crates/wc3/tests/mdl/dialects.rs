@@ -25,7 +25,7 @@ fn hive<T: mdl::Write>(value: &T) -> String {
         .encode_mdl_with_dialect(Dialect::HiveWorkshop)
         .unwrap()
 }
-fn roundtrip_hive<T: mdl::Read + mdl::Write + mdx::Read + mdx::Write>(value: &T) {
+fn roundtrip_hive<T: mdl::Read + mdl::Write + mdx::Write>(value: &T) {
     let text = hive(value);
     let decoded = T::decode_mdl(&text).unwrap_or_else(|error| panic!("{error}: {text}"));
     assert_eq!(
@@ -198,7 +198,9 @@ fn every_named_slot_uses_the_shared_animation_grammar() {
         assert!(value.prepare_mdl_fields(Dialect::Warcraft3).is_err());
         assert!(value.prepare_mdl_fields(Dialect::HiveWorkshop).is_ok());
         roundtrip_hive(&value);
-        let decoded = Layer::<V1800>::decode_mdx(&value.encode_mdx().unwrap()).unwrap();
+        let decoded = Layer::<V1800>::decode_mdx(&value.encode_mdx().unwrap())
+            .unwrap()
+            .into_owned();
         assert_eq!(hive(&decoded), hive(&value));
         for name in SLOTS {
             assert!(hive(&value).contains(&format!("{name} 1")));

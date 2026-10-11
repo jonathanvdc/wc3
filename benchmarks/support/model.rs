@@ -64,7 +64,7 @@ pub fn profiles() -> Vec<Profile> {
     profiles
 }
 
-pub fn classic(profile: Profile) -> Model<V800> {
+pub fn classic<'data>(profile: Profile) -> Model<'data, V800> {
     let text = source(profile);
     let model =
         Model::decode_mdl(&text).unwrap_or_else(|error| panic!("{}", error.diagnostic(&text)));
@@ -72,7 +72,7 @@ pub fn classic(profile: Profile) -> Model<V800> {
     model
 }
 
-fn validate(model: &Model<V800>, profile: Profile) {
+fn validate<'data>(model: &Model<'data, V800>, profile: Profile) {
     let nodes = model.nodes();
     let parents: HashMap<_, _> = nodes
         .iter()
@@ -90,14 +90,18 @@ fn validate(model: &Model<V800>, profile: Profile) {
             assert!(depth < parents.len(), "hierarchy must be acyclic");
         }
     }
-    assert_eq!(model.sequences().len(), profile.sequences);
-    let materials = model.materials();
+    assert_eq!(model.sequences().count(), profile.sequences);
+    let material_count = model.materials().count();
     for geoset in model.geosets() {
-        assert!((geoset.material_id as usize) < materials.len());
+        assert!((geoset.material_id as usize) < material_count);
         assert_eq!(geoset.vertices().len(), geoset.normals().len());
-        for triangle in geoset.face_indices().as_chunks::<3>().0 {
-            let points = [triangle[0], triangle[1], triangle[2]]
-                .map(|index| geoset.vertices()[index as usize]);
+        for start in (0..geoset.face_indices().len()).step_by(3) {
+            let points = [start, start + 1, start + 2].map(|index| {
+                geoset
+                    .vertices()
+                    .get(geoset.face_indices().get(index).unwrap() as usize)
+                    .unwrap()
+            });
             let a = [points[1][0] - points[0][0], points[1][1] - points[0][1]];
             let b = [points[2][0] - points[0][0], points[2][1] - points[0][1]];
             assert!(
@@ -108,7 +112,7 @@ fn validate(model: &Model<V800>, profile: Profile) {
         assert!(geoset
             .matrix_indices()
             .iter()
-            .all(|id| parents.contains_key(id)));
+            .all(|id| parents.contains_key(&id)));
         assert!(geoset
             .uv_sets()
             .iter()
@@ -116,16 +120,16 @@ fn validate(model: &Model<V800>, profile: Profile) {
     }
 }
 
-pub fn modern(profile: Profile) -> Model<V1800> {
+pub fn modern<'data>(profile: Profile) -> Model<'data, V1800> {
     let mut model = classic(profile)
-        .convert::<V1800>(&ConversionOptions::strict())
+        .into_convert::<V1800>(&ConversionOptions::strict())
         .unwrap()
         .model;
-    let mut geosets = model.geosets();
+    let mut geosets = model.geosets().cloned().collect::<Vec<_>>();
     for (g, geoset) in geosets.iter_mut().enumerate() {
         // Authored LODs, different UV arrays, and nonuniform four-joint weights.
         geoset.set_level_of_detail((g % 3) as u32);
-        let uv = geoset.uv_sets()[0].clone();
+        let uv = geoset.uv_sets()[0].to_vec();
         let secondary: Vec<_> = uv.iter().map(|p| [p[1], 1.0 - p[0]]).collect();
         geoset.set_uv_sets(&[uv, secondary]);
         let skin: Vec<_> = (0..geoset.vertices().len())
@@ -145,7 +149,7 @@ pub fn modern(profile: Profile) -> Model<V1800> {
         geoset.set_skin_weights(Some(&skin)).unwrap();
     }
     model.set_geosets(&geosets);
-    let mut materials = model.materials();
+    let mut materials = model.materials().cloned().collect::<Vec<_>>();
     for material in &mut materials {
         for (i, layer) in material.layers.iter_mut().enumerate() {
             layer.coordinate_id = (i % 2) as u32;

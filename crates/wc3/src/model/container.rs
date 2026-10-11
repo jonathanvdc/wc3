@@ -1,9 +1,10 @@
 //! Typed and runtime Warcraft III models with MDX and MDL I/O.
 use crate::model::mdx;
 use crate::model::mdx::{Read as _, Write as _};
-use crate::model::scene::Node;
+use crate::model::scene::NodeRef;
 use crate::model::Cursor;
 use crate::model::Encoder;
+use crate::model::ModelOwnership;
 use crate::model::ValueError;
 use crate::model::{Chunk, CollectionChunk, ModelChunk, VersionChunk};
 use crate::model::{Extended, ModelDialect, NoExtensions};
@@ -24,8 +25,9 @@ pub const MAGIC: Tag = *b"MDLX";
 /// MDX retains chunk organization; MDL produces canonical text and rejects
 /// data without a faithful text representation.
 ///
-/// Collection getters return owned copies. Set edited copies back on the model,
-/// or use [`Model::chunks`] to edit records in place.
+/// Getters for borrowed record collections return iterators without allocating. Use
+/// `.cloned().collect::<Vec<_>>()` to clone records, preserving each buffer's
+/// ownership state, or [`Model::records_mut`] to edit records in place.
 ///
 /// ```compile_fail
 /// use wc3::model::{Model, V800, V1100};
@@ -33,19 +35,19 @@ pub const MAGIC: Tag = *b"MDLX";
 /// let mut model = Model::<V800>::new();
 /// model.set_materials(&[Material::<V1100>::new()]);
 /// ```
-#[derive(Clone, Debug)]
-pub struct Model<D: ModelDialect> {
+#[derive(Clone, Debug, ModelOwnership)]
+pub struct Model<'data, D: ModelDialect> {
     /// The ordered list of chunks in the model.
-    pub chunks: Vec<ModelChunk<D>>,
+    pub chunks: Vec<ModelChunk<'data, D>>,
 }
 
-impl<D: ModelDialect> Default for Model<D> {
+impl<'data, D: ModelDialect> Default for Model<'data, D> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<D: ModelDialect> Model<D> {
+impl<'data, D: ModelDialect> Model<'data, D> {
     pub(crate) fn check_chunk_version(&self, tag: Tag) -> Result<(), ValueError> {
         (D::Version::NUMBER >= 900)
             .then_some(())
@@ -56,32 +58,46 @@ impl<D: ModelDialect> Model<D> {
             })
     }
 
-    pub(crate) fn decoded_chunks<'a, C: 'a>(&'a self) -> impl Iterator<Item = &'a C>
+    pub(crate) fn decoded_chunks<'a, C: 'a>(
+        &'a self,
+    ) -> impl Iterator<Item = &'a C> + use<'data, 'a, C, D>
     where
-        for<'b> &'b C: TryFrom<&'b ModelChunk<D>>,
+        for<'b> &'b C: TryFrom<&'b ModelChunk<'data, D>>,
     {
         self.chunks
             .iter()
             .filter_map(|chunk| <&C>::try_from(chunk).ok())
     }
 
-    pub(crate) fn collect_chunk_records<C: CollectionChunk>(&self) -> Vec<C::Item>
+    /// Borrows all records of a chunk type, preserving duplicate chunks.
+    pub fn records<'s, C: CollectionChunk + 's>(
+        &'s self,
+    ) -> impl Iterator<Item = &'s C::Item> + use<'data, 's, C, D>
     where
-        C::Item: Clone,
-        for<'a> &'a C: TryFrom<&'a ModelChunk<D>>,
+        for<'a> &'a C: TryFrom<&'a ModelChunk<'data, D>>,
     {
-        self.collect_chunk_items::<C, _>(|collection| collection.records())
+        self.decoded_chunks::<C>().flat_map(|chunk| chunk.records())
     }
 
-    pub(crate) fn collect_chunk_items<C, T: Clone>(&self, items: impl Fn(&C) -> &[T]) -> Vec<T>
+    /// Mutably borrows records in file order without replacing their chunks.
+    pub fn records_mut<'s, C: CollectionChunk + 's>(
+        &'s mut self,
+    ) -> impl Iterator<Item = &'s mut C::Item> + use<'data, 's, C, D>
     where
-        for<'a> &'a C: TryFrom<&'a ModelChunk<D>>,
+        for<'a> &'a mut C: TryFrom<&'a mut ModelChunk<'data, D>>,
     {
-        let mut result = Vec::new();
-        for chunk in self.decoded_chunks::<C>() {
-            result.extend_from_slice(items(chunk));
-        }
-        result
+        self.chunks
+            .iter_mut()
+            .filter_map(|chunk| <&mut C>::try_from(chunk).ok())
+            .flat_map(|chunk| chunk.records_mut())
+    }
+
+    /// Moves records into one replacement chunk, removing duplicate chunks of that kind.
+    pub fn replace_records<C>(&mut self, records: Vec<C::Item>)
+    where
+        C: CollectionChunk + Into<ModelChunk<'data, D>>,
+    {
+        self.replace_chunk(C::from_records(records));
     }
 
     /// Creates a model with a `VERS` chunk for this type's version.
@@ -96,51 +112,44 @@ impl<D: ModelDialect> Model<D> {
         D::Version::NUMBER
     }
 
-    /// Returns owned copies of every transform node in chunk and record order.
+    /// Borrows every transform node in chunk and record order.
     ///
     /// Emitter-specific flags are reinterpreted as ordinary node flags without
     /// changing their stored bits. Unknown chunks do not contribute nodes.
-    pub fn nodes(&self) -> Vec<Node> {
+    pub fn nodes(&self) -> Vec<NodeRef<'_>> {
         let mut nodes = Vec::new();
         for chunk in &self.chunks {
             match chunk {
                 ModelChunk::Bones(chunk) => {
-                    nodes.extend(chunk.records.iter().map(|record| record.node.clone()))
+                    nodes.extend(chunk.records.iter().map(|record| record.node.as_ref()))
                 }
-                ModelChunk::Helpers(chunk) => nodes.extend(chunk.records.iter().cloned()),
+                ModelChunk::Helpers(chunk) => {
+                    nodes.extend(chunk.records.iter().map(|node| node.as_ref()))
+                }
                 ModelChunk::Attachments(chunk) => {
-                    nodes.extend(chunk.records.iter().map(|record| record.node.clone()))
+                    nodes.extend(chunk.records.iter().map(|record| record.node.as_ref()))
                 }
                 ModelChunk::Lights(chunk) => {
-                    nodes.extend(chunk.records.iter().map(|record| record.node.clone()))
+                    nodes.extend(chunk.records.iter().map(|record| record.node.as_ref()))
                 }
                 ModelChunk::EventObjects(chunk) => {
-                    nodes.extend(chunk.records.iter().map(|record| record.node.clone()))
+                    nodes.extend(chunk.records.iter().map(|record| record.node.as_ref()))
                 }
                 ModelChunk::CollisionShapes(chunk) => {
-                    nodes.extend(chunk.records.iter().map(|record| record.node.clone()))
+                    nodes.extend(chunk.records.iter().map(|record| record.node.as_ref()))
                 }
                 ModelChunk::RibbonEmitters(chunk) => {
-                    nodes.extend(chunk.records.iter().map(|record| record.node.clone()))
+                    nodes.extend(chunk.records.iter().map(|record| record.node.as_ref()))
                 }
-                ModelChunk::ParticleEmitters(chunk) => nodes.extend(
-                    chunk
-                        .records
-                        .iter()
-                        .map(|record| record.node.clone().cast_flags()),
-                ),
-                ModelChunk::ParticleEmitters2(chunk) => nodes.extend(
-                    chunk
-                        .records
-                        .iter()
-                        .map(|record| record.node.clone().cast_flags()),
-                ),
-                ModelChunk::PopcornEmitters(chunk) => nodes.extend(
-                    chunk
-                        .records
-                        .iter()
-                        .map(|record| record.node.clone().cast_flags()),
-                ),
+                ModelChunk::ParticleEmitters(chunk) => {
+                    nodes.extend(chunk.records.iter().map(|record| record.node.as_ref()))
+                }
+                ModelChunk::ParticleEmitters2(chunk) => {
+                    nodes.extend(chunk.records.iter().map(|record| record.node.as_ref()))
+                }
+                ModelChunk::PopcornEmitters(chunk) => {
+                    nodes.extend(chunk.records.iter().map(|record| record.node.as_ref()))
+                }
                 _ => {}
             }
         }
@@ -148,7 +157,7 @@ impl<D: ModelDialect> Model<D> {
     }
 
     /// Finds the first chunk with the given tag.
-    pub fn chunk(&self, tag: Tag) -> Option<&ModelChunk<D>>
+    pub fn chunk(&self, tag: Tag) -> Option<&ModelChunk<'data, D>>
     where
         D::Extension: Chunk,
     {
@@ -156,14 +165,14 @@ impl<D: ModelDialect> Model<D> {
     }
 
     /// Finds the first mutable chunk with the given tag.
-    pub fn chunk_mut(&mut self, tag: Tag) -> Option<&mut ModelChunk<D>>
+    pub fn chunk_mut(&mut self, tag: Tag) -> Option<&mut ModelChunk<'data, D>>
     where
         D::Extension: Chunk,
     {
         self.chunks.iter_mut().find(|chunk| chunk.tag() == tag)
     }
 
-    pub(crate) fn replace_chunk(&mut self, chunk: impl Into<ModelChunk<D>>) {
+    pub(crate) fn replace_chunk(&mut self, chunk: impl Into<ModelChunk<'data, D>>) {
         let chunk = chunk.into();
         let tag = chunk
             .standard_tag()
@@ -195,7 +204,7 @@ impl<D: ModelDialect> Model<D> {
 #[cfg(test)]
 mod node_tests {
     use super::*;
-    use crate::model::scene::Bone;
+    use crate::model::scene::{Bone, Node};
     use crate::model::{BonesChunk, HelpersChunk};
 
     #[test]
@@ -215,11 +224,11 @@ mod node_tests {
     }
 }
 
-impl<D: ModelDialect> mdx::Read for Model<D>
+impl<'data, D: ModelDialect> mdx::Read<'data> for Model<'data, D>
 where
-    D::Extension: mdx::Extension,
+    D::Extension: mdx::Extension<'data>,
 {
-    fn read_mdx(cursor: &mut Cursor<'_>) -> Result<Self, mdx::ReadError> {
+    fn read_mdx(cursor: &mut Cursor<'data>) -> Result<Self, mdx::ReadError> {
         if let Some((actual, offset)) = scan_version(*cursor)? {
             if actual != D::Version::NUMBER {
                 return Err(mdx::ReadError::new(
@@ -247,7 +256,7 @@ where
     }
 }
 
-impl<D: ModelDialect> mdx::Write for Model<D>
+impl<'data, D: ModelDialect> mdx::Write for Model<'data, D>
 where
     D::Extension: Chunk,
 {
@@ -268,26 +277,26 @@ where
 /// The default extension type is [`NoExtensions`]. For standalone decoding calls,
 /// supply a result type (`let model: DynamicModel = ...`) or an explicit extension
 /// argument (`DynamicModel::<NoExtensions>::decode_mdx(...)`).
-#[derive(Clone, Debug)]
-pub enum DynamicModel<E: Clone + Debug = NoExtensions> {
+#[derive(Clone, Debug, ModelOwnership)]
+pub enum DynamicModel<'data, E: Clone + Debug = NoExtensions> {
     /// A model using format version 800.
-    V800(Model<Extended<V800, E>>),
+    V800(Model<'data, Extended<V800, E>>),
     /// A model using format version 900.
-    V900(Model<Extended<V900, E>>),
+    V900(Model<'data, Extended<V900, E>>),
     /// A model using format version 1000.
-    V1000(Model<Extended<V1000, E>>),
+    V1000(Model<'data, Extended<V1000, E>>),
     /// A model using format version 1100.
-    V1100(Model<Extended<V1100, E>>),
+    V1100(Model<'data, Extended<V1100, E>>),
     /// A model using format version 1200.
-    V1200(Model<Extended<V1200, E>>),
+    V1200(Model<'data, Extended<V1200, E>>),
     /// A model using format version 1300.
-    V1300(Model<Extended<V1300, E>>),
+    V1300(Model<'data, Extended<V1300, E>>),
     /// A model using format version 1400.
-    V1400(Model<Extended<V1400, E>>),
+    V1400(Model<'data, Extended<V1400, E>>),
     /// A model using format version 1600.
-    V1600(Model<Extended<V1600, E>>),
+    V1600(Model<'data, Extended<V1600, E>>),
     /// A model using format version 1800.
-    V1800(Model<Extended<V1800, E>>),
+    V1800(Model<'data, Extended<V1800, E>>),
 }
 
 /// Runs an expression against the typed model inside an [`DynamicModel`].
@@ -299,7 +308,7 @@ pub enum DynamicModel<E: Clone + Debug = NoExtensions> {
 /// ```
 /// use wc3::model::{visit_model, DynamicModel, Model};
 /// let model: DynamicModel = DynamicModel::V800(Model::new());
-/// let count = visit_model!(&model, |typed| typed.geosets().len());
+/// let count = visit_model!(&model, |typed| typed.geosets().count());
 /// assert_eq!(count, 0);
 /// ```
 #[macro_export]
@@ -319,9 +328,12 @@ macro_rules! visit_model {
     };
 }
 
-impl<E: Clone + Debug + mdx::Extension> DynamicModel<E> {
+impl<'data, E: Clone + Debug + mdx::Extension<'data>> DynamicModel<'data, E> {
     /// Decodes a model, using `default_version` when no `VERS` chunk is present.
-    pub fn decode_mdx(bytes: &[u8], default_version: Version) -> Result<Self, mdx::ReadError> {
+    pub fn decode_mdx(
+        bytes: &'data [u8],
+        default_version: Version,
+    ) -> Result<Self, mdx::ReadError> {
         let declared_version = scan_version(Cursor::new(bytes))?;
         let (version, offset) = declared_version.unwrap_or((default_version, 0));
         match version {
@@ -343,7 +355,7 @@ impl<E: Clone + Debug + mdx::Extension> DynamicModel<E> {
     }
 }
 
-impl<E: Clone + Debug> DynamicModel<E> {
+impl<'data, E: Clone + Debug> DynamicModel<'data, E> {
     /// Returns the format version of the contained model.
     pub fn version(&self) -> Version {
         visit_model!(self, |model| model.version())
@@ -358,13 +370,15 @@ impl<E: Clone + Debug> DynamicModel<E> {
     }
 }
 
-impl<E: Clone + Debug + Chunk> mdx::Write for DynamicModel<E> {
+impl<'data, E: Clone + Debug + Chunk> mdx::Write for DynamicModel<'data, E> {
     fn write_mdx(&self, encoder: &mut Encoder<'_>) -> Result<(), mdx::WriteError> {
         visit_model!(self, |model| model.write_mdx(encoder))
     }
 }
 
-fn scan_version(mut cursor: Cursor<'_>) -> Result<Option<(Version, usize)>, mdx::ReadError> {
+fn scan_version<'data>(
+    mut cursor: Cursor<'data>,
+) -> Result<Option<(Version, usize)>, mdx::ReadError> {
     let offset = cursor.absolute_position();
     if cursor.read_bytes(4).ok() != Some(MAGIC.as_slice()) {
         return Err(mdx::ReadError::new(

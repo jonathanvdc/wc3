@@ -1,6 +1,8 @@
 use bevy::camera::visibility::NoFrustumCulling;
 use bevy::prelude::*;
 use std::collections::HashMap;
+use wc3::model::chunks::{MaterialsChunk, RibbonEmittersChunk, TextureAnimationsChunk};
+use wc3::model::V1800;
 
 use super::{RibbonInstances, RibbonLayer, RibbonState};
 use crate::materials::textures::Wc3TextureBindings;
@@ -14,9 +16,9 @@ pub(crate) fn spawn_ribbons(
     node_entities: &HashMap<u32, Entity>,
     bindings: &Wc3TextureBindings,
 ) {
-    let source_materials = prepared.model.materials();
-    let texture_animations = prepared.model.texture_animations();
-    for definition in prepared.model.ribbon_emitters() {
+    let source_materials = prepared.model.shared_records::<MaterialsChunk<V1800>>();
+    let texture_animations = prepared.model.shared_records::<TextureAnimationsChunk>();
+    for definition in prepared.model.shared_records::<RibbonEmittersChunk>() {
         let Some(&node) = node_entities.get(&definition.node.object_id) else {
             continue;
         };
@@ -34,13 +36,12 @@ pub(crate) fn spawn_ribbons(
             ))
             .id();
         let mesh = meshes.add(Rectangle::new(2.0, 2.0));
-        for (layer_index, layer) in material.layers.iter().enumerate() {
-            let mut layer = layer.clone();
-            // Prepared layers normalize Classic and HD diffuse texture bindings.
-            layer.texture_id = prepared
-                .layer_texture_id(definition.material_id as usize, layer_index)
+        for (layer_index, _) in material.layers.iter().enumerate() {
+            let layer = material.select(move |material| &material.layers[layer_index]);
+            let texture_id = prepared.layers[definition.material_id as usize][layer_index]
+                .texture_id
                 .clone();
-            let texture = bindings.bitmap(layer.texture_id.value().copied().unwrap_or(0) as usize);
+            let texture = bindings.bitmap(texture_id.value().copied().unwrap_or(0) as usize);
             let flags = layer.shading_flags;
             commands.spawn((
                 Mesh3d(mesh.clone()),
@@ -65,6 +66,7 @@ pub(crate) fn spawn_ribbons(
                         .get(layer.texture_animation_id as usize)
                         .cloned(),
                     definition: layer,
+                    texture_id,
                 },
                 Transform::default(),
                 NoFrustumCulling,

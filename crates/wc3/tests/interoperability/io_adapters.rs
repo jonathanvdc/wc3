@@ -62,19 +62,21 @@ const SOURCE: &str = "Version { FormatVersion 800, } Model \"Example\" {}";
 
 #[test]
 fn adapters_handle_short_io_interruptions_and_dynamic_models() {
-    let model: Model<V800> = SOURCE.parse().unwrap();
+    let model: Model<'static, V800> = SOURCE.parse().unwrap();
     let binary = model.encode_mdx().unwrap();
     let text = model.encode_mdl().unwrap();
-    let decoded: Model<V800> = mdx::from_reader(short(binary.clone())).unwrap();
+    let decoded: Model<'static, V800> = mdx::from_reader(short(binary.clone())).unwrap();
     assert_eq!(decoded.encode_mdx().unwrap(), binary);
-    let dynamic: DynamicModel = mdx::from_reader_with_version(short(binary.clone()), 900).unwrap();
+    let dynamic: DynamicModel<'static> =
+        mdx::from_reader_with_version(short(binary.clone()), 900).unwrap();
     assert_eq!(dynamic.version(), 800);
-    let fallback: DynamicModel = mdx::from_reader_with_version(b"MDLX".as_slice(), 800).unwrap();
+    let fallback: DynamicModel<'static> =
+        mdx::from_reader_with_version(b"MDLX".as_slice(), 800).unwrap();
     assert_eq!(fallback.version(), 800);
     let mut sink = short(Vec::new());
     mdx::to_writer(&mut sink, &dynamic).unwrap();
     assert_eq!(sink.bytes, binary);
-    let decoded: DynamicModel = mdl::from_reader(short(text.as_bytes().to_vec())).unwrap();
+    let decoded: DynamicModel<'static> = mdl::from_reader(short(text.as_bytes().to_vec())).unwrap();
     let mut sink = short(Vec::new());
     mdl::to_writer(&mut sink, &decoded).unwrap();
     assert_eq!(sink.bytes, text.as_bytes());
@@ -91,7 +93,7 @@ fn adapters_handle_short_io_interruptions_and_dynamic_models() {
 
 #[test]
 fn adapters_preserve_io_and_codec_errors() {
-    let error = mdx::from_reader::<Model<V800>>(Failing).unwrap_err();
+    let error = mdx::from_reader::<Model<'static, V800>>(Failing).unwrap_err();
     assert!(error.source().is_some());
     assert!(matches!(error, IoError::Io(error) if error.kind() == io::ErrorKind::PermissionDenied));
     assert!(

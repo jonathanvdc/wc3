@@ -1,4 +1,5 @@
 //! Per-instance PRE2 spawning and lifetime bookkeeping; motion is evaluated on the GPU.
+use crate::preparation::shared::Shared;
 use bevy::prelude::*;
 use std::f32::consts::FRAC_PI_2;
 use std::sync::Arc;
@@ -25,7 +26,7 @@ struct Particle {
 pub(crate) struct Particle2State {
     pub(crate) root: Entity,
     pub(crate) node: Entity,
-    pub(crate) definition: ParticleEmitter2,
+    pub(crate) definition: Shared<ParticleEmitter2<'static>>,
     live: LiveRecords<ParticleInstance, Particle>,
     live_indices: Arc<Vec<u32>>,
     clock: SimulationClock,
@@ -35,7 +36,12 @@ pub(crate) struct Particle2State {
 }
 
 impl Particle2State {
-    pub(crate) fn new(root: Entity, node: Entity, definition: ParticleEmitter2) -> Self {
+    pub(crate) fn new(
+        root: Entity,
+        node: Entity,
+        definition: impl Into<Shared<ParticleEmitter2<'static>>>,
+    ) -> Self {
+        let definition = definition.into();
         Self {
             root,
             node,

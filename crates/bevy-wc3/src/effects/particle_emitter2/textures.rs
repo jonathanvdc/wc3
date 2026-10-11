@@ -30,7 +30,7 @@ mod tests {
             "../../../tests/fixtures/attachment_parent.mdl"
         ))
         .unwrap();
-        let emitter = model.particle_emitters2().remove(0);
+        let emitter = model.particle_emitters2().next().unwrap();
         let mut app = App::new();
         app.add_systems(Update, update_particle_textures);
         let image = Assets::<Image>::default().add(Image::default());

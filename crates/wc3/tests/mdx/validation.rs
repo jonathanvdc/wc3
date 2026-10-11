@@ -58,7 +58,7 @@ fn version_extension_is_preserved_without_mutable_version_number() {
     let ModelChunk::Version(first) = &mut model.chunks[0] else {
         unreachable!()
     };
-    first.extension = vec![7, 8];
+    first.extension = vec![7, 8].into();
     model
         .chunks
         .push(ModelChunk::from(VersionChunk::<V800>::new()));

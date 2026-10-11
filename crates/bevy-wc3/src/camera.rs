@@ -1,4 +1,5 @@
 //! Opt-in playback of model-authored views on application-owned Bevy cameras.
+use crate::preparation::shared::Shared;
 use bevy::prelude::*;
 use std::collections::{HashMap, HashSet};
 use std::f32::consts::PI;
@@ -11,11 +12,11 @@ use crate::animation::{sample, Wc3Animation};
 /// Authored cameras on a spawned model's animation root, in source order.
 /// This component does not create or activate Bevy cameras.
 #[derive(Component)]
-pub struct Wc3ModelCameras(pub(crate) Vec<ModelCamera<V1800>>);
+pub struct Wc3ModelCameras(pub(crate) Vec<Shared<ModelCamera<'static, V1800>>>);
 
 impl Wc3ModelCameras {
     /// Camera names, base views, and all authored tracks, including unmapped lens tracks.
-    pub fn definitions(&self) -> &[ModelCamera<V1800>] {
+    pub fn definitions(&self) -> &[Shared<ModelCamera<'static, V1800>>] {
         &self.0
     }
 

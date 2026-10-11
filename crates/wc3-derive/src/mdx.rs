@@ -46,10 +46,20 @@ fn type_argument(ty: &Type, name: &str) -> Option<Type> {
     let PathArguments::AngleBracketed(args) = &segment.arguments else {
         return None;
     };
-    if args.args.len() != 1 {
+    if args
+        .args
+        .iter()
+        .filter(|a| matches!(a, GenericArgument::Type(_)))
+        .count()
+        != 1
+    {
         return None;
     }
-    let GenericArgument::Type(ty) = args.args.first()? else {
+    let GenericArgument::Type(ty) = args
+        .args
+        .iter()
+        .find(|a| matches!(a, GenericArgument::Type(_)))?
+    else {
         return None;
     };
     Some(ty.clone())
@@ -78,7 +88,16 @@ fn expand_checked(input: DeriveInput, reading: bool) -> Result<TokenStream> {
         }
     };
     let field_count = fields.len();
+    let type_generics = input.generics.clone();
     let mut generics = input.generics;
+    let data_lifetime = generics
+        .lifetimes()
+        .next()
+        .map(|p| p.lifetime.clone())
+        .unwrap_or_else(|| parse_quote!('data));
+    if reading && generics.lifetimes().next().is_none() {
+        generics.params.insert(0, parse_quote!(#data_lifetime));
+    }
     let mut reads = Vec::new();
     let mut writes = Vec::new();
     let mut names = Vec::new();
@@ -126,7 +145,7 @@ fn expand_checked(input: DeriveInput, reading: bool) -> Result<TokenStream> {
             }
             seen_tags.push(key);
             let bound = if reading {
-                parse_quote!(#ty: ::wc3::model::mdx::ReadTrackProperty)
+                parse_quote!(#ty: ::wc3::model::mdx::ReadTrackProperty<#data_lifetime>)
             } else {
                 parse_quote!(#ty: ::wc3::model::mdx::WriteTrackProperty)
             };
@@ -141,7 +160,7 @@ fn expand_checked(input: DeriveInput, reading: bool) -> Result<TokenStream> {
         }
         if flatten {
             let bound = if reading {
-                parse_quote!(#ty: ::wc3::model::mdx::ReadTracks)
+                parse_quote!(#ty: ::wc3::model::mdx::ReadTracks<#data_lifetime>)
             } else {
                 parse_quote!(#ty: ::wc3::model::mdx::WriteTracks)
             };
@@ -162,7 +181,7 @@ fn expand_checked(input: DeriveInput, reading: bool) -> Result<TokenStream> {
         }
         if let Some(item) = vec_item {
             let predicate = if reading {
-                parse_quote!(#item: ::wc3::model::mdx::Read)
+                parse_quote!(#item: ::wc3::model::mdx::Read<#data_lifetime>)
             } else {
                 parse_quote!(#item: ::wc3::model::mdx::Write)
             };
@@ -186,7 +205,7 @@ fn expand_checked(input: DeriveInput, reading: bool) -> Result<TokenStream> {
             reads.push(quote!(::std::marker::PhantomData));
         } else {
             let predicate = if reading {
-                parse_quote!(#ty: ::wc3::model::mdx::Read)
+                parse_quote!(#ty: ::wc3::model::mdx::Read<#data_lifetime>)
             } else {
                 parse_quote!(#ty: ::wc3::model::mdx::Write)
             };
@@ -203,7 +222,8 @@ fn expand_checked(input: DeriveInput, reading: bool) -> Result<TokenStream> {
         Fields::Unnamed(_) => quote!(Self( #(#reads,)* )),
         Fields::Unit => quote!(Self),
     };
-    let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
+    let (impl_generics, _, where_clause) = generics.split_for_impl();
+    let (_, ty_generics, _) = type_generics.split_for_impl();
     if reading {
         let body = if let Some(record_tag) = tag {
             quote! {
@@ -228,15 +248,15 @@ fn expand_checked(input: DeriveInput, reading: bool) -> Result<TokenStream> {
             }
         };
         Ok(quote! {
-            impl #impl_generics ::wc3::model::mdx::ReadTracks for #name #ty_generics #where_clause {
-                fn read_mdx_track(&mut self, tag: ::wc3::model::Tag, cursor: &mut ::wc3::model::mdx::Cursor<'_>) -> Result<bool, ::wc3::model::mdx::ReadError> {
+            impl #impl_generics ::wc3::model::mdx::ReadTracks<#data_lifetime> for #name #ty_generics #where_clause {
+                fn read_mdx_track(&mut self, tag: ::wc3::model::Tag, cursor: &mut ::wc3::model::mdx::Cursor<#data_lifetime>) -> Result<bool, ::wc3::model::mdx::ReadError> {
                     #(#track_reads)*
                     let _ = (tag, cursor);
                     Ok(false)
                 }
             }
-            impl #impl_generics ::wc3::model::mdx::Read for #name #ty_generics #where_clause {
-                fn read_mdx(source: &mut ::wc3::model::mdx::Cursor<'_>) -> Result<Self, ::wc3::model::mdx::ReadError> {
+            impl #impl_generics ::wc3::model::mdx::Read<#data_lifetime> for #name #ty_generics #where_clause {
+                fn read_mdx(source: &mut ::wc3::model::mdx::Cursor<#data_lifetime>) -> Result<Self, ::wc3::model::mdx::ReadError> {
                     #body
                 }
             }
@@ -385,7 +405,17 @@ fn expand_enum(input: &DeriveInput, reading: bool, conversions: bool) -> Result<
         ));
     }
     let name = &input.ident;
-    let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
+    let mut generics = input.generics.clone();
+    let data_lifetime = generics
+        .lifetimes()
+        .next()
+        .map(|p| p.lifetime.clone())
+        .unwrap_or_else(|| parse_quote!('data));
+    if reading && !conversions && generics.lifetimes().next().is_none() {
+        generics.params.insert(0, parse_quote!(#data_lifetime));
+    }
+    let (impl_generics, _, where_clause) = generics.split_for_impl();
+    let (_, ty_generics, _) = input.generics.split_for_impl();
     if conversions {
         let (return_type, body) = if let Some(member) = unknown {
             (
@@ -416,8 +446,8 @@ fn expand_enum(input: &DeriveInput, reading: bool, conversions: bool) -> Result<
             quote!(value => return Err(::wc3::model::mdx::ReadError { offset, tag: None, kind: ::wc3::model::mdx::ReadErrorKind::UnknownEnumValue { enum_name: stringify!(#name), value } }))
         };
         Ok(quote! {
-            impl #impl_generics ::wc3::model::mdx::Read for #name #ty_generics #where_clause {
-                fn read_mdx(cursor: &mut ::wc3::model::mdx::Cursor<'_>) -> Result<Self, ::wc3::model::mdx::ReadError> {
+            impl #impl_generics ::wc3::model::mdx::Read<#data_lifetime> for #name #ty_generics #where_clause {
+                fn read_mdx(cursor: &mut ::wc3::model::mdx::Cursor<#data_lifetime>) -> Result<Self, ::wc3::model::mdx::ReadError> {
                     let offset = cursor.absolute_position();
                     let value = cursor.read::<#wire>()?;
                     let _ = offset;

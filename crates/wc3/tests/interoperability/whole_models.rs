@@ -13,7 +13,7 @@ use wc3::model::{
     Model, ModelVersion, V1000, V1100, V1200, V1300, V1400, V1600, V1800, V800, V900,
 };
 
-fn full_model<V: ModelVersion>() -> Model<V> {
+fn full_model<'data, V: ModelVersion>() -> Model<'data, V> {
     let version = V::NUMBER;
     let mut model = Model::<V>::new();
     model.set_model_info(&ModelInfo::new("Complete Synthetic Model").unwrap());
@@ -97,5 +97,5 @@ fn check_version<V: ModelVersion>() {
     let parsed = Model::<V>::decode_mdx(&bytes).unwrap();
     assert_eq!(parsed.encode_mdx().unwrap(), bytes, "version {version}");
     assert_eq!(parsed.version(), version);
-    assert_eq!(parsed.materials()[0].layers.len(), 1);
+    assert_eq!(parsed.materials().next().unwrap().layers.len(), 1);
 }

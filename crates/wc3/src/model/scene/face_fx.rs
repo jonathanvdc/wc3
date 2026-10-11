@@ -35,11 +35,13 @@ impl FaceFx {
     }
 }
 
-impl<D: ModelDialect> Model<D> {
-    /// Returns an error if this model version does not support `FAFX`.
-    pub fn try_face_fx(&self) -> Result<Vec<FaceFx>, ValueError> {
+impl<'data, D: ModelDialect> Model<'data, D> {
+    /// Borrows records in chunk and record order.
+    pub fn try_face_fx<'s>(
+        &'s self,
+    ) -> Result<impl Iterator<Item = &'s FaceFx> + use<'data, 's, D>, ValueError> {
         self.check_chunk_version(*b"FAFX")?;
-        Ok(self.collect_chunk_records::<FaceFxChunk>())
+        Ok(self.records::<FaceFxChunk>())
     }
 
     /// Returns an error if this model version does not support `FAFX`.
@@ -50,13 +52,13 @@ impl<D: ModelDialect> Model<D> {
     }
 }
 
-impl<D: ModelDialect> Model<D>
+impl<'data, D: ModelDialect> Model<'data, D>
 where
     D::Version: SupportsReforgedChunks,
 {
-    /// Returns owned facial-animation references in model order.
-    pub fn face_fx(&self) -> Vec<FaceFx> {
-        self.collect_chunk_records::<FaceFxChunk>()
+    /// Borrows records in chunk and record order.
+    pub fn face_fx<'s>(&'s self) -> impl Iterator<Item = &'s FaceFx> + use<'data, 's, D> {
+        self.records::<FaceFxChunk>()
     }
 
     /// Replaces `FAFX` records.

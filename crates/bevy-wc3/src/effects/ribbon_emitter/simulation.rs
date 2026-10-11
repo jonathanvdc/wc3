@@ -1,6 +1,8 @@
 //! Sample historical node poses only when emitting a new cross-section.
+use crate::preparation::shared::Shared;
 use bevy::prelude::*;
 use std::sync::Arc;
+use wc3::model::animation::Animatable;
 use wc3::model::animation::TextureAnimation;
 use wc3::model::emitters::RibbonEmitter;
 use wc3::model::materials::Layer;
@@ -28,7 +30,7 @@ struct Section {
 pub(crate) struct RibbonState {
     pub(crate) root: Entity,
     pub(crate) node: Entity,
-    pub(crate) definition: RibbonEmitter,
+    pub(crate) definition: Shared<RibbonEmitter<'static>>,
     live: LiveRecords<RibbonSection, Section>,
     segments: Arc<Vec<RibbonSegment>>,
     segments_version: Option<(RingCursor, usize)>,
@@ -39,7 +41,12 @@ pub(crate) struct RibbonState {
 }
 
 impl RibbonState {
-    pub(crate) fn new(root: Entity, node: Entity, definition: RibbonEmitter) -> Self {
+    pub(crate) fn new(
+        root: Entity,
+        node: Entity,
+        definition: impl Into<Shared<RibbonEmitter<'static>>>,
+    ) -> Self {
+        let definition = definition.into();
         Self {
             root,
             node,
@@ -188,11 +195,15 @@ impl RibbonState {
 #[derive(Component)]
 pub(crate) struct RibbonLayer {
     pub(crate) emitter: Entity,
-    pub(crate) definition: Layer<V1800>,
-    pub(crate) texture_animation: Option<TextureAnimation>,
+    pub(crate) texture_id: Shared<Animatable<'static, u32>>,
+    pub(crate) definition: Shared<Layer<'static, V1800>>,
+    pub(crate) texture_animation: Option<Shared<TextureAnimation<'static>>>,
 }
 
-fn uv_transform(definition: Option<&TextureAnimation>, animation: &Wc3Animation) -> Mat4 {
+fn uv_transform<'data>(
+    definition: Option<&TextureAnimation<'data>>,
+    animation: &Wc3Animation,
+) -> Mat4 {
     let Some(definition) = definition else {
         return Mat4::IDENTITY;
     };
@@ -274,12 +285,12 @@ pub(crate) fn update_ribbons(
                         || layer.definition.shading_flags.unlit(),
                 ),
             ],
-            uv_transform: uv_transform(layer.texture_animation.as_ref(), animation)
+            uv_transform: uv_transform(layer.texture_animation.as_deref(), animation)
                 .to_cols_array_2d(),
         };
         if let Some(bindings) = bindings {
             instances.texture =
-                bindings.bitmap(sample_value(&layer.definition.texture_id, animation) as usize);
+                bindings.bitmap(sample_value(&layer.texture_id, animation) as usize);
         }
     }
 }

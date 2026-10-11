@@ -1,6 +1,6 @@
 use wc3::model::animation::{Animatable, AnimationTime, Sequence, Track, ValueKeyframe};
 
-fn ramp(global: Option<u32>) -> Track<f32> {
+fn ramp<'data>(global: Option<u32>) -> Track<'data, f32> {
     Track::linear(
         vec![
             ValueKeyframe {

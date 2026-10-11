@@ -5,6 +5,7 @@ use crate::model::AttachmentsChunk;
 use crate::model::FixedText;
 use crate::model::KnownChunk;
 use crate::model::ModelDialect;
+use crate::model::ModelOwnership;
 use crate::model::ValueError;
 use crate::model::{mdl, mdx};
 use crate::model::{Model, Node, Track};
@@ -12,17 +13,17 @@ use crate::model::{Model, Node, Track};
 const PATH_SIZE: usize = 260;
 
 /// An attachment node with a model path and optional visibility track.
-#[derive(Clone, Debug, PartialEq, mdx::Read, mdx::Write, mdl::Read, mdl::Write)]
+#[derive(Clone, Debug, PartialEq, mdx::Read, mdx::Write, mdl::Read, mdl::Write, ModelOwnership)]
 #[mdx(sized(tag = AttachmentsChunk::TAG))]
 #[mdl(
     block = "Attachment",
     after_read = "finish_attachment",
     validate_write = "validate_attachment"
 )]
-pub struct Attachment {
+pub struct Attachment<'data> {
     /// Shared node.
     #[mdl(flatten)]
-    pub node: Node,
+    pub node: Node<'data>,
     /// Fixed-width path preserving every stored byte.
     #[mdl(property = "Path", default)]
     pub path: FixedText<PATH_SIZE>,
@@ -32,12 +33,12 @@ pub struct Attachment {
     /// Optional visibility track.
     #[mdx(tag = *b"KATV")]
     #[mdl(property = "Visibility")]
-    pub visibility: Option<Track<f32>>,
+    pub visibility: Option<Track<'data, f32>>,
 }
 
-impl Attachment {
+impl<'data> Attachment<'data> {
     /// Creates an attachment from a node, model path, and attachment ID.
-    pub fn new(node: Node, path: &str, id: u32) -> Result<Self, ValueError> {
+    pub fn new(node: Node<'data>, path: &str, id: u32) -> Result<Self, ValueError> {
         let mut attachment = Self {
             node,
             path: FixedText::default(),
@@ -49,22 +50,24 @@ impl Attachment {
     }
 }
 
-impl<D: ModelDialect> Model<D> {
-    /// Returns owned copies of attachments in `ATCH` chunks.
-    pub fn attachments(&self) -> Vec<Attachment> {
-        self.collect_chunk_records::<AttachmentsChunk>()
+impl<'data, D: ModelDialect> Model<'data, D> {
+    /// Borrows records in chunk and record order.
+    pub fn attachments<'s>(
+        &'s self,
+    ) -> impl Iterator<Item = &'s Attachment<'data>> + use<'data, 's, D> {
+        self.records::<AttachmentsChunk<'_>>()
     }
 
     /// Replaces attachments with one `ATCH` chunk, removing any duplicate chunks.
-    pub fn set_attachments(&mut self, attachments: &[Attachment]) {
+    pub fn set_attachments(&mut self, attachments: &[Attachment<'data>]) {
         self.replace_chunk(AttachmentsChunk::new(attachments.to_vec()));
     }
 }
 
-fn finish_attachment(value: &mut Attachment, _: Span) -> Result<(), mdl::ReadError> {
+fn finish_attachment<'data>(value: &mut Attachment<'data>, _: Span) -> Result<(), mdl::ReadError> {
     set_node_kind(&mut value.node, 0x800);
     Ok(())
 }
-fn validate_attachment(value: &Attachment) -> Result<(), mdl::WriteError> {
+fn validate_attachment<'data>(value: &Attachment<'data>) -> Result<(), mdl::WriteError> {
     validate_node_kind(&value.node, 0x800)
 }

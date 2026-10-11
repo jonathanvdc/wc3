@@ -52,10 +52,10 @@ impl Texture {
     }
 }
 
-impl<D: ModelDialect> Model<D> {
-    /// Returns owned copies of `TEXS` chunks in file order.
-    pub fn textures(&self) -> Vec<Texture> {
-        self.collect_chunk_records::<TexturesChunk>()
+impl<'data, D: ModelDialect> Model<'data, D> {
+    /// Borrows records in chunk and record order.
+    pub fn textures<'s>(&'s self) -> impl Iterator<Item = &'s Texture> + use<'data, 's, D> {
+        self.records::<TexturesChunk>()
     }
 
     /// Writes the texture list to the first `TEXS` chunk. Additional `TEXS`

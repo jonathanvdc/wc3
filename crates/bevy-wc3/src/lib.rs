@@ -102,3 +102,6 @@ pub use preparation::{
     Wc3PoseOptions, Wc3TextureColorSpace, Wc3TextureReference, Wc3TextureRole,
 };
 pub use schedule::Wc3Systems;
+
+/// A shared runtime definition with independent ownership on edits.
+pub use preparation::shared::Shared as SharedDefinition;

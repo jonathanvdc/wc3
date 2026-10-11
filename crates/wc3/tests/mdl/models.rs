@@ -19,7 +19,7 @@ const QUAD: &str = include_str!("../fixtures/mdl/quad_model.mdl");
 const CANONICAL: &str = include_str!("../fixtures/mdl/quad_model.canonical.mdl");
 const BINARY: &[u8] = include_bytes!("../fixtures/mdl/quad_model.mdx");
 const MINIMAL: &str = "Version { FormatVersion 800, } Model \"Minimal\" {}";
-fn roundtrip<V: ModelVersion>(model: &Model<V>) {
+fn roundtrip<'data, V: ModelVersion>(model: &Model<'data, V>) {
     let text = model.encode_mdl().unwrap();
     let decoded = Model::<V>::decode_mdl(&text).unwrap_or_else(|error| panic!("{error}: {text}"));
     let wire = decoded.encode_mdx().unwrap();
@@ -43,8 +43,8 @@ fn specification_quad_roundtrips_independent_text_and_binary_fixtures() {
             .unwrap(),
         BINARY
     );
-    assert_eq!(model.bones()[0].node.object_id, 0);
-    assert_eq!(model.geosets()[0].material_id, 0);
+    assert_eq!(model.bones().next().unwrap().node.object_id, 0);
+    assert_eq!(model.geosets().next().unwrap().material_id, 0);
     assert_eq!(
         DynamicModel::<NoExtensions>::decode_mdl(QUAD)
             .unwrap()
@@ -100,7 +100,6 @@ fn noncanonical_input_preserves_record_order_ids_and_canonical_block_order() {
     assert_eq!(
         model
             .helpers()
-            .iter()
             .map(|node| node.object_id)
             .collect::<Vec<_>>(),
         [7, 3]
@@ -108,7 +107,6 @@ fn noncanonical_input_preserves_record_order_ids_and_canonical_block_order() {
     assert_eq!(
         model
             .gliders()
-            .iter()
             .map(|entry| entry.geoset_id)
             .collect::<Vec<_>>(),
         [8, 8, 2]
@@ -145,11 +143,11 @@ fn available_record_codecs_dispatch_through_model_io() {
         BindPose { Matrices 1 { { 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0 }, } }
     "#;
     let model = Model::<V900>::decode_mdl(source).unwrap();
-    assert_eq!(model.texture_animations().len(), 1);
-    assert_eq!(model.lights().len(), 1);
-    assert_eq!(model.event_objects()[0].frames(), [-5, 10]);
-    assert_eq!(model.face_fx()[0].path.text(), "face.facefx");
-    assert_eq!(model.bind_poses().len(), 1);
+    assert_eq!(model.texture_animations().count(), 1);
+    assert_eq!(model.lights().count(), 1);
+    assert_eq!(model.event_objects().next().unwrap().frames(), [-5, 10]);
+    assert_eq!(model.face_fx().next().unwrap().path.text(), "face.facefx");
+    assert_eq!(model.bind_poses().cloned().collect::<Vec<_>>().len(), 1);
     roundtrip(&model);
     for name in ["FaceFX \"Face\" {}", "BindPose { Matrices 0 {} }"] {
         assert_eq!(
@@ -255,7 +253,6 @@ fn writers_merge_known_collections_in_chunk_order_and_omit_empty_ones() {
     assert_eq!(
         parsed
             .sequences()
-            .iter()
             .map(|sequence| sequence.name.text().into_owned())
             .collect::<Vec<_>>(),
         ["One", "Two"]
@@ -263,13 +260,12 @@ fn writers_merge_known_collections_in_chunk_order_and_omit_empty_ones() {
     assert_eq!(
         parsed
             .gliders()
-            .iter()
             .map(|entry| entry.geoset_id)
             .collect::<Vec<_>>(),
         [4, 4, 1]
     );
     assert_eq!(
-        parsed.bind_poses(),
+        parsed.bind_poses().cloned().collect::<Vec<_>>(),
         [BindPoseMatrix([1.0; 12]), BindPoseMatrix([2.0; 12])]
     );
     roundtrip(&model);
@@ -292,7 +288,7 @@ fn writer_rejects_missing_duplicate_extended_opaque_and_unsupported_chunks() {
     assert!(model.encode_mdl().is_err());
     let mut model = base.clone();
     let mut version = VersionChunk::<V800>::new();
-    version.extension.push(1);
+    version.extension.to_mut().push(1);
     model.chunks[0] = version.into();
     assert!(model.encode_mdl().is_err());
     let mut model = base.clone();
@@ -368,8 +364,8 @@ fn small_derived_record_codecs_keep_required_headers_counts_and_defaults() {
 
 #[test]
 fn models_parse_from_strings_and_preserve_validation() {
-    let typed: Model<V800> = QUAD.parse().unwrap();
-    let dynamic: DynamicModel = QUAD.parse().unwrap();
+    let typed: Model<'static, V800> = QUAD.parse().unwrap();
+    let dynamic: DynamicModel<'static> = QUAD.parse().unwrap();
     assert_eq!(typed.encode_mdl().unwrap(), CANONICAL);
     assert_eq!(dynamic.encode_mdl().unwrap(), CANONICAL);
 

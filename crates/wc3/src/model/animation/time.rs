@@ -24,7 +24,7 @@ impl AnimationTime<'_> {
     /// Zero-duration global sequences sample at zero; their keys are unrestricted.
     pub fn track_time<T: TrackValue>(
         &self,
-        track: &Track<T>,
+        track: &Track<'_, T>,
     ) -> Option<(f64, RangeInclusive<i32>)> {
         if let Some(global_id) = track.global_sequence_id() {
             let length = *self.global_sequences.get(global_id as usize)?;

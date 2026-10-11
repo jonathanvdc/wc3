@@ -22,12 +22,7 @@ fn constructors_stably_sort_all_interpolation_modes() {
             value: 4.0,
         },
     ];
-    let expected = vec![
-        keys[3].clone(),
-        keys[0].clone(),
-        keys[2].clone(),
-        keys[1].clone(),
-    ];
+    let expected = vec![keys[3], keys[0], keys[2], keys[1]];
     assert_eq!(
         Track::step(keys.clone(), None)
             .unwrap()

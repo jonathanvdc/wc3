@@ -2,6 +2,7 @@
 use crate::model::mdl::is_zero;
 use crate::model::scene::{impl_node_flags, NodeFlagInterpretation};
 use crate::model::ModelDialect;
+use crate::model::ModelOwnership;
 use crate::model::{mdl, mdx};
 use crate::model::{Animatable, Track};
 use bitfield::bitfield;
@@ -90,7 +91,7 @@ pub enum Particle2FilterMode {
 ///
 /// Rows and columns divide the texture into animation cells. Color, alpha, and
 /// scaling arrays describe three stages of each particle lifetime.
-#[derive(Clone, Debug, PartialEq, mdx::Read, mdx::Write, mdl::Read, mdl::Write)]
+#[derive(Clone, Debug, PartialEq, mdx::Read, mdx::Write, mdl::Read, mdl::Write, ModelOwnership)]
 #[mdx(sized(tag = ParticleEmitters2Chunk::TAG))]
 #[mdl(block = "ParticleEmitter2", after_read = "Self::finish_mdl", validate_write = "Self::validate_mdl",
     write_order(node, speed, variation, latitude, gravity, life_span, emission_rate, length, width,
@@ -109,41 +110,41 @@ pub enum Particle2FilterMode {
         tail_decay_uv: [u32; 3],
     )
 )]
-pub struct ParticleEmitter2 {
+pub struct ParticleEmitter2<'data> {
     #[mdl(flatten)]
     /// Embedded node.
-    pub node: Node<Particle2Flags>,
+    pub node: Node<'data, Particle2Flags>,
     #[mdx(tag = *b"KP2S")]
     #[mdl(property = "Speed", default)]
     /// Initial particle speed in model units per second.
-    pub speed: Animatable<f32>,
+    pub speed: Animatable<'data, f32>,
     #[mdx(tag = *b"KP2R")]
     #[mdl(property = "Variation", default)]
     /// Authored variation factor for initial particle speed.
-    pub variation: Animatable<f32>,
+    pub variation: Animatable<'data, f32>,
     #[mdx(tag = *b"KP2L")]
     #[mdl(property = "Latitude", default)]
     /// Emission-cone latitude in degrees.
-    pub latitude: Animatable<f32>,
+    pub latitude: Animatable<'data, f32>,
     #[mdx(tag = *b"KP2G")]
     #[mdl(property = "Gravity", default)]
     /// Acceleration due to gravity in model units per second squared.
-    pub gravity: Animatable<f32>,
+    pub gravity: Animatable<'data, f32>,
     #[mdl(property = "LifeSpan", default)]
     /// Particle lifetime in seconds.
     pub life_span: f32,
     #[mdx(tag = *b"KP2E")]
     #[mdl(property = "EmissionRate", default)]
     /// Emission rate in particles per second, or burst count when squirt is enabled.
-    pub emission_rate: Animatable<f32>,
+    pub emission_rate: Animatable<'data, f32>,
     #[mdx(tag = *b"KP2N")]
     #[mdl(property = "Length", default)]
     /// Length of the emission region in model units.
-    pub length: Animatable<f32>,
+    pub length: Animatable<'data, f32>,
     #[mdx(tag = *b"KP2W")]
     #[mdl(property = "Width", default)]
     /// Width of the emission region in model units.
-    pub width: Animatable<f32>,
+    pub width: Animatable<'data, f32>,
     #[mdl(flatten)]
     /// How particles blend with the scene.
     pub filter_mode: Particle2FilterMode,
@@ -189,10 +190,10 @@ pub struct ParticleEmitter2 {
     #[mdx(tag = *b"KP2V")]
     #[mdl(property = "Visibility")]
     /// Optional visibility animation.
-    pub visibility: Option<Track<f32>>,
+    pub visibility: Option<Track<'data, f32>>,
 }
 
-impl ParticleEmitter2 {
+impl<'data> ParticleEmitter2<'data> {
     /// Reports whether newly emitted particles are animated in one burst.
     pub fn squirt_enabled(&self) -> bool {
         self.squirt != 0
@@ -203,7 +204,7 @@ impl ParticleEmitter2 {
     }
 
     /// Creates an emitter with zeroed fixed fields.
-    pub fn new<F: NodeFlagInterpretation>(node: Node<F>) -> Self {
+    pub fn new<F: NodeFlagInterpretation>(node: Node<'data, F>) -> Self {
         Self {
             node: node.cast_flags(),
             speed: Default::default(),
@@ -233,14 +234,16 @@ impl ParticleEmitter2 {
     }
 }
 
-impl<D: ModelDialect> Model<D> {
-    /// Returns owned copies of `PRE2` records in file order.
-    pub fn particle_emitters2(&self) -> Vec<ParticleEmitter2> {
-        self.collect_chunk_records::<ParticleEmitters2Chunk>()
+impl<'data, D: ModelDialect> Model<'data, D> {
+    /// Borrows records in chunk and record order.
+    pub fn particle_emitters2<'s>(
+        &'s self,
+    ) -> impl Iterator<Item = &'s ParticleEmitter2<'data>> + use<'data, 's, D> {
+        self.records::<ParticleEmitters2Chunk<'_>>()
     }
 
     /// Replaces particle emitter 2 records with one `PRE2` chunk, removing any duplicate chunks.
-    pub fn set_particle_emitters2(&mut self, emitters: &[ParticleEmitter2]) {
+    pub fn set_particle_emitters2(&mut self, emitters: &[ParticleEmitter2<'data>]) {
         self.replace_chunk(ParticleEmitters2Chunk::new(emitters.to_vec()));
     }
 }
@@ -290,7 +293,7 @@ impl Particle2Flags {
         Self(bits)
     }
 }
-impl ParticleEmitter2 {
+impl<'data> ParticleEmitter2<'data> {
     /// Returns behavioral flags using this emitter's bit meanings.
     pub fn flags(&self) -> Particle2Flags {
         Particle2Flags::from_bits(self.node.flags.bits() & Particle2Flags::MASK)

@@ -12,16 +12,13 @@ pub struct BindPoseMatrix(
     pub [f32; 12],
 );
 
-impl<D: ModelDialect> Model<D> {
-    /// Returns owned bind-pose matrices in file order.
-    /// Returns an error if this model version does not support `BPOS`.
-    pub fn try_bind_poses(&self) -> Result<Vec<BindPoseMatrix>, ValueError> {
+impl<'data, D: ModelDialect> Model<'data, D> {
+    /// Borrows bind-pose records in file order, or reports unsupported versions.
+    pub fn try_bind_poses<'s>(
+        &'s self,
+    ) -> Result<impl Iterator<Item = &'s BindPoseMatrix> + use<'data, 's, D>, ValueError> {
         self.check_chunk_version(*b"BPOS")?;
-        Ok(self
-            .decoded_chunks::<BindPoseChunk>()
-            .flat_map(|chunk| chunk.records.iter())
-            .copied()
-            .collect())
+        Ok(self.records::<BindPoseChunk>())
     }
 
     /// Replaces bind-pose matrices with one `BPOS` chunk, removing duplicate chunks.
@@ -33,16 +30,15 @@ impl<D: ModelDialect> Model<D> {
     }
 }
 
-impl<D: ModelDialect> Model<D>
+impl<'data, D: ModelDialect> Model<'data, D>
 where
     D::Version: SupportsReforgedChunks,
 {
-    /// Returns owned bind-pose matrices in model order.
-    pub fn bind_poses(&self) -> Vec<BindPoseMatrix> {
-        self.decoded_chunks::<BindPoseChunk>()
-            .flat_map(|chunk| chunk.records.iter())
-            .copied()
-            .collect()
+    /// Borrows bind-pose records in file order.
+    pub fn bind_poses<'s>(
+        &'s self,
+    ) -> impl Iterator<Item = &'s BindPoseMatrix> + use<'data, 's, D> {
+        self.records::<BindPoseChunk>()
     }
 
     /// Replaces `BPOS` records.

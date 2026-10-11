@@ -26,8 +26,10 @@ fn attachment_fields_and_visibility_round_trip() {
     attachment.visibility = (Some(&track)).cloned();
     let mut model = Model::<wc3::model::V1800>::new();
     model.set_attachments(&[attachment]);
-    let parsed = Model::<wc3::model::V1800>::decode_mdx(&model.encode_mdx().unwrap()).unwrap();
-    let attachment = &parsed.attachments()[0];
+    let parsed = Model::<wc3::model::V1800>::decode_mdx(&model.encode_mdx().unwrap())
+        .unwrap()
+        .into_owned();
+    let attachment = &parsed.attachments().next().unwrap();
     assert_eq!(attachment.node.name.text(), "Weapon");
     assert_eq!(attachment.path.text(), "Abilities\\Weapons\\Sword.mdx");
     assert_eq!(attachment.id, 2);

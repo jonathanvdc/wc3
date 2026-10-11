@@ -1,6 +1,8 @@
 //! Codec bounds, kept separate from emitted parsing and writing code.
 use super::attributes::{vec_element, Container, DefaultValue, Field, Kind};
 use super::{omission, schema::Schema};
+use proc_macro2::{TokenStream, TokenTree};
+use quote::ToTokens;
 use syn::{parse_quote, DeriveInput, Generics, Result};
 
 pub(super) fn uses_writer_defaults(options: &Container, fields: &[Field]) -> bool {
@@ -12,6 +14,14 @@ pub(super) fn uses_writer_defaults(options: &Container, fields: &[Field]) -> boo
         })
 }
 
+fn mentions_parameter(tokens: TokenStream, parameters: &[String]) -> bool {
+    tokens.into_iter().any(|token| match token {
+        TokenTree::Ident(name) => parameters.iter().any(|parameter| name == parameter),
+        TokenTree::Group(group) => mentions_parameter(group.stream(), parameters),
+        _ => false,
+    })
+}
+
 pub(super) fn build(
     input: &DeriveInput,
     options: &Container,
@@ -19,10 +29,23 @@ pub(super) fn build(
     reading: bool,
 ) -> Result<Generics> {
     let fields = &schema.fields;
+    let mut parameters: Vec<_> = input
+        .generics
+        .type_params()
+        .map(|p| p.ident.to_string())
+        .collect();
+    parameters.push("Self".into());
     let mut generics = input.generics.clone();
     for field in fields {
         let ty = &field.ty;
-        if matches!(field.kind, Kind::Flatten | Kind::Block(_)) {
+        // A concrete virtual read type already has a known writer implementation.
+        // Repeating its trait bound hides the associated State when the getter
+        // returns a borrowed view with that same state.
+        if matches!(field.kind, Kind::Flatten | Kind::Block(_))
+            && (reading
+                || !field.virtual_field
+                || mentions_parameter(ty.to_token_stream(), &parameters))
+        {
             let bound = if reading {
                 parse_quote!(#ty: ::wc3::model::mdl::ReadFields)
             } else {

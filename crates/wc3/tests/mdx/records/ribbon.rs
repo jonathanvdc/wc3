@@ -26,7 +26,7 @@ fn ribbon_fields_and_integer_animation_round_trip() {
     model.set_ribbon_emitters(std::slice::from_ref(&emitter));
     let bytes = model.encode_mdx().unwrap();
     let parsed = Model::<wc3::model::V800>::decode_mdx(&bytes).unwrap();
-    let ribbons = parsed.ribbon_emitters();
+    let ribbons = parsed.ribbon_emitters().cloned().collect::<Vec<_>>();
     assert_eq!(ribbons[0], emitter);
     assert_eq!(
         ribbons[0]
@@ -34,7 +34,9 @@ fn ribbon_fields_and_integer_animation_round_trip() {
             .track()
             .unwrap()
             .linear_keys()
-            .unwrap()[0]
+            .unwrap()
+            .get(0)
+            .unwrap()
             .value,
         7
     );
@@ -56,6 +58,7 @@ fn ribbon_color_animation_round_trip() {
     assert_eq!(
         RibbonEmitter::decode_mdx(&emitter.encode_mdx().unwrap())
             .unwrap()
+            .into_owned()
             .color
             .track(),
         Some(&track)

@@ -4,6 +4,7 @@ use crate::model::scene::{set_node_kind, validate_node_kind};
 use crate::model::Color;
 use crate::model::KnownChunk;
 use crate::model::ModelDialect;
+use crate::model::ModelOwnership;
 use crate::model::RibbonEmittersChunk;
 use crate::model::{mdl, mdx};
 use crate::model::{Animatable, Track};
@@ -12,40 +13,40 @@ use crate::model::{Model, Node};
 /// A trail emitted from an animated node and rendered with a model material.
 ///
 /// Height, opacity, color, and texture-cell selection can be animated.
-#[derive(Clone, Debug, PartialEq, mdx::Read, mdx::Write, mdl::Read, mdl::Write)]
+#[derive(Clone, Debug, PartialEq, mdx::Read, mdx::Write, mdl::Read, mdl::Write, ModelOwnership)]
 #[mdx(sized(tag = RibbonEmittersChunk::TAG))]
 #[mdl(
     block = "RibbonEmitter",
     after_read = "finish_ribbon",
     validate_write = "validate_ribbon"
 )]
-pub struct RibbonEmitter {
+pub struct RibbonEmitter<'data> {
     #[mdl(flatten)]
     /// Embedded node.
-    pub node: Node,
+    pub node: Node<'data>,
     #[mdx(tag = *b"KRHA")]
     #[mdl(property = "HeightAbove", default)]
     /// Ribbon height above its emission point.
-    pub height_above: Animatable<f32>,
+    pub height_above: Animatable<'data, f32>,
     #[mdx(tag = *b"KRHB")]
     #[mdl(property = "HeightBelow", default)]
     /// Ribbon height below its emission point.
-    pub height_below: Animatable<f32>,
+    pub height_below: Animatable<'data, f32>,
     #[mdx(tag = *b"KRAL")]
     #[mdl(property = "Alpha", default)]
     /// Opacity when no alpha track is active.
-    pub alpha: Animatable<f32>,
+    pub alpha: Animatable<'data, f32>,
     #[mdx(tag = *b"KRCO")]
     #[mdl(property = "Color", default)]
     /// Animated ribbon color.
-    pub color: Animatable<Color>,
+    pub color: Animatable<'data, Color>,
     #[mdl(property = "LifeSpan", default)]
     /// Lifetime of each trail section in seconds.
     pub life_span: f32,
     #[mdx(tag = *b"KRTX")]
     #[mdl(property = "TextureSlot", default, bare_static)]
     /// Texture-atlas cell used when no texture-slot track is active.
-    pub texture_slot: Animatable<u32>,
+    pub texture_slot: Animatable<'data, u32>,
     #[mdl(property = "EmissionRate", default)]
     /// Number of trail sections emitted per second.
     pub emission_rate: u32,
@@ -64,12 +65,12 @@ pub struct RibbonEmitter {
     #[mdx(tag = *b"KRVS")]
     #[mdl(property = "Visibility")]
     /// Optional visibility animation.
-    pub visibility: Option<Track<f32>>,
+    pub visibility: Option<Track<'data, f32>>,
 }
 
-impl RibbonEmitter {
+impl<'data> RibbonEmitter<'data> {
     /// Creates a ribbon emitter with zeroed fixed properties.
-    pub fn new(node: Node) -> Self {
+    pub fn new(node: Node<'data>) -> Self {
         Self {
             node,
             height_above: Default::default(),
@@ -88,14 +89,16 @@ impl RibbonEmitter {
     }
 }
 
-impl<D: ModelDialect> Model<D> {
-    /// Returns owned copies of ribbon emitter records in file order.
-    pub fn ribbon_emitters(&self) -> Vec<RibbonEmitter> {
-        self.collect_chunk_records::<RibbonEmittersChunk>()
+impl<'data, D: ModelDialect> Model<'data, D> {
+    /// Borrows records in chunk and record order.
+    pub fn ribbon_emitters<'s>(
+        &'s self,
+    ) -> impl Iterator<Item = &'s RibbonEmitter<'data>> + use<'data, 's, D> {
+        self.records::<RibbonEmittersChunk<'_>>()
     }
 
     /// Replaces ribbon emitters with one `RIBB` chunk, removing any duplicate chunks.
-    pub fn set_ribbon_emitters(&mut self, emitters: &[RibbonEmitter]) {
+    pub fn set_ribbon_emitters(&mut self, emitters: &[RibbonEmitter<'data>]) {
         self.replace_chunk(RibbonEmittersChunk::new(emitters.to_vec()));
     }
 }
@@ -103,10 +106,10 @@ impl<D: ModelDialect> Model<D> {
 fn zero_gravity(value: &f32) -> bool {
     value.to_bits() == 0
 }
-fn finish_ribbon(value: &mut RibbonEmitter, _: Span) -> Result<(), mdl::ReadError> {
+fn finish_ribbon<'data>(value: &mut RibbonEmitter<'data>, _: Span) -> Result<(), mdl::ReadError> {
     set_node_kind(&mut value.node, 0x4000);
     Ok(())
 }
-fn validate_ribbon(value: &RibbonEmitter) -> Result<(), mdl::WriteError> {
+fn validate_ribbon<'data>(value: &RibbonEmitter<'data>) -> Result<(), mdl::WriteError> {
     validate_node_kind(&value.node, 0x4000)
 }

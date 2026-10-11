@@ -1,5 +1,6 @@
 use super::evaluation::NodeSample;
 use crate::animation::Wc3Animation;
+use crate::preparation::shared::Shared;
 use bevy::prelude::*;
 use wc3::model::animation::{Interpolate, Track};
 use wc3::model::scene::NodeFlags;
@@ -18,9 +19,9 @@ pub(crate) struct AnimatedNode {
     pub(crate) camera: Option<Transform>,
     pub(crate) pivot: Vec3,
     pub(crate) parent_pivot: Vec3,
-    pub(crate) translation: Option<Track<[f32; 3]>>,
-    pub(crate) rotation: Option<Track<[f32; 4]>>,
-    pub(crate) scaling: Option<Track<[f32; 3]>>,
+    pub(crate) translation: Shared<Option<Track<'static, [f32; 3]>>>,
+    pub(crate) rotation: Shared<Option<Track<'static, [f32; 4]>>>,
+    pub(crate) scaling: Shared<Option<Track<'static, [f32; 3]>>>,
 }
 
 impl AnimatedNode {
@@ -79,8 +80,8 @@ impl AnimatedNode {
     }
 }
 
-fn sample_node_track<T: Interpolate>(
-    track: &Track<T>,
+fn sample_node_track<'data, T: Interpolate>(
+    track: &Track<'data, T>,
     animation: &Wc3Animation,
     frame: Option<NodeFrame>,
 ) -> Option<T> {

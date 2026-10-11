@@ -11,7 +11,7 @@ fn with_fields(source: &str, fields: &str) -> String {
     let end = source.rfind('}').unwrap();
     format!("{} {fields} }}", &source[..end])
 }
-fn roundtrip<V: ModelVersion>(value: &Geoset<V>) {
+fn roundtrip<'data, V: ModelVersion>(value: &Geoset<'data, V>) {
     let binary = value.encode_mdx().unwrap();
     let text = value.encode_mdl().unwrap();
     let decoded = Geoset::<V>::decode_mdl(&text).unwrap_or_else(|error| panic!("{error}: {text}"));
@@ -82,7 +82,12 @@ fn all_versions_defaults_and_multiple_mesh_groups_roundtrip() {
     assert_eq!(value.uv_sets().len(), 2);
     assert_eq!(value.sequence_extents.len(), 2);
     assert_eq!(
-        value.sequence_extents[0].bounds_radius.to_bits(),
+        value
+            .sequence_extents
+            .get(0)
+            .unwrap()
+            .bounds_radius
+            .to_bits(),
         (-0.0f32).to_bits()
     );
     assert_eq!(value.raw_unselectable(), 4);
@@ -106,8 +111,8 @@ fn version_selected_sections_accept_both_skin_row_forms_and_keep_empty_presence(
         macro_rules! check { ($($version:ty),*) => { $( {
             let value = Geoset::<$version>::decode_mdl(&source).unwrap();
             assert_eq!(value.level_of_detail(), 2);
-            assert_eq!(value.skin_weights().unwrap()[0].bone_indices, [0, 1, 2, 255]);
-            assert_eq!(value.tangents().unwrap()[0], [1.0, 0.0, 0.0, -1.0]);
+            assert_eq!(value.skin_weights().unwrap().get(0).unwrap().bone_indices, [0, 1, 2, 255]);
+            assert_eq!(value.tangents().unwrap().get(0).unwrap(), [1.0, 0.0, 0.0, -1.0]);
             assert!(value.encode_mdl().unwrap().contains(bare));
             roundtrip(&value);
         } )* }; }
@@ -128,8 +133,14 @@ fn version_selected_sections_accept_both_skin_row_forms_and_keep_empty_presence(
     }
     let value =
         Geoset::<V900>::decode_mdl(&with_fields(EMPTY, "SkinWeights 0 {} Tangents 0 {}")).unwrap();
-    assert_eq!(value.skin_weights(), Some([].as_slice()));
-    assert_eq!(value.tangents(), Some([].as_slice()));
+    assert_eq!(
+        value.skin_weights().map(|weights| weights.to_vec()),
+        Some(vec![])
+    );
+    assert_eq!(
+        value.tangents().map(|tangents| tangents.to_vec()),
+        Some(vec![])
+    );
     roundtrip(&value);
 }
 #[test]
@@ -223,7 +234,10 @@ fn fields_reconstruct_independently_of_source_order() {
     assert_eq!(value.selection_group, 0);
     assert_eq!(value.level_of_detail(), 3);
     assert_eq!(value.extent.bounds_radius.to_bits(), 0.0f32.to_bits());
-    assert_eq!(value.vertices()[0][0].to_bits(), (-0.0f32).to_bits());
+    assert_eq!(
+        value.vertices().get(0).unwrap()[0].to_bits(),
+        (-0.0f32).to_bits()
+    );
     roundtrip(&value);
 }
 

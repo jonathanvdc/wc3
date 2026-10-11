@@ -6,10 +6,10 @@
 //! model pivot-point collection.
 mod node;
 pub(crate) use node::{impl_node_flags, set_node_kind, validate_node_kind};
-pub use node::{Bone, Node, NodeFlagInterpretation, NodeFlags};
+pub use node::{Bone, Node, NodeFlagInterpretation, NodeFlags, NodeRef};
 mod camera;
 pub use camera::{Camera, CameraLayout, CameraVariant};
-mod light;
+pub(crate) mod light;
 pub use light::{Light, LightFalloff, LightLayout, LightShadowRange, LightType};
 mod attachment;
 pub use attachment::Attachment;

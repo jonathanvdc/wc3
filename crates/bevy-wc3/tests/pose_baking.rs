@@ -41,7 +41,7 @@ fn positions(mesh: &Mesh) -> &[[f32; 3]] {
         .unwrap()
 }
 
-fn vector_track(global: Option<u32>) -> Track<[f32; 3]> {
+fn vector_track<'data>(global: Option<u32>) -> Track<'data, [f32; 3]> {
     Track::linear(
         vec![
             ValueKeyframe {
@@ -61,11 +61,16 @@ fn vector_track(global: Option<u32>) -> Track<[f32; 3]> {
 #[test]
 fn source_identity_survives_empty_geosets_shared_meshes_and_spawning() {
     let mut source = Wc3Model::decode_mdl(include_str!("fixtures/geoset_capture.mdl")).unwrap();
-    let mut geosets = source.model.geosets();
+    let mut geosets = source.model.geosets().cloned().collect::<Vec<_>>();
     let empty = Geoset::new(&[], &[], &[]).unwrap();
     geosets.insert(0, empty);
     source.model.set_geosets(&geosets);
-    let mut material = source.model.materials().remove(0);
+    let mut material = source
+        .model
+        .materials()
+        .cloned()
+        .collect::<Vec<_>>()
+        .remove(0);
     material.layers.push(material.layers[0].clone());
     source.model.set_materials(&[material]);
     let (prepared, mut meshes) = prepare(&source);
@@ -127,7 +132,12 @@ fn independent_clocks_pose_eight_influences_and_repeat_without_mutating_meshes()
     }
     source.model.set_bones(&bones);
     source.model.set_pivot_points(&[[0.0; 3]; 8]);
-    let mut geoset = source.model.geosets().remove(0);
+    let mut geoset = source
+        .model
+        .geosets()
+        .cloned()
+        .collect::<Vec<_>>()
+        .remove(0);
     geoset
         .set_matrix_groups(&[vec![0, 1, 2, 3, 4, 5, 6, 7]])
         .unwrap();
@@ -195,10 +205,10 @@ fn independent_clocks_pose_eight_influences_and_repeat_without_mutating_meshes()
 #[test]
 fn material_snapshots_preserve_override_provenance_and_reuse_linear_variants() {
     let mut source = Wc3Model::decode_mdl(include_str!("fixtures/hd_capture.mdl")).unwrap();
-    let mut textures = source.model.textures();
+    let mut textures = source.model.textures().cloned().collect::<Vec<_>>();
     textures[1].replaceable_id = 31;
     source.model.set_textures(&textures);
-    let mut materials = source.model.materials();
+    let mut materials = source.model.materials().cloned().collect::<Vec<_>>();
     materials[0].layers[0].filter_mode = LayerFilterMode::Transparent;
     source.model.set_materials(&materials);
     let (prepared, meshes) = prepare(&source);
@@ -349,7 +359,7 @@ fn malformed_hierarchies_nonfinite_times_and_missing_camera_are_errors() {
             }
         )
         .is_err());
-    let mut bones = source.model.bones();
+    let mut bones = source.model.bones().cloned().collect::<Vec<_>>();
     bones[0].node.flags = NodeFlags(8);
     source.model.set_bones(&bones);
     let (prepared, meshes) = prepare(&source);
@@ -392,7 +402,7 @@ fn malformed_hierarchies_nonfinite_times_and_missing_camera_are_errors() {
 #[test]
 fn mirrored_and_collapsed_scales_keep_normals_and_tangents_finite() {
     let mut source = Wc3Model::decode_mdl(include_str!("fixtures/quad_model.mdl")).unwrap();
-    let mut bones = source.model.bones();
+    let mut bones = source.model.bones().cloned().collect::<Vec<_>>();
     bones[0].node.scaling = Some(Track::constant([-2.0, 1.0, 1.0]));
     source.model.set_bones(&bones);
     let (prepared, meshes) = prepare(&source);

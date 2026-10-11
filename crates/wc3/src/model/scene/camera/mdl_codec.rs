@@ -7,17 +7,17 @@ use std::io::Write as IoWrite;
 
 #[derive(Clone, Debug, Default, mdl::Read)]
 #[mdl(fields)]
-pub(super) struct Target {
+pub(super) struct Target<'data> {
     #[mdl(property = "Position", default)]
     pub position: Vec3,
     #[mdl(property = "Translation")]
-    pub translation: Option<Track<Vec3>>,
+    pub translation: Option<Track<'data, Vec3>>,
 }
-impl<V: ModelVersion> Camera<V> {
+impl<'data, V: ModelVersion> Camera<'data, V> {
     pub(super) fn mdl_variant() -> CameraVariant {
         V::DEFAULT_VARIANT
     }
-    pub(super) fn mdl_target(&self) -> TargetView<'_> {
+    pub(super) fn mdl_target(&self) -> TargetView<'data, '_> {
         TargetView {
             position: &self.target_position,
             translation: &self.target_translation,
@@ -25,7 +25,7 @@ impl<V: ModelVersion> Camera<V> {
     }
     pub(super) fn set_mdl_target(
         &mut self,
-        target: Target,
+        target: Target<'data>,
         _: bool,
         _: Span,
     ) -> Result<(), mdl::ReadError> {
@@ -46,11 +46,11 @@ impl<V: ModelVersion> Camera<V> {
     }
 }
 
-pub(super) struct TargetView<'a> {
+pub(super) struct TargetView<'data, 'a> {
     position: &'a Vec3,
-    translation: &'a Option<Track<Vec3>>,
+    translation: &'a Option<Track<'data, Vec3>>,
 }
-impl mdl::WriteFields for TargetView<'_> {
+impl<'data> mdl::WriteFields for TargetView<'data, '_> {
     type State = ();
     fn visit_mdl_names(visitor: &mut dyn FnMut(&'static str, bool)) {
         visitor("Position", false);
@@ -78,7 +78,7 @@ impl mdl::WriteFields for TargetView<'_> {
     }
 }
 
-impl mdl::WriteFields for Target {
+impl<'data> mdl::WriteFields for Target<'data> {
     type State = ();
     fn visit_mdl_names(visitor: &mut dyn FnMut(&'static str, bool)) {
         <TargetView as mdl::WriteFields>::visit_mdl_names(visitor);

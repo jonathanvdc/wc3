@@ -419,7 +419,7 @@ fn lod_selection_precedes_visibility_and_follows_projection_updates() {
 fn common_only_and_classic_models_have_a_safe_single_level() {
     let mut source =
         Wc3Model::decode_mdl(include_str!("../tests/fixtures/lod_capture.mdl")).unwrap();
-    let geosets = source.model.geosets();
+    let geosets = source.model.geosets().cloned().collect::<Vec<_>>();
     source.model.set_geosets(&geosets[2..]);
     let mut meshes = Assets::<Mesh>::default();
     let mut bindposes = Assets::<SkinnedMeshInverseBindposes>::default();

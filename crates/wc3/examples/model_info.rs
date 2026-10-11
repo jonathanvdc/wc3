@@ -20,7 +20,7 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-fn dump<V: ModelDialect>(model: &Model<V>)
+fn dump<'data, V: ModelDialect>(model: &Model<'data, V>)
 where
     V::Extension: Chunk,
 {
@@ -34,19 +34,30 @@ where
             info.bounds_radius
         );
     }
-    let geosets = model.geosets();
-    println!("Geosets: {}\nVertices: {}\nFace indices: {}\nMaterials: {}\nTextures: {}\nBones: {}\nNodes: {}", geosets.len(), geosets.iter().map(|g| g.vertices().len()).sum::<usize>(), geosets.iter().map(|g| g.face_indices().len()).sum::<usize>(), model.materials().len(), model.textures().len(), model.bones().len(), model.nodes().len());
+    let (geosets, vertices, faces) =
+        model
+            .geosets()
+            .fold((0, 0, 0), |(count, vertices, faces), geoset| {
+                (
+                    count + 1,
+                    vertices + geoset.vertices().len(),
+                    faces + geoset.face_indices().len(),
+                )
+            });
+    println!("Geosets: {}\nVertices: {}\nFace indices: {}\nMaterials: {}\nTextures: {}\nBones: {}\nNodes: {}", geosets, vertices, faces, model.materials().count(), model.textures().count(), model.bones().count(), model.nodes().len());
     println!(
         "Particle emitters: {}\nParticle emitters 2: {}\nRibbon emitters: {}\nPopcorn emitters: {}",
-        model.particle_emitters().len(),
-        model.particle_emitters2().len(),
-        model.ribbon_emitters().len(),
-        model.try_popcorn_emitters().map_or(0, |items| items.len())
+        model.particle_emitters().count(),
+        model.particle_emitters2().count(),
+        model.ribbon_emitters().count(),
+        model
+            .try_popcorn_emitters()
+            .map_or(0, |items| items.count())
     );
     for chunk in &model.chunks {
         println!("Chunk: {}", String::from_utf8_lossy(&chunk.tag()));
     }
-    for (index, sequence) in model.sequences().iter().enumerate() {
+    for (index, sequence) in model.sequences().enumerate() {
         println!(
             "Sequence {index}: {} [{}..{} ms], duration {} ms",
             sequence.name.text(),

@@ -21,8 +21,8 @@ impl Chunk for NoExtensions {
         match *self {}
     }
 }
-impl mdx::Extension for NoExtensions {
-    fn read_extension(_: Tag, _: &mut Cursor<'_>) -> Result<Option<Self>, mdx::ReadError> {
+impl<'data> mdx::Extension<'data> for NoExtensions {
+    fn read_extension(_: Tag, _: &mut Cursor<'data>) -> Result<Option<Self>, mdx::ReadError> {
         Ok(None)
     }
 }

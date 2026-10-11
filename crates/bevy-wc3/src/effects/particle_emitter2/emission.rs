@@ -18,7 +18,7 @@ impl Default for SquirtTracker {
 impl SquirtTracker {
     pub(super) fn observe(
         &mut self,
-        rate: &Animatable<f32>,
+        rate: &Animatable<'static, f32>,
         animation: &Wc3Animation,
         reset: bool,
     ) {
@@ -57,7 +57,7 @@ impl SquirtTracker {
     /// Return the age of a new burst, or None if its key already fired.
     pub(super) fn burst_age(
         &mut self,
-        rate: &Animatable<f32>,
+        rate: &Animatable<'static, f32>,
         animation: &Wc3Animation,
         dt: f64,
     ) -> Option<f64> {
@@ -76,7 +76,7 @@ impl SquirtTracker {
     }
 }
 
-fn emission_key(value: &Animatable<f32>, animation: &Wc3Animation) -> Option<i32> {
+fn emission_key<'data>(value: &Animatable<'data, f32>, animation: &Wc3Animation) -> Option<i32> {
     let track = value.track()?;
     let (time, interval) = track_time(track, animation)?;
     track.key_frame_at_or_before_in(time, interval)

@@ -7,10 +7,10 @@ use wc3::model::{mdl, DynamicModel};
 
 pub type Result<T> = StdResult<T, Box<dyn Error>>;
 
-pub fn load(path: &Path) -> Result<DynamicModel> {
+pub fn load(path: &Path) -> Result<DynamicModel<'static>> {
     let bytes = fs::read(path)?;
     if bytes.starts_with(b"MDLX") {
-        Ok(DynamicModel::<NoExtensions>::decode_mdx(&bytes, 800)?)
+        Ok(DynamicModel::<NoExtensions>::decode_mdx(&bytes, 800)?.into_owned())
     } else {
         let source = from_utf8(&bytes)?;
         DynamicModel::<NoExtensions>::decode_mdl(source)
@@ -18,7 +18,7 @@ pub fn load(path: &Path) -> Result<DynamicModel> {
     }
 }
 
-pub fn save(model: &DynamicModel, path: &Path) -> Result<()> {
+pub fn save<'data>(model: &DynamicModel<'data>, path: &Path) -> Result<()> {
     match path.extension().and_then(|value| value.to_str()) {
         Some(extension) if extension.eq_ignore_ascii_case("mdx") => {
             fs::write(path, model.encode_mdx()?)?

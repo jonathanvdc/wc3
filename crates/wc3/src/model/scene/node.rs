@@ -6,6 +6,7 @@ use crate::model::IoError;
 use crate::model::KnownChunk;
 use crate::model::Model;
 use crate::model::ModelDialect;
+use crate::model::ModelOwnership;
 use crate::model::ValueError;
 use crate::model::{mdl, mdx};
 use crate::model::{BonesChunk, Cursor, HelpersChunk};
@@ -73,10 +74,10 @@ bitfield! {
 /// MDL delegates the complete flag schema to `F`, including emitter flags.
 /// Use [`Node::cast_flags`] to change interpretations without changing the bits.
 /// Standalone MDL `Helper` blocks use the default interpretation.
-#[derive(Clone, Debug, PartialEq, mdx::Read, mdx::Write, mdl::Read, mdl::Write)]
+#[derive(Clone, Debug, PartialEq, mdx::Read, mdx::Write, mdl::Read, mdl::Write, ModelOwnership)]
 #[mdx(sized(tag = HelpersChunk::TAG))]
 #[mdl(fields)]
-pub struct Node<F = NodeFlags> {
+pub struct Node<'data, F = NodeFlags> {
     #[mdl(header)]
     /// Object name; event and attachment naming conventions may give it game-specific meaning.
     pub name: FixedText<NAME_SIZE>,
@@ -96,28 +97,76 @@ pub struct Node<F = NodeFlags> {
     #[mdx(tag = *b"KGTR")]
     #[mdl(property = "Translation")]
     /// Optional local translation animation.
-    pub translation: Option<Track<Vec3>>,
+    pub translation: Option<Track<'data, Vec3>>,
     #[mdx(tag = *b"KGRT")]
     #[mdl(property = "Rotation")]
     /// Optional local quaternion rotation animation.
-    pub rotation: Option<Track<Quaternion>>,
+    pub rotation: Option<Track<'data, Quaternion>>,
     #[mdx(tag = *b"KGSC")]
     #[mdl(property = "Scaling")]
     /// Optional local scale animation.
-    pub scaling: Option<Track<Vec3>>,
+    pub scaling: Option<Track<'data, Vec3>>,
+}
+
+/// A borrowed transform node with ordinary interpretation of its stored flag bits.
+/// Emitter nodes expose the same view without cloning their names or tracks.
+#[derive(Clone, Copy, Debug)]
+pub struct NodeRef<'a> {
+    /// Borrowed authored name.
+    pub name: &'a FixedText<NAME_SIZE>,
+    /// Object identifier.
+    pub object_id: u32,
+    /// Parent identifier, or u32::MAX.
+    pub parent_id: u32,
+    /// Stored bits interpreted as ordinary node flags.
+    pub flags: NodeFlags,
+    /// Borrowed local translation animation.
+    pub translation: &'a Option<Track<'a, Vec3>>,
+    /// Borrowed local rotation animation.
+    pub rotation: &'a Option<Track<'a, Quaternion>>,
+    /// Borrowed local scale animation.
+    pub scaling: &'a Option<Track<'a, Vec3>>,
+}
+impl<'data, F: NodeFlagInterpretation> Node<'data, F> {
+    /// Borrows this node, interpreting emitter flags as ordinary node flags.
+    pub fn as_ref(&self) -> NodeRef<'_> {
+        NodeRef {
+            name: &self.name,
+            object_id: self.object_id,
+            parent_id: self.parent_id,
+            flags: NodeFlags::from_bits(self.flags.bits()),
+            translation: &self.translation,
+            rotation: &self.rotation,
+            scaling: &self.scaling,
+        }
+    }
+}
+impl<'a> NodeRef<'a> {
+    /// Copies node metadata and animation buffers into independent owned storage.
+    pub fn into_owned(self) -> Node<'static> {
+        Node {
+            name: *self.name,
+            object_id: self.object_id,
+            parent_id: self.parent_id,
+            flags: self.flags,
+            translation: self.translation.as_ref().map(Track::to_owned),
+            rotation: self.rotation.as_ref().map(Track::to_owned),
+            scaling: self.scaling.as_ref().map(Track::to_owned),
+        }
+    }
 }
 
 /// A skeletal node that influences mesh geometry.
-#[derive(Clone, Debug, PartialEq, mdl::Read, mdl::Write)]
+#[derive(Clone, Debug, PartialEq, mdl::Read, mdl::Write, ModelOwnership)]
 #[mdl(
     block = "Bone",
     after_read = "finish_bone",
     validate_write = "validate_bone"
 )]
-pub struct Bone {
+pub struct Bone<'data> {
     #[mdl(flatten)]
     /// Shared node.
-    pub node: Node,
+    pub node: Node<'data>,
     #[mdl(
         property = "GeosetId",
         default = "no_reference",
@@ -144,9 +193,9 @@ pub trait NodeFlagInterpretation: Copy + Default {
     fn from_bits(bits: u32) -> Self;
 }
 
-impl<F: NodeFlagInterpretation> Node<F> {
+impl<'data, F: NodeFlagInterpretation> Node<'data, F> {
     /// Changes the flag interpretation while preserving every field and stored bit.
-    pub fn cast_flags<G: NodeFlagInterpretation>(self) -> Node<G> {
+    pub fn cast_flags<G: NodeFlagInterpretation>(self) -> Node<'data, G> {
         Node {
             name: self.name,
             object_id: self.object_id,
@@ -159,7 +208,7 @@ impl<F: NodeFlagInterpretation> Node<F> {
     }
 }
 
-impl Node {
+impl<'data> Node<'data> {
     /// Creates a node without animation tracks.
     pub fn new(name: &str, object_id: u32) -> Result<Self, ValueError> {
         let mut node = Self {
@@ -176,9 +225,9 @@ impl Node {
     }
 }
 
-impl Bone {
+impl<'data> Bone<'data> {
     /// Creates a bone from a node and two references.
-    pub fn new(node: Node, geoset_id: u32, geoset_animation_id: u32) -> Self {
+    pub fn new(node: Node<'data>, geoset_id: u32, geoset_animation_id: u32) -> Self {
         Self {
             node,
             geoset_id,
@@ -187,30 +236,30 @@ impl Bone {
     }
 }
 
-impl<D: ModelDialect> Model<D> {
-    /// Returns owned copies of all bones in model order.
-    pub fn bones(&self) -> Vec<Bone> {
-        self.collect_chunk_records::<BonesChunk>()
+impl<'data, D: ModelDialect> Model<'data, D> {
+    /// Borrows records in chunk and record order.
+    pub fn bones<'s>(&'s self) -> impl Iterator<Item = &'s Bone<'data>> + use<'data, 's, D> {
+        self.records::<BonesChunk<'_>>()
     }
 
     /// Replaces all bones with one `BONE` chunk, removing any duplicate chunks.
-    pub fn set_bones(&mut self, bones: &[Bone]) {
+    pub fn set_bones(&mut self, bones: &[Bone<'data>]) {
         self.replace_chunk(BonesChunk::new(bones.to_vec()));
     }
 
-    /// Returns owned copies of all helper nodes in model order.
-    pub fn helpers(&self) -> Vec<Node> {
-        self.collect_chunk_records::<HelpersChunk>()
+    /// Borrows records in chunk and record order.
+    pub fn helpers<'s>(&'s self) -> impl Iterator<Item = &'s Node<'data>> + use<'data, 's, D> {
+        self.records::<HelpersChunk<'_>>()
     }
 
     /// Replaces all helpers with one `HELP` chunk, removing any duplicate chunks.
-    pub fn set_helpers(&mut self, helpers: &[Node]) {
+    pub fn set_helpers(&mut self, helpers: &[Node<'data>]) {
         self.replace_chunk(HelpersChunk::new(helpers.to_vec()));
     }
 }
 
-impl mdx::Read for Bone {
-    fn read_mdx(cursor: &mut Cursor<'_>) -> Result<Self, mdx::ReadError> {
+impl<'data> mdx::Read<'data> for Bone<'data> {
+    fn read_mdx(cursor: &mut Cursor<'data>) -> Result<Self, mdx::ReadError> {
         let node = cursor.read()?;
         let geoset_id = cursor.read()?;
         let geoset_animation_id = cursor.read()?;
@@ -222,7 +271,7 @@ impl mdx::Read for Bone {
     }
 }
 
-impl mdx::Write for Bone {
+impl<'data> mdx::Write for Bone<'data> {
     fn write_mdx(&self, bytes: &mut Encoder<'_>) -> Result<(), mdx::WriteError> {
         bytes.write(&self.node)?;
         bytes.write(&self.geoset_id)?;
@@ -237,15 +286,15 @@ fn no_reference() -> u32 {
 fn is_no_reference(value: &u32) -> bool {
     *value == u32::MAX
 }
-fn finish_bone(value: &mut Bone, _: Span) -> Result<(), mdl::ReadError> {
+fn finish_bone<'data>(value: &mut Bone<'data>, _: Span) -> Result<(), mdl::ReadError> {
     value.node.flags.0 |= 0x100;
     Ok(())
 }
-fn validate_bone(value: &Bone) -> Result<(), mdl::WriteError> {
+fn validate_bone<'data>(value: &Bone<'data>) -> Result<(), mdl::WriteError> {
     validate_node_kind(&value.node, 0x100)
 }
-pub(crate) fn validate_node_kind<F: NodeFlagInterpretation>(
-    node: &Node<F>,
+pub(crate) fn validate_node_kind<'data, F: NodeFlagInterpretation>(
+    node: &Node<'data, F>,
     kind: u32,
 ) -> Result<(), mdl::WriteError> {
     if node.flags.bits() & !0xff != kind {
@@ -255,7 +304,10 @@ pub(crate) fn validate_node_kind<F: NodeFlagInterpretation>(
     }
     Ok(())
 }
-pub(crate) fn set_node_kind<F: NodeFlagInterpretation>(node: &mut Node<F>, kind: u32) {
+pub(crate) fn set_node_kind<'data, F: NodeFlagInterpretation>(
+    node: &mut Node<'data, F>,
+    kind: u32,
+) {
     node.flags = F::from_bits(node.flags.bits() | kind);
 }
 fn read_reference(parser: &mut Parser<'_>, keyword: &str) -> Result<u32, mdl::ReadError> {
@@ -298,14 +350,14 @@ fn write_geoset_animation<W: IoWrite>(
 ) -> Result<(), IoError<mdl::WriteError>> {
     write_reference(value, writer, "None")
 }
-impl mdl::Read for Node {
+impl<'data> mdl::Read for Node<'data> {
     fn read_mdl(parser: &mut Parser<'_>) -> Result<Self, mdl::ReadError> {
         let start = parser.peek()?.map_or(0, |token| token.span.start);
         parser.expect_ident("Helper")?;
         mdl::read_mdl_body(parser, start)
     }
 }
-impl mdl::Write for Node {
+impl<'data> mdl::Write for Node<'data> {
     fn write_mdl<W: IoWrite>(
         &self,
         writer: &mut Writer<W>,

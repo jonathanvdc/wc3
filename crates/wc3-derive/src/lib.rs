@@ -22,7 +22,10 @@ use syn::{parse_macro_input, DeriveInput};
 /// unit variants and an optional `#[mdx(unknown)]` single-u32 fallback variant.
 #[proc_macro_derive(MdxRead, attributes(mdx))]
 pub fn derive_mdx_read(input: TokenStream) -> TokenStream {
-    expand_mdx(parse_macro_input!(input as DeriveInput), true).into()
+    let input = parse_macro_input!(input as DeriveInput);
+    let reader = expand_mdx(input.clone(), true);
+    let owned = ownership::expand_static_owned_read(&input);
+    quote::quote!(#reader #owned).into()
 }
 
 /// Writes fields in declaration order. A sized record's final `Vec<T>` is written elementwise.
@@ -51,4 +54,17 @@ pub fn derive_mdl_write(input: TokenStream) -> TokenStream {
 #[proc_macro_derive(MdxValue, attributes(mdx))]
 pub fn derive_mdx_value(input: TokenStream) -> TokenStream {
     expand_value(parse_macro_input!(input as DeriveInput)).into()
+}
+
+mod ownership;
+/// Implements borrowed views and owned conversion for model record fields.
+#[proc_macro_derive(ModelOwnership)]
+pub fn derive_model_ownership(input: TokenStream) -> TokenStream {
+    ownership::expand(parse_macro_input!(input as DeriveInput)).into()
+}
+
+/// Compares versioned model records across different buffer lifetimes.
+#[proc_macro_derive(ModelPartialEq)]
+pub fn derive_model_partial_eq(input: TokenStream) -> TokenStream {
+    ownership::expand_eq(parse_macro_input!(input as DeriveInput)).into()
 }

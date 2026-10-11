@@ -1,5 +1,7 @@
 use bevy::mesh::skinning::SkinnedMeshInverseBindposes;
 use bevy::prelude::*;
+use wc3::model::chunks::CamerasChunk;
+use wc3::model::V1800;
 
 use crate::assets::model::{ModelError, Wc3Model};
 use crate::attachment::spawn_attachments;
@@ -68,10 +70,16 @@ pub(crate) fn spawn_prepared_into(
 ) {
     let bindings = initialize_root(commands, prepared, root, bindings);
     spawn_animation_root(commands, &prepared.model, root);
-    commands
-        .entity(root)
-        .insert(Wc3ModelCameras(prepared.model.cameras()));
-    let rig = spawn_rig(commands, &prepared.model, root, &prepared.inverse_bindposes);
+    commands.entity(root).insert(Wc3ModelCameras(
+        prepared.model.shared_records::<CamerasChunk<V1800>>(),
+    ));
+    let rig = spawn_rig(
+        commands,
+        &prepared.model,
+        &prepared.nodes,
+        root,
+        &prepared.inverse_bindposes,
+    );
     let node_entities = &rig.by_object_id;
     spawn_events(commands, prepared, root, node_entities);
     spawn_lights(commands, prepared, root, node_entities);

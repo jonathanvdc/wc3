@@ -6,7 +6,7 @@ use bevy::prelude::*;
 use bevy::render::render_resource::VertexFormat;
 use std::collections::HashMap;
 use wc3::model::geometry::Geoset;
-use wc3::model::V1800;
+use wc3::model::{ModelArray, V1800};
 
 pub(crate) const EXTRA_JOINT_INDEX: MeshVertexAttribute =
     MeshVertexAttribute::new("Wc3_ExtraJointIndex", 138_000_001, VertexFormat::Uint16x4);
@@ -15,8 +15,8 @@ pub(crate) const EXTRA_JOINT_WEIGHT: MeshVertexAttribute =
 
 type JointRows = (Vec<[u16; 4]>, Vec<[f32; 4]>, Vec<[u16; 4]>, Vec<[f32; 4]>);
 
-fn vertex_skin(
-    geoset: &Geoset<V1800>,
+fn vertex_skin<'data>(
+    geoset: &Geoset<'data, V1800>,
     joint_index: &HashMap<u32, u16>,
 ) -> Result<JointRows, ModelError> {
     let skin = geoset.skin_weights();
@@ -24,7 +24,7 @@ fn vertex_skin(
     let mut offset = 0usize;
     for size in geoset.matrix_group_sizes() {
         group_starts.push(offset);
-        offset += *size as usize;
+        offset += size as usize;
     }
     let mut indices = Vec::with_capacity(geoset.vertices().len());
     let mut weights = Vec::with_capacity(geoset.vertices().len());
@@ -45,9 +45,9 @@ fn vertex_skin(
                 [0.0; 4],
             )
         } else {
-            let group = *geoset.vertex_groups().get(vertex).unwrap_or(&0) as usize;
+            let group = geoset.vertex_groups().get(vertex).unwrap_or(0) as usize;
             let start = *group_starts.get(group).unwrap_or(&0);
-            let count = *geoset.matrix_group_sizes().get(group).unwrap_or(&0) as usize;
+            let count = geoset.matrix_group_sizes().get(group).unwrap_or(0) as usize;
             if count > 8 {
                 return Err(ModelError(format!(
                     "matrix group {group} has {count} influences; WC3 GPU skinning supports eight"
@@ -61,7 +61,6 @@ fn vertex_skin(
                 let object_id = geoset
                     .matrix_indices()
                     .get(start + slot)
-                    .copied()
                     .unwrap_or(u32::MAX);
                 let id = *joint_index.get(&object_id).unwrap_or(&0);
                 let weight = 1.0 / count as f32;
@@ -83,9 +82,9 @@ fn vertex_skin(
     Ok((indices, weights, extra_indices, extra_weights))
 }
 
-fn skin_bounds(positions: &[[f32; 3]], rows: &JointRows) -> SkinnedMeshBounds {
+fn skin_bounds(positions: &ModelArray<'_, [f32; 3]>, rows: &JointRows) -> SkinnedMeshBounds {
     let mut ranges: Vec<Option<(Vec3, Vec3)>> = Vec::new();
-    for (vertex, &position) in positions.iter().enumerate() {
+    for (vertex, position) in positions.iter().enumerate() {
         let position = Vec3::from_array(position);
         for (ids, weights) in [
             (&rows.0[vertex], &rows.1[vertex]),
@@ -121,8 +120,8 @@ fn skin_bounds(positions: &[[f32; 3]], rows: &JointRows) -> SkinnedMeshBounds {
     bounds
 }
 
-pub(crate) fn build_mesh(
-    geoset: &Geoset<V1800>,
+pub(crate) fn build_mesh<'data>(
+    geoset: &Geoset<'data, V1800>,
     joint_index: &HashMap<u32, u16>,
     skinned: bool,
 ) -> Result<Mesh, ModelError> {
@@ -133,7 +132,7 @@ pub(crate) fn build_mesh(
     mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, geoset.vertices().to_vec());
     mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, geoset.normals().to_vec());
     if let Some(uv) = geoset.uv_sets().first() {
-        mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uv.clone());
+        mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uv.to_vec());
     }
     if skinned {
         let rows = vertex_skin(geoset, joint_index)?;
@@ -152,7 +151,10 @@ pub(crate) fn build_mesh(
 
 /// Select a layer's UV set as Bevy UV0. Authored tangents belong to UV0;
 /// other sets get a generated basis matching their own texture coordinates.
-pub(crate) fn canonical_uv_coordinate(geoset: &Geoset<V1800>, coordinate: u32) -> u32 {
+pub(crate) fn canonical_uv_coordinate<'data>(
+    geoset: &Geoset<'data, V1800>,
+    coordinate: u32,
+) -> u32 {
     // UV0's authored tangent basis must remain distinct from generated bases,
     // even when its UVs match another set. Equality is exact: tolerance-based
     // merging can change sampling near atlas edges and tangent directions.
@@ -171,15 +173,15 @@ pub(crate) fn canonical_uv_coordinate(geoset: &Geoset<V1800>, coordinate: u32) -
 }
 
 /// Build geometry with the selected UVs and their corresponding tangent basis.
-pub(crate) fn build_mesh_with_uv(
-    geoset: &Geoset<V1800>,
+pub(crate) fn build_mesh_with_uv<'data>(
+    geoset: &Geoset<'data, V1800>,
     joint_index: &HashMap<u32, u16>,
     skinned: bool,
     coordinate: u32,
 ) -> Result<Mesh, ModelError> {
     let mut mesh = build_mesh(geoset, joint_index, skinned)?;
     if let Some(uv) = geoset.uv_sets().get(coordinate as usize) {
-        mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uv.clone());
+        mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uv.to_vec());
     } else if coordinate != 0 || !geoset.uv_sets().is_empty() {
         return Err(ModelError(format!("missing UV set {coordinate}")));
     }

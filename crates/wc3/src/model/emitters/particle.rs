@@ -5,6 +5,7 @@ use crate::model::scene::{set_node_kind, validate_node_kind};
 use crate::model::FixedText;
 use crate::model::KnownChunk;
 use crate::model::ModelDialect;
+use crate::model::ModelOwnership;
 use crate::model::ParticleEmittersChunk;
 use crate::model::ValueError;
 use crate::model::{mdl, mdx};
@@ -18,53 +19,56 @@ const PATH_SIZE: usize = 260;
 ///
 /// Choose model or image resources with the emitter flags, and animate emission
 /// through `tracks`.
-#[derive(Clone, Debug, PartialEq, mdx::Read, mdx::Write, mdl::Read, mdl::Write)]
+#[derive(Clone, Debug, PartialEq, mdx::Read, mdx::Write, mdl::Read, mdl::Write, ModelOwnership)]
 #[mdx(sized(tag = ParticleEmittersChunk::TAG))]
 #[mdl(
     block = "ParticleEmitter",
     after_read = "finish_particle",
     validate_write = "validate_particle"
 )]
-pub struct ParticleEmitter {
+pub struct ParticleEmitter<'data> {
     #[mdl(flatten)]
     /// Shared node.
-    pub node: Node<ParticleEmitterFlags>,
+    pub node: Node<'data, ParticleEmitterFlags>,
     #[mdx(tag = *b"KPEE")]
     #[mdl(property = "EmissionRate", default)]
     /// Emission rate.
-    pub emission_rate: Animatable<f32>,
+    pub emission_rate: Animatable<'data, f32>,
     #[mdx(tag = *b"KPEG")]
     #[mdl(property = "Gravity", default)]
     /// Gravity.
-    pub gravity: Animatable<f32>,
+    pub gravity: Animatable<'data, f32>,
     #[mdx(tag = *b"KPLN")]
     #[mdl(property = "Longitude", default)]
     /// Longitude.
-    pub longitude: Animatable<f32>,
+    pub longitude: Animatable<'data, f32>,
     #[mdx(tag = *b"KPLT")]
     #[mdl(property = "Latitude", default)]
     /// Latitude.
-    pub latitude: Animatable<f32>,
+    pub latitude: Animatable<'data, f32>,
     #[mdl(property = "Path", default)]
     /// Model or image resource used for each particle.
     pub path: FixedText<PATH_SIZE>,
     #[mdx(tag = *b"KPEL")]
     #[mdl(property = "LifeSpan", default)]
     /// Particle lifetime.
-    pub life_span: Animatable<f32>,
+    pub life_span: Animatable<'data, f32>,
     #[mdx(tag = *b"KPES")]
     #[mdl(property = "InitVelocity", default)]
     /// Initial velocity.
-    pub initial_velocity: Animatable<f32>,
+    pub initial_velocity: Animatable<'data, f32>,
     #[mdx(tag = *b"KPEV")]
     #[mdl(property = "Visibility")]
     /// Optional visibility animation.
-    pub visibility: Option<Track<f32>>,
+    pub visibility: Option<Track<'data, f32>>,
 }
 
-impl ParticleEmitter {
+impl<'data> ParticleEmitter<'data> {
     /// Creates an emitter with zeroed physical values.
-    pub fn new<F: NodeFlagInterpretation>(node: Node<F>, path: &str) -> Result<Self, ValueError> {
+    pub fn new<F: NodeFlagInterpretation>(
+        node: Node<'data, F>,
+        path: &str,
+    ) -> Result<Self, ValueError> {
         let mut emitter = Self {
             node: node.cast_flags(),
             emission_rate: Animatable::Static(0.0),
@@ -81,23 +85,28 @@ impl ParticleEmitter {
     }
 }
 
-impl<D: ModelDialect> Model<D> {
-    /// Returns owned copies of `PREM` records in file order.
-    pub fn particle_emitters(&self) -> Vec<ParticleEmitter> {
-        self.collect_chunk_records::<ParticleEmittersChunk>()
+impl<'data, D: ModelDialect> Model<'data, D> {
+    /// Borrows records in chunk and record order.
+    pub fn particle_emitters<'s>(
+        &'s self,
+    ) -> impl Iterator<Item = &'s ParticleEmitter<'data>> + use<'data, 's, D> {
+        self.records::<ParticleEmittersChunk<'_>>()
     }
 
     /// Replaces particle emitters with one `PREM` chunk, removing any duplicate chunks.
-    pub fn set_particle_emitters(&mut self, emitters: &[ParticleEmitter]) {
+    pub fn set_particle_emitters(&mut self, emitters: &[ParticleEmitter<'data>]) {
         self.replace_chunk(ParticleEmittersChunk::new(emitters.to_vec()));
     }
 }
 
-fn finish_particle(value: &mut ParticleEmitter, _: Span) -> Result<(), mdl::ReadError> {
+fn finish_particle<'data>(
+    value: &mut ParticleEmitter<'data>,
+    _: Span,
+) -> Result<(), mdl::ReadError> {
     set_node_kind(&mut value.node, 0x1000);
     Ok(())
 }
-fn validate_particle(value: &ParticleEmitter) -> Result<(), mdl::WriteError> {
+fn validate_particle<'data>(value: &ParticleEmitter<'data>) -> Result<(), mdl::WriteError> {
     validate_node_kind(&value.node, 0x1000 | (value.node.flags.bits() & 0x18000))
 }
 
@@ -134,7 +143,7 @@ impl ParticleEmitterFlags {
         Self(bits)
     }
 }
-impl ParticleEmitter {
+impl<'data> ParticleEmitter<'data> {
     /// Returns behavioral flags using this emitter's bit meanings.
     pub fn flags(&self) -> ParticleEmitterFlags {
         ParticleEmitterFlags::from_bits(self.node.flags.bits() & ParticleEmitterFlags::MASK)

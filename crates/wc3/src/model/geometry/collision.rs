@@ -7,6 +7,7 @@ use crate::model::Encoder;
 use crate::model::IoError;
 use crate::model::KnownChunk;
 use crate::model::ModelDialect;
+use crate::model::ModelOwnership;
 use crate::model::Vec3;
 use crate::model::{mdl, mdx};
 use crate::model::{Model, Node};
@@ -17,10 +18,10 @@ use std::io::Write as IoWrite;
 /// Use the shape constructors to initialize the dimensions and node flags.
 /// Edit [`CollisionGeometry`] to change the shape directly. Sphere and cylinder
 /// shapes have a radius; boxes and planes are described by two points.
-#[derive(Clone, Debug, PartialEq, mdx::Read, mdx::Write)]
-pub struct CollisionShape {
+#[derive(Clone, Debug, PartialEq, mdx::Read, mdx::Write, ModelOwnership)]
+pub struct CollisionShape<'data> {
     /// Attached node.
-    pub node: Node,
+    pub node: Node<'data>,
     /// Shape and dimensions in the node's local coordinate system.
     pub geometry: CollisionGeometry,
 }
@@ -38,8 +39,8 @@ pub enum CollisionGeometry {
     Cylinder([Vec3; 2], f32),
 }
 
-impl mdx::Read for CollisionGeometry {
-    fn read_mdx(cursor: &mut Cursor<'_>) -> Result<Self, mdx::ReadError> {
+impl<'data> mdx::Read<'data> for CollisionGeometry {
+    fn read_mdx(cursor: &mut Cursor<'data>) -> Result<Self, mdx::ReadError> {
         let kind_offset = cursor.absolute_position();
         let kind = cursor.read::<u32>()?;
         match kind {
@@ -87,9 +88,9 @@ impl mdx::Write for CollisionGeometry {
     }
 }
 
-impl CollisionShape {
+impl<'data> CollisionShape<'data> {
     /// Creates a box collision shape from two XYZ corners.
-    pub fn new_box(node: Node, corners: [Vec3; 2]) -> Self {
+    pub fn new_box(node: Node<'data>, corners: [Vec3; 2]) -> Self {
         Self {
             node,
             geometry: CollisionGeometry::Box(corners),
@@ -97,7 +98,7 @@ impl CollisionShape {
     }
 
     /// Creates a sphere collision shape from center and radius.
-    pub fn new_sphere(node: Node, center: Vec3, radius: f32) -> Self {
+    pub fn new_sphere(node: Node<'data>, center: Vec3, radius: f32) -> Self {
         Self {
             node,
             geometry: CollisionGeometry::Sphere(center, radius),
@@ -105,7 +106,7 @@ impl CollisionShape {
     }
 
     /// Creates a plane collision shape from two XYZ points.
-    pub fn new_plane(node: Node, points: [Vec3; 2]) -> Self {
+    pub fn new_plane(node: Node<'data>, points: [Vec3; 2]) -> Self {
         Self {
             node,
             geometry: CollisionGeometry::Plane(points),
@@ -113,7 +114,7 @@ impl CollisionShape {
     }
 
     /// Creates a cylinder collision shape from endpoints and radius.
-    pub fn new_cylinder(node: Node, endpoints: [Vec3; 2], radius: f32) -> Self {
+    pub fn new_cylinder(node: Node<'data>, endpoints: [Vec3; 2], radius: f32) -> Self {
         Self {
             node,
             geometry: CollisionGeometry::Cylinder(endpoints, radius),
@@ -157,14 +158,16 @@ impl CollisionShape {
     }
 }
 
-impl<D: ModelDialect> Model<D> {
-    /// Returns owned copies of collision shapes in `CLID` chunks.
-    pub fn collision_shapes(&self) -> Vec<CollisionShape> {
-        self.collect_chunk_records::<CollisionShapesChunk>()
+impl<'data, D: ModelDialect> Model<'data, D> {
+    /// Borrows records in chunk and record order.
+    pub fn collision_shapes<'s>(
+        &'s self,
+    ) -> impl Iterator<Item = &'s CollisionShape<'data>> + use<'data, 's, D> {
+        self.records::<CollisionShapesChunk<'_>>()
     }
 
     /// Replaces collision shapes with one `CLID` chunk, removing any duplicate chunks.
-    pub fn set_collision_shapes(&mut self, shapes: &[CollisionShape]) {
+    pub fn set_collision_shapes(&mut self, shapes: &[CollisionShape<'data>]) {
         self.replace_chunk(CollisionShapesChunk::new(shapes.to_vec()));
     }
 }
@@ -189,9 +192,9 @@ struct CollisionVertex(Vec3);
     validate_read = "validate_collision_read",
     validate_write = "validate_collision_write"
 )]
-struct CollisionMdl {
+struct CollisionMdl<'data> {
     #[mdl(flatten)]
-    node: Node,
+    node: Node<'data>,
     #[mdl(flatten)]
     kind: CollisionKind,
     #[mdl(counted = "Vertices")]
@@ -199,11 +202,14 @@ struct CollisionMdl {
     #[mdl(property = "BoundsRadius", delegate)]
     radius: Option<f32>,
 }
-fn finish_collision(value: &mut CollisionMdl, _: Span) -> Result<(), mdl::ReadError> {
+fn finish_collision<'data>(value: &mut CollisionMdl<'data>, _: Span) -> Result<(), mdl::ReadError> {
     set_node_kind(&mut value.node, 0x2000);
     Ok(())
 }
-fn validate_collision_read(value: &CollisionMdl, span: Span) -> Result<(), mdl::ReadError> {
+fn validate_collision_read<'data>(
+    value: &CollisionMdl<'data>,
+    span: Span,
+) -> Result<(), mdl::ReadError> {
     let expected = if matches!(value.kind, CollisionKind::Sphere) {
         1
     } else {
@@ -233,12 +239,12 @@ fn validate_collision_read(value: &CollisionMdl, span: Span) -> Result<(), mdl::
     }
     Ok(())
 }
-fn validate_collision_write(value: &CollisionMdl) -> Result<(), mdl::WriteError> {
+fn validate_collision_write<'data>(value: &CollisionMdl<'data>) -> Result<(), mdl::WriteError> {
     validate_node_kind(&value.node, 0x2000)
 }
-impl mdl::Read for CollisionShape {
+impl<'data> mdl::Read for CollisionShape<'data> {
     fn read_mdl(parser: &mut Parser<'_>) -> Result<Self, mdl::ReadError> {
-        let value = parser.read::<CollisionMdl>()?;
+        let value = parser.read::<CollisionMdl<'data>>()?;
         let first = value.vertices[0].0;
         let geometry = match value.kind {
             CollisionKind::Box => CollisionGeometry::Box([first, value.vertices[1].0]),
@@ -257,7 +263,7 @@ impl mdl::Read for CollisionShape {
         })
     }
 }
-impl mdl::Write for CollisionShape {
+impl<'data> mdl::Write for CollisionShape<'data> {
     fn write_mdl<W: IoWrite>(
         &self,
         writer: &mut Writer<W>,

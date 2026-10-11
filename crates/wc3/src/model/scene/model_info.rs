@@ -63,10 +63,10 @@ impl ModelInfo {
     }
 }
 
-impl<D: ModelDialect> Model<D> {
+impl<'data, D: ModelDialect> Model<'data, D> {
     /// Returns an owned copy of the model information, if present.
     pub fn model_info(&self) -> Option<ModelInfo> {
-        self.decoded_chunks::<ModelInfoChunk>()
+        self.decoded_chunks::<ModelInfoChunk<'data>>()
             .next()
             .map(|decoded| decoded.info.clone())
     }
@@ -78,8 +78,8 @@ impl<D: ModelDialect> Model<D> {
     }
 }
 
-impl mdx::Read for ModelInfo {
-    fn read_mdx(cursor: &mut Cursor<'_>) -> Result<Self, mdx::ReadError> {
+impl<'data> mdx::Read<'data> for ModelInfo {
+    fn read_mdx(cursor: &mut Cursor<'data>) -> Result<Self, mdx::ReadError> {
         let size = cursor.remaining().len();
         if size < SIZE {
             return Err(mdx::ReadError::new(

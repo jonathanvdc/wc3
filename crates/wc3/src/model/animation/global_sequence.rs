@@ -13,12 +13,11 @@ pub struct GlobalSequence(
     pub u32,
 );
 
-impl<D: ModelDialect> Model<D> {
+impl<'data, D: ModelDialect> Model<'data, D> {
     /// Returns loop durations in milliseconds, in model order.
     /// Tracks refer to these durations by collection index.
     pub fn global_sequences(&self) -> Vec<u32> {
-        self.collect_chunk_records::<GlobalSequencesChunk>()
-            .into_iter()
+        self.records::<GlobalSequencesChunk>()
             .map(|sequence| sequence.0)
             .collect()
     }

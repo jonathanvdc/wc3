@@ -18,7 +18,7 @@ fn local_files_round_trip() {
     }
 }
 
-fn check_accessors<V: ModelDialect>(mut model: Model<V>, bytes: &[u8], path: &Path)
+fn check_accessors<'data, V: ModelDialect>(mut model: Model<'data, V>, bytes: &[u8], path: &Path)
 where
     V::Extension: Chunk,
 {
@@ -34,7 +34,7 @@ where
                 .count()
                 == 1
             {
-                let records = model.$getter();
+                let records = model.$getter().cloned().collect::<Vec<_>>();
                 model.$setter(&records);
             }
         };
@@ -48,7 +48,7 @@ where
                 .count()
                 == 1
             {
-                let records = model.$getter().unwrap();
+                let records = model.$getter().unwrap().cloned().collect::<Vec<_>>();
                 model.$setter(&records).unwrap();
             }
         };
@@ -59,9 +59,25 @@ where
     round_trip_records!(b"GEOS", geosets, set_geosets);
     round_trip_records!(b"BONE", bones, set_bones);
     round_trip_records!(b"HELP", helpers, set_helpers);
-    round_trip_records!(b"GLBS", global_sequences, set_global_sequences);
+    if model
+        .chunks
+        .iter()
+        .filter(|chunk| chunk.tag() == *b"GLBS")
+        .count()
+        == 1
+    {
+        model.set_global_sequences(&model.global_sequences());
+    }
     round_trip_records!(b"DILG", gliders, set_gliders);
-    round_trip_records!(b"PIVT", pivot_points, set_pivot_points);
+    if model
+        .chunks
+        .iter()
+        .filter(|chunk| chunk.tag() == *b"PIVT")
+        .count()
+        == 1
+    {
+        model.set_pivot_points(&model.pivot_points());
+    }
     round_trip_records!(b"EVTS", event_objects, set_event_objects);
     round_trip_records!(b"CLID", collision_shapes, set_collision_shapes);
     round_trip_records!(b"ATCH", attachments, set_attachments);
@@ -82,7 +98,7 @@ where
         geoset.vertex_groups();
         geoset.matrix_group_sizes();
         geoset.matrix_indices();
-        geoset.sequence_extents.as_slice();
+        geoset.sequence_extents.to_vec();
         let _ = geoset.try_tangents();
         let _ = geoset.try_skin_weights();
         geoset.uv_sets();

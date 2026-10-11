@@ -21,9 +21,16 @@ fn texture_animation_tracks_round_trip() {
     animation.translation = Some(track.clone());
     let mut model = Model::<wc3::model::V1100>::new();
     model.set_texture_animations(&[animation]);
-    let parsed = Model::<wc3::model::V1100>::decode_mdx(&model.encode_mdx().unwrap()).unwrap();
+    let parsed = Model::<wc3::model::V1100>::decode_mdx(&model.encode_mdx().unwrap())
+        .unwrap()
+        .into_owned();
     assert_eq!(
-        parsed.texture_animations()[0].translation.as_ref(),
+        parsed
+            .texture_animations()
+            .next()
+            .unwrap()
+            .translation
+            .as_ref(),
         Some(&track)
     );
 }

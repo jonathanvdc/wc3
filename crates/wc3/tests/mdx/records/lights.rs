@@ -20,8 +20,10 @@ fn light_fields_round_trip() {
     light.ambient_intensity = Animatable::Static(0.5);
     let mut model = Model::<wc3::model::V1200>::new();
     model.set_lights(&[light]);
-    let parsed = Model::<wc3::model::V1200>::decode_mdx(&model.encode_mdx().unwrap()).unwrap();
-    let light = &parsed.lights()[0];
+    let parsed = Model::<wc3::model::V1200>::decode_mdx(&model.encode_mdx().unwrap())
+        .unwrap()
+        .into_owned();
+    let light = &parsed.lights().next().unwrap();
     assert_eq!(light.node.name.text(), "Torch");
     assert_eq!(light.light_type, LightType::Directional);
     assert_eq!(light.attenuation_start, Animatable::Static(100.0));
@@ -45,7 +47,9 @@ fn light_color_track_round_trip() {
     )
     .unwrap();
     light.color.set_track(track.clone());
-    let parsed = Light::<wc3::model::V800>::decode_mdx(&light.encode_mdx().unwrap()).unwrap();
+    let parsed = Light::<wc3::model::V800>::decode_mdx(&light.encode_mdx().unwrap())
+        .unwrap()
+        .into_owned();
     assert_eq!(parsed.color.track(), Some(&track));
 }
 
@@ -77,7 +81,9 @@ fn extended_light_fields_and_tracks_round_trip() {
     )
     .unwrap();
     light.visibility = Some(track.clone());
-    let parsed = Light::<wc3::model::V1800>::decode_mdx(&light.encode_mdx().unwrap()).unwrap();
+    let parsed = Light::<wc3::model::V1800>::decode_mdx(&light.encode_mdx().unwrap())
+        .unwrap()
+        .into_owned();
     assert!(parsed.try_shadow_casting().unwrap());
     assert_eq!(parsed.try_shadow_intensity().unwrap(), 1.0);
     assert_eq!(
@@ -165,7 +171,9 @@ fn shadow_casting_and_falloff_round_trip() {
             damping: Animatable::Static(3.0),
         })
         .unwrap();
-    let decoded = Light::<V1600>::decode_mdx(&light.encode_mdx().unwrap()).unwrap();
+    let decoded = Light::<V1600>::decode_mdx(&light.encode_mdx().unwrap())
+        .unwrap()
+        .into_owned();
     assert!(decoded.try_shadow_casting().unwrap());
     assert_eq!(
         decoded.falloff(),
@@ -187,7 +195,9 @@ fn infallible_light_accessors_cover_supported_versions() {
     fn check_intensity<V: SupportsLightShadowIntensity>() {
         let mut light = Light::<V>::new(Node::new("Lamp", 1).unwrap(), LightType::Omnidirectional);
         light.set_shadow_intensity(0.5);
-        let decoded = Light::<V>::decode_mdx(&light.encode_mdx().unwrap()).unwrap();
+        let decoded = Light::<V>::decode_mdx(&light.encode_mdx().unwrap())
+            .unwrap()
+            .into_owned();
         assert_eq!(decoded.shadow_intensity(), 0.5);
     }
     fn check_casting<V: SupportsLightShadowCasting>() {
@@ -198,7 +208,9 @@ fn infallible_light_accessors_cover_supported_versions() {
         };
         light.set_shadow_casting(true);
         light.set_shadow_casting_range(range.clone());
-        let decoded = Light::<V>::decode_mdx(&light.encode_mdx().unwrap()).unwrap();
+        let decoded = Light::<V>::decode_mdx(&light.encode_mdx().unwrap())
+            .unwrap()
+            .into_owned();
         assert!(decoded.shadow_casting());
         assert_eq!(decoded.shadow_casting_range(), range);
     }
@@ -210,7 +222,9 @@ fn infallible_light_accessors_cover_supported_versions() {
             damping: Animatable::Static(0.3),
         };
         light.set_falloff(falloff.clone());
-        let decoded = Light::<V>::decode_mdx(&light.encode_mdx().unwrap()).unwrap();
+        let decoded = Light::<V>::decode_mdx(&light.encode_mdx().unwrap())
+            .unwrap()
+            .into_owned();
         assert_eq!(decoded.falloff(), falloff);
     }
     check_intensity::<V1200>();

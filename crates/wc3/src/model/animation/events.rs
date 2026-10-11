@@ -28,7 +28,7 @@ impl AnimationTime<'_> {
     /// keys once. Missing clocks and reversed sequence intervals produce no events.
     pub fn event_occurrences(
         &self,
-        event: &EventObject,
+        event: &EventObject<'_>,
         from_ms: f64,
         include_from: bool,
     ) -> Vec<EventOccurrence> {
@@ -58,9 +58,9 @@ impl AnimationTime<'_> {
         let period = end - start;
         let mut occurrences = Vec::new();
         let frames = event.frames();
-        let first = frames.partition_point(|&frame| f64::from(frame) < start);
-        let last = frames.partition_point(|&frame| f64::from(frame) <= end);
-        for (index, &frame) in frames[first..last].iter().enumerate() {
+        let first = frames.partition_point(|frame| f64::from(frame) < start);
+        let last = frames.partition_point(|frame| f64::from(frame) <= end);
+        for (index, frame) in frames.iter().skip(first).take(last - first).enumerate() {
             let offset = f64::from(frame) - start;
             let mut cycle = if looping && period > 0.0 {
                 ((from_ms - offset) / period).floor().max(0.0)

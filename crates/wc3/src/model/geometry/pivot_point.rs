@@ -13,11 +13,10 @@ pub struct PivotPoint(
     pub Vec3,
 );
 
-impl<D: ModelDialect> Model<D> {
+impl<'data, D: ModelDialect> Model<'data, D> {
     /// Returns XYZ pivot points from every `PIVT` chunk in file order.
     pub fn pivot_points(&self) -> Vec<Vec3> {
-        self.collect_chunk_records::<PivotPointsChunk>()
-            .into_iter()
+        self.records::<PivotPointsChunk>()
             .map(|point| point.0)
             .collect()
     }

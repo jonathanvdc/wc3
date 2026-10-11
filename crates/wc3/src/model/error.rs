@@ -60,6 +60,11 @@ pub enum ValueError {
         /// Number of entries supplied by the caller.
         count: usize,
     },
+    /// A skin influence exceeds the normalized integer range 0..=255.
+    InvalidSkinWeight {
+        /// Influence supplied by the caller.
+        weight: u16,
+    },
     /// The global-sequence ID cannot be represented as a signed wire value.
     InvalidGlobalSequenceId {
         /// Global-sequence ID supplied by the caller.
@@ -70,6 +75,7 @@ pub enum ValueError {
 impl fmt::Display for ValueError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::InvalidSkinWeight { weight } => write!(f, "skin weight {weight} exceeds 255"),
             Self::InvalidString { max_bytes } => {
                 write!(f, "string must fit in {max_bytes} bytes and contain no NUL")
             }

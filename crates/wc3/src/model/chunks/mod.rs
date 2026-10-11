@@ -44,16 +44,16 @@ impl<T: Chunk + ?Sized> mdx::Write for T {
 }
 
 /// A complete chunk whose tag is fixed by its type.
-pub trait KnownChunk: Chunk + Sized {
+pub trait KnownChunk<'data>: Chunk + Sized {
     /// The four-byte chunk tag for this type.
     const TAG: Tag;
 
     /// Decodes a bounded chunk payload, without the tag or size.
-    fn decode_payload(cursor: &mut Cursor<'_>) -> Result<Self, mdx::ReadError>;
+    fn decode_payload(cursor: &mut Cursor<'data>) -> Result<Self, mdx::ReadError>;
 }
 
-impl<T: KnownChunk> mdx::Read for T {
-    fn read_mdx(cursor: &mut Cursor<'_>) -> Result<Self, mdx::ReadError> {
+impl<'data, T: KnownChunk<'data>> mdx::Read<'data> for T {
+    fn read_mdx(cursor: &mut Cursor<'data>) -> Result<Self, mdx::ReadError> {
         let mut next = *cursor;
         let offset = next.absolute_position();
         if next.remaining().len() < 8 {
@@ -160,8 +160,8 @@ mod tests {
         ));
         let joined = [bytes.clone(), bytes].concat();
         let mut cursor = Cursor::new(&joined);
-        cursor.read::<VersionChunk<V800>>().unwrap();
-        cursor.read::<VersionChunk<V800>>().unwrap();
+        cursor.read::<VersionChunk<'_, V800>>().unwrap();
+        cursor.read::<VersionChunk<'_, V800>>().unwrap();
         cursor.finish().unwrap();
     }
 

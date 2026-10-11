@@ -1,5 +1,5 @@
 //! Lossless, fixed-width MDX text fields.
-use super::{Read, Write};
+use super::{Read, ReadOwned, Write};
 use crate::model::mdx;
 use crate::model::{Cursor, Encoder, ValueError};
 use std::borrow::Cow;
@@ -49,8 +49,8 @@ impl<const N: usize> Default for FixedText<N> {
     }
 }
 
-impl<const N: usize> Read for FixedText<N> {
-    fn read_mdx(cursor: &mut Cursor<'_>) -> Result<Self, mdx::ReadError> {
+impl<'data, const N: usize> Read<'data> for FixedText<N> {
+    fn read_mdx(cursor: &mut Cursor<'data>) -> Result<Self, mdx::ReadError> {
         Ok(Self(
             cursor.read_bytes(N)?.try_into().expect("fixed-width text"),
         ))
@@ -61,5 +61,11 @@ impl<const N: usize> Write for FixedText<N> {
     fn write_mdx(&self, encoder: &mut Encoder<'_>) -> Result<(), mdx::WriteError> {
         encoder.write(self.0.as_slice())?;
         Ok(())
+    }
+}
+
+impl<const N: usize> ReadOwned for FixedText<N> {
+    fn decode_owned(bytes: &[u8]) -> Result<Self, mdx::ReadError> {
+        Self::decode_mdx(bytes)
     }
 }

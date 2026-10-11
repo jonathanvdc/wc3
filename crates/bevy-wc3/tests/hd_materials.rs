@@ -5,13 +5,23 @@ use bevy_wc3::{prepare_model, Wc3Model};
 #[test]
 fn preparation_shares_identical_uv_meshes_and_preserves_distinct_tangent_sources() {
     let mut source = Wc3Model::decode_mdl(include_str!("fixtures/hd_capture.mdl")).unwrap();
-    let mut geoset = source.model.geosets().remove(0);
-    let uv = geoset.uv_sets()[0].clone();
+    let mut geoset = source
+        .model
+        .geosets()
+        .cloned()
+        .collect::<Vec<_>>()
+        .remove(0);
+    let uv = geoset.uv_sets()[0].to_vec();
     let mut near = uv.clone();
     near[0][0] += 0.000001;
     geoset.set_uv_sets(&[uv.clone(), uv, near]);
     source.model.set_geosets(&[geoset.clone()]);
-    let mut material = source.model.materials().remove(0);
+    let mut material = source
+        .model
+        .materials()
+        .cloned()
+        .collect::<Vec<_>>()
+        .remove(0);
     let layer = material.layers[0].clone();
     material.layers = (0..3)
         .map(|coordinate| {

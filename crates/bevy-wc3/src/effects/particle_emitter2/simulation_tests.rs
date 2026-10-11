@@ -17,7 +17,7 @@ fn animation() -> Wc3Animation {
     }
 }
 
-fn emitter() -> ParticleEmitter2 {
+fn emitter<'data>() -> ParticleEmitter2<'data> {
     let mut emitter = ParticleEmitter2::new(Node::new("Particles", 0).unwrap());
     emitter.life_span = 2.0;
     emitter.emission_rate = 10.0.into();
@@ -330,7 +330,7 @@ fn birth_transform_samples_the_animated_parent_chain() {
                 root,
                 pivot: Vec3::ZERO,
                 parent_pivot: Vec3::ZERO,
-                translation: Some(
+                translation: (Some(
                     Track::linear(
                         vec![
                             ValueKeyframe {
@@ -345,9 +345,10 @@ fn birth_transform_samples_the_animated_parent_chain() {
                         None,
                     )
                     .unwrap(),
-                ),
-                rotation: None,
-                scaling: None,
+                ))
+                .into(),
+                rotation: (None).into(),
+                scaling: (None).into(),
             },
             GlobalTransform::from_translation(Vec3::X * 110.0),
             ChildOf(root),
@@ -362,9 +363,9 @@ fn birth_transform_samples_the_animated_parent_chain() {
                 root,
                 pivot: Vec3::X * 2.0,
                 parent_pivot: Vec3::ZERO,
-                translation: None,
-                rotation: None,
-                scaling: None,
+                translation: (None).into(),
+                rotation: (None).into(),
+                scaling: (None).into(),
             },
             GlobalTransform::from_translation(Vec3::X * 112.0),
             ChildOf(parent),

@@ -38,7 +38,7 @@ impl mdl::WriteProperty for SegmentColorsRef<'_> {
         writer.end_block()
     }
 }
-impl ParticleEmitter2 {
+impl<'data> ParticleEmitter2<'data> {
     pub(super) fn mdl_segments(&self) -> SegmentColorsRef<'_> {
         SegmentColorsRef(&self.segment_colors)
     }
@@ -61,7 +61,7 @@ impl ParticleEmitter2 {
     }
 }
 
-impl ParticleEmitter2 {
+impl<'data> ParticleEmitter2<'data> {
     pub(super) fn mdl_life_uv(&self) -> [u32; 3] {
         self.uv_animations[0]
     }

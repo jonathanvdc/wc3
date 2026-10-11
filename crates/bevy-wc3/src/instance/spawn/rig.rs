@@ -1,4 +1,5 @@
 use crate::preparation::rig::joint_ids;
+use crate::preparation::shared::{RuntimeNode, Shared};
 use bevy::mesh::skinning::SkinnedMeshInverseBindposes;
 use bevy::prelude::*;
 use std::collections::HashMap;
@@ -30,13 +31,17 @@ impl Wc3NodeEntities {
     }
 }
 
-pub(super) fn spawn_animation_root(commands: &mut Commands, model: &Model<V1800>, root: Entity) {
+pub(super) fn spawn_animation_root<'data>(
+    commands: &mut Commands,
+    model: &Model<'data, V1800>,
+    root: Entity,
+) {
     commands.entity(root).insert(Wc3Animation {
         sequence: 0,
         elapsed_ms: 0.0,
         speed: 1.0,
         playing: true,
-        sequences: model.sequences(),
+        sequences: model.sequences().cloned().collect::<Vec<_>>(),
         global_sequences: model.global_sequences(),
         event_playback: Default::default(),
         pose_playback: PosePlayback::new(Duration::from_millis(
@@ -49,14 +54,14 @@ pub(super) fn spawn_animation_root(commands: &mut Commands, model: &Model<V1800>
 
 pub(super) fn spawn_rig(
     commands: &mut Commands,
-    model: &Model<V1800>,
+    model: &Shared<Model<'static, V1800>>,
+    source_nodes: &[RuntimeNode],
     root: Entity,
     inverse_bindposes: &Handle<SkinnedMeshInverseBindposes>,
 ) -> Rig {
-    let source_nodes = model.nodes();
     let pivots = model.pivot_points();
     let mut nodes = HashMap::new();
-    for node in &source_nodes {
+    for node in source_nodes {
         let pivot = pivots
             .get(node.object_id as usize)
             .copied()
@@ -85,7 +90,7 @@ pub(super) fn spawn_rig(
             .id();
         nodes.insert(node.object_id, entity);
     }
-    for node in &source_nodes {
+    for node in source_nodes {
         let parent = nodes.get(&node.parent_id).copied().unwrap_or(root);
         commands.entity(parent).add_child(nodes[&node.object_id]);
     }
@@ -111,14 +116,16 @@ mod tests {
     fn every_node_type_keeps_its_entity_and_parent_from_mdl() {
         let source = include_str!("../../../tests/fixtures/attachment_parent.mdl");
         let model = Model::<V1800>::decode_mdl(source).unwrap();
-        assert_eq!(model.geosets()[0].matrix_indices(), [2, 10]);
+        assert_eq!(model.geosets().next().unwrap().matrix_indices(), [2, 10]);
         let mut world = World::new();
         let root = world.spawn(Transform::default()).id();
         let mut bindposes = Assets::<SkinnedMeshInverseBindposes>::default();
         let inverse_bindposes = bindposes.add(vec![Mat4::IDENTITY]);
         let mut queue = CommandQueue::default();
         let mut commands = Commands::new(&mut queue, &world);
-        let rig = spawn_rig(&mut commands, &model, root, &inverse_bindposes);
+        let model = Shared::new(model);
+        let nodes = model.runtime_nodes();
+        let rig = spawn_rig(&mut commands, &model, &nodes, root, &inverse_bindposes);
         queue.apply(&mut world);
 
         let entities = world.entity(root).get::<Wc3NodeEntities>().unwrap();

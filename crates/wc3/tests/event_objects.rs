@@ -4,14 +4,14 @@ use wc3::model::animation::{AnimationTime, Sequence};
 use wc3::model::scene::{EventObject, Node};
 use wc3::model::{mdl, mdx};
 
-fn event(frames: &[i32], global: u32) -> EventObject {
+fn event<'data>(frames: &[i32], global: u32) -> EventObject<'data> {
     EventObject::new(Node::new("Arbitrary", 0).unwrap(), global, frames)
 }
 
-fn crossed(
+fn crossed<'data>(
     sequence: Option<&Sequence>,
     durations: &[u32],
-    event: &EventObject,
+    event: &EventObject<'data>,
     from: f64,
     to: f64,
     include: bool,
@@ -54,7 +54,9 @@ fn every_construction_and_replacement_path_sorts_and_retains_duplicates() {
         [-10, 20, 20, 30]
     );
     assert_eq!(
-        EventObject::decode_mdx(&parsed.encode_mdx().unwrap()).unwrap(),
+        EventObject::decode_mdx(&parsed.encode_mdx().unwrap())
+            .unwrap()
+            .into_owned(),
         parsed
     );
     assert_eq!(

@@ -44,7 +44,7 @@ fn main() -> Result<()> {
         ($($number:literal => $version:ident),*) => {
             match args.version {
                 None => model,
-                $(Some($number) => DynamicModel::$version(convert::<$version>(&model, &options)?),)*
+                $(Some($number) => DynamicModel::$version(convert::<$version>(model, &options)?),)*
                 Some(value) => return Err(format!("unsupported target version: {value}").into()),
             }
         };
@@ -53,11 +53,11 @@ fn main() -> Result<()> {
     save(&model, &args.output)
 }
 
-fn convert<V: ModelVersion>(
-    model: &DynamicModel,
+fn convert<'data, V: ModelVersion>(
+    model: DynamicModel<'data>,
     options: &ConversionOptions,
-) -> Result<Model<Extended<V, NoExtensions>>> {
-    let converted = model.convert::<Extended<V, NoExtensions>>(options)?;
+) -> Result<Model<'data, Extended<V, NoExtensions>>> {
+    let converted = model.into_convert::<Extended<V, NoExtensions>>(options)?;
     for issue in converted.report.issues {
         eprintln!("{:?} at {}: {}", issue.kind, issue.path, issue.description);
     }

@@ -6,7 +6,7 @@
 mod geoset;
 pub use geoset::{
     Geoset, GeosetExtent, GeosetExtraSections, GeosetLayout, NoGeosetExtraSections,
-    ReforgedGeosetExtraSections, SkinWeights,
+    ReforgedGeosetExtraSections, SkinWeight, SkinWeights,
 };
 mod collision;
 pub use collision::{CollisionGeometry, CollisionShape};

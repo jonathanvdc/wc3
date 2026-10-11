@@ -15,3 +15,6 @@ mod versions;
 
 #[path = "model/extensions.rs"]
 mod extensions;
+
+#[path = "model/storage.rs"]
+mod storage;

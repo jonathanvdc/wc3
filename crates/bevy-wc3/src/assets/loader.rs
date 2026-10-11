@@ -129,11 +129,11 @@ impl AssetLoader for Wc3ModelLoader {
             .read_to_end(&mut bytes)
             .await
             .map_err(|error| ModelError(error.to_string()))?;
-        let source = Wc3Model::decode(&bytes)?;
+        let source = Wc3Model::decode_owned(bytes)?;
         let model_path = context.path().clone_owned();
         let mut textures = ResolvedModelTextures::default();
         for texture in source.model.textures() {
-            let binding = load_texture(context, &model_path, &texture).await?;
+            let binding = load_texture(context, &model_path, texture).await?;
             textures.bitmaps.push(binding);
         }
         for emitter in source.model.particle_emitters2() {

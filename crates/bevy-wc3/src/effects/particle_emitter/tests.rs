@@ -234,17 +234,17 @@ fn moving_nodes_are_sampled_at_birth() {
     app.world_mut()
         .get_mut::<Wc3Animation>(root)
         .unwrap()
-        .sequences = source.model.sequences();
-    let definition = source.model.particle_emitters().remove(0);
+        .sequences = source.model.sequences().cloned().collect::<Vec<_>>();
+    let definition = source.model.particle_emitters().next().unwrap();
     app.world_mut().entity_mut(node).insert(AnimatedNode {
         flags: Default::default(),
         camera: None,
         root,
         pivot: Vec3::ZERO,
         parent_pivot: Vec3::ZERO,
-        translation: definition.node.translation,
-        rotation: None,
-        scaling: None,
+        translation: (definition.node.translation.clone()).into(),
+        rotation: (None).into(),
+        scaling: (None).into(),
     });
     step(&mut app, 0.625);
     let state = app.world().get::<ParticleState>(emitter).unwrap();
@@ -287,9 +287,9 @@ fn blended_switch_keeps_live_model_particles_but_immediate_switch_retires_them()
             camera: None,
             pivot: Vec3::ZERO,
             parent_pivot: Vec3::ZERO,
-            translation: None,
-            rotation: None,
-            scaling: None,
+            translation: (None).into(),
+            rotation: (None).into(),
+            scaling: (None).into(),
         });
     {
         let mut animation = app.world_mut().get_mut::<Wc3Animation>(root).unwrap();

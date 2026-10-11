@@ -167,7 +167,7 @@ pub(crate) struct LodBounds {
 }
 
 impl LodBounds {
-    pub(crate) fn from_model(model: &Model<V1800>) -> Self {
+    pub(crate) fn from_model(model: &Model<'static, V1800>) -> Self {
         let mut min = Vec3::splat(f32::INFINITY);
         let mut max = Vec3::splat(f32::NEG_INFINITY);
         let mut include = |point: Vec3| {
@@ -178,10 +178,10 @@ impl LodBounds {
         };
         let mut radius = 0.0f32;
         for geoset in model.geosets() {
-            for &vertex in geoset.vertices() {
+            for vertex in geoset.vertices() {
                 include(Vec3::from_array(vertex));
             }
-            for extent in once(&geoset.extent).chain(&geoset.sequence_extents) {
+            for extent in once(geoset.extent).chain(&geoset.sequence_extents) {
                 include(Vec3::from_array(extent.minimum));
                 include(Vec3::from_array(extent.maximum));
                 if extent.bounds_radius.is_finite() {

@@ -452,7 +452,7 @@ fn static_properties_require_prefix_and_preserve_defaults_and_bits() {
     assert_eq!(error.kind, ReadErrorKind::DuplicateField);
 }
 
-fn full_alpha() -> Animatable<f32> {
+fn full_alpha<'data>() -> Animatable<'data, f32> {
     Animatable::Static(1.0)
 }
 
@@ -469,7 +469,7 @@ struct LinkedProperties<T> {
         enabled_if = "Self::is_enabled",
         enable_with = "Self::enable"
     )]
-    alpha: Animatable<f32>,
+    alpha: Animatable<'static, f32>,
     #[mdl(flag = "Enabled", default)]
     enabled: bool,
     #[mdl(skip, default)]
@@ -558,7 +558,7 @@ fn static_value_hooks_do_not_require_codec_traits() {
 #[mdl(block = "GenericLinked")]
 struct GenericLinked<T: TrackValue> {
     #[mdl(property = "Alpha", default)]
-    alpha: Animatable<T>,
+    alpha: Animatable<'static, T>,
 }
 #[test]
 fn animated_properties_preserve_generic_bounds() {

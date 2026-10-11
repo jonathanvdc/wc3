@@ -187,11 +187,11 @@ impl<'a> ConversionContext<'a> {
 
 macro_rules! record_conversion {
     ($($record:ident),+) => {$(
-        impl<V: ModelVersion> $record<V> {
+        impl<'data, V: ModelVersion> $record<'data, V> {
             /// Converts this record without modifying it. Neutral defaults may be omitted.
-            pub fn convert<T: ModelVersion>(&self, options: &ConversionOptions) -> Result<Conversion<$record<T>>, ConversionError> {
+            pub fn convert<'view,T: ModelVersion>(&'view self, options: &ConversionOptions) -> Result<Conversion<$record<'view, T>>, ConversionError> {
                 let mut context = ConversionContext::new::<V, T>(options);
-                let model = self.convert_with::<T>(&mut context, "record")?;
+                let model = self.as_borrowed().convert_with::<T>(&mut context, "record")?;
                 Ok(Conversion { model, report: context.report })
             }
         }
@@ -199,7 +199,7 @@ macro_rules! record_conversion {
 }
 record_conversion!(Material, Layer, Geoset, Light, Camera);
 
-impl<V: ModelDialect> Model<V>
+impl<'data, V: ModelDialect> Model<'data, V>
 where
     V::Extension: Chunk,
 {
@@ -208,9 +208,10 @@ where
     /// Equivalent camera variants and missing node kind bits are normalized.
     /// The source is unchanged. This is strict conversion to the same version;
     /// it does not guarantee that every binary value can be exported to MDL.
-    pub fn normalized(&self) -> Result<Conversion<Self>, ConversionError>
+    pub fn normalized<'view>(&'view self) -> Result<Conversion<Model<'view, V>>, ConversionError>
     where
-        V::Extension: mdx::Extension,
+        V: 'static,
+        V::Extension: for<'input> mdx::Extension<'input>,
     {
         self.convert::<V>(&ConversionOptions::strict())
     }
@@ -236,17 +237,29 @@ where
     /// New fields use constructor defaults.
     /// Unsupported non-default fields and tracks fail unless dropping is enabled.
     /// A missing VERS is inserted so the encoded result identifies its target layout.
-    pub fn convert<T: ModelDialect>(
-        &self,
+    pub fn convert<'view, T: ModelDialect + 'static>(
+        &'view self,
         options: &ConversionOptions,
-    ) -> Result<Conversion<Model<T>>, ConversionError>
+    ) -> Result<Conversion<Model<'view, T>>, ConversionError>
     where
-        T::Extension: mdx::Extension,
+        T::Extension: for<'input> mdx::Extension<'input>,
+    {
+        self.as_borrowed().into_convert::<T>(options)
+    }
+
+    /// Consumes a model, moving unchanged chunks and compatible buffers.
+    pub fn into_convert<T: ModelDialect + 'static>(
+        self,
+        options: &ConversionOptions,
+    ) -> Result<Conversion<Model<'data, T>>, ConversionError>
+    where
+        T::Extension: for<'input> mdx::Extension<'input>,
     {
         let mut context = ConversionContext::new::<V::Version, T::Version>(options);
-        let mut model = Model::<T>::new();
-        model.chunks.clear();
-        for (index, chunk) in self.chunks.iter().enumerate() {
+        let mut model = Model::<T> {
+            chunks: Vec::with_capacity(self.chunks.len() + 1),
+        };
+        for (index, chunk) in self.chunks.into_iter().enumerate() {
             let path = format!("chunks[{index}]");
             if T::Version::NUMBER < 900
                 && matches!(
@@ -263,7 +276,7 @@ where
                 ($value:expr, $collection:ident, $name:literal) => {{
                     let records = $value
                         .records
-                        .iter()
+                        .into_iter()
                         .enumerate()
                         .map(|(i, record)| {
                             record.convert_with::<T::Version>(
@@ -278,17 +291,17 @@ where
             let mut converted = match chunk {
                 ModelChunk::Version(value) => {
                     let mut version = VersionChunk::<T::Version>::new();
-                    version.extension = value.extension.clone();
+                    version.extension = value.extension;
                     version.into()
                 }
                 ModelChunk::Materials(value) => records!(value, MaterialsChunk, "materials"),
                 ModelChunk::Geosets(value) => records!(value, GeosetsChunk, "geosets"),
                 ModelChunk::Lights(value) => records!(value, LightsChunk, "lights"),
                 ModelChunk::Cameras(value) => records!(value, CamerasChunk, "cameras"),
-                ModelChunk::Extension(_) | ModelChunk::Unknown(_) => {
+                chunk @ (ModelChunk::Extension(_) | ModelChunk::Unknown(_)) => {
                     let raw = match chunk {
-                        ModelChunk::Unknown(value) => value.raw().clone(),
-                        _ => {
+                        ModelChunk::Unknown(value) => value.into_raw(),
+                        chunk => {
                             let mut payload = Vec::new();
                             chunk
                                 .encode_payload_to(&mut Encoder::new(&mut payload))
@@ -335,29 +348,25 @@ where
                     }
                     converted
                 }
-                ModelChunk::ModelInfo(value) => ModelChunk::ModelInfo(value.clone()),
-                ModelChunk::Sequences(value) => ModelChunk::Sequences(value.clone()),
-                ModelChunk::GlobalSequences(value) => ModelChunk::GlobalSequences(value.clone()),
-                ModelChunk::Textures(value) => ModelChunk::Textures(value.clone()),
-                ModelChunk::GeosetAnimations(value) => ModelChunk::GeosetAnimations(value.clone()),
-                ModelChunk::Bones(value) => ModelChunk::Bones(value.clone()),
-                ModelChunk::Helpers(value) => ModelChunk::Helpers(value.clone()),
-                ModelChunk::Attachments(value) => ModelChunk::Attachments(value.clone()),
-                ModelChunk::EventObjects(value) => ModelChunk::EventObjects(value.clone()),
-                ModelChunk::CollisionShapes(value) => ModelChunk::CollisionShapes(value.clone()),
-                ModelChunk::ParticleEmitters(value) => ModelChunk::ParticleEmitters(value.clone()),
-                ModelChunk::ParticleEmitters2(value) => {
-                    ModelChunk::ParticleEmitters2(value.clone())
-                }
-                ModelChunk::RibbonEmitters(value) => ModelChunk::RibbonEmitters(value.clone()),
-                ModelChunk::PopcornEmitters(value) => ModelChunk::PopcornEmitters(value.clone()),
-                ModelChunk::TextureAnimations(value) => {
-                    ModelChunk::TextureAnimations(value.clone())
-                }
-                ModelChunk::FaceFx(value) => ModelChunk::FaceFx(value.clone()),
-                ModelChunk::PivotPoints(value) => ModelChunk::PivotPoints(value.clone()),
-                ModelChunk::BindPose(value) => ModelChunk::BindPose(value.clone()),
-                ModelChunk::Gliders(value) => ModelChunk::Gliders(value.clone()),
+                ModelChunk::ModelInfo(value) => ModelChunk::ModelInfo(value),
+                ModelChunk::Sequences(value) => ModelChunk::Sequences(value),
+                ModelChunk::GlobalSequences(value) => ModelChunk::GlobalSequences(value),
+                ModelChunk::Textures(value) => ModelChunk::Textures(value),
+                ModelChunk::GeosetAnimations(value) => ModelChunk::GeosetAnimations(value),
+                ModelChunk::Bones(value) => ModelChunk::Bones(value),
+                ModelChunk::Helpers(value) => ModelChunk::Helpers(value),
+                ModelChunk::Attachments(value) => ModelChunk::Attachments(value),
+                ModelChunk::EventObjects(value) => ModelChunk::EventObjects(value),
+                ModelChunk::CollisionShapes(value) => ModelChunk::CollisionShapes(value),
+                ModelChunk::ParticleEmitters(value) => ModelChunk::ParticleEmitters(value),
+                ModelChunk::ParticleEmitters2(value) => ModelChunk::ParticleEmitters2(value),
+                ModelChunk::RibbonEmitters(value) => ModelChunk::RibbonEmitters(value),
+                ModelChunk::PopcornEmitters(value) => ModelChunk::PopcornEmitters(value),
+                ModelChunk::TextureAnimations(value) => ModelChunk::TextureAnimations(value),
+                ModelChunk::FaceFx(value) => ModelChunk::FaceFx(value),
+                ModelChunk::PivotPoints(value) => ModelChunk::PivotPoints(value),
+                ModelChunk::BindPose(value) => ModelChunk::BindPose(value),
+                ModelChunk::Gliders(value) => ModelChunk::Gliders(value),
             };
             macro_rules! normalize_nodes {
                 ($value:expr, $name:literal, $kind:expr) => {
@@ -412,8 +421,8 @@ where
     }
 }
 
-fn normalize_node_kind<F: NodeFlagInterpretation>(
-    node: &mut Node<F>,
+fn normalize_node_kind<'data, F: NodeFlagInterpretation>(
+    node: &mut Node<'data, F>,
     kind: u32,
     context: &mut ConversionContext<'_>,
     path: &str,
@@ -430,12 +439,14 @@ fn normalize_node_kind<F: NodeFlagInterpretation>(
     }
 }
 
-impl<E: Clone + Debug + Chunk> DynamicModel<E> {
+impl<'data, E: Clone + Debug + Chunk> DynamicModel<'data, E> {
     /// Returns a normalized copy and its report without changing the runtime version.
     /// Uses the same rules as [`Model::normalized`] and leaves the source unchanged.
-    pub fn normalized(&self) -> Result<Conversion<Self>, ConversionError>
+    pub fn normalized<'view>(
+        &'view self,
+    ) -> Result<Conversion<DynamicModel<'view, E>>, ConversionError>
     where
-        E: mdx::Extension,
+        E: 'static + for<'input> mdx::Extension<'input>,
     {
         macro_rules! normalize {
             ($($variant:ident),+) => {
@@ -443,7 +454,7 @@ impl<E: Clone + Debug + Chunk> DynamicModel<E> {
                     $(Self::$variant(model) => {
                         let converted = model.normalized()?;
                         Ok(Conversion {
-                            model: Self::$variant(converted.model),
+                            model: DynamicModel::$variant(converted.model),
                             report: converted.report,
                         })
                     }),+
@@ -454,13 +465,23 @@ impl<E: Clone + Debug + Chunk> DynamicModel<E> {
     }
 
     /// Converts a runtime-dispatched source to a typed target layout.
-    pub fn convert<T: ModelDialect>(
-        &self,
+    pub fn convert<'view, T: ModelDialect + 'static>(
+        &'view self,
         options: &ConversionOptions,
-    ) -> Result<Conversion<Model<T>>, ConversionError>
+    ) -> Result<Conversion<Model<'view, T>>, ConversionError>
     where
-        T::Extension: mdx::Extension,
+        T::Extension: for<'input> mdx::Extension<'input>,
     {
         visit_model!(self, |model| model.convert::<T>(options))
+    }
+    /// Converts the contained owned model without copying unchanged chunks.
+    pub fn into_convert<T: ModelDialect + 'static>(
+        self,
+        options: &ConversionOptions,
+    ) -> Result<Conversion<Model<'data, T>>, ConversionError>
+    where
+        T::Extension: for<'input> mdx::Extension<'input>,
+    {
+        visit_model!(self, |model| model.into_convert::<T>(options))
     }
 }

@@ -55,7 +55,9 @@ fn typed_storage_retains_unknown_data_during_edits() {
     let mut flags = LayerShadingFlags::from_bits_retain(0x8000_0000);
     flags.set_two_sided(true);
     layer.shading_flags = flags;
-    let decoded = Layer::<V800>::decode_mdx(&layer.encode_mdx().unwrap()).unwrap();
+    let decoded = Layer::<V800>::decode_mdx(&layer.encode_mdx().unwrap())
+        .unwrap()
+        .into_owned();
     assert_eq!(decoded, layer);
     assert_eq!(decoded.shading_flags.bits(), 0x8000_0010);
     assert!(layer.encode_mdl().is_err());
@@ -63,7 +65,9 @@ fn typed_storage_retains_unknown_data_during_edits() {
     emitter.filter_mode = Particle2FilterMode::Unknown(99);
     emitter.frames = Particle2Frames::Unknown(u32::MAX);
     assert_eq!(
-        ParticleEmitter2::decode_mdx(&emitter.encode_mdx().unwrap()).unwrap(),
+        ParticleEmitter2::decode_mdx(&emitter.encode_mdx().unwrap())
+            .unwrap()
+            .into_owned(),
         emitter
     );
 }
@@ -128,7 +132,9 @@ fn light_type_preserves_unknown_binary_values_and_rejects_text_output() {
     }
     let light = Light::<V800>::new(Node::new("unknown", 0).unwrap(), LightType::Unknown(99));
     assert_eq!(
-        Light::<V800>::decode_mdx(&light.encode_mdx().unwrap()).unwrap(),
+        Light::<V800>::decode_mdx(&light.encode_mdx().unwrap())
+            .unwrap()
+            .into_owned(),
         light
     );
     let mut output = Vec::new();

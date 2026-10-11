@@ -3,7 +3,7 @@ use wc3::model::animation::{Track, TrackValue};
 use wc3::model::mdl::{self, Read as _, ReadErrorKind, Write as _};
 use wc3::model::{Quaternion, Vec3};
 
-fn roundtrip<K>(value: Track<K>)
+fn roundtrip<'data, K>(value: Track<'data, K>)
 where
     K: TrackValue + mdl::Read + mdl::Write,
 {
@@ -142,7 +142,7 @@ fn signed_frames_preserve_mdx_bits_and_mdl_spelling() {
     for frame in [i32::MIN, -3600, -1, 0, i32::MAX] {
         let source = format!("Track 1 {{ Linear, {frame}: 0.5, }}");
         let track = Track::<f32>::decode_mdl(&source).unwrap();
-        assert_eq!(track.linear_keys().unwrap()[0].frame, frame);
+        assert_eq!(track.linear_keys().unwrap().get(0).unwrap().frame, frame);
         assert!(track.encode_mdl().unwrap().contains(&format!("{frame}:")));
         let bytes = track.encode_mdx().unwrap();
         assert_eq!(&bytes[12..16], &frame.to_le_bytes());
@@ -156,7 +156,7 @@ fn signed_frames_preserve_mdx_bits_and_mdl_spelling() {
         "Track 1 { Hermite, -3600: { 0, 0, 0, 1 }, InTan { 0, 0, 0, 1 }, OutTan { 0, 0, 0, 1 }, }",
     )
     .unwrap();
-    assert_eq!(tangent.hermite_keys().unwrap()[0].frame, -3600);
+    assert_eq!(tangent.hermite_keys().unwrap().get(0).unwrap().frame, -3600);
     roundtrip(tangent);
 }
 
@@ -216,7 +216,7 @@ fn texture_anims_spec_container_transcodes_without_losing_tracks() {
     let mut parser = Parser::new(source);
     parser.expect_ident("TextureAnims").unwrap();
     let animations = parser
-        .counted::<TextureAnimation>()
+        .counted::<TextureAnimation<'static>>()
         .unwrap()
         .collect::<Result<Vec<_>, _>>()
         .unwrap();
@@ -228,7 +228,7 @@ fn texture_anims_spec_container_transcodes_without_losing_tracks() {
     let mut parser = Parser::new(&output);
     parser.expect_ident("TextureAnims").unwrap();
     let decoded = parser
-        .counted::<TextureAnimation>()
+        .counted::<TextureAnimation<'static>>()
         .unwrap()
         .collect::<Result<Vec<_>, _>>()
         .unwrap();

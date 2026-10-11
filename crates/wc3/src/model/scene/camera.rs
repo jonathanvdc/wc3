@@ -6,6 +6,7 @@ use crate::model::mdx;
 use crate::model::ModelDialect;
 use crate::model::ModelVersion;
 use crate::model::{ConversionError, ConversionIssueKind};
+use crate::model::{ModelOwnership, ModelPartialEq};
 use mdl_codec::Target;
 mod mdl_codec;
 use crate::model::Encoder;
@@ -85,16 +86,16 @@ impl CameraLayout for V1800 {
 }
 
 /// A camera view with a position, look-at target, clipping planes, and animation.
-#[derive(Clone, Debug, PartialEq, mdl::Read, mdl::Write)]
+#[derive(Clone, Debug, ModelPartialEq, mdl::Read, mdl::Write, ModelOwnership)]
 #[mdl(block = "Camera", validate_write = "Self::validate_mdl",
     write_order(position, translation, rotation, field_of_view, far_clip, near_clip,
         focus_distance, focal_length, f_stop, target, visibility),
     virtual_fields(
         #[mdl(block = "Target", default, get = "Self::mdl_target", set = "Self::set_mdl_target")]
-        target: Target,
+        target: Target<'data>,
     )
 )]
-pub struct Camera<V: ModelVersion> {
+pub struct Camera<'data, V: ModelVersion> {
     #[mdl(header)]
     /// Name used to identify this camera view.
     pub name: FixedText<NAME_SIZE>,
@@ -118,30 +119,30 @@ pub struct Camera<V: ModelVersion> {
     pub target_position: Vec3,
     #[mdl(property = "Translation")]
     /// Optional eye-position offset animation.
-    pub translation: Option<Track<Vec3>>,
+    pub translation: Option<Track<'data, Vec3>>,
     #[mdl(property = "Rotation")]
     /// Optional camera roll animation in radians.
-    pub rotation: Option<Track<f32>>,
+    pub rotation: Option<Track<'data, f32>>,
     #[mdl(skip, default)]
     /// Optional target-position offset animation.
-    pub target_translation: Option<Track<Vec3>>,
+    pub target_translation: Option<Track<'data, Vec3>>,
     #[mdl(property = "Visibility")]
     /// Optional authored visibility animation.
-    pub visibility: Option<Track<f32>>,
+    pub visibility: Option<Track<'data, f32>>,
     #[mdl(property = "FocusDistanceKeys", constant = "DOFDistance")]
     /// Optional depth-of-field focus-distance animation.
-    pub focus_distance: Option<Track<f32>>,
+    pub focus_distance: Option<Track<'data, f32>>,
     #[mdl(property = "FocalLengthKeys", constant = "FocalLength")]
     /// Optional focal-length animation.
-    pub focal_length: Option<Track<f32>>,
+    pub focal_length: Option<Track<'data, f32>>,
     #[mdl(property = "FStopKeys", constant = "FStop")]
     /// Optional aperture f-stop animation.
-    pub f_stop: Option<Track<f32>>,
+    pub f_stop: Option<Track<'data, f32>>,
     #[mdl(skip, default)]
     version: PhantomData<V>,
 }
 
-impl<V: ModelVersion> Camera<V> {
+impl<'data, V: ModelVersion> Camera<'data, V> {
     /// Creates a camera with zeroed position and target fields.
     pub fn new(name: &str) -> Result<Self, ValueError> {
         let mut camera = Self {
@@ -166,20 +167,22 @@ impl<V: ModelVersion> Camera<V> {
     }
 }
 
-impl<D: ModelDialect> Model<D> {
-    /// Returns owned copies of camera records in `CAMS` chunks.
-    pub fn cameras(&self) -> Vec<Camera<D::Version>> {
-        self.collect_chunk_records::<CamerasChunk<D::Version>>()
+impl<'data, D: ModelDialect> Model<'data, D> {
+    /// Borrows records in chunk and record order.
+    pub fn cameras<'s>(
+        &'s self,
+    ) -> impl Iterator<Item = &'s Camera<'data, D::Version>> + use<'data, 's, D> {
+        self.records::<CamerasChunk<'_, D::Version>>()
     }
 
     /// Replaces cameras with one `CAMS` chunk, removing any duplicate chunks.
-    pub fn set_cameras(&mut self, cameras: &[Camera<D::Version>]) {
+    pub fn set_cameras(&mut self, cameras: &[Camera<'data, D::Version>]) {
         self.replace_chunk(CamerasChunk::new(cameras.to_vec()));
     }
 }
 
-impl<V: ModelVersion> mdx::Read for Camera<V> {
-    fn read_mdx(source: &mut Cursor<'_>) -> Result<Self, mdx::ReadError> {
+impl<'data, V: ModelVersion> mdx::Read<'data> for Camera<'data, V> {
+    fn read_mdx(source: &mut Cursor<'data>) -> Result<Self, mdx::ReadError> {
         let start = source.absolute_position();
         let size_word: u32 = source.read()?;
         let length = (size_word & 0x00ff_ffff) as usize;
@@ -243,7 +246,7 @@ impl<V: ModelVersion> mdx::Read for Camera<V> {
     }
 }
 
-impl<V: ModelVersion> mdx::Write for Camera<V> {
+impl<'data, V: ModelVersion> mdx::Write for Camera<'data, V> {
     fn write_mdx(&self, bytes: &mut Encoder<'_>) -> Result<(), mdx::WriteError> {
         let start = bytes.position();
         let marker = bytes.begin_sized();
@@ -286,12 +289,12 @@ impl<V: ModelVersion> mdx::Write for Camera<V> {
     }
 }
 
-impl<V: ModelVersion> Camera<V> {
+impl<'data, V: ModelVersion> Camera<'data, V> {
     pub(crate) fn convert_with<T: ModelVersion>(
-        &self,
+        self,
         context: &mut ConversionContext<'_>,
         path: &str,
-    ) -> Result<Camera<T>, ConversionError> {
+    ) -> Result<Camera<'data, T>, ConversionError> {
         let variant = match self.variant {
             CameraVariant::Variant0 | CameraVariant::Variant3 => T::DEFAULT_VARIANT,
             variant => variant,
@@ -316,13 +319,13 @@ impl<V: ModelVersion> Camera<V> {
             far_clip: self.far_clip,
             near_clip: self.near_clip,
             target_position: self.target_position,
-            translation: self.translation.clone(),
-            rotation: self.rotation.clone(),
-            target_translation: self.target_translation.clone(),
-            visibility: self.visibility.clone(),
-            focus_distance: self.focus_distance.clone(),
-            focal_length: self.focal_length.clone(),
-            f_stop: self.f_stop.clone(),
+            translation: self.translation,
+            rotation: self.rotation,
+            target_translation: self.target_translation,
+            visibility: self.visibility,
+            focus_distance: self.focus_distance,
+            focal_length: self.focal_length,
+            f_stop: self.f_stop,
             version: PhantomData,
         })
     }

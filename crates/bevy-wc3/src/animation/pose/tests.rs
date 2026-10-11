@@ -16,14 +16,14 @@ fn animation() -> Wc3Animation {
         elapsed_ms: 0.0,
         speed: 1.0,
         playing: false,
-        sequences: model.model.sequences(),
+        sequences: model.model.sequences().cloned().collect::<Vec<_>>(),
         global_sequences: vec![],
         event_playback: Default::default(),
         pose_playback: Default::default(),
     }
 }
 
-fn vector_track(from: Vec3, to: Vec3) -> Track<[f32; 3]> {
+fn vector_track<'data>(from: Vec3, to: Vec3) -> Track<'data, [f32; 3]> {
     Track::linear(
         vec![
             ValueKeyframe {
@@ -47,9 +47,9 @@ fn node(root: Entity, pivot: Vec3, parent_pivot: Vec3, bits: u32) -> AnimatedNod
         parent_pivot,
         flags: NodeFlags(bits),
         camera: None,
-        translation: None,
-        rotation: None,
-        scaling: None,
+        translation: (None).into(),
+        rotation: (None).into(),
+        scaling: (None).into(),
     }
 }
 
@@ -94,9 +94,9 @@ fn inheritance_suppresses_animation_but_preserves_model_placement_and_pivots() {
     };
     *app.world_mut().get_mut::<Transform>(root).unwrap() = placement;
     let mut parent_node = node(root, Vec3::X, Vec3::ZERO, 0);
-    parent_node.translation = Some(vector_track(Vec3::Y * 3.0, Vec3::Y * 3.0));
-    parent_node.scaling = Some(vector_track(Vec3::splat(3.0), Vec3::splat(3.0)));
-    parent_node.rotation = Some(
+    parent_node.translation = (Some(vector_track(Vec3::Y * 3.0, Vec3::Y * 3.0))).into();
+    parent_node.scaling = (Some(vector_track(Vec3::splat(3.0), Vec3::splat(3.0)))).into();
+    parent_node.rotation = (Some(
         Track::linear(
             vec![ValueKeyframe {
                 frame: 0,
@@ -105,7 +105,8 @@ fn inheritance_suppresses_animation_but_preserves_model_placement_and_pivots() {
             None,
         )
         .unwrap(),
-    );
+    ))
+    .into();
     let parent = spawn_node(&mut app, root, parent_node);
     let ordinary = spawn_node(&mut app, parent, node(root, Vec3::X * 2.0, Vec3::X, 0));
     let flagged = spawn_node(&mut app, parent, node(root, Vec3::X * 2.0, Vec3::X, 7));
@@ -135,10 +136,10 @@ fn inheritance_suppresses_animation_but_preserves_model_placement_and_pivots() {
 fn translation_suppression_is_deterministic_when_seeking_and_paused() {
     let (mut app, root) = scene();
     let mut parent_node = node(root, Vec3::ZERO, Vec3::ZERO, 0);
-    parent_node.translation = Some(vector_track(Vec3::ZERO, Vec3::X * 8.0));
+    parent_node.translation = (Some(vector_track(Vec3::ZERO, Vec3::X * 8.0))).into();
     let parent = spawn_node(&mut app, root, parent_node);
     let mut child = node(root, Vec3::Y, Vec3::ZERO, 1);
-    child.translation = Some(vector_track(Vec3::ZERO, Vec3::Z * 4.0));
+    child.translation = (Some(vector_track(Vec3::ZERO, Vec3::Z * 4.0))).into();
     let child = spawn_node(&mut app, parent, child);
     for time in [1000.0, 250.0, 250.0, 0.0] {
         app.world_mut()
@@ -158,7 +159,7 @@ fn full_billboard_uses_current_camera_and_retains_authored_rotation() {
     let (mut app, root) = scene();
     let mut bone = node(root, Vec3::ZERO, Vec3::ZERO, 8);
     let authored = Quat::from_rotation_x(0.2);
-    bone.rotation = Some(
+    bone.rotation = (Some(
         Track::linear(
             vec![ValueKeyframe {
                 frame: 0,
@@ -167,7 +168,8 @@ fn full_billboard_uses_current_camera_and_retains_authored_rotation() {
             None,
         )
         .unwrap(),
-    );
+    ))
+    .into();
     let bone = spawn_node(&mut app, root, bone);
     let camera = app
         .world_mut()
@@ -290,7 +292,7 @@ fn camera_selection_prefers_window_then_marker_then_instance_override() {
 fn ambiguous_cameras_skip_only_camera_dependent_flags_and_recover() {
     let (mut app, root) = scene();
     let mut bone = node(root, Vec3::X, Vec3::ZERO, 128);
-    bone.translation = Some(vector_track(Vec3::Y, Vec3::Y));
+    bone.translation = (Some(vector_track(Vec3::Y, Vec3::Y))).into();
     let bone = spawn_node(&mut app, root, bone);
     app.world_mut()
         .spawn((Camera3d::default(), Transform::from_translation(Vec3::Z)));
@@ -356,10 +358,10 @@ fn attached_instances_inherit_camera_selection_and_can_override_it() {
 fn birth_sampling_evaluates_flags_at_birth_instead_of_using_endpoint_pose() {
     let (mut app, root) = scene();
     let mut parent_node = node(root, Vec3::ZERO, Vec3::ZERO, 0);
-    parent_node.translation = Some(vector_track(Vec3::ZERO, Vec3::X * 8.0));
+    parent_node.translation = (Some(vector_track(Vec3::ZERO, Vec3::X * 8.0))).into();
     let parent = spawn_node(&mut app, root, parent_node);
     let mut bone = node(root, Vec3::Y, Vec3::ZERO, 1 | 128);
-    bone.translation = Some(vector_track(Vec3::ZERO, Vec3::Z * 4.0));
+    bone.translation = (Some(vector_track(Vec3::ZERO, Vec3::Z * 4.0))).into();
     let bone = spawn_node(&mut app, parent, bone);
     app.world_mut().spawn((
         Camera3d::default(),
@@ -394,7 +396,7 @@ fn mirrored_and_collapsed_parent_scales_remain_finite() {
     for scale in [Vec3::new(-2.0, 3.0, 4.0), Vec3::new(0.0, 3.0, 4.0)] {
         let (mut app, root) = scene();
         let mut parent_node = node(root, Vec3::ZERO, Vec3::ZERO, 0);
-        parent_node.scaling = Some(vector_track(scale, scale));
+        parent_node.scaling = (Some(vector_track(scale, scale))).into();
         let parent = spawn_node(&mut app, root, parent_node);
         let child = spawn_node(&mut app, parent, node(root, Vec3::ZERO, Vec3::ZERO, 4));
         app.update();
@@ -447,7 +449,7 @@ fn birth_sampling_preserves_signed_instance_scale_and_rotation() {
         .with_scale(Vec3::new(2.0, -3.0, 4.0));
     *app.world_mut().get_mut::<Transform>(root).unwrap() = placement;
     let mut parent_node = node(root, Vec3::ZERO, Vec3::ZERO, 0);
-    parent_node.rotation = Some(
+    parent_node.rotation = (Some(
         Track::linear(
             vec![ValueKeyframe {
                 frame: 0,
@@ -456,8 +458,9 @@ fn birth_sampling_preserves_signed_instance_scale_and_rotation() {
             None,
         )
         .unwrap(),
-    );
-    parent_node.scaling = Some(vector_track(Vec3::splat(2.0), Vec3::splat(2.0)));
+    ))
+    .into();
+    parent_node.scaling = (Some(vector_track(Vec3::splat(2.0), Vec3::splat(2.0)))).into();
     let parent = spawn_node(&mut app, root, parent_node);
     let child = spawn_node(&mut app, parent, node(root, Vec3::X, Vec3::ZERO, 7));
     app.update();
@@ -503,7 +506,7 @@ fn attached_anchored_nodes_sample_the_existing_camera_offset_once() {
 fn rotation_suppression_and_axis_lock_compose_in_the_effective_parent_frame() {
     let (mut app, root) = scene();
     let mut parent_node = node(root, Vec3::ZERO, Vec3::ZERO, 0);
-    parent_node.rotation = Some(
+    parent_node.rotation = (Some(
         Track::linear(
             vec![ValueKeyframe {
                 frame: 0,
@@ -512,7 +515,8 @@ fn rotation_suppression_and_axis_lock_compose_in_the_effective_parent_frame() {
             None,
         )
         .unwrap(),
-    );
+    ))
+    .into();
     let parent = spawn_node(&mut app, root, parent_node);
     let camera_rotation = Quat::from_rotation_y(0.7) * Quat::from_rotation_x(0.4);
     app.world_mut().spawn((
@@ -575,7 +579,7 @@ fn transitions_cache_authored_poses_and_share_birth_sampling() {
     }
     let pivot = Vec3::new(3.0, 0.0, 0.0);
     let mut animated = node(root, pivot, Vec3::ZERO, 0);
-    animated.translation = Some(
+    animated.translation = (Some(
         Track::linear(
             vec![
                 ValueKeyframe {
@@ -598,7 +602,8 @@ fn transitions_cache_authored_poses_and_share_birth_sampling() {
             None,
         )
         .unwrap(),
-    );
+    ))
+    .into();
     let parent = spawn_node(&mut app, root, animated);
     let child = spawn_node(&mut app, parent, node(root, pivot + Vec3::Y, pivot, 0));
     app.world_mut()

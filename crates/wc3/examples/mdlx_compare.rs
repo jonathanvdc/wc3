@@ -55,8 +55,8 @@ fn run(args: Args) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-fn export_model<V: ModelDialect<Extension = NoExtensions>>(
-    model: &Model<V>,
+fn export_model<'data, V: ModelDialect<Extension = NoExtensions> + 'static>(
+    model: &Model<'data, V>,
     dialect: Dialect,
 ) -> Result<String, Box<dyn Error>> {
     if matches!(V::Version::NUMBER, 900 | 1000) {
@@ -67,10 +67,11 @@ fn export_model<V: ModelDialect<Extension = NoExtensions>>(
 }
 
 fn export_to<
+    'data,
     S: ModelDialect<Extension = NoExtensions>,
-    T: ModelDialect<Extension = NoExtensions>,
+    T: ModelDialect<Extension = NoExtensions> + 'static,
 >(
-    model: &Model<S>,
+    model: &Model<'data, S>,
     dialect: Dialect,
 ) -> Result<String, Box<dyn Error>> {
     let converted = model.convert::<T>(&ConversionOptions::strict())?;

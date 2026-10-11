@@ -1,5 +1,6 @@
 //! Animated surface inputs shared by SD and Reforged mesh materials.
 use super::textures::LinearImages;
+use crate::preparation::shared::Shared;
 use bevy::asset::AssetEvent;
 use bevy::math::Affine2;
 use bevy::prelude::*;
@@ -15,31 +16,31 @@ use crate::materials::Wc3LayerMaterial;
 #[derive(Component, Clone)]
 pub(crate) struct AnimatedSurface {
     pub(crate) root: Entity,
-    pub(crate) slots: [Option<Animatable<u32>>; 6],
-    pub(crate) emissive_gain: Animatable<f32>,
-    pub(crate) fresnel: LayerFresnel,
-    pub(crate) texture_animation: Option<TextureAnimation>,
+    pub(crate) slots: [Option<Shared<Animatable<'static, u32>>>; 6],
+    pub(crate) emissive_gain: Shared<Animatable<'static, f32>>,
+    pub(crate) fresnel: Shared<LayerFresnel<'static>>,
+    pub(crate) texture_animation: Option<Shared<TextureAnimation<'static>>>,
     pub(crate) hd: bool,
     pub(crate) priority_plane: i32,
 }
 
 impl AnimatedSurface {
     pub(crate) fn new(
-        layer: &Layer<V1800>,
-        texture_animation: Option<TextureAnimation>,
+        layer: &Shared<Layer<'static, V1800>>,
+        texture_animation: Option<Shared<TextureAnimation<'static>>>,
         priority_plane: i32,
     ) -> Self {
         let mut slots = [const { None }; 6];
-        for slot in layer.texture_slots() {
+        for (index, slot) in layer.texture_slots().iter().enumerate() {
             if let Some(target) = slots.get_mut(slot.texture_type as usize) {
-                *target = Some(slot.texture_id.clone());
+                *target = Some(layer.select(move |layer| &layer.texture_slots()[index].texture_id));
             }
         }
         Self {
             root: Entity::PLACEHOLDER,
             slots,
-            emissive_gain: layer.emissive_gain(),
-            fresnel: layer.fresnel(),
+            emissive_gain: layer.map(|layer| layer.emissive_gain()),
+            fresnel: layer.map(|layer| layer.fresnel()),
             texture_animation,
             hd: layer.shader_type() == ShaderType::HD_DEFAULT_UNIT,
             priority_plane,
@@ -47,16 +48,16 @@ impl AnimatedSurface {
     }
 }
 
-fn value<T: TrackValue + Interpolate + Copy>(
-    input: &Animatable<T>,
+fn value<'data, T: TrackValue + Interpolate + Copy>(
+    input: &Animatable<'data, T>,
     time: SamplingTime<'_>,
     fallback: T,
 ) -> T {
     time.sample(input).unwrap_or(fallback)
 }
 
-fn texture_transform_at_time(
-    definition: Option<&TextureAnimation>,
+fn texture_transform_at_time<'data>(
+    definition: Option<&TextureAnimation<'data>>,
     time: SamplingTime<'_>,
 ) -> Affine2 {
     let Some(definition) = definition else {
@@ -135,7 +136,7 @@ impl AnimatedSurface {
         cache: &mut LinearImages,
     ) {
         material.base.uv_transform =
-            texture_transform_at_time(self.texture_animation.as_ref(), time);
+            texture_transform_at_time(self.texture_animation.as_deref(), time);
         material.base.depth_bias = self.priority_plane as f32;
         if !self.hd {
             return;

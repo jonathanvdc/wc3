@@ -5,7 +5,7 @@ use wc3::model::{
     CommonModelAccess, DynamicModel, Model, TryModelAccess, ValueError, V1800, V800, V900,
 };
 
-fn replace_durations(model: &mut impl CommonModelAccess) {
+fn replace_durations<'data>(model: &mut impl CommonModelAccess<'data>) {
     model.set_global_sequences(&[100, 250]);
     assert_eq!(model.global_sequences(), [100, 250]);
 }
@@ -21,12 +21,15 @@ fn shared_accessors_work_for_typed_and_runtime_models() {
     assert_eq!(runtime.model_info(), None);
 }
 
-fn check_bind_poses(model: &mut impl TryModelAccess, supported: bool) {
+fn check_bind_poses<'data>(model: &mut impl TryModelAccess<'data>, supported: bool) {
     let poses = [BindPoseMatrix([0.0; 12])];
     if supported {
-        assert!(model.try_bind_poses().unwrap().is_empty());
+        assert!(model.try_bind_poses().unwrap().next().is_none());
         model.try_set_bind_poses(&poses).unwrap();
-        assert_eq!(model.try_bind_poses().unwrap(), poses);
+        assert_eq!(
+            model.try_bind_poses().unwrap().copied().collect::<Vec<_>>(),
+            poses
+        );
     } else {
         assert!(
             matches!(model.try_bind_poses(), Err(ValueError::UnsupportedVersion { tag, minimum: 900, actual: 800 }) if tag == *b"BPOS")
@@ -43,8 +46,11 @@ fn checked_accessors_distinguish_unsupported_and_empty() {
 
     let mut modern = Model::<V1800>::new();
     check_bind_poses(&mut modern, true);
-    assert_eq!(modern.bind_poses(), [BindPoseMatrix([0.0; 12])]);
-    assert!(Model::<V900>::new().bind_poses().is_empty());
+    assert_eq!(
+        modern.bind_poses().cloned().collect::<Vec<_>>(),
+        [BindPoseMatrix([0.0; 12])]
+    );
+    assert!(Model::<V900>::new().bind_poses().next().is_none());
 
     let mut runtime = DynamicModel::<NoExtensions>::V800(Model::new());
     check_bind_poses(&mut runtime, false);
@@ -59,8 +65,8 @@ fn checked_accessors_distinguish_unsupported_and_empty() {
     assert!(runtime.try_set_popcorn_emitters(&[]).is_err());
 
     let mut runtime = DynamicModel::<NoExtensions>::V1800(Model::new());
-    assert!(runtime.try_face_fx().unwrap().is_empty());
-    assert!(runtime.try_popcorn_emitters().unwrap().is_empty());
+    assert!(runtime.try_face_fx().unwrap().next().is_none());
+    assert!(runtime.try_popcorn_emitters().unwrap().next().is_none());
     runtime.try_set_face_fx(&[]).unwrap();
     runtime.try_set_popcorn_emitters(&[]).unwrap();
 }
@@ -68,7 +74,7 @@ fn checked_accessors_distinguish_unsupported_and_empty() {
 #[test]
 fn public_visit_macro_supports_versioned_records_and_edits() {
     let mut model = DynamicModel::<NoExtensions>::V900(Model::new());
-    let geoset_count = visit_model!(&model, |typed| typed.geosets().len());
+    let geoset_count = visit_model!(&model, |typed| typed.geosets().count());
     assert_eq!(geoset_count, 0);
 
     visit_model!(&mut model, |typed| typed.set_global_sequences(&[42]));

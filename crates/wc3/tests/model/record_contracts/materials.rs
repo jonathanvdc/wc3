@@ -20,6 +20,7 @@ fn named_shader_mapping_and_new_flags_preserve_raw_storage() {
         assert_eq!(
             Layer::<V1100>::decode_mdx(&layer.encode_mdx().unwrap())
                 .unwrap()
+                .into_owned()
                 .shader_type(),
             shader
         );
@@ -52,6 +53,7 @@ fn named_shader_mapping_and_new_flags_preserve_raw_storage() {
     assert_eq!(
         Layer::<V800>::decode_mdx(&layer.encode_mdx().unwrap())
             .unwrap()
+            .into_owned()
             .shading_flags,
         flags
     );

@@ -11,10 +11,10 @@ use crate::model::{mdl, FixedText};
 use crate::model::{Animatable, Color, ModelVersion, Track};
 use std::io::Write as IoWrite;
 
-pub(super) fn one() -> Animatable<f32> {
+pub(super) fn one<'data>() -> Animatable<'data, f32> {
     Animatable::Static(1.0)
 }
-pub(super) fn white() -> Animatable<Color> {
+pub(super) fn white<'data>() -> Animatable<'data, Color> {
     Animatable::Static([1.0; 3])
 }
 pub(super) fn is_no_reference(value: &u32) -> bool {
@@ -23,15 +23,15 @@ pub(super) fn is_no_reference(value: &u32) -> bool {
 pub(super) fn zero_id(value: &u32) -> bool {
     *value == 0
 }
-pub(super) fn full(value: &Animatable<f32>) -> bool {
+pub(super) fn full<'data>(value: &Animatable<'data, f32>) -> bool {
     value
         .value()
         .is_some_and(|value| value.to_bits() == 1.0f32.to_bits())
 }
-pub(super) fn zero(value: &Animatable<f32>) -> bool {
+pub(super) fn zero<'data>(value: &Animatable<'data, f32>) -> bool {
     value.value().is_some_and(|value| value.to_bits() == 0)
 }
-pub(super) fn is_white(value: &Animatable<Color>) -> bool {
+pub(super) fn is_white<'data>(value: &Animatable<'data, Color>) -> bool {
     value.value().is_some_and(|value| {
         value
             .iter()
@@ -52,10 +52,10 @@ const SLOT_NAMES: [&str; 6] = [
 ];
 
 #[derive(Default)]
-pub(super) struct TextureBindings {
-    slots: Vec<LayerTextureSlot>,
+pub(super) struct TextureBindings<'data> {
+    slots: Vec<LayerTextureSlot<'data>>,
 }
-impl ReadFields for TextureBindings {
+impl<'data> ReadFields for TextureBindings<'data> {
     type State = Self;
     fn visit_mdl_names(visitor: &mut dyn FnMut(&'static str, bool)) {
         for name in SLOT_NAMES {
@@ -134,7 +134,7 @@ impl ReadFields for TextureBindings {
         Ok(state)
     }
 }
-impl WriteFields for TextureBindings {
+impl<'data> WriteFields for TextureBindings<'data> {
     type State = ();
     fn visit_mdl_names(visitor: &mut dyn FnMut(&'static str, bool)) {
         for name in SLOT_NAMES {
@@ -162,11 +162,11 @@ impl WriteFields for TextureBindings {
 
 // Texture storage depends on the version, independently of the shader. Borrow
 // a view of the layer instead of constructing an owned texture-slot list.
-pub(super) struct TextureBindingsView<'a, V: ModelVersion>(&'a Layer<V>);
-impl<V: ModelVersion> WriteFields for TextureBindingsView<'_, V> {
+pub(super) struct TextureBindingsView<'data, 'a, V: ModelVersion>(&'a Layer<'data, V>);
+impl<'data, V: ModelVersion> WriteFields for TextureBindingsView<'data, '_, V> {
     type State = ();
     fn visit_mdl_names(visitor: &mut dyn FnMut(&'static str, bool)) {
-        <TextureBindings as WriteFields>::visit_mdl_names(visitor);
+        <TextureBindings<'data> as WriteFields>::visit_mdl_names(visitor);
     }
     fn prepare_mdl_fields(&self, dialect: Dialect) -> Result<(), mdl::WriteError> {
         if V::NUMBER >= 1100 {
@@ -206,7 +206,7 @@ impl<V: ModelVersion> WriteFields for TextureBindingsView<'_, V> {
         }
     }
 }
-impl<V: ModelVersion> Layer<V> {
+impl<'data, V: ModelVersion> Layer<'data, V> {
     fn mdl_hd(&self) -> bool {
         self.shader_type
             .shader_type()
@@ -230,12 +230,12 @@ impl<V: ModelVersion> Layer<V> {
         }
         Ok(())
     }
-    pub(super) fn mdl_textures(&self) -> TextureBindingsView<'_, V> {
+    pub(super) fn mdl_textures(&self) -> TextureBindingsView<'data, '_, V> {
         TextureBindingsView(self)
     }
     pub(super) fn set_mdl_textures(
         &mut self,
-        value: TextureBindings,
+        value: TextureBindings<'data>,
         _: bool,
         span: Span,
     ) -> Result<(), mdl::ReadError> {
@@ -289,34 +289,37 @@ impl<V: ModelVersion> Layer<V> {
         }
         Ok(())
     }
-    pub(super) fn mdl_emissive(&self) -> Option<&Animatable<f32>> {
+    pub(super) fn mdl_emissive(&self) -> Option<&Animatable<'data, f32>> {
         self.emissive_gain.emissive_gain()
     }
-    pub(super) fn mdl_emissive_mut(&mut self) -> Option<&mut Animatable<f32>> {
+    pub(super) fn mdl_emissive_mut(&mut self) -> Option<&mut Animatable<'data, f32>> {
         self.emissive_gain.emissive_gain_mut()
     }
-    pub(super) fn mdl_color(&self) -> Option<&Animatable<Color>> {
+    pub(super) fn mdl_color(&self) -> Option<&Animatable<'data, Color>> {
         self.fresnel.fresnel().map(|value| &value.color)
     }
-    pub(super) fn mdl_color_mut(&mut self) -> Option<&mut Animatable<Color>> {
+    pub(super) fn mdl_color_mut(&mut self) -> Option<&mut Animatable<'data, Color>> {
         self.fresnel.fresnel_mut().map(|value| &mut value.color)
     }
-    pub(super) fn mdl_opacity(&self) -> Option<&Animatable<f32>> {
+    pub(super) fn mdl_opacity(&self) -> Option<&Animatable<'data, f32>> {
         self.fresnel.fresnel().map(|value| &value.opacity)
     }
-    pub(super) fn mdl_opacity_mut(&mut self) -> Option<&mut Animatable<f32>> {
+    pub(super) fn mdl_opacity_mut(&mut self) -> Option<&mut Animatable<'data, f32>> {
         self.fresnel.fresnel_mut().map(|value| &mut value.opacity)
     }
-    pub(super) fn mdl_team_color(&self) -> Option<&Animatable<f32>> {
+    pub(super) fn mdl_team_color(&self) -> Option<&Animatable<'data, f32>> {
         self.fresnel.fresnel().map(|value| &value.team_color)
     }
-    pub(super) fn mdl_team_color_mut(&mut self) -> Option<&mut Animatable<f32>> {
+    pub(super) fn mdl_team_color_mut(&mut self) -> Option<&mut Animatable<'data, f32>> {
         self.fresnel
             .fresnel_mut()
             .map(|value| &mut value.team_color)
     }
 }
-fn validate_slots(slots: &[LayerTextureSlot], dialect: Dialect) -> Result<(), mdl::WriteError> {
+fn validate_slots<'data>(
+    slots: &[LayerTextureSlot<'data>],
+    dialect: Dialect,
+) -> Result<(), mdl::WriteError> {
     for (index, slot) in slots.iter().enumerate() {
         if slot.texture_type > 5
             || slots[..index]
@@ -338,8 +341,8 @@ fn validate_slots(slots: &[LayerTextureSlot], dialect: Dialect) -> Result<(), md
     }
     Ok(())
 }
-fn write_slots<W: IoWrite>(
-    slots: &[LayerTextureSlot],
+fn write_slots<'data, W: IoWrite>(
+    slots: &[LayerTextureSlot<'data>],
     writer: &mut Writer<W>,
 ) -> Result<(), IoError<mdl::WriteError>> {
     validate_slots(slots, writer.dialect())?;

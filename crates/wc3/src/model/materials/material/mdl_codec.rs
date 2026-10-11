@@ -55,7 +55,7 @@ pub(super) fn zero_priority(value: &i32) -> bool {
     *value == 0
 }
 
-impl<V: ModelVersion> Material<V> {
+impl<'data, V: ModelVersion> Material<'data, V> {
     // Historical material-level Unfogged is accepted but has no stored effect.
     pub(super) fn mdl_unfogged(&self) -> bool {
         false

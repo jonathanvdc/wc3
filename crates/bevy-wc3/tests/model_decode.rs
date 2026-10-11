@@ -6,7 +6,7 @@ fn classic_fixture_converts_to_runtime_version() {
     let model = Wc3Model::decode(include_bytes!("fixtures/quad_model.mdx")).unwrap();
     assert_eq!(model.source_version, 800);
     assert_eq!(model.model.version(), 1800);
-    assert!(!model.model.geosets().is_empty());
+    assert!(!model.model.geosets().next().is_none());
 }
 
 #[test]
@@ -47,7 +47,7 @@ fn malformed_mdl_and_non_utf8_source_report_errors() {
 #[test]
 fn synthetic_capture_fixture_contains_live_particle_emitters() {
     let model = Wc3Model::decode_mdl(include_str!("fixtures/particle_capture.mdl")).unwrap();
-    let emitters = model.model.particle_emitters2();
+    let emitters = model.model.particle_emitters2().collect::<Vec<_>>();
     assert_eq!(emitters.len(), 2);
     assert!(emitters.iter().all(|emitter| emitter.life_span > 0.0));
     assert!(!emitters[0].node.flags.model_space());

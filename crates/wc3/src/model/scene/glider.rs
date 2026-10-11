@@ -14,10 +14,10 @@ pub struct Glider {
     pub geoset_id: u32,
 }
 
-impl<D: ModelDialect> Model<D> {
-    /// Returns world-picking whitelist entries in chunk and record order.
-    pub fn gliders(&self) -> Vec<Glider> {
-        self.collect_chunk_records::<GlidersChunk>()
+impl<'data, D: ModelDialect> Model<'data, D> {
+    /// Borrows records in chunk and record order.
+    pub fn gliders<'s>(&'s self) -> impl Iterator<Item = &'s Glider> + use<'data, 's, D> {
+        self.records::<GlidersChunk>()
     }
 
     /// Replaces the whitelist, removing all DILG chunks when empty.

@@ -16,12 +16,11 @@ impl Wc3ModelResources {
     /// Resolve literal paths using a consumer's asset source. The callback owns
     /// path normalization and any MDL-to-MDX fallback policy.
     pub fn resolve(
-        model: &Model<V1800>,
+        model: &Model<'static, V1800>,
         mut resolve: impl FnMut(&str) -> Option<Handle<Wc3ModelAsset>>,
     ) -> Self {
         let attachments = model
             .attachments()
-            .iter()
             .map(|attachment| {
                 let path = attachment.path.text();
                 if path.is_empty() {
@@ -33,7 +32,6 @@ impl Wc3ModelResources {
             .collect();
         let particles = model
             .particle_emitters()
-            .iter()
             .map(|emitter| {
                 let path = emitter.path.text();
                 if emitter.flags().emitter_uses_mdl() && !path.is_empty() {
@@ -119,7 +117,7 @@ mod tests {
 
         let source = Wc3Model {
             source_version: 1800,
-            model,
+            model: (model).into(),
         };
         let mut meshes = Assets::<Mesh>::default();
         let mut materials = Assets::<Wc3LayerMaterial>::default();

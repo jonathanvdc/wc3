@@ -16,8 +16,10 @@ fn geoset_animation_fields_round_trip() {
     animation.color = Animatable::Static([0.1, 0.2, 0.3]);
     let mut model = Model::<wc3::model::V1800>::new();
     model.set_geoset_animations(&[animation]);
-    let parsed = Model::<wc3::model::V1800>::decode_mdx(&model.encode_mdx().unwrap()).unwrap();
-    let actual = &parsed.geoset_animations()[0];
+    let parsed = Model::<wc3::model::V1800>::decode_mdx(&model.encode_mdx().unwrap())
+        .unwrap()
+        .into_owned();
+    let actual = &parsed.geoset_animations().next().unwrap();
     assert_eq!(actual.geoset_id, 2);
     assert_eq!(actual.alpha, Animatable::Static(0.5));
     assert!(actual.flags.drop_shadow());
@@ -38,7 +40,9 @@ fn geoset_animation_color_track_round_trip() {
     )
     .unwrap();
     animation.color.set_track(track.clone());
-    let parsed = GeosetAnimation::decode_mdx(&animation.encode_mdx().unwrap()).unwrap();
+    let parsed = GeosetAnimation::decode_mdx(&animation.encode_mdx().unwrap())
+        .unwrap()
+        .into_owned();
     assert_eq!(parsed.color.track(), Some(&track));
 }
 

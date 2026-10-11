@@ -8,6 +8,7 @@ use crate::model::ModelDialect;
 use crate::model::ValueError;
 use crate::model::{mdl, mdx};
 use crate::model::{Animatable, Track};
+use crate::model::{Borrowed, Detached, ModelOwnership, ModelPartialEq};
 use crate::model::{Model, Node};
 use crate::model::{
     ModelVersion, SupportsLightFalloff, SupportsLightShadowCasting, SupportsLightShadowIntensity,
@@ -15,6 +16,7 @@ use crate::model::{
 use mdl_codec::{damping, is_zero, quadratic, white, zero};
 use std::fmt::Debug;
 use std::marker::PhantomData;
+use std::mem::take;
 
 /// How a light illuminates the model. Unknown values round-trip through MDX.
 #[derive(
@@ -51,7 +53,9 @@ pub enum LightType {
 }
 
 /// Light features available in a particular model version.
-pub trait ShadowCastingField: Default + mdx::Read + mdx::Write + Clone + Debug + PartialEq {
+pub trait ShadowCastingField:
+    Default + for<'data> mdx::Read<'data> + mdx::Write + Clone + Debug + PartialEq
+{
     fn shadow_casting(&self) -> Option<u32> {
         None
     }
@@ -76,7 +80,7 @@ impl ShadowCastingField for ShadowCasting {
 }
 
 pub trait ShadowIntensityField:
-    Default + mdx::Read + mdx::Write + Clone + Debug + PartialEq
+    Default + for<'data> mdx::Read<'data> + mdx::Write + Clone + Debug + PartialEq
 {
     fn shadow_intensity(&self) -> Option<f32> {
         None
@@ -103,69 +107,83 @@ impl ShadowIntensityField for LightShadowIntensity {
     }
 }
 
-pub trait ShadowRangeField:
-    Default + mdx::Read + mdx::Write + mdx::ReadTracks + mdx::WriteTracks + Clone + Debug + PartialEq
+pub trait ShadowRangeField<'data>:
+    Default
+    + mdx::Read<'data>
+    + mdx::Write
+    + mdx::ReadTracks<'data>
+    + mdx::WriteTracks
+    + Clone
+    + Debug
+    + PartialEq
 {
-    fn shadow_casting_range(&self) -> Option<&LightShadowRange> {
+    fn shadow_casting_range(&self) -> Option<&LightShadowRange<'data>> {
         None
     }
-    fn shadow_casting_range_mut(&mut self) -> Option<&mut LightShadowRange> {
+    fn shadow_casting_range_mut(&mut self) -> Option<&mut LightShadowRange<'data>> {
         None
     }
 }
 
 #[derive(Clone, Debug, Default, PartialEq, mdx::Read, mdx::Write)]
 pub struct NoShadowRange;
-impl ShadowRangeField for NoShadowRange {}
+impl<'data> ShadowRangeField<'data> for NoShadowRange {}
 
 /// Start and end distances for a light's shadow-casting range.
-#[derive(Clone, Debug, Default, PartialEq, mdx::Read, mdx::Write)]
-pub struct LightShadowRange {
+#[derive(Clone, Debug, Default, PartialEq, mdx::Read, mdx::Write, ModelOwnership)]
+pub struct LightShadowRange<'data> {
     #[mdx(tag = *b"KLSS")]
     /// Animated start distance of the shadow-casting range.
-    pub start: Animatable<f32>,
+    pub start: Animatable<'data, f32>,
     #[mdx(tag = *b"KLSE")]
     /// Animated end distance of the shadow-casting range.
-    pub end: Animatable<f32>,
+    pub end: Animatable<'data, f32>,
 }
-impl ShadowRangeField for LightShadowRange {
-    fn shadow_casting_range(&self) -> Option<&LightShadowRange> {
+impl<'data> ShadowRangeField<'data> for LightShadowRange<'data> {
+    fn shadow_casting_range(&self) -> Option<&LightShadowRange<'data>> {
         Some(self)
     }
-    fn shadow_casting_range_mut(&mut self) -> Option<&mut LightShadowRange> {
+    fn shadow_casting_range_mut(&mut self) -> Option<&mut LightShadowRange<'data>> {
         Some(self)
     }
 }
 
-pub trait FalloffField:
-    Default + mdx::Read + mdx::Write + mdx::ReadTracks + mdx::WriteTracks + Clone + Debug + PartialEq
+pub trait FalloffField<'data>:
+    Default
+    + mdx::Read<'data>
+    + mdx::Write
+    + mdx::ReadTracks<'data>
+    + mdx::WriteTracks
+    + Clone
+    + Debug
+    + PartialEq
 {
-    fn falloff(&self) -> Option<&LightFalloff> {
+    fn falloff(&self) -> Option<&LightFalloff<'data>> {
         None
     }
-    fn falloff_mut(&mut self) -> Option<&mut LightFalloff> {
+    fn falloff_mut(&mut self) -> Option<&mut LightFalloff<'data>> {
         None
     }
 }
 
 #[derive(Clone, Debug, Default, PartialEq, mdx::Read, mdx::Write)]
 pub struct NoFalloff;
-impl FalloffField for NoFalloff {}
+impl<'data> FalloffField<'data> for NoFalloff {}
 
 /// Distance falloff coefficients, editable in version 1600 and newer.
-#[derive(Clone, Debug, PartialEq, mdx::Read, mdx::Write)]
-pub struct LightFalloff {
+#[derive(Clone, Debug, PartialEq, mdx::Read, mdx::Write, ModelOwnership)]
+pub struct LightFalloff<'data> {
     #[mdx(tag = *b"KLQF")]
     /// Animated quadratic distance-falloff coefficient.
-    pub quadratic: Animatable<f32>,
+    pub quadratic: Animatable<'data, f32>,
     #[mdx(tag = *b"KLLF")]
     /// Animated linear distance-falloff coefficient.
-    pub linear: Animatable<f32>,
+    pub linear: Animatable<'data, f32>,
     #[mdx(tag = *b"KLDA")]
     /// Animated damping coefficient.
-    pub damping: Animatable<f32>,
+    pub damping: Animatable<'data, f32>,
 }
-impl Default for LightFalloff {
+impl<'data> Default for LightFalloff<'data> {
     fn default() -> Self {
         Self {
             quadratic: Animatable::Static(0.0005),
@@ -174,11 +192,11 @@ impl Default for LightFalloff {
         }
     }
 }
-impl FalloffField for LightFalloff {
-    fn falloff(&self) -> Option<&LightFalloff> {
+impl<'data> FalloffField<'data> for LightFalloff<'data> {
+    fn falloff(&self) -> Option<&LightFalloff<'data>> {
         Some(self)
     }
-    fn falloff_mut(&mut self) -> Option<&mut LightFalloff> {
+    fn falloff_mut(&mut self) -> Option<&mut LightFalloff<'data>> {
         Some(self)
     }
 }
@@ -190,18 +208,27 @@ pub trait LightLayout {
     /// Storage for shadow intensity.
     type ShadowIntensity: ShadowIntensityField;
     /// Storage for the animated shadow range.
-    type ShadowRange: ShadowRangeField;
+    type ShadowRange<'data>: ShadowRangeField<'data>
+        + for<'view> Borrowed<'view, View = Self::ShadowRange<'view>>
+        + for<'owned> Detached<'owned, Detached = Self::ShadowRange<'owned>>;
     /// Storage for animated distance-falloff controls.
-    type Falloff: FalloffField;
+    type Falloff<'data>: FalloffField<'data>
+        + for<'view> Borrowed<'view, View = Self::Falloff<'view>>
+        + for<'owned> Detached<'owned, Detached = Self::Falloff<'owned>>;
 }
 use crate::model::{V1000, V1100, V1200, V1300, V1400, V1600, V1800, V800, V900};
+macro_rules! light_field {
+    (NoShadowRange, $data:lifetime) => { NoShadowRange };
+    (NoFalloff, $data:lifetime) => { NoFalloff };
+    ($field:ident, $data:lifetime) => { $field<$data> };
+}
 macro_rules! light_layout {
-    ($version:ty, $casting:ty, $intensity:ty, $range:ty, $falloff:ty) => {
+    ($version:ty, $casting:ty, $intensity:ty, $range:ident, $falloff:ident) => {
         impl LightLayout for $version {
             type ShadowCasting = $casting;
             type ShadowIntensity = $intensity;
-            type ShadowRange = $range;
-            type Falloff = $falloff;
+            type ShadowRange<'data> = light_field!($range, 'data);
+            type Falloff<'data> = light_field!($falloff, 'data);
         }
     };
 }
@@ -274,7 +301,9 @@ light_layout!(
 /// Shadow settings depend on the model version; checked accessors report
 /// unavailable features. MDL supports static shadow intensity, not an animated
 /// shadow-intensity channel.
-#[derive(Clone, Debug, PartialEq, mdx::Read, mdx::Write, mdl::Read, mdl::Write)]
+#[derive(
+    Clone, Debug, ModelPartialEq, mdx::Read, mdx::Write, mdl::Read, mdl::Write, ModelOwnership,
+)]
 #[mdx(sized(tag = LightsChunk::<V>::TAG))]
 #[mdl(block = "Light", after_read = "Self::finish_mdl", validate_write = "Self::validate_mdl",
     write_order(node, light_type, attenuation_start, attenuation_end, color, intensity,
@@ -296,37 +325,37 @@ light_layout!(
             default = "zero"
         )]
         #[mdl(get = "Self::mdl_shadow_start", slot = "Self::mdl_shadow_start_mut")]
-        shadow_start: Animatable<f32>,
+        shadow_start: Animatable<'data, f32>,
         #[mdl(
             property = "ShadowCastingEnd",
             default = "zero"
         )]
         #[mdl(get = "Self::mdl_shadow_end", slot = "Self::mdl_shadow_end_mut")]
-        shadow_end: Animatable<f32>,
+        shadow_end: Animatable<'data, f32>,
         #[mdl(
             property = "QuadraticFalloff",
             default = "quadratic"
         )]
         #[mdl(get = "Self::mdl_quadratic", slot = "Self::mdl_quadratic_mut")]
-        quadratic: Animatable<f32>,
+        quadratic: Animatable<'data, f32>,
         #[mdl(
             property = "LinearFalloff",
             default = "zero"
         )]
         #[mdl(get = "Self::mdl_linear", slot = "Self::mdl_linear_mut")]
-        linear: Animatable<f32>,
+        linear: Animatable<'data, f32>,
         #[mdl(
             property = "Damping",
             default = "damping"
         )]
         #[mdl(get = "Self::mdl_damping", slot = "Self::mdl_damping_mut")]
-        damping: Animatable<f32>
+        damping: Animatable<'data, f32>
     )
 )]
-pub struct Light<V: ModelVersion> {
+pub struct Light<'data, V: ModelVersion> {
     #[mdl(flatten)]
     /// Shared node.
-    pub node: Node,
+    pub node: Node<'data>,
     #[mdl(flatten)]
     /// The kind of illumination.
     pub light_type: LightType,
@@ -335,46 +364,46 @@ pub struct Light<V: ModelVersion> {
     #[mdx(tag = *b"KLAS")]
     #[mdl(property = "AttenuationStart", default = "zero")]
     /// Attenuation start distance.
-    pub attenuation_start: Animatable<f32>,
+    pub attenuation_start: Animatable<'data, f32>,
     #[mdx(tag = *b"KLAE")]
     #[mdl(property = "AttenuationEnd", default = "zero")]
     /// Attenuation end distance.
-    pub attenuation_end: Animatable<f32>,
+    pub attenuation_end: Animatable<'data, f32>,
     #[mdx(tag = *b"KLAC")]
     #[mdl(property = "Color", default = "white")]
     /// RGB light color.
-    pub color: Animatable<Color>,
+    pub color: Animatable<'data, Color>,
     #[mdx(tag = *b"KLAI")]
     #[mdl(property = "Intensity", default = "zero")]
     /// Light intensity.
-    pub intensity: Animatable<f32>,
+    pub intensity: Animatable<'data, f32>,
     #[mdx(tag = *b"KLBC")]
     #[mdl(property = "AmbColor", default = "white")]
     /// Ambient RGB color.
-    pub ambient_color: Animatable<Color>,
+    pub ambient_color: Animatable<'data, Color>,
     #[mdx(tag = *b"KLBI")]
     #[mdl(property = "AmbIntensity", default = "zero")]
     /// Ambient intensity.
-    pub ambient_intensity: Animatable<f32>,
+    pub ambient_intensity: Animatable<'data, f32>,
     #[mdl(skip, default)]
     shadow_intensity: V::ShadowIntensity,
     #[mdl(skip, default)]
     #[mdx(flatten)]
-    shadow_range: V::ShadowRange,
+    shadow_range: V::ShadowRange<'data>,
     #[mdl(skip, default)]
     #[mdx(flatten)]
-    falloff: V::Falloff,
+    falloff: V::Falloff<'data>,
     #[mdl(skip, default)]
     version: PhantomData<V>,
     #[mdx(tag = *b"KLAV")]
     #[mdl(property = "Visibility")]
     /// Optional visibility animation.
-    pub visibility: Option<Track<f32>>,
+    pub visibility: Option<Track<'data, f32>>,
 }
 
-impl<V: ModelVersion> Light<V> {
+impl<'data, V: ModelVersion> Light<'data, V> {
     /// Creates a light with white colors and the format defaults for versioned fields.
-    pub fn new(node: Node, light_type: LightType) -> Self {
+    pub fn new(node: Node<'data>, light_type: LightType) -> Self {
         Self {
             node,
             light_type,
@@ -386,8 +415,8 @@ impl<V: ModelVersion> Light<V> {
             ambient_color: Animatable::Static([1.0; 3]),
             ambient_intensity: Animatable::Static(0.0),
             shadow_intensity: V::ShadowIntensity::default(),
-            shadow_range: V::ShadowRange::default(),
-            falloff: V::Falloff::default(),
+            shadow_range: V::ShadowRange::<'data>::default(),
+            falloff: V::Falloff::<'data>::default(),
             visibility: None,
             version: PhantomData,
         }
@@ -439,7 +468,7 @@ impl<V: ModelVersion> Light<V> {
         Ok(())
     }
     /// Returns shadow-casting start and end, available from version 1300.
-    pub fn try_shadow_casting_range(&self) -> Result<LightShadowRange, ValueError> {
+    pub fn try_shadow_casting_range(&self) -> Result<LightShadowRange<'data>, ValueError> {
         self.shadow_range
             .shadow_casting_range()
             .cloned()
@@ -452,7 +481,7 @@ impl<V: ModelVersion> Light<V> {
     /// Sets shadow-casting start and end, available from version 1300.
     pub fn try_set_shadow_casting_range(
         &mut self,
-        range: LightShadowRange,
+        range: LightShadowRange<'data>,
     ) -> Result<(), ValueError> {
         *self
             .shadow_range
@@ -465,11 +494,11 @@ impl<V: ModelVersion> Light<V> {
         Ok(())
     }
     /// Returns the falloff values used by the game, including older-version defaults.
-    pub fn falloff(&self) -> LightFalloff {
+    pub fn falloff(&self) -> LightFalloff<'data> {
         self.falloff.falloff().cloned().unwrap_or_default()
     }
     /// Sets the three serialized falloff fields from version 1600 onward.
-    pub fn try_set_falloff(&mut self, falloff: LightFalloff) -> Result<(), ValueError> {
+    pub fn try_set_falloff(&mut self, falloff: LightFalloff<'data>) -> Result<(), ValueError> {
         *self
             .falloff
             .falloff_mut()
@@ -482,7 +511,7 @@ impl<V: ModelVersion> Light<V> {
     }
 }
 
-impl<V: SupportsLightShadowIntensity> Light<V> {
+impl<'data, V: SupportsLightShadowIntensity> Light<'data, V> {
     /// Returns shadow intensity.
     pub fn shadow_intensity(&self) -> f32 {
         self.try_shadow_intensity().expect("supported version")
@@ -495,7 +524,7 @@ impl<V: SupportsLightShadowIntensity> Light<V> {
     }
 }
 
-impl<V: SupportsLightShadowCasting> Light<V> {
+impl<'data, V: SupportsLightShadowCasting> Light<'data, V> {
     /// Returns whether shadow casting is enabled.
     pub fn shadow_casting(&self) -> bool {
         self.try_shadow_casting().expect("supported version")
@@ -508,49 +537,51 @@ impl<V: SupportsLightShadowCasting> Light<V> {
     }
 
     /// Returns the shadow-casting range.
-    pub fn shadow_casting_range(&self) -> LightShadowRange {
+    pub fn shadow_casting_range(&self) -> LightShadowRange<'data> {
         self.try_shadow_casting_range().expect("supported version")
     }
 
     /// Sets the shadow-casting range.
-    pub fn set_shadow_casting_range(&mut self, range: LightShadowRange) {
+    pub fn set_shadow_casting_range(&mut self, range: LightShadowRange<'data>) {
         self.try_set_shadow_casting_range(range)
             .expect("supported version");
     }
 }
 
-impl<V: SupportsLightFalloff> Light<V> {
+impl<'data, V: SupportsLightFalloff> Light<'data, V> {
     /// Sets the serialized falloff coefficients.
-    pub fn set_falloff(&mut self, falloff: LightFalloff) {
+    pub fn set_falloff(&mut self, falloff: LightFalloff<'data>) {
         self.try_set_falloff(falloff).expect("supported version");
     }
 }
 
-impl<D: ModelDialect> Model<D> {
-    /// Returns owned copies of `LITE` records in file order.
-    pub fn lights(&self) -> Vec<Light<D::Version>> {
-        self.collect_chunk_records::<LightsChunk<D::Version>>()
+impl<'data, D: ModelDialect> Model<'data, D> {
+    /// Borrows records in chunk and record order.
+    pub fn lights<'s>(
+        &'s self,
+    ) -> impl Iterator<Item = &'s Light<'data, D::Version>> + use<'data, 's, D> {
+        self.records::<LightsChunk<'_, D::Version>>()
     }
 
     /// Replaces lights with one `LITE` chunk, removing any duplicate chunks.
-    pub fn set_lights(&mut self, lights: &[Light<D::Version>]) {
+    pub fn set_lights(&mut self, lights: &[Light<'data, D::Version>]) {
         self.replace_chunk(LightsChunk::new(lights.to_vec()));
     }
 }
 
-impl<V: ModelVersion> Light<V> {
+impl<'data, V: ModelVersion> Light<'data, V> {
     pub(crate) fn convert_with<T: ModelVersion>(
-        &self,
+        mut self,
         context: &mut ConversionContext<'_>,
         path: &str,
-    ) -> Result<Light<T>, ConversionError> {
-        let mut target = Light::<T>::new(self.node.clone(), self.light_type);
-        target.attenuation_start = self.attenuation_start.clone();
-        target.attenuation_end = self.attenuation_end.clone();
-        target.color = self.color.clone();
-        target.intensity = self.intensity.clone();
-        target.ambient_color = self.ambient_color.clone();
-        target.ambient_intensity = self.ambient_intensity.clone();
+    ) -> Result<Light<'data, T>, ConversionError> {
+        let mut target = Light::<T>::new(self.node, self.light_type);
+        target.attenuation_start = self.attenuation_start;
+        target.attenuation_end = self.attenuation_end;
+        target.color = self.color;
+        target.intensity = self.intensity;
+        target.ambient_color = self.ambient_color;
+        target.ambient_intensity = self.ambient_intensity;
 
         context.field(
             self.shadow_casting.shadow_casting(),
@@ -565,18 +596,18 @@ impl<V: ModelVersion> Light<V> {
             &format!("{path}.shadow_intensity"),
         )?;
         context.field(
-            self.shadow_range.shadow_casting_range().cloned(),
+            self.shadow_range.shadow_casting_range_mut().map(take),
             target.shadow_range.shadow_casting_range_mut(),
             LightShadowRange::default(),
             &format!("{path}.shadow_range"),
         )?;
         context.field(
-            self.falloff.falloff().cloned(),
+            self.falloff.falloff_mut().map(take),
             target.falloff.falloff_mut(),
             LightFalloff::default(),
             &format!("{path}.falloff"),
         )?;
-        target.visibility = self.visibility.clone();
+        target.visibility = self.visibility;
         Ok(target)
     }
 }

@@ -42,7 +42,7 @@ fn edits_to_decoded_records_are_written() {
 
     let bytes = model.encode_mdx().unwrap();
     let reopened = Model::<V800>::decode_mdx(&bytes).unwrap();
-    assert_eq!(reopened.sequences()[0].name.text(), "Walk");
+    assert_eq!(reopened.sequences().next().unwrap().name.text(), "Walk");
 }
 
 #[test]
@@ -62,7 +62,10 @@ fn collection_setter_collapses_repeated_chunks() {
     model
         .chunks
         .push(ModelChunk::from(SequencesChunk::new(vec![second.clone()])));
-    assert_eq!(model.sequences(), vec![first, second.clone()]);
+    assert_eq!(
+        model.sequences().cloned().collect::<Vec<_>>(),
+        vec![first, second.clone()]
+    );
 
     model.set_sequences(from_ref(&second));
     assert!(matches!(
@@ -77,5 +80,5 @@ fn collection_setter_collapses_repeated_chunks() {
             .count(),
         1
     );
-    assert_eq!(model.sequences(), vec![second]);
+    assert_eq!(model.sequences().cloned().collect::<Vec<_>>(), vec![second]);
 }

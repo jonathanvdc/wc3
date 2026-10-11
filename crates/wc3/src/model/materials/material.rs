@@ -8,6 +8,7 @@ use super::{write_count, ShaderType};
 use crate::model::conversion::ConversionContext;
 use crate::model::ModelDialect;
 use crate::model::{mdl, mdx};
+use crate::model::{Borrowed, Detached, ModelOwnership, ModelPartialEq};
 use crate::model::{ConversionError, ConversionIssueKind};
 use crate::model::{
     Cursor, Encoder, FixedText, KnownChunk, MaterialsChunk, Model, ModelVersion,
@@ -44,7 +45,7 @@ bitfield! {
 }
 
 /// Surface appearance composed of ordered rendering layers.
-#[derive(Clone, Debug, PartialEq, mdl::Read, mdl::Write)]
+#[derive(Clone, Debug, ModelPartialEq, mdl::Read, mdl::Write, ModelOwnership)]
 #[mdl(
     block = "Material",
     write_order(priority_plane, render_mode, unfogged, shader, layers),
@@ -54,7 +55,7 @@ bitfield! {
         unfogged: bool
     )
 )]
-pub struct Material<V: ModelVersion> {
+pub struct Material<'data, V: ModelVersion> {
     #[mdl(skip, default)]
     version: PhantomData<V>,
     #[mdl(property = "PriorityPlane", default, skip_if = "zero_priority")]
@@ -67,13 +68,13 @@ pub struct Material<V: ModelVersion> {
     shader: V::Shader,
     #[mdl(repeated = "Layer")]
     /// Rendering layers, in draw order.
-    pub layers: Vec<Layer<V>>,
+    pub layers: Vec<Layer<'data, V>>,
 }
 
 /// The fixed shader field selected by a model version.
 pub trait ShaderField:
     Default
-    + mdx::Read
+    + for<'data> mdx::Read<'data>
     + mdx::Write
     + mdl::ReadProperty
     + mdl::WriteProperty
@@ -129,82 +130,88 @@ pub trait MaterialLayout {
     /// Storage for the material shader path.
     type Shader: ShaderField;
     /// Storage for layer emissive gain.
-    type EmissiveGain: EmissiveGainField;
+    type EmissiveGain<'data>: EmissiveGainField<'data>
+        + for<'view> Borrowed<'view, View = Self::EmissiveGain<'view>>
+        + for<'owned> Detached<'owned, Detached = Self::EmissiveGain<'owned>>;
     /// Storage for layer Fresnel controls.
-    type Fresnel: FresnelField;
+    type Fresnel<'data>: FresnelField<'data>
+        + for<'view> Borrowed<'view, View = Self::Fresnel<'view>>
+        + for<'owned> Detached<'owned, Detached = Self::Fresnel<'owned>>;
     /// Storage for the layer shader-type identifier.
     type ShaderType: LayerShaderTypeField;
     /// Storage for layer texture-role slots.
-    type TextureSlots: LayerTextureSlotsField;
+    type TextureSlots<'data>: LayerTextureSlotsField<'data>
+        + for<'view> Borrowed<'view, View = Self::TextureSlots<'view>>
+        + for<'owned> Detached<'owned, Detached = Self::TextureSlots<'owned>>;
 }
 use crate::model::{V1000, V1100, V1200, V1300, V1400, V1600, V1800, V800, V900};
 
 impl MaterialLayout for V800 {
     type Shader = NoShader;
-    type EmissiveGain = NoEmissiveGain;
-    type Fresnel = NoFresnel;
+    type EmissiveGain<'data> = NoEmissiveGain;
+    type Fresnel<'data> = NoFresnel;
     type ShaderType = NoLayerShaderType;
-    type TextureSlots = NoLayerTextureSlots;
+    type TextureSlots<'data> = NoLayerTextureSlots;
 }
 impl MaterialLayout for V900 {
     type Shader = ShaderText;
-    type EmissiveGain = EmissiveGain;
-    type Fresnel = NoFresnel;
+    type EmissiveGain<'data> = EmissiveGain<'data>;
+    type Fresnel<'data> = NoFresnel;
     type ShaderType = NoLayerShaderType;
-    type TextureSlots = NoLayerTextureSlots;
+    type TextureSlots<'data> = NoLayerTextureSlots;
 }
 impl MaterialLayout for V1000 {
     type Shader = ShaderText;
-    type EmissiveGain = EmissiveGain;
-    type Fresnel = LayerFresnel;
+    type EmissiveGain<'data> = EmissiveGain<'data>;
+    type Fresnel<'data> = LayerFresnel<'data>;
     type ShaderType = NoLayerShaderType;
-    type TextureSlots = NoLayerTextureSlots;
+    type TextureSlots<'data> = NoLayerTextureSlots;
 }
 impl MaterialLayout for V1100 {
     type Shader = NoShader;
-    type EmissiveGain = EmissiveGain;
-    type Fresnel = LayerFresnel;
+    type EmissiveGain<'data> = EmissiveGain<'data>;
+    type Fresnel<'data> = LayerFresnel<'data>;
     type ShaderType = ShaderType;
-    type TextureSlots = LayerTextureSlots;
+    type TextureSlots<'data> = LayerTextureSlots<'data>;
 }
 impl MaterialLayout for V1200 {
     type Shader = NoShader;
-    type EmissiveGain = EmissiveGain;
-    type Fresnel = LayerFresnel;
+    type EmissiveGain<'data> = EmissiveGain<'data>;
+    type Fresnel<'data> = LayerFresnel<'data>;
     type ShaderType = ShaderType;
-    type TextureSlots = LayerTextureSlots;
+    type TextureSlots<'data> = LayerTextureSlots<'data>;
 }
 impl MaterialLayout for V1300 {
     type Shader = NoShader;
-    type EmissiveGain = EmissiveGain;
-    type Fresnel = LayerFresnel;
+    type EmissiveGain<'data> = EmissiveGain<'data>;
+    type Fresnel<'data> = LayerFresnel<'data>;
     type ShaderType = ShaderType;
-    type TextureSlots = LayerTextureSlots;
+    type TextureSlots<'data> = LayerTextureSlots<'data>;
 }
 impl MaterialLayout for V1400 {
     type Shader = NoShader;
-    type EmissiveGain = EmissiveGain;
-    type Fresnel = LayerFresnel;
+    type EmissiveGain<'data> = EmissiveGain<'data>;
+    type Fresnel<'data> = LayerFresnel<'data>;
     type ShaderType = ShaderType;
-    type TextureSlots = LayerTextureSlots;
+    type TextureSlots<'data> = LayerTextureSlots<'data>;
 }
 impl MaterialLayout for V1600 {
     type Shader = NoShader;
-    type EmissiveGain = EmissiveGain;
-    type Fresnel = LayerFresnel;
+    type EmissiveGain<'data> = EmissiveGain<'data>;
+    type Fresnel<'data> = LayerFresnel<'data>;
     type ShaderType = ShaderType;
-    type TextureSlots = LayerTextureSlots;
+    type TextureSlots<'data> = LayerTextureSlots<'data>;
 }
 impl MaterialLayout for V1800 {
     type Shader = NoShader;
-    type EmissiveGain = EmissiveGain;
-    type Fresnel = LayerFresnel;
+    type EmissiveGain<'data> = EmissiveGain<'data>;
+    type Fresnel<'data> = LayerFresnel<'data>;
     type ShaderType = ShaderType;
-    type TextureSlots = LayerTextureSlots;
+    type TextureSlots<'data> = LayerTextureSlots<'data>;
 }
 
-fn expect_tag(
-    cursor: &mut Cursor<'_>,
+fn expect_tag<'data>(
+    cursor: &mut Cursor<'data>,
     expected: Tag,
     record_tag: Tag,
 ) -> Result<(), mdx::ReadError> {
@@ -221,7 +228,7 @@ fn expect_tag(
     }
 }
 
-impl<V: ModelVersion> Material<V> {
+impl<'data, V: ModelVersion> Material<'data, V> {
     /// Creates an empty material using `V`'s fields.
     pub fn new() -> Self {
         Self {
@@ -262,26 +269,28 @@ impl<V: ModelVersion> Material<V> {
     }
 }
 
-impl<V: ModelVersion> Default for Material<V> {
+impl<'data, V: ModelVersion> Default for Material<'data, V> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<D: ModelDialect> Model<D> {
-    /// Returns owned copies of `MTLS` records in file order.
-    pub fn materials(&self) -> Vec<Material<D::Version>> {
-        self.collect_chunk_records::<MaterialsChunk<D::Version>>()
+impl<'data, D: ModelDialect> Model<'data, D> {
+    /// Borrows records in chunk and record order.
+    pub fn materials<'s>(
+        &'s self,
+    ) -> impl Iterator<Item = &'s Material<'data, D::Version>> + use<'data, 's, D> {
+        self.records::<MaterialsChunk<'_, D::Version>>()
     }
 
     /// Replaces all material records with one `MTLS` chunk, removing any duplicate chunks.
-    pub fn set_materials(&mut self, materials: &[Material<D::Version>]) {
+    pub fn set_materials(&mut self, materials: &[Material<'data, D::Version>]) {
         self.replace_chunk(MaterialsChunk::new(materials.to_vec()));
     }
 }
 
-impl<V: ModelVersion> mdx::Read for Material<V> {
-    fn read_mdx(source: &mut Cursor<'_>) -> Result<Self, mdx::ReadError> {
+impl<'data, V: ModelVersion> mdx::Read<'data> for Material<'data, V> {
+    fn read_mdx(source: &mut Cursor<'data>) -> Result<Self, mdx::ReadError> {
         let mut cursor = source.subcursor_u32_sized()?;
         let value = {
             let priority_plane = cursor.read()?;
@@ -307,7 +316,7 @@ impl<V: ModelVersion> mdx::Read for Material<V> {
     }
 }
 
-impl<V: ModelVersion> mdx::Write for Material<V> {
+impl<'data, V: ModelVersion> mdx::Write for Material<'data, V> {
     fn write_mdx(&self, bytes: &mut Encoder<'_>) -> Result<(), mdx::WriteError> {
         let marker = bytes.begin_sized();
         bytes.write(&(self.priority_plane))?;
@@ -323,7 +332,7 @@ impl<V: ModelVersion> mdx::Write for Material<V> {
     }
 }
 
-impl<V: SupportsMaterialShaderPath> Material<V> {
+impl<'data, V: SupportsMaterialShaderPath> Material<'data, V> {
     /// Returns the shader path, decoding invalid UTF-8 lossily.
     pub fn shader(&self) -> Cow<'_, str> {
         self.shader.text().expect("supported version")
@@ -334,12 +343,12 @@ impl<V: SupportsMaterialShaderPath> Material<V> {
     }
 }
 
-impl<V: ModelVersion> Material<V> {
+impl<'data, V: ModelVersion> Material<'data, V> {
     pub(crate) fn convert_with<T: ModelVersion>(
-        &self,
+        self,
         context: &mut ConversionContext<'_>,
         path: &str,
-    ) -> Result<Material<T>, ConversionError> {
+    ) -> Result<Material<'data, T>, ConversionError> {
         let mut target = Material::<T>::new();
         target.priority_plane = self.priority_plane;
         target.render_mode = self.render_mode;
@@ -375,11 +384,13 @@ impl<V: ModelVersion> Material<V> {
                             }
                         }
                         let mut slots = Vec::new();
-                        for (index, layer) in self.layers.iter().enumerate() {
-                            let converted = layer
+                        for (index, layer) in self.layers.into_iter().enumerate() {
+                            let mut converted = layer
                                 .convert_with::<T>(context, &format!("{path}.layers[{index}]"))?;
-                            let mut slot: LayerTextureSlot =
-                                converted.try_texture_slots().expect("target slots")[0].clone();
+                            let mut slot: LayerTextureSlot<'data> = converted
+                                .take_texture_slots()
+                                .expect("target slots")
+                                .remove(0);
                             slot.texture_type = index as u32;
                             slots.push(slot);
                             if index == 0 {
@@ -387,13 +398,15 @@ impl<V: ModelVersion> Material<V> {
                             }
                         }
                         let layer = &mut target.layers[0];
-                        layer.try_set_texture_slots(&slots).expect("target slots");
+                        layer
+                            .try_replace_texture_slots(slots)
+                            .expect("target slots");
                         layer.try_set_shader_type(shader).expect("target shader");
                         if self.render_mode.two_sided() {
                             layer.shading_flags.set_two_sided(true);
                         }
                     } else {
-                        for (index, layer) in self.layers.iter().enumerate() {
+                        for (index, layer) in self.layers.into_iter().enumerate() {
                             let mut layer = layer
                                 .convert_with::<T>(context, &format!("{path}.layers[{index}]"))?;
                             layer.try_set_shader_type(shader).expect("target shader");
@@ -415,7 +428,7 @@ impl<V: ModelVersion> Material<V> {
         )?;
         target.layers = self
             .layers
-            .iter()
+            .into_iter()
             .enumerate()
             .map(|(i, layer)| layer.convert_with::<T>(context, &format!("{path}.layers[{i}]")))
             .collect::<Result<_, _>>()?;

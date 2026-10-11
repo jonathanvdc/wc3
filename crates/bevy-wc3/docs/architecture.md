@@ -34,6 +34,19 @@ construction and runtime ownership:
   invalidation applies to future instances. `instance/spawn/` creates the root state,
   rig, geosets grouped by LOD, and feature entities from a prepared model.
 
+MDX decoding borrows encoded arrays while strict version conversion consumes
+and moves compatible data. The loader then creates an independently owned model
+for Bevy's asset lifetime. MDL input already builds owned native arrays. Both
+formats use the same model API, with value iteration that does not create decoded
+slice caches.
+
+The runtime source is shared between `Wc3Model`, preparation, and definition
+handles. Node tracks, event and emitter definitions, cameras, lights, and animated
+material fields refer to that source through handles rather than cloning their
+buffers into each instance. A handle can project a field or a nested record;
+editing it copies that definition independently. Core `wc3::model` records use
+lifetimes and explicit borrowed views, keeping runtime sharing at this boundary.
+
 Meshes and inverse bind poses are shared between instances. Spawned materials,
 texture bindings, animation clocks, rigs, and emitter simulation states belong to
 individual instances. Preparation stores material values as templates; spawning

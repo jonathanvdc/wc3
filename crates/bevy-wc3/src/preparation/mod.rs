@@ -4,11 +4,16 @@ use bevy::prelude::*;
 use std::collections::HashMap;
 use std::sync::Arc;
 use wc3::model::animation::{Animatable, GeosetAnimation};
+use wc3::model::chunks::{
+    EventObjectsChunk, GeosetAnimationsChunk, MaterialsChunk, TextureAnimationsChunk,
+};
 use wc3::model::materials::ShaderType;
 use wc3::model::scene::EventObject;
 use wc3::model::{Model, V1800};
 
 mod materials;
+pub mod shared;
+use shared::{RuntimeNode, Shared};
 mod pose;
 pub use pose::{
     BakedModelPart, BakedModelPose, PreparedPart, Wc3MaterialSnapshot, Wc3PartId, Wc3PoseBaker,
@@ -30,8 +35,8 @@ use crate::materials::animation::AnimatedSurface;
 use crate::materials::Wc3LayerMaterial;
 
 pub(crate) struct PreparedLayer {
-    pub(crate) alpha: Animatable<f32>,
-    pub(crate) texture_id: Animatable<u32>,
+    pub(crate) alpha: Shared<Animatable<'static, f32>>,
+    pub(crate) texture_id: Shared<Animatable<'static, u32>>,
     pub(crate) material: Wc3LayerMaterial,
     pub(crate) surface: AnimatedSurface,
 }
@@ -47,12 +52,13 @@ pub(crate) struct PreparedGeoset {
 /// Keep this value alive while spawning instances. Reprepare after changing
 /// the source model or its texture resolution.
 pub struct PreparedModel {
-    pub(crate) model: Model<V1800>,
-    pub(crate) events: Arc<[EventObject]>,
+    pub(crate) nodes: Vec<RuntimeNode>,
+    pub(crate) model: Shared<Model<'static, V1800>>,
+    pub(crate) events: Arc<[Shared<EventObject<'static>>]>,
     pub(crate) geosets: Vec<PreparedGeoset>,
     pub(crate) lod_levels: Vec<u32>,
     pub(crate) lod_bounds: LodBounds,
-    pub(crate) geoset_animations: Vec<Option<GeosetAnimation>>,
+    pub(crate) geoset_animations: Vec<Option<Shared<GeosetAnimation<'static>>>>,
     pub(crate) layers: Vec<Vec<PreparedLayer>>,
     pub(crate) textures: ResolvedModelTextures,
     pub(crate) models: Wc3ModelResources,
@@ -84,11 +90,6 @@ impl PreparedModel {
     /// Models containing only common geometry expose level zero.
     pub fn lod_levels(&self) -> &[u32] {
         &self.lod_levels
-    }
-
-    /// Normalized diffuse binding shared by geosets and ribbon layers.
-    pub(crate) fn layer_texture_id(&self, material: usize, layer: usize) -> &Animatable<u32> {
-        &self.layers[material][layer].texture_id
     }
 
     /// Resolved attachment and Classic particle model references.
@@ -159,13 +160,11 @@ pub fn prepare_model_with_resources(
         bitmaps: source
             .model
             .textures()
-            .iter()
             .map(|bitmap| resolve_texture_binding(bitmap, &mut resolve_texture))
             .collect(),
         particles: source
             .model
             .particle_emitters2()
-            .iter()
             .map(|emitter| ResolvedTexture {
                 replaceable_id: emitter.replaceable_id,
                 bitmap_id: (emitter.replaceable_id == 0).then_some(emitter.texture_id as usize),
@@ -195,9 +194,9 @@ pub(crate) fn prepare_resolved_model(
         .enumerate()
         .map(|(index, id)| (*id, index as u16))
         .collect();
-    let material_records = model.materials();
+    let material_records = model.shared_records::<MaterialsChunk<V1800>>();
     let mut geosets = Vec::new();
-    for (geoset_id, geoset) in model.geosets().iter().enumerate() {
+    for (geoset_id, geoset) in model.geosets().enumerate() {
         if geoset.vertices().is_empty() || geoset.face_indices().is_empty() {
             continue;
         }
@@ -234,21 +233,23 @@ pub(crate) fn prepare_resolved_model(
                 .filter(|&lod| lod != u32::MAX),
         });
     }
-    let mut geoset_animations = vec![None; model.geosets().len()];
-    for animation in model.geoset_animations() {
+    let mut geoset_animations = vec![None; model.geosets().count()];
+    for animation in model.shared_records::<GeosetAnimationsChunk>() {
         if let Some(slot) = geoset_animations.get_mut(animation.geoset_id as usize) {
             *slot = Some(animation);
         }
     }
     let binds = inverse_bind_matrices(model, &joint_ids);
-    let texture_animations = model.texture_animations();
+    let texture_animations = model.shared_records::<TextureAnimationsChunk>();
     let layers = material_records
         .iter()
         .map(|material| {
             material
                 .layers
                 .iter()
-                .map(|layer| {
+                .enumerate()
+                .map(|(index, _)| {
+                    let layer = material.select(move |material| &material.layers[index]);
                     if !matches!(
                         layer.shader_type(),
                         ShaderType::SD_LEGACY
@@ -260,14 +261,14 @@ pub(crate) fn prepare_resolved_model(
                             layer.shader_type()
                         );
                     }
-                    let texture_id = layer_texture_id(layer);
-                    let value = build_layer_material(layer, &texture_id, &default_bitmaps);
+                    let texture_id = layer.map(layer_texture_id);
+                    let value = build_layer_material(&layer, &texture_id, &default_bitmaps);
                     PreparedLayer {
-                        alpha: layer.alpha.clone(),
+                        alpha: layer.map(|layer| &layer.alpha),
                         texture_id,
                         material: value,
                         surface: AnimatedSurface::new(
-                            layer,
+                            &layer,
                             texture_animations
                                 .get(layer.texture_animation_id as usize)
                                 .cloned(),
@@ -287,7 +288,8 @@ pub(crate) fn prepare_resolved_model(
     Ok(PreparedModel {
         lod_levels,
         lod_bounds: LodBounds::from_model(model),
-        events: model.event_objects().into(),
+        events: model.shared_records::<EventObjectsChunk>().into(),
+        nodes: model.runtime_nodes(),
         model: model.clone(),
         geosets,
         geoset_animations,

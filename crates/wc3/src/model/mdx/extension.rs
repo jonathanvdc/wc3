@@ -9,17 +9,17 @@ use crate::model::{
 /// The container supplies a bounded payload cursor and checks that decoded values
 /// consume the complete payload and retain its tag. Fixed-tag types implementing
 /// `KnownChunk` receive an automatic implementation.
-pub trait Extension: Chunk + Sized {
+pub trait Extension<'data>: Chunk + Sized {
     /// Decodes the payload for a recognized tag.
     ///
     /// Returns `Some` for a decoded value, `None` without consuming input for an
     /// unrecognized tag, and an error for a malformed recognized payload.
-    fn read_extension(tag: Tag, input: &mut Cursor<'_>) -> Result<Option<Self>, mdx::ReadError>;
+    fn read_extension(tag: Tag, input: &mut Cursor<'data>) -> Result<Option<Self>, mdx::ReadError>;
 }
 
 /// Fixed-tag chunks automatically participate in extension dispatch.
-impl<T: KnownChunk> Extension for T {
-    fn read_extension(tag: Tag, input: &mut Cursor<'_>) -> Result<Option<Self>, mdx::ReadError> {
+impl<'data, T: KnownChunk<'data>> Extension<'data> for T {
+    fn read_extension(tag: Tag, input: &mut Cursor<'data>) -> Result<Option<Self>, mdx::ReadError> {
         if tag == T::TAG {
             T::decode_payload(input).map(Some)
         } else {

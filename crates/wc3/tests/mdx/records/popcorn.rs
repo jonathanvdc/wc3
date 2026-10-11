@@ -18,8 +18,10 @@ fn popcorn_fixed_fields_round_trip() {
     emitter.replaceable_id = 1;
     let mut model = Model::<wc3::model::V1800>::new();
     model.set_popcorn_emitters(&[emitter]);
-    let parsed = Model::<wc3::model::V1800>::decode_mdx(&model.encode_mdx().unwrap()).unwrap();
-    let emitter = &parsed.popcorn_emitters()[0];
+    let parsed = Model::<wc3::model::V1800>::decode_mdx(&model.encode_mdx().unwrap())
+        .unwrap()
+        .into_owned();
+    let emitter = &parsed.popcorn_emitters().next().unwrap();
     assert_eq!(emitter.node.name.text(), "Spark");
     assert_eq!(emitter.path.text(), "spark.mdx");
     assert_eq!(emitter.visibility_guide.text(), "Stand");

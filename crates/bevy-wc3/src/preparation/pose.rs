@@ -201,12 +201,13 @@ impl Wc3PoseBaker {
                 "pose camera must have a finite transform and nonzero rotation".into(),
             ));
         }
-        let sequences = prepared.model.sequences();
         let sequence = options
             .sequence
             .map(|index| {
-                sequences
-                    .get(index)
+                prepared
+                    .model
+                    .sequences()
+                    .nth(index)
                     .ok_or_else(|| ModelError(format!("invalid pose sequence {index}")))
             })
             .transpose()?;
@@ -224,8 +225,8 @@ impl Wc3PoseBaker {
         self.linear_images.retain_loaded(images);
         let mut parts = Vec::new();
         let mut bounds: Option<Aabb> = None;
-        let source_textures = prepared.model.textures();
-        let source_materials = prepared.model.materials();
+        let source_textures = prepared.model.textures().collect::<Vec<_>>();
+        let source_materials = prepared.model.materials().collect::<Vec<_>>();
         for part in prepared.parts() {
             let layer = &prepared.layers[part.id.material][part.id.layer];
             let definition = &source_materials[part.id.material].layers[part.id.layer];
@@ -235,10 +236,10 @@ impl Wc3PoseBaker {
             let animated_layer = AnimatedLayer {
                 root: Entity::PLACEHOLDER,
                 alpha: layer.alpha.clone(),
-                geoset_alpha: geoset.map(|value| value.alpha.clone()),
+                geoset_alpha: geoset.map(|value| value.map(|record| &record.alpha)),
                 geoset_color: geoset
                     .filter(|value| value.flags.color())
-                    .map(|value| value.color.clone()),
+                    .map(|value| value.map(|record| &record.color)),
                 texture_id: layer.texture_id.clone(),
             };
             let visible = animated_layer.evaluate(&mut material, Some(&bindings), time);

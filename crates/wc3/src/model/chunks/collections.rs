@@ -1,6 +1,6 @@
 //! Complete chunks containing a sequence of records.
-use crate::model::mdx;
 use crate::model::Encoder;
+use crate::model::{mdx, ModelOwnership};
 use crate::model::{
     Attachment, Bone, Camera, CollisionShape, EventObject, FaceFx, Geoset, GeosetAnimation, Glider,
     Light, Material, Node, ParticleEmitter, ParticleEmitter2, PopcornEmitter, RibbonEmitter,
@@ -22,13 +22,18 @@ pub trait CollectionChunk: Sized {
     /// Borrows the records in file order.
     fn records(&self) -> &[Self::Item];
 
+    /// Mutably borrows the records in file order.
+    fn records_mut(&mut self) -> &mut [Self::Item];
+
     /// Builds a chunk from decoded records.
     fn from_records(records: Vec<Self::Item>) -> Self;
 }
 
-fn decode_records<C: CollectionChunk>(cursor: &mut Cursor<'_>) -> Result<C, mdx::ReadError>
+fn decode_records<'data, C: CollectionChunk>(
+    cursor: &mut Cursor<'data>,
+) -> Result<C, mdx::ReadError>
 where
-    C::Item: mdx::Read,
+    C::Item: mdx::Read<'data>,
 {
     let mut records = Vec::new();
     while !cursor.remaining().is_empty() {
@@ -68,7 +73,7 @@ where
 macro_rules! record_collection {
     ($name:ident, $item:ty, $tag:expr) => {
         #[doc = concat!("A complete chunk of [`", stringify!($item), "`] records in file order.")]
-        #[derive(Clone, Debug, PartialEq)]
+        #[derive(Clone, Debug, PartialEq, ModelOwnership)]
         pub struct $name {
             /// Records in their original order.
             pub records: Vec<$item>,
@@ -89,6 +94,9 @@ macro_rules! record_collection {
             fn records(&self) -> &[Self::Item] {
                 &self.records
             }
+            fn records_mut(&mut self) -> &mut [Self::Item] {
+                &mut self.records
+            }
             fn from_records(records: Vec<Self::Item>) -> Self {
                 Self { records }
             }
@@ -104,10 +112,62 @@ macro_rules! record_collection {
             }
         }
 
-        impl KnownChunk for $name {
+        impl<'data> KnownChunk<'data> for $name {
             const TAG: Tag = $tag;
 
-            fn decode_payload(cursor: &mut Cursor<'_>) -> Result<Self, mdx::ReadError> {
+            fn decode_payload(cursor: &mut Cursor<'data>) -> Result<Self, mdx::ReadError> {
+                decode_records(cursor)
+            }
+        }
+    };
+}
+
+macro_rules! borrowed_record_collection {
+    ($name:ident, $item:ident, $tag:expr) => {
+        #[doc = concat!("A complete chunk of [`", stringify!($item), "`] records in file order.")]
+        #[derive(Clone, Debug, PartialEq, ModelOwnership)]
+        pub struct $name<'data> {
+            /// Records in their original order.
+            pub records: Vec<$item<'data>>,
+        }
+
+        impl<'data> $name<'data> {
+            /// Creates a chunk payload from its records.
+            pub fn new(records: Vec<$item<'data>>) -> Self {
+                Self { records }
+            }
+        }
+
+        impl<'data> CollectionChunk for $name<'data> {
+            type Item = $item<'data>;
+            fn tag() -> Tag {
+                $tag
+            }
+            fn records(&self) -> &[Self::Item] {
+                &self.records
+            }
+            fn records_mut(&mut self) -> &mut [Self::Item] {
+                &mut self.records
+            }
+            fn from_records(records: Vec<Self::Item>) -> Self {
+                Self { records }
+            }
+        }
+
+        impl<'data> Chunk for $name<'data> {
+            fn tag(&self) -> Tag {
+                Self::TAG
+            }
+
+            fn encode_payload_to(&self, bytes: &mut Encoder<'_>) -> Result<(), mdx::WriteError> {
+                encode_records(self, bytes)
+            }
+        }
+
+        impl<'data> KnownChunk<'data> for $name<'data> {
+            const TAG: Tag = $tag;
+
+            fn decode_payload(cursor: &mut Cursor<'data>) -> Result<Self, mdx::ReadError> {
                 decode_records(cursor)
             }
         }
@@ -116,17 +176,17 @@ macro_rules! record_collection {
 
 macro_rules! versioned_record_collection {
     ($name:ident, $item:ident, $tag:expr) => {
-        #[derive(Clone, Debug, PartialEq)]
+        #[derive(Clone, Debug, PartialEq, ModelOwnership)]
         #[doc = concat!("A complete chunk of version-dependent [`", stringify!($item), "`] records in file order.")]
-        pub struct $name<V: ModelVersion> {
+        pub struct $name<'data, V: ModelVersion> {
             /// Records in their original order.
-            pub records: Vec<$item<V>>,
+            pub records: Vec<$item<'data, V>>,
             version: PhantomData<V>,
         }
 
-        impl<V: ModelVersion> $name<V> {
+        impl<'data, V: ModelVersion> $name<'data, V> {
             /// Creates a chunk payload from its records.
-            pub fn new(records: Vec<$item<V>>) -> Self {
+            pub fn new(records: Vec<$item<'data, V>>) -> Self {
                 Self {
                     records,
                     version: PhantomData,
@@ -134,20 +194,21 @@ macro_rules! versioned_record_collection {
             }
         }
 
-        impl<V: ModelVersion> CollectionChunk for $name<V> {
-            type Item = $item<V>;
+        impl<'data, V: ModelVersion> CollectionChunk for $name<'data, V> {
+            type Item = $item<'data, V>;
             fn tag() -> Tag {
                 $tag
             }
             fn records(&self) -> &[Self::Item] {
                 &self.records
             }
+            fn records_mut(&mut self) -> &mut [Self::Item] { &mut self.records }
             fn from_records(records: Vec<Self::Item>) -> Self {
                 Self::new(records)
             }
         }
 
-        impl<V: ModelVersion> Chunk for $name<V> {
+        impl<'data, V: ModelVersion> Chunk for $name<'data, V> {
             fn tag(&self) -> Tag {
                 Self::TAG
             }
@@ -156,9 +217,9 @@ macro_rules! versioned_record_collection {
             }
         }
 
-        impl<V: ModelVersion> KnownChunk for $name<V> {
+        impl<'data, V: ModelVersion> KnownChunk<'data> for $name<'data, V> {
             const TAG: Tag = $tag;
-            fn decode_payload(cursor: &mut Cursor<'_>) -> Result<Self, mdx::ReadError> {
+            fn decode_payload(cursor: &mut Cursor<'data>) -> Result<Self, mdx::ReadError> {
                 decode_records(cursor)
             }
         }
@@ -168,21 +229,21 @@ macro_rules! versioned_record_collection {
 record_collection!(SequencesChunk, Sequence, *b"SEQS");
 record_collection!(TexturesChunk, Texture, *b"TEXS");
 versioned_record_collection!(GeosetsChunk, Geoset, *b"GEOS");
-record_collection!(GeosetAnimationsChunk, GeosetAnimation, *b"GEOA");
+borrowed_record_collection!(GeosetAnimationsChunk, GeosetAnimation, *b"GEOA");
 versioned_record_collection!(MaterialsChunk, Material, *b"MTLS");
-record_collection!(BonesChunk, Bone, *b"BONE");
-record_collection!(HelpersChunk, Node, *b"HELP");
-record_collection!(AttachmentsChunk, Attachment, *b"ATCH");
+borrowed_record_collection!(BonesChunk, Bone, *b"BONE");
+borrowed_record_collection!(HelpersChunk, Node, *b"HELP");
+borrowed_record_collection!(AttachmentsChunk, Attachment, *b"ATCH");
 versioned_record_collection!(CamerasChunk, Camera, *b"CAMS");
-record_collection!(CollisionShapesChunk, CollisionShape, *b"CLID");
-record_collection!(EventObjectsChunk, EventObject, *b"EVTS");
+borrowed_record_collection!(CollisionShapesChunk, CollisionShape, *b"CLID");
+borrowed_record_collection!(EventObjectsChunk, EventObject, *b"EVTS");
 record_collection!(FaceFxChunk, FaceFx, *b"FAFX");
 versioned_record_collection!(LightsChunk, Light, *b"LITE");
-record_collection!(ParticleEmittersChunk, ParticleEmitter, *b"PREM");
-record_collection!(ParticleEmitters2Chunk, ParticleEmitter2, *b"PRE2");
-record_collection!(PopcornEmittersChunk, PopcornEmitter, *b"CORN");
-record_collection!(RibbonEmittersChunk, RibbonEmitter, *b"RIBB");
-record_collection!(TextureAnimationsChunk, TextureAnimation, *b"TXAN");
+borrowed_record_collection!(ParticleEmittersChunk, ParticleEmitter, *b"PREM");
+borrowed_record_collection!(ParticleEmitters2Chunk, ParticleEmitter2, *b"PRE2");
+borrowed_record_collection!(PopcornEmittersChunk, PopcornEmitter, *b"CORN");
+borrowed_record_collection!(RibbonEmittersChunk, RibbonEmitter, *b"RIBB");
+borrowed_record_collection!(TextureAnimationsChunk, TextureAnimation, *b"TXAN");
 record_collection!(GlobalSequencesChunk, GlobalSequence, *b"GLBS");
 record_collection!(PivotPointsChunk, PivotPoint, *b"PIVT");
 record_collection!(GlidersChunk, Glider, *b"DILG");

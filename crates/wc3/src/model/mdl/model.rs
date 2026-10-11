@@ -17,7 +17,7 @@ use std::fmt::Debug;
 use std::io::Write as IoWrite;
 use std::str::FromStr;
 
-impl<V: ModelVersion> VersionChunk<V> {
+impl<'data, V: ModelVersion> VersionChunk<'data, V> {
     pub(crate) fn mdl_version(&self) -> u32 {
         V::NUMBER
     }
@@ -62,13 +62,13 @@ where
     Ok(C::from_records(records))
 }
 
-impl<V: ModelDialect> mdl::Read for Model<V>
+impl<'data, V: ModelDialect> mdl::Read for Model<'data, V>
 where
     V::Extension: mdl::Extension,
 {
     fn read_mdl(parser: &mut Parser<'_>) -> Result<Self, mdl::ReadError> {
         require_version_first(parser)?;
-        parser.read::<VersionChunk<V::Version>>()?;
+        parser.read::<VersionChunk<'data, V::Version>>()?;
         let mut model = Self::new();
         let mut fields = Fields::default();
         let mut has_info = false;
@@ -176,14 +176,14 @@ where
     }
 }
 
-fn write_collection<V: ModelDialect, C: CollectionChunk>(
-    model: &Model<V>,
+fn write_collection<'data, V: ModelDialect, C: CollectionChunk>(
+    model: &Model<'data, V>,
     name: Option<&str>,
     writer: &mut Writer<impl IoWrite>,
 ) -> Result<(), IoError<mdl::WriteError>>
 where
     C::Item: mdl::Write,
-    for<'a> &'a C: TryFrom<&'a ModelChunk<V>>,
+    for<'a> &'a C: TryFrom<&'a ModelChunk<'data, V>>,
 {
     let count = model
         .decoded_chunks::<C>()
@@ -210,7 +210,7 @@ where
     Ok(())
 }
 
-impl<V: ModelDialect> mdl::Write for Model<V>
+impl<'data, V: ModelDialect> mdl::Write for Model<'data, V>
 where
     V::Extension: mdl::Write,
 {
@@ -354,7 +354,7 @@ struct VersionHeader {
     #[mdl(property = "FormatVersion")]
     version: u32,
 }
-impl<E: Clone + Debug + mdl::Extension> mdl::Read for DynamicModel<E> {
+impl<'data, E: Clone + Debug + mdl::Extension> mdl::Read for DynamicModel<'data, E> {
     fn read_mdl(parser: &mut Parser<'_>) -> Result<Self, mdl::ReadError> {
         require_version_first(parser)?;
         let start = parser.position();
@@ -367,7 +367,7 @@ impl<E: Clone + Debug + mdl::Extension> mdl::Read for DynamicModel<E> {
         dispatch!(800 => V800(V800), 900 => V900(V900), 1000 => V1000(V1000), 1100 => V1100(V1100), 1200 => V1200(V1200), 1300 => V1300(V1300), 1400 => V1400(V1400), 1600 => V1600(V1600), 1800 => V1800(V1800))
     }
 }
-impl<E: Clone + Debug + mdl::Write> mdl::Write for DynamicModel<E> {
+impl<'data, E: Clone + Debug + mdl::Write> mdl::Write for DynamicModel<'data, E> {
     fn write_mdl<W: IoWrite>(
         &self,
         writer: &mut Writer<W>,
@@ -377,7 +377,7 @@ impl<E: Clone + Debug + mdl::Write> mdl::Write for DynamicModel<E> {
     }
 }
 
-impl<V: ModelDialect> FromStr for Model<V>
+impl<'data, V: ModelDialect> FromStr for Model<'data, V>
 where
     V::Extension: mdl::Extension,
 {
@@ -388,7 +388,7 @@ where
     }
 }
 
-impl<E: Clone + Debug + mdl::Extension> FromStr for DynamicModel<E> {
+impl<'data, E: Clone + Debug + mdl::Extension> FromStr for DynamicModel<'data, E> {
     type Err = mdl::ReadError;
 
     fn from_str(source: &str) -> Result<Self, Self::Err> {

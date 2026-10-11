@@ -55,7 +55,7 @@ fn repeated_instances_prepare_one_model() {
 fn changing_bindings_updates_only_the_target_instance() {
     let mut source =
         Wc3Model::decode(include_bytes!("../../tests/fixtures/quad_model.mdx")).unwrap();
-    let mut bitmaps = source.model.textures();
+    let mut bitmaps = source.model.textures().cloned().collect::<Vec<_>>();
     bitmaps[0].path.set_text("").unwrap();
     bitmaps[0].replaceable_id = 31;
     source.model.set_textures(&bitmaps);

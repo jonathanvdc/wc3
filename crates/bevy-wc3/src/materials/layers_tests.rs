@@ -36,25 +36,28 @@ fn geoset_alpha_hides_decay_geometry_and_combines_with_layer_alpha() {
         .spawn((
             AnimatedLayer {
                 root,
-                alpha: Animatable::Static(0.5),
-                geoset_alpha: Some(Animatable::Animated(
-                    Track::linear(
-                        vec![
-                            ValueKeyframe {
-                                frame: 0,
-                                value: 0.0,
-                            },
-                            ValueKeyframe {
-                                frame: 100,
-                                value: 1.0,
-                            },
-                        ],
-                        None,
-                    )
-                    .unwrap(),
-                )),
+                alpha: (Animatable::Static(0.5)).into(),
+                geoset_alpha: Some(
+                    (Animatable::Animated(
+                        Track::linear(
+                            vec![
+                                ValueKeyframe {
+                                    frame: 0,
+                                    value: 0.0,
+                                },
+                                ValueKeyframe {
+                                    frame: 100,
+                                    value: 1.0,
+                                },
+                            ],
+                            None,
+                        )
+                        .unwrap(),
+                    ))
+                    .into(),
+                ),
                 geoset_color: None,
-                texture_id: Animatable::Static(0),
+                texture_id: (Animatable::Static(0)).into(),
             },
             MeshMaterial3d(material.clone()),
             Visibility::Inherited,
@@ -111,7 +114,7 @@ fn geoset_alpha_hides_decay_geometry_and_combines_with_layer_alpha() {
         .entity_mut(entity)
         .get_mut::<AnimatedLayer>()
         .unwrap()
-        .alpha = Animatable::Static(0.0);
+        .alpha = Animatable::Static(0.0).into();
     app.update();
     assert_eq!(
         *app.world().entity(entity).get::<Visibility>().unwrap(),
@@ -155,19 +158,22 @@ fn missing_color_keys_reset_to_white_after_sequence_change() {
     app.world_mut().spawn((
         AnimatedLayer {
             root,
-            alpha: Animatable::Static(0.5),
+            alpha: (Animatable::Static(0.5)).into(),
             geoset_alpha: None,
-            geoset_color: Some(Animatable::Animated(
-                Track::linear(
-                    vec![ValueKeyframe {
-                        frame: 0,
-                        value: [1.0, 0.0, 0.0],
-                    }],
-                    None,
-                )
-                .unwrap(),
-            )),
-            texture_id: Animatable::Static(0),
+            geoset_color: Some(
+                (Animatable::Animated(
+                    Track::linear(
+                        vec![ValueKeyframe {
+                            frame: 0,
+                            value: [1.0, 0.0, 0.0],
+                        }],
+                        None,
+                    )
+                    .unwrap(),
+                ))
+                .into(),
+            ),
+            texture_id: (Animatable::Static(0)).into(),
         },
         MeshMaterial3d(handle.clone()),
         Visibility::Inherited,

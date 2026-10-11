@@ -284,11 +284,11 @@ impl Options {
 
     fn camera(&self, model: &Wc3Model) -> CaptureResult<Transform> {
         if let Some(index) = self.model_camera {
-            let definitions = model.model.cameras();
-            let definition = definitions.get(index).ok_or_else(|| {
+            let mut definitions = model.model.cameras();
+            let definition = definitions.nth(index).ok_or_else(|| {
                 format!(
                     "model camera {index} is out of range ({} cameras)",
-                    definitions.len()
+                    model.model.cameras().count()
                 )
             })?;
             let sample = Wc3CameraSample {
@@ -427,17 +427,16 @@ fn main() -> CaptureResult<()> {
         .into_owned();
     // Report parse/conversion errors before initializing the GPU.
     let source = Wc3Model::decode(&read(&model_path)?)?;
-    let sequences = source.model.sequences();
-    if options.sequence >= sequences.len() && !(sequences.is_empty() && options.sequence == 0) {
+    let sequence_count = source.model.sequences().count();
+    if options.sequence >= sequence_count && !(sequence_count == 0 && options.sequence == 0) {
         return Err(format!(
             "sequence {} is out of range ({} sequences)",
-            options.sequence,
-            sequences.len()
+            options.sequence, sequence_count
         )
         .into());
     }
     for change in &options.plays {
-        if change.sequence >= sequences.len() {
+        if change.sequence >= sequence_count {
             return Err(format!("scheduled sequence {} is out of range", change.sequence).into());
         }
     }

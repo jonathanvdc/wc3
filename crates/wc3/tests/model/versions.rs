@@ -31,10 +31,13 @@ fn version_is_shared_by_model_and_nested_records() {
 
     let bytes = model.encode_mdx().unwrap();
     let parsed = Model::<V1800>::decode_mdx(&bytes).unwrap();
-    assert_eq!(parsed.materials().len(), 1);
-    assert_eq!(parsed.geosets().len(), 1);
-    assert_eq!(parsed.lights().len(), 1);
-    assert_eq!(parsed.cameras()[0].variant, CameraVariant::Variant3);
+    assert_eq!(parsed.materials().count(), 1);
+    assert_eq!(parsed.geosets().count(), 1);
+    assert_eq!(parsed.lights().count(), 1);
+    assert_eq!(
+        parsed.cameras().next().unwrap().variant,
+        CameraVariant::Variant3
+    );
     assert!(matches!(
         DynamicModel::<NoExtensions>::decode_mdx(&bytes, 800),
         Ok(DynamicModel::V1800(_))
@@ -74,8 +77,8 @@ fn version_markers_select_record_fields() {
     let mut layer = Layer::<V1000>::new();
     layer.set_emissive_gain(Animatable::Static(0.5));
     layer.set_fresnel_opacity(Animatable::Static(0.25));
-    assert_eq!(layer.emissive_gain(), Animatable::Static(0.5));
-    assert_eq!(layer.fresnel_opacity(), Animatable::Static(0.25));
+    assert_eq!(layer.emissive_gain().clone(), Animatable::Static(0.5));
+    assert_eq!(layer.fresnel_opacity().clone(), Animatable::Static(0.25));
 
     let classic_light =
         Light::<V800>::new(Node::new("Classic", 1).unwrap(), LightType::Omnidirectional);
@@ -99,7 +102,10 @@ fn version_markers_select_record_fields() {
     assert_eq!(modern_geoset.try_tangents().unwrap(), None);
     assert_eq!(modern_geoset.try_skin_weights().unwrap(), None);
     modern_geoset.set_skin_weights(Some(&[])).unwrap();
-    assert_eq!(modern_geoset.skin_weights(), Some([].as_slice()));
+    assert_eq!(
+        modern_geoset.skin_weights().map(|weights| weights.to_vec()),
+        Some(vec![])
+    );
 }
 
 #[test]
@@ -118,8 +124,9 @@ fn runtime_dispatch_rejects_versions_without_a_layout() {
 
 #[test]
 fn geoset_extra_section_storage_is_selected_by_version() {
-    let classic: <V800 as GeosetLayout>::ExtraSections = NoGeosetExtraSections;
-    let modern: <V900 as GeosetLayout>::ExtraSections = ReforgedGeosetExtraSections::default();
+    let classic: <V800 as GeosetLayout>::ExtraSections<'static> = NoGeosetExtraSections;
+    let modern: <V900 as GeosetLayout>::ExtraSections<'static> =
+        ReforgedGeosetExtraSections::default();
     assert_eq!(size_of::<NoGeosetExtraSections>(), 0);
     assert_eq!(classic, NoGeosetExtraSections);
     assert_eq!(modern, ReforgedGeosetExtraSections::default());

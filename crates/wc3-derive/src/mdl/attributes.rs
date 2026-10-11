@@ -707,10 +707,20 @@ pub(super) fn type_argument(ty: &Type, name: &str) -> Option<Type> {
     let PathArguments::AngleBracketed(args) = &segment.arguments else {
         return None;
     };
-    if args.args.len() != 1 {
+    if args
+        .args
+        .iter()
+        .filter(|a| matches!(a, GenericArgument::Type(_)))
+        .count()
+        != 1
+    {
         return None;
     }
-    match args.args.first()? {
+    match args
+        .args
+        .iter()
+        .find(|a| matches!(a, GenericArgument::Type(_)))?
+    {
         GenericArgument::Type(ty) => Some(ty.clone()),
         _ => None,
     }

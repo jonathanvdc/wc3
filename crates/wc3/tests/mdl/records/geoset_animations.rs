@@ -4,7 +4,7 @@ use wc3::model::mdl::{Read as _, ReadErrorKind, Write as _, Writer};
 use wc3::model::mdx::{Read as _, Write as _};
 use wc3::model::Color;
 
-fn roundtrip(source: &str) -> GeosetAnimation {
+fn roundtrip<'data>(source: &str) -> GeosetAnimation<'data> {
     let value = GeosetAnimation::decode_mdl(source).unwrap();
     let bytes = value.encode_mdx().unwrap();
     let binary = GeosetAnimation::decode_mdx(&bytes).unwrap();
@@ -99,7 +99,7 @@ fn rejects_invalid_fields_and_static_framing() {
     }
 }
 
-fn refuses_before_output(value: &GeosetAnimation) {
+fn refuses_before_output<'data>(value: &GeosetAnimation<'data>) {
     let mut bytes = Vec::new();
     let mut writer = Writer::new(&mut bytes);
     assert!(writer.write(value).is_err());

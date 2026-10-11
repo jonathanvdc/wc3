@@ -5,7 +5,7 @@ use std::f32::consts::FRAC_PI_2;
 use wc3::model::animation::{Sequence, Track, ValueKeyframe};
 use wc3::model::scene::NodeFlags;
 
-fn definition() -> ModelCamera<V1800> {
+fn definition() -> ModelCamera<'static, V1800> {
     let mut camera = ModelCamera::new("Portrait").unwrap();
     camera.position = [0.0, -10.0, 0.0];
     camera.target_position = [0.0; 3];
@@ -28,7 +28,7 @@ fn animation() -> Wc3Animation {
     }
 }
 
-fn vector_track(start: i32, end: i32, global: Option<u32>) -> Track<[f32; 3]> {
+fn vector_track<'data>(start: i32, end: i32, global: Option<u32>) -> Track<'data, [f32; 3]> {
     Track::linear(
         vec![
             ValueKeyframe {
@@ -45,7 +45,7 @@ fn vector_track(start: i32, end: i32, global: Option<u32>) -> Track<[f32; 3]> {
     .unwrap()
 }
 
-fn scalar_track(value: f32) -> Track<f32> {
+fn scalar_track<'data>(value: f32) -> Track<'data, f32> {
     Track::linear(vec![ValueKeyframe { frame: 1000, value }], None).unwrap()
 }
 
@@ -67,7 +67,7 @@ fn scene() -> (App, Entity, Entity) {
         .spawn((
             Transform::default(),
             animation(),
-            Wc3ModelCameras(vec![definition()]),
+            Wc3ModelCameras(vec![definition().into()]),
         ))
         .id();
     let camera = app
@@ -94,7 +94,7 @@ fn sampling_adds_offsets_and_resolves_sequence_and_global_clocks() {
     camera.translation = Some(vector_track(1000, 2000, None));
     camera.target_translation = Some(vector_track(0, 200, Some(0)));
     camera.rotation = Some(scalar_track(0.3));
-    let cameras = Wc3ModelCameras(vec![camera]);
+    let cameras = Wc3ModelCameras(vec![camera.into()]);
     let mut clock = animation();
     clock.elapsed_ms = 450.0;
     let sampled = cameras.sample(0, &clock).unwrap();
@@ -120,7 +120,7 @@ fn roll_is_about_the_view_axis_for_multiple_directions() {
     camera.rotation = Some(scalar_track(FRAC_PI_2));
     for eye in [Vec3::NEG_X * 10.0, Vec3::NEG_Y * 10.0, Vec3::NEG_Z * 10.0] {
         camera.position = eye.to_array();
-        let cameras = Wc3ModelCameras(vec![camera.clone()]);
+        let cameras = Wc3ModelCameras(vec![camera.clone().into()]);
         let sampled = cameras.sample(0, &animation()).unwrap();
         let transform = sampled.world_transform(&GlobalTransform::IDENTITY).unwrap();
         let forward = -eye.normalize();
@@ -135,7 +135,7 @@ fn roll_is_about_the_view_axis_for_multiple_directions() {
 
 #[test]
 fn transformed_eye_target_and_up_handle_mirrored_nonuniform_roots() {
-    let sampled = Wc3ModelCameras(vec![definition()])
+    let sampled = Wc3ModelCameras(vec![definition().into()])
         .sample(0, &animation())
         .unwrap();
     let root = GlobalTransform::from(Transform {
@@ -271,7 +271,7 @@ fn invalid_views_retain_previous_state_and_recover() {
         .camera_index = 0;
     for field in ["near", "far", "position", "roll"] {
         let mut cameras = app.world_mut().get_mut::<Wc3ModelCameras>(root).unwrap();
-        cameras.0[0] = definition();
+        cameras.0[0] = definition().into();
         match field {
             "near" => cameras.0[0].near_clip = 0.0,
             "far" => cameras.0[0].far_clip = 0.1,
@@ -282,7 +282,7 @@ fn invalid_views_retain_previous_state_and_recover() {
         app.update();
         assert_eq!(*app.world().get::<Transform>(camera).unwrap(), original);
     }
-    app.world_mut().get_mut::<Wc3ModelCameras>(root).unwrap().0[0] = definition();
+    app.world_mut().get_mut::<Wc3ModelCameras>(root).unwrap().0[0] = definition().into();
     app.update();
     close(
         app.world().get::<Transform>(camera).unwrap().translation,
@@ -326,7 +326,7 @@ fn independent_camera_selection() {
         .get_mut::<Wc3ModelCameras>(root)
         .unwrap()
         .0
-        .push(other);
+        .push(other.into());
     let second = app
         .world_mut()
         .spawn((Camera3d::default(), Wc3CameraBinding::new(root, 1)))
@@ -359,9 +359,9 @@ fn camera_animation_drives_billboards_without_a_frame_of_lag() {
                 parent_pivot: Vec3::ZERO,
                 flags: NodeFlags(8),
                 camera: None,
-                translation: None,
-                rotation: None,
-                scaling: None,
+                translation: (None).into(),
+                rotation: (None).into(),
+                scaling: (None).into(),
             },
         ))
         .id();

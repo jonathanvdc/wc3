@@ -26,11 +26,14 @@ impl<'a> SamplingTime<'a> {
         }
     }
 
-    pub(crate) fn track<T: Interpolate>(&self, track: &Track<T>) -> Option<T> {
+    pub(crate) fn track<T: Interpolate>(&self, track: &Track<'_, T>) -> Option<T> {
         track.sample(&self.clock(track.global_sequence_id().is_some()))
     }
 
-    pub(crate) fn sample<T: TrackValue + Interpolate>(&self, value: &Animatable<T>) -> Option<T> {
+    pub(crate) fn sample<T: TrackValue + Interpolate>(
+        &self,
+        value: &Animatable<'_, T>,
+    ) -> Option<T> {
         value
             .track()
             .and_then(|track| self.track(track))

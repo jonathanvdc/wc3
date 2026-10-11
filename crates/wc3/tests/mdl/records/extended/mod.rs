@@ -29,11 +29,12 @@ fn whole_model<V: ModelVersion>() {
         text
     );
     let decoded = Model::<V>::decode_mdl(&text).unwrap();
-    assert_eq!(decoded.cameras().len(), 1);
-    assert_eq!(decoded.particle_emitters2().len(), 1);
+    assert_eq!(decoded.cameras().count(), 1);
+    assert_eq!(decoded.particle_emitters2().count(), 1);
     assert_eq!(
         Model::<V>::decode_mdx(&decoded.encode_mdx().unwrap())
             .unwrap()
+            .into_owned()
             .encode_mdl()
             .unwrap(),
         text

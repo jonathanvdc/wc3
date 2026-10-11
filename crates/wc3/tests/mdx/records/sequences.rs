@@ -18,8 +18,10 @@ fn sequence_fields_round_trip() {
     stand.extent.maximum = [2.0, 3.0, 4.0];
     let mut model = Model::<wc3::model::V800>::new();
     model.set_sequences(&[stand]);
-    let decoded = Model::<wc3::model::V800>::decode_mdx(&model.encode_mdx().unwrap()).unwrap();
-    let sequence = &decoded.sequences()[0];
+    let decoded = Model::<wc3::model::V800>::decode_mdx(&model.encode_mdx().unwrap())
+        .unwrap()
+        .into_owned();
+    let sequence = &decoded.sequences().next().unwrap();
     assert_eq!(sequence.name.text(), "Stand");
     assert_eq!(sequence.interval, [0, 1000]);
     assert_eq!(sequence.move_speed, 270.0);

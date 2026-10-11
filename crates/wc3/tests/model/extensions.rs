@@ -43,8 +43,8 @@ impl<V: ModelVersion> Chunk for ApplicationChunk<V> {
     }
 }
 
-impl<V: ModelVersion> mdx::Extension for ApplicationChunk<V> {
-    fn read_extension(tag: Tag, input: &mut Cursor<'_>) -> Result<Option<Self>, mdx::ReadError> {
+impl<'data, V: ModelVersion> mdx::Extension<'data> for ApplicationChunk<V> {
+    fn read_extension(tag: Tag, input: &mut Cursor<'data>) -> Result<Option<Self>, mdx::ReadError> {
         Ok(match &tag {
             b"NOTE" => Some(Self::Note(input.read()?)),
             b"VBND" => {
@@ -87,8 +87,8 @@ fn standard_records_use_the_base_version_and_custom_dialects_are_open() {
     let bytes = model.encode_mdx().unwrap();
     let decoded = Model::<ApplicationDialect>::decode_mdx(&bytes).unwrap();
     assert_eq!(decoded.version(), 1800);
-    assert_eq!(decoded.geosets().len(), 1);
-    assert_eq!(decoded.materials().len(), 1);
+    assert_eq!(decoded.geosets().count(), 1);
+    assert_eq!(decoded.materials().count(), 1);
     assert!(matches!(
         decoded.chunks.last(),
         Some(ModelChunk::Extension(ApplicationChunk::Note(42)))
@@ -319,7 +319,9 @@ fn extensions_unknown_to_a_new_version_follow_the_opaque_policy() {
     assert_eq!(dropped.model.chunks.len(), 1);
     assert_eq!(dropped.report.issues[0].kind, ConversionIssueKind::Dropped);
     // A decoder that owns the tag can establish compatibility without opaque policy.
-    let standard = Model::<V1800>::decode_mdx(&model.encode_mdx().unwrap()).unwrap();
+    let standard = Model::<V1800>::decode_mdx(&model.encode_mdx().unwrap())
+        .unwrap()
+        .into_owned();
     let recognized = standard
         .convert::<Application800>(&ConversionOptions::strict())
         .unwrap();
@@ -336,7 +338,7 @@ fn io_adapter_uses_the_selected_extension_codec() {
         .chunks
         .push(ModelChunk::Extension(ApplicationChunk::Note(42)));
     let bytes = model.encode_mdx().unwrap();
-    let decoded: DynamicModel<ApplicationChunk> =
+    let decoded: DynamicModel<'static, ApplicationChunk> =
         mdx::from_reader_with_version(bytes.as_slice(), 800).unwrap();
     assert_eq!(decoded.encode_mdx().unwrap(), bytes);
     visit_model!(&decoded, |typed| assert!(matches!(
@@ -363,10 +365,10 @@ impl Chunk for NoteChunk {
     }
 }
 
-impl KnownChunk for NoteChunk {
+impl<'data> KnownChunk<'data> for NoteChunk {
     const TAG: Tag = *b"NOTE";
 
-    fn decode_payload(input: &mut Cursor<'_>) -> Result<Self, mdx::ReadError> {
+    fn decode_payload(input: &mut Cursor<'data>) -> Result<Self, mdx::ReadError> {
         input.read().map(Self)
     }
 }
@@ -495,7 +497,7 @@ impl mdl::Write for WriteOnlyNote {
 #[test]
 fn mdl_reading_and_writing_require_only_their_respective_codecs() {
     let source = "Version { FormatVersion 800, } Model \"Example\" {} Note { Value 9, }";
-    let model: Model<Extended<V800, ReadOnlyNote>> = source.parse().unwrap();
+    let model: Model<'static, Extended<V800, ReadOnlyNote>> = source.parse().unwrap();
     assert!(matches!(&model.chunks[2], ModelChunk::Extension(note) if note.0.value == 9));
     let dynamic = DynamicModel::<ReadOnlyNote>::decode_mdl(source).unwrap();
     assert_eq!(dynamic.version(), 800);

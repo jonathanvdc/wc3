@@ -80,7 +80,7 @@ impl Wc3Attachments {
 #[derive(Component)]
 pub(crate) struct AnimatedAttachment {
     root: Entity,
-    visibility: Option<Track<f32>>,
+    visibility: Option<Track<'static, f32>>,
     last_sequence: usize,
     last_elapsed_ms: f64,
     restart: u64,
@@ -101,7 +101,7 @@ pub(crate) fn spawn_attachments(
     nodes: &HashMap<u32, Entity>,
 ) {
     let mut points = Vec::new();
-    for (index, attachment) in prepared.model.attachments().into_iter().enumerate() {
+    for (index, attachment) in prepared.model.attachments().enumerate() {
         let Some(&node) = nodes.get(&attachment.node.object_id) else {
             continue;
         };
@@ -112,7 +112,7 @@ pub(crate) fn spawn_attachments(
                 ChildOf(node),
                 AnimatedAttachment {
                     root,
-                    visibility: attachment.visibility,
+                    visibility: attachment.visibility.clone(),
                     last_sequence: usize::MAX,
                     last_elapsed_ms: 0.0,
                     restart: 0,

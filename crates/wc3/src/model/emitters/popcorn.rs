@@ -6,6 +6,7 @@ use crate::model::Color;
 use crate::model::FixedText;
 use crate::model::KnownChunk;
 use crate::model::ModelDialect;
+use crate::model::ModelOwnership;
 use crate::model::PopcornEmittersChunk;
 use crate::model::SupportsReforgedChunks;
 use crate::model::ValueError;
@@ -17,37 +18,37 @@ use bitfield::bitfield;
 const PATH_SIZE: usize = 260;
 
 /// A Reforged particle effect loaded from a PopcornFX resource.
-#[derive(Clone, Debug, PartialEq, mdx::Read, mdx::Write, mdl::Read, mdl::Write)]
+#[derive(Clone, Debug, PartialEq, mdx::Read, mdx::Write, mdl::Read, mdl::Write, ModelOwnership)]
 #[mdx(sized(tag = PopcornEmittersChunk::TAG))]
 #[mdl(
     block = "ParticleEmitterPopcorn",
     after_read = "finish_popcorn",
     validate_write = "validate_popcorn"
 )]
-pub struct PopcornEmitter {
+pub struct PopcornEmitter<'data> {
     #[mdl(flatten)]
     /// Shared node.
-    pub node: Node<PopcornFlags>,
+    pub node: Node<'data, PopcornFlags>,
     #[mdx(tag = *b"KPPL")]
     #[mdl(property = "LifeSpan", default = "one")]
     /// Particle lifetime.
-    pub life_span: Animatable<f32>,
+    pub life_span: Animatable<'data, f32>,
     #[mdx(tag = *b"KPPE")]
     #[mdl(property = "EmissionRate", default = "one")]
     /// Emission rate.
-    pub emission_rate: Animatable<f32>,
+    pub emission_rate: Animatable<'data, f32>,
     #[mdx(tag = *b"KPPS")]
     #[mdl(property = "Speed", default = "one")]
     /// Particle speed.
-    pub speed: Animatable<f32>,
+    pub speed: Animatable<'data, f32>,
     #[mdx(tag = *b"KPPC")]
     #[mdl(property = "Color", default = "white")]
     /// RGB particle color.
-    pub color: Animatable<Color>,
+    pub color: Animatable<'data, Color>,
     #[mdx(tag = *b"KPPA")]
     #[mdl(property = "Alpha", default = "one")]
     /// Base alpha.
-    pub alpha: Animatable<f32>,
+    pub alpha: Animatable<'data, f32>,
     #[mdl(property = "ReplaceableId", default, skip_if = "is_zero")]
     /// Replaceable texture ID.
     pub replaceable_id: u32,
@@ -60,13 +61,13 @@ pub struct PopcornEmitter {
     #[mdx(tag = *b"KPPV")]
     #[mdl(property = "Visibility")]
     /// Optional visibility animation.
-    pub visibility: Option<Track<f32>>,
+    pub visibility: Option<Track<'data, f32>>,
 }
 
-impl PopcornEmitter {
+impl<'data> PopcornEmitter<'data> {
     /// Creates an emitter with unit lifespan, emission rate, speed, alpha, and white color.
     pub fn new<F: NodeFlagInterpretation>(
-        node: Node<F>,
+        node: Node<'data, F>,
         path: &str,
         visibility_guide: &str,
     ) -> Result<Self, ValueError> {
@@ -88,17 +89,20 @@ impl PopcornEmitter {
     }
 }
 
-impl<D: ModelDialect> Model<D> {
-    /// Returns an error if this model version does not support `CORN`.
-    pub fn try_popcorn_emitters(&self) -> Result<Vec<PopcornEmitter>, ValueError> {
+impl<'data, D: ModelDialect> Model<'data, D> {
+    /// Borrows records in chunk and record order.
+    pub fn try_popcorn_emitters<'s>(
+        &'s self,
+    ) -> Result<impl Iterator<Item = &'s PopcornEmitter<'data>> + use<'data, 's, D>, ValueError>
+    {
         self.check_chunk_version(*b"CORN")?;
-        Ok(self.collect_chunk_records::<PopcornEmittersChunk>())
+        Ok(self.records::<PopcornEmittersChunk<'_>>())
     }
 
     /// Returns an error if this model version does not support `CORN`.
     pub fn try_set_popcorn_emitters(
         &mut self,
-        emitters: &[PopcornEmitter],
+        emitters: &[PopcornEmitter<'data>],
     ) -> Result<(), ValueError> {
         self.check_chunk_version(*b"CORN")?;
         self.replace_chunk(PopcornEmittersChunk::new(emitters.to_vec()));
@@ -106,32 +110,34 @@ impl<D: ModelDialect> Model<D> {
     }
 }
 
-impl<D: ModelDialect> Model<D>
+impl<'data, D: ModelDialect> Model<'data, D>
 where
     D::Version: SupportsReforgedChunks,
 {
-    /// Returns decoded `CORN` records.
-    pub fn popcorn_emitters(&self) -> Vec<PopcornEmitter> {
-        self.collect_chunk_records::<PopcornEmittersChunk>()
+    /// Borrows records in chunk and record order.
+    pub fn popcorn_emitters<'s>(
+        &'s self,
+    ) -> impl Iterator<Item = &'s PopcornEmitter<'data>> + use<'data, 's, D> {
+        self.records::<PopcornEmittersChunk<'_>>()
     }
 
     /// Replaces `CORN` records.
-    pub fn set_popcorn_emitters(&mut self, emitters: &[PopcornEmitter]) {
+    pub fn set_popcorn_emitters(&mut self, emitters: &[PopcornEmitter<'data>]) {
         self.replace_chunk(PopcornEmittersChunk::new(emitters.to_vec()));
     }
 }
 
-fn one() -> Animatable<f32> {
+fn one<'data>() -> Animatable<'data, f32> {
     Animatable::Static(1.0)
 }
-fn white() -> Animatable<Color> {
+fn white<'data>() -> Animatable<'data, Color> {
     Animatable::Static([1.0; 3])
 }
-fn finish_popcorn(value: &mut PopcornEmitter, _: Span) -> Result<(), mdl::ReadError> {
+fn finish_popcorn<'data>(value: &mut PopcornEmitter<'data>, _: Span) -> Result<(), mdl::ReadError> {
     set_node_kind(&mut value.node, 0x1000);
     Ok(())
 }
-fn validate_popcorn(value: &PopcornEmitter) -> Result<(), mdl::WriteError> {
+fn validate_popcorn<'data>(value: &PopcornEmitter<'data>) -> Result<(), mdl::WriteError> {
     validate_node_kind(&value.node, 0x1000 | (value.node.flags.bits() & 0x78000))
 }
 
@@ -174,7 +180,7 @@ impl PopcornFlags {
         Self(bits)
     }
 }
-impl PopcornEmitter {
+impl<'data> PopcornEmitter<'data> {
     /// Returns behavioral flags using this emitter's bit meanings.
     pub fn flags(&self) -> PopcornFlags {
         PopcornFlags::from_bits(self.node.flags.bits() & PopcornFlags::MASK)

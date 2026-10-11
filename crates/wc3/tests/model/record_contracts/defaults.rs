@@ -28,7 +28,9 @@ fn constructors_use_documented_defaults_without_changing_decoded_values() {
     assert_eq!(emitter.color, Animatable::Static([1.0; 3]));
     emitter.life_span = Animatable::Static(0.0);
     emitter.color = Animatable::Static([0.0; 3]);
-    let decoded = PopcornEmitter::decode_mdx(&emitter.encode_mdx().unwrap()).unwrap();
+    let decoded = PopcornEmitter::decode_mdx(&emitter.encode_mdx().unwrap())
+        .unwrap()
+        .into_owned();
     assert_eq!(decoded.life_span, Animatable::Static(0.0));
     assert_eq!(decoded.color, Animatable::Static([0.0; 3]));
     assert_eq!(decoded.visibility_guide.text(), "Always=on\r\nDeath=off");

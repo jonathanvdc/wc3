@@ -41,6 +41,9 @@ impl CollectionChunk for BindPoseChunk {
         &self.records
     }
 
+    fn records_mut(&mut self) -> &mut [Self::Item] {
+        &mut self.records
+    }
     fn from_records(records: Vec<Self::Item>) -> Self {
         Self { records }
     }
@@ -77,10 +80,10 @@ impl Chunk for BindPoseChunk {
     }
 }
 
-impl KnownChunk for BindPoseChunk {
+impl<'data> KnownChunk<'data> for BindPoseChunk {
     const TAG: Tag = *b"BPOS";
 
-    fn decode_payload(cursor: &mut Cursor<'_>) -> Result<Self, mdx::ReadError> {
+    fn decode_payload(cursor: &mut Cursor<'data>) -> Result<Self, mdx::ReadError> {
         let offset = cursor.absolute_position();
         let size = cursor.remaining().len();
         let count = cursor

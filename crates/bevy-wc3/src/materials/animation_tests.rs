@@ -160,7 +160,7 @@ fn hd_controls_and_slots_follow_animation_and_overrides() {
     ));
     layer.set_fresnel_color(Animatable::Static([0.2, 0.4, 0.8]));
     layer.set_fresnel_team_color(Animatable::Static(0.3));
-    let mut surface = AnimatedSurface::new(&layer, None, 3);
+    let mut surface = AnimatedSurface::new(&layer.into(), None, 3);
     surface.root = root;
     let other_bindings = app.world().get::<Wc3TextureBindings>(root).unwrap().clone();
     let other_root = app.world_mut().spawn((animation(), other_bindings)).id();

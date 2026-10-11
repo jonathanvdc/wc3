@@ -1,12 +1,14 @@
 //! Derived geoset fields with adapters for the mesh-specific list framing.
 use super::{
-    Geoset, GeosetExtent, GeosetExtraSection, GeosetExtraSections, GeosetLevelOfDetail, SkinWeights,
+    Geoset, GeosetExtent, GeosetExtraSection, GeosetExtraSections, GeosetLevelOfDetail, SkinWeight,
 };
 use crate::model::IoError;
+use crate::model::ModelArray;
 use crate::model::{mdl, FixedText, ModelVersion, Vec3};
 use mdl::WriteProperty as _;
 use mdl::{Dialect, Field, Parser, Span, TokenKind, Writer};
 use std::io::Write as IoWrite;
+use zerovec::ule::AsULE;
 
 #[derive(mdl::Read, mdl::Write)]
 #[mdl(entry)]
@@ -53,36 +55,36 @@ impl<T: mdl::Read> mdl::ReadProperty for OptionalList<T> {
         Ok(Self(None))
     }
 }
-pub(super) struct ListRef<'a, T>(pub(super) &'a [T]);
-pub(super) struct UncountedRef<'a, T>(&'a [T]);
-pub(super) struct OptionalListRef<'a, T>(Option<&'a [T]>);
-impl<T: mdl::Write> mdl::WriteProperty for ListRef<'_, T> {
+pub(super) struct ListRef<'a, T: AsULE>(pub(super) &'a ModelArray<'a, T>);
+pub(super) struct UncountedRef<'a, T: AsULE>(&'a ModelArray<'a, T>);
+pub(super) struct OptionalListRef<'a, T: AsULE>(Option<&'a ModelArray<'a, T>>);
+impl<T: AsULE + mdl::Write> mdl::WriteProperty for ListRef<'_, T> {
     fn write_mdl_property<W: IoWrite>(
         &self,
         name: &'static str,
         writer: &mut Writer<W>,
     ) -> Result<(), IoError<mdl::WriteError>> {
         writer.begin_counted_block(name, self.0.len())?;
-        for value in self.0 {
-            writer.entry(value)?;
+        for value in self.0.iter() {
+            writer.entry(&value)?;
         }
         writer.end_block()
     }
 }
-impl<T: mdl::Write> mdl::WriteProperty for UncountedRef<'_, T> {
+impl<T: AsULE + mdl::Write> mdl::WriteProperty for UncountedRef<'_, T> {
     fn write_mdl_property<W: IoWrite>(
         &self,
         name: &'static str,
         writer: &mut Writer<W>,
     ) -> Result<(), IoError<mdl::WriteError>> {
         writer.begin_block(name)?;
-        for value in self.0 {
-            writer.entry(value)?;
+        for value in self.0.iter() {
+            writer.entry(&value)?;
         }
         writer.end_block()
     }
 }
-impl<T: mdl::Write> mdl::WriteProperty for OptionalListRef<'_, T> {
+impl<T: AsULE + mdl::Write> mdl::WriteProperty for OptionalListRef<'_, T> {
     fn write_mdl_property<W: IoWrite>(
         &self,
         name: &'static str,
@@ -101,13 +103,13 @@ impl mdl::Read for UvSet {
         read_list(parser).map(Self)
     }
 }
-pub(super) struct UvSetsRef<'a>(&'a [Vec<[f32; 2]>]);
+pub(super) struct UvSetsRef<'a>(&'a [ModelArray<'a, [f32; 2]>]);
 impl UvSetsRef<'_> {
     pub(super) fn iter(&self) -> impl Iterator<Item = UvRef<'_>> {
-        self.0.iter().map(|values| UvRef(values))
+        self.0.iter().map(UvRef)
     }
 }
-pub(super) struct UvRef<'a>(&'a [[f32; 2]]);
+pub(super) struct UvRef<'a>(&'a ModelArray<'a, [f32; 2]>);
 impl mdl::Write for UvRef<'_> {
     fn write_mdl<W: IoWrite>(
         &self,
@@ -122,10 +124,10 @@ pub(super) struct AnimExtent {
     #[mdl(flatten)]
     extent: GeosetExtent,
 }
-pub(super) struct ExtentsRef<'a>(&'a [GeosetExtent]);
+pub(super) struct ExtentsRef<'a>(&'a ModelArray<'a, GeosetExtent>);
 impl ExtentsRef<'_> {
     pub(super) fn iter(&self) -> impl Iterator<Item = AnimExtent> + '_ {
-        self.0.iter().map(|extent| AnimExtent { extent: *extent })
+        self.0.iter().map(|extent| AnimExtent { extent })
     }
 }
 
@@ -227,17 +229,17 @@ impl mdl::ReadProperty for Groups {
         Ok(Self { counts, indices })
     }
 }
-pub(super) struct GroupsRef<'a, T> {
-    counts: &'a [u32],
-    indices: &'a [T],
+pub(super) struct GroupsRef<'a, T: AsULE> {
+    counts: &'a ModelArray<'a, u32>,
+    indices: &'a ModelArray<'a, T>,
     triangles: bool,
 }
-impl<T: mdl::Write> mdl::WriteProperty for GroupsRef<'_, T> {
+impl<T: AsULE + mdl::Write> mdl::WriteProperty for GroupsRef<'_, T> {
     fn validate_mdl_property(&self, _: &'static str, _: Dialect) -> Result<(), mdl::WriteError> {
         let total = self
             .counts
             .iter()
-            .try_fold(0usize, |total, &count| total.checked_add(count as usize));
+            .try_fold(0usize, |total, count| total.checked_add(count as usize));
         if total != Some(self.indices.len())
             || self.counts.len() > u32::MAX as usize
             || self.indices.len() > u32::MAX as usize
@@ -268,7 +270,7 @@ impl<T: mdl::Write> mdl::WriteProperty for GroupsRef<'_, T> {
         ))?;
         writer.open_body()?;
         let mut offset = 0;
-        for &count in self.counts {
+        for count in self.counts.iter() {
             if self.triangles {
                 writer.begin_block("Triangles")?;
                 writer.indent()?;
@@ -277,14 +279,17 @@ impl<T: mdl::Write> mdl::WriteProperty for GroupsRef<'_, T> {
                 writer.raw("Matrices ")?;
             }
             writer.raw("{ ")?;
-            for (index, value) in self.indices[offset..offset + count as usize]
+            for (index, value) in self
+                .indices
                 .iter()
+                .skip(offset)
+                .take(count as usize)
                 .enumerate()
             {
                 if index != 0 {
                     writer.raw(", ")?;
                 }
-                writer.write(value)?;
+                writer.write(&value)?;
             }
             writer.raw(" },\n")?;
             if self.triangles {
@@ -317,8 +322,8 @@ impl Selection {
     }
 }
 
-pub(super) struct SkinRow(SkinWeights);
-impl mdl::Read for SkinRow {
+pub(super) struct SkinRow<S: SkinWeight>(S);
+impl<S: SkinWeight> mdl::Read for SkinRow<S> {
     fn read_mdl(parser: &mut Parser<'_>) -> Result<Self, mdl::ReadError> {
         let values = if parser
             .peek()?
@@ -335,24 +340,35 @@ impl mdl::Read for SkinRow {
             }
             values
         };
-        Ok(Self(SkinWeights {
-            bone_indices: values[..4]
-                .try_into()
-                .map(|values: [u8; 4]| values.map(u16::from))
-                .expect("four indices"),
-            weights: values[4..].try_into().expect("four weights"),
-        }))
+        let bone_indices = values[..4]
+            .try_into()
+            .map(|values: [u8; 4]| values.map(u16::from))
+            .expect("four indices");
+        let weights = values[4..]
+            .try_into()
+            .map(|values: [u8; 4]| values.map(u16::from))
+            .expect("four weights");
+        Ok(Self(
+            S::from_influences(bone_indices, weights).expect("byte-sized MDL influences"),
+        ))
     }
 }
-pub(super) struct SkinRef<'a>(Option<&'a [SkinWeights]>);
-impl mdl::WriteProperty for SkinRef<'_> {
+pub(super) struct SkinRef<'a, S: SkinWeight>(Option<&'a ModelArray<'a, S>>);
+impl<S: SkinWeight> mdl::WriteProperty for SkinRef<'_, S> {
     fn validate_mdl_property(&self, _: &'static str, _: Dialect) -> Result<(), mdl::WriteError> {
         if self.0.is_some_and(|rows| {
             rows.iter()
-                .any(|row| row.bone_indices.iter().any(|&index| index > 255))
+                .any(|row| row.bone_indices().iter().any(|&index| index > 255))
         }) {
             Err(mdl::WriteError::Unrepresentable {
                 field: "skin bone index above 255",
+            })
+        } else if self.0.is_some_and(|rows| {
+            rows.iter()
+                .any(|row| row.weights().iter().any(|&weight| weight > 255))
+        }) {
+            Err(mdl::WriteError::Unrepresentable {
+                field: "skin weight above 255",
             })
         } else {
             Ok(())
@@ -366,16 +382,16 @@ impl mdl::WriteProperty for SkinRef<'_> {
         self.validate_mdl_property(name, writer.dialect())?;
         if let Some(rows) = self.0 {
             writer.begin_counted_block(name, rows.len())?;
-            for row in rows {
+            for row in rows.iter() {
                 writer.indent()?;
                 if writer.dialect() == Dialect::HiveWorkshop {
                     writer.raw("{ ")?;
                 }
                 for (index, value) in row
-                    .bone_indices
+                    .bone_indices()
                     .iter()
                     .copied()
-                    .chain(row.weights.map(u16::from))
+                    .chain(row.weights())
                     .enumerate()
                 {
                     if index != 0 {
@@ -394,7 +410,7 @@ impl mdl::WriteProperty for SkinRef<'_> {
     }
 }
 
-impl<V: ModelVersion> Geoset<V> {
+impl<'data, V: ModelVersion> Geoset<'data, V> {
     pub(super) fn mdl_positions(&self) -> ListRef<'_, Vec3> {
         ListRef(&self.vertices)
     }
@@ -404,7 +420,7 @@ impl<V: ModelVersion> Geoset<V> {
         _: bool,
         _: Span,
     ) -> Result<(), mdl::ReadError> {
-        self.vertices = value.0;
+        self.vertices = (value.0).into();
         Ok(())
     }
     pub(super) fn mdl_directions(&self) -> ListRef<'_, Vec3> {
@@ -416,7 +432,7 @@ impl<V: ModelVersion> Geoset<V> {
         _: bool,
         _: Span,
     ) -> Result<(), mdl::ReadError> {
-        self.normals = value.0;
+        self.normals = (value.0).into();
         Ok(())
     }
     pub(super) fn mdl_vertex_indices(&self) -> UncountedRef<'_, u8> {
@@ -428,7 +444,7 @@ impl<V: ModelVersion> Geoset<V> {
         _: bool,
         _: Span,
     ) -> Result<(), mdl::ReadError> {
-        self.vertex_groups = value.0;
+        self.vertex_groups = (value.0).into();
         Ok(())
     }
     pub(super) fn mdl_uvs(&self) -> UvSetsRef<'_> {
@@ -440,7 +456,7 @@ impl<V: ModelVersion> Geoset<V> {
         _: bool,
         _: Span,
     ) -> Result<(), mdl::ReadError> {
-        self.uv_sets = value.into_iter().map(|set| set.0).collect();
+        self.uv_sets = value.into_iter().map(|set| set.0.into()).collect();
         Ok(())
     }
     pub(super) fn mdl_bounds(&self) -> ExtentsRef<'_> {
@@ -468,9 +484,9 @@ impl<V: ModelVersion> Geoset<V> {
         _: bool,
         _: Span,
     ) -> Result<(), mdl::ReadError> {
-        self.primitive_types = vec![4; value.counts.len()];
-        self.primitive_counts = value.counts;
-        self.faces = value.indices;
+        self.primitive_types = vec![4; value.counts.len()].into();
+        self.primitive_counts = (value.counts).into();
+        self.faces = (value.indices).into();
         Ok(())
     }
     pub(super) fn mdl_matrices(&self) -> GroupsRef<'_, u32> {
@@ -486,8 +502,8 @@ impl<V: ModelVersion> Geoset<V> {
         _: bool,
         _: Span,
     ) -> Result<(), mdl::ReadError> {
-        self.matrix_group_sizes = value.counts;
-        self.matrix_indices = value.indices;
+        self.matrix_group_sizes = (value.counts).into();
+        self.matrix_indices = (value.indices).into();
         Ok(())
     }
     pub(super) fn mdl_selection(&self) -> Selection {
@@ -534,7 +550,7 @@ impl<V: ModelVersion> Geoset<V> {
     pub(super) fn mdl_tangents(&self) -> OptionalListRef<'_, [f32; 4]> {
         OptionalListRef(self.extra_sections.reforged().and_then(|storage| {
             storage.sections.iter().find_map(|section| match section {
-                GeosetExtraSection::Tangents(values) => Some(values.as_slice()),
+                GeosetExtraSection::Tangents(values) => Some(values),
                 _ => None,
             })
         }))
@@ -553,21 +569,23 @@ impl<V: ModelVersion> Geoset<V> {
                     span,
                     mdl::ReadErrorKind::UnsupportedField,
                 ))?;
-            storage.sections.push(GeosetExtraSection::Tangents(values));
+            storage
+                .sections
+                .push(GeosetExtraSection::Tangents(values.into()));
         }
         Ok(())
     }
-    pub(super) fn mdl_skin(&self) -> SkinRef<'_> {
+    pub(super) fn mdl_skin(&self) -> SkinRef<'_, V::SkinWeights> {
         SkinRef(self.extra_sections.reforged().and_then(|storage| {
             storage.sections.iter().find_map(|section| match section {
-                GeosetExtraSection::Skin { weights } => Some(weights.as_slice()),
+                GeosetExtraSection::Skin { weights } => Some(weights),
                 _ => None,
             })
         }))
     }
     pub(super) fn set_mdl_skin(
         &mut self,
-        value: OptionalList<SkinRow>,
+        value: OptionalList<SkinRow<V::SkinWeights>>,
         _: bool,
         span: Span,
     ) -> Result<(), mdl::ReadError> {
@@ -618,7 +636,7 @@ impl<V: ModelVersion> Geoset<V> {
             });
         }
         if self.primitive_types.len() != self.primitive_counts.len()
-            || self.primitive_types.iter().any(|&kind| kind != 4)
+            || self.primitive_types.iter().any(|kind| kind != 4)
         {
             return Err(mdl::WriteError::Unrepresentable {
                 field: "non-triangle primitive groups",

@@ -1,13 +1,13 @@
 //! Checked, bounded reads over immutable bytes.
-use crate::model::mdx;
+use crate::model::{mdx, ModelBytes};
 /// A value that can be read from an MDX byte stream.
-pub trait Read: Sized {
+pub trait Read<'data>: Sized {
     /// Reads one value at the current position, leaving subsequent bytes unread.
     /// Errors may leave the cursor advanced; copy it first for speculative reads.
-    fn read_mdx(cursor: &mut Cursor<'_>) -> Result<Self, mdx::ReadError>;
+    fn read_mdx(cursor: &mut Cursor<'data>) -> Result<Self, mdx::ReadError>;
 
     /// Reads a value and rejects trailing bytes.
-    fn decode_mdx(bytes: &[u8]) -> Result<Self, mdx::ReadError> {
+    fn decode_mdx(bytes: &'data [u8]) -> Result<Self, mdx::ReadError> {
         let mut cursor = Cursor::new(bytes);
         let value = Self::read_mdx(&mut cursor)?;
         cursor.finish()?;
@@ -15,44 +15,66 @@ pub trait Read: Sized {
     }
 }
 
-impl Read for u8 {
-    fn read_mdx(cursor: &mut Cursor<'_>) -> Result<Self, mdx::ReadError> {
+/// Decodes an independently owned value from a temporary input buffer.
+/// The format's lifetime-based records detach their borrowed payloads here.
+pub trait ReadOwned: Sized + 'static {
+    /// Reads a complete value, copying borrowed payloads into independent storage.
+    fn decode_owned(bytes: &[u8]) -> Result<Self, mdx::ReadError>;
+}
+macro_rules! owned_scalar_reader {
+    ($($ty:ty),*)=>{$(
+        impl ReadOwned for $ty {
+            fn decode_owned(bytes:&[u8])->Result<Self,mdx::ReadError> {
+                Self::decode_mdx(bytes)
+            }
+        }
+    )*};
+}
+owned_scalar_reader!(u8, u16, u32, i32, f32);
+impl<T: Copy + Default + 'static + for<'input> Read<'input>, const N: usize> ReadOwned for [T; N] {
+    fn decode_owned(bytes: &[u8]) -> Result<Self, mdx::ReadError> {
+        Self::decode_mdx(bytes)
+    }
+}
+
+impl<'data> Read<'data> for u8 {
+    fn read_mdx(cursor: &mut Cursor<'data>) -> Result<Self, mdx::ReadError> {
         Ok(cursor.read_bytes(1)?[0])
     }
 }
 
-impl Read for u16 {
-    fn read_mdx(cursor: &mut Cursor<'_>) -> Result<Self, mdx::ReadError> {
+impl<'data> Read<'data> for u16 {
+    fn read_mdx(cursor: &mut Cursor<'data>) -> Result<Self, mdx::ReadError> {
         Ok(u16::from_le_bytes(
             cursor.read_bytes(2)?.try_into().expect("two-byte word"),
         ))
     }
 }
 
-impl Read for u32 {
-    fn read_mdx(cursor: &mut Cursor<'_>) -> Result<Self, mdx::ReadError> {
+impl<'data> Read<'data> for u32 {
+    fn read_mdx(cursor: &mut Cursor<'data>) -> Result<Self, mdx::ReadError> {
         Ok(u32::from_le_bytes(
             cursor.read_bytes(4)?.try_into().expect("four-byte word"),
         ))
     }
 }
 
-impl Read for i32 {
-    fn read_mdx(cursor: &mut Cursor<'_>) -> Result<Self, mdx::ReadError> {
+impl<'data> Read<'data> for i32 {
+    fn read_mdx(cursor: &mut Cursor<'data>) -> Result<Self, mdx::ReadError> {
         Ok(i32::from_le_bytes(
             cursor.read_bytes(4)?.try_into().expect("four-byte word"),
         ))
     }
 }
 
-impl Read for f32 {
-    fn read_mdx(cursor: &mut Cursor<'_>) -> Result<Self, mdx::ReadError> {
+impl<'data> Read<'data> for f32 {
+    fn read_mdx(cursor: &mut Cursor<'data>) -> Result<Self, mdx::ReadError> {
         Ok(f32::from_bits(cursor.read::<u32>()?))
     }
 }
 
-impl<T: Read + Copy + Default, const N: usize> Read for [T; N] {
-    fn read_mdx(cursor: &mut Cursor<'_>) -> Result<Self, mdx::ReadError> {
+impl<'data, T: Read<'data> + Copy + Default, const N: usize> Read<'data> for [T; N] {
+    fn read_mdx(cursor: &mut Cursor<'data>) -> Result<Self, mdx::ReadError> {
         let mut values = [T::default(); N];
         for value in &mut values {
             *value = cursor.read()?;
@@ -81,6 +103,11 @@ impl<'a> Cursor<'a> {
             offset: 0,
             base: 0,
         }
+    }
+
+    /// Borrows the remaining bytes without copying them.
+    pub(crate) fn remaining_bytes(&self) -> ModelBytes<'a> {
+        ModelBytes::borrowed(self.remaining())
     }
 
     /// Returns the position relative to this cursor's slice.
@@ -126,7 +153,7 @@ impl<'a> Cursor<'a> {
     }
 
     /// Reads a value from the byte stream.
-    pub fn read<T: Read>(&mut self) -> Result<T, mdx::ReadError> {
+    pub fn read<T: Read<'a>>(&mut self) -> Result<T, mdx::ReadError> {
         T::read_mdx(self)
     }
 

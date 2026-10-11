@@ -1,6 +1,7 @@
 use super::textures::Wc3TextureBindings;
 use super::Wc3LayerMaterial;
 use crate::animation::{clocks::SamplingTime, Wc3Animation};
+use crate::preparation::shared::Shared;
 use bevy::prelude::*;
 use wc3::model::animation::Animatable;
 use wc3::model::materials::LayerFilterMode;
@@ -8,10 +9,10 @@ use wc3::model::materials::LayerFilterMode;
 #[derive(Component)]
 pub(crate) struct AnimatedLayer {
     pub(crate) root: Entity,
-    pub(crate) alpha: Animatable<f32>,
-    pub(crate) geoset_alpha: Option<Animatable<f32>>,
-    pub(crate) geoset_color: Option<Animatable<[f32; 3]>>,
-    pub(crate) texture_id: Animatable<u32>,
+    pub(crate) alpha: Shared<Animatable<'static, f32>>,
+    pub(crate) geoset_alpha: Option<Shared<Animatable<'static, f32>>>,
+    pub(crate) geoset_color: Option<Shared<Animatable<'static, [f32; 3]>>>,
+    pub(crate) texture_id: Shared<Animatable<'static, u32>>,
 }
 
 pub(crate) fn animate_layers(

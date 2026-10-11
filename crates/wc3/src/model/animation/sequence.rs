@@ -71,10 +71,10 @@ impl Sequence {
     }
 }
 
-impl<D: ModelDialect> Model<D> {
-    /// Returns owned copies of sequence records from every `SEQS` chunk in file order.
-    pub fn sequences(&self) -> Vec<Sequence> {
-        self.collect_chunk_records::<SequencesChunk>()
+impl<'data, D: ModelDialect> Model<'data, D> {
+    /// Borrows records in chunk and record order.
+    pub fn sequences<'s>(&'s self) -> impl Iterator<Item = &'s Sequence> + use<'data, 's, D> {
+        self.records::<SequencesChunk>()
     }
 
     /// Writes all sequences to the first `SEQS` chunk, creating it if needed.

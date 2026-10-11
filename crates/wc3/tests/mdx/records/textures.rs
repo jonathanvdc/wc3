@@ -16,8 +16,10 @@ fn texture_fields_round_trip() {
     let mut model = Model::<wc3::model::V1800>::new();
     model.set_textures(&[texture]);
 
-    let decoded = Model::<wc3::model::V1800>::decode_mdx(&model.encode_mdx().unwrap()).unwrap();
-    let texture = &decoded.textures()[0];
+    let decoded = Model::<wc3::model::V1800>::decode_mdx(&model.encode_mdx().unwrap())
+        .unwrap()
+        .into_owned();
+    let texture = &decoded.textures().next().unwrap();
     assert_eq!(texture.path.text(), "Textures\\Footman.blp");
     assert_eq!(texture.replaceable_id, 1);
     assert!(texture.flags.wrap_width());
@@ -36,7 +38,7 @@ fn texture_path_padding_roundtrips_and_is_cleared_when_replacing_the_path() {
         &model.encode_mdx().unwrap()[24 + 260..24 + 264],
         &[9, 8, 7, 6]
     );
-    let mut textures = model.textures();
+    let mut textures = model.textures().cloned().collect::<Vec<_>>();
     textures[0].path.set_text("b.blp").unwrap();
     model.set_textures(&textures);
     let bytes = model.encode_mdx().unwrap();

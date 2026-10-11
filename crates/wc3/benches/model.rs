@@ -1,4 +1,4 @@
-use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use criterion::{criterion_group, criterion_main, BatchSize, BenchmarkId, Criterion, Throughput};
 use mdl::{Read as _, Write as _};
 use mdx::{Read as _, Write as _};
 use std::hint::black_box;
@@ -34,6 +34,15 @@ fn models(c: &mut Criterion) {
                 group.throughput(Throughput::Bytes(bytes.len() as u64));
                 group.bench_function(concat!("mdx/read/", $name), |b| {
                     b.iter(|| black_box(Model::<$version>::decode_mdx(black_box(&bytes)).unwrap()))
+                });
+                group.bench_function(concat!("mdx/read-owned/", $name), |b| {
+                    b.iter(|| {
+                        black_box(
+                            Model::<$version>::decode_mdx(black_box(&bytes))
+                                .unwrap()
+                                .into_owned(),
+                        )
+                    })
                 });
                 group.bench_function(concat!("mdx/read-traverse/", $name), |b| {
                     b.iter(|| {
@@ -72,6 +81,11 @@ fn models(c: &mut Criterion) {
             })
         });
         group.throughput(Throughput::Elements(1));
+        group.bench_function("view/borrow", |b| {
+            b.iter(|| black_box(modern.as_borrowed()))
+        });
+        group.bench_function("view/clone", |b| b.iter(|| black_box(modern.clone())));
+        group.bench_function("view/to-owned", |b| b.iter(|| black_box(modern.to_owned())));
         group.bench_function("resources", |b| {
             b.iter(|| black_box(modern.resources().collect::<Vec<_>>()))
         });
@@ -88,6 +102,19 @@ fn models(c: &mut Criterion) {
                 })
             },
         );
+        group.bench_function("convert-owned/800-1800", |b| {
+            b.iter_batched(
+                || classic.clone(),
+                |model| {
+                    black_box(
+                        model
+                            .into_convert::<V1800>(&ConversionOptions::strict())
+                            .unwrap(),
+                    )
+                },
+                BatchSize::SmallInput,
+            )
+        });
         group.finish();
     }
 }

@@ -97,7 +97,7 @@ pub(crate) struct ParticleEmitterUniform {
 
 impl ParticleEmitterUniform {
     pub(crate) fn new(
-        definition: &ParticleEmitter2,
+        definition: &ParticleEmitter2<'static>,
         transform: &GlobalTransform,
         time: f64,
     ) -> Self {

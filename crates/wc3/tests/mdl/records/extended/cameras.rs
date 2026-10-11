@@ -33,7 +33,9 @@ fn camera_nested_tracks_aliases_required_fields_and_variants() {
         record
     );
     assert_eq!(
-        Camera::<V800>::decode_mdx(&record.encode_mdx().unwrap()).unwrap(),
+        Camera::<V800>::decode_mdx(&record.encode_mdx().unwrap())
+            .unwrap()
+            .into_owned(),
         record
     );
     let mut invalid = record;

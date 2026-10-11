@@ -68,6 +68,22 @@ animation, and effects. The
 [`model` module documentation](https://docs.rs/wc3/latest/wc3/model/) explains
 how to edit those collections and convert between supported versions.
 
+Model getters for borrowed record collections return iterators without temporary
+vectors. Use `.cloned().collect::<Vec<_>>()` to clone a collection when needed.
+MDX decoding also borrows geometry, animation keys, and opaque payloads from the
+input slice. Numeric arrays use ZeroVec to read little-endian, unaligned data
+without allocating a typed buffer; `get()` and `iter()` return ordinary Rust
+values. Editing an array owns just that array. MDL decoding builds owned native
+values directly.
+
+Use `as_borrowed()` to create an editable view that borrows even buffers the
+original model owns. `to_owned()` creates an independent deep copy.
+`into_owned()` copies borrowed buffers and moves owned buffers into an
+independent model. Cloning borrowed buffers is cheap; cloning owned buffers
+copies them. Version conversion follows the same distinction:
+`convert()` borrows its source, while `into_convert()` moves compatible buffers.
+`mdx::from_reader` buffers a file and returns an owned model.
+
 Resource tools can use `resources()` on either model type to enumerate direct
 literal paths and replaceable IDs with typed source locations. `rewrite_resources()`
 validates every proposed change before modifying the model and reports actual edits,
@@ -162,9 +178,9 @@ III syntax by default. The [MDX](https://docs.rs/wc3/latest/wc3/model/mdx/) and
 [MDL](https://docs.rs/wc3/latest/wc3/model/mdl/) documentation explains these
 behaviors in more detail.
 
-Converting between model versions creates a new model and returns a report,
-leaving the source intact. Strict conversion rejects unsupported nondefault
-data; you can opt into lossy conversion to allow that data to be dropped.
+Converting between model versions returns a model and a report. `convert`
+leaves its source intact; `into_convert` consumes it and moves unchanged chunks.
+Strict conversion rejects unsupported nondefault data; you can opt into lossy conversion to allow that data to be dropped.
 Because some Classic and Reforged features have no equivalent in another layout,
 conversion cannot guarantee identical rendering in the game.
 

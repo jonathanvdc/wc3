@@ -8,11 +8,13 @@ use crate::model::{
     SupportsLayerShaderTypeId, SupportsLayerTextureSlots, Tag, ValueError, Version,
 };
 use crate::model::{ConversionError, ConversionIssueKind};
+use crate::model::{ModelOwnership, ModelPartialEq};
 use bitfield::bitfield;
 use mdl_codec::{
     full, is_no_reference, is_white, no_reference, one, white, zero, zero_id, ShaderMarker,
     TextureBindings,
 };
+use std::mem::take;
 use std::{fmt::Debug, marker::PhantomData};
 
 pub(super) const LAYER_TAG: Tag = *b"LAYS";
@@ -112,8 +114,8 @@ impl LayerShadingFlags {
         Self(bits)
     }
 }
-impl mdx::Read for LayerShadingFlags {
-    fn read_mdx(cursor: &mut Cursor<'_>) -> Result<Self, mdx::ReadError> {
+impl<'data> mdx::Read<'data> for LayerShadingFlags {
+    fn read_mdx(cursor: &mut Cursor<'data>) -> Result<Self, mdx::ReadError> {
         Ok(Self(cursor.read()?))
     }
 }
@@ -124,10 +126,10 @@ impl mdx::Write for LayerShadingFlags {
 }
 
 /// A Reforged texture binding with an optional animated texture index.
-#[derive(Clone, Debug, PartialEq)]
-pub struct LayerTextureSlot {
+#[derive(Clone, Debug, PartialEq, ModelOwnership)]
+pub struct LayerTextureSlot<'data> {
     /// Animated index into the model texture collection.
-    pub texture_id: Animatable<u32>,
+    pub texture_id: Animatable<'data, u32>,
     /// Authored texture-role identifier for this slot.
     pub texture_type: u32,
 }
@@ -138,7 +140,9 @@ pub struct LayerTextureSlot {
 /// bind multiple HD texture slots. Use HiveWorkshop MDL output when animating
 /// slots other than diffuse; Warcraft III syntax cannot identify those channels.
 /// MDL output exports animation tracks in place of their base values.
-#[derive(Clone, Debug, PartialEq, mdx::Read, mdx::Write, mdl::Read, mdl::Write)]
+#[derive(
+    Clone, Debug, ModelPartialEq, mdx::Read, mdx::Write, mdl::Read, mdl::Write, ModelOwnership,
+)]
 #[mdx(sized(tag = LAYER_TAG))]
 #[mdl(block = "Layer", validate_write = "Self::validate_mdl",
     write_order(filter_mode, shading_flags, shader, textures, texture_animation_id,
@@ -150,38 +154,38 @@ pub struct LayerTextureSlot {
         shader: ShaderMarker,
         #[mdl(flatten)]
         #[mdl(get = "Self::mdl_textures", set = "Self::set_mdl_textures")]
-        textures: TextureBindings,
+        textures: TextureBindings<'data>,
         #[mdl(
             property = "EmissiveGain",
             default = "one",
             skip_if = "full"
         )]
         #[mdl(get = "Self::mdl_emissive", slot = "Self::mdl_emissive_mut")]
-        emissive: Animatable<f32>,
+        emissive: Animatable<'data, f32>,
         #[mdl(
             property = "FresnelColor",
             default = "white",
             skip_if = "is_white"
         )]
         #[mdl(get = "Self::mdl_color", slot = "Self::mdl_color_mut")]
-        color: Animatable<Color>,
+        color: Animatable<'data, Color>,
         #[mdl(
             property = "FresnelOpacity",
             default,
             skip_if = "zero"
         )]
         #[mdl(get = "Self::mdl_opacity", slot = "Self::mdl_opacity_mut")]
-        opacity: Animatable<f32>,
+        opacity: Animatable<'data, f32>,
         #[mdl(
             property = "FresnelTeamColor",
             default,
             skip_if = "zero"
         )]
         #[mdl(get = "Self::mdl_team_color", slot = "Self::mdl_team_color_mut")]
-        team_color: Animatable<f32>,
+        team_color: Animatable<'data, f32>,
     )
 )]
-pub struct Layer<V: ModelVersion> {
+pub struct Layer<'data, V: ModelVersion> {
     #[mdl(skip, default)]
     version: PhantomData<V>,
     #[mdl(property = "FilterMode", default)]
@@ -193,7 +197,7 @@ pub struct Layer<V: ModelVersion> {
     #[mdl(skip, default)]
     /// Index into the model texture collection when no texture-ID track is active.
     #[mdx(tag = *b"KMTF")]
-    pub texture_id: Animatable<u32>,
+    pub texture_id: Animatable<'data, u32>,
     #[mdl(
         property = "TVertexAnimId",
         default = "no_reference",
@@ -207,81 +211,95 @@ pub struct Layer<V: ModelVersion> {
     #[mdx(tag = *b"KMTA")]
     #[mdl(property = "Alpha", default = "one", skip_if = "full")]
     /// Opacity when no alpha track is active; 1.0 is fully opaque.
-    pub alpha: Animatable<f32>,
+    pub alpha: Animatable<'data, f32>,
     #[mdl(skip, default)]
     #[mdx(flatten)]
-    emissive_gain: V::EmissiveGain,
+    emissive_gain: V::EmissiveGain<'data>,
     #[mdl(skip, default)]
     #[mdx(flatten)]
-    fresnel: V::Fresnel,
+    fresnel: V::Fresnel<'data>,
     #[mdl(skip, default)]
     shader_type: V::ShaderType,
     #[mdl(skip, default)]
-    texture_slots: V::TextureSlots,
+    texture_slots: V::TextureSlots<'data>,
 }
 
 /// Version-selected storage for the layer's emissive gain.
-pub trait EmissiveGainField:
-    Default + mdx::Read + mdx::Write + mdx::ReadTracks + mdx::WriteTracks + Clone + Debug + PartialEq
+pub trait EmissiveGainField<'data>:
+    Default
+    + mdx::Read<'data>
+    + mdx::Write
+    + mdx::ReadTracks<'data>
+    + mdx::WriteTracks
+    + Clone
+    + Debug
+    + PartialEq
 {
-    fn emissive_gain(&self) -> Option<&Animatable<f32>> {
+    fn emissive_gain(&self) -> Option<&Animatable<'data, f32>> {
         None
     }
-    fn emissive_gain_mut(&mut self) -> Option<&mut Animatable<f32>> {
+    fn emissive_gain_mut(&mut self) -> Option<&mut Animatable<'data, f32>> {
         None
     }
 }
 
 #[derive(Clone, Debug, Default, PartialEq, mdx::Read, mdx::Write)]
 pub struct NoEmissiveGain;
-impl EmissiveGainField for NoEmissiveGain {}
+impl<'data> EmissiveGainField<'data> for NoEmissiveGain {}
 
-#[derive(Clone, Debug, PartialEq, mdx::Read, mdx::Write)]
-pub struct EmissiveGain(#[mdx(tag = *b"KMTE")] Animatable<f32>);
-impl Default for EmissiveGain {
+#[derive(Clone, Debug, PartialEq, mdx::Read, mdx::Write, ModelOwnership)]
+pub struct EmissiveGain<'data>(#[mdx(tag = *b"KMTE")] Animatable<'data, f32>);
+impl<'data> Default for EmissiveGain<'data> {
     fn default() -> Self {
         Self(Animatable::Static(1.0))
     }
 }
-impl EmissiveGainField for EmissiveGain {
-    fn emissive_gain(&self) -> Option<&Animatable<f32>> {
+impl<'data> EmissiveGainField<'data> for EmissiveGain<'data> {
+    fn emissive_gain(&self) -> Option<&Animatable<'data, f32>> {
         Some(&self.0)
     }
-    fn emissive_gain_mut(&mut self) -> Option<&mut Animatable<f32>> {
+    fn emissive_gain_mut(&mut self) -> Option<&mut Animatable<'data, f32>> {
         Some(&mut self.0)
     }
 }
 
 /// Version-selected storage for the layer's fresnel.
-pub trait FresnelField:
-    Default + mdx::Read + mdx::Write + mdx::ReadTracks + mdx::WriteTracks + Clone + Debug + PartialEq
+pub trait FresnelField<'data>:
+    Default
+    + mdx::Read<'data>
+    + mdx::Write
+    + mdx::ReadTracks<'data>
+    + mdx::WriteTracks
+    + Clone
+    + Debug
+    + PartialEq
 {
-    fn fresnel(&self) -> Option<&LayerFresnel> {
+    fn fresnel(&self) -> Option<&LayerFresnel<'data>> {
         None
     }
-    fn fresnel_mut(&mut self) -> Option<&mut LayerFresnel> {
+    fn fresnel_mut(&mut self) -> Option<&mut LayerFresnel<'data>> {
         None
     }
 }
 
 #[derive(Clone, Debug, Default, PartialEq, mdx::Read, mdx::Write)]
 pub struct NoFresnel;
-impl FresnelField for NoFresnel {}
+impl<'data> FresnelField<'data> for NoFresnel {}
 
 /// Fresnel color, opacity, and team-color contribution for a Reforged layer.
-#[derive(Clone, Debug, PartialEq, mdx::Read, mdx::Write)]
-pub struct LayerFresnel {
+#[derive(Clone, Debug, PartialEq, mdx::Read, mdx::Write, ModelOwnership)]
+pub struct LayerFresnel<'data> {
     #[mdx(tag = *b"KFC3")]
     /// Animated Fresnel color.
-    pub color: Animatable<Color>,
+    pub color: Animatable<'data, Color>,
     #[mdx(tag = *b"KFCA")]
     /// Animated Fresnel opacity.
-    pub opacity: Animatable<f32>,
+    pub opacity: Animatable<'data, f32>,
     #[mdx(tag = *b"KFTC")]
     /// Animated team-color contribution to the Fresnel effect.
-    pub team_color: Animatable<f32>,
+    pub team_color: Animatable<'data, f32>,
 }
-impl Default for LayerFresnel {
+impl<'data> Default for LayerFresnel<'data> {
     fn default() -> Self {
         Self {
             color: Animatable::Static([1.0; 3]),
@@ -290,18 +308,18 @@ impl Default for LayerFresnel {
         }
     }
 }
-impl FresnelField for LayerFresnel {
-    fn fresnel(&self) -> Option<&LayerFresnel> {
+impl<'data> FresnelField<'data> for LayerFresnel<'data> {
+    fn fresnel(&self) -> Option<&LayerFresnel<'data>> {
         Some(self)
     }
-    fn fresnel_mut(&mut self) -> Option<&mut LayerFresnel> {
+    fn fresnel_mut(&mut self) -> Option<&mut LayerFresnel<'data>> {
         Some(self)
     }
 }
 
 /// Version-selected storage for the layer's shader type.
 pub trait LayerShaderTypeField:
-    Default + mdx::Read + mdx::Write + Clone + Debug + PartialEq
+    Default + for<'data> mdx::Read<'data> + mdx::Write + Clone + Debug + PartialEq
 {
     fn shader_type(&self) -> Option<ShaderType> {
         None
@@ -325,38 +343,38 @@ impl LayerShaderTypeField for ShaderType {
 }
 
 /// Version-selected storage for Reforged texture slots.
-pub trait LayerTextureSlotsField:
-    Default + mdx::Read + mdx::Write + Clone + Debug + PartialEq
+pub trait LayerTextureSlotsField<'data>:
+    Default + mdx::Read<'data> + mdx::Write + Clone + Debug + PartialEq
 {
-    fn texture_slots(&self) -> Option<&[LayerTextureSlot]> {
+    fn texture_slots(&self) -> Option<&[LayerTextureSlot<'data>]> {
         None
     }
-    fn texture_slots_mut(&mut self) -> Option<&mut Vec<LayerTextureSlot>> {
+    fn texture_slots_mut(&mut self) -> Option<&mut Vec<LayerTextureSlot<'data>>> {
         None
     }
 }
 
 #[derive(Clone, Debug, Default, PartialEq, mdx::Read, mdx::Write)]
 pub struct NoLayerTextureSlots;
-impl LayerTextureSlotsField for NoLayerTextureSlots {}
+impl<'data> LayerTextureSlotsField<'data> for NoLayerTextureSlots {}
 
-#[derive(Clone, Debug, Default, PartialEq)]
-pub struct LayerTextureSlots(Vec<LayerTextureSlot>);
-impl LayerTextureSlotsField for LayerTextureSlots {
-    fn texture_slots(&self) -> Option<&[LayerTextureSlot]> {
+#[derive(Clone, Debug, Default, PartialEq, ModelOwnership)]
+pub struct LayerTextureSlots<'data>(Vec<LayerTextureSlot<'data>>);
+impl<'data> LayerTextureSlotsField<'data> for LayerTextureSlots<'data> {
+    fn texture_slots(&self) -> Option<&[LayerTextureSlot<'data>]> {
         Some(&self.0)
     }
-    fn texture_slots_mut(&mut self) -> Option<&mut Vec<LayerTextureSlot>> {
+    fn texture_slots_mut(&mut self) -> Option<&mut Vec<LayerTextureSlot<'data>>> {
         Some(&mut self.0)
     }
 }
 
-impl mdx::Read for LayerTextureSlots {
-    fn read_mdx(cursor: &mut Cursor<'_>) -> Result<Self, mdx::ReadError> {
+impl<'data> mdx::Read<'data> for LayerTextureSlots<'data> {
+    fn read_mdx(cursor: &mut Cursor<'data>) -> Result<Self, mdx::ReadError> {
         let count = cursor.read::<u32>()? as usize;
         let mut texture_slots = Vec::new();
         for _ in 0..count {
-            let mut texture_id: Animatable<u32> = cursor.read()?;
+            let mut texture_id: Animatable<'data, u32> = cursor.read()?;
             let texture_type = cursor.read()?;
             while cursor.remaining().starts_with(b"KMTF") {
                 cursor.read_bytes(4)?;
@@ -371,7 +389,7 @@ impl mdx::Read for LayerTextureSlots {
     }
 }
 
-impl mdx::Write for LayerTextureSlots {
+impl<'data> mdx::Write for LayerTextureSlots<'data> {
     fn write_mdx(&self, output: &mut Encoder<'_>) -> Result<(), mdx::WriteError> {
         write_count(output, self.0.len(), LAYER_TAG)?;
         for slot in &self.0 {
@@ -383,13 +401,13 @@ impl mdx::Write for LayerTextureSlots {
     }
 }
 
-impl<V: ModelVersion> Default for Layer<V> {
+impl<'data, V: ModelVersion> Default for Layer<'data, V> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<V: ModelVersion> Layer<V> {
+impl<'data, V: ModelVersion> Layer<'data, V> {
     /// Creates an empty layer with version-appropriate fields.
     pub fn new() -> Self {
         Self {
@@ -400,10 +418,10 @@ impl<V: ModelVersion> Layer<V> {
             texture_animation_id: u32::MAX,
             coordinate_id: 0,
             alpha: Animatable::Static(1.0),
-            emissive_gain: V::EmissiveGain::default(),
-            fresnel: V::Fresnel::default(),
+            emissive_gain: V::EmissiveGain::<'data>::default(),
+            fresnel: V::Fresnel::<'data>::default(),
             shader_type: V::ShaderType::default(),
-            texture_slots: V::TextureSlots::default(),
+            texture_slots: V::TextureSlots::<'data>::default(),
         }
     }
 
@@ -413,10 +431,9 @@ impl<V: ModelVersion> Layer<V> {
     }
 
     /// Returns the layer's emissive gain, available from version 900.
-    pub fn try_emissive_gain(&self) -> Result<Animatable<f32>, ValueError> {
+    pub fn try_emissive_gain(&self) -> Result<&Animatable<'data, f32>, ValueError> {
         self.emissive_gain
             .emissive_gain()
-            .cloned()
             .ok_or(ValueError::UnsupportedVersion {
                 tag: LAYER_TAG,
                 minimum: 900,
@@ -424,7 +441,10 @@ impl<V: ModelVersion> Layer<V> {
             })
     }
     /// Sets the layer's emissive gain, available from version 900.
-    pub fn try_set_emissive_gain(&mut self, value: Animatable<f32>) -> Result<(), ValueError> {
+    pub fn try_set_emissive_gain(
+        &mut self,
+        value: Animatable<'data, f32>,
+    ) -> Result<(), ValueError> {
         *self
             .emissive_gain
             .emissive_gain_mut()
@@ -436,10 +456,9 @@ impl<V: ModelVersion> Layer<V> {
         Ok(())
     }
     /// Returns the layer's fresnel, available from version 1000.
-    pub fn try_fresnel(&self) -> Result<LayerFresnel, ValueError> {
+    pub fn try_fresnel(&self) -> Result<&LayerFresnel<'data>, ValueError> {
         self.fresnel
             .fresnel()
-            .cloned()
             .ok_or(ValueError::UnsupportedVersion {
                 tag: LAYER_TAG,
                 minimum: 1000,
@@ -447,7 +466,7 @@ impl<V: ModelVersion> Layer<V> {
             })
     }
     /// Sets the layer's fresnel, available from version 1000.
-    pub fn try_set_fresnel(&mut self, value: LayerFresnel) -> Result<(), ValueError> {
+    pub fn try_set_fresnel(&mut self, value: LayerFresnel<'data>) -> Result<(), ValueError> {
         *self
             .fresnel
             .fresnel_mut()
@@ -481,7 +500,7 @@ impl<V: ModelVersion> Layer<V> {
         Ok(())
     }
     /// Returns the layer's texture slots, available from version 1100.
-    pub fn try_texture_slots(&self) -> Result<&[LayerTextureSlot], ValueError> {
+    pub fn try_texture_slots(&self) -> Result<&[LayerTextureSlot<'data>], ValueError> {
         self.texture_slots
             .texture_slots()
             .ok_or(ValueError::UnsupportedVersion {
@@ -491,7 +510,10 @@ impl<V: ModelVersion> Layer<V> {
             })
     }
     /// Sets the layer's texture slots, available from version 1100.
-    pub fn try_set_texture_slots(&mut self, value: &[LayerTextureSlot]) -> Result<(), ValueError> {
+    pub fn try_set_texture_slots(
+        &mut self,
+        value: &[LayerTextureSlot<'data>],
+    ) -> Result<(), ValueError> {
         *self
             .texture_slots
             .texture_slots_mut()
@@ -502,12 +524,30 @@ impl<V: ModelVersion> Layer<V> {
             })? = value.to_vec();
         Ok(())
     }
+    /// Replaces texture slots by moving their buffers, available from version 1100.
+    pub fn try_replace_texture_slots(
+        &mut self,
+        value: Vec<LayerTextureSlot<'data>>,
+    ) -> Result<(), ValueError> {
+        *self
+            .texture_slots
+            .texture_slots_mut()
+            .ok_or(ValueError::UnsupportedVersion {
+                tag: LAYER_TAG,
+                minimum: 1100,
+                actual: V::NUMBER,
+            })? = value;
+        Ok(())
+    }
     /// Returns the Fresnel color, available from version 1000.
-    pub fn try_fresnel_color(&self) -> Result<Animatable<Color>, ValueError> {
-        Ok(self.try_fresnel()?.color)
+    pub fn try_fresnel_color(&self) -> Result<&Animatable<'data, Color>, ValueError> {
+        Ok(&self.try_fresnel()?.color)
     }
     /// Sets the Fresnel color, available from version 1000.
-    pub fn try_set_fresnel_color(&mut self, value: Animatable<Color>) -> Result<(), ValueError> {
+    pub fn try_set_fresnel_color(
+        &mut self,
+        value: Animatable<'data, Color>,
+    ) -> Result<(), ValueError> {
         self.fresnel
             .fresnel_mut()
             .ok_or(ValueError::UnsupportedVersion {
@@ -519,11 +559,14 @@ impl<V: ModelVersion> Layer<V> {
         Ok(())
     }
     /// Returns the Fresnel opacity, available from version 1000.
-    pub fn try_fresnel_opacity(&self) -> Result<Animatable<f32>, ValueError> {
-        Ok(self.try_fresnel()?.opacity)
+    pub fn try_fresnel_opacity(&self) -> Result<&Animatable<'data, f32>, ValueError> {
+        Ok(&self.try_fresnel()?.opacity)
     }
     /// Sets the Fresnel opacity, available from version 1000.
-    pub fn try_set_fresnel_opacity(&mut self, value: Animatable<f32>) -> Result<(), ValueError> {
+    pub fn try_set_fresnel_opacity(
+        &mut self,
+        value: Animatable<'data, f32>,
+    ) -> Result<(), ValueError> {
         self.fresnel
             .fresnel_mut()
             .ok_or(ValueError::UnsupportedVersion {
@@ -535,11 +578,14 @@ impl<V: ModelVersion> Layer<V> {
         Ok(())
     }
     /// Returns the Fresnel team color, available from version 1000.
-    pub fn try_fresnel_team_color(&self) -> Result<Animatable<f32>, ValueError> {
-        Ok(self.try_fresnel()?.team_color)
+    pub fn try_fresnel_team_color(&self) -> Result<&Animatable<'data, f32>, ValueError> {
+        Ok(&self.try_fresnel()?.team_color)
     }
     /// Sets the Fresnel team color, available from version 1000.
-    pub fn try_set_fresnel_team_color(&mut self, value: Animatable<f32>) -> Result<(), ValueError> {
+    pub fn try_set_fresnel_team_color(
+        &mut self,
+        value: Animatable<'data, f32>,
+    ) -> Result<(), ValueError> {
         self.fresnel
             .fresnel_mut()
             .ok_or(ValueError::UnsupportedVersion {
@@ -552,66 +598,66 @@ impl<V: ModelVersion> Layer<V> {
     }
 }
 
-impl<V: SupportsEmissiveGain> Layer<V> {
+impl<'data, V: SupportsEmissiveGain> Layer<'data, V> {
     /// Returns the layer's emissive gain.
-    pub fn emissive_gain(&self) -> Animatable<f32> {
+    pub fn emissive_gain(&self) -> &Animatable<'data, f32> {
         self.try_emissive_gain().expect("supported version")
     }
     /// Sets the layer's emissive gain.
-    pub fn set_emissive_gain(&mut self, value: Animatable<f32>) {
+    pub fn set_emissive_gain(&mut self, value: Animatable<'data, f32>) {
         self.try_set_emissive_gain(value)
             .expect("supported version");
     }
 }
 
-impl<V: SupportsFresnel> Layer<V> {
+impl<'data, V: SupportsFresnel> Layer<'data, V> {
     /// Returns the layer's fresnel.
-    pub fn fresnel(&self) -> LayerFresnel {
+    pub fn fresnel(&self) -> &LayerFresnel<'data> {
         self.try_fresnel().expect("supported version")
     }
     /// Sets the layer's fresnel.
-    pub fn set_fresnel(&mut self, value: LayerFresnel) {
+    pub fn set_fresnel(&mut self, value: LayerFresnel<'data>) {
         self.try_set_fresnel(value).expect("supported version");
     }
 }
 
-impl<V: SupportsFresnel> Layer<V> {
+impl<'data, V: SupportsFresnel> Layer<'data, V> {
     /// Returns the layer's fresnel color.
-    pub fn fresnel_color(&self) -> Animatable<Color> {
+    pub fn fresnel_color(&self) -> &Animatable<'data, Color> {
         self.try_fresnel_color().expect("supported version")
     }
     /// Sets the layer's fresnel color.
-    pub fn set_fresnel_color(&mut self, value: Animatable<Color>) {
+    pub fn set_fresnel_color(&mut self, value: Animatable<'data, Color>) {
         self.try_set_fresnel_color(value)
             .expect("supported version");
     }
 }
 
-impl<V: SupportsFresnel> Layer<V> {
+impl<'data, V: SupportsFresnel> Layer<'data, V> {
     /// Returns the layer's fresnel opacity.
-    pub fn fresnel_opacity(&self) -> Animatable<f32> {
+    pub fn fresnel_opacity(&self) -> &Animatable<'data, f32> {
         self.try_fresnel_opacity().expect("supported version")
     }
     /// Sets the layer's fresnel opacity.
-    pub fn set_fresnel_opacity(&mut self, value: Animatable<f32>) {
+    pub fn set_fresnel_opacity(&mut self, value: Animatable<'data, f32>) {
         self.try_set_fresnel_opacity(value)
             .expect("supported version");
     }
 }
 
-impl<V: SupportsFresnel> Layer<V> {
+impl<'data, V: SupportsFresnel> Layer<'data, V> {
     /// Returns the layer's fresnel team color.
-    pub fn fresnel_team_color(&self) -> Animatable<f32> {
+    pub fn fresnel_team_color(&self) -> &Animatable<'data, f32> {
         self.try_fresnel_team_color().expect("supported version")
     }
     /// Sets the layer's fresnel team color.
-    pub fn set_fresnel_team_color(&mut self, value: Animatable<f32>) {
+    pub fn set_fresnel_team_color(&mut self, value: Animatable<'data, f32>) {
         self.try_set_fresnel_team_color(value)
             .expect("supported version");
     }
 }
 
-impl<V: SupportsLayerShaderTypeId> Layer<V> {
+impl<'data, V: SupportsLayerShaderTypeId> Layer<'data, V> {
     /// Returns the layer's shader type.
     pub fn shader_type(&self) -> ShaderType {
         self.try_shader_type().expect("supported version")
@@ -622,40 +668,43 @@ impl<V: SupportsLayerShaderTypeId> Layer<V> {
     }
 }
 
-impl<V: SupportsLayerTextureSlots> Layer<V> {
+impl<'data, V: SupportsLayerTextureSlots> Layer<'data, V> {
     /// Returns the layer's texture slots.
-    pub fn texture_slots(&self) -> &[LayerTextureSlot] {
+    pub fn texture_slots(&self) -> &[LayerTextureSlot<'data>] {
         self.try_texture_slots().expect("supported version")
     }
     /// Sets the layer's texture slots.
-    pub fn set_texture_slots(&mut self, value: &[LayerTextureSlot]) {
+    pub fn set_texture_slots(&mut self, value: &[LayerTextureSlot<'data>]) {
         self.try_set_texture_slots(value)
             .expect("supported version");
     }
 }
 
-impl<V: ModelVersion> Layer<V> {
+impl<'data, V: ModelVersion> Layer<'data, V> {
+    pub(crate) fn take_texture_slots(&mut self) -> Option<Vec<LayerTextureSlot<'data>>> {
+        self.texture_slots.texture_slots_mut().map(take)
+    }
     pub(crate) fn convert_with<T: ModelVersion>(
-        &self,
+        mut self,
         context: &mut ConversionContext<'_>,
         path: &str,
-    ) -> Result<Layer<T>, ConversionError> {
+    ) -> Result<Layer<'data, T>, ConversionError> {
         let mut target = Layer::<T>::new();
         target.filter_mode = self.filter_mode;
         target.shading_flags = self.shading_flags;
-        target.texture_id = self.texture_id.clone();
+        target.texture_id = self.texture_id;
         target.texture_animation_id = self.texture_animation_id;
         target.coordinate_id = self.coordinate_id;
-        target.alpha = self.alpha.clone();
+        target.alpha = self.alpha;
 
         context.field(
-            self.emissive_gain.emissive_gain().cloned(),
+            self.emissive_gain.emissive_gain_mut().map(take),
             target.emissive_gain.emissive_gain_mut(),
             Animatable::Static(1.0),
             &format!("{path}.emissive_gain"),
         )?;
         context.field(
-            self.fresnel.fresnel().cloned(),
+            self.fresnel.fresnel_mut().map(take),
             target.fresnel.fresnel_mut(),
             LayerFresnel::default(),
             &format!("{path}.fresnel"),
@@ -668,7 +717,7 @@ impl<V: ModelVersion> Layer<V> {
         )?;
         let downgrade_diffuse = V::NUMBER >= 1100
             && T::NUMBER < 1100
-            && self.texture_id == Animatable::Static(0)
+            && target.texture_id == Animatable::Static(0)
             && self
                 .texture_slots
                 .texture_slots()
@@ -678,7 +727,7 @@ impl<V: ModelVersion> Layer<V> {
                 .texture_slots
                 .texture_slots_mut()
                 .expect("target texture slots") = vec![LayerTextureSlot {
-                texture_id: self.texture_id.clone(),
+                texture_id: take(&mut target.texture_id),
                 texture_type: 0,
             }];
             target.texture_id = Animatable::Static(0);
@@ -688,9 +737,12 @@ impl<V: ModelVersion> Layer<V> {
                 "moved legacy texture binding and animation into the diffuse slot",
             );
         } else if downgrade_diffuse {
-            target.texture_id = self.texture_slots.texture_slots().expect("source slots")[0]
-                .texture_id
-                .clone();
+            target.texture_id = self
+                .texture_slots
+                .texture_slots_mut()
+                .expect("source slots")
+                .remove(0)
+                .texture_id;
             context.issue(
                 &format!("{path}.texture_slots"),
                 ConversionIssueKind::Normalized,
@@ -698,7 +750,7 @@ impl<V: ModelVersion> Layer<V> {
             );
         } else {
             context.field(
-                self.texture_slots.texture_slots().map(<[_]>::to_vec),
+                self.texture_slots.texture_slots_mut().map(take),
                 target.texture_slots.texture_slots_mut(),
                 Vec::new(),
                 &format!("{path}.texture_slots"),

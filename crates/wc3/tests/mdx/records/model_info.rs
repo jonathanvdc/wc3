@@ -16,7 +16,9 @@ fn model_info_edit_round_trip() {
     info.blend_time = 150;
     model.set_model_info(&info);
 
-    let parsed = Model::<wc3::model::V1800>::decode_mdx(&model.encode_mdx().unwrap()).unwrap();
+    let parsed = Model::<wc3::model::V1800>::decode_mdx(&model.encode_mdx().unwrap())
+        .unwrap()
+        .into_owned();
     let actual = parsed.model_info().unwrap();
     assert_eq!(actual.name.text(), "Footman");
     assert_eq!(actual.bounds_radius, 42.5);

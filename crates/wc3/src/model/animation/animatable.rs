@@ -2,6 +2,7 @@
 use super::{AnimationTime, Interpolate, Track, TrackValue};
 use crate::model::mdl::{Parser, TokenKind, Writer};
 use crate::model::IoError;
+use crate::model::ModelOwnership;
 use crate::model::{mdl, mdx};
 use std::io::Write as IoWrite;
 use std::mem::replace;
@@ -13,31 +14,31 @@ use std::ops::RangeInclusive;
 /// layout stores a base; MDL writes the animation in place of that base.
 /// When `Animated` has no base, MDX supplies `T::default()` for its fixed field.
 /// MDL decoding retains the enclosing field's declared default as a base.
-#[derive(Clone, Debug, PartialEq)]
-pub enum Animatable<T: TrackValue> {
+#[derive(Clone, Debug, PartialEq, ModelOwnership)]
+pub enum Animatable<'data, T: TrackValue> {
     /// A constant property with no animation.
     Static(T),
     /// An animation without an explicitly stored base value.
-    Animated(Track<T>),
+    Animated(Track<'data, T>),
     /// An animation together with its stored base value.
     Both {
         /// Base value used when animation cannot supply a value.
         value: T,
         /// Animation that takes precedence over the base value.
-        track: Track<T>,
+        track: Track<'data, T>,
     },
 }
-impl<T: TrackValue> Default for Animatable<T> {
+impl<'data, T: TrackValue> Default for Animatable<'data, T> {
     fn default() -> Self {
         Self::Static(T::default())
     }
 }
-impl<T: TrackValue> From<T> for Animatable<T> {
+impl<'data, T: TrackValue> From<T> for Animatable<'data, T> {
     fn from(value: T) -> Self {
         Self::Static(value)
     }
 }
-impl<T: TrackValue> Animatable<T> {
+impl<'data, T: TrackValue> Animatable<'data, T> {
     /// The stored base value, if any.
     pub fn value(&self) -> Option<&T> {
         match self {
@@ -46,14 +47,14 @@ impl<T: TrackValue> Animatable<T> {
         }
     }
     /// The animation, if any.
-    pub fn track(&self) -> Option<&Track<T>> {
+    pub fn track(&self) -> Option<&Track<'data, T>> {
         match self {
             Self::Animated(track) | Self::Both { track, .. } => Some(track),
             Self::Static(_) => None,
         }
     }
     /// Replaces the animation while retaining the stored base value.
-    pub fn set_track(&mut self, track: Track<T>) {
+    pub fn set_track(&mut self, track: Track<'data, T>) {
         *self = match self.value().copied() {
             Some(value) => Self::Both { value, track },
             None => Self::Animated(track),
@@ -67,17 +68,17 @@ impl<T: TrackValue> Animatable<T> {
         }
     }
 }
-impl<T: TrackValue> mdx::Read for Animatable<T> {
-    fn read_mdx(cursor: &mut mdx::Cursor<'_>) -> Result<Self, mdx::ReadError> {
+impl<'data, T: TrackValue> mdx::Read<'data> for Animatable<'data, T> {
+    fn read_mdx(cursor: &mut mdx::Cursor<'data>) -> Result<Self, mdx::ReadError> {
         cursor.read().map(Self::Static)
     }
 }
-impl<T: TrackValue> mdx::Write for Animatable<T> {
+impl<'data, T: TrackValue> mdx::Write for Animatable<'data, T> {
     fn write_mdx(&self, encoder: &mut mdx::Encoder<'_>) -> Result<(), mdx::WriteError> {
         encoder.write(&self.value().copied().unwrap_or_default())
     }
 }
-impl<T: TrackValue + mdl::Write> Animatable<T> {
+impl<'data, T: TrackValue + mdl::Write> Animatable<'data, T> {
     /// Writes a named static property or track, giving animation precedence.
     pub fn write_mdl_property<W: IoWrite>(
         &self,
@@ -96,7 +97,7 @@ impl<T: TrackValue + mdl::Write> Animatable<T> {
         }
     }
 }
-impl<T: TrackValue + mdl::ValueEq> mdl::ValueEq for Animatable<T> {
+impl<'data, T: TrackValue + mdl::ValueEq> mdl::ValueEq for Animatable<'data, T> {
     fn eq_mdl(&self, other: &Self) -> bool {
         match (self, other) {
             (Self::Static(a), Self::Static(b)) => a.eq_mdl(b),
@@ -105,7 +106,7 @@ impl<T: TrackValue + mdl::ValueEq> mdl::ValueEq for Animatable<T> {
     }
 }
 
-impl<T: TrackValue + mdl::Read> mdl::ReadAnimationProperty for Animatable<T> {
+impl<'data, T: TrackValue + mdl::Read> mdl::ReadAnimationProperty for Animatable<'data, T> {
     fn read_mdl_animation_property(
         &mut self,
         parser: &mut Parser<'_>,
@@ -134,7 +135,7 @@ impl<T: TrackValue + mdl::Read> mdl::ReadAnimationProperty for Animatable<T> {
         Ok(())
     }
 }
-impl<T: TrackValue + mdl::Write> mdl::WriteAnimationProperty for Animatable<T> {
+impl<'data, T: TrackValue + mdl::Write> mdl::WriteAnimationProperty for Animatable<'data, T> {
     fn has_animation(&self) -> bool {
         self.track().is_some()
     }
@@ -146,7 +147,7 @@ impl<T: TrackValue + mdl::Write> mdl::WriteAnimationProperty for Animatable<T> {
         self.write_mdl_property(name, writer)
     }
 }
-impl<T: TrackValue + mdl::Read> mdl::ReadAnimationProperty for Option<Track<T>> {
+impl<'data, T: TrackValue + mdl::Read> mdl::ReadAnimationProperty for Option<Track<'data, T>> {
     fn read_mdl_animation_property(
         &mut self,
         parser: &mut Parser<'_>,
@@ -160,7 +161,7 @@ impl<T: TrackValue + mdl::Read> mdl::ReadAnimationProperty for Option<Track<T>> 
         Ok(())
     }
 }
-impl<T: TrackValue + mdl::Write> mdl::WriteAnimationProperty for Option<Track<T>> {
+impl<'data, T: TrackValue + mdl::Write> mdl::WriteAnimationProperty for Option<Track<'data, T>> {
     fn has_animation(&self) -> bool {
         self.is_some()
     }
@@ -175,13 +176,13 @@ impl<T: TrackValue + mdl::Write> mdl::WriteAnimationProperty for Option<Track<T>
         Ok(())
     }
 }
-impl<T: TrackValue> mdl::ValueEq for Option<Track<T>> {
+impl<'data, T: TrackValue> mdl::ValueEq for Option<Track<'data, T>> {
     fn eq_mdl(&self, other: &Self) -> bool {
         self == other
     }
 }
 
-impl<T: Interpolate> Animatable<T> {
+impl<'data, T: Interpolate> Animatable<'data, T> {
     /// Samples the animation using its sequence clock, falling back to the stored
     /// base value when no animation value is available. Property-specific defaults
     /// remain the caller's choice when neither animation nor base supplies a value.

@@ -1,6 +1,8 @@
 //! Model-authored lights integrated with Bevy's scene lighting.
+use crate::preparation::shared::Shared;
 use bevy::prelude::*;
 use std::collections::HashMap;
+use wc3::model::chunks::LightsChunk;
 use wc3::model::scene::{Light, LightType};
 use wc3::model::V1800;
 
@@ -49,14 +51,14 @@ pub struct Wc3Light {
     /// Animation root that owns this light.
     pub root: Entity,
     /// Source record, including ambient/falloff/shadow properties not mapped to Bevy.
-    definition: Light<V1800>,
+    definition: Shared<Light<'static, V1800>>,
     /// Per-light suppression, combined with root settings and animated visibility.
     pub enabled: bool,
 }
 
 impl Wc3Light {
     /// Source record, including properties with no native Bevy mapping.
-    pub fn definition(&self) -> &Light<V1800> {
+    pub fn definition(&self) -> &Light<'static, V1800> {
         &self.definition
     }
 }
@@ -67,7 +69,7 @@ pub(crate) fn spawn_lights(
     root: Entity,
     nodes: &HashMap<u32, Entity>,
 ) {
-    for definition in prepared.model.lights() {
+    for definition in prepared.model.shared_records::<LightsChunk<V1800>>() {
         let Some(&node) = nodes.get(&definition.node.object_id) else {
             continue;
         };

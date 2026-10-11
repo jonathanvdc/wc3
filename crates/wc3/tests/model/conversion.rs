@@ -4,7 +4,7 @@ use wc3::model::chunks::{
     BindPoseChunk, MaterialsChunk, ModelChunk, RawChunk, UnknownChunk, VersionChunk,
 };
 use wc3::model::emitters::PopcornEmitter;
-use wc3::model::geometry::{Geoset, SkinWeights};
+use wc3::model::geometry::{Geoset, SkinWeight, SkinWeights};
 use wc3::model::mdl::Read as _;
 use wc3::model::mdl::Write as _;
 use wc3::model::mdx::Read as _;
@@ -21,7 +21,7 @@ use wc3::model::{
     V1000, V1100, V1200, V1300, V1400, V1600, V1800, V800, V900,
 };
 
-fn sample<V: ModelVersion>() -> Model<V> {
+fn sample<'data, V: ModelVersion>() -> Model<'data, V> {
     let mut model = Model::<V>::new();
     let mut material = Material::<V>::new();
     let mut layer = Layer::<V>::new();
@@ -64,7 +64,12 @@ fn missing_popcorn_kind_is_normalized_without_changing_source_or_behavior_flags(
 
     let converted = source.normalized().unwrap();
     assert_eq!(
-        converted.model.try_popcorn_emitters().unwrap()[0]
+        converted
+            .model
+            .try_popcorn_emitters()
+            .unwrap()
+            .next()
+            .unwrap()
             .node
             .flags
             .bits(),
@@ -81,10 +86,10 @@ fn missing_popcorn_kind_is_normalized_without_changing_source_or_behavior_flags(
     );
     let text = converted.model.encode_mdl().unwrap();
     let restored = Model::<V1200>::decode_mdl(&text).unwrap();
-    assert_eq!(
-        restored.try_popcorn_emitters().unwrap(),
-        converted.model.try_popcorn_emitters().unwrap()
-    );
+    assert!(restored
+        .try_popcorn_emitters()
+        .unwrap()
+        .eq(converted.model.try_popcorn_emitters().unwrap()));
     assert_eq!(source.encode_mdx().unwrap(), bytes);
     assert!(converted
         .model
@@ -106,7 +111,12 @@ fn conflicting_popcorn_kind_is_preserved_and_still_refused_by_mdl() {
         .convert::<V1200>(&ConversionOptions::strict())
         .unwrap();
     assert!(converted.report.issues.is_empty());
-    let emitter = &converted.model.try_popcorn_emitters().unwrap()[0];
+    let emitter = &converted
+        .model
+        .try_popcorn_emitters()
+        .unwrap()
+        .next()
+        .unwrap();
     assert_eq!(emitter.node.flags.bits(), 0x100);
     assert!(emitter.encode_mdl().is_err());
 }
@@ -121,7 +131,12 @@ fn kind_normalization_preserves_inheritance_and_unknown_bits() {
     let converted = source
         .convert::<V1200>(&ConversionOptions::strict())
         .unwrap();
-    let emitter = &converted.model.try_popcorn_emitters().unwrap()[0];
+    let emitter = &converted
+        .model
+        .try_popcorn_emitters()
+        .unwrap()
+        .next()
+        .unwrap();
     assert_eq!(emitter.node.flags.bits(), 0x8000_1004);
     assert!(emitter.encode_mdl().is_err());
 }
@@ -160,7 +175,10 @@ fn check_pair<S: ModelVersion, T: ModelVersion>() {
     assert_eq!(converted.model.version(), T::NUMBER);
     let bytes = converted.model.encode_mdx().unwrap();
     let decoded = Model::<T>::decode_mdx(&bytes).unwrap();
-    assert_eq!(decoded.geosets()[0].raw_unselectable(), 0x8000_0002);
+    assert_eq!(
+        decoded.geosets().next().unwrap().raw_unselectable(),
+        0x8000_0002
+    );
     let back = decoded.convert::<S>(&ConversionOptions::strict()).unwrap();
     assert_eq!(back.model.encode_mdx().unwrap(), original);
     assert_eq!(source.encode_mdx().unwrap(), original);
@@ -212,7 +230,9 @@ fn shader_transition_is_explicit_and_source_is_unchanged() {
         .iter()
         .any(|issue| issue.path == error.path && issue.kind == ConversionIssueKind::Dropped));
     assert_eq!(model.encode_mdx().unwrap(), original);
-    Model::<V1100>::decode_mdx(&result.model.encode_mdx().unwrap()).unwrap();
+    Model::<V1100>::decode_mdx(&result.model.encode_mdx().unwrap())
+        .unwrap()
+        .into_owned();
 }
 
 #[test]
@@ -303,7 +323,9 @@ fn skin_narrowing_checks_indices_and_never_truncates_them() {
         .unwrap();
     assert_eq!(lossy.model.skin_weights(), None);
     assert_eq!(lossy.model.tangents(), geoset.tangents());
-    Geoset::<V1300>::decode_mdx(&lossy.model.encode_mdx().unwrap()).unwrap();
+    Geoset::<V1300>::decode_mdx(&lossy.model.encode_mdx().unwrap())
+        .unwrap()
+        .into_owned();
     let wide = geoset
         .convert::<V1400>(&ConversionOptions::strict())
         .unwrap();
@@ -317,8 +339,19 @@ fn skin_narrowing_checks_indices_and_never_truncates_them() {
     let narrow = geoset
         .convert::<V900>(&ConversionOptions::strict())
         .unwrap();
-    let decoded = Geoset::<V900>::decode_mdx(&narrow.model.encode_mdx().unwrap()).unwrap();
-    assert_eq!(decoded.skin_weights(), geoset.skin_weights());
+    let decoded = Geoset::<V900>::decode_mdx(&narrow.model.encode_mdx().unwrap())
+        .unwrap()
+        .into_owned();
+    assert!(decoded
+        .skin_weights()
+        .unwrap()
+        .iter()
+        .map(|row| (row.bone_indices(), row.weights()))
+        .eq(geoset
+            .skin_weights()
+            .unwrap()
+            .iter()
+            .map(|row| (row.bone_indices(), row.weights()))));
 }
 
 #[test]
@@ -379,7 +412,7 @@ fn unsupported_chunks_are_rejected_or_reported_and_removed() {
 fn chunk_order_duplicates_version_extensions_and_raw_names_are_preserved() {
     let mut model = sample::<V900>();
     let mut version = VersionChunk::<V900>::new();
-    version.extension = vec![9, 8, 7];
+    version.extension = vec![9, 8, 7].into();
     model.chunks.push(version.into());
     model.chunks.push(model.chunks[1].clone());
     // Deliberately preserve non-UTF8 shader bytes and trailing padding.
@@ -500,7 +533,10 @@ fn model_camera_upgrade_downgrade_and_same_version_normalization_are_reported() 
     let upgraded = source
         .convert::<V1800>(&ConversionOptions::strict())
         .unwrap();
-    assert_eq!(upgraded.model.cameras()[0].variant, CameraVariant::Variant3);
+    assert_eq!(
+        upgraded.model.cameras().next().unwrap().variant,
+        CameraVariant::Variant3
+    );
     assert_eq!(
         upgraded.report.issues[0].path,
         "chunks[1].cameras[0].variant"
@@ -514,7 +550,7 @@ fn model_camera_upgrade_downgrade_and_same_version_normalization_are_reported() 
         .convert::<V800>(&ConversionOptions::strict())
         .unwrap();
     assert_eq!(
-        downgraded.model.cameras()[0].variant,
+        downgraded.model.cameras().next().unwrap().variant,
         CameraVariant::Variant0
     );
     assert_eq!(downgraded.model.encode_mdx().unwrap(), bytes);
@@ -530,9 +566,13 @@ fn model_camera_upgrade_downgrade_and_same_version_normalization_are_reported() 
     noncanonical.set_cameras(&[camera]);
     let result = DynamicModel::<NoExtensions>::decode_mdx(&noncanonical.encode_mdx().unwrap(), 800)
         .unwrap()
-        .convert::<V1800>(&ConversionOptions::strict())
+        .into_owned()
+        .into_convert::<V1800>(&ConversionOptions::strict())
         .unwrap();
-    assert_eq!(result.model.cameras()[0].variant, CameraVariant::Variant3);
+    assert_eq!(
+        result.model.cameras().next().unwrap().variant,
+        CameraVariant::Variant3
+    );
     assert_eq!(
         result.report.issues[0].kind,
         ConversionIssueKind::Normalized
@@ -553,7 +593,7 @@ fn absent_version_is_inserted_and_dynamic_sources_convert() {
     assert_eq!(converted.report.issues[0].path, "VERS");
     let dynamic = DynamicModel::<NoExtensions>::V800(
         sample::<V800>()
-            .convert(&ConversionOptions::strict())
+            .into_convert(&ConversionOptions::strict())
             .unwrap()
             .model,
     );

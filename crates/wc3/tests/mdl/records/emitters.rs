@@ -5,12 +5,21 @@ use wc3::model::mdl::{Read as _, Write as _};
 use wc3::model::mdx::{Read as _, Write as _};
 use wc3::model::scene::{Node, NodeFlags};
 use wc3::model::{mdl, mdx};
-fn roundtrip<T: mdl::Read + mdl::Write + mdx::Read + mdx::Write>(value: &T) {
+fn roundtrip<T>(value: &T)
+where
+    T: mdl::Read + mdl::Write + mdx::Write + mdx::ReadOwned,
+{
     let bytes = value.encode_mdx().unwrap();
     let text = value.encode_mdl().unwrap();
     let decoded = T::decode_mdl(&text).unwrap_or_else(|error| panic!("{error}: {text}"));
     assert_eq!(decoded.encode_mdl().unwrap(), text);
-    assert_eq!(T::decode_mdx(&bytes).unwrap().encode_mdx().unwrap(), bytes);
+    assert_eq!(
+        mdx::from_reader::<T>(bytes.as_slice())
+            .unwrap()
+            .encode_mdx()
+            .unwrap(),
+        bytes
+    );
     assert_eq!(value.encode_mdx().unwrap(), bytes);
 }
 #[test]

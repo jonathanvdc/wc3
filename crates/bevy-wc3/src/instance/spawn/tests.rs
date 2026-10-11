@@ -195,7 +195,7 @@ fn child_instances_inherit_visibility_and_cleanup_without_sharing_animation() {
 fn prepared_assets_share_static_layers_and_isolate_animated_layers() {
     let bytes = include_bytes!("../../../tests/fixtures/quad_model.mdx");
     let mut source = Wc3Model::decode(bytes).unwrap();
-    let mut material_records = source.model.materials();
+    let mut material_records = source.model.materials().cloned().collect::<Vec<_>>();
     assert!(!material_records.is_empty());
     assert!(!material_records[0].layers.is_empty());
     material_records[0].layers[0].alpha.set_track(
@@ -247,7 +247,7 @@ fn ribbons_share_sections_across_layers_and_keep_instances_bindings_and_ownershi
 
     let mut source =
         Wc3Model::decode_mdl(include_str!("../../../tests/fixtures/ribbon_capture.mdl")).unwrap();
-    let mut definitions = source.model.materials();
+    let mut definitions = source.model.materials().cloned().collect::<Vec<_>>();
     let mut second = definitions[0].layers[0].clone();
     second.alpha = 0.5.into();
     second.filter_mode = LayerFilterMode::Additive;
@@ -364,7 +364,7 @@ fn pre2_emitter_is_spawned_per_instance_and_owned_by_root() {
     .unwrap();
     let source = Wc3Model {
         source_version: 1800,
-        model,
+        model: (model).into(),
     };
     let mut meshes = Assets::<Mesh>::default();
     let mut materials = Assets::<Wc3LayerMaterial>::default();
@@ -389,7 +389,7 @@ fn pre2_emitter_is_spawned_per_instance_and_owned_by_root() {
 fn slot_binding_selects_replaceable_bitmap_for_geosets() {
     let mut source =
         Wc3Model::decode(include_bytes!("../../../tests/fixtures/quad_model.mdx")).unwrap();
-    let mut bitmaps = source.model.textures();
+    let mut bitmaps = source.model.textures().cloned().collect::<Vec<_>>();
     bitmaps[0].path.set_text("").unwrap();
     bitmaps[0].replaceable_id = 1;
     source.model.set_textures(&bitmaps);
@@ -425,13 +425,17 @@ fn geoset_tints_isolate_shared_materials_and_model_instances() {
     let mut source =
         Wc3Model::decode_mdl(include_str!("../../../tests/fixtures/geoset_capture.mdl")).unwrap();
     // A third geoset has nonwhite color data with the color flag disabled.
-    let mut geosets = source.model.geosets();
+    let mut geosets = source.model.geosets().cloned().collect::<Vec<_>>();
     geosets.push(geosets[0].clone());
     let mut alternate = geosets[0].clone();
     alternate.set_level_of_detail(1);
     geosets.insert(0, alternate);
     source.model.set_geosets(&geosets);
-    let mut animations = source.model.geoset_animations();
+    let mut animations = source
+        .model
+        .geoset_animations()
+        .cloned()
+        .collect::<Vec<_>>();
     let mut disabled = animations[0].clone();
     disabled.geoset_id = 2;
     disabled.flags.set_color(false);
@@ -443,7 +447,7 @@ fn geoset_tints_isolate_shared_materials_and_model_instances() {
     invalid.geoset_id = u32::MAX;
     animations.push(invalid);
     source.model.set_geoset_animations(&animations);
-    let mut records = source.model.materials();
+    let mut records = source.model.materials().cloned().collect::<Vec<_>>();
     let mut extra_layer = records[0].layers[0].clone();
     extra_layer.alpha = Animatable::Static(0.5);
     records[0].layers.push(extra_layer);

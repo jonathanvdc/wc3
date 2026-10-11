@@ -149,7 +149,9 @@ fn paths_and_consumer_models_follow_points_visibility_and_independent_animation(
         .unwrap()
         .source()
         .model
-        .sequences()[0]
+        .sequences()
+        .next()
+        .unwrap()
         .flags
         .non_looping());
     assert_eq!(app.world().resource::<Assets<Mesh>>().len(), 2);

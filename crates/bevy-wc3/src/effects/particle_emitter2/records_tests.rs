@@ -1,7 +1,7 @@
 use super::*;
 use wc3::model::scene::Node;
 
-fn emitter() -> ParticleEmitter2 {
+fn emitter<'data>() -> ParticleEmitter2<'data> {
     ParticleEmitter2::new(Node::new("Particles", 0).unwrap())
 }
 

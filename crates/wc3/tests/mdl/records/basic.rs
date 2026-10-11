@@ -7,7 +7,7 @@ use wc3::model::mdl::{Read as _, Write as _};
 use wc3::model::scene::{Attachment, Bone, Node, NodeFlags};
 use wc3::model::{mdl, mdx, V1000, V1100, V1800, V800, V900};
 
-fn roundtrip<T: mdl::Read + mdl::Write + mdx::Read + mdx::Write>(value: &T) {
+fn roundtrip<T: mdl::Read + mdl::Write + mdx::Write>(value: &T) {
     let binary = value.encode_mdx().unwrap();
     let text = value.encode_mdl().unwrap();
     let decoded = T::decode_mdl(&text).unwrap_or_else(|error| panic!("{error}: {text}"));
@@ -139,12 +139,12 @@ fn rejects_hidden_binary_storage_and_noncanonical_channel_order() {
     let node_size = u32::from_le_bytes(bytes[4..8].try_into().unwrap()) as usize;
     let reserved = 4 + node_size + 256;
     bytes[reserved..reserved + 4].copy_from_slice(&7u32.to_le_bytes());
-    let attachment = <Attachment as mdx::Read>::decode_mdx(&bytes).unwrap();
+    let attachment = <Attachment<'_> as mdx::Read<'_>>::decode_mdx(&bytes).unwrap();
     assert!(attachment.encode_mdl().is_err());
     let bone = Bone::decode_mdl("Bone \"a\" { ObjectId 0, }").unwrap();
     let mut bytes = bone.encode_mdx().unwrap();
     bytes[6] = 0xff; // nonzero padding after the name's terminator
-    let bone = <Bone as mdx::Read>::decode_mdx(&bytes).unwrap();
+    let bone = <Bone<'_> as mdx::Read<'_>>::decode_mdx(&bytes).unwrap();
     assert!(bone.encode_mdl().is_err());
 }
 
@@ -168,7 +168,7 @@ fn animated_emissive_gain_ignores_nan_base_and_preserves_keys() {
         "Layer { EmissiveGain 1 { Hermite, GlobalSeqId 2, -7: 3, InTan 4, OutTan 5, } }",
     )
     .unwrap();
-    let mut emissive = layer.emissive_gain();
+    let mut emissive = layer.emissive_gain().clone();
     emissive.set_value(f32::from_bits(0x7fc12345));
     layer.set_emissive_gain(emissive);
     let original = layer.encode_mdx().unwrap();

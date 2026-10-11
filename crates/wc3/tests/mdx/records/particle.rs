@@ -28,8 +28,10 @@ fn classic_particle_emitter_round_trip() {
     emitter.visibility = Some(track.clone());
     let mut model = Model::<wc3::model::V800>::new();
     model.set_particle_emitters(&[emitter]);
-    let parsed = Model::<wc3::model::V800>::decode_mdx(&model.encode_mdx().unwrap()).unwrap();
-    let emitter = &parsed.particle_emitters()[0];
+    let parsed = Model::<wc3::model::V800>::decode_mdx(&model.encode_mdx().unwrap())
+        .unwrap()
+        .into_owned();
+    let emitter = &parsed.particle_emitters().next().unwrap();
     assert_eq!(emitter.node.name.text(), "Smoke");
     assert_eq!(emitter.path.text(), "smoke.mdl");
     assert_eq!(emitter.emission_rate, Animatable::Static(10.0));

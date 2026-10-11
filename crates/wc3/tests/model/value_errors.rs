@@ -6,7 +6,7 @@ use wc3::model::ValueError;
 
 #[test]
 fn construction_and_mutation_report_value_errors() {
-    let bad_name: Result<Node, ValueError> = Node::new("bad\0name", 1);
+    let bad_name: Result<Node<'static>, ValueError> = Node::new("bad\0name", 1);
     assert_eq!(
         bad_name.unwrap_err(),
         ValueError::InvalidString { max_bytes: 79 }

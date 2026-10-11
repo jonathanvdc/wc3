@@ -14,15 +14,17 @@ fn bones_and_helpers_round_trip() {
     let mut model = Model::<wc3::model::V1800>::new();
     model.set_bones(&[bone]);
     model.set_helpers(&[node]);
-    let parsed = Model::<wc3::model::V1800>::decode_mdx(&model.encode_mdx().unwrap()).unwrap();
-    let bone = &parsed.bones()[0];
+    let parsed = Model::<wc3::model::V1800>::decode_mdx(&model.encode_mdx().unwrap())
+        .unwrap()
+        .into_owned();
+    let bone = &parsed.bones().next().unwrap();
     assert_eq!(bone.node.name.text(), "Root");
     assert_eq!(bone.node.object_id, 7);
     assert_eq!(bone.node.parent_id, 3);
     assert_eq!(bone.node.flags.bits(), 0x100);
     assert_eq!(bone.geoset_id, 2);
     assert_eq!(bone.geoset_animation_id, u32::MAX);
-    assert_eq!(parsed.helpers()[0].name.text(), "Root");
+    assert_eq!(parsed.helpers().next().unwrap().name.text(), "Root");
 }
 
 #[test]

@@ -12,18 +12,18 @@ use wc3::model::emitters::{ParticleEmitter, ParticleEmitter2, RibbonEmitter};
 use wc3::model::geometry::Geoset;
 use wc3::model::mdx::{self, Cursor, Encoder, Read as _, Write as _};
 use wc3::model::scene::{Bone, Camera, Node};
-use wc3::model::{Model, V1800, V800};
+use wc3::model::{Borrowed, IntoOwned, Model, V1800, V800};
 
 fn round_trip<T>(value: &T)
 where
-    T: mdx::Read + mdx::Write + PartialEq + Debug,
+    T: mdx::ReadOwned + mdx::Write + PartialEq + Debug,
 {
     let bytes = value.encode_mdx().unwrap();
     let mut appended = vec![0xaa, 0xbb];
     Encoder::new(&mut appended).write(value).unwrap();
     assert_eq!(&appended[..2], &[0xaa, 0xbb]);
     assert_eq!(&appended[2..], bytes);
-    assert_eq!(T::decode_mdx(&bytes).unwrap(), *value);
+    assert_eq!(mdx::from_reader::<T>(bytes.as_slice()).unwrap(), *value);
 }
 
 #[test]
@@ -70,7 +70,7 @@ fn cursor_read_advances_through_records_and_decode_rejects_trailing_bytes() {
     let mut bytes = first.encode_mdx().unwrap();
     bytes.extend_from_slice(&second.encode_mdx().unwrap());
     let mut cursor = Cursor::new(&bytes);
-    let decoded: Geoset<V800> = cursor.read().unwrap();
+    let decoded: Geoset<'_, V800> = cursor.read().unwrap();
     assert_eq!(decoded, first);
     assert_eq!(cursor.position(), first.encode_mdx().unwrap().len());
     assert!(matches!(
@@ -86,15 +86,28 @@ fn cursor_read_advances_through_records_and_decode_rejects_trailing_bytes() {
 fn cursor_decoders_stop_at_the_next_record() {
     fn check<T>(first: T, second: T)
     where
-        T: mdx::Read + mdx::Write + PartialEq + Debug,
+        T: for<'input> Borrowed<'input> + mdx::Write + PartialEq + Debug,
+        for<'input> <T as Borrowed<'input>>::View: mdx::Read<'input> + IntoOwned<Owned = T>,
     {
         let mut bytes = first.encode_mdx().unwrap();
         let first_len = bytes.len();
         bytes.extend_from_slice(&second.encode_mdx().unwrap());
         let mut cursor = Cursor::new(&bytes);
-        assert_eq!(cursor.read::<T>().unwrap(), first);
+        assert_eq!(
+            cursor
+                .read::<<T as Borrowed<'_>>::View>()
+                .unwrap()
+                .into_owned(),
+            first
+        );
         assert_eq!(cursor.position(), first_len);
-        assert_eq!(cursor.read::<T>().unwrap(), second);
+        assert_eq!(
+            cursor
+                .read::<<T as Borrowed<'_>>::View>()
+                .unwrap()
+                .into_owned(),
+            second
+        );
         cursor.finish().unwrap();
     }
 

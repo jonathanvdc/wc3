@@ -1,7 +1,9 @@
+use std::{io::Write as IoWrite, marker::PhantomData};
 use wc3::model::animation::Sequence;
 use wc3::model::animation::{Animatable, Track};
 use wc3::model::mdl;
 use wc3::model::mdl::{Read as _, Write as _};
+use wc3::model::IoError;
 use wc3::model::Vec3;
 
 #[derive(Debug, PartialEq, mdl::Read, mdl::Write)]
@@ -156,7 +158,7 @@ fn conflicting_flattened_names_are_rejected_before_body_or_output() {
 #[mdl(fields)]
 struct Animated {
     #[mdl(property = "Alpha", default)]
-    alpha: Animatable<f32>,
+    alpha: Animatable<'static, f32>,
     #[mdl(property = "Optional", delegate)]
     optional: Option<u32>,
 }
@@ -456,7 +458,7 @@ fn unique_collection_keys_and_reconstruction_before_validation() {
 #[mdl(block = "TrackOnly")]
 struct TrackOnly {
     #[mdl(property = "Visibility")]
-    visibility: Option<Track<f32>>,
+    visibility: Option<Track<'static, f32>>,
 }
 #[test]
 fn animation_only_properties_reject_static_and_duplicate_forms() {
@@ -485,7 +487,7 @@ struct BareAlias {
         enabled_if = "Self::enabled",
         enable_with = "Self::enable"
     )]
-    alpha: Animatable<f32>,
+    alpha: Animatable<'static, f32>,
     #[mdl(flag = "Enabled", default)]
     enabled: bool,
 }
@@ -526,7 +528,7 @@ fn bare_static_alias_shares_duplicates_hooks_and_canonical_output() {
 #[derive(Debug, PartialEq)]
 struct NestedStorage<T> {
     id: u32,
-    alpha: Animatable<f32>,
+    alpha: Animatable<'static, f32>,
     label: T,
 }
 #[derive(Debug, PartialEq, mdl::Read, mdl::Write)]
@@ -534,12 +536,12 @@ struct NestedStorage<T> {
 struct Projected<T> {
     #[mdl(project(
         #[mdl(header)] id: u32,
-        #[mdl(property = "Alpha", default)] alpha: Animatable<f32>,
+        #[mdl(property = "Alpha", default)] alpha: Animatable<'static, f32>,
         #[mdl(property = "Label")] label: T,
     ))]
     data: NestedStorage<T>,
     #[mdl(property = "Color")]
-    color: Option<Track<Vec3>>,
+    color: Option<Track<'static, Vec3>>,
 }
 #[test]
 fn projected_generic_storage_headers_and_shared_tracks() {
@@ -602,20 +604,20 @@ fn projected_defaults_come_from_nested_storage() {
 #[derive(Debug, PartialEq, mdl::Read, mdl::Write)]
 #[mdl(block = "VersionedView", virtual_fields(
     #[mdl(property = "Alpha", default, bare_static, get = "Self::alpha", slot = "Self::alpha_mut")]
-    alpha: Animatable<f32>,
+    alpha: Animatable<'static, f32>,
 ))]
 struct VersionedView<const ENABLED: bool> {
     #[mdl(skip, default = "Self::initial_storage")]
-    storage: Option<Animatable<f32>>,
+    storage: Option<Animatable<'static, f32>>,
 }
 impl<const ENABLED: bool> VersionedView<ENABLED> {
-    fn initial_storage() -> Option<Animatable<f32>> {
+    fn initial_storage() -> Option<Animatable<'static, f32>> {
         ENABLED.then_some(Animatable::Static(0.0))
     }
-    fn alpha(&self) -> Option<&Animatable<f32>> {
+    fn alpha(&self) -> Option<&Animatable<'static, f32>> {
         self.storage.as_ref()
     }
-    fn alpha_mut(&mut self) -> Option<&mut Animatable<f32>> {
+    fn alpha_mut(&mut self) -> Option<&mut Animatable<'static, f32>> {
         self.storage.as_mut()
     }
 }
@@ -666,9 +668,9 @@ fn virtual_slots_check_availability_and_export_animation_over_base() {
 #[mdl(block = "OrderedTracks", write_order(color, marker, alpha))]
 struct OrderedTracks {
     #[mdl(property = "Alpha", default)]
-    alpha: Animatable<f32>,
+    alpha: Animatable<'static, f32>,
     #[mdl(property = "Color", default)]
-    color: Animatable<[f32; 3]>,
+    color: Animatable<'static, [f32; 3]>,
     #[mdl(property = "Marker")]
     marker: u32,
 }
@@ -695,5 +697,92 @@ fn animated_properties_follow_write_order_without_reordering_storage() {
             .encode_mdl()
             .unwrap(),
         text
+    );
+}
+
+#[derive(Default, mdl::Read)]
+#[mdl(fields)]
+struct LifetimeFields<'buffers> {
+    #[mdl(property = "Number", default)]
+    number: u32,
+    #[mdl(skip, default)]
+    marker: PhantomData<&'buffers [u8]>,
+}
+impl mdl::WriteFields for LifetimeFields<'_> {
+    type State = u32;
+    fn visit_mdl_names(visitor: &mut dyn FnMut(&'static str, bool)) {
+        visitor("Number", false);
+    }
+    fn prepare_mdl_fields(&self, _: mdl::Dialect) -> Result<u32, mdl::WriteError> {
+        Ok(self.number)
+    }
+    fn write_mdl_headers<W: IoWrite>(
+        &self,
+        _: &mut mdl::Writer<W>,
+    ) -> Result<(), IoError<mdl::WriteError>> {
+        Ok(())
+    }
+    fn write_mdl_fields<W: IoWrite>(
+        &self,
+        state: u32,
+        writer: &mut mdl::Writer<W>,
+    ) -> Result<(), IoError<mdl::WriteError>> {
+        assert_eq!(state, self.number);
+        writer.property("Number", &self.number)
+    }
+}
+struct LifetimeFieldsView<'view, 'buffers>(&'view LifetimeFields<'buffers>);
+impl mdl::WriteFields for LifetimeFieldsView<'_, '_> {
+    type State = u32;
+    fn visit_mdl_names(visitor: &mut dyn FnMut(&'static str, bool)) {
+        <LifetimeFields<'_> as mdl::WriteFields>::visit_mdl_names(visitor);
+    }
+    fn prepare_mdl_fields(&self, dialect: mdl::Dialect) -> Result<u32, mdl::WriteError> {
+        self.0.prepare_mdl_fields(dialect)
+    }
+    fn write_mdl_headers<W: IoWrite>(
+        &self,
+        writer: &mut mdl::Writer<W>,
+    ) -> Result<(), IoError<mdl::WriteError>> {
+        self.0.write_mdl_headers(writer)
+    }
+    fn write_mdl_fields<W: IoWrite>(
+        &self,
+        state: u32,
+        writer: &mut mdl::Writer<W>,
+    ) -> Result<(), IoError<mdl::WriteError>> {
+        self.0.write_mdl_fields(state, writer)
+    }
+}
+#[derive(Default, mdl::Read, mdl::Write)]
+#[mdl(block = "LifetimeView", virtual_fields(
+    #[mdl(flatten, get = "Self::fields", set = "Self::set_fields")]
+    fields: LifetimeFields<'buffers>,
+))]
+struct LifetimeView<'buffers> {
+    #[mdl(skip, default)]
+    storage: LifetimeFields<'buffers>,
+}
+impl<'buffers> LifetimeView<'buffers> {
+    fn fields(&self) -> LifetimeFieldsView<'_, 'buffers> {
+        LifetimeFieldsView(&self.storage)
+    }
+    fn set_fields(
+        &mut self,
+        value: LifetimeFields<'buffers>,
+        _: bool,
+        _: mdl::Span,
+    ) -> Result<(), mdl::ReadError> {
+        self.storage = value;
+        Ok(())
+    }
+}
+#[test]
+fn borrowed_virtual_groups_keep_non_unit_writer_state() {
+    let value = LifetimeView::decode_mdl("LifetimeView { Number 42, }").unwrap();
+    assert_eq!(value.storage.number, 42);
+    assert_eq!(
+        value.encode_mdl().unwrap(),
+        "LifetimeView {\n\tNumber 42,\n}\n"
     );
 }

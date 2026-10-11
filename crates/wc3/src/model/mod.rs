@@ -30,10 +30,49 @@
 //!
 //! # Editing records
 //!
-//! Collection getters return owned copies in file order. After editing a copy,
-//! pass it to the corresponding setter to replace the model's collection. To
-//! preserve chunk organization while editing in place, match the typed variants
-//! in [`Model::chunks`](crate::model::Model::chunks) or use [`Model::chunk_mut`](crate::model::Model::chunk_mut).
+//! Getters for borrowed record collections return iterators in file order without
+//! allocating.
+//! Use `.cloned().collect::<Vec<_>>()` when you need cloned records, or
+//! `.collect::<Vec<_>>()` for a vector of references. Edit records in place with
+//! [`Model::records_mut`], or use [`Model::as_borrowed`] for an independent view
+//! whose unchanged buffers borrow the original model. [`Model::replace_records`]
+//! moves a collection into a replacement chunk; slice-based setters clone
+//! records, including buffers they own. Matching [`Model::chunks`]
+//! or using [`Model::chunk_mut`] retains duplicate chunks and their order.
+//!
+//! MDX decoding produces a `Model<'data, D>` borrowing its input byte slice.
+//! Geometry arrays and animation keys use [`ModelArray`], backed by ZeroVec for
+//! little-endian values even when the source is unaligned. `get()` and `iter()`
+//! return values without allocating a decoded buffer. `to_mut()` owns only the
+//! array being edited and exposes ordinary Rust values. MDL decoding builds
+//! owned native arrays directly; opaque MDX payloads use [`ModelBytes`]. Skin-weight
+//! rows use `SkinWeights<u8>` in versions 900–1300 and `SkinWeights<u16>` from
+//! version 1400, so both layouts borrow their exact encoded representation.
+//! The [`geometry::SkinWeight`] trait provides common accessors for generic code.
+//!
+//! `as_borrowed()` also borrows buffers that the original model already owns,
+//! making a cheap editable view. `to_owned()` creates an independent deep copy.
+//! `into_owned()` copies borrowed buffers and moves owned buffers into a `Model<'static, D>` independent of its source.
+//! `Clone` preserves each buffer's ownership state: borrowed buffers remain
+//! borrowed, while owned buffers are copied. `mdx::from_reader` buffers the input
+//! and returns an owned model. `convert` borrows its source's buffers;
+//! `into_convert` consumes its source and moves compatible buffers.
+//!
+//! ```
+//! use wc3::model::{Model, V800, V1800, ConversionOptions};
+//! use wc3::model::mdx::{Read as _, Write as _};
+//! use wc3::model::chunks::GeosetsChunk;
+//! let bytes = Model::<V800>::new().encode_mdx()?;
+//! let original = Model::<V800>::decode_mdx(&bytes)?;
+//! let mut view = original.as_borrowed();
+//! for geoset in view.records_mut::<GeosetsChunk<V800>>() {
+//!     geoset.material_id = 0;
+//! }
+//! let converted = view.into_convert::<V1800>(&ConversionOptions::strict())?;
+//! let owned = converted.model.into_owned();
+//! assert_eq!(owned.version(), 1800);
+//! # Ok::<(), Box<dyn std::error::Error>>(())
+//! ```
 //!
 //! Names and paths use [`FixedText`](crate::model::FixedText); use `set_text()` for a validated replacement.
 //! Ordinary record fields are public. Geometry methods coordinate arrays that
@@ -77,9 +116,9 @@
 //!         output.write(&self.value)
 //!     }
 //! }
-//! impl KnownChunk for Note {
+//! impl<'data> KnownChunk<'data> for Note {
 //!     const TAG: Tag = *b"NOTE";
-//!     fn decode_payload(input: &mut Cursor<'_>) -> Result<Self, mdx::ReadError> {
+//!     fn decode_payload(input: &mut Cursor<'data>) -> Result<Self, mdx::ReadError> {
 //!         Ok(Self { value: input.read()? })
 //!     }
 //! }
@@ -216,3 +255,10 @@ pub use error::{IoError, ValueError};
 
 mod dialect;
 pub use dialect::{Extended, ModelDialect, NoExtensions};
+
+mod storage;
+pub use storage::{ModelArray, ModelBytes};
+
+mod ownership;
+pub use ownership::{Borrowed, Detached, IntoOwned};
+pub use wc3_derive::{ModelOwnership, ModelPartialEq};

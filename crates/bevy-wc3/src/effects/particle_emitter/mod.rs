@@ -1,5 +1,6 @@
 //! Classic PREM model particles. Birth transforms and physical values are frozen
 //! in world space; each child owns an independent sequence-zero animation.
+use crate::preparation::shared::Shared;
 use bevy::prelude::*;
 use std::f32::consts::TAU;
 use wc3::model::emitters::ParticleEmitter;
@@ -26,7 +27,7 @@ const MAX_PARTICLES: usize = 1024;
 pub(crate) struct ParticleState {
     root: Entity,
     node: Entity,
-    definition: ParticleEmitter,
+    definition: Shared<ParticleEmitter<'static>>,
     model: Handle<Wc3ModelAsset>,
     particles: Vec<Particle>,
     emission: EmissionPhase,
@@ -55,9 +56,10 @@ impl ParticleState {
     pub(crate) fn new(
         root: Entity,
         node: Entity,
-        definition: ParticleEmitter,
+        definition: impl Into<Shared<ParticleEmitter<'static>>>,
         model: Handle<Wc3ModelAsset>,
     ) -> Self {
+        let definition = definition.into();
         Self {
             root,
             node,

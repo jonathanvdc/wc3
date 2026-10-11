@@ -14,9 +14,9 @@ fn refuses_before_output<T: mdl::Write>(value: &T) {
 #[mdl(block = "ZeroBase")]
 struct ZeroBase {
     #[mdl(property = "Alpha", default)]
-    alpha: Animatable<f32>,
+    alpha: Animatable<'static, f32>,
     #[mdl(property = "Color", default)]
-    color: Animatable<[f32; 3]>,
+    color: Animatable<'static, [f32; 3]>,
 }
 
 #[test]
@@ -49,7 +49,7 @@ fn animations_override_nondefault_scalar_and_vector_bases() {
 #[mdl(block = "NanBase", default)]
 struct NanBase {
     #[mdl(property = "Alpha")]
-    alpha: Animatable<f32>,
+    alpha: Animatable<'static, f32>,
 }
 impl Default for NanBase {
     fn default() -> Self {

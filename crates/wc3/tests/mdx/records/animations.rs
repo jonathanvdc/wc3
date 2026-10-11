@@ -17,7 +17,12 @@ fn node_transform_tracks_round_trip() {
     .unwrap();
     let mut node = Node::new("Animated", 4).unwrap();
     node.translation = Some(track);
-    assert_eq!(Node::decode_mdx(&node.encode_mdx().unwrap()).unwrap(), node);
+    assert_eq!(
+        Node::decode_mdx(&node.encode_mdx().unwrap())
+            .unwrap()
+            .into_owned(),
+        node
+    );
 }
 
 #[test]
@@ -38,7 +43,7 @@ fn track_order_is_normalized_and_name_padding_is_preserved() {
     let mut reversed = canonical[..96].to_vec();
     reversed.extend_from_slice(&canonical[128..]);
     reversed.extend_from_slice(&canonical[96..128]);
-    let parsed: Node = Node::decode_mdx(&reversed).unwrap();
+    let parsed: Node<'_> = Node::decode_mdx(&reversed).unwrap();
     assert_eq!(parsed.encode_mdx().unwrap(), canonical);
 }
 
@@ -79,13 +84,15 @@ fn interpolation_modes_preserve_their_key_shapes() {
         out_tangent: [7.0, 8.0, 9.0],
     };
     for track in [
-        Track::<Vec3>::step(vec![plain.clone()], None).unwrap(),
+        Track::<Vec3>::step(vec![plain], None).unwrap(),
         Track::<Vec3>::linear(vec![plain], None).unwrap(),
-        Track::<Vec3>::hermite(vec![spline.clone()], None).unwrap(),
+        Track::<Vec3>::hermite(vec![spline], None).unwrap(),
         Track::<Vec3>::bezier(vec![spline], None).unwrap(),
     ] {
         assert_eq!(
-            Track::<Vec3>::decode_mdx(&track.encode_mdx().unwrap()).unwrap(),
+            Track::<Vec3>::decode_mdx(&track.encode_mdx().unwrap())
+                .unwrap()
+                .into_owned(),
             track
         );
     }
@@ -93,11 +100,11 @@ fn interpolation_modes_preserve_their_key_shapes() {
 
 #[derive(Debug, PartialEq, mdx::Read, mdx::Write)]
 #[mdx(sized(tag = *b"TEST"))]
-struct Property {
+struct Property<'data> {
     #[mdx(tag = *b"COLR")]
-    color: Animatable<Vec3>,
+    color: Animatable<'data, Vec3>,
     #[mdx(tag = *b"ALPH")]
-    alpha: Animatable<f32>,
+    alpha: Animatable<'data, f32>,
 }
 
 #[test]

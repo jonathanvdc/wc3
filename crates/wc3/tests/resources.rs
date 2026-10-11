@@ -18,7 +18,7 @@ use wc3::model::ConversionOptions;
 use wc3::model::NoExtensions;
 use wc3::model::{DynamicModel, FixedText, Model, V1800, V800};
 
-fn fixture() -> Model<V1800> {
+fn fixture<'data>() -> Model<'data, V1800> {
     let mut model = Model::new();
     let mut info = ModelInfo::new("resources").unwrap();
     info.animation_file_name
@@ -35,7 +35,7 @@ fn fixture() -> Model<V1800> {
     model.chunks.push(ModelChunk::Unknown(
         UnknownChunk::new(RawChunk {
             tag: *b"TEST",
-            data: b"hidden\\resource.mdx\0".to_vec(),
+            data: b"hidden\\resource.mdx\0".to_vec().into(),
         })
         .unwrap(),
     ));
@@ -86,7 +86,7 @@ fn fixture() -> Model<V1800> {
     model
 }
 
-fn resource_texts(model: &Model<V1800>) -> Vec<String> {
+fn resource_texts<'data>(model: &Model<'data, V1800>) -> Vec<String> {
     model
         .resources()
         .map(|reference| match reference.value {
@@ -303,7 +303,10 @@ fn noops_retain_nonzero_padding_and_reports_keep_lossless_before_values() {
         model.chunks.iter().map(ModelChunk::tag).collect::<Vec<_>>(),
         tags
     );
-    assert_eq!(model.textures()[2].path.text(), "Textures\\Shared.blp");
+    assert_eq!(
+        model.textures().nth(2).unwrap().path.text(),
+        "Textures\\Shared.blp"
+    );
     let ModelChunk::Unknown(opaque) = &model.chunks[3] else {
         unreachable!()
     };
@@ -338,8 +341,8 @@ fn malformed_source_text_is_kept_unless_explicitly_replaced() {
         })
         .unwrap();
     assert_eq!(report.changes.len(), 1);
-    assert_eq!(model.textures()[0].path.text(), "a�b");
-    assert_ne!(model.textures()[0].path.as_bytes(), &bytes);
+    assert_eq!(model.textures().next().unwrap().path.text(), "a�b");
+    assert_ne!(model.textures().next().unwrap().path.as_bytes(), &bytes);
 }
 
 #[test]
@@ -357,20 +360,20 @@ fn path_and_replaceable_id_are_independent_and_can_be_cleared() {
         })
         .unwrap();
     assert_eq!(report.changes.len(), 1);
-    assert_eq!(model.textures()[0].path.text(), "body.blp");
+    assert_eq!(model.textures().next().unwrap().path.text(), "body.blp");
     assert_eq!(model.resources().count(), 1);
     let report = model
         .rewrite_resources(|_| Ok::<_, Infallible>(ResourceEdit::SetPath(String::new())))
         .unwrap();
     assert_eq!(report.changes.len(), 1);
     assert_eq!(model.resources().count(), 1);
-    assert!(model.textures()[0].path.text().is_empty());
+    assert!(model.textures().next().unwrap().path.text().is_empty());
     let maximum = format!("{}é", "a".repeat(257));
     model
         .rewrite_resources(|_| Ok::<_, Infallible>(ResourceEdit::SetPath(maximum.clone())))
         .unwrap();
-    assert_eq!(model.textures()[0].path.text(), maximum);
-    assert_eq!(model.textures()[0].path.as_bytes()[259], 0);
+    assert_eq!(model.textures().next().unwrap().path.text(), maximum);
+    assert_eq!(model.textures().next().unwrap().path.as_bytes()[259], 0);
 }
 
 #[test]
@@ -402,7 +405,7 @@ fn dynamic_models_keep_source_versions_and_duplicate_chunks_for_every_layout() {
     let mut dynamic = DynamicModel::<NoExtensions>::V1800(
         typed
             .clone()
-            .convert(&ConversionOptions::strict())
+            .into_convert(&ConversionOptions::strict())
             .unwrap()
             .model,
     );
@@ -491,7 +494,8 @@ fn every_resource_site_can_be_rewritten_without_reenumerating_cleared_ids() {
         })
         .collect();
     assert_eq!(actual, expected);
-    let decoded =
-        DynamicModel::<NoExtensions>::decode_mdx(&model.encode_mdx().unwrap(), 800).unwrap();
+    let decoded = DynamicModel::<NoExtensions>::decode_mdx(&model.encode_mdx().unwrap(), 800)
+        .unwrap()
+        .into_owned();
     assert_eq!(decoded.resources().count(), actual.len());
 }

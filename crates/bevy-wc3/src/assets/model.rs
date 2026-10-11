@@ -1,3 +1,4 @@
+use crate::preparation::shared::Shared;
 use std::error::Error;
 use std::fmt::{Display, Formatter, Result as FmtResult};
 use std::str::from_utf8;
@@ -23,7 +24,7 @@ pub struct Wc3Model {
     /// Format version recorded before normalization.
     pub source_version: u32,
     /// Source data normalized to the common runtime model version.
-    pub model: Model<V1800>,
+    pub model: Shared<Model<'static, V1800>>,
 }
 
 impl Wc3Model {
@@ -39,6 +40,11 @@ impl Wc3Model {
                 .map_err(|error| ModelError(format!("MDL source is not UTF-8: {error}")))?;
             Self::decode_mdl(source)
         }
+    }
+
+    /// Decodes file bytes into an independently owned runtime source.
+    pub fn decode_owned(bytes: Vec<u8>) -> Result<Self, ModelError> {
+        Self::decode(&bytes)
     }
 
     /// Reads binary MDX, using version 800 when there is no `VERS` chunk.
@@ -57,15 +63,16 @@ impl Wc3Model {
         Self::normalize(source)
     }
 
-    fn normalize(source: DynamicModel) -> Result<Self, ModelError> {
+    fn normalize(source: DynamicModel<'_>) -> Result<Self, ModelError> {
         let source_version = source.version();
         let model = source
-            .convert::<V1800>(&ConversionOptions::strict())
+            .into_convert::<V1800>(&ConversionOptions::strict())
             .map_err(|error| ModelError(error.to_string()))?
-            .model;
+            .model
+            .into_owned();
         Ok(Self {
             source_version,
-            model,
+            model: model.into(),
         })
     }
 }

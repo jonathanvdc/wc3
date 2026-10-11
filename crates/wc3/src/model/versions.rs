@@ -12,7 +12,15 @@ mod sealed {
 
 /// A version whose record layout is known by this library.
 pub trait ModelVersion:
-    sealed::Sealed + MaterialLayout + GeosetLayout + CameraLayout + LightLayout + Clone + Debug + Eq
+    'static
+    + sealed::Sealed
+    + MaterialLayout
+    + GeosetLayout
+    + CameraLayout
+    + LightLayout
+    + Clone
+    + Debug
+    + Eq
 {
     /// Numeric format version written in the `VERS` chunk.
     const NUMBER: Version;

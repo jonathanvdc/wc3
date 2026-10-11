@@ -26,6 +26,6 @@ fn signed_event_times_and_material_priority_preserve_wire_bits() {
         .convert::<V1800>(&ConversionOptions::strict())
         .unwrap()
         .model;
-    assert_eq!(converted.materials()[0].priority_plane, -7);
-    assert_eq!(converted.event_objects()[0].frames(), frames);
+    assert_eq!(converted.materials().next().unwrap().priority_plane, -7);
+    assert_eq!(converted.event_objects().next().unwrap().frames(), frames);
 }

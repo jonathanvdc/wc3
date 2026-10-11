@@ -16,18 +16,23 @@ fn bind_pose_matrices_round_trip() {
     pose.records[0] = BindPoseMatrix(changed);
     let mut model = Model::<wc3::model::V1800>::new();
     model.set_bind_poses(&pose.records);
-    let parsed = Model::<wc3::model::V1800>::decode_mdx(&model.encode_mdx().unwrap()).unwrap();
-    assert_eq!(parsed.bind_poses()[0].0, changed);
+    let parsed = Model::<wc3::model::V1800>::decode_mdx(&model.encode_mdx().unwrap())
+        .unwrap()
+        .into_owned();
+    assert_eq!(parsed.bind_poses().next().unwrap().0, changed);
 }
 
 #[test]
 fn malformed_bind_pose_chunk_is_rejected() {
     let mut model = Model::<wc3::model::V1800>::new();
     assert!(ModelChunk::<wc3::model::V1800>::from_raw(RawChunk::new(*b"BPOS", vec![0])).is_err());
-    assert!(model.bind_poses().is_empty());
+    assert!(model.bind_poses().cloned().collect::<Vec<_>>().is_empty());
 
     let pose = BindPoseChunk::new(vec![BindPoseMatrix([0.0; 12])]);
     model.set_bind_poses(&pose.records);
-    assert_eq!(model.bind_poses(), pose.records);
+    assert_eq!(
+        model.bind_poses().cloned().collect::<Vec<_>>(),
+        pose.records
+    );
     assert_eq!(model.chunks.len(), 2);
 }

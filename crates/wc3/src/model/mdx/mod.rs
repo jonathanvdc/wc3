@@ -18,6 +18,10 @@
 //! # Ok::<(), Box<dyn std::error::Error>>(())
 //! ```
 //!
+//! The reader trait carries the source lifetime: `Read<'data>` can produce a
+//! value borrowing the input. Use `as_borrowed()` for another editable view and
+//! `into_owned()` when the model must outlive the input buffer.
+//!
 //! Decoding preserves chunk order, unknown chunk payloads, unknown flag bits, and
 //! fixed-width text bytes. Malformed known records return [`ReadError`].
 //!
@@ -37,7 +41,7 @@
 //! # Standard I/O
 //!
 //! [`from_reader`] buffers the entire source through EOF and rejects trailing
-//! input. [`to_writer`] buffers the encoded value before writing it.
+//! input, returning independent owned buffers. [`to_writer`] buffers the encoded value before writing it.
 //! Writers do not flush their sinks; I/O failures may leave partial output.
 //! Standard I/O adapters return [`crate::model::IoError`], separating transport
 //! failures from codec errors. Slice and buffer codecs return [`ReadError`] or
@@ -56,7 +60,7 @@
 //! ```
 
 mod cursor;
-pub use cursor::{Cursor, Read};
+pub use cursor::{Cursor, Read, ReadOwned};
 mod encoder;
 pub use encoder::{Encoder, SizeMarker, Write};
 mod error;

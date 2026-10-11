@@ -5,6 +5,7 @@ use crate::model::GeosetAnimationsChunk;
 use crate::model::KnownChunk;
 use crate::model::Model;
 use crate::model::ModelDialect;
+use crate::model::ModelOwnership;
 use crate::model::{mdl, mdx};
 use bitfield::bitfield;
 
@@ -22,16 +23,16 @@ bitfield! {
 }
 
 /// Opacity and optional color animation applied to one geoset.
-#[derive(Clone, Debug, PartialEq, mdl::Read, mdl::Write)]
+#[derive(Clone, Debug, PartialEq, mdl::Read, mdl::Write, ModelOwnership)]
 #[mdl(
     block = "GeosetAnim",
     default,
     write_order(alpha, flags, geoset_id, color)
 )]
-pub struct GeosetAnimation {
+pub struct GeosetAnimation<'data> {
     #[mdl(property = "Alpha")]
     /// Base alpha.
-    pub alpha: Animatable<f32>,
+    pub alpha: Animatable<'data, f32>,
     #[mdl(flatten)]
     /// Rendering flags.
     pub flags: GeosetAnimationFlags,
@@ -41,13 +42,13 @@ pub struct GeosetAnimation {
         enable_with = "Self::enable_color"
     )]
     /// Base RGB color.
-    pub color: Animatable<Color>,
+    pub color: Animatable<'data, Color>,
     #[mdl(property = "GeosetId", required)]
     /// Referenced geoset index.
     pub geoset_id: u32,
 }
 
-impl Default for GeosetAnimation {
+impl<'data> Default for GeosetAnimation<'data> {
     fn default() -> Self {
         Self {
             alpha: Animatable::Static(1.0),
@@ -58,7 +59,7 @@ impl Default for GeosetAnimation {
     }
 }
 
-impl GeosetAnimation {
+impl<'data> GeosetAnimation<'data> {
     /// Creates a geoset animation with opaque white color and full alpha.
     pub fn new(geoset_id: u32) -> Self {
         Self {
@@ -68,19 +69,21 @@ impl GeosetAnimation {
     }
 }
 
-impl<D: ModelDialect> Model<D> {
-    /// Returns owned copies of `GEOA` records in file order.
-    pub fn geoset_animations(&self) -> Vec<GeosetAnimation> {
-        self.collect_chunk_records::<GeosetAnimationsChunk>()
+impl<'data, D: ModelDialect> Model<'data, D> {
+    /// Borrows records in chunk and record order.
+    pub fn geoset_animations<'s>(
+        &'s self,
+    ) -> impl Iterator<Item = &'s GeosetAnimation<'data>> + use<'data, 's, D> {
+        self.records::<GeosetAnimationsChunk<'data>>()
     }
 
     /// Replaces geoset animations with one `GEOA` chunk, removing any duplicate chunks.
-    pub fn set_geoset_animations(&mut self, animations: &[GeosetAnimation]) {
+    pub fn set_geoset_animations(&mut self, animations: &[GeosetAnimation<'data>]) {
         self.replace_chunk(GeosetAnimationsChunk::new(animations.to_vec()));
     }
 }
 
-impl GeosetAnimation {
+impl<'data> GeosetAnimation<'data> {
     fn uses_color(&self) -> bool {
         self.flags.color()
     }
@@ -93,25 +96,25 @@ impl GeosetAnimation {
 // Keep this wire representation private so the public model consistently uses RGB.
 #[derive(mdx::Read, mdx::Write)]
 #[mdx(sized(tag = GeosetAnimationsChunk::TAG))]
-struct BinaryGeosetAnimation {
+struct BinaryGeosetAnimation<'data> {
     #[mdx(tag = *b"KGAO")]
-    alpha: Animatable<f32>,
+    alpha: Animatable<'data, f32>,
     flags: GeosetAnimationFlags,
     #[mdx(tag = *b"KGAC")]
-    color: Animatable<Color>,
+    color: Animatable<'data, Color>,
     geoset_id: u32,
 }
 
-fn swap_base_color(color: &mut Animatable<Color>) {
+fn swap_base_color<'data>(color: &mut Animatable<'data, Color>) {
     if let Some(mut value) = color.value().copied() {
         value.swap(0, 2);
         color.set_value(value);
     }
 }
 
-impl mdx::Read for GeosetAnimation {
-    fn read_mdx(cursor: &mut mdx::Cursor<'_>) -> Result<Self, mdx::ReadError> {
-        let mut value: BinaryGeosetAnimation = cursor.read()?;
+impl<'data> mdx::Read<'data> for GeosetAnimation<'data> {
+    fn read_mdx(cursor: &mut mdx::Cursor<'data>) -> Result<Self, mdx::ReadError> {
+        let mut value: BinaryGeosetAnimation<'data> = cursor.read()?;
         swap_base_color(&mut value.color);
         Ok(Self {
             alpha: value.alpha,
@@ -122,12 +125,12 @@ impl mdx::Read for GeosetAnimation {
     }
 }
 
-impl mdx::Write for GeosetAnimation {
+impl<'data> mdx::Write for GeosetAnimation<'data> {
     fn write_mdx(&self, encoder: &mut mdx::Encoder<'_>) -> Result<(), mdx::WriteError> {
-        let mut color = self.color.clone();
+        let mut color = self.color.as_borrowed();
         swap_base_color(&mut color);
         encoder.write(&BinaryGeosetAnimation {
-            alpha: self.alpha.clone(),
+            alpha: self.alpha.as_borrowed(),
             flags: self.flags,
             color,
             geoset_id: self.geoset_id,

@@ -6,13 +6,15 @@ use wc3::model::animation::Animatable;
 use wc3::model::materials::{Layer, LayerFilterMode, ShaderType};
 use wc3::model::V1800;
 
-pub(super) fn layer_texture_id(layer: &Layer<V1800>) -> Animatable<u32> {
+pub(super) fn layer_texture_id<'view, 'data>(
+    layer: &'view Layer<'data, V1800>,
+) -> &'view Animatable<'data, u32> {
     layer
         .texture_slots()
         .iter()
         .find(|slot| slot.texture_type == 0)
-        .map(|slot| slot.texture_id.clone())
-        .unwrap_or_else(|| layer.texture_id.clone())
+        .map(|slot| &slot.texture_id)
+        .unwrap_or(&layer.texture_id)
 }
 
 fn layer_alpha_mode(mode: LayerFilterMode) -> AlphaMode {
@@ -28,9 +30,9 @@ fn layer_alpha_mode(mode: LayerFilterMode) -> AlphaMode {
     }
 }
 
-pub(super) fn build_layer_material(
-    layer: &Layer<V1800>,
-    texture_id: &Animatable<u32>,
+pub(super) fn build_layer_material<'data>(
+    layer: &Layer<'data, V1800>,
+    texture_id: &Animatable<'data, u32>,
     textures: &[Option<Handle<Image>>],
 ) -> Wc3LayerMaterial {
     let alpha = layer.alpha.value().copied().unwrap_or(1.0);

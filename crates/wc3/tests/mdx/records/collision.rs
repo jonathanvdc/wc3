@@ -23,8 +23,10 @@ fn collision_primitives_round_trip() {
     );
     let mut model = Model::<wc3::model::V800>::new();
     model.set_collision_shapes(&[box_shape, sphere, plane, cylinder]);
-    let decoded = Model::<wc3::model::V800>::decode_mdx(&model.encode_mdx().unwrap()).unwrap();
-    let shapes = decoded.collision_shapes();
+    let decoded = Model::<wc3::model::V800>::decode_mdx(&model.encode_mdx().unwrap())
+        .unwrap()
+        .into_owned();
+    let shapes = decoded.collision_shapes().collect::<Vec<_>>();
     assert_eq!(shapes[0].node.name.text(), "Box");
     assert_eq!(
         shapes[0].box_corners(),
@@ -41,6 +43,8 @@ fn edited_collision_geometry_round_trips() {
     let mut shape = CollisionShape::new_box(Node::new("Shape", 1).unwrap(), [[0.0; 3]; 2]);
     shape.geometry = CollisionGeometry::Cylinder([[0.0; 3], [0.0, 0.0, 2.0]], 0.5);
     shape.node.name.set_text("Cylinder").unwrap();
-    let decoded = CollisionShape::decode_mdx(&shape.encode_mdx().unwrap()).unwrap();
+    let decoded = CollisionShape::decode_mdx(&shape.encode_mdx().unwrap())
+        .unwrap()
+        .into_owned();
     assert_eq!(decoded, shape);
 }

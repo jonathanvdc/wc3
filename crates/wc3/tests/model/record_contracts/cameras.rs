@@ -57,21 +57,33 @@ fn camera_extended_tracks_survive_model_io_and_conversion() {
     model.set_cameras(&[camera.clone()]);
     let bytes = model.encode_mdx().unwrap();
     let parsed = Model::<V1800>::decode_mdx(&bytes).unwrap();
-    assert_eq!(parsed.cameras()[0], camera);
+    assert_eq!(parsed.cameras().next().unwrap(), &camera);
     assert_eq!(parsed.encode_mdx().unwrap(), bytes);
     // These track tags are recognized by the new client without a layout gate.
     let converted = model
         .convert::<V800>(&ConversionOptions::strict())
         .unwrap()
         .model;
-    assert_eq!(converted.cameras()[0].visibility, camera.visibility);
-    assert_eq!(converted.cameras()[0].focus_distance, camera.focus_distance);
-    assert_eq!(converted.cameras()[0].focal_length, camera.focal_length);
-    assert_eq!(converted.cameras()[0].f_stop, camera.f_stop);
+    assert_eq!(
+        converted.cameras().next().unwrap().visibility,
+        camera.visibility
+    );
+    assert_eq!(
+        converted.cameras().next().unwrap().focus_distance,
+        camera.focus_distance
+    );
+    assert_eq!(
+        converted.cameras().next().unwrap().focal_length,
+        camera.focal_length
+    );
+    assert_eq!(converted.cameras().next().unwrap().f_stop, camera.f_stop);
     assert_eq!(
         Model::<V800>::decode_mdx(&converted.encode_mdx().unwrap())
             .unwrap()
-            .cameras()[0]
+            .into_owned()
+            .cameras()
+            .next()
+            .unwrap()
             .focus_distance,
         camera.focus_distance
     );

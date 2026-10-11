@@ -26,7 +26,7 @@
 //!     Ok::<_, Infallible>(edit)
 //! })?;
 //! assert_eq!(report.changes.len(), 1);
-//! assert_eq!(model.textures()[0].path.text(), "Custom\\Body.blp");
+//! assert_eq!(model.textures().next().unwrap().path.text(), "Custom\\Body.blp");
 //! # Ok::<(), Box<dyn std::error::Error>>(())
 //! ```
 
@@ -297,28 +297,28 @@ macro_rules! resource_fields {
     }};
 }
 
-fn fields<V: ModelDialect>(
-    chunk: &ModelChunk<V>,
+fn fields<'data, 'view, V: ModelDialect>(
+    chunk: &'view ModelChunk<'data, V>,
     record: usize,
-) -> Option<Fields<&FixedText<260>, &u32>> {
+) -> Option<Fields<&'view FixedText<260>, &'view u32>> {
     resource_fields!(chunk, record, get)
 }
 
-fn fields_mut<V: ModelDialect>(
-    chunk: &mut ModelChunk<V>,
+fn fields_mut<'data, 'view, V: ModelDialect>(
+    chunk: &'view mut ModelChunk<'data, V>,
     record: usize,
-) -> Option<Fields<&mut FixedText<260>, &mut u32>> {
+) -> Option<Fields<&'view mut FixedText<260>, &'view mut u32>> {
     resource_fields!(chunk, record, get_mut, mut)
 }
 
-struct Resources<'a, V: ModelDialect> {
-    chunks: &'a [ModelChunk<V>],
+struct Resources<'data, 'a, V: ModelDialect> {
+    chunks: &'a [ModelChunk<'data, V>],
     chunk: usize,
     record: usize,
     field: ResourceField,
 }
 
-impl<'a, V: ModelDialect> Iterator for Resources<'a, V> {
+impl<'data, 'a, V: ModelDialect> Iterator for Resources<'data, 'a, V> {
     type Item = ResourceReference<'a>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -356,13 +356,15 @@ impl<'a, V: ModelDialect> Iterator for Resources<'a, V> {
     }
 }
 
-impl<V: ModelDialect> FusedIterator for Resources<'_, V> {}
+impl<'data, V: ModelDialect> FusedIterator for Resources<'data, '_, V> {}
 
-impl<D: ModelDialect> Model<D> {
+impl<'data, D: ModelDialect> Model<'data, D> {
     /// Enumerate all direct authored references in chunk, record, and field order.
     /// Paths precede IDs within each record. Empty paths and duplicate occurrences
     /// remain; zero replaceable IDs and internal indices are excluded.
-    pub fn resources(&self) -> impl Iterator<Item = ResourceReference<'_>> + '_ {
+    pub fn resources<'view>(
+        &'view self,
+    ) -> impl Iterator<Item = ResourceReference<'view>> + use<'data, 'view, D> {
         Resources {
             chunks: &self.chunks,
             chunk: 0,
@@ -443,10 +445,12 @@ impl<D: ModelDialect> Model<D> {
     }
 }
 
-impl<X: Clone + Debug> DynamicModel<X> {
+impl<'data, X: Clone + Debug> DynamicModel<'data, X> {
     /// Enumerate direct authored references with the same order and guarantees as
     /// [`Model::resources`], preserving the decoded source version and chunk layout.
-    pub fn resources(&self) -> impl Iterator<Item = ResourceReference<'_>> + '_ {
+    pub fn resources<'view>(
+        &'view self,
+    ) -> impl Iterator<Item = ResourceReference<'view>> + use<'data, 'view, X> {
         visit_model!(self, |model| Box::new(model.resources())
             as Box<dyn Iterator<Item = ResourceReference<'_>> + '_>)
     }

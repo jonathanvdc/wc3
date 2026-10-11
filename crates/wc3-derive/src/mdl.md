@@ -143,13 +143,13 @@ use wc3::model::{mdl, mdx, Color};
 #[derive(mdx::Read, mdx::Write, mdl::Read, mdl::Write)]
 #[mdx(sized(tag = *b"EXMP"))]
 #[mdl(block = "Example")]
-struct Example {
+struct Example<'data> {
     #[mdx(tag = *b"COLR")]
     #[mdl(property = "Color", default)]
-    color: Animatable<Color>,
+    color: Animatable<'data, Color>,
     #[mdx(tag = *b"VISI")]
     #[mdl(property = "Visibility")]
-    visibility: Option<Track<f32>>,
+    visibility: Option<Track<'data, f32>>,
 }
 ```
 
@@ -285,8 +285,8 @@ Use these forms to adapt the layout without changing the record's public storage
 A field annotation such as
 `project(#[mdl(property = "Id")] id: u32, ...)` maps members of a nested Rust
 struct into the enclosing MDL record. List every member, marking binary-only
-members `skip`. Animatable members own their tracks. Record defaults
-supply nested defaults, and `write_order` lists the containing field name.
+members `skip`. Animatable members hold their tracks with the record's buffer
+lifetime. Record defaults supply nested defaults, and `write_order` lists the containing field name.
 
 Flag bitfields implement field-group codecs on their definitions:
 

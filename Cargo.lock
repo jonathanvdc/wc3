@@ -5774,6 +5774,7 @@ dependencies = [
  "md5",
  "squish",
  "wc3-derive",
+ "zerovec",
  "zune-jpeg",
 ]
 

@@ -1,4 +1,5 @@
 //! Discrete model notifications; applications interpret their names.
+use crate::preparation::shared::Shared;
 use bevy::prelude::*;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -44,7 +45,7 @@ pub struct Wc3ModelEvent {
 
 #[derive(Component)]
 pub(crate) struct EventState {
-    definitions: Arc<[EventObject]>,
+    definitions: Arc<[Shared<EventObject<'static>>]>,
     nodes: Vec<Entity>,
     cursor: Option<EventCursor>,
 }

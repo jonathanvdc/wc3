@@ -9,10 +9,10 @@ fn main() -> Result<(), Box<dyn Error>> {
         println!(
             "{path}: version {}, {} geosets, {} materials, {} bones, {} sequences",
             model.source_version,
-            model.model.geosets().len(),
-            model.model.materials().len(),
-            model.model.bones().len(),
-            model.model.sequences().len(),
+            model.model.geosets().count(),
+            model.model.materials().count(),
+            model.model.bones().count(),
+            model.model.sequences().count(),
         );
     }
     Ok(())
