@@ -78,10 +78,17 @@ collection from records you want to retain.
 MDX decoding also borrows geometry, animation keys, and opaque payloads from the
 input slice. Numeric arrays use ZeroVec to read little-endian, unaligned data
 without allocating a typed buffer; `get()` and `iter()` return ordinary Rust
-values. The arrays expose ZeroVec directly: construct them by collecting values,
-and edit encoded ULE elements with `to_mut_slice()` or `with_mut()`. Only the
-array being edited becomes owned. MDL decoding builds encoded arrays directly,
-and opaque payloads use `Cow<[u8]>`.
+values. `Geoset::new` and the track constructors accept native arrays, vectors,
+and slices through `IntoZeroVec`. For example,
+`Track::linear([first, second], None)` encodes those keys into owned storage.
+Passing an existing ZeroVec retains its buffer during conversion; sorting
+unordered borrowed track keys creates an owned copy. Collect generated values
+into `ZeroVec` explicitly.
+
+The arrays expose ZeroVec directly for inspection and editing. Edit encoded ULE
+elements with `to_mut_slice()` or `with_mut()`. Only the array being edited becomes
+owned. MDL decoding builds encoded arrays directly, and opaque payloads use
+`Cow<[u8]>`.
 
 Use `as_borrowed()` to create an editable view that borrows even buffers the
 original model owns. `to_owned()` creates an independent deep copy.

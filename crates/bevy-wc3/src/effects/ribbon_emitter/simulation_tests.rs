@@ -81,9 +81,7 @@ fn exact_visibility_key_boundaries_match_at_30_and_60_fps() {
                         frame: 1100,
                         value: 1.0,
                     },
-                ]
-                .into_iter()
-                .collect(),
+                ],
                 None,
             )
             .unwrap(),
@@ -125,9 +123,7 @@ fn gaps_do_not_bridge_and_each_live_chain_gets_its_own_uv_span() {
                     frame: 450,
                     value: 1.0,
                 },
-            ]
-            .into_iter()
-            .collect(),
+            ],
             None,
         )
         .unwrap(),
@@ -266,9 +262,7 @@ fn rotated_scaled_sections_use_local_y_and_animated_heights_at_birth() {
                     frame: 1000,
                     value: 10.0,
                 },
-            ]
-            .into_iter()
-            .collect(),
+            ],
             None,
         )
         .unwrap(),

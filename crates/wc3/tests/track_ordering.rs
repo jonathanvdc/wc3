@@ -24,17 +24,11 @@ fn constructors_stably_sort_all_interpolation_modes() {
     ];
     let expected = [keys[3], keys[0], keys[2], keys[1]];
     assert_eq!(
-        *Track::step(keys.into_iter().collect(), None)
-            .unwrap()
-            .step_keys()
-            .unwrap(),
+        *Track::step(keys, None).unwrap().step_keys().unwrap(),
         expected
     );
     assert_eq!(
-        *Track::linear(keys.into_iter().collect(), None)
-            .unwrap()
-            .linear_keys()
-            .unwrap(),
+        *Track::linear(keys, None).unwrap().linear_keys().unwrap(),
         expected
     );
     let tangent = |key: ValueKeyframe<f32>| TangentKeyframe {
@@ -46,17 +40,11 @@ fn constructors_stably_sort_all_interpolation_modes() {
     let keys = keys.map(tangent);
     let expected = expected.map(tangent);
     assert_eq!(
-        *Track::hermite(keys.into_iter().collect(), None)
-            .unwrap()
-            .hermite_keys()
-            .unwrap(),
+        *Track::hermite(keys, None).unwrap().hermite_keys().unwrap(),
         expected
     );
     assert_eq!(
-        *Track::bezier(keys.into_iter().collect(), None)
-            .unwrap()
-            .bezier_keys()
-            .unwrap(),
+        *Track::bezier(keys, None).unwrap().bezier_keys().unwrap(),
         expected
     );
 }

@@ -209,9 +209,7 @@ mod tests {
                         frame: 100,
                         value: [2.0; 3],
                     },
-                ]
-                .into_iter()
-                .collect(),
+                ],
                 None,
             )
             .unwrap(),

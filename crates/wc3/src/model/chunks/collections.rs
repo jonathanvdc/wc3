@@ -269,8 +269,8 @@ mod tests {
     #[test]
     fn variable_width_collection_uses_the_whole_chunk() {
         let records = vec![
-            Geoset::<V1800>::new(&[], &[], &[]).unwrap(),
-            Geoset::<V1800>::new(&[], &[], &[]).unwrap(),
+            Geoset::<V1800>::new([], [], []).unwrap(),
+            Geoset::<V1800>::new([], [], []).unwrap(),
         ];
         let original = GeosetsChunk::new(records);
         let bytes = original.encode_mdx().unwrap();

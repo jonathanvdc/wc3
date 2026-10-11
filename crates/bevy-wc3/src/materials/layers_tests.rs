@@ -49,9 +49,7 @@ fn geoset_alpha_hides_decay_geometry_and_combines_with_layer_alpha() {
                                     frame: 100,
                                     value: 1.0,
                                 },
-                            ]
-                            .into_iter()
-                            .collect(),
+                            ],
                             None,
                         )
                         .unwrap(),
@@ -168,9 +166,7 @@ fn missing_color_keys_reset_to_white_after_sequence_change() {
                         [ValueKeyframe {
                             frame: 0,
                             value: [1.0, 0.0, 0.0],
-                        }]
-                        .into_iter()
-                        .collect(),
+                        }],
                         None,
                     )
                     .unwrap(),

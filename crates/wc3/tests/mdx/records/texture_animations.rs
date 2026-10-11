@@ -13,9 +13,7 @@ fn texture_animation_tracks_round_trip() {
         [ValueKeyframe {
             frame: 100,
             value: [1.0, 2.0, 3.0],
-        }]
-        .into_iter()
-        .collect(),
+        }],
         None,
     )
     .unwrap();

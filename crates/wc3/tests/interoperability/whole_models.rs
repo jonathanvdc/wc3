@@ -24,9 +24,7 @@ fn full_model<'data, V: ModelVersion>() -> Model<'data, V> {
     material.layers = [Layer::<V>::new()].to_vec();
     model.set_materials([material]);
     model.set_texture_animations([TextureAnimation::new()]);
-    model.set_geosets([
-        Geoset::<V>::new(&[[0.0, 0.0, 0.0]], &[[0.0, 0.0, 1.0]], &[0, 0, 0]).unwrap(),
-    ]);
+    model.set_geosets([Geoset::<V>::new([[0.0, 0.0, 0.0]], [[0.0, 0.0, 1.0]], [0, 0, 0]).unwrap()]);
     model.set_geoset_animations([GeosetAnimation::new(0)]);
     model.set_bones([Bone::new(Node::new("Root", 0).unwrap(), 0, 0)]);
     model.set_helpers([Node::new("Helper", 1).unwrap()]);

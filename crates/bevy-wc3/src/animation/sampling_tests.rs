@@ -22,9 +22,7 @@ fn sequence_clock_loops_and_global_clock_runs_independently() {
                 frame: 1100,
                 value: 1.0f32,
             },
-        ]
-        .into_iter()
-        .collect(),
+        ],
         None,
     )
     .unwrap();
@@ -38,9 +36,7 @@ fn sequence_clock_loops_and_global_clock_runs_independently() {
                 frame: 200,
                 value: 1.0f32,
             },
-        ]
-        .into_iter()
-        .collect(),
+        ],
         Some(0),
     )
     .unwrap();
@@ -73,9 +69,7 @@ fn color_tracks_use_sequence_and_global_clocks_with_neutral_fallback() {
                 frame: 100,
                 value: [0.0, 0.0, 1.0],
             },
-        ]
-        .into_iter()
-        .collect(),
+        ],
         None,
     )
     .unwrap();
@@ -92,9 +86,7 @@ fn color_tracks_use_sequence_and_global_clocks_with_neutral_fallback() {
                 frame: 100,
                 value: [0.0, 0.0, 1.0],
             },
-        ]
-        .into_iter()
-        .collect(),
+        ],
         Some(0),
     )
     .unwrap();

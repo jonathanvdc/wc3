@@ -4,7 +4,7 @@ use wc3::model::animation::{
     AnimationTime, Interpolate, Sequence, TangentKeyframe, Track, ValueKeyframe,
 };
 use wc3::model::scene::{EventObject, Node};
-use wc3::model::ZeroVec;
+use wc3::model::{Borrowed, ZeroVec};
 
 fn tracks<T: Interpolate>(c: &mut Criterion, name: &str, value: impl Fn(usize) -> T) {
     let mut group = c.benchmark_group(format!("animation/{name}"));
@@ -75,13 +75,7 @@ fn tracks<T: Interpolate>(c: &mut Criterion, name: &str, value: impl Fn(usize) -
             let sampled = if global {
                 track.clone()
             } else {
-                Track::linear(
-                    (track.linear_keys().unwrap().to_vec())
-                        .into_iter()
-                        .collect(),
-                    None,
-                )
-                .unwrap()
+                Track::linear(track.linear_keys().unwrap().as_borrowed(), None).unwrap()
             };
             group.throughput(Throughput::Elements(6));
             group.bench_function(

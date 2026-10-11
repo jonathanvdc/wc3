@@ -209,9 +209,7 @@ fn prepared_assets_share_static_layers_and_isolate_animated_layers() {
                     frame: 100,
                     value: 0.0,
                 },
-            ]
-            .into_iter()
-            .collect(),
+            ],
             None,
         )
         .unwrap(),

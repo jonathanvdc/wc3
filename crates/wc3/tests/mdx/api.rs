@@ -38,7 +38,7 @@ fn one_api_handles_model_fixed_and_versioned_records() {
         bytes
     );
     round_trip(&Sequence::new("Stand", [0, 100]).unwrap());
-    round_trip(&Geoset::<V1800>::new(&[], &[], &[]).unwrap());
+    round_trip(&Geoset::<V1800>::new([], [], []).unwrap());
     assert!(Sequence::decode_mdx(&[0; 131]).is_err());
 }
 
@@ -65,8 +65,8 @@ fn cursor_read_advances_through_records_and_decode_rejects_trailing_bytes() {
         })
     );
 
-    let first = Geoset::<V800>::new(&[], &[], &[]).unwrap();
-    let second = Geoset::<V800>::new(&[], &[], &[]).unwrap();
+    let first = Geoset::<V800>::new([], [], []).unwrap();
+    let second = Geoset::<V800>::new([], [], []).unwrap();
     let mut bytes = first.encode_mdx().unwrap();
     bytes.extend_from_slice(&second.encode_mdx().unwrap());
     let mut cursor = Cursor::new(&bytes);

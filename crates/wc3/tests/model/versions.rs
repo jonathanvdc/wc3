@@ -23,7 +23,7 @@ fn version_is_shared_by_model_and_nested_records() {
 
     let mut model = Model::<V1800>::new();
     model.set_materials([material]);
-    model.set_geosets([Geoset::<V1800>::new(&[], &[], &[]).unwrap()]);
+    model.set_geosets([Geoset::<V1800>::new([], [], []).unwrap()]);
     model.set_lights([Light::<V1800>::new(
         Node::new("Lamp", 1).unwrap(),
         LightType::Omnidirectional,
@@ -97,8 +97,8 @@ fn version_markers_select_record_fields() {
         Animatable::Static(0.0)
     );
 
-    let classic_geoset = Geoset::<V800>::new(&[], &[], &[]).unwrap();
-    let mut modern_geoset = Geoset::<V1800>::new(&[], &[], &[]).unwrap();
+    let classic_geoset = Geoset::<V800>::new([], [], []).unwrap();
+    let mut modern_geoset = Geoset::<V1800>::new([], [], []).unwrap();
     assert!(classic_geoset.try_tangents().is_err());
     assert_eq!(modern_geoset.try_tangents().unwrap(), None);
     assert_eq!(modern_geoset.try_skin_weights().unwrap(), None);

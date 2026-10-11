@@ -19,9 +19,7 @@ fn camera_fields_and_tracks_round_trip() {
         [ValueKeyframe {
             frame: 100,
             value: 0.5,
-        }]
-        .into_iter()
-        .collect(),
+        }],
         None,
     )
     .unwrap();

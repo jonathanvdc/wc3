@@ -305,9 +305,7 @@ fn delayed_and_nested_attachments_restart_in_parent_order() {
                     frame: 100,
                     value: 1.0,
                 },
-            ]
-            .into_iter()
-            .collect(),
+            ],
             None,
         )
         .unwrap(),

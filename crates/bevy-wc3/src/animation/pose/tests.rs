@@ -34,9 +34,7 @@ fn vector_track<'data>(from: Vec3, to: Vec3) -> Track<'data, [f32; 3]> {
                 frame: 1000,
                 value: to.to_array(),
             },
-        ]
-        .into_iter()
-        .collect(),
+        ],
         None,
     )
     .unwrap()
@@ -103,9 +101,7 @@ fn inheritance_suppresses_animation_but_preserves_model_placement_and_pivots() {
             [ValueKeyframe {
                 frame: 0,
                 value: Quat::from_rotation_z(0.7).to_array(),
-            }]
-            .into_iter()
-            .collect(),
+            }],
             None,
         )
         .unwrap(),
@@ -168,9 +164,7 @@ fn full_billboard_uses_current_camera_and_retains_authored_rotation() {
             [ValueKeyframe {
                 frame: 0,
                 value: authored.to_array(),
-            }]
-            .into_iter()
-            .collect(),
+            }],
             None,
         )
         .unwrap(),
@@ -460,9 +454,7 @@ fn birth_sampling_preserves_signed_instance_scale_and_rotation() {
             [ValueKeyframe {
                 frame: 0,
                 value: Quat::from_rotation_z(0.7).to_array(),
-            }]
-            .into_iter()
-            .collect(),
+            }],
             None,
         )
         .unwrap(),
@@ -519,9 +511,7 @@ fn rotation_suppression_and_axis_lock_compose_in_the_effective_parent_frame() {
             [ValueKeyframe {
                 frame: 0,
                 value: Quat::from_rotation_z(0.7).to_array(),
-            }]
-            .into_iter()
-            .collect(),
+            }],
             None,
         )
         .unwrap(),
@@ -608,9 +598,7 @@ fn transitions_cache_authored_poses_and_share_birth_sampling() {
                     frame: 3000,
                     value: [20.0, 0.0, 0.0],
                 },
-            ]
-            .into_iter()
-            .collect(),
+            ],
             None,
         )
         .unwrap(),

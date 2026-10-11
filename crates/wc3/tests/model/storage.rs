@@ -11,7 +11,7 @@ use zerovec::ule::AsULE;
 #[test]
 fn geometry_borrows_unaligned_source_and_only_an_edited_array_becomes_owned() {
     let geoset =
-        Geoset::<V800>::new(&[[1.0, 2.0, 3.0]; 32], &[[0.0, 0.0, 1.0]; 32], &[0, 1, 2]).unwrap();
+        Geoset::<V800>::new([[1.0, 2.0, 3.0]; 32], [[0.0, 0.0, 1.0]; 32], [0, 1, 2]).unwrap();
     let mut model = Model::<V800>::new();
     model.replace_records::<GeosetsChunk<V800>>(vec![geoset]);
     let mut source = vec![99];
@@ -81,9 +81,7 @@ fn sorted_track_sampling_keeps_wire_storage_and_unsorted_input_sorts_stably() {
                 frame: 10,
                 value: 2.0,
             },
-        ]
-        .into_iter()
-        .collect(),
+        ],
         None,
     )
     .unwrap();
@@ -113,9 +111,9 @@ fn consuming_conversion_moves_records_and_geometry_allocations() {
         u32::MAX,
     )]);
     model.replace_records::<GeosetsChunk<V800>>(vec![Geoset::new(
-        &[[1.0; 3]; 3],
-        &[[0.0, 0.0, 1.0]; 3],
-        &[0, 1, 2],
+        [[1.0; 3]; 3],
+        [[0.0, 0.0, 1.0]; 3],
+        [0, 1, 2],
     )
     .unwrap()]);
     let bone = model.records::<BonesChunk>().next().unwrap() as *const Bone;
@@ -251,9 +249,7 @@ fn custom_track_values_keep_semantic_validation() {
         [ValueKeyframe {
             frame: 0,
             value: ValidScalar::default(),
-        }]
-        .into_iter()
-        .collect(),
+        }],
         None,
     )
     .unwrap();
@@ -268,7 +264,7 @@ fn skin_conversion_moves_owned_arrays_when_layouts_match() {
     use wc3::model::geometry::{SkinWeight, SkinWeights};
     use wc3::model::{V1300, V1400, V900};
 
-    let mut geoset = Geoset::<V900>::new(&[[0.0; 3]], &[[0.0; 3]], &[]).unwrap();
+    let mut geoset = Geoset::<V900>::new([[0.0; 3]], [[0.0; 3]], []).unwrap();
     geoset
         .set_skin_weights(Some(ZeroVec::alloc_from_slice(&[SkinWeights::<u8> {
             bone_indices: [1, 2, 3, 4],
@@ -359,7 +355,7 @@ fn skin_conversion_keeps_encoded_storage_borrowed_when_layouts_match() {
     use wc3::model::geometry::SkinWeights;
     use wc3::model::{V1300, V1400, V900};
 
-    let mut narrow = Geoset::<V900>::new(&[[0.0; 3]], &[[0.0; 3]], &[]).unwrap();
+    let mut narrow = Geoset::<V900>::new([[0.0; 3]], [[0.0; 3]], []).unwrap();
     narrow
         .set_skin_weights(Some(ZeroVec::alloc_from_slice(&[SkinWeights::<u8> {
             bone_indices: [1; 4],
@@ -379,7 +375,7 @@ fn skin_conversion_keeps_encoded_storage_borrowed_when_layouts_match() {
         pointer
     );
 
-    let mut wide = Geoset::<V1400>::new(&[[0.0; 3]], &[[0.0; 3]], &[]).unwrap();
+    let mut wide = Geoset::<V1400>::new([[0.0; 3]], [[0.0; 3]], []).unwrap();
     wide.set_skin_weights(Some(ZeroVec::alloc_from_slice(&[SkinWeights::<u16> {
         bone_indices: [1000; 4],
         weights: [255, 0, 0, 0],
@@ -397,4 +393,97 @@ fn skin_conversion_keeps_encoded_storage_borrowed_when_layouts_match() {
         converted.skin_weights().unwrap().as_bytes().as_ptr(),
         pointer
     );
+}
+
+#[test]
+fn native_inputs_encode_into_storage_independent_of_their_lifetimes() {
+    use wc3::model::IntoZeroVec;
+
+    let from_array: ZeroVec<'static, u32> = [1, 2, 3].into_zero_vec();
+    let from_vec: ZeroVec<'static, u32> = vec![1, 2, 3].into_zero_vec();
+    let (from_slice, from_array_ref): (ZeroVec<'static, u32>, ZeroVec<'static, u32>) = {
+        let native = [1, 2, 3];
+        (native.as_slice().into_zero_vec(), (&native).into_zero_vec())
+    };
+    for values in [from_array, from_vec, from_slice, from_array_ref] {
+        assert_eq!(values, [1, 2, 3]);
+        assert!(values.is_owned());
+    }
+    let empty: ZeroVec<u32> = [].into_zero_vec();
+    assert!(empty.is_empty());
+}
+
+#[test]
+fn encoded_inputs_move_owned_and_borrowed_buffers_unchanged() {
+    use wc3::model::{Borrowed, IntoZeroVec};
+
+    let owned: ZeroVec<u32> = [1, 2, 3].into_zero_vec();
+    let pointer = owned.as_bytes().as_ptr();
+    let moved = owned.into_zero_vec();
+    assert_eq!(moved.as_bytes().as_ptr(), pointer);
+    assert!(moved.is_owned());
+    let borrowed = moved.as_borrowed().into_zero_vec();
+    assert_eq!(borrowed.as_bytes().as_ptr(), pointer);
+    assert!(!borrowed.is_owned());
+}
+
+#[test]
+fn geometry_construction_moves_encoded_arrays_and_accepts_mixed_native_inputs() {
+    use wc3::model::{Borrowed, IntoZeroVec};
+
+    let vertices: ZeroVec<[f32; 3]> = [[1.0, 2.0, 3.0]].into_zero_vec();
+    let normals: ZeroVec<[f32; 3]> = [[0.0, 0.0, 1.0]].into_zero_vec();
+    let faces: ZeroVec<u16> = [0, 0, 0].into_zero_vec();
+    let pointers = (
+        vertices.as_bytes().as_ptr(),
+        normals.as_bytes().as_ptr(),
+        faces.as_bytes().as_ptr(),
+    );
+    let geoset = Geoset::<V800>::new(vertices, normals, faces).unwrap();
+    assert_eq!(geoset.vertices().as_bytes().as_ptr(), pointers.0);
+    assert_eq!(geoset.normals().as_bytes().as_ptr(), pointers.1);
+    assert_eq!(geoset.face_indices().as_bytes().as_ptr(), pointers.2);
+
+    let copied = Geoset::<V800>::new(
+        geoset.vertices().as_borrowed(),
+        vec![[0.0, 0.0, 1.0]],
+        [0, 0, 0].as_slice(),
+    )
+    .unwrap();
+    assert_eq!(copied.vertices().as_bytes().as_ptr(), pointers.0);
+    assert!(!copied.vertices().is_owned());
+    assert!(copied.normals().is_owned());
+    assert!(copied.face_indices().is_owned());
+    assert_eq!(copied, geoset);
+}
+
+#[test]
+fn track_constructors_copy_native_slices_and_sort_without_changing_the_source() {
+    use wc3::model::animation::TangentKeyframe;
+
+    let keys = [
+        ValueKeyframe {
+            frame: 100,
+            value: 2.0,
+        },
+        ValueKeyframe {
+            frame: 0,
+            value: 1.0,
+        },
+    ];
+    let track: Track<'static, f32> = Track::linear(keys.as_slice(), None).unwrap();
+    assert_eq!(track.evaluate(50.0), Some(1.5));
+    assert_eq!(keys[0].frame, 100);
+    assert!(track.linear_keys().unwrap().is_owned());
+    let tangents = keys.map(|key| TangentKeyframe {
+        frame: key.frame,
+        value: key.value,
+        in_tangent: 0.0,
+        out_tangent: 0.0,
+    });
+    let hermite = Track::hermite(tangents.as_slice(), None).unwrap();
+    let bezier = Track::bezier(tangents.to_vec(), None).unwrap();
+    assert_eq!(hermite.hermite_keys().unwrap().get(0).unwrap().frame, 0);
+    assert_eq!(bezier.bezier_keys().unwrap().get(0).unwrap().frame, 0);
+    assert_eq!(tangents[0].frame, 100);
 }

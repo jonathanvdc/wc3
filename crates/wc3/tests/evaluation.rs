@@ -11,13 +11,7 @@ fn close(a: f32, b: f32) {
 
 #[test]
 fn boundaries_fractional_time_and_unordered_duplicates() {
-    let track = Track::linear(
-        [key(10, 10.0), key(-10, -10.0), key(10, 20.0)]
-            .into_iter()
-            .collect(),
-        None,
-    )
-    .unwrap();
+    let track = Track::linear([key(10, 10.0), key(-10, -10.0), key(10, 20.0)], None).unwrap();
     assert_eq!(track.evaluate(-100.0), Some(-10.0));
     assert_eq!(track.evaluate(100.0), Some(20.0));
     assert_eq!(track.evaluate(10.0), Some(20.0));
@@ -25,14 +19,14 @@ fn boundaries_fractional_time_and_unordered_duplicates() {
     assert_eq!(track.evaluate(-9.5), Some(-9.25));
     assert_eq!(track.evaluate(f64::NAN), None);
     assert_eq!(track.evaluate(f64::INFINITY), None);
-    let step = Track::step([key(0, 1.0), key(10, 2.0)].into_iter().collect(), None).unwrap();
+    let step = Track::step([key(0, 1.0), key(10, 2.0)], None).unwrap();
     assert_eq!(step.evaluate(9.9), Some(1.0));
     assert_eq!(step.evaluate(10.0), Some(2.0));
 }
 
 #[test]
 fn intervals_and_base_fallback() {
-    let empty = Track::<f32>::linear(Default::default(), None).unwrap();
+    let empty = Track::<f32>::linear([], None).unwrap();
     assert_eq!(empty.evaluate(0.0), None);
     assert_eq!(Animatable::Animated(empty.clone()).evaluate(0.0), None);
     assert_eq!(
@@ -44,13 +38,7 @@ fn intervals_and_base_fallback() {
         Some(3.0)
     );
     assert_eq!(Animatable::Static(4.0).evaluate(f64::NAN), Some(4.0));
-    let track = Track::linear(
-        [key(0, 0.0), key(10, 10.0), key(100, 100.0)]
-            .into_iter()
-            .collect(),
-        Some(0),
-    )
-    .unwrap();
+    let track = Track::linear([key(0, 0.0), key(10, 10.0), key(100, 100.0)], Some(0)).unwrap();
     assert_eq!(track.evaluate_in(50.0, 0..=10), Some(10.0));
     assert_eq!(track.evaluate_in(50.0, 20..=90), None);
     let backwards_interval = RangeInclusive::new(10, 0);
@@ -78,17 +66,11 @@ fn splines_use_left_outgoing_and_right_incoming_tangents() {
         },
     ];
     close(
-        Track::hermite(keys.into_iter().collect(), None)
-            .unwrap()
-            .evaluate(50.0)
-            .unwrap(),
+        Track::hermite(keys, None).unwrap().evaluate(50.0).unwrap(),
         4.5,
     );
     close(
-        Track::bezier(keys.into_iter().collect(), None)
-            .unwrap()
-            .evaluate(50.0)
-            .unwrap(),
+        Track::bezier(keys, None).unwrap().evaluate(50.0).unwrap(),
         2.5,
     );
     assert_eq!(
@@ -109,9 +91,7 @@ fn integer_tracks_are_discrete_and_rotation_uses_shortest_path() {
                 frame: 10,
                 value: 8,
             },
-        ]
-        .into_iter()
-        .collect(),
+        ],
         None,
     )
     .unwrap();

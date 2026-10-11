@@ -31,9 +31,7 @@ fn uv_animation_rotates_and_scales_around_center() {
                         frame: 100,
                         value: [0.4, 0.0, 0.0],
                     },
-                ]
-                .into_iter()
-                .collect(),
+                ],
                 None,
             )
             .unwrap(),
@@ -43,9 +41,7 @@ fn uv_animation_rotates_and_scales_around_center() {
                 [ValueKeyframe {
                     frame: 0,
                     value: [2.0, 3.0, 1.0],
-                }]
-                .into_iter()
-                .collect(),
+                }],
                 None,
             )
             .unwrap(),
@@ -55,9 +51,7 @@ fn uv_animation_rotates_and_scales_around_center() {
                 [ValueKeyframe {
                     frame: 0,
                     value: Quat::from_rotation_z(std::f32::consts::FRAC_PI_2).to_array(),
-                }]
-                .into_iter()
-                .collect(),
+                }],
                 None,
             )
             .unwrap(),
@@ -128,9 +122,7 @@ fn hd_controls_and_slots_follow_animation_and_overrides() {
                     frame: 100,
                     value: 4.0,
                 },
-            ]
-            .into_iter()
-            .collect(),
+            ],
             Some(0),
         )
         .unwrap(),
@@ -144,9 +136,7 @@ fn hd_controls_and_slots_follow_animation_and_overrides() {
                     frame: 75,
                     value: 5,
                 },
-            ]
-            .into_iter()
-            .collect(),
+            ],
             None,
         )
         .unwrap(),
@@ -163,9 +153,7 @@ fn hd_controls_and_slots_follow_animation_and_overrides() {
                     frame: 100,
                     value: 1.0,
                 },
-            ]
-            .into_iter()
-            .collect(),
+            ],
             None,
         )
         .unwrap(),

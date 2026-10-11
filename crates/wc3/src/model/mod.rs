@@ -47,10 +47,13 @@
 //! Geometry arrays and animation keys use [`ZeroVec`] directly to read
 //! little-endian values even when the source is unaligned. MDL parsing collects
 //! into owned encoded arrays without an intermediate native vector. Use
-//! `.iter().collect::<ZeroVec<_>>()` to construct arrays from values;
-//! constructors such as [`geometry::Geoset::from_arrays`] and [`animation::Track::linear`]
-//! move existing encoded arrays into the model. ZeroVec equality compares
-//! encoded bytes, including the exact bit patterns of floating-point values.
+//! `.iter().collect::<ZeroVec<_>>()` to construct arrays from generated values.
+//! [`geometry::Geoset::new`] and the [`animation::Track`] constructors accept
+//! native arrays, vectors, and slices through [`IntoZeroVec`], encoding them into
+//! owned storage. Passing a ZeroVec moves its buffer unchanged, preserving any
+//! borrowing. Sorting unordered borrowed track keys creates an owned copy.
+//! ZeroVec equality compares encoded bytes, including the exact bit patterns of
+//! floating-point values.
 //!
 //! Editing follows ZeroVec's API: `to_mut_slice()` copies a borrowed array once
 //! and exposes ULE elements; `with_mut()` also allows resizing. [`AsULE::to_unaligned`]
@@ -267,6 +270,9 @@ mod dialect;
 pub use dialect::{Extended, ModelDialect, NoExtensions};
 
 pub use zerovec::{ule::AsULE, ZeroVec};
+
+mod into_zero_vec;
+pub use into_zero_vec::IntoZeroVec;
 
 mod ownership;
 pub use ownership::{Borrowed, Detached, IntoOwned};

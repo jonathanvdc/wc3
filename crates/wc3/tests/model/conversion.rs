@@ -40,7 +40,7 @@ fn sample<'data, V: ModelVersion>() -> Model<'data, V> {
     material.priority_plane = 12;
     material.layers = [layer].to_vec();
     model.set_materials([material]);
-    let mut geoset = Geoset::<V>::new(&[[1.0, 2.0, 3.0]], &[[0.0, 0.0, 1.0]], &[]).unwrap();
+    let mut geoset = Geoset::<V>::new([[1.0, 2.0, 3.0]], [[0.0, 0.0, 1.0]], []).unwrap();
     geoset.set_raw_unselectable(0x8000_0002);
     model.set_geosets([geoset]);
     let mut light = Light::<V>::new(Node::new("Lamp", 7).unwrap(), LightType::Ambient);
@@ -246,9 +246,7 @@ fn texture_slots_including_animations_require_loss_permission() {
                 [ValueKeyframe {
                     frame: 20,
                     value: 9,
-                }]
-                .into_iter()
-                .collect(),
+                }],
                 None,
             )
             .unwrap(),
@@ -275,9 +273,7 @@ fn tracks_are_checked_even_when_static_fields_are_neutral() {
         [ValueKeyframe {
             frame: 100,
             value: 2.0,
-        }]
-        .into_iter()
-        .collect(),
+        }],
         Some(3),
     )
     .unwrap();
@@ -311,7 +307,7 @@ fn tracks_are_checked_even_when_static_fields_are_neutral() {
 
 #[test]
 fn skin_narrowing_checks_indices_and_never_truncates_them() {
-    let mut geoset = Geoset::<V1800>::new(&[[0.0; 3]], &[[0.0; 3]], &[]).unwrap();
+    let mut geoset = Geoset::<V1800>::new([[0.0; 3]], [[0.0; 3]], []).unwrap();
     geoset
         .set_skin_weights(Some(ZeroVec::alloc_from_slice(&[SkinWeights {
             bone_indices: [256, 0, 0, 0],
@@ -630,9 +626,7 @@ fn populated_versioned_fields_preserve_exact_storage_when_supported() {
                 [ValueKeyframe {
                     frame: 200,
                     value: 5,
-                }]
-                .into_iter()
-                .collect(),
+                }],
                 Some(2),
             )
             .unwrap(),

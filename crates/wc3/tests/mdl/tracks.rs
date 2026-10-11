@@ -24,9 +24,7 @@ fn all_modes_and_value_shapes_roundtrip() {
             [ValueKeyframe {
                 frame: 0,
                 value: -0.0,
-            }]
-            .into_iter()
-            .collect(),
+            }],
             None,
         )
         .unwrap(),
@@ -36,9 +34,7 @@ fn all_modes_and_value_shapes_roundtrip() {
             [ValueKeyframe {
                 frame: i32::MAX,
                 value: 3,
-            }]
-            .into_iter()
-            .collect(),
+            }],
             Some(7),
         )
         .unwrap(),
@@ -50,9 +46,7 @@ fn all_modes_and_value_shapes_roundtrip() {
                 value: [1.0, 2.0, 3.0],
                 in_tangent: [0.0; 3],
                 out_tangent: [4.0; 3],
-            }]
-            .into_iter()
-            .collect(),
+            }],
             None,
         )
         .unwrap(),
@@ -64,14 +58,12 @@ fn all_modes_and_value_shapes_roundtrip() {
                 value: [0.0, 0.0, 0.0, 1.0],
                 in_tangent: [0.0; 4],
                 out_tangent: [1.0; 4],
-            }]
-            .into_iter()
-            .collect(),
+            }],
             Some(0),
         )
         .unwrap(),
     );
-    roundtrip(Track::<f32>::linear((Vec::new()).into_iter().collect(), None).unwrap());
+    roundtrip(Track::<f32>::linear(Vec::new(), None).unwrap());
 }
 
 #[test]

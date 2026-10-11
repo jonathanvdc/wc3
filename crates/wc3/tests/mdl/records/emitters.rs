@@ -57,7 +57,7 @@ fn independent_emitter_fixtures_roundtrip() {
     particle.initial_velocity = Animatable::Static(7.0);
     particle
         .emission_rate
-        .set_track(Track::linear(Default::default(), None).unwrap());
+        .set_track(Track::linear([], None).unwrap());
     roundtrip(&particle);
     node.flags = NodeFlags(0x4000);
     let mut ribbon = RibbonEmitter::new(node);
@@ -74,10 +74,8 @@ fn independent_emitter_fixtures_roundtrip() {
     ribbon.gravity = -0.0;
     ribbon
         .texture_slot
-        .set_track(Track::linear(Default::default(), None).unwrap());
-    ribbon
-        .alpha
-        .set_track(Track::linear(Default::default(), None).unwrap());
+        .set_track(Track::linear([], None).unwrap());
+    ribbon.alpha.set_track(Track::linear([], None).unwrap());
     roundtrip(&ribbon);
     assert!(ribbon.encode_mdl().unwrap().contains("Gravity -0.0,"));
 }

@@ -15,9 +15,7 @@ fn ramp<'data>(global: Option<u32>) -> Track<'data, f32> {
                 frame: 300,
                 value: 9.0,
             },
-        ]
-        .into_iter()
-        .collect(),
+        ],
         global,
     )
     .unwrap()
@@ -91,7 +89,7 @@ fn properties_prefer_animation_then_base_and_leave_defaults_to_callers() {
             .unwrap_or(1.0),
         1.0
     );
-    let empty = Track::linear(Default::default(), None).unwrap();
+    let empty = Track::linear([], None).unwrap();
     assert_eq!(
         Animatable::Both {
             value: 0.9f32,

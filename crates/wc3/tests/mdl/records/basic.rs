@@ -114,7 +114,7 @@ fn malformed_and_unrepresentable_layers() {
     layer.set_texture_slots(&[LayerTextureSlot {
         texture_id: Animatable::Both {
             value: 0,
-            track: Track::linear(Default::default(), None).unwrap(),
+            track: Track::linear([], None).unwrap(),
         },
         texture_type: 1,
     }]);
@@ -129,12 +129,8 @@ fn rejects_hidden_binary_storage_and_noncanonical_channel_order() {
     use wc3::model::mdx::Write as _;
     let layer = Layer::<V800>::decode_mdl("Layer { static TextureID 0 <= 0, }").unwrap();
     let mut layer = layer;
-    layer
-        .alpha
-        .set_track(Track::linear(Default::default(), None).unwrap());
-    layer
-        .texture_id
-        .set_track(Track::linear(Default::default(), None).unwrap());
+    layer.alpha.set_track(Track::linear([], None).unwrap());
+    layer.texture_id.set_track(Track::linear([], None).unwrap());
     assert!(layer.encode_mdl().is_ok());
     let attachment = Attachment::decode_mdl("Attachment \"a\" { ObjectId 0, }").unwrap();
     let mut bytes = attachment.encode_mdx().unwrap();
@@ -193,7 +189,7 @@ fn animated_texture_slots_ignore_base_ids() {
     layer.set_texture_slots(&[LayerTextureSlot {
         texture_id: Animatable::Both {
             value: 37,
-            track: Track::linear(Default::default(), None).unwrap(),
+            track: Track::linear([], None).unwrap(),
         },
         texture_type: 1,
     }]);

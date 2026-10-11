@@ -7,7 +7,7 @@ use wc3::model::ZeroVec;
 use wc3::model::{Model, ModelVersion, V1100, V1200, V1300, V1400, V1600, V1800, V800, V900};
 
 fn sample_geoset() -> Geoset<'static, V1800> {
-    let geoset = Geoset::<V1800>::new(&[[1.0, 2.0, 3.0]], &[[0.0, 0.0, 1.0]], &[0, 0, 0]).unwrap();
+    let geoset = Geoset::<V1800>::new([[1.0, 2.0, 3.0]], [[0.0, 0.0, 1.0]], [0, 0, 0]).unwrap();
     Geoset::<V1800>::decode_mdx(&geoset.encode_mdx().unwrap())
         .unwrap()
         .into_owned()
@@ -50,9 +50,9 @@ fn builds_complete_synthetic_geosets() {
 fn check_version<V: ModelVersion>() {
     let version = V::NUMBER;
     let mut geoset = Geoset::<V>::new(
-        &[[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]],
-        &[[0.0, 0.0, 1.0]; 2],
-        &[0, 1, 0],
+        [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]],
+        [[0.0, 0.0, 1.0]; 2],
+        [0, 1, 0],
     )
     .unwrap();
     geoset.material_id = 7;
@@ -180,11 +180,11 @@ fn skin_elements_widen_at_v1400() {
         bone_indices: [1, 2, 3, 255],
         weights: [128, 64, 32, 31],
     }];
-    let mut narrow = Geoset::<V1300>::new(&[[0.0; 3]], &[[0.0; 3]], &[]).unwrap();
+    let mut narrow = Geoset::<V1300>::new([[0.0; 3]], [[0.0; 3]], []).unwrap();
     narrow
         .set_skin_weights(Some(ZeroVec::alloc_from_slice(&weights)))
         .unwrap();
-    let mut wide = Geoset::<V1400>::new(&[[0.0; 3]], &[[0.0; 3]], &[]).unwrap();
+    let mut wide = Geoset::<V1400>::new([[0.0; 3]], [[0.0; 3]], []).unwrap();
     wide.set_skin_weights(Some(ZeroVec::alloc_from_slice(&weights.map(|row| {
         SkinWeights::<u16>::from_influences(row.bone_indices(), row.weights()).unwrap()
     }))))
@@ -216,17 +216,17 @@ fn skin_version_gates_and_wide_indices() {
         bone_indices: [256, 1000, 65535, 0],
         weights: [255, 0, 0, 0],
     }];
-    let mut classic = Geoset::<V800>::new(&[], &[], &[]).unwrap();
+    let mut classic = Geoset::<V800>::new([], [], []).unwrap();
     assert!(classic
         .try_set_skin_weights(Some(ZeroVec::alloc_from_slice(&[])))
         .is_err());
     assert!(classic.try_skin_weights().is_err());
-    let narrow = Geoset::<V1300>::new(&[], &[], &[]).unwrap();
+    let narrow = Geoset::<V1300>::new([], [], []).unwrap();
     assert!(
         SkinWeights::<u8>::from_influences(weights[0].bone_indices, weights[0].weights).is_none()
     );
     assert!(narrow.skin_weights().is_none());
-    let mut wide = Geoset::<V1400>::new(&[], &[], &[]).unwrap();
+    let mut wide = Geoset::<V1400>::new([], [], []).unwrap();
     wide.set_skin_weights(Some(ZeroVec::alloc_from_slice(&weights)))
         .unwrap();
     assert_eq!(
@@ -259,7 +259,7 @@ fn rejects_incomplete_skin_vertices_and_out_of_range_wide_weights() {
 #[test]
 fn skin_arrays_borrow_their_version_selected_wire_layout() {
     fn check<V: ModelVersion>(width: usize) {
-        let mut geoset = Geoset::<V>::new(&[[0.0; 3]], &[[0.0; 3]], &[]).unwrap();
+        let mut geoset = Geoset::<V>::new([[0.0; 3]], [[0.0; 3]], []).unwrap();
         geoset
             .try_set_skin_weights(Some(ZeroVec::alloc_from_slice(&[
                 V::SkinWeights::from_influences([1, 2, 3, 4], [128, 64, 32, 31]).unwrap(),
@@ -294,7 +294,7 @@ fn skin_arrays_borrow_their_version_selected_wire_layout() {
 
 #[test]
 fn wide_skin_weights_validate_the_normalized_weight_range() {
-    let mut geoset = Geoset::<V1400>::new(&[[0.0; 3]], &[[0.0; 3]], &[]).unwrap();
+    let mut geoset = Geoset::<V1400>::new([[0.0; 3]], [[0.0; 3]], []).unwrap();
     let invalid = SkinWeights::<u16> {
         bone_indices: [1, 0, 0, 0],
         weights: [256, 0, 0, 0],

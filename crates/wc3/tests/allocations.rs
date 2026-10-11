@@ -464,7 +464,7 @@ fn encoded_arrays_move_into_track_constructors_and_skin_setters() {
     assert_eq!(allocations, 0);
     assert_eq!(track.linear_keys().unwrap().as_bytes().as_ptr(), pointer);
 
-    let mut geoset = Geoset::<V1300>::new(&[[0.0; 3]], &[[0.0; 3]], &[]).unwrap();
+    let mut geoset = Geoset::<V1300>::new([[0.0; 3]], [[0.0; 3]], []).unwrap();
     geoset
         .set_skin_weights(Some(
             [SkinWeights::<u8> {
@@ -485,4 +485,21 @@ fn encoded_arrays_move_into_track_constructors_and_skin_setters() {
     let (_, allocations) = measured(|| geoset.set_skin_weights(Some(rows)).unwrap());
     assert_eq!(allocations, 0);
     assert_eq!(geoset.skin_weights().unwrap().as_bytes().as_ptr(), pointer);
+}
+
+#[test]
+fn input_conversion_encodes_once_and_moves_existing_storage_without_allocating() {
+    use wc3::model::{Borrowed, IntoZeroVec};
+
+    let (owned, allocations): (ZeroVec<u32>, _) = measured(|| [1, 2, 3].into_zero_vec());
+    assert_eq!(allocations, 1);
+    let pointer = owned.as_bytes().as_ptr();
+    let (moved, allocations) = measured(|| owned.into_zero_vec());
+    assert_eq!(allocations, 0);
+    assert_eq!(moved.as_bytes().as_ptr(), pointer);
+    let borrowed = moved.as_borrowed();
+    let (borrowed, allocations) = measured(|| borrowed.into_zero_vec());
+    assert_eq!(allocations, 0);
+    assert_eq!(borrowed.as_bytes().as_ptr(), pointer);
+    assert!(!borrowed.is_owned());
 }

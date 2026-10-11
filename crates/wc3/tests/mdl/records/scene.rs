@@ -213,7 +213,7 @@ fn independent_binary_record_fixtures_roundtrip() {
     let mut unsupported = old_light.encode_mdx().unwrap();
     unsupported.extend_from_slice(b"KLDA");
     unsupported.extend_from_slice(
-        &Track::<f32>::linear(Default::default(), None)
+        &Track::<f32>::linear([], None)
             .unwrap()
             .encode_mdx()
             .unwrap(),

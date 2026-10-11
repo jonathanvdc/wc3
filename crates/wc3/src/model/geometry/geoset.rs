@@ -13,7 +13,7 @@ use crate::model::ModelDialect;
 use crate::model::ValueError;
 use crate::model::{mdl, mdx};
 use crate::model::{Borrowed, Detached, ModelOwnership, ModelPartialEq};
-use crate::model::{Model, ZeroVec};
+use crate::model::{IntoZeroVec, Model, ZeroVec};
 use crate::model::{ModelVersion, SupportsReforgedChunks, Tag, Vec3, Version};
 use std::borrow::Cow;
 use std::fmt::Debug;
@@ -404,20 +404,15 @@ pub struct Geoset<'data, V: ModelVersion> {
 
 impl<'data, V: ModelVersion> Geoset<'data, V> {
     /// Builds a basic geoset with one matrix group and one UV set.
-    pub fn new(vertices: &[Vec3], normals: &[Vec3], faces: &[u16]) -> Result<Self, ValueError> {
-        Self::from_arrays(
-            ZeroVec::alloc_from_slice(vertices),
-            ZeroVec::alloc_from_slice(normals),
-            ZeroVec::alloc_from_slice(faces),
-        )
-    }
-
-    /// Creates geometry by moving already encoded arrays into the model.
-    pub fn from_arrays(
-        vertices: ZeroVec<'data, Vec3>,
-        normals: ZeroVec<'data, Vec3>,
-        faces: ZeroVec<'data, u16>,
+    /// Native arrays, vectors, and slices are encoded; existing ZeroVec buffers are moved.
+    pub fn new(
+        vertices: impl IntoZeroVec<'data, Vec3>,
+        normals: impl IntoZeroVec<'data, Vec3>,
+        faces: impl IntoZeroVec<'data, u16>,
     ) -> Result<Self, ValueError> {
+        let vertices = vertices.into_zero_vec();
+        let normals = normals.into_zero_vec();
+        let faces = faces.into_zero_vec();
         if vertices.len() != normals.len() {
             return Err(ValueError::LengthMismatch {
                 tag: GeosetsChunk::<V>::TAG,

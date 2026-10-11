@@ -207,9 +207,9 @@ mod tests {
     #[test]
     fn selected_uv_set_uses_matching_generated_tangents() {
         let mut geoset = Geoset::<V1800>::new(
-            &[[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]],
-            &[[0.0, 0.0, 1.0]; 3],
-            &[0, 1, 2],
+            [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]],
+            [[0.0, 0.0, 1.0]; 3],
+            [0, 1, 2],
         )
         .unwrap();
         let uv = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]];
@@ -252,7 +252,7 @@ mod tests {
 
     #[test]
     fn identical_uv_sets_share_but_nearby_coordinates_remain_distinct() {
-        let mut geoset = Geoset::<V1800>::new(&[[0.0; 3]; 3], &[[0.0, 0.0, 1.0]; 3], &[]).unwrap();
+        let mut geoset = Geoset::<V1800>::new([[0.0; 3]; 3], [[0.0, 0.0, 1.0]; 3], []).unwrap();
         let uv = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]];
         let mut near = uv;
         near[0][0] += 0.000001;
@@ -272,7 +272,7 @@ mod tests {
 
     #[test]
     fn reforged_skin_indices_address_nodes_directly() {
-        let mut geoset = Geoset::<V1800>::new(&[[0.0; 3]], &[[0.0, 0.0, 1.0]], &[]).unwrap();
+        let mut geoset = Geoset::<V1800>::new([[0.0; 3]], [[0.0, 0.0, 1.0]], []).unwrap();
         geoset
             .set_skin_weights(Some(ZeroVec::alloc_from_slice(&[SkinWeights {
                 bone_indices: [7, 0, 0, 0],
@@ -287,7 +287,7 @@ mod tests {
 
     #[test]
     fn classic_five_bone_group_retains_all_influences() {
-        let mut geoset = Geoset::<V1800>::new(&[[0.0; 3]], &[[0.0, 0.0, 1.0]], &[]).unwrap();
+        let mut geoset = Geoset::<V1800>::new([[0.0; 3]], [[0.0, 0.0, 1.0]], []).unwrap();
         geoset.set_matrix_groups([[1, 2, 3, 4, 5]]).unwrap();
         let joints = HashMap::from([(1, 0), (2, 1), (3, 2), (4, 3), (5, 4)]);
         let rows = vertex_skin(&geoset, &joints).unwrap();
@@ -301,7 +301,7 @@ mod tests {
 
     #[test]
     fn classic_nine_bone_group_reports_the_limit() {
-        let mut geoset = Geoset::<V1800>::new(&[[0.0; 3]], &[[0.0, 0.0, 1.0]], &[]).unwrap();
+        let mut geoset = Geoset::<V1800>::new([[0.0; 3]], [[0.0, 0.0, 1.0]], []).unwrap();
         geoset
             .set_matrix_groups([(0..9).collect::<Vec<_>>()])
             .unwrap();

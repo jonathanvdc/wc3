@@ -8,9 +8,8 @@ use crate::model::mdx::read_array_layout;
 use crate::model::IoError;
 use crate::model::ModelOwnership;
 use crate::model::{mdl, mdx};
-use crate::model::{Cursor, Encoder, ValueError, ZeroVec};
+use crate::model::{Cursor, Encoder, IntoZeroVec, ValueError, ZeroVec};
 use std::io::Write as IoWrite;
-use std::iter::once;
 use std::ops::{Range, RangeInclusive};
 use zerovec::ule::AsULE;
 
@@ -31,7 +30,10 @@ enum Keyframes<'data, T: TrackValue> {
 ///
 /// Constructors and readers stably sort keys by ascending frame time. Duplicate
 /// timestamps retain their input order, and evaluation uses the last key at each
-/// timestamp. Writing a parsed track emits this sorted order.
+/// timestamp. Writing a parsed track emits this sorted order. Constructors accept
+/// native arrays, vectors, and slices through [`IntoZeroVec`]. Already sorted
+/// ZeroVec input retains its storage; sorting unordered borrowed keys creates an
+/// owned copy.
 #[derive(Clone, Debug, PartialEq, ModelOwnership)]
 pub struct Track<'data, T: TrackValue> {
     global_sequence_id: Option<u32>,
@@ -41,37 +43,37 @@ pub struct Track<'data, T: TrackValue> {
 impl<'data, T: TrackValue> Track<'data, T> {
     /// A constant animation represented by one stepped key at time zero.
     pub fn constant(value: T) -> Self {
-        Self::step(once(ValueKeyframe { frame: 0, value }).collect(), None)
+        Self::step([ValueKeyframe { frame: 0, value }], None)
             .expect("one key without a global sequence is valid")
     }
 
     /// Creates stepped animation: each key value holds until the next key.
     pub fn step(
-        keys: ZeroVec<'data, ValueKeyframe<T>>,
+        keys: impl IntoZeroVec<'data, ValueKeyframe<T>>,
         global_sequence_id: Option<u32>,
     ) -> Result<Self, ValueError> {
-        Self::new(Keyframes::Step(keys), global_sequence_id)
+        Self::new(Keyframes::Step(keys.into_zero_vec()), global_sequence_id)
     }
     /// Creates animation that interpolates linearly between adjacent key values.
     pub fn linear(
-        keys: ZeroVec<'data, ValueKeyframe<T>>,
+        keys: impl IntoZeroVec<'data, ValueKeyframe<T>>,
         global_sequence_id: Option<u32>,
     ) -> Result<Self, ValueError> {
-        Self::new(Keyframes::Linear(keys), global_sequence_id)
+        Self::new(Keyframes::Linear(keys.into_zero_vec()), global_sequence_id)
     }
     /// Creates a Hermite track whose keys each have two tangents.
     pub fn hermite(
-        keys: ZeroVec<'data, TangentKeyframe<T>>,
+        keys: impl IntoZeroVec<'data, TangentKeyframe<T>>,
         global_sequence_id: Option<u32>,
     ) -> Result<Self, ValueError> {
-        Self::new(Keyframes::Hermite(keys), global_sequence_id)
+        Self::new(Keyframes::Hermite(keys.into_zero_vec()), global_sequence_id)
     }
     /// Creates a Bezier track whose keys each have two tangents.
     pub fn bezier(
-        keys: ZeroVec<'data, TangentKeyframe<T>>,
+        keys: impl IntoZeroVec<'data, TangentKeyframe<T>>,
         global_sequence_id: Option<u32>,
     ) -> Result<Self, ValueError> {
-        Self::new(Keyframes::Bezier(keys), global_sequence_id)
+        Self::new(Keyframes::Bezier(keys.into_zero_vec()), global_sequence_id)
     }
     fn new(
         keyframes: Keyframes<'data, T>,
@@ -622,9 +624,7 @@ mod key_lookup_tests {
                     frame: 150,
                     value: 3.0,
                 },
-            ]
-            .into_iter()
-            .collect(),
+            ],
             None,
         )
         .unwrap();

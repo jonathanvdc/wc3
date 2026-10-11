@@ -35,9 +35,7 @@ fn geoset_animation_color_track_round_trip() {
         [ValueKeyframe {
             frame: 25,
             value: [0.2, 0.4, 0.8],
-        }]
-        .into_iter()
-        .collect(),
+        }],
         None,
     )
     .unwrap();
@@ -71,9 +69,7 @@ fn static_wire_color_is_bgr_but_tracks_and_public_color_are_rgb() {
             [ValueKeyframe {
                 frame: 0,
                 value: [1.0, 0.0, 0.0],
-            }]
-            .into_iter()
-            .collect(),
+            }],
             None,
         )
         .unwrap(),

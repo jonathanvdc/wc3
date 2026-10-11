@@ -87,7 +87,7 @@ fn named_setters_move_owned_record_buffers() {
     use wc3::model::geometry::Geoset;
     use wc3::model::scene::{Bone, Node};
 
-    let geoset = Geoset::<V800>::new(&[[1.0; 3]], &[[0.0; 3]], &[]).unwrap();
+    let geoset = Geoset::<V800>::new([[1.0; 3]], [[0.0; 3]], []).unwrap();
     let vertices = geoset.vertices().as_bytes().as_ptr();
     let mut node = Node::new("Root", 0).unwrap();
     node.translation = Some(
@@ -95,9 +95,7 @@ fn named_setters_move_owned_record_buffers() {
             [ValueKeyframe {
                 frame: 0,
                 value: [2.0; 3],
-            }]
-            .into_iter()
-            .collect(),
+            }],
             None,
         )
         .unwrap(),

@@ -19,9 +19,7 @@ fn attachment_fields_and_visibility_round_trip() {
         [ValueKeyframe {
             frame: 50,
             value: 1.0,
-        }]
-        .into_iter()
-        .collect(),
+        }],
         None,
     )
     .unwrap();

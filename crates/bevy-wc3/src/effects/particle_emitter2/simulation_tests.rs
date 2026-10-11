@@ -76,9 +76,7 @@ fn squirt_retriggers_when_sequence_loops() {
                     frame: 500,
                     value: 3.0,
                 },
-            ]
-            .into_iter()
-            .collect(),
+            ],
             None,
         )
         .unwrap(),
@@ -257,9 +255,7 @@ fn continuous_births_and_spawn_parameters_do_not_depend_on_update_partition() {
                     frame: 2000,
                     value: 20.0,
                 },
-            ]
-            .into_iter()
-            .collect(),
+            ],
             None,
         )
         .unwrap(),
@@ -345,9 +341,7 @@ fn birth_transform_samples_the_animated_parent_chain() {
                                 frame: 2000,
                                 value: [20.0, 0.0, 0.0],
                             },
-                        ]
-                        .into_iter()
-                        .collect(),
+                        ],
                         None,
                     )
                     .unwrap(),

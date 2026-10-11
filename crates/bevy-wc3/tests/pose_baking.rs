@@ -52,9 +52,7 @@ fn vector_track<'data>(global: Option<u32>) -> Track<'data, [f32; 3]> {
                 frame: 1000,
                 value: [10.0, 0.0, 0.0],
             },
-        ]
-        .into_iter()
-        .collect(),
+        ],
         global,
     )
     .unwrap()
@@ -64,7 +62,7 @@ fn vector_track<'data>(global: Option<u32>) -> Track<'data, [f32; 3]> {
 fn source_identity_survives_empty_geosets_shared_meshes_and_spawning() {
     let mut source = Wc3Model::decode_mdl(include_str!("fixtures/geoset_capture.mdl")).unwrap();
     let mut geosets = source.model.geosets().cloned().collect::<Vec<_>>();
-    let empty = Geoset::new(&[], &[], &[]).unwrap();
+    let empty = Geoset::new([], [], []).unwrap();
     geosets.insert(0, empty);
     source.model.set_geosets(geosets);
     let material = source.model.materials_mut().next().unwrap();

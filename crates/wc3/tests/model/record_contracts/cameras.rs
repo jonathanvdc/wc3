@@ -44,9 +44,7 @@ fn camera_extended_tracks_survive_model_io_and_conversion() {
         [ValueKeyframe {
             frame: -100,
             value: 0.5,
-        }]
-        .into_iter()
-        .collect(),
+        }],
         Some(0),
     )
     .unwrap();

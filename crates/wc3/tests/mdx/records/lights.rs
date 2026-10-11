@@ -42,9 +42,7 @@ fn light_color_track_round_trip() {
         [ValueKeyframe {
             frame: 250,
             value: [1.0, 0.5, 0.25],
-        }]
-        .into_iter()
-        .collect(),
+        }],
         None,
     )
     .unwrap();
@@ -78,9 +76,7 @@ fn extended_light_fields_and_tracks_round_trip() {
         [ValueKeyframe {
             frame: 10,
             value: 1.0,
-        }]
-        .into_iter()
-        .collect(),
+        }],
         None,
     )
     .unwrap();

@@ -78,7 +78,7 @@ fn standard_records_use_the_base_version_and_custom_dialects_are_open() {
         type Extension = ApplicationChunk;
     }
     let mut model = Model::<ApplicationDialect>::new();
-    model.set_geosets([Geoset::<V1800>::new(&[], &[], &[]).unwrap()]);
+    model.set_geosets([Geoset::<V1800>::new([], [], []).unwrap()]);
     model.set_materials([Material::<V1800>::new()]);
     model.set_bind_poses([BindPoseMatrix([0.; 12])]);
     model
