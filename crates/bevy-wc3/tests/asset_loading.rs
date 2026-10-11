@@ -1,5 +1,5 @@
 use bevy::asset::{AssetApp, AssetPlugin, AssetServer};
-use bevy::image::Image;
+use bevy::image::{Image, ImageLoaderSettings};
 use bevy::prelude::{default, App, Assets, Handle};
 use bevy::tasks::{ComputeTaskPool, IoTaskPool, TaskPoolBuilder};
 use bevy_wc3::{BlpImageLoader, Wc3ModelAsset, Wc3ModelLoader};
@@ -155,5 +155,77 @@ fn asset_server_resolves_child_models_and_keeps_missing_slots() {
         assert_eq!(child.path().unwrap().path(), Path::new(path));
         assert!(assets.contains(&child));
     }
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn blp0_file_loader_reads_base_sidecar_and_reports_missing_sidecar() {
+    use bevy::asset::LoadState;
+    use wc3::blp::{Blp0, Blp0Content, Blp0Header};
+
+    init_task_pools();
+    let directory = std::env::temp_dir().join(format!("bevy-wc3-blp0-{}", std::process::id()));
+    fs::create_dir_all(directory.join("textures")).unwrap();
+    let mut palette = Box::new([0; 1024]);
+    palette[..4].copy_from_slice(&[30, 20, 10, 0]);
+    let output = Blp0 {
+        header: Blp0Header {
+            width: 1,
+            height: 1,
+            alpha_bits: 8,
+            extra: 4,
+            has_mipmaps: 0,
+        },
+        content: Blp0Content::Indexed { palette },
+        mipmaps: std::array::from_fn(|level| (level == 0).then(|| vec![0, 160])),
+    }
+    .write_files()
+    .unwrap();
+    fs::write(directory.join("textures/present.blp"), &output.root).unwrap();
+    fs::write(
+        directory.join("textures/present.b00"),
+        output.mipmaps[0].as_ref().unwrap(),
+    )
+    .unwrap();
+    fs::write(directory.join("textures/missing.blp"), &output.root).unwrap();
+    let mut app = App::new();
+    app.add_plugins(AssetPlugin {
+        file_path: directory.to_string_lossy().into_owned(),
+        ..default()
+    });
+    app.init_asset::<Image>()
+        .init_asset_loader::<BlpImageLoader>();
+    let server = app.world().resource::<AssetServer>();
+    let present: Handle<Image> = server
+        .load_builder()
+        .with_settings(|settings: &mut ImageLoaderSettings| {
+            settings.is_srgb = false;
+        })
+        .load("textures/present.blp");
+    let missing: Handle<Image> = server.load("textures/missing.blp");
+    wait_for(&mut app, |app| {
+        app.world().resource::<Assets<Image>>().contains(&present)
+            && matches!(
+                app.world()
+                    .resource::<AssetServer>()
+                    .get_load_state(&missing),
+                Some(LoadState::Failed(_))
+            )
+    });
+    let images = app.world().resource::<Assets<Image>>();
+    let image = images.get(&present).unwrap();
+    assert_eq!(image.data.as_deref(), Some([10, 20, 30, 160].as_slice()));
+    assert_eq!(
+        image.texture_descriptor.format,
+        bevy::render::render_resource::TextureFormat::Rgba8Unorm
+    );
+    let Some(LoadState::Failed(error)) = app
+        .world()
+        .resource::<AssetServer>()
+        .get_load_state(&missing)
+    else {
+        panic!("expected missing sidecar failure")
+    };
+    assert!(error.to_string().contains("textures/missing.b00"));
     fs::remove_dir_all(directory).unwrap();
 }

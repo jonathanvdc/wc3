@@ -127,3 +127,63 @@ fn named_source_loads_recursive_models_and_images_across_archives() {
     assert!(models.get(&leaf).is_some());
     assert_eq!(app.world().resource::<Assets<Image>>().len(), 1);
 }
+
+#[test]
+fn blp0_base_mipmap_loads_from_named_archive_source() {
+    use bevy_wc3::BlpImageLoader;
+    use wc3::blp::{Blp0, Blp0Content, Blp0Header};
+
+    IoTaskPool::get_or_init(|| TaskPoolBuilder::new().num_threads(2).build());
+    ComputeTaskPool::get_or_init(|| TaskPoolBuilder::new().num_threads(2).build());
+    AsyncComputeTaskPool::get_or_init(|| TaskPoolBuilder::new().num_threads(2).build());
+    let mut palette = Box::new([0; 1024]);
+    palette[..4].copy_from_slice(&[30, 20, 10, 0]);
+    let texture = Blp0 {
+        header: Blp0Header {
+            width: 1,
+            height: 1,
+            alpha_bits: 8,
+            extra: 4,
+            has_mipmaps: 1,
+        },
+        content: Blp0Content::Indexed { palette },
+        mipmaps: std::array::from_fn(|level| (level == 0).then(|| vec![0, 160])),
+    }
+    .write_files()
+    .unwrap();
+    let root = mount(&[("Textures/Beta.blp", &texture.root)]);
+    let sidecar = mount(&[("Textures/Beta.b00", texture.mipmaps[0].as_ref().unwrap())]);
+    let mut app = App::new();
+    app.register_asset_source(
+        "beta",
+        AssetSourceBuilder::new(move || {
+            Box::new(OverlayAssetReader::new(vec![
+                OverlayMount::mpq(root.clone()),
+                OverlayMount::mpq(sidecar.clone()),
+            ]))
+        }),
+    );
+    app.add_plugins(AssetPlugin::default());
+    app.init_asset::<Image>()
+        .init_asset_loader::<BlpImageLoader>();
+    let handle: Handle<Image> = app
+        .world()
+        .resource::<AssetServer>()
+        .load("beta://Textures/Beta.blp");
+    let deadline = Instant::now() + Duration::from_secs(10);
+    loop {
+        app.update();
+        if app.world().resource::<Assets<Image>>().contains(&handle) {
+            break;
+        }
+        assert!(Instant::now() < deadline, "BLP0 sidecar failed to load");
+        sleep(Duration::from_millis(5));
+    }
+    let images = app.world().resource::<Assets<Image>>();
+    let image = images.get(&handle).unwrap();
+    assert_eq!(image.data.as_deref(), Some([10, 20, 30, 160].as_slice()));
+    assert_eq!(
+        image.texture_descriptor.format,
+        bevy::render::render_resource::TextureFormat::Rgba8UnormSrgb
+    );
+}

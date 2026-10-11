@@ -1,5 +1,5 @@
 use crate::assets::model::ModelError;
-use bevy::asset::{io::Reader, AssetLoader, LoadContext, RenderAssetUsages};
+use bevy::asset::{io::Reader, AssetLoader, AssetPath, LoadContext, RenderAssetUsages};
 use bevy::image::ImageLoaderSettings;
 use bevy::prelude::*;
 use bevy::reflect::TypePath;
@@ -22,14 +22,24 @@ impl AssetLoader for BlpImageLoader {
         &self,
         reader: &mut dyn Reader,
         settings: &ImageLoaderSettings,
-        _context: &mut LoadContext<'_>,
+        context: &mut LoadContext<'_>,
     ) -> Result<Image, ModelError> {
         let mut bytes = Vec::new();
         reader
             .read_to_end(&mut bytes)
             .await
             .map_err(|error| ModelError(error.to_string()))?;
-        let blp = BlpRef::read(&bytes).map_err(|error| ModelError(error.to_string()))?;
+        let mut blp = BlpRef::read(&bytes).map_err(|error| ModelError(error.to_string()))?;
+        let external;
+        if let BlpRef::Blp0(texture) = &mut blp {
+            let path = AssetPath::from(context.path().path().with_extension("b00"))
+                .with_source(context.path().source().clone_owned());
+            external = context
+                .read_asset_bytes(path.clone())
+                .await
+                .map_err(|error| ModelError(format!("BLP0 mipmap 0 at {path}: {error}")))?;
+            texture.mipmaps[0] = Some(&external);
+        }
         let rgba = blp
             .decode_mip(0)
             .map_err(|error| ModelError(error.to_string()))?;
