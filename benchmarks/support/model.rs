@@ -95,7 +95,7 @@ fn validate(model: &Model<V800>, profile: Profile) {
     for geoset in model.geosets() {
         assert!((geoset.material_id as usize) < materials.len());
         assert_eq!(geoset.vertices().len(), geoset.normals().len());
-        for triangle in geoset.face_indices().chunks_exact(3) {
+        for triangle in geoset.face_indices().as_chunks::<3>().0 {
             let points = [triangle[0], triangle[1], triangle[2]]
                 .map(|index| geoset.vertices()[index as usize]);
             let a = [points[1][0] - points[0][0], points[1][1] - points[0][1]];
