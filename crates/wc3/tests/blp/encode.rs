@@ -349,3 +349,86 @@ fn blp0_image_encoder_rejects_single_file_output() {
         .is_err());
     assert!(output.is_empty());
 }
+
+#[test]
+fn blp0_shared_jpeg_prefix_and_malformed_external_data() {
+    use wc3::blp::{Blp0Content, DecodeError};
+    let image = RgbaImage::from_pixel(8, 2, Rgba([220, 40, 80, 160]));
+    let mut encoded = Blp::encode_image(
+        &image,
+        EncodeOptions {
+            format: EncodeFormat::Jpeg {
+                version: BlpVersion::Blp0,
+                alpha: true,
+                quality: 100,
+            },
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    let Blp::Blp0(texture) = &mut encoded else {
+        panic!("expected BLP0")
+    };
+    // Move the common SOI marker into root metadata, leaving mipmap JPEG chunks.
+    for mip in texture.mipmaps.iter_mut().flatten() {
+        assert_eq!(mip.drain(..2).collect::<Vec<_>>(), [255, 216]);
+    }
+    texture.content = Blp0Content::Jpeg {
+        shared_header: vec![255, 216],
+    };
+    let output = encoded.write_files().unwrap();
+    let mut parsed = BlpRef::read(&output.root).unwrap();
+    let BlpRef::Blp0(texture) = &mut parsed else {
+        panic!("expected BLP0")
+    };
+    texture.mipmaps = output.mipmaps.each_ref().map(|mip| mip.as_deref());
+    for (level, dimensions) in [(0, (8, 2)), (1, (4, 1)), (2, (2, 1)), (3, (1, 1))] {
+        let decoded = parsed.decode_mip(level).unwrap();
+        assert_eq!(decoded.dimensions(), dimensions);
+        for (actual, expected) in decoded
+            .get_pixel(0, 0)
+            .0
+            .into_iter()
+            .zip([220, 40, 80, 160])
+        {
+            assert!(actual.abs_diff(expected) <= 5);
+        }
+    }
+    let BlpRef::Blp0(texture) = &mut parsed else {
+        unreachable!()
+    };
+    texture.mipmaps[0] = Some(&[0]);
+    assert!(matches!(parsed.decode_mip(0), Err(DecodeError::Jpeg(_))));
+}
+
+#[test]
+fn blp0_single_file_hook_reports_missing_external_mipmap() {
+    use image::ImageReader;
+    use std::io::Cursor;
+    use wc3::blp::{register_decoding_hook, BlpDecoder};
+    let encoded = Blp::encode_image(
+        &source(),
+        EncodeOptions {
+            format: EncodeFormat::Indexed {
+                version: BlpVersion::Blp0,
+                alpha: IndexedAlpha::Bit8,
+            },
+            ..Default::default()
+        },
+    )
+    .unwrap()
+    .write_files()
+    .unwrap();
+    assert!(BlpDecoder::new(&encoded.root)
+        .err()
+        .unwrap()
+        .to_string()
+        .contains("missing BLP mipmap 0"));
+    register_decoding_hook();
+    let error = ImageReader::new(Cursor::new(encoded.root))
+        .with_guessed_format()
+        .unwrap()
+        .decode()
+        .unwrap_err();
+    assert!(error.to_string().contains("missing BLP mipmap 0"));
+}
