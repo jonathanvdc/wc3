@@ -25,7 +25,7 @@ fn animation() -> Wc3Animation {
 
 fn vector_track<'data>(from: Vec3, to: Vec3) -> Track<'data, [f32; 3]> {
     Track::linear(
-        (vec![
+        [
             ValueKeyframe {
                 frame: 0,
                 value: from.to_array(),
@@ -34,7 +34,7 @@ fn vector_track<'data>(from: Vec3, to: Vec3) -> Track<'data, [f32; 3]> {
                 frame: 1000,
                 value: to.to_array(),
             },
-        ])
+        ]
         .into_iter()
         .collect(),
         None,
@@ -100,10 +100,10 @@ fn inheritance_suppresses_animation_but_preserves_model_placement_and_pivots() {
     parent_node.scaling = (Some(vector_track(Vec3::splat(3.0), Vec3::splat(3.0)))).into();
     parent_node.rotation = (Some(
         Track::linear(
-            (vec![ValueKeyframe {
+            [ValueKeyframe {
                 frame: 0,
                 value: Quat::from_rotation_z(0.7).to_array(),
-            }])
+            }]
             .into_iter()
             .collect(),
             None,
@@ -165,10 +165,10 @@ fn full_billboard_uses_current_camera_and_retains_authored_rotation() {
     let authored = Quat::from_rotation_x(0.2);
     bone.rotation = (Some(
         Track::linear(
-            (vec![ValueKeyframe {
+            [ValueKeyframe {
                 frame: 0,
                 value: authored.to_array(),
-            }])
+            }]
             .into_iter()
             .collect(),
             None,
@@ -457,10 +457,10 @@ fn birth_sampling_preserves_signed_instance_scale_and_rotation() {
     let mut parent_node = node(root, Vec3::ZERO, Vec3::ZERO, 0);
     parent_node.rotation = (Some(
         Track::linear(
-            (vec![ValueKeyframe {
+            [ValueKeyframe {
                 frame: 0,
                 value: Quat::from_rotation_z(0.7).to_array(),
-            }])
+            }]
             .into_iter()
             .collect(),
             None,
@@ -516,10 +516,10 @@ fn rotation_suppression_and_axis_lock_compose_in_the_effective_parent_frame() {
     let mut parent_node = node(root, Vec3::ZERO, Vec3::ZERO, 0);
     parent_node.rotation = (Some(
         Track::linear(
-            (vec![ValueKeyframe {
+            [ValueKeyframe {
                 frame: 0,
                 value: Quat::from_rotation_z(0.7).to_array(),
-            }])
+            }]
             .into_iter()
             .collect(),
             None,
@@ -591,7 +591,7 @@ fn transitions_cache_authored_poses_and_share_birth_sampling() {
     let mut animated = node(root, pivot, Vec3::ZERO, 0);
     animated.translation = (Some(
         Track::linear(
-            (vec![
+            [
                 ValueKeyframe {
                     frame: 0,
                     value: [0.0, 0.0, 0.0],
@@ -608,7 +608,7 @@ fn transitions_cache_authored_poses_and_share_birth_sampling() {
                     frame: 3000,
                     value: [20.0, 0.0, 0.0],
                 },
-            ])
+            ]
             .into_iter()
             .collect(),
             None,

@@ -4,7 +4,7 @@ use wc3::model::mdx::Read as _;
 
 #[test]
 fn constructors_stably_sort_all_interpolation_modes() {
-    let keys = vec![
+    let keys = [
         ValueKeyframe {
             frame: 10,
             value: 1.0,
@@ -22,21 +22,19 @@ fn constructors_stably_sort_all_interpolation_modes() {
             value: 4.0,
         },
     ];
-    let expected = vec![keys[3], keys[0], keys[2], keys[1]];
+    let expected = [keys[3], keys[0], keys[2], keys[1]];
     assert_eq!(
-        Track::step((keys.clone()).into_iter().collect(), None)
+        *Track::step(keys.into_iter().collect(), None)
             .unwrap()
             .step_keys()
-            .unwrap()
-            .to_vec(),
+            .unwrap(),
         expected
     );
     assert_eq!(
-        Track::linear((keys.clone()).into_iter().collect(), None)
+        *Track::linear(keys.into_iter().collect(), None)
             .unwrap()
             .linear_keys()
-            .unwrap()
-            .to_vec(),
+            .unwrap(),
         expected
     );
     let tangent = |key: ValueKeyframe<f32>| TangentKeyframe {
@@ -45,22 +43,20 @@ fn constructors_stably_sort_all_interpolation_modes() {
         in_tangent: key.value + 10.0,
         out_tangent: key.value + 20.0,
     };
-    let keys: Vec<_> = keys.into_iter().map(tangent).collect();
-    let expected: Vec<_> = expected.into_iter().map(tangent).collect();
+    let keys = keys.map(tangent);
+    let expected = expected.map(tangent);
     assert_eq!(
-        Track::hermite((keys.clone()).into_iter().collect(), None)
+        *Track::hermite(keys.into_iter().collect(), None)
             .unwrap()
             .hermite_keys()
-            .unwrap()
-            .to_vec(),
+            .unwrap(),
         expected
     );
     assert_eq!(
-        Track::bezier((keys).into_iter().collect(), None)
+        *Track::bezier(keys.into_iter().collect(), None)
             .unwrap()
             .bezier_keys()
-            .unwrap()
-            .to_vec(),
+            .unwrap(),
         expected
     );
 }

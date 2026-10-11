@@ -16,9 +16,9 @@ fn sample_geoset() -> Geoset<'static, V1800> {
 #[test]
 fn geoset_mesh_edit_preserves_other_sections() {
     let mut geoset = sample_geoset();
-    assert_eq!(geoset.vertices().to_vec(), vec![[1.0, 2.0, 3.0]]);
-    assert_eq!(geoset.normals().to_vec(), vec![[0.0, 0.0, 1.0]]);
-    assert_eq!(geoset.face_indices().to_vec(), vec![0, 0, 0]);
+    assert_eq!(*geoset.vertices(), [[1.0, 2.0, 3.0]]);
+    assert_eq!(*geoset.normals(), [[0.0, 0.0, 1.0]]);
+    assert_eq!(*geoset.face_indices(), [0, 0, 0]);
     geoset.set_vertex(0, [4.0, 5.0, 6.0]).unwrap();
     let mut model = Model::<V1800>::new();
     model.set_geosets(&[geoset]);
@@ -26,12 +26,12 @@ fn geoset_mesh_edit_preserves_other_sections() {
         .unwrap()
         .into_owned();
     assert_eq!(
-        decoded.geosets().next().unwrap().vertices().to_vec(),
-        vec![[4.0, 5.0, 6.0]]
+        *decoded.geosets().next().unwrap().vertices(),
+        [[4.0, 5.0, 6.0]]
     );
     assert_eq!(
-        decoded.geosets().next().unwrap().normals().to_vec(),
-        vec![[0.0, 0.0, 1.0]]
+        *decoded.geosets().next().unwrap().normals(),
+        [[0.0, 0.0, 1.0]]
     );
 }
 
@@ -66,7 +66,7 @@ fn check_version<V: ModelVersion>() {
     .into_iter()
     .collect();
     geoset.set_uv_sets(
-        ([vec![[0.0, 0.0]; 2], vec![[1.0, 1.0]; 2]])
+        [[[0.0, 0.0]; 2], [[1.0, 1.0]; 2]]
             .iter()
             .map(|set| ZeroVec::alloc_from_slice(set))
             .collect(),
@@ -117,8 +117,8 @@ fn check_version<V: ModelVersion>() {
     assert!(geoset.unselectable());
     assert_eq!(geoset.extent, extent);
     assert_eq!(geoset.vertex_groups(), &[0, 1]);
-    assert_eq!(geoset.matrix_group_sizes().to_vec(), vec![2, 1]);
-    assert_eq!(geoset.matrix_indices().to_vec(), vec![1, 2, 3]);
+    assert_eq!(*geoset.matrix_group_sizes(), [2, 1]);
+    assert_eq!(*geoset.matrix_indices(), [1, 2, 3]);
     assert_eq!(geoset.sequence_extents.len(), 1);
     assert_eq!(
         geoset

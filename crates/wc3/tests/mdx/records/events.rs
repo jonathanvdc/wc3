@@ -18,7 +18,7 @@ fn event_object_round_trip() {
     let event = &parsed.event_objects().next().unwrap();
     assert_eq!(event.node.name.text(), "Sound");
     assert_eq!(event.global_sequence_id, 3);
-    assert_eq!(event.frames().to_vec(), vec![100, 200, 300]);
+    assert_eq!(*event.frames(), [100, 200, 300]);
 }
 
 #[test]

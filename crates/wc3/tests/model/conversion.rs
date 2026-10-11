@@ -243,10 +243,10 @@ fn texture_slots_including_animations_require_loss_permission() {
         texture_id: Animatable::Both {
             value: 8,
             track: Track::<u32>::step(
-                (vec![ValueKeyframe {
+                [ValueKeyframe {
                     frame: 20,
                     value: 9,
-                }])
+                }]
                 .into_iter()
                 .collect(),
                 None,
@@ -272,10 +272,10 @@ fn texture_slots_including_animations_require_loss_permission() {
 fn tracks_are_checked_even_when_static_fields_are_neutral() {
     let mut layer = Layer::<V900>::new();
     let track = Track::<f32>::linear(
-        (vec![ValueKeyframe {
+        [ValueKeyframe {
             frame: 100,
             value: 2.0,
-        }])
+        }]
         .into_iter()
         .collect(),
         Some(3),
@@ -627,10 +627,10 @@ fn populated_versioned_fields_preserve_exact_storage_when_supported() {
         texture_id: Animatable::Both {
             value: 2,
             track: Track::<u32>::linear(
-                (vec![ValueKeyframe {
+                [ValueKeyframe {
                     frame: 200,
                     value: 5,
-                }])
+                }]
                 .into_iter()
                 .collect(),
                 Some(2),

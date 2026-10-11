@@ -22,7 +22,7 @@ fn uv_animation_rotates_and_scales_around_center() {
     let definition = TextureAnimation {
         translation: Some(
             Track::linear(
-                (vec![
+                [
                     ValueKeyframe {
                         frame: 0,
                         value: [0.0; 3],
@@ -31,7 +31,7 @@ fn uv_animation_rotates_and_scales_around_center() {
                         frame: 100,
                         value: [0.4, 0.0, 0.0],
                     },
-                ])
+                ]
                 .into_iter()
                 .collect(),
                 None,
@@ -40,10 +40,10 @@ fn uv_animation_rotates_and_scales_around_center() {
         ),
         scaling: Some(
             Track::linear(
-                (vec![ValueKeyframe {
+                [ValueKeyframe {
                     frame: 0,
                     value: [2.0, 3.0, 1.0],
-                }])
+                }]
                 .into_iter()
                 .collect(),
                 None,
@@ -52,10 +52,10 @@ fn uv_animation_rotates_and_scales_around_center() {
         ),
         rotation: Some(
             Track::linear(
-                (vec![ValueKeyframe {
+                [ValueKeyframe {
                     frame: 0,
                     value: Quat::from_rotation_z(std::f32::consts::FRAC_PI_2).to_array(),
-                }])
+                }]
                 .into_iter()
                 .collect(),
                 None,
@@ -119,7 +119,7 @@ fn hd_controls_and_slots_follow_animation_and_overrides() {
     );
     layer.set_emissive_gain(Animatable::Animated(
         Track::linear(
-            (vec![
+            [
                 ValueKeyframe {
                     frame: 0,
                     value: 0.0,
@@ -128,7 +128,7 @@ fn hd_controls_and_slots_follow_animation_and_overrides() {
                     frame: 100,
                     value: 4.0,
                 },
-            ])
+            ]
             .into_iter()
             .collect(),
             Some(0),
@@ -138,13 +138,13 @@ fn hd_controls_and_slots_follow_animation_and_overrides() {
     let mut slots = layer.texture_slots().to_vec();
     slots[1].texture_id = Animatable::Animated(
         Track::step(
-            (vec![
+            [
                 ValueKeyframe { frame: 0, value: 1 },
                 ValueKeyframe {
                     frame: 75,
                     value: 5,
                 },
-            ])
+            ]
             .into_iter()
             .collect(),
             None,
@@ -154,7 +154,7 @@ fn hd_controls_and_slots_follow_animation_and_overrides() {
     layer.set_texture_slots(&slots);
     layer.set_fresnel_opacity(Animatable::Animated(
         Track::linear(
-            (vec![
+            [
                 ValueKeyframe {
                     frame: 0,
                     value: 0.0,
@@ -163,7 +163,7 @@ fn hd_controls_and_slots_follow_animation_and_overrides() {
                     frame: 100,
                     value: 1.0,
                 },
-            ])
+            ]
             .into_iter()
             .collect(),
             None,

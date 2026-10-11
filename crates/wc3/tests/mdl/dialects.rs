@@ -168,7 +168,7 @@ fn sd_subtexture_export_rejects_hidden_legacy_values() {
     layer.texture_id = Animatable::Static(0);
     layer
         .texture_id
-        .set_track(Track::<u32>::linear((vec![]).into_iter().collect(), None).unwrap());
+        .set_track(Track::<u32>::linear(Default::default(), None).unwrap());
     assert!(layer.encode_mdl().is_err());
 }
 #[test]

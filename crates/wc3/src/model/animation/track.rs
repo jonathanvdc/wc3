@@ -609,7 +609,7 @@ mod key_lookup_tests {
     #[test]
     fn lookup_respects_time_and_sequence_for_unordered_keys() {
         let track = Track::step(
-            (vec![
+            [
                 ValueKeyframe {
                     frame: 200,
                     value: 1.0,
@@ -622,7 +622,7 @@ mod key_lookup_tests {
                     frame: 150,
                     value: 3.0,
                 },
-            ])
+            ]
             .into_iter()
             .collect(),
             None,

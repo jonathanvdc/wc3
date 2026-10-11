@@ -40,7 +40,7 @@ fn geoset_alpha_hides_decay_geometry_and_combines_with_layer_alpha() {
                 geoset_alpha: Some(
                     (Animatable::Animated(
                         Track::linear(
-                            (vec![
+                            [
                                 ValueKeyframe {
                                     frame: 0,
                                     value: 0.0,
@@ -49,7 +49,7 @@ fn geoset_alpha_hides_decay_geometry_and_combines_with_layer_alpha() {
                                     frame: 100,
                                     value: 1.0,
                                 },
-                            ])
+                            ]
                             .into_iter()
                             .collect(),
                             None,
@@ -165,10 +165,10 @@ fn missing_color_keys_reset_to_white_after_sequence_change() {
             geoset_color: Some(
                 (Animatable::Animated(
                     Track::linear(
-                        (vec![ValueKeyframe {
+                        [ValueKeyframe {
                             frame: 0,
                             value: [1.0, 0.0, 0.0],
-                        }])
+                        }]
                         .into_iter()
                         .collect(),
                         None,

@@ -296,7 +296,7 @@ fn delayed_and_nested_attachments_restart_in_parent_order() {
     let mut nested = Attachment::new(node, "leaf.mdl", 99).unwrap();
     nested.visibility = Some(
         Track::step(
-            (vec![
+            [
                 ValueKeyframe {
                     frame: 0,
                     value: 0.0,
@@ -305,7 +305,7 @@ fn delayed_and_nested_attachments_restart_in_parent_order() {
                     frame: 100,
                     value: 1.0,
                 },
-            ])
+            ]
             .into_iter()
             .collect(),
             None,

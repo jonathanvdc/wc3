@@ -39,10 +39,10 @@ fn light_color_track_round_trip() {
     let mut light =
         Light::<wc3::model::V800>::new(Node::new("Lamp", 3).unwrap(), LightType::Omnidirectional);
     let track = Track::<Color>::linear(
-        (vec![ValueKeyframe {
+        [ValueKeyframe {
             frame: 250,
             value: [1.0, 0.5, 0.25],
-        }])
+        }]
         .into_iter()
         .collect(),
         None,
@@ -75,10 +75,10 @@ fn extended_light_fields_and_tracks_round_trip() {
         })
         .unwrap();
     let track = Track::<f32>::linear(
-        (vec![ValueKeyframe {
+        [ValueKeyframe {
             frame: 10,
             value: 1.0,
-        }])
+        }]
         .into_iter()
         .collect(),
         None,

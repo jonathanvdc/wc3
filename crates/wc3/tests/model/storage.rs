@@ -72,7 +72,7 @@ fn geometry_borrows_unaligned_source_and_only_an_edited_array_becomes_owned() {
 #[test]
 fn sorted_track_sampling_keeps_wire_storage_and_unsorted_input_sorts_stably() {
     let track = Track::linear(
-        (vec![
+        [
             ValueKeyframe {
                 frame: -10,
                 value: 0.0,
@@ -81,7 +81,7 @@ fn sorted_track_sampling_keeps_wire_storage_and_unsorted_input_sorts_stably() {
                 frame: 10,
                 value: 2.0,
             },
-        ])
+        ]
         .into_iter()
         .collect(),
         None,
@@ -248,10 +248,10 @@ impl TrackValue for ValidScalar {
 #[test]
 fn custom_track_values_keep_semantic_validation() {
     let track = Track::step(
-        (vec![ValueKeyframe {
+        [ValueKeyframe {
             frame: 0,
             value: ValidScalar::default(),
-        }])
+        }]
         .into_iter()
         .collect(),
         None,

@@ -116,10 +116,7 @@ mod tests {
     fn every_node_type_keeps_its_entity_and_parent_from_mdl() {
         let source = include_str!("../../../tests/fixtures/attachment_parent.mdl");
         let model = Model::<V1800>::decode_mdl(source).unwrap();
-        assert_eq!(
-            model.geosets().next().unwrap().matrix_indices().to_vec(),
-            [2, 10]
-        );
+        assert_eq!(*model.geosets().next().unwrap().matrix_indices(), [2, 10]);
         let mut world = World::new();
         let root = world.spawn(Transform::default()).id();
         let mut bindposes = Assets::<SkinnedMeshInverseBindposes>::default();

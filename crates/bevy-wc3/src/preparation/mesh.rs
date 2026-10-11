@@ -212,10 +212,10 @@ mod tests {
             &[0, 1, 2],
         )
         .unwrap();
-        let uv = vec![[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]];
-        let mirrored = vec![[1.0, 0.0], [0.0, 0.0], [1.0, 1.0]];
+        let uv = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]];
+        let mirrored = [[1.0, 0.0], [0.0, 0.0], [1.0, 1.0]];
         geoset.set_uv_sets(
-            ([uv.clone(), uv.clone(), mirrored.clone()])
+            [uv, uv, mirrored]
                 .iter()
                 .map(|set| ZeroVec::alloc_from_slice(set))
                 .collect(),
@@ -234,7 +234,7 @@ mod tests {
         let third = build_mesh_with_uv(&geoset, &HashMap::new(), false, 2).unwrap();
         assert_eq!(
             third.attribute(Mesh::ATTRIBUTE_UV_0),
-            Some(&VertexAttributeValues::Float32x2(mirrored))
+            Some(&VertexAttributeValues::Float32x2(mirrored.to_vec()))
         );
         let Some(VertexAttributeValues::Float32x4(tangents)) =
             third.attribute(Mesh::ATTRIBUTE_TANGENT)
@@ -253,11 +253,11 @@ mod tests {
     #[test]
     fn identical_uv_sets_share_but_nearby_coordinates_remain_distinct() {
         let mut geoset = Geoset::<V1800>::new(&[[0.0; 3]; 3], &[[0.0, 0.0, 1.0]; 3], &[]).unwrap();
-        let uv = vec![[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]];
-        let mut near = uv.clone();
+        let uv = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]];
+        let mut near = uv;
         near[0][0] += 0.000001;
         geoset.set_uv_sets(
-            ([uv.clone(), uv.clone(), near, uv])
+            [uv, uv, near, uv]
                 .iter()
                 .map(|set| ZeroVec::alloc_from_slice(set))
                 .collect(),

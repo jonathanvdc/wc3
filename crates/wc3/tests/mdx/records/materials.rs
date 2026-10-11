@@ -109,8 +109,7 @@ fn reforged_layer_texture_slot_and_tracks_round_trip() {
         frame: 100,
         value: 17u32,
     };
-    let texture_track =
-        Track::<u32>::linear((vec![texture_key]).into_iter().collect(), None).unwrap();
+    let texture_track = Track::<u32>::linear([texture_key].into_iter().collect(), None).unwrap();
     layer.set_texture_slots(&[LayerTextureSlot {
         texture_id: Animatable::Both {
             value: 3,
@@ -119,10 +118,10 @@ fn reforged_layer_texture_slot_and_tracks_round_trip() {
         texture_type: 2,
     }]);
     let alpha_track = Track::<f32>::linear(
-        (vec![ValueKeyframe {
+        [ValueKeyframe {
             frame: 100,
             value: 0.5,
-        }])
+        }]
         .into_iter()
         .collect(),
         None,

@@ -30,14 +30,14 @@ fn crossed<'data>(
 #[test]
 fn every_construction_and_replacement_path_sorts_and_retains_duplicates() {
     let mut value = event(&[30, -10, 20, 20], u32::MAX);
-    assert_eq!(value.frames().to_vec(), [-10, 20, 20, 30]);
+    assert_eq!(*value.frames(), [-10, 20, 20, 30]);
     value.set_frames(&[100, 0, -5, 0]);
-    assert_eq!(value.frames().to_vec(), [-5, 0, 0, 100]);
+    assert_eq!(*value.frames(), [-5, 0, 0, 100]);
     let parsed = EventObject::decode_mdl(
         "EventObject \"Arbitrary\" { ObjectId 0, EventTrack 4 { 30, -10, 20, 20, } }",
     )
     .unwrap();
-    assert_eq!(parsed.frames().to_vec(), [-10, 20, 20, 30]);
+    assert_eq!(*parsed.frames(), [-10, 20, 20, 30]);
     // Rewrite independent wire timestamps to verify sorting by the MDX reader.
     let mut bytes = value.encode_mdx().unwrap();
     let tail = bytes.len() - 16;
@@ -50,7 +50,7 @@ fn every_construction_and_replacement_path_sorts_and_retains_duplicates() {
         chunk.copy_from_slice(&frame.to_le_bytes());
     }
     assert_eq!(
-        EventObject::decode_mdx(&bytes).unwrap().frames().to_vec(),
+        *EventObject::decode_mdx(&bytes).unwrap().frames(),
         [-10, 20, 20, 30]
     );
     assert_eq!(

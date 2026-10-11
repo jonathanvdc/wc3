@@ -4,6 +4,7 @@ use wc3::model::animation::{
     AnimationTime, Interpolate, Sequence, TangentKeyframe, Track, ValueKeyframe,
 };
 use wc3::model::scene::{EventObject, Node};
+use wc3::model::ZeroVec;
 
 fn tracks<T: Interpolate>(c: &mut Criterion, name: &str, value: impl Fn(usize) -> T) {
     let mut group = c.benchmark_group(format!("animation/{name}"));
@@ -15,13 +16,13 @@ fn tracks<T: Interpolate>(c: &mut Criterion, name: &str, value: impl Fn(usize) -
         vec![8, 64, 256]
     };
     for count in sizes {
-        let values: Vec<_> = (0..count)
+        let values: ZeroVec<_> = (0..count)
             .map(|i| ValueKeyframe {
                 frame: (i * 33 + i % 7) as i32,
                 value: value(i),
             })
             .collect();
-        let tangents: Vec<_> = values
+        let tangents: ZeroVec<_> = values
             .iter()
             .map(|k| TangentKeyframe {
                 frame: k.frame,
@@ -31,22 +32,10 @@ fn tracks<T: Interpolate>(c: &mut Criterion, name: &str, value: impl Fn(usize) -
             })
             .collect();
         for (mode, track) in [
-            (
-                "step",
-                Track::step((values.clone()).into_iter().collect(), None).unwrap(),
-            ),
-            (
-                "linear",
-                Track::linear((values.clone()).into_iter().collect(), None).unwrap(),
-            ),
-            (
-                "hermite",
-                Track::hermite((tangents.clone()).into_iter().collect(), None).unwrap(),
-            ),
-            (
-                "bezier",
-                Track::bezier((tangents).into_iter().collect(), None).unwrap(),
-            ),
+            ("step", Track::step(values.clone(), None).unwrap()),
+            ("linear", Track::linear(values.clone(), None).unwrap()),
+            ("hermite", Track::hermite(tangents.clone(), None).unwrap()),
+            ("bezier", Track::bezier(tangents, None).unwrap()),
         ] {
             for scattered in [false, true] {
                 let times: Vec<_> = (0..128)
@@ -77,7 +66,7 @@ fn tracks<T: Interpolate>(c: &mut Criterion, name: &str, value: impl Fn(usize) -
                 );
             }
         }
-        let track = Track::linear((values).into_iter().collect(), Some(0)).unwrap();
+        let track = Track::linear(values, Some(0)).unwrap();
         let sequence = Sequence {
             interval: [0, (count * 33) as u32],
             ..Default::default()

@@ -200,7 +200,7 @@ mod tests {
         let mut node = Node::new("root", 0).unwrap();
         node.translation = Some(
             Track::linear(
-                (vec![
+                [
                     ValueKeyframe {
                         frame: 0,
                         value: [1.0; 3],
@@ -209,7 +209,7 @@ mod tests {
                         frame: 100,
                         value: [2.0; 3],
                     },
-                ])
+                ]
                 .into_iter()
                 .collect(),
                 None,

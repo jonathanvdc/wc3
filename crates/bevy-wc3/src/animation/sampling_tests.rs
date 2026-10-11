@@ -13,7 +13,7 @@ fn sequence_clock_loops_and_global_clock_runs_independently() {
         pose_playback: Default::default(),
     };
     let sequence_track = Track::linear(
-        (vec![
+        [
             ValueKeyframe {
                 frame: 1000,
                 value: 0.0f32,
@@ -22,14 +22,14 @@ fn sequence_clock_loops_and_global_clock_runs_independently() {
                 frame: 1100,
                 value: 1.0f32,
             },
-        ])
+        ]
         .into_iter()
         .collect(),
         None,
     )
     .unwrap();
     let global_track = Track::linear(
-        (vec![
+        [
             ValueKeyframe {
                 frame: 0,
                 value: 0.0f32,
@@ -38,7 +38,7 @@ fn sequence_clock_loops_and_global_clock_runs_independently() {
                 frame: 200,
                 value: 1.0f32,
             },
-        ])
+        ]
         .into_iter()
         .collect(),
         Some(0),
@@ -64,7 +64,7 @@ fn color_tracks_use_sequence_and_global_clocks_with_neutral_fallback() {
         pose_playback: Default::default(),
     };
     let track = Track::linear(
-        (vec![
+        [
             ValueKeyframe {
                 frame: 0,
                 value: [1.0, 0.0, 0.0],
@@ -73,7 +73,7 @@ fn color_tracks_use_sequence_and_global_clocks_with_neutral_fallback() {
                 frame: 100,
                 value: [0.0, 0.0, 1.0],
             },
-        ])
+        ]
         .into_iter()
         .collect(),
         None,
@@ -83,7 +83,7 @@ fn color_tracks_use_sequence_and_global_clocks_with_neutral_fallback() {
     animation.play(1);
     assert_eq!(sample(&track, &animation), None);
     let global = Track::linear(
-        (vec![
+        [
             ValueKeyframe {
                 frame: 0,
                 value: [1.0, 0.0, 0.0],
@@ -92,7 +92,7 @@ fn color_tracks_use_sequence_and_global_clocks_with_neutral_fallback() {
                 frame: 100,
                 value: [0.0, 0.0, 1.0],
             },
-        ])
+        ]
         .into_iter()
         .collect(),
         Some(0),

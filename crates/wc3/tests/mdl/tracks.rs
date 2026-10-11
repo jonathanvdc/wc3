@@ -21,10 +21,10 @@ where
 fn all_modes_and_value_shapes_roundtrip() {
     roundtrip(
         Track::<f32>::step(
-            (vec![ValueKeyframe {
+            [ValueKeyframe {
                 frame: 0,
                 value: -0.0,
-            }])
+            }]
             .into_iter()
             .collect(),
             None,
@@ -33,10 +33,10 @@ fn all_modes_and_value_shapes_roundtrip() {
     );
     roundtrip(
         Track::<u32>::linear(
-            (vec![ValueKeyframe {
+            [ValueKeyframe {
                 frame: i32::MAX,
                 value: 3,
-            }])
+            }]
             .into_iter()
             .collect(),
             Some(7),
@@ -45,12 +45,12 @@ fn all_modes_and_value_shapes_roundtrip() {
     );
     roundtrip(
         Track::<Vec3>::hermite(
-            (vec![TangentKeyframe {
+            [TangentKeyframe {
                 frame: 100,
                 value: [1.0, 2.0, 3.0],
                 in_tangent: [0.0; 3],
                 out_tangent: [4.0; 3],
-            }])
+            }]
             .into_iter()
             .collect(),
             None,
@@ -59,12 +59,12 @@ fn all_modes_and_value_shapes_roundtrip() {
     );
     roundtrip(
         Track::<Quaternion>::bezier(
-            (vec![TangentKeyframe {
+            [TangentKeyframe {
                 frame: 200,
                 value: [0.0, 0.0, 0.0, 1.0],
                 in_tangent: [0.0; 4],
                 out_tangent: [1.0; 4],
-            }])
+            }]
             .into_iter()
             .collect(),
             Some(0),

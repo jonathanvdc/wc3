@@ -41,10 +41,10 @@ fn camera_dof_scalar_keywords_produce_correct_keyed_wire_tags() {
 #[test]
 fn camera_extended_tracks_survive_model_io_and_conversion() {
     let visibility = Track::<f32>::linear(
-        (vec![ValueKeyframe {
+        [ValueKeyframe {
             frame: -100,
             value: 0.5,
-        }])
+        }]
         .into_iter()
         .collect(),
         Some(0),

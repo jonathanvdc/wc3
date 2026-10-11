@@ -67,7 +67,7 @@ fn squirt_retriggers_when_sequence_loops() {
     definition.set_squirt_enabled(true);
     definition.emission_rate = Animatable::Animated(
         Track::step(
-            (vec![
+            [
                 ValueKeyframe {
                     frame: 0,
                     value: 2.0,
@@ -76,7 +76,7 @@ fn squirt_retriggers_when_sequence_loops() {
                     frame: 500,
                     value: 3.0,
                 },
-            ])
+            ]
             .into_iter()
             .collect(),
             None,
@@ -248,7 +248,7 @@ fn continuous_births_and_spawn_parameters_do_not_depend_on_update_partition() {
     definition.gravity = 1.0.into();
     definition.speed = Animatable::Animated(
         Track::linear(
-            (vec![
+            [
                 ValueKeyframe {
                     frame: 0,
                     value: 0.0,
@@ -257,7 +257,7 @@ fn continuous_births_and_spawn_parameters_do_not_depend_on_update_partition() {
                     frame: 2000,
                     value: 20.0,
                 },
-            ])
+            ]
             .into_iter()
             .collect(),
             None,
@@ -336,7 +336,7 @@ fn birth_transform_samples_the_animated_parent_chain() {
                 parent_pivot: Vec3::ZERO,
                 translation: (Some(
                     Track::linear(
-                        (vec![
+                        [
                             ValueKeyframe {
                                 frame: 0,
                                 value: [0.0; 3],
@@ -345,7 +345,7 @@ fn birth_transform_samples_the_animated_parent_chain() {
                                 frame: 2000,
                                 value: [20.0, 0.0, 0.0],
                             },
-                        ])
+                        ]
                         .into_iter()
                         .collect(),
                         None,

@@ -6,12 +6,12 @@ use wc3::model::Vec3;
 #[test]
 fn node_transform_tracks_round_trip() {
     let track = Track::<Vec3>::hermite(
-        (vec![TangentKeyframe {
+        [TangentKeyframe {
             frame: 100,
             value: [1.0, 2.0, 3.0],
             in_tangent: [0.0; 3],
             out_tangent: [4.0, 5.0, 6.0],
-        }])
+        }]
         .into_iter()
         .collect(),
         None,
@@ -31,10 +31,10 @@ fn node_transform_tracks_round_trip() {
 fn track_order_is_normalized_and_name_padding_is_preserved() {
     let mut node = Node::new("N", 2).unwrap();
     let track = Track::<Vec3>::linear(
-        (vec![ValueKeyframe {
+        [ValueKeyframe {
             frame: 7,
             value: [1.0, 2.0, 3.0],
-        }])
+        }]
         .into_iter()
         .collect(),
         None,
@@ -54,10 +54,10 @@ fn track_order_is_normalized_and_name_padding_is_preserved() {
 #[test]
 fn standalone_integer_track_preserves_values_and_rejects_trailing_bytes() {
     let track = Track::<u32>::linear(
-        (vec![ValueKeyframe {
+        [ValueKeyframe {
             frame: 10,
             value: u32::MAX,
-        }])
+        }]
         .into_iter()
         .collect(),
         None,
@@ -70,11 +70,11 @@ fn standalone_integer_track_preserves_values_and_rejects_trailing_bytes() {
 
 #[test]
 fn invalid_interpolation_and_reserved_sequence_are_rejected() {
-    let track = Track::<Vec3>::step((vec![]).into_iter().collect(), None).unwrap();
+    let track = Track::<Vec3>::step(Default::default(), None).unwrap();
     let mut bytes = track.encode_mdx().unwrap();
     bytes[4..8].copy_from_slice(&4u32.to_le_bytes());
     assert!(Track::<Vec3>::decode_mdx(&bytes).is_err());
-    assert!(Track::<Vec3>::step((vec![]).into_iter().collect(), Some(u32::MAX)).is_err());
+    assert!(Track::<Vec3>::step(Default::default(), Some(u32::MAX)).is_err());
 }
 
 #[test]
@@ -90,10 +90,10 @@ fn interpolation_modes_preserve_their_key_shapes() {
         out_tangent: [7.0, 8.0, 9.0],
     };
     for track in [
-        Track::<Vec3>::step((vec![plain]).into_iter().collect(), None).unwrap(),
-        Track::<Vec3>::linear((vec![plain]).into_iter().collect(), None).unwrap(),
-        Track::<Vec3>::hermite((vec![spline]).into_iter().collect(), None).unwrap(),
-        Track::<Vec3>::bezier((vec![spline]).into_iter().collect(), None).unwrap(),
+        Track::<Vec3>::step([plain].into_iter().collect(), None).unwrap(),
+        Track::<Vec3>::linear([plain].into_iter().collect(), None).unwrap(),
+        Track::<Vec3>::hermite([spline].into_iter().collect(), None).unwrap(),
+        Track::<Vec3>::bezier([spline].into_iter().collect(), None).unwrap(),
     ] {
         assert_eq!(
             Track::<Vec3>::decode_mdx(&track.encode_mdx().unwrap())
@@ -116,22 +116,22 @@ struct Property<'data> {
 #[test]
 fn repeated_tags_replace_tracks_and_keep_bases_and_metadata() {
     let first = Track::<Vec3>::linear(
-        (vec![ValueKeyframe {
+        [ValueKeyframe {
             frame: 1,
             value: [1.0; 3],
-        }])
+        }]
         .into_iter()
         .collect(),
         None,
     )
     .unwrap();
     let last = Track::<Vec3>::bezier(
-        (vec![TangentKeyframe {
+        [TangentKeyframe {
             frame: -2,
             value: [2.0; 3],
             in_tangent: [3.0; 3],
             out_tangent: [4.0; 3],
-        }])
+        }]
         .into_iter()
         .collect(),
         Some(7),
@@ -158,7 +158,7 @@ fn repeated_tags_replace_tracks_and_keep_bases_and_metadata() {
 #[test]
 fn unknown_tags_are_rejected_and_malformed_replacements_are_not_ignored() {
     let mut node = Node::new("N", 1).unwrap();
-    node.translation = Some(Track::step((vec![]).into_iter().collect(), None).unwrap());
+    node.translation = Some(Track::step(Default::default(), None).unwrap());
     let mut bytes = node.encode_mdx().unwrap();
     bytes[96..100].copy_from_slice(b"KATV");
     assert!(<Node as mdx::Read>::decode_mdx(&bytes).is_err());

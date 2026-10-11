@@ -32,10 +32,10 @@ fn geoset_animation_fields_round_trip() {
 fn geoset_animation_color_track_round_trip() {
     let mut animation = GeosetAnimation::new(1);
     let track = Track::<Color>::linear(
-        (vec![ValueKeyframe {
+        [ValueKeyframe {
             frame: 25,
             value: [0.2, 0.4, 0.8],
-        }])
+        }]
         .into_iter()
         .collect(),
         None,
@@ -68,10 +68,10 @@ fn static_wire_color_is_bgr_but_tracks_and_public_color_are_rgb() {
     );
     animation.color.set_track(
         Track::linear(
-            (vec![ValueKeyframe {
+            [ValueKeyframe {
                 frame: 0,
                 value: [1.0, 0.0, 0.0],
-            }])
+            }]
             .into_iter()
             .collect(),
             None,

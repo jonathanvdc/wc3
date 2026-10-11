@@ -200,7 +200,7 @@ fn prepared_assets_share_static_layers_and_isolate_animated_layers() {
     assert!(!material_records[0].layers.is_empty());
     material_records[0].layers[0].alpha.set_track(
         Track::linear(
-            (vec![
+            [
                 ValueKeyframe {
                     frame: 0,
                     value: 1.0,
@@ -209,7 +209,7 @@ fn prepared_assets_share_static_layers_and_isolate_animated_layers() {
                     frame: 100,
                     value: 0.0,
                 },
-            ])
+            ]
             .into_iter()
             .collect(),
             None,

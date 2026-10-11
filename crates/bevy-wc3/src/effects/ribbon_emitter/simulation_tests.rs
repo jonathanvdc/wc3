@@ -68,7 +68,7 @@ fn exact_visibility_key_boundaries_match_at_30_and_60_fps() {
         state.definition.emission_rate = 20;
         state.definition.visibility = Some(
             Track::step(
-                (vec![
+                [
                     ValueKeyframe {
                         frame: 0,
                         value: 1.0,
@@ -81,7 +81,7 @@ fn exact_visibility_key_boundaries_match_at_30_and_60_fps() {
                         frame: 1100,
                         value: 1.0,
                     },
-                ])
+                ]
                 .into_iter()
                 .collect(),
                 None,
@@ -112,7 +112,7 @@ fn gaps_do_not_bridge_and_each_live_chain_gets_its_own_uv_span() {
     let mut state = state();
     state.definition.visibility = Some(
         Track::step(
-            (vec![
+            [
                 ValueKeyframe {
                     frame: 0,
                     value: 1.0,
@@ -125,7 +125,7 @@ fn gaps_do_not_bridge_and_each_live_chain_gets_its_own_uv_span() {
                     frame: 450,
                     value: 1.0,
                 },
-            ])
+            ]
             .into_iter()
             .collect(),
             None,
@@ -257,7 +257,7 @@ fn rotated_scaled_sections_use_local_y_and_animated_heights_at_birth() {
     let mut state = state();
     state.definition.height_above.set_track(
         Track::linear(
-            (vec![
+            [
                 ValueKeyframe {
                     frame: 0,
                     value: 0.0,
@@ -266,7 +266,7 @@ fn rotated_scaled_sections_use_local_y_and_animated_heights_at_birth() {
                     frame: 1000,
                     value: 10.0,
                 },
-            ])
+            ]
             .into_iter()
             .collect(),
             None,

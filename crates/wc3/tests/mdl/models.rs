@@ -145,10 +145,7 @@ fn available_record_codecs_dispatch_through_model_io() {
     let model = Model::<V900>::decode_mdl(source).unwrap();
     assert_eq!(model.texture_animations().count(), 1);
     assert_eq!(model.lights().count(), 1);
-    assert_eq!(
-        model.event_objects().next().unwrap().frames().to_vec(),
-        [-5, 10]
-    );
+    assert_eq!(*model.event_objects().next().unwrap().frames(), [-5, 10]);
     assert_eq!(model.face_fx().next().unwrap().path.text(), "face.facefx");
     assert_eq!(model.bind_poses().cloned().collect::<Vec<_>>().len(), 1);
     roundtrip(&model);
