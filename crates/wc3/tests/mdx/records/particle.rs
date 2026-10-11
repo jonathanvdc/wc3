@@ -29,7 +29,7 @@ fn classic_particle_emitter_round_trip() {
     .unwrap();
     emitter.visibility = Some(track.clone());
     let mut model = Model::<wc3::model::V800>::new();
-    model.set_particle_emitters(&[emitter]);
+    model.set_particle_emitters([emitter]);
     let parsed = Model::<wc3::model::V800>::decode_mdx(&model.encode_mdx().unwrap())
         .unwrap()
         .into_owned();

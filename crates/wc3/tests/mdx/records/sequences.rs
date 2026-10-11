@@ -17,7 +17,7 @@ fn sequence_fields_round_trip() {
     stand.extent.minimum = [-2.0, -3.0, -4.0];
     stand.extent.maximum = [2.0, 3.0, 4.0];
     let mut model = Model::<wc3::model::V800>::new();
-    model.set_sequences(&[stand]);
+    model.set_sequences([stand]);
     let decoded = Model::<wc3::model::V800>::decode_mdx(&model.encode_mdx().unwrap())
         .unwrap()
         .into_owned();

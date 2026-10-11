@@ -66,15 +66,9 @@ fn source_identity_survives_empty_geosets_shared_meshes_and_spawning() {
     let mut geosets = source.model.geosets().cloned().collect::<Vec<_>>();
     let empty = Geoset::new(&[], &[], &[]).unwrap();
     geosets.insert(0, empty);
-    source.model.set_geosets(&geosets);
-    let mut material = source
-        .model
-        .materials()
-        .cloned()
-        .collect::<Vec<_>>()
-        .remove(0);
+    source.model.set_geosets(geosets);
+    let material = source.model.materials_mut().next().unwrap();
     material.layers.push(material.layers[0].clone());
-    source.model.set_materials(&[material]);
     let (prepared, mut meshes) = prepare(&source);
     let parts: Vec<_> = prepared.parts().collect();
     assert_eq!(
@@ -132,18 +126,12 @@ fn independent_clocks_pose_eight_influences_and_repeat_without_mutating_meshes()
         node.translation = Some(vector_track((id >= 4).then_some(0)));
         bones.push(Bone::new(node, u32::MAX, u32::MAX));
     }
-    source.model.set_bones(&bones);
+    source.model.set_bones(bones);
     source.model.set_pivot_points(&[[0.0; 3]; 8]);
-    let mut geoset = source
-        .model
-        .geosets()
-        .cloned()
-        .collect::<Vec<_>>()
-        .remove(0);
+    let geoset = source.model.geosets_mut().next().unwrap();
     geoset
-        .set_matrix_groups(&[vec![0, 1, 2, 3, 4, 5, 6, 7]])
+        .set_matrix_groups([[0, 1, 2, 3, 4, 5, 6, 7]])
         .unwrap();
-    source.model.set_geosets(&[geoset]);
     let (prepared, meshes) = prepare(&source);
     let input = positions(meshes.get(prepared.parts().next().unwrap().mesh).unwrap()).to_vec();
     let mut baker = Wc3PoseBaker::default();
@@ -207,12 +195,9 @@ fn independent_clocks_pose_eight_influences_and_repeat_without_mutating_meshes()
 #[test]
 fn material_snapshots_preserve_override_provenance_and_reuse_linear_variants() {
     let mut source = Wc3Model::decode_mdl(include_str!("fixtures/hd_capture.mdl")).unwrap();
-    let mut textures = source.model.textures().cloned().collect::<Vec<_>>();
-    textures[1].replaceable_id = 31;
-    source.model.set_textures(&textures);
-    let mut materials = source.model.materials().cloned().collect::<Vec<_>>();
-    materials[0].layers[0].filter_mode = LayerFilterMode::Transparent;
-    source.model.set_materials(&materials);
+    source.model.textures_mut().nth(1).unwrap().replaceable_id = 31;
+    source.model.materials_mut().next().unwrap().layers[0].filter_mode =
+        LayerFilterMode::Transparent;
     let (prepared, meshes) = prepare(&source);
     let mut images = Assets::default();
     let mut image = Image::new(
@@ -361,9 +346,8 @@ fn malformed_hierarchies_nonfinite_times_and_missing_camera_are_errors() {
             }
         )
         .is_err());
-    let mut bones = source.model.bones().cloned().collect::<Vec<_>>();
-    bones[0].node.flags = NodeFlags(8);
-    source.model.set_bones(&bones);
+    let bone = source.model.bones_mut().next().unwrap();
+    bone.node.flags = NodeFlags(8);
     let (prepared, meshes) = prepare(&source);
     assert!(baker
         .bake(
@@ -386,9 +370,9 @@ fn malformed_hierarchies_nonfinite_times_and_missing_camera_are_errors() {
             }
         )
         .is_ok());
-    bones[0].node.flags = NodeFlags(0);
-    bones[0].node.parent_id = 0;
-    source.model.set_bones(&bones);
+    let bone = source.model.bones_mut().next().unwrap();
+    bone.node.flags = NodeFlags(0);
+    bone.node.parent_id = 0;
     let (prepared, meshes) = prepare(&source);
     assert!(baker
         .bake(
@@ -404,9 +388,8 @@ fn malformed_hierarchies_nonfinite_times_and_missing_camera_are_errors() {
 #[test]
 fn mirrored_and_collapsed_scales_keep_normals_and_tangents_finite() {
     let mut source = Wc3Model::decode_mdl(include_str!("fixtures/quad_model.mdl")).unwrap();
-    let mut bones = source.model.bones().cloned().collect::<Vec<_>>();
-    bones[0].node.scaling = Some(Track::constant([-2.0, 1.0, 1.0]));
-    source.model.set_bones(&bones);
+    let bone = source.model.bones_mut().next().unwrap();
+    bone.node.scaling = Some(Track::constant([-2.0, 1.0, 1.0]));
     let (prepared, meshes) = prepare(&source);
     let pose = Wc3PoseBaker::default()
         .bake(
@@ -423,8 +406,7 @@ fn mirrored_and_collapsed_scales_keep_normals_and_tangents_finite() {
         panic!("tangents missing")
     };
     assert_eq!(tangents[0][3], -1.0);
-    bones[0].node.scaling = Some(Track::constant([0.0; 3]));
-    source.model.set_bones(&bones);
+    source.model.bones_mut().next().unwrap().node.scaling = Some(Track::constant([0.0; 3]));
     let (prepared, meshes) = prepare(&source);
     let pose = Wc3PoseBaker::default()
         .bake(

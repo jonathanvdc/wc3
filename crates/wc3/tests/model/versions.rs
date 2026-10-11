@@ -22,13 +22,13 @@ fn version_is_shared_by_model_and_nested_records() {
     material.layers = [Layer::<V1800>::new()].to_vec();
 
     let mut model = Model::<V1800>::new();
-    model.set_materials(&[material]);
-    model.set_geosets(&[Geoset::<V1800>::new(&[], &[], &[]).unwrap()]);
-    model.set_lights(&[Light::<V1800>::new(
+    model.set_materials([material]);
+    model.set_geosets([Geoset::<V1800>::new(&[], &[], &[]).unwrap()]);
+    model.set_lights([Light::<V1800>::new(
         Node::new("Lamp", 1).unwrap(),
         LightType::Omnidirectional,
     )]);
-    model.set_cameras(&[Camera::<V1800>::new("View").unwrap()]);
+    model.set_cameras([Camera::<V1800>::new("View").unwrap()]);
 
     let bytes = model.encode_mdx().unwrap();
     let parsed = Model::<V1800>::decode_mdx(&bytes).unwrap();

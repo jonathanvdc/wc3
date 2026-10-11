@@ -39,17 +39,17 @@ fn sample<'data, V: ModelVersion>() -> Model<'data, V> {
     layer.alpha = Animatable::Static(0.75);
     material.priority_plane = 12;
     material.layers = [layer].to_vec();
-    model.set_materials(&[material]);
+    model.set_materials([material]);
     let mut geoset = Geoset::<V>::new(&[[1.0, 2.0, 3.0]], &[[0.0, 0.0, 1.0]], &[]).unwrap();
     geoset.set_raw_unselectable(0x8000_0002);
-    model.set_geosets(&[geoset]);
+    model.set_geosets([geoset]);
     let mut light = Light::<V>::new(Node::new("Lamp", 7).unwrap(), LightType::Ambient);
     light.node.flags.set_light(true);
     light.color = Animatable::Static([1.0, 0.5, 0.25]);
     light.intensity = Animatable::Static(2.5);
     light.attenuation_end = Animatable::Static(200.0);
-    model.set_lights(&[light]);
-    model.set_cameras(&[Camera::<V>::new("View").unwrap()]);
+    model.set_lights([light]);
+    model.set_cameras([Camera::<V>::new("View").unwrap()]);
     model
 }
 
@@ -59,7 +59,7 @@ fn missing_popcorn_kind_is_normalized_without_changing_source_or_behavior_flags(
         Model::<V1200>::decode_mdl("Version { FormatVersion 1200, } Model \"Minimal\" {}").unwrap();
     let mut emitter = PopcornEmitter::new(Node::new("Hero_Glow", 153).unwrap(), "", "").unwrap();
     emitter.node.flags.set_unfogged(true);
-    source.try_set_popcorn_emitters(&[emitter]).unwrap();
+    source.try_set_popcorn_emitters([emitter]).unwrap();
     let bytes = source.encode_mdx().unwrap();
     assert!(source.encode_mdl().is_err());
 
@@ -107,7 +107,7 @@ fn conflicting_popcorn_kind_is_preserved_and_still_refused_by_mdl() {
     let mut node = Node::new("Conflicting", 0).unwrap();
     node.flags.set_bone(true);
     let emitter = PopcornEmitter::new(node, "", "").unwrap();
-    source.try_set_popcorn_emitters(&[emitter]).unwrap();
+    source.try_set_popcorn_emitters([emitter]).unwrap();
     let converted = source
         .convert::<V1200>(&ConversionOptions::strict())
         .unwrap();
@@ -128,7 +128,7 @@ fn kind_normalization_preserves_inheritance_and_unknown_bits() {
     let mut node = Node::new("UnknownFlags", 0).unwrap();
     node.flags = NodeFlags::from_bits(0x8000_0004);
     let emitter = PopcornEmitter::new(node, "", "").unwrap();
-    source.try_set_popcorn_emitters(&[emitter]).unwrap();
+    source.try_set_popcorn_emitters([emitter]).unwrap();
     let converted = source
         .convert::<V1200>(&ConversionOptions::strict())
         .unwrap();
@@ -153,7 +153,7 @@ fn runtime_normalization_preserves_each_version_and_matches_typed_normalization(
             } else {
                 CameraVariant::Variant3
             };
-            source.set_cameras(&[camera]);
+            source.set_cameras([camera]);
             let original = source.encode_mdx().unwrap();
             let expected = source.normalized().unwrap();
             let dynamic = DynamicModel::<NoExtensions>::decode_mdx(&original, 800).unwrap();
@@ -216,7 +216,7 @@ fn shader_transition_is_explicit_and_source_is_unchanged() {
     let mut material = Material::<V1000>::new();
     material.set_shader("Shaders\\Unit.shader").unwrap();
     let mut model = Model::<V1000>::new();
-    model.set_materials(&[material]);
+    model.set_materials([material]);
     let original = model.encode_mdx().unwrap();
     let error = model
         .convert::<V1100>(&ConversionOptions::strict())
@@ -533,7 +533,7 @@ fn camera_conversion_normalizes_equivalent_variants_to_each_target_layout() {
 #[test]
 fn model_camera_upgrade_downgrade_and_same_version_normalization_are_reported() {
     let mut source = Model::<V800>::new();
-    source.set_cameras(&[Camera::<V800>::new("View").unwrap()]);
+    source.set_cameras([Camera::<V800>::new("View").unwrap()]);
     let bytes = source.encode_mdx().unwrap();
     let upgraded = source
         .convert::<V1800>(&ConversionOptions::strict())
@@ -568,7 +568,7 @@ fn model_camera_upgrade_downgrade_and_same_version_normalization_are_reported() 
     let mut noncanonical = Model::<V1800>::new();
     let mut camera = Camera::<V1800>::new("Portrait").unwrap();
     camera.variant = CameraVariant::Variant0;
-    noncanonical.set_cameras(&[camera]);
+    noncanonical.set_cameras([camera]);
     let result = DynamicModel::<NoExtensions>::decode_mdx(&noncanonical.encode_mdx().unwrap(), 800)
         .unwrap()
         .into_owned()

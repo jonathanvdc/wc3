@@ -77,9 +77,16 @@ impl<'data, D: ModelDialect> Model<'data, D> {
         self.records::<SequencesChunk>()
     }
 
+    /// Mutably borrows records in file order without replacing their chunks.
+    pub fn sequences_mut<'s>(
+        &'s mut self,
+    ) -> impl Iterator<Item = &'s mut Sequence> + use<'data, 's, D> {
+        self.records_mut::<SequencesChunk>()
+    }
+
     /// Writes all sequences to the first `SEQS` chunk, creating it if needed.
     /// Additional `SEQS` chunks are removed after their records are replaced.
-    pub fn set_sequences(&mut self, sequences: &[Sequence]) {
-        self.replace_chunk(SequencesChunk::new(sequences.to_vec()));
+    pub fn set_sequences(&mut self, sequences: impl IntoIterator<Item = Sequence>) {
+        self.replace_chunk(SequencesChunk::new(sequences.into_iter().collect()));
     }
 }

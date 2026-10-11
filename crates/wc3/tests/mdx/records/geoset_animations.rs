@@ -15,7 +15,7 @@ fn geoset_animation_fields_round_trip() {
     animation.flags = GeosetAnimationFlags(7);
     animation.color = Animatable::Static([0.1, 0.2, 0.3]);
     let mut model = Model::<wc3::model::V1800>::new();
-    model.set_geoset_animations(&[animation]);
+    model.set_geoset_animations([animation]);
     let parsed = Model::<wc3::model::V1800>::decode_mdx(&model.encode_mdx().unwrap())
         .unwrap()
         .into_owned();

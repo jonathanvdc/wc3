@@ -77,9 +77,19 @@ impl<'data, D: ModelDialect> Model<'data, D> {
         self.records::<GeosetAnimationsChunk<'data>>()
     }
 
+    /// Mutably borrows records in file order without replacing their chunks.
+    pub fn geoset_animations_mut<'s>(
+        &'s mut self,
+    ) -> impl Iterator<Item = &'s mut GeosetAnimation<'data>> + use<'data, 's, D> {
+        self.records_mut::<GeosetAnimationsChunk<'data>>()
+    }
+
     /// Replaces geoset animations with one `GEOA` chunk, removing any duplicate chunks.
-    pub fn set_geoset_animations(&mut self, animations: &[GeosetAnimation<'data>]) {
-        self.replace_chunk(GeosetAnimationsChunk::new(animations.to_vec()));
+    pub fn set_geoset_animations(
+        &mut self,
+        animations: impl IntoIterator<Item = GeosetAnimation<'data>>,
+    ) {
+        self.replace_chunk(GeosetAnimationsChunk::new(animations.into_iter().collect()));
     }
 }
 

@@ -93,9 +93,19 @@ impl<'data, D: ModelDialect> Model<'data, D> {
         self.records::<ParticleEmittersChunk<'_>>()
     }
 
+    /// Mutably borrows records in file order without replacing their chunks.
+    pub fn particle_emitters_mut<'s>(
+        &'s mut self,
+    ) -> impl Iterator<Item = &'s mut ParticleEmitter<'data>> + use<'data, 's, D> {
+        self.records_mut::<ParticleEmittersChunk<'_>>()
+    }
+
     /// Replaces particle emitters with one `PREM` chunk, removing any duplicate chunks.
-    pub fn set_particle_emitters(&mut self, emitters: &[ParticleEmitter<'data>]) {
-        self.replace_chunk(ParticleEmittersChunk::new(emitters.to_vec()));
+    pub fn set_particle_emitters(
+        &mut self,
+        emitters: impl IntoIterator<Item = ParticleEmitter<'data>>,
+    ) {
+        self.replace_chunk(ParticleEmittersChunk::new(emitters.into_iter().collect()));
     }
 }
 

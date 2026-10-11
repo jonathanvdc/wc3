@@ -21,7 +21,7 @@ fn geoset_mesh_edit_preserves_other_sections() {
     assert_eq!(*geoset.face_indices(), [0, 0, 0]);
     geoset.set_vertex(0, [4.0, 5.0, 6.0]).unwrap();
     let mut model = Model::<V1800>::new();
-    model.set_geosets(&[geoset]);
+    model.set_geosets([geoset]);
     let decoded = Model::<V1800>::decode_mdx(&model.encode_mdx().unwrap())
         .unwrap()
         .into_owned();
@@ -56,7 +56,7 @@ fn check_version<V: ModelVersion>() {
     )
     .unwrap();
     geoset.material_id = 7;
-    geoset.set_matrix_groups(&[vec![1, 2], vec![3]]).unwrap();
+    geoset.set_matrix_groups([&[1, 2][..], &[3][..]]).unwrap();
     geoset.set_vertex_groups(&[0, 1]).unwrap();
     geoset.sequence_extents = [GeosetExtent {
         bounds_radius: 2.0,
@@ -135,7 +135,7 @@ fn check_version<V: ModelVersion>() {
         geoset
     );
     let mut model = Model::<V>::new();
-    model.set_geosets(&[geoset]);
+    model.set_geosets([geoset]);
     let parsed = Model::<V>::decode_mdx(&model.encode_mdx().unwrap())
         .unwrap()
         .into_owned();
@@ -313,4 +313,25 @@ fn wide_skin_weights_validate_the_normalized_weight_range() {
     let offset = bytes.windows(4).position(|tag| tag == b"SKIN").unwrap() + 16;
     bytes[offset..offset + 2].copy_from_slice(&256u16.to_le_bytes());
     assert!(Geoset::<V1400>::decode_mdx(&bytes).is_err());
+}
+
+#[test]
+fn matrix_groups_accept_arrays_slices_and_owned_vectors() {
+    let mut geoset = sample_geoset();
+    geoset.set_matrix_groups([[1, 2], [3, 4]]).unwrap();
+    assert_eq!(*geoset.matrix_group_sizes(), [2, 2]);
+    assert_eq!(*geoset.matrix_indices(), [1, 2, 3, 4]);
+    geoset
+        .set_matrix_groups([&[5, 6][..], &[][..], &[7][..]])
+        .unwrap();
+    assert_eq!(*geoset.matrix_group_sizes(), [2, 0, 1]);
+    assert_eq!(*geoset.matrix_indices(), [5, 6, 7]);
+    geoset
+        .set_matrix_groups(vec![vec![8], vec![9, 10]])
+        .unwrap();
+    assert_eq!(*geoset.matrix_group_sizes(), [1, 2]);
+    assert_eq!(*geoset.matrix_indices(), [8, 9, 10]);
+    geoset.set_matrix_groups([] as [[u32; 0]; 0]).unwrap();
+    assert!(geoset.matrix_group_sizes().is_empty());
+    assert!(geoset.matrix_indices().is_empty());
 }

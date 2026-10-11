@@ -35,7 +35,7 @@ where
                 == 1
             {
                 let records = model.$getter().cloned().collect::<Vec<_>>();
-                model.$setter(&records);
+                model.$setter(records);
             }
         };
     }
@@ -49,7 +49,7 @@ where
                 == 1
             {
                 let records = model.$getter().unwrap().cloned().collect::<Vec<_>>();
-                model.$setter(&records).unwrap();
+                model.$setter(records).unwrap();
             }
         };
     }

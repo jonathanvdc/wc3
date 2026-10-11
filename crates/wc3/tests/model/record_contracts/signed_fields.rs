@@ -23,8 +23,8 @@ fn signed_event_times_and_material_priority_preserve_wire_bits() {
         -7
     );
     let mut model = Model::<V800>::new();
-    model.set_materials(&[material]);
-    model.set_event_objects(&[event]);
+    model.set_materials([material]);
+    model.set_event_objects([event]);
     let converted = model
         .convert::<V1800>(&ConversionOptions::strict())
         .unwrap()

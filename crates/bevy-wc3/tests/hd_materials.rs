@@ -1,20 +1,19 @@
 use bevy::mesh::skinning::SkinnedMeshInverseBindposes;
 use bevy::prelude::{Assets, Mesh};
 use bevy_wc3::{prepare_model, Wc3Model};
-use wc3::model::AsULE;
 
 #[test]
 fn preparation_shares_identical_uv_meshes_and_preserves_distinct_tangent_sources() {
     let mut source = Wc3Model::decode_mdl(include_str!("fixtures/hd_capture.mdl")).unwrap();
-    let mut geoset = source.model.geosets().next().unwrap().clone();
+    let first = source.model.geosets().next().unwrap().clone();
+    source.model.set_geosets([first]);
+    let geoset = source.model.geosets_mut().next().unwrap();
     let uv = geoset.uv_sets()[0].clone();
-    let mut near = uv.clone();
-    let mut coordinate = near.get(0).unwrap();
+    let mut coordinate = uv.get(0).unwrap();
     coordinate[0] += 0.000001;
-    near.to_mut_slice()[0] = coordinate.to_unaligned();
-    geoset.set_uv_sets(vec![uv.clone(), uv, near]);
-    source.model.set_geosets(&[geoset.clone()]);
-    let mut material = source.model.materials().next().unwrap().clone();
+    geoset.set_uv_sets(vec![uv.clone(), uv.clone(), uv]);
+    geoset.set_uv(2, 0, coordinate).unwrap();
+    let material = source.model.materials_mut().next().unwrap();
     let layer = material.layers[0].clone();
     material.layers = (0..3)
         .map(|coordinate| {
@@ -23,7 +22,6 @@ fn preparation_shares_identical_uv_meshes_and_preserves_distinct_tangent_sources
             layer
         })
         .collect();
-    source.model.set_materials(&[material]);
     let mut meshes = Assets::<Mesh>::default();
     let mut binds = Assets::<SkinnedMeshInverseBindposes>::default();
     let prepared = prepare_model(&mut meshes, &mut binds, &source, |_| None).unwrap();
@@ -34,12 +32,12 @@ fn preparation_shares_identical_uv_meshes_and_preserves_distinct_tangent_sources
     );
     drop(prepared);
 
+    let geoset = source.model.geosets_mut().next().unwrap();
     geoset.set_tangents(Some(
         (0..geoset.vertices().len())
             .map(|_| [1.0, 0.0, 0.0, 1.0])
             .collect(),
     ));
-    source.model.set_geosets(&[geoset]);
     let mut meshes = Assets::<Mesh>::default();
     let _prepared = prepare_model(&mut meshes, &mut binds, &source, |_| None).unwrap();
     assert_eq!(

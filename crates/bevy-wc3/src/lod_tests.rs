@@ -420,7 +420,7 @@ fn common_only_and_classic_models_have_a_safe_single_level() {
     let mut source =
         Wc3Model::decode_mdl(include_str!("../tests/fixtures/lod_capture.mdl")).unwrap();
     let geosets = source.model.geosets().cloned().collect::<Vec<_>>();
-    source.model.set_geosets(&geosets[2..]);
+    source.model.set_geosets(geosets.into_iter().skip(2));
     let mut meshes = Assets::<Mesh>::default();
     let mut bindposes = Assets::<SkinnedMeshInverseBindposes>::default();
     let prepared = prepare_model(&mut meshes, &mut bindposes, &source, |_| None).unwrap();
@@ -429,7 +429,7 @@ fn common_only_and_classic_models_have_a_safe_single_level() {
     let classic = Wc3Model::decode(include_bytes!("../tests/fixtures/quad_model.mdx")).unwrap();
     let prepared = prepare_model(&mut meshes, &mut bindposes, &classic, |_| None).unwrap();
     assert_eq!(prepared.lod_levels(), [0]);
-    source.model.set_geosets(&[]);
+    source.model.set_geosets([]);
     let prepared = prepare_model(&mut meshes, &mut bindposes, &source, |_| None).unwrap();
     assert_eq!(prepared.lod_levels(), [0]);
     assert!(prepared.geosets.is_empty());

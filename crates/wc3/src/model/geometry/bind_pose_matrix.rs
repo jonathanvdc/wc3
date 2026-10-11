@@ -21,11 +21,22 @@ impl<'data, D: ModelDialect> Model<'data, D> {
         Ok(self.records::<BindPoseChunk>())
     }
 
+    /// Mutably borrows records in file order without replacing their chunks.
+    pub fn try_bind_poses_mut<'s>(
+        &'s mut self,
+    ) -> Result<impl Iterator<Item = &'s mut BindPoseMatrix> + use<'data, 's, D>, ValueError> {
+        self.check_chunk_version(*b"BPOS")?;
+        Ok(self.records_mut::<BindPoseChunk>())
+    }
+
     /// Replaces bind-pose matrices with one `BPOS` chunk, removing duplicate chunks.
     /// Returns an error if this model version does not support `BPOS`.
-    pub fn try_set_bind_poses(&mut self, poses: &[BindPoseMatrix]) -> Result<(), ValueError> {
+    pub fn try_set_bind_poses(
+        &mut self,
+        poses: impl IntoIterator<Item = BindPoseMatrix>,
+    ) -> Result<(), ValueError> {
         self.check_chunk_version(*b"BPOS")?;
-        self.replace_chunk(BindPoseChunk::new(poses.to_vec()));
+        self.replace_chunk(BindPoseChunk::new(poses.into_iter().collect()));
         Ok(())
     }
 }
@@ -41,8 +52,15 @@ where
         self.records::<BindPoseChunk>()
     }
 
+    /// Mutably borrows records in file order without replacing their chunks.
+    pub fn bind_poses_mut<'s>(
+        &'s mut self,
+    ) -> impl Iterator<Item = &'s mut BindPoseMatrix> + use<'data, 's, D> {
+        self.records_mut::<BindPoseChunk>()
+    }
+
     /// Replaces `BPOS` records.
-    pub fn set_bind_poses(&mut self, poses: &[BindPoseMatrix]) {
-        self.replace_chunk(BindPoseChunk::new(poses.to_vec()));
+    pub fn set_bind_poses(&mut self, poses: impl IntoIterator<Item = BindPoseMatrix>) {
+        self.replace_chunk(BindPoseChunk::new(poses.into_iter().collect()));
     }
 }

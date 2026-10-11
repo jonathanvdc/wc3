@@ -166,9 +166,19 @@ impl<'data, D: ModelDialect> Model<'data, D> {
         self.records::<CollisionShapesChunk<'_>>()
     }
 
+    /// Mutably borrows records in file order without replacing their chunks.
+    pub fn collision_shapes_mut<'s>(
+        &'s mut self,
+    ) -> impl Iterator<Item = &'s mut CollisionShape<'data>> + use<'data, 's, D> {
+        self.records_mut::<CollisionShapesChunk<'_>>()
+    }
+
     /// Replaces collision shapes with one `CLID` chunk, removing any duplicate chunks.
-    pub fn set_collision_shapes(&mut self, shapes: &[CollisionShape<'data>]) {
-        self.replace_chunk(CollisionShapesChunk::new(shapes.to_vec()));
+    pub fn set_collision_shapes(
+        &mut self,
+        shapes: impl IntoIterator<Item = CollisionShape<'data>>,
+    ) {
+        self.replace_chunk(CollisionShapesChunk::new(shapes.into_iter().collect()));
     }
 }
 

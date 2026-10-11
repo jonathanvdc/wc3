@@ -17,7 +17,7 @@ fn gliders_keep_every_entry_in_all_versions_and_reject_partial_words() {
         expected
     );
     let mut model = Model::<V800>::new();
-    model.set_gliders(&entries);
+    model.set_gliders(entries);
     let bytes = model.encode_mdx().unwrap();
     let parsed = Model::<V800>::decode_mdx(&bytes).unwrap();
     assert_eq!(parsed.gliders().cloned().collect::<Vec<_>>(), entries);
@@ -36,7 +36,7 @@ fn gliders_keep_every_entry_in_all_versions_and_reject_partial_words() {
         newer.convert(&ConversionOptions::strict()).unwrap().model,
     );
     assert_eq!(dynamic.gliders().copied().collect::<Vec<_>>(), entries);
-    dynamic.set_gliders(&[entries[1], entries[0], entries[1]]);
+    dynamic.set_gliders([entries[1], entries[0], entries[1]]);
     assert_eq!(
         dynamic.gliders().copied().collect::<Vec<_>>(),
         [entries[1], entries[0], entries[1]]
@@ -48,7 +48,7 @@ fn gliders_keep_every_entry_in_all_versions_and_reject_partial_words() {
     model
         .chunks
         .push(GlidersChunk::new(entries.to_vec()).into());
-    model.set_gliders(&[]);
+    model.set_gliders([]);
     assert!(model.chunk(*b"DILG").is_none());
     assert!(model.gliders().cloned().collect::<Vec<_>>().is_empty());
     // Existing gated access remains independent of ungated DILG.

@@ -21,7 +21,7 @@ fn particle_emitter2_fields_round_trip() {
     assert_eq!(emitter.frames, Particle2Frames::Both);
     assert!(emitter.squirt_enabled());
     let mut model = Model::<wc3::model::V1800>::new();
-    model.set_particle_emitters2(std::slice::from_ref(&emitter));
+    model.set_particle_emitters2([emitter.clone()]);
     let parsed = Model::<wc3::model::V1800>::decode_mdx(&model.encode_mdx().unwrap())
         .unwrap()
         .into_owned();

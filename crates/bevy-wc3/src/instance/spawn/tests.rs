@@ -217,7 +217,7 @@ fn prepared_assets_share_static_layers_and_isolate_animated_layers() {
         .unwrap(),
     );
     material_records[0].layers.push(Layer::new());
-    source.model.set_materials(&material_records);
+    source.model.set_materials(material_records);
 
     let mut meshes = Assets::<Mesh>::default();
     let mut materials = Assets::<Wc3LayerMaterial>::default();
@@ -254,7 +254,7 @@ fn ribbons_share_sections_across_layers_and_keep_instances_bindings_and_ownershi
     second.alpha = 0.5.into();
     second.filter_mode = LayerFilterMode::Additive;
     definitions[0].layers.push(second);
-    source.model.set_materials(&definitions);
+    source.model.set_materials(definitions);
     let mut app = App::new();
     app.add_plugins((TransformPlugin, VisibilityPlugin));
     app.insert_resource(Time::<()>::default());
@@ -394,7 +394,7 @@ fn slot_binding_selects_replaceable_bitmap_for_geosets() {
     let mut bitmaps = source.model.textures().cloned().collect::<Vec<_>>();
     bitmaps[0].path.set_text("").unwrap();
     bitmaps[0].replaceable_id = 1;
-    source.model.set_textures(&bitmaps);
+    source.model.set_textures(bitmaps);
     let mut images = Assets::<Image>::default();
     let selected = images.add(Image::default());
     let mut meshes = Assets::<Mesh>::default();
@@ -432,7 +432,7 @@ fn geoset_tints_isolate_shared_materials_and_model_instances() {
     let mut alternate = geosets[0].clone();
     alternate.set_level_of_detail(1);
     geosets.insert(0, alternate);
-    source.model.set_geosets(&geosets);
+    source.model.set_geosets(geosets);
     let mut animations = source
         .model
         .geoset_animations()
@@ -448,12 +448,12 @@ fn geoset_tints_isolate_shared_materials_and_model_instances() {
     let mut invalid = disabled;
     invalid.geoset_id = u32::MAX;
     animations.push(invalid);
-    source.model.set_geoset_animations(&animations);
+    source.model.set_geoset_animations(animations);
     let mut records = source.model.materials().cloned().collect::<Vec<_>>();
     let mut extra_layer = records[0].layers[0].clone();
     extra_layer.alpha = Animatable::Static(0.5);
     records[0].layers.push(extra_layer);
-    source.model.set_materials(&records);
+    source.model.set_materials(records);
     let mut app = App::new();
     app.add_systems(Update, animate_layers);
     let mut meshes = Assets::<Mesh>::default();

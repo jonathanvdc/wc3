@@ -1,4 +1,3 @@
-use std::slice::from_ref;
 use wc3::model::mdx::Read as _;
 use wc3::model::mdx::Write as _;
 
@@ -67,7 +66,7 @@ fn collection_setter_collapses_repeated_chunks() {
         vec![first, second.clone()]
     );
 
-    model.set_sequences(from_ref(&second));
+    model.set_sequences([second.clone()]);
     assert!(matches!(
         model.chunk(*b"SEQS"),
         Some(ModelChunk::Sequences(_))

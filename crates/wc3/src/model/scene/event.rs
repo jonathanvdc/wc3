@@ -64,9 +64,16 @@ impl<'data, D: ModelDialect> Model<'data, D> {
         self.records::<EventObjectsChunk<'_>>()
     }
 
+    /// Mutably borrows records in file order without replacing their chunks.
+    pub fn event_objects_mut<'s>(
+        &'s mut self,
+    ) -> impl Iterator<Item = &'s mut EventObject<'data>> + use<'data, 's, D> {
+        self.records_mut::<EventObjectsChunk<'_>>()
+    }
+
     /// Replaces event objects with one `EVTS` chunk, removing any duplicate chunks.
-    pub fn set_event_objects(&mut self, events: &[EventObject<'data>]) {
-        self.replace_chunk(EventObjectsChunk::new(events.to_vec()));
+    pub fn set_event_objects(&mut self, events: impl IntoIterator<Item = EventObject<'data>>) {
+        self.replace_chunk(EventObjectsChunk::new(events.into_iter().collect()));
     }
 }
 

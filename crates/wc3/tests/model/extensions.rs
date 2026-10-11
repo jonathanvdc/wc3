@@ -78,9 +78,9 @@ fn standard_records_use_the_base_version_and_custom_dialects_are_open() {
         type Extension = ApplicationChunk;
     }
     let mut model = Model::<ApplicationDialect>::new();
-    model.set_geosets(&[Geoset::<V1800>::new(&[], &[], &[]).unwrap()]);
-    model.set_materials(&[Material::<V1800>::new()]);
-    model.set_bind_poses(&[BindPoseMatrix([0.; 12])]);
+    model.set_geosets([Geoset::<V1800>::new(&[], &[], &[]).unwrap()]);
+    model.set_materials([Material::<V1800>::new()]);
+    model.set_bind_poses([BindPoseMatrix([0.; 12])]);
     model
         .chunks
         .push(ModelChunk::Extension(ApplicationChunk::Note(42)));
@@ -456,7 +456,7 @@ fn mdl_only_extensions_support_model_io_and_standard_accessors() {
     )
     .unwrap();
     model.set_global_sequences(&[100]);
-    model.set_gliders(&[]);
+    model.set_gliders([]);
     assert_eq!(model.global_sequences(), [100]);
     let source = model.encode_mdl().unwrap();
     let mut dynamic = DynamicModel::<NoteText>::decode_mdl(&source).unwrap();

@@ -58,7 +58,7 @@ fn changing_bindings_updates_only_the_target_instance() {
     let mut bitmaps = source.model.textures().cloned().collect::<Vec<_>>();
     bitmaps[0].path.set_text("").unwrap();
     bitmaps[0].replaceable_id = 31;
-    source.model.set_textures(&bitmaps);
+    source.model.set_textures(bitmaps);
     let mut app = App::new();
     app.insert_resource(Assets::<Wc3ModelAsset>::default());
     app.insert_resource(Assets::<Image>::default());

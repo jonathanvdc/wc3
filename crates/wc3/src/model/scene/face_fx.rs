@@ -44,10 +44,21 @@ impl<'data, D: ModelDialect> Model<'data, D> {
         Ok(self.records::<FaceFxChunk>())
     }
 
-    /// Returns an error if this model version does not support `FAFX`.
-    pub fn try_set_face_fx(&mut self, entries: &[FaceFx]) -> Result<(), ValueError> {
+    /// Mutably borrows records in file order without replacing their chunks.
+    pub fn try_face_fx_mut<'s>(
+        &'s mut self,
+    ) -> Result<impl Iterator<Item = &'s mut FaceFx> + use<'data, 's, D>, ValueError> {
         self.check_chunk_version(*b"FAFX")?;
-        self.replace_chunk(FaceFxChunk::new(entries.to_vec()));
+        Ok(self.records_mut::<FaceFxChunk>())
+    }
+
+    /// Returns an error if this model version does not support `FAFX`.
+    pub fn try_set_face_fx(
+        &mut self,
+        entries: impl IntoIterator<Item = FaceFx>,
+    ) -> Result<(), ValueError> {
+        self.check_chunk_version(*b"FAFX")?;
+        self.replace_chunk(FaceFxChunk::new(entries.into_iter().collect()));
         Ok(())
     }
 }
@@ -61,8 +72,15 @@ where
         self.records::<FaceFxChunk>()
     }
 
+    /// Mutably borrows records in file order without replacing their chunks.
+    pub fn face_fx_mut<'s>(
+        &'s mut self,
+    ) -> impl Iterator<Item = &'s mut FaceFx> + use<'data, 's, D> {
+        self.records_mut::<FaceFxChunk>()
+    }
+
     /// Replaces `FAFX` records.
-    pub fn set_face_fx(&mut self, entries: &[FaceFx]) {
-        self.replace_chunk(FaceFxChunk::new(entries.to_vec()));
+    pub fn set_face_fx(&mut self, entries: impl IntoIterator<Item = FaceFx>) {
+        self.replace_chunk(FaceFxChunk::new(entries.into_iter().collect()));
     }
 }

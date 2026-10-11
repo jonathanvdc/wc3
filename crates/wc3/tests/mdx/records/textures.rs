@@ -14,7 +14,7 @@ fn texture_fields_round_trip() {
     texture.replaceable_id = 1;
     texture.flags = TextureFlags(3);
     let mut model = Model::<wc3::model::V1800>::new();
-    model.set_textures(&[texture]);
+    model.set_textures([texture]);
 
     let decoded = Model::<wc3::model::V1800>::decode_mdx(&model.encode_mdx().unwrap())
         .unwrap()
@@ -40,7 +40,7 @@ fn texture_path_padding_roundtrips_and_is_cleared_when_replacing_the_path() {
     );
     let mut textures = model.textures().cloned().collect::<Vec<_>>();
     textures[0].path.set_text("b.blp").unwrap();
-    model.set_textures(&textures);
+    model.set_textures(textures);
     let bytes = model.encode_mdx().unwrap();
     assert_eq!(&bytes[24 + 260..24 + 264], &[0; 4]);
 }

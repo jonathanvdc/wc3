@@ -12,8 +12,8 @@ fn bones_and_helpers_round_trip() {
     node.flags = NodeFlags(0x100);
     let bone = Bone::new(node.clone(), 2, u32::MAX);
     let mut model = Model::<wc3::model::V1800>::new();
-    model.set_bones(&[bone]);
-    model.set_helpers(&[node]);
+    model.set_bones([bone]);
+    model.set_helpers([node]);
     let parsed = Model::<wc3::model::V1800>::decode_mdx(&model.encode_mdx().unwrap())
         .unwrap()
         .into_owned();

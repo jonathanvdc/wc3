@@ -19,7 +19,7 @@ fn light_fields_round_trip() {
     light.ambient_color = Animatable::Static([0.1, 0.2, 0.3]);
     light.ambient_intensity = Animatable::Static(0.5);
     let mut model = Model::<wc3::model::V1200>::new();
-    model.set_lights(&[light]);
+    model.set_lights([light]);
     let parsed = Model::<wc3::model::V1200>::decode_mdx(&model.encode_mdx().unwrap())
         .unwrap()
         .into_owned();

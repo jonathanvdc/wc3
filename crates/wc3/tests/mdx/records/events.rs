@@ -11,7 +11,7 @@ fn event_object_round_trip() {
     event.global_sequence_id = 3;
     event.set_frames(&[300, 100, 200]);
     let mut model = Model::<wc3::model::V800>::new();
-    model.set_event_objects(&[event]);
+    model.set_event_objects([event]);
     let parsed = Model::<wc3::model::V800>::decode_mdx(&model.encode_mdx().unwrap())
         .unwrap()
         .into_owned();

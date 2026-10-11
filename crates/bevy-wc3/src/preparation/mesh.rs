@@ -288,7 +288,7 @@ mod tests {
     #[test]
     fn classic_five_bone_group_retains_all_influences() {
         let mut geoset = Geoset::<V1800>::new(&[[0.0; 3]], &[[0.0, 0.0, 1.0]], &[]).unwrap();
-        geoset.set_matrix_groups(&[vec![1, 2, 3, 4, 5]]).unwrap();
+        geoset.set_matrix_groups([[1, 2, 3, 4, 5]]).unwrap();
         let joints = HashMap::from([(1, 0), (2, 1), (3, 2), (4, 3), (5, 4)]);
         let rows = vertex_skin(&geoset, &joints).unwrap();
         assert_eq!(rows.0[0], [0, 1, 2, 3]);
@@ -302,7 +302,9 @@ mod tests {
     #[test]
     fn classic_nine_bone_group_reports_the_limit() {
         let mut geoset = Geoset::<V1800>::new(&[[0.0; 3]], &[[0.0, 0.0, 1.0]], &[]).unwrap();
-        geoset.set_matrix_groups(&[(0..9).collect()]).unwrap();
+        geoset
+            .set_matrix_groups([(0..9).collect::<Vec<_>>()])
+            .unwrap();
         let error = vertex_skin(&geoset, &HashMap::new()).unwrap_err();
         assert!(error
             .to_string()

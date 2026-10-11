@@ -69,7 +69,12 @@ animation, and effects. The
 how to edit those collections and convert between supported versions.
 
 Model getters for borrowed record collections return iterators without temporary
-vectors. Use `.cloned().collect::<Vec<_>>()` to clone a collection when needed.
+vectors. Named mutable iterators such as `geosets_mut()` and `materials_mut()`
+edit records in place while preserving chunk boundaries and file order. Named
+record setters accept arrays, vectors, or iterators of records, moving their
+buffers into one replacement chunk. Use `.iter().cloned()` when replacing a
+collection from records you want to retain.
+
 MDX decoding also borrows geometry, animation keys, and opaque payloads from the
 input slice. Numeric arrays use ZeroVec to read little-endian, unaligned data
 without allocating a typed buffer; `get()` and `iter()` return ordinary Rust

@@ -6,7 +6,7 @@ fn classic_fixture_converts_to_runtime_version() {
     let model = Wc3Model::decode(include_bytes!("fixtures/quad_model.mdx")).unwrap();
     assert_eq!(model.source_version, 800);
     assert_eq!(model.model.version(), 1800);
-    assert!(!model.model.geosets().next().is_none());
+    assert!(model.model.geosets().next().is_some());
 }
 
 #[test]

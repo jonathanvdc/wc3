@@ -43,7 +43,7 @@ fn check_version<V: ModelVersion>() {
     material.priority_plane = 3;
     material.render_mode = MaterialRenderFlags(7);
     let mut model = Model::<V>::new();
-    model.set_materials(&[material]);
+    model.set_materials([material]);
     let decoded = Model::<V>::decode_mdx(&model.encode_mdx().unwrap())
         .unwrap()
         .into_owned();

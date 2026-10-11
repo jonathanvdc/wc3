@@ -22,7 +22,7 @@ fn collision_primitives_round_trip() {
         0.5,
     );
     let mut model = Model::<wc3::model::V800>::new();
-    model.set_collision_shapes(&[box_shape, sphere, plane, cylinder]);
+    model.set_collision_shapes([box_shape, sphere, plane, cylinder]);
     let decoded = Model::<wc3::model::V800>::decode_mdx(&model.encode_mdx().unwrap())
         .unwrap()
         .into_owned();

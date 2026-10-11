@@ -23,7 +23,7 @@ fn ribbon_fields_and_integer_animation_round_trip() {
         .texture_slot
         .set_track(Track::<u32>::linear([key].into_iter().collect(), None).unwrap());
     let mut model = Model::<wc3::model::V800>::new();
-    model.set_ribbon_emitters(std::slice::from_ref(&emitter));
+    model.set_ribbon_emitters([emitter.clone()]);
     let bytes = model.encode_mdx().unwrap();
     let parsed = Model::<wc3::model::V800>::decode_mdx(&bytes).unwrap();
     let ribbons = parsed.ribbon_emitters().cloned().collect::<Vec<_>>();

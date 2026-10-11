@@ -56,7 +56,7 @@ fn camera_extended_tracks_survive_model_io_and_conversion() {
     camera.focal_length = Some(Track::constant(50.0));
     camera.f_stop = Some(Track::constant(2.8));
     let mut model = Model::<V1800>::new();
-    model.set_cameras(&[camera.clone()]);
+    model.set_cameras([camera.clone()]);
     let bytes = model.encode_mdx().unwrap();
     let parsed = Model::<V1800>::decode_mdx(&bytes).unwrap();
     assert_eq!(parsed.cameras().next().unwrap(), &camera);

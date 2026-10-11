@@ -15,7 +15,7 @@ fn bind_pose_matrices_round_trip() {
     let changed = [2.0; 12];
     pose.records[0] = BindPoseMatrix(changed);
     let mut model = Model::<wc3::model::V1800>::new();
-    model.set_bind_poses(&pose.records);
+    model.set_bind_poses(pose.records.iter().copied());
     let parsed = Model::<wc3::model::V1800>::decode_mdx(&model.encode_mdx().unwrap())
         .unwrap()
         .into_owned();
@@ -29,7 +29,7 @@ fn malformed_bind_pose_chunk_is_rejected() {
     assert!(model.bind_poses().cloned().collect::<Vec<_>>().is_empty());
 
     let pose = BindPoseChunk::new(vec![BindPoseMatrix([0.0; 12])]);
-    model.set_bind_poses(&pose.records);
+    model.set_bind_poses(pose.records.iter().copied());
     assert_eq!(
         model.bind_poses().cloned().collect::<Vec<_>>(),
         pose.records

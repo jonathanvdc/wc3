@@ -199,7 +199,7 @@ fn model_assembly_writes_borrowed_collections_without_allocating() {
     use wc3::model::{Model, V800};
     let mut model =
         Model::<V800>::decode_mdl("Version { FormatVersion 800, } Model \"Borrowed\" {}").unwrap();
-    model.set_geosets(&[
+    model.set_geosets([
         Geoset::<V800>::decode_mdl(include_str!("fixtures/mdl/quad_geoset.mdl")).unwrap(),
     ]);
     model
@@ -348,18 +348,18 @@ fn runtime_collection_getters_do_not_allocate_for_any_version() {
     macro_rules! check_version {
         ($variant:ident) => {{
             let mut model = DynamicModel::<NoExtensions>::$variant(Model::new());
-            model.set_sequences(&[Sequence::new("Stand", [0, 100]).unwrap()]);
-            model.set_textures(&[Texture::new("body.blp").unwrap()]);
-            model.set_helpers(&[Node::new("Root", 0).unwrap()]);
+            model.set_sequences([Sequence::new("Stand", [0, 100]).unwrap()]);
+            model.set_textures([Texture::new("body.blp").unwrap()]);
+            model.set_helpers([Node::new("Root", 0).unwrap()]);
             let supported = model
-                .try_set_bind_poses(&[BindPoseMatrix([1.0; 12])])
+                .try_set_bind_poses([BindPoseMatrix([1.0; 12])])
                 .is_ok();
             if supported {
                 model
-                    .try_set_face_fx(&[FaceFx::new("Talk", "talk.facefx").unwrap()])
+                    .try_set_face_fx([FaceFx::new("Talk", "talk.facefx").unwrap()])
                     .unwrap();
                 model
-                    .try_set_popcorn_emitters(&[PopcornEmitter::new(
+                    .try_set_popcorn_emitters([PopcornEmitter::new(
                         Node::new("Fire", 1).unwrap(),
                         "fire.mdx",
                         "Stand",

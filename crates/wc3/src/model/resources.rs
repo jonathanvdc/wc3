@@ -14,7 +14,7 @@
 //! use wc3::model::resources::{ResourceEdit, ResourceValue};
 //!
 //! let mut model = Model::<V800>::new();
-//! model.set_textures(&[Texture::new("Textures\\Body.blp")?]);
+//! model.set_textures([Texture::new("Textures\\Body.blp")?]);
 //! let report = model.rewrite_resources(|reference| {
 //!     let edit = match reference.value {
 //!         ResourceValue::Path(path) => match path.text().strip_prefix("Textures\\") {

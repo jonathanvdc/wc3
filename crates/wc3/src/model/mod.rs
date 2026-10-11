@@ -34,11 +34,14 @@
 //! allocating.
 //! Use `.cloned().collect::<Vec<_>>()` when you need cloned records, or
 //! `.collect::<Vec<_>>()` for a vector of references. Edit records in place with
-//! [`Model::records_mut`], or use [`Model::as_borrowed`] for an independent view
-//! whose unchanged buffers borrow the original model. [`Model::replace_records`]
-//! moves a collection into a replacement chunk; slice-based setters clone
-//! records, including buffers they own. Matching [`Model::chunks`]
-//! or using [`Model::chunk_mut`] retains duplicate chunks and their order.
+//! named mutable iterators such as [`Model::geosets_mut`] or generic
+//! [`Model::records_mut`]. Both retain duplicate chunks and their order. Use
+//! [`Model::as_borrowed`] for an independent view whose unchanged buffers borrow
+//! the original model. Named record setters consume arrays, vectors, or iterators
+//! of records and move their buffers into one replacement chunk, removing
+//! duplicate chunks of that kind. [`Model::replace_records`] provides the same
+//! replacement operation for a typed collection. Matching [`Model::chunks`]
+//! or using [`Model::chunk_mut`] gives direct access to individual chunks.
 //!
 //! MDX decoding produces a `Model<'data, D>` borrowing its input byte slice.
 //! Geometry arrays and animation keys use [`ZeroVec`] directly to read

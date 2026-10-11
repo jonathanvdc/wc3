@@ -58,9 +58,16 @@ impl<'data, D: ModelDialect> Model<'data, D> {
         self.records::<AttachmentsChunk<'_>>()
     }
 
+    /// Mutably borrows records in file order without replacing their chunks.
+    pub fn attachments_mut<'s>(
+        &'s mut self,
+    ) -> impl Iterator<Item = &'s mut Attachment<'data>> + use<'data, 's, D> {
+        self.records_mut::<AttachmentsChunk<'_>>()
+    }
+
     /// Replaces attachments with one `ATCH` chunk, removing any duplicate chunks.
-    pub fn set_attachments(&mut self, attachments: &[Attachment<'data>]) {
-        self.replace_chunk(AttachmentsChunk::new(attachments.to_vec()));
+    pub fn set_attachments(&mut self, attachments: impl IntoIterator<Item = Attachment<'data>>) {
+        self.replace_chunk(AttachmentsChunk::new(attachments.into_iter().collect()));
     }
 }
 

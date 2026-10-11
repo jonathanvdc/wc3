@@ -242,9 +242,16 @@ impl<'data, D: ModelDialect> Model<'data, D> {
         self.records::<BonesChunk<'_>>()
     }
 
+    /// Mutably borrows records in file order without replacing their chunks.
+    pub fn bones_mut<'s>(
+        &'s mut self,
+    ) -> impl Iterator<Item = &'s mut Bone<'data>> + use<'data, 's, D> {
+        self.records_mut::<BonesChunk<'_>>()
+    }
+
     /// Replaces all bones with one `BONE` chunk, removing any duplicate chunks.
-    pub fn set_bones(&mut self, bones: &[Bone<'data>]) {
-        self.replace_chunk(BonesChunk::new(bones.to_vec()));
+    pub fn set_bones(&mut self, bones: impl IntoIterator<Item = Bone<'data>>) {
+        self.replace_chunk(BonesChunk::new(bones.into_iter().collect()));
     }
 
     /// Borrows records in chunk and record order.
@@ -252,9 +259,16 @@ impl<'data, D: ModelDialect> Model<'data, D> {
         self.records::<HelpersChunk<'_>>()
     }
 
+    /// Mutably borrows records in file order without replacing their chunks.
+    pub fn helpers_mut<'s>(
+        &'s mut self,
+    ) -> impl Iterator<Item = &'s mut Node<'data>> + use<'data, 's, D> {
+        self.records_mut::<HelpersChunk<'_>>()
+    }
+
     /// Replaces all helpers with one `HELP` chunk, removing any duplicate chunks.
-    pub fn set_helpers(&mut self, helpers: &[Node<'data>]) {
-        self.replace_chunk(HelpersChunk::new(helpers.to_vec()));
+    pub fn set_helpers(&mut self, helpers: impl IntoIterator<Item = Node<'data>>) {
+        self.replace_chunk(HelpersChunk::new(helpers.into_iter().collect()));
     }
 }
 

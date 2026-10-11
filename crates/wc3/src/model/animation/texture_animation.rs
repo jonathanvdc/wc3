@@ -45,8 +45,20 @@ impl<'data, D: ModelDialect> Model<'data, D> {
         self.records::<TextureAnimationsChunk<'_>>()
     }
 
+    /// Mutably borrows records in file order without replacing their chunks.
+    pub fn texture_animations_mut<'s>(
+        &'s mut self,
+    ) -> impl Iterator<Item = &'s mut TextureAnimation<'data>> + use<'data, 's, D> {
+        self.records_mut::<TextureAnimationsChunk<'_>>()
+    }
+
     /// Replaces texture animations with one `TXAN` chunk, removing any duplicate chunks.
-    pub fn set_texture_animations(&mut self, animations: &[TextureAnimation<'data>]) {
-        self.replace_chunk(TextureAnimationsChunk::new(animations.to_vec()));
+    pub fn set_texture_animations(
+        &mut self,
+        animations: impl IntoIterator<Item = TextureAnimation<'data>>,
+    ) {
+        self.replace_chunk(TextureAnimationsChunk::new(
+            animations.into_iter().collect(),
+        ));
     }
 }

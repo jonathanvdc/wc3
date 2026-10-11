@@ -17,7 +17,7 @@ fn popcorn_fixed_fields_round_trip() {
     emitter.alpha = Animatable::Static(0.75);
     emitter.replaceable_id = 1;
     let mut model = Model::<wc3::model::V1800>::new();
-    model.set_popcorn_emitters(&[emitter]);
+    model.set_popcorn_emitters([emitter]);
     let parsed = Model::<wc3::model::V1800>::decode_mdx(&model.encode_mdx().unwrap())
         .unwrap()
         .into_owned();

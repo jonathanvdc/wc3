@@ -27,7 +27,7 @@ fn camera_fields_and_tracks_round_trip() {
     .unwrap();
     camera.rotation = Some(track.clone());
     let mut model = Model::<wc3::model::V1100>::new();
-    model.set_cameras(&[camera]);
+    model.set_cameras([camera]);
     let decoded = Model::<wc3::model::V1100>::decode_mdx(&model.encode_mdx().unwrap())
         .unwrap()
         .into_owned();
@@ -47,7 +47,7 @@ fn newer_camera_variant_round_trip() {
     assert_eq!(camera.variant, CameraVariant::Variant3);
     camera.field_of_view = 0.8;
     let mut model = Model::<wc3::model::V1800>::new();
-    model.set_cameras(&[camera]);
+    model.set_cameras([camera]);
     let bytes = model.encode_mdx().unwrap();
     let parsed = Model::<wc3::model::V1800>::decode_mdx(&bytes).unwrap();
     assert_eq!(
@@ -71,7 +71,7 @@ fn camera_variants_round_trip() {
         camera.variant = variant;
         camera.target_position = [4.0, 5.0, 6.0];
         let mut model = Model::<wc3::model::V1200>::new();
-        model.set_cameras(&[camera]);
+        model.set_cameras([camera]);
         let bytes = model.encode_mdx().unwrap();
         let parsed = Model::<wc3::model::V1200>::decode_mdx(&bytes).unwrap();
         assert_eq!(parsed.cameras().next().unwrap().variant, variant);

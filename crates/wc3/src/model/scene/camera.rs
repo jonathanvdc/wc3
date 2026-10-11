@@ -175,9 +175,16 @@ impl<'data, D: ModelDialect> Model<'data, D> {
         self.records::<CamerasChunk<'_, D::Version>>()
     }
 
+    /// Mutably borrows records in file order without replacing their chunks.
+    pub fn cameras_mut<'s>(
+        &'s mut self,
+    ) -> impl Iterator<Item = &'s mut Camera<'data, D::Version>> + use<'data, 's, D> {
+        self.records_mut::<CamerasChunk<'_, D::Version>>()
+    }
+
     /// Replaces cameras with one `CAMS` chunk, removing any duplicate chunks.
-    pub fn set_cameras(&mut self, cameras: &[Camera<'data, D::Version>]) {
-        self.replace_chunk(CamerasChunk::new(cameras.to_vec()));
+    pub fn set_cameras(&mut self, cameras: impl IntoIterator<Item = Camera<'data, D::Version>>) {
+        self.replace_chunk(CamerasChunk::new(cameras.into_iter().collect()));
     }
 }
 

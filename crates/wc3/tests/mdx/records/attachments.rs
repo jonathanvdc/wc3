@@ -27,7 +27,7 @@ fn attachment_fields_and_visibility_round_trip() {
     .unwrap();
     attachment.visibility = (Some(&track)).cloned();
     let mut model = Model::<wc3::model::V1800>::new();
-    model.set_attachments(&[attachment]);
+    model.set_attachments([attachment]);
     let parsed = Model::<wc3::model::V1800>::decode_mdx(&model.encode_mdx().unwrap())
         .unwrap()
         .into_owned();

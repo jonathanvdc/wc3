@@ -283,9 +283,19 @@ impl<'data, D: ModelDialect> Model<'data, D> {
         self.records::<MaterialsChunk<'_, D::Version>>()
     }
 
+    /// Mutably borrows records in file order without replacing their chunks.
+    pub fn materials_mut<'s>(
+        &'s mut self,
+    ) -> impl Iterator<Item = &'s mut Material<'data, D::Version>> + use<'data, 's, D> {
+        self.records_mut::<MaterialsChunk<'_, D::Version>>()
+    }
+
     /// Replaces all material records with one `MTLS` chunk, removing any duplicate chunks.
-    pub fn set_materials(&mut self, materials: &[Material<'data, D::Version>]) {
-        self.replace_chunk(MaterialsChunk::new(materials.to_vec()));
+    pub fn set_materials(
+        &mut self,
+        materials: impl IntoIterator<Item = Material<'data, D::Version>>,
+    ) {
+        self.replace_chunk(MaterialsChunk::new(materials.into_iter().collect()));
     }
 }
 

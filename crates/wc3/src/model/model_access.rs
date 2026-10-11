@@ -95,25 +95,33 @@ macro_rules! try_visit_records {
     };
 }
 
-/// Read and replace collections shared by every model version.
+/// Read, edit, and replace collections shared by every model version.
 ///
 /// Import this trait to use these operations on [`DynamicModel`]. Getters for
-/// borrowed record collections return iterators without temporary vectors. Setters
-/// clone records, preserving the borrowed or owned state of each buffer.
-/// Collection setters replace all chunks of that kind with one collection.
+/// borrowed record collections return iterators without temporary vectors. Mutable
+/// iterators edit records in place, preserving chunk order. Record setters consume
+/// an iterator of records and move their buffers into one replacement collection.
 pub trait CommonModelAccess<'data> {
     /// Borrows glider records in file order.
     fn gliders<'s>(&'s self) -> impl Iterator<Item = &'s Glider> + 's
     where
         'data: 's;
+    /// Mutably borrows records in file order without replacing their chunks.
+    fn gliders_mut<'s>(&'s mut self) -> impl Iterator<Item = &'s mut Glider> + 's
+    where
+        'data: 's;
     /// Replaces all glider chunks with one collection of the supplied records.
-    fn set_gliders(&mut self, gliders: &[Glider]);
+    fn set_gliders(&mut self, gliders: impl IntoIterator<Item = Glider>);
     /// Borrows sequence records in file order.
     fn sequences<'s>(&'s self) -> impl Iterator<Item = &'s Sequence> + 's
     where
         'data: 's;
+    /// Mutably borrows records in file order without replacing their chunks.
+    fn sequences_mut<'s>(&'s mut self) -> impl Iterator<Item = &'s mut Sequence> + 's
+    where
+        'data: 's;
     /// Replaces all sequence chunks with one collection of the supplied records.
-    fn set_sequences(&mut self, sequences: &[Sequence]);
+    fn set_sequences(&mut self, sequences: impl IntoIterator<Item = Sequence>);
     /// Returns global-sequence durations in milliseconds, in file order.
     fn global_sequences(&self) -> Vec<u32>;
     /// Replaces all global-sequence chunks with the supplied millisecond durations.
@@ -122,50 +130,94 @@ pub trait CommonModelAccess<'data> {
     fn texture_animations<'s>(&'s self) -> impl Iterator<Item = &'s TextureAnimation<'data>> + 's
     where
         'data: 's;
+    /// Mutably borrows records in file order without replacing their chunks.
+    fn texture_animations_mut<'s>(
+        &'s mut self,
+    ) -> impl Iterator<Item = &'s mut TextureAnimation<'data>> + 's
+    where
+        'data: 's;
     /// Replaces all texture-animation chunks with one collection of the supplied records.
-    fn set_texture_animations(&mut self, animations: &[TextureAnimation<'data>]);
+    fn set_texture_animations(
+        &mut self,
+        animations: impl IntoIterator<Item = TextureAnimation<'data>>,
+    );
     /// Borrows geoset-animation records in file order.
     fn geoset_animations<'s>(&'s self) -> impl Iterator<Item = &'s GeosetAnimation<'data>> + 's
     where
         'data: 's;
+    /// Mutably borrows records in file order without replacing their chunks.
+    fn geoset_animations_mut<'s>(
+        &'s mut self,
+    ) -> impl Iterator<Item = &'s mut GeosetAnimation<'data>> + 's
+    where
+        'data: 's;
     /// Replaces all geoset-animation chunks with one collection of the supplied records.
-    fn set_geoset_animations(&mut self, animations: &[GeosetAnimation<'data>]);
+    fn set_geoset_animations(
+        &mut self,
+        animations: impl IntoIterator<Item = GeosetAnimation<'data>>,
+    );
     /// Borrows texture records in file order.
     fn textures<'s>(&'s self) -> impl Iterator<Item = &'s Texture> + 's
     where
         'data: 's;
+    /// Mutably borrows records in file order without replacing their chunks.
+    fn textures_mut<'s>(&'s mut self) -> impl Iterator<Item = &'s mut Texture> + 's
+    where
+        'data: 's;
     /// Replaces all texture chunks with one collection of the supplied records.
-    fn set_textures(&mut self, textures: &[Texture]);
+    fn set_textures(&mut self, textures: impl IntoIterator<Item = Texture>);
     /// Borrows bone records in file order.
     fn bones<'s>(&'s self) -> impl Iterator<Item = &'s Bone<'data>> + 's
     where
         'data: 's;
+    /// Mutably borrows records in file order without replacing their chunks.
+    fn bones_mut<'s>(&'s mut self) -> impl Iterator<Item = &'s mut Bone<'data>> + 's
+    where
+        'data: 's;
     /// Replaces all bone chunks with one collection of the supplied records.
-    fn set_bones(&mut self, bones: &[Bone<'data>]);
+    fn set_bones(&mut self, bones: impl IntoIterator<Item = Bone<'data>>);
     /// Borrows helper records in file order.
     fn helpers<'s>(&'s self) -> impl Iterator<Item = &'s Node<'data>> + 's
     where
         'data: 's;
+    /// Mutably borrows records in file order without replacing their chunks.
+    fn helpers_mut<'s>(&'s mut self) -> impl Iterator<Item = &'s mut Node<'data>> + 's
+    where
+        'data: 's;
     /// Replaces all helper chunks with one collection of the supplied records.
-    fn set_helpers(&mut self, helpers: &[Node<'data>]);
+    fn set_helpers(&mut self, helpers: impl IntoIterator<Item = Node<'data>>);
     /// Borrows attachment records in file order.
     fn attachments<'s>(&'s self) -> impl Iterator<Item = &'s Attachment<'data>> + 's
     where
         'data: 's;
+    /// Mutably borrows records in file order without replacing their chunks.
+    fn attachments_mut<'s>(&'s mut self) -> impl Iterator<Item = &'s mut Attachment<'data>> + 's
+    where
+        'data: 's;
     /// Replaces all attachment chunks with one collection of the supplied records.
-    fn set_attachments(&mut self, attachments: &[Attachment<'data>]);
+    fn set_attachments(&mut self, attachments: impl IntoIterator<Item = Attachment<'data>>);
     /// Borrows event-object records in file order.
     fn event_objects<'s>(&'s self) -> impl Iterator<Item = &'s EventObject<'data>> + 's
     where
         'data: 's;
+    /// Mutably borrows records in file order without replacing their chunks.
+    fn event_objects_mut<'s>(&'s mut self) -> impl Iterator<Item = &'s mut EventObject<'data>> + 's
+    where
+        'data: 's;
     /// Replaces all event-object chunks with one collection of the supplied records.
-    fn set_event_objects(&mut self, events: &[EventObject<'data>]);
+    fn set_event_objects(&mut self, events: impl IntoIterator<Item = EventObject<'data>>);
     /// Borrows collision-shape records in file order.
     fn collision_shapes<'s>(&'s self) -> impl Iterator<Item = &'s CollisionShape<'data>> + 's
     where
         'data: 's;
+    /// Mutably borrows records in file order without replacing their chunks.
+    fn collision_shapes_mut<'s>(
+        &'s mut self,
+    ) -> impl Iterator<Item = &'s mut CollisionShape<'data>> + 's
+    where
+        'data: 's;
     /// Replaces all collision-shape chunks with one collection of the supplied records.
-    fn set_collision_shapes(&mut self, shapes: &[CollisionShape<'data>]);
+    fn set_collision_shapes(&mut self, shapes: impl IntoIterator<Item = CollisionShape<'data>>);
     /// Returns copies of pivot-point records in file order.
     fn pivot_points(&self) -> Vec<Vec3>;
     /// Replaces all pivot-point chunks with one collection of the supplied records.
@@ -174,20 +226,41 @@ pub trait CommonModelAccess<'data> {
     fn particle_emitters<'s>(&'s self) -> impl Iterator<Item = &'s ParticleEmitter<'data>> + 's
     where
         'data: 's;
+    /// Mutably borrows records in file order without replacing their chunks.
+    fn particle_emitters_mut<'s>(
+        &'s mut self,
+    ) -> impl Iterator<Item = &'s mut ParticleEmitter<'data>> + 's
+    where
+        'data: 's;
     /// Replaces all particle-emitter chunks with one collection of the supplied records.
-    fn set_particle_emitters(&mut self, emitters: &[ParticleEmitter<'data>]);
+    fn set_particle_emitters(&mut self, emitters: impl IntoIterator<Item = ParticleEmitter<'data>>);
     /// Borrows particle-emitter-2 records in file order.
     fn particle_emitters2<'s>(&'s self) -> impl Iterator<Item = &'s ParticleEmitter2<'data>> + 's
     where
         'data: 's;
+    /// Mutably borrows records in file order without replacing their chunks.
+    fn particle_emitters2_mut<'s>(
+        &'s mut self,
+    ) -> impl Iterator<Item = &'s mut ParticleEmitter2<'data>> + 's
+    where
+        'data: 's;
     /// Replaces all particle-emitter-2 chunks with one collection of the supplied records.
-    fn set_particle_emitters2(&mut self, emitters: &[ParticleEmitter2<'data>]);
+    fn set_particle_emitters2(
+        &mut self,
+        emitters: impl IntoIterator<Item = ParticleEmitter2<'data>>,
+    );
     /// Borrows ribbon-emitter records in file order.
     fn ribbon_emitters<'s>(&'s self) -> impl Iterator<Item = &'s RibbonEmitter<'data>> + 's
     where
         'data: 's;
+    /// Mutably borrows records in file order without replacing their chunks.
+    fn ribbon_emitters_mut<'s>(
+        &'s mut self,
+    ) -> impl Iterator<Item = &'s mut RibbonEmitter<'data>> + 's
+    where
+        'data: 's;
     /// Replaces all ribbon-emitter chunks with one collection of the supplied records.
-    fn set_ribbon_emitters(&mut self, emitters: &[RibbonEmitter<'data>]);
+    fn set_ribbon_emitters(&mut self, emitters: impl IntoIterator<Item = RibbonEmitter<'data>>);
     /// Returns an owned copy of the first model-info record, or `None` if absent.
     fn model_info(&self) -> Option<ModelInfo>;
     /// Replaces model metadata with an owned copy, creating a chunk if absent.
@@ -202,7 +275,13 @@ impl<'data, D: ModelDialect> CommonModelAccess<'data> for Model<'data, D> {
     {
         Model::gliders(self)
     }
-    fn set_gliders(&mut self, gliders: &[Glider]) {
+    fn gliders_mut<'s>(&'s mut self) -> impl Iterator<Item = &'s mut Glider> + 's
+    where
+        'data: 's,
+    {
+        Model::gliders_mut(self)
+    }
+    fn set_gliders(&mut self, gliders: impl IntoIterator<Item = Glider>) {
         Model::set_gliders(self, gliders)
     }
 
@@ -212,7 +291,13 @@ impl<'data, D: ModelDialect> CommonModelAccess<'data> for Model<'data, D> {
     {
         Model::sequences(self)
     }
-    fn set_sequences(&mut self, sequences: &[Sequence]) {
+    fn sequences_mut<'s>(&'s mut self) -> impl Iterator<Item = &'s mut Sequence> + 's
+    where
+        'data: 's,
+    {
+        Model::sequences_mut(self)
+    }
+    fn set_sequences(&mut self, sequences: impl IntoIterator<Item = Sequence>) {
         Model::set_sequences(self, sequences)
     }
     fn global_sequences(&self) -> Vec<u32> {
@@ -227,7 +312,18 @@ impl<'data, D: ModelDialect> CommonModelAccess<'data> for Model<'data, D> {
     {
         Model::texture_animations(self)
     }
-    fn set_texture_animations(&mut self, animations: &[TextureAnimation<'data>]) {
+    fn texture_animations_mut<'s>(
+        &'s mut self,
+    ) -> impl Iterator<Item = &'s mut TextureAnimation<'data>> + 's
+    where
+        'data: 's,
+    {
+        Model::texture_animations_mut(self)
+    }
+    fn set_texture_animations(
+        &mut self,
+        animations: impl IntoIterator<Item = TextureAnimation<'data>>,
+    ) {
         Model::set_texture_animations(self, animations)
     }
     fn geoset_animations<'s>(&'s self) -> impl Iterator<Item = &'s GeosetAnimation<'data>> + 's
@@ -236,7 +332,18 @@ impl<'data, D: ModelDialect> CommonModelAccess<'data> for Model<'data, D> {
     {
         Model::geoset_animations(self)
     }
-    fn set_geoset_animations(&mut self, animations: &[GeosetAnimation<'data>]) {
+    fn geoset_animations_mut<'s>(
+        &'s mut self,
+    ) -> impl Iterator<Item = &'s mut GeosetAnimation<'data>> + 's
+    where
+        'data: 's,
+    {
+        Model::geoset_animations_mut(self)
+    }
+    fn set_geoset_animations(
+        &mut self,
+        animations: impl IntoIterator<Item = GeosetAnimation<'data>>,
+    ) {
         Model::set_geoset_animations(self, animations)
     }
     fn textures<'s>(&'s self) -> impl Iterator<Item = &'s Texture> + 's
@@ -245,7 +352,13 @@ impl<'data, D: ModelDialect> CommonModelAccess<'data> for Model<'data, D> {
     {
         Model::textures(self)
     }
-    fn set_textures(&mut self, textures: &[Texture]) {
+    fn textures_mut<'s>(&'s mut self) -> impl Iterator<Item = &'s mut Texture> + 's
+    where
+        'data: 's,
+    {
+        Model::textures_mut(self)
+    }
+    fn set_textures(&mut self, textures: impl IntoIterator<Item = Texture>) {
         Model::set_textures(self, textures)
     }
     fn bones<'s>(&'s self) -> impl Iterator<Item = &'s Bone<'data>> + 's
@@ -254,7 +367,13 @@ impl<'data, D: ModelDialect> CommonModelAccess<'data> for Model<'data, D> {
     {
         Model::bones(self)
     }
-    fn set_bones(&mut self, bones: &[Bone<'data>]) {
+    fn bones_mut<'s>(&'s mut self) -> impl Iterator<Item = &'s mut Bone<'data>> + 's
+    where
+        'data: 's,
+    {
+        Model::bones_mut(self)
+    }
+    fn set_bones(&mut self, bones: impl IntoIterator<Item = Bone<'data>>) {
         Model::set_bones(self, bones)
     }
     fn helpers<'s>(&'s self) -> impl Iterator<Item = &'s Node<'data>> + 's
@@ -263,7 +382,13 @@ impl<'data, D: ModelDialect> CommonModelAccess<'data> for Model<'data, D> {
     {
         Model::helpers(self)
     }
-    fn set_helpers(&mut self, helpers: &[Node<'data>]) {
+    fn helpers_mut<'s>(&'s mut self) -> impl Iterator<Item = &'s mut Node<'data>> + 's
+    where
+        'data: 's,
+    {
+        Model::helpers_mut(self)
+    }
+    fn set_helpers(&mut self, helpers: impl IntoIterator<Item = Node<'data>>) {
         Model::set_helpers(self, helpers)
     }
     fn attachments<'s>(&'s self) -> impl Iterator<Item = &'s Attachment<'data>> + 's
@@ -272,7 +397,13 @@ impl<'data, D: ModelDialect> CommonModelAccess<'data> for Model<'data, D> {
     {
         Model::attachments(self)
     }
-    fn set_attachments(&mut self, attachments: &[Attachment<'data>]) {
+    fn attachments_mut<'s>(&'s mut self) -> impl Iterator<Item = &'s mut Attachment<'data>> + 's
+    where
+        'data: 's,
+    {
+        Model::attachments_mut(self)
+    }
+    fn set_attachments(&mut self, attachments: impl IntoIterator<Item = Attachment<'data>>) {
         Model::set_attachments(self, attachments)
     }
     fn event_objects<'s>(&'s self) -> impl Iterator<Item = &'s EventObject<'data>> + 's
@@ -281,7 +412,13 @@ impl<'data, D: ModelDialect> CommonModelAccess<'data> for Model<'data, D> {
     {
         Model::event_objects(self)
     }
-    fn set_event_objects(&mut self, events: &[EventObject<'data>]) {
+    fn event_objects_mut<'s>(&'s mut self) -> impl Iterator<Item = &'s mut EventObject<'data>> + 's
+    where
+        'data: 's,
+    {
+        Model::event_objects_mut(self)
+    }
+    fn set_event_objects(&mut self, events: impl IntoIterator<Item = EventObject<'data>>) {
         Model::set_event_objects(self, events)
     }
     fn collision_shapes<'s>(&'s self) -> impl Iterator<Item = &'s CollisionShape<'data>> + 's
@@ -290,7 +427,15 @@ impl<'data, D: ModelDialect> CommonModelAccess<'data> for Model<'data, D> {
     {
         Model::collision_shapes(self)
     }
-    fn set_collision_shapes(&mut self, shapes: &[CollisionShape<'data>]) {
+    fn collision_shapes_mut<'s>(
+        &'s mut self,
+    ) -> impl Iterator<Item = &'s mut CollisionShape<'data>> + 's
+    where
+        'data: 's,
+    {
+        Model::collision_shapes_mut(self)
+    }
+    fn set_collision_shapes(&mut self, shapes: impl IntoIterator<Item = CollisionShape<'data>>) {
         Model::set_collision_shapes(self, shapes)
     }
     fn pivot_points(&self) -> Vec<Vec3> {
@@ -305,7 +450,18 @@ impl<'data, D: ModelDialect> CommonModelAccess<'data> for Model<'data, D> {
     {
         Model::particle_emitters(self)
     }
-    fn set_particle_emitters(&mut self, emitters: &[ParticleEmitter<'data>]) {
+    fn particle_emitters_mut<'s>(
+        &'s mut self,
+    ) -> impl Iterator<Item = &'s mut ParticleEmitter<'data>> + 's
+    where
+        'data: 's,
+    {
+        Model::particle_emitters_mut(self)
+    }
+    fn set_particle_emitters(
+        &mut self,
+        emitters: impl IntoIterator<Item = ParticleEmitter<'data>>,
+    ) {
         Model::set_particle_emitters(self, emitters)
     }
     fn particle_emitters2<'s>(&'s self) -> impl Iterator<Item = &'s ParticleEmitter2<'data>> + 's
@@ -314,7 +470,18 @@ impl<'data, D: ModelDialect> CommonModelAccess<'data> for Model<'data, D> {
     {
         Model::particle_emitters2(self)
     }
-    fn set_particle_emitters2(&mut self, emitters: &[ParticleEmitter2<'data>]) {
+    fn particle_emitters2_mut<'s>(
+        &'s mut self,
+    ) -> impl Iterator<Item = &'s mut ParticleEmitter2<'data>> + 's
+    where
+        'data: 's,
+    {
+        Model::particle_emitters2_mut(self)
+    }
+    fn set_particle_emitters2(
+        &mut self,
+        emitters: impl IntoIterator<Item = ParticleEmitter2<'data>>,
+    ) {
         Model::set_particle_emitters2(self, emitters)
     }
     fn ribbon_emitters<'s>(&'s self) -> impl Iterator<Item = &'s RibbonEmitter<'data>> + 's
@@ -323,7 +490,15 @@ impl<'data, D: ModelDialect> CommonModelAccess<'data> for Model<'data, D> {
     {
         Model::ribbon_emitters(self)
     }
-    fn set_ribbon_emitters(&mut self, emitters: &[RibbonEmitter<'data>]) {
+    fn ribbon_emitters_mut<'s>(
+        &'s mut self,
+    ) -> impl Iterator<Item = &'s mut RibbonEmitter<'data>> + 's
+    where
+        'data: 's,
+    {
+        Model::ribbon_emitters_mut(self)
+    }
+    fn set_ribbon_emitters(&mut self, emitters: impl IntoIterator<Item = RibbonEmitter<'data>>) {
         Model::set_ribbon_emitters(self, emitters)
     }
     fn model_info(&self) -> Option<ModelInfo> {
@@ -341,7 +516,13 @@ impl<'data, E: Clone + Debug> CommonModelAccess<'data> for DynamicModel<'data, E
     {
         visit_records!(self, |model| model.gliders())
     }
-    fn set_gliders(&mut self, gliders: &[Glider]) {
+    fn gliders_mut<'s>(&'s mut self) -> impl Iterator<Item = &'s mut Glider> + 's
+    where
+        'data: 's,
+    {
+        visit_records!(self, |model| model.gliders_mut())
+    }
+    fn set_gliders(&mut self, gliders: impl IntoIterator<Item = Glider>) {
         visit_model!(self, |model| model.set_gliders(gliders))
     }
 
@@ -351,7 +532,13 @@ impl<'data, E: Clone + Debug> CommonModelAccess<'data> for DynamicModel<'data, E
     {
         visit_records!(self, |model| model.sequences())
     }
-    fn set_sequences(&mut self, sequences: &[Sequence]) {
+    fn sequences_mut<'s>(&'s mut self) -> impl Iterator<Item = &'s mut Sequence> + 's
+    where
+        'data: 's,
+    {
+        visit_records!(self, |model| model.sequences_mut())
+    }
+    fn set_sequences(&mut self, sequences: impl IntoIterator<Item = Sequence>) {
         visit_model!(self, |model| model.set_sequences(sequences))
     }
     fn global_sequences(&self) -> Vec<u32> {
@@ -366,7 +553,18 @@ impl<'data, E: Clone + Debug> CommonModelAccess<'data> for DynamicModel<'data, E
     {
         visit_records!(self, |model| model.texture_animations())
     }
-    fn set_texture_animations(&mut self, animations: &[TextureAnimation<'data>]) {
+    fn texture_animations_mut<'s>(
+        &'s mut self,
+    ) -> impl Iterator<Item = &'s mut TextureAnimation<'data>> + 's
+    where
+        'data: 's,
+    {
+        visit_records!(self, |model| model.texture_animations_mut())
+    }
+    fn set_texture_animations(
+        &mut self,
+        animations: impl IntoIterator<Item = TextureAnimation<'data>>,
+    ) {
         visit_model!(self, |model| model.set_texture_animations(animations))
     }
     fn geoset_animations<'s>(&'s self) -> impl Iterator<Item = &'s GeosetAnimation<'data>> + 's
@@ -375,7 +573,18 @@ impl<'data, E: Clone + Debug> CommonModelAccess<'data> for DynamicModel<'data, E
     {
         visit_records!(self, |model| model.geoset_animations())
     }
-    fn set_geoset_animations(&mut self, animations: &[GeosetAnimation<'data>]) {
+    fn geoset_animations_mut<'s>(
+        &'s mut self,
+    ) -> impl Iterator<Item = &'s mut GeosetAnimation<'data>> + 's
+    where
+        'data: 's,
+    {
+        visit_records!(self, |model| model.geoset_animations_mut())
+    }
+    fn set_geoset_animations(
+        &mut self,
+        animations: impl IntoIterator<Item = GeosetAnimation<'data>>,
+    ) {
         visit_model!(self, |model| model.set_geoset_animations(animations))
     }
     fn textures<'s>(&'s self) -> impl Iterator<Item = &'s Texture> + 's
@@ -384,7 +593,13 @@ impl<'data, E: Clone + Debug> CommonModelAccess<'data> for DynamicModel<'data, E
     {
         visit_records!(self, |model| model.textures())
     }
-    fn set_textures(&mut self, textures: &[Texture]) {
+    fn textures_mut<'s>(&'s mut self) -> impl Iterator<Item = &'s mut Texture> + 's
+    where
+        'data: 's,
+    {
+        visit_records!(self, |model| model.textures_mut())
+    }
+    fn set_textures(&mut self, textures: impl IntoIterator<Item = Texture>) {
         visit_model!(self, |model| model.set_textures(textures))
     }
     fn bones<'s>(&'s self) -> impl Iterator<Item = &'s Bone<'data>> + 's
@@ -393,7 +608,13 @@ impl<'data, E: Clone + Debug> CommonModelAccess<'data> for DynamicModel<'data, E
     {
         visit_records!(self, |model| model.bones())
     }
-    fn set_bones(&mut self, bones: &[Bone<'data>]) {
+    fn bones_mut<'s>(&'s mut self) -> impl Iterator<Item = &'s mut Bone<'data>> + 's
+    where
+        'data: 's,
+    {
+        visit_records!(self, |model| model.bones_mut())
+    }
+    fn set_bones(&mut self, bones: impl IntoIterator<Item = Bone<'data>>) {
         visit_model!(self, |model| model.set_bones(bones))
     }
     fn helpers<'s>(&'s self) -> impl Iterator<Item = &'s Node<'data>> + 's
@@ -402,7 +623,13 @@ impl<'data, E: Clone + Debug> CommonModelAccess<'data> for DynamicModel<'data, E
     {
         visit_records!(self, |model| model.helpers())
     }
-    fn set_helpers(&mut self, helpers: &[Node<'data>]) {
+    fn helpers_mut<'s>(&'s mut self) -> impl Iterator<Item = &'s mut Node<'data>> + 's
+    where
+        'data: 's,
+    {
+        visit_records!(self, |model| model.helpers_mut())
+    }
+    fn set_helpers(&mut self, helpers: impl IntoIterator<Item = Node<'data>>) {
         visit_model!(self, |model| model.set_helpers(helpers))
     }
     fn attachments<'s>(&'s self) -> impl Iterator<Item = &'s Attachment<'data>> + 's
@@ -411,7 +638,13 @@ impl<'data, E: Clone + Debug> CommonModelAccess<'data> for DynamicModel<'data, E
     {
         visit_records!(self, |model| model.attachments())
     }
-    fn set_attachments(&mut self, attachments: &[Attachment<'data>]) {
+    fn attachments_mut<'s>(&'s mut self) -> impl Iterator<Item = &'s mut Attachment<'data>> + 's
+    where
+        'data: 's,
+    {
+        visit_records!(self, |model| model.attachments_mut())
+    }
+    fn set_attachments(&mut self, attachments: impl IntoIterator<Item = Attachment<'data>>) {
         visit_model!(self, |model| model.set_attachments(attachments))
     }
     fn event_objects<'s>(&'s self) -> impl Iterator<Item = &'s EventObject<'data>> + 's
@@ -420,7 +653,13 @@ impl<'data, E: Clone + Debug> CommonModelAccess<'data> for DynamicModel<'data, E
     {
         visit_records!(self, |model| model.event_objects())
     }
-    fn set_event_objects(&mut self, events: &[EventObject<'data>]) {
+    fn event_objects_mut<'s>(&'s mut self) -> impl Iterator<Item = &'s mut EventObject<'data>> + 's
+    where
+        'data: 's,
+    {
+        visit_records!(self, |model| model.event_objects_mut())
+    }
+    fn set_event_objects(&mut self, events: impl IntoIterator<Item = EventObject<'data>>) {
         visit_model!(self, |model| model.set_event_objects(events))
     }
     fn collision_shapes<'s>(&'s self) -> impl Iterator<Item = &'s CollisionShape<'data>> + 's
@@ -429,7 +668,15 @@ impl<'data, E: Clone + Debug> CommonModelAccess<'data> for DynamicModel<'data, E
     {
         visit_records!(self, |model| model.collision_shapes())
     }
-    fn set_collision_shapes(&mut self, shapes: &[CollisionShape<'data>]) {
+    fn collision_shapes_mut<'s>(
+        &'s mut self,
+    ) -> impl Iterator<Item = &'s mut CollisionShape<'data>> + 's
+    where
+        'data: 's,
+    {
+        visit_records!(self, |model| model.collision_shapes_mut())
+    }
+    fn set_collision_shapes(&mut self, shapes: impl IntoIterator<Item = CollisionShape<'data>>) {
         visit_model!(self, |model| model.set_collision_shapes(shapes))
     }
     fn pivot_points(&self) -> Vec<Vec3> {
@@ -444,7 +691,18 @@ impl<'data, E: Clone + Debug> CommonModelAccess<'data> for DynamicModel<'data, E
     {
         visit_records!(self, |model| model.particle_emitters())
     }
-    fn set_particle_emitters(&mut self, emitters: &[ParticleEmitter<'data>]) {
+    fn particle_emitters_mut<'s>(
+        &'s mut self,
+    ) -> impl Iterator<Item = &'s mut ParticleEmitter<'data>> + 's
+    where
+        'data: 's,
+    {
+        visit_records!(self, |model| model.particle_emitters_mut())
+    }
+    fn set_particle_emitters(
+        &mut self,
+        emitters: impl IntoIterator<Item = ParticleEmitter<'data>>,
+    ) {
         visit_model!(self, |model| model.set_particle_emitters(emitters))
     }
     fn particle_emitters2<'s>(&'s self) -> impl Iterator<Item = &'s ParticleEmitter2<'data>> + 's
@@ -453,7 +711,18 @@ impl<'data, E: Clone + Debug> CommonModelAccess<'data> for DynamicModel<'data, E
     {
         visit_records!(self, |model| model.particle_emitters2())
     }
-    fn set_particle_emitters2(&mut self, emitters: &[ParticleEmitter2<'data>]) {
+    fn particle_emitters2_mut<'s>(
+        &'s mut self,
+    ) -> impl Iterator<Item = &'s mut ParticleEmitter2<'data>> + 's
+    where
+        'data: 's,
+    {
+        visit_records!(self, |model| model.particle_emitters2_mut())
+    }
+    fn set_particle_emitters2(
+        &mut self,
+        emitters: impl IntoIterator<Item = ParticleEmitter2<'data>>,
+    ) {
         visit_model!(self, |model| model.set_particle_emitters2(emitters))
     }
     fn ribbon_emitters<'s>(&'s self) -> impl Iterator<Item = &'s RibbonEmitter<'data>> + 's
@@ -462,7 +731,15 @@ impl<'data, E: Clone + Debug> CommonModelAccess<'data> for DynamicModel<'data, E
     {
         visit_records!(self, |model| model.ribbon_emitters())
     }
-    fn set_ribbon_emitters(&mut self, emitters: &[RibbonEmitter<'data>]) {
+    fn ribbon_emitters_mut<'s>(
+        &'s mut self,
+    ) -> impl Iterator<Item = &'s mut RibbonEmitter<'data>> + 's
+    where
+        'data: 's,
+    {
+        visit_records!(self, |model| model.ribbon_emitters_mut())
+    }
+    fn set_ribbon_emitters(&mut self, emitters: impl IntoIterator<Item = RibbonEmitter<'data>>) {
         visit_model!(self, |model| model.set_ribbon_emitters(emitters))
     }
     fn model_info(&self) -> Option<ModelInfo> {
@@ -485,17 +762,35 @@ pub trait TryModelAccess<'data> {
     ) -> Result<impl Iterator<Item = &'s BindPoseMatrix> + 's, ValueError>
     where
         'data: 's;
+    /// Mutably borrows records in file order without replacing their chunks.
+    fn try_bind_poses_mut<'s>(
+        &'s mut self,
+    ) -> Result<impl Iterator<Item = &'s mut BindPoseMatrix> + 's, ValueError>
+    where
+        'data: 's;
     /// Replaces all bind-pose chunks with one collection of the supplied records.
     /// Returns an error if the model version does not support this collection.
-    fn try_set_bind_poses(&mut self, poses: &[BindPoseMatrix]) -> Result<(), ValueError>;
+    fn try_set_bind_poses(
+        &mut self,
+        poses: impl IntoIterator<Item = BindPoseMatrix>,
+    ) -> Result<(), ValueError>;
     /// Borrows FaceFX records in file order.
     /// Returns an error if the model version does not support this collection.
     fn try_face_fx<'s>(&'s self) -> Result<impl Iterator<Item = &'s FaceFx> + 's, ValueError>
     where
         'data: 's;
+    /// Mutably borrows records in file order without replacing their chunks.
+    fn try_face_fx_mut<'s>(
+        &'s mut self,
+    ) -> Result<impl Iterator<Item = &'s mut FaceFx> + 's, ValueError>
+    where
+        'data: 's;
     /// Replaces all FaceFX chunks with one collection of the supplied records.
     /// Returns an error if the model version does not support this collection.
-    fn try_set_face_fx(&mut self, entries: &[FaceFx]) -> Result<(), ValueError>;
+    fn try_set_face_fx(
+        &mut self,
+        entries: impl IntoIterator<Item = FaceFx>,
+    ) -> Result<(), ValueError>;
     /// Borrows Popcorn-emitter records in file order.
     /// Returns an error if the model version does not support this collection.
     fn try_popcorn_emitters<'s>(
@@ -503,11 +798,17 @@ pub trait TryModelAccess<'data> {
     ) -> Result<impl Iterator<Item = &'s PopcornEmitter<'data>> + 's, ValueError>
     where
         'data: 's;
+    /// Mutably borrows records in file order without replacing their chunks.
+    fn try_popcorn_emitters_mut<'s>(
+        &'s mut self,
+    ) -> Result<impl Iterator<Item = &'s mut PopcornEmitter<'data>> + 's, ValueError>
+    where
+        'data: 's;
     /// Replaces all Popcorn-emitter chunks with one collection of the supplied records.
     /// Returns an error if the model version does not support this collection.
     fn try_set_popcorn_emitters(
         &mut self,
-        emitters: &[PopcornEmitter<'data>],
+        emitters: impl IntoIterator<Item = PopcornEmitter<'data>>,
     ) -> Result<(), ValueError>;
 }
 
@@ -520,7 +821,18 @@ impl<'data, D: ModelDialect> TryModelAccess<'data> for Model<'data, D> {
     {
         Model::try_bind_poses(self)
     }
-    fn try_set_bind_poses(&mut self, poses: &[BindPoseMatrix]) -> Result<(), ValueError> {
+    fn try_bind_poses_mut<'s>(
+        &'s mut self,
+    ) -> Result<impl Iterator<Item = &'s mut BindPoseMatrix> + 's, ValueError>
+    where
+        'data: 's,
+    {
+        Model::try_bind_poses_mut(self)
+    }
+    fn try_set_bind_poses(
+        &mut self,
+        poses: impl IntoIterator<Item = BindPoseMatrix>,
+    ) -> Result<(), ValueError> {
         Model::try_set_bind_poses(self, poses)
     }
     fn try_face_fx<'s>(&'s self) -> Result<impl Iterator<Item = &'s FaceFx> + 's, ValueError>
@@ -529,7 +841,18 @@ impl<'data, D: ModelDialect> TryModelAccess<'data> for Model<'data, D> {
     {
         Model::try_face_fx(self)
     }
-    fn try_set_face_fx(&mut self, entries: &[FaceFx]) -> Result<(), ValueError> {
+    fn try_face_fx_mut<'s>(
+        &'s mut self,
+    ) -> Result<impl Iterator<Item = &'s mut FaceFx> + 's, ValueError>
+    where
+        'data: 's,
+    {
+        Model::try_face_fx_mut(self)
+    }
+    fn try_set_face_fx(
+        &mut self,
+        entries: impl IntoIterator<Item = FaceFx>,
+    ) -> Result<(), ValueError> {
         Model::try_set_face_fx(self, entries)
     }
     fn try_popcorn_emitters<'s>(
@@ -540,9 +863,17 @@ impl<'data, D: ModelDialect> TryModelAccess<'data> for Model<'data, D> {
     {
         Model::try_popcorn_emitters(self)
     }
+    fn try_popcorn_emitters_mut<'s>(
+        &'s mut self,
+    ) -> Result<impl Iterator<Item = &'s mut PopcornEmitter<'data>> + 's, ValueError>
+    where
+        'data: 's,
+    {
+        Model::try_popcorn_emitters_mut(self)
+    }
     fn try_set_popcorn_emitters(
         &mut self,
-        emitters: &[PopcornEmitter<'data>],
+        emitters: impl IntoIterator<Item = PopcornEmitter<'data>>,
     ) -> Result<(), ValueError> {
         Model::try_set_popcorn_emitters(self, emitters)
     }
@@ -557,7 +888,18 @@ impl<'data, E: Clone + Debug> TryModelAccess<'data> for DynamicModel<'data, E> {
     {
         try_visit_records!(self, |model| model.try_bind_poses())
     }
-    fn try_set_bind_poses(&mut self, poses: &[BindPoseMatrix]) -> Result<(), ValueError> {
+    fn try_bind_poses_mut<'s>(
+        &'s mut self,
+    ) -> Result<impl Iterator<Item = &'s mut BindPoseMatrix> + 's, ValueError>
+    where
+        'data: 's,
+    {
+        try_visit_records!(self, |model| model.try_bind_poses_mut())
+    }
+    fn try_set_bind_poses(
+        &mut self,
+        poses: impl IntoIterator<Item = BindPoseMatrix>,
+    ) -> Result<(), ValueError> {
         visit_model!(self, |model| model.try_set_bind_poses(poses))
     }
     fn try_face_fx<'s>(&'s self) -> Result<impl Iterator<Item = &'s FaceFx> + 's, ValueError>
@@ -566,7 +908,18 @@ impl<'data, E: Clone + Debug> TryModelAccess<'data> for DynamicModel<'data, E> {
     {
         try_visit_records!(self, |model| model.try_face_fx())
     }
-    fn try_set_face_fx(&mut self, entries: &[FaceFx]) -> Result<(), ValueError> {
+    fn try_face_fx_mut<'s>(
+        &'s mut self,
+    ) -> Result<impl Iterator<Item = &'s mut FaceFx> + 's, ValueError>
+    where
+        'data: 's,
+    {
+        try_visit_records!(self, |model| model.try_face_fx_mut())
+    }
+    fn try_set_face_fx(
+        &mut self,
+        entries: impl IntoIterator<Item = FaceFx>,
+    ) -> Result<(), ValueError> {
         visit_model!(self, |model| model.try_set_face_fx(entries))
     }
     fn try_popcorn_emitters<'s>(
@@ -577,9 +930,17 @@ impl<'data, E: Clone + Debug> TryModelAccess<'data> for DynamicModel<'data, E> {
     {
         try_visit_records!(self, |model| model.try_popcorn_emitters())
     }
+    fn try_popcorn_emitters_mut<'s>(
+        &'s mut self,
+    ) -> Result<impl Iterator<Item = &'s mut PopcornEmitter<'data>> + 's, ValueError>
+    where
+        'data: 's,
+    {
+        try_visit_records!(self, |model| model.try_popcorn_emitters_mut())
+    }
     fn try_set_popcorn_emitters(
         &mut self,
-        emitters: &[PopcornEmitter<'data>],
+        emitters: impl IntoIterator<Item = PopcornEmitter<'data>>,
     ) -> Result<(), ValueError> {
         visit_model!(self, |model| model.try_set_popcorn_emitters(emitters))
     }

@@ -58,9 +58,16 @@ impl<'data, D: ModelDialect> Model<'data, D> {
         self.records::<TexturesChunk>()
     }
 
+    /// Mutably borrows records in file order without replacing their chunks.
+    pub fn textures_mut<'s>(
+        &'s mut self,
+    ) -> impl Iterator<Item = &'s mut Texture> + use<'data, 's, D> {
+        self.records_mut::<TexturesChunk>()
+    }
+
     /// Writes the texture list to the first `TEXS` chunk. Additional `TEXS`
     /// chunks are removed after their records are replaced.
-    pub fn set_textures(&mut self, textures: &[Texture]) {
-        self.replace_chunk(TexturesChunk::new(textures.to_vec()));
+    pub fn set_textures(&mut self, textures: impl IntoIterator<Item = Texture>) {
+        self.replace_chunk(TexturesChunk::new(textures.into_iter().collect()));
     }
 }

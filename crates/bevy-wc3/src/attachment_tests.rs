@@ -312,7 +312,7 @@ fn delayed_and_nested_attachments_restart_in_parent_order() {
         )
         .unwrap(),
     );
-    source.model.set_attachments(&[nested]);
+    source.model.set_attachments([nested]);
     source.model.set_pivot_points(&[[0.0; 3], [0.0; 3]]);
     let resources = Wc3ModelResources::resolve(&source.model, |_| Some(leaf.clone()));
     app.world_mut()

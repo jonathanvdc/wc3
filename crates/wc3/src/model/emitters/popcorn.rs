@@ -99,13 +99,22 @@ impl<'data, D: ModelDialect> Model<'data, D> {
         Ok(self.records::<PopcornEmittersChunk<'_>>())
     }
 
+    /// Mutably borrows records in file order without replacing their chunks.
+    pub fn try_popcorn_emitters_mut<'s>(
+        &'s mut self,
+    ) -> Result<impl Iterator<Item = &'s mut PopcornEmitter<'data>> + use<'data, 's, D>, ValueError>
+    {
+        self.check_chunk_version(*b"CORN")?;
+        Ok(self.records_mut::<PopcornEmittersChunk<'_>>())
+    }
+
     /// Returns an error if this model version does not support `CORN`.
     pub fn try_set_popcorn_emitters(
         &mut self,
-        emitters: &[PopcornEmitter<'data>],
+        emitters: impl IntoIterator<Item = PopcornEmitter<'data>>,
     ) -> Result<(), ValueError> {
         self.check_chunk_version(*b"CORN")?;
-        self.replace_chunk(PopcornEmittersChunk::new(emitters.to_vec()));
+        self.replace_chunk(PopcornEmittersChunk::new(emitters.into_iter().collect()));
         Ok(())
     }
 }
@@ -121,9 +130,19 @@ where
         self.records::<PopcornEmittersChunk<'_>>()
     }
 
+    /// Mutably borrows records in file order without replacing their chunks.
+    pub fn popcorn_emitters_mut<'s>(
+        &'s mut self,
+    ) -> impl Iterator<Item = &'s mut PopcornEmitter<'data>> + use<'data, 's, D> {
+        self.records_mut::<PopcornEmittersChunk<'_>>()
+    }
+
     /// Replaces `CORN` records.
-    pub fn set_popcorn_emitters(&mut self, emitters: &[PopcornEmitter<'data>]) {
-        self.replace_chunk(PopcornEmittersChunk::new(emitters.to_vec()));
+    pub fn set_popcorn_emitters(
+        &mut self,
+        emitters: impl IntoIterator<Item = PopcornEmitter<'data>>,
+    ) {
+        self.replace_chunk(PopcornEmittersChunk::new(emitters.into_iter().collect()));
     }
 }
 

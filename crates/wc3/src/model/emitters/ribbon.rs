@@ -97,9 +97,19 @@ impl<'data, D: ModelDialect> Model<'data, D> {
         self.records::<RibbonEmittersChunk<'_>>()
     }
 
+    /// Mutably borrows records in file order without replacing their chunks.
+    pub fn ribbon_emitters_mut<'s>(
+        &'s mut self,
+    ) -> impl Iterator<Item = &'s mut RibbonEmitter<'data>> + use<'data, 's, D> {
+        self.records_mut::<RibbonEmittersChunk<'_>>()
+    }
+
     /// Replaces ribbon emitters with one `RIBB` chunk, removing any duplicate chunks.
-    pub fn set_ribbon_emitters(&mut self, emitters: &[RibbonEmitter<'data>]) {
-        self.replace_chunk(RibbonEmittersChunk::new(emitters.to_vec()));
+    pub fn set_ribbon_emitters(
+        &mut self,
+        emitters: impl IntoIterator<Item = RibbonEmitter<'data>>,
+    ) {
+        self.replace_chunk(RibbonEmittersChunk::new(emitters.into_iter().collect()));
     }
 }
 

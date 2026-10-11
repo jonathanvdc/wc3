@@ -20,13 +20,21 @@ impl<'data, D: ModelDialect> Model<'data, D> {
         self.records::<GlidersChunk>()
     }
 
+    /// Mutably borrows records in file order without replacing their chunks.
+    pub fn gliders_mut<'s>(
+        &'s mut self,
+    ) -> impl Iterator<Item = &'s mut Glider> + use<'data, 's, D> {
+        self.records_mut::<GlidersChunk>()
+    }
+
     /// Replaces the whitelist, removing all DILG chunks when empty.
-    pub fn set_gliders(&mut self, gliders: &[Glider]) {
+    pub fn set_gliders(&mut self, gliders: impl IntoIterator<Item = Glider>) {
+        let gliders: Vec<_> = gliders.into_iter().collect();
         if gliders.is_empty() {
             self.chunks
                 .retain(|chunk| chunk.standard_tag() != Some(*b"DILG"));
         } else {
-            self.replace_chunk(GlidersChunk::new(gliders.to_vec()));
+            self.replace_chunk(GlidersChunk::new(gliders));
         }
     }
 }

@@ -126,8 +126,7 @@ pub fn modern<'data>(profile: Profile) -> Model<'data, V1800> {
         .into_convert::<V1800>(&ConversionOptions::strict())
         .unwrap()
         .model;
-    let mut geosets = model.geosets().cloned().collect::<Vec<_>>();
-    for (g, geoset) in geosets.iter_mut().enumerate() {
+    for (g, geoset) in model.geosets_mut().enumerate() {
         // Authored LODs, different UV arrays, and nonuniform four-joint weights.
         geoset.set_level_of_detail((g % 3) as u32);
         let uv = geoset.uv_sets()[0].clone();
@@ -149,9 +148,7 @@ pub fn modern<'data>(profile: Profile) -> Model<'data, V1800> {
             .collect();
         geoset.set_skin_weights(Some(skin)).unwrap();
     }
-    model.set_geosets(&geosets);
-    let mut materials = model.materials().cloned().collect::<Vec<_>>();
-    for material in &mut materials {
+    for material in model.materials_mut() {
         for (i, layer) in material.layers.iter_mut().enumerate() {
             layer.coordinate_id = (i % 2) as u32;
             if i == 0 && profile.layers > 1 {
@@ -167,7 +164,6 @@ pub fn modern<'data>(profile: Profile) -> Model<'data, V1800> {
             }
         }
     }
-    model.set_materials(&materials);
     model
 }
 

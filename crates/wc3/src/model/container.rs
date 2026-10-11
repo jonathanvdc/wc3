@@ -33,7 +33,7 @@ pub const MAGIC: Tag = *b"MDLX";
 /// use wc3::model::{Model, V800, V1100};
 /// use wc3::model::materials::Material;
 /// let mut model = Model::<V800>::new();
-/// model.set_materials(&[Material::<V1100>::new()]);
+/// model.set_materials([Material::<V1100>::new()]);
 /// ```
 #[derive(Clone, Debug, ModelOwnership)]
 pub struct Model<'data, D: ModelDialect> {

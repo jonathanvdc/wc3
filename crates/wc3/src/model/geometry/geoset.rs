@@ -614,18 +614,23 @@ impl<'data, V: ModelVersion> Geoset<'data, V> {
     }
 
     /// Replaces matrix groups and their flattened indices.
-    pub fn set_matrix_groups(&mut self, groups: &[Vec<u32>]) -> Result<(), ValueError> {
-        if let Some(group) = groups.iter().find(|group| group.len() > u32::MAX as usize) {
-            return Err(ValueError::CountTooLarge {
+    pub fn set_matrix_groups<G: AsRef<[u32]>>(
+        &mut self,
+        groups: impl IntoIterator<Item = G>,
+    ) -> Result<(), ValueError> {
+        let mut sizes = Vec::new();
+        let mut indices = Vec::new();
+        for group in groups {
+            let group = group.as_ref();
+            let size = u32::try_from(group.len()).map_err(|_| ValueError::CountTooLarge {
                 tag: GeosetsChunk::<V>::TAG,
                 count: group.len(),
-            });
+            })?;
+            sizes.push(size.to_unaligned());
+            indices.extend(group.iter().map(|index| index.to_unaligned()));
         }
-        self.matrix_group_sizes = groups.iter().map(|group| group.len() as u32).collect();
-        self.matrix_indices = groups
-            .iter()
-            .flat_map(|group| group.iter().copied())
-            .collect();
+        self.matrix_group_sizes = ZeroVec::new_owned(sizes);
+        self.matrix_indices = ZeroVec::new_owned(indices);
         Ok(())
     }
 
@@ -948,9 +953,16 @@ impl<'data, D: ModelDialect> Model<'data, D> {
         self.records::<GeosetsChunk<'_, D::Version>>()
     }
 
+    /// Mutably borrows records in file order without replacing their chunks.
+    pub fn geosets_mut<'s>(
+        &'s mut self,
+    ) -> impl Iterator<Item = &'s mut Geoset<'data, D::Version>> + use<'data, 's, D> {
+        self.records_mut::<GeosetsChunk<'_, D::Version>>()
+    }
+
     /// Replaces geosets.
-    pub fn set_geosets(&mut self, geosets: &[Geoset<'data, D::Version>]) {
-        self.replace_chunk(GeosetsChunk::new(geosets.to_vec()));
+    pub fn set_geosets(&mut self, geosets: impl IntoIterator<Item = Geoset<'data, D::Version>>) {
+        self.replace_chunk(GeosetsChunk::new(geosets.into_iter().collect()));
     }
 }
 

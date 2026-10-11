@@ -563,9 +563,16 @@ impl<'data, D: ModelDialect> Model<'data, D> {
         self.records::<LightsChunk<'_, D::Version>>()
     }
 
+    /// Mutably borrows records in file order without replacing their chunks.
+    pub fn lights_mut<'s>(
+        &'s mut self,
+    ) -> impl Iterator<Item = &'s mut Light<'data, D::Version>> + use<'data, 's, D> {
+        self.records_mut::<LightsChunk<'_, D::Version>>()
+    }
+
     /// Replaces lights with one `LITE` chunk, removing any duplicate chunks.
-    pub fn set_lights(&mut self, lights: &[Light<'data, D::Version>]) {
-        self.replace_chunk(LightsChunk::new(lights.to_vec()));
+    pub fn set_lights(&mut self, lights: impl IntoIterator<Item = Light<'data, D::Version>>) {
+        self.replace_chunk(LightsChunk::new(lights.into_iter().collect()));
     }
 }
 

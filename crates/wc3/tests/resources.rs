@@ -82,7 +82,7 @@ fn fixture<'data>() -> Model<'data, V1800> {
     let mut layer = Layer::new();
     layer.texture_id.set_value(99);
     material.layers.push(layer);
-    model.set_materials(&[material]);
+    model.set_materials([material]);
     model
 }
 
@@ -325,7 +325,7 @@ fn malformed_source_text_is_kept_unless_explicitly_replaced() {
     bytes[..4].copy_from_slice(&[b'a', 0xff, b'b', 0]);
     bytes[240] = 42;
     bitmap.path = FixedText::from_bytes(bytes);
-    model.set_textures(&[bitmap]);
+    model.set_textures([bitmap]);
     let before = model.encode_mdx().unwrap();
     let report = model
         .rewrite_resources(|_| Ok::<_, Infallible>(ResourceEdit::Keep))
@@ -350,7 +350,7 @@ fn path_and_replaceable_id_are_independent_and_can_be_cleared() {
     let mut model = Model::<V800>::new();
     let mut texture = Texture::new("body.blp").unwrap();
     texture.replaceable_id = 31;
-    model.set_textures(&[texture]);
+    model.set_textures([texture]);
     let report = model
         .rewrite_resources(|reference| {
             Ok::<_, Infallible>(match reference.value {
