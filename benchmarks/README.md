@@ -88,8 +88,8 @@ measure rendered frames per second.
 Fixtures, file creation, and correctness checks happen before measurement.
 Spawn/despawn setup and teardown are excluded, as is teardown of the asset stores
 returned by preparation. Ordinary codec and pose loops include destruction of
-their outputs. Public geometry accessors produce owned record copies, which are
-included in the geometry-access workload. Despawning measures entity removal;
+their outputs. Public geometry accessors borrow records and their encoded ZeroVec arrays; the
+geometry-access workload measures that traversal without cloning record buffers. Despawning measures entity removal;
 later asset garbage collection is excluded.
 
 The MPQ file-backed case measures a warm filesystem cache. Tiny fixed codec

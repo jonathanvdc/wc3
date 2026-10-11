@@ -9,7 +9,7 @@ loading, modifying, and rendering them.
 ## Crates
 
 Choose `wc3` for asset tools, `bevy-wc3` for model rendering, and `bevy-mpq`
-for archive-backed Bevy assets. The fourth crate, `wc3-derive`, supports
+for archive-backed Bevy assets. The fourth library crate, `wc3-derive`, supports
 contributors defining model codecs. These crates can be used separately or
 combined according to your application's needs.
 
@@ -46,6 +46,8 @@ files using an ordered overlay. The adapter is independent of the renderer;
 `bevy-wc3` preserves the source when resolving a model's dependencies.
 
 Each crate's README explains how to get started and links to further examples.
+The [asset documentation index](crates/wc3/docs/README.md) connects model editing,
+command-line tools, and the format APIs.
 API references are available for [`wc3`](https://docs.rs/wc3/latest/wc3/) and
 [`wc3-derive`](https://docs.rs/wc3-derive/latest/wc3_derive/), and the
 [Bevy documentation index](crates/bevy-wc3/docs/README.md) collects the application
@@ -59,6 +61,10 @@ with the optional texture and archive codecs enabled, use:
 ```sh
 cargo test --workspace --all-features
 ```
+
+Use the Rust toolchain pinned in `rust-toolchain.toml` for local checks. Rustdoc
+examples are included in `cargo test`; to check documentation links separately,
+run `RUSTDOCFLAGS="-D warnings" cargo doc --workspace --all-features --no-deps`.
 
 Criterion suites measure the formats, animation, and Bevy integration with
 self-contained synthetic inputs. Run `bash benchmarks/run-quick.sh` for the

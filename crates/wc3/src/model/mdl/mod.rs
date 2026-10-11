@@ -39,7 +39,19 @@
 //! [`Write`] for output; see the [model guide](crate::model) for dialect setup.
 //! Readers reject unknown names, duplicate assignments, incorrect
 //! counts, and invalid values. Use [`ReadError::diagnostic`] with the original source
-//! for line/column diagnostics.
+//! for line/column diagnostics. Keep the original source text available when
+//! formatting an error:
+//!
+//! ```
+//! use wc3::model::Model;
+//! use wc3::model::V800;
+//! use wc3::model::mdl::Read as _;
+//!
+//! let source = "Version { FormatVersion 800, } Model \"Example\" { Unknown, }";
+//! let error = Model::<V800>::decode_mdl(source).unwrap_err();
+//! let diagnostic = error.diagnostic(source);
+//! println!("{diagnostic}");
+//! ```
 //!
 //! Writers return an error for data that text cannot faithfully represent, such as
 //! opaque binary chunks, unknown flag bits, non-UTF-8 fixed text, nonzero text

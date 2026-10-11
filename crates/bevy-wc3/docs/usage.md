@@ -16,6 +16,17 @@ commands.spawn((Wc3ModelInstance::new(model.clone()), Transform::default()));
 commands.spawn((Wc3ModelInstance::new(model), Transform::from_xyz(150.0, 0.0, 0.0)));
 ```
 
+The request component is present immediately; `Wc3Animation` and the other
+instance components appear after preparation and spawning. Systems that control
+playback can query for `Wc3Animation` and run after `Wc3Systems::SpawnInstances`
+in `Update`. Loading failures are reported by Bevy; geometry preparation failures
+are logged and leave the root unpopulated.
+
+Prepared assets are cached per model asset. Source asset changes invalidate the
+cache for future instances. Existing spawned instances retain their prepared
+geometry; changing their `Wc3ModelInstance` handle does not rebuild them. Spawn a
+new root to replace a populated instance.
+
 Bitmap paths are checked beside the model first, then at the asset root.
 At each location, the literal filename is tried first, followed by the same path
 with `.blp`, `.dds`, `.png`, and `.tga` extensions, in that order. This allows
@@ -90,7 +101,10 @@ Query `Wc3Animation` on a spawned root. `sequences()` lists the available
 sequences; `play(index)` starts or restarts one using the model’s BlendTime.
 Call it when the desired animation changes. Use `play_immediately(index)` for
 an immediate switch or `play_with_blend(index, Duration)` for a custom fade.
-Set `playing` to pause/resume and `speed` to change playback speed.
+Invalid sequence indices leave playback unchanged. Set `playing` to pause/resume
+and `speed` to change playback speed. `play` also resumes playback and restarts
+the shared global-track clock. Repeatedly calling it each update prevents the
+sequence from progressing.
 `seek(milliseconds)` changes the sampling clock without replaying skipped
 particle births or events. See [animation blending](rendering/animation-blending.md).
 
@@ -149,8 +163,9 @@ keep their record slots; PREM image resources are excluded. Read handles through
 `Wc3ModelAsset::model_resources()`, `PreparedModel::model_resources()`, or the
 `Wc3ModelResources` component on a spawned instance. `attachment(index)` and
 `particle(index)` use source record indices, not attachment IDs or node object IDs.
-Custom sources can use `prepare_model_with_resources` with texture and model
-resolver callbacks; the existing `prepare_model` API remains available.
+Custom sources use `prepare_model_with_resources` with texture and model
+resolver callbacks. Use `prepare_model` when child-model resources can remain
+unresolved.
 
 ## Mount models on attachment points
 

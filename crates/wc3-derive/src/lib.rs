@@ -5,7 +5,8 @@
 //! `wc3::model::mdx` and `wc3::model::mdl`.
 //!
 //! Import macros through those format modules, for example
-//! `#[derive(mdl::Read, mdl::Write)]`. The MDL attribute reference follows.
+//! `#[derive(mdl::Read, mdl::Write)]`. The MDX and MDL attribute references follow.
+#![doc = include_str!("mdx.md")]
 #![doc = include_str!("mdl.md")]
 #![deny(missing_docs)]
 mod mdl;

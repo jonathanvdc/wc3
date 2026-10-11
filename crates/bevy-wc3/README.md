@@ -10,13 +10,13 @@ and ribbon trails.
 Add Bevy and the renderer to your application:
 
 ```sh
-cargo add bevy bevy-wc3
+cargo add bevy@0.19.1 bevy-wc3
 ```
 
 Register `Wc3BevyPlugin` alongside Bevy’s default plugins, put the model and its
 textures under `assets/`, and spawn a model root:
 
-```rust
+```rust,no_run
 use bevy::prelude::*;
 use bevy_wc3::{Wc3BevyPlugin, Wc3ModelInstance};
 
@@ -44,8 +44,12 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
 }
 ```
 
-The root is populated when the asset is ready. Literal texture paths resolve
-beside the model first, then from the asset root; BLP decoding is included.
+The root is populated when the asset is ready; query it for `Wc3Animation` to
+control playback after spawning. The model's coordinates use Z up, and the camera
+in this example assumes a character-sized asset. Adjust its position and target
+for other bounds.
+
+Literal texture paths resolve beside the model first, then from the asset root; BLP decoding is included.
 Supply replaceable textures, such as team colors, through `Wc3TextureBindings`.
 Instances share meshes and bind poses and own their animation and materials.
 

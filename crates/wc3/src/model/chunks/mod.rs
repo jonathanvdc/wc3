@@ -1,7 +1,7 @@
 //! Access model records while preserving their MDX chunk organization.
 //!
-//! Match [`ModelChunk`] variants in a model's `chunks` vector to edit records
-//! in place. This retains duplicate chunks and their order, unlike collection
+//! Match [`ModelChunk`] variants in the public [`Model::chunks`](crate::model::Model::chunks)
+//! vector to edit records in place. This retains duplicate chunks and their order, unlike collection
 //! setters that replace a complete collection. [`UnknownChunk`] keeps payloads
 //! whose tags are not recognized; [`RawChunk`] is available for direct byte access.
 //!

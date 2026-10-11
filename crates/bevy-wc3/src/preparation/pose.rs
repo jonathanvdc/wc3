@@ -159,7 +159,13 @@ pub struct BakedModelPose {
 
 /// Reusable CPU pose baker, retaining private linear image variants across samples.
 /// Original images must remain available in `Assets<Image>`. Call
-/// [`Self::clear_image_cache`] after modifying source images in place.
+/// [`Self::clear_image_cache`] after modifying source image contents or samplers.
+///
+/// Baking includes all prepared mesh passes and authored LODs. A part's
+/// [`BakedModelPart::visible`] reports opacity, not LOD selection or scene culling;
+/// consumers choose which levels to retain. No entities, transitions, events, or
+/// effects are simulated. The output meshes are in model space and need only the
+/// desired instance transform when spawned.
 #[derive(Default)]
 pub struct Wc3PoseBaker {
     linear_images: LinearImages,

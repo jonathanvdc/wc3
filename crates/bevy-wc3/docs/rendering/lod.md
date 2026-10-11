@@ -34,7 +34,7 @@ material handles and runtime selection belong to each instance.
 ## Choose a policy and quality
 
 The plugin initializes `Wc3LodSettings` with `default_lod: Wc3Lod::Fixed(0)`,
-preserving the previous default view. Add `Wc3Lod::Automatic` to a root to opt
+so instances initially use the finest authored level available at or above zero. Add `Wc3Lod::Automatic` to a root to opt
 that instance in, or insert an automatic preset resource to enable it globally.
 `low()`, `medium()`, and `high()` use quality biases of 0.5, 1, and 2 respectively.
 They all enable automatic selection; larger bias retains detailed geometry longer.

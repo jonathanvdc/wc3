@@ -68,44 +68,9 @@ animation, and effects. The
 [`model` module documentation](https://docs.rs/wc3/latest/wc3/model/) explains
 how to edit those collections and convert between supported versions.
 
-Model getters for borrowed record collections return iterators without temporary
-vectors. Named mutable iterators such as `geosets_mut()` and `materials_mut()`
-edit records in place while preserving chunk boundaries and file order. Named
-record setters accept arrays, vectors, or iterators of records, moving their
-buffers into one replacement chunk. Use `.iter().cloned()` when replacing a
-collection from records you want to retain.
-
-MDX decoding also borrows geometry, animation keys, and opaque payloads from the
-input slice. Numeric arrays use ZeroVec to read little-endian, unaligned data
-without allocating a typed buffer; `get()` and `iter()` return ordinary Rust
-values. `Geoset::new` and the track constructors accept native arrays, vectors,
-and slices through `IntoZeroVec`. For example,
-`Track::linear([first, second], None)` encodes those keys into owned storage.
-Passing an existing ZeroVec retains its buffer during conversion; sorting
-unordered borrowed track keys creates an owned copy. Collect generated values
-into `ZeroVec` explicitly.
-
-The arrays expose ZeroVec directly for inspection and editing. Edit encoded ULE
-elements with `to_mut_slice()` or `with_mut()`. Only the array being edited becomes
-owned. MDL decoding builds encoded arrays directly, and opaque payloads use
-`Cow<[u8]>`.
-
-Use `as_borrowed()` to create an editable view that borrows even buffers the
-original model owns. `to_owned()` creates an independent deep copy.
-`into_owned()` copies borrowed buffers and moves owned buffers into an
-independent model. Cloning borrowed buffers is cheap; cloning owned buffers
-copies them. Version conversion follows the same distinction:
-`convert()` borrows its source, while `into_convert()` moves compatible buffers.
-`mdx::from_reader` buffers a file and returns an owned model.
-
-Resource tools can use `resources()` on either model type to enumerate direct
-literal paths and replaceable IDs with typed source locations. `rewrite_resources()`
-validates every proposed change before modifying the model and reports actual edits,
-retaining chunk organization and unchanged bytes. The
-[`resources` API](https://docs.rs/wc3/latest/wc3/model/resources/) includes an example.
-File resolution, recursive discovery, path normalization, and packaging policy remain
-application-owned, so enumeration includes PopcornFX and FaceFX even when a renderer
-does not support them.
+Continue with the [model editing guide](docs/models.md) for runtime version
+selection, collection editing, borrowed buffers, conversion policies, and resource
+rewriting. The API reference supplies the record types and codec contracts.
 
 ### Textures
 
@@ -194,7 +159,10 @@ behaviors in more detail.
 
 Converting between model versions returns a model and a report. `convert`
 leaves its source intact; `into_convert` consumes it and moves unchanged chunks.
-Strict conversion rejects unsupported nondefault data; you can opt into lossy conversion to allow that data to be dropped.
+Strict conversion rejects unsupported nondefault data and opaque chunks when
+changing versions. Lossy conversion permits unsupported fields to be dropped;
+opaque chunks still require a separate policy. Inspect the report even after a
+successful conversion, since it also describes normalization and defaults.
 Because some Classic and Reforged features have no equivalent in another layout,
 conversion cannot guarantee identical rendering in the game.
 
@@ -214,6 +182,8 @@ compatibility limits and integrity checks that apply to reading and editing.
 The API reference provides examples for each asset type, and the repository
 includes command-line examples for inspecting, editing, and converting assets:
 
+- [Documentation index](docs/README.md): model workflows, command-line tools,
+  and format-specific API references.
 - [API reference](https://docs.rs/wc3/latest/wc3/).
 - [`mpq` example](examples/mpq.rs): archive listing, extraction, creation, and editing.
 - [`mpq_concurrent` example](examples/mpq_concurrent.rs): a synthetic benchmark comparing serialized and concurrent extraction; requires `mpq-decode` and `mpq-encode`.

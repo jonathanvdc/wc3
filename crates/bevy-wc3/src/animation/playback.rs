@@ -9,6 +9,19 @@ use wc3::model::animation::{AnimationTime, Sequence};
 /// desired sequence changes; calling it again restarts that sequence. Set
 /// [`Self::playing`] to pause and [`Self::speed`] to control clock advancement.
 /// Only local node transforms blend; other properties sample the destination.
+/// Live sequence and global tracks share one elapsed clock and restart together.
+/// Offline [`crate::Wc3PoseBaker`] instead accepts independent sampling clocks.
+///
+/// ```no_run
+/// use bevy::prelude::*;
+/// use bevy_wc3::Wc3Animation;
+///
+/// fn pause_instances(mut animations: Query<&mut Wc3Animation>) {
+///     for mut animation in &mut animations {
+///         animation.playing = false;
+///     }
+/// }
+/// ```
 #[derive(Component, Clone)]
 pub struct Wc3Animation {
     pub(crate) sequence: usize,

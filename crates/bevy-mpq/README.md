@@ -6,28 +6,42 @@ archive precedence, locale/platform selection, and archive parsing limits.
 
 ## Register an asset source
 
+Use the adapter with Bevy 0.19.1. `bevy-mpq` enables MPQ decompression through
+its `wc3` dependency; applications opening `SharedArchive` directly also depend
+on `wc3`:
+
+```sh
+cargo add bevy@0.19.1 bevy-mpq wc3
+```
+
 Open an archive with `wc3::mpq::SharedArchive` and pass it to
 `MpqAssetReader::new`. Register its source before adding Bevy's `AssetPlugin`
 (including through `DefaultPlugins`). Use `OverlayAssetReader` to search any combination of MPQ
 and loose-file readers in the order you supply:
 
-```rust,ignore
+```rust,no_run
+use bevy::prelude::{App, DefaultPlugins};
 use bevy::asset::{io::{AssetSourceBuilder, file::FileAssetReader}, AssetApp};
 use bevy_mpq::{MpqAssetReader, OverlayAssetReader, OverlayMount};
 use std::fs::File;
 use wc3::mpq::SharedArchive;
 
-let map = MpqAssetReader::new(SharedArchive::open(File::open("map.w3x")?)?, "map.w3x");
-let base = MpqAssetReader::new(SharedArchive::open(File::open("base.mpq")?)?, "base.mpq");
-app.register_asset_source("warcraft", AssetSourceBuilder::new(move || {
-    Box::new(OverlayAssetReader::new(vec![
-        OverlayMount::reader(Box::new(FileAssetReader::new("overrides"))),
-        OverlayMount::mpq(map.clone()),
-        OverlayMount::mpq(base.clone()),
-    ]))
-}));
-// Add DefaultPlugins after registering the source.
-// Load with asset_server.load("warcraft://units/human/footman/footman.mdx").
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let mut app = App::new();
+    let map = MpqAssetReader::new(SharedArchive::open(File::open("map.w3x")?)?, "map.w3x");
+    let base = MpqAssetReader::new(SharedArchive::open(File::open("base.mpq")?)?, "base.mpq");
+    app.register_asset_source("warcraft", AssetSourceBuilder::new(move || {
+        Box::new(OverlayAssetReader::new(vec![
+            OverlayMount::reader(Box::new(FileAssetReader::new("overrides"))),
+            OverlayMount::mpq(map.clone()),
+            OverlayMount::mpq(base.clone()),
+        ]))
+    }));
+    app.add_plugins(DefaultPlugins);
+    // Systems can load with asset_server.load("warcraft://units/human/footman/footman.mdx").
+    app.run();
+    Ok(())
+}
 ```
 
 The source name is part of each asset path, such as `warcraft://units/model.mdx`.

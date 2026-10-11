@@ -1,6 +1,48 @@
 //! MPQ asset readers and caller-ordered overlays for Bevy.
-//! Register readers before adding `AssetPlugin`. Archives are immutable snapshots;
-//! directory enumeration, asset processing, patch deltas and watching are unsupported.
+//!
+//! Open a [`SharedArchive`] and wrap it in [`MpqAssetReader`]. Register its named
+//! Bevy asset source before adding `AssetPlugin`, including through default
+//! plugins. [`OverlayAssetReader`] combines archive and loose-file mounts in the
+//! order supplied by the application; only missing assets permit fallback.
+//!
+//! # Read an archive entry
+//!
+//! The adapter implements Bevy's [`AssetReader`]. This example reads directly;
+//! normal applications register the reader and load through `AssetServer`.
+//!
+//! ```no_run
+//! use bevy_asset::io::{AssetReader, Reader};
+//! use bevy_mpq::MpqAssetReader;
+//! use std::fs::File;
+//! use std::path::Path;
+//! use wc3::mpq::SharedArchive;
+//!
+//! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+//! let archive = SharedArchive::open(File::open("map.w3x")?)?;
+//! let reader = MpqAssetReader::new(archive, "map.w3x");
+//! let mut entry = reader.read(Path::new("war3map.j")).await?;
+//! let mut bytes = Vec::new();
+//! entry.read_to_end(&mut bytes).await?;
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! # Lookup and resource use
+//!
+//! Configure locale/platform selection with [`MpqAssetReader::with_locale`] and
+//! the extraction limit with [`MpqAssetReader::with_max_concurrent_reads`] before
+//! cloning. Clones share extraction capacity, which is released when decoding
+//! finishes. Returned readers own complete decoded entries; retained bytes are
+//! outside that concurrency limit. Archive [`wc3::mpq::ReadOptions`] bound
+//! individual allocations. There is no decoded-byte cache in the adapter.
+//!
+//! [`OverlayMount::mpq`] selects metadata using the archive index without
+//! extracting an entry. [`OverlayMount::reader`] probes generic readers by reading
+//! the asset. Metadata always comes from the mount that supplies the asset.
+//!
+//! Keep archive contents unchanged while mounted. Directory enumeration, asset
+//! processing, patch deltas, and watching are unsupported. See the repository
+//! README for source registration and a complete overlay example.
 #![deny(missing_docs)]
 
 use async_lock::Semaphore;

@@ -34,33 +34,33 @@
 //! allocating.
 //! Use `.cloned().collect::<Vec<_>>()` when you need cloned records, or
 //! `.collect::<Vec<_>>()` for a vector of references. Edit records in place with
-//! named mutable iterators such as [`Model::geosets_mut`] or generic
-//! [`Model::records_mut`]. Both retain duplicate chunks and their order. Use
-//! [`Model::as_borrowed`] for an independent view whose unchanged buffers borrow
+//! named mutable iterators such as [`Model::geosets_mut`](crate::model::Model::geosets_mut) or generic
+//! [`Model::records_mut`](crate::model::Model::records_mut). Both retain duplicate chunks and their order. Use
+//! [`Model::as_borrowed`](crate::model::Model::as_borrowed) for an independent view whose unchanged buffers borrow
 //! the original model. Named record setters consume arrays, vectors, or iterators
 //! of records and move their buffers into one replacement chunk, removing
-//! duplicate chunks of that kind. [`Model::replace_records`] provides the same
-//! replacement operation for a typed collection. Matching [`Model::chunks`]
-//! or using [`Model::chunk_mut`] gives direct access to individual chunks.
+//! duplicate chunks of that kind. [`Model::replace_records`](crate::model::Model::replace_records) provides the same
+//! replacement operation for a typed collection. Matching [`Model::chunks`](crate::model::Model::chunks)
+//! or using [`Model::chunk_mut`](crate::model::Model::chunk_mut) gives direct access to individual chunks.
 //!
 //! MDX decoding produces a `Model<'data, D>` borrowing its input byte slice.
-//! Geometry arrays and animation keys use [`ZeroVec`] directly to read
+//! Geometry arrays and animation keys use [`ZeroVec`](zerovec::ZeroVec) directly to read
 //! little-endian values even when the source is unaligned. MDL parsing collects
 //! into owned encoded arrays without an intermediate native vector. Use
 //! `.iter().collect::<ZeroVec<_>>()` to construct arrays from generated values.
-//! [`geometry::Geoset::new`] and the [`animation::Track`] constructors accept
-//! native arrays, vectors, and slices through [`IntoZeroVec`], encoding them into
+//! [`geometry::Geoset::new`](crate::model::geometry::Geoset::new) and the [`animation::Track`](crate::model::animation::Track) constructors accept
+//! native arrays, vectors, and slices through [`IntoZeroVec`](crate::model::IntoZeroVec), encoding them into
 //! owned storage. Passing a ZeroVec moves its buffer unchanged, preserving any
 //! borrowing. Sorting unordered borrowed track keys creates an owned copy.
 //! ZeroVec equality compares encoded bytes, including the exact bit patterns of
 //! floating-point values.
 //!
 //! Editing follows ZeroVec's API: `to_mut_slice()` copies a borrowed array once
-//! and exposes ULE elements; `with_mut()` also allows resizing. [`AsULE::to_unaligned`]
+//! and exposes ULE elements; `with_mut()` also allows resizing. [`AsULE::to_unaligned`](zerovec::ule::AsULE::to_unaligned)
 //! converts native values for those edits. Geometry's individual-value setters
 //! perform that conversion for you. Opaque payloads use [`Cow`](std::borrow::Cow)
 //! over byte slices. Skin rows use `SkinWeights<u8>` in versions 900–1300 and
-//! `SkinWeights<u16>` from version 1400; [`geometry::SkinWeight`] provides common
+//! `SkinWeights<u16>` from version 1400; [`geometry::SkinWeight`](crate::model::geometry::SkinWeight) provides common
 //! accessors for generic code.
 //!
 //! `as_borrowed()` also borrows buffers that the original model already owns,

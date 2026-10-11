@@ -6,6 +6,22 @@
 //! See [`model`] for a complete example and guidance on editing records.
 //! [`blp`] reads and writes BLP0, BLP1, and BLP2 encoded texture containers.
 //! [`mpq`] indexes, streams, creates, and edits MPQ v1–v4 archives.
+//!
+//! # Optional pixel and compression codecs
+//!
+//! The crate has no default features. Model codecs and encoded BLP/MPQ container
+//! operations are always available. Enable `blp-decode` to read RGBA pixels and
+//! use the `image` decoder adapter; `blp-encode` adds pixel encoding. `mpq-decode`
+//! enables compressed entry extraction, and `mpq-encode` adds zlib/bzip2 writing.
+//! Stored MPQ entries and encoded copying do not require those features.
+//!
+//! # Ownership and output
+//!
+//! MDX models and BLP containers can borrow their encoded input. Their owned
+//! conversion methods detach data for longer-lived storage; MDL parsing builds
+//! owned records. See each module for its editing and round-trip guarantees.
+//! Writers can leave partial output after transport errors. Complete encoding or
+//! archive finalization before replacing a source file.
 
 #![deny(missing_docs)]
 

@@ -44,7 +44,8 @@ Dispatch follows forward clock traversal rather than sampling only the current
 frame. Every key crossed in `(previous, current]` is emitted, including multiple
 keys or loops in one update. Model keys use the selected sequence's inclusive
 interval; global keys use `0..=duration`. Constructors, MDX/MDL readers, and
-`set_frames` sort timestamps, and `frames()` exposes a read-only slice. Duplicate
+`set_frames` sort timestamps, and `frames()` borrows the encoded ZeroVec array.
+Use `get()` or `iter()` to read ordinary integer values. Duplicate
 keys remain separate events and serialization emits them in sorted order.
 
 Initial playback and `Wc3Animation::play` include start-time events once.

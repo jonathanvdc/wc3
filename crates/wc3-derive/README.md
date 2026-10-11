@@ -56,6 +56,8 @@ A record codec encodes that record, rather than a complete model file.
 Use the attribute reference when defining records, and the codec and model
 guides when connecting those records to whole-model operations:
 
+- [MDX attribute reference](src/mdx.md): fixed fields, sized records, repeated
+  entries, animation tails, and numeric enums.
 - [MDL attribute reference](src/mdl.md): record shapes, field mappings, defaults,
   animation, and validation hooks. Also included in the
   [crate API documentation](https://docs.rs/wc3-derive/latest/wc3_derive/).

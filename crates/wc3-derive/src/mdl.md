@@ -269,13 +269,16 @@ Function attributes accept ordinary or associated function paths.
 | Attribute | Signature | When it runs |
 | --- | --- | --- |
 | Field `read_with` | `fn(&mut Parser<'_>) -> Result<T, mdl::ReadError>` | Reads a field value. |
-| Field `write_with` | `fn<W: std::io::Write>(&T, &mut Writer<W>) -> Result<(), mdl::WriteError>` | Writes a field value. |
+| Field `write_with` | `fn<W: std::io::Write>(&T, &mut Writer<W>) -> Result<(), IoError<mdl::WriteError>>` | Writes a field value. |
 | Record `after_read` | `fn(&mut Self, Span) -> Result<(), mdl::ReadError>` | Restores implicit values before validation. |
 | Record `validate_read` | `fn(&Self, Span) -> Result<(), mdl::ReadError>` | Validates the completed record. |
 | Record `validate_write` | `fn(&Self) -> Result<(), mdl::WriteError>` | Checks the record before output. |
 
 Value hooks work on headers, properties, and static properties. They handle
-only the value; the derive handles the name and property comma. Record hook
+only the value; the derive handles the name and property comma. `IoError` lives
+in `wc3::model` and preserves sink failures separately from codec failures. A
+write hook that only validates a value can return `mdl::WriteError`, which the
+generated writer converts into `IoError`. Record hook
 spans cover the complete record. Value and tagged enum validation hooks use the same signatures.
 
 ## Adapting existing storage

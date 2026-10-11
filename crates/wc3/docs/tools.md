@@ -50,8 +50,10 @@ cargo run -p wc3 --example model_convert -- model.mdx classic.mdx --version 800 
 ```
 
 Version conversion is strict by default. `--lossy` permits conversion losses
-and prints the conversion report to stderr; it does not bypass MDL writer
-limitations. Model writes canonicalize the selected format, and output files
+and prints the conversion report to stderr when a target version is selected; it does not bypass MDL writer
+limitations. It also leaves opaque-chunk policy at reject when changing versions;
+choose an explicit unknown-chunk policy through the library API when needed.
+Model writes canonicalize the selected format, and output files
 are overwritten. Review reported losses before using a converted model.
 
 ## Change declared paths

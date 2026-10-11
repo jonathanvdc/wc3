@@ -17,7 +17,14 @@ use crate::materials::textures::Wc3TextureBindings;
 use crate::materials::Wc3LayerMaterial;
 
 /// Attach to an entity to spawn an MDX or MDL asset beneath it when loading finishes.
-/// The entity remains the transform and animation root.
+/// The entity remains the transform and animation root. [`Wc3Animation`] appears
+/// after successful preparation and spawning; it is absent while loading or after
+/// a preparation failure. The request supplies required transform and visibility
+/// components, so callers can spawn it on its own.
+///
+/// Changing the handle on an already populated root does not rebuild the instance.
+/// Spawn a new root when replacing a model. Source asset changes invalidate cached
+/// preparation for future instances; existing instances retain their render assets.
 #[derive(Component)]
 #[require(Transform, Visibility)]
 pub struct Wc3ModelInstance(
