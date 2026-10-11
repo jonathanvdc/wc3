@@ -3,7 +3,7 @@ use super::EncodeError;
 use crate::blp::MIPMAP_SLOTS;
 use image::{imageops::FilterType, RgbaImage};
 
-pub(super) fn generate(image: &RgbaImage, enabled: bool) -> Vec<RgbaImage> {
+pub(super) fn generate(image: &RgbaImage, enabled: bool, filter: FilterType) -> Vec<RgbaImage> {
     let mut levels = vec![image.clone()];
     if enabled {
         while levels.len() < MIPMAP_SLOTS {
@@ -15,7 +15,7 @@ pub(super) fn generate(image: &RgbaImage, enabled: bool) -> Vec<RgbaImage> {
                 last,
                 (last.width() / 2).max(1),
                 (last.height() / 2).max(1),
-                FilterType::Triangle,
+                filter,
             ));
         }
     }

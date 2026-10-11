@@ -89,7 +89,10 @@ images. The corresponding `blp-encode` feature creates BLP textures from images,
 using either generated or authored mipmaps. Both integrate with the `image`
 crate, which you should also add as a direct dependency if your code uses its
 types. The [`blp` module documentation](https://docs.rs/wc3/latest/wc3/blp/)
-provides examples and explains the available encoding options.
+provides examples and explains the available encoding options. `EncodeOptions`
+lets you choose the filter for generated mipmaps and the DXT fitting algorithm,
+with Triangle resampling and ClusterFit compression as defaults. Applications
+that author their own mipmaps can supply those levels directly.
 
 ### Archives
 

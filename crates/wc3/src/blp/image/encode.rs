@@ -1,6 +1,7 @@
 //! RGBA image encoding for BLP1 and BLP2.
 use super::{assemble, bgra, dxt, indexed, jpeg, mipmaps};
 use crate::blp::{Blp, DxtFormat, MIPMAP_SLOTS};
+pub use image::imageops::FilterType as MipmapFilter;
 use image::RgbaImage;
 use std::{error::Error, fmt};
 
@@ -95,6 +96,18 @@ impl EncodeFormat {
     }
 }
 
+/// Algorithm used to compress DXT color blocks.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum DxtAlgorithm {
+    /// Fast fitting with lower image quality.
+    RangeFit,
+    /// Slower fitting with higher image quality; the default.
+    #[default]
+    ClusterFit,
+    /// Repeated cluster fitting for higher quality at greater encoding cost.
+    IterativeClusterFit,
+}
+
 /// Options for turning RGBA pixels into a BLP container.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct EncodeOptions {
@@ -102,6 +115,10 @@ pub struct EncodeOptions {
     pub format: EncodeFormat,
     /// Generate mipmaps when encoding an image; validate a complete chain when encoding supplied levels.
     pub mipmaps: bool,
+    /// Resampling filter for generated mipmaps; ignored for supplied levels.
+    pub mipmap_filter: MipmapFilter,
+    /// Color-block fitting algorithm; ignored for non-DXT formats.
+    pub dxt_algorithm: DxtAlgorithm,
 }
 
 impl Default for EncodeOptions {
@@ -112,6 +129,8 @@ impl Default for EncodeOptions {
                 alpha: IndexedAlpha::Bit8,
             },
             mipmaps: true,
+            mipmap_filter: MipmapFilter::Triangle,
+            dxt_algorithm: DxtAlgorithm::ClusterFit,
         }
     }
 }
@@ -157,7 +176,7 @@ fn validate(images: &[RgbaImage], options: EncodeOptions) -> Result<(), EncodeEr
 impl Blp {
     /// Encodes an RGBA image, optionally generating mipmaps through 1×1.
     pub fn encode_image(image: &RgbaImage, options: EncodeOptions) -> Result<Self, EncodeError> {
-        let images = mipmaps::generate(image, options.mipmaps);
+        let images = mipmaps::generate(image, options.mipmaps, options.mipmap_filter);
         Self::encode_mipmaps(&images, options)
     }
 
@@ -185,11 +204,18 @@ impl Blp {
                     EncodeFormat::Jpeg { alpha, quality, .. } => {
                         jpeg::encode(image, u8::from(alpha) * 8, quality)?
                     }
-                    EncodeFormat::Dxt1 { alpha } => {
-                        dxt::encode(image, DxtFormat::Dxt1, u8::from(alpha))
+                    EncodeFormat::Dxt1 { alpha } => dxt::encode(
+                        image,
+                        DxtFormat::Dxt1,
+                        u8::from(alpha),
+                        options.dxt_algorithm,
+                    ),
+                    EncodeFormat::Dxt3 => {
+                        dxt::encode(image, DxtFormat::Dxt3, 4, options.dxt_algorithm)
                     }
-                    EncodeFormat::Dxt3 => dxt::encode(image, DxtFormat::Dxt3, 4),
-                    EncodeFormat::Dxt5 => dxt::encode(image, DxtFormat::Dxt5, 8),
+                    EncodeFormat::Dxt5 => {
+                        dxt::encode(image, DxtFormat::Dxt5, 8, options.dxt_algorithm)
+                    }
                     EncodeFormat::Bgra => bgra::encode(image),
                     EncodeFormat::Indexed { .. } => unreachable!(),
                 });

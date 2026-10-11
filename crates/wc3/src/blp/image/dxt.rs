@@ -1,5 +1,7 @@
 #[cfg(feature = "blp-decode")]
 use super::DecodeError;
+#[cfg(feature = "blp-encode")]
+use super::DxtAlgorithm;
 use crate::blp::DxtFormat;
 #[cfg(feature = "blp-encode")]
 use image::RgbaImage;
@@ -129,7 +131,12 @@ pub(super) fn decode_into(
 }
 
 #[cfg(feature = "blp-encode")]
-pub(super) fn encode(image: &RgbaImage, format: DxtFormat, alpha_bits: u8) -> Vec<u8> {
+pub(super) fn encode(
+    image: &RgbaImage,
+    format: DxtFormat,
+    alpha_bits: u8,
+    algorithm: DxtAlgorithm,
+) -> Vec<u8> {
     let format = match format {
         DxtFormat::Dxt1 => Format::Bc1,
         DxtFormat::Dxt3 => Format::Bc2,
@@ -143,9 +150,18 @@ pub(super) fn encode(image: &RgbaImage, format: DxtFormat, alpha_bits: u8) -> Ve
     }
     let (width, height) = (image.width() as usize, image.height() as usize);
     let mut bytes = vec![0; format.compressed_size(width, height)];
-    format.compress(&pixels, width, height, Params::default(), &mut bytes);
+    let algorithm = match algorithm {
+        DxtAlgorithm::RangeFit => Algorithm::RangeFit,
+        DxtAlgorithm::ClusterFit => Algorithm::ClusterFit,
+        DxtAlgorithm::IterativeClusterFit => Algorithm::IterativeClusterFit,
+    };
+    let params = Params {
+        algorithm,
+        ..Params::default()
+    };
+    format.compress(&pixels, width, height, params, &mut bytes);
     bytes
 }
 
 #[cfg(feature = "blp-encode")]
-use squish::{Format, Params};
+use squish::{Algorithm, Format, Params};

@@ -76,6 +76,7 @@ fn textures(c: &mut Criterion) {
             let options = EncodeOptions {
                 format,
                 mipmaps: true,
+                ..Default::default()
             };
             let encoded = Blp::encode_image(&image, options).unwrap();
             let bytes = encoded.write().unwrap();

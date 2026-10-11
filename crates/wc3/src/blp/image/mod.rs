@@ -25,7 +25,9 @@ pub use decode::DecodeError;
 #[cfg(feature = "blp-decode")]
 pub use decoder::{register_decoding_hook, BlpDecoder};
 #[cfg(feature = "blp-encode")]
-pub use encode::{BlpVersion, EncodeError, EncodeFormat, EncodeOptions, IndexedAlpha};
+pub use encode::{
+    BlpVersion, DxtAlgorithm, EncodeError, EncodeFormat, EncodeOptions, IndexedAlpha, MipmapFilter,
+};
 #[cfg(feature = "blp-encode")]
 pub use encoder::BlpEncoder;
 

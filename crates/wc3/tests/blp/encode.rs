@@ -10,6 +10,7 @@ fn image_encoder_writes_a_blp_file() {
     let options = EncodeOptions {
         format: EncodeFormat::Bgra,
         mipmaps: false,
+        ..Default::default()
     };
     BlpEncoder::with_options(&mut bytes, options)
         .write_image(
@@ -110,6 +111,7 @@ fn jpeg_preserves_component_order_and_alpha() {
         let options = EncodeOptions {
             format,
             mipmaps: false,
+            ..Default::default()
         };
         let bytes = Blp::encode_image(&image, options).unwrap().write().unwrap();
         let pixel = BlpRef::read(&bytes)
@@ -137,6 +139,7 @@ fn dxt_handles_partial_blocks_and_alpha() {
         let options = EncodeOptions {
             format,
             mipmaps: false,
+            ..Default::default()
         };
         let blp = Blp::encode_image(&image, options).unwrap();
         let Blp::Blp2(ref container) = blp else {
@@ -170,4 +173,90 @@ fn rejects_invalid_quality_and_mip_dimensions() {
         ..Default::default()
     };
     assert!(Blp::encode_mipmaps(&[image.clone(), image], options).is_err());
+}
+
+#[test]
+fn mipmap_filter_changes_generated_levels_but_not_supplied_levels() {
+    use wc3::blp::MipmapFilter;
+
+    let image = source();
+    let options = EncodeOptions {
+        format: EncodeFormat::Bgra,
+        mipmap_filter: MipmapFilter::Nearest,
+        ..Default::default()
+    };
+    let nearest = Blp::encode_image(&image, options).unwrap();
+    let triangle = Blp::encode_image(
+        &image,
+        EncodeOptions {
+            mipmap_filter: MipmapFilter::Triangle,
+            ..options
+        },
+    )
+    .unwrap();
+    assert_eq!(nearest.decode_mip(0).unwrap(), image);
+    assert_ne!(
+        nearest.decode_mip(1).unwrap(),
+        triangle.decode_mip(1).unwrap()
+    );
+    assert_eq!(
+        nearest.decode_mip(1).unwrap(),
+        image::imageops::resize(&image, 4, 4, MipmapFilter::Nearest)
+    );
+    let supplied: Vec<_> = (0..4)
+        .map(|level| nearest.decode_mip(level).unwrap())
+        .collect();
+    assert_eq!(
+        Blp::encode_mipmaps(&supplied, options)
+            .unwrap()
+            .write()
+            .unwrap(),
+        Blp::encode_mipmaps(
+            &supplied,
+            EncodeOptions {
+                mipmap_filter: MipmapFilter::Lanczos3,
+                ..options
+            }
+        )
+        .unwrap()
+        .write()
+        .unwrap(),
+    );
+}
+
+#[test]
+fn dxt_algorithms_produce_decodable_blocks_and_affect_compression() {
+    use wc3::blp::DxtAlgorithm;
+
+    let image = source();
+    for format in [
+        EncodeFormat::Dxt1 { alpha: true },
+        EncodeFormat::Dxt3,
+        EncodeFormat::Dxt5,
+    ] {
+        let mut outputs = Vec::new();
+        for dxt_algorithm in [
+            DxtAlgorithm::RangeFit,
+            DxtAlgorithm::ClusterFit,
+            DxtAlgorithm::IterativeClusterFit,
+        ] {
+            let encoded = Blp::encode_image(
+                &image,
+                EncodeOptions {
+                    format,
+                    mipmaps: false,
+                    dxt_algorithm,
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+            let decoded = encoded.decode_mip(0).unwrap();
+            assert_eq!(decoded.dimensions(), image.dimensions());
+            for (actual, expected) in decoded.pixels().zip(image.pixels()) {
+                assert_eq!(actual[3], expected[3]);
+            }
+            outputs.push(encoded.write().unwrap());
+        }
+        assert_ne!(outputs[0], outputs[1], "{format:?}");
+    }
 }

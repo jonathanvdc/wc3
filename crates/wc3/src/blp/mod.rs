@@ -33,6 +33,13 @@
 //! RGBA8 pixels. Use `BlpEncoder::with_options` to select the BLP encoding
 //! format; `BlpEncoder::new` uses default options.
 //!
+//! `EncodeOptions::mipmap_filter` selects the resampling filter for generated
+//! levels, defaulting to [`MipmapFilter::Triangle`]. Supplied mipmaps are used
+//! as authored. `EncodeOptions::dxt_algorithm` selects [`DxtAlgorithm`] for
+//! DXT1/3/5 encoding: range fit prioritizes speed, cluster fit is the default,
+//! and iterative cluster fit spends more time refining the color fit. This
+//! setting has no effect on indexed, JPEG, or BGRA encoding.
+//!
 //! ```
 //! # #[cfg(feature = "blp-encode")]
 //! # fn example(image: &image::RgbaImage) -> Result<Vec<u8>, image::ImageError> {
@@ -62,7 +69,9 @@ pub use image::DecodeError;
 #[cfg(feature = "blp-decode")]
 pub use image::{register_decoding_hook, BlpDecoder};
 #[cfg(feature = "blp-encode")]
-pub use image::{BlpVersion, EncodeError, EncodeFormat, EncodeOptions, IndexedAlpha};
+pub use image::{
+    BlpVersion, DxtAlgorithm, EncodeError, EncodeFormat, EncodeOptions, IndexedAlpha, MipmapFilter,
+};
 
 /// Number of slots in a BLP mipmap location table.
 pub const MIPMAP_SLOTS: usize = 16;

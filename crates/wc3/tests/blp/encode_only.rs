@@ -7,6 +7,7 @@ fn encode_feature_writes_container_without_decode_feature() {
     let options = EncodeOptions {
         format: EncodeFormat::Bgra,
         mipmaps: false,
+        ..Default::default()
     };
     let bytes = Blp::encode_image(&image, options).unwrap().write().unwrap();
     assert!(matches!(BlpRef::read(&bytes).unwrap(), BlpRef::Blp2(_)));

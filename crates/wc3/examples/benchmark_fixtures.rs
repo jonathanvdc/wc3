@@ -21,6 +21,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         EncodeOptions {
             format: EncodeFormat::Bgra,
             mipmaps: true,
+            ..Default::default()
         },
     )?;
     fs::write(output.join("synthetic/diffuse.blp"), blp.write()?)?;
