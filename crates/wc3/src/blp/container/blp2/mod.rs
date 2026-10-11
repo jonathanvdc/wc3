@@ -29,7 +29,7 @@ pub enum DxtFormat {
     Dxt5,
 }
 
-/// BLP2 content borrowing its original bytes. The unused region is retained
+/// BLP2 encoding metadata with borrowed or owned byte storage. The unused region is retained
 /// because BLP2 always has a 1024-byte content area.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Blp2Content<'a> {
@@ -67,12 +67,12 @@ pub enum Blp2Content<'a> {
     },
 }
 
-/// Borrowed BLP2 container.
+/// A BLP2 container with copy-on-write payloads.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Blp2<'a> {
     /// Dimensions and encoding-independent header fields.
     pub header: Blp2Header,
-    /// Borrowed encoding metadata shared by all mipmaps.
+    /// Encoding metadata shared by all mipmaps.
     pub content: Blp2Content<'a>,
     /// Encoded mipmap payloads, with full-resolution level zero first; `None` denotes an absent level.
     pub mipmaps: [Option<Cow<'a, [u8]>>; MIPMAP_SLOTS],

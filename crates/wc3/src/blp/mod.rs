@@ -1,17 +1,50 @@
 //! Read and write BLP0, BLP1, and BLP2 texture containers.
 //!
-//! [`Blp::read`](crate::blp::Blp::read) borrows encoded content from an input byte slice. BLP1 and
-//! BLP2 include mipmaps in that slice; BLP0 requires external payloads, described
-//! below. Call [`Blp::to_owned`](crate::blp::Blp::to_owned) to edit the container, or serialize the
-//! borrowed view directly. Writing BLP1 and BLP2 lays out mipmaps in level order
-//! and recalculates offsets; writing any version discards arbitrary source
-//! padding rather than reproducing the original file layout.
-//! Container types retain format fields and encoded bytes, including unused
-//! regions. Image encoding validates format settings, dimensions, and mipmaps;
-//! reading a container does not assert that every mipmap can be decoded.
-//! With `blp-decode`, `decode_mip` converts encoded mipmaps to
-//! `image::RgbaImage`. With `blp-encode`, `encode_image` creates a container
-//! from RGBA pixels.
+//! [`Blp::read`](crate::blp::Blp::read) parses a root file without copying its
+//! encoded content. The lifetime in `Blp<'a>` tracks borrowed bytes; the same
+//! container can also hold owned buffers. BLP1 and BLP2 include mipmaps in the root file, while BLP0
+//! requires external payloads, described below. Container types retain format
+//! fields and encoded bytes, including unused regions. Reading a container does
+//! not assert that every mipmap can be decoded.
+//!
+//! Writing BLP1 and BLP2 lays out mipmaps in level order and recalculates
+//! offsets. Writing any version discards arbitrary source padding rather than
+//! reproducing the original file layout. With `blp-decode`, `decode_mip`
+//! converts encoded mipmaps to `image::RgbaImage`. With `blp-encode`,
+//! `encode_image` validates settings and mipmaps and creates a `Blp<'static>`
+//! with owned buffers from RGBA pixels.
+//!
+//! # Editing and ownership
+//!
+//! Mipmaps, shared JPEG prefixes, and unused byte regions use
+//! [`Cow`](std::borrow::Cow). Call `to_mut` on a payload to edit its bytes:
+//! borrowed data is copied on first mutation, while owned data reuses its
+//! buffer. [`Palette`](crate::blp::Palette) provides the same operation with
+//! fixed-size access. Header fields can be edited directly without copying
+//! any payloads.
+//!
+//! ```
+//! # fn example(bytes: &[u8]) -> Result<wc3::blp::Blp<'static>, wc3::blp::ReadError> {
+//! use wc3::blp::{Blp, Blp1Content};
+//!
+//! let mut texture = Blp::read(bytes)?;
+//! if let Blp::Blp1(value) = &mut texture {
+//!     if let Blp1Content::Indexed { palette } = &mut value.content {
+//!         // Change the first palette entry to red; its fourth byte is unused.
+//!         palette.to_mut()[..4].copy_from_slice(&[0, 0, 255, 0]);
+//!     }
+//! }
+//! // Move owned buffers and copy any remaining borrowed bytes.
+//! Ok(texture.into_owned())
+//! # }
+//! ```
+//!
+//! [`Blp::into_owned`](crate::blp::Blp::into_owned) consumes the container and
+//! returns `Blp<'static>`, independent of the input's lifetime; it can still be
+//! dropped normally.
+//! [`Blp::as_ref`](crate::blp::Blp::as_ref) creates a borrowed view without
+//! allocating or cloning payload buffers. In contrast, `clone` copies owned
+//! buffers and retains references to borrowed bytes.
 //!
 //! # External BLP0 mipmaps
 //!
@@ -22,11 +55,12 @@
 //!
 //! ```
 //! # fn example(root: &[u8], base: &[u8]) -> Result<(), Box<dyn std::error::Error>> {
+//! use std::borrow::Cow;
 //! use wc3::blp::Blp;
 //!
 //! let mut texture = Blp::read(root)?;
 //! if let Blp::Blp0(value) = &mut texture {
-//!     value.mipmaps[0] = Some(base);
+//!     value.mipmaps[0] = Some(Cow::Borrowed(base));
 //! }
 //! # #[cfg(feature = "blp-decode")]
 //! let rgba = texture.decode_mip(0)?;
@@ -120,14 +154,17 @@ pub const MIPMAP_SLOTS: usize = 16;
 /// Size of a BLP palette or BLP2 content region.
 pub const PALETTE_BYTES: usize = 1024;
 
-/// A borrowed BLP texture container.
+/// A BLP texture container with borrowed or owned encoded content.
+///
+/// Parsing borrows the input; encoding creates owned buffers. Payload mutation
+/// uses copy-on-write storage. See the [module documentation](crate::blp) for examples.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Blp<'a> {
     /// A BLP0 container with externally supplied mipmaps.
     Blp0(Blp0<'a>),
-    /// A borrowed BLP1 container.
+    /// A BLP1 container.
     Blp1(Blp1<'a>),
-    /// A borrowed BLP2 container.
+    /// A BLP2 container.
     Blp2(Blp2<'a>),
 }
 
@@ -145,7 +182,9 @@ impl<'a> Blp<'a> {
         }
     }
 
-    /// Copies encoded content into an editable container.
+    /// Returns a container independent of the input lifetime.
+    ///
+    /// Moves owned buffers without copying and copies any borrowed bytes.
     pub fn into_owned(self) -> Blp<'static> {
         match self {
             Self::Blp0(value) => Blp::Blp0(value.into_owned()),

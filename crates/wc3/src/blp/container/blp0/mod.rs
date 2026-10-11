@@ -20,7 +20,7 @@ pub struct Blp0Header {
     pub has_mipmaps: u32,
 }
 
-/// BLP0 content borrowing its original bytes.
+/// BLP0 encoding metadata with borrowed or owned byte storage.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Blp0Content<'a> {
     /// JPEG payloads with a header prefix shared by all mipmaps.
@@ -35,7 +35,7 @@ pub enum Blp0Content<'a> {
     },
 }
 
-/// Borrowed BLP0 root metadata and externally supplied mipmaps.
+/// BLP0 root metadata and externally supplied copy-on-write mipmaps.
 ///
 /// [`Self::read`] leaves all mipmap slots empty. Attach payloads from sibling
 /// `.b00`, `.b01`, and subsequent files before decoding those levels.
@@ -43,7 +43,7 @@ pub enum Blp0Content<'a> {
 pub struct Blp0<'a> {
     /// Dimensions and encoding-independent header fields.
     pub header: Blp0Header,
-    /// Borrowed encoding metadata shared by all mipmaps.
+    /// Encoding metadata shared by all mipmaps.
     pub content: Blp0Content<'a>,
     /// Encoded mipmap payloads, with full-resolution level zero first; `None` denotes an absent level.
     pub mipmaps: [Option<Cow<'a, [u8]>>; MIPMAP_SLOTS],

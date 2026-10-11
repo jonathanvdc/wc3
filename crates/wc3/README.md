@@ -80,9 +80,14 @@ does not support them.
 ### Textures
 
 For BLP textures, you can choose whether to work with the encoded container or
-with decoded pixels. `BlpRef` borrows encoded content from your input buffer;
-converting it to an owned `Blp` lets you change the container and write it back.
-This is enough for operations that do not need to inspect the image itself.
+with decoded pixels. `Blp::read` borrows encoded content from your input buffer
+without copying it. The same `Blp<'a>` container holds borrowed or owned bytes;
+its payloads use copy-on-write storage so editing copies only borrowed data
+that you change. `as_ref()` creates a borrowed view without copying buffers,
+while `into_owned()` moves owned buffers and copies borrowed bytes into an
+independent `Blp<'static>`. This is enough for operations that do not need to
+inspect the image itself.
+
 BLP1 and BLP2 contain their mipmaps in the root file. BLP0 uses sibling `.b00`,
 `.b01`, and subsequent files; parsing its root leaves empty mipmap slots that
 callers fill explicitly. `write_files()` returns the root and attached external

@@ -5,7 +5,7 @@ pub use image::imageops::FilterType as MipmapFilter;
 use image::RgbaImage;
 use std::{error::Error, fmt};
 
-/// BLP container version for formats available in both versions.
+/// BLP container version for indexed and JPEG encodings.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum BlpVersion {
     /// BLP0 root metadata with external mipmaps.

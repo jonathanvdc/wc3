@@ -177,12 +177,12 @@ pub(super) fn write(value: &Blp2<'_>) -> Result<Vec<u8>, WriteError> {
 }
 
 impl Blp2<'_> {
-    /// Reads a complete BLP2 file.
+    /// Reads a complete BLP2 file, borrowing its encoded content.
     pub fn read(bytes: &[u8]) -> Result<Blp2<'_>, ReadError> {
         read(bytes)
     }
 
-    /// Writes this borrowed container.
+    /// Writes a canonical layout from borrowed or owned content.
     pub fn write(&self) -> Result<Vec<u8>, WriteError> {
         write(self)
     }
