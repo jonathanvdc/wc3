@@ -10,7 +10,7 @@ use crate::effects::simulation::{
 };
 
 use super::emission::SquirtTracker;
-use super::render::{ParticleEmitterUniform, ParticleInstance, ParticleInstances};
+use super::records::{ParticleEmitterUniform, ParticleInstance, ParticleInstances};
 use crate::animation::pose::{sample_emitter_transform, EmitterNodes};
 use crate::animation::{sample, sample_value, Wc3Animation};
 

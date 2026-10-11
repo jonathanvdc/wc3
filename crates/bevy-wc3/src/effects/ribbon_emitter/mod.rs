@@ -3,11 +3,13 @@
 //! Cross-sections use local Y for height and remain in world space after birth.
 //! Gravity is world -Z with displacement `0.5 * gravity * age²`, deliberately
 //! independent of simulation FPS.
+mod records;
 mod render;
 mod simulation;
 mod spawn;
 
-pub(crate) use render::{RibbonInstances, RibbonRenderPlugin};
+pub(crate) use records::RibbonInstances;
+pub(crate) use render::RibbonRenderPlugin;
 pub(crate) use simulation::{update_ribbons, RibbonLayer, RibbonState};
 
 pub(crate) use spawn::spawn_ribbons;

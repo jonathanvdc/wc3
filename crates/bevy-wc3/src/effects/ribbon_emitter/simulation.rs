@@ -12,7 +12,7 @@ use crate::effects::simulation::{
     EmissionRounding, LiveRecords, SimulationClock,
 };
 
-use super::render::{RibbonInstances, RibbonSection, RibbonSegment, RibbonUniform};
+use super::records::{RibbonInstances, RibbonSection, RibbonSegment, RibbonUniform};
 use crate::animation::pose::{sample_emitter_transform, EmitterNodes};
 use crate::animation::{sample, sample_value, Wc3Animation};
 use crate::materials::textures::Wc3TextureBindings;

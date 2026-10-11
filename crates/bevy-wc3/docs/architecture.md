@@ -77,7 +77,9 @@ management; emitter-specific modules retain capacity, expiry, and connectivity
 policy. The PRE2 texture update lives beside PRE2 simulation and rendering rather
 than inside the general binding API.
 
-PRE2 and ribbons maintain immutable birth records in the main world. Their render
+PRE2 and ribbons keep birth records, shader parameters, and immutable extraction
+snapshots in their emitter-specific `records.rs` modules. Simulation produces
+these snapshots without depending on pipeline or GPU allocation code. Their render
 plugins extract snapshots, prepare resident GPU buffers, queue per-view draws,
 and render shader-generated geometry. Shared `effects/records.rs` and
 `effects/render.rs` implement record storage and GPU upload/allocation mechanics.

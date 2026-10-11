@@ -1,7 +1,10 @@
 use super::*;
+use crate::effects::simulation::split_time;
+use bevy::render::extract_component::ExtractComponent;
 use naga::front::wgsl::parse_str;
 use naga::valid::{Capabilities, ValidationFlags, Validator};
 use naga::TypeInner;
+use std::sync::Arc;
 #[test]
 fn sorting_preserves_endpoint_pairs_and_uv_ranks_with_split_clock_gravity() {
     let clock = 1_000_000_000.0;

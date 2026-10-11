@@ -8,13 +8,15 @@
 //! ranges; draw-order indices provide per-view depth sorting for SortPrimsFarZ.
 
 mod emission;
+mod records;
 mod render;
 mod simulation;
 mod spawn;
 
 use bevy::prelude::Component;
 
-pub(crate) use render::{ParticleInstances, ParticleRenderPlugin};
+pub(crate) use records::ParticleInstances;
+pub(crate) use render::ParticleRenderPlugin;
 pub(crate) use simulation::{update_particles, Particle2State};
 
 /// Associates a spawned emitter with its texture binding slot.
