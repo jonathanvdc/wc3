@@ -219,7 +219,7 @@ where
     /// Decodes a raw chunk, moving opaque bytes and detaching decoded owned payloads.
     pub fn from_raw(raw: RawChunk<'data>) -> Result<Self, mdx::ReadError> {
         let tag = raw.tag;
-        match raw.data.into_cow() {
+        match raw.data {
             Cow::Borrowed(bytes) => Self::decode_from(tag, &mut Cursor::new(bytes)),
             Cow::Owned(bytes) => {
                 let mut input = Cursor::new(&bytes);
@@ -258,6 +258,8 @@ mod tests {
         );
         assert!(<&VersionChunk<'_, V800>>::try_from(&chunk).is_err());
         let original = VersionChunk::<V800>::try_from(chunk).unwrap_err();
-        assert!(matches!(original, ModelChunk::Unknown(raw) if raw.raw().data == [1, 2, 3]));
+        assert!(
+            matches!(original, ModelChunk::Unknown(raw) if raw.raw().data.as_ref() == [1, 2, 3])
+        );
     }
 }

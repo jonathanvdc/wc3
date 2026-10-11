@@ -6,6 +6,7 @@ use wc3::model::mdx::ReadErrorKind;
 use wc3::model::mdx::Write as _;
 use wc3::model::NoExtensions;
 use wc3::model::ValueError;
+use wc3::model::ZeroVec;
 
 use wc3::model::geometry::{
     Geoset, GeosetLayout, NoGeosetExtraSections, ReforgedGeosetExtraSections,
@@ -101,7 +102,9 @@ fn version_markers_select_record_fields() {
     assert!(classic_geoset.try_tangents().is_err());
     assert_eq!(modern_geoset.try_tangents().unwrap(), None);
     assert_eq!(modern_geoset.try_skin_weights().unwrap(), None);
-    modern_geoset.set_skin_weights(Some(&[])).unwrap();
+    modern_geoset
+        .set_skin_weights(Some(ZeroVec::alloc_from_slice(&[])))
+        .unwrap();
     assert_eq!(
         modern_geoset.skin_weights().map(|weights| weights.to_vec()),
         Some(vec![])

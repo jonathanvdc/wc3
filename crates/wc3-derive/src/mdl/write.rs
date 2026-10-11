@@ -1,5 +1,5 @@
 //! Generation of record writers and preflight validation.
-use super::attributes::{Container, Field, Kind};
+use super::attributes::{type_argument, Container, Field, Kind};
 use super::{bounds, omission, schema::Schema, sink_name, state_type};
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
@@ -59,10 +59,17 @@ pub(super) fn expand(
                 });
             }
             Kind::Repeated(_) => {
+                let encoded = type_argument(&field.ty, "ZeroVec").is_some();
                 if let Some(key) = &field.unique_by {
+                    let previous = if encoded {
+                        quote!(&previous)
+                    } else {
+                        quote!(previous)
+                    };
+                    let item = if encoded { quote!(&item) } else { quote!(item) };
                     required_flags.push(quote! {
                         for (index, item) in (#access).iter().enumerate() {
-                            if (#access).iter().take(index).any(|previous| #key(previous) == #key(item)) {
+                            if (#access).iter().take(index).any(|previous| #key(#previous) == #key(#item)) {
                                 return Err(::wc3::model::mdl::WriteError::InvalidStructure { field: "duplicate repeated record" }.into());
                             }
                         }
@@ -74,9 +81,8 @@ pub(super) fn expand(
                         item.write_mdl(__wc3_mdl_writer)?;
                     }));
                 } else {
-                    writes.push(
-                        quote!(for item in (#access).iter() { __wc3_mdl_writer.write(item)?; }),
-                    );
+                    let reference = if encoded { quote!(&item) } else { quote!(item) };
+                    writes.push(quote!(for item in (#access).iter() { __wc3_mdl_writer.write(#reference)?; }));
                 }
             }
             Kind::Counted(mdl_name) => {

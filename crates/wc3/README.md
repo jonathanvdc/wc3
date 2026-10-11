@@ -73,8 +73,10 @@ vectors. Use `.cloned().collect::<Vec<_>>()` to clone a collection when needed.
 MDX decoding also borrows geometry, animation keys, and opaque payloads from the
 input slice. Numeric arrays use ZeroVec to read little-endian, unaligned data
 without allocating a typed buffer; `get()` and `iter()` return ordinary Rust
-values. Editing an array owns just that array. MDL decoding builds owned native
-values directly.
+values. The arrays expose ZeroVec directly: construct them by collecting values,
+and edit encoded ULE elements with `to_mut_slice()` or `with_mut()`. Only the
+array being edited becomes owned. MDL decoding builds encoded arrays directly,
+and opaque payloads use `Cow<[u8]>`.
 
 Use `as_borrowed()` to create an editable view that borrows even buffers the
 original model owns. `to_owned()` creates an independent deep copy.

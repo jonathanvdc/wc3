@@ -18,10 +18,12 @@ fn classic_particle_emitter_round_trip() {
     emitter.life_span = Animatable::Static(2.0);
     emitter.initial_velocity = Animatable::Static(5.0);
     let track = Track::<f32>::linear(
-        vec![ValueKeyframe {
+        (vec![ValueKeyframe {
             frame: 100,
             value: 1.0,
-        }],
+        }])
+        .into_iter()
+        .collect(),
         None,
     )
     .unwrap();

@@ -31,10 +31,22 @@ fn tracks<T: Interpolate>(c: &mut Criterion, name: &str, value: impl Fn(usize) -
             })
             .collect();
         for (mode, track) in [
-            ("step", Track::step(values.clone(), None).unwrap()),
-            ("linear", Track::linear(values.clone(), None).unwrap()),
-            ("hermite", Track::hermite(tangents.clone(), None).unwrap()),
-            ("bezier", Track::bezier(tangents, None).unwrap()),
+            (
+                "step",
+                Track::step((values.clone()).into_iter().collect(), None).unwrap(),
+            ),
+            (
+                "linear",
+                Track::linear((values.clone()).into_iter().collect(), None).unwrap(),
+            ),
+            (
+                "hermite",
+                Track::hermite((tangents.clone()).into_iter().collect(), None).unwrap(),
+            ),
+            (
+                "bezier",
+                Track::bezier((tangents).into_iter().collect(), None).unwrap(),
+            ),
         ] {
             for scattered in [false, true] {
                 let times: Vec<_> = (0..128)
@@ -65,7 +77,7 @@ fn tracks<T: Interpolate>(c: &mut Criterion, name: &str, value: impl Fn(usize) -
                 );
             }
         }
-        let track = Track::linear(values, Some(0)).unwrap();
+        let track = Track::linear((values).into_iter().collect(), Some(0)).unwrap();
         let sequence = Sequence {
             interval: [0, (count * 33) as u32],
             ..Default::default()
@@ -74,7 +86,13 @@ fn tracks<T: Interpolate>(c: &mut Criterion, name: &str, value: impl Fn(usize) -
             let sampled = if global {
                 track.clone()
             } else {
-                Track::linear(track.linear_keys().unwrap().to_vec(), None).unwrap()
+                Track::linear(
+                    (track.linear_keys().unwrap().to_vec())
+                        .into_iter()
+                        .collect(),
+                    None,
+                )
+                .unwrap()
             };
             group.throughput(Throughput::Elements(6));
             group.bench_function(

@@ -1,4 +1,6 @@
 //! Explicit buffer ownership at the model boundary.
+use std::borrow::Cow;
+use zerovec::{ule::AsULE, ZeroVec};
 /// Creates a view borrowing the buffers held by a record, including owned buffers.
 pub trait Borrowed<'view> {
     /// The record with its buffer lifetimes shortened to the view.
@@ -91,3 +93,28 @@ impl<T: Detached<'static>> IntoOwned for T {
 
 use super::animation::Sequence;
 unchanged_ownership!(Sequence);
+
+impl<'view, T: AsULE + 'view> Borrowed<'view> for ZeroVec<'_, T> {
+    type View = ZeroVec<'view, T>;
+    fn as_borrowed(&'view self) -> Self::View {
+        self.as_slice().as_zerovec()
+    }
+}
+impl<'owned, T: AsULE + 'owned> Detached<'owned> for ZeroVec<'_, T> {
+    type Detached = ZeroVec<'owned, T>;
+    fn into_detached(self) -> Self::Detached {
+        self.into_owned()
+    }
+}
+impl<'view> Borrowed<'view> for Cow<'_, [u8]> {
+    type View = Cow<'view, [u8]>;
+    fn as_borrowed(&'view self) -> Self::View {
+        Cow::Borrowed(self.as_ref())
+    }
+}
+impl<'owned> Detached<'owned> for Cow<'_, [u8]> {
+    type Detached = Cow<'owned, [u8]>;
+    fn into_detached(self) -> Self::Detached {
+        Cow::Owned(self.into_owned())
+    }
+}

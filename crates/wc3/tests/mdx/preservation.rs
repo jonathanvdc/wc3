@@ -44,6 +44,10 @@ fn preserves_repeated_chunks_and_order() {
     let parsed = Model::<V800>::decode_mdx(&model.encode_mdx().unwrap())
         .unwrap()
         .into_owned();
-    assert!(matches!(&parsed.chunks[1], ModelChunk::Unknown(raw) if raw.raw().data == [1]));
-    assert!(matches!(&parsed.chunks[2], ModelChunk::Unknown(raw) if raw.raw().data == [2]));
+    assert!(
+        matches!(&parsed.chunks[1], ModelChunk::Unknown(raw) if raw.raw().data.as_ref() == [1])
+    );
+    assert!(
+        matches!(&parsed.chunks[2], ModelChunk::Unknown(raw) if raw.raw().data.as_ref() == [2])
+    );
 }

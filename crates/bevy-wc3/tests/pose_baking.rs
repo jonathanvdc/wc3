@@ -43,7 +43,7 @@ fn positions(mesh: &Mesh) -> &[[f32; 3]] {
 
 fn vector_track<'data>(global: Option<u32>) -> Track<'data, [f32; 3]> {
     Track::linear(
-        vec![
+        (vec![
             ValueKeyframe {
                 frame: 0,
                 value: [0.0; 3],
@@ -52,7 +52,9 @@ fn vector_track<'data>(global: Option<u32>) -> Track<'data, [f32; 3]> {
                 frame: 1000,
                 value: [10.0, 0.0, 0.0],
             },
-        ],
+        ])
+        .into_iter()
+        .collect(),
         global,
     )
     .unwrap()

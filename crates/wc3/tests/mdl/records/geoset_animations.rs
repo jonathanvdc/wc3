@@ -108,8 +108,8 @@ fn refuses_before_output<'data>(value: &GeosetAnimation<'data>) {
 
 #[test]
 fn refuses_binary_data_that_text_would_discard() {
-    let alpha = Track::<f32>::linear(Vec::new(), None).unwrap();
-    let color = Track::<Color>::linear(Vec::new(), None).unwrap();
+    let alpha = Track::<f32>::linear((Vec::new()).into_iter().collect(), None).unwrap();
+    let color = Track::<Color>::linear((Vec::new()).into_iter().collect(), None).unwrap();
     let mut value = GeosetAnimation::new(0);
     value.flags = GeosetAnimationFlags(4);
     refuses_before_output(&value);

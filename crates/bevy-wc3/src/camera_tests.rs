@@ -30,7 +30,7 @@ fn animation() -> Wc3Animation {
 
 fn vector_track<'data>(start: i32, end: i32, global: Option<u32>) -> Track<'data, [f32; 3]> {
     Track::linear(
-        vec![
+        (vec![
             ValueKeyframe {
                 frame: start,
                 value: [0.0; 3],
@@ -39,14 +39,22 @@ fn vector_track<'data>(start: i32, end: i32, global: Option<u32>) -> Track<'data
                 frame: end,
                 value: [4.0, 0.0, 0.0],
             },
-        ],
+        ])
+        .into_iter()
+        .collect(),
         global,
     )
     .unwrap()
 }
 
 fn scalar_track<'data>(value: f32) -> Track<'data, f32> {
-    Track::linear(vec![ValueKeyframe { frame: 1000, value }], None).unwrap()
+    Track::linear(
+        (vec![ValueKeyframe { frame: 1000, value }])
+            .into_iter()
+            .collect(),
+        None,
+    )
+    .unwrap()
 }
 
 fn scene() -> (App, Entity, Entity) {

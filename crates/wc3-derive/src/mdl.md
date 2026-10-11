@@ -108,7 +108,7 @@ its contents directly, create a nested block, or collect repeated records:
 | --- | --- |
 | `flatten` | Put a field group's headers and body fields in the parent. |
 | `block = "Target"` | Put a field group in one nested `Target { ... }` block. |
-| `repeated = "Anim"` | Collect zero or more complete `Anim` records into a `Vec<T>`. |
+| `repeated = "Anim"` | Collect zero or more complete `Anim` records into `Vec<T>` or `ZeroVec<T>`. |
 | `counted = "Points"` | Read or write one `Points N { ... }` list as a `Vec<T>`. |
 
 Use record-level `#[mdl(fields)]` to derive a reusable field group without an
@@ -121,6 +121,10 @@ counted list writes a zero count. Repeated records preserve source order and
 initialize an empty collection when absent. List items handle their own names,
 headers, and punctuation. For scalar or vector entries, use a tuple wrapper
 with `#[mdl(entry)]`.
+
+Repeated fixed-size records can use `ZeroVec` to build encoded storage directly
+while parsing. Their element type must implement `AsULE`; repeated `Vec` fields
+continue to store native records.
 
 `repeated(Translation, Rotation, Scaling)` accepts several record names in one
 collection. Add `unique_by = "Type::key"` to reject duplicate keys on both read

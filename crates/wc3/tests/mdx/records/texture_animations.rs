@@ -10,10 +10,12 @@ use wc3::model::Model;
 #[test]
 fn texture_animation_tracks_round_trip() {
     let track = Track::<Vec3>::linear(
-        vec![ValueKeyframe {
+        (vec![ValueKeyframe {
             frame: 100,
             value: [1.0, 2.0, 3.0],
-        }],
+        }])
+        .into_iter()
+        .collect(),
         None,
     )
     .unwrap();

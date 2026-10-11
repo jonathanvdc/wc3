@@ -24,17 +24,19 @@ fn constructors_stably_sort_all_interpolation_modes() {
     ];
     let expected = vec![keys[3], keys[0], keys[2], keys[1]];
     assert_eq!(
-        Track::step(keys.clone(), None)
+        Track::step((keys.clone()).into_iter().collect(), None)
             .unwrap()
             .step_keys()
-            .unwrap(),
+            .unwrap()
+            .to_vec(),
         expected
     );
     assert_eq!(
-        Track::linear(keys.clone(), None)
+        Track::linear((keys.clone()).into_iter().collect(), None)
             .unwrap()
             .linear_keys()
-            .unwrap(),
+            .unwrap()
+            .to_vec(),
         expected
     );
     let tangent = |key: ValueKeyframe<f32>| TangentKeyframe {
@@ -46,14 +48,19 @@ fn constructors_stably_sort_all_interpolation_modes() {
     let keys: Vec<_> = keys.into_iter().map(tangent).collect();
     let expected: Vec<_> = expected.into_iter().map(tangent).collect();
     assert_eq!(
-        Track::hermite(keys.clone(), None)
+        Track::hermite((keys.clone()).into_iter().collect(), None)
             .unwrap()
             .hermite_keys()
-            .unwrap(),
+            .unwrap()
+            .to_vec(),
         expected
     );
     assert_eq!(
-        Track::bezier(keys, None).unwrap().bezier_keys().unwrap(),
+        Track::bezier((keys).into_iter().collect(), None)
+            .unwrap()
+            .bezier_keys()
+            .unwrap()
+            .to_vec(),
         expected
     );
 }
@@ -102,7 +109,7 @@ fn both_readers_sort_all_modes_without_losing_duplicate_tangents() {
                 .hermite_keys()
                 .or_else(|| binary.bezier_keys())
                 .unwrap();
-            for key in keys {
+            for key in keys.iter() {
                 assert_eq!(key.in_tangent, key.value + 10.0);
                 assert_eq!(key.out_tangent, key.value + 20.0);
             }

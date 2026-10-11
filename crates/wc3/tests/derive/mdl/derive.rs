@@ -528,7 +528,7 @@ fn linked_properties_enable_both_forms_and_validate_the_collection() {
     let mut invalid = absent;
     invalid
         .alpha
-        .set_track(Track::linear(Vec::new(), None).unwrap());
+        .set_track(Track::linear((Vec::new()).into_iter().collect(), None).unwrap());
     let mut writer = Writer::new(Vec::new());
     assert!(writer.write(&invalid).is_err());
     assert!(writer.finish().unwrap().is_empty());

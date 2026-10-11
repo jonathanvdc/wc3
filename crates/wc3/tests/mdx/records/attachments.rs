@@ -16,10 +16,12 @@ fn attachment_fields_and_visibility_round_trip() {
     )
     .unwrap();
     let track = Track::<f32>::linear(
-        vec![ValueKeyframe {
+        (vec![ValueKeyframe {
             frame: 50,
             value: 1.0,
-        }],
+        }])
+        .into_iter()
+        .collect(),
         None,
     )
     .unwrap();

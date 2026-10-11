@@ -12,6 +12,7 @@ use wc3::model::mdl::{Lexer, Parser, Writer};
 use wc3::model::scene::ModelInfo;
 use wc3::model::Encoder;
 use wc3::model::Vec3;
+use wc3::model::ZeroVec;
 
 struct CountingAllocator;
 thread_local! { static ALLOCATIONS: Cell<Option<usize>> = const { Cell::new(None) }; }
@@ -171,16 +172,16 @@ fn geosets_write_borrowed_mesh_sections_without_allocating() {
     use wc3::model::V1400;
     let mut geoset =
         Geoset::<V1400>::decode_mdl(include_str!("fixtures/mdl/quad_geoset.mdl")).unwrap();
-    geoset.set_tangents(Some(&[[1.0, 0.0, 0.0, -1.0]; 4]));
+    geoset.set_tangents(Some(ZeroVec::alloc_from_slice(&[[1.0, 0.0, 0.0, -1.0]; 4])));
     geoset
-        .set_skin_weights(Some(
+        .set_skin_weights(Some(ZeroVec::alloc_from_slice(
             &[SkinWeights {
                 bone_indices: [0; 4],
                 weights: [255, 0, 0, 0],
             }; 4],
-        ))
+        )))
         .unwrap();
-    geoset.sequence_extents = vec![geoset.extent; 2].into();
+    geoset.sequence_extents = [geoset.extent; 2].into_iter().collect();
     let mut storage = [0u8; 8192];
     let (_, count) = measured(|| {
         let mut writer = Writer::new(IoCursor::new(&mut storage[..]));
@@ -271,18 +272,18 @@ fn borrowed_arrays_clone_sample_and_encode_without_allocating() {
         let clone = track.clone();
         assert_eq!(clone.evaluate(50.0), Some(0.5));
         let keys = clone.linear_keys().unwrap();
-        assert_eq!(keys.values().count(), 2);
-        assert!(keys.is_borrowed());
+        assert_eq!(keys.iter().count(), 2);
+        assert!(!keys.is_owned());
         Encoder::new(&mut output).write(&clone).unwrap();
     });
     assert_eq!(count, 0);
-    assert!(track.linear_keys().unwrap().is_borrowed());
+    assert!(!track.linear_keys().unwrap().is_owned());
     let mut array = track.linear_keys().unwrap().clone();
     let (_, first) = measured(|| {
-        array.to_mut();
+        array.to_mut_slice();
     });
     let (_, second) = measured(|| {
-        array.to_mut();
+        array.to_mut_slice();
     });
     assert_eq!(first, 1);
     assert_eq!(second, 0);
@@ -414,4 +415,74 @@ fn named_geometry_and_material_getters_stream_without_allocating() {
     assert_eq!(allocations, 0);
     assert_eq!(vertices, 4);
     assert_eq!(materials, 1);
+}
+
+#[test]
+fn mdl_tracks_construct_encoded_keys_without_an_intermediate_vector() {
+    for source in [
+        "Track 1 { Linear, 0: 2, }",
+        "Track 1 { Hermite, 0: 2, InTan 1, OutTan 3, }",
+    ] {
+        let (track, allocations) = measured(|| Track::<f32>::decode_mdl(source).unwrap());
+        assert_eq!(allocations, 1);
+        assert_eq!(track.evaluate(0.0), Some(2.0));
+    }
+}
+
+#[test]
+fn mdl_skin_and_extent_adapters_move_their_encoded_buffers() {
+    use wc3::model::geometry::Geoset;
+    use wc3::model::V1400;
+
+    let source = include_str!("fixtures/mdl/quad_geoset.mdl");
+    let end = source.rfind('}').unwrap();
+    let skin = format!("{} SkinWeights 4 {{ {{ 0, 0, 0, 0, 255, 0, 0, 0 }}, {{ 0, 0, 0, 0, 255, 0, 0, 0 }}, {{ 0, 0, 0, 0, 255, 0, 0, 0 }}, {{ 0, 0, 0, 0, 255, 0, 0, 0 }}, }} }}", &source[..end]);
+    let extent = format!("{} Anim {{ BoundsRadius 1, MinimumExtent {{ 0, 0, 0 }}, MaximumExtent {{ 1, 1, 1 }}, }} }}", &source[..end]);
+    let (_, baseline) = measured(|| Geoset::<V1400>::decode_mdl(source).unwrap());
+    let (skin, allocations) = measured(|| Geoset::<V1400>::decode_mdl(&skin).unwrap());
+    assert_eq!(allocations, baseline + 2); // Encoded rows and section metadata.
+    assert_eq!(skin.skin_weights().unwrap().len(), 4);
+    let (extent, allocations) = measured(|| Geoset::<V1400>::decode_mdl(&extent).unwrap());
+    assert_eq!(allocations, baseline + 1);
+    assert_eq!(extent.sequence_extents.len(), 1);
+}
+
+#[test]
+fn encoded_arrays_move_into_track_constructors_and_skin_setters() {
+    use wc3::model::animation::ValueKeyframe;
+    use wc3::model::geometry::{Geoset, SkinWeights};
+    use wc3::model::{ZeroVec, V1300};
+
+    let keys: ZeroVec<ValueKeyframe<f32>> = [ValueKeyframe {
+        frame: 0,
+        value: 1.0,
+    }]
+    .into_iter()
+    .collect();
+    let pointer = keys.as_bytes().as_ptr();
+    let (track, allocations) = measured(|| Track::linear(keys, None).unwrap());
+    assert_eq!(allocations, 0);
+    assert_eq!(track.linear_keys().unwrap().as_bytes().as_ptr(), pointer);
+
+    let mut geoset = Geoset::<V1300>::new(&[[0.0; 3]], &[[0.0; 3]], &[]).unwrap();
+    geoset
+        .set_skin_weights(Some(
+            [SkinWeights::<u8> {
+                bone_indices: [1; 4],
+                weights: [255, 0, 0, 0],
+            }]
+            .into_iter()
+            .collect(),
+        ))
+        .unwrap();
+    let rows: ZeroVec<SkinWeights<u8>> = [SkinWeights {
+        bone_indices: [2; 4],
+        weights: [255, 0, 0, 0],
+    }]
+    .into_iter()
+    .collect();
+    let pointer = rows.as_bytes().as_ptr();
+    let (_, allocations) = measured(|| geoset.set_skin_weights(Some(rows)).unwrap());
+    assert_eq!(allocations, 0);
+    assert_eq!(geoset.skin_weights().unwrap().as_bytes().as_ptr(), pointer);
 }

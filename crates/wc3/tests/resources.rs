@@ -310,11 +310,11 @@ fn noops_retain_nonzero_padding_and_reports_keep_lossless_before_values() {
     let ModelChunk::Unknown(opaque) = &model.chunks[3] else {
         unreachable!()
     };
-    assert_eq!(opaque.raw().data, b"hidden\\resource.mdx\0");
+    assert_eq!(opaque.raw().data.as_ref(), b"hidden\\resource.mdx\0");
     let ModelChunk::ModelInfo(info) = &model.chunks[1] else {
         unreachable!()
     };
-    assert_eq!(info.extension, [9, 0, 7]);
+    assert_eq!(info.extension.as_ref(), [9, 0, 7]);
 }
 
 #[test]

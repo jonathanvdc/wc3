@@ -200,7 +200,7 @@ mod tests {
         let mut node = Node::new("root", 0).unwrap();
         node.translation = Some(
             Track::linear(
-                vec![
+                (vec![
                     ValueKeyframe {
                         frame: 0,
                         value: [1.0; 3],
@@ -209,7 +209,9 @@ mod tests {
                         frame: 100,
                         value: [2.0; 3],
                     },
-                ],
+                ])
+                .into_iter()
+                .collect(),
                 None,
             )
             .unwrap(),
@@ -225,8 +227,7 @@ mod tests {
             .unwrap()
             .linear_keys()
             .unwrap()
-            .as_native_slice()
-            .unwrap()
+            .as_bytes()
             .as_ptr();
         let source = Shared::new(model);
         let first = source.runtime_nodes();
@@ -238,7 +239,7 @@ mod tests {
                 .unwrap()
                 .linear_keys()
                 .unwrap();
-            assert_eq!(keys.as_native_slice().unwrap().as_ptr(), pointer);
+            assert_eq!(keys.as_bytes().as_ptr(), pointer);
         }
         let clone = first[0].translation.clone();
         assert_eq!(
@@ -247,8 +248,7 @@ mod tests {
                 .unwrap()
                 .linear_keys()
                 .unwrap()
-                .as_native_slice()
-                .unwrap()
+                .as_bytes()
                 .as_ptr(),
             pointer
         );

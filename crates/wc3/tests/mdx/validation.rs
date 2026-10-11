@@ -67,7 +67,7 @@ fn version_extension_is_preserved_without_mutable_version_number() {
     let ModelChunk::Version(first) = &parsed.chunks[0] else {
         unreachable!()
     };
-    assert_eq!(first.extension, [7, 8]);
+    assert_eq!(first.extension.as_ref(), [7, 8]);
     assert_eq!(parsed.version(), 800);
 }
 

@@ -36,7 +36,7 @@ construction and runtime ownership:
 
 MDX decoding borrows encoded arrays while strict version conversion consumes
 and moves compatible data. The loader then creates an independently owned model
-for Bevy's asset lifetime. MDL input already builds owned native arrays. Both
+for Bevy's asset lifetime. MDL input already builds owned encoded arrays. Both
 formats use the same model API, with value iteration that does not create decoded
 slice caches.
 

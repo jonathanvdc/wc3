@@ -1,6 +1,7 @@
 use wc3::model::geometry::{Geoset, SkinWeights};
 use wc3::model::mdl::{Read as _, Write as _};
 use wc3::model::mdx::{Read as _, Write as _};
+use wc3::model::ZeroVec;
 use wc3::model::{mdl, ModelVersion, V1000, V1100, V1200, V1300, V1400, V1600, V1800, V800, V900};
 
 const QUAD: &str = include_str!("../../fixtures/mdl/quad_geoset.mdl");
@@ -28,7 +29,7 @@ fn roundtrip<'data, V: ModelVersion>(value: &Geoset<'data, V>) {
 fn specification_quad_has_independent_canonical_output_and_wire_sections() {
     let value = Geoset::<V800>::decode_mdl(QUAD).unwrap();
     assert_eq!(
-        value.vertices(),
+        value.vertices().to_vec(),
         [
             [-16.0, -16.0, 0.0],
             [16.0, -16.0, 0.0],
@@ -36,13 +37,13 @@ fn specification_quad_has_independent_canonical_output_and_wire_sections() {
             [-16.0, 16.0, 0.0]
         ]
     );
-    assert_eq!(value.face_indices(), [0, 1, 2, 0, 2, 3]);
-    assert_eq!(value.primitive_types(), [4]);
-    assert_eq!(value.primitive_counts(), [6]);
-    assert_eq!(value.matrix_group_sizes(), [1]);
-    assert_eq!(value.matrix_indices(), [0]);
+    assert_eq!(value.face_indices().to_vec(), [0, 1, 2, 0, 2, 3]);
+    assert_eq!(value.primitive_types().to_vec(), [4]);
+    assert_eq!(value.primitive_counts().to_vec(), [6]);
+    assert_eq!(value.matrix_group_sizes().to_vec(), [1]);
+    assert_eq!(value.matrix_indices().to_vec(), [0]);
     assert_eq!(
-        value.uv_sets()[0],
+        value.uv_sets()[0].to_vec(),
         [[0.0, 1.0], [1.0, 1.0], [1.0, 0.0], [0.0, 0.0]]
     );
     assert_eq!(value.encode_mdl().unwrap(), CANONICAL);
@@ -77,8 +78,8 @@ fn all_versions_defaults_and_multiple_mesh_groups_roundtrip() {
         );
     let source = with_fields(&source, "TVertices 4 { { -0.0, 1.0 }, { 1.0, 1.0 }, { 1.0, 0.0 }, { 0.0, 0.0 }, } Anim { BoundsRadius -0.0, } Anim { MaximumExtent { 1.0, 2.0, 3.0 }, } Unselectable,");
     let value = Geoset::<V900>::decode_mdl(&source).unwrap();
-    assert_eq!(value.primitive_counts(), [3, 3]);
-    assert_eq!(value.matrix_group_sizes(), [2, 0, 1]);
+    assert_eq!(value.primitive_counts().to_vec(), [3, 3]);
+    assert_eq!(value.matrix_group_sizes().to_vec(), [2, 0, 1]);
     assert_eq!(value.uv_sets().len(), 2);
     assert_eq!(value.sequence_extents.len(), 2);
     assert_eq!(
@@ -181,12 +182,12 @@ fn malformed_counts_duplicates_ranges_and_unknown_fields_have_spans() {
 fn binary_only_values_are_rejected_instead_of_dropped() {
     let mut value = Geoset::<V1400>::decode_mdl(QUAD).unwrap();
     value
-        .set_skin_weights(Some(
+        .set_skin_weights(Some(ZeroVec::alloc_from_slice(
             &[SkinWeights {
                 bone_indices: [256, 0, 0, 0],
                 weights: [255, 0, 0, 0],
             }; 4],
-        ))
+        )))
         .unwrap();
     assert!(value.encode_mdl().is_err());
     let value =

@@ -5,6 +5,7 @@ use std::env;
 use std::fmt::Write as _;
 use wc3::model::geometry::SkinWeights;
 use wc3::model::materials::{LayerTextureSlot, ShaderType};
+use wc3::model::ZeroVec;
 use wc3::model::{mdl, ConversionOptions, Model, V1800, V800};
 
 #[derive(Clone, Copy)]
@@ -131,7 +132,12 @@ pub fn modern<'data>(profile: Profile) -> Model<'data, V1800> {
         geoset.set_level_of_detail((g % 3) as u32);
         let uv = geoset.uv_sets()[0].to_vec();
         let secondary: Vec<_> = uv.iter().map(|p| [p[1], 1.0 - p[0]]).collect();
-        geoset.set_uv_sets(&[uv, secondary]);
+        geoset.set_uv_sets(
+            ([uv, secondary])
+                .iter()
+                .map(|set| ZeroVec::alloc_from_slice(set))
+                .collect(),
+        );
         let skin: Vec<_> = (0..geoset.vertices().len())
             .map(|i| {
                 let bone = (i / 12 + g) % profile.bones;
@@ -146,7 +152,9 @@ pub fn modern<'data>(profile: Profile) -> Model<'data, V1800> {
                 }
             })
             .collect();
-        geoset.set_skin_weights(Some(&skin)).unwrap();
+        geoset
+            .set_skin_weights(Some(ZeroVec::alloc_from_slice(&skin)))
+            .unwrap();
     }
     model.set_geosets(&geosets);
     let mut materials = model.materials().cloned().collect::<Vec<_>>();

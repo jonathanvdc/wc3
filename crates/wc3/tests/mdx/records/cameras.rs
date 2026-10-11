@@ -16,10 +16,12 @@ fn camera_fields_and_tracks_round_trip() {
     camera.far_clip = 1000.0;
     camera.near_clip = 10.0;
     let track = Track::<f32>::linear(
-        vec![ValueKeyframe {
+        (vec![ValueKeyframe {
             frame: 100,
             value: 0.5,
-        }],
+        }])
+        .into_iter()
+        .collect(),
         None,
     )
     .unwrap();

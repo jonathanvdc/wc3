@@ -41,14 +41,21 @@
 //! or using [`Model::chunk_mut`] retains duplicate chunks and their order.
 //!
 //! MDX decoding produces a `Model<'data, D>` borrowing its input byte slice.
-//! Geometry arrays and animation keys use [`ModelArray`], backed by ZeroVec for
-//! little-endian values even when the source is unaligned. `get()` and `iter()`
-//! return values without allocating a decoded buffer. `to_mut()` owns only the
-//! array being edited and exposes ordinary Rust values. MDL decoding builds
-//! owned native arrays directly; opaque MDX payloads use [`ModelBytes`]. Skin-weight
-//! rows use `SkinWeights<u8>` in versions 900–1300 and `SkinWeights<u16>` from
-//! version 1400, so both layouts borrow their exact encoded representation.
-//! The [`geometry::SkinWeight`] trait provides common accessors for generic code.
+//! Geometry arrays and animation keys use [`ZeroVec`] directly to read
+//! little-endian values even when the source is unaligned. MDL parsing collects
+//! into owned encoded arrays without an intermediate native vector. Use
+//! `.iter().collect::<ZeroVec<_>>()` to construct arrays from values;
+//! constructors such as [`geometry::Geoset::from_arrays`] and [`animation::Track::linear`]
+//! move existing encoded arrays into the model. ZeroVec equality compares
+//! encoded bytes, including the exact bit patterns of floating-point values.
+//!
+//! Editing follows ZeroVec's API: `to_mut_slice()` copies a borrowed array once
+//! and exposes ULE elements; `with_mut()` also allows resizing. [`AsULE::to_unaligned`]
+//! converts native values for those edits. Geometry's individual-value setters
+//! perform that conversion for you. Opaque payloads use [`Cow`](std::borrow::Cow)
+//! over byte slices. Skin rows use `SkinWeights<u8>` in versions 900–1300 and
+//! `SkinWeights<u16>` from version 1400; [`geometry::SkinWeight`] provides common
+//! accessors for generic code.
 //!
 //! `as_borrowed()` also borrows buffers that the original model already owns,
 //! making a cheap editable view. `to_owned()` creates an independent deep copy.
@@ -256,8 +263,7 @@ pub use error::{IoError, ValueError};
 mod dialect;
 pub use dialect::{Extended, ModelDialect, NoExtensions};
 
-mod storage;
-pub use storage::{ModelArray, ModelBytes};
+pub use zerovec::{ule::AsULE, ZeroVec};
 
 mod ownership;
 pub use ownership::{Borrowed, Detached, IntoOwned};

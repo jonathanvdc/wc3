@@ -3,20 +3,23 @@ use super::{
     AnimationTime, Interpolate, Interpolation, Keyframe, TangentKeyframe, TrackValue, ValueKeyframe,
 };
 use crate::model::mdl::{Parser, TokenKind, Writer};
+use crate::model::mdx::read_array;
+use crate::model::mdx::read_array_layout;
 use crate::model::IoError;
 use crate::model::ModelOwnership;
 use crate::model::{mdl, mdx};
-use crate::model::{Cursor, Encoder, ModelArray, ValueError};
+use crate::model::{Cursor, Encoder, ValueError, ZeroVec};
 use std::io::Write as IoWrite;
+use std::iter::once;
 use std::ops::{Range, RangeInclusive};
 use zerovec::ule::AsULE;
 
 #[derive(Clone, Debug, PartialEq, ModelOwnership)]
 enum Keyframes<'data, T: TrackValue> {
-    Step(ModelArray<'data, ValueKeyframe<T>>),
-    Linear(ModelArray<'data, ValueKeyframe<T>>),
-    Hermite(ModelArray<'data, TangentKeyframe<T>>),
-    Bezier(ModelArray<'data, TangentKeyframe<T>>),
+    Step(ZeroVec<'data, ValueKeyframe<T>>),
+    Linear(ZeroVec<'data, ValueKeyframe<T>>),
+    Hermite(ZeroVec<'data, TangentKeyframe<T>>),
+    Bezier(ZeroVec<'data, TangentKeyframe<T>>),
 }
 
 /// Keyframes for one animated property.
@@ -38,37 +41,37 @@ pub struct Track<'data, T: TrackValue> {
 impl<'data, T: TrackValue> Track<'data, T> {
     /// A constant animation represented by one stepped key at time zero.
     pub fn constant(value: T) -> Self {
-        Self::step(vec![ValueKeyframe { frame: 0, value }], None)
+        Self::step(once(ValueKeyframe { frame: 0, value }).collect(), None)
             .expect("one key without a global sequence is valid")
     }
 
     /// Creates stepped animation: each key value holds until the next key.
     pub fn step(
-        keys: Vec<ValueKeyframe<T>>,
+        keys: ZeroVec<'data, ValueKeyframe<T>>,
         global_sequence_id: Option<u32>,
     ) -> Result<Self, ValueError> {
-        Self::new(Keyframes::Step(keys.into()), global_sequence_id)
+        Self::new(Keyframes::Step(keys), global_sequence_id)
     }
     /// Creates animation that interpolates linearly between adjacent key values.
     pub fn linear(
-        keys: Vec<ValueKeyframe<T>>,
+        keys: ZeroVec<'data, ValueKeyframe<T>>,
         global_sequence_id: Option<u32>,
     ) -> Result<Self, ValueError> {
-        Self::new(Keyframes::Linear(keys.into()), global_sequence_id)
+        Self::new(Keyframes::Linear(keys), global_sequence_id)
     }
     /// Creates a Hermite track whose keys each have two tangents.
     pub fn hermite(
-        keys: Vec<TangentKeyframe<T>>,
+        keys: ZeroVec<'data, TangentKeyframe<T>>,
         global_sequence_id: Option<u32>,
     ) -> Result<Self, ValueError> {
-        Self::new(Keyframes::Hermite(keys.into()), global_sequence_id)
+        Self::new(Keyframes::Hermite(keys), global_sequence_id)
     }
     /// Creates a Bezier track whose keys each have two tangents.
     pub fn bezier(
-        keys: Vec<TangentKeyframe<T>>,
+        keys: ZeroVec<'data, TangentKeyframe<T>>,
         global_sequence_id: Option<u32>,
     ) -> Result<Self, ValueError> {
-        Self::new(Keyframes::Bezier(keys.into()), global_sequence_id)
+        Self::new(Keyframes::Bezier(keys), global_sequence_id)
     }
     fn new(
         keyframes: Keyframes<'data, T>,
@@ -102,28 +105,28 @@ impl<'data, T: TrackValue> Track<'data, T> {
         }
     }
     /// Returns keys in ascending frame order only for stepped interpolation.
-    pub fn step_keys(&self) -> Option<&ModelArray<'data, ValueKeyframe<T>>> {
+    pub fn step_keys(&self) -> Option<&ZeroVec<'data, ValueKeyframe<T>>> {
         match &self.keyframes {
             Keyframes::Step(keys) => Some(keys),
             _ => None,
         }
     }
     /// Returns keys in ascending frame order only for linear interpolation.
-    pub fn linear_keys(&self) -> Option<&ModelArray<'data, ValueKeyframe<T>>> {
+    pub fn linear_keys(&self) -> Option<&ZeroVec<'data, ValueKeyframe<T>>> {
         match &self.keyframes {
             Keyframes::Linear(keys) => Some(keys),
             _ => None,
         }
     }
     /// Returns keys and tangents in ascending frame order only for Hermite interpolation.
-    pub fn hermite_keys(&self) -> Option<&ModelArray<'data, TangentKeyframe<T>>> {
+    pub fn hermite_keys(&self) -> Option<&ZeroVec<'data, TangentKeyframe<T>>> {
         match &self.keyframes {
             Keyframes::Hermite(keys) => Some(keys),
             _ => None,
         }
     }
     /// Returns keys and tangents in ascending frame order only for Bezier interpolation.
-    pub fn bezier_keys(&self) -> Option<&ModelArray<'data, TangentKeyframe<T>>> {
+    pub fn bezier_keys(&self) -> Option<&ZeroVec<'data, TangentKeyframe<T>>> {
         match &self.keyframes {
             Keyframes::Bezier(keys) => Some(keys),
             _ => None,
@@ -183,9 +186,9 @@ impl<'data, T: TrackValue> mdx::Read<'data> for Track<'data, T> {
         let keyframes = match interpolation {
             0 | 1 => {
                 let keys = if T::ALL_BITS_VALID {
-                    ModelArray::read_layout(body, key_size)?
+                    read_array_layout(body, key_size)?
                 } else {
-                    ModelArray::read(body, key_size)?
+                    read_array(body, key_size)?
                 };
                 if interpolation == 0 {
                     Keyframes::Step(keys)
@@ -195,9 +198,9 @@ impl<'data, T: TrackValue> mdx::Read<'data> for Track<'data, T> {
             }
             2 | 3 => {
                 let keys = if T::ALL_BITS_VALID {
-                    ModelArray::read_layout(body, key_size)?
+                    read_array_layout(body, key_size)?
                 } else {
-                    ModelArray::read(body, key_size)?
+                    read_array(body, key_size)?
                 };
                 if interpolation == 2 {
                     Keyframes::Hermite(keys)
@@ -216,15 +219,21 @@ impl<'data, T: TrackValue> mdx::Read<'data> for Track<'data, T> {
 }
 impl<'data, T: TrackValue> mdx::Write for Track<'data, T> {
     fn write_mdx(&self, encoder: &mut Encoder<'_>) -> Result<(), mdx::WriteError> {
+        if T::COMPONENTS.checked_mul(4) != Some(size_of::<T::ULE>()) {
+            return Err(mdx::WriteError::InvalidValue {
+                field: "track value layout",
+                tag: *b"TRAK",
+            });
+        }
         encoder.write(&(self.keyframes.len() as u32))?;
         encoder.write(&(self.keyframes.interpolation()))?;
         encoder.write(&(self.global_sequence_id.unwrap_or(u32::MAX)))?;
         match &self.keyframes {
             Keyframes::Step(keys) | Keyframes::Linear(keys) => {
-                keys.write(encoder)?;
+                encoder.write_bytes(keys.as_bytes());
             }
             Keyframes::Hermite(keys) | Keyframes::Bezier(keys) => {
-                keys.write(encoder)?;
+                encoder.write_bytes(keys.as_bytes());
             }
         }
         Ok(())
@@ -334,22 +343,25 @@ where
                 let in_tangent = parser.read_property()?;
                 parser.expect_ident("OutTan")?;
                 let out_tangent = parser.read_property()?;
-                tangents.push(TangentKeyframe {
-                    frame,
-                    value,
-                    in_tangent,
-                    out_tangent,
-                });
+                tangents.push(
+                    TangentKeyframe {
+                        frame,
+                        value,
+                        in_tangent,
+                        out_tangent,
+                    }
+                    .to_unaligned(),
+                );
             } else {
-                values.push(ValueKeyframe { frame, value });
+                values.push(ValueKeyframe { frame, value }.to_unaligned());
             }
             actual += 1;
         }
         let keyframes = match interpolation {
-            Interpolation::Step => Keyframes::Step(values.into()),
-            Interpolation::Linear => Keyframes::Linear(values.into()),
-            Interpolation::Hermite => Keyframes::Hermite(tangents.into()),
-            Interpolation::Bezier => Keyframes::Bezier(tangents.into()),
+            Interpolation::Step => Keyframes::Step(ZeroVec::new_owned(values)),
+            Interpolation::Linear => Keyframes::Linear(ZeroVec::new_owned(values)),
+            Interpolation::Hermite => Keyframes::Hermite(ZeroVec::new_owned(tangents)),
+            Interpolation::Bezier => Keyframes::Bezier(ZeroVec::new_owned(tangents)),
         };
         Ok(Self {
             global_sequence_id: sequence,
@@ -461,26 +473,22 @@ impl<'data, T: TrackValue> Track<'data, T> {
 
 // Encoded ValueKeyframe and TangentKeyframe arrays both start each key with
 // an i32 timestamp. Validation has already checked their complete wire layout.
-fn key_frame<'data, K: Keyframe + AsULE>(keys: &ModelArray<'data, K>, index: usize) -> i32 {
-    if let Some((bytes, width)) = keys.encoded_bytes() {
-        let offset = index * width;
-        i32::from_le_bytes(
-            bytes[offset..offset + 4]
-                .try_into()
-                .expect("validated timestamp"),
-        )
-    } else {
-        keys.value(index).expect("key index").frame()
-    }
+fn key_frame<'data, K: Keyframe + AsULE>(keys: &ZeroVec<'data, K>, index: usize) -> i32 {
+    let offset = index * size_of::<K::ULE>();
+    i32::from_le_bytes(
+        keys.as_bytes()[offset..offset + 4]
+            .try_into()
+            .expect("validated timestamp"),
+    )
 }
-fn sort_keys<'data, K: Keyframe + AsULE>(keys: &mut ModelArray<'data, K>) {
+fn sort_keys<'data, K: Keyframe + AsULE>(keys: &mut ZeroVec<'data, K>) {
     let sorted = (1..keys.len()).all(|index| key_frame(keys, index - 1) <= key_frame(keys, index));
     if !sorted {
-        keys.to_mut().sort_by_key(Keyframe::frame);
+        keys.with_mut(|values| values.sort_by_key(|value| K::from_unaligned(*value).frame()));
     }
 }
 fn partition<'data, K: Keyframe + AsULE>(
-    keys: &ModelArray<'data, K>,
+    keys: &ZeroVec<'data, K>,
     range: Range<usize>,
     predicate: impl Fn(i32) -> bool,
 ) -> usize {
@@ -497,7 +505,7 @@ fn partition<'data, K: Keyframe + AsULE>(
     start
 }
 fn key_range<'data, K: Keyframe + AsULE>(
-    keys: &ModelArray<'data, K>,
+    keys: &ZeroVec<'data, K>,
     interval: &RangeInclusive<i32>,
 ) -> (usize, usize) {
     let start = partition(keys, 0..keys.len(), |frame| frame < *interval.start());
@@ -505,7 +513,7 @@ fn key_range<'data, K: Keyframe + AsULE>(
     (start, end)
 }
 fn latest_frame<'data, K: Keyframe + AsULE>(
-    keys: &ModelArray<'data, K>,
+    keys: &ZeroVec<'data, K>,
     time_ms: f64,
     interval: &RangeInclusive<i32>,
 ) -> Option<i32> {
@@ -569,7 +577,7 @@ impl<'data, T: Interpolate> Track<'data, T> {
 }
 
 fn surrounding<'data, K: Keyframe + AsULE>(
-    keys: &ModelArray<'data, K>,
+    keys: &ZeroVec<'data, K>,
     time: f64,
     interval: &RangeInclusive<i32>,
 ) -> Option<(K, K)> {
@@ -578,16 +586,16 @@ fn surrounding<'data, K: Keyframe + AsULE>(
         return None;
     }
     let after = partition(keys, start..end, |frame| f64::from(frame) <= time);
-    let left = (after > start).then(|| keys.value(after - 1).expect("key index"));
+    let left = (after > start).then(|| keys.get(after - 1).expect("key index"));
     let right = if left
         .as_ref()
         .is_some_and(|key| f64::from(key.frame()) == time)
     {
         left
     } else if after < end {
-        let frame = keys.value(after).expect("key index").frame();
+        let frame = keys.get(after).expect("key index").frame();
         let next = partition(keys, after..end, |key_frame| key_frame <= frame);
-        keys.value(next - 1)
+        keys.get(next - 1)
     } else {
         None
     };
@@ -601,7 +609,7 @@ mod key_lookup_tests {
     #[test]
     fn lookup_respects_time_and_sequence_for_unordered_keys() {
         let track = Track::step(
-            vec![
+            (vec![
                 ValueKeyframe {
                     frame: 200,
                     value: 1.0,
@@ -614,7 +622,9 @@ mod key_lookup_tests {
                     frame: 150,
                     value: 3.0,
                 },
-            ],
+            ])
+            .into_iter()
+            .collect(),
             None,
         )
         .unwrap();

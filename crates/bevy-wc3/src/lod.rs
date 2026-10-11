@@ -178,10 +178,10 @@ impl LodBounds {
         };
         let mut radius = 0.0f32;
         for geoset in model.geosets() {
-            for vertex in geoset.vertices() {
+            for vertex in geoset.vertices().iter() {
                 include(Vec3::from_array(vertex));
             }
-            for extent in once(geoset.extent).chain(&geoset.sequence_extents) {
+            for extent in once(geoset.extent).chain(geoset.sequence_extents.iter()) {
                 include(Vec3::from_array(extent.minimum));
                 include(Vec3::from_array(extent.maximum));
                 if extent.bounds_radius.is_finite() {

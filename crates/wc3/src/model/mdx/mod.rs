@@ -78,3 +78,6 @@ pub use tracks::{ReadTrackProperty, ReadTracks, WriteTrackProperty, WriteTracks}
 
 mod extension;
 pub use extension::Extension;
+
+mod arrays;
+pub(crate) use arrays::{read_array, read_array_layout, WireValue};

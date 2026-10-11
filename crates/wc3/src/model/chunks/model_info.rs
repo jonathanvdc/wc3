@@ -1,10 +1,11 @@
 //! The complete model-information chunk.
 use crate::model::mdx;
+use crate::model::Encoder;
 use crate::model::ModelOwnership;
 use crate::model::Tag;
 use crate::model::{Chunk, KnownChunk};
 use crate::model::{Cursor, ModelInfo};
-use crate::model::{Encoder, ModelBytes};
+use std::borrow::Cow;
 
 /// A complete `MODL` chunk, including bytes after the standard record.
 #[derive(Clone, Debug, PartialEq, ModelOwnership)]
@@ -12,12 +13,12 @@ pub struct ModelInfoChunk<'data> {
     /// Decoded model metadata and bounds.
     pub info: ModelInfo,
     /// Uninterpreted trailing MDX bytes, preserved when writing MDX.
-    pub extension: ModelBytes<'data>,
+    pub extension: Cow<'data, [u8]>,
 }
 
 impl<'data> ModelInfoChunk<'data> {
     /// Creates a chunk from metadata and trailing extension bytes.
-    pub fn new(info: ModelInfo, extension: impl Into<ModelBytes<'data>>) -> Self {
+    pub fn new(info: ModelInfo, extension: impl Into<Cow<'data, [u8]>>) -> Self {
         Self {
             info,
             extension: extension.into(),

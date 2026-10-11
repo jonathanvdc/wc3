@@ -1,5 +1,6 @@
 //! Checked, bounded reads over immutable bytes.
-use crate::model::{mdx, ModelBytes};
+use crate::model::mdx;
+use std::borrow::Cow;
 /// A value that can be read from an MDX byte stream.
 pub trait Read<'data>: Sized {
     /// Reads one value at the current position, leaving subsequent bytes unread.
@@ -106,8 +107,8 @@ impl<'a> Cursor<'a> {
     }
 
     /// Borrows the remaining bytes without copying them.
-    pub(crate) fn remaining_bytes(&self) -> ModelBytes<'a> {
-        ModelBytes::borrowed(self.remaining())
+    pub(crate) fn remaining_bytes(&self) -> Cow<'a, [u8]> {
+        Cow::Borrowed(self.remaining())
     }
 
     /// Returns the position relative to this cursor's slice.

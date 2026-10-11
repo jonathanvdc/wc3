@@ -1,5 +1,7 @@
 //! Codec bounds, kept separate from emitted parsing and writing code.
-use super::attributes::{vec_element, Container, DefaultValue, Field, Kind};
+use super::attributes::{
+    repeated_element, type_argument, vec_element, Container, DefaultValue, Field, Kind,
+};
 use super::{omission, schema::Schema};
 use proc_macro2::{TokenStream, TokenTree};
 use quote::ToTokens;
@@ -56,7 +58,17 @@ pub(super) fn build(
         if matches!(field.kind, Kind::Repeated(_) | Kind::Counted(_))
             && (reading || !field.virtual_field)
         {
-            let element = vec_element(ty)?;
+            let element = if matches!(field.kind, Kind::Repeated(_)) {
+                repeated_element(ty)?
+            } else {
+                vec_element(ty)?.clone()
+            };
+            if type_argument(ty, "ZeroVec").is_some() {
+                generics
+                    .make_where_clause()
+                    .predicates
+                    .push(parse_quote!(#element: ::wc3::model::AsULE));
+            }
             let bound = if reading {
                 parse_quote!(#element: ::wc3::model::mdl::Read)
             } else {

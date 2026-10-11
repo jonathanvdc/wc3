@@ -6,7 +6,7 @@ use bevy::prelude::*;
 use bevy::render::render_resource::VertexFormat;
 use std::collections::HashMap;
 use wc3::model::geometry::Geoset;
-use wc3::model::{ModelArray, V1800};
+use wc3::model::{ZeroVec, V1800};
 
 pub(crate) const EXTRA_JOINT_INDEX: MeshVertexAttribute =
     MeshVertexAttribute::new("Wc3_ExtraJointIndex", 138_000_001, VertexFormat::Uint16x4);
@@ -22,7 +22,7 @@ fn vertex_skin<'data>(
     let skin = geoset.skin_weights();
     let mut group_starts = Vec::new();
     let mut offset = 0usize;
-    for size in geoset.matrix_group_sizes() {
+    for size in geoset.matrix_group_sizes().iter() {
         group_starts.push(offset);
         offset += size as usize;
     }
@@ -82,7 +82,7 @@ fn vertex_skin<'data>(
     Ok((indices, weights, extra_indices, extra_weights))
 }
 
-fn skin_bounds(positions: &ModelArray<'_, [f32; 3]>, rows: &JointRows) -> SkinnedMeshBounds {
+fn skin_bounds(positions: &ZeroVec<'_, [f32; 3]>, rows: &JointRows) -> SkinnedMeshBounds {
     let mut ranges: Vec<Option<(Vec3, Vec3)>> = Vec::new();
     for (vertex, position) in positions.iter().enumerate() {
         let position = Vec3::from_array(position);
@@ -214,11 +214,16 @@ mod tests {
         .unwrap();
         let uv = vec![[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]];
         let mirrored = vec![[1.0, 0.0], [0.0, 0.0], [1.0, 1.0]];
-        geoset.set_uv_sets(&[uv.clone(), uv.clone(), mirrored.clone()]);
+        geoset.set_uv_sets(
+            ([uv.clone(), uv.clone(), mirrored.clone()])
+                .iter()
+                .map(|set| ZeroVec::alloc_from_slice(set))
+                .collect(),
+        );
         assert_eq!(canonical_uv_coordinate(&geoset, 1), 0);
         assert_eq!(canonical_uv_coordinate(&geoset, 2), 2);
         let authored = [[0.0, 1.0, 0.0, 1.0]; 3];
-        geoset.set_tangents(Some(&authored));
+        geoset.set_tangents(Some(ZeroVec::alloc_from_slice(&authored)));
         assert_eq!(canonical_uv_coordinate(&geoset, 0), 0);
         assert_eq!(canonical_uv_coordinate(&geoset, 1), 1);
         let first = build_mesh_with_uv(&geoset, &HashMap::new(), false, 0).unwrap();
@@ -251,11 +256,16 @@ mod tests {
         let uv = vec![[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]];
         let mut near = uv.clone();
         near[0][0] += 0.000001;
-        geoset.set_uv_sets(&[uv.clone(), uv.clone(), near, uv]);
+        geoset.set_uv_sets(
+            ([uv.clone(), uv.clone(), near, uv])
+                .iter()
+                .map(|set| ZeroVec::alloc_from_slice(set))
+                .collect(),
+        );
         assert_eq!(canonical_uv_coordinate(&geoset, 1), 0);
         assert_eq!(canonical_uv_coordinate(&geoset, 2), 2);
         assert_eq!(canonical_uv_coordinate(&geoset, 3), 0);
-        geoset.set_tangents(Some(&[[1.0, 0.0, 0.0, 1.0]; 3]));
+        geoset.set_tangents(Some(ZeroVec::alloc_from_slice(&[[1.0, 0.0, 0.0, 1.0]; 3])));
         assert_eq!(canonical_uv_coordinate(&geoset, 0), 0);
         assert_eq!(canonical_uv_coordinate(&geoset, 3), 1);
     }
@@ -264,10 +274,10 @@ mod tests {
     fn reforged_skin_indices_address_nodes_directly() {
         let mut geoset = Geoset::<V1800>::new(&[[0.0; 3]], &[[0.0, 0.0, 1.0]], &[]).unwrap();
         geoset
-            .set_skin_weights(Some(&[SkinWeights {
+            .set_skin_weights(Some(ZeroVec::alloc_from_slice(&[SkinWeights {
                 bone_indices: [7, 0, 0, 0],
                 weights: [255, 0, 0, 0],
-            }]))
+            }])))
             .unwrap();
         let joints = HashMap::from([(7, 3)]);
         let rows = vertex_skin(&geoset, &joints).unwrap();

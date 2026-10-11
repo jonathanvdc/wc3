@@ -1,10 +1,11 @@
 //! The complete version chunk.
 use crate::model::mdx;
 use crate::model::Cursor;
+use crate::model::Encoder;
 use crate::model::ModelOwnership;
 use crate::model::{mdl, ModelVersion, Tag};
 use crate::model::{Chunk, KnownChunk};
-use crate::model::{Encoder, ModelBytes};
+use std::borrow::Cow;
 use std::marker::PhantomData;
 
 /// A complete `VERS` chunk, including bytes after the version number.
@@ -16,7 +17,7 @@ use std::marker::PhantomData;
 pub struct VersionChunk<'data, V: ModelVersion> {
     #[mdl(skip, default)]
     /// Uninterpreted bytes after the version number; omitted from MDL.
-    pub extension: ModelBytes<'data>,
+    pub extension: Cow<'data, [u8]>,
     #[mdl(skip, default)]
     version: PhantomData<V>,
 }
@@ -25,7 +26,7 @@ impl<'data, V: ModelVersion> VersionChunk<'data, V> {
     /// Creates a version chunk with no extension bytes.
     pub fn new() -> Self {
         Self {
-            extension: ModelBytes::default(),
+            extension: Cow::default(),
             version: PhantomData,
         }
     }

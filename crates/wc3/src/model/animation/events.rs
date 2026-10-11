@@ -1,6 +1,7 @@
 //! Interval traversal for discrete event tracks.
 use super::AnimationTime;
 use crate::model::scene::EventObject;
+use std::cmp::Ordering::{Greater, Less};
 
 /// One occurrence of an event key, including repeated loop occurrences.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -58,8 +59,24 @@ impl AnimationTime<'_> {
         let period = end - start;
         let mut occurrences = Vec::new();
         let frames = event.frames();
-        let first = frames.partition_point(|frame| f64::from(frame) < start);
-        let last = frames.partition_point(|frame| f64::from(frame) <= end);
+        let first = frames
+            .binary_search_by(|frame| {
+                if f64::from(frame) < start {
+                    Less
+                } else {
+                    Greater
+                }
+            })
+            .unwrap_err();
+        let last = frames
+            .binary_search_by(|frame| {
+                if f64::from(frame) <= end {
+                    Less
+                } else {
+                    Greater
+                }
+            })
+            .unwrap_err();
         for (index, frame) in frames.iter().skip(first).take(last - first).enumerate() {
             let offset = f64::from(frame) - start;
             let mut cycle = if looping && period > 0.0 {

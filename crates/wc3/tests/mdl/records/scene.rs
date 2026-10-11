@@ -126,7 +126,7 @@ fn event_frames_and_sequence_roundtrip() {
     )
     .unwrap();
     assert_eq!(event.global_sequence_id, u32::MAX);
-    assert_eq!(event.frames(), [4]);
+    assert_eq!(event.frames().to_vec(), [4]);
     roundtrip(&event);
 }
 #[test]
@@ -213,7 +213,7 @@ fn independent_binary_record_fixtures_roundtrip() {
     let mut unsupported = old_light.encode_mdx().unwrap();
     unsupported.extend_from_slice(b"KLDA");
     unsupported.extend_from_slice(
-        &Track::<f32>::linear(vec![], None)
+        &Track::<f32>::linear((vec![]).into_iter().collect(), None)
             .unwrap()
             .encode_mdx()
             .unwrap(),

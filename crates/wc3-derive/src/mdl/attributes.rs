@@ -588,7 +588,10 @@ pub(super) fn field(field: &SynField, index: usize) -> Result<Field> {
         {
             return Err(Error::new_spanned(field, "structural fields do not support codec hooks or skip_if; flatten and repeated also own their initialization and presence policy"));
         }
-        if matches!(kind, Kind::Repeated(_) | Kind::Counted(_)) {
+        if matches!(kind, Kind::Repeated(_)) {
+            repeated_element(&field.ty)?;
+        }
+        if matches!(kind, Kind::Counted(_)) {
             vec_element(&field.ty)?;
         }
     }
@@ -724,4 +727,10 @@ pub(super) fn type_argument(ty: &Type, name: &str) -> Option<Type> {
         GenericArgument::Type(ty) => Some(ty.clone()),
         _ => None,
     }
+}
+
+pub(super) fn repeated_element(ty: &Type) -> Result<Type> {
+    type_argument(ty, "ZeroVec")
+        .map(Ok)
+        .unwrap_or_else(|| vec_element(ty).cloned())
 }

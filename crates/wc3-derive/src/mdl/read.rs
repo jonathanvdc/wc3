@@ -1,5 +1,7 @@
 //! Generation of direct streaming record readers.
-use super::attributes::{vec_element, Container, DefaultValue, Field, Kind};
+use super::attributes::{
+    repeated_element, type_argument, vec_element, Container, DefaultValue, Field, Kind,
+};
 use super::{bounds, schema::Schema, state_type};
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
@@ -67,11 +69,22 @@ pub(super) fn expand(
             continue;
         }
         if let Kind::Repeated(mdl_names) = kind {
-            let element = vec_element(ty)?;
-            locals.push(quote!(let mut #local: #ty = ::std::vec::Vec::new();));
+            let element = repeated_element(ty)?;
+            let encoded = type_argument(ty, "ZeroVec").is_some();
+            let append = if encoded {
+                quote!(#local.with_mut(|values| values.push(::wc3::model::AsULE::to_unaligned(value)));)
+            } else {
+                quote!(#local.push(value);)
+            };
+            locals.push(quote!(let mut #local: #ty = ::std::default::Default::default();));
+            let previous = if encoded {
+                quote!(&previous)
+            } else {
+                quote!(previous)
+            };
             for mdl_name in mdl_names {
                 let unique = field.unique_by.as_ref().map(|key| quote! {
-                    if #local.iter().any(|previous| #key(previous) == #key(&value)) {
+                    if #local.iter().any(|previous| #key(#previous) == #key(&value)) {
                         return Err(::wc3::model::mdl::ReadError::new(__wc3_mdl_field.span, ::wc3::model::mdl::ReadErrorKind::DuplicateField));
                     }
                 });
@@ -81,7 +94,7 @@ pub(super) fn expand(
                 let value = __wc3_mdl_body.read::<#element>()?;
                 if __wc3_mdl_body.position() == start { return Err(__wc3_mdl_body.error(::wc3::model::mdl::ReadErrorKind::NoProgress)); }
                 #unique
-                #local.push(value);
+                #append
                 #mark_present
             }));
             }

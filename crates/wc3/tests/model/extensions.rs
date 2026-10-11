@@ -119,7 +119,7 @@ fn unknown_chunks_and_repeated_extensions_retain_order() {
         [*b"VERS", *b"NOTE", *b"FUTR", *b"NOTE"]
     );
     assert!(
-        matches!(&decoded.chunks[2], ModelChunk::Unknown(chunk) if chunk.raw().data == [9, 8, 7])
+        matches!(&decoded.chunks[2], ModelChunk::Unknown(chunk) if chunk.raw().data.as_ref() == [9, 8, 7])
     );
     assert_eq!(decoded.encode_mdx().unwrap(), bytes);
     let standard = Model::<V1800>::decode_mdx(&bytes).unwrap();

@@ -4,7 +4,7 @@ use wc3::model::animation::{Animatable, Track};
 use wc3::model::mdl;
 use wc3::model::mdl::{Read as _, Write as _};
 use wc3::model::IoError;
-use wc3::model::Vec3;
+use wc3::model::{AsULE, Vec3, ZeroVec};
 
 #[derive(Debug, PartialEq, mdl::Read, mdl::Write)]
 #[mdl(fields)]
@@ -785,4 +785,45 @@ fn borrowed_virtual_groups_keep_non_unit_writer_state() {
         value.encode_mdl().unwrap(),
         "LifetimeView {\n\tNumber 42,\n}\n"
     );
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, mdl::Read, mdl::Write)]
+#[mdl(block = "Item")]
+struct EncodedItem {
+    #[mdl(header)]
+    id: u32,
+}
+impl AsULE for EncodedItem {
+    type ULE = <u32 as AsULE>::ULE;
+    fn to_unaligned(self) -> Self::ULE {
+        self.id.to_unaligned()
+    }
+    fn from_unaligned(value: Self::ULE) -> Self {
+        Self {
+            id: u32::from_unaligned(value),
+        }
+    }
+}
+fn encoded_item_id(item: &EncodedItem) -> u32 {
+    item.id
+}
+#[derive(Debug, PartialEq, mdl::Read, mdl::Write)]
+#[mdl(block = "Encoded")]
+struct EncodedRecords<'data> {
+    #[mdl(repeated = "Item", unique_by = "encoded_item_id")]
+    items: ZeroVec<'data, EncodedItem>,
+}
+#[test]
+fn repeated_records_can_build_zero_vecs_directly_and_validate_duplicates() {
+    let records = EncodedRecords::decode_mdl("Encoded { Item 1 {} Item 2 {} }").unwrap();
+    assert_eq!(records.items.get(0).unwrap().id, 1);
+    assert_eq!(records.items.get(1).unwrap().id, 2);
+    assert!(records.items.is_owned());
+    let text = records.encode_mdl().unwrap();
+    assert_eq!(EncodedRecords::decode_mdl(&text).unwrap(), records);
+    assert!(EncodedRecords::decode_mdl("Encoded { Item 1 {} Item 1 {} }").is_err());
+    let duplicate = EncodedRecords {
+        items: [EncodedItem { id: 1 }; 2].into_iter().collect(),
+    };
+    assert!(duplicate.encode_mdl().is_err());
 }

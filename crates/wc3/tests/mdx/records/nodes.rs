@@ -49,7 +49,8 @@ fn typed_node_flags_preserve_the_complete_word_and_node() {
     let mut original = Node::new("Typed", 9).unwrap();
     original.parent_id = 4;
     original.flags = NodeFlags(bits);
-    original.translation = Some(Track::<Vec3>::linear(vec![], None).unwrap());
+    original.translation =
+        Some(Track::<Vec3>::linear((vec![]).into_iter().collect(), None).unwrap());
     let bytes = original.encode_mdx().unwrap();
     let mut particle = original.clone().cast_flags::<Particle2Flags>();
     assert!(particle.flags.line_emitter());

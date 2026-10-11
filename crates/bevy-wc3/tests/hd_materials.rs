@@ -1,6 +1,7 @@
 use bevy::mesh::skinning::SkinnedMeshInverseBindposes;
 use bevy::prelude::{Assets, Mesh};
 use bevy_wc3::{prepare_model, Wc3Model};
+use wc3::model::ZeroVec;
 
 #[test]
 fn preparation_shares_identical_uv_meshes_and_preserves_distinct_tangent_sources() {
@@ -14,7 +15,12 @@ fn preparation_shares_identical_uv_meshes_and_preserves_distinct_tangent_sources
     let uv = geoset.uv_sets()[0].to_vec();
     let mut near = uv.clone();
     near[0][0] += 0.000001;
-    geoset.set_uv_sets(&[uv.clone(), uv, near]);
+    geoset.set_uv_sets(
+        ([uv.clone(), uv, near])
+            .iter()
+            .map(|set| ZeroVec::alloc_from_slice(set))
+            .collect(),
+    );
     source.model.set_geosets(&[geoset.clone()]);
     let mut material = source
         .model
@@ -42,7 +48,7 @@ fn preparation_shares_identical_uv_meshes_and_preserves_distinct_tangent_sources
     drop(prepared);
 
     let authored = vec![[1.0, 0.0, 0.0, 1.0]; geoset.vertices().len()];
-    geoset.set_tangents(Some(&authored));
+    geoset.set_tangents(Some(ZeroVec::alloc_from_slice(&authored)));
     source.model.set_geosets(&[geoset]);
     let mut meshes = Assets::<Mesh>::default();
     let _prepared = prepare_model(&mut meshes, &mut binds, &source, |_| None).unwrap();

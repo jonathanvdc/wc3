@@ -10,6 +10,7 @@ use wc3::model::mdl::Write as _;
 use wc3::model::mdx::Read as _;
 use wc3::model::mdx::Write as _;
 use wc3::model::NoExtensions;
+use wc3::model::ZeroVec;
 
 use wc3::model::materials::{Layer, LayerFresnel, LayerTextureSlot, Material, ShaderType};
 use wc3::model::scene::{
@@ -242,10 +243,12 @@ fn texture_slots_including_animations_require_loss_permission() {
         texture_id: Animatable::Both {
             value: 8,
             track: Track::<u32>::step(
-                vec![ValueKeyframe {
+                (vec![ValueKeyframe {
                     frame: 20,
                     value: 9,
-                }],
+                }])
+                .into_iter()
+                .collect(),
                 None,
             )
             .unwrap(),
@@ -269,10 +272,12 @@ fn texture_slots_including_animations_require_loss_permission() {
 fn tracks_are_checked_even_when_static_fields_are_neutral() {
     let mut layer = Layer::<V900>::new();
     let track = Track::<f32>::linear(
-        vec![ValueKeyframe {
+        (vec![ValueKeyframe {
             frame: 100,
             value: 2.0,
-        }],
+        }])
+        .into_iter()
+        .collect(),
         Some(3),
     )
     .unwrap();
@@ -308,12 +313,12 @@ fn tracks_are_checked_even_when_static_fields_are_neutral() {
 fn skin_narrowing_checks_indices_and_never_truncates_them() {
     let mut geoset = Geoset::<V1800>::new(&[[0.0; 3]], &[[0.0; 3]], &[]).unwrap();
     geoset
-        .set_skin_weights(Some(&[SkinWeights {
+        .set_skin_weights(Some(ZeroVec::alloc_from_slice(&[SkinWeights {
             bone_indices: [256, 0, 0, 0],
             weights: [255, 0, 0, 0],
-        }]))
+        }])))
         .unwrap();
-    geoset.set_tangents(Some(&[[1.0, 0.0, 0.0, 1.0]]));
+    geoset.set_tangents(Some(ZeroVec::alloc_from_slice(&[[1.0, 0.0, 0.0, 1.0]])));
     let error = geoset
         .convert::<V1300>(&ConversionOptions::strict())
         .unwrap_err();
@@ -331,10 +336,10 @@ fn skin_narrowing_checks_indices_and_never_truncates_them() {
         .unwrap();
     assert_eq!(wide.model.skin_weights(), geoset.skin_weights());
     geoset
-        .set_skin_weights(Some(&[SkinWeights {
+        .set_skin_weights(Some(ZeroVec::alloc_from_slice(&[SkinWeights {
             bone_indices: [255, 0, 0, 0],
             weights: [255, 0, 0, 0],
-        }]))
+        }])))
         .unwrap();
     let narrow = geoset
         .convert::<V900>(&ConversionOptions::strict())
@@ -373,7 +378,7 @@ fn opaque_chunks_have_an_independent_policy() {
     let ModelChunk::Unknown(chunk) = &preserved.model.chunks[1] else {
         panic!("expected opaque chunk")
     };
-    assert_eq!(chunk.raw().data, [1, 2, 3]);
+    assert_eq!(chunk.raw().data.as_ref(), [1, 2, 3]);
     let options = ConversionOptions {
         unknown_chunks: UnknownChunkPolicy::Drop,
         ..ConversionOptions::strict()
@@ -622,10 +627,12 @@ fn populated_versioned_fields_preserve_exact_storage_when_supported() {
         texture_id: Animatable::Both {
             value: 2,
             track: Track::<u32>::linear(
-                vec![ValueKeyframe {
+                (vec![ValueKeyframe {
                     frame: 200,
                     value: 5,
-                }],
+                }])
+                .into_iter()
+                .collect(),
                 Some(2),
             )
             .unwrap(),

@@ -1,6 +1,8 @@
 //! Mesh geometry, material references, bounds, and skinning.
 use crate::model::conversion::ConversionContext;
-use crate::model::storage::WireValue;
+use crate::model::mdx::read_array;
+use crate::model::mdx::read_array_layout;
+use crate::model::mdx::WireValue;
 use crate::model::ConversionError;
 use crate::model::Cursor;
 use crate::model::Encoder;
@@ -11,7 +13,7 @@ use crate::model::ModelDialect;
 use crate::model::ValueError;
 use crate::model::{mdl, mdx};
 use crate::model::{Borrowed, Detached, ModelOwnership, ModelPartialEq};
-use crate::model::{Model, ModelArray};
+use crate::model::{Model, ZeroVec};
 use crate::model::{ModelVersion, SupportsReforgedChunks, Tag, Vec3, Version};
 use std::borrow::Cow;
 use std::fmt::Debug;
@@ -65,15 +67,13 @@ pub trait SkinWeight:
     /// Constructs a row, checking the selected layout and the weight range.
     fn from_influences(bone_indices: [u16; 4], weights: [u16; 4]) -> Option<Self>;
     #[doc(hidden)]
-    fn into_narrow<'data>(
-        values: ModelArray<'data, Self>,
-    ) -> Option<ModelArray<'data, SkinWeights<u8>>>;
+    fn into_narrow<'data>(values: ZeroVec<'data, Self>) -> Option<ZeroVec<'data, SkinWeights<u8>>>;
     #[doc(hidden)]
-    fn into_wide<'data>(values: ModelArray<'data, Self>) -> ModelArray<'data, SkinWeights<u16>>;
+    fn into_wide<'data>(values: ZeroVec<'data, Self>) -> ZeroVec<'data, SkinWeights<u16>>;
     #[doc(hidden)]
     fn convert_array<'data, S: SkinWeight>(
-        values: ModelArray<'data, S>,
-    ) -> Option<ModelArray<'data, Self>>;
+        values: ZeroVec<'data, S>,
+    ) -> Option<ZeroVec<'data, Self>>;
 }
 
 impl SkinWeight for SkinWeights<u8> {
@@ -96,10 +96,10 @@ impl SkinWeight for SkinWeights<u8> {
             weights: weights.map(|value| value as u8),
         })
     }
-    fn into_narrow<'data>(values: ModelArray<'data, Self>) -> Option<ModelArray<'data, Self>> {
+    fn into_narrow<'data>(values: ZeroVec<'data, Self>) -> Option<ZeroVec<'data, Self>> {
         Some(values)
     }
-    fn into_wide<'data>(values: ModelArray<'data, Self>) -> ModelArray<'data, SkinWeights<u16>> {
+    fn into_wide<'data>(values: ZeroVec<'data, Self>) -> ZeroVec<'data, SkinWeights<u16>> {
         values
             .iter()
             .map(|row| SkinWeights {
@@ -109,8 +109,8 @@ impl SkinWeight for SkinWeights<u8> {
             .collect()
     }
     fn convert_array<'data, S: SkinWeight>(
-        values: ModelArray<'data, S>,
-    ) -> Option<ModelArray<'data, Self>> {
+        values: ZeroVec<'data, S>,
+    ) -> Option<ZeroVec<'data, Self>> {
         S::into_narrow(values)
     }
 }
@@ -127,20 +127,18 @@ impl SkinWeight for SkinWeights<u16> {
             weights,
         })
     }
-    fn into_narrow<'data>(
-        values: ModelArray<'data, Self>,
-    ) -> Option<ModelArray<'data, SkinWeights<u8>>> {
+    fn into_narrow<'data>(values: ZeroVec<'data, Self>) -> Option<ZeroVec<'data, SkinWeights<u8>>> {
         values
             .iter()
             .map(|row| SkinWeights::<u8>::from_influences(row.bone_indices, row.weights))
             .collect()
     }
-    fn into_wide<'data>(values: ModelArray<'data, Self>) -> ModelArray<'data, Self> {
+    fn into_wide<'data>(values: ZeroVec<'data, Self>) -> ZeroVec<'data, Self> {
         values
     }
     fn convert_array<'data, S: SkinWeight>(
-        values: ModelArray<'data, S>,
-    ) -> Option<ModelArray<'data, Self>> {
+        values: ZeroVec<'data, S>,
+    ) -> Option<ZeroVec<'data, Self>> {
         Some(S::into_wide(values))
     }
 }
@@ -148,8 +146,8 @@ impl SkinWeight for SkinWeights<u16> {
 /// Optional sections retain their original order for serialization.
 #[derive(Clone, Debug, PartialEq, ModelOwnership)]
 enum GeosetExtraSection<'data, S: SkinWeight> {
-    Tangents(ModelArray<'data, [f32; 4]>),
-    Skin { weights: ModelArray<'data, S> },
+    Tangents(ZeroVec<'data, [f32; 4]>),
+    Skin { weights: ZeroVec<'data, S> },
 }
 
 /// Storage and serialization of the optional TANG and SKIN sections for a version.
@@ -356,7 +354,7 @@ use mdl_codec::{
         #[mdl(property = "Name", hive_name = "LevelOfDetailName", delegate, get = "Self::mdl_lod_name", set = "Self::set_mdl_lod_name")]
         lod_name: Option<FixedText<80>>,
         #[mdl(repeated = "Anim", get = "Self::mdl_bounds", set = "Self::set_mdl_bounds")]
-        bounds: Vec<AnimExtent>,
+        bounds: ZeroVec<'data, AnimExtent>,
         #[mdl(property = "Tangents", delegate, get = "Self::mdl_tangents", set = "Self::set_mdl_tangents")]
         tangents: OptionalList<[f32; 4]>,
         #[mdl(property = "SkinWeights", delegate, get = "Self::mdl_skin", set = "Self::set_mdl_skin")]
@@ -367,21 +365,21 @@ pub struct Geoset<'data, V: ModelVersion> {
     #[mdl(skip, default)]
     version: PhantomData<V>,
     #[mdl(skip, default)]
-    vertices: ModelArray<'data, Vec3>,
+    vertices: ZeroVec<'data, Vec3>,
     #[mdl(skip, default)]
-    normals: ModelArray<'data, Vec3>,
+    normals: ZeroVec<'data, Vec3>,
     #[mdl(skip, default)]
-    primitive_types: ModelArray<'data, u32>,
+    primitive_types: ZeroVec<'data, u32>,
     #[mdl(skip, default)]
-    primitive_counts: ModelArray<'data, u32>,
+    primitive_counts: ZeroVec<'data, u32>,
     #[mdl(skip, default)]
-    faces: ModelArray<'data, u16>,
+    faces: ZeroVec<'data, u16>,
     #[mdl(skip, default)]
-    vertex_groups: ModelArray<'data, u8>,
+    vertex_groups: ZeroVec<'data, u8>,
     #[mdl(skip, default)]
-    matrix_group_sizes: ModelArray<'data, u32>,
+    matrix_group_sizes: ZeroVec<'data, u32>,
     #[mdl(skip, default)]
-    matrix_indices: ModelArray<'data, u32>,
+    matrix_indices: ZeroVec<'data, u32>,
     #[mdl(property = "MaterialID", default)]
     /// Referenced material index.
     pub material_id: u32,
@@ -397,16 +395,29 @@ pub struct Geoset<'data, V: ModelVersion> {
     pub extent: GeosetExtent,
     #[mdl(skip, default)]
     /// Per-sequence bounding volumes.
-    pub sequence_extents: ModelArray<'data, GeosetExtent>,
+    pub sequence_extents: ZeroVec<'data, GeosetExtent>,
     #[mdl(skip, default)]
     extra_sections: V::ExtraSections<'data>,
     #[mdl(skip, default)]
-    uv_sets: Vec<ModelArray<'data, [f32; 2]>>,
+    uv_sets: Vec<ZeroVec<'data, [f32; 2]>>,
 }
 
 impl<'data, V: ModelVersion> Geoset<'data, V> {
     /// Builds a basic geoset with one matrix group and one UV set.
     pub fn new(vertices: &[Vec3], normals: &[Vec3], faces: &[u16]) -> Result<Self, ValueError> {
+        Self::from_arrays(
+            ZeroVec::alloc_from_slice(vertices),
+            ZeroVec::alloc_from_slice(normals),
+            ZeroVec::alloc_from_slice(faces),
+        )
+    }
+
+    /// Creates geometry by moving already encoded arrays into the model.
+    pub fn from_arrays(
+        vertices: ZeroVec<'data, Vec3>,
+        normals: ZeroVec<'data, Vec3>,
+        faces: ZeroVec<'data, u16>,
+    ) -> Result<Self, ValueError> {
         if vertices.len() != normals.len() {
             return Err(ValueError::LengthMismatch {
                 tag: GeosetsChunk::<V>::TAG,
@@ -420,24 +431,26 @@ impl<'data, V: ModelVersion> Geoset<'data, V> {
                 count: faces.len(),
             });
         }
+        let vertex_count = vertices.len();
+        let index_count = faces.len();
         Ok(Self {
             version: PhantomData,
-            vertices: vertices.to_vec().into(),
-            normals: normals.to_vec().into(),
-            primitive_types: vec![4].into(),
-            primitive_counts: vec![faces.len() as u32].into(),
-            faces: faces.to_vec().into(),
-            vertex_groups: vec![0; vertices.len()].into(),
-            matrix_group_sizes: vec![1].into(),
-            matrix_indices: vec![0].into(),
+            vertices,
+            normals,
+            primitive_types: [4].into_iter().collect(),
+            primitive_counts: [index_count as u32].into_iter().collect(),
+            faces,
+            vertex_groups: (0..vertex_count).map(|_| 0u8).collect(),
+            matrix_group_sizes: [1].into_iter().collect(),
+            matrix_indices: [0].into_iter().collect(),
             material_id: 0,
             selection_group: 0,
             unselectable_raw: 0,
             level_of_detail: V::LevelOfDetail::default(),
             extent: GeosetExtent::default(),
-            sequence_extents: ModelArray::default(),
+            sequence_extents: ZeroVec::default(),
             extra_sections: V::ExtraSections::<'data>::default(),
-            uv_sets: vec![vec![[0.0; 2]; vertices.len()].into()],
+            uv_sets: vec![(0..vertex_count).map(|_| [0.0; 2]).collect()],
         })
     }
 
@@ -447,47 +460,47 @@ impl<'data, V: ModelVersion> Geoset<'data, V> {
     }
 
     /// Vertex positions in model coordinates.
-    pub fn vertices(&self) -> &ModelArray<'data, Vec3> {
+    pub fn vertices(&self) -> &ZeroVec<'data, Vec3> {
         &self.vertices
     }
     /// Mutably borrows vertex positions for bulk edits.
-    pub fn vertices_mut(&mut self) -> &mut [Vec3] {
-        self.vertices.to_mut().as_mut_slice()
+    pub fn vertices_mut(&mut self) -> &mut ZeroVec<'data, Vec3> {
+        &mut self.vertices
     }
     /// Borrows all vertex normals.
-    pub fn normals(&self) -> &ModelArray<'data, Vec3> {
+    pub fn normals(&self) -> &ZeroVec<'data, Vec3> {
         &self.normals
     }
     /// Mutably borrows normals for bulk edits.
-    pub fn normals_mut(&mut self) -> &mut [Vec3] {
-        self.normals.to_mut().as_mut_slice()
+    pub fn normals_mut(&mut self) -> &mut ZeroVec<'data, Vec3> {
+        &mut self.normals
     }
     /// Primitive type for each face group; triangle groups use type 4.
-    pub fn primitive_types(&self) -> &ModelArray<'data, u32> {
+    pub fn primitive_types(&self) -> &ZeroVec<'data, u32> {
         &self.primitive_types
     }
     /// Number of vertex indices in each primitive group.
-    pub fn primitive_counts(&self) -> &ModelArray<'data, u32> {
+    pub fn primitive_counts(&self) -> &ZeroVec<'data, u32> {
         &self.primitive_counts
     }
     /// Face indices into the vertex-position array.
-    pub fn face_indices(&self) -> &ModelArray<'data, u16> {
+    pub fn face_indices(&self) -> &ZeroVec<'data, u16> {
         &self.faces
     }
     /// Mutably borrows face indices for bulk edits.
-    pub fn face_indices_mut(&mut self) -> &mut [u16] {
-        self.faces.to_mut().as_mut_slice()
+    pub fn face_indices_mut(&mut self) -> &mut ZeroVec<'data, u16> {
+        &mut self.faces
     }
     /// Borrows the matrix group assigned to each vertex.
-    pub fn vertex_groups(&self) -> &ModelArray<'data, u8> {
+    pub fn vertex_groups(&self) -> &ZeroVec<'data, u8> {
         &self.vertex_groups
     }
     /// Number of bone references in each matrix group.
-    pub fn matrix_group_sizes(&self) -> &ModelArray<'data, u32> {
+    pub fn matrix_group_sizes(&self) -> &ZeroVec<'data, u32> {
         &self.matrix_group_sizes
     }
     /// Bone object IDs, concatenated in matrix-group order.
-    pub fn matrix_indices(&self) -> &ModelArray<'data, u32> {
+    pub fn matrix_indices(&self) -> &ZeroVec<'data, u32> {
         &self.matrix_indices
     }
 
@@ -515,14 +528,12 @@ impl<'data, V: ModelVersion> Geoset<'data, V> {
     }
 
     /// Borrows every UV coordinate set.
-    pub fn uv_sets(&self) -> &[ModelArray<'data, [f32; 2]>] {
+    pub fn uv_sets(&self) -> &[ZeroVec<'data, [f32; 2]>] {
         &self.uv_sets
     }
     /// Mutably borrows one UV set for bulk edits.
-    pub fn uv_set_mut(&mut self, index: usize) -> Option<&mut [[f32; 2]]> {
-        self.uv_sets
-            .get_mut(index)
-            .map(|set| set.to_mut().as_mut_slice())
+    pub fn uv_set_mut(&mut self, index: usize) -> Option<&mut ZeroVec<'data, [f32; 2]>> {
+        self.uv_sets.get_mut(index)
     }
 
     /// Returns the level-of-detail name, if this version supports it.
@@ -538,7 +549,7 @@ impl<'data, V: ModelVersion> Geoset<'data, V> {
     }
 
     /// Borrows optional Reforged tangent vectors.
-    pub fn try_tangents(&self) -> Result<Option<&ModelArray<'data, [f32; 4]>>, ValueError> {
+    pub fn try_tangents(&self) -> Result<Option<&ZeroVec<'data, [f32; 4]>>, ValueError> {
         if V::NUMBER < 900 {
             return Err(ValueError::UnsupportedVersion {
                 tag: *b"GEOS",
@@ -559,9 +570,7 @@ impl<'data, V: ModelVersion> Geoset<'data, V> {
     }
 
     /// Borrows the four bone influences for each skinned vertex.
-    pub fn try_skin_weights(
-        &self,
-    ) -> Result<Option<&ModelArray<'data, V::SkinWeights>>, ValueError> {
+    pub fn try_skin_weights(&self) -> Result<Option<&ZeroVec<'data, V::SkinWeights>>, ValueError> {
         if V::NUMBER < 900 {
             return Err(ValueError::UnsupportedVersion {
                 tag: *b"GEOS",
@@ -583,30 +592,12 @@ impl<'data, V: ModelVersion> Geoset<'data, V> {
 
     /// Changes one vertex position.
     pub fn set_vertex(&mut self, index: usize, vertex: Vec3) -> Result<(), ValueError> {
-        let len = self.vertices.len();
-        *self
-            .vertices
-            .get_mut(index)
-            .ok_or(ValueError::IndexOutOfBounds {
-                tag: GeosetsChunk::<V>::TAG,
-                index,
-                len,
-            })? = vertex;
-        Ok(())
+        set_array_value(&mut self.vertices, index, vertex)
     }
 
     /// Changes one vertex normal.
     pub fn set_normal(&mut self, index: usize, normal: Vec3) -> Result<(), ValueError> {
-        let len = self.normals.len();
-        *self
-            .normals
-            .get_mut(index)
-            .ok_or(ValueError::IndexOutOfBounds {
-                tag: GeosetsChunk::<V>::TAG,
-                index,
-                len,
-            })? = normal;
-        Ok(())
+        set_array_value(&mut self.normals, index, normal)
     }
 
     /// Replaces the per-vertex matrix group indices.
@@ -618,7 +609,7 @@ impl<'data, V: ModelVersion> Geoset<'data, V> {
                 actual: groups.len(),
             });
         }
-        self.vertex_groups = groups.to_vec().into();
+        self.vertex_groups = ZeroVec::alloc_from_slice(groups);
         Ok(())
     }
 
@@ -679,20 +670,14 @@ impl<'data, V: ModelVersion> Geoset<'data, V> {
         index: usize,
         extent: GeosetExtent,
     ) -> Result<(), ValueError> {
-        let len = self.sequence_extents.len();
-        *self
-            .sequence_extents
-            .get_mut(index)
-            .ok_or(ValueError::IndexOutOfBounds {
-                tag: GeosetsChunk::<V>::TAG,
-                index,
-                len,
-            })? = extent;
-        Ok(())
+        set_array_value(&mut self.sequence_extents, index, extent)
     }
 
     /// Replaces or removes the Reforged tangent section, retaining its order.
-    pub fn try_set_tangents(&mut self, tangents: Option<&[[f32; 4]]>) -> Result<(), ValueError> {
+    pub fn try_set_tangents(
+        &mut self,
+        tangents: Option<ZeroVec<'data, [f32; 4]>>,
+    ) -> Result<(), ValueError> {
         if V::NUMBER < 900 {
             return Err(ValueError::UnsupportedVersion {
                 tag: GeosetsChunk::<V>::TAG,
@@ -710,12 +695,12 @@ impl<'data, V: ModelVersion> Geoset<'data, V> {
             .position(|part| matches!(part, GeosetExtraSection::Tangents(_)))
         {
             if let Some(values) = tangents {
-                sections[index] = GeosetExtraSection::Tangents(values.to_vec().into());
+                sections[index] = GeosetExtraSection::Tangents(values);
             } else {
                 sections.remove(index);
             }
         } else if let Some(values) = tangents {
-            sections.insert(0, GeosetExtraSection::Tangents(values.to_vec().into()));
+            sections.insert(0, GeosetExtraSection::Tangents(values));
         }
         Ok(())
     }
@@ -723,7 +708,7 @@ impl<'data, V: ModelVersion> Geoset<'data, V> {
     /// Replaces or removes per-vertex skin influences, retaining section order.
     pub fn try_set_skin_weights(
         &mut self,
-        weights: Option<&[V::SkinWeights]>,
+        weights: Option<ZeroVec<'data, V::SkinWeights>>,
     ) -> Result<(), ValueError> {
         if V::NUMBER < 900 {
             return Err(ValueError::UnsupportedVersion {
@@ -732,7 +717,7 @@ impl<'data, V: ModelVersion> Geoset<'data, V> {
                 actual: V::NUMBER,
             });
         }
-        if let Some(weights) = weights {
+        if let Some(weights) = &weights {
             if weights.len() > u32::MAX as usize / 8 {
                 return Err(ValueError::CountTooLarge {
                     tag: *b"SKIN",
@@ -752,9 +737,7 @@ impl<'data, V: ModelVersion> Geoset<'data, V> {
             .reforged_mut()
             .expect("supported version")
             .sections;
-        let new_part = weights.map(|weights| GeosetExtraSection::Skin {
-            weights: weights.to_vec().into(),
-        });
+        let new_part = weights.map(|weights| GeosetExtraSection::Skin { weights });
         if let Some(index) = sections
             .iter()
             .position(|part| matches!(part, GeosetExtraSection::Skin { .. }))
@@ -781,21 +764,30 @@ impl<'data, V: ModelVersion> Geoset<'data, V> {
                 index: set,
                 len: sets_len,
             })?;
-        let len = coordinates.len();
-        *coordinates
-            .get_mut(index)
-            .ok_or(ValueError::IndexOutOfBounds {
-                tag: GeosetsChunk::<V>::TAG,
-                index,
-                len,
-            })? = uv;
-        Ok(())
+        set_array_value(coordinates, index, uv)
     }
 
     /// Replaces every UV coordinate set.
-    pub fn set_uv_sets(&mut self, sets: &[Vec<[f32; 2]>]) {
-        self.uv_sets = sets.iter().cloned().map(ModelArray::from).collect();
+    pub fn set_uv_sets(&mut self, sets: Vec<ZeroVec<'data, [f32; 2]>>) {
+        self.uv_sets = sets;
     }
+}
+
+fn set_array_value<T: AsULE>(
+    values: &mut ZeroVec<'_, T>,
+    index: usize,
+    value: T,
+) -> Result<(), ValueError> {
+    let len = values.len();
+    if index >= len {
+        return Err(ValueError::IndexOutOfBounds {
+            tag: *b"GEOS",
+            index,
+            len,
+        });
+    }
+    values.to_mut_slice()[index] = value.to_unaligned();
+    Ok(())
 }
 
 fn peek_tag<'data>(cursor: &Cursor<'data>) -> Result<Tag, mdx::ReadError> {
@@ -829,18 +821,17 @@ fn section<'a>(
 fn decode_values<'data, T: WireValue>(
     cursor: Cursor<'data>,
     width: usize,
-) -> Result<ModelArray<'data, T>, mdx::ReadError> {
-    ModelArray::read_layout(cursor, width)
+) -> Result<ZeroVec<'data, T>, mdx::ReadError> {
+    read_array_layout(cursor, width)
 }
 
 fn read_skin_weights<'data, S: SkinWeight>(
     cursor: &mut Cursor<'data>,
-) -> Result<ModelArray<'data, S>, mdx::ReadError> {
+) -> Result<ZeroVec<'data, S>, mdx::ReadError> {
     let offset = cursor.absolute_position();
     let width = size_of::<S::ULE>();
     let data = section(cursor, *b"SKIN", width / 8)?;
-    let values =
-        ModelArray::<S>::read_layout(data, width).map_err(|error| error.with_tag(*b"SKIN"))?;
+    let values = read_array_layout::<S>(data, width).map_err(|error| error.with_tag(*b"SKIN"))?;
     if values
         .iter()
         .any(|row| row.weights().iter().any(|&weight| weight > 255))
@@ -903,7 +894,7 @@ fn write_extra_sections<'data, S: SkinWeight>(
             GeosetExtraSection::Tangents(tangents) => write_vectors(bytes, *b"TANG", tangents)?,
             GeosetExtraSection::Skin { weights } => {
                 write_section_header(bytes, *b"SKIN", weights.len() * 8)?;
-                weights.write(bytes)?;
+                bytes.write_bytes(weights.as_bytes());
             }
         }
     }
@@ -932,20 +923,20 @@ fn write_section_header(
 fn write_words<'data>(
     bytes: &mut Encoder<'_>,
     tag: Tag,
-    words: &ModelArray<'data, u32>,
+    words: &ZeroVec<'data, u32>,
 ) -> Result<(), mdx::WriteError> {
     write_section_header(bytes, tag, words.len())?;
-    words.write(bytes)?;
+    bytes.write_bytes(words.as_bytes());
     Ok(())
 }
 
 fn write_vectors<'data, const N: usize>(
     bytes: &mut Encoder<'_>,
     tag: Tag,
-    vectors: &ModelArray<'data, [f32; N]>,
+    vectors: &ZeroVec<'data, [f32; N]>,
 ) -> Result<(), mdx::WriteError> {
     write_section_header(bytes, tag, vectors.len())?;
-    vectors.write(bytes)?;
+    bytes.write_bytes(vectors.as_bytes());
     Ok(())
 }
 
@@ -973,7 +964,7 @@ impl<'data, V: ModelVersion> mdx::Read<'data> for Geoset<'data, V> {
             let primitive_types = decode_values::<u32>(section(&mut cursor, *b"PTYP", 4)?, 4)?;
             let primitive_counts = decode_values::<u32>(section(&mut cursor, *b"PCNT", 4)?, 4)?;
             let faces = decode_values::<u16>(section(&mut cursor, *b"PVTX", 2)?, 2)?;
-            let vertex_groups = ModelArray::read(section(&mut cursor, *b"GNDX", 1)?, 1)?;
+            let vertex_groups = read_array(section(&mut cursor, *b"GNDX", 1)?, 1)?;
             let matrix_group_sizes = decode_values::<u32>(section(&mut cursor, *b"MTGC", 4)?, 4)?;
             let matrix_indices = decode_values::<u32>(section(&mut cursor, *b"MATS", 4)?, 4)?;
             let material_id = cursor.read()?;
@@ -985,7 +976,7 @@ impl<'data, V: ModelVersion> mdx::Read<'data> for Geoset<'data, V> {
             let size = sequence_count.checked_mul(28).ok_or_else(|| {
                 mdx::ReadError::new(cursor.absolute_position(), mdx::ReadErrorKind::SizeOverflow)
             })?;
-            let sequence_extents = ModelArray::read(cursor.subcursor(size)?, 28)?;
+            let sequence_extents = read_array(cursor.subcursor(size)?, 28)?;
             let extra_sections = V::ExtraSections::<'data>::read(&mut cursor)?;
             let actual = cursor.read()?;
             if actual != *b"UVAS" {
@@ -1040,9 +1031,9 @@ impl<'data, V: ModelVersion> mdx::Write for Geoset<'data, V> {
         write_words(bytes, *b"PTYP", &self.primitive_types)?;
         write_words(bytes, *b"PCNT", &self.primitive_counts)?;
         write_section_header(bytes, *b"PVTX", self.faces.len())?;
-        self.faces.write(bytes)?;
+        bytes.write_bytes(self.faces.as_bytes());
         write_section_header(bytes, *b"GNDX", self.vertex_groups.len())?;
-        self.vertex_groups.write(bytes)?;
+        bytes.write_bytes(self.vertex_groups.as_bytes());
         write_words(bytes, *b"MTGC", &self.matrix_group_sizes)?;
         write_words(bytes, *b"MATS", &self.matrix_indices)?;
         for word in [
@@ -1055,7 +1046,7 @@ impl<'data, V: ModelVersion> mdx::Write for Geoset<'data, V> {
         bytes.write(&self.level_of_detail)?;
         bytes.write(&self.extent)?;
         write_count(bytes, self.sequence_extents.len())?;
-        self.sequence_extents.write(bytes)?;
+        bytes.write_bytes(self.sequence_extents.as_bytes());
         self.extra_sections.write(bytes)?;
         bytes.write_bytes(b"UVAS");
         write_count(bytes, self.uv_sets.len())?;
@@ -1086,7 +1077,7 @@ impl<'data, V: SupportsReforgedChunks> Geoset<'data, V> {
         self.level_of_detail.name().expect("supported version")
     }
     /// Borrows optional tangent vectors and their handedness components.
-    pub fn tangents(&self) -> Option<&ModelArray<'data, [f32; 4]>> {
+    pub fn tangents(&self) -> Option<&ZeroVec<'data, [f32; 4]>> {
         self.extra_sections
             .reforged()
             .expect("supported version")
@@ -1098,7 +1089,7 @@ impl<'data, V: SupportsReforgedChunks> Geoset<'data, V> {
             })
     }
     /// Borrows optional per-vertex skin influences.
-    pub fn skin_weights(&self) -> Option<&ModelArray<'data, V::SkinWeights>> {
+    pub fn skin_weights(&self) -> Option<&ZeroVec<'data, V::SkinWeights>> {
         self.extra_sections
             .reforged()
             .expect("supported version")
@@ -1119,14 +1110,14 @@ impl<'data, V: SupportsReforgedChunks> Geoset<'data, V> {
         self.try_set_name(name)
     }
     /// Replaces tangents, or removes the section when passed `None`.
-    pub fn set_tangents(&mut self, tangents: Option<&[[f32; 4]]>) {
+    pub fn set_tangents(&mut self, tangents: Option<ZeroVec<'data, [f32; 4]>>) {
         self.try_set_tangents(tangents).expect("supported version")
     }
     /// Replaces skin influences, or removes the section when passed `None`.
     /// Rejects influence weights above 255; the index type is selected by the version.
     pub fn set_skin_weights(
         &mut self,
-        weights: Option<&[V::SkinWeights]>,
+        weights: Option<ZeroVec<'data, V::SkinWeights>>,
     ) -> Result<(), ValueError> {
         self.try_set_skin_weights(weights)
     }
@@ -1157,7 +1148,7 @@ impl<'data, V: ModelVersion> Geoset<'data, V> {
                 let section_path = format!("{path}.extra_sections[{index}]");
                 let supported = T::NUMBER >= 900;
                 let fits = match &section {
-                    GeosetExtraSection::Skin { weights } => weights.values().all(|vertex| {
+                    GeosetExtraSection::Skin { weights } => weights.iter().all(|vertex| {
                         vertex.weights().iter().all(|&weight| weight <= 255)
                             && (T::NUMBER >= 1400
                                 || vertex.bone_indices().iter().all(|&bone| bone <= 255))

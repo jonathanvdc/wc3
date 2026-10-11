@@ -10,7 +10,10 @@ fn signed_event_times_and_material_priority_preserve_wire_bits() {
         .flat_map(|frame| frame.to_le_bytes())
         .collect();
     assert_eq!(&bytes[bytes.len() - 16..], expected);
-    assert_eq!(EventObject::decode_mdx(&bytes).unwrap().frames(), frames);
+    assert_eq!(
+        EventObject::decode_mdx(&bytes).unwrap().frames().to_vec(),
+        frames
+    );
     let mut material = Material::<V800>::new();
     material.priority_plane = -7;
     let bytes = material.encode_mdx().unwrap();
@@ -27,5 +30,8 @@ fn signed_event_times_and_material_priority_preserve_wire_bits() {
         .unwrap()
         .model;
     assert_eq!(converted.materials().next().unwrap().priority_plane, -7);
-    assert_eq!(converted.event_objects().next().unwrap().frames(), frames);
+    assert_eq!(
+        converted.event_objects().next().unwrap().frames().to_vec(),
+        frames
+    );
 }

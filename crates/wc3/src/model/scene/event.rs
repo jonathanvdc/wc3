@@ -1,6 +1,7 @@
 //! Timed events attached to model nodes.
 use super::{set_node_kind, validate_node_kind};
 use crate::model::mdl::{Dialect, Field, Parser, Span, TokenKind, Writer};
+use crate::model::mdx::read_array;
 use crate::model::IoError;
 use crate::model::KnownChunk;
 use crate::model::ModelDialect;
@@ -8,9 +9,10 @@ use crate::model::ModelOwnership;
 use crate::model::Tag;
 use crate::model::{mdl, mdx};
 use crate::model::{Cursor, EventObjectsChunk};
-use crate::model::{Encoder, ModelArray};
+use crate::model::{Encoder, ZeroVec};
 use crate::model::{Model, Node};
 use std::io::Write as IoWrite;
+use zerovec::ule::AsULE;
 
 const TRACK_TAG: Tag = *b"KEVT";
 
@@ -25,7 +27,7 @@ pub struct EventObject<'data> {
     /// Global sequence ID, or `u32::MAX` when absent.
     pub global_sequence_id: u32,
     /// Sorted event times in milliseconds. Negative times allow animation lead-in.
-    frames: ModelArray<'data, i32>,
+    frames: ZeroVec<'data, i32>,
 }
 
 impl<'data> EventObject<'data> {
@@ -37,19 +39,20 @@ impl<'data> EventObject<'data> {
         Self {
             node,
             global_sequence_id,
-            frames: frames.into(),
+            frames: frames.into_iter().collect(),
         }
     }
 
     /// Returns the event times in ascending order, including duplicates.
-    pub fn frames(&self) -> &ModelArray<'data, i32> {
+    pub fn frames(&self) -> &ZeroVec<'data, i32> {
         &self.frames
     }
 
     /// Replaces the event times, sorting them in ascending order.
     pub fn set_frames(&mut self, frames: &[i32]) {
-        self.frames = frames.to_vec().into();
-        self.frames.to_mut().sort();
+        self.frames = ZeroVec::alloc_from_slice(frames);
+        self.frames
+            .with_mut(|frames| frames.sort_by_key(|frame| i32::from_unaligned(*frame)));
     }
 }
 
@@ -91,15 +94,15 @@ impl<'data> mdx::Read<'data> for EventObject<'data> {
         let size = count.checked_mul(4).ok_or_else(|| {
             mdx::ReadError::new(cursor.absolute_position(), mdx::ReadErrorKind::SizeOverflow)
         })?;
-        let mut frames = ModelArray::<i32>::read(cursor.subcursor(size)?, 4)?;
+        let mut frames = read_array::<i32>(cursor.subcursor(size)?, 4)?;
         let mut previous = None;
-        let sorted = frames.values().all(|frame| {
+        let sorted = frames.iter().all(|frame| {
             let ordered = previous.is_none_or(|previous| previous <= frame);
             previous = Some(frame);
             ordered
         });
         if !sorted {
-            frames.to_mut().sort();
+            frames.with_mut(|frames| frames.sort_by_key(|frame| i32::from_unaligned(*frame)));
         }
         Ok(Self {
             node,
@@ -122,7 +125,7 @@ impl<'data> mdx::Write for EventObject<'data> {
             })?;
         bytes.write(&(count))?;
         bytes.write(&(self.global_sequence_id))?;
-        self.frames.write(bytes)?;
+        bytes.write_bytes(self.frames.as_bytes());
         if bytes.position() - start > u32::MAX as usize {
             return Err(mdx::WriteError::SizeOverflow {
                 field: "encoded size",
@@ -137,11 +140,11 @@ impl<'data> mdx::Write for EventObject<'data> {
 #[derive(mdl::Read, mdl::Write)]
 #[mdl(entry)]
 struct EventFrame(i32);
-struct EventTrackMdl {
+struct EventTrackMdl<'data> {
     sequence: u32,
-    frames: Vec<i32>,
+    frames: ZeroVec<'data, i32>,
 }
-impl mdl::ReadProperty for EventTrackMdl {
+impl mdl::ReadProperty for EventTrackMdl<'_> {
     fn read_mdl_property(parser: &mut Parser<'_>, _: Field<'_>) -> Result<Self, mdl::ReadError> {
         let (sequence, items) = parser.counted_with_header::<EventFrame, _>(|parser| {
             if parser
@@ -167,7 +170,7 @@ impl mdl::ReadProperty for EventTrackMdl {
         Ok(Self { sequence, frames })
     }
 }
-impl mdl::WriteProperty for EventTrackMdl {
+impl mdl::WriteProperty for EventTrackMdl<'_> {
     fn validate_mdl_property(&self, _: &'static str, _: Dialect) -> Result<(), mdl::WriteError> {
         if self.frames.len() > u32::MAX as usize {
             return Err(mdl::WriteError::SizeOverflow {
@@ -186,8 +189,8 @@ impl mdl::WriteProperty for EventTrackMdl {
         if self.sequence != u32::MAX {
             writer.property("GlobalSeqId", &self.sequence)?;
         }
-        for frame in &self.frames {
-            writer.entry(frame)?;
+        for frame in self.frames.iter() {
+            writer.entry(&frame)?;
         }
         writer.end_block()
     }
@@ -202,7 +205,7 @@ struct EventMdl<'data> {
     #[mdl(flatten)]
     node: Node<'data>,
     #[mdl(property = "EventTrack", delegate)]
-    track: EventTrackMdl,
+    track: EventTrackMdl<'data>,
 }
 fn finish_event<'data>(value: &mut EventMdl<'data>, _: Span) -> Result<(), mdl::ReadError> {
     set_node_kind(&mut value.node, 0x400);
@@ -214,11 +217,13 @@ fn validate_event<'data>(value: &EventMdl<'data>) -> Result<(), mdl::WriteError>
 impl<'data> mdl::Read for EventObject<'data> {
     fn read_mdl(parser: &mut Parser<'_>) -> Result<Self, mdl::ReadError> {
         let value = parser.read::<EventMdl<'data>>()?;
-        Ok(Self::new(
-            value.node,
-            value.track.sequence,
-            &value.track.frames,
-        ))
+        let mut frames = value.track.frames;
+        frames.with_mut(|values| values.sort_by_key(|value| i32::from_unaligned(*value)));
+        Ok(Self {
+            node: value.node,
+            global_sequence_id: value.track.sequence,
+            frames,
+        })
     }
 }
 impl<'data> mdl::Write for EventObject<'data> {
@@ -227,10 +232,10 @@ impl<'data> mdl::Write for EventObject<'data> {
         writer: &mut Writer<W>,
     ) -> Result<(), IoError<mdl::WriteError>> {
         writer.write(&EventMdl {
-            node: self.node.clone(),
+            node: self.node.as_borrowed(),
             track: EventTrackMdl {
                 sequence: self.global_sequence_id,
-                frames: self.frames.to_vec(),
+                frames: self.frames.as_slice().as_zerovec(),
             },
         })
     }

@@ -3,7 +3,7 @@ use super::{
     Geoset, GeosetExtent, GeosetExtraSection, GeosetExtraSections, GeosetLevelOfDetail, SkinWeight,
 };
 use crate::model::IoError;
-use crate::model::ModelArray;
+use crate::model::ZeroVec;
 use crate::model::{mdl, FixedText, ModelVersion, Vec3};
 use mdl::WriteProperty as _;
 use mdl::{Dialect, Field, Parser, Span, TokenKind, Writer};
@@ -14,40 +14,44 @@ use zerovec::ule::AsULE;
 #[mdl(entry)]
 struct Entry<T>(T);
 
-pub(super) struct List<T>(Vec<T>);
-pub(super) struct Uncounted<T>(Vec<T>);
-pub(super) struct OptionalList<T>(Option<Vec<T>>);
+pub(super) struct List<T: AsULE>(ZeroVec<'static, T>);
+pub(super) struct Uncounted<T: AsULE>(ZeroVec<'static, T>);
+pub(super) struct OptionalList<T: AsULE>(Option<ZeroVec<'static, T>>);
 
-fn read_list<T: mdl::Read>(parser: &mut Parser<'_>) -> Result<Vec<T>, mdl::ReadError> {
+fn read_list<T: mdl::Read + AsULE>(
+    parser: &mut Parser<'_>,
+) -> Result<ZeroVec<'static, T>, mdl::ReadError> {
     parser
         .counted::<Entry<T>>()?
         .map(|item| item.map(|entry| entry.0))
         .collect()
 }
-fn read_values<T: mdl::Read>(parser: &mut Parser<'_>) -> Result<Vec<T>, mdl::ReadError> {
+fn read_values<T: mdl::Read + AsULE>(
+    parser: &mut Parser<'_>,
+) -> Result<ZeroVec<'static, T>, mdl::ReadError> {
     parser.expect(TokenKind::OpenBrace)?;
     let mut values = Vec::new();
     while !parser.consume(TokenKind::CloseBrace)? {
-        values.push(parser.read_property()?);
+        values.push(parser.read_property::<T>()?.to_unaligned());
     }
-    Ok(values)
+    Ok(ZeroVec::new_owned(values))
 }
-impl<T: mdl::Read> mdl::ReadProperty for List<T> {
+impl<T: mdl::Read + AsULE> mdl::ReadProperty for List<T> {
     fn read_mdl_property(parser: &mut Parser<'_>, _: Field<'_>) -> Result<Self, mdl::ReadError> {
         read_list(parser).map(Self)
     }
 }
-impl<T: mdl::Read> mdl::ReadProperty for Uncounted<T> {
+impl<T: mdl::Read + AsULE> mdl::ReadProperty for Uncounted<T> {
     fn read_mdl_property(parser: &mut Parser<'_>, _: Field<'_>) -> Result<Self, mdl::ReadError> {
         read_values(parser).map(Self)
     }
     fn missing_mdl_property(_: &'static str, _: Span) -> Result<Self, mdl::ReadError> {
         // Reforged skinning can leave the legacy VertexGroup block absent.
         // Geoset validation still checks that complete skin rows replace it.
-        Ok(Self(Vec::new()))
+        Ok(Self(ZeroVec::new()))
     }
 }
-impl<T: mdl::Read> mdl::ReadProperty for OptionalList<T> {
+impl<T: mdl::Read + AsULE> mdl::ReadProperty for OptionalList<T> {
     fn read_mdl_property(parser: &mut Parser<'_>, _: Field<'_>) -> Result<Self, mdl::ReadError> {
         read_list(parser).map(|values| Self(Some(values)))
     }
@@ -55,9 +59,9 @@ impl<T: mdl::Read> mdl::ReadProperty for OptionalList<T> {
         Ok(Self(None))
     }
 }
-pub(super) struct ListRef<'a, T: AsULE>(pub(super) &'a ModelArray<'a, T>);
-pub(super) struct UncountedRef<'a, T: AsULE>(&'a ModelArray<'a, T>);
-pub(super) struct OptionalListRef<'a, T: AsULE>(Option<&'a ModelArray<'a, T>>);
+pub(super) struct ListRef<'a, T: AsULE>(pub(super) &'a ZeroVec<'a, T>);
+pub(super) struct UncountedRef<'a, T: AsULE>(&'a ZeroVec<'a, T>);
+pub(super) struct OptionalListRef<'a, T: AsULE>(Option<&'a ZeroVec<'a, T>>);
 impl<T: AsULE + mdl::Write> mdl::WriteProperty for ListRef<'_, T> {
     fn write_mdl_property<W: IoWrite>(
         &self,
@@ -96,20 +100,20 @@ impl<T: AsULE + mdl::Write> mdl::WriteProperty for OptionalListRef<'_, T> {
         Ok(())
     }
 }
-pub(super) struct UvSet(Vec<[f32; 2]>);
+pub(super) struct UvSet(ZeroVec<'static, [f32; 2]>);
 impl mdl::Read for UvSet {
     fn read_mdl(parser: &mut Parser<'_>) -> Result<Self, mdl::ReadError> {
         parser.expect_ident("TVertices")?;
         read_list(parser).map(Self)
     }
 }
-pub(super) struct UvSetsRef<'a>(&'a [ModelArray<'a, [f32; 2]>]);
+pub(super) struct UvSetsRef<'a>(&'a [ZeroVec<'a, [f32; 2]>]);
 impl UvSetsRef<'_> {
     pub(super) fn iter(&self) -> impl Iterator<Item = UvRef<'_>> {
         self.0.iter().map(UvRef)
     }
 }
-pub(super) struct UvRef<'a>(&'a ModelArray<'a, [f32; 2]>);
+pub(super) struct UvRef<'a>(&'a ZeroVec<'a, [f32; 2]>);
 impl mdl::Write for UvRef<'_> {
     fn write_mdl<W: IoWrite>(
         &self,
@@ -118,13 +122,13 @@ impl mdl::Write for UvRef<'_> {
         ListRef(self.0).write_mdl_property("TVertices", writer)
     }
 }
-#[derive(mdl::Read, mdl::Write)]
+#[derive(Clone, Copy, mdl::Read, mdl::Write)]
 #[mdl(block = "Anim")]
 pub(super) struct AnimExtent {
     #[mdl(flatten)]
     extent: GeosetExtent,
 }
-pub(super) struct ExtentsRef<'a>(&'a ModelArray<'a, GeosetExtent>);
+pub(super) struct ExtentsRef<'a>(&'a ZeroVec<'a, GeosetExtent>);
 impl ExtentsRef<'_> {
     pub(super) fn iter(&self) -> impl Iterator<Item = AnimExtent> + '_ {
         self.0.iter().map(|extent| AnimExtent { extent })
@@ -132,12 +136,12 @@ impl ExtentsRef<'_> {
 }
 
 pub(super) struct Faces {
-    counts: Vec<u32>,
-    indices: Vec<u16>,
+    counts: ZeroVec<'static, u32>,
+    indices: ZeroVec<'static, u16>,
 }
 pub(super) struct Groups {
-    counts: Vec<u32>,
-    indices: Vec<u32>,
+    counts: ZeroVec<'static, u32>,
+    indices: ZeroVec<'static, u32>,
 }
 fn check_count(parser: &Parser<'_>, expected: usize, actual: usize) -> Result<(), mdl::ReadError> {
     if expected != actual {
@@ -147,11 +151,11 @@ fn check_count(parser: &Parser<'_>, expected: usize, actual: usize) -> Result<()
     }
 }
 // Faces and Groups have two counts and nested variable-length index lists.
-fn read_groups<T: mdl::Read>(
+fn read_groups<T: mdl::Read + AsULE>(
     parser: &mut Parser<'_>,
     name: &'static str,
     triangles: bool,
-) -> Result<(Vec<u32>, Vec<T>), mdl::ReadError> {
+) -> Result<(ZeroVec<'static, u32>, ZeroVec<'static, T>), mdl::ReadError> {
     let groups = parser.read::<u32>()? as usize;
     let total = parser.read::<u32>()? as usize;
     let mut counts = Vec::new();
@@ -164,48 +168,39 @@ fn read_groups<T: mdl::Read>(
                 mdl::ReadErrorKind::UnknownField,
             ));
         }
+        let start = indices.len();
         if triangles {
             body.expect(TokenKind::OpenBrace)?;
-            let mut values = Vec::new();
             while !body.consume(TokenKind::CloseBrace)? {
-                values.extend(read_inline::<T>(&mut body)?);
+                read_inline::<T>(&mut body, &mut indices)?;
                 body.expect(TokenKind::Comma)?;
             }
-            if values.len() % 3 != 0 {
+            if (indices.len() - start) % 3 != 0 {
                 return Err(body.error(mdl::ReadErrorKind::Expected("triangle index triples")));
             }
-            counts.push(
-                values
-                    .len()
-                    .try_into()
-                    .map_err(|_| body.error(mdl::ReadErrorKind::InvalidNumber("u32 count")))?,
-            );
-            indices.extend(values);
         } else {
-            let values = read_inline::<T>(&mut body)?;
-            counts.push(
-                values
-                    .len()
-                    .try_into()
-                    .map_err(|_| body.error(mdl::ReadErrorKind::InvalidNumber("u32 count")))?,
-            );
-            indices.extend(values);
+            read_inline::<T>(&mut body, &mut indices)?;
             body.consume(TokenKind::Comma)?;
         }
+        let count = u32::try_from(indices.len() - start)
+            .map_err(|_| body.error(mdl::ReadErrorKind::InvalidNumber("u32 count")))?;
+        counts.push(count.to_unaligned());
     }
     check_count(&body, groups, counts.len())?;
     check_count(&body, total, indices.len())?;
     body.finish()?;
-    Ok((counts, indices))
+    Ok((ZeroVec::new_owned(counts), ZeroVec::new_owned(indices)))
 }
-fn read_inline<T: mdl::Read>(parser: &mut Parser<'_>) -> Result<Vec<T>, mdl::ReadError> {
+fn read_inline<T: mdl::Read + AsULE>(
+    parser: &mut Parser<'_>,
+    values: &mut Vec<T::ULE>,
+) -> Result<(), mdl::ReadError> {
     parser.expect(TokenKind::OpenBrace)?;
-    let mut values = Vec::new();
     if parser.consume(TokenKind::CloseBrace)? {
-        return Ok(values);
+        return Ok(());
     }
     loop {
-        values.push(parser.read()?);
+        values.push(parser.read::<T>()?.to_unaligned());
         if parser.consume(TokenKind::CloseBrace)? {
             break;
         }
@@ -214,8 +209,7 @@ fn read_inline<T: mdl::Read>(parser: &mut Parser<'_>) -> Result<Vec<T>, mdl::Rea
             break;
         }
     }
-    // Triangle vector entries conventionally end with a comma.
-    Ok(values)
+    Ok(())
 }
 impl mdl::ReadProperty for Faces {
     fn read_mdl_property(parser: &mut Parser<'_>, _: Field<'_>) -> Result<Self, mdl::ReadError> {
@@ -230,8 +224,8 @@ impl mdl::ReadProperty for Groups {
     }
 }
 pub(super) struct GroupsRef<'a, T: AsULE> {
-    counts: &'a ModelArray<'a, u32>,
-    indices: &'a ModelArray<'a, T>,
+    counts: &'a ZeroVec<'a, u32>,
+    indices: &'a ZeroVec<'a, T>,
     triangles: bool,
 }
 impl<T: AsULE + mdl::Write> mdl::WriteProperty for GroupsRef<'_, T> {
@@ -322,7 +316,17 @@ impl Selection {
     }
 }
 
+#[derive(Clone, Copy)]
 pub(super) struct SkinRow<S: SkinWeight>(S);
+impl<S: SkinWeight> AsULE for SkinRow<S> {
+    type ULE = S::ULE;
+    fn to_unaligned(self) -> Self::ULE {
+        self.0.to_unaligned()
+    }
+    fn from_unaligned(value: Self::ULE) -> Self {
+        Self(S::from_unaligned(value))
+    }
+}
 impl<S: SkinWeight> mdl::Read for SkinRow<S> {
     fn read_mdl(parser: &mut Parser<'_>) -> Result<Self, mdl::ReadError> {
         let values = if parser
@@ -353,7 +357,7 @@ impl<S: SkinWeight> mdl::Read for SkinRow<S> {
         ))
     }
 }
-pub(super) struct SkinRef<'a, S: SkinWeight>(Option<&'a ModelArray<'a, S>>);
+pub(super) struct SkinRef<'a, S: SkinWeight>(Option<&'a ZeroVec<'a, S>>);
 impl<S: SkinWeight> mdl::WriteProperty for SkinRef<'_, S> {
     fn validate_mdl_property(&self, _: &'static str, _: Dialect) -> Result<(), mdl::WriteError> {
         if self.0.is_some_and(|rows| {
@@ -420,7 +424,7 @@ impl<'data, V: ModelVersion> Geoset<'data, V> {
         _: bool,
         _: Span,
     ) -> Result<(), mdl::ReadError> {
-        self.vertices = (value.0).into();
+        self.vertices = value.0;
         Ok(())
     }
     pub(super) fn mdl_directions(&self) -> ListRef<'_, Vec3> {
@@ -432,7 +436,7 @@ impl<'data, V: ModelVersion> Geoset<'data, V> {
         _: bool,
         _: Span,
     ) -> Result<(), mdl::ReadError> {
-        self.normals = (value.0).into();
+        self.normals = value.0;
         Ok(())
     }
     pub(super) fn mdl_vertex_indices(&self) -> UncountedRef<'_, u8> {
@@ -444,7 +448,7 @@ impl<'data, V: ModelVersion> Geoset<'data, V> {
         _: bool,
         _: Span,
     ) -> Result<(), mdl::ReadError> {
-        self.vertex_groups = (value.0).into();
+        self.vertex_groups = value.0;
         Ok(())
     }
     pub(super) fn mdl_uvs(&self) -> UvSetsRef<'_> {
@@ -456,7 +460,7 @@ impl<'data, V: ModelVersion> Geoset<'data, V> {
         _: bool,
         _: Span,
     ) -> Result<(), mdl::ReadError> {
-        self.uv_sets = value.into_iter().map(|set| set.0.into()).collect();
+        self.uv_sets = value.into_iter().map(|set| set.0).collect();
         Ok(())
     }
     pub(super) fn mdl_bounds(&self) -> ExtentsRef<'_> {
@@ -464,11 +468,11 @@ impl<'data, V: ModelVersion> Geoset<'data, V> {
     }
     pub(super) fn set_mdl_bounds(
         &mut self,
-        value: Vec<AnimExtent>,
+        value: ZeroVec<'data, AnimExtent>,
         _: bool,
         _: Span,
     ) -> Result<(), mdl::ReadError> {
-        self.sequence_extents = value.into_iter().map(|value| value.extent).collect();
+        self.sequence_extents = value.cast();
         Ok(())
     }
     pub(super) fn mdl_triangles(&self) -> GroupsRef<'_, u16> {
@@ -484,9 +488,9 @@ impl<'data, V: ModelVersion> Geoset<'data, V> {
         _: bool,
         _: Span,
     ) -> Result<(), mdl::ReadError> {
-        self.primitive_types = vec![4; value.counts.len()].into();
-        self.primitive_counts = (value.counts).into();
-        self.faces = (value.indices).into();
+        self.primitive_types = (0..value.counts.len()).map(|_| 4u32).collect();
+        self.primitive_counts = value.counts;
+        self.faces = value.indices;
         Ok(())
     }
     pub(super) fn mdl_matrices(&self) -> GroupsRef<'_, u32> {
@@ -502,8 +506,8 @@ impl<'data, V: ModelVersion> Geoset<'data, V> {
         _: bool,
         _: Span,
     ) -> Result<(), mdl::ReadError> {
-        self.matrix_group_sizes = (value.counts).into();
-        self.matrix_indices = (value.indices).into();
+        self.matrix_group_sizes = value.counts;
+        self.matrix_indices = value.indices;
         Ok(())
     }
     pub(super) fn mdl_selection(&self) -> Selection {
@@ -569,9 +573,7 @@ impl<'data, V: ModelVersion> Geoset<'data, V> {
                     span,
                     mdl::ReadErrorKind::UnsupportedField,
                 ))?;
-            storage
-                .sections
-                .push(GeosetExtraSection::Tangents(values.into()));
+            storage.sections.push(GeosetExtraSection::Tangents(values));
         }
         Ok(())
     }
@@ -598,7 +600,7 @@ impl<'data, V: ModelVersion> Geoset<'data, V> {
                     mdl::ReadErrorKind::UnsupportedField,
                 ))?;
             storage.sections.push(GeosetExtraSection::Skin {
-                weights: values.into_iter().map(|row| row.0).collect(),
+                weights: values.cast(),
             });
         }
         Ok(())
@@ -700,5 +702,17 @@ impl mdl::WriteProperty for LodNameRef<'_> {
             writer.property(name, value)?;
         }
         Ok(())
+    }
+}
+
+impl AsULE for AnimExtent {
+    type ULE = <GeosetExtent as AsULE>::ULE;
+    fn to_unaligned(self) -> Self::ULE {
+        self.extent.to_unaligned()
+    }
+    fn from_unaligned(value: Self::ULE) -> Self {
+        Self {
+            extent: GeosetExtent::from_unaligned(value),
+        }
     }
 }

@@ -32,11 +32,11 @@ fn animations_override_nondefault_scalar_and_vector_bases() {
     );
     value
         .alpha
-        .set_track(Track::linear(Vec::new(), None).unwrap());
+        .set_track(Track::linear((Vec::new()).into_iter().collect(), None).unwrap());
     value.alpha.set_value(0.5);
     value
         .color
-        .set_track(Track::linear(Vec::new(), None).unwrap());
+        .set_track(Track::linear((Vec::new()).into_iter().collect(), None).unwrap());
     value.color.set_value([0.5; 3]);
     let output = value.encode_mdl().unwrap();
     assert!(!output.contains("static"));
@@ -63,7 +63,7 @@ fn animated_output_ignores_base_even_when_default_is_nan() {
     let mut value = NanBase::default();
     value
         .alpha
-        .set_track(Track::linear(Vec::new(), None).unwrap());
+        .set_track(Track::linear((Vec::new()).into_iter().collect(), None).unwrap());
     for base in [
         f32::from_bits(0xffc12345),
         0.0,
