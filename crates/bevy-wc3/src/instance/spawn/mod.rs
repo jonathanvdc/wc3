@@ -77,6 +77,7 @@ pub(crate) fn spawn_prepared_into(
         commands,
         &prepared.model,
         &prepared.nodes,
+        &prepared.node_order,
         root,
         &prepared.inverse_bindposes,
     );

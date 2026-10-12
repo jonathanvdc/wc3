@@ -22,8 +22,8 @@ construction and runtime ownership:
   loads MDX/MDL and BLP assets, resolves dependency paths, and preserves child
   model resource slots. The format definitions and codecs remain in `wc3`.
 - `preparation/` builds shared meshes, UV variants, joint mappings, inverse bind
-  poses, and material templates. `PreparedModel` also retains the source model
-  and resolved image/child-model dependencies. Preparation does not spawn
+  poses, parent-first node traversal, and material templates. `PreparedModel` also
+  retains the source model and resolved image/child-model dependencies. Preparation does not spawn
   entities. `preparation/pose.rs` evaluates explicit
   sequence/global clocks, skins prepared meshes on the CPU, and returns geometry
   and material snapshots with stable source indices and original texture uses.
@@ -70,8 +70,13 @@ blend into the advancing destination, including effect births and event poses.
 `wc3` resolves sequence/global-sequence clocks and samples tracks and properties;
 `animation/sampling.rs` adapts those operations for Bevy effect callers.
 `animation/pose/` owns animated node data, camera selection, pose evaluation,
-and birth-time transform sampling. The ECS node system, effect birth sampling,
-and offline pose baking reuse the same hierarchy composition rules.
+and birth-time transform sampling. Live evaluation reuses sampling and hierarchy
+buffers across frames and follows the prepared node order. Reparented nodes and
+attachments use the hierarchy resolver when their parents are not yet evaluated.
+The authored snapshot reuses its storage while exclusively owned; a transition
+retains an immutable shared source, so subsequent live writes copy that snapshot
+once. The ECS node system, effect birth sampling, and offline pose baking reuse
+the same hierarchy composition rules.
 
 `event.rs` dispatches crossed event keys as `Wc3ModelEvent` messages. Prepared
 instances share event definitions and retain independent cursors. Interval

@@ -1,6 +1,8 @@
 use super::*;
+use crate::animation::Wc3Animation;
 use bevy::ecs::system::SystemState;
 use bevy::transform::TransformSystems;
+use std::collections::HashMap;
 use std::f32::consts::FRAC_PI_2;
 use wc3::model::animation::{Track, ValueKeyframe};
 use wc3::model::scene::NodeFlags;
@@ -670,5 +672,98 @@ fn transitions_cache_authored_poses_and_share_birth_sampling() {
     close(
         app.world().get::<Transform>(parent).unwrap().translation,
         pivot + Vec3::X * 10.0,
+    );
+}
+
+#[test]
+fn live_snapshot_reuses_storage_and_preserves_shared_blend_source() {
+    use std::sync::Arc;
+    let (mut app, root) = scene();
+    let mut bone = node(root, Vec3::ZERO, Vec3::ZERO, 0);
+    bone.translation = Some(vector_track(Vec3::ZERO, Vec3::X * 8.0)).into();
+    let bone = spawn_node(&mut app, root, bone);
+    app.world_mut()
+        .entity_mut(root)
+        .insert(PoseOrder(vec![bone]));
+    app.update();
+    let original = Arc::as_ptr(
+        &app.world()
+            .get::<Wc3Animation>(root)
+            .unwrap()
+            .pose_playback
+            .current,
+    );
+    app.world_mut()
+        .get_mut::<Wc3Animation>(root)
+        .unwrap()
+        .elapsed_ms = 250.0;
+    app.update();
+    let current = &app
+        .world()
+        .get::<Wc3Animation>(root)
+        .unwrap()
+        .pose_playback
+        .current;
+    assert_eq!(original, Arc::as_ptr(current));
+    let frozen = current.clone();
+    close(frozen[&bone].translation, Vec3::X * 2.0);
+    app.world_mut()
+        .get_mut::<Wc3Animation>(root)
+        .unwrap()
+        .elapsed_ms = 500.0;
+    app.update();
+    let current = &app
+        .world()
+        .get::<Wc3Animation>(root)
+        .unwrap()
+        .pose_playback
+        .current;
+    assert_ne!(original, Arc::as_ptr(current));
+    close(current[&bone].translation, Vec3::X * 4.0);
+    close(frozen[&bone].translation, Vec3::X * 2.0);
+    let exclusive = Arc::as_ptr(current);
+    drop(frozen);
+    app.world_mut()
+        .get_mut::<Wc3Animation>(root)
+        .unwrap()
+        .elapsed_ms = 750.0;
+    app.update();
+    assert_eq!(
+        exclusive,
+        Arc::as_ptr(
+            &app.world()
+                .get::<Wc3Animation>(root)
+                .unwrap()
+                .pose_playback
+                .current
+        )
+    );
+}
+
+#[test]
+fn prepared_order_falls_back_after_reparenting() {
+    let (mut app, root) = scene();
+    let mut parent_node = node(root, Vec3::ZERO, Vec3::ZERO, 0);
+    parent_node.translation = Some(vector_track(Vec3::ZERO, Vec3::X * 8.0)).into();
+    let parent = spawn_node(&mut app, root, parent_node);
+    let mut child_node = node(root, Vec3::Y, Vec3::ZERO, 1);
+    child_node.translation = Some(vector_track(Vec3::ZERO, Vec3::Z * 4.0)).into();
+    let child = spawn_node(&mut app, parent, child_node);
+    app.world_mut()
+        .entity_mut(root)
+        .insert(PoseOrder(vec![parent, child]));
+    app.world_mut()
+        .get_mut::<Wc3Animation>(root)
+        .unwrap()
+        .elapsed_ms = 500.0;
+    app.update();
+    close(global(&app, child).translation(), Vec3::Y + Vec3::Z * 2.0);
+    app.world_mut().entity_mut(child).insert(ChildOf(root));
+    app.world_mut().entity_mut(parent).insert(ChildOf(child));
+    app.update();
+    close(global(&app, child).translation(), Vec3::Y + Vec3::Z * 2.0);
+    close(
+        global(&app, parent).translation(),
+        Vec3::Y + Vec3::Z * 2.0 + Vec3::X * 4.0,
     );
 }

@@ -5,7 +5,7 @@ use bevy::prelude::*;
 use std::collections::HashMap;
 use wc3::model::{Model, V1800};
 
-use crate::animation::pose::AnimatedNode;
+use crate::animation::pose::{AnimatedNode, PoseOrder};
 use crate::animation::{PosePlayback, Wc3Animation};
 use std::time::Duration;
 
@@ -56,6 +56,7 @@ pub(super) fn spawn_rig(
     commands: &mut Commands,
     model: &Shared<Model<'static, V1800>>,
     source_nodes: &[RuntimeNode],
+    node_order: &[usize],
     root: Entity,
     inverse_bindposes: &Handle<SkinnedMeshInverseBindposes>,
 ) -> Rig {
@@ -96,9 +97,17 @@ pub(super) fn spawn_rig(
     }
     let joint_ids = joint_ids(model);
     let joints = joint_ids.iter().map(|id| nodes[id]).collect();
-    commands.entity(root).insert(Wc3NodeEntities {
-        by_object_id: nodes.clone(),
-    });
+    commands.entity(root).insert((
+        Wc3NodeEntities {
+            by_object_id: nodes.clone(),
+        },
+        PoseOrder(
+            node_order
+                .iter()
+                .map(|&index| nodes[&source_nodes[index].object_id])
+                .collect(),
+        ),
+    ));
     Rig {
         joints,
         inverse_bindposes: inverse_bindposes.clone(),
@@ -109,6 +118,7 @@ pub(super) fn spawn_rig(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::preparation::rig::node_order;
     use bevy::ecs::world::{CommandQueue, World};
     use wc3::model::mdl::Read as _;
 
@@ -124,10 +134,25 @@ mod tests {
         let mut queue = CommandQueue::default();
         let mut commands = Commands::new(&mut queue, &world);
         let model = Shared::new(model);
-        let nodes = model.runtime_nodes();
-        let rig = spawn_rig(&mut commands, &model, &nodes, root, &inverse_bindposes);
+        let mut nodes = model.runtime_nodes();
+        nodes.reverse();
+        let order = node_order(&nodes);
+        let rig = spawn_rig(
+            &mut commands,
+            &model,
+            &nodes,
+            &order,
+            root,
+            &inverse_bindposes,
+        );
         queue.apply(&mut world);
 
+        let traversal = &world.entity(root).get::<PoseOrder>().unwrap().0;
+        assert_eq!(traversal.len(), nodes.len());
+        for (index, &entity) in traversal.iter().enumerate() {
+            let parent = world.entity(entity).get::<ChildOf>().unwrap().parent();
+            assert!(parent == root || traversal[..index].contains(&parent));
+        }
         let entities = world.entity(root).get::<Wc3NodeEntities>().unwrap();
         for object_id in 0..11 {
             assert!(

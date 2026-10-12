@@ -1,5 +1,7 @@
 //! Shared joint ordering and pivot-derived inverse bind matrices.
+use super::shared::RuntimeNode;
 use bevy::prelude::{Mat4, Vec3};
+use std::collections::{HashMap, VecDeque};
 use wc3::model::{Model, V1800};
 
 pub(crate) fn joint_ids<'data>(model: &Model<'data, V1800>) -> Vec<u32> {
@@ -20,4 +22,39 @@ pub(super) fn inverse_bind_matrices<'data>(
             Mat4::from_translation(-Vec3::from_array(pivot))
         })
         .collect()
+}
+
+/// Stable parent-first traversal, with malformed cycles left to pose cycle detection.
+pub(crate) fn node_order(nodes: &[RuntimeNode]) -> Vec<usize> {
+    let indices: HashMap<_, _> = nodes
+        .iter()
+        .enumerate()
+        .map(|(index, node)| (node.object_id, index))
+        .collect();
+    let mut children = vec![Vec::new(); nodes.len()];
+    let mut waiting = vec![false; nodes.len()];
+    let mut ready = VecDeque::new();
+    for (index, node) in nodes.iter().enumerate() {
+        if let Some(&parent) = indices.get(&node.parent_id) {
+            children[parent].push(index);
+            waiting[index] = true;
+        } else {
+            ready.push_back(index);
+        }
+    }
+    let mut order = Vec::with_capacity(nodes.len());
+    while let Some(index) = ready.pop_front() {
+        order.push(index);
+        for &child in &children[index] {
+            waiting[child] = false;
+            ready.push_back(child);
+        }
+    }
+    order.extend(
+        waiting
+            .iter()
+            .enumerate()
+            .filter_map(|(index, waiting)| waiting.then_some(index)),
+    );
+    order
 }

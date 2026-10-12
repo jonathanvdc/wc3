@@ -172,7 +172,7 @@ pub(crate) fn resolve_pose<K: Copy + Eq + Hash>(
         return None;
     }
     let input = lookup(entity)?;
-    let mut parent = match input.parent {
+    let parent = match input.parent {
         Some(parent) => resolve_pose(parent, lookup, cache, visiting)?,
         None => Pose::default(),
     };
@@ -180,6 +180,18 @@ pub(crate) fn resolve_pose<K: Copy + Eq + Hash>(
         Some(node) => resolve_pose(node.root, lookup, cache, visiting)?,
         None => Pose::default(),
     };
+    let pose = compose_pose(input, parent, instance);
+    visiting.remove(&entity);
+    cache.insert(entity, pose);
+    Some(pose)
+}
+
+/// Compose an already resolved parent and instance using the shared flag rules.
+pub(crate) fn compose_pose<K: Copy + Eq>(
+    input: PoseInput<K>,
+    mut parent: Pose,
+    instance: Pose,
+) -> Pose {
     if input
         .node
         .is_some_and(|node| input.parent == Some(node.root))
@@ -193,7 +205,5 @@ pub(crate) fn resolve_pose<K: Copy + Eq + Hash>(
     if let Some(anchor) = input.anchor {
         pose.anchor = anchor;
     }
-    visiting.remove(&entity);
-    cache.insert(entity, pose);
-    Some(pose)
+    pose
 }

@@ -24,7 +24,7 @@ pub(crate) mod mesh;
 pub(crate) mod rig;
 use self::materials::{build_layer_material, layer_texture_id};
 use self::mesh::{build_mesh_with_uv, canonical_uv_coordinate};
-use self::rig::{inverse_bind_matrices, joint_ids};
+use self::rig::{inverse_bind_matrices, joint_ids, node_order};
 use crate::assets::loader::Wc3ModelAsset;
 use crate::assets::loader::{
     resolve_texture as resolve_texture_binding, ResolvedModelTextures, ResolvedTexture,
@@ -55,6 +55,7 @@ pub(crate) struct PreparedGeoset {
 /// the source model or its texture resolution.
 pub struct PreparedModel {
     pub(crate) nodes: Vec<RuntimeNode>,
+    pub(crate) node_order: Vec<usize>,
     pub(crate) model: Shared<Model<'static, V1800>>,
     pub(crate) events: Arc<[Shared<EventObject<'static>>]>,
     pub(crate) geosets: Vec<PreparedGeoset>,
@@ -288,11 +289,14 @@ pub(crate) fn prepare_resolved_model(
     if lod_levels.is_empty() {
         lod_levels.push(0);
     }
+    let nodes = model.runtime_nodes();
+    let node_order = node_order(&nodes);
     Ok(PreparedModel {
         lod_levels,
         lod_bounds: LodBounds::from_model(model),
         events: model.shared_records::<EventObjectsChunk>().into(),
-        nodes: model.runtime_nodes(),
+        nodes,
+        node_order,
         model: model.clone(),
         geosets,
         geoset_animations,

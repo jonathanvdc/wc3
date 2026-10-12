@@ -37,7 +37,10 @@ Materials and other non-transform properties sample the destination directly.
 See [animation blending](animation-blending.md).
 
 Nodes without transform tracks retain their rest pose, and unchanged local
-transforms do not trigger propagation. Skin bounds refresh when contributing
+transforms do not trigger propagation. Live node evaluation reuses frame buffers
+and the prepared parent-first traversal; dynamically changed hierarchies fall
+back to the shared resolver. Blend sources remain immutable while the advancing
+pose reuses exclusively owned storage. Skin bounds refresh when contributing
 joints, mesh transforms, or source assets change. Hidden LOD passes defer that
 work until visibility returns, retaining pending changes so culling uses the
 current pose.
