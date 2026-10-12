@@ -13,6 +13,8 @@ to editing workflows and runnable tools.
   borrowed records, collision and liquids, resource identities, and bundle edits.
 - [StarCraft II and Heroes of the Storm M3 models](m3.md) explains indexed
   section graphs, independent record revisions, packed vertices, and animations.
+- [WEM documents](wem.md) explains native multi-model graphs, profiles, variable
+  records, and indexed-section preservation.
 - [Asset command-line tools](tools.md) covers inspection, dependency reporting,
   repathing, conversion, texture export, and archive operations.
 
@@ -27,6 +29,8 @@ The API reference contains the detailed contracts and executable examples:
   documents, native chunk records, validation, and historical layouts.
 - [M3 models](https://docs.rs/wc3/latest/wc3/model/m3/) describes native section
   records, reference envelopes, graph validation, and external animations.
+- [WEM documents](https://docs.rs/wc3/latest/wc3/model/wem/) describes native
+  profiles, typed records, graph references, and encoded section editing.
 - [BLP textures](https://docs.rs/wc3/latest/wc3/blp/) covers encoded containers,
   external BLP0 mipmaps, and optional image adapters.
 - [MPQ archives](https://docs.rs/wc3/latest/wc3/mpq/) covers streaming and

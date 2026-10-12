@@ -1,14 +1,15 @@
 # wc3-derive
 
-Codec derives for maintaining and extending Warcraft III, World of Warcraft, and StarCraft II
-model records in [`wc3`](../wc3/README.md). Applications using the built-in model types only need
+Codec derives for maintaining and extending native and editable model
+records in [`wc3`](../wc3/README.md). Applications using the built-in model types only need
 the codec traits in `wc3`; the derives are re-exported through its format modules.
 
 ## Derives
 
 Import `wc3::model::mdlx::{mdx, mdl}` to distinguish the binary and text derives.
 Import `wc3::model::{m2, wmo}` for the World of Warcraft formats and
-`wc3::model::m3` for indexed StarCraft II models. The format modules re-export
+`wc3::model::m3` for indexed StarCraft II models and `wc3::model::wem` for
+editable model documents. The format modules re-export
 the following macros alongside their codec traits:
 
 | Derive through `wc3` | Purpose |
@@ -21,6 +22,8 @@ the following macros alongside their codec traits:
 | `m2::Validate`, `m2::VisitArrays` | Compose field validation and animation-leaf traversal. |
 | `m3::Read`, `m3::Write`, `m3::RecordLayout` | Compose indexed M3 record codecs with envelope-selected reference widths. |
 | `m3::Validate`, `m3::VisitReferences` | Compose field validation and section-reference traversal. |
+| `wem::Read`, `wem::Write`, `wem::RecordLayout` | Compose variable inline records and their minimum encoded widths. |
+| `wem::Validate`, `wem::VisitReferences` | Compose local checks and section-link traversal. |
 | `wmo::Read`, `wmo::Write`, `wmo::RecordLayout`, `wmo::Validate` | Compose WMO record codecs, fixed inline widths, and field validation. |
 
 For buffer-bearing records, `wc3::model::common::Ownership` generates
@@ -107,6 +110,8 @@ guides when connecting those records to whole-model operations:
 - [WMO derive reference](src/wmo.md): fixed inline records and validation.
 - [M3 derive reference](src/m3.md): envelope-selected reference widths,
   fixed records, section identity, and reference traversal.
+- [WEM derive reference](src/wem.md): variable inline records, allocation-free
+  boundary scanning, and preserved discriminator bytes.
 - [MDX codec documentation](https://docs.rs/wc3/latest/wc3/model/mdlx/mdx/): binary
   derives, numeric enums, and animation records.
 - [`wc3` model documentation](https://docs.rs/wc3/latest/wc3/model/mdlx/): built-in

@@ -25,6 +25,7 @@ pub(crate) enum Format {
     M2,
     Wmo,
     M3,
+    Wem,
 }
 
 pub(crate) enum Operation {
@@ -48,10 +49,12 @@ pub(crate) fn expand_format(
 fn expand_checked(input: DeriveInput, operation: Operation, format: Format) -> Result<TokenStream> {
     let m2 = matches!(format, Format::M2);
     let m3 = matches!(format, Format::M3);
+    let wem = matches!(format, Format::Wem);
     let codec = match format {
         Format::M2 => quote!(::wc3::model::m2),
         Format::Wmo => quote!(::wc3::model::wmo),
         Format::M3 => quote!(::wc3::model::m3),
+        Format::Wem => quote!(::wc3::model::wem),
     };
     let envelope = fresh_ident(&input, "__M3Envelope");
     let envelope_args = if m3 { quote!(<#envelope>) } else { quote!() };
@@ -115,6 +118,13 @@ fn expand_checked(input: DeriveInput, operation: Operation, format: Format) -> R
     let mut reads = Vec::new();
     let mut writes = Vec::new();
     let mut sizes = Vec::new();
+    let mut skips = Vec::new();
+    let mut fixed_sizes = Vec::new();
+    let size_method = if wem {
+        quote!(minimum_size)
+    } else {
+        quote!(size)
+    };
     for (index, field) in data.fields.iter().enumerate() {
         let ty = &field.ty;
         let member = field
@@ -134,7 +144,9 @@ fn expand_checked(input: DeriveInput, operation: Operation, format: Format) -> R
         members.push(member.clone());
         reads.push(quote!(<#ty as #codec::Read<#read_args>>::read(#decoder)?));
         writes.push(quote!(<#ty as #codec::Write #envelope_args>::write(&self.#member,#encoder)?;));
-        sizes.push(quote!(<#ty as #codec::RecordLayout #envelope_args>::size(#arguments)));
+        sizes.push(quote!(<#ty as #codec::RecordLayout #envelope_args>::#size_method(#arguments)));
+        skips.push(quote!(<#ty as #codec::Read<#read_args>>::skip(#decoder)?;));
+        fixed_sizes.push(quote!(<#ty as #codec::RecordLayout>::fixed_size()?));
     }
     if matches!(operation, Operation::Write) && m2 {
         generics
@@ -148,12 +160,39 @@ fn expand_checked(input: DeriveInput, operation: Operation, format: Format) -> R
         Fields::Unnamed(_) => quote!(Self(#(#reads),*)),
         Fields::Unit => quote!(Self),
     };
+    let skip_method = if wem {
+        quote! {
+            fn skip(#decoder: &mut #decoder_type) -> ::core::result::Result<(), #codec::ReadError> {
+                #(#skips)*
+                ::core::result::Result::Ok(())
+            }
+        }
+    } else {
+        quote!()
+    };
+    let width = if wem {
+        quote!(0usize #(.saturating_add(#sizes))*)
+    } else {
+        quote!(0 #(+ #sizes)*)
+    };
+    let fixed_size_method = if wem {
+        quote! {
+            fn fixed_size() -> ::core::option::Option<usize> {
+                let width = 0usize;
+                #(let width = width.checked_add(#fixed_sizes)?;)*
+                ::core::option::Option::Some(width)
+            }
+        }
+    } else {
+        quote!()
+    };
     Ok(match operation {
         Operation::Read => quote! {
             impl #impl_generics #codec::Read<#read_args> for #name #type_generics #where_clause {
                 fn read(#decoder: &mut #decoder_type) -> ::core::result::Result<Self, #codec::ReadError> {
                     ::core::result::Result::Ok(#construct)
                 }
+                #skip_method
             }
         },
         Operation::Write => quote! {
@@ -167,7 +206,8 @@ fn expand_checked(input: DeriveInput, operation: Operation, format: Format) -> R
         },
         Operation::Layout => quote! {
             impl #impl_generics #codec::RecordLayout #envelope_args for #name #type_generics #where_clause {
-                fn size(#parameters) -> usize { 0 #(+ #sizes)* }
+                fn #size_method(#parameters) -> usize { #width }
+                #fixed_size_method
             }
         },
     })

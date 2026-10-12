@@ -6,5 +6,7 @@ pub mod m2;
 pub mod m3;
 /// Warcraft III models with binary MDX and text MDL codecs.
 pub mod mdlx;
+/// Editable model documents with shared geometry and profile-specific payloads.
+pub mod wem;
 /// World of Warcraft world-model root and group documents.
 pub mod wmo;

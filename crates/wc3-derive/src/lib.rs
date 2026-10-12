@@ -1,8 +1,8 @@
-//! Codec derives for Warcraft III, World of Warcraft, and StarCraft II model records in `wc3`.
+//! Binary and text record derives for the model formats exposed by `wc3`.
 //!
 //! These macros are for maintaining or extending the record implementations.
 //! Applications using the built-in model types only need the codec traits in
-//! `wc3::model::mdlx::{mdx, mdl}`, `wc3::model::m2`, `wc3::model::wmo`, and `wc3::model::m3`.
+//! `wc3::model::mdlx::{mdx, mdl}`, `wc3::model::m2`, `wc3::model::wmo`, `wc3::model::m3`, and `wc3::model::wem`.
 //!
 //! Import macros through those format modules, for example
 //! `#[derive(mdl::Read, mdl::Write)]`. Ownership is shared through
@@ -12,6 +12,7 @@
 #![doc = include_str!("m2.md")]
 #![doc = include_str!("wmo.md")]
 #![doc = include_str!("m3.md")]
+#![doc = include_str!("wem.md")]
 #![deny(missing_docs)]
 mod mdl;
 mod mdx;
@@ -234,6 +235,57 @@ pub fn derive_m3_visit_references(input: TokenStream) -> TokenStream {
         syn::parse_macro_input!(input as syn::DeriveInput),
         binary_traversal::Operation::VisitReferences,
         binary::Format::M3,
+    )
+    .into()
+}
+
+/// Derives native WEM field decoding and allocation-free field skipping.
+#[proc_macro_derive(WemRead)]
+pub fn derive_wem_read(input: TokenStream) -> TokenStream {
+    binary::expand_format(
+        parse_macro_input!(input as DeriveInput),
+        binary::Operation::Read,
+        binary::Format::Wem,
+    )
+    .into()
+}
+/// Derives native WEM field encoding, including variable inline payloads.
+#[proc_macro_derive(WemWrite)]
+pub fn derive_wem_write(input: TokenStream) -> TokenStream {
+    binary::expand_format(
+        parse_macro_input!(input as DeriveInput),
+        binary::Operation::Write,
+        binary::Format::Wem,
+    )
+    .into()
+}
+/// Derives a lower bound on WEM inline record length.
+#[proc_macro_derive(WemRecordLayout)]
+pub fn derive_wem_layout(input: TokenStream) -> TokenStream {
+    binary::expand_format(
+        parse_macro_input!(input as DeriveInput),
+        binary::Operation::Layout,
+        binary::Format::Wem,
+    )
+    .into()
+}
+/// Derives compositional WEM local validation.
+#[proc_macro_derive(WemValidate)]
+pub fn derive_wem_validate(input: TokenStream) -> TokenStream {
+    binary_traversal::expand_format(
+        parse_macro_input!(input as DeriveInput),
+        binary_traversal::Operation::Validate,
+        binary::Format::Wem,
+    )
+    .into()
+}
+/// Derives traversal of native WEM section links.
+#[proc_macro_derive(WemVisitReferences)]
+pub fn derive_wem_visit_references(input: TokenStream) -> TokenStream {
+    binary_traversal::expand_format(
+        parse_macro_input!(input as DeriveInput),
+        binary_traversal::Operation::VisitReferences,
+        binary::Format::Wem,
     )
     .into()
 }
