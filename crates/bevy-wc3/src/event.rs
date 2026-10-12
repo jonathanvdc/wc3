@@ -3,7 +3,7 @@ use crate::preparation::shared::Shared;
 use bevy::prelude::*;
 use std::collections::HashMap;
 use std::sync::Arc;
-use wc3::model::scene::EventObject;
+use wc3::model::mdlx::scene::EventObject;
 
 use crate::animation::pose::{sample_emitter_transform_at_frame, EmitterNodes, NodeFrame};
 use crate::animation::Wc3Animation;

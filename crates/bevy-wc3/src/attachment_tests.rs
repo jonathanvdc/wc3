@@ -3,8 +3,8 @@ use crate::animation::pose::animate_nodes;
 use bevy::camera::visibility::VisibilityPlugin;
 use bevy::ecs::world::CommandQueue;
 use bevy::mesh::skinning::SkinnedMeshInverseBindposes;
-use wc3::model::animation::{Sequence, ValueKeyframe};
-use wc3::model::scene::{Attachment, Node};
+use wc3::model::mdlx::animation::{Sequence, ValueKeyframe};
+use wc3::model::mdlx::scene::{Attachment, Node};
 
 use crate::assets::loader::ResolvedModelTextures;
 use crate::assets::model::Wc3Model;

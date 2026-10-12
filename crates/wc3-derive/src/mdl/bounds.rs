@@ -49,9 +49,9 @@ pub(super) fn build(
                 || mentions_parameter(ty.to_token_stream(), &parameters))
         {
             let bound = if reading {
-                parse_quote!(#ty: ::wc3::model::mdl::ReadFields)
+                parse_quote!(#ty: ::wc3::model::mdlx::mdl::ReadFields)
             } else {
-                parse_quote!(#ty: ::wc3::model::mdl::WriteFields)
+                parse_quote!(#ty: ::wc3::model::mdlx::mdl::WriteFields)
             };
             generics.make_where_clause().predicates.push(bound);
         }
@@ -67,28 +67,28 @@ pub(super) fn build(
                 generics
                     .make_where_clause()
                     .predicates
-                    .push(parse_quote!(#element: ::wc3::model::AsULE));
+                    .push(parse_quote!(#element: ::wc3::model::mdlx::AsULE));
             }
             let bound = if reading {
-                parse_quote!(#element: ::wc3::model::mdl::Read)
+                parse_quote!(#element: ::wc3::model::mdlx::mdl::Read)
             } else {
-                parse_quote!(#element: ::wc3::model::mdl::Write)
+                parse_quote!(#element: ::wc3::model::mdlx::mdl::Write)
             };
             generics.make_where_clause().predicates.push(bound);
         }
         if matches!(field.kind, Kind::DelegatedProperty(_)) && (reading || !field.virtual_field) {
             let bound = if reading {
-                parse_quote!(#ty: ::wc3::model::mdl::ReadProperty)
+                parse_quote!(#ty: ::wc3::model::mdlx::mdl::ReadProperty)
             } else {
-                parse_quote!(#ty: ::wc3::model::mdl::WriteProperty)
+                parse_quote!(#ty: ::wc3::model::mdlx::mdl::WriteProperty)
             };
             generics.make_where_clause().predicates.push(bound);
         }
         if matches!(field.kind, Kind::Animatable(_)) && (reading || !field.virtual_field) {
             let bound = if reading {
-                parse_quote!(#ty: ::wc3::model::mdl::ReadAnimationProperty)
+                parse_quote!(#ty: ::wc3::model::mdlx::mdl::ReadAnimationProperty)
             } else {
-                parse_quote!(#ty: ::wc3::model::mdl::WriteAnimationProperty)
+                parse_quote!(#ty: ::wc3::model::mdlx::mdl::WriteAnimationProperty)
             };
             generics.make_where_clause().predicates.push(bound);
         }
@@ -100,30 +100,30 @@ pub(super) fn build(
                 generics
                     .make_where_clause()
                     .predicates
-                    .push(parse_quote!(#ty: ::wc3::model::mdl::Read));
+                    .push(parse_quote!(#ty: ::wc3::model::mdlx::mdl::Read));
             } else if !reading && field.write_with.is_none() {
                 generics
                     .make_where_clause()
                     .predicates
-                    .push(parse_quote!(#ty: ::wc3::model::mdl::Write));
+                    .push(parse_quote!(#ty: ::wc3::model::mdlx::mdl::Write));
             }
         }
         if !reading && omission::needs_check(field) {
             generics
                 .make_where_clause()
                 .predicates
-                .push(parse_quote!(#ty: ::wc3::model::mdl::ValueEq));
+                .push(parse_quote!(#ty: ::wc3::model::mdlx::mdl::ValueEq));
         }
         if matches!(field.kind, Kind::Flags(_)) {
             generics
                 .make_where_clause()
                 .predicates
-                .push(parse_quote!(#ty: ::wc3::model::mdl::BitRange<u32>));
+                .push(parse_quote!(#ty: ::wc3::model::mdlx::mdl::BitRange<u32>));
             if reading {
                 generics
                     .make_where_clause()
                     .predicates
-                    .push(parse_quote!(#ty: ::wc3::model::mdl::BitRangeMut<u32>));
+                    .push(parse_quote!(#ty: ::wc3::model::mdlx::mdl::BitRangeMut<u32>));
                 if !options.default || field.default.is_some() || field.virtual_field {
                     generics
                         .make_where_clause()

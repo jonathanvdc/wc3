@@ -4,7 +4,7 @@ use clap::Parser;
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 use support::{load, Result};
-use wc3::model::resources::ResourceValue;
+use wc3::model::mdlx::resources::ResourceValue;
 
 #[derive(Parser)]
 #[command(about = "List direct model file references and replaceable resources")]

@@ -9,7 +9,7 @@ use bevy::prelude::*;
 use bevy::reflect::TypePath;
 use std::path::Path;
 
-use wc3::model::materials::{Texture, TextureFlags};
+use wc3::model::mdlx::materials::{Texture, TextureFlags};
 
 #[cfg(test)]
 use crate::assets::model::Wc3Model;

@@ -2,7 +2,7 @@ use criterion::{criterion_group, criterion_main, BatchSize, BenchmarkId, Criteri
 use mdl::{Read as _, Write as _};
 use mdx::{Read as _, Write as _};
 use std::hint::black_box;
-use wc3::model::{mdl, mdx, ConversionOptions, Model, V1800, V800};
+use wc3::model::mdlx::{mdl, mdx, ConversionOptions, Model, V1800, V800};
 
 #[path = "../../../benchmarks/support/model.rs"]
 mod fixtures;

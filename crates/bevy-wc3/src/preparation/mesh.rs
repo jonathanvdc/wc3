@@ -5,8 +5,8 @@ use bevy::mesh::{Indices, MeshVertexAttribute, PrimitiveTopology, VertexAttribut
 use bevy::prelude::*;
 use bevy::render::render_resource::VertexFormat;
 use std::collections::HashMap;
-use wc3::model::geometry::Geoset;
-use wc3::model::{ZeroVec, V1800};
+use wc3::model::mdlx::geometry::Geoset;
+use wc3::model::mdlx::{ZeroVec, V1800};
 
 pub(crate) const EXTRA_JOINT_INDEX: MeshVertexAttribute =
     MeshVertexAttribute::new("Wc3_ExtraJointIndex", 138_000_001, VertexFormat::Uint16x4);
@@ -202,7 +202,7 @@ pub(crate) fn build_mesh_with_uv<'data>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use wc3::model::geometry::SkinWeights;
+    use wc3::model::mdlx::geometry::SkinWeights;
 
     #[test]
     fn selected_uv_set_uses_matching_generated_tangents() {

@@ -25,7 +25,7 @@ use bevy::render::{
     view::ExtractedView,
     Render, RenderApp, RenderStartup, RenderSystems,
 };
-use wc3::model::emitters::Particle2FilterMode;
+use wc3::model::mdlx::emitters::Particle2FilterMode;
 
 use super::records::{ParticleEmitterUniform, ParticleInstance, ParticleInstances};
 #[cfg(test)]

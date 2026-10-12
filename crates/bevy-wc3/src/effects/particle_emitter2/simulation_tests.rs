@@ -1,8 +1,8 @@
 use super::*;
 use crate::animation::pose::AnimatedNode;
-use wc3::model::animation::Animatable;
-use wc3::model::animation::{Sequence, Track, ValueKeyframe};
-use wc3::model::scene::Node;
+use wc3::model::mdlx::animation::Animatable;
+use wc3::model::mdlx::animation::{Sequence, Track, ValueKeyframe};
+use wc3::model::mdlx::scene::Node;
 
 fn animation() -> Wc3Animation {
     Wc3Animation {

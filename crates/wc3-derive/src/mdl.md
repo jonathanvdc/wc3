@@ -14,8 +14,8 @@ field declaration order unless `write_order(...)` specifies another order.
 field appears before the opening brace; properties and flags appear inside it.
 
 ```rust
-use wc3::model::{mdl, FixedText};
-use wc3::model::mdl::{Read as _, Write as _};
+use wc3::model::mdlx::{mdl, FixedText};
+use wc3::model::mdlx::mdl::{Read as _, Write as _};
 
 #[derive(mdl::Read, mdl::Write)]
 #[mdl(block = "Example")]
@@ -77,8 +77,8 @@ Use `property = "Name", delegate` with `Option<T>` when absence should mean
 `None`. `Some(value)` always writes the property, even for a default value.
 
 ```rust
-use wc3::model::mdl;
-use wc3::model::mdl::{Read as _, Write as _};
+use wc3::model::mdlx::mdl;
+use wc3::model::mdlx::mdl::{Read as _, Write as _};
 
 #[derive(mdl::Read, mdl::Write)]
 #[mdl(block = "Example")]
@@ -141,8 +141,8 @@ field type selects the syntax: `Animatable<T>` accepts static values and tracks;
 `Option<Track<T>>` accepts tracks only and defaults to `None`.
 
 ```rust
-use wc3::model::animation::{Animatable, Track};
-use wc3::model::{mdl, mdx, Color};
+use wc3::model::mdlx::animation::{Animatable, Track};
+use wc3::model::mdlx::{mdl, mdx, Color};
 
 #[derive(mdx::Read, mdx::Write, mdl::Read, mdl::Write)]
 #[mdx(sized(tag = *b"EXMP"))]
@@ -233,8 +233,8 @@ writing still emits the selected variant. Choice enums support no validation
 hooks or payload variants other than `unknown`.
 
 ```rust
-use wc3::model::mdl;
-use wc3::model::mdl::{Read as _, Write as _};
+use wc3::model::mdlx::mdl;
+use wc3::model::mdlx::mdl::{Read as _, Write as _};
 
 #[derive(Debug, Default, PartialEq, mdl::Read, mdl::Write)]
 #[mdl(choice, default)]
@@ -276,7 +276,7 @@ Function attributes accept ordinary or associated function paths.
 
 Value hooks work on headers, properties, and static properties. They handle
 only the value; the derive handles the name and property comma. `IoError` lives
-in `wc3::model` and preserves sink failures separately from codec failures. A
+in `wc3::model::mdlx` and preserves sink failures separately from codec failures. A
 write hook that only validates a value can return `mdl::WriteError`, which the
 generated writer converts into `IoError`. Record hook
 spans cover the complete record. Value and tagged enum validation hooks use the same signatures.
@@ -299,7 +299,7 @@ Flag bitfields implement field-group codecs on their definitions:
 
 ```rust
 use bitfield::bitfield;
-use wc3::model::mdl;
+use wc3::model::mdlx::mdl;
 
 bitfield! {
     #[derive(Default, mdl::Read, mdl::Write)]

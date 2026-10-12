@@ -115,8 +115,8 @@ mod tests {
     use crate::preparation::compile_model;
     use crate::preparation::rig::{joint_ids, node_order};
     use bevy::ecs::world::{CommandQueue, World};
-    use wc3::model::mdl::Read as _;
-    use wc3::model::{Model, V1800};
+    use wc3::model::mdlx::mdl::Read as _;
+    use wc3::model::mdlx::{Model, V1800};
 
     #[test]
     fn every_node_type_keeps_its_entity_and_parent_from_mdl() {

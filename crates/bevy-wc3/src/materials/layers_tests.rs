@@ -1,6 +1,6 @@
 use super::super::Wc3LayerState;
 use super::*;
-use wc3::model::animation::{Animatable, Sequence, Track, ValueKeyframe};
+use wc3::model::mdlx::animation::{Animatable, Sequence, Track, ValueKeyframe};
 #[test]
 fn geoset_alpha_hides_decay_geometry_and_combines_with_layer_alpha() {
     let mut app = App::new();

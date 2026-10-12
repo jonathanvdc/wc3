@@ -3,10 +3,10 @@ use mdl::Read as _;
 use std::collections::HashMap;
 use std::env;
 use std::fmt::Write as _;
-use wc3::model::geometry::SkinWeights;
-use wc3::model::materials::{LayerTextureSlot, ShaderType};
-use wc3::model::ZeroVec;
-use wc3::model::{mdl, ConversionOptions, Model, V1800, V800};
+use wc3::model::mdlx::geometry::SkinWeights;
+use wc3::model::mdlx::materials::{LayerTextureSlot, ShaderType};
+use wc3::model::mdlx::ZeroVec;
+use wc3::model::mdlx::{mdl, ConversionOptions, Model, V1800, V800};
 
 #[derive(Clone, Copy)]
 pub struct Profile {

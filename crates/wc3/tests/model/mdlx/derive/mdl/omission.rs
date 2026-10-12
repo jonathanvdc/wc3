@@ -1,0 +1,131 @@
+use std::sync::atomic::{AtomicUsize, Ordering};
+use wc3::model::mdlx::animation::{Animatable, Track};
+
+use wc3::model::mdlx::mdl::{self, Read as _, ValueEq as _, Write as _, Writer};
+
+fn refuses_before_output<T: mdl::Write>(value: &T) {
+    let mut writer = Writer::new(Vec::new());
+    assert!(writer.write(value).is_err());
+    assert!(writer.finish().unwrap().is_empty());
+}
+
+// Animated output replaces the base without changing stored values.
+#[derive(mdl::Read, mdl::Write)]
+#[mdl(block = "ZeroBase")]
+struct ZeroBase {
+    #[mdl(property = "Alpha", default)]
+    alpha: Animatable<'static, f32>,
+    #[mdl(property = "Color", default)]
+    color: Animatable<'static, [f32; 3]>,
+}
+
+#[test]
+fn animations_override_nondefault_scalar_and_vector_bases() {
+    let mut value = ZeroBase {
+        alpha: Animatable::Static(-0.0),
+        color: Animatable::Static([0.0; 3]),
+    };
+    let decoded = ZeroBase::decode_mdl(&value.encode_mdl().unwrap()).unwrap();
+    assert_eq!(
+        decoded.alpha.value().unwrap().to_bits(),
+        (-0.0f32).to_bits()
+    );
+    value
+        .alpha
+        .set_track(Track::linear(Vec::new(), None).unwrap());
+    value.alpha.set_value(0.5);
+    value
+        .color
+        .set_track(Track::linear(Vec::new(), None).unwrap());
+    value.color.set_value([0.5; 3]);
+    let output = value.encode_mdl().unwrap();
+    assert!(!output.contains("static"));
+    let decoded = ZeroBase::decode_mdl(&output).unwrap();
+    assert_eq!(decoded.alpha.track(), value.alpha.track());
+    assert_eq!(decoded.color.track(), value.color.track());
+}
+
+#[derive(mdl::Read, mdl::Write)]
+#[mdl(block = "NanBase", default)]
+struct NanBase {
+    #[mdl(property = "Alpha")]
+    alpha: Animatable<'static, f32>,
+}
+impl Default for NanBase {
+    fn default() -> Self {
+        Self {
+            alpha: Animatable::Static(f32::NAN),
+        }
+    }
+}
+#[test]
+fn animated_output_ignores_base_even_when_default_is_nan() {
+    let mut value = NanBase::default();
+    value
+        .alpha
+        .set_track(Track::linear(Vec::new(), None).unwrap());
+    for base in [
+        f32::from_bits(0xffc12345),
+        0.0,
+        f32::INFINITY,
+        f32::NEG_INFINITY,
+    ] {
+        value.alpha.set_value(base);
+        let output = value.encode_mdl().unwrap();
+        assert!(!output.contains("static Alpha"));
+        let decoded = NanBase::decode_mdl(&output).unwrap();
+        assert!(decoded.alpha.value().unwrap().is_nan());
+        assert_eq!(decoded.alpha.track(), value.alpha.track());
+    }
+    assert!(f32::NAN.eq_mdl(&f32::from_bits(0xffc12345)));
+    assert!(!f32::INFINITY.eq_mdl(&f32::NEG_INFINITY));
+    assert!([f32::NAN, -0.0].eq_mdl(&[f32::from_bits(0x7fc12345), -0.0]));
+    assert!(![f32::NAN, -0.0].eq_mdl(&[f32::NAN, 0.0]));
+}
+
+fn always_skip<T>(_: &T) -> bool {
+    true
+}
+#[derive(mdl::Read, mdl::Write)]
+#[mdl(block = "Suppressed")]
+struct Suppressed<T> {
+    #[mdl(static_property = "Value", default, skip_if = "always_skip")]
+    value: T,
+}
+
+#[test]
+fn predicates_cannot_discard_nondefault_values() {
+    assert_eq!(
+        Suppressed { value: 0.0f32 }.encode_mdl().unwrap(),
+        "Suppressed {\n}\n"
+    );
+    refuses_before_output(&Suppressed { value: -0.0f32 });
+    refuses_before_output(&Suppressed { value: 1u32 });
+    refuses_before_output(&Suppressed {
+        value: [0.0f32, 1.0],
+    });
+}
+
+static PREDICATE_CALLS: AtomicUsize = AtomicUsize::new(0);
+fn counted_skip(value: &f32) -> bool {
+    PREDICATE_CALLS.fetch_add(1, Ordering::Relaxed);
+    value.to_bits() == 0
+}
+#[derive(mdl::Read, mdl::Write)]
+#[mdl(block = "CountedPredicate")]
+struct CountedPredicate {
+    #[mdl(property = "Value", default, skip_if = "counted_skip")]
+    value: f32,
+}
+
+#[test]
+fn omission_decision_is_reused_during_output() {
+    PREDICATE_CALLS.store(0, Ordering::Relaxed);
+    assert!(CountedPredicate { value: 2.0 }
+        .encode_mdl()
+        .unwrap()
+        .contains("Value 2.0,"));
+    assert_eq!(PREDICATE_CALLS.load(Ordering::Relaxed), 1);
+    CountedPredicate { value: 0.0 }.encode_mdl().unwrap();
+    assert_eq!(PREDICATE_CALLS.load(Ordering::Relaxed), 2);
+}

@@ -80,26 +80,26 @@ pub(super) fn expand(input: &DeriveInput, reading: bool) -> Result<TokenStream> 
             quote! {
                 #name #(| #alias)* => {
                     if state & #mask != 0 {
-                        return Err(::wc3::model::mdl::ReadError::new(
-                            field.span, ::wc3::model::mdl::ReadErrorKind::DuplicateField,
+                        return Err(::wc3::model::mdlx::mdl::ReadError::new(
+                            field.span, ::wc3::model::mdlx::mdl::ReadErrorKind::DuplicateField,
                         ));
                     }
-                    parser.expect(::wc3::model::mdl::TokenKind::Comma)?;
+                    parser.expect(::wc3::model::mdlx::mdl::TokenKind::Comma)?;
                     state |= #mask;
                 }
             }
         });
         Ok(quote! {
-            impl #impl_generics ::wc3::model::mdl::ReadFields for #name #ty_generics #clause {
+            impl #impl_generics ::wc3::model::mdlx::mdl::ReadFields for #name #ty_generics #clause {
                 type State = u32;
                 #visit
                 fn accepts_mdl_field(name: &str, static_form: bool) -> bool { !static_form && matches!(name, #(#names)|*) }
-                fn begin_mdl_fields(_: &mut ::wc3::model::mdl::Parser<'_>) -> ::core::result::Result<Self::State, ::wc3::model::mdl::ReadError> { Ok(0) }
-                fn read_mdl_field<'a>(mut state: Self::State, parser: &mut ::wc3::model::mdl::Parser<'a>, field: ::wc3::model::mdl::Field<'a>, _: ::wc3::model::mdl::Parser<'a>) -> ::core::result::Result<Self::State, ::wc3::model::mdl::ReadError> {
-                    match field.name { #(#arms)* _ => return Err(parser.error(::wc3::model::mdl::ReadErrorKind::UnknownField)) }
+                fn begin_mdl_fields(_: &mut ::wc3::model::mdlx::mdl::Parser<'_>) -> ::core::result::Result<Self::State, ::wc3::model::mdlx::mdl::ReadError> { Ok(0) }
+                fn read_mdl_field<'a>(mut state: Self::State, parser: &mut ::wc3::model::mdlx::mdl::Parser<'a>, field: ::wc3::model::mdlx::mdl::Field<'a>, _: ::wc3::model::mdlx::mdl::Parser<'a>) -> ::core::result::Result<Self::State, ::wc3::model::mdlx::mdl::ReadError> {
+                    match field.name { #(#arms)* _ => return Err(parser.error(::wc3::model::mdlx::mdl::ReadErrorKind::UnknownField)) }
                     Ok(state)
                 }
-                fn finish_mdl_fields(state: Self::State, _: ::wc3::model::mdl::Span, _: ::wc3::model::mdl::Span) -> ::core::result::Result<Self, ::wc3::model::mdl::ReadError> { Ok(Self(state)) }
+                fn finish_mdl_fields(state: Self::State, _: ::wc3::model::mdlx::mdl::Span, _: ::wc3::model::mdlx::mdl::Span) -> ::core::result::Result<Self, ::wc3::model::mdlx::mdl::ReadError> { Ok(Self(state)) }
             }
         })
     } else {
@@ -116,7 +116,7 @@ pub(super) fn expand(input: &DeriveInput, reading: bool) -> Result<TokenStream> 
             let skip = mapping.hive_skip_bits & mask != 0;
             quote! {
                 if self.0 & #mask != 0 {
-                    if writer.dialect() == ::wc3::model::mdl::Dialect::HiveWorkshop {
+                    if writer.dialect() == ::wc3::model::mdlx::mdl::Dialect::HiveWorkshop {
                         if !#skip { writer.flag(#hive)?; }
                     } else {
                         writer.flag(#name)?;
@@ -125,14 +125,14 @@ pub(super) fn expand(input: &DeriveInput, reading: bool) -> Result<TokenStream> 
             }
         });
         Ok(quote! {
-            impl #impl_generics ::wc3::model::mdl::WriteFields for #name #ty_generics #clause {
+            impl #impl_generics ::wc3::model::mdlx::mdl::WriteFields for #name #ty_generics #clause {
                 type State = ();
                 #visit
-                fn prepare_mdl_fields(&self, _: ::wc3::model::mdl::Dialect) -> ::core::result::Result<(), ::wc3::model::mdl::WriteError> {
-                    if self.0 & !#known != 0 { return Err(::wc3::model::mdl::WriteError::Unrepresentable { field: concat!("unknown flag bits in ", stringify!(#name)) }.into()); } Ok(())
+                fn prepare_mdl_fields(&self, _: ::wc3::model::mdlx::mdl::Dialect) -> ::core::result::Result<(), ::wc3::model::mdlx::mdl::WriteError> {
+                    if self.0 & !#known != 0 { return Err(::wc3::model::mdlx::mdl::WriteError::Unrepresentable { field: concat!("unknown flag bits in ", stringify!(#name)) }.into()); } Ok(())
                 }
-                fn write_mdl_headers<W: ::std::io::Write>(&self, _: &mut ::wc3::model::mdl::Writer<W>) -> ::core::result::Result<(), ::wc3::model::IoError<::wc3::model::mdl::WriteError>> { Ok(()) }
-                fn write_mdl_fields<W: ::std::io::Write>(&self, _: (), writer: &mut ::wc3::model::mdl::Writer<W>) -> ::core::result::Result<(), ::wc3::model::IoError<::wc3::model::mdl::WriteError>> { #(#writes)* Ok(()) }
+                fn write_mdl_headers<W: ::std::io::Write>(&self, _: &mut ::wc3::model::mdlx::mdl::Writer<W>) -> ::core::result::Result<(), ::wc3::model::mdlx::IoError<::wc3::model::mdlx::mdl::WriteError>> { Ok(()) }
+                fn write_mdl_fields<W: ::std::io::Write>(&self, _: (), writer: &mut ::wc3::model::mdlx::mdl::Writer<W>) -> ::core::result::Result<(), ::wc3::model::mdlx::IoError<::wc3::model::mdlx::mdl::WriteError>> { #(#writes)* Ok(()) }
             }
         })
     }

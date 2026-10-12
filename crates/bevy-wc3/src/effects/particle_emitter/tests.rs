@@ -4,7 +4,7 @@ use bevy::camera::visibility::VisibilityPlugin;
 use bevy::mesh::skinning::SkinnedMeshInverseBindposes;
 use bevy::transform::TransformSystems;
 use std::time::Duration;
-use wc3::model::scene::Node;
+use wc3::model::mdlx::scene::Node;
 
 use crate::animation::advance_animation;
 use crate::assets::model::Wc3Model;
@@ -271,7 +271,7 @@ fn recursive_particle_models_are_blocked() {
 
 #[test]
 fn blended_switch_keeps_live_model_particles_but_immediate_switch_retires_them() {
-    use wc3::model::animation::Sequence;
+    use wc3::model::mdlx::animation::Sequence;
 
     let (mut app, root, emitter) = setup();
     let node_entity = app.world().get::<ParticleState>(emitter).unwrap().node;

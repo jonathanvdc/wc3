@@ -5,8 +5,8 @@ use crate::preparation::{PreparedLayer, Wc3PartId};
 use bevy::mesh::skinning::SkinnedMesh;
 use bevy::prelude::*;
 use std::collections::HashMap;
-use wc3::model::animation::GeosetAnimation;
-use wc3::model::materials::LayerFilterMode;
+use wc3::model::mdlx::animation::GeosetAnimation;
+use wc3::model::mdlx::materials::LayerFilterMode;
 
 use super::{rig::Rig, PreparedModel};
 use crate::materials::layers::AnimatedLayer;

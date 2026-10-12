@@ -7,7 +7,7 @@ use bevy::render::extract_component::ExtractComponent;
 use bevy::render::sync_component::SyncComponent;
 use bytemuck::{Pod, Zeroable};
 use std::sync::Arc;
-use wc3::model::materials::LayerFilterMode;
+use wc3::model::mdlx::materials::LayerFilterMode;
 
 /// Birth-time endpoints. The split clock retains precision in long-running scenes.
 #[derive(Clone, Copy, Debug, PartialEq, Pod, Zeroable)]

@@ -1,0 +1,83 @@
+use wc3::model::mdlx::mdx::Read as _;
+use wc3::model::mdlx::mdx::Write as _;
+
+use wc3::model::mdlx::animation::Sequence;
+use wc3::model::mdlx::chunks::{ModelChunk, RawChunk, SequencesChunk, UnknownChunk};
+
+use wc3::model::mdlx::{Model, V800};
+
+#[test]
+fn model_stores_known_and_unknown_chunks() {
+    let mut model = Model::<V800>::new();
+    model
+        .chunks
+        .push(ModelChunk::from(SequencesChunk::new(vec![Sequence::new(
+            "Stand",
+            [0, 100],
+        )
+        .unwrap()])));
+    let unknown = UnknownChunk::<V800>::new(RawChunk::new(*b"FUTR", vec![1, 2, 3])).unwrap();
+    model.chunks.push(ModelChunk::Unknown(unknown));
+
+    assert!(matches!(model.chunks[1], ModelChunk::Sequences(_)));
+    assert!(matches!(model.chunks[2], ModelChunk::Unknown(_)));
+    let bytes = model.encode_mdx().unwrap();
+    let decoded = Model::<V800>::decode_mdx(&bytes).unwrap();
+    assert_eq!(decoded.encode_mdx().unwrap(), bytes);
+}
+
+#[test]
+fn edits_to_decoded_records_are_written() {
+    let mut model = Model::<V800>::new();
+    model
+        .chunks
+        .push(ModelChunk::from(SequencesChunk::new(Vec::new())));
+    let ModelChunk::Sequences(decoded) = &mut model.chunks[1] else {
+        panic!("expected typed sequence chunk");
+    };
+    decoded
+        .records
+        .push(Sequence::new("Walk", [0, 100]).unwrap());
+
+    let bytes = model.encode_mdx().unwrap();
+    let reopened = Model::<V800>::decode_mdx(&bytes).unwrap();
+    assert_eq!(reopened.sequences().next().unwrap().name.text(), "Walk");
+}
+
+#[test]
+fn malformed_known_chunk_cannot_enter_typed_model() {
+    assert!(ModelChunk::<V800>::from_raw(RawChunk::new(*b"SEQS", vec![0; 131])).is_err());
+    assert!(UnknownChunk::<V800>::new(RawChunk::new(*b"SEQS", Vec::new())).is_none());
+}
+
+#[test]
+fn collection_setter_collapses_repeated_chunks() {
+    let mut model = Model::<V800>::new();
+    let first = Sequence::new("Stand", [0, 100]).unwrap();
+    let second = Sequence::new("Walk", [101, 200]).unwrap();
+    model
+        .chunks
+        .push(ModelChunk::from(SequencesChunk::new(vec![first.clone()])));
+    model
+        .chunks
+        .push(ModelChunk::from(SequencesChunk::new(vec![second.clone()])));
+    assert_eq!(
+        model.sequences().cloned().collect::<Vec<_>>(),
+        vec![first, second.clone()]
+    );
+
+    model.set_sequences([second.clone()]);
+    assert!(matches!(
+        model.chunk(*b"SEQS"),
+        Some(ModelChunk::Sequences(_))
+    ));
+    assert_eq!(
+        model
+            .chunks
+            .iter()
+            .filter(|chunk| chunk.tag() == *b"SEQS")
+            .count(),
+        1
+    );
+    assert_eq!(model.sequences().cloned().collect::<Vec<_>>(), vec![second]);
+}

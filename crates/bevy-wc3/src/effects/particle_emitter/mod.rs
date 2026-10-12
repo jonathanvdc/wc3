@@ -3,7 +3,7 @@
 use crate::preparation::shared::Shared;
 use bevy::prelude::*;
 use std::f32::consts::TAU;
-use wc3::model::emitters::ParticleEmitter;
+use wc3::model::mdlx::emitters::ParticleEmitter;
 
 use crate::animation::pose::AnimatedNode;
 use crate::animation::Wc3Animation;

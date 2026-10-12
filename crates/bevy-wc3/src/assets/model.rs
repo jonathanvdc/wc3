@@ -2,9 +2,9 @@ use crate::preparation::shared::Shared;
 use std::error::Error;
 use std::fmt::{Display, Formatter, Result as FmtResult};
 use std::str::from_utf8;
-use wc3::model::mdl::Read as _;
-use wc3::model::NoExtensions;
-use wc3::model::{ConversionOptions, DynamicModel, Model, V1800};
+use wc3::model::mdlx::mdl::Read as _;
+use wc3::model::mdlx::NoExtensions;
+use wc3::model::mdlx::{ConversionOptions, DynamicModel, Model, V1800};
 
 /// A model decoding, strict conversion, or geometry preparation failure.
 #[derive(Debug)]

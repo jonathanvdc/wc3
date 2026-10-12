@@ -1,0 +1,37 @@
+use wc3::model::mdlx::mdx::Cursor;
+use wc3::model::mdlx::mdx::Read as _;
+use wc3::model::mdlx::mdx::Write as _;
+use wc3::model::mdlx::scene::{EventObject, Node};
+use wc3::model::mdlx::Model;
+
+#[test]
+fn event_object_round_trip() {
+    let node = Node::new("Sound", 2).unwrap();
+    let mut event = EventObject::new(node, u32::MAX, &[100, 200]);
+    event.global_sequence_id = 3;
+    event.set_frames(&[300, 100, 200]);
+    let mut model = Model::<wc3::model::mdlx::V800>::new();
+    model.set_event_objects([event]);
+    let parsed = Model::<wc3::model::mdlx::V800>::decode_mdx(&model.encode_mdx().unwrap())
+        .unwrap()
+        .into_owned();
+    let event = &parsed.event_objects().next().unwrap();
+    assert_eq!(event.node.name.text(), "Sound");
+    assert_eq!(event.global_sequence_id, 3);
+    assert_eq!(*event.frames(), [100, 200, 300]);
+}
+
+#[test]
+fn adjacent_events_decode_at_their_own_boundaries() {
+    let first = EventObject::new(Node::new("First", 1).unwrap(), 0, &[10, 20]);
+    let second = EventObject::new(Node::new("Second", 2).unwrap(), 1, &[30]);
+    let mut bytes = first.encode_mdx().unwrap();
+    let first_len = bytes.len();
+    bytes.extend_from_slice(&second.encode_mdx().unwrap());
+    let mut cursor = Cursor::new(&bytes);
+    assert_eq!(cursor.read::<EventObject>().unwrap(), first);
+    assert_eq!(cursor.position(), first_len);
+    assert_eq!(cursor.read::<EventObject>().unwrap(), second);
+    cursor.finish().unwrap();
+    assert!(EventObject::decode_mdx(&bytes).is_err());
+}

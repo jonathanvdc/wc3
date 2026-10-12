@@ -2,7 +2,7 @@
 use super::shared::RuntimeNode;
 use bevy::prelude::{Mat4, Vec3};
 use std::collections::{HashMap, VecDeque};
-use wc3::model::{Model, V1800};
+use wc3::model::mdlx::{Model, V1800};
 
 pub(crate) fn joint_ids<'data>(model: &Model<'data, V1800>) -> Vec<u32> {
     let mut ids: Vec<_> = model.bones().map(|bone| bone.node.object_id).collect();

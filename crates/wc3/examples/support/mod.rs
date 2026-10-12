@@ -2,8 +2,8 @@
 use mdl::{Read as _, Write as _};
 use std::result::Result as StdResult;
 use std::{error::Error, fs, path::Path, str::from_utf8};
-use wc3::model::NoExtensions;
-use wc3::model::{mdl, DynamicModel};
+use wc3::model::mdlx::NoExtensions;
+use wc3::model::mdlx::{mdl, DynamicModel};
 
 pub type Result<T> = StdResult<T, Box<dyn Error>>;
 

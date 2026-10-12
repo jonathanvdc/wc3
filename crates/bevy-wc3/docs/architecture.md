@@ -90,7 +90,7 @@ pose transition state. `play` uses model BlendTime; immediate and duration-overr
 controls use the same playback path. The node system caches authored local poses
 before inheritance/camera corrections. Transitions retain a frozen source and
 blend into the advancing destination, including effect births and event poses.
-`Wc3Animation::time()` exposes a borrowed `wc3::model::animation::AnimationTime`.
+`Wc3Animation::time()` exposes a borrowed `wc3::model::mdlx::animation::AnimationTime`.
 `wc3` resolves sequence/global-sequence clocks and samples tracks and properties;
 `animation/sampling.rs` adapts those operations for Bevy effect callers.
 `animation/pose/` owns animated node data, camera selection, pose evaluation,
@@ -104,7 +104,7 @@ the same hierarchy composition rules.
 
 `event.rs` dispatches crossed event keys as `Wc3ModelEvent` messages. Prepared
 instances share event definitions and retain independent cursors. Interval
-traversal lives under `wc3::model::animation`; explicit playback restart/seek
+traversal lives under `wc3::model::mdlx::animation`; explicit playback restart/seek
 metadata lives with `Wc3Animation`. Event names are interpreted by applications.
 
 `materials/` owns Bevy material specialization, layer/geoset animation, surface

@@ -9,7 +9,7 @@ use bytemuck::{Pod, Zeroable};
 use std::array::from_fn;
 use std::f32::consts::{FRAC_PI_8, PI};
 use std::sync::Arc;
-use wc3::model::emitters::{Particle2FilterMode, ParticleEmitter2};
+use wc3::model::mdlx::emitters::{Particle2FilterMode, ParticleEmitter2};
 
 /// Immutable spawn data indexed by the growing record ring.
 #[derive(Clone, Copy, Debug, PartialEq, Pod, Zeroable)]

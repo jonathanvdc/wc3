@@ -8,10 +8,10 @@ use bevy_wc3::{
     prepare_model, spawn_prepared_model, PreparedModel, Wc3Model, Wc3PartId, Wc3PoseBaker,
     Wc3PoseOptions, Wc3TextureBindings, Wc3TextureColorSpace, Wc3TextureRole, Wc3TextureSlot,
 };
-use wc3::model::animation::{Track, ValueKeyframe};
-use wc3::model::geometry::Geoset;
-use wc3::model::materials::LayerFilterMode;
-use wc3::model::scene::{Bone, Node, NodeFlags};
+use wc3::model::mdlx::animation::{Track, ValueKeyframe};
+use wc3::model::mdlx::geometry::Geoset;
+use wc3::model::mdlx::materials::LayerFilterMode;
+use wc3::model::mdlx::scene::{Bone, Node, NodeFlags};
 
 fn prepare(source: &Wc3Model) -> (PreparedModel, Assets<Mesh>) {
     let mut meshes = Assets::default();

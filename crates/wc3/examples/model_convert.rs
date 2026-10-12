@@ -1,11 +1,11 @@
 //! Convert model formats and optionally versions, reporting conversion losses.
-use wc3::model::{Extended, NoExtensions};
+use wc3::model::mdlx::{Extended, NoExtensions};
 mod support;
 use clap::Parser;
 use std::path::PathBuf;
 use std::result::Result as ParseResult;
 use support::{load, save, Result};
-use wc3::model::{
+use wc3::model::mdlx::{
     ConversionOptions, DynamicModel, Model, ModelVersion, V1000, V1100, V1200, V1300, V1400, V1600,
     V1800, V800, V900,
 };

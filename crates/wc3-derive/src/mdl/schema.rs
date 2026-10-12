@@ -29,9 +29,9 @@ impl Schema {
                 Kind::Flatten => {
                     let ty = &field.ty;
                     let trait_name = if reading {
-                        quote!(::wc3::model::mdl::ReadFields)
+                        quote!(::wc3::model::mdlx::mdl::ReadFields)
                     } else {
-                        quote!(::wc3::model::mdl::WriteFields)
+                        quote!(::wc3::model::mdlx::mdl::WriteFields)
                     };
                     calls.push(quote!(<#ty as #trait_name>::visit_mdl_names(visitor);));
                 }
@@ -72,7 +72,7 @@ impl Schema {
             match &field.kind {
                 Kind::Flatten => {
                     let ty = &field.ty;
-                    conditions.push(quote!(<#ty as ::wc3::model::mdl::ReadFields>::accepts_mdl_field(name, static_form)));
+                    conditions.push(quote!(<#ty as ::wc3::model::mdlx::mdl::ReadFields>::accepts_mdl_field(name, static_form)));
                 }
                 Kind::StaticProperty(value) => {
                     conditions.push(quote!(static_form && name == #value))

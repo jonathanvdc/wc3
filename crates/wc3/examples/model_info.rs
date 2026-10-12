@@ -3,8 +3,8 @@ mod support;
 use clap::Parser;
 use std::path::PathBuf;
 use support::{load, Result};
-use wc3::model::chunks::Chunk;
-use wc3::model::{visit_model, Model, ModelDialect};
+use wc3::model::mdlx::chunks::Chunk;
+use wc3::model::mdlx::{visit_model, Model, ModelDialect};
 
 #[derive(Parser)]
 #[command(about = "Inspect model metadata, geometry, and animations")]

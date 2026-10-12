@@ -2,8 +2,8 @@ use super::evaluation::NodeSample;
 use crate::animation::Wc3Animation;
 use crate::preparation::shared::Shared;
 use bevy::prelude::*;
-use wc3::model::animation::{Interpolate, Track};
-use wc3::model::scene::NodeFlags;
+use wc3::model::mdlx::animation::{Interpolate, Track};
+use wc3::model::mdlx::scene::NodeFlags;
 
 /// An event key's exact authored clock position, including loop-end keys.
 #[derive(Clone, Copy)]

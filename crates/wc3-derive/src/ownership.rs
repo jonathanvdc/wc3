@@ -1,9 +1,9 @@
 //! Ownership operations for the model's lifetime-bearing record graph.
-use proc_macro2::TokenStream;
+use proc_macro2::{TokenStream, TokenTree};
 use quote::{quote, ToTokens};
 use syn::{parse_quote, Data, DeriveInput, Fields, Index, Type};
 
-fn view_type(ty: &Type, lifetime: &str) -> Type {
+pub(crate) fn view_type(ty: &Type, lifetime: &str) -> Type {
     syn::parse_str(
         &ty.to_token_stream()
             .to_string()
@@ -16,9 +16,9 @@ fn field_value(ty: &Type, value: TokenStream, borrowing: bool) -> TokenStream {
     let text = ty.to_token_stream().to_string();
     if text.contains("'data") || text.contains("' data") {
         if borrowing {
-            quote!(::wc3::model::Borrowed::as_borrowed(#value))
+            quote!(::wc3::model::common::Borrowed::as_borrowed(#value))
         } else {
-            quote!(::wc3::model::Detached::into_detached(#value))
+            quote!(::wc3::model::common::Detached::into_detached(#value))
         }
     } else if borrowing {
         quote!(Clone::clone(#value))
@@ -27,6 +27,10 @@ fn field_value(ty: &Type, value: TokenStream, borrowing: bool) -> TokenStream {
     }
 }
 pub(crate) fn expand(input: DeriveInput) -> TokenStream {
+    if matches!(input.data, Data::Union(_)) {
+        return syn::Error::new_spanned(&input.ident, "ownership cannot be derived for a union")
+            .to_compile_error();
+    }
     let name = &input.ident;
     let (_, ty_generics, _) = input.generics.split_for_impl();
     let ty: Type = parse_quote!(#name #ty_generics);
@@ -94,7 +98,19 @@ pub(crate) fn expand(input: DeriveInput) -> TokenStream {
                     .collect();
                 match &variant.fields {
                     Fields::Named(_) => {
-                        quote!(Self::#v { #(#names),* } => #name::#v { #(#names: #values),* })
+                        let fields: Vec<_> = names
+                            .iter()
+                            .zip(&values)
+                            .map(|(name, value)| {
+                                let mut tokens = value.clone().into_iter();
+                            if matches!(tokens.next(), Some(TokenTree::Ident(ident)) if ident == *name) && tokens.next().is_none() {
+                                    quote!(#name)
+                                } else {
+                                    quote!(#name: #value)
+                                }
+                            })
+                            .collect();
+                        quote!(Self::#v { #(#names),* } => #name::#v { #(#fields),* })
                     }
                     Fields::Unnamed(_) => quote!(Self::#v(#(#names),*)=>#name::#v(#(#values),*)),
                     Fields::Unit => quote!(Self::#v=>#name::#v),
@@ -126,35 +142,11 @@ pub(crate) fn expand(input: DeriveInput) -> TokenStream {
             quote!(#name:'static)
         })
         .collect();
-    let mut reader_generics = input.generics.clone();
-    reader_generics.params = reader_generics
-        .params
-        .into_iter()
-        .filter(|p| !matches!(p,syn::GenericParam::Lifetime(l) if l.lifetime.ident=="data"))
-        .collect();
-    for p in input.generics.type_params() {
-        let ident = &p.ident;
-        reader_generics
-            .make_where_clause()
-            .predicates
-            .push(parse_quote!(#ident:Clone+'static));
-    }
-    let read_ty = view_type(&ty, "'input");
-    reader_generics
-        .make_where_clause()
-        .predicates
-        .push(parse_quote!(for<'input> #read_ty: ::wc3::model::mdx::Read<'input>));
-    let (reader_impl, _, reader_where) = reader_generics.split_for_impl();
     quote! {
-        impl #reader_impl ::wc3::model::mdx::ReadOwned for #static_ty #reader_where {
-            fn decode_owned<'input>(bytes:&'input[u8])->Result<Self,::wc3::model::mdx::ReadError> {
-                <#read_ty as ::wc3::model::mdx::Read<'input>>::decode_mdx(bytes).map(|value|value.into_owned())
-            }
-        }
         impl #methods_impl #ty #methods_where {
             /// Borrows all buffers, including buffers currently owned by this record.
             pub fn as_borrowed<'view>(&'view self)->#borrowed_ty {
-                ::wc3::model::Borrowed::as_borrowed(self)
+                ::wc3::model::common::Borrowed::as_borrowed(self)
             }
             /// Creates an independently owned copy of this record and all of its buffers.
             pub fn to_owned(&self)->#static_ty where #(#static_bounds),* {
@@ -162,14 +154,14 @@ pub(crate) fn expand(input: DeriveInput) -> TokenStream {
             }
             /// Moves owned buffers and copies borrowed buffers into independent storage.
             pub fn into_owned(self)->#static_ty where #(#static_bounds),* {
-                ::wc3::model::Detached::into_detached(self)
+                ::wc3::model::common::Detached::into_detached(self)
             }
         }
-        impl #borrow_impl ::wc3::model::Borrowed<'view> for #ty #borrow_where {
+        impl #borrow_impl ::wc3::model::common::Borrowed<'view> for #ty #borrow_where {
             type View = #borrowed_ty;
             fn as_borrowed(&'view self) -> Self::View { #borrow_body }
         }
-        impl #own_impl ::wc3::model::Detached<'owned> for #ty #own_where {
+        impl #own_impl ::wc3::model::common::Detached<'owned> for #ty #own_where {
             type Detached = #owned_ty;
             fn into_detached(self) -> Self::Detached { #own_body }
         }
@@ -207,28 +199,6 @@ pub(crate) fn expand_eq(input: DeriveInput) -> TokenStream {
         impl #eq_impl PartialEq<#other_ty> for #ty #eq_where {
             fn eq(&self,other:&#other_ty)->bool {
                 self.as_borrowed().fields_equal(&other.as_borrowed())
-            }
-        }
-    }
-}
-
-pub(crate) fn expand_static_owned_read(input: &DeriveInput) -> TokenStream {
-    if input.generics.lifetimes().next().is_some() {
-        return TokenStream::new();
-    }
-    let name = &input.ident;
-    let (_, ty_generics, _) = input.generics.split_for_impl();
-    let ty: Type = parse_quote!(#name #ty_generics);
-    let mut generics = input.generics.clone();
-    generics
-        .make_where_clause()
-        .predicates
-        .push(parse_quote!(#ty:'static+for<'input> ::wc3::model::mdx::Read<'input>));
-    let (impl_generics, _, where_clause) = generics.split_for_impl();
-    quote! {
-        impl #impl_generics ::wc3::model::mdx::ReadOwned for #ty #where_clause {
-            fn decode_owned<'input>(bytes:&'input[u8])->Result<Self,::wc3::model::mdx::ReadError> {
-                <Self as ::wc3::model::mdx::Read<'input>>::decode_mdx(bytes)
             }
         }
     }

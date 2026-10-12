@@ -7,7 +7,7 @@ use std::borrow::Cow;
 use std::fs;
 use std::path::Path;
 use std::time::{Duration, Instant};
-use wc3::model::mdx::Write as _;
+use wc3::model::mdlx::mdx::Write as _;
 
 fn wait_for(app: &mut App, mut ready: impl FnMut(&App) -> bool) {
     let deadline = Instant::now() + Duration::from_secs(5);

@@ -1,6 +1,6 @@
 //! Model resources referenced by attachments and Classic particle emitters.
 use bevy::prelude::*;
-use wc3::model::{Model, V1800};
+use wc3::model::mdlx::{Model, V1800};
 
 use crate::assets::loader::Wc3ModelAsset;
 
@@ -77,7 +77,7 @@ mod tests {
     use crate::preparation::prepare_model_with_resources;
     use bevy::ecs::world::CommandQueue;
     use bevy::mesh::skinning::SkinnedMeshInverseBindposes;
-    use wc3::model::mdl::Read as _;
+    use wc3::model::mdlx::mdl::Read as _;
 
     #[test]
     fn resolver_preserves_record_slots_and_skips_empty_and_image_paths() {

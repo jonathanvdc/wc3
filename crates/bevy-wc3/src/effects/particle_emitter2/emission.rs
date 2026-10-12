@@ -1,5 +1,5 @@
 //! PRE2 squirt scheduling is independent of continuous emission phase.
-use wc3::model::animation::Animatable;
+use wc3::model::mdlx::animation::Animatable;
 
 use crate::animation::{track_time, Wc3Animation};
 

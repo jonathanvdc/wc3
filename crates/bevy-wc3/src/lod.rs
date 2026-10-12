@@ -4,7 +4,7 @@ use bevy::camera::RenderTarget;
 use bevy::prelude::*;
 use std::collections::HashMap;
 use std::iter::once;
-use wc3::model::{Model, V1800};
+use wc3::model::mdlx::{Model, V1800};
 
 use crate::animation::pose::{
     default_node_camera, inherited_node_camera, Wc3DefaultNodeCamera, Wc3NodeCamera,

@@ -1,7 +1,7 @@
 use super::*;
 use std::f32::consts::FRAC_PI_2;
-use wc3::model::animation::{Animatable, Sequence, Track, ValueKeyframe};
-use wc3::model::scene::Node;
+use wc3::model::mdlx::animation::{Animatable, Sequence, Track, ValueKeyframe};
+use wc3::model::mdlx::scene::Node;
 
 fn animation() -> Wc3Animation {
     Wc3Animation {

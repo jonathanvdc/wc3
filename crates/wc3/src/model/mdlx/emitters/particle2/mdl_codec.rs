@@ -1,0 +1,113 @@
+//! Particle2 choice flags, three segment colors and projected UV intervals.
+use super::ParticleEmitter2;
+use crate::model::mdlx::scene::{set_node_kind, validate_node_kind};
+use crate::model::mdlx::IoError;
+use crate::model::mdlx::{mdl, Color};
+use mdl::{Field, Parser, Span, TokenKind, Writer};
+use std::io::Write as IoWrite;
+
+#[derive(mdl::Read, mdl::Write)]
+#[mdl(property = "Color")]
+struct ColorEntry(Color);
+pub(super) struct SegmentColors([Color; 3]);
+impl mdl::ReadProperty for SegmentColors {
+    fn read_mdl_property(parser: &mut Parser<'_>, _: Field<'_>) -> Result<Self, mdl::ReadError> {
+        parser.expect(TokenKind::OpenBrace)?;
+        let mut values = [[0.0; 3]; 3];
+        for value in &mut values {
+            *value = parser.read::<ColorEntry>()?.0;
+        }
+        parser.expect(TokenKind::CloseBrace)?;
+        Ok(Self(values))
+    }
+    fn missing_mdl_property(_: &'static str, _: Span) -> Result<Self, mdl::ReadError> {
+        Ok(Self([[0.0; 3]; 3]))
+    }
+}
+pub(super) struct SegmentColorsRef<'a>(&'a [Color; 3]);
+impl mdl::WriteProperty for SegmentColorsRef<'_> {
+    fn write_mdl_property<W: IoWrite>(
+        &self,
+        name: &'static str,
+        writer: &mut Writer<W>,
+    ) -> Result<(), IoError<mdl::WriteError>> {
+        writer.begin_block(name)?;
+        for value in self.0 {
+            writer.write(&ColorEntry(*value))?;
+        }
+        writer.end_block()
+    }
+}
+impl<'data> ParticleEmitter2<'data> {
+    pub(super) fn mdl_segments(&self) -> SegmentColorsRef<'_> {
+        SegmentColorsRef(&self.segment_colors)
+    }
+    pub(super) fn set_mdl_segments(
+        &mut self,
+        value: SegmentColors,
+        _: bool,
+        _: Span,
+    ) -> Result<(), mdl::ReadError> {
+        self.segment_colors = value.0;
+        Ok(())
+    }
+    pub(super) fn finish_mdl(&mut self, _: Span) -> Result<(), mdl::ReadError> {
+        set_node_kind(&mut self.node, 0x1000);
+        Ok(())
+    }
+    pub(super) fn validate_mdl(&self) -> Result<(), mdl::WriteError> {
+        validate_node_kind(&self.node, 0x1000 | (self.node.flags.bits() & 0x1f8000))?;
+        Ok(())
+    }
+}
+
+impl<'data> ParticleEmitter2<'data> {
+    pub(super) fn mdl_life_uv(&self) -> [u32; 3] {
+        self.uv_animations[0]
+    }
+    pub(super) fn set_mdl_life_uv(
+        &mut self,
+        value: [u32; 3],
+        _: bool,
+        _: Span,
+    ) -> Result<(), mdl::ReadError> {
+        self.uv_animations[0] = value;
+        Ok(())
+    }
+    pub(super) fn mdl_decay_uv(&self) -> [u32; 3] {
+        self.uv_animations[1]
+    }
+    pub(super) fn set_mdl_decay_uv(
+        &mut self,
+        value: [u32; 3],
+        _: bool,
+        _: Span,
+    ) -> Result<(), mdl::ReadError> {
+        self.uv_animations[1] = value;
+        Ok(())
+    }
+    pub(super) fn mdl_tail_uv(&self) -> [u32; 3] {
+        self.uv_animations[2]
+    }
+    pub(super) fn set_mdl_tail_uv(
+        &mut self,
+        value: [u32; 3],
+        _: bool,
+        _: Span,
+    ) -> Result<(), mdl::ReadError> {
+        self.uv_animations[2] = value;
+        Ok(())
+    }
+    pub(super) fn mdl_tail_decay_uv(&self) -> [u32; 3] {
+        self.uv_animations[3]
+    }
+    pub(super) fn set_mdl_tail_decay_uv(
+        &mut self,
+        value: [u32; 3],
+        _: bool,
+        _: Span,
+    ) -> Result<(), mdl::ReadError> {
+        self.uv_animations[3] = value;
+        Ok(())
+    }
+}

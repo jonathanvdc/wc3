@@ -1,5 +1,5 @@
 //! Sampling clocks shared by live animation and offline preparation.
-use wc3::model::animation::{Animatable, AnimationTime, Interpolate, Track, TrackValue};
+use wc3::model::mdlx::animation::{Animatable, AnimationTime, Interpolate, Track, TrackValue};
 
 #[derive(Clone, Copy)]
 pub(crate) struct SamplingTime<'a> {

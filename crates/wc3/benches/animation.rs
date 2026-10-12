@@ -1,10 +1,10 @@
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use std::{env, hint::black_box};
-use wc3::model::animation::{
+use wc3::model::mdlx::animation::{
     AnimationTime, Interpolate, Sequence, TangentKeyframe, Track, ValueKeyframe,
 };
-use wc3::model::scene::{EventObject, Node};
-use wc3::model::{Borrowed, ZeroVec};
+use wc3::model::mdlx::scene::{EventObject, Node};
+use wc3::model::mdlx::{Borrowed, ZeroVec};
 
 fn tracks<T: Interpolate>(c: &mut Criterion, name: &str, value: impl Fn(usize) -> T) {
     let mut group = c.benchmark_group(format!("animation/{name}"));

@@ -24,7 +24,7 @@ pub(super) fn predicate(field: &Field) -> TokenStream {
         condition = quote!(#condition && !#function(#access));
     }
     if matches!(field.kind, Kind::Animatable(_)) {
-        condition = quote!(#condition && !::wc3::model::mdl::WriteAnimationProperty::has_animation(#access));
+        condition = quote!(#condition && !::wc3::model::mdlx::mdl::WriteAnimationProperty::has_animation(#access));
         if let Some(function) = &field.enabled_if {
             condition = quote!(#condition && #function(self));
         }

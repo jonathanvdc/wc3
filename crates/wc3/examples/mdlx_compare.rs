@@ -5,9 +5,9 @@ use std::fs;
 use std::path::PathBuf;
 use std::process::exit;
 use std::str::from_utf8;
-use wc3::model::mdl::{Dialect, Read as _, Write as _};
-use wc3::model::{visit_model, ConversionOptions, DynamicModel, Model, ModelDialect, V1200};
-use wc3::model::{ModelVersion, NoExtensions};
+use wc3::model::mdlx::mdl::{Dialect, Read as _, Write as _};
+use wc3::model::mdlx::{visit_model, ConversionOptions, DynamicModel, Model, ModelDialect, V1200};
+use wc3::model::mdlx::{ModelVersion, NoExtensions};
 
 #[derive(Parser)]
 #[command(about = "Convert and canonicalize a model for mdlx-compare")]
@@ -90,7 +90,7 @@ fn export_to<
 #[cfg(test)]
 mod tests {
     use super::*;
-    use wc3::model::V1000;
+    use wc3::model::mdlx::V1000;
 
     #[test]
     fn export_upgrades_old_reforged_versions_to_oracle_target() {

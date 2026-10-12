@@ -1,11 +1,13 @@
 # wc3
 
-`wc3` is a Rust library for working with Warcraft III models, textures, and
-archives. It provides types and codecs for reading assets, changing their
-contents, and writing them back, whether you are building an asset editor, a
-converter, or an application that loads game data. Binary MDX and text MDL models
+`wc3` is a Rust library for working with Warcraft III and World of Warcraft
+model assets, BLP textures, and MPQ archives. It provides types and codecs for
+reading assets, changing their contents, and writing them back, whether you are
+building an asset editor, a converter, or an application that loads game data. Binary MDX and text MDL models
 share the same typed representation, allowing model editing code to work with
-both formats and with supported Classic and Reforged layouts.
+both formats and with supported Classic and Reforged layouts. World of Warcraft
+M2 documents use a separate typed format API, including their supporting skin,
+geometry, animation, skeleton, bone, and physics files.
 
 ## Capabilities
 
@@ -16,12 +18,13 @@ operations and archive compression when your application needs them.
 
 | Assets | Operations |
 | --- | --- |
-| MDX and MDL models | Read, edit, write, and convert between supported model versions. |
+| Warcraft III MDX and MDL models | Read, edit, write, and convert between supported model versions. |
+| World of Warcraft M2 models | Read, edit, and write typed core layouts and supporting files; resolve and rebuild model bundles. |
 | BLP0, BLP1, and BLP2 textures | Inspect and edit encoded containers; optionally decode pixels and encode images. |
 | MPQ v1–v4 archives | Index, extract, create, and edit archives; optionally decompress and compress entries. |
 
-For model loading, animation, and rendering in Bevy, see the companion
-[`bevy-wc3`](../bevy-wc3/README.md) crate.
+For Warcraft III model loading, animation, and rendering in Bevy, see the
+companion [`bevy-wc3`](../bevy-wc3/README.md) crate.
 
 ## Getting started
 
@@ -33,17 +36,17 @@ and compression features separately as described below.
 cargo add wc3
 ```
 
-### Models
+### Warcraft III models
 
-Model types live under `wc3::model`, where the `mdx` and `mdl` modules provide
-the codecs for each format. The example below reads a small MDL model, changes
-its name, and writes the result in both formats. Importing the codec traits as
+MDX and MDL model types live under `wc3::model::mdlx`, where the `mdx` and `mdl`
+modules provide the codecs for each format. The example below reads a small MDL
+model, changes its name, and writes the result in both formats. Importing the codec traits as
 `_` makes their methods available without introducing conflicting trait names.
 
 ```rust
-use wc3::model::{Model, V800};
-use wc3::model::mdl::{Read as _, Write as _};
-use wc3::model::mdx::Write as _;
+use wc3::model::mdlx::{Model, V800};
+use wc3::model::mdlx::mdl::{Read as _, Write as _};
+use wc3::model::mdlx::mdx::Write as _;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let source = r#"Version { FormatVersion 800, } Model "Example" {}"#;
@@ -65,12 +68,36 @@ When the version needs to be determined from the file, `DynamicModel` provides
 the same model operations with runtime version selection. Once a model is
 loaded, its records give you access to geometry, materials, scene nodes,
 animation, and effects. The
-[`model` module documentation](https://docs.rs/wc3/latest/wc3/model/) explains
+[`mdlx` module documentation](https://docs.rs/wc3/latest/wc3/model/mdlx/) explains
 how to edit those collections and convert between supported versions.
 
 Continue with the [model editing guide](docs/models.md) for runtime version
 selection, collection editing, borrowed buffers, conversion policies, and resource
 rewriting. The API reference supplies the record types and codec contracts.
+
+### World of Warcraft models
+
+M2 types live under `wc3::model::m2`. Choose a numeric layout and either the flat
+MD20 or chunked MD21 envelope, or use `DynamicModel` to detect both from bytes:
+
+```rust
+use wc3::model::m2::{Chunked, Model, V274};
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let model = Model::<Chunked<V274>>::new();
+    let bytes = model.encode_m2()?;
+    let decoded = Model::<Chunked<V274>>::decode_m2(&bytes)?;
+    assert_eq!(decoded.version(), 274);
+    Ok(())
+}
+```
+
+The core exposes native records and borrowed encoded arrays. Standalone
+`skin`, `geometry`, `animation`, `skeleton`, `bone`, and `physics` modules handle
+supporting files; `Bundle` connects declared references through a caller-owned resolver and
+coordinates external animation offsets when writing. The [M2 guide](docs/m2.md)
+explains layout selection, ownership, complete bundle output, and preservation
+boundaries. M2-to-MDLX conversion and M2 rendering are not implemented.
 
 ### Textures
 
@@ -149,15 +176,15 @@ Reading and writing an asset does not always preserve its original bytes or
 appearance. The codecs and conversion APIs make different guarantees depending
 on the format and operation.
 
-For models, MDX preserves chunk order and opaque data, while MDL produces
-canonical text and reports data it cannot faithfully represent. MDL source
+For Warcraft III models, MDX preserves chunk order and opaque data, while MDL
+produces canonical text and reports data it cannot faithfully represent. MDL source
 formatting is therefore discarded when writing a model back to text. Readers
 accept both Warcraft III and Hive Workshop spellings, and writers use Warcraft
-III syntax by default. The [MDX](https://docs.rs/wc3/latest/wc3/model/mdx/) and
-[MDL](https://docs.rs/wc3/latest/wc3/model/mdl/) documentation explains these
+III syntax by default. The [MDX](https://docs.rs/wc3/latest/wc3/model/mdlx/mdx/) and
+[MDL](https://docs.rs/wc3/latest/wc3/model/mdlx/mdl/) documentation explains these
 behaviors in more detail.
 
-Converting between model versions returns a model and a report. `convert`
+Converting between MDLX model versions returns a model and a report. `convert`
 leaves its source intact; `into_convert` consumes it and moves unchanged chunks.
 Strict conversion rejects unsupported nondefault data and opaque chunks when
 changing versions. Lossy conversion permits unsupported fields to be dropped;
@@ -165,6 +192,14 @@ opaque chunks still require a separate policy. Inspect the report even after a
 successful conversion, since it also describes normalization and defaults.
 Because some Classic and Reforged features have no equivalent in another layout,
 conversion cannot guarantee identical rendering in the game.
+
+M2 writing relocates understood offset-addressed data and retains unknown chunk
+payloads. `Bundle::encode()` updates external animation streams and their owner
+records together. AFRA, classic lookup arrays, and the version-257 extra array
+remain uninterpreted; format coverage and broad game compatibility are separate
+concerns. See the
+[M2 guide](docs/m2.md#coverage-and-preservation-boundaries) for the supported
+layouts, chunk catalogue, and limits.
 
 BLP container writing canonicalizes layout rather than preserving arbitrary
 padding. BLP0 indexed and JPEG parsing, encoding, and external mipmap assembly
@@ -180,9 +215,10 @@ compatibility limits and integrity checks that apply to reading and editing.
 ## Documentation and examples
 
 The API reference provides examples for each asset type, and the repository
-includes command-line examples for inspecting, editing, and converting assets:
+includes command-line examples for inspecting, editing, and converting assets.
+The model command-line examples below operate on Warcraft III MDX and MDL:
 
-- [Documentation index](docs/README.md): model workflows, command-line tools,
+- [Documentation index](docs/README.md): MDLX and M2 workflows, command-line tools,
   and format-specific API references.
 - [API reference](https://docs.rs/wc3/latest/wc3/).
 - [`mpq` example](examples/mpq.rs): archive listing, extraction, creation, and editing.

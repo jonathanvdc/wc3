@@ -3,7 +3,7 @@ use bevy::prelude::*;
 use std::collections::{HashMap, HashSet};
 use std::f32::consts::FRAC_PI_2;
 use std::hash::Hash;
-use wc3::model::scene::NodeFlags;
+use wc3::model::mdlx::scene::NodeFlags;
 
 #[derive(Clone, Copy)]
 pub(crate) struct NodeSample<K = Entity> {

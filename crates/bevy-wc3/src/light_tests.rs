@@ -7,7 +7,7 @@ use crate::preparation::prepare_model;
 use bevy::camera::visibility::VisibilityPlugin;
 use bevy::ecs::world::CommandQueue;
 use bevy::mesh::skinning::SkinnedMeshInverseBindposes;
-use wc3::model::animation::Animatable;
+use wc3::model::mdlx::animation::Animatable;
 
 fn scene() -> (App, Entity, Entity) {
     let mut app = App::new();

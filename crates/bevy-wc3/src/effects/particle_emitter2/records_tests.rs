@@ -1,5 +1,5 @@
 use super::*;
-use wc3::model::scene::Node;
+use wc3::model::mdlx::scene::Node;
 
 fn emitter<'data>() -> ParticleEmitter2<'data> {
     ParticleEmitter2::new(Node::new("Particles", 0).unwrap())

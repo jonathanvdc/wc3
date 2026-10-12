@@ -1,11 +1,11 @@
 //! Selective ownership conversion of decoded runtime records.
 use super::shared::{RuntimeNode, Shared};
-use wc3::model::animation::{GeosetAnimation, TextureAnimation};
-use wc3::model::chunks::ModelChunk;
-use wc3::model::emitters::{ParticleEmitter, ParticleEmitter2, RibbonEmitter};
-use wc3::model::materials::Material;
-use wc3::model::scene::{Attachment, Camera, EventObject, Light};
-use wc3::model::{Model, V1800};
+use wc3::model::mdlx::animation::{GeosetAnimation, TextureAnimation};
+use wc3::model::mdlx::chunks::ModelChunk;
+use wc3::model::mdlx::emitters::{ParticleEmitter, ParticleEmitter2, RibbonEmitter};
+use wc3::model::mdlx::materials::Material;
+use wc3::model::mdlx::scene::{Attachment, Camera, EventObject, Light};
+use wc3::model::mdlx::{Model, V1800};
 
 #[derive(Default)]
 pub(super) struct RuntimeRecords {

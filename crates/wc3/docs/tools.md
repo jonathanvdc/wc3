@@ -4,7 +4,9 @@ The `wc3` examples provide small tools for inspecting, converting, and editing
 assets. The [crate README](../README.md) introduces the library APIs and lists
 the available examples. This guide covers common commands and the guarantees
 that matter when writing modified assets. Run commands from the repository root;
-all examples support `--help`, including individual `mpq` subcommands.
+all examples support `--help`, including individual `mpq` subcommands. The model
+tools operate on Warcraft III MDX and MDL; M2 documents and supporting files use
+the [separate library APIs](m2.md).
 
 ## Inspect model data and dependencies
 
@@ -29,7 +31,7 @@ Library consumers can enumerate these occurrences with `resources()` on
 `Model<V>` or `DynamicModel`. The iterator also exposes empty paths and preserves
 original spelling and fixed-field bytes. Internal texture indices are not external
 resources, and opaque chunks are not searched for strings. See the
-[`resources` API](https://docs.rs/wc3/latest/wc3/model/resources/) for typed sites,
+[`resources` API](https://docs.rs/wc3/latest/wc3/model/mdlx/resources/) for typed sites,
 locations, and value kinds.
 
 These tools, along with `model_convert` and `model_repath`, recognize MDX by its

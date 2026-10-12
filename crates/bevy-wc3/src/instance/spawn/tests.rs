@@ -8,10 +8,10 @@ use crate::materials::layers::{animate_layers, AnimatedLayer};
 use bevy::camera::visibility::VisibilityPlugin;
 use bevy::ecs::world::{CommandQueue, World};
 use bevy::mesh::skinning::SkinnedMesh;
-use wc3::model::animation::{Animatable, Track, ValueKeyframe};
-use wc3::model::materials::{Layer, LayerFilterMode};
-use wc3::model::mdl::Read as _;
-use wc3::model::{Model, V1800};
+use wc3::model::mdlx::animation::{Animatable, Track, ValueKeyframe};
+use wc3::model::mdlx::materials::{Layer, LayerFilterMode};
+use wc3::model::mdlx::mdl::Read as _;
+use wc3::model::mdlx::{Model, V1800};
 
 #[test]
 fn child_instances_inherit_visibility_and_cleanup_without_sharing_animation() {

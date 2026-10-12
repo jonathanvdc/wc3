@@ -1,5 +1,5 @@
 use bevy_wc3::Wc3Model;
-use wc3::model::mdl::Write as _;
+use wc3::model::mdlx::mdl::Write as _;
 
 #[test]
 fn classic_fixture_converts_to_runtime_version() {

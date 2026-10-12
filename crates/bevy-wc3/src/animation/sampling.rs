@@ -1,6 +1,6 @@
 use super::Wc3Animation;
 use std::ops::RangeInclusive;
-use wc3::model::animation::{Animatable, Interpolate, Track, TrackValue};
+use wc3::model::mdlx::animation::{Animatable, Interpolate, Track, TrackValue};
 
 pub(crate) fn track_time<'data, T: TrackValue>(
     track: &Track<'data, T>,

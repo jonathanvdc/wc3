@@ -4,8 +4,8 @@ use bevy::ecs::system::SystemState;
 use bevy::transform::TransformSystems;
 use std::collections::HashMap;
 use std::f32::consts::FRAC_PI_2;
-use wc3::model::animation::{Track, ValueKeyframe};
-use wc3::model::scene::NodeFlags;
+use wc3::model::mdlx::animation::{Track, ValueKeyframe};
+use wc3::model::mdlx::scene::NodeFlags;
 
 use crate::animation::pose::sample_emitter_transform;
 use crate::assets::model::Wc3Model;
@@ -568,7 +568,7 @@ fn node_flags_survive_mdl_loading_and_reach_the_spawned_rig() {
 #[test]
 fn transitions_cache_authored_poses_and_share_birth_sampling() {
     use std::time::Duration;
-    use wc3::model::animation::Sequence;
+    use wc3::model::mdlx::animation::Sequence;
 
     let (mut app, root) = scene();
     {

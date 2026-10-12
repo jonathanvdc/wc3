@@ -4,7 +4,7 @@ use crate::materials::layers::{animate_layers, AnimatedLayer};
 use crate::materials::textures::Wc3TextureBindings;
 use bevy::asset::{AssetEvent, AssetPlugin};
 use bevy::ecs::message::MessageCursor;
-use wc3::model::animation::{Animatable, Sequence};
+use wc3::model::mdlx::animation::{Animatable, Sequence};
 
 #[test]
 fn constant_materials_share_by_template_and_state_and_detach_on_change() {

@@ -3,7 +3,7 @@ use mdl::Write as _;
 use mdx::Write as _;
 use std::{env, error::Error, fs, path::PathBuf};
 use wc3::blp::{Blp, EncodeFormat, EncodeOptions};
-use wc3::model::{mdl, mdx};
+use wc3::model::mdlx::{mdl, mdx};
 
 #[path = "../../../benchmarks/support/model.rs"]
 mod models;
