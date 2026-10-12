@@ -1,5 +1,5 @@
-//! Field-wise validation and animation-leaf traversal.
-use crate::m2::{fresh_ident, Format};
+//! Compositional field validation, animation-array traversal, and section references.
+use crate::binary::{fresh_ident, Format};
 use proc_macro2::TokenStream;
 use quote::quote;
 use syn::{parse_quote, Data, DeriveInput, Error, Fields, Index, Result};
@@ -7,6 +7,7 @@ use syn::{parse_quote, Data, DeriveInput, Error, Fields, Index, Result};
 pub(crate) enum Operation {
     Validate,
     VisitArrays,
+    VisitReferences,
 }
 pub(crate) fn expand(input: DeriveInput, operation: Operation) -> TokenStream {
     expand_format(input, operation, Format::M2)
@@ -22,10 +23,10 @@ pub(crate) fn expand_format(
     }
 }
 fn expand_checked(input: DeriveInput, operation: Operation, format: Format) -> Result<TokenStream> {
-    let codec = if matches!(format, Format::Wmo) {
-        quote!(::wc3::model::wmo)
-    } else {
-        quote!(::wc3::model::m2)
+    let codec = match format {
+        Format::M2 => quote!(::wc3::model::m2),
+        Format::Wmo => quote!(::wc3::model::wmo),
+        Format::M3 => quote!(::wc3::model::m3),
     };
     let name = &input.ident;
     let (_, type_generics, _) = input.generics.split_for_impl();
@@ -60,7 +61,7 @@ fn expand_checked(input: DeriveInput, operation: Operation, format: Format) -> R
                 quote!(#binding)
             } else {
                 match operation {
-                    Operation::Validate => quote!(&self.#member),
+                    Operation::Validate | Operation::VisitReferences => quote!(&self.#member),
                     Operation::VisitArrays => quote!(&mut self.#member),
                 }
             };
@@ -68,6 +69,10 @@ fn expand_checked(input: DeriveInput, operation: Operation, format: Format) -> R
                 Operation::Validate => (
                     parse_quote!(#ty: #codec::Validate),
                     quote!(#codec::Validate::validate(#value)?;),
+                ),
+                Operation::VisitReferences => (
+                    parse_quote!(#ty:#codec::VisitReferences),
+                    quote!(#codec::VisitReferences::visit_references(#value,#visitor_argument)?;),
                 ),
                 Operation::VisitArrays => (
                     parse_quote!(#ty: #codec::VisitArrays<#lifetime>),
@@ -116,6 +121,11 @@ fn expand_checked(input: DeriveInput, operation: Operation, format: Format) -> R
         Operation::Validate => quote! {
             impl #impl_generics #codec::Validate for #name #type_generics #where_clause {
                 fn validate(&self) -> ::core::result::Result<(), #codec::ReadError> { #body }
+            }
+        },
+        Operation::VisitReferences => quote! {
+            impl #impl_generics #codec::VisitReferences for #name #type_generics #where_clause{
+                fn visit_references<#visitor:#codec::ReferenceVisitor>(&self,#visitor_argument:&mut #visitor)->::core::result::Result<(),#visitor::Error>{#body}
             }
         },
         Operation::VisitArrays => quote! {

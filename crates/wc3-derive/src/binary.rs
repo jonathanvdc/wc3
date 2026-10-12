@@ -1,4 +1,4 @@
-//! Field-order codecs for records in an offset address space.
+//! Field-order binary record codecs with format-specific framing and envelopes.
 use proc_macro2::{Ident, TokenStream};
 use quote::quote;
 use syn::{parse_quote, Data, DeriveInput, Error, Fields, GenericParam, Index, Result};
@@ -24,6 +24,7 @@ pub(crate) fn fresh_ident(input: &DeriveInput, base: &str) -> Ident {
 pub(crate) enum Format {
     M2,
     Wmo,
+    M3,
 }
 
 pub(crate) enum Operation {
@@ -45,31 +46,34 @@ pub(crate) fn expand_format(
     }
 }
 fn expand_checked(input: DeriveInput, operation: Operation, format: Format) -> Result<TokenStream> {
-    let wmo = matches!(format, Format::Wmo);
-    let codec = if wmo {
-        quote!(::wc3::model::wmo)
-    } else {
-        quote!(::wc3::model::m2)
+    let m2 = matches!(format, Format::M2);
+    let m3 = matches!(format, Format::M3);
+    let codec = match format {
+        Format::M2 => quote!(::wc3::model::m2),
+        Format::Wmo => quote!(::wc3::model::wmo),
+        Format::M3 => quote!(::wc3::model::m3),
     };
+    let envelope = fresh_ident(&input, "__M3Envelope");
+    let envelope_args = if m3 { quote!(<#envelope>) } else { quote!() };
     let name = &input.ident;
     let decoder = fresh_ident(&input, "__m2_decoder");
     let encoder = fresh_ident(&input, "__m2_encoder");
     let version = fresh_ident(&input, "__m2_version");
     let flags = fresh_ident(&input, "__m2_flags");
-    let arguments = if wmo {
-        quote!()
-    } else {
+    let arguments = if m2 {
         quote!(#version,#flags)
-    };
-    let parameters = if wmo {
-        quote!()
     } else {
+        quote!()
+    };
+    let parameters = if m2 {
         quote!(#version:u32,#flags:u32)
-    };
-    let reserve = if wmo {
-        quote!()
     } else {
+        quote!()
+    };
+    let reserve = if m2 {
         quote!(#encoder.reserve_metadata(<Self as #codec::RecordLayout>::size(#encoder.version,#encoder.flags))?;)
+    } else {
+        quote!()
     };
     let Data::Struct(data) = &input.data else {
         return Err(Error::new_spanned(
@@ -87,6 +91,26 @@ fn expand_checked(input: DeriveInput, operation: Operation, format: Format) -> R
     if matches!(operation, Operation::Read) && generics.lifetimes().next().is_none() {
         generics.params.insert(0, parse_quote!(#lifetime));
     }
+    if m3 {
+        generics
+            .params
+            .push(parse_quote!(#envelope:#codec::Envelope));
+    }
+    let read_args = if m3 {
+        quote!(#lifetime,#envelope)
+    } else {
+        quote!(#lifetime)
+    };
+    let decoder_type = if m3 {
+        quote!(#codec::codec::Decoder<#lifetime,#envelope>)
+    } else {
+        quote!(#codec::codec::Decoder<#lifetime>)
+    };
+    let encoder_type = if m3 {
+        quote!(#codec::codec::Encoder<#envelope>)
+    } else {
+        quote!(#codec::codec::Encoder)
+    };
     let mut members = Vec::new();
     let mut reads = Vec::new();
     let mut writes = Vec::new();
@@ -102,17 +126,17 @@ fn expand_checked(input: DeriveInput, operation: Operation, format: Format) -> R
                 quote!(#index)
             });
         let predicate = match operation {
-            Operation::Read => parse_quote!(#ty: #codec::Read<#lifetime>),
-            Operation::Write => parse_quote!(#ty: #codec::Write),
-            Operation::Layout => parse_quote!(#ty: #codec::RecordLayout),
+            Operation::Read => parse_quote!(#ty: #codec::Read<#read_args>),
+            Operation::Write => parse_quote!(#ty: #codec::Write #envelope_args),
+            Operation::Layout => parse_quote!(#ty: #codec::RecordLayout #envelope_args),
         };
         generics.make_where_clause().predicates.push(predicate);
         members.push(member.clone());
-        reads.push(quote!(<#ty as #codec::Read<#lifetime>>::read(#decoder)?));
-        writes.push(quote!(#codec::Write::write(&self.#member, #encoder)?;));
-        sizes.push(quote!(<#ty as #codec::RecordLayout>::size(#arguments)));
+        reads.push(quote!(<#ty as #codec::Read<#read_args>>::read(#decoder)?));
+        writes.push(quote!(<#ty as #codec::Write #envelope_args>::write(&self.#member,#encoder)?;));
+        sizes.push(quote!(<#ty as #codec::RecordLayout #envelope_args>::size(#arguments)));
     }
-    if matches!(operation, Operation::Write) && !wmo {
+    if matches!(operation, Operation::Write) && m2 {
         generics
             .make_where_clause()
             .predicates
@@ -126,15 +150,15 @@ fn expand_checked(input: DeriveInput, operation: Operation, format: Format) -> R
     };
     Ok(match operation {
         Operation::Read => quote! {
-            impl #impl_generics #codec::Read<#lifetime> for #name #type_generics #where_clause {
-                fn read(#decoder: &mut #codec::codec::Decoder<#lifetime>) -> ::core::result::Result<Self, #codec::ReadError> {
+            impl #impl_generics #codec::Read<#read_args> for #name #type_generics #where_clause {
+                fn read(#decoder: &mut #decoder_type) -> ::core::result::Result<Self, #codec::ReadError> {
                     ::core::result::Result::Ok(#construct)
                 }
             }
         },
         Operation::Write => quote! {
-            impl #impl_generics #codec::Write for #name #type_generics #where_clause {
-                fn write(&self, #encoder: &mut #codec::codec::Encoder) -> ::core::result::Result<(), #codec::WriteError> {
+            impl #impl_generics #codec::Write #envelope_args for #name #type_generics #where_clause {
+                fn write(&self, #encoder: &mut #encoder_type) -> ::core::result::Result<(), #codec::WriteError> {
                     #reserve
                     #(#writes)*
                     ::core::result::Result::Ok(())
@@ -142,7 +166,7 @@ fn expand_checked(input: DeriveInput, operation: Operation, format: Format) -> R
             }
         },
         Operation::Layout => quote! {
-            impl #impl_generics #codec::RecordLayout for #name #type_generics #where_clause {
+            impl #impl_generics #codec::RecordLayout #envelope_args for #name #type_generics #where_clause {
                 fn size(#parameters) -> usize { 0 #(+ #sizes)* }
             }
         },

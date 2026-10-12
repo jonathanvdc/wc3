@@ -22,6 +22,7 @@ operations and archive compression when your application needs them.
 | Warcraft III MDX and MDL models | Read, edit, write, and convert between supported model versions. |
 | World of Warcraft M2 models | Read, edit, and write typed core layouts and supporting files; resolve and rebuild model bundles. |
 | World of Warcraft WMO models | Read, edit, and write root and group documents; resolve native geometry bundles. |
+| StarCraft II and Heroes of the Storm M3 models | Read, edit, and write indexed model and external animation documents. |
 | BLP0, BLP1, and BLP2 textures | Inspect and edit encoded containers; optionally decode pixels and encode images. |
 | MPQ v1–v4 archives | Index, extract, create, and edit archives; optionally decompress and compress entries. |
 
@@ -105,6 +106,12 @@ World geometry uses `wc3::model::wmo::{Root, Group, Bundle}` with an explicit
 client profile, since WMO's version field does not identify every layout change.
 The [WMO guide](docs/wmo.md) explains borrowed chunk records, dependency
 resolution, validation, and coordinated root/group output.
+
+StarCraft II and Heroes of the Storm models use `wc3::model::m3`. The MD33 and
+MD34 envelopes select reference widths, while each indexed section selects its
+own record revision. The [M3 guide](docs/m3.md) explains borrowed section graphs,
+typed packed vertices, shared references, external animations, and preservation
+limits for unknown payloads.
 
 ### Textures
 
@@ -225,7 +232,7 @@ The API reference provides examples for each asset type, and the repository
 includes command-line examples for inspecting, editing, and converting assets.
 The model command-line examples below operate on Warcraft III MDX and MDL:
 
-- [Documentation index](docs/README.md): MDLX, M2, and WMO workflows, command-line tools,
+- [Documentation index](docs/README.md): MDLX, M2, WMO, and M3 workflows, command-line tools,
   and format-specific API references.
 - [API reference](https://docs.rs/wc3/latest/wc3/).
 - [`mpq` example](examples/mpq.rs): archive listing, extraction, creation, and editing.

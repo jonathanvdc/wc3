@@ -1,8 +1,8 @@
-//! Codec derives for Warcraft III and World of Warcraft model records in `wc3`.
+//! Codec derives for Warcraft III, World of Warcraft, and StarCraft II model records in `wc3`.
 //!
 //! These macros are for maintaining or extending the record implementations.
 //! Applications using the built-in model types only need the codec traits in
-//! `wc3::model::mdlx::{mdx, mdl}`, `wc3::model::m2`, and `wc3::model::wmo`.
+//! `wc3::model::mdlx::{mdx, mdl}`, `wc3::model::m2`, `wc3::model::wmo`, and `wc3::model::m3`.
 //!
 //! Import macros through those format modules, for example
 //! `#[derive(mdl::Read, mdl::Write)]`. Ownership is shared through
@@ -11,6 +11,7 @@
 #![doc = include_str!("mdl.md")]
 #![doc = include_str!("m2.md")]
 #![doc = include_str!("wmo.md")]
+#![doc = include_str!("m3.md")]
 #![deny(missing_docs)]
 mod mdl;
 mod mdx;
@@ -76,31 +77,31 @@ pub fn derive_ownership(input: TokenStream) -> TokenStream {
     ownership::expand(parse_macro_input!(input as DeriveInput)).into()
 }
 
-mod m2;
+mod binary;
 /// Reads M2 record fields in declaration order within a shared address space.
 #[proc_macro_derive(M2Read)]
 pub fn derive_m2_read(input: TokenStream) -> TokenStream {
-    m2::expand(
+    binary::expand(
         parse_macro_input!(input as DeriveInput),
-        m2::Operation::Read,
+        binary::Operation::Read,
     )
     .into()
 }
 /// Writes M2 fields after reserving the record's complete inline metadata.
 #[proc_macro_derive(M2Write)]
 pub fn derive_m2_write(input: TokenStream) -> TokenStream {
-    m2::expand(
+    binary::expand(
         parse_macro_input!(input as DeriveInput),
-        m2::Operation::Write,
+        binary::Operation::Write,
     )
     .into()
 }
 /// Sums the inline metadata widths of an M2 record's fields.
 #[proc_macro_derive(M2RecordLayout)]
 pub fn derive_m2_record_layout(input: TokenStream) -> TokenStream {
-    m2::expand(
+    binary::expand(
         parse_macro_input!(input as DeriveInput),
-        m2::Operation::Layout,
+        binary::Operation::Layout,
     )
     .into()
 }
@@ -123,14 +124,14 @@ pub fn derive_mdx_read_owned(input: TokenStream) -> TokenStream {
     mdx_owned::expand(&parse_macro_input!(input as DeriveInput)).into()
 }
 
-mod m2_traversal;
+mod binary_traversal;
 /// Validates struct fields or the active enum payload in declaration order.
 /// Returns the first field error; cross-field invariants use handwritten impls.
 #[proc_macro_derive(M2Validate)]
 pub fn derive_m2_validate(input: TokenStream) -> TokenStream {
-    m2_traversal::expand(
+    binary_traversal::expand(
         parse_macro_input!(input as DeriveInput),
-        m2_traversal::Operation::Validate,
+        binary_traversal::Operation::Validate,
     )
     .into()
 }
@@ -138,9 +139,9 @@ pub fn derive_m2_validate(input: TokenStream) -> TokenStream {
 /// Context-dependent leaves provide their own traversal implementations.
 #[proc_macro_derive(M2VisitArrays)]
 pub fn derive_m2_visit_arrays(input: TokenStream) -> TokenStream {
-    m2_traversal::expand(
+    binary_traversal::expand(
         parse_macro_input!(input as DeriveInput),
-        m2_traversal::Operation::VisitArrays,
+        binary_traversal::Operation::VisitArrays,
     )
     .into()
 }
@@ -148,40 +149,91 @@ pub fn derive_m2_visit_arrays(input: TokenStream) -> TokenStream {
 /// Derives field-order WMO binary decoding.
 #[proc_macro_derive(WmoRead)]
 pub fn derive_wmo_read(input: TokenStream) -> TokenStream {
-    m2::expand_format(
+    binary::expand_format(
         syn::parse_macro_input!(input as syn::DeriveInput),
-        m2::Operation::Read,
-        m2::Format::Wmo,
+        binary::Operation::Read,
+        binary::Format::Wmo,
     )
     .into()
 }
 /// Derives field-order WMO binary encoding.
 #[proc_macro_derive(WmoWrite)]
 pub fn derive_wmo_write(input: TokenStream) -> TokenStream {
-    m2::expand_format(
+    binary::expand_format(
         syn::parse_macro_input!(input as syn::DeriveInput),
-        m2::Operation::Write,
-        m2::Format::Wmo,
+        binary::Operation::Write,
+        binary::Format::Wmo,
     )
     .into()
 }
 /// Derives fixed inline WMO record width.
 #[proc_macro_derive(WmoRecordLayout)]
 pub fn derive_wmo_record_layout(input: TokenStream) -> TokenStream {
-    m2::expand_format(
+    binary::expand_format(
         syn::parse_macro_input!(input as syn::DeriveInput),
-        m2::Operation::Layout,
-        m2::Format::Wmo,
+        binary::Operation::Layout,
+        binary::Format::Wmo,
     )
     .into()
 }
 /// Derives compositional WMO record validation.
 #[proc_macro_derive(WmoValidate)]
 pub fn derive_wmo_validate(input: TokenStream) -> TokenStream {
-    m2_traversal::expand_format(
+    binary_traversal::expand_format(
         syn::parse_macro_input!(input as syn::DeriveInput),
-        m2_traversal::Operation::Validate,
-        m2::Format::Wmo,
+        binary_traversal::Operation::Validate,
+        binary::Format::Wmo,
+    )
+    .into()
+}
+
+/// Derives envelope-generic M3 record decoding.
+#[proc_macro_derive(M3Read)]
+pub fn derive_m3_read(input: TokenStream) -> TokenStream {
+    binary::expand_format(
+        syn::parse_macro_input!(input as syn::DeriveInput),
+        binary::Operation::Read,
+        binary::Format::M3,
+    )
+    .into()
+}
+/// Derives envelope-generic M3 record encoding.
+#[proc_macro_derive(M3Write)]
+pub fn derive_m3_write(input: TokenStream) -> TokenStream {
+    binary::expand_format(
+        syn::parse_macro_input!(input as syn::DeriveInput),
+        binary::Operation::Write,
+        binary::Format::M3,
+    )
+    .into()
+}
+/// Derives the inline M3 record width under either reference envelope.
+#[proc_macro_derive(M3RecordLayout)]
+pub fn derive_m3_layout(input: TokenStream) -> TokenStream {
+    binary::expand_format(
+        syn::parse_macro_input!(input as syn::DeriveInput),
+        binary::Operation::Layout,
+        binary::Format::M3,
+    )
+    .into()
+}
+/// Derives compositional M3 semantic validation.
+#[proc_macro_derive(M3Validate)]
+pub fn derive_m3_validate(input: TokenStream) -> TokenStream {
+    binary_traversal::expand_format(
+        syn::parse_macro_input!(input as syn::DeriveInput),
+        binary_traversal::Operation::Validate,
+        binary::Format::M3,
+    )
+    .into()
+}
+/// Derives immutable traversal of native M3 section references.
+#[proc_macro_derive(M3VisitReferences)]
+pub fn derive_m3_visit_references(input: TokenStream) -> TokenStream {
+    binary_traversal::expand_format(
+        syn::parse_macro_input!(input as syn::DeriveInput),
+        binary_traversal::Operation::VisitReferences,
+        binary::Format::M3,
     )
     .into()
 }

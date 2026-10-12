@@ -12,6 +12,8 @@
 //!
 //! World models use [`model::wmo::Root`] and [`model::wmo::Group`], with explicit
 //! client profiles and [`model::wmo::Bundle`] for shared root/group references.
+//! StarCraft II and Heroes of the Storm models use [`model::m3::Model`], whose
+//! MD33/MD34 envelopes keep independently versioned indexed sections and external animations.
 //!
 //! [`blp`] reads and writes BLP0, BLP1, and BLP2 encoded texture containers.
 //! [`mpq`] indexes, streams, creates, and edits MPQ v1–v4 archives.
@@ -26,7 +28,7 @@
 //!
 //! # Ownership and output
 //!
-//! MDX, M2, and WMO documents and BLP containers can borrow their encoded input. Their
+//! MDX, M2, WMO, and M3 documents and BLP containers can borrow their encoded input. Their
 //! owned conversion methods detach data for longer-lived storage; MDL parsing builds
 //! owned records. See each module for its editing and round-trip guarantees.
 //! Writers can leave partial output after transport errors. Complete encoding or
@@ -36,7 +38,7 @@
 
 extern crate self as wc3;
 
-/// Warcraft III MDX/MDL and World of Warcraft M2 and WMO model formats.
+/// Warcraft III MDX/MDL, World of Warcraft M2/WMO, and StarCraft II M3 formats.
 pub mod model;
 
 /// BLP0, BLP1, and BLP2 texture containers.

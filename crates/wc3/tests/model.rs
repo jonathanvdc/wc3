@@ -7,3 +7,6 @@ mod mdlx;
 
 #[path = "model/wmo/mod.rs"]
 mod wmo;
+
+#[path = "model/m3/mod.rs"]
+mod m3;

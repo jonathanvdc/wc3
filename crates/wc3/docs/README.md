@@ -11,6 +11,8 @@ to editing workflows and runnable tools.
   bundle output.
 - [World of Warcraft world models](wmo.md) explains root and group dialects,
   borrowed records, collision and liquids, resource identities, and bundle edits.
+- [StarCraft II and Heroes of the Storm M3 models](m3.md) explains indexed
+  section graphs, independent record revisions, packed vertices, and animations.
 - [Asset command-line tools](tools.md) covers inspection, dependency reporting,
   repathing, conversion, texture export, and archive operations.
 
@@ -23,6 +25,8 @@ The API reference contains the detailed contracts and executable examples:
   companion records, typed envelopes, dependency identities, and bundle assembly.
 - [WMO models](https://docs.rs/wc3/latest/wc3/model/wmo/) describes root and group
   documents, native chunk records, validation, and historical layouts.
+- [M3 models](https://docs.rs/wc3/latest/wc3/model/m3/) describes native section
+  records, reference envelopes, graph validation, and external animations.
 - [BLP textures](https://docs.rs/wc3/latest/wc3/blp/) covers encoded containers,
   external BLP0 mipmaps, and optional image adapters.
 - [MPQ archives](https://docs.rs/wc3/latest/wc3/mpq/) covers streaming and
