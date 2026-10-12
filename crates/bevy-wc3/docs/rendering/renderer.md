@@ -17,7 +17,8 @@ Spawning creates animated nodes and one mesh pass per material layer beneath
 LOD visibility groups. Fixed or automatic selection chooses one level per
 instance, with configurable screen-size thresholds, quality bias, and hysteresis.
 Common geosets remain visible across levels. See [geometry LOD](lod.md). Each
-instance owns its rig, material handles, texture bindings, and animation clock.
+instance owns its rig, texture bindings, and animation clock. Constant material
+states can share handles; independently animated states remain private.
 [Architecture](../architecture.md) describes preparation and ownership in detail.
 
 Prepared and spawned mesh passes expose `Wc3PartId` with normalized source
@@ -34,6 +35,12 @@ properties. Sequence changes blend authored local poses using model BlendTime;
 translation and scale interpolate linearly and rotation uses quaternion slerp.
 Materials and other non-transform properties sample the destination directly.
 See [animation blending](animation-blending.md).
+
+Nodes without transform tracks retain their rest pose, and unchanged local
+transforms do not trigger propagation. Skin bounds refresh when contributing
+joints, mesh transforms, or source assets change. Hidden LOD passes defer that
+work until visibility returns, retaining pending changes so culling uses the
+current pose.
 
 The CPU pose evaluator handles pivots, selective inheritance, full and
 axis-locked billboards, and camera anchoring. Each instance selects one driving

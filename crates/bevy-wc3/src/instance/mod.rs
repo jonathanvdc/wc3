@@ -1,4 +1,5 @@
 //! Spawn file-backed model instances once their source assets are ready.
+pub(crate) mod bounds;
 mod cache;
 mod ownership;
 pub(crate) mod spawn;

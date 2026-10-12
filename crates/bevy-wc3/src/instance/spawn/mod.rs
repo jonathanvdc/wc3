@@ -25,8 +25,8 @@ use rig::{spawn_animation_root, spawn_rig};
 /// Spawn an independently animated instance from prepared assets.
 ///
 /// Returns its transform and animation root. Commands take effect when Bevy
-/// applies the command queue. Meshes and bind poses remain shared; layer
-/// materials and playback state are created for this instance.
+/// applies the command queue. Meshes and bind poses remain shared. Playback
+/// state belongs to this instance; the plugin shares constant material states.
 pub fn spawn_prepared_model(
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,

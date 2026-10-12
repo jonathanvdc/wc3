@@ -33,7 +33,7 @@ then choose a topic:
 - [Geometry LOD](rendering/lod.md): authored levels, automatic screen-size
   selection, quality controls, and camera policy.
 - [Geoset animation](rendering/geoset-animation.md): color, opacity,
-  material isolation, and sampling.
+  material sharing, isolation, and sampling.
 - [Reforged materials](rendering/reforged-materials.md): texture roles,
   surface animation, UV sets, and Bevy shading integration.
 - [Model lights](rendering/lights.md): animated scene lights, conversion

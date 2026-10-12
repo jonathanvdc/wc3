@@ -1,6 +1,7 @@
+use crate::instance::bounds::SkinBounds;
 use crate::lod::{LodGroup, Wc3LodState};
+use crate::materials::runtime::ConstantMaterial;
 use crate::preparation::{PreparedLayer, Wc3PartId};
-use bevy::camera::visibility::DynamicSkinnedMeshBounds;
 use bevy::mesh::skinning::SkinnedMesh;
 use bevy::prelude::*;
 use std::collections::HashMap;
@@ -88,6 +89,18 @@ pub(super) fn spawn_geosets(
                 MeshMaterial3d(material),
                 initial_visibility,
             ));
+            let constant = layer.alpha.track().is_none()
+                && layer.texture_id.track().is_none()
+                && layer.surface.is_constant()
+                && geoset_alpha
+                    .as_ref()
+                    .is_none_or(|alpha| alpha.track().is_none())
+                && geoset_color
+                    .as_ref()
+                    .is_none_or(|color| color.track().is_none());
+            if constant {
+                entity.insert(ConstantMaterial(layer.template_id));
+            }
             entity.insert(AnimatedLayer {
                 root,
                 alpha: layer.alpha.clone(),
@@ -105,7 +118,7 @@ pub(super) fn spawn_geosets(
                         inverse_bindposes: rig.inverse_bindposes.clone(),
                         joints: rig.joints.clone(),
                     },
-                    DynamicSkinnedMeshBounds,
+                    SkinBounds::default(),
                 ));
             }
             // Joint matrices already contain world transforms; skinning ignores

@@ -54,6 +54,9 @@ impl AnimatedNode {
         animation: &Wc3Animation,
         frame: Option<NodeFrame>,
     ) -> Transform {
+        if self.translation.is_none() && self.rotation.is_none() && self.scaling.is_none() {
+            return Transform::from_translation(self.pivot - self.parent_pivot);
+        }
         let translation = self
             .translation
             .as_ref()

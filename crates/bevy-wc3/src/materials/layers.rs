@@ -1,3 +1,4 @@
+use super::runtime::{apply_material, ConstantMaterial};
 use super::textures::Wc3TextureBindings;
 use super::Wc3LayerMaterial;
 use crate::animation::{clocks::SamplingTime, Wc3Animation};
@@ -16,30 +17,50 @@ pub(crate) struct AnimatedLayer {
 }
 
 pub(crate) fn animate_layers(
-    instances: Query<(&Wc3Animation, Option<&Wc3TextureBindings>)>,
+    instances: Query<(&Wc3Animation, Option<Ref<Wc3TextureBindings>>)>,
     mut layers: Query<(
         &AnimatedLayer,
-        &MeshMaterial3d<Wc3LayerMaterial>,
+        &mut MeshMaterial3d<Wc3LayerMaterial>,
+        Option<&ConstantMaterial>,
         &mut Visibility,
     )>,
     mut materials: ResMut<Assets<Wc3LayerMaterial>>,
 ) {
-    for (layer, material_handle, mut visibility) in &mut layers {
+    for (layer, mut material_handle, constant, mut visibility) in &mut layers {
         let Ok((animation, bindings)) = instances.get(layer.root) else {
             continue;
         };
-        let Some(mut material) = materials.get_mut(&material_handle.0) else {
+        if constant.is_some()
+            && bindings
+                .as_ref()
+                .is_none_or(|bindings| !bindings.is_changed())
+            && !material_handle.is_changed()
+        {
+            continue;
+        }
+        let Some(mut material) = materials.get(&material_handle.0).cloned() else {
             continue;
         };
-        *visibility = if layer.evaluate(
+        let next_visibility = if layer.evaluate(
             &mut material,
-            bindings,
+            bindings.as_deref(),
             SamplingTime::live(animation.time()),
         ) {
             Visibility::Inherited
         } else {
             Visibility::Hidden
         };
+        visibility.set_if_neq(next_visibility);
+        let previous = material_handle.0.id();
+        apply_material(
+            &mut materials,
+            material_handle.bypass_change_detection(),
+            material,
+            constant.is_some(),
+        );
+        if material_handle.0.id() != previous {
+            material_handle.set_changed();
+        }
     }
 }
 

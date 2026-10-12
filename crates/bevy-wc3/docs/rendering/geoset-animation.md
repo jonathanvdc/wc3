@@ -29,9 +29,17 @@ Bevy's Blend shader path to preserve source alpha for the custom blend factors.
 
 ## Material ownership
 
-Each geoset with an animation record receives private material handles for all
-its layers, even for static tint. Instances own separate materials and clocks.
-Meshes and bind poses remain shared. Bone GeosetAnimId is not used to
+Passes with animated layer, geoset, or surface properties retain private material
+handles and independent clocks. Constant passes from the same prepared layer
+share a handle when their evaluated tint, alpha, and texture state match, including
+static geoset tint. Texture binding changes detach the affected pass before
+updating its material. Unchanged evaluated values do not mark material assets
+modified. Meshes and bind poses remain shared.
+
+For independent application PBR customization, insert `Wc3IndependentMaterial`
+on the mesh pass and assign a cloned material asset before editing its settings.
+The marker excludes that pass from sharing; authored animation still controls
+its tint, opacity, texture slots, and surface properties. Bone GeosetAnimId is not used to
 apply material tint: the GEOA record's GeosetId selects the geometry.
 
 ## Shading and shadow behavior

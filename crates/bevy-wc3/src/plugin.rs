@@ -1,5 +1,8 @@
 //! Asset, material, renderer, and main-world system registration.
+use crate::instance::bounds::update_skin_bounds;
+use crate::materials::runtime::share_constant_materials;
 use bevy::asset::embedded_asset;
+use bevy::camera::visibility::VisibilitySystems;
 use bevy::prelude::*;
 
 use crate::animation::advance_animation;
@@ -49,6 +52,14 @@ impl Plugin for Wc3BevyPlugin {
         app.add_plugins(ParticleRenderPlugin);
         app.add_plugins(RibbonRenderPlugin);
         app.add_systems(PostUpdate, configure_effect_views);
+        app.add_systems(
+            PostUpdate,
+            update_skin_bounds
+                .after(VisibilitySystems::CalculateBounds)
+                .after(VisibilitySystems::VisibilityPropagate)
+                .after(Wc3Systems::SelectLod)
+                .before(VisibilitySystems::CheckVisibility),
+        );
         configure(app);
         app.add_message::<Wc3ModelEvent>();
         app.add_systems(PostUpdate, update_lod.in_set(Wc3Systems::SelectLod));
@@ -78,6 +89,7 @@ impl Plugin for Wc3BevyPlugin {
                 animate_lights,
                 animate_layers,
                 animate_surface,
+                share_constant_materials,
             )
                 .chain()
                 .in_set(Wc3Systems::AnimateInstances),

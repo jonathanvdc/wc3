@@ -197,10 +197,14 @@ pub(crate) fn animate_nodes(
         .filter_map(|entity| {
             let (_, _, node, _, _) = inputs.get(entity).ok()?;
             let node = node?;
-            let pose = resolve_pose(entity, &lookup, &mut cache, &mut HashSet::new())?;
+            let local = if node.flags.bits() & 0xff == 0 {
+                *authored.get(&node.root)?.get(&entity)?
+            } else {
+                resolve_pose(entity, &lookup, &mut cache, &mut HashSet::new())?.local
+            };
             Some((
                 entity,
-                pose.local,
+                local,
                 camera_poses.get(&node.root).copied().flatten(),
             ))
         })
@@ -208,13 +212,17 @@ pub(crate) fn animate_nodes(
     let mut outputs = nodes.p1();
     for (entity, local, camera) in resolved {
         if let Ok((mut node, mut transform)) = outputs.get_mut(entity) {
-            node.camera = camera;
-            *transform = local;
+            if node.camera != camera {
+                node.camera = camera;
+            }
+            transform.set_if_neq(local);
         }
     }
     for (root, pose) in authored {
         if let Ok(mut animation) = animations.get_mut(root) {
-            animation.pose_playback.current = Arc::new(pose);
+            if *animation.pose_playback.current != pose {
+                animation.pose_playback.current = Arc::new(pose);
+            }
         }
     }
 }

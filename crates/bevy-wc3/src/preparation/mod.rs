@@ -1,4 +1,5 @@
 //! Shared meshes, bind poses, and material templates prepared before instantiation.
+use crate::materials::runtime::MaterialTemplateId;
 use bevy::mesh::skinning::SkinnedMeshInverseBindposes;
 use bevy::prelude::*;
 use std::collections::HashMap;
@@ -35,6 +36,7 @@ use crate::materials::animation::AnimatedSurface;
 use crate::materials::Wc3LayerMaterial;
 
 pub(crate) struct PreparedLayer {
+    pub(crate) template_id: MaterialTemplateId,
     pub(crate) alpha: Shared<Animatable<'static, f32>>,
     pub(crate) texture_id: Shared<Animatable<'static, u32>>,
     pub(crate) material: Wc3LayerMaterial,
@@ -264,6 +266,7 @@ pub(crate) fn prepare_resolved_model(
                     let texture_id = layer.map(layer_texture_id);
                     let value = build_layer_material(&layer, &texture_id, &default_bitmaps);
                     PreparedLayer {
+                        template_id: MaterialTemplateId::new(),
                         alpha: layer.map(|layer| &layer.alpha),
                         texture_id,
                         material: value,

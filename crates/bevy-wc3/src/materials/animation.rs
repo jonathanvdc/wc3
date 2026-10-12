@@ -1,4 +1,5 @@
 //! Animated surface inputs shared by SD and Reforged mesh materials.
+use super::runtime::{apply_material, ConstantMaterial};
 use super::textures::LinearImages;
 use crate::preparation::shared::Shared;
 use bevy::asset::AssetEvent;
@@ -93,14 +94,20 @@ fn texture_transform_at_time<'data>(
 }
 
 pub(crate) fn animate_surface(
-    roots: Query<(&Wc3Animation, &Wc3TextureBindings)>,
-    surfaces: Query<(&AnimatedSurface, &MeshMaterial3d<Wc3LayerMaterial>)>,
+    roots: Query<(&Wc3Animation, Ref<Wc3TextureBindings>)>,
+    mut surfaces: Query<(
+        &AnimatedSurface,
+        &mut MeshMaterial3d<Wc3LayerMaterial>,
+        Option<&ConstantMaterial>,
+    )>,
     mut materials: ResMut<Assets<Wc3LayerMaterial>>,
     mut images: ResMut<Assets<Image>>,
     mut cache: Local<LinearImages>,
     mut events: MessageReader<AssetEvent<Image>>,
 ) {
+    let mut images_changed = false;
     for event in events.read() {
+        images_changed = true;
         match event {
             AssetEvent::Modified { id } | AssetEvent::Removed { id } => {
                 cache.remove(*id);
@@ -109,24 +116,54 @@ pub(crate) fn animate_surface(
         }
     }
     cache.retain_loaded(&images);
-    for (surface, handle) in &surfaces {
+    for (surface, mut handle, constant) in &mut surfaces {
         let Ok((animation, bindings)) = roots.get(surface.root) else {
             continue;
         };
-        let Some(mut material) = materials.get_mut(&handle.0) else {
+        if constant.is_some() && !bindings.is_changed() && !handle.is_changed() && !images_changed {
+            continue;
+        }
+        let Some(mut material) = materials.get(&handle.0).cloned() else {
             continue;
         };
         surface.evaluate(
             &mut material,
-            bindings,
+            &bindings,
             SamplingTime::live(animation.time()),
             &mut images,
             &mut cache,
         );
+        let previous = handle.0.id();
+        apply_material(
+            &mut materials,
+            handle.bypass_change_detection(),
+            material,
+            constant.is_some(),
+        );
+        if handle.0.id() != previous {
+            handle.set_changed();
+        }
     }
 }
 
 impl AnimatedSurface {
+    pub(crate) fn is_constant(&self) -> bool {
+        self.texture_animation.as_ref().is_none_or(|animation| {
+            animation.translation.is_none()
+                && animation.rotation.is_none()
+                && animation.scaling.is_none()
+        }) && (!self.hd
+            || (self
+                .slots
+                .iter()
+                .flatten()
+                .all(|slot| slot.track().is_none())
+                && self.emissive_gain.track().is_none()
+                && self.fresnel.color.track().is_none()
+                && self.fresnel.opacity.track().is_none()
+                && self.fresnel.team_color.track().is_none()))
+    }
+
     pub(crate) fn evaluate(
         &self,
         material: &mut Wc3LayerMaterial,

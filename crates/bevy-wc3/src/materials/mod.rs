@@ -1,3 +1,4 @@
+pub(crate) mod runtime;
 use bevy::mesh::MeshVertexBufferLayoutRef;
 use bevy::pbr::{
     ExtendedMaterial, MaterialExtension, MaterialExtensionKey, MaterialExtensionPipeline,
@@ -20,7 +21,8 @@ pub type Wc3LayerMaterial = ExtendedMaterial<StandardMaterial, Wc3LayerState>;
 ///
 /// Model preparation and instance animation populate this state. Its fields are
 /// private; customize the standard-material portion of [`Wc3LayerMaterial`] for
-/// application-controlled PBR properties.
+/// application-controlled PBR properties. For independent pass customization,
+/// clone its material and insert [`crate::Wc3IndependentMaterial`] on the pass.
 #[derive(Asset, TypePath, AsBindGroup, Debug, Clone, Default)]
 #[bind_group_data(Wc3LayerKey)]
 pub struct Wc3LayerState {

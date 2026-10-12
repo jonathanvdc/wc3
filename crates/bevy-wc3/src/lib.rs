@@ -4,8 +4,8 @@
 //!
 //! Register [`Wc3BevyPlugin`] alongside Bevy's default plugins, then attach
 //! [`Wc3ModelInstance`] to each desired root. Instances are populated after their
-//! assets load. Geometry and bind poses are shared; animation and materials are
-//! private to each instance. [`Wc3Animation`] appears on the root after spawning;
+//! assets load. Geometry, bind poses, and constant material states are shared;
+//! animation clocks and changing material states remain private to each instance. [`Wc3Animation`] appears on the root after spawning;
 //! query it to operate only on ready instances. Replacing a populated root's
 //! model handle does not rebuild its hierarchy; spawn a new root for a new model.
 //!
@@ -95,6 +95,7 @@ pub use instance::spawn::{
 pub use instance::{Wc3ModelInstance, Wc3ModelOwner, Wc3OwnedModels};
 pub use light::{Wc3Light, Wc3LightSettings};
 pub use lod::{Wc3Lod, Wc3LodOverride, Wc3LodSettings, Wc3LodState};
+pub use materials::runtime::Wc3IndependentMaterial;
 pub use materials::textures::{Wc3TextureBindings, Wc3TextureSlot};
 pub use materials::{Wc3LayerMaterial, Wc3LayerState};
 pub use plugin::Wc3BevyPlugin;

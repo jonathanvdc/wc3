@@ -47,10 +47,12 @@ buffers into each instance. A handle can project a field or a nested record;
 editing it copies that definition independently. Core `wc3::model` records use
 lifetimes and explicit borrowed views, keeping runtime sharing at this boundary.
 
-Meshes and inverse bind poses are shared between instances. Spawned materials,
-texture bindings, animation clocks, rigs, and emitter simulation states belong to
-individual instances. Preparation stores material values as templates; spawning
-inserts private material assets. Material assets are needed only when spawning
+Meshes and inverse bind poses are shared between instances. Texture bindings, animation clocks, rigs, and emitter simulation states belong to
+individual instances. Preparation stores material values as templates. Constant
+layer and surface states share material handles across instances of a prepared
+model; independently animated states retain private handles. Changing bindings
+on a constant pass detaches its material before sampling, preserving other
+instances. The sharing cache retains only states used by live passes. Material assets are needed only when spawning
 instances, so preparation takes only mesh and inverse bind pose asset stores.
 
 `Wc3ModelOwner` retains lifetime ownership independently of `ChildOf` transform
