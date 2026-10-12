@@ -19,8 +19,8 @@ commands.spawn((Wc3ModelInstance::new(model), Transform::from_xyz(150.0, 0.0, 0.
 The request component is present immediately; `Wc3Animation` and the other
 instance components appear after preparation and spawning. Systems that control
 playback can query for `Wc3Animation` and run after `Wc3Systems::SpawnInstances`
-in `Update`. Loading failures are reported by Bevy; geometry preparation failures
-are logged and leave the root unpopulated.
+in `Update`. Decoding, dependency, and geometry compilation failures are reported
+by Bevy and leave the root unpopulated.
 
 Prepared assets are cached per model asset. Source asset changes invalidate the
 cache for future instances. Existing spawned instances retain their prepared
@@ -82,9 +82,11 @@ with loose-file overrides and the reader's memory and concurrency behavior.
 
 ## Choose textures
 
-A viewer or game can choose textures using the decoded model (`Wc3ModelAsset::source`)
-and its own state, including model type, team, and blight. Bind by replaceable ID
-or by exact bitmap/PRE2 slot. Slot bindings take precedence:
+A viewer or game can choose textures using the compiled asset's
+`compiled().texture_definitions()` and its own state, including model type,
+team, and blight. Full source inspection is available separately through
+`Wc3Model::decode`; loaded rendering assets do not retain decoded models. Bind
+by replaceable ID or by exact bitmap/PRE2 slot. Slot bindings take precedence:
 
 ```rust
 let mut textures = Wc3TextureBindings::default();
@@ -207,18 +209,20 @@ child models. Their playback and cleanup rules are described in
 
 ## Prepare custom model sources
 
-For custom model sources, prepare shared geometry and runtime definitions once
-and spawn them repeatedly. The decoded source can be dropped after preparation;
-spawning and pose baking use only the owned `PreparedModel`.
-Only spawning needs the material asset store:
+For custom sources, decode and compile while the input buffer is alive, then
+insert the compiled geometry into Bevy's asset stores. Compilation consumes the
+normalized model, moving owned buffers and owning borrowed runtime data only
+where needed. The bytes can be released before preparation or spawning:
 
 ```rust
-let prepared = prepare_model(
-    &mut meshes,
-    &mut inverse_bindposes,
-    &source,
+let decoded = DecodedModel::decode(&bytes)?;
+let compiled = compile_model(
+    decoded.model,
+    |path| Some(asset_server.load(path.to_owned())),
     |path| Some(asset_server.load(path.to_owned())),
 )?;
+drop(bytes);
+let prepared = compiled.prepare(&mut meshes, &mut inverse_bindposes);
 let root = spawn_prepared_model(
     &mut commands,
     &mut meshes,
@@ -227,10 +231,17 @@ let root = spawn_prepared_model(
 );
 ```
 
-Use `prepare_model_with_resources` to additionally resolve child-model paths, and
-`spawn_prepared_model_with_bindings` to supply per-instance texture choices. If
-you already loaded a `Wc3ModelAsset`, `prepare_model_asset` retains its resolved
-textures and child-model resources without resolving them again.
+Keep the prepared value to spawn repeatedly. Compilation needs no asset stores;
+preparation needs meshes and inverse bind poses; spawning also needs materials.
+`CompiledModel` retains CPU meshes, so drop it after insertion when they are no
+longer needed. Prepared runtime definitions remain shared and alive.
+
+If a tool needs to retain or edit source records, use the owned `Wc3Model` decoding
+APIs and `prepare_model` or `prepare_model_with_resources`. These borrow the source
+and preserve it for inspection. For an already loaded rendering asset,
+`prepare_model_asset` performs only Bevy asset insertion and is infallible;
+geometry validation has already happened during loading. Use
+`spawn_prepared_model_with_bindings` for per-instance texture choices.
 
 ## Bake a static pose
 

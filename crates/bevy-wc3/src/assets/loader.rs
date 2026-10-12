@@ -11,15 +11,20 @@ use std::path::Path;
 
 use wc3::model::materials::{Texture, TextureFlags};
 
-use crate::assets::model::{ModelError, Wc3Model};
+#[cfg(test)]
+use crate::assets::model::Wc3Model;
+use crate::assets::model::{DecodedModel, ModelError};
 use crate::assets::resources::Wc3ModelResources;
+use crate::preparation::{compile_resolved_model, CompiledModel};
 
-/// An MDX or MDL file with its resolved image and child model dependencies.
+/// An MDX or MDL model compiled into owned CPU geometry and runtime definitions.
+/// Resolved image and child-model handles preserve its dependencies. Encoded bytes
+/// and the decoded source container are released before this asset is returned.
 #[derive(Asset, TypePath)]
 pub struct Wc3ModelAsset {
-    pub(crate) source: Wc3Model,
-    pub(crate) textures: ResolvedModelTextures,
-    pub(crate) models: Wc3ModelResources,
+    /// Format version recorded before normalization.
+    pub source_version: u32,
+    pub(crate) compiled: CompiledModel,
 }
 
 #[derive(Clone, Default)]
@@ -96,19 +101,32 @@ async fn load_texture(
 impl Wc3ModelAsset {
     /// Resolved attachment and Classic particle model dependencies.
     pub fn model_resources(&self) -> &Wc3ModelResources {
-        &self.models
+        self.compiled.model_resources()
     }
 
-    /// The decoded and normalized source model.
-    pub fn source(&self) -> &Wc3Model {
-        &self.source
+    /// Owned CPU geometry and runtime definitions, without decoded source buffers.
+    pub fn compiled(&self) -> &CompiledModel {
+        &self.compiled
+    }
+
+    #[cfg(test)]
+    pub(crate) fn from_source(
+        source: &Wc3Model,
+        textures: ResolvedModelTextures,
+        models: Wc3ModelResources,
+    ) -> Result<Self, ModelError> {
+        Ok(Self {
+            source_version: source.source_version,
+            compiled: compile_resolved_model(source.model.as_borrowed(), textures, models)?,
+        })
     }
 }
 
 /// Bevy loader for `.mdx` and `.mdl` model assets and their dependencies.
 ///
 /// Registered by [`crate::Wc3BevyPlugin`]. Models are decoded and strictly
-/// normalized with [`Wc3Model::decode`]; textures and child models retain the
+/// normalized with [`DecodedModel::decode`] and compiled while buffers can borrow
+/// the input. Textures and child models retain the
 /// source asset's named source and resolve beside the model before its asset root.
 #[derive(Default, TypePath)]
 pub struct Wc3ModelLoader;
@@ -129,7 +147,7 @@ impl AssetLoader for Wc3ModelLoader {
             .read_to_end(&mut bytes)
             .await
             .map_err(|error| ModelError(error.to_string()))?;
-        let source = Wc3Model::decode_owned(bytes)?;
+        let source = DecodedModel::decode(&bytes)?;
         let model_path = context.path().clone_owned();
         let mut textures = ResolvedModelTextures::default();
         for texture in source.model.textures() {
@@ -157,9 +175,8 @@ impl AssetLoader for Wc3ModelLoader {
         }
         let models = Wc3ModelResources::from_handles(attachments, particles);
         Ok(Wc3ModelAsset {
-            source,
-            textures,
-            models,
+            source_version: source.source_version,
+            compiled: compile_resolved_model(source.model, textures, models)?,
         })
     }
 

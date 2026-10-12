@@ -18,7 +18,41 @@ impl Display for ModelError {
 
 impl Error for ModelError {}
 
-/// A version-independent source model. Conversion is strict: unsupported data
+/// A normalized model whose MDX buffers may borrow the encoded input.
+/// Consume it with `compile_model` before releasing that input.
+pub struct DecodedModel<'data> {
+    /// Format version recorded before strict normalization.
+    pub source_version: u32,
+    /// Normalized model, borrowing compatible MDX arrays from the input.
+    pub model: Model<'data, V1800>,
+}
+
+impl<'data> DecodedModel<'data> {
+    /// Detect MDX by its header, otherwise decode UTF-8 MDL. Strict conversion
+    /// preserves compatible borrowed arrays and moves owned conversion results.
+    pub fn decode(bytes: &'data [u8]) -> Result<Self, ModelError> {
+        let source = if bytes.starts_with(b"MDLX") {
+            DynamicModel::<NoExtensions>::decode_mdx(bytes, 800)
+                .map_err(|error| ModelError(error.to_string()))?
+        } else {
+            let text = from_utf8(bytes)
+                .map_err(|error| ModelError(format!("MDL source is not UTF-8: {error}")))?;
+            DynamicModel::<NoExtensions>::decode_mdl(text)
+                .map_err(|error| ModelError(error.to_string()))?
+        };
+        let source_version = source.version();
+        let model = source
+            .into_convert::<V1800>(&ConversionOptions::strict())
+            .map_err(|error| ModelError(error.to_string()))?
+            .model;
+        Ok(Self {
+            source_version,
+            model,
+        })
+    }
+}
+
+/// An owned decoded model for source inspection and editing. Conversion is strict: unsupported data
 /// is reported rather than silently discarded.
 pub struct Wc3Model {
     /// Format version recorded before normalization.

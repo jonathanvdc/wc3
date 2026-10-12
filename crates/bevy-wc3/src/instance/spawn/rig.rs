@@ -112,8 +112,8 @@ pub(super) fn spawn_rig(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::preparation::compile_model;
     use crate::preparation::rig::{joint_ids, node_order};
-    use crate::preparation::shared::Shared;
     use bevy::ecs::world::{CommandQueue, World};
     use wc3::model::mdl::Read as _;
     use wc3::model::{Model, V1800};
@@ -129,14 +129,15 @@ mod tests {
         let inverse_bindposes = bindposes.add(vec![Mat4::IDENTITY]);
         let mut queue = CommandQueue::default();
         let mut commands = Commands::new(&mut queue, &world);
-        let model = Shared::new(model);
-        let mut nodes = model.runtime_nodes();
+        let pivots = model.pivot_points();
+        let joint_ids = joint_ids(&model);
+        let mut nodes = compile_model(model, |_| None, |_| None).unwrap().nodes;
         nodes.reverse();
         let order = node_order(&nodes);
         let rig = spawn_rig(
             &mut commands,
-            &model.pivot_points(),
-            &joint_ids(&model),
+            &pivots,
+            &joint_ids,
             &nodes,
             &order,
             root,

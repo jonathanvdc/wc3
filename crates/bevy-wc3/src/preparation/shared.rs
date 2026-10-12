@@ -115,9 +115,7 @@ impl<T: Debug> Debug for Shared<T> {
 }
 
 use wc3::model::animation::Track;
-use wc3::model::chunks::{CollectionChunk, ModelChunk};
 use wc3::model::scene::{Node, NodeFlagInterpretation, NodeFlags};
-use wc3::model::{Model, V1800};
 /// One node's metadata and shared animation definitions.
 #[derive(Clone)]
 pub(crate) struct RuntimeNode {
@@ -129,7 +127,7 @@ pub(crate) struct RuntimeNode {
     pub(crate) scaling: Shared<Option<Track<'static, [f32; 3]>>>,
 }
 impl RuntimeNode {
-    fn new<F: NodeFlagInterpretation + Send + Sync + 'static>(
+    pub(super) fn new<F: NodeFlagInterpretation + Send + Sync + 'static>(
         node: Shared<Node<'static, F>>,
     ) -> Self {
         Self {
@@ -142,54 +140,11 @@ impl RuntimeNode {
         }
     }
 }
-impl Shared<Model<'static, V1800>> {
-    pub(crate) fn owned_records<C: CollectionChunk + 'static>(&self) -> Vec<Shared<C::Item>>
-    where
-        C::Item: Clone + Send + Sync + 'static,
-        for<'view> &'view C: TryFrom<&'view ModelChunk<'static, V1800>>,
-    {
-        let mut records = Vec::new();
-        for chunk in &self.chunks {
-            let Ok(chunk) = <&C>::try_from(chunk) else {
-                continue;
-            };
-            records.extend(chunk.records().iter().cloned().map(Shared::new));
-        }
-        records
-    }
-    pub(crate) fn runtime_nodes(&self) -> Vec<RuntimeNode> {
-        let mut nodes = Vec::new();
-        for chunk in &self.chunks {
-            macro_rules! records {
-                ($variant:ident,$chunk:expr,$($field:ident)?) => {
-                    for record in &$chunk.records {
-                        nodes.push(RuntimeNode::new(Shared::new(record$(.$field)?.clone())));
-                    }
-                };
-            }
-            match chunk {
-                ModelChunk::Helpers(c) => records!(Helpers, c,),
-                ModelChunk::Bones(c) => records!(Bones, c, node),
-                ModelChunk::Attachments(c) => records!(Attachments, c, node),
-                ModelChunk::Lights(c) => records!(Lights, c, node),
-                ModelChunk::EventObjects(c) => records!(EventObjects, c, node),
-                ModelChunk::CollisionShapes(c) => records!(CollisionShapes, c, node),
-                ModelChunk::RibbonEmitters(c) => records!(RibbonEmitters, c, node),
-                ModelChunk::ParticleEmitters(c) => records!(ParticleEmitters, c, node),
-                ModelChunk::ParticleEmitters2(c) => records!(ParticleEmitters2, c, node),
-                ModelChunk::PopcornEmitters(c) => records!(PopcornEmitters, c, node),
-                _ => {}
-            }
-        }
-        nodes
-    }
-}
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use wc3::model::animation::ValueKeyframe;
-    use wc3::model::chunks::HelpersChunk;
 
     #[test]
     fn cloned_runtime_nodes_share_prepared_key_buffers() {
@@ -210,10 +165,8 @@ mod tests {
             )
             .unwrap(),
         );
-        let mut model = Model::<V1800>::new();
-        model.replace_records::<HelpersChunk>(vec![node]);
-        let source = Shared::new(model);
-        let first = source.runtime_nodes();
+        let source = Shared::new(node);
+        let first = vec![RuntimeNode::new(source.clone())];
         let second = first.clone();
         let pointer = first[0]
             .translation

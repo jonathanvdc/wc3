@@ -162,12 +162,12 @@ pub(crate) struct LodGroup {
 
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct LodBounds {
-    center: Vec3,
-    radius: f32,
+    pub(crate) center: Vec3,
+    pub(crate) radius: f32,
 }
 
 impl LodBounds {
-    pub(crate) fn from_model(model: &Model<'static, V1800>) -> Self {
+    pub(crate) fn from_model(model: &Model<'_, V1800>) -> Self {
         let mut min = Vec3::splat(f32::INFINITY);
         let mut max = Vec3::splat(f32::NEG_INFINITY);
         let mut include = |point: Vec3| {

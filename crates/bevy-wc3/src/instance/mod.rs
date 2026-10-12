@@ -97,14 +97,7 @@ pub(crate) fn spawn_loaded_instances(
         let Some(asset) = sources.get(id) else {
             continue;
         };
-        let prepared = match cache.get_or_prepare(id, asset, &mut meshes, &mut inverse_bindposes) {
-            Ok(Some(prepared)) => prepared,
-            Ok(None) => continue,
-            Err(error) => {
-                warn!("Could not prepare WC3 model {:?}: {error}", instance.0);
-                continue;
-            }
-        };
+        let prepared = cache.get_or_prepare(id, asset, &mut meshes, &mut inverse_bindposes);
         spawn_prepared_into(
             &mut commands,
             &mut meshes,

@@ -84,7 +84,8 @@ mod schedule;
 pub use animation::pose::{Wc3DefaultNodeCamera, Wc3NodeCamera};
 pub use animation::Wc3Animation;
 pub use assets::{
-    BlpImageLoader, ModelError, Wc3Model, Wc3ModelAsset, Wc3ModelLoader, Wc3ModelResources,
+    BlpImageLoader, DecodedModel, ModelError, Wc3Model, Wc3ModelAsset, Wc3ModelLoader,
+    Wc3ModelResources,
 };
 pub use attachment::{Wc3AttachmentPoint, Wc3Attachments};
 pub use camera::{Wc3CameraBinding, Wc3CameraSample, Wc3ModelCameras};
@@ -100,9 +101,10 @@ pub use materials::textures::{Wc3TextureBindings, Wc3TextureSlot};
 pub use materials::{Wc3LayerMaterial, Wc3LayerState};
 pub use plugin::Wc3BevyPlugin;
 pub use preparation::{
-    prepare_model, prepare_model_asset, prepare_model_with_resources, BakedModelPart,
-    BakedModelPose, PreparedModel, PreparedPart, Wc3MaterialSnapshot, Wc3PartId, Wc3PoseBaker,
-    Wc3PoseOptions, Wc3TextureColorSpace, Wc3TextureReference, Wc3TextureRole,
+    compile_model, prepare_model, prepare_model_asset, prepare_model_with_resources,
+    BakedModelPart, BakedModelPose, CompiledModel, PreparedModel, PreparedPart,
+    Wc3MaterialSnapshot, Wc3PartId, Wc3PoseBaker, Wc3PoseOptions, Wc3TextureColorSpace,
+    Wc3TextureReference, Wc3TextureRole,
 };
 pub use schedule::Wc3Systems;
 

@@ -43,11 +43,7 @@ fn setup() -> (App, Entity, Entity) {
     let model = app
         .world_mut()
         .resource_mut::<Assets<Wc3ModelAsset>>()
-        .add(Wc3ModelAsset {
-            source,
-            textures: default(),
-            models: default(),
-        });
+        .add(Wc3ModelAsset::from_source(&source, default(), default()).unwrap());
     let root = app
         .world_mut()
         .spawn((

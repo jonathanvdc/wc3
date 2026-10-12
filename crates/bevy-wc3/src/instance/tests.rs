@@ -17,11 +17,7 @@ fn repeated_instances_prepare_one_model() {
     let handle = app
         .world_mut()
         .resource_mut::<Assets<Wc3ModelAsset>>()
-        .add(Wc3ModelAsset {
-            source,
-            textures,
-            models: default(),
-        });
+        .add(Wc3ModelAsset::from_source(&source, textures, default()).unwrap());
     let first = app
         .world_mut()
         .spawn(Wc3ModelInstance::new(handle.clone()))
@@ -86,20 +82,20 @@ fn changing_bindings_updates_only_the_target_instance() {
         .world_mut()
         .resource_mut::<Assets<Image>>()
         .add(Image::default());
-    let model = app
-        .world_mut()
-        .resource_mut::<Assets<Wc3ModelAsset>>()
-        .add(Wc3ModelAsset {
-            source,
-            models: default(),
-            textures: ResolvedModelTextures {
+    let model = app.world_mut().resource_mut::<Assets<Wc3ModelAsset>>().add(
+        Wc3ModelAsset::from_source(
+            &source,
+            ResolvedModelTextures {
                 bitmaps: vec![ResolvedTexture {
                     replaceable_id: 31,
                     ..default()
                 }],
                 ..default()
             },
-        });
+            default(),
+        )
+        .unwrap(),
+    );
     let first = app
         .world_mut()
         .spawn(Wc3ModelInstance::new(model.clone()))

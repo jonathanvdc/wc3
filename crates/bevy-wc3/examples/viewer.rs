@@ -160,18 +160,8 @@ fn frame_model(
     let Some(asset) = models.get(&source.handle) else {
         return;
     };
-    let model = asset.source();
-    let info = model.model.model_info();
-    let center = info
-        .as_ref()
-        .map(|info| {
-            (Vec3::from_array(info.minimum_extent) + Vec3::from_array(info.maximum_extent)) * 0.5
-        })
-        .unwrap_or(Vec3::ZERO);
-    let radius = info
-        .map(|info| info.bounds_radius)
-        .unwrap_or(100.0)
-        .max(10.0);
+    let (center, radius) = asset.compiled().bounds();
+    let radius = radius.max(10.0);
     let offset = Vec3::new(0.7, -1.5, 0.55).normalize();
     let distance = radius * 4.0;
     commands.spawn((
@@ -189,7 +179,7 @@ fn frame_model(
     ));
     info!(
         "loaded {:?}, source version {}; left drag rotates, right drag pans, scroll zooms, Space changes sequence",
-        source.path, model.source_version
+        source.path, asset.source_version
     );
 }
 

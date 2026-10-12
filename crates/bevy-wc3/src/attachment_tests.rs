@@ -36,11 +36,7 @@ fn app() -> App {
 }
 
 fn asset(source: Wc3Model, models: Wc3ModelResources) -> Wc3ModelAsset {
-    Wc3ModelAsset {
-        source,
-        models,
-        textures: ResolvedModelTextures::default(),
-    }
+    Wc3ModelAsset::from_source(&source, ResolvedModelTextures::default(), models).unwrap()
 }
 
 fn parent_source() -> Wc3Model {
@@ -147,10 +143,9 @@ fn paths_and_consumer_models_follow_points_visibility_and_independent_animation(
         .resource::<Assets<Wc3ModelAsset>>()
         .get(&child)
         .unwrap()
-        .source()
-        .model
+        .compiled()
         .sequences()
-        .next()
+        .first()
         .unwrap()
         .flags
         .non_looping());

@@ -7,7 +7,6 @@ use std::borrow::Cow;
 use std::fs;
 use std::path::Path;
 use std::time::{Duration, Instant};
-use wc3::model::mdl::Write as _;
 use wc3::model::mdx::Write as _;
 
 fn wait_for(app: &mut App, mut ready: impl FnMut(&App) -> bool) {
@@ -69,21 +68,14 @@ fn asset_server_loads_mdx_and_mdl_files() {
         })
     });
     let assets = app.world().resource::<Assets<Wc3ModelAsset>>();
+    let mdx = assets.get(&handles[0]).unwrap();
+    let mdl = assets.get(&handles[1]).unwrap();
+    assert_eq!(mdx.source_version, mdl.source_version);
+    assert_eq!(mdx.compiled().sequences(), mdl.compiled().sequences());
+    assert_eq!(mdx.compiled().bounds(), mdl.compiled().bounds());
     assert_eq!(
-        assets
-            .get(&handles[0])
-            .unwrap()
-            .source()
-            .model
-            .encode_mdl()
-            .unwrap(),
-        assets
-            .get(&handles[1])
-            .unwrap()
-            .source()
-            .model
-            .encode_mdl()
-            .unwrap()
+        mdx.compiled().texture_definitions(),
+        mdl.compiled().texture_definitions()
     );
     fs::remove_dir_all(directory).unwrap();
 }

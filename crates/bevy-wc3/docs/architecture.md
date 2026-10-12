@@ -18,37 +18,45 @@ preparing reusable render assets, and creating an entity hierarchy for each
 instance. The corresponding modules keep file handling separate from asset
 construction and runtime ownership:
 
-- `assets/` adapts `wc3::model` decoding and strict version conversion to Bevy,
-  loads MDX/MDL and BLP assets, resolves dependency paths, and preserves child
-  model resource slots. The format definitions and codecs remain in `wc3`.
-- `preparation/` builds shared meshes, UV variants, joint mappings, inverse bind
-  poses, parent-first node traversal, and material templates. `PreparedModel` also
-  owns animation and scene definitions, texture provenance, and resolved
-  image/child-model dependencies without retaining the decoded container.
-  Preparation does not spawn entities. `preparation/pose.rs` evaluates explicit
-  sequence/global clocks, skins prepared meshes on the CPU, and returns geometry
-  and material snapshots with stable source indices and original texture uses.
-- `instance/` waits for assets, caches prepared models, checks recursive child
-  references, and manages ownership. The cache owns preparation and failure
-  suppression, and source asset events invalidate successful and failed entries
-  before pending instances spawn. Existing spawned instances retain their assets;
-  invalidation applies to future instances. `instance/spawn/` creates the root state,
-  rig, geosets grouped by LOD, and feature entities from a prepared model.
+- `assets/` decodes MDX/MDL with strict version conversion, resolves images and
+  child models, and compiles the model before returning `Wc3ModelAsset`. The asset
+  retains owned CPU meshes, runtime definitions, and dependency handles rather
+  than a decoded source container. Format definitions and codecs remain in `wc3`.
+- `preparation/` separates CPU compilation from Bevy asset insertion.
+  `compile_model` consumes a normalized `Model` and produces `CompiledModel`
+  without an ECS world or asset stores. `CompiledModel::prepare` inserts meshes
+  and inverse bind poses into Bevy and returns `PreparedModel`. Both forms share
+  owned runtime definitions and preserve texture provenance. Offline pose baking
+  evaluates the prepared data using explicit sequence and global clocks.
+- `instance/` waits for compiled assets, caches their Bevy preparation, checks
+  recursive child references, and manages ownership. Source asset events
+  invalidate cached entries for future instances. Existing instances retain
+  their runtime definitions and render assets. Compilation failures are reported
+  by the loader, before an asset reaches the preparation cache.
 
-MDX decoding borrows encoded arrays while strict version conversion consumes
-and moves compatible data. The loader then creates an independently owned model
-for Bevy's asset lifetime. MDL input already builds owned encoded arrays. Both
-formats use the same model API, with value iteration that does not create decoded
-slice caches.
+`DecodedModel::decode` borrows compatible MDX arrays from the encoded input.
+Strict version conversion moves unchanged chunks and allocates only where the
+conversion requires a new representation. Compilation reads borrowed geometry
+while constructing meshes, then consumes the decoded records. Retained animation
+and feature records move already-owned buffers and copy borrowed buffers into
+owned storage. MDL decoding already owns its buffers, so consuming compilation
+moves those buffers directly. Geometry records and unrelated chunks are discarded
+without converting their source arrays to owned data.
 
-`PreparedModel` is the ownership boundary between decoding and runtime use.
-Preparation copies the required node tracks, animation metadata, event and emitter
-definitions, cameras, lights, and material definitions into shared owned values.
-Projections refer only to those owned definitions, never to the decoded container.
-Spawning and offline pose baking use the prepared data, so callers can release
-`Wc3Model` immediately after preparation. Geometry arrays and unrelated source
-chunks are not retained. Instances share prepared definition buffers rather than
-copying them per instance; editing a projected value copies its definition.
+`CompiledModel` is the ownership boundary: it can outlive the input bytes and the
+decoded container. Nodes belonging to scene features project their tracks from
+the same owned records used by attachments, lights, events, or emitter simulation.
+Preparation shares these definition buffers rather than copying them again.
+Compiled meshes are shared between passes with identical UV variants; insertion
+copies each unique CPU mesh into Bevy once per prepared model. The compiled asset
+keeps its CPU meshes until it is unloaded. Spawning and offline baking use only
+`PreparedModel`; no decoded source is retained at runtime.
+
+Tools that need full source records can explicitly use `Wc3Model::decode` or
+`decode_mdl`. Those owned inspection APIs remain separate from the renderer's
+borrowed loading path. `prepare_model` and `prepare_model_with_resources` borrow
+an inspected source, while `compile_model` consumes a model when retaining it is
+unnecessary.
 
 The prepared container is independent of the source container's layout. Its
 current animation, material, and effect definitions still express WC3 semantics
@@ -57,7 +65,7 @@ appropriate runtime behavior for features with different semantics.
 
 After asset-backed spawning, the root's `Wc3ModelInstance` loading request is
 removed and replaced by `ModelSource`, an asset ID that preserves provenance and
-recursive child-model detection without retaining the decoded asset. Prepared
+recursive child-model detection without retaining the compiled asset. Prepared
 meshes, images, bind poses, and child-model dependencies retain their own handles.
 Applications that want to reuse cached preparation should keep a source asset
 handle themselves; unloading a source removes its cache entry while existing

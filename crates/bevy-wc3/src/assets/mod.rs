@@ -7,5 +7,5 @@ pub(crate) mod resources;
 
 pub use blp::BlpImageLoader;
 pub use loader::{Wc3ModelAsset, Wc3ModelLoader};
-pub use model::{ModelError, Wc3Model};
+pub use model::{DecodedModel, ModelError, Wc3Model};
 pub use resources::Wc3ModelResources;

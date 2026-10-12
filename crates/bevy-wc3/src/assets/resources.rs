@@ -16,7 +16,7 @@ impl Wc3ModelResources {
     /// Resolve literal paths using a consumer's asset source. The callback owns
     /// path normalization and any MDL-to-MDX fallback policy.
     pub fn resolve(
-        model: &Model<'static, V1800>,
+        model: &Model<'_, V1800>,
         mut resolve: impl FnMut(&str) -> Option<Handle<Wc3ModelAsset>>,
     ) -> Self {
         let attachments = model
@@ -95,12 +95,9 @@ mod tests {
         )
         .unwrap();
         let mut assets = Assets::<Wc3ModelAsset>::default();
-        let handle = assets.add(Wc3ModelAsset {
-            source: Wc3Model::decode_mdl("Version { FormatVersion 800, } Model \"Child\" {}")
-                .unwrap(),
-            textures: default(),
-            models: default(),
-        });
+        let child =
+            Wc3Model::decode_mdl("Version { FormatVersion 800, } Model \"Child\" {}").unwrap();
+        let handle = assets.add(Wc3ModelAsset::from_source(&child, default(), default()).unwrap());
         let mut requested = Vec::new();
         let resources = Wc3ModelResources::resolve(&model, |path| {
             requested.push(path.to_owned());

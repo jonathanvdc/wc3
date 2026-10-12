@@ -119,13 +119,11 @@ fn file_loader_resolves_tif_references_and_preserves_location_precedence() {
     }
     let models = app.world().resource::<Assets<Wc3ModelAsset>>();
     let model = models.get(&handle).unwrap();
-    for (bitmap, expected) in
-        model
-            .textures
-            .bitmaps
-            .iter()
-            .zip(["units/body.tga", "root.tga", "units/exact.tga"])
-    {
+    for (bitmap, expected) in model.compiled.textures.bitmaps.iter().zip([
+        "units/body.tga",
+        "root.tga",
+        "units/exact.tga",
+    ]) {
         let image = bitmap.default.as_ref().unwrap();
         assert_eq!(image.path().unwrap().path(), Path::new(expected));
         let images = app.world().resource::<Assets<Image>>();

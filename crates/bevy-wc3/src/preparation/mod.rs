@@ -6,20 +6,15 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use wc3::model::animation::{Animatable, GeosetAnimation};
 use wc3::model::animation::{Sequence, TextureAnimation};
-use wc3::model::chunks::{
-    AttachmentsChunk, CamerasChunk, LightsChunk, ParticleEmitters2Chunk, ParticleEmittersChunk,
-    RibbonEmittersChunk,
-};
-use wc3::model::chunks::{
-    EventObjectsChunk, GeosetAnimationsChunk, MaterialsChunk, TextureAnimationsChunk,
-};
 use wc3::model::emitters::{ParticleEmitter, ParticleEmitter2, RibbonEmitter};
 use wc3::model::materials::ShaderType;
 use wc3::model::materials::{Material, Texture};
 use wc3::model::scene::EventObject;
 use wc3::model::scene::{Attachment, Camera, Light};
-use wc3::model::V1800;
+use wc3::model::{Model, V1800};
 
+mod compilation;
+use compilation::RuntimeRecords;
 mod materials;
 pub mod shared;
 use shared::{RuntimeNode, Shared};
@@ -43,6 +38,7 @@ use crate::lod::LodBounds;
 use crate::materials::animation::AnimatedSurface;
 use crate::materials::Wc3LayerMaterial;
 
+#[derive(Clone)]
 pub(crate) struct PreparedLayer {
     pub(crate) template_id: MaterialTemplateId,
     pub(crate) alpha: Shared<Animatable<'static, f32>>,
@@ -51,20 +47,22 @@ pub(crate) struct PreparedLayer {
     pub(crate) surface: AnimatedSurface,
 }
 
-pub(crate) struct PreparedGeoset {
-    pub(crate) meshes: Vec<Handle<Mesh>>,
+#[derive(Clone)]
+pub(crate) struct PreparedGeoset<M> {
+    pub(crate) meshes: Vec<M>,
     pub(crate) material_id: usize,
     pub(crate) geoset_id: usize,
     pub(crate) lod: Option<u32>,
 }
 
 /// An owned runtime definition and reusable Bevy assets for a model.
-/// Preparation copies the runtime definitions once; instances share those definitions.
+/// Compilation owns the required runtime definitions; instances share them.
 /// The decoded source container can be dropped immediately after preparation.
 /// Meshes, texture provenance, animation, and scene features remain available.
 /// Keep this value alive while spawning instances. Reprepare after changing
 /// the source model or its texture resolution.
-pub struct PreparedModel {
+#[derive(Clone)]
+pub struct PreparedModel<M = Handle<Mesh>, B = Handle<SkinnedMeshInverseBindposes>> {
     pub(crate) nodes: Vec<RuntimeNode>,
     pub(crate) node_order: Vec<usize>,
     pub(crate) sequences: Vec<Sequence>,
@@ -81,15 +79,42 @@ pub struct PreparedModel {
     pub(crate) texture_animations: Vec<Shared<TextureAnimation<'static>>>,
     pub(crate) texture_definitions: Vec<Texture>,
     pub(crate) events: Arc<[Shared<EventObject<'static>>]>,
-    pub(crate) geosets: Vec<PreparedGeoset>,
+    pub(crate) geosets: Vec<PreparedGeoset<M>>,
     pub(crate) lod_levels: Vec<u32>,
     pub(crate) lod_bounds: LodBounds,
     pub(crate) geoset_animations: Vec<Option<Shared<GeosetAnimation<'static>>>>,
     pub(crate) layers: Vec<Vec<PreparedLayer>>,
     pub(crate) textures: ResolvedModelTextures,
     pub(crate) models: Wc3ModelResources,
-    pub(crate) inverse_bindposes: Handle<SkinnedMeshInverseBindposes>,
+    pub(crate) inverse_bindposes: B,
     pub(crate) joint_bindings: Vec<(u32, Mat4)>,
+}
+
+/// Owned CPU meshes and runtime definitions, ready for insertion into Bevy assets.
+/// No encoded input or decoded model is retained.
+pub type CompiledModel = PreparedModel<Arc<Mesh>, Arc<[Mat4]>>;
+
+impl<M, B> PreparedModel<M, B> {
+    /// Source animation metadata retained for runtime playback and inspection.
+    pub fn sequences(&self) -> &[Sequence] {
+        &self.sequences
+    }
+    /// Model-space center and conservative bounding radius.
+    pub fn bounds(&self) -> (Vec3, f32) {
+        (self.lod_bounds.center, self.lod_bounds.radius)
+    }
+    /// Authored texture slots, including paths, flags, and replacement IDs.
+    pub fn texture_definitions(&self) -> &[Texture] {
+        &self.texture_definitions
+    }
+    /// Resolved child-model slots.
+    pub fn model_resources(&self) -> &Wc3ModelResources {
+        &self.models
+    }
+    /// Sorted authored geometry levels.
+    pub fn lod_levels(&self) -> &[u32] {
+        &self.lod_levels
+    }
 }
 
 impl PreparedModel {
@@ -111,36 +136,17 @@ impl PreparedModel {
                 })
         })
     }
-
-    /// Sorted authored levels with drawable geometry; larger numbers are coarser.
-    /// Models containing only common geometry expose level zero.
-    pub fn lod_levels(&self) -> &[u32] {
-        &self.lod_levels
-    }
-
-    /// Resolved attachment and Classic particle model references.
-    pub fn model_resources(&self) -> &Wc3ModelResources {
-        &self.models
-    }
 }
 
-/// Prepare an already loaded model asset, retaining its resolved textures and
-/// child-model resources. No asset loading or entity spawning occurs here.
-///
-/// # Errors
-/// Returns [`ModelError`] for geometry preparation failures, as in [`prepare_model`].
+/// Insert an already compiled model asset into Bevy's mesh and bind-pose stores.
+/// Dependencies and runtime definitions remain shared with the compiled asset.
+/// No decoding, geometry compilation, asset loading, or spawning occurs here.
 pub fn prepare_model_asset(
     meshes: &mut Assets<Mesh>,
     inverse_bindposes: &mut Assets<SkinnedMeshInverseBindposes>,
     asset: &Wc3ModelAsset,
-) -> Result<PreparedModel, ModelError> {
-    prepare_resolved_model(
-        meshes,
-        inverse_bindposes,
-        &asset.source,
-        asset.textures.clone(),
-        asset.models.clone(),
-    )
+) -> PreparedModel {
+    asset.compiled.prepare(meshes, inverse_bindposes)
 }
 
 /// Build shareable meshes and bind poses once. Each instance receives private
@@ -178,18 +184,42 @@ pub fn prepare_model_with_resources(
     meshes: &mut Assets<Mesh>,
     inverse_bindposes: &mut Assets<SkinnedMeshInverseBindposes>,
     source: &Wc3Model,
-    mut resolve_texture: impl FnMut(&str) -> Option<Handle<Image>>,
+    resolve_texture: impl FnMut(&str) -> Option<Handle<Image>>,
     resolve_model: impl FnMut(&str) -> Option<Handle<Wc3ModelAsset>>,
 ) -> Result<PreparedModel, ModelError> {
-    let models = Wc3ModelResources::resolve(&source.model, resolve_model);
+    let compiled = compile_model(source.model.as_borrowed(), resolve_texture, resolve_model)?;
+    Ok(compiled.prepare(meshes, inverse_bindposes))
+}
+
+/// Consume a decoded model, resolving dependencies and compiling owned runtime data.
+/// Geometry stays borrowed while meshes are built. Runtime records move owned
+/// buffers and copy only borrowed buffers. No Bevy asset stores are needed.
+///
+/// ```
+/// use bevy_wc3::{compile_model, DecodedModel};
+/// let bytes = b"Version { FormatVersion 800, } Model \"Empty\" {}".to_vec();
+/// let decoded = DecodedModel::decode(&bytes)?;
+/// let compiled = compile_model(decoded.model, |_| None, |_| None)?;
+/// drop(bytes);
+/// assert_eq!(compiled.lod_levels(), &[0]);
+/// # Ok::<(), bevy_wc3::ModelError>(())
+/// ```
+///
+/// # Errors
+/// Returns an error for geometry that cannot be compiled, including unsupported
+/// influence counts. No mesh or bind-pose assets are inserted on failure.
+pub fn compile_model(
+    model: Model<'_, V1800>,
+    mut resolve_texture: impl FnMut(&str) -> Option<Handle<Image>>,
+    resolve_model: impl FnMut(&str) -> Option<Handle<Wc3ModelAsset>>,
+) -> Result<CompiledModel, ModelError> {
+    let models = Wc3ModelResources::resolve(&model, resolve_model);
     let textures = ResolvedModelTextures {
-        bitmaps: source
-            .model
+        bitmaps: model
             .textures()
             .map(|bitmap| resolve_texture_binding(bitmap, &mut resolve_texture))
             .collect(),
-        particles: source
-            .model
+        particles: model
             .particle_emitters2()
             .map(|emitter| ResolvedTexture {
                 replaceable_id: emitter.replaceable_id,
@@ -198,29 +228,26 @@ pub fn prepare_model_with_resources(
             })
             .collect(),
     };
-    prepare_resolved_model(meshes, inverse_bindposes, source, textures, models)
+    compile_resolved_model(model, textures, models)
 }
 
-pub(crate) fn prepare_resolved_model(
-    meshes: &mut Assets<Mesh>,
-    inverse_bindposes: &mut Assets<SkinnedMeshInverseBindposes>,
-    source: &Wc3Model,
+pub(crate) fn compile_resolved_model(
+    model: Model<'_, V1800>,
     textures: ResolvedModelTextures,
     models: Wc3ModelResources,
-) -> Result<PreparedModel, ModelError> {
-    let model = &source.model;
+) -> Result<CompiledModel, ModelError> {
     let default_bitmaps: Vec<_> = textures
         .bitmaps
         .iter()
         .map(|binding| binding.default.clone())
         .collect();
-    let joint_ids = joint_ids(model);
+    let joint_ids = joint_ids(&model);
     let joint_index: HashMap<_, _> = joint_ids
         .iter()
         .enumerate()
         .map(|(index, id)| (*id, index as u16))
         .collect();
-    let material_records = model.owned_records::<MaterialsChunk<V1800>>();
+    let material_records: Vec<_> = model.materials().collect();
     let mut geosets = Vec::new();
     for (geoset_id, geoset) in model.geosets().enumerate() {
         if geoset.vertices().is_empty() || geoset.face_indices().is_empty() {
@@ -230,7 +257,7 @@ pub(crate) fn prepare_resolved_model(
             continue;
         }
         let material = &material_records[geoset.material_id as usize];
-        let mut variants: HashMap<u32, Handle<Mesh>> = HashMap::new();
+        let mut variants: HashMap<u32, Arc<Mesh>> = HashMap::new();
         let mut layer_meshes = Vec::new();
         for layer in &material.layers {
             let coordinate = canonical_uv_coordinate(geoset, layer.coordinate_id);
@@ -240,7 +267,7 @@ pub(crate) fn prepare_resolved_model(
                 let mesh =
                     build_mesh_with_uv(geoset, &joint_index, !joint_ids.is_empty(), coordinate)
                         .map_err(|error| ModelError(format!("geoset {geoset_id}: {error}")))?;
-                let handle = meshes.add(mesh);
+                let handle = Arc::new(mesh);
                 variants.insert(coordinate, handle.clone());
                 handle
             };
@@ -259,14 +286,24 @@ pub(crate) fn prepare_resolved_model(
                 .filter(|&lod| lod != u32::MAX),
         });
     }
-    let mut geoset_animations = vec![None; model.geosets().count()];
-    for animation in model.owned_records::<GeosetAnimationsChunk>() {
+    let geoset_count = model.geosets().count();
+    let binds = inverse_bind_matrices(&model, &joint_ids);
+    let lod_bounds = LodBounds::from_model(&model);
+    let sequences = model.sequences().cloned().collect();
+    let global_sequences = model.global_sequences();
+    let blend_time = model.model_info().map_or(0, |info| info.blend_time);
+    let pivots = model.pivot_points();
+    let texture_definitions = model.textures().cloned().collect();
+    let records = RuntimeRecords::consume(model);
+    let nodes = records.nodes;
+    let material_records = records.materials;
+    let texture_animations = records.texture_animations;
+    let mut geoset_animations = vec![None; geoset_count];
+    for animation in records.geoset_animations {
         if let Some(slot) = geoset_animations.get_mut(animation.geoset_id as usize) {
             *slot = Some(animation);
         }
     }
-    let binds = inverse_bind_matrices(model, &joint_ids);
-    let texture_animations = model.owned_records::<TextureAnimationsChunk>();
     let layers = material_records
         .iter()
         .map(|material| {
@@ -312,36 +349,93 @@ pub(crate) fn prepare_resolved_model(
     if lod_levels.is_empty() {
         lod_levels.push(0);
     }
-    let nodes = model.runtime_nodes();
     let node_order = node_order(&nodes);
     Ok(PreparedModel {
         lod_levels,
-        lod_bounds: LodBounds::from_model(model),
-        events: model.owned_records::<EventObjectsChunk>().into(),
+        lod_bounds,
+        events: records.events.into(),
         nodes,
         node_order,
-        sequences: model.sequences().cloned().collect(),
-        global_sequences: model.global_sequences(),
-        blend_time: model.model_info().map_or(0, |info| info.blend_time),
-        pivots: model.pivot_points(),
-        cameras: model.owned_records::<CamerasChunk<V1800>>(),
-        lights: model.owned_records::<LightsChunk<V1800>>(),
-        attachments: model.owned_records::<AttachmentsChunk>(),
-        particles: model.owned_records::<ParticleEmittersChunk>(),
-        particles2: model.owned_records::<ParticleEmitters2Chunk>(),
-        ribbons: model.owned_records::<RibbonEmittersChunk>(),
+        sequences,
+        global_sequences,
+        blend_time,
+        pivots,
+        cameras: records.cameras,
+        lights: records.lights,
+        attachments: records.attachments,
+        particles: records.particles,
+        particles2: records.particles2,
+        ribbons: records.ribbons,
         material_definitions: material_records,
         texture_animations,
-        texture_definitions: model.textures().cloned().collect(),
+        texture_definitions,
         geosets,
         geoset_animations,
         layers,
         textures,
         models,
         joint_bindings: joint_ids.into_iter().zip(binds.iter().copied()).collect(),
-        inverse_bindposes: inverse_bindposes.add(binds),
+        inverse_bindposes: binds.into(),
     })
 }
 
 #[cfg(test)]
 mod tests;
+
+impl CompiledModel {
+    /// Insert compiled geometry into Bevy's asset stores. Call once and reuse the
+    /// returned prepared model for all instances. Runtime definitions stay shared.
+    pub fn prepare(
+        &self,
+        meshes: &mut Assets<Mesh>,
+        inverse_bindposes: &mut Assets<SkinnedMeshInverseBindposes>,
+    ) -> PreparedModel {
+        let mut variants = HashMap::new();
+        let geosets = self
+            .geosets
+            .iter()
+            .map(|geoset| PreparedGeoset {
+                meshes: geoset
+                    .meshes
+                    .iter()
+                    .map(|mesh| {
+                        variants
+                            .entry(Arc::as_ptr(mesh))
+                            .or_insert_with(|| meshes.add((**mesh).clone()))
+                            .clone()
+                    })
+                    .collect(),
+                material_id: geoset.material_id,
+                geoset_id: geoset.geoset_id,
+                lod: geoset.lod,
+            })
+            .collect();
+        PreparedModel {
+            nodes: self.nodes.clone(),
+            node_order: self.node_order.clone(),
+            sequences: self.sequences.clone(),
+            global_sequences: self.global_sequences.clone(),
+            blend_time: self.blend_time,
+            pivots: self.pivots.clone(),
+            cameras: self.cameras.clone(),
+            lights: self.lights.clone(),
+            attachments: self.attachments.clone(),
+            particles: self.particles.clone(),
+            particles2: self.particles2.clone(),
+            ribbons: self.ribbons.clone(),
+            material_definitions: self.material_definitions.clone(),
+            texture_animations: self.texture_animations.clone(),
+            texture_definitions: self.texture_definitions.clone(),
+            events: self.events.clone(),
+            lod_levels: self.lod_levels.clone(),
+            lod_bounds: self.lod_bounds,
+            geoset_animations: self.geoset_animations.clone(),
+            layers: self.layers.clone(),
+            textures: self.textures.clone(),
+            models: self.models.clone(),
+            joint_bindings: self.joint_bindings.clone(),
+            geosets,
+            inverse_bindposes: inverse_bindposes.add(self.inverse_bindposes.to_vec()),
+        }
+    }
+}

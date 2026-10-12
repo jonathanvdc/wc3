@@ -441,6 +441,7 @@ fn main() -> CaptureResult<()> {
         }
     }
     let camera = options.camera(&source)?;
+    drop(source);
     let mut app = App::new();
     app.add_plugins((
         DefaultPlugins
@@ -608,7 +609,7 @@ fn main() -> CaptureResult<()> {
                             )
                         },
                     )
-                })?,
+                }),
         )
     } else {
         None
