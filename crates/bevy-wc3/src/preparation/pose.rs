@@ -211,18 +211,17 @@ impl Wc3PoseBaker {
             .sequence
             .map(|index| {
                 prepared
-                    .model
-                    .sequences()
-                    .nth(index)
+                    .sequences
+                    .get(index)
                     .ok_or_else(|| ModelError(format!("invalid pose sequence {index}")))
             })
             .transpose()?;
-        let globals = prepared.model.global_sequences();
+        let globals = &prepared.global_sequences;
         let time = SamplingTime {
             model: AnimationTime {
                 sequence,
                 elapsed_ms: options.elapsed_ms,
-                global_sequences: &globals,
+                global_sequences: globals,
             },
             global_elapsed_ms: options.global_elapsed_ms,
         };
@@ -231,8 +230,8 @@ impl Wc3PoseBaker {
         self.linear_images.retain_loaded(images);
         let mut parts = Vec::new();
         let mut bounds: Option<Aabb> = None;
-        let source_textures = prepared.model.textures().collect::<Vec<_>>();
-        let source_materials = prepared.model.materials().collect::<Vec<_>>();
+        let source_textures = &prepared.texture_definitions;
+        let source_materials = &prepared.material_definitions;
         for part in prepared.parts() {
             let layer = &prepared.layers[part.id.material][part.id.layer];
             let definition = &source_materials[part.id.material].layers[part.id.layer];
@@ -338,10 +337,10 @@ fn sample_joints(
     time: SamplingTime<'_>,
     camera: Option<Transform>,
 ) -> Result<Vec<Mat4>, ModelError> {
-    let nodes = prepared.model.nodes();
-    let pivots = prepared.model.pivot_points();
+    let nodes = &prepared.nodes;
+    let pivots = &prepared.pivots;
     let mut inputs = HashMap::new();
-    for node in &nodes {
+    for node in nodes {
         if node.object_id == u32::MAX || inputs.contains_key(&node.object_id) {
             return Err(ModelError(format!(
                 "invalid or duplicate node ID {}",
@@ -417,7 +416,7 @@ fn sample_joints(
     };
     let mut poses = HashMap::new();
     // Validate and resolve every node, including helpers not used directly as joints.
-    for node in &nodes {
+    for node in nodes {
         resolve_pose(node.object_id, &lookup, &mut poses, &mut HashSet::new()).ok_or_else(
             || {
                 ModelError(format!(

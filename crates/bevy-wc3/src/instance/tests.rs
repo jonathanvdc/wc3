@@ -1,11 +1,12 @@
 use super::*;
+use crate::assets::loader::{ResolvedModelTextures, ResolvedTexture};
 use crate::assets::model::Wc3Model;
 use crate::materials::layers::{animate_layers, AnimatedLayer};
 
 #[test]
 fn repeated_instances_prepare_one_model() {
     let source = Wc3Model::decode(include_bytes!("../../tests/fixtures/quad_model.mdx")).unwrap();
-    let textures = crate::assets::loader::ResolvedModelTextures::default();
+    let textures = ResolvedModelTextures::default();
     let mut app = App::new();
     app.insert_resource(Assets::<Wc3ModelAsset>::default());
     app.insert_resource(Assets::<Mesh>::default());
@@ -32,6 +33,10 @@ fn repeated_instances_prepare_one_model() {
     app.update();
     assert!(app.world().entity(first).contains::<Wc3Animation>());
     assert!(app.world().entity(second).contains::<Wc3Animation>());
+    for root in [first, second] {
+        assert!(app.world().get::<Wc3ModelInstance>(root).is_none());
+        assert_eq!(app.world().get::<ModelSource>(root).unwrap().0, handle.id());
+    }
     assert_eq!(app.world().resource::<PreparedModelCache>().len(), 1);
     let meshes = app.world().resource::<Assets<Mesh>>().len();
     let materials = app.world().resource::<Assets<Wc3LayerMaterial>>().len();
@@ -49,6 +54,16 @@ fn repeated_instances_prepare_one_model() {
             .len(),
         bindposes
     );
+    let id = app.world().get::<ModelSource>(first).unwrap().0;
+    app.world_mut()
+        .resource_mut::<Assets<Wc3ModelAsset>>()
+        .remove(id);
+    app.update();
+    assert_eq!(app.world().resource::<PreparedModelCache>().len(), 0);
+    for root in [first, second] {
+        assert!(app.world().get::<Wc3Animation>(root).is_some());
+        assert_eq!(app.world().get::<ModelSource>(root).unwrap().0, id);
+    }
 }
 
 #[test]
@@ -77,8 +92,8 @@ fn changing_bindings_updates_only_the_target_instance() {
         .add(Wc3ModelAsset {
             source,
             models: default(),
-            textures: crate::assets::loader::ResolvedModelTextures {
-                bitmaps: vec![crate::assets::loader::ResolvedTexture {
+            textures: ResolvedModelTextures {
+                bitmaps: vec![ResolvedTexture {
                     replaceable_id: 31,
                     ..default()
                 }],

@@ -23,8 +23,9 @@ construction and runtime ownership:
   model resource slots. The format definitions and codecs remain in `wc3`.
 - `preparation/` builds shared meshes, UV variants, joint mappings, inverse bind
   poses, parent-first node traversal, and material templates. `PreparedModel` also
-  retains the source model and resolved image/child-model dependencies. Preparation does not spawn
-  entities. `preparation/pose.rs` evaluates explicit
+  owns animation and scene definitions, texture provenance, and resolved
+  image/child-model dependencies without retaining the decoded container.
+  Preparation does not spawn entities. `preparation/pose.rs` evaluates explicit
   sequence/global clocks, skins prepared meshes on the CPU, and returns geometry
   and material snapshots with stable source indices and original texture uses.
 - `instance/` waits for assets, caches prepared models, checks recursive child
@@ -40,12 +41,27 @@ for Bevy's asset lifetime. MDL input already builds owned encoded arrays. Both
 formats use the same model API, with value iteration that does not create decoded
 slice caches.
 
-The runtime source is shared between `Wc3Model`, preparation, and definition
-handles. Node tracks, event and emitter definitions, cameras, lights, and animated
-material fields refer to that source through handles rather than cloning their
-buffers into each instance. A handle can project a field or a nested record;
-editing it copies that definition independently. Core `wc3::model` records use
-lifetimes and explicit borrowed views, keeping runtime sharing at this boundary.
+`PreparedModel` is the ownership boundary between decoding and runtime use.
+Preparation copies the required node tracks, animation metadata, event and emitter
+definitions, cameras, lights, and material definitions into shared owned values.
+Projections refer only to those owned definitions, never to the decoded container.
+Spawning and offline pose baking use the prepared data, so callers can release
+`Wc3Model` immediately after preparation. Geometry arrays and unrelated source
+chunks are not retained. Instances share prepared definition buffers rather than
+copying them per instance; editing a projected value copies its definition.
+
+The prepared container is independent of the source container's layout. Its
+current animation, material, and effect definitions still express WC3 semantics
+and reuse types from `wc3::model`; another format needs a preparation adapter and
+appropriate runtime behavior for features with different semantics.
+
+After asset-backed spawning, the root's `Wc3ModelInstance` loading request is
+removed and replaced by `ModelSource`, an asset ID that preserves provenance and
+recursive child-model detection without retaining the decoded asset. Prepared
+meshes, images, bind poses, and child-model dependencies retain their own handles.
+Applications that want to reuse cached preparation should keep a source asset
+handle themselves; unloading a source removes its cache entry while existing
+instances continue using their prepared definitions and render assets.
 
 Meshes and inverse bind poses are shared between instances. Texture bindings, animation clocks, rigs, and emitter simulation states belong to
 individual instances. Preparation stores material values as templates. Constant

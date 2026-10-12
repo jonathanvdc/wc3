@@ -1,8 +1,6 @@
 use bevy::camera::visibility::NoFrustumCulling;
 use bevy::prelude::*;
 use std::collections::HashMap;
-use wc3::model::chunks::{MaterialsChunk, RibbonEmittersChunk, TextureAnimationsChunk};
-use wc3::model::V1800;
 
 use super::{RibbonInstances, RibbonLayer, RibbonState};
 use crate::materials::textures::Wc3TextureBindings;
@@ -16,9 +14,9 @@ pub(crate) fn spawn_ribbons(
     node_entities: &HashMap<u32, Entity>,
     bindings: &Wc3TextureBindings,
 ) {
-    let source_materials = prepared.model.shared_records::<MaterialsChunk<V1800>>();
-    let texture_animations = prepared.model.shared_records::<TextureAnimationsChunk>();
-    for definition in prepared.model.shared_records::<RibbonEmittersChunk>() {
+    let source_materials = &prepared.material_definitions;
+    let texture_animations = &prepared.texture_animations;
+    for definition in prepared.ribbons.iter().cloned() {
         let Some(&node) = node_entities.get(&definition.node.object_id) else {
             continue;
         };

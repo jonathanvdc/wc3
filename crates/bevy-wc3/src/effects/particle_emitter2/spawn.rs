@@ -1,7 +1,6 @@
 use bevy::camera::visibility::NoFrustumCulling;
 use bevy::prelude::*;
 use std::collections::HashMap;
-use wc3::model::chunks::ParticleEmitters2Chunk;
 
 use super::{Particle2State, ParticleInstances, ParticleTextureSlot};
 use crate::materials::textures::Wc3TextureBindings;
@@ -15,12 +14,7 @@ pub(crate) fn spawn_particles2(
     node_entities: &HashMap<u32, Entity>,
     bindings: &Wc3TextureBindings,
 ) {
-    for (emitter_id, definition) in prepared
-        .model
-        .shared_records::<ParticleEmitters2Chunk>()
-        .into_iter()
-        .enumerate()
-    {
+    for (emitter_id, definition) in prepared.particles2.iter().cloned().enumerate() {
         let Some(&node) = node_entities.get(&definition.node.object_id) else {
             continue;
         };

@@ -24,8 +24,11 @@ are logged and leave the root unpopulated.
 
 Prepared assets are cached per model asset. Source asset changes invalidate the
 cache for future instances. Existing spawned instances retain their prepared
-geometry; changing their `Wc3ModelInstance` handle does not rebuild them. Spawn a
-new root to replace a populated instance.
+geometry and definitions. Successful spawning removes the `Wc3ModelInstance`
+loading request and inserts `ModelSource`, which records the source asset ID
+without keeping it loaded. Keep a model handle in application state when you
+want subsequent instances to reuse the cached preparation. Inserting another
+request on an animated root does not rebuild it; spawn a new root to replace it.
 
 Bitmap paths are checked beside the model first, then at the asset root.
 At each location, the literal filename is tried first, followed by the same path
@@ -204,7 +207,9 @@ child models. Their playback and cleanup rules are described in
 
 ## Prepare custom model sources
 
-For custom model sources, prepare shared geometry once and spawn it repeatedly.
+For custom model sources, prepare shared geometry and runtime definitions once
+and spawn them repeatedly. The decoded source can be dropped after preparation;
+spawning and pose baking use only the owned `PreparedModel`.
 Only spawning needs the material asset store:
 
 ```rust

@@ -1,5 +1,5 @@
 pub(crate) mod runtime;
-use bevy::mesh::MeshVertexBufferLayoutRef;
+use bevy::mesh::{MeshVertexAttribute, MeshVertexBufferLayoutRef};
 use bevy::pbr::{
     ExtendedMaterial, MaterialExtension, MaterialExtensionKey, MaterialExtensionPipeline,
 };
@@ -125,7 +125,7 @@ impl MaterialExtension for Wc3LayerState {
                 |def| matches!(def, ShaderDefVal::Bool(name, true) if name == "PREPASS_PIPELINE"),
             );
             let mut attrs = Vec::new();
-            let mut add = |attribute: bevy::mesh::MeshVertexAttribute, location| {
+            let mut add = |attribute: MeshVertexAttribute, location| {
                 if layout.0.contains(attribute) {
                     attrs.push(attribute.at_shader_location(location));
                 }

@@ -131,6 +131,7 @@ fn independent_clocks_pose_eight_influences_and_repeat_without_mutating_meshes()
         .set_matrix_groups([[0, 1, 2, 3, 4, 5, 6, 7]])
         .unwrap();
     let (prepared, meshes) = prepare(&source);
+    drop(source);
     let input = positions(meshes.get(prepared.parts().next().unwrap().mesh).unwrap()).to_vec();
     let mut baker = Wc3PoseBaker::default();
     let mut images = Assets::default();

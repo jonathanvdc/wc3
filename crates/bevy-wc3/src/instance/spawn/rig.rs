@@ -1,9 +1,8 @@
-use crate::preparation::rig::joint_ids;
-use crate::preparation::shared::{RuntimeNode, Shared};
+use crate::preparation::shared::RuntimeNode;
+use crate::preparation::PreparedModel;
 use bevy::mesh::skinning::SkinnedMeshInverseBindposes;
 use bevy::prelude::*;
 use std::collections::HashMap;
-use wc3::model::{Model, V1800};
 
 use crate::animation::pose::{AnimatedNode, PoseOrder};
 use crate::animation::{PosePlayback, Wc3Animation};
@@ -31,9 +30,9 @@ impl Wc3NodeEntities {
     }
 }
 
-pub(super) fn spawn_animation_root<'data>(
+pub(super) fn spawn_animation_root(
     commands: &mut Commands,
-    model: &Model<'data, V1800>,
+    prepared: &PreparedModel,
     root: Entity,
 ) {
     commands.entity(root).insert(Wc3Animation {
@@ -41,26 +40,22 @@ pub(super) fn spawn_animation_root<'data>(
         elapsed_ms: 0.0,
         speed: 1.0,
         playing: true,
-        sequences: model.sequences().cloned().collect::<Vec<_>>(),
-        global_sequences: model.global_sequences(),
+        sequences: prepared.sequences.clone(),
+        global_sequences: prepared.global_sequences.clone(),
         event_playback: Default::default(),
-        pose_playback: PosePlayback::new(Duration::from_millis(
-            model
-                .model_info()
-                .map_or(0, |info| u64::from(info.blend_time)),
-        )),
+        pose_playback: PosePlayback::new(Duration::from_millis(u64::from(prepared.blend_time))),
     });
 }
 
 pub(super) fn spawn_rig(
     commands: &mut Commands,
-    model: &Shared<Model<'static, V1800>>,
+    pivots: &[[f32; 3]],
+    joint_ids: &[u32],
     source_nodes: &[RuntimeNode],
     node_order: &[usize],
     root: Entity,
     inverse_bindposes: &Handle<SkinnedMeshInverseBindposes>,
 ) -> Rig {
-    let pivots = model.pivot_points();
     let mut nodes = HashMap::new();
     for node in source_nodes {
         let pivot = pivots
@@ -95,7 +90,6 @@ pub(super) fn spawn_rig(
         let parent = nodes.get(&node.parent_id).copied().unwrap_or(root);
         commands.entity(parent).add_child(nodes[&node.object_id]);
     }
-    let joint_ids = joint_ids(model);
     let joints = joint_ids.iter().map(|id| nodes[id]).collect();
     commands.entity(root).insert((
         Wc3NodeEntities {
@@ -118,9 +112,11 @@ pub(super) fn spawn_rig(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::preparation::rig::node_order;
+    use crate::preparation::rig::{joint_ids, node_order};
+    use crate::preparation::shared::Shared;
     use bevy::ecs::world::{CommandQueue, World};
     use wc3::model::mdl::Read as _;
+    use wc3::model::{Model, V1800};
 
     #[test]
     fn every_node_type_keeps_its_entity_and_parent_from_mdl() {
@@ -139,7 +135,8 @@ mod tests {
         let order = node_order(&nodes);
         let rig = spawn_rig(
             &mut commands,
-            &model,
+            &model.pivot_points(),
+            &joint_ids(&model),
             &nodes,
             &order,
             root,

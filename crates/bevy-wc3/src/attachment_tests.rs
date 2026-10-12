@@ -10,7 +10,7 @@ use crate::assets::loader::ResolvedModelTextures;
 use crate::assets::model::Wc3Model;
 use crate::assets::resources::Wc3ModelResources;
 use crate::instance::spawn::Wc3NodeEntities;
-use crate::instance::{spawn_loaded_instances, PreparedModelCache};
+use crate::instance::{spawn_loaded_instances, ModelSource, PreparedModelCache};
 use crate::materials::layers::{animate_layers, AnimatedLayer};
 use crate::materials::Wc3LayerMaterial;
 
@@ -131,8 +131,8 @@ fn paths_and_consumer_models_follow_points_visibility_and_independent_animation(
     assert_eq!(app.world().get::<Wc3ModelOwner>(weapon).unwrap().0, root);
     for child_root in [weapon, shield, supplied] {
         assert_eq!(
-            app.world().get::<Wc3ModelInstance>(child_root).unwrap().0,
-            child
+            app.world().get::<ModelSource>(child_root).unwrap().0,
+            child.id()
         );
         assert!(!app
             .world()
@@ -385,7 +385,9 @@ fn recursive_model_paths_do_not_expand_forever() {
         app.update();
     }
     let mut instances = app.world_mut().query::<&Wc3ModelInstance>();
-    assert_eq!(instances.iter(app.world()).count(), 3);
+    assert_eq!(instances.iter(app.world()).count(), 1);
+    let mut sources = app.world_mut().query::<&ModelSource>();
+    assert_eq!(sources.iter(app.world()).count(), 2);
     let child = points(&app, root)[0].model.unwrap();
     let blocked = points(&app, child)[0].model.unwrap();
     assert!(app.world().get::<Wc3Animation>(blocked).is_none());

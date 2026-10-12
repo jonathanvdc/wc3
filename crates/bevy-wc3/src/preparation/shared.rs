@@ -1,4 +1,4 @@
-//! Runtime definition handles keep ownership outside the format data structures.
+//! Shared owned runtime definitions and projections within those definitions.
 use std::fmt::{Debug, Formatter, Result as FmtResult};
 use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
@@ -26,6 +26,13 @@ pub struct Shared<T> {
     storage: Storage<T>,
 }
 impl<T: Send + Sync + 'static> Shared<T> {
+    #[cfg(test)]
+    pub(crate) fn strong_count(&self) -> usize {
+        match &self.storage {
+            Storage::Value(value) => Arc::strong_count(value),
+            Storage::Projection(value) => Arc::strong_count(value),
+        }
+    }
     /// Owns a runtime definition.
     pub fn new(value: T) -> Self {
         Self {
@@ -136,38 +143,27 @@ impl RuntimeNode {
     }
 }
 impl Shared<Model<'static, V1800>> {
-    pub(crate) fn shared_records<C: CollectionChunk + 'static>(&self) -> Vec<Shared<C::Item>>
+    pub(crate) fn owned_records<C: CollectionChunk + 'static>(&self) -> Vec<Shared<C::Item>>
     where
-        C::Item: Send + Sync + 'static,
+        C::Item: Clone + Send + Sync + 'static,
         for<'view> &'view C: TryFrom<&'view ModelChunk<'static, V1800>>,
     {
         let mut records = Vec::new();
-        for (chunk_index, chunk) in self.chunks.iter().enumerate() {
+        for chunk in &self.chunks {
             let Ok(chunk) = <&C>::try_from(chunk) else {
                 continue;
             };
-            for record_index in 0..chunk.records().len() {
-                records.push(self.select(move |model| {
-                    let chunk = <&C>::try_from(&model.chunks[chunk_index])
-                        .ok()
-                        .expect("shared record chunk");
-                    &chunk.records()[record_index]
-                }));
-            }
+            records.extend(chunk.records().iter().cloned().map(Shared::new));
         }
         records
     }
     pub(crate) fn runtime_nodes(&self) -> Vec<RuntimeNode> {
         let mut nodes = Vec::new();
-        for (chunk_index, chunk) in self.chunks.iter().enumerate() {
+        for chunk in &self.chunks {
             macro_rules! records {
                 ($variant:ident,$chunk:expr,$($field:ident)?) => {
-                    for record_index in 0..$chunk.records.len() {
-                        let node=self.select(move|model|match &model.chunks[chunk_index] {
-                            ModelChunk::$variant(chunk)=> &chunk.records[record_index]$(.$field)?,
-                            _=>unreachable!("shared node chunk"),
-                        });
-                        nodes.push(RuntimeNode::new(node));
+                    for record in &$chunk.records {
+                        nodes.push(RuntimeNode::new(Shared::new(record$(.$field)?.clone())));
                     }
                 };
             }
@@ -196,7 +192,7 @@ mod tests {
     use wc3::model::chunks::HelpersChunk;
 
     #[test]
-    fn cloned_runtime_nodes_share_the_source_key_buffers() {
+    fn cloned_runtime_nodes_share_prepared_key_buffers() {
         let mut node = Node::new("root", 0).unwrap();
         node.translation = Some(
             Track::linear(
@@ -216,10 +212,10 @@ mod tests {
         );
         let mut model = Model::<V1800>::new();
         model.replace_records::<HelpersChunk>(vec![node]);
-        let pointer = model
-            .helpers()
-            .next()
-            .unwrap()
+        let source = Shared::new(model);
+        let first = source.runtime_nodes();
+        let second = first.clone();
+        let pointer = first[0]
             .translation
             .as_ref()
             .unwrap()
@@ -227,9 +223,7 @@ mod tests {
             .unwrap()
             .as_bytes()
             .as_ptr();
-        let source = Shared::new(model);
-        let first = source.runtime_nodes();
-        let second = source.runtime_nodes();
+        drop(source);
         for nodes in [&first, &second] {
             let keys = nodes[0]
                 .translation

@@ -8,6 +8,7 @@ use ownership::has_model_cycle;
 pub(crate) use ownership::BlockedChildModel;
 pub use ownership::{Wc3ModelOwner, Wc3OwnedModels};
 
+use bevy::asset::AssetId;
 use bevy::mesh::skinning::SkinnedMeshInverseBindposes;
 use bevy::prelude::*;
 
@@ -23,7 +24,8 @@ use crate::materials::Wc3LayerMaterial;
 /// a preparation failure. The request supplies required transform and visibility
 /// components, so callers can spawn it on its own.
 ///
-/// Changing the handle on an already populated root does not rebuild the instance.
+/// The request is removed after spawning and replaced by [`ModelSource`].
+/// Inserting another request on an already populated root does not rebuild the instance.
 /// Spawn a new root when replacing a model. Source asset changes invalidate cached
 /// preparation for future instances; existing instances retain their render assets.
 #[derive(Component)]
@@ -39,6 +41,11 @@ impl Wc3ModelInstance {
         Self(handle)
     }
 }
+
+/// Source identity retained after preparation, without keeping the decoded asset alive.
+/// Used for provenance and recursive child-model detection.
+#[derive(Component, Clone, Copy, Debug)]
+pub struct ModelSource(pub AssetId<Wc3ModelAsset>);
 
 type UnloadedInstances<'w, 's> = Query<
     'w,
@@ -56,7 +63,11 @@ type UnloadedInstances<'w, 's> = Query<
 pub(crate) fn spawn_loaded_instances(
     mut commands: Commands,
     instances: UnloadedInstances,
-    owners: Query<(Option<&Wc3ModelInstance>, Option<&Wc3ModelOwner>)>,
+    owners: Query<(
+        Option<&Wc3ModelInstance>,
+        Option<&ModelSource>,
+        Option<&Wc3ModelOwner>,
+    )>,
     sources: Res<Assets<Wc3ModelAsset>>,
     mut cache: ResMut<PreparedModelCache>,
     mut meshes: ResMut<Assets<Mesh>>,
@@ -68,8 +79,13 @@ pub(crate) fn spawn_loaded_instances(
         let id = instance.0.id();
         if owner.is_some()
             && has_model_cycle(root, id, |entity| {
-                let (model, owner) = owners.get(entity).ok()?;
-                Some((model.map(|model| model.0.id()), owner.map(|owner| owner.0)))
+                let (request, source, owner) = owners.get(entity).ok()?;
+                Some((
+                    request
+                        .map(|model| model.0.id())
+                        .or_else(|| source.map(|source| source.0)),
+                    owner.map(|owner| owner.0),
+                ))
             })
         {
             warn!("Skipping cyclic WC3 child model {:?}", instance.0);
@@ -97,6 +113,10 @@ pub(crate) fn spawn_loaded_instances(
             root,
             bindings.cloned().unwrap_or_default(),
         );
+        commands
+            .entity(root)
+            .remove::<Wc3ModelInstance>()
+            .insert(ModelSource(id));
     }
 }
 

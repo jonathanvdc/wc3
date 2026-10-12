@@ -9,6 +9,7 @@ use crate::preparation::prepare_model;
 use crate::schedule::{configure, Wc3Systems};
 use bevy::ecs::world::CommandQueue;
 use bevy::mesh::skinning::SkinnedMeshInverseBindposes;
+use std::time::Duration;
 
 fn scene() -> (App, Entity, Entity) {
     let mut app = App::new();
@@ -235,7 +236,7 @@ fn ordinary_animation_advance_drives_dispatch_in_the_same_update() {
     app.insert_resource(Time::<()>::default());
     app.world_mut()
         .resource_mut::<Time>()
-        .advance_by(std::time::Duration::from_millis(300));
+        .advance_by(Duration::from_millis(300));
     // Run the schedules directly so MinimalPlugins does not replace the injected delta.
     app.world_mut().run_schedule(Update);
     app.world_mut().run_schedule(PostUpdate);
@@ -296,8 +297,6 @@ fn global_only_models_dispatch_and_restart_without_a_sequence() {
 
 #[test]
 fn blended_switch_dispatches_only_destination_events_at_blended_occurrence_poses() {
-    use std::time::Duration;
-
     let (mut app, root, _) = scene();
     advance(&mut app, root, 500.0);
     app.world_mut()

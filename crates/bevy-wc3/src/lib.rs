@@ -92,7 +92,7 @@ pub use event::Wc3ModelEvent;
 pub use instance::spawn::{
     spawn_model, spawn_prepared_model, spawn_prepared_model_with_bindings, Wc3NodeEntities,
 };
-pub use instance::{Wc3ModelInstance, Wc3ModelOwner, Wc3OwnedModels};
+pub use instance::{ModelSource, Wc3ModelInstance, Wc3ModelOwner, Wc3OwnedModels};
 pub use light::{Wc3Light, Wc3LightSettings};
 pub use lod::{Wc3Lod, Wc3LodOverride, Wc3LodSettings, Wc3LodState};
 pub use materials::runtime::Wc3IndependentMaterial;

@@ -1,6 +1,5 @@
 use bevy::prelude::*;
 use std::collections::HashMap;
-use wc3::model::chunks::ParticleEmittersChunk;
 
 use super::ParticleState;
 use crate::preparation::PreparedModel;
@@ -11,12 +10,7 @@ pub(crate) fn spawn_particles(
     root: Entity,
     node_entities: &HashMap<u32, Entity>,
 ) {
-    for (index, definition) in prepared
-        .model
-        .shared_records::<ParticleEmittersChunk>()
-        .into_iter()
-        .enumerate()
-    {
+    for (index, definition) in prepared.particles.iter().cloned().enumerate() {
         let Some(model) = prepared.model_resources().particle(index) else {
             continue;
         };

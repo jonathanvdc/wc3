@@ -101,7 +101,7 @@ pub(crate) fn spawn_attachments(
     nodes: &HashMap<u32, Entity>,
 ) {
     let mut points = Vec::new();
-    for (index, attachment) in prepared.model.attachments().enumerate() {
+    for (index, attachment) in prepared.attachments.iter().enumerate() {
         let Some(&node) = nodes.get(&attachment.node.object_id) else {
             continue;
         };

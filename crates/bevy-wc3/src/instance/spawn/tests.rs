@@ -23,6 +23,8 @@ fn child_instances_inherit_visibility_and_cleanup_without_sharing_animation() {
     let mut materials = Assets::<Wc3LayerMaterial>::default();
     let mut bindposes = Assets::<SkinnedMeshInverseBindposes>::default();
     let prepared = prepare_model(&mut meshes, &mut bindposes, &source, |_| None).unwrap();
+    assert_eq!(source.model.strong_count(), 1);
+    drop(source);
     let owner = app
         .world_mut()
         .spawn((Transform::from_xyz(100.0, 0.0, 0.0), Visibility::Inherited))
@@ -44,6 +46,8 @@ fn child_instances_inherit_visibility_and_cleanup_without_sharing_animation() {
         Wc3Model::decode_mdl(include_str!("../../../tests/fixtures/particle_capture.mdl")).unwrap();
     let particle_prepared =
         prepare_model(&mut meshes, &mut bindposes, &particles, |_| None).unwrap();
+    assert_eq!(particles.model.strong_count(), 1);
+    drop(particles);
     let effects = spawn_prepared_model(
         &mut commands,
         &mut meshes,

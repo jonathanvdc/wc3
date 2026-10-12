@@ -1,4 +1,6 @@
 use super::*;
+use std::env::temp_dir;
+use std::process::id;
 #[test]
 fn texture_sampler_uses_wrap_flags_per_axis() {
     let mut flags = TextureFlags::default();
@@ -63,8 +65,7 @@ fn file_loader_resolves_tif_references_and_preserves_location_precedence() {
     IoTaskPool::get_or_init(|| TaskPoolBuilder::new().num_threads(2).build());
     ComputeTaskPool::get_or_init(|| TaskPoolBuilder::new().num_threads(2).build());
     AsyncComputeTaskPool::get_or_init(|| TaskPoolBuilder::new().num_threads(2).build());
-    let directory =
-        std::env::temp_dir().join(format!("wc3-texture-fallback-{}", std::process::id()));
+    let directory = temp_dir().join(format!("wc3-texture-fallback-{}", id()));
     fs::create_dir_all(directory.join("units")).unwrap();
     // A complete one-pixel, uncompressed, 24-bit TGA.
     let tga = [

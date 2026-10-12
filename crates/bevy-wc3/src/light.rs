@@ -2,7 +2,6 @@
 use crate::preparation::shared::Shared;
 use bevy::prelude::*;
 use std::collections::HashMap;
-use wc3::model::chunks::LightsChunk;
 use wc3::model::scene::{Light, LightType};
 use wc3::model::V1800;
 
@@ -69,7 +68,7 @@ pub(crate) fn spawn_lights(
     root: Entity,
     nodes: &HashMap<u32, Entity>,
 ) {
-    for definition in prepared.model.shared_records::<LightsChunk<V1800>>() {
+    for definition in prepared.lights.iter().cloned() {
         let Some(&node) = nodes.get(&definition.node.object_id) else {
             continue;
         };

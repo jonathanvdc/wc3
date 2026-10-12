@@ -1,8 +1,11 @@
 use super::*;
 use crate::assets::loader::{ResolvedModelTextures, ResolvedTexture};
+use crate::materials::textures::Wc3TextureSlot;
 use crate::materials::Wc3LayerState;
 use bevy::render::render_resource::TextureFormat;
+use std::f32::consts::FRAC_PI_2;
 use wc3::model::animation::{Sequence, Track, ValueKeyframe};
+use wc3::model::materials::LayerTextureSlot;
 
 fn animation() -> Wc3Animation {
     Wc3Animation {
@@ -50,7 +53,7 @@ fn uv_animation_rotates_and_scales_around_center() {
             Track::linear(
                 [ValueKeyframe {
                     frame: 0,
-                    value: Quat::from_rotation_z(std::f32::consts::FRAC_PI_2).to_array(),
+                    value: Quat::from_rotation_z(FRAC_PI_2).to_array(),
                 }],
                 None,
             )
@@ -105,7 +108,7 @@ fn hd_controls_and_slots_follow_animation_and_overrides() {
     layer.set_shader_type(ShaderType::HD_DEFAULT_UNIT);
     layer.set_texture_slots(
         &(0..6)
-            .map(|role| wc3::model::materials::LayerTextureSlot {
+            .map(|role| LayerTextureSlot {
                 texture_type: role,
                 texture_id: Animatable::Static(role),
             })
@@ -194,10 +197,7 @@ fn hd_controls_and_slots_follow_animation_and_overrides() {
         .entity_mut(root)
         .get_mut::<Wc3TextureBindings>()
         .unwrap()
-        .set_slot(
-            crate::materials::textures::Wc3TextureSlot::Bitmap(2),
-            handles[5].clone(),
-        );
+        .set_slot(Wc3TextureSlot::Bitmap(2), handles[5].clone());
     app.update();
     assert_eq!(
         app.world()

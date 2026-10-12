@@ -1,4 +1,5 @@
 use super::*;
+use std::f32::consts::FRAC_PI_2;
 use wc3::model::animation::{Animatable, Sequence, Track, ValueKeyframe};
 use wc3::model::scene::Node;
 
@@ -236,9 +237,7 @@ fn texture_animation_rotates_and_scales_around_cell_surface_center() {
     let animation = animation();
     let definition = TextureAnimation {
         translation: Some(Track::constant([0.25, 0.0, 0.0])),
-        rotation: Some(Track::constant(
-            Quat::from_rotation_z(std::f32::consts::FRAC_PI_2).to_array(),
-        )),
+        rotation: Some(Track::constant(Quat::from_rotation_z(FRAC_PI_2).to_array())),
         scaling: Some(Track::constant([2.0, 1.0, 1.0])),
     };
     let transform = uv_transform(Some(&definition), &animation);
@@ -272,7 +271,7 @@ fn rotated_scaled_sections_use_local_y_and_animated_heights_at_birth() {
     state.advance(&animation, 0.2, |_| {
         GlobalTransform::from(
             Transform::from_xyz(10.0, 20.0, 30.0)
-                .with_rotation(Quat::from_rotation_z(std::f32::consts::FRAC_PI_2))
+                .with_rotation(Quat::from_rotation_z(FRAC_PI_2))
                 .with_scale(Vec3::splat(2.0)),
         )
     });

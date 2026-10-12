@@ -5,12 +5,20 @@ use bevy::prelude::*;
 use std::collections::HashMap;
 use std::sync::Arc;
 use wc3::model::animation::{Animatable, GeosetAnimation};
+use wc3::model::animation::{Sequence, TextureAnimation};
+use wc3::model::chunks::{
+    AttachmentsChunk, CamerasChunk, LightsChunk, ParticleEmitters2Chunk, ParticleEmittersChunk,
+    RibbonEmittersChunk,
+};
 use wc3::model::chunks::{
     EventObjectsChunk, GeosetAnimationsChunk, MaterialsChunk, TextureAnimationsChunk,
 };
+use wc3::model::emitters::{ParticleEmitter, ParticleEmitter2, RibbonEmitter};
 use wc3::model::materials::ShaderType;
+use wc3::model::materials::{Material, Texture};
 use wc3::model::scene::EventObject;
-use wc3::model::{Model, V1800};
+use wc3::model::scene::{Attachment, Camera, Light};
+use wc3::model::V1800;
 
 mod materials;
 pub mod shared;
@@ -50,13 +58,28 @@ pub(crate) struct PreparedGeoset {
     pub(crate) lod: Option<u32>,
 }
 
-/// Reusable Bevy assets for one model and one set of resolved textures.
+/// An owned runtime definition and reusable Bevy assets for a model.
+/// Preparation copies the runtime definitions once; instances share those definitions.
+/// The decoded source container can be dropped immediately after preparation.
+/// Meshes, texture provenance, animation, and scene features remain available.
 /// Keep this value alive while spawning instances. Reprepare after changing
 /// the source model or its texture resolution.
 pub struct PreparedModel {
     pub(crate) nodes: Vec<RuntimeNode>,
     pub(crate) node_order: Vec<usize>,
-    pub(crate) model: Shared<Model<'static, V1800>>,
+    pub(crate) sequences: Vec<Sequence>,
+    pub(crate) global_sequences: Vec<u32>,
+    pub(crate) blend_time: u32,
+    pub(crate) pivots: Vec<[f32; 3]>,
+    pub(crate) cameras: Vec<Shared<Camera<'static, V1800>>>,
+    pub(crate) lights: Vec<Shared<Light<'static, V1800>>>,
+    pub(crate) attachments: Vec<Shared<Attachment<'static>>>,
+    pub(crate) particles: Vec<Shared<ParticleEmitter<'static>>>,
+    pub(crate) particles2: Vec<Shared<ParticleEmitter2<'static>>>,
+    pub(crate) ribbons: Vec<Shared<RibbonEmitter<'static>>>,
+    pub(crate) material_definitions: Vec<Shared<Material<'static, V1800>>>,
+    pub(crate) texture_animations: Vec<Shared<TextureAnimation<'static>>>,
+    pub(crate) texture_definitions: Vec<Texture>,
     pub(crate) events: Arc<[Shared<EventObject<'static>>]>,
     pub(crate) geosets: Vec<PreparedGeoset>,
     pub(crate) lod_levels: Vec<u32>,
@@ -197,7 +220,7 @@ pub(crate) fn prepare_resolved_model(
         .enumerate()
         .map(|(index, id)| (*id, index as u16))
         .collect();
-    let material_records = model.shared_records::<MaterialsChunk<V1800>>();
+    let material_records = model.owned_records::<MaterialsChunk<V1800>>();
     let mut geosets = Vec::new();
     for (geoset_id, geoset) in model.geosets().enumerate() {
         if geoset.vertices().is_empty() || geoset.face_indices().is_empty() {
@@ -237,13 +260,13 @@ pub(crate) fn prepare_resolved_model(
         });
     }
     let mut geoset_animations = vec![None; model.geosets().count()];
-    for animation in model.shared_records::<GeosetAnimationsChunk>() {
+    for animation in model.owned_records::<GeosetAnimationsChunk>() {
         if let Some(slot) = geoset_animations.get_mut(animation.geoset_id as usize) {
             *slot = Some(animation);
         }
     }
     let binds = inverse_bind_matrices(model, &joint_ids);
-    let texture_animations = model.shared_records::<TextureAnimationsChunk>();
+    let texture_animations = model.owned_records::<TextureAnimationsChunk>();
     let layers = material_records
         .iter()
         .map(|material| {
@@ -294,10 +317,22 @@ pub(crate) fn prepare_resolved_model(
     Ok(PreparedModel {
         lod_levels,
         lod_bounds: LodBounds::from_model(model),
-        events: model.shared_records::<EventObjectsChunk>().into(),
+        events: model.owned_records::<EventObjectsChunk>().into(),
         nodes,
         node_order,
-        model: model.clone(),
+        sequences: model.sequences().cloned().collect(),
+        global_sequences: model.global_sequences(),
+        blend_time: model.model_info().map_or(0, |info| info.blend_time),
+        pivots: model.pivot_points(),
+        cameras: model.owned_records::<CamerasChunk<V1800>>(),
+        lights: model.owned_records::<LightsChunk<V1800>>(),
+        attachments: model.owned_records::<AttachmentsChunk>(),
+        particles: model.owned_records::<ParticleEmittersChunk>(),
+        particles2: model.owned_records::<ParticleEmitters2Chunk>(),
+        ribbons: model.owned_records::<RibbonEmittersChunk>(),
+        material_definitions: material_records,
+        texture_animations,
+        texture_definitions: model.textures().cloned().collect(),
         geosets,
         geoset_animations,
         layers,
@@ -307,3 +342,6 @@ pub(crate) fn prepare_resolved_model(
         inverse_bindposes: inverse_bindposes.add(binds),
     })
 }
+
+#[cfg(test)]
+mod tests;
