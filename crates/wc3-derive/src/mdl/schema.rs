@@ -117,14 +117,14 @@ pub(super) fn parse(input: &DeriveInput, options: &Container) -> Result<Schema> 
                 return Err(Error::new_spanned(
                     &input.ident,
                     "MDL derives support named-field structs only",
-                ))
+                ));
             }
         },
         _ => {
             return Err(Error::new_spanned(
                 &input.ident,
                 "MDL derives support structs only",
-            ))
+            ));
         }
     };
     let mut normalized = Vec::new();
@@ -242,7 +242,10 @@ pub(super) fn parse(input: &DeriveInput, options: &Container) -> Result<Schema> 
                     || virtual_field.enabled_if.is_some()
                     || virtual_field.enable_with.is_some())
             {
-                return Err(Error::new_spanned(source, "slot requires an explicit default and a scalar property, animatable field, or flag without enable hooks"));
+                return Err(Error::new_spanned(
+                    source,
+                    "slot requires an explicit default and a scalar property, animatable field, or flag without enable hooks",
+                ));
             }
             virtual_field.virtual_field = true;
             normalized.push(virtual_field);
@@ -372,11 +375,17 @@ pub(super) fn parse(input: &DeriveInput, options: &Container) -> Result<Schema> 
                 }
                 body_order.push(index);
             } else {
-                return Err(Error::new_spanned(name, "write_order must list every body field exactly once, excluding headers and skipped fields"));
+                return Err(Error::new_spanned(
+                    name,
+                    "write_order must list every body field exactly once, excluding headers and skipped fields",
+                ));
             }
         }
         if body_order.len() != body.len() || body.iter().any(|index| !body_order.contains(index)) {
-            return Err(Error::new_spanned(&input.ident, "write_order must list every body field exactly once, excluding headers and skipped fields"));
+            return Err(Error::new_spanned(
+                &input.ident,
+                "write_order must list every body field exactly once, excluding headers and skipped fields",
+            ));
         }
         ordered = fields
             .iter()

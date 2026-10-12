@@ -20,27 +20,61 @@ pub(crate) fn fresh_ident(input: &DeriveInput, base: &str) -> Ident {
     Ident::new(&name, input.ident.span())
 }
 
+#[derive(Clone, Copy)]
+pub(crate) enum Format {
+    M2,
+    Wmo,
+}
+
 pub(crate) enum Operation {
     Read,
     Write,
     Layout,
 }
 pub(crate) fn expand(input: DeriveInput, operation: Operation) -> TokenStream {
-    match expand_checked(input, operation) {
+    expand_format(input, operation, Format::M2)
+}
+pub(crate) fn expand_format(
+    input: DeriveInput,
+    operation: Operation,
+    format: Format,
+) -> TokenStream {
+    match expand_checked(input, operation, format) {
         Ok(tokens) => tokens,
         Err(error) => error.to_compile_error(),
     }
 }
-fn expand_checked(input: DeriveInput, operation: Operation) -> Result<TokenStream> {
+fn expand_checked(input: DeriveInput, operation: Operation, format: Format) -> Result<TokenStream> {
+    let wmo = matches!(format, Format::Wmo);
+    let codec = if wmo {
+        quote!(::wc3::model::wmo)
+    } else {
+        quote!(::wc3::model::m2)
+    };
     let name = &input.ident;
     let decoder = fresh_ident(&input, "__m2_decoder");
     let encoder = fresh_ident(&input, "__m2_encoder");
     let version = fresh_ident(&input, "__m2_version");
     let flags = fresh_ident(&input, "__m2_flags");
+    let arguments = if wmo {
+        quote!()
+    } else {
+        quote!(#version,#flags)
+    };
+    let parameters = if wmo {
+        quote!()
+    } else {
+        quote!(#version:u32,#flags:u32)
+    };
+    let reserve = if wmo {
+        quote!()
+    } else {
+        quote!(#encoder.reserve_metadata(<Self as #codec::RecordLayout>::size(#encoder.version,#encoder.flags))?;)
+    };
     let Data::Struct(data) = &input.data else {
         return Err(Error::new_spanned(
             name,
-            "M2 codec derives support structs; implement discriminated payload codecs explicitly",
+            "Binary codec derives support structs; implement discriminated payload codecs explicitly",
         ));
     };
     let (_, type_generics, _) = input.generics.split_for_impl();
@@ -68,21 +102,21 @@ fn expand_checked(input: DeriveInput, operation: Operation) -> Result<TokenStrea
                 quote!(#index)
             });
         let predicate = match operation {
-            Operation::Read => parse_quote!(#ty: ::wc3::model::m2::Read<#lifetime>),
-            Operation::Write => parse_quote!(#ty: ::wc3::model::m2::Write),
-            Operation::Layout => parse_quote!(#ty: ::wc3::model::m2::RecordLayout),
+            Operation::Read => parse_quote!(#ty: #codec::Read<#lifetime>),
+            Operation::Write => parse_quote!(#ty: #codec::Write),
+            Operation::Layout => parse_quote!(#ty: #codec::RecordLayout),
         };
         generics.make_where_clause().predicates.push(predicate);
         members.push(member.clone());
-        reads.push(quote!(<#ty as ::wc3::model::m2::Read<#lifetime>>::read(#decoder)?));
-        writes.push(quote!(::wc3::model::m2::Write::write(&self.#member, #encoder)?;));
-        sizes.push(quote!(<#ty as ::wc3::model::m2::RecordLayout>::size(#version, #flags)));
+        reads.push(quote!(<#ty as #codec::Read<#lifetime>>::read(#decoder)?));
+        writes.push(quote!(#codec::Write::write(&self.#member, #encoder)?;));
+        sizes.push(quote!(<#ty as #codec::RecordLayout>::size(#arguments)));
     }
-    if matches!(operation, Operation::Write) {
+    if matches!(operation, Operation::Write) && !wmo {
         generics
             .make_where_clause()
             .predicates
-            .push(parse_quote!(Self: ::wc3::model::m2::RecordLayout));
+            .push(parse_quote!(Self: #codec::RecordLayout));
     }
     let (impl_generics, _, where_clause) = generics.split_for_impl();
     let construct = match &data.fields {
@@ -92,24 +126,24 @@ fn expand_checked(input: DeriveInput, operation: Operation) -> Result<TokenStrea
     };
     Ok(match operation {
         Operation::Read => quote! {
-            impl #impl_generics ::wc3::model::m2::Read<#lifetime> for #name #type_generics #where_clause {
-                fn read(#decoder: &mut ::wc3::model::m2::codec::Decoder<#lifetime>) -> ::core::result::Result<Self, ::wc3::model::m2::ReadError> {
+            impl #impl_generics #codec::Read<#lifetime> for #name #type_generics #where_clause {
+                fn read(#decoder: &mut #codec::codec::Decoder<#lifetime>) -> ::core::result::Result<Self, #codec::ReadError> {
                     ::core::result::Result::Ok(#construct)
                 }
             }
         },
         Operation::Write => quote! {
-            impl #impl_generics ::wc3::model::m2::Write for #name #type_generics #where_clause {
-                fn write(&self, #encoder: &mut ::wc3::model::m2::codec::Encoder) -> ::core::result::Result<(), ::wc3::model::m2::WriteError> {
-                    #encoder.reserve_metadata(<Self as ::wc3::model::m2::RecordLayout>::size(#encoder.version, #encoder.flags))?;
+            impl #impl_generics #codec::Write for #name #type_generics #where_clause {
+                fn write(&self, #encoder: &mut #codec::codec::Encoder) -> ::core::result::Result<(), #codec::WriteError> {
+                    #reserve
                     #(#writes)*
                     ::core::result::Result::Ok(())
                 }
             }
         },
         Operation::Layout => quote! {
-            impl #impl_generics ::wc3::model::m2::RecordLayout for #name #type_generics #where_clause {
-                fn size(#version: u32, #flags: u32) -> usize { 0 #(+ #sizes)* }
+            impl #impl_generics #codec::RecordLayout for #name #type_generics #where_clause {
+                fn size(#parameters) -> usize { 0 #(+ #sizes)* }
             }
         },
     })

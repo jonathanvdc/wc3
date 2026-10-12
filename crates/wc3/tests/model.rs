@@ -4,3 +4,6 @@ mod common;
 mod m2;
 #[path = "model/mdlx/mod.rs"]
 mod mdlx;
+
+#[path = "model/wmo/mod.rs"]
+mod wmo;

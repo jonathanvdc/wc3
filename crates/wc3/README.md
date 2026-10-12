@@ -7,7 +7,8 @@ building an asset editor, a converter, or an application that loads game data. B
 share the same typed representation, allowing model editing code to work with
 both formats and with supported Classic and Reforged layouts. World of Warcraft
 M2 documents use a separate typed format API, including their supporting skin,
-geometry, animation, skeleton, bone, and physics files.
+geometry, animation, skeleton, bone, and physics files. WMO roots and groups
+have their own typed layouts and bundle API for static world geometry.
 
 ## Capabilities
 
@@ -20,6 +21,7 @@ operations and archive compression when your application needs them.
 | --- | --- |
 | Warcraft III MDX and MDL models | Read, edit, write, and convert between supported model versions. |
 | World of Warcraft M2 models | Read, edit, and write typed core layouts and supporting files; resolve and rebuild model bundles. |
+| World of Warcraft WMO models | Read, edit, and write root and group documents; resolve native geometry bundles. |
 | BLP0, BLP1, and BLP2 textures | Inspect and edit encoded containers; optionally decode pixels and encode images. |
 | MPQ v1–v4 archives | Index, extract, create, and edit archives; optionally decompress and compress entries. |
 
@@ -98,6 +100,11 @@ supporting files; `Bundle` connects declared references through a caller-owned r
 coordinates external animation offsets when writing. The [M2 guide](docs/m2.md)
 explains layout selection, ownership, complete bundle output, and preservation
 boundaries. M2-to-MDLX conversion and M2 rendering are not implemented.
+
+World geometry uses `wc3::model::wmo::{Root, Group, Bundle}` with an explicit
+client profile, since WMO's version field does not identify every layout change.
+The [WMO guide](docs/wmo.md) explains borrowed chunk records, dependency
+resolution, validation, and coordinated root/group output.
 
 ### Textures
 
@@ -218,7 +225,7 @@ The API reference provides examples for each asset type, and the repository
 includes command-line examples for inspecting, editing, and converting assets.
 The model command-line examples below operate on Warcraft III MDX and MDL:
 
-- [Documentation index](docs/README.md): MDLX and M2 workflows, command-line tools,
+- [Documentation index](docs/README.md): MDLX, M2, and WMO workflows, command-line tools,
   and format-specific API references.
 - [API reference](https://docs.rs/wc3/latest/wc3/).
 - [`mpq` example](examples/mpq.rs): archive listing, extraction, creation, and editing.

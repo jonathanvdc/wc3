@@ -84,7 +84,7 @@ fn expand_checked(input: DeriveInput, reading: bool) -> Result<TokenStream> {
             return Err(Error::new_spanned(
                 name,
                 "codec derives support structs only",
-            ))
+            ));
         }
     };
     let field_count = fields.len();

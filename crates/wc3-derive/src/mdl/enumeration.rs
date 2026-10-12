@@ -192,7 +192,7 @@ pub(super) fn expand(input: &DeriveInput, reading: bool) -> Result<TokenStream> 
                 return Err(Error::new_spanned(
                     variant,
                     "MDL enum variants must be unit or single-field tuple variants",
-                ))
+                ));
             }
         };
         let (name, kind) = match mode {
@@ -232,7 +232,12 @@ pub(super) fn expand(input: &DeriveInput, reading: bool) -> Result<TokenStream> 
                     let kind = framing.expect("name and framing are paired");
                     match (&kind, &ty) {
                         (Kind::Flag, None) | (Kind::Property | Kind::Block, Some(_)) => {}
-                        _ => return Err(Error::new_spanned(variant, "tagged variants require flag for unit variants, property/block for payloads, or name with delegate")),
+                        _ => {
+                            return Err(Error::new_spanned(
+                                variant,
+                                "tagged variants require flag for unit variants, property/block for payloads, or name with delegate",
+                            ));
+                        }
                     }
                     kind
                 };

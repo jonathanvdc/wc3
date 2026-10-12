@@ -5,7 +5,8 @@ editing a model or converting a texture to displaying an animated character in
 Bevy. It brings together support for MDX and MDL models, BLP textures, and MPQ
 archives, so applications can work with these assets throughout the process of
 loading, modifying, and rendering them. World of Warcraft M2 support covers
-file formats and supporting documents through the asset library.
+file formats and supporting documents through the asset library. WMO support
+adds native world-model roots, geometry groups, and bundle validation.
 
 ## Crates
 
@@ -21,6 +22,8 @@ types cover geometry, materials, animation, and effects across Classic and
 Reforged layouts, and the library can convert between supported model versions.
 World of Warcraft M2 models have their own typed layouts and native supporting
 file codecs, with explicit dependency resolution and coordinated bundle writing.
+WMO documents expose their own root and group layouts, including geometry,
+materials, portals, liquids, and collision data.
 Alongside models, it provides BLP texture and MPQ archive APIs, with optional
 features for working with decoded images and compressed archive entries. This
 makes it useful for asset tools and converters as well as applications that
@@ -32,7 +35,7 @@ maps to MDX bytes or MDL text, including how fields, defaults, and animation
 tracks are represented. Most applications use the existing record types and
 never need to work with these macros directly. For contributors extending the
 codecs or users defining additional records, the derives are available through
-`wc3`'s MDX and MDL modules alongside the traits they implement.
+`wc3`'s MDX, MDL, M2, and WMO modules alongside the traits they implement.
 
 [`bevy-wc3`](crates/bevy-wc3/README.md) builds on the asset library to load and
 render Warcraft III models in Bevy. It turns models and their textures into
@@ -49,7 +52,7 @@ files using an ordered overlay. The adapter is independent of the renderer;
 `bevy-wc3` preserves the source when resolving a model's dependencies.
 
 Each crate's README explains how to get started and links to further examples.
-The [asset documentation index](crates/wc3/docs/README.md) connects MDLX and M2
+The [asset documentation index](crates/wc3/docs/README.md) connects MDLX, M2, and WMO
 editing, command-line tools, and the format APIs.
 API references are available for [`wc3`](https://docs.rs/wc3/latest/wc3/) and
 [`wc3-derive`](https://docs.rs/wc3-derive/latest/wc3_derive/), and the

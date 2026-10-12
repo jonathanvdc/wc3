@@ -36,14 +36,14 @@ pub(super) fn expand(input: DeriveInput, options: Container, reading: bool) -> R
                 return Err(Error::new_spanned(
                     &input.ident,
                     "MDL property and entry derives require a single-field tuple struct",
-                ))
+                ));
             }
         },
         _ => {
             return Err(Error::new_spanned(
                 &input.ident,
                 "MDL derives support structs only",
-            ))
+            ));
         }
     };
     if let Some(attr) = value.attrs.iter().find(|attr| attr.path().is_ident("mdl")) {

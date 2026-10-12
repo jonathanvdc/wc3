@@ -7,7 +7,7 @@ the codec traits in `wc3`; the derives are re-exported through its format module
 ## Derives
 
 Import `wc3::model::mdlx::{mdx, mdl}` to distinguish the binary and text derives.
-Import `wc3::model::m2` for M2. The format modules re-export the following macros
+Import `wc3::model::{m2, wmo}` for the World of Warcraft formats. The format modules re-export the following macros
 alongside their codec traits:
 
 | Derive through `wc3` | Purpose |
@@ -18,6 +18,7 @@ alongside their codec traits:
 | `mdl::Read`, `mdl::Write` | Read and write text MDL records. |
 | `m2::Read`, `m2::Write`, `m2::RecordLayout` | Read and write offset-addressed M2 records and describe their inline metadata width. |
 | `m2::Validate`, `m2::VisitArrays` | Compose field validation and animation-leaf traversal. |
+| `wmo::Read`, `wmo::Write`, `wmo::RecordLayout`, `wmo::Validate` | Compose WMO record codecs, fixed inline widths, and field validation. |
 
 For buffer-bearing records, `wc3::model::common::Ownership` generates
 borrowed views and owned conversion independently of any codec. Records name

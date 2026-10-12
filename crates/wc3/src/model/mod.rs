@@ -4,3 +4,5 @@ pub mod common;
 pub mod m2;
 /// Warcraft III models with binary MDX and text MDL codecs.
 pub mod mdlx;
+/// World of Warcraft world-model root and group documents.
+pub mod wmo;

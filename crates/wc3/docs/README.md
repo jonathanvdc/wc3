@@ -9,6 +9,8 @@ to editing workflows and runnable tools.
 - [World of Warcraft M2 models](m2.md) explains core layouts, supporting documents,
   borrowed records and geometry streams, dependency resolution, and coordinated
   bundle output.
+- [World of Warcraft world models](wmo.md) explains root and group dialects,
+  borrowed records, collision and liquids, resource identities, and bundle edits.
 - [Asset command-line tools](tools.md) covers inspection, dependency reporting,
   repathing, conversion, texture export, and archive operations.
 
@@ -19,13 +21,15 @@ The API reference contains the detailed contracts and executable examples:
   [MDL](https://docs.rs/wc3/latest/wc3/model/mdlx/mdl/) describe binary and text codecs.
 - [M2 models](https://docs.rs/wc3/latest/wc3/model/m2/) describes native core and
   companion records, typed envelopes, dependency identities, and bundle assembly.
+- [WMO models](https://docs.rs/wc3/latest/wc3/model/wmo/) describes root and group
+  documents, native chunk records, validation, and historical layouts.
 - [BLP textures](https://docs.rs/wc3/latest/wc3/blp/) covers encoded containers,
   external BLP0 mipmaps, and optional image adapters.
 - [MPQ archives](https://docs.rs/wc3/latest/wc3/mpq/) covers streaming and
   concurrent extraction, encoded copying, editing, and recovery policy.
 
 For record contributors, the [derive guide](../../wc3-derive/README.md) links
-both attribute references. For Warcraft III rendering applications, continue with
+the format-specific derive references. For Warcraft III rendering applications, continue with
 [bevy-wc3](../../bevy-wc3/README.md); archive-backed Bevy sources use
 [bevy-mpq](../../bevy-mpq/README.md).
 

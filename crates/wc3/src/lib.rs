@@ -10,6 +10,9 @@
 //! documents; [`model::m2::Bundle`] resolves declared references and coordinates
 //! external animation output through caller-owned storage.
 //!
+//! World models use [`model::wmo::Root`] and [`model::wmo::Group`], with explicit
+//! client profiles and [`model::wmo::Bundle`] for shared root/group references.
+//!
 //! [`blp`] reads and writes BLP0, BLP1, and BLP2 encoded texture containers.
 //! [`mpq`] indexes, streams, creates, and edits MPQ v1–v4 archives.
 //!
@@ -23,7 +26,7 @@
 //!
 //! # Ownership and output
 //!
-//! MDX and M2 documents and BLP containers can borrow their encoded input. Their
+//! MDX, M2, and WMO documents and BLP containers can borrow their encoded input. Their
 //! owned conversion methods detach data for longer-lived storage; MDL parsing builds
 //! owned records. See each module for its editing and round-trip guarantees.
 //! Writers can leave partial output after transport errors. Complete encoding or
@@ -33,7 +36,7 @@
 
 extern crate self as wc3;
 
-/// Warcraft III MDX/MDL and World of Warcraft M2 model formats.
+/// Warcraft III MDX/MDL and World of Warcraft M2 and WMO model formats.
 pub mod model;
 
 /// BLP0, BLP1, and BLP2 texture containers.

@@ -455,7 +455,7 @@ pub(super) fn field(field: &SynField, index: usize) -> Result<Field> {
                 return Err(Error::new_spanned(
                     field,
                     "delegate requires property = \"Name\"",
-                ))
+                ));
             }
         }
     } else {
@@ -468,7 +468,10 @@ pub(super) fn field(field: &SynField, index: usize) -> Result<Field> {
             || write_with.is_some()
             || required)
     {
-        return Err(Error::new_spanned(field, "delegate owns defaults, requirements, omission, and codec framing; it cannot have default, required, skip_if, read_with, or write_with"));
+        return Err(Error::new_spanned(
+            field,
+            "delegate owns defaults, requirements, omission, and codec framing; it cannot have default, required, skip_if, read_with, or write_with",
+        ));
     }
     if constant.is_some()
         && !(matches!(kind, Kind::Animatable(_)) && type_argument(&field.ty, "Option").is_some())
@@ -486,7 +489,7 @@ pub(super) fn field(field: &SynField, index: usize) -> Result<Field> {
                 return Err(Error::new_spanned(
                     field,
                     "hive_name requires a property and a distinct spelling",
-                ))
+                ));
             }
         }
     }
@@ -586,7 +589,10 @@ pub(super) fn field(field: &SynField, index: usize) -> Result<Field> {
             || (matches!(kind, Kind::Flatten | Kind::Repeated(_))
                 && (default.is_some() || required))
         {
-            return Err(Error::new_spanned(field, "structural fields do not support codec hooks or skip_if; flatten and repeated also own their initialization and presence policy"));
+            return Err(Error::new_spanned(
+                field,
+                "structural fields do not support codec hooks or skip_if; flatten and repeated also own their initialization and presence policy",
+            ));
         }
         if matches!(kind, Kind::Repeated(_)) {
             repeated_element(&field.ty)?;
@@ -613,7 +619,7 @@ pub(super) fn field(field: &SynField, index: usize) -> Result<Field> {
             return Err(Error::new_spanned(
                 field,
                 "headers cannot have default or skip_if",
-            ))
+            ));
         }
         Kind::Skip if skip_if.is_some() || read_with.is_some() || write_with.is_some() => {
             return Err(Error::new_spanned(

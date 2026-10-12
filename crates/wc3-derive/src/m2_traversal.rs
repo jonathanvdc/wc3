@@ -1,5 +1,5 @@
 //! Field-wise validation and animation-leaf traversal.
-use crate::m2::fresh_ident;
+use crate::m2::{fresh_ident, Format};
 use proc_macro2::TokenStream;
 use quote::quote;
 use syn::{parse_quote, Data, DeriveInput, Error, Fields, Index, Result};
@@ -9,12 +9,24 @@ pub(crate) enum Operation {
     VisitArrays,
 }
 pub(crate) fn expand(input: DeriveInput, operation: Operation) -> TokenStream {
-    match expand_checked(input, operation) {
+    expand_format(input, operation, Format::M2)
+}
+pub(crate) fn expand_format(
+    input: DeriveInput,
+    operation: Operation,
+    format: Format,
+) -> TokenStream {
+    match expand_checked(input, operation, format) {
         Ok(tokens) => tokens,
         Err(error) => error.to_compile_error(),
     }
 }
-fn expand_checked(input: DeriveInput, operation: Operation) -> Result<TokenStream> {
+fn expand_checked(input: DeriveInput, operation: Operation, format: Format) -> Result<TokenStream> {
+    let codec = if matches!(format, Format::Wmo) {
+        quote!(::wc3::model::wmo)
+    } else {
+        quote!(::wc3::model::m2)
+    };
     let name = &input.ident;
     let (_, type_generics, _) = input.generics.split_for_impl();
     let mut generics = input.generics.clone();
@@ -54,12 +66,12 @@ fn expand_checked(input: DeriveInput, operation: Operation) -> Result<TokenStrea
             };
             let (bound, call) = match operation {
                 Operation::Validate => (
-                    parse_quote!(#ty: ::wc3::model::m2::Validate),
-                    quote!(::wc3::model::m2::Validate::validate(#value)?;),
+                    parse_quote!(#ty: #codec::Validate),
+                    quote!(#codec::Validate::validate(#value)?;),
                 ),
                 Operation::VisitArrays => (
-                    parse_quote!(#ty: ::wc3::model::m2::VisitArrays<#lifetime>),
-                    quote!(::wc3::model::m2::VisitArrays::visit_arrays(#value, #visitor_argument)?;),
+                    parse_quote!(#ty: #codec::VisitArrays<#lifetime>),
+                    quote!(#codec::VisitArrays::visit_arrays(#value, #visitor_argument)?;),
                 ),
             };
             generics.make_where_clause().predicates.push(bound);
@@ -96,19 +108,19 @@ fn expand_checked(input: DeriveInput, operation: Operation) -> Result<TokenStrea
             return Err(Error::new_spanned(
                 name,
                 "M2 traversal derives do not support unions",
-            ))
+            ));
         }
     };
     let (impl_generics, _, where_clause) = generics.split_for_impl();
     Ok(match operation {
         Operation::Validate => quote! {
-            impl #impl_generics ::wc3::model::m2::Validate for #name #type_generics #where_clause {
-                fn validate(&self) -> ::core::result::Result<(), ::wc3::model::m2::ReadError> { #body }
+            impl #impl_generics #codec::Validate for #name #type_generics #where_clause {
+                fn validate(&self) -> ::core::result::Result<(), #codec::ReadError> { #body }
             }
         },
         Operation::VisitArrays => quote! {
-            impl #impl_generics ::wc3::model::m2::VisitArrays<#lifetime> for #name #type_generics #where_clause {
-                fn visit_arrays<#visitor: ::wc3::model::m2::ArrayVisitor<#lifetime>>(&mut self, #visitor_argument: &mut #visitor) -> ::core::result::Result<(), #visitor::Error> { #body }
+            impl #impl_generics #codec::VisitArrays<#lifetime> for #name #type_generics #where_clause {
+                fn visit_arrays<#visitor: #codec::ArrayVisitor<#lifetime>>(&mut self, #visitor_argument: &mut #visitor) -> ::core::result::Result<(), #visitor::Error> { #body }
             }
         },
     })

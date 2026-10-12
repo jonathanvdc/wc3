@@ -2,7 +2,7 @@
 //!
 //! These macros are for maintaining or extending the record implementations.
 //! Applications using the built-in model types only need the codec traits in
-//! `wc3::model::mdlx::{mdx, mdl}` and `wc3::model::m2`.
+//! `wc3::model::mdlx::{mdx, mdl}`, `wc3::model::m2`, and `wc3::model::wmo`.
 //!
 //! Import macros through those format modules, for example
 //! `#[derive(mdl::Read, mdl::Write)]`. Ownership is shared through
@@ -10,6 +10,7 @@
 #![doc = include_str!("mdx.md")]
 #![doc = include_str!("mdl.md")]
 #![doc = include_str!("m2.md")]
+#![doc = include_str!("wmo.md")]
 #![deny(missing_docs)]
 mod mdl;
 mod mdx;
@@ -140,6 +141,47 @@ pub fn derive_m2_visit_arrays(input: TokenStream) -> TokenStream {
     m2_traversal::expand(
         parse_macro_input!(input as DeriveInput),
         m2_traversal::Operation::VisitArrays,
+    )
+    .into()
+}
+
+/// Derives field-order WMO binary decoding.
+#[proc_macro_derive(WmoRead)]
+pub fn derive_wmo_read(input: TokenStream) -> TokenStream {
+    m2::expand_format(
+        syn::parse_macro_input!(input as syn::DeriveInput),
+        m2::Operation::Read,
+        m2::Format::Wmo,
+    )
+    .into()
+}
+/// Derives field-order WMO binary encoding.
+#[proc_macro_derive(WmoWrite)]
+pub fn derive_wmo_write(input: TokenStream) -> TokenStream {
+    m2::expand_format(
+        syn::parse_macro_input!(input as syn::DeriveInput),
+        m2::Operation::Write,
+        m2::Format::Wmo,
+    )
+    .into()
+}
+/// Derives fixed inline WMO record width.
+#[proc_macro_derive(WmoRecordLayout)]
+pub fn derive_wmo_record_layout(input: TokenStream) -> TokenStream {
+    m2::expand_format(
+        syn::parse_macro_input!(input as syn::DeriveInput),
+        m2::Operation::Layout,
+        m2::Format::Wmo,
+    )
+    .into()
+}
+/// Derives compositional WMO record validation.
+#[proc_macro_derive(WmoValidate)]
+pub fn derive_wmo_validate(input: TokenStream) -> TokenStream {
+    m2_traversal::expand_format(
+        syn::parse_macro_input!(input as syn::DeriveInput),
+        m2_traversal::Operation::Validate,
+        m2::Format::Wmo,
     )
     .into()
 }

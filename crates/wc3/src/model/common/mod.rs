@@ -11,3 +11,6 @@ pub use wc3_derive::{CommonPartialEq, Ownership};
 
 mod io_error;
 pub use io_error::IoError;
+
+mod resources;
+pub use resources::FileKey;
