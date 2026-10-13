@@ -2,6 +2,7 @@
 use wc3::model::m2;
 use wc3::model::m2::codec::{Decoder, Encoder};
 use wc3::model::m2::companions::{BoneFile, GeometryFile, PhysicsFile};
+use wc3::model::m2::records::ModelFlags;
 
 fn frame(tag: [u8; 4], payload: &[u8]) -> Vec<u8> {
     let mut bytes = tag.to_vec();
@@ -10,11 +11,11 @@ fn frame(tag: [u8; 4], payload: &[u8]) -> Vec<u8> {
     bytes
 }
 fn check<'data, T: m2::Read<'data> + m2::Write>(bytes: &'data [u8]) {
-    let mut input = Decoder::new(bytes, 274, 0);
+    let mut input = Decoder::new(bytes, 274, ModelFlags::default());
     input.bytes(3).unwrap();
     let document = T::read(&mut input).unwrap();
     assert_eq!(input.position(), bytes.len());
-    let mut output = Encoder::new(274, 0);
+    let mut output = Encoder::new(274, ModelFlags::default());
     output.bytes(&bytes[..3]).unwrap();
     document.write(&mut output).unwrap();
     assert_eq!(output.finish(), bytes);
@@ -41,16 +42,22 @@ fn full_documents_use_the_remaining_bounded_address_space() {
 #[test]
 fn full_document_traits_reject_truncated_framing() {
     let bytes = b"SYHP\x02\0\0\0\0";
-    assert!(<PhysicsFile as m2::Read>::read(&mut Decoder::new(bytes, 274, 0)).is_err());
+    assert!(
+        <PhysicsFile as m2::Read>::read(&mut Decoder::new(bytes, 274, ModelFlags::default()))
+            .is_err()
+    );
     let bytes = b"VPOS\x08\0\0\0";
-    assert!(<GeometryFile as m2::Read>::read(&mut Decoder::new(bytes, 274, 0)).is_err());
+    assert!(
+        <GeometryFile as m2::Read>::read(&mut Decoder::new(bytes, 274, ModelFlags::default()))
+            .is_err()
+    );
 }
 
 #[test]
 fn document_errors_retain_the_enclosing_source_offset() {
     let mut bytes = vec![9, 8, 7];
     bytes.extend_from_slice(&2u32.to_le_bytes());
-    let mut decoder = Decoder::new(&bytes, 274, 0).with_origin(20);
+    let mut decoder = Decoder::new(&bytes, 274, ModelFlags::default()).with_origin(20);
     decoder.bytes(3).unwrap();
     let error = <BoneFile as m2::Read>::read(&mut decoder).unwrap_err();
     assert_eq!(error.offset, 23);

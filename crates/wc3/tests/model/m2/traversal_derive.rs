@@ -5,6 +5,8 @@ use m2::{ReadError, Validate as _, VisitArrays as _, ZeroVec, V264};
 use std::cell::RefCell;
 use std::rc::Rc;
 use wc3::model::m2;
+use wc3::model::m2::records::Interpolation;
+use wc3::model::m2::records::ModelFlags;
 
 struct Leaf<'data> {
     id: usize,
@@ -140,7 +142,7 @@ fn native_tracks_keep_sequence_and_global_context() {
     let mut animated = Animated {
         track: Track {
             base: TrackBase {
-                interpolation: 1,
+                interpolation: Interpolation::Linear,
                 global_sequence: 12,
                 timeline: ModernTimeline {
                     timestamps: vec![Array::Inline(ZeroVec::alloc_from_slice(&[0, 20]))],
@@ -223,10 +225,10 @@ fn generated_names_do_not_shadow_user_parameters() {
     fn assert_empty<T: m2::Validate + for<'data> m2::VisitArrays<'data>>() {}
     assert_empty::<Empty>();
     let codec = CodecResult { value: 0x1234u32 };
-    let mut encoder = m2::codec::Encoder::new(264, 0);
+    let mut encoder = m2::codec::Encoder::new(264, ModelFlags::default());
     m2::Write::write(&codec, &mut encoder).unwrap();
     let bytes = encoder.finish();
-    let mut decoder = m2::codec::Decoder::new(&bytes, 264, 0);
+    let mut decoder = m2::codec::Decoder::new(&bytes, 264, ModelFlags::default());
     let decoded = <CodecResult<u32> as m2::Read>::read(&mut decoder).unwrap();
     assert_eq!(decoded.value, codec.value);
 }

@@ -128,7 +128,7 @@ impl<'data, V: ModelLayout> DocumentStorage<'data, V> for ChunkStream<'data, V> 
         let external: Vec<bool> = core
             .sequences
             .iter()
-            .map(|sequence| sequence.flags & 0x130 == 0)
+            .map(|sequence| sequence.flags.external_animation())
             .collect();
         let flags = core.flags;
         let core_light_count = core.lights.len();

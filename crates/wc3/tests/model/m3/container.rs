@@ -60,18 +60,18 @@ fn check_fixture<E: Envelope>() {
     assert_eq!(array.as_bytes().as_ptr(), bytes[32..].as_ptr());
     assert_eq!(array.get(0).unwrap().unwrap(), Word(0x1122_3344));
     let first = document
-        .resolve(Ref::<Word>::new(1, id.index(), 0))
+        .resolve(Ref::<Word>::from_section(1, id.index()))
         .unwrap();
     let second = document
-        .resolve(Ref::<Word>::new(1, id.index(), 0))
+        .resolve(Ref::<Word>::from_section(1, id.index()))
         .unwrap();
     assert_eq!(first.as_bytes().as_ptr(), second.as_bytes().as_ptr());
     assert!(document
-        .resolve(Ref::<Word>::new(3, id.index(), 0))
+        .resolve(Ref::<Word>::from_section(3, id.index()))
         .is_err());
-    assert!(document.resolve(Ref::<Word>::new(1, 999, 0)).is_err());
+    assert!(document.resolve(Ref::<Word>::from_section(1, 999)).is_err());
     assert!(document
-        .resolve(Ref::<Word>::new(0, 999, 0))
+        .resolve(Ref::<Word>::from_section(0, 999))
         .unwrap()
         .is_empty());
     let mut document = document.into_owned();
@@ -113,6 +113,10 @@ fn md33_rejects_unrepresentable_reference_flags() {
     let mut document = Document::<Md33>::read(&words_fixture(*b"MD33"))
         .unwrap()
         .into_owned();
-    document.set_root(Ref::<m3::Any>::with_flags(0, 0, 1));
+    document.set_root(Ref::<m3::Any>::with_flags(
+        0,
+        0,
+        m3::records::ReferenceFlags(1),
+    ));
     assert!(document.write().is_err());
 }

@@ -3,7 +3,7 @@ use super::*;
 pub(super) fn set_version(asset: &mut Asset, version: u32) -> Result<(), Error> {
     let mut raw = asset.document.clone().into_raw();
     let root = raw
-        .resolve::<wr::DocumentRecord<wr::V1>>(Ref::new(1, raw.root_reference().index, 0))?
+        .resolve::<wr::DocumentRecord<wr::V1>>(Ref::from_section(1, raw.root_reference().index))?
         .get(0)
         .transpose()?
         .ok_or_else(|| Error::new("root", "missing root"))?;
@@ -34,7 +34,7 @@ pub(super) fn legacy_metadata14(
     source: &old::Root14<'_>,
 ) -> Result<(), Error> {
     let root = raw
-        .resolve::<wr::DocumentRecord<wr::V1>>(Ref::new(1, raw.root_reference().index, 0))?
+        .resolve::<wr::DocumentRecord<wr::V1>>(Ref::from_section(1, raw.root_reference().index))?
         .get(0)
         .transpose()?
         .ok_or_else(|| Error::new("root", "missing root"))?;

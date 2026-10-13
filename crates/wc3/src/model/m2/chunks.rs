@@ -8,7 +8,10 @@
 use super as m2;
 use super::codec::{ArrayRef, Decoder, Encoder, Value};
 use super::companions::{encode_records, flat_records, write_chunk, PhysicsFile};
-use super::records::{Extent, ParticleTrack, TextureWeight, TrackBase};
+use super::records::{
+    CollisionFlags, DetailLightFlags, Extent, LodFlags, ModelFlags, ParticleTrack, PivotFlags,
+    TextureWeight, TrackBase, WaterfallFlags,
+};
 use super::{ModelLayout, ReadError, WriteError, ZeroVec};
 use crate::model::common::Ownership;
 use m2::Write as _;
@@ -42,7 +45,7 @@ pub struct ParticleExtensionV1 {
 /// LDV1 configuration for mesh and particle levels of detail.
 pub struct LodConfiguration {
     /// LOD configuration bits; 0x08 enables the fixed-point scale. Unknown bits are preserved.
-    pub flags: u16,
+    pub flags: LodFlags,
     /// Number of available LOD levels; the client clamps this count to eight.
     pub lod_count: u16,
     /// Native distance parameter used in the client scale clamp `clamp(740 / distance, 0.5, 5)`; its physical unit is not established.
@@ -87,7 +90,7 @@ pub struct DistanceAlpha {
 /// DETL parameters aligned with the core light array.
 pub struct DetailLight {
     /// Native detail-light flags; bit meanings remain unresolved.
-    pub flags: u16,
+    pub flags: DetailLightFlags,
     /// Binary16 bits for the shadow render-target matrix scale.
     pub scale_half: u16,
     /// Binary16 bits for the multiplier applied to the corresponding light diffuse color.
@@ -117,7 +120,7 @@ pub struct PivotDisplacement {
     /// Three-component pivot displacement; its coordinate space and units remain unresolved.
     pub offset: [f32; 3],
     /// Native displacement flags; bit meanings remain unresolved.
-    pub flags: u32,
+    pub flags: PivotFlags,
     /// Uninterpreted trailing words.
     pub reserved: [u32; 4],
 }
@@ -145,7 +148,7 @@ pub struct WaterfallV3 {
     /// Base color stored as four unsigned RGBA bytes.
     pub base_color: [u8; 4],
     /// Native waterfall-path flags; bit meanings remain unresolved.
-    pub flags: u16,
+    pub flags: WaterfallFlags,
     /// Uninterpreted 16-bit word between flags and the remaining shader parameters.
     pub unknown0: u16,
     /// Remaining seven native shader parameters, in wire order; individual meanings remain unresolved.
@@ -175,13 +178,13 @@ pub struct CollisionMesh<'data> {
     /// Collision index entries referencing the position array.
     pub indices: ZeroVec<'data, u16>,
     /// Native collision flags; element associations and bit meanings remain unresolved.
-    pub flags: ZeroVec<'data, u16>,
+    pub flags: ZeroVec<'data, CollisionFlags>,
 }
 #[derive(Clone, Debug, Default)]
 /// Owning-model context needed to decode native extension records.
 pub struct ChunkContext<V: ModelLayout> {
     /// Core model flags used when decoding flag-selected record fields.
-    pub flags: u32,
+    pub flags: ModelFlags,
     /// Number of core lights, needed to distinguish DETL records from alignment padding.
     pub light_count: Option<usize>,
     /// One entry per owning sequence: true when its animation leaves belong to an external file.
@@ -190,7 +193,11 @@ pub struct ChunkContext<V: ModelLayout> {
 }
 impl<V: ModelLayout> ChunkContext<V> {
     /// Supplies native flags, optional light count, and external-sequence identity.
-    pub fn new(flags: u32, light_count: Option<usize>, external_sequences: Arc<[bool]>) -> Self {
+    pub fn new(
+        flags: ModelFlags,
+        light_count: Option<usize>,
+        external_sequences: Arc<[bool]>,
+    ) -> Self {
         Self {
             flags,
             light_count,
@@ -441,7 +448,7 @@ impl<'data, V: ModelLayout> Chunk<'data, V> {
         }
     }
     /// Encodes the typed chunk payload with freshly assigned local offsets.
-    pub fn payload(&self, flags: u32) -> Result<Vec<u8>, WriteError> {
+    pub fn payload(&self, flags: ModelFlags) -> Result<Vec<u8>, WriteError> {
         let version = V::VERSION;
         let mut e = Encoder::new(version, flags);
         match self {
@@ -556,7 +563,7 @@ fn read_single<'data, T: m2::Read<'data> + m2::RecordLayout, V: ModelLayout>(
     data: &'data [u8],
     c: &ChunkContext<V>,
 ) -> Result<T, ReadError> {
-    if data.len() != T::size(V::VERSION, c.flags) {
+    if data.len() != T::size(V::VERSION, c.flags.bits()) {
         return Err(ReadError::invalid(0, "chunk record size"));
     }
     T::read(&mut Decoder::new(data, V::VERSION, c.flags))

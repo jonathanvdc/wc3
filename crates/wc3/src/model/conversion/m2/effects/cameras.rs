@@ -29,7 +29,10 @@ where
     } = state;
 
     let mut camera = native::records::Camera::<V> {
-        kind: metadata.get("m2.camera.kind").copied().unwrap_or(0) as u32,
+        kind: metadata
+            .get("m2.camera.kind")
+            .map(|&value| CameraKind::from_raw(value as u32))
+            .unwrap_or(CameraKind::Portrait),
         near_clip: payload.near_clip,
         far_clip: payload.far_clip,
         position_base: common.pivot,

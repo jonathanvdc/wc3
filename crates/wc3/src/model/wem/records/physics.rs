@@ -566,7 +566,7 @@ impl PhysicsShapeDialect for V1 {
 
 impl PhysicsShapeDialect for V2 {
     const VERSION: u32 = 2;
-    type GameFlags = u16;
+    type GameFlags = WowShapeGameFlags;
 }
 
 /// Collision geometry expressed in a body-relative coordinate frame.
@@ -634,7 +634,7 @@ pub struct Sc2BodyExtension {
     /// Retains the bone physics-state bit during setup and deactivation.
     pub keeps_bone_driven: Bool,
     /// Additional authored body bits whose runtime interpretation is unresolved.
-    pub untraced_flags: u32,
+    pub untraced_flags: Sc2BodyUntracedFlags,
 }
 
 /// World of Warcraft body-following and ragdoll grouping settings.
@@ -724,7 +724,7 @@ pub struct PhysicsBody<D: PhysicsBodyDialect> {
     /// Keeps the body kinematic during ragdoll activation.
     pub exempt_from_ragdoll: Bool,
     /// Force-field channel mask; low and high 16-bit halves retain local and world channels.
-    pub force_channels: u32,
+    pub force_channels: ForceChannels,
     /// Optional StarCraft II body settings.
     pub sc2: InlineOption<Sc2BodyExtension>,
     /// Optional World of Warcraft kinematic-drive and grouping settings.

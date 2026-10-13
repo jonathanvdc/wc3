@@ -1,6 +1,8 @@
 //! PHYS versions 0–6, including inline PFDC framing and polytope topology.
 use super::super as m2;
 use super::super::codec::{ArrayRef, Decoder, Encoder};
+use super::super::records::ModelFlags;
+use super::super::records::{PhysicsBodyKind, PhysicsKind};
 use super::super::{ReadError, WriteError, ZeroVec};
 use super::fixed::*;
 use super::{encode_records, flat_records, write_chunk};
@@ -28,7 +30,7 @@ pub enum PhysicsChunk<'data> {
     /// PHYS header containing the physics layout version, from zero through six.
     Header(u16),
     /// PHYT object behavior: 0/1 worn ragdoll, 2 vegetation, 3 shared-world ragdoll, 4 private-world ragdoll.
-    Kind(u32),
+    Kind(PhysicsKind),
     /// PLYT convex polytope geometry.
     Polytopes(Vec<Polytope<'data>>),
     /// PHAO host-skeleton allow-list controlling use of authored kinematic follow factors.
@@ -108,7 +110,7 @@ impl<'data> PhysicsFile<'data> {
         Self::decode(data, true)
     }
     fn decode(data: &'data [u8], inline: bool) -> Result<Self, ReadError> {
-        let mut d = Decoder::new(data, 0, 0);
+        let mut d = Decoder::new(data, 0, ModelFlags::default());
         let mut chunks = Vec::new();
         let mut version = None;
         let mut padding = &data[data.len()..];
@@ -140,7 +142,7 @@ impl<'data> PhysicsFile<'data> {
                     "duplicate PHYS header",
                 ));
             }
-            let mut payload = Decoder::new(bytes, 0, 0);
+            let mut payload = Decoder::new(bytes, 0, ModelFlags::default());
             let chunk = match &tag {
                 b"PHYS" => {
                     if bytes.len() != 2 {
@@ -157,7 +159,7 @@ impl<'data> PhysicsFile<'data> {
                     if bytes.len() != 4 {
                         return Err(ReadError::invalid(0, "PHYT length"));
                     }
-                    PhysicsChunk::Kind(payload.u32()?)
+                    PhysicsChunk::Kind(PhysicsKind::from_raw(payload.u32()?))
                 }
                 b"PLYT" => PhysicsChunk::Polytopes(read_polytopes(bytes)?),
                 b"PHAO" => {
@@ -171,28 +173,30 @@ impl<'data> PhysicsFile<'data> {
                     })?;
                     PhysicsChunk::AllowList { header, keys }
                 }
-                b"BOXS" => PhysicsChunk::Boxes(flat_records(bytes, 0, 0)?),
-                b"SPHS" => PhysicsChunk::Spheres(flat_records(bytes, 0, 0)?),
-                b"CAPS" => PhysicsChunk::Capsules(flat_records(bytes, 0, 0)?),
-                b"SHAP" => PhysicsChunk::Shapes(flat_records(bytes, 0, 0)?),
-                b"SHP2" => PhysicsChunk::Shapes2(flat_records(bytes, 0, 0)?),
-                b"BODY" => PhysicsChunk::Bodies(flat_records(bytes, 0, 0)?),
-                b"BDY2" => PhysicsChunk::Bodies2(flat_records(bytes, 0, 0)?),
-                b"BDY3" => PhysicsChunk::Bodies3(flat_records(bytes, 0, 0)?),
-                b"BDY4" => PhysicsChunk::Bodies4(flat_records(bytes, 0, 0)?),
-                b"SHOJ" => PhysicsChunk::Shoulders(flat_records(bytes, 0, 0)?),
-                b"SHJ2" => PhysicsChunk::Shoulders2(flat_records(bytes, 0, 0)?),
-                b"WELJ" => PhysicsChunk::Welds(flat_records(bytes, 0, 0)?),
-                b"WLJ2" => PhysicsChunk::Welds2(flat_records(bytes, 0, 0)?),
-                b"WLJ3" => PhysicsChunk::Welds3(flat_records(bytes, 0, 0)?),
-                b"REVJ" => PhysicsChunk::Revolutes(flat_records(bytes, 0, 0)?),
-                b"REV2" => PhysicsChunk::Revolutes2(flat_records(bytes, 0, 0)?),
-                b"SPHJ" => PhysicsChunk::Sphericals(flat_records(bytes, 0, 0)?),
-                b"DSTJ" => PhysicsChunk::Distances(flat_records(bytes, 0, 0)?),
-                b"PRSJ" => PhysicsChunk::Prismatics(flat_records(bytes, 0, 0)?),
-                b"PRS2" => PhysicsChunk::Prismatics2(flat_records(bytes, 0, 0)?),
-                b"JOIN" => PhysicsChunk::Joints(flat_records(bytes, 0, 0)?),
-                b"PHYV" => PhysicsChunk::Vegetation(flat_records(bytes, 0, 0)?),
+                b"BOXS" => PhysicsChunk::Boxes(flat_records(bytes, 0, ModelFlags::default())?),
+                b"SPHS" => PhysicsChunk::Spheres(flat_records(bytes, 0, ModelFlags::default())?),
+                b"CAPS" => PhysicsChunk::Capsules(flat_records(bytes, 0, ModelFlags::default())?),
+                b"SHAP" => PhysicsChunk::Shapes(flat_records(bytes, 0, ModelFlags::default())?),
+                b"SHP2" => PhysicsChunk::Shapes2(flat_records(bytes, 0, ModelFlags::default())?),
+                b"BODY" => PhysicsChunk::Bodies(flat_records(bytes, 0, ModelFlags::default())?),
+                b"BDY2" => PhysicsChunk::Bodies2(flat_records(bytes, 0, ModelFlags::default())?),
+                b"BDY3" => PhysicsChunk::Bodies3(flat_records(bytes, 0, ModelFlags::default())?),
+                b"BDY4" => PhysicsChunk::Bodies4(flat_records(bytes, 0, ModelFlags::default())?),
+                b"SHOJ" => PhysicsChunk::Shoulders(flat_records(bytes, 0, ModelFlags::default())?),
+                b"SHJ2" => PhysicsChunk::Shoulders2(flat_records(bytes, 0, ModelFlags::default())?),
+                b"WELJ" => PhysicsChunk::Welds(flat_records(bytes, 0, ModelFlags::default())?),
+                b"WLJ2" => PhysicsChunk::Welds2(flat_records(bytes, 0, ModelFlags::default())?),
+                b"WLJ3" => PhysicsChunk::Welds3(flat_records(bytes, 0, ModelFlags::default())?),
+                b"REVJ" => PhysicsChunk::Revolutes(flat_records(bytes, 0, ModelFlags::default())?),
+                b"REV2" => PhysicsChunk::Revolutes2(flat_records(bytes, 0, ModelFlags::default())?),
+                b"SPHJ" => PhysicsChunk::Sphericals(flat_records(bytes, 0, ModelFlags::default())?),
+                b"DSTJ" => PhysicsChunk::Distances(flat_records(bytes, 0, ModelFlags::default())?),
+                b"PRSJ" => PhysicsChunk::Prismatics(flat_records(bytes, 0, ModelFlags::default())?),
+                b"PRS2" => {
+                    PhysicsChunk::Prismatics2(flat_records(bytes, 0, ModelFlags::default())?)
+                }
+                b"JOIN" => PhysicsChunk::Joints(flat_records(bytes, 0, ModelFlags::default())?),
+                b"PHYV" => PhysicsChunk::Vegetation(flat_records(bytes, 0, ModelFlags::default())?),
                 _ => PhysicsChunk::Unknown {
                     tag,
                     data: Cow::Borrowed(bytes),
@@ -294,7 +298,7 @@ impl<'data> PhysicsFile<'data> {
             }
         }
         for shape in &shapes {
-            if let Some(count) = geometry.get(shape.shape_type as usize) {
+            if let Some(count) = geometry.get(usize::from(shape.shape_type.raw())) {
                 if shape.shape_index < 0 || shape.shape_index as usize >= *count {
                     return Err(ReadError::invalid(0, "physics shape geometry index"));
                 }
@@ -313,7 +317,9 @@ impl<'data> PhysicsFile<'data> {
             {
                 return Err(ReadError::invalid(0, "physics body shape range"));
             }
-            if kind <= 1 && bone_count.is_some_and(|count| bone as usize >= count) {
+            if matches!(kind, PhysicsBodyKind::Kinematic | PhysicsBodyKind::Dynamic)
+                && bone_count.is_some_and(|count| bone as usize >= count)
+            {
                 return Err(ReadError::invalid(0, "physics body bone index"));
             }
         }
@@ -321,7 +327,7 @@ impl<'data> PhysicsFile<'data> {
             if binding.body_a as usize >= bodies.len() || binding.body_b as usize >= bodies.len() {
                 return Err(ReadError::invalid(0, "physics joint body index"));
             }
-            if let Some(count) = joints.get(binding.joint_type as usize) {
+            if let Some(count) = joints.get(usize::from(binding.joint_type.raw())) {
                 if binding.joint_id < 0 || binding.joint_id as usize >= *count {
                     return Err(ReadError::invalid(0, "physics joint constraint index"));
                 }
@@ -339,7 +345,7 @@ impl<'data> PhysicsFile<'data> {
             Some(PhysicsChunk::Header(version)) => *version,
             _ => unreachable!(),
         };
-        let mut e = Encoder::new(0, 0);
+        let mut e = Encoder::new(0, ModelFlags::default());
         for (index, chunk) in self.chunks.iter().enumerate() {
             if index > 0 && matches!(chunk, PhysicsChunk::Header(_)) {
                 return Err(WriteError::invalid("duplicate PHYS header"));
@@ -354,35 +360,79 @@ impl<'data> PhysicsFile<'data> {
                     }
                     (*b"PHYS", version.to_le_bytes().to_vec())
                 }
-                PhysicsChunk::Kind(kind) => (*b"PHYT", kind.to_le_bytes().to_vec()),
+                PhysicsChunk::Kind(kind) => (*b"PHYT", kind.raw().to_le_bytes().to_vec()),
                 PhysicsChunk::Polytopes(values) => (*b"PLYT", write_polytopes(values)?),
                 PhysicsChunk::AllowList { header, keys } => {
                     let mut data = header.to_le_bytes().to_vec();
                     data.extend_from_slice(keys.as_bytes());
                     (*b"PHAO", data)
                 }
-                PhysicsChunk::Boxes(values) => (*b"BOXS", encode_records(values, 0, 0)?),
-                PhysicsChunk::Spheres(values) => (*b"SPHS", encode_records(values, 0, 0)?),
-                PhysicsChunk::Capsules(values) => (*b"CAPS", encode_records(values, 0, 0)?),
-                PhysicsChunk::Shapes(values) => (*b"SHAP", encode_records(values, 0, 0)?),
-                PhysicsChunk::Shapes2(values) => (*b"SHP2", encode_records(values, 0, 0)?),
-                PhysicsChunk::Bodies(values) => (*b"BODY", encode_records(values, 0, 0)?),
-                PhysicsChunk::Bodies2(values) => (*b"BDY2", encode_records(values, 0, 0)?),
-                PhysicsChunk::Bodies3(values) => (*b"BDY3", encode_records(values, 0, 0)?),
-                PhysicsChunk::Bodies4(values) => (*b"BDY4", encode_records(values, 0, 0)?),
-                PhysicsChunk::Shoulders(values) => (*b"SHOJ", encode_records(values, 0, 0)?),
-                PhysicsChunk::Shoulders2(values) => (*b"SHJ2", encode_records(values, 0, 0)?),
-                PhysicsChunk::Welds(values) => (*b"WELJ", encode_records(values, 0, 0)?),
-                PhysicsChunk::Welds2(values) => (*b"WLJ2", encode_records(values, 0, 0)?),
-                PhysicsChunk::Welds3(values) => (*b"WLJ3", encode_records(values, 0, 0)?),
-                PhysicsChunk::Revolutes(values) => (*b"REVJ", encode_records(values, 0, 0)?),
-                PhysicsChunk::Revolutes2(values) => (*b"REV2", encode_records(values, 0, 0)?),
-                PhysicsChunk::Sphericals(values) => (*b"SPHJ", encode_records(values, 0, 0)?),
-                PhysicsChunk::Distances(values) => (*b"DSTJ", encode_records(values, 0, 0)?),
-                PhysicsChunk::Prismatics(values) => (*b"PRSJ", encode_records(values, 0, 0)?),
-                PhysicsChunk::Prismatics2(values) => (*b"PRS2", encode_records(values, 0, 0)?),
-                PhysicsChunk::Joints(values) => (*b"JOIN", encode_records(values, 0, 0)?),
-                PhysicsChunk::Vegetation(values) => (*b"PHYV", encode_records(values, 0, 0)?),
+                PhysicsChunk::Boxes(values) => {
+                    (*b"BOXS", encode_records(values, 0, ModelFlags::default())?)
+                }
+                PhysicsChunk::Spheres(values) => {
+                    (*b"SPHS", encode_records(values, 0, ModelFlags::default())?)
+                }
+                PhysicsChunk::Capsules(values) => {
+                    (*b"CAPS", encode_records(values, 0, ModelFlags::default())?)
+                }
+                PhysicsChunk::Shapes(values) => {
+                    (*b"SHAP", encode_records(values, 0, ModelFlags::default())?)
+                }
+                PhysicsChunk::Shapes2(values) => {
+                    (*b"SHP2", encode_records(values, 0, ModelFlags::default())?)
+                }
+                PhysicsChunk::Bodies(values) => {
+                    (*b"BODY", encode_records(values, 0, ModelFlags::default())?)
+                }
+                PhysicsChunk::Bodies2(values) => {
+                    (*b"BDY2", encode_records(values, 0, ModelFlags::default())?)
+                }
+                PhysicsChunk::Bodies3(values) => {
+                    (*b"BDY3", encode_records(values, 0, ModelFlags::default())?)
+                }
+                PhysicsChunk::Bodies4(values) => {
+                    (*b"BDY4", encode_records(values, 0, ModelFlags::default())?)
+                }
+                PhysicsChunk::Shoulders(values) => {
+                    (*b"SHOJ", encode_records(values, 0, ModelFlags::default())?)
+                }
+                PhysicsChunk::Shoulders2(values) => {
+                    (*b"SHJ2", encode_records(values, 0, ModelFlags::default())?)
+                }
+                PhysicsChunk::Welds(values) => {
+                    (*b"WELJ", encode_records(values, 0, ModelFlags::default())?)
+                }
+                PhysicsChunk::Welds2(values) => {
+                    (*b"WLJ2", encode_records(values, 0, ModelFlags::default())?)
+                }
+                PhysicsChunk::Welds3(values) => {
+                    (*b"WLJ3", encode_records(values, 0, ModelFlags::default())?)
+                }
+                PhysicsChunk::Revolutes(values) => {
+                    (*b"REVJ", encode_records(values, 0, ModelFlags::default())?)
+                }
+                PhysicsChunk::Revolutes2(values) => {
+                    (*b"REV2", encode_records(values, 0, ModelFlags::default())?)
+                }
+                PhysicsChunk::Sphericals(values) => {
+                    (*b"SPHJ", encode_records(values, 0, ModelFlags::default())?)
+                }
+                PhysicsChunk::Distances(values) => {
+                    (*b"DSTJ", encode_records(values, 0, ModelFlags::default())?)
+                }
+                PhysicsChunk::Prismatics(values) => {
+                    (*b"PRSJ", encode_records(values, 0, ModelFlags::default())?)
+                }
+                PhysicsChunk::Prismatics2(values) => {
+                    (*b"PRS2", encode_records(values, 0, ModelFlags::default())?)
+                }
+                PhysicsChunk::Joints(values) => {
+                    (*b"JOIN", encode_records(values, 0, ModelFlags::default())?)
+                }
+                PhysicsChunk::Vegetation(values) => {
+                    (*b"PHYV", encode_records(values, 0, ModelFlags::default())?)
+                }
                 PhysicsChunk::Unknown { tag, data } => (*tag, data.to_vec()),
             };
             if !valid_tag(version, tag) {
@@ -409,7 +459,7 @@ impl<'data> PhysicsFile<'data> {
     }
 }
 fn read_polytopes<'data>(data: &'data [u8]) -> Result<Vec<Polytope<'data>>, ReadError> {
-    let mut d = Decoder::new(data, 0, 0);
+    let mut d = Decoder::new(data, 0, ModelFlags::default());
     let count = d.u32()? as usize;
     let headers = d.records::<PolytopeHeader>(ArrayRef {
         count: u32::try_from(count).map_err(|_| ReadError::invalid(0, "polytope count"))?,
@@ -475,7 +525,7 @@ fn read_array<'data, T: super::super::codec::Value>(
     Ok(value)
 }
 fn write_polytopes(values: &[Polytope<'_>]) -> Result<Vec<u8>, WriteError> {
-    let mut e = Encoder::new(0, 0);
+    let mut e = Encoder::new(0, ModelFlags::default());
     e.u32(
         u32::try_from(values.len())
             .map_err(|_| WriteError::invalid("polytope count exceeds u32"))?,

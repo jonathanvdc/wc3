@@ -13,7 +13,7 @@ where
     if semantic.unit_scale != 1. {
         context.unsupported("unit_scale","native model has no global unit scale; numeric geometry, physics, and effect rescaling needs an explicit policy")?;
     }
-    if semantic.space != wr::CoordSpace::BLIZZARD {
+    if semantic.space != wr::CoordSpace::Blizzard {
         context.issue(
             "space",
             IssueKind::Normalized,
@@ -50,7 +50,7 @@ where
     }
 
     for (index, node) in semantic.nodes.iter().enumerate() {
-        if node.flags & wr::NodeFlags::HIDDEN.0 != 0 {
+        if node.flags.hidden() {
             context.unsupported(
                 format!("nodes[{index}].hidden"),
                 "MDLX does not store visibility on generic transform nodes",
@@ -107,16 +107,6 @@ where
     }
     let (active_nodes, active_materials) = active_graph(asset, options)?;
     let starts = clip_starts(&semantic, &mut context)?;
-    if !is_wc3(semantic.profile) && semantic.profile != ProfileId::GENERIC {
-        for (index, material) in semantic.materials.iter().enumerate() {
-            if material.flags != 0 {
-                context.unsupported(
-                    format!("materials[{index}].flags"),
-                    "Native profile render flags have no equivalent MDLX meaning",
-                )?;
-            }
-        }
-    }
     let mut baseline = native::Model::<T>::new();
     let ids = native_ids(&active_nodes, asset.document.raw())?;
     let mut updates = BTreeMap::new();
@@ -140,7 +130,7 @@ where
         let original = values
             .get("mdlx.node_flags")
             .map_or(0, |(value, _)| *value as u32);
-        native_node.flags = native::scene::NodeFlags(native_flags(node.flags, original));
+        native_node.flags = native_flags(node.flags, original);
         if node.translation != [0.; 3] {
             native_node.translation = Some(Track::constant(node.translation));
         }
@@ -398,7 +388,7 @@ where
         let mut value = native::Texture::new(&texture.path)
             .map_err(|error| failure(format!("textures[{index}]"), error))?;
         value.replaceable_id = texture.replaceable;
-        value.flags = native::TextureFlags(texture.flags);
+        value.flags = native::TextureFlags(texture.flags.bits());
         textures.push(value);
     }
     baseline.set_textures(textures);
@@ -411,20 +401,47 @@ where
         }
         if active_materials
             .get(index)
-            .is_none_or(|(_, sync)| *sync == wr::NativeSync::COMMON_EDITED)
+            .is_none_or(|(_, sync)| *sync == wr::NativeSync::CommonEdited)
         {
-            value.render_mode = native::MaterialRenderFlags(material.flags);
+            value
+                .render_mode
+                .set_sort_primitives_near_z(material.flags.sort_near_z());
+            value
+                .render_mode
+                .set_sort_primitives_far_z(material.flags.sort_far_z());
+            if material.flags.no_shadow_cast()
+                || material.flags.no_shadow_receive()
+                || material.flags.invisible()
+            {
+                context.unsupported(
+                    format!("materials[{index}].flags"),
+                    "MDLX material records cannot express these visibility or shadow flags",
+                )?;
+            }
             if let Some(layer) = value.layers.first_mut() {
-                layer.filter_mode = match material.blend {
-                    0 => native::LayerFilterMode::None,
-                    1 => native::LayerFilterMode::Transparent,
-                    2 => native::LayerFilterMode::Blend,
-                    3 => native::LayerFilterMode::Additive,
-                    4 => native::LayerFilterMode::AddAlpha,
-                    5 => native::LayerFilterMode::Modulate,
-                    6 => native::LayerFilterMode::Modulate2x,
-                    value => native::LayerFilterMode::Unknown(value),
-                };
+                if active_materials.get(index).is_none()
+                    || material.blend != filter(layer.filter_mode)
+                {
+                    layer.filter_mode = match material.blend {
+                        wr::BlendMode::Opaque => native::LayerFilterMode::None,
+                        wr::BlendMode::AlphaKey => native::LayerFilterMode::Transparent,
+                        wr::BlendMode::AlphaBlend => native::LayerFilterMode::Blend,
+                        wr::BlendMode::Additive => native::LayerFilterMode::Additive,
+                        wr::BlendMode::AdditiveAlpha => native::LayerFilterMode::AddAlpha,
+                        wr::BlendMode::Modulate => native::LayerFilterMode::Modulate,
+                        wr::BlendMode::Modulate2x => native::LayerFilterMode::Modulate2x,
+                        wr::BlendMode::Unknown(value) => native::LayerFilterMode::Unknown(value),
+                        _ => {
+                            context.unsupported(
+                                format!("materials[{index}].blend"),
+                                "MDLX has no corresponding blend mode",
+                            )?;
+                            native::LayerFilterMode::None
+                        }
+                    };
+                }
+                layer.shading_flags.set_unshaded(material.flags.unlit());
+                layer.shading_flags.set_unfogged(material.flags.unfogged());
                 layer.texture_id.set_value(material.texture.unwrap_or(0));
             }
         }
@@ -450,7 +467,10 @@ where
         )?;
         let mut value = native::Sequence::new(&clip.name, [starts[index], end])
             .map_err(|error| failure(format!("clips[{index}]"), error))?;
-        value.flags = native::SequenceFlags(clip.flags);
+        value.flags.set_non_looping(!clip.looping);
+        if !clip.flags.is_empty() {
+            context.unsupported(format!("clips[{index}].flags"),"MDLX sequence records cannot express common autoplay, persistence, or world-clock flags")?;
+        }
         value.extent = native_extent(semantic.bounds.clone());
         sequences.push(value);
     }

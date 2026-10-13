@@ -243,9 +243,9 @@ pub(in crate::model::conversion::mdlx) fn clip_starts(
     context: &mut Context,
 ) -> Result<Vec<u32>, Error> {
     if [
-        ProfileId::WC3_CLASSIC,
-        ProfileId::WC3_REFORGED,
-        ProfileId::WC3_DEFINITIVE,
+        ProfileId::Wc3Classic,
+        ProfileId::Wc3Reforged,
+        ProfileId::Wc3Definitive,
     ]
     .contains(&model.profile)
     {

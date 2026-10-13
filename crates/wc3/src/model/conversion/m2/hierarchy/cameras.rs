@@ -22,7 +22,7 @@ where
             particle: None,
             texts: Vec::new(),
             index: node,
-            kind: wr::NodeKind::CAMERA,
+            kind: wr::NodeKind::Camera,
             payload: wr::NodePayload::Camera(Box::new(wr::CameraPayload {
                 fov: D::Layout::static_fov(camera),
                 near_clip: camera.near_clip,
@@ -30,7 +30,7 @@ where
                 target: camera.target_position_base,
                 ..Default::default()
             })),
-            metadata: vec![("m2.camera.kind", i64::from(camera.kind))],
+            metadata: vec![("m2.camera.kind", i64::from(camera.kind.raw()))],
         });
         for sequence in 0..model.clips.len() {
             let start = core

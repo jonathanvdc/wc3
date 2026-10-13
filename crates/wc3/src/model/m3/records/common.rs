@@ -3,6 +3,7 @@
 //! Animated values carry identifiers and fallback values within their containing
 //! record. Reserved reference-width words occupy the same wire width as links
 //! while remaining outside the reference graph.
+use super::values::{AnimationFlags, Interpolation, ReferenceFlags};
 use crate::model::m3;
 /// Metadata and default/reset values for a property addressed by animation ID.
 #[derive(
@@ -19,9 +20,9 @@ use crate::model::m3;
 )]
 pub struct AnimationValue<T> {
     /// Curve mode code: 0 step, 1 linear, 2 Hermite, 3 Bezier.
-    pub interpolation: u16,
+    pub interpolation: Interpolation,
     /// Property animation control bits.
-    pub flags: u16,
+    pub flags: AnimationFlags,
     /// Identifier matched against animation-controller lookup entries.
     pub animation_id: u32,
     /// Value supplied when this property has no selected animated key.
@@ -80,7 +81,7 @@ pub struct ReservedReferenceWords {
     /// Second opaque word, occupying the position normally used for a section index.
     pub index: u32,
     /// Third opaque word in MD34; MD33 omits it and requires zero on writing.
-    pub flags: u32,
+    pub third_word: u32,
 }
 impl<'data, E: m3::Envelope> m3::Read<'data, E> for ReservedReferenceWords {
     fn read(input: &mut m3::codec::Decoder<'data, E>) -> Result<Self, m3::ReadError> {
@@ -88,14 +89,14 @@ impl<'data, E: m3::Envelope> m3::Read<'data, E> for ReservedReferenceWords {
         Ok(Self {
             entries: words.entries,
             index: words.index,
-            flags: words.flags,
+            third_word: words.flags.bits(),
         })
     }
 }
 impl<E: m3::Envelope> m3::Write<E> for ReservedReferenceWords {
     fn write(&self, output: &mut m3::codec::Encoder<E>) -> Result<(), m3::WriteError> {
         m3::Write::write(
-            &m3::Ref::<m3::Any>::new(self.entries, self.index, self.flags),
+            &m3::Ref::<m3::Any>::new(self.entries, self.index, ReferenceFlags(self.third_word)),
             output,
         )
     }

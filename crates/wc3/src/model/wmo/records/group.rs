@@ -1,4 +1,7 @@
 //! Fixed group headers, draw batches, collision nodes and group-local lights.
+use crate::model::wmo::records::{
+    BatchFlags, BspFlags, FlickerMode, GroupFlags, GroupFlags2, TriangleFlags, TriangleFlags2,
+};
 use crate::model::{common::Ownership, wmo};
 use std::fmt::Debug;
 use wmo::{Dialect, Read, RecordLayout, Validate, Write};
@@ -103,7 +106,7 @@ pub struct GroupHeader<D: Dialect> {
     /// Byte offset of the descriptive group name in MOGN.
     pub descriptive_name_offset: u32,
     /// Native group behavior and stream-presence flags; unknown bits are retained.
-    pub flags: u32,
+    pub flags: GroupFlags,
     /// Axis-aligned minimum corner in model coordinates.
     pub bounds_minimum: [f32; 3],
     /// Axis-aligned maximum corner in model coordinates.
@@ -127,7 +130,7 @@ pub struct GroupHeader<D: Dialect> {
     /// WMOAreaTable group identifier.
     pub unique_id: u32,
     /// Extended flags, including terrain cutting and split-group relationships.
-    pub flags2: u32,
+    pub flags2: GroupFlags2,
     /// Reserved word or typed split-group links selected by the dialect.
     pub tail: <D as GroupLayout>::HeaderTail,
 }
@@ -146,7 +149,7 @@ pub struct GroupHeader<D: Dialect> {
 )]
 pub struct Triangle {
     /// Collision, rendering, transition and query flags.
-    pub flags: u8,
+    pub flags: TriangleFlags,
     /// Index into root MOMT; 0xff marks a collision-only triangle.
     pub material: u8,
 }
@@ -165,7 +168,7 @@ pub struct Triangle {
 )]
 pub struct Triangle2 {
     /// Triangle flags; 0x100 selects a ground-type entry from MOQG.
-    pub flags: u16,
+    pub flags: TriangleFlags2,
     /// Root MOMT material index; 0xffff marks a collision-only triangle.
     pub material: u16,
 }
@@ -194,7 +197,7 @@ pub struct Batch<D: Dialect> {
     /// Low sixteen bits of the last referenced vertex index, inclusive.
     pub maximum_vertex: u16,
     /// Batch flags; modern bit 2 selects the large material and bit 4 extends vertex indices.
-    pub flags: u8,
+    pub flags: BatchFlags,
     /// Root MOMT material index when the large-material flag is clear.
     pub material: u8,
 }
@@ -244,7 +247,7 @@ pub struct ShadowBatch {
     /// Undeciphered middle bytes.
     pub reserved_middle: [u8; 4],
     /// Native shadow batch flags.
-    pub flags: u8,
+    pub flags: BatchFlags,
     /// Root MOMT material index when flag 2 is clear.
     pub material: u8,
 }
@@ -261,8 +264,8 @@ pub struct ShadowBatch {
     wmo::Validate,
 )]
 pub struct BspNode {
-    /// Split axis 0–2, or leaf bit 4; remaining flags are retained.
-    pub flags: u16,
+    /// Packed split axis and leaf flag 0x4; remaining flags are retained.
+    pub flags: BspFlags,
     /// Negative-side child node index, or -1 when absent.
     pub negative_child: i16,
     /// Positive-side child node index, or -1 when absent.
@@ -357,7 +360,7 @@ pub struct PointLightAnimation {
     /// Native flicker speed.
     pub flicker_speed: f32,
     /// Flicker mode: 0 off, 1 sine, 2 noise curve, 3 noise step.
-    pub flicker_mode: i32,
+    pub flicker_mode: FlickerMode,
     /// Four preserved words preceding the cookie texture reference.
     pub reserved: [i32; 4],
     /// FileDataID of the light-cookie texture.
@@ -451,28 +454,28 @@ impl HeaderTailMetadata for SplitGroupLinks {
 /// Access to draw ranges shared by both batch prefix layouts.
 pub trait BatchMetadata {
     /// Selects the active root material index from batch flags.
-    fn material(&self, flags: u8, small: u8) -> u16;
+    fn material(&self, flags: BatchFlags, small: u8) -> u16;
     /// Reconstructs the first and last vertex indices from batch flags and low words.
-    fn vertex_range(&self, flags: u8, minimum: u16, maximum: u16) -> (u32, u32);
+    fn vertex_range(&self, flags: BatchFlags, minimum: u16, maximum: u16) -> (u32, u32);
 }
 impl BatchMetadata for CullingBox {
-    fn material(&self, _: u8, small: u8) -> u16 {
+    fn material(&self, _: BatchFlags, small: u8) -> u16 {
         u16::from(small)
     }
-    fn vertex_range(&self, _: u8, minimum: u16, maximum: u16) -> (u32, u32) {
+    fn vertex_range(&self, _: BatchFlags, minimum: u16, maximum: u16) -> (u32, u32) {
         (minimum.into(), maximum.into())
     }
 }
 impl BatchMetadata for LargeMaterialPrefix {
-    fn material(&self, flags: u8, small: u8) -> u16 {
-        if flags & 2 != 0 {
+    fn material(&self, flags: BatchFlags, small: u8) -> u16 {
+        if flags.large_material() {
             self.material
         } else {
             small.into()
         }
     }
-    fn vertex_range(&self, flags: u8, minimum: u16, maximum: u16) -> (u32, u32) {
-        if flags & 4 != 0 {
+    fn vertex_range(&self, flags: BatchFlags, minimum: u16, maximum: u16) -> (u32, u32) {
+        if flags.extended_vertices() {
             (
                 (u32::from(self.reserved[0]) << 16) | u32::from(minimum),
                 (u32::from(self.reserved[1]) << 16) | u32::from(maximum),
@@ -534,7 +537,7 @@ impl Default for SplitGroupLinks {
 impl Default for BspNode {
     fn default() -> Self {
         Self {
-            flags: 0,
+            flags: Default::default(),
             negative_child: -1,
             positive_child: -1,
             face_count: 0,

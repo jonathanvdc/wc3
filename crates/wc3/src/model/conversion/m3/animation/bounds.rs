@@ -93,7 +93,7 @@ pub(super) fn import<E: Envelope>(
         nodes.push(wr::Node::<wr::V19> {
             name: text(raw, &format!("animated-bounds-{id}"))?,
             parent: if owner == 0 { u32::MAX } else { 0 },
-            kind: wr::NodeKind::HELPER,
+            kind: wr::NodeKind::Helper,
             native: wr::NativeBag {
                 entries: put(raw, &entries)?.cast(),
             },
@@ -106,7 +106,7 @@ pub(super) fn import<E: Envelope>(
         .iter()
         .collect::<Result<_, _>>()?;
     for (name, value) in [
-        ("flags", i64::from(block.flags)),
+        ("flags", i64::from((block.flags).bits())),
         ("end", i64::from(block.end_frame)),
     ] {
         entries.push(wr::NativeEntry::<wr::V2> {
@@ -130,15 +130,15 @@ pub(super) fn import<E: Envelope>(
         let kind = if part == 2 {
             wr::AttrType::F32
         } else {
-            wr::AttrType::F32X3
+            wr::AttrType::F32x3
         };
         let channel = wr::AnimChannel {
             id,
             target: wr::TrackTarget {
-                kind: wr::TrackTargetKind::NODE,
+                kind: wr::TrackTargetKind::Node,
                 node: owner as u32,
                 sub: id,
-                channel: wr::Channel(255),
+                channel: wr::Channel::from_raw(255),
                 ..Default::default()
             },
             value_type: kind,
@@ -159,7 +159,7 @@ pub(super) fn import<E: Envelope>(
         }
         tracks.push(wr::SubTrack::<wr::V2> {
             channel: id,
-            interp: wr::Interpolation::LINEAR,
+            interp: wr::Interpolation::Linear,
             times: put(raw, &times)?.cast(),
             values: bytes(raw, &values)?,
             ..Default::default()
@@ -207,7 +207,7 @@ pub(super) fn export<E: Envelope>(
             .iter()
             .find(|track| track.channel == id)
             .ok_or_else(|| Error::new("wem.bounds", "incomplete extent component channels"))?;
-        if track.interp != wr::Interpolation::LINEAR {
+        if track.interp != wr::Interpolation::Linear {
             context.unsupported(
                 "wem.bounds.interpolation",
                 "extent components require the native linear convention",
@@ -264,10 +264,11 @@ pub(super) fn export<E: Envelope>(
     Ok(nr::AnimationBlockExtent {
         timestamps: append(doc, &times)?.cast(),
         keys: append(doc, &extents)?.cast(),
-        flags: data
-            .get(&format!("m3.bounds.clip.{clip_index}.flags"))
-            .copied()
-            .unwrap_or(0) as u32,
+        flags: nr::AnimationBlockFlags(
+            data.get(&format!("m3.bounds.clip.{clip_index}.flags"))
+                .copied()
+                .unwrap_or(0) as u32,
+        ),
         end_frame: data
             .get(&format!("m3.bounds.clip.{clip_index}.end"))
             .copied()

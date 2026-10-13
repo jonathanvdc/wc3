@@ -3,6 +3,7 @@
 mod chunks {
     use wc3::model::common::IntoZeroVec;
     use wc3::model::m2::chunks::*;
+    use wc3::model::m2::records::ModelFlags;
     use wc3::model::m2::V274;
 
     #[test]
@@ -18,7 +19,7 @@ mod chunks {
         data[24..28].copy_from_slice(&4.0f32.to_le_bytes());
         data[64..66].copy_from_slice(&123u16.to_le_bytes());
         data[80..82].copy_from_slice(&456u16.to_le_bytes());
-        let context = ChunkContext::<V274>::new(0, Some(0), [].into());
+        let context = ChunkContext::<V274>::new(ModelFlags::default(), Some(0), [].into());
         let mut chunk = Chunk::read(*b"EXP2", &data, &context).unwrap();
         let Chunk::ParticleExtensions { entries, .. } = &mut chunk else {
             panic!()
@@ -27,7 +28,7 @@ mod chunks {
         assert_eq!(entries[0].alpha_cutoff.values.get(0), Some(456));
         entries[0].alpha_cutoff.timestamps = [123, 999].into_zero_vec();
         entries[0].alpha_cutoff.values = [456, 777].into_zero_vec();
-        let bytes = chunk.payload(0).unwrap();
+        let bytes = chunk.payload(ModelFlags::default()).unwrap();
         assert_eq!(Chunk::read(*b"EXP2", &bytes, &context).unwrap(), chunk);
     }
 
@@ -41,13 +42,13 @@ mod chunks {
             0x00170005u32.to_le_bytes(),
         ]
         .concat();
-        let c = ChunkContext::<V274>::new(0, Some(0), [].into());
+        let c = ChunkContext::<V274>::new(ModelFlags::default(), Some(0), [].into());
         let chunk = Chunk::read(*b"PABC", &data, &c).unwrap();
         let Chunk::ParentAnimationBlacklist(values) = &chunk else {
             panic!()
         };
         assert_eq!(values.iter().collect::<Vec<_>>(), vec![5, 23]);
-        let bytes = chunk.payload(0).unwrap();
+        let bytes = chunk.payload(ModelFlags::default()).unwrap();
         assert_eq!(Chunk::read(*b"PABC", &bytes, &c).unwrap(), chunk);
     }
 }
@@ -56,6 +57,7 @@ mod skeleton {
     use wc3::model::m2::codec::Array;
     use wc3::model::m2::codec::ArrayRef;
     use wc3::model::m2::companions::{Skeleton, SkeletonChunk};
+    use wc3::model::m2::records::ModelFlags;
     use wc3::model::m2::V274;
 
     fn word(data: &mut [u8], offset: usize, value: u32) {
@@ -89,7 +91,8 @@ mod skeleton {
     #[test]
     fn inherited_sequences_preserve_external_attachment_keys() {
         let bytes = attachment_external();
-        let skeleton = Skeleton::<V274>::read_with_sequences(&bytes, 0, &[true]).unwrap();
+        let skeleton =
+            Skeleton::<V274>::read_with_sequences(&bytes, ModelFlags::default(), &[true]).unwrap();
         let SkeletonChunk::Attachments { attachments, .. } = &skeleton.chunks[0] else {
             panic!()
         };
@@ -100,7 +103,9 @@ mod skeleton {
                 offset: 0xf000_0000
             })]
         );
-        assert!(Skeleton::<V274>::read_with_sequences(&bytes, 0, &[false]).is_err());
+        assert!(
+            Skeleton::<V274>::read_with_sequences(&bytes, ModelFlags::default(), &[false]).is_err()
+        );
     }
     #[test]
     fn local_sequences_override_inherited_external_flags() {
@@ -110,7 +115,9 @@ mod skeleton {
         word(&mut sequences, 12, 32);
         word(&mut sequences, 44, 0x130);
         bytes.extend(chunk(*b"SKS1", &sequences));
-        assert!(Skeleton::<V274>::read_with_sequences(&bytes, 0, &[true]).is_err());
+        assert!(
+            Skeleton::<V274>::read_with_sequences(&bytes, ModelFlags::default(), &[true]).is_err()
+        );
     }
 }
 
@@ -118,6 +125,7 @@ mod resources {
     use wc3::model::common::IntoZeroVec;
     use wc3::model::m2::chunks::Chunk;
     use wc3::model::m2::records::Texture;
+    use wc3::model::m2::records::{TextureFlags, TextureSource};
     use wc3::model::m2::resources::*;
     use wc3::model::m2::Model;
     use wc3::model::m2::{Chunked, Flat, V264, V274};
@@ -150,18 +158,18 @@ mod resources {
         model.core_mut().skins = 2;
         model.core_mut().textures = vec![
             Texture {
-                kind: 0,
-                flags: 0,
+                kind: TextureSource::File,
+                flags: TextureFlags::default(),
                 filename: b"Textures\\fur.blp\0".as_slice().into_zero_vec(),
             },
             Texture {
-                kind: 0,
-                flags: 0,
+                kind: TextureSource::File,
+                flags: TextureFlags::default(),
                 filename: [0xff, 0].into_zero_vec(),
             },
             Texture {
-                kind: 1,
-                flags: 0,
+                kind: TextureSource::Skin,
+                flags: TextureFlags::default(),
                 filename: b"replaceable.blp\0".as_slice().into_zero_vec(),
             },
         ];

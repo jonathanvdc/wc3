@@ -18,18 +18,18 @@ impl<T> Headers for wr::M3AnimRef<T> {
                 self.anim_id,
                 Property {
                     target: wr::TrackTarget {
-                        kind: wr::TrackTargetKind::MATERIAL_FEATURE,
+                        kind: wr::TrackTargetKind::MaterialFeature,
                         node: owner,
                         material: wr::MaterialChannelRef {
-                            profile: wr::ProfileId::SC2,
+                            profile: wr::ProfileId::Sc2,
                             slot: owner & 0x7fffffff,
                             look: 0,
                         },
                         sub: self.anim_id,
-                        channel: wr::Channel(255),
+                        channel: wr::Channel::from_raw(255),
                         ..Default::default()
                     },
-                    mode: self.interp_type,
+                    mode: (self.interp_type).raw(),
                 },
             );
         }
@@ -223,14 +223,14 @@ pub(super) fn properties(document: &wem::Document<'_>) -> Result<Properties, Err
                         id as u32,
                         Property {
                             target: wr::TrackTarget {
-                                kind: wr::TrackTargetKind::NODE,
+                                kind: wr::TrackTargetKind::Node,
                                 node: owner as u32,
                                 sub: id as u32,
                                 channel: match prefix {
-                                    "m3.bone.position" => wr::Channel::TRANSLATION,
-                                    "m3.bone.rotation" => wr::Channel::ROTATION,
-                                    "m3.bone.scale" => wr::Channel::SCALE,
-                                    _ => wr::Channel(255),
+                                    "m3.bone.position" => wr::Channel::Translation,
+                                    "m3.bone.rotation" => wr::Channel::Rotation,
+                                    "m3.bone.scale" => wr::Channel::Scale,
+                                    _ => wr::Channel::from_raw(255),
                                 },
                                 ..Default::default()
                             },
@@ -249,7 +249,7 @@ pub(super) fn properties(document: &wem::Document<'_>) -> Result<Properties, Err
         .iter()
     {
         let profile = profile?;
-        if profile.profile != wr::ProfileId::SC2 {
+        if profile.profile != wr::ProfileId::Sc2 {
             continue;
         }
         let metadata = native_metadata::read(raw, &profile.native)?;
@@ -266,10 +266,10 @@ pub(super) fn properties(document: &wem::Document<'_>) -> Result<Properties, Err
                         id as u32,
                         Property {
                             target: wr::TrackTarget {
-                                kind: wr::TrackTargetKind::NODE,
+                                kind: wr::TrackTargetKind::Node,
                                 node: owner,
                                 sub: id as u32,
-                                channel: wr::Channel(255),
+                                channel: wr::Channel::from_raw(255),
                                 ..Default::default()
                             },
                             mode: metadata

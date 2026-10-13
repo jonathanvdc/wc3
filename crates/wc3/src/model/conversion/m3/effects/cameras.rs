@@ -87,7 +87,7 @@ where
         nodes,
         r.bone_index,
         wr::NodePayload::Camera(Box::new(payload)),
-        wr::NodeKind::CAMERA,
+        wr::NodeKind::Camera,
         values,
     )?;
     let node = nodes

@@ -1,4 +1,5 @@
 //! Alpha and early-beta group layouts, before version 17 narrowed triangle records.
+use crate::model::wmo::records::{BatchFlags, GroupFlags, GroupFlags2, TriangleFlags};
 use crate::model::{common::Ownership, wmo};
 use std::borrow::Cow;
 use wmo::codec::{Array, Decoder, Encoder};
@@ -49,7 +50,7 @@ pub struct GroupHeader14 {
     /// Descriptive-name byte offset in root MOGN.
     pub descriptive_name_offset: u32,
     /// Native group flags, including the legacy lightmap bit.
-    pub flags: u32,
+    pub flags: GroupFlags,
     /// Axis-aligned minimum corner in model coordinates.
     pub bounds_minimum: [f32; 3],
     /// Axis-aligned maximum corner in model coordinates.
@@ -90,7 +91,7 @@ pub struct GroupHeader16 {
     /// Descriptive-name byte offset in root MOGN.
     pub descriptive_name_offset: u32,
     /// Native group flags.
-    pub flags: u32,
+    pub flags: GroupFlags,
     /// Axis-aligned minimum corner in model coordinates.
     pub bounds_minimum: [f32; 3],
     /// Axis-aligned maximum corner in model coordinates.
@@ -114,7 +115,7 @@ pub struct GroupHeader16 {
     /// Native group identity associated with area metadata.
     pub unique_id: i32,
     /// Preserved secondary flag word.
-    pub flags2: u32,
+    pub flags2: GroupFlags2,
     /// Preserved last header word.
     pub reserved_tail: u32,
 }
@@ -147,7 +148,7 @@ pub struct Batch14 {
     /// Last referenced vertex, inclusive.
     pub maximum_vertex: u16,
     /// Native batch flags.
-    pub flags: u8,
+    pub flags: BatchFlags,
     /// Preserved final byte, not a material ID in version 14.
     pub reserved: u8,
 }
@@ -176,7 +177,7 @@ pub struct Batch16 {
     /// Last referenced vertex, inclusive.
     pub maximum_vertex: u16,
     /// Native rendering flags.
-    pub flags: u8,
+    pub flags: BatchFlags,
     /// Root material index.
     pub material: u8,
     /// Eight unresolved trailing bytes, absent from version 17 batches.
@@ -197,7 +198,7 @@ pub struct Batch16 {
 )]
 pub struct LegacyTriangle {
     /// Triangle collision and drawing flags.
-    pub flags: u8,
+    pub flags: TriangleFlags,
     /// Legacy lightmap texture selection.
     pub lightmap: u8,
     /// Root material index; 0xff denotes a collision-only face.

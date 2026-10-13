@@ -7,8 +7,10 @@ use wc3::model::{
         self,
         companions::SkinProfile,
         records::{
-            Batch, Bone, LegacyTimeline, LegacyValues, Material, SkinSection, Texture, Track,
-            TrackBase, Vertex,
+            Batch, BlendMode, Bone, Interpolation, LegacyTimeline, LegacyValues, LightKind,
+            Material, MaterialFlags, ModelFlags, PhysicsBodyKind, PhysicsGameFlags, PhysicsKind,
+            PhysicsShapeKind, SequenceFlags, SkinSection, Texture, TextureFlags, TextureSource,
+            Track, TrackBase, Vertex,
         },
     },
     wem::{records::ProfileId, semantic as sm},
@@ -45,12 +47,12 @@ fn native_triangle() -> m2::Bundle<'static, m2::Flat<m2::V256>> {
     ]);
     core.textures = vec![Texture {
         filename: ZeroVec::alloc_from_slice(b"textures/checker.blp\0"),
-        kind: 0,
-        flags: 3,
+        kind: TextureSource::File,
+        flags: TextureFlags::from_bits_retain(3),
     }];
     core.materials = ZeroVec::alloc_from_slice(&[Material {
-        flags: 4,
-        blending_mode: 2,
+        flags: MaterialFlags::from_bits_retain(4),
+        blending_mode: BlendMode::Alpha,
     }]);
     core.texture_combos = ZeroVec::alloc_from_slice(&[0]);
     core.texture_weight_combos = ZeroVec::alloc_from_slice(&[u16::MAX]);
@@ -81,7 +83,7 @@ fn classic_geometry_becomes_editable_and_exports_modern_skin() {
     let source = native_triangle();
     let imported = conversion::m2::import(&source, &ImportOptions::default()).unwrap();
     let semantic = imported.value.model(&ExportOptions::default()).unwrap();
-    assert_eq!(semantic.profile, ProfileId::WOW);
+    assert_eq!(semantic.profile, ProfileId::Wow);
     assert_eq!(semantic.meshes[0].positions[1], [1., 0., 0.]);
     assert_eq!(semantic.meshes[0].triangles.as_ref(), &[[0, 1, 2]]);
     assert_eq!(semantic.meshes[0].influences[0][0].weight, 1.);
@@ -104,7 +106,7 @@ fn classic_geometry_becomes_editable_and_exports_modern_skin() {
     );
     assert_eq!(
         target.model.core().materials.get(0).unwrap().blending_mode,
-        2
+        BlendMode::Alpha
     );
     assert_eq!(target.skin(0, false).unwrap().profile.sections[0].id, 17);
     let encoded = target.encode().unwrap();
@@ -130,13 +132,13 @@ fn hermite_tangents_and_legacy_clock_survive_editable_roundtrip() {
             end: 3000,
         },
         id: 4,
-        flags: 0x20,
+        flags: SequenceFlags::from_bits_retain(0x20),
         variation_next: -1,
         ..Default::default()
     });
     core.bones[0].translation = Track {
         base: TrackBase {
-            interpolation: 3,
+            interpolation: Interpolation::Hermite,
             global_sequence: u16::MAX,
             timeline: LegacyTimeline {
                 ranges: ZeroVec::alloc_from_slice(&[[0, 1]]),
@@ -199,7 +201,7 @@ fn semantic_geometry_edits_rebuild_native_values() {
 #[test]
 fn quantization_requires_an_explicit_tolerance() {
     let mut model = sm::Model {
-        profile: ProfileId::WOW,
+        profile: ProfileId::Wow,
         ..Default::default()
     };
     model.nodes.push(sm::Node {
@@ -285,7 +287,7 @@ fn lights_particles_ribbons_and_collision_use_active_wem_records() {
     let core = source.model.core_mut();
     core.global_sequences = ZeroVec::alloc_from_slice(&[1000]);
     core.lights.push(m2::records::Light {
-        kind: 1,
+        kind: LightKind::Point,
         bone_id: 0,
         position: [1., 2., 3.],
         diffuse_color: constant([0.1, 0.2, 0.3]),
@@ -293,7 +295,7 @@ fn lights_particles_ribbons_and_collision_use_active_wem_records() {
         visibility: constant(1),
         ..Default::default()
     });
-    let mut particle = m2::records::ParticleEmitter::<m2::V256>::new(0);
+    let mut particle = m2::records::ParticleEmitter::<m2::V256>::new(ModelFlags::default());
     particle.id = 7;
     particle.bone_id = 0;
     particle.emission_speed = constant(12.);
@@ -426,11 +428,11 @@ fn native_physics_shapes_and_body_offsets_are_editable() {
     };
     use wc3::model::wem::{self, records as wr};
     let mut source = native_triangle();
-    source.model.core_mut().flags |= 0x20;
+    source.model.core_mut().flags.set_external_physics(true);
     let file = PhysicsFile {
         chunks: vec![
             PhysicsChunk::Header(6),
-            PhysicsChunk::Kind(0),
+            PhysicsChunk::Kind(PhysicsKind::WornItem),
             PhysicsChunk::Boxes(vec![PhysicsBox {
                 frame: PhysicsFrame {
                     axis_x: [1., 0., 0.],
@@ -442,18 +444,18 @@ fn native_physics_shapes_and_body_offsets_are_editable() {
             }]),
             PhysicsChunk::Shapes2(vec![PhysicsShape2 {
                 shape: PhysicsShape {
-                    shape_type: 0,
+                    shape_type: PhysicsShapeKind::Box,
                     shape_index: 0,
                     friction: 0.25,
                     restitution: 0.5,
                     density: 2.,
-                    game_flags: 7,
+                    game_flags: PhysicsGameFlags::from_bits_retain(7),
                     ..Default::default()
                 },
                 ..Default::default()
             }]),
             PhysicsChunk::Bodies4(vec![PhysicsBody4 {
-                body_type: 0,
+                body_type: PhysicsBodyKind::Kinematic,
                 bone_index: 0,
                 position: [4., 5., 6.],
                 shape_index: 0,
@@ -603,8 +605,8 @@ fn packed_particle_gravity_is_a_direction_and_rejects_malformed_words() {
     let mut source = native_triangle();
     source.model.core_mut().global_sequences = ZeroVec::alloc_from_slice(&[1000]);
     let word = u32::from_le_bytes([32, 0, 100, 0]);
-    let mut emitter = m2::records::ParticleEmitter::<m2::V256>::new(0);
-    emitter.flags = 0x800000;
+    let mut emitter = m2::records::ParticleEmitter::<m2::V256>::new(ModelFlags::default());
+    emitter.flags.set_packed_gravity(true);
     emitter.bone_id = 0;
     emitter.gravity = constant(word);
     source.model.core_mut().particles.push(emitter);
@@ -668,7 +670,7 @@ fn static_node_transforms_become_constant_native_curves() {
 fn local_effect_transforms_drive_the_effects_emitted_bone() {
     let mut source = native_triangle();
     source.model.core_mut().lights.push(m2::records::Light {
-        kind: 1,
+        kind: LightKind::Point,
         bone_id: 0,
         position: [1., 2., 3.],
         ..Default::default()
@@ -690,4 +692,58 @@ fn local_effect_transforms_drive_the_effects_emitted_bone() {
         _ => panic!("unexpected spline"),
     }
     output.encode().unwrap();
+}
+
+#[test]
+fn unknown_native_blend_does_not_collide_with_common_transparency() {
+    use wc3::model::wem::{self, records::BlendMode as WemBlendMode};
+    let mut source = native_triangle();
+    source.model.core_mut().materials = ZeroVec::alloc_from_slice(&[Material {
+        flags: MaterialFlags::default(),
+        blending_mode: BlendMode::Unknown(8),
+    }]);
+    let imported = conversion::m2::import(&source, &ImportOptions::default())
+        .unwrap()
+        .value;
+    let semantic = imported.model(&ExportOptions::default()).unwrap();
+    assert_eq!(semantic.materials[0].blend, WemBlendMode::Opaque);
+    let edited = Asset::new(wem::semantic::build(&semantic).unwrap());
+    let output = conversion::m2::plan::<m2::Flat<m2::V256>>(&edited, &ExportOptions::default())
+        .unwrap()
+        .execute()
+        .unwrap()
+        .value;
+    assert_eq!(
+        output.model.core().materials.get(0).unwrap().blending_mode,
+        BlendMode::Unknown(8)
+    );
+}
+
+#[test]
+fn legacy_particle_shape_and_head_tail_controls_survive_conversion() {
+    use m2::records::{LegacyTextureScale, ParticleEmitter, ParticleHeadTail};
+    let mut source = native_triangle();
+    let mut particle = ParticleEmitter::<m2::V256>::new(ModelFlags::default());
+    particle.id = 51;
+    particle.texture_scale = LegacyTextureScale {
+        particle_type: 77,
+        head_or_tail: ParticleHeadTail::Both,
+    };
+    source.model.core_mut().particles.push(particle);
+    let imported = conversion::m2::import(&source, &ImportOptions::default())
+        .unwrap()
+        .value;
+    let output = conversion::m2::plan::<m2::Flat<m2::V256>>(&imported, &ExportOptions::default())
+        .unwrap()
+        .execute()
+        .unwrap()
+        .value;
+    assert_eq!(
+        output.model.core().particles[0].texture_scale.particle_type,
+        77
+    );
+    assert_eq!(
+        output.model.core().particles[0].texture_scale.head_or_tail,
+        ParticleHeadTail::Both
+    );
 }

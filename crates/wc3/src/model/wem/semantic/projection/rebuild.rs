@@ -175,17 +175,17 @@ pub(in crate::model::wem::semantic) fn rebuild(
                 }
                 _ => return Err(WriteError::invalid("unmapped source attribute")),
             };
-            layer.data = bytes(doc, &data)?;
+            layer.data = editing::retain_flags(bytes(doc, &data)?, layer.data);
         }
         let domain = if changes
             .iter()
             .any(|(_, _, map)| map.vertices.iter().any(|source| source.corner != u32::MAX))
         {
-            r::Domain::HALFEDGE
+            r::Domain::Halfedge
         } else {
-            r::Domain::VERTEX
+            r::Domain::Vertex
         };
-        let count = if domain == r::Domain::VERTEX {
+        let count = if domain == r::Domain::Vertex {
             mesh.face_set.vertex_count as usize
         } else {
             rows::<r::U32>(source, mesh.face_set.corner_vertex.cast())
@@ -211,7 +211,7 @@ pub(in crate::model::wem::semantic) fn rebuild(
                 "normal" => new_attribute(
                     doc,
                     name,
-                    r::AttrType::F32X3,
+                    r::AttrType::F32x3,
                     domain,
                     count,
                     &changes,
@@ -220,7 +220,7 @@ pub(in crate::model::wem::semantic) fn rebuild(
                 "tangent" => new_attribute(
                     doc,
                     name,
-                    r::AttrType::F32X4,
+                    r::AttrType::F32x4,
                     domain,
                     count,
                     &changes,
@@ -229,7 +229,7 @@ pub(in crate::model::wem::semantic) fn rebuild(
                 _ => new_attribute(
                     doc,
                     name,
-                    r::AttrType::F32X4,
+                    r::AttrType::F32x4,
                     domain,
                     count,
                     &changes,
@@ -260,19 +260,20 @@ pub(in crate::model::wem::semantic) fn rebuild(
             layers.push(new_attribute(
                 doc,
                 &name,
-                r::AttrType::F32X2,
+                r::AttrType::F32x2,
                 domain,
                 count,
                 &changes,
                 |m| m.uv_sets.get(uv).map(|v| v.as_ref()).unwrap_or(&[]),
             )?);
         }
-        mesh.attributes.layers = put(doc, &layers)?.cast();
+        mesh.attributes.layers =
+            editing::retain_flags(put(doc, &layers)?.cast(), mesh.attributes.layers);
         let mut sections = rows::<r::MeshSection>(source, mesh.sections.cast())
             .map_err(|_| WriteError::invalid("source sections"))?;
         for (semantic_index, value, map) in &changes {
             if let Some(section) = sections.get_mut(map.section as usize) {
-                section.name = text(doc, &value.name)?;
+                section.name = editing::retain_flags(text(doc, &value.name)?, section.name);
                 section.material_slot =
                     editing::material_slot(model, *semantic_index, value.material_slot)?;
                 section.selection_group = u16::try_from(value.selection_group)
@@ -295,9 +296,9 @@ pub(in crate::model::wem::semantic) fn rebuild(
                 return Err(WriteError::invalid("source section address"));
             }
         }
-        mesh.sections = put(doc, &sections)?.cast();
+        mesh.sections = editing::retain_flags(put(doc, &sections)?.cast(), mesh.sections);
         if let Some((_, first, _)) = changes.first() {
-            mesh.name = text(doc, &first.name)?;
+            mesh.name = editing::retain_flags(text(doc, &first.name)?, mesh.name);
             mesh.lod_level = first.lod;
             mesh.bounds = first.bounds.clone();
             if changes.iter().any(|(_, m, _)| m.lod != first.lod) {
@@ -335,12 +336,12 @@ pub(in crate::model::wem::semantic) fn rebuild(
             }
         }
         if !has_skin {
-            mesh.skin.offsets = Ref::default();
-            mesh.skin.influences = Ref::default();
+            mesh.skin.offsets = editing::retain_flags(Ref::default(), mesh.skin.offsets);
+            mesh.skin.influences = editing::retain_flags(Ref::default(), mesh.skin.influences);
             for section in &mut sections {
                 section.rigid_node.value = None;
             }
-            mesh.sections = put(doc, &sections)?.cast();
+            mesh.sections = editing::retain_flags(put(doc, &sections)?.cast(), mesh.sections);
         }
         if has_skin {
             let offsets = rows::<r::U32>(source, mesh.skin.offsets.cast())
@@ -365,8 +366,9 @@ pub(in crate::model::wem::semantic) fn rebuild(
                 }
                 boundaries.push(records.len() as u32);
             }
-            mesh.skin.offsets = words(doc, &boundaries)?;
-            mesh.skin.influences = put(doc, &records)?.cast();
+            mesh.skin.offsets = editing::retain_flags(words(doc, &boundaries)?, mesh.skin.offsets);
+            mesh.skin.influences =
+                editing::retain_flags(put(doc, &records)?.cast(), mesh.skin.influences);
         }
     }
     Ok(meshes)

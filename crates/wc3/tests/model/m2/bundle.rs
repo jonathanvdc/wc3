@@ -1,6 +1,7 @@
 //! Public bundle checks using independently assembled animation streams and
 //! explicit document identities, including aliases and inherited skeletons.
 use std::borrow::Cow;
+use wc3::model::m2::records::{Interpolation, ModelFlags, SequenceFlags};
 
 use wc3::model::m2::{
     chunks::{AnimationFileId, Chunk},
@@ -21,7 +22,7 @@ fn sequence<V: ModelLayout<Timing = u32>>(
         id,
         variation_index: variation,
         timing: 1000,
-        flags,
+        flags: SequenceFlags::from_bits_retain(flags),
         variation_next: -1,
         alias_next: alias,
         ..Sequence::default()
@@ -29,7 +30,7 @@ fn sequence<V: ModelLayout<Timing = u32>>(
 }
 fn external_bone<V: ModelLayout>() -> Bone<'static, V> {
     let mut bone = Bone::<V>::new();
-    bone.translation.base.interpolation = 1;
+    bone.translation.base.interpolation = Interpolation::Linear;
     bone.translation
         .base
         .timeline
@@ -96,7 +97,10 @@ fn parent_chunk(id: u32) -> SkeletonChunk<'static, V272> {
     }
 }
 fn skeleton(chunks: Vec<SkeletonChunk<'static, V272>>) -> Skeleton<'static, V272> {
-    Skeleton { flags: 0, chunks }
+    Skeleton {
+        flags: ModelFlags::default(),
+        chunks,
+    }
 }
 fn skeleton_model() -> Model<'static, Chunked<V272>> {
     let mut model = Model::new();
@@ -182,7 +186,7 @@ fn aliases_select_terminal_identity_but_requested_leaf_offsets() {
 #[test]
 fn wrong_chunked_animation_stream_is_rejected_for_core_bones() {
     let mut model = Model::<Chunked<V272>>::new();
-    model.core_mut().flags = 0x200000;
+    model.core_mut().flags.set_chunked_animations(true);
     model
         .core_mut()
         .sequences
@@ -450,7 +454,7 @@ fn raw_animation_framing_is_rejected_for_skeleton_owned_native_streams() {
 #[test]
 fn zero_parent_skeleton_id_keeps_inherited_sequence_context() {
     let mut model = skeleton_model();
-    model.core_mut().flags = 0x200000;
+    model.core_mut().flags.set_chunked_animations(true);
     model
         .core_mut()
         .sequences
@@ -511,7 +515,9 @@ fn nested_model_skin_uses_its_native_owner_layout() {
         V274,
     };
     let mut root = Model::<Chunked<V274>>::new();
-    root.core_mut().particles.push(ParticleEmitter::new(0));
+    root.core_mut()
+        .particles
+        .push(ParticleEmitter::new(ModelFlags::default()));
     root.insert_extension(
         1,
         Chunk::GeometryParticleIds(ZeroVec::alloc_from_slice(&[33])),

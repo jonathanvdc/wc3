@@ -38,7 +38,7 @@ pub(in crate::model::conversion::mdlx) fn decorate_native<D: ModelDialect>(
             layers: wem::InlineList(native_layers(source_material)),
         };
         materials[index].native = wr::NativeMaterial::Mdx(append(&mut raw, &[native_material])?);
-        materials[index].sync = wr::NativeSync::NATIVE_AUTHORITATIVE;
+        materials[index].sync = wr::NativeSync::NativeAuthoritative;
     }
     let materials_id = raw
         .section_id(profile.materials.index)
@@ -76,7 +76,7 @@ pub(in crate::model::conversion::mdlx) fn decorate_native<D: ModelDialect>(
             ModelChunk::ParticleEmitters(chunk) => {
                 for record in &chunk.records {
                     let index = identities[&record.node.object_id];
-                    nodes[index].kind = wr::NodeKind::WC3_PARTICLE_EMITTER1;
+                    nodes[index].kind = wr::NodeKind::Wc3ParticleEmitter1;
                     nodes[index].payload = wr::NodePayload::Wc3ParticleEmitter1(Box::new(
                         wr::Wc3ParticleEmitter1Payload {
                             emission_rate: base(&record.emission_rate),
@@ -111,7 +111,7 @@ pub(in crate::model::conversion::mdlx) fn decorate_native<D: ModelDialect>(
                             end: v[1],
                             repeat: v[2],
                         });
-                    nodes[index].kind = wr::NodeKind::WC3_PARTICLE_EMITTER2;
+                    nodes[index].kind = wr::NodeKind::Wc3ParticleEmitter2;
                     nodes[index].payload = wr::NodePayload::Wc3ParticleEmitter2(Box::new(
                         wr::Wc3ParticleEmitter2Payload {
                             speed: base(&record.speed),
@@ -122,15 +122,19 @@ pub(in crate::model::conversion::mdlx) fn decorate_native<D: ModelDialect>(
                             emission_rate: base(&record.emission_rate),
                             width: base(&record.width),
                             length: base(&record.length),
-                            filter: wr::Wc3ParticleFilter(particle_filter(record.filter_mode)),
+                            filter: wr::Wc3ParticleFilter::from_raw(particle_filter(
+                                record.filter_mode,
+                            )),
                             rows: record.rows,
                             columns: record.columns,
-                            head_or_tail: wr::Wc3ParticleHeadOrTail(match record.frames {
-                                native::Particle2Frames::Head => 0,
-                                native::Particle2Frames::Tail => 1,
-                                native::Particle2Frames::Both => 2,
-                                native::Particle2Frames::Unknown(value) => value,
-                            }),
+                            head_or_tail: wr::Wc3ParticleHeadOrTail::from_raw(
+                                match record.frames {
+                                    native::Particle2Frames::Head => 0,
+                                    native::Particle2Frames::Tail => 1,
+                                    native::Particle2Frames::Both => 2,
+                                    native::Particle2Frames::Unknown(value) => value,
+                                },
+                            ),
                             tail_length: record.tail_length,
                             time: record.time,
                             start: segments[0].clone(),
@@ -156,7 +160,7 @@ pub(in crate::model::conversion::mdlx) fn decorate_native<D: ModelDialect>(
             ModelChunk::RibbonEmitters(chunk) => {
                 for record in &chunk.records {
                     let index = identities[&record.node.object_id];
-                    nodes[index].kind = wr::NodeKind::WC3_RIBBON_EMITTER;
+                    nodes[index].kind = wr::NodeKind::Wc3RibbonEmitter;
                     nodes[index].payload =
                         wr::NodePayload::Wc3RibbonEmitter(Box::new(wr::Wc3RibbonEmitterPayload {
                             height_above: base(&record.height_above),
@@ -176,7 +180,7 @@ pub(in crate::model::conversion::mdlx) fn decorate_native<D: ModelDialect>(
             ModelChunk::PopcornEmitters(chunk) => {
                 for record in &chunk.records {
                     let index = identities[&record.node.object_id];
-                    nodes[index].kind = wr::NodeKind::WC3_CORN_EMITTER;
+                    nodes[index].kind = wr::NodeKind::Wc3CornEmitter;
                     nodes[index].payload =
                         wr::NodePayload::Wc3CornEmitter(Box::new(wr::Wc3CornEmitterPayload {
                             lifespan: base(&record.life_span),
@@ -204,7 +208,7 @@ pub(in crate::model::conversion::mdlx) fn decorate_native<D: ModelDialect>(
             ModelChunk::Attachments(chunk) => {
                 for record in &chunk.records {
                     let index = identities[&record.node.object_id];
-                    nodes[index].kind = wr::NodeKind::ATTACHMENT;
+                    nodes[index].kind = wr::NodeKind::Attachment;
                     nodes[index].payload =
                         wr::NodePayload::Attachment(Box::new(wr::AttachmentPayload {
                             model: u32::MAX,
@@ -219,13 +223,13 @@ pub(in crate::model::conversion::mdlx) fn decorate_native<D: ModelDialect>(
             ModelChunk::Lights(chunk) => {
                 for record in &chunk.records {
                     let index = identities[&record.node.object_id];
-                    nodes[index].kind = wr::NodeKind::LIGHT;
+                    nodes[index].kind = wr::NodeKind::Light;
                     nodes[index].payload =
                         wr::NodePayload::Light(Box::new(wr::LightPayload::<wr::V19> {
-                            kind: wr::LightKind(match record.light_type {
+                            kind: wr::LightKind::from_raw(match record.light_type {
                                 native::scene::LightType::Omnidirectional => 0,
                                 native::scene::LightType::Directional => 1,
-                                native::scene::LightType::Ambient => 2,
+                                native::scene::LightType::Ambient => 3,
                                 native::scene::LightType::Unknown(value) => u8::try_from(value)
                                     .map_err(|_| {
                                         Error::new(
@@ -248,27 +252,27 @@ pub(in crate::model::conversion::mdlx) fn decorate_native<D: ModelDialect>(
                     let mut shape = wr::CollisionShapeDesc::default();
                     match record.geometry {
                         native::CollisionGeometry::Box(points) => {
-                            shape.kind = wr::CollisionShapeKind::BOX;
+                            shape.kind = wr::CollisionShapeKind::Box;
                             shape.bounds.minimum = points[0];
                             shape.bounds.maximum = points[1];
                         }
                         native::CollisionGeometry::Plane(points) => {
-                            shape.kind = wr::CollisionShapeKind::PLANE;
+                            shape.kind = wr::CollisionShapeKind::Plane;
                             shape.bounds.minimum = points[0];
                             shape.bounds.maximum = points[1];
                         }
                         native::CollisionGeometry::Sphere(center, radius) => {
-                            shape.kind = wr::CollisionShapeKind::SPHERE;
+                            shape.kind = wr::CollisionShapeKind::Sphere;
                             shape.sphere = wr::Sphere { center, radius };
                         }
                         native::CollisionGeometry::Cylinder(points, radius) => {
-                            shape.kind = wr::CollisionShapeKind::CYLINDER;
+                            shape.kind = wr::CollisionShapeKind::Cylinder;
                             shape.bounds.minimum = points[0];
                             shape.bounds.maximum = points[1];
                             shape.sphere.radius = radius;
                         }
                     }
-                    nodes[index].kind = wr::NodeKind::COLLISION_SHAPE;
+                    nodes[index].kind = wr::NodeKind::CollisionShape;
                     nodes[index].payload =
                         wr::NodePayload::Collision(Box::new(wr::CollisionPayload { shape }));
                 }
@@ -276,7 +280,7 @@ pub(in crate::model::conversion::mdlx) fn decorate_native<D: ModelDialect>(
             ModelChunk::EventObjects(chunk) => {
                 for record in &chunk.records {
                     let index = identities[&record.node.object_id];
-                    nodes[index].kind = wr::NodeKind::EVENT;
+                    nodes[index].kind = wr::NodeKind::Event;
                     nodes[index].payload =
                         wr::NodePayload::Event(Box::new(wr::EventPayload::<wr::V19> {
                             id: record.node.object_id,
@@ -313,7 +317,7 @@ pub(in crate::model::conversion::mdlx) fn decorate_native<D: ModelDialect>(
     }
     for (index, camera) in source.cameras().enumerate() {
         let node = &mut nodes[source_nodes.len() + index];
-        node.kind = wr::NodeKind::CAMERA;
+        node.kind = wr::NodeKind::Camera;
         node.payload = wr::NodePayload::Camera(Box::new(wr::CameraPayload::<wr::V19> {
             fov: camera.field_of_view,
             near_clip: camera.near_clip,
@@ -331,7 +335,7 @@ pub(in crate::model::conversion::mdlx) fn decorate_native<D: ModelDialect>(
     if let Ok(entries) = source.try_face_fx() {
         let start = source_nodes.len() + source.cameras().count();
         for (index, entry) in entries.enumerate() {
-            nodes[start + index].kind = wr::NodeKind::WC3_FACE_FX;
+            nodes[start + index].kind = wr::NodeKind::Wc3FaceFx;
             nodes[start + index].payload =
                 wr::NodePayload::Wc3FaceFx(Box::new(wr::Wc3FaceFxPayload {
                     actor: wr::AssetKey {

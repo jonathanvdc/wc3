@@ -96,13 +96,14 @@ borrowed array's bytes on its first edit; `replace()` replaces an entire record 
 ```rust
 use wc3::model::wmo::{Classic, Root};
 use wc3::model::wmo::root::RootChunk;
+use wc3::model::wmo::records::BlendMode;
 
 fn change_blending(root: &mut Root<'_, Classic>) -> Result<(), Box<dyn std::error::Error>> {
     for chunk in root.chunks_mut() {
         if let RootChunk::Materials(materials) = chunk {
             for index in 0..materials.len() {
                 let mut material = materials.get(index).unwrap()?;
-                material.blend_mode = 2;
+                material.blend_mode = BlendMode::Alpha;
                 materials.set(index, &material)?;
             }
         }
@@ -124,6 +125,12 @@ Ordinary records use `wmo::Read`, `wmo::Write`, `wmo::RecordLayout`, and
 need a fixed layout to derive writing. Cross-field validation and context-dependent
 chunk codecs are handwritten. There is no animation-array visitor solely for
 symmetry with M2: WMO arrays carry their own record and reference meanings.
+
+Choice fields use named enums with `Unknown(wire)` variants that preserve
+unrecognized codes. Flag fields use `bitfield!` types with named getters and
+setters; `bits()` retains the complete stored word. `wmo::Value` generates
+exact code conversions for custom scalar enums alongside the codec derives.
+Revision numbers, indices, and counts keep their numerical types.
 
 ## Resources and bundles
 

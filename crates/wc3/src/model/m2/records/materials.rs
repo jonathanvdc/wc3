@@ -1,5 +1,6 @@
 //! Material flags, texture references, and animated material properties.
 use super::Track;
+use super::{BlendMode, MaterialFlags, TextureFlags, TextureSource};
 use crate::model::{common::Ownership, m2};
 use m2::ModelLayout;
 use zerovec::{ule::AsULE, ZeroVec};
@@ -20,9 +21,9 @@ use zerovec::{ule::AsULE, ZeroVec};
 )]
 pub struct Material {
     /// Render-state flags controlling lighting, fog, culling, depth, and shadow behavior.
-    pub flags: u16,
+    pub flags: MaterialFlags,
     /// M2 blend-mode code used to select the color and alpha blending operation.
-    pub blending_mode: u16,
+    pub blending_mode: BlendMode,
 }
 /// Texture source and sampler wrapping settings.
 #[derive(
@@ -39,9 +40,9 @@ pub struct Material {
 )]
 pub struct Texture<'data> {
     /// Texture source type: zero uses a file reference; other values select runtime replacements.
-    pub kind: u32,
+    pub kind: TextureSource,
     /// Sampler wrapping flags: `0x01` wraps U and `0x02` wraps V.
-    pub flags: u32,
+    pub flags: TextureFlags,
     /// NUL-terminated texture path for source type zero; TXID file IDs can replace this path.
     pub filename: ZeroVec<'data, u8>,
 }
@@ -122,15 +123,15 @@ pub struct TextureTransform<'data, V: ModelLayout> {
 impl AsULE for Material {
     type ULE = <[u8; 4] as AsULE>::ULE;
     fn to_unaligned(self) -> Self::ULE {
-        let flags = self.flags.to_le_bytes();
-        let blending = self.blending_mode.to_le_bytes();
+        let flags = self.flags.bits().to_le_bytes();
+        let blending = self.blending_mode.raw().to_le_bytes();
         [flags[0], flags[1], blending[0], blending[1]].to_unaligned()
     }
     fn from_unaligned(unaligned: Self::ULE) -> Self {
         let bytes = <[u8; 4]>::from_unaligned(unaligned);
         Self {
-            flags: u16::from_le_bytes([bytes[0], bytes[1]]),
-            blending_mode: u16::from_le_bytes([bytes[2], bytes[3]]),
+            flags: MaterialFlags::from_bits_retain(u16::from_le_bytes([bytes[0], bytes[1]])),
+            blending_mode: BlendMode::from_raw(u16::from_le_bytes([bytes[2], bytes[3]])),
         }
     }
 }

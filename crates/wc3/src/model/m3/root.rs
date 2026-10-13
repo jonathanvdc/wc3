@@ -51,11 +51,11 @@ impl RootRecord {
         visit_m3_root!(self, |root| root.name)
     }
     /// Native model flags without rendering interpretation.
-    pub fn flags(&self) -> u32 {
+    pub fn flags(&self) -> ModelFlags {
         visit_m3_root!(self, |root| root.flags)
     }
     /// Packed vertex-format flags owned by MODL.
-    pub fn vertex_flags(&self) -> u32 {
+    pub fn vertex_flags(&self) -> VertexFlags {
         visit_m3_root!(self, |root| root.vertex_flags)
     }
     /// Reference to packed vertex bytes, retaining native index and flag words.

@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use wc3::model::m3;
 use wc3::model::m3::vertices::{Color, DynamicVertices, ExtraRaw, NoColor, Packed, Raw, Vertices};
 
 #[test]
@@ -36,7 +37,8 @@ fn sparse_uv_channels_preserve_type_selected_channel_identity() {
     let buffer = Vertices::<_, Packed<2>>::new(bytes.as_slice()).unwrap();
     assert_eq!(buffer.vertex(0).unwrap().uv::<1>(), [123, 456]);
     assert!(matches!(
-        DynamicVertices::from_flags(bytes.as_slice(), 0x0184_0061).unwrap(),
+        DynamicVertices::from_flags(bytes.as_slice(), m3::records::VertexFlags(0x0184_0061))
+            .unwrap(),
         DynamicVertices::NoColorUv02(_)
     ));
 }
@@ -48,14 +50,16 @@ fn fifth_uv_channel_has_its_own_type_and_wire_slot() {
     let buffer = Vertices::<_, Packed<17>>::new(bytes.as_slice()).unwrap();
     assert_eq!(buffer.vertex(0).unwrap().uv::<4>(), [512, -512]);
     assert!(matches!(
-        DynamicVertices::from_flags(bytes.as_slice(), 0x4182_007d).unwrap(),
+        DynamicVertices::from_flags(bytes.as_slice(), m3::records::VertexFlags(0x4182_007d))
+            .unwrap(),
         DynamicVertices::NoColorUv17(_)
     ));
 }
 #[test]
 fn ambiguous_flags_preserve_raw_storage_without_assigning_vertex_boundaries() {
     let bytes = [9, 8, 7];
-    let raw = DynamicVertices::from_flags(bytes.as_slice(), 0x2182_007d).unwrap();
+    let raw = DynamicVertices::from_flags(bytes.as_slice(), m3::records::VertexFlags(0x2182_007d))
+        .unwrap();
     assert!(matches!(raw, DynamicVertices::Raw(_)));
     assert_eq!(raw.vertex_count(), None);
     assert_eq!(raw.as_bytes(), bytes);

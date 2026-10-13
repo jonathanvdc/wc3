@@ -143,7 +143,7 @@ where
             if body.node != u32::MAX {
                 continue;
             }
-            if body.motion != wr::BodyMotion::STATIC {
+            if body.motion != wr::BodyMotion::Static {
                 context.unsupported(
                     "physics.body.motion",
                     "M2 collision tables cannot express a dynamic body",
@@ -157,7 +157,7 @@ where
                 .iter()
             {
                 let shape = shape?;
-                if shape.kind != wr::PhysicsShapeKind::TRIANGLE_MESH {
+                if shape.kind != wr::PhysicsShapeKind::TriangleMesh {
                     context.unsupported(
                         "physics.shape.kind",
                         "M2 collision output currently requires explicit triangulated geometry",

@@ -1,5 +1,6 @@
 //! External track data. Track descriptors live in the model or skeleton.
 use super::super::codec::Encoder;
+use super::super::records::ModelFlags;
 use super::super::{ReadError, WriteError};
 use super::{chunk_bytes, write_chunk};
 use crate::model::common::Ownership;
@@ -52,7 +53,7 @@ impl<'data> AnimationFile<'data> {
         match self {
             Self::Raw(data) => Ok(data.to_vec()),
             Self::Chunked(chunks) => {
-                let mut e = Encoder::new(0, 0);
+                let mut e = Encoder::new(0, ModelFlags::default());
                 for c in chunks {
                     write_chunk(&mut e, c.tag, &c.data)?;
                 }

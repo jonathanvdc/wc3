@@ -28,14 +28,17 @@ pub(in crate::model::conversion::m3) fn attach<E: Envelope>(
     let maps = complete_maps(source)?;
     materials.resize_with(maps.len(), wr::MaterialRecord::default);
     for (index, map) in maps.into_iter().enumerate() {
-        if !matches!(map.material_type,1..=7|9..=12) {
+        if matches!(
+            map.material_type,
+            nr::MaterialKind::Hair | nr::MaterialKind::Unknown(_)
+        ) {
             continue;
         }
         let kind = map.material_type;
         let (body, source_version) = body(source, &mut doc, map)?;
         let payload = wr::M3Material::<wr::V1, wr::Abi64> {
             source_version,
-            kind: wr::M3MaterialKind(kind),
+            kind: wr::M3MaterialKind::from_raw((kind).raw()),
             body: wr::NativeM3Body {
                 body,
                 abi: PhantomData,
@@ -45,15 +48,17 @@ pub(in crate::model::conversion::m3) fn attach<E: Envelope>(
         let name = body_name(&payload.body.body);
         if let wr::M3Body::Standard(body) = &payload.body.body {
             if let Some(material) = materials.get_mut(index) {
-                material.common.blend = wr::BlendMode(body.blend_mode.0);
-                material.common.flags = wr::MaterialFlags(body.flags.0);
+                material.common.blend =
+                    super::render_state::blend(nr::BlendMode::from_raw(body.blend_mode.raw()));
+                material.common.flags =
+                    super::render_state::flags(nr::MaterialFlags(body.flags.bits()));
             }
         }
         let reference = put(&mut doc, &[payload])?.cast();
         if let Some(material) = materials.get_mut(index) {
             material.name = name;
             material.native = wr::NativeMaterial::M3(reference);
-            material.sync = wr::NativeSync::NATIVE_AUTHORITATIVE;
+            material.sync = wr::NativeSync::NativeAuthoritative;
         }
     }
     if !materials.is_empty() {
@@ -116,12 +121,12 @@ pub(in crate::model::conversion::m3) fn complete_maps<E: Envelope>(
     ]);
     for (kind, count) in counts {
         for material_index in 0..count {
-            if !maps
-                .iter()
-                .any(|map| map.material_type == kind && map.material_index == material_index)
-            {
+            if !maps.iter().any(|map| {
+                map.material_type == nr::MaterialKind::from_raw(kind)
+                    && map.material_index == material_index
+            }) {
                 maps.push(nr::MaterialMap {
-                    material_type: kind,
+                    material_type: nr::MaterialKind::from_raw(kind),
                     material_index,
                 });
             }

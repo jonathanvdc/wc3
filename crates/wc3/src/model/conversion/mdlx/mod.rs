@@ -23,7 +23,7 @@ use animation::{
     overlay_properties, read_track, semantic_track,
 };
 mod materials;
-use materials::{filter, native_layers, overlay_material};
+use materials::{common_material_flags, filter, native_layers, overlay_material};
 mod effects;
 use effects::{active_graph, decorate_native, overlay_effects};
 mod metadata;
@@ -34,15 +34,6 @@ fn text<const N: usize>(text: &native::FixedText<N>) -> String {
 
 fn failure(path: impl Into<String>, error: impl std::fmt::Display) -> Error {
     Error::new(path, error.to_string())
-}
-
-fn is_wc3(profile: ProfileId) -> bool {
-    [
-        ProfileId::WC3_CLASSIC,
-        ProfileId::WC3_REFORGED,
-        ProfileId::WC3_DEFINITIVE,
-    ]
-    .contains(&profile)
 }
 
 mod import;

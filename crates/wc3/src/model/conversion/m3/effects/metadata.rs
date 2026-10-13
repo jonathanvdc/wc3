@@ -51,9 +51,9 @@ pub(in crate::model::conversion::m3) fn animated<T: Components>(
 ) {
     values.insert(
         format!("m3.{key}.interpolation"),
-        i64::from(value.interpolation),
+        i64::from((value.interpolation).raw()),
     );
-    values.insert(format!("m3.{key}.flags"), i64::from(value.flags));
+    values.insert(format!("m3.{key}.flags"), i64::from((value.flags).bits()));
     values.insert(
         format!("m3.{key}.animation_id"),
         i64::from(value.animation_id),
@@ -86,8 +86,8 @@ pub(in crate::model::conversion::m3) fn restore<T: Components>(
         })
         .collect::<Vec<_>>();
     nr::AnimationValue {
-        interpolation: get("interpolation") as u16,
-        flags: get("flags") as u16,
+        interpolation: nr::Interpolation::from_raw(get("interpolation") as u16),
+        flags: nr::AnimationFlags(get("flags") as u16),
         animation_id: get("animation_id") as u32,
         reserved: get("reserved") as i32,
         initial_value: initial,
@@ -203,9 +203,9 @@ pub(in crate::model::conversion::m3) fn header<T>(
 ) {
     values.insert(
         format!("m3.{key}.interpolation"),
-        i64::from(value.interpolation),
+        i64::from((value.interpolation).raw()),
     );
-    values.insert(format!("m3.{key}.flags"), i64::from(value.flags));
+    values.insert(format!("m3.{key}.flags"), i64::from((value.flags).bits()));
     values.insert(
         format!("m3.{key}.animation_id"),
         i64::from(value.animation_id),
@@ -235,8 +235,8 @@ pub(in crate::model::conversion::m3) fn native_property<T>(
             .unwrap_or(0)
     };
     nr::AnimationValue {
-        interpolation: get("interpolation") as u16,
-        flags: get("flags") as u16,
+        interpolation: nr::Interpolation::from_raw(get("interpolation") as u16),
+        flags: nr::AnimationFlags(get("flags") as u16),
         animation_id: get("animation_id") as u32,
         reserved: get("reserved") as i32,
         initial_value: value.init_value,

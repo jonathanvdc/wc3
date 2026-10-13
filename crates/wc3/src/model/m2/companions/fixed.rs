@@ -1,5 +1,9 @@
 //! Fixed companion-file records, with their authored units and reserved fields intact.
 use super::super as m2;
+use super::super::records::{
+    PhysicsAttachment, PhysicsBodyKind, PhysicsGameFlags, PhysicsJointKind, PhysicsMotorMode,
+    PhysicsShapeKind,
+};
 
 #[derive(Clone, Debug, Default, PartialEq, m2::Read, m2::Write, m2::RecordLayout)]
 /// A sparse bone replacement transform stored in BOMT.
@@ -54,7 +58,7 @@ pub struct PhysicsSphere {
 /// BODY rigid-body definition for PHYS versions 0–1.
 pub struct PhysicsBody {
     /// Body behavior: 0 is kinematic, 1 is dynamic; other values select static bodies.
-    pub body_type: u16,
+    pub body_type: PhysicsBodyKind,
     /// Reserved padding with no established semantic meaning; preserved verbatim.
     pub reserved: u16,
     /// Body origin offset relative to its animated bone position, in model coordinate length units.
@@ -80,7 +84,7 @@ pub struct PhysicsBody2 {
 /// BDY3 rigid body with damping, inertia, and attachment parameters.
 pub struct PhysicsBody3 {
     /// Body behavior: 0 is kinematic, 1 is dynamic; other values select static bodies.
-    pub body_type: u16,
+    pub body_type: PhysicsBodyKind,
     /// Index into the owning model or skeleton bone array.
     pub bone_index: u16,
     /// Body origin offset relative to its animated bone position, in model coordinate length units.
@@ -98,7 +102,7 @@ pub struct PhysicsBody3 {
     /// Damping parameter applied to angular velocity.
     pub angular_damping: f32,
     /// Body attachment encoding: 0x8000 marks an attachment host, 0x4000 a ragdoll root; low bits identify the host body.
-    pub attachment: u16,
+    pub attachment: PhysicsAttachment,
     /// Reserved padding with no established semantic meaning; preserved verbatim.
     pub reserved: u16,
 }
@@ -107,7 +111,7 @@ pub struct PhysicsBody3 {
 /// BDY4 rigid body with an animated-pose follow factor.
 pub struct PhysicsBody4 {
     /// Body behavior: 0 is kinematic, 1 is dynamic; other values select static bodies.
-    pub body_type: u16,
+    pub body_type: PhysicsBodyKind,
     /// Index into the owning model or skeleton bone array.
     pub bone_index: u16,
     /// Body origin offset relative to its animated bone position, in model coordinate length units.
@@ -127,7 +131,7 @@ pub struct PhysicsBody4 {
     /// Fraction of a kinematic body's displacement toward its animated pose applied per synchronization step.
     pub follow_factor: f32,
     /// Body attachment encoding: 0x8000 marks an attachment host, 0x4000 a ragdoll root; low bits identify the host body.
-    pub attachment: u16,
+    pub attachment: PhysicsAttachment,
     /// Reserved padding with no established semantic meaning; preserved verbatim.
     pub reserved: u16,
 }
@@ -136,11 +140,11 @@ pub struct PhysicsBody4 {
 /// SHAP geometry reference and fixture material properties.
 pub struct PhysicsShape {
     /// Geometry selector: 0 = BOXS box, 1 = CAPS capsule, 2 = SPHS sphere, 3 = PLYT polytope.
-    pub shape_type: u16,
+    pub shape_type: PhysicsShapeKind,
     /// Index into the BOXS/CAPS/SPHS/PLYT geometry array selected by `shape_type`.
     pub shape_index: i16,
     /// Client fixture game flags; individual bit meanings are not established.
-    pub game_flags: u16,
+    pub game_flags: PhysicsGameFlags,
     /// Reserved padding with no established semantic meaning; preserved verbatim.
     pub reserved: u16,
     /// Surface friction coefficient used by the physics fixture.
@@ -174,7 +178,7 @@ pub struct PhysicsJoint {
     /// Reserved padding with no established semantic meaning; preserved verbatim.
     pub reserved: u32,
     /// Joint payload selector: 0 spherical, 1 shoulder, 2 weld, 3 revolute, 4 prismatic, 5 distance.
-    pub joint_type: u16,
+    pub joint_type: PhysicsJointKind,
     /// Index into the joint-type chunk selected by `joint_type`.
     pub joint_id: i16,
 }
@@ -195,7 +199,7 @@ pub struct PhysicsShoulder {
     /// Maximum torque supplied by the joint motor; the source does not establish an absolute torque unit.
     pub max_motor_torque: f32,
     /// Joint motor mode: 0 free, 1 motor; other values retain their numeric encoding.
-    pub motor_mode: u32,
+    pub motor_mode: PhysicsMotorMode,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, m2::Read, m2::Write, m2::RecordLayout)]
@@ -256,7 +260,7 @@ pub struct PhysicsRevolute {
     /// Maximum torque supplied by the joint motor; the source does not establish an absolute torque unit.
     pub max_motor_torque: f32,
     /// Encoded revolute motor mode; numeric mode behavior is not established by the reference.
-    pub motor_mode: u32,
+    pub motor_mode: PhysicsMotorMode,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, m2::Read, m2::Write, m2::RecordLayout)]
@@ -310,7 +314,7 @@ pub struct PhysicsPrismatic {
     /// Target prismatic translation velocity; the source does not establish its time unit.
     pub motor_speed: f32,
     /// Encoded prismatic motor mode; numeric mode behavior is not established by the reference.
-    pub motor_mode: u32,
+    pub motor_mode: PhysicsMotorMode,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, m2::Read, m2::Write, m2::RecordLayout)]

@@ -33,15 +33,16 @@ pub(super) fn patch_materials(
     let mut raw = document.into_raw();
     for (record, native) in records.iter_mut().zip(native) {
         record.native = wr::NativeMaterial::M2(put(&mut raw, from_ref(native))?.cast());
-        record.sync = wr::NativeSync::IN_SYNC;
-        record.common.flags = wr::MaterialFlags(u32::from(native.render_flags & 3));
-        record.common.cull = if native.render_flags & 4 != 0 {
-            wr::CullMode::NONE
+        record.sync = wr::NativeSync::InSync;
+        record.common.flags =
+            common_material_flags(MaterialFlags::from_bits_retain(native.render_flags.bits()));
+        record.common.cull = if native.render_flags.two_sided() {
+            wr::CullMode::None
         } else {
-            wr::CullMode::BACK
+            wr::CullMode::Back
         };
-        record.common.depth.test = wem::Bool::from(native.render_flags & 8 == 0);
-        record.common.depth.write = wem::Bool::from(native.render_flags & 16 == 0);
+        record.common.depth.test = wem::Bool::from(!native.render_flags.no_depth_test());
+        record.common.depth.write = wem::Bool::from(!native.render_flags.no_depth_write());
     }
     let id = raw
         .section_id(profile.materials.index)
@@ -81,25 +82,20 @@ pub(super) fn active_material(
                 .get(0)
                 .transpose()?
                 .map(|mut value| {
-                    let authoritative = record.sync == wr::NativeSync::NATIVE_AUTHORITATIVE;
+                    let authoritative = record.sync == wr::NativeSync::NativeAuthoritative;
                     if !authoritative {
-                        value.render_flags = (value.render_flags & !0x1f)
-                            | (model.materials[slot as usize].flags as u16 & 3)
-                            | if record.common.cull == wr::CullMode::NONE {
-                                4
-                            } else {
-                                0
-                            }
-                            | if !record.common.depth.test.get() {
-                                8
-                            } else {
-                                0
-                            }
-                            | if !record.common.depth.write.get() {
-                                16
-                            } else {
-                                0
-                            };
+                        let flags = model.materials[slot as usize].flags;
+                        value.render_flags.set_unlit(flags.unlit());
+                        value.render_flags.set_unfogged(flags.unfogged());
+                        value
+                            .render_flags
+                            .set_two_sided(record.common.cull == wr::CullMode::None);
+                        value
+                            .render_flags
+                            .set_no_depth_test(!record.common.depth.test.get());
+                        value
+                            .render_flags
+                            .set_no_depth_write(!record.common.depth.write.get());
                     }
                     (value, authoritative)
                 }));
@@ -512,4 +508,64 @@ pub(super) fn foreign_native_material(model: &sm::Model<'_>, slot: u32) -> Resul
         }));
     }
     Ok(false)
+}
+
+pub(super) fn common_material_flags(source: MaterialFlags) -> wr::MaterialFlags {
+    let mut flags = wr::MaterialFlags::default();
+    flags.set_unlit(source.unlit());
+    flags.set_unfogged(source.unfogged());
+    flags
+}
+pub(super) fn native_material_flags(source: wr::MaterialFlags) -> wr::M2RenderFlags16 {
+    let mut flags = wr::M2RenderFlags16::default();
+    flags.set_unlit(source.unlit());
+    flags.set_unfogged(source.unfogged());
+    flags
+}
+pub(super) fn common_blend(source: BlendMode) -> wr::BlendMode {
+    match source {
+        BlendMode::Opaque => wr::BlendMode::Opaque,
+        BlendMode::AlphaKey => wr::BlendMode::AlphaKey,
+        BlendMode::Alpha => wr::BlendMode::AlphaBlend,
+        BlendMode::NoAlphaAdd => wr::BlendMode::Additive,
+        BlendMode::Add => wr::BlendMode::AdditiveAlpha,
+        BlendMode::Modulate => wr::BlendMode::Modulate,
+        BlendMode::Modulate2x => wr::BlendMode::Modulate2x,
+        BlendMode::BlendAdd => wr::BlendMode::BlendAdd,
+        BlendMode::Unknown(value) => {
+            let projection = wr::BlendMode::from_raw(u32::from(value));
+            if matches!(projection, wr::BlendMode::Unknown(_)) {
+                projection
+            } else {
+                wr::BlendMode::Opaque
+            }
+        }
+    }
+}
+pub(super) fn native_blend(
+    source: wr::BlendMode,
+    context: &mut Context,
+) -> Result<wr::M2BlendingMode16, Error> {
+    Ok(match source {
+        wr::BlendMode::Opaque => wr::M2BlendingMode16::Opaque,
+        wr::BlendMode::AlphaKey => wr::M2BlendingMode16::AlphaKey,
+        wr::BlendMode::AlphaBlend => wr::M2BlendingMode16::Alpha,
+        wr::BlendMode::Additive => wr::M2BlendingMode16::NoAlphaAdd,
+        wr::BlendMode::AdditiveAlpha => wr::M2BlendingMode16::Add,
+        wr::BlendMode::Modulate => wr::M2BlendingMode16::Mod,
+        wr::BlendMode::Modulate2x => wr::M2BlendingMode16::Mod2x,
+        wr::BlendMode::BlendAdd => wr::M2BlendingMode16::BlendAdd,
+        wr::BlendMode::Unknown(value) => {
+            wr::M2BlendingMode16::Unknown(u16::try_from(value).map_err(|_| {
+                Error::new("materials.blend", "unknown M2 blending code exceeds u16")
+            })?)
+        }
+        _ => {
+            context.unsupported(
+                "materials.blend",
+                "common blending operation has no native M2 equivalent",
+            )?;
+            wr::M2BlendingMode16::Opaque
+        }
+    })
 }

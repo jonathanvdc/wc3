@@ -59,7 +59,7 @@ fn asset() -> Asset {
             ..Default::default()
         }],
         clips: vec![clip],
-        profile: wem::records::ProfileId::SC2,
+        profile: wem::records::ProfileId::Sc2,
         ..Default::default()
     };
     Asset::new(wem::semantic::build(&model).unwrap())
@@ -237,7 +237,7 @@ fn particle_copies_ribbons_and_spline_controls_are_active() {
             null_value: 2.,
             ..Default::default()
         },
-        yaw_type: 3,
+        yaw_type: nr::Variation::Saw,
         emission_vector_norm_factor: 0.25,
         ..Default::default()
     };
@@ -245,11 +245,11 @@ fn particle_copies_ribbons_and_spline_controls_are_active() {
     root.ribbon_emitters = doc
         .append(&[nr::RibbonEmitter::<nr::V9> {
             bone_index: 0,
-            spline_ribbons: m3::Ref::new(1, spline.index(), 0),
+            spline_ribbons: m3::Ref::new(1, spline.index(), nr::ReferenceFlags::default()),
             drag: 2.5,
             ..Default::default()
         }])
-        .map(|id| m3::Ref::new(1, id.index(), 0))
+        .map(|id| m3::Ref::new(1, id.index(), nr::ReferenceFlags::default()))
         .unwrap();
     let copies = doc
         .append(&[nr::ParticleEmitterCopy {
@@ -264,7 +264,7 @@ fn particle_copies_ribbons_and_spline_controls_are_active() {
             },
         }])
         .unwrap();
-    root.particle_emitter_copies = m3::Ref::new(1, copies.index(), 0);
+    root.particle_emitter_copies = m3::Ref::new(1, copies.index(), nr::ReferenceFlags::default());
     let copy_ids = doc.append(&[nr::U32 { value: 0 }]).unwrap();
     root.particle_emitters = doc
         .append(&[nr::ParticleEmitter::<nr::V24> {
@@ -273,14 +273,14 @@ fn particle_copies_ribbons_and_spline_controls_are_active() {
                 initial_value: 1.,
                 ..Default::default()
             },
-            copy_indices: m3::Ref::new(1, copy_ids.index(), 0),
+            copy_indices: m3::Ref::new(1, copy_ids.index(), nr::ReferenceFlags::default()),
             collision_spawn_index: -1,
             trail_link_index: -1,
             ribbon_link_index: 0,
             drag: 4.5,
             ..Default::default()
         }])
-        .map(|id| m3::Ref::new(1, id.index(), 0))
+        .map(|id| m3::Ref::new(1, id.index(), nr::ReferenceFlags::default()))
         .unwrap();
     doc.replace(root_id, &[root]).unwrap();
     let source = m3::Bundle::from_model(m3::Model::from_document(doc).unwrap());
@@ -329,7 +329,7 @@ fn particle_copies_ribbons_and_spline_controls_are_active() {
     assert_eq!(point.emission_offset, [1., 2., 3.]);
     assert_eq!(point.velocity.initial_value, 7.);
     assert_eq!(point.velocity.null_value, 2.);
-    assert_eq!(point.yaw_type, 3);
+    assert_eq!(point.yaw_type, nr::Variation::Saw);
 }
 #[test]
 fn collision_and_selection_shapes_survive_without_becoming_dynamic_bodies() {
@@ -366,16 +366,16 @@ fn collision_and_selection_shapes_survive_without_becoming_dynamic_bodies() {
             value: [0., 0., 1.],
         }])
         .unwrap();
-    root.collision_verts = m3::Ref::new(3, points.index(), 0);
-    root.collision_faces = m3::Ref::new(3, faces.index(), 0);
-    root.collision_normals = m3::Ref::new(1, normals.index(), 0);
+    root.collision_verts = m3::Ref::new(3, points.index(), nr::ReferenceFlags::default());
+    root.collision_faces = m3::Ref::new(3, faces.index(), nr::ReferenceFlags::default());
+    root.collision_normals = m3::Ref::new(1, normals.index(), nr::ReferenceFlags::default());
     root.collision_bounds = nr::Extent {
         minimum: [0.; 3],
         maximum: [1., 1., 0.],
         radius: 1.,
     };
     root.tight_hit_test_object = nr::HitTestShape {
-        shape_type: 1,
+        shape_type: nr::VolumeShape::Sphere,
         bone_index: 0,
         padding: 9,
         transform: [
@@ -428,7 +428,7 @@ fn full_width_unsigned_animation_keys_remain_typed_and_exact() {
         .unwrap()
         .unwrap();
     bone.batching.animation_id = 555;
-    bone.batching.flags = 1;
+    bone.batching.flags = nr::AnimationFlags(1);
     doc.replace(doc.section_id(root.bones.index).unwrap(), &[bone])
         .unwrap();
     let mut controller = doc
@@ -476,7 +476,7 @@ fn full_width_unsigned_animation_keys_remain_typed_and_exact() {
     let block = nr::AnimationBlockU32 {
         timestamps,
         keys,
-        flags: 9,
+        flags: nr::AnimationBlockFlags(9),
         end_frame: 1000,
     };
     controller.sdu3 =
@@ -544,7 +544,7 @@ fn full_width_unsigned_animation_keys_remain_typed_and_exact() {
         .unwrap();
     assert_eq!(keys.get(0).unwrap().unwrap().value, 0xfffffff1);
     assert_eq!(keys.get(1).unwrap().unwrap().value, u32::MAX);
-    assert_eq!(block.flags, 9);
+    assert_eq!(block.flags.bits(), 9);
     let bone = output
         .model
         .document()
@@ -568,7 +568,7 @@ fn solver_controls_are_named_editable_fields() {
     let dep = doc.append(&[nr::U16 { value: 0 }]).unwrap();
     let ik = doc
         .append(&[nr::IKJoint {
-            dependents: m3::Ref::new(1, dep.index(), 0),
+            dependents: m3::Ref::new(1, dep.index(), nr::ReferenceFlags::default()),
             bone_index1: 0,
             bone_index2: 0,
             raycast_up: 1.5,
@@ -577,18 +577,18 @@ fn solver_controls_are_named_editable_fields() {
             goal_threshold: 0.25,
         }])
         .unwrap();
-    root.ik_joints = m3::Ref::new(1, ik.index(), 0);
+    root.ik_joints = m3::Ref::new(1, ik.index(), nr::ReferenceFlags::default());
     let bb = doc
         .append(&[nr::BillboardBehavior {
             bone_index: 0,
-            billboard_type: 6,
+            billboard_type: nr::BillboardKind::Full,
             camera_look_at: 1,
             up: [0., 0., 0., 1.],
             forward: [1., 0., 0., 0.],
             ..Default::default()
         }])
         .unwrap();
-    root.billboard_behaviors = m3::Ref::new(1, bb.index(), 0);
+    root.billboard_behaviors = m3::Ref::new(1, bb.index(), nr::ReferenceFlags::default());
     doc.replace(root_id, &[root]).unwrap();
     let imported = conversion::m3::import(
         &m3::Bundle::from_model(m3::Model::from_document(doc).unwrap()),
@@ -653,7 +653,7 @@ fn solver_controls_are_named_editable_fields() {
         .get(0)
         .unwrap()
         .unwrap();
-    assert_eq!(bb.billboard_type, 6);
+    assert_eq!(bb.billboard_type, nr::BillboardKind::Full);
     assert_eq!(bb.camera_look_at, 1);
     assert_eq!(bb.forward, [1., 0., 0., 0.]);
 }
@@ -678,7 +678,8 @@ fn every_particle_and_ribbon_record_revision_rebuilds_from_wem_fields() {
                 ..Default::default()
             };
             let section = doc.append(&[row]).unwrap();
-            root.particle_emitters = m3::Ref::new(1, section.index(), 0);
+            root.particle_emitters =
+                m3::Ref::new(1, section.index(), nr::ReferenceFlags::default());
             doc.replace(id, &[root]).unwrap();
             let imported = conversion::m3::import(
                 &m3::Bundle::from_model(m3::Model::from_document(doc).unwrap()),
@@ -733,7 +734,7 @@ fn every_particle_and_ribbon_record_revision_rebuilds_from_wem_fields() {
                 ..Default::default()
             };
             let section = doc.append(&[row]).unwrap();
-            root.ribbon_emitters = m3::Ref::new(1, section.index(), 0);
+            root.ribbon_emitters = m3::Ref::new(1, section.index(), nr::ReferenceFlags::default());
             doc.replace(id, &[root]).unwrap();
             let imported = conversion::m3::import(
                 &m3::Bundle::from_model(m3::Model::from_document(doc).unwrap()),
@@ -801,8 +802,8 @@ fn dormant_standard_shaders_remain_editable_native_materials() {
         .unwrap();
     let mut dormant = first;
     dormant.specular_exponent = 37.;
-    dormant.flags = 0x20;
-    dormant.blend_mode = 3;
+    dormant.flags = nr::MaterialFlags(0x20);
+    dormant.blend_mode = nr::BlendMode::AlphaAdd;
     let id = document.section_id(root.standard_materials.index).unwrap();
     document.replace(id, &[first, dormant]).unwrap();
     root.standard_materials.entries = 2;
@@ -843,8 +844,8 @@ fn dormant_standard_shaders_remain_editable_native_materials() {
         .unwrap()
         .unwrap();
     assert_eq!(dormant.specular_exponent, 37.);
-    assert_eq!(dormant.flags, 0x20);
-    assert_eq!(dormant.blend_mode, 3);
+    assert_eq!(dormant.flags.bits(), 0x20);
+    assert_eq!(dormant.blend_mode, nr::BlendMode::AlphaAdd);
 }
 
 #[test]
@@ -902,7 +903,7 @@ fn referenced_hair_shader_can_be_dropped_into_a_generic_material() {
         .replace(
             maps,
             &[nr::MaterialMap {
-                material_type: 8,
+                material_type: nr::MaterialKind::Hair,
                 material_index: 0,
             }],
         )
@@ -922,7 +923,7 @@ fn referenced_hair_shader_can_be_dropped_into_a_generic_material() {
     .unwrap();
     let model = imported.value.model(&ExportOptions::default()).unwrap();
     assert_eq!(model.meshes[0].material_slot, 0);
-    assert_eq!(model.materials[0].flags, 0);
+    assert_eq!(model.materials[0].flags.bits(), 0);
     assert!(imported
         .report
         .issues

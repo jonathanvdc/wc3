@@ -7,6 +7,7 @@ use super::{
     Array, NativeAbi, RawReference, Read, ReadError, Record, RecordLayout, Ref, Target, Write,
     WriteError,
 };
+use super::{ProfileMask, ReferenceFlags};
 use crate::model::common::{Borrowed, IntoOwned};
 use std::borrow::Cow;
 use std::fmt::Debug;
@@ -85,7 +86,7 @@ pub struct RawDocument<'data> {
     owner: u64,
     root: RawReference,
     version: u32,
-    profile_mask: u32,
+    profile_mask: ProfileMask,
     options: Options,
     source: Option<Cow<'data, [u8]>>,
     dirty: bool,
@@ -128,11 +129,11 @@ impl<'data> RawDocument<'data> {
             root: RawReference {
                 entries: 0,
                 index: 0,
-                flags: 0,
+                flags: ReferenceFlags(0),
                 target: Some(*b"WDOC"),
             },
             version: 3,
-            profile_mask: 0,
+            profile_mask: ProfileMask(0),
             options,
             source: None,
             dirty: true,
@@ -163,7 +164,7 @@ impl<'data> RawDocument<'data> {
         let root = RawReference {
             entries: word(bytes, 16)?,
             index: word(bytes, 20)?,
-            flags: word(bytes, 24)?,
+            flags: ReferenceFlags(word(bytes, 24)?),
             target: Some(*b"WDOC"),
         };
         let mut entries = Vec::with_capacity(count);
@@ -257,7 +258,7 @@ impl<'data> RawDocument<'data> {
             owner: NEXT_DOCUMENT.fetch_add(1, Ordering::Relaxed),
             root,
             version,
-            profile_mask: word(bytes, 28)?,
+            profile_mask: ProfileMask(word(bytes, 28)?),
             options,
             source: Some(Cow::Borrowed(bytes)),
             dirty: false,
@@ -268,11 +269,11 @@ impl<'data> RawDocument<'data> {
         self.version
     }
     /// Header profile bits, including an unspecified zero mask.
-    pub fn profile_mask(&self) -> u32 {
+    pub fn profile_mask(&self) -> ProfileMask {
         self.profile_mask
     }
     /// Sets profile metadata without normalizing document contents.
-    pub fn set_profile_mask(&mut self, mask: u32) {
+    pub fn set_profile_mask(&mut self, mask: ProfileMask) {
         self.profile_mask = mask;
         self.dirty = true;
     }
@@ -399,7 +400,7 @@ impl<'data> RawDocument<'data> {
         if T::NATIVE_ABI.is_some() && T::NATIVE_ABI != self.options.native_abi {
             return Err(ReadError::invalid(0, "native record ABI"));
         }
-        self.resolve(Ref::new(section.count, id.index, 0))
+        self.resolve(Ref::from_section(section.count, id.index))
     }
     /// Borrows a CHAR reference as UTF-8. WEM string counts exclude a terminator.
     pub fn string<T: Target>(&self, reference: Ref<T>) -> Result<Option<&str>, ReadError> {
@@ -742,8 +743,8 @@ impl<'data> RawDocument<'data> {
             (12, width(self.sections.len())?),
             (16, self.root.entries),
             (20, self.root.index),
-            (24, self.root.flags),
-            (28, self.profile_mask),
+            (24, self.root.flags.bits()),
+            (28, self.profile_mask.bits()),
         ] {
             bytes[at..at + 4].copy_from_slice(&value.to_le_bytes());
         }
@@ -823,12 +824,12 @@ impl<'data, D: Dialect> Document<'data, D> {
         use super::InlineList;
         let mut raw = RawDocument::new_with_options(options);
         let root = DocumentRecord::<V1> {
-            profiles: InlineList(vec![ProfileId::GENERIC]),
+            profiles: InlineList(vec![ProfileId::Generic]),
             unit_scale: 1.0,
             ..Default::default()
         };
         let id = raw.append(&[root])?;
-        raw.set_root(Ref::<DocumentRecord<V1>>::new(1, id.index(), 0));
+        raw.set_root(Ref::<DocumentRecord<V1>>::from_section(1, id.index()));
         Self::from_raw(raw).map_err(|_| WriteError::invalid("empty document"))
     }
     /// Reads the selected file generation without assuming a native ABI.

@@ -90,7 +90,7 @@ pub(super) fn patch_scene<V: ModelLayout + ParticleConversion>(
             })
             .collect();
         let shape = wr::PhysicsShape::<wr::V2> {
-            kind: wr::PhysicsShapeKind::TRIANGLE_MESH,
+            kind: wr::PhysicsShapeKind::TriangleMesh,
             transform: from_fn(|row| from_fn(|col| if row == col { 1. } else { 0. })),
             vertices: put(&mut doc, &vertices)?.cast(),
             triangles: put(&mut doc, &triangles)?.cast(),
@@ -100,7 +100,7 @@ pub(super) fn patch_scene<V: ModelLayout + ParticleConversion>(
         let body = wr::PhysicsBody::<wr::V3> {
             id: 1,
             node: u32::MAX,
-            motion: wr::BodyMotion::STATIC,
+            motion: wr::BodyMotion::Static,
             shapes: shape,
             ..Default::default()
         };
@@ -134,53 +134,46 @@ pub(super) fn native_nodes(model: &sm::Model<'_>) -> Result<Vec<wr::Node<wr::V19
         .collect::<Result<_, _>>()?)
 }
 
-pub(super) fn common_flags(native: u32) -> u32 {
-    [
-        (0x1, wr::NodeFlags::DONT_INHERIT_TRANSLATION.0),
-        (0x2, wr::NodeFlags::DONT_INHERIT_SCALE.0),
-        (0x4, wr::NodeFlags::DONT_INHERIT_ROTATION.0),
-        (0x8, wr::NodeFlags::BILLBOARDED.0),
-        (0x10, wr::NodeFlags::BILLBOARD_LOCK_X.0),
-        (0x20, wr::NodeFlags::BILLBOARD_LOCK_Y.0),
-        (0x40, wr::NodeFlags::BILLBOARD_LOCK_Z.0),
-        (0x1000000, wr::NodeFlags::MODEL_SPACE.0),
-    ]
-    .into_iter()
-    .filter(|(bit, _)| native & bit != 0)
-    .fold(0, |flags, (_, bit)| flags | bit)
+pub(super) fn common_flags(native: BoneFlags) -> wr::NodeFlags {
+    let mut flags = wr::NodeFlags::default();
+    flags.set_dont_inherit_translation(native.dont_inherit_translation());
+    flags.set_dont_inherit_scale(native.dont_inherit_scale());
+    flags.set_dont_inherit_rotation(native.dont_inherit_rotation());
+    flags.set_billboarded(native.billboard());
+    flags.set_billboard_lock_x(native.billboard_lock_x());
+    flags.set_billboard_lock_y(native.billboard_lock_y());
+    flags.set_billboard_lock_z(native.billboard_lock_z());
+    flags.set_model_space(native.model_space());
+    flags
 }
 pub(super) fn native_flags(
-    common: u32,
+    common: wr::NodeFlags,
     original: u32,
     context: &mut Context,
     path: &str,
-) -> Result<u32, Error> {
-    let supported = wr::NodeFlags::DONT_INHERIT_TRANSLATION.0
-        | wr::NodeFlags::DONT_INHERIT_ROTATION.0
-        | wr::NodeFlags::DONT_INHERIT_SCALE.0
-        | wr::NodeFlags::BILLBOARDED.0
-        | wr::NodeFlags::BILLBOARD_LOCK_X.0
-        | wr::NodeFlags::BILLBOARD_LOCK_Y.0
-        | wr::NodeFlags::BILLBOARD_LOCK_Z.0
-        | wr::NodeFlags::MODEL_SPACE.0;
-    if common & !supported != 0 {
+) -> Result<BoneFlags, Error> {
+    let supported = wr::NodeFlags::DONT_INHERIT_TRANSLATION.bits()
+        | wr::NodeFlags::DONT_INHERIT_ROTATION.bits()
+        | wr::NodeFlags::DONT_INHERIT_SCALE.bits()
+        | wr::NodeFlags::BILLBOARDED.bits()
+        | wr::NodeFlags::BILLBOARD_LOCK_X.bits()
+        | wr::NodeFlags::BILLBOARD_LOCK_Y.bits()
+        | wr::NodeFlags::BILLBOARD_LOCK_Z.bits()
+        | wr::NodeFlags::MODEL_SPACE.bits();
+    if common.bits() & !supported != 0 {
         context.unsupported(
             path,
             "M2 has no equivalent to the selected common node flags",
         )?;
     }
-    let mapped = [
-        (wr::NodeFlags::DONT_INHERIT_TRANSLATION.0, 0x1),
-        (wr::NodeFlags::DONT_INHERIT_SCALE.0, 0x2),
-        (wr::NodeFlags::DONT_INHERIT_ROTATION.0, 0x4),
-        (wr::NodeFlags::BILLBOARDED.0, 0x8),
-        (wr::NodeFlags::BILLBOARD_LOCK_X.0, 0x10),
-        (wr::NodeFlags::BILLBOARD_LOCK_Y.0, 0x20),
-        (wr::NodeFlags::BILLBOARD_LOCK_Z.0, 0x40),
-        (wr::NodeFlags::MODEL_SPACE.0, 0x1000000),
-    ]
-    .into_iter()
-    .filter(|(bit, _)| common & bit != 0)
-    .fold(0, |flags, (_, bit)| flags | bit);
-    Ok((original & !0x100007f) | mapped)
+    let mut flags = BoneFlags::from_bits_retain(original);
+    flags.set_dont_inherit_translation(common.dont_inherit_translation());
+    flags.set_dont_inherit_scale(common.dont_inherit_scale());
+    flags.set_dont_inherit_rotation(common.dont_inherit_rotation());
+    flags.set_billboard(common.billboarded());
+    flags.set_billboard_lock_x(common.billboard_lock_x());
+    flags.set_billboard_lock_y(common.billboard_lock_y());
+    flags.set_billboard_lock_z(common.billboard_lock_z());
+    flags.set_model_space(common.model_space());
+    Ok(flags)
 }

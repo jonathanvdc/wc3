@@ -31,9 +31,15 @@ pub(super) fn import<E: Envelope>(
         .enumerate()
     {
         let row = row.map_err(read_error)?;
-        if row.joint_type > 3 {
-            return Err(Error::new("m3.physics.joint.kind", "unknown joint kind"));
-        }
+        let kind = match row.joint_type {
+            nr::JointKind::Spherical => wr::JointKind::Spherical,
+            nr::JointKind::Revolute => wr::JointKind::Revolute,
+            nr::JointKind::Cone => wr::JointKind::ConeTwist,
+            nr::JointKind::Weld => wr::JointKind::Weld,
+            nr::JointKind::Unknown(_) => {
+                return Err(Error::new("m3.physics.joint.kind", "unknown joint kind"));
+            }
+        };
         if row.reserved_0 != [0; 3] {
             context.unsupported(
                 format!("physics.joints[{index}].reserved"),
@@ -58,7 +64,7 @@ pub(super) fn import<E: Envelope>(
             id: (bodies.len() + index) as u32,
             body_a: a.id,
             body_b: b.id,
-            kind: wr::JointKind(row.joint_type as u8),
+            kind,
             frame_a: row.matrix_body1,
             frame_b: row.matrix_body2,
             collide_connected: wem::Bool(row.enable_shape),
@@ -67,9 +73,9 @@ pub(super) fn import<E: Envelope>(
             upper: row.limit_max,
             cone: row.cone_angle,
             friction: if row.enable_friction & 255 != 0 {
-                wr::JointFriction::TORQUE
+                wr::JointFriction::Torque
             } else {
-                wr::JointFriction::NONE
+                wr::JointFriction::None
             },
             friction_amount: row.friction,
             angular_spring: wr::JointSpring {
@@ -109,9 +115,16 @@ pub(super) fn export<E: Envelope>(
         let row = row?;
         let a = body_for(row.body_a)?;
         let b = body_for(row.body_b)?;
-        if row.kind.0 > 3
-            || row.friction == wr::JointFriction::GRAVITY_HOLD
-            || row.motor.0 != 0
+        let native_kind = match row.kind {
+            wr::JointKind::Spherical => Some(nr::JointKind::Spherical),
+            wr::JointKind::Revolute => Some(nr::JointKind::Revolute),
+            wr::JointKind::ConeTwist => Some(nr::JointKind::Cone),
+            wr::JointKind::Weld => Some(nr::JointKind::Weld),
+            _ => None,
+        };
+        if native_kind.is_none()
+            || row.friction == wr::JointFriction::GravityHold
+            || row.motor != wr::JointMotorMode::Off
             || row.max_motor_force != 0.
             || row.motor_speed != 0.
             || row.reference_translation != 0.
@@ -126,9 +139,9 @@ pub(super) fn export<E: Envelope>(
                 "joint controls have no native M3 equivalent",
             )?;
         }
-        if row.kind.0 > 3 {
+        let Some(native_kind) = native_kind else {
             continue;
-        }
+        };
         let node = nodes
             .get(a.node as usize)
             .ok_or_else(|| Error::new("wem.physics.node", "missing body node"))??;
@@ -146,7 +159,7 @@ pub(super) fn export<E: Envelope>(
             row.angular_spring.hz * TAU
         };
         output.push(nr::PhysicsJoint {
-            joint_type: u32::from(row.kind.0),
+            joint_type: native_kind,
             bone_index1: *bone_map
                 .get(a.node as usize)
                 .ok_or_else(|| Error::new("wem.physics.node", "missing joint bone mapping"))?,
@@ -169,7 +182,7 @@ pub(super) fn export<E: Envelope>(
                 .copied()
                 .unwrap_or(0) as u32
                 & !255)
-                | u32::from(row.friction != wr::JointFriction::NONE),
+                | u32::from(row.friction != wr::JointFriction::None),
             friction: row.friction_amount,
             damping_ratio: row.angular_spring.damping,
             angular_frequency: frequency,

@@ -67,7 +67,7 @@ pub(in super::super) fn import_physics<D: Dialect>(
             .get(first..end)
             .ok_or_else(|| Error::new("physics.body.shapes", "missing body shape window"))?;
         let shapes = if first == 0 {
-            wem::Ref::<wr::targets::PhysicsShape>::new(count as u32, shape_section.index, 0)
+            wem::Ref::<wr::targets::PhysicsShape>::from_section(count as u32, shape_section.index)
         } else {
             put(&mut raw, selected)?.cast()
         };
@@ -76,7 +76,10 @@ pub(in super::super) fn import_physics<D: Dialect>(
         let chars: Vec<_> = name.bytes().map(|value| wr::Character { value }).collect();
         let mut fields = vec![
             ("m2.physics.host".to_owned(), 1),
-            ("m2.physics.body_type".to_owned(), i64::from(body.body_type)),
+            (
+                "m2.physics.body_type".to_owned(),
+                i64::from(body.body_type.raw()),
+            ),
             ("m2.physics.reserved".to_owned(), i64::from(body.reserved)),
         ];
         let definitions: Vec<_> = file
@@ -112,7 +115,7 @@ pub(in super::super) fn import_physics<D: Dialect>(
         let helper = wr::Node::<wr::V19> {
             name: put(&mut raw, &chars)?.cast(),
             parent: body.bone,
-            kind: wr::NodeKind::HELPER,
+            kind: wr::NodeKind::Helper,
             flags: wr::NodeFlags(
                 wr::NodeFlags::DONT_INHERIT_ROTATION.0 | wr::NodeFlags::DONT_INHERIT_SCALE.0,
             ),
@@ -153,7 +156,7 @@ pub(in super::super) fn import_physics<D: Dialect>(
                 None
             }
         })
-        .unwrap_or(0);
+        .unwrap_or_default();
     let vegetation = file
         .chunks
         .iter()
@@ -193,7 +196,7 @@ pub(in super::super) fn import_physics<D: Dialect>(
             id: first_id + native_bodies.len() as u32 + joints.len() as u32,
             bodies: put(&mut raw, &body_ids)?.cast(),
             wow: wem::InlineOption::from(Some(wr::WowRigExtension {
-                kind: wr::WowPhysicsKind(u8::try_from(kind).map_err(|_| {
+                kind: wr::WowPhysicsKind::from_raw(u8::try_from(kind.raw()).map_err(|_| {
                     Error::new("physics.kind", "rig category exceeds WEM byte field")
                 })?),
                 vegetation: wem::InlineOption::from(vegetation),

@@ -4,6 +4,10 @@
 //! Reference counts and explicit geometry counts remain separate fields. Solver
 //! parameters are exposed without imposing units or evaluating simulation.
 use super::dialect::*;
+use super::values::{
+    JointKind, LocalForces, PhysicalMaterial, PhysicsShapeKind, RigidBodyFlags, TriangleFlags,
+    WorldForces,
+};
 use super::{targets, AnimationValue};
 use crate::model::m3::{self, Record, Ref};
 use core::fmt::Debug;
@@ -130,7 +134,7 @@ pub struct PhysicsMeshTriangle {
     /// Uninterpreted word immediately before the triangle flag bits.
     pub reserved: u16,
     /// Triangle property bits.
-    pub flags: u16,
+    pub flags: TriangleFlags,
 }
 
 impl Record for PhysicsMeshTriangle {
@@ -152,7 +156,7 @@ impl Record for PhysicsMeshTriangle {
     m3::VisitReferences,
 )]
 pub struct PhysicsMeshEdge {
-    /// Numeric edge classification; no Rust enum restricts its values.
+    /// Unresolved native edge classification word.
     pub edge_type: u32,
     /// Position-array index for one endpoint of the edge.
     pub vertex_a: u32,
@@ -432,7 +436,7 @@ pub struct PhysicsShape<D: PhysicsShapeDialect> {
     /// 4 uninterpreted bytes between `transform` and `shape_type`.
     pub legacy_reserved_0: D::LegacyReserved0,
     /// Shape discriminator: 0 box, 1 sphere, 2 capsule, 3 cylinder, 4 hull, 5 mesh.
-    pub shape_type: u8,
+    pub shape_type: PhysicsShapeKind,
     /// 3 uninterpreted bytes between `shape_type` and `source_points`.
     pub legacy_reserved_1: D::LegacyReserved1,
     /// 3 uninterpreted bytes between `shape_type` and `source_points`.
@@ -625,11 +629,11 @@ impl RigidBodyDialect for V2 {
     type DynamicState = ();
     type DynamicBlendOut = ();
     type Reserved2 = ();
-    type Flags = u32;
+    type Flags = RigidBodyFlags;
     type Reserved3 = ();
-    type LocalForces = u16;
+    type LocalForces = LocalForces;
     type Reserved4 = ();
-    type WorldForces = u16;
+    type WorldForces = WorldForces;
     type Reserved5 = ();
     type Priority = u32;
 }
@@ -639,7 +643,7 @@ impl RigidBodyDialect for V3 {
     type Reserved0 = ();
     type SimulationType = u16;
     type Reserved1 = ();
-    type PhysicsType = u32;
+    type PhysicsType = PhysicalMaterial;
     type Mass = f32;
     type Friction = f32;
     type Restitution = f32;
@@ -649,11 +653,11 @@ impl RigidBodyDialect for V3 {
     type DynamicState = ();
     type DynamicBlendOut = ();
     type Reserved2 = ();
-    type Flags = u32;
+    type Flags = RigidBodyFlags;
     type Reserved3 = ();
-    type LocalForces = u16;
+    type LocalForces = LocalForces;
     type Reserved4 = ();
-    type WorldForces = u16;
+    type WorldForces = WorldForces;
     type Reserved5 = ();
     type Priority = u32;
 }
@@ -663,7 +667,7 @@ impl RigidBodyDialect for V4 {
     type Reserved0 = ();
     type SimulationType = u16;
     type Reserved1 = ();
-    type PhysicsType = u32;
+    type PhysicsType = PhysicalMaterial;
     type Mass = f32;
     type Friction = f32;
     type Restitution = f32;
@@ -673,11 +677,11 @@ impl RigidBodyDialect for V4 {
     type DynamicState = AnimationValue<u32>;
     type DynamicBlendOut = f32;
     type Reserved2 = ();
-    type Flags = u32;
+    type Flags = RigidBodyFlags;
     type Reserved3 = ();
-    type LocalForces = u16;
+    type LocalForces = LocalForces;
     type Reserved4 = ();
-    type WorldForces = u16;
+    type WorldForces = WorldForces;
     type Reserved5 = ();
     type Priority = u32;
 }
@@ -762,7 +766,7 @@ impl<D: RigidBodyDialect> Record for RigidBody<D> {
 )]
 pub struct PhysicsJoint {
     /// Joint discriminator: 0 spherical, 1 revolute, 2 cone-twist, 3 weld.
-    pub joint_type: u32,
+    pub joint_type: JointKind,
     /// BONE record on the first side of the joint.
     pub bone_index1: u32,
     /// BONE record on the second side of the joint.

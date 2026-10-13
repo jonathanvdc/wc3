@@ -82,21 +82,21 @@ pub(in crate::model::conversion::mdlx) fn overlay_effects<D: ModelDialect>(
                 record.emission_rate.set_value(data.emission_rate);
                 record.width.set_value(data.width);
                 record.length.set_value(data.length);
-                record.filter_mode = match data.filter.0 {
-                    0 => native::Particle2FilterMode::Blend,
-                    1 => native::Particle2FilterMode::Additive,
-                    2 => native::Particle2FilterMode::Modulate,
-                    3 => native::Particle2FilterMode::Modulate2x,
-                    4 => native::Particle2FilterMode::AlphaKey,
-                    value => native::Particle2FilterMode::Unknown(value),
+                record.filter_mode = match data.filter {
+                    wr::Wc3ParticleFilter::Blend => native::Particle2FilterMode::Blend,
+                    wr::Wc3ParticleFilter::Additive => native::Particle2FilterMode::Additive,
+                    wr::Wc3ParticleFilter::Modulate => native::Particle2FilterMode::Modulate,
+                    wr::Wc3ParticleFilter::Modulate2x => native::Particle2FilterMode::Modulate2x,
+                    wr::Wc3ParticleFilter::AlphaKey => native::Particle2FilterMode::AlphaKey,
+                    value => native::Particle2FilterMode::Unknown(value.raw()),
                 };
                 record.rows = data.rows;
                 record.columns = data.columns;
-                record.frames = match data.head_or_tail.0 {
-                    0 => native::Particle2Frames::Head,
-                    1 => native::Particle2Frames::Tail,
-                    2 => native::Particle2Frames::Both,
-                    value => native::Particle2Frames::Unknown(value),
+                record.frames = match data.head_or_tail {
+                    wr::Wc3ParticleHeadOrTail::Head => native::Particle2Frames::Head,
+                    wr::Wc3ParticleHeadOrTail::Tail => native::Particle2Frames::Tail,
+                    wr::Wc3ParticleHeadOrTail::Both => native::Particle2Frames::Both,
+                    value => native::Particle2Frames::Unknown(value.raw()),
                 };
                 record.tail_length = data.tail_length;
                 record.time = data.time;
@@ -218,11 +218,26 @@ pub(in crate::model::conversion::mdlx) fn overlay_effects<D: ModelDialect>(
             }
             wr::NodePayload::Light(data) => {
                 typed_ids.push(id);
-                let kind = match data.kind.0 {
-                    0 => native::scene::LightType::Omnidirectional,
-                    1 => native::scene::LightType::Directional,
-                    2 => native::scene::LightType::Ambient,
-                    value => native::scene::LightType::Unknown(u32::from(value)),
+                let fields = metadata(raw, node.native.clone())?;
+                let original_unknown = fields
+                    .get("mdlx.light.unknown_type")
+                    .map(|(value, _)| *value as u32)
+                    .filter(|value| *value == u32::from(data.kind.raw()));
+                let kind = if let Some(value) = original_unknown {
+                    native::scene::LightType::Unknown(value)
+                } else {
+                    match data.kind {
+                        wr::LightKind::Omni => native::scene::LightType::Omnidirectional,
+                        wr::LightKind::Directional => native::scene::LightType::Directional,
+                        wr::LightKind::Ambient => native::scene::LightType::Ambient,
+                        wr::LightKind::Spot => {
+                            context.unsupported("lights.kind", "MDLX has no spotlight record")?;
+                            native::scene::LightType::Omnidirectional
+                        }
+                        wr::LightKind::Unknown(value) => {
+                            native::scene::LightType::Unknown(u32::from(value))
+                        }
+                    }
                 };
                 let record = if let Some(position) =
                     lights.iter().position(|record| record.node.object_id == id)
@@ -267,17 +282,17 @@ pub(in crate::model::conversion::mdlx) fn overlay_effects<D: ModelDialect>(
                 typed_ids.push(id);
                 let shape = &data.shape;
                 let geometry = match shape.kind {
-                    wr::CollisionShapeKind::BOX => {
+                    wr::CollisionShapeKind::Box => {
                         native::CollisionGeometry::Box([shape.bounds.minimum, shape.bounds.maximum])
                     }
-                    wr::CollisionShapeKind::PLANE => native::CollisionGeometry::Plane([
+                    wr::CollisionShapeKind::Plane => native::CollisionGeometry::Plane([
                         shape.bounds.minimum,
                         shape.bounds.maximum,
                     ]),
-                    wr::CollisionShapeKind::SPHERE => {
+                    wr::CollisionShapeKind::Sphere => {
                         native::CollisionGeometry::Sphere(shape.sphere.center, shape.sphere.radius)
                     }
-                    wr::CollisionShapeKind::CYLINDER => native::CollisionGeometry::Cylinder(
+                    wr::CollisionShapeKind::Cylinder => native::CollisionGeometry::Cylinder(
                         [shape.bounds.minimum, shape.bounds.maximum],
                         shape.sphere.radius,
                     ),

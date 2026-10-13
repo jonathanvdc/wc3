@@ -28,7 +28,7 @@ pub(in crate::model::conversion::m3::controls) fn import_one_bone_solvers<E: Env
             &format!("{prefix}.bone_fallback"),
             u32::from(r.bone_fallback),
         );
-        fields.uint(&format!("{prefix}.flags"), r.flags);
+        fields.uint(&format!("{prefix}.flags"), (r.flags).bits());
         fields.float(&format!("{prefix}.max_angle"), r.max_angle);
     }
     Ok(())
@@ -87,7 +87,7 @@ pub(in crate::model::conversion::m3::controls) fn export_one_bone_solvers<E: Env
                     "value exceeds native integer width",
                 )
             })?,
-            flags: fields.uint(&format!("{prefix}.flags")),
+            flags: nr::OneBoneFlags(fields.uint(&format!("{prefix}.flags"))),
             max_angle: fields.float(&format!("{prefix}.max_angle")),
         });
     }

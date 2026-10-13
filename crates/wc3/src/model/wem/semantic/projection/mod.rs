@@ -7,10 +7,10 @@ pub(super) use read::read_mesh;
 pub(super) use rebuild::rebuild;
 fn domain_index(domain: r::Domain, source: VertexSource) -> Result<usize, ReadError> {
     match domain {
-        r::Domain::VERTEX => Ok(source.vertex as usize),
-        r::Domain::HALFEDGE => Ok(source.corner as usize),
-        r::Domain::FACE => Ok(source.face as usize),
-        r::Domain::MESH => Ok(0),
+        r::Domain::Vertex => Ok(source.vertex as usize),
+        r::Domain::Halfedge => Ok(source.corner as usize),
+        r::Domain::Face => Ok(source.face as usize),
+        r::Domain::Mesh => Ok(0),
         _ => Err(ReadError::unsupported(
             0,
             "edge attribute domain has no explicit edge identity table",

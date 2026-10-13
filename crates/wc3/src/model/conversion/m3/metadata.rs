@@ -69,7 +69,7 @@ pub(super) fn decorate<E: Envelope>(
     };
     let mut values = read(&doc, &set.native)?;
     native::visit_m3_root!(source.root_record().map_err(read_error)?, |r| {
-        values.insert("m3.model.flags".into(), i64::from(r.flags));
+        values.insert("m3.model.flags".into(), i64::from((r.flags).bits()));
         values.insert(
             "m3.model.animation_split_count".into(),
             i64::from(r.animation_split_count),
@@ -83,7 +83,7 @@ pub(super) fn decorate<E: Envelope>(
     if let native::RootRecord::V30(root) = native_root {
         let maps = super::material::complete_maps(source)?;
         for (index, map) in maps.iter().enumerate() {
-            if map.material_type != 12 {
+            if map.material_type != nr::MaterialKind::DataDriven {
                 continue;
             }
             macro_rules! read_reserved {
@@ -125,7 +125,7 @@ pub(super) fn decorate<E: Envelope>(
                 for (name, value) in [
                     ("entries", words.entries),
                     ("index", words.index),
-                    ("flags", words.flags),
+                    ("third_word", words.third_word),
                 ] {
                     values.insert(
                         format!("m3.materials[{index}].reserved[{slot}].{name}"),
@@ -180,7 +180,7 @@ pub(super) fn restore_reserved(
 ) -> Result<(), Error> {
     let values = values(model)?;
     for (index, map) in maps.iter().enumerate() {
-        if map.material_type != 12 {
+        if map.material_type != nr::MaterialKind::DataDriven {
             continue;
         }
         let mut words = [nr::ReservedReferenceWords::default(); 4];
@@ -194,7 +194,7 @@ pub(super) fn restore_reserved(
             *word = nr::ReservedReferenceWords {
                 entries: get("entries"),
                 index: get("index"),
-                flags: get("flags"),
+                third_word: get("third_word"),
             };
         }
         let row = materials

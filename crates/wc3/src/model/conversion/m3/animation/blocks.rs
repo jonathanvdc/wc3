@@ -83,7 +83,7 @@ impl NativeBlocks {
         let timestamps = append(doc, &times)?.cast();
         let selector = match family {
             1 => {
-                if kind != wr::AttrType::F32X2 {
+                if kind != wr::AttrType::F32x2 {
                     return Err(Error::new(
                         "animation.type",
                         "edited channel differs from source family",
@@ -107,7 +107,7 @@ impl NativeBlocks {
                 let index = self.vectors2.len();
                 self.vectors2.push(nr::AnimationBlockVector2 {
                     timestamps,
-                    flags,
+                    flags: nr::AnimationBlockFlags(flags),
                     end_frame,
                     keys,
                 });
@@ -116,7 +116,7 @@ impl NativeBlocks {
                         .map_err(|_| Error::new("animation.blocks", "too many blocks"))?
             }
             2 => {
-                if kind != wr::AttrType::F32X3 {
+                if kind != wr::AttrType::F32x3 {
                     return Err(Error::new(
                         "animation.type",
                         "edited channel differs from source family",
@@ -140,7 +140,7 @@ impl NativeBlocks {
                 let index = vector_base + self.vectors3.len();
                 self.vectors3.push(nr::AnimationBlockVector3 {
                     timestamps,
-                    flags,
+                    flags: nr::AnimationBlockFlags(flags),
                     end_frame,
                     keys,
                 });
@@ -149,7 +149,7 @@ impl NativeBlocks {
                         .map_err(|_| Error::new("animation.blocks", "too many blocks"))?
             }
             3 => {
-                if kind != wr::AttrType::QUAT && kind != wr::AttrType::F32X4 {
+                if kind != wr::AttrType::Quat && kind != wr::AttrType::F32x4 {
                     return Err(Error::new(
                         "animation.type",
                         "edited channel differs from source family",
@@ -173,7 +173,7 @@ impl NativeBlocks {
                 let index = quaternion_base + self.quaternions.len();
                 self.quaternions.push(nr::AnimationBlockQuaternion {
                     timestamps,
-                    flags,
+                    flags: nr::AnimationBlockFlags(flags),
                     end_frame,
                     keys,
                 });
@@ -182,7 +182,7 @@ impl NativeBlocks {
                         .map_err(|_| Error::new("animation.blocks", "too many blocks"))?
             }
             4 => {
-                if kind != wr::AttrType::U8X4 {
+                if kind != wr::AttrType::U8x4 {
                     return Err(Error::new(
                         "animation.type",
                         "edited channel differs from source family",
@@ -202,7 +202,7 @@ impl NativeBlocks {
                 let index = self.colors.len();
                 self.colors.push(nr::AnimationBlockColor {
                     timestamps,
-                    flags,
+                    flags: nr::AnimationBlockFlags(flags),
                     end_frame,
                     keys,
                 });
@@ -233,7 +233,7 @@ impl NativeBlocks {
                 let index = self.reals.len();
                 self.reals.push(nr::AnimationBlockReal {
                     timestamps,
-                    flags,
+                    flags: nr::AnimationBlockFlags(flags),
                     end_frame,
                     keys,
                 });
@@ -269,7 +269,7 @@ impl NativeBlocks {
                 let index = self.bytes.len();
                 self.bytes.push(nr::AnimationBlockByte {
                     timestamps,
-                    flags,
+                    flags: nr::AnimationBlockFlags(flags),
                     end_frame,
                     keys,
                 });
@@ -305,7 +305,7 @@ impl NativeBlocks {
                 let index = self.shorts.len();
                 self.shorts.push(nr::AnimationBlockI16 {
                     timestamps,
-                    flags,
+                    flags: nr::AnimationBlockFlags(flags),
                     end_frame,
                     keys,
                 });
@@ -336,7 +336,7 @@ impl NativeBlocks {
                 let index = self.ushorts.len();
                 self.ushorts.push(nr::AnimationBlockU16 {
                     timestamps,
-                    flags,
+                    flags: nr::AnimationBlockFlags(flags),
                     end_frame,
                     keys,
                 });
@@ -367,7 +367,7 @@ impl NativeBlocks {
                 let index = self.ints.len();
                 self.ints.push(nr::AnimationBlockI32 {
                     timestamps,
-                    flags,
+                    flags: nr::AnimationBlockFlags(flags),
                     end_frame,
                     keys,
                 });
@@ -398,7 +398,7 @@ impl NativeBlocks {
                 let index = self.uints.len();
                 self.uints.push(nr::AnimationBlockU32 {
                     timestamps,
-                    flags,
+                    flags: nr::AnimationBlockFlags(flags),
                     end_frame,
                     keys,
                 });
@@ -422,14 +422,14 @@ impl NativeBlocks {
                 let mut keys = Vec::new();
                 for bytes in data.as_chunks::<4>().0.iter() {
                     keys.push(nr::Flag {
-                        value: u32::from_le_bytes(*bytes),
+                        value: nr::FlagBits(u32::from_le_bytes(*bytes)),
                     });
                 }
                 let keys = append(doc, &keys)?.cast();
                 let index = self.flags.len();
                 self.flags.push(nr::AnimationBlockFlag {
                     timestamps,
-                    flags,
+                    flags: nr::AnimationBlockFlags(flags),
                     end_frame,
                     keys,
                 });

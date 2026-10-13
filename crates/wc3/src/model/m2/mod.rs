@@ -108,3 +108,6 @@ pub use companions::{
 pub use records::{ArrayVisitor, Validate, VisitArrays};
 /// Derives recursive validation and traversal for ordinary records and enums.
 pub use wc3_derive::{M2Validate as Validate, M2VisitArrays as VisitArrays};
+
+/// Derives exact scalar enum wire-code conversions.
+pub use wc3_derive::M2Value as Value;

@@ -90,13 +90,14 @@ pub(in super::super) fn export_physics<D: ExportDialect>(
             }
         }
         let body_type = match body.motion {
-            wr::BodyMotion::KINEMATIC => 0,
-            wr::BodyMotion::DYNAMIC => 1,
-            wr::BodyMotion::STATIC => data
-                .get("m2.physics.body_type")
-                .copied()
-                .filter(|v| *v > 1)
-                .unwrap_or(2) as u16,
+            wr::BodyMotion::Kinematic => PhysicsBodyKind::Kinematic,
+            wr::BodyMotion::Dynamic => PhysicsBodyKind::Dynamic,
+            wr::BodyMotion::Static => PhysicsBodyKind::from_raw(
+                data.get("m2.physics.body_type")
+                    .copied()
+                    .filter(|v| *v > 1)
+                    .unwrap_or(2) as u16,
+            ),
             _ => return Err(Error::new("physics.body.motion", "unknown motion category")),
         };
         output_bodies.push(native::companions::PhysicsBody4 {
@@ -112,7 +113,7 @@ pub(in super::super) fn export_physics<D: ExportDialect>(
             linear_damping: body.linear_damping,
             angular_damping: body.angular_damping,
             follow_factor: body.wow.value.as_ref().map_or(1., |wow| wow.follow_factor),
-            attachment,
+            attachment: PhysicsAttachment::from_bits_retain(attachment),
             reserved: data.get("m2.physics.reserved").copied().unwrap_or(0) as u16,
         });
     }
@@ -136,7 +137,7 @@ pub(in super::super) fn export_physics<D: ExportDialect>(
     {
         let rig = rig?;
         if let Some(wow) = rig.wow.value {
-            chunks.push(Pc::Kind(u32::from(wow.kind.0)));
+            chunks.push(Pc::Kind(PhysicsKind::from_raw(u32::from(wow.kind.raw()))));
             if let Some(vegetation) = wow.vegetation.value {
                 chunks.push(Pc::Vegetation(vec![
                     native::companions::PhysicsVegetation {

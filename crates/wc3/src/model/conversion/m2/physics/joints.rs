@@ -3,10 +3,12 @@ use super::*;
 fn spring(hz: f32, damping: f32) -> wr::JointSpring {
     wr::JointSpring { hz, damping }
 }
-fn motor(code: u32) -> Result<wr::JointMotorMode, Error> {
-    Ok(wr::JointMotorMode(u8::try_from(code).map_err(|_| {
-        Error::new("physics.joint.motor", "motor code exceeds WEM's byte field")
-    })?))
+fn motor(code: PhysicsMotorMode) -> Result<wr::JointMotorMode, Error> {
+    Ok(wr::JointMotorMode::from_raw(
+        u8::try_from(code.raw()).map_err(|_| {
+            Error::new("physics.joint.motor", "motor code exceeds WEM's byte field")
+        })?,
+    ))
 }
 pub(super) fn joints(
     source: &PhysicsFile<'_>,
@@ -36,7 +38,7 @@ pub(super) fn joints(
             ..Default::default()
         };
         match joint.joint_type {
-            0 => {
+            PhysicsJointKind::Spherical => {
                 let value = source
                     .chunks
                     .iter()
@@ -52,13 +54,13 @@ pub(super) fn joints(
                     .ok_or_else(|| {
                         Error::new("physics.joint.spherical", "missing constraint payload")
                     })?;
-                row.kind = wr::JointKind::SPHERICAL;
+                row.kind = wr::JointKind::Spherical;
                 row.frame_a = translate(value.anchor_a);
                 row.frame_b = translate(value.anchor_b);
-                row.friction = wr::JointFriction::TORQUE;
+                row.friction = wr::JointFriction::Torque;
                 row.friction_amount = value.friction_torque;
             }
-            1 => {
+            PhysicsJointKind::Shoulder => {
                 let values: Vec<_> = source
                     .chunks
                     .iter()
@@ -74,7 +76,7 @@ pub(super) fn joints(
                 let (value, hz, damping) = values.get(key).copied().ok_or_else(|| {
                     Error::new("physics.joint.shoulder", "missing constraint payload")
                 })?;
-                row.kind = wr::JointKind::CONE_TWIST;
+                row.kind = wr::JointKind::ConeTwist;
                 row.frame_a = frame(&value.frame_a);
                 row.frame_b = frame(&value.frame_b);
                 row.lower = value.lower_twist_angle.to_radians();
@@ -86,7 +88,7 @@ pub(super) fn joints(
                 row.max_motor_force = value.max_motor_torque;
                 row.angular_spring = spring(hz, damping);
             }
-            2 => {
+            PhysicsJointKind::Weld => {
                 let values: Vec<_> = source
                     .chunks
                     .iter()
@@ -112,14 +114,14 @@ pub(super) fn joints(
                 let (value, hz, damping) = values.get(key).copied().ok_or_else(|| {
                     Error::new("physics.joint.weld", "missing constraint payload")
                 })?;
-                row.kind = wr::JointKind::WELD;
+                row.kind = wr::JointKind::Weld;
                 row.frame_a = frame(&value.frame_a);
                 row.frame_b = frame(&value.frame_b);
                 row.angular_spring =
                     spring(value.angular_frequency_hz, value.angular_damping_ratio);
                 row.linear_spring = spring(hz, damping);
             }
-            3 => {
+            PhysicsJointKind::Revolute => {
                 let values: Vec<_> = source
                     .chunks
                     .iter()
@@ -135,7 +137,7 @@ pub(super) fn joints(
                 let (value, hz, damping) = values.get(key).copied().ok_or_else(|| {
                     Error::new("physics.joint.revolute", "missing constraint payload")
                 })?;
-                row.kind = wr::JointKind::REVOLUTE;
+                row.kind = wr::JointKind::Revolute;
                 row.frame_a = frame(&value.frame_a);
                 row.frame_b = frame(&value.frame_b);
                 row.lower = value.lower_angle.to_radians();
@@ -145,7 +147,7 @@ pub(super) fn joints(
                 row.max_motor_force = value.max_motor_torque;
                 row.angular_spring = spring(hz, damping);
             }
-            4 => {
+            PhysicsJointKind::Prismatic => {
                 let values: Vec<_> = source
                     .chunks
                     .iter()
@@ -161,7 +163,7 @@ pub(super) fn joints(
                 let (value, hz, damping) = values.get(key).copied().ok_or_else(|| {
                     Error::new("physics.joint.prismatic", "missing constraint payload")
                 })?;
-                row.kind = wr::JointKind::PRISMATIC;
+                row.kind = wr::JointKind::Prismatic;
                 row.frame_a = frame(&value.frame_a);
                 row.frame_b = frame(&value.frame_b);
                 row.lower = value.lower_limit;
@@ -173,7 +175,7 @@ pub(super) fn joints(
                 row.motor_speed = value.motor_speed;
                 row.linear_spring = spring(hz, damping);
             }
-            5 => {
+            PhysicsJointKind::Distance => {
                 let value = source
                     .chunks
                     .iter()
@@ -189,7 +191,7 @@ pub(super) fn joints(
                     .ok_or_else(|| {
                         Error::new("physics.joint.distance", "missing constraint payload")
                     })?;
-                row.kind = wr::JointKind::DISTANCE;
+                row.kind = wr::JointKind::Distance;
                 row.frame_a = translate(value.anchor_a);
                 row.frame_b = translate(value.anchor_b);
                 row.rest_length = value.distance;

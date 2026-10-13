@@ -30,9 +30,9 @@ impl Constraints {
             .get(&joint.body_b)
             .ok_or_else(|| Error::new("physics.joint.body_b", "joint references a missing body"))?;
         let (kind, index) = match joint.kind {
-            wr::JointKind::SPHERICAL => {
-                if joint.friction != wr::JointFriction::NONE
-                    && joint.friction != wr::JointFriction::TORQUE
+            wr::JointKind::Spherical => {
+                if joint.friction != wr::JointFriction::None
+                    && joint.friction != wr::JointFriction::Torque
                 {
                     context.unsupported(
                         "physics.joint.friction",
@@ -45,9 +45,9 @@ impl Constraints {
                     anchor_b: joint.frame_b[3][..3].try_into().unwrap(),
                     friction_torque: joint.friction_amount,
                 });
-                (0, index)
+                (PhysicsJointKind::Spherical, index)
             }
-            wr::JointKind::CONE_TWIST => {
+            wr::JointKind::ConeTwist => {
                 let index = self.shoulders.len();
                 self.shoulders.push(native::companions::PhysicsShoulder2 {
                     shoulder: native::companions::PhysicsShoulder {
@@ -61,14 +61,14 @@ impl Constraints {
                         },
                         cone_angle: joint.cone.to_degrees(),
                         max_motor_torque: joint.max_motor_force,
-                        motor_mode: u32::from(joint.motor.0),
+                        motor_mode: PhysicsMotorMode::from_raw(u32::from(joint.motor.raw())),
                     },
                     motor_frequency_hz: joint.angular_spring.hz,
                     motor_damping_ratio: joint.angular_spring.damping,
                 });
-                (1, index)
+                (PhysicsJointKind::Shoulder, index)
             }
-            wr::JointKind::WELD => {
+            wr::JointKind::Weld => {
                 let index = self.welds.len();
                 self.welds.push(native::companions::PhysicsWeld3 {
                     weld: native::companions::PhysicsWeld2 {
@@ -83,9 +83,9 @@ impl Constraints {
                     },
                     unused: 0.,
                 });
-                (2, index)
+                (PhysicsJointKind::Weld, index)
             }
-            wr::JointKind::REVOLUTE => {
+            wr::JointKind::Revolute => {
                 let index = self.revolutes.len();
                 self.revolutes.push(native::companions::PhysicsRevolute2 {
                     revolute: native::companions::PhysicsRevolute {
@@ -98,14 +98,14 @@ impl Constraints {
                             joint.lower.to_degrees()
                         },
                         max_motor_torque: joint.max_motor_force,
-                        motor_mode: u32::from(joint.motor.0),
+                        motor_mode: PhysicsMotorMode::from_raw(u32::from(joint.motor.raw())),
                     },
                     motor_frequency_hz: joint.angular_spring.hz,
                     motor_damping_ratio: joint.angular_spring.damping,
                 });
-                (3, index)
+                (PhysicsJointKind::Revolute, index)
             }
-            wr::JointKind::PRISMATIC => {
+            wr::JointKind::Prismatic => {
                 let index = self.prismatics.len();
                 self.prismatics.push(native::companions::PhysicsPrismatic2 {
                     prismatic: native::companions::PhysicsPrismatic {
@@ -120,21 +120,21 @@ impl Constraints {
                         reference_translation: joint.reference_translation,
                         max_motor_force: joint.max_motor_force,
                         motor_speed: joint.motor_speed,
-                        motor_mode: u32::from(joint.motor.0),
+                        motor_mode: PhysicsMotorMode::from_raw(u32::from(joint.motor.raw())),
                     },
                     motor_frequency_hz: joint.linear_spring.hz,
                     motor_damping_ratio: joint.linear_spring.damping,
                 });
-                (4, index)
+                (PhysicsJointKind::Prismatic, index)
             }
-            wr::JointKind::DISTANCE => {
+            wr::JointKind::Distance => {
                 let index = self.distances.len();
                 self.distances.push(native::companions::PhysicsDistance {
                     anchor_a: joint.frame_a[3][..3].try_into().unwrap(),
                     anchor_b: joint.frame_b[3][..3].try_into().unwrap(),
                     distance: joint.rest_length,
                 });
-                (5, index)
+                (PhysicsJointKind::Distance, index)
             }
             _ => {
                 return Err(Error::new(

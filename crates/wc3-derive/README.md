@@ -16,7 +16,7 @@ the following macros alongside their codec traits:
 | --- | --- |
 | `mdx::Read`, `mdx::Write` | Read and write binary MDX records. |
 | `mdx::ReadOwned` | Decode MDX values into independently owned storage. |
-| `mdx::Value` | Generate numeric enum `raw()` and `from_raw()` conversions. |
+| `mdx::Value`, `m2::Value`, `m3::Value`, `wmo::Value`, `wem::Value` | Generate scalar enum `raw()` and `from_raw()` conversions. |
 | `mdl::Read`, `mdl::Write` | Read and write text MDL records. |
 | `m2::Read`, `m2::Write`, `m2::RecordLayout` | Read and write offset-addressed M2 records and describe their inline metadata width. |
 | `m2::Validate`, `m2::VisitArrays` | Compose field validation and animation-leaf traversal. |
@@ -25,6 +25,13 @@ the following macros alongside their codec traits:
 | `wem::Read`, `wem::Write`, `wem::RecordLayout` | Compose variable inline records and their minimum encoded widths. |
 | `wem::Validate`, `wem::VisitReferences` | Compose local checks and section-link traversal. |
 | `wmo::Read`, `wmo::Write`, `wmo::RecordLayout`, `wmo::Validate` | Compose WMO record codecs, fixed inline widths, and field validation. |
+
+Scalar choice fields in M2, M3, WMO, and WEM use named enums with an explicit
+integer wire width and an unknown-value variant. Each format re-exports a
+`Value` derive alongside its codec derives to provide exact code conversions.
+The format references below describe the attributes and examples. Flag words
+use `bitfield!` types with the ordinary struct codec derives instead.
+
 
 For buffer-bearing records, `wc3::model::common::Ownership` generates
 borrowed views and owned conversion independently of any codec. Records name
@@ -79,7 +86,7 @@ A record codec encodes that record, rather than a complete model file.
 
 M2 records also read fields in declaration order, but their arrays are stored
 outside the inline metadata. Derive `m2::Read`, `m2::Write`, and
-`m2::RecordLayout` together for ordinary structs. `ZeroVec<T>` fields encode a
+`m2::RecordLayout` together for ordinary structs and scalar enums. `ZeroVec<T>` fields encode a
 count/offset pair followed by borrowed fixed-width values; `Vec<T>` fields encode
 a count/offset pair addressing record headers and their nested payloads. The
 writer reserves the whole inline header before allocating those payloads.

@@ -21,8 +21,8 @@ pub(super) fn attach<E: Envelope>(
                 let r = row.map_err(read_error)?;
                 let mut values = BTreeMap::new();
                 for (key, value) in [
-                    ("type", u32::from(r.light_type)),
-                    ("flags", r.flags),
+                    ("type", u32::from((r.light_type).raw())),
+                    ("flags", (r.flags).bits()),
                     ("lod_cut", r.lod_cut),
                     ("shadow_lod_cut", r.shadow_lod_cut),
                 ] {
@@ -55,14 +55,14 @@ pub(super) fn attach<E: Envelope>(
                     i64::from(r.decay.initial_value.to_bits()),
                 );
                 let kind = match r.light_type {
-                    0 => wr::LightKind::DIRECTIONAL,
-                    1 => wr::LightKind::OMNI,
-                    2 => wr::LightKind::SPOT,
-                    _ => wr::LightKind(255),
+                    nr::LightKind::Directional => wr::LightKind::Directional,
+                    nr::LightKind::Point => wr::LightKind::Omni,
+                    nr::LightKind::Spot => wr::LightKind::Spot,
+                    _ => wr::LightKind::from_raw(255),
                 };
                 let payload = wr::LightPayload::<wr::V19> {
                     kind,
-                    shadow_casting: wem::Bool::from(r.flags & 1 != 0),
+                    shadow_casting: wem::Bool::from(r.flags.shadows()),
                     color: r.diffuse_color.initial_value,
                     intensity: r.intensity_multiplier.initial_value,
                     attenuation_start: r.attenuation_start.initial_value,
@@ -76,7 +76,7 @@ pub(super) fn attach<E: Envelope>(
                     nodes,
                     u32::from(r.bone_index),
                     wr::NodePayload::Light(Box::new(payload)),
-                    wr::NodeKind::LIGHT,
+                    wr::NodeKind::Light,
                     values,
                 )?;
             }
@@ -115,17 +115,17 @@ pub(super) fn export(
     let color =
         [0, 1, 2].map(|i| f32::from_bits(get(&format!("specular_color.initial[{i}]")) as u32));
     let light_type = match payload.kind {
-        wr::LightKind::DIRECTIONAL => 0,
-        wr::LightKind::OMNI => 1,
-        wr::LightKind::SPOT => 2,
+        wr::LightKind::Directional => 0,
+        wr::LightKind::Omni => 1,
+        wr::LightKind::Spot => 2,
         _ => u16::try_from(get("type"))
             .map_err(|_| Error::new("m3.light.kind", "source light type exceeds native width"))?,
     };
     Ok(nr::Light {
-        light_type,
+        light_type: nr::LightKind::from_raw(light_type),
         bone_index: u16::try_from(index)
             .map_err(|_| Error::new("m3.light.bone", "bone index exceeds native width"))?,
-        flags: (get("flags") as u32 & !1) | u32::from(payload.shadow_casting.get()),
+        flags: nr::LightFlags((get("flags") as u32 & !1) | u32::from(payload.shadow_casting.get())),
         lod_cut: get("lod_cut") as u32,
         shadow_lod_cut: get("shadow_lod_cut") as u32,
         diffuse_color: restore(values, "light.color", payload.color),

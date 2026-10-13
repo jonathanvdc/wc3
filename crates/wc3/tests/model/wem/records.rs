@@ -1,5 +1,5 @@
 use wc3::model::wem::records::{AssetKey, NativeEntry, V1, V2};
-use wc3::model::wem::{Array, Encoder};
+use wc3::model::wem::{self, Array, Encoder};
 
 #[test]
 fn asset_identity_is_two_words_followed_by_a_twelve_byte_path_reference() {
@@ -14,7 +14,7 @@ fn asset_identity_is_two_words_followed_by_a_twelve_byte_path_reference() {
     assert_eq!(key.id, 0x55667788);
     assert_eq!(key.path.entries, 4);
     assert_eq!(key.path.index, 9);
-    assert_eq!(key.path.flags, 0xabcdef01);
+    assert_eq!(key.path.flags.bits(), 0xabcdef01);
     let mut encoder = Encoder::new(1);
     encoder.write(&key).unwrap();
     assert_eq!(encoder.finish(), bytes);
@@ -34,7 +34,7 @@ fn native_entry_revision_two_adds_a_text_link_after_the_signed_value() {
     assert_eq!(entry.value, -123);
     assert_eq!(entry.text.entries, 3);
     assert_eq!(entry.text.index, 7);
-    assert_eq!(entry.text.flags, 17);
+    assert_eq!(entry.text.flags.bits(), 17);
     assert!(Array::<NativeEntry<V2>>::read(&bytes[..20], 1, 2).is_err());
 }
 
@@ -62,4 +62,14 @@ fn material_native_kind_controls_presence_of_the_inline_body_reference() {
     encoder.write(&native.get(0).unwrap().unwrap()).unwrap();
     assert_eq!(encoder.finish(), with);
     assert!(Array::<MaterialRecord>::read(&with[..62], 1, 1).is_err());
+}
+
+#[test]
+fn reference_metadata_flags_remain_typed_and_exact() {
+    let reference = wem::Ref::<wem::Any>::new(3, 7, wem::ReferenceFlags(0x8000_0001));
+    assert_eq!(reference.flags.bits(), 0x8000_0001);
+    assert_eq!(
+        reference.cast::<wem::records::targets::Byte>().raw().flags,
+        reference.flags
+    );
 }

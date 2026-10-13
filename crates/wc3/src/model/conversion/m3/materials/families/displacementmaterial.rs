@@ -20,7 +20,7 @@ where
         strength: anim(r.strength),
         normal_map: get_layer(source, doc, r.normal_map)?,
         strength_map: get_layer(source, doc, r.strength_map)?,
-        flags: r.flags,
+        flags: wr::M3DisplacementFlags((wr::M3TextureLayerFlag((r.flags).bits())).bits()),
         priority: r.priority,
     })
 }
@@ -63,7 +63,7 @@ pub(in crate::model::conversion::m3) fn export_displacementmaterial<E: Envelope>
         strength: native_anim(r.strength),
         normal_map: native_layer_ref(r.normal_map, source, doc)?,
         strength_map: native_layer_ref(r.strength_map, source, doc)?,
-        flags: r.flags,
+        flags: nr::DisplacementFlags((r.flags).bits()),
         priority: r.priority,
     })
 }

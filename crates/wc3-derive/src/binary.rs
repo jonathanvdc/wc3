@@ -12,7 +12,7 @@ pub(crate) fn fresh_ident(input: &DeriveInput, base: &str) -> Ident {
         .any(|parameter| match parameter {
             GenericParam::Type(parameter) => parameter.ident == name,
             GenericParam::Const(parameter) => parameter.ident == name,
-            GenericParam::Lifetime(_) => false,
+            GenericParam::Lifetime(parameter) => parameter.lifetime.ident == name,
         })
     {
         name.push('_');
@@ -47,6 +47,9 @@ pub(crate) fn expand_format(
     }
 }
 fn expand_checked(input: DeriveInput, operation: Operation, format: Format) -> Result<TokenStream> {
+    if matches!(input.data, Data::Enum(_)) {
+        return crate::binary_value::binary(&input, operation, format);
+    }
     let m2 = matches!(format, Format::M2);
     let m3 = matches!(format, Format::M3);
     let wem = matches!(format, Format::Wem);
@@ -74,7 +77,7 @@ fn expand_checked(input: DeriveInput, operation: Operation, format: Format) -> R
         quote!()
     };
     let reserve = if m2 {
-        quote!(#encoder.reserve_metadata(<Self as #codec::RecordLayout>::size(#encoder.version,#encoder.flags))?;)
+        quote!(#encoder.reserve_metadata(<Self as #codec::RecordLayout>::size(#encoder.version,#encoder.flags.bits()))?;)
     } else {
         quote!()
     };

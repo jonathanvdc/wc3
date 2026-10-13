@@ -27,7 +27,7 @@ pub(super) fn attach<E: Envelope>(
                 );
                 values.insert(
                     "m3.projector.projection_type".into(),
-                    i64::from(r.projection_type),
+                    i64::from((r.projection_type).raw()),
                 );
                 values.insert(
                     "m3.projector.material_reference_index".into(),
@@ -181,13 +181,13 @@ pub(super) fn attach<E: Envelope>(
                 values.insert("m3.projector.layer".into(), i64::from(r.layer));
                 values.insert("m3.projector.lod_reduce".into(), i64::from(r.lod_reduce));
                 values.insert("m3.projector.lod_cut".into(), i64::from(r.lod_cut));
-                values.insert("m3.projector.flags".into(), i64::from(r.flags));
+                values.insert("m3.projector.flags".into(), i64::from((r.flags).bits()));
                 install(
                     doc,
                     nodes,
                     r.bone,
                     wr::NodePayload::Helper(Box::default()),
-                    wr::NodeKind::HELPER,
+                    wr::NodeKind::Helper,
                     values,
                 )?;
             }
@@ -232,7 +232,9 @@ pub(super) fn export<E: Envelope>(
             for (values, bone) in rows {
                 let get = |key: &str| values.get(key).copied().unwrap_or(0) as u32;
                 output.push(nr::Projector::<$v> {
-                    projection_type: get("m3.projector.projection_type"),
+                    projection_type: nr::ProjectionKind::from_raw(get(
+                        "m3.projector.projection_type",
+                    )),
                     bone: *bone,
                     material_reference_index: get("m3.projector.material_reference_index"),
                     offset: restore(
@@ -326,7 +328,7 @@ pub(super) fn export<E: Envelope>(
                     layer: get("m3.projector.layer"),
                     lod_reduce: get("m3.projector.lod_reduce"),
                     lod_cut: get("m3.projector.lod_cut"),
-                    flags: get("m3.projector.flags"),
+                    flags: nr::ProjectorFlags(get("m3.projector.flags")),
                 });
             }
             Ok(super::super::append(doc, &output)?.cast())

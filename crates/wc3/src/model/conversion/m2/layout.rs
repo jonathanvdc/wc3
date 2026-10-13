@@ -69,7 +69,7 @@ impl<V: ModelLayout> ExportDialect for native::Flat<V> {
                 "flat MD20 requires a sibling filename instead of PFID",
             )?;
         }
-        model.core_mut().flags |= 0x20;
+        model.core_mut().flags.set_external_physics(true);
         Ok(())
     }
     fn bone_ids(
@@ -110,7 +110,7 @@ impl<V: ModelLayout> ExportDialect for Chunked<V> {
                 .insert_extension(0, Chunk::PhysicsId(id))
                 .map_err(failure)?;
         } else {
-            model.core_mut().flags |= 0x20;
+            model.core_mut().flags.set_external_physics(true);
         }
         Ok(())
     }

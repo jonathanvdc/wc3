@@ -4,6 +4,7 @@
 //! packed reference selects one of thirteen keyframe-block families and an element
 //! within that family. Sequence and bone dialects preserve their own field layouts.
 use super::dialect::*;
+use super::values::{BoneFlags, BoneSetFlags, SequenceFlags};
 use super::{targets, AnimationValue, Extent};
 use crate::model::m3::{self, Record, Ref};
 use core::fmt::Debug;
@@ -57,7 +58,7 @@ pub struct Sequence<D: SequenceDialect> {
     /// Multiplier describing movement speed for the sequence.
     pub move_speed: f32,
     /// Playback behavior bits, including looping and global-sequence behavior.
-    pub flags: u32,
+    pub flags: SequenceFlags,
     /// Relative weight used when choosing this sequence.
     pub frequency: u32,
     /// Beginning frame of the sequence replay subinterval.
@@ -240,7 +241,7 @@ impl Record for AnimationState {
 )]
 pub struct BoneAnimationSet {
     /// Behavior bits for this bone animation set.
-    pub flags: u32,
+    pub flags: BoneSetFlags,
     /// SEQS index selected as the primary sequence for this bone animation set.
     pub animation_sequence_index: u16,
     /// SEQS index used as the fallback for this bone animation set.
@@ -293,7 +294,7 @@ pub struct Bone<D: BoneDialect> {
     /// CHAR link naming this bone.
     pub name: Ref<targets::Character>,
     /// Bone behavior bits recorded with its hierarchy metadata.
-    pub flags: u32,
+    pub flags: BoneFlags,
     /// BONE index identifying the parent; `0xffff` marks a hierarchy root.
     pub parent_index: u16,
     /// Two uninterpreted bytes separating hierarchy metadata from animated properties.

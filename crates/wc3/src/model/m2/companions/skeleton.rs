@@ -2,7 +2,7 @@
 use super::super as m2;
 use super::super::chunks::AnimationFileId;
 use super::super::codec::{ArrayRef, Decoder, Encoder};
-use super::super::records::{Attachment, Bone, Sequence};
+use super::super::records::{Attachment, Bone, ModelFlags, Sequence, SkeletonFlags};
 use super::super::{ModelLayout, ReadError, WriteError, ZeroVec};
 use super::{chunk_bytes, encode_records, flat_records, write_chunk};
 use crate::model::common::Ownership;
@@ -14,7 +14,7 @@ pub enum SkeletonChunk<'data, L: ModelLayout> {
     /// SKL1 skeleton name and header metadata.
     Header {
         /// SKL1 header flags; individual bit meanings are not established.
-        flags: u32,
+        flags: SkeletonFlags,
         /// Skeleton name bytes, including any stored string terminator.
         name: ZeroVec<'data, u8>,
         /// Reserved bytes with no established semantic meaning; preserved verbatim.
@@ -70,13 +70,13 @@ pub enum SkeletonChunk<'data, L: ModelLayout> {
 /// Shared skeleton document interpreted using its owning model's native layout.
 pub struct Skeleton<'data, L: ModelLayout> {
     /// Owning model core flags used to select conditional record fields; this context is not a standalone skeleton header.
-    pub flags: u32,
+    pub flags: ModelFlags,
     /// Skeleton chunks in source order, including parent and supporting-file references.
     pub chunks: Vec<SkeletonChunk<'data, L>>,
 }
 impl<'data, L: ModelLayout> Skeleton<'data, L> {
     /// Decodes a standalone skeleton using the selected native layout.
-    pub fn read(data: &'data [u8], flags: u32) -> Result<Self, ReadError> {
+    pub fn read(data: &'data [u8], flags: ModelFlags) -> Result<Self, ReadError> {
         Self::read_with_sequences(data, flags, &[])
     }
     /// Uses inherited sequence-storage flags when this document has no SKS1.
@@ -85,7 +85,7 @@ impl<'data, L: ModelLayout> Skeleton<'data, L> {
     /// animation leaves retain unresolved external descriptors.
     pub fn read_with_sequences(
         data: &'data [u8],
-        flags: u32,
+        flags: ModelFlags,
         external_sequences: &[bool],
     ) -> Result<Self, ReadError> {
         let raw = chunk_bytes(data)?;
@@ -98,7 +98,10 @@ impl<'data, L: ModelLayout> Skeleton<'data, L> {
                 d.descriptor()?;
                 let a = d.descriptor()?;
                 let sequences: Vec<Sequence<L>> = d.records(a)?;
-                external = sequences.iter().map(|s| s.flags & 0x130 == 0).collect();
+                external = sequences
+                    .iter()
+                    .map(|s| s.flags.external_animation())
+                    .collect();
             }
         }
         let mut chunks = Vec::new();
@@ -108,7 +111,7 @@ impl<'data, L: ModelLayout> Skeleton<'data, L> {
             d.unresolved_sequences = !has_sequence_context;
             let chunk = match &tag {
                 b"SKL1" => {
-                    let flags = d.u32()?;
+                    let flags = SkeletonFlags::from_bits_retain(d.u32()?);
                     let name = d.descriptor()?;
                     let reserved = d
                         .bytes(4)?
@@ -198,7 +201,7 @@ impl<'data, L: ModelLayout> Skeleton<'data, L> {
                     reserved,
                 } => {
                     e.reserve(16)?;
-                    e.u32(*flags)?;
+                    e.u32(flags.bits())?;
                     let a = e.array(name)?;
                     e.write_descriptor(a)?;
                     e.bytes(reserved)?;

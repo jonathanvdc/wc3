@@ -6,6 +6,7 @@
 use super::chunks::{AnimationFileId, Chunk};
 use super::companions::{DynamicSkeleton, Skeleton, SkeletonChunk};
 use super::records::Sequence;
+use super::records::TextureSource;
 use super::{Dialect, Model, ModelLayout};
 use crate::visit_m2_skeleton;
 
@@ -108,7 +109,7 @@ impl<'data, D: Dialect> Model<'data, D> {
         }
         if D::VERSION >= 264 {
             for (index, sequence) in core.sequences.iter().enumerate() {
-                if sequence.flags & 0x130 != 0 {
+                if !sequence.flags.external_animation() {
                     continue;
                 }
                 let Some(source) = sequence_source(&core.sequences, index) else {
@@ -142,7 +143,7 @@ impl<'data, D: Dialect> Model<'data, D> {
             }
         });
         for (index, texture) in core.textures.iter().enumerate() {
-            if texture.kind != 0 {
+            if texture.kind != TextureSource::File {
                 continue;
             }
             if let Some(id) = texture_ids
@@ -224,7 +225,7 @@ impl<'data, D: Dialect> Model<'data, D> {
                 _ => {}
             }
         }
-        if !physics && core.flags & 0x20 != 0 {
+        if !physics && core.flags.external_physics() {
             push(
                 &mut result,
                 owner,
@@ -308,7 +309,7 @@ fn sequence_source<V: ModelLayout>(
     let mut current_index = index;
     for _ in 0..sequences.len() {
         let current = sequences.get(current_index)?;
-        if current.flags & 0x40 == 0 {
+        if !current.flags.alias() {
             return Some(current);
         }
         current_index = current.alias_next as usize;

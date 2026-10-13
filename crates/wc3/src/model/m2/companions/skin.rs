@@ -1,5 +1,6 @@
 //! Embedded and standalone mesh views with statically selected native fields.
 use super::super as m2;
+use super::super::records::ModelFlags;
 use super::DynamicSkin;
 use crate::model::common::Ownership;
 use m2::codec::{Decoder, Encoder};
@@ -99,11 +100,11 @@ pub struct Skin<'data, V: ModelLayout> {
 impl<'data, V: SupportsExternalSkins> Skin<'data, V> {
     /// Reads a standalone profile using the selected model layout.
     pub fn read(data: &'data [u8]) -> Result<Self, ReadError> {
-        <Self as m2::Read>::read(&mut Decoder::new(data, V::VERSION, 0))
+        <Self as m2::Read>::read(&mut Decoder::new(data, V::VERSION, ModelFlags::default()))
     }
     /// Rebuilds the profile and assigns fresh local offsets.
     pub fn write(&self) -> Result<Vec<u8>, WriteError> {
-        let mut encoder = Encoder::new(V::VERSION, 0);
+        let mut encoder = Encoder::new(V::VERSION, ModelFlags::default());
         m2::Write::write(self, &mut encoder)?;
         Ok(encoder.finish())
     }
@@ -120,7 +121,7 @@ impl<'data, V: SupportsExternalSkins> m2::Read<'data> for Skin<'data, V> {
 }
 impl<V: SupportsExternalSkins> m2::Write for Skin<'_, V> {
     fn write(&self, encoder: &mut Encoder) -> Result<(), WriteError> {
-        encoder.reserve_metadata(Self::size(V::VERSION, encoder.flags))?;
+        encoder.reserve_metadata(Self::size(V::VERSION, encoder.flags.bits()))?;
         encoder.bytes(b"SKIN")?;
         self.profile.write(encoder)
     }

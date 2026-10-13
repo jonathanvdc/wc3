@@ -1,5 +1,10 @@
 //! Root-file material, visibility, doodad, lighting, and environmental records.
 use super::super as wmo;
+use crate::model::wmo::records::{
+    AmbientBoxFlags, AmbientFlags, BlendMode, DoodadFlags, DoodadReference, FlickerMode,
+    FogBoxFlags, FogFlags, GroupFlags, GroupFlags2, LightFlags, LightKind, MaterialFlags,
+    MaterialFlags2, NewLightKind, PortalFlags, RootFlags,
+};
 use std::fmt::Debug;
 use wmo::{Dialect, Read, RecordLayout, Validate, Write, WriteError};
 
@@ -30,7 +35,7 @@ pub trait RootLayout {
 /// Common access to native header flags and supported LOD counts.
 pub trait HeaderTailField {
     /// Root behavior flags without changing their native encoding.
-    fn flags(&self) -> u32;
+    fn flags(&self) -> RootFlags;
     /// Number of extra group LOD levels authored in this layout.
     fn lod_count(&self) -> u16;
 }
@@ -40,7 +45,7 @@ pub trait HeaderTailField {
 )]
 pub struct LegacyHeaderTail {
     /// Root behavior flags.
-    pub flags: u16,
+    pub flags: RootFlags,
     /// Reserved trailing header word before group LOD metadata was introduced.
     pub reserved: u16,
 }
@@ -51,7 +56,7 @@ pub struct LegacyHeaderTail {
 )]
 pub struct ModernHeaderTail {
     /// Root lighting, liquid-type, and group LOD flags.
-    pub flags: u16,
+    pub flags: RootFlags,
     /// Number of group LOD levels including the base; newer clients use the low byte.
     pub lod_count: u16,
 }
@@ -64,7 +69,7 @@ pub struct LegacyMaterialTail {
     /// Historical additional BGRA material color; modern shaders reuse this word as texture slot 3.
     pub color2: [u8; 4],
     /// Historical secondary material flags; modern shaders reuse this word as texture slot 4.
-    pub flags2: u32,
+    pub flags2: MaterialFlags2,
     /// Historical runtime material words; modern shaders reuse them as texture slots 5–8.
     pub runtime: [u32; 4],
 }
@@ -106,7 +111,7 @@ pub struct MaterialExtension {
 #[derive(Clone, Debug, PartialEq, wmo::Read, wmo::Write, wmo::RecordLayout, wmo::Validate)]
 pub struct GroupInfo {
     /// Group flags corresponding to the group file MOGP flags.
-    pub flags: u32,
+    pub flags: GroupFlags,
     /// Minimum and maximum group bounds in WMO coordinates.
     pub bounds: [[f32; 3]; 2],
     /// Byte offset into MOGN group-name bytes, or -1 for no name.
@@ -116,7 +121,7 @@ pub struct GroupInfo {
 impl Default for GroupInfo {
     fn default() -> Self {
         Self {
-            flags: 0,
+            flags: Default::default(),
             bounds: [[0.0; 3]; 2],
             name_offset: -1,
         }
@@ -129,7 +134,7 @@ impl Default for GroupInfo {
 )]
 pub struct GroupInfo2 {
     /// Secondary group flags corresponding to the MOGP flags2 field.
-    pub flags2: u32,
+    pub flags2: GroupFlags2,
     /// Group LOD index; the latest client reads only its low byte.
     pub lod_index: u32,
 }
@@ -159,7 +164,7 @@ pub struct PortalRef {
     /// Signed portal-plane side for this group relationship.
     pub side: i16,
     /// Reference flags: 0x1 skips viewer queries; 0x20 applies the MOPE plane adjustment.
-    pub flags: u16,
+    pub flags: PortalFlags,
 }
 
 /// MOPE supplemental portal culling adjustment.
@@ -190,7 +195,7 @@ pub struct VisibleBlock {
 )]
 pub struct Light {
     /// Legacy light kind: 0 omni, 1 spot, 2 directional, 3 ambient.
-    pub kind: u8,
+    pub kind: LightKind,
     /// Whether distance attenuation is enabled.
     pub use_attenuation: u8,
     /// Reserved bytes with no established meaning.
@@ -230,7 +235,7 @@ pub struct DoodadSet {
 )]
 pub struct DoodadDef {
     /// Low 24 bits are a MODN byte offset or MODI index; high eight bits are doodad flags.
-    pub name_and_flags: u32,
+    pub name_and_flags: DoodadReference,
     /// Doodad position in WMO coordinates.
     pub position: [f32; 3],
     /// Doodad orientation quaternion (x, y, z, w).
@@ -260,7 +265,7 @@ pub struct FogParams {
 )]
 pub struct Fog {
     /// Fog behavior flags; 0x1 denotes infinite radius and is skipped by the client query.
-    pub flags: u32,
+    pub flags: FogFlags,
     /// Fog-volume center in WMO coordinates.
     pub position: [f32; 3],
     /// Radius where the fog volume begins blending.
@@ -287,7 +292,7 @@ pub struct FogBox {
     /// Underwater fog parameters.
     pub underwater: FogParams,
     /// Volume flags whose bit meanings remain unresolved.
-    pub flags: u32,
+    pub flags: FogBoxFlags,
     /// Zero applies always; other values restrict the volume to the active doodad set.
     pub doodad_set_id: u16,
     /// Reserved bytes with no established meaning.
@@ -319,7 +324,7 @@ pub struct AmbientVolume {
     /// Three BGRA ambient colors; flag 0x1 selects distinct colors rather than repeating the first.
     pub colors: [[u8; 4]; 3],
     /// Ambient-volume flags; 0x1 selects three distinct colors.
-    pub flags: u32,
+    pub flags: AmbientFlags,
     /// Doodad-set restriction for this ambient volume.
     pub doodad_set_id: u16,
     /// Reserved bytes with no established meaning.
@@ -338,7 +343,7 @@ pub struct AmbientBox {
     /// Three BGRA ambient colors.
     pub colors: [[u8; 4]; 3],
     /// Ambient-volume flags; other meanings remain unresolved.
-    pub flags: u32,
+    pub flags: AmbientBoxFlags,
     /// Doodad-set restriction for this volume.
     pub doodad_set_id: u16,
     /// Reserved bytes with no established meaning.
@@ -375,11 +380,11 @@ pub struct LightExtension {
 )]
 pub struct NewLight {
     /// Modern light kind: 0 point, 1 spot.
-    pub kind: i32,
+    pub kind: NewLightKind,
     /// Authored light index.
     pub light_index: i32,
     /// 0x1 blends inner to outer color; 0x2 enables shadow casting.
-    pub flags: i32,
+    pub flags: LightFlags,
     /// Doodad-set selection for this light.
     pub doodad_set: i32,
     /// Inner light color in BGRA order.
@@ -407,7 +412,7 @@ pub struct NewLight {
     /// Authored flicker speed; time units are not established.
     pub flicker_speed: f32,
     /// Flicker selector: 0 off, 1 sine, 2 noise, 3 stepped noise.
-    pub flicker_mode: i32,
+    pub flicker_mode: FlickerMode,
     /// Vector at offset 0x54 whose purpose remains unresolved.
     pub unknown_vector: [f32; 3],
     /// Word with no established meaning.
@@ -431,16 +436,16 @@ pub struct NewLight {
 }
 
 impl HeaderTailField for LegacyHeaderTail {
-    fn flags(&self) -> u32 {
-        u32::from(self.flags)
+    fn flags(&self) -> RootFlags {
+        self.flags
     }
     fn lod_count(&self) -> u16 {
         0
     }
 }
 impl HeaderTailField for ModernHeaderTail {
-    fn flags(&self) -> u32 {
-        u32::from(self.flags)
+    fn flags(&self) -> RootFlags {
+        self.flags
     }
     fn lod_count(&self) -> u16 {
         self.lod_count
@@ -476,7 +481,7 @@ pub struct Header<D: Dialect> {
 }
 impl<D: Dialect> Header<D> {
     /// Root flags independent of the native field width.
-    pub fn flags(&self) -> u32 {
+    pub fn flags(&self) -> RootFlags {
         self.tail.flags()
     }
     /// Authored LOD count, or zero in layouts without LOD metadata.
@@ -490,11 +495,11 @@ impl<D: Dialect> Header<D> {
 )]
 pub struct Material<D: Dialect> {
     /// Material behavior flags such as unlit, unfogged, two-sided, and UV clamp.
-    pub flags: u32,
+    pub flags: MaterialFlags,
     /// Client shader-table index.
     pub shader: u32,
     /// Blend mode: zero opaque, one alpha key, larger values blended.
-    pub blend_mode: u32,
+    pub blend_mode: BlendMode,
     /// First texture, as a MOTX byte offset or FileDataID depending on name-table presence.
     pub texture0: u32,
     /// Self-illumination color in BGRA order, used with the Sidn flag.
@@ -528,7 +533,7 @@ impl MaterialTailField for LegacyMaterialTail {
     fn texture_slots(&self) -> [u32; 6] {
         [
             u32::from_le_bytes(self.color2),
-            self.flags2,
+            self.flags2.bits(),
             self.runtime[0],
             self.runtime[1],
             self.runtime[2],
@@ -538,7 +543,7 @@ impl MaterialTailField for LegacyMaterialTail {
     fn set_texture(&mut self, index: usize, value: u32) -> Result<(), WriteError> {
         match index {
             0 => self.color2 = value.to_le_bytes(),
-            1 => self.flags2 = value,
+            1 => self.flags2 = value.into(),
             2..=5 => self.runtime[index - 2] = value,
             _ => return Err(WriteError::invalid("material texture slot")),
         }
@@ -600,10 +605,10 @@ impl<D: Dialect> Material<D> {
 impl DoodadDef {
     /// MODN byte offset or MODI index encoded in the low 24 bits.
     pub fn name_index(&self) -> u32 {
-        self.name_and_flags & 0x00ff_ffff
+        self.name_and_flags.name_index()
     }
     /// Doodad behavior flags encoded in the highest byte.
-    pub fn flags(&self) -> u8 {
-        (self.name_and_flags >> 24) as u8
+    pub fn flags(&self) -> DoodadFlags {
+        self.name_and_flags.flags()
     }
 }

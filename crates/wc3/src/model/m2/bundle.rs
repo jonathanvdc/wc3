@@ -9,6 +9,7 @@ use super::companions::{
 use super::records::{
     ArrayVisitor, Bone, Sequence, TimelineStorage, Track, ValuesLeaf, ValuesStorage, VisitArrays,
 };
+use super::records::{Interpolation, ModelFlags, SequenceFlags};
 use super::resources::{Dependency, DependencyKind, FileKey};
 use super::{Core, Dialect, DynamicModel, Model, ModelLayout, ReadError, WriteError};
 use crate::model::common::{binary::Chunks, Ownership};
@@ -71,7 +72,7 @@ where
     [T; 3]: Value,
 {
     /// Track interpolation code without rendering interpretation.
-    pub interpolation: u16,
+    pub interpolation: Interpolation,
     /// Global sequence index, or 0xffff for an ordinary sequence.
     pub global_sequence: u16,
     /// Key times in the native clock (legacy timelines are not rebased).
@@ -182,7 +183,7 @@ impl<'data, D: Dialect> Bundle<'data, D> {
                     DependencyKind::Animation { .. } => File::Animation(AnimationFile::read(
                         data,
                         matches!(bundle.files.get(&dependency.owner), Some(File::Skeleton(_)))
-                            || flags & 0x200000 != 0,
+                            || flags.chunked_animations(),
                     )?),
                     DependencyKind::Skeleton => {
                         bundle.load_skeleton(
@@ -210,7 +211,7 @@ impl<'data, D: Dialect> Bundle<'data, D> {
         &mut self,
         key: &FileKey,
         data: &'data [u8],
-        layout: (LayoutKind, u32),
+        layout: (LayoutKind, ModelFlags),
         inherited: &[bool],
         active: &mut BTreeSet<FileKey>,
         resolve: &mut impl FnMut(&Dependency) -> Result<Option<&'data [u8]>, ReadError>,
@@ -247,7 +248,7 @@ impl<'data, D: Dialect> Bundle<'data, D> {
                     if let Some(sequences) = skeleton_sequences(skeleton) {
                         external = sequences
                             .iter()
-                            .map(|sequence| sequence.flags & 0x130 == 0)
+                            .map(|sequence| sequence.flags.external_animation())
                             .collect();
                     }
                 } else {
@@ -263,7 +264,7 @@ impl<'data, D: Dialect> Bundle<'data, D> {
         active.remove(key);
         Ok(())
     }
-    fn owner_context(&self, owner: &FileKey) -> (LayoutKind, u32, Vec<bool>) {
+    fn owner_context(&self, owner: &FileKey) -> (LayoutKind, ModelFlags, Vec<bool>) {
         if let Some(File::Model(model)) = self.files.get(owner) {
             return crate::visit_m2_model!(&**model, |typed| model_context(typed));
         }
@@ -273,7 +274,7 @@ impl<'data, D: Dialect> Bundle<'data, D> {
                 skeleton.flags(),
                 self.sequences_for(owner)
                     .iter()
-                    .map(|s| s.flags & 0x130 == 0)
+                    .map(|s| s.flags.external_animation())
                     .collect(),
             );
         }
@@ -319,7 +320,7 @@ impl<'data, D: Dialect> Bundle<'data, D> {
                 (&dependency.kind, file)
             {
                 let chunked = matches!(self.files.get(&dependency.owner), Some(File::Skeleton(_)))
-                    || self.owner_context(&dependency.owner).1 & 0x200000 != 0;
+                    || self.owner_context(&dependency.owner).1.chunked_animations();
                 if chunked != matches!(animation, AnimationFile::Chunked(_)) {
                     return Err(ReadError::invalid(0, "animation stream framing"));
                 }
@@ -475,7 +476,7 @@ impl<'data, D: Dialect> Bundle<'data, D> {
                 let bytes = file
                     .stream(stream)
                     .ok_or_else(|| ReadError::invalid(0, "missing animation stream"))?;
-                Decoder::new(bytes, 0, 0).array(reference)
+                Decoder::new(bytes, 0, ModelFlags::default()).array(reference)
             }
         }
     }
@@ -622,8 +623,7 @@ impl<'data, D: Dialect> Bundle<'data, D> {
         if timestamps.len() != count {
             return Err(ReadError::invalid(0, "timestamp/value count mismatch"));
         }
-        if matches!(track.base.interpolation, 2 | 3) != matches!(values, ResolvedValues::Splines(_))
-        {
+        if track.base.interpolation.spline() != matches!(values, ResolvedValues::Splines(_)) {
             return Err(ReadError::invalid(0, "spline interpolation values"));
         }
         track
@@ -747,7 +747,7 @@ impl<'data, D: Dialect> Bundle<'data, D> {
 struct SequenceKey {
     id: u16,
     variation_index: u16,
-    flags: u32,
+    flags: SequenceFlags,
     alias_next: u16,
 }
 fn sequence_keys<V: ModelLayout>(sequences: &[Sequence<V>]) -> Vec<SequenceKey> {
@@ -761,7 +761,7 @@ fn sequence_keys<V: ModelLayout>(sequences: &[Sequence<V>]) -> Vec<SequenceKey> 
         })
         .collect()
 }
-fn model_context<D: Dialect>(model: &Model<'_, D>) -> (LayoutKind, u32, Vec<bool>) {
+fn model_context<D: Dialect>(model: &Model<'_, D>) -> (LayoutKind, ModelFlags, Vec<bool>) {
     (
         D::Layout::KIND,
         model.core().flags,
@@ -769,7 +769,7 @@ fn model_context<D: Dialect>(model: &Model<'_, D>) -> (LayoutKind, u32, Vec<bool
             .core()
             .sequences
             .iter()
-            .map(|s| s.flags & 0x130 == 0)
+            .map(|s| s.flags.external_animation())
             .collect(),
     )
 }
@@ -822,7 +822,7 @@ fn animation_key(
             return None;
         }
         let animation = sequences.get(index)?;
-        if animation.flags & 0x40 != 0 {
+        if animation.flags.alias() {
             index = animation.alias_next as usize;
             continue;
         }
@@ -866,7 +866,7 @@ impl<'data, 'target> ArrayVisitor<'target> for ExternalRelocator<'_, 'data> {
             && self
                 .sequences
                 .get(sequence)
-                .is_some_and(|sequence| sequence.flags & 0x130 == 0);
+                .is_some_and(|sequence| sequence.flags.external_animation());
         if !external_sequence && matches!(values, Array::Inline(_)) {
             return Ok(());
         }
@@ -898,7 +898,7 @@ impl<'data, 'target> ArrayVisitor<'target> for ExternalRelocator<'_, 'data> {
                 let stream = file
                     .stream(self.stream)
                     .ok_or_else(|| WriteError::invalid("missing external animation stream"))?;
-                Decoder::new(stream, 0, 0)
+                Decoder::new(stream, 0, ModelFlags::default())
                     .array(*reference)
                     .map_err(|_| WriteError::invalid("external animation bounds"))?
             }
@@ -911,7 +911,7 @@ impl<'data, 'target> ArrayVisitor<'target> for ExternalRelocator<'_, 'data> {
         let output = self
             .streams
             .entry((key, target_stream))
-            .or_insert_with(|| Encoder::new(0, 0));
+            .or_insert_with(|| Encoder::new(0, ModelFlags::default()));
         *values = Array::External(output.array(&leaf)?);
         Ok(())
     }

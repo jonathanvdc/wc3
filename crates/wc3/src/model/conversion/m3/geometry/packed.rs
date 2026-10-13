@@ -24,9 +24,9 @@ pub(super) fn packed_vertices<E: Envelope>(
     }
     let bytes = view.as_bytes();
     let stride = bytes.len() / count;
-    let color = root.vertex_flags() & 0x200 != 0;
-    let uv_mask =
-        ((root.vertex_flags() >> 17) & 15) as u8 | (((root.vertex_flags() >> 30) & 1) as u8) << 4;
+    let color = root.vertex_flags().color();
+    let uv_mask = ((root.vertex_flags().bits() >> 17) & 15) as u8
+        | (((root.vertex_flags().bits() >> 30) & 1) as u8) << 4;
     let mut output = Vec::with_capacity(count);
     for row in bytes.chunks_exact(stride) {
         let position = [0, 4, 8].map(|at| f32::from_le_bytes(row[at..at + 4].try_into().unwrap()));

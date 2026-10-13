@@ -21,3 +21,6 @@ pub use traversal::*;
 #[cfg(test)]
 #[path = "records/tests.rs"]
 mod tests;
+
+mod types;
+pub use types::*;

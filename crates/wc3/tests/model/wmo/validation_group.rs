@@ -14,7 +14,7 @@ fn triangle_group() -> Group<'static, Classic> {
         GroupChunk::Indices(Array::from_records(&[0u16, 1, 2]).unwrap()),
         GroupChunk::Triangles(
             Array::from_records(&[Triangle {
-                flags: 0x20,
+                flags: 0x20u8.into(),
                 material: 0,
             }])
             .unwrap(),

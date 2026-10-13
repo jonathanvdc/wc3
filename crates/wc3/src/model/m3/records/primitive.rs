@@ -3,6 +3,7 @@
 //! References from other records determine how generic numeric elements are used.
 //! Animation blocks pair a timestamp section with a key section without resolving
 //! either array eagerly.
+use super::values::{AnimationBlockFlags, ConstraintFlags, FlagBits};
 use super::{targets, AnimationValue, Extent};
 use crate::model::m3::{self, Record, Ref};
 /// Fields of the native `CHAR` section, in serialized order.
@@ -204,7 +205,7 @@ impl Record for Real {
 )]
 pub struct Flag {
     /// One 32-bit bitmask element.
-    pub value: u32,
+    pub value: FlagBits,
 }
 
 impl Record for Flag {
@@ -367,7 +368,7 @@ pub struct AnimationBlockEvent {
     /// I32_ time coordinates corresponding to the entries in `keys`.
     pub timestamps: Ref<targets::I32>,
     /// Keyframe-block control bits.
-    pub flags: u32,
+    pub flags: AnimationBlockFlags,
     /// Ending frame coordinate recorded for the animation block.
     pub end_frame: u32,
     /// Key values selected in parallel with the block timestamp array.
@@ -396,7 +397,7 @@ pub struct AnimationBlockVector2 {
     /// I32_ time coordinates corresponding to the entries in `keys`.
     pub timestamps: Ref<targets::I32>,
     /// Keyframe-block control bits.
-    pub flags: u32,
+    pub flags: AnimationBlockFlags,
     /// Ending frame coordinate recorded for the animation block.
     pub end_frame: u32,
     /// Key values selected in parallel with the block timestamp array.
@@ -425,7 +426,7 @@ pub struct AnimationBlockVector3 {
     /// I32_ time coordinates corresponding to the entries in `keys`.
     pub timestamps: Ref<targets::I32>,
     /// Keyframe-block control bits.
-    pub flags: u32,
+    pub flags: AnimationBlockFlags,
     /// Ending frame coordinate recorded for the animation block.
     pub end_frame: u32,
     /// Key values selected in parallel with the block timestamp array.
@@ -454,7 +455,7 @@ pub struct AnimationBlockReal {
     /// I32_ time coordinates corresponding to the entries in `keys`.
     pub timestamps: Ref<targets::I32>,
     /// Keyframe-block control bits.
-    pub flags: u32,
+    pub flags: AnimationBlockFlags,
     /// Ending frame coordinate recorded for the animation block.
     pub end_frame: u32,
     /// Key values selected in parallel with the block timestamp array.
@@ -483,7 +484,7 @@ pub struct AnimationBlockQuaternion {
     /// I32_ time coordinates corresponding to the entries in `keys`.
     pub timestamps: Ref<targets::I32>,
     /// Keyframe-block control bits.
-    pub flags: u32,
+    pub flags: AnimationBlockFlags,
     /// Ending frame coordinate recorded for the animation block.
     pub end_frame: u32,
     /// Key values selected in parallel with the block timestamp array.
@@ -512,7 +513,7 @@ pub struct AnimationBlockColor {
     /// I32_ time coordinates corresponding to the entries in `keys`.
     pub timestamps: Ref<targets::I32>,
     /// Keyframe-block control bits.
-    pub flags: u32,
+    pub flags: AnimationBlockFlags,
     /// Ending frame coordinate recorded for the animation block.
     pub end_frame: u32,
     /// Key values selected in parallel with the block timestamp array.
@@ -541,7 +542,7 @@ pub struct AnimationBlockByte {
     /// I32_ time coordinates corresponding to the entries in `keys`.
     pub timestamps: Ref<targets::I32>,
     /// Keyframe-block control bits.
-    pub flags: u32,
+    pub flags: AnimationBlockFlags,
     /// Ending frame coordinate recorded for the animation block.
     pub end_frame: u32,
     /// Key values selected in parallel with the block timestamp array.
@@ -570,7 +571,7 @@ pub struct AnimationBlockI16 {
     /// I32_ time coordinates corresponding to the entries in `keys`.
     pub timestamps: Ref<targets::I32>,
     /// Keyframe-block control bits.
-    pub flags: u32,
+    pub flags: AnimationBlockFlags,
     /// Ending frame coordinate recorded for the animation block.
     pub end_frame: u32,
     /// Key values selected in parallel with the block timestamp array.
@@ -599,7 +600,7 @@ pub struct AnimationBlockU16 {
     /// I32_ time coordinates corresponding to the entries in `keys`.
     pub timestamps: Ref<targets::I32>,
     /// Keyframe-block control bits.
-    pub flags: u32,
+    pub flags: AnimationBlockFlags,
     /// Ending frame coordinate recorded for the animation block.
     pub end_frame: u32,
     /// Key values selected in parallel with the block timestamp array.
@@ -628,7 +629,7 @@ pub struct AnimationBlockI32 {
     /// I32_ time coordinates corresponding to the entries in `keys`.
     pub timestamps: Ref<targets::I32>,
     /// Keyframe-block control bits.
-    pub flags: u32,
+    pub flags: AnimationBlockFlags,
     /// Ending frame coordinate recorded for the animation block.
     pub end_frame: u32,
     /// Key values selected in parallel with the block timestamp array.
@@ -657,7 +658,7 @@ pub struct AnimationBlockU32 {
     /// I32_ time coordinates corresponding to the entries in `keys`.
     pub timestamps: Ref<targets::I32>,
     /// Keyframe-block control bits.
-    pub flags: u32,
+    pub flags: AnimationBlockFlags,
     /// Ending frame coordinate recorded for the animation block.
     pub end_frame: u32,
     /// Key values selected in parallel with the block timestamp array.
@@ -686,7 +687,7 @@ pub struct AnimationBlockFlag {
     /// I32_ time coordinates corresponding to the entries in `keys`.
     pub timestamps: Ref<targets::I32>,
     /// Keyframe-block control bits.
-    pub flags: u32,
+    pub flags: AnimationBlockFlags,
     /// Ending frame coordinate recorded for the animation block.
     pub end_frame: u32,
     /// Key values selected in parallel with the block timestamp array.
@@ -715,7 +716,7 @@ pub struct AnimationBlockExtent {
     /// I32_ time coordinates corresponding to the entries in `keys`.
     pub timestamps: Ref<targets::I32>,
     /// Keyframe-block control bits.
-    pub flags: u32,
+    pub flags: AnimationBlockFlags,
     /// Ending frame coordinate recorded for the animation block.
     pub end_frame: u32,
     /// Key values selected in parallel with the block timestamp array.
@@ -932,7 +933,7 @@ pub struct PhysicsConstraint {
     /// Index of the second rigid body participating in the constraint.
     pub rigid_body_2: u16,
     /// Constraint control bits.
-    pub flags: u32,
+    pub flags: ConstraintFlags,
     /// Force threshold recorded for breaking the constraint.
     pub break_force: f32,
 }

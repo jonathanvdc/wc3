@@ -10,12 +10,12 @@ pub(super) fn modern<D: Dialect>(
         .map_err(|error| failure("wmo.bundle", error))?;
     let mut context = Context::import(options);
     let mut model = s::Model {
-        profile: wr::ProfileId::WOW,
+        profile: wr::ProfileId::Wow,
         name: Cow::Borrowed("World model"),
         bounds: bounds(source.root.header().bounds),
         ..Default::default()
     };
-    let material_sources = materials::import(&source.root, &mut model)?;
+    let material_sources = materials::import(&source.root, &mut model, &mut context)?;
     let node_sources = environment::import(source, &mut model)?;
     let names = source
         .root
@@ -55,7 +55,7 @@ pub(super) fn modern<D: Dialect>(
     }
     let mut raw = s::build(&model)?.into_raw();
     let root = raw
-        .resolve::<wr::DocumentRecord<wr::V1>>(Ref::new(1, raw.root_reference().index, 0))?
+        .resolve::<wr::DocumentRecord<wr::V1>>(Ref::from_section(1, raw.root_reference().index))?
         .get(0)
         .transpose()?
         .ok_or_else(|| Error::new("wem.root", "missing root"))?;

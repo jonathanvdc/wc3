@@ -105,7 +105,7 @@ pub(super) fn decode(
             data,
             1,
         )?),
-        r::AttrType::U8X4 => IntegerTrack::Bytes4(read(
+        r::AttrType::U8x4 => IntegerTrack::Bytes4(read(
             target,
             interpolation,
             layer,
@@ -114,7 +114,7 @@ pub(super) fn decode(
             data,
             4,
         )?),
-        r::AttrType::BOOL => IntegerTrack::Boolean(read(
+        r::AttrType::Bool => IntegerTrack::Boolean(read(
             target,
             interpolation,
             layer,
@@ -123,7 +123,7 @@ pub(super) fn decode(
             data,
             1,
         )?),
-        r::AttrType::U32X4 => IntegerTrack::Unsigned4(read(
+        r::AttrType::U32x4 => IntegerTrack::Unsigned4(read(
             target,
             interpolation,
             layer,
@@ -193,8 +193,8 @@ pub(super) fn encode(
     ) -> Result<r::SubTrackContainer, WriteError> {
         let (kind, width) = layout;
         let (owner, channel, sub) = match track.target {
-            Target::NativeProperty { owner, id } => (owner, r::Channel(255), id),
-            Target::Property { owner, channel } => (owner, r::Channel::EMITTER_PROPERTY, channel),
+            Target::NativeProperty { owner, id } => (owner, r::Channel::from_raw(255), id),
+            Target::Property { owner, channel } => (owner, r::Channel::EmitterProperty, channel),
             _ => return Err(WriteError::invalid("integer transform channel")),
         };
         let id = if let Target::NativeProperty { id, .. } = track.target {
@@ -214,7 +214,7 @@ pub(super) fn encode(
         let old = original.and_then(|o| {
             o.channels
                 .iter()
-                .find(|c| c.id == id && c.target.channel == r::Channel(255))
+                .find(|c| c.id == id && c.target.channel == r::Channel::from_raw(255))
         });
         let mut target = old.map(|c| c.target.clone()).unwrap_or_default();
         target.node = owner;
@@ -264,10 +264,10 @@ pub(super) fn encode(
             }
         }
         let interp = match track.interpolation {
-            Interpolation::Step => r::Interpolation::STEP,
-            Interpolation::Linear => r::Interpolation::LINEAR,
-            Interpolation::Hermite => r::Interpolation::HERMITE,
-            Interpolation::Bezier => r::Interpolation::BEZIER,
+            Interpolation::Step => r::Interpolation::Step,
+            Interpolation::Linear => r::Interpolation::Linear,
+            Interpolation::Hermite => r::Interpolation::Hermite,
+            Interpolation::Bezier => r::Interpolation::Bezier,
         };
         let row = r::SubTrack::<r::V2> {
             channel: id,
@@ -324,7 +324,7 @@ pub(super) fn encode(
         ),
         IntegerTrack::Bytes4(t) => write(
             t,
-            (r::AttrType::U8X4, 4),
+            (r::AttrType::U8x4, 4),
             doc,
             channels,
             next,
@@ -333,7 +333,7 @@ pub(super) fn encode(
         ),
         IntegerTrack::Boolean(t) => write(
             t,
-            (r::AttrType::BOOL, 1),
+            (r::AttrType::Bool, 1),
             doc,
             channels,
             next,
@@ -342,7 +342,7 @@ pub(super) fn encode(
         ),
         IntegerTrack::Unsigned4(t) => write(
             t,
-            (r::AttrType::U32X4, 4),
+            (r::AttrType::U32x4, 4),
             doc,
             channels,
             next,

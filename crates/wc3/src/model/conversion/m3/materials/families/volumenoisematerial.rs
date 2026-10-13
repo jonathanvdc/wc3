@@ -10,8 +10,8 @@ pub(in crate::model::conversion::m3) fn map_volumenoisematerial<E: Envelope>(
 ) -> Result<wr::M3VolumeNoise, Error> {
     Ok(wr::M3VolumeNoise {
         name: text(doc, &string(source, r.name).map_err(read_error)?)?,
-        falloff_type: wr::M3VolumeFalloffType(r.falloff_type),
-        draw_transparency: wr::M3VolumeNoiseCameraMode(r.draw_transparency),
+        falloff_type: wr::M3VolumeFalloffType::from_raw((r.falloff_type).raw()),
+        draw_transparency: wr::M3VolumeNoiseCameraMode::from_raw((r.draw_transparency).raw()),
         density: anim(r.density),
         near_plane: anim(r.near_plane),
         falloff: anim(r.falloff),
@@ -23,7 +23,7 @@ pub(in crate::model::conversion::m3) fn map_volumenoisematerial<E: Envelope>(
         scale: anim(r.scale),
         rotation: anim(r.rotation),
         alpha_threshold: r.alpha_threshold,
-        flags: wr::M3VolumeNoiseMaterialFlag(r.flags),
+        flags: wr::M3VolumeNoiseMaterialFlag((r.flags).bits()),
     })
 }
 
@@ -57,8 +57,8 @@ pub(in crate::model::conversion::m3) fn export_volumenoisematerial<E: Envelope>(
 ) -> Result<nr::VolumeNoiseMaterial, Error> {
     Ok(nr::VolumeNoiseMaterial {
         name: append_string(doc, source.string(r.name)?.unwrap_or_default())?,
-        falloff_type: r.falloff_type.0,
-        draw_transparency: r.draw_transparency.0,
+        falloff_type: nr::VolumeFalloff::from_raw(r.falloff_type.raw()),
+        draw_transparency: nr::VolumeCameraMode::from_raw(r.draw_transparency.raw()),
         density: native_anim(r.density),
         near_plane: native_anim(r.near_plane),
         falloff: native_anim(r.falloff),
@@ -70,6 +70,6 @@ pub(in crate::model::conversion::m3) fn export_volumenoisematerial<E: Envelope>(
         scale: native_anim(r.scale),
         rotation: native_anim(r.rotation),
         alpha_threshold: r.alpha_threshold,
-        flags: r.flags.0,
+        flags: nr::VolumeNoiseFlags(r.flags.bits()),
     })
 }

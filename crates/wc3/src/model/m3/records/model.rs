@@ -1,5 +1,6 @@
 //! Native model record revisions.
 use super::dialect::*;
+use super::values::{ModelFlags, VertexFlags};
 use super::{targets, Extent, HitTestShape};
 use crate::model::m3::{self, Record, Ref};
 use core::fmt::Debug;
@@ -239,7 +240,7 @@ pub struct ModelRecord<D: ModelDialect> {
     /// CHAR section containing the model resource name.
     pub name: Ref<targets::Character>,
     /// Model state bits, including sorted tracks (0x40), valid animated-base flags (0x800), and solved bone flags (0x80000).
-    pub flags: u32,
+    pub flags: ModelFlags,
     /// SEQS entries defining the available animation intervals.
     pub sequences: Ref<targets::Sequence>,
     /// STC_ containers associating animation identities with typed key arrays.
@@ -257,7 +258,7 @@ pub struct ModelRecord<D: ModelDialect> {
     /// Number of skeleton bones participating in vertex skinning.
     pub skin_bone_count: u32,
     /// Bit mask selecting the packed vertex record layout.
-    pub vertex_flags: u32,
+    pub vertex_flags: VertexFlags,
     /// U8__ section containing packed vertices in the layout selected by vertex_flags.
     pub vertices: Ref<targets::Byte>,
     /// DIV_ section describing mesh regions, face arrays, and material batches.
@@ -407,7 +408,7 @@ impl OptionalHashes for Ref<targets::U32> {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct RootMetadata {
     /// Native packed vertex-format selector.
-    pub vertex_flags: u32,
+    pub vertex_flags: VertexFlags,
     /// Packed vertex byte section.
     pub vertices: Ref<targets::Byte>,
     /// Skeleton bone section.

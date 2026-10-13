@@ -6,7 +6,7 @@ pub(super) fn export<V: ModelLayout + ParticleConversion + CameraConversion>(
     index: usize,
     _node: &wr::Node<wr::V19>,
     common: &sm::Node<'_>,
-    _metadata: &BTreeMap<String, i64>,
+    metadata: &BTreeMap<String, i64>,
     payload: &wr::M2ParticleEmitterPayload<wr::V19>,
 ) -> Result<(), Error>
 where
@@ -33,6 +33,15 @@ where
         model.native.as_ref().unwrap().document.raw(),
         context,
     )?;
+    if let Some(&kind) = metadata.get("m2.particle_type") {
+        let parts = [
+            u8::try_from(kind)
+                .map_err(|_| Error::new("particles.particle_type", "shape byte exceeds u8"))?,
+            u8::try_from(metadata.get("m2.head_or_tail").copied().unwrap_or(0))
+                .map_err(|_| Error::new("particles.head_or_tail", "head/tail byte exceeds u8"))?,
+        ];
+        V::restore_legacy_texture_scale(&mut particle, parts, context)?;
+    }
     particle.bone_id = u16::try_from(actor_bone(model, index, common))
         .map_err(|_| Error::new("particles.bone", "bone index exceeds u16"))?;
     particle.position = common.pivot;
@@ -77,7 +86,7 @@ where
             gravity_word(
                 v.try_into()
                     .map_err(|_| Error::new(path, "gravity needs three components"))?,
-                payload.flags & 0x800000 != 0,
+                ParticleFlags::from_bits_retain(payload.flags.bits()).packed_gravity(),
                 context,
                 path,
             )
@@ -114,7 +123,7 @@ where
         &mut particle.gravity,
         gravity_word(
             payload.gravity,
-            payload.flags & 0x800000 != 0,
+            ParticleFlags::from_bits_retain(payload.flags.bits()).packed_gravity(),
             context,
             "particles.gravity",
         )?,
@@ -126,7 +135,10 @@ where
     ensure_constant(&mut particle.emission_area_length, payload.length, globals);
     ensure_constant(&mut particle.z_source, payload.z_source, globals);
     ensure_constant(&mut particle.enabled, 1u8, globals);
-    core.flags |= V::required_flags(&particle);
+    core.flags.set_particle_multi_texture(
+        core.flags.particle_multi_texture()
+            || V::required_flags(&particle).particle_multi_texture(),
+    );
     core.particles.push(particle);
     Ok(())
 }

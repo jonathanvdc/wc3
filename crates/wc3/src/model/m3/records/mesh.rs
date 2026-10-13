@@ -3,6 +3,7 @@
 //! Each record type selects its own section revision. Region vertex ranges refer
 //! to the model packed vertex data; batch material indices address MATM entries.
 use super::dialect::*;
+use super::values::{BatchFlags, RegionFlags};
 use super::{targets, AnimationValue, Extent};
 use crate::model::m3::{self, Record, Ref};
 use core::fmt::Debug;
@@ -83,7 +84,7 @@ impl RegionDialect for V4 {
     type VertexCount = u32;
     type FirstIndex = u32;
     type IndexCount = u32;
-    type Flags = u32;
+    type Flags = RegionFlags;
     type UvScale = ();
     type UvOffset = ();
 }
@@ -95,7 +96,7 @@ impl RegionDialect for V5 {
     type VertexCount = u32;
     type FirstIndex = u32;
     type IndexCount = u32;
-    type Flags = u32;
+    type Flags = RegionFlags;
     type UvScale = f32;
     type UvOffset = f32;
 }
@@ -165,13 +166,13 @@ pub trait BatchDialect: Revision + Copy + Clone + Debug + Default + PartialEq {
 
 impl BatchDialect for V0 {
     const VERSION: u32 = 0;
-    type Flags = u16;
+    type Flags = BatchFlags;
     type PriorityPlane = u16;
 }
 
 impl BatchDialect for V1 {
     const VERSION: u32 = 1;
-    type Flags = u16;
+    type Flags = BatchFlags;
     type PriorityPlane = u16;
 }
 

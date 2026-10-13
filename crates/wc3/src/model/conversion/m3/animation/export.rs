@@ -64,7 +64,11 @@ pub(in super::super) fn export_clips<E: Envelope>(
                 name,
                 start_frame: 0,
                 end_frame: end,
-                flags: clip.flags,
+                flags: {
+                    let mut flags = nr::SequenceFlags::default();
+                    flags.set_not_looping(!clip.looping);
+                    flags
+                },
                 bounds: nr::Extent {
                     minimum: model.bounds.minimum,
                     maximum: model.bounds.maximum,
@@ -122,18 +126,24 @@ pub(in super::super) fn export_clips<E: Envelope>(
             match channel {
                 0 => {
                     bone.position.animation_id = animation_id;
-                    bone.position.interpolation = mode;
-                    bone.position.flags |= 1;
+                    bone.position.interpolation = nr::Interpolation::from_raw(mode);
+                    bone.position.flags = nr::AnimationFlags(
+                        bone.position.flags.bits() | nr::AnimationFlags::VALID.bits(),
+                    );
                 }
                 1 => {
                     bone.rotation.animation_id = animation_id;
-                    bone.rotation.interpolation = mode;
-                    bone.rotation.flags |= 1;
+                    bone.rotation.interpolation = nr::Interpolation::from_raw(mode);
+                    bone.rotation.flags = nr::AnimationFlags(
+                        bone.rotation.flags.bits() | nr::AnimationFlags::VALID.bits(),
+                    );
                 }
                 _ => {
                     bone.scale.animation_id = animation_id;
-                    bone.scale.interpolation = mode;
-                    bone.scale.flags |= 1;
+                    bone.scale.interpolation = nr::Interpolation::from_raw(mode);
+                    bone.scale.flags = nr::AnimationFlags(
+                        bone.scale.flags.bits() | nr::AnimationFlags::VALID.bits(),
+                    );
                 }
             }
             let mut timestamps = Vec::new();
@@ -183,7 +193,7 @@ pub(in super::super) fn export_clips<E: Envelope>(
                 });
                 vectors.push(nr::AnimationBlockVector3 {
                     timestamps: time_ref,
-                    flags: 0,
+                    flags: nr::AnimationBlockFlags(0),
                     end_frame: end,
                     keys: key_ref,
                 });
@@ -194,7 +204,7 @@ pub(in super::super) fn export_clips<E: Envelope>(
                 });
                 quaternions.push(nr::AnimationBlockQuaternion {
                     timestamps: time_ref,
-                    flags: 0,
+                    flags: nr::AnimationBlockFlags(0),
                     end_frame: end,
                     keys: key_ref,
                 });
@@ -256,7 +266,11 @@ pub(in super::super) fn export_clips<E: Envelope>(
             name,
             start_frame: 0,
             end_frame: end,
-            flags: clip.flags,
+            flags: {
+                let mut flags = nr::SequenceFlags::default();
+                flags.set_not_looping(!clip.looping);
+                flags
+            },
             bounds: nr::Extent {
                 minimum: model.bounds.minimum,
                 maximum: model.bounds.maximum,

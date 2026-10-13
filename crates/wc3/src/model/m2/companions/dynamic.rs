@@ -1,6 +1,7 @@
 //! Runtime dispatch retaining a complete, statically typed companion document.
 use super::super as m2;
 use super::super::codec::Encoder;
+use super::super::records::ModelFlags;
 use super::super::{
     ModelLayout, ReadError, V272PreSplit, WriteError, V256, V257, V260, V263, V264, V265, V272,
     V273, V274,
@@ -558,7 +559,7 @@ impl<'data> DynamicSkeleton<'data> {
         visit_m2_skeleton!(self, |file| skeleton_layout(file))
     }
     /// Context flags supplied by the owning model.
-    pub fn flags(&self) -> u32 {
+    pub fn flags(&self) -> ModelFlags {
         visit_m2_skeleton!(self, |file| file.flags)
     }
     /// Rebuilds the skeleton using its native record family.
@@ -604,7 +605,7 @@ impl LayoutKind {
     pub fn read_skeleton<'data>(
         self,
         data: &'data [u8],
-        flags: u32,
+        flags: ModelFlags,
         external: &[bool],
     ) -> Result<DynamicSkeleton<'data>, ReadError> {
         match self {

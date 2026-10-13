@@ -253,7 +253,7 @@ pub fn plan<P: ExportProfile>(
 ) -> Result<Plan<native::Bundle<'static, P::Envelope>>, Error> {
     let mut context = Context::export(options);
     let model = asset.model(options)?;
-    if model.space != wem::records::CoordSpace::SC2 {
+    if model.space != wem::records::CoordSpace::Sc2 {
         context.issue("document.space",IssueKind::Normalized,"M3 uses the SC2 authoring-space tag; authored numeric coordinates are preserved and no basis transform is applied");
     }
     if model.unit_scale != 1. {

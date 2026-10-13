@@ -79,8 +79,9 @@ pub fn derive_ownership(input: TokenStream) -> TokenStream {
 }
 
 mod binary;
+mod binary_value;
 /// Reads M2 record fields in declaration order within a shared address space.
-#[proc_macro_derive(M2Read)]
+#[proc_macro_derive(M2Read, attributes(m2))]
 pub fn derive_m2_read(input: TokenStream) -> TokenStream {
     binary::expand(
         parse_macro_input!(input as DeriveInput),
@@ -89,7 +90,7 @@ pub fn derive_m2_read(input: TokenStream) -> TokenStream {
     .into()
 }
 /// Writes M2 fields after reserving the record's complete inline metadata.
-#[proc_macro_derive(M2Write)]
+#[proc_macro_derive(M2Write, attributes(m2))]
 pub fn derive_m2_write(input: TokenStream) -> TokenStream {
     binary::expand(
         parse_macro_input!(input as DeriveInput),
@@ -98,7 +99,7 @@ pub fn derive_m2_write(input: TokenStream) -> TokenStream {
     .into()
 }
 /// Sums the inline metadata widths of an M2 record's fields.
-#[proc_macro_derive(M2RecordLayout)]
+#[proc_macro_derive(M2RecordLayout, attributes(m2))]
 pub fn derive_m2_record_layout(input: TokenStream) -> TokenStream {
     binary::expand(
         parse_macro_input!(input as DeriveInput),
@@ -148,7 +149,7 @@ pub fn derive_m2_visit_arrays(input: TokenStream) -> TokenStream {
 }
 
 /// Derives field-order WMO binary decoding.
-#[proc_macro_derive(WmoRead)]
+#[proc_macro_derive(WmoRead, attributes(wmo))]
 pub fn derive_wmo_read(input: TokenStream) -> TokenStream {
     binary::expand_format(
         syn::parse_macro_input!(input as syn::DeriveInput),
@@ -158,7 +159,7 @@ pub fn derive_wmo_read(input: TokenStream) -> TokenStream {
     .into()
 }
 /// Derives field-order WMO binary encoding.
-#[proc_macro_derive(WmoWrite)]
+#[proc_macro_derive(WmoWrite, attributes(wmo))]
 pub fn derive_wmo_write(input: TokenStream) -> TokenStream {
     binary::expand_format(
         syn::parse_macro_input!(input as syn::DeriveInput),
@@ -168,7 +169,7 @@ pub fn derive_wmo_write(input: TokenStream) -> TokenStream {
     .into()
 }
 /// Derives fixed inline WMO record width.
-#[proc_macro_derive(WmoRecordLayout)]
+#[proc_macro_derive(WmoRecordLayout, attributes(wmo))]
 pub fn derive_wmo_record_layout(input: TokenStream) -> TokenStream {
     binary::expand_format(
         syn::parse_macro_input!(input as syn::DeriveInput),
@@ -189,7 +190,7 @@ pub fn derive_wmo_validate(input: TokenStream) -> TokenStream {
 }
 
 /// Derives envelope-generic M3 record decoding.
-#[proc_macro_derive(M3Read)]
+#[proc_macro_derive(M3Read, attributes(m3))]
 pub fn derive_m3_read(input: TokenStream) -> TokenStream {
     binary::expand_format(
         syn::parse_macro_input!(input as syn::DeriveInput),
@@ -199,7 +200,7 @@ pub fn derive_m3_read(input: TokenStream) -> TokenStream {
     .into()
 }
 /// Derives envelope-generic M3 record encoding.
-#[proc_macro_derive(M3Write)]
+#[proc_macro_derive(M3Write, attributes(m3))]
 pub fn derive_m3_write(input: TokenStream) -> TokenStream {
     binary::expand_format(
         syn::parse_macro_input!(input as syn::DeriveInput),
@@ -209,7 +210,7 @@ pub fn derive_m3_write(input: TokenStream) -> TokenStream {
     .into()
 }
 /// Derives the inline M3 record width under either reference envelope.
-#[proc_macro_derive(M3RecordLayout)]
+#[proc_macro_derive(M3RecordLayout, attributes(m3))]
 pub fn derive_m3_layout(input: TokenStream) -> TokenStream {
     binary::expand_format(
         syn::parse_macro_input!(input as syn::DeriveInput),
@@ -240,7 +241,7 @@ pub fn derive_m3_visit_references(input: TokenStream) -> TokenStream {
 }
 
 /// Derives native WEM field decoding and allocation-free field skipping.
-#[proc_macro_derive(WemRead)]
+#[proc_macro_derive(WemRead, attributes(wem))]
 pub fn derive_wem_read(input: TokenStream) -> TokenStream {
     binary::expand_format(
         parse_macro_input!(input as DeriveInput),
@@ -250,7 +251,7 @@ pub fn derive_wem_read(input: TokenStream) -> TokenStream {
     .into()
 }
 /// Derives native WEM field encoding, including variable inline payloads.
-#[proc_macro_derive(WemWrite)]
+#[proc_macro_derive(WemWrite, attributes(wem))]
 pub fn derive_wem_write(input: TokenStream) -> TokenStream {
     binary::expand_format(
         parse_macro_input!(input as DeriveInput),
@@ -260,7 +261,7 @@ pub fn derive_wem_write(input: TokenStream) -> TokenStream {
     .into()
 }
 /// Derives a lower bound on WEM inline record length.
-#[proc_macro_derive(WemRecordLayout)]
+#[proc_macro_derive(WemRecordLayout, attributes(wem))]
 pub fn derive_wem_layout(input: TokenStream) -> TokenStream {
     binary::expand_format(
         parse_macro_input!(input as DeriveInput),
@@ -285,6 +286,38 @@ pub fn derive_wem_visit_references(input: TokenStream) -> TokenStream {
     binary_traversal::expand_format(
         parse_macro_input!(input as DeriveInput),
         binary_traversal::Operation::VisitReferences,
+        binary::Format::Wem,
+    )
+    .into()
+}
+
+/// Wire-code conversions for M2 scalar enums, preserving unknown values.
+#[proc_macro_derive(M2Value, attributes(m2))]
+pub fn derive_m2_value(input: TokenStream) -> TokenStream {
+    binary_value::expand(parse_macro_input!(input as DeriveInput), binary::Format::M2).into()
+}
+
+/// Wire-code conversions for M3 scalar enums, preserving unknown values.
+#[proc_macro_derive(M3Value, attributes(m3))]
+pub fn derive_m3_value(input: TokenStream) -> TokenStream {
+    binary_value::expand(parse_macro_input!(input as DeriveInput), binary::Format::M3).into()
+}
+
+/// Wire-code conversions for Wmo scalar enums, preserving unknown values.
+#[proc_macro_derive(WmoValue, attributes(wmo))]
+pub fn derive_wmo_value(input: TokenStream) -> TokenStream {
+    binary_value::expand(
+        parse_macro_input!(input as DeriveInput),
+        binary::Format::Wmo,
+    )
+    .into()
+}
+
+/// Wire-code conversions for Wem scalar enums, preserving unknown values.
+#[proc_macro_derive(WemValue, attributes(wem))]
+pub fn derive_wem_value(input: TokenStream) -> TokenStream {
+    binary_value::expand(
+        parse_macro_input!(input as DeriveInput),
         binary::Format::Wem,
     )
     .into()

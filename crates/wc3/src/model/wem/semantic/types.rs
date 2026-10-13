@@ -1,5 +1,7 @@
 //! Decoded authoring values and borrowed attribute views for WEM model graphs.
-use crate::model::wem::records::{CoordSpace, Extent, ProfileId};
+use crate::model::wem::records::{
+    BlendMode, ClipFlags, CoordSpace, Extent, MaterialFlags, NodeFlags, ProfileId, TextureFlags,
+};
 use crate::model::wem::{Document, V3};
 use std::borrow::Cow;
 
@@ -33,7 +35,7 @@ impl Default for Model<'_> {
     fn default() -> Self {
         Self {
             name: Cow::Borrowed(""),
-            space: CoordSpace::BLIZZARD,
+            space: CoordSpace::Blizzard,
             unit_scale: 1.,
             bounds: Extent::default(),
             meshes: Vec::new(),
@@ -172,8 +174,8 @@ pub struct Node<'data> {
     pub scale: [f32; 3],
     /// Inverse bind matrix, when explicitly supplied.
     pub inverse_bind: Option<[[f32; 4]; 4]>,
-    /// Source node flags kept under the selected native profile.
-    pub flags: u32,
+    /// Common node transformation and billboard flags.
+    pub flags: NodeFlags,
     /// Whether this node participates in skinning.
     pub bone: bool,
 }
@@ -187,7 +189,7 @@ impl Default for Node<'_> {
             rotation: [0., 0., 0., 1.],
             scale: [1.; 3],
             inverse_bind: None,
-            flags: 0,
+            flags: NodeFlags::default(),
             bone: false,
         }
     }
@@ -199,10 +201,10 @@ pub struct Material<'data> {
     pub name: Cow<'data, str>,
     /// Referenced texture index.
     pub texture: Option<u32>,
-    /// Native blend mode code under the model profile.
-    pub blend: u32,
-    /// Native render flags under the model profile.
-    pub flags: u32,
+    /// Common material blending mode.
+    pub blend: BlendMode,
+    /// Common material rendering flags.
+    pub flags: MaterialFlags,
 }
 /// A filename or numeric resource identity.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -216,10 +218,10 @@ pub struct Texture<'data> {
     /// Replaceable texture category.
     pub replaceable: u32,
     /// Native texture flags.
-    pub flags: u32,
+    pub flags: TextureFlags,
 }
 /// An animation clip with channels in seconds.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Clip<'data> {
     /// Clip name.
     pub name: Cow<'data, str>,
@@ -227,12 +229,27 @@ pub struct Clip<'data> {
     pub duration: f32,
     /// Native sequence identifier.
     pub id: u32,
-    /// Native sequence flags.
-    pub flags: u32,
+    /// Clip playback and evaluation flags.
+    pub flags: ClipFlags,
+    /// Whether playback repeats after the clip duration.
+    pub looping: bool,
     /// Channel tracks.
     pub tracks: Vec<Track>,
     /// Integer-valued channels retained without floating-point narrowing.
     pub integer_tracks: Vec<IntegerTrack>,
+}
+impl Default for Clip<'_> {
+    fn default() -> Self {
+        Self {
+            name: Cow::Borrowed(""),
+            duration: 0.,
+            id: 0,
+            flags: ClipFlags::default(),
+            looping: true,
+            tracks: Vec::new(),
+            integer_tracks: Vec::new(),
+        }
+    }
 }
 /// An animation track's destination.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

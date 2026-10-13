@@ -587,9 +587,9 @@ fn region_beta_field_offsets_preserve_both_index_range_words() {
 #[test]
 fn nested_and_discarded_references_remain_visible_in_field_order() {
     let value = ModelRecord::<V29> {
-        physics_constraints: m3::Ref::new(1, 23, 7),
+        physics_constraints: m3::Ref::new(1, 23, m3::records::ReferenceFlags(7)),
         tight_hit_test_object: HitTestShape::<V1> {
-            vertex_positions: m3::Ref::new(3, 24, 9),
+            vertex_positions: m3::Ref::new(3, 24, m3::records::ReferenceFlags(9)),
             ..Default::default()
         },
         ..Default::default()
@@ -607,9 +607,9 @@ fn nested_and_discarded_references_remain_visible_in_field_order() {
     .unwrap();
     assert_eq!(seen.len(), 2);
     assert_eq!(seen[0].target, Some(*b"PHCT"));
-    assert_eq!((seen[0].index, seen[0].flags), (23, 7));
+    assert_eq!((seen[0].index, seen[0].flags.bits()), (23, 7));
     assert_eq!(seen[1].target, Some(*b"VEC3"));
-    assert_eq!((seen[1].index, seen[1].flags), (24, 9));
+    assert_eq!((seen[1].index, seen[1].flags.bits()), (24, 9));
     let mut extended = bytes;
     extended.push(0);
     assert!(validate_known_section::<Md34>(*b"MODL", 29, &extended, 1, &mut |_| Ok(())).is_err());
@@ -631,7 +631,7 @@ fn old_bvh_normals_and_reserved_material_words_keep_their_native_roles() {
     let mut material = DataDrivenMaterial::<V3>::default();
     material.reserved_0.entries = 17;
     material.reserved_0.index = u32::MAX;
-    material.reserved_0.flags = 93;
+    material.reserved_0.third_word = 93;
     let mut output = Encoder::<Md34>::new();
     material.write(&mut output).unwrap();
     let bytes = output.finish();
@@ -653,7 +653,7 @@ fn descriptor_shaped_material_metadata_is_not_a_document_graph_edge() {
     let mut material = DataDrivenMaterial::<V3>::default();
     material.reserved_0.entries = u32::MAX;
     material.reserved_0.index = u32::MAX;
-    material.reserved_0.flags = 0xdead_beef;
+    material.reserved_0.third_word = 0xdead_beef;
     let mut document = m3::Document::<Md34>::new();
     let id = document.append(&[material]).unwrap();
     document.validate().unwrap();
@@ -687,11 +687,11 @@ fn bone_identifier_and_shadow_dimensions_use_documented_offsets() {
     assert_eq!(row.id, -37);
     assert_eq!(row.name.entries, 3);
     assert_eq!(row.name.index, 7);
-    assert_eq!(row.name.flags, 9);
-    assert_eq!(row.flags, 0x2007);
+    assert_eq!(row.name.flags.bits(), 9);
+    assert_eq!(row.flags.bits(), 0x2007);
     assert_eq!(row.parent_index, u16::MAX);
     assert_eq!(row.padding, 0x1234);
-    assert_eq!(row.position.interpolation, 1);
+    assert_eq!(row.position.interpolation, Interpolation::Linear);
     assert_eq!(row.position.animation_id, 41);
     assert_eq!(row.position.initial_value[0], 2.5);
     let mut shadow = vec![0u8; 64];
@@ -727,7 +727,7 @@ fn attachment_bone_word_and_body_mass_gravity_have_independent_offsets() {
     let row = AttachmentVolume::read(&mut Decoder::<Md34>::new(&volume)).unwrap();
     assert_eq!(row.bone1, 1);
     assert_eq!(row.bone2, 2);
-    assert_eq!(row.shape_type, 3);
+    assert_eq!(row.shape_type, VolumeShape::Cylinder);
     assert_eq!(row.bone_index, u32::MAX);
     assert_eq!(row.size_z, 7.5);
     let mut body = vec![0u8; 56];
@@ -741,7 +741,7 @@ fn attachment_bone_word_and_body_mass_gravity_have_independent_offsets() {
     assert_eq!(row.parent_bone_index, 9);
     assert_eq!(row.mass, 2400.);
     assert_eq!(row.gravity_factor, 0.25);
-    assert_eq!(row.flags, 0x89);
+    assert_eq!(row.flags.bits(), 0x89);
 }
 
 #[test]
@@ -761,9 +761,30 @@ fn batch_fields_follow_native_halfword_offsets() {
     let batch = Batch::<V1>::read(&mut Decoder::<Md34>::new(&bytes)).unwrap();
     assert_eq!(batch.region_index, 5);
     assert_eq!(batch.material_index, 7);
-    assert_eq!(batch.flags, 0x1234);
+    assert_eq!(batch.flags.bits(), 0x1234);
     assert_eq!(batch.priority_plane, 0xfffd);
     assert_eq!(batch.bounds_index, 9);
     assert_eq!(batch.color_index, 11);
     assert_eq!(batch.visibility_bone, u16::MAX);
+}
+
+#[test]
+fn selectors_and_flag_edits_preserve_unrecognized_wire_values() {
+    let bytes = 0xf123_4567u32.to_le_bytes();
+    let mut input = Decoder::<Md34>::new(&bytes);
+    let selector = BlendMode::read(&mut input).unwrap();
+    assert_eq!(selector, BlendMode::Unknown(0xf123_4567));
+    let mut output = Encoder::<Md34>::new();
+    selector.write(&mut output).unwrap();
+    assert_eq!(output.finish(), 0xf123_4567u32.to_le_bytes());
+
+    let mut flags = MaterialFlags(0x8000_0000);
+    flags.set_unfogged(true);
+    flags.set_depth_fog(true);
+    assert_eq!(flags.bits(), 0x8000_2004);
+    flags.set_unfogged(false);
+    assert_eq!(flags.bits(), 0x8000_2000);
+    let mut output = Encoder::<Md34>::new();
+    flags.write(&mut output).unwrap();
+    assert_eq!(output.finish(), 0x8000_2000u32.to_le_bytes());
 }

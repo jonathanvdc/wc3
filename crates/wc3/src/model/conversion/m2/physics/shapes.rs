@@ -23,11 +23,11 @@ pub(super) fn shapes(
                 friction: definition.friction,
                 restitution: definition.restitution,
             },
-            game_flags: definition.game_flags,
+            game_flags: wr::WowShapeGameFlags::from_bits_retain(definition.game_flags.bits()),
             ..Default::default()
         };
         match definition.shape_type {
-            0 => {
+            PhysicsShapeKind::Box => {
                 let value = source
                     .chunks
                     .iter()
@@ -41,11 +41,11 @@ pub(super) fn shapes(
                     .flatten()
                     .nth(index)
                     .ok_or_else(|| Error::new("physics.box", "missing box geometry"))?;
-                row.kind = wr::PhysicsShapeKind::BOX;
+                row.kind = wr::PhysicsShapeKind::Box;
                 row.transform = frame(&value.frame);
                 row.half_extents = value.half_extents;
             }
-            1 => {
+            PhysicsShapeKind::Capsule => {
                 let value = source
                     .chunks
                     .iter()
@@ -59,7 +59,7 @@ pub(super) fn shapes(
                     .flatten()
                     .nth(index)
                     .ok_or_else(|| Error::new("physics.capsule", "missing capsule geometry"))?;
-                row.kind = wr::PhysicsShapeKind::CAPSULE;
+                row.kind = wr::PhysicsShapeKind::Capsule;
                 row.radius = value.radius;
                 row.length = value
                     .position2
@@ -81,7 +81,7 @@ pub(super) fn shapes(
                 )?
                 .cast();
             }
-            2 => {
+            PhysicsShapeKind::Sphere => {
                 let value = source
                     .chunks
                     .iter()
@@ -95,11 +95,11 @@ pub(super) fn shapes(
                     .flatten()
                     .nth(index)
                     .ok_or_else(|| Error::new("physics.sphere", "missing sphere geometry"))?;
-                row.kind = wr::PhysicsShapeKind::SPHERE;
+                row.kind = wr::PhysicsShapeKind::Sphere;
                 row.transform = translate(value.position);
                 row.radius = value.radius;
             }
-            3 => {
+            PhysicsShapeKind::ConvexHull => {
                 let value = source
                     .chunks
                     .iter()
@@ -113,7 +113,7 @@ pub(super) fn shapes(
                     .flatten()
                     .nth(index)
                     .ok_or_else(|| Error::new("physics.hull", "missing convex polytope"))?;
-                row.kind = wr::PhysicsShapeKind::CONVEX_HULL;
+                row.kind = wr::PhysicsShapeKind::ConvexHull;
                 row.points = put(
                     doc,
                     &value

@@ -47,7 +47,7 @@ fn install(
             rotation: [0., 0., 0., 1.],
             scale: [1.; 3],
         },
-        profiles: 1 << wr::ProfileId::SC2.0,
+        profiles: 1 << wr::ProfileId::Sc2.raw(),
         native: metadata::extend(doc, &wr::NativeBag::default(), &values)?,
         ..Default::default()
     });
@@ -106,28 +106,28 @@ pub(super) fn attach<E: Envelope>(
             {
                 let row = row.map_err(read_error)?;
                 let mut values = BTreeMap::new();
-                for (key, value) in [("m3.force.flags", i64::from(row.flags))] {
+                for (key, value) in [("m3.force.flags", i64::from((row.flags).bits()))] {
                     values.insert(key.to_owned(), value);
                 }
                 animated(&mut values, "force.strength", row.strength);
                 animated(&mut values, "force.width", row.width);
                 animated(&mut values, "force.height", row.height);
                 animated(&mut values, "force.length", row.length);
-                if row.force_type > 255 || row.force_shape > 255 {
+                if row.force_type.raw() > 255 || row.force_shape.raw() > 255 {
                     return Err(Error::new(
                         "m3.force.kind",
                         "force kind or shape exceeds WEM enum width",
                     ));
                 }
                 let payload = wr::ForceFieldPayload::<wr::V19> {
-                    kind: wr::ForceKind(row.force_type as u8),
-                    volume: wr::ForceVolume(row.force_shape as u8),
-                    falloff: wem::Bool::from(row.flags & 1 != 0),
-                    height_gradient: wem::Bool::from(row.flags & 2 != 0),
-                    unbounded: wem::Bool::from(row.flags & 4 != 0),
+                    kind: wr::ForceKind::from_raw((row.force_type).raw() as u8),
+                    volume: wr::ForceVolume::from_raw((row.force_shape).raw() as u8),
+                    falloff: wem::Bool::from(row.flags.falloff()),
+                    height_gradient: wem::Bool::from(row.flags.height_gradient()),
+                    unbounded: wem::Bool::from(row.flags.unbounded()),
                     affects_particles: wem::Bool::from(false),
                     affects_bodies: wem::Bool::from(false),
-                    channels: row.local_channels,
+                    channels: wr::ForceChannels((row.local_channels).bits()),
                     scope: row.unknown,
                     strength: row.strength.initial_value,
                     width: row.width.initial_value,
@@ -140,7 +140,7 @@ pub(super) fn attach<E: Envelope>(
                     &mut nodes,
                     row.bone_index,
                     wr::NodePayload::ForceField(Box::new(payload)),
-                    wr::NodeKind::FORCE_FIELD,
+                    wr::NodeKind::ForceField,
                     values,
                 )?;
             }
@@ -186,7 +186,7 @@ pub(super) fn attach<E: Envelope>(
             &mut nodes,
             row.bone_index,
             wr::NodePayload::VertexWarp(Box::new(payload)),
-            wr::NodeKind::VERTEX_WARP,
+            wr::NodeKind::VertexWarp,
             values,
         )?;
     }
@@ -284,11 +284,13 @@ pub(super) fn export<E: Envelope>(
                     | u32::from(payload.unbounded.get()) << 2;
                 forces.push(nr::Force::<nr::V2> {
                     bone_index: index as u32,
-                    force_type: u32::from(payload.kind.0),
-                    force_shape: u32::from(payload.volume.0),
-                    flags: (values.get("m3.force.flags").copied().unwrap_or(0) as u32 & !7) | known,
+                    force_type: nr::ForceKind::from_raw(u32::from(payload.kind.raw())),
+                    force_shape: nr::ForceShape::from_raw(u32::from(payload.volume.raw())),
+                    flags: nr::ForceFlags(
+                        (values.get("m3.force.flags").copied().unwrap_or(0) as u32 & !7) | known,
+                    ),
                     unknown: payload.scope,
-                    local_channels: payload.channels,
+                    local_channels: nr::ForceChannels(payload.channels.bits()),
                     strength: restore(&values, "force.strength", payload.strength),
                     width: restore(&values, "force.width", payload.width),
                     height: restore(&values, "force.height", payload.height),

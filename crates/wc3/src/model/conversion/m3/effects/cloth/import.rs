@@ -122,7 +122,7 @@ pub(in crate::model::conversion::m3) fn attach<E: Envelope>(
                 } else {
                     row.bone
                 },
-                kind: wr::ClothColliderKind::CAPSULE,
+                kind: wr::ClothColliderKind::Capsule,
                 transform: row.transform,
                 radius: row.radius,
                 length: row.height,
@@ -178,7 +178,7 @@ pub(in crate::model::conversion::m3) fn attach<E: Envelope>(
         nodes.push(wr::Node::<wr::V19> {
             name: metadata::text(&mut raw, &format!("Cloth {id} controls"))?,
             parent: u32::MAX,
-            kind: wr::NodeKind::HELPER,
+            kind: wr::NodeKind::Helper,
             local: wr::Transform {
                 rotation: [0., 0., 0., 1.],
                 scale: [1.; 3],

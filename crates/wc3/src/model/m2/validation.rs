@@ -117,7 +117,7 @@ impl<V: ModelLayout> Skeleton<'_, V> {
 
 fn validate_aliases<V: ModelLayout>(sequences: &[Sequence<V>]) -> Result<(), ReadError> {
     for (index, sequence) in sequences.iter().enumerate() {
-        if sequence.flags & 0x40 != 0 {
+        if sequence.flags.alias() {
             let mut current = index;
             let mut seen = BTreeSet::new();
             loop {
@@ -127,7 +127,7 @@ fn validate_aliases<V: ModelLayout>(sequences: &[Sequence<V>]) -> Result<(), Rea
                 let sequence = sequences
                     .get(current)
                     .ok_or_else(|| ReadError::invalid(0, "animation alias index"))?;
-                if sequence.flags & 0x40 == 0 {
+                if !sequence.flags.alias() {
                     break;
                 }
                 current = sequence.alias_next as usize;

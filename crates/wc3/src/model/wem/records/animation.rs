@@ -282,7 +282,7 @@ pub struct BakeWorldForce {
     /// Model node used as the centre of the force, when selected.
     pub centre_node: u32,
     /// Bit mask selecting the bodies affected by this force.
-    pub channels: u32,
+    pub channels: ForceChannels,
 }
 impl Record for BakeWorldForce {
     const TAG: [u8; 4] = *b"CPWF";

@@ -35,41 +35,7 @@ pub(in crate::model::conversion::m3) fn import_semantic<E: Envelope>(
                 .iter()
             {
                 let m = row.map_err(read_error)?;
-                standard.push((
-                    m.name,
-                    m.flags,
-                    m.blend_mode,
-                    m.diffuse_layer,
-                    [
-                        m.decal_layer,
-                        m.specular_layer,
-                        m.emissive_layer1,
-                        m.emissive_layer2,
-                        m.environment_layer,
-                        m.environment_mask_layer,
-                        m.alpha_layer1,
-                        m.alpha_layer2,
-                        m.normal_layer,
-                        m.height_layer,
-                        m.light_map_layer,
-                        m.ambient_occlusion_layer,
-                    ]
-                    .iter()
-                    .any(|r| r.entries != 0)
-                        || m.additional_flags != 0
-                        || m.priority != 0
-                        || m.rtt_channels != 0
-                        || m.specular_exponent != 0.
-                        || m.depth_blend_falloff != 0.
-                        || m.alpha_test_threshold != 0
-                        || m.hdr_specular_multiplier != 0.
-                        || m.hdr_emissive_multiplier != 0.
-                        || m.material_class != 0
-                        || m.layer_blend_mode != 0
-                        || m.emissive_blend_mode1 != 0
-                        || m.emissive_blend_mode2 != 0
-                        || m.specular_mode != 0,
-                ));
+                standard.push((m.name, m.flags, m.blend_mode, m.diffuse_layer));
             }
         };
     }
@@ -107,17 +73,19 @@ pub(in crate::model::conversion::m3) fn import_semantic<E: Envelope>(
     model.materials.clear();
     for (index, map) in maps.into_iter().enumerate() {
         let path = format!("m3.materials[{index}]");
-        if map.material_type != 1 {
-            if !matches!(map.material_type,2..=7|9..=12) {
+        if map.material_type != nr::MaterialKind::Standard {
+            if matches!(
+                map.material_type,
+                nr::MaterialKind::Hair | nr::MaterialKind::Unknown(_)
+            ) {
                 context.unsupported(&path, "native shader family has no WEM body mapping")?;
             }
             model.materials.push(sem::Material::default());
             continue;
         }
-        let (name, flags, blend, diffuse, extra) = *standard
+        let (name, flags, blend, diffuse) = *standard
             .get(map.material_index as usize)
             .ok_or_else(|| Error::new(&path, "material map index out of range"))?;
-        let _ = extra;
         let texture = if diffuse.entries != 0 {
             let path = texture_path(document, diffuse).map_err(read_error)?;
             let texture = model.textures.len() as u32;
@@ -131,8 +99,8 @@ pub(in crate::model::conversion::m3) fn import_semantic<E: Envelope>(
         };
         model.materials.push(sem::Material {
             name: Cow::Owned(string(document, name).map_err(read_error)?),
-            flags,
-            blend,
+            flags: super::render_state::flags(flags),
+            blend: super::render_state::blend(blend),
             texture,
         });
     }

@@ -1,5 +1,11 @@
 //! Native material record revisions.
 use super::dialect::*;
+use super::values::{
+    AdditionalMaterialFlags, BlendMode, ColorChannel, DisplacementFlags, FresnelMode, LayerBlendOp,
+    LayerFlags, MaterialClass, MaterialFlags, MaterialKind, ReflectionFlags, RttChannels,
+    ShaderFresnelFlags, ShaderType, SpecularMode, UvMappingMode, VolumeCameraMode, VolumeFalloff,
+    VolumeFlags, VolumeNoiseFlags,
+};
 use super::{targets, AnimationValue, ReservedReferenceWords};
 use crate::model::m3::{self, Record, Ref};
 use core::fmt::Debug;
@@ -18,7 +24,7 @@ use core::fmt::Debug;
 )]
 pub struct MaterialMap {
     /// Selects the material family; 1 denotes standard materials and 2 denotes displacement materials.
-    pub material_type: u32,
+    pub material_type: MaterialKind,
     /// Selects an entry in the material array chosen by `material_type`.
     pub material_index: u32,
 }
@@ -395,11 +401,11 @@ pub struct TextureLayer<D: TextureLayerDialect> {
     /// Controls color tint through its animation value.
     pub color: AnimationValue<[u8; 4]>,
     /// Sets layer flags (wrap, flipbook, video, etc.).
-    pub flags: u32,
+    pub flags: LayerFlags,
     /// Selects the behavior used for uv mapping source.
-    pub uv_mapping: u32,
+    pub uv_mapping: UvMappingMode,
     /// Selects the behavior used for channel selection.
-    pub color_type: u32,
+    pub color_type: ColorChannel,
     /// Sets RGB multiply factor.
     pub rgb_multiply: AnimationValue<f32>,
     /// Sets RGB additive factor.
@@ -451,7 +457,7 @@ pub struct TextureLayer<D: TextureLayerDialect> {
     /// Selects the layer supplying shared UV settings; all bits set selects this layer’s own settings.
     pub uv_source_related: u32,
     /// Selects the behavior used for fresnel effect mode.
-    pub fresnel_mode: u32,
+    pub fresnel_mode: FresnelMode,
     /// Sets fresnel exponent (edge sharpness).
     pub fresnel_exponent: f32,
     /// Sets fresnel minimum intensity.
@@ -787,15 +793,15 @@ pub struct StandardMaterial<D: StandardMaterialDialect> {
     /// Links to the CHAR bytes identifying the material.
     pub name: Ref<targets::Character>,
     /// Stores the bit mask governing additional.
-    pub additional_flags: u32,
+    pub additional_flags: AdditionalMaterialFlags,
     /// Stores the bit mask governing material rendering.
-    pub flags: u32,
+    pub flags: MaterialFlags,
     /// Selects the behavior used for alpha blend mode.
-    pub blend_mode: u32,
+    pub blend_mode: BlendMode,
     /// Sets render priority (lower = earlier).
     pub priority: i32,
     /// Selects render-to-texture channels through a bit mask.
-    pub rtt_channels: u32,
+    pub rtt_channels: RttChannels,
     /// Sets specular highlight exponent.
     pub specular_exponent: f32,
     /// Sets depth blend falloff distance.
@@ -849,15 +855,15 @@ pub struct StandardMaterial<D: StandardMaterialDialect> {
     /// Links to additional normal map 2 for blending with the base normal map. This field is present in revision 19 onward.
     pub normal_blend2_layer: D::NormalBlend2Layer,
     /// Sets material class (unit, building, etc.).
-    pub material_class: u32,
+    pub material_class: MaterialClass,
     /// Sets layer blend operation.
-    pub layer_blend_mode: u32,
+    pub layer_blend_mode: LayerBlendOp,
     /// Selects the compositing operation applied to emissive layer 1.
-    pub emissive_blend_mode1: u32,
+    pub emissive_blend_mode1: LayerBlendOp,
     /// Selects the compositing operation applied to emissive layer 2.
-    pub emissive_blend_mode2: u32,
+    pub emissive_blend_mode2: LayerBlendOp,
     /// Selects the behavior used for specular computation mode.
-    pub specular_mode: u32,
+    pub specular_mode: SpecularMode,
     /// Controls parallax height through its animation value.
     pub parallax_height: AnimationValue<f32>,
     /// Controls motion blur amount through its animation value.
@@ -931,7 +937,7 @@ pub struct DisplacementMaterial<D: DisplacementMaterialDialect> {
     /// Links to the mask scaling displacement strength.
     pub strength_map: Ref<targets::TextureLayer>,
     /// Stores the bit mask configuring the displacement material.
-    pub flags: u32,
+    pub flags: DisplacementFlags,
     /// Sets render priority.
     pub priority: u32,
 }
@@ -1078,9 +1084,9 @@ pub struct VolumeMaterial {
     /// Links to the CHAR bytes identifying the material.
     pub name: Ref<targets::Character>,
     /// Selects the behavior used for blend mode.
-    pub blend_mode: u32,
+    pub blend_mode: BlendMode,
     /// Selects the behavior used for density falloff type.
-    pub falloff_type: u32,
+    pub falloff_type: VolumeFalloff,
     /// Controls density through its animation value.
     pub density: AnimationValue<f32>,
     /// Links to the map supplying color.
@@ -1092,7 +1098,7 @@ pub struct VolumeMaterial {
     /// Sets alpha test threshold.
     pub alpha_threshold: u32,
     /// Stores the bit mask configuring the volume material.
-    pub flags: u32,
+    pub flags: VolumeFlags,
 }
 
 impl Record for VolumeMaterial {
@@ -1160,9 +1166,9 @@ pub struct VolumeNoiseMaterial {
     /// Links to the CHAR bytes identifying the material.
     pub name: Ref<targets::Character>,
     /// Selects the behavior used for density falloff type.
-    pub falloff_type: u32,
+    pub falloff_type: VolumeFalloff,
     /// Selects the transparency behavior for a camera inside or outside the volume.
-    pub draw_transparency: u32,
+    pub draw_transparency: VolumeCameraMode,
     /// Controls density through its animation value.
     pub density: AnimationValue<f32>,
     /// Controls near-plane clip through its animation value.
@@ -1186,7 +1192,7 @@ pub struct VolumeNoiseMaterial {
     /// Sets alpha test threshold.
     pub alpha_threshold: u32,
     /// Stores the bit mask governing volume noise material.
-    pub flags: u32,
+    pub flags: VolumeNoiseFlags,
 }
 
 impl Record for VolumeNoiseMaterial {
@@ -1355,7 +1361,7 @@ pub struct ReflectionMaterial<D: ReflectionMaterialDialect> {
     /// Links to the map controlling blur.
     pub blur_map: D::BlurMap,
     /// Stores the bit mask governing reflection. This field is present in revision 2 onward.
-    pub flags: u32,
+    pub flags: ReflectionFlags,
     /// The meaning of the unknown2 storage has not been established; its encoded bits are preserved.
     pub unknown2: D::Unknown2,
 }
@@ -1613,9 +1619,9 @@ pub struct DataDrivenMaterial<D: DataDrivenMaterialDialect> {
     /// The meaning of the unknown148 storage has not been established; its encoded bits are preserved.
     pub unknown148: u8,
     /// Caches alpha and Fresnel settings derived from the property dictionary by the loader.
-    pub alpha_fresnel_flags: u8,
+    pub alpha_fresnel_flags: ShaderFresnelFlags,
     /// Selects the shader-family prefix used to form the permutation name.
-    pub shader_type: u8,
+    pub shader_type: ShaderType,
     /// The meaning of the unknown151 storage has not been established; its encoded bits are preserved.
     pub unknown151: u8,
     /// Stores another permutation identifier; all bits set indicates no second permutation (revision 3 onward).

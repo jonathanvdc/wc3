@@ -35,33 +35,41 @@ where
 {
     fn read(input: &mut Decoder<'data>) -> Result<Self, ReadError> {
         let at = input.absolute_position();
-        let kind = <u8 as wem::Read>::read(input)?;
+        let kind = MaterialKind::read(input)?;
         Ok(match kind {
-            0 => Self::Composite(<Ref<targets::CompositeBody> as wem::Read<'data>>::read(
-                input,
-            )?),
-            1 => Self::Combiners(<Ref<targets::CombinersBody> as wem::Read<'data>>::read(
-                input,
-            )?),
-            2 => Self::LegacyDeferred(
+            MaterialKind::Composite => Self::Composite(
+                <Ref<targets::CompositeBody> as wem::Read<'data>>::read(input)?,
+            ),
+            MaterialKind::Combiners => Self::Combiners(
+                <Ref<targets::CombinersBody> as wem::Read<'data>>::read(input)?,
+            ),
+            MaterialKind::LegacyDeferred => Self::LegacyDeferred(
                 <Ref<targets::LegacyDeferredBody> as wem::Read<'data>>::read(input)?,
             ),
-            3 => Self::PbrDeferred(<Ref<targets::PbrDeferredBody> as wem::Read<'data>>::read(
-                input,
-            )?),
-            4 => Self::Count,
+            MaterialKind::PBRDeferred => Self::PbrDeferred(
+                <Ref<targets::PbrDeferredBody> as wem::Read<'data>>::read(input)?,
+            ),
+            MaterialKind::Count => Self::Count,
             _ => return Err(ReadError::unsupported(at, "MaterialBody discriminator")),
         })
     }
     fn skip(input: &mut Decoder<'data>) -> Result<(), ReadError> {
         let at = input.absolute_position();
-        let kind = <u8 as wem::Read>::read(input)?;
+        let kind = MaterialKind::read(input)?;
         match kind {
-            0 => <Ref<targets::CompositeBody> as wem::Read<'data>>::skip(input),
-            1 => <Ref<targets::CombinersBody> as wem::Read<'data>>::skip(input),
-            2 => <Ref<targets::LegacyDeferredBody> as wem::Read<'data>>::skip(input),
-            3 => <Ref<targets::PbrDeferredBody> as wem::Read<'data>>::skip(input),
-            4 => Ok(()),
+            MaterialKind::Composite => {
+                <Ref<targets::CompositeBody> as wem::Read<'data>>::skip(input)
+            }
+            MaterialKind::Combiners => {
+                <Ref<targets::CombinersBody> as wem::Read<'data>>::skip(input)
+            }
+            MaterialKind::LegacyDeferred => {
+                <Ref<targets::LegacyDeferredBody> as wem::Read<'data>>::skip(input)
+            }
+            MaterialKind::PBRDeferred => {
+                <Ref<targets::PbrDeferredBody> as wem::Read<'data>>::skip(input)
+            }
+            MaterialKind::Count => Ok(()),
             _ => Err(ReadError::unsupported(at, "MaterialBody discriminator")),
         }
     }
@@ -76,23 +84,23 @@ where
     fn write(&self, output: &mut Encoder) -> Result<(), WriteError> {
         match self {
             Self::Composite(value) => {
-                0_u8.write(output)?;
+                MaterialKind::Composite.write(output)?;
                 value.write(output)?;
             }
             Self::Combiners(value) => {
-                1_u8.write(output)?;
+                MaterialKind::Combiners.write(output)?;
                 value.write(output)?;
             }
             Self::LegacyDeferred(value) => {
-                2_u8.write(output)?;
+                MaterialKind::LegacyDeferred.write(output)?;
                 value.write(output)?;
             }
             Self::PbrDeferred(value) => {
-                3_u8.write(output)?;
+                MaterialKind::PBRDeferred.write(output)?;
                 value.write(output)?;
             }
             Self::Count => {
-                4_u8.write(output)?;
+                MaterialKind::Count.write(output)?;
             }
         }
         Ok(())
@@ -128,29 +136,33 @@ where
 {
     fn read(input: &mut Decoder<'data>) -> Result<Self, ReadError> {
         let at = input.absolute_position();
-        let kind = <u8 as wem::Read>::read(input)?;
+        let kind = FeatureKind::read(input)?;
         Ok(match kind {
-            0 => Self::Fresnel(<Ref<targets::FresnelFeature> as wem::Read<'data>>::read(
-                input,
-            )?),
-            1 => Self::UvAnimation(
+            FeatureKind::Fresnel => Self::Fresnel(<Ref<targets::FresnelFeature> as wem::Read<
+                'data,
+            >>::read(input)?),
+            FeatureKind::UvAnimation => Self::UvAnimation(
                 <Ref<targets::UvAnimationFeature> as wem::Read<'data>>::read(input)?,
             ),
-            2 => Self::LayerShading(
+            FeatureKind::LayerShading => Self::LayerShading(
                 <Ref<targets::LayerShadingFeature> as wem::Read<'data>>::read(input)?,
             ),
-            3 => Self::Count,
+            FeatureKind::Count => Self::Count,
             _ => return Err(ReadError::unsupported(at, "FeaturePayload discriminator")),
         })
     }
     fn skip(input: &mut Decoder<'data>) -> Result<(), ReadError> {
         let at = input.absolute_position();
-        let kind = <u8 as wem::Read>::read(input)?;
+        let kind = FeatureKind::read(input)?;
         match kind {
-            0 => <Ref<targets::FresnelFeature> as wem::Read<'data>>::skip(input),
-            1 => <Ref<targets::UvAnimationFeature> as wem::Read<'data>>::skip(input),
-            2 => <Ref<targets::LayerShadingFeature> as wem::Read<'data>>::skip(input),
-            3 => Ok(()),
+            FeatureKind::Fresnel => <Ref<targets::FresnelFeature> as wem::Read<'data>>::skip(input),
+            FeatureKind::UvAnimation => {
+                <Ref<targets::UvAnimationFeature> as wem::Read<'data>>::skip(input)
+            }
+            FeatureKind::LayerShading => {
+                <Ref<targets::LayerShadingFeature> as wem::Read<'data>>::skip(input)
+            }
+            FeatureKind::Count => Ok(()),
             _ => Err(ReadError::unsupported(at, "FeaturePayload discriminator")),
         }
     }
@@ -164,19 +176,19 @@ where
     fn write(&self, output: &mut Encoder) -> Result<(), WriteError> {
         match self {
             Self::Fresnel(value) => {
-                0_u8.write(output)?;
+                FeatureKind::Fresnel.write(output)?;
                 value.write(output)?;
             }
             Self::UvAnimation(value) => {
-                1_u8.write(output)?;
+                FeatureKind::UvAnimation.write(output)?;
                 value.write(output)?;
             }
             Self::LayerShading(value) => {
-                2_u8.write(output)?;
+                FeatureKind::LayerShading.write(output)?;
                 value.write(output)?;
             }
             Self::Count => {
-                3_u8.write(output)?;
+                FeatureKind::Count.write(output)?;
             }
         }
         Ok(())
@@ -212,27 +224,33 @@ where
 {
     fn read(input: &mut Decoder<'data>) -> Result<Self, ReadError> {
         let at = input.absolute_position();
-        let kind = <u8 as wem::Read>::read(input)?;
+        let kind = NativeKind::read(input)?;
         Ok(match kind {
-            0 => Self::None,
-            1 => Self::Mdx(<Ref<targets::MdxMaterial> as wem::Read<'data>>::read(
+            NativeKind::None => Self::None,
+            NativeKind::Mdx => Self::Mdx(<Ref<targets::MdxMaterial> as wem::Read<'data>>::read(
                 input,
             )?),
-            2 => Self::M2(<Ref<targets::M2Material> as wem::Read<'data>>::read(input)?),
-            3 => Self::M3(<Ref<targets::M3Material> as wem::Read<'data>>::read(input)?),
-            4 => Self::D3(<Ref<targets::D3Material> as wem::Read<'data>>::read(input)?),
+            NativeKind::M2 => {
+                Self::M2(<Ref<targets::M2Material> as wem::Read<'data>>::read(input)?)
+            }
+            NativeKind::M3 => {
+                Self::M3(<Ref<targets::M3Material> as wem::Read<'data>>::read(input)?)
+            }
+            NativeKind::D3 => {
+                Self::D3(<Ref<targets::D3Material> as wem::Read<'data>>::read(input)?)
+            }
             _ => return Err(ReadError::unsupported(at, "NativeMaterial discriminator")),
         })
     }
     fn skip(input: &mut Decoder<'data>) -> Result<(), ReadError> {
         let at = input.absolute_position();
-        let kind = <u8 as wem::Read>::read(input)?;
+        let kind = NativeKind::read(input)?;
         match kind {
-            0 => Ok(()),
-            1 => <Ref<targets::MdxMaterial> as wem::Read<'data>>::skip(input),
-            2 => <Ref<targets::M2Material> as wem::Read<'data>>::skip(input),
-            3 => <Ref<targets::M3Material> as wem::Read<'data>>::skip(input),
-            4 => <Ref<targets::D3Material> as wem::Read<'data>>::skip(input),
+            NativeKind::None => Ok(()),
+            NativeKind::Mdx => <Ref<targets::MdxMaterial> as wem::Read<'data>>::skip(input),
+            NativeKind::M2 => <Ref<targets::M2Material> as wem::Read<'data>>::skip(input),
+            NativeKind::M3 => <Ref<targets::M3Material> as wem::Read<'data>>::skip(input),
+            NativeKind::D3 => <Ref<targets::D3Material> as wem::Read<'data>>::skip(input),
             _ => Err(ReadError::unsupported(at, "NativeMaterial discriminator")),
         }
     }
@@ -247,22 +265,22 @@ where
     fn write(&self, output: &mut Encoder) -> Result<(), WriteError> {
         match self {
             Self::None => {
-                0_u8.write(output)?;
+                NativeKind::None.write(output)?;
             }
             Self::Mdx(value) => {
-                1_u8.write(output)?;
+                NativeKind::Mdx.write(output)?;
                 value.write(output)?;
             }
             Self::M2(value) => {
-                2_u8.write(output)?;
+                NativeKind::M2.write(output)?;
                 value.write(output)?;
             }
             Self::M3(value) => {
-                3_u8.write(output)?;
+                NativeKind::M3.write(output)?;
                 value.write(output)?;
             }
             Self::D3(value) => {
-                4_u8.write(output)?;
+                NativeKind::D3.write(output)?;
                 value.write(output)?;
             }
         }
@@ -296,23 +314,25 @@ where
 {
     fn read(input: &mut Decoder<'data>) -> Result<Self, ReadError> {
         let at = input.absolute_position();
-        let kind = <u8 as wem::Read>::read(input)?;
+        let kind = TextureKeyKind::read(input)?;
         Ok(match kind {
-            0 => Self::None,
-            1 => Self::Path(<TexturePath as wem::Read<'data>>::read(input)?),
-            2 => Self::FileDataId(<TextureFileDataId as wem::Read<'data>>::read(input)?),
-            3 => Self::SnoId(<TextureSnoId as wem::Read<'data>>::read(input)?),
+            TextureKeyKind::None => Self::None,
+            TextureKeyKind::Path => Self::Path(<TexturePath as wem::Read<'data>>::read(input)?),
+            TextureKeyKind::FileDataId => {
+                Self::FileDataId(<TextureFileDataId as wem::Read<'data>>::read(input)?)
+            }
+            TextureKeyKind::SnoId => Self::SnoId(<TextureSnoId as wem::Read<'data>>::read(input)?),
             _ => return Err(ReadError::unsupported(at, "TextureKey discriminator")),
         })
     }
     fn skip(input: &mut Decoder<'data>) -> Result<(), ReadError> {
         let at = input.absolute_position();
-        let kind = <u8 as wem::Read>::read(input)?;
+        let kind = TextureKeyKind::read(input)?;
         match kind {
-            0 => Ok(()),
-            1 => <TexturePath as wem::Read<'data>>::skip(input),
-            2 => <TextureFileDataId as wem::Read<'data>>::skip(input),
-            3 => <TextureSnoId as wem::Read<'data>>::skip(input),
+            TextureKeyKind::None => Ok(()),
+            TextureKeyKind::Path => <TexturePath as wem::Read<'data>>::skip(input),
+            TextureKeyKind::FileDataId => <TextureFileDataId as wem::Read<'data>>::skip(input),
+            TextureKeyKind::SnoId => <TextureSnoId as wem::Read<'data>>::skip(input),
             _ => Err(ReadError::unsupported(at, "TextureKey discriminator")),
         }
     }
@@ -326,18 +346,18 @@ where
     fn write(&self, output: &mut Encoder) -> Result<(), WriteError> {
         match self {
             Self::None => {
-                0_u8.write(output)?;
+                TextureKeyKind::None.write(output)?;
             }
             Self::Path(value) => {
-                1_u8.write(output)?;
+                TextureKeyKind::Path.write(output)?;
                 value.write(output)?;
             }
             Self::FileDataId(value) => {
-                2_u8.write(output)?;
+                TextureKeyKind::FileDataId.write(output)?;
                 value.write(output)?;
             }
             Self::SnoId(value) => {
-                3_u8.write(output)?;
+                TextureKeyKind::SnoId.write(output)?;
                 value.write(output)?;
             }
         }
@@ -453,87 +473,113 @@ where
 {
     fn read(input: &mut Decoder<'data>) -> Result<Self, ReadError> {
         let at = input.absolute_position();
-        let kind = <u8 as wem::Read>::read(input)?;
+        let kind = NodeKind::read(input)?;
         Ok(match kind {
-            0 => Self::Helper(Box::new(<HelperPayload as wem::Read<'data>>::read(input)?)),
-            1 => Self::Bone(Box::new(<BonePayload<D> as wem::Read<'data>>::read(input)?)),
-            2 => Self::Attachment(Box::new(<AttachmentPayload as wem::Read<'data>>::read(
-                input,
-            )?)),
-            3 => Self::Light(Box::new(<LightPayload<D> as wem::Read<'data>>::read(
-                input,
-            )?)),
-            4 => Self::Camera(Box::new(<CameraPayload<D> as wem::Read<'data>>::read(
-                input,
-            )?)),
-            5 => Self::Particle(Box::new(<ParticlePayload as wem::Read<'data>>::read(
-                input,
-            )?)),
-            6 => Self::Ribbon(Box::new(<RibbonPayload as wem::Read<'data>>::read(input)?)),
-            7 => Self::Event(Box::new(<EventPayload<D> as wem::Read<'data>>::read(
-                input,
-            )?)),
-            8 => Self::Collision(Box::new(<CollisionPayload as wem::Read<'data>>::read(
-                input,
-            )?)),
-            9 => Self::Wc3ParticleEmitter1(Box::new(<Wc3ParticleEmitter1Payload as wem::Read<
+            NodeKind::Helper => {
+                Self::Helper(Box::new(<HelperPayload as wem::Read<'data>>::read(input)?))
+            }
+            NodeKind::Bone => {
+                Self::Bone(Box::new(<BonePayload<D> as wem::Read<'data>>::read(input)?))
+            }
+            NodeKind::Attachment => Self::Attachment(Box::new(<AttachmentPayload as wem::Read<
                 'data,
             >>::read(input)?)),
-            10 => Self::Wc3ParticleEmitter2(Box::new(<Wc3ParticleEmitter2Payload as wem::Read<
-                'data,
-            >>::read(input)?)),
-            11 => Self::Wc3RibbonEmitter(Box::new(<Wc3RibbonEmitterPayload as wem::Read<
-                'data,
-            >>::read(input)?)),
-            12 => Self::Sc2ParticleEmitter(Box::new(<Sc2ParticleEmitterPayload as wem::Read<
-                'data,
-            >>::read(input)?)),
-            13 => Self::Sc2RibbonEmitter(Box::new(<Sc2RibbonEmitterPayload as wem::Read<
-                'data,
-            >>::read(input)?)),
-            14 => Self::Wc3CornEmitter(Box::new(
+            NodeKind::Light => Self::Light(Box::new(<LightPayload<D> as wem::Read<'data>>::read(
+                input,
+            )?)),
+            NodeKind::Camera => Self::Camera(Box::new(
+                <CameraPayload<D> as wem::Read<'data>>::read(input)?,
+            )),
+            NodeKind::ParticleEmitter => Self::Particle(Box::new(
+                <ParticlePayload as wem::Read<'data>>::read(input)?,
+            )),
+            NodeKind::RibbonEmitter => {
+                Self::Ribbon(Box::new(<RibbonPayload as wem::Read<'data>>::read(input)?))
+            }
+            NodeKind::Event => Self::Event(Box::new(<EventPayload<D> as wem::Read<'data>>::read(
+                input,
+            )?)),
+            NodeKind::CollisionShape => Self::Collision(Box::new(
+                <CollisionPayload as wem::Read<'data>>::read(input)?,
+            )),
+            NodeKind::Wc3ParticleEmitter1 => {
+                Self::Wc3ParticleEmitter1(Box::new(<Wc3ParticleEmitter1Payload as wem::Read<
+                    'data,
+                >>::read(input)?))
+            }
+            NodeKind::Wc3ParticleEmitter2 => {
+                Self::Wc3ParticleEmitter2(Box::new(<Wc3ParticleEmitter2Payload as wem::Read<
+                    'data,
+                >>::read(input)?))
+            }
+            NodeKind::Wc3RibbonEmitter => Self::Wc3RibbonEmitter(Box::new(
+                <Wc3RibbonEmitterPayload as wem::Read<'data>>::read(input)?,
+            )),
+            NodeKind::Sc2ParticleEmitter => {
+                Self::Sc2ParticleEmitter(Box::new(<Sc2ParticleEmitterPayload as wem::Read<
+                    'data,
+                >>::read(input)?))
+            }
+            NodeKind::Sc2RibbonEmitter => Self::Sc2RibbonEmitter(Box::new(
+                <Sc2RibbonEmitterPayload as wem::Read<'data>>::read(input)?,
+            )),
+            NodeKind::Wc3CornEmitter => Self::Wc3CornEmitter(Box::new(
                 <Wc3CornEmitterPayload as wem::Read<'data>>::read(input)?,
             )),
-            15 => Self::M2ParticleEmitter(Box::new(<M2ParticleEmitterPayload<D> as wem::Read<
+            NodeKind::M2ParticleEmitter => {
+                Self::M2ParticleEmitter(Box::new(<M2ParticleEmitterPayload<D> as wem::Read<
+                    'data,
+                >>::read(input)?))
+            }
+            NodeKind::ForceField => Self::ForceField(Box::new(
+                <ForceFieldPayload<D> as wem::Read<'data>>::read(input)?,
+            )),
+            NodeKind::VertexWarp => Self::VertexWarp(Box::new(<VertexWarpPayload as wem::Read<
                 'data,
             >>::read(input)?)),
-            16 => Self::ForceField(Box::new(<ForceFieldPayload<D> as wem::Read<'data>>::read(
-                input,
-            )?)),
-            17 => Self::VertexWarp(Box::new(<VertexWarpPayload as wem::Read<'data>>::read(
-                input,
-            )?)),
-            18 => Self::Wc3FaceFx(Box::new(<Wc3FaceFxPayload as wem::Read<'data>>::read(
-                input,
-            )?)),
-            19 => Self::Count,
+            NodeKind::Wc3FaceFx => Self::Wc3FaceFx(Box::new(<Wc3FaceFxPayload as wem::Read<
+                'data,
+            >>::read(input)?)),
+            NodeKind::Count => Self::Count,
             _ => return Err(ReadError::unsupported(at, "NodePayload discriminator")),
         })
     }
     fn skip(input: &mut Decoder<'data>) -> Result<(), ReadError> {
         let at = input.absolute_position();
-        let kind = <u8 as wem::Read>::read(input)?;
+        let kind = NodeKind::read(input)?;
         match kind {
-            0 => <HelperPayload as wem::Read<'data>>::skip(input),
-            1 => <BonePayload<D> as wem::Read<'data>>::skip(input),
-            2 => <AttachmentPayload as wem::Read<'data>>::skip(input),
-            3 => <LightPayload<D> as wem::Read<'data>>::skip(input),
-            4 => <CameraPayload<D> as wem::Read<'data>>::skip(input),
-            5 => <ParticlePayload as wem::Read<'data>>::skip(input),
-            6 => <RibbonPayload as wem::Read<'data>>::skip(input),
-            7 => <EventPayload<D> as wem::Read<'data>>::skip(input),
-            8 => <CollisionPayload as wem::Read<'data>>::skip(input),
-            9 => <Wc3ParticleEmitter1Payload as wem::Read<'data>>::skip(input),
-            10 => <Wc3ParticleEmitter2Payload as wem::Read<'data>>::skip(input),
-            11 => <Wc3RibbonEmitterPayload as wem::Read<'data>>::skip(input),
-            12 => <Sc2ParticleEmitterPayload as wem::Read<'data>>::skip(input),
-            13 => <Sc2RibbonEmitterPayload as wem::Read<'data>>::skip(input),
-            14 => <Wc3CornEmitterPayload as wem::Read<'data>>::skip(input),
-            15 => <M2ParticleEmitterPayload<D> as wem::Read<'data>>::skip(input),
-            16 => <ForceFieldPayload<D> as wem::Read<'data>>::skip(input),
-            17 => <VertexWarpPayload as wem::Read<'data>>::skip(input),
-            18 => <Wc3FaceFxPayload as wem::Read<'data>>::skip(input),
-            19 => Ok(()),
+            NodeKind::Helper => <HelperPayload as wem::Read<'data>>::skip(input),
+            NodeKind::Bone => <BonePayload<D> as wem::Read<'data>>::skip(input),
+            NodeKind::Attachment => <AttachmentPayload as wem::Read<'data>>::skip(input),
+            NodeKind::Light => <LightPayload<D> as wem::Read<'data>>::skip(input),
+            NodeKind::Camera => <CameraPayload<D> as wem::Read<'data>>::skip(input),
+            NodeKind::ParticleEmitter => <ParticlePayload as wem::Read<'data>>::skip(input),
+            NodeKind::RibbonEmitter => <RibbonPayload as wem::Read<'data>>::skip(input),
+            NodeKind::Event => <EventPayload<D> as wem::Read<'data>>::skip(input),
+            NodeKind::CollisionShape => <CollisionPayload as wem::Read<'data>>::skip(input),
+            NodeKind::Wc3ParticleEmitter1 => {
+                <Wc3ParticleEmitter1Payload as wem::Read<'data>>::skip(input)
+            }
+            NodeKind::Wc3ParticleEmitter2 => {
+                <Wc3ParticleEmitter2Payload as wem::Read<'data>>::skip(input)
+            }
+            NodeKind::Wc3RibbonEmitter => {
+                <Wc3RibbonEmitterPayload as wem::Read<'data>>::skip(input)
+            }
+            NodeKind::Sc2ParticleEmitter => {
+                <Sc2ParticleEmitterPayload as wem::Read<'data>>::skip(input)
+            }
+            NodeKind::Sc2RibbonEmitter => {
+                <Sc2RibbonEmitterPayload as wem::Read<'data>>::skip(input)
+            }
+            NodeKind::Wc3CornEmitter => <Wc3CornEmitterPayload as wem::Read<'data>>::skip(input),
+            NodeKind::M2ParticleEmitter => {
+                <M2ParticleEmitterPayload<D> as wem::Read<'data>>::skip(input)
+            }
+            NodeKind::ForceField => <ForceFieldPayload<D> as wem::Read<'data>>::skip(input),
+            NodeKind::VertexWarp => <VertexWarpPayload as wem::Read<'data>>::skip(input),
+            NodeKind::Wc3FaceFx => <Wc3FaceFxPayload as wem::Read<'data>>::skip(input),
+            NodeKind::Count => Ok(()),
             _ => Err(ReadError::unsupported(at, "NodePayload discriminator")),
         }
     }
@@ -563,83 +609,83 @@ where
     fn write(&self, output: &mut Encoder) -> Result<(), WriteError> {
         match self {
             Self::Helper(value) => {
-                0_u8.write(output)?;
+                NodeKind::Helper.write(output)?;
                 value.write(output)?;
             }
             Self::Bone(value) => {
-                1_u8.write(output)?;
+                NodeKind::Bone.write(output)?;
                 value.write(output)?;
             }
             Self::Attachment(value) => {
-                2_u8.write(output)?;
+                NodeKind::Attachment.write(output)?;
                 value.write(output)?;
             }
             Self::Light(value) => {
-                3_u8.write(output)?;
+                NodeKind::Light.write(output)?;
                 value.write(output)?;
             }
             Self::Camera(value) => {
-                4_u8.write(output)?;
+                NodeKind::Camera.write(output)?;
                 value.write(output)?;
             }
             Self::Particle(value) => {
-                5_u8.write(output)?;
+                NodeKind::ParticleEmitter.write(output)?;
                 value.write(output)?;
             }
             Self::Ribbon(value) => {
-                6_u8.write(output)?;
+                NodeKind::RibbonEmitter.write(output)?;
                 value.write(output)?;
             }
             Self::Event(value) => {
-                7_u8.write(output)?;
+                NodeKind::Event.write(output)?;
                 value.write(output)?;
             }
             Self::Collision(value) => {
-                8_u8.write(output)?;
+                NodeKind::CollisionShape.write(output)?;
                 value.write(output)?;
             }
             Self::Wc3ParticleEmitter1(value) => {
-                9_u8.write(output)?;
+                NodeKind::Wc3ParticleEmitter1.write(output)?;
                 value.write(output)?;
             }
             Self::Wc3ParticleEmitter2(value) => {
-                10_u8.write(output)?;
+                NodeKind::Wc3ParticleEmitter2.write(output)?;
                 value.write(output)?;
             }
             Self::Wc3RibbonEmitter(value) => {
-                11_u8.write(output)?;
+                NodeKind::Wc3RibbonEmitter.write(output)?;
                 value.write(output)?;
             }
             Self::Sc2ParticleEmitter(value) => {
-                12_u8.write(output)?;
+                NodeKind::Sc2ParticleEmitter.write(output)?;
                 value.write(output)?;
             }
             Self::Sc2RibbonEmitter(value) => {
-                13_u8.write(output)?;
+                NodeKind::Sc2RibbonEmitter.write(output)?;
                 value.write(output)?;
             }
             Self::Wc3CornEmitter(value) => {
-                14_u8.write(output)?;
+                NodeKind::Wc3CornEmitter.write(output)?;
                 value.write(output)?;
             }
             Self::M2ParticleEmitter(value) => {
-                15_u8.write(output)?;
+                NodeKind::M2ParticleEmitter.write(output)?;
                 value.write(output)?;
             }
             Self::ForceField(value) => {
-                16_u8.write(output)?;
+                NodeKind::ForceField.write(output)?;
                 value.write(output)?;
             }
             Self::VertexWarp(value) => {
-                17_u8.write(output)?;
+                NodeKind::VertexWarp.write(output)?;
                 value.write(output)?;
             }
             Self::Wc3FaceFx(value) => {
-                18_u8.write(output)?;
+                NodeKind::Wc3FaceFx.write(output)?;
                 value.write(output)?;
             }
             Self::Count => {
-                19_u8.write(output)?;
+                NodeKind::Count.write(output)?;
             }
         }
         Ok(())

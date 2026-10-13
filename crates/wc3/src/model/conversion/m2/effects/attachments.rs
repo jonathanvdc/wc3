@@ -43,7 +43,7 @@ where
         model,
         sm::Target::Property {
             owner: index as u32,
-            channel: u32::from(wr::Channel::VISIBILITY.0),
+            channel: u32::from(wr::Channel::Visibility.raw()),
         },
         starts,
         globals,

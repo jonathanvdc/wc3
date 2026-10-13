@@ -86,7 +86,7 @@ pub(super) fn decorate<D: Dialect>(
             );
         }
         let shape = wr::PhysicsShape::<wr::V2> {
-            kind: wr::PhysicsShapeKind::TRIANGLE_MESH,
+            kind: wr::PhysicsShapeKind::TriangleMesh,
             transform: IDENTITY,
             vertices: metadata::append(
                 raw,
@@ -108,7 +108,7 @@ pub(super) fn decorate<D: Dialect>(
         nodes.push(wr::Node::<wr::V19> {
             name: metadata::string(raw, &format!("Group {} collision", key.index))?,
             parent: u32::MAX,
-            kind: wr::NodeKind::HELPER,
+            kind: wr::NodeKind::Helper,
             local: wr::Transform {
                 rotation: [0., 0., 0., 1.],
                 scale: [1.; 3],
@@ -130,7 +130,7 @@ pub(super) fn decorate<D: Dialect>(
         bodies.push(wr::PhysicsBody::<wr::V3> {
             id: bodies.len() as u32 + 1,
             node,
-            motion: wr::BodyMotion::STATIC,
+            motion: wr::BodyMotion::Static,
             shapes: metadata::append(raw, &[shape])?,
             inertia_scale: 1.,
             gravity_scale: 1.,
@@ -176,7 +176,7 @@ pub(super) fn restore<D: Dialect>(
             .get(body.node as usize)
             .ok_or_else(|| Error::new("physics.node", "missing attached node"))?;
         let fields = metadata::read(raw, node.native.clone())?;
-        if body.motion != wr::BodyMotion::STATIC {
+        if body.motion != wr::BodyMotion::Static {
             context.unsupported("physics.motion", "WMO collision bodies must be static")?;
             continue;
         }
@@ -216,14 +216,14 @@ pub(super) fn restore<D: Dialect>(
             .iter()
         {
             let shape = shape?;
-            if shape.kind != wr::PhysicsShapeKind::TRIANGLE_MESH {
+            if shape.kind != wr::PhysicsShapeKind::TriangleMesh {
                 context.unsupported(
                     "physics.shape",
                     "WMO requires triangle-mesh collision geometry",
                 )?;
                 continue;
             }
-            if shape.material != wr::PhysicsMaterial::default() || shape.game_flags != 0 {
+            if shape.material != wr::PhysicsMaterial::default() || shape.game_flags.bits() != 0 {
                 context.unsupported("physics.shape.material", "WMO collision surfaces need explicit material/contact policy for authored physics settings")?;
             }
             if shape.transform != IDENTITY
@@ -341,7 +341,7 @@ pub(super) fn restore<D: Dialect>(
             let rows = faces
                 .into_iter()
                 .map(|(flags, material)| nr::Triangle {
-                    flags: flags as u8,
+                    flags: nr::TriangleFlags(flags as u8),
                     material: material as u8,
                 })
                 .collect::<Vec<_>>();
@@ -352,7 +352,7 @@ pub(super) fn restore<D: Dialect>(
             let rows = faces
                 .into_iter()
                 .map(|(flags, material)| nr::Triangle2 {
-                    flags: flags as u16,
+                    flags: nr::TriangleFlags2(flags as u16),
                     material: material as u16,
                 })
                 .collect::<Vec<_>>();
@@ -362,7 +362,7 @@ pub(super) fn restore<D: Dialect>(
         }
         if !collision.is_empty() {
             let node = nr::BspNode {
-                flags: 4,
+                flags: nr::BspFlags(4),
                 negative_child: -1,
                 positive_child: -1,
                 face_count: u16::try_from(collision.len())

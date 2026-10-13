@@ -56,5 +56,39 @@ traversal through struct fields or an active enum payload. These traits have no
 codec bounds. Reference visitors receive the target tag when the field's target
 marker identifies it, without loading the target section or choosing its
 revision. Write handwritten validation for relationships between fields and
-handwritten codecs for runtime-discriminated payloads. The codec derives
-support structs only and have no format attributes.
+handwritten codecs for runtime-discriminated payloads. Runtime-discriminated variable payloads require handwritten codecs.
+
+### Scalar enums and flags
+
+Use a scalar enum for a field whose wire code selects a named choice. The
+`wem::Value` derive supplies `from_raw`, `raw`, and `From` conversions;
+codec and layout derives use the declared integer width independently of that
+derive. Every enum requires exactly one `Unknown` payload with the same wire
+type, so unrecognized codes round-trip without being interpreted as a known choice.
+
+```rust
+use wc3::model::wem;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq,
+         wem::Value, wem::Read, wem::Write, wem::RecordLayout)]
+#[wem(value = u16)]
+enum Mode {
+    #[wem(value = 0)]
+    Disabled,
+    #[wem(value = 1)]
+    Enabled,
+    #[wem(unknown)]
+    Unknown(u16),
+}
+
+assert_eq!(Mode::from_raw(1), Mode::Enabled);
+assert_eq!(Mode::from_raw(65535), Mode::Unknown(65535));
+assert_eq!(Mode::Unknown(65535).raw(), 65535);
+```
+
+Known variants must be unit variants with distinct integer literal codes.
+Signed wire types support negative codes. Revision numbers, indices, counts,
+and offsets remain numerical fields. Use `bitfield!` tuple structs for flag
+words, with named getters and setters for established bits and a whole-word
+`bits` accessor for preserving unrecognized bits. Their codec derives delegate
+to the underlying integer field; they do not reinterpret the flags as enum choices.

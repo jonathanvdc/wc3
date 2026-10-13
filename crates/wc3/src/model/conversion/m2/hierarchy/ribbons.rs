@@ -43,7 +43,7 @@ where
                 ),
             ],
             index: node,
-            kind: wr::NodeKind::RIBBON_EMITTER,
+            kind: wr::NodeKind::RibbonEmitter,
             payload: wr::NodePayload::Wc3RibbonEmitter(Box::new(wr::Wc3RibbonEmitterPayload {
                 height_above: initial(&ribbon.height_above).unwrap_or(0.),
                 height_below: initial(&ribbon.height_below).unwrap_or(0.),

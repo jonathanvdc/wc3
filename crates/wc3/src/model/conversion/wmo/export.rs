@@ -10,7 +10,7 @@ pub(super) fn modern<D: Dialect>(
     if model.unit_scale != 1. {
         context.unsupported("unit_scale","native model has no global unit scale; numeric geometry, physics, and effect rescaling needs an explicit policy")?;
     }
-    if model.space != wr::CoordSpace::BLIZZARD {
+    if model.space != wr::CoordSpace::Blizzard {
         context.issue(
             "space",
             IssueKind::Normalized,
@@ -176,8 +176,9 @@ pub(super) fn modern<D: Dialect>(
                 .chunks_mut()
                 .retain(|chunk| !matches!(chunk, GroupChunk::Batches(_)));
         }
-        group.header_mut().flags = metadata::number(&native, "wmo.group.flags", 0)?;
-        group.header_mut().flags2 = metadata::number(&native, "wmo.group.flags2", 0)?;
+        group.header_mut().flags = nr::GroupFlags(metadata::number(&native, "wmo.group.flags", 0)?);
+        group.header_mut().flags2 =
+            nr::GroupFlags2(metadata::number(&native, "wmo.group.flags2", 0)?);
         group.header_mut().unique_id = metadata::number(&native, "wmo.group.id", index as u32)?;
         group.header_mut().liquid_type = metadata::number(&native, "wmo.group.liquid_type", 0)?;
         group.header_mut().fog_indices =

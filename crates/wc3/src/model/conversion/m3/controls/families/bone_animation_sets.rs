@@ -14,7 +14,7 @@ pub(in crate::model::conversion::m3::controls) fn import_bone_animation_sets<E: 
     {
         let r = row.map_err(read_error)?;
         let prefix = format!("m3.controls.bone_animation_sets[{index}]");
-        fields.uint(&format!("{prefix}.flags"), r.flags);
+        fields.uint(&format!("{prefix}.flags"), (r.flags).bits());
         fields.uint(
             &format!("{prefix}.animation_sequence_index"),
             u32::from(r.animation_sequence_index),
@@ -49,7 +49,7 @@ pub(in crate::model::conversion::m3::controls) fn export_bone_animation_sets<E: 
     for index in 0..fields.uint("m3.controls.bone_animation_sets.count") {
         let prefix = format!("m3.controls.bone_animation_sets[{index}]");
         rows.push(nr::BoneAnimationSet {
-            flags: fields.uint(&format!("{prefix}.flags")),
+            flags: nr::BoneSetFlags(fields.uint(&format!("{prefix}.flags"))),
             animation_sequence_index: u16::try_from(
                 fields.uint(&format!("{prefix}.animation_sequence_index")),
             )

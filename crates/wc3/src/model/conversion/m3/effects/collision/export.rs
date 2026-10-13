@@ -36,7 +36,7 @@ fn native_shape<E: Envelope>(
     if !faces.len().is_multiple_of(3) || faces.iter().any(|r| r.value as usize >= points.len()) {
         return Err(Error::new("collision.faces", "invalid collision triangle"));
     }
-    let kind = match shape.kind.0 {
+    let kind = match shape.kind.raw() {
         0 => 0,
         1 => 1,
         2 => 2,
@@ -51,7 +51,7 @@ fn native_shape<E: Envelope>(
         }
     };
     Ok(nr::HitTestShape {
-        shape_type: kind,
+        shape_type: nr::VolumeShape::from_raw(kind),
         bone_index: if body.node == u32::MAX {
             u16::MAX
         } else {

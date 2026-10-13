@@ -1,4 +1,5 @@
 //! Flat and per-sequence animation storage selected by a record layout.
+use super::Interpolation;
 use super::{ArrayVisitor, Validate, VisitArrays};
 use crate::model::{common::Ownership, m2};
 use m2::codec::{Array, ArrayRef, Decoder, Encoder, Value};
@@ -286,7 +287,7 @@ where
     /// Reads the value descriptor according to interpolation and global-loop context.
     fn read_context(
         input: &mut Decoder<'data>,
-        interpolation: u16,
+        interpolation: Interpolation,
         global: u16,
     ) -> Result<Self, ReadError>;
     /// Number of native value leaves.
@@ -352,9 +353,9 @@ impl<'data, T: Value> ValuesStorage<'data, T> for LegacyValues<'data, T>
 where
     [T; 3]: Value,
 {
-    fn read_context(i: &mut Decoder<'data>, p: u16, _: u16) -> Result<Self, ReadError> {
+    fn read_context(i: &mut Decoder<'data>, p: Interpolation, _: u16) -> Result<Self, ReadError> {
         let r = i.descriptor()?;
-        Ok(if matches!(p, 2 | 3) {
+        Ok(if p.spline() {
             Self::Splines(i.array(r)?)
         } else {
             Self::Values(i.array(r)?)
@@ -440,9 +441,9 @@ impl<'data, T: Value> ValuesStorage<'data, T> for TrackValues<'data, T>
 where
     [T; 3]: Value,
 {
-    fn read_context(i: &mut Decoder<'data>, p: u16, g: u16) -> Result<Self, ReadError> {
+    fn read_context(i: &mut Decoder<'data>, p: Interpolation, g: u16) -> Result<Self, ReadError> {
         let r = i.descriptor()?;
-        Ok(if matches!(p, 2 | 3) {
+        Ok(if p.spline() {
             Self::Splines(read_leaves(i, r, g)?)
         } else {
             Self::Values(read_leaves(i, r, g)?)
@@ -671,8 +672,8 @@ where
 /// Timestamp-only native track with a statically selected timeline family.
 #[derive(Clone, Debug, PartialEq, Ownership)]
 pub struct TrackBase<'data, V: ModelLayout> {
-    /// Runtime interpolation code: step, linear, Bezier, or Hermite.
-    pub interpolation: u16,
+    /// Runtime interpolation operation: step, linear, Hermite, or Bezier.
+    pub interpolation: Interpolation,
     /// Index into the owning core's `global_sequences` durations, or `0xffff` for ordinary sequences.
     pub global_sequence: u16,
     /// Legacy flat timeline or modern per-sequence leaves.
@@ -681,7 +682,7 @@ pub struct TrackBase<'data, V: ModelLayout> {
 impl<V: ModelLayout> Default for TrackBase<'_, V> {
     fn default() -> Self {
         Self {
-            interpolation: 0,
+            interpolation: Interpolation::Step,
             global_sequence: u16::MAX,
             timeline: Default::default(),
         }
@@ -689,7 +690,7 @@ impl<V: ModelLayout> Default for TrackBase<'_, V> {
 }
 impl<'data, V: ModelLayout> Read<'data> for TrackBase<'data, V> {
     fn read(i: &mut Decoder<'data>) -> Result<Self, ReadError> {
-        let interpolation = i.u16()?;
+        let interpolation = Interpolation::from_raw(i.u16()?);
         let global_sequence = i.u16()?;
         Ok(Self {
             interpolation,
@@ -700,8 +701,8 @@ impl<'data, V: ModelLayout> Read<'data> for TrackBase<'data, V> {
 }
 impl<V: ModelLayout> Write for TrackBase<'_, V> {
     fn write(&self, o: &mut Encoder) -> Result<(), WriteError> {
-        o.reserve_metadata(Self::size(o.version, o.flags))?;
-        o.u16(self.interpolation)?;
+        o.reserve_metadata(Self::size(o.version, o.flags.bits()))?;
+        o.u16(self.interpolation.raw())?;
         o.u16(self.global_sequence)?;
         self.timeline.write(o)
     }
@@ -713,9 +714,6 @@ impl<V: ModelLayout> RecordLayout for TrackBase<'_, V> {
 }
 impl<V: ModelLayout> Validate for TrackBase<'_, V> {
     fn validate(&self) -> Result<(), ReadError> {
-        if self.interpolation > 3 {
-            return Err(ReadError::invalid(0, "unknown track interpolation"));
-        }
         self.timeline.validate()
     }
 }
@@ -761,12 +759,12 @@ where
     [T; 3]: Value,
 {
     fn write(&self, o: &mut Encoder) -> Result<(), WriteError> {
-        if matches!(self.base.interpolation, 2 | 3) != self.values.is_spline() {
+        if self.base.interpolation.spline() != self.values.is_spline() {
             return Err(WriteError::invalid(
                 "track interpolation and key representation",
             ));
         }
-        o.reserve_metadata(Self::size(o.version, o.flags))?;
+        o.reserve_metadata(Self::size(o.version, o.flags.bits()))?;
         self.base.write(o)?;
         self.values.write(o)
     }
@@ -785,7 +783,7 @@ where
 {
     fn validate(&self) -> Result<(), ReadError> {
         self.base.validate()?;
-        if matches!(self.base.interpolation, 2 | 3) != self.values.is_spline() {
+        if self.base.interpolation.spline() != self.values.is_spline() {
             return Err(ReadError::invalid(
                 0,
                 "track interpolation and key representation",
@@ -861,7 +859,7 @@ where
     [T; 3]: Value,
 {
     fn write(&self, o: &mut Encoder) -> Result<(), WriteError> {
-        o.reserve_metadata(Self::size(o.version, o.flags))?;
+        o.reserve_metadata(Self::size(o.version, o.flags.bits()))?;
         self.base.write(o)?;
         self.values.write(o)
     }

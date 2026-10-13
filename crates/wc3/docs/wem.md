@@ -1,6 +1,8 @@
 # WEM documents
 
-WEM is an indexed asset document format that can hold several models, texture
+WEM (Whiteout Editable Model) was developed as part of
+[WhiteoutLib](https://github.com/FernandoS27/WhiteoutLib) as an intermediate model
+format. Its indexed asset documents can hold several models, texture
 references, animation clips, and named animation sets in one file. Its profiles
 identify the intended game conventions and material representations. Profile
 selection is stored data: reading a document does not convert its geometry,
@@ -72,8 +74,11 @@ unrecognized.
 
 Revision-dependent families use a record dialect such as `NativeEntry<V1>` or
 `NativeEntry<V2>`. Fields absent in a selected revision have a zero-width
-representation instead of a runtime flag. Scalar code domains expose named
-constants while retaining unrecognized numerical values.
+representation instead of a runtime flag. Scalar code domains expose named enum
+variants and an `Unknown` variant carrying the original integer. Flag words use `bitfield!` types with named bit
+accessors; `bits()` returns the entire word, including unrecognized bits.
+Revision numbers, indices, counts, and unresolved numerical controls remain
+numeric.
 
 `Array` keeps the encoded section bytes borrowed and scans record boundaries
 without resolving its target sections. Reading a row decodes its inline fields;
@@ -130,7 +135,7 @@ fn rename(bytes: &[u8]) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
     let characters: Vec<_> = b"Renamed".iter()
         .map(|value| Character { value: *value }).collect();
     let name_id = raw.append(&characters)?;
-    root.name = Ref::new(characters.len() as u32, name_id.index(), 0);
+    root.name = Ref::from_section(characters.len() as u32, name_id.index());
     raw.replace(root_id, &[root])?;
     Ok(Document::<V3>::from_raw(raw)?.write()?)
 }

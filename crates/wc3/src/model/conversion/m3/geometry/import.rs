@@ -2,7 +2,7 @@
 use super::super::{revision, string};
 use super::packed_vertices;
 use crate::model::m3::{self as native, records as nr};
-use crate::model::wem::{self, semantic as sem};
+use crate::model::wem::{self, records as wr, semantic as sem};
 use native::{Envelope, Ref};
 use std::borrow::Cow;
 #[derive(Clone, Copy, Debug)]
@@ -131,9 +131,9 @@ pub(in crate::model::conversion::m3) fn semantic<E: Envelope>(
     let root = model.root_record()?;
     let document = model.document();
     let mut output = sem::Model {
-        space: wem::records::CoordSpace::SC2,
+        space: wem::records::CoordSpace::Sc2,
         name: Cow::Owned(string(document, root.name())?),
-        profile: wem::records::ProfileId::SC2,
+        profile: wem::records::ProfileId::Sc2,
         ..Default::default()
     };
     let (division_ref, palette_ref, initial_ref, material_ref) =
@@ -168,7 +168,9 @@ pub(in crate::model::conversion::m3) fn semantic<E: Envelope>(
                     translation: bone.position.initial_value,
                     rotation: bone.rotation.initial_value,
                     scale: bone.scale.initial_value,
-                    flags: super::super::hierarchy::common_flags(bone.flags),
+                    flags: wr::NodeFlags(super::super::hierarchy::common_flags(
+                        (bone.flags).bits(),
+                    )),
                     inverse_bind: inverse_bind.get(index).map(|r| r.matrix),
                     bone: true,
                     ..Default::default()

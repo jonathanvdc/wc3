@@ -81,7 +81,7 @@ pub(in crate::model::conversion::wmo) fn export<D: Dialect>(
             .iter()
             .enumerate()
             .map(|(index, _)| nr::Triangle2 {
-                flags: flags.get(index).copied().unwrap_or(0) as u16,
+                flags: nr::TriangleFlags2(flags.get(index).copied().unwrap_or(0) as u16),
                 material: material as u16,
             })
             .collect::<Vec<_>>();
@@ -94,7 +94,7 @@ pub(in crate::model::conversion::wmo) fn export<D: Dialect>(
             .iter()
             .enumerate()
             .map(|(index, _)| nr::Triangle {
-                flags: flags.get(index).copied().unwrap_or(0) as u8,
+                flags: nr::TriangleFlags(flags.get(index).copied().unwrap_or(0) as u8),
                 material: material as u8,
             })
             .collect::<Vec<_>>();
@@ -117,16 +117,17 @@ pub(in crate::model::conversion::wmo) fn export<D: Dialect>(
             let extended = Decoder::new(&probe)
                 .read::<D::BatchPrefix>()
                 .map_err(|error| failure(path, error))?
-                .vertex_range(4, 0, 0)
+                .vertex_range(nr::BatchFlags(4), 0, 0)
                 .0
                 == 65536;
             let maximum = mesh.positions.len().saturating_sub(1) as u32;
-            let mut batch_flags = if material > 255 { 2 } else { 0 };
+            let mut batch_flags = nr::BatchFlags::default();
+            batch_flags.set_large_material(material > 255);
             if extended {
                 bytes[10..12].copy_from_slice(&(material as u16).to_le_bytes());
                 if maximum > 65535 {
                     bytes[1] = u8::try_from(maximum >> 16).map_err(|error| failure(path, error))?;
-                    batch_flags |= 4;
+                    batch_flags.set_extended_vertices(true);
                 }
             } else {
                 for axis in 0..3 {
@@ -162,7 +163,7 @@ pub(in crate::model::conversion::wmo) fn export<D: Dialect>(
             let prefix = Decoder::new(&bytes)
                 .read::<D::BatchPrefix>()
                 .map_err(|error| failure(path, error))?;
-            if material > 255 && prefix.material(2, 0) != material as u16 {
+            if material > 255 && prefix.material(nr::BatchFlags(2), 0) != material as u16 {
                 return Err(Error::new(
                     path,
                     "selected WMO batch dialect cannot address this material",

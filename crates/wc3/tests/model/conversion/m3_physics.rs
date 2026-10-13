@@ -35,7 +35,7 @@ fn source() -> m3::Bundle<'static, m3::Md34> {
     let unused = doc.append(&[nr::Byte { value: 73 }]).unwrap();
     let mut shape_record = nr::PhysicsShape::<nr::V1> {
         transform: IDENTITY,
-        shape_type: 1,
+        shape_type: nr::PhysicsShapeKind::Sphere,
         shape_dimensions: [2., 0., 0.],
         planes: m3::Ref::from_section(1, planes.index()),
         unused: m3::Ref::from_section(1, unused.index()),
@@ -54,7 +54,7 @@ fn source() -> m3::Bundle<'static, m3::Md34> {
                     friction: 0.5,
                     restitution: 0.25,
                     gravity_factor: 1.,
-                    flags: 3,
+                    flags: nr::RigidBodyFlags(3),
                     priority: 7,
                     rigid_body_shape: m3::Ref::from_section(1, shape.index()),
                     dynamic_state: nr::AnimationValue {
@@ -70,7 +70,7 @@ fn source() -> m3::Bundle<'static, m3::Md34> {
         .append(&[nr::PhysicsJoint {
             bone_index1: 0,
             bone_index2: 1,
-            joint_type: 1,
+            joint_type: nr::JointKind::Revolute,
             matrix_body1: IDENTITY,
             matrix_body2: IDENTITY,
             enable_limits: 0x101,
@@ -101,7 +101,7 @@ fn source() -> m3::Bundle<'static, m3::Md34> {
         .unwrap();
     let root = doc
         .append(&[nr::ModelRecord::<nr::V29> {
-            vertex_flags: 0x0182_007d,
+            vertex_flags: nr::VertexFlags(0x0182_007d),
             bones: m3::Ref::from_section(2, bones.index()),
             rigid_bodies: m3::Ref::from_section(2, bodies.index()),
             physics_joints: m3::Ref::from_section(1, joints.index()),
@@ -199,7 +199,9 @@ fn physics_and_attachment_fields_are_active_and_editable() {
     assert_eq!(body.gravity_factor, 0.5);
     assert_eq!(body.linear_damping, 0.125);
     assert_eq!(body.priority, 7);
-    assert_eq!(body.flags, 3);
+    assert!(body.flags.collidable());
+    assert!(body.flags.walkable());
+    assert_eq!(body.flags.bits(), 3);
     let joint = output
         .model
         .document()

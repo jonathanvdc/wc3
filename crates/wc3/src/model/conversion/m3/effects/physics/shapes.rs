@@ -42,9 +42,7 @@ pub(super) fn import<E: Envelope>(
                         .map_err(read_error)
                     })
                     .collect::<Result<Vec<_>, _>>()?;
-                if row.shape_type > 5 {
-                    return Err(Error::new("m3.physics.shape.kind", "unknown shape kind"));
-                }
+
                 if !faces.len().is_multiple_of(3)
                     || faces.iter().any(|v| v.value as usize >= points.len())
                 {
@@ -53,7 +51,17 @@ pub(super) fn import<E: Envelope>(
                         "invalid collision triangles",
                     ));
                 }
-                let kind = wr::PhysicsShapeKind(row.shape_type);
+                let kind = match row.shape_type {
+                    nr::PhysicsShapeKind::Box => wr::PhysicsShapeKind::Box,
+                    nr::PhysicsShapeKind::Sphere => wr::PhysicsShapeKind::Sphere,
+                    nr::PhysicsShapeKind::Capsule => wr::PhysicsShapeKind::Capsule,
+                    nr::PhysicsShapeKind::Cylinder => wr::PhysicsShapeKind::Cylinder,
+                    nr::PhysicsShapeKind::ConvexHull => wr::PhysicsShapeKind::ConvexHull,
+                    nr::PhysicsShapeKind::TriangleMesh => wr::PhysicsShapeKind::TriangleMesh,
+                    nr::PhysicsShapeKind::Unknown(_) => {
+                        return Err(Error::new("m3.physics.shape.kind", "unknown shape kind"));
+                    }
+                };
                 let points = put(doc, &points)?.cast();
                 output.push(wr::PhysicsShape::<wr::V2> {
                     kind,
@@ -61,12 +69,12 @@ pub(super) fn import<E: Envelope>(
                     half_extents: row.shape_dimensions,
                     radius: row.shape_dimensions[0],
                     length: row.shape_dimensions[1],
-                    points: if row.shape_type != 5 {
+                    points: if row.shape_type != nr::PhysicsShapeKind::TriangleMesh {
                         points
                     } else {
                         wem::Ref::default()
                     },
-                    vertices: if row.shape_type == 5 {
+                    vertices: if row.shape_type == nr::PhysicsShapeKind::TriangleMesh {
                         points
                     } else {
                         wem::Ref::default()
@@ -146,19 +154,27 @@ pub(super) fn export<E: Envelope>(
         } else {
             material = Some(row.material.clone());
         }
-        if row.kind.0 > 5 {
-            return Err(Error::new(
-                "wem.physics.shape.kind",
-                "M3 does not represent this shape kind",
-            ));
-        }
-        if row.game_flags != 0 {
+        let shape_type = match row.kind {
+            wr::PhysicsShapeKind::Box => nr::PhysicsShapeKind::Box,
+            wr::PhysicsShapeKind::Sphere => nr::PhysicsShapeKind::Sphere,
+            wr::PhysicsShapeKind::Capsule => nr::PhysicsShapeKind::Capsule,
+            wr::PhysicsShapeKind::Cylinder => nr::PhysicsShapeKind::Cylinder,
+            wr::PhysicsShapeKind::ConvexHull => nr::PhysicsShapeKind::ConvexHull,
+            wr::PhysicsShapeKind::TriangleMesh => nr::PhysicsShapeKind::TriangleMesh,
+            _ => {
+                return Err(Error::new(
+                    "wem.physics.shape.kind",
+                    "M3 does not represent this shape kind",
+                ));
+            }
+        };
+        if !row.game_flags.is_empty() {
             context.unsupported(
                 "wem.physics.shape.game_flags",
                 "M3 has no per-shape game callback bits",
             )?;
         }
-        let points = if row.kind.0 == 5 {
+        let points = if row.kind == wr::PhysicsShapeKind::TriangleMesh {
             row.vertices
         } else {
             row.points
@@ -183,15 +199,17 @@ pub(super) fn export<E: Envelope>(
                 })
             })
             .collect::<Result<Vec<_>, Error>>()?;
-        let dimensions = match row.kind.0 {
-            0 => row.half_extents,
-            1 => [row.radius, 0., 0.],
-            2 | 3 => [row.radius, row.length, 0.],
+        let dimensions = match row.kind {
+            wr::PhysicsShapeKind::Box => row.half_extents,
+            wr::PhysicsShapeKind::Sphere => [row.radius, 0., 0.],
+            wr::PhysicsShapeKind::Capsule | wr::PhysicsShapeKind::Cylinder => {
+                [row.radius, row.length, 0.]
+            }
             _ => [0.; 3],
         };
         let mut native_shape = nr::PhysicsShape::<nr::V1> {
             transform: row.transform,
-            shape_type: row.kind.0,
+            shape_type,
             shape_dimensions: dimensions,
             source_points: append(doc, &points)?.cast(),
             source_triangles: append(doc, &indices)?.cast(),

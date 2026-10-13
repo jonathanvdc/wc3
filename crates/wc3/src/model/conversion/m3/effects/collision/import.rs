@@ -38,7 +38,7 @@ pub(in crate::model::conversion::m3) fn attach<E: Envelope>(
         .collect::<Result<Vec<_>, _>>()?;
     let set = sets
         .iter_mut()
-        .find(|r| r.profile == wr::ProfileId::SC2)
+        .find(|r| r.profile == wr::ProfileId::Sc2)
         .ok_or_else(|| Error::new("wem.profile", "missing SC2 profile"))?;
     let mut values = BTreeMap::new();
     let mut normals_text = None;
@@ -56,7 +56,7 @@ pub(in crate::model::conversion::m3) fn attach<E: Envelope>(
     }
     if !pos.is_empty() || !tris.is_empty() || !norms.is_empty() {
         let shape = wr::PhysicsShape {
-            kind: wr::PhysicsShapeKind(5),
+            kind: wr::PhysicsShapeKind::from_raw(5),
             transform: IDENTITY,
             vertices: metadata::put(&mut doc, &pos)?.cast(),
             triangles: metadata::put(&mut doc, &tris)?.cast(),
@@ -74,7 +74,10 @@ pub(in crate::model::conversion::m3) fn attach<E: Envelope>(
     }
     if tight != nr::HitTestShape::<nr::V1>::default() {
         values.insert("m3.hit.tight.padding".into(), i64::from(tight.padding));
-        values.insert("m3.hit.tight.kind".into(), i64::from(tight.shape_type));
+        values.insert(
+            "m3.hit.tight.kind".into(),
+            i64::from((tight.shape_type).raw()),
+        );
         let shape = shape(source_doc, &mut doc, tight, context)?;
         bodies.push(body(
             &mut doc,
@@ -98,7 +101,7 @@ pub(in crate::model::conversion::m3) fn attach<E: Envelope>(
                 let r = row.map_err(read_error)?;
                 values.insert(
                     format!("m3.hit.fuzzy[{index}].kind"),
-                    i64::from(r.shape_type),
+                    i64::from((r.shape_type).raw()),
                 );
                 values.insert(
                     format!("m3.hit.fuzzy[{index}].padding"),
@@ -145,12 +148,12 @@ pub(in crate::model::conversion::m3) fn attach<E: Envelope>(
         let r = row.map_err(read_error)?;
         for (key, value) in [
             ("kind", r.shape_type),
-            ("bone1", r.bone1),
-            ("bone2", r.bone2),
+            ("bone1", nr::VolumeShape::from_raw(r.bone1)),
+            ("bone2", nr::VolumeShape::from_raw(r.bone2)),
         ] {
             values.insert(
                 format!("m3.attachment_volume[{index}].{key}"),
-                i64::from(value),
+                i64::from((value).raw()),
             );
         }
         let hit = nr::HitTestShape::<nr::V1> {

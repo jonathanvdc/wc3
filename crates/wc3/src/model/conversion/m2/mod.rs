@@ -11,7 +11,14 @@ use crate::model::m2::{
 use crate::model::wem::{self, records as wr, semantic as sm};
 use native::chunks::Chunk;
 use native::codec::{Array, Decoder, Value};
-use native::records::{Bone, LegacyTiming, TimelineStorage, Track, ValuesStorage};
+use native::records::{
+    BatchFlags, BlendMode, Bone, BoneFlags, CameraKind, Interpolation as NativeInterpolation,
+    LegacyTiming, LightKind, MaterialFlags, ModelFlags, PackedParticleBlend,
+    PackedParticleGenerator, ParticleBlend, ParticleFlags, ParticleGenerator, ParticleHeadTail,
+    PhysicsAttachment, PhysicsBodyKind, PhysicsGameFlags, PhysicsJointKind, PhysicsKind,
+    PhysicsMotorMode, PhysicsShapeKind, SequenceFlags, TextureFlags, TextureSource,
+    TimelineStorage, Track, ValuesStorage,
+};
 use native::{
     Bundle, Chunked, Core, Dialect, File, ModelLayout, V272PreSplit, V256, V257, V260, V263, V264,
     V265, V272, V273, V274,

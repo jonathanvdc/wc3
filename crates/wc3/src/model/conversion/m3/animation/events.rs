@@ -53,7 +53,7 @@ pub(super) fn import_events<E: Envelope>(
     let pose_slot = schemas.len();
     schemas.push(wr::PoseSchema::<wr::V2> {
         name: text(raw, "M3 event transform")?,
-        storage: wr::PoseStorage::MATRIX,
+        storage: wr::PoseStorage::Matrix,
         ..Default::default()
     });
     macro_rules! events {
@@ -82,7 +82,7 @@ pub(super) fn import_events<E: Envelope>(
                         "m3.event.extra_parameter",
                         i64::from(row.extra_parameter.word()),
                     ),
-                    ("m3.event.flags", i64::from(block.flags)),
+                    ("m3.event.flags", i64::from((block.flags).bits())),
                     ("m3.event.end", i64::from(block.end_frame)),
                     ("m3.event.pose_slot", pose_slot as i64),
                 ];
@@ -113,7 +113,7 @@ pub(super) fn import_events<E: Envelope>(
                     } else {
                         u32::from(row.bone_index)
                     },
-                    kind: wr::NodeKind::EVENT,
+                    kind: wr::NodeKind::Event,
                     pose_matrices: put(raw, &poses)?.cast(),
                     payload: wr::NodePayload::Event(Box::new(wr::EventPayload::<wr::V19> {
                         id: row.event_type,
@@ -255,7 +255,7 @@ pub(super) fn export_events<E: Envelope>(
             nr::AnimationBlockEvent {
                 timestamps: append(doc, &times)?.cast(),
                 keys: append(doc, &events)?.cast(),
-                flags,
+                flags: nr::AnimationBlockFlags(flags),
                 end_frame,
             },
         ));

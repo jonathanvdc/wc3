@@ -28,14 +28,30 @@ where
         context,
     } = state;
 
+    let requested_kind = match payload.kind {
+        wr::LightKind::Directional => LightKind::Directional,
+        wr::LightKind::Omni => LightKind::Point,
+        _ => {
+            context.unsupported("lights.kind", "light operation has no native M2 equivalent")?;
+            LightKind::Point
+        }
+    };
+    let original_kind = metadata
+        .get("m2.light.kind")
+        .map(|&value| LightKind::from_raw(value as u16))
+        .unwrap_or(requested_kind);
+    let projection = if original_kind == LightKind::Directional {
+        wr::LightKind::Directional
+    } else {
+        wr::LightKind::Omni
+    };
+    let kind = if projection == payload.kind {
+        original_kind
+    } else {
+        requested_kind
+    };
     let mut light = native::records::Light::<V> {
-        kind: metadata.get("m2.light.kind").copied().unwrap_or(
-            if payload.kind == wr::LightKind::DIRECTIONAL {
-                0
-            } else {
-                1
-            },
-        ) as u16,
+        kind,
         bone_id: if actor_has_transform(model, index, common) {
             Some(index as u32)
         } else {
@@ -53,7 +69,7 @@ where
         model,
         sm::Target::Property {
             owner: index as u32,
-            channel: u32::from(wr::Channel::COLOR.0),
+            channel: u32::from(wr::Channel::Color.raw()),
         },
         starts,
         globals,
@@ -96,15 +112,15 @@ where
             )?;
         };
     }
-    scalar!(diffuse_intensity, wr::Channel::INTENSITY.0);
-    scalar!(attenuation_start, wr::Channel::ATTENUATION_START.0);
-    scalar!(attenuation_end, wr::Channel::ATTENUATION_END.0);
+    scalar!(diffuse_intensity, wr::Channel::Intensity.raw());
+    scalar!(attenuation_start, wr::Channel::AttenuationStart.raw());
+    scalar!(attenuation_end, wr::Channel::AttenuationEnd.raw());
     scalar!(ambient_intensity, 201u8);
     light.visibility = export_track::<V, u8>(
         model,
         sm::Target::Property {
             owner: index as u32,
-            channel: u32::from(wr::Channel::VISIBILITY.0),
+            channel: u32::from(wr::Channel::Visibility.raw()),
         },
         starts,
         globals,

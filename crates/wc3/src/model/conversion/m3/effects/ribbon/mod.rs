@@ -43,12 +43,12 @@ fn spline_points<E: Envelope>(
             yaw: property(values, &format!("{prefix}.yaw"), r.yaw),
             pitch: property(values, &format!("{prefix}.pitch"), r.pitch),
             yaw_variation: wr::Sc2Variation {
-                type_: r.yaw_type,
+                type_: wr::Sc2VariationKind::from_raw((r.yaw_type).raw()),
                 amplitude: property(values, &format!("{prefix}.yaw_amplitude"), r.yaw_amplitude),
                 frequency: property(values, &format!("{prefix}.yaw_frequency"), r.yaw_frequency),
             },
             pitch_variation: wr::Sc2Variation {
-                type_: r.pitch_type,
+                type_: wr::Sc2VariationKind::from_raw((r.pitch_type).raw()),
                 amplitude: property(
                     values,
                     &format!("{prefix}.pitch_amplitude"),
@@ -61,7 +61,7 @@ fn spline_points<E: Envelope>(
                 ),
             },
             velocity_variation: wr::Sc2Variation {
-                type_: r.velocity_type,
+                type_: wr::Sc2VariationKind::from_raw(r.velocity_type.raw()),
                 amplitude: property(
                     values,
                     &format!("{prefix}.velocity_amplitude"),
@@ -114,7 +114,7 @@ fn native_spline_points<E: Envelope>(
             ),
             yaw: native_property(values, &format!("{prefix}.yaw"), r.yaw),
             pitch: native_property(values, &format!("{prefix}.pitch"), r.pitch),
-            yaw_type: r.yaw_variation.type_,
+            yaw_type: nr::Variation::from_raw(r.yaw_variation.type_.raw()),
             yaw_amplitude: native_property(
                 values,
                 &format!("{prefix}.yaw_amplitude"),
@@ -125,7 +125,7 @@ fn native_spline_points<E: Envelope>(
                 &format!("{prefix}.yaw_frequency"),
                 r.yaw_variation.frequency,
             ),
-            pitch_type: r.pitch_variation.type_,
+            pitch_type: nr::Variation::from_raw(r.pitch_variation.type_.raw()),
             pitch_amplitude: native_property(
                 values,
                 &format!("{prefix}.pitch_amplitude"),
@@ -136,7 +136,7 @@ fn native_spline_points<E: Envelope>(
                 &format!("{prefix}.pitch_frequency"),
                 r.pitch_variation.frequency,
             ),
-            velocity_type: r.velocity_variation.type_,
+            velocity_type: nr::Variation::from_raw(r.velocity_variation.type_.raw()),
             velocity_amplitude: native_property(
                 values,
                 &format!("{prefix}.velocity_amplitude"),
@@ -179,7 +179,7 @@ pub(super) fn attach<E: Envelope>(
                     nodes,
                     bone,
                     wr::NodePayload::Sc2RibbonEmitter(Box::new(payload)),
-                    wr::NodeKind::SC2_RIBBON_EMITTER,
+                    wr::NodeKind::Sc2RibbonEmitter,
                     values,
                 )?;
             }

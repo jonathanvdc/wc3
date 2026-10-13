@@ -8,7 +8,7 @@ pub(super) fn append<T: wem::Record + wem::Write, U: wem::Target>(
         return Ok(Ref::default());
     }
     let id = doc.append(values)?;
-    Ok(Ref::new(values.len() as u32, id.index(), 0))
+    Ok(Ref::from_section(values.len() as u32, id.index()))
 }
 pub(super) fn string(
     doc: &mut RawDocument<'static>,

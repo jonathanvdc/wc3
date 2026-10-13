@@ -19,10 +19,9 @@ pub(super) fn put<T: Record + Write>(
         return Ok(Ref::default());
     }
     let id = doc.append(values)?;
-    Ok(Ref::new(
+    Ok(Ref::from_section(
         u32::try_from(values.len()).map_err(|_| WriteError::invalid("array count"))?,
         id.index(),
-        0,
     ))
 }
 
@@ -65,9 +64,9 @@ pub(super) fn attribute<const N: usize>(
         .collect();
     Ok(Some(r::AttrLayer {
         name: text(doc, name)?,
-        domain: r::Domain::VERTEX,
+        domain: r::Domain::Vertex,
         type_: kind,
-        storage: r::AttributeEncoding::FLOAT32,
+        storage: r::AttributeEncoding::Float32,
         data: bytes(doc, &encoded)?,
     }))
 }
@@ -160,12 +159,12 @@ pub(super) fn float_values<const N: usize>(
     // ATTR storage describes an export preference; data always holds unpacked values.
     let expected = match N {
         1 => r::AttrType::F32,
-        2 => r::AttrType::F32X2,
-        3 => r::AttrType::F32X3,
-        4 => r::AttrType::F32X4,
+        2 => r::AttrType::F32x2,
+        3 => r::AttrType::F32x3,
+        4 => r::AttrType::F32x4,
         _ => return Err(ReadError::unsupported(0, "attribute component count")),
     };
-    if layer.type_ != expected && !(N == 4 && layer.type_ == r::AttrType::QUAT) {
+    if layer.type_ != expected && !(N == 4 && layer.type_ == r::AttrType::Quat) {
         return Err(ReadError::unsupported(0, "attribute value type"));
     }
     let bytes = rawbytes(doc, layer.data)?;

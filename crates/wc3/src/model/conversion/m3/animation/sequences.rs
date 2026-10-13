@@ -74,6 +74,7 @@ pub(super) fn metadata<E: Envelope>(
     let mut fields = vec![
         ("conversion.clip_id".to_owned(), i64::from(row.id)),
         ("m3.sequence.index".to_owned(), i64::from(row.index)),
+        ("m3.sequence.flags".to_owned(), i64::from(row.flags.bits())),
         (
             "m3.sequence.start_frame".to_owned(),
             i64::from(row.start_frame),
@@ -157,6 +158,9 @@ pub(super) fn decorate<E: Envelope>(
                 .unwrap_or(0)
         };
         if data.contains_key("m3.sequence.source_version") {
+            let mut flags = nr::SequenceFlags(get("flags") as u32);
+            flags.set_not_looping(!clip.looping.get());
+            row.flags = flags;
             row.index = get("index") as i32;
             row.start_frame = get("start_frame") as u32;
             row.end_frame = row

@@ -14,7 +14,7 @@ where
     V::Scroll: ScrollFields,
     for<'a> V::Lifetime<'a>: AgeFields,
 {
-    let multi = payload.flags & 0x10000000 != 0;
+    let multi = ParticleFlags::from_bits_retain(payload.flags.bits()).multi_texture();
     let texture_id = if multi {
         if [payload.texture, payload.texture2, payload.texture3]
             .iter()
@@ -44,9 +44,9 @@ where
             ZeroVec::alloc_from_slice(&text.bytes().chain([0]).collect::<Vec<_>>())
         })
     };
-    let mut value = native::records::ParticleEmitter::<V>::new(0);
+    let mut value = native::records::ParticleEmitter::<V>::new(ModelFlags::default());
     value.id = payload.particle_id as u32;
-    value.flags = payload.flags;
+    value.flags = ParticleFlags::from_bits_retain(payload.flags.bits());
     value.texture_id = texture_id;
     value.particle_model_filename = filename(&payload.particle_model)?;
     value.child_model_filename = filename(&payload.trail_model)?;

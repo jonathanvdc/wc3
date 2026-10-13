@@ -171,7 +171,7 @@ fn bone_properties<E: Envelope>(source: &native::Model<'_, E>) -> Result<Vec<Pro
                             .map_err(read_error)?
                             .unwrap_or_default()
                             .to_owned(),
-                        flags: r.flags,
+                        flags: (r.flags).bits(),
                         parent_index: r.parent_index,
                         padding: r.padding,
                         position: r.position,

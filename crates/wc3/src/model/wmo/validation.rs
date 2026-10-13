@@ -220,7 +220,7 @@ pub(crate) fn validate_tables<D: Dialect>(
                     "doodad model index",
                 )?;
             }
-            if doodad.flags() & 0x4 != 0 {
+            if doodad.flags().has_light_reference() {
                 index(
                     doodad.color[3] as usize,
                     light_count.unwrap_or_else(|| table!(Lights).map_or(0, |values| values.len())),

@@ -5,6 +5,7 @@ type MaterialOutput<D> = (Vec<nr::Material<D>>, Option<Vec<u8>>);
 pub(super) fn import<D: Dialect>(
     root: &Root<'_, D>,
     model: &mut s::Model<'static>,
+    context: &mut Context,
 ) -> Result<Vec<MaterialFields>, Error> {
     let rows = root
         .chunks()
@@ -70,13 +71,23 @@ pub(super) fn import<D: Dialect>(
         model.materials.push(s::Material {
             name: Cow::Owned(format!("Material {index}")),
             texture: textures.first().copied().filter(|value| *value != u32::MAX),
-            blend: material.blend_mode,
-            flags: material.flags & 3,
+            blend: common_blend(material.blend_mode, context, index)?,
+            flags: common_flags(material.flags),
         });
         metadata_rows.push(vec![
             (
                 "wmo.material.flags".into(),
                 i64::from(material.flags),
+                String::new(),
+            ),
+            (
+                "wmo.material.blend".into(),
+                i64::from(material.blend_mode.raw()),
+                String::new(),
+            ),
+            (
+                "wmo.material.blend_projection".into(),
+                i64::from(model.materials.last().unwrap().blend.raw()),
                 String::new(),
             ),
             (
@@ -157,11 +168,20 @@ pub(super) fn export<D: Dialect>(
         let default = BTreeMap::new();
         let fields = native_fields.get(index).unwrap_or(&default);
         let mut value = nr::Material::<D> {
-            flags: (metadata::number(fields, "wmo.material.flags", 0)? & !3) | (material.flags & 3),
+            flags: nr::MaterialFlags(metadata::number(fields, "wmo.material.flags", 0)?),
             shader: metadata::number(fields, "wmo.material.shader", 0)?,
-            blend_mode: material.blend,
+            blend_mode: if fields
+                .get("wmo.material.blend_projection")
+                .is_some_and(|(original, _)| *original == i64::from(material.blend.raw()))
+            {
+                nr::BlendMode::from_raw(metadata::number(fields, "wmo.material.blend", 0)?)
+            } else {
+                native_blend(material.blend, context, index)?
+            },
             ..Default::default()
         };
+        value.flags.set_unlit(material.flags.unlit());
+        value.flags.set_unfogged(material.flags.unfogged());
         let mut textures = fields
             .get("wmo.material.textures")
             .map(|(_, text)| metadata::parse_words(text))
@@ -209,4 +229,58 @@ pub(super) fn export<D: Dialect>(
         output.push(value);
     }
     Ok((output, uses_names.then_some(names)))
+}
+
+fn common_flags(native: nr::MaterialFlags) -> wr::MaterialFlags {
+    let mut flags = wr::MaterialFlags::default();
+    flags.set_unlit(native.unlit());
+    flags.set_unfogged(native.unfogged());
+    flags
+}
+fn common_blend(
+    native: nr::BlendMode,
+    context: &mut Context,
+    index: usize,
+) -> Result<wr::BlendMode, Error> {
+    Ok(match native {
+        nr::BlendMode::Opaque => wr::BlendMode::Opaque,
+        nr::BlendMode::AlphaKey => wr::BlendMode::AlphaKey,
+        nr::BlendMode::Alpha => wr::BlendMode::AlphaBlend,
+        nr::BlendMode::Add => wr::BlendMode::Additive,
+        nr::BlendMode::Modulate => wr::BlendMode::Modulate,
+        nr::BlendMode::Modulate2x => wr::BlendMode::Modulate2x,
+        nr::BlendMode::Unknown(value) => match wr::BlendMode::from_raw(value) {
+            wr::BlendMode::Unknown(value) => wr::BlendMode::Unknown(value),
+            _ => wr::BlendMode::Opaque,
+        },
+        nr::BlendMode::ModulateAdd | nr::BlendMode::InverseSourceAlphaAdd => {
+            context.unsupported(
+                format!("materials[{index}].blend"),
+                "WEM common material blending has no equivalent operation",
+            )?;
+            wr::BlendMode::Opaque
+        }
+    })
+}
+fn native_blend(
+    common: wr::BlendMode,
+    context: &mut Context,
+    index: usize,
+) -> Result<nr::BlendMode, Error> {
+    Ok(match common {
+        wr::BlendMode::Opaque => nr::BlendMode::Opaque,
+        wr::BlendMode::AlphaKey => nr::BlendMode::AlphaKey,
+        wr::BlendMode::AlphaBlend => nr::BlendMode::Alpha,
+        wr::BlendMode::Additive => nr::BlendMode::Add,
+        wr::BlendMode::Modulate => nr::BlendMode::Modulate,
+        wr::BlendMode::Modulate2x => nr::BlendMode::Modulate2x,
+        wr::BlendMode::Unknown(value) => nr::BlendMode::Unknown(value),
+        _ => {
+            context.unsupported(
+                format!("materials[{index}].blend"),
+                "WMO material records have no equivalent blend operation",
+            )?;
+            nr::BlendMode::Opaque
+        }
+    })
 }

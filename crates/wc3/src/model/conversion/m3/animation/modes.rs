@@ -36,10 +36,10 @@ pub(in super::super) fn modes(
                     .iter()
                     .find(|channel| channel.id == track.channel)
                     .ok_or_else(|| Error::new("animation.channel", "missing channel"))?;
-                if channel.target.channel != wr::Channel(255) {
+                if channel.target.channel != wr::Channel::from_raw(255) {
                     continue;
                 }
-                let mode = if track.interp == wr::Interpolation::STEP {
+                let mode = if track.interp == wr::Interpolation::Step {
                     0
                 } else {
                     1
@@ -81,7 +81,7 @@ trait HeadersMut {
 impl<T> HeadersMut for wr::M3AnimRef<T> {
     fn update_headers(&mut self, modes: &BTreeMap<u32, u16>) {
         if let Some(&mode) = modes.get(&self.anim_id) {
-            self.interp_type = mode;
+            self.interp_type = wr::NativeInterpolation16::from_raw(mode);
         }
     }
 }

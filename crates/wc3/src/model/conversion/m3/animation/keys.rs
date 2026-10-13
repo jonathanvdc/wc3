@@ -53,7 +53,7 @@ pub(super) fn read_keys<E: Envelope>(
                 kind: $kind,
                 times,
                 values,
-                flags: block.flags,
+                flags: (block.flags).bits(),
                 end: block.end_frame,
                 family,
             })
@@ -64,7 +64,7 @@ pub(super) fn read_keys<E: Envelope>(
             nr::AnimationBlockVector2,
             controller.sd2v,
             nr::Vector2,
-            wr::AttrType::F32X2,
+            wr::AttrType::F32x2,
             |row: nr::Vector2| row
                 .value
                 .into_iter()
@@ -75,7 +75,7 @@ pub(super) fn read_keys<E: Envelope>(
             nr::AnimationBlockVector3,
             controller.sd3v,
             nr::Vector3,
-            wr::AttrType::F32X3,
+            wr::AttrType::F32x3,
             |row: nr::Vector3| row
                 .value
                 .into_iter()
@@ -86,7 +86,7 @@ pub(super) fn read_keys<E: Envelope>(
             nr::AnimationBlockQuaternion,
             controller.sd4q,
             nr::Quaternion,
-            wr::AttrType::QUAT,
+            wr::AttrType::Quat,
             |row: nr::Quaternion| row
                 .value
                 .into_iter()
@@ -97,7 +97,7 @@ pub(super) fn read_keys<E: Envelope>(
             nr::AnimationBlockColor,
             controller.sdcc,
             nr::Color,
-            wr::AttrType::U8X4,
+            wr::AttrType::U8x4,
             |row: nr::Color| row.value.to_vec()
         ),
         5 => keys!(
@@ -147,7 +147,7 @@ pub(super) fn read_keys<E: Envelope>(
             controller.sdfg,
             nr::Flag,
             wr::AttrType::U32,
-            |row: nr::Flag| row.value.to_le_bytes().to_vec()
+            |row: nr::Flag| row.value.bits().to_le_bytes().to_vec()
         ),
         _ => {
             context.unsupported(

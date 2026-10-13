@@ -29,7 +29,7 @@ fn doodad_packed_name_flags_transform_and_color_decode_without_copying() {
     };
     assert_eq!(records.as_bytes().as_ptr(), bytes.as_ptr());
     let record = records.get(0).unwrap().unwrap();
-    assert_eq!(record.name_and_flags, 0x0800_0123);
+    assert_eq!(record.name_and_flags.bits(), 0x0800_0123);
     assert_eq!(record.position, [2.5, 0.0, 0.0]);
     assert_eq!(record.rotation, [0.0, 0.0, 0.0, 1.0]);
     assert_eq!(record.scale, 1.5);

@@ -6,7 +6,7 @@ use wc3::model::{
 };
 fn geometry() -> wem::Document<'static> {
     sem::build(&sem::Model {
-        profile: wr::ProfileId::SC2,
+        profile: wr::ProfileId::Sc2,
         meshes: vec![sem::Mesh {
             name: Cow::Borrowed("LOD 0 region 0"),
             positions: Cow::Owned(vec![[0.; 3], [1., 0., 0.], [0., 1., 0.]]),

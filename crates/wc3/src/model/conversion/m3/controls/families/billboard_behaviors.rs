@@ -26,7 +26,7 @@ pub(in crate::model::conversion::m3::controls) fn import_billboard_behaviors<E: 
         fields.uint(&format!("{prefix}.bone_index"), u32::from(r.bone_index));
         fields.uint(
             &format!("{prefix}.billboard_type"),
-            u32::from(r.billboard_type),
+            u32::from((r.billboard_type).raw()),
         );
         fields.uint(
             &format!("{prefix}.camera_look_at"),
@@ -80,13 +80,14 @@ pub(in crate::model::conversion::m3::controls) fn export_billboard_behaviors<E: 
                     "value exceeds native integer width",
                 )
             })?,
-            billboard_type: u8::try_from(fields.uint(&format!("{prefix}.billboard_type")))
-                .map_err(|_| {
+            billboard_type: nr::BillboardKind::from_raw(
+                u8::try_from(fields.uint(&format!("{prefix}.billboard_type"))).map_err(|_| {
                     Error::new(
                         format!("{prefix}.billboard_type"),
                         "value exceeds native integer width",
                     )
                 })?,
+            ),
             camera_look_at: u8::try_from(fields.uint(&format!("{prefix}.camera_look_at")))
                 .map_err(|_| {
                     Error::new(

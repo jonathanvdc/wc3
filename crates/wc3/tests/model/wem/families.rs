@@ -207,12 +207,15 @@ fn all_supported_native_families_read_write_and_scan_their_rows() {
 #[test]
 fn inline_profile_and_slot_runs_are_nonempty_and_references_keep_their_order() {
     let document = DocumentRecord::<V1> {
-        profiles: InlineList(vec![ProfileId::GENERIC, ProfileId::WOW]),
+        profiles: InlineList(vec![ProfileId::Generic, ProfileId::Wow]),
         ..Default::default()
     };
     check_value(&document);
     let model = ModelRecord::<V9> {
-        material_slots: InlineList(vec![wem::Ref::new(4, 12, 93), wem::Ref::new(5, 14, 97)]),
+        material_slots: InlineList(vec![
+            wem::Ref::new(4, 12, 93u32.into()),
+            wem::Ref::new(5, 14, 97u32.into()),
+        ]),
         ..Default::default()
     };
     check_value(&model);
@@ -254,7 +257,11 @@ fn literal_node_headers_distinguish_revision_one_and_two_matrix_slots() {
     let value = Node::<V1>::read(&mut Decoder::new(&old, 1)).unwrap();
     assert_eq!(value.uniform_scale_only.0, 0x7f);
     assert_eq!(
-        (value.poses.entries, value.poses.index, value.poses.flags),
+        (
+            value.poses.entries,
+            value.poses.index,
+            value.poses.flags.bits()
+        ),
         (5, 44, 12)
     );
     assert_eq!(value.pose_matrices, ());
@@ -272,7 +279,7 @@ fn literal_node_headers_distinguish_revision_one_and_two_matrix_slots() {
         (
             value.pose_matrices.entries,
             value.pose_matrices.index,
-            value.pose_matrices.flags
+            value.pose_matrices.flags.bits()
         ),
         (2, 53, 90)
     );
@@ -295,11 +302,15 @@ fn literal_attribute_fields_keep_the_two_byte_domains_and_four_byte_storage_code
     word(&mut bytes, 22, 23);
     word(&mut bytes, 26, 29);
     let value = AttrLayer::read(&mut Decoder::new(&bytes, 1)).unwrap();
-    assert_eq!(value.domain, Domain::HALFEDGE);
-    assert_eq!(value.type_, AttrType::F32X3);
-    assert_eq!(value.storage.0, 0x11223344);
+    assert_eq!(value.domain, Domain::Halfedge);
+    assert_eq!(value.type_, AttrType::F32x3);
+    assert_eq!(value.storage.raw(), 0x11223344);
     assert_eq!(
-        (value.data.entries, value.data.index, value.data.flags),
+        (
+            value.data.entries,
+            value.data.index,
+            value.data.flags.bits()
+        ),
         (12, 23, 29)
     );
     let mut seen = Vec::new();
@@ -355,7 +366,7 @@ fn literal_soft_lump_has_unaligned_node_words_and_two_preserved_bool_bytes() {
     bytes[47] = 0x7f;
     bytes[48] = 0xfe;
     let lump = SoftLump::read(&mut Decoder::new(&bytes, 1)).unwrap();
-    assert_eq!(lump.kind.0, 0x91);
+    assert_eq!(lump.kind.raw(), 0x91);
     assert_eq!(lump.anchor[0], 1.25);
     assert_eq!((lump.carrier, lump.node, lump.effect), (7, 11, 13));
     assert_eq!(lump.rider, 17);

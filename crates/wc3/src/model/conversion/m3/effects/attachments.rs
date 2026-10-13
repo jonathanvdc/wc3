@@ -37,7 +37,7 @@ pub(super) fn attach<E: Envelope>(
                 nodes.push(wr::Node::<wr::V19> {
                     name: metadata::text(doc, name)?,
                     parent: record.bone_index,
-                    kind: wr::NodeKind::ATTACHMENT,
+                    kind: wr::NodeKind::Attachment,
                     local: wr::Transform {
                         rotation: [0., 0., 0., 1.],
                         scale: [1.; 3],

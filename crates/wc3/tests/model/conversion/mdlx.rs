@@ -397,3 +397,53 @@ fn integer_texture_selectors_remain_exact_above_f32_precision() {
         16_777_217
     );
 }
+
+#[test]
+fn ambient_lights_and_sequence_looping_keep_their_semantic_meanings() {
+    use mdlx::scene::{Light, LightType, Node};
+    let mut source = source();
+    source.set_lights(vec![Light::new(
+        Node::new("Ambient", 9).unwrap(),
+        LightType::Ambient,
+    )]);
+    let mut sequences = source.sequences().cloned().collect::<Vec<_>>();
+    sequences[0].flags.set_non_looping(true);
+    source.set_sequences(sequences);
+    let imported = conversion::mdlx::import(&source, &ImportOptions::default()).unwrap();
+    let common = imported.value.model(&ExportOptions::default()).unwrap();
+    assert!(!common.clips[0].looping);
+    assert!(common.clips[0].flags.is_empty());
+    let output = conversion::mdlx::plan::<mdlx::V800>(&imported.value, &ExportOptions::default())
+        .unwrap()
+        .execute()
+        .unwrap()
+        .value;
+    assert_eq!(
+        output.lights().next().unwrap().light_type,
+        LightType::Ambient
+    );
+    assert!(output.sequences().next().unwrap().flags.non_looping());
+}
+
+#[test]
+fn unknown_native_blend_codes_do_not_become_known_common_operations() {
+    for code in [7, 8, 9] {
+        let mut source = source();
+        source.materials_mut().next().unwrap().layers[0].filter_mode =
+            mdlx::materials::LayerFilterMode::Unknown(code);
+        let imported = conversion::mdlx::import(&source, &ImportOptions::default()).unwrap();
+        let mut model = imported.value.model(&ExportOptions::default()).unwrap();
+        model.materials[0].flags.set_unlit(true);
+        let edited = Asset::new(semantic::build(&model).unwrap());
+        assert_eq!(model.materials[0].blend, r::BlendMode::Opaque);
+        let output = conversion::mdlx::plan::<mdlx::V800>(&edited, &ExportOptions::default())
+            .unwrap()
+            .execute()
+            .unwrap()
+            .value;
+        assert_eq!(
+            output.materials().next().unwrap().layers[0].filter_mode,
+            mdlx::materials::LayerFilterMode::Unknown(code)
+        );
+    }
+}

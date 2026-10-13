@@ -24,11 +24,11 @@ pub(super) fn encode<E: Envelope>(
                 "M3 hierarchy has no independent pivot field",
             )?;
         }
-        let unrepresented = node.flags
-            & !(wr::NodeFlags::DONT_INHERIT_TRANSLATION.0
-                | wr::NodeFlags::DONT_INHERIT_ROTATION.0
-                | wr::NodeFlags::DONT_INHERIT_SCALE.0
-                | wr::NodeFlags::BILLBOARDED.0);
+        let unrepresented = node.flags.bits()
+            & !(wr::NodeFlags::DONT_INHERIT_TRANSLATION.bits()
+                | wr::NodeFlags::DONT_INHERIT_ROTATION.bits()
+                | wr::NodeFlags::DONT_INHERIT_SCALE.bits()
+                | wr::NodeFlags::BILLBOARDED.bits());
         if unrepresented != 0 {
             context.unsupported(
                 format!("nodes[{index}].flags"),
@@ -46,10 +46,10 @@ pub(super) fn encode<E: Envelope>(
                 .transpose()
                 .map_err(|_| Error::new("bone.parent", "bone parent exceeds native capacity"))?
                 .unwrap_or(u16::MAX),
-            flags: native_flags(
-                node.flags,
+            flags: nr::BoneFlags(native_flags(
+                (node.flags).bits(),
                 values.get("m3.bone.flags").copied().unwrap_or(0) as u32,
-            ),
+            )),
             padding: values.get("m3.bone.padding").copied().unwrap_or(0) as u16,
             position: restore(&values, "bone.position", node.translation),
             rotation: restore(&values, "bone.rotation", node.rotation),
@@ -154,24 +154,24 @@ fn mapping_details(model: &sem::Model<'_>) -> Result<(Vec<u32>, Vec<bool>), Erro
 pub(super) fn common_flags(flags: u32) -> u32 {
     let mut result = 0;
     for (source, destination) in [
-        (1, wr::NodeFlags::DONT_INHERIT_TRANSLATION.0),
-        (4, wr::NodeFlags::DONT_INHERIT_ROTATION.0),
-        (2, wr::NodeFlags::DONT_INHERIT_SCALE.0),
+        (1, wr::NodeFlags::DONT_INHERIT_TRANSLATION.bits()),
+        (4, wr::NodeFlags::DONT_INHERIT_ROTATION.bits()),
+        (2, wr::NodeFlags::DONT_INHERIT_SCALE.bits()),
     ] {
         if flags & source == 0 {
             result |= destination;
         }
     }
     if flags & 0x10 != 0 {
-        result |= wr::NodeFlags::BILLBOARDED.0;
+        result |= wr::NodeFlags::BILLBOARDED.bits();
     }
     result
 }
 
 fn native_flags(flags: u32, original: u32) -> u32 {
     (original & !0x17)
-        | u32::from(flags & wr::NodeFlags::DONT_INHERIT_TRANSLATION.0 == 0)
-        | u32::from(flags & wr::NodeFlags::DONT_INHERIT_SCALE.0 == 0) << 1
-        | u32::from(flags & wr::NodeFlags::DONT_INHERIT_ROTATION.0 == 0) << 2
-        | u32::from(flags & wr::NodeFlags::BILLBOARDED.0 != 0) << 4
+        | u32::from(flags & wr::NodeFlags::DONT_INHERIT_TRANSLATION.bits() == 0)
+        | u32::from(flags & wr::NodeFlags::DONT_INHERIT_SCALE.bits() == 0) << 1
+        | u32::from(flags & wr::NodeFlags::DONT_INHERIT_ROTATION.bits() == 0) << 2
+        | u32::from(flags & wr::NodeFlags::BILLBOARDED.bits() != 0) << 4
 }

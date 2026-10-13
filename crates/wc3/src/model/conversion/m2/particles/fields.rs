@@ -33,17 +33,25 @@ impl OptionalFloat for () {
 }
 
 pub(super) trait HeaderFields {
-    fn parts(&self) -> (u32, u32, u32);
-    fn make(blend: u32, kind: u32, color: u32) -> Result<Self, Error>
+    fn parts(&self) -> (ParticleBlend, ParticleGenerator, u32);
+    fn make(
+        blend: wr::M2ParticleBlend32,
+        kind: wr::M2EmitterShape,
+        color: u32,
+    ) -> Result<Self, Error>
     where
         Self: Sized;
 }
 
 impl HeaderFields for native::records::WideParticleHeader {
-    fn parts(&self) -> (u32, u32, u32) {
-        (u32::from(self.blending), u32::from(self.emitter), 0)
+    fn parts(&self) -> (ParticleBlend, ParticleGenerator, u32) {
+        (self.blending, self.emitter, 0)
     }
-    fn make(blend: u32, kind: u32, color: u32) -> Result<Self, Error> {
+    fn make(
+        blend: wr::M2ParticleBlend32,
+        kind: wr::M2EmitterShape,
+        color: u32,
+    ) -> Result<Self, Error> {
         if color != 0 {
             return Err(Error::new(
                 "particles.color_index",
@@ -51,28 +59,40 @@ impl HeaderFields for native::records::WideParticleHeader {
             ));
         }
         Ok(Self {
-            blending: u16::try_from(blend)
-                .map_err(|_| Error::new("particles.blend", "blend exceeds u16"))?,
-            emitter: u16::try_from(kind)
-                .map_err(|_| Error::new("particles.kind", "kind exceeds u16"))?,
+            blending: ParticleBlend::from_raw(
+                u16::try_from(blend.raw())
+                    .map_err(|_| Error::new("particles.blend", "blend exceeds u16"))?,
+            ),
+            emitter: ParticleGenerator::from_raw(
+                u16::try_from(kind.raw())
+                    .map_err(|_| Error::new("particles.kind", "kind exceeds u16"))?,
+            ),
         })
     }
 }
 
 impl HeaderFields for native::records::PackedParticleHeader {
-    fn parts(&self) -> (u32, u32, u32) {
+    fn parts(&self) -> (ParticleBlend, ParticleGenerator, u32) {
         (
-            u32::from(self.blending),
-            u32::from(self.emitter),
+            ParticleBlend::from_raw(u16::from(self.blending.raw())),
+            ParticleGenerator::from_raw(u16::from(self.emitter.raw())),
             u32::from(self.color_index),
         )
     }
-    fn make(blend: u32, kind: u32, color: u32) -> Result<Self, Error> {
+    fn make(
+        blend: wr::M2ParticleBlend32,
+        kind: wr::M2EmitterShape,
+        color: u32,
+    ) -> Result<Self, Error> {
         Ok(Self {
-            blending: u8::try_from(blend)
-                .map_err(|_| Error::new("particles.blend", "blend exceeds u8"))?,
-            emitter: u8::try_from(kind)
-                .map_err(|_| Error::new("particles.kind", "kind exceeds u8"))?,
+            blending: PackedParticleBlend::from_raw(
+                u8::try_from(blend.raw())
+                    .map_err(|_| Error::new("particles.blend", "blend exceeds u8"))?,
+            ),
+            emitter: PackedParticleGenerator::from_raw(
+                u8::try_from(kind.raw())
+                    .map_err(|_| Error::new("particles.kind", "kind exceeds u8"))?,
+            ),
             color_index: u16::try_from(color)
                 .map_err(|_| Error::new("particles.color_index", "color selector exceeds u16"))?,
         })
@@ -121,6 +141,18 @@ impl SpinFields for native::records::ModernSpin {
 }
 
 pub(super) trait UvFields {
+    fn legacy_parts(&self) -> Option<[u8; 2]> {
+        None
+    }
+    fn set_legacy_parts(&mut self, parts: [u8; 2], context: &mut Context) -> Result<(), Error> {
+        if parts != [0; 2] {
+            context.unsupported(
+                "particles.legacy_shape",
+                "modern particle layouts omit legacy shape and head/tail fields",
+            )?;
+        }
+        Ok(())
+    }
     fn scales(&self) -> [f32; 2];
     fn make(scales: [f32; 2], context: &mut Context) -> Result<Self, Error>
     where
@@ -128,10 +160,24 @@ pub(super) trait UvFields {
 }
 
 impl UvFields for native::records::LegacyTextureScale {
+    fn legacy_parts(&self) -> Option<[u8; 2]> {
+        Some([self.particle_type, self.head_or_tail.raw()])
+    }
+    fn set_legacy_parts(&mut self, parts: [u8; 2], _: &mut Context) -> Result<(), Error> {
+        self.particle_type = parts[0];
+        self.head_or_tail = ParticleHeadTail::from_raw(parts[1]);
+        Ok(())
+    }
     fn scales(&self) -> [f32; 2] {
         [1.; 2]
     }
-    fn make(_: [f32; 2], _: &mut Context) -> Result<Self, Error> {
+    fn make(scales: [f32; 2], context: &mut Context) -> Result<Self, Error> {
+        if scales != [1.; 2] {
+            context.unsupported(
+                "particles.uv_scale",
+                "legacy particle layouts omit layer UV scales",
+            )?;
+        }
         Ok(Self::default())
     }
 }
@@ -161,8 +207,8 @@ impl UvFields for native::records::ModernTextureScale {
 }
 
 pub(super) trait ScrollFields {
-    fn required_flag(&self) -> u32 {
-        0
+    fn required_flag(&self) -> ModelFlags {
+        ModelFlags::default()
     }
 
     fn values(&self) -> Option<[i16; 8]>;
@@ -187,12 +233,10 @@ impl ScrollFields for () {
 }
 
 impl ScrollFields for native::records::FlaggedScroll {
-    fn required_flag(&self) -> u32 {
-        if self.values.is_some() {
-            0x200
-        } else {
-            0
-        }
+    fn required_flag(&self) -> ModelFlags {
+        let mut flags = ModelFlags::default();
+        flags.set_particle_multi_texture(self.values.is_some());
+        flags
     }
 
     fn values(&self) -> Option<[i16; 8]> {

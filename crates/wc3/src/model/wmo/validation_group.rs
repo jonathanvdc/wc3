@@ -290,7 +290,7 @@ impl<D: Dialect> Bundle<'_, D> {
                     for value in values.iter() {
                         let value = value?;
                         material(
-                            if value.flags & 2 != 0 {
+                            if value.flags.large_material() {
                                 value.large_material
                             } else {
                                 value.material.into()

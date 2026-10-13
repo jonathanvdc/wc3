@@ -18,10 +18,10 @@ pub(super) fn build_impl(
         for (mesh_index, mesh) in model.meshes.iter().enumerate() {
             let mut layers = Vec::new();
             for layer in [
-                attribute(&mut doc, "position", &mesh.positions, r::AttrType::F32X3)?,
-                attribute(&mut doc, "normal", &mesh.normals, r::AttrType::F32X3)?,
-                attribute(&mut doc, "tangent", &mesh.tangents, r::AttrType::F32X4)?,
-                attribute(&mut doc, "color", &mesh.colors, r::AttrType::F32X4)?,
+                attribute(&mut doc, "position", &mesh.positions, r::AttrType::F32x3)?,
+                attribute(&mut doc, "normal", &mesh.normals, r::AttrType::F32x3)?,
+                attribute(&mut doc, "tangent", &mesh.tangents, r::AttrType::F32x4)?,
+                attribute(&mut doc, "color", &mesh.colors, r::AttrType::F32x4)?,
             ]
             .into_iter()
             .flatten()
@@ -29,7 +29,7 @@ pub(super) fn build_impl(
                 layers.push(layer);
             }
             for (i, uv) in mesh.uv_sets.iter().enumerate() {
-                if let Some(layer) = attribute(&mut doc, &format!("uv{i}"), uv, r::AttrType::F32X2)?
+                if let Some(layer) = attribute(&mut doc, &format!("uv{i}"), uv, r::AttrType::F32x2)?
                 {
                     layers.push(layer);
                 }
@@ -119,11 +119,11 @@ pub(super) fn build_impl(
                 name: node_name,
                 parent: node.parent.unwrap_or(u32::MAX),
                 kind: if node.bone {
-                    r::NodeKind::BONE
+                    r::NodeKind::Bone
                 } else {
-                    r::NodeKind::HELPER
+                    r::NodeKind::Helper
                 },
-                flags: r::NodeFlags(node.flags),
+                flags: node.flags,
                 pivot: node.pivot,
                 local: r::Transform {
                     translation: node.translation,
@@ -138,7 +138,7 @@ pub(super) fn build_impl(
         )?);
     }
     let mut textures = Vec::new();
-    for texture in &model.textures {
+    for (index, texture) in model.textures.iter().enumerate() {
         let path = text(&mut doc, &texture.path)?;
         let key = match texture.id {
             Some(id) if texture.group != 0 => r::TextureKey::SnoId(r::TextureSnoId {
@@ -148,13 +148,16 @@ pub(super) fn build_impl(
             Some(id) => r::TextureKey::FileDataId(r::TextureFileDataId { value: id }),
             None => r::TextureKey::Path(r::TexturePath { value: path }),
         };
-        textures.push(r::TextureRecord {
-            key,
-            path,
-            flags: texture.flags,
-            replaceable_id: texture.replaceable,
-            ..Default::default()
-        });
+        textures.push(editing::texture(
+            r::TextureRecord {
+                key,
+                path,
+                flags: texture.flags,
+                replaceable_id: texture.replaceable,
+                ..Default::default()
+            },
+            original.as_ref().and_then(|o| o.textures.get(index)),
+        ));
     }
     let mut materials = Vec::new();
     for (material_index, material) in model.materials.iter().enumerate() {
@@ -175,18 +178,18 @@ pub(super) fn build_impl(
         let body = put(&mut doc, &[body])?.cast();
         let material_name = text(&mut doc, &material.name)?;
         materials.push(editing::material(
-            &doc,
+            &mut doc,
             r::MaterialRecord {
                 name: material_name,
                 common: r::CommonMaterial {
-                    blend: r::BlendMode(material.blend),
-                    flags: r::MaterialFlags(material.flags),
+                    blend: material.blend,
+                    flags: material.flags,
                     depth: r::DepthState {
                         test: true.into(),
                         write: true.into(),
                         bias: 0.,
                     },
-                    cull: r::CullMode::BACK,
+                    cull: r::CullMode::Back,
                     body: r::MaterialBody::Composite(body),
                     ..Default::default()
                 },
@@ -195,7 +198,7 @@ pub(super) fn build_impl(
             original
                 .as_ref()
                 .and_then(|o| o.materials.get(material_index)),
-        ));
+        )?);
     }
     let mut clip_rows = Vec::new();
     let mut channels: Vec<r::AnimChannel> = Vec::new();
@@ -218,17 +221,17 @@ pub(super) fn build_impl(
         let mut tracks = Vec::new();
         for track in &clip.tracks {
             let (node, channel, width) = match track.target {
-                Target::Translation(n) => (n, r::Channel::TRANSLATION, 3),
-                Target::Rotation(n) => (n, r::Channel::ROTATION, 4),
-                Target::Scale(n) => (n, r::Channel::SCALE, 3),
+                Target::Translation(n) => (n, r::Channel::Translation, 3),
+                Target::Rotation(n) => (n, r::Channel::Rotation, 4),
+                Target::Scale(n) => (n, r::Channel::Scale, 3),
                 Target::NativeProperty { owner, .. } => (
                     owner,
-                    r::Channel(255),
+                    r::Channel::from_raw(255),
                     track.keys.first().map_or(1, |k| k.value.len()),
                 ),
                 Target::Property { owner, .. } => (
                     owner,
-                    r::Channel::EMITTER_PROPERTY,
+                    r::Channel::EmitterProperty,
                     track.keys.first().map_or(1, |k| k.value.len()),
                 ),
             };
@@ -248,9 +251,9 @@ pub(super) fn build_impl(
             };
             let kind = match width {
                 1 => r::AttrType::F32,
-                2 => r::AttrType::F32X2,
-                3 => r::AttrType::F32X3,
-                4 => r::AttrType::F32X4,
+                2 => r::AttrType::F32x2,
+                3 => r::AttrType::F32x3,
+                4 => r::AttrType::F32x4,
                 _ => return Err(WriteError::invalid("animation component count")),
             };
             let init: Vec<_> = track
@@ -262,7 +265,7 @@ pub(super) fn build_impl(
             let mut channel_record = r::AnimChannel {
                 id,
                 target: r::TrackTarget {
-                    kind: r::TrackTargetKind::NODE,
+                    kind: r::TrackTargetKind::Node,
                     node,
                     channel,
                     sub: match track.target {
@@ -278,7 +281,9 @@ pub(super) fn build_impl(
             if let Target::NativeProperty { .. } = track.target {
                 if let Some(old) = original.as_ref().and_then(|o| {
                     o.channels.iter().find(|c| {
-                        c.id == id && c.target.channel == r::Channel(255) && c.value_type == kind
+                        c.id == id
+                            && c.target.channel == r::Channel::from_raw(255)
+                            && c.value_type == kind
                     })
                 }) {
                     channel_record.target = old.target.clone();
@@ -296,10 +301,10 @@ pub(super) fn build_impl(
                 channels.push(channel_record);
             }
             let interp = match track.interpolation {
-                Interpolation::Step => r::Interpolation::STEP,
-                Interpolation::Linear => r::Interpolation::LINEAR,
-                Interpolation::Hermite => r::Interpolation::HERMITE,
-                Interpolation::Bezier => r::Interpolation::BEZIER,
+                Interpolation::Step => r::Interpolation::Step,
+                Interpolation::Linear => r::Interpolation::Linear,
+                Interpolation::Hermite => r::Interpolation::Hermite,
+                Interpolation::Bezier => r::Interpolation::Bezier,
             };
             let mut values = Vec::new();
             for key in &track.keys {
@@ -378,7 +383,8 @@ pub(super) fn build_impl(
             name: text(&mut doc, &clip.name)?,
             model: 0,
             duration: clip.duration,
-            flags: r::ClipFlags(clip.flags),
+            flags: clip.flags,
+            looping: clip.looping.into(),
             containers: put(&mut doc, &tracks)?.cast(),
             native: extra,
             ..Default::default()

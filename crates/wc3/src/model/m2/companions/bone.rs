@@ -1,6 +1,7 @@
 //! Sparse character customization bone transforms.
 use super::super as m2;
 use super::super::codec::{ArrayRef, Decoder, Encoder};
+use super::super::records::ModelFlags;
 use super::super::{ReadError, WriteError, ZeroVec};
 use super::{chunk_bytes, encode_records, flat_records, write_chunk, BoneMatrix};
 use crate::model::common::Ownership;
@@ -17,7 +18,7 @@ pub struct BoneFile<'data> {
 impl<'data> BoneFile<'data> {
     /// Decodes the document from a bounded byte buffer.
     pub fn read(data: &'data [u8]) -> Result<Self, ReadError> {
-        let mut d = Decoder::new(data, 0, 0);
+        let mut d = Decoder::new(data, 0, ModelFlags::default());
         let version = d.u32()?;
         if version != 1 {
             return Err(ReadError::invalid(0, "unsupported bone-file version"));
@@ -30,11 +31,11 @@ impl<'data> BoneFile<'data> {
         if !bytes.len().is_multiple_of(2) {
             return Err(ReadError::invalid(4, "bone indices length"));
         }
-        let indices = Decoder::new(bytes, 0, 0).array(ArrayRef {
+        let indices = Decoder::new(bytes, 0, ModelFlags::default()).array(ArrayRef {
             count: (bytes.len() / 2) as u32,
             offset: 0,
         })?;
-        let matrices = flat_records(chunks[1].1, 0, 0)?;
+        let matrices = flat_records(chunks[1].1, 0, ModelFlags::default())?;
         if indices.len() != matrices.len() {
             return Err(ReadError::invalid(
                 4,
@@ -55,10 +56,14 @@ impl<'data> BoneFile<'data> {
         if self.indices.len() != self.matrices.len() {
             return Err(WriteError::invalid("bone indices/matrices count mismatch"));
         }
-        let mut e = Encoder::new(0, 0);
+        let mut e = Encoder::new(0, ModelFlags::default());
         e.u32(self.version)?;
         write_chunk(&mut e, *b"BIDA", self.indices.as_bytes())?;
-        write_chunk(&mut e, *b"BOMT", &encode_records(&self.matrices, 0, 0)?)?;
+        write_chunk(
+            &mut e,
+            *b"BOMT",
+            &encode_records(&self.matrices, 0, ModelFlags::default())?,
+        )?;
         Ok(e.finish())
     }
 }

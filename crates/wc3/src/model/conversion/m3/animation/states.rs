@@ -18,7 +18,7 @@ pub(super) fn attach<E: Envelope>(
         .collect::<Result<_, _>>()?;
     let profile = profiles
         .iter_mut()
-        .find(|profile| profile.profile == wr::ProfileId::SC2)
+        .find(|profile| profile.profile == wr::ProfileId::Sc2)
         .ok_or_else(|| Error::new("wem.profile", "missing SC2 profile"))?;
     let mut entries: Vec<_> = raw
         .resolve::<wr::NativeEntry<wr::V2>>(profile.native.entries.cast())?
@@ -81,7 +81,7 @@ pub(super) fn export<E: Envelope>(
         .collect::<Result<_, _>>()?;
     let Some(profile) = profiles
         .iter()
-        .find(|profile| profile.profile == wr::ProfileId::SC2)
+        .find(|profile| profile.profile == wr::ProfileId::Sc2)
     else {
         return Ok(Vec::new());
     };

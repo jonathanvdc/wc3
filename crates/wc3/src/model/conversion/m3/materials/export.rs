@@ -16,18 +16,6 @@ pub(in crate::model::conversion::m3) fn export<E: Envelope>(
     let modes = super::super::animation::modes(model, context)?;
     let mut maps = Vec::new();
     for (index, material) in model.materials.iter().enumerate() {
-        if !matches!(
-            model.profile,
-            wem::records::ProfileId::SC2
-                | wem::records::ProfileId::HEROES
-                | wem::records::ProfileId::GENERIC
-        ) && (material.flags != 0 || material.blend != 0)
-        {
-            context.unsupported(
-                format!("materials[{index}].render_state"),
-                "native blend and flag codes require an explicit M3 material translation",
-            )?;
-        }
         let mut native_body = if let Some(native) = &model.native {
             super::body_with_revision(&native.document, native.model, model.profile, index)?
         } else {
@@ -89,16 +77,20 @@ pub(in crate::model::conversion::m3) fn export<E: Envelope>(
                 let name = append_string(document, &material.name)?;
                 let i = map.material_index as usize;
                 match map.material_type {
-                    2 => families.displacement_materials[i].name = name,
-                    3 => families.composite_materials[i].name = name,
-                    4 => families.terrain_materials[i].name = name,
-                    5 => families.volume_materials[i].name = name,
-                    6 => families.volume_noise_materials[i].name = name,
-                    7 => families.creep_materials[i].name = name,
-                    9 => families.stb_materials[i].name = name,
-                    10 => families.reflection_materials[i].name = name,
-                    11 => families.lens_flare_materials[i].name = name,
-                    12 => families.data_driven_materials[i].material_name = name,
+                    nr::MaterialKind::Displacement => {
+                        families.displacement_materials[i].name = name
+                    }
+                    nr::MaterialKind::Composite => families.composite_materials[i].name = name,
+                    nr::MaterialKind::Terrain => families.terrain_materials[i].name = name,
+                    nr::MaterialKind::Volume => families.volume_materials[i].name = name,
+                    nr::MaterialKind::VolumeNoise => families.volume_noise_materials[i].name = name,
+                    nr::MaterialKind::Creep => families.creep_materials[i].name = name,
+                    nr::MaterialKind::SplatTerrainBake => families.stb_materials[i].name = name,
+                    nr::MaterialKind::Reflection => families.reflection_materials[i].name = name,
+                    nr::MaterialKind::LensFlare => families.lens_flare_materials[i].name = name,
+                    nr::MaterialKind::DataDriven => {
+                        families.data_driven_materials[i].material_name = name
+                    }
                     _ => unreachable!(),
                 }
                 maps.push(map);
@@ -107,8 +99,13 @@ pub(in crate::model::conversion::m3) fn export<E: Envelope>(
             None => nr::StandardMaterial::<nr::V20>::default(),
         };
         m.name = append_string(document, &material.name)?;
-        m.flags = material.flags;
-        m.blend_mode = material.blend;
+        super::render_state::apply(
+            &mut m,
+            material.blend,
+            material.flags,
+            context,
+            &format!("materials[{index}]"),
+        )?;
         if let Some(texture) = material.texture {
             let texture = model.textures.get(texture as usize).ok_or_else(|| {
                 Error::new(format!("materials[{index}].texture"), "missing texture")
@@ -147,7 +144,7 @@ pub(in crate::model::conversion::m3) fn export<E: Envelope>(
         let material_index = families.standard.len() as u32;
         families.standard.push(m);
         maps.push(nr::MaterialMap {
-            material_type: 1,
+            material_type: nr::MaterialKind::Standard,
             material_index,
         });
     }

@@ -2,12 +2,14 @@
 use super::*;
 use crate::model::conversion::animation::crop;
 
-pub(in super::super) fn interpolation(value: u16) -> Result<sm::Interpolation, Error> {
+pub(in super::super) fn interpolation(
+    value: NativeInterpolation,
+) -> Result<sm::Interpolation, Error> {
     match value {
-        0 => Ok(sm::Interpolation::Step),
-        1 => Ok(sm::Interpolation::Linear),
-        2 => Ok(sm::Interpolation::Bezier),
-        3 => Ok(sm::Interpolation::Hermite),
+        NativeInterpolation::Step => Ok(sm::Interpolation::Step),
+        NativeInterpolation::Linear => Ok(sm::Interpolation::Linear),
+        NativeInterpolation::Bezier => Ok(sm::Interpolation::Bezier),
+        NativeInterpolation::Hermite => Ok(sm::Interpolation::Hermite),
         _ => Err(Error::new(
             "m2.track.interpolation",
             "unknown interpolation code",
@@ -15,12 +17,12 @@ pub(in super::super) fn interpolation(value: u16) -> Result<sm::Interpolation, E
     }
 }
 
-pub(in super::super) fn interpolation_code(value: sm::Interpolation) -> u16 {
+pub(in super::super) fn interpolation_code(value: sm::Interpolation) -> NativeInterpolation {
     match value {
-        sm::Interpolation::Step => 0,
-        sm::Interpolation::Linear => 1,
-        sm::Interpolation::Bezier => 2,
-        sm::Interpolation::Hermite => 3,
+        sm::Interpolation::Step => NativeInterpolation::Step,
+        sm::Interpolation::Linear => NativeInterpolation::Linear,
+        sm::Interpolation::Bezier => NativeInterpolation::Bezier,
+        sm::Interpolation::Hermite => NativeInterpolation::Hermite,
     }
 }
 
@@ -299,7 +301,7 @@ pub(in super::super) fn ensure_constant<V: ModelLayout, T: Value>(
             globals.push(1000);
             globals.len() - 1
         });
-    track.base.interpolation = 0;
+    track.base.interpolation = NativeInterpolation::Step;
     track.base.global_sequence = index as u16;
     track.base.timeline = TimelineFactory::build(vec![vec![0]], true);
     track.values = ValuesFactory::build(vec![vec![value]], Vec::new(), false);

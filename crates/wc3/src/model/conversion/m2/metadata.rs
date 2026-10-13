@@ -42,7 +42,7 @@ pub(super) fn put<T: wem::Record + wem::Write>(
         return Ok(wem::Ref::default());
     }
     let id = doc.append(values)?;
-    Ok(wem::Ref::new(values.len() as u32, id.index(), 0))
+    Ok(wem::Ref::from_section(values.len() as u32, id.index()))
 }
 
 pub(super) fn bag(
@@ -182,7 +182,7 @@ pub(super) fn profile_metadata(model: &sm::Model<'_>) -> Result<BTreeMap<String,
         .iter()
     {
         let profile = profile?;
-        if profile.profile == wr::ProfileId::WOW {
+        if profile.profile == wr::ProfileId::Wow {
             return metadata(raw, &profile.native);
         }
     }
@@ -220,7 +220,7 @@ where
             &mut raw,
             &[
                 ("m2.bone.key", i64::from(bone.key_bone_id)),
-                ("m2.bone.flags", i64::from(bone.flags)),
+                ("m2.bone.flags", i64::from(bone.flags.bits())),
                 ("m2.bone.mesh", i64::from(bone.submesh_id)),
                 ("m2.bone.name_crc", i64::from(bone.name_crc.get())),
             ],
@@ -235,7 +235,7 @@ where
     profile.native = bag(
         &mut raw,
         &[
-            ("m2.flags", i64::from(source.model.core().flags)),
+            ("m2.flags", i64::from(source.model.core().flags.bits())),
             ("m2.colors.count", source.model.core().colors.len() as i64),
             (
                 "m2.flipbooks.count",
@@ -370,11 +370,12 @@ pub(super) fn restore_native_metadata<V: ModelLayout>(
         .iter()
     {
         let profile = profile?;
-        if profile.profile != wr::ProfileId::WOW {
+        if profile.profile != wr::ProfileId::Wow {
             continue;
         }
         let data = metadata(raw, &profile.native)?;
-        core.flags = data.get("m2.flags").copied().unwrap_or(0) as u32;
+        core.flags =
+            ModelFlags::from_bits_retain(data.get("m2.flags").copied().unwrap_or(0) as u32);
         core.sequence_lookup =
             index_words(metadata_text(raw, &profile.native, "m2.sequence_lookup")?)?;
         core.key_bone_lookup =
@@ -451,6 +452,7 @@ where
     for (clip, sequence) in clips.iter_mut().zip(sequences) {
         let blend = sequence.blend_time.parts();
         let extra = [
+            ("m2.sequence.flags", i64::from(sequence.flags.bits())),
             ("m2.variation", i64::from(sequence.variation_index)),
             ("m2.move_speed", i64::from(sequence.move_speed.to_bits())),
             ("m2.frequency", i64::from(sequence.frequency)),

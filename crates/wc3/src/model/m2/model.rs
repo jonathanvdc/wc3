@@ -3,8 +3,8 @@ use super::codec::{ArrayRef, Decoder, Encoder, Value};
 use super::companions::SkinProfile;
 use super::records::{ArrayVisitor, Validate, VisitArrays};
 use super::records::{
-    Attachment, Bone, ColorAnimation, Event, Extent, Light, Material, Sequence, Texture,
-    TextureTransform, TextureWeight, Vertex,
+    Attachment, Bone, ColorAnimation, Event, Extent, Light, Material, ModelFlags, Sequence,
+    Texture, TextureTransform, TextureWeight, Vertex,
 };
 use super::records::{Camera, ParticleEmitter, RibbonEmitter};
 use super::{ModelLayout, Read, ReadError, RecordLayout, Write, WriteError};
@@ -44,7 +44,7 @@ pub struct Core<'data, V: ModelLayout> {
     /// Model name bytes, including any encoded terminator.
     pub name: ZeroVec<'data, u8>,
     /// Global flags, including unknown bits.
-    pub flags: u32,
+    pub flags: ModelFlags,
     /// Classic header tail present only in versions 256 and 257.
     pub classic_header_tail: V::ClassicTail<'data>,
     /// Global animation loop durations in milliseconds.
@@ -134,7 +134,8 @@ impl<'data, V: ModelLayout> Core<'data, V> {
     /// Decodes a core address space, including its MD20 magic and version.
     pub fn decode(data: &'data [u8], origin: usize) -> Result<Self, ReadError> {
         let expected_version = V::VERSION;
-        let mut input = Decoder::new(data, expected_version, 0).with_origin(origin);
+        let mut input =
+            Decoder::new(data, expected_version, ModelFlags::default()).with_origin(origin);
         if input.bytes(4)? != b"MD20" {
             return Err(ReadError::invalid(origin, "MD20 magic"));
         }
@@ -144,7 +145,7 @@ impl<'data, V: ModelLayout> Core<'data, V> {
         }
         let name = input.descriptor()?;
         let flags = input.u32()?;
-        input.flags = flags;
+        input.flags = ModelFlags::from_bits_retain(flags);
         let global_sequences = input.descriptor()?;
         let sequences = input.descriptor()?;
         let sequence_lookup = input.descriptor()?;
@@ -184,11 +185,11 @@ impl<'data, V: ModelLayout> Core<'data, V> {
         let sequences: Vec<Sequence<V>> = input.records(sequences)?;
         input.external_sequences = sequences
             .iter()
-            .map(|sequence| sequence.flags & 0x130 == 0)
+            .map(|sequence| sequence.flags.external_animation())
             .collect();
         Ok(Self {
             name: input.array(name)?,
-            flags,
+            flags: ModelFlags::from_bits_retain(flags),
             classic_header_tail,
             classic_lookup,
             global_sequences: input.array(global_sequences)?,
@@ -268,7 +269,7 @@ impl<'data, V: ModelLayout> Core<'data, V> {
             }};
         }
         array!(&self.name);
-        output.u32(self.flags)?;
+        output.u32(self.flags.bits())?;
         array!(&self.global_sequences);
         records!(&self.sequences);
         array!(&self.sequence_lookup);
@@ -318,7 +319,7 @@ pub trait HeaderField<'data>:
     /// Writes native header metadata and relocates understood contents.
     fn write_header(&self, output: &mut Encoder) -> Result<(), WriteError>;
     /// Number of inline header bytes enabled by these flags.
-    fn header_size(&self, _flags: u32) -> usize {
+    fn header_size(&self, _flags: ModelFlags) -> usize {
         0
     }
     /// Original address space needed by opaque descriptors.
@@ -479,7 +480,7 @@ impl<'data> VisitArrays<'data> for FlaggedCombiner<'data> {
 impl<'data> HeaderField<'data> for FlaggedCombiner<'data> {
     fn read_header(input: &mut Decoder<'data>) -> Result<Self, ReadError> {
         Ok(Self {
-            values: if input.flags & 8 != 0 {
+            values: if input.flags.texture_combiners() {
                 ZeroVec::read_header(input)?
             } else {
                 ZeroVec::new()
@@ -487,7 +488,7 @@ impl<'data> HeaderField<'data> for FlaggedCombiner<'data> {
         })
     }
     fn write_header(&self, output: &mut Encoder) -> Result<(), WriteError> {
-        if output.flags & 8 != 0 {
+        if output.flags.texture_combiners() {
             self.values.write_header(output)
         } else if self.values.is_empty() {
             Ok(())
@@ -495,8 +496,8 @@ impl<'data> HeaderField<'data> for FlaggedCombiner<'data> {
             Err(WriteError::invalid("texture combiner flag"))
         }
     }
-    fn header_size(&self, flags: u32) -> usize {
-        if flags & 8 != 0 {
+    fn header_size(&self, flags: ModelFlags) -> usize {
+        if flags.texture_combiners() {
             8
         } else {
             0

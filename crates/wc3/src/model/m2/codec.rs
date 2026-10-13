@@ -1,4 +1,5 @@
 //! Checked offset-based record decoding and relocating encoding.
+use super::records::ModelFlags;
 use super::{Read, ReadError, RecordLayout, Write, WriteError};
 use crate::model::common::binary::read_bytes;
 use crate::model::common::Ownership;
@@ -43,7 +44,9 @@ impl<'data, T: Value> Array<'data, T> {
     ) -> Result<ZeroVec<'view, T>, ReadError> {
         match self {
             Self::Inline(values) => Ok(values.as_slice().as_zerovec()),
-            Self::External(reference) => Decoder::new(stream, 0, 0).array(*reference),
+            Self::External(reference) => {
+                Decoder::new(stream, 0, ModelFlags::default()).array(*reference)
+            }
         }
     }
 }
@@ -57,7 +60,7 @@ pub struct Decoder<'data> {
     /// Numeric core layout version.
     pub version: u32,
     /// Core model flags selecting conditional layouts.
-    pub flags: u32,
+    pub flags: ModelFlags,
     /// Whether each sequence stores its track leaves externally.
     pub external_sequences: Arc<[bool]>,
     /// Preserve ordinary leaf descriptors when their sequence storage context is unavailable.
@@ -65,7 +68,7 @@ pub struct Decoder<'data> {
 }
 impl<'data> Decoder<'data> {
     /// Creates an address space whose offsets are relative to its first byte.
-    pub fn new(data: &'data [u8], version: u32, flags: u32) -> Self {
+    pub fn new(data: &'data [u8], version: u32, flags: ModelFlags) -> Self {
         Self {
             data,
             position: 0,
@@ -170,7 +173,7 @@ impl<'data> Decoder<'data> {
         if reference.count == 0 {
             return Ok(Vec::new());
         }
-        let width = T::size(self.version, self.flags);
+        let width = T::size(self.version, self.flags.bits());
         if width == 0 {
             return Err(self.error("zero-width record"));
         }
@@ -201,11 +204,11 @@ pub struct Encoder {
     /// Numeric core layout version.
     pub version: u32,
     /// Core flags selecting conditional record layouts.
-    pub flags: u32,
+    pub flags: ModelFlags,
 }
 impl Encoder {
     /// Starts a fresh address space.
-    pub fn new(version: u32, flags: u32) -> Self {
+    pub fn new(version: u32, flags: ModelFlags) -> Self {
         Self {
             data: Vec::new(),
             position: 0,
@@ -214,7 +217,7 @@ impl Encoder {
         }
     }
     /// Seeds an address space whose opaque offsets must remain stable.
-    pub fn from_bytes(version: u32, flags: u32, data: Vec<u8>) -> Result<Self, WriteError> {
+    pub fn from_bytes(version: u32, flags: ModelFlags, data: Vec<u8>) -> Result<Self, WriteError> {
         if data.len() > u32::MAX as usize {
             return Err(WriteError::invalid("32-bit address space"));
         }
@@ -371,7 +374,7 @@ impl Encoder {
         if records.is_empty() {
             return Ok(ArrayRef::default());
         }
-        let width = T::size(self.version, self.flags);
+        let width = T::size(self.version, self.flags.bits());
         if width == 0 {
             return Err(WriteError::invalid("zero-width record"));
         }
@@ -438,7 +441,7 @@ impl<'data, T: Read<'data>, const N: usize> Read<'data> for [T; N] {
 }
 impl<T: Write + RecordLayout, const N: usize> Write for [T; N] {
     fn write(&self, output: &mut Encoder) -> Result<(), WriteError> {
-        output.reserve_metadata(Self::size(output.version, output.flags))?;
+        output.reserve_metadata(Self::size(output.version, output.flags.bits()))?;
         for value in self {
             value.write(output)?;
         }

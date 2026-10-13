@@ -15,23 +15,23 @@ impl Geometry {
         doc: &wem::RawDocument<'_>,
     ) -> Result<(), Error> {
         let (kind, index) = match shape.kind {
-            wr::PhysicsShapeKind::BOX => {
+            wr::PhysicsShapeKind::Box => {
                 let index = self.boxes.len();
                 self.boxes.push(native::companions::PhysicsBox {
                     frame: native_frame(shape.transform),
                     half_extents: shape.half_extents,
                 });
-                (0, index)
+                (PhysicsShapeKind::Box, index)
             }
-            wr::PhysicsShapeKind::SPHERE => {
+            wr::PhysicsShapeKind::Sphere => {
                 let index = self.spheres.len();
                 self.spheres.push(native::companions::PhysicsSphere {
                     position: shape.transform[3][..3].try_into().unwrap(),
                     radius: shape.radius,
                 });
-                (2, index)
+                (PhysicsShapeKind::Sphere, index)
             }
-            wr::PhysicsShapeKind::CAPSULE => {
+            wr::PhysicsShapeKind::Capsule => {
                 let index = self.capsules.len();
                 let points = doc.resolve::<wr::Vector3>(shape.points.cast())?;
                 let (a, b) = if points.len() == 2 {
@@ -49,9 +49,9 @@ impl Geometry {
                     position2: b,
                     radius: shape.radius,
                 });
-                (1, index)
+                (PhysicsShapeKind::Capsule, index)
             }
-            wr::PhysicsShapeKind::CONVEX_HULL => {
+            wr::PhysicsShapeKind::ConvexHull => {
                 let index = self.polytopes.len();
                 let points = doc
                     .resolve::<wr::Vector3>(shape.points.cast())?
@@ -67,7 +67,7 @@ impl Geometry {
                     })
                     .collect::<Result<Vec<_>, Error>>()?;
                 self.polytopes.push(hull(points)?);
-                (3, index)
+                (PhysicsShapeKind::ConvexHull, index)
             }
             _ => {
                 return Err(Error::new(
@@ -82,7 +82,7 @@ impl Geometry {
             shape: native::companions::PhysicsShape {
                 shape_type: kind,
                 shape_index,
-                game_flags: shape.game_flags,
+                game_flags: PhysicsGameFlags::from_bits_retain(shape.game_flags.bits()),
                 friction: shape.material.friction,
                 restitution: shape.material.restitution,
                 density: shape.material.density,

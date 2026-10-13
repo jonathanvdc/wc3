@@ -38,8 +38,8 @@ fn independent_v3_header_and_unaligned_document_root_are_readable() {
     let bytes = fixture();
     let document = Document::<V3>::read(&bytes).unwrap();
     let root = document.root::<DocumentRecord<V1>>().unwrap();
-    assert_eq!(root.default_profile.0, 0);
-    assert_eq!(root.space.0, 0);
+    assert_eq!(root.default_profile.raw(), 0);
+    assert_eq!(root.space.raw(), 0);
     assert_eq!(root.unit_scale, 1.0);
     assert_eq!(root.bounds.minimum, [0.0; 3]);
     assert_eq!(root.models.entries, 0);
@@ -237,7 +237,7 @@ fn unknown_global_generation_remains_opaque_and_preserves_native_bytes() {
     let mut raw = RawDocument::read(&bytes).unwrap();
     assert_eq!(raw.write().unwrap(), bytes);
     assert!(Document::<V3>::read(&bytes).is_err());
-    raw.set_profile_mask(0x80000000);
+    raw.set_profile_mask(0x80000000u32.into());
     let output = raw.write().unwrap();
     word(&mut bytes, 28, 0x80000000);
     assert_eq!(output, bytes);
@@ -322,7 +322,7 @@ fn unknown_variant_preserves_the_bounded_section_without_guessing_its_inline_wid
     let section = raw.section(raw.section_id(2).unwrap()).unwrap();
     assert_eq!(section.bytes(), &bytes[144..224]);
     assert_eq!(raw.write().unwrap(), bytes);
-    raw.set_profile_mask(0);
+    raw.set_profile_mask(0u32.into());
     let mut expected = bytes.clone();
     word(&mut expected, 28, 0);
     assert_eq!(raw.write().unwrap(), expected);
@@ -424,7 +424,7 @@ fn material_profile_sets_must_use_a_declared_profile() {
     let document = Document::<V3>::new().unwrap();
     let mut raw = document.into_raw();
     raw.append(&[ProfileMaterialSet {
-        profile: ProfileId::WC3_CLASSIC,
+        profile: ProfileId::Wc3Classic,
         ..Default::default()
     }])
     .unwrap();
@@ -438,12 +438,12 @@ fn explicitly_declared_unknown_profiles_remain_valid_open_codes() {
     let document = Document::<V3>::new().unwrap();
     let root_id = document.root_id();
     let mut root = document.root::<DocumentRecord<V1>>().unwrap();
-    root.profiles = InlineList(vec![ProfileId(999)]);
-    root.default_profile = ProfileId(999);
+    root.profiles = InlineList(vec![ProfileId::from_raw(999)]);
+    root.default_profile = ProfileId::from_raw(999);
     let mut raw = document.into_raw();
     raw.replace(root_id, &[root]).unwrap();
     raw.append(&[ProfileMaterialSet {
-        profile: ProfileId(999),
+        profile: ProfileId::from_raw(999),
         ..Default::default()
     }])
     .unwrap();

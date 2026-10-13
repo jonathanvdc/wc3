@@ -29,7 +29,7 @@ where
         reflection_map: get_layer(source, doc, r.reflection_map)?,
         displacement_map: get_layer(source, doc, r.displacement_map)?,
         blur_map: get_layer(source, doc, r.blur_map.value())?,
-        flags: wr::M3ReflectionMaterialFlag(r.flags),
+        flags: wr::M3ReflectionMaterialFlag((r.flags).bits()),
         unknown2: r.unknown2.value(),
     })
 }
@@ -76,7 +76,7 @@ pub(in crate::model::conversion::m3) fn export_reflectionmaterial<E: Envelope>(
         reflection_map: native_layer_ref(r.reflection_map, source, doc)?,
         displacement_map: native_layer_ref(r.displacement_map, source, doc)?,
         blur_map: native_layer_ref(r.blur_map, source, doc)?,
-        flags: r.flags.0,
+        flags: nr::ReflectionFlags(r.flags.bits()),
         unknown2: r.unknown2,
     })
 }

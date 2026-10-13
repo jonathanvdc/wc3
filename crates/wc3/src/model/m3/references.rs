@@ -1,6 +1,7 @@
 //! Typed section links independent of section revisions and physical offsets.
 use super::codec::{Decoder, Encoder, Read, RecordLayout, Validate, Write};
 use super::dialect::Envelope;
+use super::records::ReferenceFlags;
 use super::{ReadError, WriteError};
 use crate::model::common::Ownership;
 use std::fmt::{self, Debug};
@@ -34,7 +35,7 @@ pub struct RawReference {
     /// Stable section ID, initially equal to the source index-table position.
     pub index: u32,
     /// Native MD34 reference flags; absent and zero in MD33.
-    pub flags: u32,
+    pub flags: ReferenceFlags,
     /// Expected section family when known from the record schema.
     pub target: Option<[u8; 4]>,
 }
@@ -62,7 +63,7 @@ pub struct Ref<T: Target = Any> {
     /// Stable section ID; section movement does not change this identity.
     pub index: u32,
     /// Native MD34 reference flag word.
-    pub flags: u32,
+    pub flags: ReferenceFlags,
     target: PhantomData<T>,
 }
 impl<T: Target> Clone for Ref<T> {
@@ -73,7 +74,7 @@ impl<T: Target> Clone for Ref<T> {
 impl<T: Target> Copy for Ref<T> {}
 impl<T: Target> Default for Ref<T> {
     fn default() -> Self {
-        Self::new(0, 0, 0)
+        Self::new(0, 0, ReferenceFlags(0))
     }
 }
 impl<T: Target> Debug for Ref<T> {
@@ -95,10 +96,10 @@ impl<T: Target> Eq for Ref<T> {}
 impl<T: Target> Ref<T> {
     /// Creates a reference with no flag bits set.
     pub const fn from_section(entries: u32, index: u32) -> Self {
-        Self::new(entries, index, 0)
+        Self::new(entries, index, ReferenceFlags(0))
     }
     /// Creates a reference retaining its native count, index, and flag words.
-    pub const fn new(entries: u32, index: u32, flags: u32) -> Self {
+    pub const fn new(entries: u32, index: u32, flags: ReferenceFlags) -> Self {
         Self {
             entries,
             index,
@@ -107,7 +108,7 @@ impl<T: Target> Ref<T> {
         }
     }
     /// Creates a reference retaining an explicit flag word.
-    pub const fn with_flags(entries: u32, index: u32, flags: u32) -> Self {
+    pub const fn with_flags(entries: u32, index: u32, flags: ReferenceFlags) -> Self {
         Self {
             entries,
             index,
@@ -138,16 +139,16 @@ impl<'data, T: Target, E: Envelope> Read<'data, E> for Ref<T> {
         let entries = u32::read(input)?;
         let index = u32::read(input)?;
         let flags = if E::REFERENCE_SIZE == 12 {
-            u32::read(input)?
+            ReferenceFlags::read(input)?
         } else {
-            0
+            ReferenceFlags(0)
         };
         Ok(Self::with_flags(entries, index, flags))
     }
 }
 impl<T: Target, E: Envelope> Write<E> for Ref<T> {
     fn write(&self, output: &mut Encoder<E>) -> Result<(), WriteError> {
-        if E::REFERENCE_SIZE == 8 && self.flags != 0 {
+        if E::REFERENCE_SIZE == 8 && self.flags.bits() != 0 {
             return Err(WriteError::invalid("MD33 reference flags"));
         }
         self.entries.write(output)?;

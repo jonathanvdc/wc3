@@ -139,7 +139,7 @@ pub struct MeshSection {
     /// Document material-slot index; `0xffffffff` means no material has been assigned.
     pub material_slot: u32,
     /// Bitmask selecting the native profiles in which the section participates.
-    pub profiles: u32,
+    pub profiles: ProfileMask,
     /// Optional document node index binding every section vertex at full weight.
     pub rigid_node: InlineOption<u32>,
     /// Native selection-group identity retained for profile-specific output.

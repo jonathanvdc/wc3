@@ -26,7 +26,7 @@ where
             particle: None,
             texts: Vec::new(),
             index: node,
-            kind: wr::NodeKind::EVENT,
+            kind: wr::NodeKind::Event,
             payload: wr::NodePayload::Event(Box::new(wr::EventPayload {
                 id: event.data,
                 ..Default::default()

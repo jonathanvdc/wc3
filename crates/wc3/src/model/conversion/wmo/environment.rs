@@ -45,7 +45,7 @@ pub(super) fn import<D: Dialect>(
             }
             RootChunk::Doodads(rows) => {
                 for doodad in collect(rows, "doodads")? {
-                    let identity = doodad.name_and_flags & 0xffffff;
+                    let identity = doodad.name_index();
                     let name = if let Some(names) = doodad_names {
                         text(names, identity, "doodad.name")?
                     } else {
@@ -126,14 +126,14 @@ pub(super) fn decorate<D: Dialect>(
     for (index, (node, source)) in rows.iter_mut().zip(nodes).enumerate() {
         match source {
             NodeSource::Light(light) => {
-                node.kind = wr::NodeKind::LIGHT;
+                node.kind = wr::NodeKind::Light;
                 node.payload = wr::NodePayload::Light(Box::new(wr::LightPayload::<wr::V19> {
-                    kind: wr::LightKind(match light.kind {
-                        0 => 0,
-                        1 => 2,
-                        2 => 1,
-                        3 => 3,
-                        value => value,
+                    kind: wr::LightKind::from_raw(match light.kind {
+                        nr::LightKind::Omni => 0,
+                        nr::LightKind::Spot => 2,
+                        nr::LightKind::Directional => 1,
+                        nr::LightKind::Ambient => 3,
+                        nr::LightKind::Unknown(value) => value,
                     }),
                     color: [light.color[2], light.color[1], light.color[0]]
                         .map(|v| f32::from(v) / 255.),
@@ -147,7 +147,7 @@ pub(super) fn decorate<D: Dialect>(
                     &[
                         (
                             "wmo.light.kind".into(),
-                            i64::from(light.kind),
+                            i64::from(light.kind.raw()),
                             String::new(),
                         ),
                         (
@@ -169,7 +169,7 @@ pub(super) fn decorate<D: Dialect>(
                 )?;
             }
             NodeSource::Doodad(doodad) => {
-                let identity = doodad.name_and_flags & 0xffffff;
+                let identity = doodad.name_index();
                 let asset = if let Some(names) = doodad_names {
                     wr::AssetKey {
                         group: 0,
@@ -185,7 +185,7 @@ pub(super) fn decorate<D: Dialect>(
                         path: Ref::default(),
                     }
                 };
-                node.kind = wr::NodeKind::ATTACHMENT;
+                node.kind = wr::NodeKind::Attachment;
                 node.payload = wr::NodePayload::Attachment(Box::new(wr::AttachmentPayload {
                     asset,
                     model: u32::MAX,
@@ -195,7 +195,7 @@ pub(super) fn decorate<D: Dialect>(
                     &[
                         (
                             "wmo.doodad.flags".into(),
-                            i64::from(doodad.name_and_flags >> 24),
+                            i64::from(doodad.flags()),
                             String::new(),
                         ),
                         (
@@ -208,9 +208,9 @@ pub(super) fn decorate<D: Dialect>(
                 )?;
             }
             NodeSource::Point { group, light } => {
-                node.kind = wr::NodeKind::LIGHT;
+                node.kind = wr::NodeKind::Light;
                 node.payload = wr::NodePayload::Light(Box::new(wr::LightPayload::<wr::V19> {
-                    kind: wr::LightKind::OMNI,
+                    kind: wr::LightKind::Omni,
                     color: [
                         light.color_bgra[2],
                         light.color_bgra[1],
@@ -351,12 +351,12 @@ pub(super) fn export(
                             })?,
                         });
                 } else {
-                    let kind = match data.kind.0 {
-                        0 => 0,
-                        1 => 2,
-                        2 => 1,
-                        3 => 3,
-                        value => value,
+                    let kind = match data.kind {
+                        wr::LightKind::Omni => nr::LightKind::Omni,
+                        wr::LightKind::Directional => nr::LightKind::Directional,
+                        wr::LightKind::Spot => nr::LightKind::Spot,
+                        wr::LightKind::Ambient => nr::LightKind::Ambient,
+                        value => nr::LightKind::from_raw(value.raw()),
                     };
                     output.lights.push(nr::Light {
                         kind,
@@ -433,7 +433,7 @@ pub(super) fn export(
                     return Err(Error::new(&path, "doodad flags exceed one byte"));
                 }
                 output.doodads.push(nr::DoodadDef {
-                    name_and_flags: identity | (flags << 24),
+                    name_and_flags: nr::DoodadReference(identity | (flags << 24)),
                     position: node.local.translation,
                     rotation: node.local.rotation,
                     scale: node.local.scale[0],

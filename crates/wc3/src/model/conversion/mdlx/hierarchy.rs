@@ -112,21 +112,27 @@ pub(super) fn native_ids(
     }
     Ok(output)
 }
-pub(super) fn common_flags(flags: u32) -> u32 {
-    ((flags & 0x7f) << 1)
-        | if flags & (1 << 19) != 0 {
-            wr::NodeFlags::MODEL_SPACE.0
-        } else {
-            0
-        }
+pub(super) fn common_flags(flags: native::scene::NodeFlags) -> wr::NodeFlags {
+    let mut out = wr::NodeFlags::default();
+    out.set_dont_inherit_translation(flags.dont_inherit_translation());
+    out.set_dont_inherit_rotation(flags.dont_inherit_rotation());
+    out.set_dont_inherit_scale(flags.dont_inherit_scaling());
+    out.set_billboarded(flags.billboarded());
+    out.set_billboard_lock_x(flags.billboard_lock_x());
+    out.set_billboard_lock_y(flags.billboard_lock_y());
+    out.set_billboard_lock_z(flags.billboard_lock_z());
+    out.set_model_space(flags.model_space());
+    out
 }
-pub(super) fn native_flags(flags: u32, original: u32) -> u32 {
-    let mask = 0x7f | (1 << 19);
-    (original & !mask)
-        | ((flags >> 1) & 0x7f)
-        | if flags & wr::NodeFlags::MODEL_SPACE.0 != 0 {
-            1 << 19
-        } else {
-            0
-        }
+pub(super) fn native_flags(flags: wr::NodeFlags, original: u32) -> native::scene::NodeFlags {
+    let mut out = native::scene::NodeFlags(original);
+    out.set_dont_inherit_translation(flags.dont_inherit_translation());
+    out.set_dont_inherit_rotation(flags.dont_inherit_rotation());
+    out.set_dont_inherit_scaling(flags.dont_inherit_scale());
+    out.set_billboarded(flags.billboarded());
+    out.set_billboard_lock_x(flags.billboard_lock_x());
+    out.set_billboard_lock_y(flags.billboard_lock_y());
+    out.set_billboard_lock_z(flags.billboard_lock_z());
+    out.set_model_space(flags.model_space());
+    out
 }

@@ -24,8 +24,8 @@ fn derives_select_native_reference_widths() {
     let mut input = Decoder::<Md33>::new(&wire);
     let record: Record = input.read().unwrap();
     assert_eq!(record.value, 7);
-    assert_eq!(record.links[0], Ref::new(2, 3, 0));
-    assert_eq!(record.links[1], Ref::new(0, 99, 0));
+    assert_eq!(record.links[0], Ref::from_section(2, 3));
+    assert_eq!(record.links[1], Ref::from_section(0, 99));
     let mut output = Encoder::<Md33>::new();
     output.write(&record).unwrap();
     assert_eq!(output.finish(), wire);
@@ -37,7 +37,9 @@ fn derives_select_native_reference_widths() {
 #[test]
 fn md33_rejects_flags_and_truncation_reports_origin() {
     let mut output = Encoder::<Md33>::new();
-    assert!(output.write(&Ref::<m3::Any>::new(1, 0, 4)).is_err());
+    assert!(output
+        .write(&Ref::<m3::Any>::new(1, 0, m3::records::ReferenceFlags(4)))
+        .is_err());
     let mut input = Decoder::<Md34>::new(&[0; 11]).with_origin(100);
     let error = input.read::<Ref>().unwrap_err();
     assert_eq!(error.offset, 108);
@@ -68,7 +70,10 @@ fn derive_visits_every_reference_in_native_order() {
     }
     let record = Record {
         value: 9,
-        links: [Ref::new(1, 2, 0), Ref::new(0, 3, 4)],
+        links: [
+            Ref::from_section(1, 2),
+            Ref::new(0, 3, m3::records::ReferenceFlags(4)),
+        ],
     };
     let mut visitor = Visitor(Vec::new());
     record.visit_references(&mut visitor).unwrap();

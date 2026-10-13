@@ -1,4 +1,5 @@
 //! Attachments, event markers, and lights.
+use super::LightKind;
 use super::{Track, TrackBase};
 use crate::model::{common::Ownership, m2};
 use m2::ModelLayout;
@@ -68,7 +69,7 @@ pub struct Event<'data, V: ModelLayout> {
 )]
 pub struct Light<'data, V: ModelLayout> {
     /// Light type: zero is directional and one is a point light.
-    pub kind: u16,
+    pub kind: LightKind,
     /// Anchor bone index, or `-1` for a light without a bone attachment.
     pub bone_id: i16,
     /// Light position transformed by its anchor bone, or model coordinates when unattached.

@@ -10,6 +10,16 @@ impl<T: Default> Slot<T> for () {
 }
 macro_rules! slot {($($t:ty),*)=>{$(impl Slot<$t> for $t{fn value(&self)->Self{*self}})*};}
 slot!(f32, u32, [f32; 2], [f32; 3]);
+macro_rules! wire_slot {
+    ($wire:ty, $method:ident, $($ty:ty),*) => {$(
+        impl Slot<$wire> for $ty { fn value(&self) -> $wire { self.$method() } }
+    )*};
+}
+wire_slot!(u32, raw, nr::Smoothing, nr::Variation, nr::ForceKind);
+wire_slot!(u16, raw, nr::LightKind);
+wire_slot!(u32, bits, nr::RegionFlags);
+wire_slot!(u16, bits, nr::BatchFlags);
+
 impl<T: native::Target> Slot<native::Ref<T>> for native::Ref<T> {
     fn value(&self) -> Self {
         *self
@@ -23,8 +33,8 @@ impl<T: Clone> Slot<nr::AnimationValue<T>> for nr::AnimationValue<T> {
 
 pub(in crate::model::conversion::m3) fn anim<T>(r: nr::AnimationValue<T>) -> wr::M3AnimRef<T> {
     wr::M3AnimRef {
-        interp_type: r.interpolation,
-        flags: r.flags,
+        interp_type: wr::NativeInterpolation16::from_raw((r.interpolation).raw()),
+        flags: wr::M3AnimationFlags((r.flags).bits()),
         anim_id: r.animation_id,
         init_value: r.initial_value,
         null_value: r.null_value,
@@ -42,8 +52,8 @@ pub(in crate::model::conversion::m3) fn color(
         a: r[3],
     };
     wr::M3AnimRef {
-        interp_type: r.interpolation,
-        flags: r.flags,
+        interp_type: wr::NativeInterpolation16::from_raw((r.interpolation).raw()),
+        flags: wr::M3AnimationFlags((r.flags).bits()),
         anim_id: r.animation_id,
         init_value: c(r.initial_value),
         null_value: c(r.null_value),
@@ -80,8 +90,8 @@ pub(in crate::model::conversion::m3) fn native_anim<T>(
     r: wr::M3AnimRef<T>,
 ) -> nr::AnimationValue<T> {
     nr::AnimationValue {
-        interpolation: r.interp_type,
-        flags: r.flags,
+        interpolation: nr::Interpolation::from_raw((r.interp_type).raw()),
+        flags: nr::AnimationFlags((r.flags).bits()),
         animation_id: r.anim_id,
         initial_value: r.init_value,
         null_value: r.null_value,
@@ -94,8 +104,8 @@ pub(in crate::model::conversion::m3) fn native_color(
 ) -> nr::AnimationValue<[u8; 4]> {
     let c = |r: wr::M3ColorBGRA| [r.b, r.g, r.r, r.a];
     nr::AnimationValue {
-        interpolation: r.interp_type,
-        flags: r.flags,
+        interpolation: nr::Interpolation::from_raw((r.interp_type).raw()),
+        flags: nr::AnimationFlags((r.flags).bits()),
         animation_id: r.anim_id,
         initial_value: c(r.init_value),
         null_value: c(r.null_value),

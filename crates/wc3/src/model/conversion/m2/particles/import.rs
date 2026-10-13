@@ -16,10 +16,10 @@ where
     let (blend, kind, color) = value.kind.parts();
     let [base, base_variation, spin, spin_variation] = value.spin.parts();
     let [texture2_scale, texture3_scale] = value.texture_scale.scales();
-    let multi = value.flags & 0x10000000 != 0;
+    let multi = value.flags.multi_texture();
     let mut payload = wr::M2ParticleEmitterPayload {
         particle_id: value.id as i32,
-        flags: value.flags,
+        flags: wr::M2ParticleFlags::from_bits_retain(value.flags.bits()),
         texture: if multi {
             u32::from(value.texture_id & 31)
         } else {
@@ -35,8 +35,8 @@ where
         } else {
             u32::MAX
         },
-        blend,
-        emitter_type: kind,
+        blend: wr::M2ParticleBlend32::from_raw(u32::from(blend.raw())),
+        emitter_type: wr::M2EmitterShape::from_raw(u32::from(kind.raw())),
         color_index: color,
         rows: u32::from(value.rows),
         columns: u32::from(value.columns),
@@ -47,7 +47,7 @@ where
         horizontal_range: initial(&value.horizontal_range).unwrap_or(0.),
         gravity: gravity_vector(
             initial(&value.gravity).unwrap_or(0),
-            value.flags & 0x800000 != 0,
+            value.flags.packed_gravity(),
         )?,
         lifespan: initial(&value.lifespan).unwrap_or(0.),
         lifespan_variation: value.lifespan_variation.get(),

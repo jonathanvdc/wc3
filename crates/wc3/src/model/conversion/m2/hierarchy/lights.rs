@@ -23,12 +23,12 @@ where
             particle: None,
             texts: Vec::new(),
             index: node,
-            kind: wr::NodeKind::LIGHT,
+            kind: wr::NodeKind::Light,
             payload: wr::NodePayload::Light(Box::new(wr::LightPayload {
-                kind: if light.kind == 0 {
-                    wr::LightKind::DIRECTIONAL
+                kind: if light.kind == LightKind::Directional {
+                    wr::LightKind::Directional
                 } else {
-                    wr::LightKind::OMNI
+                    wr::LightKind::Omni
                 },
                 color: initial(&light.diffuse_color).unwrap_or([1.; 3]),
                 intensity: initial(&light.diffuse_intensity).unwrap_or(1.),
@@ -36,7 +36,7 @@ where
                 attenuation_end: initial(&light.attenuation_end).unwrap_or(0.),
                 ..Default::default()
             })),
-            metadata: vec![("m2.light.kind", i64::from(light.kind))],
+            metadata: vec![("m2.light.kind", i64::from(light.kind.raw()))],
         });
         for sequence in 0..model.clips.len() {
             let start = core
@@ -44,9 +44,12 @@ where
                 .get(sequence)
                 .map_or(0, |sequence| sequence.timing.window().0);
             for (channel, track) in [
-                (wr::Channel::INTENSITY.0, &light.diffuse_intensity),
-                (wr::Channel::ATTENUATION_START.0, &light.attenuation_start),
-                (wr::Channel::ATTENUATION_END.0, &light.attenuation_end),
+                (wr::Channel::Intensity.raw(), &light.diffuse_intensity),
+                (
+                    wr::Channel::AttenuationStart.raw(),
+                    &light.attenuation_start,
+                ),
+                (wr::Channel::AttenuationEnd.raw(), &light.attenuation_end),
                 (201, &light.ambient_intensity),
             ] {
                 if let Some(track) = import_track(
@@ -65,7 +68,7 @@ where
                 }
             }
             for (channel, track) in [
-                (wr::Channel::COLOR.0, &light.diffuse_color),
+                (wr::Channel::Color.raw(), &light.diffuse_color),
                 (200, &light.ambient_color),
             ] {
                 if let Some(track) = import_track(
@@ -91,7 +94,7 @@ where
                 start,
                 sm::Target::Property {
                     owner: node as u32,
-                    channel: u32::from(wr::Channel::VISIBILITY.0),
+                    channel: u32::from(wr::Channel::Visibility.raw()),
                 },
                 |v| vec![f32::from(v)],
             )? {

@@ -11,16 +11,23 @@ fn typed_resolution_checks_family_revision_and_count() {
     let characters = document.append(&[Character { value: 0 }]).unwrap();
     let layers = document.append(&[TextureLayer::<V20>::default()]).unwrap();
     assert!(document
-        .resolve(Ref::<TextureLayer<V20>>::new(1, characters.index(), 0))
+        .resolve(Ref::<TextureLayer<V20>>::from_section(
+            1,
+            characters.index()
+        ))
         .is_err());
     assert!(document
-        .resolve(Ref::<TextureLayer<V21>>::new(1, layers.index(), 0))
+        .resolve(Ref::<TextureLayer<V21>>::from_section(1, layers.index()))
         .is_err());
     assert!(document
-        .resolve(Ref::<TextureLayer<V20>>::new(2, layers.index(), 0))
+        .resolve(Ref::<TextureLayer<V20>>::from_section(2, layers.index()))
         .is_err());
     assert!(document
-        .resolve(Ref::<TextureLayer<V21>>::new(0, u32::MAX, 99))
+        .resolve(Ref::<TextureLayer<V21>>::new(
+            0,
+            u32::MAX,
+            m3::records::ReferenceFlags(99)
+        ))
         .unwrap()
         .is_empty());
 }
@@ -32,7 +39,7 @@ fn dangling_and_wrong_family_references_in_native_records_fail_validation() {
         document.append(&[TextureLayer::<V20>::default()]).unwrap();
         document
             .append(&[StringReference {
-                value: Ref::new(1, index, 0),
+                value: Ref::from_section(1, index),
             }])
             .unwrap();
         assert!(document.validate().is_err());
@@ -46,7 +53,7 @@ fn referenced_arrays_cannot_be_cleared_until_the_reference_is_removed() {
     let target = document.append(&[Character { value: 0 }]).unwrap();
     let incoming = document
         .append(&[StringReference {
-            value: Ref::new(1, target.index(), 0),
+            value: Ref::from_section(1, target.index()),
         }])
         .unwrap();
     assert!(document.clear(target).is_err());
@@ -107,11 +114,15 @@ fn root_and_material_revisions_remain_independent_after_editing() {
         .unwrap();
     let root = document
         .append(&[ModelRecord::<V23> {
-            standard_materials: Ref::new(1, material.index(), 0),
+            standard_materials: Ref::from_section(1, material.index()),
             ..Default::default()
         }])
         .unwrap();
-    document.set_root(Ref::<ModelRecord<V23>>::new(1, root.index(), 17));
+    document.set_root(Ref::<ModelRecord<V23>>::new(
+        1,
+        root.index(),
+        m3::records::ReferenceFlags(17),
+    ));
     let model = Model::from_document(document).unwrap();
     assert!(model.root::<ModelRecord<V24>>().is_err());
     let bytes = model.write().unwrap();
@@ -125,7 +136,7 @@ fn root_and_material_revisions_remain_independent_after_editing() {
             .len(),
         1
     );
-    assert_eq!(parsed.document().root_reference().flags, 17);
+    assert_eq!(parsed.document().root_reference().flags.bits(), 17);
     assert_eq!(
         parsed
             .document()

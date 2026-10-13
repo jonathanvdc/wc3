@@ -42,7 +42,7 @@ pub(super) fn attach<E: Envelope>(
                     .get_mut(index)
                     .ok_or_else(|| Error::new("bone.node", "missing bone node"))?;
                 let mut values = BTreeMap::new();
-                values.insert("m3.bone.flags".into(), i64::from(r.flags));
+                values.insert("m3.bone.flags".into(), i64::from((r.flags).bits()));
                 metadata::animated(&mut values, "bone.position", r.position);
                 metadata::animated(&mut values, "bone.rotation", r.rotation);
                 metadata::animated(&mut values, "bone.scale", r.scale);

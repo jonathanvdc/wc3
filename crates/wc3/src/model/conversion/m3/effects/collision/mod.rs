@@ -56,7 +56,7 @@ fn body(
     Ok(wr::PhysicsBody {
         id,
         node,
-        motion: wr::BodyMotion(2),
+        motion: wr::BodyMotion::from_raw(2),
         shapes: metadata::put(doc, &[shape])?.cast(),
         ..Default::default()
     })
@@ -70,12 +70,12 @@ fn shape<E: Envelope>(
     let vertices = points(source, r.vertex_positions)?;
     let triangles = faces(source, r.face_indices, vertices.len())?;
     let kind = match r.shape_type {
-        0 => 0,
-        1 => 1,
-        2 => 2,
-        3 => 3,
-        4 => 5,
-        other => {
+        nr::VolumeShape::Box => 0,
+        nr::VolumeShape::Sphere => 1,
+        nr::VolumeShape::Capsule => 2,
+        nr::VolumeShape::Cylinder => 3,
+        nr::VolumeShape::Mesh => 5,
+        nr::VolumeShape::Unknown(other) => {
             context.unsupported(
                 "hit_test.kind",
                 format!("uninterpreted native hit-test shape kind {other}"),
@@ -84,7 +84,7 @@ fn shape<E: Envelope>(
         }
     };
     Ok(wr::PhysicsShape {
-        kind: wr::PhysicsShapeKind(kind),
+        kind: wr::PhysicsShapeKind::from_raw(kind),
         transform: r.transform,
         half_extents: [r.size_x, r.size_y, r.size_z],
         radius: r.size_x,

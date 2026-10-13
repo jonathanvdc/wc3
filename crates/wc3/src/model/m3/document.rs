@@ -1,6 +1,6 @@
 //! Indexed section storage, checked reference resolution, and relocating writes.
 use super::codec::Encoder;
-use super::records::{known_record_size, validate_known_section};
+use super::records::{known_record_size, validate_known_section, ReferenceFlags};
 use super::{
     Array, Envelope, Md34, RawReference, Read, ReadError, Record, RecordLayout, Ref, Target, Write,
     WriteError,
@@ -107,7 +107,7 @@ impl<'data, E: Envelope> Document<'data, E> {
             root: RawReference {
                 entries: 0,
                 index: 0,
-                flags: 0,
+                flags: ReferenceFlags(0),
                 target: Some(*b"MODL"),
             },
             source: None,
@@ -139,9 +139,9 @@ impl<'data, E: Envelope> Document<'data, E> {
             entries: word(bytes, 12)?,
             index: word(bytes, 16)?,
             flags: if E::REFERENCE_SIZE == 8 {
-                0
+                ReferenceFlags(0)
             } else {
-                word(bytes, 20)?
+                ReferenceFlags(word(bytes, 20)?)
             },
             target: Some(*b"MODL"),
         };
@@ -389,7 +389,7 @@ impl<'data, E: Envelope> Document<'data, E> {
         let section = self
             .section(id)
             .ok_or_else(|| ReadError::invalid(0, "section identity"))?;
-        self.resolve(Ref::new(section.count, id.index, 0))
+        self.resolve(Ref::from_section(section.count, id.index))
     }
     fn ensure_header(&mut self) {
         if self.sections.is_empty() {
@@ -539,7 +539,7 @@ impl<'data, E: Envelope> Document<'data, E> {
     pub fn write(&self) -> Result<Vec<u8>, WriteError> {
         self.validate()
             .map_err(|_| WriteError::invalid("document validation"))?;
-        if E::REFERENCE_SIZE == 8 && self.root.flags != 0 {
+        if E::REFERENCE_SIZE == 8 && self.root.flags.bits() != 0 {
             return Err(WriteError::invalid("MD33 reference flags"));
         }
         if !self.dirty {
@@ -587,7 +587,7 @@ impl<'data, E: Envelope> Document<'data, E> {
         bytes[12..16].copy_from_slice(&self.root.entries.to_le_bytes());
         bytes[16..20].copy_from_slice(&self.root.index.to_le_bytes());
         if E::REFERENCE_SIZE == 12 {
-            bytes[20..24].copy_from_slice(&self.root.flags.to_le_bytes());
+            bytes[20..24].copy_from_slice(&self.root.flags.bits().to_le_bytes());
         }
         Ok(())
     }

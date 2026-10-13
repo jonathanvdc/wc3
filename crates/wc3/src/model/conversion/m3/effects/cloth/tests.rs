@@ -3,7 +3,7 @@ use crate::model::conversion::{ExportOptions, ImportOptions};
 use std::borrow::Cow;
 fn geometry() -> wem::Document<'static> {
     sem::build(&sem::Model {
-        profile: wr::ProfileId::SC2,
+        profile: wr::ProfileId::Sc2,
         meshes: vec![sem::Mesh {
             name: Cow::Borrowed("LOD 0 region 0"),
             positions: Cow::Owned(vec![[0.; 3], [1., 0., 0.], [0., 1., 0.]]),
@@ -66,7 +66,7 @@ fn every_cloth_revision_rebuilds_from_edited_wem_solver_fields() {
             rows[0].sc2.value.as_mut().unwrap().tracking = 0.5;
             raw.replace(id, &rows).unwrap();
             let document = wem::Document::from_raw(raw).unwrap();
-            let model = sem::read(&document, 0, wr::ProfileId::SC2).unwrap();
+            let model = sem::read(&document, 0, wr::ProfileId::Sc2).unwrap();
             let mut output = native::Document::<native::Md34>::new();
             let reference = export(
                 &model,
@@ -118,7 +118,7 @@ fn stale_cloth_particle_arrays_are_rejected_after_topology_edits() {
         &mut Context::import(&ImportOptions::default()),
     )
     .unwrap();
-    let mut model = sem::read(&document, 0, wr::ProfileId::SC2).unwrap();
+    let mut model = sem::read(&document, 0, wr::ProfileId::Sc2).unwrap();
     model.meshes[0].positions.to_mut().push([2.; 3]);
     let mut output = native::Document::<native::Md34>::new();
     let error = export(

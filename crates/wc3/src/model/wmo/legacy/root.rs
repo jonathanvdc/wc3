@@ -1,5 +1,6 @@
 //! Alpha root records and root envelopes for versions14 and16.
 use super::Group14;
+use crate::model::wmo::records::{BlendMode, GroupFlags, LightKind, MaterialFlags};
 use crate::model::{common::Ownership, wmo};
 use std::borrow::Cow;
 use std::collections::BTreeSet;
@@ -60,9 +61,9 @@ pub struct Material14 {
     /// Native per-material version word.
     pub version: u32,
     /// Render-state flags.
-    pub flags: u32,
+    pub flags: MaterialFlags,
     /// Native blend-mode code.
-    pub blend_mode: u32,
+    pub blend_mode: BlendMode,
     /// Byte offset into MOTX of the diffuse texture.
     pub texture0: u32,
     /// Native self-illumination color in BGRA order.
@@ -88,7 +89,7 @@ pub struct GroupInfo14 {
     /// Complete MOGP frame length, including its eight-byte chunk header.
     pub group_size: u32,
     /// Group flags corresponding to the MOGP header.
-    pub flags: u32,
+    pub flags: GroupFlags,
     /// Group bounds in WMO coordinates.
     pub bounds: [[f32; 3]; 2],
     /// MOGN name offset, or -1 when absent.
@@ -99,7 +100,7 @@ impl Default for GroupInfo14 {
         Self {
             group_offset: 0,
             group_size: 0,
-            flags: 0,
+            flags: Default::default(),
             bounds: [[0.0; 3]; 2],
             name_offset: -1,
         }
@@ -119,7 +120,7 @@ impl Default for GroupInfo14 {
 )]
 pub struct Light14 {
     /// Native light kind.
-    pub kind: u8,
+    pub kind: LightKind,
     /// Whether attenuation is enabled.
     pub use_attenuation: u8,
     /// Uninterpreted bytes.
@@ -956,7 +957,7 @@ fn common_dependencies(chunks: &[&RootChunk<'_, Classic>]) -> Result<Vec<Depende
             push_path(
                 &mut result,
                 DependencyKind::Doodad { index },
-                string_at(names, doodad?.name_and_flags & 0xffffff)?,
+                string_at(names, doodad?.name_index())?,
             );
         }
     }

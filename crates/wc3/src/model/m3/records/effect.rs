@@ -1,5 +1,10 @@
 //! Native effect record revisions.
 use super::dialect::*;
+use super::values::{
+    EmitterShape, LocalForces, ParticleAdditionalFlags, ParticleFlags, ParticleInstance,
+    ParticleRotationFlags, RibbonAdditionalFlags, RibbonFlags, RibbonKind, Smoothing, Variation,
+    VelocityKind, WorldForces,
+};
 use super::{targets, AnimationValue};
 use crate::model::m3::{self, Record, Ref};
 use core::fmt::Debug;
@@ -290,9 +295,9 @@ impl ParticleEmitterDialect for V13 {
     type InstanceDistance = ();
     type PhaseShift = ();
     type RotationFlags = ();
-    type ColorSmoothing = u32;
-    type SizeSmoothing = u32;
-    type RotationSmoothing = u32;
+    type ColorSmoothing = Smoothing;
+    type SizeSmoothing = Smoothing;
+    type RotationSmoothing = Smoothing;
     type AlphaThreshold = ();
     type UvOffset = ();
     type UvAngle = ();
@@ -340,9 +345,9 @@ impl ParticleEmitterDialect for V14 {
     type InstanceDistance = ();
     type PhaseShift = ();
     type RotationFlags = ();
-    type ColorSmoothing = u32;
-    type SizeSmoothing = u32;
-    type RotationSmoothing = u32;
+    type ColorSmoothing = Smoothing;
+    type SizeSmoothing = Smoothing;
+    type RotationSmoothing = Smoothing;
     type AlphaThreshold = ();
     type UvOffset = ();
     type UvAngle = ();
@@ -390,9 +395,9 @@ impl ParticleEmitterDialect for V15 {
     type InstanceDistance = ();
     type PhaseShift = ();
     type RotationFlags = ();
-    type ColorSmoothing = u32;
-    type SizeSmoothing = u32;
-    type RotationSmoothing = u32;
+    type ColorSmoothing = Smoothing;
+    type SizeSmoothing = Smoothing;
+    type RotationSmoothing = Smoothing;
     type AlphaThreshold = AnimationValue<f32>;
     type UvOffset = AnimationValue<[f32; 2]>;
     type UvAngle = AnimationValue<[f32; 3]>;
@@ -440,9 +445,9 @@ impl ParticleEmitterDialect for V16 {
     type InstanceDistance = f32;
     type PhaseShift = ();
     type RotationFlags = ();
-    type ColorSmoothing = u32;
-    type SizeSmoothing = u32;
-    type RotationSmoothing = u32;
+    type ColorSmoothing = Smoothing;
+    type SizeSmoothing = Smoothing;
+    type RotationSmoothing = Smoothing;
     type AlphaThreshold = AnimationValue<f32>;
     type UvOffset = AnimationValue<[f32; 2]>;
     type UvAngle = AnimationValue<[f32; 3]>;
@@ -453,7 +458,7 @@ impl ParticleEmitterDialect for V16 {
 
 impl ParticleEmitterDialect for V17 {
     const VERSION: u32 = 17;
-    type AdditionalFlags = u32;
+    type AdditionalFlags = ParticleAdditionalFlags;
     type LegacySpeedRandomize = ();
     type LegacyLifespanRandomize = ();
     type LegacySizeAnimation = ();
@@ -490,9 +495,9 @@ impl ParticleEmitterDialect for V17 {
     type InstanceDistance = f32;
     type PhaseShift = ();
     type RotationFlags = ();
-    type ColorSmoothing = u32;
-    type SizeSmoothing = u32;
-    type RotationSmoothing = u32;
+    type ColorSmoothing = Smoothing;
+    type SizeSmoothing = Smoothing;
+    type RotationSmoothing = Smoothing;
     type AlphaThreshold = AnimationValue<f32>;
     type UvOffset = AnimationValue<[f32; 2]>;
     type UvAngle = AnimationValue<[f32; 3]>;
@@ -503,7 +508,7 @@ impl ParticleEmitterDialect for V17 {
 
 impl ParticleEmitterDialect for V18 {
     const VERSION: u32 = 18;
-    type AdditionalFlags = u32;
+    type AdditionalFlags = ParticleAdditionalFlags;
     type LegacySpeedRandomize = ();
     type LegacyLifespanRandomize = ();
     type LegacySizeAnimation = ();
@@ -539,10 +544,10 @@ impl ParticleEmitterDialect for V18 {
     type FlipbookRowFraction = f32;
     type InstanceDistance = f32;
     type PhaseShift = ();
-    type RotationFlags = u32;
-    type ColorSmoothing = u32;
-    type SizeSmoothing = u32;
-    type RotationSmoothing = u32;
+    type RotationFlags = ParticleRotationFlags;
+    type ColorSmoothing = Smoothing;
+    type SizeSmoothing = Smoothing;
+    type RotationSmoothing = Smoothing;
     type AlphaThreshold = AnimationValue<f32>;
     type UvOffset = AnimationValue<[f32; 2]>;
     type UvAngle = AnimationValue<[f32; 3]>;
@@ -553,7 +558,7 @@ impl ParticleEmitterDialect for V18 {
 
 impl ParticleEmitterDialect for V19 {
     const VERSION: u32 = 19;
-    type AdditionalFlags = u32;
+    type AdditionalFlags = ParticleAdditionalFlags;
     type LegacySpeedRandomize = ();
     type LegacyLifespanRandomize = ();
     type LegacySizeAnimation = ();
@@ -589,10 +594,10 @@ impl ParticleEmitterDialect for V19 {
     type FlipbookRowFraction = f32;
     type InstanceDistance = f32;
     type PhaseShift = ();
-    type RotationFlags = u32;
-    type ColorSmoothing = u32;
-    type SizeSmoothing = u32;
-    type RotationSmoothing = u32;
+    type RotationFlags = ParticleRotationFlags;
+    type ColorSmoothing = Smoothing;
+    type SizeSmoothing = Smoothing;
+    type RotationSmoothing = Smoothing;
     type AlphaThreshold = AnimationValue<f32>;
     type UvOffset = AnimationValue<[f32; 2]>;
     type UvAngle = AnimationValue<[f32; 3]>;
@@ -603,7 +608,7 @@ impl ParticleEmitterDialect for V19 {
 
 impl ParticleEmitterDialect for V20 {
     const VERSION: u32 = 20;
-    type AdditionalFlags = u32;
+    type AdditionalFlags = ParticleAdditionalFlags;
     type LegacySpeedRandomize = ();
     type LegacyLifespanRandomize = ();
     type LegacySizeAnimation = ();
@@ -639,10 +644,10 @@ impl ParticleEmitterDialect for V20 {
     type FlipbookRowFraction = f32;
     type InstanceDistance = f32;
     type PhaseShift = ();
-    type RotationFlags = u32;
-    type ColorSmoothing = u32;
-    type SizeSmoothing = u32;
-    type RotationSmoothing = u32;
+    type RotationFlags = ParticleRotationFlags;
+    type ColorSmoothing = Smoothing;
+    type SizeSmoothing = Smoothing;
+    type RotationSmoothing = Smoothing;
     type AlphaThreshold = AnimationValue<f32>;
     type UvOffset = AnimationValue<[f32; 2]>;
     type UvAngle = AnimationValue<[f32; 3]>;
@@ -653,7 +658,7 @@ impl ParticleEmitterDialect for V20 {
 
 impl ParticleEmitterDialect for V21 {
     const VERSION: u32 = 21;
-    type AdditionalFlags = u32;
+    type AdditionalFlags = ParticleAdditionalFlags;
     type LegacySpeedRandomize = ();
     type LegacyLifespanRandomize = ();
     type LegacySizeAnimation = ();
@@ -689,10 +694,10 @@ impl ParticleEmitterDialect for V21 {
     type FlipbookRowFraction = f32;
     type InstanceDistance = f32;
     type PhaseShift = ();
-    type RotationFlags = u32;
-    type ColorSmoothing = u32;
-    type SizeSmoothing = u32;
-    type RotationSmoothing = u32;
+    type RotationFlags = ParticleRotationFlags;
+    type ColorSmoothing = Smoothing;
+    type SizeSmoothing = Smoothing;
+    type RotationSmoothing = Smoothing;
     type AlphaThreshold = AnimationValue<f32>;
     type UvOffset = AnimationValue<[f32; 2]>;
     type UvAngle = AnimationValue<[f32; 3]>;
@@ -703,7 +708,7 @@ impl ParticleEmitterDialect for V21 {
 
 impl ParticleEmitterDialect for V22 {
     const VERSION: u32 = 22;
-    type AdditionalFlags = u32;
+    type AdditionalFlags = ParticleAdditionalFlags;
     type LegacySpeedRandomize = ();
     type LegacyLifespanRandomize = ();
     type LegacySizeAnimation = ();
@@ -739,10 +744,10 @@ impl ParticleEmitterDialect for V22 {
     type FlipbookRowFraction = f32;
     type InstanceDistance = f32;
     type PhaseShift = AnimationValue<f32>;
-    type RotationFlags = u32;
-    type ColorSmoothing = u32;
-    type SizeSmoothing = u32;
-    type RotationSmoothing = u32;
+    type RotationFlags = ParticleRotationFlags;
+    type ColorSmoothing = Smoothing;
+    type SizeSmoothing = Smoothing;
+    type RotationSmoothing = Smoothing;
     type AlphaThreshold = AnimationValue<f32>;
     type UvOffset = AnimationValue<[f32; 2]>;
     type UvAngle = AnimationValue<[f32; 3]>;
@@ -753,7 +758,7 @@ impl ParticleEmitterDialect for V22 {
 
 impl ParticleEmitterDialect for V23 {
     const VERSION: u32 = 23;
-    type AdditionalFlags = u32;
+    type AdditionalFlags = ParticleAdditionalFlags;
     type LegacySpeedRandomize = ();
     type LegacyLifespanRandomize = ();
     type LegacySizeAnimation = ();
@@ -789,10 +794,10 @@ impl ParticleEmitterDialect for V23 {
     type FlipbookRowFraction = f32;
     type InstanceDistance = f32;
     type PhaseShift = AnimationValue<f32>;
-    type RotationFlags = u32;
-    type ColorSmoothing = u32;
-    type SizeSmoothing = u32;
-    type RotationSmoothing = u32;
+    type RotationFlags = ParticleRotationFlags;
+    type ColorSmoothing = Smoothing;
+    type SizeSmoothing = Smoothing;
+    type RotationSmoothing = Smoothing;
     type AlphaThreshold = AnimationValue<f32>;
     type UvOffset = AnimationValue<[f32; 2]>;
     type UvAngle = AnimationValue<[f32; 3]>;
@@ -803,7 +808,7 @@ impl ParticleEmitterDialect for V23 {
 
 impl ParticleEmitterDialect for V24 {
     const VERSION: u32 = 24;
-    type AdditionalFlags = u32;
+    type AdditionalFlags = ParticleAdditionalFlags;
     type LegacySpeedRandomize = ();
     type LegacyLifespanRandomize = ();
     type LegacySizeAnimation = ();
@@ -839,10 +844,10 @@ impl ParticleEmitterDialect for V24 {
     type FlipbookRowFraction = f32;
     type InstanceDistance = f32;
     type PhaseShift = AnimationValue<f32>;
-    type RotationFlags = u32;
-    type ColorSmoothing = u32;
-    type SizeSmoothing = u32;
-    type RotationSmoothing = u32;
+    type RotationFlags = ParticleRotationFlags;
+    type ColorSmoothing = Smoothing;
+    type SizeSmoothing = Smoothing;
+    type RotationSmoothing = Smoothing;
     type AlphaThreshold = AnimationValue<f32>;
     type UvOffset = AnimationValue<[f32; 2]>;
     type UvAngle = AnimationValue<[f32; 3]>;
@@ -956,13 +961,13 @@ pub struct ParticleEmitter<D: ParticleEmitterDialect> {
     /// Controls world space with a separate legacy boolean rather than a later flag bit.
     pub legacy_world_space: D::LegacyWorldSpace,
     /// Selects local force channel through individual bits.
-    pub local_forces: u16,
+    pub local_forces: LocalForces,
     /// Selects world force channel through individual bits.
-    pub world_forces: u16,
+    pub world_forces: WorldForces,
     /// Sets fallback local force channels.
-    pub local_forces_fallback: u16,
+    pub local_forces_fallback: LocalForces,
     /// Sets fallback world force channels.
-    pub world_forces_fallback: u16,
+    pub world_forces_fallback: WorldForces,
     /// Sets world force mass multiplier. This field is present in revision 24 onward.
     pub world_forces_mass_multiplier: D::WorldForcesMassMultiplier,
     /// Sets noise displacement amplitude.
@@ -982,7 +987,7 @@ pub struct ParticleEmitter<D: ParticleEmitterDialect> {
     /// Controls emission rate (particles/sec) through its animation value.
     pub emission_rate: AnimationValue<f32>,
     /// Sets emission shape.
-    pub emitter_shape: u32,
+    pub emitter_shape: EmitterShape,
     /// Controls outer shape dimensions through its animation value.
     pub shape_outer: AnimationValue<[f32; 3]>,
     /// Controls inner shape dimensions through its animation value.
@@ -994,7 +999,7 @@ pub struct ParticleEmitter<D: ParticleEmitterDialect> {
     /// Links to U32_ region indices selecting emission geometry from a division, starting at revision 14.
     pub shape_regions: D::ShapeRegions,
     /// Selects the behavior used for velocity randomization type.
-    pub velocity_type: u32,
+    pub velocity_type: VelocityKind,
     /// Enables random variation of size.
     pub size_random_enable: u32,
     /// Sets random size curve.
@@ -1050,7 +1055,7 @@ pub struct ParticleEmitter<D: ParticleEmitterDialect> {
     /// Sets die after N bounces.
     pub collision_die_bounce: u32,
     /// Selects the particle representation passed to the shader as b_iInstanceType.
-    pub instance_type: u32,
+    pub instance_type: ParticleInstance,
     /// Sets tail length for Tail/Trail types.
     pub tail_length: f32,
     /// Sets instance orientation angles.
@@ -1058,55 +1063,55 @@ pub struct ParticleEmitter<D: ParticleEmitterDialect> {
     /// Sets instance distance. This field is present in revision 17 onward.
     pub instance_distance: D::InstanceDistance,
     /// Selects the function used to vary pitch.
-    pub pitch_type: u32,
+    pub pitch_type: Variation,
     /// Sets the magnitude of changes applied to pitch.
     pub pitch_amplitude: AnimationValue<f32>,
     /// Sets how frequently pitch varies.
     pub pitch_frequency: AnimationValue<f32>,
     /// Selects the function used to vary yaw.
-    pub yaw_type: u32,
+    pub yaw_type: Variation,
     /// Sets the magnitude of changes applied to yaw.
     pub yaw_amplitude: AnimationValue<f32>,
     /// Sets how frequently yaw varies.
     pub yaw_frequency: AnimationValue<f32>,
     /// Selects the function used to vary speed.
-    pub speed_type: u32,
+    pub speed_type: Variation,
     /// Sets the magnitude of changes applied to speed.
     pub speed_amplitude: AnimationValue<f32>,
     /// Sets how frequently speed varies.
     pub speed_frequency: AnimationValue<f32>,
     /// Selects the function used to vary size.
-    pub size_type: u32,
+    pub size_type: Variation,
     /// Sets the magnitude of changes applied to size.
     pub size_amplitude: AnimationValue<f32>,
     /// Sets how frequently size varies.
     pub size_frequency: AnimationValue<f32>,
     /// Selects the function used to vary alpha.
-    pub alpha_type: u32,
+    pub alpha_type: Variation,
     /// Sets the magnitude of changes applied to alpha.
     pub alpha_amplitude: AnimationValue<f32>,
     /// Sets how frequently alpha varies.
     pub alpha_frequency: AnimationValue<f32>,
     /// Selects the function used to vary color.
-    pub color_type: u32,
+    pub color_type: Variation,
     /// Sets the magnitude of changes applied to color.
     pub color_amplitude: AnimationValue<f32>,
     /// Sets how frequently color varies.
     pub color_frequency: AnimationValue<f32>,
     /// Selects the function used to vary rotation.
-    pub rotation_type: u32,
+    pub rotation_type: Variation,
     /// Sets the magnitude of changes applied to rotation.
     pub rotation_amplitude: AnimationValue<f32>,
     /// Sets how frequently rotation varies.
     pub rotation_frequency: AnimationValue<f32>,
     /// Selects the function used to vary horizontal.
-    pub horizontal_type: u32,
+    pub horizontal_type: Variation,
     /// Sets the magnitude of changes applied to horizontal.
     pub horizontal_amplitude: AnimationValue<f32>,
     /// Sets how frequently horizontal varies.
     pub horizontal_frequency: AnimationValue<f32>,
     /// Selects the function used to vary vertical.
-    pub vertical_type: u32,
+    pub vertical_type: Variation,
     /// Sets the magnitude of changes applied to vertical.
     pub vertical_amplitude: AnimationValue<f32>,
     /// Sets how frequently the vertical emission spread varies.
@@ -1116,7 +1121,7 @@ pub struct ParticleEmitter<D: ParticleEmitterDialect> {
     /// Controls phase shift through its animation value. This field is present in revision 22 onward.
     pub phase_shift: D::PhaseShift,
     /// Stores the bit mask governing main particle.
-    pub flags: u32,
+    pub flags: ParticleFlags,
     /// Stores the bit mask governing rotation. This field is present in revision 18 onward.
     pub rotation_flags: D::RotationFlags,
     /// The meaning of the color smoothing storage has not been established; its encoded bits are preserved.
@@ -1226,19 +1231,19 @@ pub struct SplineRibbon {
     /// Controls end velocity factor through its animation value.
     pub velocity_end_factor: AnimationValue<f32>,
     /// Selects the function used to vary yaw.
-    pub yaw_type: u32,
+    pub yaw_type: Variation,
     /// Sets the magnitude of changes applied to yaw.
     pub yaw_amplitude: AnimationValue<f32>,
     /// Sets how frequently yaw varies.
     pub yaw_frequency: AnimationValue<f32>,
     /// Selects the function used to vary pitch.
-    pub pitch_type: u32,
+    pub pitch_type: Variation,
     /// Sets the magnitude of changes applied to pitch.
     pub pitch_amplitude: AnimationValue<f32>,
     /// Sets how frequently pitch varies.
     pub pitch_frequency: AnimationValue<f32>,
     /// Selects the function used to vary velocity.
-    pub velocity_type: u32,
+    pub velocity_type: Variation,
     /// Sets the magnitude of changes applied to velocity.
     pub velocity_amplitude: AnimationValue<f32>,
     /// Sets how frequently velocity varies.
@@ -1398,13 +1403,13 @@ impl RibbonEmitterDialect for V4 {
     type DeprecatedUnknown3fbae7d6 = i32;
     type SizeSmoothing = ();
     type ColorSmoothing = ();
-    type LegacyPitchType = u32;
+    type LegacyPitchType = Variation;
     type YawType = ();
     type LegacyPitchAmplitude = AnimationValue<f32>;
     type YawAmplitude = ();
     type LegacyPitchFrequency = AnimationValue<f32>;
     type YawFrequency = ();
-    type LegacyYawType = u32;
+    type LegacyYawType = Variation;
     type PitchType = ();
     type LegacyYawAmplitude = AnimationValue<f32>;
     type PitchAmplitude = ();
@@ -1450,13 +1455,13 @@ impl RibbonEmitterDialect for V5 {
     type DeprecatedUnknown3fbae7d6 = i32;
     type SizeSmoothing = ();
     type ColorSmoothing = ();
-    type LegacyPitchType = u32;
+    type LegacyPitchType = Variation;
     type YawType = ();
     type LegacyPitchAmplitude = AnimationValue<f32>;
     type YawAmplitude = ();
     type LegacyPitchFrequency = AnimationValue<f32>;
     type YawFrequency = ();
-    type LegacyYawType = u32;
+    type LegacyYawType = Variation;
     type PitchType = ();
     type LegacyYawAmplitude = AnimationValue<f32>;
     type PitchAmplitude = ();
@@ -1502,13 +1507,13 @@ impl RibbonEmitterDialect for V6 {
     type DeprecatedUnknown3fbae7d6 = i32;
     type SizeSmoothing = ();
     type ColorSmoothing = ();
-    type LegacyPitchType = u32;
+    type LegacyPitchType = Variation;
     type YawType = ();
     type LegacyPitchAmplitude = AnimationValue<f32>;
     type YawAmplitude = ();
     type LegacyPitchFrequency = AnimationValue<f32>;
     type YawFrequency = ();
-    type LegacyYawType = u32;
+    type LegacyYawType = Variation;
     type PitchType = ();
     type LegacyYawAmplitude = AnimationValue<f32>;
     type PitchAmplitude = ();
@@ -1552,16 +1557,16 @@ impl RibbonEmitterDialect for V7 {
     type WorldForcesMassMultiplier = ();
     type IndexPlusLength = u32;
     type DeprecatedUnknown3fbae7d6 = ();
-    type SizeSmoothing = u32;
-    type ColorSmoothing = u32;
+    type SizeSmoothing = Smoothing;
+    type ColorSmoothing = Smoothing;
     type LegacyPitchType = ();
-    type YawType = u32;
+    type YawType = Variation;
     type LegacyPitchAmplitude = ();
     type YawAmplitude = AnimationValue<f32>;
     type LegacyPitchFrequency = ();
     type YawFrequency = AnimationValue<f32>;
     type LegacyYawType = ();
-    type PitchType = u32;
+    type PitchType = Variation;
     type LegacyYawAmplitude = ();
     type PitchAmplitude = AnimationValue<f32>;
     type LegacyYawFrequency = ();
@@ -1570,7 +1575,7 @@ impl RibbonEmitterDialect for V7 {
 
 impl RibbonEmitterDialect for V8 {
     const VERSION: u32 = 8;
-    type AdditionalFlags = u32;
+    type AdditionalFlags = RibbonAdditionalFlags;
     type LegacySpeedRandomize = ();
     type LegacyInitialPitch = ();
     type InitialYaw = AnimationValue<f32>;
@@ -1604,16 +1609,16 @@ impl RibbonEmitterDialect for V8 {
     type WorldForcesMassMultiplier = ();
     type IndexPlusLength = u32;
     type DeprecatedUnknown3fbae7d6 = ();
-    type SizeSmoothing = u32;
-    type ColorSmoothing = u32;
+    type SizeSmoothing = Smoothing;
+    type ColorSmoothing = Smoothing;
     type LegacyPitchType = ();
-    type YawType = u32;
+    type YawType = Variation;
     type LegacyPitchAmplitude = ();
     type YawAmplitude = AnimationValue<f32>;
     type LegacyPitchFrequency = ();
     type YawFrequency = AnimationValue<f32>;
     type LegacyYawType = ();
-    type PitchType = u32;
+    type PitchType = Variation;
     type LegacyYawAmplitude = ();
     type PitchAmplitude = AnimationValue<f32>;
     type LegacyYawFrequency = ();
@@ -1622,7 +1627,7 @@ impl RibbonEmitterDialect for V8 {
 
 impl RibbonEmitterDialect for V9 {
     const VERSION: u32 = 9;
-    type AdditionalFlags = u32;
+    type AdditionalFlags = RibbonAdditionalFlags;
     type LegacySpeedRandomize = ();
     type LegacyInitialPitch = ();
     type InitialYaw = AnimationValue<f32>;
@@ -1656,16 +1661,16 @@ impl RibbonEmitterDialect for V9 {
     type WorldForcesMassMultiplier = f32;
     type IndexPlusLength = u32;
     type DeprecatedUnknown3fbae7d6 = ();
-    type SizeSmoothing = u32;
-    type ColorSmoothing = u32;
+    type SizeSmoothing = Smoothing;
+    type ColorSmoothing = Smoothing;
     type LegacyPitchType = ();
-    type YawType = u32;
+    type YawType = Variation;
     type LegacyPitchAmplitude = ();
     type YawAmplitude = AnimationValue<f32>;
     type LegacyPitchFrequency = ();
     type YawFrequency = AnimationValue<f32>;
     type LegacyYawType = ();
-    type PitchType = u32;
+    type PitchType = Variation;
     type LegacyYawAmplitude = ();
     type PitchAmplitude = AnimationValue<f32>;
     type LegacyYawFrequency = ();
@@ -1783,13 +1788,13 @@ pub struct RibbonEmitter<D: RibbonEmitterDialect> {
     /// Controls world space with a separate legacy boolean rather than a later flag bit.
     pub legacy_world_space: D::LegacyWorldSpace,
     /// Selects local force channel through individual bits.
-    pub local_forces: u16,
+    pub local_forces: LocalForces,
     /// Selects world force channel through individual bits.
-    pub world_forces: u16,
+    pub world_forces: WorldForces,
     /// Sets fallback local force channels.
-    pub local_forces_fallback: u16,
+    pub local_forces_fallback: LocalForces,
     /// Sets fallback world force channels.
-    pub world_forces_fallback: u16,
+    pub world_forces_fallback: WorldForces,
     /// Sets world force mass multiplier.
     pub world_forces_mass_multiplier: D::WorldForcesMassMultiplier,
     /// Sets noise displacement amplitude.
@@ -1803,9 +1808,9 @@ pub struct RibbonEmitter<D: RibbonEmitterDialect> {
     /// Stores a combined index-and-length value whose component encoding is unresolved.
     pub index_plus_length: D::IndexPlusLength,
     /// Selects the behavior used for emitter shape type.
-    pub emitter_shape: u32,
+    pub emitter_shape: EmitterShape,
     /// Selects the behavior used for ribbon cross-section type.
-    pub ribbon_type: u32,
+    pub ribbon_type: RibbonKind,
     /// Sets the number of ribbon divisions.
     pub divisions: f32,
     /// Sets the number of cross-section edges.
@@ -1821,7 +1826,7 @@ pub struct RibbonEmitter<D: RibbonEmitterDialect> {
     /// Controls active state through its animation value.
     pub active: AnimationValue<u32>,
     /// Stores the bit mask governing ribbon emitter.
-    pub flags: u32,
+    pub flags: RibbonFlags,
     /// Selects the behavior used for size interpolation mode.
     pub size_smoothing: D::SizeSmoothing,
     /// Selects the behavior used for color interpolation mode.
@@ -1859,19 +1864,19 @@ pub struct RibbonEmitter<D: RibbonEmitterDialect> {
     /// Sets how frequently pitch varies.
     pub pitch_frequency: D::PitchFrequency,
     /// Selects the function used to vary speed.
-    pub speed_type: u32,
+    pub speed_type: Variation,
     /// Sets the magnitude of changes applied to speed.
     pub speed_amplitude: AnimationValue<f32>,
     /// Sets how frequently speed varies.
     pub speed_frequency: AnimationValue<f32>,
     /// Selects the function used to vary size.
-    pub size_type: u32,
+    pub size_type: Variation,
     /// Sets the magnitude of changes applied to size.
     pub size_amplitude: AnimationValue<f32>,
     /// Sets how frequently size varies.
     pub size_frequency: AnimationValue<f32>,
     /// Selects the function used to vary alpha.
-    pub alpha_type: u32,
+    pub alpha_type: Variation,
     /// Sets the magnitude of changes applied to alpha.
     pub alpha_amplitude: AnimationValue<f32>,
     /// Sets how frequently alpha varies.

@@ -62,7 +62,7 @@ fn rebuild<D: Dialect>(group: &mut Group<'static, D>, streams: Streams<D>) -> Re
         let rows = faces
             .iter()
             .map(|(flags, material)| nr::Triangle2 {
-                flags: *flags as u16,
+                flags: nr::TriangleFlags2(*flags as u16),
                 material: *material as u16,
             })
             .collect::<Vec<_>>();
@@ -73,7 +73,7 @@ fn rebuild<D: Dialect>(group: &mut Group<'static, D>, streams: Streams<D>) -> Re
         let rows = faces
             .iter()
             .map(|(flags, material)| nr::Triangle {
-                flags: *flags as u8,
+                flags: nr::TriangleFlags(*flags as u8),
                 material: *material as u8,
             })
             .collect::<Vec<_>>();
@@ -186,12 +186,12 @@ pub(in crate::model::conversion::wmo) fn merge<D: Dialect>(
                 GroupChunk::Triangles(rows) => output.extend(
                     collect(rows, "triangles")?
                         .into_iter()
-                        .map(|row| (row.flags as u32, row.material as u32)),
+                        .map(|row| (u32::from(row.flags), row.material as u32)),
                 ),
                 GroupChunk::Triangles2(rows) => output.extend(
                     collect(rows, "triangles")?
                         .into_iter()
-                        .map(|row| (row.flags as u32, row.material as u32)),
+                        .map(|row| (u32::from(row.flags), row.material as u32)),
                 ),
                 _ => {}
             }
@@ -284,13 +284,13 @@ pub(in crate::model::conversion::wmo) fn merge<D: Dialect>(
         let last = last
             .checked_add(offset)
             .ok_or_else(|| Error::new("batch.range", "vertex offset overflow"))?;
-        if last > 65535 || batch.flags & 4 != 0 {
+        if last > 65535 || batch.flags.extended_vertices() {
             let mut probe = [0u8; 12];
             probe[0] = 1;
             if Decoder::new(&probe)
                 .read::<D::BatchPrefix>()
                 .map_err(|e| failure("batch.range", e))?
-                .vertex_range(4, 0, 0)
+                .vertex_range(nr::BatchFlags(4), 0, 0)
                 .0
                 != 65536
             {
@@ -311,7 +311,7 @@ pub(in crate::model::conversion::wmo) fn merge<D: Dialect>(
             batch.prefix = Decoder::new(&bytes)
                 .read()
                 .map_err(|e| failure("batch.range", e))?;
-            batch.flags |= 4;
+            batch.flags.set_extended_vertices(true);
         }
         batch.minimum_vertex = first as u16;
         batch.maximum_vertex = last as u16;

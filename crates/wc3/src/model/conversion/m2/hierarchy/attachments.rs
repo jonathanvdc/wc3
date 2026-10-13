@@ -23,7 +23,7 @@ where
             particle: None,
             texts: Vec::new(),
             index: node,
-            kind: wr::NodeKind::ATTACHMENT,
+            kind: wr::NodeKind::Attachment,
             payload: wr::NodePayload::Attachment(Box::new(wr::AttachmentPayload {
                 model: u32::MAX,
                 ..Default::default()
@@ -44,7 +44,7 @@ where
                     .map_or(0, |sequence| sequence.timing.window().0),
                 sm::Target::Property {
                     owner: node as u32,
-                    channel: u32::from(wr::Channel::VISIBILITY.0),
+                    channel: u32::from(wr::Channel::Visibility.raw()),
                 },
                 |v| vec![f32::from(v)],
             )? {

@@ -232,7 +232,7 @@ pub(in crate::model::conversion::m3) fn encode<E: Envelope>(
                 palette.first().copied().unwrap_or(u32::from(u16::MAX)) as u16,
                 &node_map,
             )?,
-            flags: controls::uint(&controls, "m3.region.flags", 0),
+            flags: nr::RegionFlags(controls::uint(&controls, "m3.region.flags", 0)),
             uv_scale,
             uv_offset,
         });
@@ -244,8 +244,10 @@ pub(in crate::model::conversion::m3) fn encode<E: Envelope>(
                     "material index capacity exceeded",
                 )
             })?,
-            flags: u16::try_from(controls::uint(&controls, "m3.batch.flags", 0))
-                .map_err(|_| Error::new("batch.flags", "flags capacity exceeded"))?,
+            flags: nr::BatchFlags(
+                u16::try_from(controls::uint(&controls, "m3.batch.flags", 0))
+                    .map_err(|_| Error::new("batch.flags", "flags capacity exceeded"))?,
+            ),
             priority_plane: u16::try_from(controls::uint(&controls, "m3.batch.priority_plane", 0))
                 .map_err(|_| Error::new("batch.priority_plane", "priority capacity exceeded"))?,
             bounds_index: u16::try_from(controls::uint(&controls, "m3.batch.bounds_index", 0))

@@ -2,7 +2,7 @@
 use super::*;
 #[derive(Clone, Debug)]
 pub(super) struct Body {
-    pub body_type: u16,
+    pub body_type: PhysicsBodyKind,
     pub bone: u32,
     pub position: [f32; 3],
     pub first: i32,
@@ -12,7 +12,7 @@ pub(super) struct Body {
     pub linear: f32,
     pub angular: f32,
     pub follow: f32,
-    pub attachment: u16,
+    pub attachment: PhysicsAttachment,
     pub reserved: u16,
 }
 fn legacy(value: &native::companions::PhysicsBody) -> Body {
@@ -27,7 +27,7 @@ fn legacy(value: &native::companions::PhysicsBody) -> Body {
         linear: 0.,
         angular: 0.,
         follow: 1.,
-        attachment: 0,
+        attachment: PhysicsAttachment::default(),
         reserved: value.reserved,
     }
 }
@@ -84,11 +84,11 @@ pub(super) fn body_record(
         id,
         node,
         motion: match value.body_type {
-            0 => wr::BodyMotion::KINEMATIC,
-            1 => wr::BodyMotion::DYNAMIC,
-            _ => wr::BodyMotion::STATIC,
+            PhysicsBodyKind::Kinematic => wr::BodyMotion::Kinematic,
+            PhysicsBodyKind::Dynamic => wr::BodyMotion::Dynamic,
+            _ => wr::BodyMotion::Static,
         },
-        simulates: wem::Bool::from(value.body_type == 1),
+        simulates: wem::Bool::from(value.body_type == PhysicsBodyKind::Dynamic),
         shapes,
         gravity_scale: value.gravity,
         inertia_scale: value.inertia,
@@ -96,10 +96,10 @@ pub(super) fn body_record(
         angular_damping: value.angular,
         wow: wem::InlineOption::from(Some(wr::WowBodyExtension {
             follow_factor: value.follow,
-            has_children: wem::Bool::from(value.attachment & 0x8000 != 0),
-            ragdoll_root: wem::Bool::from(value.attachment & 0x4000 != 0),
-            parent: if value.attachment & 0x3fff != 0 {
-                u32::from(value.attachment & 0x3fff) + 1
+            has_children: wem::Bool::from(value.attachment.attachment_host()),
+            ragdoll_root: wem::Bool::from(value.attachment.ragdoll_root()),
+            parent: if value.attachment.parent_body() != 0 {
+                u32::from(value.attachment.parent_body()) + 1
             } else {
                 u32::MAX
             },

@@ -535,11 +535,11 @@ pub struct TextureRecord {
     /// Links to the CHAR bytes used when the source resource is named by a path.
     pub path: Ref<targets::Character>,
     /// Stores common material options as individual bits.
-    pub flags: u32,
+    pub flags: TextureFlags,
     /// Identifies a texture supplied through the source format’s replaceable-texture mechanism.
     pub replaceable_id: u32,
     /// Selects the interpretation of this texture slot.
-    pub slot_type: u8,
+    pub slot_type: TextureSlot,
     /// Records the texture’s declared color space.
     pub declared_space: ColorSpace,
 }

@@ -4,6 +4,7 @@
 //! mutable slices, and owned buffers. Layout markers determine byte meaning;
 //! shape markers distinguish one vertex from a complete buffer. Raw layouts do
 //! not expose position, normal, or UV methods.
+use super::records::VertexFlags;
 use super::ReadError;
 use crate::visit_m3_vertices;
 use std::array::from_fn;
@@ -701,7 +702,8 @@ impl<S: AsRef<[u8]>> DynamicVertices<S> {
     ///
     /// Unknown flags never select a guessed stride. The original flag word
     /// remains in the owning MODL record rather than being rewritten by this view.
-    pub fn from_flags(storage: S, flags: u32) -> Result<Self, ReadError> {
+    pub fn from_flags(storage: S, flags: VertexFlags) -> Result<Self, ReadError> {
+        let flags = flags.bits();
         const REQUIRED: u32 = 0x0180_0061;
         const OPTIONAL: u32 = 0x1c | 0x200 | 0x001e_0000 | 0x4000_0000;
         if flags & REQUIRED != REQUIRED || flags & !(REQUIRED | OPTIONAL) != 0 {

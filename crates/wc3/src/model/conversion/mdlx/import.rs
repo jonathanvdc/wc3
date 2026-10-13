@@ -33,9 +33,9 @@ where
     }
     let mut model = s::Model {
         profile: if D::Version::NUMBER >= 900 {
-            ProfileId::WC3_REFORGED
+            ProfileId::Wc3Reforged
         } else {
-            ProfileId::WC3_CLASSIC
+            ProfileId::Wc3Classic
         },
         ..Default::default()
     };
@@ -72,7 +72,7 @@ where
                 .get(node.object_id as usize)
                 .copied()
                 .unwrap_or_default(),
-            flags: common_flags(node.flags.bits()),
+            flags: common_flags(node.flags),
             bone: node.flags.bone()
                 || source
                     .bones()
@@ -148,7 +148,7 @@ where
         model.textures.push(s::Texture {
             path: Cow::Owned(text(&texture.path)),
             replaceable: texture.replaceable_id,
-            flags: texture.flags.bits(),
+            flags: wr::TextureFlags(texture.flags.bits()),
             ..Default::default()
         });
     }
@@ -157,8 +157,10 @@ where
         model.materials.push(s::Material {
             name: Cow::Owned(format!("Material {index}")),
             texture: layer.and_then(|layer| layer.texture_id.value()).copied(),
-            blend: layer.map(|layer| filter(layer.filter_mode)).unwrap_or(0),
-            flags: material.render_mode.bits(),
+            blend: layer
+                .map(|layer| filter(layer.filter_mode))
+                .unwrap_or_default(),
+            flags: common_material_flags(material),
         });
     }
     let globals = source.global_sequences();
@@ -179,7 +181,8 @@ where
             name: Cow::Owned(text(&sequence.name)),
             duration: (sequence.interval[1] - sequence.interval[0]) as f32 / 1000.,
             id: sequence.interval[0],
-            flags: sequence.flags.bits(),
+            flags: wr::ClipFlags::default(),
+            looping: !sequence.flags.non_looping(),
             tracks: Vec::new(),
             integer_tracks: Vec::new(),
         });

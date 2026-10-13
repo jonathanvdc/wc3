@@ -9,7 +9,7 @@ pub(super) fn profile_vertices<V: ModelLayout>(
     core: &Core<'_, V>,
     profile: &SkinProfile<'_, V>,
 ) -> Result<Vec<Vertex>, native::ReadError> {
-    let base = if core.flags & 0x2000 != 0 {
+    let base = if core.flags.global_skin_vertex_offsets() {
         profile.lod_vertex_base as usize
     } else {
         0
@@ -144,7 +144,7 @@ pub(super) fn import_profile<V: ModelLayout>(
                     .textures
                     .get(usize::from(texture))
                     .ok_or_else(|| Error::new("m2.batch.texture", "missing texture resource"))?;
-                if texture_record.kind > u32::from(u8::MAX) {
+                if texture_record.kind.raw() > u32::from(u8::MAX) {
                     return Err(Error::new(
                         "m2.texture.kind",
                         "native WEM material cannot encode this replacement category",
@@ -164,19 +164,19 @@ pub(super) fn import_profile<V: ModelLayout>(
                         .texture_weight_combos
                         .get(usize::from(batch.texture_weight_combo_index) + slot)
                         .unwrap_or(u16::MAX),
-                    texture_type: texture_record.kind as u8,
-                    replaceable_id: texture_record.kind as u8,
+                    texture_type: wr::M2TextureSource8::from_raw(texture_record.kind.raw() as u8),
+                    replaceable_id: texture_record.kind.raw() as u8,
                 });
             }
             let record = wr::M2Material {
                 source_version: V::VERSION,
-                render_flags: material.flags,
-                blending_mode: material.blending_mode,
+                render_flags: wr::M2RenderFlags16::from_bits_retain(material.flags.bits()),
+                blending_mode: wr::M2BlendingMode16::from_raw(material.blending_mode.raw()),
                 shader_id: batch.shader_id,
                 priority_plane: i16::from(batch.priority_plane),
                 material_layer: batch.material_layer,
                 color_index: batch.color_index,
-                batch_flags: batch.flags,
+                batch_flags: wr::M2BatchFlags8::from_bits_retain(batch.flags.bits()),
                 units: wem::InlineList(units),
             };
             let texture = record.units.0.first().map(|unit| u32::from(unit.texture));
@@ -185,8 +185,8 @@ pub(super) fn import_profile<V: ModelLayout>(
             model.materials.push(sm::Material {
                 name: Cow::Owned(format!("material-{}", model.materials.len())),
                 texture,
-                blend: u32::from(material.blending_mode),
-                flags: u32::from(material.flags & 3),
+                blend: common_blend(material.blending_mode),
+                flags: common_material_flags(material.flags),
             });
             model.meshes.push(mesh.clone());
         }
@@ -380,6 +380,13 @@ where
             .materials
             .get(mesh.material_slot as usize)
             .ok_or_else(|| Error::new(&path, "material slot references a missing material"))?;
+        let supported = wr::MaterialFlags::UNLIT.bits() | wr::MaterialFlags::UNFOGGED.bits();
+        if material.flags.bits() & !supported != 0 {
+            context.unsupported(
+                format!("{path}.material.flags"),
+                "common material flags have no verified native M2 equivalent",
+            )?;
+        }
         if foreign_native_material(model, mesh.material_slot)? {
             context.unsupported(
                 format!("{path}.material.native"),
@@ -392,7 +399,7 @@ where
             } else {
                 (
                     wr::M2Material {
-                        render_flags: u16::try_from(material.flags & 3).unwrap(),
+                        render_flags: native_material_flags(material.flags),
                         units: wem::InlineList(
                             material
                                 .texture
@@ -412,8 +419,10 @@ where
                 )
             };
         if !native_authoritative {
-            native_material.blending_mode = u16::try_from(material.blend)
-                .map_err(|_| Error::new("materials.blend", "M2 blending code exceeds u16"))?;
+            let projection = common_blend(BlendMode::from_raw(native_material.blending_mode.raw()));
+            if material.blend != projection {
+                native_material.blending_mode = native_blend(material.blend, context)?;
+            }
             if let Some(texture) = material.texture {
                 let texture = u16::try_from(texture)
                     .map_err(|_| Error::new("materials.texture", "texture index exceeds u16"))?;
@@ -432,8 +441,8 @@ where
         let material_index = u16::try_from(materials.len())
             .map_err(|_| Error::new("materials", "too many native materials"))?;
         materials.push(native::records::Material {
-            flags: native_material.render_flags,
-            blending_mode: native_material.blending_mode,
+            flags: MaterialFlags::from_bits_retain(native_material.render_flags.bits()),
+            blending_mode: BlendMode::from_raw(native_material.blending_mode.raw()),
         });
         let combo = u16::try_from(textures.len())
             .map_err(|_| Error::new("materials", "texture combinations exceed u16"))?;
@@ -447,7 +456,7 @@ where
             transforms.push(unit.transform);
         }
         profile.batches.push(native::records::Batch {
-            flags: native_material.batch_flags,
+            flags: BatchFlags::from_bits_retain(native_material.batch_flags.bits()),
             priority_plane: i8::try_from(native_material.priority_plane)
                 .map_err(|_| Error::new("materials.priority", "M2 priority exceeds i8"))?,
             shader_id: native_material.shader_id,

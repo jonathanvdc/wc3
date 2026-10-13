@@ -77,9 +77,9 @@ pub(super) fn export_native<E: Envelope>(
                 .ok_or_else(|| Error::new("wem.animation.channel", "missing declaration"))?;
             let is_common = matches!(
                 channel.target.channel,
-                wr::Channel::TRANSLATION | wr::Channel::ROTATION | wr::Channel::SCALE
+                wr::Channel::Translation | wr::Channel::Rotation | wr::Channel::Scale
             );
-            if channel.target.channel != wr::Channel(255)
+            if channel.target.channel != wr::Channel::from_raw(255)
                 && !(is_common && selected_container.is_some())
             {
                 continue;
@@ -93,8 +93,8 @@ pub(super) fn export_native<E: Envelope>(
                     .as_deref()
                     .and_then(|rows| rows.get(index as usize))
                     .map(|bone| match channel.target.channel {
-                        wr::Channel::TRANSLATION => bone.position.animation_id,
-                        wr::Channel::ROTATION => bone.rotation.animation_id,
+                        wr::Channel::Translation => bone.position.animation_id,
+                        wr::Channel::Rotation => bone.rotation.animation_id,
                         _ => bone.scale.animation_id,
                     })
                     .unwrap_or(0);
@@ -130,26 +130,38 @@ pub(super) fn export_native<E: Envelope>(
                     let bone = bones
                         .get_mut(index as usize)
                         .ok_or_else(|| Error::new("animation.node", "missing bone"))?;
-                    let mode = if track.interp == wr::Interpolation::STEP {
+                    let mode = if track.interp == wr::Interpolation::Step {
                         0
                     } else {
                         1
                     };
                     match channel.target.channel {
-                        wr::Channel::TRANSLATION => {
+                        wr::Channel::Translation => {
+                            if bone.position.animation_id != id {
+                                bone.position.flags = nr::AnimationFlags(
+                                    bone.position.flags.bits() | nr::AnimationFlags::VALID.bits(),
+                                );
+                            }
                             bone.position.animation_id = id;
-                            bone.position.interpolation = mode;
-                            bone.position.flags |= 1;
+                            bone.position.interpolation = nr::Interpolation::from_raw(mode);
                         }
-                        wr::Channel::ROTATION => {
+                        wr::Channel::Rotation => {
+                            if bone.rotation.animation_id != id {
+                                bone.rotation.flags = nr::AnimationFlags(
+                                    bone.rotation.flags.bits() | nr::AnimationFlags::VALID.bits(),
+                                );
+                            }
                             bone.rotation.animation_id = id;
-                            bone.rotation.interpolation = mode;
-                            bone.rotation.flags |= 1;
+                            bone.rotation.interpolation = nr::Interpolation::from_raw(mode);
                         }
                         _ => {
+                            if bone.scale.animation_id != id {
+                                bone.scale.flags = nr::AnimationFlags(
+                                    bone.scale.flags.bits() | nr::AnimationFlags::VALID.bits(),
+                                );
+                            }
                             bone.scale.animation_id = id;
-                            bone.scale.interpolation = mode;
-                            bone.scale.flags |= 1;
+                            bone.scale.interpolation = nr::Interpolation::from_raw(mode);
                         }
                     }
                 } else if channel.target.node < model_record.nodes.nodes.entries {
@@ -162,12 +174,11 @@ pub(super) fn export_native<E: Envelope>(
                         let index = mapping[channel.target.node as usize];
                         bones[index as usize].batching.animation_id = id;
                         bones[index as usize].batching.interpolation =
-                            if track.interp == wr::Interpolation::STEP {
-                                0
+                            if track.interp == wr::Interpolation::Step {
+                                nr::Interpolation::Constant
                             } else {
-                                1
+                                nr::Interpolation::Linear
                             };
-                        bones[index as usize].batching.flags |= 1;
                     }
                 }
             }
@@ -201,10 +212,10 @@ pub(super) fn export_native<E: Envelope>(
             }
             let default_family = match channel.value_type {
                 wr::AttrType::F32 => 5,
-                wr::AttrType::F32X2 => 1,
-                wr::AttrType::F32X3 => 2,
-                wr::AttrType::F32X4 | wr::AttrType::QUAT => 3,
-                wr::AttrType::U8X4 => 4,
+                wr::AttrType::F32x2 => 1,
+                wr::AttrType::F32x3 => 2,
+                wr::AttrType::F32x4 | wr::AttrType::Quat => 3,
+                wr::AttrType::U8x4 => 4,
                 wr::AttrType::U16 => 8,
                 wr::AttrType::I32 => 9,
                 wr::AttrType::U32 => 10,
@@ -239,7 +250,7 @@ pub(super) fn export_native<E: Envelope>(
                 .copied()
                 .unwrap_or((clip.duration * 1000.).round() as i64)
                 as u32;
-            if track.interp != wr::Interpolation::STEP && track.interp != wr::Interpolation::LINEAR
+            if track.interp != wr::Interpolation::Step && track.interp != wr::Interpolation::Linear
             {
                 context.unsupported(
                     "animation.interpolation",

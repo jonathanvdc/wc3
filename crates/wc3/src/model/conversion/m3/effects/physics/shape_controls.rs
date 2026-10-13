@@ -26,16 +26,25 @@ pub(super) fn import<E: Envelope>(
                 }
                 values.insert(
                     format!("{key}.points_flags"),
-                    i64::from(row.source_points.flags),
+                    i64::from((row.source_points.flags).bits()),
                 );
                 let (unused, planes, triangles): (
                     Ref<nr::targets::Byte>,
                     Ref<nr::targets::Vector4>,
                     Ref<nr::targets::U16>,
                 ) = $links(&row);
-                values.insert(format!("{key}.triangles_flags"), i64::from(triangles.flags));
-                values.insert(format!("{key}.unused_flags"), i64::from(unused.flags));
-                values.insert(format!("{key}.planes_flags"), i64::from(planes.flags));
+                values.insert(
+                    format!("{key}.triangles_flags"),
+                    i64::from((triangles.flags).bits()),
+                );
+                values.insert(
+                    format!("{key}.unused_flags"),
+                    i64::from((unused.flags).bits()),
+                );
+                values.insert(
+                    format!("{key}.planes_flags"),
+                    i64::from((planes.flags).bits()),
+                );
                 values.insert(format!("{key}.unused_count"), i64::from(unused.entries));
                 for (i, byte) in source
                     .resolve::<nr::Byte>(unused.cast())
@@ -95,11 +104,11 @@ pub(super) fn import<E: Envelope>(
                         }
                         values.insert(
                             format!("{key}.points_flags"),
-                            i64::from(row.source_points.flags),
+                            i64::from((row.source_points.flags).bits()),
                         );
                         values.insert(
                             format!("{key}.triangles_flags"),
-                            i64::from(row.source_triangles.flags),
+                            i64::from((row.source_triangles.flags).bits()),
                         );
                     }
                 };
@@ -134,8 +143,8 @@ pub(super) fn export<E: Envelope>(
     for (i, value) in row.legacy_reserved_1.0.iter_mut().enumerate() {
         *value = byte(&format!("padding[{i}]"))?;
     }
-    row.source_points.flags = get("points_flags") as u32;
-    row.source_triangles.flags = get("triangles_flags") as u32;
+    row.source_points.flags = nr::ReferenceFlags(get("points_flags") as u32);
+    row.source_triangles.flags = nr::ReferenceFlags(get("triangles_flags") as u32);
     let count = |field: &str| {
         usize::try_from(get(field))
             .map_err(|_| Error::new(format!("{key}.{field}"), "invalid array count"))
@@ -167,9 +176,9 @@ pub(super) fn export<E: Envelope>(
         return Err(Error::new(&key, "collision planes must be finite"));
     }
     row.unused = append(doc, &unused)?.cast();
-    row.unused.flags = get("unused_flags") as u32;
+    row.unused.flags = nr::ReferenceFlags(get("unused_flags") as u32);
     row.planes = append(doc, &planes)?.cast();
-    row.planes.flags = get("planes_flags") as u32;
+    row.planes.flags = nr::ReferenceFlags(get("planes_flags") as u32);
     Ok(())
 }
 

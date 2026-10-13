@@ -55,7 +55,7 @@ fn fixture<D: Dialect>() -> Bundle<'static, D> {
     ));
     group.chunks_mut().push(GroupChunk::Triangles(
         Array::from_records(&[r::Triangle {
-            flags: 0,
+            flags: Default::default(),
             material: 0,
         }])
         .unwrap(),
@@ -205,7 +205,10 @@ fn native_lights_are_editable_wem_payloads() {
         .value;
     let mut raw = asset.document.into_raw();
     let root = raw
-        .resolve::<wr::DocumentRecord<wr::V1>>(wem::Ref::new(1, raw.root_reference().index, 0))
+        .resolve::<wr::DocumentRecord<wr::V1>>(wem::Ref::from_section(
+            1,
+            raw.root_reference().index,
+        ))
         .unwrap()
         .get(0)
         .unwrap()
@@ -308,7 +311,7 @@ fn collision_is_an_active_wem_triangle_mesh() {
     let group = source.group_mut(GroupKey { index: 0, lod: 0 }).unwrap();
     group.chunks_mut().push(GroupChunk::BspNodes(
         Array::from_records(&[r::BspNode {
-            flags: 4,
+            flags: r::BspFlags(4),
             negative_child: -1,
             positive_child: -1,
             face_count: 1,
@@ -408,7 +411,7 @@ fn liquid_grid_fields_rebuild_without_source_bytes() {
         .map(|value| wr::Character { value })
         .collect::<Vec<_>>();
     let text = raw.append(&characters).unwrap();
-    fields[height].text = wem::Ref::new(characters.len() as u32, text.index(), 0);
+    fields[height].text = wem::Ref::from_section(characters.len() as u32, text.index());
     raw.replace(
         raw.section_id(section.native.entries.index).unwrap(),
         &fields,
@@ -445,7 +448,7 @@ fn draw_batches_override_collision_face_material_and_keep_classification() {
     for chunk in group.chunks_mut() {
         if let GroupChunk::Triangles(rows) = chunk {
             *rows = Array::from_records(&[r::Triangle {
-                flags: 0,
+                flags: Default::default(),
                 material: 255,
             }])
             .unwrap();
@@ -462,7 +465,7 @@ fn draw_batches_override_collision_face_material_and_keep_classification() {
             index_count: 3,
             minimum_vertex: 0,
             maximum_vertex: 2,
-            flags: 0,
+            flags: Default::default(),
             material: 0,
         }])
         .unwrap(),
@@ -512,7 +515,7 @@ fn draw_batches_override_collision_face_material_and_keep_classification() {
 fn historical_untextured_materials_have_an_empty_name_table() {
     let asset = conversion::Asset::new(
         semantic::build(&semantic::Model {
-            profile: wr::ProfileId::WOW,
+            profile: wr::ProfileId::Wow,
             materials: vec![semantic::Material::default()],
             ..Default::default()
         })
@@ -530,4 +533,40 @@ fn historical_untextured_materials_have_an_empty_name_table() {
         .unwrap()
         .value;
     beta.validate_complete().unwrap();
+}
+
+#[test]
+fn unknown_native_blends_keep_their_namespace_during_common_edits() {
+    for code in [8, 9] {
+        let mut source = fixture::<wmo::Classic>();
+        for chunk in source.root.chunks_mut() {
+            if let RootChunk::Materials(rows) = chunk {
+                let mut records = rows.iter().collect::<Result<Vec<_>, _>>().unwrap();
+                records[0].blend_mode = r::BlendMode::Unknown(code);
+                *rows = Array::from_records(&records).unwrap();
+            }
+        }
+        let imported = conversion::wmo::import(&source, &ImportOptions::default()).unwrap();
+        let mut common = imported.value.model(&ExportOptions::default()).unwrap();
+        assert_eq!(common.materials[0].blend, wr::BlendMode::Opaque);
+        common.materials[0].name = "Renamed".into();
+        let edited = conversion::Asset::new(wem::semantic::build(&common).unwrap());
+        let output = conversion::wmo::plan::<wmo::Classic>(&edited, &ExportOptions::default())
+            .unwrap()
+            .execute()
+            .unwrap()
+            .value;
+        let material = output
+            .root
+            .chunks()
+            .find_map(|chunk| {
+                if let RootChunk::Materials(rows) = chunk {
+                    Some(rows.get(0).unwrap().unwrap())
+                } else {
+                    None
+                }
+            })
+            .unwrap();
+        assert_eq!(material.blend_mode, r::BlendMode::Unknown(code));
+    }
 }

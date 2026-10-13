@@ -1,3 +1,4 @@
+use wc3::model::m3;
 use wc3::model::m3::records::{ModelRecord, U32, V23};
 use wc3::model::m3::{AnimationFile, Bundle, Document, Envelope, Md33, Md34, Model, Ref};
 fn model<E: Envelope>(primary: u32, additional: &[u32]) -> Model<'static, E> {
@@ -9,11 +10,11 @@ fn model<E: Envelope>(primary: u32, additional: &[u32]) -> Model<'static, E> {
     let hashes_id = document.append(&hashes).unwrap();
     let root = ModelRecord::<V23> {
         m3a_anim_hash: primary,
-        m3a_anim_hashes: Ref::new(hashes.len() as u32, hashes_id.index(), 0),
+        m3a_anim_hashes: Ref::from_section(hashes.len() as u32, hashes_id.index()),
         ..ModelRecord::<V23>::default()
     };
     let id = document.append(&[root]).unwrap();
-    document.set_root(Ref::<ModelRecord<V23>>::new(1, id.index(), 0));
+    document.set_root(Ref::<ModelRecord<V23>>::from_section(1, id.index()));
     Model::from_document(document).unwrap()
 }
 #[test]
@@ -92,17 +93,21 @@ fn native_roots_share_one_name_section_and_record_revisions_remain_independent()
         .collect();
     let name = document.append(&characters).unwrap();
     let group = AnimationGroup {
-        name: Ref::new(characters.len() as u32, name.index(), 7),
+        name: Ref::new(
+            characters.len() as u32,
+            name.index(),
+            m3::records::ReferenceFlags(7),
+        ),
         ..AnimationGroup::default()
     };
     let group_id = document.append(&[group]).unwrap();
     let root = ModelRecord::<V21> {
         name: group.name,
-        animation_groups: Ref::new(1, group_id.index(), 0),
+        animation_groups: Ref::from_section(1, group_id.index()),
         ..ModelRecord::<V21>::default()
     };
     let root_id = document.append(&[root]).unwrap();
-    document.set_root(Ref::<ModelRecord<V21>>::new(1, root_id.index(), 0));
+    document.set_root(Ref::<ModelRecord<V21>>::from_section(1, root_id.index()));
     let model = Model::from_document(document).unwrap();
     let a = model
         .document()
@@ -134,7 +139,15 @@ fn native_roots_share_one_name_section_and_record_revisions_remain_independent()
             .revision(),
         0
     );
-    assert_eq!(decoded.root::<ModelRecord<V21>>().unwrap().name.flags, 7);
+    assert_eq!(
+        decoded
+            .root::<ModelRecord<V21>>()
+            .unwrap()
+            .name
+            .flags
+            .bits(),
+        7
+    );
 }
 
 #[test]
@@ -179,7 +192,7 @@ fn newly_established_root_revisions_have_exact_common_metadata() {
             ..ModelRecord::<V22>::default()
         }])
         .unwrap();
-    document.set_root(Ref::<ModelRecord<V22>>::new(1, id.index(), 0));
+    document.set_root(Ref::<ModelRecord<V22>>::from_section(1, id.index()));
     let model = Model::from_document(document).unwrap();
     assert_eq!(model.root_record().unwrap().revision(), 22);
     assert_eq!(model.animation_hashes().unwrap(), [22]);
@@ -188,11 +201,11 @@ fn newly_established_root_revisions_have_exact_common_metadata() {
     let id = document
         .append(&[ModelRecord::<V27> {
             m3a_anim_hash: 27,
-            m3a_anim_hashes: Ref::new(1, hashes.index(), 0),
+            m3a_anim_hashes: Ref::from_section(1, hashes.index()),
             ..ModelRecord::<V27>::default()
         }])
         .unwrap();
-    document.set_root(Ref::<ModelRecord<V27>>::new(1, id.index(), 0));
+    document.set_root(Ref::<ModelRecord<V27>>::from_section(1, id.index()));
     let model = Model::from_document(document).unwrap();
     assert_eq!(model.root_record().unwrap().revision(), 27);
     assert_eq!(model.animation_hashes().unwrap(), [27, 28]);

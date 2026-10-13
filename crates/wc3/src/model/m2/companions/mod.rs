@@ -1,5 +1,6 @@
 //! Standalone M2 companion codecs. Reading a companion never accesses other files.
 use super as m2;
+use super::records::ModelFlags;
 pub(crate) mod fixed;
 pub use fixed::*;
 mod skin;
@@ -19,9 +20,9 @@ use super::{ReadError, WriteError};
 pub(crate) fn flat_records<'data, T: m2::Read<'data> + m2::RecordLayout>(
     data: &'data [u8],
     version: u32,
-    flags: u32,
+    flags: ModelFlags,
 ) -> Result<Vec<T>, ReadError> {
-    let stride = T::size(version, flags);
+    let stride = T::size(version, flags.bits());
     if stride == 0 || !data.len().is_multiple_of(stride) {
         return Err(ReadError::invalid(0, "record array byte length"));
     }
@@ -32,7 +33,7 @@ pub(crate) fn flat_records<'data, T: m2::Read<'data> + m2::RecordLayout>(
 pub(crate) fn encode_records<T: m2::Write + m2::RecordLayout>(
     records: &[T],
     version: u32,
-    flags: u32,
+    flags: ModelFlags,
 ) -> Result<Vec<u8>, WriteError> {
     let mut e = Encoder::new(version, flags);
     e.write_records(records)?;
@@ -40,7 +41,7 @@ pub(crate) fn encode_records<T: m2::Write + m2::RecordLayout>(
 }
 type ChunkBytes<'data> = ([u8; 4], &'data [u8]);
 pub(crate) fn chunk_bytes(data: &[u8]) -> Result<Vec<ChunkBytes<'_>>, ReadError> {
-    let mut d = Decoder::new(data, 0, 0);
+    let mut d = Decoder::new(data, 0, ModelFlags::default());
     let mut chunks = Vec::new();
     while d.position() < data.len() {
         let tag = d

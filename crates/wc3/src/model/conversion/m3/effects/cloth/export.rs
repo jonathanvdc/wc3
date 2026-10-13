@@ -118,7 +118,7 @@ pub(in crate::model::conversion::m3) fn export<E: Envelope>(
                 .iter()
                 .find(|row| row.id == id)
                 .ok_or_else(|| Error::new("cloth.collider", "missing collider identity"))?;
-            if collider.kind != wr::ClothColliderKind::CAPSULE || collider.body != 0 {
+            if collider.kind != wr::ClothColliderKind::Capsule || collider.body != 0 {
                 context.unsupported(
                     "cloth.collider.kind",
                     "M3 cloth requires independent capsule colliders",
@@ -200,8 +200,8 @@ pub(in crate::model::conversion::m3) fn export<E: Envelope>(
             }
         };
         let active = nr::AnimationValue {
-            interpolation: get("m3.cloth.active.interpolation") as u16,
-            flags: get("m3.cloth.active.flags") as u16,
+            interpolation: nr::Interpolation::from_raw(get("m3.cloth.active.interpolation") as u16),
+            flags: nr::AnimationFlags(get("m3.cloth.active.flags") as u16),
             animation_id: get("m3.cloth.active.animation_id") as u32,
             reserved: get("m3.cloth.active.reserved") as i32,
             initial_value: preserve("m3.cloth.active.initial", cloth.active.get()),

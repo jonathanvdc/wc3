@@ -106,8 +106,8 @@ pub(super) fn read_impl<'a>(
                     translation: node.local.translation,
                     rotation: node.local.rotation,
                     scale: node.local.scale,
-                    flags: node.flags.0,
-                    bone: node.kind == r::NodeKind::BONE,
+                    flags: node.flags,
+                    bone: node.kind == r::NodeKind::Bone,
                     ..Default::default()
                 });
             }
@@ -151,8 +151,8 @@ pub(super) fn read_impl<'a>(
                         rotation: node.local.rotation,
                         scale: node.local.scale,
                         inverse_bind: matrix,
-                        flags: node.flags.0,
-                        bone: node.kind == r::NodeKind::BONE,
+                        flags: node.flags,
+                        bone: node.kind == r::NodeKind::Bone,
                     });
                 }
             }
@@ -222,8 +222,8 @@ pub(super) fn read_impl<'a>(
             model.materials.push(Material {
                 name: text_view(doc, material.name)?,
                 texture,
-                blend: material.common.blend.0,
-                flags: material.common.flags.0,
+                blend: material.common.blend,
+                flags: material.common.flags,
             });
         }
     }
@@ -232,7 +232,17 @@ pub(super) fn read_impl<'a>(
         ($v:ty) => {
             rows::<r::Clip<$v>>(doc, root.clips.cast())?
                 .into_iter()
-                .map(|c| (c.name, c.model, c.duration, c.flags, c.containers, c.native))
+                .map(|c| {
+                    (
+                        c.name,
+                        c.model,
+                        c.duration,
+                        c.flags,
+                        c.looping,
+                        c.containers,
+                        c.native,
+                    )
+                })
                 .collect::<Vec<_>>()
         };
     }
@@ -250,7 +260,7 @@ pub(super) fn read_impl<'a>(
             7 => clip_rows!(r::V7),
             _ => return Err(ReadError::unsupported(0, "clip revision")),
         };
-        for (name, owner, duration, flags, containers, native) in clips {
+        for (name, owner, duration, flags, looping, containers, native) in clips {
             if owner != index {
                 continue;
             }
@@ -258,7 +268,8 @@ pub(super) fn read_impl<'a>(
             let mut clip = Clip {
                 name: text_view(doc, name)?,
                 duration,
-                flags: flags.0,
+                flags,
+                looping: looping.get(),
                 id: meta.get("conversion.clip_id").map_or(0, |v| v.0 as u32),
                 ..Default::default()
             };
@@ -293,27 +304,27 @@ pub(super) fn read_impl<'a>(
                         source: Some(container_index as u32),
                     };
                     let target = match channel.target.channel {
-                        r::Channel(255) => Target::NativeProperty {
+                        r::Channel::Unknown(255) => Target::NativeProperty {
                             owner: channel.target.node,
                             id: channel.target.sub,
                         },
-                        r::Channel::TRANSLATION => Target::Translation(channel.target.node),
-                        r::Channel::ROTATION => Target::Rotation(channel.target.node),
-                        r::Channel::SCALE => Target::Scale(channel.target.node),
-                        r::Channel::EMITTER_PROPERTY => Target::Property {
+                        r::Channel::Translation => Target::Translation(channel.target.node),
+                        r::Channel::Rotation => Target::Rotation(channel.target.node),
+                        r::Channel::Scale => Target::Scale(channel.target.node),
+                        r::Channel::EmitterProperty => Target::Property {
                             owner: channel.target.node,
                             channel: channel.target.sub,
                         },
                         code => Target::Property {
                             owner: channel.target.node,
-                            channel: u32::from(code.0),
+                            channel: u32::from(code.raw()),
                         },
                     };
                     let interp = match interp {
-                        r::Interpolation::STEP => Interpolation::Step,
-                        r::Interpolation::LINEAR | r::Interpolation::SLERP => Interpolation::Linear,
-                        r::Interpolation::HERMITE => Interpolation::Hermite,
-                        r::Interpolation::BEZIER => Interpolation::Bezier,
+                        r::Interpolation::Step => Interpolation::Step,
+                        r::Interpolation::Linear | r::Interpolation::Slerp => Interpolation::Linear,
+                        r::Interpolation::Hermite => Interpolation::Hermite,
+                        r::Interpolation::Bezier => Interpolation::Bezier,
                         _ => return Err(ReadError::unsupported(0, "animation interpolation")),
                     };
                     if matches!(
@@ -321,9 +332,9 @@ pub(super) fn read_impl<'a>(
                         r::AttrType::U32
                             | r::AttrType::I32
                             | r::AttrType::U16
-                            | r::AttrType::U8X4
-                            | r::AttrType::BOOL
-                            | r::AttrType::U32X4
+                            | r::AttrType::U8x4
+                            | r::AttrType::Bool
+                            | r::AttrType::U32x4
                     ) {
                         let times = rows::<r::Real>(doc, times.cast())?;
                         clip.integer_tracks.push(integer::decode(
@@ -341,9 +352,9 @@ pub(super) fn read_impl<'a>(
                     }
                     let width = match channel.value_type {
                         r::AttrType::F32 => 1,
-                        r::AttrType::F32X2 => 2,
-                        r::AttrType::F32X3 => 3,
-                        r::AttrType::F32X4 | r::AttrType::QUAT => 4,
+                        r::AttrType::F32x2 => 2,
+                        r::AttrType::F32x3 => 3,
+                        r::AttrType::F32x4 | r::AttrType::Quat => 4,
                         _ => return Err(ReadError::unsupported(0, "animation value type")),
                     };
                     let times = rows::<r::Real>(doc, times.cast())?;

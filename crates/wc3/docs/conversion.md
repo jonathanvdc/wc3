@@ -92,6 +92,15 @@ API when their common view does not expose the required control. A material's
 authoritative. Common material edits made through the semantic builder mark the
 common representation as changed so the adapter can update its native fields.
 
+Common material blends are named `BlendMode` variants, and common node,
+material, texture, and clip flags use bitfield types. Adapters map their meanings
+rather than copying native numerical codes into another format's namespace.
+Clip looping is a separate boolean, since native sequence flags and WEM clip
+flags describe different controls. Native values without a common equivalent
+remain in their profile records or metadata; an unchanged common projection
+preserves those values when exporting back to the source format. Unknown native
+codes do not become known common operations merely because their numbers match.
+
 `semantic::build_with_options` selects document options for a new model,
 including the producer ABI required by ABI-dependent native M3 materials. A view
 of an existing document retains that document's options.

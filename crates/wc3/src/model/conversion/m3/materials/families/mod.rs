@@ -13,7 +13,7 @@ pub(in crate::model::conversion::m3) fn body<E: Envelope>(
     let source = model.document();
     let root = model.root_record().map_err(read_error)?;
     match map.material_type {
-        1 => {
+        nr::MaterialKind::Standard => {
             let reference = native::visit_m3_root!(root, |r| r.standard_materials);
             Ok((
                 wr::M3Body::Standard(Box::new(get_standard(
@@ -25,7 +25,7 @@ pub(in crate::model::conversion::m3) fn body<E: Envelope>(
                 revision(source, reference).map_err(read_error)?,
             ))
         }
-        2 => {
+        nr::MaterialKind::Displacement => {
             let reference: native::Ref<nr::targets::DisplacementMaterial> =
                 native::visit_m3_root!(root, |r| Slot::value(&r.displacement_materials));
             Ok((
@@ -38,7 +38,7 @@ pub(in crate::model::conversion::m3) fn body<E: Envelope>(
                 revision(source, reference).map_err(read_error)?,
             ))
         }
-        3 => {
+        nr::MaterialKind::Composite => {
             let reference: native::Ref<nr::targets::CompositeMaterial> =
                 native::visit_m3_root!(root, |r| Slot::value(&r.composite_materials));
             Ok((
@@ -51,7 +51,7 @@ pub(in crate::model::conversion::m3) fn body<E: Envelope>(
                 revision(source, reference).map_err(read_error)?,
             ))
         }
-        4 => {
+        nr::MaterialKind::Terrain => {
             let reference: native::Ref<nr::targets::TerrainMaterial> =
                 native::visit_m3_root!(root, |r| Slot::value(&r.terrain_materials));
             Ok((
@@ -64,7 +64,7 @@ pub(in crate::model::conversion::m3) fn body<E: Envelope>(
                 revision(source, reference).map_err(read_error)?,
             ))
         }
-        5 => {
+        nr::MaterialKind::Volume => {
             let reference: native::Ref<nr::targets::VolumeMaterial> =
                 native::visit_m3_root!(root, |r| Slot::value(&r.volume_materials));
             Ok((
@@ -77,7 +77,7 @@ pub(in crate::model::conversion::m3) fn body<E: Envelope>(
                 revision(source, reference).map_err(read_error)?,
             ))
         }
-        6 => {
+        nr::MaterialKind::VolumeNoise => {
             let reference: native::Ref<nr::targets::VolumeNoiseMaterial> =
                 native::visit_m3_root!(root, |r| Slot::value(&r.volume_noise_materials));
             Ok((
@@ -90,7 +90,7 @@ pub(in crate::model::conversion::m3) fn body<E: Envelope>(
                 revision(source, reference).map_err(read_error)?,
             ))
         }
-        7 => {
+        nr::MaterialKind::Creep => {
             let reference: native::Ref<nr::targets::CreepMaterial> =
                 native::visit_m3_root!(root, |r| Slot::value(&r.creep_materials));
             Ok((
@@ -103,7 +103,7 @@ pub(in crate::model::conversion::m3) fn body<E: Envelope>(
                 revision(source, reference).map_err(read_error)?,
             ))
         }
-        9 => {
+        nr::MaterialKind::SplatTerrainBake => {
             let reference: native::Ref<nr::targets::STBMaterial> =
                 native::visit_m3_root!(root, |r| Slot::value(&r.stb_materials));
             Ok((
@@ -116,7 +116,7 @@ pub(in crate::model::conversion::m3) fn body<E: Envelope>(
                 revision(source, reference).map_err(read_error)?,
             ))
         }
-        10 => {
+        nr::MaterialKind::Reflection => {
             let reference: native::Ref<nr::targets::ReflectionMaterial> =
                 native::visit_m3_root!(root, |r| Slot::value(&r.reflection_materials));
             Ok((
@@ -129,7 +129,7 @@ pub(in crate::model::conversion::m3) fn body<E: Envelope>(
                 revision(source, reference).map_err(read_error)?,
             ))
         }
-        11 => {
+        nr::MaterialKind::LensFlare => {
             let reference: native::Ref<nr::targets::LensFlare> =
                 native::visit_m3_root!(root, |r| Slot::value(&r.lens_flare_materials));
             Ok((
@@ -142,7 +142,7 @@ pub(in crate::model::conversion::m3) fn body<E: Envelope>(
                 revision(source, reference).map_err(read_error)?,
             ))
         }
-        12 => {
+        nr::MaterialKind::DataDriven => {
             let reference: native::Ref<nr::targets::DataDrivenMaterial> =
                 native::visit_m3_root!(root, |r| Slot::value(&r.data_driven_materials));
             Ok((
@@ -253,7 +253,7 @@ impl Families {
             }
         };
         Ok(nr::MaterialMap {
-            material_type: kind,
+            material_type: nr::MaterialKind::from_raw(kind),
             material_index: index as u32,
         })
     }

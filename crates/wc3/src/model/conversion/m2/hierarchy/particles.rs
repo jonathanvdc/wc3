@@ -23,9 +23,17 @@ where
             particle: Some(index),
             texts: Vec::new(),
             index: node,
-            kind: wr::NodeKind::PARTICLE_EMITTER,
+            kind: wr::NodeKind::ParticleEmitter,
             payload: wr::NodePayload::Helper(Box::default()),
-            metadata: vec![],
+            metadata: D::Layout::legacy_texture_scale(particle).map_or_else(
+                Vec::new,
+                |[kind, head_tail]| {
+                    vec![
+                        ("m2.particle_type", i64::from(kind)),
+                        ("m2.head_or_tail", i64::from(head_tail)),
+                    ]
+                },
+            ),
         });
         for sequence in 0..model.clips.len() {
             let start = core
@@ -68,7 +76,7 @@ where
                     owner: node as u32,
                     channel: 1004,
                 },
-                |v| gravity_vector(v, particle.flags & 0x800000 != 0).map(|v| v.to_vec()),
+                |v| gravity_vector(v, particle.flags.packed_gravity()).map(|v| v.to_vec()),
             )? {
                 model.clips[sequence].tracks.push(track);
             }

@@ -20,6 +20,25 @@ impl<T> Assign<T> for () {
 }
 macro_rules! scalar{($($t:ty),*)=>{$(impl Slot<$t> for $t{fn slot(self)->Option<Self>{Some(self)}}impl Assign<$t> for $t{const PRESENT:bool=true;fn assign(value:Self)->Self{value}})*};}
 scalar!(f32, u32, i32);
+macro_rules! enum_slot {
+    ($($ty:ty),*) => {$(
+        impl Slot<u32> for $ty { fn slot(self) -> Option<u32> { Some(self.raw()) } }
+        impl Assign<u32> for $ty { const PRESENT:bool=true; fn assign(value:u32)->Self {Self::from_raw(value)} }
+    )*};
+}
+enum_slot!(nr::Smoothing, nr::Variation);
+macro_rules! flags_slot {
+    ($($ty:ty),*) => {$(
+        impl Slot<u32> for $ty { fn slot(self) -> Option<u32> { Some(self.bits()) } }
+        impl Assign<u32> for $ty { const PRESENT:bool=true; fn assign(value:u32)->Self {value.into()} }
+    )*};
+}
+flags_slot!(
+    nr::ParticleAdditionalFlags,
+    nr::ParticleRotationFlags,
+    nr::RibbonAdditionalFlags
+);
+
 impl<T> Slot<nr::AnimationValue<T>> for nr::AnimationValue<T> {
     fn slot(self) -> Option<Self> {
         Some(self)

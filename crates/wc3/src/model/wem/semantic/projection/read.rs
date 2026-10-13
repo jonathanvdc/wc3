@@ -50,7 +50,7 @@ pub(in crate::model::wem::semantic) fn read_mesh<'a>(
     for layer in &layers {
         let name = doc.string(layer.name)?.unwrap_or_default();
         if name == "section" {
-            if layer.domain != r::Domain::FACE {
+            if layer.domain != r::Domain::Face {
                 return Err(ReadError::invalid(
                     0,
                     "section assignment must use the face domain",
@@ -76,8 +76,8 @@ pub(in crate::model::wem::semantic) fn read_mesh<'a>(
         ));
     }
     let expand = layers.iter().any(|layer| {
-        layer.domain != r::Domain::VERTEX
-            && layer.domain != r::Domain::MESH
+        layer.domain != r::Domain::Vertex
+            && layer.domain != r::Domain::Mesh
             && doc.string(layer.name).ok().flatten() != Some("section")
     });
     let offsets = rows::<r::U32>(doc, mesh.triangulation.offsets.cast())?;
@@ -195,10 +195,10 @@ pub(in crate::model::wem::semantic) fn read_mesh<'a>(
             .collect();
     }
     let expected = |domain| match domain {
-        r::Domain::VERTEX => Ok(vertices),
-        r::Domain::HALFEDGE => Ok(corner_count),
-        r::Domain::FACE => Ok(valences.len()),
-        r::Domain::MESH => Ok(1),
+        r::Domain::Vertex => Ok(vertices),
+        r::Domain::Halfedge => Ok(corner_count),
+        r::Domain::Face => Ok(valences.len()),
+        r::Domain::Mesh => Ok(1),
         _ => Err(ReadError::unsupported(0, "edge attribute domain")),
     };
     let mut result = Vec::new();

@@ -1,4 +1,5 @@
 //! Composable record codec traits and standard I/O adapters.
+use super::records::ModelFlags;
 use super::{
     codec::{Decoder, Encoder},
     Dialect, DynamicModel, Model, ReadError, WriteError,
@@ -46,7 +47,7 @@ pub fn from_reader_dynamic(
 /// Models select their own dialect and flags. Context-dependent record values
 /// should instead use an explicitly configured [`Encoder`].
 pub fn to_writer(mut writer: impl IoWrite, value: &impl Write) -> Result<(), IoError<WriteError>> {
-    let mut encoder = Encoder::new(0, 0);
+    let mut encoder = Encoder::new(0, ModelFlags::default());
     value.write(&mut encoder).map_err(IoError::Codec)?;
     let bytes = encoder.finish();
     writer.write_all(&bytes).map_err(IoError::Io)

@@ -332,7 +332,7 @@ pub struct ForceFieldPayload<D: ForceFieldPayloadDialect> {
     /// Stored boolean byte controlling affects bodies; nonzero encodings are retained.
     pub affects_bodies: Bool,
     /// Force-channel mask matched against rigid-body force channels.
-    pub channels: u32,
+    pub channels: ForceChannels,
     /// Source force-field scope value; zero denotes the model itself. Other values are unresolved.
     pub scope: u32,
     /// Strength parameter stored as a floating-point value.
@@ -2298,7 +2298,7 @@ pub struct M2ParticleEmitterPayload<D: M2ParticleEmitterPayloadDialect> {
     /// M2 particle-emitter identifier; negative values are retained.
     pub particle_id: i32,
     /// Stored state bits; unknown bits are retained.
-    pub flags: u32,
+    pub flags: M2ParticleFlags,
     /// Document texture index used by the emitter.
     pub texture: u32,
     /// Second texture index in the document texture table, used by multi-texture emitters.
@@ -2306,9 +2306,9 @@ pub struct M2ParticleEmitterPayload<D: M2ParticleEmitterPayloadDialect> {
     /// Third texture index in the document texture table, used by multi-texture emitters.
     pub texture3: u32,
     /// M2 blend-mode number, independent of Warcraft III particle blending modes.
-    pub blend: u32,
+    pub blend: M2ParticleBlend32,
     /// M2 emitter shape code: 1 plane, 2 sphere, 3 spline, or 4 bone.
-    pub emitter_type: u32,
+    pub emitter_type: M2EmitterShape,
     /// Color index selector; sentinel and unrecognized values are retained.
     pub color_index: u32,
     /// Number of rows in the particle texture atlas.
@@ -2460,7 +2460,7 @@ pub struct Sc2Property<T> {
 )]
 pub struct Sc2Variation {
     /// Variation function code retained from the source emitter.
-    pub type_: u32,
+    pub type_: Sc2VariationKind,
     /// Magnitude of variation applied to the associated property.
     pub amplitude: Sc2Property<f32>,
     /// Frequency parameter of the selected variation function.
@@ -2485,7 +2485,7 @@ pub struct Sc2ParticleEmitterPayload {
     /// Index of the model material slot drawn by this emitter.
     pub material_slot: u32,
     /// Supplementary StarCraft II emitter flags; unknown bits remain available.
-    pub additional_flags: u32,
+    pub additional_flags: Sc2ParticleAdditionalFlags,
     /// Initial particle-speed property, including its unanimated and reset values.
     pub initial_speed: Sc2Property<f32>,
     /// Randomized initial-speed property in the source emitter.
@@ -2545,13 +2545,13 @@ pub struct Sc2ParticleEmitterPayload {
     /// Mass size multiplier parameter stored as a floating-point value.
     pub mass_size_multiplier: f32,
     /// Mask selecting local force channels.
-    pub local_forces: u16,
+    pub local_forces: LocalForceChannels,
     /// Mask selecting world force channels.
-    pub world_forces: u16,
+    pub world_forces: WorldForceChannels,
     /// Fallback mask for local force channels.
-    pub local_forces_fallback: u16,
+    pub local_forces_fallback: LocalForceChannels,
     /// Fallback mask for world force channels.
-    pub world_forces_fallback: u16,
+    pub world_forces_fallback: WorldForceChannels,
     /// World forces mass multiplier parameter stored as a floating-point value.
     pub world_forces_mass_multiplier: f32,
     /// Noise amplitude parameter stored as a floating-point value.
@@ -2581,7 +2581,7 @@ pub struct Sc2ParticleEmitterPayload {
     /// Section reference containing shape sections; the target revision is selected by its index entry.
     pub shape_sections: Ref<targets::U32>,
     /// Source velocity-mode code; the meanings of its values are unresolved.
-    pub velocity_type: u32,
+    pub velocity_type: Sc2EmissionDirection,
     /// Source control word enabling size randomization.
     pub size_random_enable: u32,
     /// Random contribution to the three-component size property.
@@ -2667,9 +2667,9 @@ pub struct Sc2ParticleEmitterPayload {
     /// Animated phase-shift control; its effect-specific interpretation is unresolved.
     pub phase_shift: Sc2Property<f32>,
     /// Stored state bits; unknown bits are retained.
-    pub flags: u32,
+    pub flags: Sc2ParticleFlags,
     /// Rotation behavior flags of the StarCraft II emitter.
-    pub rotation_flags: u32,
+    pub rotation_flags: Sc2ParticleRotationFlags,
     /// Interpolation mode for the particle color controls.
     pub color_smoothing: Sc2Smoothing,
     /// Interpolation mode for the particle size controls.
@@ -2779,7 +2779,7 @@ pub struct Sc2RibbonEmitterPayload {
     /// Index of the model material slot drawn by this emitter.
     pub material_slot: u32,
     /// Supplementary StarCraft II emitter flags; unknown bits remain available.
-    pub additional_flags: u32,
+    pub additional_flags: Sc2RibbonAdditionalFlags,
     /// Initial particle-speed property, including its unanimated and reset values.
     pub initial_speed: Sc2Property<f32>,
     /// Randomized initial-speed property in the source emitter.
@@ -2839,13 +2839,13 @@ pub struct Sc2RibbonEmitterPayload {
     /// Mass size multiplier parameter stored as a floating-point value.
     pub mass_size_multiplier: f32,
     /// Mask selecting local force channels.
-    pub local_forces: u16,
+    pub local_forces: LocalForceChannels,
     /// Mask selecting world force channels.
-    pub world_forces: u16,
+    pub world_forces: WorldForceChannels,
     /// Fallback mask for local force channels.
-    pub local_forces_fallback: u16,
+    pub local_forces_fallback: LocalForceChannels,
     /// Fallback mask for world force channels.
-    pub world_forces_fallback: u16,
+    pub world_forces_fallback: WorldForceChannels,
     /// World forces mass multiplier parameter stored as a floating-point value.
     pub world_forces_mass_multiplier: f32,
     /// Noise amplitude parameter stored as a floating-point value.
@@ -2875,7 +2875,7 @@ pub struct Sc2RibbonEmitterPayload {
     /// Animated ribbon activation control.
     pub active: Sc2Property<u32>,
     /// Stored state bits; unknown bits are retained.
-    pub flags: u32,
+    pub flags: Sc2RibbonFlags,
     /// Interpolation mode for the particle size controls.
     pub size_smoothing: Sc2Smoothing,
     /// Interpolation mode for the particle color controls.

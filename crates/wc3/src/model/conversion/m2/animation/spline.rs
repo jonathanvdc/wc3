@@ -60,7 +60,7 @@ pub(in super::super) fn resolve_array<D: Dialect, T: Value>(
             let bytes = animation
                 .stream(*b"AFM2")
                 .ok_or_else(|| Error::new("cameras.animation", "missing model animation stream"))?;
-            Ok(Decoder::new(bytes, D::VERSION, 0)
+            Ok(Decoder::new(bytes, D::VERSION, ModelFlags::default())
                 .array::<T>(reference)
                 .map_err(failure)?
                 .iter()

@@ -1,4 +1,5 @@
 use wc3::model::common::FileKey;
+use wc3::model::m3;
 use wc3::model::m3::records::{
     Character, DataDrivenMaterial, StringReference, TextureLayer, V0, V1, V20,
 };
@@ -15,19 +16,19 @@ fn only_native_texture_fields_declare_dependencies() {
         .unwrap();
     let layer = document
         .append(&[TextureLayer::<V20> {
-            texture_path: Ref::new(2, path.index(), 9),
+            texture_path: Ref::new(2, path.index(), m3::records::ReferenceFlags(9)),
             ..Default::default()
         }])
         .unwrap();
     let strings = document
         .append(&[StringReference {
-            value: Ref::new(2, path.index(), 0),
+            value: Ref::from_section(2, path.index()),
         }])
         .unwrap();
     let material = document
         .append(&[DataDrivenMaterial::<V1> {
-            material_name: Ref::new(2, name.index(), 0),
-            texture_paths: Ref::new(1, strings.index(), 0),
+            material_name: Ref::from_section(2, name.index()),
+            texture_paths: Ref::from_section(1, strings.index()),
             ..Default::default()
         }])
         .unwrap();
@@ -49,7 +50,7 @@ fn only_native_texture_fields_declare_dependencies() {
         }
     );
     assert_eq!(dependencies[0].key(), FileKey::RawPath(vec![0xff]));
-    assert_eq!(dependencies[0].reference.flags, 9);
+    assert_eq!(dependencies[0].reference.flags.bits(), 9);
     assert_eq!(
         dependencies[0].path.as_ptr(),
         document.section(path).unwrap().bytes().as_ptr()
@@ -62,7 +63,7 @@ fn malformed_texture_string_is_reported() {
     let path = document.append(&[Character { value: b'x' }]).unwrap();
     document
         .append(&[TextureLayer::<V20> {
-            texture_path: Ref::new(1, path.index(), 0),
+            texture_path: Ref::from_section(1, path.index()),
             ..Default::default()
         }])
         .unwrap();
@@ -77,18 +78,18 @@ fn historically_defined_material_revisions_declare_texture_paths() {
         .unwrap();
     document
         .append(&[TextureLayer::<V0> {
-            texture_path: Ref::new(2, path.index(), 0),
+            texture_path: Ref::from_section(2, path.index()),
             ..Default::default()
         }])
         .unwrap();
     let strings = document
         .append(&[StringReference {
-            value: Ref::new(2, path.index(), 0),
+            value: Ref::from_section(2, path.index()),
         }])
         .unwrap();
     document
         .append(&[DataDrivenMaterial::<V0> {
-            texture_paths: Ref::new(1, strings.index(), 0),
+            texture_paths: Ref::from_section(1, strings.index()),
             ..Default::default()
         }])
         .unwrap();

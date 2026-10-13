@@ -50,11 +50,11 @@ fn regions<E: Envelope>(
         }),
         4 => rows!(nr::V4, |r: &nr::Region<nr::V4>, v: &mut Fields| {
             v.insert("m3.region.unknown".into(), i64::from(r.unknown));
-            v.insert("m3.region.flags".into(), i64::from(r.flags));
+            v.insert("m3.region.flags".into(), i64::from((r.flags).bits()));
         }),
         5 => rows!(nr::V5, |r: &nr::Region<nr::V5>, v: &mut Fields| {
             v.insert("m3.region.unknown".into(), i64::from(r.unknown));
-            v.insert("m3.region.flags".into(), i64::from(r.flags));
+            v.insert("m3.region.flags".into(), i64::from((r.flags).bits()));
             v.insert("m3.region.uv_scale".into(), i64::from(r.uv_scale.to_bits()));
             v.insert(
                 "m3.region.uv_offset".into(),
@@ -89,12 +89,12 @@ fn batches<E: Envelope>(
                 let mut v = Fields::new();
                 for (key, value) in [
                     ("flags", r.flags),
-                    ("priority_plane", r.priority_plane),
-                    ("bounds_index", r.bounds_index),
-                    ("color_index", r.color_index),
-                    ("visibility_bone", r.visibility_bone),
+                    ("priority_plane", nr::BatchFlags(r.priority_plane)),
+                    ("bounds_index", nr::BatchFlags(r.bounds_index)),
+                    ("color_index", nr::BatchFlags(r.color_index)),
+                    ("visibility_bone", nr::BatchFlags(r.visibility_bone)),
                 ] {
-                    v.insert(format!("m3.batch.{key}"), i64::from(value));
+                    v.insert(format!("m3.batch.{key}"), i64::from((value).bits()));
                 }
                 out.push((usize::from(r.region_index), v));
             }

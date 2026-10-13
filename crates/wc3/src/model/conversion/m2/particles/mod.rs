@@ -13,8 +13,16 @@ use import::import_particle;
 /// Layout-specific particle fields shared by the native emitter adapter.
 pub trait ParticleConversion: ModelLayout {
     /// Returns physical core flags required by the selected scrolling representation.
-    fn required_flags(value: &native::records::ParticleEmitter<'_, Self>) -> u32;
+    fn required_flags(value: &native::records::ParticleEmitter<'_, Self>) -> ModelFlags;
 
+    /// Reads legacy particle-shape and head/tail control bytes when present.
+    fn legacy_texture_scale(value: &native::records::ParticleEmitter<'_, Self>) -> Option<[u8; 2]>;
+    /// Restores editable legacy controls, rejecting nondefault controls in modern layouts.
+    fn restore_legacy_texture_scale(
+        value: &mut native::records::ParticleEmitter<'_, Self>,
+        parts: [u8; 2],
+        context: &mut Context,
+    ) -> Result<(), Error>;
     /// Reads the layout-selected ribbon ordering words.
     fn ribbon_tail(value: &<Self as native::records::RibbonLayout>::Tail) -> [i16; 3];
     /// Constructs the layout-selected ribbon ordering words.
@@ -36,7 +44,7 @@ pub trait ParticleConversion: ModelLayout {
     ) -> Result<native::records::ParticleEmitter<'static, Self>, Error>;
 }
 
-macro_rules! particle_layouts{($($version:ty),*)=>{$(impl ParticleConversion for $version{fn required_flags(value:&native::records::ParticleEmitter<'_,Self>)->u32{value.multi_texture_scroll.required_flag()}fn ribbon_tail(value:&<Self as native::records::RibbonLayout>::Tail)->[i16;3]{value.parts()}fn ribbon_tail_from(value:[i16;3],context:&mut Context)->Result<<Self as native::records::RibbonLayout>::Tail,Error>{RibbonTailFields::make(value,context)}fn import_particle(value:&native::records::ParticleEmitter<'_,Self>,doc:&mut wem::RawDocument<'static>)->Result<wr::M2ParticleEmitterPayload<wr::V19>,Error>{import_particle::<Self>(value,doc)}fn export_particle(value:&wr::M2ParticleEmitterPayload<wr::V19>,doc:&wem::RawDocument<'_>,context:&mut Context)->Result<native::records::ParticleEmitter<'static,Self>,Error>{export_particle::<Self>(value,doc,context)}})*};}
+macro_rules! particle_layouts{($($version:ty),*)=>{$(impl ParticleConversion for $version{fn legacy_texture_scale(value:&native::records::ParticleEmitter<'_,Self>)->Option<[u8;2]>{value.texture_scale.legacy_parts()}fn restore_legacy_texture_scale(value:&mut native::records::ParticleEmitter<'_,Self>,parts:[u8;2],context:&mut Context)->Result<(),Error>{value.texture_scale.set_legacy_parts(parts,context)}fn required_flags(value:&native::records::ParticleEmitter<'_,Self>)->ModelFlags{value.multi_texture_scroll.required_flag()}fn ribbon_tail(value:&<Self as native::records::RibbonLayout>::Tail)->[i16;3]{value.parts()}fn ribbon_tail_from(value:[i16;3],context:&mut Context)->Result<<Self as native::records::RibbonLayout>::Tail,Error>{RibbonTailFields::make(value,context)}fn import_particle(value:&native::records::ParticleEmitter<'_,Self>,doc:&mut wem::RawDocument<'static>)->Result<wr::M2ParticleEmitterPayload<wr::V19>,Error>{import_particle::<Self>(value,doc)}fn export_particle(value:&wr::M2ParticleEmitterPayload<wr::V19>,doc:&wem::RawDocument<'_>,context:&mut Context)->Result<native::records::ParticleEmitter<'static,Self>,Error>{export_particle::<Self>(value,doc,context)}})*};}
 
 particle_layouts!(
     V256,

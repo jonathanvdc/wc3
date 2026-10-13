@@ -45,7 +45,7 @@ pub(in super::super) fn import_overrides<D: Dialect>(
         let chars: Vec<_> = name.bytes().map(|value| wr::Character { value }).collect();
         schemas.push(wr::PoseSchema::<wr::V2> {
             name: put(&mut raw, &chars)?.cast(),
-            storage: wr::PoseStorage::MATRIX,
+            storage: wr::PoseStorage::Matrix,
             ..Default::default()
         });
         for values in &mut matrices {
@@ -147,7 +147,7 @@ pub(in super::super) fn export_overrides<D: ExportDialect>(
         .resolve::<wr::ProfileMaterialSet>(record.profile_sets.cast())?
         .iter()
         .find_map(|p| match p {
-            Ok(p) if p.profile == wr::ProfileId::WOW => Some(Ok(p)),
+            Ok(p) if p.profile == wr::ProfileId::Wow => Some(Ok(p)),
             Err(e) => Some(Err(e)),
             _ => None,
         })

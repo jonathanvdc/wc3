@@ -36,3 +36,6 @@ mod validation_group;
 
 /// Historical monolithic version-14 and split version-16 documents.
 pub mod legacy;
+
+/// Derives exact scalar enum wire-code conversions.
+pub use wc3_derive::WmoValue as Value;

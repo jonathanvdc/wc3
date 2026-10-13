@@ -33,10 +33,10 @@ fn draw_controls_and_uv_transforms_are_editable_native_fields() {
     region.bone_count = 1;
     region.padding = 0xabc;
     region.unknown_byte = 7;
-    region.flags = 0x1234;
+    region.flags = nr::RegionFlags(0x1234);
     region.uv_scale = 32.;
     region.uv_offset = 0.5;
-    batch.flags = 0x321;
+    batch.flags = nr::BatchFlags(0x321);
     batch.priority_plane = 9;
     batch.bounds_index = 13;
     batch.color_index = 17;
@@ -133,14 +133,14 @@ fn draw_controls_and_uv_transforms_are_editable_native_fields() {
             region.unknown,
             region.padding,
             region.unknown_byte,
-            region.flags
+            region.flags.bits()
         ),
         (41, 0xdeadbeef, 0xabc, 7, 0x1234)
     );
     assert_eq!((region.uv_scale, region.uv_offset), (32., 0.5));
     assert_eq!(
         (
-            batch.flags,
+            batch.flags.bits(),
             batch.priority_plane,
             batch.bounds_index,
             batch.color_index,

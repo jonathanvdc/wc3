@@ -1,5 +1,9 @@
 //! Native scene record revisions.
 use super::dialect::*;
+use super::values::{
+    BillboardKind, ForceChannels, ForceFlags, ForceKind, ForceShape, LightFlags, LightKind,
+    OneBoneFlags, ProjectionKind, ProjectorFlags, VolumeShape,
+};
 use super::{targets, AnimationValue};
 use crate::model::m3::{self, Record, Ref};
 use core::fmt::Debug;
@@ -80,12 +84,12 @@ pub trait ProjectorDialect: Revision + Copy + Clone + Debug + Default + PartialE
 
 impl ProjectorDialect for V4 {
     const VERSION: u32 = 4;
-    type ProjectionType = u32;
+    type ProjectionType = ProjectionKind;
 }
 
 impl ProjectorDialect for V5 {
     const VERSION: u32 = 5;
-    type ProjectionType = u32;
+    type ProjectionType = ProjectionKind;
 }
 
 /// Fields of the native `PROJ` section, in serialized order.
@@ -167,7 +171,7 @@ pub struct Projector<D: ProjectorDialect> {
     /// Selects the detail level beyond which this effect is omitted.
     pub lod_cut: u32,
     /// Stores the bit mask controlling projector behavior.
-    pub flags: u32,
+    pub flags: ProjectorFlags,
 }
 
 impl<D: ProjectorDialect> Record for Projector<D> {
@@ -185,12 +189,12 @@ pub trait HitTestShapeDialect: Revision + Copy + Clone + Debug + Default + Parti
 
 impl HitTestShapeDialect for V0 {
     const VERSION: u32 = 0;
-    type ShapeType = u32;
+    type ShapeType = VolumeShape;
 }
 
 impl HitTestShapeDialect for V1 {
     const VERSION: u32 = 1;
-    type ShapeType = u32;
+    type ShapeType = VolumeShape;
 }
 
 /// Fields of the native `SSGS` section, in serialized order.
@@ -251,7 +255,7 @@ pub struct AttachmentVolume {
     /// Selects the second bone in the BONE section.
     pub bone2: u32,
     /// Sets the shape type.
-    pub shape_type: u32,
+    pub shape_type: VolumeShape,
     /// Selects the primary bone in the BONE section.
     pub bone_index: u32,
     /// Transforms the volume using a four-by-four matrix.
@@ -426,7 +430,7 @@ pub struct BillboardBehavior {
     /// Selects the associated bone in the BONE section.
     pub bone_index: u16,
     /// Selects the billboard mode and its allowed rotational axes.
-    pub billboard_type: u8,
+    pub billboard_type: BillboardKind,
     /// Nonzero aims the bone toward the camera position; zero aligns it with the camera’s viewing direction.
     pub camera_look_at: u8,
     /// Supplies a quaternion pre-rotation for axis-constrained billboard modes 0, 1, and 2; this is not an up-direction vector.
@@ -568,7 +572,7 @@ pub struct OneBoneSolver {
     /// Selects the fallback bone in the BONE section.
     pub bone_fallback: u16,
     /// Stores the bit mask controlling solver behavior.
-    pub flags: u32,
+    pub flags: OneBoneFlags,
     /// Sets the maximum rotation angle.
     pub max_angle: f32,
 }
@@ -668,17 +672,17 @@ pub trait ForceDialect: Revision + Copy + Clone + Debug + Default + PartialEq {
 
 impl ForceDialect for V0 {
     const VERSION: u32 = 0;
-    type ForceType = u32;
+    type ForceType = ForceKind;
 }
 
 impl ForceDialect for V1 {
     const VERSION: u32 = 1;
-    type ForceType = u32;
+    type ForceType = ForceKind;
 }
 
 impl ForceDialect for V2 {
     const VERSION: u32 = 2;
-    type ForceType = u32;
+    type ForceType = ForceKind;
 }
 
 /// Fields of the native `FOR_` section, in serialized order.
@@ -698,15 +702,15 @@ pub struct Force<D: ForceDialect> {
     /// Sets the force kind.
     pub force_type: D::ForceType,
     /// Sets the influence volume shape.
-    pub force_shape: u32,
+    pub force_shape: ForceShape,
     /// Stores a possible local-versus-world scope selector; this interpretation has not been confirmed by a traced reader.
     pub unknown: u32,
     /// Selects the associated bone in the BONE section.
     pub bone_index: u32,
     /// Encodes force options for attenuation, vertical gradient, unbounded influence, and affected targets.
-    pub flags: u32,
+    pub flags: ForceFlags,
     /// Selects force channels; a matching bit connects this force with a body or emitter.
-    pub local_channels: u32,
+    pub local_channels: ForceChannels,
     /// Animates the force strength.
     pub strength: AnimationValue<f32>,
     /// Animates the influence width.
@@ -771,42 +775,42 @@ pub trait LightDialect: Revision + Copy + Clone + Debug + Default + PartialEq {
 
 impl LightDialect for V0 {
     const VERSION: u32 = 0;
-    type LightType = u16;
+    type LightType = LightKind;
 }
 
 impl LightDialect for V1 {
     const VERSION: u32 = 1;
-    type LightType = u16;
+    type LightType = LightKind;
 }
 
 impl LightDialect for V2 {
     const VERSION: u32 = 2;
-    type LightType = u16;
+    type LightType = LightKind;
 }
 
 impl LightDialect for V3 {
     const VERSION: u32 = 3;
-    type LightType = u16;
+    type LightType = LightKind;
 }
 
 impl LightDialect for V4 {
     const VERSION: u32 = 4;
-    type LightType = u16;
+    type LightType = LightKind;
 }
 
 impl LightDialect for V5 {
     const VERSION: u32 = 5;
-    type LightType = u16;
+    type LightType = LightKind;
 }
 
 impl LightDialect for V6 {
     const VERSION: u32 = 6;
-    type LightType = u16;
+    type LightType = LightKind;
 }
 
 impl LightDialect for V7 {
     const VERSION: u32 = 7;
-    type LightType = u16;
+    type LightType = LightKind;
 }
 
 /// Fields of the native `LITE` section, in serialized order.
@@ -828,7 +832,7 @@ pub struct Light<D: LightDialect> {
     /// Selects the associated bone in the BONE section.
     pub bone_index: u16,
     /// Controls lighting features, including shadowing, specular response, and ambient occlusion, through individual bits.
-    pub flags: u32,
+    pub flags: LightFlags,
     /// Selects the detail level beyond which this effect is omitted.
     pub lod_cut: u32,
     /// Sets the shadow LOD cut-off level.

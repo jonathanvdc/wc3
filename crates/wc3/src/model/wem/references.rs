@@ -3,7 +3,7 @@ use super::codec::{
     Bool, Decoder, Encoder, InlineList, InlineOption, NativeAbi, Read, RecordLayout, Validate,
     Write,
 };
-use super::{ReadError, WriteError};
+use super::{ReadError, ReferenceFlags, WriteError};
 use crate::model::common::Ownership;
 use std::fmt::{self, Debug};
 use std::marker::PhantomData;
@@ -38,7 +38,7 @@ pub struct RawReference {
     /// Stable section ID, initially equal to the source index-table position.
     pub index: u32,
     /// Encoded reference flag word.
-    pub flags: u32,
+    pub flags: ReferenceFlags,
     /// Expected section family when known from the record schema.
     pub target: Option<[u8; 4]>,
 }
@@ -65,7 +65,7 @@ pub struct Ref<T: Target = Any> {
     /// Stable section ID; section movement does not change this identity.
     pub index: u32,
     /// Encoded reference flag word.
-    pub flags: u32,
+    pub flags: ReferenceFlags,
     target: PhantomData<T>,
 }
 impl<T: Target> Clone for Ref<T> {
@@ -76,7 +76,7 @@ impl<T: Target> Clone for Ref<T> {
 impl<T: Target> Copy for Ref<T> {}
 impl<T: Target> Default for Ref<T> {
     fn default() -> Self {
-        Self::new(0, 0, 0)
+        Self::new(0, 0, ReferenceFlags(0))
     }
 }
 impl<T: Target> Debug for Ref<T> {
@@ -98,10 +98,10 @@ impl<T: Target> Eq for Ref<T> {}
 impl<T: Target> Ref<T> {
     /// Creates a reference with no flag bits set.
     pub const fn from_section(entries: u32, index: u32) -> Self {
-        Self::new(entries, index, 0)
+        Self::new(entries, index, ReferenceFlags(0))
     }
     /// Creates a reference retaining its native count, index, and flag words.
-    pub const fn new(entries: u32, index: u32, flags: u32) -> Self {
+    pub const fn new(entries: u32, index: u32, flags: ReferenceFlags) -> Self {
         Self {
             entries,
             index,
@@ -110,7 +110,7 @@ impl<T: Target> Ref<T> {
         }
     }
     /// Creates a reference retaining an explicit flag word.
-    pub const fn with_flags(entries: u32, index: u32, flags: u32) -> Self {
+    pub const fn with_flags(entries: u32, index: u32, flags: ReferenceFlags) -> Self {
         Self {
             entries,
             index,

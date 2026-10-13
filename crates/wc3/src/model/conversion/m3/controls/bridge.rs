@@ -73,7 +73,7 @@ pub(in crate::model::conversion::m3) fn attach<E: Envelope>(
         .collect::<Result<Vec<_>, _>>()?;
     let set = sets
         .iter_mut()
-        .find(|s| s.profile == wr::ProfileId::SC2)
+        .find(|s| s.profile == wr::ProfileId::Sc2)
         .ok_or_else(|| Error::new("wem.profile", "missing SC2 profile"))?;
     set.native = metadata::extend(&mut doc, &set.native, &fields.values)?;
     for (key, value) in fields.texts {

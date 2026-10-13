@@ -15,9 +15,9 @@ use crate::model::wem::{self, Bool, InlineList, InlineOption, NativeAbi, Record,
 )]
 pub struct M3AnimRef<T> {
     /// Selects the interpolation used by this animated property.
-    pub interp_type: u16,
-    /// Sets layer flags (wrap, flipbook, video, etc.).
-    pub flags: u16,
+    pub interp_type: NativeInterpolation16,
+    /// Retains animation-reference control bits independently of the interpolation mode.
+    pub flags: M3AnimationFlags,
     /// Identifies the animation channel driving this property.
     pub anim_id: u32,
     /// Supplies the value before an animation channel overrides it.
@@ -168,7 +168,7 @@ pub struct M3Standard {
     /// Sets render priority (lower = earlier).
     pub priority: i32,
     /// Selects render-to-texture channels through a bit mask.
-    pub rtt_channels: u32,
+    pub rtt_channels: RttChannels,
     /// Sets specular highlight exponent.
     pub specular_exponent: f32,
     /// Sets depth blend falloff distance.
@@ -262,8 +262,8 @@ pub struct M3Displacement {
     pub normal_map: InlineOption<M3TextureLayer>,
     /// Supplies the mask scaling displacement strength.
     pub strength_map: InlineOption<M3TextureLayer>,
-    /// Sets layer flags (wrap, flipbook, video, etc.).
-    pub flags: u32,
+    /// Retains the native material control bits; unresolved bits remain intact.
+    pub flags: M3DisplacementFlags,
     /// Sets render priority (lower = earlier).
     pub priority: u32,
 }
@@ -345,7 +345,7 @@ pub struct M3Volume {
     /// Links to the CHAR bytes identifying the material.
     pub name: Ref<targets::Character>,
     /// Selects the behavior used for alpha blend mode.
-    pub blend_mode: u32,
+    pub blend_mode: M3BlendMode,
     /// Selects the behavior used for density falloff type.
     pub falloff_type: M3VolumeFalloffType,
     /// Controls density through its animation value.
@@ -358,8 +358,8 @@ pub struct M3Volume {
     pub noise_map2: InlineOption<M3TextureLayer>,
     /// Sets alpha test threshold.
     pub alpha_threshold: u32,
-    /// Sets layer flags (wrap, flipbook, video, etc.).
-    pub flags: u32,
+    /// Retains the native material control bits; unresolved bits remain intact.
+    pub flags: M3VolumeFlags,
 }
 
 /// Typed m3 volume noise payload in its serialized field order.
@@ -608,7 +608,7 @@ pub struct M3DataDriven {
     /// The meaning of the unknown148 storage has not been established; its encoded bits are preserved.
     pub unknown148: u8,
     /// Caches alpha and Fresnel settings derived from the property dictionary by the loader.
-    pub alpha_fresnel_flags: u8,
+    pub alpha_fresnel_flags: M3AlphaFresnelFlags,
     /// Selects the shader-family prefix used to form the permutation name.
     pub shader_type: M3MaterialShaderType,
     /// The meaning of the unknown151 storage has not been established; its encoded bits are preserved.
@@ -789,7 +789,7 @@ pub struct M2TextureUnit {
     /// Scales the texture input’s contribution.
     pub weight: u16,
     /// Selects the native texture’s source or replacement mechanism.
-    pub texture_type: u8,
+    pub texture_type: M2TextureSource8,
     /// Identifies a source texture supplied by a replaceable-texture mechanism.
     pub replaceable_id: u8,
 }
@@ -810,9 +810,9 @@ pub struct M2Material {
     /// Records the source format version that supplied this native material.
     pub source_version: u32,
     /// Stores the source material’s rendering options.
-    pub render_flags: u16,
+    pub render_flags: M2RenderFlags16,
     /// Selects the native material’s compositing mode.
-    pub blending_mode: u16,
+    pub blending_mode: M2BlendingMode16,
     /// Selects the source shader.
     pub shader_id: u16,
     /// Sets the source material’s draw-order priority plane.
@@ -822,7 +822,7 @@ pub struct M2Material {
     /// Selects the source animated color entry.
     pub color_index: i16,
     /// Stores the source batch’s drawing options.
-    pub batch_flags: u8,
+    pub batch_flags: M2BatchFlags8,
     /// Stores the texture units forming the source batch inline.
     pub units: InlineList<M2TextureUnit>,
 }
@@ -874,7 +874,7 @@ pub struct D3MaterialColors {
     /// Controls the concentration of the source specular highlight.
     pub shininess: f32,
     /// Stores the source material options.
-    pub material_flags: i32,
+    pub material_flags: D3MaterialFlags,
 }
 
 /// Typed d3 tex anim payload in its serialized field order.
@@ -940,7 +940,7 @@ pub struct D3TextureEntry {
     /// The purpose of this source field is unresolved; its encoded value is preserved.
     pub anim5: D3TexAnim,
     /// Stores source UV-mapping options.
-    pub uv_flags: i32,
+    pub uv_flags: D3UvFlags,
     /// The purpose of this source field is unresolved; its encoded value is preserved.
     pub dw_unknown9_c: i32,
 }
@@ -1147,7 +1147,7 @@ pub struct D3RenderState {
     /// Contains the source texture-stage states.
     pub texture_stages: InlineList<D3TextureStage>,
     /// Stores the source material pass options.
-    pub pass_flags: i32,
+    pub pass_flags: D3PassFlags,
     /// Links to the name of the source effect file.
     pub effect_file: Ref<targets::Character>,
     /// Links to the source vertex-shader entry name.
@@ -1172,7 +1172,7 @@ pub struct D3RenderState {
 )]
 pub struct M2Batch {
     /// Sets layer flags (wrap, flipbook, video, etc.).
-    pub flags: u8,
+    pub flags: M2BatchFlags8,
     /// Sets the source material’s draw-order priority plane.
     pub priority_plane: i8,
     /// Selects the source shader.
@@ -1213,9 +1213,9 @@ pub struct M2Batch {
 )]
 pub struct M2Texture {
     /// Selects the source texture-animation operation.
-    pub type_: u32,
+    pub type_: M2TextureSource32,
     /// Sets layer flags (wrap, flipbook, video, etc.).
-    pub flags: u32,
+    pub flags: TextureFlags,
     /// Links to the source texture filename.
     pub filename: Ref<targets::Character>,
 }
@@ -1234,9 +1234,9 @@ pub struct M2Texture {
 )]
 pub struct M2RenderRecord {
     /// Sets layer flags (wrap, flipbook, video, etc.).
-    pub flags: u16,
+    pub flags: M2RenderFlags16,
     /// Selects the native material’s compositing mode.
-    pub blending_mode: u16,
+    pub blending_mode: M2BlendingMode16,
 }
 
 /// Static field selections for `D3Material` section or inline context revisions.
@@ -1263,7 +1263,7 @@ impl D3MaterialDialect for V1 {
 
 impl D3MaterialDialect for V2 {
     const VERSION: u32 = 2;
-    type VariantFlags = i32;
+    type VariantFlags = D3VariantFlags;
     type ShaderParams = InlineList<D3TagValue>;
     type OpaquePasses = InlineList<D3RenderState>;
     type TranslucentPasses = InlineList<D3RenderState>;

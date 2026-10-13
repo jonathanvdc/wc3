@@ -1,5 +1,6 @@
 //! Sequence metadata, timing, and skeletal animation records.
 use super::{ArrayVisitor, Extent, Track, Validate, VisitArrays};
+use super::{BoneFlags, SequenceFlags};
 use crate::model::{common::Ownership, m2};
 use m2::ModelLayout;
 use m2::ReadError;
@@ -71,7 +72,7 @@ pub struct Sequence<V: ModelLayout> {
     /// Movement speed associated with the animation, in model distance units per second.
     pub move_speed: f32,
     /// Sequence behavior and storage flags; `0x40` marks an alias to `alias_next`.
-    pub flags: u32,
+    pub flags: SequenceFlags,
     /// Relative selection weight among variations of the same animation ID.
     pub frequency: i16,
     /// Alignment word with no defined animation behavior.
@@ -106,7 +107,7 @@ pub struct Bone<'data, V: ModelLayout> {
     /// Semantic key-bone ID, or `-1` for a bone with no key-bone role.
     pub key_bone_id: i32,
     /// Bone transform flags controlling billboarding and inherited transforms.
-    pub flags: u32,
+    pub flags: BoneFlags,
     /// Parent index in the bone array, or `-1` for a root bone.
     pub parent_bone_id: i16,
     /// Mesh-part identifier associated with the bone.

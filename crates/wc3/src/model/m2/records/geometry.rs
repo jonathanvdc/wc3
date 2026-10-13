@@ -1,5 +1,6 @@
 //! Bounds, vertices, and skin draw records.
 use super::SkinSectionLayout;
+use super::{BatchFlags, ShadowBatchExtraFlags, ShadowBatchFlags};
 use crate::model::{common::Ownership, m2};
 use m2::ModelLayout;
 use std::array::from_fn;
@@ -128,7 +129,7 @@ pub struct SkinSection<V: ModelLayout> {
 )]
 pub struct Batch {
     /// Draw-batch flags; `0x04` identifies a projected-texture batch.
-    pub flags: u8,
+    pub flags: BatchFlags,
     /// Signed priority used when ordering draw batches.
     pub priority_plane: i8,
     /// Shader selection code; some legacy layouts instead index texture-combiner combinations.
@@ -170,9 +171,9 @@ pub struct Batch {
 )]
 pub struct ShadowBatch {
     /// Shadow-pass render flags.
-    pub flags: u8,
+    pub flags: ShadowBatchFlags,
     /// Additional shadow-pass flags; `0x08` selects EDGF edge-fade data.
-    pub flags2: u8,
+    pub flags2: ShadowBatchExtraFlags,
     /// Unresolved shadow-pass parameter.
     pub unknown: u16,
     /// Section reference used by the shadow pass.

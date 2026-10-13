@@ -10,14 +10,14 @@ pub(in crate::model::conversion::m3) fn map_volumematerial<E: Envelope>(
 ) -> Result<wr::M3Volume, Error> {
     Ok(wr::M3Volume {
         name: text(doc, &string(source, r.name).map_err(read_error)?)?,
-        blend_mode: r.blend_mode,
-        falloff_type: wr::M3VolumeFalloffType(r.falloff_type),
+        blend_mode: wr::M3BlendMode::from_raw((r.blend_mode).raw()),
+        falloff_type: wr::M3VolumeFalloffType::from_raw((r.falloff_type).raw()),
         density: anim(r.density),
         color_map: get_layer(source, doc, r.color_map)?,
         noise_map1: get_layer(source, doc, r.noise_map1)?,
         noise_map2: get_layer(source, doc, r.noise_map2)?,
         alpha_threshold: r.alpha_threshold,
-        flags: r.flags,
+        flags: wr::M3VolumeFlags((wr::M3TextureLayerFlag((r.flags).bits())).bits()),
     })
 }
 
@@ -51,13 +51,13 @@ pub(in crate::model::conversion::m3) fn export_volumematerial<E: Envelope>(
 ) -> Result<nr::VolumeMaterial, Error> {
     Ok(nr::VolumeMaterial {
         name: append_string(doc, source.string(r.name)?.unwrap_or_default())?,
-        blend_mode: r.blend_mode,
-        falloff_type: r.falloff_type.0,
+        blend_mode: nr::BlendMode::from_raw((r.blend_mode).raw()),
+        falloff_type: nr::VolumeFalloff::from_raw(r.falloff_type.raw()),
         density: native_anim(r.density),
         color_map: native_layer_ref(r.color_map, source, doc)?,
         noise_map1: native_layer_ref(r.noise_map1, source, doc)?,
         noise_map2: native_layer_ref(r.noise_map2, source, doc)?,
         alpha_threshold: r.alpha_threshold,
-        flags: r.flags,
+        flags: nr::VolumeFlags((r.flags).bits()),
     })
 }

@@ -38,7 +38,7 @@ fn fixture() -> wem::Document<'static> {
             },
         ])
         .unwrap();
-    mesh.sections = wem::Ref::new(2, sections.index(), 0);
+    mesh.sections = wem::Ref::from_section(2, sections.index());
     let mut layers = raw
         .resolve::<r::AttrLayer>(mesh.attributes.layers.cast())
         .unwrap()
@@ -48,7 +48,7 @@ fn fixture() -> wem::Document<'static> {
     for (name, domain, type_, data) in [
         (
             "section",
-            r::Domain::FACE,
+            r::Domain::Face,
             r::AttrType::U32,
             vec![0u32, 1]
                 .into_iter()
@@ -57,8 +57,8 @@ fn fixture() -> wem::Document<'static> {
         ),
         (
             "uv0",
-            r::Domain::HALFEDGE,
-            r::AttrType::F32X2,
+            r::Domain::Halfedge,
+            r::AttrType::F32x2,
             vec![[0., 0.], [1., 0.], [1., 1.], [0.25, 0.], [1., 1.], [0., 1.]]
                 .into_iter()
                 .flatten()
@@ -67,8 +67,8 @@ fn fixture() -> wem::Document<'static> {
         ),
         (
             "normal",
-            r::Domain::FACE,
-            r::AttrType::F32X3,
+            r::Domain::Face,
+            r::AttrType::F32x3,
             vec![[0., 0., 1.], [0., 1., 0.]]
                 .into_iter()
                 .flatten()
@@ -93,15 +93,15 @@ fn fixture() -> wem::Document<'static> {
             )
             .unwrap();
         layers.push(r::AttrLayer {
-            name: wem::Ref::new(raw.section(name).unwrap().count(), name.index(), 0),
+            name: wem::Ref::from_section(raw.section(name).unwrap().count(), name.index()),
             domain,
             type_,
-            data: wem::Ref::new(raw.section(data).unwrap().count(), data.index(), 0),
+            data: wem::Ref::from_section(raw.section(data).unwrap().count(), data.index()),
             ..Default::default()
         });
     }
     let layers_id = raw.append(&layers).unwrap();
-    mesh.attributes.layers = wem::Ref::new(layers.len() as u32, layers_id.index(), 0);
+    mesh.attributes.layers = wem::Ref::from_section(layers.len() as u32, layers_id.index());
     mesh.attributes.domain_counts = [4, 6, 0, 2, 1];
     raw.replace(id, &[mesh]).unwrap();
     wem::Document::from_raw(raw).unwrap()
@@ -109,7 +109,7 @@ fn fixture() -> wem::Document<'static> {
 #[test]
 fn seams_and_material_draws_remain_editable_in_original_domains() {
     let doc = fixture();
-    let mut model = s::read(&doc, 0, r::ProfileId::GENERIC).unwrap();
+    let mut model = s::read(&doc, 0, r::ProfileId::Generic).unwrap();
     assert_eq!(model.meshes.len(), 2);
     assert_eq!(model.meshes[1].material_slot, 1);
     assert_eq!(model.meshes[0].normals[0], [0., 0., 1.]);
@@ -126,20 +126,20 @@ fn seams_and_material_draws_remain_editable_in_original_domains() {
         .unwrap()
         .unwrap();
     assert_eq!(graph.meshes.entries, 1);
-    let reread = s::read(&rebuilt, 0, r::ProfileId::GENERIC).unwrap();
+    let reread = s::read(&rebuilt, 0, r::ProfileId::Generic).unwrap();
     assert_eq!(reread.meshes[1].uv_sets[0][0], [0.5, 0.]);
 }
 #[test]
 fn contradictory_shared_vertex_edits_are_rejected() {
     let doc = fixture();
-    let mut model = s::read(&doc, 0, r::ProfileId::GENERIC).unwrap();
+    let mut model = s::read(&doc, 0, r::ProfileId::Generic).unwrap();
     model.meshes[0].positions.to_mut()[0][0] = 7.;
     assert!(s::build(&model).is_err());
 }
 #[test]
 fn projected_topology_edits_are_rejected() {
     let doc = fixture();
-    let mut model = s::read(&doc, 0, r::ProfileId::GENERIC).unwrap();
+    let mut model = s::read(&doc, 0, r::ProfileId::Generic).unwrap();
     model.meshes[0].triangles.to_mut()[0] = [0, 0, 0];
     assert!(s::build(&model).is_err());
 }

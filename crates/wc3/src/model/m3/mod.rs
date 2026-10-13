@@ -77,3 +77,6 @@ pub use crate::visit_m3_root;
 pub use root::RootRecord;
 mod profile;
 pub use profile::{Beta, CreationProfile, HeroesOfTheStorm, StarCraft2};
+
+/// Derives exact scalar enum wire-code conversions.
+pub use wc3_derive::M3Value as Value;

@@ -8,6 +8,10 @@ use super::{
     ArrayVisitor, ParticleTrack, RibbonLayout, ScalarField, SplineTrack, Track, Validate,
     VisitArrays,
 };
+use super::{
+    CameraKind, ModelFlags, PackedParticleBlend, PackedParticleGenerator, ParticleBlend,
+    ParticleFlags, ParticleGenerator, ParticleHeadTail,
+};
 use crate::model::{common::Ownership, m2};
 use m2::codec::{Decoder, Encoder};
 use m2::ModelLayout;
@@ -54,9 +58,9 @@ pub struct RibbonModern {
 pub struct WideParticleHeader {
     /// Particle blending code: 0 opaque, 1 alpha blend, 2 additive, 3 alpha test, 4
     /// additive alpha test.
-    pub blending: u16,
+    pub blending: ParticleBlend,
     /// Generator code: 1 plane, 2 sphere, 3 spline, 4 bone.
-    pub emitter: u16,
+    pub emitter: ParticleGenerator,
 }
 /// Packed particle blend and generator bytes followed by a color-table index.
 #[derive(
@@ -74,9 +78,9 @@ pub struct WideParticleHeader {
 )]
 pub struct PackedParticleHeader {
     /// Particle blending code in one byte; values 0 through 4 name the established modes.
-    pub blending: u8,
+    pub blending: PackedParticleBlend,
     /// Generator code in one byte: 1 plane, 2 sphere, 3 spline, 4 bone.
-    pub emitter: u8,
+    pub emitter: PackedParticleGenerator,
     /// ParticleColor.dbc selection, retained without resolving game color tables.
     pub color_index: u16,
 }
@@ -98,7 +102,7 @@ pub struct LegacyTextureScale {
     /// Legacy particle shape code; retained without interpreting undocumented values.
     pub particle_type: u8,
     /// Head/tail selection: 0 head, 1 tail, 2 both.
-    pub head_or_tail: u8,
+    pub head_or_tail: ParticleHeadTail,
 }
 /// Two per-layer UV scales retained in their one-byte fixed8_5 representation.
 #[derive(
@@ -230,7 +234,7 @@ pub struct FlaggedScroll {
 impl<'data> Read<'data> for FlaggedScroll {
     fn read(i: &mut Decoder<'data>) -> Result<Self, ReadError> {
         Ok(Self {
-            values: if i.flags & 0x200 != 0 {
+            values: if i.flags.particle_multi_texture() {
                 Some(<[i16; 8]>::read(i)?)
             } else {
                 None
@@ -240,7 +244,7 @@ impl<'data> Read<'data> for FlaggedScroll {
 }
 impl Write for FlaggedScroll {
     fn write(&self, o: &mut Encoder) -> Result<(), WriteError> {
-        if (self.values.is_some()) != (o.flags & 0x200 != 0) {
+        if (self.values.is_some()) != (o.flags.particle_multi_texture()) {
             return Err(WriteError::invalid("flag-selected particle scrolling"));
         }
         if let Some(v) = self.values {
@@ -251,7 +255,7 @@ impl Write for FlaggedScroll {
 }
 impl RecordLayout for FlaggedScroll {
     fn size(_: u32, flags: u32) -> usize {
-        if flags & 0x200 != 0 {
+        if ModelFlags::from_bits_retain(flags).particle_multi_texture() {
             16
         } else {
             0
@@ -271,20 +275,20 @@ impl<'data> VisitArrays<'data> for FlaggedScroll {
 /// Construction of a statically selected scrolling representation.
 pub trait ScrollField: ScalarField {
     /// Creates the native representation for runtime core flags.
-    fn from_flags(flags: u32) -> Self;
+    fn from_flags(flags: ModelFlags) -> Self;
 }
 impl ScrollField for () {
-    fn from_flags(_: u32) -> Self {}
+    fn from_flags(_: ModelFlags) -> Self {}
 }
 impl ScrollField for FlaggedScroll {
-    fn from_flags(flags: u32) -> Self {
+    fn from_flags(flags: ModelFlags) -> Self {
         Self {
-            values: (flags & 0x200 != 0).then_some([0; 8]),
+            values: (flags.particle_multi_texture()).then_some([0; 8]),
         }
     }
 }
 impl ScrollField for ExtendedScroll {
-    fn from_flags(_: u32) -> Self {
+    fn from_flags(_: ModelFlags) -> Self {
         Self::default()
     }
 }
@@ -304,7 +308,7 @@ impl ScrollField for ExtendedScroll {
 )]
 pub struct Camera<'data, V: ModelLayout> {
     /// Camera role: 0 portrait, 1 character-info, u32::MAX flyby.
-    pub kind: u32,
+    pub kind: CameraKind,
     /// Legacy diagonal field of view in radians; `()` in layouts selecting an animated
     /// field of view.
     pub field_of_view: V::FovPrefix,
@@ -391,7 +395,7 @@ pub struct ParticleEmitter<'data, V: ModelLayout> {
     /// Particle emitter identifier, commonly u32::MAX when unassigned.
     pub id: u32,
     /// Native particle behavior flags, including 0x800000 for packed-vector gravity keys.
-    pub flags: u32,
+    pub flags: ParticleFlags,
     /// Emitter position relative to its attached bone.
     pub position: [f32; 3],
     /// Index into the core bone table.
@@ -489,7 +493,7 @@ impl<'data, V: ModelLayout> Camera<'data, V> {
 }
 impl<'data, V: ModelLayout> ParticleEmitter<'data, V> {
     /// Creates an empty emitter with scrolling selected from the owning core flags.
-    pub fn new(flags: u32) -> Self {
+    pub fn new(flags: ModelFlags) -> Self {
         Self {
             id: u32::MAX,
             rows: 1,

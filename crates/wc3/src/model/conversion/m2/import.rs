@@ -21,7 +21,7 @@ where
     let mut model = sm::Model {
         name: Cow::Owned(text(core.name.iter(), "m2.name")?),
         bounds: extent(core.bounding),
-        profile: wr::ProfileId::WOW,
+        profile: wr::ProfileId::Wow,
         ..Default::default()
     };
     let texture_ids = source.model.extensions().find_map(|chunk| {
@@ -40,8 +40,8 @@ where
             id: texture_ids
                 .and_then(|ids| ids.get(index))
                 .filter(|id| *id != 0),
-            replaceable: texture.kind,
-            flags: texture.flags,
+            replaceable: texture.kind.raw(),
+            flags: wr::TextureFlags::from_bits_retain(texture.flags.bits()),
             ..Default::default()
         });
     }
@@ -107,7 +107,7 @@ where
             )),
             duration: duration as f32 / 1000.,
             id: u32::from(sequence.id),
-            flags: sequence.flags,
+            flags: Default::default(),
             ..Default::default()
         };
         for (bone_index, bone) in bones.iter().enumerate() {

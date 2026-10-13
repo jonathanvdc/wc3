@@ -152,7 +152,7 @@ pub(super) fn attach<E: Envelope>(
                     nodes,
                     bone,
                     wr::NodePayload::Sc2ParticleEmitter(Box::new(payload.clone())),
-                    wr::NodeKind::SC2_PARTICLE_EMITTER,
+                    wr::NodeKind::Sc2ParticleEmitter,
                     values.clone(),
                 )?;
                 for copy_index in source
@@ -181,7 +181,7 @@ pub(super) fn attach<E: Envelope>(
                         nodes,
                         copy.bone_index,
                         wr::NodePayload::Sc2ParticleEmitter(Box::new(payload)),
-                        wr::NodeKind::SC2_PARTICLE_EMITTER,
+                        wr::NodeKind::Sc2ParticleEmitter,
                         values.clone(),
                     )?;
                 }

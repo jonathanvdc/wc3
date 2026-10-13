@@ -4,7 +4,9 @@ use wc3::model::m2::codec::{Array, ArrayRef};
 use wc3::model::m2::companions::{
     AnimationFile, BoneFile, PhysicsChunk, PhysicsFile, Skeleton, SkeletonChunk, Skin,
 };
+use wc3::model::m2::records::ModelFlags;
 use wc3::model::m2::records::Validate as _;
+use wc3::model::m2::records::{BlendMode, PhysicsJointKind, PhysicsShapeKind};
 use wc3::model::m2::{
     Chunked, Dialect, Flat, IntoZeroVec, Model, ModelLayout, V256, V257, V260, V263, V264, V265,
     V272, V273, V274,
@@ -219,7 +221,7 @@ fn skeleton_offsets_are_relative_to_each_chunk_payload() {
     header[16..].copy_from_slice(b"rig\0\0");
     let mut bytes = frame(*b"XXXX", &[1]);
     bytes.extend(frame(*b"SKL1", &header));
-    let skeleton = Skeleton::<V274>::read(&bytes, 0).unwrap();
+    let skeleton = Skeleton::<V274>::read(&bytes, ModelFlags::default()).unwrap();
     let SkeletonChunk::Header {
         flags,
         name,
@@ -228,11 +230,14 @@ fn skeleton_offsets_are_relative_to_each_chunk_payload() {
     else {
         panic!("skeleton header")
     };
-    assert_eq!(*flags, 17);
+    assert_eq!(flags.bits(), 17);
     assert_eq!(name.as_bytes(), b"rig\0\0");
     assert_eq!(*reserved, [1, 2, 3, 4]);
     let written = skeleton.write().unwrap();
-    assert_eq!(Skeleton::<V274>::read(&written, 0).unwrap(), skeleton);
+    assert_eq!(
+        Skeleton::<V274>::read(&written, ModelFlags::default()).unwrap(),
+        skeleton
+    );
 }
 
 #[test]
@@ -698,12 +703,12 @@ fn physics_validation_checks_known_reference_domains_without_reinterpreting_unkn
     let PhysicsChunk::Joints(joints) = &mut edited.chunks[5] else {
         panic!("joint bindings")
     };
-    joints[0].joint_type = 66;
+    joints[0].joint_type = PhysicsJointKind::Unknown(66);
     joints[0].joint_id = -1;
     let PhysicsChunk::Shapes2(shapes) = &mut edited.chunks[2] else {
         panic!("shape table")
     };
-    shapes[0].shape.shape_type = 55;
+    shapes[0].shape.shape_type = PhysicsShapeKind::Unknown(55);
     shapes[0].shape.shape_index = -9;
     edited.validate().unwrap();
 }
@@ -741,8 +746,11 @@ fn late_tbc_header_keeps_its_pre_wrath_lookup_and_embedded_skin_layout() {
     };
     assert_eq!(values.get(0), Some(81));
     frames.validate().unwrap();
-    assert_eq!(model.core().materials.get(0).unwrap().flags, 0x13);
-    assert_eq!(model.core().materials.get(0).unwrap().blending_mode, 4);
+    assert_eq!(model.core().materials.get(0).unwrap().flags.bits(), 0x13);
+    assert_eq!(
+        model.core().materials.get(0).unwrap().blending_mode,
+        BlendMode::Add
+    );
     let skins = &model.core().skins;
     assert_eq!(skins.len(), 1);
     let written = model.encode_m2().unwrap();
@@ -832,14 +840,17 @@ fn version272_profiles_distinguish_single_and_split_blend_words() {
     word(&mut payload, 12, 32);
     payload.extend_from_slice(&bytes[offset..offset + 64]);
     let skeleton_bytes = frame(*b"SKS1", &payload);
-    let skeleton = Skeleton::<V272PreSplit>::read_with_sequences(&skeleton_bytes, 0, &[]).unwrap();
+    let skeleton =
+        Skeleton::<V272PreSplit>::read_with_sequences(&skeleton_bytes, ModelFlags::default(), &[])
+            .unwrap();
     let SkeletonChunk::Sequences { sequences, .. } = &skeleton.chunks[0] else {
         panic!("skeleton sequences")
     };
     assert_eq!(sequences[0].blend_time, 350);
     let written = skeleton.write().unwrap();
     assert_eq!(
-        Skeleton::<V272PreSplit>::read_with_sequences(&written, 0, &[]).unwrap(),
+        Skeleton::<V272PreSplit>::read_with_sequences(&written, ModelFlags::default(), &[])
+            .unwrap(),
         skeleton
     );
 }

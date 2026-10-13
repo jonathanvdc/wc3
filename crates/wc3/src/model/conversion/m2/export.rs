@@ -37,7 +37,7 @@ where
     if model.unit_scale != 1. {
         context.unsupported("model.unit_scale","M2 has implicit physical units; a non-unit WEM scale requires transforming geometry, animation, and effect distances")?;
     }
-    if model.space != wr::CoordSpace::BLIZZARD {
+    if model.space != wr::CoordSpace::Blizzard {
         context.issue("model.space",IssueKind::Normalized,"M2 uses Blizzard coordinates; numeric coordinates retained without a basis transformation");
     }
 
@@ -141,8 +141,8 @@ where
     core.collision = core.bounding;
     for texture in &model.textures {
         core.textures.push(native::records::Texture {
-            kind: texture.replaceable,
-            flags: texture.flags,
+            kind: TextureSource::from_raw(texture.replaceable),
+            flags: TextureFlags::from_bits_retain(texture.flags.bits()),
             filename: ZeroVec::alloc_from_slice(
                 &texture.path.bytes().chain([0]).collect::<Vec<_>>(),
             ),
@@ -158,11 +158,30 @@ where
         )?;
         starts.push(start);
         let data = clip_metadata(&model, index)?;
+        if !clip.flags.is_empty() {
+            context.unsupported(
+                format!("clips[{index}].flags"),
+                "M2 has no native equivalent to WEM clip playback flags",
+            )?;
+        }
+        if !clip.looping {
+            context.unsupported(
+                format!("clips[{index}].looping"),
+                "M2 has no verified native control for generic nonlooping playback",
+            )?;
+        }
+        let mut flags = SequenceFlags::from_bits_retain(
+            data.get("m2.sequence.flags").copied().unwrap_or(0) as u32,
+        );
+        flags.set_alias(false);
+        flags.set_load_low_priority(false);
+        flags.set_primary_bone_sequence(true);
+        flags.set_stored_in_model(false);
         core.sequences.push(native::records::Sequence {
             id: u16::try_from(clip.id)
                 .map_err(|_| Error::new("clips.id", "animation ID exceeds u16"))?,
             timing: SequenceClock::from_window(start, duration),
-            flags: (clip.flags & !0x170) | 0x20,
+            flags,
             variation_index: data.get("m2.variation").copied().unwrap_or(0) as u16,
             move_speed: f32::from_bits(data.get("m2.move_speed").copied().unwrap_or(0) as u32),
             frequency: data.get("m2.frequency").copied().unwrap_or(1) as i16,

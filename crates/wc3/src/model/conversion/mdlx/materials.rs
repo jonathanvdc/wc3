@@ -1,16 +1,31 @@
 //! Typed native Warcraft III material mappings.
 use super::*;
-pub(super) fn filter(value: native::LayerFilterMode) -> u32 {
+pub(super) fn filter(value: native::LayerFilterMode) -> wr::BlendMode {
     match value {
-        native::LayerFilterMode::None => 0,
-        native::LayerFilterMode::Transparent => 1,
-        native::LayerFilterMode::Blend => 2,
-        native::LayerFilterMode::Additive => 3,
-        native::LayerFilterMode::AddAlpha => 4,
-        native::LayerFilterMode::Modulate => 5,
-        native::LayerFilterMode::Modulate2x => 6,
-        native::LayerFilterMode::Unknown(value) => value,
+        native::LayerFilterMode::None => wr::BlendMode::Opaque,
+        native::LayerFilterMode::Transparent => wr::BlendMode::AlphaKey,
+        native::LayerFilterMode::Blend => wr::BlendMode::AlphaBlend,
+        native::LayerFilterMode::Additive => wr::BlendMode::Additive,
+        native::LayerFilterMode::AddAlpha => wr::BlendMode::AdditiveAlpha,
+        native::LayerFilterMode::Modulate => wr::BlendMode::Modulate,
+        native::LayerFilterMode::Modulate2x => wr::BlendMode::Modulate2x,
+        native::LayerFilterMode::Unknown(value) => match wr::BlendMode::from_raw(value) {
+            wr::BlendMode::Unknown(value) => wr::BlendMode::Unknown(value),
+            _ => wr::BlendMode::Opaque,
+        },
     }
+}
+pub(super) fn common_material_flags<V: ModelVersion>(
+    material: &native::Material<'_, V>,
+) -> wr::MaterialFlags {
+    let mut flags = wr::MaterialFlags::default();
+    flags.set_sort_near_z(material.render_mode.sort_primitives_near_z());
+    flags.set_sort_far_z(material.render_mode.sort_primitives_far_z());
+    if let Some(layer) = material.layers.first() {
+        flags.set_unlit(layer.shading_flags.unshaded());
+        flags.set_unfogged(layer.shading_flags.unfogged());
+    }
+    flags
 }
 
 pub(super) fn native_layers<V: ModelVersion>(
@@ -20,7 +35,10 @@ pub(super) fn native_layers<V: ModelVersion>(
         .layers
         .iter()
         .map(|layer| wr::MdxLayer {
-            filter_mode: wr::MdxFilterMode(filter(layer.filter_mode)),
+            filter_mode: wr::MdxFilterMode::from_raw(match layer.filter_mode {
+                native::LayerFilterMode::Unknown(value) => value,
+                value => filter(value).raw(),
+            }),
             shading_flags: wr::MdxShadingFlag(layer.shading_flags.bits()),
             texture_id: base(&layer.texture_id),
             texture_animation_id: layer.texture_animation_id,
@@ -36,7 +54,7 @@ pub(super) fn native_layers<V: ModelVersion>(
                 .try_fresnel()
                 .map(|f| base(&f.team_color))
                 .unwrap_or(0.),
-            shader_type: wr::MdxShaderType(
+            shader_type: wr::MdxShaderType::from_raw(
                 layer
                     .try_shader_type()
                     .map(|shader| shader.id())
@@ -56,7 +74,7 @@ pub(super) fn native_layers<V: ModelVersion>(
                             .iter()
                             .map(|slot| wr::MdxSubTexture {
                                 texture_id: base(&slot.texture_id),
-                                slot: wr::MdxSlotType(slot.texture_type),
+                                slot: wr::MdxSlotType::from_raw(slot.texture_type),
                             })
                             .collect()
                     })
@@ -73,7 +91,7 @@ pub(super) fn overlay_material<V: ModelVersion>(
     context: &mut Context,
 ) -> Result<(), Error> {
     material.priority_plane = record.priority_plane;
-    material.render_mode = native::MaterialRenderFlags(record.flags.0);
+    material.render_mode = native::MaterialRenderFlags(record.flags.bits());
     let shader = raw.string(record.shader)?.unwrap_or_default();
     if let Err(error) = material.try_set_shader(shader) {
         if !shader.is_empty() {
@@ -84,17 +102,17 @@ pub(super) fn overlay_material<V: ModelVersion>(
         .layers
         .resize_with(record.layers.0.len(), native::Layer::new);
     for (layer, data) in material.layers.iter_mut().zip(&record.layers.0) {
-        layer.filter_mode = match data.filter_mode.0 {
-            0 => native::LayerFilterMode::None,
-            1 => native::LayerFilterMode::Transparent,
-            2 => native::LayerFilterMode::Blend,
-            3 => native::LayerFilterMode::Additive,
-            4 => native::LayerFilterMode::AddAlpha,
-            5 => native::LayerFilterMode::Modulate,
-            6 => native::LayerFilterMode::Modulate2x,
-            value => native::LayerFilterMode::Unknown(value),
+        layer.filter_mode = match data.filter_mode {
+            wr::MdxFilterMode::None => native::LayerFilterMode::None,
+            wr::MdxFilterMode::Transparent => native::LayerFilterMode::Transparent,
+            wr::MdxFilterMode::Blend => native::LayerFilterMode::Blend,
+            wr::MdxFilterMode::Additive => native::LayerFilterMode::Additive,
+            wr::MdxFilterMode::AddAlpha => native::LayerFilterMode::AddAlpha,
+            wr::MdxFilterMode::Modulate => native::LayerFilterMode::Modulate,
+            wr::MdxFilterMode::Modulate2x => native::LayerFilterMode::Modulate2x,
+            value => native::LayerFilterMode::Unknown(value.raw()),
         };
-        layer.shading_flags = native::LayerShadingFlags(data.shading_flags.0);
+        layer.shading_flags = native::LayerShadingFlags(data.shading_flags.bits());
         layer.texture_id.set_value(data.texture_id);
         layer.texture_animation_id = data.texture_animation_id;
         layer.coordinate_id = data.coord_id;
@@ -119,9 +137,9 @@ pub(super) fn overlay_material<V: ModelVersion>(
             }
         }
         if let Err(error) =
-            layer.try_set_shader_type(native::materials::ShaderType::new(data.shader_type.0))
+            layer.try_set_shader_type(native::materials::ShaderType::new(data.shader_type.raw()))
         {
-            if data.shader_type.0 != 0 {
+            if data.shader_type.raw() != 0 {
                 context.unsupported("material.shader_type", error.to_string())?;
             }
         }
@@ -139,7 +157,7 @@ pub(super) fn overlay_material<V: ModelVersion>(
                 id.set_value(texture.texture_id);
                 native::materials::LayerTextureSlot {
                     texture_id: id,
-                    texture_type: texture.slot.0,
+                    texture_type: texture.slot.raw(),
                 }
             })
             .collect();

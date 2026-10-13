@@ -9,10 +9,10 @@ fn roundtrip<'data, T: Read<'data> + Write + RecordLayout>(
     version: u32,
     flags: u32,
 ) {
-    let mut input = Decoder::new(bytes, version, flags);
+    let mut input = Decoder::new(bytes, version, ModelFlags::from_bits_retain(flags));
     let record = T::read(&mut input).unwrap();
     assert_eq!(input.position(), T::size(version, flags));
-    let mut output = Encoder::new(version, flags);
+    let mut output = Encoder::new(version, ModelFlags::from_bits_retain(flags));
     record.write(&mut output).unwrap();
     assert_eq!(output.position(), T::size(version, flags));
     assert_eq!(output.finish(), bytes);
@@ -62,7 +62,7 @@ fn classic_bone_is_108_bytes_with_float_keys_and_no_crc() {
     for (n, v) in [1.0_f32, 2.0, 3.0].iter().enumerate() {
         bytes[96 + n * 4..100 + n * 4].copy_from_slice(&v.to_le_bytes());
     }
-    let bone = Bone::<V256>::read(&mut Decoder::new(&bytes, 256, 0)).unwrap();
+    let bone = Bone::<V256>::read(&mut Decoder::new(&bytes, 256, ModelFlags::default())).unwrap();
     assert_eq!(bone.name_crc, ());
     assert_eq!(bone.pivot, [1.0, 2.0, 3.0]);
     assert_eq!(Bone::<V260>::size(260, 0), 112);
@@ -73,20 +73,23 @@ fn legacy_particle_native_offsets_and_packing_remain_distinct() {
     bytes[0x28..0x2c].copy_from_slice(&[1, 2, 3, 4]);
     bytes[0x15c..0x160].copy_from_slice(&1.5_f32.to_le_bytes());
     bytes[0x17c..0x180].copy_from_slice(&4.25_f32.to_le_bytes());
-    let early = ParticleEmitter::<V260>::read(&mut Decoder::new(&bytes, 260, 0)).unwrap();
-    let late = ParticleEmitter::<V263>::read(&mut Decoder::new(&bytes, 263, 0)).unwrap();
+    let early =
+        ParticleEmitter::<V260>::read(&mut Decoder::new(&bytes, 260, ModelFlags::default()))
+            .unwrap();
+    let late = ParticleEmitter::<V263>::read(&mut Decoder::new(&bytes, 263, ModelFlags::default()))
+        .unwrap();
     assert_eq!(
         early.kind,
         WideParticleHeader {
-            blending: 0x0201,
-            emitter: 0x0403
+            blending: ParticleBlend::Unknown(0x0201),
+            emitter: ParticleGenerator::Unknown(0x0403)
         }
     );
     assert_eq!(
         late.kind,
         PackedParticleHeader {
-            blending: 1,
-            emitter: 2,
+            blending: PackedParticleBlend::Alpha,
+            emitter: PackedParticleGenerator::Sphere,
             color_index: 0x0403
         }
     );
@@ -99,7 +102,7 @@ fn legacy_particle_native_offsets_and_packing_remain_distinct() {
 fn static_legacy_timeline_and_spline_values_relocate() {
     let track = Track::<f32, V260> {
         base: TrackBase {
-            interpolation: 3,
+            interpolation: Interpolation::Hermite,
             global_sequence: u16::MAX,
             timeline: LegacyTimeline {
                 ranges: ZeroVec::alloc_from_slice(&[[0, 1], [0, 0]]),
@@ -111,10 +114,11 @@ fn static_legacy_timeline_and_spline_values_relocate() {
             [2.0, 1.5, 2.5],
         ])),
     };
-    let mut output = Encoder::new(260, 0);
+    let mut output = Encoder::new(260, ModelFlags::default());
     track.write(&mut output).unwrap();
     let bytes = output.finish();
-    let decoded = Track::<f32, V260>::read(&mut Decoder::new(&bytes, 260, 0)).unwrap();
+    let decoded =
+        Track::<f32, V260>::read(&mut Decoder::new(&bytes, 260, ModelFlags::default())).unwrap();
     assert_eq!(decoded, track);
     decoded.validate().unwrap();
 }
@@ -122,7 +126,7 @@ fn static_legacy_timeline_and_spline_values_relocate() {
 fn modern_external_leaves_never_dereference_model_bytes() {
     let track = Track::<f32, V264> {
         base: TrackBase {
-            interpolation: 1,
+            interpolation: Interpolation::Linear,
             global_sequence: u16::MAX,
             timeline: ModernTimeline {
                 timestamps: vec![Array::External(ArrayRef {
@@ -136,30 +140,34 @@ fn modern_external_leaves_never_dereference_model_bytes() {
             offset: 9016,
         })]),
     };
-    let mut output = Encoder::new(264, 0);
+    let mut output = Encoder::new(264, ModelFlags::default());
     track.write(&mut output).unwrap();
     let bytes = output.finish();
-    let mut input = Decoder::new(&bytes, 264, 0);
+    let mut input = Decoder::new(&bytes, 264, ModelFlags::default());
     input.external_sequences = vec![true].into();
     assert_eq!(Track::<f32, V264>::read(&mut input).unwrap(), track);
-    assert!(Track::<f32, V264>::read(&mut Decoder::new(&bytes, 264, 0)).is_err());
+    assert!(
+        Track::<f32, V264>::read(&mut Decoder::new(&bytes, 264, ModelFlags::default())).is_err()
+    );
 }
 #[test]
 fn malformed_outer_array_is_rejected_before_allocation() {
     let mut bytes = vec![0; 20];
     bytes[4..8].copy_from_slice(&u32::MAX.to_le_bytes());
-    assert!(Track::<f32, V264>::read(&mut Decoder::new(&bytes, 264, 0)).is_err());
+    assert!(
+        Track::<f32, V264>::read(&mut Decoder::new(&bytes, 264, ModelFlags::default())).is_err()
+    );
 }
 #[test]
 fn camera_splines_keep_triplets_even_with_constant_interpolation() {
     let mut camera = Camera::<V265>::new();
     camera.roll.base.timeline.timestamps = vec![Array::Inline(ZeroVec::alloc_from_slice(&[7]))];
     camera.roll.values.values = vec![Array::Inline(ZeroVec::alloc_from_slice(&[[1.0, 2.0, 3.0]]))];
-    let mut output = Encoder::new(265, 0);
+    let mut output = Encoder::new(265, ModelFlags::default());
     camera.write(&mut output).unwrap();
     let bytes = output.finish();
     assert_eq!(
-        Camera::<V265>::read(&mut Decoder::new(&bytes, 265, 0)).unwrap(),
+        Camera::<V265>::read(&mut Decoder::new(&bytes, 265, ModelFlags::default())).unwrap(),
         camera
     );
     camera.validate().unwrap();
@@ -168,11 +176,13 @@ fn camera_splines_keep_triplets_even_with_constant_interpolation() {
 fn typed_constructors_encode_without_runtime_version_variants() {
     fn check<V: ModelLayout>() {
         for flags in [0, 0x200] {
-            let mut output = Encoder::new(V::VERSION, flags);
+            let mut output = Encoder::new(V::VERSION, ModelFlags::from_bits_retain(flags));
             output.write_records(&[Bone::<V>::new()]).unwrap();
             output.write_records(&[Camera::<V>::new()]).unwrap();
             output
-                .write_records(&[ParticleEmitter::<V>::new(flags)])
+                .write_records(&[ParticleEmitter::<V>::new(ModelFlags::from_bits_retain(
+                    flags,
+                ))])
                 .unwrap();
         }
     }
@@ -205,8 +215,8 @@ fn vertex_material_leaf_arrays_borrow_unaligned_bytes() {
     assert_eq!(
         material.get(0),
         Some(Material {
-            flags: 0x1234,
-            blending_mode: 0x5678
+            flags: MaterialFlags::from_bits_retain(0x1234),
+            blending_mode: BlendMode::Unknown(0x5678)
         })
     );
 }
@@ -215,7 +225,7 @@ fn vertex_material_leaf_arrays_borrow_unaligned_bytes() {
 fn typed_track_views_keep_native_ranges_and_detach_buffers() {
     let track = Track::<f32, V260> {
         base: TrackBase {
-            interpolation: 1,
+            interpolation: Interpolation::Linear,
             global_sequence: u16::MAX,
             timeline: LegacyTimeline {
                 ranges: ZeroVec::alloc_from_slice(&[[1, 2]]),

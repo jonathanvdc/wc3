@@ -21,17 +21,17 @@ pub(in super::super) fn import_native_clips<E: Envelope>(
                 for (id, channel, mode) in [
                     (
                         bone.position.animation_id,
-                        wr::Channel::TRANSLATION,
+                        wr::Channel::Translation,
                         bone.position.interpolation,
                     ),
                     (
                         bone.rotation.animation_id,
-                        wr::Channel::ROTATION,
+                        wr::Channel::Rotation,
                         bone.rotation.interpolation,
                     ),
                     (
                         bone.scale.animation_id,
-                        wr::Channel::SCALE,
+                        wr::Channel::Scale,
                         bone.scale.interpolation,
                     ),
                 ] {
@@ -40,12 +40,12 @@ pub(in super::super) fn import_native_clips<E: Envelope>(
                             id,
                             Property {
                                 target: wr::TrackTarget {
-                                    kind: wr::TrackTargetKind::NODE,
+                                    kind: wr::TrackTargetKind::Node,
                                     node: index as u32,
                                     channel,
                                     ..Default::default()
                                 },
-                                mode,
+                                mode: mode.raw(),
                             },
                         );
                     }
@@ -56,13 +56,13 @@ pub(in super::super) fn import_native_clips<E: Envelope>(
                         bone.batching.animation_id,
                         Property {
                             target: wr::TrackTarget {
-                                kind: wr::TrackTargetKind::NODE,
+                                kind: wr::TrackTargetKind::Node,
                                 node: index as u32,
-                                channel: wr::Channel(255),
+                                channel: wr::Channel::from_raw(255),
                                 sub: bone.batching.animation_id,
                                 ..Default::default()
                             },
-                            mode: bone.batching.interpolation,
+                            mode: (bone.batching.interpolation).raw(),
                         },
                     );
                 }
@@ -287,14 +287,14 @@ pub(in super::super) fn import_native_clips<E: Envelope>(
                     continue;
                 };
                 let interpolation = match property.mode {
-                    0 => wr::Interpolation::STEP,
-                    1 => wr::Interpolation::LINEAR,
+                    0 => wr::Interpolation::Step,
+                    1 => wr::Interpolation::Linear,
                     _ => {
                         context.unsupported(
                             "m3.animation.interpolation",
                             "spline convention has no explicit tangent payload",
                         )?;
-                        wr::Interpolation::LINEAR
+                        wr::Interpolation::Linear
                     }
                 };
                 let channel = wr::AnimChannel {
@@ -382,7 +382,8 @@ pub(in super::super) fn import_native_clips<E: Envelope>(
             },
             name: text(&mut raw, &string(document, name).map_err(read_error)?)?,
             duration: duration as f32 / 1000.,
-            flags: wr::ClipFlags(flags),
+            flags: wr::ClipFlags::default(),
+            looping: (!flags.not_looping()).into(),
             containers: put(&mut raw, &output_containers)?.cast(),
             ..Default::default()
         });

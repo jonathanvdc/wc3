@@ -116,7 +116,7 @@ pub(super) fn decorate_metadata<D: ModelDialect>(
 ) -> Result<wem::Document<'static>, Error> {
     let mut raw = document.into_raw();
     let root = raw
-        .resolve::<wr::DocumentRecord<wr::V1>>(Ref::new(1, raw.root_reference().index, 0))?
+        .resolve::<wr::DocumentRecord<wr::V1>>(Ref::from_section(1, raw.root_reference().index))?
         .get(0)
         .transpose()?
         .ok_or_else(|| Error::new("root", "missing root"))?;
@@ -183,6 +183,13 @@ pub(super) fn decorate_metadata<D: ModelDialect>(
         .iter()
         .collect::<Result<Vec<_>, _>>()?;
     for (clip, sequence) in clips.iter_mut().zip(source.sequences()) {
+        set_metadata(
+            &mut raw,
+            &mut clip.native,
+            "mdlx.sequence_flags",
+            i64::from(sequence.flags.bits()),
+            "",
+        )?;
         clip.bounds = extent(sequence.extent);
         set_metadata(
             &mut raw,
@@ -295,6 +302,17 @@ pub(super) fn decorate_metadata<D: ModelDialect>(
             i64::from(bone.geoset_animation_id),
             "",
         )?;
+    }
+    for light in source.lights() {
+        if let native::scene::LightType::Unknown(value) = light.light_type {
+            set_metadata(
+                &mut raw,
+                &mut nodes[identities[&light.node.object_id]].native,
+                "mdlx.light.unknown_type",
+                i64::from(value),
+                "",
+            )?;
+        }
     }
     for attachment in source.attachments() {
         set_metadata(
@@ -472,6 +490,11 @@ pub(super) fn overlay_metadata<D: ModelDialect>(
     for (sequence, clip) in model.sequences_mut().zip(source_clips) {
         let values = metadata(raw, clip.native)?;
         sequence.extent = native_extent(clip.bounds);
+        if let Some((value, _)) = values.get("mdlx.sequence_flags") {
+            let looping = sequence.flags.non_looping();
+            sequence.flags = native::SequenceFlags(*value as u32);
+            sequence.flags.set_non_looping(looping);
+        }
         if let Some((value, _)) = values.get("mdlx.move_speed") {
             sequence.move_speed = f32::from_bits(*value as u32);
         }
