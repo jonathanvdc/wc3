@@ -253,9 +253,7 @@ pub struct AttachmentVolume {
     /// Sets the shape type.
     pub shape_type: u32,
     /// Selects the primary bone in the BONE section.
-    pub bone_index: u16,
-    /// Keeps alignment bytes in their serialized position.
-    pub padding: u16,
+    pub bone_index: u32,
     /// Transforms the volume using a four-by-four matrix.
     pub transform: [[f32; 4]; 4],
     /// Links to VEC3 positions defining the shape’s mesh vertices.

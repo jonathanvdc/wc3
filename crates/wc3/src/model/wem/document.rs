@@ -604,6 +604,61 @@ impl<'data> RawDocument<'data> {
         }
         Ok(false)
     }
+    /// Drops payloads unreachable from the document root without changing index identities.
+    ///
+    /// This requires understood reference layouts. Removed slots become holes, and
+    /// the original container buffer is released because subsequent writes rebuild
+    /// the graph. It is useful after replacing tables during semantic editing.
+    pub fn prune_unreachable(&mut self) -> Result<usize, WriteError> {
+        if self.opaque()? {
+            return Err(WriteError::invalid("reachability with opaque sections"));
+        }
+        self.validate()
+            .map_err(|_| WriteError::invalid("document graph"))?;
+        let mut reachable = vec![false; self.sections.len()];
+        if !reachable.is_empty() {
+            reachable[0] = true;
+        }
+        let mut pending = Vec::new();
+        if self.root.entries != 0 {
+            pending.push(self.root.index);
+        }
+        while let Some(index) = pending.pop() {
+            if reachable[index as usize] {
+                continue;
+            }
+            reachable[index as usize] = true;
+            let section = &self.sections[index as usize];
+            validate_known_section(
+                section.tag,
+                section.revision,
+                &section.data,
+                section.count,
+                self.options.native_abi,
+                &mut |reference| {
+                    if reference.entries != 0 {
+                        pending.push(reference.index);
+                    }
+                    Ok(())
+                },
+            )
+            .map_err(|_| WriteError::invalid("reference traversal"))?;
+        }
+        let mut removed = 0;
+        for (section, live) in self.sections.iter_mut().zip(reachable) {
+            if !live && section.tag != *b"HOLE" {
+                section.tag = *b"HOLE";
+                section.count = 0;
+                section.revision = 0;
+                section.data = Cow::Borrowed(&[]);
+                section.original = None;
+                removed += 1;
+            }
+        }
+        self.source = None;
+        self.dirty = true;
+        Ok(removed)
+    }
     /// Empties an unreferenced array, retaining its original index slot.
     pub fn clear(&mut self, id: SectionId) -> Result<(), WriteError> {
         let section = self
@@ -924,3 +979,7 @@ impl<D: Dialect> IntoOwned for Document<'_, D> {
         Document::into_owned(self)
     }
 }
+
+#[cfg(test)]
+#[path = "document_tests.rs"]
+mod tests;

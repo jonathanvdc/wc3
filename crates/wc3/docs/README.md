@@ -15,6 +15,8 @@ to editing workflows and runnable tools.
   section graphs, independent record revisions, packed vertices, and animations.
 - [WEM documents](wem.md) explains native multi-model graphs, profiles, variable
   records, and indexed-section preservation.
+- [Model conversions](conversion.md) explains WEM imports, typed native export
+  plans, editable fields, selected looks, and representability policies.
 - [Asset command-line tools](tools.md) covers inspection, dependency reporting,
   repathing, conversion, texture export, and archive operations.
 

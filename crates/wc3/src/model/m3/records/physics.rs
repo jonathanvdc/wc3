@@ -445,7 +445,7 @@ pub struct PhysicsShape<D: PhysicsShapeDialect> {
     pub source_triangles: D::SourceTriangles,
     /// VEC4 plane data carried by the older shape layout.
     pub planes: D::Planes,
-    /// Shape-dependent parameters: box half-extents, sphere radius, or capsule/cylinder radius and length.
+    /// Shape-dependent dimensions: box half-extents, sphere radius, or capsule/cylinder radius and cylindrical segment length.
     pub shape_dimensions: [f32; 3],
     /// VEC3 positions forming the cooked convex hull.
     pub hull_vertices: D::HullVertices,
@@ -528,8 +528,8 @@ pub trait RigidBodyDialect: Revision + Copy + Clone + Debug + Default + PartialE
     type Reserved1: NativeField;
     /// Field representation for `physics_type`; `()` omits the field.
     type PhysicsType: NativeField;
-    /// Field representation for `density`; `()` omits the field.
-    type Density: NativeField;
+    /// Field representation for `mass`; `()` omits the field.
+    type Mass: NativeField;
     /// Field representation for `friction`; `()` omits the field.
     type Friction: NativeField;
     /// Field representation for `restitution`; `()` omits the field.
@@ -538,8 +538,8 @@ pub trait RigidBodyDialect: Revision + Copy + Clone + Debug + Default + PartialE
     type LinearDamping: NativeField;
     /// Field representation for `angular_damping`; `()` omits the field.
     type AngularDamping: NativeField;
-    /// Field representation for `inertia_scale`; `()` omits the field.
-    type InertiaScale: NativeField;
+    /// Field representation for `gravity_factor`; `()` omits the field.
+    type GravityFactor: NativeField;
     /// Field representation for `dynamic_state`; `()` omits the field.
     type DynamicState: NativeField;
     /// Field representation for `dynamic_blend_out`; `()` omits the field.
@@ -568,12 +568,12 @@ impl RigidBodyDialect for V0 {
     type SimulationType = ();
     type Reserved1 = FixedBytes<18>;
     type PhysicsType = ();
-    type Density = ();
+    type Mass = ();
     type Friction = ();
     type Restitution = ();
     type LinearDamping = ();
     type AngularDamping = ();
-    type InertiaScale = ();
+    type GravityFactor = ();
     type DynamicState = ();
     type DynamicBlendOut = ();
     type Reserved2 = u8;
@@ -592,12 +592,12 @@ impl RigidBodyDialect for V1 {
     type SimulationType = ();
     type Reserved1 = FixedBytes<18>;
     type PhysicsType = ();
-    type Density = ();
+    type Mass = ();
     type Friction = ();
     type Restitution = ();
     type LinearDamping = ();
     type AngularDamping = ();
-    type InertiaScale = ();
+    type GravityFactor = ();
     type DynamicState = ();
     type DynamicBlendOut = ();
     type Reserved2 = u8;
@@ -616,12 +616,12 @@ impl RigidBodyDialect for V2 {
     type SimulationType = ();
     type Reserved1 = FixedBytes<18>;
     type PhysicsType = ();
-    type Density = ();
+    type Mass = ();
     type Friction = ();
     type Restitution = ();
     type LinearDamping = ();
     type AngularDamping = ();
-    type InertiaScale = ();
+    type GravityFactor = ();
     type DynamicState = ();
     type DynamicBlendOut = ();
     type Reserved2 = ();
@@ -640,12 +640,12 @@ impl RigidBodyDialect for V3 {
     type SimulationType = u16;
     type Reserved1 = ();
     type PhysicsType = u32;
-    type Density = f32;
+    type Mass = f32;
     type Friction = f32;
     type Restitution = f32;
     type LinearDamping = f32;
     type AngularDamping = f32;
-    type InertiaScale = f32;
+    type GravityFactor = f32;
     type DynamicState = ();
     type DynamicBlendOut = ();
     type Reserved2 = ();
@@ -664,12 +664,12 @@ impl RigidBodyDialect for V4 {
     type SimulationType = u16;
     type Reserved1 = ();
     type PhysicsType = u32;
-    type Density = f32;
+    type Mass = f32;
     type Friction = f32;
     type Restitution = f32;
     type LinearDamping = f32;
     type AngularDamping = f32;
-    type InertiaScale = f32;
+    type GravityFactor = f32;
     type DynamicState = AnimationValue<u32>;
     type DynamicBlendOut = f32;
     type Reserved2 = ();
@@ -698,7 +698,7 @@ impl RigidBodyDialect for V4 {
 pub struct RigidBody<D: RigidBodyDialect> {
     /// 60 uninterpreted bytes between the record start and `parent_bone_index`.
     pub reserved_0: D::Reserved0,
-    /// Motion category: 0 dynamic, 1 kinematic, 2 static.
+    /// Native simulation-type control; the individual code meanings are unresolved.
     pub simulation_type: D::SimulationType,
     /// BONE record to which this rigid body is attached.
     pub parent_bone_index: u16,
@@ -706,8 +706,8 @@ pub struct RigidBody<D: RigidBodyDialect> {
     pub reserved_1: D::Reserved1,
     /// Physics-material identity used to select material properties.
     pub physics_type: D::PhysicsType,
-    /// Density parameter used with the collision shape to determine body mass.
-    pub density: D::Density,
+    /// Mass parameter used with the collision shape to determine body mass.
+    pub mass: D::Mass,
     /// Contact-friction parameter for this body.
     pub friction: D::Friction,
     /// Coefficient controlling velocity recovery after contact.
@@ -716,8 +716,8 @@ pub struct RigidBody<D: RigidBodyDialect> {
     pub linear_damping: D::LinearDamping,
     /// Attenuation parameter for rotational velocity.
     pub angular_damping: D::AngularDamping,
-    /// Scale factor applied to body inertia.
-    pub inertia_scale: D::InertiaScale,
+    /// Multiplier applied to gravity for this body.
+    pub gravity_factor: D::GravityFactor,
     /// Animated simulation switch; the body flag word determines whether it is sampled.
     pub dynamic_state: D::DynamicState,
     /// Stored simulation-transition parameter; its interpretation is unresolved.
@@ -1093,7 +1093,7 @@ pub struct ClothPhysics<D: ClothPhysicsDialect> {
     pub colliders: Ref<targets::ClothCollider>,
     /// PHAC records relating simulated cage vertices to output mesh regions.
     pub proxies: D::Proxies,
-    /// Density parameter used with the collision shape to determine body mass.
+    /// Authored body mass, independent of collision-shape volume.
     pub density: f32,
     /// Parameter controlling how cloth tracks its anchors.
     pub tracking: f32,

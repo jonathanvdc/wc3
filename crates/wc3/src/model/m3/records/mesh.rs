@@ -126,8 +126,8 @@ pub struct Region<D: RegionDialect> {
     pub first_index: D::FirstIndex,
     /// Length of the face-index range; each triangle consumes three indices.
     pub index_count: D::IndexCount,
-    /// Additional bone-table count word; its relationship to `bone_lookup_count` is unresolved.
-    pub unknown2: u16,
+    /// Number of bones associated with this region.
+    pub bone_count: u16,
     /// Starting element of this region in the model bone-lookup array.
     pub first_bone_lookup: u16,
     /// Length of the bone-lookup range beginning at `first_bone_lookup`.
@@ -136,8 +136,8 @@ pub struct Region<D: RegionDialect> {
     pub padding: u16,
     /// Number of weight pairs encoded for each vertex in this region.
     pub bone_weight_pairs: u8,
-    /// Number of bone-index pairs encoded for each vertex in this region.
-    pub bone_index_pairs: u8,
+    /// Uninterpreted byte following the per-vertex lookup count; reference models commonly store one.
+    pub unknown_byte: u8,
     /// BONE record index identifying the region root.
     pub root_bone: u16,
     /// Region behavior bits, including visibility and cloth participation.
@@ -157,18 +157,22 @@ impl<D: RegionDialect> Record for Region<D> {
 pub trait BatchDialect: Revision + Copy + Clone + Debug + Default + PartialEq {
     /// Native section revision.
     const VERSION: u32;
-    /// Field representation for `unknown`; `()` omits the field.
-    type Unknown: NativeField;
+    /// Native representation of the batch behavior flags.
+    type Flags: NativeField;
+    /// Native representation of the draw priority plane.
+    type PriorityPlane: NativeField;
 }
 
 impl BatchDialect for V0 {
     const VERSION: u32 = 0;
-    type Unknown = u32;
+    type Flags = u16;
+    type PriorityPlane = u16;
 }
 
 impl BatchDialect for V1 {
     const VERSION: u32 = 1;
-    type Unknown = u32;
+    type Flags = u16;
+    type PriorityPlane = u16;
 }
 
 /// Fields of the native `BAT_` section, in serialized order.
@@ -185,16 +189,20 @@ impl BatchDialect for V1 {
     m3::VisitReferences,
 )]
 pub struct Batch<D: BatchDialect> {
-    /// Uninterpreted batch word before the region index.
-    pub unknown: D::Unknown,
+    /// Batch behavior flags.
+    pub flags: D::Flags,
+    /// Draw-order priority plane.
+    pub priority_plane: D::PriorityPlane,
     /// REGN record selected for this draw batch.
     pub region_index: u16,
-    /// Uninterpreted batch word between the region and material indices.
-    pub unknown2: u32,
+    /// Index of the MSEC bounds control for this batch.
+    pub bounds_index: u16,
+    /// Native color-control index associated with the batch.
+    pub color_index: u16,
     /// MATM record selected for this draw batch.
     pub material_index: u16,
-    /// BONE index used to test batch visibility; `0xffff` disables that test despite the field name.
-    pub bone_count: u16,
+    /// BONE index gating batch visibility; `0xffff` disables the gate.
+    pub visibility_bone: u16,
 }
 
 impl<D: BatchDialect> Record for Batch<D> {

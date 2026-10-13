@@ -248,6 +248,13 @@ impl<'data> Root14<'data> {
                 _ => None,
             })
     }
+    /// Iterates uninterpreted top-level payloads outside the MOMO root body.
+    pub fn unknown_chunks(&self) -> impl Iterator<Item = &RawChunk<'data>> {
+        self.entries.iter().filter_map(|entry| match entry {
+            Entry14::Unknown(chunk) => Some(chunk),
+            _ => None,
+        })
+    }
     /// Iterates mutable root payloads without exposing required-header removal.
     pub fn chunks_mut(&mut self) -> impl Iterator<Item = &mut RootChunk14<'data>> {
         self.entries

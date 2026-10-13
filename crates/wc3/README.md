@@ -103,7 +103,8 @@ The core exposes native records and borrowed encoded arrays. Standalone
 supporting files; `Bundle` connects declared references through a caller-owned resolver and
 coordinates external animation offsets when writing. The [M2 guide](docs/m2.md)
 explains layout selection, ownership, complete bundle output, and preservation
-boundaries. M2-to-MDLX conversion and M2 rendering are not implemented.
+boundaries. Model conversions through WEM are described in the
+[conversion guide](docs/conversion.md). M2 rendering is not implemented.
 
 World geometry uses `wc3::model::wmo::{Root, Group, Bundle}` with an explicit
 client profile, since WMO's version field does not identify every layout change.

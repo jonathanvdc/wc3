@@ -8,6 +8,9 @@ loading, modifying, and rendering them. World of Warcraft M2 support covers
 file formats and supporting documents through the asset library. WMO support
 adds native world-model roots, geometry groups, and bundle validation. M3 support
 covers StarCraft II and Heroes of the Storm model files and external animations.
+[Model conversions](crates/wc3/docs/conversion.md) use WEM as an editable
+intermediate for MDLX, M2, M3, and WMO assets.
+
 WEM support adds indexed multi-model documents with profiles, shared resources,
 and independently revised native records.
 

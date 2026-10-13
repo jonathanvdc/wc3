@@ -30,7 +30,7 @@ fn vectors_require_exact_arity_and_separators() {
         <[f32; 3]>::decode_mdl("{ 1.0, -0.0, 2e-2 }").unwrap(),
         [1.0, -0.0, 0.02]
     );
-    assert_eq!(<[u32; 0]>::decode_mdl("{}").unwrap(), []);
+    assert_eq!(<[u32; 0]>::decode_mdl("{}").unwrap(), [0u32; 0]);
     for raw in [
         "{ 1, 2 }",
         "{ 1, 2, 3, 4 }",

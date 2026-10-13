@@ -13,3 +13,6 @@ mod m3;
 
 #[path = "model/wem/mod.rs"]
 mod wem;
+
+#[path = "model/conversion/mod.rs"]
+mod conversion;

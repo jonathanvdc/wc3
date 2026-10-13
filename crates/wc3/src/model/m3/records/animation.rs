@@ -260,18 +260,18 @@ impl Record for BoneAnimationSet {
 pub trait BoneDialect: Revision + Copy + Clone + Debug + Default + PartialEq {
     /// Native section revision.
     const VERSION: u32;
-    /// Field representation for `unknown`; `()` omits the field.
-    type Unknown: NativeField;
+    /// Leading word: an unsigned legacy value in revision zero and a signed identifier in revision one.
+    type Id: NativeField;
 }
 
 impl BoneDialect for V0 {
     const VERSION: u32 = 0;
-    type Unknown = u32;
+    type Id = u32;
 }
 
 impl BoneDialect for V1 {
     const VERSION: u32 = 1;
-    type Unknown = u32;
+    type Id = i32;
 }
 
 /// Hierarchy metadata and animated local properties under one native section dialect.
@@ -288,8 +288,8 @@ impl BoneDialect for V1 {
     m3::VisitReferences,
 )]
 pub struct Bone<D: BoneDialect> {
-    /// Legacy metadata word before the bone name; its purpose is unresolved.
-    pub unknown: D::Unknown,
+    /// Leading legacy word (revision zero) or signed bone identifier (revision one).
+    pub id: D::Id,
     /// CHAR link naming this bone.
     pub name: Ref<targets::Character>,
     /// Bone behavior bits recorded with its hierarchy metadata.
@@ -304,8 +304,8 @@ pub struct Bone<D: BoneDialect> {
     pub rotation: AnimationValue<[f32; 4]>,
     /// Animated local scale with its identifier and fallback values.
     pub scale: AnimationValue<[f32; 3]>,
-    /// Animated visibility value with its identifier and fallback values.
-    pub visibility: AnimationValue<u32>,
+    /// Animated batching flags controlling draw-batch participation, with their identifier and fallback values.
+    pub batching: AnimationValue<u32>,
 }
 
 impl<D: BoneDialect> Record for Bone<D> {
@@ -395,8 +395,16 @@ impl<D: AttachmentPointDialect> Record for AttachmentPoint<D> {
     m3::VisitReferences,
 )]
 pub struct ShadowBox {
-    /// Matrix specifying the orientation and placement of the box volume.
-    pub matrix: [[f32; 4]; 4],
+    /// Skeleton node carrying the shadow volume.
+    pub bone_index: u16,
+    /// Uninterpreted alignment/control word following the node index.
+    pub padding: u16,
+    /// Animated extent along the shadow volume's length axis.
+    pub length: AnimationValue<f32>,
+    /// Animated extent along its width axis.
+    pub width: AnimationValue<f32>,
+    /// Animated extent along its height axis.
+    pub height: AnimationValue<f32>,
 }
 
 impl Record for ShadowBox {

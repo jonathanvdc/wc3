@@ -667,3 +667,103 @@ fn descriptor_shaped_material_metadata_is_not_a_document_graph_edge() {
         material.reserved_0
     );
 }
+#[test]
+fn bone_identifier_and_shadow_dimensions_use_documented_offsets() {
+    // These arrays are assembled from field offsets, independently of Write.
+    let mut bone = vec![0u8; 160];
+    bone[..4].copy_from_slice(&(-37i32).to_le_bytes());
+    bone[4..8].copy_from_slice(&3u32.to_le_bytes());
+    bone[8..12].copy_from_slice(&7u32.to_le_bytes());
+    bone[12..16].copy_from_slice(&9u32.to_le_bytes());
+    bone[16..20].copy_from_slice(&0x2007u32.to_le_bytes());
+    bone[20..22].copy_from_slice(&0xffffu16.to_le_bytes());
+    bone[22..24].copy_from_slice(&0x1234u16.to_le_bytes());
+    bone[24..26].copy_from_slice(&1u16.to_le_bytes());
+    bone[28..32].copy_from_slice(&41u32.to_le_bytes());
+    bone[32..36].copy_from_slice(&2.5f32.to_le_bytes());
+    let mut decoder = Decoder::<Md34>::new(&bone);
+    let row = Bone::<V1>::read(&mut decoder).unwrap();
+    assert_eq!(decoder.position(), 160);
+    assert_eq!(row.id, -37);
+    assert_eq!(row.name.entries, 3);
+    assert_eq!(row.name.index, 7);
+    assert_eq!(row.name.flags, 9);
+    assert_eq!(row.flags, 0x2007);
+    assert_eq!(row.parent_index, u16::MAX);
+    assert_eq!(row.padding, 0x1234);
+    assert_eq!(row.position.interpolation, 1);
+    assert_eq!(row.position.animation_id, 41);
+    assert_eq!(row.position.initial_value[0], 2.5);
+    let mut shadow = vec![0u8; 64];
+    shadow[..2].copy_from_slice(&5u16.to_le_bytes());
+    shadow[2..4].copy_from_slice(&9u16.to_le_bytes());
+    for (offset, id, value) in [(4usize, 31u32, 2f32), (24, 32, 3.), (44, 33, 4.)] {
+        shadow[offset..offset + 2].copy_from_slice(&1u16.to_le_bytes());
+        shadow[offset + 4..offset + 8].copy_from_slice(&id.to_le_bytes());
+        shadow[offset + 8..offset + 12].copy_from_slice(&value.to_le_bytes());
+        shadow[offset + 12..offset + 16].copy_from_slice(&(value + 0.5).to_le_bytes());
+        shadow[offset + 16..offset + 20].copy_from_slice(&0x12345678u32.to_le_bytes());
+    }
+    let mut decoder = Decoder::<Md34>::new(&shadow);
+    let row = ShadowBox::read(&mut decoder).unwrap();
+    assert_eq!(decoder.position(), 64);
+    assert_eq!(row.bone_index, 5);
+    assert_eq!(row.padding, 9);
+    assert_eq!(row.length.animation_id, 31);
+    assert_eq!(row.width.animation_id, 32);
+    assert_eq!(row.height.animation_id, 33);
+    assert_eq!(row.length.initial_value, 2.);
+    assert_eq!(row.width.null_value, 3.5);
+    assert_eq!(row.height.reserved, 0x12345678);
+}
+#[test]
+fn attachment_bone_word_and_body_mass_gravity_have_independent_offsets() {
+    let mut volume = vec![0u8; 116];
+    volume[0..4].copy_from_slice(&1u32.to_le_bytes());
+    volume[4..8].copy_from_slice(&2u32.to_le_bytes());
+    volume[8..12].copy_from_slice(&3u32.to_le_bytes());
+    volume[12..16].copy_from_slice(&u32::MAX.to_le_bytes());
+    volume[112..116].copy_from_slice(&7.5f32.to_le_bytes());
+    let row = AttachmentVolume::read(&mut Decoder::<Md34>::new(&volume)).unwrap();
+    assert_eq!(row.bone1, 1);
+    assert_eq!(row.bone2, 2);
+    assert_eq!(row.shape_type, 3);
+    assert_eq!(row.bone_index, u32::MAX);
+    assert_eq!(row.size_z, 7.5);
+    let mut body = vec![0u8; 56];
+    body[0..2].copy_from_slice(&2u16.to_le_bytes());
+    body[2..4].copy_from_slice(&9u16.to_le_bytes());
+    body[8..12].copy_from_slice(&2400f32.to_le_bytes());
+    body[28..32].copy_from_slice(&0.25f32.to_le_bytes());
+    body[44..48].copy_from_slice(&0x89u32.to_le_bytes());
+    let row = RigidBody::<V3>::read(&mut Decoder::<Md34>::new(&body)).unwrap();
+    assert_eq!(row.simulation_type, 2);
+    assert_eq!(row.parent_bone_index, 9);
+    assert_eq!(row.mass, 2400.);
+    assert_eq!(row.gravity_factor, 0.25);
+    assert_eq!(row.flags, 0x89);
+}
+
+#[test]
+fn batch_fields_follow_native_halfword_offsets() {
+    let mut bytes = [0u8; 14];
+    for (offset, value) in [
+        (0, 0x1234u16),
+        (2, 0xfffd),
+        (4, 5),
+        (6, 9),
+        (8, 11),
+        (10, 7),
+        (12, 0xffff),
+    ] {
+        bytes[offset..offset + 2].copy_from_slice(&value.to_le_bytes());
+    }
+    let batch = Batch::<V1>::read(&mut Decoder::<Md34>::new(&bytes)).unwrap();
+    assert_eq!(batch.region_index, 5);
+    assert_eq!(batch.material_index, 7);
+    assert_eq!(batch.flags, 0x1234);
+    assert_eq!(batch.priority_plane, 0xfffd);
+    assert_eq!(batch.bounds_index, 9);
+    assert_eq!(batch.color_index, 11);
+    assert_eq!(batch.visibility_bone, u16::MAX);
+}

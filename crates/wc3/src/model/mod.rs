@@ -10,3 +10,6 @@ pub mod mdlx;
 pub mod wem;
 /// World of Warcraft world-model root and group documents.
 pub mod wmo;
+
+/// Explicit model conversion planning, policies, and native adapters.
+pub mod conversion;

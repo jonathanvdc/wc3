@@ -8,7 +8,8 @@ material models, or animation channels into another game’s conventions.
 
 This guide is for tools that inspect and edit the native file representation.
 The codec lives under `wc3::model::wem`; conversion, rendering, and editor
-operations remain separate from file-format support.
+operations remain separate from file-format support. The [conversion guide](conversion.md)
+explains importing native models into WEM and building typed native exports.
 
 ## Reading a document
 
