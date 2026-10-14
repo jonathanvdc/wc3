@@ -1,7 +1,8 @@
 //! Static and animated field-of-view placement in native camera families.
 use super::graph::{Graph, GraphBuilder};
 use super::*;
-use crate::model::semantic::{Animated, Channel, ClipId, ClockId, FeatureId, OwnerId, Property};
+use crate::model::semantic::profiles::m2 as profile;
+use crate::model::semantic::{Animated, Channel, ClipId, ClockId, FeatureId};
 
 /// Selects field-of-view representation through the native dialect's field types.
 pub trait CameraConversion: ModelLayout {
@@ -36,7 +37,7 @@ macro_rules! static_cameras {($($v:ty),*)=>{$(impl CameraConversion for $v {
 })*};}
 static_cameras!(V256, V257, V260, V263, V264);
 macro_rules! animated_cameras {($($v:ty),*)=>{$(impl CameraConversion for $v {
-    fn logical_fov<'a,'data:'a,D:Dialect<Layout=Self>>(source:&'a Bundle<'data,D>,camera:&'a native::records::Camera<'data,Self>,feature:FeatureId,clips:&[ClipId],clocks:&[ClockId],builder:&mut GraphBuilder<'a>)->Result<Animated<f32>,Error>{let property=Property::named(OwnerId::Feature(feature),"m2.camera.field_of_view");let tables=sequence_tables(source,&source.key)?;let mut default=0.;for(seq,clip)in graph::animation::sequences(clips){let(start,_)=tables.sequences.get(seq).map_or((0,0),|s|s.timing.window());if let Some((c,g))=graph::animation::spline_curve(source,&camera.field_of_view_track,seq,start)?{default=c.values().get(0).unwrap_or(default);graph::animation::insert(builder,clip,Channel::Scalar(graph::animation::bind(c,g,property.clone(),clocks)?))?}}Ok(Animated::new(default,property))}
+    fn logical_fov<'a,'data:'a,D:Dialect<Layout=Self>>(source:&'a Bundle<'data,D>,camera:&'a native::records::Camera<'data,Self>,feature:FeatureId,clips:&[ClipId],clocks:&[ClockId],builder:&mut GraphBuilder<'a>)->Result<Animated<f32>,Error>{let property=profile::properties::camera::FIELD_OF_VIEW.bind(feature);let tables=sequence_tables(source,&source.key)?;let mut default=0.;for(seq,clip)in graph::animation::sequences(clips){let(start,_)=tables.sequences.get(seq).map_or((0,0),|s|s.timing.window());if let Some((c,g))=graph::animation::spline_curve(source,&camera.field_of_view_track,seq,start)?{default=c.values().get(0).unwrap_or(default);graph::animation::insert(builder,clip,Channel::Scalar(graph::animation::bind(c,g,property.clone(),clocks)?))?}}Ok(Animated::new(default,property))}
     fn write_logical_fov(model:&Graph<'_>,value:&Animated<f32>,camera:&mut native::records::Camera<'static,Self>,starts:&[u32],globals:&mut Vec<u32>,context:&mut Context)->Result<(),Error>{camera.field_of_view_track=graph::animation::animated_spline(model,value,starts,globals,context,|v,_|Ok(v))?;Ok(())}
 })*};}
 animated_cameras!(V265, V272, V272PreSplit, V273, V274);

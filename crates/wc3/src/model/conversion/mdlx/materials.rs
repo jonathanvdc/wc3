@@ -2,10 +2,11 @@
 use super::animation::Decoder;
 use crate::model::conversion::Error;
 use crate::model::mdlx::{self as native, ModelVersion};
+use crate::model::semantic::profiles::mdlx as profile;
 use crate::model::semantic::profiles::mdlx::{
     Blend, Fresnel, Layer, Material, Shading, TextureSlot,
 };
-use crate::model::semantic::{Animated, MaterialId, OwnerId, TextureId, TextureTransformId};
+use crate::model::semantic::{Animated, MaterialId, TextureId, TextureTransformId};
 
 pub(super) fn read<'a, V: ModelVersion>(
     source: &'a native::Material<'_, V>,
@@ -128,41 +129,31 @@ pub(super) fn bind<'a, V: ModelVersion>(
     decoder: &mut Decoder<'a, '_>,
 ) -> Result<Material<'a>, Error> {
     let mut material = read(source, textures, transforms)?;
-    let owner = OwnerId::Material(id);
+    let owner = id;
     for (index, (source, layer)) in source.layers.iter().zip(&mut material.layers).enumerate() {
-        let path = format!("layers[{index}]");
+        let layer_key = profile::properties::Layer(index);
         let map = texture_map(textures, &source.texture_id)?;
-        layer.texture = decoder.bind(&source.texture_id, owner, &format!("{path}.texture"), map)?;
-        layer.opacity =
-            decoder.bind(&source.alpha, owner, &format!("{path}.opacity"), |value| {
-                value
-            })?;
+        layer.texture = decoder.bind(&source.texture_id, owner, layer_key.texture(), map)?;
+        layer.opacity = decoder.bind(&source.alpha, owner, layer_key.opacity(), |value| value)?;
         if let Ok(source) = source.try_emissive_gain() {
-            layer.emissive_gain = Some(decoder.bind(
-                source,
-                owner,
-                &format!("{path}.emissive_gain"),
-                |value| value,
-            )?);
+            layer.emissive_gain =
+                Some(decoder.bind(source, owner, layer_key.emissive_gain(), |value| value)?);
         }
         if let Ok(source) = source.try_fresnel() {
             layer.fresnel = Some(Fresnel {
-                color: decoder.bind(
-                    &source.color,
-                    owner,
-                    &format!("{path}.fresnel.color"),
-                    |value| value,
-                )?,
+                color: decoder.bind(&source.color, owner, layer_key.fresnel_color(), |value| {
+                    value
+                })?,
                 opacity: decoder.bind(
                     &source.opacity,
                     owner,
-                    &format!("{path}.fresnel.opacity"),
+                    layer_key.fresnel_opacity(),
                     |value| value,
                 )?,
                 team_color: decoder.bind(
                     &source.team_color,
                     owner,
-                    &format!("{path}.fresnel.team_color"),
+                    layer_key.fresnel_team_color(),
                     |value| value,
                 )?,
             });
@@ -178,7 +169,7 @@ pub(super) fn bind<'a, V: ModelVersion>(
             slot.texture = decoder.bind(
                 &source.texture_id,
                 owner,
-                &format!("{path}.textures[{slot_index}]"),
+                layer_key.texture_slot(slot_index),
                 map,
             )?;
         }

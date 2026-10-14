@@ -1,4 +1,6 @@
 //! World of Warcraft particle declarations retain their own editable-model vocabulary.
+/// Typed destinations for emitter animation.
+pub mod properties;
 use super::AssetAddress;
 use crate::model::semantic::{Animated, Link, TextureId, ValidateLinks, Values};
 use bitfield::bitfield;

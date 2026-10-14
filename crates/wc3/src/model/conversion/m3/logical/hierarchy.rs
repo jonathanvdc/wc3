@@ -7,8 +7,8 @@ use crate::model::conversion::m3::logical::GraphBuilder;
 use crate::model::m3::{self as native, records as nr};
 use crate::model::semantic::ExplicitBinding;
 use crate::model::semantic::{
-    profiles::m3 as surface, Billboard, Inheritance, Node, NodeId, OwnerId, Property, Quaternion,
-    Skin, Transform, Values,
+    profiles::m3 as surface, Billboard, Inheritance, Node, NodeId, Property, Quaternion, Skin,
+    Transform, Values,
 };
 use native::Envelope;
 use std::array::from_fn;
@@ -70,7 +70,7 @@ pub(super) fn read<'a, E: Envelope>(
                 };
                 let rotation = anim(bone.rotation);
                 let mut batching = anim(bone.batching);
-                batching.binding = Some(Property::named(OwnerId::Node(id), "batching"));
+                batching.binding = Some(surface::properties::BATCHING.bind(id));
                 let payload = surface::BoneControls {
                     source_id: i64::from(bone.id),
                     extra_flags: surface::values::BoneFlags(bone.flags.bits() & !0x17),

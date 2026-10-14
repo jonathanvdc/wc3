@@ -357,19 +357,8 @@ fn foreign_slot_variant_id_is_not_resolved_by_its_display_name() {
 }
 #[test]
 fn nlerp_is_quaternion_only() {
-    use wc3::model::semantic::{Curve, Interpolation, Quaternion, Time};
-    assert!(Curve::new(
-        vec![Time::seconds(0.).unwrap()],
-        vec![1f32],
-        Interpolation::Nlerp
-    )
-    .is_err());
-    assert!(Curve::new(
-        vec![Time::seconds(0.).unwrap()],
-        vec![Quaternion::IDENTITY],
-        Interpolation::Nlerp
-    )
-    .is_ok());
+    use wc3::model::semantic::{Curve, Quaternion, Time};
+    assert!(Curve::nlerp(vec![Time::seconds(0.).unwrap()], vec![Quaternion::IDENTITY]).is_ok());
 }
 #[test]
 fn unknown_bone_pulses_stay_inactive_after_graph_edits() {

@@ -169,7 +169,10 @@ fn hermite_tangents_and_legacy_clock_survive_editable_roundtrip() {
     assert!(track.curve.values().is_borrowed());
     assert_eq!(track.curve.times().get(0).unwrap().as_seconds(), 0.);
     assert_eq!(track.curve.times().get(1).unwrap().as_seconds(), 1.);
-    assert_eq!(track.curve.incoming().unwrap().get(1), Some([3., 0., 0.]));
+    assert_eq!(
+        track.curve.hermite_derivatives().unwrap().incoming.get(1),
+        Some([3., 0., 0.])
+    );
     let exported =
         conversion::m2::plan::<m2::Flat<m2::V256>>(&imported.value, &ExportOptions::default())
             .unwrap()
@@ -247,10 +250,9 @@ fn quantization_requires_an_explicit_tolerance() {
     let clip = builder
         .add_clip(sm::Clip::named("clip").with_duration(sm::Time::seconds(1.).unwrap()))
         .unwrap();
-    let curve = sm::Curve::new(
+    let curve = sm::Curve::linear(
         sm::Values::owned(vec![sm::Time::seconds(0.0004).unwrap()]),
         sm::Values::owned(vec![[0.; 3]]),
-        sm::Interpolation::Linear,
     )
     .unwrap();
     builder
@@ -751,10 +753,9 @@ fn local_effect_transforms_drive_the_effects_emitted_bone() {
             let clock = draft.add_clock(sm::SharedClock {
                 period: sm::Time::seconds(1.)?,
             })?;
-            let curve = sm::Curve::new(
+            let curve = sm::Curve::step(
                 sm::Values::owned(vec![sm::Time::default()]),
                 sm::Values::owned(vec![[5., 0., 0.]]),
-                sm::Interpolation::Step,
             )?;
             draft.add_shared_channel(sm::Channel::Vector3(sm::Track {
                 target: node.translation(),

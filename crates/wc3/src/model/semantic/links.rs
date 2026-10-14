@@ -191,6 +191,7 @@ impl<T: CurveValue + 'static> ValidateLinks for Track<'_, T> {
         for value in self.curve.values().iter() {
             value.visit_value_links(v);
         }
+        self.curve.visit_control_links(v);
         self.target.visit_links(&mut |link| match link {
             Link::Property {
                 target, value_type, ..
@@ -221,36 +222,8 @@ impl ValidateLinks for Channel<'_> {
             Self::Unsigned16(t) => t.visit_links(v),
             Self::Byte(t) => t.visit_links(v),
             Self::Boolean(t) => t.visit_links(v),
-            Self::Texture(t) => {
-                t.visit_links(v);
-                for values in [
-                    Some(t.curve.values()),
-                    t.curve.incoming(),
-                    t.curve.outgoing(),
-                ]
-                .into_iter()
-                .flatten()
-                {
-                    for id in values.iter() {
-                        id.visit_links(v);
-                    }
-                }
-            }
-            Self::OptionalTexture(t) => {
-                t.visit_links(v);
-                for values in [
-                    Some(t.curve.values()),
-                    t.curve.incoming(),
-                    t.curve.outgoing(),
-                ]
-                .into_iter()
-                .flatten()
-                {
-                    for id in values.iter() {
-                        id.visit_links(v);
-                    }
-                }
-            }
+            Self::Texture(t) => t.visit_links(v),
+            Self::OptionalTexture(t) => t.visit_links(v),
         }
     }
 }

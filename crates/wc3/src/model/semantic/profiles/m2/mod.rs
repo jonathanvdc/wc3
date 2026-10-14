@@ -1,4 +1,6 @@
 //! World of Warcraft model authoring features independent of binary layout.
+/// Typed animated destinations for World of Warcraft features.
+pub mod properties;
 mod texture;
 pub use texture::{SupplementalTextureFlags, TextureControls};
 mod materials;

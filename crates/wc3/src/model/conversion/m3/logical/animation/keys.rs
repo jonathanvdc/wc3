@@ -105,7 +105,7 @@ pub(super) fn read<'a, E: Envelope + Send + Sync>(
                 value.map_err(read_error)?;
             }
             if let $target = target {
-                let curve = Curve::new(
+                let curve = Curve::from_samples(
                     Values::view(times.len(), move |i| {
                         Time::seconds(f64::from(times.get(i).unwrap().unwrap().value) / 1000.)
                             .unwrap()

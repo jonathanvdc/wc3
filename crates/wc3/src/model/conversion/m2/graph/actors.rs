@@ -33,11 +33,8 @@ where
     let core = source.model.core();
     let tables = sequence_tables(source, &source.key)?;
     macro_rules! bind_field {
-        ($node:ident,$actor:ident,$field:ident,$native:expr,$variant:ident,$map:expr) => {{
-            let property = Property::named(
-                OwnerId::Feature($node),
-                concat!("m2.", stringify!($actor), ".", stringify!($field)),
-            );
+        ($node:ident,$actor:ident,$field:ident,$key:ident,$native:expr,$variant:ident,$map:expr) => {{
+            let property = profile::properties::$actor::$key.bind($node);
             $actor.$field.property = Some(property.clone());
             for (seq, clip) in animation::sequences(clips) {
                 let (start, _) = tables
@@ -67,8 +64,15 @@ where
             role: value.id,
             enabled: Animated::constant(initial(&value.animate).unwrap_or(1) != 0),
         };
-        bind_field!(feature, attachment, enabled, &value.animate, Boolean, |v| v
-            != 0);
+        bind_field!(
+            feature,
+            attachment,
+            enabled,
+            ENABLED,
+            &value.animate,
+            Boolean,
+            |v| v != 0
+        );
         builder.set_feature(feature, profile::ActorKind::Attachment(attachment))?;
     }
     for (index, value) in core.lights.iter().enumerate() {
@@ -94,6 +98,7 @@ where
             feature,
             light,
             ambient_color,
+            AMBIENT_COLOR,
             &value.ambient_color,
             Vector3,
             |v| v
@@ -102,6 +107,7 @@ where
             feature,
             light,
             ambient_intensity,
+            AMBIENT_INTENSITY,
             &value.ambient_intensity,
             Scalar,
             |v| v
@@ -110,6 +116,7 @@ where
             feature,
             light,
             diffuse_color,
+            DIFFUSE_COLOR,
             &value.diffuse_color,
             Vector3,
             |v| v
@@ -118,6 +125,7 @@ where
             feature,
             light,
             diffuse_intensity,
+            DIFFUSE_INTENSITY,
             &value.diffuse_intensity,
             Scalar,
             |v| v
@@ -126,6 +134,7 @@ where
             feature,
             light,
             attenuation_start,
+            ATTENUATION_START,
             &value.attenuation_start,
             Scalar,
             |v| v
@@ -134,12 +143,20 @@ where
             feature,
             light,
             attenuation_end,
+            ATTENUATION_END,
             &value.attenuation_end,
             Scalar,
             |v| v
         );
-        bind_field!(feature, light, enabled, &value.visibility, Boolean, |v| v
-            != 0);
+        bind_field!(
+            feature,
+            light,
+            enabled,
+            ENABLED,
+            &value.visibility,
+            Boolean,
+            |v| v != 0
+        );
         builder.set_feature(feature, profile::ActorKind::Light(light))?;
     }
     for (index, value) in core.ribbons.iter().enumerate() {
@@ -194,14 +211,21 @@ where
             color_index: tail[1] as i8,
             texture_transform: None,
         };
-        bind_field!(feature, ribbon, color, &value.color, Vector3, |v| v);
-        bind_field!(feature, ribbon, alpha, &value.alpha, Scalar, |v| f32::from(
-            v
-        ) / 32767.);
+        bind_field!(feature, ribbon, color, COLOR, &value.color, Vector3, |v| v);
+        bind_field!(
+            feature,
+            ribbon,
+            alpha,
+            ALPHA,
+            &value.alpha,
+            Scalar,
+            |v| f32::from(v) / 32767.
+        );
         bind_field!(
             feature,
             ribbon,
             height_above,
+            HEIGHT_ABOVE,
             &value.height_above,
             Scalar,
             |v| v
@@ -210,6 +234,7 @@ where
             feature,
             ribbon,
             height_below,
+            HEIGHT_BELOW,
             &value.height_below,
             Scalar,
             |v| v
@@ -218,12 +243,20 @@ where
             feature,
             ribbon,
             texture_slot,
+            TEXTURE_SLOT,
             &value.texture_slot,
             Unsigned16,
             |v| v
         );
-        bind_field!(feature, ribbon, enabled, &value.visibility, Boolean, |v| v
-            != 0);
+        bind_field!(
+            feature,
+            ribbon,
+            enabled,
+            ENABLED,
+            &value.visibility,
+            Boolean,
+            |v| v != 0
+        );
         builder.set_feature(feature, profile::ActorKind::Ribbon(ribbon))?;
     }
     for (index, value) in core.particles.iter().enumerate() {
@@ -240,6 +273,7 @@ where
             feature,
             particle,
             speed,
+            SPEED,
             &value.emission_speed,
             Scalar,
             |v| v
@@ -248,6 +282,7 @@ where
             feature,
             particle,
             speed_variation,
+            SPEED_VARIATION,
             &value.speed_variation,
             Scalar,
             |v| v
@@ -256,6 +291,7 @@ where
             feature,
             particle,
             vertical_range,
+            VERTICAL_RANGE,
             &value.vertical_range,
             Scalar,
             |v| v
@@ -264,16 +300,34 @@ where
             feature,
             particle,
             horizontal_range,
+            HORIZONTAL_RANGE,
             &value.horizontal_range,
             Scalar,
             |v| v
         );
-        bind_field!(feature, particle, lifespan, &value.lifespan, Scalar, |v| v);
-        bind_field!(feature, particle, rate, &value.emission_rate, Scalar, |v| v);
+        bind_field!(
+            feature,
+            particle,
+            lifespan,
+            LIFESPAN,
+            &value.lifespan,
+            Scalar,
+            |v| v
+        );
+        bind_field!(
+            feature,
+            particle,
+            rate,
+            RATE,
+            &value.emission_rate,
+            Scalar,
+            |v| v
+        );
         bind_field!(
             feature,
             particle,
             area_width,
+            AREA_WIDTH,
             &value.emission_area_width,
             Scalar,
             |v| v
@@ -282,18 +336,35 @@ where
             feature,
             particle,
             area_length,
+            AREA_LENGTH,
             &value.emission_area_length,
             Scalar,
             |v| v
         );
-        bind_field!(feature, particle, z_source, &value.z_source, Scalar, |v| v);
-        bind_field!(feature, particle, enabled, &value.enabled, Boolean, |v| v
-            != 0);
+        bind_field!(
+            feature,
+            particle,
+            z_source,
+            Z_SOURCE,
+            &value.z_source,
+            Scalar,
+            |v| v
+        );
+        bind_field!(
+            feature,
+            particle,
+            enabled,
+            ENABLED,
+            &value.enabled,
+            Boolean,
+            |v| v != 0
+        );
         let packed = value.flags.packed_gravity();
         bind_field!(
             feature,
             particle,
             gravity,
+            GRAVITY,
             &value.gravity,
             Vector3,
             move |v| { gravity_vector(v, packed).unwrap_or([f32::NAN; 3]) }
@@ -318,9 +389,9 @@ where
             target: Animated::constant([0.; 3]),
             roll: Animated::constant(0.),
         };
-        let position = Property::named(OwnerId::Feature(feature), "m2.camera.position");
-        let target = Property::named(OwnerId::Feature(feature), "m2.camera.target");
-        let roll = Property::named(OwnerId::Feature(feature), "m2.camera.roll");
+        let position = profile::properties::camera::POSITION.bind(feature);
+        let target = profile::properties::camera::TARGET.bind(feature);
+        let roll = profile::properties::camera::ROLL.bind(feature);
         camera.position.property = Some(position.clone());
         camera.target.property = Some(target.clone());
         camera.roll.property = Some(roll.clone());

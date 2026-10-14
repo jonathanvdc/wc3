@@ -6,7 +6,7 @@ use super::{
 };
 use crate::model::conversion::Error;
 use crate::model::m3::{self as native, records as nr};
-use crate::model::semantic::{profiles::m3 as surface, Bounds, FeatureId, OwnerId, Property};
+use crate::model::semantic::{profiles::m3 as surface, Bounds, FeatureId};
 use native::{Envelope, Ref};
 fn bounds(value: nr::Extent) -> Bounds {
     Bounds {
@@ -54,9 +54,9 @@ pub(super) fn read<'a, E: Envelope>(
                             initial: bounds(r.bounds.initial_value),
                             reset: bounds(r.bounds.null_value),
                             control,
-                            minimum: Property::named(OwnerId::Feature(feature), "extent.minimum"),
-                            maximum: Property::named(OwnerId::Feature(feature), "extent.maximum"),
-                            radius: Property::named(OwnerId::Feature(feature), "extent.radius"),
+                            minimum: surface::properties::EXTENT_MINIMUM.bind(feature),
+                            maximum: surface::properties::EXTENT_MAXIMUM.bind(feature),
+                            radius: surface::properties::EXTENT_RADIUS.bind(feature),
                         })
                         .into(),
                     ),

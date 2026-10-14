@@ -1,4 +1,6 @@
 //! Logical M3 surfaces, effects, and source controls.
+/// Typed animated destinations for StarCraft II features.
+pub mod properties;
 mod unbound_animation;
 pub use unbound_animation::{OrderedKeys, UnboundBlock, UnboundKeys};
 mod materials;

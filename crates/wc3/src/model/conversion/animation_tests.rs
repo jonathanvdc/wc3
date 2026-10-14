@@ -75,7 +75,7 @@ fn typed_restriction_retains_clock_and_target() {
     use crate::model::semantic::{Clock, OwnerId, Property};
     let track = Track {
         target: Property::named(OwnerId::Model, "opacity"),
-        curve: Curve::new(
+        curve: Curve::from_samples(
             [Time::seconds(-1.).unwrap(), Time::seconds(2.).unwrap()],
             [0f32, 3.],
             Interpolation::Linear,

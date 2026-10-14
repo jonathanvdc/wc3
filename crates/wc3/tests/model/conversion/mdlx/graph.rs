@@ -443,12 +443,9 @@ fn overlapping_sequences_share_one_authored_absolute_curve() {
     let Channel::Vector3(mut track) = graph.timeline_channels()[0].clone() else {
         panic!("translation curve missing")
     };
-    track.curve = wc3::model::semantic::Curve::new(
-        track.curve.times().clone(),
-        vec![[4., 5., 6.]],
-        track.curve.interpolation(),
-    )
-    .unwrap();
+    track.curve =
+        wc3::model::semantic::Curve::linear(track.curve.times().clone(), vec![[4., 5., 6.]])
+            .unwrap();
     imported
         .value
         .edit_model(0, |builder| {

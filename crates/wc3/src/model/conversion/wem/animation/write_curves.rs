@@ -25,9 +25,11 @@ fn packed<T: CurveValue + 'static>(curve: &Curve<'_, T>) -> Values<'static, T> {
     let mut values = Vec::new();
     for (index, value) in curve.values().iter().enumerate() {
         values.push(value);
-        if let (Some(incoming), Some(outgoing)) = (curve.incoming(), curve.outgoing()) {
-            values.push(incoming.get(index).unwrap());
-            values.push(outgoing.get(index).unwrap());
+        if let (Some(incoming), Some(outgoing)) =
+            (curve.incoming_value(index), curve.outgoing_value(index))
+        {
+            values.push(incoming);
+            values.push(outgoing);
         }
     }
     Values::owned(values)

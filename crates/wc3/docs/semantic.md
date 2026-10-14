@@ -173,6 +173,75 @@ array indices as editable relationships. Simulation controls similarly select an
 actual body, rig, cloth, soft-body effect, or lump within its owning physics system.
 Their exact scalar, boolean, vector, and integer value domains remain distinct.
 
+## Typed animation curves
+
+A `Track<T>` connects a `Property<T>` to a checked `Curve<T>` and an explicit
+clock. `Animated<T>` keeps the property's rest value and optional binding separate
+from its playback programs. Common destinations come from typed ID methods such
+as `NodeId::translation` and `MaterialId::texture`. Profile definitions fix both
+an owner identity type and a value type: for example,
+`profiles::mdlx::properties::light::INTENSITY.bind(feature)` produces a
+`Property<f32>`, while `profiles::mdlx::properties::Layer(index).texture()` defines
+an optional texture selection on a material. M2 and M3 publish their definitions
+under their own `properties` modules; WEM emitter definitions belong to their
+Warcraft, World of Warcraft, or StarCraft actor vocabulary. Applications define
+custom profile properties through `PropertyDescriptor`, then bind those definitions
+with `Property::profile`. Property names describe logical destinations rather
+than serialized channel numbers, and publication checks their owner identities
+and rejects conflicting value definitions.
+
+Choose interpolation through `Curve::step`, `linear`, `hermite`, `bezier`, `tcb`,
+`slerp`, or `nlerp`. The constructor's trait bounds express the permitted value
+capabilities. Boolean and texture-selection values permit stepped curves;
+numeric domains permit linear curves; floating-point scalars, vectors, and
+quaternions also permit splines. Explicit spherical and normalized linear
+interpolation require rotation values. Integer domains retain their exact value
+types rather than passing through floating-point key storage. Constructors still
+check finite values, ordered times, and matching array lengths. Times are finite
+seconds and can precede playback. Coincident keys retain their input order: the
+first key defines the incoming limit, while the last defines the boundary value
+and outgoing segment.
+
+Custom value types implement `CurveValue` and select `DiscreteDomain`,
+`NumericDomain`, `ContinuousDomain`, or `RotationDomain` through its associated
+`Domain` type. That choice derives the constructor capability traits and supplies
+the native decoder's checks. Applications do not implement those capability
+traits separately or repeat their runtime flags.
+
+Each curve stores exactly the controls required by its interpolation. Hermite
+curves expose `hermite_derivatives`, Bezier curves expose `bezier_controls`, and
+TCB curves expose `tcb_parameters`; the other accessors return `None`. Derivatives
+and control points have distinct associated domains. For quaternion keys both
+use finite four-component vectors, allowing zero derivatives and component
+controls that are not themselves rotations. Hermite derivatives retain the
+source curve's segment convention; constructing a semantic curve does not
+rescale them to derivatives per second or infer a new quaternion spline convention.
+Native adapters check decoded sampling directives against these capabilities
+and translate component layouts without changing the interpolation mode.
+
+The array constructors accept separate `Values` for times, values, and controls,
+so native adapters can retain borrowed arrays and packed projections. Typed
+`ValueKeyframe`, `HermiteKeyframe`, `BezierKeyframe`, and `TcbKeyframe` records
+provide a convenient authoring interface through the corresponding `*_keys`
+constructors. Those constructors project their input lazily, so borrowing an
+interleaved keyframe slice does not require allocating separate value arrays.
+For example, a quaternion Hermite curve can carry zero derivatives explicitly:
+
+```rust
+use wc3::model::semantic::{Curve, HermiteKeyframe, Quaternion, Time};
+
+let keys = [HermiteKeyframe {
+    time: Time::seconds(0.)?,
+    value: Quaternion::IDENTITY,
+    incoming: [0.; 4],
+    outgoing: [0.; 4],
+}];
+let curve = Curve::hermite_keys(&keys[..])?;
+assert!(curve.values().is_borrowed());
+assert_eq!(curve.hermite_derivatives().unwrap().incoming.get(0), Some([0.; 4]));
+Ok::<(), wc3::model::semantic::Error>(())
+```
+
 ## Borrowing and checked edits
 
 `Values<'data, T>` exposes logical elements independently of their native

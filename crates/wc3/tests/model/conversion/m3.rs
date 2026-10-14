@@ -83,13 +83,12 @@ pub(super) fn asset() -> Asset<'static, M3> {
             sem::Channel::Vector3(sem::Track {
                 target: node.translation(),
                 clock: sem::Clock::Timeline,
-                curve: sem::Curve::new(
+                curve: sem::Curve::linear(
                     sem::Values::owned(vec![
                         sem::Time::seconds(0.).unwrap(),
                         sem::Time::seconds(1.).unwrap(),
                     ]),
                     sem::Values::owned(vec![[0., 0., 0.], [1., 2., 3.]]),
-                    sem::Interpolation::Linear,
                 )
                 .unwrap(),
             }),

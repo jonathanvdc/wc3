@@ -95,14 +95,8 @@ pub fn crop<'a, T: FloatValue + 'a>(
                     .get(i)
                     .expect("curve cardinality")
                     .components(),
-                incoming: track
-                    .curve
-                    .incoming()
-                    .map(|v| v.get(i).expect("curve cardinality").components()),
-                outgoing: track
-                    .curve
-                    .outgoing()
-                    .map(|v| v.get(i).expect("curve cardinality").components()),
+                incoming: track.curve.incoming_value(i).map(|v| v.components()),
+                outgoing: track.curve.outgoing_value(i).map(|v| v.components()),
             })
             .collect(),
     };
@@ -131,9 +125,9 @@ pub fn crop<'a, T: FloatValue + 'a>(
             .iter()
             .map(|k| T::from_components(k.outgoing.clone().expect("spline tangents")))
             .collect::<Result<Vec<_>, _>>()?;
-        Curve::spline(times, values, incoming, outgoing, restricted.interpolation)?
+        Curve::from_spline_samples(times, values, incoming, outgoing, restricted.interpolation)?
     } else {
-        Curve::new(times, values, restricted.interpolation)?
+        Curve::from_samples(times, values, restricted.interpolation)?
     };
     Ok(Track {
         target: track.target.clone(),

@@ -9,7 +9,7 @@ pub(super) trait LogicalAge: Sized {
 
     fn logical<'a>(&'a self) -> Result<profile::Appearance<'a>, Error>;
 }
-fn age<'a, T: Value, U: semantic::CurveValue + 'a>(
+fn age<'a, T: Value, U: semantic::LinearValue + 'a>(
     track: &'a native::records::ParticleTrack<'_, T>,
     map: impl Fn(T) -> U + Send + Sync + 'a,
 ) -> Result<Option<Curve<'a, U>>, Error>
@@ -19,14 +19,13 @@ where
     if track.timestamps.is_empty() {
         return Ok(None);
     }
-    Ok(Some(Curve::new(
+    Ok(Some(Curve::linear(
         Values::view(track.timestamps.len(), move |i| {
             Time::seconds(f64::from(track.timestamps.get(i).unwrap()) / 65535.).unwrap()
         }),
         Values::view(track.values.len(), move |i| {
             map(track.values.get(i).unwrap())
         }),
-        semantic::Interpolation::Linear,
     )?))
 }
 impl LogicalAge for native::records::ModernParticleLifetime<'_> {
@@ -181,21 +180,12 @@ impl LogicalAge for native::records::LegacyParticleLifetime {
                 tail_lifespan: self.tail_lifespan_uv,
                 tail_decay: self.tail_decay_uv,
             }),
-            color: Some(Curve::new(
+            color: Some(Curve::linear(
                 times.clone(),
                 Values::owned(colors.to_vec()),
-                semantic::Interpolation::Linear,
             )?),
-            alpha: Some(Curve::new(
-                times.clone(),
-                Values::owned(alpha.to_vec()),
-                semantic::Interpolation::Linear,
-            )?),
-            scale: Some(Curve::new(
-                times,
-                Values::owned(scale.to_vec()),
-                semantic::Interpolation::Linear,
-            )?),
+            alpha: Some(Curve::linear(times.clone(), Values::owned(alpha.to_vec()))?),
+            scale: Some(Curve::linear(times, Values::owned(scale.to_vec()))?),
             ..Default::default()
         })
     }

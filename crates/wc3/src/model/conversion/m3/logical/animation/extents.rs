@@ -97,7 +97,7 @@ pub(super) fn read<'a, E: Envelope + Send + Sync>(
             layer,
             Channel::Vector3(Track {
                 target: minimum.clone(),
-                curve: Curve::new(
+                curve: Curve::from_samples(
                     time_values.clone(),
                     Values::view(min_rows.len(), move |i| {
                         min_rows.get(i).unwrap().unwrap().value.minimum
@@ -111,7 +111,7 @@ pub(super) fn read<'a, E: Envelope + Send + Sync>(
             layer,
             Channel::Vector3(Track {
                 target: maximum.clone(),
-                curve: Curve::new(
+                curve: Curve::from_samples(
                     time_values.clone(),
                     Values::view(max_rows.len(), move |i| {
                         max_rows.get(i).unwrap().unwrap().value.maximum
@@ -125,7 +125,7 @@ pub(super) fn read<'a, E: Envelope + Send + Sync>(
             layer,
             Channel::Scalar(Track {
                 target: radius.clone(),
-                curve: Curve::new(
+                curve: Curve::from_samples(
                     time_values.clone(),
                     Values::view(radius_rows.len(), move |i| {
                         radius_rows.get(i).unwrap().unwrap().value.radius

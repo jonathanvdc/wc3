@@ -7,8 +7,8 @@ use crate::model::mdlx::{
 };
 use crate::model::semantic::profiles::Mdlx;
 use crate::model::semantic::{
-    Animated, Channel, Clock, ClockId, CurveValue, ModelBuilder, OwnerId, Property, Quaternion,
-    TextureId, Track,
+    Animated, Channel, Clock, ClockId, CurveValue, ModelBuilder, Property, PropertyDescriptor,
+    Quaternion, TextureId, Track,
 };
 
 pub(super) trait Value: CurveValue {
@@ -37,39 +37,42 @@ pub(super) struct Decoder<'a, 'b> {
     pub globals: &'b [ClockId],
 }
 impl<'a> Decoder<'a, '_> {
-    pub fn bind<T, U>(
+    pub fn bind<T, U, D>(
         &mut self,
         source: &'a Animatable<'_, T>,
-        owner: OwnerId,
-        name: &str,
+        owner: D::Owner,
+        descriptor: D,
         map: impl Fn(T) -> U + Clone + Send + Sync + 'a,
     ) -> Result<Animated<U>, Error>
     where
         T: TrackValue + Send + Sync + 'a,
         T::ULE: Sync,
         U: Value + 'a,
+        D: PropertyDescriptor<Value = U> + Clone,
     {
         let default = map(source.value().copied().unwrap_or_default());
-        self.track(source.track(), default, owner, name, map)
+        self.track(source.track(), default, owner, descriptor, map)
     }
-    pub fn track<T, U>(
+    pub fn track<T, U, D>(
         &mut self,
         source: Option<&'a NativeTrack<'_, T>>,
         default: U,
-        owner: OwnerId,
-        name: &str,
+        owner: D::Owner,
+        descriptor: D,
         map: impl Fn(T) -> U + Clone + Send + Sync + 'a,
     ) -> Result<Animated<U>, Error>
     where
         T: TrackValue + Send + Sync + 'a,
         T::ULE: Sync,
         U: Value + 'a,
+        D: PropertyDescriptor<Value = U> + Clone,
     {
         let Some(source) = source else {
             return Ok(Animated::constant(default));
         };
-        let property = Property::named(owner, name);
-        self.track_property(source, default, property, name, map.clone(), map)
+        let name = descriptor.clone().name();
+        let property = Property::profile(owner, descriptor);
+        self.track_property(source, default, property, &name, map.clone(), map)
     }
     pub fn track_property<T, U>(
         &mut self,

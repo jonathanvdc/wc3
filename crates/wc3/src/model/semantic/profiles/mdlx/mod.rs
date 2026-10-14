@@ -1,5 +1,7 @@
 //! Warcraft III authoring semantics, independent of a particular MDX dialect.
 mod flags;
+/// Typed animated destinations for Warcraft III features and material layers.
+pub mod properties;
 pub use flags::*;
 mod links;
 mod materials;

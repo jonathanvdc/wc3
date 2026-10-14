@@ -7,9 +7,7 @@ use wc3::model::semantic::profiles::wem::{
     self as authored, AppearanceLook, AppearanceSet, Family,
 };
 use wc3::model::semantic::profiles::Wem;
-use wc3::model::semantic::{
-    Clip, Controller, Curve, Interpolation, Material, Model, Node, Time, Values,
-};
+use wc3::model::semantic::{Clip, Controller, Curve, Material, Model, Node, Time, Values};
 use wc3::model::wem::{records, Bool, RawDocument, ReferenceFlags};
 
 fn encode<'view, 'data: 'view>(asset: &'view Asset<'data, Wem>) -> RawDocument<'view> {
@@ -136,10 +134,9 @@ fn producer_property_selection_is_distinct_from_hierarchy_translation() {
     builder.set_controls(controls);
     let track = |channel| Track {
         channel,
-        curve: Curve::new(
+        curve: Curve::linear(
             Values::owned(vec![Time::default()]),
             Values::owned(vec![[7., 8., 9.]]),
-            Interpolation::Linear,
         )
         .unwrap(),
         auxiliary_tcb: Values::default(),

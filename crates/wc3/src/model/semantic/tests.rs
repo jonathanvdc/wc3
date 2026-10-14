@@ -73,7 +73,7 @@ fn invalid_geometry_never_enters_a_published_model() {
 #[test]
 fn boundary_keys_may_precede_playback() {
     let keys = [Time::seconds(-0.5).unwrap(), Time::seconds(1.).unwrap()];
-    assert!(Curve::new(keys, [0., 1.], Interpolation::Linear).is_ok());
+    assert!(Curve::from_samples(keys, [0., 1.], Interpolation::Linear).is_ok());
     assert!(Time::seconds(f64::NAN).is_err());
 }
 
@@ -103,7 +103,7 @@ fn incompatible_named_property_bindings_are_rejected() {
             clip,
             Channel::Scalar(Track {
                 target: Property::named(OwnerId::Model, "value"),
-                curve: Curve::new([Time::default()], [1f32], Interpolation::Step).unwrap(),
+                curve: Curve::from_samples([Time::default()], [1f32], Interpolation::Step).unwrap(),
                 clock: Clock::Clip,
             }),
         )
@@ -113,7 +113,8 @@ fn incompatible_named_property_bindings_are_rejected() {
             clip,
             Channel::Vector3(Track {
                 target: Property::named(OwnerId::Model, "value"),
-                curve: Curve::new([Time::default()], [[1f32; 3]], Interpolation::Step).unwrap(),
+                curve: Curve::from_samples([Time::default()], [[1f32; 3]], Interpolation::Step)
+                    .unwrap(),
                 clock: Clock::Clip,
             }),
         )
@@ -332,7 +333,8 @@ fn absolute_timeline_does_not_require_a_playback_clip() {
     builder
         .add_timeline_channel(Channel::Vector3(Track {
             target: node.translation(),
-            curve: Curve::new([Time::default()], [[1., 2., 3.]], Interpolation::Step).unwrap(),
+            curve: Curve::from_samples([Time::default()], [[1., 2., 3.]], Interpolation::Step)
+                .unwrap(),
             clock: Clock::Timeline,
         }))
         .unwrap();
@@ -361,5 +363,5 @@ fn tcb_curves_preserve_authoring_parameters_and_check_cardinality() {
     assert!(curve.tcb_parameters().unwrap().is_borrowed());
     assert_eq!(curve.tcb_parameters().unwrap().get(0), Some(parameters[0]));
     assert!(Curve::tcb([Time::default()], [1f32], Vec::<TcbParameters>::new()).is_err());
-    assert!(Curve::new([Time::default()], [1f32], Interpolation::Tcb).is_err());
+    assert!(Curve::from_samples([Time::default()], [1f32], Interpolation::Tcb).is_err());
 }

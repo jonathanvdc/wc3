@@ -4,8 +4,8 @@ use crate::model::{
     conversion::{Context, ExportOptions},
     m3::{self as native, records as nr},
     semantic::{
-        profiles::M3, Channel, Clip, Clock, Controller, Curve, Interpolation, Node, OwnerId,
-        Property, Quaternion, Time, Track, Values,
+        profiles::M3, Channel, Clip, Clock, Controller, Curve, Interpolation, Node, Quaternion,
+        Time, Track, Values,
     },
 };
 
@@ -13,7 +13,7 @@ use crate::model::{
 fn exact_unsigned_keys_rebuild_typed_native_controller_tables() {
     let mut builder = Graph::builder("integer controller");
     let node = builder.reserve_node();
-    let batching = Property::named(OwnerId::Node(node), "batching");
+    let batching = surface::properties::BATCHING.bind(node);
     let controls = surface::BoneControls {
         source_id: 0,
         extra_flags: Default::default(),
@@ -69,7 +69,7 @@ fn exact_unsigned_keys_rebuild_typed_native_controller_tables() {
             controller,
             Channel::Unsigned(Track {
                 target: batching.clone(),
-                curve: Curve::new(
+                curve: Curve::from_samples(
                     Values::owned(vec![Time::seconds(0.).unwrap(), Time::seconds(1.).unwrap()]),
                     Values::owned(vec![16_777_217, u32::MAX]),
                     Interpolation::Linear,

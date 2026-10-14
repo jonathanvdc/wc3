@@ -174,17 +174,13 @@ impl Encoder<'_, '_, '_> {
                     .expect("checked value index"))?;
                 let incoming = track
                     .curve
-                    .incoming()
-                    .map(|values| {
-                        tangent_map(values.get(index).expect("checked tangent index"), mode)
-                    })
+                    .incoming_value(index)
+                    .map(|value| tangent_map(value, mode))
                     .transpose()?;
                 let outgoing = track
                     .curve
-                    .outgoing()
-                    .map(|values| {
-                        tangent_map(values.get(index).expect("checked tangent index"), mode)
-                    })
+                    .outgoing_value(index)
+                    .map(|value| tangent_map(value, mode))
                     .transpose()?;
                 let key = (value, incoming, outgoing);
                 track_keys.entry(frame).or_default().push(key);

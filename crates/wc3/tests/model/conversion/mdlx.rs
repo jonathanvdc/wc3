@@ -272,12 +272,11 @@ fn shared_spline_keys_are_borrowed_and_editable_without_encoded_bridges() {
     assert!(track.curve.values().is_borrowed());
     let mut values = track.curve.values().to_vec();
     values[1] = [3.; 3];
-    track.curve = wc3::model::semantic::Curve::spline(
+    track.curve = wc3::model::semantic::Curve::hermite(
         track.curve.times().to_vec(),
         Values::owned(values),
-        track.curve.incoming().unwrap().clone(),
-        track.curve.outgoing().unwrap().clone(),
-        track.curve.interpolation(),
+        track.curve.hermite_derivatives().unwrap().incoming.clone(),
+        track.curve.hermite_derivatives().unwrap().outgoing.clone(),
     )
     .unwrap();
     imported

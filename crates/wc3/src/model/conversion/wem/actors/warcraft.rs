@@ -2,12 +2,13 @@
 use super::super::text;
 use super::{read_asset, write_asset};
 use crate::model::conversion::Error;
+use crate::model::semantic::profiles::wem::actors::warcraft::properties;
 use crate::model::semantic::profiles::wem::actors::warcraft::{
     Feature, FrameInterval, LifeStage, ParticleBlend, ParticleGeometry, Popcorn, ResourceParticles,
     Ribbon, SpriteParticles,
 };
 use crate::model::semantic::{
-    Animated, FeatureId, MaterialSlotId, OwnerId, Property, PropertyTarget, TextureId,
+    Animated, FeatureId, MaterialSlotId, Property, PropertyTarget, TextureId,
 };
 use crate::model::wem::{records, RawDocument};
 use std::collections::BTreeMap;
@@ -286,44 +287,54 @@ pub(in crate::model::conversion::wem) fn bind_property(
     id: FeatureId,
     code: u32,
 ) -> Result<Option<Property<f32>>, Error> {
-    let (field, name) = match actor {
+    let (field, descriptor) = match actor {
         Feature::ResourceParticles(value) => match records::Wc3Particle1Property::from_raw(code) {
             records::Wc3Particle1Property::EmissionRate => {
-                (&mut value.emission_rate, "emission_rate")
+                (&mut value.emission_rate, properties::EMISSION_RATE)
             }
-            records::Wc3Particle1Property::Gravity => (&mut value.gravity, "gravity"),
-            records::Wc3Particle1Property::Longitude => (&mut value.longitude, "longitude"),
-            records::Wc3Particle1Property::Latitude => (&mut value.latitude, "latitude"),
-            records::Wc3Particle1Property::Lifespan => (&mut value.lifespan, "lifespan"),
-            records::Wc3Particle1Property::Speed => (&mut value.speed, "speed"),
+            records::Wc3Particle1Property::Gravity => (&mut value.gravity, properties::GRAVITY),
+            records::Wc3Particle1Property::Longitude => {
+                (&mut value.longitude, properties::LONGITUDE)
+            }
+            records::Wc3Particle1Property::Latitude => (&mut value.latitude, properties::LATITUDE),
+            records::Wc3Particle1Property::Lifespan => (&mut value.lifespan, properties::LIFESPAN),
+            records::Wc3Particle1Property::Speed => (&mut value.speed, properties::SPEED),
             _ => return Ok(None),
         },
         Feature::SpriteParticles(value) => match records::Wc3Particle2Property::from_raw(code) {
-            records::Wc3Particle2Property::Speed => (&mut value.speed, "speed"),
-            records::Wc3Particle2Property::Variation => (&mut value.variation, "variation"),
-            records::Wc3Particle2Property::Latitude => (&mut value.latitude, "latitude"),
-            records::Wc3Particle2Property::Gravity => (&mut value.gravity, "gravity"),
-            records::Wc3Particle2Property::EmissionRate => {
-                (&mut value.emission_rate, "emission_rate")
+            records::Wc3Particle2Property::Speed => (&mut value.speed, properties::SPEED),
+            records::Wc3Particle2Property::Variation => {
+                (&mut value.variation, properties::VARIATION)
             }
-            records::Wc3Particle2Property::Width => (&mut value.width, "width"),
-            records::Wc3Particle2Property::Length => (&mut value.length, "length"),
+            records::Wc3Particle2Property::Latitude => (&mut value.latitude, properties::LATITUDE),
+            records::Wc3Particle2Property::Gravity => (&mut value.gravity, properties::GRAVITY),
+            records::Wc3Particle2Property::EmissionRate => {
+                (&mut value.emission_rate, properties::EMISSION_RATE)
+            }
+            records::Wc3Particle2Property::Width => (&mut value.width, properties::WIDTH),
+            records::Wc3Particle2Property::Length => (&mut value.length, properties::LENGTH),
             _ => return Ok(None),
         },
         Feature::Ribbon(value) => match records::Wc3RibbonProperty::from_raw(code) {
-            records::Wc3RibbonProperty::HeightAbove => (&mut value.height_above, "height_above"),
-            records::Wc3RibbonProperty::HeightBelow => (&mut value.height_below, "height_below"),
+            records::Wc3RibbonProperty::HeightAbove => {
+                (&mut value.height_above, properties::HEIGHT_ABOVE)
+            }
+            records::Wc3RibbonProperty::HeightBelow => {
+                (&mut value.height_below, properties::HEIGHT_BELOW)
+            }
             _ => return Ok(None),
         },
         Feature::Popcorn(value) => match records::Wc3CornProperty::from_raw(code) {
-            records::Wc3CornProperty::Lifespan => (&mut value.lifespan, "lifespan"),
-            records::Wc3CornProperty::EmissionRate => (&mut value.emission_rate, "emission_rate"),
-            records::Wc3CornProperty::Speed => (&mut value.speed, "speed"),
+            records::Wc3CornProperty::Lifespan => (&mut value.lifespan, properties::LIFESPAN),
+            records::Wc3CornProperty::EmissionRate => {
+                (&mut value.emission_rate, properties::EMISSION_RATE)
+            }
+            records::Wc3CornProperty::Speed => (&mut value.speed, properties::SPEED),
             _ => return Ok(None),
         },
         Feature::FaceAnimation(_) => return Ok(None),
     };
-    let property = Property::named(OwnerId::Feature(id), name);
+    let property = descriptor.bind(id);
     field.property = Some(property.clone());
     Ok(Some(property))
 }

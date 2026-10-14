@@ -182,8 +182,8 @@ where
                 })?;
                 if batch.color_index >= 0 {
                     if let Some(color) = core.colors.get(batch.color_index as usize) {
-                        let rgb = Property::named(OwnerId::Material(material), "m2.color");
-                        let alpha = Property::named(OwnerId::Material(material), "m2.opacity");
+                        let rgb = profile::properties::COLOR.bind(material);
+                        let alpha = profile::properties::OPACITY.bind(material);
                         surface.color.property = Some(rgb.clone());
                         surface.opacity.property = Some(alpha.clone());
                         for (seq, clip) in animation::sequences(clips) {
@@ -220,10 +220,9 @@ where
                         .get(batch.texture_weight_combo_index as usize + slot)
                         .and_then(|i| core.texture_weights.get(i as usize))
                     {
-                        let prop = Property::named(
-                            OwnerId::Material(material),
-                            format!("m2.texture.{slot}.weight"),
-                        );
+                        let prop = profile::properties::TextureUnit(slot)
+                            .weight()
+                            .bind(material);
                         unit.weight.property = Some(prop.clone());
                         for (seq, clip) in animation::sequences(clips) {
                             let (start, _) = tables
@@ -248,18 +247,15 @@ where
                         .get(batch.texture_transform_combo_index as usize + slot)
                         .and_then(|i| core.texture_transforms.get(i as usize))
                     {
-                        let tr = Property::named(
-                            OwnerId::Material(material),
-                            format!("m2.texture.{slot}.translation"),
-                        );
-                        let ro = Property::named(
-                            OwnerId::Material(material),
-                            format!("m2.texture.{slot}.rotation"),
-                        );
-                        let sc = Property::named(
-                            OwnerId::Material(material),
-                            format!("m2.texture.{slot}.scale"),
-                        );
+                        let tr = profile::properties::TextureUnit(slot)
+                            .translation()
+                            .bind(material);
+                        let ro = profile::properties::TextureUnit(slot)
+                            .rotation()
+                            .bind(material);
+                        let sc = profile::properties::TextureUnit(slot)
+                            .scale()
+                            .bind(material);
                         unit.transform.translation.property = Some(tr.clone());
                         unit.transform.rotation.property = Some(ro.clone());
                         unit.transform.scale.property = Some(sc.clone());

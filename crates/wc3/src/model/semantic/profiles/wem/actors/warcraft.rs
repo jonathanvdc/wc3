@@ -1,4 +1,6 @@
 //! Warcraft effect actors independent of their encoded records.
+/// Typed destinations for emitter animation.
+pub mod properties;
 use super::AssetAddress;
 use crate::model::semantic::{Animated, Link, MaterialSlotId, TextureId, ValidateLinks};
 use std::borrow::Cow;

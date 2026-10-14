@@ -49,7 +49,7 @@ where
         let values = Values::view(indices.len(), move |index| {
             value_map(keys.get(indices[index]).expect("checked source key").value)
         });
-        Curve::new(times, values, interpolation).map_err(failure)
+        Curve::from_samples(times, values, interpolation).map_err(failure)
     } else {
         let keys = source
             .hermite_keys()
@@ -84,6 +84,7 @@ where
                     .out_tangent,
             )
         });
-        Curve::spline(times, values, incoming, outgoing, interpolation).map_err(failure)
+        Curve::from_spline_samples(times, values, incoming, outgoing, interpolation)
+            .map_err(failure)
     }
 }

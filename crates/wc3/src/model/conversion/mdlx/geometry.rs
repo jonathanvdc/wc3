@@ -7,7 +7,7 @@ use crate::model::semantic::profiles::mdlx::{self as profile, Bone};
 use crate::model::semantic::profiles::Mdlx;
 use crate::model::semantic::{
     Bounds, ClipId, ClockId, Draw, Influence, MaterialId, MdlxGeometry, MdlxVertexInfluences, Mesh,
-    MeshInstance, ModelBuilder, Node, NodeId, OwnerId, Skin, Values,
+    MeshInstance, ModelBuilder, Node, NodeId, Skin, Values,
 };
 use std::collections::BTreeMap;
 use zerovec::ZeroVec;
@@ -235,16 +235,25 @@ pub(super) fn read<'a, D: ModelDialect>(
                 decoder.builder.add_node(Node::named("GeometryAnimation"))?
             };
             let feature = decoder.builder.reserve_feature(placement);
-            let owner = OwnerId::Feature(feature);
+            let owner = feature;
             let mut flags = source.flags;
             flags.set_drop_shadow(false);
             flags.set_color(false);
             {
                 let payload = profile::Node::GeometryAnimation(profile::GeometryAnimation {
                     mesh,
-                    opacity: decoder
-                        .bind(&source.alpha, owner, "geometry.opacity", |value| value)?,
-                    color: decoder.bind(&source.color, owner, "geometry.color", |value| value)?,
+                    opacity: decoder.bind(
+                        &source.alpha,
+                        owner,
+                        profile::properties::geometry::OPACITY,
+                        |value| value,
+                    )?,
+                    color: decoder.bind(
+                        &source.color,
+                        owner,
+                        profile::properties::geometry::COLOR,
+                        |value| value,
+                    )?,
                     use_color: source.flags.color(),
                     drop_shadow: source.flags.drop_shadow(),
                     unclassified: flags.bits().into(),

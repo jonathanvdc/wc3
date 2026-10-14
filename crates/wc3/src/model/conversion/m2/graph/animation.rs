@@ -83,14 +83,14 @@ where
     let curve = match resolved.values {
         ResolvedValues::Values(values) => {
             let data = Values::view(len, move |i| map(values.get(first + i).unwrap()));
-            Curve::new(times, data, interpolation)?
+            Curve::from_samples(times, data, interpolation)?
         }
         ResolvedValues::Splines(values) => {
             let a = values.clone();
             let b = values.clone();
             let ma = map.clone();
             let mb = map.clone();
-            Curve::spline(
+            Curve::from_spline_samples(
                 times,
                 Values::view(len, move |i| map(values.get(first + i).unwrap()[0])),
                 Values::view(len, move |i| ma(a.get(first + i).unwrap()[1])),
@@ -274,8 +274,8 @@ where
                 if spline {
                     ss.push([
                         value,
-                        convert(track.curve.incoming().unwrap().get(key).unwrap(), context)?,
-                        convert(track.curve.outgoing().unwrap().get(key).unwrap(), context)?,
+                        convert(track.curve.incoming_value(key).unwrap(), context)?,
+                        convert(track.curve.outgoing_value(key).unwrap(), context)?,
                     ])
                 } else {
                     vs.push(value)
@@ -414,7 +414,7 @@ where
         interpolation,
         semantic::Interpolation::Hermite | semantic::Interpolation::Bezier
     ) {
-        Curve::spline(
+        Curve::from_spline_samples(
             timestamps,
             keys,
             Values::view(len, move |i| a.get(first + i).unwrap()[1]),
@@ -422,7 +422,7 @@ where
             interpolation,
         )?
     } else {
-        Curve::new(timestamps, keys, interpolation)?
+        Curve::from_samples(timestamps, keys, interpolation)?
     };
     Ok(Some((curve, global)))
 }

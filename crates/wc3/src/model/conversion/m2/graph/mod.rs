@@ -15,7 +15,7 @@ use semantic::profiles::M2 as M2Vocabulary;
 pub(in super::super) type Graph<'a> = semantic::Model<'a, M2Vocabulary>;
 pub(in super::super) type GraphBuilder<'a> = semantic::ModelBuilder<'a, M2Vocabulary>;
 pub use export::plan;
-use semantic::{Animated, Channel, Node, OwnerId, Property, Resource, SharedClock, Time, Values};
+use semantic::{Animated, Channel, Node, Resource, SharedClock, Time, Values};
 
 /// Imports an M2 bundle without a canonical intermediate encoding.
 pub fn import<'a, 'data: 'a, D: Dialect>(

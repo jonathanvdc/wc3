@@ -1,4 +1,6 @@
 //! Independently authored StarCraft behavior snapshots and their actual links.
+/// Typed destinations for emitter animation.
+pub mod properties;
 mod values;
 pub use values::*;
 mod particle;

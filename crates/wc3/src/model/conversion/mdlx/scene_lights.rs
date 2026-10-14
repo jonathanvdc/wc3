@@ -4,7 +4,7 @@ use super::state::ImportState;
 use crate::model::conversion::Error;
 use crate::model::mdlx::{self as native, ModelDialect};
 use crate::model::semantic::profiles::mdlx as profile;
-use crate::model::semantic::{Node, NodeId, OwnerId};
+use crate::model::semantic::{Node, NodeId};
 use std::collections::BTreeMap;
 
 pub(super) fn read<'a, D: ModelDialect>(
@@ -18,13 +18,13 @@ pub(super) fn read<'a, D: ModelDialect>(
             .get(&source.node.object_id)
             .ok_or_else(|| Error::new("light.node", "node identity does not exist"))?;
         let feature = decoder.builder.reserve_feature(id);
-        let owner = OwnerId::Feature(feature);
+        let owner = feature;
         macro_rules! a {
-            ($field:ident) => {
+            ($field:ident, $key:ident) => {
                 decoder.bind(
                     &source.$field,
                     owner,
-                    concat!("light.", stringify!($field)),
+                    profile::properties::light::$key,
                     |value| value,
                 )?
             };
@@ -37,17 +37,42 @@ pub(super) fn read<'a, D: ModelDialect>(
         };
         let shadow_range = if let Ok(range) = source.try_shadow_casting_range_ref() {
             Some([
-                decoder.bind(&range.start, owner, "light.shadow_start", |value| value)?,
-                decoder.bind(&range.end, owner, "light.shadow_end", |value| value)?,
+                decoder.bind(
+                    &range.start,
+                    owner,
+                    profile::properties::light::SHADOW_START,
+                    |value| value,
+                )?,
+                decoder.bind(
+                    &range.end,
+                    owner,
+                    profile::properties::light::SHADOW_END,
+                    |value| value,
+                )?,
             ])
         } else {
             None
         };
         let falloff = if let Some(falloff) = source.authored_falloff() {
             Some([
-                decoder.bind(&falloff.quadratic, owner, "light.quadratic", |value| value)?,
-                decoder.bind(&falloff.linear, owner, "light.linear", |value| value)?,
-                decoder.bind(&falloff.damping, owner, "light.damping", |value| value)?,
+                decoder.bind(
+                    &falloff.quadratic,
+                    owner,
+                    profile::properties::light::QUADRATIC,
+                    |value| value,
+                )?,
+                decoder.bind(
+                    &falloff.linear,
+                    owner,
+                    profile::properties::light::LINEAR,
+                    |value| value,
+                )?,
+                decoder.bind(
+                    &falloff.damping,
+                    owner,
+                    profile::properties::light::DAMPING,
+                    |value| value,
+                )?,
             ])
         } else {
             None
@@ -55,11 +80,14 @@ pub(super) fn read<'a, D: ModelDialect>(
         {
             let payload = profile::Node::Light(profile::Light {
                 kind,
-                attenuation: [a!(attenuation_start), a!(attenuation_end)],
-                color: a!(color),
-                intensity: a!(intensity),
-                ambient_color: a!(ambient_color),
-                ambient_intensity: a!(ambient_intensity),
+                attenuation: [
+                    a!(attenuation_start, ATTENUATION_START),
+                    a!(attenuation_end, ATTENUATION_END),
+                ],
+                color: a!(color, COLOR),
+                intensity: a!(intensity, INTENSITY),
+                ambient_color: a!(ambient_color, AMBIENT_COLOR),
+                ambient_intensity: a!(ambient_intensity, AMBIENT_INTENSITY),
                 shadow_casting: source.try_shadow_casting().ok(),
                 shadow_intensity: source.try_shadow_intensity().ok(),
                 shadow_range,
@@ -68,7 +96,7 @@ pub(super) fn read<'a, D: ModelDialect>(
                     source.visibility.as_ref(),
                     1.,
                     owner,
-                    "light.visibility",
+                    profile::properties::light::VISIBILITY,
                     |value| value,
                 )?,
             });
@@ -80,29 +108,29 @@ pub(super) fn read<'a, D: ModelDialect>(
         node.transform.translation = source.position;
         let id = decoder.builder.add_node(node)?;
         let feature = decoder.builder.reserve_feature(id);
-        let owner = OwnerId::Feature(feature);
+        let owner = feature;
         let eye_offset = decoder.track(
             source.translation.as_ref(),
             [0.; 3],
             owner,
-            "camera.eye_offset",
+            profile::properties::camera::EYE_OFFSET,
             |value| value,
         )?;
         let target_offset = decoder.track(
             source.target_translation.as_ref(),
             [0.; 3],
             owner,
-            "camera.target_offset",
+            profile::properties::camera::TARGET_OFFSET,
             |value| value,
         )?;
         macro_rules! optional {
-            ($field:ident) => {
+            ($field:ident, $key:ident) => {
                 if source.$field.is_some() {
                     Some(decoder.track(
                         source.$field.as_ref(),
                         0.,
                         owner,
-                        concat!("camera.", stringify!($field)),
+                        profile::properties::camera::$key,
                         |value| value,
                     )?)
                 } else {
@@ -121,19 +149,19 @@ pub(super) fn read<'a, D: ModelDialect>(
                     source.rotation.as_ref(),
                     0.,
                     owner,
-                    "camera.roll",
+                    profile::properties::camera::ROLL,
                     |value| value,
                 )?,
                 visibility: decoder.track(
                     source.visibility.as_ref(),
                     1.,
                     owner,
-                    "camera.visibility",
+                    profile::properties::camera::VISIBILITY,
                     |value| value,
                 )?,
-                focus_distance: optional!(focus_distance),
-                focal_length: optional!(focal_length),
-                f_stop: optional!(f_stop),
+                focus_distance: optional!(focus_distance, FOCUS_DISTANCE),
+                focal_length: optional!(focal_length, FOCAL_LENGTH),
+                f_stop: optional!(f_stop, F_STOP),
             });
             decoder.builder.set_feature(feature, payload)?;
         }

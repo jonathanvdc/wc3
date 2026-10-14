@@ -60,7 +60,7 @@ fn curve<'a, T: CurveValue + 'a>(
         let count = times.len();
         let values = packed.clone();
         let incoming = packed.clone();
-        Ok(Curve::spline(
+        Ok(Curve::from_spline_samples(
             times,
             Values::view(count, move |i| values.get(i * 3).unwrap()),
             Values::view(count, move |i| incoming.get(i * 3 + 1).unwrap()),
@@ -68,7 +68,7 @@ fn curve<'a, T: CurveValue + 'a>(
             mode,
         )?)
     } else {
-        Ok(Curve::new(times, packed, mode)?)
+        Ok(Curve::from_samples(times, packed, mode)?)
     }
 }
 

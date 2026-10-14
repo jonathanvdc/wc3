@@ -1,6 +1,5 @@
 //! Typed curves and property destinations, independent of file clocks and channel numbers.
 use crate::model::semantic::profiles::{Profile, Universal};
-use crate::model::semantic::Link;
 use crate::model::semantic::{
     ClipId, ClockId, Error, EventId, FeatureId, MaterialId, MeshId, NodeId, Quaternion, SystemId,
     TextureId, TextureTransformId, Values,
@@ -8,6 +7,8 @@ use crate::model::semantic::{
 use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::marker::PhantomData;
+mod curves;
+pub use curves::*;
 
 /// Finite timeline time in seconds.
 #[derive(Clone, Copy, Debug, Default, PartialEq, PartialOrd)]
@@ -116,8 +117,22 @@ impl<T> PartialEq for Property<T> {
 }
 impl<T> Eq for Property<T> {}
 impl<T> Property<T> {
-    /// Profile-defined property path. Graph insertion checks the owner's identity.
-    pub fn named(owner: OwnerId, name: impl Into<String>) -> Self {
+    /// Binds a profile-defined destination whose descriptor fixes its value and owner types.
+    ///
+    /// Custom profiles implement [`PropertyDescriptor`] once per property definition;
+    /// callers choose that definition rather than supplying a name and value type independently.
+    /// ```compile_fail
+    /// use wc3::model::semantic::{FeatureId, Property};
+    /// use wc3::model::semantic::profiles::mdlx::properties::light;
+    /// fn invalid(owner: FeatureId) -> Property<bool> {
+    ///     Property::profile(owner, light::INTENSITY)
+    /// }
+    /// ```
+    pub fn profile<D: PropertyDescriptor<Value = T>>(owner: D::Owner, descriptor: D) -> Self {
+        Self::named(owner.into(), descriptor.name())
+    }
+    /// Decoded profile property path. Public authoring uses typed descriptors.
+    pub(crate) fn named(owner: OwnerId, name: impl Into<String>) -> Self {
         Self {
             target: PropertyTarget::Named {
                 owner,
@@ -165,6 +180,66 @@ impl MaterialId {
         Property::new(PropertyTarget::MaterialTexture(self, slot))
     }
 }
+/// A profile property definition fixing both its owner and animated value domains.
+///
+/// Applications can implement this trait for their own vocabulary. A descriptor's
+/// name is its logical address, independent of native channel numbers. Graph
+/// publication still checks owner identity and conflicting property definitions.
+pub trait PropertyDescriptor {
+    /// Owner identity accepted by this definition.
+    type Owner: Into<OwnerId>;
+    /// Animated value domain accepted by this definition.
+    type Value;
+    /// Logical property path.
+    fn name(self) -> Cow<'static, str>;
+}
+/// A built-in typed property definition. Profile modules publish keys for their vocabulary.
+#[derive(Debug)]
+pub struct PropertyKey<O, T> {
+    name: Cow<'static, str>,
+    marker: PhantomData<fn(O) -> T>,
+}
+impl<O, T> Clone for PropertyKey<O, T> {
+    fn clone(&self) -> Self {
+        Self {
+            name: self.name.clone(),
+            marker: PhantomData,
+        }
+    }
+}
+impl<O: Into<OwnerId>, T> PropertyDescriptor for PropertyKey<O, T> {
+    type Owner = O;
+    type Value = T;
+    fn name(self) -> Cow<'static, str> {
+        self.name
+    }
+}
+impl<O: Into<OwnerId>, T> PropertyKey<O, T> {
+    pub(crate) const fn new(name: &'static str) -> Self {
+        Self {
+            name: Cow::Borrowed(name),
+            marker: PhantomData,
+        }
+    }
+    pub(crate) fn indexed(name: String) -> Self {
+        Self {
+            name: Cow::Owned(name),
+            marker: PhantomData,
+        }
+    }
+    /// Binds this definition to an owner in a semantic graph.
+    pub fn bind(self, owner: O) -> Property<T> {
+        Property::profile(owner, self)
+    }
+}
+macro_rules! owner_identity {
+    ($($id:ty => $kind:ident),* $(,)?) => {$ (
+        impl From<$id> for OwnerId { fn from(id: $id) -> Self { Self::$kind(id) } }
+    )*};
+}
+owner_identity!(NodeId => Node, MaterialId => Material, MeshId => Mesh,
+    TextureTransformId => TextureTransform, FeatureId => Feature, SystemId => System);
+
 /// Rest value and optional binding to a typed animated property.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Animated<T> {
@@ -192,270 +267,6 @@ impl<T> Animated<T> {
 impl<T: Default> Default for Animated<T> {
     fn default() -> Self {
         Self::constant(T::default())
-    }
-}
-/// A value supported by typed animation curves.
-pub trait CurveValue: Clone + Send + Sync + std::fmt::Debug {
-    /// Visits object identities carried by this value, including unanimated defaults.
-    fn visit_value_links(&self, _visitor: &mut dyn FnMut(Link)) {}
-    /// Whether this value domain supports explicit quaternion interpolation directives.
-    fn supports_quaternion_interpolation() -> bool {
-        false
-    }
-    /// Whether a value is meaningful for this channel.
-    fn is_valid(&self) -> bool;
-    /// Whether a spline control or derivative is finite and meaningful.
-    fn is_valid_tangent(&self) -> bool {
-        self.is_valid()
-    }
-}
-impl CurveValue for f32 {
-    fn is_valid(&self) -> bool {
-        self.is_finite()
-    }
-}
-impl CurveValue for f64 {
-    fn is_valid(&self) -> bool {
-        self.is_finite()
-    }
-}
-impl CurveValue for u32 {
-    fn is_valid(&self) -> bool {
-        true
-    }
-}
-impl CurveValue for i32 {
-    fn is_valid(&self) -> bool {
-        true
-    }
-}
-impl<const N: usize> CurveValue for [u32; N] {
-    fn is_valid(&self) -> bool {
-        true
-    }
-}
-impl<const N: usize> CurveValue for [u8; N] {
-    fn is_valid(&self) -> bool {
-        true
-    }
-}
-impl CurveValue for u16 {
-    fn is_valid(&self) -> bool {
-        true
-    }
-}
-impl CurveValue for u8 {
-    fn is_valid(&self) -> bool {
-        true
-    }
-}
-impl CurveValue for bool {
-    fn is_valid(&self) -> bool {
-        true
-    }
-}
-impl<const N: usize> CurveValue for [f32; N] {
-    fn is_valid(&self) -> bool {
-        self.iter().all(|v| v.is_finite())
-    }
-}
-impl CurveValue for Option<TextureId> {
-    fn visit_value_links(&self, visitor: &mut dyn FnMut(Link)) {
-        if let Some(id) = self {
-            visitor(Link::Texture(*id));
-        }
-    }
-    fn is_valid(&self) -> bool {
-        true
-    }
-}
-impl CurveValue for Quaternion {
-    fn supports_quaternion_interpolation() -> bool {
-        true
-    }
-    fn is_valid(&self) -> bool {
-        self.is_rotation()
-    }
-    fn is_valid_tangent(&self) -> bool {
-        self.0.iter().all(|value| value.is_finite())
-    }
-}
-impl CurveValue for TextureId {
-    fn visit_value_links(&self, visitor: &mut dyn FnMut(Link)) {
-        visitor(Link::Texture(*self));
-    }
-    fn is_valid(&self) -> bool {
-        true
-    }
-}
-/// Per-key Kochanek–Bartels spline parameters.
-#[derive(Clone, Copy, Debug, Default, PartialEq)]
-pub struct TcbParameters {
-    /// Controls the strength of the incoming and outgoing tangent response.
-    pub tension: f32,
-    /// Controls the difference between incoming and outgoing tangents.
-    pub continuity: f32,
-    /// Controls the balance between the preceding and following segments.
-    pub bias: f32,
-}
-/// Ordered typed keys; spline modes require tangents of the same value type.
-/// Coincident keys preserve an authored discontinuity: the first key supplies the incoming limit,
-/// and the last key supplies the value at the boundary and the outgoing segment.
-#[derive(Clone, Debug)]
-pub struct Curve<'a, T> {
-    times: Values<'a, Time>,
-    values: Values<'a, T>,
-    interpolation: Interpolation,
-    incoming: Option<Values<'a, T>>,
-    outgoing: Option<Values<'a, T>>,
-    tcb: Option<Values<'a, TcbParameters>>,
-}
-impl<'a, T: CurveValue + 'a> Curve<'a, T> {
-    /// Constructs a checked step or linear curve.
-    pub fn new(
-        times: impl Into<Values<'a, Time>>,
-        values: impl Into<Values<'a, T>>,
-        interpolation: Interpolation,
-    ) -> Result<Self, Error> {
-        let curve = Self {
-            times: times.into(),
-            values: values.into(),
-            interpolation,
-            incoming: None,
-            outgoing: None,
-            tcb: None,
-        };
-        curve.validate()?;
-        Ok(curve)
-    }
-    /// Constructs a checked Hermite or Bezier curve.
-    pub fn spline(
-        times: impl Into<Values<'a, Time>>,
-        values: impl Into<Values<'a, T>>,
-        incoming: impl Into<Values<'a, T>>,
-        outgoing: impl Into<Values<'a, T>>,
-        interpolation: Interpolation,
-    ) -> Result<Self, Error> {
-        let curve = Self {
-            times: times.into(),
-            values: values.into(),
-            interpolation,
-            incoming: Some(incoming.into()),
-            outgoing: Some(outgoing.into()),
-            tcb: None,
-        };
-        curve.validate()?;
-        Ok(curve)
-    }
-    /// Constructs a checked Kochanek–Bartels curve, retaining its authored parameters.
-    pub fn tcb(
-        times: impl Into<Values<'a, Time>>,
-        values: impl Into<Values<'a, T>>,
-        parameters: impl Into<Values<'a, TcbParameters>>,
-    ) -> Result<Self, Error> {
-        let curve = Self {
-            times: times.into(),
-            values: values.into(),
-            interpolation: Interpolation::Tcb,
-            incoming: None,
-            outgoing: None,
-            tcb: Some(parameters.into()),
-        };
-        curve.validate()?;
-        Ok(curve)
-    }
-    /// Authored tension, continuity, and bias values when this is a TCB curve.
-    pub fn tcb_parameters(&self) -> Option<&Values<'a, TcbParameters>> {
-        self.tcb.as_ref()
-    }
-    /// Ordered key times.
-    pub fn times(&self) -> &Values<'a, Time> {
-        &self.times
-    }
-    /// Values matching the key times.
-    pub fn values(&self) -> &Values<'a, T> {
-        &self.values
-    }
-    /// Interpolation convention.
-    pub fn interpolation(&self) -> Interpolation {
-        self.interpolation
-    }
-    /// Incoming spline data.
-    pub fn incoming(&self) -> Option<&Values<'a, T>> {
-        self.incoming.as_ref()
-    }
-    /// Outgoing spline data.
-    pub fn outgoing(&self) -> Option<&Values<'a, T>> {
-        self.outgoing.as_ref()
-    }
-    fn validate(&self) -> Result<(), Error> {
-        if self.times.len() != self.values.len() {
-            return Err(Error::new("curve", "key and value cardinalities differ"));
-        }
-        let mut previous = None;
-        for time in self.times.iter() {
-            if previous.is_some_and(|p| time < p) {
-                return Err(Error::new("curve.times", "keys must be nondecreasing"));
-            }
-            previous = Some(time);
-        }
-        if matches!(
-            self.interpolation,
-            Interpolation::Slerp | Interpolation::Nlerp
-        ) && !T::supports_quaternion_interpolation()
-        {
-            return Err(Error::new(
-                "curve.interpolation",
-                "spherical and normalized linear interpolation require rotation values",
-            ));
-        }
-        let spline = matches!(
-            self.interpolation,
-            Interpolation::Hermite | Interpolation::Bezier
-        );
-        if spline != (self.incoming.is_some() && self.outgoing.is_some()) {
-            return Err(Error::new(
-                "curve.tangents",
-                "only spline curves require both tangent arrays",
-            ));
-        }
-        if (self.interpolation == Interpolation::Tcb) != self.tcb.is_some() {
-            return Err(Error::new(
-                "curve.tcb",
-                "TCB interpolation requires its authoring parameters",
-            ));
-        }
-        if let Some(parameters) = &self.tcb {
-            if parameters.len() != self.times.len()
-                || parameters.iter().any(|p| {
-                    ![p.tension, p.continuity, p.bias]
-                        .iter()
-                        .all(|v| v.is_finite())
-                })
-            {
-                return Err(Error::new(
-                    "curve.tcb",
-                    "expected finite TCB parameters for every key",
-                ));
-            }
-        }
-        if self.values.iter().any(|value| !value.is_valid()) {
-            return Err(Error::new("curve.values", "invalid key value"));
-        }
-        for values in [self.incoming.as_ref(), self.outgoing.as_ref()]
-            .into_iter()
-            .flatten()
-        {
-            if values.len() != self.times.len()
-                || values.iter().any(|value| !value.is_valid_tangent())
-            {
-                return Err(Error::new(
-                    "curve.tangents",
-                    "invalid spline control or cardinality",
-                ));
-            }
-        }
-        Ok(())
     }
 }
 /// Clock used to evaluate a track.
@@ -499,7 +310,7 @@ impl<P: Profile> Default for Controller<'_, P> {
 }
 /// One typed animation channel.
 #[derive(Clone, Debug)]
-pub struct Track<'a, T> {
+pub struct Track<'a, T: CurveValue> {
     /// Typed animated destination.
     pub target: Property<T>,
     /// Checked key data.

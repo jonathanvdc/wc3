@@ -6,7 +6,7 @@ use crate::model::mdlx::{self as native, ModelDialect};
 use crate::model::semantic::profiles::mdlx as profile;
 use crate::model::semantic::profiles::Mdlx;
 use crate::model::semantic::{
-    Clock, ClockId, Event, MaterialId, ModelBuilder, NodeId, OwnerId, TextureId, Time, Values,
+    Clock, ClockId, Event, MaterialId, ModelBuilder, NodeId, TextureId, Time, Values,
 };
 use std::collections::BTreeMap;
 
@@ -39,13 +39,13 @@ pub(super) fn read<'a, D: ModelDialect>(
     for source in source.particle_emitters() {
         let id = node(source.node.object_id)?;
         let feature = decoder.builder.reserve_feature(id);
-        let owner = OwnerId::Feature(feature);
+        let owner = feature;
         macro_rules! a {
-            ($field:ident) => {
+            ($field:ident, $key:ident) => {
                 decoder.bind(
                     &source.$field,
                     owner,
-                    concat!("particle.", stringify!($field)),
+                    profile::properties::particle::$key,
                     |value| value,
                 )?
             };
@@ -54,17 +54,17 @@ pub(super) fn read<'a, D: ModelDialect>(
         {
             let payload = profile::Node::Particle(profile::Particle {
                 resource: source.path.text(),
-                emission_rate: a!(emission_rate),
-                gravity: a!(gravity),
-                longitude: a!(longitude),
-                latitude: a!(latitude),
-                life_span: a!(life_span),
-                initial_velocity: a!(initial_velocity),
+                emission_rate: a!(emission_rate, EMISSION_RATE),
+                gravity: a!(gravity, GRAVITY),
+                longitude: a!(longitude, LONGITUDE),
+                latitude: a!(latitude, LATITUDE),
+                life_span: a!(life_span, LIFE_SPAN),
+                initial_velocity: a!(initial_velocity, INITIAL_VELOCITY),
                 visibility: decoder.track(
                     source.visibility.as_ref(),
                     1.,
                     owner,
-                    "particle.visibility",
+                    profile::properties::particle::VISIBILITY,
                     |value| value,
                 )?,
                 model_resource: flags.emitter_uses_mdl(),
@@ -77,13 +77,13 @@ pub(super) fn read<'a, D: ModelDialect>(
     for source in source.particle_emitters2() {
         let id = node(source.node.object_id)?;
         let feature = decoder.builder.reserve_feature(id);
-        let owner = OwnerId::Feature(feature);
+        let owner = feature;
         macro_rules! a {
-            ($field:ident) => {
+            ($field:ident, $key:ident) => {
                 decoder.bind(
                     &source.$field,
                     owner,
-                    concat!("particle2.", stringify!($field)),
+                    profile::properties::particle2::$key,
                     |value| value,
                 )?
             };
@@ -105,14 +105,14 @@ pub(super) fn read<'a, D: ModelDialect>(
         };
         {
             let payload = profile::Node::Particle2(profile::Particle2 {
-                speed: a!(speed),
-                variation: a!(variation),
-                latitude: a!(latitude),
-                gravity: a!(gravity),
+                speed: a!(speed, SPEED),
+                variation: a!(variation, VARIATION),
+                latitude: a!(latitude, LATITUDE),
+                gravity: a!(gravity, GRAVITY),
                 life_span: source.life_span,
-                emission_rate: a!(emission_rate),
-                length: a!(length),
-                width: a!(width),
+                emission_rate: a!(emission_rate, EMISSION_RATE),
+                length: a!(length, LENGTH),
+                width: a!(width, WIDTH),
                 blend,
                 atlas: [source.rows, source.columns],
                 frames,
@@ -130,7 +130,7 @@ pub(super) fn read<'a, D: ModelDialect>(
                     source.visibility.as_ref(),
                     1.,
                     owner,
-                    "particle2.visibility",
+                    profile::properties::particle2::VISIBILITY,
                     |value| value,
                 )?,
                 model_space: flags.model_space(),
@@ -147,25 +147,25 @@ pub(super) fn read<'a, D: ModelDialect>(
     for source in source.ribbon_emitters() {
         let id = node(source.node.object_id)?;
         let feature = decoder.builder.reserve_feature(id);
-        let owner = OwnerId::Feature(feature);
+        let owner = feature;
         macro_rules! a {
-            ($field:ident) => {
+            ($field:ident, $key:ident) => {
                 decoder.bind(
                     &source.$field,
                     owner,
-                    concat!("ribbon.", stringify!($field)),
+                    profile::properties::ribbon::$key,
                     |value| value,
                 )?
             };
         }
         {
             let payload = profile::Node::Ribbon(profile::Ribbon {
-                height_above: a!(height_above),
-                height_below: a!(height_below),
-                opacity: a!(alpha),
-                color: a!(color),
+                height_above: a!(height_above, HEIGHT_ABOVE),
+                height_below: a!(height_below, HEIGHT_BELOW),
+                opacity: a!(alpha, OPACITY),
+                color: a!(color, COLOR),
                 life_span: source.life_span,
-                texture_slot: a!(texture_slot),
+                texture_slot: a!(texture_slot, TEXTURE_SLOT),
                 emission_rate: source.emission_rate,
                 atlas: [source.rows, source.columns],
                 material: if source.material_id == u32::MAX {
@@ -180,7 +180,7 @@ pub(super) fn read<'a, D: ModelDialect>(
                     source.visibility.as_ref(),
                     1.,
                     owner,
-                    "ribbon.visibility",
+                    profile::properties::ribbon::VISIBILITY,
                     |value| value,
                 )?,
             });
@@ -191,13 +191,13 @@ pub(super) fn read<'a, D: ModelDialect>(
         for source in emitters {
             let id = node(source.node.object_id)?;
             let feature = decoder.builder.reserve_feature(id);
-            let owner = OwnerId::Feature(feature);
+            let owner = feature;
             macro_rules! a {
-                ($field:ident) => {
+                ($field:ident, $key:ident) => {
                     decoder.bind(
                         &source.$field,
                         owner,
-                        concat!("popcorn.", stringify!($field)),
+                        profile::properties::popcorn::$key,
                         |value| value,
                     )?
                 };
@@ -207,17 +207,17 @@ pub(super) fn read<'a, D: ModelDialect>(
                 let payload = profile::Node::Popcorn(profile::Popcorn {
                     resource: source.path.text(),
                     visibility_guide: source.visibility_guide.text(),
-                    life_span: a!(life_span),
-                    emission_rate: a!(emission_rate),
-                    speed: a!(speed),
-                    color: a!(color),
-                    opacity: a!(alpha),
+                    life_span: a!(life_span, LIFE_SPAN),
+                    emission_rate: a!(emission_rate, EMISSION_RATE),
+                    speed: a!(speed, SPEED),
+                    color: a!(color, COLOR),
+                    opacity: a!(alpha, OPACITY),
                     replaceable: source.replaceable_id,
                     visibility: decoder.track(
                         source.visibility.as_ref(),
                         1.,
                         owner,
-                        "popcorn.visibility",
+                        profile::properties::popcorn::VISIBILITY,
                         |value| value,
                     )?,
                     unlit: flags.unshaded(),
@@ -240,8 +240,8 @@ pub(super) fn read<'a, D: ModelDialect>(
                 visibility: decoder.track(
                     source.visibility.as_ref(),
                     1.,
-                    OwnerId::Feature(feature),
-                    "attachment.visibility",
+                    feature,
+                    profile::properties::attachment::VISIBILITY,
                     |value| value,
                 )?,
             });

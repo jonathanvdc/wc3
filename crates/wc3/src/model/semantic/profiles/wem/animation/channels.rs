@@ -396,7 +396,7 @@ impl<T: CurveValue + 'static> ValidateLinks for Declaration<T> {
 }
 /// Exact typed curve selecting a declaration rather than copying its initialization.
 #[derive(Clone, Debug)]
-pub struct Track<'a, T> {
+pub struct Track<'a, T: CurveValue> {
     /// Declaration whose initialization and destination this track uses.
     pub channel: ChannelId<T>,
     /// Ordered keys and interpolation controls.
@@ -529,17 +529,7 @@ fn visit_curve<T: CurveValue>(curve: &Curve<'_, T>, visitor: &mut dyn FnMut(Link
             visitor(Link::InvalidValue);
         }
     }
-    for value in curve
-        .incoming()
-        .into_iter()
-        .chain(curve.outgoing())
-        .flat_map(|values| values.iter())
-    {
-        value.visit_value_links(visitor);
-        if !value.is_valid_tangent() {
-            visitor(Link::InvalidValue);
-        }
-    }
+    curve.visit_control_links(visitor);
 }
 
 /// Identity marker of a model-owned named channel selection.
@@ -694,7 +684,7 @@ mod tests {
         let id = channels.add(declaration(&scope));
         let track = AnyTrack::Unsigned(Track {
             channel: id,
-            curve: Curve::new(
+            curve: Curve::from_samples(
                 vec![Time::seconds(-0.25).unwrap()],
                 vec![u32::MAX],
                 Interpolation::Step,

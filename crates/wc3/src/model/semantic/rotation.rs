@@ -1,6 +1,7 @@
 //! Rotation values are distinct from colors and arbitrary four-component vectors.
 /// Quaternion components in x, y, z, w order.
-/// Draft components are checked when inserted into a curve or model; spline derivatives may be zero.
+/// Draft components are checked when inserted into a curve or model. Semantic spline
+/// derivatives and control points use separate finite component-vector domains.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Quaternion(pub [f32; 4]);
 impl Quaternion {

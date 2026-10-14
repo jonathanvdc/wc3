@@ -17,6 +17,14 @@
 //! profile's surface and feature vocabulary. Built-in profiles describe game
 //! semantics; native codec dialects separately select file layouts and revisions.
 //!
+//! [`Track`](crate::model::semantic::Track) binds a typed [`Property`](crate::model::semantic::Property) to a checked [`Curve`](crate::model::semantic::Curve) and explicit [`Clock`](crate::model::semantic::Clock).
+//! Curve constructors select interpolation together with its required key shape:
+//! [`HermiteKeyframe`](crate::model::semantic::HermiteKeyframe) carries derivatives, [`BezierKeyframe`](crate::model::semantic::BezierKeyframe) carries control points,
+//! and [`TcbKeyframe`](crate::model::semantic::TcbKeyframe) carries authored spline parameters. Capability traits prevent
+//! spherical scalar curves and interpolated discrete resource choices. Built-in profile
+//! property descriptors fix both owner and value types; custom profiles implement
+//! [`PropertyDescriptor`](crate::model::semantic::PropertyDescriptor) for their own destinations.
+//!
 //! [`Values`](crate::model::semantic::Values) can borrow aligned arrays, packed native storage, or indexed views.
 //! Building a graph therefore need not materialize its geometry and animation
 //! arrays. [`ModelBuilder::finish`](crate::model::semantic::ModelBuilder::finish) checks relationships and values before

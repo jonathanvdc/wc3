@@ -136,7 +136,7 @@ pub(super) fn read<'a>(
                     let values = Values::view(keys.len(), move |k| keys.get(k).unwrap().position);
                     channels.push(Channel::Vector3(Track {
                         target: node.translation(),
-                        curve: Curve::new(times, values, Interpolation::Linear)?,
+                        curve: Curve::linear(times, values)?,
                         clock: Clock::Clip,
                     }));
                 }
@@ -150,7 +150,7 @@ pub(super) fn read<'a>(
                     });
                     channels.push(Channel::Rotation(Track {
                         target: node.rotation(),
-                        curve: Curve::new(times, values, Interpolation::Nlerp)?,
+                        curve: Curve::nlerp(times, values)?,
                         clock: Clock::Clip,
                     }));
                 }
@@ -162,7 +162,7 @@ pub(super) fn read<'a>(
                     let values = Values::view(keys.len(), move |k| [keys.get(k).unwrap().scale; 3]);
                     channels.push(Channel::Vector3(Track {
                         target: node.scale(),
-                        curve: Curve::new(times, values, Interpolation::Linear)?,
+                        curve: Curve::linear(times, values)?,
                         clock: Clock::Clip,
                     }));
                 }
