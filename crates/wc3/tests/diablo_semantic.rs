@@ -1,0 +1,207 @@
+use wc3::model::semantic::profiles::diablo::d3::{self, Geometry, NodeRole, VertexStreams, D3};
+use wc3::model::semantic::profiles::{NoControls, Universal, Wem};
+use wc3::model::semantic::{Mesh, Model, Node, Resource, SnoNamespace, Texture, Values};
+
+fn triangle<'a>(positions: &'a [[f32; 3]]) -> Geometry<'a> {
+    Geometry::new(
+        VertexStreams {
+            positions: Values::from_slice(positions),
+            normals: vec![[0., 0., 1.]; 3].into(),
+            colors: vec![[1.; 4]; 3].into(),
+            auxiliary_colors: vec![[0.; 4]; 3].into(),
+            texture_coordinates: [vec![[0.; 2]; 3].into(), vec![[1.; 2]; 3].into()],
+            tangents: vec![[1., 0., 0.]; 3].into(),
+            binormals: vec![[0., -1., 0.]; 3].into(),
+            cloth_vertices: vec![0; 3].into(),
+        },
+        vec![[0, 1, 2]],
+        Vec::new(),
+    )
+    .unwrap()
+}
+
+#[test]
+fn widening_and_narrowing_preserve_geometry_identity_and_borrowed_arrays() {
+    let positions = [[0., 0., 0.], [1., 0., 0.], [0., 1., 0.]];
+    let mut builder = Model::<D3>::builder("triangle");
+    let material = builder
+        .add_material(wc3::model::semantic::Material {
+            name: "".into(),
+            surface: d3::Material::default(),
+        })
+        .unwrap();
+    let mut appearance = d3::Appearance::default();
+    let slot = appearance.add_slot(d3::Slot::named("surface"));
+    appearance.add_variant(slot, material).unwrap();
+    builder.set_appearance(appearance);
+    let id = builder
+        .add_mesh(
+            Mesh::new(triangle(&positions)).with_controls(d3::MeshControls {
+                material_slot: Some(slot),
+                ..Default::default()
+            }),
+        )
+        .unwrap();
+    let model = builder.finish().unwrap();
+    let wider = model.widen::<Universal>();
+    assert_eq!(
+        wider
+            .mesh(id)
+            .unwrap()
+            .positions()
+            .as_slice()
+            .unwrap()
+            .as_ptr(),
+        positions.as_ptr()
+    );
+    let restored = wider.try_narrow::<D3>().unwrap();
+    assert_eq!(
+        restored
+            .mesh(id)
+            .unwrap()
+            .positions()
+            .as_slice()
+            .unwrap()
+            .as_ptr(),
+        positions.as_ptr()
+    );
+    assert_eq!(
+        restored
+            .mesh(id)
+            .unwrap()
+            .geometry
+            .streams()
+            .binormals
+            .get(0),
+        Some([0., -1., 0.])
+    );
+}
+
+#[test]
+fn independent_binormals_and_auxiliary_colors_are_validated() {
+    let positions = [[0.; 3]; 3];
+    let geometry = triangle(&positions);
+    let mut streams = geometry.streams().clone();
+    streams.binormals = vec![[f32::NAN, 0., 0.]; 3].into();
+    assert!(geometry.clone().with_streams(streams).is_err());
+    let mut streams = geometry.streams().clone();
+    streams.auxiliary_colors = vec![[0.; 4]; 2].into();
+    assert!(geometry.with_streams(streams).is_err());
+}
+
+#[test]
+fn source_namespaces_do_not_alias_and_wem_cannot_erase_them() {
+    let d3 = Resource::Sno {
+        namespace: SnoNamespace::Diablo3,
+        group: 44,
+        id: 7,
+    };
+    let d4 = Resource::Sno {
+        namespace: SnoNamespace::Diablo4,
+        group: 44,
+        id: 7,
+    };
+    assert_ne!(d3, d4);
+    let mut builder = Model::<Wem>::builder("qualified");
+    builder
+        .add_texture(Texture {
+            resource: d3,
+            controls: Default::default(),
+            color_space: Default::default(),
+            sampler: Default::default(),
+        })
+        .unwrap();
+    assert!(builder.finish().is_err());
+    let mut builder = Model::<D3>::builder("wrong game");
+    builder
+        .add_texture(Texture {
+            resource: d4,
+            controls: NoControls,
+            color_space: Default::default(),
+            sampler: Default::default(),
+        })
+        .unwrap();
+    assert!(builder.finish().is_err());
+}
+
+#[test]
+fn wem_producer_options_surround_the_shared_shader_definition() {
+    use wc3::model::semantic::profiles::wem::materials::diablo::{DiabloMaterial, VariantFlags};
+    let shared = d3::Material::default();
+    let wrapper = DiabloMaterial {
+        variant_flags: Some(VariantFlags::from_bits_retain(i32::MIN)),
+        shader: shared,
+    };
+    wrapper.validate().unwrap();
+    assert_eq!(wrapper.variant_flags.unwrap().bits(), i32::MIN);
+}
+
+#[test]
+fn nonuniform_bone_transforms_fail_checked_publication() {
+    let mut builder = Model::<D3>::builder("bone");
+    let mut node = Node::named("bone");
+    node.controls = NodeRole::Bone(Box::default());
+    node.transform.scale = [1., 2., 1.];
+    builder.add_node(node).unwrap();
+    assert!(builder.finish().is_err());
+}
+
+#[test]
+fn d4_resource_publication_requires_the_correct_game_namespace() {
+    use wc3::model::semantic::profiles::D4;
+    for (namespace, valid) in [
+        (SnoNamespace::Diablo4, true),
+        (SnoNamespace::Diablo3, false),
+    ] {
+        let mut builder = Model::<D4>::builder("resource");
+        builder
+            .add_texture(Texture {
+                resource: Resource::Sno {
+                    namespace,
+                    group: 44,
+                    id: 12,
+                },
+                controls: NoControls,
+                color_space: Default::default(),
+                sampler: Default::default(),
+            })
+            .unwrap();
+        assert_eq!(builder.finish().is_ok(), valid);
+    }
+}
+
+#[test]
+fn d4_chunks_and_look_hashes_have_model_scoped_ownership() {
+    use wc3::model::semantic::profiles::diablo::d4::{self, Chunk, D4};
+    use wc3::model::semantic::GeometryData;
+    let mut foreign = d4::ModelControls::default();
+    let foreign_id = foreign.add_chunk(Chunk::default());
+    let mut own = d4::ModelControls::default();
+    own.add_chunk(Chunk::default());
+    let mut builder = Model::<D4>::builder("foreign chunk");
+    builder.set_controls(own);
+    let geometry = d4::Geometry::new(GeometryData::default()).unwrap();
+    builder
+        .add_mesh(Mesh::new(geometry).with_controls(d4::MeshControls {
+            chunk: Some(foreign_id),
+            ..Default::default()
+        }))
+        .unwrap();
+    assert!(builder.finish().is_err());
+
+    let mut a = d4::Appearance::default();
+    let slot_a = a.add_slot(d4::Slot::new(1, 0, 0));
+    let mut b = d4::Appearance::default();
+    let slot_b = b.add_slot(d4::Slot::new(1, 0, 0));
+    let mut builder = Model::<D4>::builder("material");
+    let material = builder
+        .add_material(wc3::model::semantic::Material {
+            name: "".into(),
+            surface: d4::Material::default(),
+        })
+        .unwrap();
+    let foreign_variant = a.add_variant(slot_a, material).unwrap();
+    b.add_variant(slot_b, material).unwrap();
+    assert!(b.add_look(9, vec![(slot_b, foreign_variant)]).is_err());
+    assert!(b.add_look(9, vec![(slot_a, foreign_variant)]).is_err());
+}

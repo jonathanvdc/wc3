@@ -16,3 +16,6 @@ pub mod conversion;
 
 /// Checked logical model graphs with borrowed storage and typed relationships.
 pub mod semantic;
+
+/// Diablo III and Diablo IV model documents and supporting SNO resources.
+pub mod diablo;

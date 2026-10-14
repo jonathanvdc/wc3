@@ -22,6 +22,10 @@ impl ValidateLinks for TextureControls<'_> {
 /// Additional geometry behavior permitted by the universal vocabulary.
 #[derive(Clone, Debug)]
 pub enum MeshControls {
+    /// Diablo III subobject behavior.
+    D3(profiles::diablo::d3::MeshControls),
+    /// Diablo IV subobject declarations and segment palettes.
+    D4(profiles::diablo::d4::MeshControls),
     /// Warcraft III picking and sequence bounds.
     Mdlx(profiles::mdlx::Geometry),
     /// World of Warcraft sorting and culling frames.
@@ -34,6 +38,8 @@ pub enum MeshControls {
 impl ValidateLinks for MeshControls {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
         match self {
+            Self::D4(value) => value.visit_links(visitor),
+            Self::D3(value) => value.visit_links(visitor),
             Self::Wem(value) => value.visit_links(visitor),
             Self::Mdlx(value) => value.visit_links(visitor),
             Self::M2(value) => value.center_bone.visit_links(visitor),
@@ -64,6 +70,10 @@ impl ValidateLinks for () {
 /// Additional hierarchy behavior chosen by a semantic vocabulary.
 #[derive(Clone, Debug)]
 pub enum NodeControls<'a> {
+    /// Diablo III bone bind poses and attachment roles.
+    D3(profiles::diablo::d3::NodeRole<'a>),
+    /// Diablo IV hashed bones and independent bind poses.
+    D4(profiles::diablo::d4::NodeRole),
     /// World of Warcraft skeleton behavior and external bone role.
     M2(profiles::m2::BoneControls),
     /// Warcraft III bone scope, bind pose, and unresolved node behavior.
@@ -76,6 +86,8 @@ pub enum NodeControls<'a> {
 impl ValidateLinks for NodeControls<'_> {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
         match self {
+            Self::D4(value) => value.visit_links(visitor),
+            Self::D3(value) => value.visit_links(visitor),
             Self::Wem(value) => value.visit_links(visitor),
             Self::M2(value) => value.visit_links(visitor),
             Self::Mdlx(value) => value.visit_links(visitor),

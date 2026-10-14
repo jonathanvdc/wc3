@@ -5,7 +5,7 @@ use crate::model::semantic::profiles::wem::{
     SupplementalTextureFlags, TextureControls, TextureSlot,
 };
 use crate::model::semantic::profiles::Profile;
-use crate::model::semantic::{AddressMode, ColorSpace, Resource, Sampler, Texture};
+use crate::model::semantic::{AddressMode, ColorSpace, Resource, Sampler, SnoNamespace, Texture};
 use crate::model::wem::{records, RawDocument};
 
 pub(super) fn read<'view, P>(
@@ -20,6 +20,7 @@ where
         records::TextureKey::Path(key) => Resource::Path(text::read_bytes(document, key.value)?),
         records::TextureKey::FileDataId(key) => Resource::FileDataId(key.value),
         records::TextureKey::SnoId(key) => Resource::Sno {
+            namespace: SnoNamespace::Unspecified,
             group: i32::from_ne_bytes(key.group.to_ne_bytes()),
             id: key.id,
         },
@@ -85,7 +86,11 @@ where
         Resource::FileDataId(value) => {
             records::TextureKey::FileDataId(records::TextureFileDataId { value: *value })
         }
-        Resource::Sno { group, id } => records::TextureKey::SnoId(records::TextureSnoId {
+        Resource::Sno {
+            namespace: SnoNamespace::Unspecified,
+            group,
+            id,
+        } => records::TextureKey::SnoId(records::TextureSnoId {
             group: u32::from_ne_bytes(group.to_ne_bytes()),
             id: *id,
         }),

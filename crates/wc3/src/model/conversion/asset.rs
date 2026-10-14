@@ -3,6 +3,7 @@ use crate::model::conversion::{Error, ExportOptions, Format};
 use crate::model::m3::records::{ReferenceFlags, VertexFlags};
 use crate::model::semantic::profiles::wem::ShaderFamily;
 use crate::model::semantic::profiles::{Extends, Narrows, Profile, Universal};
+use crate::model::semantic::Values;
 use crate::model::semantic::{
     ClipId, ContainsCardinality, Error as SemanticError, MaterialId, MeshId, Model, ModelBuilder,
     ModelCollection, OwnerId, Resources, ResourcesBuilder, SingleModel,
@@ -28,6 +29,13 @@ pub struct OpaquePayload<'a> {
 /// Optional physical encoding information that does not define model behavior.
 #[derive(Clone, Debug)]
 pub enum EncodingHint<'a> {
+    /// Uninterpreted fourth bytes of native packed D3 normal, tangent and binormal fields.
+    D3VectorQualifiers {
+        /// Geometry whose packed vectors carried these qualifiers.
+        mesh: MeshId,
+        /// One triple per vertex, in normal, tangent, binormal order.
+        values: Values<'a, [u8; 3]>,
+    },
     /// Producer cache fingerprints for saved WEM bake results; they do not validate edited programmes.
     WemBakeFingerprints {
         /// Actual clip containing the recorded bake.

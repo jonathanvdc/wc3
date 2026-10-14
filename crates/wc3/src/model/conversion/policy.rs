@@ -11,6 +11,10 @@ pub enum Format {
     M3,
     /// World of Warcraft world geometry.
     Wmo,
+    /// Diablo III model resources.
+    Diablo3,
+    /// Diablo IV model resources.
+    Diablo4,
     /// Editable model documents.
     Wem,
 }

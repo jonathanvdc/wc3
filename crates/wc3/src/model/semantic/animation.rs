@@ -36,6 +36,9 @@ pub enum Interpolation {
     Linear,
     /// Explicit spherical interpolation between quaternion rotations.
     Slerp,
+    /// Normalize quaternion keys, choose their shortest arc, linearly blend
+    /// components, and normalize the result.
+    Nlerp,
     /// Uses incoming and outgoing derivatives.
     Hermite,
     /// Uses incoming and outgoing control points.
@@ -195,8 +198,8 @@ impl<T: Default> Default for Animated<T> {
 pub trait CurveValue: Clone + Send + Sync + std::fmt::Debug {
     /// Visits object identities carried by this value, including unanimated defaults.
     fn visit_value_links(&self, _visitor: &mut dyn FnMut(Link)) {}
-    /// Whether this value domain supports an explicit spherical interpolation directive.
-    fn supports_slerp() -> bool {
+    /// Whether this value domain supports explicit quaternion interpolation directives.
+    fn supports_quaternion_interpolation() -> bool {
         false
     }
     /// Whether a value is meaningful for this channel.
@@ -267,7 +270,7 @@ impl CurveValue for Option<TextureId> {
     }
 }
 impl CurveValue for Quaternion {
-    fn supports_slerp() -> bool {
+    fn supports_quaternion_interpolation() -> bool {
         true
     }
     fn is_valid(&self) -> bool {
@@ -396,10 +399,14 @@ impl<'a, T: CurveValue + 'a> Curve<'a, T> {
             }
             previous = Some(time);
         }
-        if self.interpolation == Interpolation::Slerp && !T::supports_slerp() {
+        if matches!(
+            self.interpolation,
+            Interpolation::Slerp | Interpolation::Nlerp
+        ) && !T::supports_quaternion_interpolation()
+        {
             return Err(Error::new(
                 "curve.interpolation",
-                "spherical interpolation requires rotation values",
+                "spherical and normalized linear interpolation require rotation values",
             ));
         }
         let spline = matches!(

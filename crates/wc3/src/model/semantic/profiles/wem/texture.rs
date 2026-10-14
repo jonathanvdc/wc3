@@ -71,14 +71,17 @@ impl ValidateLinks for TextureControls<'_> {
 }
 
 pub(super) fn resources(resources: &Resources<'_, Wem>) -> Result<(), Error> {
-    use crate::model::semantic::{AddressMode, Resource};
+    use crate::model::semantic::{AddressMode, Resource, SnoNamespace};
     for (_, texture) in resources.textures() {
         if !matches!(
             texture.resource,
             Resource::Unspecified
                 | Resource::Path(_)
                 | Resource::FileDataId(_)
-                | Resource::Sno { .. }
+                | Resource::Sno {
+                    namespace: SnoNamespace::Unspecified,
+                    ..
+                }
         ) {
             return Err(Error::new(
                 "wem.texture.resource",

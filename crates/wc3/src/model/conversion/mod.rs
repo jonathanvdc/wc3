@@ -27,3 +27,6 @@ pub mod geometry;
 
 /// Editable-model authoring import and export support.
 pub mod wem;
+
+/// Diablo native model imports and typed exports.
+pub mod diablo;

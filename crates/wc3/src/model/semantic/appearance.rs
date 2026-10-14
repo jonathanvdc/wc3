@@ -141,6 +141,10 @@ impl<'data> DrawAppearanceSchema<'data> for DrawLooks<'data> {
 /// Built-in appearance families, retaining their original authoring domains on widening.
 #[derive(Clone, Debug)]
 pub enum UniversalAppearance<'data> {
+    /// Diablo III material look alternatives.
+    D3(crate::model::semantic::profiles::diablo::d3::Appearance<'data>),
+    /// Diablo IV hashed material look alternatives.
+    D4(crate::model::semantic::profiles::diablo::d4::Appearance),
     /// General draw-based material alternatives.
     Flexible(DrawLooks<'data>),
     /// Warcraft III's single material assignment.
@@ -167,6 +171,8 @@ macro_rules! with_appearance {
             | UniversalAppearance::M3($value)
             | UniversalAppearance::Wmo($value) => $body,
             UniversalAppearance::Wem($value) => $body,
+            UniversalAppearance::D4($value) => $body,
+            UniversalAppearance::D3($value) => $body,
         }
     };
 }
@@ -197,7 +203,7 @@ impl<'data> DrawAppearanceSchema<'data> for UniversalAppearance<'data> {
         match self {
             Self::Flexible(value) | Self::M2(value) => value.add_look(id, look),
             Self::Mdlx(value) | Self::M3(value) | Self::Wmo(value) => value.add_look(id, look),
-            Self::Wem(_) => Err(Error::new(
+            Self::Wem(_) | Self::D4(_) | Self::D3(_) => Err(Error::new(
                 "appearance.draw",
                 "editable-model appearances assign named polygon-group slots",
             )),
@@ -207,7 +213,7 @@ impl<'data> DrawAppearanceSchema<'data> for UniversalAppearance<'data> {
         match self {
             Self::Flexible(value) | Self::M2(value) => value.set_default_look(id),
             Self::Mdlx(value) | Self::M3(value) | Self::Wmo(value) => value.set_default_look(id),
-            Self::Wem(_) => Err(Error::new(
+            Self::Wem(_) | Self::D4(_) | Self::D3(_) => Err(Error::new(
                 "appearance.draw",
                 "editable-model appearances select family-local slot alternatives",
             )),
@@ -217,7 +223,7 @@ impl<'data> DrawAppearanceSchema<'data> for UniversalAppearance<'data> {
         match self {
             Self::Flexible(value) | Self::M2(value) => value.remove_look(id),
             Self::Mdlx(value) | Self::M3(value) | Self::Wmo(value) => value.remove_look(id),
-            Self::Wem(_) => None,
+            Self::Wem(_) | Self::D4(_) | Self::D3(_) => None,
         }
     }
 }

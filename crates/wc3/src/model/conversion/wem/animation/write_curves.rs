@@ -59,6 +59,9 @@ fn interpolation(mode: Interpolation) -> Result<records::Interpolation, Error> {
         Interpolation::Hermite => records::Interpolation::Hermite,
         Interpolation::Bezier => records::Interpolation::Bezier,
         Interpolation::Slerp => records::Interpolation::Slerp,
+        Interpolation::Nlerp => {
+            return Err(Error::new("wem.animation.interpolation","no native sampling discriminator declares normalized-linear quaternion interpolation"));
+        }
         Interpolation::Tcb => {
             return Err(Error::new(
                 "wem.animation.interpolation",

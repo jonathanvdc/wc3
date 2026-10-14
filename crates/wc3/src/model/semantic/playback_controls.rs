@@ -3,6 +3,8 @@ use crate::model::semantic::{profiles, Link, ValidateLinks};
 /// Native authoring behavior supplementing one logical clip.
 #[derive(Clone, Debug)]
 pub enum ClipControls<'a> {
+    /// Diablo III permutation selection and timing.
+    D3(profiles::diablo::d3::ClipControls),
     /// Warcraft III sequence selection and authored interval controls.
     Mdlx(profiles::mdlx::Sequence),
     /// World of Warcraft sequence selection and transition controls.
@@ -15,6 +17,7 @@ pub enum ClipControls<'a> {
 impl ValidateLinks for ClipControls<'_> {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
         match self {
+            Self::D3(value) => value.visit_links(visitor),
             Self::Wem(value) => value.visit_links(visitor),
             Self::Mdlx(value) => value.visit_links(visitor),
             Self::M2(value) => value.visit_links(visitor),

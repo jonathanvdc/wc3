@@ -2,7 +2,8 @@
 //!
 //! These macros are for maintaining or extending the record implementations.
 //! Applications using the built-in model types only need the codec traits in
-//! `wc3::model::mdlx::{mdx, mdl}`, `wc3::model::m2`, `wc3::model::wmo`, `wc3::model::m3`, and `wc3::model::wem`.
+//! `wc3::model::mdlx::{mdx, mdl}`, `wc3::model::m2`, `wc3::model::wmo`,
+//! `wc3::model::m3`, `wc3::model::wem`, and `wc3::model::diablo::d4`.
 //!
 //! Import macros through those format modules, for example
 //! `#[derive(mdl::Read, mdl::Write)]`. Ownership is shared through
@@ -13,6 +14,7 @@
 #![doc = include_str!("wmo.md")]
 #![doc = include_str!("m3.md")]
 #![doc = include_str!("wem.md")]
+#![doc = include_str!("d4.md")]
 #![deny(missing_docs)]
 mod mdl;
 mod mdx;
@@ -80,6 +82,38 @@ pub fn derive_ownership(input: TokenStream) -> TokenStream {
 
 mod binary;
 mod binary_value;
+mod d4;
+
+/// Reads D4 fields in declaration order using their native descriptor encodings.
+#[proc_macro_derive(D4Read, attributes(d4))]
+pub fn derive_d4_read(input: TokenStream) -> TokenStream {
+    d4::expand(
+        parse_macro_input!(input as DeriveInput),
+        d4::Operation::Read,
+    )
+    .into()
+}
+
+/// Writes a D4 record and relocates its main-file and external-payload descriptors.
+#[proc_macro_derive(D4Write, attributes(d4))]
+pub fn derive_d4_write(input: TokenStream) -> TokenStream {
+    d4::expand(
+        parse_macro_input!(input as DeriveInput),
+        d4::Operation::Write,
+    )
+    .into()
+}
+
+/// Computes a D4 record's fixed size from its encoded field widths.
+#[proc_macro_derive(D4RecordLayout, attributes(d4))]
+pub fn derive_d4_record_layout(input: TokenStream) -> TokenStream {
+    d4::expand(
+        parse_macro_input!(input as DeriveInput),
+        d4::Operation::Layout,
+    )
+    .into()
+}
+
 /// Reads M2 record fields in declaration order within a shared address space.
 #[proc_macro_derive(M2Read, attributes(m2))]
 pub fn derive_m2_read(input: TokenStream) -> TokenStream {

@@ -1,9 +1,9 @@
 //! Diablo shader inputs retain external dependencies and independent native state.
 use crate::model::conversion::wem::shader_materials::diablo::{read_group, write_group};
 use crate::model::conversion::Error;
-use crate::model::semantic::profiles::wem::materials::diablo::{
+use crate::model::semantic::profiles::diablo::d3::{
     AssetRef, MaterialColors, MaterialFlags, ParameterType, TagValue, TexAnim, TextureEntry,
-    TextureOperation, UberMaterial, UvFlags, UvTransformMode,
+    TextureType, UberMaterial, UvFlags, UvTransformMode,
 };
 use crate::model::wem::records::{
     D3AssetRef, D3MaterialColors, D3MaterialFlags, D3TagValue, D3TexAnim, D3TextureEntry,
@@ -80,7 +80,7 @@ pub(super) fn read_texture_entry(
     value: &D3TextureEntry,
 ) -> Result<TextureEntry, Error> {
     Ok(TextureEntry {
-        operation: TextureOperation::Unknown(value.type_),
+        texture_type: TextureType::Unknown(value.type_),
         unclassified_control: value.dw_unknown04,
         texture: read_asset_ref(document, &value.texture)?,
         uv_transform_mode: UvTransformMode::Unknown(value.uv_transform_mode),
@@ -103,8 +103,8 @@ pub(super) fn write_texture_entry(
     value: &TextureEntry,
 ) -> Result<D3TextureEntry, Error> {
     Ok(D3TextureEntry {
-        type_: match value.operation {
-            TextureOperation::Unknown(value) => value,
+        type_: match value.texture_type {
+            TextureType::Unknown(value) => value,
         },
         dw_unknown04: value.unclassified_control,
         texture: write_asset_ref(document, &value.texture)?,

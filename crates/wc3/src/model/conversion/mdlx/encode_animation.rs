@@ -228,10 +228,10 @@ impl Encoder<'_, '_, '_> {
             Interpolation::Linear => NativeTrack::linear(plain(), global),
             Interpolation::Hermite => NativeTrack::hermite(spline(), global),
             Interpolation::Bezier => NativeTrack::bezier(spline(), global),
-            Interpolation::Tcb | Interpolation::Slerp => {
+            Interpolation::Tcb | Interpolation::Slerp | Interpolation::Nlerp => {
                 return Err(Error::new(
                     path,
-                    "Warcraft III tracks cannot encode explicit TCB or SLERP directives",
+                    "Warcraft III tracks cannot encode explicit TCB, SLERP or NLERP directives",
                 ));
             }
         }

@@ -5,7 +5,7 @@ edition = "2021"
 rust-version = "1.88"
 license = "MIT OR Apache-2.0"
 readme = "README.md"
-description = "MDX, MDL, M2, and WMO model codec derives for wc3"
+description = "Blizzard model codec and ownership derives for wc3"
 repository = "https://github.com/jonathanvdc/wc3"
 
 [lib]

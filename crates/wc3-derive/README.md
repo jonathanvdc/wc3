@@ -9,7 +9,8 @@ the codec traits in `wc3`; the derives are re-exported through its format module
 Import `wc3::model::mdlx::{mdx, mdl}` to distinguish the binary and text derives.
 Import `wc3::model::{m2, wmo}` for the World of Warcraft formats and
 `wc3::model::m3` for indexed StarCraft II models and `wc3::model::wem` for
-editable model documents. The format modules re-export
+editable model documents. Import `wc3::model::diablo::d4` for native Diablo IV
+records. The format modules re-export
 the following macros alongside their codec traits:
 
 | Derive through `wc3` | Purpose |
@@ -25,6 +26,7 @@ the following macros alongside their codec traits:
 | `wem::Read`, `wem::Write`, `wem::RecordLayout` | Compose variable inline records and their minimum encoded widths. |
 | `wem::Validate`, `wem::VisitReferences` | Compose local checks and section-link traversal. |
 | `wmo::Read`, `wmo::Write`, `wmo::RecordLayout`, `wmo::Validate` | Compose WMO record codecs, fixed inline widths, and field validation. |
+| `d4::Read`, `d4::Write`, `d4::RecordLayout` | Compose sequential Diablo IV records, computed widths, and relocated descriptors. |
 
 Scalar choice fields in M2, M3, WMO, and WEM use named enums with an explicit
 integer wire width and an unknown-value variant. Each format re-exports a
@@ -119,6 +121,8 @@ guides when connecting those records to whole-model operations:
   fixed records, section identity, and reference traversal.
 - [WEM derive reference](src/wem.md): variable inline records, allocation-free
   boundary scanning, and preserved discriminator bytes.
+- [D4 derive reference](src/d4.md): wire-order fields, computed widths,
+  relocated descriptors, and external payloads.
 - [MDX codec documentation](https://docs.rs/wc3/latest/wc3/model/mdlx/mdx/): binary
   derives, numeric enums, and animation records.
 - [`wc3` model documentation](https://docs.rs/wc3/latest/wc3/model/mdlx/): built-in

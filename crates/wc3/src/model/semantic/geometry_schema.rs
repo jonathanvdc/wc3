@@ -187,6 +187,10 @@ impl InfluenceRows<'_, '_> {
 /// Complete built-in geometry vocabulary, preserving each authored schema on widening.
 #[derive(Clone, Debug)]
 pub enum UniversalGeometry<'data> {
+    /// Diablo III geometry with independent tangent and binormal streams.
+    D3(crate::model::semantic::profiles::diablo::d3::Geometry<'data>),
+    /// Diablo IV declared logical vertex streams.
+    D4(crate::model::semantic::profiles::diablo::d4::Geometry<'data>),
     /// General authoring geometry, including polygons and custom attributes.
     Flexible(GeometryData<'data>),
     /// Warcraft III geometry and joint distribution semantics.
@@ -232,6 +236,8 @@ impl<'data> GeometrySchema<'data> for UniversalGeometry<'data> {
             Self::Mdlx(v) => v.kind(),
             Self::M2(v) => v.kind(),
             Self::M3(v) => v.kind(),
+            Self::D4(v) => v.kind(),
+            Self::D3(v) => v.kind(),
             Self::Wmo(v) => v.kind(),
             Self::Wem(v) => v.kind(),
         }
@@ -242,6 +248,8 @@ impl<'data> GeometrySchema<'data> for UniversalGeometry<'data> {
             Self::Mdlx(value) => value.positions(),
             Self::M2(value) => value.positions(),
             Self::M3(value) => value.positions(),
+            Self::D4(value) => value.positions(),
+            Self::D3(value) => value.positions(),
             Self::Wmo(value) => value.positions(),
             Self::Wem(value) => value.positions(),
         }
@@ -252,6 +260,8 @@ impl<'data> GeometrySchema<'data> for UniversalGeometry<'data> {
             Self::Mdlx(value) => value.normals(),
             Self::M2(value) => value.normals(),
             Self::M3(value) => value.normals(),
+            Self::D4(value) => value.normals(),
+            Self::D3(value) => value.normals(),
             Self::Wmo(value) => value.normals(),
             Self::Wem(value) => value.normals(),
         }
@@ -262,6 +272,8 @@ impl<'data> GeometrySchema<'data> for UniversalGeometry<'data> {
             Self::Mdlx(value) => value.tangents(),
             Self::M2(value) => value.tangents(),
             Self::M3(value) => value.tangents(),
+            Self::D4(value) => value.tangents(),
+            Self::D3(value) => value.tangents(),
             Self::Wmo(value) => value.tangents(),
             Self::Wem(value) => value.tangents(),
         }
@@ -272,6 +284,8 @@ impl<'data> GeometrySchema<'data> for UniversalGeometry<'data> {
             Self::Mdlx(value) => value.texture_coordinates(),
             Self::M2(value) => value.texture_coordinates(),
             Self::M3(value) => value.texture_coordinates(),
+            Self::D4(value) => value.texture_coordinates(),
+            Self::D3(value) => value.texture_coordinates(),
             Self::Wmo(value) => value.texture_coordinates(),
             Self::Wem(value) => value.texture_coordinates(),
         }
@@ -282,6 +296,8 @@ impl<'data> GeometrySchema<'data> for UniversalGeometry<'data> {
             Self::Mdlx(value) => value.colors(),
             Self::M2(value) => value.colors(),
             Self::M3(value) => value.colors(),
+            Self::D4(value) => value.colors(),
+            Self::D3(value) => value.colors(),
             Self::Wmo(value) => value.colors(),
             Self::Wem(value) => value.colors(),
         }
@@ -292,6 +308,8 @@ impl<'data> GeometrySchema<'data> for UniversalGeometry<'data> {
             Self::Mdlx(value) => value.attributes(),
             Self::M2(value) => value.attributes(),
             Self::M3(value) => value.attributes(),
+            Self::D4(value) => value.attributes(),
+            Self::D3(value) => value.attributes(),
             Self::Wmo(value) => value.attributes(),
             Self::Wem(value) => value.attributes(),
         }
@@ -302,6 +320,8 @@ impl<'data> GeometrySchema<'data> for UniversalGeometry<'data> {
             Self::Mdlx(value) => value.topology(),
             Self::M2(value) => value.topology(),
             Self::M3(value) => value.topology(),
+            Self::D4(value) => value.topology(),
+            Self::D3(value) => value.topology(),
             Self::Wmo(value) => value.topology(),
             Self::Wem(value) => value.topology(),
         }
@@ -312,6 +332,8 @@ impl<'data> GeometrySchema<'data> for UniversalGeometry<'data> {
             Self::Mdlx(value) => value.influences(),
             Self::M2(value) => value.influences(),
             Self::M3(value) => value.influences(),
+            Self::D4(value) => value.influences(),
+            Self::D3(value) => value.influences(),
             Self::Wmo(value) => value.influences(),
             Self::Wem(value) => value.influences(),
         }
@@ -322,6 +344,8 @@ impl<'data> GeometrySchema<'data> for UniversalGeometry<'data> {
             Self::Mdlx(value) => value.validate(),
             Self::M2(value) => value.validate(),
             Self::M3(value) => value.validate(),
+            Self::D4(value) => value.validate(),
+            Self::D3(value) => value.validate(),
             Self::Wmo(value) => value.validate(),
             Self::Wem(value) => value.validate(),
         }
@@ -334,6 +358,8 @@ impl ValidateLinks for UniversalGeometry<'_> {
             Self::Mdlx(value) => value.visit_links(visitor),
             Self::M2(value) => value.visit_links(visitor),
             Self::M3(value) => value.visit_links(visitor),
+            Self::D4(value) => value.visit_links(visitor),
+            Self::D3(value) => value.visit_links(visitor),
             Self::Wmo(value) => value.visit_links(visitor),
             Self::Wem(value) => value.visit_links(visitor),
         }

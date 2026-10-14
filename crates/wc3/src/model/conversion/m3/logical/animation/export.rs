@@ -120,7 +120,7 @@ pub(in crate::model::conversion::m3::logical) fn prepare(
                 _ => {
                     context.unsupported(
                         "m3.animation.interpolation",
-                        "M3 has no cubic key-tangent encoding",
+                        "M3 has no encoding for the requested interpolation directive",
                     )?;
                     continue;
                 }

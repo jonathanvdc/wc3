@@ -67,6 +67,12 @@ pub fn crop<'a, T: FloatValue + 'a>(
     start: Time,
     end: Time,
 ) -> Result<Track<'a, T>, Error> {
+    if track.curve.interpolation() == Interpolation::Nlerp {
+        return Err(Error::new(
+            "curve.nlerp",
+            "exact normalized-linear quaternion curve restriction is not implemented",
+        ));
+    }
     if track.curve.interpolation() == Interpolation::Tcb {
         return Err(Error::new(
             "curve.tcb",

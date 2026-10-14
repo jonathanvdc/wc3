@@ -4,6 +4,17 @@ use crate::model::semantic::profiles::{Profile, SurfacePayload, Universal};
 use crate::model::semantic::{Animated, Error, TextureId};
 use std::borrow::Cow;
 
+/// Game namespace of an external Diablo resource identity.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum SnoNamespace {
+    /// The producer supplied numeric keys without a game namespace.
+    #[default]
+    Unspecified,
+    /// Diablo III resource groups and identifiers.
+    Diablo3,
+    /// Diablo IV resource groups and identifiers.
+    Diablo4,
+}
 /// Resource identity interpreted by an application resolver, not by a file layout.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Resource<'a> {
@@ -24,6 +35,8 @@ pub enum Resource<'a> {
     FileDataId(u32),
     /// Diablo resource identity and resource group.
     Sno {
+        /// Game whose resource group and identifier are addressed.
+        namespace: SnoNamespace,
         /// Resource group.
         group: i32,
         /// Resource identity.
@@ -248,6 +261,10 @@ impl Default for PbrSurface {
 /// Complete logical surface definition, retaining distinct game shader semantics.
 #[derive(Clone, Debug)]
 pub enum MaterialSurface<'a> {
+    /// Diablo III shader resources and render passes.
+    D3(Box<profiles::diablo::d3::Material<'a>>),
+    /// Diablo IV external material selections and shader definitions.
+    D4(Box<profiles::diablo::d4::Material>),
     /// Portable surface.
     Generic(Box<PbrSurface>),
     /// Warcraft III layers and shader parameters.

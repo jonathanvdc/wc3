@@ -38,7 +38,7 @@ the collection's resources, and its collection controls. Resource lookup through
 a view therefore uses the same owner as the rest of the collection.
 
 The cardinality parameter `Single` requires exactly one graph; `Multiple`
-permits several. Native MDLX, M2, M3, and WMO assets use `Single`, while WEM can
+permits several. Native MDLX, M2, M3, WMO, and Diablo assets use `Single`, while WEM can
 contain multiple models with shared dependencies. Collection controls describe
 shared behavior, including WEM animation selection banks. They are
 separate from declarations that belong to an individual model.
@@ -46,7 +46,7 @@ separate from declarations that belong to an individual model.
 ## Choosing an authoring vocabulary
 
 `Model<'data, P>` uses `P` to select the permitted authoring vocabulary. Built-in
-profiles in `semantic::profiles` include `Mdlx`, `M2`, `M3`, `Wmo`, and `Wem`.
+profiles in `semantic::profiles` include `Mdlx`, `M2`, `M3`, `Wmo`, `D3`, `D4`, and `Wem`.
 The default profile, `Universal`, accepts all built-in families. A profile selects
 complete geometry and joint-binding schemas, material surfaces, attached
 features, systems, appearance assignments, animation programs, and the controls
@@ -121,12 +121,21 @@ attaching arbitrary streams to a narrower native schema.
 Appearance schemas retain the family's actual assignment domain. A native
 family may use one material assignment, draw alternatives, or named material
 slots. WEM retains its shader-convention sets and alternatives, with slot bindings
-and a selected default. A material mount identifies a particular set, alternative,
+and a selected default. Diablo IV owns hashed material slots, slot-local variants, and hashed looks that
+select actual variants. These identities remain stable when native tables are
+rebuilt. Its geometry selects an actual material slot; it does not duplicate those
+assignments in common draw overrides. D3 uses the same ownership pattern with named slots and named alternatives.
+Both profiles retain unused variants independently of the looks that select them;
+neither infers slot identity from mutable material display names.
+
+A material mount identifies a particular set, alternative,
 and slot; an animated shader contribution can therefore retain the authored
 selection rather than binding permanently to whichever material was initially
 visible.
 
-WEM can mix payload families within one model. Its document declarations select
+WEM can mix payload families within one model. Its Diablo material declaration
+wraps the shared `profiles::diablo::d3` shader vocabulary, retaining WEM producer
+variant options separately from the game shader state. Its document declarations select
 default conventions, while each surface and attached feature retains its own
 meaning. Its specialized Warcraft and World of Warcraft shader definitions
 retain external texture and transform selections alongside their independently
@@ -138,6 +147,12 @@ collection texture definitions, retaining arbitrary path bytes and one edit
 authority for repeated filenames. An emitter field declared to address a WEM
 texture or material-slot table uses the corresponding checked document handle.
 
+Diablo resource identities include a game namespace: a D3 group/ID pair does not
+identify the D4 resource with the same numbers. WEM texture keys retain an
+unspecified namespace because their native record does not encode one. Export
+requires an explicit translation before a qualified identity can be written to
+that unqualified field.
+
 Playback programs belong to their actual clip or controller owners. MDLX
 non-global channels use one absolute authoring timeline, and sequences select
 intervals on it. Global sequences use shared clocks. WEM owns typed channel
@@ -146,6 +161,11 @@ Each declaration carries its target and initialization; each track refers to
 that declaration and owns its curve. The initialization and an actor payload's
 baseline remain separate authored values. WEM controller tracks are authoritative;
 they are not duplicated into the common controller channel list.
+
+D3 quaternion curves use explicit normalized linear interpolation (`Nlerp`),
+which remains distinct from spherical interpolation (`Slerp`). Both are restricted
+to quaternion-valued curves. Native exports reject an interpolation mode they
+cannot represent rather than substituting another rotation path.
 
 Pose stages and their animation sources have scoped identities within the model's
 pose pipeline. Stage controls address those identities, rather than preserving

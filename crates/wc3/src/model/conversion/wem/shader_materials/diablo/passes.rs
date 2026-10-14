@@ -1,6 +1,6 @@
 //! Diablo shader inputs retain external dependencies and independent native state.
 use crate::model::conversion::Error;
-use crate::model::semantic::profiles::wem::materials::diablo::{
+use crate::model::semantic::profiles::diablo::d3::{
     AddressMode, BlendFactor, BlendOperation, Comparison, CullMode, FillMode, ParameterType,
     PassFlags, RenderParams, RenderState, ShaderTagValue, StencilOperation, Switch, TextureFilter,
     TextureStage,

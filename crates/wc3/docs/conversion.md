@@ -15,7 +15,7 @@ or original physical layout.
 
 ## Selecting a vocabulary and layout
 
-MDLX import returns `Asset<'data, Mdlx>`. The M2, M3, and WMO adapters use their
+MDLX import returns `Asset<'data, Mdlx>`. The M2, M3, WMO, and Diablo adapters use their
 own concrete profiles as well. Native export requires the matching vocabulary:
 for example, the MDLX planner accepts `Asset<'data, Mdlx>`, rather than implicitly
 projecting a `Universal` graph into Warcraft III behavior. Widening an asset
@@ -45,6 +45,22 @@ planner constructs a new generation-three `RawDocument` directly from the checke
 collection. Output record revisions
 follow actual authored declarations, including meaningful absence; the native
 document codec performs the subsequent byte encoding.
+
+Diablo III appearance import produces `Asset<D3>`. Caller-assembled bundles can
+include independently versioned animation documents, which bind to actual skeleton
+nodes by their authored bone names. Bundle output plans the appearance and
+animation resources together. Shader vocabulary is shared with WEM, but WEM's
+producer options remain outside the native Diablo shader definition.
+
+Diablo IV appearance import produces `Asset<D4>`. Native numeric vertex semantics
+and encodings require explicit caller-established `BufferLayout` declarations;
+matching the root hash alone does not establish every vertex interpretation.
+The output `VertexLayout` separately selects native packing. Packed arrays become
+logical borrowed streams, while actual chunks, material slots, variants, and
+segment palettes retain checked identities. Compressed D4 animation payloads
+remain accessible through the native codec; semantic animation decoding is not
+implemented. The [Diablo guide](diablo.md) explains the supported projection and
+its strict loss boundaries.
 
 ## Editing and inspecting an output plan
 
@@ -123,7 +139,8 @@ the default rejects them. Archiving unknown bytes cannot replace an active
 semantic definition of a known feature.
 
 Encoding hints are also separate from model meaning. They can retain physical
-qualifiers such as a native shader revision or an affine UV quantization.
+qualifiers such as a native shader revision, an affine UV quantization, or otherwise
+uninterpreted fourth bytes of D3 packed direction vectors.
 The logical values remain authoritative when they change. Hints neither store
 whole-file snapshots nor impose native layout restrictions on graph editing.
 

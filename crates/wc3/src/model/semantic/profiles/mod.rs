@@ -310,6 +310,8 @@ impl<P: Profile> Extends<P> for P {
 impl ValidateLinks for MaterialSurface<'_> {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
         match self {
+            Self::D4(value) => value.visit_links(visitor),
+            Self::D3(value) => value.visit_links(visitor),
             Self::Generic(value) => value.visit_links(visitor),
             Self::Mdlx(value) => value.visit_links(visitor),
             Self::M2(value) => value.visit_links(visitor),
@@ -338,6 +340,8 @@ impl SurfacePayload for PbrSurface {
 impl SurfacePayload for MaterialSurface<'_> {
     fn validate(&self) -> Result<(), Error> {
         match self {
+            Self::D4(value) => value.validate(),
+            Self::D3(value) => value.validate(),
             Self::Generic(value) => value.validate(),
             Self::Wem(value) => value.validate(),
             _ => Ok(()),
@@ -514,3 +518,10 @@ pub use wem::Wem;
 
 mod narrowing;
 pub use narrowing::Narrows;
+
+/// Diablo game authoring vocabularies shared with editable-model declarations.
+pub mod diablo;
+
+pub use diablo::d3::D3;
+
+pub use diablo::d4::D4;

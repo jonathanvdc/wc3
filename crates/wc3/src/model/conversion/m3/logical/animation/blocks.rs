@@ -127,10 +127,11 @@ impl Blocks {
                         | Interpolation::Bezier
                         | Interpolation::Tcb
                         | Interpolation::Slerp
+                        | Interpolation::Nlerp
                 ) {
                     context.unsupported(
                         "m3.animation.interpolation",
-                        "native M3 controllers do not encode cubic tangent curves",
+                        "native M3 controllers do not encode the requested interpolation directive",
                     )?;
                     return Ok(None);
                 }

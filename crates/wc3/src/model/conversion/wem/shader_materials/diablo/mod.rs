@@ -1,8 +1,7 @@
 //! Diablo shader inputs retain external dependencies and independent native state.
 use crate::model::conversion::Error;
-use crate::model::semantic::profiles::wem::materials::diablo::{
-    DiabloMaterial, Group, VariantFlags,
-};
+use crate::model::semantic::profiles::diablo::d3::{Group, Material};
+use crate::model::semantic::profiles::wem::materials::diablo::{DiabloMaterial, VariantFlags};
 use crate::model::wem::records::D3MaterialDialect;
 use crate::model::wem::records::{D3Group, D3Material, D3RenderState, D3TagValue, D3VariantFlags};
 
@@ -198,27 +197,30 @@ where
 {
     Ok(DiabloMaterial {
         variant_flags: value.variant_flags.options(),
-        uber: read_uber_material(document, &value.uber)?,
-        base_material: read_asset_ref(document, &value.base_material)?,
-        cloth: read_asset_ref(document, &value.cloth)?,
-        shader_params: value
-            .shader_params
-            .rows()
-            .iter()
-            .map(|value| read_tag_value(document, value))
-            .collect::<Result<Vec<_>, _>>()?,
-        opaque_passes: value
-            .opaque_passes
-            .rows()
-            .iter()
-            .map(|value| read_render_state(document, value))
-            .collect::<Result<Vec<_>, _>>()?,
-        translucent_passes: value
-            .translucent_passes
-            .rows()
-            .iter()
-            .map(|value| read_render_state(document, value))
-            .collect::<Result<Vec<_>, _>>()?,
+        shader: Material {
+            appearance_control: 0,
+            uber: read_uber_material(document, &value.uber)?,
+            base_material: read_asset_ref(document, &value.base_material)?,
+            cloth: read_asset_ref(document, &value.cloth)?,
+            shader_params: value
+                .shader_params
+                .rows()
+                .iter()
+                .map(|value| read_tag_value(document, value))
+                .collect::<Result<Vec<_>, _>>()?,
+            opaque_passes: value
+                .opaque_passes
+                .rows()
+                .iter()
+                .map(|value| read_render_state(document, value))
+                .collect::<Result<Vec<_>, _>>()?,
+            translucent_passes: value
+                .translucent_passes
+                .rows()
+                .iter()
+                .map(|value| read_render_state(document, value))
+                .collect::<Result<Vec<_>, _>>()?,
+        },
     })
 }
 /// An output schema selected by whether variant options are authored.
@@ -244,6 +246,14 @@ pub(in crate::model::conversion::wem) fn write(
     value: &DiabloMaterial<'_>,
     source_version: u32,
 ) -> Result<Encoded, Error> {
+    let variant_flags = value.variant_flags;
+    let value = &value.shader;
+    if value.appearance_control != 0 {
+        return Err(Error::new(
+            "wem.material.diablo.appearance_control",
+            "WEM ND3 does not encode the native appearance qualifier",
+        ));
+    }
     let uber = write_uber_material(document, &value.uber)?;
     let base_material = write_asset_ref(document, &value.base_material)?;
     let cloth = write_asset_ref(document, &value.cloth)?;
@@ -268,7 +278,7 @@ pub(in crate::model::conversion::wem) fn write(
             .map(|value| write_render_state(document, value))
             .collect::<Result<Vec<_>, _>>()?,
     );
-    Ok(match value.variant_flags {
+    Ok(match variant_flags {
         None => Encoded::Unflagged(D3Material {
             source_version,
             variant_flags: (),

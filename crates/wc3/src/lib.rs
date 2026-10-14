@@ -1,4 +1,4 @@
-//! Read, edit, and write Warcraft models, BLP textures, and MPQ archives.
+//! Read, edit, and write Blizzard models, BLP/TEX textures, and MPQ archives.
 //!
 //! Start with [`model::mdlx::Model`] for a known format version or [`model::mdlx::DynamicModel`]
 //! for files whose version is determined at runtime. Both use the same model types
@@ -15,16 +15,21 @@
 //! StarCraft II and Heroes of the Storm models use [`model::m3::Model`], whose
 //! MD33/MD34 envelopes keep independently versioned indexed sections and external animations.
 //!
+//! Diablo III and IV resources use [`model::diablo`], with independent native
+//! root layouts and caller-supplied external payloads. [`tex`] handles their
+//! encoded texture containers and optional pixel conversion.
+//!
 //! [`blp`] reads and writes BLP0, BLP1, and BLP2 encoded texture containers.
 //! [`mpq`] indexes, streams, creates, and edits MPQ v1–v4 archives.
 //!
 //! # Optional pixel and compression codecs
 //!
 //! The crate has no default features. Model codecs and encoded BLP/MPQ container
-//! operations are always available. Enable `blp-decode` to read RGBA pixels and
+//! and TEX operations are always available. Enable `blp-decode` to read RGBA pixels and
 //! use the `image` decoder adapter; `blp-encode` adds pixel encoding. `mpq-decode`
 //! enables compressed entry extraction, and `mpq-encode` adds zlib/bzip2 writing.
 //! Stored MPQ entries and encoded copying do not require those features.
+//! `tex-decode` and `tex-encode` enable supported Diablo pixel conversions.
 //!
 //! # Ownership and output
 //!
@@ -46,3 +51,6 @@ pub mod blp;
 
 /// MPQ archive indexing and streaming entry I/O.
 pub mod mpq;
+
+/// Diablo III and Diablo IV TEX texture containers.
+pub mod tex;

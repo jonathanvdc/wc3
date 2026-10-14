@@ -3,6 +3,10 @@ use crate::model::semantic::{profiles, scene, Link, ValidateLinks};
 /// Model-wide behavior chosen by the universal vocabulary.
 #[derive(Clone, Debug)]
 pub enum ModelControls<'a> {
+    /// Diablo III appearance-wide declarations.
+    D3(profiles::diablo::d3::ModelControls),
+    /// Diablo IV appearance and structure declarations.
+    D4(profiles::diablo::d4::ModelControls),
     /// Warcraft III animation resources and transition policy.
     Mdlx(profiles::mdlx::ModelControls<'a>),
     /// World of Warcraft model behavior and gameplay lookup programs.
@@ -17,6 +21,8 @@ pub enum ModelControls<'a> {
 impl ValidateLinks for ModelControls<'_> {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
         match self {
+            Self::D4(value) => value.visit_links(visitor),
+            Self::D3(value) => value.visit_links(visitor),
             Self::Mdlx(value) => value.visit_links(visitor),
             Self::M2(value) => value.visit_links(visitor),
             Self::M3(value) => value.visit_links(visitor),

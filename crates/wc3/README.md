@@ -1,7 +1,7 @@
 # wc3
 
 `wc3` is a Rust library for working with Blizzard model assets, native WEM
-documents, BLP textures, and MPQ archives. It provides types and codecs for
+documents, BLP and Diablo TEX textures, and MPQ archives. It provides types and codecs for
 reading assets, changing their contents, and writing them back, whether you are
 building an asset editor, a converter, or an application that loads game data. Binary MDX and text MDL models
 share the same typed representation, allowing model editing code to work with
@@ -11,6 +11,8 @@ geometry, animation, skeleton, bone, and physics files. WMO roots and groups
 have their own typed layouts and bundle API for static world geometry. M3 models
 and external animations retain their indexed section graphs. WEM documents hold
 multiple models, textures, and animation records under declared game profiles.
+Diablo III and IV resources use independently typed SNO document layouts, with
+external payloads supplied by the caller.
 
 ## Capabilities
 
@@ -25,8 +27,10 @@ operations and archive compression when your application needs them.
 | World of Warcraft M2 models | Read, edit, and write typed core layouts and supporting files; resolve and rebuild model bundles. |
 | World of Warcraft WMO models | Read, edit, and write root and group documents; resolve native geometry bundles. |
 | StarCraft II and Heroes of the Storm M3 models | Read, edit, and write indexed model and external animation documents. |
+| Diablo III and IV model resources | Read, edit, and rebuild supported typed appearance, actor, animation, and material documents. |
 | WEM asset documents | Read, edit, and write native indexed multi-model documents and profile-specific records. |
 | BLP0, BLP1, and BLP2 textures | Inspect and edit encoded containers; optionally decode pixels and encode images. |
+| Diablo III and IV TEX textures | Read, edit, and write typed containers; optionally decode and encode supported pixels. |
 | MPQ v1–v4 archives | Index, extract, create, and edit archives; optionally decompress and compress entries. |
 
 Native model APIs describe encoded records and supporting documents. For
@@ -126,6 +130,17 @@ WEM assets use `wc3::model::wem::{Document, RawDocument}` for native indexed
 multi-model documents. The [WEM guide](docs/wem.md) explains profile declarations,
 variable record layouts, borrowed arrays, and preserving unsupported sections.
 
+### Diablo models
+
+Diablo resources live under `wc3::model::diablo::{d3, d4}`. D3 document families
+select their own numeric revision: an appearance revision does not select an
+animation or material revision. D4 uses exact format hashes to select concrete
+root layouts. Both families resolve borrowed native arrays and relocate their
+references when writing. D4 documents can return a root file and a separate
+payload body, leaving storage naming and lookup to the application. The
+[Diablo guide](docs/diablo.md) describes the supported layouts and the boundary
+between native records and semantic conversion. Diablo rendering is not implemented.
+
 ### Textures
 
 For BLP textures, you can choose whether to work with the encoded container or
@@ -151,6 +166,13 @@ provides examples and explains the available encoding options. `EncodeOptions`
 lets you choose the filter for generated mipmaps and the DXT fitting algorithm,
 with Triangle resampling and ClusterFit compression as defaults. Applications
 that author their own mipmaps can supply those levels directly.
+
+Diablo TEX textures use `wc3::tex::{d3, d4}` with typed native layouts.
+Encoded operations require no image features. Enable `tex-decode` or `tex-encode`
+for supported pixel conversions, which reuse existing block-compression libraries.
+D3 embeds mip payloads; D4 metadata addresses separately supplied payloads.
+The [TEX guide](docs/tex.md) explains payload selection, supported formats, and
+preservation limits.
 
 ### Archives
 
@@ -179,7 +201,7 @@ the API and describes format support, editing behavior, and archive recovery.
 
 The crate has no default features, so applications that only work with models
 or encoded containers do not pull in image or compression dependencies. Model
-codecs, BLP container operations, and MPQ indexing, stored entries, encryption,
+codecs, BLP/TEX container operations, and MPQ indexing, stored entries, encryption,
 and encoded archive editing are always available. The following features add
 the operations that require decoding or encoding asset contents:
 
@@ -187,6 +209,8 @@ the operations that require decoding or encoding asset contents:
 | --- | --- |
 | `blp-decode` | BLP mipmap decoding to RGBA pixels and an `image::ImageDecoder` adapter. |
 | `blp-encode` | BLP image encoding and an `image::ImageEncoder` adapter. |
+| `tex-decode` | Supported D3/D4 TEX mipmap decoding to RGBA pixels. |
+| `tex-encode` | Supported TEX mip encoding through existing pixel codecs. |
 | `mpq-decode` | MPQ decompression. |
 | `mpq-encode` | MPQ zlib and bzip2 compression. |
 
@@ -245,11 +269,13 @@ The API reference provides examples for each asset type, and the repository
 includes command-line examples for inspecting, editing, and converting assets.
 The model command-line examples below operate on Warcraft III MDX and MDL:
 
-- [Documentation index](docs/README.md): MDLX, M2, WMO, M3, and WEM workflows, command-line tools,
+- [Documentation index](docs/README.md): MDLX, M2, WMO, M3, Diablo, TEX, and WEM workflows, command-line tools,
   and format-specific API references.
 - [API reference](https://docs.rs/wc3/latest/wc3/).
 - [`mpq` example](examples/mpq.rs): archive listing, extraction, creation, and editing.
 - [`mpq_concurrent` example](examples/mpq_concurrent.rs): a synthetic benchmark comparing serialized and concurrent extraction; requires `mpq-decode` and `mpq-encode`.
+- [`diablo_info` example](examples/diablo_info.rs): typed D3/D4 SNO metadata and direct dependency identities.
+- [`tex_to_png` example](examples/tex_to_png.rs): selected Diablo TEX pixel export; requires `tex-decode`.
 - [`model_dependencies` example](examples/model_dependencies.rs): deduplicated direct file references with their locations, plus replaceable resource IDs.
 - [`model_info` example](examples/model_info.rs): model metadata, geometry and emitter counts, and animation intervals.
 - [`model_convert` example](examples/model_convert.rs): MDX/MDL and model-version conversion with loss reports.

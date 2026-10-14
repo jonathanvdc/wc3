@@ -2,7 +2,7 @@
 
 This project provides Rust libraries for working with Blizzard assets, from
 editing a model or converting a texture to displaying an animated character in
-Bevy. It brings together support for MDX and MDL models, BLP textures, and MPQ
+Bevy. It brings together support for MDX and MDL models, BLP/TEX textures, and MPQ
 archives, so applications can work with these assets throughout the process of
 loading, modifying, and rendering them. World of Warcraft M2 support covers
 file formats and supporting documents through the asset library. WMO support
@@ -13,7 +13,9 @@ authoring vocabularies and checked edits. [Model conversions](crates/wc3/docs/co
 connect those graphs to the native format APIs.
 
 WEM support adds indexed multi-model documents with profiles, shared resources,
-and independently revised native records.
+and independently revised native records. Diablo III and IV support adds typed
+appearance, actor, animation, and material resources, with native layout selection
+separate from the [semantic conversion boundary](crates/wc3/docs/diablo.md).
 
 ## Crates
 
@@ -35,7 +37,7 @@ and group layouts, including geometry, materials, portals, liquids, and collisio
 data. WEM documents hold several models, texture identities, and animation clips
 in a native indexed graph; the [WEM guide](crates/wc3/docs/wem.md) explains typed
 records, profile metadata, and preservation of unsupported payloads. Alongside
-models, it provides BLP texture and MPQ archive APIs, with optional
+models, it provides BLP and Diablo TEX texture and MPQ archive APIs, with optional
 features for working with decoded images and compressed archive entries. This
 makes it useful for asset tools and converters as well as applications that
 supply their own renderer.
@@ -63,7 +65,7 @@ files using an ordered overlay. The adapter is independent of the renderer;
 `bevy-wc3` preserves the source when resolving a model's dependencies.
 
 Each crate's README explains how to get started and links to further examples.
-The [asset documentation index](crates/wc3/docs/README.md) connects MDLX, M2, WMO, M3, and WEM
+The [asset documentation index](crates/wc3/docs/README.md) connects MDLX, M2, WMO, M3, Diablo, TEX, and WEM
 editing, command-line tools, and the format APIs.
 API references are available for [`wc3`](https://docs.rs/wc3/latest/wc3/) and
 [`wc3-derive`](https://docs.rs/wc3-derive/latest/wc3_derive/), and the
@@ -79,7 +81,7 @@ with the optional texture and archive codecs enabled, use:
 cargo test --workspace --all-features
 ```
 
-Use the Rust toolchain pinned in `rust-toolchain.toml` for local checks. Rustdoc
+Use the Rust toolchain pinned in [CI](.github/workflows/ci.yml) for local checks. Rustdoc
 examples are included in `cargo test`; to check documentation links separately,
 run `RUSTDOCFLAGS="-D warnings" cargo doc --workspace --all-features --no-deps`.
 

@@ -111,13 +111,13 @@ impl Default for TextureFilter {
         Self::Unknown(0)
     }
 }
-/// Producer-defined texture operation selection.
+/// Shader-defined texture role selection, retaining unresolved codes.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum TextureOperation {
+pub enum TextureType {
     /// Category whose interpretation is not established.
     Unknown(i32),
 }
-impl Default for TextureOperation {
+impl Default for TextureType {
     fn default() -> Self {
         Self::Unknown(0)
     }
@@ -164,18 +164,6 @@ bitfield! { /// Producer-defined PassFlags options; every bit is retained.
  pub bits,_:31,0;
 }
 impl PassFlags {
-    /// Constructs the complete authored option mask.
-    pub const fn from_bits_retain(bits: i32) -> Self {
-        Self(bits)
-    }
-}
-bitfield! { /// Producer-defined VariantFlags options; every bit is retained.
- #[derive(Clone,Copy,Debug,Default,PartialEq,Eq)]
- pub struct VariantFlags(i32);
- /// Full authored option mask.
- pub bits,_:31,0;
-}
-impl VariantFlags {
     /// Constructs the complete authored option mask.
     pub const fn from_bits_retain(bits: i32) -> Self {
         Self(bits)

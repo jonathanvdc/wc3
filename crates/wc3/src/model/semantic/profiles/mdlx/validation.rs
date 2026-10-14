@@ -108,10 +108,13 @@ fn validate_channel(channel: &Channel<'_>) -> Result<(), Error> {
             ));
         }
     };
-    if matches!(mode, Interpolation::Tcb | Interpolation::Slerp) {
+    if matches!(
+        mode,
+        Interpolation::Tcb | Interpolation::Slerp | Interpolation::Nlerp
+    ) {
         return Err(Error::new(
             "animation.interpolation",
-            "Warcraft III tracks do not encode explicit TCB or SLERP interpolation directives",
+            "Warcraft III tracks do not encode explicit TCB, SLERP or NLERP interpolation directives",
         ));
     }
     Ok(())

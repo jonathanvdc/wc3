@@ -221,10 +221,10 @@ where
         }
     };
     let interpolation = match first.curve.interpolation() {
-        semantic::Interpolation::Slerp => {
+        semantic::Interpolation::Slerp | semantic::Interpolation::Nlerp => {
             return Err(Error::new(
                 "m2.animation.interpolation",
-                "M2 has no distinct spherical interpolation directive",
+                "M2 has no distinct spherical or normalized-linear interpolation directive",
             ));
         }
         semantic::Interpolation::Tcb => {

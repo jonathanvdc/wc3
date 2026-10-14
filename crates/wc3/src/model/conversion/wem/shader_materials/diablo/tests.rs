@@ -1,6 +1,6 @@
 use crate::model::conversion::wem::shader_materials::diablo::{read, write, Encoded};
 use crate::model::conversion::wem::text;
-use crate::model::semantic::profiles::wem::materials::diablo::Switch;
+use crate::model::semantic::profiles::diablo::d3::Switch;
 use crate::model::wem::records::{
     D3AssetRef, D3Group, D3Material, D3PassFlags, D3RenderParams, D3RenderState, D3ShaderTagValue,
     D3TextureEntry, D3TextureStage, D3UberMaterial, D3UvFlags,
@@ -94,14 +94,14 @@ fn native_pass_text_borrows_and_signed_options_and_external_dependencies_survive
     let mut graph = read(&source, &original).unwrap();
     graph.validate().unwrap();
     assert!(matches!(
-        graph.opaque_passes[0].effect_file,
+        graph.shader.opaque_passes[0].effect_file,
         Cow::Borrowed("shaders/independent.fx")
     ));
     assert_eq!(
-        graph.opaque_passes[0].render_params.z_write_enable,
+        graph.shader.opaque_passes[0].render_params.z_write_enable,
         Switch::Unknown(17)
     );
-    graph.opaque_passes[0].render_params.depth_bias = -0.75;
+    graph.shader.opaque_passes[0].render_params.depth_bias = -0.75;
     let mut destination = RawDocument::new();
     let Encoded::Flagged(output) =
         write(&mut destination, &graph, original.source_version).unwrap()
