@@ -30,3 +30,23 @@ fn pruning_preserves_live_indices_and_releases_original_container() {
         Some("L")
     );
 }
+
+#[test]
+fn supplied_borrowed_records_keep_storage_and_validate_spans_before_mutation() {
+    let bytes = 3.5f32.to_le_bytes();
+    let mut document = RawDocument::new();
+    let id = document
+        .append_data(*b"REAL", 0, 1, Cow::Borrowed(&bytes))
+        .unwrap();
+    let section = document.section(id).unwrap();
+    assert!(section.is_borrowed());
+    assert_eq!(section.bytes().as_ptr(), bytes.as_ptr());
+    let count = document.sections().len();
+    assert!(document
+        .append_data(*b"REAL", 0, 2, Cow::Borrowed(&bytes))
+        .is_err());
+    assert!(document
+        .append_data(*b"HOLE", 0, 1, Cow::Borrowed(&bytes))
+        .is_err());
+    assert_eq!(document.sections().len(), count);
+}

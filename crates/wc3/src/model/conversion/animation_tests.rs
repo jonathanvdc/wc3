@@ -2,11 +2,9 @@ use super::*;
 #[test]
 fn shortened_splines_keep_values_between_new_boundaries() {
     for interpolation in [Interpolation::Hermite, Interpolation::Bezier] {
-        let track = Track {
-            layer: Default::default(),
-            target: Target::Translation(0),
+        let track = RawTrack {
+            rotation: false,
             interpolation,
-            global_duration: None,
             keys: vec![
                 Key {
                     time: -1.,
@@ -22,13 +20,13 @@ fn shortened_splines_keep_values_between_new_boundaries() {
                 },
             ],
         };
-        let cropped = crop(&track, 0., 1.).unwrap();
+        let cropped = crop_raw(&track, 0., 1.).unwrap();
         assert_eq!(
             cropped.keys.iter().map(|k| k.time).collect::<Vec<_>>(),
             [0., 1.]
         );
         for i in 0..101 {
-            let t = i as f32 / 100.;
+            let t = i as f64 / 100.;
             let a = sample(&track, t).unwrap();
             let b = sample(&cropped, t).unwrap();
             for (a, b) in a.iter().zip(b) {
@@ -39,11 +37,9 @@ fn shortened_splines_keep_values_between_new_boundaries() {
 }
 #[test]
 fn spherical_restriction_preserves_rotation_and_clamped_intervals() {
-    let track = Track {
-        layer: Default::default(),
-        target: Target::Rotation(0),
+    let track = RawTrack {
+        rotation: true,
         interpolation: Interpolation::Linear,
-        global_duration: None,
         keys: vec![
             Key {
                 time: -1.,
@@ -59,9 +55,9 @@ fn spherical_restriction_preserves_rotation_and_clamped_intervals() {
             },
         ],
     };
-    let cropped = crop(&track, 0., 1.).unwrap();
+    let cropped = crop_raw(&track, 0., 1.).unwrap();
     for i in 0..101 {
-        let t = i as f32 / 100.;
+        let t = i as f64 / 100.;
         for (a, b) in sample(&track, t)
             .unwrap()
             .iter()
@@ -70,6 +66,30 @@ fn spherical_restriction_preserves_rotation_and_clamped_intervals() {
             assert!((a - b).abs() < 0.000002);
         }
     }
-    let clamped = crop(&track, 3., 4.).unwrap();
+    let clamped = crop_raw(&track, 3., 4.).unwrap();
     assert_eq!(clamped.keys[0].value, track.keys[1].value);
+}
+
+#[test]
+fn typed_restriction_retains_clock_and_target() {
+    use crate::model::semantic::{Clock, OwnerId, Property};
+    let track = Track {
+        target: Property::named(OwnerId::Model, "opacity"),
+        curve: Curve::new(
+            [Time::seconds(-1.).unwrap(), Time::seconds(2.).unwrap()],
+            [0f32, 3.],
+            Interpolation::Linear,
+        )
+        .unwrap(),
+        clock: Clock::Clip,
+    };
+    let result = crop(
+        &track,
+        Time::seconds(0.).unwrap(),
+        Time::seconds(1.).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(result.target, track.target);
+    assert_eq!(result.clock, track.clock);
+    assert_eq!(result.curve.values().to_vec(), [1., 2.]);
 }

@@ -1,4 +1,4 @@
-use super::super::wem;
+use super::super::semantic::LookId;
 
 /// Native source family used for provenance and diagnostics.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -56,15 +56,13 @@ pub struct ImportOptions {
     /// Numeric approximation policy.
     pub approximation: ApproximationPolicy,
 }
-/// Explicit WEM model and native output selection.
+/// Explicit logical model, authored look, and native output selection.
 #[derive(Clone, Debug, Default)]
 pub struct ExportOptions {
-    /// Model index in the WEM root model table.
+    /// Model index in the imported logical asset.
     pub model: u32,
-    /// Selected material profile; absent selects the document default.
-    pub profile: Option<wem::records::ProfileId>,
-    /// Material look index.
-    pub look: u32,
+    /// Authored material look; absent selects the model default.
+    pub look: Option<LookId>,
     /// Unsupported semantic feature policy.
     pub loss_policy: LossPolicy,
     /// Unknown source payload policy.

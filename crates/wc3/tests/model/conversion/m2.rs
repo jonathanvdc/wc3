@@ -13,7 +13,8 @@ use wc3::model::{
             Track, TrackBase, Vertex,
         },
     },
-    wem::{records::ProfileId, semantic as sm},
+    semantic as sm,
+    semantic::profiles::m2 as mp,
 };
 use zerovec::ZeroVec;
 
@@ -83,11 +84,19 @@ fn classic_geometry_becomes_editable_and_exports_modern_skin() {
     let source = native_triangle();
     let imported = conversion::m2::import(&source, &ImportOptions::default()).unwrap();
     let semantic = imported.value.model(&ExportOptions::default()).unwrap();
-    assert_eq!(semantic.profile, ProfileId::Wow);
-    assert_eq!(semantic.meshes[0].positions[1], [1., 0., 0.]);
-    assert_eq!(semantic.meshes[0].triangles.as_ref(), &[[0, 1, 2]]);
-    assert_eq!(semantic.meshes[0].influences[0][0].weight, 1.);
-    assert_eq!(semantic.textures[0].path, "textures/checker.blp");
+    let mesh = semantic.meshes().next().unwrap().1;
+    assert!(mesh.positions().is_borrowed());
+    assert_eq!(mesh.positions().get(1), Some([1., 0., 0.]));
+    let sm::Topology::Triangles(triangles) = mesh.topology() else {
+        panic!("triangle topology lost")
+    };
+    assert!(triangles.is_borrowed());
+    assert_eq!(triangles.get(0), Some([0, 1, 2]));
+    assert_eq!(mesh.influences().joint_weights(0).unwrap()[0].weight, 1.);
+    let texture = imported.value.resources().textures().next().unwrap().1;
+    assert!(
+        matches!(&texture.resource,sm::Resource::Path(Cow::Borrowed(path))if *path==b"textures/checker.blp")
+    );
     let target =
         conversion::m2::plan::<m2::Chunked<m2::V274>>(&imported.value, &ExportOptions::default())
             .unwrap()
@@ -152,11 +161,15 @@ fn hermite_tangents_and_legacy_clock_survive_editable_roundtrip() {
     };
     let imported = conversion::m2::import(&source, &ImportOptions::default()).unwrap();
     let model = imported.value.model(&ExportOptions::default()).unwrap();
-    let track = &model.clips[0].tracks[0];
-    assert_eq!(track.interpolation, sm::Interpolation::Hermite);
-    assert_eq!(track.keys[0].time, 0.);
-    assert_eq!(track.keys[1].time, 1.);
-    assert_eq!(track.keys[1].incoming, Some(vec![3., 0., 0.]));
+    let clip = model.clips().next().unwrap().1;
+    let sm::Channel::Vector3(track) = &clip.channels()[0] else {
+        panic!("translation channel lost")
+    };
+    assert_eq!(track.curve.interpolation(), sm::Interpolation::Hermite);
+    assert!(track.curve.values().is_borrowed());
+    assert_eq!(track.curve.times().get(0).unwrap().as_seconds(), 0.);
+    assert_eq!(track.curve.times().get(1).unwrap().as_seconds(), 1.);
+    assert_eq!(track.curve.incoming().unwrap().get(1), Some([3., 0., 0.]));
     let exported =
         conversion::m2::plan::<m2::Flat<m2::V256>>(&imported.value, &ExportOptions::default())
             .unwrap()
@@ -177,54 +190,80 @@ fn hermite_tangents_and_legacy_clock_survive_editable_roundtrip() {
 }
 #[test]
 fn semantic_geometry_edits_rebuild_native_values() {
-    let imported = conversion::m2::import(
-        &native_triangle(),
-        &ImportOptions {
-            unknown: UnknownPolicy::Archive,
-            ..Default::default()
-        },
+    let source = native_triangle();
+    let mut asset = conversion::m2::import(&source, &ImportOptions::default())
+        .unwrap()
+        .value;
+    let (id, mesh) = asset.models[0].meshes().next().unwrap();
+    let mut mesh = mesh.clone();
+    let mut positions: Vec<_> = mesh.positions().iter().collect();
+    positions[1] = [5., 0., 0.];
+    let sm::Topology::Triangles(triangles) = mesh.topology() else {
+        unreachable!()
+    };
+    let normals = mesh.normals().unwrap().clone();
+    let uv = std::array::from_fn(|slot| mesh.texture_coordinates()[slot].clone());
+    let influences = sm::Values::owned(
+        mesh.influences()
+            .iter()
+            .map(|row| -> [sm::Influence; 4] {
+                row.into_joint_weights().unwrap().try_into().unwrap()
+            })
+            .collect::<Vec<_>>(),
+    );
+    mesh.geometry = sm::M2Geometry::new(
+        sm::Values::owned(positions),
+        normals,
+        uv,
+        triangles.clone(),
+        influences,
     )
     .unwrap();
-    let mut model = imported.value.model(&ExportOptions::default()).unwrap();
-    model.meshes[0].positions.to_mut()[1] = [5., 0., 0.];
-    let asset = Asset::new(sm::build(&model).unwrap());
-    let native = conversion::m2::plan::<m2::Flat<m2::V263>>(&asset, &ExportOptions::default())
+    asset
+        .models
+        .edit_model(0, |draft| draft.set_mesh(id, mesh))
+        .unwrap();
+    let output = conversion::m2::plan::<m2::Flat<m2::V263>>(&asset, &ExportOptions::default())
         .unwrap()
         .execute()
         .unwrap()
         .value;
     assert_eq!(
-        native.model.core().vertices.get(1).unwrap().position,
+        output.model.core().vertices.get(1).unwrap().position,
         [5., 0., 0.]
     );
 }
 #[test]
 fn quantization_requires_an_explicit_tolerance() {
-    let mut model = sm::Model {
-        profile: ProfileId::Wow,
-        ..Default::default()
-    };
-    model.nodes.push(sm::Node {
-        bone: true,
-        ..Default::default()
-    });
-    model.clips.push(sm::Clip {
-        duration: 1.,
-        tracks: vec![sm::Track {
-            layer: Default::default(),
-            target: sm::Target::Translation(0),
-            interpolation: sm::Interpolation::Linear,
-            global_duration: None,
-            keys: vec![sm::Key {
-                time: 0.0004,
-                value: vec![0.; 3],
-                incoming: None,
-                outgoing: None,
-            }],
-        }],
-        ..Default::default()
-    });
-    let asset = Asset::new(sm::build(&model).unwrap());
+    let mut builder = sm::Model::<sm::profiles::M2>::builder("quantized");
+    let node = builder
+        .add_node(sm::Node::named("bone").with_controls(mp::BoneControls {
+            key_bone: -1,
+            flags: mp::values::BoneBehaviorFlags::default(),
+            submesh: 0,
+            name_crc: 0,
+        }))
+        .unwrap();
+    let clip = builder
+        .add_clip(sm::Clip::named("clip").with_duration(sm::Time::seconds(1.).unwrap()))
+        .unwrap();
+    let curve = sm::Curve::new(
+        sm::Values::owned(vec![sm::Time::seconds(0.0004).unwrap()]),
+        sm::Values::owned(vec![[0.; 3]]),
+        sm::Interpolation::Linear,
+    )
+    .unwrap();
+    builder
+        .add_channel(
+            clip,
+            sm::Channel::Vector3(sm::Track {
+                target: node.translation(),
+                curve,
+                clock: sm::Clock::Clip,
+            }),
+        )
+        .unwrap();
+    let asset = Asset::new(builder.finish().unwrap());
     assert!(conversion::m2::plan::<m2::Flat<m2::V264>>(&asset, &ExportOptions::default()).is_err());
     let plan = conversion::m2::plan::<m2::Flat<m2::V264>>(
         &asset,
@@ -282,7 +321,7 @@ where
     }
 }
 #[test]
-fn lights_particles_ribbons_and_collision_use_active_wem_records() {
+fn lights_particles_ribbons_and_collision_use_logical_fields() {
     let mut source = native_triangle();
     let core = source.model.core_mut();
     core.global_sequences = ZeroVec::alloc_from_slice(&[1000]);
@@ -324,9 +363,25 @@ fn lights_particles_ribbons_and_collision_use_active_wem_records() {
     core.collision_indices = ZeroVec::alloc_from_slice(&[0, 1, 2]);
     let imported = conversion::m2::import(&source, &ImportOptions::default()).unwrap();
     assert!(imported.value.opaque.is_empty());
-    let raw = imported.value.document.raw();
-    assert!(raw.sections().any(|(_, s)| s.tag() == *b"NODE"));
-    assert!(raw.sections().any(|(_, s)| s.tag() == *b"PSHP"));
+    let model = imported.value.model(&ExportOptions::default()).unwrap();
+    assert_eq!(
+        model
+            .features()
+            .filter(|(_, f)| matches!(
+                f.payload,
+                mp::ActorKind::Attachment(_)
+                    | mp::ActorKind::Light(_)
+                    | mp::ActorKind::Ribbon(_)
+                    | mp::ActorKind::Particle(_)
+                    | mp::ActorKind::Camera(_)
+                    | mp::ActorKind::Event(_)
+            ))
+            .count(),
+        3
+    );
+    assert!(model
+        .systems()
+        .any(|(_, system)| matches!(system, mp::System::Collision(_))));
     let exported =
         conversion::m2::plan::<m2::Flat<m2::V256>>(&imported.value, &ExportOptions::default())
             .unwrap()
@@ -348,20 +403,17 @@ fn lights_particles_ribbons_and_collision_use_active_wem_records() {
 }
 #[test]
 fn native_material_edits_affect_rebuilt_output() {
-    use wc3::model::wem::{self, records as wr};
-    let imported = conversion::m2::import(&native_triangle(), &ImportOptions::default()).unwrap();
-    let mut asset = imported.value;
-    let mut raw = asset.document.into_raw();
-    let native_id = raw.sections().find(|(_, s)| s.tag() == *b"NM2_").unwrap().0;
-    let mut native = raw
-        .array::<wr::M2Material>(native_id)
+    let source = native_triangle();
+    let mut asset = conversion::m2::import(&source, &ImportOptions::default())
         .unwrap()
-        .get(0)
-        .unwrap()
+        .value;
+    let (id, material) = asset.models[0].materials().next().unwrap();
+    let mut surface = material.surface.clone();
+    surface.shader = 42;
+    asset
+        .models
+        .edit_model(0, |draft| draft.set_material_surface(id, surface))
         .unwrap();
-    native.shader_id = 42;
-    raw.replace(native_id, &[native]).unwrap();
-    asset.document = wem::Document::from_raw(raw).unwrap();
     let output = conversion::m2::plan::<m2::Flat<m2::V256>>(&asset, &ExportOptions::default())
         .unwrap()
         .execute()
@@ -426,7 +478,6 @@ fn native_physics_shapes_and_body_offsets_are_editable() {
         PhysicsBody4, PhysicsBox, PhysicsChunk, PhysicsFile, PhysicsFrame, PhysicsShape,
         PhysicsShape2,
     };
-    use wc3::model::wem::{self, records as wr};
     let mut source = native_triangle();
     source.model.core_mut().flags.set_external_physics(true);
     let file = PhysicsFile {
@@ -472,22 +523,24 @@ fn native_physics_shapes_and_body_offsets_are_editable() {
     let mut asset = conversion::m2::import(&source, &ImportOptions::default())
         .unwrap()
         .value;
-    let mut raw = asset.document.into_raw();
-    let shape_id = raw
-        .sections()
-        .find(|(_, section)| section.tag() == *b"PSHP")
-        .unwrap()
-        .0;
-    let mut shape = raw
-        .array::<wr::PhysicsShape<wr::V2>>(shape_id)
-        .unwrap()
-        .get(0)
-        .unwrap()
+    let (system_id, system) = asset.models[0]
+        .systems()
+        .find(|(_, s)| matches!(s, mp::System::Physics(_)))
         .unwrap();
-    assert_eq!(shape.half_extents, [1., 2., 3.]);
-    shape.half_extents = [7., 8., 9.];
-    raw.replace(shape_id, &[shape]).unwrap();
-    asset.document = wem::Document::from_raw(raw).unwrap();
+    let mut system = system.clone();
+    let mp::System::Physics(physics) = &mut system else {
+        unreachable!()
+    };
+    let shape = &mut physics.bodies[0].shapes[0];
+    assert!(matches!(
+        shape.geometry,
+        mp::ShapeGeometry::Box([1., 2., 3.])
+    ));
+    shape.geometry = mp::ShapeGeometry::Box([7., 8., 9.]);
+    asset
+        .models
+        .edit_model(0, |draft| draft.set_system(system_id, system))
+        .unwrap();
     let output = conversion::m2::plan::<m2::Flat<m2::V256>>(&asset, &ExportOptions::default())
         .unwrap()
         .execute()
@@ -535,7 +588,6 @@ fn native_physics_shapes_and_body_offsets_are_editable() {
 #[test]
 fn sparse_bone_overrides_use_editable_pose_matrices() {
     use wc3::model::m2::companions::{BoneFile, BoneMatrix};
-    use wc3::model::wem::{self, records as wr};
     let mut model = native_triangle().model.into_chunked();
     model
         .insert_extension(
@@ -560,22 +612,24 @@ fn sparse_bone_overrides_use_editable_pose_matrices() {
     let mut asset = conversion::m2::import(&source, &ImportOptions::default())
         .unwrap()
         .value;
-    let mut raw = asset.document.into_raw();
-    let id = raw
-        .sections()
-        .find(|(_, section)| section.tag() == *b"MTX4")
-        .unwrap()
-        .0;
-    let mut matrix = raw
-        .array::<wr::Matrix44>(id)
-        .unwrap()
-        .get(0)
-        .unwrap()
+    let (system_id, system) = asset.models[0]
+        .systems()
+        .find(|(_, s)| matches!(s, mp::System::BoneOverrides(_)))
         .unwrap();
-    assert_eq!(matrix.value[3][0], 3.);
-    matrix.value[3][0] = 9.;
-    raw.replace(id, &[matrix]).unwrap();
-    asset.document = wem::Document::from_raw(raw).unwrap();
+    let mut system = system.clone();
+    let mp::System::BoneOverrides(overrides) = &mut system else {
+        unreachable!()
+    };
+    let matrices = &mut overrides[0].transforms;
+    assert!(matrices.is_borrowed());
+    let mut matrix = matrices.get(0).unwrap();
+    assert_eq!(matrix[3][0], 3.);
+    matrix[3][0] = 9.;
+    *matrices = sm::Values::owned(vec![matrix]);
+    asset
+        .models
+        .edit_model(0, |draft| draft.set_system(system_id, system))
+        .unwrap();
     let output = conversion::m2::plan::<m2::Chunked<m2::V256>>(&asset, &ExportOptions::default())
         .unwrap()
         .execute()
@@ -614,14 +668,11 @@ fn packed_particle_gravity_is_a_direction_and_rejects_malformed_words() {
         .unwrap()
         .value;
     let semantic = asset.model(&ExportOptions::default()).unwrap();
-    let track = semantic.clips[0]
-        .tracks
-        .iter()
-        .find(|track| matches!(track.target, sm::Target::Property { channel: 1004, .. }))
-        .unwrap();
-    assert!(track.keys[0].value[0] > 1.);
-    assert_eq!(track.keys[0].value[1], 0.);
-    assert!(track.keys[0].value[2] > 4.);
+    let sm::Channel::Vector3(track)=semantic.shared_channels().iter().find(|c|matches!(c,sm::Channel::Vector3(t)if matches!(t.target.target(),sm::PropertyTarget::Named{name,..}if name=="m2.particle.gravity"))).unwrap() else{panic!("gravity channel lost")};
+    let gravity = track.curve.values().get(0).unwrap();
+    assert!(gravity[0] > 1.);
+    assert_eq!(gravity[1], 0.);
+    assert!(gravity[2] > 4.);
     let options = ExportOptions {
         approximation: ApproximationPolicy::Allow { tolerance: 0.00001 },
         ..Default::default()
@@ -635,27 +686,37 @@ fn packed_particle_gravity_is_a_direction_and_rejects_malformed_words() {
         LegacyValues::Values(values) => assert_eq!(values.get(0), Some(word)),
         _ => panic!("unexpected spline"),
     }
+    drop(asset);
     source.model.core_mut().particles[0].gravity = constant(u32::from_le_bytes([127, 127, 100, 0]));
     assert!(conversion::m2::import(&source, &ImportOptions::default()).is_err());
 }
 
 #[test]
 fn static_node_transforms_become_constant_native_curves() {
-    let imported = conversion::m2::import(&native_triangle(), &ImportOptions::default())
+    let source = native_triangle();
+    let mut asset = conversion::m2::import(&source, &ImportOptions::default())
         .unwrap()
         .value;
-    let mut semantic = imported.model(&ExportOptions::default()).unwrap();
-    semantic.nodes[0].translation = [2., 3., 4.];
-    let asset = Asset::new(wc3::model::wem::semantic::build(&semantic).unwrap());
+    let id = asset.models[0]
+        .nodes()
+        .find(|(_, node)| node.controls.is_some())
+        .unwrap()
+        .0;
+    let mut node = asset.models[0].node(id).unwrap().clone();
+    node.transform.translation = [2., 3., 4.];
+    asset
+        .models
+        .edit_model(0, |draft| draft.set_node(id, node))
+        .unwrap();
     let output = conversion::m2::plan::<m2::Flat<m2::V256>>(&asset, &ExportOptions::default())
         .unwrap()
         .execute()
         .unwrap()
         .value;
-    match &output.model.core().bones[0].translation.values {
-        LegacyValues::Values(values) => assert_eq!(values.get(0), Some([2., 3., 4.])),
-        _ => panic!("unexpected spline"),
-    }
+    let LegacyValues::Values(values) = &output.model.core().bones[0].translation.values else {
+        panic!("unexpected spline")
+    };
+    assert_eq!(values.get(0), Some([2., 3., 4.]));
     assert_ne!(
         output.model.core().bones[0]
             .translation
@@ -675,40 +736,66 @@ fn local_effect_transforms_drive_the_effects_emitted_bone() {
         position: [1., 2., 3.],
         ..Default::default()
     });
-    let imported = conversion::m2::import(&source, &ImportOptions::default())
+    let mut asset = conversion::m2::import(&source, &ImportOptions::default())
         .unwrap()
         .value;
-    let mut semantic = imported.model(&ExportOptions::default()).unwrap();
-    semantic.nodes[1].translation = [5., 0., 0.];
-    let asset = Asset::new(wc3::model::wem::semantic::build(&semantic).unwrap());
+    let node = asset.models[0]
+        .features()
+        .find(|(_, f)| matches!(f.payload, mp::ActorKind::Light(_)))
+        .unwrap()
+        .1
+        .node;
+    asset
+        .models
+        .edit_model(0, |draft| {
+            let clock = draft.add_clock(sm::SharedClock {
+                period: sm::Time::seconds(1.)?,
+            })?;
+            let curve = sm::Curve::new(
+                sm::Values::owned(vec![sm::Time::default()]),
+                sm::Values::owned(vec![[5., 0., 0.]]),
+                sm::Interpolation::Step,
+            )?;
+            draft.add_shared_channel(sm::Channel::Vector3(sm::Track {
+                target: node.translation(),
+                curve,
+                clock: sm::Clock::Shared(clock),
+            }))
+        })
+        .unwrap();
     let output = conversion::m2::plan::<m2::Flat<m2::V256>>(&asset, &ExportOptions::default())
         .unwrap()
         .execute()
         .unwrap()
         .value;
     assert_eq!(output.model.core().lights[0].bone_id, 1);
-    match &output.model.core().bones[1].translation.values {
-        LegacyValues::Values(values) => assert_eq!(values.get(0), Some([5., 0., 0.])),
-        _ => panic!("unexpected spline"),
-    }
+    let LegacyValues::Values(values) = &output.model.core().bones[1].translation.values else {
+        panic!("unexpected spline")
+    };
+    assert_eq!(values.get(0), Some([5., 0., 0.]));
     output.encode().unwrap();
 }
 
 #[test]
 fn unknown_native_blend_does_not_collide_with_common_transparency() {
-    use wc3::model::wem::{self, records::BlendMode as WemBlendMode};
     let mut source = native_triangle();
     source.model.core_mut().materials = ZeroVec::alloc_from_slice(&[Material {
         flags: MaterialFlags::default(),
         blending_mode: BlendMode::Unknown(8),
     }]);
-    let imported = conversion::m2::import(&source, &ImportOptions::default())
+    let mut asset = conversion::m2::import(&source, &ImportOptions::default())
         .unwrap()
         .value;
-    let semantic = imported.model(&ExportOptions::default()).unwrap();
-    assert_eq!(semantic.materials[0].blend, WemBlendMode::Opaque);
-    let edited = Asset::new(wem::semantic::build(&semantic).unwrap());
-    let output = conversion::m2::plan::<m2::Flat<m2::V256>>(&edited, &ExportOptions::default())
+    let surface = &asset.models[0].materials().next().unwrap().1.surface;
+    assert!(surface.blend == mp::values::BlendMode::Unknown(8));
+    let id = asset.models[0].nodes().next().unwrap().0;
+    let mut node = asset.models[0].node(id).unwrap().clone();
+    node.name = Cow::Borrowed("edited");
+    asset
+        .models
+        .edit_model(0, |draft| draft.set_node(id, node))
+        .unwrap();
+    let output = conversion::m2::plan::<m2::Flat<m2::V256>>(&asset, &ExportOptions::default())
         .unwrap()
         .execute()
         .unwrap()
@@ -746,4 +833,63 @@ fn legacy_particle_shape_and_head_tail_controls_survive_conversion() {
         output.model.core().particles[0].texture_scale.head_or_tail,
         ParticleHeadTail::Both
     );
+}
+
+#[test]
+fn texture_options_keep_unknown_bits_and_reject_unencoded_interpretations() {
+    let mut source = native_triangle();
+    source.model.core_mut().textures[0].flags = TextureFlags::from_bits_retain(0x8000_0001);
+    let mut asset = conversion::m2::import(&source, &ImportOptions::default())
+        .unwrap()
+        .value;
+    let id = asset.resources().textures().next().unwrap().0;
+    let texture = asset.resources().texture(id).unwrap();
+    assert_eq!(texture.controls.flags.bits(), 0x8000_0000);
+    assert_eq!(texture.color_space, sm::ColorSpace::Unspecified);
+    let native = conversion::m2::plan::<m2::Flat<m2::V256>>(&asset, &ExportOptions::default())
+        .unwrap()
+        .execute()
+        .unwrap()
+        .value;
+    assert_eq!(native.model.core().textures[0].flags.bits(), 0x8000_0001);
+    let original = texture.sampler;
+    assert!(asset
+        .edit_resources(|draft| {
+            let mut value = draft.texture(id).unwrap().clone();
+            value.sampler.u = sm::AddressMode::Mirror;
+            draft.set_texture(id, value)
+        })
+        .is_err());
+    assert_eq!(asset.resources().texture(id).unwrap().sampler, original);
+    assert!(asset
+        .edit_resources(|draft| {
+            let mut value = draft.texture(id).unwrap().clone();
+            value.color_space = sm::ColorSpace::Srgb;
+            draft.set_texture(id, value)
+        })
+        .is_err());
+}
+
+#[test]
+fn replacement_texture_retains_its_separately_declared_filename() {
+    let mut source = native_triangle();
+    source.model.core_mut().textures[0].kind = TextureSource::Unknown(0x1234);
+    let asset = conversion::m2::import(&source, &ImportOptions::default())
+        .unwrap()
+        .value;
+    let texture = asset.resources().textures().next().unwrap().1;
+    assert_eq!(texture.resource, sm::Resource::Replaceable(0x1234));
+    assert!(matches!(texture.controls.path, Some(Cow::Borrowed(_))));
+    assert_eq!(
+        texture.controls.path.as_deref(),
+        Some(b"textures/checker.blp".as_slice())
+    );
+    let native = conversion::m2::plan::<m2::Flat<m2::V256>>(&asset, &ExportOptions::default())
+        .unwrap()
+        .execute()
+        .unwrap()
+        .value;
+    let texture = &native.model.core().textures[0];
+    assert_eq!(texture.kind, TextureSource::Unknown(0x1234));
+    assert_eq!(texture.filename.as_bytes(), b"textures/checker.blp\0");
 }

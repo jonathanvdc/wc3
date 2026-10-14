@@ -257,6 +257,16 @@ impl<'data, V: ModelVersion> Material<'data, V> {
         }
         Ok(self.shader.text().expect("supported version"))
     }
+    /// Borrows the lossless fixed shader name in layouts containing a shader path.
+    pub fn try_shader_field(&self) -> Result<&FixedText<80>, ValueError> {
+        self.shader
+            .fixed_text()
+            .ok_or(ValueError::UnsupportedField {
+                tag: *b"MTLS",
+                field: "shader",
+                actual: V::NUMBER,
+            })
+    }
     /// Changes the shader path and clears unused bytes.
     pub fn try_set_shader(&mut self, shader: &str) -> Result<(), ValueError> {
         if !matches!(V::NUMBER, 900 | 1000) {

@@ -242,9 +242,9 @@ impl Record for AnimationState {
 pub struct BoneAnimationSet {
     /// Behavior bits for this bone animation set.
     pub flags: BoneSetFlags,
-    /// SEQS index selected as the primary sequence for this bone animation set.
+    /// Primary animation selector; the relationship to SEQS or other declarations is unresolved.
     pub animation_sequence_index: u16,
-    /// SEQS index used as the fallback for this bone animation set.
+    /// Fallback animation selector in the same unresolved namespace.
     pub fallback_sequence_index: u16,
     /// CHAR link naming this bone animation set.
     pub name: Ref<targets::Character>,

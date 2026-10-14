@@ -24,9 +24,6 @@ pub use document::{Dialect, Document, Options, RawDocument, Section, SectionId, 
 mod io;
 pub use io::{from_reader, from_reader_with_options, raw_from_reader, to_writer};
 
-/// Semantic model access and authoring helpers.
-pub mod semantic;
-
 /// Derives exact scalar enum wire-code conversions.
 pub use wc3_derive::WemValue as Value;
 

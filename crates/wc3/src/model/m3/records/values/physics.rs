@@ -212,24 +212,6 @@ impl From<RigidBodyFlags> for u32 {
 }
 
 bitfield! {
-    /// Native TriangleFlags bit mask.
-    #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Hash, m3::Read, m3::Write, m3::RecordLayout, m3::Validate, m3::VisitReferences)]
-    pub struct TriangleFlags(u16);
-    /// Returns the complete stored bit mask.
-    pub bits, _: 15, 0;
-}
-impl From<u16> for TriangleFlags {
-    fn from(value: u16) -> Self {
-        Self(value)
-    }
-}
-impl From<TriangleFlags> for u16 {
-    fn from(value: TriangleFlags) -> Self {
-        value.bits()
-    }
-}
-
-bitfield! {
     /// Native ConstraintFlags control mask; every unknown bit is preserved.
     #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Hash, m3::Read, m3::Write, m3::RecordLayout, m3::Validate, m3::VisitReferences)]
     pub struct ConstraintFlags(u32);

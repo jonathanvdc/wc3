@@ -488,6 +488,16 @@ impl<'data, V: ModelVersion> Light<'data, V> {
                 actual: V::NUMBER,
             })
     }
+    /// Borrows authored shadow-casting distances without cloning their animation arrays.
+    pub fn try_shadow_casting_range_ref(&self) -> Result<&LightShadowRange<'data>, ValueError> {
+        self.shadow_range
+            .shadow_casting_range()
+            .ok_or(ValueError::UnsupportedVersion {
+                tag: LightsChunk::<V>::TAG,
+                minimum: 1300,
+                actual: V::NUMBER,
+            })
+    }
     /// Sets shadow-casting start and end, available from version 1300.
     pub fn try_set_shadow_casting_range(
         &mut self,
@@ -506,6 +516,10 @@ impl<'data, V: ModelVersion> Light<'data, V> {
     /// Returns the falloff values used by the game, including older-version defaults.
     pub fn falloff(&self) -> LightFalloff<'data> {
         self.falloff.falloff().cloned().unwrap_or_default()
+    }
+    /// Borrows explicitly stored attenuation coefficients; older layouts have implicit defaults.
+    pub fn authored_falloff(&self) -> Option<&LightFalloff<'data>> {
+        self.falloff.falloff()
     }
     /// Sets the three serialized falloff fields from version 1600 onward.
     pub fn try_set_falloff(&mut self, falloff: LightFalloff<'data>) -> Result<(), ValueError> {

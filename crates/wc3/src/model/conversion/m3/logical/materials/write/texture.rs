@@ -1,0 +1,52 @@
+//! Layer encoding preserves authored UV, video, color, and fresnel controls.
+use super::{native_anim, native_color, nr, surface, Envelope, Error, Writer};
+pub(super) fn encode<E: Envelope>(
+    r: &surface::TextureLayer,
+    writer: &mut Writer<'_, '_, '_, '_, E>,
+) -> Result<nr::TextureLayer<nr::V25>, Error> {
+    let path = match r.texture {
+        Some(id) => writer.texture(id)?,
+        None => "",
+    };
+    Ok(nr::TextureLayer {
+        id: r.id,
+        texture_path: writer.string(path)?,
+        color: native_color(&r.color, writer)?,
+        flags: nr::LayerFlags(r.flags.bits()),
+        uv_mapping: nr::UvMappingMode::from_raw(r.uv_mapping.raw()),
+        color_type: nr::ColorChannel::from_raw(r.color_type.raw()),
+        rgb_multiply: native_anim(&r.rgb_multiply, writer.animation_ids),
+        rgb_add: native_anim(&r.rgb_add, writer.animation_ids),
+        poc_texture: r.poc_texture,
+        noise_amplitude: r.noise_amplitude,
+        noise_frequency: r.noise_frequency,
+        texture_source: r.texture_source,
+        avi_frame_rate: r.avi_frame_rate,
+        avi_start: r.avi_start,
+        avi_stop: r.avi_stop,
+        avi_loop: r.avi_loop,
+        avi_sync: r.avi_sync,
+        avi_play: native_anim(&r.avi_play, writer.animation_ids),
+        avi_restart: native_anim(&r.avi_restart, writer.animation_ids),
+        flipbook_rows: r.flipbook_rows,
+        flipbook_columns: r.flipbook_columns,
+        current_frame: native_anim(&r.current_frame, writer.animation_ids),
+        uv_offset: native_anim(&r.uv_offset, writer.animation_ids),
+        uv_angle: native_anim(&r.uv_angle, writer.animation_ids),
+        uv_tiling: native_anim(&r.uv_tiling, writer.animation_ids),
+        w_offset: native_anim(&r.w_offset, writer.animation_ids),
+        w_tiling: native_anim(&r.w_tiling, writer.animation_ids),
+        map_alpha: native_anim(&r.map_alpha, writer.animation_ids),
+        triplanar_offset: native_anim(&r.triplanar_offset, writer.animation_ids),
+        triplanar_scale: native_anim(&r.triplanar_scale, writer.animation_ids),
+        uv_source_related: r.uv_source_related,
+        fresnel_mode: nr::FresnelMode::from_raw(r.fresnel_mode.raw()),
+        fresnel_exponent: r.fresnel_exponent,
+        fresnel_min: r.fresnel_min,
+        fresnel_max: r.fresnel_max,
+        fresnel_translation: r.fresnel_translation,
+        fresnel_mask: r.fresnel_mask,
+        fresnel_rotation: r.fresnel_rotation,
+        uv_density: r.uv_density,
+    })
+}

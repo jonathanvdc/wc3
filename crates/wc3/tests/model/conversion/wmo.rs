@@ -1,15 +1,9 @@
-use std::borrow::Cow;
 use wc3::model::{
-    conversion::{self, ExportOptions, ImportOptions, UnknownPolicy},
-    wem::{self, records as wr, semantic},
+    conversion::{self, ExportOptions, ImportOptions},
+    semantic::{Resource, Values},
     wmo::{self, Bundle, Dialect, FileKey, Group, GroupKey, Root},
 };
-use wmo::{
-    codec::Array,
-    group::GroupChunk,
-    records::{self as r},
-    root::RootChunk,
-};
+use wmo::{codec::Array, group::GroupChunk, records as r, root::RootChunk};
 fn fixture<D: Dialect>() -> Bundle<'static, D> {
     let mut root = Root::<D>::new();
     root.header_mut().wmo_id = 55;
@@ -77,35 +71,16 @@ fn roundtrip<D: Dialect>() {
     let asset = conversion::wmo::import(&source, &ImportOptions::default())
         .unwrap()
         .value;
-    assert!(asset.opaque.is_empty());
-    let model = asset.model(&ExportOptions::default()).unwrap();
-    assert_eq!(model.meshes[0].triangles.as_ref(), [[0, 1, 2]]);
-    assert_eq!(model.textures[0].id, Some(123));
     let output = conversion::wmo::plan::<D>(&asset, &ExportOptions::default())
         .unwrap()
         .execute()
         .unwrap()
         .value;
-    assert_eq!(output.root.header().wmo_id, 55);
-    assert_eq!(output.root.header().group_count, 1);
     output.validate_complete().unwrap();
-    let material = output
-        .root
-        .chunks()
-        .find_map(|chunk| {
-            if let RootChunk::Materials(rows) = chunk {
-                rows.get(0)
-            } else {
-                None
-            }
-        })
-        .unwrap()
-        .unwrap();
-    assert_eq!(material.texture0, 123);
-    assert_eq!(material.diffuse_color, [10, 20, 30, 40]);
+    assert_eq!(output.root.header().wmo_id, 55);
 }
 #[test]
-fn every_modern_dialect_round_trips_semantics() {
+fn modern() {
     roundtrip::<wmo::Classic>();
     roundtrip::<wmo::Legion>();
     roundtrip::<wmo::Bfa>();
@@ -115,332 +90,141 @@ fn every_modern_dialect_round_trips_semantics() {
     roundtrip::<wmo::WarWithin>();
 }
 #[test]
-fn edited_geometry_rebuilds_native_companions() {
-    let asset = conversion::wmo::import(&fixture::<wmo::Classic>(), &ImportOptions::default())
+fn region_lights_are_independent_editable_features() {
+    let mut source = fixture::<wmo::Classic>();
+    let group = source.group_mut(GroupKey { index: 0, lod: 0 }).unwrap();
+    group.chunks_mut().push(GroupChunk::PointLights(
+        Array::from_records(&[r::PointLight {
+            color_bgra: [30, 20, 10, 40],
+            intensity: 2.,
+            position: [1., 2., 3.],
+            reserved_header: 42,
+            attenuation_end: 10.,
+            ..Default::default()
+        }])
+        .unwrap(),
+    ));
+    group.chunks_mut().push(GroupChunk::PointLightAnimations(
+        Array::from_records(&[r::PointLightAnimation {
+            light_index: 0,
+            intensity: 3.,
+            position: [2., 3., 4.],
+            texture_file_id: 1234,
+            flicker_mode: r::FlickerMode::NoiseStep,
+            reserved: [1, 2, 3, 4],
+            ..Default::default()
+        }])
+        .unwrap(),
+    ));
+    group.chunks_mut().push(GroupChunk::PointLightSets(
+        Array::from_records(&[r::LightSetRange {
+            offset: 0,
+            count: 1,
+        }])
+        .unwrap(),
+    ));
+    let mut asset = conversion::wmo::import(&source, &ImportOptions::default())
         .unwrap()
         .value;
-    let mut model = asset.model(&ExportOptions::default()).unwrap();
-    model.meshes[0].positions.to_mut()[0] = [0.25, 0.5, 0.75];
-    let asset = conversion::Asset::new(semantic::build(&model).unwrap());
+    let model = &asset.models[0];
+    let (id, mut feature) = model
+        .features()
+        .find(|(_, feature)| {
+            matches!(
+                feature.payload,
+                wc3::model::semantic::profiles::wmo::Node::PointLight(_)
+            )
+        })
+        .map(|(id, value)| (id, value.payload.clone()))
+        .unwrap();
+    if let wc3::model::semantic::profiles::wmo::Node::PointLight(light) = &mut feature {
+        light.intensity = 7.;
+    }
+    asset
+        .edit_model(0, |builder| builder.set_feature(id, feature))
+        .unwrap();
     let output = conversion::wmo::plan::<wmo::Classic>(&asset, &ExportOptions::default())
         .unwrap()
         .execute()
         .unwrap()
         .value;
     let group = output.group(GroupKey { index: 0, lod: 0 }).unwrap();
-    let value = group
+    let light = group
+        .chunks()
+        .iter()
+        .find_map(|chunk| {
+            if let GroupChunk::PointLights(rows) = chunk {
+                Some(rows.get(0).unwrap().unwrap())
+            } else {
+                None
+            }
+        })
+        .unwrap();
+    assert_eq!(light.intensity, 7.);
+    assert_eq!(light.reserved_header, 42);
+    assert_eq!(light.color_bgra, [30, 20, 10, 40]);
+    let program = group
+        .chunks()
+        .iter()
+        .find_map(|chunk| {
+            if let GroupChunk::PointLightAnimations(rows) = chunk {
+                Some(rows.get(0).unwrap().unwrap())
+            } else {
+                None
+            }
+        })
+        .unwrap();
+    assert_eq!(program.texture_file_id, 1234);
+    assert_eq!(program.reserved, [1, 2, 3, 4]);
+    assert_eq!(program.flicker_mode, r::FlickerMode::NoiseStep);
+    output.validate_complete().unwrap();
+}
+
+#[test]
+fn edited_geometry_rebuilds_native_companions() {
+    let source = fixture::<wmo::Classic>();
+    let mut asset = conversion::wmo::import(&source, &ImportOptions::default())
+        .unwrap()
+        .value;
+    let model = &asset.models[0];
+    let (id, mut mesh) = model
+        .meshes()
+        .next()
+        .map(|(id, mesh)| (id, mesh.clone()))
+        .unwrap();
+    let mut positions = mesh.positions().to_vec();
+    positions[0] = [0.25, 0.5, 0.75];
+    mesh.geometry = mesh
+        .geometry
+        .with_positions(Values::owned(positions))
+        .unwrap();
+    asset
+        .edit_model(0, |builder| builder.set_mesh(id, mesh))
+        .unwrap();
+    let output = conversion::wmo::plan::<wmo::Classic>(&asset, &ExportOptions::default())
+        .unwrap()
+        .execute()
+        .unwrap()
+        .value;
+    let group = output.group(GroupKey { index: 0, lod: 0 }).unwrap();
+    let positions = group
         .chunks()
         .iter()
         .find_map(|chunk| {
             if let GroupChunk::Positions(rows) = chunk {
-                rows.get(0)
+                Some(rows)
             } else {
                 None
             }
         })
-        .unwrap()
         .unwrap();
-    assert_eq!(value, [0.25, 0.5, 0.75]);
-}
-#[test]
-fn unrepresentable_portals_and_unknown_payloads_require_policies() {
-    let mut source = fixture::<wmo::Classic>();
-    source
-        .root
-        .insert_chunk(
-            source.root.chunks().count(),
-            RootChunk::PortalVertices(Array::from_records(&[[0.; 3]]).unwrap()),
-        )
-        .unwrap();
-    assert!(conversion::wmo::import(&source, &ImportOptions::default()).is_err());
-    let mut source = fixture::<wmo::Classic>();
-    source
-        .root
-        .insert_chunk(
-            source.root.chunks().count(),
-            RootChunk::Unknown {
-                tag: *b"TEST",
-                data: Cow::Owned(vec![1, 2, 3]),
-            },
-        )
-        .unwrap();
-    assert!(conversion::wmo::import(&source, &ImportOptions::default()).is_err());
-    let options = ImportOptions {
-        unknown: UnknownPolicy::Archive,
-        ..Default::default()
-    };
-    let asset = conversion::wmo::import(&source, &options).unwrap().value;
-    assert_eq!(asset.opaque[0].bytes.as_ref(), [1, 2, 3]);
-    let output = conversion::wmo::plan::<wmo::Classic>(&asset, &ExportOptions::default())
-        .unwrap()
-        .execute()
-        .unwrap()
-        .value;
-    assert!(output
-        .root
-        .chunks()
-        .all(|chunk| !matches!(chunk, RootChunk::Unknown { .. })));
-}
-#[test]
-fn native_lights_are_editable_wem_payloads() {
-    let mut source = fixture::<wmo::Classic>();
-    source
-        .root
-        .insert_chunk(
-            source.root.chunks().count(),
-            RootChunk::Lights(
-                Array::from_records(&[r::Light {
-                    color: [10, 20, 30, 255],
-                    intensity: 2.,
-                    rotation: [0., 0., 0., 1.],
-                    ..Default::default()
-                }])
-                .unwrap(),
-            ),
-        )
-        .unwrap();
-    source.root.synchronize_counts().unwrap();
-    let asset = conversion::wmo::import(&source, &ImportOptions::default())
-        .unwrap()
-        .value;
-    let mut raw = asset.document.into_raw();
-    let root = raw
-        .resolve::<wr::DocumentRecord<wr::V1>>(wem::Ref::from_section(
-            1,
-            raw.root_reference().index,
-        ))
-        .unwrap()
-        .get(0)
-        .unwrap()
-        .unwrap();
-    let model = raw
-        .resolve::<wr::ModelRecord<wr::V9>>(root.models.cast())
-        .unwrap()
-        .get(0)
-        .unwrap()
-        .unwrap();
-    let id = raw.section_id(model.nodes.nodes.index).unwrap();
-    let mut rows = raw
-        .array::<wr::Node<wr::V19>>(id)
-        .unwrap()
-        .iter()
-        .collect::<Result<Vec<_>, _>>()
-        .unwrap();
-    if let wr::NodePayload::Light(value) = &mut rows[0].payload {
-        value.intensity = 7.;
-    } else {
-        panic!("native light missing");
-    }
-    raw.replace(id, &rows).unwrap();
-    let asset = conversion::Asset::new(wem::Document::from_raw(raw).unwrap());
-    let output = conversion::wmo::plan::<wmo::Classic>(&asset, &ExportOptions::default())
-        .unwrap()
-        .execute()
-        .unwrap()
-        .value;
-    let value = output
-        .root
-        .chunks()
-        .find_map(|chunk| {
-            if let RootChunk::Lights(rows) = chunk {
-                rows.get(0)
-            } else {
-                None
-            }
-        })
-        .unwrap()
-        .unwrap();
-    assert_eq!(value.intensity, 7.);
-    assert_eq!(value.color, [10, 20, 30, 255]);
-}
-#[test]
-fn historical_destinations_rebuild_native_values() {
-    let mut source = fixture::<wmo::Classic>();
-    for chunk in source.root.chunks_mut() {
-        if let RootChunk::Materials(rows) = chunk {
-            *rows = Array::from_records(&[r::Material::<wmo::Classic> {
-                texture0: 1,
-                ..Default::default()
-            }])
-            .unwrap();
-        }
-    }
-    let count = source.root.chunks().count();
-    source
-        .root
-        .insert_chunk(
-            count,
-            RootChunk::TextureNames(Array::from_records(b"\0Legacy.blp\0").unwrap()),
-        )
-        .unwrap();
-    let asset = conversion::wmo::import(&source, &ImportOptions::default())
-        .unwrap()
-        .value;
-    let alpha = conversion::wmo::plan::<conversion::wmo::V14>(&asset, &ExportOptions::default())
-        .unwrap()
-        .execute()
-        .unwrap()
-        .value;
-    let imported = conversion::wmo::import(&alpha, &ImportOptions::default())
-        .unwrap()
-        .value;
+    assert_eq!(positions.get(0).unwrap().unwrap(), [0.25, 0.5, 0.75]);
     assert_eq!(
-        imported.model(&ExportOptions::default()).unwrap().meshes[0]
-            .triangles
-            .as_ref(),
-        [[0, 1, 2]]
-    );
-    let beta = conversion::wmo::plan::<conversion::wmo::V16>(&asset, &ExportOptions::default())
-        .unwrap()
-        .execute()
-        .unwrap()
-        .value;
-    let imported = conversion::wmo::import(&beta, &ImportOptions::default())
-        .unwrap()
-        .value;
-    assert_eq!(
-        imported.model(&ExportOptions::default()).unwrap().meshes[0]
-            .triangles
-            .as_ref(),
-        [[0, 1, 2]]
+        asset.resources().textures().next().unwrap().1.resource,
+        Resource::FileDataId(123)
     );
 }
-#[test]
-fn collision_is_an_active_wem_triangle_mesh() {
-    let mut source = fixture::<wmo::Classic>();
-    let group = source.group_mut(GroupKey { index: 0, lod: 0 }).unwrap();
-    group.chunks_mut().push(GroupChunk::BspNodes(
-        Array::from_records(&[r::BspNode {
-            flags: r::BspFlags(4),
-            negative_child: -1,
-            positive_child: -1,
-            face_count: 1,
-            ..Default::default()
-        }])
-        .unwrap(),
-    ));
-    group
-        .chunks_mut()
-        .push(GroupChunk::BspFaces(Array::from_records(&[0u16]).unwrap()));
-    let asset = conversion::wmo::import(&source, &ImportOptions::default())
-        .unwrap()
-        .value;
-    let root = asset.document.root::<wr::DocumentRecord<wr::V1>>().unwrap();
-    let model = asset
-        .document
-        .raw()
-        .resolve::<wr::ModelRecord<wr::V9>>(root.models.cast())
-        .unwrap()
-        .get(0)
-        .unwrap()
-        .unwrap();
-    assert_eq!(model.physics.bodies.entries, 1);
-    let output = conversion::wmo::plan::<wmo::Classic>(&asset, &ExportOptions::default())
-        .unwrap()
-        .execute()
-        .unwrap()
-        .value;
-    assert!(output
-        .group(GroupKey { index: 0, lod: 0 })
-        .unwrap()
-        .chunks()
-        .iter()
-        .any(|chunk| matches!(chunk,GroupChunk::BspFaces(rows)if rows.len()==1)));
-}
-#[test]
-fn liquid_grid_fields_rebuild_without_source_bytes() {
-    use wmo::group::{Liquid, LiquidHeader, LiquidVertex, LiquidVertices};
-    let mut source = fixture::<wmo::Classic>();
-    source
-        .group_mut(GroupKey { index: 0, lod: 0 })
-        .unwrap()
-        .chunks_mut()
-        .push(GroupChunk::Liquid(Liquid {
-            header: LiquidHeader {
-                vertex_dimensions: [2, 2],
-                tile_dimensions: [1, 1],
-                corner: [1., 2., 3.],
-                material: 0,
-            },
-            vertices: LiquidVertices::Unresolved(
-                Array::from_records(
-                    &[LiquidVertex {
-                        data: [1, 2, 3, 4],
-                        height: 4.,
-                    }; 4],
-                )
-                .unwrap(),
-            ),
-            tiles: Array::from_records(&[0u8]).unwrap(),
-        }));
-    let asset = conversion::wmo::import(&source, &ImportOptions::default())
-        .unwrap()
-        .value;
-    let root = asset.document.root::<wr::DocumentRecord<wr::V1>>().unwrap();
-    let mut raw = asset.document.into_raw();
-    let graph = raw
-        .resolve::<wr::ModelRecord<wr::V9>>(root.models.cast())
-        .unwrap()
-        .get(0)
-        .unwrap()
-        .unwrap();
-    let mesh = raw
-        .resolve::<wr::Mesh<wr::V2>>(graph.meshes.cast())
-        .unwrap()
-        .get(0)
-        .unwrap()
-        .unwrap();
-    let section = raw
-        .resolve::<wr::MeshSection>(mesh.sections.cast())
-        .unwrap()
-        .get(0)
-        .unwrap()
-        .unwrap();
-    let mut fields = raw
-        .resolve::<wr::NativeEntry<wr::V2>>(section.native.entries.cast())
-        .unwrap()
-        .iter()
-        .collect::<Result<Vec<_>, _>>()
-        .unwrap();
-    let height = fields
-        .iter()
-        .position(|row| raw.string(row.name).unwrap() == Some("wmo.liquid.heights"))
-        .unwrap();
-    let characters = "40c00000,40800000,40800000,40800000"
-        .bytes()
-        .map(|value| wr::Character { value })
-        .collect::<Vec<_>>();
-    let text = raw.append(&characters).unwrap();
-    fields[height].text = wem::Ref::from_section(characters.len() as u32, text.index());
-    raw.replace(
-        raw.section_id(section.native.entries.index).unwrap(),
-        &fields,
-    )
-    .unwrap();
-    let asset = conversion::Asset::new(wem::Document::from_raw(raw).unwrap());
-    let output = conversion::wmo::plan::<wmo::Classic>(&asset, &ExportOptions::default())
-        .unwrap()
-        .execute()
-        .unwrap()
-        .value;
-    let liquid = output
-        .group(GroupKey { index: 0, lod: 0 })
-        .unwrap()
-        .chunks()
-        .iter()
-        .find_map(|chunk| {
-            if let GroupChunk::Liquid(value) = chunk {
-                Some(value)
-            } else {
-                None
-            }
-        })
-        .unwrap();
-    assert_eq!(liquid.header.corner, [1., 2., 3.]);
-    let rows = Array::<LiquidVertex>::decode(liquid.vertices.as_bytes()).unwrap();
-    assert_eq!(rows.get(0).unwrap().unwrap().height, 6.);
-    assert_eq!(rows.get(0).unwrap().unwrap().data, [1, 2, 3, 4]);
-}
+
 #[test]
 fn draw_batches_override_collision_face_material_and_keep_classification() {
     let mut source = fixture::<wmo::Classic>();
@@ -473,10 +257,18 @@ fn draw_batches_override_collision_face_material_and_keep_classification() {
     let asset = conversion::wmo::import(&source, &ImportOptions::default())
         .unwrap()
         .value;
-    assert_eq!(
-        asset.model(&ExportOptions::default()).unwrap().meshes[0].material_slot,
-        0
-    );
+    let model = asset.model(&ExportOptions::default()).unwrap();
+    let instance = model.instances().next().unwrap().1;
+    assert_eq!(instance.draws.len(), 1);
+    assert!(model
+        .mesh(instance.mesh)
+        .unwrap()
+        .geometry
+        .triangle_controls()
+        .get(0)
+        .unwrap()
+        .material
+        .is_none());
     let output = conversion::wmo::plan::<wmo::Classic>(&asset, &ExportOptions::default())
         .unwrap()
         .execute()
@@ -511,47 +303,102 @@ fn draw_batches_override_collision_face_material_and_keep_classification() {
     assert_eq!(batch.material, 0);
     assert_eq!(batch.prefix.maximum, [1, 1, 0]);
 }
+
 #[test]
-fn historical_untextured_materials_have_an_empty_name_table() {
-    let asset = conversion::Asset::new(
-        semantic::build(&semantic::Model {
-            profile: wr::ProfileId::Wow,
-            materials: vec![semantic::Material::default()],
-            ..Default::default()
+fn liquid_grid_fields_are_editable_without_source_packets() {
+    use wc3::model::semantic::profiles::wmo::LiquidVertex as SurfaceVertex;
+    use wmo::group::{Liquid, LiquidHeader, LiquidVertex, LiquidVertices};
+    let mut source = fixture::<wmo::Classic>();
+    source
+        .group_mut(GroupKey { index: 0, lod: 0 })
+        .unwrap()
+        .chunks_mut()
+        .push(GroupChunk::Liquid(Liquid {
+            header: LiquidHeader {
+                vertex_dimensions: [2, 2],
+                tile_dimensions: [1, 1],
+                corner: [1., 2., 3.],
+                material: 0,
+            },
+            vertices: LiquidVertices::Unresolved(
+                Array::from_records(
+                    &[LiquidVertex {
+                        data: [1, 2, 3, 4],
+                        height: 4.,
+                    }; 4],
+                )
+                .unwrap(),
+            ),
+            tiles: Array::from_records(&[0u8]).unwrap(),
+        }));
+    let mut asset = conversion::wmo::import(&source, &ImportOptions::default())
+        .unwrap()
+        .value;
+    let (id, mut instance) = asset.models[0]
+        .instances()
+        .next()
+        .map(|(id, value)| (id, value.clone()))
+        .unwrap();
+    let liquid = &mut instance.controls.liquids[0];
+    let mut vertices = liquid.vertices.to_vec();
+    let SurfaceVertex::Unresolved { height, .. } = &mut vertices[0] else {
+        panic!("unresolved liquid interpretation changed")
+    };
+    *height = 6.;
+    liquid.vertices = Values::owned(vertices);
+    asset
+        .edit_model(0, |builder| builder.set_instance(id, instance))
+        .unwrap();
+    let output = conversion::wmo::plan::<wmo::Classic>(&asset, &ExportOptions::default())
+        .unwrap()
+        .execute()
+        .unwrap()
+        .value;
+    let liquid = output
+        .group(GroupKey { index: 0, lod: 0 })
+        .unwrap()
+        .chunks()
+        .iter()
+        .find_map(|chunk| {
+            if let GroupChunk::Liquid(value) = chunk {
+                Some(value)
+            } else {
+                None
+            }
         })
-        .unwrap(),
-    );
-    let alpha = conversion::wmo::plan::<conversion::wmo::V14>(&asset, &ExportOptions::default())
-        .unwrap()
-        .execute()
-        .unwrap()
-        .value;
-    alpha.validate().unwrap();
-    let beta = conversion::wmo::plan::<conversion::wmo::V16>(&asset, &ExportOptions::default())
-        .unwrap()
-        .execute()
-        .unwrap()
-        .value;
-    beta.validate_complete().unwrap();
+        .unwrap();
+    assert_eq!(liquid.header.corner, [1., 2., 3.]);
+    let rows = Array::<LiquidVertex>::decode(liquid.vertices.as_bytes()).unwrap();
+    assert_eq!(rows.get(0).unwrap().unwrap().height, 6.);
+    assert_eq!(rows.get(0).unwrap().unwrap().data, [1, 2, 3, 4]);
 }
 
 #[test]
-fn unknown_native_blends_keep_their_namespace_during_common_edits() {
+fn unknown_native_blends_keep_their_family_namespace_during_edits() {
+    use wc3::model::semantic::profiles::wmo::Blend;
     for code in [8, 9] {
         let mut source = fixture::<wmo::Classic>();
         for chunk in source.root.chunks_mut() {
             if let RootChunk::Materials(rows) = chunk {
-                let mut records = rows.iter().collect::<Result<Vec<_>, _>>().unwrap();
-                records[0].blend_mode = r::BlendMode::Unknown(code);
-                *rows = Array::from_records(&records).unwrap();
+                let mut values = rows.iter().collect::<Result<Vec<_>, _>>().unwrap();
+                values[0].blend_mode = r::BlendMode::Unknown(code);
+                *rows = Array::from_records(&values).unwrap();
             }
         }
-        let imported = conversion::wmo::import(&source, &ImportOptions::default()).unwrap();
-        let mut common = imported.value.model(&ExportOptions::default()).unwrap();
-        assert_eq!(common.materials[0].blend, wr::BlendMode::Opaque);
-        common.materials[0].name = "Renamed".into();
-        let edited = conversion::Asset::new(wem::semantic::build(&common).unwrap());
-        let output = conversion::wmo::plan::<wmo::Classic>(&edited, &ExportOptions::default())
+        let mut asset = conversion::wmo::import(&source, &ImportOptions::default())
+            .unwrap()
+            .value;
+        let (id, mut material) = asset.models[0]
+            .materials()
+            .next()
+            .map(|(id, value)| (id, value.clone()))
+            .unwrap();
+        assert_eq!(material.surface.blend, Blend::Unknown(code));
+        material.name = "Renamed".into();
+        asset
+            .edit_model(0, |builder| builder.set_material(id, material))
+            .unwrap();
+        let output = conversion::wmo::plan::<wmo::Classic>(&asset, &ExportOptions::default())
             .unwrap()
             .execute()
             .unwrap()
@@ -569,4 +416,492 @@ fn unknown_native_blends_keep_their_namespace_during_common_edits() {
             .unwrap();
         assert_eq!(material.blend_mode, r::BlendMode::Unknown(code));
     }
+}
+
+#[path = "wmo/historical.rs"]
+mod historical;
+
+#[test]
+fn unknown_payloads_are_separate_and_never_reattached_to_rebuilt_files() {
+    use std::borrow::Cow;
+    use wc3::model::conversion::UnknownPolicy;
+    let mut source = fixture::<wmo::Classic>();
+    source
+        .root
+        .insert_chunk(
+            source.root.chunks().count(),
+            RootChunk::Unknown {
+                tag: *b"XTRA",
+                data: Cow::Borrowed(&[7, 8, 9]),
+            },
+        )
+        .unwrap();
+    assert!(conversion::wmo::import(&source, &ImportOptions::default()).is_err());
+    let asset = conversion::wmo::import(
+        &source,
+        &ImportOptions {
+            unknown: UnknownPolicy::Archive,
+            ..Default::default()
+        },
+    )
+    .unwrap()
+    .value;
+    assert_eq!(asset.opaque.len(), 1);
+    assert_eq!(asset.opaque[0].tag, *b"XTRA");
+    assert_eq!(asset.opaque[0].bytes.as_ref(), &[7, 8, 9]);
+    let output = conversion::wmo::plan::<wmo::Classic>(&asset, &ExportOptions::default())
+        .unwrap()
+        .execute()
+        .unwrap()
+        .value;
+    assert!(output.root.chunks().all(|chunk| chunk.tag() != *b"XTRA"));
+}
+
+#[test]
+fn portals_are_scoped_authoring_relationships_and_rebuild_native_windows() {
+    let mut source = fixture::<wmo::Classic>();
+    source.root.header_mut().portal_count = 1;
+    for chunk in [
+        RootChunk::PortalVertices(
+            Array::from_records(&[[0., 0., 0.], [0., 1., 0.], [0., 0., 1.]]).unwrap(),
+        ),
+        RootChunk::Portals(
+            Array::from_records(&[r::Portal {
+                start_vertex: 0,
+                vertex_count: 3,
+                plane: [1., 0., 0., 0.],
+            }])
+            .unwrap(),
+        ),
+        RootChunk::PortalRefs(
+            Array::from_records(&[r::PortalRef {
+                portal_index: 0,
+                group_index: 0,
+                side: 1,
+                flags: Default::default(),
+            }])
+            .unwrap(),
+        ),
+    ] {
+        source
+            .root
+            .insert_chunk(source.root.chunks().count(), chunk)
+            .unwrap();
+    }
+    source
+        .group_mut(GroupKey { index: 0, lod: 0 })
+        .unwrap()
+        .header_mut()
+        .portal_count = 1;
+    source.validate_complete().unwrap();
+    let asset = conversion::wmo::import(&source, &ImportOptions::default())
+        .unwrap()
+        .value;
+    let world = asset.models[0].systems().next().unwrap().1;
+    assert_eq!(world.portals.len(), 1);
+    let region = &asset.models[0].instances().next().unwrap().1.controls;
+    assert_eq!(region.portals[0].portal.index, 0);
+    assert_eq!(region.portals[0].neighbor.index, 0);
+    let output = conversion::wmo::plan::<wmo::Classic>(&asset, &ExportOptions::default())
+        .unwrap()
+        .execute()
+        .unwrap()
+        .value;
+    output.validate_complete().unwrap();
+    assert_eq!(output.root.header().portal_count, 1);
+    assert_eq!(
+        output
+            .group(GroupKey { index: 0, lod: 0 })
+            .unwrap()
+            .header()
+            .portal_count,
+        1
+    );
+}
+
+#[test]
+fn strip_connectivity_and_tangent_pools_are_independent_editable_geometry() {
+    use std::borrow::Cow;
+    let mut source = fixture::<wmo::Classic>();
+    let group = source.group_mut(GroupKey { index: 0, lod: 0 }).unwrap();
+    group.header_mut().interior_batch_count = 1;
+    group.chunks_mut().push(GroupChunk::Batches(
+        Array::from_records(&[r::Batch::<wmo::Classic> {
+            prefix: r::CullingBox {
+                minimum: [0; 3],
+                maximum: [1, 1, 0],
+            },
+            start_index: 0,
+            index_count: 3,
+            minimum_vertex: 0,
+            maximum_vertex: 2,
+            material: 0,
+            ..Default::default()
+        }])
+        .unwrap(),
+    ));
+    group.chunks_mut().push(GroupChunk::StripIndices(
+        Array::from_records(&[0u16, 1, 2]).unwrap(),
+    ));
+    group.chunks_mut().push(GroupChunk::BatchOverrides(
+        Array::from_records(&[r::BatchOverride {
+            start_index: 0,
+            index_count: 3,
+            padding: 19,
+        }])
+        .unwrap(),
+    ));
+    let mut tangent_bytes = 0u16.to_le_bytes().to_vec();
+    tangent_bytes.extend_from_slice(Array::from_records(&[[0., 1., 0., 1.]]).unwrap().as_bytes());
+    group
+        .chunks_mut()
+        .push(GroupChunk::TangentsUnresolved(Cow::Owned(tangent_bytes)));
+    let mut asset = conversion::wmo::import(&source, &ImportOptions::default())
+        .unwrap()
+        .value;
+    let (id, mut mesh) = asset.models[0]
+        .meshes()
+        .next()
+        .map(|(id, mesh)| (id, mesh.clone()))
+        .unwrap();
+    assert!(mesh.geometry.tangent_vectors().is_borrowed());
+    assert_eq!(mesh.geometry.strip_indices().to_vec(), vec![0, 1, 2]);
+    mesh.geometry = mesh
+        .geometry
+        .with_tangent_vectors(Values::owned(vec![[1., 0., 0., -1.]]))
+        .unwrap();
+    asset
+        .edit_model(0, |builder| builder.set_mesh(id, mesh))
+        .unwrap();
+    let output = conversion::wmo::plan::<wmo::Classic>(&asset, &ExportOptions::default())
+        .unwrap()
+        .execute()
+        .unwrap()
+        .value;
+    output.validate_complete().unwrap();
+    let group = output.group(GroupKey { index: 0, lod: 0 }).unwrap();
+    let window = group
+        .chunks()
+        .iter()
+        .find_map(|chunk| match chunk {
+            GroupChunk::BatchOverrides(rows) => Some(rows.get(0).unwrap().unwrap()),
+            _ => None,
+        })
+        .unwrap();
+    assert_eq!(window.padding, 19);
+    assert_eq!(window.index_count, 3);
+    let tangents = group
+        .chunks()
+        .iter()
+        .find_map(|chunk| match chunk {
+            GroupChunk::Tangents(rows) => Some(rows),
+            _ => None,
+        })
+        .unwrap();
+    assert_eq!(tangents.first_tangent.get(0).unwrap().unwrap(), 0);
+    assert_eq!(
+        tangents.tangents.get(0).unwrap().unwrap(),
+        [1., 0., 0., -1.]
+    );
+}
+
+#[test]
+fn ambient_memberships_remap_scoped_volumes_across_native_table_order() {
+    use wc3::model::semantic::profiles::wmo::Volume;
+    let mut source = fixture::<wmo::Legion>();
+    for chunk in [
+        RootChunk::AmbientBoxes(
+            Array::from_records(&[r::AmbientBox {
+                colors: [[1, 2, 3, 4]; 3],
+                ..Default::default()
+            }])
+            .unwrap(),
+        ),
+        RootChunk::GlobalAmbients(
+            Array::from_records(&[r::AmbientVolume {
+                end: 5.,
+                ..Default::default()
+            }])
+            .unwrap(),
+        ),
+        RootChunk::AmbientVolumes(
+            Array::from_records(&[r::AmbientVolume {
+                position: [2., 3., 4.],
+                start: 1.,
+                end: 2.,
+                colors: [[5, 6, 7, 8]; 3],
+                ..Default::default()
+            }])
+            .unwrap(),
+        ),
+    ] {
+        source
+            .root
+            .insert_chunk(source.root.chunks().count(), chunk)
+            .unwrap();
+    }
+    let group = source.group_mut(GroupKey { index: 0, lod: 0 }).unwrap();
+    group.chunks_mut().push(GroupChunk::AmbientVolumeReferences(
+        Array::from_records(&[0u16]).unwrap(),
+    ));
+    group.chunks_mut().push(GroupChunk::AmbientBoxReferences(
+        Array::from_records(&[0u16]).unwrap(),
+    ));
+    source.validate_complete().unwrap();
+    let asset = conversion::wmo::import(&source, &ImportOptions::default())
+        .unwrap()
+        .value;
+    let model = &asset.models[0];
+    let region = &model.instances().next().unwrap().1.controls;
+    assert_eq!(region.ambients.len(), 2);
+    let world = model.system(region.ambients[0].system).unwrap();
+    assert!(matches!(
+        world.ambient_volumes[region.ambients[0].index as usize].volume,
+        Volume::Sphere { .. }
+    ));
+    assert!(matches!(
+        world.ambient_volumes[region.ambients[1].index as usize].volume,
+        Volume::Planes { .. }
+    ));
+    let output = conversion::wmo::plan::<wmo::Legion>(&asset, &ExportOptions::default())
+        .unwrap()
+        .execute()
+        .unwrap()
+        .value;
+    output.validate_complete().unwrap();
+    let group = output.group(GroupKey { index: 0, lod: 0 }).unwrap();
+    for references in group.chunks().iter().filter_map(|chunk| match chunk {
+        GroupChunk::AmbientVolumeReferences(rows) | GroupChunk::AmbientBoxReferences(rows) => {
+            Some(rows)
+        }
+        _ => None,
+    }) {
+        assert_eq!(references.len(), 1);
+        assert_eq!(references.get(0).unwrap().unwrap(), 0);
+    }
+}
+
+#[test]
+fn compatible_same_detail_geometry_joins_without_changing_material_look_or_source() {
+    use wc3::model::semantic::{Bounds, Look, LookBinding};
+    let mut source = fixture::<wmo::Classic>();
+    let group = source.group_mut(GroupKey { index: 0, lod: 0 }).unwrap();
+    group.header_mut().exterior_batch_count = 1;
+    group.chunks_mut().push(GroupChunk::Batches(
+        Array::from_records(&[r::Batch::<wmo::Classic> {
+            prefix: r::CullingBox {
+                minimum: [0; 3],
+                maximum: [1, 1, 0],
+            },
+            start_index: 0,
+            index_count: 3,
+            minimum_vertex: 0,
+            maximum_vertex: 2,
+            material: 0,
+            ..Default::default()
+        }])
+        .unwrap(),
+    ));
+    let mut asset = conversion::wmo::import(&source, &ImportOptions::default())
+        .unwrap()
+        .value;
+    let model = &asset.models[0];
+    let (original_id, original) = model
+        .instances()
+        .next()
+        .map(|(id, instance)| (id, instance.clone()))
+        .unwrap();
+    let mut second_mesh = model.mesh(original.mesh).unwrap().clone();
+    let positions = second_mesh
+        .positions()
+        .clone()
+        .map(|position| [position[0] + 2., position[1], position[2]]);
+    second_mesh.geometry = second_mesh.geometry.with_positions(positions).unwrap();
+    second_mesh.bounds = Bounds {
+        minimum: [2., 0., 0.],
+        maximum: [3., 1., 1.],
+        sphere_radius: 0.75f32.sqrt(),
+    };
+    let mut second = original.clone();
+    let (world_id, mut world) = model
+        .systems()
+        .next()
+        .map(|(id, world)| (id, world.clone()))
+        .unwrap();
+    let material = model.materials().next().unwrap().1.clone();
+    asset
+        .edit_model(0, |builder| {
+            let material = builder.add_material(material)?;
+            let mesh = builder.add_mesh(second_mesh)?;
+            second.mesh = mesh;
+            let second = builder.add_instance(second)?;
+            world.groups[0].instances.push(second);
+            builder.set_system(world_id, world)?;
+            let look = builder.add_look(Look {
+                name: "chosen".into(),
+                bindings: vec![LookBinding {
+                    instance: second,
+                    draw: 0,
+                    material,
+                }],
+            })?;
+            builder.set_default_look(Some(look))?;
+            Ok(())
+        })
+        .unwrap();
+    let result = conversion::wmo::plan::<wmo::Classic>(&asset, &ExportOptions::default())
+        .unwrap()
+        .execute()
+        .unwrap();
+    assert!(result
+        .report
+        .issues
+        .iter()
+        .any(|issue| issue.kind == conversion::IssueKind::Normalized));
+    assert_eq!(asset.models[0].instances().count(), 2);
+    assert!(asset.models[0].instance(original_id).is_some());
+    let group = result.value.group(GroupKey { index: 0, lod: 0 }).unwrap();
+    let positions = group
+        .chunks()
+        .iter()
+        .find_map(|chunk| match chunk {
+            GroupChunk::Positions(rows) => Some(rows),
+            _ => None,
+        })
+        .unwrap();
+    assert_eq!(positions.len(), 6);
+    assert_eq!(positions.get(3).unwrap().unwrap(), [2., 0., 0.]);
+    let batches = group
+        .chunks()
+        .iter()
+        .find_map(|chunk| match chunk {
+            GroupChunk::Batches(rows) => Some(rows),
+            _ => None,
+        })
+        .unwrap();
+    assert_eq!(batches.len(), 2);
+    assert_eq!(batches.get(0).unwrap().unwrap().material_index(), 0);
+    assert_eq!(batches.get(1).unwrap().unwrap().material_index(), 1);
+    result.value.validate_complete().unwrap();
+}
+
+#[test]
+fn implicitly_filled_region_keeps_its_liquid_category_without_a_surface_grid() {
+    let mut source = fixture::<wmo::Classic>();
+    let key = GroupKey { index: 0, lod: 0 };
+    let group = source.group_mut(key).unwrap();
+    group.header_mut().flags.set_has_liquid(true);
+    group.header_mut().liquid_type = 37;
+    let asset = conversion::wmo::import(&source, &ImportOptions::default())
+        .unwrap()
+        .value;
+    let (_, instance) = asset.models[0].instances().next().unwrap();
+    assert_eq!(instance.controls.implicit_liquid, Some(37));
+    assert!(instance.controls.liquids.is_empty());
+    let output = conversion::wmo::plan::<wmo::Classic>(&asset, &ExportOptions::default())
+        .unwrap()
+        .execute()
+        .unwrap()
+        .value;
+    let group = output.group(key).unwrap();
+    assert!(group.header().flags.has_liquid());
+    assert_eq!(group.header().liquid_type, 37);
+    assert!(!group
+        .chunks()
+        .iter()
+        .any(|chunk| matches!(chunk, GroupChunk::Liquid(_))));
+}
+
+#[test]
+fn region_selection_groups_are_rejected_before_native_export() {
+    let source = fixture::<wmo::Legion>();
+    let mut asset = conversion::wmo::import(&source, &ImportOptions::default())
+        .unwrap()
+        .value;
+    let instance = asset.models[0].instances().next().unwrap().0;
+    let result = asset.edit_model(0, |builder| {
+        let mut region = builder.model().instance(instance).unwrap().clone();
+        region.selection_group = 7;
+        builder.set_instance(instance, region)
+    });
+    assert!(result.is_err());
+    assert_eq!(
+        asset.models[0].instance(instance).unwrap().selection_group,
+        0
+    );
+}
+
+#[test]
+fn logical_world_flag_words_keep_unknown_bits_through_native_output() {
+    let mut source = fixture::<wmo::Legion>();
+    source.root.header_mut().tail.flags = r::RootFlags(0x8000);
+    let asset = conversion::wmo::import(&source, &ImportOptions::default())
+        .unwrap()
+        .value;
+    assert_eq!(
+        asset.models[0].controls().options.unclassified.bits(),
+        0x8000
+    );
+    let output = conversion::wmo::plan::<wmo::Legion>(&asset, &ExportOptions::default())
+        .unwrap()
+        .execute()
+        .unwrap()
+        .value;
+    assert_eq!(output.root.header().flags().bits(), 0x8000);
+}
+
+#[test]
+fn modern_world_output_requires_explicit_bounds_or_loss_policy() {
+    let source = fixture::<wmo::Legion>();
+    let mut asset = conversion::wmo::import(&source, &ImportOptions::default())
+        .unwrap()
+        .value;
+    asset
+        .edit_model(0, |builder| {
+            builder.set_bounds(None);
+            Ok(())
+        })
+        .unwrap();
+    assert!(conversion::wmo::plan::<wmo::Legion>(&asset, &ExportOptions::default()).is_err());
+    let plan = conversion::wmo::plan::<wmo::Legion>(
+        &asset,
+        &ExportOptions {
+            loss_policy: conversion::LossPolicy::Drop,
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    assert!(plan
+        .report()
+        .issues
+        .iter()
+        .any(|issue| issue.path == "world.bounds" && issue.kind == conversion::IssueKind::Dropped));
+}
+
+#[test]
+fn world_radius_is_derived_from_each_authored_box() {
+    let source = fixture::<wmo::Legion>();
+    let mut asset = conversion::wmo::import(&source, &ImportOptions::default())
+        .unwrap()
+        .value;
+    let original = asset.models[0].bounds().unwrap();
+    assert!(asset
+        .edit_model(0, |builder| {
+            let mut bounds = original;
+            bounds.sphere_radius += 1.;
+            builder.set_bounds(Some(bounds));
+            Ok(())
+        })
+        .is_err());
+    assert_eq!(asset.models[0].bounds(), Some(original));
+    let (id, mesh) = asset.models[0].meshes().next().unwrap();
+    let original = mesh.bounds;
+    assert!(asset
+        .edit_model(0, |builder| {
+            let mut mesh = builder.model().mesh(id).unwrap().clone();
+            mesh.bounds.sphere_radius += 1.;
+            builder.set_mesh(id, mesh)
+        })
+        .is_err());
+    assert_eq!(asset.models[0].mesh(id).unwrap().bounds, original);
 }

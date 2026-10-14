@@ -29,6 +29,12 @@ operations and archive compression when your application needs them.
 | BLP0, BLP1, and BLP2 textures | Inspect and edit encoded containers; optionally decode pixels and encode images. |
 | MPQ v1–v4 archives | Index, extract, create, and edit archives; optionally decompress and compress entries. |
 
+Native model APIs describe encoded records and supporting documents. For
+independent authoring values, use [semantic model graphs](docs/semantic.md):
+typed vocabularies, graph relationships, shared resource ownership, and checked
+edits. The [conversion guide](docs/conversion.md) connects those graphs to native
+imports and export plans, with explicit representability policies.
+
 For Warcraft III model loading, animation, and rendering in Bevy, see the
 companion [`bevy-wc3`](../bevy-wc3/README.md) crate.
 
@@ -103,8 +109,7 @@ The core exposes native records and borrowed encoded arrays. Standalone
 supporting files; `Bundle` connects declared references through a caller-owned resolver and
 coordinates external animation offsets when writing. The [M2 guide](docs/m2.md)
 explains layout selection, ownership, complete bundle output, and preservation
-boundaries. Model conversions through WEM are described in the
-[conversion guide](docs/conversion.md). M2 rendering is not implemented.
+boundaries. M2 rendering is not implemented.
 
 World geometry uses `wc3::model::wmo::{Root, Group, Bundle}` with an explicit
 client profile, since WMO's version field does not identify every layout change.

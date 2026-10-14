@@ -1,69 +1,84 @@
-//! Editable world-model geometry, materials, environment nodes, and companion outputs.
-use super::{
-    Asset, Context, Conversion, Error, ExportOptions, Format, ImportOptions, IssueKind,
-    OpaquePayload, Plan, UnknownPolicy,
-};
-use crate::model::common::FileKey;
-use crate::model::wem::{self, records as wr, semantic as s, RawDocument, Ref};
-use crate::model::wmo::{self as native, Bundle, Dialect, Group, GroupKey, Root};
-use native::codec::{Array, Decoder};
-use native::group::{GroupChunk, LiquidVertex, LiquidVertices};
-use native::records::{self as nr, BatchMetadata, MaterialTailField};
-use native::root::RootChunk;
-use std::borrow::Cow;
-use std::collections::{BTreeMap, BTreeSet};
-use std::str::from_utf8;
-mod environment;
-mod export;
-mod geometry;
-mod import;
-mod liquids;
-mod materials;
-mod metadata;
-mod physics;
-fn failure(path: impl Into<String>, error: impl std::fmt::Display) -> Error {
-    Error::new(path, error.to_string())
+//! Direct codecs between world-model files and the typed world authoring vocabulary.
+use super::{Asset, Conversion, Error, ExportOptions, ImportOptions, Plan};
+use crate::model::semantic::profiles::Wmo;
+use crate::model::wmo::legacy::{Bundle16, Root14};
+use crate::model::wmo::{Bundle, Dialect};
+mod graph;
+
+/// Monolithic alpha world-model output layout.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct V14;
+/// Split early-beta world-model output layout.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct V16;
+/// A native source with resolved companion geometry.
+pub trait Source {
+    /// Borrows authored fields into a checked world model without an encoded intermediate.
+    fn import<'a>(&'a self, options: &ImportOptions) -> Result<Conversion<Asset<'a, Wmo>>, Error>;
 }
-fn collect<T: for<'data> native::Read<'data> + native::RecordLayout>(
-    array: &Array<'_, T>,
-    path: &str,
-) -> Result<Vec<T>, Error> {
-    array
-        .iter()
-        .map(|row| row.map_err(|error| failure(path, error)))
-        .collect()
-}
-fn array<T: native::Write + native::RecordLayout>(
-    records: &[T],
-) -> Result<Array<'static, T>, Error> {
-    Array::from_records(records).map_err(|error| failure("wmo.output", error))
-}
-fn bounds(value: [[f32; 3]; 2]) -> wr::Extent {
-    let center = [0, 1, 2].map(|i| (value[0][i] + value[1][i]) * 0.5);
-    let sphere_radius = (0..3)
-        .map(|i| (value[1][i] - center[i]).powi(2))
-        .sum::<f32>()
-        .sqrt();
-    wr::Extent {
-        minimum: value[0],
-        maximum: value[1],
-        sphere_radius,
+impl<D: Dialect> Source for Bundle<'_, D> {
+    fn import<'a>(&'a self, options: &ImportOptions) -> Result<Conversion<Asset<'a, Wmo>>, Error> {
+        graph::import(self, options)
     }
 }
-fn text(bytes: &[u8], offset: u32, path: &str) -> Result<String, Error> {
-    let value =
-        native::resources::string_at(bytes, offset).map_err(|error| failure(path, error))?;
-    Ok(from_utf8(value)
-        .map_err(|error| failure(path, error))?
-        .to_owned())
+impl Source for Root14<'_> {
+    fn import<'a>(&'a self, options: &ImportOptions) -> Result<Conversion<Asset<'a, Wmo>>, Error> {
+        graph::import_alpha(self, options)
+    }
 }
-fn root_chunk<D: Dialect>(
-    root: &mut Root<'static, D>,
-    chunk: RootChunk<'static, D>,
-) -> Result<(), Error> {
-    root.insert_chunk(root.chunks().count(), chunk)
-        .map_err(|error| failure("wmo.root", error))
+impl Source for Bundle16<'_> {
+    fn import<'a>(&'a self, options: &ImportOptions) -> Result<Conversion<Asset<'a, Wmo>>, Error> {
+        graph::import_beta(self, options)
+    }
 }
-
-mod legacy;
-pub use legacy::{import, plan, Destination, Source, V14, V16};
+/// A selected native output layout.
+pub trait Destination {
+    /// Inspectable native root and supporting documents.
+    type Output<'a>;
+    /// Constructs output records from typed world authoring data.
+    fn plan<'a>(
+        asset: &'a Asset<'_, Wmo>,
+        options: &ExportOptions,
+    ) -> Result<Plan<Self::Output<'a>>, Error>;
+}
+impl<D: Dialect> Destination for D {
+    type Output<'a> = Bundle<'a, D>;
+    fn plan<'a>(
+        asset: &'a Asset<'_, Wmo>,
+        options: &ExportOptions,
+    ) -> Result<Plan<Self::Output<'a>>, Error> {
+        graph::plan(asset, options)
+    }
+}
+impl Destination for V14 {
+    type Output<'a> = Root14<'a>;
+    fn plan<'a>(
+        asset: &'a Asset<'_, Wmo>,
+        options: &ExportOptions,
+    ) -> Result<Plan<Self::Output<'a>>, Error> {
+        graph::plan_alpha(asset, options)
+    }
+}
+impl Destination for V16 {
+    type Output<'a> = Bundle16<'a>;
+    fn plan<'a>(
+        asset: &'a Asset<'_, Wmo>,
+        options: &ExportOptions,
+    ) -> Result<Plan<Self::Output<'a>>, Error> {
+        graph::plan_beta(asset, options)
+    }
+}
+/// Imports a native source into its own family vocabulary.
+pub fn import<'a, S: Source>(
+    source: &'a S,
+    options: &ImportOptions,
+) -> Result<Conversion<Asset<'a, Wmo>>, Error> {
+    source.import(options)
+}
+/// Plans native output from its own family vocabulary.
+pub fn plan<'a, D: Destination>(
+    asset: &'a Asset<'_, Wmo>,
+    options: &ExportOptions,
+) -> Result<Plan<D::Output<'a>>, Error> {
+    D::plan(asset, options)
+}

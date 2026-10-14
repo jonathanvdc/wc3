@@ -77,3 +77,8 @@ impl From<wem::WriteError> for Error {
         Self::new("wem", error.to_string())
     }
 }
+impl From<super::super::semantic::Error> for Error {
+    fn from(error: super::super::semantic::Error) -> Self {
+        Self::new(error.path(), error.message())
+    }
+}

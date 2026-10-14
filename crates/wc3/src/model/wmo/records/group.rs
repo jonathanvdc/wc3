@@ -4,7 +4,7 @@ use crate::model::wmo::records::{
 };
 use crate::model::{common::Ownership, wmo};
 use std::fmt::Debug;
-use wmo::{Dialect, Read, RecordLayout, Validate, Write};
+use wmo::{Dialect, Read, RecordLayout, Validate, Write, WriteError};
 
 /// Dialect-selected fields in group headers and rendering batches.
 pub trait GroupLayout {
@@ -438,27 +438,96 @@ pub struct Plane {
 
 /// Common inspection of dialect-selected group links without changing their representation.
 pub trait HeaderTailMetadata {
+    /// Reads an unresolved standalone header control when this tail stores one.
+    fn control(&self) -> Option<u32>;
+    /// Replaces an unresolved standalone header control when this tail stores one.
+    fn set_control(&mut self, value: u32) -> bool;
+    /// Sets split-group relationships when the selected tail has those fields.
+    fn set_split_links(&mut self, parent_or_first_child: i16, next_child: i16) -> bool;
     /// Split parent/first-child and next-sibling indices, when the dialect defines them.
     fn split_links(&self) -> Option<(i16, i16)>;
 }
 impl HeaderTailMetadata for u32 {
+    fn control(&self) -> Option<u32> {
+        Some(*self)
+    }
+    fn set_control(&mut self, value: u32) -> bool {
+        *self = value;
+        true
+    }
+    fn set_split_links(&mut self, first: i16, next: i16) -> bool {
+        first == -1 && next == -1
+    }
     fn split_links(&self) -> Option<(i16, i16)> {
         None
     }
 }
 impl HeaderTailMetadata for SplitGroupLinks {
+    fn control(&self) -> Option<u32> {
+        None
+    }
+    fn set_control(&mut self, value: u32) -> bool {
+        value == 0
+    }
+    fn set_split_links(&mut self, first: i16, next: i16) -> bool {
+        self.parent_or_first_child = first;
+        self.next_child = next;
+        true
+    }
     fn split_links(&self) -> Option<(i16, i16)> {
         Some((self.parent_or_first_child, self.next_child))
     }
 }
 /// Access to draw ranges shared by both batch prefix layouts.
 pub trait BatchMetadata {
+    /// Initializes native selection fields, deriving structural extension flags.
+    fn set_selection(
+        &mut self,
+        flags: &mut BatchFlags,
+        material: u16,
+        vertices: (u32, u32),
+    ) -> Result<(), WriteError>;
+    /// Replaces authored culling bounds when this prefix supports them.
+    fn set_culling_bounds(&mut self, bounds: [[i16; 3]; 2]) -> bool;
+    /// Replaces individual unresolved supplemental words.
+    fn set_supplemental(&mut self, words: [u16; 5]);
+    /// Reads the historical rounded culling bounds when present in this prefix family.
+    fn culling_bounds(&self) -> Option<[[i16; 3]; 2]>;
+    /// Reads individual supplemental words whose authored interpretation is unresolved.
+    fn supplemental(&self) -> [u16; 5];
     /// Selects the active root material index from batch flags.
     fn material(&self, flags: BatchFlags, small: u8) -> u16;
     /// Reconstructs the first and last vertex indices from batch flags and low words.
     fn vertex_range(&self, flags: BatchFlags, minimum: u16, maximum: u16) -> (u32, u32);
 }
 impl BatchMetadata for CullingBox {
+    fn set_selection(
+        &mut self,
+        flags: &mut BatchFlags,
+        material: u16,
+        vertices: (u32, u32),
+    ) -> Result<(), WriteError> {
+        if material > 255 || vertices.0 > 65535 || vertices.1 > 65535 {
+            return Err(WriteError::invalid(
+                "batch selection exceeds historical prefix",
+            ));
+        }
+        flags.set_large_material(false);
+        flags.set_extended_vertices(false);
+        Ok(())
+    }
+    fn set_culling_bounds(&mut self, bounds: [[i16; 3]; 2]) -> bool {
+        self.minimum = bounds[0];
+        self.maximum = bounds[1];
+        true
+    }
+    fn set_supplemental(&mut self, _: [u16; 5]) {}
+    fn culling_bounds(&self) -> Option<[[i16; 3]; 2]> {
+        Some([self.minimum, self.maximum])
+    }
+    fn supplemental(&self) -> [u16; 5] {
+        [0; 5]
+    }
     fn material(&self, _: BatchFlags, small: u8) -> u16 {
         u16::from(small)
     }
@@ -467,6 +536,39 @@ impl BatchMetadata for CullingBox {
     }
 }
 impl BatchMetadata for LargeMaterialPrefix {
+    fn set_selection(
+        &mut self,
+        flags: &mut BatchFlags,
+        material: u16,
+        vertices: (u32, u32),
+    ) -> Result<(), WriteError> {
+        if vertices.0 > 0xffffff || vertices.1 > 0xffffff {
+            return Err(WriteError::invalid("batch vertices exceed extended prefix"));
+        }
+        self.material = material;
+        flags.set_large_material(material > 255);
+        flags.set_extended_vertices(vertices.0 > 65535 || vertices.1 > 65535);
+        if flags.extended_vertices() {
+            self.reserved[0] = (vertices.0 >> 16) as u8;
+            self.reserved[1] = (vertices.1 >> 16) as u8;
+        }
+        Ok(())
+    }
+    fn set_culling_bounds(&mut self, _: [[i16; 3]; 2]) -> bool {
+        false
+    }
+    fn set_supplemental(&mut self, words: [u16; 5]) {
+        for (pair, word) in self.reserved.as_chunks_mut::<2>().0.iter_mut().zip(words) {
+            pair.copy_from_slice(&word.to_le_bytes());
+        }
+    }
+    fn culling_bounds(&self) -> Option<[[i16; 3]; 2]> {
+        None
+    }
+    fn supplemental(&self) -> [u16; 5] {
+        [0, 2, 4, 6, 8]
+            .map(|offset| u16::from_le_bytes([self.reserved[offset], self.reserved[offset + 1]]))
+    }
     fn material(&self, flags: BatchFlags, small: u8) -> u16 {
         if flags.large_material() {
             self.material

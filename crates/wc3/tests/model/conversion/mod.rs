@@ -8,3 +8,13 @@ mod wmo;
 mod m3_cloth;
 
 mod projection;
+
+mod m3_graph;
+
+mod graph_assets;
+
+mod narrowing;
+
+mod m2_core;
+
+mod wem_collection;

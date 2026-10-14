@@ -1,11 +1,145 @@
 //! Curve restrictions shared by native clocks with bounded unsigned timestamps.
 use super::Error;
-use crate::model::wem::semantic::{Interpolation, Key, Target, Track};
+use crate::model::semantic::{Curve, CurveValue, Interpolation, Quaternion, Time, Track};
+
+#[derive(Clone)]
+struct Key {
+    time: f64,
+    value: Vec<f32>,
+    incoming: Option<Vec<f32>>,
+    outgoing: Option<Vec<f32>>,
+}
+#[derive(Clone)]
+struct RawTrack {
+    keys: Vec<Key>,
+    interpolation: Interpolation,
+    rotation: bool,
+}
+
+/// Floating-point channel components supported by exact curve restriction.
+pub trait FloatValue: CurveValue {
+    /// Whether component interpolation must honor quaternion rotation semantics.
+    const IS_ROTATION: bool = false;
+    /// Reads the scalar components in their authored order.
+    fn components(&self) -> Vec<f32>;
+    /// Reconstructs a value, checking component count and rotation constraints.
+    fn from_components(components: Vec<f32>) -> Result<Self, Error>;
+}
+impl FloatValue for f32 {
+    /// Reads the scalar components in their authored order.
+    fn components(&self) -> Vec<f32> {
+        vec![*self]
+    }
+    fn from_components(v: Vec<f32>) -> Result<Self, Error> {
+        if v.len() == 1 {
+            Ok(v[0])
+        } else {
+            Err(Error::new("curve", "scalar cardinality differs"))
+        }
+    }
+}
+impl<const N: usize> FloatValue for [f32; N] {
+    /// Reads the scalar components in their authored order.
+    fn components(&self) -> Vec<f32> {
+        self.to_vec()
+    }
+    fn from_components(v: Vec<f32>) -> Result<Self, Error> {
+        v.try_into()
+            .map_err(|_| Error::new("curve", "vector cardinality differs"))
+    }
+}
+impl FloatValue for Quaternion {
+    /// Whether component interpolation must honor quaternion rotation semantics.
+    const IS_ROTATION: bool = true;
+    /// Reads the scalar components in their authored order.
+    fn components(&self) -> Vec<f32> {
+        self.0.to_vec()
+    }
+    fn from_components(values: Vec<f32>) -> Result<Self, Error> {
+        Ok(Self(values.try_into().map_err(|_| {
+            Error::new("quaternion", "four components required")
+        })?))
+    }
+}
+/// Restricts a typed floating-point track without resampling its spline segments.
+pub fn crop<'a, T: FloatValue + 'a>(
+    track: &Track<'a, T>,
+    start: Time,
+    end: Time,
+) -> Result<Track<'a, T>, Error> {
+    if track.curve.interpolation() == Interpolation::Tcb {
+        return Err(Error::new(
+            "curve.tcb",
+            "exact restriction requires an established TCB tangent convention",
+        ));
+    }
+    let raw = RawTrack {
+        interpolation: track.curve.interpolation(),
+        rotation: T::IS_ROTATION,
+        keys: track
+            .curve
+            .times()
+            .iter()
+            .enumerate()
+            .map(|(i, t)| Key {
+                time: t.as_seconds(),
+                value: track
+                    .curve
+                    .values()
+                    .get(i)
+                    .expect("curve cardinality")
+                    .components(),
+                incoming: track
+                    .curve
+                    .incoming()
+                    .map(|v| v.get(i).expect("curve cardinality").components()),
+                outgoing: track
+                    .curve
+                    .outgoing()
+                    .map(|v| v.get(i).expect("curve cardinality").components()),
+            })
+            .collect(),
+    };
+    let restricted = crop_raw(&raw, start.as_seconds(), end.as_seconds())?;
+    let times = restricted
+        .keys
+        .iter()
+        .map(|k| Time::seconds(k.time))
+        .collect::<Result<Vec<_>, _>>()?;
+    let values = restricted
+        .keys
+        .iter()
+        .map(|k| T::from_components(k.value.clone()))
+        .collect::<Result<Vec<_>, _>>()?;
+    let curve = if matches!(
+        restricted.interpolation,
+        Interpolation::Hermite | Interpolation::Bezier
+    ) {
+        let incoming = restricted
+            .keys
+            .iter()
+            .map(|k| T::from_components(k.incoming.clone().expect("spline tangents")))
+            .collect::<Result<Vec<_>, _>>()?;
+        let outgoing = restricted
+            .keys
+            .iter()
+            .map(|k| T::from_components(k.outgoing.clone().expect("spline tangents")))
+            .collect::<Result<Vec<_>, _>>()?;
+        Curve::spline(times, values, incoming, outgoing, restricted.interpolation)?
+    } else {
+        Curve::new(times, values, restricted.interpolation)?
+    };
+    Ok(Track {
+        target: track.target.clone(),
+        curve,
+        clock: track.clock,
+    })
+}
 
 /// Restricts a floating-point track to a time interval without resampling splines.
 /// Hermite derivatives and Bezier control points are adjusted for each shortened
 /// segment. Linear rotation tracks retain spherical interpolation.
-pub fn crop(track: &Track, start: f32, end: f32) -> Result<Track, Error> {
+fn crop_raw(track: &RawTrack, start: f64, end: f64) -> Result<RawTrack, Error> {
     if !start.is_finite() || !end.is_finite() || start > end {
         return Err(Error::new("animation.window", "invalid crop interval"));
     }
@@ -69,11 +203,11 @@ pub fn crop(track: &Track, start: f32, end: f32) -> Result<Track, Error> {
             if a == b {
                 continue;
             }
-            let original = segment(track, f64::from(a) + (f64::from(b) - f64::from(a)) * 0.5);
+            let original = segment(track, a + (b - a) * 0.5);
             let (incoming, outgoing) = if let Some((left, right)) = original {
-                let duration = f64::from(right.time) - f64::from(left.time);
-                let u0 = (f64::from(a) - f64::from(left.time)) / duration;
-                let u1 = (f64::from(b) - f64::from(left.time)) / duration;
+                let duration = right.time - left.time;
+                let u0 = (a - left.time) / duration;
+                let u1 = (b - left.time) / duration;
                 let scale = u1 - u0;
                 let mut out = Vec::with_capacity(width);
                 let mut inc = Vec::with_capacity(width);
@@ -104,26 +238,30 @@ pub fn crop(track: &Track, start: f32, end: f32) -> Result<Track, Error> {
     }
     Ok(output)
 }
-fn segment(track: &Track, time: f64) -> Option<(&Key, &Key)> {
-    let end = track.keys.partition_point(|k| f64::from(k.time) <= time);
+fn segment(track: &RawTrack, time: f64) -> Option<(&Key, &Key)> {
+    let end = track.keys.partition_point(|k| k.time <= time);
     if end == 0 || end == track.keys.len() {
         return None;
     }
     Some((&track.keys[end - 1], &track.keys[end]))
 }
-fn sample(track: &Track, time: f32) -> Result<Vec<f32>, Error> {
-    let Some((a, b)) = segment(track, f64::from(time)) else {
+fn sample(track: &RawTrack, time: f64) -> Result<Vec<f32>, Error> {
+    let Some((a, b)) = segment(track, time) else {
         return Ok(if time < track.keys[0].time {
             track.keys[0].value.clone()
         } else {
             track.keys.last().unwrap().value.clone()
         });
     };
-    let u = (f64::from(time) - f64::from(a.time)) / (f64::from(b.time) - f64::from(a.time));
+    let u = (time - a.time) / (b.time - a.time);
     if track.interpolation == Interpolation::Step {
         return Ok(a.value.clone());
     }
-    if track.interpolation == Interpolation::Linear && matches!(track.target, Target::Rotation(_)) {
+    if matches!(
+        track.interpolation,
+        Interpolation::Linear | Interpolation::Slerp
+    ) && track.rotation
+    {
         return rotation(&a.value, &b.value, u);
     }
     Ok((0..a.value.len())

@@ -13,3 +13,6 @@ pub mod wmo;
 
 /// Explicit model conversion planning, policies, and native adapters.
 pub mod conversion;
+
+/// Checked logical model graphs with borrowed storage and typed relationships.
+pub mod semantic;

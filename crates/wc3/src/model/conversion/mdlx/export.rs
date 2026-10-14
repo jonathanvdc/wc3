@@ -1,509 +1,224 @@
-//! Typed Warcraft III export planning.
-use super::*;
-/// Plans a typed native model while enforcing loss and approximation policies.
-pub fn plan<T: ModelDialect + 'static>(
-    asset: &Asset,
+//! Native Warcraft III export planning over independent logical models.
+use super::encode_animation::{unsigned_frame, Encoder};
+use crate::model::conversion::{Asset, Context, Error, ExportOptions, Plan};
+use crate::model::mdlx::animation::Track;
+use crate::model::mdlx::mdx::FixedText;
+use crate::model::mdlx::scene::{Node as NativeNode, NodeFlags};
+use crate::model::mdlx::{
+    GeosetExtent, Model as NativeModel, ModelDialect, ModelInfo, Sequence, SequenceFlags, Texture,
+    TextureFlags,
+};
+use crate::model::semantic::profiles::Mdlx;
+use crate::model::semantic::{AddressMode, Billboard, NodeId, Quaternion, Resource};
+use std::collections::BTreeMap;
+
+pub(in crate::model::conversion::mdlx) fn write<'a, 'data, T: ModelDialect>(
+    asset: &'a Asset<'data, Mdlx>,
     options: &ExportOptions,
-) -> Result<Plan<native::Model<'static, T>>, Error>
-where
-    T::Extension: for<'input> mdx::Extension<'input>,
-{
+) -> Result<Plan<NativeModel<'a, T>>, Error> {
+    let model = asset.model(options)?;
     let mut context = Context::export(options);
-    let semantic = asset.model(options)?;
-    if semantic.unit_scale != 1. {
-        context.unsupported("unit_scale","native model has no global unit scale; numeric geometry, physics, and effect rescaling needs an explicit policy")?;
+    if model.systems().next().is_some() {
+        context.unsupported(
+            "model.systems",
+            "Warcraft III cannot encode the authored global system without semantic translation",
+        )?;
     }
-    if semantic.space != wr::CoordSpace::Blizzard {
-        context.issue(
-            "space",
-            IssueKind::Normalized,
-            "Authored numeric coordinates preserved; no basis transform applied",
-        );
+    let mut result = NativeModel::<T>::new();
+    let mut globals = BTreeMap::new();
+    let mut periods = Vec::new();
+    for (id, clock) in model.clocks() {
+        globals.insert(id, periods.len() as u32);
+        periods.push(unsigned_frame(
+            clock.period.as_seconds(),
+            &mut context,
+            "clock.period",
+        )?);
     }
-    for (clip_index, clip) in semantic.clips.iter().enumerate() {
-        for (index, layer) in clip
-            .tracks
-            .iter()
-            .map(|track| &track.layer)
-            .chain(clip.integer_tracks.iter().map(|track| match track {
-                s::IntegerTrack::Unsigned(track) | s::IntegerTrack::Unsigned4(track) => {
-                    &track.layer
-                }
-                s::IntegerTrack::Signed(track) => &track.layer,
-                s::IntegerTrack::Unsigned16(track) => &track.layer,
-                s::IntegerTrack::Bytes4(track) | s::IntegerTrack::Boolean(track) => &track.layer,
-            }))
-            .enumerate()
+    result.set_global_sequences(&periods);
+    let mut sequences = Vec::new();
+    let mut starts = BTreeMap::new();
+    for (id, clip) in model.clips() {
+        let metadata = &clip.controls;
+        let start = metadata.start.as_seconds();
+        let first = unsigned_frame(start, &mut context, "clip.start")?;
+        let last = unsigned_frame(
+            start + clip.duration().as_seconds(),
+            &mut context,
+            "clip.end",
+        )?;
+        let mut sequence = Sequence::new(clip.name(), [first, last])
+            .map_err(|error| Error::new("clip.name", error.to_string()))?;
+        sequence.flags.set_non_looping(!clip.is_looping());
         {
-            if layer.priority != 0 || layer.concurrent {
-                context.unsupported(format!("clips[{clip_index}].tracks[{index}].layer"),"MDLX has one timeline per channel and cannot express prioritized or concurrent controllers")?;
-            }
+            sequence.flags = SequenceFlags(metadata.unclassified.bits());
+            sequence.flags.set_non_looping(!clip.is_looping());
+            sequence.move_speed = metadata.move_speed;
+            sequence.rarity = metadata.rarity;
+            sequence.sync_point = metadata.sync_point;
+            sequence.extent = GeosetExtent {
+                minimum: metadata.bounds[0],
+                maximum: metadata.bounds[1],
+                bounds_radius: metadata.radius,
+            };
         }
-        for (track_index, track) in clip.tracks.iter().enumerate() {
-            if matches!(track.target, s::Target::NativeProperty { .. }) {
+        starts.insert(id, start);
+        sequences.push(sequence);
+    }
+    result.set_sequences(sequences);
+    let mut textures = Vec::new();
+    let mut texture_ids = BTreeMap::new();
+    for (id, source) in asset.resources().textures() {
+        texture_ids.insert(id, textures.len() as u32);
+        let metadata = &source.controls;
+        let path: &[u8] = match &source.resource {
+            Resource::Path(bytes) => bytes.as_ref(),
+            Resource::Replaceable(_) => metadata.fallback_path.as_ref(),
+            _ => {
                 context.unsupported(
-                    format!("clips[{clip_index}].tracks[{track_index}]"),
-                    "Native profile channel has no MDLX property mapping",
+                    "texture.resource",
+                    "Warcraft III textures require a filename or replaceable category",
                 )?;
+                &[]
             }
-        }
-    }
-
-    for (index, node) in semantic.nodes.iter().enumerate() {
-        if node.flags.hidden() {
-            context.unsupported(
-                format!("nodes[{index}].hidden"),
-                "MDLX does not store visibility on generic transform nodes",
-            )?;
-        }
-
-        if node.inverse_bind.is_some() {
-            context.unsupported(
-                format!("nodes[{index}].inverse_bind"),
-                "An arbitrary inverse bind matrix needs an explicit MDLX bind-pose convention",
-            )?;
-        }
-    }
-
-    let root = asset.document.root::<wr::DocumentRecord<wr::V1>>()?;
-    let raw = asset.document.raw();
-    let section = raw
-        .referenced_section(root.models)?
-        .ok_or_else(|| Error::new("model", "missing model section"))?;
-    macro_rules! check_physics {
-        ($v:ty) => {{
-            let graph = raw
-                .resolve::<wr::ModelRecord<$v>>(root.models.cast())?
-                .get(options.model as usize)
-                .transpose()?
-                .ok_or_else(|| Error::new("model", "missing selected model"))?;
-            if !graph.physics.bodies.is_empty()
-                || !graph.physics.joints.is_empty()
-                || !graph.physics.colliders.is_empty()
-                || !graph.physics.cloths.is_empty()
-                || !graph.physics.rigs.is_empty()
-            {
-                context.unsupported(
-                    "physics",
-                    "MDLX cannot express rigid simulations, constraints, or cloth authoring",
-                )?;
-            }
-        }};
-    }
-    match section.revision() {
-        8 => check_physics!(wr::V8),
-        9 => {
-            check_physics!(wr::V9);
-            let graph = raw
-                .resolve::<wr::ModelRecord<wr::V9>>(root.models.cast())?
-                .get(options.model as usize)
-                .transpose()?
-                .ok_or_else(|| Error::new("model", "missing selected model"))?;
-            if !graph.physics.soft.is_empty() {
-                context.unsupported("physics.soft", "MDLX cannot express soft-body simulation")?;
-            }
-        }
-        _ => {}
-    }
-    let (active_nodes, active_materials) = active_graph(asset, options)?;
-    let starts = clip_starts(&semantic, &mut context)?;
-    let mut baseline = native::Model::<T>::new();
-    let ids = native_ids(&active_nodes, asset.document.raw())?;
-    let mut updates = BTreeMap::new();
-    let mut globals = native_globals(asset, options)?;
-    for (index, node) in semantic.nodes.iter().enumerate() {
-        let mut native_node = native::Node::new(&node.name, ids[index])
-            .map_err(|error| failure(format!("nodes[{index}].name"), error))?;
-        native_node.parent_id = node
-            .parent
-            .map(|parent| {
-                ids.get(parent as usize).copied().ok_or_else(|| {
-                    Error::new(
-                        format!("nodes[{index}].parent"),
-                        "parent index out of bounds",
-                    )
-                })
-            })
-            .transpose()?
-            .unwrap_or(u32::MAX);
-        let values = metadata(asset.document.raw(), active_nodes[index].native.clone())?;
-        let original = values
-            .get("mdlx.node_flags")
-            .map_or(0, |(value, _)| *value as u32);
-        native_node.flags = native_flags(node.flags, original);
-        if node.translation != [0.; 3] {
-            native_node.translation = Some(Track::constant(node.translation));
-        }
-        if node.rotation != [0., 0., 0., 1.] {
-            native_node.rotation = Some(Track::constant(node.rotation));
-        }
-        if node.scale != [1.; 3] {
-            native_node.scaling = Some(Track::constant(node.scale));
-        }
-        let mut trans = None;
-        let mut rot = None;
-        let mut scale = None;
-        for (clip_index, clip) in semantic.clips.iter().enumerate() {
-            for (track_index, track) in clip.tracks.iter().enumerate() {
-                let path = format!("clips[{clip_index}].tracks[{track_index}]");
-                let start = starts[clip_index] as f32 / 1000.;
-                match track.target {
-                    s::Target::Translation(owner) if owner == index as u32 => {
-                        let value =
-                            native_track::<3>(track, start, &mut globals, &mut context, &path)?;
-                        merge_track(&mut trans, value, &path)?;
-                    }
-                    s::Target::Rotation(owner) if owner == index as u32 => {
-                        let value =
-                            native_track::<4>(track, start, &mut globals, &mut context, &path)?;
-                        merge_track(&mut rot, value, &path)?;
-                    }
-                    s::Target::Scale(owner) if owner == index as u32 => {
-                        let value =
-                            native_track::<3>(track, start, &mut globals, &mut context, &path)?;
-                        merge_track(&mut scale, value, &path)?;
-                    }
-                    _ => {}
-                }
-            }
-        }
-        native_node.translation = trans.or(native_node.translation);
-        native_node.rotation = rot.or(native_node.rotation);
-        native_node.scaling = scale.or(native_node.scaling);
-        updates.insert(ids[index], native_node);
-    }
-    patch_hierarchy(&mut baseline, &updates);
-    let existing: Vec<_> = baseline.nodes().iter().map(|node| node.object_id).collect();
-    let mut bones: Vec<_> = baseline.bones().cloned().collect();
-    let mut helpers: Vec<_> = baseline.helpers().cloned().collect();
-    for (index, node) in semantic.nodes.iter().enumerate() {
-        if !existing.contains(&ids[index]) {
-            let native_node = updates[&ids[index]].clone();
-            if node.bone {
-                bones.push(native::Bone::new(native_node, u32::MAX, u32::MAX));
-            } else {
-                helpers.push(native_node);
-            }
-        }
-    }
-    baseline.set_bones(bones);
-    baseline.set_helpers(helpers);
-    let max = ids
-        .iter()
-        .copied()
-        .max()
-        .map(|id| id as usize + 1)
-        .unwrap_or(0);
-    if max > 1_000_000 {
-        return Err(Error::new(
-            "nodes",
-            "sparse node identities exceed pivot allocation limit",
-        ));
-    }
-    let mut pivots = vec![[0.; 3]; max];
-    for (index, node) in semantic.nodes.iter().enumerate() {
-        pivots[ids[index] as usize] = node.pivot;
-    }
-    baseline.set_pivot_points(&pivots);
-    baseline.set_global_sequences(&globals);
-    let mut info = baseline.model_info().unwrap_or(
-        native::ModelInfo::new(&semantic.name).map_err(|error| failure("model.name", error))?,
-    );
-    info.name
-        .set_text(&semantic.name)
-        .map_err(|error| failure("model.name", error))?;
-    info.minimum_extent = semantic.bounds.minimum;
-    info.maximum_extent = semantic.bounds.maximum;
-    info.bounds_radius = semantic.bounds.sphere_radius;
-    baseline.set_model_info(&info);
-    let mut meshes = Vec::new();
-    for (index, mesh) in semantic.meshes.iter().enumerate() {
-        let path = format!("meshes[{index}]");
-        if mesh.positions.len() > 65536 {
+        };
+        if path.len() > 260 || path.contains(&0) {
             return Err(Error::new(
-                &path,
-                "MDLX geoset vertex count exceeds 16-bit index range",
+                "texture.path",
+                "resource path exceeds the native field or contains NUL",
             ));
         }
-        let normals = if mesh.normals.is_empty() {
-            context.issue(
-                format!("{path}.normals"),
-                IssueKind::Initialized,
-                "Missing normals initialized to zero",
-            );
-            vec![[0.; 3]; mesh.positions.len()]
-        } else {
-            mesh.normals.to_vec()
-        };
-        let faces = mesh
-            .triangles
-            .iter()
-            .flat_map(|face| face.iter())
-            .map(|index| {
-                u16::try_from(*index)
-                    .map_err(|_| Error::new(&path, "triangle index exceeds 16-bit range"))
-            })
-            .collect::<Result<Vec<_>, _>>()?;
-        let mut geoset = native::Geoset::<T::Version>::new(mesh.positions.to_vec(), normals, faces)
-            .map_err(|error| failure(&path, error))?;
-        geoset.material_id = mesh.material_slot;
-        geoset.selection_group = mesh.selection_group;
-        geoset.extent = native_extent(mesh.bounds.clone());
-        if let Err(error) = geoset.try_set_level_of_detail(mesh.lod) {
-            if mesh.lod != 0 {
-                context.unsupported(format!("{path}.lod"), error.to_string())?;
-            }
+        let mut value =
+            Texture::new("").map_err(|error| Error::new("texture.path", error.to_string()))?;
+        let mut field = [0u8; 260];
+        field[..path.len()].copy_from_slice(path);
+        value.path = FixedText::from_bytes(field);
+        if let Resource::Replaceable(category) = source.resource {
+            value.replaceable_id = category;
         }
-        if let Err(error) = geoset.try_set_name(&mesh.name) {
-            if !mesh.name.is_empty() {
-                context.unsupported(format!("{path}.name"), error.to_string())?;
-            }
-        }
-        if !mesh.uv_sets.is_empty() {
-            geoset.set_uv_sets(
-                mesh.uv_sets
-                    .iter()
-                    .map(|values| values.iter().copied().collect())
-                    .collect(),
-            );
-        }
-        if !mesh.tangents.is_empty() {
-            if let Err(error) =
-                geoset.try_set_tangents(Some(mesh.tangents.iter().copied().collect()))
-            {
-                context.unsupported(format!("{path}.tangents"), error.to_string())?;
-            }
-        }
-        if !mesh.colors.is_empty() {
+        value.flags = TextureFlags(metadata.unclassified.bits());
+        if !matches!(source.sampler.u, AddressMode::Repeat | AddressMode::Clamp)
+            || !matches!(source.sampler.v, AddressMode::Repeat | AddressMode::Clamp)
+        {
             context.unsupported(
-                format!("{path}.colors"),
-                "MDLX geometry has no vertex-color attribute",
+                "texture.sampler",
+                "Warcraft III texture addressing supports only repeat and clamp",
             )?;
         }
-        if !mesh.influences.is_empty() {
-            if mesh.influences.len() != mesh.positions.len() {
-                return Err(Error::new(
-                    format!("{path}.skin"),
-                    "influence count differs from vertex count",
-                ));
-            }
-            let mut groups = Vec::<Vec<u32>>::new();
-            let mut group_ids = Vec::new();
-            let mut weights = Vec::new();
-            let mut all_equal = true;
-            for (vertex, row) in mesh.influences.iter().enumerate() {
-                if row.len() > 4 {
-                    context.unsupported(
-                        format!("{path}.skin[{vertex}]"),
-                        "MDLX weighted skin supports four influences",
-                    )?;
-                }
-                let row = &row[..row.len().min(4)];
-                let mut group = Vec::new();
-                let mut bone_indices = [0u16; 4];
-                let mut quantized = [0u16; 4];
-                for (slot, influence) in row.iter().enumerate() {
-                    let node = *ids.get(influence.node as usize).ok_or_else(|| {
-                        Error::new(
-                            format!("{path}.skin[{vertex}]"),
-                            "bone index is out of bounds",
-                        )
-                    })?;
-                    group.push(node);
-                    bone_indices[slot] = u16::try_from(node).map_err(|_| {
-                        Error::new(&path, "skin node identity exceeds 16-bit range")
-                    })?;
-                    let value = (influence.weight * 255.).round();
-                    if !value.is_finite() || !(0.0..=255.).contains(&value) {
-                        return Err(Error::new(&path, "invalid skin weight"));
-                    }
-                    quantized[slot] = value as u16;
-                    if (influence.weight - 1. / row.len() as f32).abs() > 1e-6 {
-                        all_equal = false;
-                    }
-                }
-                let group_id = groups
-                    .iter()
-                    .position(|existing| existing == &group)
-                    .unwrap_or_else(|| {
-                        groups.push(group);
-                        groups.len() - 1
-                    });
-                group_ids
-                    .push(u8::try_from(group_id).map_err(|_| {
-                        Error::new(&path, "classic matrix group count exceeds 256")
-                    })?);
-                weights.push(native::geometry::SkinWeights {
-                    bone_indices,
-                    weights: quantized,
-                });
-            }
-            geoset
-                .set_matrix_groups(&groups)
-                .map_err(|error| failure(&path, error))?;
-            geoset
-                .set_vertex_groups(&group_ids)
-                .map_err(|error| failure(&path, error))?;
-            if T::Version::NUMBER >= 900 && !all_equal {
-                for (vertex, (row, weights)) in mesh.influences.iter().zip(&weights).enumerate() {
-                    for (slot, influence) in row.iter().take(4).enumerate() {
-                        context.approximate(
-                            format!("{path}.skin[{vertex}][{slot}]"),
-                            (influence.weight - f32::from(weights.weights[slot]) / 255.).abs(),
-                            "Skin weight quantized to 1/255",
-                        )?;
-                    }
-                }
-                let rows=weights.into_iter().map(|row|<T::Version as native::geometry::GeosetLayout>::SkinWeights::from_influences(row.bone_indices,row.weights).ok_or_else(||Error::new(format!("{path}.skin"),"bone identity exceeds target skin index range"))).collect::<Result<Vec<_>,_>>()?;
-                geoset
-                    .try_set_skin_weights(Some(rows.into_iter().collect()))
-                    .map_err(|error| failure(&path, error))?;
-            } else if T::Version::NUMBER < 900 && !all_equal {
-                context.unsupported(
-                    format!("{path}.skin"),
-                    "Classic MDLX supports only equal-weight matrix groups",
-                )?;
-            }
-        }
-        meshes.push(geoset);
-    }
-    baseline.set_geosets(meshes);
-    overlay_effects(
-        &mut baseline,
-        &active_nodes,
-        &ids,
-        &updates,
-        asset.document.raw(),
-        &semantic,
-        &mut context,
-    )?;
-    let mut textures = Vec::new();
-    for (index, texture) in semantic.textures.iter().enumerate() {
-        if texture.id.is_some() {
-            context.unsupported(
-                format!("textures[{index}].id"),
-                "MDLX textures require filenames or replaceable categories",
-            )?;
-        }
-        let mut value = native::Texture::new(&texture.path)
-            .map_err(|error| failure(format!("textures[{index}]"), error))?;
-        value.replaceable_id = texture.replaceable;
-        value.flags = native::TextureFlags(texture.flags.bits());
+        value
+            .flags
+            .set_wrap_width(source.sampler.u == AddressMode::Repeat);
+        value
+            .flags
+            .set_wrap_height(source.sampler.v == AddressMode::Repeat);
         textures.push(value);
     }
-    baseline.set_textures(textures);
+    result.set_textures(textures);
+    let mut encoder = Encoder {
+        model,
+        starts,
+        globals,
+        context: &mut context,
+        used: Default::default(),
+    };
     let mut materials = Vec::new();
-    for (index, material) in semantic.materials.iter().enumerate() {
-        let mut value = native::Material::<T::Version>::new();
-        value.layers.push(native::Layer::new());
-        if let Some((record, _)) = active_materials.get(index) {
-            overlay_material(&mut value, record, asset.document.raw(), &mut context)?;
-        }
-        if active_materials
-            .get(index)
-            .is_none_or(|(_, sync)| *sync == wr::NativeSync::CommonEdited)
-        {
-            value
-                .render_mode
-                .set_sort_primitives_near_z(material.flags.sort_near_z());
-            value
-                .render_mode
-                .set_sort_primitives_far_z(material.flags.sort_far_z());
-            if material.flags.no_shadow_cast()
-                || material.flags.no_shadow_receive()
-                || material.flags.invisible()
-            {
-                context.unsupported(
-                    format!("materials[{index}].flags"),
-                    "MDLX material records cannot express these visibility or shadow flags",
-                )?;
-            }
-            if let Some(layer) = value.layers.first_mut() {
-                if active_materials.get(index).is_none()
-                    || material.blend != filter(layer.filter_mode)
-                {
-                    layer.filter_mode = match material.blend {
-                        wr::BlendMode::Opaque => native::LayerFilterMode::None,
-                        wr::BlendMode::AlphaKey => native::LayerFilterMode::Transparent,
-                        wr::BlendMode::AlphaBlend => native::LayerFilterMode::Blend,
-                        wr::BlendMode::Additive => native::LayerFilterMode::Additive,
-                        wr::BlendMode::AdditiveAlpha => native::LayerFilterMode::AddAlpha,
-                        wr::BlendMode::Modulate => native::LayerFilterMode::Modulate,
-                        wr::BlendMode::Modulate2x => native::LayerFilterMode::Modulate2x,
-                        wr::BlendMode::Unknown(value) => native::LayerFilterMode::Unknown(value),
-                        _ => {
-                            context.unsupported(
-                                format!("materials[{index}].blend"),
-                                "MDLX has no corresponding blend mode",
-                            )?;
-                            native::LayerFilterMode::None
-                        }
-                    };
-                }
-                layer.shading_flags.set_unshaded(material.flags.unlit());
-                layer.shading_flags.set_unfogged(material.flags.unfogged());
-                layer.texture_id.set_value(material.texture.unwrap_or(0));
-            }
-        }
-        materials.push(value);
+    let mut material_ids = BTreeMap::new();
+    for (id, source) in model.materials() {
+        material_ids.insert(id, materials.len() as u32);
+        materials.push(super::encode_materials::write::<T::Version>(
+            &source.surface,
+            &texture_ids,
+            &mut encoder,
+            "material",
+        )?);
     }
-    baseline.set_materials(materials);
-    let mut sequences = Vec::new();
-    for (index, clip) in semantic.clips.iter().enumerate() {
-        let duration = clip.duration * 1000.;
-        if !duration.is_finite() || duration < 0. || duration > u32::MAX as f32 {
-            return Err(Error::new(
-                format!("clips[{index}].duration"),
-                "invalid clip duration",
-            ));
+    result.set_materials(materials);
+    let node_ids: BTreeMap<NodeId, u32> = model
+        .nodes()
+        .enumerate()
+        .map(|(index, (id, _))| (id, index as u32))
+        .collect();
+    let mut nodes = BTreeMap::new();
+    let mut pivots = Vec::new();
+    for (id, source) in model.nodes() {
+        let mut node = NativeNode::new(&source.name, node_ids[&id])
+            .map_err(|error| Error::new("node.name", error.to_string()))?;
+        node.parent_id = source.parent.map_or(u32::MAX, |parent| node_ids[&parent]);
+        node.flags = NodeFlags(source.controls.unclassified.bits());
+        node.flags
+            .set_dont_inherit_translation(!source.inheritance.translation);
+        node.flags
+            .set_dont_inherit_rotation(!source.inheritance.rotation);
+        node.flags
+            .set_dont_inherit_scaling(!source.inheritance.scale);
+        node.flags.set_camera_anchored(source.camera_anchored);
+        match source.billboard {
+            Billboard::None => {}
+            Billboard::Spherical => node.flags.set_billboarded(true),
+            Billboard::Locked { enabled, x, y, z } => {
+                node.flags.set_billboarded(enabled);
+                node.flags.set_billboard_lock_x(x);
+                node.flags.set_billboard_lock_y(y);
+                node.flags.set_billboard_lock_z(z);
+            }
         }
-        let end = starts[index]
-            .checked_add(duration.round() as u32)
-            .ok_or_else(|| Error::new(format!("clips[{index}]"), "clip interval overflow"))?;
-        context.approximate(
-            format!("clips[{index}].duration"),
-            (duration - duration.round()).abs() / 1000.,
-            "Clip duration rounded to milliseconds",
+        if !source.visible {
+            encoder.context.unsupported(
+                "node.visible",
+                "generic Warcraft III hierarchy nodes have no static hidden flag",
+            )?;
+        }
+        node.translation = encoder.track(&id.translation(), Ok, "node.translation")?;
+        node.rotation = encoder.track(
+            &id.rotation(),
+            |value: Quaternion| Ok(value.components()),
+            "node.rotation",
         )?;
-        let mut value = native::Sequence::new(&clip.name, [starts[index], end])
-            .map_err(|error| failure(format!("clips[{index}]"), error))?;
-        value.flags.set_non_looping(!clip.looping);
-        if !clip.flags.is_empty() {
-            context.unsupported(format!("clips[{index}].flags"),"MDLX sequence records cannot express common autoplay, persistence, or world-clock flags")?;
+        node.scaling = encoder.track(&id.scale(), Ok, "node.scale")?;
+        if node.translation.is_none() && source.transform.translation != [0.; 3] {
+            node.translation = Some(Track::constant(source.transform.translation));
         }
-        value.extent = native_extent(semantic.bounds.clone());
-        sequences.push(value);
+        if node.rotation.is_none() && source.transform.rotation != Quaternion::default() {
+            node.rotation = Some(Track::constant(source.transform.rotation.components()));
+        }
+        if node.scaling.is_none() && source.transform.scale != [1.; 3] {
+            node.scaling = Some(Track::constant(source.transform.scale));
+        }
+        pivots.push(source.transform.pivot);
+        nodes.insert(id, node);
     }
-    baseline.set_sequences(sequences);
-    overlay_metadata(
-        &mut baseline,
-        asset,
-        options,
-        &active_nodes,
-        semantic
-            .native
-            .as_ref()
-            .map_or(&[][..], |native| native.mesh_projections.as_slice()),
-        &ids,
-        &mut context,
+    result.set_pivot_points(&pivots);
+    let meshes = super::encode_geometry::write(
+        &mut result,
+        &mut encoder,
+        &node_ids,
+        &material_ids,
+        options.look,
     )?;
-    overlay_properties(
-        &mut baseline,
-        &semantic,
-        &active_nodes,
-        &ids,
-        &starts,
-        &mut globals,
-        &mut context,
+    super::encode_scene::write(
+        &mut result,
+        &mut encoder,
+        nodes,
+        &texture_ids,
+        &material_ids,
+        &meshes,
     )?;
-    overlay_integer(
-        &mut baseline,
-        &semantic,
-        &ids,
-        &starts,
-        &mut globals,
-        &mut context,
-    )?;
-    baseline.set_global_sequences(&globals);
-    Ok(Plan::new(baseline, context.report))
+    if let Some(bounds) = model.bounds() {
+        let mut info = ModelInfo::new(model.name())
+            .map_err(|error| Error::new("model.name", error.to_string()))?;
+        info.minimum_extent = bounds.minimum;
+        info.maximum_extent = bounds.maximum;
+        info.bounds_radius = bounds.sphere_radius;
+        {
+            let metadata = model.controls();
+            info.animation_file_name
+                .set_text(&metadata.animation_file)
+                .map_err(|error| Error::new("model.animation_file", error.to_string()))?;
+            info.blend_time =
+                unsigned_frame(metadata.blend_time, encoder.context, "model.blend_time")?;
+        }
+        result.set_model_info(&info);
+    }
+    encoder.audit()?;
+    Ok(Plan::new(result, context.report))
 }

@@ -1,163 +1,138 @@
-use std::borrow::Cow;
-use wc3::model::wem::{self, records as r, semantic as s};
+use wc3::model::conversion::{geometry, Context, ExportOptions};
+use wc3::model::semantic::{
+    Attribute, AttributeDomain, AttributeSemantic, AttributeValues, Draw, GeometryData, InstanceId,
+    Material, Mesh, MeshId, MeshInstance, ModelBuilder, Node, SingleModel, Topology,
+    UniversalGeometry,
+};
 
-fn fixture() -> wem::Document<'static> {
-    let model = s::Model {
-        materials: vec![s::Material::default(), s::Material::default()],
-        meshes: vec![s::Mesh {
-            positions: Cow::Owned(vec![[0., 0., 0.], [1., 0., 0.], [1., 1., 0.], [0., 1., 0.]]),
-            triangles: Cow::Owned(vec![[0, 1, 2], [0, 2, 3]]),
+fn fixture() -> (SingleModel<'static>, MeshId, InstanceId) {
+    let mut draft = ModelBuilder::new("seams");
+    let node = draft.add_node(Node::named("placement")).unwrap();
+    let first = draft.add_material(Material::pbr().named("first")).unwrap();
+    let second = draft.add_material(Material::pbr().named("second")).unwrap();
+    let mesh = draft
+        .add_mesh(Mesh::new(UniversalGeometry::Flexible(GeometryData {
+            positions: vec![[0., 0., 0.], [1., 0., 0.], [1., 1., 0.], [0., 1., 0.]].into(),
+            topology: Topology::Triangles(vec![[0, 1, 2], [0, 2, 3]].into()),
+            attributes: vec![
+                Attribute {
+                    semantic: AttributeSemantic::Normal,
+                    domain: AttributeDomain::Face,
+                    values: AttributeValues::Vector3(vec![[0., 0., 1.], [0., 1., 0.]].into()),
+                },
+                Attribute {
+                    semantic: AttributeSemantic::TexCoord(0),
+                    domain: AttributeDomain::Corner,
+                    values: AttributeValues::Vector2(
+                        vec![[0., 0.], [1., 0.], [1., 1.], [0.25, 0.], [1., 1.], [0., 1.]].into(),
+                    ),
+                },
+            ],
             ..Default::default()
-        }],
-        ..Default::default()
-    };
-    let mut raw = s::build(&model).unwrap().into_raw();
-    let id = raw
-        .sections()
-        .find(|(_, section)| section.tag() == *b"MESH")
-        .unwrap()
-        .0;
-    let mut mesh = raw
-        .array::<r::Mesh<r::V2>>(id)
-        .unwrap()
-        .get(0)
-        .unwrap()
+        })))
         .unwrap();
-    let section = raw
-        .resolve::<r::MeshSection>(mesh.sections.cast())
-        .unwrap()
-        .get(0)
-        .unwrap()
-        .unwrap();
-    let sections = raw
-        .append(&[
-            section.clone(),
-            r::MeshSection {
-                material_slot: 1,
-                ..section
-            },
-        ])
-        .unwrap();
-    mesh.sections = wem::Ref::from_section(2, sections.index());
-    let mut layers = raw
-        .resolve::<r::AttrLayer>(mesh.attributes.layers.cast())
-        .unwrap()
-        .iter()
-        .collect::<Result<Vec<_>, _>>()
-        .unwrap();
-    for (name, domain, type_, data) in [
-        (
-            "section",
-            r::Domain::Face,
-            r::AttrType::U32,
-            vec![0u32, 1]
-                .into_iter()
-                .flat_map(u32::to_le_bytes)
-                .collect::<Vec<_>>(),
-        ),
-        (
-            "uv0",
-            r::Domain::Halfedge,
-            r::AttrType::F32x2,
-            vec![[0., 0.], [1., 0.], [1., 1.], [0.25, 0.], [1., 1.], [0., 1.]]
-                .into_iter()
-                .flatten()
-                .flat_map(f32::to_le_bytes)
-                .collect(),
-        ),
-        (
-            "normal",
-            r::Domain::Face,
-            r::AttrType::F32x3,
-            vec![[0., 0., 1.], [0., 1., 0.]]
-                .into_iter()
-                .flatten()
-                .flat_map(f32::to_le_bytes)
-                .collect(),
-        ),
-    ] {
-        let name = raw
-            .append(
-                &name
-                    .bytes()
-                    .map(|value| r::Character { value })
-                    .collect::<Vec<_>>(),
-            )
-            .unwrap();
-        let data = raw
-            .append(
-                &data
-                    .into_iter()
-                    .map(|value| r::Byte { value })
-                    .collect::<Vec<_>>(),
-            )
-            .unwrap();
-        layers.push(r::AttrLayer {
-            name: wem::Ref::from_section(raw.section(name).unwrap().count(), name.index()),
-            domain,
-            type_,
-            data: wem::Ref::from_section(raw.section(data).unwrap().count(), data.index()),
-            ..Default::default()
-        });
-    }
-    let layers_id = raw.append(&layers).unwrap();
-    mesh.attributes.layers = wem::Ref::from_section(layers.len() as u32, layers_id.index());
-    mesh.attributes.domain_counts = [4, 6, 0, 2, 1];
-    raw.replace(id, &[mesh]).unwrap();
-    wem::Document::from_raw(raw).unwrap()
-}
-#[test]
-fn seams_and_material_draws_remain_editable_in_original_domains() {
-    let doc = fixture();
-    let mut model = s::read(&doc, 0, r::ProfileId::Generic).unwrap();
-    assert_eq!(model.meshes.len(), 2);
-    assert_eq!(model.meshes[1].material_slot, 1);
-    assert_eq!(model.meshes[0].normals[0], [0., 0., 1.]);
-    assert_eq!(model.meshes[1].normals[0], [0., 1., 0.]);
-    assert_eq!(model.meshes[1].uv_sets[0][0], [0.25, 0.]);
-    model.meshes[1].uv_sets[0].to_mut()[0] = [0.5, 0.];
-    let rebuilt = s::build(&model).unwrap();
-    let root = rebuilt.root::<r::DocumentRecord<r::V1>>().unwrap();
-    let graph = rebuilt
-        .raw()
-        .resolve::<r::ModelRecord<r::V9>>(root.models.cast())
-        .unwrap()
-        .get(0)
-        .unwrap()
-        .unwrap();
-    assert_eq!(graph.meshes.entries, 1);
-    let reread = s::read(&rebuilt, 0, r::ProfileId::Generic).unwrap();
-    assert_eq!(reread.meshes[1].uv_sets[0][0], [0.5, 0.]);
-}
-#[test]
-fn contradictory_shared_vertex_edits_are_rejected() {
-    let doc = fixture();
-    let mut model = s::read(&doc, 0, r::ProfileId::Generic).unwrap();
-    model.meshes[0].positions.to_mut()[0][0] = 7.;
-    assert!(s::build(&model).is_err());
-}
-#[test]
-fn projected_topology_edits_are_rejected() {
-    let doc = fixture();
-    let mut model = s::read(&doc, 0, r::ProfileId::Generic).unwrap();
-    model.meshes[0].triangles.to_mut()[0] = [0, 0, 0];
-    assert!(s::build(&model).is_err());
+    let mut instance = MeshInstance::new(node, mesh);
+    instance.draws = vec![
+        Draw {
+            first: 0,
+            count: 1,
+            material: first,
+            controls: None,
+        },
+        Draw {
+            first: 1,
+            count: 1,
+            material: second,
+            controls: None,
+        },
+    ];
+    let instance = draft.add_instance(instance).unwrap();
+    (draft.finish().unwrap(), mesh, instance)
 }
 
 #[test]
-fn mdlx_export_uses_each_material_draw_and_preserves_uv_seams() {
-    use wc3::model::{
-        conversion::{self, Asset, ExportOptions},
-        mdlx,
+fn projection_preserves_face_materials_normals_and_uv_seams() {
+    let (model, _, instance) = fixture();
+    let draws = geometry::project(
+        &model,
+        instance,
+        None,
+        &mut Context::export(&ExportOptions::default()),
+    )
+    .unwrap();
+    assert_eq!(draws.len(), 2);
+    assert_ne!(draws[0].material, draws[1].material);
+    assert_eq!(draws[0].mesh.normals().unwrap().get(0), Some([0., 0., 1.]));
+    assert_eq!(draws[1].mesh.normals().unwrap().get(0), Some([0., 1., 0.]));
+    assert_eq!(
+        draws[1].mesh.texture_coordinates()[0].get(0),
+        Some([0.25, 0.])
+    );
+    assert_eq!(draws[1].source_vertices.get(0), Some(0));
+}
+
+#[test]
+fn editing_a_corner_keeps_the_shared_vertex_and_other_corner_unchanged() {
+    let (mut model, mesh, instance) = fixture();
+    let mut edited = model.mesh(mesh).unwrap().clone();
+    let UniversalGeometry::Flexible(geometry) = &mut edited.geometry else {
+        unreachable!()
     };
-    let asset = Asset::new(fixture());
-    let target = conversion::mdlx::plan::<mdlx::V800>(&asset, &ExportOptions::default())
-        .unwrap()
-        .execute()
-        .unwrap()
-        .value;
-    let geosets = target.geosets().collect::<Vec<_>>();
-    assert_eq!(geosets.len(), 2);
-    assert_eq!(geosets[1].material_id, 1);
-    assert_eq!(geosets[1].uv_sets()[0].get(0).unwrap(), [0.25, 0.]);
+    let AttributeValues::Vector2(coordinates) = &mut geometry.attributes[1].values else {
+        unreachable!()
+    };
+    let mut values = coordinates.to_vec();
+    values[3] = [0.5, 0.];
+    *coordinates = values.into();
+    model.edit(|draft| draft.set_mesh(mesh, edited)).unwrap();
+    assert_eq!(model.mesh(mesh).unwrap().positions().len(), 4);
+    let draws = geometry::project(
+        &model,
+        instance,
+        None,
+        &mut Context::export(&ExportOptions::default()),
+    )
+    .unwrap();
+    assert_eq!(
+        draws[0].mesh.texture_coordinates()[0].get(0),
+        Some([0., 0.])
+    );
+    assert_eq!(
+        draws[1].mesh.texture_coordinates()[0].get(0),
+        Some([0.5, 0.])
+    );
+}
+
+#[test]
+fn invalid_source_topology_cannot_replace_published_geometry() {
+    let (mut model, mesh, _) = fixture();
+    let mut edited = model.mesh(mesh).unwrap().clone();
+    let UniversalGeometry::Flexible(geometry) = &mut edited.geometry else {
+        unreachable!()
+    };
+    geometry.topology = Topology::Triangles(vec![[0, 1, 99], [0, 2, 3]].into());
+    assert!(model.edit(|draft| draft.set_mesh(mesh, edited)).is_err());
+    assert_eq!(model.mesh(mesh).unwrap().positions().len(), 4);
+}
+
+#[test]
+fn shared_vertex_edits_update_both_draw_projections() {
+    let (mut model, mesh, instance) = fixture();
+    let mut edited = model.mesh(mesh).unwrap().clone();
+    let UniversalGeometry::Flexible(geometry) = &mut edited.geometry else {
+        unreachable!()
+    };
+    let mut positions = geometry.positions.to_vec();
+    positions[0] = [7., 0., 0.];
+    geometry.positions = positions.into();
+    model.edit(|draft| draft.set_mesh(mesh, edited)).unwrap();
+    let draws = geometry::project(
+        &model,
+        instance,
+        None,
+        &mut Context::export(&ExportOptions::default()),
+    )
+    .unwrap();
+    assert_eq!(draws[0].mesh.positions().get(0), Some([7., 0., 0.]));
+    assert_eq!(draws[1].mesh.positions().get(0), Some([7., 0., 0.]));
 }

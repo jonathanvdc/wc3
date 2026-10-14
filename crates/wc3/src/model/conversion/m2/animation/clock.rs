@@ -30,26 +30,6 @@ impl SequenceClock for LegacyTiming {
     }
 }
 
-pub(in super::super) fn milliseconds(
-    seconds: f32,
-    context: &mut Context,
-    path: &str,
-) -> Result<u32, Error> {
-    if !seconds.is_finite() || seconds < 0. || f64::from(seconds) * 1000. > f64::from(u32::MAX) {
-        return Err(Error::new(
-            path,
-            "time exceeds the unsigned millisecond clock",
-        ));
-    }
-    let result = (seconds * 1000.).round() as u32;
-    context.approximate(
-        path,
-        (result as f32 / 1000. - seconds).abs(),
-        "animation time quantized to milliseconds",
-    )?;
-    Ok(result)
-}
-
 pub(in super::super) struct SequenceTables<'view, V: ModelLayout> {
     pub(in super::super) sequences: &'view [native::records::Sequence<V>],
     pub(in super::super) lookup: &'view zerovec::ZeroSlice<u16>,

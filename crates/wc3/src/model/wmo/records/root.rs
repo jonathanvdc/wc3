@@ -34,6 +34,10 @@ pub trait RootLayout {
 }
 /// Common access to native header flags and supported LOD counts.
 pub trait HeaderTailField {
+    /// Replaces authored root behavior flags.
+    fn set_flags(&mut self, flags: RootFlags);
+    /// Sets the declared additional LOD count when this layout carries it.
+    fn set_lod_count(&mut self, count: u16) -> bool;
     /// Root behavior flags without changing their native encoding.
     fn flags(&self) -> RootFlags;
     /// Number of extra group LOD levels authored in this layout.
@@ -436,6 +440,12 @@ pub struct NewLight {
 }
 
 impl HeaderTailField for LegacyHeaderTail {
+    fn set_flags(&mut self, flags: RootFlags) {
+        self.flags = flags;
+    }
+    fn set_lod_count(&mut self, count: u16) -> bool {
+        count == 0
+    }
     fn flags(&self) -> RootFlags {
         self.flags
     }
@@ -444,6 +454,13 @@ impl HeaderTailField for LegacyHeaderTail {
     }
 }
 impl HeaderTailField for ModernHeaderTail {
+    fn set_flags(&mut self, flags: RootFlags) {
+        self.flags = flags;
+    }
+    fn set_lod_count(&mut self, count: u16) -> bool {
+        self.lod_count = count;
+        true
+    }
     fn flags(&self) -> RootFlags {
         self.flags
     }

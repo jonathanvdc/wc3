@@ -22,3 +22,8 @@ pub mod wmo;
 
 /// Exact curve restrictions for bounded native animation clocks.
 pub mod animation;
+/// Logical primitive and attribute normalization at native output boundaries.
+pub mod geometry;
+
+/// Editable-model authoring import and export support.
+pub mod wem;

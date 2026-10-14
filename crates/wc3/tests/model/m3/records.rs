@@ -301,8 +301,8 @@ fn every_defined_record_revision_preserves_native_bits() {
     roundtrip::<Md34, HitTestShape<V1>>();
     roundtrip::<Md33, AttachmentVolume>();
     roundtrip::<Md34, AttachmentVolume>();
-    roundtrip::<Md33, TriggerData>();
-    roundtrip::<Md34, TriggerData>();
+    roundtrip::<Md33, TurretGroup>();
+    roundtrip::<Md34, TurretGroup>();
     roundtrip::<Md33, TurretBehavior<V0>>();
     roundtrip::<Md34, TurretBehavior<V0>>();
     roundtrip::<Md33, TurretBehavior<V1>>();
@@ -787,4 +787,71 @@ fn selectors_and_flag_edits_preserve_unrecognized_wire_values() {
     let mut output = Encoder::<Md34>::new();
     flags.write(&mut output).unwrap();
     assert_eq!(output.finish(), 0x8000_2000u32.to_le_bytes());
+}
+
+#[test]
+fn cooked_shape_header_controls_are_not_interpreted_as_references() {
+    // Independent PHSH2 layout: matrix 64, shape/padding 4, six control words 24,
+    // then three shape dimensions. The header words never address indexed sections.
+    let mut bytes = vec![0; 292];
+    bytes[64] = 1;
+    let controls = [0x0123_45678_u32, 0xFFFF_FFFF, 3, 4, 5, 6];
+    for (index, value) in controls.into_iter().enumerate() {
+        bytes[68 + index * 4..72 + index * 4].copy_from_slice(&value.to_le_bytes());
+    }
+    for (index, value) in [2.0_f32, 3.0, 4.0].into_iter().enumerate() {
+        bytes[92 + index * 4..96 + index * 4].copy_from_slice(&value.to_le_bytes());
+    }
+    let shape = PhysicsShape::<V2>::read(&mut Decoder::<Md34>::new(&bytes)).unwrap();
+    assert_eq!(shape.cooked_controls, controls);
+    assert_eq!(shape.shape_dimensions, [2., 3., 4.]);
+    assert_eq!(shape.source_points, ());
+    assert_eq!(shape.source_triangles, ());
+}
+
+#[test]
+fn joint_collision_control_preserves_the_complete_signed_word() {
+    // PHYJ0's final field occupies bytes 176..180; it is not a byte plus padding.
+    let mut bytes = vec![0; 180];
+    bytes[176..180].copy_from_slice(&(-0x0123_4567_i32).to_le_bytes());
+    let joint = PhysicsJoint::read(&mut Decoder::<Md34>::new(&bytes)).unwrap();
+    assert_eq!(joint.collision_control, -0x0123_4567);
+}
+
+#[test]
+fn cooked_connectivity_uses_three_vertex_indices_and_scalar_triangle_control() {
+    let mut edge_bytes = [0u8; 20];
+    for (offset, value) in [2u32, 3, 5, 7, 11].into_iter().enumerate() {
+        edge_bytes[offset * 4..offset * 4 + 4].copy_from_slice(&value.to_le_bytes());
+    }
+    let edge = PhysicsMeshEdge::read(&mut Decoder::<Md34>::new(&edge_bytes)).unwrap();
+    assert_eq!(
+        [edge.vertex_index0, edge.vertex_index1, edge.vertex_index2],
+        [2, 3, 5]
+    );
+    assert_eq!([edge.triangle_index0, edge.triangle_index1], [7, 11]);
+    let mut triangle_bytes = [0u8; 28];
+    triangle_bytes[24..28].copy_from_slice(&2.5f32.to_le_bytes());
+    let triangle = PhysicsMeshTriangle::read(&mut Decoder::<Md34>::new(&triangle_bytes)).unwrap();
+    assert_eq!(triangle.unresolved_control, 2.5);
+}
+
+#[test]
+fn turret_part_v1_ends_before_the_later_bone_offset() {
+    // Primary PATU1 schema is exactly 100 bytes; only PATU4 appends the offset.
+    let mut bytes = [0u8; 100];
+    bytes[64..66].copy_from_slice(&17u16.to_le_bytes());
+    bytes[66] = 0x81;
+    bytes[68..72].copy_from_slice(&0x8000_0002u32.to_le_bytes());
+    bytes[92..96].copy_from_slice(&1.25f32.to_le_bytes());
+    bytes[96..100].copy_from_slice(&2.5f32.to_le_bytes());
+    let part = TurretBehavior::<V1>::read(&mut Decoder::<Md34>::new(&bytes)).unwrap();
+    assert_eq!(part.bone_index, 17);
+    assert!(part.use_as_main_turret.main_part());
+    assert_eq!(part.use_as_main_turret.bits(), 0x81);
+    assert!(part.yaw_limited.limited());
+    assert_eq!(part.unknown3, 1.25);
+    assert_eq!(part.unknown4, 2.5);
+    assert_eq!(part.main_bone_offset, ());
+    assert_eq!(<TurretBehavior<V1> as m3::RecordLayout<Md34>>::size(), 100);
 }

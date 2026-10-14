@@ -1,0 +1,105 @@
+//! Authored ribbon spline controls, anchored to actual graph nodes.
+use super::super::{materials::read_error, particles::context::Reader};
+use crate::model::conversion::Error;
+use crate::model::m3::{self as native, records as nr};
+use crate::model::semantic::{profiles::m3 as surface, NodeId, Values};
+use native::{Envelope, Ref};
+pub(super) fn read<'view, E: Envelope>(
+    reader: &mut Reader<'view, '_, '_, E>,
+    nodes: &[NodeId],
+    reference: Ref<nr::targets::SplineRibbon>,
+) -> Result<Values<'view, surface::SplinePoint>, Error> {
+    let mut rows = Vec::new();
+    for (index, row) in reader
+        .source
+        .resolve::<nr::SplineRibbon>(reference.cast())
+        .map_err(read_error)?
+        .iter()
+        .enumerate()
+    {
+        let r = row.map_err(read_error)?;
+        let prefix = format!("ribbon.spline_points[{index}]");
+        rows.push(surface::SplinePoint {
+            node: *nodes.get(r.bone_index as usize).ok_or_else(|| {
+                Error::new(
+                    "m3.ribbon.spline.node",
+                    "spline attachment exceeds skeleton",
+                )
+            })?,
+            emission_offset: r.emission_offset,
+            emission_vector: r.emission_vector,
+            reserved: r.reserved,
+            emission_vector_norm_factor: r.emission_vector_norm_factor,
+            velocity_norm_factor: r.velocity_norm_factor,
+            velocity: reader.property(&format!("{prefix}.velocity"), r.velocity),
+            velocity_base_factor: reader.property(
+                &format!("{prefix}.velocity_base_factor"),
+                r.velocity_base_factor,
+            ),
+            velocity_end_factor: reader.property(
+                &format!("{prefix}.velocity_end_factor"),
+                r.velocity_end_factor,
+            ),
+            yaw: reader.property(&format!("{prefix}.yaw"), r.yaw),
+            pitch: reader.property(&format!("{prefix}.pitch"), r.pitch),
+            yaw_variation: surface::VariationControl {
+                kind: surface::values::Variation::from_raw((r.yaw_type).raw()),
+                amplitude: reader.property(&format!("{prefix}.yaw_amplitude"), r.yaw_amplitude),
+                frequency: reader.property(&format!("{prefix}.yaw_frequency"), r.yaw_frequency),
+            },
+            pitch_variation: surface::VariationControl {
+                kind: surface::values::Variation::from_raw((r.pitch_type).raw()),
+                amplitude: reader.property(&format!("{prefix}.pitch_amplitude"), r.pitch_amplitude),
+                frequency: reader.property(&format!("{prefix}.pitch_frequency"), r.pitch_frequency),
+            },
+            velocity_variation: surface::VariationControl {
+                kind: surface::values::Variation::from_raw(r.velocity_type.raw()),
+                amplitude: reader.property(
+                    &format!("{prefix}.velocity_amplitude"),
+                    r.velocity_amplitude,
+                ),
+                frequency: reader.property(
+                    &format!("{prefix}.velocity_frequency"),
+                    r.velocity_frequency,
+                ),
+            },
+        });
+    }
+    Ok(Values::owned(rows))
+}
+
+pub(super) fn write<E: Envelope>(
+    points: &Values<'_, surface::SplinePoint>,
+    writer: &mut super::super::particles::writer::Writer<'_, '_, E>,
+    bones: &std::collections::BTreeMap<NodeId, u32>,
+) -> Result<Ref<nr::targets::SplineRibbon>, Error> {
+    use super::super::write::{animated, append};
+    let mut rows = Vec::new();
+    for r in points.iter() {
+        rows.push(nr::SplineRibbon {
+            bone_index: *bones
+                .get(&r.node)
+                .ok_or_else(|| Error::new("ribbon.spline.node", "missing spline anchor node"))?,
+            emission_offset: r.emission_offset,
+            emission_vector: r.emission_vector,
+            reserved: r.reserved,
+            emission_vector_norm_factor: r.emission_vector_norm_factor,
+            velocity_norm_factor: r.velocity_norm_factor,
+            velocity: animated(&r.velocity, writer.ids),
+            velocity_base_factor: animated(&r.velocity_base_factor, writer.ids),
+            velocity_end_factor: animated(&r.velocity_end_factor, writer.ids),
+            yaw: animated(&r.yaw, writer.ids),
+            pitch: animated(&r.pitch, writer.ids),
+            yaw_type: nr::Variation::from_raw(r.yaw_variation.kind.raw()),
+            yaw_amplitude: animated(&r.yaw_variation.amplitude, writer.ids),
+            yaw_frequency: animated(&r.yaw_variation.frequency, writer.ids),
+            pitch_type: nr::Variation::from_raw(r.pitch_variation.kind.raw()),
+            pitch_amplitude: animated(&r.pitch_variation.amplitude, writer.ids),
+            pitch_frequency: animated(&r.pitch_variation.frequency, writer.ids),
+            velocity_type: nr::Variation::from_raw(r.velocity_variation.kind.raw()),
+            velocity_amplitude: animated(&r.velocity_variation.amplitude, writer.ids),
+            velocity_frequency: animated(&r.velocity_variation.frequency, writer.ids),
+        });
+    }
+    Ok(append(writer.document, &rows)?.cast())
+}

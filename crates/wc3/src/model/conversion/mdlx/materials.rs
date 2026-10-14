@@ -1,171 +1,215 @@
-//! Typed native Warcraft III material mappings.
-use super::*;
-pub(super) fn filter(value: native::LayerFilterMode) -> wr::BlendMode {
-    match value {
-        native::LayerFilterMode::None => wr::BlendMode::Opaque,
-        native::LayerFilterMode::Transparent => wr::BlendMode::AlphaKey,
-        native::LayerFilterMode::Blend => wr::BlendMode::AlphaBlend,
-        native::LayerFilterMode::Additive => wr::BlendMode::Additive,
-        native::LayerFilterMode::AddAlpha => wr::BlendMode::AdditiveAlpha,
-        native::LayerFilterMode::Modulate => wr::BlendMode::Modulate,
-        native::LayerFilterMode::Modulate2x => wr::BlendMode::Modulate2x,
-        native::LayerFilterMode::Unknown(value) => match wr::BlendMode::from_raw(value) {
-            wr::BlendMode::Unknown(value) => wr::BlendMode::Unknown(value),
-            _ => wr::BlendMode::Opaque,
-        },
-    }
-}
-pub(super) fn common_material_flags<V: ModelVersion>(
-    material: &native::Material<'_, V>,
-) -> wr::MaterialFlags {
-    let mut flags = wr::MaterialFlags::default();
-    flags.set_sort_near_z(material.render_mode.sort_primitives_near_z());
-    flags.set_sort_far_z(material.render_mode.sort_primitives_far_z());
-    if let Some(layer) = material.layers.first() {
-        flags.set_unlit(layer.shading_flags.unshaded());
-        flags.set_unfogged(layer.shading_flags.unfogged());
-    }
-    flags
-}
+//! Direct native layered-material decoding into logical surface fields.
+use super::animation::Decoder;
+use crate::model::conversion::Error;
+use crate::model::mdlx::{self as native, ModelVersion};
+use crate::model::semantic::profiles::mdlx::{
+    Blend, Fresnel, Layer, Material, Shading, TextureSlot,
+};
+use crate::model::semantic::{Animated, MaterialId, OwnerId, TextureId, TextureTransformId};
 
-pub(super) fn native_layers<V: ModelVersion>(
-    material: &native::Material<'_, V>,
-) -> Vec<wr::MdxLayer> {
-    material
-        .layers
-        .iter()
-        .map(|layer| wr::MdxLayer {
-            filter_mode: wr::MdxFilterMode::from_raw(match layer.filter_mode {
-                native::LayerFilterMode::Unknown(value) => value,
-                value => filter(value).raw(),
-            }),
-            shading_flags: wr::MdxShadingFlag(layer.shading_flags.bits()),
-            texture_id: base(&layer.texture_id),
-            texture_animation_id: layer.texture_animation_id,
-            coord_id: layer.coordinate_id,
-            alpha: base(&layer.alpha),
-            emissive_gain: layer.try_emissive_gain().map(base).unwrap_or(0.),
-            fresnel_color: layer
-                .try_fresnel()
-                .map(|f| base(&f.color))
-                .unwrap_or([1.; 3]),
-            fresnel_opacity: layer.try_fresnel().map(|f| base(&f.opacity)).unwrap_or(0.),
-            fresnel_team_color: layer
-                .try_fresnel()
-                .map(|f| base(&f.team_color))
-                .unwrap_or(0.),
-            shader_type: wr::MdxShaderType::from_raw(
-                layer
-                    .try_shader_type()
-                    .map(|shader| shader.id())
-                    .unwrap_or(0),
-            ),
-            is_hd: wem::Bool::from(
-                material
-                    .try_shader()
-                    .map(|shader| shader.starts_with("Shader_HD"))
-                    .unwrap_or(false),
-            ),
-            sub_textures: wem::InlineList(
-                layer
-                    .try_texture_slots()
-                    .map(|slots| {
-                        slots
-                            .iter()
-                            .map(|slot| wr::MdxSubTexture {
-                                texture_id: base(&slot.texture_id),
-                                slot: wr::MdxSlotType::from_raw(slot.texture_type),
-                            })
-                            .collect()
-                    })
-                    .unwrap_or_default(),
-            ),
-        })
-        .collect()
-}
-
-pub(super) fn overlay_material<V: ModelVersion>(
-    material: &mut native::Material<'static, V>,
-    record: &wr::MdxMaterial,
-    raw: &RawDocument<'_>,
-    context: &mut Context,
-) -> Result<(), Error> {
-    material.priority_plane = record.priority_plane;
-    material.render_mode = native::MaterialRenderFlags(record.flags.bits());
-    let shader = raw.string(record.shader)?.unwrap_or_default();
-    if let Err(error) = material.try_set_shader(shader) {
-        if !shader.is_empty() {
-            context.unsupported("material.shader", error.to_string())?;
+pub(super) fn read<'a, V: ModelVersion>(
+    source: &'a native::Material<'_, V>,
+    textures: &[TextureId],
+    transforms: &[TextureTransformId],
+) -> Result<Material<'a>, Error> {
+    let texture = |index: u32| {
+        if index == u32::MAX {
+            return Ok(None);
         }
-    }
-    material
-        .layers
-        .resize_with(record.layers.0.len(), native::Layer::new);
-    for (layer, data) in material.layers.iter_mut().zip(&record.layers.0) {
-        layer.filter_mode = match data.filter_mode {
-            wr::MdxFilterMode::None => native::LayerFilterMode::None,
-            wr::MdxFilterMode::Transparent => native::LayerFilterMode::Transparent,
-            wr::MdxFilterMode::Blend => native::LayerFilterMode::Blend,
-            wr::MdxFilterMode::Additive => native::LayerFilterMode::Additive,
-            wr::MdxFilterMode::AddAlpha => native::LayerFilterMode::AddAlpha,
-            wr::MdxFilterMode::Modulate => native::LayerFilterMode::Modulate,
-            wr::MdxFilterMode::Modulate2x => native::LayerFilterMode::Modulate2x,
-            value => native::LayerFilterMode::Unknown(value.raw()),
-        };
-        layer.shading_flags = native::LayerShadingFlags(data.shading_flags.bits());
-        layer.texture_id.set_value(data.texture_id);
-        layer.texture_animation_id = data.texture_animation_id;
-        layer.coordinate_id = data.coord_id;
-        layer.alpha.set_value(data.alpha);
-        let mut emissive = layer.try_emissive_gain().cloned().unwrap_or_default();
-        emissive.set_value(data.emissive_gain);
-        if let Err(error) = layer.try_set_emissive_gain(emissive) {
-            if data.emissive_gain != 0. {
-                context.unsupported("material.emissive", error.to_string())?;
-            }
-        }
-        let mut fresnel = layer.try_fresnel().cloned().unwrap_or_default();
-        fresnel.color.set_value(data.fresnel_color);
-        fresnel.opacity.set_value(data.fresnel_opacity);
-        fresnel.team_color.set_value(data.fresnel_team_color);
-        if let Err(error) = layer.try_set_fresnel(fresnel) {
-            if data.fresnel_color != [1.; 3]
-                || data.fresnel_opacity != 0.
-                || data.fresnel_team_color != 0.
-            {
-                context.unsupported("material.fresnel", error.to_string())?;
-            }
-        }
-        if let Err(error) =
-            layer.try_set_shader_type(native::materials::ShaderType::new(data.shader_type.raw()))
-        {
-            if data.shader_type.raw() != 0 {
-                context.unsupported("material.shader_type", error.to_string())?;
-            }
-        }
-        let old = layer.try_texture_slots().unwrap_or_default();
-        let slots: Vec<_> = data
-            .sub_textures
-            .0
-            .iter()
-            .enumerate()
-            .map(|(index, texture)| {
-                let mut id = old
-                    .get(index)
-                    .map(|slot| slot.texture_id.clone())
-                    .unwrap_or_default();
-                id.set_value(texture.texture_id);
-                native::materials::LayerTextureSlot {
-                    texture_id: id,
-                    texture_type: texture.slot.raw(),
-                }
+        textures
+            .get(index as usize)
+            .copied()
+            .map(Some)
+            .ok_or_else(|| {
+                Error::new(
+                    "material.texture",
+                    "texture selector is outside the model texture table",
+                )
             })
-            .collect();
-        if let Err(error) = layer.try_set_texture_slots(&slots) {
-            if !slots.is_empty() {
-                context.unsupported("material.texture_slots", error.to_string())?;
-            }
+    };
+    let mut layers = Vec::with_capacity(source.layers.len());
+    for layer in &source.layers {
+        let flags = layer.shading_flags;
+        let mut unresolved = flags;
+        unresolved.set_unshaded(false);
+        unresolved.set_sphere_env_map(false);
+        unresolved.set_wrap_width(false);
+        unresolved.set_wrap_height(false);
+        unresolved.set_two_sided(false);
+        unresolved.set_unfogged(false);
+        unresolved.set_no_depth_test(false);
+        unresolved.set_no_depth_set(false);
+        let fresnel = layer.try_fresnel().ok().map(|value| Fresnel {
+            color: Animated::constant(value.color.value().copied().unwrap_or_default()),
+            opacity: Animated::constant(value.opacity.value().copied().unwrap_or_default()),
+            team_color: Animated::constant(value.team_color.value().copied().unwrap_or_default()),
+        });
+        let mut slots = Vec::new();
+        for slot in layer.try_texture_slots().unwrap_or_default() {
+            slots.push(TextureSlot {
+                slot: slot.texture_type,
+                texture: Animated::constant(texture(
+                    slot.texture_id.value().copied().unwrap_or_default(),
+                )?),
+            });
+        }
+        layers.push(Layer {
+            blend: match layer.filter_mode {
+                native::LayerFilterMode::None => Blend::Opaque,
+                native::LayerFilterMode::Transparent => Blend::AlphaKey,
+                native::LayerFilterMode::Blend => Blend::Alpha,
+                native::LayerFilterMode::Additive => Blend::Additive,
+                native::LayerFilterMode::AddAlpha => Blend::AdditiveAlpha,
+                native::LayerFilterMode::Modulate => Blend::Modulate,
+                native::LayerFilterMode::Modulate2x => Blend::Modulate2x,
+                native::LayerFilterMode::Unknown(value) => Blend::Unknown(value),
+            },
+            shading: Shading {
+                unlit: flags.unshaded(),
+                sphere_environment: flags.sphere_env_map(),
+                two_sided: flags.two_sided(),
+                unfogged: flags.unfogged(),
+                no_depth_test: flags.no_depth_test(),
+                no_depth_write: flags.no_depth_set(),
+                unclassified: unresolved.bits().into(),
+                wrap_u: flags.wrap_width(),
+                wrap_v: flags.wrap_height(),
+            },
+            texture: Animated::constant(texture(
+                layer.texture_id.value().copied().unwrap_or_default(),
+            )?),
+            texture_transform: if layer.texture_animation_id == u32::MAX {
+                None
+            } else {
+                Some(
+                    *transforms
+                        .get(layer.texture_animation_id as usize)
+                        .ok_or_else(|| {
+                            Error::new("material.texture_transform", "transform does not exist")
+                        })?,
+                )
+            },
+            uv_set: layer.coordinate_id,
+            opacity: Animated::constant(layer.alpha.value().copied().unwrap_or_default()),
+            emissive_gain: layer
+                .try_emissive_gain()
+                .ok()
+                .map(|value| Animated::constant(value.value().copied().unwrap_or_default())),
+            fresnel,
+            shader: layer.try_shader_type().ok().map(|value| value.id()),
+            textures: slots,
+        });
+    }
+    let flags = source.render_mode;
+    let mut unresolved = flags;
+    unresolved.set_constant_color(false);
+    unresolved.set_two_sided(false);
+    unresolved.set_sort_primitives_far_z(false);
+    unresolved.set_sort_primitives_near_z(false);
+    unresolved.set_full_resolution(false);
+    Ok(Material {
+        priority_plane: source.priority_plane,
+        shader: source.try_shader().unwrap_or_default(),
+        constant_color: flags.constant_color(),
+        two_sided: flags.two_sided(),
+        sort_near_z: flags.sort_primitives_near_z(),
+        sort_far_z: flags.sort_primitives_far_z(),
+        full_resolution: flags.full_resolution(),
+        unclassified: unresolved.bits().into(),
+        layers,
+    })
+}
+
+pub(super) fn bind<'a, V: ModelVersion>(
+    source: &'a native::Material<'_, V>,
+    textures: &[TextureId],
+    transforms: &[TextureTransformId],
+    id: MaterialId,
+    decoder: &mut Decoder<'a, '_>,
+) -> Result<Material<'a>, Error> {
+    let mut material = read(source, textures, transforms)?;
+    let owner = OwnerId::Material(id);
+    for (index, (source, layer)) in source.layers.iter().zip(&mut material.layers).enumerate() {
+        let path = format!("layers[{index}]");
+        let map = texture_map(textures, &source.texture_id)?;
+        layer.texture = decoder.bind(&source.texture_id, owner, &format!("{path}.texture"), map)?;
+        layer.opacity =
+            decoder.bind(&source.alpha, owner, &format!("{path}.opacity"), |value| {
+                value
+            })?;
+        if let Ok(source) = source.try_emissive_gain() {
+            layer.emissive_gain = Some(decoder.bind(
+                source,
+                owner,
+                &format!("{path}.emissive_gain"),
+                |value| value,
+            )?);
+        }
+        if let Ok(source) = source.try_fresnel() {
+            layer.fresnel = Some(Fresnel {
+                color: decoder.bind(
+                    &source.color,
+                    owner,
+                    &format!("{path}.fresnel.color"),
+                    |value| value,
+                )?,
+                opacity: decoder.bind(
+                    &source.opacity,
+                    owner,
+                    &format!("{path}.fresnel.opacity"),
+                    |value| value,
+                )?,
+                team_color: decoder.bind(
+                    &source.team_color,
+                    owner,
+                    &format!("{path}.fresnel.team_color"),
+                    |value| value,
+                )?,
+            });
+        }
+        for (slot_index, (source, slot)) in source
+            .try_texture_slots()
+            .unwrap_or_default()
+            .iter()
+            .zip(&mut layer.textures)
+            .enumerate()
+        {
+            let map = texture_map(textures, &source.texture_id)?;
+            slot.texture = decoder.bind(
+                &source.texture_id,
+                owner,
+                &format!("{path}.textures[{slot_index}]"),
+                map,
+            )?;
         }
     }
-    Ok(())
+    Ok(material)
+}
+
+fn texture_map<'a>(
+    textures: &[TextureId],
+    source: &native::Animatable<'_, u32>,
+) -> Result<impl Fn(u32) -> Option<TextureId> + Clone + Send + Sync + 'a, Error> {
+    let mut selectors = vec![source.value().copied().unwrap_or_default()];
+    if let Some(track) = source.track() {
+        if let Some(keys) = track.step_keys().or_else(|| track.linear_keys()) {
+            selectors.extend(keys.iter().map(|key| key.value));
+        } else if let Some(keys) = track.hermite_keys().or_else(|| track.bezier_keys()) {
+            selectors.extend(
+                keys.iter()
+                    .flat_map(|key| [key.value, key.in_tangent, key.out_tangent]),
+            );
+        }
+    }
+    if selectors
+        .iter()
+        .any(|selector| *selector != u32::MAX && *selector as usize >= textures.len())
+    {
+        return Err(Error::new(
+            "material.texture",
+            "animated selector references an absent texture",
+        ));
+    }
+    let textures = textures.to_vec();
+    Ok(move |selector| textures.get(selector as usize).copied())
 }

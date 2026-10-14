@@ -1,0 +1,17 @@
+//! Mechanical displacement surface encoding.
+use super::{native_anim, nr, surface, Envelope, Error, Writer};
+pub(super) fn encode<E: Envelope>(
+    name: &str,
+    r: &surface::Displacement,
+    writer: &mut Writer<'_, '_, '_, '_, E>,
+) -> Result<nr::DisplacementMaterial<nr::V4>, Error> {
+    Ok(nr::DisplacementMaterial {
+        name: writer.string(name)?,
+        unknown: r.unknown,
+        strength: native_anim(&r.strength, writer.animation_ids),
+        normal_map: writer.layer(r.normal_map.as_ref())?,
+        strength_map: writer.layer(r.strength_map.as_ref())?,
+        flags: nr::DisplacementFlags((r.flags).bits()),
+        priority: r.priority,
+    })
+}

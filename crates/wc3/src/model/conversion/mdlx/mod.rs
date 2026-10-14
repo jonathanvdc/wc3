@@ -1,43 +1,46 @@
-//! Bidirectional conversion between Warcraft III models and editable WEM graphs.
-use super::{
-    Asset, Context, Conversion, Error, ExportOptions, Format, ImportOptions, IssueKind,
-    OpaquePayload, Plan, UnknownPolicy,
-};
-use crate::model::common::FileKey;
-use crate::model::mdlx::{self as native, ModelDialect, ModelVersion};
-use crate::model::wem::{self, records as wr, records::ProfileId, semantic as s, RawDocument, Ref};
-use native::animation::{Interpolation, Track, TrackValue};
-use native::geometry::SkinWeight;
-use native::{mdx, Chunk, ModelChunk};
-use std::borrow::Cow;
-use std::collections::BTreeMap;
-mod wem_view;
-use wem_view::graph;
-mod geometry;
-use geometry::{extent, influences, native_extent};
-mod hierarchy;
-use hierarchy::{common_flags, native_flags, native_ids, patch_hierarchy};
+//! Warcraft III adapters for independent, borrowed semantic model graphs.
+use super::{Asset, Conversion, Error, ExportOptions, ImportOptions, Plan};
+use crate::model::mdlx::{Chunk, Model as NativeModel, ModelDialect};
+use crate::model::semantic::profiles::Mdlx;
 mod animation;
-use animation::{
-    clip_starts, import_properties, merge_track, native_globals, native_track, overlay_integer,
-    overlay_properties, read_track, semantic_track,
-};
-mod materials;
-use materials::{common_material_flags, filter, native_layers, overlay_material};
-mod effects;
-use effects::{active_graph, decorate_native, overlay_effects};
-mod metadata;
-use metadata::{append, append_string, base, decorate_metadata, metadata, overlay_metadata};
-fn text<const N: usize>(text: &native::FixedText<N>) -> String {
-    text.text().into_owned()
-}
-
-fn failure(path: impl Into<String>, error: impl std::fmt::Display) -> Error {
-    Error::new(path, error.to_string())
-}
-
-mod import;
-pub use import::import;
-
+mod curves;
+mod encode_animation;
+mod encode_geometry;
+mod encode_helpers;
+mod encode_lights;
+mod encode_materials;
+mod encode_scene;
 mod export;
-pub use export::plan;
+mod geometry;
+mod import;
+mod materials;
+mod scene;
+mod scene_lights;
+mod state;
+mod text;
+/// Borrows native geometry and animation values into a checked authoring graph.
+pub fn import<'a, D: ModelDialect>(
+    source: &'a NativeModel<'_, D>,
+    options: &ImportOptions,
+) -> Result<Conversion<Asset<'a, Mdlx>>, Error>
+where
+    D::Extension: Chunk,
+{
+    import::read(source, options)
+}
+/// Constructs a native model for a selected file dialect and reports encoding losses.
+///
+/// The input vocabulary must be Warcraft III. Translating a broader graph is a
+/// separate operation; this planner does not implicitly approximate its payloads.
+///
+/// ```compile_fail
+/// use wc3::model::{conversion::{self, Asset, ExportOptions}, mdlx::V800, semantic::Model};
+/// let universal = Asset::new(Model::new("Example"));
+/// conversion::mdlx::plan::<V800>(&universal, &ExportOptions::default());
+/// ```
+pub fn plan<'a, 'data, T: ModelDialect>(
+    asset: &'a Asset<'data, Mdlx>,
+    options: &ExportOptions,
+) -> Result<Plan<NativeModel<'a, T>>, Error> {
+    export::write(asset, options)
+}

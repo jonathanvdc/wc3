@@ -481,6 +481,20 @@ impl<'data, V: ModelVersion> Geoset<'data, V> {
     pub fn primitive_counts(&self) -> &ZeroVec<'data, u32> {
         &self.primitive_counts
     }
+    /// Replaces triangle-group boundaries without changing vertex indices.
+    pub fn set_triangle_group_counts(&mut self, counts: &[u32]) -> Result<(), ValueError> {
+        let actual = counts.iter().map(|count| *count as usize).sum::<usize>();
+        if actual != self.faces.len() || counts.iter().any(|count| count % 3 != 0) {
+            return Err(ValueError::LengthMismatch {
+                tag: GeosetsChunk::<V>::TAG,
+                expected: self.faces.len(),
+                actual,
+            });
+        }
+        self.primitive_counts = ZeroVec::alloc_from_slice(counts);
+        self.primitive_types = counts.iter().map(|_| 4u32).collect();
+        Ok(())
+    }
     /// Face indices into the vertex-position array.
     pub fn face_indices(&self) -> &ZeroVec<'data, u16> {
         &self.faces
@@ -546,6 +560,16 @@ impl<'data, V: ModelVersion> Geoset<'data, V> {
         Ok(self.level_of_detail.name().expect("supported version"))
     }
 
+    /// Borrows the lossless fixed detail-level name when present in this layout.
+    pub fn try_name_field(&self) -> Result<&FixedText<80>, ValueError> {
+        self.level_of_detail
+            .fixed_name()
+            .ok_or(ValueError::UnsupportedVersion {
+                tag: *b"GEOS",
+                minimum: 900,
+                actual: V::NUMBER,
+            })
+    }
     /// Borrows optional Reforged tangent vectors.
     pub fn try_tangents(&self) -> Result<Option<&ZeroVec<'data, [f32; 4]>>, ValueError> {
         if V::NUMBER < 900 {
@@ -881,7 +905,7 @@ fn read_extra_sections<'data, S: SkinWeight>(
                     offset,
                     mdx::ReadErrorKind::UnknownTag { actual: tag },
                 )
-                .with_tag(*b"GEOS"))
+                .with_tag(*b"GEOS"));
             }
         }
     }

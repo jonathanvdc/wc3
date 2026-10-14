@@ -1,6 +1,6 @@
 //! Tracks components for native animation conversion.
 use super::*;
-use crate::model::conversion::animation::crop;
+
 
 pub(in super::super) fn interpolation(
     value: NativeInterpolation,
@@ -207,19 +207,6 @@ where
         let mut leaf_values = Vec::new();
         let mut leaf_splines = Vec::new();
         if let Some(track) = track {
-            let end = track.global_duration.unwrap_or(model.clips[index].duration);
-            let cropped;
-            let track = if track.keys.iter().any(|key| key.time < 0. || key.time > end) {
-                cropped = crop(track, 0., end)?;
-                context.issue(
-                    format!("clips[{index}].animation"),
-                    IssueKind::Normalized,
-                    "curve restricted exactly to its native sequence window",
-                );
-                &cropped
-            } else {
-                track
-            };
             for (key_index, key) in track.keys.iter().enumerate() {
                 let path = format!("clips[{index}].keys[{key_index}]");
                 let time = milliseconds(key.time, context, &path)?;

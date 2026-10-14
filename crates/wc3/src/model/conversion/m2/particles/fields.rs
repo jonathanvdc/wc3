@@ -34,11 +34,7 @@ impl OptionalFloat for () {
 
 pub(super) trait HeaderFields {
     fn parts(&self) -> (ParticleBlend, ParticleGenerator, u32);
-    fn make(
-        blend: wr::M2ParticleBlend32,
-        kind: wr::M2EmitterShape,
-        color: u32,
-    ) -> Result<Self, Error>
+    fn make(blend: ParticleBlend, kind: ParticleGenerator, color: u32) -> Result<Self, Error>
     where
         Self: Sized;
 }
@@ -47,11 +43,7 @@ impl HeaderFields for native::records::WideParticleHeader {
     fn parts(&self) -> (ParticleBlend, ParticleGenerator, u32) {
         (self.blending, self.emitter, 0)
     }
-    fn make(
-        blend: wr::M2ParticleBlend32,
-        kind: wr::M2EmitterShape,
-        color: u32,
-    ) -> Result<Self, Error> {
+    fn make(blend: ParticleBlend, kind: ParticleGenerator, color: u32) -> Result<Self, Error> {
         if color != 0 {
             return Err(Error::new(
                 "particles.color_index",
@@ -59,14 +51,8 @@ impl HeaderFields for native::records::WideParticleHeader {
             ));
         }
         Ok(Self {
-            blending: ParticleBlend::from_raw(
-                u16::try_from(blend.raw())
-                    .map_err(|_| Error::new("particles.blend", "blend exceeds u16"))?,
-            ),
-            emitter: ParticleGenerator::from_raw(
-                u16::try_from(kind.raw())
-                    .map_err(|_| Error::new("particles.kind", "kind exceeds u16"))?,
-            ),
+            blending: blend,
+            emitter: kind,
         })
     }
 }
@@ -79,11 +65,7 @@ impl HeaderFields for native::records::PackedParticleHeader {
             u32::from(self.color_index),
         )
     }
-    fn make(
-        blend: wr::M2ParticleBlend32,
-        kind: wr::M2EmitterShape,
-        color: u32,
-    ) -> Result<Self, Error> {
+    fn make(blend: ParticleBlend, kind: ParticleGenerator, color: u32) -> Result<Self, Error> {
         Ok(Self {
             blending: PackedParticleBlend::from_raw(
                 u8::try_from(blend.raw())

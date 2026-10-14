@@ -273,7 +273,7 @@ pub struct ModelRecord<D: ModelDialect> {
     pub collision_faces: Ref<targets::U16>,
     /// VEC3 positions for collision vertices.
     pub collision_verts: Ref<targets::Vector3>,
-    /// VEC3 normals associated with collision geometry.
+    /// VEC3 normal for each collision triangle.
     pub collision_normals: Ref<targets::Vector3>,
     /// ATT_ entries naming attachment locations on skeleton bones.
     pub attachment_points: Ref<targets::AttachmentPoint>,
@@ -345,8 +345,8 @@ pub struct ModelRecord<D: ModelDialect> {
     pub one_bone_solvers: Ref<targets::OneBoneSolver>,
     /// PATU entries defining constrained turret bone motion.
     pub turret_behaviors: Ref<targets::TurretBehavior>,
-    /// TRGD section carrying trigger-related metadata.
-    pub trigger_data: Ref<targets::TriggerData>,
+    /// TRGD named groups selecting PATU turret parts.
+    pub turret_groups: Ref<targets::TurretGroup>,
     /// IREF section containing the skeleton reference-pose matrices.
     pub initial_reference: Ref<targets::InitialReference>,
     /// Inline SSGS revision-1 shape used for precise hit testing.

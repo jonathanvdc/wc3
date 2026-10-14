@@ -38,6 +38,11 @@ external!(V264, V265, V272, V272PreSplit, V273, V274);
 
 /// Target envelope's ability to carry numeric texture identities.
 pub trait ExportDialect: Dialect {
+    /// Installs inline physics where supported, returning a document requiring a sibling otherwise.
+    fn inline_physics(
+        model: &mut native::Model<'static, Self>,
+        file: native::companions::PhysicsFile<'static>,
+    ) -> Result<Option<native::companions::PhysicsFile<'static>>, Error>;
     /// Whether the envelope carries numeric companion identities.
     const NUMERIC_COMPANIONS: bool;
     /// Installs an external physics identity using the selected envelope.
@@ -57,6 +62,12 @@ pub trait ExportDialect: Dialect {
 }
 
 impl<V: ModelLayout> ExportDialect for native::Flat<V> {
+    fn inline_physics(
+        _: &mut native::Model<'static, Self>,
+        file: native::companions::PhysicsFile<'static>,
+    ) -> Result<Option<native::companions::PhysicsFile<'static>>, Error> {
+        Ok(Some(file))
+    }
     const NUMERIC_COMPANIONS: bool = false;
     fn physics_id(
         model: &mut native::Model<'static, Self>,
@@ -99,6 +110,15 @@ impl<V: ModelLayout> ExportDialect for native::Flat<V> {
 }
 
 impl<V: ModelLayout> ExportDialect for Chunked<V> {
+    fn inline_physics(
+        model: &mut native::Model<'static, Self>,
+        file: native::companions::PhysicsFile<'static>,
+    ) -> Result<Option<native::companions::PhysicsFile<'static>>, Error> {
+        model
+            .insert_extension(0, Chunk::Physics(file))
+            .map_err(failure)?;
+        Ok(None)
+    }
     const NUMERIC_COMPANIONS: bool = true;
     fn physics_id(
         model: &mut native::Model<'static, Self>,

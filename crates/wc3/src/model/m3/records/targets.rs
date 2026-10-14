@@ -435,8 +435,8 @@ impl Target for AttachmentVolume {
 }
 /// Target family `TRGD`.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct TriggerData;
-impl Target for TriggerData {
+pub struct TurretGroup;
+impl Target for TurretGroup {
     const TAG: Option<[u8; 4]> = Some(*b"TRGD");
 }
 /// Target family `PATU`.

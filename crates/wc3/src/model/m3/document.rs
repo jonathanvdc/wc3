@@ -422,15 +422,16 @@ impl<'data, E: Envelope> Document<'data, E> {
             bytes,
         )
     }
-    /// Appends a raw indexed payload. Known layouts must have exactly count × size
+    /// Appends borrowed or owned indexed storage. Known layouts must have exactly count × size
     /// bytes; unknown layouts can only be preserved without relocation afterward.
     pub fn append_raw(
         &mut self,
         tag: [u8; 4],
         revision: u32,
         count: u32,
-        bytes: Vec<u8>,
+        bytes: impl Into<Cow<'data, [u8]>>,
     ) -> Result<SectionId, WriteError> {
+        let bytes = bytes.into();
         if tag == E::MAGIC {
             return Err(WriteError::invalid("duplicate envelope section"));
         }
@@ -448,7 +449,7 @@ impl<'data, E: Envelope> Document<'data, E> {
             tag,
             revision,
             count,
-            data: Cow::Owned(bytes),
+            data: bytes,
             original: None,
         });
         self.dirty = true;

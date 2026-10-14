@@ -2,7 +2,7 @@
 use super::dialect::*;
 use super::values::{
     BillboardKind, ForceChannels, ForceFlags, ForceKind, ForceShape, LightFlags, LightKind,
-    OneBoneFlags, ProjectionKind, ProjectorFlags, VolumeShape,
+    OneBoneFlags, ProjectionKind, ProjectorFlags, TurretAxisFlags, TurretPartFlags, VolumeShape,
 };
 use super::{targets, AnimationValue};
 use crate::model::m3::{self, Record, Ref};
@@ -290,14 +290,14 @@ impl Record for AttachmentVolume {
     m3::Validate,
     m3::VisitReferences,
 )]
-pub struct TriggerData {
-    /// Links to U32_ indices identifying the associated data entries.
-    pub data_indices: Ref<targets::U32>,
-    /// Links to CHAR bytes naming this trigger.
+pub struct TurretGroup {
+    /// U32_ indices selecting PATU turret parts.
+    pub parts: Ref<targets::U32>,
+    /// Links to CHAR bytes naming this turret group.
     pub name: Ref<targets::Character>,
 }
 
-impl Record for TriggerData {
+impl Record for TurretGroup {
     const TAG: [u8; 4] = *b"TRGD";
     const VERSION: u32 = 0;
 }
@@ -314,6 +314,8 @@ pub trait TurretBehaviorDialect: Revision + Copy + Clone + Debug + Default + Par
     type YawWeight: NativeField;
     /// Field representation for `pitch_weight`; `()` omits the field.
     type PitchWeight: NativeField;
+    /// Bone-relative offset representation for this part revision.
+    type MainBoneOffset: NativeField;
 }
 
 impl TurretBehaviorDialect for V0 {
@@ -322,6 +324,7 @@ impl TurretBehaviorDialect for V0 {
     type Unknown2 = ();
     type YawWeight = ();
     type PitchWeight = ();
+    type MainBoneOffset = [f32; 3];
 }
 
 impl TurretBehaviorDialect for V1 {
@@ -330,6 +333,7 @@ impl TurretBehaviorDialect for V1 {
     type Unknown2 = ();
     type YawWeight = ();
     type PitchWeight = ();
+    type MainBoneOffset = ();
 }
 
 impl TurretBehaviorDialect for V2 {
@@ -338,6 +342,7 @@ impl TurretBehaviorDialect for V2 {
     type Unknown2 = ();
     type YawWeight = ();
     type PitchWeight = ();
+    type MainBoneOffset = [f32; 3];
 }
 
 impl TurretBehaviorDialect for V3 {
@@ -346,6 +351,7 @@ impl TurretBehaviorDialect for V3 {
     type Unknown2 = ();
     type YawWeight = ();
     type PitchWeight = ();
+    type MainBoneOffset = [f32; 3];
 }
 
 impl TurretBehaviorDialect for V4 {
@@ -354,6 +360,7 @@ impl TurretBehaviorDialect for V4 {
     type Unknown2 = [f32; 4];
     type YawWeight = f32;
     type PitchWeight = f32;
+    type MainBoneOffset = [f32; 3];
 }
 
 /// Fields of the native `PATU` section, in serialized order.
@@ -379,11 +386,11 @@ pub struct TurretBehavior<D: TurretBehaviorDialect> {
     /// Selects the associated bone in the BONE section.
     pub bone_index: u16,
     /// Marks the turret as the primary turret when nonzero.
-    pub use_as_main_turret: u8,
+    pub use_as_main_turret: TurretPartFlags,
     /// Sets the turret group identifier.
     pub turret_group_id: u8,
     /// Enables enforcement of yaw limits.
-    pub yaw_limited: u32,
+    pub yaw_limited: TurretAxisFlags,
     /// Limits yaw rotation to its minimum angle, measured in radians.
     pub yaw_min: f32,
     /// Limits yaw rotation to its maximum angle, measured in radians.
@@ -391,7 +398,7 @@ pub struct TurretBehavior<D: TurretBehaviorDialect> {
     /// Sets the yaw rotation weight.
     pub yaw_weight: D::YawWeight,
     /// Enables enforcement of pitch limits.
-    pub pitch_limited: u32,
+    pub pitch_limited: TurretAxisFlags,
     /// Limits pitch rotation to its minimum angle, measured in radians.
     pub pitch_min: f32,
     /// Limits pitch rotation to its maximum angle, measured in radians.
@@ -403,7 +410,7 @@ pub struct TurretBehavior<D: TurretBehaviorDialect> {
     /// The purpose of this field has not been established.
     pub unknown4: f32,
     /// Sets the offset from main bone.
-    pub main_bone_offset: [f32; 3],
+    pub main_bone_offset: D::MainBoneOffset,
 }
 
 impl<D: TurretBehaviorDialect> Record for TurretBehavior<D> {

@@ -5,8 +5,7 @@
 //! parameters are exposed without imposing units or evaluating simulation.
 use super::dialect::*;
 use super::values::{
-    JointKind, LocalForces, PhysicalMaterial, PhysicsShapeKind, RigidBodyFlags, TriangleFlags,
-    WorldForces,
+    JointKind, LocalForces, PhysicalMaterial, PhysicsShapeKind, RigidBodyFlags, WorldForces,
 };
 use super::{targets, AnimationValue};
 use crate::model::m3::{self, Record, Ref};
@@ -131,10 +130,8 @@ pub struct PhysicsMeshTriangle {
     pub edge_index1: u32,
     /// Third edge selected from the owning shape edge array.
     pub edge_index2: u32,
-    /// Uninterpreted word immediately before the triangle flag bits.
-    pub reserved: u16,
-    /// Triangle property bits.
-    pub flags: TriangleFlags,
+    /// Unresolved floating-point control associated with this cooked triangle.
+    pub unresolved_control: f32,
 }
 
 impl Record for PhysicsMeshTriangle {
@@ -156,16 +153,16 @@ impl Record for PhysicsMeshTriangle {
     m3::VisitReferences,
 )]
 pub struct PhysicsMeshEdge {
-    /// Unresolved native edge classification word.
-    pub edge_type: u32,
-    /// Position-array index for one endpoint of the edge.
-    pub vertex_a: u32,
-    /// Position-array index for the other endpoint of the edge.
-    pub vertex_b: u32,
-    /// Triangle-array index for one face incident on the edge.
-    pub face_a: u32,
-    /// Triangle-array index for the other face incident on the edge.
-    pub face_b: u32,
+    /// First position selected by this cooked connectivity record.
+    pub vertex_index0: u32,
+    /// Second position selected by this cooked connectivity record.
+    pub vertex_index1: u32,
+    /// Third position selected by this cooked connectivity record.
+    pub vertex_index2: u32,
+    /// First triangle selected by this cooked connectivity record.
+    pub triangle_index0: u32,
+    /// Second triangle selected by this cooked connectivity record.
+    pub triangle_index1: u32,
 }
 
 impl Record for PhysicsMeshEdge {
@@ -183,6 +180,10 @@ pub trait PhysicsShapeDialect: Revision + Copy + Clone + Debug + Default + Parti
     type LegacyReserved1: NativeField;
     /// Field representation for `reserved_0`; `()` omits the field.
     type Reserved0: NativeField;
+    /// Input position reference present only before cooked hull storage was introduced.
+    type SourcePoints: NativeField;
+    /// Unresolved numerical controls in the cooked-shape header.
+    type CookedControls: NativeField;
     /// Field representation for `unused`; `()` omits the field.
     type Unused: NativeField;
     /// Field representation for `source_triangles`; `()` omits the field.
@@ -258,6 +259,8 @@ impl PhysicsShapeDialect for V0 {
     type LegacyReserved0 = FixedBytes<4>;
     type LegacyReserved1 = FixedBytes<3>;
     type Reserved0 = ();
+    type SourcePoints = Ref<targets::Vector3>;
+    type CookedControls = ();
     type Unused = ();
     type SourceTriangles = ();
     type Planes = ();
@@ -299,6 +302,8 @@ impl PhysicsShapeDialect for V1 {
     type LegacyReserved0 = FixedBytes<4>;
     type LegacyReserved1 = FixedBytes<3>;
     type Reserved0 = ();
+    type SourcePoints = Ref<targets::Vector3>;
+    type CookedControls = ();
     type Unused = Ref<targets::Byte>;
     type SourceTriangles = Ref<targets::U16>;
     type Planes = Ref<targets::Vector4>;
@@ -340,8 +345,10 @@ impl PhysicsShapeDialect for V2 {
     type LegacyReserved0 = ();
     type LegacyReserved1 = ();
     type Reserved0 = FixedBytes<3>;
+    type SourcePoints = ();
+    type CookedControls = [u32; 6];
     type Unused = ();
-    type SourceTriangles = Ref<targets::U16>;
+    type SourceTriangles = ();
     type Planes = ();
     type HullVertices = Ref<targets::Vector3>;
     type HullPlanes = Ref<targets::Vector4>;
@@ -381,8 +388,10 @@ impl PhysicsShapeDialect for V3 {
     type LegacyReserved0 = ();
     type LegacyReserved1 = ();
     type Reserved0 = FixedBytes<3>;
+    type SourcePoints = ();
+    type CookedControls = [u32; 6];
     type Unused = ();
-    type SourceTriangles = Ref<targets::U16>;
+    type SourceTriangles = ();
     type Planes = ();
     type HullVertices = Ref<targets::Vector3>;
     type HullPlanes = Ref<targets::Vector4>;
@@ -442,13 +451,15 @@ pub struct PhysicsShape<D: PhysicsShapeDialect> {
     /// 3 uninterpreted bytes between `shape_type` and `source_points`.
     pub reserved_0: D::Reserved0,
     /// VEC3 input points used to build collision geometry before the shape matrix is applied.
-    pub source_points: Ref<targets::Vector3>,
+    pub source_points: D::SourcePoints,
     /// U8__ section link present in this shape revision; its purpose is unresolved.
     pub unused: D::Unused,
     /// U16_ input indices for cooking a mesh, grouped in triples per triangle.
     pub source_triangles: D::SourceTriangles,
     /// VEC4 plane data carried by the older shape layout.
     pub planes: D::Planes,
+    /// Unresolved numerical controls used by cooked shapes, conventionally zero.
+    pub cooked_controls: D::CookedControls,
     /// Shape-dependent dimensions: box half-extents, sphere radius, or capsule/cylinder radius and cylindrical segment length.
     pub shape_dimensions: [f32; 3],
     /// VEC3 positions forming the cooked convex hull.
@@ -793,10 +804,8 @@ pub struct PhysicsJoint {
     pub angular_frequency: f32,
     /// Stored joint breaking threshold; runtime application is unresolved.
     pub break_threshold: f32,
-    /// Byte controlling collision between the connected bodies.
-    pub enable_shape: u8,
-    /// 3 uninterpreted bytes between `enable_shape` and the record end.
-    pub reserved_0: [u8; 3],
+    /// Signed joint collision-control word; its individual values have no established meaning.
+    pub collision_control: i32,
 }
 
 impl Record for PhysicsJoint {
@@ -824,7 +833,7 @@ pub struct ClothCollider {
     pub radius: f32,
     /// Total longitudinal size of the cloth capsule collider.
     pub height: f32,
-    /// Attachment BONE index; `0xffff` attaches the collider to the model root.
+    /// Entry in the owning cloth's skin-bone palette; `0xffff` attaches to model space.
     pub bone: u32,
 }
 
@@ -1079,8 +1088,8 @@ impl ClothPhysicsDialect for V4 {
 pub struct ClothPhysics<D: ClothPhysicsDialect> {
     /// REGN index defining the simulated cloth cage.
     pub cage_region: u32,
-    /// Stored anchor-bone count; its relationship to the `skin_bones` reference count is unresolved.
-    pub skin_bone_count: u32,
+    /// Unresolved authored control associated with the cage and its anchors.
+    pub anchor_control: u32,
     /// U16_ array of bone indices used by cloth anchors and colliders.
     pub skin_bones: Ref<targets::U16>,
     /// Section link of unresolved purpose; the expected target tag is not established.
@@ -1097,7 +1106,7 @@ pub struct ClothPhysics<D: ClothPhysicsDialect> {
     pub colliders: Ref<targets::ClothCollider>,
     /// PHAC records relating simulated cage vertices to output mesh regions.
     pub proxies: D::Proxies,
-    /// Authored body mass, independent of collision-shape volume.
+    /// Density parameter used by the cloth solver.
     pub density: f32,
     /// Parameter controlling how cloth tracks its anchors.
     pub tracking: f32,

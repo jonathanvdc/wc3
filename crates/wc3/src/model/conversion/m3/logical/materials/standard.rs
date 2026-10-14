@@ -1,0 +1,120 @@
+//! Direct logical standard decoding from native M3 fields.
+use super::texture::get_layer;
+use super::{
+    anim, identity, native, nr, read_error, revision, string, surface, Envelope, Error, Reader,
+    Slot,
+};
+pub(super) fn standard<'a, E: Envelope, D: nr::StandardMaterialDialect>(
+    r: nr::StandardMaterial<D>,
+    source: &'a native::Document<'_, E>,
+    reader: &mut Reader<'a, '_>,
+) -> Result<surface::Standard, Error>
+where
+    D::HdrEnvironmentConstant: Slot<f32>,
+    D::HdrEnvironmentDiffuse: Slot<f32>,
+    D::HdrEnvironmentSpecular: Slot<f32>,
+    D::GlossLayer: Slot<native::Ref<nr::targets::TextureLayer>>,
+    D::NormalBlend1MaskLayer: Slot<native::Ref<nr::targets::TextureLayer>>,
+    D::NormalBlend2MaskLayer: Slot<native::Ref<nr::targets::TextureLayer>>,
+    D::NormalBlend1Layer: Slot<native::Ref<nr::targets::TextureLayer>>,
+    D::NormalBlend2Layer: Slot<native::Ref<nr::targets::TextureLayer>>,
+    D::NormalBlendFactors: Slot<native::Ref<nr::targets::AnimationValueReal>>,
+{
+    reader.name = Some(string(source, r.name)?);
+    Ok(surface::Standard {
+        additional_flags: surface::values::AdditionalMaterialFlags((r.additional_flags).bits()),
+        flags: surface::values::MaterialFlags((r.flags).bits()),
+        blend_mode: surface::values::BlendMode::from_raw((r.blend_mode).raw()),
+        priority: r.priority,
+        rtt_channels: surface::values::RttChannels(r.rtt_channels.bits()),
+        specular_exponent: r.specular_exponent,
+        depth_blend_falloff: r.depth_blend_falloff,
+        alpha_test_threshold: r.alpha_test_threshold,
+        hdr_specular_multiplier: r.hdr_specular_multiplier,
+        hdr_emissive_multiplier: r.hdr_emissive_multiplier,
+        hdr_environment_constant: r.hdr_environment_constant.value(),
+        hdr_environment_diffuse: r.hdr_environment_diffuse.value(),
+        hdr_environment_specular: r.hdr_environment_specular.value(),
+        diffuse_layer: get_layer(source, reader, r.diffuse_layer)?,
+        decal_layer: get_layer(source, reader, r.decal_layer)?,
+        specular_layer: get_layer(source, reader, r.specular_layer)?,
+        gloss_layer: get_layer(source, reader, r.gloss_layer.value())?,
+        emissive_layer1: get_layer(source, reader, r.emissive_layer1)?,
+        emissive_layer2: get_layer(source, reader, r.emissive_layer2)?,
+        environment_layer: get_layer(source, reader, r.environment_layer)?,
+        environment_mask_layer: get_layer(source, reader, r.environment_mask_layer)?,
+        alpha_layer1: get_layer(source, reader, r.alpha_layer1)?,
+        alpha_layer2: get_layer(source, reader, r.alpha_layer2)?,
+        normal_layer: get_layer(source, reader, r.normal_layer)?,
+        height_layer: get_layer(source, reader, r.height_layer)?,
+        light_map_layer: get_layer(source, reader, r.light_map_layer)?,
+        ambient_occlusion_layer: get_layer(source, reader, r.ambient_occlusion_layer)?,
+        normal_blend1_mask_layer: get_layer(source, reader, r.normal_blend1_mask_layer.value())?,
+        normal_blend2_mask_layer: get_layer(source, reader, r.normal_blend2_mask_layer.value())?,
+        normal_blend1_layer: get_layer(source, reader, r.normal_blend1_layer.value())?,
+        normal_blend2_layer: get_layer(source, reader, r.normal_blend2_layer.value())?,
+        material_class: surface::values::MaterialClass::from_raw((r.material_class).raw()),
+        layer_blend_mode: surface::values::LayerBlendOp::from_raw((r.layer_blend_mode).raw()),
+        emissive_blend_mode1: surface::values::LayerBlendOp::from_raw(
+            (r.emissive_blend_mode1).raw(),
+        ),
+        emissive_blend_mode2: surface::values::LayerBlendOp::from_raw(
+            (r.emissive_blend_mode2).raw(),
+        ),
+        specular_mode: surface::values::SpecularMode::from_raw((r.specular_mode).raw()),
+        parallax_height: anim(r.parallax_height),
+        motion_blur_amount: anim(r.motion_blur_amount),
+        normal_blend_factors: identity(
+            source
+                .resolve::<nr::AnimationValueReal>(r.normal_blend_factors.value().cast())
+                .map_err(read_error)?
+                .iter()
+                .map(|r| r.map(|r| anim(r.value)))
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(read_error)?,
+        ),
+    })
+}
+
+pub(super) fn get_standard<'a, E: Envelope>(
+    source: &'a native::Document<'_, E>,
+    reader: &mut Reader<'a, '_>,
+    reference: native::Ref<nr::targets::StandardMaterial>,
+    index: usize,
+) -> Result<surface::Standard, Error> {
+    macro_rules! read {
+        ($v:ty) => {{
+            let r = source
+                .resolve::<nr::StandardMaterial<$v>>(reference.cast())
+                .map_err(read_error)?
+                .get(index)
+                .ok_or_else(|| Error::new("m3.material", "material index out of range"))?
+                .map_err(read_error)?;
+            standard(r, source, reader)
+        }};
+    }
+    match revision(source, reference).map_err(read_error)? {
+        0 => read!(nr::V0),
+        1 => read!(nr::V1),
+        2 => read!(nr::V2),
+        3 => read!(nr::V3),
+        4 => read!(nr::V4),
+        5 => read!(nr::V5),
+        6 => read!(nr::V6),
+        7 => read!(nr::V7),
+        8 => read!(nr::V8),
+        9 => read!(nr::V9),
+        10 => read!(nr::V10),
+        11 => read!(nr::V11),
+        12 => read!(nr::V12),
+        13 => read!(nr::V13),
+        14 => read!(nr::V14),
+        15 => read!(nr::V15),
+        16 => read!(nr::V16),
+        17 => read!(nr::V17),
+        18 => read!(nr::V18),
+        19 => read!(nr::V19),
+        20 => read!(nr::V20),
+        _ => Err(Error::new("m3.material", "unsupported standard revision")),
+    }
+}

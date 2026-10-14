@@ -19,7 +19,7 @@ use crate::model::wem::{self, Bool, InlineOption, Record, Ref};
     wem::VisitReferences,
 )]
 pub struct SoftPart {
-    /// Document mesh index selected as part of the soft body.
+    /// Model mesh index selected as part of the soft body.
     pub mesh: u32,
     /// Material-slot restriction within the mesh; `0xffffffff` selects the entire mesh.
     pub material: u32,
@@ -42,7 +42,7 @@ impl Record for SoftPart {
     wem::VisitReferences,
 )]
 pub struct SoftPlace {
-    /// Document mesh index carrying the effect attachment.
+    /// Model mesh index carrying the effect attachment.
     pub mesh: u32,
     /// Face index on the attachment mesh.
     pub face: u32,
@@ -496,7 +496,7 @@ pub struct SoftBody {
     pub id: u32,
     /// CHAR bytes naming the soft body.
     pub name: Ref<targets::Character>,
-    /// Document mesh indices participating in the soft body.
+    /// Model mesh indices participating in the soft body.
     pub meshes: Ref<targets::U32>,
     /// Requested number of surface lumps, excluding lumps selected by effect attachments.
     pub detail: u32,
@@ -520,7 +520,7 @@ pub struct SoftBody {
     pub effects: Ref<targets::SoftEffect>,
     /// Physics collider identities participating in the soft-body response.
     pub colliders: Ref<targets::U32>,
-    /// Document mesh index created by drip generation; `0xffffffff` means no generated mesh.
+    /// Model mesh index created by drip generation; `0xffffffff` means no generated mesh.
     pub drips: u32,
     /// Next identity to allocate for a new soft effect.
     pub next_effect: u32,
@@ -703,7 +703,7 @@ impl PhysicsBodyDialect for V3 {
 pub struct PhysicsBody<D: PhysicsBodyDialect> {
     /// Stable identity of this physics body.
     pub id: u32,
-    /// Global document node index attached to the body.
+    /// Model hierarchy node index attached to the body.
     pub node: u32,
     /// Motion category selecting dynamic, kinematic, or static behavior.
     pub motion: BodyMotion,
@@ -864,7 +864,7 @@ impl<D: PhysicsJointDialect> Record for PhysicsJoint<D> {
     const VERSION: u32 = D::VERSION;
 }
 
-/// A draw-section index paired with the document mesh that owns it.
+/// A draw-section index paired with the model mesh that owns it.
 #[derive(
     Clone,
     Debug,
@@ -877,7 +877,7 @@ impl<D: PhysicsJointDialect> Record for PhysicsJoint<D> {
     wem::VisitReferences,
 )]
 pub struct SectionRef {
-    /// Document mesh index containing the selected draw section.
+    /// Model mesh index containing the selected draw section.
     pub mesh: u32,
     /// Draw-section index within that mesh.
     pub section: u32,
@@ -920,7 +920,7 @@ impl ClothColliderDialect for V2 {
 pub struct ClothCollider<D: ClothColliderDialect> {
     /// Stable identity of this cloth collider.
     pub id: u32,
-    /// Document node index attaching the collider; `0xffffffff` selects the model root.
+    /// Model hierarchy node index attaching the collider; `0xffffffff` selects the model root.
     pub node: u32,
     /// Cloth collision primitive selecting a capsule or plane.
     pub kind: ClothColliderKind,
@@ -1017,7 +1017,7 @@ pub struct Sc2ClothParams {
 pub struct ClothRecipe {
     /// CHAR bytes naming this cloth preparation recipe.
     pub name: Ref<targets::Character>,
-    /// Document node indices selected as candidate cloth anchors.
+    /// Model hierarchy node indices selected as candidate cloth anchors.
     pub bones: Ref<targets::U32>,
     /// Minimum fraction of skin weight on the selected cloth bones needed for a particle to move; lower fractions are pinned.
     pub threshold: f32,

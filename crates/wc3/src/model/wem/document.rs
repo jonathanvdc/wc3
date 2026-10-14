@@ -489,6 +489,20 @@ impl<'data> RawDocument<'data> {
         count: u32,
         bytes: Vec<u8>,
     ) -> Result<SectionId, WriteError> {
+        self.append_data(tag, revision, count, Cow::Owned(bytes))
+    }
+    /// Appends checked native records from borrowed or owned encoded storage.
+    ///
+    /// Known record layouts must consume the entire supplied payload. The document
+    /// relocates sections during writing; opaque payloads with internal addresses
+    /// require the caller to supply any corresponding relocation policy.
+    pub fn append_data(
+        &mut self,
+        tag: [u8; 4],
+        revision: u32,
+        count: u32,
+        bytes: Cow<'data, [u8]>,
+    ) -> Result<SectionId, WriteError> {
         if matches!(&tag, b"WOEM" | b"HOLE") {
             return Err(WriteError::invalid("reserved section tag"));
         }
@@ -508,7 +522,7 @@ impl<'data> RawDocument<'data> {
             tag,
             revision,
             count,
-            data: Cow::Owned(bytes),
+            data: bytes,
             original: None,
         });
         self.dirty = true;

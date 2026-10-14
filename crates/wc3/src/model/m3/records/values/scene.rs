@@ -351,3 +351,23 @@ impl From<ForceChannels> for u32 {
         value.bits()
     }
 }
+
+bitfield! {
+    /// Turret control mask retaining every unknown bit.
+    #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Hash, m3::Read, m3::Write, m3::RecordLayout, m3::Validate, m3::VisitReferences)]
+    pub struct TurretPartFlags(u8);
+    /// Complete authored control word.
+    pub bits, _: 7, 0;
+    /// Returns or changes the documented main part control.
+    pub main_part, set_main_part: 0;
+}
+
+bitfield! {
+    /// Turret control mask retaining every unknown bit.
+    #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Hash, m3::Read, m3::Write, m3::RecordLayout, m3::Validate, m3::VisitReferences)]
+    pub struct TurretAxisFlags(u32);
+    /// Complete authored control word.
+    pub bits, _: 31, 0;
+    /// Returns or changes the documented limited control.
+    pub limited, set_limited: 1;
+}

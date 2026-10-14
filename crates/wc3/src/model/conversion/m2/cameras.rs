@@ -1,33 +1,42 @@
-//! Static and animated native field-of-view placement.
+//! Static and animated field-of-view placement in native camera families.
+use super::graph::{Graph, GraphBuilder};
 use super::*;
+use crate::model::semantic::{Animated, Channel, ClipId, ClockId, FeatureId, OwnerId, Property};
 
-/// Selects static or animated field-of-view placement without runtime layout flags.
+/// Selects field-of-view representation through the native dialect's field types.
 pub trait CameraConversion: ModelLayout {
-    /// Returns the static camera field of view, when present.
-    fn static_fov(camera: &native::records::Camera<'_, Self>) -> f32;
-    /// Reads an animated field-of-view channel in layouts that include it.
-    fn import_fov<'data, D: Dialect<Layout = Self>>(
-        source: &Bundle<'data, D>,
-        camera: &native::records::Camera<'data, Self>,
-        sequence: usize,
-        start: u32,
-        target: sm::Target,
-    ) -> Result<Option<sm::Track>, Error>;
-    /// Installs the field of view in its selected native location.
-    fn export_fov(
+    /// Imports a logical field-of-view property, borrowing its native curves.
+    fn logical_fov<'a, 'data: 'a, D: Dialect<Layout = Self>>(
+        source: &'a Bundle<'data, D>,
+        camera: &'a native::records::Camera<'data, Self>,
+        feature: FeatureId,
+        clips: &[ClipId],
+        clocks: &[ClockId],
+        builder: &mut GraphBuilder<'a>,
+    ) -> Result<Animated<f32>, Error>
+    where
+        Self::Timing: SequenceClock;
+    /// Writes a logical property into the native dialect-selected field.
+    fn write_logical_fov(
+        model: &Graph<'_>,
+        value: &Animated<f32>,
         camera: &mut native::records::Camera<'static, Self>,
-        field: (f32, sm::Target),
-        model: &sm::Model<'_>,
         starts: &[u32],
         globals: &mut Vec<u32>,
         context: &mut Context,
-    ) -> Result<(), Error>;
+    ) -> Result<(), Error>
+    where
+        Self::Timeline<'static>: TimelineFactory,
+        Self::TrackValues<'static, f32>: ValuesFactory<f32>,
+        Self::SplineValues<'static, f32>: SplineFactory<f32>;
 }
-
-macro_rules! static_cameras{($($v:ty),*)=>{$(impl CameraConversion for $v{fn static_fov(camera:&native::records::Camera<'_,Self>)->f32{camera.field_of_view}fn import_fov<'data,D:Dialect<Layout=Self>>(_: &Bundle<'data,D>,_:&native::records::Camera<'data,Self>,_:usize,_:u32,_:sm::Target)->Result<Option<sm::Track>,Error>{Ok(None)}fn export_fov(camera:&mut native::records::Camera<'static,Self>,field:(f32,sm::Target),model:&sm::Model<'_>,_:&[u32],_:&mut Vec<u32>,context:&mut Context )->Result<(),Error>{let(value,target)=field;if model.clips.iter().any(|clip|clip.tracks.iter().any(|track|track.target==target&&!track.keys.is_empty())){context.unsupported("cameras.fov","target layout carries only static field of view")?;}camera.field_of_view=value;Ok(())}})*};}
-
+macro_rules! static_cameras {($($v:ty),*)=>{$(impl CameraConversion for $v {
+    fn logical_fov<'a,'data:'a,D:Dialect<Layout=Self>>(_: &'a Bundle<'data,D>,camera:&'a native::records::Camera<'data,Self>,_:FeatureId,_:&[ClipId],_:&[ClockId],_:&mut GraphBuilder<'a>)->Result<Animated<f32>,Error>{Ok(Animated::constant(camera.field_of_view))}
+    fn write_logical_fov(model:&Graph<'_>,value:&Animated<f32>,camera:&mut native::records::Camera<'static,Self>,_:&[u32],_:&mut Vec<u32>,context:&mut Context)->Result<(),Error>{if value.property.as_ref().is_some_and(|target|model.clips().any(|(_,clip)|clip.channels().iter().any(|c|matches!(c,Channel::Scalar(t)if t.target==*target)))){context.unsupported("m2.camera.fov","target dialect has only static field of view")?}camera.field_of_view=value.default;Ok(())}
+})*};}
 static_cameras!(V256, V257, V260, V263, V264);
-
-macro_rules! animated_cameras{($($v:ty),*)=>{$(impl CameraConversion for $v{fn static_fov(_: &native::records::Camera<'_,Self>)->f32{0.}fn import_fov<'data,D:Dialect<Layout=Self>>(source:&Bundle<'data,D>,camera:&native::records::Camera<'data,Self>,sequence:usize,start:u32,target:sm::Target)->Result<Option<sm::Track>,Error>{import_spline(source,&camera.field_of_view_track,sequence,start,target,|v|vec![v])}fn export_fov(camera:&mut native::records::Camera<'static,Self>,field:(f32,sm::Target),model:&sm::Model<'_>,starts:&[u32],globals:&mut Vec<u32>,context:&mut Context )->Result<(),Error>{let(value,target)=field;camera.field_of_view_track=export_spline::<Self,f32>(model,target,starts,globals,context,|v,_,path|v.first().copied().filter(|_|v.len()==1).ok_or_else(||Error::new(path,"field of view needs one component")))?;if camera.field_of_view_track.base.timeline.inline(0).is_none_or(|t|t.is_empty()){let index=globals.iter().position(|v|*v==1000).unwrap_or_else(||{globals.push(1000);globals.len()-1});camera.field_of_view_track.base.global_sequence=index as u16;camera.field_of_view_track.base.timeline=TimelineFactory::build(vec![vec![0]],true);camera.field_of_view_track.values=SplineFactory::build(vec![vec![[value;3]]]);}Ok(())}})*};}
-
+macro_rules! animated_cameras {($($v:ty),*)=>{$(impl CameraConversion for $v {
+    fn logical_fov<'a,'data:'a,D:Dialect<Layout=Self>>(source:&'a Bundle<'data,D>,camera:&'a native::records::Camera<'data,Self>,feature:FeatureId,clips:&[ClipId],clocks:&[ClockId],builder:&mut GraphBuilder<'a>)->Result<Animated<f32>,Error>{let property=Property::named(OwnerId::Feature(feature),"m2.camera.field_of_view");let tables=sequence_tables(source,&source.key)?;let mut default=0.;for(seq,clip)in graph::animation::sequences(clips){let(start,_)=tables.sequences.get(seq).map_or((0,0),|s|s.timing.window());if let Some((c,g))=graph::animation::spline_curve(source,&camera.field_of_view_track,seq,start)?{default=c.values().get(0).unwrap_or(default);graph::animation::insert(builder,clip,Channel::Scalar(graph::animation::bind(c,g,property.clone(),clocks)?))?}}Ok(Animated::new(default,property))}
+    fn write_logical_fov(model:&Graph<'_>,value:&Animated<f32>,camera:&mut native::records::Camera<'static,Self>,starts:&[u32],globals:&mut Vec<u32>,context:&mut Context)->Result<(),Error>{camera.field_of_view_track=graph::animation::animated_spline(model,value,starts,globals,context,|v,_|Ok(v))?;Ok(())}
+})*};}
 animated_cameras!(V265, V272, V272PreSplit, V273, V274);

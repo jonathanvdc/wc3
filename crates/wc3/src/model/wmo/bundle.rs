@@ -73,6 +73,10 @@ impl<'data, D: Dialect> Bundle<'data, D> {
     pub fn group(&self, key: GroupKey) -> Option<&Group<'data, D>> {
         self.groups.get(&key).map(|value| &value.group)
     }
+    /// Returns the caller-visible resource identity of a resolved group.
+    pub fn group_file_key(&self, key: GroupKey) -> Option<&FileKey> {
+        self.groups.get(&key).map(|value| &value.key)
+    }
     /// Edits a resolved group in its native dialect.
     pub fn group_mut(&mut self, key: GroupKey) -> Option<&mut Group<'data, D>> {
         self.groups.get_mut(&key).map(|value| &mut value.group)
