@@ -177,7 +177,7 @@ fn grouping_and_collision_remain_distinct_from_single_display_topology() {
         .with_triangle_controls(vec![3.5])
         .unwrap();
     let universal = UniversalGeometry::from(M3Geometry::Collision(collision));
-    assert!(matches!(universal, UniversalGeometry::Collision(_)));
+    assert!(matches!(universal, UniversalGeometry::Data(_)));
     assert_eq!(universal.kind(), GeometryKind::Collision);
     assert!(<Mdlx as Narrows<Universal>>::geometry(universal.clone()).is_err());
     let M3Geometry::Collision(restored) = <M3 as Narrows<Universal>>::geometry(universal).unwrap()
@@ -354,4 +354,115 @@ fn narrowing_does_not_relabel_variable_width_rows_as_fixed_slots() {
     assert!(M2Geometry::try_from(data.clone()).is_err());
     assert!(MdlxGeometry::try_from(data.clone()).is_err());
     assert!(M3DisplayGeometry::try_from(data).is_err());
+}
+
+#[test]
+fn collision_purpose_and_face_streams_survive_shared_storage() {
+    use wc3::model::semantic::profiles::{
+        diablo::{d3, d4},
+        D3, D4,
+    };
+    use wc3::model::semantic::VertexRemap;
+    let positions = [[0., 0., 0.], [1., 0., 0.], [0., 1., 0.]];
+    let normals = [[0., 0., 2.]];
+    let controls = [-3.5];
+    let original = M3CollisionGeometry::new(&positions[..], vec![[0, 1, 2]])
+        .unwrap()
+        .with_face_normals(&normals[..])
+        .unwrap()
+        .with_triangle_controls(&controls[..])
+        .unwrap();
+    let data = GeometryData::from(original);
+    assert_eq!(data.kind(), GeometryKind::Collision);
+    let restored = M3CollisionGeometry::try_from(data.clone()).unwrap();
+    assert_eq!(
+        restored.positions().as_slice().unwrap().as_ptr(),
+        positions.as_ptr()
+    );
+    assert_eq!(
+        restored
+            .face_normals()
+            .unwrap()
+            .as_slice()
+            .unwrap()
+            .as_ptr(),
+        normals.as_ptr()
+    );
+    assert_eq!(
+        restored
+            .triangle_controls()
+            .unwrap()
+            .as_slice()
+            .unwrap()
+            .as_ptr(),
+        controls.as_ptr()
+    );
+    let mapped = data
+        .edited(GeometryEdit {
+            remap: Some(VertexRemap {
+                new_to_old: vec![2, 0, 1, 0],
+                topology: Topology::Triangles(vec![[3, 2, 0]].into()),
+            }),
+            ..Default::default()
+        })
+        .unwrap();
+    assert_eq!(mapped.kind(), GeometryKind::Collision);
+    let mapped = M3CollisionGeometry::try_from(mapped).unwrap();
+    assert_eq!(
+        mapped.face_normals().unwrap().as_slice().unwrap().as_ptr(),
+        normals.as_ptr()
+    );
+    assert_eq!(
+        mapped
+            .triangle_controls()
+            .unwrap()
+            .as_slice()
+            .unwrap()
+            .as_ptr(),
+        controls.as_ptr()
+    );
+    let mut duplicate = data.clone();
+    duplicate.attributes.push(duplicate.attributes[0].clone());
+    assert!(M3CollisionGeometry::try_from(duplicate).is_err());
+    let mut wrong_type = data.clone();
+    wrong_type.attributes[0].values = AttributeValues::Scalar(vec![1.].into());
+    assert!(M3CollisionGeometry::try_from(wrong_type).is_err());
+    let mut wrong_domain = data.clone();
+    wrong_domain.attributes[0].domain = AttributeDomain::Mesh;
+    assert!(M3CollisionGeometry::try_from(wrong_domain).is_err());
+    let mut shading = data.clone();
+    shading.normals = vec![[0., 0., 1.]; 3].into();
+    assert!(M3CollisionGeometry::try_from(shading).is_err());
+    let mut skinning = data.clone();
+    skinning.influences = GeometryInfluences::Four(vec![four(); 3].into());
+    assert!(M3CollisionGeometry::try_from(skinning).is_err());
+    let mut display = data;
+    display.kind = GeometryKind::Display;
+    assert!(M3CollisionGeometry::try_from(display).is_err());
+
+    for topology in [
+        Topology::Points(vec![0, 1, 2].into()),
+        Topology::Polygons {
+            corners: vec![0, 1, 2].into(),
+            offsets: vec![0, 3].into(),
+        },
+        Topology::Triangles(vec![[0, 1, 2]].into()),
+    ] {
+        let data = GeometryData {
+            kind: GeometryKind::Collision,
+            positions: Values::from_slice(&positions),
+            topology,
+            ..Default::default()
+        };
+        assert!(MdlxGeometry::try_from(data.clone()).is_err());
+        assert!(M2Geometry::try_from(data.clone()).is_err());
+        assert!(M3DisplayGeometry::try_from(data.clone()).is_err());
+        assert!(d3::Geometry::try_from(data.clone()).is_err());
+        assert!(d4::Geometry::new(data.clone()).is_err());
+        let universal: UniversalGeometry<'_> = data.into();
+        assert!(<D3 as Narrows<Universal>>::geometry(universal.clone()).is_err());
+        assert!(<D4 as Narrows<Universal>>::geometry(universal.clone()).is_err());
+        let restored = <M3 as Narrows<Universal>>::geometry(universal).unwrap();
+        assert!(matches!(restored, M3Geometry::Collision(_)));
+    }
 }

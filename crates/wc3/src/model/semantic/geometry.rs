@@ -90,6 +90,8 @@ pub enum AttributeSemantic<'a> {
     Binormal,
     /// Index into the owning cloth vertex domain.
     ClothVertex,
+    /// Independently authored scalar control for each collision triangle.
+    CollisionTriangleControl,
     /// Color stream with its authored slot.
     Color(u32),
     /// Texture-coordinate stream with its authored slot.

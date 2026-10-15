@@ -1,11 +1,11 @@
 //! Native projection expands logical corner and face attributes at the output boundary.
 use super::{Context, Error};
 use crate::model::semantic::profiles::Profile;
-use crate::model::semantic::GeometryInfluences;
 use crate::model::semantic::{
     Attribute, AttributeDomain, AttributeSemantic, AttributeValues, GeometryData, InfluenceRows,
     InstanceId, LookId, MaterialId, Mesh, Model, SkinId, Topology, UniversalGeometry, Values,
 };
+use crate::model::semantic::{GeometryInfluences, GeometrySchema};
 use std::collections::BTreeMap;
 use std::sync::Arc;
 /// Geometry for one material draw after attribute seams and polygons are resolved.
@@ -172,6 +172,7 @@ pub fn project<'a, 'data: 'a, P: Profile>(
                     controls: None,
                     bounds: source.bounds,
                     geometry: UniversalGeometry::Data(GeometryData {
+                        kind: source.geometry.kind(),
                         positions: source.positions().clone(),
                         normals: source.normals().cloned().unwrap_or_default(),
                         tangents: source.tangents().cloned().unwrap_or_default(),
@@ -409,6 +410,7 @@ pub fn project<'a, 'data: 'a, P: Profile>(
                     name: source.name.clone(),
                     bounds: source.bounds,
                     geometry: UniversalGeometry::Data(GeometryData {
+                        kind: source.geometry.kind(),
                         positions,
                         normals,
                         tangents,

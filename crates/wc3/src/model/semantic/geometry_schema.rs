@@ -210,8 +210,6 @@ impl InfluenceRows<'_, '_> {
 pub enum UniversalGeometry<'data> {
     /// Shared streams, connectivity, attributes, and explicit influence representations.
     Data(GeometryData<'data>),
-    /// Collision connectivity and per-triangle controls, independent of shading.
-    Collision(M3CollisionGeometry<'data>),
     /// Static-world geometry, including face collision and rendering controls.
     Wmo(WmoGeometry<'data>),
     /// Editable-model polygon groups, typed layers, and direct node influences.
@@ -236,13 +234,24 @@ impl<'data> From<M3Geometry<'data>> for UniversalGeometry<'data> {
     fn from(value: M3Geometry<'data>) -> Self {
         match value {
             M3Geometry::Display(value) => Self::Data(value.into()),
-            M3Geometry::Collision(value) => Self::Collision(value),
+            M3Geometry::Collision(value) => Self::Data(value.into()),
         }
     }
 }
 impl<'data> From<GeometryData<'data>> for UniversalGeometry<'data> {
     fn from(value: GeometryData<'data>) -> Self {
         Self::Data(value)
+    }
+}
+impl<'data> From<M3CollisionGeometry<'data>> for UniversalGeometry<'data> {
+    fn from(value: M3CollisionGeometry<'data>) -> Self {
+        Self::Data(value.into())
+    }
+}
+impl<'data> TryFrom<UniversalGeometry<'data>> for M3CollisionGeometry<'data> {
+    type Error = Error;
+    fn try_from(value: UniversalGeometry<'data>) -> Result<Self, Error> {
+        value.into_data()?.try_into()
     }
 }
 impl<'data> UniversalGeometry<'data> {
@@ -271,12 +280,10 @@ impl<'data> TryFrom<UniversalGeometry<'data>> for M2Geometry<'data> {
 impl<'data> TryFrom<UniversalGeometry<'data>> for M3Geometry<'data> {
     type Error = Error;
     fn try_from(value: UniversalGeometry<'data>) -> Result<Self, Error> {
-        match value {
-            UniversalGeometry::Collision(value) => {
-                value.validate()?;
-                Ok(Self::Collision(value))
-            }
-            value => Ok(Self::Display(value.into_data()?.try_into()?)),
+        let data = value.into_data()?;
+        match data.kind {
+            GeometryKind::Collision => Ok(Self::Collision(data.try_into()?)),
+            GeometryKind::Display => Ok(Self::Display(data.try_into()?)),
         }
     }
 }
@@ -284,7 +291,6 @@ macro_rules! with_geometry {
     ($self:expr, $value:ident => $body:expr) => {
         match $self {
             UniversalGeometry::Data($value) => $body,
-            UniversalGeometry::Collision($value) => $body,
             UniversalGeometry::Wmo($value) => $body,
             UniversalGeometry::Wem($value) => $body,
         }
@@ -297,7 +303,6 @@ impl<'data> GeometrySchema<'data> for UniversalGeometry<'data> {
     fn edited(&self, edit: GeometryEdit<'data>) -> Result<Self, Error> {
         match self {
             Self::Data(value) => Ok(Self::Data(value.edited(edit)?)),
-            Self::Collision(value) => Ok(Self::Collision(value.edited(edit)?)),
             Self::Wmo(value) => Ok(Self::Wmo(value.edited(edit)?)),
             Self::Wem(value) => Ok(Self::Wem(value.edited(edit)?)),
         }
@@ -341,6 +346,8 @@ impl ValidateLinks for UniversalGeometry<'_> {
 /// General authoring geometry, including polygon domains and custom attributes.
 #[derive(Clone, Debug)]
 pub struct GeometryData<'data> {
+    /// Authored purpose, retained independently of connectivity and attributes.
+    pub kind: GeometryKind,
     /// Vertex positions.
     pub positions: Values<'data, [f32; 3]>,
     /// Vertex normals; empty when absent.
@@ -370,6 +377,12 @@ impl<'data> GeometryData<'data> {
     }
     pub(crate) fn validate_vertex_streams(&self) -> Result<(), Error> {
         self.validate()?;
+        if self.kind != GeometryKind::Display {
+            return Err(Error::new(
+                "geometry.kind",
+                "target requires display geometry",
+            ));
+        }
         if !self.attributes.is_empty() {
             return Err(Error::new(
                 "geometry.attributes",
@@ -388,6 +401,7 @@ impl<'data> GeometryData<'data> {
         triangles: impl Into<Values<'data, [u32; 3]>>,
     ) -> Result<Self, Error> {
         let geometry = Self {
+            kind: GeometryKind::Display,
             positions: positions.into(),
             normals: Values::default(),
             tangents: Values::default(),
@@ -402,6 +416,9 @@ impl<'data> GeometryData<'data> {
     }
 }
 impl<'data> GeometrySchema<'data> for GeometryData<'data> {
+    fn kind(&self) -> GeometryKind {
+        self.kind
+    }
     fn edit_capabilities(&self) -> GeometryEditCapabilities {
         GeometryEditCapabilities {
             positions: true,
@@ -703,6 +720,7 @@ fn validate_topology(topology: &Topology<'_>, vertices: usize) -> Result<(), Err
 impl Default for GeometryData<'_> {
     fn default() -> Self {
         Self {
+            kind: GeometryKind::Display,
             positions: Values::default(),
             normals: Values::default(),
             tangents: Values::default(),

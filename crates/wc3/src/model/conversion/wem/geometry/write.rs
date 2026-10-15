@@ -66,6 +66,7 @@ fn semantic(value: &AttributeSemantic<'_>) -> String {
         AttributeSemantic::TangentVector => "tangent_vector".into(),
         AttributeSemantic::Binormal => "binormal".into(),
         AttributeSemantic::ClothVertex => "cloth_vertex".into(),
+        AttributeSemantic::CollisionTriangleControl => "collision_triangle_control".into(),
         AttributeSemantic::Color(index) => {
             if *index == 0 {
                 "color".into()

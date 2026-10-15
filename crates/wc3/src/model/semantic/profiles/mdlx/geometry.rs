@@ -6,7 +6,7 @@ use crate::model::semantic::{
     Attributes, Error, GeometrySchema, InfluenceRows, JointInfluences, Link, Topology,
     ValidateLinks, Values,
 };
-use crate::model::semantic::{GeometryData, VertexData};
+use crate::model::semantic::{GeometryData, GeometryKind, VertexData};
 use crate::model::semantic::{GeometryEdit, GeometryEditCapabilities, StreamSupport};
 /// Warcraft III geometry with its native stream vocabulary.
 ///
@@ -249,6 +249,7 @@ impl<'data> From<MdlxGeometry<'data>> for GeometryData<'data> {
             influences,
         } = value.streams;
         Self {
+            kind: GeometryKind::Display,
             positions: vertices.positions,
             normals: vertices.normals,
             tangents: vertices.tangents,

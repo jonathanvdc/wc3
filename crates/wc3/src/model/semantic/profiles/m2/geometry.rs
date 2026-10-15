@@ -6,7 +6,7 @@ use crate::model::semantic::{
     Attributes, Error, GeometrySchema, Influence, InfluenceRows, Link, Topology, ValidateLinks,
     Values,
 };
-use crate::model::semantic::{GeometryData, GeometryInfluences, VertexData};
+use crate::model::semantic::{GeometryData, GeometryInfluences, GeometryKind, VertexData};
 use crate::model::semantic::{GeometryEdit, GeometryEditCapabilities, StreamSupport};
 /// World of Warcraft model geometry with two UV streams and four joint slots.
 /// Unsupported streams are unavailable through this type's constructors.
@@ -183,6 +183,7 @@ impl<'data> From<M2Geometry<'data>> for GeometryData<'data> {
             influences,
         } = value.streams;
         Self {
+            kind: GeometryKind::Display,
             positions: vertices.positions,
             normals: vertices.normals,
             tangents: Values::default(),

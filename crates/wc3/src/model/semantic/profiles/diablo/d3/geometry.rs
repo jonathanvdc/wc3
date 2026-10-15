@@ -5,8 +5,8 @@ use crate::model::semantic::vertex_geometry::{GeometryStreams, RemapStreams};
 use crate::model::semantic::VertexData;
 use crate::model::semantic::{
     Attribute, AttributeDomain, AttributeSemantic, AttributeValues, Attributes, Error,
-    GeometryData, GeometryInfluences, GeometrySchema, Influence, InfluenceRows, Link, Topology,
-    UniversalGeometry, ValidateLinks, Values,
+    GeometryData, GeometryInfluences, GeometryKind, GeometrySchema, Influence, InfluenceRows, Link,
+    Topology, UniversalGeometry, ValidateLinks, Values,
 };
 use crate::model::semantic::{GeometryEdit, GeometryEditCapabilities, StreamSupport};
 
@@ -214,6 +214,7 @@ impl<'a> From<Geometry<'a>> for GeometryData<'a> {
             influences,
         } = value.data;
         Self {
+            kind: GeometryKind::Display,
             positions: vertices.positions,
             normals: vertices.normals,
             tangents: Values::default(),
@@ -271,6 +272,9 @@ impl<'a> TryFrom<GeometryData<'a>> for Geometry<'a> {
     type Error = Error;
     fn try_from(value: GeometryData<'a>) -> Result<Self, Error> {
         value.validate()?;
+        if value.kind != GeometryKind::Display {
+            return Err(Error::new("d3.geometry.kind", "expected display geometry"));
+        }
         if !value.tangents.is_empty() {
             return Err(Error::new(
                 "d3.geometry.tangents",

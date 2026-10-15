@@ -160,8 +160,15 @@ equal-weight matrix groups. Custom attributes can coexist with each influence
 representation. Narrowing to a constrained display type rejects custom attributes
 and influence representations that the destination cannot retain; even a
 variable-length row containing four entries remains distinct from four authored
-slots. `UniversalGeometry::Collision` keeps collision connectivity and
-per-triangle controls separate from display geometry.
+slots.
+
+Collision geometry also widens to `Data`, retaining `GeometryKind::Collision`
+as its authored purpose. Face normals use face-domain `Normal` attributes, and
+per-triangle scalar controls use `CollisionTriangleControl`. Checked M3 narrowing
+requires collision purpose, supported connectivity, and correctly typed optional
+triangle attributes. It rejects shading and skinning streams; display geometry
+types reject collision purpose even when the mesh carries only positions and
+connectivity. Widening, common edits, and native projection retain this purpose.
 
 `VertexData` shares the typed vertex layout used by display geometry, WMO,
 Diablo III, and collision. Its stream types select fixed UV arrays, optional

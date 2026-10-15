@@ -5,8 +5,8 @@ use crate::model::semantic::geometry_edit::{check_edit, remap_values};
 use crate::model::semantic::geometry_schema::validate_geometry;
 use crate::model::semantic::vertex_geometry::{GeometryStreams, VertexStreams};
 use crate::model::semantic::{
-    Attributes, Error, GeometryKind, GeometrySchema, Influence, InfluenceRows, Link, Topology,
-    ValidateLinks, Values,
+    Attribute, AttributeDomain, AttributeSemantic, AttributeValues, Attributes, Error,
+    GeometryKind, GeometrySchema, Influence, InfluenceRows, Link, Topology, ValidateLinks, Values,
 };
 use crate::model::semantic::{GeometryData, GeometryInfluences, VertexData};
 use crate::model::semantic::{GeometryEdit, GeometryEditCapabilities, StreamSupport};
@@ -528,6 +528,7 @@ impl<'data> From<M3DisplayGeometry<'data>> for GeometryData<'data> {
             influences,
         } = value.streams;
         Self {
+            kind: GeometryKind::Display,
             positions: vertices.positions,
             normals: vertices.normals,
             tangents: vertices.tangents,
@@ -571,6 +572,100 @@ impl<'data> TryFrom<GeometryData<'data>> for M3DisplayGeometry<'data> {
                 topology,
                 influences,
             },
+        };
+        result.validate()?;
+        Ok(result)
+    }
+}
+
+impl<'data> From<M3CollisionGeometry<'data>> for GeometryData<'data> {
+    fn from(value: M3CollisionGeometry<'data>) -> Self {
+        let mut attributes = Vec::new();
+        if !value.face_normals.is_empty() {
+            attributes.push(Attribute {
+                semantic: AttributeSemantic::Normal,
+                domain: AttributeDomain::Face,
+                values: AttributeValues::Vector3(value.face_normals),
+            });
+        }
+        if !value.triangle_controls.is_empty() {
+            attributes.push(Attribute {
+                semantic: AttributeSemantic::CollisionTriangleControl,
+                domain: AttributeDomain::Face,
+                values: AttributeValues::Scalar(value.triangle_controls),
+            });
+        }
+        Self {
+            kind: GeometryKind::Collision,
+            positions: value.streams.vertices.positions,
+            topology: value.streams.topology,
+            attributes,
+            ..Self::default()
+        }
+    }
+}
+impl<'data> TryFrom<GeometryData<'data>> for M3CollisionGeometry<'data> {
+    type Error = Error;
+    fn try_from(value: GeometryData<'data>) -> Result<Self, Error> {
+        value.validate()?;
+        if value.kind != GeometryKind::Collision {
+            return Err(Error::new(
+                "m3.collision.kind",
+                "expected collision geometry",
+            ));
+        }
+        if !value.normals.is_empty()
+            || !value.tangents.is_empty()
+            || !value.colors.is_empty()
+            || !value.texture_coordinates.is_empty()
+            || !matches!(value.influences, GeometryInfluences::None)
+        {
+            return Err(Error::new(
+                "m3.collision.streams",
+                "collision geometry cannot retain shading or skinning streams",
+            ));
+        }
+        let mut face_normals = None;
+        let mut triangle_controls = None;
+        for attribute in value.attributes {
+            if attribute.domain != AttributeDomain::Face
+                || !matches!(value.topology, Topology::Triangles(_))
+            {
+                return Err(Error::new(
+                    "m3.collision.attributes",
+                    "expected triangle face attributes",
+                ));
+            }
+            match (attribute.semantic, attribute.values) {
+                (AttributeSemantic::Normal, AttributeValues::Vector3(values))
+                    if face_normals.is_none() && !values.is_empty() =>
+                {
+                    face_normals = Some(values)
+                }
+                (AttributeSemantic::CollisionTriangleControl, AttributeValues::Scalar(values))
+                    if triangle_controls.is_none() && !values.is_empty() =>
+                {
+                    triangle_controls = Some(values)
+                }
+                _ => {
+                    return Err(Error::new(
+                        "m3.collision.attributes",
+                        "unsupported, duplicate, empty, or incorrectly typed attribute",
+                    ))
+                }
+            }
+        }
+        let result = Self {
+            streams: VertexStreams {
+                vertices: VertexData {
+                    positions: value.positions,
+                    ..VertexData::default()
+                },
+                topology: value.topology,
+                influences: (),
+            },
+            face_normals: face_normals.unwrap_or_default(),
+            triangle_controls: triangle_controls.unwrap_or_default(),
         };
         result.validate()?;
         Ok(result)

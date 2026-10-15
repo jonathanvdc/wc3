@@ -285,6 +285,7 @@ fn every_particle_record_revision_maps_through_logical_fields() {
 
 #[test]
 fn static_collision_streams_remain_borrowed_and_independently_editable() {
+    use wc3::model::semantic::profiles::Universal;
     use wc3::model::semantic::{M3CollisionGeometry, M3Geometry, Values};
     let source = source();
     let id = source.model.root_id();
@@ -327,7 +328,10 @@ fn static_collision_streams_remain_borrowed_and_independently_editable() {
     let source = m3::Bundle::from_model(m3::Model::from_document(document).unwrap());
     let mut imported = conversion::m3::import(&source, &Default::default())
         .unwrap()
-        .value;
+        .value
+        .widen::<Universal>()
+        .try_narrow::<M3>()
+        .unwrap();
     let (_, surface::System::Collision(system)) = imported.models[0].systems().next().unwrap()
     else {
         panic!("expected collision world")
