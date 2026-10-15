@@ -66,8 +66,7 @@ pub(super) fn asset() -> Asset<'static, M3> {
     instance.skin = Some(skin);
     instance.draws.push(sem::Draw {
         controls: None,
-        first: 0,
-        count: 1,
+        subset: builder.add_primary_subset(mesh, 0, 1).unwrap(),
         material,
     });
     builder.add_instance(instance).unwrap();

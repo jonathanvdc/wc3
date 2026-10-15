@@ -1,9 +1,9 @@
 use wc3::model::semantic::profiles::{Extends, Mdlx, Narrows, Universal, M2, M3};
 use wc3::model::semantic::{
-    Attribute, AttributeDomain, AttributeSemantic, AttributeValues, GeometryData, GeometryEdit,
-    GeometryInfluences, GeometryKind, GeometrySchema, Influence, InfluenceRows, JointInfluences,
-    M2Geometry, M3CollisionGeometry, M3DisplayGeometry, M3Geometry, MdlxGeometry, Topology,
-    UniversalGeometry, Values,
+    Attribute, AttributeDomain, AttributeSemantic, AttributeValues, ConnectivitySets, GeometryData,
+    GeometryEdit, GeometryInfluences, GeometryKind, GeometrySchema, Influence, InfluenceRows,
+    JointInfluences, M2Geometry, M3CollisionGeometry, M3DisplayGeometry, M3Geometry, MdlxGeometry,
+    Topology, UniversalGeometry, Values,
 };
 
 fn four() -> [Influence; 4] {
@@ -192,11 +192,14 @@ fn grouping_and_collision_remain_distinct_from_single_display_topology() {
 fn general_geometry_projects_only_when_its_full_domain_is_supported() {
     let mut general = GeometryData::triangles(vec![[0.; 3]], vec![[0, 0, 0]]).unwrap();
     assert!(<Mdlx as Narrows<Universal>>::geometry(general.clone().into()).is_ok());
-    general.attributes.push(Attribute {
-        semantic: AttributeSemantic::Named("custom".into()),
-        domain: AttributeDomain::Vertex,
-        values: AttributeValues::Unsigned(vec![23].into()),
-    });
+    general
+        .attributes
+        .insert(Attribute {
+            semantic: AttributeSemantic::Named("custom".into()),
+            domain: AttributeDomain::Vertex,
+            values: AttributeValues::Unsigned(vec![23].into()),
+        })
+        .unwrap();
     assert!(<Mdlx as Narrows<Universal>>::geometry(general.into()).is_err());
     let mut general = GeometryData::triangles(vec![[0.; 3]], vec![[0, 0, 0]]).unwrap();
     general.influences = GeometryInfluences::Variable(
@@ -246,11 +249,13 @@ fn shared_data_can_keep_custom_attributes_and_fixed_slots_together() {
         )
         .unwrap(),
     );
-    data.attributes.push(Attribute {
-        semantic: AttributeSemantic::Named("custom".into()),
-        domain: AttributeDomain::Vertex,
-        values: AttributeValues::Unsigned(Values::from_slice(&custom)),
-    });
+    data.attributes
+        .insert(Attribute {
+            semantic: AttributeSemantic::Named("custom".into()),
+            domain: AttributeDomain::Vertex,
+            values: AttributeValues::Unsigned(Values::from_slice(&custom)),
+        })
+        .unwrap();
     let universal: UniversalGeometry<'_> = data.into();
     assert!(matches!(universal, UniversalGeometry::Data(_)));
     assert!(<Mdlx as Narrows<Universal>>::geometry(universal.clone()).is_err());
@@ -263,11 +268,22 @@ fn shared_data_can_keep_custom_attributes_and_fixed_slots_together() {
         panic!("slot domain lost")
     };
     assert_eq!(values.as_slice().unwrap().as_ptr(), rows.as_ptr());
-    let AttributeValues::Unsigned(values) = &data.attributes[0].values else {
+    let AttributeValues::Unsigned(values) = &data
+        .attributes
+        .get(
+            &AttributeSemantic::Named("custom".into()),
+            AttributeDomain::Vertex,
+        )
+        .unwrap()
+        .values
+    else {
         unreachable!()
     };
     assert_eq!(values.as_slice().unwrap().as_ptr(), custom.as_ptr());
-    data.attributes.clear();
+    data.attributes.take(
+        &AttributeSemantic::Named("custom".into()),
+        AttributeDomain::Vertex,
+    );
     let restored = M2Geometry::try_from(data).unwrap();
     let InfluenceRows::Four(values) = restored.influences() else {
         unreachable!()
@@ -302,12 +318,17 @@ fn remapping_keeps_each_influence_domain_and_custom_attribute_correspondence() {
     ] {
         let data = GeometryData {
             positions: Values::from_slice(&positions),
-            topology: Topology::Triangles(vec![[0, 1, 2]].into()),
+            connectivity: ConnectivitySets::new(
+                Topology::Triangles(vec![[0, 1, 2]].into()),
+                Vec::new(),
+            ),
             attributes: vec![Attribute {
                 semantic: AttributeSemantic::Named("custom".into()),
                 domain: AttributeDomain::Vertex,
                 values: AttributeValues::Unsigned(Values::from_slice(&custom)),
-            }],
+            }]
+            .try_into()
+            .unwrap(),
             influences,
             ..Default::default()
         };
@@ -422,16 +443,24 @@ fn collision_purpose_and_face_streams_survive_shared_storage() {
         controls.as_ptr()
     );
     let mut duplicate = data.clone();
-    duplicate.attributes.push(duplicate.attributes[0].clone());
-    assert!(M3CollisionGeometry::try_from(duplicate).is_err());
+    assert!(duplicate
+        .attributes
+        .insert(duplicate.attributes[0].clone())
+        .is_err());
     let mut wrong_type = data.clone();
-    wrong_type.attributes[0].values = AttributeValues::Scalar(vec![1.].into());
-    assert!(M3CollisionGeometry::try_from(wrong_type).is_err());
+    assert!(wrong_type
+        .attributes
+        .update(0, |attribute| attribute.values =
+            AttributeValues::Scalar(vec![1.].into()))
+        .is_err());
     let mut wrong_domain = data.clone();
-    wrong_domain.attributes[0].domain = AttributeDomain::Mesh;
+    wrong_domain
+        .attributes
+        .update(0, |attribute| attribute.domain = AttributeDomain::Mesh)
+        .unwrap();
     assert!(M3CollisionGeometry::try_from(wrong_domain).is_err());
     let mut shading = data.clone();
-    shading.normals = vec![[0., 0., 1.]; 3].into();
+    shading.set_normals(vec![[0., 0., 1.]; 3].into());
     assert!(M3CollisionGeometry::try_from(shading).is_err());
     let mut skinning = data.clone();
     skinning.influences = GeometryInfluences::Four(vec![four(); 3].into());
@@ -451,7 +480,7 @@ fn collision_purpose_and_face_streams_survive_shared_storage() {
         let data = GeometryData {
             kind: GeometryKind::Collision,
             positions: Values::from_slice(&positions),
-            topology,
+            connectivity: ConnectivitySets::new(topology, Vec::new()),
             ..Default::default()
         };
         assert!(MdlxGeometry::try_from(data.clone()).is_err());

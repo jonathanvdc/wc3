@@ -307,13 +307,12 @@ impl<P: Profile> Model<'_, P> {
         }
         for instance in self.instances.values() {
             let mesh = &self.meshes[&instance.mesh];
-            let primitives = mesh.topology().primitive_count();
             for draw in &instance.draws {
-                if (draw.first as usize)
-                    .checked_add(draw.count as usize)
-                    .is_none_or(|end| end > primitives)
-                {
-                    return Err(Error::new("instance.draw", "draw range exceeds geometry"));
+                if mesh.subset(draw.subset).is_none() {
+                    return Err(Error::new(
+                        "instance.draw.subset",
+                        "draw subset belongs to another mesh or is absent",
+                    ));
                 }
             }
             if mesh

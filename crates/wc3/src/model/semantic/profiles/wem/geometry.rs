@@ -1,6 +1,7 @@
 //! WEM retains polygon domains without projecting corners into duplicated vertices.
 use super::{Layer, LayerData, RepairHistory, Section, SectionId};
 use crate::model::semantic::geometry_edit::{check_edit, remap_attribute, remap_values};
+use crate::model::semantic::TextureCoordinates;
 use crate::model::semantic::{
     validate_geometry, AttributeValues, Attributes, Error, GeometryData, GeometrySchema,
     InfluenceRows, Link, NodeInfluence, Scope, Topology, ValidateLinks, Values,
@@ -101,14 +102,16 @@ impl<'a> Geometry<'a> {
     }
 
     /// Creates a geometry definition and checks domain relationships.
-    pub fn new(mut data: GeometryData<'a>) -> Result<Self, Error> {
+    pub fn new(data: GeometryData<'a>) -> Result<Self, Error> {
         if !data.influences.is_empty() {
             return Err(Error::new(
                 "wem.geometry.influences",
                 "WEM uses direct node identities, not joint-palette indices",
             ));
         }
+        data.validate_no_additional_domains()?;
         let layer_scope = Scope::default();
+        let mut data = data.into_parts();
         let layers = data
             .attributes
             .drain(..)
@@ -215,8 +218,8 @@ impl<'a> GeometrySchema<'a> for Geometry<'a> {
     fn tangents(&self) -> Option<&Values<'a, [f32; 4]>> {
         (!self.tangents.is_empty()).then_some(&self.tangents)
     }
-    fn texture_coordinates(&self) -> &[Values<'a, [f32; 2]>] {
-        &self.texture_coordinates
+    fn texture_coordinates(&self) -> TextureCoordinates<'_, 'a> {
+        TextureCoordinates::Slice(&self.texture_coordinates)
     }
     fn colors(&self) -> Option<&Values<'a, [f32; 4]>> {
         (!self.colors.is_empty()).then_some(&self.colors)

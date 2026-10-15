@@ -2,11 +2,12 @@
 use crate::model::semantic::geometry_edit::{check_edit, remap_values};
 use crate::model::semantic::geometry_schema::{present, validate_geometry};
 use crate::model::semantic::vertex_geometry::{GeometryStreams, VertexStreams};
+use crate::model::semantic::TextureCoordinates;
 use crate::model::semantic::{
     Attributes, Error, GeometrySchema, InfluenceRows, JointInfluences, Link, Topology,
     ValidateLinks, Values,
 };
-use crate::model::semantic::{GeometryData, GeometryKind, VertexData};
+use crate::model::semantic::{GeometryData, GeometryKind, GeometryParts, VertexData};
 use crate::model::semantic::{GeometryEdit, GeometryEditCapabilities, StreamSupport};
 /// Warcraft III geometry with its native stream vocabulary.
 ///
@@ -170,8 +171,8 @@ impl<'data> GeometrySchema<'data> for MdlxGeometry<'data> {
     fn tangents(&self) -> Option<&Values<'data, [f32; 4]>> {
         present(&self.streams.tangents)
     }
-    fn texture_coordinates(&self) -> &[Values<'data, [f32; 2]>] {
-        &self.streams.texture_coordinates
+    fn texture_coordinates(&self) -> TextureCoordinates<'_, 'data> {
+        TextureCoordinates::Slice(&self.streams.texture_coordinates)
     }
     fn colors(&self) -> Option<&Values<'data, [f32; 4]>> {
         None
@@ -248,7 +249,10 @@ impl<'data> From<MdlxGeometry<'data>> for GeometryData<'data> {
             topology,
             influences,
         } = value.streams;
-        Self {
+        GeometryParts {
+            strip_set: false,
+            surface_triangles: Values::default(),
+            pools: Default::default(),
             kind: GeometryKind::Display,
             positions: vertices.positions,
             normals: vertices.normals,
@@ -259,13 +263,15 @@ impl<'data> From<MdlxGeometry<'data>> for GeometryData<'data> {
             topology,
             influences: influences.into(),
         }
+        .into_data()
+        .expect("constrained geometry has unique typed attributes")
     }
 }
 impl<'data> TryFrom<GeometryData<'data>> for MdlxGeometry<'data> {
     type Error = Error;
     fn try_from(value: GeometryData<'data>) -> Result<Self, Error> {
         value.validate_vertex_streams()?;
-        let vertices = value;
+        let vertices = value.into_parts();
         let topology = vertices.topology;
         let influences = vertices.influences;
         if !vertices.colors.is_empty() {

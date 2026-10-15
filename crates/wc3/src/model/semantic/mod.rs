@@ -74,7 +74,9 @@ mod geometry_edit;
 pub use geometry_edit::*;
 mod geometry_schema;
 pub use geometry_schema::*;
-pub use profiles::wmo::{WmoGeometry, WmoTriangleControls};
+pub use profiles::wmo::WmoGeometry;
+mod geometry_domains;
+pub use geometry_domains::{ConnectivitySets, SurfaceTriangleControls, TriangleFlags};
 mod geometry;
 pub use geometry::*;
 mod node;
@@ -103,3 +105,13 @@ pub use model::*;
 
 #[cfg(test)]
 mod tests;
+
+mod geometry_attributes;
+pub use geometry_attributes::{GeometryAttributes, TextureCoordinates};
+
+mod geometry_parts;
+pub(crate) use geometry_domains::GeometryPools;
+pub(crate) use geometry_parts::GeometryParts;
+
+mod draw_subset;
+pub use draw_subset::*;

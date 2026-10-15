@@ -295,8 +295,7 @@ where
                 builder.set_material_surface(material, surface)?;
                 draws.push(Draw {
                     controls: Default::default(),
-                    first: 0,
-                    count: faces as u32,
+                    subset: builder.add_primary_subset(mesh, 0, faces as u32)?,
                     material,
                 });
             }
@@ -528,6 +527,7 @@ where
             sort_center: SectionSorting::make(geoset.and_then(|g| g.sorting), context)?,
         });
         for (draw_index, draw) in instance.draws.iter().enumerate() {
+            let draw = mesh.resolve_draw(draw)?;
             let material_id = model.material_for_draw(instance_id, draw_index as u32, look)?;
             if draw.first != 0 || draw.count as usize != triangles.len() {
                 context.unsupported(

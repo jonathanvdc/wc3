@@ -1,13 +1,13 @@
 //! Named triangle behavior mapped independently of native flag storage.
 use crate::model::conversion::Error;
-use crate::model::semantic::{MaterialId, WmoTriangleControls};
+use crate::model::semantic::{MaterialId, SurfaceTriangleControls};
 use crate::model::wmo::records::TriangleFlags2;
 pub(in crate::model::conversion::wmo::graph) fn face(
     flags: TriangleFlags2,
     selector: u16,
     collision_only: bool,
     materials: &[MaterialId],
-) -> Result<WmoTriangleControls, Error> {
+) -> Result<SurfaceTriangleControls, Error> {
     let material = if collision_only || flags.ground_type_entry() {
         None
     } else {
@@ -27,7 +27,7 @@ pub(in crate::model::conversion::wmo::graph) fn face(
     unknown.set_cull_objects(false);
     unknown.set_collide_hit(false);
     unknown.set_ground_type_entry(false);
-    Ok(WmoTriangleControls {
+    Ok(SurfaceTriangleControls {
         spatial_queries: false,
         material,
         ground_type_selector: flags.ground_type_entry().then_some(selector),

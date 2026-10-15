@@ -286,7 +286,10 @@ fn every_particle_record_revision_maps_through_logical_fields() {
 #[test]
 fn static_collision_streams_remain_borrowed_and_independently_editable() {
     use wc3::model::semantic::profiles::Universal;
-    use wc3::model::semantic::{M3CollisionGeometry, M3Geometry, Values};
+    use wc3::model::semantic::{
+        AttributeDomain, AttributeSemantic, GeometryKind, GeometrySchema, M3CollisionGeometry,
+        M3Geometry, UniversalGeometry, Values,
+    };
     let source = source();
     let id = source.model.root_id();
     let mut root = source.model.root::<nr::ModelRecord<nr::V29>>().unwrap();
@@ -326,12 +329,34 @@ fn static_collision_streams_remain_borrowed_and_independently_editable() {
     };
     document.replace(id, &[root]).unwrap();
     let source = m3::Bundle::from_model(m3::Model::from_document(document).unwrap());
-    let mut imported = conversion::m3::import(&source, &Default::default())
+    let mut widened = conversion::m3::import(&source, &Default::default())
         .unwrap()
         .value
-        .widen::<Universal>()
-        .try_narrow::<M3>()
+        .widen::<Universal>();
+    let collision = widened.models[0]
+        .meshes()
+        .find(|(_, mesh)| mesh.geometry.kind() == GeometryKind::Collision)
+        .unwrap()
+        .0;
+    widened
+        .edit_model(0, |draft| {
+            let mut mesh = draft.model().mesh(collision).unwrap().clone();
+            let primary = mesh.subsets.primary();
+            let UniversalGeometry::Data(data) = &mut mesh.geometry else {
+                unreachable!()
+            };
+            let index = data
+                .attributes
+                .iter()
+                .position(|attribute| attribute.semantic == AttributeSemantic::Normal)
+                .unwrap();
+            data.attributes.update(index, |attribute| {
+                attribute.domain = AttributeDomain::ConnectivityFace(primary)
+            })?;
+            draft.set_mesh(collision, mesh)
+        })
         .unwrap();
+    let mut imported = widened.try_narrow::<M3>().unwrap();
     let (_, surface::System::Collision(system)) = imported.models[0].systems().next().unwrap()
     else {
         panic!("expected collision world")

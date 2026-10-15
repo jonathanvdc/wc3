@@ -63,7 +63,7 @@ pub struct GeometryEdit<'a> {
     /// Structural correspondence applied before stream replacements.
     pub remap: Option<VertexRemap<'a>>,
 }
-/// New vertex indices select old vertices. Connectivity must preserve every primitive
+/// New vertex indices select old vertices. ConnectivitySets must preserve every primitive
 /// and corner in order, selecting an equivalent old vertex at each corner. This permits
 /// splitting shared vertices without changing face assignments or corner attributes.
 #[derive(Clone, Debug)]
@@ -148,8 +148,19 @@ pub(crate) fn remap_attribute(attribute: &mut Attribute<'_>, map: &[u32]) {
     }
     macro_rules! remap { ($($variant:ident),*) => { match &mut attribute.values { $(AttributeValues::$variant(v) => remap_values(v,map),)* } }; }
     remap!(
-        Boolean, Byte4, U16, Unsigned4, Quaternion, Scalar, Vector2, Vector3, Vector4, Unsigned,
-        Signed, Materials
+        Boolean,
+        Byte4,
+        U16,
+        Unsigned4,
+        Quaternion,
+        Scalar,
+        Vector2,
+        Vector3,
+        Vector4,
+        Unsigned,
+        Signed,
+        Materials,
+        SurfaceControls
     );
 }
 pub(crate) fn check_edit(

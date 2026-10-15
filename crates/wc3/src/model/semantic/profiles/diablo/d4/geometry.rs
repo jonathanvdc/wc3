@@ -1,4 +1,5 @@
 //! Diablo IV declared vertex streams are logical values independent of buffer packing.
+use crate::model::semantic::TextureCoordinates;
 use crate::model::semantic::{
     AttributeDomain, Attributes, Error, GeometryData, GeometryEdit, GeometryEditCapabilities,
     GeometryInfluences, GeometryKind, GeometrySchema, InfluenceRows, Link, Topology,
@@ -48,7 +49,7 @@ impl<'a> GeometrySchema<'a> for Geometry<'a> {
     fn tangents(&self) -> Option<&Values<'a, [f32; 4]>> {
         self.data.tangents()
     }
-    fn texture_coordinates(&self) -> &[Values<'a, [f32; 2]>] {
+    fn texture_coordinates(&self) -> TextureCoordinates<'_, 'a> {
         self.data.texture_coordinates()
     }
     fn colors(&self) -> Option<&Values<'a, [f32; 4]>> {
@@ -64,6 +65,7 @@ impl<'a> GeometrySchema<'a> for Geometry<'a> {
         self.data.influences()
     }
     fn validate(&self) -> Result<(), Error> {
+        self.data.validate_no_additional_domains()?;
         if self.data.kind != GeometryKind::Display {
             return Err(Error::new("d4.geometry.kind", "expected display geometry"));
         }
@@ -73,7 +75,7 @@ impl<'a> GeometrySchema<'a> for Geometry<'a> {
                 "declared geometry requires weighted joint contributions",
             ));
         }
-        if !matches!(self.data.topology, Topology::Triangles(_))
+        if !matches!(self.data.connectivity.primary, Topology::Triangles(_))
             || self
                 .data
                 .attributes

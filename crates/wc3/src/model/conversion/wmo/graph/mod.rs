@@ -1,5 +1,6 @@
 //! Direct typed world-model authoring graph codecs.
 mod alpha_materials;
+mod draw;
 mod encode;
 mod encode_scene;
 mod environment;

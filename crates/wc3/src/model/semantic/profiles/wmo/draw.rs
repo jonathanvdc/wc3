@@ -41,12 +41,6 @@ pub struct DrawControls {
     pub lightmap: Option<TextureId>,
     /// Historical baked-light selector whose table interpretation remains unresolved.
     pub lightmap_selector: Option<u8>,
-    /// Inclusive referenced vertex window, when explicitly authored.
-    pub vertex_window: Option<[u32; 2]>,
-    /// Optional strip connectivity selected from the owning geometry's strip stream.
-    pub strip: Option<StripWindow>,
-    /// Optional tangent vectors selected from the owning geometry's tangent pool.
-    pub tangents: Option<TangentWindow>,
     /// Batch behavior bits whose meanings remain unresolved.
     pub unclassified: BatchFlags,
     /// Individual unresolved supplemental controls surrounding the draw selection.
@@ -65,25 +59,4 @@ impl ValidateLinks for DrawControls {
             visitor(Link::InvalidValue);
         }
     }
-}
-
-/// An authored window into shared strip connectivity.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct StripWindow {
-    /// First strip index in the owning geometry's shared strip stream.
-    pub first: u32,
-    /// Number of strip index elements selected by this draw.
-    pub count: u32,
-    /// Unresolved supplemental strip control.
-    pub control: u16,
-}
-/// An authored tangent start and the draw's referenced vertex window.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct TangentWindow {
-    /// First vertex in the draw's authored vertex window.
-    pub first_vertex: u32,
-    /// Number of consecutive vertices in the draw's authored vertex window.
-    pub vertex_count: u32,
-    /// First tangent vector in the owning geometry's shared tangent pool.
-    pub first_tangent: u32,
 }

@@ -1,8 +1,8 @@
 use wc3::model::conversion::{geometry, Context, ExportOptions};
 use wc3::model::semantic::{
-    Attribute, AttributeDomain, AttributeSemantic, AttributeValues, Draw, GeometryData, InstanceId,
-    Material, Mesh, MeshId, MeshInstance, ModelBuilder, Node, SingleModel, Topology,
-    UniversalGeometry,
+    Attribute, AttributeDomain, AttributeSemantic, AttributeValues, ConnectivitySets, Draw,
+    GeometryData, InstanceId, Material, Mesh, MeshId, MeshInstance, ModelBuilder, Node,
+    SingleModel, Topology, UniversalGeometry,
 };
 
 fn fixture() -> (SingleModel<'static>, MeshId, InstanceId) {
@@ -13,7 +13,10 @@ fn fixture() -> (SingleModel<'static>, MeshId, InstanceId) {
     let mesh = draft
         .add_mesh(Mesh::new(UniversalGeometry::Data(GeometryData {
             positions: vec![[0., 0., 0.], [1., 0., 0.], [1., 1., 0.], [0., 1., 0.]].into(),
-            topology: Topology::Triangles(vec![[0, 1, 2], [0, 2, 3]].into()),
+            connectivity: ConnectivitySets::new(
+                Topology::Triangles(vec![[0, 1, 2], [0, 2, 3]].into()),
+                Vec::new(),
+            ),
             attributes: vec![
                 Attribute {
                     semantic: AttributeSemantic::Normal,
@@ -27,21 +30,21 @@ fn fixture() -> (SingleModel<'static>, MeshId, InstanceId) {
                         vec![[0., 0.], [1., 0.], [1., 1.], [0.25, 0.], [1., 1.], [0., 1.]].into(),
                     ),
                 },
-            ],
+            ]
+            .try_into()
+            .unwrap(),
             ..Default::default()
         })))
         .unwrap();
     let mut instance = MeshInstance::new(node, mesh);
     instance.draws = vec![
         Draw {
-            first: 0,
-            count: 1,
+            subset: draft.add_primary_subset(mesh, 0, 1).unwrap(),
             material: first,
             controls: None,
         },
         Draw {
-            first: 1,
-            count: 1,
+            subset: draft.add_primary_subset(mesh, 1, 1).unwrap(),
             material: second,
             controls: None,
         },
@@ -78,12 +81,17 @@ fn editing_a_corner_keeps_the_shared_vertex_and_other_corner_unchanged() {
     let UniversalGeometry::Data(geometry) = &mut edited.geometry else {
         unreachable!()
     };
-    let AttributeValues::Vector2(coordinates) = &mut geometry.attributes[1].values else {
-        unreachable!()
-    };
-    let mut values = coordinates.to_vec();
-    values[3] = [0.5, 0.];
-    *coordinates = values.into();
+    geometry
+        .attributes
+        .update(1, |attribute| {
+            let AttributeValues::Vector2(coordinates) = &mut attribute.values else {
+                unreachable!()
+            };
+            let mut values = coordinates.to_vec();
+            values[3] = [0.5, 0.];
+            *coordinates = values.into();
+        })
+        .unwrap();
     model.edit(|draft| draft.set_mesh(mesh, edited)).unwrap();
     assert_eq!(model.mesh(mesh).unwrap().positions().len(), 4);
     let draws = geometry::project(
@@ -110,7 +118,7 @@ fn invalid_source_topology_cannot_replace_published_geometry() {
     let UniversalGeometry::Data(geometry) = &mut edited.geometry else {
         unreachable!()
     };
-    geometry.topology = Topology::Triangles(vec![[0, 1, 99], [0, 2, 3]].into());
+    geometry.connectivity.primary = Topology::Triangles(vec![[0, 1, 99], [0, 2, 3]].into());
     assert!(model.edit(|draft| draft.set_mesh(mesh, edited)).is_err());
     assert_eq!(model.mesh(mesh).unwrap().positions().len(), 4);
 }
@@ -135,4 +143,28 @@ fn shared_vertex_edits_update_both_draw_projections() {
     .unwrap();
     assert_eq!(draws[0].mesh.positions().get(0), Some([7., 0., 0.]));
     assert_eq!(draws[1].mesh.positions().get(0), Some([7., 0., 0.]));
+}
+
+#[test]
+fn face_attributes_override_vertex_attributes_during_native_projection() {
+    let (mut model, mesh, instance) = fixture();
+    model
+        .edit(|draft| {
+            let mut edited = draft.model().mesh(mesh).unwrap().clone();
+            let UniversalGeometry::Data(data) = &mut edited.geometry else {
+                unreachable!()
+            };
+            data.set_normals(vec![[1., 0., 0.]; 4].into());
+            draft.set_mesh(mesh, edited)
+        })
+        .unwrap();
+    let draws = geometry::project(
+        &model,
+        instance,
+        None,
+        &mut Context::export(&ExportOptions::default()),
+    )
+    .unwrap();
+    assert_eq!(draws[0].mesh.normals().unwrap().get(0), Some([0., 0., 1.]));
+    assert_eq!(draws[1].mesh.normals().unwrap().get(0), Some([0., 1., 0.]));
 }

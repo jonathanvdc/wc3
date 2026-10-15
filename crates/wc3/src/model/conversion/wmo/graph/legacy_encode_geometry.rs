@@ -256,8 +256,9 @@ pub(super) fn write<'a, B: Batch>(
     }
     let mut batches = Vec::new();
     for (draw_index, draw) in instance.draws.iter().enumerate() {
+        let draw = mesh.resolve_draw(draw)?;
         let control = draw.controls.clone().unwrap_or_default();
-        if control.strip.is_some() || control.tangents.is_some() {
+        if draw.subset.strip.is_some() || draw.subset.tangents.is_some() {
             context.unsupported(
                 "world.draw.streams",
                 "historical draws cannot encode strip overrides or tangent associations",
@@ -311,7 +312,7 @@ pub(super) fn write<'a, B: Batch>(
             .take(draw.count as usize)
             .flatten()
             .collect::<Vec<_>>();
-        let [minimum, maximum] = control.vertex_window.unwrap_or([
+        let [minimum, maximum] = draw.subset.vertex_window.unwrap_or([
             selected.iter().copied().min().unwrap_or(0),
             selected.iter().copied().max().unwrap_or(0),
         ]);

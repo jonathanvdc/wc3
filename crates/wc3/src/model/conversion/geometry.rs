@@ -2,8 +2,9 @@
 use super::{Context, Error};
 use crate::model::semantic::profiles::Profile;
 use crate::model::semantic::{
-    Attribute, AttributeDomain, AttributeSemantic, AttributeValues, GeometryData, InfluenceRows,
-    InstanceId, LookId, MaterialId, Mesh, Model, SkinId, Topology, UniversalGeometry, Values,
+    Attribute, AttributeDomain, AttributeSemantic, AttributeValues, ConnectivityId, GeometryParts,
+    InfluenceRows, InstanceId, LookId, MaterialId, Mesh, Model, PrimitiveRange, SkinId, Topology,
+    UniversalGeometry, Values,
 };
 use crate::model::semantic::{GeometryInfluences, GeometrySchema};
 use std::collections::BTreeMap;
@@ -24,6 +25,7 @@ pub struct ProjectedDraw<'a> {
 }
 #[derive(Clone, Copy, Debug)]
 struct Corner {
+    connectivity: ConnectivityId,
     vertex: u32,
     corner: usize,
     face: usize,
@@ -36,19 +38,45 @@ enum Primitive {
 }
 fn primitives(
     topology: &Topology<'_>,
+    connectivity: ConnectivityId,
     out: &mut Vec<Primitive>,
     corner: &mut usize,
     face: &mut usize,
 ) {
     match topology {
+        Topology::TriangleStrip(indices) => {
+            for index in 0..indices.len().saturating_sub(2) {
+                let mut vertices = [
+                    indices.get(index).unwrap(),
+                    indices.get(index + 1).unwrap(),
+                    indices.get(index + 2).unwrap(),
+                ];
+                if index % 2 != 0 {
+                    vertices.swap(0, 1);
+                }
+                let points = vertices.map(|vertex| {
+                    let point = Corner {
+                        connectivity,
+                        vertex,
+                        corner: *corner,
+                        face: *face,
+                    };
+                    *corner += 1;
+                    point
+                });
+                out.push(Primitive::Polygon(points.to_vec()));
+                *face += 1;
+            }
+        }
         Topology::Mixed(groups) => {
             for group in groups {
-                primitives(group, out, corner, face);
+                primitives(group, connectivity, out, corner, face);
             }
         }
         Topology::Points(values) => {
             for vertex in values.iter() {
                 out.push(Primitive::Point(Corner {
+                    connectivity,
                     vertex,
                     corner: *corner,
                     face: *face,
@@ -61,6 +89,7 @@ fn primitives(
             for vertices in values.iter() {
                 let points = vertices.map(|vertex| {
                     let point = Corner {
+                        connectivity,
                         vertex,
                         corner: *corner,
                         face: *face,
@@ -76,6 +105,7 @@ fn primitives(
             for vertices in values.iter() {
                 let points = vertices.map(|vertex| {
                     let point = Corner {
+                        connectivity,
                         vertex,
                         corner: *corner,
                         face: *face,
@@ -93,6 +123,7 @@ fn primitives(
                 let points = (range[0] as usize..range[1] as usize)
                     .map(|index| {
                         let point = Corner {
+                            connectivity,
                             vertex: corners.get(index).expect("validated index"),
                             corner: *corner,
                             face: *face,
@@ -110,18 +141,41 @@ fn primitives(
 fn index(attribute: &Attribute<'_>, point: Corner) -> usize {
     match attribute.domain {
         AttributeDomain::Vertex => point.vertex as usize,
-        AttributeDomain::Corner => point.corner,
-        AttributeDomain::Face => point.face,
+        AttributeDomain::Corner | AttributeDomain::ConnectivityCorner(_) => point.corner,
+        AttributeDomain::Face | AttributeDomain::ConnectivityFace(_) => point.face,
         AttributeDomain::Mesh => 0,
+        AttributeDomain::Pool => {
+            unreachable!("indexed pool projection requires explicit translation")
+        }
+    }
+}
+fn applies(attribute: &Attribute<'_>, primary: ConnectivityId, selected: ConnectivityId) -> bool {
+    match attribute.domain {
+        AttributeDomain::Face | AttributeDomain::Corner => selected == primary,
+        AttributeDomain::ConnectivityFace(id) | AttributeDomain::ConnectivityCorner(id) => {
+            id == selected
+        }
+        _ => true,
     }
 }
 fn lookup<'a, 'data: 'a, P: Profile>(
     mesh: &'a Mesh<'data, P>,
     semantic: &AttributeSemantic<'_>,
+    connectivity: ConnectivityId,
 ) -> Option<&'a Attribute<'data>> {
     mesh.attributes()
         .iter()
-        .find(|attribute| &attribute.semantic == semantic)
+        .filter(|attribute| {
+            &attribute.semantic == semantic
+                && applies(attribute, mesh.subsets.primary(), connectivity)
+        })
+        .min_by_key(|attribute| match attribute.domain {
+            AttributeDomain::Corner | AttributeDomain::ConnectivityCorner(_) => 0,
+            AttributeDomain::Face | AttributeDomain::ConnectivityFace(_) => 1,
+            AttributeDomain::Vertex => 2,
+            AttributeDomain::Mesh => 3,
+            AttributeDomain::Pool => 4,
+        })
 }
 /// Projects each draw while borrowing its logical values until native packing is required.
 pub fn project<'a, 'data: 'a, P: Profile>(
@@ -137,6 +191,33 @@ pub fn project<'a, 'data: 'a, P: Profile>(
     let source = model
         .mesh(instance.mesh)
         .ok_or_else(|| Error::new("geometry.mesh", "geometry is absent"))?;
+    if source.attributes().iter().any(|attribute| {
+        attribute.domain == AttributeDomain::Pool
+            || attribute.semantic == AttributeSemantic::SurfaceControls
+    }) || source
+        .geometry
+        .surface_triangles()
+        .is_some_and(|controls| !controls.is_empty())
+        || source
+            .geometry
+            .tangent_pool()
+            .is_some_and(|values| !values.is_empty())
+    {
+        return Err(Error::new(
+            "geometry.domains",
+            "surface controls and indexed draw pools require an explicit domain translation",
+        ));
+    }
+    if instance.draws.iter().any(|draw| {
+        source.subset(draw.subset).is_some_and(|subset| {
+            subset.strip.is_some() || subset.tangents.is_some() || subset.vertex_window.is_some()
+        })
+    }) {
+        return Err(Error::new(
+            "geometry.subset.bindings",
+            "supplemental selections and pool associations require explicit domain translation",
+        ));
+    }
     if matches!(source.influences(), InfluenceRows::Nodes(_)) {
         return Err(Error::new(
             "geometry.influences",
@@ -144,55 +225,112 @@ pub fn project<'a, 'data: 'a, P: Profile>(
         ));
     }
     if let [draw] = instance.draws.as_slice() {
-        if draw.first == 0
-            && draw.count as usize == source.topology().primitive_count()
-            && source.attributes().is_empty()
-            && matches!(
-                source.topology(),
-                Topology::Triangles(_) | Topology::Lines(_) | Topology::Points(_)
-            )
-        {
-            let length = source.positions().len();
-            let rows = source.influences();
-            let influences = if rows.is_empty() {
-                Values::default()
-            } else {
-                Values::view(rows.len(), move |index| {
-                    rows.joint_weights(index)
-                        .expect("checked joint-slot influence index")
-                })
-            };
-            return Ok(vec![ProjectedDraw {
-                material: model.material_for_draw(instance_id, 0, look)?,
-                source_draw: 0,
-                skin: instance.skin.or_else(|| source.skin()),
-                source_vertices: Values::view(length, |index| index as u32),
-                mesh: Mesh {
-                    name: source.name.clone(),
-                    controls: None,
-                    bounds: source.bounds,
-                    geometry: UniversalGeometry::Data(GeometryData {
-                        kind: source.geometry.kind(),
-                        positions: source.positions().clone(),
-                        normals: source.normals().cloned().unwrap_or_default(),
-                        tangents: source.tangents().cloned().unwrap_or_default(),
-                        texture_coordinates: source.texture_coordinates().to_vec(),
-                        colors: source.colors().cloned().unwrap_or_default(),
-                        influences: GeometryInfluences::Variable(influences),
-                        topology: source.topology().clone(),
-                        attributes: Vec::new(),
-                    }),
-                },
-            }]);
+        if let Ok(draw) = source.resolve_draw(draw) {
+            if draw.first == 0
+                && draw.count as usize == source.topology().primitive_count()
+                && source.attributes().is_empty()
+                && matches!(
+                    source.topology(),
+                    Topology::Triangles(_) | Topology::Lines(_) | Topology::Points(_)
+                )
+            {
+                let length = source.positions().len();
+                let rows = source.influences();
+                let influences = if rows.is_empty() {
+                    Values::default()
+                } else {
+                    Values::view(rows.len(), move |index| {
+                        rows.joint_weights(index)
+                            .expect("checked joint-slot influence index")
+                    })
+                };
+                return Ok(vec![ProjectedDraw {
+                    material: model.material_for_draw(instance_id, 0, look)?,
+                    source_draw: 0,
+                    skin: instance.skin.or_else(|| source.skin()),
+                    source_vertices: Values::view(length, |index| index as u32),
+                    mesh: Mesh {
+                        subsets: Default::default(),
+                        name: source.name.clone(),
+                        controls: None,
+                        bounds: source.bounds,
+                        geometry: UniversalGeometry::Data(
+                            GeometryParts {
+                                strip_set: false,
+                                surface_triangles: Values::default(),
+                                pools: Default::default(),
+                                kind: source.geometry.kind(),
+                                positions: source.positions().clone(),
+                                normals: source.normals().cloned().unwrap_or_default(),
+                                tangents: source.tangents().cloned().unwrap_or_default(),
+                                texture_coordinates: source.texture_coordinates().to_vec(),
+                                colors: source.colors().cloned().unwrap_or_default(),
+                                influences: GeometryInfluences::Variable(influences),
+                                topology: source.topology().clone(),
+                                attributes: Vec::new(),
+                            }
+                            .into_data()?,
+                        ),
+                    },
+                }]);
+            }
         }
     }
-    let mut all = Vec::new();
-    primitives(source.topology(), &mut all, &mut 0, &mut 0);
     let mut out = Vec::new();
     for (draw_index, draw) in instance.draws.iter().enumerate() {
-        let end = draw.first as usize + draw.count as usize;
+        let subset = source
+            .subset(draw.subset)
+            .ok_or_else(|| Error::new("geometry.subset", "draw subset is absent"))?;
+        let topology = source
+            .connectivity(subset.selection.connectivity)
+            .ok_or_else(|| {
+                Error::new("geometry.connectivity", "selected connectivity is absent")
+            })?;
+        let mut all = Vec::new();
+        let (first, count) = match subset.selection.range {
+            PrimitiveRange::Primitives { first, count } => {
+                primitives(
+                    &topology,
+                    subset.selection.connectivity,
+                    &mut all,
+                    &mut 0,
+                    &mut 0,
+                );
+                (first as usize, count as usize)
+            }
+            PrimitiveRange::StripIndices { first, count } => {
+                let Topology::TriangleStrip(indices) = topology else {
+                    return Err(Error::new(
+                        "geometry.selection",
+                        "strip selection requires strip connectivity",
+                    ));
+                };
+                let selected = Values::view(count as usize, move |index| {
+                    indices
+                        .get(first as usize + index)
+                        .expect("validated strip window")
+                });
+                primitives(
+                    &Topology::TriangleStrip(selected),
+                    subset.selection.connectivity,
+                    &mut all,
+                    &mut (first as usize * 3),
+                    &mut (first as usize),
+                );
+                if first % 2 != 0 {
+                    for primitive in &mut all {
+                        if let Primitive::Polygon(points) = primitive {
+                            let corner = points[0].corner;
+                            points[0].corner = points[1].corner;
+                            points[1].corner = corner;
+                        }
+                    }
+                }
+                (0, all.len())
+            }
+        };
         let selected = all
-            .get(draw.first as usize..end)
+            .get(first..first + count)
             .ok_or_else(|| Error::new("geometry.draw", "primitive range is absent"))?;
         let base_material = model.material_for_draw(instance_id, draw_index as u32, look)?;
         let authored_override = look
@@ -203,7 +341,11 @@ pub fn project<'a, 'data: 'a, P: Profile>(
                     binding.instance == instance_id && binding.draw == draw_index as u32
                 })
             });
-        let material_attribute = lookup(source, &AttributeSemantic::Material);
+        let material_attribute = lookup(
+            source,
+            &AttributeSemantic::Material,
+            subset.selection.connectivity,
+        );
         let mut segments: Vec<(MaterialId, Vec<&Primitive>)> = Vec::new();
         for primitive in selected {
             let point = match primitive {
@@ -222,7 +364,9 @@ pub fn project<'a, 'data: 'a, P: Profile>(
                 };
                 if !matches!(
                     attribute.domain,
-                    AttributeDomain::Face | AttributeDomain::Mesh
+                    AttributeDomain::Face
+                        | AttributeDomain::ConnectivityFace(_)
+                        | AttributeDomain::Mesh
                 ) {
                     return Err(Error::new(
                         "geometry.material",
@@ -245,9 +389,16 @@ pub fn project<'a, 'data: 'a, P: Profile>(
             let mut points = Vec::new();
             let mut groups = Vec::new();
             let domain_seams = source.attributes().iter().any(|attribute| {
-                matches!(
+                applies(
+                    attribute,
+                    source.subsets.primary(),
+                    subset.selection.connectivity,
+                ) && matches!(
                     attribute.domain,
-                    AttributeDomain::Face | AttributeDomain::Corner
+                    AttributeDomain::Face
+                        | AttributeDomain::Corner
+                        | AttributeDomain::ConnectivityFace(_)
+                        | AttributeDomain::ConnectivityCorner(_)
                 )
             });
             let mut identities = BTreeMap::new();
@@ -389,7 +540,11 @@ pub fn project<'a, 'data: 'a, P: Profile>(
                 .attributes()
                 .iter()
                 .filter(|attribute| {
-                    !matches!(
+                    applies(
+                        attribute,
+                        source.subsets.primary(),
+                        subset.selection.connectivity,
+                    ) && !matches!(
                         attribute.semantic,
                         AttributeSemantic::Normal
                             | AttributeSemantic::Tangent
@@ -406,20 +561,27 @@ pub fn project<'a, 'data: 'a, P: Profile>(
                 skin: instance.skin.or_else(|| source.skin()),
                 source_vertices,
                 mesh: Mesh {
+                    subsets: Default::default(),
                     controls: None,
                     name: source.name.clone(),
                     bounds: source.bounds,
-                    geometry: UniversalGeometry::Data(GeometryData {
-                        kind: source.geometry.kind(),
-                        positions,
-                        normals,
-                        tangents,
-                        colors,
-                        texture_coordinates: uv_sets,
-                        influences: GeometryInfluences::Variable(influences),
-                        topology,
-                        attributes,
-                    }),
+                    geometry: UniversalGeometry::Data(
+                        GeometryParts {
+                            strip_set: false,
+                            surface_triangles: Values::default(),
+                            pools: Default::default(),
+                            kind: source.geometry.kind(),
+                            positions,
+                            normals,
+                            tangents,
+                            colors,
+                            texture_coordinates: uv_sets,
+                            influences: GeometryInfluences::Variable(influences),
+                            topology,
+                            attributes,
+                        }
+                        .into_data()?,
+                    ),
                 },
             });
         }
@@ -433,7 +595,14 @@ fn vector3<'a, 'data: 'a, P: Profile>(
     points: &Arc<[Corner]>,
     fallback: Option<&'a Values<'data, [f32; 3]>>,
 ) -> Result<Values<'a, [f32; 3]>, Error> {
-    if let Some(attribute) = lookup(mesh, &semantic) {
+    if let Some(attribute) = lookup(
+        mesh,
+        &semantic,
+        points
+            .first()
+            .map(|point| point.connectivity)
+            .unwrap_or_else(|| mesh.subsets.primary()),
+    ) {
         let AttributeValues::Vector3(values) = &attribute.values else {
             return Err(Error::new(
                 "geometry.attribute",
@@ -463,7 +632,14 @@ fn vector4<'a, 'data: 'a, P: Profile>(
     points: &Arc<[Corner]>,
     fallback: Option<&'a Values<'data, [f32; 4]>>,
 ) -> Result<Values<'a, [f32; 4]>, Error> {
-    if let Some(attribute) = lookup(mesh, &semantic) {
+    if let Some(attribute) = lookup(
+        mesh,
+        &semantic,
+        points
+            .first()
+            .map(|point| point.connectivity)
+            .unwrap_or_else(|| mesh.subsets.primary()),
+    ) {
         let AttributeValues::Vector4(values) = &attribute.values else {
             return Err(Error::new(
                 "geometry.attribute",
@@ -493,7 +669,14 @@ fn vector2<'a, 'data: 'a, P: Profile>(
     points: &Arc<[Corner]>,
     fallback: Option<&'a Values<'data, [f32; 2]>>,
 ) -> Result<Values<'a, [f32; 2]>, Error> {
-    if let Some(attribute) = lookup(mesh, &semantic) {
+    if let Some(attribute) = lookup(
+        mesh,
+        &semantic,
+        points
+            .first()
+            .map(|point| point.connectivity)
+            .unwrap_or_else(|| mesh.subsets.primary()),
+    ) {
         let AttributeValues::Vector2(values) = &attribute.values else {
             return Err(Error::new(
                 "geometry.attribute",
@@ -665,6 +848,7 @@ fn project_attribute<'a, 'data: 'a>(
         AttributeValues::Unsigned(source) => values!(source, Unsigned),
         AttributeValues::Signed(source) => values!(source, Signed),
         AttributeValues::Materials(source) => values!(source, Materials),
+        AttributeValues::SurfaceControls(source) => values!(source, SurfaceControls),
     };
     Attribute {
         semantic: attribute.semantic.clone(),

@@ -215,6 +215,7 @@ pub(in crate::model::conversion::wmo::graph) fn write<'a, D: Dialect>(
     if faces.is_empty() {
         faces.resize(triangles.len(), Triangle2::default());
         for (index, draw) in instance.draws.iter().enumerate() {
+            let draw = mesh.resolve_draw(draw)?;
             let material = materials[&model.material_for_draw(instance_id, index as u32, look)?];
             for face in &mut faces[draw.first as usize..(draw.first + draw.count) as usize] {
                 face.flags.set_render(true);
@@ -293,6 +294,7 @@ pub(in crate::model::conversion::wmo::graph) fn write<'a, D: Dialect>(
     let mut tangent_starts = Vec::new();
     let mut shadow_batches = Vec::new();
     for (index, draw) in instance.draws.iter().enumerate() {
+        let draw = mesh.resolve_draw(draw)?;
         let material = materials[&model.material_for_draw(instance_id, index as u32, look)?];
         if let Some(crate::model::semantic::profiles::wmo::Pass::Shadow {
             controls,
@@ -393,22 +395,20 @@ pub(in crate::model::conversion::wmo::graph) fn write<'a, D: Dialect>(
             } else {
                 output.header_mut().exterior_batch_count += 1;
             }
-            let controls = draw.controls.as_ref();
-            let tangent = controls.and_then(|control| control.tangents);
+            let tangent = draw.subset.tangents;
             if remaining != draw.count as usize
-                && controls
-                    .is_some_and(|control| control.strip.is_some() || control.tangents.is_some())
+                && (draw.subset.strip.is_some() || draw.subset.tangents.is_some())
             {
                 return Err(Error::new(
                     "world.draw.streams",
                     "splitting an authored strip or tangent association requires explicit draw windows",
                 ));
             }
-            strip_windows.push(controls.and_then(|control| control.strip).map_or(
+            strip_windows.push(draw.subset.strip.map_or(
                 crate::model::wmo::records::BatchOverride::default(),
                 |window| crate::model::wmo::records::BatchOverride {
-                    start_index: window.first,
-                    index_count: window.count as u16,
+                    start_index: window.selection.range.first(),
+                    index_count: window.selection.range.count() as u16,
                     padding: window.control,
                 },
             ));
@@ -416,8 +416,9 @@ pub(in crate::model::conversion::wmo::graph) fn write<'a, D: Dialect>(
                 u16::try_from(window.first_tangent)
                     .map_err(|error| Error::new("world.tangents", error.to_string()))
             })?);
-            let (minimum, maximum) = controls
-                .and_then(|control| control.vertex_window)
+            let (minimum, maximum) = draw
+                .subset
+                .vertex_window
                 .map_or((minimum, maximum), |[first, last]| (first, last));
             let (minimum, maximum) = if let Some(window) = tangent {
                 (
@@ -441,15 +442,20 @@ pub(in crate::model::conversion::wmo::graph) fn write<'a, D: Dialect>(
         GroupChunk::Batches(super::encode::array(&batches)?),
     )?;
     if instance.draws.iter().any(|draw| {
-        draw.controls
-            .as_ref()
-            .is_some_and(|control| control.strip.is_some())
+        mesh.subset(draw.subset)
+            .expect("validated draw subset")
+            .strip
+            .is_some()
     }) {
         if instance
             .draws
             .iter()
-            .filter_map(|draw| draw.controls.as_ref().and_then(|control| control.strip))
-            .any(|window| window.count > u32::from(u16::MAX))
+            .filter_map(|draw| {
+                mesh.subset(draw.subset)
+                    .expect("validated draw subset")
+                    .strip
+            })
+            .any(|window| window.selection.range.count() > u32::from(u16::MAX))
         {
             return Err(Error::new(
                 "world.strips",

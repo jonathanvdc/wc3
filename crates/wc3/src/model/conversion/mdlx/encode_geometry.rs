@@ -22,6 +22,7 @@ pub(super) fn write<'a, 'data, T: ModelDialect>(
     for (instance_id, instance) in model.instances() {
         for (draw_index, draw) in instance.draws.iter().enumerate() {
             let mesh = model.mesh(instance.mesh).expect("validated mesh");
+            let draw = mesh.resolve_draw(draw)?;
             if mesh.positions().len() > 65536 {
                 return Err(Error::new(
                     "mesh.vertices",

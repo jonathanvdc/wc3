@@ -3,10 +3,10 @@ use crate::model::semantic::ids::Scope;
 use crate::model::semantic::profiles::{Profile, Universal};
 use crate::model::semantic::{
     AttachedFeature, Basis, Bounds, Channel, Clip, ClipId, Clock, ClockId, Controller,
-    ControllerId, DrawAppearanceSchema, Error, Event, EventId, FeatureId, InstanceId, LengthUnit,
-    Look, LookId, Material, MaterialId, Mesh, MeshId, MeshInstance, Model, ModelId, Node, NodeId,
-    Resources, ResourcesBuilder, SharedClock, SingleModel, Skin, SkinId, SystemId, Texture,
-    TextureId, TextureTransform, TextureTransformId,
+    ControllerId, DrawAppearanceSchema, DrawSubsetId, Error, Event, EventId, FeatureId, InstanceId,
+    LengthUnit, Look, LookId, Material, MaterialId, Mesh, MeshId, MeshInstance, Model, ModelId,
+    Node, NodeId, Resources, ResourcesBuilder, SharedClock, SingleModel, Skin, SkinId, SystemId,
+    Texture, TextureId, TextureTransform, TextureTransformId,
 };
 use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet};
@@ -428,6 +428,20 @@ impl<'a, P: Profile> ModelBuilder<'a, P> {
         P::Appearance<'a>: DrawAppearanceSchema<'a>,
     {
         self.model.appearance.set_default_look(look)
+    }
+    /// Adds a mesh-owned primitive selection to the draft.
+    pub fn add_primary_subset(
+        &mut self,
+        mesh: MeshId,
+        first: u32,
+        count: u32,
+    ) -> Result<DrawSubsetId, Error> {
+        Ok(self
+            .model
+            .meshes
+            .get_mut(&mesh)
+            .ok_or_else(|| Error::new("mesh.subsets", "mesh is absent"))?
+            .add_primary_subset(first, count))
     }
     /// Replaces a draft mesh; publication validates its data and relationships.
     pub fn set_mesh(&mut self, id: MeshId, value: Mesh<'a, P>) -> Result<(), Error> {

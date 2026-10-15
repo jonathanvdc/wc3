@@ -67,10 +67,14 @@ fn fixture<D: Dialect>() -> Bundle<'static, D> {
     bundle
 }
 fn roundtrip<D: Dialect>() {
+    use wc3::model::semantic::profiles::{Universal, Wmo};
     let source = fixture::<D>();
     let asset = conversion::wmo::import(&source, &ImportOptions::default())
         .unwrap()
-        .value;
+        .value
+        .widen::<Universal>()
+        .try_narrow::<Wmo>()
+        .unwrap();
     let output = conversion::wmo::plan::<D>(&asset, &ExportOptions::default())
         .unwrap()
         .execute()
@@ -522,6 +526,7 @@ fn portals_are_scoped_authoring_relationships_and_rebuild_native_windows() {
 #[test]
 fn strip_connectivity_and_tangent_pools_are_independent_editable_geometry() {
     use std::borrow::Cow;
+    use wc3::model::semantic::profiles::{Universal, Wmo};
     let mut source = fixture::<wmo::Classic>();
     let group = source.group_mut(GroupKey { index: 0, lod: 0 }).unwrap();
     group.header_mut().interior_batch_count = 1;
@@ -556,9 +561,26 @@ fn strip_connectivity_and_tangent_pools_are_independent_editable_geometry() {
     group
         .chunks_mut()
         .push(GroupChunk::TangentsUnresolved(Cow::Owned(tangent_bytes)));
-    let mut asset = conversion::wmo::import(&source, &ImportOptions::default())
+    let asset = conversion::wmo::import(&source, &ImportOptions::default())
         .unwrap()
-        .value;
+        .value
+        .widen::<Universal>();
+    let id = asset.models[0].meshes().next().unwrap().0;
+    let mut invalid = asset.clone();
+    assert!(invalid
+        .edit_model(0, |builder| {
+            let mut mesh = builder.model().mesh(id).unwrap().clone();
+            let wc3::model::semantic::UniversalGeometry::Data(data) = &mut mesh.geometry else {
+                unreachable!()
+            };
+            data.connectivity = wc3::model::semantic::ConnectivitySets::new(
+                data.connectivity.primary.clone(),
+                Vec::new(),
+            );
+            builder.set_mesh(id, mesh)
+        })
+        .is_err());
+    let mut asset = asset.try_narrow::<Wmo>().unwrap();
     let (id, mut mesh) = asset.models[0]
         .meshes()
         .next()

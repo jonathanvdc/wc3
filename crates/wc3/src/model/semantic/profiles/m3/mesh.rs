@@ -4,11 +4,12 @@
 use crate::model::semantic::geometry_edit::{check_edit, remap_values};
 use crate::model::semantic::geometry_schema::validate_geometry;
 use crate::model::semantic::vertex_geometry::{GeometryStreams, VertexStreams};
+use crate::model::semantic::TextureCoordinates;
 use crate::model::semantic::{
     Attribute, AttributeDomain, AttributeSemantic, AttributeValues, Attributes, Error,
     GeometryKind, GeometrySchema, Influence, InfluenceRows, Link, Topology, ValidateLinks, Values,
 };
-use crate::model::semantic::{GeometryData, GeometryInfluences, VertexData};
+use crate::model::semantic::{GeometryData, GeometryInfluences, GeometryParts, VertexData};
 use crate::model::semantic::{GeometryEdit, GeometryEditCapabilities, StreamSupport};
 fn present<'view, 'data, T>(values: &'view Values<'data, T>) -> Option<&'view Values<'data, T>> {
     (!values.is_empty()).then_some(values)
@@ -126,8 +127,8 @@ impl<'data> GeometrySchema<'data> for M3DisplayGeometry<'data> {
     fn tangents(&self) -> Option<&Values<'data, [f32; 4]>> {
         present(&self.streams.tangents)
     }
-    fn texture_coordinates(&self) -> &[Values<'data, [f32; 2]>] {
-        &self.streams.texture_coordinates
+    fn texture_coordinates(&self) -> TextureCoordinates<'_, 'data> {
+        TextureCoordinates::Slice(&self.streams.texture_coordinates)
     }
     fn colors(&self) -> Option<&Values<'data, [f32; 4]>> {
         present(&self.streams.colors)
@@ -342,8 +343,8 @@ impl<'data> GeometrySchema<'data> for M3CollisionGeometry<'data> {
     fn tangents(&self) -> Option<&Values<'data, [f32; 4]>> {
         None
     }
-    fn texture_coordinates(&self) -> &[Values<'data, [f32; 2]>] {
-        &[]
+    fn texture_coordinates(&self) -> TextureCoordinates<'_, 'data> {
+        TextureCoordinates::Slice(&[])
     }
     fn colors(&self) -> Option<&Values<'data, [f32; 4]>> {
         None
@@ -512,7 +513,7 @@ impl<'data> GeometrySchema<'data> for M3Geometry<'data> {
     delegate!(positions, &Values<'data, [f32; 3]>);
     delegate!(normals, Option<&Values<'data, [f32; 3]>>);
     delegate!(tangents, Option<&Values<'data, [f32; 4]>>);
-    delegate!(texture_coordinates, &[Values<'data, [f32; 2]>]);
+    delegate!(texture_coordinates, TextureCoordinates<'_, 'data>);
     delegate!(colors, Option<&Values<'data, [f32; 4]>>);
     delegate!(attributes, Attributes<'_, 'data>);
     delegate!(topology, &Topology<'data>);
@@ -527,7 +528,10 @@ impl<'data> From<M3DisplayGeometry<'data>> for GeometryData<'data> {
             topology,
             influences,
         } = value.streams;
-        Self {
+        GeometryParts {
+            strip_set: false,
+            surface_triangles: Values::default(),
+            pools: Default::default(),
             kind: GeometryKind::Display,
             positions: vertices.positions,
             normals: vertices.normals,
@@ -538,13 +542,15 @@ impl<'data> From<M3DisplayGeometry<'data>> for GeometryData<'data> {
             topology,
             influences: GeometryInfluences::Four(influences),
         }
+        .into_data()
+        .expect("constrained geometry has unique typed attributes")
     }
 }
 impl<'data> TryFrom<GeometryData<'data>> for M3DisplayGeometry<'data> {
     type Error = Error;
     fn try_from(value: GeometryData<'data>) -> Result<Self, Error> {
         value.validate_vertex_streams()?;
-        let vertices = value;
+        let vertices = value.into_parts();
         let topology = vertices.topology;
         let influences = vertices.influences;
         if !matches!(topology, Topology::Triangles(_)) {
@@ -595,19 +601,23 @@ impl<'data> From<M3CollisionGeometry<'data>> for GeometryData<'data> {
                 values: AttributeValues::Scalar(value.triangle_controls),
             });
         }
-        Self {
+        GeometryParts {
             kind: GeometryKind::Collision,
             positions: value.streams.vertices.positions,
             topology: value.streams.topology,
             attributes,
-            ..Self::default()
+            ..GeometryParts::default()
         }
+        .into_data()
+        .expect("constrained geometry has unique typed attributes")
     }
 }
 impl<'data> TryFrom<GeometryData<'data>> for M3CollisionGeometry<'data> {
     type Error = Error;
     fn try_from(value: GeometryData<'data>) -> Result<Self, Error> {
         value.validate()?;
+        value.validate_no_additional_domains()?;
+        let value = value.into_parts();
         if value.kind != GeometryKind::Collision {
             return Err(Error::new(
                 "m3.collision.kind",

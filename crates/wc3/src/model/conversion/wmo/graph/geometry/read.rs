@@ -1,13 +1,14 @@
 //! World-group fields borrowed directly into the static authoring vocabulary.
 use super::bounds;
 use super::face;
-use crate::model::conversion::{Context, Error};
-use crate::model::semantic::profiles::wmo::{
-    DrawControls, Group as LogicalGroup, Lighting, WorldSystem,
+use crate::model::conversion::wmo::graph::draw::{
+    bind_draw, ImportedDrawControls, StripWindow, TangentWindow,
 };
+use crate::model::conversion::{Context, Error};
+use crate::model::semantic::profiles::wmo::{Group as LogicalGroup, Lighting, WorldSystem};
 use crate::model::semantic::profiles::Wmo;
 use crate::model::semantic::{
-    Draw, MaterialId, Mesh, MeshInstance, ModelBuilder, Node, Values, WmoGeometry,
+    MaterialId, Mesh, MeshInstance, ModelBuilder, Node, Values, WmoGeometry,
 };
 use crate::model::wmo::group::GroupChunk;
 use crate::model::wmo::records::{BatchMetadata, HeaderTailMetadata, TriangleFlags2};
@@ -222,11 +223,13 @@ pub(in crate::model::conversion::wmo::graph) fn read<'a, D: Dialect>(
                 let mut unknown = batch.flags;
                 unknown.set_large_material(false);
                 unknown.set_extended_vertices(false);
-                draws.push(Draw {
-                    first: batch.start_index / 3,
-                    count: u32::from(batch.index_count) / 3,
+                draws.push(bind_draw(
+                    builder,
+                    mesh_id,
+                    batch.start_index / 3,
+                    u32::from(batch.index_count) / 3,
                     material,
-                    controls: Some(DrawControls {
+                    Some(ImportedDrawControls {
                         lighting,
                         vertex_window: Some([batch.vertex_range().0, batch.vertex_range().1]),
                         strip: source
@@ -241,14 +244,14 @@ pub(in crate::model::conversion::wmo::graph) fn read<'a, D: Dialect>(
                             })
                             .transpose()
                             .map_err(|error| Error::new("world.strips", error.to_string()))?
-                            .map(|row| crate::model::semantic::profiles::wmo::StripWindow {
+                            .map(|row| StripWindow {
                                 first: row.start_index,
                                 count: u32::from(row.index_count),
                                 control: row.padding,
                             }),
                         tangents: tangent_start(source, ordinal)?.map(|first| {
                             let (minimum, maximum) = batch.vertex_range();
-                            crate::model::semantic::profiles::wmo::TangentWindow {
+                            TangentWindow {
                                 first_vertex: minimum,
                                 vertex_count: maximum - minimum + 1,
                                 first_tangent: u32::from(first),
@@ -262,7 +265,7 @@ pub(in crate::model::conversion::wmo::graph) fn read<'a, D: Dialect>(
                         unclassified: unknown.bits().into(),
                         ..Default::default()
                     }),
-                });
+                )?);
                 ordinal += 1;
             }
         }
@@ -288,11 +291,13 @@ pub(in crate::model::conversion::wmo::graph) fn read<'a, D: Dialect>(
                 })?;
                 let mut flags = row.flags;
                 flags.set_large_material(false);
-                draws.push(Draw {
-                    first: row.start as u32 / 3,
-                    count: row.count as u32 / 3,
+                draws.push(bind_draw(
+                    builder,
+                    mesh_id,
+                    row.start as u32 / 3,
+                    row.count as u32 / 3,
                     material,
-                    controls: Some(DrawControls {
+                    Some(ImportedDrawControls {
                         pass: crate::model::semantic::profiles::wmo::Pass::Shadow {
                             controls: std::array::from_fn(|index| {
                                 u16::from_le_bytes([
@@ -310,7 +315,7 @@ pub(in crate::model::conversion::wmo::graph) fn read<'a, D: Dialect>(
                         unclassified: flags.bits().into(),
                         ..Default::default()
                     }),
-                });
+                )?);
             }
         }
     }

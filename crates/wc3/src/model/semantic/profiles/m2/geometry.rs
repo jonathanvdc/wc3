@@ -2,11 +2,14 @@
 use crate::model::semantic::geometry_edit::{check_edit, remap_values};
 use crate::model::semantic::geometry_schema::validate_geometry;
 use crate::model::semantic::vertex_geometry::{GeometryStreams, VertexStreams};
+use crate::model::semantic::TextureCoordinates;
 use crate::model::semantic::{
     Attributes, Error, GeometrySchema, Influence, InfluenceRows, Link, Topology, ValidateLinks,
     Values,
 };
-use crate::model::semantic::{GeometryData, GeometryInfluences, GeometryKind, VertexData};
+use crate::model::semantic::{
+    GeometryData, GeometryInfluences, GeometryKind, GeometryParts, VertexData,
+};
 use crate::model::semantic::{GeometryEdit, GeometryEditCapabilities, StreamSupport};
 /// World of Warcraft model geometry with two UV streams and four joint slots.
 /// Unsupported streams are unavailable through this type's constructors.
@@ -107,8 +110,8 @@ impl<'data> GeometrySchema<'data> for M2Geometry<'data> {
     fn tangents(&self) -> Option<&Values<'data, [f32; 4]>> {
         None
     }
-    fn texture_coordinates(&self) -> &[Values<'data, [f32; 2]>] {
-        &self.streams.texture_coordinates
+    fn texture_coordinates(&self) -> TextureCoordinates<'_, 'data> {
+        TextureCoordinates::Slice(&self.streams.texture_coordinates)
     }
     fn colors(&self) -> Option<&Values<'data, [f32; 4]>> {
         None
@@ -182,7 +185,10 @@ impl<'data> From<M2Geometry<'data>> for GeometryData<'data> {
             topology,
             influences,
         } = value.streams;
-        Self {
+        GeometryParts {
+            strip_set: false,
+            surface_triangles: Values::default(),
+            pools: Default::default(),
             kind: GeometryKind::Display,
             positions: vertices.positions,
             normals: vertices.normals,
@@ -193,13 +199,15 @@ impl<'data> From<M2Geometry<'data>> for GeometryData<'data> {
             topology,
             influences: GeometryInfluences::Four(influences),
         }
+        .into_data()
+        .expect("constrained geometry has unique typed attributes")
     }
 }
 impl<'data> TryFrom<GeometryData<'data>> for M2Geometry<'data> {
     type Error = Error;
     fn try_from(value: GeometryData<'data>) -> Result<Self, Error> {
         value.validate_vertex_streams()?;
-        let vertices = value;
+        let vertices = value.into_parts();
         let topology = vertices.topology;
         let influences = vertices.influences;
         if !vertices.tangents.is_empty() || !vertices.colors.is_empty() {

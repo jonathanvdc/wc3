@@ -2,11 +2,12 @@
 use crate::model::semantic::geometry_edit::{check_edit, remap_values};
 use crate::model::semantic::geometry_schema::validate_geometry;
 use crate::model::semantic::vertex_geometry::{GeometryStreams, RemapStreams};
+use crate::model::semantic::TextureCoordinates;
 use crate::model::semantic::VertexData;
 use crate::model::semantic::{
     Attribute, AttributeDomain, AttributeSemantic, AttributeValues, Attributes, Error,
-    GeometryData, GeometryInfluences, GeometryKind, GeometrySchema, Influence, InfluenceRows, Link,
-    Topology, UniversalGeometry, ValidateLinks, Values,
+    GeometryData, GeometryInfluences, GeometryKind, GeometryParts, GeometrySchema, Influence,
+    InfluenceRows, Link, Topology, UniversalGeometry, ValidateLinks, Values,
 };
 use crate::model::semantic::{GeometryEdit, GeometryEditCapabilities, StreamSupport};
 
@@ -147,8 +148,8 @@ impl<'a> GeometrySchema<'a> for Geometry<'a> {
     fn tangents(&self) -> Option<&Values<'a, [f32; 4]>> {
         None
     }
-    fn texture_coordinates(&self) -> &[Values<'a, [f32; 2]>] {
-        &self.data.vertices.texture_coordinates
+    fn texture_coordinates(&self) -> TextureCoordinates<'_, 'a> {
+        TextureCoordinates::Slice(&self.data.vertices.texture_coordinates)
     }
     fn colors(&self) -> Option<&Values<'a, [f32; 4]>> {
         Some(&self.data.vertices.colors)
@@ -213,7 +214,10 @@ impl<'a> From<Geometry<'a>> for GeometryData<'a> {
             topology,
             influences,
         } = value.data;
-        Self {
+        GeometryParts {
+            strip_set: false,
+            surface_triangles: Values::default(),
+            pools: Default::default(),
             kind: GeometryKind::Display,
             positions: vertices.positions,
             normals: vertices.normals,
@@ -249,6 +253,8 @@ impl<'a> From<Geometry<'a>> for GeometryData<'a> {
                 GeometryInfluences::Three(influences)
             },
         }
+        .into_data()
+        .expect("constrained geometry has unique typed attributes")
     }
 }
 impl<'a> From<Geometry<'a>> for UniversalGeometry<'a> {
@@ -272,6 +278,8 @@ impl<'a> TryFrom<GeometryData<'a>> for Geometry<'a> {
     type Error = Error;
     fn try_from(value: GeometryData<'a>) -> Result<Self, Error> {
         value.validate()?;
+        value.validate_no_additional_domains()?;
+        let value = value.into_parts();
         if value.kind != GeometryKind::Display {
             return Err(Error::new("d3.geometry.kind", "expected display geometry"));
         }

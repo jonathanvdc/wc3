@@ -3,8 +3,8 @@ use crate::model::semantic::profiles::wem::{
     Appearance, Availability, Geometry, Section, SectionFlags, Wem,
 };
 use crate::model::semantic::{
-    Attribute, AttributeDomain, AttributeSemantic, AttributeValues, GeometryData, Mesh, Model,
-    Node, NodeInfluence, Topology, Values,
+    Attribute, AttributeDomain, AttributeSemantic, AttributeValues, ConnectivitySets, GeometryData,
+    Mesh, Model, Node, NodeInfluence, Topology, Values,
 };
 use crate::model::wem::RawDocument;
 use std::collections::HashMap;
@@ -17,15 +17,20 @@ fn polygon_groups_corner_layers_and_node_weights_remain_independent() {
     let slot = appearance.add_slot("surface");
     let geometry = Geometry::new(GeometryData {
         positions: Values::owned(vec![[0., 0., 0.], [1., 0., 0.], [1., 1., 0.], [0., 1., 0.]]),
-        topology: Topology::Polygons {
-            offsets: Values::owned(vec![0, 4]),
-            corners: Values::owned(vec![0, 1, 2, 3]),
-        },
+        connectivity: ConnectivitySets::new(
+            Topology::Polygons {
+                offsets: Values::owned(vec![0, 4]),
+                corners: Values::owned(vec![0, 1, 2, 3]),
+            },
+            Vec::new(),
+        ),
         attributes: vec![Attribute {
             semantic: AttributeSemantic::Named("normal".into()),
             domain: AttributeDomain::Corner,
             values: AttributeValues::Vector3(Values::owned(vec![[0., 0., 1.]; 4])),
-        }],
+        }]
+        .try_into()
+        .unwrap(),
         ..Default::default()
     })
     .unwrap();

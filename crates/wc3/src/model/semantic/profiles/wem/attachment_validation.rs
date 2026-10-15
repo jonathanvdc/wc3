@@ -7,6 +7,7 @@ pub(super) fn usable_face(topology: &Topology<'_>, mut face: usize) -> bool {
             .get(face)
             .zip(offsets.get(face + 1))
             .is_some_and(|(first, last)| last.saturating_sub(first) >= 3),
+        Topology::TriangleStrip(indices) => face < indices.len().saturating_sub(2),
         Topology::Lines(_) | Topology::Points(_) => false,
         Topology::Mixed(groups) => {
             for group in groups {

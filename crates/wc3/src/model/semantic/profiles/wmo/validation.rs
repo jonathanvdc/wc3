@@ -162,43 +162,10 @@ pub(super) fn model(value: &crate::model::semantic::Model<'_, super::Wmo>) -> Re
                 ));
             }
         }
-        let mesh = value.mesh(instance.mesh).expect("validated geometry");
         for draw in &instance.draws {
             if let Some(controls) = &draw.controls {
                 if let Some(bounds) = controls.bounds {
                     aabb_bounds(bounds, "world.draw.bounds")?;
-                }
-                if draw.count != 0
-                    && controls.vertex_window.is_some_and(|[first, last]| {
-                        first > last || last as usize >= mesh.positions().len()
-                    })
-                {
-                    return Err(Error::new(
-                        "world.draw.vertices",
-                        "draw vertex window must address existing vertices",
-                    ));
-                }
-                if controls.strip.is_some_and(|window| {
-                    u64::from(window.first) + u64::from(window.count)
-                        > mesh.geometry.strip_indices().len() as u64
-                }) {
-                    return Err(Error::new(
-                        "world.draw.strip",
-                        "strip selection exceeds the owning geometry's shared connectivity",
-                    ));
-                }
-                if controls.tangents.is_some_and(|window| {
-                    (draw.count != 0
-                        && (window.vertex_count == 0
-                            || u64::from(window.first_vertex) + u64::from(window.vertex_count)
-                                > mesh.positions().len() as u64))
-                        || u64::from(window.first_tangent)
-                            >= mesh.geometry.tangent_vectors().len() as u64
-                }) {
-                    return Err(Error::new(
-                        "world.draw.tangents",
-                        "tangent association must address existing vertices and vectors",
-                    ));
                 }
             }
         }

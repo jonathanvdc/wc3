@@ -142,6 +142,12 @@ pub(super) fn write<'view, 'data: 'view>(
         };
     }
     let kind = match values {
+        AttributeValues::SurfaceControls(_) => {
+            return Err(Error::new(
+                "wem.geometry.attributes",
+                "surface records have no native attribute encoding",
+            ))
+        }
         AttributeValues::Scalar(v) => {
             scalar!(v);
             records::AttrType::F32

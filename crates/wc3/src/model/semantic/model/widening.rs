@@ -148,6 +148,7 @@ impl<'a, P: Profile> Model<'a, P> {
                     |(
                         id,
                         Mesh {
+                            subsets,
                             name,
                             bounds,
                             controls,
@@ -157,6 +158,7 @@ impl<'a, P: Profile> Model<'a, P> {
                         (
                             id,
                             Mesh {
+                                subsets,
                                 name,
                                 bounds,
                                 controls: (maps.mesh)(controls),
@@ -251,13 +253,11 @@ impl<'a, P: Profile> Model<'a, P> {
                                 .into_iter()
                                 .map(
                                     |Draw {
-                                         first,
-                                         count,
+                                         subset,
                                          material,
                                          controls,
                                      }| Draw {
-                                        first,
-                                        count,
+                                        subset,
                                         material,
                                         controls: (maps.draw)(controls),
                                     },

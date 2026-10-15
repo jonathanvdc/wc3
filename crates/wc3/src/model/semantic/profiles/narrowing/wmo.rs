@@ -3,7 +3,7 @@ use super::{incompatible, Narrows};
 use crate::model::semantic::profiles::{NoControls, Profile, Universal, Wmo};
 use crate::model::semantic::{
     DrawControls, Error, InstanceControls, MaterialSurface, ModelControls, NodeFeature, System,
-    UniversalAppearance, UniversalGeometry,
+    UniversalAppearance,
 };
 impl Narrows<Universal> for Wmo {
     fn asset<'a>(value: <Universal as Profile>::Asset<'a>) -> Result<Self::Asset<'a>, Error> {
@@ -28,10 +28,7 @@ impl Narrows<Universal> for Wmo {
     fn geometry<'a>(
         value: <Universal as Profile>::Geometry<'a>,
     ) -> Result<Self::Geometry<'a>, Error> {
-        match value {
-            UniversalGeometry::Wmo(value) => Ok(value),
-            _ => Err(incompatible("geometry")),
-        }
+        value.try_into()
     }
     fn model<'a>(value: <Universal as Profile>::Model<'a>) -> Result<Self::Model<'a>, Error> {
         match value {

@@ -137,6 +137,7 @@ fn material_looks_resolve_without_changing_base_draws() {
     let alternative = builder
         .add_material(Material::pbr().named("alternate"))
         .unwrap();
+    let subset = builder.add_primary_subset(mesh, 0, 1).unwrap();
     let instance = builder
         .add_instance(MeshInstance {
             controls: None,
@@ -145,8 +146,7 @@ fn material_looks_resolve_without_changing_base_draws() {
             skin: None,
             draws: vec![Draw {
                 controls: None,
-                first: 0,
-                count: 1,
+                subset,
                 material: base,
             }],
             lod: None,

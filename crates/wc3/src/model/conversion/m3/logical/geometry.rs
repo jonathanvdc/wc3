@@ -254,6 +254,7 @@ pub(super) fn read<'a, E: Envelope>(
                             node
                         }
                     };
+                    let subset = builder.add_primary_subset(mesh, 0, count)?;
                     builder.add_instance(MeshInstance {
                         controls: Some(surface::InstanceControls {
                             instance_count: division.instances,
@@ -282,8 +283,7 @@ pub(super) fn read<'a, E: Envelope>(
                                 },
                                 color_control: batch.color_index,
                             }),
-                            first: 0,
-                            count,
+                            subset,
                             material,
                         }],
                         lod: Some(lod as u32),

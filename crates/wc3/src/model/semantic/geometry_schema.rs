@@ -1,10 +1,11 @@
 //! Complete geometry vocabularies with borrowed inspection of their logical streams.
-use crate::model::semantic::geometry_edit::{check_edit, remap_attribute, remap_values};
+use crate::model::semantic::geometry_edit::{check_edit, remap_values};
 use crate::model::semantic::profiles::{self as profiles, Either};
 use crate::model::semantic::{
-    Attribute, AttributeDomain, AttributeValues, Error, GeometryInfluences, Influence, Link,
-    M2Geometry, M3CollisionGeometry, M3Geometry, MdlxGeometry, NodeInfluence, Topology,
-    ValidateLinks, Values, VertexInfluences, WmoGeometry,
+    Attribute, AttributeDomain, AttributeSemantic, AttributeValues, ConnectivityId,
+    ConnectivitySets, DrawSubsetCapabilities, Error, GeometryAttributes, GeometryInfluences,
+    Influence, Link, M2Geometry, M3CollisionGeometry, M3Geometry, MdlxGeometry, NodeInfluence,
+    SurfaceTriangleControls, TextureCoordinates, Topology, ValidateLinks, Values, VertexInfluences,
 };
 use crate::model::semantic::{GeometryEdit, GeometryEditCapabilities, StreamSupport};
 use std::fmt::{Debug, Formatter, Result as FmtResult};
@@ -116,6 +117,43 @@ pub trait GeometrySchema<'data>: Clone + Debug + Send + Sync + ValidateLinks {
     fn kind(&self) -> GeometryKind {
         GeometryKind::Display
     }
+    /// Resolves explicit primary-domain aliases during checked mesh projection.
+    fn normalize_primary_domains(&mut self, _primary: ConnectivityId) -> Result<(), Error> {
+        Ok(())
+    }
+    /// Describes the mesh-owned selection bindings supported by this vocabulary.
+    fn subset_capabilities(&self) -> DrawSubsetCapabilities {
+        DrawSubsetCapabilities::default()
+    }
+    /// Resolves one topology set without copying its backing arrays.
+    fn connectivity(&self, index: usize) -> Option<Topology<'data>> {
+        match index {
+            0 => Some(self.topology().clone()),
+            1 => self
+                .strip_indices()
+                .map(|values| Topology::TriangleStrip(values.clone())),
+            _ => None,
+        }
+    }
+    /// Adds independently selectable topology when the schema permits it.
+    fn add_connectivity(&mut self, _topology: Topology<'data>) -> Result<usize, Error> {
+        Err(Error::new(
+            "geometry.connectivity",
+            "schema cannot add connectivity sets",
+        ))
+    }
+    /// Typed surface behavior in primary triangle order, when supported.
+    fn surface_triangles(&self) -> Option<&Values<'data, SurfaceTriangleControls>> {
+        None
+    }
+    /// Independently indexed draw pools, when supported.
+    fn strip_indices(&self) -> Option<&Values<'data, u32>> {
+        None
+    }
+    /// Independently indexed tangent attributes selected by draw bindings.
+    fn tangent_pool(&self) -> Option<&Values<'data, [f32; 4]>> {
+        None
+    }
     /// Model-space vertex positions.
     fn positions(&self) -> &Values<'data, [f32; 3]>;
     /// Vertex normals, when authored.
@@ -123,7 +161,7 @@ pub trait GeometrySchema<'data>: Clone + Debug + Send + Sync + ValidateLinks {
     /// Vertex tangents with handedness, when authored.
     fn tangents(&self) -> Option<&Values<'data, [f32; 4]>>;
     /// Ordered texture-coordinate streams.
-    fn texture_coordinates(&self) -> &[Values<'data, [f32; 2]>];
+    fn texture_coordinates(&self) -> TextureCoordinates<'_, 'data>;
     /// Vertex colors, when authored.
     fn colors(&self) -> Option<&Values<'data, [f32; 4]>>;
     /// Additional authoring attributes supported by this vocabulary.
@@ -210,8 +248,6 @@ impl InfluenceRows<'_, '_> {
 pub enum UniversalGeometry<'data> {
     /// Shared streams, connectivity, attributes, and explicit influence representations.
     Data(GeometryData<'data>),
-    /// Static-world geometry, including face collision and rendering controls.
-    Wmo(WmoGeometry<'data>),
     /// Editable-model polygon groups, typed layers, and direct node influences.
     Wem(profiles::wem::Geometry<'data>),
 }
@@ -291,19 +327,47 @@ macro_rules! with_geometry {
     ($self:expr, $value:ident => $body:expr) => {
         match $self {
             UniversalGeometry::Data($value) => $body,
-            UniversalGeometry::Wmo($value) => $body,
             UniversalGeometry::Wem($value) => $body,
         }
     };
 }
 impl<'data> GeometrySchema<'data> for UniversalGeometry<'data> {
+    fn normalize_primary_domains(&mut self, primary: ConnectivityId) -> Result<(), Error> {
+        match self {
+            Self::Data(value) => value.normalize_primary_domains(primary),
+            Self::Wem(_) => Ok(()),
+        }
+    }
+    fn subset_capabilities(&self) -> DrawSubsetCapabilities {
+        with_geometry!(self, value => value.subset_capabilities())
+    }
+    fn add_connectivity(&mut self, topology: Topology<'data>) -> Result<usize, Error> {
+        match self {
+            Self::Data(value) => value.add_connectivity(topology),
+            Self::Wem(_) => Err(Error::new(
+                "geometry.connectivity",
+                "schema cannot add connectivity sets",
+            )),
+        }
+    }
+    fn connectivity(&self, index: usize) -> Option<Topology<'data>> {
+        with_geometry!(self, value => value.connectivity(index))
+    }
+    fn surface_triangles(&self) -> Option<&Values<'data, SurfaceTriangleControls>> {
+        with_geometry!(self, value => value.surface_triangles())
+    }
+    fn strip_indices(&self) -> Option<&Values<'data, u32>> {
+        with_geometry!(self, value => value.strip_indices())
+    }
+    fn tangent_pool(&self) -> Option<&Values<'data, [f32; 4]>> {
+        with_geometry!(self, value => value.tangent_pool())
+    }
     fn edit_capabilities(&self) -> GeometryEditCapabilities {
         with_geometry!(self, value => value.edit_capabilities())
     }
     fn edited(&self, edit: GeometryEdit<'data>) -> Result<Self, Error> {
         match self {
             Self::Data(value) => Ok(Self::Data(value.edited(edit)?)),
-            Self::Wmo(value) => Ok(Self::Wmo(value.edited(edit)?)),
             Self::Wem(value) => Ok(Self::Wem(value.edited(edit)?)),
         }
     }
@@ -319,7 +383,7 @@ impl<'data> GeometrySchema<'data> for UniversalGeometry<'data> {
     fn tangents(&self) -> Option<&Values<'data, [f32; 4]>> {
         with_geometry!(self, value => value.tangents())
     }
-    fn texture_coordinates(&self) -> &[Values<'data, [f32; 2]>] {
+    fn texture_coordinates(&self) -> TextureCoordinates<'_, 'data> {
         with_geometry!(self, value => value.texture_coordinates())
     }
     fn colors(&self) -> Option<&Values<'data, [f32; 4]>> {
@@ -343,30 +407,39 @@ impl ValidateLinks for UniversalGeometry<'_> {
         with_geometry!(self, value => value.visit_links(visitor));
     }
 }
-/// General authoring geometry, including polygon domains and custom attributes.
+/// Shared geometry with canonical attributes and explicit connectivity.
 #[derive(Clone, Debug)]
 pub struct GeometryData<'data> {
-    /// Authored purpose, retained independently of connectivity and attributes.
+    /// Authored purpose, independent of representation.
     pub kind: GeometryKind,
-    /// Vertex positions.
+    /// Vertex positions addressed by connectivity and vertex attributes.
     pub positions: Values<'data, [f32; 3]>,
-    /// Vertex normals; empty when absent.
-    pub normals: Values<'data, [f32; 3]>,
-    /// Vertex tangents; empty when absent.
-    pub tangents: Values<'data, [f32; 4]>,
-    /// Ordered texture-coordinate sets.
-    pub texture_coordinates: Vec<Values<'data, [f32; 2]>>,
-    /// Vertex colors; empty when absent.
-    pub colors: Values<'data, [f32; 4]>,
-    /// Additional attributes, including corner and face domains.
-    pub attributes: Vec<Attribute<'data>>,
-    /// Authored connectivity.
-    pub topology: Topology<'data>,
-    /// Authored joint distributions, preserving slot structure and blending interpretation.
+    /// Primary topology and additional draw-selected connectivity.
+    pub connectivity: ConnectivitySets<'data>,
+    /// Canonical typed attributes, including independently indexed pools.
+    pub attributes: GeometryAttributes<'data>,
+    /// Exact authored joint distributions.
     pub influences: GeometryInfluences<'data>,
 }
 impl<'data> GeometryData<'data> {
-    /// Replaces influences while retaining their exact authored representation.
+    /// Creates empty display geometry.
+    pub fn empty() -> Self {
+        Self::default()
+    }
+    /// Creates display triangles without copying their arrays.
+    pub fn triangles(
+        positions: impl Into<Values<'data, [f32; 3]>>,
+        triangles: impl Into<Values<'data, [u32; 3]>>,
+    ) -> Result<Self, Error> {
+        let value = Self {
+            positions: positions.into(),
+            connectivity: ConnectivitySets::new(Topology::Triangles(triangles.into()), Vec::new()),
+            ..Default::default()
+        };
+        value.validate()?;
+        Ok(value)
+    }
+    /// Replaces exact authored joint distributions.
     pub fn with_influences(
         mut self,
         influences: impl Into<GeometryInfluences<'data>>,
@@ -374,6 +447,52 @@ impl<'data> GeometryData<'data> {
         self.influences = influences.into();
         self.validate()?;
         Ok(self)
+    }
+    /// Replaces the vertex normal stream; an empty stream removes it.
+    pub fn set_normals(&mut self, values: Values<'data, [f32; 3]>) {
+        self.set_stream(AttributeSemantic::Normal, AttributeValues::Vector3(values));
+    }
+    /// Replaces the vertex tangent-frame stream; an empty stream removes it.
+    pub fn set_tangents(&mut self, values: Values<'data, [f32; 4]>) {
+        self.set_stream(AttributeSemantic::Tangent, AttributeValues::Vector4(values));
+    }
+    /// Replaces the primary vertex color stream; an empty stream removes it.
+    pub fn set_colors(&mut self, values: Values<'data, [f32; 4]>) {
+        self.set_stream(
+            AttributeSemantic::Color(0),
+            AttributeValues::Vector4(values),
+        );
+    }
+    fn set_stream(&mut self, semantic: AttributeSemantic<'data>, values: AttributeValues<'data>) {
+        if values.is_empty() {
+            self.attributes.take(&semantic, AttributeDomain::Vertex);
+        } else {
+            self.attributes
+                .set(Attribute {
+                    semantic,
+                    domain: AttributeDomain::Vertex,
+                    values,
+                })
+                .expect("typed stream");
+        }
+    }
+    /// Replaces ordered UV slots, including authored empty slots.
+    pub fn set_texture_coordinates(&mut self, values: Vec<Values<'data, [f32; 2]>>) {
+        self.attributes.retain(|attribute| {
+            !matches!(
+                (&attribute.semantic, attribute.domain),
+                (AttributeSemantic::TexCoord(_), AttributeDomain::Vertex)
+            )
+        });
+        for (slot, values) in values.into_iter().enumerate() {
+            self.attributes
+                .insert(Attribute {
+                    semantic: AttributeSemantic::TexCoord(slot as u32),
+                    domain: AttributeDomain::Vertex,
+                    values: AttributeValues::Vector2(values),
+                })
+                .expect("unique typed UV slot");
+        }
     }
     pub(crate) fn validate_vertex_streams(&self) -> Result<(), Error> {
         self.validate()?;
@@ -383,39 +502,97 @@ impl<'data> GeometryData<'data> {
                 "target requires display geometry",
             ));
         }
-        if !self.attributes.is_empty() {
+        self.validate_no_additional_domains()?;
+        if self.attributes.iter().any(|attribute| {
+            attribute.domain != AttributeDomain::Vertex
+                || !matches!(
+                    attribute.semantic,
+                    AttributeSemantic::Normal
+                        | AttributeSemantic::Tangent
+                        | AttributeSemantic::Color(0)
+                        | AttributeSemantic::TexCoord(_)
+                )
+        }) {
             return Err(Error::new(
                 "geometry.attributes",
-                "target geometry has no custom attribute domain",
+                "target has no additional attribute domain",
             ));
         }
         Ok(())
     }
-    /// Creates an empty geometry definition.
-    pub fn empty() -> Self {
-        Self::default()
-    }
-    /// Creates checked triangle geometry without copying its arrays.
-    pub fn triangles(
-        positions: impl Into<Values<'data, [f32; 3]>>,
-        triangles: impl Into<Values<'data, [u32; 3]>>,
-    ) -> Result<Self, Error> {
-        let geometry = Self {
-            kind: GeometryKind::Display,
-            positions: positions.into(),
-            normals: Values::default(),
-            tangents: Values::default(),
-            texture_coordinates: Vec::new(),
-            colors: Values::default(),
-            attributes: Vec::new(),
-            topology: Topology::Triangles(triangles.into()),
-            influences: GeometryInfluences::None,
-        };
-        geometry.validate()?;
-        Ok(geometry)
+    pub(crate) fn validate_no_additional_domains(&self) -> Result<(), Error> {
+        if !self.connectivity.additional().is_empty()
+            || self.attributes.iter().any(|attribute| {
+                attribute.domain == AttributeDomain::Pool
+                    || attribute.semantic == AttributeSemantic::SurfaceControls
+            })
+        {
+            return Err(Error::new(
+                "geometry.domains",
+                "target cannot retain surface controls or indexed pools",
+            ));
+        }
+        Ok(())
     }
 }
 impl<'data> GeometrySchema<'data> for GeometryData<'data> {
+    fn normalize_primary_domains(&mut self, primary: ConnectivityId) -> Result<(), Error> {
+        for index in 0..self.attributes.len() {
+            let domain = match self.attributes[index].domain {
+                AttributeDomain::ConnectivityFace(id) if id == primary => {
+                    Some(AttributeDomain::Face)
+                }
+                AttributeDomain::ConnectivityCorner(id) if id == primary => {
+                    Some(AttributeDomain::Corner)
+                }
+                _ => None,
+            };
+            if let Some(domain) = domain {
+                self.attributes
+                    .update(index, |attribute| attribute.domain = domain)?;
+            }
+        }
+        Ok(())
+    }
+    fn subset_capabilities(&self) -> DrawSubsetCapabilities {
+        DrawSubsetCapabilities {
+            alternate_selection: true,
+            supplemental_strips: true,
+            vertex_windows: true,
+            tangent_bindings: true,
+        }
+    }
+    fn add_connectivity(&mut self, topology: Topology<'data>) -> Result<usize, Error> {
+        validate_topology(&topology, self.positions.len())?;
+        Ok(self.connectivity.add(topology))
+    }
+    fn connectivity(&self, index: usize) -> Option<Topology<'data>> {
+        if index == 0 {
+            Some(self.connectivity.primary.clone())
+        } else {
+            self.connectivity.additional().get(index - 1).cloned()
+        }
+    }
+    fn surface_triangles(&self) -> Option<&Values<'data, SurfaceTriangleControls>> {
+        match &self
+            .attributes
+            .get(&AttributeSemantic::SurfaceControls, AttributeDomain::Face)?
+            .values
+        {
+            AttributeValues::SurfaceControls(values) => Some(values),
+            _ => None,
+        }
+    }
+    fn strip_indices(&self) -> Option<&Values<'data, u32>> {
+        match self.connectivity.additional().first()? {
+            Topology::TriangleStrip(indices) => Some(indices),
+            _ => None,
+        }
+    }
+    fn tangent_pool(&self) -> Option<&Values<'data, [f32; 4]>> {
+        self.attributes
+            .vector4(&AttributeSemantic::Tangent, AttributeDomain::Pool)
+    }
     fn kind(&self) -> GeometryKind {
         self.kind
     }
@@ -427,7 +604,11 @@ impl<'data> GeometrySchema<'data> for GeometryData<'data> {
             colors: StreamSupport::Optional,
             minimum_uv_sets: 0,
             maximum_uv_sets: None,
-            vertex_remap: true,
+            vertex_remap: self.connectivity.additional().is_empty()
+                && !self
+                    .attributes
+                    .iter()
+                    .any(|attribute| attribute.domain == AttributeDomain::Pool),
         }
     }
     fn edited(&self, edit: GeometryEdit<'data>) -> Result<Self, Error> {
@@ -437,70 +618,115 @@ impl<'data> GeometrySchema<'data> for GeometryData<'data> {
         if let Some(map) = &edit.remap {
             map.check(self)?;
             remap_values(&mut result.positions, &map.new_to_old);
-            remap_values(&mut result.normals, &map.new_to_old);
-            remap_values(&mut result.tangents, &map.new_to_old);
-            remap_values(&mut result.colors, &map.new_to_old);
-            for stream in &mut result.texture_coordinates {
-                remap_values(stream, &map.new_to_old);
-            }
             result.influences.remap(&map.new_to_old);
-            for attribute in &mut result.attributes {
-                remap_attribute(attribute, &map.new_to_old);
-            }
-            result.topology = map.topology.clone();
+            result.attributes.remap(&map.new_to_old);
+            result.connectivity.primary = map.topology.clone();
         }
         if let Some(values) = edit.positions {
             result.positions = values;
         }
         if let Some(values) = edit.normals {
-            result.normals = values;
+            result.set_normals(values);
         }
         if let Some(values) = edit.tangents {
-            result.tangents = values;
+            result.set_tangents(values);
         }
         if let Some(values) = edit.colors {
-            result.colors = values;
+            result.set_colors(values);
         }
         if let Some(values) = edit.texture_coordinates {
-            result.texture_coordinates = values;
+            result.set_texture_coordinates(values);
         }
-
         result.validate()?;
         Ok(result)
     }
-
     fn positions(&self) -> &Values<'data, [f32; 3]> {
         &self.positions
     }
     fn normals(&self) -> Option<&Values<'data, [f32; 3]>> {
-        present(&self.normals)
+        self.attributes
+            .vector3(&AttributeSemantic::Normal, AttributeDomain::Vertex)
     }
     fn tangents(&self) -> Option<&Values<'data, [f32; 4]>> {
-        present(&self.tangents)
-    }
-    fn texture_coordinates(&self) -> &[Values<'data, [f32; 2]>] {
-        &self.texture_coordinates
+        self.attributes
+            .vector4(&AttributeSemantic::Tangent, AttributeDomain::Vertex)
     }
     fn colors(&self) -> Option<&Values<'data, [f32; 4]>> {
-        present(&self.colors)
+        self.attributes
+            .vector4(&AttributeSemantic::Color(0), AttributeDomain::Vertex)
+    }
+    fn texture_coordinates(&self) -> TextureCoordinates<'_, 'data> {
+        self.attributes.texture_coordinates()
     }
     fn attributes(&self) -> Attributes<'_, 'data> {
-        Attributes::Slice(&self.attributes)
+        Attributes::Slice(self.attributes.as_slice())
     }
     fn topology(&self) -> &Topology<'data> {
-        &self.topology
+        &self.connectivity.primary
     }
     fn influences(&self) -> InfluenceRows<'_, 'data> {
         self.influences.rows()
     }
     fn validate(&self) -> Result<(), Error> {
-        validate_geometry(self)
+        validate_geometry(self)?;
+        for topology in self.connectivity.additional() {
+            validate_topology(topology, self.positions.len())?;
+        }
+        if self.surface_triangles().is_some_and(|values| {
+            !matches!(self.connectivity.primary, Topology::Triangles(_))
+                || values.len() != self.connectivity.primary.primitive_count()
+        }) {
+            return Err(Error::new("geometry.connectivity", "surface controls must cover primary triangles and strip indices must address vertices"));
+        }
+        Ok(())
     }
 }
 
 impl<'data, A: GeometrySchema<'data>, B: GeometrySchema<'data>> GeometrySchema<'data>
     for Either<A, B>
 {
+    fn normalize_primary_domains(&mut self, primary: ConnectivityId) -> Result<(), Error> {
+        match self {
+            Self::Left(value) => value.normalize_primary_domains(primary),
+            Self::Right(value) => value.normalize_primary_domains(primary),
+        }
+    }
+    fn subset_capabilities(&self) -> DrawSubsetCapabilities {
+        match self {
+            Self::Left(value) => value.subset_capabilities(),
+            Self::Right(value) => value.subset_capabilities(),
+        }
+    }
+    fn add_connectivity(&mut self, topology: Topology<'data>) -> Result<usize, Error> {
+        match self {
+            Self::Left(value) => value.add_connectivity(topology),
+            Self::Right(value) => value.add_connectivity(topology),
+        }
+    }
+    fn connectivity(&self, index: usize) -> Option<Topology<'data>> {
+        match self {
+            Self::Left(value) => value.connectivity(index),
+            Self::Right(value) => value.connectivity(index),
+        }
+    }
+    fn surface_triangles(&self) -> Option<&Values<'data, SurfaceTriangleControls>> {
+        match self {
+            Self::Left(value) => value.surface_triangles(),
+            Self::Right(value) => value.surface_triangles(),
+        }
+    }
+    fn strip_indices(&self) -> Option<&Values<'data, u32>> {
+        match self {
+            Self::Left(value) => value.strip_indices(),
+            Self::Right(value) => value.strip_indices(),
+        }
+    }
+    fn tangent_pool(&self) -> Option<&Values<'data, [f32; 4]>> {
+        match self {
+            Self::Left(value) => value.tangent_pool(),
+            Self::Right(value) => value.tangent_pool(),
+        }
+    }
     fn edit_capabilities(&self) -> GeometryEditCapabilities {
         match self {
             Self::Left(value) => value.edit_capabilities(),
@@ -538,7 +764,7 @@ impl<'data, A: GeometrySchema<'data>, B: GeometrySchema<'data>> GeometrySchema<'
             Self::Right(v) => v.tangents(),
         }
     }
-    fn texture_coordinates(&self) -> &[Values<'data, [f32; 2]>] {
+    fn texture_coordinates(&self) -> TextureCoordinates<'_, 'data> {
         match self {
             Self::Left(v) => v.texture_coordinates(),
             Self::Right(v) => v.texture_coordinates(),
@@ -649,7 +875,11 @@ pub(crate) fn validate_geometry<'data>(geometry: &impl GeometrySchema<'data>) ->
             AttributeDomain::Vertex => count,
             AttributeDomain::Corner => corners,
             AttributeDomain::Face => faces,
+            AttributeDomain::ConnectivityFace(_) | AttributeDomain::ConnectivityCorner(_) => {
+                attribute.values.len()
+            }
             AttributeDomain::Mesh => 1,
+            AttributeDomain::Pool => attribute.values.len(),
         };
         let finite = match &attribute.values {
             AttributeValues::Scalar(v) => v.iter().all(f32::is_finite),
@@ -660,7 +890,10 @@ pub(crate) fn validate_geometry<'data>(geometry: &impl GeometrySchema<'data>) ->
             }
             _ => true,
         };
-        if attribute.values.len() != expected || !finite {
+        let empty_uv_slot = attribute.domain == AttributeDomain::Vertex
+            && matches!(attribute.semantic, AttributeSemantic::TexCoord(_))
+            && attribute.values.is_empty();
+        if (attribute.values.len() != expected && !empty_uv_slot) || !finite {
             return Err(Error::new(
                 "geometry.attributes",
                 "attribute cardinality or values are invalid for its domain",
@@ -688,7 +921,7 @@ pub(crate) fn validate_geometry<'data>(geometry: &impl GeometrySchema<'data>) ->
 fn validate_topology(topology: &Topology<'_>, vertices: usize) -> Result<(), Error> {
     let valid = |index: u32| (index as usize) < vertices;
     let indices_valid = match topology {
-        Topology::Points(values) => values.iter().all(valid),
+        Topology::Points(values) | Topology::TriangleStrip(values) => values.iter().all(valid),
         Topology::Lines(values) => values.iter().flatten().all(valid),
         Topology::Triangles(values) => values.iter().flatten().all(valid),
         Topology::Mixed(groups) => {
@@ -722,24 +955,27 @@ impl Default for GeometryData<'_> {
         Self {
             kind: GeometryKind::Display,
             positions: Values::default(),
-            normals: Values::default(),
-            tangents: Values::default(),
-            texture_coordinates: Vec::new(),
-            colors: Values::default(),
-            attributes: Vec::new(),
-            topology: Topology::Triangles(Values::default()),
+            connectivity: ConnectivitySets::default(),
+            attributes: GeometryAttributes::default(),
             influences: GeometryInfluences::None,
         }
     }
 }
-
 impl ValidateLinks for GeometryData<'_> {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
         for attribute in &self.attributes {
-            if let AttributeValues::Materials(values) = &attribute.values {
-                for id in values.iter() {
-                    id.visit_links(visitor);
+            match &attribute.values {
+                AttributeValues::Materials(values) => {
+                    for id in values.iter() {
+                        id.visit_links(visitor);
+                    }
                 }
+                AttributeValues::SurfaceControls(values) => {
+                    for face in values.iter() {
+                        face.material.visit_links(visitor);
+                    }
+                }
+                _ => {}
             }
         }
     }

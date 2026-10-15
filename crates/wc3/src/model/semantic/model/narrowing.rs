@@ -1,5 +1,6 @@
 //! Checked payload projections preserve identities and shared storage.
 use crate::model::semantic::profiles::{Narrows, Profile};
+use crate::model::semantic::GeometrySchema as _;
 use crate::model::semantic::{
     AttachedFeature, Clip, Controller, Draw, Error, Material, Mesh, MeshInstance, Model, Node, Skin,
 };
@@ -95,15 +96,18 @@ impl<'a, P: Profile> Model<'a, P> {
                     |(
                         id,
                         Mesh {
+                            subsets,
                             name,
                             bounds,
                             controls,
-                            geometry: source_geometry,
+                            geometry: mut source_geometry,
                         },
                     )| {
+                        source_geometry.normalize_primary_domains(subsets.primary())?;
                         Ok((
                             id,
                             Mesh {
+                                subsets,
                                 name,
                                 bounds,
                                 controls: mesh(controls)?,
@@ -194,14 +198,12 @@ impl<'a, P: Profile> Model<'a, P> {
                                 .into_iter()
                                 .map(
                                     |Draw {
-                                         first,
-                                         count,
+                                         subset,
                                          material,
                                          controls,
                                      }| {
                                         Ok(Draw {
-                                            first,
-                                            count,
+                                            subset,
                                             material,
                                             controls: draw(controls)?,
                                         })

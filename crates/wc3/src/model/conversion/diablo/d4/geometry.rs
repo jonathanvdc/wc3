@@ -152,10 +152,10 @@ pub(super) fn read(
         context.unsupported("d4.geometry.vertex_padding","nonzero bytes outside explicitly interpreted vertex elements cannot define semantic attributes")?;
     }
     data.positions = positions.into();
-    data.normals = normals.into();
-    data.tangents = tangents.into();
-    data.colors = colors.into();
-    data.texture_coordinates = uvs.into_iter().map(Into::into).collect();
+    data.set_normals(normals.into());
+    data.set_tangents(tangents.into());
+    data.set_colors(colors.into());
+    data.set_texture_coordinates(uvs.into_iter().map(Into::into).collect());
     data.influences = if layout
         .elements
         .iter()
@@ -165,7 +165,7 @@ pub(super) fn read(
     } else {
         GeometryInfluences::None
     };
-    data.topology = Topology::Triangles(triangles.into());
+    data.connectivity.primary = Topology::Triangles(triangles.into());
     Ok((Geometry::new(data)?, segments))
 }
 
@@ -183,7 +183,7 @@ pub(super) fn write(
     context: &mut Context,
 ) -> Result<EncodedGeometry, Error> {
     layout.validate()?;
-    let data = geometry.data();
+    let data = geometry.data().clone().into_parts();
     let Topology::Triangles(triangles) = &data.topology else {
         return Err(error("native subobjects require triangle connectivity"));
     };

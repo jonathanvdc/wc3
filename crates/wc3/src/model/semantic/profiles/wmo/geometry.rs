@@ -1,11 +1,15 @@
 //! Static world geometry with the authored world-model stream vocabulary.
-use super::TriangleFlags;
+use crate::model::semantic::TextureCoordinates;
+use std::collections::BTreeMap;
+
 use crate::model::semantic::geometry_edit::check_edit;
 use crate::model::semantic::geometry_schema::validate_geometry;
 use crate::model::semantic::vertex_geometry::VertexStreams;
 use crate::model::semantic::VertexData;
 use crate::model::semantic::{
-    Attributes, Error, GeometrySchema, InfluenceRows, Link, MaterialId, Topology,
+    Attribute, AttributeDomain, AttributeSemantic, AttributeValues, Attributes,
+    DrawSubsetCapabilities, Error, GeometryData, GeometryInfluences, GeometryKind, GeometryParts,
+    GeometryPools, GeometrySchema, InfluenceRows, Link, SurfaceTriangleControls, Topology,
     UniversalGeometry, ValidateLinks, Values,
 };
 use crate::model::semantic::{GeometryEdit, GeometryEditCapabilities, StreamSupport};
@@ -26,9 +30,8 @@ pub struct WmoGeometry<'data> {
         Values<'data, [f32; 3]>,
         Values<'data, [f32; 2]>,
     >,
-    strip_indices: Values<'data, u32>,
-    tangent_vectors: Values<'data, [f32; 4]>,
-    triangle_controls: Values<'data, WmoTriangleControls>,
+    pools: GeometryPools<'data>,
+    triangle_controls: Values<'data, SurfaceTriangleControls>,
 }
 impl<'data> WmoGeometry<'data> {
     /// Replaces positions while checking all geometry stream relationships.
@@ -43,7 +46,8 @@ impl<'data> WmoGeometry<'data> {
         triangles: impl Into<Values<'data, [u32; 3]>>,
     ) -> Result<Self, Error> {
         let triangles = triangles.into();
-        let triangle_controls = Values::view(triangles.len(), |_| WmoTriangleControls::default());
+        let triangle_controls =
+            Values::view(triangles.len(), |_| SurfaceTriangleControls::default());
         let geometry = Self {
             streams: VertexStreams {
                 vertices: VertexData {
@@ -57,8 +61,7 @@ impl<'data> WmoGeometry<'data> {
                 topology: Topology::Triangles(triangles),
                 influences: (),
             },
-            strip_indices: Values::default(),
-            tangent_vectors: Values::default(),
+            pools: GeometryPools::default(),
             triangle_controls,
         };
         geometry.validate()?;
@@ -67,7 +70,7 @@ impl<'data> WmoGeometry<'data> {
     /// Sets per-triangle rendering, collision, and query behavior.
     pub fn with_triangle_controls(
         mut self,
-        controls: Values<'data, WmoTriangleControls>,
+        controls: Values<'data, SurfaceTriangleControls>,
     ) -> Result<Self, Error> {
         self.triangle_controls = controls;
         self.validate()?;
@@ -75,23 +78,23 @@ impl<'data> WmoGeometry<'data> {
     }
     /// Sets shared strip connectivity selected by individual draw windows.
     pub fn with_strip_indices(mut self, indices: Values<'data, u32>) -> Result<Self, Error> {
-        self.strip_indices = indices;
+        self.pools.triangle_strip_indices = indices;
         self.validate()?;
         Ok(self)
     }
     /// Reads shared strip connectivity selected by individual draw windows.
     pub fn strip_indices(&self) -> &Values<'data, u32> {
-        &self.strip_indices
+        &self.pools.triangle_strip_indices
     }
     /// Sets the shared tangent-vector pool selected by individual draws.
     pub fn with_tangent_vectors(mut self, values: Values<'data, [f32; 4]>) -> Result<Self, Error> {
-        self.tangent_vectors = values;
+        self.pools.tangent_vectors = values;
         self.validate()?;
         Ok(self)
     }
     /// Reads the shared tangent-vector pool selected by individual draws.
     pub fn tangent_vectors(&self) -> &Values<'data, [f32; 4]> {
-        &self.tangent_vectors
+        &self.pools.tangent_vectors
     }
     /// Sets the independently authored baked-light coordinate stream.
     pub fn with_lightmap_coordinates(
@@ -107,7 +110,7 @@ impl<'data> WmoGeometry<'data> {
         &self.streams.extras
     }
     /// Reads per-triangle controls in connectivity order.
-    pub fn triangle_controls(&self) -> &Values<'data, WmoTriangleControls> {
+    pub fn triangle_controls(&self) -> &Values<'data, SurfaceTriangleControls> {
         &self.triangle_controls
     }
     /// Sets authored vertex normals.
@@ -140,6 +143,23 @@ impl<'data> WmoGeometry<'data> {
     }
 }
 impl<'data> GeometrySchema<'data> for WmoGeometry<'data> {
+    fn subset_capabilities(&self) -> DrawSubsetCapabilities {
+        DrawSubsetCapabilities {
+            alternate_selection: false,
+            supplemental_strips: true,
+            vertex_windows: true,
+            tangent_bindings: true,
+        }
+    }
+    fn surface_triangles(&self) -> Option<&Values<'data, SurfaceTriangleControls>> {
+        Some(&self.triangle_controls)
+    }
+    fn strip_indices(&self) -> Option<&Values<'data, u32>> {
+        Some(&self.pools.triangle_strip_indices)
+    }
+    fn tangent_pool(&self) -> Option<&Values<'data, [f32; 4]>> {
+        Some(&self.pools.tangent_vectors)
+    }
     fn edit_capabilities(&self) -> GeometryEditCapabilities {
         GeometryEditCapabilities {
             positions: true,
@@ -148,7 +168,7 @@ impl<'data> GeometrySchema<'data> for WmoGeometry<'data> {
             colors: StreamSupport::Optional,
             minimum_uv_sets: 0,
             maximum_uv_sets: None,
-            vertex_remap: self.strip_indices.is_empty(),
+            vertex_remap: self.pools.triangle_strip_indices.is_empty(),
         }
     }
     fn edited(&self, edit: GeometryEdit<'data>) -> Result<Self, Error> {
@@ -193,8 +213,8 @@ impl<'data> GeometrySchema<'data> for WmoGeometry<'data> {
     fn tangents(&self) -> Option<&Values<'data, [f32; 4]>> {
         None
     }
-    fn texture_coordinates(&self) -> &[Values<'data, [f32; 2]>] {
-        &self.streams.texture_coordinates
+    fn texture_coordinates(&self) -> TextureCoordinates<'_, 'data> {
+        TextureCoordinates::Slice(&self.streams.texture_coordinates)
     }
     fn colors(&self) -> Option<&Values<'data, [f32; 4]>> {
         self.streams.colors.first()
@@ -211,10 +231,16 @@ impl<'data> GeometrySchema<'data> for WmoGeometry<'data> {
     fn validate(&self) -> Result<(), Error> {
         validate_geometry(self)?;
         if self
-            .strip_indices
+            .pools
+            .triangle_strip_indices
             .iter()
             .any(|index| index as usize >= self.streams.positions.len())
-            || !self.tangent_vectors.iter().flatten().all(f32::is_finite)
+            || !self
+                .pools
+                .tangent_vectors
+                .iter()
+                .flatten()
+                .all(f32::is_finite)
         {
             return Err(Error::new(
                 "geometry.draw_streams",
@@ -253,7 +279,7 @@ impl<'data> GeometrySchema<'data> for WmoGeometry<'data> {
 }
 impl<'data> From<WmoGeometry<'data>> for UniversalGeometry<'data> {
     fn from(value: WmoGeometry<'data>) -> Self {
-        Self::Wmo(value)
+        Self::Data(value.into())
     }
 }
 
@@ -272,8 +298,7 @@ impl Default for WmoGeometry<'_> {
                 topology: Topology::Triangles(Values::default()),
                 influences: (),
             },
-            strip_indices: Values::default(),
-            tangent_vectors: Values::default(),
+            pools: GeometryPools::default(),
             triangle_controls: Values::default(),
         }
     }
@@ -288,37 +313,141 @@ impl ValidateLinks for WmoGeometry<'_> {
         }
     }
 }
-/// Authored world-triangle rendering and query behavior.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct WmoTriangleControls {
-    /// Include this face in the static spatial-query structure.
-    pub spatial_queries: bool,
-    /// Surface material; absent for collision-only faces.
-    pub material: Option<MaterialId>,
-    /// Unresolved ground-type selector when the extended triangle marks a ground entry.
-    pub ground_type_selector: Option<u16>,
-    /// Optional authored terrain query classification.
-    pub ground_type: Option<u32>,
-    /// Historical baked-light selector whose table interpretation remains unresolved.
-    pub lightmap_selector: Option<u8>,
-    /// Historical alignment control whose meaning remains unresolved.
-    pub alignment: u8,
-    /// Interior/exterior lighting transition face.
-    pub transition: bool,
-    /// Disable camera collisions.
-    pub no_camera_collision: bool,
-    /// Detail geometry classification.
-    pub detail: bool,
-    /// Include the triangle in collision queries.
-    pub collision: bool,
-    /// Geometry hint classification.
-    pub hint: bool,
-    /// Include the triangle in rendering queries.
-    pub render: bool,
-    /// Cull nearby objects against this triangle.
-    pub cull_objects: bool,
-    /// Participate in hit queries.
-    pub collide_hit: bool,
-    /// Behavior bits with unresolved meanings.
-    pub unclassified: TriangleFlags,
+
+impl<'data> From<WmoGeometry<'data>> for GeometryData<'data> {
+    fn from(value: WmoGeometry<'data>) -> Self {
+        let vertices = value.streams.vertices;
+        let mut attributes = Vec::new();
+        for (slot, colors) in vertices.colors.into_iter().enumerate() {
+            attributes.push(Attribute {
+                semantic: AttributeSemantic::Color(slot as u32),
+                domain: AttributeDomain::Vertex,
+                values: AttributeValues::Vector4(colors),
+            });
+        }
+        if !vertices.extras.is_empty() {
+            attributes.push(Attribute {
+                semantic: AttributeSemantic::LightmapCoordinates,
+                domain: AttributeDomain::Vertex,
+                values: AttributeValues::Vector2(vertices.extras),
+            });
+        }
+        GeometryParts {
+            strip_set: true,
+            positions: vertices.positions,
+            normals: vertices.normals,
+            texture_coordinates: vertices.texture_coordinates,
+            topology: value.streams.topology,
+            attributes,
+            surface_triangles: value.triangle_controls,
+            pools: GeometryPools {
+                triangle_strip_indices: value.pools.triangle_strip_indices,
+                tangent_vectors: value.pools.tangent_vectors,
+            },
+            ..GeometryParts::default()
+        }
+        .into_data()
+        .expect("constrained geometry has unique typed attributes")
+    }
+}
+impl<'data> TryFrom<UniversalGeometry<'data>> for WmoGeometry<'data> {
+    type Error = Error;
+    fn try_from(value: UniversalGeometry<'data>) -> Result<Self, Error> {
+        match value {
+            UniversalGeometry::Data(value) => value.try_into(),
+            _ => Err(Error::new(
+                "world.geometry",
+                "geometry carries a different authored domain",
+            )),
+        }
+    }
+}
+impl<'data> TryFrom<GeometryData<'data>> for WmoGeometry<'data> {
+    type Error = Error;
+    fn try_from(value: GeometryData<'data>) -> Result<Self, Error> {
+        value.validate()?;
+        if value.connectivity.additional().len() > 1
+            || value
+                .connectivity
+                .additional()
+                .iter()
+                .any(|topology| !matches!(topology, Topology::TriangleStrip(_)))
+        {
+            return Err(Error::new(
+                "world.geometry.connectivity",
+                "world geometry retains primary triangles and one strip set",
+            ));
+        }
+        let value = value.into_parts();
+        if value.kind != GeometryKind::Display
+            || !matches!(value.topology, Topology::Triangles(_))
+            || !value.tangents.is_empty()
+            || !matches!(value.influences, GeometryInfluences::None)
+        {
+            return Err(Error::new(
+                "world.geometry",
+                "expected unskinned display triangles without vertex tangent frames",
+            ));
+        }
+        let mut colors = BTreeMap::new();
+        if !value.colors.is_empty() {
+            colors.insert(0, value.colors);
+        }
+        let mut lightmap = None;
+        for attribute in value.attributes {
+            if attribute.domain != AttributeDomain::Vertex {
+                return Err(Error::new(
+                    "world.geometry.attributes",
+                    "expected vertex-domain attributes",
+                ));
+            }
+            match (attribute.semantic, attribute.values) {
+                (AttributeSemantic::Color(slot), AttributeValues::Vector4(values))
+                    if !colors.contains_key(&slot) =>
+                {
+                    colors.insert(slot, values);
+                }
+                (AttributeSemantic::LightmapCoordinates, AttributeValues::Vector2(values))
+                    if lightmap.is_none() && !values.is_empty() =>
+                {
+                    lightmap = Some(values)
+                }
+                _ => {
+                    return Err(Error::new(
+                        "world.geometry.attributes",
+                        "unsupported, duplicate, empty, or incorrectly typed attribute",
+                    ))
+                }
+            }
+        }
+        if colors
+            .keys()
+            .copied()
+            .enumerate()
+            .any(|(index, slot)| index as u32 != slot)
+        {
+            return Err(Error::new(
+                "world.geometry.colors",
+                "color slots must be contiguous from zero",
+            ));
+        }
+        let result = Self {
+            streams: VertexStreams {
+                vertices: VertexData {
+                    positions: value.positions,
+                    normals: value.normals,
+                    texture_coordinates: value.texture_coordinates,
+                    colors: colors.into_values().collect(),
+                    tangents: (),
+                    extras: lightmap.unwrap_or_default(),
+                },
+                topology: value.topology,
+                influences: (),
+            },
+            triangle_controls: value.surface_triangles,
+            pools: value.pools,
+        };
+        result.validate()?;
+        Ok(result)
+    }
 }

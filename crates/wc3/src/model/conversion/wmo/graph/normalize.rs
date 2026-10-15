@@ -2,8 +2,8 @@
 use crate::model::conversion::Error;
 use crate::model::semantic::profiles::Wmo;
 use crate::model::semantic::{
-    Bounds, DrawAppearanceSchema, InstanceId, LookId, Model, ModelBuilder, Resources, Values,
-    WmoGeometry,
+    Bounds, DrawAppearanceSchema, DrawSubsets, InstanceId, LookId, Model, ModelBuilder,
+    PrimitiveRange, PrimitiveSelection, Resources, Values, WmoGeometry,
 };
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -82,6 +82,7 @@ pub(super) fn prepare<'data>(
         let mut strips = Vec::new();
         let mut tangents = Vec::new();
         let mut draws = Vec::new();
+        let mut subsets = DrawSubsets::default();
         let mut vertex_base = 0u32;
         let mut face_base = 0u32;
         let mut strip_base = 0u32;
@@ -149,57 +150,58 @@ pub(super) fn prepare<'data>(
                 u32::try_from(draws.len()).map_err(error)?,
             )?;
             for (ordinal, source) in instance.draws.iter().enumerate() {
+                let source_draw = mesh.resolve_draw(source)?;
+                let mut subset = source_draw.subset.clone();
+                subset.selection = PrimitiveSelection {
+                    connectivity: subsets.primary(),
+                    range: PrimitiveRange::Primitives {
+                        first: source_draw.first.checked_add(face_base).ok_or_else(|| {
+                            Error::new("world.group.merge", "draw selection exceeds face capacity")
+                        })?,
+                        count: source_draw.count,
+                    },
+                };
+                if let Some([first, last]) = &mut subset.vertex_window {
+                    *first = first.checked_add(vertex_base).ok_or_else(|| {
+                        Error::new("world.group.merge", "vertex window exceeds capacity")
+                    })?;
+                    *last = last.checked_add(vertex_base).ok_or_else(|| {
+                        Error::new("world.group.merge", "vertex window exceeds capacity")
+                    })?;
+                }
+                if let Some(strip) = &mut subset.strip {
+                    strip.selection.connectivity = subsets.connectivity_id(1);
+                    strip.selection.range = PrimitiveRange::StripIndices {
+                        first: strip
+                            .selection
+                            .range
+                            .first()
+                            .checked_add(strip_base)
+                            .ok_or_else(|| {
+                                Error::new("world.group.merge", "strip window exceeds capacity")
+                            })?,
+                        count: strip.selection.range.count(),
+                    };
+                }
+                if let Some(tangents) = &mut subset.tangents {
+                    tangents.first_vertex = tangents
+                        .first_vertex
+                        .checked_add(vertex_base)
+                        .ok_or_else(|| {
+                            Error::new("world.group.merge", "tangent vertex exceeds capacity")
+                        })?;
+                    tangents.first_tangent = tangents
+                        .first_tangent
+                        .checked_add(tangent_base)
+                        .ok_or_else(|| {
+                            Error::new("world.group.merge", "tangent pool exceeds capacity")
+                        })?;
+                }
                 let mut draw = source.clone();
-                draw.first = draw.first.checked_add(face_base).ok_or_else(|| {
-                    Error::new("world.group.merge", "draw selection exceeds face capacity")
-                })?;
+                draw.subset = subsets.insert(subset);
                 draw.material = model
                     .material_for_draw(*id, ordinal as u32, look)
                     .expect("validated material assignment");
-                if let Some(controls) = &mut draw.controls {
-                    if let Some([first, last]) = &mut controls.vertex_window {
-                        *first = first.checked_add(vertex_base).ok_or_else(|| {
-                            Error::new(
-                                "world.group.merge",
-                                "vertex window exceeds logical capacity",
-                            )
-                        })?;
-                        *last = last.checked_add(vertex_base).ok_or_else(|| {
-                            Error::new(
-                                "world.group.merge",
-                                "vertex window exceeds logical capacity",
-                            )
-                        })?;
-                    }
-                    if let Some(window) = &mut controls.strip {
-                        window.first = window.first.checked_add(strip_base).ok_or_else(|| {
-                            Error::new(
-                                "world.group.merge",
-                                "strip selection exceeds logical capacity",
-                            )
-                        })?;
-                    }
-                    if let Some(window) = &mut controls.tangents {
-                        window.first_vertex = window
-                            .first_vertex
-                            .checked_add(vertex_base)
-                            .ok_or_else(|| {
-                                Error::new(
-                                    "world.group.merge",
-                                    "tangent vertex selection exceeds logical capacity",
-                                )
-                            })?;
-                        window.first_tangent = window
-                            .first_tangent
-                            .checked_add(tangent_base)
-                            .ok_or_else(|| {
-                                Error::new(
-                                    "world.group.merge",
-                                    "tangent selection exceeds logical capacity",
-                                )
-                            })?;
-                    }
-                }
                 draws.push(draw);
             }
             vertex_base = next_vertex;
@@ -230,6 +232,7 @@ pub(super) fn prepare<'data>(
             .with_tangent_vectors(concat(tangents)?)?;
         let mut mesh = first_mesh.clone();
         mesh.geometry = geometry;
+        mesh.subsets = subsets;
         mesh.bounds = Bounds {
             minimum,
             maximum,

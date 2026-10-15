@@ -1,4 +1,5 @@
 //! World-model scene semantics independent of WMO chunk revisions.
+pub use crate::model::semantic::{SurfaceTriangleControls, TriangleFlags};
 mod flags;
 pub use flags::*;
 mod draw;

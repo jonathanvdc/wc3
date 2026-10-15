@@ -1,12 +1,15 @@
 //! Geometry, skin bindings, and placements use logical graph identities.
 use crate::model::semantic::profiles::{Profile, Universal};
 use crate::model::semantic::BindingSchema as _;
-use crate::model::semantic::{Attributes, BindMatrices, IdentityBinding};
+use crate::model::semantic::TextureCoordinates;
+use crate::model::semantic::{Attributes, BindMatrices, IdentityBinding, SurfaceTriangleControls};
 use crate::model::semantic::{
-    Error, GeometryData, GeometrySchema, InfluenceRows, MaterialId, MeshId, NodeId, SkinId,
-    UniversalGeometry, Values,
+    ConnectivityId, ConnectivitySets, DrawSubset, DrawSubsetId, DrawSubsets, Error, GeometryData,
+    GeometryEdit, GeometrySchema, InfluenceRows, MaterialId, MeshId, NodeId, PrimitiveRange,
+    PrimitiveSelection, SkinId, UniversalGeometry, Values,
 };
 use std::borrow::Cow;
+use std::collections::BTreeMap;
 
 /// Axis-aligned geometry bounds and a conservative bounding sphere radius.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
@@ -62,6 +65,8 @@ pub enum Topology<'a> {
     },
     /// Line primitives.
     Lines(Values<'a, [u32; 2]>),
+    /// Triangle-strip indices, retaining their authored index order.
+    TriangleStrip(Values<'a, u32>),
     /// Point primitives.
     Points(Values<'a, u32>),
 }
@@ -74,11 +79,17 @@ pub enum AttributeDomain {
     Corner,
     /// One value per primitive in topology order.
     Face,
+    /// Independently indexed values selected by draw bindings.
+    Pool,
+    /// One value per face in an explicitly identified connectivity set.
+    ConnectivityFace(ConnectivityId),
+    /// One value per corner in an explicitly identified connectivity set.
+    ConnectivityCorner(ConnectivityId),
     /// One value for the whole geometry.
     Mesh,
 }
 /// The meaning of an additional geometry attribute.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum AttributeSemantic<'a> {
     /// Surface normal used for lighting.
     Normal,
@@ -96,6 +107,10 @@ pub enum AttributeSemantic<'a> {
     Color(u32),
     /// Texture-coordinate stream with its authored slot.
     TexCoord(u32),
+    /// Complete typed surface behavior per primary triangle.
+    SurfaceControls,
+    /// Independently authored baked-light texture coordinates.
+    LightmapCoordinates,
     /// Material assigned to the domain element.
     Material,
     /// Application-defined attribute meaning.
@@ -104,6 +119,8 @@ pub enum AttributeSemantic<'a> {
 /// Typed values of an authoring attribute.
 #[derive(Clone, Debug)]
 pub enum AttributeValues<'a> {
+    /// Complete typed surface records, including material relationships.
+    SurfaceControls(Values<'a, SurfaceTriangleControls>),
     /// Logical boolean attributes.
     Boolean(Values<'a, bool>),
     /// Four exact byte components.
@@ -133,6 +150,7 @@ impl AttributeValues<'_> {
     /// Number of domain elements carrying a value.
     pub fn len(&self) -> usize {
         match self {
+            Self::SurfaceControls(v) => v.len(),
             Self::Boolean(v) => v.len(),
             Self::Byte4(v) => v.len(),
             Self::U16(v) => v.len(),
@@ -201,6 +219,8 @@ pub struct Attribute<'a> {
 /// Geometry arrays and their draw topology. Insertion validates attribute sizes and indices.
 #[derive(Clone, Debug)]
 pub struct Mesh<'a, P: Profile = Universal> {
+    /// Mesh-owned reusable selections and scoped connectivity identities.
+    pub subsets: DrawSubsets,
     /// Additional owner-local behavior permitted by the vocabulary.
     pub controls: P::Mesh<'a>,
     /// Geometry name.
@@ -214,11 +234,91 @@ impl<'a, P: Profile> Mesh<'a, P> {
     /// Creates a mesh around geometry permitted by this profile.
     pub fn new(geometry: P::Geometry<'a>) -> Self {
         Self {
+            subsets: DrawSubsets::default(),
             name: Cow::Borrowed(""),
             controls: Default::default(),
             geometry,
             bounds: Bounds::default(),
         }
+    }
+    pub(crate) fn resolve_draw<'view>(
+        &'view self,
+        draw: &'view Draw<P>,
+    ) -> Result<ResolvedDraw<'view, P>, Error> {
+        let subset = self.subset(draw.subset).ok_or_else(|| {
+            Error::new(
+                "instance.draw.subset",
+                "draw subset belongs to another mesh or is absent",
+            )
+        })?;
+        let PrimitiveRange::Primitives { first, count } = subset.selection.range else {
+            return Err(Error::new(
+                "instance.draw.selection",
+                "native adapter requires a primitive selection",
+            ));
+        };
+        if subset.selection.connectivity != self.subsets.primary() {
+            return Err(Error::new(
+                "instance.draw.connectivity",
+                "native adapter requires primary connectivity",
+            ));
+        }
+        Ok(ResolvedDraw {
+            first,
+            count,
+            controls: &draw.controls,
+            subset,
+        })
+    }
+    /// Adds a profile-supported connectivity set and returns its mesh-scoped identity.
+    pub fn add_connectivity(&mut self, topology: Topology<'a>) -> Result<ConnectivityId, Error> {
+        let index = self.geometry.add_connectivity(topology)?;
+        Ok(self.subsets.connectivity_id(index))
+    }
+    /// Applies geometry edits atomically while checking mesh-owned selections.
+    pub fn edited(&self, edit: GeometryEdit<'a>) -> Result<Self, Error> {
+        if edit.remap.is_some()
+            && self.subsets.iter().any(|(_, subset)| {
+                subset.strip.is_some()
+                    || subset.tangents.is_some()
+                    || subset.vertex_window.is_some()
+            })
+        {
+            return Err(Error::new(
+                "mesh.subsets.remap",
+                "authored windows and pool associations require explicit correspondence updates",
+            ));
+        }
+        let mut value = self.clone();
+        value.geometry = value.geometry.edited(edit)?;
+        value.validate()?;
+        Ok(value)
+    }
+    /// Adds a reusable range in the primary topology.
+    pub fn add_primary_subset(&mut self, first: u32, count: u32) -> DrawSubsetId {
+        self.subsets.insert(DrawSubset::new(PrimitiveSelection {
+            connectivity: self.subsets.primary(),
+            range: PrimitiveRange::Primitives { first, count },
+        }))
+    }
+    /// Inspects a connectivity set by its mesh-scoped identity.
+    pub fn connectivity(&self, id: ConnectivityId) -> Option<Topology<'a>> {
+        self.subsets.resolve(id, &self.geometry)
+    }
+    /// Inspects the geometry selected by an instance draw.
+    pub fn subset(&self, id: DrawSubsetId) -> Option<&DrawSubset> {
+        self.subsets.get(id)
+    }
+    /// Adds an explicitly identified subset; publication checks all its bindings.
+    pub fn add_subset(&mut self, subset: DrawSubset) -> DrawSubsetId {
+        self.subsets.insert(subset)
+    }
+    /// Identifies a connectivity set in the geometry's schema.
+    pub fn connectivity_id(&mut self, index: usize) -> Result<ConnectivityId, Error> {
+        self.geometry
+            .connectivity(index)
+            .ok_or_else(|| Error::new("mesh.connectivity", "connectivity set is absent"))?;
+        Ok(self.subsets.connectivity_id(index))
     }
     /// Returns the binding shared by all placements of this geometry.
     pub fn skin(&self) -> Option<SkinId> {
@@ -237,7 +337,7 @@ impl<'a, P: Profile> Mesh<'a, P> {
         self.geometry.tangents()
     }
     /// Borrows ordered texture-coordinate streams.
-    pub fn texture_coordinates(&self) -> &[Values<'a, [f32; 2]>] {
+    pub fn texture_coordinates(&self) -> TextureCoordinates<'_, 'a> {
         self.geometry.texture_coordinates()
     }
     /// Borrows authored vertex colors when present.
@@ -268,7 +368,59 @@ impl<'a, P: Profile> Mesh<'a, P> {
     }
     pub(crate) fn validate(&self) -> Result<(), Error> {
         self.bounds.validate()?;
-        self.geometry.validate()
+        self.geometry.validate()?;
+        let mut domains = BTreeMap::new();
+        for attribute in self.attributes() {
+            let domain = match attribute.domain {
+                AttributeDomain::Face => (0, Some(self.subsets.primary())),
+                AttributeDomain::ConnectivityFace(id) => (0, Some(id)),
+                AttributeDomain::Corner => (1, Some(self.subsets.primary())),
+                AttributeDomain::ConnectivityCorner(id) => (1, Some(id)),
+                AttributeDomain::Vertex => (2, None),
+                AttributeDomain::Pool => (3, None),
+                AttributeDomain::Mesh => (4, None),
+            };
+            if domains
+                .insert((&attribute.semantic, domain), attribute.domain)
+                .is_some_and(|previous| previous != attribute.domain)
+            {
+                return Err(Error::new(
+                    "mesh.attributes",
+                    "duplicate semantic and connectivity domain",
+                ));
+            }
+
+            let expected = match attribute.domain {
+                AttributeDomain::ConnectivityFace(id) => Some(
+                    self.connectivity(id)
+                        .ok_or_else(|| {
+                            Error::new(
+                                "mesh.attributes.connectivity",
+                                "face connectivity belongs to another mesh or is absent",
+                            )
+                        })?
+                        .primitive_count(),
+                ),
+                AttributeDomain::ConnectivityCorner(id) => Some(
+                    self.connectivity(id)
+                        .ok_or_else(|| {
+                            Error::new(
+                                "mesh.attributes.connectivity",
+                                "corner connectivity belongs to another mesh or is absent",
+                            )
+                        })?
+                        .corner_count(),
+                ),
+                _ => None,
+            };
+            if expected.is_some_and(|count| attribute.values.len() != count) {
+                return Err(Error::new(
+                    "mesh.attributes",
+                    "attribute cardinality differs from its connectivity domain",
+                ));
+            }
+        }
+        self.subsets.validate(&self.geometry)
     }
 }
 /// Joint nodes and their inverse bind transforms.
@@ -300,10 +452,8 @@ impl<'a, P: Profile<Binding<'a> = IdentityBinding>> Skin<'a, P> {
 pub struct Draw<P: Profile = Universal> {
     /// Behavioral controls permitted by this vocabulary.
     pub controls: P::Draw,
-    /// First primitive in the geometry's topology.
-    pub first: u32,
-    /// Number of primitives to draw.
-    pub count: u32,
+    /// Mesh-owned geometry selection rendered by this binding.
+    pub subset: DrawSubsetId,
     /// Material used by this draw.
     pub material: MaterialId,
 }
@@ -330,6 +480,7 @@ impl Topology<'_> {
     /// Number of primitives in logical ordering, including mixed groups.
     pub fn primitive_count(&self) -> usize {
         match self {
+            Self::TriangleStrip(v) => v.len().saturating_sub(2),
             Self::Triangles(v) => v.len(),
             Self::Lines(v) => v.len(),
             Self::Points(v) => v.len(),
@@ -340,6 +491,7 @@ impl Topology<'_> {
     /// Number of primitive corners in logical ordering.
     pub fn corner_count(&self) -> usize {
         match self {
+            Self::TriangleStrip(v) => v.len().saturating_sub(2) * 3,
             Self::Triangles(v) => v.len() * 3,
             Self::Lines(v) => v.len() * 2,
             Self::Points(v) => v.len(),
@@ -377,8 +529,16 @@ impl<'a> Mesh<'a> {
     ) -> Self {
         Self::new(UniversalGeometry::Data(GeometryData {
             positions: positions.into(),
-            topology: Topology::Triangles(triangles.into()),
+            connectivity: ConnectivitySets::new(Topology::Triangles(triangles.into()), Vec::new()),
             ..GeometryData::default()
         }))
     }
+}
+
+/// Borrowed adapter view; ranges come from mesh-owned selections, never instance storage.
+pub(crate) struct ResolvedDraw<'view, P: Profile> {
+    pub first: u32,
+    pub count: u32,
+    pub controls: &'view P::Draw,
+    pub subset: &'view DrawSubset,
 }

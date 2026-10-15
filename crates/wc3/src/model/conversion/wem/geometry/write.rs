@@ -61,6 +61,8 @@ fn layer<'view, 'data: 'view>(
 }
 fn semantic(value: &AttributeSemantic<'_>) -> String {
     match value {
+        AttributeSemantic::LightmapCoordinates => "lightmap_coordinates".into(),
+        AttributeSemantic::SurfaceControls => "surface_controls".into(),
         AttributeSemantic::Normal => "normal".into(),
         AttributeSemantic::Tangent => "tangent".into(),
         AttributeSemantic::TangentVector => "tangent_vector".into(),
@@ -155,6 +157,14 @@ pub(in crate::model::conversion::wem) fn write<'view, 'data: 'view>(
                     AttributeDomain::Corner => records::Domain::Halfedge,
                     AttributeDomain::Face => records::Domain::Face,
                     AttributeDomain::Mesh => records::Domain::Mesh,
+                    AttributeDomain::ConnectivityFace(_)
+                    | AttributeDomain::ConnectivityCorner(_)
+                    | AttributeDomain::Pool => {
+                        return Err(Error::new(
+                            "wem.geometry.attributes",
+                            "indexed attribute pools require explicit translation",
+                        ))
+                    }
                 };
                 layers.push(layer(
                     document,

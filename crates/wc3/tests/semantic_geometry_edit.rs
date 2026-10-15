@@ -119,7 +119,9 @@ fn remapping_preserves_attribute_domains_and_profile_payloads() {
             domain: AttributeDomain::Corner,
             values: AttributeValues::Vector2(vec![[0.; 2], [1.; 2], [2.; 2]].into()),
         },
-    ];
+    ]
+    .try_into()
+    .unwrap();
     let mapped = data.edited(duplicate()).unwrap();
     match &mapped.attributes[0].values {
         AttributeValues::Unsigned(v) => assert_eq!(v.to_vec(), vec![30, 10, 20, 10]),
@@ -249,7 +251,7 @@ fn edits_publish_transactionally_and_keep_unmodified_borrowed_streams() {
 fn polygon_corner_order_and_wem_layer_identities_survive_vertex_splits() {
     let mut data = GeometryData::empty();
     data.positions = positions();
-    data.topology = Topology::Polygons {
+    data.connectivity.primary = Topology::Polygons {
         corners: vec![0, 1, 2].into(),
         offsets: vec![0, 3].into(),
     };

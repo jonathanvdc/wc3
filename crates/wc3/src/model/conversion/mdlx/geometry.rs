@@ -173,6 +173,7 @@ pub(super) fn read<'a, D: ModelDialect>(
         let material = *materials
             .get(mesh.material_id as usize)
             .ok_or_else(|| Error::new("mesh.material", "material does not exist"))?;
+        let subset = builder.add_primary_subset(mesh_id, 0, primitive_count)?;
         builder.add_instance(MeshInstance {
             controls: Default::default(),
             node: placement,
@@ -180,8 +181,7 @@ pub(super) fn read<'a, D: ModelDialect>(
             skin: Some(skin),
             draws: vec![Draw {
                 controls: Default::default(),
-                first: 0,
-                count: primitive_count,
+                subset,
                 material,
             }],
             lod: mesh.try_level_of_detail().ok(),

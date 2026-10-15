@@ -1,6 +1,6 @@
 //! Quantization uses current graph values; optional layout hints never supply geometry.
 use crate::model::conversion::{Context, EncodingHint, Error};
-use crate::model::semantic::{MeshId, Values};
+use crate::model::semantic::{MeshId, TextureCoordinates, Values};
 
 #[derive(Clone, Copy, Debug)]
 pub(super) struct UvTransform {
@@ -8,11 +8,12 @@ pub(super) struct UvTransform {
     pub offset: f32,
 }
 impl UvTransform {
-    pub fn for_mesh(
+    pub fn for_mesh<'a, 'data: 'a>(
         mesh: MeshId,
         hints: &[EncodingHint<'_>],
-        channels: &[Values<'_, [f32; 2]>],
+        channels: impl Into<TextureCoordinates<'a, 'data>>,
     ) -> Result<Self, Error> {
+        let channels = channels.into();
         let mut selected = None;
         for hint in hints {
             if let EncodingHint::M3TextureCoordinates {

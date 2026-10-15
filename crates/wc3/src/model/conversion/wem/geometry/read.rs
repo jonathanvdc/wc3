@@ -6,7 +6,7 @@ use crate::model::semantic::profiles::wem::{
     VertexSplit, Wem,
 };
 use crate::model::semantic::{
-    Attribute, AttributeDomain, AttributeSemantic, AttributeValues, Bounds, GeometryData,
+    Attribute, AttributeDomain, AttributeSemantic, AttributeValues, Bounds, GeometryParts,
     GeometrySchema, MaterialSlotId, Mesh, NodeId, NodeInfluence, Topology, Values,
 };
 use crate::model::wem::{records, RawDocument, Ref};
@@ -93,7 +93,7 @@ where
         offsets: Values::owned(offsets),
         corners,
     };
-    let mut data = GeometryData {
+    let mut data = GeometryParts {
         topology,
         ..Default::default()
     };
@@ -191,7 +191,7 @@ where
         }
     }
     data.attributes = extra;
-    let mut geometry = Geometry::new(data)?;
+    let mut geometry = Geometry::new(data.into_data()?)?;
     geometry.edge_count = counts[2];
     for layer in edge {
         geometry.add_layer(layer);

@@ -180,21 +180,3 @@ impl From<u8> for BatchFlags {
         Self::from_bits_retain(bits)
     }
 }
-bitfield! {
-    /// Unresolved triangle flags retained alongside named authoring controls.
-    #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
-    pub struct TriangleFlags(u16);
-    /// Complete retained option word.
-    pub bits, _:15,0;
-}
-impl TriangleFlags {
-    /// Constructs an option word without discarding any unrecognized bits.
-    pub const fn from_bits_retain(bits: u16) -> Self {
-        Self(bits)
-    }
-}
-impl From<u16> for TriangleFlags {
-    fn from(bits: u16) -> Self {
-        Self::from_bits_retain(bits)
-    }
-}

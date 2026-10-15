@@ -1,13 +1,14 @@
 //! Direct historical group fields, with no upgraded native document.
 use super::{bounds, geometry, relationships, root_view::CommonRoot, scene::Identities};
+use crate::model::conversion::wmo::graph::draw::{bind_draw, ImportedDrawControls};
 use crate::model::conversion::{Context, Error};
 use crate::model::semantic::profiles::wmo::{
-    DrawControls, Group as WorldGroup, GroupOptions, Lighting, RegionControls, WorldSystem,
+    Group as WorldGroup, GroupOptions, Lighting, RegionControls, WorldSystem,
 };
 use crate::model::semantic::profiles::Wmo;
 use crate::model::semantic::{
-    ColorSpace, Draw, InstanceId, MaterialId, Mesh, MeshInstance, ModelBuilder, Node, Resource,
-    Sampler, SystemId, Texture, Values, WmoGeometry,
+    ColorSpace, InstanceId, MaterialId, Mesh, MeshInstance, ModelBuilder, Node, Resource, Sampler,
+    SystemId, Texture, Values, WmoGeometry,
 };
 use crate::model::wmo::group::GroupChunk;
 use crate::model::wmo::legacy::{Batch14, Batch16, LegacyGroupChunk};
@@ -345,6 +346,10 @@ pub(super) fn read<'a, 'data: 'a, B: Batch>(
     if world.fogs.is_empty() {
         region.fogs.clear();
     }
+    let mut mesh = Mesh::<Wmo>::new(geometry);
+    mesh.name = relationships::name(root, header.name)?;
+    mesh.bounds = bounds(header.bounds);
+    let mesh = builder.add_mesh(mesh)?;
     let mut draws = Vec::new();
     for chunk in chunks {
         if let LegacyGroupChunk::Batches(rows) = chunk {
@@ -366,11 +371,13 @@ pub(super) fn read<'a, 'data: 'a, B: Batch>(
                 } else {
                     Lighting::Exterior
                 };
-                draws.push(Draw {
-                    first: row.first() / 3,
-                    count: u32::from(row.count()) / 3,
+                draws.push(bind_draw(
+                    builder,
+                    mesh,
+                    row.first() / 3,
+                    u32::from(row.count()) / 3,
                     material,
-                    controls: Some(DrawControls {
+                    Some(ImportedDrawControls {
                         lighting,
                         vertex_window: Some(row.vertices()),
                         bounds: Some(bounds([
@@ -383,14 +390,11 @@ pub(super) fn read<'a, 'data: 'a, B: Batch>(
                         supplemental: row.supplemental(),
                         ..Default::default()
                     }),
-                });
+                )?);
             }
         }
     }
-    let mut mesh = Mesh::<Wmo>::new(geometry);
-    mesh.name = relationships::name(root, header.name)?;
-    mesh.bounds = bounds(header.bounds);
-    let mesh = builder.add_mesh(mesh)?;
+
     let node = builder.add_node(Node::named(format!("Group {index}")))?;
     if header.flags.has_liquid() && region.liquids.is_empty() {
         region.implicit_liquid = Some(header.liquid_type);

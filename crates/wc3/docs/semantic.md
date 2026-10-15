@@ -11,7 +11,7 @@ representation.
 
 Hierarchy nodes describe placement, transform inheritance, and camera-facing
 behavior. Meshes describe geometry, while mesh instances place that geometry at
-a node. Each instance's draws select geometry and materials. A complete material
+a node. Each instance's draws bind mesh-owned draw subsets to materials. A complete material
 surface owns its rendering and sampling behavior, including the family's layers
 or passes. Shared texture-coordinate transforms describe animated translation,
 rotation, and scale before texture sampling; they belong to the sampling domain
@@ -153,8 +153,28 @@ target cannot retain them. Neither zero-weight influence slots nor matrix-group
 ordering are discarded, and equal-weight groups are not converted into weighted
 slots.
 
-`GeometryData` combines common streams, custom attributes, and connectivity with
-`GeometryInfluences`. Its influence variants retain absent influences,
+`GeometryData` keeps positions and authored purpose explicit, with `ConnectivitySets`,
+`GeometryAttributes`, and `GeometryInfluences` owning the remaining domains.
+Connectivity sets retain primary topology and independently selectable alternatives.
+Each set can contain triangles, triangle strips, polygons, points, lines, or an
+ordered `Mixed` topology. Alternatives are separate selections, rather than extra
+faces appended to the primary topology.
+Normals, tangent frames, color and UV slots, custom data, surface records, and
+independently indexed pools all use the same attribute collection, keyed by
+semantic and domain. There is no separate backing field for a primary color or
+UV stream that could disagree with its attribute definition.
+
+Attribute insertion checks value types and rejects duplicate semantic/domain
+keys. `set` explicitly replaces a definition, while `update` checks types and
+keys before applying an atomic attribute edit. The common stream accessors borrow
+the corresponding typed attribute values. `TextureCoordinates` provides an ordered borrowed view
+over either profile-owned slots or canonical attributes, preserving empty gaps
+and sharing array storage. Attribute domains establish vertex, corner, face,
+mesh, or independently indexed correspondence; pool cardinality is independent
+of vertex count. Native projection selects the most specific authored domain
+when a semantic occurs in several domains: corner, face, vertex, then mesh.
+
+The influence variants retain absent influences,
 variable-length weighted rows, three or four fixed weighted slots, and ordered
 equal-weight matrix groups. Custom attributes can coexist with each influence
 representation. Narrowing to a constrained display type rejects custom attributes
@@ -177,10 +197,23 @@ extras type owns additional vertex streams. Common remapping carries those
 streams through the same vertex correspondence, while connectivity and joint
 rows remain separate fields of their constrained geometry owner.
 
-WMO retains its face controls, strip connectivity, and draw-selected tangent
-pool. Its ordered color sets and baked-light coordinates participate in shared
-vertex remapping, while face records and tangent pools keep their own domains.
-These additional domains keep WMO in a distinct universal variant.
+WMO also widens to `Data`. Ordered color sets use vertex-domain `Color(n)`
+attributes, retaining even empty authored slots on empty geometry. Baked-light
+coordinates use `LightmapCoordinates`. `SurfaceTriangleControls` retain complete
+face behavior, including optional material references, query and rendering flags,
+and unresolved selectors and bits. Their material references participate in
+graph validation.
+
+Surface records use face-domain `SurfaceControls` attributes with
+`AttributeValues::SurfaceControls`. The tangent pool uses a pool-domain `Tangent`
+attribute, while secondary strips are a `TriangleStrip` connectivity set. Mesh-owned
+draw subsets select these domains on the owning geometry;
+neither stream acquires vertex-domain cardinality. Checked publication validates
+these selections in both WMO and universal graphs. WMO narrowing requires
+unskinned display triangles, contiguous color slots, and supported typed vertex attributes, while retaining face controls
+and pools without copying. Other constrained geometry types reject these additional
+domains. Generic draw projection requires an explicit domain translation before
+handling surface controls, supplemental declarations, or indexed pools.
 
 Diablo III also widens to `Data`. Its independent three-vector tangents and
 binormals use the typed vertex attributes `TangentVector` and `Binormal`, auxiliary
@@ -197,6 +230,38 @@ constructing `d4::Geometry`. Weighted rows retain their variable or fixed width
 without copying their arrays. Equal-weight matrix groups require an explicit
 transformation before entering this weighted geometry vocabulary. Native adapters
 also check whether the selected vertex layout can encode the authored streams.
+
+## Draw subsets and instance bindings
+
+A mesh owns reusable `DrawSubset` declarations. Each subset selects a scoped
+`ConnectivityId` and a typed `PrimitiveRange`: `Primitives` counts logical
+primitives, while `StripIndices` counts authored strip indices. `Mixed` describes
+one ordered primitive collection within a set; it does not combine independently
+selected alternatives. An instance's `Draw` stores a `DrawSubsetId`, material,
+and rendering controls, so several instances can reuse the same geometry selection
+with different material bindings. Subset and connectivity identities survive
+widening and checked narrowing.
+
+`Mesh::add_primary_subset` creates a primitive range in primary topology.
+`Mesh::add_connectivity` adds a profile-supported alternative and returns its
+mesh-scoped identity. `Mesh::add_subset` accepts an explicit selection and its
+bindings. Publication checks ownership, range counting domains, bounds, and the
+profile's supported subset operations. A subset from another mesh cannot satisfy
+an instance draw, even when both meshes have identical connectivity.
+
+WMO subsets retain their ordinary triangle selection together with optional
+strip declarations, vertex windows, and tangent-pool associations. Their instance
+draws retain material, lighting, pass, and other rendering behavior. Import does
+not turn a supplemental strip declaration into another draw. Export resolves
+subset identities into native batch ranges, and joining world placements relocates
+the mesh-owned selections and pool associations together.
+
+`Face` and `Corner` attributes describe primary topology. `ConnectivityFace(id)`
+and `ConnectivityCorner(id)` explicitly address another connectivity set on the
+owning mesh. Publication checks those identities and domain cardinalities, and
+rejects duplicate definitions that alias the same semantic and domain. Native
+projection uses the selected set's attributes and preserves strip winding when
+expanding strips into triangles.
 
 ## Appearance and playback
 
@@ -453,8 +518,13 @@ assert_eq!(geometry.positions.len(), 3);
 Ok::<(), wc3::model::semantic::Error>(())
 ```
 
-To publish an edit, clone the mesh from the draft's model, replace its `geometry`
-with the result of `edited`, and submit it through `ModelBuilder::set_mesh` inside
+Use `Mesh::edited` to apply a geometry edit and validate its subset references
+atomically. Remapping a subset with vertex windows, supplemental strips, or
+tangent-pool bindings requires an explicit correspondence update; the helper
+rejects those edits instead of guessing new associations.
+
+To publish an edit, clone the mesh from the draft's model, apply `Mesh::edited`,
+and submit the result through `ModelBuilder::set_mesh` inside
 `SingleModel::edit` or `ModelCollection::edit_model`. Geometry editing does not
 recompute mesh or model bounds, transform normals automatically when positions
 change, or rewrite references held by other graph objects. Tools must update those
@@ -465,9 +535,11 @@ the intended vertex.
 
 The common protocol currently preserves topology structure. Adding or splitting
 faces, interpolating new vertices, changing skinning representations, and creating
-profile-specific attribute layers require explicit profile operations. WMO geometry
-with strip indices rejects vertex remapping because draws retain separate strip
-windows. WEM geometry with declared edges, triangulations, or repair history also
+profile-specific attribute layers require explicit profile operations. Shared
+geometry with alternative connectivity or indexed pools rejects vertex remapping
+because those domains require separate correspondence. The constrained WMO API retains its existing strip
+restriction; pool selections need their own correspondence when vertices change.
+WEM geometry with declared edges, triangulations, or repair history also
 rejects remapping rather than guessing correspondence for those domains. Ordinary
 stream edits remain available for those meshes. Native index widths, packing, and
 quantization continue to be checked during export.
