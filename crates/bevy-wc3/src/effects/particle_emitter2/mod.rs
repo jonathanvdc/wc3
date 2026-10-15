@@ -15,7 +15,7 @@ mod spawn;
 
 use bevy::prelude::Component;
 
-pub(crate) use records::ParticleInstances;
+pub(crate) use records::{ParticleInstances, ParticleInstance, ParticleEmitterUniform, StagedSpriteParameters};
 pub(crate) use render::ParticleRenderPlugin;
 pub(crate) use simulation::{update_particles, Particle2State};
 

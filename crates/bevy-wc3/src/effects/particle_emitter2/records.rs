@@ -1,4 +1,5 @@
 //! Birth records, shader parameters, and immutable extraction snapshots.
+use crate::effects::blend::EffectBlend;
 use crate::effects::records::RecordRing;
 use crate::effects::simulation::split_time;
 use bevy::ecs::query::QueryItem;
@@ -9,7 +10,7 @@ use bytemuck::{Pod, Zeroable};
 use std::array::from_fn;
 use std::f32::consts::{FRAC_PI_8, PI};
 use std::sync::Arc;
-use wc3::model::formats::mdlx::emitters::{Particle2FilterMode, ParticleEmitter2};
+use wc3::model::formats::mdlx::emitters::ParticleEmitter2;
 
 /// Immutable spawn data indexed by the growing record ring.
 #[derive(Clone, Copy, Debug, PartialEq, Pod, Zeroable)]
@@ -21,6 +22,7 @@ pub(crate) struct ParticleInstance {
     lifetime_tail_birth: [f32; 4],
     // XYZ size multipliers sampled at birth, then XYQuad facing in radians.
     scale_facing: [f32; 4],
+    acceleration_drag: [f32; 4],
 }
 
 impl ParticleInstance {
@@ -47,9 +49,19 @@ impl ParticleInstance {
                 size_scale.z,
                 velocity.y.atan2(velocity.x) - PI + FRAC_PI_8,
             ],
+            acceleration_drag: [0., 0., -gravity, 0.],
         }
     }
 
+    /// Supplies vector acceleration and exponential velocity damping.
+    pub(crate) fn with_acceleration(mut self, acceleration: Vec3, drag: f32) -> Self {
+        self.acceleration_drag = [acceleration.x, acceleration.y, acceleration.z, drag.max(0.)];
+        self
+    }
+    pub(crate) fn with_facing(mut self, facing: f32) -> Self {
+        self.scale_facing[3] = facing;
+        self
+    }
     pub(crate) fn as_tail(mut self) -> Self {
         self.lifetime_tail_birth[1] = 1.0;
         self
@@ -71,8 +83,14 @@ impl ParticleInstance {
             .max(0.0);
         let position = Vec3::from_slice(&self.position_birth[..3]);
         let velocity = Vec3::from_slice(&self.velocity_gravity[..3]);
-        let center =
-            position + velocity * age - Vec3::Z * (0.5 * self.velocity_gravity[3] * age * age);
+        let acceleration = Vec3::from_slice(&self.acceleration_drag[..3]);
+        let drag = self.acceleration_drag[3];
+        let center = if drag > 0.00001 {
+            let velocity_time = (1. - (-drag * age).exp()) / drag;
+            position + velocity * velocity_time + acceleration * ((age - velocity_time) / drag)
+        } else {
+            position + velocity * age + acceleration * (0.5 * age * age)
+        };
         if uniform.atlas_flags[2] != 0 {
             Mat4::from_cols_array_2d(&uniform.world_from_local).transform_point3(center)
         } else {
@@ -93,44 +111,77 @@ pub(crate) struct ParticleEmitterUniform {
     clock_tail: [f32; 4],
     // Unshaded, followed by reserved lanes.
     render_flags: [u32; 4],
+    plane_axes: [[f32; 4]; 2],
 }
 
+/// Staged sprite appearance supplied independently of any native model records.
+#[derive(Clone, Debug)]
+pub(crate) struct StagedSpriteParameters {
+    pub colors: [[f32; 4]; 3],
+    pub scales: [f32; 3],
+    pub middle: f32,
+    pub intervals: [[u32; 3]; 4],
+    pub atlas: [u32; 2],
+    pub model_space: bool,
+    pub xy_quad: bool,
+    pub tail_length: f32,
+    pub unlit: bool,
+    pub plane_axes: [Vec3; 2],
+}
 impl ParticleEmitterUniform {
+    pub(crate) fn from_staged(
+        parameters: &StagedSpriteParameters,
+        transform: Mat4,
+        time: f64,
+    ) -> Self {
+        let [high, low] = split_time(time);
+        Self {
+            world_from_local: transform.to_cols_array_2d(),
+            colors: parameters.colors,
+            scaling: [
+                parameters.scales[0],
+                parameters.scales[1],
+                parameters.scales[2],
+                parameters.middle.clamp(0.001, 0.999),
+            ],
+            intervals: parameters.intervals.map(|v| [v[0], v[1], v[2], 0]),
+            atlas_flags: [
+                parameters.atlas[0].max(1),
+                parameters.atlas[1].max(1),
+                u32::from(parameters.model_space),
+                u32::from(parameters.xy_quad),
+            ],
+            clock_tail: [high, low, parameters.tail_length, 0.],
+            render_flags: [u32::from(parameters.unlit), 0, 0, 0],
+            plane_axes: parameters.plane_axes.map(|v| v.extend(0.).to_array()),
+        }
+    }
     pub(crate) fn new(
         definition: &ParticleEmitter2<'static>,
         transform: &GlobalTransform,
         time: f64,
     ) -> Self {
-        let [high, low] = split_time(time);
-        Self {
-            world_from_local: transform.to_matrix().to_cols_array_2d(),
+        let parameters = StagedSpriteParameters {
             colors: from_fn(|i| {
                 let color = definition.segment_colors[i];
                 [
                     color[0],
                     color[1],
                     color[2],
-                    definition.alpha[i] as f32 / 255.0,
+                    definition.alpha[i] as f32 / 255.,
                 ]
             }),
-            scaling: [
-                definition.particle_scaling[0],
-                definition.particle_scaling[1],
-                definition.particle_scaling[2],
-                definition.time.clamp(0.001, 0.999),
-            ],
-            intervals: definition
-                .uv_animations
-                .map(|interval| [interval[0], interval[1], interval[2], 0]),
-            atlas_flags: [
-                definition.rows.max(1),
-                definition.columns.max(1),
-                u32::from(definition.node.flags.model_space()),
-                u32::from(definition.node.flags.xy_quad()),
-            ],
-            clock_tail: [high, low, definition.tail_length, 0.0],
-            render_flags: [u32::from(definition.node.flags.unshaded()), 0, 0, 0],
-        }
+            scales: definition.particle_scaling,
+            middle: definition.time,
+            intervals: definition.uv_animations,
+            atlas: [definition.rows, definition.columns],
+            model_space: definition.node.flags.model_space(),
+            xy_quad: definition.node.flags.xy_quad(),
+            tail_length: definition.tail_length,
+            unlit: definition.node.flags.unshaded(),
+            plane_axes: [Vec3::X, Vec3::Y],
+        };
+        Self::from_staged(&parameters, transform.to_matrix(), time)
     }
 }
 
@@ -140,7 +191,7 @@ pub(crate) struct ParticleInstances {
     pub(crate) live_indices: Arc<Vec<u32>>,
     pub(crate) uniform: ParticleEmitterUniform,
     pub(crate) texture: Option<Handle<Image>>,
-    pub(crate) filter: Particle2FilterMode,
+    pub(crate) filter: EffectBlend,
     pub(crate) priority_plane: u32,
     pub(crate) sort_far: bool,
 }

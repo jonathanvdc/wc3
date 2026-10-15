@@ -1,7 +1,7 @@
 //! Capture an MDX or MDL offscreen at fixed animation times.
 //! Run `cargo run -p bevy-wc3 --example capture -- --help` for options.
 use bevy::app::PluginsState;
-use bevy::asset::{AssetPlugin, LoadState, RecursiveDependencyLoadState};
+use bevy::asset::{AssetPath, AssetPlugin, LoadState, RecursiveDependencyLoadState};
 use bevy::camera::{RenderTarget, ShadowLodOrigin};
 use bevy::core_pipeline::prepass::{DepthPrepass, MotionVectorPrepass, NormalPrepass};
 use bevy::core_pipeline::tonemapping::Tonemapping;
@@ -17,27 +17,36 @@ use bevy::time::TimeUpdateStrategy;
 use bevy::window::ExitCondition;
 use bevy::winit::WinitPlugin;
 use bevy_wc3::{
-    prepare_model_asset, PreparedModel, Wc3Animation, Wc3BevyPlugin, Wc3CameraBinding,
+    prepare_model_asset, spawn_universal_model, PreparedModel, UniversalAnimationError,
+    UniversalAssetSettings, UniversalMaterial, UniversalModelAsset, UniversalPathResolver,
+    UniversalPlayback, UniversalResourceResolver, Wc3Animation, Wc3BevyPlugin, Wc3CameraBinding,
     Wc3CameraSample, Wc3LayerMaterial, Wc3Lod, Wc3LodOverride, Wc3LodSettings, Wc3LodState,
     Wc3Model, Wc3ModelAsset, Wc3ModelCameras, Wc3ModelInstance, Wc3NodeCamera, Wc3PoseBaker,
     Wc3PoseOptions, Wc3TextureBindings, Wc3TextureSlot,
 };
+use std::collections::HashMap;
 use std::env::args;
 use std::error::Error;
 use std::fs::{create_dir_all, read, File};
 use std::io::Write as _;
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::thread::sleep;
 use std::time::{Duration, Instant};
 use wc3::model::conversion::ExportOptions;
 use wc3::model::formats::mdlx::V1800;
+use wc3::model::formats::wmo::Profile as WmoProfile;
 use wc3::model::io;
+use wc3::model::Resource as ModelResource;
 
 type CaptureResult<T> = Result<T, Box<dyn Error>>;
 const TIMEOUT: Duration = Duration::from_secs(30);
 const HELP: &str = "Usage: capture MODEL.{mdx,mdl} OUTPUT_DIR [options]
 
 Render offscreen and write frame-0000-1.000s.png, etc. Requires a GPU.
+  --universal           Compile native semantics directly (requires --eye and --target)
+  --wmo-profile NAME    classic, legion, bfa, shadowlands-pre92, shadowlands, dragonflight, warwithin
+  --file-id ID=PATH     Map a native file-data identity to an asset-root-relative file
   --bake-pose           Render offline-baked geometry instead of the live hierarchy
   --prepasses           Enable depth/normal/motion prepasses and shadows
   --no-default-light    Omit the capture scene light (isolate model lights)
@@ -78,6 +87,9 @@ struct PlaybackChange {
 }
 
 struct Options {
+    universal: bool,
+    wmo_profile: Option<WmoProfile>,
+    file_ids: HashMap<u32, String>,
     bake_pose: bool,
     prepasses: bool,
     bevy_reference: bool,
@@ -116,6 +128,9 @@ impl Options {
             .next()
             .ok_or("pass an output directory after the model path")?;
         let mut options = Self {
+            universal: false,
+            wmo_profile: None,
+            file_ids: HashMap::new(),
             bake_pose: false,
             prepasses: false,
             bevy_reference: false,
@@ -144,6 +159,10 @@ impl Options {
             if option == "--help" || option == "-h" {
                 return Ok(None);
             }
+            if option == "--universal" {
+                options.universal = true;
+                continue;
+            }
             if option == "--no-default-light" {
                 options.no_default_light = true;
                 continue;
@@ -164,6 +183,22 @@ impl Options {
                 .next()
                 .ok_or_else(|| format!("missing value for {option}"))?;
             match option.as_str() {
+                "--wmo-profile" => {
+                    options.wmo_profile = Some(match value.as_str() {
+                        "classic" => WmoProfile::Classic,
+                        "legion" => WmoProfile::Legion,
+                        "bfa" => WmoProfile::Bfa,
+                        "shadowlands-pre92" => WmoProfile::ShadowlandsPre92,
+                        "shadowlands" => WmoProfile::Shadowlands,
+                        "dragonflight" => WmoProfile::Dragonflight,
+                        "warwithin" => WmoProfile::WarWithin,
+                        _ => return Err("unsupported WMO profile".into()),
+                    })
+                }
+                "--file-id" => {
+                    let (id, path) = value.split_once('=').ok_or("file-id must be ID=PATH")?;
+                    options.file_ids.insert(id.parse()?, path.to_owned());
+                }
                 "--tonemapping" => {
                     options.tonemapping = match value.as_str() {
                         "tony-mcmapface" => Tonemapping::TonyMcMapface,
@@ -281,6 +316,9 @@ impl Options {
         }
         for &time in &options.times {
             Duration::try_from_secs_f64(time)?;
+        }
+        if !options.universal && (options.wmo_profile.is_some() || !options.file_ids.is_empty()) {
+            return Err("--wmo-profile and --file-id require --universal".into());
         }
         Ok(Some(options))
     }
@@ -420,6 +458,9 @@ fn main() -> CaptureResult<()> {
         println!("{HELP}");
         return Ok(());
     };
+    if options.universal {
+        return capture_universal(options);
+    }
     let model_path = options.model.canonicalize()?;
     let asset_root = options
         .asset_root
@@ -735,6 +776,301 @@ fn main() -> CaptureResult<()> {
             path.display(),
             app.world().get::<Wc3Animation>(root).unwrap().sequence()
         );
+    }
+    Ok(())
+}
+
+struct CaptureUniversalResolver {
+    file_ids: HashMap<u32, String>,
+    wmo_profile: Option<WmoProfile>,
+}
+impl UniversalResourceResolver for CaptureUniversalResolver {
+    fn candidates(
+        &self,
+        resource: &ModelResource<'_>,
+        owner: &AssetPath<'_>,
+    ) -> Vec<AssetPath<'static>> {
+        if let ModelResource::FileDataId(id) = resource {
+            return self
+                .file_ids
+                .get(id)
+                .map(|path| {
+                    vec![AssetPath::from(path.clone()).with_source(owner.source().clone_owned())]
+                })
+                .unwrap_or_default();
+        }
+        UniversalPathResolver.candidates(resource, owner)
+    }
+    fn wmo_profile(&self, _owner: &AssetPath<'_>) -> Option<WmoProfile> {
+        self.wmo_profile
+    }
+}
+
+fn capture_universal(options: Options) -> CaptureResult<()> {
+    let eye = options
+        .eye
+        .ok_or("Universal capture currently requires an explicit --eye")?;
+    let target = options
+        .target
+        .ok_or("Universal capture currently requires an explicit --target")?;
+    if options.bake_pose
+        || options.model_camera.is_some()
+        || options.blend.is_some()
+        || !options.textures.is_empty()
+        || options.benchmark_frames.is_some()
+    {
+        return Err("Universal capture does not yet implement pose baking, authored cameras, blend overrides, texture overrides, or frame benchmarks".into());
+    }
+    let model = options.model.canonicalize()?;
+    let asset_root = options
+        .asset_root
+        .clone()
+        .unwrap_or_else(|| model.parent().unwrap().to_owned())
+        .canonicalize()?;
+    let path = model
+        .strip_prefix(&asset_root)
+        .map_err(|_| "model must be inside the asset root")?
+        .to_string_lossy()
+        .into_owned();
+    let mut app = App::new();
+    app.insert_resource(UniversalAssetSettings {
+        resolver: Arc::new(CaptureUniversalResolver {
+            file_ids: options.file_ids.clone(),
+            wmo_profile: options.wmo_profile,
+        }),
+    });
+    app.add_plugins((
+        DefaultPlugins
+            .set(AssetPlugin {
+                file_path: asset_root.to_string_lossy().into_owned(),
+                ..default()
+            })
+            .set(WindowPlugin {
+                primary_window: None,
+                exit_condition: ExitCondition::DontExit,
+                ..default()
+            })
+            .set(RenderPlugin {
+                synchronous_pipeline_compilation: true,
+                ..default()
+            })
+            .disable::<WinitPlugin>()
+            .disable::<PipelinedRenderingPlugin>(),
+        Wc3BevyPlugin,
+    ));
+    app.insert_resource(TimeUpdateStrategy::ManualDuration(Duration::ZERO));
+    app.init_resource::<ScreenshotResult>();
+    let deadline = Instant::now() + TIMEOUT;
+    while app.plugins_state() != PluginsState::Ready {
+        check_deadline(deadline, "initializing renderer")?;
+        sleep(Duration::from_millis(5));
+    }
+    app.finish();
+    app.cleanup();
+    let limit = app
+        .world()
+        .resource::<RenderDevice>()
+        .limits()
+        .max_texture_dimension_2d;
+    if options.size.max_element() > limit {
+        return Err(format!("image dimensions exceed the GPU limit of {limit}").into());
+    }
+    app.world_mut()
+        .resource_mut::<Time<Virtual>>()
+        .set_max_delta(Duration::from_secs(1));
+    let assets = app.world().resource::<AssetServer>().clone();
+    let handle: Handle<UniversalModelAsset> = assets.load(path);
+    let deadline = Instant::now() + TIMEOUT;
+    loop {
+        step(&mut app, Duration::ZERO)?;
+        check_asset(&assets, &handle)?;
+        if assets.is_loaded_with_dependencies(&handle) {
+            break;
+        }
+        check_deadline(deadline, "loading Universal model and textures")?;
+        sleep(Duration::from_millis(5));
+    }
+    let prepared = app
+        .world_mut()
+        .resource_scope(|world, mut meshes: Mut<Assets<Mesh>>| {
+            world.resource_scope(
+                |world, mut binds: Mut<Assets<SkinnedMeshInverseBindposes>>| {
+                    let models = world.resource::<Assets<UniversalModelAsset>>();
+                    let asset = models.get(&handle).unwrap();
+                    for diagnostic in asset.compiled.diagnostics() {
+                        eprintln!("Universal rendering: {}", diagnostic.message);
+                    }
+                    for resource in &asset.unresolved_images {
+                        eprintln!("Unresolved image: {resource:?}");
+                    }
+                    asset.compiled.prepare(&mut meshes, &mut binds)
+                },
+            )
+        });
+    let clips = prepared.clips();
+    if options.sequence >= clips.len() && !(clips.is_empty() && options.sequence == 0) {
+        return Err("Universal sequence index is out of range".into());
+    }
+    for change in &options.plays {
+        if change.sequence >= clips.len() {
+            return Err("scheduled Universal sequence index is out of range".into());
+        }
+    }
+    let image = app
+        .world_mut()
+        .resource_mut::<Assets<Image>>()
+        .add(Image::new_target_texture(
+            options.size.x,
+            options.size.y,
+            TextureFormat::Rgba8UnormSrgb,
+            None,
+        ));
+    let camera = app
+        .world_mut()
+        .spawn((
+            Camera3d::default(),
+            options.tonemapping,
+            ShadowLodOrigin,
+            Msaa::Sample4,
+            RenderTarget::Image(image.clone().into()),
+            Transform::from_translation(eye).looking_at(target, Vec3::Y),
+        ))
+        .id();
+    if options.prepasses {
+        app.world_mut().entity_mut(camera).insert((
+            DepthPrepass,
+            NormalPrepass,
+            MotionVectorPrepass,
+        ));
+    }
+    if !options.no_default_light {
+        app.world_mut().spawn((
+            DirectionalLight {
+                illuminance: options.illuminance,
+                shadow_maps_enabled: options.prepasses,
+                ..default()
+            },
+            Transform::from_xyz(1., -1., 2.).looking_at(Vec3::ZERO, Vec3::Z),
+        ));
+    }
+    if options.bevy_reference {
+        let mesh = app
+            .world_mut()
+            .resource_mut::<Assets<Mesh>>()
+            .add(Sphere::new(0.5));
+        let material = app
+            .world_mut()
+            .resource_mut::<Assets<StandardMaterial>>()
+            .add(StandardMaterial {
+                base_color: Color::srgb(0.8, 0.15, 0.05),
+                metallic: 0.6,
+                perceptual_roughness: 0.3,
+                ..default()
+            });
+        app.world_mut().spawn((
+            Mesh3d(mesh),
+            MeshMaterial3d(material),
+            Transform::from_xyz(0., 2., 0.),
+        ));
+    }
+    let root = app
+        .world_mut()
+        .resource_scope(|world, mut meshes: Mut<Assets<Mesh>>| {
+            world.resource_scope(|world, mut materials: Mut<Assets<UniversalMaterial>>| {
+                let mut commands = world.commands();
+                spawn_universal_model(
+                    &mut commands,
+                    &mut meshes,
+                    &mut materials,
+                    &prepared,
+                    Transform::IDENTITY,
+                )
+            })
+        });
+    app.world_mut().flush();
+    {
+        let mut playback = app
+            .world_mut()
+            .get_mut::<UniversalPlayback>(root)
+            .ok_or("Universal playback was not spawned")?;
+        playback.clip = clips.get(options.sequence).map(|(id, _)| *id);
+        playback.driving_camera = Some(camera);
+        if let Wc3Lod::Fixed(level) = options.lod {
+            playback.lod = level;
+        }
+    }
+    settle(&mut app)?;
+    create_dir_all(&options.output)?;
+    let mut elapsed = 0.;
+    let mut next_play = 0;
+    for (index, &time) in options.times.iter().enumerate() {
+        loop {
+            if let Some(change) = options
+                .plays
+                .get(next_play)
+                .filter(|change| change.time <= elapsed + 1e-9 && change.time <= time + 1e-9)
+            {
+                let mut playback = app.world_mut().get_mut::<UniversalPlayback>(root).unwrap();
+                playback.clip = Some(clips[change.sequence].0);
+                playback.clip_time = 0.;
+                playback.timeline_time = 0.;
+                next_play += 1;
+                continue;
+            }
+            if elapsed + 1e-9 >= time {
+                break;
+            }
+            let target_time = options
+                .plays
+                .get(next_play)
+                .map_or(time, |change| time.min(change.time));
+            let dt = Duration::try_from_secs_f64((target_time - elapsed).min(1. / options.fps))?;
+            step(&mut app, dt)?;
+            elapsed += dt.as_secs_f64();
+        }
+        settle(&mut app)?;
+        if let Some(error) = app
+            .world()
+            .get::<UniversalAnimationError>(root)
+            .and_then(|error| error.0.as_ref())
+        {
+            return Err(format!("Universal animation failed: {error}").into());
+        }
+        let path = options
+            .output
+            .join(format!("frame-{index:04}-{time:.3}s.png"));
+        app.world_mut().resource_mut::<ScreenshotResult>().0 = None;
+        let destination = path.clone();
+        app.world_mut()
+            .spawn(Screenshot::image(image.clone()))
+            .observe(
+                move |event: On<ScreenshotCaptured>, mut result: ResMut<ScreenshotResult>| {
+                    result.0 = Some(
+                        event
+                            .image
+                            .clone()
+                            .try_into_dynamic()
+                            .map_err(|error| error.to_string())
+                            .and_then(|image| {
+                                image
+                                    .to_rgb8()
+                                    .save(&destination)
+                                    .map_err(|error| error.to_string())
+                            }),
+                    );
+                },
+            );
+        let deadline = Instant::now() + TIMEOUT;
+        loop {
+            step(&mut app, Duration::ZERO)?;
+            if let Some(result) = app.world_mut().resource_mut::<ScreenshotResult>().0.take() {
+                result.map_err(|error| format!("saving {}: {error}", path.display()))?;
+                break;
+            }
+            check_deadline(deadline, "waiting for screenshot readback")?;
+            sleep(Duration::from_millis(5));
+        }
+        println!("{} (Universal, time {time:.6}s)", path.display());
     }
     Ok(())
 }

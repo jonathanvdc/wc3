@@ -5,6 +5,14 @@ animation and rendering. This guide describes the module responsibilities,
 asset ownership, and scheduling contracts used when extending the renderer or
 integrating it with an application.
 
+The direct Universal runtime lives under `src/universal/`. Its compiler borrows
+semantic geometry and produces owned meshes, animation programmes, and scene
+definitions. Resource loading, geometry projection, material interpretation,
+scene features, and instance evaluation have separate modules. It shares the
+plugin's scheduling contract with the Warcraft III runtime. The
+[direct rendering guide](rendering/universal.md) describes its public boundary
+and current limits; the sections below describe the existing Warcraft III path.
+
 The crate keeps an explicit public facade in `src/lib.rs`. Implementation modules
 are private; the facade exports model assets, instance components, preparation
 and spawning APIs, material types, and scheduling integration points.

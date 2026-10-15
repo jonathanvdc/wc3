@@ -26,6 +26,8 @@ The files under `rendering/` describe how the renderer evaluates model data
 and draws it through Bevy. Start with the [renderer overview](rendering/renderer.md),
 then choose a topic:
 
+- [Direct semantic rendering](rendering/universal.md): Universal compilation,
+  native resource providers, semantic animation, and the direct runtime's limits.
 - [Animation blending](rendering/animation-blending.md): sequence controls,
   local-pose transitions, interruption, and effect/event sampling.
 - [Node transforms and flags](rendering/node-flags.md): inheritance,

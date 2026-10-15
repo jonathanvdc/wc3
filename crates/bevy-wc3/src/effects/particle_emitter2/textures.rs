@@ -56,7 +56,7 @@ mod tests {
                     live_indices: Default::default(),
                     uniform: Default::default(),
                     texture: None,
-                    filter: emitter.filter_mode,
+                    filter: emitter.filter_mode.into(),
                     priority_plane: emitter.priority_plane,
                     sort_far: false,
                 },

@@ -17,6 +17,7 @@ struct Emitter {
     clock_gravity: vec4<f32>,
     atlas_flags: vec4<u32>,
     uv_transform: mat4x4<f32>,
+    gravity_axis: vec4<f32>,
 };
 @group(3) @binding(2) var<uniform> emitter: Emitter;
 @group(3) @binding(3) var<storage, read> sections: array<Section>;
@@ -36,7 +37,9 @@ struct VertexOutput {
 fn displacement(section: Section) -> vec3<f32> {
     let age = max((emitter.clock_gravity.x - section.above_birth.w)
         + (emitter.clock_gravity.y - section.below_birth.w), 0.0);
-    return vec3(0.0, 0.0, -0.5 * emitter.clock_gravity.z * age * age);
+    var axis = emitter.gravity_axis.xyz;
+    if length(axis) == 0.0 { axis = vec3(0.0, 0.0, 1.0); }
+    return -axis * (0.5 * emitter.clock_gravity.z * age * age);
 }
 @vertex
 fn vertex(input: VertexInput) -> VertexOutput {

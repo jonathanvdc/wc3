@@ -67,3 +67,13 @@ fn split_clock_preserves_short_ages_after_long_runtime() {
         ParticleEmitterUniform::new(&emitter(), &GlobalTransform::default(), birth + 0.125);
     assert_eq!(record.center(&uniform), Vec3::new(0.125, 0.0, 0.0));
 }
+
+#[test]
+fn vector_acceleration_and_drag_match_transport_sorting_motion() {
+    let record = ParticleInstance::new(Vec3::ZERO, Vec3::X * 10., 0., 0., 4., Vec3::ONE, false)
+        .with_acceleration(Vec3::Y * 2., 2.);
+    let uniform = ParticleEmitterUniform::new(&emitter(), &GlobalTransform::default(), 1.);
+    let response = (1. - (-2.0f32).exp()) / 2.;
+    let expected = Vec3::X * (10. * response) + Vec3::Y * (1. - response);
+    assert!((record.center(&uniform) - expected).length() < 1e-5);
+}

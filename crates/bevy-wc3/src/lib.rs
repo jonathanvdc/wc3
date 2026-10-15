@@ -80,6 +80,17 @@ mod materials;
 mod plugin;
 mod preparation;
 mod schedule;
+mod universal;
+
+pub use universal::{
+    compile_universal_model, spawn_universal_model, texture_requests, CompiledUniversalModel,
+    PreparedUniversalModel, RenderDiagnostic, SampledUniversalCamera, TextureColorSpace,
+    TextureImageKey, TextureRequest, TextureRole, UniversalAnimationError, UniversalAssetSettings,
+    UniversalAttachmentPoint, UniversalDraw, UniversalFeature, UniversalInstance, UniversalLight,
+    UniversalMaterial, UniversalMaterialExtension, UniversalModelAsset, UniversalModelInstance,
+    UniversalModelLoader, UniversalModelSource, UniversalNode, UniversalParticleEmitter,
+    UniversalPathResolver, UniversalPlayback, UniversalPoseOverrides, UniversalResourceResolver,
+};
 
 pub use animation::pose::{Wc3DefaultNodeCamera, Wc3NodeCamera};
 pub use animation::Wc3Animation;

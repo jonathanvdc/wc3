@@ -48,7 +48,7 @@ pub(crate) fn spawn_ribbons(
                     live_indices: Default::default(),
                     uniform: Default::default(),
                     texture,
-                    filter: layer.filter_mode,
+                    filter: layer.filter_mode.into(),
                     priority_plane: material.priority_plane,
                     emitter,
                     layer_index,

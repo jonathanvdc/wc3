@@ -1,4 +1,5 @@
 //! Instanced PRE2 quads evaluated from immutable spawn records.
+use crate::effects::blend::EffectBlend;
 use bevy::core_pipeline::core_3d::Transparent3d;
 use bevy::ecs::system::{lifetimeless::*, SystemParamItem};
 use bevy::math::{Affine3A, Vec3A};
@@ -25,7 +26,6 @@ use bevy::render::{
     view::ExtractedView,
     Render, RenderApp, RenderStartup, RenderSystems,
 };
-use wc3::model::formats::mdlx::emitters::Particle2FilterMode;
 
 use super::records::{ParticleEmitterUniform, ParticleInstance, ParticleInstances};
 #[cfg(test)]
@@ -112,11 +112,12 @@ impl SpecializedMeshPipeline for ParticlePipeline {
             if let Some(Some(target)) = fragment.targets.first_mut() {
                 let (src, dst) = match key.filter {
                     1 => (BlendFactor::SrcAlpha, BlendFactor::One),
+                    6 => (BlendFactor::One, BlendFactor::One),
                     2 => (BlendFactor::Zero, BlendFactor::Src),
                     3 => (BlendFactor::Dst, BlendFactor::Src),
                     _ => (BlendFactor::SrcAlpha, BlendFactor::OneMinusSrcAlpha),
                 };
-                target.blend = (key.filter != 4).then_some(BlendState {
+                target.blend = (!matches!(key.filter, 4 | 5)).then_some(BlendState {
                     color: BlendComponent {
                         src_factor: src,
                         dst_factor: dst,
@@ -133,13 +134,15 @@ impl SpecializedMeshPipeline for ParticlePipeline {
         Ok(descriptor)
     }
 }
-fn filter_key(filter: Particle2FilterMode) -> u8 {
+fn filter_key(filter: EffectBlend) -> u8 {
     match filter {
-        Particle2FilterMode::Additive => 1,
-        Particle2FilterMode::Modulate => 2,
-        Particle2FilterMode::Modulate2x => 3,
-        Particle2FilterMode::AlphaKey => 4,
-        _ => 0,
+        EffectBlend::Alpha => 0,
+        EffectBlend::AdditiveAlpha => 1,
+        EffectBlend::Modulate => 2,
+        EffectBlend::Modulate2x => 3,
+        EffectBlend::Cutout => 4,
+        EffectBlend::Opaque => 5,
+        EffectBlend::Additive => 6,
     }
 }
 

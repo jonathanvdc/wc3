@@ -25,7 +25,7 @@ pub(crate) fn spawn_particles2(
             live_indices: Default::default(),
             uniform: Default::default(),
             texture,
-            filter: definition.filter_mode,
+            filter: definition.filter_mode.into(),
             priority_plane: definition.priority_plane,
             sort_far: definition.node.flags.sort_prims_far_z(),
         };

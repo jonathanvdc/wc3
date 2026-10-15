@@ -165,7 +165,7 @@ fn independent_clocks_pose_eight_influences_and_repeat_without_mutating_meshes()
     assert!(!first.parts[0]
         .mesh
         .attributes()
-        .any(|(attribute, _)| attribute.name == "Wc3_ExtraJointIndex"));
+        .any(|(attribute, _)| attribute.name == "Model_ExtraJointIndex"));
     assert_eq!(
         positions(meshes.get(prepared.parts().next().unwrap().mesh).unwrap()),
         input

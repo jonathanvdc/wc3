@@ -24,6 +24,11 @@ fn sorting_preserves_endpoint_pairs_and_uv_ranks_with_split_clock_gravity() {
     };
     assert_eq!(records[0].center(&uniform), Vec3::new(0.0, 0.0, -1.0));
     assert_eq!(records[1].center(&uniform), Vec3::new(1.0, 0.0, -0.25));
+    let redirected = RibbonUniform {
+        gravity_axis: [0., 1., 0., 0.],
+        ..uniform
+    };
+    assert_eq!(records[0].center(&redirected), Vec3::new(0., -1., 0.));
     let first = RibbonSegment([0, 1, 0, 2]);
     let second = RibbonSegment([1, 2, 1, 2]);
     let mut data = RibbonInstances {
@@ -31,7 +36,7 @@ fn sorting_preserves_endpoint_pairs_and_uv_ranks_with_split_clock_gravity() {
         live_indices: Arc::new(vec![second, first]),
         uniform,
         texture: None,
-        filter: LayerFilterMode::Blend,
+        filter: EffectBlend::Alpha,
         priority_plane: -1,
         emitter: Entity::PLACEHOLDER,
         layer_index: 0,

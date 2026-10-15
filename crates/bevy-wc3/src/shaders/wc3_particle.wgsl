@@ -13,6 +13,7 @@ struct Particle {
     velocity_gravity: vec4<f32>,
     lifetime_tail_birth: vec4<f32>,
     scale_facing: vec4<f32>,
+    acceleration_drag: vec4<f32>,
 };
 struct Emitter {
     world_from_local: mat4x4<f32>,
@@ -23,6 +24,7 @@ struct Emitter {
     clock_tail: vec4<f32>,
     // x: Unshaded; remaining components reserved.
     render_flags: vec4<u32>,
+    plane_axes: array<vec4<f32>, 2>,
 };
 @group(3) @binding(2) var<uniform> emitter: Emitter;
 @group(3) @binding(3) var<storage, read> particles: array<Particle>;
@@ -76,10 +78,18 @@ fn vertex(input: VertexInput) -> VertexOutput {
     let uv_origin = vec2(f32(cell % columns) / f32(columns), f32(cell / columns) / f32(rows));
     let uv_size = vec2(1.0 / f32(columns), 1.0 / f32(rows));
 
-    let acceleration = vec3(0.0, 0.0, -particle.velocity_gravity.w);
+    let acceleration = particle.acceleration_drag.xyz;
+    let drag = particle.acceleration_drag.w;
     var velocity = particle.velocity_gravity.xyz + acceleration * age;
     var center = particle.position_birth.xyz + particle.velocity_gravity.xyz * age
         + 0.5 * acceleration * age * age;
+    if drag > 0.00001 {
+        let decay = exp(-drag * age);
+        let velocity_time = (1.0 - decay) / drag;
+        velocity = particle.velocity_gravity.xyz * decay + acceleration * velocity_time;
+        center = particle.position_birth.xyz + particle.velocity_gravity.xyz * velocity_time
+            + acceleration * ((age - velocity_time) / drag);
+    }
     if emitter.atlas_flags.z != 0u {
         center = (emitter.world_from_local * vec4(center, 1.0)).xyz;
         velocity = (emitter.world_from_local * vec4(velocity, 0.0)).xyz;
@@ -106,9 +116,11 @@ fn vertex(input: VertexInput) -> VertexOutput {
         let facing = particle.scale_facing.w;
         let cs = cos(facing);
         let sn = sin(facing);
-        side = vec3(cs, sn, 0.0) * half_size * size_scale;
-        vertical = vec3(-sn, cs, 0.0) * half_size * size_scale;
-        normal = vec3(0.0, 0.0, 1.0);
+        let axis_x = emitter.plane_axes[0].xyz;
+        let axis_y = emitter.plane_axes[1].xyz;
+        side = (axis_x * cs + axis_y * sn) * half_size * size_scale;
+        vertical = (-axis_x * sn + axis_y * cs) * half_size * size_scale;
+        normal = safe_normalize(cross(axis_x, axis_y));
     } else {
         // Scale world components after orienting the billboard.
         side *= size_scale;

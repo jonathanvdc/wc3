@@ -1,4 +1,5 @@
 //! Birth records, shader parameters, and immutable extraction snapshots.
+use crate::effects::blend::EffectBlend;
 use crate::effects::records::RecordRing;
 use crate::effects::simulation::split_time;
 use bevy::ecs::query::QueryItem;
@@ -7,7 +8,6 @@ use bevy::render::extract_component::ExtractComponent;
 use bevy::render::sync_component::SyncComponent;
 use bytemuck::{Pod, Zeroable};
 use std::sync::Arc;
-use wc3::model::formats::mdlx::materials::LayerFilterMode;
 
 /// Birth-time endpoints. The split clock retains precision in long-running scenes.
 #[derive(Clone, Copy, Debug, PartialEq, Pod, Zeroable)]
@@ -30,8 +30,10 @@ impl RibbonSection {
         let age = ((uniform.clock_gravity[0] - self.above_birth[3])
             + (uniform.clock_gravity[1] - self.below_birth[3]))
             .max(0.0);
+        let axis = Vec3::from_slice(&uniform.gravity_axis[..3]);
+        let axis = if axis == Vec3::ZERO { Vec3::Z } else { axis };
         (Vec3::from_slice(&self.above_birth[..3]) + Vec3::from_slice(&self.below_birth[..3])) * 0.5
-            - Vec3::Z * (0.5 * uniform.clock_gravity[2] * age * age)
+            - axis * (0.5 * uniform.clock_gravity[2] * age * age)
     }
 }
 
@@ -58,6 +60,7 @@ pub(crate) struct RibbonUniform {
     pub(crate) clock_gravity: [f32; 4],
     pub(crate) atlas_flags: [u32; 4],
     pub(crate) uv_transform: [[f32; 4]; 4],
+    pub(crate) gravity_axis: [f32; 4],
 }
 
 #[derive(Component, Clone)]
@@ -66,7 +69,7 @@ pub(crate) struct RibbonInstances {
     pub(crate) live_indices: Arc<Vec<RibbonSegment>>,
     pub(crate) uniform: RibbonUniform,
     pub(crate) texture: Option<Handle<Image>>,
-    pub(crate) filter: LayerFilterMode,
+    pub(crate) filter: EffectBlend,
     pub(crate) priority_plane: i32,
     pub(crate) emitter: Entity,
     pub(crate) layer_index: usize,

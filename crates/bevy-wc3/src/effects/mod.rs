@@ -13,3 +13,6 @@ pub(crate) mod particle_emitter;
 pub(crate) mod particle_emitter2;
 pub(crate) mod records;
 pub(crate) mod ribbon_emitter;
+
+pub(crate) mod blend;
+mod legacy_blend;

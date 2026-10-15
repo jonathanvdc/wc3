@@ -274,6 +274,7 @@ pub(crate) fn update_ribbons(
         instances.records = state.live.records.clone();
         instances.live_indices = state.segments.clone();
         instances.uniform = RibbonUniform {
+            gravity_axis: [0.; 4],
             color: [color[0], color[1], color[2], alpha.clamp(0.0, 1.0)],
             clock_gravity: [high, low, definition.gravity, 0.0],
             atlas_flags: [

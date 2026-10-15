@@ -1,4 +1,5 @@
 //! GPU ribbon quads built from pairs of immutable world-space cross-sections.
+use crate::effects::blend::EffectBlend;
 use bevy::core_pipeline::core_3d::Transparent3d;
 use bevy::ecs::system::{lifetimeless::*, SystemParamItem};
 use bevy::math::{Affine3A, Vec3A};
@@ -24,7 +25,6 @@ use bevy::render::{
     Render, RenderApp, RenderStartup, RenderSystems,
 };
 use std::collections::HashMap;
-use wc3::model::formats::mdlx::materials::LayerFilterMode;
 
 use super::records::{
     segment_center, RibbonInstances, RibbonSection, RibbonSegment, RibbonUniform,
@@ -114,7 +114,8 @@ impl SpecializedMeshPipeline for RibbonPipeline {
             fragment.shader = self.shader.clone();
             if let Some(Some(target)) = fragment.targets.first_mut() {
                 let (src, dst) = match key.filter {
-                    3 | 4 => (BlendFactor::SrcAlpha, BlendFactor::One),
+                    3 => (BlendFactor::One, BlendFactor::One),
+                    4 => (BlendFactor::SrcAlpha, BlendFactor::One),
                     5 => (BlendFactor::Zero, BlendFactor::Src),
                     6 => (BlendFactor::Dst, BlendFactor::Src),
                     _ => (BlendFactor::SrcAlpha, BlendFactor::OneMinusSrcAlpha),
@@ -143,16 +144,15 @@ impl SpecializedMeshPipeline for RibbonPipeline {
         Ok(descriptor)
     }
 }
-fn filter_key(filter: LayerFilterMode) -> u8 {
+fn filter_key(filter: EffectBlend) -> u8 {
     match filter {
-        LayerFilterMode::None => 0,
-        LayerFilterMode::Transparent => 1,
-        LayerFilterMode::Blend => 2,
-        LayerFilterMode::Additive => 3,
-        LayerFilterMode::AddAlpha => 4,
-        LayerFilterMode::Modulate => 5,
-        LayerFilterMode::Modulate2x => 6,
-        LayerFilterMode::Unknown(_) => 2,
+        EffectBlend::Opaque => 0,
+        EffectBlend::Cutout => 1,
+        EffectBlend::Alpha => 2,
+        EffectBlend::Additive => 3,
+        EffectBlend::AdditiveAlpha => 4,
+        EffectBlend::Modulate => 5,
+        EffectBlend::Modulate2x => 6,
     }
 }
 

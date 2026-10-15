@@ -18,7 +18,7 @@ fn instances(records: Vec<ParticleInstance>, uniform: ParticleEmitterUniform) ->
         records: Arc::new(records.into()),
         uniform,
         texture: None,
-        filter: Particle2FilterMode::Blend,
+        filter: EffectBlend::Alpha,
         priority_plane: 0,
         sort_far: true,
     }

@@ -27,6 +27,11 @@ use crate::materials::animation::animate_surface;
 use crate::materials::layers::animate_layers;
 use crate::materials::Wc3LayerMaterial;
 use crate::schedule::{configure, Wc3Systems};
+use crate::universal::{
+    advance_universal_animation, animate_universal_instances, UniversalMaterial,
+    UniversalModelAsset, UniversalModelLoader, UniversalAssetSettings,
+};
+use crate::universal::{UniversalPreparedCache, invalidate_universal_models, spawn_loaded_universal_models};
 
 /// Registers model/BLP loaders, WC3 materials, animation, and effect rendering.
 ///
@@ -38,17 +43,26 @@ pub struct Wc3BevyPlugin;
 impl Plugin for Wc3BevyPlugin {
     fn build(&self, app: &mut App) {
         embedded_asset!(app, "shaders/wc3_mesh.wgsl");
+        embedded_asset!(app, "shaders/extra_skinning.wgsl");
         embedded_asset!(app, "shaders/wc3_material.wgsl");
         embedded_asset!(app, "shaders/wc3_material_prepass.wgsl");
         embedded_asset!(app, "shaders/wc3_prepass.wgsl");
+        embedded_asset!(app, "shaders/universal_material.wgsl");
+        embedded_asset!(app, "shaders/universal_material_prepass.wgsl");
         embedded_asset!(app, "shaders/wc3_particle.wgsl");
         embedded_asset!(app, "shaders/wc3_ribbon.wgsl");
         app.init_asset::<Wc3ModelAsset>();
+        app.init_asset::<UniversalModelAsset>();
+        app.init_resource::<UniversalAssetSettings>();
+        let resolver = app.world().resource::<UniversalAssetSettings>().resolver.clone();
+        app.register_asset_loader(UniversalModelLoader::new(resolver));
         app.init_asset_loader::<Wc3ModelLoader>();
         app.init_asset_loader::<BlpImageLoader>();
         app.init_resource::<PreparedModelCache>();
+        app.init_resource::<UniversalPreparedCache>();
         app.init_resource::<Wc3LodSettings>();
         app.add_plugins(MaterialPlugin::<Wc3LayerMaterial>::default());
+        app.add_plugins(MaterialPlugin::<UniversalMaterial>::default());
         app.add_plugins(ParticleRenderPlugin);
         app.add_plugins(RibbonRenderPlugin);
         app.add_systems(PostUpdate, configure_effect_views);
@@ -61,6 +75,16 @@ impl Plugin for Wc3BevyPlugin {
                 .before(VisibilitySystems::CheckVisibility),
         );
         configure(app);
+        app.add_systems(PostUpdate, crate::universal::simulate_universal_particles.in_set(Wc3Systems::SimulateEffects));
+        app.add_systems(Update, (invalidate_universal_models, spawn_loaded_universal_models).chain().in_set(Wc3Systems::SpawnInstances));
+        app.add_systems(
+            Update,
+            advance_universal_animation.in_set(Wc3Systems::AdvanceAnimation),
+        );
+        app.add_systems(
+            PostUpdate,
+            animate_universal_instances.in_set(Wc3Systems::EvaluateNodePoses),
+        );
         app.add_message::<Wc3ModelEvent>();
         app.add_systems(PostUpdate, update_lod.in_set(Wc3Systems::SelectLod));
         app.add_systems(
