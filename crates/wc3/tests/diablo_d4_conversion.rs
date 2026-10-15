@@ -130,9 +130,7 @@ fn declared_geometry_material_slots_and_independent_sphere_round_trip() {
     let (_, mesh) = model.meshes().next().unwrap();
     assert_eq!(mesh.positions().get(1), Some([1., 0., 0.]));
     assert_eq!(mesh.texture_coordinates()[0].get(2), Some([0., 1.]));
-    assert!(
-        matches!(mesh.geometry.influences(),InfluenceRows::Variable(values) if values.is_empty())
-    );
+    assert!(matches!(mesh.geometry.influences(), InfluenceRows::None));
     assert_eq!(model.controls().structure_sphere_center, [0.25, 0.25, 0.]);
     assert_eq!(model.controls().structure_sphere_radius, 2.);
     let (_, slot) = model.appearance().slots().next().unwrap();
@@ -277,7 +275,8 @@ fn segment_palettes_map_actual_bones_and_rebuild_inverse_skinning_bindings() {
         .geometry
         .data()
         .influences
-        .get(0)
+        .rows()
+        .joint_weights(0)
         .unwrap();
     assert_eq!((row[0].joint, row[0].weight), (1, 0.25));
     assert_eq!((row[1].joint, row[1].weight), (0, 0.75));

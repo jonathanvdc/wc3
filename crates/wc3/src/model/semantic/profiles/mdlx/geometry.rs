@@ -6,8 +6,8 @@ use crate::model::semantic::{
     Attributes, Error, GeometrySchema, InfluenceRows, JointInfluences, Link, Topology,
     ValidateLinks, Values,
 };
+use crate::model::semantic::{GeometryData, VertexData};
 use crate::model::semantic::{GeometryEdit, GeometryEditCapabilities, StreamSupport};
-use crate::model::semantic::{VertexData, VertexGeometry};
 /// Warcraft III geometry with its native stream vocabulary.
 ///
 /// Triangle groups retain their logical identities. Primitive kinds whose
@@ -241,7 +241,7 @@ impl ValidateLinks for MdlxGeometry<'_> {
     fn visit_links(&self, _visitor: &mut dyn FnMut(Link)) {}
 }
 
-impl<'data> From<MdlxGeometry<'data>> for VertexGeometry<'data> {
+impl<'data> From<MdlxGeometry<'data>> for GeometryData<'data> {
     fn from(value: MdlxGeometry<'data>) -> Self {
         let GeometryStreams {
             vertices,
@@ -249,36 +249,31 @@ impl<'data> From<MdlxGeometry<'data>> for VertexGeometry<'data> {
             influences,
         } = value.streams;
         Self {
-            streams: VertexStreams {
-                vertices: VertexData {
-                    positions: vertices.positions,
-                    normals: vertices.normals,
-                    tangents: vertices.tangents,
-                    colors: Values::default(),
-                    texture_coordinates: vertices.texture_coordinates,
-                    extras: (),
-                },
-                topology,
-                influences,
-            },
+            positions: vertices.positions,
+            normals: vertices.normals,
+            tangents: vertices.tangents,
+            colors: Values::default(),
+            texture_coordinates: vertices.texture_coordinates,
+            attributes: Vec::new(),
+            topology,
+            influences: influences.into(),
         }
     }
 }
-impl<'data> TryFrom<VertexGeometry<'data>> for MdlxGeometry<'data> {
+impl<'data> TryFrom<GeometryData<'data>> for MdlxGeometry<'data> {
     type Error = Error;
-    fn try_from(value: VertexGeometry<'data>) -> Result<Self, Error> {
-        value.validate()?;
-        let GeometryStreams {
-            vertices,
-            topology,
-            influences,
-        } = value.streams;
+    fn try_from(value: GeometryData<'data>) -> Result<Self, Error> {
+        value.validate_vertex_streams()?;
+        let vertices = value;
+        let topology = vertices.topology;
+        let influences = vertices.influences;
         if !vertices.colors.is_empty() {
             return Err(Error::new(
                 "geometry.colors",
                 "MDLX geometry has no vertex color stream",
             ));
         }
+        let influences = influences.try_into()?;
         let result = Self {
             streams: VertexStreams {
                 vertices: VertexData {

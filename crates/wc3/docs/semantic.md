@@ -142,8 +142,8 @@ permits tangents, colors, and up to five UV slots with meaningful gaps. Checked
 constructors establish stream cardinalities and finite values; the profile types
 keep unsupported representations out of subsequent authoring operations.
 
-Widening these display types produces `UniversalGeometry::Vertex` containing
-`VertexGeometry`, without a source-profile tag. The arrays move unchanged,
+Widening these display types produces `UniversalGeometry::Data` containing
+`GeometryData`, without a source-profile tag. The arrays move unchanged,
 including borrowed slices, packed views, and shared owned buffers. Narrowing
 checks the actual streams before constructing the destination's constrained
 type. M2 geometry can therefore narrow to M3 display geometry, while M3 geometry
@@ -153,11 +153,15 @@ target cannot retain them. Neither zero-weight influence slots nor matrix-group
 ordering are discarded, and equal-weight groups are not converted into weighted
 slots.
 
-`UniversalGeometry::Collision` keeps collision connectivity and per-triangle
-controls separate from display geometry. `General` retains custom attributes,
-polygon domains, and variable-length influence rows. General geometry can narrow
-to the shared vertex representation when it has no custom attributes or authored
-variable influences; otherwise those domains require an explicit transformation.
+`GeometryData` combines common streams, custom attributes, and connectivity with
+`GeometryInfluences`. Its influence variants retain absent influences,
+variable-length weighted rows, three or four fixed weighted slots, and ordered
+equal-weight matrix groups. Custom attributes can coexist with each influence
+representation. Narrowing to a constrained display type rejects custom attributes
+and influence representations that the destination cannot retain; even a
+variable-length row containing four entries remains distinct from four authored
+slots. `UniversalGeometry::Collision` keeps collision connectivity and
+per-triangle controls separate from display geometry.
 
 `VertexData` shares the typed vertex layout used by display geometry, WMO,
 Diablo III, and collision. Its stream types select fixed UV arrays, optional
@@ -174,11 +178,12 @@ colors, and cloth mappings; its influence rows have the array type
 `[Influence; 3]`. Those additional meanings keep both geometries in distinct
 universal variants.
 
-Diablo IV already uses `GeometryData` and widens directly to `General`.
+Diablo IV uses `GeometryData` and widens directly to `Data`.
 Narrowing checks triangle connectivity and vertex-domain attributes before
-constructing `d4::Geometry`. Unskinned shared vertex geometry can also narrow
-without copying its arrays. Fixed weighted slots and equal-weight matrix groups
-require an explicit transformation before becoming variable influence rows.
+constructing `d4::Geometry`. Weighted rows retain their variable or fixed width
+without copying their arrays. Equal-weight matrix groups require an explicit
+transformation before entering this weighted geometry vocabulary. Native adapters
+also check whether the selected vertex layout can encode the authored streams.
 
 ## Appearance and playback
 
@@ -393,7 +398,7 @@ example, requires normals and exactly two UV streams. Diablo III tangent and
 binormal vectors remain distinct profile streams, so its common tangent-frame
 operation is unavailable. Capabilities guide tools before they submit an edit;
 validation still checks cardinalities, finite values, and the profile's complete
-invariants. Union branches retain their constrained schema. Universal vertex
+invariants. Union branches retain their constrained schema. Universal `Data`
 geometry exposes the shared representation's broader editing capabilities: an
 M2 mesh widened to `Universal` can acquire tangents, but subsequent M2 narrowing
 rejects that added stream. Other universal variants retain their own complete

@@ -159,7 +159,7 @@ fn declared_geometry_widens_without_a_format_tag_and_narrows_by_its_actual_domai
         values: AttributeValues::Unsigned(Values::from_slice(&declared)),
     });
     let universal = <Universal as Extends<D4>>::geometry(d4::Geometry::new(data.clone()).unwrap());
-    assert!(matches!(universal, UniversalGeometry::General(_)));
+    assert!(matches!(universal, UniversalGeometry::Data(_)));
     let restored = <D4 as Narrows<Universal>>::geometry(universal).unwrap();
     assert_eq!(
         restored.positions().as_slice().unwrap().as_ptr(),
@@ -180,6 +180,11 @@ fn declared_geometry_widens_without_a_format_tag_and_narrows_by_its_actual_domai
     assert!(<D4 as Narrows<Universal>>::geometry(points.into()).is_err());
     let vertices = MdlxGeometry::triangles(&positions[..], vec![[0, 1, 2]]).unwrap();
     assert!(<D4 as Narrows<Universal>>::geometry(vertices.clone().into()).is_ok());
+    let grouped = vertices
+        .clone()
+        .with_influences(JointInfluences::MatrixGroups(vec![vec![0, 1]; 3].into()))
+        .unwrap();
+    assert!(<D4 as Narrows<Universal>>::geometry(grouped.into()).is_err());
     let weighted = vertices
         .with_influences(JointInfluences::Four(
             vec![
@@ -192,7 +197,8 @@ fn declared_geometry_widens_without_a_format_tag_and_narrows_by_its_actual_domai
             .into(),
         ))
         .unwrap();
-    assert!(<D4 as Narrows<Universal>>::geometry(weighted.into()).is_err());
+    let restored = <D4 as Narrows<Universal>>::geometry(weighted.into()).unwrap();
+    assert!(matches!(restored.influences(), InfluenceRows::Four(_)));
 }
 
 #[test]

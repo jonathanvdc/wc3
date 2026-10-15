@@ -2,9 +2,9 @@
 use crate::model::semantic::geometry_edit::{check_edit, remap_attribute, remap_values};
 use crate::model::semantic::profiles::{self as profiles, Either};
 use crate::model::semantic::{
-    Attribute, AttributeDomain, AttributeValues, Error, Influence, Link, M2Geometry,
-    M3CollisionGeometry, M3Geometry, MdlxGeometry, NodeInfluence, Topology, ValidateLinks, Values,
-    VertexGeometry, VertexInfluences, WmoGeometry,
+    Attribute, AttributeDomain, AttributeValues, Error, GeometryInfluences, Influence, Link,
+    M2Geometry, M3CollisionGeometry, M3Geometry, MdlxGeometry, NodeInfluence, Topology,
+    ValidateLinks, Values, VertexInfluences, WmoGeometry,
 };
 use crate::model::semantic::{GeometryEdit, GeometryEditCapabilities, StreamSupport};
 use std::fmt::{Debug, Formatter, Result as FmtResult};
@@ -210,10 +210,8 @@ impl InfluenceRows<'_, '_> {
 pub enum UniversalGeometry<'data> {
     /// Independent tangent and binormal streams and three-slot skinning.
     D3(profiles::diablo::d3::Geometry<'data>),
-    /// General authoring geometry, including polygons, custom attributes, and variable influences.
-    General(GeometryData<'data>),
-    /// Shared vertex streams with explicit joint-distribution semantics.
-    Vertex(VertexGeometry<'data>),
+    /// Shared streams, connectivity, attributes, and explicit influence representations.
+    Data(GeometryData<'data>),
     /// Collision connectivity and per-triangle controls, independent of shading.
     Collision(M3CollisionGeometry<'data>),
     /// Static-world geometry, including face collision and rendering controls.
@@ -223,42 +221,36 @@ pub enum UniversalGeometry<'data> {
 }
 impl Default for UniversalGeometry<'_> {
     fn default() -> Self {
-        Self::General(GeometryData::default())
+        Self::Data(GeometryData::default())
     }
 }
 impl<'data> From<MdlxGeometry<'data>> for UniversalGeometry<'data> {
     fn from(value: MdlxGeometry<'data>) -> Self {
-        Self::Vertex(value.into())
+        Self::Data(value.into())
     }
 }
 impl<'data> From<M2Geometry<'data>> for UniversalGeometry<'data> {
     fn from(value: M2Geometry<'data>) -> Self {
-        Self::Vertex(value.into())
+        Self::Data(value.into())
     }
 }
 impl<'data> From<M3Geometry<'data>> for UniversalGeometry<'data> {
     fn from(value: M3Geometry<'data>) -> Self {
         match value {
-            M3Geometry::Display(value) => Self::Vertex(value.into()),
+            M3Geometry::Display(value) => Self::Data(value.into()),
             M3Geometry::Collision(value) => Self::Collision(value),
         }
     }
 }
-impl<'data> From<VertexGeometry<'data>> for UniversalGeometry<'data> {
-    fn from(value: VertexGeometry<'data>) -> Self {
-        Self::Vertex(value)
-    }
-}
 impl<'data> From<GeometryData<'data>> for UniversalGeometry<'data> {
     fn from(value: GeometryData<'data>) -> Self {
-        Self::General(value)
+        Self::Data(value)
     }
 }
 impl<'data> UniversalGeometry<'data> {
-    fn into_vertex(self) -> Result<VertexGeometry<'data>, Error> {
+    fn into_data(self) -> Result<GeometryData<'data>, Error> {
         match self {
-            Self::Vertex(value) => Ok(value),
-            Self::General(value) => value.try_into(),
+            Self::Data(value) => Ok(value),
             _ => Err(Error::new(
                 "geometry",
                 "geometry carries a different authored domain",
@@ -269,13 +261,13 @@ impl<'data> UniversalGeometry<'data> {
 impl<'data> TryFrom<UniversalGeometry<'data>> for MdlxGeometry<'data> {
     type Error = Error;
     fn try_from(value: UniversalGeometry<'data>) -> Result<Self, Error> {
-        value.into_vertex()?.try_into()
+        value.into_data()?.try_into()
     }
 }
 impl<'data> TryFrom<UniversalGeometry<'data>> for M2Geometry<'data> {
     type Error = Error;
     fn try_from(value: UniversalGeometry<'data>) -> Result<Self, Error> {
-        value.into_vertex()?.try_into()
+        value.into_data()?.try_into()
     }
 }
 impl<'data> TryFrom<UniversalGeometry<'data>> for M3Geometry<'data> {
@@ -286,15 +278,14 @@ impl<'data> TryFrom<UniversalGeometry<'data>> for M3Geometry<'data> {
                 value.validate()?;
                 Ok(Self::Collision(value))
             }
-            value => Ok(Self::Display(value.into_vertex()?.try_into()?)),
+            value => Ok(Self::Display(value.into_data()?.try_into()?)),
         }
     }
 }
 macro_rules! with_geometry {
     ($self:expr, $value:ident => $body:expr) => {
         match $self {
-            UniversalGeometry::General($value) => $body,
-            UniversalGeometry::Vertex($value) => $body,
+            UniversalGeometry::Data($value) => $body,
             UniversalGeometry::Collision($value) => $body,
             UniversalGeometry::Wmo($value) => $body,
             UniversalGeometry::Wem($value) => $body,
@@ -308,8 +299,7 @@ impl<'data> GeometrySchema<'data> for UniversalGeometry<'data> {
     }
     fn edited(&self, edit: GeometryEdit<'data>) -> Result<Self, Error> {
         match self {
-            Self::General(value) => Ok(Self::General(value.edited(edit)?)),
-            Self::Vertex(value) => Ok(Self::Vertex(value.edited(edit)?)),
+            Self::Data(value) => Ok(Self::Data(value.edited(edit)?)),
             Self::Collision(value) => Ok(Self::Collision(value.edited(edit)?)),
             Self::Wmo(value) => Ok(Self::Wmo(value.edited(edit)?)),
             Self::Wem(value) => Ok(Self::Wem(value.edited(edit)?)),
@@ -369,10 +359,29 @@ pub struct GeometryData<'data> {
     pub attributes: Vec<Attribute<'data>>,
     /// Authored connectivity.
     pub topology: Topology<'data>,
-    /// Arbitrary normalized joint distributions; empty when rigid.
-    pub influences: Values<'data, Vec<Influence>>,
+    /// Authored joint distributions, preserving slot structure and blending interpretation.
+    pub influences: GeometryInfluences<'data>,
 }
 impl<'data> GeometryData<'data> {
+    /// Replaces influences while retaining their exact authored representation.
+    pub fn with_influences(
+        mut self,
+        influences: impl Into<GeometryInfluences<'data>>,
+    ) -> Result<Self, Error> {
+        self.influences = influences.into();
+        self.validate()?;
+        Ok(self)
+    }
+    pub(crate) fn validate_vertex_streams(&self) -> Result<(), Error> {
+        self.validate()?;
+        if !self.attributes.is_empty() {
+            return Err(Error::new(
+                "geometry.attributes",
+                "target geometry has no custom attribute domain",
+            ));
+        }
+        Ok(())
+    }
     /// Creates an empty geometry definition.
     pub fn empty() -> Self {
         Self::default()
@@ -390,7 +399,7 @@ impl<'data> GeometryData<'data> {
             colors: Values::default(),
             attributes: Vec::new(),
             topology: Topology::Triangles(triangles.into()),
-            influences: Values::default(),
+            influences: GeometryInfluences::None,
         };
         geometry.validate()?;
         Ok(geometry)
@@ -421,7 +430,7 @@ impl<'data> GeometrySchema<'data> for GeometryData<'data> {
             for stream in &mut result.texture_coordinates {
                 remap_values(stream, &map.new_to_old);
             }
-            remap_values(&mut result.influences, &map.new_to_old);
+            result.influences.remap(&map.new_to_old);
             for attribute in &mut result.attributes {
                 remap_attribute(attribute, &map.new_to_old);
             }
@@ -469,7 +478,7 @@ impl<'data> GeometrySchema<'data> for GeometryData<'data> {
         &self.topology
     }
     fn influences(&self) -> InfluenceRows<'_, 'data> {
-        InfluenceRows::Variable(&self.influences)
+        self.influences.rows()
     }
     fn validate(&self) -> Result<(), Error> {
         validate_geometry(self)
@@ -705,7 +714,7 @@ impl Default for GeometryData<'_> {
             colors: Values::default(),
             attributes: Vec::new(),
             topology: Topology::Triangles(Values::default()),
-            influences: Values::default(),
+            influences: GeometryInfluences::None,
         }
     }
 }

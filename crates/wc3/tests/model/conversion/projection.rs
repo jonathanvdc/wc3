@@ -11,7 +11,7 @@ fn fixture() -> (SingleModel<'static>, MeshId, InstanceId) {
     let first = draft.add_material(Material::pbr().named("first")).unwrap();
     let second = draft.add_material(Material::pbr().named("second")).unwrap();
     let mesh = draft
-        .add_mesh(Mesh::new(UniversalGeometry::General(GeometryData {
+        .add_mesh(Mesh::new(UniversalGeometry::Data(GeometryData {
             positions: vec![[0., 0., 0.], [1., 0., 0.], [1., 1., 0.], [0., 1., 0.]].into(),
             topology: Topology::Triangles(vec![[0, 1, 2], [0, 2, 3]].into()),
             attributes: vec![
@@ -75,7 +75,7 @@ fn projection_preserves_face_materials_normals_and_uv_seams() {
 fn editing_a_corner_keeps_the_shared_vertex_and_other_corner_unchanged() {
     let (mut model, mesh, instance) = fixture();
     let mut edited = model.mesh(mesh).unwrap().clone();
-    let UniversalGeometry::General(geometry) = &mut edited.geometry else {
+    let UniversalGeometry::Data(geometry) = &mut edited.geometry else {
         unreachable!()
     };
     let AttributeValues::Vector2(coordinates) = &mut geometry.attributes[1].values else {
@@ -107,7 +107,7 @@ fn editing_a_corner_keeps_the_shared_vertex_and_other_corner_unchanged() {
 fn invalid_source_topology_cannot_replace_published_geometry() {
     let (mut model, mesh, _) = fixture();
     let mut edited = model.mesh(mesh).unwrap().clone();
-    let UniversalGeometry::General(geometry) = &mut edited.geometry else {
+    let UniversalGeometry::Data(geometry) = &mut edited.geometry else {
         unreachable!()
     };
     geometry.topology = Topology::Triangles(vec![[0, 1, 99], [0, 2, 3]].into());
@@ -119,7 +119,7 @@ fn invalid_source_topology_cannot_replace_published_geometry() {
 fn shared_vertex_edits_update_both_draw_projections() {
     let (mut model, mesh, instance) = fixture();
     let mut edited = model.mesh(mesh).unwrap().clone();
-    let UniversalGeometry::General(geometry) = &mut edited.geometry else {
+    let UniversalGeometry::Data(geometry) = &mut edited.geometry else {
         unreachable!()
     };
     let mut positions = geometry.positions.to_vec();

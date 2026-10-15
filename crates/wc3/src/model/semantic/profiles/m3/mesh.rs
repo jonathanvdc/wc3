@@ -5,11 +5,11 @@ use crate::model::semantic::geometry_edit::{check_edit, remap_values};
 use crate::model::semantic::geometry_schema::validate_geometry;
 use crate::model::semantic::vertex_geometry::{GeometryStreams, VertexStreams};
 use crate::model::semantic::{
-    Attributes, Error, GeometryKind, GeometrySchema, Influence, InfluenceRows, JointInfluences,
-    Link, Topology, ValidateLinks, Values,
+    Attributes, Error, GeometryKind, GeometrySchema, Influence, InfluenceRows, Link, Topology,
+    ValidateLinks, Values,
 };
+use crate::model::semantic::{GeometryData, GeometryInfluences, VertexData};
 use crate::model::semantic::{GeometryEdit, GeometryEditCapabilities, StreamSupport};
-use crate::model::semantic::{VertexData, VertexGeometry};
 fn present<'view, 'data, T>(values: &'view Values<'data, T>) -> Option<&'view Values<'data, T>> {
     (!values.is_empty()).then_some(values)
 }
@@ -520,7 +520,7 @@ impl<'data> GeometrySchema<'data> for M3Geometry<'data> {
     delegate!(validate,Result<(),Error>);
 }
 
-impl<'data> From<M3DisplayGeometry<'data>> for VertexGeometry<'data> {
+impl<'data> From<M3DisplayGeometry<'data>> for GeometryData<'data> {
     fn from(value: M3DisplayGeometry<'data>) -> Self {
         let GeometryStreams {
             vertices,
@@ -528,37 +528,31 @@ impl<'data> From<M3DisplayGeometry<'data>> for VertexGeometry<'data> {
             influences,
         } = value.streams;
         Self {
-            streams: VertexStreams {
-                vertices: VertexData {
-                    positions: vertices.positions,
-                    normals: vertices.normals,
-                    tangents: vertices.tangents,
-                    colors: vertices.colors,
-                    texture_coordinates: vertices.texture_coordinates,
-                    extras: (),
-                },
-                topology,
-                influences: JointInfluences::Four(influences),
-            },
+            positions: vertices.positions,
+            normals: vertices.normals,
+            tangents: vertices.tangents,
+            colors: vertices.colors,
+            texture_coordinates: vertices.texture_coordinates,
+            attributes: Vec::new(),
+            topology,
+            influences: GeometryInfluences::Four(influences),
         }
     }
 }
-impl<'data> TryFrom<VertexGeometry<'data>> for M3DisplayGeometry<'data> {
+impl<'data> TryFrom<GeometryData<'data>> for M3DisplayGeometry<'data> {
     type Error = Error;
-    fn try_from(value: VertexGeometry<'data>) -> Result<Self, Error> {
-        value.validate()?;
-        let GeometryStreams {
-            vertices,
-            topology,
-            influences,
-        } = value.streams;
+    fn try_from(value: GeometryData<'data>) -> Result<Self, Error> {
+        value.validate_vertex_streams()?;
+        let vertices = value;
+        let topology = vertices.topology;
+        let influences = vertices.influences;
         if !matches!(topology, Topology::Triangles(_)) {
             return Err(Error::new(
                 "geometry.topology",
                 "M3 display geometry requires triangle connectivity",
             ));
         }
-        let JointInfluences::Four(influences) = influences else {
+        let GeometryInfluences::Four(influences) = influences else {
             return Err(Error::new(
                 "geometry.influences",
                 "M3 display geometry requires four authored joint slots",

@@ -3,6 +3,7 @@ use super::{count, nonnegative};
 use crate::model::conversion::{Context, Error};
 use crate::model::diablo::d4::records as native;
 use crate::model::semantic::profiles::diablo::d4::{Geometry, Segment};
+use crate::model::semantic::GeometryInfluences;
 use crate::model::semantic::{GeometryData, Influence, NodeId, Topology};
 use std::collections::BTreeMap;
 use zerovec::ZeroVec;
@@ -94,7 +95,10 @@ pub(super) fn read(
                 }
             }
             if let (Some(indices), Some(weights)) = (joint_indices, joint_weights) {
-                let mut row = Vec::with_capacity(4);
+                let mut row = [Influence {
+                    joint: 0,
+                    weight: 0.,
+                }; 4];
                 for slot in 0..4 {
                     let palette_index = indices[slot] as usize;
                     let node = palette
@@ -104,10 +108,10 @@ pub(super) fn read(
                         .iter()
                         .position(|id| id == node)
                         .ok_or_else(|| error("palette bone is absent from skeleton"))?;
-                    row.push(Influence {
+                    row[slot] = Influence {
                         joint: count(joint)?,
                         weight: weights[slot],
-                    });
+                    };
                 }
                 rows.push(row);
             }
@@ -152,7 +156,15 @@ pub(super) fn read(
     data.tangents = tangents.into();
     data.colors = colors.into();
     data.texture_coordinates = uvs.into_iter().map(Into::into).collect();
-    data.influences = rows.into();
+    data.influences = if layout
+        .elements
+        .iter()
+        .any(|element| element.semantic == ElementSemantic::JointWeights)
+    {
+        GeometryInfluences::Four(rows.into())
+    } else {
+        GeometryInfluences::None
+    };
     data.topology = Topology::Triangles(triangles.into());
     Ok((Geometry::new(data)?, segments))
 }
@@ -292,9 +304,13 @@ pub(super) fn write(
                         [v[0], v[1], 0., 0.]
                     }
                     ElementSemantic::JointIndices | ElementSemantic::JointWeights => {
-                        let row = data.influences.get(vertex).ok_or_else(|| {
-                            error("output layout requires missing skin distributions")
-                        })?;
+                        let row =
+                            data.influences
+                                .rows()
+                                .joint_weights(vertex)
+                                .ok_or_else(|| {
+                                    error("output layout requires missing skin distributions")
+                                })?;
                         if row.len() != 4 {
                             return Err(error(
                                 "declared output skin encoding requires four ordered influences",

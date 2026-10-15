@@ -3,11 +3,11 @@ use crate::model::semantic::geometry_edit::{check_edit, remap_values};
 use crate::model::semantic::geometry_schema::validate_geometry;
 use crate::model::semantic::vertex_geometry::{GeometryStreams, VertexStreams};
 use crate::model::semantic::{
-    Attributes, Error, GeometrySchema, Influence, InfluenceRows, JointInfluences, Link, Topology,
-    ValidateLinks, Values,
+    Attributes, Error, GeometrySchema, Influence, InfluenceRows, Link, Topology, ValidateLinks,
+    Values,
 };
+use crate::model::semantic::{GeometryData, GeometryInfluences, VertexData};
 use crate::model::semantic::{GeometryEdit, GeometryEditCapabilities, StreamSupport};
-use crate::model::semantic::{VertexData, VertexGeometry};
 /// World of Warcraft model geometry with two UV streams and four joint slots.
 /// Unsupported streams are unavailable through this type's constructors.
 ///
@@ -175,7 +175,7 @@ impl ValidateLinks for M2Geometry<'_> {
     fn visit_links(&self, _visitor: &mut dyn FnMut(Link)) {}
 }
 
-impl<'data> From<M2Geometry<'data>> for VertexGeometry<'data> {
+impl<'data> From<M2Geometry<'data>> for GeometryData<'data> {
     fn from(value: M2Geometry<'data>) -> Self {
         let GeometryStreams {
             vertices,
@@ -183,30 +183,24 @@ impl<'data> From<M2Geometry<'data>> for VertexGeometry<'data> {
             influences,
         } = value.streams;
         Self {
-            streams: VertexStreams {
-                vertices: VertexData {
-                    positions: vertices.positions,
-                    normals: vertices.normals,
-                    tangents: Values::default(),
-                    colors: Values::default(),
-                    texture_coordinates: Vec::from(vertices.texture_coordinates),
-                    extras: (),
-                },
-                topology,
-                influences: JointInfluences::Four(influences),
-            },
+            positions: vertices.positions,
+            normals: vertices.normals,
+            tangents: Values::default(),
+            colors: Values::default(),
+            texture_coordinates: Vec::from(vertices.texture_coordinates),
+            attributes: Vec::new(),
+            topology,
+            influences: GeometryInfluences::Four(influences),
         }
     }
 }
-impl<'data> TryFrom<VertexGeometry<'data>> for M2Geometry<'data> {
+impl<'data> TryFrom<GeometryData<'data>> for M2Geometry<'data> {
     type Error = Error;
-    fn try_from(value: VertexGeometry<'data>) -> Result<Self, Error> {
-        value.validate()?;
-        let GeometryStreams {
-            vertices,
-            topology,
-            influences,
-        } = value.streams;
+    fn try_from(value: GeometryData<'data>) -> Result<Self, Error> {
+        value.validate_vertex_streams()?;
+        let vertices = value;
+        let topology = vertices.topology;
+        let influences = vertices.influences;
         if !vertices.tangents.is_empty() || !vertices.colors.is_empty() {
             return Err(Error::new(
                 "geometry.streams",
@@ -219,7 +213,7 @@ impl<'data> TryFrom<VertexGeometry<'data>> for M2Geometry<'data> {
                 "M2 geometry requires triangle connectivity",
             ));
         }
-        let JointInfluences::Four(influences) = influences else {
+        let GeometryInfluences::Four(influences) = influences else {
             return Err(Error::new(
                 "geometry.influences",
                 "M2 geometry requires four authored joint slots",

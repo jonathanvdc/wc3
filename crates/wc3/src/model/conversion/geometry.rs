@@ -1,6 +1,7 @@
 //! Native projection expands logical corner and face attributes at the output boundary.
 use super::{Context, Error};
 use crate::model::semantic::profiles::Profile;
+use crate::model::semantic::GeometryInfluences;
 use crate::model::semantic::{
     Attribute, AttributeDomain, AttributeSemantic, AttributeValues, GeometryData, InfluenceRows,
     InstanceId, LookId, MaterialId, Mesh, Model, SkinId, Topology, UniversalGeometry, Values,
@@ -170,13 +171,13 @@ pub fn project<'a, 'data: 'a, P: Profile>(
                     name: source.name.clone(),
                     controls: None,
                     bounds: source.bounds,
-                    geometry: UniversalGeometry::General(GeometryData {
+                    geometry: UniversalGeometry::Data(GeometryData {
                         positions: source.positions().clone(),
                         normals: source.normals().cloned().unwrap_or_default(),
                         tangents: source.tangents().cloned().unwrap_or_default(),
                         texture_coordinates: source.texture_coordinates().to_vec(),
                         colors: source.colors().cloned().unwrap_or_default(),
-                        influences,
+                        influences: GeometryInfluences::Variable(influences),
                         topology: source.topology().clone(),
                         attributes: Vec::new(),
                     }),
@@ -407,13 +408,13 @@ pub fn project<'a, 'data: 'a, P: Profile>(
                     controls: None,
                     name: source.name.clone(),
                     bounds: source.bounds,
-                    geometry: UniversalGeometry::General(GeometryData {
+                    geometry: UniversalGeometry::Data(GeometryData {
                         positions,
                         normals,
                         tangents,
                         colors,
                         texture_coordinates: uv_sets,
-                        influences,
+                        influences: GeometryInfluences::Variable(influences),
                         topology,
                         attributes,
                     }),

@@ -1,7 +1,8 @@
 //! Diablo IV declared vertex streams are logical values independent of buffer packing.
 use crate::model::semantic::{
     AttributeDomain, Attributes, Error, GeometryData, GeometryEdit, GeometryEditCapabilities,
-    GeometrySchema, InfluenceRows, Link, Topology, UniversalGeometry, ValidateLinks, Values,
+    GeometryInfluences, GeometrySchema, InfluenceRows, Link, Topology, UniversalGeometry,
+    ValidateLinks, Values,
 };
 
 /// Triangle geometry whose independently declared streams retain their logical values.
@@ -63,6 +64,12 @@ impl<'a> GeometrySchema<'a> for Geometry<'a> {
         self.data.influences()
     }
     fn validate(&self) -> Result<(), Error> {
+        if matches!(self.data.influences, GeometryInfluences::MatrixGroups(_)) {
+            return Err(Error::new(
+                "d4.geometry.influences",
+                "declared geometry requires weighted joint contributions",
+            ));
+        }
         if !matches!(self.data.topology, Topology::Triangles(_))
             || self
                 .data
@@ -81,15 +88,14 @@ impl<'a> GeometrySchema<'a> for Geometry<'a> {
 
 impl<'a> From<Geometry<'a>> for UniversalGeometry<'a> {
     fn from(value: Geometry<'a>) -> Self {
-        Self::General(value.into_data())
+        Self::Data(value.into_data())
     }
 }
 impl<'a> TryFrom<UniversalGeometry<'a>> for Geometry<'a> {
     type Error = Error;
     fn try_from(value: UniversalGeometry<'a>) -> Result<Self, Error> {
         match value {
-            UniversalGeometry::General(data) => Self::new(data),
-            UniversalGeometry::Vertex(data) => Self::new(data.try_into()?),
+            UniversalGeometry::Data(data) => Self::new(data),
             _ => Err(Error::new(
                 "d4.narrow.geometry",
                 "geometry carries a different authored domain",
