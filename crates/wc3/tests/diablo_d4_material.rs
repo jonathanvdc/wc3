@@ -45,7 +45,7 @@ fn standalone_materials_share_texture_identity_and_rebuild_native_resources() {
     let imported = convert::import_material(&source, &ImportOptions::default()).unwrap();
     assert!(imported.report.issues.is_empty());
     assert_eq!(imported.value.resources().len(), 1);
-    let (material_id, material) = imported.value[0].materials().next().unwrap();
+    let (material_id, material) = imported.value.materials().next().unwrap();
     let shader = material.surface.shader.as_ref().unwrap();
     assert_eq!(shader.textures[0].selection, shader.textures[1].selection);
     assert_eq!(shader.asset.as_ref().unwrap().sno_id, 77);

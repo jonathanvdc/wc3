@@ -133,7 +133,7 @@ numeric rather than being replaced with guessed enum variants.
 ## Convert Diablo III appearances and resources
 
 `wc3::model::conversion::diablo::d3::import` converts an appearance into an
-independent `Asset<D3>`. Geometry streams borrow the native vertex and index
+independent `Model<D3>`. Geometry streams borrow the native vertex and index
 storage while exposing logical positions, directions, colors, UVs, and three
 ordered skin contributions. Skeleton nodes retain their local rest transforms
 and four independently authored bind declarations. Hardpoints retain their
@@ -253,7 +253,7 @@ supported record vocabulary even when the semantic adapter rejects a projection.
 `conversion::diablo::d4::import_material` creates a checked material-only graph
 from a native material resource. The shader definition retains external shader-map
 and value-set selections, ordered texture inputs, constant scalar/vector parameters,
-and its material-resource controls. Texture SNOs are interned in the collection's
+and its material-resource controls. Texture SNOs are interned in the model's
 resource arena with the Diablo IV namespace, so repeated inputs share one editable
 image identity. Negative absent-image selections remain distinct from image handles.
 

@@ -2,7 +2,6 @@ use super::{
     ApproximationPolicy, Error, ExportOptions, ImportOptions, Issue, IssueKind, LossPolicy, Report,
     UnknownPolicy,
 };
-use crate::model::semantic::{profiles::Profile, Asset, Cardinality, Model};
 
 /// Shared policy enforcement used by native adapters.
 pub struct Context {
@@ -98,15 +97,4 @@ impl Context {
         }
         Err(Error::new(path, description))
     }
-}
-
-/// Checks an asset and selects the logical model requested by the export options.
-pub(crate) fn select_model<'view, 'data, P: Profile, C: Cardinality>(
-    asset: &'view Asset<'data, P, C>,
-    options: &ExportOptions,
-) -> Result<&'view Model<'data, P>, Error> {
-    asset.validate()?;
-    asset
-        .get(options.model as usize)
-        .ok_or_else(|| Error::new("model", format!("model {} is absent", options.model)))
 }

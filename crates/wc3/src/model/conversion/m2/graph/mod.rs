@@ -21,7 +21,7 @@ use semantic::{Animated, Channel, Node, Resource, SharedClock, Time, Values};
 pub fn import<'a, 'data: 'a, D: Dialect>(
     source: &'a Bundle<'data, D>,
     options: &ImportOptions,
-) -> Result<Conversion<Asset<'a, M2Vocabulary>>, Error>
+) -> Result<Conversion<Model<'a, M2Vocabulary>>, Error>
 where
     D::Layout: ParticleConversion + CameraConversion,
     for<'v> <D::Layout as native::HeaderLayout>::Flipbooks<'v>: FlipbookField<'v, D::Layout>,
@@ -53,7 +53,7 @@ where
         .map_err(|_| Error::new("m2.name", "invalid UTF-8 name"))?;
     let mut builder = GraphBuilder::with_profile(Cow::Borrowed(name));
     builder.set_bounds(Some(bounds(core.bounding)));
-    let mut family = profile::ModelControls {
+    let mut family = profile::ModelMetadata {
         flags: profile::values::ModelFlags::from_bits_retain(core.flags.bits()),
         ..Default::default()
     };
@@ -347,7 +347,7 @@ where
     for physics in physics::import(source, &nodes, &mut builder, &mut context)? {
         builder.add_system(profile::System::Physics(physics))?;
     }
-    builder.set_controls(family);
+    builder.set_metadata(family);
     let asset = builder.finish()?;
     for chunk in source.model.extensions() {
         match chunk {

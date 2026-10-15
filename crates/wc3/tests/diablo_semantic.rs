@@ -158,12 +158,12 @@ fn d4_resource_publication_requires_the_correct_game_namespace() {
 fn d4_chunks_and_look_hashes_have_model_scoped_ownership() {
     use wc3::model::semantic::profiles::diablo::d4::{self, Chunk, D4};
     use wc3::model::semantic::GeometryData;
-    let mut foreign = d4::ModelControls::default();
+    let mut foreign = d4::ModelMetadata::default();
     let foreign_id = foreign.add_chunk(Chunk::default());
-    let mut own = d4::ModelControls::default();
+    let mut own = d4::ModelMetadata::default();
     own.add_chunk(Chunk::default());
     let mut builder = Model::<D4>::builder("foreign chunk");
-    builder.set_controls(own);
+    builder.set_metadata(own);
     let geometry = d4::Geometry::new(GeometryData::default()).unwrap();
     builder
         .add_mesh(Mesh::new(geometry).with_controls(d4::MeshControls {

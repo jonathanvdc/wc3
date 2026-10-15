@@ -1,26 +1,24 @@
 //! Diablo IV authoring vocabulary is independent of native SNO revisions.
-use super::{Appearance, Geometry, Material, MeshControls, ModelControls, NodeRole};
+use super::{Appearance, Geometry, Material, MeshControls, ModelMetadata, NodeRole};
 use crate::model::semantic::profiles::{
     Extends, Narrows, NoControls, Profile, Unavailable, Universal,
 };
 use crate::model::semantic::{
     Basis, Billboard, Bounds, ColorSpace, Error, ExplicitBinding, Inheritance, LengthUnit,
-    MaterialSurface, Model, NodeControls, Resource, Resources, Sampler, Single, SnoNamespace,
-    Transform, UniversalAppearance, UniversalBinding,
+    MaterialSurface, Model, NodeControls, Resource, Sampler, SnoNamespace, Transform,
+    UniversalAppearance, UniversalBinding,
 };
-use crate::model::semantic::{MeshControls as AnyMeshControls, ModelControls as AnyModelControls};
+use crate::model::semantic::{MeshControls as AnyMeshControls, ModelMetadata as AnyModelMetadata};
 
 /// Diablo IV appearance, skeleton, and material authoring vocabulary.
 #[derive(Clone, Debug, Default)]
 pub struct D4;
 impl Profile for D4 {
     type Property = Unavailable;
-    type Models = Single;
-    type AssetMetadata<'a> = NoControls;
     type Appearance<'a> = Appearance;
     type Binding<'a> = ExplicitBinding<'a>;
     type Geometry<'a> = Geometry<'a>;
-    type Model<'a> = ModelControls;
+    type ModelMetadata<'a> = ModelMetadata;
     type System<'a> = Unavailable;
     type Surface<'a> = Material;
     type Feature<'a> = Unavailable;
@@ -91,7 +89,7 @@ impl Profile for D4 {
             if mesh
                 .controls
                 .chunk
-                .is_none_or(|id| model.controls().chunk(id).is_none())
+                .is_none_or(|id| model.metadata().chunk(id).is_none())
             {
                 return Err(Error::new(
                     "d4.mesh.chunk",
@@ -133,7 +131,7 @@ impl Profile for D4 {
                 .mesh(instance.mesh)
                 .expect("checked mesh relationship");
             let chunk = model
-                .controls()
+                .metadata()
                 .chunk(mesh.controls.chunk.expect("checked chunk"))
                 .expect("checked chunk ownership");
             if instance
@@ -158,11 +156,9 @@ impl Profile for D4 {
         }
         Ok(())
     }
-    fn validate_asset<'a>(
-        _: &NoControls,
-        _: &[Model<'a, Self>],
-        resources: &Resources<'a, Self>,
-    ) -> Result<(), Error> {
+    fn validate_resources(model: &Model<'_, Self>) -> Result<(), Error> {
+        let resources = model.resources();
+
         for (_, texture) in resources.textures() {
             if texture.color_space != ColorSpace::Unspecified
                 || texture.sampler != Sampler::default()
@@ -189,9 +185,6 @@ impl Extends<D4> for Universal {
     fn property(value: <D4 as Profile>::Property) -> Self::Property {
         match value {}
     }
-    fn asset_metadata<'a>(value: <D4 as Profile>::AssetMetadata<'a>) -> Self::AssetMetadata<'a> {
-        value
-    }
     fn appearance<'a>(value: <D4 as Profile>::Appearance<'a>) -> Self::Appearance<'a> {
         UniversalAppearance::D4(value)
     }
@@ -201,8 +194,8 @@ impl Extends<D4> for Universal {
     fn geometry<'a>(value: <D4 as Profile>::Geometry<'a>) -> Self::Geometry<'a> {
         value.into()
     }
-    fn model<'a>(value: <D4 as Profile>::Model<'a>) -> Self::Model<'a> {
-        Some(AnyModelControls::D4(value))
+    fn model_metadata<'a>(value: <D4 as Profile>::ModelMetadata<'a>) -> Self::ModelMetadata<'a> {
+        Some(AnyModelMetadata::D4(value))
     }
     fn system<'a>(value: <D4 as Profile>::System<'a>) -> Self::System<'a> {
         match value {}
@@ -241,11 +234,6 @@ impl Extends<D4> for Universal {
     }
 }
 impl Narrows<Universal> for D4 {
-    fn asset_metadata<'a>(
-        value: <Universal as Profile>::AssetMetadata<'a>,
-    ) -> Result<Self::AssetMetadata<'a>, Error> {
-        Ok(value)
-    }
     fn appearance<'a>(
         value: <Universal as Profile>::Appearance<'a>,
     ) -> Result<Self::Appearance<'a>, Error> {
@@ -271,9 +259,11 @@ impl Narrows<Universal> for D4 {
     ) -> Result<Self::Geometry<'a>, Error> {
         value.try_into()
     }
-    fn model<'a>(value: <Universal as Profile>::Model<'a>) -> Result<Self::Model<'a>, Error> {
+    fn model_metadata<'a>(
+        value: <Universal as Profile>::ModelMetadata<'a>,
+    ) -> Result<Self::ModelMetadata<'a>, Error> {
         match value {
-            Some(AnyModelControls::D4(value)) => Ok(value),
+            Some(AnyModelMetadata::D4(value)) => Ok(value),
             _ => Err(Error::new(
                 "d4.narrow.model",
                 "payload belongs to another authoring vocabulary",

@@ -5,9 +5,10 @@ use crate::model::semantic::DrawId;
 use crate::model::semantic::{
     AppearanceSchema as _, AttachedFeature, Basis, Bounds, Channel, Clip, ClipId, ClockId,
     Controller, ControllerId, Error, Event, EventId, FeatureId, InstanceId, LengthUnit, Look,
-    LookId, Material, MaterialId, Mesh, MeshId, MeshInstance, ModelId, Node, NodeId, SingleModel,
-    Skin, SkinId, SystemId, TextureTransform, TextureTransformId, Time,
+    LookId, Material, MaterialId, Mesh, MeshId, MeshInstance, ModelId, Node, NodeId, Skin, SkinId,
+    SystemId, TextureTransform, TextureTransformId, Time,
 };
+use crate::model::semantic::{Resources, ResourcesBuilder, Texture, TextureId};
 use std::borrow::Cow;
 use std::collections::BTreeMap;
 /// A repeating clock shared by animation channels.
@@ -19,13 +20,14 @@ pub struct SharedClock {
 /// An encoding-independent model. All public access is immutable; edits are checked before publication.
 #[derive(Clone, Debug)]
 pub struct Model<'a, P: Profile = Universal> {
+    resources: Resources<'a, P>,
     scope: Scope,
     id: ModelId,
     name: Cow<'a, str>,
     basis: Basis,
     units: LengthUnit,
     bounds: Option<Bounds>,
-    controls: P::Model<'a>,
+    metadata: P::ModelMetadata<'a>,
     systems: BTreeMap<SystemId, P::System<'a>>,
     timeline_channels: Vec<Channel<'a, P>>,
     timeline_events: Vec<Event<'a>>,
@@ -44,10 +46,42 @@ pub struct Model<'a, P: Profile = Universal> {
     texture_transforms: BTreeMap<TextureTransformId, TextureTransform>,
 }
 impl<'a, P: Profile> Model<'a, P> {
-    pub(crate) fn same_identity(&self, other: &Self) -> bool {
-        self.scope.same_identity(&other.scope)
+    /// Texture definitions owned by this model.
+    pub fn resources(&self) -> &Resources<'a, P> {
+        &self.resources
     }
-    /// Stable identity of this model within any collection containing it.
+    /// Resolves a texture identity in this model.
+    pub fn texture(&self, id: TextureId) -> Option<&Texture<'a, P>> {
+        self.resources.texture(id)
+    }
+    /// Iterates texture definitions in identity order.
+    pub fn textures(&self) -> impl ExactSizeIterator<Item = (TextureId, &Texture<'a, P>)> {
+        self.resources.textures()
+    }
+    /// Edits a draft and publishes it only after the complete model validates.
+    pub fn edit<R>(
+        &mut self,
+        edit: impl FnOnce(&mut ModelBuilder<'a, P>) -> Result<R, Error>,
+    ) -> Result<R, Error> {
+        let mut draft = ModelBuilder::from_model(self.clone());
+        let result = edit(&mut draft)?;
+        *self = draft.finish()?;
+        Ok(result)
+    }
+    /// Checks resource edits against the model before publishing them.
+    pub fn edit_resources<R>(
+        &mut self,
+        edit: impl FnOnce(&mut ResourcesBuilder<'a, P>) -> Result<R, Error>,
+    ) -> Result<R, Error> {
+        let mut resources = self.resources.draft();
+        let result = edit(&mut resources)?;
+        let mut draft = self.clone();
+        draft.resources = resources.finish();
+        draft.validate()?;
+        *self = draft;
+        Ok(result)
+    }
+    /// Stable identity of this model and its model-level property targets.
     pub fn id(&self) -> ModelId {
         self.id
     }
@@ -55,8 +89,8 @@ impl<'a, P: Profile> Model<'a, P> {
     pub fn builder(name: impl Into<Cow<'a, str>>) -> ModelBuilder<'a, P> {
         ModelBuilder::with_profile(name)
     }
-    /// Creates an empty graph, checking the profile's default authoring vocabulary.
-    pub fn empty(name: impl Into<Cow<'a, str>>) -> Result<SingleModel<'a, P>, Error> {
+    /// Creates an empty model, checking the profile's default authoring vocabulary.
+    pub fn empty(name: impl Into<Cow<'a, str>>) -> Result<Model<'a, P>, Error> {
         ModelBuilder::<P>::with_profile(name).finish()
     }
     /// Display name of the model.
@@ -97,9 +131,9 @@ impl<'a, P: Profile> Model<'a, P> {
     pub fn shared_events(&self) -> &[Event<'a>] {
         &self.shared_events
     }
-    /// Model-wide authoring behavior selected by this vocabulary.
-    pub fn controls(&self) -> &P::Model<'a> {
-        &self.controls
+    /// Model-wide authoring metadata selected by this vocabulary.
+    pub fn metadata(&self) -> &P::ModelMetadata<'a> {
+        &self.metadata
     }
     /// Iterates independent scene systems in stable graph identity order.
     pub fn systems(&self) -> impl ExactSizeIterator<Item = (SystemId, &P::System<'a>)> {
@@ -260,7 +294,7 @@ impl<'a, P: Profile> Model<'a, P> {
 }
 impl<'a> Model<'a> {
     /// Creates an empty graph accepting every built-in logical family.
-    pub fn standalone(name: impl Into<Cow<'a, str>>) -> SingleModel<'a> {
+    pub fn standalone(name: impl Into<Cow<'a, str>>) -> Model<'a> {
         Self::empty(name).expect("built-in empty vocabulary is valid")
     }
 }

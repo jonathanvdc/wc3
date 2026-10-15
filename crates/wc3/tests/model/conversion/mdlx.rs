@@ -129,13 +129,13 @@ fn empty_native_tables_do_not_replace_reserved_root() {
 fn complete_native_surface_is_an_editable_logical_payload() {
     let source = source();
     let mut imported = conversion::mdlx::import(&source, &ImportOptions::default()).unwrap();
-    let graph = &imported.value[0];
+    let graph = &imported.value;
     let (id, material) = graph.materials().next().unwrap();
     let mut material = material.surface.clone();
     material.layers[0].opacity.default = 0.25;
     imported
         .value
-        .edit_model(0, |builder| builder.set_material_surface(id, material))
+        .edit(|builder| builder.set_material_surface(id, material))
         .unwrap();
     let output = conversion::mdlx::plan::<mdlx::V800>(&imported.value, &ExportOptions::default())
         .unwrap()
@@ -156,7 +156,7 @@ fn complete_native_emitter_is_an_editable_logical_feature() {
     source.set_particle_emitters2([emitter]);
     source.set_pivot_points(&[[0.; 3], [0.; 3]]);
     let mut imported = conversion::mdlx::import(&source, &ImportOptions::default()).unwrap();
-    let graph = &imported.value[0];
+    let graph = &imported.value;
     let (id, mut feature) = graph
         .features()
         .find(|(_, feature)| matches!(feature.payload, profile::Node::Particle2(_)))
@@ -168,7 +168,7 @@ fn complete_native_emitter_is_an_editable_logical_feature() {
     emitter.emission_rate = Animated::constant(17.);
     imported
         .value
-        .edit_model(0, |builder| builder.set_feature(id, feature))
+        .edit(|builder| builder.set_feature(id, feature))
         .unwrap();
     let output = conversion::mdlx::plan::<mdlx::V800>(&imported.value, &ExportOptions::default())
         .unwrap()
@@ -214,7 +214,7 @@ fn unknown_blocks_are_rejected_or_dropped_before_authoring_edits() {
         .chunks
         .iter()
         .any(|chunk| matches!(chunk, mdlx::chunks::ModelChunk::Unknown(_))));
-    let graph = &imported.value[0];
+    let graph = &imported.value;
     let (id, mesh) = graph.meshes().next().unwrap();
     let mut mesh = mesh.clone();
     mesh.geometry = mesh
@@ -229,7 +229,7 @@ fn unknown_blocks_are_rejected_or_dropped_before_authoring_edits() {
         .unwrap();
     imported
         .value
-        .edit_model(0, |builder| builder.set_mesh(id, mesh))
+        .edit(|builder| builder.set_mesh(id, mesh))
         .unwrap();
     let output = conversion::mdlx::plan::<mdlx::V800>(&imported.value, &ExportOptions::default())
         .unwrap()
@@ -266,7 +266,7 @@ fn shared_spline_keys_are_borrowed_and_editable_without_encoded_bridges() {
     );
     source.set_global_sequences(&[2000]);
     let mut imported = conversion::mdlx::import(&source, &ImportOptions::default()).unwrap();
-    let graph = &imported.value[0];
+    let graph = &imported.value;
     let Channel::Vector3(mut track) = graph.shared_channels()[0].clone() else {
         panic!("translation curve missing")
     };
@@ -283,9 +283,7 @@ fn shared_spline_keys_are_borrowed_and_editable_without_encoded_bridges() {
     .unwrap();
     imported
         .value
-        .edit_model(0, |builder| {
-            builder.set_shared_channel(0, Channel::Vector3(track))
-        })
+        .edit(|builder| builder.set_shared_channel(0, Channel::Vector3(track)))
         .unwrap();
     let output = conversion::mdlx::plan::<mdlx::V800>(&imported.value, &ExportOptions::default())
         .unwrap()
@@ -324,7 +322,7 @@ fn ambient_illumination_and_nonlooping_clips_preserve_behavior() {
         .flags
         .set_non_looping(true);
     let imported = conversion::mdlx::import(&source, &ImportOptions::default()).unwrap();
-    assert!(!imported.value[0].clips().next().unwrap().1.is_looping());
+    assert!(!imported.value.clips().next().unwrap().1.is_looping());
     let output = conversion::mdlx::plan::<mdlx::V800>(&imported.value, &ExportOptions::default())
         .unwrap()
         .execute()

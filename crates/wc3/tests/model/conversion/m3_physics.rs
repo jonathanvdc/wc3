@@ -146,7 +146,7 @@ fn physics_and_attachment_fields_are_active_and_editable() {
     let mut asset = conversion::m3::import(&source, &ImportOptions::default())
         .unwrap()
         .value;
-    let (id, system) = asset[0]
+    let (id, system) = asset
         .systems()
         .find(|(_, system)| matches!(system, surface::System::Physics(_)))
         .unwrap();
@@ -164,7 +164,7 @@ fn physics_and_attachment_fields_are_active_and_editable() {
     };
     *radius = 3.;
     asset
-        .edit_model(0, |builder| builder.set_system(id, system))
+        .edit(|builder| builder.set_system(id, system))
         .unwrap();
     let output = conversion::m3::plan::<m3::StarCraft2>(&asset, &ExportOptions::default())
         .unwrap()
@@ -222,7 +222,7 @@ fn physics_and_attachment_fields_are_active_and_editable() {
     assert_eq!(attachment.unknown, 123);
     assert_eq!(attachment.bone_index, 1);
     let reread = conversion::m3::import(&output, &ImportOptions::default()).unwrap();
-    assert!(reread.value[0].features().any(|(_,feature)|matches!(&feature.payload,surface::Feature::Attachment(attachment)if attachment.name=="socket")));
+    assert!(reread.value.features().any(|(_,feature)|matches!(&feature.payload,surface::Feature::Attachment(attachment)if attachment.name=="socket")));
 }
 
 #[test]
@@ -288,17 +288,17 @@ fn selection_and_attachment_volumes_use_editable_collision_meshes() {
     let mut asset = conversion::m3::import(&source, &ImportOptions::default())
         .unwrap()
         .value;
-    let (id, original) = asset[0].features().find(|(_, value)| matches!(&value.payload, surface::Feature::HitTest(shape) if shape.role == surface::HitTestRole::Fuzzy)).unwrap();
+    let (id, original) = asset.features().find(|(_, value)| matches!(&value.payload, surface::Feature::HitTest(shape) if shape.role == surface::HitTestRole::Fuzzy)).unwrap();
     let mut edited = original.clone();
     let surface::Feature::HitTest(shape) = &mut edited.payload else {
         unreachable!()
     };
-    let mesh = asset[0].mesh(shape.mesh.unwrap()).unwrap();
+    let mesh = asset.mesh(shape.mesh.unwrap()).unwrap();
     assert!(mesh.positions().is_borrowed());
     assert_eq!(mesh.positions().get(1), Some([1., 0., 0.]));
     shape.size_x = 7.;
     asset
-        .edit_model(0, |builder| builder.set_feature(id, edited.payload))
+        .edit(|builder| builder.set_feature(id, edited.payload))
         .unwrap();
     let output = conversion::m3::plan::<m3::StarCraft2>(&asset, &ExportOptions::default())
         .unwrap()
@@ -371,7 +371,7 @@ fn named_turrets_reference_active_parts_instead_of_trigger_data() {
     let mut asset = conversion::m3::import(&source, &ImportOptions::default())
         .unwrap()
         .value;
-    let groups = asset[0]
+    let groups = asset
         .systems()
         .find_map(|(_, system)| match system {
             surface::System::TurretGroups(groups) => Some(groups),
@@ -381,14 +381,14 @@ fn named_turrets_reference_active_parts_instead_of_trigger_data() {
     assert_eq!(groups[0].name, "aim");
     assert!(matches!(groups[0].name, std::borrow::Cow::Borrowed(_)));
     let part_id = groups[0].parts[0];
-    let mut part = asset[0].feature(part_id).unwrap().payload.clone();
+    let mut part = asset.feature(part_id).unwrap().payload.clone();
     let surface::Feature::Turret(value) = &mut part else {
         unreachable!()
     };
     assert!(value.yaw_limited.limited());
     value.yaw_max = 2.;
     asset
-        .edit_model(0, |builder| builder.set_feature(part_id, part))
+        .edit(|builder| builder.set_feature(part_id, part))
         .unwrap();
     let output = conversion::m3::plan::<m3::StarCraft2>(&asset, &ExportOptions::default())
         .unwrap()
@@ -448,7 +448,7 @@ fn body_constraints_use_checked_local_identities() {
     let mut asset = conversion::m3::import(&source, &ImportOptions::default())
         .unwrap()
         .value;
-    let (id, system) = asset[0]
+    let (id, system) = asset
         .systems()
         .find(|(_, system)| matches!(system, surface::System::Physics(_)))
         .unwrap();
@@ -460,7 +460,7 @@ fn body_constraints_use_checked_local_identities() {
     assert_eq!(world.constraints[0].dependents[0], world.bodies[1].id());
     world.constraints[0].break_force = 75.;
     asset
-        .edit_model(0, |builder| builder.set_system(id, edited))
+        .edit(|builder| builder.set_system(id, edited))
         .unwrap();
     let output = conversion::m3::plan::<m3::StarCraft2>(&asset, &ExportOptions::default())
         .unwrap()
@@ -479,16 +479,16 @@ fn body_constraints_use_checked_local_identities() {
     assert_eq!(row.break_force, 75.);
     assert_eq!(row.flags.bits(), 0x8123_4567);
     assert_eq!(row.rigid_body_2, 1);
-    let mut invalid = asset[0].system(id).unwrap().clone();
+    let mut invalid = asset.system(id).unwrap().clone();
     let surface::System::Physics(world) = &mut invalid else {
         unreachable!()
     };
     let foreign = surface::Body::new(world.bodies[0].node);
     world.constraints[0].body_b = foreign.id();
     assert!(asset
-        .edit_model(0, |builder| builder.set_system(id, invalid))
+        .edit(|builder| builder.set_system(id, invalid))
         .is_err());
-    let surface::System::Physics(world) = asset[0].system(id).unwrap() else {
+    let surface::System::Physics(world) = asset.system(id).unwrap() else {
         unreachable!()
     };
     assert_eq!(world.bodies.len(), 2);
@@ -519,7 +519,7 @@ fn animation_split_declarations_preserve_unresolved_typed_controls() {
     let asset = conversion::m3::import(&source, &ImportOptions::default())
         .unwrap()
         .value;
-    let items = asset[0]
+    let items = asset
         .systems()
         .find_map(|(_, system)| match system {
             surface::System::AnimationPartitions(declarations) => {
@@ -574,5 +574,5 @@ fn unresolved_reference_qualifiers_require_explicit_loss_policy() {
         .issues
         .iter()
         .any(|issue| issue.path.starts_with("m3.reference_qualifier.MODL")));
-    assert_eq!(converted.value[0].nodes().count(), 2);
+    assert_eq!(converted.value.nodes().count(), 2);
 }

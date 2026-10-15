@@ -73,7 +73,7 @@ pub(in crate::model::conversion::wmo::graph) fn write<'a, D: Dialect>(
         )?;
     }
     header.liquid_type =
-        super::super::liquids::category(region, model.controls().options.database_liquids)?;
+        super::super::liquids::category(region, model.metadata().options.database_liquids)?;
     header.flags2 = GroupFlags2(region.options.supplemental.bits());
     let mut flags = super::super::group_flags::write(region.options);
     flags.set_lod(lod != 0);
@@ -571,7 +571,7 @@ pub(in crate::model::conversion::wmo::graph) fn write<'a, D: Dialect>(
             GroupChunk::Liquid(super::liquids::write(
                 liquid,
                 materials,
-                model.controls().options.database_liquids,
+                model.metadata().options.database_liquids,
             )?),
         )?;
     }

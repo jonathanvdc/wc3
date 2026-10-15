@@ -2,9 +2,9 @@
 use super::{environment, legacy_geometry, materials, root_view::CommonRoot, scene, visibility};
 use crate::model::common::FileKey;
 use crate::model::conversion::{Context, Conversion, Error, ImportOptions};
-use crate::model::semantic::profiles::wmo::{ModelControls, WorldOptions, WorldSystem};
+use crate::model::semantic::profiles::wmo::{ModelMetadata, WorldOptions, WorldSystem};
 use crate::model::semantic::profiles::Wmo;
-use crate::model::semantic::Asset;
+use crate::model::semantic::Model;
 use crate::model::semantic::{ModelBuilder, Resource};
 use crate::model::wmo::legacy::{Bundle16, Root14, RootChunk14};
 use crate::model::wmo::root::RootChunk;
@@ -13,7 +13,7 @@ use std::borrow::Cow;
 pub(super) fn alpha<'a>(
     source: &'a Root14<'_>,
     options: &ImportOptions,
-) -> Result<Conversion<Asset<'a, Wmo>>, Error> {
+) -> Result<Conversion<Model<'a, Wmo>>, Error> {
     source.validate().map_err(read_error)?;
     let mut context = Context::import(options);
     collect_root(source, &mut context)?;
@@ -21,7 +21,7 @@ pub(super) fn alpha<'a>(
         super::handle_unknown(&mut context, FileKey::Root, unknown.tag)?;
     }
     let mut builder = ModelBuilder::<Wmo>::with_profile("World model");
-    builder.set_controls(ModelControls {
+    builder.set_metadata(ModelMetadata {
         id: source.header().wmo_id,
         ambient: super::rgba(source.header().ambient_color),
         skybox: skybox(source),
@@ -120,7 +120,7 @@ pub(super) fn alpha<'a>(
 pub(super) fn beta<'a>(
     source: &'a Bundle16<'_>,
     options: &ImportOptions,
-) -> Result<Conversion<Asset<'a, Wmo>>, Error> {
+) -> Result<Conversion<Model<'a, Wmo>>, Error> {
     source.validate_complete().map_err(read_error)?;
     let mut context = Context::import(options);
     collect_root(&source.root, &mut context)?;
@@ -135,7 +135,7 @@ pub(super) fn beta<'a>(
     unknown.set_default_max_lod(false);
     unknown.set_has_group_lods(false);
     builder.set_bounds(Some(super::bounds(header.bounds)));
-    builder.set_controls(ModelControls {
+    builder.set_metadata(ModelMetadata {
         id: header.wmo_id,
         ambient: super::rgba(header.ambient_color),
         skybox: skybox(&source.root),

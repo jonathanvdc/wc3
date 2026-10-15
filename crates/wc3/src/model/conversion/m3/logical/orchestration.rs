@@ -7,12 +7,11 @@ use super::{
     skeleton_write, write, GraphBuilder,
 };
 use crate::model::common::FileKey;
-use crate::model::conversion::select_model;
 use crate::model::conversion::{
     Context, Conversion, Error, ExportOptions, ImportOptions, IssueKind, Plan,
 };
 use crate::model::m3::{self as native, records as nr};
-use crate::model::semantic::Asset;
+use crate::model::semantic::Model;
 use crate::model::semantic::{profiles::m3 as surface, profiles::M3, LengthUnit};
 use native::Envelope;
 use std::collections::BTreeMap;
@@ -20,13 +19,13 @@ use std::collections::BTreeMap;
 pub(in crate::model::conversion::m3) fn read<'a, E: Envelope + Send + Sync>(
     source: &'a native::Bundle<'_, E>,
     options: &ImportOptions,
-) -> Result<Conversion<Asset<'a, M3>>, Error> {
+) -> Result<Conversion<Model<'a, M3>>, Error> {
     source.validate_complete().map_err(materials::read_error)?;
     let root = source.model.root_record().map_err(materials::read_error)?;
     let name = native::visit_m3_root!(root, |r| r.name);
     let mut builder = GraphBuilder::with_profile(materials::string(source.model.document(), name)?);
     let flags = native::visit_m3_root!(root, |r| r.flags.bits());
-    builder.set_controls(surface::ModelControls {
+    builder.set_metadata(surface::ModelMetadata {
         flags: surface::values::ModelFlags(flags),
         partition_control: native::visit_m3_root!(root, |r| r.animation_split_count),
     });
@@ -213,10 +212,11 @@ pub(in crate::model::conversion::m3) fn read<'a, E: Envelope + Send + Sync>(
     })
 }
 pub(in crate::model::conversion::m3) fn plan<'view, 'source: 'view, P: ExportProfile>(
-    asset: &'view Asset<'source, M3>,
+    asset: &'view Model<'source, M3>,
     options: &ExportOptions,
 ) -> Result<Plan<native::Bundle<'view, P::Envelope>>, Error> {
-    let graph = select_model(asset, options)?;
+    asset.validate()?;
+    let graph = asset;
     let mut context = Context::export(options);
 
     if graph.units() != LengthUnit::Unspecified {
@@ -306,7 +306,7 @@ pub(in crate::model::conversion::m3) fn plan<'view, 'source: 'view, P: ExportPro
         super::physics::write(graph, &mut document, &skeleton.indices, &ids, &mut context)?;
     let root = P::root(RootFields {
         partitions: super::partitions::write(graph, &mut document)?,
-        partition_control: graph.controls().partition_control,
+        partition_control: graph.metadata().partition_control,
         turrets: turrets.parts,
         turret_groups: turrets.groups,
         tight_hit: volumes.tight,
@@ -324,7 +324,7 @@ pub(in crate::model::conversion::m3) fn plan<'view, 'source: 'view, P: ExportPro
         copies: emitters.copies,
         ribbons: emitters.ribbons,
         name: write::string(&mut document, graph.name())?,
-        flags: nr::ModelFlags(graph.controls().flags.bits()),
+        flags: nr::ModelFlags(graph.metadata().flags.bits()),
         bones,
         vertices,
         vertex_flags: geometry.flags,

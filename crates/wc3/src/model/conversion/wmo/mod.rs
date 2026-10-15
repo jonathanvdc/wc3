@@ -1,7 +1,7 @@
 //! Direct codecs between world-model files and the typed world authoring vocabulary.
 use super::{Conversion, Error, ExportOptions, ImportOptions, Plan};
 use crate::model::semantic::profiles::Wmo;
-use crate::model::semantic::Asset;
+use crate::model::semantic::Model;
 use crate::model::wmo::legacy::{Bundle16, Root14};
 use crate::model::wmo::{Bundle, Dialect};
 mod graph;
@@ -15,20 +15,20 @@ pub struct V16;
 /// A native source with resolved companion geometry.
 pub trait Source {
     /// Borrows authored fields into a checked world model without an encoded intermediate.
-    fn import<'a>(&'a self, options: &ImportOptions) -> Result<Conversion<Asset<'a, Wmo>>, Error>;
+    fn import<'a>(&'a self, options: &ImportOptions) -> Result<Conversion<Model<'a, Wmo>>, Error>;
 }
 impl<D: Dialect> Source for Bundle<'_, D> {
-    fn import<'a>(&'a self, options: &ImportOptions) -> Result<Conversion<Asset<'a, Wmo>>, Error> {
+    fn import<'a>(&'a self, options: &ImportOptions) -> Result<Conversion<Model<'a, Wmo>>, Error> {
         graph::import(self, options)
     }
 }
 impl Source for Root14<'_> {
-    fn import<'a>(&'a self, options: &ImportOptions) -> Result<Conversion<Asset<'a, Wmo>>, Error> {
+    fn import<'a>(&'a self, options: &ImportOptions) -> Result<Conversion<Model<'a, Wmo>>, Error> {
         graph::import_alpha(self, options)
     }
 }
 impl Source for Bundle16<'_> {
-    fn import<'a>(&'a self, options: &ImportOptions) -> Result<Conversion<Asset<'a, Wmo>>, Error> {
+    fn import<'a>(&'a self, options: &ImportOptions) -> Result<Conversion<Model<'a, Wmo>>, Error> {
         graph::import_beta(self, options)
     }
 }
@@ -38,14 +38,14 @@ pub trait Destination {
     type Output<'a>;
     /// Constructs output records from typed world authoring data.
     fn plan<'a>(
-        asset: &'a Asset<'_, Wmo>,
+        asset: &'a Model<'_, Wmo>,
         options: &ExportOptions,
     ) -> Result<Plan<Self::Output<'a>>, Error>;
 }
 impl<D: Dialect> Destination for D {
     type Output<'a> = Bundle<'a, D>;
     fn plan<'a>(
-        asset: &'a Asset<'_, Wmo>,
+        asset: &'a Model<'_, Wmo>,
         options: &ExportOptions,
     ) -> Result<Plan<Self::Output<'a>>, Error> {
         graph::plan(asset, options)
@@ -54,7 +54,7 @@ impl<D: Dialect> Destination for D {
 impl Destination for V14 {
     type Output<'a> = Root14<'a>;
     fn plan<'a>(
-        asset: &'a Asset<'_, Wmo>,
+        asset: &'a Model<'_, Wmo>,
         options: &ExportOptions,
     ) -> Result<Plan<Self::Output<'a>>, Error> {
         graph::plan_alpha(asset, options)
@@ -63,7 +63,7 @@ impl Destination for V14 {
 impl Destination for V16 {
     type Output<'a> = Bundle16<'a>;
     fn plan<'a>(
-        asset: &'a Asset<'_, Wmo>,
+        asset: &'a Model<'_, Wmo>,
         options: &ExportOptions,
     ) -> Result<Plan<Self::Output<'a>>, Error> {
         graph::plan_beta(asset, options)
@@ -73,12 +73,12 @@ impl Destination for V16 {
 pub fn import<'a, S: Source>(
     source: &'a S,
     options: &ImportOptions,
-) -> Result<Conversion<Asset<'a, Wmo>>, Error> {
+) -> Result<Conversion<Model<'a, Wmo>>, Error> {
     source.import(options)
 }
 /// Plans native output from its own family vocabulary.
 pub fn plan<'a, D: Destination>(
-    asset: &'a Asset<'_, Wmo>,
+    asset: &'a Model<'_, Wmo>,
     options: &ExportOptions,
 ) -> Result<Plan<D::Output<'a>>, Error> {
     D::plan(asset, options)

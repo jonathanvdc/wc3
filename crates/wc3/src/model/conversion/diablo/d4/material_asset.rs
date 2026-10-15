@@ -1,19 +1,17 @@
 //! Standalone material-resource conversion retains shader inputs and owner-local declarations.
 use super::materials::{read_shader, write_shader};
-use crate::model::conversion::select_model;
 use crate::model::conversion::{Context, Conversion, Error, ExportOptions, ImportOptions, Plan};
 use crate::model::diablo::d4::{self, records as native};
 use crate::model::semantic::profiles::diablo::d4::{
     Material as Surface, MaterialAssetControls, D4,
 };
-use crate::model::semantic::Asset;
 use crate::model::semantic::{Material, MaterialId, Model, Resources};
 
 /// Imports one standalone material resource as a checked material-only graph.
 pub fn import_material<'a>(
     source: &'a d4::Material<'_>,
     options: &ImportOptions,
-) -> Result<Conversion<Asset<'a, D4>>, Error> {
+) -> Result<Conversion<Model<'a, D4>>, Error> {
     let root = &source.root;
     let mut context = Context::import(options);
     if !root.decal_look_variant_map.is_empty()
@@ -59,11 +57,12 @@ pub fn import_material<'a>(
 }
 /// Plans one actual material resource independently of appearance document output.
 pub fn plan_material(
-    asset: &Asset<'_, D4>,
+    asset: &Model<'_, D4>,
     material: MaterialId,
     options: &ExportOptions,
 ) -> Result<Plan<d4::Material<'static>>, Error> {
-    let model = select_model(asset, options)?;
+    asset.validate()?;
+    let model = asset;
     let surface = &model
         .material(material)
         .ok_or_else(|| Error::new("d4.material", "material belongs to another model"))?

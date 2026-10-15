@@ -15,17 +15,17 @@ or original physical layout.
 
 ## Selecting a vocabulary and layout
 
-MDLX import returns `semantic::Asset<'data, Mdlx>` directly. The M2, M3, WMO, and
+MDLX import returns `semantic::Model<'data, Mdlx>` directly. The M2, M3, WMO, and
 Diablo adapters use their own concrete profiles as well. Native export requires the matching vocabulary:
-for example, the MDLX planner accepts `Asset<'data, Mdlx>`, rather than implicitly
-projecting a `Universal` graph into Warcraft III behavior. Widening an asset
+for example, the MDLX planner accepts `Model<'data, Mdlx>`, rather than implicitly
+projecting a `Universal` graph into Warcraft III behavior. Widening a model
 preserves its meanings, identities, and shared arrays; it does not translate
 materials, effects, or playback semantics into another game's equivalents.
 A union vocabulary likewise retains both families distinctly. Use
 `try_narrow::<TargetProfile>()` when every owner already carries a complete
 payload supported by the target, including capabilities shared across profiles.
-It moves the existing values, checks required controls and references, and rejects
-incompatible model cardinality. Shared vertex geometry is checked against the
+It moves the existing values and checks required metadata, controls, and references.
+Shared vertex geometry is checked against the
 target's stream, topology, and influence constraints, independently of its source
 profile. Narrowing is an exact projection; translating another game's behavior
 requires an explicit semantic transformation before the native planner can accept
@@ -38,12 +38,12 @@ representations. M2, M3, and WMO also construct their native supporting document
 through bundles rather than leaving offsets or references for the caller to
 repair after writing.
 
-Diablo III appearance import produces `Asset<D3>`. Caller-assembled bundles can
+Diablo III appearance import produces `Model<D3>`. Caller-assembled bundles can
 include independently versioned animation documents, which bind to actual skeleton
 nodes by their authored bone names. Bundle output plans the appearance and
 animation resources together.
 
-Diablo IV appearance import produces `Asset<D4>`. Native numeric vertex semantics
+Diablo IV appearance import produces `Model<D4>`. Native numeric vertex semantics
 and encodings require explicit caller-established `BufferLayout` declarations;
 matching the root hash alone does not establish every vertex interpretation.
 The output `VertexLayout` separately selects native packing. Packed arrays become
@@ -55,15 +55,13 @@ its strict loss boundaries.
 
 ## Editing and inspecting an output plan
 
-A `semantic::Asset` owns checked models, their shared resources, and asset metadata.
-Conversion adapters return this same container. `metadata()` exposes
-the collection metadata selected by `Profile::AssetMetadata`, and `set_metadata`
-checks replacements against the complete asset. Use `Asset::edit_model` or
-`Asset::edit_resources` to stage edits and publish them atomically after
-validation. For a standalone graph, `SingleModel::edit` provides the same
-checked workflow. Models, dependencies, mesh placements, draws, and material
-assignments retain separate identities, so changing one placement need not
-modify every user of a shared mesh.
+A `semantic::Model` owns its checked graph, resources, and profile-specific
+metadata. Conversion adapters return this same model. `metadata()` exposes the
+payload selected by `Profile::ModelMetadata`; use `ModelBuilder::set_metadata`
+inside `Model::edit` to replace it. `Model::edit` and `Model::edit_resources`
+stage changes and publish them atomically after validation. Dependencies, mesh
+placements, draws, and material assignments retain separate identities, so
+changing one placement need not modify every user of a shared mesh.
 
 A plan exposes its proposed native value through `draft()` and its ordered
 conversion decisions through `report()`. Inspect both before calling `execute()`.
@@ -76,8 +74,8 @@ use wc3::model::{conversion, mdlx};
 use conversion::{ExportOptions, ImportOptions};
 
 fn prepare(source: &mdlx::Model<'_, mdlx::V800>) -> Result<(), conversion::Error> {
-    let asset = conversion::mdlx::import(source, &ImportOptions::default())?.value;
-    let plan = conversion::mdlx::plan::<mdlx::V800>(&asset, &ExportOptions::default())?;
+    let model = conversion::mdlx::import(source, &ImportOptions::default())?.value;
+    let plan = conversion::mdlx::plan::<mdlx::V800>(&model, &ExportOptions::default())?;
     let _proposed_model = plan.draft();
     let _decisions = plan.report();
     let _output = plan.execute()?;
@@ -128,7 +126,7 @@ retaining a known record layout does not establish its behavior.
 
 Unknown source data follows an import policy. `UnknownPolicy::Reject` is the
 default; `UnknownPolicy::Drop` discards it and reports the decision. The semantic
-asset stores supported authoring values, so export needs no unknown-byte policy.
+model stores supported authoring values, so export needs no unknown-byte policy.
 Keep the native document separately when an application needs its original
 unknown records or bytes.
 
@@ -150,7 +148,7 @@ Native codec APIs retain their own byte-preserving editing behavior.
 ## Where the implementation lives
 
 Policies, reports, plans, and policy enforcement live under `model/conversion`.
-The shared asset container lives under `model/semantic`. Each adapter divides geometry, hierarchy, animation,
+Each adapter divides geometry, hierarchy, animation,
 materials, effects, and supporting documents into focused modules. The checked
 graph and borrowed values live under `model/semantic`; authoring vocabularies
 live in its `profiles` namespace. Format-independent features and scoped simulation

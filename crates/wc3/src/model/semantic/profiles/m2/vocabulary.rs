@@ -7,8 +7,8 @@ use crate::model::semantic::profiles::{
 use crate::model::semantic::PropertyIdentityKey;
 use crate::model::semantic::{
     Basis, Bounds, ClipControls, DrawControls, DrawLooks, Error, FeatureKind, IdentityBinding,
-    LengthUnit, M2Geometry, MaterialSurface, MeshControls, Model, ModelControls, NodeControls,
-    NodeFeature, Resources, Single, System, TextureControls, UniversalAppearance, UniversalBinding,
+    LengthUnit, M2Geometry, MaterialSurface, MeshControls, Model, ModelMetadata, NodeControls,
+    NodeFeature, System, TextureControls, UniversalAppearance, UniversalBinding,
 };
 /// Vocabulary that maps mechanically to M2 logical features.
 #[derive(Clone, Debug, Default)]
@@ -18,13 +18,11 @@ impl Profile for M2 {
     fn default_bounds() -> Option<Bounds> {
         Some(Default::default())
     }
-    type Models = Single;
-    type AssetMetadata<'a> = NoControls;
     type Appearance<'a> = DrawLooks<'a>;
     type Binding<'a> = IdentityBinding;
     type Geometry<'a> = M2Geometry<'a>;
     type Draw = Option<m2::ShadowControls>;
-    type Model<'a> = m2::ModelControls;
+    type ModelMetadata<'a> = m2::ModelMetadata;
     type System<'a> = m2::System<'a>;
     type Surface<'a> = m2::Material<'a>;
     type Feature<'a> = m2::ActorKind<'a>;
@@ -34,11 +32,9 @@ impl Profile for M2 {
     type Instance<'a> = NoControls;
     type Clip<'a> = m2::SequenceControls;
     type Controller<'a> = NoControls;
-    fn validate_asset<'a>(
-        _: &Self::AssetMetadata<'a>,
-        _: &[Model<'a, Self>],
-        resources: &Resources<'a, Self>,
-    ) -> Result<(), Error> {
+    fn validate_resources(model: &Model<'_, Self>) -> Result<(), Error> {
+        let resources = model.resources();
+
         super::texture::resources(resources)
     }
     fn validate_model(model: &Model<'_, Self>) -> Result<(), Error> {
@@ -70,7 +66,7 @@ impl Profile for M2 {
             ));
         }
         if model
-            .controls()
+            .metadata()
             .key_bone_lookup
             .iter()
             .flatten()
@@ -128,9 +124,6 @@ impl Extends<M2> for Universal {
     fn property(value: <M2 as Profile>::Property) -> Self::Property {
         UniversalProperty::M2(value)
     }
-    fn asset_metadata<'a>(value: <M2 as Profile>::AssetMetadata<'a>) -> Self::AssetMetadata<'a> {
-        value
-    }
     fn appearance<'a>(value: <M2 as Profile>::Appearance<'a>) -> Self::Appearance<'a> {
         UniversalAppearance::Draw(value)
     }
@@ -143,8 +136,8 @@ impl Extends<M2> for Universal {
     fn draw(value: <M2 as Profile>::Draw) -> Self::Draw {
         value.map(DrawControls::M2)
     }
-    fn model<'a>(value: <M2 as Profile>::Model<'a>) -> Self::Model<'a> {
-        Some(ModelControls::M2(value))
+    fn model_metadata<'a>(value: <M2 as Profile>::ModelMetadata<'a>) -> Self::ModelMetadata<'a> {
+        Some(ModelMetadata::M2(value))
     }
     fn system<'a>(value: <M2 as Profile>::System<'a>) -> Self::System<'a> {
         System::M2(value)
@@ -181,7 +174,7 @@ impl Extends<M2> for Universal {
 mod tests {
     use super::*;
     use crate::model::semantic::{Controller, Node, Skin};
-    use m2::{BoneControls, ModelControls};
+    use m2::{BoneControls, ModelMetadata};
 
     #[test]
     fn native_joint_palettes_require_declared_bone_nodes() {
@@ -201,9 +194,9 @@ mod tests {
     fn key_bone_categories_and_layers_are_checked_at_publication() {
         let mut invalid = Model::<M2>::builder("key bone");
         let helper = invalid.add_node(Node::named("helper")).unwrap();
-        invalid.set_controls(ModelControls {
+        invalid.set_metadata(ModelMetadata {
             key_bone_lookup: vec![Some(helper)],
-            ..ModelControls::default()
+            ..ModelMetadata::default()
         });
         assert!(invalid.finish().is_err());
         let mut invalid = Model::<M2>::builder("layer");

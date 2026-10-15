@@ -1,11 +1,11 @@
 use wc3::model::conversion::{geometry, Context, ExportOptions};
 use wc3::model::semantic::{
     Attribute, AttributeDomain, AttributeSemantic, AttributeValues, ConnectivitySets, Draw,
-    GeometryData, InstanceId, Material, Mesh, MeshId, MeshInstance, ModelBuilder, Node,
-    SingleModel, Topology,
+    GeometryData, InstanceId, Material, Mesh, MeshId, MeshInstance, Model, ModelBuilder, Node,
+    Topology,
 };
 
-fn fixture() -> (SingleModel<'static>, MeshId, InstanceId) {
+fn fixture() -> (Model<'static>, MeshId, InstanceId) {
     let mut draft = ModelBuilder::new("seams");
     let node = draft.add_node(Node::named("placement")).unwrap();
     let first = draft.add_material(Material::pbr().named("first")).unwrap();

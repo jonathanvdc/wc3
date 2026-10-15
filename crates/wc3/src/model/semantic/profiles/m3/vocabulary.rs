@@ -9,9 +9,9 @@ use crate::model::semantic::{
     Basis, Billboard, Channel, ClipControls, Clock, ColorSpace, DrawControls, Error,
     ExplicitBinding, FeatureKind, GeometrySchema as _, Inheritance, InstanceControls,
     Interpolation, LengthUnit, Link, M3Geometry, MaterialSurface, MeshControls, Model,
-    ModelControls, NodeControls, NodeFeature, PropertyTarget, Resource, Resources, Sampler, Single,
-    SingleLook, SkinId, System, Topology, Transform, UniversalAppearance, UniversalBinding,
-    ValidateLinks, VertexInfluences,
+    ModelMetadata, NodeControls, NodeFeature, PropertyTarget, Resource, Sampler, SingleLook,
+    SkinId, System, Topology, Transform, UniversalAppearance, UniversalBinding, ValidateLinks,
+    VertexInfluences,
 };
 use std::collections::HashSet;
 use std::str::from_utf8;
@@ -23,13 +23,11 @@ impl Profile for M3 {
     fn default_bounds() -> Option<crate::model::semantic::Bounds> {
         Some(Default::default())
     }
-    type Models = Single;
-    type AssetMetadata<'a> = NoControls;
     type Appearance<'a> = SingleLook<'a>;
     type Binding<'a> = ExplicitBinding<'a>;
     type Geometry<'a> = M3Geometry<'a>;
     type Draw = Option<profiles::m3::BatchControls>;
-    type Model<'a> = profiles::m3::ModelControls;
+    type ModelMetadata<'a> = profiles::m3::ModelMetadata;
     type System<'a> = profiles::m3::System<'a>;
     type Surface<'a> = profiles::m3::Material<'a>;
     type Feature<'a> = profiles::m3::Feature<'a>;
@@ -476,20 +474,16 @@ impl Profile for M3 {
         Ok(())
     }
 
-    fn validate_asset<'a>(
-        _: &Self::AssetMetadata<'a>,
-        models: &[Model<'a, Self>],
-        resources: &Resources<'a, Self>,
-    ) -> Result<(), Error> {
+    fn validate_resources(model: &Model<'_, Self>) -> Result<(), Error> {
+        let resources = model.resources();
+
         let mut used = HashSet::new();
-        for model in models {
-            for (_, material) in model.materials() {
-                material.surface.visit_links(&mut |link| {
-                    if let Link::Texture(id) = link {
-                        used.insert(id);
-                    }
-                });
-            }
+        for (_, material) in model.materials() {
+            material.surface.visit_links(&mut |link| {
+                if let Link::Texture(id) = link {
+                    used.insert(id);
+                }
+            });
         }
         for (id, texture) in resources.textures() {
             if !used.contains(&id) {
@@ -552,9 +546,6 @@ impl Extends<M3> for Universal {
     fn property(value: <M3 as Profile>::Property) -> Self::Property {
         UniversalProperty::M3(value)
     }
-    fn asset_metadata<'a>(value: <M3 as Profile>::AssetMetadata<'a>) -> Self::AssetMetadata<'a> {
-        value
-    }
     fn appearance<'a>(value: <M3 as Profile>::Appearance<'a>) -> Self::Appearance<'a> {
         UniversalAppearance::Single(value)
     }
@@ -567,8 +558,8 @@ impl Extends<M3> for Universal {
     fn draw(value: <M3 as Profile>::Draw) -> Self::Draw {
         value.map(DrawControls::M3)
     }
-    fn model<'a>(value: <M3 as Profile>::Model<'a>) -> Self::Model<'a> {
-        Some(ModelControls::M3(value))
+    fn model_metadata<'a>(value: <M3 as Profile>::ModelMetadata<'a>) -> Self::ModelMetadata<'a> {
+        Some(ModelMetadata::M3(value))
     }
     fn system<'a>(value: <M3 as Profile>::System<'a>) -> Self::System<'a> {
         System::M3(value)

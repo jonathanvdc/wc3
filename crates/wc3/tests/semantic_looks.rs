@@ -1,15 +1,10 @@
 use wc3::model::semantic::profiles::{Mdlx, Universal};
 use wc3::model::semantic::{
     Draw, DrawId, InstanceId, Look, LookBinding, LookId, Material, MaterialId, Mesh, MeshInstance,
-    Model, ModelBuilder, Node, SingleModel,
+    Model, ModelBuilder, Node,
 };
 
-fn fixture() -> (
-    SingleModel<'static>,
-    InstanceId,
-    [DrawId; 2],
-    [MaterialId; 2],
-) {
+fn fixture() -> (Model<'static>, InstanceId, [DrawId; 2], [MaterialId; 2]) {
     let mut builder = ModelBuilder::new("complete looks");
     let node = builder.add_node(Node::named("placement")).unwrap();
     let mut mesh = Mesh::triangles(

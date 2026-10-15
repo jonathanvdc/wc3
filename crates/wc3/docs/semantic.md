@@ -20,7 +20,7 @@ rather than the hierarchy.
 Attached features give a node behavior such as a camera, light, or emitter.
 A node can anchor several independently identified features. Systems own
 relationships that span several objects, such as physics constraints, cloth,
-or world groups and portals. Model controls contain declarations that apply to
+or world groups and portals. Model metadata contains declarations that apply to
 the complete model. Additional controls belong directly to their actual owners,
 so understanding a node or draw does not require consulting a parallel extension
 table.
@@ -30,23 +30,18 @@ an unrelated owner cannot satisfy a relationship. Graph identity is independent
 of native record ordering, so output codecs can reorder tables without changing
 which objects refer to one another.
 
-`Asset<'data, P, C>` owns an ordered collection of graphs and one
-`Resources` arena. Textures live in that arena, which owns a plain map of texture
-definitions. Models store texture IDs but own no separate texture map or resource
-handle. `Asset::view` returns a `ModelView` borrowing a selected graph,
-the collection's resources, and its asset metadata. Resource lookup through
-a view therefore uses the same owner as the rest of the collection.
+`Model<'data, P>` owns its graph and a `Resources` arena containing texture
+definitions. Materials and effects refer to those definitions by texture ID;
+`Model::texture` and `Model::resources` resolve them in the same ownership context.
+Cloning a model preserves its IDs and borrowed array storage while creating an
+independently editable copy of its definitions.
 
-The cardinality parameter `Single` requires exactly one graph; `Multiple`
-permits several. The default cardinality is selected by `P::Models`. Native
-MDLX, M2, M3, WMO, and Diablo assets use `Single`;
-`Universal` and union profiles can contain multiple models with shared dependencies.
-`Profile::AssetMetadata` selects metadata shared by all models in an asset,
-separately from declarations owned by an individual model. Access it through
-`Asset::metadata` or `ModelView::metadata`.
-`set_metadata` checks replacements before publication; the collection builder
-checks its metadata when `finish` publishes the draft. The built-in native profiles
-and `Universal` use the zero-sized `NoControls` value for asset metadata.
+`Profile::ModelMetadata` selects declarations belonging to the complete model.
+Read them through `Model::metadata` and replace them through
+`ModelBuilder::set_metadata` in a checked edit. For example, MDLX model metadata
+contains the external animation filename, sequence blend time, and face-effect
+resources. WMO doodads retain external model references and placements; resolving
+those dependencies remains the application's responsibility.
 
 ## Choosing an authoring vocabulary
 
@@ -76,13 +71,13 @@ value. Format-specific imports and exports use their concrete profile; translati
 an incompatible vocabulary requires a separate representability decision.
 
 ```rust
-use wc3::model::semantic::{Model, Node, SingleModel};
+use wc3::model::semantic::{Model, Node};
 use wc3::model::semantic::profiles::{Mdlx, Universal};
 
 let mut draft = Model::<Mdlx>::builder("Example");
 let root = draft.add_node(Node::named("Root"))?;
 let model = draft.finish()?;
-let broader: SingleModel<'_, Universal> = model.widen();
+let broader: Model<'_, Universal> = model.widen();
 assert_eq!(broader.node(root).unwrap().name, "Root");
 let restored = broader.try_narrow::<Mdlx>()?;
 assert_eq!(restored.node(root).unwrap().name, "Root");
@@ -92,13 +87,11 @@ Ok::<(), wc3::model::semantic::Error>(())
 Widening preserves graph identities, meanings, and shared array storage. Its
 `Extends` bound proves that the destination vocabulary can embed every source
 payload. The separate `try_narrow::<Target>()` operation checks an exact
-projection from `Universal`. It consumes the collection, moves owned resource
+projection from `Universal`. It consumes the model, moves owned resource
 paths, and retains scoped identities and borrowed arrays. Each owner must already
-carry a complete payload supported by the target; missing required controls,
-foreign behavior, and an incompatible asset model count return an error.
-Collection publication also checks the target profile's relationship and
-authoring rules. The asset contains supported semantic values throughout widening
-and narrowing.
+carry a complete payload supported by the target; missing required metadata or
+controls and foreign behavior return an error. Publication checks the complete
+model against the target profile's relationship and authoring rules.
 
 Universal enum variants distinguish data, interpretation, or supported operations,
 rather than recording the source format. MDLX, M3, and WMO appearances share
@@ -434,22 +427,19 @@ values during export.
 A `ModelBuilder` collects an unpublished draft. Reserved IDs permit forward
 references where supported; `finish` checks their definitions, ownership, and
 required relationship kinds, together with local values such as geometry ranges
-and curve parameters. It returns a `SingleModel`, containing the checked graph
-and its resources. This standalone container dereferences to its graph for
-inspection and resolves dependencies in the same ownership context.
-`Model::standalone(name)` creates an empty universal container when no draft edits
-are needed; use `Model::<P>::builder(name)` to author a selected vocabulary.
+and curve parameters. It returns a `Model` containing the checked graph,
+metadata, and resources. `Model::standalone(name)` creates an empty universal
+model when no draft edits are needed; use `Model::<P>::builder(name)` to author
+a selected vocabulary.
 
-Published graphs provide immutable access. Use `SingleModel::edit` for a
-standalone model or `Asset::edit_model` within a collection.
-`edit_resources` changes the shared dependency arena. Edits stage changes with
-shared array storage and publish only after the affected graph and collection
-relationships validate. A failed edit leaves the original collection unchanged.
-Conversion adapters import into this same asset and plan native output directly
-from it. Typed profile fields retain source details with an identified owner
-and participate in checked edits and exact narrowing. The asset has no archive
-of arbitrary source payloads; retain the decoded native document separately
-when its unsupported records or original physical layout are needed.
+Published models provide immutable access. `Model::edit` stages graph, metadata,
+and resource changes in a `ModelBuilder`; `Model::edit_resources` stages changes
+only to texture definitions. Both publish only after the complete model validates.
+A failed edit leaves the original model unchanged. Conversion adapters import into
+this same model and plan native output directly from it. Typed profile fields
+retain source details with an identified owner and participate in checked edits
+and exact narrowing. Retain the decoded native document separately when its
+unsupported records or original physical layout are needed.
 
 Coordinate basis and length units describe authored numeric values. Changing
 those declarations does not transform geometry. Native imports, output plans,
@@ -520,10 +510,10 @@ rejects those edits instead of guessing new associations.
 
 To publish an edit, clone the mesh from the draft's model, apply `Mesh::edited`,
 and submit the result through `ModelBuilder::set_mesh` inside
-`SingleModel::edit` or `Asset::edit_model`. Geometry editing does not
+`Model::edit`. Geometry editing does not
 recompute mesh or model bounds, transform normals automatically when positions
 change, or rewrite references held by other graph objects. Tools must update those
-related declarations in the same collection transaction where needed. In
+related declarations in the same model transaction where needed. In
 particular, vertex references in physics systems require their own correspondence
 updates; graph validation cannot establish that an in-range index still identifies
 the intended vertex.

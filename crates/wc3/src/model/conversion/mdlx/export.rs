@@ -1,6 +1,5 @@
 //! Native Warcraft III export planning over independent logical models.
 use super::encode_animation::{unsigned_frame, Encoder};
-use crate::model::conversion::select_model;
 use crate::model::conversion::{Context, Error, ExportOptions, Plan};
 use crate::model::mdlx::animation::Track;
 use crate::model::mdlx::mdx::FixedText;
@@ -10,15 +9,16 @@ use crate::model::mdlx::{
     TextureFlags,
 };
 use crate::model::semantic::profiles::Mdlx;
-use crate::model::semantic::Asset;
+use crate::model::semantic::Model;
 use crate::model::semantic::{AddressMode, Billboard, NodeId, Quaternion, Resource};
 use std::collections::BTreeMap;
 
 pub(in crate::model::conversion::mdlx) fn write<'a, 'data, T: ModelDialect>(
-    asset: &'a Asset<'data, Mdlx>,
+    asset: &'a Model<'data, Mdlx>,
     options: &ExportOptions,
 ) -> Result<Plan<NativeModel<'a, T>>, Error> {
-    let model = select_model(asset, options)?;
+    asset.validate()?;
+    let model = asset;
     let mut context = Context::export(options);
     if model.systems().next().is_some() {
         context.unsupported(
@@ -212,7 +212,7 @@ pub(in crate::model::conversion::mdlx) fn write<'a, 'data, T: ModelDialect>(
         info.maximum_extent = bounds.maximum;
         info.bounds_radius = bounds.sphere_radius;
         {
-            let metadata = model.controls();
+            let metadata = model.metadata();
             info.animation_file_name
                 .set_text(&metadata.animation_file)
                 .map_err(|error| Error::new("model.animation_file", error.to_string()))?;

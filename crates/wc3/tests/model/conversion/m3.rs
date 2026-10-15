@@ -1,5 +1,5 @@
 use std::borrow::Cow;
-use wc3::model::semantic::Asset;
+use wc3::model::semantic::Model;
 use wc3::model::{
     conversion::{self, ApproximationPolicy, ExportOptions, ImportOptions},
     m3::{self, records as nr},
@@ -8,7 +8,7 @@ use wc3::model::{
         profiles::{m3 as surface, M3},
     },
 };
-pub(super) fn asset() -> Asset<'static, M3> {
+pub(super) fn asset() -> Model<'static, M3> {
     let mut builder = sem::Model::<M3>::builder("Triangle");
     let node = builder
         .add_node(sem::Node::named("Root").with_controls(surface::BoneControls::default()))
@@ -120,7 +120,7 @@ fn geometry_skin_and_animation_survive_native_round_trip() {
     let bytes = native.value.write().unwrap();
     let decoded = m3::Bundle::from_model(m3::Model::<m3::Md34>::read(&bytes.model).unwrap());
     let imported = conversion::m3::import(&decoded, &ImportOptions::default()).unwrap();
-    let model = &imported.value[0];
+    let model = &imported.value;
     let (_, mesh) = model.meshes().next().unwrap();
     assert_eq!(mesh.positions().get(1), Some([1., 0., 0.]));
     let sem::Topology::Triangles(triangles) = mesh.topology() else {
@@ -168,7 +168,7 @@ fn profiles_select_root_and_envelope_independently() {
 #[test]
 fn standard_controls_remain_active_after_geometry_edit() {
     let mut asset = asset();
-    let (id, material) = asset[0].materials().next().unwrap();
+    let (id, material) = asset.materials().next().unwrap();
     let mut material = material.clone();
     let surface::Material::Standard(standard) = &mut material.surface else {
         unreachable!()
@@ -176,7 +176,7 @@ fn standard_controls_remain_active_after_geometry_edit() {
     standard.specular_exponent = 17.;
     standard.priority = -3;
     asset
-        .edit_model(0, |builder| builder.set_material(id, material))
+        .edit(|builder| builder.set_material(id, material))
         .unwrap();
     let native = conversion::m3::plan::<m3::StarCraft2>(&asset, &approximate())
         .unwrap()
@@ -203,7 +203,7 @@ fn dormant_standard_and_hair_surfaces_are_authored_materials() {
         ..Default::default()
     };
     asset
-        .edit_model(0, |builder| {
+        .edit(|builder| {
             builder.add_material(sem::Material {
                 name: Cow::Borrowed("Dormant hair"),
                 surface: surface::Material::Hair((hair).into()),
@@ -216,7 +216,8 @@ fn dormant_standard_and_hair_surfaces_are_authored_materials() {
         .unwrap()
         .value;
     let imported = conversion::m3::import(&native, &ImportOptions::default()).unwrap();
-    assert!(imported.value[0]
+    assert!(imported
+        .value
         .materials()
         .any(|(_, material)| matches!(material.surface, surface::Material::Hair(_))));
 }
@@ -235,27 +236,27 @@ fn imported_graph_widens_and_narrows_without_changing_identity_or_borrowing() {
     let imported = conversion::m3::import(&decoded, &ImportOptions::default())
         .unwrap()
         .value;
-    let model_id = imported[0].id();
-    let mesh_id = imported[0].meshes().next().unwrap().0;
-    let node_id = imported[0].nodes().next().unwrap().0;
-    assert!(imported[0].mesh(mesh_id).unwrap().positions().is_borrowed());
+    let model_id = imported.id();
+    let mesh_id = imported.meshes().next().unwrap().0;
+    let node_id = imported.nodes().next().unwrap().0;
+    assert!(imported.mesh(mesh_id).unwrap().positions().is_borrowed());
     let narrowed = imported
         .widen::<sem::profiles::Universal>()
         .try_narrow::<M3>()
         .unwrap();
-    assert_eq!(narrowed[0].id(), model_id);
-    assert!(narrowed[0].node(node_id).is_some());
-    let mesh = narrowed[0].mesh(mesh_id).unwrap();
+    assert_eq!(narrowed.id(), model_id);
+    assert!(narrowed.node(node_id).is_some());
+    let mesh = narrowed.mesh(mesh_id).unwrap();
     assert!(mesh.positions().is_borrowed());
     assert_eq!(mesh.positions().get(1), Some([1., 0., 0.]));
-    assert_eq!(narrowed[0].controllers().count(), 1);
+    assert_eq!(narrowed.controllers().count(), 1);
 }
 #[test]
 fn native_profile_rejects_coordinate_metadata_that_cannot_round_trip() {
     let mut source = asset();
-    let original = source[0].basis();
+    let original = source.basis();
     assert!(source
-        .edit_model(0, |builder| {
+        .edit(|builder| {
             builder.set_basis(sem::Basis::new(
                 sem::Axis::PositiveY,
                 sem::Axis::PositiveZ,
@@ -264,14 +265,14 @@ fn native_profile_rejects_coordinate_metadata_that_cannot_round_trip() {
             Ok(())
         })
         .is_err());
-    assert_eq!(source[0].basis(), original);
+    assert_eq!(source.basis(), original);
     assert!(source
-        .edit_model(0, |builder| {
+        .edit(|builder| {
             builder.set_units(sem::LengthUnit::MetersPerUnit(0.5));
             Ok(())
         })
         .is_err());
-    assert_eq!(source[0].units(), sem::LengthUnit::Unspecified);
+    assert_eq!(source.units(), sem::LengthUnit::Unspecified);
 }
 
 #[test]

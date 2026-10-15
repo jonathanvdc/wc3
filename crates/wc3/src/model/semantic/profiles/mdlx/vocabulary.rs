@@ -4,11 +4,12 @@ use crate::model::semantic::profiles::UniversalProperty;
 use crate::model::semantic::profiles::{
     mdlx, Extends, FeaturePayload, NoControls, Profile, SurfacePayload, Unavailable, Universal,
 };
+use crate::model::semantic::Model;
 use crate::model::semantic::PropertyIdentityKey;
 use crate::model::semantic::{
     ClipControls, Error, FeatureKind, IdentityBinding, MaterialSurface, MdlxGeometry, MeshControls,
-    ModelControls, NodeControls, NodeFeature, Single, SingleLook, TextureControls,
-    UniversalAppearance, UniversalBinding,
+    ModelMetadata, NodeControls, NodeFeature, SingleLook, TextureControls, UniversalAppearance,
+    UniversalBinding,
 };
 /// Vocabulary that maps mechanically to Warcraft III logical features.
 ///
@@ -28,13 +29,11 @@ impl Profile for Mdlx {
     fn default_bounds() -> Option<crate::model::semantic::Bounds> {
         Some(Default::default())
     }
-    type Models = Single;
-    type AssetMetadata<'a> = NoControls;
     type Appearance<'a> = SingleLook<'a>;
     type Binding<'a> = IdentityBinding;
     type Geometry<'a> = MdlxGeometry<'a>;
     type Draw = NoControls;
-    type Model<'a> = mdlx::ModelControls<'a>;
+    type ModelMetadata<'a> = mdlx::ModelMetadata<'a>;
     type System<'a> = Unavailable;
     type Surface<'a> = mdlx::Material<'a>;
     type Feature<'a> = mdlx::Node<'a>;
@@ -44,14 +43,12 @@ impl Profile for Mdlx {
     type Instance<'a> = NoControls;
     type Clip<'a> = mdlx::Sequence;
     type Controller<'a> = NoControls;
-    fn validate_asset<'a>(
-        _metadata: &Self::AssetMetadata<'a>,
-        _models: &[crate::model::semantic::Model<'a, Self>],
-        resources: &crate::model::semantic::Resources<'a, Self>,
-    ) -> Result<(), Error> {
+    fn validate_resources(model: &Model<'_, Self>) -> Result<(), Error> {
+        let resources = model.resources();
+
         super::validation::resources(resources)
     }
-    fn validate_model(model: &crate::model::semantic::Model<'_, Self>) -> Result<(), Error> {
+    fn validate_model(model: &Model<'_, Self>) -> Result<(), Error> {
         super::validation::model(model)
     }
 }
@@ -82,9 +79,6 @@ impl Extends<Mdlx> for Universal {
     fn property(value: <Mdlx as Profile>::Property) -> Self::Property {
         UniversalProperty::Mdlx(value)
     }
-    fn asset_metadata<'a>(value: <Mdlx as Profile>::AssetMetadata<'a>) -> Self::AssetMetadata<'a> {
-        value
-    }
     fn appearance<'a>(value: <Mdlx as Profile>::Appearance<'a>) -> Self::Appearance<'a> {
         UniversalAppearance::Single(value)
     }
@@ -98,8 +92,8 @@ impl Extends<Mdlx> for Universal {
         let _ = value;
         None
     }
-    fn model<'a>(value: <Mdlx as Profile>::Model<'a>) -> Self::Model<'a> {
-        Some(ModelControls::Mdlx(value))
+    fn model_metadata<'a>(value: <Mdlx as Profile>::ModelMetadata<'a>) -> Self::ModelMetadata<'a> {
+        Some(ModelMetadata::Mdlx(value))
     }
     fn system<'a>(value: <Mdlx as Profile>::System<'a>) -> Self::System<'a> {
         match value {}

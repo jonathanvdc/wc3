@@ -1,22 +1,22 @@
-//! Independently authored scene systems and genuinely model-wide controls.
+//! Independently authored scene systems and model-wide metadata.
 use crate::model::semantic::{profiles, scene, Link, ValidateLinks};
-/// Model-wide behavior chosen by the universal vocabulary.
+/// Model-wide metadata chosen by the universal vocabulary.
 #[derive(Clone, Debug)]
-pub enum ModelControls<'a> {
+pub enum ModelMetadata<'a> {
     /// Diablo III appearance-wide declarations.
-    D3(profiles::diablo::d3::ModelControls),
+    D3(profiles::diablo::d3::ModelMetadata),
     /// Diablo IV appearance and structure declarations.
-    D4(profiles::diablo::d4::ModelControls),
+    D4(profiles::diablo::d4::ModelMetadata),
     /// Warcraft III animation resources and transition policy.
-    Mdlx(profiles::mdlx::ModelControls<'a>),
+    Mdlx(profiles::mdlx::ModelMetadata<'a>),
     /// World of Warcraft model behavior and gameplay lookup programs.
-    M2(profiles::m2::ModelControls),
+    M2(profiles::m2::ModelMetadata),
     /// StarCraft II model behavior.
-    M3(profiles::m3::ModelControls),
+    M3(profiles::m3::ModelMetadata),
     /// World-model rendering and environment settings.
-    Wmo(profiles::wmo::ModelControls<'a>),
+    Wmo(profiles::wmo::ModelMetadata<'a>),
 }
-impl ValidateLinks for ModelControls<'_> {
+impl ValidateLinks for ModelMetadata<'_> {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
         match self {
             Self::D4(value) => value.visit_links(visitor),

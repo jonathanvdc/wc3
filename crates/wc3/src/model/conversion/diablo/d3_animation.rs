@@ -1,11 +1,10 @@
 //! Animation resources bind by authored bone names, with permutation-local seconds.
 use super::{i32_count, name, native, text, text_owned};
-use crate::model::conversion::select_model;
 use crate::model::conversion::{Context, Error, ExportOptions};
 use crate::model::diablo::d3::{Animation, V118};
 use crate::model::semantic::profiles::diablo::d3::ClipControls;
 use crate::model::semantic::profiles::diablo::d3::{NodeRole, D3};
-use crate::model::semantic::Asset;
+use crate::model::semantic::Model;
 use crate::model::semantic::{
     Channel, Clip, Clock, Curve, Interpolation, PropertyTarget, Time, Track,
 };
@@ -13,11 +12,11 @@ use crate::model::semantic::{Quaternion, Values};
 use std::collections::BTreeMap;
 use zerovec::ZeroVec;
 pub(super) fn read<'a>(
-    asset: &mut Asset<'a, D3>,
+    asset: &mut Model<'a, D3>,
     sources: &[&'a Animation<'_, V118>],
     context: &mut Context,
 ) -> Result<(), Error> {
-    let model = &asset[0];
+    let model = &asset;
     let mut bones = BTreeMap::new();
     for (id, node) in model.nodes() {
         if matches!(node.controls, NodeRole::Bone(_))
@@ -33,7 +32,7 @@ pub(super) fn read<'a>(
     let mut resource_ids = Vec::new();
     for source in sources {
         let root = &source.root;
-        if root.appearance >= 0 && root.appearance != model.controls().sno_id {
+        if root.appearance >= 0 && root.appearance != model.metadata().sno_id {
             return Err(Error::new(
                 "d3.animation.appearance",
                 "animation names a different appearance resource",
@@ -172,7 +171,7 @@ pub(super) fn read<'a>(
             programs.push((clip, channels));
         }
     }
-    asset.edit_model(0, move |builder| {
+    asset.edit(move |builder| {
         for (clip, channels) in programs {
             let id = builder.add_clip(clip)?;
             for channel in channels {
@@ -225,11 +224,12 @@ fn rotation(value: Quaternion, context: &mut Context) -> Result<native::Quaterni
     })
 }
 pub(super) fn write(
-    asset: &Asset<'_, D3>,
-    options: &ExportOptions,
+    asset: &Model<'_, D3>,
+    _options: &ExportOptions,
     context: &mut Context,
 ) -> Result<Vec<Animation<'static, V118>>, Error> {
-    let model = select_model(asset, options)?;
+    asset.validate()?;
+    let model = asset;
     let mut groups: Vec<native::AnimationRecord<'static>> = Vec::new();
     for (_, clip) in model.clips() {
         if clip.alias().is_some() || !clip.is_looping() {

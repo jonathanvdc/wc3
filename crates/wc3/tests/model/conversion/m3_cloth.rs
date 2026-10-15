@@ -50,7 +50,7 @@ fn public_adapter_rebuilds_edited_cloth_density_and_node_bindings() {
     let mut imported = conversion::m3::import(&source, &Default::default())
         .unwrap()
         .value;
-    let (id, system) = imported[0]
+    let (id, system) = imported
         .systems()
         .find(|(_, system)| matches!(system, surface::System::Cloth(_)))
         .unwrap();
@@ -64,7 +64,7 @@ fn public_adapter_rebuilds_edited_cloth_density_and_node_bindings() {
     cloths.cloths[0].density = 7.;
     cloths.cloths[0].colliders[0].radius = 4.;
     imported
-        .edit_model(0, |builder| builder.set_system(id, system))
+        .edit(|builder| builder.set_system(id, system))
         .unwrap();
     let result = conversion::m3::plan::<m3::StarCraft2>(&imported, &approximate())
         .unwrap()

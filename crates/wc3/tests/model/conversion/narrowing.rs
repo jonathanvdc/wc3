@@ -2,7 +2,6 @@ use std::borrow::Cow;
 use wc3::model::conversion::{self, ImportOptions};
 use wc3::model::mdlx::{self, mdl::Read as _, mdx::Read as _, mdx::Write as _};
 use wc3::model::semantic::profiles::{Extends, Mdlx, Narrows, Universal, Wmo, M2, M3};
-use wc3::model::semantic::Asset;
 use wc3::model::semantic::{
     AppearanceSchema, DrawAppearanceSchema, DrawLooks, Look, Model, Resource, SingleLook, Texture,
     UniversalAppearance,
@@ -18,14 +17,14 @@ fn native_widening_and_narrowing_preserves_identities_and_borrowed_geometry() {
     let asset = conversion::mdlx::import(&source, &ImportOptions::default())
         .unwrap()
         .value;
-    let model_id = asset[0].id();
-    let mesh_id = asset[0].meshes().next().unwrap().0;
-    let positions = asset[0].mesh(mesh_id).unwrap().positions().clone();
+    let model_id = asset.id();
+    let mesh_id = asset.meshes().next().unwrap().0;
+    let positions = asset.mesh(mesh_id).unwrap().positions().clone();
     assert!(positions.is_borrowed());
 
     let asset = asset.widen::<Universal>().try_narrow::<Mdlx>().unwrap();
-    assert_eq!(asset[0].id(), model_id);
-    let restored = asset[0].mesh(mesh_id).unwrap().positions();
+    assert_eq!(asset.id(), model_id);
+    let restored = asset.mesh(mesh_id).unwrap().positions();
     assert!(restored.is_borrowed());
     assert_eq!(
         restored.iter().collect::<Vec<_>>(),
@@ -66,20 +65,6 @@ fn narrowing_rejects_foreign_payloads_and_missing_required_controls() {
     let asset = Model::<Universal>::builder("no profile controls")
         .finish()
         .unwrap();
-    assert!(asset.try_narrow::<Mdlx>().is_err());
-}
-
-#[test]
-fn narrowing_checks_native_asset_cardinality() {
-    let first = Model::<Mdlx>::builder("first")
-        .finish()
-        .unwrap()
-        .widen::<Universal>();
-    let second = Model::<Mdlx>::builder("second")
-        .finish()
-        .unwrap()
-        .widen::<Universal>();
-    let asset = Asset::<Universal>::from_models(vec![first, second], Default::default()).unwrap();
     assert!(asset.try_narrow::<Mdlx>().is_err());
 }
 

@@ -1,24 +1,24 @@
 //! Direct native root and companion construction from typed world semantics.
 use super::{geometry, materials};
 use crate::model::common::FileKey;
-use crate::model::conversion::select_model;
 use crate::model::conversion::{Context, Error, ExportOptions, IssueKind, Plan};
 use crate::model::semantic::profiles::Wmo;
-use crate::model::semantic::Asset;
+use crate::model::semantic::Model;
 use crate::model::wmo::codec::Array;
 use crate::model::wmo::records::{HeaderTailField, RootFlags};
 use crate::model::wmo::root::RootChunk;
 use crate::model::wmo::{Bundle, Dialect, GroupKey, Root};
 
 pub(super) fn write<'a, D: Dialect>(
-    asset: &'a Asset<'_, Wmo>,
+    asset: &'a Model<'_, Wmo>,
     options: &ExportOptions,
 ) -> Result<Plan<Bundle<'a, D>>, Error> {
-    let model = select_model(asset, options)?;
+    asset.validate()?;
+    let model = asset;
     let mut context = Context::export(options);
-    if let Some((normalized, resources)) = super::normalize::prepare(model, asset.resources())? {
+    if let Some(normalized) = super::normalize::prepare(model)? {
         context.issue("world.groups.geometry",IssueKind::Normalized,"compatible geometry placements at the same detail level joined while preserving draw order and material assignments");
-        write_model(&normalized, &resources, options, context)
+        write_model(&normalized, normalized.resources(), options, context)
     } else {
         write_model(model, asset.resources(), options, context)
     }
@@ -33,7 +33,7 @@ fn write_model<'a, D: Dialect>(
         context.unsupported("world.bounds", "destination world header requires a bounding declaration; absent source bounds cannot be represented")?;
     }
     let mut root = Root::<D>::new();
-    let controls = model.controls();
+    let controls = model.metadata();
     let mut flags = RootFlags(controls.options.unclassified.bits());
     flags.set_no_vertex_attenuation(controls.options.no_vertex_attenuation);
     flags.set_unified_render_path(controls.options.unified_rendering);

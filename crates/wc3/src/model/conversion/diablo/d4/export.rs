@@ -2,20 +2,20 @@ use super::{
     count, error, geometry, materials, matrix, native_bounds, native_name_info, native_transform,
     signed, vertices::VertexLayout,
 };
-use crate::model::conversion::select_model;
 use crate::model::conversion::{Context, Error, ExportOptions, Plan};
 use crate::model::diablo::d4::{self, records as native};
 use crate::model::semantic::profiles::diablo::d4::{NodeRole, D4};
-use crate::model::semantic::Asset;
+use crate::model::semantic::Model;
 use crate::model::semantic::{BindMatrices, BindingSchema as _, Bounds, MeshId};
 use std::collections::BTreeMap;
 
 pub(super) fn plan(
-    asset: &Asset<'_, D4>,
+    asset: &Model<'_, D4>,
     layout: &VertexLayout,
     options: &ExportOptions,
 ) -> Result<Plan<d4::Appearance<'static>>, Error> {
-    let model = select_model(asset, options)?;
+    asset.validate()?;
+    let model = asset;
     let mut context = Context::export(options);
     if model.clips().len() != 0 {
         context.unsupported(
@@ -54,7 +54,7 @@ pub(super) fn plan(
             )?;
         }
     }
-    let controls = model.controls();
+    let controls = model.metadata();
     let mut root = native::AppearanceRecord {
         sno_id: controls.sno_id,
         record_flags: controls.record_flags,

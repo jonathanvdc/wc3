@@ -1,5 +1,5 @@
 //! Direct conversion between native indexed M3 documents and checked M3 graph vocabulary.
-use crate::model::semantic::Asset;
+use crate::model::semantic::Model;
 mod logical;
 use super::{Conversion, Error, ExportOptions, ImportOptions, Plan};
 use crate::model::m3::{Bundle, Envelope};
@@ -13,13 +13,13 @@ pub use logical::profiles::ExportProfile;
 pub fn import<'view, E: Envelope + Send + Sync>(
     source: &'view Bundle<'_, E>,
     options: &ImportOptions,
-) -> Result<Conversion<Asset<'view, M3>>, Error> {
+) -> Result<Conversion<Model<'view, M3>>, Error> {
     logical::read(source, options)
 }
 /// Builds a relocated native draft from the concrete M3 graph vocabulary.
 /// Semantic vocabulary translation is a separate operation from native encoding.
 pub fn plan<'view, 'source: 'view, P: ExportProfile>(
-    asset: &'view Asset<'source, M3>,
+    asset: &'view Model<'source, M3>,
     options: &ExportOptions,
 ) -> Result<Plan<Bundle<'view, P::Envelope>>, Error> {
     logical::plan::<P>(asset, options)

@@ -1,19 +1,18 @@
 //! Diablo III authoring vocabulary is independent of native SNO revisions.
 use super::{
     uniform_transform, Appearance, ClipControls, Geometry, LookAtTarget, Material, MeshControls,
-    ModelControls, NodeRole,
+    ModelMetadata, NodeRole,
 };
 use crate::model::semantic::profiles::{
     Extends, Narrows, NoControls, Profile, SurfacePayload, Unavailable, Universal,
 };
 use crate::model::semantic::{
     Basis, Billboard, Bounds, Error, ExplicitBinding, Inheritance, LengthUnit, MaterialSurface,
-    Model, NodeControls, Resource, Resources, Single, SnoNamespace, Transform, UniversalAppearance,
-    UniversalBinding,
+    Model, NodeControls, Resource, SnoNamespace, Transform, UniversalAppearance, UniversalBinding,
 };
 use crate::model::semantic::{
     ClipControls as AnyClipControls, MeshControls as AnyMeshControls,
-    ModelControls as AnyModelControls,
+    ModelMetadata as AnyModelMetadata,
 };
 
 /// Diablo III appearance, skeleton, material, and animation authoring vocabulary.
@@ -21,12 +20,10 @@ use crate::model::semantic::{
 pub struct D3;
 impl Profile for D3 {
     type Property = Unavailable;
-    type Models = Single;
-    type AssetMetadata<'a> = NoControls;
     type Appearance<'a> = Appearance<'a>;
     type Binding<'a> = ExplicitBinding<'a>;
     type Geometry<'a> = Geometry<'a>;
-    type Model<'a> = ModelControls;
+    type ModelMetadata<'a> = ModelMetadata;
     type System<'a> = Unavailable;
     type Surface<'a> = Material<'a>;
     type Feature<'a> = Unavailable;
@@ -50,7 +47,7 @@ impl Profile for D3 {
                 "expected authored bounds, the fixed Diablo basis, and unspecified physical units",
             ));
         }
-        if let LookAtTarget::Bone(id) = model.controls().look_at.target {
+        if let LookAtTarget::Bone(id) = model.metadata().look_at.target {
             if !model
                 .node(id)
                 .is_some_and(|node| matches!(node.controls, NodeRole::Bone(_)))
@@ -148,11 +145,9 @@ impl Profile for D3 {
         }
         Ok(())
     }
-    fn validate_asset<'a>(
-        _: &NoControls,
-        _: &[Model<'a, Self>],
-        resources: &Resources<'a, Self>,
-    ) -> Result<(), Error> {
+    fn validate_resources(model: &Model<'_, Self>) -> Result<(), Error> {
+        let resources = model.resources();
+
         for (_, texture) in resources.textures() {
             if !matches!(
                 texture.resource,
@@ -179,9 +174,6 @@ impl Extends<D3> for Universal {
     fn property(value: <D3 as Profile>::Property) -> Self::Property {
         match value {}
     }
-    fn asset_metadata<'a>(value: <D3 as Profile>::AssetMetadata<'a>) -> Self::AssetMetadata<'a> {
-        value
-    }
     fn appearance<'a>(value: <D3 as Profile>::Appearance<'a>) -> Self::Appearance<'a> {
         UniversalAppearance::D3(value)
     }
@@ -191,8 +183,8 @@ impl Extends<D3> for Universal {
     fn geometry<'a>(value: <D3 as Profile>::Geometry<'a>) -> Self::Geometry<'a> {
         value.into()
     }
-    fn model<'a>(value: <D3 as Profile>::Model<'a>) -> Self::Model<'a> {
-        Some(AnyModelControls::D3(value))
+    fn model_metadata<'a>(value: <D3 as Profile>::ModelMetadata<'a>) -> Self::ModelMetadata<'a> {
+        Some(AnyModelMetadata::D3(value))
     }
     fn system<'a>(value: <D3 as Profile>::System<'a>) -> Self::System<'a> {
         match value {}
@@ -230,11 +222,6 @@ impl Extends<D3> for Universal {
     }
 }
 impl Narrows<Universal> for D3 {
-    fn asset_metadata<'a>(
-        value: <Universal as Profile>::AssetMetadata<'a>,
-    ) -> Result<Self::AssetMetadata<'a>, Error> {
-        Ok(value)
-    }
     fn appearance<'a>(
         value: <Universal as Profile>::Appearance<'a>,
     ) -> Result<Self::Appearance<'a>, Error> {
@@ -260,9 +247,11 @@ impl Narrows<Universal> for D3 {
     ) -> Result<Self::Geometry<'a>, Error> {
         value.try_into()
     }
-    fn model<'a>(value: <Universal as Profile>::Model<'a>) -> Result<Self::Model<'a>, Error> {
+    fn model_metadata<'a>(
+        value: <Universal as Profile>::ModelMetadata<'a>,
+    ) -> Result<Self::ModelMetadata<'a>, Error> {
         match value {
-            Some(AnyModelControls::D3(value)) => Ok(value),
+            Some(AnyModelMetadata::D3(value)) => Ok(value),
             _ => Err(Error::new(
                 "d3.narrow.model",
                 "payload belongs to another authoring vocabulary",

@@ -15,18 +15,16 @@ pub trait Narrows<Source: Profile>: Profile {
             .ok_or_else(|| incompatible("animation property"))
     }
 
-    /// Projects asset-wide metadata without changing its meaning.
-    fn asset_metadata<'a>(
-        value: Source::AssetMetadata<'a>,
-    ) -> Result<Self::AssetMetadata<'a>, Error>;
     /// Projects the complete appearance vocabulary while preserving identities.
     fn appearance<'a>(value: Source::Appearance<'a>) -> Result<Self::Appearance<'a>, Error>;
     /// Projects the authored joint binding without changing its interpretation.
     fn binding<'a>(value: Source::Binding<'a>) -> Result<Self::Binding<'a>, Error>;
     /// Projects complete geometry without changing its logical values.
     fn geometry<'a>(value: Source::Geometry<'a>) -> Result<Self::Geometry<'a>, Error>;
-    /// Projects model-wide controls without changing their meaning.
-    fn model<'a>(value: Source::Model<'a>) -> Result<Self::Model<'a>, Error>;
+    /// Projects model-wide metadata without changing their meaning.
+    fn model_metadata<'a>(
+        value: Source::ModelMetadata<'a>,
+    ) -> Result<Self::ModelMetadata<'a>, Error>;
     /// Projects an independent scene system without changing its meaning.
     fn system<'a>(value: Source::System<'a>) -> Result<Self::System<'a>, Error>;
     /// Projects a surface without changing its meaning.
@@ -52,9 +50,6 @@ impl<P: Profile> Narrows<P> for P {
     fn property(value: P::Property) -> Result<Self::Property, Error> {
         Ok(value)
     }
-    fn asset_metadata<'a>(value: P::AssetMetadata<'a>) -> Result<Self::AssetMetadata<'a>, Error> {
-        Ok(value)
-    }
     fn appearance<'a>(value: P::Appearance<'a>) -> Result<Self::Appearance<'a>, Error> {
         Ok(value)
     }
@@ -64,7 +59,7 @@ impl<P: Profile> Narrows<P> for P {
     fn geometry<'a>(value: P::Geometry<'a>) -> Result<Self::Geometry<'a>, Error> {
         Ok(value)
     }
-    fn model<'a>(value: P::Model<'a>) -> Result<Self::Model<'a>, Error> {
+    fn model_metadata<'a>(value: P::ModelMetadata<'a>) -> Result<Self::ModelMetadata<'a>, Error> {
         Ok(value)
     }
     fn system<'a>(value: P::System<'a>) -> Result<Self::System<'a>, Error> {

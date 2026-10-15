@@ -4,11 +4,12 @@ use crate::model::semantic::{
     AttachedFeature, Clip, Controller, Draw, Material, Mesh, MeshInstance, Model, Node, Skin,
 };
 struct PayloadMap<'a, P: Profile, Q: Profile> {
+    texture: fn(P::Texture<'a>) -> Q::Texture<'a>,
     property: fn(P::Property) -> Q::Property,
     appearance: fn(P::Appearance<'a>) -> Q::Appearance<'a>,
     geometry: fn(P::Geometry<'a>) -> Q::Geometry<'a>,
     binding: fn(P::Binding<'a>) -> Q::Binding<'a>,
-    model: fn(P::Model<'a>) -> Q::Model<'a>,
+    model: fn(P::ModelMetadata<'a>) -> Q::ModelMetadata<'a>,
     system: fn(P::System<'a>) -> Q::System<'a>,
     map_surface: fn(P::Surface<'a>) -> Q::Surface<'a>,
     feature: fn(P::Feature<'a>) -> Q::Feature<'a>,
@@ -23,11 +24,12 @@ impl<'a, P: Profile> Model<'a, P> {
     /// Embeds the complete graph into a containing vocabulary without copying array storage.
     pub fn widen<Q: Extends<P>>(self) -> Model<'a, Q> {
         self.map_payloads(PayloadMap {
+            texture: Q::texture,
             property: Q::property,
             appearance: Q::appearance,
             geometry: Q::geometry,
             binding: Q::binding,
-            model: Q::model,
+            model: Q::model_metadata,
             system: Q::system,
             map_surface: Q::surface,
             feature: Q::feature,
@@ -46,6 +48,7 @@ impl<'a, P: Profile> Model<'a, P> {
     /// Adds another vocabulary, preserving this model in the right branch.
     pub fn union_right<Q: Profile>(self) -> Model<'a, Union<Q, P>> {
         self.map_payloads(PayloadMap {
+            texture: Either::Right,
             property: Either::Right,
             appearance: Either::Right,
             geometry: Either::Right,
@@ -64,13 +67,14 @@ impl<'a, P: Profile> Model<'a, P> {
     }
     fn map_payloads<Q: Profile>(self, maps: PayloadMap<'a, P, Q>) -> Model<'a, Q> {
         Model {
+            resources: self.resources.map_controls(maps.texture),
             scope: self.scope,
             id: self.id,
             name: self.name,
             basis: self.basis,
             units: self.units,
             bounds: self.bounds,
-            controls: (maps.model)(self.controls),
+            metadata: (maps.model)(self.metadata),
             systems: self
                 .systems
                 .into_iter()

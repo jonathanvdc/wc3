@@ -4,7 +4,7 @@ use crate::model::conversion::{Context, Conversion, Error, ImportOptions};
 use crate::model::mdlx::{self as native, Chunk, ModelChunk, ModelDialect};
 use crate::model::semantic::profiles::mdlx as profile;
 use crate::model::semantic::profiles::Mdlx;
-use crate::model::semantic::Asset;
+use crate::model::semantic::Model;
 use crate::model::semantic::{
     AddressMode, Billboard, Bounds, Channel, Clip, Clock, Inheritance, Material, ModelBuilder,
     Node, Quaternion, Resource, Sampler, SharedClock, Texture, TextureTransform, Time, Track,
@@ -15,7 +15,7 @@ use std::collections::BTreeMap;
 pub(in crate::model::conversion::mdlx) fn read<'a, D: ModelDialect>(
     source: &'a native::Model<'_, D>,
     options: &ImportOptions,
-) -> Result<Conversion<Asset<'a, Mdlx>>, Error>
+) -> Result<Conversion<Model<'a, Mdlx>>, Error>
 where
     D::Extension: Chunk,
 {
@@ -204,9 +204,9 @@ where
         }
     }
     if let Some(info) = source.model_info() {
-        native_profile.controls.animation_file =
+        native_profile.metadata.animation_file =
             Cow::Owned(info.animation_file_name.text().into_owned());
-        native_profile.controls.blend_time = f64::from(info.blend_time) / 1000.;
+        native_profile.metadata.blend_time = f64::from(info.blend_time) / 1000.;
     }
     let mut clips = Vec::new();
     for sequence in source.sequences() {
@@ -364,7 +364,7 @@ where
         node.controls = controls;
         builder.set_node(id, node)?;
     }
-    builder.set_controls(native_profile.controls);
+    builder.set_metadata(native_profile.metadata);
     let asset = builder.finish()?;
     Ok(Conversion {
         value: asset,

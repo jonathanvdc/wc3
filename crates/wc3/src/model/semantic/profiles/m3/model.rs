@@ -8,7 +8,7 @@ use std::borrow::Cow;
 
 /// Game-wide model behavior settings.
 #[derive(Clone, Debug, Default, PartialEq)]
-pub struct ModelControls {
+pub struct ModelMetadata {
     /// Authored animation-partition control; its relationship to split definitions is unresolved.
     pub partition_control: u32,
     /// Model behavior flags; unknown bits remain available.

@@ -2,22 +2,21 @@
 use crate::model::semantic::profiles::{
     wmo, Extends, FeaturePayload, NoControls, Profile, SurfacePayload, Unavailable, Universal,
 };
+use crate::model::semantic::Model;
 use crate::model::semantic::{
-    DrawControls, Error, FeatureKind, InstanceControls, MaterialSurface, ModelControls,
-    NodeFeature, Single, SingleLook, System, UniversalAppearance, WmoGeometry,
+    DrawControls, Error, FeatureKind, InstanceControls, MaterialSurface, ModelMetadata,
+    NodeFeature, SingleLook, System, UniversalAppearance, WmoGeometry,
 };
 /// Vocabulary that maps mechanically to Wmo logical features.
 #[derive(Clone, Debug, Default)]
 pub struct Wmo;
 impl Profile for Wmo {
     type Property = Unavailable;
-    type Models = Single;
-    type AssetMetadata<'a> = NoControls;
     type Appearance<'a> = SingleLook<'a>;
     type Binding<'a> = Unavailable;
     type Geometry<'a> = WmoGeometry<'a>;
     type Draw = Option<wmo::DrawControls>;
-    type Model<'a> = wmo::ModelControls<'a>;
+    type ModelMetadata<'a> = wmo::ModelMetadata<'a>;
     type System<'a> = wmo::WorldSystem<'a>;
     type Surface<'a> = wmo::Material<'a>;
     type Feature<'a> = wmo::Node<'a>;
@@ -27,14 +26,12 @@ impl Profile for Wmo {
     type Instance<'a> = wmo::RegionControls<'a>;
     type Clip<'a> = NoControls;
     type Controller<'a> = NoControls;
-    fn validate_asset<'a>(
-        _metadata: &Self::AssetMetadata<'a>,
-        _models: &[crate::model::semantic::Model<'a, Self>],
-        resources: &crate::model::semantic::Resources<'a, Self>,
-    ) -> Result<(), Error> {
+    fn validate_resources(model: &Model<'_, Self>) -> Result<(), Error> {
+        let resources = model.resources();
+
         super::validation::resources(resources)
     }
-    fn validate_model(model: &crate::model::semantic::Model<'_, Self>) -> Result<(), Error> {
+    fn validate_model(model: &Model<'_, Self>) -> Result<(), Error> {
         super::validation::model(model)
     }
 }
@@ -57,9 +54,6 @@ impl Extends<Wmo> for Universal {
     fn property(value: <Wmo as Profile>::Property) -> Self::Property {
         match value {}
     }
-    fn asset_metadata<'a>(value: <Wmo as Profile>::AssetMetadata<'a>) -> Self::AssetMetadata<'a> {
-        value
-    }
     fn appearance<'a>(value: <Wmo as Profile>::Appearance<'a>) -> Self::Appearance<'a> {
         UniversalAppearance::Single(value)
     }
@@ -72,8 +66,8 @@ impl Extends<Wmo> for Universal {
     fn draw(value: <Wmo as Profile>::Draw) -> Self::Draw {
         value.map(DrawControls::Wmo)
     }
-    fn model<'a>(value: <Wmo as Profile>::Model<'a>) -> Self::Model<'a> {
-        Some(ModelControls::Wmo(value))
+    fn model_metadata<'a>(value: <Wmo as Profile>::ModelMetadata<'a>) -> Self::ModelMetadata<'a> {
+        Some(ModelMetadata::Wmo(value))
     }
     fn system<'a>(value: <Wmo as Profile>::System<'a>) -> Self::System<'a> {
         System::Wmo(value)

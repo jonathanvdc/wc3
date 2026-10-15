@@ -6,7 +6,7 @@ use std::borrow::Cow;
 
 /// Model identity and appearance-wide declarations.
 #[derive(Clone, Debug, Default)]
-pub struct ModelControls {
+pub struct ModelMetadata {
     /// Source appearance resource identity, independent of its filename.
     pub sno_id: i32,
     /// Authored object classification, including unresolved codes.
@@ -26,7 +26,7 @@ pub struct ModelControls {
     /// Unclassified appearance-wide floating scalar.
     pub unclassified_scalar: f32,
 }
-impl ValidateLinks for ModelControls {
+impl ValidateLinks for ModelMetadata {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
         if self
             .collision_center

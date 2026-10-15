@@ -5,7 +5,7 @@ use crate::model::semantic::{
 
 /// Appearance-wide authoring declarations.
 #[derive(Clone, Debug)]
-pub struct ModelControls {
+pub struct ModelMetadata {
     scope: Scope,
     chunks: Vec<(ChunkId, Chunk)>,
     /// External appearance identity.
@@ -33,7 +33,7 @@ pub struct ModelControls {
     /// Independently authored structure bounding-sphere radius.
     pub structure_sphere_radius: f32,
 }
-impl Default for ModelControls {
+impl Default for ModelMetadata {
     fn default() -> Self {
         Self {
             scope: Scope::default(),
@@ -53,7 +53,7 @@ impl Default for ModelControls {
         }
     }
 }
-impl ValidateLinks for ModelControls {
+impl ValidateLinks for ModelMetadata {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
         for (_, chunk) in &self.chunks {
             if chunk.bounds.validate().is_err()
@@ -280,7 +280,7 @@ pub struct Chunk {
     /// Authored transition distance per logical detail level, in increasing level order.
     pub lod_distances: Vec<f32>,
 }
-impl ModelControls {
+impl ModelMetadata {
     /// Adds a geometry chunk without changing existing scoped identities.
     pub fn add_chunk(&mut self, chunk: Chunk) -> ChunkId {
         let id = self.scope.allocate();
@@ -300,7 +300,7 @@ impl ModelControls {
     }
 }
 
-impl ModelControls {
+impl ModelMetadata {
     /// Edits an actual chunk without changing its scoped identity.
     pub fn chunk_mut(&mut self, id: ChunkId) -> Option<&mut Chunk> {
         self.chunks

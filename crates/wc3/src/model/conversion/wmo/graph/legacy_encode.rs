@@ -4,13 +4,11 @@ use super::{
     relationships, root_output::RootOutput, visibility,
 };
 use crate::model::common::FileKey;
-use crate::model::conversion::select_model;
 use crate::model::conversion::{Context, Error, ExportOptions, IssueKind, Plan};
 use crate::model::semantic::profiles::wmo::{
-    Group as WorldGroup, ModelControls, RegionControls, WorldSystem,
+    Group as WorldGroup, ModelMetadata, RegionControls, WorldSystem,
 };
 use crate::model::semantic::profiles::Wmo;
-use crate::model::semantic::Asset;
 use crate::model::semantic::{InstanceId, Model, Quaternion, Resource, Resources};
 use crate::model::wmo::legacy::{
     Batch14, Batch16, Bundle16, Group14, Group16, GroupInfo14, HeaderBatchRange, Root14, Root16,
@@ -21,14 +19,15 @@ use crate::model::wmo::Classic;
 use std::collections::BTreeMap;
 
 pub(super) fn alpha<'a>(
-    asset: &'a Asset<'_, Wmo>,
+    asset: &'a Model<'_, Wmo>,
     options: &ExportOptions,
 ) -> Result<Plan<Root14<'a>>, Error> {
-    let model = select_model(asset, options)?;
+    asset.validate()?;
+    let model = asset;
     let mut context = Context::export(options);
-    if let Some((model, resources)) = super::normalize::prepare(model, asset.resources())? {
+    if let Some(model) = super::normalize::prepare(model)? {
         context.issue("world.groups.geometry", IssueKind::Normalized, "compatible geometry placements joined with relocated historical vertex and lighting selections");
-        alpha_model(&model, &resources, options, context)
+        alpha_model(&model, model.resources(), options, context)
     } else {
         alpha_model(model, asset.resources(), options, context)
     }
@@ -41,7 +40,7 @@ fn alpha_model<'a>(
 ) -> Result<Plan<Root14<'a>>, Error> {
     let world = world(model)?;
     let mut root = Root14::new();
-    let controls = model.controls();
+    let controls = model.metadata();
     if model.bounds().is_some() || controls.options != Default::default() {
         context.unsupported(
             "world.root",
@@ -150,14 +149,15 @@ fn alpha_model<'a>(
     Ok(Plan::new(root, context.report))
 }
 pub(super) fn beta<'a>(
-    asset: &'a Asset<'_, Wmo>,
+    asset: &'a Model<'_, Wmo>,
     options: &ExportOptions,
 ) -> Result<Plan<Bundle16<'a>>, Error> {
-    let model = select_model(asset, options)?;
+    asset.validate()?;
+    let model = asset;
     let mut context = Context::export(options);
-    if let Some((model, resources)) = super::normalize::prepare(model, asset.resources())? {
+    if let Some(model) = super::normalize::prepare(model)? {
         context.issue("world.groups.geometry", IssueKind::Normalized, "compatible geometry placements joined with relocated historical vertex and lighting selections");
-        beta_model(&model, &resources, options, context)
+        beta_model(&model, model.resources(), options, context)
     } else {
         beta_model(model, asset.resources(), options, context)
     }
@@ -173,7 +173,7 @@ fn beta_model<'a>(
         context.unsupported("world.bounds", "destination world header requires a bounding declaration; absent source bounds cannot be represented")?;
     }
     let mut root = Root16::new();
-    let controls = model.controls();
+    let controls = model.metadata();
     root.header_mut().wmo_id = controls.id;
     root.header_mut().ambient_color = super::rgba(controls.ambient);
     root.header_mut().group_count = u32::try_from(world.groups.len()).map_err(error)?;
@@ -298,7 +298,7 @@ fn name(bytes: &mut Vec<u8>, name: &str) -> Result<u32, Error> {
     Ok(start)
 }
 fn skybox<'a>(
-    controls: &ModelControls<'_>,
+    controls: &ModelMetadata<'_>,
     root: &mut impl RootOutput<'a, Classic>,
     context: &mut Context,
 ) -> Result<(), Error> {

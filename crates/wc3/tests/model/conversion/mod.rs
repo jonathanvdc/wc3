@@ -10,7 +10,7 @@ mod projection;
 
 mod m3_graph;
 
-mod graph_assets;
+mod model_resources;
 
 mod narrowing;
 

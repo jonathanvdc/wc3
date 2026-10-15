@@ -130,7 +130,7 @@ fn region_lights_are_independent_editable_features() {
     let mut asset = conversion::wmo::import(&source, &ImportOptions::default())
         .unwrap()
         .value;
-    let model = &asset[0];
+    let model = &asset;
     let (id, mut feature) = model
         .features()
         .find(|(_, feature)| {
@@ -145,7 +145,7 @@ fn region_lights_are_independent_editable_features() {
         light.intensity = 7.;
     }
     asset
-        .edit_model(0, |builder| builder.set_feature(id, feature))
+        .edit(|builder| builder.set_feature(id, feature))
         .unwrap();
     let output = conversion::wmo::plan::<wmo::Classic>(&asset, &ExportOptions::default())
         .unwrap()
@@ -190,7 +190,7 @@ fn edited_geometry_rebuilds_native_companions() {
     let mut asset = conversion::wmo::import(&source, &ImportOptions::default())
         .unwrap()
         .value;
-    let model = &asset[0];
+    let model = &asset;
     let (id, mut mesh) = model
         .meshes()
         .next()
@@ -202,9 +202,7 @@ fn edited_geometry_rebuilds_native_companions() {
         .geometry
         .with_positions(Values::owned(positions))
         .unwrap();
-    asset
-        .edit_model(0, |builder| builder.set_mesh(id, mesh))
-        .unwrap();
+    asset.edit(|builder| builder.set_mesh(id, mesh)).unwrap();
     let output = conversion::wmo::plan::<wmo::Classic>(&asset, &ExportOptions::default())
         .unwrap()
         .execute()
@@ -261,7 +259,7 @@ fn draw_batches_override_collision_face_material_and_keep_classification() {
     let asset = conversion::wmo::import(&source, &ImportOptions::default())
         .unwrap()
         .value;
-    let model = asset.model();
+    let model = &asset;
     let instance = model.instances().next().unwrap().1;
     assert_eq!(instance.draws.len(), 1);
     assert!(model
@@ -338,7 +336,7 @@ fn liquid_grid_fields_are_editable_without_source_packets() {
     let mut asset = conversion::wmo::import(&source, &ImportOptions::default())
         .unwrap()
         .value;
-    let (id, mut instance) = asset[0]
+    let (id, mut instance) = asset
         .instances()
         .next()
         .map(|(id, value)| (id, value.clone()))
@@ -351,7 +349,7 @@ fn liquid_grid_fields_are_editable_without_source_packets() {
     *height = 6.;
     liquid.vertices = Values::owned(vertices);
     asset
-        .edit_model(0, |builder| builder.set_instance(id, instance))
+        .edit(|builder| builder.set_instance(id, instance))
         .unwrap();
     let output = conversion::wmo::plan::<wmo::Classic>(&asset, &ExportOptions::default())
         .unwrap()
@@ -392,7 +390,7 @@ fn unknown_native_blends_keep_their_family_namespace_during_edits() {
         let mut asset = conversion::wmo::import(&source, &ImportOptions::default())
             .unwrap()
             .value;
-        let (id, mut material) = asset[0]
+        let (id, mut material) = asset
             .materials()
             .next()
             .map(|(id, value)| (id, value.clone()))
@@ -400,7 +398,7 @@ fn unknown_native_blends_keep_their_family_namespace_during_edits() {
         assert_eq!(material.surface.blend, Blend::Unknown(code));
         material.name = "Renamed".into();
         asset
-            .edit_model(0, |builder| builder.set_material(id, material))
+            .edit(|builder| builder.set_material(id, material))
             .unwrap();
         let output = conversion::wmo::plan::<wmo::Classic>(&asset, &ExportOptions::default())
             .unwrap()
@@ -499,9 +497,9 @@ fn portals_are_scoped_authoring_relationships_and_rebuild_native_windows() {
     let asset = conversion::wmo::import(&source, &ImportOptions::default())
         .unwrap()
         .value;
-    let world = asset[0].systems().next().unwrap().1;
+    let world = asset.systems().next().unwrap().1;
     assert_eq!(world.portals.len(), 1);
-    let region = &asset[0].instances().next().unwrap().1.controls;
+    let region = &asset.instances().next().unwrap().1.controls;
     assert_eq!(region.portals[0].portal.index, 0);
     assert_eq!(region.portals[0].neighbor.index, 0);
     let output = conversion::wmo::plan::<wmo::Classic>(&asset, &ExportOptions::default())
@@ -563,10 +561,10 @@ fn strip_connectivity_and_tangent_pools_are_independent_editable_geometry() {
         .unwrap()
         .value
         .widen::<Universal>();
-    let id = asset[0].meshes().next().unwrap().0;
+    let id = asset.meshes().next().unwrap().0;
     let mut invalid = asset.clone();
     assert!(invalid
-        .edit_model(0, |builder| {
+        .edit(|builder| {
             let mut mesh = builder.model().mesh(id).unwrap().clone();
             let data = &mut mesh.geometry;
             data.connectivity = wc3::model::semantic::ConnectivitySets::new(
@@ -577,7 +575,7 @@ fn strip_connectivity_and_tangent_pools_are_independent_editable_geometry() {
         })
         .is_err());
     let mut asset = asset.try_narrow::<Wmo>().unwrap();
-    let (id, mut mesh) = asset[0]
+    let (id, mut mesh) = asset
         .meshes()
         .next()
         .map(|(id, mesh)| (id, mesh.clone()))
@@ -588,9 +586,7 @@ fn strip_connectivity_and_tangent_pools_are_independent_editable_geometry() {
         .geometry
         .with_tangent_vectors(Values::owned(vec![[1., 0., 0., -1.]]))
         .unwrap();
-    asset
-        .edit_model(0, |builder| builder.set_mesh(id, mesh))
-        .unwrap();
+    asset.edit(|builder| builder.set_mesh(id, mesh)).unwrap();
     let output = conversion::wmo::plan::<wmo::Classic>(&asset, &ExportOptions::default())
         .unwrap()
         .execute()
@@ -669,7 +665,7 @@ fn ambient_memberships_remap_scoped_volumes_across_native_table_order() {
     let asset = conversion::wmo::import(&source, &ImportOptions::default())
         .unwrap()
         .value;
-    let model = &asset[0];
+    let model = &asset;
     let region = &model.instances().next().unwrap().1.controls;
     assert_eq!(region.ambients.len(), 2);
     let world = model.system(region.ambients[0].system).unwrap();
@@ -723,7 +719,7 @@ fn compatible_same_detail_geometry_joins_without_changing_material_look_or_sourc
     let mut asset = conversion::wmo::import(&source, &ImportOptions::default())
         .unwrap()
         .value;
-    let model = &asset[0];
+    let model = &asset;
     let (original_id, original) = model
         .instances()
         .next()
@@ -753,7 +749,7 @@ fn compatible_same_detail_geometry_joins_without_changing_material_look_or_sourc
         .unwrap();
     let material = model.materials().next().unwrap().1.clone();
     asset
-        .edit_model(0, |builder| {
+        .edit(|builder| {
             let material = builder.add_material(material)?;
             let mesh = builder.add_mesh(second_mesh)?;
             second.mesh = mesh;
@@ -772,8 +768,8 @@ fn compatible_same_detail_geometry_joins_without_changing_material_look_or_sourc
         .issues
         .iter()
         .any(|issue| issue.kind == conversion::IssueKind::Normalized));
-    assert_eq!(asset[0].instances().count(), 2);
-    assert!(asset[0].instance(original_id).is_some());
+    assert_eq!(asset.instances().count(), 2);
+    assert!(asset.instance(original_id).is_some());
     let group = result.value.group(GroupKey { index: 0, lod: 0 }).unwrap();
     let positions = group
         .chunks()
@@ -809,7 +805,7 @@ fn implicitly_filled_region_keeps_its_liquid_category_without_a_surface_grid() {
     let asset = conversion::wmo::import(&source, &ImportOptions::default())
         .unwrap()
         .value;
-    let (_, instance) = asset[0].instances().next().unwrap();
+    let (_, instance) = asset.instances().next().unwrap();
     assert_eq!(instance.controls.implicit_liquid, Some(37));
     assert!(instance.controls.liquids.is_empty());
     let output = conversion::wmo::plan::<wmo::Classic>(&asset, &ExportOptions::default())
@@ -832,14 +828,14 @@ fn region_selection_groups_are_rejected_before_native_export() {
     let mut asset = conversion::wmo::import(&source, &ImportOptions::default())
         .unwrap()
         .value;
-    let instance = asset[0].instances().next().unwrap().0;
-    let result = asset.edit_model(0, |builder| {
+    let instance = asset.instances().next().unwrap().0;
+    let result = asset.edit(|builder| {
         let mut region = builder.model().instance(instance).unwrap().clone();
         region.selection_group = 7;
         builder.set_instance(instance, region)
     });
     assert!(result.is_err());
-    assert_eq!(asset[0].instance(instance).unwrap().selection_group, 0);
+    assert_eq!(asset.instance(instance).unwrap().selection_group, 0);
 }
 
 #[test]
@@ -849,7 +845,7 @@ fn logical_world_flag_words_keep_unknown_bits_through_native_output() {
     let asset = conversion::wmo::import(&source, &ImportOptions::default())
         .unwrap()
         .value;
-    assert_eq!(asset[0].controls().options.unclassified.bits(), 0x8000);
+    assert_eq!(asset.metadata().options.unclassified.bits(), 0x8000);
     let output = conversion::wmo::plan::<wmo::Legion>(&asset, &ExportOptions::default())
         .unwrap()
         .execute()
@@ -865,7 +861,7 @@ fn modern_world_output_requires_explicit_bounds_or_loss_policy() {
         .unwrap()
         .value;
     asset
-        .edit_model(0, |builder| {
+        .edit(|builder| {
             builder.set_bounds(None);
             Ok(())
         })
@@ -892,24 +888,24 @@ fn world_radius_is_derived_from_each_authored_box() {
     let mut asset = conversion::wmo::import(&source, &ImportOptions::default())
         .unwrap()
         .value;
-    let original = asset[0].bounds().unwrap();
+    let original = asset.bounds().unwrap();
     assert!(asset
-        .edit_model(0, |builder| {
+        .edit(|builder| {
             let mut bounds = original;
             bounds.sphere_radius += 1.;
             builder.set_bounds(Some(bounds));
             Ok(())
         })
         .is_err());
-    assert_eq!(asset[0].bounds(), Some(original));
-    let (id, mesh) = asset[0].meshes().next().unwrap();
+    assert_eq!(asset.bounds(), Some(original));
+    let (id, mesh) = asset.meshes().next().unwrap();
     let original = mesh.bounds;
     assert!(asset
-        .edit_model(0, |builder| {
+        .edit(|builder| {
             let mut mesh = builder.model().mesh(id).unwrap().clone();
             mesh.bounds.sphere_radius += 1.;
             builder.set_mesh(id, mesh)
         })
         .is_err());
-    assert_eq!(asset[0].mesh(id).unwrap().bounds, original);
+    assert_eq!(asset.mesh(id).unwrap().bounds, original);
 }

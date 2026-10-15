@@ -11,11 +11,10 @@ use wc3::model::semantic::profiles::mdlx::{
 use wc3::model::semantic::profiles::{Either, FeaturePayload, Mdlx, Profile, Universal, M2};
 use wc3::model::semantic::{
     Animated, Channel, Clock, Curve, FeatureId, FeatureKind, Link, Material, Model, Node, OwnerId,
-    Property, PropertyDescriptor, PropertyPayload, PropertyTarget, SingleModel, Time, Track,
-    ValidateLinks,
+    Property, PropertyDescriptor, PropertyPayload, PropertyTarget, Time, Track, ValidateLinks,
 };
 
-fn light_model<'a>(times: &'a [Time], values: &'a [f32]) -> SingleModel<'a, Mdlx> {
+fn light_model<'a>(times: &'a [Time], values: &'a [f32]) -> Model<'a, Mdlx> {
     let mut builder = Model::<Mdlx>::builder("");
     let node = builder.add_node(Node::named("light")).unwrap();
     let feature = builder.reserve_feature(node);
@@ -180,12 +179,10 @@ impl FeaturePayload for ApplicationFeature {
 }
 impl Profile for Application {
     type Property = ApplicationProperty;
-    type Models = <Universal as Profile>::Models;
-    type AssetMetadata<'a> = <Universal as Profile>::AssetMetadata<'a>;
     type Appearance<'a> = <Universal as Profile>::Appearance<'a>;
     type Binding<'a> = <Universal as Profile>::Binding<'a>;
     type Geometry<'a> = <Universal as Profile>::Geometry<'a>;
-    type Model<'a> = <Universal as Profile>::Model<'a>;
+    type ModelMetadata<'a> = <Universal as Profile>::ModelMetadata<'a>;
     type System<'a> = <Universal as Profile>::System<'a>;
     type Surface<'a> = <Universal as Profile>::Surface<'a>;
     type Feature<'a> = ApplicationFeature;

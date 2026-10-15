@@ -70,7 +70,7 @@ pub struct NodeControls {
 }
 /// Genuinely model-wide Warcraft III authoring controls.
 #[derive(Clone, Debug, Default, PartialEq)]
-pub struct ModelControls<'a> {
+pub struct ModelMetadata<'a> {
     /// External animation-file resource.
     pub animation_file: Cow<'a, str>,
     /// Sequence transition blend duration in seconds.
@@ -78,7 +78,7 @@ pub struct ModelControls<'a> {
     /// Named external face-animation resources.
     pub face_effects: Vec<(Cow<'a, str>, Cow<'a, str>)>,
 }
-impl ValidateLinks for ModelControls<'_> {
+impl ValidateLinks for ModelMetadata<'_> {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
         if !self.blend_time.is_finite() || self.blend_time < 0. {
             visitor(Link::InvalidValue);

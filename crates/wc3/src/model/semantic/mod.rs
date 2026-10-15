@@ -1,9 +1,8 @@
 //! Editable model meaning, independent of native encoding and record layout.
 //!
-//! [`Asset`](crate::model::semantic::Asset) supplies one authoritative [`Resources`](crate::model::semantic::Resources) arena to its models.
-//! `Resources` owns its texture map directly; model views retain the complete dependency context.
-//! A [`Model`](crate::model::semantic::Model) connects hierarchy nodes, shared geometry, material definitions,
-//! resource references, animation, and scene systems through graph-scoped IDs.
+//! A [`Model`](crate::model::semantic::Model) owns its graph, profile-specific metadata, and
+//! [`Resources`](crate::model::semantic::Resources) arena. It connects hierarchy nodes, shared geometry,
+//! material definitions, resource references, animation, and scene systems through scoped IDs.
 //! A [`MeshInstance`](crate::model::semantic::MeshInstance) places a mesh at a node; its [`Draw`](crate::model::semantic::Draw) values select the
 //! geometry and rendering controls for individual passes. A [`Look`](crate::model::semantic::Look) supplies a complete
 //! material assignment for those draws. Shared [`TextureTransform`](crate::model::semantic::TextureTransform) objects animate sampling
@@ -12,7 +11,7 @@
 //! bodies or world portals.
 //!
 //! The [`profiles::Profile`](crate::model::semantic::profiles::Profile) parameter selects the payload types allowed on these
-//! objects. Owner-local `controls` belong to their node, texture, mesh, draw,
+//! objects. `Profile::ModelMetadata` supplies model-wide declarations. Owner-local `controls` belong to their node, texture, mesh, draw,
 //! clip, or controller. Complete material surfaces and attached features use the
 //! profile's surface and feature vocabulary. Built-in profiles describe game
 //! semantics; native codec dialects separately select file layouts and revisions.
@@ -34,8 +33,8 @@
 //! [`Values`](crate::model::semantic::Values) can borrow aligned arrays, packed native storage, or indexed views.
 //! Building a graph therefore need not materialize its geometry and animation
 //! arrays. [`ModelBuilder::finish`](crate::model::semantic::ModelBuilder::finish) checks relationships and values before
-//! publication. It returns a [`SingleModel`](crate::model::semantic::SingleModel) containing the graph and its resources.
-//! [`Asset::edit_model`](crate::model::semantic::Asset::edit_model) checks dependency changes against the complete collection.
+//! publication. It returns a [`Model`](crate::model::semantic::Model) containing the graph, metadata, and resources.
+//! [`Model::edit`](crate::model::semantic::Model::edit) checks dependency changes against the complete model.
 //!
 //! [`Model::widen`](crate::model::semantic::Model::widen) embeds payloads into a containing profile without changing
 //! their meaning, IDs, or shared array storage. [`Model::union`](crate::model::semantic::Model::union) combines two
@@ -55,8 +54,6 @@ mod animation;
 pub use animation::*;
 mod playback_controls;
 pub use playback_controls::*;
-mod asset;
-pub use asset::*;
 mod resources;
 pub use resources::*;
 mod appearance;

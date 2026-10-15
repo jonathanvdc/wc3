@@ -18,9 +18,6 @@ impl Default for Scope {
     }
 }
 impl Scope {
-    pub(crate) fn same_identity(&self, other: &Self) -> bool {
-        self.identity == other.identity
-    }
     pub(crate) fn allocate<K>(&self) -> Id<K> {
         Id {
             scope: self.identity,
@@ -74,9 +71,9 @@ impl<K> Debug for Id<K> {
             .finish()
     }
 }
-/// Model identity marker, stable when a graph moves between collections.
+/// Model identity marker, stable across edits and profile mappings.
 pub enum ModelObject {}
-/// Model handle resolved by its owning collection.
+/// Model handle identifying the owner of model-level properties.
 pub type ModelId = Id<ModelObject>;
 /// Node identity marker.
 pub enum NodeObject {}

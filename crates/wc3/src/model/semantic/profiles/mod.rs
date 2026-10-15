@@ -1,9 +1,9 @@
 //! Compile-time vocabulary of logical payloads; unrelated to native file revisions.
 use crate::model::semantic::OwnerId;
 use crate::model::semantic::{
-    AppearanceSchema, BindingSchema, Bounds, Cardinality, Error, FeatureKind, GeometrySchema, Link,
-    MaterialSurface, Model, ModelControls, Multiple, NodeFeature, PbrSurface, Resources, SkinId,
-    SystemPayload, ValidateLinks,
+    AppearanceSchema, BindingSchema, Bounds, Error, FeatureKind, GeometrySchema, Link,
+    MaterialSurface, Model, ModelMetadata, NodeFeature, PbrSurface, SkinId, SystemPayload,
+    ValidateLinks,
 };
 use crate::model::semantic::{
     ClipControls, DrawControls, GeometryData, InstanceControls, Material, MeshControls,
@@ -85,18 +85,14 @@ impl<T: Clone + Debug + Send + Sync + ValidateLinks> ControlsPayload for T {}
 pub trait Profile: Clone + Debug + 'static {
     /// Structural animation-property vocabulary accepted by this profile.
     type Property: PropertyPayload;
-    /// Model cardinality represented by a native asset in this vocabulary.
-    type Models: Cardinality;
-    /// Metadata shared by the models in an asset.
-    type AssetMetadata<'a>: ControlsPayload + Default;
     /// Complete material-assignment and appearance vocabulary.
     type Appearance<'a>: AppearanceSchema<'a>;
     /// Joint binding interpretations supported by this vocabulary.
     type Binding<'a>: BindingSchema<'a>;
     /// Complete geometry vocabulary, including supported streams and connectivity.
     type Geometry<'a>: GeometrySchema<'a>;
-    /// Genuinely model-wide authoring controls.
-    type Model<'a>: ControlsPayload + Default;
+    /// Model-wide authoring metadata.
+    type ModelMetadata<'a>: ControlsPayload + Default;
     /// Independently authored scene systems.
     type System<'a>: SystemPayload;
     /// Complete surface payload, with no unsupported family variants.
@@ -152,13 +148,9 @@ pub trait Profile: Clone + Debug + 'static {
         let _ = controls;
         None
     }
-    /// Checks asset-wide authoring domains after model and standard references are valid.
-    fn validate_asset<'a>(
-        metadata: &Self::AssetMetadata<'a>,
-        models: &[Model<'a, Self>],
-        library: &Resources<'a, Self>,
-    ) -> Result<(), Error> {
-        let _ = (metadata, models, library);
+    /// Checks profile-specific resource constraints on the complete model.
+    fn validate_resources(model: &Model<'_, Self>) -> Result<(), Error> {
+        let _ = model;
         Ok(())
     }
     /// Checks relationships within additional authoring domains owned by this profile.
@@ -221,13 +213,11 @@ impl<A: FeaturePayload, B: FeaturePayload> FeaturePayload for Either<A, B> {
 pub struct Union<A, B>(PhantomData<(A, B)>);
 impl<A: Profile, B: Profile> Profile for Union<A, B> {
     type Property = Either<A::Property, B::Property>;
-    type Models = Multiple;
-    type AssetMetadata<'a> = Either<A::AssetMetadata<'a>, B::AssetMetadata<'a>>;
     type Appearance<'a> = Either<A::Appearance<'a>, B::Appearance<'a>>;
     type Binding<'a> = Either<A::Binding<'a>, B::Binding<'a>>;
     type Geometry<'a> = Either<A::Geometry<'a>, B::Geometry<'a>>;
     type Draw = Either<A::Draw, B::Draw>;
-    type Model<'a> = Either<A::Model<'a>, B::Model<'a>>;
+    type ModelMetadata<'a> = Either<A::ModelMetadata<'a>, B::ModelMetadata<'a>>;
     type System<'a> = Either<A::System<'a>, B::System<'a>>;
     type Surface<'a> = Either<A::Surface<'a>, B::Surface<'a>>;
     type Feature<'a> = Either<A::Feature<'a>, B::Feature<'a>>;
@@ -249,13 +239,11 @@ impl<A: Profile, B: Profile> Profile for Union<A, B> {
 pub struct Universal;
 impl Profile for Universal {
     type Property = UniversalProperty;
-    type Models = Multiple;
-    type AssetMetadata<'a> = NoControls;
     type Appearance<'a> = UniversalAppearance<'a>;
     type Binding<'a> = UniversalBinding<'a>;
     type Geometry<'a> = GeometryData<'a>;
     type Draw = Option<DrawControls>;
-    type Model<'a> = Option<ModelControls<'a>>;
+    type ModelMetadata<'a> = Option<ModelMetadata<'a>>;
     type System<'a> = System<'a>;
     type Surface<'a> = MaterialSurface<'a>;
     type Feature<'a> = NodeFeature<'a>;
@@ -279,16 +267,14 @@ impl Profile for Universal {
 pub trait Extends<Source: Profile>: Profile {
     /// Embeds structural property selectors without changing their identity.
     fn property(value: Source::Property) -> Self::Property;
-    /// Embeds asset-wide metadata without changing its meaning.
-    fn asset_metadata<'a>(value: Source::AssetMetadata<'a>) -> Self::AssetMetadata<'a>;
     /// Embeds the complete appearance vocabulary while preserving identities.
     fn appearance<'a>(value: Source::Appearance<'a>) -> Self::Appearance<'a>;
     /// Embeds the authored joint binding without changing its interpretation.
     fn binding<'a>(value: Source::Binding<'a>) -> Self::Binding<'a>;
     /// Embeds complete geometry without changing its logical values.
     fn geometry<'a>(value: Source::Geometry<'a>) -> Self::Geometry<'a>;
-    /// Embeds model-wide controls without changing their meaning.
-    fn model<'a>(value: Source::Model<'a>) -> Self::Model<'a>;
+    /// Embeds model-wide metadata without changing their meaning.
+    fn model_metadata<'a>(value: Source::ModelMetadata<'a>) -> Self::ModelMetadata<'a>;
     /// Embeds an independent scene system without changing its meaning.
     fn system<'a>(value: Source::System<'a>) -> Self::System<'a>;
     /// Embeds a surface without changing its meaning.
@@ -314,9 +300,6 @@ impl<P: Profile> Extends<P> for P {
     fn property(value: P::Property) -> Self::Property {
         value
     }
-    fn asset_metadata<'a>(value: <P as Profile>::AssetMetadata<'a>) -> Self::AssetMetadata<'a> {
-        value
-    }
     fn appearance<'a>(value: <P as Profile>::Appearance<'a>) -> Self::Appearance<'a> {
         value
     }
@@ -329,7 +312,7 @@ impl<P: Profile> Extends<P> for P {
     fn draw(value: <P as Profile>::Draw) -> Self::Draw {
         value
     }
-    fn model<'a>(value: <P as Profile>::Model<'a>) -> Self::Model<'a> {
+    fn model_metadata<'a>(value: <P as Profile>::ModelMetadata<'a>) -> Self::ModelMetadata<'a> {
         value
     }
     fn system<'a>(value: <P as Profile>::System<'a>) -> Self::System<'a> {
@@ -434,9 +417,6 @@ impl<A: Profile, B: Profile> Extends<A> for Union<A, B> {
     fn property(value: A::Property) -> Self::Property {
         Either::Left(value)
     }
-    fn asset_metadata<'a>(value: <A as Profile>::AssetMetadata<'a>) -> Self::AssetMetadata<'a> {
-        Either::Left(value)
-    }
     fn appearance<'a>(value: <A as Profile>::Appearance<'a>) -> Self::Appearance<'a> {
         Either::Left(value)
     }
@@ -449,7 +429,7 @@ impl<A: Profile, B: Profile> Extends<A> for Union<A, B> {
     fn draw(value: <A as Profile>::Draw) -> Self::Draw {
         Either::Left(value)
     }
-    fn model<'a>(value: <A as Profile>::Model<'a>) -> Self::Model<'a> {
+    fn model_metadata<'a>(value: <A as Profile>::ModelMetadata<'a>) -> Self::ModelMetadata<'a> {
         Either::Left(value)
     }
     fn system<'a>(value: <A as Profile>::System<'a>) -> Self::System<'a> {
@@ -490,14 +470,6 @@ where
             Either::Right(v) => <Self as Extends<B>>::property(v),
         }
     }
-    fn asset_metadata<'a>(
-        value: <Union<A, B> as Profile>::AssetMetadata<'a>,
-    ) -> Self::AssetMetadata<'a> {
-        match value {
-            Either::Left(value) => <Self as Extends<A>>::asset_metadata(value),
-            Either::Right(value) => <Self as Extends<B>>::asset_metadata(value),
-        }
-    }
     fn appearance<'a>(value: <Union<A, B> as Profile>::Appearance<'a>) -> Self::Appearance<'a> {
         match value {
             Either::Left(value) => <Self as Extends<A>>::appearance(value),
@@ -524,10 +496,12 @@ where
         }
     }
 
-    fn model<'a>(value: <Union<A, B> as Profile>::Model<'a>) -> Self::Model<'a> {
+    fn model_metadata<'a>(
+        value: <Union<A, B> as Profile>::ModelMetadata<'a>,
+    ) -> Self::ModelMetadata<'a> {
         match value {
-            Either::Left(value) => <Self as Extends<A>>::model(value),
-            Either::Right(value) => <Self as Extends<B>>::model(value),
+            Either::Left(value) => <Self as Extends<A>>::model_metadata(value),
+            Either::Right(value) => <Self as Extends<B>>::model_metadata(value),
         }
     }
     fn system<'a>(value: <Union<A, B> as Profile>::System<'a>) -> Self::System<'a> {

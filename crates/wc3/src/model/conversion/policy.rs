@@ -40,11 +40,9 @@ pub struct ImportOptions {
     /// Numeric approximation policy.
     pub approximation: ApproximationPolicy,
 }
-/// Explicit logical model, authored look, and native output selection.
+/// Authored look selection and native output policies.
 #[derive(Clone, Debug, Default)]
 pub struct ExportOptions {
-    /// Model index in the imported logical asset.
-    pub model: u32,
     /// Authored material look; absent selects the model default.
     pub look: Option<LookId>,
     /// Unsupported semantic feature policy.

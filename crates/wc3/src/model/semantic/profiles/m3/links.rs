@@ -4,7 +4,7 @@ use super::{
     BodyParameters, BoneControls, Camera, CameraBokeh, CameraClipping, CameraFalloff, Cloth,
     ClothCollider, ClothProxy, Composite, CompositeSection, Creep, DataDriven, DataGroup,
     DataProperties, DataProperty, Displacement, DynamicState, ExternalModel, Feature, Force, Hair,
-    HitTestShape, IkCcd, IkJoint, IkTwoJoint, Joint, LensFlare, Light, Material, ModelControls,
+    HitTestShape, IkCcd, IkJoint, IkTwoJoint, Joint, LensFlare, Light, Material, ModelMetadata,
     NodeRole, OneBoneSolver, Parameters, Particle, Projector, Property, PropertyControl,
     Reflection, Ribbon, ShadowBox, Shape, ShapeGeometry, SplatTerrainBake, SplinePoint, Standard,
     SubFlare, Terrain, TextureLayer, TurretBehavior, VariationControl, ViewVolume, Volume,
@@ -311,7 +311,7 @@ impl ValidateLinks for ViewVolume {
         self.size.visit_links(visitor);
     }
 }
-impl ValidateLinks for ModelControls {
+impl ValidateLinks for ModelMetadata {
     fn visit_links(&self, _visitor: &mut dyn FnMut(Link)) {}
 }
 impl ValidateLinks for BoneControls {

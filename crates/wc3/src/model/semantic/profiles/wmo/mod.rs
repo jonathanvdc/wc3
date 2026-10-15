@@ -163,7 +163,7 @@ pub struct WorldSystem<'a> {
 
 /// Model-wide world rendering and environment controls.
 #[derive(Clone, Debug, Default, PartialEq)]
-pub struct ModelControls<'a> {
+pub struct ModelMetadata<'a> {
     /// Optional background sky model resource.
     pub skybox: Option<Resource<'a>>,
     /// External world-model identifier.
@@ -173,7 +173,7 @@ pub struct ModelControls<'a> {
     /// Root rendering and illumination behavior.
     pub options: WorldOptions,
 }
-impl crate::model::semantic::ValidateLinks for ModelControls<'_> {
+impl crate::model::semantic::ValidateLinks for ModelMetadata<'_> {
     fn visit_links(&self, _visitor: &mut dyn FnMut(crate::model::semantic::Link)) {}
 }
 

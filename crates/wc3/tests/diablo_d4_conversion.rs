@@ -126,13 +126,13 @@ fn declared_geometry_material_slots_and_independent_sphere_round_trip() {
         convert::import_with_layouts(&source, &layouts, &ImportOptions::default()).unwrap();
     assert!(imported.report.issues.is_empty());
     let options = ExportOptions::default();
-    let model = imported.value.model();
+    let model = &imported.value;
     let (_, mesh) = model.meshes().next().unwrap();
     assert_eq!(mesh.positions().get(1), Some([1., 0., 0.]));
     assert_eq!(mesh.texture_coordinates()[0].get(2), Some([0., 1.]));
     assert!(matches!(mesh.geometry.influences(), InfluenceRows::None));
-    assert_eq!(model.controls().structure_sphere_center, [0.25, 0.25, 0.]);
-    assert_eq!(model.controls().structure_sphere_radius, 2.);
+    assert_eq!(model.metadata().structure_sphere_center, [0.25, 0.25, 0.]);
+    assert_eq!(model.metadata().structure_sphere_radius, 2.);
     let (_, slot) = model.appearance().slots().next().unwrap();
     assert_eq!(
         (slot.hash, slot.persona_material, slot.persona),
@@ -151,7 +151,7 @@ fn declared_geometry_material_slots_and_independent_sphere_round_trip() {
     let decoded = d4::Appearance::read_with_payload(&encoded.root, &encoded.payload).unwrap();
     let second =
         convert::import_with_layouts(&decoded, &layouts, &ImportOptions::default()).unwrap();
-    let model = second.value.model();
+    let model = &second.value;
     assert_eq!(
         model.meshes().next().unwrap().1.positions().get(1),
         Some([1., 0., 0.])
@@ -266,7 +266,7 @@ fn segment_palettes_map_actual_bones_and_rebuild_inverse_skinning_bindings() {
     let imported =
         convert::import_with_layouts(&source, &layouts, &ImportOptions::default()).unwrap();
     let options = ExportOptions::default();
-    let model = imported.value.model();
+    let model = &imported.value;
     let row = model
         .meshes()
         .next()

@@ -145,7 +145,7 @@ fn alpha_direct_geometry_and_lighting_controls_survive_edits() {
     let mut asset = conversion::wmo::import(&source, &ImportOptions::default())
         .unwrap()
         .value;
-    let model = &asset[0];
+    let model = &asset;
     let (id, mut mesh) = model
         .meshes()
         .next()
@@ -158,9 +158,7 @@ fn alpha_direct_geometry_and_lighting_controls_survive_edits() {
         .geometry
         .with_positions(Values::owned(positions))
         .unwrap();
-    asset
-        .edit_model(0, |builder| builder.set_mesh(id, mesh))
-        .unwrap();
+    asset.edit(|builder| builder.set_mesh(id, mesh)).unwrap();
     let output = conversion::wmo::plan::<conversion::wmo::V14>(&asset, &ExportOptions::default())
         .unwrap()
         .execute()
@@ -237,7 +235,7 @@ fn historical_multiple_placements_relocate_lighting_windows() {
         .unwrap()
         .value;
     asset
-        .edit_model(0, |builder| {
+        .edit(|builder| {
             let (system, world) = builder.model().systems().next().unwrap();
             let mut world = world.clone();
             let first = world.groups[0].instances[0];
@@ -270,7 +268,7 @@ fn historical_multiple_placements_relocate_lighting_windows() {
         .execute()
         .unwrap()
         .value;
-    assert_eq!(asset[0].instances().count(), 2);
+    assert_eq!(asset.instances().count(), 2);
     assert_eq!(
         encoded.group(0).unwrap().header.interior_batches[0].vertex_count,
         6

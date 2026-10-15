@@ -1,16 +1,14 @@
 //! Structural and relationship checks before publishing a graph.
 use crate::model::semantic::profiles::{FeaturePayload, Profile};
 use crate::model::semantic::{
-    AppearanceSchema, BindingSchema as _, Clock, Error, GeometrySchema, Link, Model, ModelId,
+    AppearanceSchema, BindingSchema as _, Clock, Error, GeometrySchema, Link, Model,
     PropertyIdentity, PropertyTarget, Resources, SystemPayload, ValidateLinks, VertexInfluences,
 };
 use std::collections::{BTreeSet, HashMap, HashSet};
 impl<P: Profile> Model<'_, P> {
-    pub(crate) fn validate(
-        &self,
-        resources: &Resources<'_, P>,
-        models: &BTreeSet<ModelId>,
-    ) -> Result<(), Error> {
+    /// Checks values, graph relationships, metadata, and owned resources.
+    pub fn validate(&self) -> Result<(), Error> {
+        let resources = &self.resources;
         self.units.validate()?;
         self.appearance.validate()?;
         if let Some(bounds) = self.bounds {
@@ -51,16 +49,13 @@ impl<P: Profile> Model<'_, P> {
         for skin in self.skins.values() {
             skin.binding.validate(skin.joints.len())?;
         }
-        self.validate_relationships(resources, models)?;
-        P::validate_model(self)
+        self.validate_relationships(resources)?;
+        P::validate_model(self)?;
+        P::validate_resources(self)
     }
 }
 impl<P: Profile> Model<'_, P> {
-    fn validate_relationships(
-        &self,
-        resources: &Resources<'_, P>,
-        models: &BTreeSet<ModelId>,
-    ) -> Result<(), Error> {
+    fn validate_relationships(&self, resources: &Resources<'_, P>) -> Result<(), Error> {
         let mut missing = false;
         let mut property_types = HashMap::new();
         let mut declared_properties = HashSet::new();
@@ -68,7 +63,7 @@ impl<P: Profile> Model<'_, P> {
         let mut conflicting_types = false;
         let mut visit = |link| {
             missing |= match link {
-                Link::Model(id) => !models.contains(&id),
+                Link::Model(id) => id != self.id,
                 Link::AppearanceSlot(id) => !self.appearance.contains_slot(id),
                 Link::SystemMember { system, member } => !self
                     .systems
@@ -218,7 +213,7 @@ impl<P: Profile> Model<'_, P> {
             }
         }
         self.appearance.visit_links(&mut visit);
-        self.controls.visit_links(&mut visit);
+        self.metadata.visit_links(&mut visit);
         for system in self.systems.values() {
             system.visit_links(&mut visit);
         }

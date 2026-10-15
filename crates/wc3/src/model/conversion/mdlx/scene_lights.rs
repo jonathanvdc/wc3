@@ -183,7 +183,7 @@ pub(super) fn read<'a, D: ModelDialect>(
     }
     if let Ok(faces) = source.try_face_fx() {
         profile
-            .controls
+            .metadata
             .face_effects
             .extend(faces.map(|face| (face.name.text(), face.path.text())));
     }

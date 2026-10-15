@@ -92,7 +92,7 @@ pub struct BoneOverride<'a> {
 }
 /// Model-wide behavior and external game-category bindings.
 #[derive(Clone, Debug, Default)]
-pub struct ModelControls {
+pub struct ModelMetadata {
     /// Model behavior flags.
     pub flags: ModelFlags,
     /// Playback bindings indexed by external animation-data category.
@@ -137,7 +137,7 @@ impl ValidateLinks for BoneOverride<'_> {
         self.bones.visit_links(v)
     }
 }
-impl ValidateLinks for ModelControls {
+impl ValidateLinks for ModelMetadata {
     fn visit_links(&self, v: &mut dyn FnMut(Link)) {
         self.animation_lookup.visit_links(v);
         self.key_bone_lookup.visit_links(v)

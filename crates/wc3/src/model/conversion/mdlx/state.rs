@@ -1,11 +1,11 @@
 //! Temporary decoded controls attached to their logical owners before publication.
 use crate::model::semantic::profiles::mdlx::{
-    Bone, Geometry, ModelControls, Sequence, TextureControls,
+    Bone, Geometry, ModelMetadata, Sequence, TextureControls,
 };
 use crate::model::semantic::{ClipId, MeshId, NodeId, TextureId};
 #[derive(Default)]
 pub(super) struct ImportState<'a> {
-    pub controls: ModelControls<'a>,
+    pub metadata: ModelMetadata<'a>,
     pub textures: Vec<(TextureId, TextureControls<'a>)>,
     pub sequences: Vec<(ClipId, Sequence)>,
     pub geometry: Vec<(MeshId, Geometry)>,

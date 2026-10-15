@@ -4,7 +4,6 @@
 //! declarations for geometry import and a `VertexLayout` for output. Without
 //! declarations, strict import rejects populated geometry while explicit loss
 //! policy can retain the supported skeleton and material-reference graph.
-use crate::model::semantic::Asset;
 mod vertices;
 pub use vertices::{BufferLayout, ElementEncoding, ElementSemantic, VertexElement, VertexLayout};
 mod export;
@@ -13,7 +12,7 @@ mod materials;
 use crate::model::conversion::{Context, Conversion, Error, ExportOptions, ImportOptions, Plan};
 use crate::model::diablo::d4::{self, records as native};
 use crate::model::semantic::profiles::diablo::d4::{
-    Appearance as LogicalAppearance, BoneControls, Chunk, Geometry, MeshControls, ModelControls,
+    Appearance as LogicalAppearance, BoneControls, Chunk, Geometry, MeshControls, ModelMetadata,
     NameInfo, NodeRole, Slot, D4,
 };
 use crate::model::semantic::{
@@ -25,7 +24,7 @@ use std::{array::from_fn, borrow::Cow, collections::BTreeMap};
 pub fn import<'a>(
     source: &'a d4::Appearance<'_>,
     options: &ImportOptions,
-) -> Result<Conversion<Asset<'a, D4>>, Error> {
+) -> Result<Conversion<Model<'a, D4>>, Error> {
     import_with_layouts(source, &[], options)
 }
 /// Imports appearance geometry only through caller-established native vertex declarations.
@@ -33,13 +32,13 @@ pub fn import_with_layouts<'a>(
     source: &'a d4::Appearance<'_>,
     layouts: &[BufferLayout],
     options: &ImportOptions,
-) -> Result<Conversion<Asset<'a, D4>>, Error> {
+) -> Result<Conversion<Model<'a, D4>>, Error> {
     let root = &source.root;
     let mut context = Context::import(options);
     unsupported(root, &mut context)?;
     let mut builder = Model::<D4>::builder("");
     builder.set_bounds(Some(bounds(&root.structure.aabb_bounds)));
-    let mut controls = ModelControls::default();
+    let mut controls = ModelMetadata::default();
     controls.sno_id = root.sno_id;
     controls.record_flags = root.record_flags;
     controls.flags = root.flags;
@@ -286,7 +285,7 @@ pub fn import_with_layouts<'a>(
         appearance.add_look(look.look_name, bindings)?;
     }
     builder.set_appearance(appearance);
-    builder.set_controls(controls);
+    builder.set_metadata(controls);
     Ok(Conversion {
         value: builder.finish()?,
         report: context.report,
@@ -294,7 +293,7 @@ pub fn import_with_layouts<'a>(
 }
 /// Plans native appearance output using an explicit complete vertex interpretation.
 pub fn plan(
-    asset: &Asset<'_, D4>,
+    asset: &Model<'_, D4>,
     layout: &VertexLayout,
     options: &ExportOptions,
 ) -> Result<Plan<d4::Appearance<'static>>, Error> {

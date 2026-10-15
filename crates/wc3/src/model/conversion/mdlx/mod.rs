@@ -2,7 +2,7 @@
 use super::{Conversion, Error, ExportOptions, ImportOptions, Plan};
 use crate::model::mdlx::{Chunk, Model as NativeModel, ModelDialect};
 use crate::model::semantic::profiles::Mdlx;
-use crate::model::semantic::Asset;
+use crate::model::semantic::Model;
 mod animation;
 mod curves;
 mod encode_animation;
@@ -23,7 +23,7 @@ mod text;
 pub fn import<'a, D: ModelDialect>(
     source: &'a NativeModel<'_, D>,
     options: &ImportOptions,
-) -> Result<Conversion<Asset<'a, Mdlx>>, Error>
+) -> Result<Conversion<Model<'a, Mdlx>>, Error>
 where
     D::Extension: Chunk,
 {
@@ -40,7 +40,7 @@ where
 /// conversion::mdlx::plan::<V800>(&universal, &ExportOptions::default());
 /// ```
 pub fn plan<'a, 'data, T: ModelDialect>(
-    asset: &'a Asset<'data, Mdlx>,
+    asset: &'a Model<'data, Mdlx>,
     options: &ExportOptions,
 ) -> Result<Plan<NativeModel<'a, T>>, Error> {
     export::write(asset, options)

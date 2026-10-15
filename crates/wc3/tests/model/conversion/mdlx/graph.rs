@@ -45,7 +45,7 @@ fn additive_camera_keys_remain_exact_and_borrowed() {
     );
     source.set_cameras([camera]);
     let imported = conversion::mdlx::import(&source, &ImportOptions::default()).unwrap();
-    let graph = &imported.value[0];
+    let graph = &imported.value;
     let (_, feature) = graph.features().next().unwrap();
     let profile::Node::Camera(camera) = &feature.payload else {
         panic!("camera feature missing")
@@ -115,7 +115,7 @@ fn native_integer_effect_curves_keep_full_width() {
     source.set_ribbon_emitters([ribbon]);
     source.set_pivot_points(&[[0.; 3]]);
     let imported = conversion::mdlx::import(&source, &ImportOptions::default()).unwrap();
-    let graph = &imported.value[0];
+    let graph = &imported.value;
     let curve = graph
         .timeline_channels()
         .iter()
@@ -158,7 +158,7 @@ fn unknown_native_blend_remains_its_own_operation() {
     material.layers.push(layer);
     source.set_materials([material]);
     let imported = conversion::mdlx::import(&source, &ImportOptions::default()).unwrap();
-    let surface = &imported.value[0].materials().next().unwrap().1.surface;
+    let surface = &imported.value.materials().next().unwrap().1.surface;
     let material = surface;
     assert_eq!(material.layers[0].blend, profile::Blend::Unknown(8));
     let output = conversion::mdlx::plan::<mdlx::V800>(&imported.value, &ExportOptions::default())
@@ -202,7 +202,7 @@ fn borrowed_mesh_authoring_edits_rebuild_native_geometry() {
         mdlx::Model::<mdlx::V800>::decode_mdl(include_str!("../../../fixtures/mdl/quad_model.mdl"))
             .unwrap();
     let mut imported = conversion::mdlx::import(&source, &ImportOptions::default()).unwrap();
-    let graph = &imported.value[0];
+    let graph = &imported.value;
     let (id, mesh) = graph.meshes().next().unwrap();
     assert!(mesh.positions().is_borrowed());
     let mut edited = mesh.clone();
@@ -214,7 +214,7 @@ fn borrowed_mesh_authoring_edits_rebuild_native_geometry() {
         .unwrap();
     imported
         .value
-        .edit_model(0, |builder| builder.set_mesh(id, edited))
+        .edit(|builder| builder.set_mesh(id, edited))
         .unwrap();
     let output = conversion::mdlx::plan::<mdlx::V800>(&imported.value, &ExportOptions::default())
         .unwrap()
@@ -254,7 +254,7 @@ fn invalid_unicode_names_need_an_explicit_loss_policy() {
     )
     .unwrap();
     assert!(!output.report.issues.is_empty());
-    assert_eq!(output.value[0].nodes().next().unwrap().1.name, "�");
+    assert_eq!(output.value.nodes().next().unwrap().1.name, "�");
 }
 
 #[test]
@@ -320,7 +320,7 @@ fn shared_uv_transform_links_are_scoped_and_rebuild_animation() {
     );
     source.set_texture_animations([transform]);
     let imported = conversion::mdlx::import(&source, &ImportOptions::default()).unwrap();
-    let graph = &imported.value[0];
+    let graph = &imported.value;
     let (id, transform) = graph.texture_transforms().next().unwrap();
     assert_eq!(
         transform.translation.property.as_ref().unwrap(),
@@ -388,7 +388,7 @@ fn absolute_tracks_without_sequences_do_not_invent_playback_clips() {
     );
     source.set_helpers([node]);
     let imported = conversion::mdlx::import(&source, &ImportOptions::default()).unwrap();
-    let model = &imported.value[0];
+    let model = &imported.value;
     assert_eq!(model.clips().len(), 0);
     assert_eq!(model.timeline_channels().len(), 1);
     let output = conversion::mdlx::plan::<mdlx::V800>(&imported.value, &ExportOptions::default())
@@ -431,7 +431,7 @@ fn overlapping_sequences_share_one_authored_absolute_curve() {
     );
     source.set_helpers([node]);
     let mut imported = conversion::mdlx::import(&source, &ImportOptions::default()).unwrap();
-    let graph = &imported.value[0];
+    let graph = &imported.value;
     assert_eq!(graph.clips().len(), 2);
     assert_eq!(graph.timeline_channels().len(), 1);
     assert!(graph.clips().all(|(_, clip)| clip.channels().is_empty()));
@@ -443,9 +443,7 @@ fn overlapping_sequences_share_one_authored_absolute_curve() {
             .unwrap();
     imported
         .value
-        .edit_model(0, |builder| {
-            builder.set_timeline_channel(0, Channel::Vector3(track))
-        })
+        .edit(|builder| builder.set_timeline_channel(0, Channel::Vector3(track)))
         .unwrap();
     let output = conversion::mdlx::plan::<mdlx::V800>(&imported.value, &ExportOptions::default())
         .unwrap()
@@ -478,7 +476,7 @@ fn global_tracks_without_sequences_stay_on_the_shared_clock() {
     );
     source.set_helpers([node]);
     let imported = conversion::mdlx::import(&source, &ImportOptions::default()).unwrap();
-    let graph = &imported.value[0];
+    let graph = &imported.value;
     assert_eq!(graph.clips().len(), 0);
     assert!(graph.timeline_channels().is_empty());
     assert_eq!(graph.shared_channels().len(), 1);
@@ -516,7 +514,7 @@ fn tcb_curves_cannot_be_encoded_as_native_mdlx_tracks() {
     );
     source.set_helpers([node]);
     let mut imported = conversion::mdlx::import(&source, &ImportOptions::default()).unwrap();
-    let graph = &imported.value[0];
+    let graph = &imported.value;
     let Channel::Vector3(mut track) = graph.timeline_channels()[0].clone() else {
         panic!("translation missing")
     };
@@ -528,9 +526,7 @@ fn tcb_curves_cannot_be_encoded_as_native_mdlx_tracks() {
     .unwrap();
     if imported
         .value
-        .edit_model(0, |builder| {
-            builder.set_timeline_channel(0, Channel::Vector3(track))
-        })
+        .edit(|builder| builder.set_timeline_channel(0, Channel::Vector3(track)))
         .is_ok()
     {
         assert!(
@@ -548,17 +544,14 @@ fn skinned_geometry_placement_edits_cannot_silently_disappear() {
     let mut asset = conversion::mdlx::import(&source, &ImportOptions::default())
         .unwrap()
         .value;
-    let anchor = asset[0].instances().next().unwrap().1.node;
-    let result = asset.edit_model(0, |builder| {
+    let anchor = asset.instances().next().unwrap().1.node;
+    let result = asset.edit(|builder| {
         let mut node = builder.model().node(anchor).unwrap().clone();
         node.transform.translation = [1., 0., 0.];
         builder.set_node(anchor, node)
     });
     assert!(result.is_err());
-    assert_eq!(
-        asset[0].node(anchor).unwrap().transform.translation,
-        [0.; 3]
-    );
+    assert_eq!(asset.node(anchor).unwrap().transform.translation, [0.; 3]);
 }
 
 #[test]
@@ -571,14 +564,7 @@ fn logical_sequence_flag_words_keep_unknown_bits_through_native_output() {
         .unwrap()
         .value;
     assert_eq!(
-        asset[0]
-            .clips()
-            .next()
-            .unwrap()
-            .1
-            .controls
-            .unclassified
-            .bits(),
+        asset.clips().next().unwrap().1.controls.unclassified.bits(),
         0x8000_0000
     );
     let output = conversion::mdlx::plan::<mdlx::V800>(&asset, &ExportOptions::default())
@@ -596,7 +582,7 @@ fn absent_model_info_stays_absent_while_named_drafts_declare_bounds() {
     let asset = conversion::mdlx::import(&source, &ImportOptions::default())
         .unwrap()
         .value;
-    assert!(asset[0].bounds().is_none());
+    assert!(asset.bounds().is_none());
     let output = conversion::mdlx::plan::<mdlx::V800>(&asset, &ExportOptions::default())
         .unwrap()
         .execute()
@@ -607,10 +593,10 @@ fn absent_model_info_stays_absent_while_named_drafts_declare_bounds() {
     assert_eq!(named.bounds(), Some(Bounds::default()));
     let mut asset = named;
     assert!(asset
-        .edit_model(0, |builder| {
+        .edit(|builder| {
             builder.set_bounds(None);
             Ok(())
         })
         .is_err());
-    assert!(asset[0].bounds().is_some());
+    assert!(asset.bounds().is_some());
 }

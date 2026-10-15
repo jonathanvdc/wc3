@@ -9,7 +9,7 @@ impl<'a, P: Profile> Model<'a, P> {
         let appearance = Q::appearance;
         let geometry = Q::geometry;
         let binding = Q::binding;
-        let model = Q::model;
+        let model = Q::model_metadata;
         let system = Q::system;
         let map_surface = Q::surface;
         let feature = Q::feature;
@@ -20,13 +20,14 @@ impl<'a, P: Profile> Model<'a, P> {
         let clip = Q::clip;
         let controller = Q::controller;
         Ok(Model {
+            resources: self.resources.try_narrow::<Q>()?,
             scope: self.scope,
             id: self.id,
             name: self.name,
             basis: self.basis,
             units: self.units,
             bounds: self.bounds,
-            controls: model(self.controls)?,
+            metadata: model(self.metadata)?,
             systems: self
                 .systems
                 .into_iter()
@@ -252,7 +253,7 @@ impl<'a, P: Profile> Model<'a, P> {
     /// Projects into a smaller vocabulary exactly, rejecting incompatible authored data.
     pub fn try_narrow<Q: Narrows<P>>(self) -> Result<Model<'a, Q>, Error> {
         let model = self.try_map_payloads::<Q>()?;
-        Q::validate_model(&model)?;
+        model.validate()?;
         Ok(model)
     }
 }

@@ -161,7 +161,7 @@ pub(super) fn controls<T: ModelDialect>(
                 .map(|id| native::Glider { geoset_id: *id }),
         );
         {
-            let profile = model.controls();
+            let profile = model.metadata();
             if !profile.face_effects.is_empty() {
                 let faces = profile
                     .face_effects

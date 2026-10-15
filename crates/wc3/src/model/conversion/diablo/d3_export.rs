@@ -2,26 +2,26 @@
 use super::{
     geometry, i32_count, materials, matrix, name, native, native_bounds, native_transform,
 };
-use crate::model::conversion::select_model;
 use crate::model::conversion::{Context, Error, ExportOptions, Plan};
 use crate::model::diablo::d3::{Appearance, V260};
-use crate::model::semantic::profiles::diablo::d3::{LookAtTarget, ModelControls, NodeRole, D3};
-use crate::model::semantic::Asset;
+use crate::model::semantic::profiles::diablo::d3::{LookAtTarget, ModelMetadata, NodeRole, D3};
 use crate::model::semantic::BindMatrices;
+use crate::model::semantic::Model;
 use std::collections::BTreeMap;
 use zerovec::ZeroVec;
 pub(super) fn plan(
-    asset: &Asset<'_, D3>,
+    asset: &Model<'_, D3>,
     options: &ExportOptions,
 ) -> Result<Plan<Appearance<'static, V260>>, Error> {
     plan_with_animations(asset, options, false)
 }
 pub(super) fn plan_with_animations(
-    asset: &Asset<'_, D3>,
+    asset: &Model<'_, D3>,
     options: &ExportOptions,
     animations: bool,
 ) -> Result<Plan<Appearance<'static, V260>>, Error> {
-    let model = select_model(asset, options)?;
+    asset.validate()?;
+    let model = asset;
     let mut context = Context::export(options);
     if !model.name().is_empty() {
         context.unsupported(
@@ -38,7 +38,7 @@ pub(super) fn plan_with_animations(
 
     let mut root = native::AppearanceRecord::default();
 
-    let look_at_name = match &model.controls().look_at.target {
+    let look_at_name = match &model.metadata().look_at.target {
         LookAtTarget::Bone(id) => {
             let node = model
                 .node(*id)
@@ -61,7 +61,7 @@ pub(super) fn plan_with_animations(
             node.name.as_ref()
         }
         LookAtTarget::Unresolved(name) => {
-            if model.controls().look_at.enabled != 0 {
+            if model.metadata().look_at.enabled != 0 {
                 return Err(Error::new(
                     "d3.look_at.target",
                     "active look-at target must resolve to an actual skeleton bone",
@@ -70,7 +70,7 @@ pub(super) fn plan_with_animations(
             name.as_str()
         }
     };
-    write_controls(model.controls(), &mut root, look_at_name)?;
+    write_controls(model.metadata(), &mut root, look_at_name)?;
     root.bounds = native_bounds(
         model
             .bounds()
@@ -314,7 +314,7 @@ pub(super) fn plan_with_animations(
     Ok(Plan::new(Appearance::<V260>::new(root), context.report))
 }
 fn write_controls(
-    c: &ModelControls,
+    c: &ModelMetadata,
     v: &mut native::AppearanceRecord<'_>,
     look_at_name: &str,
 ) -> Result<(), Error> {

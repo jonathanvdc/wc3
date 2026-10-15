@@ -5,38 +5,36 @@ use crate::model::semantic::{
     AttachedFeature, Basis, Bounds, Channel, Clip, ClipId, Clock, ClockId, Controller,
     ControllerId, DrawAppearanceSchema, DrawSubsetId, Error, Event, EventId, FeatureId, InstanceId,
     LengthUnit, Look, LookBinding, LookId, Material, MaterialId, Mesh, MeshId, MeshInstance, Model,
-    ModelId, Node, NodeId, Resources, ResourcesBuilder, SharedClock, SingleModel, Skin, SkinId,
-    SystemId, Texture, TextureId, TextureTransform, TextureTransformId,
+    ModelId, Node, NodeId, Resources, SharedClock, Skin, SkinId, SystemId, Texture, TextureId,
+    TextureTransform, TextureTransformId,
 };
 use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet};
 /// A draft that accepts forward node relationships and publishes only a validated graph.
 pub struct ModelBuilder<'a, P: Profile = Universal> {
     pub(super) model: Model<'a, P>,
-    resources: ResourcesBuilder<'a, P>,
     pub(super) pending_nodes: BTreeSet<NodeId>,
     pub(super) pending_features: BTreeMap<FeatureId, NodeId>,
     pub(super) pending_materials: BTreeSet<MaterialId>,
     pub(super) pending_controllers: BTreeSet<ControllerId>,
 }
 impl<'a, P: Profile> ModelBuilder<'a, P> {
-    pub(crate) fn from_parts(model: Model<'a, P>, resources: Resources<'a, P>) -> Self {
+    pub(crate) fn from_model(model: Model<'a, P>) -> Self {
         Self {
             model,
-            resources: ResourcesBuilder::from_resources(resources),
             pending_nodes: BTreeSet::new(),
             pending_features: BTreeMap::new(),
             pending_materials: BTreeSet::new(),
             pending_controllers: BTreeSet::new(),
         }
     }
-    /// Identity reserved for this model before collection publication.
+    /// Identity reserved for this model before publication.
     pub fn id(&self) -> ModelId {
         self.model.id()
     }
     /// Resolves a texture in the draft dependency arena.
     pub fn texture(&self, id: TextureId) -> Option<&Texture<'a, P>> {
-        self.resources.resources().texture(id)
+        self.model.resources().texture(id)
     }
 
     /// Begins an unpublished graph using the explicit payload vocabulary `P`.
@@ -44,15 +42,15 @@ impl<'a, P: Profile> ModelBuilder<'a, P> {
         let scope = Scope::default();
         let id = scope.allocate();
         Self {
-            resources: Resources::builder(),
             model: Model {
+                resources: Resources::default(),
                 scope,
                 id,
                 name: name.into(),
                 basis: Basis::default(),
                 units: LengthUnit::default(),
                 bounds: P::default_bounds(),
-                controls: Default::default(),
+                metadata: Default::default(),
                 systems: BTreeMap::new(),
                 timeline_channels: Vec::new(),
                 timeline_events: Vec::new(),
@@ -389,9 +387,9 @@ impl<'a, P: Profile> ModelBuilder<'a, P> {
             .payload = payload;
         Ok(())
     }
-    /// Replaces genuine model-wide authoring behavior.
-    pub fn set_controls(&mut self, value: impl Into<P::Model<'a>>) {
-        self.model.controls = value.into();
+    /// Replaces model-wide authoring metadata.
+    pub fn set_metadata(&mut self, value: impl Into<P::ModelMetadata<'a>>) {
+        self.model.metadata = value.into();
     }
     /// Adds an independently authored scene system.
     pub fn add_system(&mut self, value: P::System<'a>) -> Result<SystemId, Error> {
@@ -537,7 +535,7 @@ impl<'a, P: Profile> ModelBuilder<'a, P> {
     }
     /// Replaces a draft texture; publication validates its data and relationships.
     pub fn set_texture(&mut self, id: TextureId, value: Texture<'a, P>) -> Result<(), Error> {
-        self.resources.set_texture(id, value)
+        self.model.resources.set_texture(id, value)
     }
     /// Replaces a draft clip; publication validates its data and relationships.
     pub fn set_clip(&mut self, id: ClipId, value: Clip<'a, P>) -> Result<(), Error> {
@@ -601,13 +599,13 @@ impl<'a, P: Profile> ModelBuilder<'a, P> {
         self.model.materials.insert(id, value);
         Ok(id)
     }
-    /// Inherits shared texture definitions without copying them into local ownership.
+    /// Replaces the model-owned texture definitions while retaining their identities.
     pub fn set_resources(&mut self, library: Resources<'a, P>) {
-        self.resources = ResourcesBuilder::from_resources(library);
+        self.model.resources = library;
     }
     /// Adds a texture resource to the draft; publication validates its values and relationships.
     pub fn add_texture(&mut self, value: Texture<'a, P>) -> Result<TextureId, Error> {
-        Ok(self.resources.add_texture(value))
+        Ok(self.model.resources.add_texture(value))
     }
     /// Adds a playback clip to the draft; publication validates its values and relationships.
     pub fn add_clip(&mut self, value: Clip<'a, P>) -> Result<ClipId, Error> {
@@ -654,11 +652,7 @@ impl<'a, P: Profile> ModelBuilder<'a, P> {
         Ok(())
     }
     /// Publishes an immutable graph after validating all values, identities, and relationships.
-    pub fn finish(self) -> Result<SingleModel<'a, P>, Error> {
-        let (model, resources) = self.finish_parts()?;
-        SingleModel::from_single_parts(model, resources)
-    }
-    pub(crate) fn finish_parts(self) -> Result<(Model<'a, P>, Resources<'a, P>), Error> {
+    pub fn finish(self) -> Result<Model<'a, P>, Error> {
         if !self.pending_controllers.is_empty() {
             return Err(Error::new(
                 "controllers",
@@ -680,7 +674,8 @@ impl<'a, P: Profile> ModelBuilder<'a, P> {
         if !self.pending_nodes.is_empty() {
             return Err(Error::new("nodes", "reserved nodes have no definition"));
         }
-        Ok((self.model, self.resources.finish()))
+        self.model.validate()?;
+        Ok(self.model)
     }
 }
 impl<'a> ModelBuilder<'a> {
@@ -712,7 +707,7 @@ impl<'a, P: Profile> ModelBuilder<'a, P> {
     }
     /// Removes this texture from the draft; publication rejects references left pointing to it.
     pub fn remove_texture(&mut self, id: TextureId) -> Option<Texture<'a, P>> {
-        self.resources.remove_texture(id)
+        self.model.resources.remove_texture(id)
     }
     /// Removes this clip from the draft; publication rejects references left pointing to it.
     pub fn remove_clip(&mut self, id: ClipId) -> Option<Clip<'a, P>> {

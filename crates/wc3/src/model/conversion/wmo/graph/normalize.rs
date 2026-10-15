@@ -3,16 +3,14 @@ use crate::model::conversion::Error;
 use crate::model::semantic::profiles::Wmo;
 use crate::model::semantic::{
     Bounds, DrawAppearanceSchema, DrawSubsets, InstanceId, Model, ModelBuilder, PrimitiveRange,
-    PrimitiveSelection, Resources, Values, WmoGeometry,
+    PrimitiveSelection, Values, WmoGeometry,
 };
 use std::collections::{BTreeMap, BTreeSet};
-
-type Normalized<'a> = (Model<'a, Wmo>, Resources<'a, Wmo>);
+use std::fmt::Display;
 
 pub(super) fn prepare<'data>(
     model: &Model<'data, Wmo>,
-    resources: &Resources<'data, Wmo>,
-) -> Result<Option<Normalized<'data>>, Error> {
+) -> Result<Option<Model<'data, Wmo>>, Error> {
     let mut merges = Vec::new();
     for (system_id, world) in model.systems() {
         for (group_index, group) in world.groups.iter().enumerate() {
@@ -36,7 +34,7 @@ pub(super) fn prepare<'data>(
     if merges.is_empty() {
         return Ok(None);
     }
-    let mut builder = ModelBuilder::from_parts(model.clone(), resources.clone());
+    let mut builder = ModelBuilder::from_model(model.clone());
     let mut rehomed = BTreeMap::new();
     let mut old_meshes = BTreeSet::new();
     let mut old_nodes = BTreeSet::new();
@@ -296,7 +294,7 @@ pub(super) fn prepare<'data>(
             builder.remove_node(node);
         }
     }
-    Ok(Some(builder.finish_parts()?))
+    Ok(Some(builder.finish()?))
 }
 fn concat<'data, T: Clone + Send + Sync + 'data>(
     parts: Vec<Values<'data, T>>,
@@ -317,6 +315,6 @@ fn concat<'data, T: Clone + Send + Sync + 'data>(
             .expect("checked concatenated stream")
     }))
 }
-fn error(error: impl std::fmt::Display) -> Error {
+fn error(error: impl Display) -> Error {
     Error::new("world.group.merge", error.to_string())
 }

@@ -154,9 +154,9 @@ fn appearance_export_honors_numeric_approximation_policy() {
     let mut asset = conversion::import(&source, &ImportOptions::default())
         .unwrap()
         .value;
-    let mesh_id = asset[0].meshes().next().unwrap().0;
+    let mesh_id = asset.meshes().next().unwrap().0;
     asset
-        .edit_model(0, |builder| {
+        .edit(|builder| {
             let mut mesh = builder.model().mesh(mesh_id).unwrap().clone();
             let mut streams = mesh.geometry.streams().clone();
             streams.normals = vec![[0., 0., 1.]; 3].into();
@@ -248,8 +248,8 @@ fn appearance_and_animation_bundle_roundtrip_keeps_independent_declarations() {
     let asset = conversion::import(&bundle, &ImportOptions::default())
         .unwrap()
         .value;
-    assert_eq!(asset[0].clips().len(), 1);
-    assert!(asset[0].clips().next().unwrap().1.channels().iter().any(|channel| matches!(channel,wc3::model::semantic::Channel::Rotation(track) if track.curve.interpolation()==wc3::model::semantic::Interpolation::Nlerp)));
+    assert_eq!(asset.clips().len(), 1);
+    assert!(asset.clips().next().unwrap().1.channels().iter().any(|channel| matches!(channel,wc3::model::semantic::Channel::Rotation(track) if track.curve.interpolation()==wc3::model::semantic::Interpolation::Nlerp)));
     assert!(conversion::plan(&asset, &ExportOptions::default()).is_err());
     let out = conversion::plan_bundle(&asset, &ExportOptions::default())
         .unwrap()
@@ -276,11 +276,11 @@ fn actual_slot_variants_survive_without_look_or_geometry_uses() {
     let asset = conversion::import(&source, &ImportOptions::default())
         .unwrap()
         .value;
-    assert_eq!(asset[0].appearance().slots().len(), 2);
-    assert!(asset[0]
+    assert_eq!(asset.appearance().slots().len(), 2);
+    assert!(asset
         .instances()
         .all(|(_, instance)| instance.draws.is_empty()));
-    assert!(asset[0]
+    assert!(asset
         .materials()
         .all(|(_, material)| material.name.is_empty()));
     let output = conversion::plan(&asset, &ExportOptions::default())
@@ -296,9 +296,9 @@ fn slot_identity_renames_native_references_without_material_label_inference() {
     let mut asset = conversion::import(&source, &ImportOptions::default())
         .unwrap()
         .value;
-    let slot = asset[0].appearance().slots().next().unwrap().0;
+    let slot = asset.appearance().slots().next().unwrap().0;
     asset
-        .edit_model(0, |builder| {
+        .edit(|builder| {
             let mut appearance = builder.model().appearance().clone();
             appearance.slot_mut(slot).unwrap().name = "renamed".into();
             builder.set_appearance(appearance);
@@ -320,7 +320,7 @@ fn native_implicit_look_ordinals_cannot_silently_reassign_actual_variants() {
         .unwrap()
         .value;
     asset
-        .edit_model(0, |builder| {
+        .edit(|builder| {
             let mut appearance = builder.model().appearance().clone();
             let slot = appearance.slots().next().unwrap().0;
             let variant = appearance.slot(slot).unwrap().variants().nth(1).unwrap().0;
@@ -353,7 +353,7 @@ fn foreign_slot_variant_id_is_not_resolved_by_its_display_name() {
     let asset = conversion::import(&source, &ImportOptions::default())
         .unwrap()
         .value;
-    let mut appearance = asset[0].appearance().clone();
+    let mut appearance = asset.appearance().clone();
     let slot = appearance.slots().next().unwrap().0;
     let material = appearance.slot(slot).unwrap().variants().next().unwrap().1;
     let look = appearance.alternatives().next().unwrap().0;
@@ -382,7 +382,7 @@ fn unknown_bone_pulses_are_rejected_or_dropped_before_graph_edits() {
     .unwrap()
     .value;
 
-    let bone = asset[0]
+    let bone = asset
         .nodes()
         .find(|(_, node)| {
             matches!(
@@ -393,7 +393,7 @@ fn unknown_bone_pulses_are_rejected_or_dropped_before_graph_edits() {
         .unwrap()
         .0;
     asset
-        .edit_model(0, |builder| {
+        .edit(|builder| {
             let mut node = builder.model().node(bone).unwrap().clone();
             node.name = "renamed".into();
             builder.set_node(bone, node)
@@ -585,7 +585,7 @@ fn duplicate_native_slot_names_cannot_hide_distinct_scoped_relationships() {
         .unwrap()
         .value;
     asset
-        .edit_model(0, |builder| {
+        .edit(|builder| {
             let mut appearance = builder.model().appearance().clone();
             let material = appearance
                 .slots()
@@ -613,11 +613,11 @@ fn active_look_at_reference_follows_actual_bone_rename() {
     let mut asset = conversion::import(&source, &ImportOptions::default())
         .unwrap()
         .value;
-    let LookAtTarget::Bone(bone) = asset[0].controls().look_at.target else {
+    let LookAtTarget::Bone(bone) = asset.metadata().look_at.target else {
         panic!("look-at reference was not resolved")
     };
     asset
-        .edit_model(0, |builder| {
+        .edit(|builder| {
             let mut node = builder.model().node(bone).unwrap().clone();
             node.name = "renamed".into();
             builder.set_node(bone, node)
@@ -651,14 +651,14 @@ fn inactive_unresolved_look_at_spelling_stays_editable_without_claiming_a_bone()
         .unwrap()
         .value;
     assert_eq!(
-        asset[0].controls().look_at.target,
+        asset.metadata().look_at.target,
         LookAtTarget::Unresolved("missing".to_owned())
     );
     asset
-        .edit_model(0, |builder| {
-            let mut controls = builder.model().controls().clone();
+        .edit(|builder| {
+            let mut controls = builder.model().metadata().clone();
             controls.look_at.target = LookAtTarget::Unresolved("retained".to_owned());
-            builder.set_controls(controls);
+            builder.set_metadata(controls);
             Ok(())
         })
         .unwrap();
@@ -669,10 +669,10 @@ fn inactive_unresolved_look_at_spelling_stays_editable_without_claiming_a_bone()
         .value;
     assert_eq!(output.root.look_at.bone_name, fixed("retained"));
     assert!(asset
-        .edit_model(0, |builder| {
-            let mut controls = builder.model().controls().clone();
+        .edit(|builder| {
+            let mut controls = builder.model().metadata().clone();
             controls.look_at.enabled = 1;
-            builder.set_controls(controls);
+            builder.set_metadata(controls);
             Ok(())
         })
         .is_err());
@@ -686,24 +686,24 @@ fn look_at_typed_target_rejects_non_bones_and_ambiguous_native_export_names() {
     let mut asset = conversion::import(&source, &ImportOptions::default())
         .unwrap()
         .value;
-    let frame = asset[0]
+    let frame = asset
         .nodes()
         .find(|(_, node)| matches!(node.controls, NodeRole::ModelSpace))
         .unwrap()
         .0;
     assert!(asset
-        .edit_model(0, |builder| {
-            let mut controls = builder.model().controls().clone();
+        .edit(|builder| {
+            let mut controls = builder.model().metadata().clone();
             controls.look_at.target = LookAtTarget::Bone(frame);
-            builder.set_controls(controls);
+            builder.set_metadata(controls);
             Ok(())
         })
         .is_err());
-    let LookAtTarget::Bone(bone) = asset[0].controls().look_at.target else {
+    let LookAtTarget::Bone(bone) = asset.metadata().look_at.target else {
         unreachable!()
     };
     asset
-        .edit_model(0, |builder| {
+        .edit(|builder| {
             builder.add_node(builder.model().node(bone).unwrap().clone())?;
             Ok(())
         })
@@ -721,7 +721,7 @@ fn disabled_ambiguous_look_at_name_remains_unresolved() {
         .unwrap()
         .value;
     assert_eq!(
-        asset[0].controls().look_at.target,
+        asset.metadata().look_at.target,
         LookAtTarget::Unresolved("root".to_owned())
     );
     let output = conversion::plan(&asset, &ExportOptions::default())
@@ -753,7 +753,7 @@ fn auxiliary_direction_bytes_survive_strict_import_and_profile_conversion() {
     );
     let imported = conversion::import(&native, &ImportOptions::default()).unwrap();
     assert!(imported.report.issues.is_empty());
-    let (_, mesh) = imported.value[0].meshes().next().unwrap();
+    let (_, mesh) = imported.value.meshes().next().unwrap();
     assert!(mesh
         .geometry
         .streams()
@@ -791,14 +791,12 @@ fn absent_auxiliary_direction_stream_exports_zero_bytes() {
     let mut imported = conversion::import(&source, &ImportOptions::default())
         .unwrap()
         .value;
-    let (id, mesh) = imported[0].meshes().next().unwrap();
+    let (id, mesh) = imported.meshes().next().unwrap();
     let mut mesh = mesh.clone();
     let mut streams = mesh.geometry.streams().clone();
     streams.extras.direction_auxiliary = Default::default();
     mesh.geometry = mesh.geometry.with_streams(streams).unwrap();
-    imported
-        .edit_model(0, |builder| builder.set_mesh(id, mesh))
-        .unwrap();
+    imported.edit(|builder| builder.set_mesh(id, mesh)).unwrap();
     let output = conversion::plan(&imported, &ExportOptions::default())
         .unwrap()
         .execute()

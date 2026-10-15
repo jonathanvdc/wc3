@@ -6,8 +6,8 @@ use crate::model::semantic::{
 pub(super) fn model(value: &Model<'_, Mdlx>) -> Result<(), Error> {
     if value.bounds().is_none()
         && (!value.name().is_empty()
-            || !value.controls().animation_file.is_empty()
-            || value.controls().blend_time != 0.)
+            || !value.metadata().animation_file.is_empty()
+            || value.metadata().blend_time != 0.)
     {
         return Err(Error::new(
             "model.info",

@@ -7,9 +7,8 @@ use crate::model::diablo::d3::{
 };
 use crate::model::semantic::profiles::diablo::d3::{
     Appearance as LogicalAppearance, BoneControls, LookAtControls, LookAtTarget, MaterialAsset,
-    ModelControls, NodeRole, Slot, D3,
+    ModelMetadata, NodeRole, Slot, D3,
 };
-use crate::model::semantic::Asset;
 use crate::model::semantic::{
     Bounds, ExplicitBinding, Material, MeshInstance, Model, Node, NodeId, Quaternion, Skin,
     Transform,
@@ -38,15 +37,15 @@ pub struct Bundle<'view, 'data> {
 /// Native source accepted by the Diablo III semantic importer.
 pub trait Source {
     /// Convert native records without opening external resources.
-    fn import<'a>(&'a self, options: &ImportOptions) -> Result<Conversion<Asset<'a, D3>>, Error>;
+    fn import<'a>(&'a self, options: &ImportOptions) -> Result<Conversion<Model<'a, D3>>, Error>;
 }
 impl Source for Appearance<'_, V260> {
-    fn import<'a>(&'a self, options: &ImportOptions) -> Result<Conversion<Asset<'a, D3>>, Error> {
+    fn import<'a>(&'a self, options: &ImportOptions) -> Result<Conversion<Model<'a, D3>>, Error> {
         import_appearance(self, options)
     }
 }
 impl Source for Bundle<'_, '_> {
-    fn import<'a>(&'a self, options: &ImportOptions) -> Result<Conversion<Asset<'a, D3>>, Error> {
+    fn import<'a>(&'a self, options: &ImportOptions) -> Result<Conversion<Model<'a, D3>>, Error> {
         let mut converted = import_appearance(self.appearance, options)?;
         let mut context = Context::import(options);
         animation::read(&mut converted.value, &self.animations, &mut context)?;
@@ -58,7 +57,7 @@ impl Source for Bundle<'_, '_> {
 pub fn import<'a, S: Source>(
     source: &'a S,
     options: &ImportOptions,
-) -> Result<Conversion<Asset<'a, D3>>, Error> {
+) -> Result<Conversion<Model<'a, D3>>, Error> {
     source.import(options)
 }
 /// Native output resources with no filesystem naming or persistence policy.
@@ -70,7 +69,7 @@ pub struct Output {
     pub animations: Vec<Animation<'static, V118>>,
 }
 /// Plan appearance and animation documents together, retaining clip programs.
-pub fn plan_bundle(asset: &Asset<'_, D3>, options: &ExportOptions) -> Result<Plan<Output>, Error> {
+pub fn plan_bundle(asset: &Model<'_, D3>, options: &ExportOptions) -> Result<Plan<Output>, Error> {
     let appearance = export::plan_with_animations(asset, options, true)?.execute()?;
     let mut context = Context::export(options);
     let animations = animation::write(asset, options, &mut context)?;
@@ -90,7 +89,7 @@ pub fn plan_bundle(asset: &Asset<'_, D3>, options: &ExportOptions) -> Result<Pla
 fn import_appearance<'a>(
     source: &'a Appearance<'_, V260>,
     options: &ImportOptions,
-) -> Result<Conversion<Asset<'a, D3>>, Error> {
+) -> Result<Conversion<Model<'a, D3>>, Error> {
     let root = &source.root;
     let mut context = Context::import(options);
     unsupported(root, &mut context)?;
@@ -98,7 +97,7 @@ fn import_appearance<'a>(
     builder.set_bounds(Some(bounds(root.bounds)));
     let model_frame = builder.add_node(Node::named("").with_controls(NodeRole::ModelSpace))?;
     let bone_ids: Vec<_> = root.bones.iter().map(|_| builder.reserve_node()).collect();
-    builder.set_controls(read_controls(root, &bone_ids)?);
+    builder.set_metadata(read_controls(root, &bone_ids)?);
     for (i, bone) in root.bones.iter().enumerate() {
         if !bone.collision_shapes.is_empty() || !bone.constraints.is_empty() {
             context.unsupported(
@@ -233,7 +232,7 @@ fn import_appearance<'a>(
 }
 /// Plan revision 260 appearance output from the Diablo III authoring vocabulary.
 pub fn plan(
-    asset: &Asset<'_, D3>,
+    asset: &Model<'_, D3>,
     options: &ExportOptions,
 ) -> Result<Plan<Appearance<'static, V260>>, Error> {
     export::plan(asset, options)
@@ -340,7 +339,7 @@ fn matrix(t: Transform) -> [[f32; 4]; 4] {
 fn read_controls(
     v: &native::AppearanceRecord<'_>,
     bone_ids: &[NodeId],
-) -> Result<ModelControls, Error> {
+) -> Result<ModelMetadata, Error> {
     let authored = text(&v.look_at.bone_name)?;
     let mut matches = Vec::new();
     for (index, bone) in v.bones.iter().enumerate() {
@@ -358,7 +357,7 @@ fn read_controls(
             "active look-at target does not identify one unique skeleton bone",
         ));
     };
-    Ok(ModelControls {
+    Ok(ModelMetadata {
         sno_id: v.sno_id,
         object_type: v.object_type,
         collision_center: v.collision_sphere.center,

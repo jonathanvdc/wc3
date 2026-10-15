@@ -1,11 +1,10 @@
 //! Typed M2 output planning and native graph construction.
 use super::animation::{encode, time_ms};
 use super::*;
-use crate::model::conversion::select_model;
 
 /// Plans a typed M2 bundle, checking index limits, curves and resource identities.
 pub fn plan<D: ExportDialect>(
-    asset: &Asset<'_, M2Vocabulary>,
+    asset: &Model<'_, M2Vocabulary>,
     options: &ExportOptions,
 ) -> Result<Plan<Bundle<'static, D>>, Error>
 where
@@ -34,7 +33,8 @@ where
         <D::Layout as native::records::BoneLayout>::RotationValue,
     >: ValuesFactory<<D::Layout as native::records::BoneLayout>::RotationValue>,
 {
-    let model = select_model(asset, options)?;
+    asset.validate()?;
+    let model = asset;
     let mut context = Context::export(options);
     if model.basis() != semantic::Basis::default() {
         context.unsupported(
@@ -53,7 +53,7 @@ where
             )?;
         }
     }
-    let family = Some(model.controls());
+    let family = Some(model.metadata());
 
     let mut bundle = Bundle::from_model(native::Model::<D>::new());
     let core = bundle.model.core_mut();

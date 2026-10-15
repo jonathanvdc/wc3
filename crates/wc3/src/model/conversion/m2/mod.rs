@@ -5,7 +5,7 @@ use crate::model::m2::{
     companions::{Skin, SkinProfile},
     records::{SkinSection, Vertex},
 };
-use crate::model::semantic::Asset;
+use crate::model::semantic::Model;
 use native::chunks::Chunk;
 use native::codec::{Array, Decoder, Value};
 use native::records::{

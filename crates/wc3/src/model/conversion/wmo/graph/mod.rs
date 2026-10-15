@@ -1,5 +1,5 @@
 //! Direct typed world-model authoring graph codecs.
-use crate::model::semantic::Asset;
+use crate::model::semantic::Model;
 mod alpha_materials;
 mod draw;
 mod encode;
@@ -25,7 +25,7 @@ mod spatial_queries;
 mod visibility;
 use crate::model::common::FileKey;
 use crate::model::conversion::{Context, Conversion, Error, ImportOptions, IssueKind};
-use crate::model::semantic::profiles::wmo::{ModelControls, WorldOptions, WorldSystem};
+use crate::model::semantic::profiles::wmo::{ModelMetadata, WorldOptions, WorldSystem};
 use crate::model::semantic::profiles::Wmo;
 use crate::model::semantic::{Bounds, ModelBuilder};
 use crate::model::wmo::{Bundle, Dialect, GroupKey};
@@ -34,7 +34,7 @@ use std::collections::BTreeSet;
 pub(super) fn import<'a, D: Dialect>(
     source: &'a Bundle<'_, D>,
     options: &ImportOptions,
-) -> Result<Conversion<Asset<'a, Wmo>>, Error> {
+) -> Result<Conversion<Model<'a, Wmo>>, Error> {
     source
         .validate_complete()
         .map_err(|error| Error::new("world", error.to_string()))?;
@@ -62,7 +62,7 @@ pub(super) fn import<'a, D: Dialect>(
     unknown.set_preserve_vertex_alpha(false);
     unknown.set_default_max_lod(false);
     unknown.set_has_group_lods(false);
-    builder.set_controls(ModelControls {
+    builder.set_metadata(ModelMetadata {
         id: header.wmo_id,
         ambient: rgba(header.ambient_color),
         options: WorldOptions {
@@ -237,7 +237,7 @@ fn bounds([minimum, maximum]: [[f32; 3]; 2]) -> Bounds {
 }
 
 pub(super) fn plan<'a, D: Dialect>(
-    asset: &'a Asset<'_, Wmo>,
+    asset: &'a Model<'_, Wmo>,
     options: &crate::model::conversion::ExportOptions,
 ) -> Result<crate::model::conversion::Plan<Bundle<'a, D>>, Error> {
     encode::write(asset, options)
@@ -253,24 +253,24 @@ fn handle_unknown(context: &mut Context, file: FileKey, tag: [u8; 4]) -> Result<
 pub(super) fn import_alpha<'a>(
     source: &'a crate::model::wmo::legacy::Root14<'_>,
     options: &ImportOptions,
-) -> Result<Conversion<Asset<'a, Wmo>>, Error> {
+) -> Result<Conversion<Model<'a, Wmo>>, Error> {
     legacy_import::alpha(source, options)
 }
 pub(super) fn import_beta<'a>(
     source: &'a crate::model::wmo::legacy::Bundle16<'_>,
     options: &ImportOptions,
-) -> Result<Conversion<Asset<'a, Wmo>>, Error> {
+) -> Result<Conversion<Model<'a, Wmo>>, Error> {
     legacy_import::beta(source, options)
 }
 
 pub(super) fn plan_alpha<'a>(
-    asset: &'a Asset<'_, Wmo>,
+    asset: &'a Model<'_, Wmo>,
     options: &crate::model::conversion::ExportOptions,
 ) -> Result<crate::model::conversion::Plan<crate::model::wmo::legacy::Root14<'a>>, Error> {
     legacy_encode::alpha(asset, options)
 }
 pub(super) fn plan_beta<'a>(
-    asset: &'a Asset<'_, Wmo>,
+    asset: &'a Model<'_, Wmo>,
     options: &crate::model::conversion::ExportOptions,
 ) -> Result<crate::model::conversion::Plan<crate::model::wmo::legacy::Bundle16<'a>>, Error> {
     legacy_encode::beta(asset, options)
