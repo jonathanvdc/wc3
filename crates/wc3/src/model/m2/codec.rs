@@ -1,10 +1,9 @@
 //! Checked offset-based record decoding and relocating encoding.
 use super::records::ModelFlags;
 use super::{Read, ReadError, RecordLayout, Write, WriteError};
-use crate::model::common::binary::read_bytes;
-use crate::model::common::Ownership;
+use crate::model::common::binary::{align_position, Cursor, Output, ValueError};
+use crate::model::common::{try_array, Ownership};
 use crate::model::m2;
-use std::array::from_fn;
 use std::fmt::Debug;
 use std::sync::Arc;
 use zerovec::{ule::AsULE, ZeroVec};
@@ -54,9 +53,7 @@ impl<'data, T: Value> Array<'data, T> {
 /// A bounded address space and a sequential metadata cursor.
 #[derive(Clone, Debug)]
 pub struct Decoder<'data> {
-    data: &'data [u8],
-    position: usize,
-    origin: usize,
+    cursor: Cursor<'data>,
     /// Numeric core layout version.
     pub version: u32,
     /// Core model flags selecting conditional layouts.
@@ -70,9 +67,7 @@ impl<'data> Decoder<'data> {
     /// Creates an address space whose offsets are relative to its first byte.
     pub fn new(data: &'data [u8], version: u32, flags: ModelFlags) -> Self {
         Self {
-            data,
-            position: 0,
-            origin: 0,
+            cursor: Cursor::new(data),
             version,
             flags,
             external_sequences: Arc::from([]),
@@ -81,29 +76,26 @@ impl<'data> Decoder<'data> {
     }
     /// Associates this address space with an absolute source offset.
     pub fn with_origin(mut self, origin: usize) -> Self {
-        self.origin = origin;
+        self.cursor = self.cursor.with_origin(origin);
         self
     }
     /// Current relative cursor position.
     pub fn position(&self) -> usize {
-        self.position
+        self.cursor.position()
     }
     /// Absolute cursor position within the enclosing encoded source.
     pub(crate) fn absolute_position(&self) -> usize {
-        self.origin.saturating_add(self.position)
+        self.cursor.absolute_position()
     }
     /// Entire address space.
     pub fn data(&self) -> &'data [u8] {
-        self.data
+        self.cursor.data()
     }
     /// Creates another metadata cursor sharing this address space and context.
     pub fn at(&self, offset: u32) -> Result<Self, ReadError> {
         let position = offset as usize;
-        if position > self.data.len() {
-            return Err(self.error("offset"));
-        }
         let mut result = self.clone();
-        result.position = position;
+        result.cursor = self.cursor.at(position).map_err(|_| self.error("offset"))?;
         Ok(result)
     }
     /// Reads a composable value in this address space.
@@ -112,39 +104,46 @@ impl<'data> Decoder<'data> {
     }
     /// Reads a bounded byte sequence.
     pub fn bytes(&mut self, count: usize) -> Result<&'data [u8], ReadError> {
-        read_bytes(self.data, &mut self.position, count, self.origin)
+        self.cursor
+            .bytes(count)
             .map_err(|error| ReadError::invalid(error.offset, "truncated record"))
     }
     fn error(&self, field: &'static str) -> ReadError {
-        ReadError::invalid(self.origin.saturating_add(self.position), field)
+        ReadError::invalid(self.cursor.absolute_position(), field)
     }
-    /// Reads an unsigned byte.
+    fn value<T: AsULE>(&mut self) -> Result<T, ReadError> {
+        self.cursor.value().map_err(|error| match error {
+            ValueError::Bounds(error) => ReadError::invalid(error.offset, "truncated record"),
+            ValueError::Invalid => self.error("scalar encoding"),
+        })
+    }
+    /// Reads a little-endian `u8` value.
     pub fn u8(&mut self) -> Result<u8, ReadError> {
-        Ok(self.bytes(1)?[0])
+        self.value()
     }
-    /// Reads a signed byte.
+    /// Reads a little-endian `i8` value.
     pub fn i8(&mut self) -> Result<i8, ReadError> {
-        Ok(self.u8()? as i8)
+        self.value()
     }
-    /// Reads an unsigned little-endian word.
+    /// Reads a little-endian `u16` value.
     pub fn u16(&mut self) -> Result<u16, ReadError> {
-        Ok(u16::from_le_bytes(self.bytes(2)?.try_into().unwrap()))
+        self.value()
     }
-    /// Reads a signed little-endian word.
+    /// Reads a little-endian `i16` value.
     pub fn i16(&mut self) -> Result<i16, ReadError> {
-        Ok(self.u16()? as i16)
+        self.value()
     }
-    /// Reads an unsigned little-endian doubleword.
+    /// Reads a little-endian `u32` value.
     pub fn u32(&mut self) -> Result<u32, ReadError> {
-        Ok(u32::from_le_bytes(self.bytes(4)?.try_into().unwrap()))
+        self.value()
     }
-    /// Reads a signed little-endian doubleword.
+    /// Reads a little-endian `i32` value.
     pub fn i32(&mut self) -> Result<i32, ReadError> {
-        Ok(self.u32()? as i32)
+        self.value()
     }
-    /// Reads an IEEE little-endian single-precision float.
+    /// Reads a little-endian `f32` value.
     pub fn f32(&mut self) -> Result<f32, ReadError> {
-        Ok(f32::from_bits(self.u32()?))
+        self.value()
     }
     /// Reads a count/offset descriptor.
     pub fn descriptor(&mut self) -> Result<ArrayRef, ReadError> {
@@ -182,12 +181,15 @@ impl<'data> Decoder<'data> {
             .ok_or_else(|| self.error("record array overflow"))?;
         let mut cursor = self.at(reference.offset)?;
         cursor.bytes(length)?;
-        cursor.position = reference.offset as usize;
+        cursor
+            .cursor
+            .seek(reference.offset as usize)
+            .map_err(|_| cursor.error("offset"))?;
         let mut records = Vec::with_capacity(reference.count as usize);
         for _ in 0..reference.count {
-            let start = cursor.position;
+            let start = cursor.position();
             let value = T::read(&mut cursor)?;
-            if cursor.position != start + width {
+            if cursor.position() != start + width {
                 return Err(cursor.error("record width"));
             }
             records.push(value);
@@ -199,7 +201,7 @@ impl<'data> Decoder<'data> {
 /// Deterministic allocator and metadata writer for one offset address space.
 #[derive(Clone, Debug)]
 pub struct Encoder {
-    data: Vec<u8>,
+    data: Output,
     position: usize,
     /// Numeric core layout version.
     pub version: u32,
@@ -210,7 +212,7 @@ impl Encoder {
     /// Starts a fresh address space.
     pub fn new(version: u32, flags: ModelFlags) -> Self {
         Self {
-            data: Vec::new(),
+            data: Output::new(),
             position: 0,
             version,
             flags,
@@ -222,7 +224,7 @@ impl Encoder {
             return Err(WriteError::invalid("32-bit address space"));
         }
         Ok(Self {
-            data,
+            data: Output::from_bytes(data),
             position: 0,
             version,
             flags,
@@ -234,7 +236,7 @@ impl Encoder {
     }
     /// Returns completed encoded bytes.
     pub fn finish(self) -> Vec<u8> {
-        self.data
+        self.data.finish()
     }
     /// Current metadata write position.
     pub fn position(&self) -> usize {
@@ -250,9 +252,9 @@ impl Encoder {
     }
     /// Moves the metadata cursor within allocated storage.
     pub fn set_position(&mut self, position: usize) -> Result<(), WriteError> {
-        if position > self.data.len() {
-            return Err(WriteError::invalid("write position"));
-        }
+        self.data
+            .range(position, 0)
+            .map_err(|_| WriteError::invalid("write position"))?;
         self.position = position;
         Ok(())
     }
@@ -289,17 +291,17 @@ impl Encoder {
             return Err(WriteError::invalid("32-bit offset overflow"));
         }
         self.data
-            .try_reserve(count)
-            .map_err(|_| WriteError::invalid("allocation"))?;
-        self.data.resize(end, 0);
-        Ok(start)
+            .reserve(count, 1)
+            .map_err(|_| WriteError::invalid("allocation"))
     }
     /// Aligns subsequent allocated blocks without moving the metadata cursor.
     pub fn align(&mut self, alignment: usize) -> Result<(), WriteError> {
         if !alignment.is_power_of_two() {
             return Err(WriteError::invalid("alignment"));
         }
-        let padding = self.data.len().wrapping_neg() & (alignment - 1);
+        let aligned = align_position(self.data.len(), alignment)
+            .map_err(|_| WriteError::invalid("size overflow"))?;
+        let padding = aligned - self.data.len();
         self.reserve(padding)?;
         Ok(())
     }
@@ -312,7 +314,9 @@ impl Encoder {
         if end > self.data.len() {
             self.reserve(end - self.data.len())?;
         }
-        self.data[self.position..end].copy_from_slice(bytes);
+        self.data
+            .patch(self.position, bytes)
+            .map_err(|_| WriteError::invalid("write range"))?;
         self.position = end;
         Ok(())
     }
@@ -360,7 +364,9 @@ impl Encoder {
         }
         self.align(16)?;
         let offset = self.reserve(values.as_bytes().len())?;
-        self.data[offset..offset + values.as_bytes().len()].copy_from_slice(values.as_bytes());
+        self.data
+            .patch(offset, values.as_bytes())
+            .map_err(|_| WriteError::invalid("array write range"))?;
         Ok(ArrayRef {
             count: u32::try_from(values.len()).map_err(|_| WriteError::invalid("array count"))?,
             offset: offset as u32,
@@ -422,21 +428,7 @@ scalar_codecs! {
 }
 impl<'data, T: Read<'data>, const N: usize> Read<'data> for [T; N] {
     fn read(input: &mut Decoder<'data>) -> Result<Self, ReadError> {
-        let mut result = Ok(());
-        let values: [Option<T>; N] = from_fn(|_| {
-            if result.is_err() {
-                return None;
-            }
-            match T::read(input) {
-                Ok(value) => Some(value),
-                Err(error) => {
-                    result = Err(error);
-                    None
-                }
-            }
-        });
-        result?;
-        Ok(values.map(|value| value.expect("every fixed array element was read")))
+        try_array(|| T::read(input))
     }
 }
 impl<T: Write + RecordLayout, const N: usize> Write for [T; N] {

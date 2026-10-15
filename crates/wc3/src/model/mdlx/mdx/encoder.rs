@@ -1,4 +1,5 @@
 //! Sequential MDX writing into a caller-owned byte buffer.
+use crate::model::common::binary::{append_bytes, patch_bytes};
 use crate::model::mdlx::mdx;
 use crate::model::mdlx::Tag;
 
@@ -68,7 +69,7 @@ impl<'a> Encoder<'a> {
 
     /// Appends bytes without interpreting them.
     pub fn write_bytes(&mut self, bytes: &[u8]) {
-        self.bytes.extend_from_slice(bytes);
+        append_bytes(self.bytes, bytes).expect("MDX output allocation");
     }
 
     /// Appends a value in its little-endian MDX representation.
@@ -96,7 +97,8 @@ impl<'a> Encoder<'a> {
             tag,
             size,
         })?;
-        self.bytes[marker.0..marker.0 + 4].copy_from_slice(&size.to_le_bytes());
+        patch_bytes(self.bytes, marker.0, &size.to_le_bytes())
+            .expect("size marker belongs to this encoder");
         Ok(())
     }
 
@@ -113,7 +115,8 @@ impl<'a> Encoder<'a> {
             tag,
             size,
         })?;
-        self.bytes[marker.0..marker.0 + 4].copy_from_slice(&(size | flags).to_le_bytes());
+        patch_bytes(self.bytes, marker.0, &(size | flags).to_le_bytes())
+            .expect("size marker belongs to this encoder");
         Ok(())
     }
 }

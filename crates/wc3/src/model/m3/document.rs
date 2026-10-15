@@ -5,6 +5,7 @@ use super::{
     Array, Envelope, Md34, RawReference, Read, ReadError, Record, RecordLayout, Ref, Target, Write,
     WriteError,
 };
+use crate::model::common::binary::{align_position, AddressSpace};
 use crate::model::common::{Borrowed, IntoOwned};
 use std::borrow::Cow;
 use std::marker::PhantomData;
@@ -69,30 +70,21 @@ pub struct Document<'data, E: Envelope = Md34> {
 }
 
 fn word(data: &[u8], offset: usize) -> Result<u32, ReadError> {
-    let bytes = data
-        .get(
-            offset
-                ..offset
-                    .checked_add(4)
-                    .ok_or_else(|| ReadError::invalid(offset, "integer span"))?,
-        )
-        .ok_or_else(|| ReadError::invalid(offset, "truncated integer"))?;
-    Ok(u32::from_le_bytes(bytes.try_into().unwrap()))
+    AddressSpace::new(data)
+        .value(offset)
+        .map_err(|_| ReadError::invalid(offset, "truncated integer"))
 }
 fn tag(data: &[u8], offset: usize) -> Result<[u8; 4], ReadError> {
-    let mut tag: [u8; 4] = data
-        .get(offset..offset + 4)
-        .ok_or_else(|| ReadError::invalid(offset, "section tag"))?
+    let mut tag: [u8; 4] = AddressSpace::new(data)
+        .range(offset, 4)
+        .map_err(|_| ReadError::invalid(offset, "section tag"))?
         .try_into()
         .unwrap();
     tag.reverse();
     Ok(tag)
 }
 fn align(value: usize) -> Result<usize, WriteError> {
-    value
-        .checked_add(15)
-        .map(|v| v & !15)
-        .ok_or_else(|| WriteError::invalid("file size"))
+    align_position(value, 16).map_err(|_| WriteError::invalid("file size"))
 }
 fn u32_size(value: usize) -> Result<u32, WriteError> {
     u32::try_from(value).map_err(|_| WriteError::invalid("32-bit file size"))

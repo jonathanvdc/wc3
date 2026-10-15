@@ -31,6 +31,11 @@ operations and archive compression when your application needs them.
 | Diablo III and IV TEX textures | Read, edit, and write typed containers; optionally decode and encode supported pixels. |
 | MPQ v1–v4 archives | Index, extract, create, and edit archives; optionally decompress and compress entries. |
 
+Native codecs share byte access, output buffers, and borrowed fixed-record
+storage through `wc3::model::common`. Each format retains its own codec traits,
+reference types, layout rules, and validation. Shared storage therefore preserves
+the addressing and editing rules of the native document.
+
 Native model APIs describe encoded records and supporting documents. For
 independent authoring values, use [semantic model graphs](docs/semantic.md):
 typed vocabularies, graph relationships, shared resource ownership, and checked

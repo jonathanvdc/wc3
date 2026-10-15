@@ -1,6 +1,33 @@
-//! Checked byte ranges and allocation-free framing for tagged binary streams.
+//! Checked byte access, output storage, and tagged binary framing.
+//!
+//! [`AddressSpace`] reads explicit offsets; [`Cursor`] adds a sequential position
+//! without adding format context. Both borrow the source and report bounds with
+//! an absolute diagnostic origin. [`Output`] appends bytes, reserves aligned
+//! blocks, and patches existing ranges. Format codecs translate these mechanical
+//! failures into their own diagnostics and enforce their native offset limits.
+//!
+//! The free output helpers perform the same operations on caller-owned buffers.
+//! [`Chunks`] iterates tag/length frames without allocating payloads or an index.
+//!
+//! ```
+//! use wc3::model::common::binary::{AddressSpace, Output};
+//!
+//! let mut output = Output::new();
+//! output.append(b"DATA")?;
+//! let offset = output.reserve(4, 16)?;
+//! output.value(offset, &42u32)?;
+//! let bytes = output.finish();
+//! assert_eq!(AddressSpace::new(&bytes).value::<u32>(offset)?, 42);
+//! # Ok::<(), Box<dyn std::error::Error>>(())
+//! ```
 use std::error::Error;
 use std::fmt;
+
+mod storage;
+pub use storage::{
+    align_position, append_bytes, patch_bytes, reserve_bytes, AddressSpace, Cursor, Output,
+    OutputError, ValueError,
+};
 
 /// A failed byte-range read, independent of a particular model format.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

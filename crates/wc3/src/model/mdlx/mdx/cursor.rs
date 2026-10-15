@@ -1,7 +1,9 @@
 //! Checked, bounded reads over immutable bytes.
-use crate::model::common::binary::read_bytes;
+use crate::model::common::binary::{BoundsError, Cursor as ByteCursor, ValueError};
+use crate::model::common::try_array;
 use crate::model::mdlx::mdx;
 use std::borrow::Cow;
+use zerovec::ule::AsULE;
 /// A value that can be read from an MDX byte stream.
 pub trait Read<'data>: Sized {
     /// Reads one value at the current position, leaving subsequent bytes unread.
@@ -34,55 +36,26 @@ macro_rules! owned_scalar_reader {
     )*};
 }
 owned_scalar_reader!(u8, u16, u32, i32, f32);
-impl<T: Copy + Default + 'static + for<'input> Read<'input>, const N: usize> ReadOwned for [T; N] {
+impl<T: 'static + for<'input> Read<'input>, const N: usize> ReadOwned for [T; N] {
     fn decode_owned(bytes: &[u8]) -> Result<Self, mdx::ReadError> {
         Self::decode_mdx(bytes)
     }
 }
 
-impl<'data> Read<'data> for u8 {
-    fn read_mdx(cursor: &mut Cursor<'data>) -> Result<Self, mdx::ReadError> {
-        Ok(cursor.read_bytes(1)?[0])
-    }
-}
-
-impl<'data> Read<'data> for u16 {
-    fn read_mdx(cursor: &mut Cursor<'data>) -> Result<Self, mdx::ReadError> {
-        Ok(u16::from_le_bytes(
-            cursor.read_bytes(2)?.try_into().expect("two-byte word"),
-        ))
-    }
-}
-
-impl<'data> Read<'data> for u32 {
-    fn read_mdx(cursor: &mut Cursor<'data>) -> Result<Self, mdx::ReadError> {
-        Ok(u32::from_le_bytes(
-            cursor.read_bytes(4)?.try_into().expect("four-byte word"),
-        ))
-    }
-}
-
-impl<'data> Read<'data> for i32 {
-    fn read_mdx(cursor: &mut Cursor<'data>) -> Result<Self, mdx::ReadError> {
-        Ok(i32::from_le_bytes(
-            cursor.read_bytes(4)?.try_into().expect("four-byte word"),
-        ))
-    }
-}
-
-impl<'data> Read<'data> for f32 {
-    fn read_mdx(cursor: &mut Cursor<'data>) -> Result<Self, mdx::ReadError> {
-        Ok(f32::from_bits(cursor.read::<u32>()?))
-    }
-}
-
-impl<'data, T: Read<'data> + Copy + Default, const N: usize> Read<'data> for [T; N] {
-    fn read_mdx(cursor: &mut Cursor<'data>) -> Result<Self, mdx::ReadError> {
-        let mut values = [T::default(); N];
-        for value in &mut values {
-            *value = cursor.read()?;
+macro_rules! readable_scalars {
+    ($($ty:ty),* $(,)?) => {$(
+        impl<'data> Read<'data> for $ty {
+            fn read_mdx(cursor: &mut Cursor<'data>) -> Result<Self, mdx::ReadError> {
+                cursor.value()
+            }
         }
-        Ok(values)
+    )*};
+}
+readable_scalars!(u8, u16, u32, i32, f32);
+
+impl<'data, T: Read<'data>, const N: usize> Read<'data> for [T; N] {
+    fn read_mdx(cursor: &mut Cursor<'data>) -> Result<Self, mdx::ReadError> {
+        try_array(|| cursor.read())
     }
 }
 
@@ -93,18 +66,14 @@ impl<'data, T: Read<'data> + Copy + Default, const N: usize> Read<'data> for [T;
 /// before a speculative read to retain a checkpoint.
 #[derive(Clone, Copy, Debug)]
 pub struct Cursor<'a> {
-    bytes: &'a [u8],
-    offset: usize,
-    base: usize,
+    cursor: ByteCursor<'a>,
 }
 
 impl<'a> Cursor<'a> {
     /// Starts at the beginning of `bytes`.
     pub fn new(bytes: &'a [u8]) -> Self {
         Self {
-            bytes,
-            offset: 0,
-            base: 0,
+            cursor: ByteCursor::new(bytes),
         }
     }
 
@@ -115,29 +84,33 @@ impl<'a> Cursor<'a> {
 
     /// Returns the position relative to this cursor's slice.
     pub fn position(&self) -> usize {
-        self.offset
+        self.cursor.position()
     }
 
     /// Returns the position relative to the original cursor's bytes.
     pub fn absolute_position(&self) -> usize {
-        self.base + self.offset
+        self.cursor.absolute_position()
     }
 
     /// Borrows all bytes not yet consumed by this cursor.
     pub fn remaining(&self) -> &'a [u8] {
-        &self.bytes[self.offset..]
+        &self.cursor.data()[self.cursor.position()..]
     }
 
     /// Reads exactly `len` bytes and advances only on success.
     pub fn read_bytes(&mut self, len: usize) -> Result<&'a [u8], mdx::ReadError> {
-        read_bytes(self.bytes, &mut self.offset, len, self.base).map_err(|error| {
-            mdx::ReadError::new(
-                error.offset,
-                mdx::ReadErrorKind::UnexpectedEnd {
-                    needed: error.needed,
-                    remaining: error.remaining,
+        self.cursor.bytes(len).map_err(read_bounds)
+    }
+
+    fn value<T: AsULE>(&mut self) -> Result<T, mdx::ReadError> {
+        self.cursor.value().map_err(|error| match error {
+            ValueError::Bounds(error) => read_bounds(error),
+            ValueError::Invalid => mdx::ReadError::new(
+                self.absolute_position(),
+                mdx::ReadErrorKind::InvalidValue {
+                    field: "scalar encoding",
                 },
-            )
+            ),
         })
     }
 
@@ -158,9 +131,7 @@ impl<'a> Cursor<'a> {
         let base = self.absolute_position();
         let bytes = self.read_bytes(len)?;
         Ok(Self {
-            bytes,
-            offset: 0,
-            base,
+            cursor: ByteCursor::new(bytes).with_origin(base),
         })
     }
 
@@ -182,17 +153,27 @@ impl<'a> Cursor<'a> {
 
     /// Requires that all bytes in this cursor's slice were consumed.
     pub fn finish(self) -> Result<(), mdx::ReadError> {
-        if self.offset == self.bytes.len() {
+        if self.cursor.remaining() == 0 {
             Ok(())
         } else {
             Err(mdx::ReadError::new(
                 self.absolute_position(),
                 mdx::ReadErrorKind::TrailingBytes {
-                    remaining: self.bytes.len() - self.offset,
+                    remaining: self.cursor.remaining(),
                 },
             ))
         }
     }
+}
+
+fn read_bounds(error: BoundsError) -> mdx::ReadError {
+    mdx::ReadError::new(
+        error.offset,
+        mdx::ReadErrorKind::UnexpectedEnd {
+            needed: error.needed,
+            remaining: error.remaining,
+        },
+    )
 }
 
 #[cfg(test)]

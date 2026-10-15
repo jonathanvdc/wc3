@@ -1,11 +1,9 @@
 //! Checked access to main-file and external-payload address spaces.
 use super::records::Polymorphic;
 use super::{Read, ReadError, RecordLayout, Write, WriteError};
-use std::array;
-use zerovec::{
-    ule::{AsULE, ULE},
-    ZeroVec,
-};
+use crate::model::common::binary::{align_position, AddressSpace, Output, OutputError, ValueError};
+use crate::model::common::try_array;
+use zerovec::{ule::AsULE, ZeroVec};
 
 /// Native output address space. Offsets exclude the 16-byte SNO envelope.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -18,7 +16,7 @@ pub enum Space {
 /// Checked reader over one SNO body, with an optional external payload body.
 #[derive(Clone, Copy, Debug)]
 pub struct Decoder<'a> {
-    data: &'a [u8],
+    data: AddressSpace<'a>,
     payload: Option<&'a [u8]>,
     depth: usize,
 }
@@ -26,28 +24,29 @@ impl<'a> Decoder<'a> {
     /// Constructs a codec context for its selected address spaces.
     pub fn new(data: &'a [u8], payload: Option<&'a [u8]>) -> Self {
         Self {
-            data,
+            data: AddressSpace::new(data),
             payload,
             depth: 0,
         }
     }
     /// Returns a checked borrowed byte range.
     pub fn range(&self, at: usize, size: usize) -> Result<&'a [u8], ReadError> {
-        let end = at.checked_add(size).ok_or(ReadError::Overflow)?;
+        at.checked_add(size).ok_or(ReadError::Overflow)?;
         self.data
-            .get(at..end)
-            .ok_or(ReadError::Truncated { offset: at, size })
+            .range(at, size)
+            .map_err(|_| ReadError::Truncated { offset: at, size })
     }
     /// Reads or writes one little-endian scalar or fixed scalar array.
     pub fn value<T: AsULE>(&self, at: usize) -> Result<T, ReadError> {
-        let size = size_of::<T::ULE>();
-        if size == 0 {
-            return Err(ReadError::Invalid("scalar encoding"));
-        }
-        let bytes = self.range(at, size)?;
-        let v = T::ULE::parse_bytes_to_slice(bytes)
-            .map_err(|_| ReadError::Invalid("scalar encoding"))?;
-        Ok(T::from_unaligned(v[0]))
+        at.checked_add(size_of::<T::ULE>())
+            .ok_or(ReadError::Overflow)?;
+        self.data.value(at).map_err(|error| match error {
+            ValueError::Bounds(_) => ReadError::Truncated {
+                offset: at,
+                size: size_of::<T::ULE>(),
+            },
+            ValueError::Invalid => ReadError::Invalid("scalar encoding"),
+        })
     }
     fn descriptor(&self, at: usize, external: bool) -> Result<(Self, usize, usize), ReadError> {
         if self.value::<u64>(at)? != 0 {
@@ -64,7 +63,7 @@ impl<'a> Decoder<'a> {
             return Err(ReadError::Invalid("array nesting limit"));
         }
         if external && size != 0 {
-            child.data = self.payload.ok_or(ReadError::MissingPayload)?;
+            child.data = AddressSpace::new(self.payload.ok_or(ReadError::MissingPayload)?);
         }
         let off = off as usize;
         let size = size as usize;
@@ -94,10 +93,12 @@ impl<'a> Decoder<'a> {
     pub fn fixed<T: Read<'a>, const N: usize>(&self, at: usize) -> Result<[T; N], ReadError> {
         let size = T::SIZE.checked_mul(N).ok_or(ReadError::Overflow)?;
         self.range(at, size)?;
-        let values = (0..N)
-            .map(|i| T::read(self, at + i * T::SIZE))
-            .collect::<Result<Vec<_>, _>>()?;
-        Ok(values.try_into().ok().unwrap())
+        let mut index = 0;
+        try_array(|| {
+            let value = T::read(self, at + index * T::SIZE)?;
+            index += 1;
+            Ok(value)
+        })
     }
     /// Resolves or relocates a native byte-string descriptor.
     pub fn bytes(&self, at: usize) -> Result<&'a [u8], ReadError> {
@@ -145,20 +146,20 @@ impl<'a> Decoder<'a> {
 /// Relocating writer with independent main-file and external-payload buffers.
 #[derive(Clone, Debug, Default)]
 pub struct Encoder {
-    main: Vec<u8>,
-    payload: Vec<u8>,
+    main: Output,
+    payload: Output,
 }
 impl Encoder {
     /// Constructs a codec context for its selected address spaces.
     pub fn new(size: usize) -> Self {
         Self {
-            main: vec![0; size],
-            payload: Vec::new(),
+            main: Output::from(vec![0; size]),
+            payload: Output::new(),
         }
     }
     /// Returns the encoded main body and external payload body, without SNO envelopes.
     pub fn finish(self) -> (Vec<u8>, Vec<u8>) {
-        (self.main, self.payload)
+        (self.main.finish(), self.payload.finish())
     }
     /// Checks that the complete fixed record fits in previously reserved output storage.
     pub fn range(&self, at: usize, size: usize, space: Space) -> Result<(), WriteError> {
@@ -168,11 +169,11 @@ impl Encoder {
             Space::Payload => &self.payload,
         };
         buffer
-            .get(at..end)
-            .ok_or(WriteError::Invalid("record output range"))?;
+            .range(at, end - at)
+            .map_err(|_| WriteError::Invalid("record output range"))?;
         Ok(())
     }
-    fn buffer(&mut self, space: Space) -> &mut Vec<u8> {
+    fn buffer(&mut self, space: Space) -> &mut Output {
         match space {
             Space::Main => &mut self.main,
             Space::Payload => &mut self.payload,
@@ -181,14 +182,12 @@ impl Encoder {
     /// Reserves aligned fixed storage in the selected output address space.
     pub fn reserve(&mut self, size: usize, space: Space) -> Result<usize, WriteError> {
         let b = self.buffer(space);
-        while !b.len().is_multiple_of(8) {
-            b.push(0);
-        }
-        let at = b.len();
-        let end = at.checked_add(size).ok_or(WriteError::Overflow)?;
+        let end = align_position(b.len(), 8)
+            .map_err(|_| WriteError::Overflow)?
+            .checked_add(size)
+            .ok_or(WriteError::Overflow)?;
         i32::try_from(end).map_err(|_| WriteError::Overflow)?;
-        b.resize(end, 0);
-        Ok(at)
+        b.reserve(size, 8).map_err(|_| WriteError::Overflow)
     }
     /// Reads or writes one little-endian scalar or fixed scalar array.
     pub fn value<T: AsULE>(
@@ -200,14 +199,12 @@ impl Encoder {
         if size_of::<T::ULE>() == 0 {
             return Err(WriteError::Invalid("scalar encoding"));
         }
-        let value = value.to_unaligned();
-        let bytes = T::ULE::slice_as_bytes(array::from_ref(&value));
-        let end = at.checked_add(bytes.len()).ok_or(WriteError::Overflow)?;
         self.buffer(space)
-            .get_mut(at..end)
-            .ok_or(WriteError::Invalid("scalar output range"))?
-            .copy_from_slice(bytes);
-        Ok(())
+            .value(at, value)
+            .map_err(|error| match error {
+                OutputError::Bounds(_) => WriteError::Invalid("scalar output range"),
+                _ => WriteError::Overflow,
+            })
     }
     fn descriptor(
         &mut self,
@@ -247,7 +244,9 @@ impl Encoder {
             self.reserve(bytes.len(), target)?
         };
         if !bytes.is_empty() {
-            self.buffer(target)[off..off + bytes.len()].copy_from_slice(bytes);
+            self.buffer(target)
+                .patch(off, bytes)
+                .map_err(|_| WriteError::Invalid("array output range"))?;
         }
         self.descriptor(at, off, bytes.len(), space)
     }
@@ -300,7 +299,9 @@ impl Encoder {
             self.reserve(bytes.len(), space)?
         };
         if !bytes.is_empty() {
-            self.buffer(space)[off..off + bytes.len()].copy_from_slice(bytes);
+            self.buffer(space)
+                .patch(off, bytes)
+                .map_err(|_| WriteError::Invalid("byte output range"))?;
         }
         self.descriptor(at, off, bytes.len(), space)
     }
@@ -342,5 +343,36 @@ impl Encoder {
             cursor += v.size();
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn output_rejects_unrepresentable_reservation_without_padding_storage() {
+        let mut encoder = Encoder::new(5);
+        assert_eq!(
+            encoder.reserve(i32::MAX as usize, Space::Main),
+            Err(WriteError::Overflow)
+        );
+        assert_eq!(encoder.finish(), (vec![0; 5], vec![]));
+    }
+
+    #[test]
+    fn address_space_errors_retain_native_distinctions() {
+        let decoder = Decoder::new(&[0; 4], None);
+        assert_eq!(decoder.range(usize::MAX, 4), Err(ReadError::Overflow));
+        assert_eq!(
+            decoder.value::<u32>(1),
+            Err(ReadError::Truncated { offset: 1, size: 4 })
+        );
+        let mut encoder = Encoder::new(4);
+        assert_eq!(
+            encoder.value(1, &7u32, Space::Main),
+            Err(WriteError::Invalid("scalar output range"))
+        );
+        assert_eq!(encoder.finish(), (vec![0; 4], vec![]));
     }
 }

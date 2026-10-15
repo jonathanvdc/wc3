@@ -1,5 +1,6 @@
 //! Checked payload-relative descriptors and relocating record encoding.
 use super::{ReadError, WriteError};
+use crate::model::common::binary::{align_position, AddressSpace, Output, OutputError, ValueError};
 use std::{mem::size_of, slice::from_ref};
 use zerovec::{
     ule::{AsULE, ULE},
@@ -24,29 +25,30 @@ pub trait Write: RecordLayout {
 /// Checked byte address space shared by every nested descriptor.
 #[derive(Clone, Copy, Debug)]
 pub struct Decoder<'data> {
-    data: &'data [u8],
+    data: AddressSpace<'data>,
 }
 impl<'data> Decoder<'data> {
     /// Selects the payload beginning after the 16-byte SNO header.
     pub fn new(data: &'data [u8]) -> Self {
-        Self { data }
+        Self {
+            data: AddressSpace::new(data),
+        }
     }
     /// Returns an exactly bounded range.
     pub fn range(&self, offset: usize, size: usize) -> Result<&'data [u8], ReadError> {
-        let end = offset
-            .checked_add(size)
-            .ok_or(ReadError::Range { offset, size })?;
         self.data
-            .get(offset..end)
-            .ok_or(ReadError::Range { offset, size })
+            .range(offset, size)
+            .map_err(|_| ReadError::Range { offset, size })
     }
     /// Reads an unaligned fixed-width value without native pointer casts.
     pub fn value<T: AsULE>(&self, offset: usize) -> Result<T, ReadError> {
-        let bytes = self.range(offset, size_of::<T::ULE>())?;
-        ZeroVec::<T>::parse_bytes(bytes)
-            .ok()
-            .and_then(|v| v.get(0))
-            .ok_or(ReadError::Value { offset })
+        self.data.value(offset).map_err(|error| match error {
+            ValueError::Bounds(_) => ReadError::Range {
+                offset,
+                size: size_of::<T::ULE>(),
+            },
+            ValueError::Invalid => ReadError::Value { offset },
+        })
     }
     /// Checks a redundant native count against a resolved array.
     pub fn count(&self, at: usize, expected: usize) -> Result<(), ReadError> {
@@ -117,47 +119,39 @@ impl<'data> Decoder<'data> {
 /// Relocating payload builder. Fixed record ranges are reserved before their leaves.
 #[derive(Debug)]
 pub struct Encoder {
-    data: Vec<u8>,
+    data: Output,
 }
 impl Encoder {
     /// Reserves the root's fixed image at offset zero.
     pub fn new(root_size: usize) -> Self {
         Self {
-            data: vec![0; root_size],
+            data: Output::from(vec![0; root_size]),
         }
     }
     /// Finishes the payload.
     pub fn finish(self) -> Vec<u8> {
-        self.data
+        self.data.finish()
     }
     /// Stores a fixed-width value in previously reserved space.
     pub fn value<T: AsULE>(&mut self, offset: usize, value: T) -> Result<(), WriteError> {
-        let raw = value.to_unaligned();
-        let bytes = T::ULE::slice_as_bytes(from_ref(&raw));
-        let end = offset.checked_add(bytes.len()).ok_or(WriteError::Size)?;
         self.data
-            .get_mut(offset..end)
-            .ok_or(WriteError::Range { offset })?
-            .copy_from_slice(bytes);
-        Ok(())
+            .value(offset, &value)
+            .map_err(|error| match error {
+                OutputError::Bounds(_) => WriteError::Range { offset },
+                _ => WriteError::Size,
+            })
     }
     /// Regenerates a redundant native count from the edited array.
     pub fn count(&mut self, at: usize, count: usize) -> Result<(), WriteError> {
         self.value(at, i32::try_from(count).map_err(|_| WriteError::Size)?)
     }
     fn reserve(&mut self, size: usize) -> Result<usize, WriteError> {
-        let padding = (4 - self.data.len() % 4) % 4;
-        let offset = self
-            .data
-            .len()
-            .checked_add(padding)
-            .ok_or(WriteError::Size)?;
-        let end = offset
+        align_position(self.data.len(), 4)
+            .map_err(|_| WriteError::Size)?
             .checked_add(size)
-            .filter(|n| *n <= i32::MAX as usize)
+            .filter(|end| *end <= i32::MAX as usize)
             .ok_or(WriteError::Size)?;
-        self.data.resize(end, 0);
-        Ok(offset)
+        self.data.reserve(size, 4).map_err(|_| WriteError::Size)
     }
     fn descriptor(
         &mut self,
@@ -192,7 +186,9 @@ impl Encoder {
     ) -> Result<(), WriteError> {
         let offset = self.descriptor(at, values.len(), size_of::<T::ULE>(), prefix)?;
         let bytes = values.as_bytes();
-        self.data[offset..offset + bytes.len()].copy_from_slice(bytes);
+        self.data
+            .patch(offset, bytes)
+            .map_err(|_| WriteError::Range { offset })?;
         Ok(())
     }
     /// Relocates a metadata array and all leaves reachable from it.
@@ -214,4 +210,28 @@ impl Encoder {
 pub(crate) fn copy_value<T: AsULE>(bytes: &mut [u8], value: T) {
     let raw = value.to_unaligned();
     bytes.copy_from_slice(T::ULE::slice_as_bytes(from_ref(&raw)));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn output_rejects_unrepresentable_reservation_without_mutating_storage() {
+        let mut encoder = Encoder::new(5);
+        assert_eq!(encoder.reserve(i32::MAX as usize), Err(WriteError::Size));
+        assert_eq!(encoder.finish(), vec![0; 5]);
+    }
+
+    #[test]
+    fn checked_scalar_access_retains_native_errors() {
+        let decoder = Decoder::new(&[0; 4]);
+        assert_eq!(
+            decoder.value::<u32>(1),
+            Err(ReadError::Range { offset: 1, size: 4 })
+        );
+        let mut encoder = Encoder::new(4);
+        assert_eq!(encoder.value(1, 7u32), Err(WriteError::Range { offset: 1 }));
+        assert_eq!(encoder.finish(), vec![0; 4]);
+    }
 }
