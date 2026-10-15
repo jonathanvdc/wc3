@@ -89,6 +89,10 @@ mod space;
 pub use space::*;
 mod look;
 pub use look::*;
+mod feature_schema;
+pub use feature_schema::*;
+pub mod feature_properties;
+pub use feature_properties::FeatureProperty;
 mod feature;
 pub use feature::*;
 /// Compile-time logical vocabularies and lossless embeddings.

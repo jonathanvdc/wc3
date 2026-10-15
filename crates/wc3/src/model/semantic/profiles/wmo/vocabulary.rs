@@ -4,8 +4,8 @@ use crate::model::semantic::profiles::{
 };
 use crate::model::semantic::Model;
 use crate::model::semantic::{
-    DrawControls, Error, FeatureKind, InstanceControls, MaterialSurface, ModelMetadata,
-    NodeFeature, SingleLook, System, UniversalAppearance, WmoGeometry,
+    DrawControls, Error, FeatureKind, InstanceControls, MaterialSurface, ModelMetadata, SingleLook,
+    System, UniversalAppearance, WmoGeometry,
 };
 /// Vocabulary that maps mechanically to Wmo logical features.
 #[derive(Clone, Debug, Default)]
@@ -76,7 +76,7 @@ impl Extends<Wmo> for Universal {
         MaterialSurface::Wmo(Box::new(value))
     }
     fn feature<'a>(value: <Wmo as Profile>::Feature<'a>) -> Self::Feature<'a> {
-        NodeFeature::Wmo(Box::new(value))
+        value.into()
     }
     fn node<'a>(value: <Wmo as Profile>::Node<'a>) -> Self::Node<'a> {
         let _ = value;

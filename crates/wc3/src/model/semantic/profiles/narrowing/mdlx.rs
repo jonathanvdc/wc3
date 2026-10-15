@@ -2,7 +2,7 @@
 use super::{incompatible, Narrows};
 use crate::model::semantic::profiles::{Mdlx, NoControls, Profile, Universal};
 use crate::model::semantic::{
-    ClipControls, Error, MaterialSurface, MeshControls, ModelMetadata, NodeControls, NodeFeature,
+    ClipControls, Error, MaterialSurface, MeshControls, ModelMetadata, NodeControls,
     TextureControls, UniversalAppearance, UniversalBinding,
 };
 impl Narrows<Universal> for Mdlx {
@@ -43,10 +43,7 @@ impl Narrows<Universal> for Mdlx {
         }
     }
     fn feature<'a>(value: <Universal as Profile>::Feature<'a>) -> Result<Self::Feature<'a>, Error> {
-        match value {
-            NodeFeature::Mdlx(value) => Ok(*value),
-            _ => Err(incompatible("feature")),
-        }
+        value.try_into().map_err(|_| incompatible("feature"))
     }
     fn node<'a>(value: <Universal as Profile>::Node<'a>) -> Result<Self::Node<'a>, Error> {
         match value {

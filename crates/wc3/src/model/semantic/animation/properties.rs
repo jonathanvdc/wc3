@@ -68,7 +68,11 @@ impl<T: Clone + Debug + Eq + Hash + Send + Sync + 'static> KeyValue for T {
 /// A borrowed structural selector identity used for equality and relationship checking.
 /// Profile and union wrappers delegate to their underlying selector; no labels enter identity.
 pub struct PropertyKeyRef<'a>(&'a dyn KeyValue);
-impl PropertyKeyRef<'_> {
+impl<'a> PropertyKeyRef<'a> {
+    pub(crate) fn new<T: PropertyPayload>(value: &'a T) -> Self {
+        Self(value)
+    }
+
     /// Copies the selector into a transient validation relationship.
     pub fn to_owned(&self) -> PropertyIdentityKey {
         PropertyIdentityKey(self.0.owned())

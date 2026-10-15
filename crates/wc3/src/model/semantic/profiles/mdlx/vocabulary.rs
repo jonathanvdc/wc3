@@ -8,7 +8,7 @@ use crate::model::semantic::Model;
 use crate::model::semantic::PropertyIdentityKey;
 use crate::model::semantic::{
     ClipControls, Error, FeatureKind, IdentityBinding, MaterialSurface, MdlxGeometry, MeshControls,
-    ModelMetadata, NodeControls, NodeFeature, SingleLook, TextureControls, UniversalAppearance,
+    ModelMetadata, NodeControls, PropertyPayload, SingleLook, TextureControls, UniversalAppearance,
     UniversalBinding,
 };
 /// Vocabulary that maps mechanically to Warcraft III logical features.
@@ -54,8 +54,7 @@ impl Profile for Mdlx {
 }
 impl SurfacePayload for mdlx::Material<'_> {
     fn supports_property(&self, key: &PropertyIdentityKey) -> bool {
-        key.downcast_ref::<super::properties::Target>()
-            .is_some_and(|key| key.supports_material(self))
+        super::properties::Target::from_identity(key).is_some_and(|key| key.supports_material(self))
     }
 
     fn validate(&self) -> Result<(), Error> {
@@ -64,8 +63,7 @@ impl SurfacePayload for mdlx::Material<'_> {
 }
 impl FeaturePayload for mdlx::Node<'_> {
     fn supports_property(&self, key: &PropertyIdentityKey) -> bool {
-        key.downcast_ref::<super::properties::Target>()
-            .is_some_and(|key| key.supports_feature(self))
+        super::properties::Target::from_identity(key).is_some_and(|key| key.supports_feature(self))
     }
 
     fn kind(&self) -> FeatureKind {
@@ -102,7 +100,7 @@ impl Extends<Mdlx> for Universal {
         MaterialSurface::Mdlx(Box::new(value))
     }
     fn feature<'a>(value: <Mdlx as Profile>::Feature<'a>) -> Self::Feature<'a> {
-        NodeFeature::Mdlx(Box::new(value))
+        value.into()
     }
     fn node<'a>(value: <Mdlx as Profile>::Node<'a>) -> Self::Node<'a> {
         Some(NodeControls::Mdlx(value))

@@ -2,7 +2,7 @@
 use super::{incompatible, Narrows};
 use crate::model::semantic::profiles::{NoControls, Profile, Universal, Wmo};
 use crate::model::semantic::{
-    DrawControls, Error, InstanceControls, MaterialSurface, ModelMetadata, NodeFeature, System,
+    DrawControls, Error, InstanceControls, MaterialSurface, ModelMetadata, System,
     UniversalAppearance,
 };
 impl Narrows<Universal> for Wmo {
@@ -45,10 +45,7 @@ impl Narrows<Universal> for Wmo {
         }
     }
     fn feature<'a>(value: <Universal as Profile>::Feature<'a>) -> Result<Self::Feature<'a>, Error> {
-        match value {
-            NodeFeature::Wmo(value) => Ok(*value),
-            _ => Err(incompatible("feature")),
-        }
+        value.try_into().map_err(|_| incompatible("feature"))
     }
     fn node<'a>(value: <Universal as Profile>::Node<'a>) -> Result<Self::Node<'a>, Error> {
         match value {

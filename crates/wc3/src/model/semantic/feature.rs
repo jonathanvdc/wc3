@@ -1,19 +1,104 @@
-//! Effects and behaviors are individually typed, and can freely share one graph.
-use crate::model::semantic::profiles::{FeaturePayload, Profile, Universal};
-use crate::model::semantic::{profiles, scene, NodeId};
+//! Logical behaviors grouped by purpose rather than their source vocabulary.
+use crate::model::semantic::profiles::{m2, m3, mdlx, wmo, Profile, Universal};
+use crate::model::semantic::{NodeId, Resource};
+mod illumination;
+pub use illumination::*;
+mod cameras;
+pub use cameras::*;
+mod attachments;
+pub use attachments::*;
+mod effect_components;
+pub use effect_components::*;
+mod particles;
+pub use particles::*;
+mod ribbons;
+pub use ribbons::*;
+mod conversions;
+mod links;
+mod selector_support;
 /// Complete logical payload of an attached behavior.
 #[derive(Clone, Debug)]
 pub enum NodeFeature<'a> {
-    /// Format-independent scene behavior.
-    Generic(Box<scene::Feature<'a>>),
-    /// Warcraft III effects and scene actors.
-    Mdlx(Box<profiles::mdlx::Node<'a>>),
-    /// World of Warcraft animated actors.
-    M2(Box<profiles::m2::ActorKind<'a>>),
-    /// StarCraft II attached behavior.
-    M3(Box<profiles::m3::Feature<'a>>),
-    /// Static-world doodad or light behavior.
-    Wmo(Box<profiles::wmo::Node<'a>>),
+    /// Authored illumination.
+    Light(Light),
+    /// Authored camera.
+    Camera(Camera<'a>),
+    /// Attachment point or external model placement.
+    Attachment(Attachment<'a>),
+    /// Independent particle emission.
+    ParticleEmitter(ParticleEmitter<'a>),
+    /// Ribbon generation.
+    RibbonEmitter(RibbonEmitter<'a>),
+    /// Timed gameplay or engine action.
+    Event(EventSource<'a>),
+    /// Geometry opacity, tint, and shadows.
+    GeometryAnimation(mdlx::GeometryAnimation),
+    /// Collision primitive.
+    CollisionShape(mdlx::Collision),
+    /// External particle effect program.
+    ParticleProgram(Box<mdlx::Popcorn<'a>>),
+    /// External face animation actor.
+    FaceActor(Resource<'a>),
+    /// Region-local flicker and cookie program.
+    LightProgram(wmo::PointProgram),
+    /// Animated spatial bounds linked to a model extent.
+    Extent(Box<m3::ExtentBinding>),
+    /// Particle instance inheriting a source emitter with authored overrides.
+    ParticleCopy(Box<m3::ParticleCopy>),
+    /// Surface material projection.
+    Projector(Box<m3::Projector>),
+    /// Spatial particle force field.
+    Force(Box<m3::Force>),
+    /// Spatial vertex deformation field.
+    Warp(Box<m3::Warp>),
+    /// Hit-test volume.
+    HitTest(Box<m3::HitTestShape>),
+    /// Attachment volume with linked bones.
+    AttachmentVolume(Box<m3::AttachmentVolume>),
+    /// Camera-dependent bone orientation.
+    Billboard(Box<m3::BillboardBehavior>),
+    /// Turret rotation constraints.
+    Turret(Box<m3::TurretBehavior>),
+    /// Ground-contact two-bone inverse kinematics.
+    IkJoint(Box<m3::IkJoint>),
+    /// Angularly constrained two-joint inverse kinematics.
+    IkTwoJoint(Box<m3::IkTwoJoint>),
+    /// Cyclic-coordinate-descent inverse kinematics.
+    IkCcd(Box<m3::IkCcd>),
+    /// Single-bone solver.
+    OneBoneSolver(Box<m3::OneBoneSolver>),
+    /// Animated shadow bounds.
+    ShadowBox(Box<m3::ShadowBox>),
+    /// Animated influence volume.
+    ViewVolume(Box<m3::ViewVolume>),
+}
+/// An external effect or a composed simulation definition.
+#[derive(Clone, Debug)]
+pub enum ParticleEmitter<'a> {
+    /// Instance of an externally defined effect resource.
+    Resource(Resource<'a>),
+    /// Authored emission, motion, lifetime, and particle-age appearance.
+    Simulated(Box<ParticleDefinition<'a>>),
+}
+/// Ribbon generation from cross sections or programmed geometry.
+#[derive(Clone, Debug)]
+pub enum RibbonEmitter<'a> {
+    /// Instance of an externally defined effect resource.
+    Resource(Resource<'a>),
+    /// Persistent sections with shared geometry, appearance, and rendering.
+    Trail(Box<TrailEmitter>),
+    /// Programmed geometry with particle-age appearance and forces.
+    Programmed(Box<ProgrammedRibbon<'a>>),
+}
+/// Gameplay event identities and executable engine commands.
+#[derive(Clone, Debug)]
+pub enum EventSource<'a> {
+    /// Named gameplay action emitted at timeline occurrences.
+    Named(mdlx::Events<'a>),
+    /// Four-character action code and external application data identity.
+    Identifier(m2::Event),
+    /// Structured engine command with typed resource and parameter controls.
+    Command(Box<m3::EventCommand<'a>>),
 }
 /// A feature's hierarchy anchor and logical definition.
 #[derive(Clone, Debug)]
@@ -55,11 +140,25 @@ impl NodeFeature<'_> {
     /// Classifies payloads whose concrete type is required by another feature.
     pub fn kind(&self) -> FeatureKind {
         match self {
-            Self::Generic(_) => FeatureKind::Other,
-            Self::Mdlx(value) => FeaturePayload::kind(value.as_ref()),
-            Self::M2(value) => FeaturePayload::kind(value.as_ref()),
-            Self::M3(value) => FeaturePayload::kind(value.as_ref()),
-            Self::Wmo(value) => FeaturePayload::kind(value.as_ref()),
+            Self::GeometryAnimation(_) => FeatureKind::MdlxGeometryAnimation,
+            Self::ParticleEmitter(ParticleEmitter::Simulated(value))
+                if matches!(value.details, ParticleDetails::Programmed(_)) =>
+            {
+                FeatureKind::M3Particle
+            }
+            Self::ParticleCopy(_) => FeatureKind::M3ParticleCopy,
+            Self::RibbonEmitter(RibbonEmitter::Programmed(_)) => FeatureKind::M3Ribbon,
+            Self::Projector(_) => FeatureKind::M3Projection,
+            Self::Extent(_) => FeatureKind::M3Extent,
+            Self::Turret(_) => FeatureKind::M3Turret,
+            Self::Light(Light::World(_)) => FeatureKind::WmoLight,
+            Self::Light(Light::Point(_)) => FeatureKind::WmoPointLight,
+            Self::LightProgram(_) => FeatureKind::WmoPointProgram,
+            Self::Attachment(Attachment::External(ExternalAttachment {
+                appearance: PlacementAppearance::World { .. },
+                ..
+            })) => FeatureKind::WmoDoodad,
+            _ => FeatureKind::Other,
         }
     }
 }

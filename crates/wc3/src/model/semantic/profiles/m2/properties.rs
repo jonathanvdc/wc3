@@ -1,7 +1,10 @@
 //! Typed World of Warcraft destinations, independent of native track descriptors.
 use crate::model::semantic::profiles::M2;
+use crate::model::semantic::AttachmentActivation;
+use crate::model::semantic::NodeFeature;
 use crate::model::semantic::{
-    FeatureId, MaterialId, OwnerId, PropertyKey, PropertyPayload, Quaternion,
+    FeatureId, FeatureProperty, MaterialId, OwnerId, PropertyIdentityKey, PropertyKey,
+    PropertyKeyRef, PropertyPayload, Quaternion,
 };
 use std::any::TypeId;
 /// Camera destinations on an attached camera feature.
@@ -280,7 +283,64 @@ pub enum TextureUnitField {
     Scale,
 }
 
+impl Target {
+    fn shared_feature_property(&self) -> Option<&'static FeatureProperty> {
+        match self {
+            Self::Light(LightField::DiffuseColor) => Some(&FeatureProperty::LightDiffuseColor),
+            Self::Light(LightField::DiffuseIntensity) => {
+                Some(&FeatureProperty::LightDiffuseIntensity)
+            }
+            Self::Light(LightField::AmbientColor) => Some(&FeatureProperty::LightAmbientColor),
+            Self::Light(LightField::AmbientIntensity) => {
+                Some(&FeatureProperty::LightAmbientIntensity)
+            }
+            Self::Light(LightField::AttenuationStart) => {
+                Some(&FeatureProperty::LightAttenuationStart)
+            }
+            Self::Light(LightField::AttenuationEnd) => Some(&FeatureProperty::LightAttenuationEnd),
+            Self::Camera(CameraField::Roll) => Some(&FeatureProperty::CameraRoll),
+            Self::Ribbon(RibbonField::Color) => Some(&FeatureProperty::TrailColor),
+            Self::Ribbon(RibbonField::Alpha) => Some(&FeatureProperty::TrailOpacity),
+            Self::Ribbon(RibbonField::HeightAbove) => Some(&FeatureProperty::TrailHeightAbove),
+            Self::Ribbon(RibbonField::HeightBelow) => Some(&FeatureProperty::TrailHeightBelow),
+            Self::Particle(ParticleField::Rate) => Some(&FeatureProperty::ParticleContinuousRate),
+            Self::Particle(ParticleField::Lifespan) => Some(&FeatureProperty::ParticleLifetime),
+            Self::Particle(ParticleField::Speed) => Some(&FeatureProperty::ParticleSpeed),
+
+            _ => None,
+        }
+    }
+}
 impl PropertyPayload for Target {
+    fn identity(&self) -> PropertyKeyRef<'_> {
+        match self.shared_feature_property() {
+            Some(value) => value.identity(),
+            None => PropertyKeyRef::new(self),
+        }
+    }
+    fn from_identity(key: &PropertyIdentityKey) -> Option<Self> {
+        if let Some(value) = key.downcast_ref::<FeatureProperty>() {
+            return Some(match value {
+                FeatureProperty::LightDiffuseColor => Self::Light(LightField::DiffuseColor),
+                FeatureProperty::LightDiffuseIntensity => Self::Light(LightField::DiffuseIntensity),
+                FeatureProperty::LightAmbientColor => Self::Light(LightField::AmbientColor),
+                FeatureProperty::LightAmbientIntensity => Self::Light(LightField::AmbientIntensity),
+                FeatureProperty::LightAttenuationStart => Self::Light(LightField::AttenuationStart),
+                FeatureProperty::LightAttenuationEnd => Self::Light(LightField::AttenuationEnd),
+                FeatureProperty::CameraRoll => Self::Camera(CameraField::Roll),
+                FeatureProperty::TrailColor => Self::Ribbon(RibbonField::Color),
+                FeatureProperty::TrailOpacity => Self::Ribbon(RibbonField::Alpha),
+                FeatureProperty::TrailHeightAbove => Self::Ribbon(RibbonField::HeightAbove),
+                FeatureProperty::TrailHeightBelow => Self::Ribbon(RibbonField::HeightBelow),
+                FeatureProperty::ParticleContinuousRate => Self::Particle(ParticleField::Rate),
+                FeatureProperty::ParticleLifetime => Self::Particle(ParticleField::Lifespan),
+                FeatureProperty::ParticleSpeed => Self::Particle(ParticleField::Speed),
+                _ => return None,
+            });
+        }
+        key.downcast_ref::<Self>().cloned()
+    }
+
     fn value_type(&self) -> Option<TypeId> {
         Some(match self {
             Target::Camera(CameraField::Position) => TypeId::of::<[f32; 3]>(),
@@ -402,6 +462,44 @@ impl Target {
         match self {
             Self::Color | Self::Opacity => true,
             Self::TextureUnit { index, .. } => *index < value.textures.len(),
+            _ => false,
+        }
+    }
+}
+
+impl Target {
+    pub(crate) fn supports_universal_feature(&self, value: &NodeFeature<'_>) -> bool {
+        use crate::model::semantic::{
+            Attachment, Camera, CameraConvention, Light, LightActivation, ParticleEmitter,
+            RibbonEmitter, TrailAtlasSlot, TrailControls,
+        };
+        match (self, value) {
+            (Self::Light(field), NodeFeature::Light(Light::AmbientDiffuse(v))) => match field {
+                LightField::Enabled => matches!(v.activation, LightActivation::Enabled(_)),
+                _ => true,
+            },
+            (Self::Camera(field), NodeFeature::Camera(Camera::Aimed(v))) => {
+                matches!(field, CameraField::Roll)
+                    || matches!(v.convention, CameraConvention::Diagonal(_))
+            }
+            (Self::Attachment(_), NodeFeature::Attachment(Attachment::Point(value))) => {
+                matches!(value.activation, AttachmentActivation::Enabled(_))
+            }
+            (Self::Ribbon(field), NodeFeature::RibbonEmitter(RibbonEmitter::Trail(value))) => {
+                match field {
+                    RibbonField::TextureSlot => {
+                        matches!(value.appearance.texture_slot, TrailAtlasSlot::Compact(_))
+                    }
+                    RibbonField::Enabled => {
+                        matches!(value.controls, TrailControls::EmissionAngle { .. })
+                    }
+                    _ => true,
+                }
+            }
+            (
+                Self::Particle(field),
+                NodeFeature::ParticleEmitter(ParticleEmitter::Simulated(value)),
+            ) => value.supports_age_driven_property(field),
             _ => false,
         }
     }

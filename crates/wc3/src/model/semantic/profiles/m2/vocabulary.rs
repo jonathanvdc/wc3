@@ -8,7 +8,7 @@ use crate::model::semantic::PropertyIdentityKey;
 use crate::model::semantic::{
     Basis, Bounds, ClipControls, DrawControls, DrawLooks, Error, FeatureKind, IdentityBinding,
     LengthUnit, M2Geometry, MaterialSurface, MeshControls, Model, ModelMetadata, NodeControls,
-    NodeFeature, System, TextureControls, UniversalAppearance, UniversalBinding,
+    PropertyPayload, System, TextureControls, UniversalAppearance, UniversalBinding,
 };
 /// Vocabulary that maps mechanically to M2 logical features.
 #[derive(Clone, Debug, Default)]
@@ -102,8 +102,7 @@ impl Profile for M2 {
 }
 impl SurfacePayload for m2::Material<'_> {
     fn supports_property(&self, key: &PropertyIdentityKey) -> bool {
-        key.downcast_ref::<super::properties::Target>()
-            .is_some_and(|key| key.supports_material(self))
+        super::properties::Target::from_identity(key).is_some_and(|key| key.supports_material(self))
     }
 
     fn validate(&self) -> Result<(), Error> {
@@ -112,8 +111,7 @@ impl SurfacePayload for m2::Material<'_> {
 }
 impl FeaturePayload for m2::ActorKind<'_> {
     fn supports_property(&self, key: &PropertyIdentityKey) -> bool {
-        key.downcast_ref::<super::properties::Target>()
-            .is_some_and(|key| key.supports_feature(self))
+        super::properties::Target::from_identity(key).is_some_and(|key| key.supports_feature(self))
     }
 
     fn kind(&self) -> FeatureKind {
@@ -146,7 +144,7 @@ impl Extends<M2> for Universal {
         MaterialSurface::M2(Box::new(value))
     }
     fn feature<'a>(value: <M2 as Profile>::Feature<'a>) -> Self::Feature<'a> {
-        NodeFeature::M2(Box::new(value))
+        value.into()
     }
     fn node<'a>(value: <M2 as Profile>::Node<'a>) -> Self::Node<'a> {
         value.map(NodeControls::M2)

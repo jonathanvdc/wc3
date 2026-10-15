@@ -1,6 +1,7 @@
 //! Typed StarCraft II destinations for hierarchy and animated bounds.
 use crate::model::semantic::profiles::M3;
 use crate::model::semantic::{FeatureId, NodeId, OwnerId, PropertyKey, PropertyPayload};
+use crate::model::semantic::{FeatureProperty, NodeFeature, PropertyIdentityKey, PropertyKeyRef};
 use std::any::TypeId;
 use std::sync::Arc;
 /// Animated hierarchy batching selection.
@@ -30,6 +31,36 @@ pub enum Target {
 }
 
 impl PropertyPayload for Target {
+    fn identity(&self) -> PropertyKeyRef<'_> {
+        if let Self::Field(path) = self {
+            match path.segments() {
+                [FieldSegment::Field(Field::Light), FieldSegment::Field(Field::DiffuseColor)] => {
+                    return FeatureProperty::LightDiffuseColor.identity()
+                }
+                [FieldSegment::Field(Field::Light), FieldSegment::Field(Field::IntensityMultiplier)] => {
+                    return FeatureProperty::LightDiffuseIntensity.identity()
+                }
+                [FieldSegment::Field(Field::Light), FieldSegment::Field(Field::AttenuationStart)] => {
+                    return FeatureProperty::LightAttenuationStart.identity()
+                }
+                _ => {}
+            }
+        }
+        PropertyKeyRef::new(self)
+    }
+    fn from_identity(key: &PropertyIdentityKey) -> Option<Self> {
+        if let Some(value) = key.downcast_ref::<FeatureProperty>() {
+            let field = match value {
+                FeatureProperty::LightDiffuseColor => Field::DiffuseColor,
+                FeatureProperty::LightDiffuseIntensity => Field::IntensityMultiplier,
+                FeatureProperty::LightAttenuationStart => Field::AttenuationStart,
+                _ => return None,
+            };
+            return Some(Self::Field(FieldPath::root(Field::Light).child(field)));
+        }
+        key.downcast_ref::<Self>().cloned()
+    }
+
     fn value_type(&self) -> Option<TypeId> {
         Some(match self {
             Target::Field(_) => return None,
@@ -537,5 +568,93 @@ impl Target {
     }
     pub(crate) fn supports_material(&self) -> bool {
         matches!(self, Self::Field(path) if matches!(path.segments().first(), Some(FieldSegment::Field(Field::Material))))
+    }
+}
+
+impl Target {
+    pub(crate) fn supports_universal_feature(&self, feature: &NodeFeature<'_>) -> bool {
+        use crate::model::semantic::{
+            Camera, Light, ParticleDetails, ParticleEmitter, RibbonEmitter,
+        };
+        match self {
+            Self::ExtentMinimum | Self::ExtentMaximum | Self::ExtentRadius => {
+                matches!(feature, NodeFeature::Extent(_))
+            }
+            Self::Field(path) => {
+                let matches = matches!(
+                    (path.segments().first(), feature),
+                    (
+                        Some(FieldSegment::Field(Field::Camera)),
+                        NodeFeature::Camera(Camera::Optical(_))
+                    ) | (
+                        Some(FieldSegment::Field(Field::Light)),
+                        NodeFeature::Light(Light::Specular(_))
+                    ) | (
+                        Some(FieldSegment::Field(Field::Force)),
+                        NodeFeature::Force(_)
+                    ) | (Some(FieldSegment::Field(Field::Warp)), NodeFeature::Warp(_))
+                        | (
+                            Some(FieldSegment::Field(Field::Projector)),
+                            NodeFeature::Projector(_)
+                        )
+                        | (
+                            Some(FieldSegment::Field(Field::ParticleCopy)),
+                            NodeFeature::ParticleCopy(_)
+                        )
+                        | (
+                            Some(FieldSegment::Field(Field::Ribbon)),
+                            NodeFeature::RibbonEmitter(RibbonEmitter::Programmed(_))
+                        )
+                        | (
+                            Some(FieldSegment::Field(Field::Shadow)),
+                            NodeFeature::ShadowBox(_)
+                        )
+                        | (
+                            Some(FieldSegment::Field(Field::ViewVolume)),
+                            NodeFeature::ViewVolume(_)
+                        )
+                );
+                let matches = matches
+                    || (matches!(
+                        path.segments().first(),
+                        Some(FieldSegment::Field(Field::Particle))
+                    ) && feature.is_programmed_particle());
+                if !matches {
+                    return false;
+                }
+                if let Some(FieldSegment::Field(field)) = path.segments().get(1) {
+                    let supported = match feature {
+                        NodeFeature::ParticleEmitter(ParticleEmitter::Simulated(value)) => {
+                            value.supports_programmed_property(field)
+                        }
+                        NodeFeature::RibbonEmitter(RibbonEmitter::Programmed(value)) => {
+                            value.supports_programmed_property(field)
+                        }
+                        _ => true,
+                    };
+                    if !supported {
+                        return false;
+                    }
+                }
+                if let [_, FieldSegment::Field(Field::SplinePoints), FieldSegment::Index(index), ..] =
+                    path.segments()
+                {
+                    return match feature {
+                        NodeFeature::ParticleEmitter(ParticleEmitter::Simulated(v)) => {
+                            match &v.details {
+                                ParticleDetails::Programmed(v) => *index < v.spline_points.len(),
+                                _ => false,
+                            }
+                        }
+                        NodeFeature::RibbonEmitter(RibbonEmitter::Programmed(v)) => {
+                            *index < v.spline_points.len()
+                        }
+                        _ => false,
+                    };
+                }
+                true
+            }
+            _ => false,
+        }
     }
 }

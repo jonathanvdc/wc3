@@ -1,7 +1,10 @@
 //! Typed Warcraft III property definitions used by semantic animation bindings.
 use crate::model::semantic::profiles::Mdlx;
+use crate::model::semantic::AttachmentActivation;
+use crate::model::semantic::NodeFeature;
 use crate::model::semantic::{
-    FeatureId, MaterialId, OwnerId, PropertyKey, PropertyPayload, TextureId,
+    FeatureId, FeatureProperty, MaterialId, OwnerId, PropertyIdentityKey, PropertyKey,
+    PropertyKeyRef, PropertyPayload, TextureId,
 };
 use std::any::TypeId;
 
@@ -260,6 +263,10 @@ impl Layer {
 pub enum Target {
     /// Geometry properties.
     Geometry(GeometryField),
+    /// Initial speed shared by resource and atlas particle emitters.
+    ParticleSpeed,
+    /// Continuous particles per second on resource or non-burst atlas emitters.
+    ParticleContinuousRate,
     /// Particle properties.
     Particle(ParticleField),
     /// Particle2 properties.
@@ -444,9 +451,71 @@ pub enum LayerField {
     FresnelTeamColor,
 }
 
+impl Target {
+    fn shared_feature_property(&self) -> Option<&'static FeatureProperty> {
+        match self {
+            Self::Light(LightField::Color) => Some(&FeatureProperty::LightDiffuseColor),
+            Self::Light(LightField::Intensity) => Some(&FeatureProperty::LightDiffuseIntensity),
+            Self::Light(LightField::AmbientColor) => Some(&FeatureProperty::LightAmbientColor),
+            Self::Light(LightField::AmbientIntensity) => {
+                Some(&FeatureProperty::LightAmbientIntensity)
+            }
+            Self::Light(LightField::AttenuationStart) => {
+                Some(&FeatureProperty::LightAttenuationStart)
+            }
+            Self::Light(LightField::AttenuationEnd) => Some(&FeatureProperty::LightAttenuationEnd),
+            Self::ParticleContinuousRate => Some(&FeatureProperty::ParticleContinuousRate),
+            Self::ParticleSpeed | Self::Particle2(Particle2Field::Speed) => {
+                Some(&FeatureProperty::ParticleSpeed)
+            }
+            Self::Camera(CameraField::Roll) => Some(&FeatureProperty::CameraRoll),
+            Self::Ribbon(RibbonField::Color) => Some(&FeatureProperty::TrailColor),
+            Self::Ribbon(RibbonField::Opacity) => Some(&FeatureProperty::TrailOpacity),
+            Self::Ribbon(RibbonField::HeightAbove) => Some(&FeatureProperty::TrailHeightAbove),
+            Self::Ribbon(RibbonField::HeightBelow) => Some(&FeatureProperty::TrailHeightBelow),
+            Self::Particle(ParticleField::EmissionRate) => {
+                Some(&FeatureProperty::ParticleContinuousRate)
+            }
+            Self::Particle(ParticleField::LifeSpan) => Some(&FeatureProperty::ParticleLifetime),
+            Self::Particle(ParticleField::InitialVelocity) => Some(&FeatureProperty::ParticleSpeed),
+
+            _ => None,
+        }
+    }
+}
 impl PropertyPayload for Target {
+    fn identity(&self) -> PropertyKeyRef<'_> {
+        match self.shared_feature_property() {
+            Some(value) => value.identity(),
+            None => PropertyKeyRef::new(self),
+        }
+    }
+    fn from_identity(key: &PropertyIdentityKey) -> Option<Self> {
+        if let Some(value) = key.downcast_ref::<FeatureProperty>() {
+            return Some(match value {
+                FeatureProperty::LightDiffuseColor => Self::Light(LightField::Color),
+                FeatureProperty::LightDiffuseIntensity => Self::Light(LightField::Intensity),
+                FeatureProperty::LightAmbientColor => Self::Light(LightField::AmbientColor),
+                FeatureProperty::LightAmbientIntensity => Self::Light(LightField::AmbientIntensity),
+                FeatureProperty::LightAttenuationStart => Self::Light(LightField::AttenuationStart),
+                FeatureProperty::LightAttenuationEnd => Self::Light(LightField::AttenuationEnd),
+                FeatureProperty::CameraRoll => Self::Camera(CameraField::Roll),
+                FeatureProperty::TrailColor => Self::Ribbon(RibbonField::Color),
+                FeatureProperty::TrailOpacity => Self::Ribbon(RibbonField::Opacity),
+                FeatureProperty::TrailHeightAbove => Self::Ribbon(RibbonField::HeightAbove),
+                FeatureProperty::TrailHeightBelow => Self::Ribbon(RibbonField::HeightBelow),
+                FeatureProperty::ParticleContinuousRate => Self::ParticleContinuousRate,
+                FeatureProperty::ParticleLifetime => Self::Particle(ParticleField::LifeSpan),
+                FeatureProperty::ParticleSpeed => Self::ParticleSpeed,
+                _ => return None,
+            });
+        }
+        key.downcast_ref::<Self>().cloned()
+    }
+
     fn value_type(&self) -> Option<TypeId> {
         Some(match self {
+            Target::ParticleSpeed | Target::ParticleContinuousRate => TypeId::of::<f32>(),
             Target::Geometry(GeometryField::Opacity) => TypeId::of::<f32>(),
             Target::Geometry(GeometryField::Color) => TypeId::of::<[f32; 3]>(),
             Target::Particle(ParticleField::EmissionRate) => TypeId::of::<f32>(),
@@ -525,6 +594,9 @@ impl PropertyPayload for Target {
     }
     fn accepts_owner(&self, owner: OwnerId) -> bool {
         match self {
+            Target::ParticleSpeed | Target::ParticleContinuousRate => {
+                matches!(owner, OwnerId::Feature(_))
+            }
             Target::Geometry(GeometryField::Opacity) => matches!(owner, OwnerId::Feature(_)),
             Target::Geometry(GeometryField::Color) => matches!(owner, OwnerId::Feature(_)),
             Target::Particle(ParticleField::EmissionRate) => matches!(owner, OwnerId::Feature(_)),
@@ -607,6 +679,13 @@ impl PropertyPayload for Target {
 
 impl Target {
     pub(crate) fn supports_feature(&self, value: &super::Node<'_>) -> bool {
+        if matches!(self, Self::ParticleContinuousRate) {
+            return matches!(value, super::Node::Particle(_))
+                || matches!(value, super::Node::Particle2(particle) if !particle.squirt);
+        }
+        if matches!(self, Self::ParticleSpeed) {
+            return matches!(value, super::Node::Particle(_) | super::Node::Particle2(_));
+        }
         match (self, value) {
             (
                 Self::Light(LightField::ShadowStart | LightField::ShadowEnd),
@@ -654,6 +733,86 @@ impl Target {
                 .layers
                 .get(*layer)
                 .is_some_and(|layer| layer.textures.get(*slot).is_some()),
+            _ => false,
+        }
+    }
+}
+
+impl Target {
+    pub(crate) fn supports_universal_feature(&self, value: &NodeFeature<'_>) -> bool {
+        use crate::model::semantic::{
+            Attachment, Camera, CameraConvention, Light, LightActivation, ParticleEmitter,
+            RibbonEmitter, TrailAtlasSlot, TrailControls,
+        };
+        match (self, value) {
+            (
+                Self::Light(
+                    LightField::Color
+                    | LightField::Intensity
+                    | LightField::AttenuationStart
+                    | LightField::AttenuationEnd,
+                ),
+                NodeFeature::Light(Light::Portable(_)),
+            ) => true,
+
+            (Self::Light(field), NodeFeature::Light(Light::AmbientDiffuse(v))) => match field {
+                LightField::Color
+                | LightField::Intensity
+                | LightField::AmbientColor
+                | LightField::AmbientIntensity
+                | LightField::AttenuationStart
+                | LightField::AttenuationEnd => true,
+                _ => match &v.activation {
+                    LightActivation::Visibility(control) => match field {
+                        LightField::ShadowStart | LightField::ShadowEnd => {
+                            control.shadow_range.is_some()
+                        }
+                        LightField::Quadratic | LightField::Linear | LightField::Damping => {
+                            control.falloff.is_some()
+                        }
+                        _ => true,
+                    },
+                    LightActivation::Enabled(_) => false,
+                },
+            },
+            (Self::Camera(field), NodeFeature::Camera(Camera::Aimed(v))) => match field {
+                CameraField::Roll => true,
+                _ => match &v.convention {
+                    CameraConvention::Vertical(control) => match field {
+                        CameraField::FocusDistance => control.focus_distance.is_some(),
+                        CameraField::FocalLength => control.focal_length.is_some(),
+                        CameraField::FStop => control.f_stop.is_some(),
+                        _ => true,
+                    },
+                    CameraConvention::Diagonal(_) => false,
+                },
+            },
+            (Self::Geometry(_), NodeFeature::GeometryAnimation(_))
+            | (Self::Popcorn(_), NodeFeature::ParticleProgram(_)) => true,
+            (
+                Self::Particle(field),
+                NodeFeature::ParticleEmitter(ParticleEmitter::Simulated(value)),
+            ) => value.supports_resource_property(field),
+            (
+                Self::Particle2(field),
+                NodeFeature::ParticleEmitter(ParticleEmitter::Simulated(value)),
+            ) => value.supports_atlas_property(field),
+            (Self::Ribbon(field), NodeFeature::RibbonEmitter(RibbonEmitter::Trail(value))) => {
+                match field {
+                    RibbonField::TextureSlot => {
+                        matches!(value.appearance.texture_slot, TrailAtlasSlot::Wide(_))
+                    }
+                    RibbonField::Visibility => {
+                        matches!(value.controls, TrailControls::Gravity { .. })
+                    }
+                    _ => true,
+                }
+            }
+            (Self::Attachment(_), NodeFeature::Attachment(Attachment::External(value))) => {
+                value.point.as_ref().is_some_and(|point| {
+                    matches!(point.activation, AttachmentActivation::Visibility(_))
+                })
+            }
             _ => false,
         }
     }

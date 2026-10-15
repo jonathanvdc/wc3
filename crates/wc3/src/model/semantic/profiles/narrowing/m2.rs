@@ -3,7 +3,7 @@ use super::{incompatible, Narrows};
 use crate::model::semantic::profiles::{NoControls, Profile, Universal, M2};
 use crate::model::semantic::{
     ClipControls, DrawControls, Error, MaterialSurface, MeshControls, ModelMetadata, NodeControls,
-    NodeFeature, System, TextureControls, UniversalAppearance, UniversalBinding,
+    System, TextureControls, UniversalAppearance, UniversalBinding,
 };
 impl Narrows<Universal> for M2 {
     fn appearance<'a>(
@@ -46,10 +46,7 @@ impl Narrows<Universal> for M2 {
         }
     }
     fn feature<'a>(value: <Universal as Profile>::Feature<'a>) -> Result<Self::Feature<'a>, Error> {
-        match value {
-            NodeFeature::M2(value) => Ok(*value),
-            _ => Err(incompatible("feature")),
-        }
+        value.try_into().map_err(|_| incompatible("feature"))
     }
     fn node<'a>(value: <Universal as Profile>::Node<'a>) -> Result<Self::Node<'a>, Error> {
         match value {

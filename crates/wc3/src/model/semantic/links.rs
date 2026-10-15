@@ -244,14 +244,8 @@ impl ValidateLinks for FeatureId {
     }
 }
 impl ValidateLinks for NodeFeature<'_> {
-    fn visit_links(&self, v: &mut dyn FnMut(Link)) {
-        match self {
-            Self::Generic(value) => value.visit_links(v),
-            Self::Mdlx(value) => value.visit_links(v),
-            Self::M2(value) => value.visit_links(v),
-            Self::M3(value) => value.visit_links(v),
-            Self::Wmo(value) => value.visit_links(v),
-        }
+    fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
+        self.visit_feature_links(visitor);
     }
 }
 

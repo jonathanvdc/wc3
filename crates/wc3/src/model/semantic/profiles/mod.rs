@@ -1,10 +1,10 @@
 //! Compile-time vocabulary of logical payloads; unrelated to native file revisions.
-use crate::model::semantic::OwnerId;
 use crate::model::semantic::{
-    AppearanceSchema, BindingSchema, Bounds, Error, FeatureKind, GeometrySchema, Link,
-    MaterialSurface, Model, ModelMetadata, NodeFeature, PbrSurface, SkinId, SystemPayload,
+    AppearanceSchema, BindingSchema, Bounds, Error, FeatureKind, FeatureProperty, GeometrySchema,
+    Link, MaterialSurface, Model, ModelMetadata, NodeFeature, PbrSurface, SkinId, SystemPayload,
     ValidateLinks,
 };
+use crate::model::semantic::{Camera, CameraConvention, FeatureSchema, OwnerId};
 use crate::model::semantic::{
     ClipControls, DrawControls, GeometryData, InstanceControls, Material, MeshControls,
     NodeControls, System, TextureControls, UniversalAppearance, UniversalBinding,
@@ -98,7 +98,7 @@ pub trait Profile: Clone + Debug + 'static {
     /// Complete surface payload, with no unsupported family variants.
     type Surface<'a>: SurfacePayload;
     /// Complete attached behavior payload.
-    type Feature<'a>: FeaturePayload;
+    type Feature<'a>: FeaturePayload + FeatureSchema<'a>;
     /// Additional logical hierarchy behavior.
     type Node<'a>: ControlsPayload + Default;
     /// Additional texture behavior, which may borrow its authoring data.
@@ -398,14 +398,21 @@ impl SurfacePayload for MaterialSurface<'_> {
 }
 impl FeaturePayload for NodeFeature<'_> {
     fn supports_property(&self, key: &PropertyIdentityKey) -> bool {
-        match self {
-            Self::Mdlx(v) => v.supports_property(key),
-            Self::M2(v) => v.supports_property(key),
-            Self::M3(v) => v.supports_property(key),
-
-            Self::Wmo(v) => v.supports_property(key),
-            Self::Generic(_) => false,
+        if let Some(supported) = self.supports_shared_feature_property(key) {
+            return supported;
         }
+        if matches!(
+            key.downcast_ref::<FeatureProperty>(),
+            Some(FeatureProperty::CameraVerticalFieldOfView)
+        ) {
+            return matches!(self, NodeFeature::Camera(Camera::Aimed(camera)) if matches!(camera.convention, CameraConvention::Vertical(_)));
+        }
+        mdlx::properties::Target::from_identity(key)
+            .is_some_and(|target| target.supports_universal_feature(self))
+            || m2::properties::Target::from_identity(key)
+                .is_some_and(|target| target.supports_universal_feature(self))
+            || m3::properties::Target::from_identity(key)
+                .is_some_and(|target| target.supports_universal_feature(self))
     }
 
     fn kind(&self) -> FeatureKind {
@@ -616,6 +623,8 @@ impl<A: PropertyPayload, B: PropertyPayload> PropertyPayload for Either<A, B> {
 /// Structural property selectors from all built-in semantic vocabularies.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum UniversalProperty {
+    /// Shared behavior destination with format-independent semantics.
+    Feature(FeatureProperty),
     /// Warcraft III destination.
     Mdlx(mdlx::properties::Target),
     /// World of Warcraft destination.
@@ -626,19 +635,22 @@ pub enum UniversalProperty {
 impl PropertyPayload for UniversalProperty {
     fn identity(&self) -> PropertyKeyRef<'_> {
         match self {
+            Self::Feature(v) => v.identity(),
             Self::Mdlx(v) => v.identity(),
             Self::M2(v) => v.identity(),
             Self::M3(v) => v.identity(),
         }
     }
     fn from_identity(key: &PropertyIdentityKey) -> Option<Self> {
-        mdlx::properties::Target::from_identity(key)
-            .map(Self::Mdlx)
+        FeatureProperty::from_identity(key)
+            .map(Self::Feature)
+            .or_else(|| mdlx::properties::Target::from_identity(key).map(Self::Mdlx))
             .or_else(|| m2::properties::Target::from_identity(key).map(Self::M2))
             .or_else(|| m3::properties::Target::from_identity(key).map(Self::M3))
     }
     fn value_type(&self) -> Option<TypeId> {
         match self {
+            Self::Feature(v) => v.value_type(),
             Self::Mdlx(v) => v.value_type(),
             Self::M2(v) => v.value_type(),
             Self::M3(v) => v.value_type(),
@@ -646,6 +658,7 @@ impl PropertyPayload for UniversalProperty {
     }
     fn accepts_owner(&self, owner: OwnerId) -> bool {
         match self {
+            Self::Feature(v) => v.accepts_owner(owner),
             Self::Mdlx(v) => v.accepts_owner(owner),
             Self::M2(v) => v.accepts_owner(owner),
             Self::M3(v) => v.accepts_owner(owner),

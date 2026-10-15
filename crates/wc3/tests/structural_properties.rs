@@ -10,8 +10,9 @@ use wc3::model::semantic::profiles::mdlx::{
 };
 use wc3::model::semantic::profiles::{Either, FeaturePayload, Mdlx, Profile, Universal, M2};
 use wc3::model::semantic::{
-    Animated, Channel, Clock, Curve, FeatureId, FeatureKind, Link, Material, Model, Node, OwnerId,
-    Property, PropertyDescriptor, PropertyPayload, PropertyTarget, Time, Track, ValidateLinks,
+    Animated, Channel, Clock, Curve, FeatureId, FeatureKind, FeatureSchema, FeatureView, Link,
+    Material, Model, Node, OwnerId, Property, PropertyDescriptor, PropertyPayload, PropertyTarget,
+    Time, Track, ValidateLinks,
 };
 
 fn light_model<'a>(times: &'a [Time], values: &'a [f32]) -> Model<'a, Mdlx> {
@@ -135,7 +136,7 @@ fn layer_and_texture_slot_ordinals_must_exist_in_the_selected_material() {
 }
 
 #[test]
-fn exact_property_narrowing_rejects_another_profile_vocabulary() {
+fn exact_property_narrowing_accepts_shared_fields_and_rejects_different_semantics() {
     let times = [Time::default()];
     let values = [1f32];
     let model = light_model(&times, &values);
@@ -143,7 +144,13 @@ fn exact_property_narrowing_rejects_another_profile_vocabulary() {
         .target()
         .clone()
         .widen::<Universal>();
-    assert!(target.try_narrow::<M2>().is_err());
+    assert!(target.try_narrow::<M2>().is_ok());
+    let feature = model.features().next().unwrap().0;
+    assert!(light::VISIBILITY
+        .bind(feature)
+        .widen::<Universal>()
+        .try_narrow::<M2>()
+        .is_err());
 }
 
 #[derive(Clone, Debug)]
@@ -164,6 +171,11 @@ struct ApplicationFeature {
 impl ValidateLinks for ApplicationFeature {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
         self.weight.visit_links(visitor);
+    }
+}
+impl<'data> FeatureSchema<'data> for ApplicationFeature {
+    fn feature(&self) -> FeatureView<'_, 'data> {
+        FeatureView::Custom(self)
     }
 }
 impl FeaturePayload for ApplicationFeature {

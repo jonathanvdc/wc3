@@ -123,9 +123,121 @@ authored axis-aligned box with a sphere radius derived from its half-diagonal.
 Native image definitions also retain the profile's sampler and supplemental texture
 controls. M2 can preserve an alternate filename alongside a replaceable-image or
 file-data-ID selection. Surfaces additionally implement `SurfacePayload`, attached
-features implement `FeaturePayload`, and systems implement `SystemPayload`. Geometry
-schemas define their full attribute and connectivity vocabulary rather than
+features implement `FeaturePayload` and `FeatureSchema`, and systems implement
+`SystemPayload`. Geometry schemas define their full attribute and connectivity vocabulary rather than
 attaching arbitrary streams to a narrower native schema.
+
+## Attached behavior and shared feature inspection
+
+Universal's `NodeFeature` selects behavior directly: lights, cameras, attachments,
+particle and ribbon emitters, events, collision shapes, and geometry animation.
+It also admits light and external particle programs, particle copies, projectors,
+force and deformation fields, attachment and hit-test volumes, billboard and
+turret behaviors, inverse-kinematics solvers, and animated bounds. These are
+independently identified features anchored to ordinary hierarchy nodes. There is
+no outer source-format variant to unwrap before discovering a feature's purpose.
+
+Shared structures retain common authored fields while explicit alternatives
+preserve different interpretations. `AmbientDiffuseLight` owns independently
+animated diffuse and ambient emission and distance attenuation. Its
+`LightActivation` distinguishes fractional visibility with optional shadow and
+falloff controls from boolean enablement. Specular, world, region-point, and
+portable lighting retain their complete definitions as separate illumination
+models. Unresolved light-kind selectors retain their original vocabulary, so
+changing activation cannot reinterpret an unknown code in another format.
+Unresolved controls remain authored values.
+
+`AimedCamera` shares eye displacement, target and target displacement, clipping,
+roll, and field of view. `CameraConvention` distinguishes vertical projection
+with visibility and photographic controls from diagonal projection with an
+application camera role. Widening a static vertical field of view represents it
+as a constant animated value; adding a binding prevents exact MDLX narrowing.
+Optical camera programs retain their initial/reset values and animation-reference
+metadata rather than collapsing them into a simpler rest value.
+
+Attachments compose identity, activation, and placement independently.
+`AttachmentPoint` exposes a named identity, an application role, or an MDLX point
+index; those namespaces remain distinct even when their numeric values coincide.
+Its activation explicitly describes uncontrolled, boolean-enabled, or fractionally
+visible behavior. The point also retains any unresolved authored control.
+Exact export checks identity namespace, activation semantics, and control presence
+against the destination vocabulary. `ExternalAttachment` combines a resource with an optional point
+and placement appearance. MDLX attachments and WMO doodads therefore share the
+external placement structure, while world tint and light selection remain an
+explicit appearance program. MDLX path strings retain their borrowed or owned
+storage as byte paths; exact MDLX narrowing requires UTF-8.
+
+`ParticleDefinition` owns shared emission, motion, lifetime, and particle-age
+appearance components.
+All simulated particles expose their rate, initial speed, speed variation,
+gravity, duration, and lifetime variation through those same fields.
+`ParticleScalar` distinguishes rest-value animation from programmed values with
+independent initial/reset values and animation-reference metadata. The emission
+trigger distinguishes continuous rates, keyed burst counts, and programmed
+burst controls. Fractional visibility and boolean activation remain separate.
+Directional gravity, animated vector acceleration, and programmed gravity words
+retain their distinct interpretations.
+
+`ParticleAppearance` distinguishes resource-defined appearance, staged color,
+opacity and scale, arbitrary age curves, and programmed age controls. It is
+owned independently of emitter timing and simulation details. The remaining
+`ParticleDetails` select the simulation, rendering, and source geometry rules:
+resource particles, atlas sprites and tails, age-driven particles, or programmed
+effects. Atlas and age-driven definitions group rendering and emission shape. Model-clock animation changes emitter parameters, while particle-age
+programs control the appearance of each living particle. Widening does not
+convert degrees to radians, reinterpret unknown controls, or bake an appearance
+program into a different simulation.
+
+MDLX and M2 ribbons widen to one owned `TrailEmitter`, composed from section
+geometry, animated appearance, rendering bindings, and physical controls.
+Generation rate uses `f64`, which exactly retains either native `u32` or `f32`
+values. Checked export requires an integral in-range rate for MDLX or an exactly
+representable `f32` rate for M2. Atlas dimensions similarly use a shared unsigned
+width, while animated atlas selectors retain their `u16` or `u32` value domain
+and structural property identity. Gravity and emission angle retain separate
+meanings; layered materials and ordered texture/surface bindings remain explicit
+rendering programs.
+
+Programmed particles and ribbons also share `ParticleMotion`, `ParticleLifetime`,
+`ProgrammedDirection`, particle-age appearance, force response, and noise
+components. Their remaining geometry and simulation controls stay on their own
+definitions. Particle copies retain a checked reference to a compatible independent
+programmed emitter. Events distinguish named sources, four-character gameplay
+identifiers, and structured engine commands.
+
+`FeatureSchema::feature` borrows a `FeatureView` from any profile's feature
+payload, including custom unions. Application-specific behaviors can return
+`FeatureView::Custom` while retaining their concrete profile vocabulary.
+Consumers can discover behavior before widening an entire model. `LightView::ambient_diffuse` and `CameraView::aimed` expose common
+borrowed fields across the constrained and universal representations. The views
+also retain access to complete definitions for specialized controls.
+Particle emission views distinguish continuous rates, keyed bursts, external
+program inputs, and programmed rates with independent burst controls. Lifetime
+views preserve static seconds, animated seconds, and programmed values. Ribbon
+edge-strip views share color, opacity, heights, and section lifetime while
+retaining exact generation rates and the atlas selector's original animation
+value domain. Inspection neither clones payloads nor materializes their borrowed
+curves. After widening, the shared owned components can be edited without selecting a
+native payload:
+
+```rust
+use wc3::model::semantic::profiles::mdlx;
+use wc3::model::semantic::{Animated, ParticleDefinition, ParticleScalar};
+
+let mut emitter = ParticleDefinition::from(mdlx::Particle2::default());
+emitter.emission.rate = ParticleScalar::Animated(Animated::constant(24.));
+emitter.motion.speed = ParticleScalar::Animated(Animated::constant(8.));
+let exported = mdlx::Particle2::try_from(emitter).unwrap();
+assert_eq!(exported.emission_rate.default, 24.);
+assert_eq!(exported.speed.default, 8.);
+```
+
+Widening moves each feature into its behavior representation. Exact narrowing
+checks its current fields and interpretations, preserving resources, animation
+bindings, and relationship identities. For example, editing shared diffuse
+intensity survives MDLX narrowing; changing boolean enablement into fractional
+visibility requires an explicit authoring decision. Unsupported features and
+unrepresentable additions return errors instead of being discarded.
 
 ## Geometry representations and profile constraints
 
@@ -328,8 +440,18 @@ owner identity type, value type, and property enum. For example,
 `profiles::mdlx::properties::Layer(index).texture_slot(slot)` selects a material
 layer and sampling slot through integer fields. M2 and M3 publish their selectors
 under their own `properties` modules. M3's nested fields use `FieldPath` with enum
-field segments and collection ordinals. Each profile retains its own selector
-vocabulary even when field labels coincide.
+field segments and collection ordinals. Shared feature destinations live under `feature_properties::light` and
+`feature_properties::camera`. Diffuse and ambient illumination, attenuation, and
+camera roll share structural identity where their value and spatial semantics
+agree. Native selectors resolve those same identities for exact export. Universal also
+admits `camera::VERTICAL_FIELD_OF_VIEW` for vertical aimed cameras; MDLX narrowing
+rejects this binding because its field of view is static. `feature_properties::trail`
+provides shared tint, opacity, and cross-section extent destinations, while
+`feature_properties::particle` exposes continuous rate, lifetime, and initial
+speed where those quantities have established shared units. Keyed burst counts
+remain distinct from continuous emission rates. Fields
+whose meanings differ retain distinct selectors, including camera projection
+and boolean enablement versus fractional visibility.
 Publication checks owner identities, selector families, existing layer and slot
 ordinals, and declared value domains.
 

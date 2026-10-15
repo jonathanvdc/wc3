@@ -4,15 +4,14 @@ use crate::model::semantic::profiles::UniversalProperty;
 use crate::model::semantic::profiles::{
     self, Extends, FeaturePayload, NoControls, Profile, SurfacePayload, Universal,
 };
-use crate::model::semantic::PropertyIdentityKey;
 use crate::model::semantic::{
     Basis, Billboard, Channel, ClipControls, Clock, ColorSpace, DrawControls, Error,
     ExplicitBinding, FeatureKind, GeometrySchema as _, Inheritance, InstanceControls,
     Interpolation, LengthUnit, Link, M3Geometry, MaterialSurface, MeshControls, Model,
-    ModelMetadata, NodeControls, NodeFeature, PropertyTarget, Resource, Sampler, SingleLook,
-    SkinId, System, Topology, Transform, UniversalAppearance, UniversalBinding, ValidateLinks,
-    VertexInfluences,
+    ModelMetadata, NodeControls, PropertyTarget, Resource, Sampler, SingleLook, SkinId, System,
+    Topology, Transform, UniversalAppearance, UniversalBinding, ValidateLinks, VertexInfluences,
 };
+use crate::model::semantic::{PropertyIdentityKey, PropertyPayload};
 use std::collections::HashSet;
 use std::str::from_utf8;
 /// Vocabulary that maps mechanically to M3 logical features.
@@ -516,8 +515,7 @@ impl Profile for M3 {
 }
 impl SurfacePayload for profiles::m3::Material<'_> {
     fn supports_property(&self, key: &PropertyIdentityKey) -> bool {
-        key.downcast_ref::<super::properties::Target>()
-            .is_some_and(|key| key.supports_material())
+        super::properties::Target::from_identity(key).is_some_and(|key| key.supports_material())
     }
 
     fn validate(&self) -> Result<(), Error> {
@@ -526,8 +524,7 @@ impl SurfacePayload for profiles::m3::Material<'_> {
 }
 impl FeaturePayload for profiles::m3::Feature<'_> {
     fn supports_property(&self, key: &PropertyIdentityKey) -> bool {
-        key.downcast_ref::<super::properties::Target>()
-            .is_some_and(|key| key.supports_feature(self))
+        super::properties::Target::from_identity(key).is_some_and(|key| key.supports_feature(self))
     }
 
     fn kind(&self) -> FeatureKind {
@@ -568,7 +565,7 @@ impl Extends<M3> for Universal {
         MaterialSurface::M3(Box::new(value))
     }
     fn feature<'a>(value: <M3 as Profile>::Feature<'a>) -> Self::Feature<'a> {
-        NodeFeature::M3(Box::new(value))
+        value.into()
     }
     fn node<'a>(value: <M3 as Profile>::Node<'a>) -> Self::Node<'a> {
         Some(NodeControls::M3(value))
