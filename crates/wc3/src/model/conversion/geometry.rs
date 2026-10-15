@@ -170,7 +170,7 @@ pub fn project<'a, 'data: 'a, P: Profile>(
                     name: source.name.clone(),
                     controls: None,
                     bounds: source.bounds,
-                    geometry: UniversalGeometry::Flexible(GeometryData {
+                    geometry: UniversalGeometry::General(GeometryData {
                         positions: source.positions().clone(),
                         normals: source.normals().cloned().unwrap_or_default(),
                         tangents: source.tangents().cloned().unwrap_or_default(),
@@ -407,7 +407,7 @@ pub fn project<'a, 'data: 'a, P: Profile>(
                     controls: None,
                     name: source.name.clone(),
                     bounds: source.bounds,
-                    geometry: UniversalGeometry::Flexible(GeometryData {
+                    geometry: UniversalGeometry::General(GeometryData {
                         positions,
                         normals,
                         tangents,

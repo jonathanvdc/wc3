@@ -4,7 +4,7 @@ use crate::model::semantic::profiles::{NoControls, Profile, Universal, M3};
 use crate::model::semantic::{
     ClipControls, ControllerControls, DrawControls, Error, InstanceControls, MaterialSurface,
     MeshControls, ModelControls, NodeControls, NodeFeature, System, UniversalAppearance,
-    UniversalBinding, UniversalGeometry,
+    UniversalBinding,
 };
 impl Narrows<Universal> for M3 {
     fn asset<'a>(value: <Universal as Profile>::Asset<'a>) -> Result<Self::Asset<'a>, Error> {
@@ -30,10 +30,7 @@ impl Narrows<Universal> for M3 {
     fn geometry<'a>(
         value: <Universal as Profile>::Geometry<'a>,
     ) -> Result<Self::Geometry<'a>, Error> {
-        match value {
-            UniversalGeometry::M3(value) => Ok(value),
-            _ => Err(incompatible("geometry")),
-        }
+        value.try_into()
     }
     fn model<'a>(value: <Universal as Profile>::Model<'a>) -> Result<Self::Model<'a>, Error> {
         match value {

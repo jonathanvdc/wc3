@@ -1,9 +1,10 @@
 //! Complete geometry vocabularies with borrowed inspection of their logical streams.
 use crate::model::semantic::geometry_edit::{check_edit, remap_attribute, remap_values};
-use crate::model::semantic::profiles::Either;
+use crate::model::semantic::profiles::{self as profiles, Either};
 use crate::model::semantic::{
-    Attribute, AttributeDomain, AttributeValues, Error, Influence, Link, M2Geometry, M3Geometry,
-    MdlxGeometry, NodeInfluence, Topology, ValidateLinks, Values, VertexInfluences, WmoGeometry,
+    Attribute, AttributeDomain, AttributeValues, Error, Influence, Link, M2Geometry,
+    M3CollisionGeometry, M3Geometry, MdlxGeometry, NodeInfluence, Topology, ValidateLinks, Values,
+    VertexGeometry, VertexInfluences, WmoGeometry,
 };
 use crate::model::semantic::{GeometryEdit, GeometryEditCapabilities, StreamSupport};
 use std::fmt::{Debug, Formatter, Result as FmtResult};
@@ -198,210 +199,155 @@ impl InfluenceRows<'_, '_> {
     }
 }
 
-/// Complete built-in geometry vocabulary, preserving each authored schema on widening.
+/// Geometry representations distinguished by their authored data, rather than source format.
 #[derive(Clone, Debug)]
 pub enum UniversalGeometry<'data> {
-    /// Diablo III geometry with independent tangent and binormal streams.
-    D3(crate::model::semantic::profiles::diablo::d3::Geometry<'data>),
-    /// Diablo IV declared logical vertex streams.
-    D4(crate::model::semantic::profiles::diablo::d4::Geometry<'data>),
-    /// General authoring geometry, including polygons and custom attributes.
-    Flexible(GeometryData<'data>),
-    /// Warcraft III geometry and joint distribution semantics.
-    Mdlx(MdlxGeometry<'data>),
-    /// World of Warcraft geometry with its two coordinate streams and four joint slots.
-    M2(M2Geometry<'data>),
-    /// StarCraft II geometry, including sparse coordinate slots.
-    M3(M3Geometry<'data>),
+    /// Independent tangent and binormal streams and three-slot skinning.
+    D3(profiles::diablo::d3::Geometry<'data>),
+    /// Declared logical streams and material-slot relationships.
+    D4(profiles::diablo::d4::Geometry<'data>),
+    /// General authoring geometry, including polygons, custom attributes, and variable influences.
+    General(GeometryData<'data>),
+    /// Shared vertex streams with explicit joint-distribution semantics.
+    Vertex(VertexGeometry<'data>),
+    /// Collision connectivity and per-triangle controls, independent of shading.
+    Collision(M3CollisionGeometry<'data>),
     /// Static-world geometry, including face collision and rendering controls.
     Wmo(WmoGeometry<'data>),
     /// Editable-model polygon groups, typed layers, and direct node influences.
-    Wem(crate::model::semantic::profiles::wem::Geometry<'data>),
+    Wem(profiles::wem::Geometry<'data>),
 }
 impl Default for UniversalGeometry<'_> {
     fn default() -> Self {
-        Self::Flexible(GeometryData::default())
+        Self::General(GeometryData::default())
     }
 }
 impl<'data> From<MdlxGeometry<'data>> for UniversalGeometry<'data> {
     fn from(value: MdlxGeometry<'data>) -> Self {
-        Self::Mdlx(value)
+        Self::Vertex(value.into())
     }
 }
 impl<'data> From<M2Geometry<'data>> for UniversalGeometry<'data> {
     fn from(value: M2Geometry<'data>) -> Self {
-        Self::M2(value)
+        Self::Vertex(value.into())
     }
 }
 impl<'data> From<M3Geometry<'data>> for UniversalGeometry<'data> {
     fn from(value: M3Geometry<'data>) -> Self {
-        Self::M3(value)
+        match value {
+            M3Geometry::Display(value) => Self::Vertex(value.into()),
+            M3Geometry::Collision(value) => Self::Collision(value),
+        }
+    }
+}
+impl<'data> From<VertexGeometry<'data>> for UniversalGeometry<'data> {
+    fn from(value: VertexGeometry<'data>) -> Self {
+        Self::Vertex(value)
     }
 }
 impl<'data> From<GeometryData<'data>> for UniversalGeometry<'data> {
     fn from(value: GeometryData<'data>) -> Self {
-        Self::Flexible(value)
+        Self::General(value)
     }
+}
+impl<'data> UniversalGeometry<'data> {
+    fn into_vertex(self) -> Result<VertexGeometry<'data>, Error> {
+        match self {
+            Self::Vertex(value) => Ok(value),
+            Self::General(value) => value.try_into(),
+            _ => Err(Error::new(
+                "geometry",
+                "geometry carries a different authored domain",
+            )),
+        }
+    }
+}
+impl<'data> TryFrom<UniversalGeometry<'data>> for MdlxGeometry<'data> {
+    type Error = Error;
+    fn try_from(value: UniversalGeometry<'data>) -> Result<Self, Error> {
+        value.into_vertex()?.try_into()
+    }
+}
+impl<'data> TryFrom<UniversalGeometry<'data>> for M2Geometry<'data> {
+    type Error = Error;
+    fn try_from(value: UniversalGeometry<'data>) -> Result<Self, Error> {
+        value.into_vertex()?.try_into()
+    }
+}
+impl<'data> TryFrom<UniversalGeometry<'data>> for M3Geometry<'data> {
+    type Error = Error;
+    fn try_from(value: UniversalGeometry<'data>) -> Result<Self, Error> {
+        match value {
+            UniversalGeometry::Collision(value) => {
+                value.validate()?;
+                Ok(Self::Collision(value))
+            }
+            value => Ok(Self::Display(value.into_vertex()?.try_into()?)),
+        }
+    }
+}
+macro_rules! with_geometry {
+    ($self:expr, $value:ident => $body:expr) => {
+        match $self {
+            UniversalGeometry::General($value) => $body,
+            UniversalGeometry::Vertex($value) => $body,
+            UniversalGeometry::Collision($value) => $body,
+            UniversalGeometry::Wmo($value) => $body,
+            UniversalGeometry::Wem($value) => $body,
+            UniversalGeometry::D3($value) => $body,
+            UniversalGeometry::D4($value) => $body,
+        }
+    };
 }
 impl<'data> GeometrySchema<'data> for UniversalGeometry<'data> {
     fn edit_capabilities(&self) -> GeometryEditCapabilities {
-        match self {
-            Self::Flexible(value) => value.edit_capabilities(),
-            Self::Mdlx(value) => value.edit_capabilities(),
-            Self::M2(value) => value.edit_capabilities(),
-            Self::M3(value) => value.edit_capabilities(),
-            Self::Wmo(value) => value.edit_capabilities(),
-            Self::Wem(value) => value.edit_capabilities(),
-            Self::D3(value) => value.edit_capabilities(),
-            Self::D4(value) => value.edit_capabilities(),
-        }
+        with_geometry!(self, value => value.edit_capabilities())
     }
     fn edited(&self, edit: GeometryEdit<'data>) -> Result<Self, Error> {
         match self {
-            Self::Flexible(value) => Ok(Self::Flexible(value.edited(edit)?)),
-            Self::Mdlx(value) => Ok(Self::Mdlx(value.edited(edit)?)),
-            Self::M2(value) => Ok(Self::M2(value.edited(edit)?)),
-            Self::M3(value) => Ok(Self::M3(value.edited(edit)?)),
+            Self::General(value) => Ok(Self::General(value.edited(edit)?)),
+            Self::Vertex(value) => Ok(Self::Vertex(value.edited(edit)?)),
+            Self::Collision(value) => Ok(Self::Collision(value.edited(edit)?)),
             Self::Wmo(value) => Ok(Self::Wmo(value.edited(edit)?)),
             Self::Wem(value) => Ok(Self::Wem(value.edited(edit)?)),
             Self::D3(value) => Ok(Self::D3(value.edited(edit)?)),
             Self::D4(value) => Ok(Self::D4(value.edited(edit)?)),
         }
     }
-
     fn kind(&self) -> GeometryKind {
-        match self {
-            Self::Flexible(v) => v.kind(),
-            Self::Mdlx(v) => v.kind(),
-            Self::M2(v) => v.kind(),
-            Self::M3(v) => v.kind(),
-            Self::D4(v) => v.kind(),
-            Self::D3(v) => v.kind(),
-            Self::Wmo(v) => v.kind(),
-            Self::Wem(v) => v.kind(),
-        }
+        with_geometry!(self, value => value.kind())
     }
     fn positions(&self) -> &Values<'data, [f32; 3]> {
-        match self {
-            Self::Flexible(value) => value.positions(),
-            Self::Mdlx(value) => value.positions(),
-            Self::M2(value) => value.positions(),
-            Self::M3(value) => value.positions(),
-            Self::D4(value) => value.positions(),
-            Self::D3(value) => value.positions(),
-            Self::Wmo(value) => value.positions(),
-            Self::Wem(value) => value.positions(),
-        }
+        with_geometry!(self, value => value.positions())
     }
     fn normals(&self) -> Option<&Values<'data, [f32; 3]>> {
-        match self {
-            Self::Flexible(value) => value.normals(),
-            Self::Mdlx(value) => value.normals(),
-            Self::M2(value) => value.normals(),
-            Self::M3(value) => value.normals(),
-            Self::D4(value) => value.normals(),
-            Self::D3(value) => value.normals(),
-            Self::Wmo(value) => value.normals(),
-            Self::Wem(value) => value.normals(),
-        }
+        with_geometry!(self, value => value.normals())
     }
     fn tangents(&self) -> Option<&Values<'data, [f32; 4]>> {
-        match self {
-            Self::Flexible(value) => value.tangents(),
-            Self::Mdlx(value) => value.tangents(),
-            Self::M2(value) => value.tangents(),
-            Self::M3(value) => value.tangents(),
-            Self::D4(value) => value.tangents(),
-            Self::D3(value) => value.tangents(),
-            Self::Wmo(value) => value.tangents(),
-            Self::Wem(value) => value.tangents(),
-        }
+        with_geometry!(self, value => value.tangents())
     }
     fn texture_coordinates(&self) -> &[Values<'data, [f32; 2]>] {
-        match self {
-            Self::Flexible(value) => value.texture_coordinates(),
-            Self::Mdlx(value) => value.texture_coordinates(),
-            Self::M2(value) => value.texture_coordinates(),
-            Self::M3(value) => value.texture_coordinates(),
-            Self::D4(value) => value.texture_coordinates(),
-            Self::D3(value) => value.texture_coordinates(),
-            Self::Wmo(value) => value.texture_coordinates(),
-            Self::Wem(value) => value.texture_coordinates(),
-        }
+        with_geometry!(self, value => value.texture_coordinates())
     }
     fn colors(&self) -> Option<&Values<'data, [f32; 4]>> {
-        match self {
-            Self::Flexible(value) => value.colors(),
-            Self::Mdlx(value) => value.colors(),
-            Self::M2(value) => value.colors(),
-            Self::M3(value) => value.colors(),
-            Self::D4(value) => value.colors(),
-            Self::D3(value) => value.colors(),
-            Self::Wmo(value) => value.colors(),
-            Self::Wem(value) => value.colors(),
-        }
+        with_geometry!(self, value => value.colors())
     }
     fn attributes(&self) -> Attributes<'_, 'data> {
-        match self {
-            Self::Flexible(value) => value.attributes(),
-            Self::Mdlx(value) => value.attributes(),
-            Self::M2(value) => value.attributes(),
-            Self::M3(value) => value.attributes(),
-            Self::D4(value) => value.attributes(),
-            Self::D3(value) => value.attributes(),
-            Self::Wmo(value) => value.attributes(),
-            Self::Wem(value) => value.attributes(),
-        }
+        with_geometry!(self, value => value.attributes())
     }
     fn topology(&self) -> &Topology<'data> {
-        match self {
-            Self::Flexible(value) => value.topology(),
-            Self::Mdlx(value) => value.topology(),
-            Self::M2(value) => value.topology(),
-            Self::M3(value) => value.topology(),
-            Self::D4(value) => value.topology(),
-            Self::D3(value) => value.topology(),
-            Self::Wmo(value) => value.topology(),
-            Self::Wem(value) => value.topology(),
-        }
+        with_geometry!(self, value => value.topology())
     }
     fn influences(&self) -> InfluenceRows<'_, 'data> {
-        match self {
-            Self::Flexible(value) => value.influences(),
-            Self::Mdlx(value) => value.influences(),
-            Self::M2(value) => value.influences(),
-            Self::M3(value) => value.influences(),
-            Self::D4(value) => value.influences(),
-            Self::D3(value) => value.influences(),
-            Self::Wmo(value) => value.influences(),
-            Self::Wem(value) => value.influences(),
-        }
+        with_geometry!(self, value => value.influences())
     }
     fn validate(&self) -> Result<(), Error> {
-        match self {
-            Self::Flexible(value) => value.validate(),
-            Self::Mdlx(value) => value.validate(),
-            Self::M2(value) => value.validate(),
-            Self::M3(value) => value.validate(),
-            Self::D4(value) => value.validate(),
-            Self::D3(value) => value.validate(),
-            Self::Wmo(value) => value.validate(),
-            Self::Wem(value) => value.validate(),
-        }
+        with_geometry!(self, value => value.validate())
     }
 }
 impl ValidateLinks for UniversalGeometry<'_> {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
-        match self {
-            Self::Flexible(value) => value.visit_links(visitor),
-            Self::Mdlx(value) => value.visit_links(visitor),
-            Self::M2(value) => value.visit_links(visitor),
-            Self::M3(value) => value.visit_links(visitor),
-            Self::D4(value) => value.visit_links(visitor),
-            Self::D3(value) => value.visit_links(visitor),
-            Self::Wmo(value) => value.visit_links(visitor),
-            Self::Wem(value) => value.visit_links(visitor),
-        }
+        with_geometry!(self, value => value.visit_links(visitor));
     }
 }
 /// General authoring geometry, including polygon domains and custom attributes.
@@ -797,9 +743,7 @@ mod tests {
         let groups = [vec![3, 8, 12, 19, 24]];
         let geometry = MdlxGeometry::triangles(&positions[..], Vec::<[u32; 3]>::new())
             .unwrap()
-            .with_influences(MdlxVertexInfluences::MatrixGroups(Values::from_slice(
-                &groups,
-            )))
+            .with_influences(JointInfluences::MatrixGroups(Values::from_slice(&groups)))
             .unwrap();
         let widened = UniversalGeometry::from(geometry);
         assert!(widened.positions().is_borrowed());

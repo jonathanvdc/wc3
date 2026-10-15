@@ -91,9 +91,9 @@ projection from `Universal`. It consumes the collection, moves owned resource
 paths, and retains scoped identities and borrowed arrays. Each owner must already
 carry a complete payload supported by the target; missing required controls,
 foreign behavior, and an incompatible asset model count return an error.
-Collection publication also
-checks the target profile's relationship and authoring rules. Optional physical
-encoding hints and unknown attachments remain outside the graph and survive
+Collection publication also checks the target profile's relationship and
+authoring rules. Optional physical encoding hints and unknown attachments remain
+outside the graph and survive
 `Asset::try_narrow` unchanged.
 
 Universal enum variants distinguish data, interpretation, or supported operations,
@@ -129,6 +129,38 @@ file-data-ID selection. Surfaces additionally implement `SurfacePayload`, attach
 features implement `FeaturePayload`, and systems implement `SystemPayload`. Geometry
 schemas define their full attribute and connectivity vocabulary rather than
 attaching arbitrary streams to a narrower native schema.
+
+## Geometry representations and profile constraints
+
+`MdlxGeometry`, `M2Geometry`, and `M3DisplayGeometry` retain distinct constrained
+APIs while sharing vertex-stream storage. M2 construction requires a two-element
+UV array and four weighted influence slots per vertex, and exposes no tangent or
+color constructor. MDLX supports optional normals and tangents, ordered triangle
+groups, and `JointInfluences` with either equal-weight matrix groups or four
+weighted slots. M3 display geometry requires normals and weighted slots, and
+permits tangents, colors, and up to five UV slots with meaningful gaps. Checked
+constructors establish stream cardinalities and finite values; the profile types
+keep unsupported representations out of subsequent authoring operations.
+
+Widening these display types produces `UniversalGeometry::Vertex` containing
+`VertexGeometry`, without a source-profile tag. The arrays move unchanged,
+including borrowed slices, packed views, and shared owned buffers. Narrowing
+checks the actual streams before constructing the destination's constrained
+type. M2 geometry can therefore narrow to M3 display geometry, while M3 geometry
+with colors cannot narrow to MDLX or M2. Missing normals, absent weighted rows,
+unsupported UV gaps, and ordered primitive groups are rejected wherever the
+target cannot retain them. Neither zero-weight influence slots nor matrix-group
+ordering are discarded, and equal-weight groups are not converted into weighted
+slots.
+
+`UniversalGeometry::Collision` keeps collision connectivity and per-triangle
+controls separate from display geometry. `General` retains custom attributes,
+polygon domains, and variable-length influence rows. General geometry can narrow
+to the shared vertex representation when it has no custom attributes or authored
+variable influences; otherwise those domains require an explicit transformation.
+WMO, WEM, and Diablo retain their richer geometry payloads, including face
+controls, named sections, and independent tangent/binormal streams. Sharing
+vertex storage does not make their additional data interchangeable.
 
 ## Appearance and playback
 
@@ -343,7 +375,10 @@ example, requires normals and exactly two UV streams. Diablo III tangent and
 binormal vectors remain distinct profile streams, so its common tangent-frame
 operation is unavailable. Capabilities guide tools before they submit an edit;
 validation still checks cardinalities, finite values, and the profile's complete
-invariants. Universal geometry and union branches delegate to the retained concrete
+invariants. Union branches retain their constrained schema. Universal vertex
+geometry exposes the shared representation's broader editing capabilities: an
+M2 mesh widened to `Universal` can acquire tangents, but subsequent M2 narrowing
+rejects that added stream. Other universal variants retain their own complete
 schema. Custom schemas opt in by implementing the same two methods; their default
 implementation rejects common edits.
 

@@ -4,9 +4,8 @@ use wc3::model::semantic::profiles::{
 };
 use wc3::model::semantic::{
     Attribute, AttributeDomain, AttributeSemantic, AttributeValues, GeometryData, GeometryEdit,
-    GeometrySchema, Influence, M2Geometry, M3CollisionGeometry, M3Geometry, MdlxGeometry,
-    MdlxVertexInfluences, StreamSupport, Topology, UniversalGeometry, Values, VertexRemap,
-    WmoGeometry,
+    GeometrySchema, Influence, JointInfluences, M2Geometry, M3CollisionGeometry, M3Geometry,
+    MdlxGeometry, StreamSupport, Topology, UniversalGeometry, Values, VertexRemap, WmoGeometry,
 };
 
 fn positions() -> Values<'static, [f32; 3]> {
@@ -57,9 +56,7 @@ fn common_tools_work_across_profiles_and_dispatchers() {
     exercise(
         MdlxGeometry::triangles(positions(), triangles())
             .unwrap()
-            .with_influences(MdlxVertexInfluences::MatrixGroups(
-                vec![vec![0, 1]; 3].into(),
-            ))
+            .with_influences(JointInfluences::MatrixGroups(vec![vec![0, 1]; 3].into()))
             .unwrap(),
     );
     let m2 = M2Geometry::new(
@@ -71,7 +68,7 @@ fn common_tools_work_across_profiles_and_dispatchers() {
     )
     .unwrap();
     exercise(m2.clone());
-    exercise(UniversalGeometry::M2(m2.clone()));
+    exercise(UniversalGeometry::from(m2.clone()));
     exercise(Either::<M2Geometry<'static>, GeometryData<'static>>::Left(
         m2,
     ));
@@ -138,13 +135,13 @@ fn remapping_preserves_attribute_domains_and_profile_payloads() {
     assert_eq!(mapped.lightmap_coordinates().get(0), Some([2.; 2]));
     let mdlx = MdlxGeometry::triangles(positions(), triangles())
         .unwrap()
-        .with_influences(MdlxVertexInfluences::MatrixGroups(
+        .with_influences(JointInfluences::MatrixGroups(
             vec![vec![0], vec![1], vec![2]].into(),
         ))
         .unwrap();
     let mapped = mdlx.edited(duplicate()).unwrap();
     match mapped.vertex_influences() {
-        MdlxVertexInfluences::MatrixGroups(v) => assert_eq!(v.get(0), Some(vec![2])),
+        JointInfluences::MatrixGroups(v) => assert_eq!(v.get(0), Some(vec![2])),
         _ => panic!(),
     }
 }
@@ -216,7 +213,7 @@ fn edits_publish_transactionally_and_keep_unmodified_borrowed_streams() {
     assert!(edited.normals().unwrap().is_borrowed());
     let mut draft = Model::<Universal>::builder("Editable");
     let id = draft
-        .add_mesh(Mesh::new(UniversalGeometry::Mdlx(geometry)))
+        .add_mesh(Mesh::new(UniversalGeometry::from(geometry)))
         .unwrap();
     let mut collection = draft.finish().unwrap();
     collection

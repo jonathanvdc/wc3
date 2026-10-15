@@ -3,7 +3,7 @@ use super::encode_animation::Encoder;
 use crate::model::conversion::{Context, Error};
 use crate::model::mdlx::{self as native, ModelDialect};
 use crate::model::semantic::{
-    LookId, MaterialId, MdlxVertexInfluences, MeshId, NodeId, Topology, Values,
+    JointInfluences, LookId, MaterialId, MeshId, NodeId, Topology, Values,
 };
 use native::geometry::SkinWeight;
 use std::collections::BTreeMap;
@@ -118,10 +118,8 @@ pub(super) fn write<'a, 'data, T: ModelDialect>(
             let mut groups = Vec::<Vec<u32>>::new();
             let mut vertices = Vec::new();
             let mut weighted = Vec::new();
-            let mut exact_groups = !matches!(
-                mesh.geometry.vertex_influences(),
-                MdlxVertexInfluences::Weighted(_)
-            );
+            let mut exact_groups =
+                !matches!(mesh.geometry.vertex_influences(), JointInfluences::Four(_));
             for index in 0..mesh.influences().len() {
                 let row = mesh
                     .influences()

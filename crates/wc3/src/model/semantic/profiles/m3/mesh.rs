@@ -3,9 +3,11 @@
 //! meshes contain positions and connectivity, without invented shading data.
 use crate::model::semantic::geometry_edit::{check_edit, remap_values};
 use crate::model::semantic::geometry_schema::validate_geometry;
+use crate::model::semantic::vertex_geometry::VertexStreams;
+use crate::model::semantic::VertexGeometry;
 use crate::model::semantic::{
-    Attributes, Error, GeometryKind, GeometrySchema, Influence, InfluenceRows, Link, Topology,
-    ValidateLinks, Values,
+    Attributes, Error, GeometryKind, GeometrySchema, Influence, InfluenceRows, JointInfluences,
+    Link, Topology, ValidateLinks, Values,
 };
 use crate::model::semantic::{GeometryEdit, GeometryEditCapabilities, StreamSupport};
 fn present<'view, 'data, T>(values: &'view Values<'data, T>) -> Option<&'view Values<'data, T>> {
@@ -14,13 +16,7 @@ fn present<'view, 'data, T>(values: &'view Values<'data, T>) -> Option<&'view Va
 /// StarCraft II geometry with native vertex streams and four joint slots.
 #[derive(Clone, Debug)]
 pub struct M3DisplayGeometry<'data> {
-    positions: Values<'data, [f32; 3]>,
-    normals: Values<'data, [f32; 3]>,
-    tangents: Values<'data, [f32; 4]>,
-    texture_coordinates: Vec<Values<'data, [f32; 2]>>,
-    colors: Values<'data, [f32; 4]>,
-    topology: Topology<'data>,
-    influences: Values<'data, [Influence; 4]>,
+    pub(crate) streams: VertexStreams<'data, Values<'data, [Influence; 4]>>,
 }
 impl<'data> M3DisplayGeometry<'data> {
     /// Creates an empty geometry definition.
@@ -35,13 +31,15 @@ impl<'data> M3DisplayGeometry<'data> {
         influences: impl Into<Values<'data, [Influence; 4]>>,
     ) -> Result<Self, Error> {
         let geometry = Self {
-            positions: positions.into(),
-            normals: normals.into(),
-            tangents: Values::default(),
-            texture_coordinates: Vec::new(),
-            colors: Values::default(),
-            topology: Topology::Triangles(triangles.into()),
-            influences: influences.into(),
+            streams: VertexStreams {
+                positions: positions.into(),
+                normals: normals.into(),
+                tangents: Values::default(),
+                texture_coordinates: Vec::new(),
+                colors: Values::default(),
+                topology: Topology::Triangles(triangles.into()),
+                influences: influences.into(),
+            },
         };
         geometry.validate()?;
         Ok(geometry)
@@ -51,7 +49,7 @@ impl<'data> M3DisplayGeometry<'data> {
         mut self,
         tangents: impl Into<Values<'data, [f32; 4]>>,
     ) -> Result<Self, Error> {
-        self.tangents = tangents.into();
+        self.streams.tangents = tangents.into();
         self.validate()?;
         Ok(self)
     }
@@ -60,7 +58,7 @@ impl<'data> M3DisplayGeometry<'data> {
         mut self,
         coordinates: Vec<Values<'data, [f32; 2]>>,
     ) -> Result<Self, Error> {
-        self.texture_coordinates = coordinates;
+        self.streams.texture_coordinates = coordinates;
         self.validate()?;
         Ok(self)
     }
@@ -69,7 +67,7 @@ impl<'data> M3DisplayGeometry<'data> {
         mut self,
         colors: impl Into<Values<'data, [f32; 4]>>,
     ) -> Result<Self, Error> {
-        self.colors = colors.into();
+        self.streams.colors = colors.into();
         self.validate()?;
         Ok(self)
     }
@@ -92,30 +90,30 @@ impl<'data> GeometrySchema<'data> for M3DisplayGeometry<'data> {
         let mut result = self.clone();
         if let Some(map) = &edit.remap {
             map.check(self)?;
-            remap_values(&mut result.positions, &map.new_to_old);
-            remap_values(&mut result.normals, &map.new_to_old);
-            remap_values(&mut result.tangents, &map.new_to_old);
-            remap_values(&mut result.colors, &map.new_to_old);
-            for stream in &mut result.texture_coordinates {
+            remap_values(&mut result.streams.positions, &map.new_to_old);
+            remap_values(&mut result.streams.normals, &map.new_to_old);
+            remap_values(&mut result.streams.tangents, &map.new_to_old);
+            remap_values(&mut result.streams.colors, &map.new_to_old);
+            for stream in &mut result.streams.texture_coordinates {
                 remap_values(stream, &map.new_to_old);
             }
-            remap_values(&mut result.influences, &map.new_to_old);
-            result.topology = map.topology.clone();
+            remap_values(&mut result.streams.influences, &map.new_to_old);
+            result.streams.topology = map.topology.clone();
         }
         if let Some(values) = edit.positions {
-            result.positions = values;
+            result.streams.positions = values;
         }
         if let Some(values) = edit.normals {
-            result.normals = values;
+            result.streams.normals = values;
         }
         if let Some(values) = edit.tangents {
-            result.tangents = values;
+            result.streams.tangents = values;
         }
         if let Some(values) = edit.colors {
-            result.colors = values;
+            result.streams.colors = values;
         }
         if let Some(values) = edit.texture_coordinates {
-            result.texture_coordinates = values;
+            result.streams.texture_coordinates = values;
         }
 
         result.validate()?;
@@ -123,38 +121,38 @@ impl<'data> GeometrySchema<'data> for M3DisplayGeometry<'data> {
     }
 
     fn positions(&self) -> &Values<'data, [f32; 3]> {
-        &self.positions
+        &self.streams.positions
     }
     fn normals(&self) -> Option<&Values<'data, [f32; 3]>> {
-        Some(&self.normals)
+        Some(&self.streams.normals)
     }
     fn tangents(&self) -> Option<&Values<'data, [f32; 4]>> {
-        present(&self.tangents)
+        present(&self.streams.tangents)
     }
     fn texture_coordinates(&self) -> &[Values<'data, [f32; 2]>] {
-        &self.texture_coordinates
+        &self.streams.texture_coordinates
     }
     fn colors(&self) -> Option<&Values<'data, [f32; 4]>> {
-        present(&self.colors)
+        present(&self.streams.colors)
     }
     fn attributes(&self) -> Attributes<'_, 'data> {
         Attributes::Slice(&[])
     }
     fn topology(&self) -> &Topology<'data> {
-        &self.topology
+        &self.streams.topology
     }
     fn influences(&self) -> InfluenceRows<'_, 'data> {
-        InfluenceRows::Four(&self.influences)
+        InfluenceRows::Four(&self.streams.influences)
     }
     fn validate(&self) -> Result<(), Error> {
-        if self.texture_coordinates.len() > 5 {
+        if self.streams.texture_coordinates.len() > 5 {
             return Err(Error::new(
                 "geometry.texture_coordinates",
                 "M3 vertices have at most five UV streams",
             ));
         }
-        if self.normals.len() != self.positions.len()
-            || self.influences.len() != self.positions.len()
+        if self.streams.normals.len() != self.streams.positions.len()
+            || self.streams.influences.len() != self.streams.positions.len()
         {
             return Err(Error::new(
                 "geometry.streams",
@@ -168,13 +166,15 @@ impl<'data> GeometrySchema<'data> for M3DisplayGeometry<'data> {
 impl Default for M3DisplayGeometry<'_> {
     fn default() -> Self {
         Self {
-            positions: Values::default(),
-            normals: Values::default(),
-            tangents: Values::default(),
-            texture_coordinates: Vec::new(),
-            colors: Values::default(),
-            topology: Topology::Triangles(Values::default()),
-            influences: Values::default(),
+            streams: VertexStreams {
+                positions: Values::default(),
+                normals: Values::default(),
+                tangents: Values::default(),
+                texture_coordinates: Vec::new(),
+                colors: Values::default(),
+                topology: Topology::Triangles(Values::default()),
+                influences: Values::default(),
+            },
         }
     }
 }
@@ -490,4 +490,53 @@ impl<'data> GeometrySchema<'data> for M3Geometry<'data> {
     delegate!(topology, &Topology<'data>);
     delegate!(influences, InfluenceRows<'_, 'data>);
     delegate!(validate,Result<(),Error>);
+}
+
+impl<'data> From<M3DisplayGeometry<'data>> for VertexGeometry<'data> {
+    fn from(value: M3DisplayGeometry<'data>) -> Self {
+        let s = value.streams;
+        Self {
+            streams: VertexStreams {
+                positions: s.positions,
+                normals: s.normals,
+                tangents: s.tangents,
+                colors: s.colors,
+                texture_coordinates: s.texture_coordinates,
+                topology: s.topology,
+                influences: JointInfluences::Four(s.influences),
+            },
+        }
+    }
+}
+impl<'data> TryFrom<VertexGeometry<'data>> for M3DisplayGeometry<'data> {
+    type Error = Error;
+    fn try_from(value: VertexGeometry<'data>) -> Result<Self, Error> {
+        value.validate()?;
+        let s = value.streams;
+        if !matches!(s.topology, Topology::Triangles(_)) {
+            return Err(Error::new(
+                "geometry.topology",
+                "M3 display geometry requires triangle connectivity",
+            ));
+        }
+        let JointInfluences::Four(influences) = s.influences else {
+            return Err(Error::new(
+                "geometry.influences",
+                "M3 display geometry requires four authored joint slots",
+            ));
+        };
+        let result = Self {
+            streams: VertexStreams {
+                positions: s.positions,
+                normals: s.normals,
+                tangents: s.tangents,
+                colors: s.colors,
+                texture_coordinates: s.texture_coordinates,
+                topology: s.topology,
+                influences,
+            },
+        };
+        result.validate()?;
+        Ok(result)
+    }
 }

@@ -25,9 +25,11 @@ A union vocabulary likewise retains both families distinctly. Use
 `try_narrow::<TargetProfile>()` when every owner already carries a complete
 payload supported by the target, including capabilities shared across profiles.
 It moves the existing values, checks required controls and references, and rejects
-incompatible model cardinality. Narrowing is an exact
-projection; translating another game's behavior requires an explicit semantic
-transformation before the native planner can accept it.
+incompatible model cardinality. Shared vertex geometry is checked against the
+target's stream, topology, and influence constraints, independently of its source
+profile. Narrowing is an exact projection; translating another game's behavior
+requires an explicit semantic transformation before the native planner can accept
+it.
 
 The destination type separately selects a native dialect or envelope. A profile
 can express behavior that an older output revision cannot encode. The export

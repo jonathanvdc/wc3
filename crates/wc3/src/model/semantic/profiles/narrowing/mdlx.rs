@@ -3,7 +3,7 @@ use super::{incompatible, Narrows};
 use crate::model::semantic::profiles::{Mdlx, NoControls, Profile, Universal};
 use crate::model::semantic::{
     ClipControls, Error, MaterialSurface, MeshControls, ModelControls, NodeControls, NodeFeature,
-    TextureControls, UniversalAppearance, UniversalBinding, UniversalGeometry,
+    TextureControls, UniversalAppearance, UniversalBinding,
 };
 impl Narrows<Universal> for Mdlx {
     fn asset<'a>(value: <Universal as Profile>::Asset<'a>) -> Result<Self::Asset<'a>, Error> {
@@ -29,10 +29,7 @@ impl Narrows<Universal> for Mdlx {
     fn geometry<'a>(
         value: <Universal as Profile>::Geometry<'a>,
     ) -> Result<Self::Geometry<'a>, Error> {
-        match value {
-            UniversalGeometry::Mdlx(value) => Ok(value),
-            _ => Err(incompatible("geometry")),
-        }
+        value.try_into()
     }
     fn model<'a>(value: <Universal as Profile>::Model<'a>) -> Result<Self::Model<'a>, Error> {
         match value {

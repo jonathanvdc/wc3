@@ -367,7 +367,7 @@ impl<'a> Mesh<'a> {
         positions: impl Into<Values<'a, [f32; 3]>>,
         triangles: impl Into<Values<'a, [u32; 3]>>,
     ) -> Self {
-        Self::new(UniversalGeometry::Flexible(GeometryData {
+        Self::new(UniversalGeometry::General(GeometryData {
             positions: positions.into(),
             topology: Topology::Triangles(triangles.into()),
             ..GeometryData::default()

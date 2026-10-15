@@ -6,7 +6,7 @@ use crate::model::mdlx::{self as native, ModelDialect, ModelVersion};
 use crate::model::semantic::profiles::mdlx::{self as profile, Bone};
 use crate::model::semantic::profiles::Mdlx;
 use crate::model::semantic::{
-    Bounds, ClipId, ClockId, Draw, Influence, MaterialId, MdlxGeometry, MdlxVertexInfluences, Mesh,
+    Bounds, ClipId, ClockId, Draw, Influence, JointInfluences, MaterialId, MdlxGeometry, Mesh,
     MeshInstance, ModelBuilder, Node, NodeId, Skin, Values,
 };
 use std::collections::BTreeMap;
@@ -157,9 +157,9 @@ pub(super) fn read<'a, D: ModelDialect>(
                         Ok(result)
                     })
                     .collect::<Result<Vec<_>, Error>>()?;
-                MdlxVertexInfluences::Weighted(Values::owned(slots))
+                JointInfluences::Four(Values::owned(slots))
             } else {
-                MdlxVertexInfluences::MatrixGroups(rows.map(|row: Vec<Influence>| {
+                JointInfluences::MatrixGroups(rows.map(|row: Vec<Influence>| {
                     row.into_iter().map(|influence| influence.joint).collect()
                 }))
             })?;
