@@ -1,4 +1,6 @@
 //! M3 material selectors and bit masks.
+use crate::model::semantic::materials::state::BlendOperations;
+use crate::model::semantic::profiles::Unavailable;
 use bitfield::bitfield;
 
 /// M3 MaterialKind selector.
@@ -77,53 +79,32 @@ impl Default for MaterialKind {
 }
 
 /// M3 BlendMode selector.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
-pub enum BlendMode {
-    /// Selects Opaque.
-    Opaque,
-    /// Selects AlphaBlend.
-    AlphaBlend,
-    /// Selects Add.
-    Add,
-    /// Selects AlphaAdd.
-    AlphaAdd,
-    /// Selects Mod.
-    Mod,
-    /// Selects Mod2x.
-    Mod2x,
-    /// An unrecognized native code, retained without reinterpretation.
-    Unknown(u32),
-}
+pub type BlendMode = BlendOperations<Unavailable, Unavailable, (), u32>;
 impl BlendMode {
     /// Returns the stored selector code.
     pub const fn raw(self) -> u32 {
         match self {
             Self::Opaque => 0,
-            Self::AlphaBlend => 1,
-            Self::Add => 2,
-            Self::AlphaAdd => 3,
-            Self::Mod => 4,
-            Self::Mod2x => 5,
+            Self::Alpha => 1,
+            Self::Additive => 2,
+            Self::AdditiveAlpha(()) => 3,
+            Self::Modulate => 4,
+            Self::Modulate2x => 5,
             Self::Unknown(value) => value,
+            Self::AlphaKey(value) | Self::Extension(value) => match value {},
         }
     }
     /// Selects a known meaning, preserving any unrecognized code.
     pub const fn from_raw(value: u32) -> Self {
         match value {
             0 => Self::Opaque,
-            1 => Self::AlphaBlend,
-            2 => Self::Add,
-            3 => Self::AlphaAdd,
-            4 => Self::Mod,
-            5 => Self::Mod2x,
+            1 => Self::Alpha,
+            2 => Self::Additive,
+            3 => Self::AdditiveAlpha(()),
+            4 => Self::Modulate,
+            5 => Self::Modulate2x,
             value => Self::Unknown(value),
         }
-    }
-}
-
-impl Default for BlendMode {
-    fn default() -> Self {
-        Self::from_raw(0)
     }
 }
 

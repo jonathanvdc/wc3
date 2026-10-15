@@ -47,7 +47,7 @@ fn standalone_materials_share_texture_identity_and_rebuild_native_resources() {
     assert_eq!(imported.value.resources().len(), 1);
     let (material_id, material) = imported.value.materials().next().unwrap();
     let shader = material.surface.shader.as_ref().unwrap();
-    assert_eq!(shader.textures[0].selection, shader.textures[1].selection);
+    assert_eq!(shader.textures[0].image, shader.textures[1].image);
     assert_eq!(shader.asset.as_ref().unwrap().sno_id, 77);
     let output = convert::plan_material(&imported.value, material_id, &ExportOptions::default())
         .unwrap()
@@ -84,4 +84,32 @@ fn material_coefficients_and_unmapped_programs_are_checked() {
     )
     .unwrap();
     assert!(!result.report.issues.is_empty());
+}
+
+#[test]
+fn ordered_parameter_entries_keep_duplicate_keys_and_controls() {
+    let mut source = source();
+    let values = &mut source.root.uber_material.run_time_material_values[0].material_scalar_values;
+    let mut duplicate = values[0].clone();
+    duplicate.value.value = 0.25;
+    duplicate.value.path_val_graph_index = -7;
+    duplicate.value.light_group = 9;
+    values.push(duplicate);
+    let imported = convert::import_material(&source, &ImportOptions::default()).unwrap();
+    let (id, material) = imported.value.materials().next().unwrap();
+    let entries = &material.surface.shader.as_ref().unwrap().values[0].scalars;
+    assert_eq!(entries[0].key, entries[1].key);
+    assert_eq!(entries[0].value, 0.75);
+    assert_eq!(entries[1].value, 0.25);
+    assert_eq!(entries[1].controls.graph.code(), -7);
+    assert_eq!(entries[1].controls.light_group, 9);
+    let output = convert::plan_material(&imported.value, id, &ExportOptions::default())
+        .unwrap()
+        .execute()
+        .unwrap()
+        .value;
+    assert_eq!(
+        output.root.uber_material.run_time_material_values,
+        source.root.uber_material.run_time_material_values
+    );
 }

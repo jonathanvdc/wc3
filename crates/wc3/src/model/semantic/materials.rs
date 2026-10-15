@@ -12,10 +12,22 @@ pub mod programmed;
 /// Static-world surface shaders.
 pub mod world;
 
-use crate::model::semantic::profiles::{Profile, SurfacePayload, Universal};
+use bindings::{Coordinates, TextureBinding};
+use contributions::SurfaceContribution;
+/// Texture identity, coordinate, sampling, and contribution compositions.
+pub mod bindings;
+/// Surface response contributions.
+pub mod contributions;
+/// Ordered shader parameter entries and their typed domains.
+pub mod parameters;
+/// Composable draw state and rasterization controls.
+pub mod state;
+
+use crate::model::semantic::profiles::{Profile, SurfacePayload, Unavailable, Universal};
 use crate::model::semantic::{
     Animated, Error, Link, PropertyIdentityKey, TextureId, ValidateLinks,
 };
+use state::{DepthState, Lighting, Operation, PassState, Rasterization};
 use std::borrow::Cow;
 
 /// Game namespace of an external Diablo resource identity.
@@ -154,38 +166,37 @@ pub enum TextureRole {
 }
 /// A resource bound to a surface input.
 #[derive(Clone, Debug)]
-pub struct TextureInput {
-    /// Semantic surface input.
-    pub role: TextureRole,
-    /// Animated texture resource.
-    pub texture: Animated<Option<TextureId>>,
-    /// UV set used by this input.
-    pub uv_set: u32,
-    /// Per-input sampler override.
-    pub sampler: Option<Sampler>,
+pub struct TextureInput<
+    Role = TextureRole,
+    Binding = TextureBinding<Animated<Option<TextureId>>, Coordinates<u32>, Option<Sampler>>,
+> {
+    /// Semantic surface input selected by this shader vocabulary.
+    pub role: Role,
+    /// Independently chosen image, coordinates, sampling, and contribution.
+    pub binding: Binding,
 }
+impl<Role: ValidateLinks, Binding: ValidateLinks> ValidateLinks for TextureInput<Role, Binding> {
+    fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
+        self.role.visit_links(visitor);
+        self.binding.visit_links(visitor);
+    }
+}
+impl ValidateLinks for Sampler {
+    fn visit_links(&self, _visitor: &mut dyn FnMut(Link)) {}
+}
+
 /// Blending behavior independent of native numeric codes.
-#[derive(Clone, Copy, Debug, Default, PartialEq)]
-pub enum Blend {
-    /// Replaces destination color.
-    #[default]
-    Opaque,
-    /// Discards fragments below an alpha threshold.
-    AlphaTest(f32),
-    /// Standard alpha compositing.
-    Alpha,
-    /// Adds source color.
-    Add,
-    /// Adds alpha-weighted source color.
-    AddAlpha,
-    /// Multiplies destination color.
-    Modulate,
-    /// Doubled modulation.
-    Modulate2x,
+pub type Blend = state::BlendOperations<PortableBlend, f32, (), Unavailable>;
+/// Additional portable compositing operations.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum PortableBlend {
     /// Combined blending and addition.
     BlendAdd,
     /// Alpha has already been applied to source color.
     Premultiplied,
+}
+impl ValidateLinks for PortableBlend {
+    fn visit_links(&self, _visitor: &mut dyn FnMut(Link)) {}
 }
 /// Which triangle orientations are culled.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -198,56 +209,48 @@ pub enum Cull {
     /// Draw both orientations.
     None,
 }
-/// Shared surface rendering state.
-#[derive(Clone, Debug, PartialEq)]
-pub struct RenderState {
-    /// Color blending.
-    pub blend: Blend,
-    /// Face culling.
-    pub cull: Cull,
-    /// Test depth.
-    pub depth_test: bool,
-    /// Write depth.
-    pub depth_write: bool,
-    /// Receive lighting.
-    pub lit: bool,
-    /// Receive scene fog.
-    pub fog: bool,
-    /// Cast shadows.
-    pub cast_shadows: bool,
-    /// Receive shadows.
-    pub receive_shadows: bool,
-    /// Authored ordering priority.
-    pub priority: i32,
+/// Independent shadow participation for a surface.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Shadows {
+    /// Contribute to shadow maps.
+    pub cast: bool,
+    /// Apply shadow-map illumination.
+    pub receive: bool,
 }
-impl Default for RenderState {
+impl Default for Shadows {
     fn default() -> Self {
         Self {
-            blend: Blend::Opaque,
-            cull: Cull::Back,
-            depth_test: true,
-            depth_write: true,
-            lit: true,
-            fog: true,
-            cast_shadows: true,
-            receive_shadows: true,
-            priority: 0,
+            cast: true,
+            receive: true,
         }
     }
 }
+impl ValidateLinks for Shadows {
+    fn visit_links(&self, _: &mut dyn FnMut(Link)) {}
+}
+impl ValidateLinks for Cull {
+    fn visit_links(&self, _: &mut dyn FnMut(Link)) {}
+}
+impl ValidateLinks for TextureRole {
+    fn visit_links(&self, _: &mut dyn FnMut(Link)) {}
+}
+/// Portable surfaces select explicit depth operations, lighting, culling, and shadows.
+pub type RenderState =
+    PassState<Blend, Rasterization<DepthState<Operation, Operation>, Cull, Lighting, Shadows>, i32>;
+
 /// A portable physically based surface.
 #[derive(Clone, Debug)]
 pub struct PbrSurface {
     /// Rasterization, blending, lighting, and shadow behavior.
     pub state: RenderState,
     /// Base color multiplier.
-    pub base_color: [f32; 4],
+    pub base_color: SurfaceContribution<(), [f32; 4]>,
     /// Metalness multiplier.
     pub metallic: f32,
     /// Perceptual roughness multiplier.
     pub roughness: f32,
     /// Emissive color multiplier.
-    pub emissive: [f32; 3],
+    pub emissive: SurfaceContribution<(), [f32; 3]>,
     /// Texture inputs.
     pub inputs: Vec<TextureInput>,
 }
@@ -255,10 +258,16 @@ impl Default for PbrSurface {
     fn default() -> Self {
         Self {
             state: RenderState::default(),
-            base_color: [1.; 4],
+            base_color: SurfaceContribution {
+                input: (),
+                parameters: [1.; 4],
+            },
             metallic: 0.,
             roughness: 1.,
-            emissive: [0.; 3],
+            emissive: SurfaceContribution {
+                input: (),
+                parameters: [0.; 3],
+            },
             inputs: Vec::new(),
         }
     }
@@ -320,9 +329,15 @@ impl<'a> Material<'a> {
         if let MaterialSurface::Generic(surface) = &mut self.surface {
             surface.inputs.push(TextureInput {
                 role: TextureRole::BaseColor,
-                texture: Animated::constant(Some(texture)),
-                uv_set: 0,
-                sampler: None,
+                binding: TextureBinding {
+                    image: Animated::constant(Some(texture)),
+                    coordinates: Coordinates {
+                        source: 0,
+                        transform: (),
+                    },
+                    sampling: None,
+                    contribution: (),
+                },
             });
         } else {
             return Err(Error::new(
@@ -334,7 +349,7 @@ impl<'a> Material<'a> {
     }
     pub(crate) fn validate_portable(&self) -> Result<(), Error> {
         if let MaterialSurface::Generic(p) = &self.surface {
-            if matches!(p.state.blend,Blend::AlphaTest(v) if !v.is_finite() || !(0. ..=1.).contains(&v))
+            if matches!(p.state.blend,Blend::AlphaKey(v) if !v.is_finite() || !(0. ..=1.).contains(&v))
             {
                 return Err(Error::new(
                     "material.alpha_test",
@@ -342,8 +357,9 @@ impl<'a> Material<'a> {
                 ));
             }
             if p.base_color
+                .parameters
                 .iter()
-                .chain(&p.emissive)
+                .chain(&p.emissive.parameters)
                 .any(|x| !x.is_finite())
                 || !p.metallic.is_finite()
                 || !(0. ..=1.).contains(&p.metallic)
@@ -396,8 +412,11 @@ impl<
 }
 impl ValidateLinks for PbrSurface {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
+        self.state.visit_links(visitor);
+        self.base_color.visit_links(visitor);
+        self.emissive.visit_links(visitor);
         for input in &self.inputs {
-            input.texture.visit_links(visitor);
+            input.visit_links(visitor);
         }
     }
 }

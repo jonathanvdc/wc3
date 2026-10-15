@@ -51,7 +51,7 @@ impl ValidateLinks for NoControls {
 ///
 /// Use this for object families that a profile cannot describe. An owner with
 /// optional controls can still exist, but its controls must remain absent.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Unavailable {}
 impl ValidateLinks for Unavailable {
     fn visit_links(&self, _visitor: &mut dyn FnMut(Link)) {

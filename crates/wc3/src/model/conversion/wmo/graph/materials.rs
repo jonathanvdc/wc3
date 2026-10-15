@@ -1,6 +1,10 @@
 //! Independent world-surface fields and borrowed external texture identities.
 use super::encode::append;
 use crate::model::conversion::Error;
+use crate::model::semantic::materials::bindings::TextureBinding;
+use crate::model::semantic::materials::state::{Lighting, PassState};
+use crate::model::semantic::materials::world::SurfaceOptions;
+use crate::model::semantic::materials::world::WorldBlend;
 use crate::model::semantic::profiles::wmo as profile;
 use crate::model::semantic::profiles::Wmo;
 use crate::model::semantic::{
@@ -55,7 +59,7 @@ pub(super) fn read<'a, 'data: 'a>(
         let mut bindings = Vec::new();
         for slot in 0..row.texture_slots() {
             let resource = resource(root, row.textures()[slot])?;
-            bindings.push(if let Some(resource) = resource {
+            let image = if let Some(resource) = resource {
                 Some(
                     if let Some((_, id)) =
                         textures.iter().find(|(existing, _)| *existing == resource)
@@ -74,6 +78,10 @@ pub(super) fn read<'a, 'data: 'a>(
                 )
             } else {
                 None
+            };
+            bindings.push(TextureBinding {
+                image,
+                ..Default::default()
             });
         }
         let flags = row.flags;
@@ -88,27 +96,6 @@ pub(super) fn read<'a, 'data: 'a>(
         let extended = matches!(row.shader, 22..=24);
         let surface = profile::Material {
             shader: Some(row.shader),
-            blend: match row.blend_mode {
-                BlendMode::Opaque => profile::Blend::Opaque,
-                BlendMode::AlphaKey => profile::Blend::AlphaKey,
-                BlendMode::Alpha => profile::Blend::Alpha,
-                BlendMode::Add => profile::Blend::Additive,
-                BlendMode::Modulate => profile::Blend::Modulate,
-                BlendMode::Modulate2x => profile::Blend::Modulate2x,
-                BlendMode::ModulateAdd => profile::Blend::ModulateAdd,
-                BlendMode::InverseSourceAlphaAdd => profile::Blend::InverseSourceAlphaAdd,
-                BlendMode::Unknown(value) => profile::Blend::Unknown(value),
-            },
-            options: profile::Options {
-                unlit: flags.unlit(),
-                unfogged: flags.unfogged(),
-                two_sided: flags.two_sided(),
-                exterior_lit: flags.exterior_lit(),
-                clamp_u: flags.clamp_s(),
-                clamp_v: flags.clamp_t(),
-                self_illuminated: false,
-                unclassified: unclassified.bits().into(),
-            },
             textures: bindings,
             self_illumination: color(row.sidn_color),
             runtime_self_illumination: color(row.frame_sidn_color),
@@ -127,6 +114,38 @@ pub(super) fn read<'a, 'data: 'a>(
             legacy_controls: (!extended).then_some(tail[1]),
             legacy_runtime: (!extended)
                 .then_some(tail[2..].try_into().expect("four tail controls")),
+            state: PassState {
+                blend: match row.blend_mode {
+                    BlendMode::Opaque => profile::Blend::Opaque,
+                    BlendMode::AlphaKey => profile::Blend::AlphaKey(()),
+                    BlendMode::Alpha => profile::Blend::Alpha,
+                    BlendMode::Add => profile::Blend::Additive,
+                    BlendMode::Modulate => profile::Blend::Modulate,
+                    BlendMode::Modulate2x => profile::Blend::Modulate2x,
+                    BlendMode::ModulateAdd => profile::Blend::Extension(WorldBlend::ModulateAdd),
+                    BlendMode::InverseSourceAlphaAdd => {
+                        profile::Blend::Extension(WorldBlend::InverseSourceAlphaAdd)
+                    }
+                    BlendMode::Unknown(value) => profile::Blend::Unknown(value),
+                },
+                rasterization: profile::Options {
+                    depth: (),
+                    faces: flags.two_sided(),
+                    lighting: Lighting {
+                        unlit: flags.unlit(),
+                        unfogged: flags.unfogged(),
+                    },
+                    controls: SurfaceOptions {
+                        exterior_lit: flags.exterior_lit(),
+                        clamp_u: flags.clamp_s(),
+                        clamp_v: flags.clamp_t(),
+                        self_illuminated: false,
+                        unclassified: unclassified.bits().into(),
+                        ..Default::default()
+                    },
+                },
+                ordering: (),
+            },
             ..Default::default()
         };
         output.push(builder.add_material(Material {
@@ -149,7 +168,13 @@ pub(super) fn write<'a, D: Dialect>(
     let mut selectors = std::collections::BTreeMap::new();
     let used = model
         .materials()
-        .flat_map(|(_, material)| material.surface.textures.iter().copied().flatten())
+        .flat_map(|(_, material)| {
+            material
+                .surface
+                .textures
+                .iter()
+                .filter_map(|binding| binding.image)
+        })
         .collect::<std::collections::BTreeSet<_>>();
     for (id, texture) in resources.textures() {
         if !used.contains(&id) {
@@ -212,11 +237,11 @@ pub(super) fn write<'a, D: Dialect>(
                 )?;
                 0
             },
-            blend_mode: native_blend(source.blend),
-            flags: native_flags(source.options),
+            blend_mode: native_blend(source.state.blend),
+            flags: native_flags(source.state.rasterization),
             ..Default::default()
         };
-        if source.options.self_illuminated {
+        if source.state.rasterization.controls.self_illuminated {
             context.unsupported(
                 "world.material.self_illuminated",
                 "no established native self-illumination switch is available",
@@ -227,7 +252,7 @@ pub(super) fn write<'a, D: Dialect>(
         row.diffuse_color = color(source.diffuse);
         row.ground_type = source.ground_type;
         for (slot, texture) in source.textures.iter().enumerate() {
-            row.set_texture(slot, texture.map_or(0, |id| selectors[&id]))
+            row.set_texture(slot, texture.image.map_or(0, |id| selectors[&id]))
                 .map_err(|error| Error::new("world.material.texture", error.to_string()))?;
         }
         if let Some(value) = source.legacy_color {
@@ -363,7 +388,10 @@ pub(super) fn read_alpha<'view, 'data: 'view>(
                     } else {
                         None
                     };
-                    bindings.push(binding);
+                    bindings.push(TextureBinding {
+                        image: binding,
+                        ..Default::default()
+                    });
                 }
                 let flags = row.flags;
                 let mut unclassified = flags;
@@ -375,22 +403,31 @@ pub(super) fn read_alpha<'view, 'data: 'view>(
                 unclassified.set_clamp_t(false);
                 let surface = profile::Material {
                     shader: None,
-                    blend: blend(row.blend_mode),
-                    options: profile::Options {
-                        unlit: flags.unlit(),
-                        unfogged: flags.unfogged(),
-                        two_sided: flags.two_sided(),
-                        exterior_lit: flags.exterior_lit(),
-                        clamp_u: flags.clamp_s(),
-                        clamp_v: flags.clamp_t(),
-                        unclassified: unclassified.bits().into(),
-                        ..Default::default()
-                    },
                     textures: bindings,
                     self_illumination: color(row.sidn_color),
                     runtime_self_illumination: color(row.frame_sidn_color),
                     diffuse: color(row.diffuse_color),
                     ground_type: row.ground_type,
+                    state: PassState {
+                        blend: blend(row.blend_mode),
+                        rasterization: profile::Options {
+                            depth: (),
+                            faces: flags.two_sided(),
+                            lighting: Lighting {
+                                unlit: flags.unlit(),
+                                unfogged: flags.unfogged(),
+                            },
+                            controls: SurfaceOptions {
+                                exterior_lit: flags.exterior_lit(),
+                                clamp_u: flags.clamp_s(),
+                                clamp_v: flags.clamp_t(),
+                                unclassified: unclassified.bits().into(),
+                                ..Default::default()
+                            },
+                            ..Default::default()
+                        },
+                        ordering: (),
+                    },
                     ..Default::default()
                 };
                 result.push(builder.add_material(Material {
@@ -405,13 +442,15 @@ pub(super) fn read_alpha<'view, 'data: 'view>(
 fn blend(value: BlendMode) -> profile::Blend {
     match value {
         BlendMode::Opaque => profile::Blend::Opaque,
-        BlendMode::AlphaKey => profile::Blend::AlphaKey,
+        BlendMode::AlphaKey => profile::Blend::AlphaKey(()),
         BlendMode::Alpha => profile::Blend::Alpha,
         BlendMode::Add => profile::Blend::Additive,
         BlendMode::Modulate => profile::Blend::Modulate,
         BlendMode::Modulate2x => profile::Blend::Modulate2x,
-        BlendMode::ModulateAdd => profile::Blend::ModulateAdd,
-        BlendMode::InverseSourceAlphaAdd => profile::Blend::InverseSourceAlphaAdd,
+        BlendMode::ModulateAdd => profile::Blend::Extension(WorldBlend::ModulateAdd),
+        BlendMode::InverseSourceAlphaAdd => {
+            profile::Blend::Extension(WorldBlend::InverseSourceAlphaAdd)
+        }
         BlendMode::Unknown(value) => profile::Blend::Unknown(value),
     }
 }
@@ -419,23 +458,26 @@ fn blend(value: BlendMode) -> profile::Blend {
 pub(super) fn native_blend(value: profile::Blend) -> BlendMode {
     match value {
         profile::Blend::Opaque => BlendMode::Opaque,
-        profile::Blend::AlphaKey => BlendMode::AlphaKey,
+        profile::Blend::AlphaKey(()) => BlendMode::AlphaKey,
         profile::Blend::Alpha => BlendMode::Alpha,
         profile::Blend::Additive => BlendMode::Add,
         profile::Blend::Modulate => BlendMode::Modulate,
         profile::Blend::Modulate2x => BlendMode::Modulate2x,
-        profile::Blend::ModulateAdd => BlendMode::ModulateAdd,
-        profile::Blend::InverseSourceAlphaAdd => BlendMode::InverseSourceAlphaAdd,
+        profile::Blend::Extension(WorldBlend::ModulateAdd) => BlendMode::ModulateAdd,
+        profile::Blend::Extension(WorldBlend::InverseSourceAlphaAdd) => {
+            BlendMode::InverseSourceAlphaAdd
+        }
         profile::Blend::Unknown(value) => BlendMode::Unknown(value),
+        profile::Blend::AdditiveAlpha(value) => match value {},
     }
 }
 pub(super) fn native_flags(value: profile::Options) -> native::records::MaterialFlags {
-    let mut flags = native::records::MaterialFlags(value.unclassified.bits());
-    flags.set_unlit(value.unlit);
-    flags.set_unfogged(value.unfogged);
-    flags.set_two_sided(value.two_sided);
-    flags.set_exterior_lit(value.exterior_lit);
-    flags.set_clamp_s(value.clamp_u);
-    flags.set_clamp_t(value.clamp_v);
+    let mut flags = native::records::MaterialFlags(value.controls.unclassified.bits());
+    flags.set_unlit(value.lighting.unlit);
+    flags.set_unfogged(value.lighting.unfogged);
+    flags.set_two_sided(value.faces);
+    flags.set_exterior_lit(value.controls.exterior_lit);
+    flags.set_clamp_s(value.controls.clamp_u);
+    flags.set_clamp_t(value.controls.clamp_v);
     flags
 }

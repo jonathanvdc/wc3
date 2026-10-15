@@ -71,13 +71,6 @@ parameters; Universal chooses explicit alternatives that admit more behavior.
 No optional field is needed merely because another profile uses a different
 interpretation.
 
-Surface composition follows the same rule. `LayeredSurface<Layer>` owns ordered
-layers; `ShaderPass<Input>` owns ordered shader inputs. Custom layer and input
-types implement `SurfaceLayer` or `ShaderInput` to participate in property
-selection, local validation, and graph traversal. `SurfaceSet` combines complete
-surface families, with `Unavailable` for families that a selection cannot author.
-Application profiles can reuse these structures or supply their own payloads.
-
 A profile chooses a required controls payload where absence has no meaning,
 `Option<Payload>` where the declaration is genuinely optional, or the zero-sized
 `NoControls` value where that owner has no additional controls. `Unavailable`
@@ -152,6 +145,77 @@ file-data-ID selection. Surfaces additionally implement `SurfacePayload`, attach
 features implement `FeaturePayload` and `FeatureSchema`, and systems implement
 `SystemPayload`. Geometry schemas define their full attribute and connectivity vocabulary rather than
 attaching arbitrary streams to a narrower native schema.
+
+## Materials, shader inputs, and draw state
+
+A material combines a rendering program with its input values. Its components
+live under `semantic::materials`, where profiles select complete compositions
+with their own supported value domains. `LayeredSurface<Layer>` owns ordered
+layers; `ShaderPass<Input>` owns ordered shader inputs. Custom layer and input
+types implement `SurfaceLayer` or `ShaderInput` to participate in property
+selection, local validation, and graph traversal. `SurfaceSet` combines complete
+surface families, with `Unavailable` for families that a selection cannot author.
+Application profiles can reuse these structures or supply their own payloads.
+
+Texture inputs compose through `TextureBinding<Image, Coordinates, Sampling,
+Contribution>`. The selected image representation can retain animated texture
+choices, runtime replacement categories, external resource identities, or explicit
+absent-image codes. `Coordinates<Source, Transform>` separates mesh UV or generated
+coordinate selection from its transform. Referenced transforms, inline transforms,
+Diablo matrices and parametric animation, and programmed UV controls remain
+explicit choices. Native transform conventions and units are preserved.
+
+Sampling belongs to the input that uses it. Programmed bindings retain sampling programs for flipbook, video, and noise,
+together with independent channel-selection contributions. Simpler bindings
+select smaller components. World materials retain two independently authored scrolling
+slots even when their image bindings are absent. Diablo matrix rows and unresolved
+animation controls retain their authored order. These distinctions do not require
+optional fields on every texture binding.
+
+The following shader pass selects inputs without an inline coordinate transform.
+Its inputs still use the same owning binding structure as other selections:
+
+```rust
+use wc3::model::semantic::materials::model_shader::{ShaderPass, TextureUnit};
+use wc3::model::semantic::Animated;
+
+let mut input = TextureUnit::<()>::default();
+input.coordinates.source = 1;
+input.contribution = Animated::constant(0.75);
+let surface = ShaderPass {
+    textures: vec![input],
+    ..Default::default()
+};
+assert_eq!(surface.textures[0].contribution.default, 0.75);
+```
+
+A binding supplies a shader input; a pass applies an operation to the draw.
+MDLX layers therefore retain their ordered pass behavior, while programmed
+texture layers remain inputs to a shader. `PassState<Blend, Rasterization,
+Ordering>` owns draw state. `Rasterization<Depth, Faces, Lighting, Controls>`
+selects independent domains, with `DepthState` separating comparison, writes,
+and bias. Common operations have shared names, while each composition limits
+its admitted blend operations. Explicit blend equations retain their factors,
+operation, enablement, and constant color. Unresolved codes and additional
+operations remain in their selected domains. M2 rasterization helpers separate
+known lighting, fog, face, and depth controls while retaining the remaining flag bits.
+
+`SurfaceContribution<Input, Parameters>` couples an input with its response
+parameters. Programmed standard surfaces group diffuse, specular, emissive,
+opacity, and normal contributions without replacing their shader model with PBR.
+Sparse primary and secondary inputs retain their exact slots. A specular response
+keeps its color and gloss roles; normal contributions retain independent masks and
+the full authored weight vector. Portable PBR uses the same contribution structure
+for constant colors and keeps its texture inputs in their original order.
+
+Shader parameters use `ParameterEntry<Key, Value, Controls>`. Their ordered
+collections retain duplicate keys. Diablo tags, Diablo value selectors, and
+programmed hashed names remain different identity domains. Opaque words and byte
+payloads remain distinct from interpreted scalar or vector values; a bit pattern
+that resembles a nonfinite float is valid opaque data. Graph-absence sentinels,
+light groups, unresolved parameter types, and independently stored hashes are
+preserved. Composition traverses every selected component during graph validation,
+including application-defined resource, coordinate, contribution, and parameter types.
 
 ## Attached behavior and shared feature inspection
 

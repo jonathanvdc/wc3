@@ -1,29 +1,10 @@
 //! Native materials wire codes and flags.
+use crate::model::semantic::materials::state::BlendOperations;
+use crate::model::semantic::{Link, ValidateLinks};
 use bitfield::bitfield;
 
 /// Native BlendMode code; unknown values retain their exact wire representation.
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub enum BlendMode {
-    #[default]
-    /// Writes the source color without blending.
-    Opaque,
-    /// Uses an alpha-test cutout.
-    AlphaKey,
-    /// Blends using source alpha.
-    Alpha,
-    /// Adds source color without source-alpha modulation.
-    NoAlphaAdd,
-    /// Adds source color weighted by source alpha.
-    Add,
-    /// Multiplies the destination color by the source color.
-    Modulate,
-    /// Doubles the modulated color contribution.
-    Modulate2x,
-    /// Combines alpha blending and an additive contribution.
-    BlendAdd,
-    /// Unrecognized native code.
-    Unknown(u16),
-}
+pub type BlendMode = BlendOperations<ModelBlend, (), (), u16>;
 
 /// Native TextureSource code; unknown values retain their exact wire representation.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -220,13 +201,13 @@ impl BlendMode {
     pub const fn from_raw(value: u16) -> Self {
         match value {
             0 => Self::Opaque,
-            1 => Self::AlphaKey,
+            1 => Self::AlphaKey(()),
             2 => Self::Alpha,
-            3 => Self::NoAlphaAdd,
-            4 => Self::Add,
+            3 => Self::Additive,
+            4 => Self::AdditiveAlpha(()),
             5 => Self::Modulate,
             6 => Self::Modulate2x,
-            7 => Self::BlendAdd,
+            7 => Self::Extension(ModelBlend::BlendAdd),
             value => Self::Unknown(value),
         }
     }
@@ -234,13 +215,13 @@ impl BlendMode {
     pub const fn raw(self) -> u16 {
         match self {
             Self::Opaque => 0,
-            Self::AlphaKey => 1,
+            Self::AlphaKey(()) => 1,
             Self::Alpha => 2,
-            Self::NoAlphaAdd => 3,
-            Self::Add => 4,
+            Self::Additive => 3,
+            Self::AdditiveAlpha(()) => 4,
             Self::Modulate => 5,
             Self::Modulate2x => 6,
-            Self::BlendAdd => 7,
+            Self::Extension(ModelBlend::BlendAdd) => 7,
             Self::Unknown(value) => value,
         }
     }
@@ -297,4 +278,14 @@ impl TextureSource {
             Self::Unknown(value) => value,
         }
     }
+}
+
+/// Additional model-shader color operation.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum ModelBlend {
+    /// Combines alpha blending and an additive contribution.
+    BlendAdd,
+}
+impl ValidateLinks for ModelBlend {
+    fn visit_links(&self, _: &mut dyn FnMut(Link)) {}
 }

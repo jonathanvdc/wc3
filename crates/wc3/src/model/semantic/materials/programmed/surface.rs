@@ -1,5 +1,6 @@
 //! Logical M3 surface values.
 use super::{Property, TextureLayer};
+use crate::model::semantic::materials::contributions::SurfaceContribution;
 use crate::model::semantic::values::programmed::DisplacementFlags;
 
 /// Editable M3 Displacement values.
@@ -7,16 +8,14 @@ use crate::model::semantic::values::programmed::DisplacementFlags;
 pub struct Displacement {
     /// The purpose of this field has not been established.
     pub unknown: u32,
-    /// Controls displacement strength through its animation value.
-    pub strength: Property<f32>,
-    /// Supplies the map defining the displacement direction.
-    pub normal_map: Option<TextureLayer>,
     /// Supplies the mask scaling displacement strength.
     pub strength_map: Option<TextureLayer>,
     /// Retains the native material control bits; unresolved bits remain intact.
     pub flags: DisplacementFlags,
     /// Sets render priority (lower = earlier).
     pub priority: u32,
+    /// Authored displacement input and response.
+    pub displacement: SurfaceContribution<Option<TextureLayer>, Property<f32>>,
 }
 
 /// Editable M3 Terrain values.

@@ -160,7 +160,7 @@ pub(super) fn write<'a, T: ModelDialect>(
                     profile::Blend::Additive => native::Particle2FilterMode::Additive,
                     profile::Blend::Modulate => native::Particle2FilterMode::Modulate,
                     profile::Blend::Modulate2x => native::Particle2FilterMode::Modulate2x,
-                    profile::Blend::AlphaKey => native::Particle2FilterMode::AlphaKey,
+                    profile::Blend::AlphaKey(()) => native::Particle2FilterMode::AlphaKey,
                     profile::Blend::Unknown(value) => native::Particle2FilterMode::Unknown(value),
                     _ => {
                         encoder.context.unsupported(

@@ -1,6 +1,10 @@
 //! Borrowed section geometry and logical shader passes.
 use super::*;
 use crate::model::conversion::materialize;
+use crate::model::semantic::materials::bindings::{Coordinates, ImageSelection};
+use crate::model::semantic::materials::model_shader::FrameSampling;
+use crate::model::semantic::materials::model_shader::{material_flags, rasterization};
+use crate::model::semantic::materials::state::PassState;
 use semantic::{Draw, Influence, M2Geometry, Mesh, MeshInstance, Skin, Topology};
 use zerovec::ZeroVec;
 pub(super) fn import<'a, 'data: 'a, D: Dialect>(
@@ -140,18 +144,22 @@ where
                     .ok_or_else(|| Error::new("m2.material", "missing render state"))?;
                 let mut surface = profile::Material {
                     shader: batch.shader_id,
-                    priority_plane: batch.priority_plane,
                     geoset: batch.geoset_index,
                     layer: batch.material_layer,
                     batch_flags: profile::values::BatchFlags::from_bits_retain(batch.flags.bits()),
-                    flags: profile::values::MaterialFlags::from_bits_retain(
-                        native_material.flags.bits(),
-                    ),
-                    blend: profile::values::BlendMode::from_raw(
-                        native_material.blending_mode.raw(),
-                    ),
                     color: Animated::constant([1.; 3]),
                     opacity: Animated::constant(1.),
+                    state: PassState {
+                        blend: profile::values::BlendMode::from_raw(
+                            native_material.blending_mode.raw(),
+                        ),
+                        rasterization: rasterization(
+                            profile::values::MaterialFlags::from_bits_retain(
+                                native_material.flags.bits(),
+                            ),
+                        ),
+                        ordering: batch.priority_plane,
+                    },
                     ..Default::default()
                 };
                 for slot in 0..batch.texture_count as usize {
@@ -166,17 +174,23 @@ where
                         .get(texture)
                         .ok_or_else(|| Error::new("m2.material.texture", "missing texture"))?;
                     surface.textures.push(profile::TextureUnit {
-                        source: profile::values::TextureSource::from_raw(record.kind.raw()),
-                        texture: Some(*textures.get(texture).ok_or_else(|| {
-                            Error::new("m2.material.texture", "missing logical texture")
-                        })?),
-                        coordinate_set: core
-                            .texture_transform_bone_map
-                            .get(batch.texture_coordinate_combo_index as usize + slot)
-                            .unwrap_or(0) as i16,
-                        weight: Animated::constant(1.),
-                        transform: profile::TextureTransform::default(),
-                        frame: Animated::constant(0),
+                        image: ImageSelection {
+                            source: profile::values::TextureSource::from_raw(record.kind.raw()),
+                            texture: Some(*textures.get(texture).ok_or_else(|| {
+                                Error::new("m2.material.texture", "missing logical texture")
+                            })?),
+                        },
+                        coordinates: Coordinates {
+                            source: core
+                                .texture_transform_bone_map
+                                .get(batch.texture_coordinate_combo_index as usize + slot)
+                                .unwrap_or(0) as i16,
+                            transform: profile::TextureTransform::default(),
+                        },
+                        contribution: Animated::constant(1.),
+                        sampling: FrameSampling {
+                            frame: Animated::constant(0),
+                        },
                     });
                 }
                 let material = builder.add_material(semantic::Material {
@@ -226,7 +240,7 @@ where
                         let prop = profile::properties::TextureUnit(slot)
                             .weight()
                             .bind(material);
-                        unit.weight.property = Some(prop.clone().widen());
+                        unit.contribution.property = Some(prop.clone().widen());
                         for (seq, clip) in animation::sequences(clips) {
                             let (start, _) = tables
                                 .sequences
@@ -259,9 +273,9 @@ where
                         let sc = profile::properties::TextureUnit(slot)
                             .scale()
                             .bind(material);
-                        unit.transform.translation.property = Some(tr.clone().widen());
-                        unit.transform.rotation.property = Some(ro.clone().widen());
-                        unit.transform.scale.property = Some(sc.clone().widen());
+                        unit.coordinates.transform.translation.property = Some(tr.clone().widen());
+                        unit.coordinates.transform.rotation.property = Some(ro.clone().widen());
+                        unit.coordinates.transform.scale.property = Some(sc.clone().widen());
                         for (seq, clip) in animation::sequences(clips) {
                             let (start, _) = tables
                                 .sequences
@@ -547,12 +561,14 @@ where
             let surface = super::materials::surface(material, context)?;
             let material_index = materials.len();
             materials.push(native::records::Material {
-                flags: MaterialFlags::from_bits_retain(surface.flags.bits()),
-                blending_mode: BlendMode::from_raw(surface.blend.raw()),
+                flags: MaterialFlags::from_bits_retain(
+                    material_flags(&surface.state.rasterization).bits(),
+                ),
+                blending_mode: BlendMode::from_raw(surface.state.blend.raw()),
             });
             let combo = texture_combos.len();
             for (slot, unit) in surface.textures.iter().enumerate() {
-                let id = unit.texture.ok_or_else(|| {
+                let id = unit.image.texture.ok_or_else(|| {
                     Error::new("m2.material.texture", "shader unit has no texture resource")
                 })?;
                 texture_combos.push(
@@ -564,7 +580,7 @@ where
                     )
                     .map_err(|_| Error::new("m2.material.texture", "index exceeds u16"))?,
                 );
-                uv_sets.push(unit.coordinate_set as u16);
+                uv_sets.push(unit.coordinates.source as u16);
                 let indices = controls
                     .get(&material_id)
                     .and_then(|c| c.units.get(slot))
@@ -575,7 +591,7 @@ where
             }
             profile.batches.push(native::records::Batch {
                 flags: BatchFlags::from_bits_retain(surface.batch_flags.bits()),
-                priority_plane: surface.priority_plane,
+                priority_plane: surface.state.ordering,
                 shader_id: surface.shader,
                 skin_section_index: section_index as u16,
                 color_index: controls.get(&material_id).map_or(-1, |c| c.color),

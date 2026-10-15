@@ -2,12 +2,12 @@
 use super::{
     AnimationControl, AttachmentVolume, AuxiliaryGeometry, BillboardBehavior, Body, BodyParameters,
     BoneControls, Camera, CameraBokeh, CameraClipping, CameraFalloff, Cloth, ClothCollider,
-    ClothProxy, Composite, CompositeSection, Creep, DataDriven, DataGroup, DataProperties,
-    DataProperty, Displacement, DynamicState, ExternalModel, Feature, Force, Hair, HitTestShape,
-    IkCcd, IkJoint, IkTwoJoint, Joint, LensFlare, Light, Material, ModelMetadata, NodeRole,
-    OneBoneSolver, Parameters, Projector, Property, PropertyControl, Reflection, ShadowBox, Shape,
-    ShapeGeometry, SplatTerrainBake, SplinePoint, Standard, SubFlare, Terrain, TextureLayer,
-    TurretBehavior, VariationControl, ViewVolume, Volume, VolumeNoise, Warp,
+    ClothProxy, Composite, CompositeSection, Creep, DataDriven, DataProperties, Displacement,
+    DynamicState, ExternalModel, Feature, Force, Hair, HitTestShape, IkCcd, IkJoint, IkTwoJoint,
+    Joint, LensFlare, Light, Material, ModelMetadata, NodeRole, OneBoneSolver, Parameters,
+    Projector, Property, PropertyControl, Reflection, ShadowBox, Shape, ShapeGeometry,
+    SplatTerrainBake, SplinePoint, Standard, SubFlare, Terrain, TextureLayer, TurretBehavior,
+    VariationControl, ViewVolume, Volume, VolumeNoise, Warp,
 };
 use crate::model::semantic::{
     CurveValue, FeatureKind, GeometryKind, Link, Quaternion, ValidateLinks,
@@ -656,15 +656,15 @@ impl<'a> ValidateLinks for Cloth<'a> {
 }
 impl ValidateLinks for Reflection {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
-        self.reflection_strength.visit_links(visitor);
-        self.displacement_strength.visit_links(visitor);
+        self.reflection.parameters.visit_links(visitor);
+        self.displacement.parameters.visit_links(visitor);
         self.reflection_offset.visit_links(visitor);
         self.blur_angle.visit_links(visitor);
         self.blur_distance_max.visit_links(visitor);
-        if let Some(child) = &self.reflection_map {
+        if let Some(child) = &self.reflection.input {
             child.visit_links(visitor);
         }
-        if let Some(child) = &self.displacement_map {
+        if let Some(child) = &self.displacement.input {
             child.visit_links(visitor);
         }
         if let Some(child) = &self.blur_map {
@@ -674,88 +674,26 @@ impl ValidateLinks for Reflection {
 }
 impl ValidateLinks for Standard {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
-        if !self.specular_exponent.is_finite() {
-            visitor(Link::InvalidValue);
-        }
-        if !self.depth_blend_falloff.is_finite() {
-            visitor(Link::InvalidValue);
-        }
-        if !self.hdr_specular_multiplier.is_finite() {
-            visitor(Link::InvalidValue);
-        }
-        if !self.hdr_emissive_multiplier.is_finite() {
-            visitor(Link::InvalidValue);
-        }
-        if !self.hdr_environment_constant.is_finite() {
-            visitor(Link::InvalidValue);
-        }
-        if !self.hdr_environment_diffuse.is_finite() {
-            visitor(Link::InvalidValue);
-        }
-        if !self.hdr_environment_specular.is_finite() {
-            visitor(Link::InvalidValue);
-        }
-        if let Some(child) = &self.diffuse_layer {
-            child.visit_links(visitor);
-        }
-        if let Some(child) = &self.decal_layer {
-            child.visit_links(visitor);
-        }
-        if let Some(child) = &self.specular_layer {
-            child.visit_links(visitor);
-        }
-        if let Some(child) = &self.gloss_layer {
-            child.visit_links(visitor);
-        }
-        if let Some(child) = &self.emissive_layer1 {
-            child.visit_links(visitor);
-        }
-        if let Some(child) = &self.emissive_layer2 {
-            child.visit_links(visitor);
-        }
-        if let Some(child) = &self.environment_layer {
-            child.visit_links(visitor);
-        }
-        if let Some(child) = &self.environment_mask_layer {
-            child.visit_links(visitor);
-        }
-        if let Some(child) = &self.alpha_layer1 {
-            child.visit_links(visitor);
-        }
-        if let Some(child) = &self.alpha_layer2 {
-            child.visit_links(visitor);
-        }
-        if let Some(child) = &self.normal_layer {
-            child.visit_links(visitor);
-        }
-        if let Some(child) = &self.height_layer {
-            child.visit_links(visitor);
-        }
-        if let Some(child) = &self.light_map_layer {
-            child.visit_links(visitor);
-        }
-        if let Some(child) = &self.ambient_occlusion_layer {
-            child.visit_links(visitor);
-        }
-        if let Some(child) = &self.normal_blend1_mask_layer {
-            child.visit_links(visitor);
-        }
-        if let Some(child) = &self.normal_blend2_mask_layer {
-            child.visit_links(visitor);
-        }
-        if let Some(child) = &self.normal_blend1_layer {
-            child.visit_links(visitor);
-        }
-        if let Some(child) = &self.normal_blend2_layer {
-            child.visit_links(visitor);
-        }
+        self.state.visit_links(visitor);
+        self.diffuse.visit_links(visitor);
+        self.specular.visit_links(visitor);
+        self.emissive.visit_links(visitor);
+        self.opacity.visit_links(visitor);
+        self.normals.visit_links(visitor);
+        self.hdr_environment_constant.visit_links(visitor);
+        self.hdr_environment_diffuse.visit_links(visitor);
+        self.hdr_environment_specular.visit_links(visitor);
+        self.decal_layer.visit_links(visitor);
+        self.environment_layer.visit_links(visitor);
+        self.environment_mask_layer.visit_links(visitor);
+        self.height_layer.visit_links(visitor);
+        self.light_map_layer.visit_links(visitor);
+        self.ambient_occlusion_layer.visit_links(visitor);
         self.parallax_height.visit_links(visitor);
         self.motion_blur_amount.visit_links(visitor);
-        for child in self.normal_blend_factors.iter() {
-            child.visit_links(visitor);
-        }
     }
 }
+
 impl ValidateLinks for AnimationControl {
     fn visit_links(&self, _visitor: &mut dyn FnMut(Link)) {}
 }
@@ -772,16 +710,6 @@ impl<'a> ValidateLinks for DataDriven<'a> {
         }
         if !self.unknown116.is_finite() {
             visitor(Link::InvalidValue);
-        }
-    }
-}
-impl<'a> ValidateLinks for DataProperty<'a> {
-    fn visit_links(&self, _visitor: &mut dyn FnMut(Link)) {}
-}
-impl<'a> ValidateLinks for DataGroup<'a> {
-    fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
-        for child in self.properties.iter() {
-            child.visit_links(visitor);
         }
     }
 }
@@ -839,8 +767,8 @@ impl<'a> ValidateLinks for LensFlare<'a> {
 }
 impl ValidateLinks for Displacement {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
-        self.strength.visit_links(visitor);
-        if let Some(child) = &self.normal_map {
+        self.displacement.parameters.visit_links(visitor);
+        if let Some(child) = &self.displacement.input {
             child.visit_links(visitor);
         }
         if let Some(child) = &self.strength_map {
@@ -877,7 +805,7 @@ impl ValidateLinks for SplatTerrainBake {
 }
 impl ValidateLinks for Hair {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
-        if let Some(child) = &self.layer_base {
+        if let Some(child) = &self.diffuse.input {
             child.visit_links(visitor);
         }
         if let Some(child) = &self.layer_spec_shift {
@@ -895,7 +823,7 @@ impl ValidateLinks for Hair {
         if !self.shift_secondary.is_finite() {
             visitor(Link::InvalidValue);
         }
-        self.color_diffuse.visit_links(visitor);
+        self.diffuse.parameters.visit_links(visitor);
         self.color_specular.visit_links(visitor);
         if !self.specular_exponent_primary.is_finite() {
             visitor(Link::InvalidValue);
@@ -920,29 +848,7 @@ impl ValidateLinks for Composite {
 }
 impl ValidateLinks for TextureLayer {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
-        if let Some(id) = self.texture {
-            visitor(Link::Texture(id));
-        }
-        self.color.visit_links(visitor);
-        self.rgb_multiply.visit_links(visitor);
-        self.rgb_add.visit_links(visitor);
-        if !self.noise_amplitude.is_finite() {
-            visitor(Link::InvalidValue);
-        }
-        if !self.noise_frequency.is_finite() {
-            visitor(Link::InvalidValue);
-        }
-        self.avi_play.visit_links(visitor);
-        self.avi_restart.visit_links(visitor);
-        self.current_frame.visit_links(visitor);
-        self.uv_offset.visit_links(visitor);
-        self.uv_angle.visit_links(visitor);
-        self.uv_tiling.visit_links(visitor);
-        self.w_offset.visit_links(visitor);
-        self.w_tiling.visit_links(visitor);
-        self.map_alpha.visit_links(visitor);
-        self.triplanar_offset.visit_links(visitor);
-        self.triplanar_scale.visit_links(visitor);
+        self.binding.visit_links(visitor);
         if !self.fresnel_exponent.is_finite() {
             visitor(Link::InvalidValue);
         }

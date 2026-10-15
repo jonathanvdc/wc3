@@ -8,8 +8,8 @@ pub(super) fn encode<E: Envelope>(
     Ok(nr::DisplacementMaterial {
         name: writer.string(name)?,
         unknown: r.unknown,
-        strength: native_anim(&r.strength, writer.animation_ids),
-        normal_map: writer.layer(r.normal_map.as_ref())?,
+        strength: native_anim(&r.displacement.parameters, writer.animation_ids),
+        normal_map: writer.layer(r.displacement.input.as_ref())?,
         strength_map: writer.layer(r.strength_map.as_ref())?,
         flags: nr::DisplacementFlags((r.flags).bits()),
         priority: r.priority,

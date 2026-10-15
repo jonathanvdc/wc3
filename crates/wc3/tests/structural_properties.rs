@@ -122,7 +122,7 @@ fn layer_and_texture_slot_ordinals_must_exist_in_the_selected_material() {
             })
             .unwrap();
         if slot {
-            surface.layers[0].texture =
+            surface.layers[0].binding.image =
                 Animated::new(None, LayerProperties(0).texture_slot(2).bind(material));
         } else {
             surface.layers[0].opacity =

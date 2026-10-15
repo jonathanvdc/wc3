@@ -3,6 +3,7 @@ use super::texture::get_layer;
 use super::{
     anim, native, nr, read_error, revision, string, surface, Envelope, Error, Reader, Slot,
 };
+use crate::model::semantic::materials::contributions::SurfaceContribution;
 pub(super) fn map_reflectionmaterial<'a, E: Envelope, D: nr::ReflectionMaterialDialect>(
     r: nr::ReflectionMaterial<D>,
     source: &'a native::Document<'_, E>,
@@ -16,16 +17,23 @@ where
     D::Unknown2: Slot<u32>,
 {
     reader.name = Some(string(source, r.name)?);
+    let reflection_map = get_layer(source, reader, r.reflection_map)?;
+    let displacement_map = get_layer(source, reader, r.displacement_map)?;
+    let blur_map = get_layer(source, reader, r.blur_map.value())?;
     Ok(surface::Reflection {
+        displacement: SurfaceContribution {
+            input: displacement_map,
+            parameters: anim(r.displacement_strength),
+        },
+        reflection: SurfaceContribution {
+            input: reflection_map,
+            parameters: anim(r.reflection_strength),
+        },
         unknown: r.unknown,
-        reflection_strength: anim(r.reflection_strength),
-        displacement_strength: anim(r.displacement_strength),
         reflection_offset: anim(r.reflection_offset.value()),
         blur_angle: anim(r.blur_angle.value()),
         blur_distance_max: anim(r.blur_distance_max.value()),
-        reflection_map: get_layer(source, reader, r.reflection_map)?,
-        displacement_map: get_layer(source, reader, r.displacement_map)?,
-        blur_map: get_layer(source, reader, r.blur_map.value())?,
+        blur_map: blur_map,
         flags: surface::values::ReflectionFlags((r.flags).bits()),
         unknown2: r.unknown2.value(),
     })

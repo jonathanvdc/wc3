@@ -4,6 +4,11 @@ use super::{
     anim, identity, native, nr, read_error, revision, string, surface, Envelope, Error, Reader,
     Slot,
 };
+use crate::model::semantic::materials::contributions::{
+    MaskedInput, NormalContributions, PairedInputs, SpecularInputs, SurfaceContribution,
+};
+use crate::model::semantic::materials::programmed::SpecularResponse;
+use crate::model::semantic::materials::{programmed::PassControls, state::PassState};
 pub(super) fn standard<'a, E: Envelope, D: nr::StandardMaterialDialect>(
     r: nr::StandardMaterial<D>,
     source: &'a native::Document<'_, E>,
@@ -21,58 +26,108 @@ where
     D::NormalBlendFactors: Slot<native::Ref<nr::targets::AnimationValueReal>>,
 {
     reader.name = Some(string(source, r.name)?);
+    let diffuse_layer = get_layer(source, reader, r.diffuse_layer)?;
+    let decal_layer = get_layer(source, reader, r.decal_layer)?;
+    let specular_layer = get_layer(source, reader, r.specular_layer)?;
+    let gloss_layer = get_layer(source, reader, r.gloss_layer.value())?;
+    let emissive_layer1 = get_layer(source, reader, r.emissive_layer1)?;
+    let emissive_layer2 = get_layer(source, reader, r.emissive_layer2)?;
+    let environment_layer = get_layer(source, reader, r.environment_layer)?;
+    let environment_mask_layer = get_layer(source, reader, r.environment_mask_layer)?;
+    let alpha_layer1 = get_layer(source, reader, r.alpha_layer1)?;
+    let alpha_layer2 = get_layer(source, reader, r.alpha_layer2)?;
+    let normal_layer = get_layer(source, reader, r.normal_layer)?;
+    let height_layer = get_layer(source, reader, r.height_layer)?;
+    let light_map_layer = get_layer(source, reader, r.light_map_layer)?;
+    let ambient_occlusion_layer = get_layer(source, reader, r.ambient_occlusion_layer)?;
+    let normal_blend1_mask_layer = get_layer(source, reader, r.normal_blend1_mask_layer.value())?;
+    let normal_blend2_mask_layer = get_layer(source, reader, r.normal_blend2_mask_layer.value())?;
+    let normal_blend1_layer = get_layer(source, reader, r.normal_blend1_layer.value())?;
+    let normal_blend2_layer = get_layer(source, reader, r.normal_blend2_layer.value())?;
     Ok(surface::Standard {
-        additional_flags: surface::values::AdditionalMaterialFlags((r.additional_flags).bits()),
-        flags: surface::values::MaterialFlags((r.flags).bits()),
-        blend_mode: surface::values::BlendMode::from_raw((r.blend_mode).raw()),
-        priority: r.priority,
-        rtt_channels: surface::values::RttChannels(r.rtt_channels.bits()),
-        specular_exponent: r.specular_exponent,
-        depth_blend_falloff: r.depth_blend_falloff,
-        alpha_test_threshold: r.alpha_test_threshold,
-        hdr_specular_multiplier: r.hdr_specular_multiplier,
-        hdr_emissive_multiplier: r.hdr_emissive_multiplier,
         hdr_environment_constant: r.hdr_environment_constant.value(),
         hdr_environment_diffuse: r.hdr_environment_diffuse.value(),
         hdr_environment_specular: r.hdr_environment_specular.value(),
-        diffuse_layer: get_layer(source, reader, r.diffuse_layer)?,
-        decal_layer: get_layer(source, reader, r.decal_layer)?,
-        specular_layer: get_layer(source, reader, r.specular_layer)?,
-        gloss_layer: get_layer(source, reader, r.gloss_layer.value())?,
-        emissive_layer1: get_layer(source, reader, r.emissive_layer1)?,
-        emissive_layer2: get_layer(source, reader, r.emissive_layer2)?,
-        environment_layer: get_layer(source, reader, r.environment_layer)?,
-        environment_mask_layer: get_layer(source, reader, r.environment_mask_layer)?,
-        alpha_layer1: get_layer(source, reader, r.alpha_layer1)?,
-        alpha_layer2: get_layer(source, reader, r.alpha_layer2)?,
-        normal_layer: get_layer(source, reader, r.normal_layer)?,
-        height_layer: get_layer(source, reader, r.height_layer)?,
-        light_map_layer: get_layer(source, reader, r.light_map_layer)?,
-        ambient_occlusion_layer: get_layer(source, reader, r.ambient_occlusion_layer)?,
-        normal_blend1_mask_layer: get_layer(source, reader, r.normal_blend1_mask_layer.value())?,
-        normal_blend2_mask_layer: get_layer(source, reader, r.normal_blend2_mask_layer.value())?,
-        normal_blend1_layer: get_layer(source, reader, r.normal_blend1_layer.value())?,
-        normal_blend2_layer: get_layer(source, reader, r.normal_blend2_layer.value())?,
+        decal_layer: decal_layer,
+        environment_layer: environment_layer,
+        environment_mask_layer: environment_mask_layer,
+        height_layer: height_layer,
+        light_map_layer: light_map_layer,
+        ambient_occlusion_layer: ambient_occlusion_layer,
         material_class: surface::values::MaterialClass::from_raw((r.material_class).raw()),
-        layer_blend_mode: surface::values::LayerBlendOp::from_raw((r.layer_blend_mode).raw()),
-        emissive_blend_mode1: surface::values::LayerBlendOp::from_raw(
-            (r.emissive_blend_mode1).raw(),
-        ),
-        emissive_blend_mode2: surface::values::LayerBlendOp::from_raw(
-            (r.emissive_blend_mode2).raw(),
-        ),
-        specular_mode: surface::values::SpecularMode::from_raw((r.specular_mode).raw()),
         parallax_height: anim(r.parallax_height),
         motion_blur_amount: anim(r.motion_blur_amount),
-        normal_blend_factors: identity(
-            source
-                .resolve::<nr::AnimationValueReal>(r.normal_blend_factors.value().cast())
-                .map_err(read_error)?
-                .iter()
-                .map(|r| r.map(|r| anim(r.value)))
-                .collect::<Result<Vec<_>, _>>()
-                .map_err(read_error)?,
-        ),
+        diffuse: SurfaceContribution {
+            input: diffuse_layer,
+            parameters: surface::values::LayerBlendOp::from_raw((r.layer_blend_mode).raw()),
+        },
+        specular: SurfaceContribution {
+            input: SpecularInputs {
+                color: specular_layer,
+                gloss: gloss_layer,
+            },
+            parameters: SpecularResponse {
+                exponent: r.specular_exponent,
+                hdr_multiplier: r.hdr_specular_multiplier,
+                mode: surface::values::SpecularMode::from_raw((r.specular_mode).raw()),
+            },
+        },
+        emissive: SurfaceContribution {
+            input: PairedInputs {
+                primary: SurfaceContribution {
+                    input: emissive_layer1,
+                    parameters: surface::values::LayerBlendOp::from_raw(
+                        (r.emissive_blend_mode1).raw(),
+                    ),
+                },
+                secondary: SurfaceContribution {
+                    input: emissive_layer2,
+                    parameters: surface::values::LayerBlendOp::from_raw(
+                        (r.emissive_blend_mode2).raw(),
+                    ),
+                },
+            },
+            parameters: r.hdr_emissive_multiplier,
+        },
+        opacity: PairedInputs {
+            primary: alpha_layer1,
+            secondary: alpha_layer2,
+        },
+        normals: NormalContributions {
+            base: normal_layer,
+            primary: MaskedInput {
+                input: normal_blend1_layer,
+                mask: normal_blend1_mask_layer,
+            },
+            secondary: MaskedInput {
+                input: normal_blend2_layer,
+                mask: normal_blend2_mask_layer,
+            },
+            weights: identity(
+                source
+                    .resolve::<nr::AnimationValueReal>(r.normal_blend_factors.value().cast())
+                    .map_err(read_error)?
+                    .iter()
+                    .map(|r| r.map(|r| anim(r.value)))
+                    .collect::<Result<Vec<_>, _>>()
+                    .map_err(read_error)?,
+            ),
+        },
+        state: PassState {
+            blend: surface::values::BlendMode::from_raw((r.blend_mode).raw()),
+            ordering: r.priority,
+            rasterization: PassControls {
+                additional_flags: surface::values::AdditionalMaterialFlags(
+                    (r.additional_flags).bits(),
+                ),
+                flags: surface::values::MaterialFlags((r.flags).bits()),
+                rtt_channels: surface::values::RttChannels(r.rtt_channels.bits()),
+                depth_blend_falloff: r.depth_blend_falloff,
+                alpha_test_threshold: r.alpha_test_threshold,
+                ..Default::default()
+            },
+            ..Default::default()
+        },
     })
 }
 

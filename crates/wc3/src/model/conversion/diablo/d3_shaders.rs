@@ -3,6 +3,9 @@ use super::{i32_count, name, text};
 use crate::model::conversion::{Conversion, Error, ExportOptions, ImportOptions, Plan};
 use crate::model::diablo::d3::records as native;
 use crate::model::diablo::d3::{Shader, ShaderMapDocument, V150, V26};
+use crate::model::semantic::materials::diablo3::RenderControls;
+use crate::model::semantic::materials::parameters::{OpaqueWord, ShaderTag};
+use crate::model::semantic::materials::state::{BlendEquation, DepthState, Rasterization};
 use crate::model::semantic::profiles::diablo::d3::{
     AddressMode, AssetRef, BlendFactor, BlendOperation, Comparison, CullMode, FillMode, Group,
     ParameterType, PassFlags, RenderParams, RenderState, ShaderAsset, ShaderMapAsset,
@@ -26,58 +29,67 @@ fn native_switch(v: Switch) -> i32 {
 }
 fn params(v: &native::RenderParams) -> RenderParams {
     RenderParams {
-        cull_mode: CullMode(v.cull_mode),
-        z_write_enable: switch(v.z_write_enable),
-        z_func: Comparison(v.z_func),
-        depth_bias: v.depth_bias,
-        unclassified_control: v.unknown10,
-        stencil_enable: switch(v.stencil_enable),
-        stencil_func: Comparison(v.stencil_func),
-        stencil_ref: v.stencil_ref,
-        stencil_pass: StencilOperation(v.stencil_pass),
-        stencil_fail: StencilOperation(v.stencil_fail),
-        stencil_z_fail: StencilOperation(v.stencil_z_fail),
-        alpha_test_enable: switch(v.alpha_test_enable),
-        alpha_func: Comparison(v.alpha_func),
-        alpha_ref: v.b_alpha_ref,
-        alpha_to_coverage: switch(v.alpha_to_coverage),
-        fog_enable: switch(v.fog_enable),
-        fill_mode: FillMode(v.fill_mode),
-        color_write_enable: switch(v.color_write_enable),
-        alpha_write_enable: switch(v.alpha_write_enable),
-        alpha_blend_enable: switch(v.alpha_blend_enable),
-        blend_op: BlendOperation(v.blend_op),
-        src_blend: BlendFactor(v.src_blend),
-        dest_blend: BlendFactor(v.dest_blend),
-        constant_color: v.constant_color,
+        blend: BlendEquation {
+            enabled: switch(v.alpha_blend_enable),
+            operation: BlendOperation(v.blend_op),
+            source: BlendFactor(v.src_blend),
+            destination: BlendFactor(v.dest_blend),
+            constant: v.constant_color,
+        },
+        rasterization: Rasterization {
+            depth: DepthState {
+                test: Comparison(v.z_func),
+                write: switch(v.z_write_enable),
+                bias: v.depth_bias,
+            },
+            faces: CullMode(v.cull_mode),
+            lighting: switch(v.fog_enable),
+            controls: RenderControls {
+                unclassified_control: v.unknown10,
+                stencil_enable: switch(v.stencil_enable),
+                stencil_func: Comparison(v.stencil_func),
+                stencil_ref: v.stencil_ref,
+                stencil_pass: StencilOperation(v.stencil_pass),
+                stencil_fail: StencilOperation(v.stencil_fail),
+                stencil_z_fail: StencilOperation(v.stencil_z_fail),
+                alpha_test_enable: switch(v.alpha_test_enable),
+                alpha_func: Comparison(v.alpha_func),
+                alpha_ref: v.b_alpha_ref,
+                alpha_to_coverage: switch(v.alpha_to_coverage),
+                fill_mode: FillMode(v.fill_mode),
+                color_write_enable: switch(v.color_write_enable),
+                alpha_write_enable: switch(v.alpha_write_enable),
+            },
+        },
+        ordering: (),
     }
 }
 fn native_params(v: &RenderParams) -> native::RenderParams {
     native::RenderParams {
-        cull_mode: v.cull_mode.0,
-        z_write_enable: native_switch(v.z_write_enable),
-        z_func: v.z_func.0,
-        depth_bias: v.depth_bias,
-        unknown10: v.unclassified_control,
-        stencil_enable: native_switch(v.stencil_enable),
-        stencil_func: v.stencil_func.0,
-        stencil_ref: v.stencil_ref,
-        stencil_pass: v.stencil_pass.0,
-        stencil_fail: v.stencil_fail.0,
-        stencil_z_fail: v.stencil_z_fail.0,
-        alpha_test_enable: native_switch(v.alpha_test_enable),
-        alpha_func: v.alpha_func.0,
-        b_alpha_ref: v.alpha_ref,
-        alpha_to_coverage: native_switch(v.alpha_to_coverage),
-        fog_enable: native_switch(v.fog_enable),
-        fill_mode: v.fill_mode.0,
-        color_write_enable: native_switch(v.color_write_enable),
-        alpha_write_enable: native_switch(v.alpha_write_enable),
-        alpha_blend_enable: native_switch(v.alpha_blend_enable),
-        blend_op: v.blend_op.0,
-        src_blend: v.src_blend.0,
-        dest_blend: v.dest_blend.0,
-        constant_color: v.constant_color,
+        cull_mode: v.rasterization.faces.0,
+        z_write_enable: native_switch(v.rasterization.depth.write),
+        z_func: v.rasterization.depth.test.0,
+        depth_bias: v.rasterization.depth.bias,
+        unknown10: v.rasterization.controls.unclassified_control,
+        stencil_enable: native_switch(v.rasterization.controls.stencil_enable),
+        stencil_func: v.rasterization.controls.stencil_func.0,
+        stencil_ref: v.rasterization.controls.stencil_ref,
+        stencil_pass: v.rasterization.controls.stencil_pass.0,
+        stencil_fail: v.rasterization.controls.stencil_fail.0,
+        stencil_z_fail: v.rasterization.controls.stencil_z_fail.0,
+        alpha_test_enable: native_switch(v.rasterization.controls.alpha_test_enable),
+        alpha_func: v.rasterization.controls.alpha_func.0,
+        b_alpha_ref: v.rasterization.controls.alpha_ref,
+        alpha_to_coverage: native_switch(v.rasterization.controls.alpha_to_coverage),
+        fog_enable: native_switch(v.rasterization.lighting),
+        fill_mode: v.rasterization.controls.fill_mode.0,
+        color_write_enable: native_switch(v.rasterization.controls.color_write_enable),
+        alpha_write_enable: native_switch(v.rasterization.controls.alpha_write_enable),
+        alpha_blend_enable: native_switch(v.blend.enabled),
+        blend_op: v.blend.operation.0,
+        src_blend: v.blend.source.0,
+        dest_blend: v.blend.destination.0,
+        constant_color: v.blend.constant,
         ..Default::default()
     }
 }
@@ -108,9 +120,9 @@ fn pass<'a>(v: &'a native::RenderPass<'_>) -> Result<RenderState<'a>, Error> {
             .shader_params
             .iter()
             .map(|t| ShaderTagValue {
-                value_type: ParameterType(t.value_type),
-                tag_id: t.tag_id,
-                value: t.value,
+                controls: ParameterType(t.value_type),
+                key: ShaderTag(t.tag_id),
+                value: OpaqueWord(t.value),
             })
             .collect(),
     })
@@ -132,9 +144,9 @@ fn native_pass(v: &RenderState<'_>) -> Result<native::RenderPass<'static>, Error
         .shader_params
         .iter()
         .map(|t| native::ShaderTagMapEntry {
-            value_type: t.value_type.0,
-            tag_id: t.tag_id,
-            value: t.value,
+            value_type: t.controls.0,
+            tag_id: t.key.0,
+            value: t.value.0,
         })
         .collect::<Vec<_>>();
     Ok(native::RenderPass {
@@ -211,9 +223,9 @@ pub fn import_shader_map(
                 .shaders
                 .iter()
                 .map(|v| ShaderMapEntry {
-                    value_type: ParameterType(v.value_type),
-                    tag_id: v.tag_id,
-                    shader: AssetRef {
+                    controls: ParameterType(v.value_type),
+                    key: ShaderTag(v.tag_id),
+                    value: AssetRef {
                         id: v.shader,
                         group: Group::Shaders,
                     },
@@ -232,16 +244,16 @@ pub fn plan_shader_map(
         .entries
         .iter()
         .map(|v| {
-            if v.shader.group != Group::Shaders {
+            if v.value.group != Group::Shaders {
                 return Err(Error::new(
                     "d3.shader_map.shader",
                     "dependency belongs to a different SNO group",
                 ));
             }
             Ok(native::ShaderMapEntry {
-                value_type: v.value_type.0,
-                tag_id: v.tag_id,
-                shader: v.shader.id,
+                value_type: v.controls.0,
+                tag_id: v.key.0,
+                shader: v.value.id,
             })
         })
         .collect::<Result<Vec<_>, Error>>()?;

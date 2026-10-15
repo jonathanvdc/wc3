@@ -15,7 +15,13 @@ pub(super) fn write<'a>(
 ) -> Result<BTreeMap<MaterialId, u16>, Error> {
     let used = model
         .materials()
-        .flat_map(|(_, material)| material.surface.textures.iter().flatten().copied())
+        .flat_map(|(_, material)| {
+            material
+                .surface
+                .textures
+                .iter()
+                .filter_map(|binding| binding.image)
+        })
         .collect::<BTreeSet<_>>();
     let mut names = vec![0];
     let mut textures = BTreeMap::new();
@@ -62,7 +68,7 @@ pub(super) fn write<'a>(
         {
             context.unsupported("world.material", "historical fixed-function materials have two texture slots and no shader selection, scroll curves, or later shader controls")?;
         }
-        if surface.options.self_illuminated {
+        if surface.state.rasterization.controls.self_illuminated {
             context.unsupported(
                 "world.material.self_illuminated",
                 "no established native self-illumination switch is available",
@@ -72,13 +78,12 @@ pub(super) fn write<'a>(
             surface
                 .textures
                 .get(slot)
-                .copied()
-                .flatten()
+                .and_then(|binding| binding.image)
                 .map_or(0, |id| textures[&id])
         };
         let record = Material14 {
-            flags: native_flags(surface.options),
-            blend_mode: native_blend(surface.blend),
+            flags: native_flags(surface.state.rasterization),
+            blend_mode: native_blend(surface.state.blend),
             texture0: texture(0),
             texture1: texture(1),
             sidn_color: super::rgba(surface.self_illumination),

@@ -3,6 +3,7 @@ use super::texture::get_layer;
 use super::{
     anim, native, nr, read_error, revision, string, surface, Envelope, Error, Reader, Slot,
 };
+use crate::model::semantic::materials::contributions::SurfaceContribution;
 pub(super) fn map_displacementmaterial<'a, E: Envelope, D: nr::DisplacementMaterialDialect>(
     r: nr::DisplacementMaterial<D>,
     source: &'a native::Document<'_, E>,
@@ -12,11 +13,15 @@ where
     D::Name: Slot<native::Ref<nr::targets::Character>>,
 {
     reader.name = Some(string(source, r.name.value())?);
+    let normal_map = get_layer(source, reader, r.normal_map)?;
+    let strength_map = get_layer(source, reader, r.strength_map)?;
     Ok(surface::Displacement {
+        displacement: SurfaceContribution {
+            input: normal_map,
+            parameters: anim(r.strength),
+        },
         unknown: r.unknown,
-        strength: anim(r.strength),
-        normal_map: get_layer(source, reader, r.normal_map)?,
-        strength_map: get_layer(source, reader, r.strength_map)?,
+        strength_map: strength_map,
         flags: surface::values::DisplacementFlags(
             (surface::values::LayerFlags((r.flags).bits())).bits(),
         ),

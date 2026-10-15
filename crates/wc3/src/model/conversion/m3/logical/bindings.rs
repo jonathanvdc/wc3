@@ -121,20 +121,24 @@ impl<T: Value> Bind for surface::Property<T> {
 }
 impl Bind for surface::Reflection {
     fn bind(&mut self, owner: OwnerId, path: &FieldPath, bindings: &mut Bindings) {
-        self.reflection_strength
+        self.reflection
+            .parameters
             .bind(owner, &path.child(Field::ReflectionStrength), bindings);
-        self.displacement_strength
-            .bind(owner, &path.child(Field::DisplacementStrength), bindings);
+        self.displacement.parameters.bind(
+            owner,
+            &path.child(Field::DisplacementStrength),
+            bindings,
+        );
         self.reflection_offset
             .bind(owner, &path.child(Field::ReflectionOffset), bindings);
         self.blur_angle
             .bind(owner, &path.child(Field::BlurAngle), bindings);
         self.blur_distance_max
             .bind(owner, &path.child(Field::BlurDistanceMax), bindings);
-        if let Some(value) = &mut self.reflection_map {
+        if let Some(value) = &mut self.reflection.input {
             value.bind(owner, &path.child(Field::ReflectionMap), bindings);
         }
-        if let Some(value) = &mut self.displacement_map {
+        if let Some(value) = &mut self.displacement.input {
             value.bind(owner, &path.child(Field::DisplacementMap), bindings);
         }
         if let Some(value) = &mut self.blur_map {
@@ -144,22 +148,22 @@ impl Bind for surface::Reflection {
 }
 impl Bind for surface::Standard {
     fn bind(&mut self, owner: OwnerId, path: &FieldPath, bindings: &mut Bindings) {
-        if let Some(value) = &mut self.diffuse_layer {
+        if let Some(value) = &mut self.diffuse.input {
             value.bind(owner, &path.child(Field::DiffuseLayer), bindings);
         }
         if let Some(value) = &mut self.decal_layer {
             value.bind(owner, &path.child(Field::DecalLayer), bindings);
         }
-        if let Some(value) = &mut self.specular_layer {
+        if let Some(value) = &mut self.specular.input.color {
             value.bind(owner, &path.child(Field::SpecularLayer), bindings);
         }
-        if let Some(value) = &mut self.gloss_layer {
+        if let Some(value) = &mut self.specular.input.gloss {
             value.bind(owner, &path.child(Field::GlossLayer), bindings);
         }
-        if let Some(value) = &mut self.emissive_layer1 {
+        if let Some(value) = &mut self.emissive.input.primary.input {
             value.bind(owner, &path.child(Field::EmissiveLayer1), bindings);
         }
-        if let Some(value) = &mut self.emissive_layer2 {
+        if let Some(value) = &mut self.emissive.input.secondary.input {
             value.bind(owner, &path.child(Field::EmissiveLayer2), bindings);
         }
         if let Some(value) = &mut self.environment_layer {
@@ -168,13 +172,13 @@ impl Bind for surface::Standard {
         if let Some(value) = &mut self.environment_mask_layer {
             value.bind(owner, &path.child(Field::EnvironmentMaskLayer), bindings);
         }
-        if let Some(value) = &mut self.alpha_layer1 {
+        if let Some(value) = &mut self.opacity.primary {
             value.bind(owner, &path.child(Field::AlphaLayer1), bindings);
         }
-        if let Some(value) = &mut self.alpha_layer2 {
+        if let Some(value) = &mut self.opacity.secondary {
             value.bind(owner, &path.child(Field::AlphaLayer2), bindings);
         }
-        if let Some(value) = &mut self.normal_layer {
+        if let Some(value) = &mut self.normals.base {
             value.bind(owner, &path.child(Field::NormalLayer), bindings);
         }
         if let Some(value) = &mut self.height_layer {
@@ -186,23 +190,23 @@ impl Bind for surface::Standard {
         if let Some(value) = &mut self.ambient_occlusion_layer {
             value.bind(owner, &path.child(Field::AmbientOcclusionLayer), bindings);
         }
-        if let Some(value) = &mut self.normal_blend1_mask_layer {
+        if let Some(value) = &mut self.normals.primary.mask {
             value.bind(owner, &path.child(Field::NormalBlend1MaskLayer), bindings);
         }
-        if let Some(value) = &mut self.normal_blend2_mask_layer {
+        if let Some(value) = &mut self.normals.secondary.mask {
             value.bind(owner, &path.child(Field::NormalBlend2MaskLayer), bindings);
         }
-        if let Some(value) = &mut self.normal_blend1_layer {
+        if let Some(value) = &mut self.normals.primary.input {
             value.bind(owner, &path.child(Field::NormalBlend1Layer), bindings);
         }
-        if let Some(value) = &mut self.normal_blend2_layer {
+        if let Some(value) = &mut self.normals.secondary.input {
             value.bind(owner, &path.child(Field::NormalBlend2Layer), bindings);
         }
         self.parallax_height
             .bind(owner, &path.child(Field::ParallaxHeight), bindings);
         self.motion_blur_amount
             .bind(owner, &path.child(Field::MotionBlurAmount), bindings);
-        for (index, value) in self.normal_blend_factors.iter_mut().enumerate() {
+        for (index, value) in self.normals.weights.iter_mut().enumerate() {
             value.bind(
                 owner,
                 &path.child(Field::NormalBlendFactors).indexed(index),
@@ -219,7 +223,7 @@ impl<'a> Bind for surface::DataProperty<'a> {
 }
 impl<'a> Bind for surface::DataGroup<'a> {
     fn bind(&mut self, owner: OwnerId, path: &FieldPath, bindings: &mut Bindings) {
-        for (index, value) in self.properties.iter_mut().enumerate() {
+        for (index, value) in self.value.iter_mut().enumerate() {
             value.bind(
                 owner,
                 &path.child(Field::Properties).indexed(index),
@@ -262,9 +266,10 @@ impl<'a> Bind for surface::LensFlare<'a> {
 }
 impl Bind for surface::Displacement {
     fn bind(&mut self, owner: OwnerId, path: &FieldPath, bindings: &mut Bindings) {
-        self.strength
+        self.displacement
+            .parameters
             .bind(owner, &path.child(Field::Strength), bindings);
-        if let Some(value) = &mut self.normal_map {
+        if let Some(value) = &mut self.displacement.input {
             value.bind(owner, &path.child(Field::NormalMap), bindings);
         }
         if let Some(value) = &mut self.strength_map {
@@ -301,7 +306,7 @@ impl Bind for surface::SplatTerrainBake {
 }
 impl Bind for surface::Hair {
     fn bind(&mut self, owner: OwnerId, path: &FieldPath, bindings: &mut Bindings) {
-        if let Some(value) = &mut self.layer_base {
+        if let Some(value) = &mut self.diffuse.input {
             value.bind(owner, &path.child(Field::LayerBase), bindings);
         }
         if let Some(value) = &mut self.layer_spec_shift {
@@ -313,7 +318,8 @@ impl Bind for surface::Hair {
         if let Some(value) = &mut self.layer_ambient_occlusion {
             value.bind(owner, &path.child(Field::LayerAmbientOcclusion), bindings);
         }
-        self.color_diffuse
+        self.diffuse
+            .parameters
             .bind(owner, &path.child(Field::ColorDiffuse), bindings);
         self.color_specular
             .bind(owner, &path.child(Field::ColorSpecular), bindings);
@@ -334,33 +340,70 @@ impl Bind for surface::Composite {
 }
 impl Bind for surface::TextureLayer {
     fn bind(&mut self, owner: OwnerId, path: &FieldPath, bindings: &mut Bindings) {
-        self.color.bind(owner, &path.child(Field::Color), bindings);
-        self.rgb_multiply
-            .bind(owner, &path.child(Field::RgbMultiply), bindings);
-        self.rgb_add
+        self.binding
+            .contribution
+            .color
+            .bind(owner, &path.child(Field::Color), bindings);
+        self.binding.contribution.rgb_multiply.bind(
+            owner,
+            &path.child(Field::RgbMultiply),
+            bindings,
+        );
+        self.binding
+            .contribution
+            .rgb_add
             .bind(owner, &path.child(Field::RgbAdd), bindings);
-        self.avi_play
+        self.binding
+            .sampling
+            .avi_play
             .bind(owner, &path.child(Field::AviPlay), bindings);
-        self.avi_restart
+        self.binding
+            .sampling
+            .avi_restart
             .bind(owner, &path.child(Field::AviRestart), bindings);
-        self.current_frame
+        self.binding
+            .sampling
+            .current_frame
             .bind(owner, &path.child(Field::CurrentFrame), bindings);
-        self.uv_offset
-            .bind(owner, &path.child(Field::UvOffset), bindings);
-        self.uv_angle
-            .bind(owner, &path.child(Field::UvAngle), bindings);
-        self.uv_tiling
-            .bind(owner, &path.child(Field::UvTiling), bindings);
-        self.w_offset
-            .bind(owner, &path.child(Field::WOffset), bindings);
-        self.w_tiling
-            .bind(owner, &path.child(Field::WTiling), bindings);
-        self.map_alpha
+        self.binding.coordinates.transform.uv_offset.bind(
+            owner,
+            &path.child(Field::UvOffset),
+            bindings,
+        );
+        self.binding.coordinates.transform.uv_angle.bind(
+            owner,
+            &path.child(Field::UvAngle),
+            bindings,
+        );
+        self.binding.coordinates.transform.uv_tiling.bind(
+            owner,
+            &path.child(Field::UvTiling),
+            bindings,
+        );
+        self.binding.coordinates.transform.w_offset.bind(
+            owner,
+            &path.child(Field::WOffset),
+            bindings,
+        );
+        self.binding.coordinates.transform.w_tiling.bind(
+            owner,
+            &path.child(Field::WTiling),
+            bindings,
+        );
+        self.binding
+            .contribution
+            .map_alpha
             .bind(owner, &path.child(Field::MapAlpha), bindings);
-        self.triplanar_offset
-            .bind(owner, &path.child(Field::TriplanarOffset), bindings);
-        self.triplanar_scale
-            .bind(owner, &path.child(Field::TriplanarScale), bindings);
+        self.binding.coordinates.transform.triplanar_offset.bind(
+            owner,
+            &path.child(Field::TriplanarOffset),
+            bindings,
+        );
+        self.binding.coordinates.transform.triplanar_scale.bind(
+            owner,
+            &path.child(Field::TriplanarScale),
+            bindings,
+        );
     }
 }
 impl Bind for surface::Volume {

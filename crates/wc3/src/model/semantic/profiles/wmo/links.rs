@@ -3,6 +3,7 @@ use super::{Material, Node, WorldSystem};
 use crate::model::semantic::{FeatureKind, Link, ValidateLinks};
 impl ValidateLinks for Material<'_> {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
+        self.state.visit_links(visitor);
         self.textures.visit_links(visitor);
         if self
             .uv_scroll

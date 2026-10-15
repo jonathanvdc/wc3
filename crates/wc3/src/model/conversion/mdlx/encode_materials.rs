@@ -48,31 +48,42 @@ pub(super) fn write<'a, V: ModelVersion>(
     for (index, source) in source.layers.iter().enumerate() {
         let path = format!("{path}.layers[{index}]");
         let mut layer = native::Layer::<V>::new();
-        layer.filter_mode = blend(source.blend);
-        layer.shading_flags = native::LayerShadingFlags(source.shading.unclassified.bits());
-        layer.shading_flags.set_unshaded(source.shading.unlit);
+        layer.filter_mode = blend(source.state.blend);
+        layer.shading_flags =
+            native::LayerShadingFlags(source.state.rasterization.controls.unclassified.bits());
         layer
             .shading_flags
-            .set_sphere_env_map(source.shading.sphere_environment);
-        layer.shading_flags.set_wrap_width(source.shading.wrap_u);
-        layer.shading_flags.set_wrap_height(source.shading.wrap_v);
-        layer.shading_flags.set_two_sided(source.shading.two_sided);
-        layer.shading_flags.set_unfogged(source.shading.unfogged);
+            .set_unshaded(source.state.rasterization.lighting.unlit);
         layer
             .shading_flags
-            .set_no_depth_test(source.shading.no_depth_test);
+            .set_sphere_env_map(source.state.rasterization.controls.sphere_environment);
         layer
             .shading_flags
-            .set_no_depth_set(source.shading.no_depth_write);
-        layer.texture_id = encoder.value(&source.texture, map, &format!("{path}.texture"))?;
-        layer.texture_animation_id = source.texture_transform.map_or(u32::MAX, |id| {
+            .set_wrap_width(source.state.rasterization.controls.wrap_u);
+        layer
+            .shading_flags
+            .set_wrap_height(source.state.rasterization.controls.wrap_v);
+        layer
+            .shading_flags
+            .set_two_sided(source.state.rasterization.faces);
+        layer
+            .shading_flags
+            .set_unfogged(source.state.rasterization.lighting.unfogged);
+        layer
+            .shading_flags
+            .set_no_depth_test(source.state.rasterization.depth.test.is_bypassed());
+        layer
+            .shading_flags
+            .set_no_depth_set(source.state.rasterization.depth.write.is_bypassed());
+        layer.texture_id = encoder.value(&source.binding.image, map, &format!("{path}.texture"))?;
+        layer.texture_animation_id = source.binding.coordinates.transform.map_or(u32::MAX, |id| {
             encoder
                 .model
                 .texture_transforms()
                 .position(|(key, _)| key == id)
                 .expect("validated transform") as u32
         });
-        layer.coordinate_id = source.uv_set;
+        layer.coordinate_id = source.binding.coordinates.source;
         layer.alpha = encoder.value(&source.opacity, Ok, &format!("{path}.opacity"))?;
         if let Some(source) = &source.emissive_gain {
             let value = encoder.value(source, Ok, &format!("{path}.emissive_gain"))?;
@@ -115,7 +126,7 @@ pub(super) fn write<'a, V: ModelVersion>(
                 Ok(native::materials::LayerTextureSlot {
                     texture_type: source.slot,
                     texture_id: encoder.value(
-                        &source.texture,
+                        &source.binding.image,
                         map,
                         &format!("{path}.textures[{index}]"),
                     )?,
@@ -136,12 +147,13 @@ pub(super) fn write<'a, V: ModelVersion>(
 fn blend(source: profile::Blend) -> native::LayerFilterMode {
     match source {
         profile::Blend::Opaque => native::LayerFilterMode::None,
-        profile::Blend::AlphaKey => native::LayerFilterMode::Transparent,
+        profile::Blend::AlphaKey(()) => native::LayerFilterMode::Transparent,
         profile::Blend::Alpha => native::LayerFilterMode::Blend,
         profile::Blend::Additive => native::LayerFilterMode::Additive,
-        profile::Blend::AdditiveAlpha => native::LayerFilterMode::AddAlpha,
+        profile::Blend::AdditiveAlpha(()) => native::LayerFilterMode::AddAlpha,
         profile::Blend::Modulate => native::LayerFilterMode::Modulate,
         profile::Blend::Modulate2x => native::LayerFilterMode::Modulate2x,
         profile::Blend::Unknown(value) => native::LayerFilterMode::Unknown(value),
+        profile::Blend::Extension(value) => match value {},
     }
 }

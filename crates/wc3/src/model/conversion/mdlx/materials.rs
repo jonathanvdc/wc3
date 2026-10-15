@@ -2,6 +2,9 @@
 use super::animation::Decoder;
 use crate::model::conversion::Error;
 use crate::model::mdlx::{self as native, ModelVersion};
+use crate::model::semantic::materials::bindings::{Coordinates, TextureBinding};
+use crate::model::semantic::materials::layered::LayerOptions;
+use crate::model::semantic::materials::state::{DepthState, Lighting, Operation, PassState};
 use crate::model::semantic::profiles::mdlx as profile;
 use crate::model::semantic::profiles::mdlx::{
     Blend, Fresnel, Layer, Material, Shading, TextureSlot,
@@ -49,56 +52,77 @@ pub(super) fn read<'a, V: ModelVersion>(
         for slot in layer.try_texture_slots().unwrap_or_default() {
             slots.push(TextureSlot {
                 slot: slot.texture_type,
-                texture: Animated::constant(texture(
-                    slot.texture_id.value().copied().unwrap_or_default(),
-                )?),
+                binding: TextureBinding {
+                    image: Animated::constant(texture(
+                        slot.texture_id.value().copied().unwrap_or_default(),
+                    )?),
+                    ..Default::default()
+                },
             });
         }
         layers.push(Layer {
-            blend: match layer.filter_mode {
-                native::LayerFilterMode::None => Blend::Opaque,
-                native::LayerFilterMode::Transparent => Blend::AlphaKey,
-                native::LayerFilterMode::Blend => Blend::Alpha,
-                native::LayerFilterMode::Additive => Blend::Additive,
-                native::LayerFilterMode::AddAlpha => Blend::AdditiveAlpha,
-                native::LayerFilterMode::Modulate => Blend::Modulate,
-                native::LayerFilterMode::Modulate2x => Blend::Modulate2x,
-                native::LayerFilterMode::Unknown(value) => Blend::Unknown(value),
+            binding: TextureBinding {
+                image: Animated::constant(texture(
+                    layer.texture_id.value().copied().unwrap_or_default(),
+                )?),
+                coordinates: Coordinates {
+                    source: layer.coordinate_id,
+                    transform: if layer.texture_animation_id == u32::MAX {
+                        None
+                    } else {
+                        Some(
+                            *transforms
+                                .get(layer.texture_animation_id as usize)
+                                .ok_or_else(|| {
+                                    Error::new(
+                                        "material.texture_transform",
+                                        "transform does not exist",
+                                    )
+                                })?,
+                        )
+                    },
+                },
+                ..Default::default()
             },
-            shading: Shading {
-                unlit: flags.unshaded(),
-                sphere_environment: flags.sphere_env_map(),
-                two_sided: flags.two_sided(),
-                unfogged: flags.unfogged(),
-                no_depth_test: flags.no_depth_test(),
-                no_depth_write: flags.no_depth_set(),
-                unclassified: unresolved.bits().into(),
-                wrap_u: flags.wrap_width(),
-                wrap_v: flags.wrap_height(),
-            },
-            texture: Animated::constant(texture(
-                layer.texture_id.value().copied().unwrap_or_default(),
-            )?),
-            texture_transform: if layer.texture_animation_id == u32::MAX {
-                None
-            } else {
-                Some(
-                    *transforms
-                        .get(layer.texture_animation_id as usize)
-                        .ok_or_else(|| {
-                            Error::new("material.texture_transform", "transform does not exist")
-                        })?,
-                )
-            },
-            uv_set: layer.coordinate_id,
             opacity: Animated::constant(layer.alpha.value().copied().unwrap_or_default()),
             emissive_gain: layer
                 .try_emissive_gain()
                 .ok()
                 .map(|value| Animated::constant(value.value().copied().unwrap_or_default())),
-            fresnel,
+            fresnel: fresnel,
             shader: layer.try_shader_type().ok().map(|value| value.id()),
             textures: slots,
+            state: PassState {
+                blend: match layer.filter_mode {
+                    native::LayerFilterMode::None => Blend::Opaque,
+                    native::LayerFilterMode::Transparent => Blend::AlphaKey(()),
+                    native::LayerFilterMode::Blend => Blend::Alpha,
+                    native::LayerFilterMode::Additive => Blend::Additive,
+                    native::LayerFilterMode::AddAlpha => Blend::AdditiveAlpha(()),
+                    native::LayerFilterMode::Modulate => Blend::Modulate,
+                    native::LayerFilterMode::Modulate2x => Blend::Modulate2x,
+                    native::LayerFilterMode::Unknown(value) => Blend::Unknown(value),
+                },
+                rasterization: Shading {
+                    depth: DepthState {
+                        test: Operation::bypassed(flags.no_depth_test()),
+                        write: Operation::bypassed(flags.no_depth_set()),
+                        bias: (),
+                    },
+                    faces: flags.two_sided(),
+                    lighting: Lighting {
+                        unlit: flags.unshaded(),
+                        unfogged: flags.unfogged(),
+                    },
+                    controls: LayerOptions {
+                        sphere_environment: flags.sphere_env_map(),
+                        wrap_u: flags.wrap_width(),
+                        wrap_v: flags.wrap_height(),
+                        unclassified: unresolved.bits().into(),
+                    },
+                },
+                ordering: (),
+            },
         });
     }
     let flags = source.render_mode;
@@ -133,7 +157,7 @@ pub(super) fn bind<'a, V: ModelVersion>(
     for (index, (source, layer)) in source.layers.iter().zip(&mut material.layers).enumerate() {
         let layer_key = profile::properties::Layer(index);
         let map = texture_map(textures, &source.texture_id)?;
-        layer.texture = decoder.bind(&source.texture_id, owner, layer_key.texture(), map)?;
+        layer.binding.image = decoder.bind(&source.texture_id, owner, layer_key.texture(), map)?;
         layer.opacity = decoder.bind(&source.alpha, owner, layer_key.opacity(), |value| value)?;
         if let Ok(source) = source.try_emissive_gain() {
             layer.emissive_gain =
@@ -166,7 +190,7 @@ pub(super) fn bind<'a, V: ModelVersion>(
             .enumerate()
         {
             let map = texture_map(textures, &source.texture_id)?;
-            slot.texture = decoder.bind(
+            slot.binding.image = decoder.bind(
                 &source.texture_id,
                 owner,
                 layer_key.texture_slot(slot_index),

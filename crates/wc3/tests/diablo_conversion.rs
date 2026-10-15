@@ -437,11 +437,18 @@ fn standalone_material_resource_roundtrip_keeps_shared_shader_declarations() {
     root.material.shader_map = 123;
     root.material.colors.diffuse = [0.1, 0.2, 0.3, 0.4];
     root.material.colors.material_flags = 0x1234;
-    root.shader_params = ZeroVec::alloc_from_slice(&[TagMapEntry {
-        value_type: 99,
-        tag_id: 88,
-        value: 77,
-    }]);
+    root.shader_params = ZeroVec::alloc_from_slice(&[
+        TagMapEntry {
+            value_type: 99,
+            tag_id: 88,
+            value: 0x7fc00001,
+        },
+        TagMapEntry {
+            value_type: -17,
+            tag_id: 88,
+            value: 77,
+        },
+    ]);
     root.material.textures = ZeroVec::alloc_from_slice(&[MaterialTextureEntry {
         texture_type: 5,
         texture: 987,
@@ -455,6 +462,34 @@ fn standalone_material_resource_roundtrip_keeps_shared_shader_declarations() {
             rate1: 3.4,
         },
         uv_row0: [1., 2., 3., 4.],
+        uv_row1: [5., 6., 7., 8.],
+        uv_row2: [9., 10., 11., 12.],
+        uv_row3: [13., 14., 15., 16.],
+        anim_v: MaterialTextureAnim {
+            amount: 4.,
+            rate0: 5.,
+            rate1: 6.,
+        },
+        anim_rotate: MaterialTextureAnim {
+            amount: 7.,
+            rate0: 8.,
+            rate1: 9.,
+        },
+        anim3: MaterialTextureAnim {
+            amount: 10.,
+            rate0: 11.,
+            rate1: 12.,
+        },
+        anim4: MaterialTextureAnim {
+            amount: 13.,
+            rate0: 14.,
+            rate1: 15.,
+        },
+        anim5: MaterialTextureAnim {
+            amount: 16.,
+            rate0: 17.,
+            rate1: 18.,
+        },
         ..Default::default()
     }]);
     let source = Material::<V25>::new(root);
@@ -462,7 +497,11 @@ fn standalone_material_resource_roundtrip_keeps_shared_shader_declarations() {
         .unwrap()
         .value;
     assert_eq!(value.sno_id, 42);
-    assert_eq!(value.uber.textures[0].texture.id, 987);
+    assert_eq!(value.shader_params.len(), 2);
+    assert_eq!(value.shader_params[0].key, value.shader_params[1].key);
+    assert_eq!(value.shader_params[0].value.0, 0x7fc00001);
+    assert_eq!(value.shader_params[1].controls.0, -17);
+    assert_eq!(value.uber.textures[0].image.id, 987);
     let output = conversion::plan_material(&value, &ExportOptions::default())
         .unwrap()
         .execute()

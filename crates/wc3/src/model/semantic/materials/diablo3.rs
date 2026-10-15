@@ -1,5 +1,8 @@
 //! Independent Diablo shader state and external SNO dependencies.
 
+use super::bindings::{Coordinates, TextureBinding};
+use super::parameters::{OpaqueWord, OrderedParameters, ParameterEntry, ShaderTag};
+use super::state::{BlendEquation, DepthState, PassState, Rasterization};
 pub use crate::model::semantic::values::diablo3::*;
 use crate::model::semantic::{Error, Link, ValidateLinks};
 use std::borrow::Cow;
@@ -37,42 +40,32 @@ pub struct TexAnim {
     /// Stores the second rate parameter of the source texture animation.
     pub rate1: f32,
 }
-/// Authored Diablo texture entry inputs.
+/// Matrix and independently authored parametric coordinate animations.
 #[derive(Clone, Debug, Default)]
-pub struct TextureEntry {
-    /// Selects the source shader texture role.
-    pub texture_type: TextureType,
-    /// The purpose of this source field is unresolved; its authored value is retained.
-    pub unclassified_control: i32,
-    /// Identifies the source texture resource by SNO group and ID.
-    pub texture: AssetRef,
-    /// Selects the source UV transformation convention.
-    pub uv_transform_mode: UvTransformMode,
-    /// Stores one row of the source UV transformation matrix.
-    pub uv_row0: [f32; 4],
-    /// Stores one row of the source UV transformation matrix.
-    pub uv_row1: [f32; 4],
-    /// Stores one row of the source UV transformation matrix.
-    pub uv_row2: [f32; 4],
-    /// Stores one row of the source UV transformation matrix.
-    pub uv_row3: [f32; 4],
-    /// Stores the U-coordinate animation parameters.
-    pub anim_u: TexAnim,
-    /// Stores the V-coordinate animation parameters.
-    pub anim_v: TexAnim,
-    /// Stores the texture rotation animation parameters.
-    pub anim_rotate: TexAnim,
-    /// The purpose of this source field is unresolved; its authored value is retained.
-    pub anim3: TexAnim,
-    /// The purpose of this source field is unresolved; its authored value is retained.
-    pub anim4: TexAnim,
-    /// The purpose of this source field is unresolved; its authored value is retained.
-    pub anim5: TexAnim,
-    /// Stores source UV-mapping options.
-    pub uv_flags: UvFlags,
-    /// The purpose of this source field is unresolved; its authored value is retained.
-    pub unclassified_control2: i32,
+pub struct TextureTransform {
+    /// Four authored matrix rows, preserved without transposition.
+    pub matrix: [[f32; 4]; 4],
+    /// U, V, rotation, and three unresolved animation channels, in source order.
+    pub animations: [TexAnim; 6],
+    /// Coordinate-mapping options, including unresolved bits.
+    pub flags: UvFlags,
 }
+/// Shader role and additional declarations of one texture contribution.
+#[derive(Clone, Debug, Default)]
+pub struct TextureContribution {
+    /// Producer-defined shader texture role.
+    pub role: TextureType,
+    /// Independently authored unresolved controls in source order.
+    pub unclassified_controls: [i32; 2],
+}
+/// A Diablo III external image with its selected coordinate program and shader role.
+pub type TextureEntry = TextureBinding<
+    AssetRef,
+    Coordinates<UvTransformMode, TextureTransform>,
+    (),
+    TextureContribution,
+>;
+
 /// Authored Diablo uber material inputs.
 #[derive(Clone, Debug, Default)]
 pub struct UberMaterial {
@@ -84,15 +77,7 @@ pub struct UberMaterial {
     pub textures: Vec<TextureEntry>,
 }
 /// Authored Diablo tag value inputs.
-#[derive(Clone, Debug, Default)]
-pub struct TagValue {
-    /// Selects the encoded type of this source shader parameter.
-    pub value_type: ParameterType,
-    /// Identifies the source shader parameter.
-    pub tag_id: u32,
-    /// Stores the authored source shader-tag value.
-    pub value: u32,
-}
+pub type TagValue = ParameterEntry<ShaderTag, OpaqueWord, ParameterType>;
 /// Authored Diablo material asset inputs.
 #[derive(Clone, Debug, Default)]
 pub struct MaterialAsset {
@@ -101,21 +86,13 @@ pub struct MaterialAsset {
     /// The purpose of this source field is unresolved; its authored value is retained.
     pub unclassified_control: i32,
     /// Stores source shader-parameter entries in authored order.
-    pub shader_params: Vec<TagValue>,
+    pub shader_params: OrderedParameters<ShaderTag, OpaqueWord, ParameterType>,
     /// Contains the source shader’s additional material state.
     pub uber: UberMaterial,
 }
-/// Authored Diablo render params inputs.
+/// Additional draw controls with explicit stencil, alpha-test, and write policies.
 #[derive(Clone, Debug, Default)]
-pub struct RenderParams {
-    /// Selects the source surface-culling mode.
-    pub cull_mode: CullMode,
-    /// Controls updates to the depth buffer.
-    pub z_write_enable: Switch,
-    /// Selects the source depth comparison.
-    pub z_func: Comparison,
-    /// Offsets the source depth comparison.
-    pub depth_bias: f32,
+pub struct RenderControls {
     /// The purpose of this source field is unresolved; its authored value is retained.
     pub unclassified_control: f32,
     /// Controls use of the stencil buffer.
@@ -138,25 +115,18 @@ pub struct RenderParams {
     pub alpha_ref: u8,
     /// Controls conversion of alpha to sample coverage.
     pub alpha_to_coverage: Switch,
-    /// Controls application of fog.
-    pub fog_enable: Switch,
     /// Selects the rasterization fill mode.
     pub fill_mode: FillMode,
     /// Controls writes to color components.
     pub color_write_enable: Switch,
     /// Controls writes to opacity.
     pub alpha_write_enable: Switch,
-    /// Controls alpha blending.
-    pub alpha_blend_enable: Switch,
-    /// Selects the operation combining source and destination colors.
-    pub blend_op: BlendOperation,
-    /// Selects the source blend factor.
-    pub src_blend: BlendFactor,
-    /// Selects the destination blend factor.
-    pub dest_blend: BlendFactor,
-    /// Supplies the constant color used by blending.
-    pub constant_color: i32,
 }
+/// Complete draw state selecting the authored equation and rasterization domains.
+pub type RenderParams = PassState<
+    BlendEquation<Switch, BlendOperation, BlendFactor, i32>,
+    Rasterization<DepthState<Comparison, Switch, f32>, CullMode, Switch, RenderControls>,
+>;
 /// Authored Diablo texture stage inputs.
 #[derive(Clone, Debug, Default)]
 pub struct TextureStage {
@@ -174,15 +144,7 @@ pub struct TextureStage {
     pub mip_map_lod_bias: f32,
 }
 /// Authored Diablo shader tag value inputs.
-#[derive(Clone, Debug, Default)]
-pub struct ShaderTagValue {
-    /// Selects the encoded type of this source shader parameter.
-    pub value_type: ParameterType,
-    /// Identifies the source shader parameter.
-    pub tag_id: u32,
-    /// Stores the authored source shader-tag value.
-    pub value: u32,
-}
+pub type ShaderTagValue = ParameterEntry<ShaderTag, OpaqueWord, ParameterType>;
 /// Authored Diablo render state inputs.
 #[derive(Clone, Debug, Default)]
 pub struct RenderState<'a> {
@@ -207,7 +169,7 @@ pub struct RenderState<'a> {
     /// Names the source pixel-shader entry name.
     pub pixel_shader_entry: Cow<'a, str>,
     /// Stores source shader-parameter entries in authored order.
-    pub shader_params: Vec<ShaderTagValue>,
+    pub shader_params: OrderedParameters<ShaderTag, OpaqueWord, ParameterType>,
 }
 /// Diablo III shader declaration with external dependencies and ordered render passes.
 #[derive(Clone, Debug, Default)]
@@ -221,7 +183,7 @@ pub struct Material<'a> {
     /// External cloth-material dependency.
     pub cloth: AssetRef,
     /// Ordered shader property entries.
-    pub shader_params: Vec<TagValue>,
+    pub shader_params: OrderedParameters<ShaderTag, OpaqueWord, ParameterType>,
     /// Ordered opaque rasterization passes.
     pub opaque_passes: Vec<RenderState<'a>>,
     /// Ordered translucent rasterization passes.
@@ -246,19 +208,28 @@ impl TexAnim {
         (self.amount.is_finite()) && (self.rate0.is_finite()) && (self.rate1.is_finite())
     }
 }
+impl TextureTransform {
+    fn is_valid(&self) -> bool {
+        self.matrix.iter().flatten().all(|value| value.is_finite())
+            && self.animations.iter().all(TexAnim::is_valid)
+    }
+}
+impl ValidateLinks for TextureTransform {
+    fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
+        if !self.is_valid() {
+            visitor(Link::InvalidValue);
+        }
+    }
+}
+impl ValidateLinks for TextureContribution {
+    fn visit_links(&self, _visitor: &mut dyn FnMut(Link)) {}
+}
+impl ValidateLinks for AssetRef {
+    fn visit_links(&self, _visitor: &mut dyn FnMut(Link)) {}
+}
 impl TextureEntry {
     fn is_valid(&self) -> bool {
-        (self.texture.is_valid())
-            && (self.uv_row0.iter().all(|value| value.is_finite()))
-            && (self.uv_row1.iter().all(|value| value.is_finite()))
-            && (self.uv_row2.iter().all(|value| value.is_finite()))
-            && (self.uv_row3.iter().all(|value| value.is_finite()))
-            && (self.anim_u.is_valid())
-            && (self.anim_v.is_valid())
-            && (self.anim_rotate.is_valid())
-            && (self.anim3.is_valid())
-            && (self.anim4.is_valid())
-            && (self.anim5.is_valid())
+        self.image.is_valid() && self.coordinates.transform.is_valid()
     }
 }
 impl UberMaterial {
@@ -291,7 +262,8 @@ impl MaterialAsset {
 }
 impl RenderParams {
     fn is_valid(&self) -> bool {
-        (self.depth_bias.is_finite()) && (self.unclassified_control.is_finite())
+        (self.rasterization.depth.bias.is_finite())
+            && (self.rasterization.controls.unclassified_control.is_finite())
     }
 }
 impl TextureStage {
@@ -299,11 +271,7 @@ impl TextureStage {
         self.mip_map_lod_bias.is_finite()
     }
 }
-impl ShaderTagValue {
-    fn is_valid(&self) -> bool {
-        true
-    }
-}
+
 impl RenderState<'_> {
     fn is_valid(&self) -> bool {
         (self.render_params.is_valid())
@@ -378,15 +346,7 @@ impl ShaderAsset<'_> {
     }
 }
 /// One independently authored shader-map parameter mapping.
-#[derive(Clone, Debug, Default)]
-pub struct ShaderMapEntry {
-    /// Encoded shader parameter category, including unresolved values.
-    pub value_type: ParameterType,
-    /// Authored shader selection tag.
-    pub tag_id: u32,
-    /// Explicit external shader dependency.
-    pub shader: AssetRef,
-}
+pub type ShaderMapEntry = ParameterEntry<ShaderTag, AssetRef, ParameterType>;
 /// Independently authored shader-map resource.
 #[derive(Clone, Debug, Default)]
 pub struct ShaderMapAsset {
@@ -395,5 +355,27 @@ pub struct ShaderMapAsset {
     /// Shader-map options, including unresolved bits.
     pub flags: i32,
     /// Parameter mappings in authored order.
-    pub entries: Vec<ShaderMapEntry>,
+    pub entries: OrderedParameters<ShaderTag, AssetRef, ParameterType>,
 }
+
+impl ValidateLinks for UvTransformMode {
+    fn visit_links(&self, _visitor: &mut dyn FnMut(Link)) {}
+}
+
+impl ValidateLinks for ParameterType {
+    fn visit_links(&self, _visitor: &mut dyn FnMut(Link)) {}
+}
+
+impl ValidateLinks for RenderControls {
+    fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
+        self.unclassified_control.visit_links(visitor);
+    }
+}
+macro_rules! state_selectors {
+    ($($selector:ty),* $(,)?) => { $(
+        impl ValidateLinks for $selector {
+            fn visit_links(&self, _: &mut dyn FnMut(Link)) {}
+        }
+    )* };
+}
+state_selectors!(Switch, BlendOperation, BlendFactor, Comparison, CullMode);

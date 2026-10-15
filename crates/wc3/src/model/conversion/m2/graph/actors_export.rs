@@ -1,6 +1,7 @@
 //! Feature-local fields and curves become typed native effect records.
 use super::animation::{animated, animated_spline, fixed_alpha, time_ms};
 use super::*;
+use crate::model::semantic::materials::model_shader::material_flags;
 use zerovec::ZeroVec;
 fn anchor(
     model: &Graph<'_>,
@@ -171,8 +172,10 @@ where
                     );
                     let mut materials: Vec<_> = core.materials.iter().collect();
                     materials.push(native::records::Material {
-                        flags: MaterialFlags::from_bits_retain(surface.flags.bits()),
-                        blending_mode: BlendMode::from_raw(surface.blend.raw()),
+                        flags: MaterialFlags::from_bits_retain(
+                            material_flags(&surface.state.rasterization).bits(),
+                        ),
+                        blending_mode: BlendMode::from_raw(surface.state.blend.raw()),
                     });
                     core.materials = ZeroVec::alloc_from_slice(&materials)
                 }

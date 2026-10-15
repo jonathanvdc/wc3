@@ -1,6 +1,7 @@
 //! Direct anisotropic hair shading values.
 use super::texture::get_layer;
 use super::{color, native, nr, read_error, string, surface, Envelope, Error, Reader};
+use crate::model::semantic::materials::contributions::SurfaceContribution;
 pub(super) fn get_hair<'a, E: Envelope>(
     source: &'a native::Document<'_, E>,
     reader: &mut Reader<'a, '_>,
@@ -14,14 +15,20 @@ pub(super) fn get_hair<'a, E: Envelope>(
         .ok_or_else(|| Error::new("m3.material.hair", "missing hair material"))?
         .map_err(read_error)?;
     reader.name = Some(string(source, value.name)?);
+    let layer_base = get_layer(source, reader, value.layer_base)?;
+    let layer_spec_shift = get_layer(source, reader, value.layer_spec_shift)?;
+    let layer_spec_noise = get_layer(source, reader, value.layer_spec_noise)?;
+    let layer_ambient_occlusion = get_layer(source, reader, value.layer_a_o)?;
     Ok(surface::Hair {
-        layer_base: get_layer(source, reader, value.layer_base)?,
-        layer_spec_shift: get_layer(source, reader, value.layer_spec_shift)?,
-        layer_spec_noise: get_layer(source, reader, value.layer_spec_noise)?,
-        layer_ambient_occlusion: get_layer(source, reader, value.layer_a_o)?,
+        diffuse: SurfaceContribution {
+            input: layer_base,
+            parameters: color(value.color_diffuse),
+        },
+        layer_spec_shift: layer_spec_shift,
+        layer_spec_noise: layer_spec_noise,
+        layer_ambient_occlusion: layer_ambient_occlusion,
         shift_primary: value.shift_primary,
         shift_secondary: value.shift_secondary,
-        color_diffuse: color(value.color_diffuse),
         color_specular: color(value.color_spec),
         specular_exponent_primary: value.spec_exponent0,
         specular_exponent_secondary: value.spec_exponent1,

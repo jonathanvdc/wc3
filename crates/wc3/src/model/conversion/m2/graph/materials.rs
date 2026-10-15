@@ -42,7 +42,14 @@ where
             let weight = u16::try_from(core.texture_weights.len())
                 .map_err(|_| Error::new("m2.material.weight", "too many weight controls"))?;
             core.texture_weights.push(native::records::TextureWeight {
-                weight: animated(model, &unit.weight, starts, globals, context, fixed_alpha)?,
+                weight: animated(
+                    model,
+                    &unit.contribution,
+                    starts,
+                    globals,
+                    context,
+                    fixed_alpha,
+                )?,
             });
             let transform = u16::try_from(core.texture_transforms.len())
                 .map_err(|_| Error::new("m2.material.transform", "too many transforms"))?;
@@ -50,7 +57,7 @@ where
                 .push(native::records::TextureTransform {
                     translation: animated(
                         model,
-                        &unit.transform.translation,
+                        &unit.coordinates.transform.translation,
                         starts,
                         globals,
                         context,
@@ -58,7 +65,7 @@ where
                     )?,
                     rotation: animated(
                         model,
-                        &unit.transform.rotation,
+                        &unit.coordinates.transform.rotation,
                         starts,
                         globals,
                         context,
@@ -66,7 +73,7 @@ where
                     )?,
                     scaling: animated(
                         model,
-                        &unit.transform.scale,
+                        &unit.coordinates.transform.scale,
                         starts,
                         globals,
                         context,

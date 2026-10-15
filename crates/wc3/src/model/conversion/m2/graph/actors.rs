@@ -1,5 +1,7 @@
 //! Native feature nodes imported directly into independent scene state.
 use super::*;
+use crate::model::semantic::materials::model_shader::rasterization;
+use crate::model::semantic::materials::state::PassState;
 use crate::model::semantic::LightEmission;
 use crate::model::semantic::{
     AngleTrailControls, SurfaceTrailRendering, TrailAppearance, TrailGeometry,
@@ -188,8 +190,13 @@ where
             materials.push(builder.add_material(semantic::Material {
                 name: Cow::Borrowed(""),
                 surface: profile::Material {
-                    flags: profile::values::MaterialFlags::from_bits_retain(native.flags.bits()),
-                    blend: profile::values::BlendMode::from_raw(native.blending_mode.raw()),
+                    state: PassState {
+                        blend: profile::values::BlendMode::from_raw(native.blending_mode.raw()),
+                        rasterization: rasterization(
+                            profile::values::MaterialFlags::from_bits_retain(native.flags.bits()),
+                        ),
+                        ordering: 0,
+                    },
                     ..Default::default()
                 },
             })?)

@@ -2,6 +2,7 @@
 use super::{
     anim, color, native, nr, read_error, revision, surface, Envelope, Error, Reader, Slot,
 };
+use crate::model::semantic::materials::bindings::{Coordinates, TextureBinding};
 pub(super) fn layer<'a, E: Envelope, D: nr::TextureLayerDialect>(
     r: nr::TextureLayer<D>,
     source: &'a native::Document<'_, E>,
@@ -19,41 +20,52 @@ where
 {
     Ok(surface::TextureLayer {
         id: r.id,
-        texture: reader.texture(
-            source
-                .string(r.texture_path)
-                .map_err(read_error)?
-                .unwrap_or_default(),
-        )?,
-        color: color(r.color),
-        flags: surface::values::LayerFlags((r.flags).bits()),
-        uv_mapping: surface::values::UvMappingMode::from_raw((r.uv_mapping).raw()),
-        color_type: surface::values::ColorChannel::from_raw((r.color_type).raw()),
-        rgb_multiply: anim(r.rgb_multiply),
-        rgb_add: anim(r.rgb_add),
-        poc_texture: r.poc_texture,
-        noise_amplitude: r.noise_amplitude.value(),
-        noise_frequency: r.noise_frequency.value(),
-        texture_source: r.texture_source,
-        avi_frame_rate: r.avi_frame_rate,
-        avi_start: r.avi_start,
-        avi_stop: r.avi_stop,
-        avi_loop: r.avi_loop,
-        avi_sync: r.avi_sync,
-        avi_play: anim(r.avi_play),
-        avi_restart: anim(r.avi_restart),
-        flipbook_rows: r.flipbook_rows,
-        flipbook_columns: r.flipbook_columns,
-        current_frame: anim(r.current_frame),
-        uv_offset: anim(r.uv_offset),
-        uv_angle: anim(r.uv_angle),
-        uv_tiling: anim(r.uv_tiling),
-        w_offset: anim(r.w_offset),
-        w_tiling: anim(r.w_tiling),
-        map_alpha: anim(r.map_alpha),
-        triplanar_offset: anim(r.triplanar_offset.value()),
-        triplanar_scale: anim(r.triplanar_scale.value()),
-        uv_source_related: r.uv_source_related,
+        binding: TextureBinding {
+            image: reader.texture(
+                source
+                    .string(r.texture_path)
+                    .map_err(read_error)?
+                    .unwrap_or_default(),
+            )?,
+            coordinates: Coordinates {
+                source: surface::values::UvMappingMode::from_raw((r.uv_mapping).raw()),
+                transform: surface::CoordinateTransform {
+                    uv_offset: anim(r.uv_offset),
+                    uv_angle: anim(r.uv_angle),
+                    uv_tiling: anim(r.uv_tiling),
+                    w_offset: anim(r.w_offset),
+                    w_tiling: anim(r.w_tiling),
+                    triplanar_offset: anim(r.triplanar_offset.value()),
+                    triplanar_scale: anim(r.triplanar_scale.value()),
+                    uv_source_related: r.uv_source_related,
+                    uv_density: r.uv_density.value(),
+                },
+            },
+            sampling: surface::SamplingProgram {
+                flags: surface::values::LayerFlags((r.flags).bits()),
+                poc_texture: r.poc_texture,
+                noise_amplitude: r.noise_amplitude.value(),
+                noise_frequency: r.noise_frequency.value(),
+                texture_source: r.texture_source,
+                avi_frame_rate: r.avi_frame_rate,
+                avi_start: r.avi_start,
+                avi_stop: r.avi_stop,
+                avi_loop: r.avi_loop,
+                avi_sync: r.avi_sync,
+                avi_play: anim(r.avi_play),
+                avi_restart: anim(r.avi_restart),
+                flipbook_rows: r.flipbook_rows,
+                flipbook_columns: r.flipbook_columns,
+                current_frame: anim(r.current_frame),
+            },
+            contribution: surface::ColorContribution {
+                color: color(r.color),
+                color_type: surface::values::ColorChannel::from_raw((r.color_type).raw()),
+                rgb_multiply: anim(r.rgb_multiply),
+                rgb_add: anim(r.rgb_add),
+                map_alpha: anim(r.map_alpha),
+            },
+        },
         fresnel_mode: surface::values::FresnelMode::from_raw((r.fresnel_mode).raw()),
         fresnel_exponent: r.fresnel_exponent,
         fresnel_min: r.fresnel_min,
@@ -61,7 +73,6 @@ where
         fresnel_translation: r.fresnel_translation.value(),
         fresnel_mask: r.fresnel_mask.value(),
         fresnel_rotation: r.fresnel_rotation.value(),
-        uv_density: r.uv_density.value(),
     })
 }
 

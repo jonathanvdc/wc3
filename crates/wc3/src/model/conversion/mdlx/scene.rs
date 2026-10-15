@@ -116,7 +116,7 @@ pub(super) fn read<'a, D: ModelDialect>(
             native::Particle2FilterMode::Additive => profile::Blend::Additive,
             native::Particle2FilterMode::Modulate => profile::Blend::Modulate,
             native::Particle2FilterMode::Modulate2x => profile::Blend::Modulate2x,
-            native::Particle2FilterMode::AlphaKey => profile::Blend::AlphaKey,
+            native::Particle2FilterMode::AlphaKey => profile::Blend::AlphaKey(()),
             native::Particle2FilterMode::Unknown(value) => profile::Blend::Unknown(value),
         };
         let frames = match source.frames {

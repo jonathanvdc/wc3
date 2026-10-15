@@ -771,7 +771,7 @@ fn unknown_native_blend_does_not_collide_with_common_transparency() {
         .unwrap()
         .value;
     let surface = &asset.materials().next().unwrap().1.surface;
-    assert!(surface.blend == mp::values::BlendMode::Unknown(8));
+    assert!(surface.state.blend == mp::values::BlendMode::Unknown(8));
     let id = asset.nodes().next().unwrap().0;
     let mut node = asset.node(id).unwrap().clone();
     node.name = Cow::Borrowed("edited");

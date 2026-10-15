@@ -1,4 +1,6 @@
 //! Diablo IV shader inputs use checked texture identities and explicit parameter selections.
+use super::bindings::TextureBinding;
+use super::parameters::{OrderedParameters, ParameterEntry, ShaderValue};
 use crate::model::semantic::profiles::SurfacePayload;
 use crate::model::semantic::{Error, Link, TextureId, ValidateLinks};
 
@@ -24,17 +26,27 @@ impl ValidateLinks for TextureSelection {
         }
     }
 }
-/// A shader's named texture contribution, independent of its image's storage layout.
+/// An authored texture animation-state selection.
 #[derive(Clone, Debug, Default)]
-pub struct TextureInput {
-    /// Shader-defined texture semantic, including unresolved selectors.
-    pub semantic: i32,
-    /// Shared image identity or explicit absent-image selection.
-    pub selection: TextureSelection,
-    /// Animation-state selection, including negative sentinels.
+pub struct TexturePlayback {
+    /// Animation-state index, including unresolved negative sentinels.
     pub animation_state_index: i32,
-    /// Independently authored source control with unresolved meaning.
+}
+/// Shader-defined texture role and independently authored control.
+#[derive(Clone, Debug, Default)]
+pub struct TextureContribution {
+    /// Producer-defined shader texture semantic.
+    pub semantic: i32,
+    /// Independently authored unresolved control.
     pub unclassified_control: i32,
+}
+/// A Diablo IV image with playback and shader contribution declarations.
+pub type TextureInput = TextureBinding<TextureSelection, (), TexturePlayback, TextureContribution>;
+impl ValidateLinks for TexturePlayback {
+    fn visit_links(&self, _visitor: &mut dyn FnMut(Link)) {}
+}
+impl ValidateLinks for TextureContribution {
+    fn visit_links(&self, _visitor: &mut dyn FnMut(Link)) {}
 }
 /// An explicitly absent parameter graph, retaining the native negative selector.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -61,37 +73,25 @@ impl Default for GraphAbsence {
         Self(-1)
     }
 }
-/// An authored scalar shader parameter.
+/// Declarations shared by scalar and vector shader parameters.
 #[derive(Clone, Copy, Debug, Default)]
-pub struct ScalarValue {
-    /// Shader-defined parameter identity.
-    pub parameter: i32,
-    /// Authored scalar value.
-    pub value: f32,
-    /// Explicitly absent scalar graph selection.
+pub struct ParameterControls {
+    /// Explicitly absent parameter graph selection.
     pub graph: GraphAbsence,
     /// Authored light-group selection.
     pub light_group: i32,
 }
-/// An authored vector shader parameter.
-#[derive(Clone, Copy, Debug, Default)]
-pub struct VectorValue {
-    /// Shader-defined parameter identity.
-    pub parameter: i32,
-    /// Authored four-component value.
-    pub value: [f32; 4],
-    /// Explicitly absent vector graph selection.
-    pub graph: GraphAbsence,
-    /// Authored light-group selection.
-    pub light_group: i32,
-}
+/// An interpreted scalar parameter in the Diablo IV shader-value namespace.
+pub type ScalarValue = ParameterEntry<ShaderValue, f32, ParameterControls>;
+/// An interpreted vector parameter in the Diablo IV shader-value namespace.
+pub type VectorValue = ParameterEntry<ShaderValue, [f32; 4], ParameterControls>;
 /// One ordered runtime material parameter set.
 #[derive(Clone, Debug, Default)]
 pub struct MaterialValues {
     /// Scalar parameter values in authored order.
-    pub scalars: Vec<ScalarValue>,
+    pub scalars: OrderedParameters<ShaderValue, f32, ParameterControls>,
     /// Vector parameter values in authored order.
-    pub vectors: Vec<VectorValue>,
+    pub vectors: OrderedParameters<ShaderValue, [f32; 4], ParameterControls>,
 }
 /// Diablo IV shader declaration, independent of native material and appearance layouts.
 #[derive(Clone, Debug, Default)]
@@ -129,17 +129,10 @@ impl ValidateLinks for Shader {
             visitor(Link::InvalidValue);
         }
         for input in &self.textures {
-            input.selection.visit_links(visitor);
+            input.visit_links(visitor);
         }
-        if self.texture_animation_state_count < 0
-            || self.values.iter().any(|set| {
-                set.scalars.iter().any(|v| !v.value.is_finite())
-                    || set
-                        .vectors
-                        .iter()
-                        .any(|v| v.value.iter().any(|x| !x.is_finite()))
-            })
-        {
+        self.values.visit_links(visitor);
+        if self.texture_animation_state_count < 0 {
             visitor(Link::InvalidValue);
         }
     }
@@ -234,4 +227,19 @@ pub struct MaterialAssetControls {
     pub gravity_magnitude: f32,
     /// Authored animated influence selections.
     pub animated_influences: [i32; 8],
+}
+
+impl ValidateLinks for GraphAbsence {
+    fn visit_links(&self, _visitor: &mut dyn FnMut(Link)) {}
+}
+impl ValidateLinks for ParameterControls {
+    fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
+        self.graph.visit_links(visitor);
+    }
+}
+impl ValidateLinks for MaterialValues {
+    fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
+        self.scalars.visit_links(visitor);
+        self.vectors.visit_links(visitor);
+    }
 }

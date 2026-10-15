@@ -176,8 +176,8 @@ fn standard_controls_remain_active_after_geometry_edit() {
     let surface::Material::Standard(standard) = &mut material.surface else {
         unreachable!()
     };
-    standard.specular_exponent = 17.;
-    standard.priority = -3;
+    standard.specular.parameters.exponent = 17.;
+    standard.state.ordering = -3;
     asset
         .edit(|builder| builder.set_material(id, material))
         .unwrap();
@@ -332,4 +332,65 @@ fn unknown_sections_and_vertex_qualifiers_require_explicit_drop() {
         .document()
         .sections()
         .all(|(_, section)| section.tag() != *b"XTRA"));
+}
+
+#[test]
+fn contribution_groups_round_trip_sparse_slots_and_arbitrary_normal_weights() {
+    let mut asset = asset();
+    let (id, material) = asset.materials().next().unwrap();
+    let mut material = material.clone();
+    let surface::Material::Standard(standard) = &mut material.surface else {
+        unreachable!()
+    };
+    standard.specular.parameters.exponent = 23.;
+    standard.specular.parameters.hdr_multiplier = 2.5;
+    standard.emissive.parameters = 3.5;
+    standard.emissive.input.secondary.input = Some(surface::TextureLayer {
+        id: 71,
+        ..Default::default()
+    });
+    standard.normals.primary.mask = Some(surface::TextureLayer {
+        id: 81,
+        ..Default::default()
+    });
+    standard.normals.weights = (0..5)
+        .map(|index| surface::Property {
+            initial: index as f32 * 0.2,
+            reset: index as f32 * 0.1,
+            ..Default::default()
+        })
+        .collect();
+    asset
+        .edit(|builder| builder.set_material(id, material))
+        .unwrap();
+    let native = conversion::m3::plan::<m3::StarCraft2>(&asset, &approximate())
+        .unwrap()
+        .execute()
+        .unwrap()
+        .value;
+    let imported = conversion::m3::import(&native, &ImportOptions::default())
+        .unwrap()
+        .value;
+    let (_, material) = imported
+        .materials()
+        .find(|(_, material)| material.name == "Solid")
+        .unwrap();
+    let surface::Material::Standard(standard) = &material.surface else {
+        unreachable!()
+    };
+    assert_eq!(standard.specular.parameters.exponent, 23.);
+    assert_eq!(standard.specular.parameters.hdr_multiplier, 2.5);
+    assert_eq!(standard.emissive.parameters, 3.5);
+    assert!(standard.emissive.input.primary.input.is_none());
+    assert_eq!(
+        standard.emissive.input.secondary.input.as_ref().unwrap().id,
+        71
+    );
+    assert!(standard.normals.primary.input.is_none());
+    assert_eq!(standard.normals.primary.mask.as_ref().unwrap().id, 81);
+    assert_eq!(standard.normals.weights.len(), 5);
+    for (index, weight) in standard.normals.weights.iter().enumerate() {
+        assert_eq!(weight.initial, index as f32 * 0.2);
+        assert_eq!(weight.reset, index as f32 * 0.1);
+    }
 }

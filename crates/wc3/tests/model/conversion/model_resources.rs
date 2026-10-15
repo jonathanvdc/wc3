@@ -1,3 +1,4 @@
+use wc3::model::semantic::materials::bindings::{Coordinates, TextureBinding};
 use wc3::model::semantic::profiles::Universal;
 use wc3::model::semantic::{
     Animated, Material, MaterialSurface, ModelBuilder, PbrSurface, Resource, Resources, Texture,
@@ -48,9 +49,15 @@ fn unanimated_texture_references_are_checked_at_publication() {
             surface: MaterialSurface::Generic(Box::new(PbrSurface {
                 inputs: vec![TextureInput {
                     role: TextureRole::BaseColor,
-                    texture: Animated::constant(Some(texture)),
-                    uv_set: 0,
-                    sampler: None,
+                    binding: TextureBinding {
+                        image: Animated::constant(Some(texture)),
+                        coordinates: Coordinates {
+                            source: 0,
+                            transform: (),
+                        },
+                        sampling: None,
+                        contribution: (),
+                    },
                 }],
                 ..Default::default()
             })),

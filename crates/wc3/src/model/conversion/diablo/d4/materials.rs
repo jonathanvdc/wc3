@@ -1,9 +1,11 @@
 //! External appearance selections and supplied shader resources have separate authoring authority.
 use crate::model::conversion::{Context, Error};
 use crate::model::diablo::d4::records as native;
+use crate::model::semantic::materials::diablo4::{TextureContribution, TexturePlayback};
+use crate::model::semantic::materials::parameters::ShaderValue;
 use crate::model::semantic::profiles::diablo::d4::{
-    AppearanceMaterialControls, GraphAbsence, Material, MaterialValues, ScalarValue, Shader,
-    TextureInput, TextureSelection, VectorValue, D4,
+    AppearanceMaterialControls, GraphAbsence, Material, MaterialValues, ParameterControls,
+    ScalarValue, Shader, TextureInput, TextureSelection, VectorValue, D4,
 };
 use crate::model::semantic::profiles::NoControls;
 use crate::model::semantic::{Resource, Resources, ResourcesBuilder, SnoNamespace, Texture};
@@ -93,10 +95,15 @@ pub(super) fn read_shader(
                 }))
             };
             Ok(TextureInput {
-                semantic: entry.shader_tex,
-                selection,
-                animation_state_index: native.tex_anim_state_index,
-                unclassified_control: native.unk_e1a4010,
+                image: selection,
+                coordinates: (),
+                sampling: TexturePlayback {
+                    animation_state_index: native.tex_anim_state_index,
+                },
+                contribution: TextureContribution {
+                    semantic: entry.shader_tex,
+                    unclassified_control: native.unk_e1a4010,
+                },
             })
         })
         .collect::<Result<Vec<_>, Error>>()?;
@@ -131,11 +138,13 @@ pub(super) fn read_shader(
                     .map(|entry| {
                         let value = &entry.value;
                         ScalarValue {
-                            parameter: value.material_value,
+                            key: ShaderValue(value.material_value),
                             value: value.value,
-                            graph: GraphAbsence::new(value.path_val_graph_index)
-                                .unwrap_or_default(),
-                            light_group: value.light_group,
+                            controls: ParameterControls {
+                                graph: GraphAbsence::new(value.path_val_graph_index)
+                                    .unwrap_or_default(),
+                                light_group: value.light_group,
+                            },
                         }
                     })
                     .collect(),
@@ -145,11 +154,13 @@ pub(super) fn read_shader(
                     .map(|entry| {
                         let value = &entry.value;
                         VectorValue {
-                            parameter: value.material_value,
+                            key: ShaderValue(value.material_value),
                             value: value.value,
-                            graph: GraphAbsence::new(value.path_val_graph_index)
-                                .unwrap_or_default(),
-                            light_group: value.light_group,
+                            controls: ParameterControls {
+                                graph: GraphAbsence::new(value.path_val_graph_index)
+                                    .unwrap_or_default(),
+                                light_group: value.light_group,
+                            },
                         }
                     })
                     .collect(),
@@ -176,7 +187,7 @@ pub(super) fn write_shader(
         .textures
         .iter()
         .map(|input| {
-            let tex = match input.selection {
+            let tex = match input.image {
                 TextureSelection::Absent(code) if code < 0 => code,
                 TextureSelection::Image(id) => {
                     match resources.texture(id).map(|image| &image.resource) {
@@ -204,11 +215,11 @@ pub(super) fn write_shader(
                 }
             };
             Ok(native::MaterialTextureEntry {
-                shader_tex: input.semantic,
+                shader_tex: input.contribution.semantic,
                 mat_tex: native::MaterialTexture {
                     tex,
-                    tex_anim_state_index: input.animation_state_index,
-                    unk_e1a4010: input.unclassified_control,
+                    tex_anim_state_index: input.sampling.animation_state_index,
+                    unk_e1a4010: input.contribution.unclassified_control,
                     ..Default::default()
                 },
                 ..Default::default()
@@ -225,10 +236,10 @@ pub(super) fn write_shader(
                     .iter()
                     .map(|v| native::RunTimeMaterialScalarValueEntry {
                         value: native::RunTimeMaterialValueFloat {
-                            material_value: v.parameter,
+                            material_value: v.key.0,
                             value: v.value,
-                            path_val_graph_index: v.graph.code(),
-                            light_group: v.light_group,
+                            path_val_graph_index: v.controls.graph.code(),
+                            light_group: v.controls.light_group,
                         },
                     })
                     .collect(),
@@ -237,10 +248,10 @@ pub(super) fn write_shader(
                     .iter()
                     .map(|v| native::RunTimeMaterialVectorValueEntry {
                         value: native::RunTimeMaterialValueBcVec4 {
-                            material_value: v.parameter,
+                            material_value: v.key.0,
                             value: v.value,
-                            path_val_graph_index: v.graph.code(),
-                            light_group: v.light_group,
+                            path_val_graph_index: v.controls.graph.code(),
+                            light_group: v.controls.light_group,
                         },
                     })
                     .collect(),

@@ -1,6 +1,9 @@
 //! Native Diablo material declarations map to the Diablo semantic vocabulary.
 use crate::model::conversion::{Context, Error};
 use crate::model::diablo::d3::records as native;
+use crate::model::semantic::materials::bindings::Coordinates;
+use crate::model::semantic::materials::diablo3::{TextureContribution, TextureTransform};
+use crate::model::semantic::materials::parameters::{OpaqueWord, ShaderTag};
 use crate::model::semantic::profiles::diablo::d3::{
     AssetRef, Group, Material, MaterialColors, MaterialFlags, ParameterType, TagValue, TexAnim,
     TextureEntry, TextureType, UberMaterial, UvFlags, UvTransformMode,
@@ -42,22 +45,27 @@ pub(super) fn read(v: &native::SubObjectAppearance<'_>) -> Material<'static> {
                 .textures
                 .iter()
                 .map(|t| TextureEntry {
-                    texture_type: TextureType(t.texture_type),
-                    unclassified_control: t.unknown04,
-                    texture: asset(t.texture, Group::Textures),
-                    uv_transform_mode: UvTransformMode(t.uv_transform_mode),
-                    uv_row0: t.uv_row0,
-                    uv_row1: t.uv_row1,
-                    uv_row2: t.uv_row2,
-                    uv_row3: t.uv_row3,
-                    anim_u: anim(t.anim_u),
-                    anim_v: anim(t.anim_v),
-                    anim_rotate: anim(t.anim_rotate),
-                    anim3: anim(t.anim3),
-                    anim4: anim(t.anim4),
-                    anim5: anim(t.anim5),
-                    uv_flags: UvFlags::from_bits_retain(t.uv_flags),
-                    unclassified_control2: t.unknown9_c,
+                    image: asset(t.texture, Group::Textures),
+                    coordinates: Coordinates {
+                        source: UvTransformMode(t.uv_transform_mode),
+                        transform: TextureTransform {
+                            matrix: [t.uv_row0, t.uv_row1, t.uv_row2, t.uv_row3],
+                            animations: [
+                                anim(t.anim_u),
+                                anim(t.anim_v),
+                                anim(t.anim_rotate),
+                                anim(t.anim3),
+                                anim(t.anim4),
+                                anim(t.anim5),
+                            ],
+                            flags: UvFlags::from_bits_retain(t.uv_flags),
+                        },
+                    },
+                    sampling: (),
+                    contribution: TextureContribution {
+                        role: TextureType(t.texture_type),
+                        unclassified_controls: [t.unknown04, t.unknown9_c],
+                    },
                 })
                 .collect(),
         },
@@ -67,9 +75,9 @@ pub(super) fn read(v: &native::SubObjectAppearance<'_>) -> Material<'static> {
             .shader_params
             .iter()
             .map(|t| TagValue {
-                value_type: ParameterType(t.value_type),
-                tag_id: t.tag_id,
-                value: t.value,
+                controls: ParameterType(t.value_type),
+                key: ShaderTag(t.tag_id),
+                value: OpaqueWord(t.value),
             })
             .collect(),
         opaque_passes: Vec::new(),
@@ -105,9 +113,9 @@ pub(super) fn write_tags(values: &[TagValue]) -> ZeroVec<'static, native::TagMap
     let params = values
         .iter()
         .map(|t| native::TagMapEntry {
-            value_type: t.value_type.0,
-            tag_id: t.tag_id,
-            value: t.value,
+            value_type: t.controls.0,
+            tag_id: t.key.0,
+            value: t.value.0,
         })
         .collect::<Vec<_>>();
     ZeroVec::alloc_from_slice(&params)
@@ -119,22 +127,22 @@ pub(super) fn write_uber(v: &UberMaterial) -> Result<native::UberMaterial<'stati
         .iter()
         .map(|t| {
             Ok(native::MaterialTextureEntry {
-                texture_type: t.texture_type.0,
-                unknown04: t.unclassified_control,
-                texture: id(&t.texture, Group::Textures)?,
-                uv_transform_mode: t.uv_transform_mode.0,
-                uv_row0: t.uv_row0,
-                uv_row1: t.uv_row1,
-                uv_row2: t.uv_row2,
-                uv_row3: t.uv_row3,
-                anim_u: native_anim(&t.anim_u),
-                anim_v: native_anim(&t.anim_v),
-                anim_rotate: native_anim(&t.anim_rotate),
-                anim3: native_anim(&t.anim3),
-                anim4: native_anim(&t.anim4),
-                anim5: native_anim(&t.anim5),
-                uv_flags: t.uv_flags.bits(),
-                unknown9_c: t.unclassified_control2,
+                texture_type: t.contribution.role.0,
+                unknown04: t.contribution.unclassified_controls[0],
+                texture: id(&t.image, Group::Textures)?,
+                uv_transform_mode: t.coordinates.source.0,
+                uv_row0: t.coordinates.transform.matrix[0],
+                uv_row1: t.coordinates.transform.matrix[1],
+                uv_row2: t.coordinates.transform.matrix[2],
+                uv_row3: t.coordinates.transform.matrix[3],
+                anim_u: native_anim(&t.coordinates.transform.animations[0]),
+                anim_v: native_anim(&t.coordinates.transform.animations[1]),
+                anim_rotate: native_anim(&t.coordinates.transform.animations[2]),
+                anim3: native_anim(&t.coordinates.transform.animations[3]),
+                anim4: native_anim(&t.coordinates.transform.animations[4]),
+                anim5: native_anim(&t.coordinates.transform.animations[5]),
+                uv_flags: t.coordinates.transform.flags.bits(),
+                unknown9_c: t.contribution.unclassified_controls[1],
             })
         })
         .collect::<Result<Vec<_>, Error>>()?;

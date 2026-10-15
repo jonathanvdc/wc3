@@ -1,6 +1,7 @@
 //! Logical M3 data driven values.
+use super::super::parameters::{OpaqueBytes, OrderedParameters, ParameterEntry};
 use crate::model::semantic::values::programmed::{ShaderFresnelFlags, ShaderType};
-use crate::model::semantic::{TextureId, ZeroVec};
+use crate::model::semantic::{Link, TextureId, ValidateLinks, ZeroVec};
 use std::borrow::Cow;
 
 /// Editable M3 DataDriven values.
@@ -48,27 +49,19 @@ pub struct DataDriven<'a> {
     pub effect_name_hash3: u32,
 }
 
-/// Editable M3 DataProperty values.
-#[derive(Clone, Debug, Default, PartialEq)]
-pub struct DataProperty<'a> {
-    /// Identifies a shader property by its source name hash.
-    pub name_hash: u32,
-    /// Names the material.
+/// A named shader key retains both its authored spelling and source hash.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct NamedShaderKey<'a> {
+    /// Source name hash, retained independently of the spelling.
+    pub hash: u32,
+    /// Authored shader property or group name.
     pub name: Cow<'a, str>,
-    /// Stores the property’s encoded value bytes.
-    pub data: Vec<u8>,
 }
-
-/// Editable M3 DataGroup values.
-#[derive(Clone, Debug, Default, PartialEq)]
-pub struct DataGroup<'a> {
-    /// Identifies a shader property by its source name hash.
-    pub name_hash: u32,
-    /// Names the material.
-    pub name: Cow<'a, str>,
-    /// Stores the shader-property entries inline.
-    pub properties: Vec<DataProperty<'a>>,
-}
+/// An ordered named property with unresolved encoded value bytes.
+pub type DataProperty<'a> = ParameterEntry<NamedShaderKey<'a>, OpaqueBytes>;
+/// An ordered named group of shader properties.
+pub type DataGroup<'a> =
+    ParameterEntry<NamedShaderKey<'a>, OrderedParameters<NamedShaderKey<'a>, OpaqueBytes>>;
 
 /// Editable M3 DataProperties values.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -89,4 +82,8 @@ impl Default for Parameters<'_> {
     fn default() -> Self {
         Self::Named(DataProperties::default())
     }
+}
+
+impl ValidateLinks for NamedShaderKey<'_> {
+    fn visit_links(&self, _visitor: &mut dyn FnMut(Link)) {}
 }

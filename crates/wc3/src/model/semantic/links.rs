@@ -301,3 +301,16 @@ impl ValidateLinks for Cow<'_, str> {
 impl ValidateLinks for Resource<'_> {
     fn visit_links(&self, _: &mut dyn FnMut(Link)) {}
 }
+
+impl ValidateLinks for i16 {
+    fn visit_links(&self, _: &mut dyn FnMut(Link)) {}
+}
+impl ValidateLinks for i32 {
+    fn visit_links(&self, _: &mut dyn FnMut(Link)) {}
+}
+impl ValidateLinks for i8 {
+    fn visit_links(&self, _: &mut dyn FnMut(Link)) {}
+}
+impl ValidateLinks for u16 {
+    fn visit_links(&self, _: &mut dyn FnMut(Link)) {}
+}

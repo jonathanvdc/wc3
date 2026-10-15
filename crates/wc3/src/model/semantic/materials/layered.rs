@@ -1,6 +1,10 @@
 //! Warcraft III layered surfaces independent of MDX and MDL storage.
+use super::bindings::{Coordinates, TextureBinding};
+use super::state::{DepthState, Lighting, Operation, PassState, Rasterization};
+use crate::model::semantic::materials::state::BlendOperations;
 use crate::model::semantic::profiles::mdlx::properties::{LayerField, Target};
 use crate::model::semantic::profiles::SurfacePayload;
+use crate::model::semantic::profiles::Unavailable;
 use crate::model::semantic::values::layered::{LayerFlags, MaterialFlags};
 use crate::model::semantic::TextureTransformId;
 use crate::model::semantic::{
@@ -9,55 +13,29 @@ use crate::model::semantic::{
 use std::{borrow::Cow, fmt::Debug};
 
 /// Blending performed by a Warcraft III material layer.
+pub type Blend = BlendOperations<Unavailable, (), (), u32>;
+/// Additional sampling and unresolved controls of a layered pass.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub enum Blend {
-    /// Replace the destination color.
-    #[default]
-    Opaque,
-    /// Discard transparent texels.
-    AlphaKey,
-    /// Blend using source opacity.
-    Alpha,
-    /// Add source color.
-    Additive,
-    /// Add opacity-weighted source color.
-    AdditiveAlpha,
-    /// Multiply destination color.
-    Modulate,
-    /// Multiply destination color and double the result.
-    Modulate2x,
-    /// A source operation whose meaning is not established.
-    Unknown(u32),
-}
-/// Sampling and lighting controls for an individual pass.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct Shading {
-    /// Bypass directional lighting.
-    pub unlit: bool,
-    /// Render both sides of the geometry.
-    pub two_sided: bool,
-    /// Bypass scene fog.
-    pub unfogged: bool,
-    /// Disable depth comparison.
-    pub no_depth_test: bool,
-    /// Disable depth writes.
-    pub no_depth_write: bool,
-    /// Keep sphere-environment sampling enabled.
+pub struct LayerOptions {
+    /// Select sphere-environment sampling.
     pub sphere_environment: bool,
     /// Wrap the U coordinate at layer scope.
     pub wrap_u: bool,
     /// Wrap the V coordinate at layer scope.
     pub wrap_v: bool,
-    /// Preserve shading controls with unresolved meanings.
+    /// Preserve controls with unresolved meanings.
     pub unclassified: LayerFlags,
 }
+/// A layered pass selects explicit depth operations, face selection, and common lighting.
+pub type Shading = Rasterization<DepthState<Operation, Operation>, bool, Lighting, LayerOptions>;
+
 /// One independently animated texture slot in an extended shader.
 #[derive(Clone, Debug, PartialEq)]
 pub struct TextureSlot {
     /// Semantic shader slot; undocumented selectors remain numeric.
     pub slot: u32,
     /// Texture sampled by this slot, or no texture.
-    pub texture: Animated<Option<TextureId>>,
+    pub binding: TextureBinding<Animated<Option<TextureId>>>,
 }
 /// Fresnel controls for a material pass.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -72,16 +50,11 @@ pub struct Fresnel {
 /// One Warcraft III draw pass. Pass ordering is the order in the material.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Layer {
-    /// Color composition operation.
-    pub blend: Blend,
-    /// Lighting, depth, and face controls.
-    pub shading: Shading,
-    /// Animated primary texture selection.
-    pub texture: Animated<Option<TextureId>>,
-    /// Index of the mesh UV set sampled by this pass.
-    pub uv_set: u32,
-    /// Local texture-transform identity within the profile.
-    pub texture_transform: Option<TextureTransformId>,
+    /// Color composition and rasterization applied by this pass.
+    pub state: PassState<Blend, Shading>,
+    /// Primary image input and its referenced coordinate transform.
+    pub binding:
+        TextureBinding<Animated<Option<TextureId>>, Coordinates<u32, Option<TextureTransformId>>>,
     /// Opacity multiplier.
     pub opacity: Animated<f32>,
     /// Emissive contribution, when supported by the shader.
@@ -165,9 +138,8 @@ impl<L: ValidateLinks> ValidateLinks for LayeredSurface<'_, L> {
 }
 impl ValidateLinks for Layer {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
-        self.texture_transform.visit_links(visitor);
-        self.texture.default.visit_links(visitor);
-        self.texture.visit_links(visitor);
+        self.state.visit_links(visitor);
+        self.binding.visit_links(visitor);
         self.opacity.visit_links(visitor);
         self.emissive_gain.visit_links(visitor);
         if let Some(fresnel) = &self.fresnel {
@@ -176,8 +148,7 @@ impl ValidateLinks for Layer {
             fresnel.team_color.visit_links(visitor);
         }
         for slot in &self.textures {
-            slot.texture.default.visit_links(visitor);
-            slot.texture.visit_links(visitor);
+            slot.binding.visit_links(visitor);
         }
     }
 }
@@ -196,4 +167,8 @@ impl<L> Default for LayeredSurface<'_, L> {
             layers: Vec::new(),
         }
     }
+}
+
+impl ValidateLinks for LayerOptions {
+    fn visit_links(&self, _: &mut dyn FnMut(Link)) {}
 }

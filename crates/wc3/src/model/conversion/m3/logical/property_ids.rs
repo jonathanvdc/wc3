@@ -235,15 +235,15 @@ impl<'a> Collect for surface::Cloth<'a> {
 }
 impl Collect for surface::Reflection {
     fn collect(&self, bindings: &mut Bindings) {
-        self.reflection_strength.collect(bindings);
-        self.displacement_strength.collect(bindings);
+        self.reflection.parameters.collect(bindings);
+        self.displacement.parameters.collect(bindings);
         self.reflection_offset.collect(bindings);
         self.blur_angle.collect(bindings);
         self.blur_distance_max.collect(bindings);
-        if let Some(value) = &self.reflection_map {
+        if let Some(value) = &self.reflection.input {
             value.collect(bindings);
         }
-        if let Some(value) = &self.displacement_map {
+        if let Some(value) = &self.displacement.input {
             value.collect(bindings);
         }
         if let Some(value) = &self.blur_map {
@@ -253,22 +253,22 @@ impl Collect for surface::Reflection {
 }
 impl Collect for surface::Standard {
     fn collect(&self, bindings: &mut Bindings) {
-        if let Some(value) = &self.diffuse_layer {
+        if let Some(value) = &self.diffuse.input {
             value.collect(bindings);
         }
         if let Some(value) = &self.decal_layer {
             value.collect(bindings);
         }
-        if let Some(value) = &self.specular_layer {
+        if let Some(value) = &self.specular.input.color {
             value.collect(bindings);
         }
-        if let Some(value) = &self.gloss_layer {
+        if let Some(value) = &self.specular.input.gloss {
             value.collect(bindings);
         }
-        if let Some(value) = &self.emissive_layer1 {
+        if let Some(value) = &self.emissive.input.primary.input {
             value.collect(bindings);
         }
-        if let Some(value) = &self.emissive_layer2 {
+        if let Some(value) = &self.emissive.input.secondary.input {
             value.collect(bindings);
         }
         if let Some(value) = &self.environment_layer {
@@ -277,13 +277,13 @@ impl Collect for surface::Standard {
         if let Some(value) = &self.environment_mask_layer {
             value.collect(bindings);
         }
-        if let Some(value) = &self.alpha_layer1 {
+        if let Some(value) = &self.opacity.primary {
             value.collect(bindings);
         }
-        if let Some(value) = &self.alpha_layer2 {
+        if let Some(value) = &self.opacity.secondary {
             value.collect(bindings);
         }
-        if let Some(value) = &self.normal_layer {
+        if let Some(value) = &self.normals.base {
             value.collect(bindings);
         }
         if let Some(value) = &self.height_layer {
@@ -295,21 +295,21 @@ impl Collect for surface::Standard {
         if let Some(value) = &self.ambient_occlusion_layer {
             value.collect(bindings);
         }
-        if let Some(value) = &self.normal_blend1_mask_layer {
+        if let Some(value) = &self.normals.primary.mask {
             value.collect(bindings);
         }
-        if let Some(value) = &self.normal_blend2_mask_layer {
+        if let Some(value) = &self.normals.secondary.mask {
             value.collect(bindings);
         }
-        if let Some(value) = &self.normal_blend1_layer {
+        if let Some(value) = &self.normals.primary.input {
             value.collect(bindings);
         }
-        if let Some(value) = &self.normal_blend2_layer {
+        if let Some(value) = &self.normals.secondary.input {
             value.collect(bindings);
         }
         self.parallax_height.collect(bindings);
         self.motion_blur_amount.collect(bindings);
-        for value in self.normal_blend_factors.iter() {
+        for value in self.normals.weights.iter() {
             value.collect(bindings);
         }
     }
@@ -330,8 +330,8 @@ impl<'a> Collect for surface::LensFlare<'a> {
 }
 impl Collect for surface::Displacement {
     fn collect(&self, bindings: &mut Bindings) {
-        self.strength.collect(bindings);
-        if let Some(value) = &self.normal_map {
+        self.displacement.parameters.collect(bindings);
+        if let Some(value) = &self.displacement.input {
             value.collect(bindings);
         }
         if let Some(value) = &self.strength_map {
@@ -368,7 +368,7 @@ impl Collect for surface::SplatTerrainBake {
 }
 impl Collect for surface::Hair {
     fn collect(&self, bindings: &mut Bindings) {
-        if let Some(value) = &self.layer_base {
+        if let Some(value) = &self.diffuse.input {
             value.collect(bindings);
         }
         if let Some(value) = &self.layer_spec_shift {
@@ -380,7 +380,7 @@ impl Collect for surface::Hair {
         if let Some(value) = &self.layer_ambient_occlusion {
             value.collect(bindings);
         }
-        self.color_diffuse.collect(bindings);
+        self.diffuse.parameters.collect(bindings);
         self.color_specular.collect(bindings);
     }
 }
@@ -398,20 +398,48 @@ impl Collect for surface::Composite {
 }
 impl Collect for surface::TextureLayer {
     fn collect(&self, bindings: &mut Bindings) {
-        self.color.collect(bindings);
-        self.rgb_multiply.collect(bindings);
-        self.rgb_add.collect(bindings);
-        self.avi_play.collect(bindings);
-        self.avi_restart.collect(bindings);
-        self.current_frame.collect(bindings);
-        self.uv_offset.collect(bindings);
-        self.uv_angle.collect(bindings);
-        self.uv_tiling.collect(bindings);
-        self.w_offset.collect(bindings);
-        self.w_tiling.collect(bindings);
-        self.map_alpha.collect(bindings);
-        self.triplanar_offset.collect(bindings);
-        self.triplanar_scale.collect(bindings);
+        self.binding.contribution.color.collect(bindings);
+        self.binding.contribution.rgb_multiply.collect(bindings);
+        self.binding.contribution.rgb_add.collect(bindings);
+        self.binding.sampling.avi_play.collect(bindings);
+        self.binding.sampling.avi_restart.collect(bindings);
+        self.binding.sampling.current_frame.collect(bindings);
+        self.binding
+            .coordinates
+            .transform
+            .uv_offset
+            .collect(bindings);
+        self.binding
+            .coordinates
+            .transform
+            .uv_angle
+            .collect(bindings);
+        self.binding
+            .coordinates
+            .transform
+            .uv_tiling
+            .collect(bindings);
+        self.binding
+            .coordinates
+            .transform
+            .w_offset
+            .collect(bindings);
+        self.binding
+            .coordinates
+            .transform
+            .w_tiling
+            .collect(bindings);
+        self.binding.contribution.map_alpha.collect(bindings);
+        self.binding
+            .coordinates
+            .transform
+            .triplanar_offset
+            .collect(bindings);
+        self.binding
+            .coordinates
+            .transform
+            .triplanar_scale
+            .collect(bindings);
     }
 }
 impl Collect for surface::Volume {
