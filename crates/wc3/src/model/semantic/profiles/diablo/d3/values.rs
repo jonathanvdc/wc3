@@ -1,93 +1,53 @@
 //! Explicit producer shader choices retain unresolved categories.
 use bitfield::bitfield;
 /// Producer-defined address mode selection.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum AddressMode {
-    /// Category whose interpretation is not established.
-    Unknown(i32),
-}
-impl Default for AddressMode {
-    fn default() -> Self {
-        Self::Unknown(0)
-    }
-}
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct AddressMode(
+    /// Producer code whose interpretation is not established.
+    pub i32,
+);
 /// Producer-defined blend factor selection.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum BlendFactor {
-    /// Category whose interpretation is not established.
-    Unknown(i32),
-}
-impl Default for BlendFactor {
-    fn default() -> Self {
-        Self::Unknown(0)
-    }
-}
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct BlendFactor(
+    /// Producer code whose interpretation is not established.
+    pub i32,
+);
 /// Producer-defined blend operation selection.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum BlendOperation {
-    /// Category whose interpretation is not established.
-    Unknown(i32),
-}
-impl Default for BlendOperation {
-    fn default() -> Self {
-        Self::Unknown(0)
-    }
-}
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct BlendOperation(
+    /// Producer code whose interpretation is not established.
+    pub i32,
+);
 /// Producer-defined comparison selection.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Comparison {
-    /// Category whose interpretation is not established.
-    Unknown(i32),
-}
-impl Default for Comparison {
-    fn default() -> Self {
-        Self::Unknown(0)
-    }
-}
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Comparison(
+    /// Producer code whose interpretation is not established.
+    pub i32,
+);
 /// Producer-defined cull mode selection.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum CullMode {
-    /// Category whose interpretation is not established.
-    Unknown(i32),
-}
-impl Default for CullMode {
-    fn default() -> Self {
-        Self::Unknown(0)
-    }
-}
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct CullMode(
+    /// Producer code whose interpretation is not established.
+    pub i32,
+);
 /// Producer-defined fill mode selection.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum FillMode {
-    /// Category whose interpretation is not established.
-    Unknown(i32),
-}
-impl Default for FillMode {
-    fn default() -> Self {
-        Self::Unknown(0)
-    }
-}
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct FillMode(
+    /// Producer code whose interpretation is not established.
+    pub i32,
+);
 /// Producer-defined parameter type selection.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum ParameterType {
-    /// Category whose interpretation is not established.
-    Unknown(i32),
-}
-impl Default for ParameterType {
-    fn default() -> Self {
-        Self::Unknown(0)
-    }
-}
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct ParameterType(
+    /// Producer code whose interpretation is not established.
+    pub i32,
+);
 /// Producer-defined stencil operation selection.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum StencilOperation {
-    /// Category whose interpretation is not established.
-    Unknown(i32),
-}
-impl Default for StencilOperation {
-    fn default() -> Self {
-        Self::Unknown(0)
-    }
-}
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct StencilOperation(
+    /// Producer code whose interpretation is not established.
+    pub i32,
+);
 /// Producer-defined switch selection.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Switch {
@@ -101,38 +61,23 @@ pub enum Switch {
 }
 
 /// Producer-defined texture filter selection.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum TextureFilter {
-    /// Category whose interpretation is not established.
-    Unknown(i32),
-}
-impl Default for TextureFilter {
-    fn default() -> Self {
-        Self::Unknown(0)
-    }
-}
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct TextureFilter(
+    /// Producer code whose interpretation is not established.
+    pub i32,
+);
 /// Shader-defined texture role selection, retaining unresolved codes.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum TextureType {
-    /// Category whose interpretation is not established.
-    Unknown(i32),
-}
-impl Default for TextureType {
-    fn default() -> Self {
-        Self::Unknown(0)
-    }
-}
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct TextureType(
+    /// Producer code whose interpretation is not established.
+    pub i32,
+);
 /// Producer-defined uv transform mode selection.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum UvTransformMode {
-    /// Category whose interpretation is not established.
-    Unknown(i32),
-}
-impl Default for UvTransformMode {
-    fn default() -> Self {
-        Self::Unknown(0)
-    }
-}
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct UvTransformMode(
+    /// Producer code whose interpretation is not established.
+    pub i32,
+);
 bitfield! { /// Producer-defined MaterialFlags options; every bit is retained.
  #[derive(Clone,Copy,Debug,Default,PartialEq,Eq)]
  pub struct MaterialFlags(i32);

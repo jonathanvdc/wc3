@@ -17,7 +17,7 @@ impl Narrows<Universal> for M3 {
         value: <Universal as Profile>::Appearance<'a>,
     ) -> Result<Self::Appearance<'a>, Error> {
         match value {
-            UniversalAppearance::M3(value) => Ok(value),
+            UniversalAppearance::Single(value) => Ok(value),
             _ => Err(incompatible("appearance")),
         }
     }

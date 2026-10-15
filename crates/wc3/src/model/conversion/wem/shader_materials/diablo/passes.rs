@@ -17,13 +17,13 @@ pub(super) fn read_render_params(
     value: &D3RenderParams,
 ) -> Result<RenderParams, Error> {
     Ok(RenderParams {
-        cull_mode: CullMode::Unknown(value.dw_cull_mode),
+        cull_mode: CullMode(value.dw_cull_mode),
         z_write_enable: match value.dw_z_write_enable {
             0 => Switch::Disabled,
             1 => Switch::Enabled,
             value => Switch::Unknown(value),
         },
-        z_func: Comparison::Unknown(value.dw_z_func),
+        z_func: Comparison(value.dw_z_func),
         depth_bias: value.fl_depth_bias,
         unclassified_control: value.fl_unknown10,
         stencil_enable: match value.dw_stencil_enable {
@@ -31,17 +31,17 @@ pub(super) fn read_render_params(
             1 => Switch::Enabled,
             value => Switch::Unknown(value),
         },
-        stencil_func: Comparison::Unknown(value.dw_stencil_func),
+        stencil_func: Comparison(value.dw_stencil_func),
         stencil_ref: value.dw_stencil_ref,
-        stencil_pass: StencilOperation::Unknown(value.dw_stencil_pass),
-        stencil_fail: StencilOperation::Unknown(value.dw_stencil_fail),
-        stencil_z_fail: StencilOperation::Unknown(value.dw_stencil_z_fail),
+        stencil_pass: StencilOperation(value.dw_stencil_pass),
+        stencil_fail: StencilOperation(value.dw_stencil_fail),
+        stencil_z_fail: StencilOperation(value.dw_stencil_z_fail),
         alpha_test_enable: match value.dw_alpha_test_enable {
             0 => Switch::Disabled,
             1 => Switch::Enabled,
             value => Switch::Unknown(value),
         },
-        alpha_func: Comparison::Unknown(value.dw_alpha_func),
+        alpha_func: Comparison(value.dw_alpha_func),
         alpha_ref: value.b_alpha_ref,
         alpha_to_coverage: match value.dw_alpha_to_coverage {
             0 => Switch::Disabled,
@@ -53,7 +53,7 @@ pub(super) fn read_render_params(
             1 => Switch::Enabled,
             value => Switch::Unknown(value),
         },
-        fill_mode: FillMode::Unknown(value.dw_fill_mode),
+        fill_mode: FillMode(value.dw_fill_mode),
         color_write_enable: match value.dw_color_write_enable {
             0 => Switch::Disabled,
             1 => Switch::Enabled,
@@ -69,9 +69,9 @@ pub(super) fn read_render_params(
             1 => Switch::Enabled,
             value => Switch::Unknown(value),
         },
-        blend_op: BlendOperation::Unknown(value.dw_blend_op),
-        src_blend: BlendFactor::Unknown(value.dw_src_blend),
-        dest_blend: BlendFactor::Unknown(value.dw_dest_blend),
+        blend_op: BlendOperation(value.dw_blend_op),
+        src_blend: BlendFactor(value.dw_src_blend),
+        dest_blend: BlendFactor(value.dw_dest_blend),
         constant_color: value.dw_constant_color,
     })
 }
@@ -80,17 +80,13 @@ pub(super) fn write_render_params(
     value: &RenderParams,
 ) -> Result<D3RenderParams, Error> {
     Ok(D3RenderParams {
-        dw_cull_mode: match value.cull_mode {
-            CullMode::Unknown(value) => value,
-        },
+        dw_cull_mode: value.cull_mode.0,
         dw_z_write_enable: match value.z_write_enable {
             Switch::Unknown(value) => value,
             Switch::Disabled => 0,
             Switch::Enabled => 1,
         },
-        dw_z_func: match value.z_func {
-            Comparison::Unknown(value) => value,
-        },
+        dw_z_func: value.z_func.0,
         fl_depth_bias: value.depth_bias,
         fl_unknown10: value.unclassified_control,
         dw_stencil_enable: match value.stencil_enable {
@@ -98,27 +94,17 @@ pub(super) fn write_render_params(
             Switch::Disabled => 0,
             Switch::Enabled => 1,
         },
-        dw_stencil_func: match value.stencil_func {
-            Comparison::Unknown(value) => value,
-        },
+        dw_stencil_func: value.stencil_func.0,
         dw_stencil_ref: value.stencil_ref,
-        dw_stencil_pass: match value.stencil_pass {
-            StencilOperation::Unknown(value) => value,
-        },
-        dw_stencil_fail: match value.stencil_fail {
-            StencilOperation::Unknown(value) => value,
-        },
-        dw_stencil_z_fail: match value.stencil_z_fail {
-            StencilOperation::Unknown(value) => value,
-        },
+        dw_stencil_pass: value.stencil_pass.0,
+        dw_stencil_fail: value.stencil_fail.0,
+        dw_stencil_z_fail: value.stencil_z_fail.0,
         dw_alpha_test_enable: match value.alpha_test_enable {
             Switch::Unknown(value) => value,
             Switch::Disabled => 0,
             Switch::Enabled => 1,
         },
-        dw_alpha_func: match value.alpha_func {
-            Comparison::Unknown(value) => value,
-        },
+        dw_alpha_func: value.alpha_func.0,
         b_alpha_ref: value.alpha_ref,
         dw_alpha_to_coverage: match value.alpha_to_coverage {
             Switch::Unknown(value) => value,
@@ -130,9 +116,7 @@ pub(super) fn write_render_params(
             Switch::Disabled => 0,
             Switch::Enabled => 1,
         },
-        dw_fill_mode: match value.fill_mode {
-            FillMode::Unknown(value) => value,
-        },
+        dw_fill_mode: value.fill_mode.0,
         dw_color_write_enable: match value.color_write_enable {
             Switch::Unknown(value) => value,
             Switch::Disabled => 0,
@@ -148,15 +132,9 @@ pub(super) fn write_render_params(
             Switch::Disabled => 0,
             Switch::Enabled => 1,
         },
-        dw_blend_op: match value.blend_op {
-            BlendOperation::Unknown(value) => value,
-        },
-        dw_src_blend: match value.src_blend {
-            BlendFactor::Unknown(value) => value,
-        },
-        dw_dest_blend: match value.dest_blend {
-            BlendFactor::Unknown(value) => value,
-        },
+        dw_blend_op: value.blend_op.0,
+        dw_src_blend: value.src_blend.0,
+        dw_dest_blend: value.dest_blend.0,
         dw_constant_color: value.constant_color,
     })
 }
@@ -166,10 +144,10 @@ pub(super) fn read_texture_stage(
 ) -> Result<TextureStage, Error> {
     Ok(TextureStage {
         content_stage: value.content_stage,
-        address_u: AddressMode::Unknown(value.dw_address_u),
-        address_v: AddressMode::Unknown(value.dw_address_v),
-        address_w: AddressMode::Unknown(value.dw_address_w),
-        filter: TextureFilter::Unknown(value.dw_filter),
+        address_u: AddressMode(value.dw_address_u),
+        address_v: AddressMode(value.dw_address_v),
+        address_w: AddressMode(value.dw_address_w),
+        filter: TextureFilter(value.dw_filter),
         mip_map_lod_bias: value.fl_mip_map_lod_bias,
     })
 }
@@ -179,18 +157,10 @@ pub(super) fn write_texture_stage(
 ) -> Result<D3TextureStage, Error> {
     Ok(D3TextureStage {
         content_stage: value.content_stage,
-        dw_address_u: match value.address_u {
-            AddressMode::Unknown(value) => value,
-        },
-        dw_address_v: match value.address_v {
-            AddressMode::Unknown(value) => value,
-        },
-        dw_address_w: match value.address_w {
-            AddressMode::Unknown(value) => value,
-        },
-        dw_filter: match value.filter {
-            TextureFilter::Unknown(value) => value,
-        },
+        dw_address_u: value.address_u.0,
+        dw_address_v: value.address_v.0,
+        dw_address_w: value.address_w.0,
+        dw_filter: value.filter.0,
         fl_mip_map_lod_bias: value.mip_map_lod_bias,
     })
 }
@@ -199,7 +169,7 @@ pub(super) fn read_shader_tag_value(
     value: &D3ShaderTagValue,
 ) -> Result<ShaderTagValue, Error> {
     Ok(ShaderTagValue {
-        value_type: ParameterType::Unknown(value.value_type),
+        value_type: ParameterType(value.value_type),
         tag_id: value.tag_id,
         value: value.value,
     })
@@ -209,9 +179,7 @@ pub(super) fn write_shader_tag_value(
     value: &ShaderTagValue,
 ) -> Result<D3ShaderTagValue, Error> {
     Ok(D3ShaderTagValue {
-        value_type: match value.value_type {
-            ParameterType::Unknown(value) => value,
-        },
+        value_type: value.value_type.0,
         tag_id: value.tag_id,
         value: value.value,
     })

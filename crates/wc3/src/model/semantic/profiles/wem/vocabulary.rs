@@ -1,9 +1,10 @@
 //! The editable-model vocabulary retains its own mixed-family authoring domains.
 use super::attachment_validation::usable_face;
+use super::physics::Physics;
 use super::properties::Target as PropertySelector;
 use super::{
     Appearance, ClipControls, ControllerControls, DocumentControls, Feature, Geometry, Material,
-    MeshControls, ModelControls, NodeControls, System, TextureControls,
+    MeshControls, ModelControls, NodeControls, TextureControls,
 };
 use crate::model::semantic::profiles::UniversalProperty;
 use crate::model::semantic::profiles::{Extends, NoControls, Profile, Unavailable, Universal};
@@ -24,7 +25,7 @@ impl Profile for Wem {
     type Binding<'a> = Unavailable;
     type Geometry<'a> = Geometry<'a>;
     type Model<'a> = ModelControls<'a>;
-    type System<'a> = System<'a>;
+    type System<'a> = Physics<'a>;
     type Surface<'a> = Material<'a>;
     type Feature<'a> = Feature<'a>;
     type Node<'a> = NodeControls<'a>;
@@ -57,18 +58,13 @@ impl Profile for Wem {
         }
 
         model.controls().pose_pipeline.validate_simulations(
-            |system,id|matches!(model.system(system),Some(super::System::Physics(value)) if value.rig(id).is_some()),
-            |system,id|matches!(model.system(system),Some(super::System::Physics(value)) if value.cloth(id).is_some()),
+            |system, id| matches!(model.system(system),Some(value) if value.rig(id).is_some()),
+            |system, id| matches!(model.system(system),Some(value) if value.cloth(id).is_some()),
         )?;
         model
             .controls()
             .channels
-            .validate_simulations(&model.controls().pose_pipeline, |id| {
-                match model.system(id) {
-                    Some(System::Physics(value)) => Some(value),
-                    _ => None,
-                }
-            })?;
+            .validate_simulations(&model.controls().pose_pipeline, |id| model.system(id))?;
         if model.systems().len() > 1 {
             return Err(Error::new(
                 "wem.physics.systems",
@@ -141,10 +137,7 @@ impl Profile for Wem {
                             .controller(id)
                             .map(|value| value.controls.tracks.len())
                     },
-                    |id| match model.system(id) {
-                        Some(System::Physics(value)) => Some(value),
-                        _ => None,
-                    },
+                    |id| model.system(id),
                 )?;
             }
             if !clip.channels().is_empty() || !clip.events().is_empty() || clip.alias().is_some() {
@@ -177,32 +170,29 @@ impl Profile for Wem {
                 track.validate(&model.controls().channels)?;
             }
         }
-        for (_, system) in model.systems() {
-            match system {
-                System::Physics(physics) => {
-                    for (_, body) in physics.soft_bodies() {
-                        body.validate_mesh_faces(|mesh, face| {
-                            model
-                                .mesh(mesh)
-                                .is_some_and(|mesh| usable_face(mesh.topology(), face as usize))
-                        })?;
-                    }
-                    for (_, cloth) in physics.cloths() {
-                        for section in cloth.recipe.iter().flat_map(|recipe| {
-                            recipe
-                                .binding_origins
-                                .iter()
-                                .chain(recipe.cage_origin.iter())
-                        }) {
-                            if !model.mesh(section.mesh).is_some_and(|mesh| {
-                                mesh.geometry.section(section.section).is_some()
-                            }) {
-                                return Err(Error::new(
-                                    "wem.cloth.section",
-                                    "cloth recipe section belongs to another mesh",
-                                ));
-                            }
-                        }
+        for (_, physics) in model.systems() {
+            for (_, body) in physics.soft_bodies() {
+                body.validate_mesh_faces(|mesh, face| {
+                    model
+                        .mesh(mesh)
+                        .is_some_and(|mesh| usable_face(mesh.topology(), face as usize))
+                })?;
+            }
+            for (_, cloth) in physics.cloths() {
+                for section in cloth.recipe.iter().flat_map(|recipe| {
+                    recipe
+                        .binding_origins
+                        .iter()
+                        .chain(recipe.cage_origin.iter())
+                }) {
+                    if !model
+                        .mesh(section.mesh)
+                        .is_some_and(|mesh| mesh.geometry.section(section.section).is_some())
+                    {
+                        return Err(Error::new(
+                            "wem.cloth.section",
+                            "cloth recipe section belongs to another mesh",
+                        ));
                     }
                 }
             }
@@ -311,13 +301,13 @@ pub(crate) fn validate_universal_model(model: &Model<'_, Universal>) -> Result<(
     let poses = match model.controls() {
         Some(ModelControls::Wem(controls)) => {
             controls.pose_pipeline.validate_simulations(
-                |system,id|matches!(model.system(system),Some(System::Wem(super::System::Physics(value))) if value.rig(id).is_some()),
-                |system,id|matches!(model.system(system),Some(System::Wem(super::System::Physics(value))) if value.cloth(id).is_some()),
+                |system,id|matches!(model.system(system),Some(System::Wem(value)) if value.rig(id).is_some()),
+                |system,id|matches!(model.system(system),Some(System::Wem(value)) if value.cloth(id).is_some()),
             )?;
             controls
                 .channels
                 .validate_simulations(&controls.pose_pipeline, |id| match model.system(id) {
-                    Some(System::Wem(super::System::Physics(value))) => Some(value),
+                    Some(System::Wem(value)) => Some(value),
                     _ => None,
                 })?;
             controls.channel_selections.validate(&controls.channels)?;
@@ -371,7 +361,7 @@ pub(crate) fn validate_universal_model(model: &Model<'_, Universal>) -> Result<(
                             })
                     },
                     |id| match model.system(id) {
-                        Some(System::Wem(super::System::Physics(value))) => Some(value),
+                        Some(System::Wem(value)) => Some(value),
                         _ => None,
                     },
                 )?;
@@ -413,7 +403,7 @@ pub(crate) fn validate_universal_model(model: &Model<'_, Universal>) -> Result<(
         }
     }
     for (_, system) in model.systems() {
-        if let System::Wem(super::System::Physics(physics)) = system {
+        if let System::Wem(physics) = system {
             for (_, body) in physics.soft_bodies() {
                 body.validate_mesh_faces(|mesh, face| {
                     model

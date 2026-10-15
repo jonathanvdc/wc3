@@ -2,7 +2,7 @@
 use crate::model::conversion::wem::actors::common::Field;
 use crate::model::conversion::wem::hierarchy::poses::put;
 use crate::model::conversion::Error;
-use crate::model::semantic::profiles::wem::{HierarchyConvention, System};
+use crate::model::semantic::profiles::wem::HierarchyConvention;
 use crate::model::semantic::profiles::Wem;
 use crate::model::semantic::Model;
 use crate::model::wem::{self, records, InlineList, RawDocument, Ref, Target};
@@ -162,7 +162,9 @@ where
             HierarchyConvention::Unknown(value) => records::RigConvention::Unknown(value),
         });
         let has_physics = value.systems().len() != 0;
-        let soft=value.systems().any(|(_,system)|matches!(system,System::Physics(physics) if physics.soft_bodies().len()!=0));
+        let soft = value
+            .systems()
+            .any(|(_, system)| system.soft_bodies().len() != 0);
         D::Nodes::supports(convention)
             && D::LodExport::write(
                 controls

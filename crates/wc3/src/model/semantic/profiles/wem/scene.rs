@@ -1,8 +1,6 @@
 //! Individually typed authored WEM behaviors may mix supported game families.
 use crate::model::semantic::profiles::FeaturePayload;
-use crate::model::semantic::{
-    FeatureKind, Link, PropertyIdentityKey, SystemPayload, ValidateLinks,
-};
+use crate::model::semantic::{FeatureKind, Link, PropertyIdentityKey, ValidateLinks};
 /// Complete attached behavior, independent of a model-wide game selector.
 #[derive(Clone, Debug)]
 pub enum Feature<'a> {
@@ -55,17 +53,3 @@ impl FeaturePayload for Feature<'_> {
         }
     }
 }
-/// Independently authored simulation system.
-#[derive(Clone, Debug)]
-pub enum System<'a> {
-    /// Bodies and constraints share one domain regardless of their game extensions.
-    Physics(super::physics::Physics<'a>),
-}
-impl ValidateLinks for System<'_> {
-    fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
-        match self {
-            Self::Physics(value) => value.visit_links(visitor),
-        }
-    }
-}
-impl SystemPayload for System<'_> {}

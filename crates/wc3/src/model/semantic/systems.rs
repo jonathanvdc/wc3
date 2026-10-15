@@ -43,7 +43,7 @@ pub enum System<'a> {
     /// Static-world groups, portals, and environment volumes.
     Wmo(profiles::wmo::WorldSystem<'a>),
     /// Editable-model mixed-family simulation domain.
-    Wem(profiles::wem::System<'a>),
+    Wem(profiles::wem::physics::Physics<'a>),
 }
 impl ValidateLinks for System<'_> {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
@@ -83,6 +83,7 @@ pub trait SystemPayload: profiles::ControlsPayload {
         false
     }
 }
+impl SystemPayload for profiles::wem::physics::Physics<'_> {}
 impl SystemPayload for profiles::m2::System<'_> {}
 impl SystemPayload for profiles::m3::System<'_> {}
 impl SystemPayload for profiles::Unavailable {}

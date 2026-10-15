@@ -24,7 +24,7 @@ pub use attributes::{Layer, LayerData, LayerId, LayerObject};
 pub mod materials;
 pub use materials::*;
 mod scene;
-pub use scene::{Feature, System};
+pub use scene::Feature;
 
 mod sections;
 pub use sections::*;

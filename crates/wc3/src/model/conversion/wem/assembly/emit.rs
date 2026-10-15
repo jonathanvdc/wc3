@@ -2,7 +2,7 @@
 use super::super::{appearance, geometry, hierarchy, physics, stages, text};
 use super::{maps, model_records::EncodedModel, resources::Encoded as TextureIndices};
 use crate::model::conversion::{Asset, EncodingHint, Error};
-use crate::model::semantic::profiles::wem::{AnimationSetId, HierarchyConvention, System};
+use crate::model::semantic::profiles::wem::{AnimationSetId, HierarchyConvention};
 use crate::model::semantic::profiles::Wem;
 use crate::model::semantic::{ClipId, ModelId, SystemId};
 use crate::model::wem::{records, RawDocument, Ref};
@@ -75,8 +75,8 @@ pub(super) fn write<'view, 'data: 'view>(
         let mut systems = model.systems();
         let physics = systems
             .next()
-            .map(|(id, value)| match value {
-                System::Physics(value) => physics::write_packed(
+            .map(|(id, value)| {
+                physics::write_packed(
                     document,
                     value,
                     &maps.nodes,
@@ -85,7 +85,7 @@ pub(super) fn write<'view, 'data: 'view>(
                     &appearance.slot_indices,
                     &maps::packed(model),
                 )
-                .map(|value| (id, value)),
+                .map(|value| (id, value))
             })
             .transpose()?;
         if systems.next().is_some() {

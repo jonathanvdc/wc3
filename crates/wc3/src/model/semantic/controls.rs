@@ -100,7 +100,7 @@ impl ValidateLinks for NodeControls<'_> {
 #[derive(Clone, Debug)]
 pub enum DrawControls {
     /// World of Warcraft color or shadow pass behavior.
-    M2(profiles::m2::DrawControls),
+    M2(profiles::m2::ShadowControls),
     /// StarCraft II batching, priority, and animated culling.
     M3(profiles::m3::BatchControls),
     /// Static-world lighting class, bounds, and lightmap behavior.

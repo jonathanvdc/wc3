@@ -26,79 +26,57 @@ fn native_switch(v: Switch) -> i32 {
 }
 fn params(v: &native::RenderParams) -> RenderParams {
     RenderParams {
-        cull_mode: CullMode::Unknown(v.cull_mode),
+        cull_mode: CullMode(v.cull_mode),
         z_write_enable: switch(v.z_write_enable),
-        z_func: Comparison::Unknown(v.z_func),
+        z_func: Comparison(v.z_func),
         depth_bias: v.depth_bias,
         unclassified_control: v.unknown10,
         stencil_enable: switch(v.stencil_enable),
-        stencil_func: Comparison::Unknown(v.stencil_func),
+        stencil_func: Comparison(v.stencil_func),
         stencil_ref: v.stencil_ref,
-        stencil_pass: StencilOperation::Unknown(v.stencil_pass),
-        stencil_fail: StencilOperation::Unknown(v.stencil_fail),
-        stencil_z_fail: StencilOperation::Unknown(v.stencil_z_fail),
+        stencil_pass: StencilOperation(v.stencil_pass),
+        stencil_fail: StencilOperation(v.stencil_fail),
+        stencil_z_fail: StencilOperation(v.stencil_z_fail),
         alpha_test_enable: switch(v.alpha_test_enable),
-        alpha_func: Comparison::Unknown(v.alpha_func),
+        alpha_func: Comparison(v.alpha_func),
         alpha_ref: v.b_alpha_ref,
         alpha_to_coverage: switch(v.alpha_to_coverage),
         fog_enable: switch(v.fog_enable),
-        fill_mode: FillMode::Unknown(v.fill_mode),
+        fill_mode: FillMode(v.fill_mode),
         color_write_enable: switch(v.color_write_enable),
         alpha_write_enable: switch(v.alpha_write_enable),
         alpha_blend_enable: switch(v.alpha_blend_enable),
-        blend_op: BlendOperation::Unknown(v.blend_op),
-        src_blend: BlendFactor::Unknown(v.src_blend),
-        dest_blend: BlendFactor::Unknown(v.dest_blend),
+        blend_op: BlendOperation(v.blend_op),
+        src_blend: BlendFactor(v.src_blend),
+        dest_blend: BlendFactor(v.dest_blend),
         constant_color: v.constant_color,
     }
 }
 fn native_params(v: &RenderParams) -> native::RenderParams {
     native::RenderParams {
-        cull_mode: match v.cull_mode {
-            CullMode::Unknown(v) => v,
-        },
+        cull_mode: v.cull_mode.0,
         z_write_enable: native_switch(v.z_write_enable),
-        z_func: match v.z_func {
-            Comparison::Unknown(v) => v,
-        },
+        z_func: v.z_func.0,
         depth_bias: v.depth_bias,
         unknown10: v.unclassified_control,
         stencil_enable: native_switch(v.stencil_enable),
-        stencil_func: match v.stencil_func {
-            Comparison::Unknown(v) => v,
-        },
+        stencil_func: v.stencil_func.0,
         stencil_ref: v.stencil_ref,
-        stencil_pass: match v.stencil_pass {
-            StencilOperation::Unknown(v) => v,
-        },
-        stencil_fail: match v.stencil_fail {
-            StencilOperation::Unknown(v) => v,
-        },
-        stencil_z_fail: match v.stencil_z_fail {
-            StencilOperation::Unknown(v) => v,
-        },
+        stencil_pass: v.stencil_pass.0,
+        stencil_fail: v.stencil_fail.0,
+        stencil_z_fail: v.stencil_z_fail.0,
         alpha_test_enable: native_switch(v.alpha_test_enable),
-        alpha_func: match v.alpha_func {
-            Comparison::Unknown(v) => v,
-        },
+        alpha_func: v.alpha_func.0,
         b_alpha_ref: v.alpha_ref,
         alpha_to_coverage: native_switch(v.alpha_to_coverage),
         fog_enable: native_switch(v.fog_enable),
-        fill_mode: match v.fill_mode {
-            FillMode::Unknown(v) => v,
-        },
+        fill_mode: v.fill_mode.0,
         color_write_enable: native_switch(v.color_write_enable),
         alpha_write_enable: native_switch(v.alpha_write_enable),
         alpha_blend_enable: native_switch(v.alpha_blend_enable),
-        blend_op: match v.blend_op {
-            BlendOperation::Unknown(v) => v,
-        },
-        src_blend: match v.src_blend {
-            BlendFactor::Unknown(v) => v,
-        },
-        dest_blend: match v.dest_blend {
-            BlendFactor::Unknown(v) => v,
-        },
+        blend_op: v.blend_op.0,
+        src_blend: v.src_blend.0,
+        dest_blend: v.dest_blend.0,
         constant_color: v.constant_color,
         ..Default::default()
     }
@@ -115,10 +93,10 @@ fn pass<'a>(v: &'a native::RenderPass<'_>) -> Result<RenderState<'a>, Error> {
             .iter()
             .map(|s| TextureStage {
                 content_stage: s.texture_type,
-                address_u: AddressMode::Unknown(s.address_u),
-                address_v: AddressMode::Unknown(s.address_v),
-                address_w: AddressMode::Unknown(s.address_w),
-                filter: TextureFilter::Unknown(s.filter),
+                address_u: AddressMode(s.address_u),
+                address_v: AddressMode(s.address_v),
+                address_w: AddressMode(s.address_w),
+                filter: TextureFilter(s.filter),
                 mip_map_lod_bias: s.mip_map_lod_bias,
             })
             .collect(),
@@ -130,7 +108,7 @@ fn pass<'a>(v: &'a native::RenderPass<'_>) -> Result<RenderState<'a>, Error> {
             .shader_params
             .iter()
             .map(|t| ShaderTagValue {
-                value_type: ParameterType::Unknown(t.value_type),
+                value_type: ParameterType(t.value_type),
                 tag_id: t.tag_id,
                 value: t.value,
             })
@@ -143,18 +121,10 @@ fn native_pass(v: &RenderState<'_>) -> Result<native::RenderPass<'static>, Error
         .iter()
         .map(|s| native::TextureStageParams {
             texture_type: s.content_stage,
-            address_u: match s.address_u {
-                AddressMode::Unknown(v) => v,
-            },
-            address_v: match s.address_v {
-                AddressMode::Unknown(v) => v,
-            },
-            address_w: match s.address_w {
-                AddressMode::Unknown(v) => v,
-            },
-            filter: match s.filter {
-                TextureFilter::Unknown(v) => v,
-            },
+            address_u: s.address_u.0,
+            address_v: s.address_v.0,
+            address_w: s.address_w.0,
+            filter: s.filter.0,
             mip_map_lod_bias: s.mip_map_lod_bias,
         })
         .collect::<Vec<_>>();
@@ -162,9 +132,7 @@ fn native_pass(v: &RenderState<'_>) -> Result<native::RenderPass<'static>, Error
         .shader_params
         .iter()
         .map(|t| native::ShaderTagMapEntry {
-            value_type: match t.value_type {
-                ParameterType::Unknown(v) => v,
-            },
+            value_type: t.value_type.0,
             tag_id: t.tag_id,
             value: t.value,
         })
@@ -243,7 +211,7 @@ pub fn import_shader_map(
                 .shaders
                 .iter()
                 .map(|v| ShaderMapEntry {
-                    value_type: ParameterType::Unknown(v.value_type),
+                    value_type: ParameterType(v.value_type),
                     tag_id: v.tag_id,
                     shader: AssetRef {
                         id: v.shader,
@@ -271,9 +239,7 @@ pub fn plan_shader_map(
                 ));
             }
             Ok(native::ShaderMapEntry {
-                value_type: match v.value_type {
-                    ParameterType::Unknown(v) => v,
-                },
+                value_type: v.value_type.0,
                 tag_id: v.tag_id,
                 shader: v.shader.id,
             })

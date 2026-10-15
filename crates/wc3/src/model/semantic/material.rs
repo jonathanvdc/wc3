@@ -44,10 +44,8 @@ pub enum Resource<'a> {
     },
     /// Application-provided replacement texture category.
     Replaceable(u32),
-    /// An image supplied with the authoring data rather than resolved externally.
+    /// Image bytes supplied with the authoring data, with no established encoding interpretation.
     EmbeddedImage {
-        /// Explicit interpretation of the image bytes.
-        encoding: ImageEncoding,
         /// Authored image bytes, borrowed when available.
         bytes: Cow<'a, [u8]>,
     },
@@ -58,13 +56,6 @@ pub enum Resource<'a> {
         /// Provider identity.
         name: Cow<'a, str>,
     },
-}
-/// Interpretation of an embedded image payload.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
-pub enum ImageEncoding {
-    /// The original image representation has no established channel or compression interpretation.
-    #[default]
-    Unspecified,
 }
 /// Texture color interpretation.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]

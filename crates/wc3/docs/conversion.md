@@ -22,9 +22,10 @@ projecting a `Universal` graph into Warcraft III behavior. Widening an asset
 preserves its meanings, identities, and shared arrays; it does not translate
 materials, effects, or playback semantics into another game's equivalents.
 A union vocabulary likewise retains both families distinctly. Use
-`try_narrow::<TargetProfile>()` when every owner already carries the target's
-complete payload. It moves the existing values, checks required controls and
-references, and rejects incompatible model cardinality. Narrowing is an exact
+`try_narrow::<TargetProfile>()` when every owner already carries a complete
+payload supported by the target, including capabilities shared across profiles.
+It moves the existing values, checks required controls and references, and rejects
+incompatible model cardinality. Narrowing is an exact
 projection; translating another game's behavior requires an explicit semantic
 transformation before the native planner can accept it.
 

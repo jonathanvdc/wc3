@@ -62,7 +62,7 @@ impl Extends<Wmo> for Universal {
         None
     }
     fn appearance<'a>(value: <Wmo as Profile>::Appearance<'a>) -> Self::Appearance<'a> {
-        UniversalAppearance::Wmo(value)
+        UniversalAppearance::Single(value)
     }
     fn binding<'a>(value: <Wmo as Profile>::Binding<'a>) -> Self::Binding<'a> {
         match value {}

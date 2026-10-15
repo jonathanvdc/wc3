@@ -87,7 +87,7 @@ impl Extends<Mdlx> for Universal {
         None
     }
     fn appearance<'a>(value: <Mdlx as Profile>::Appearance<'a>) -> Self::Appearance<'a> {
-        UniversalAppearance::Mdlx(value)
+        UniversalAppearance::Single(value)
     }
     fn binding<'a>(value: <Mdlx as Profile>::Binding<'a>) -> Self::Binding<'a> {
         UniversalBinding::Identity(value)

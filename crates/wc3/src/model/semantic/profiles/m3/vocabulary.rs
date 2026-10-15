@@ -557,7 +557,7 @@ impl Extends<M3> for Universal {
         None
     }
     fn appearance<'a>(value: <M3 as Profile>::Appearance<'a>) -> Self::Appearance<'a> {
-        UniversalAppearance::M3(value)
+        UniversalAppearance::Single(value)
     }
     fn binding<'a>(value: <M3 as Profile>::Binding<'a>) -> Self::Binding<'a> {
         UniversalBinding::Explicit(value)

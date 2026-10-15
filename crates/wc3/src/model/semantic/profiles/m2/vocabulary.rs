@@ -23,7 +23,7 @@ impl Profile for M2 {
     type Appearance<'a> = DrawLooks<'a>;
     type Binding<'a> = IdentityBinding;
     type Geometry<'a> = M2Geometry<'a>;
-    type Draw = Option<m2::DrawControls>;
+    type Draw = Option<m2::ShadowControls>;
     type Model<'a> = m2::ModelControls;
     type System<'a> = m2::System<'a>;
     type Surface<'a> = m2::Material<'a>;
@@ -133,7 +133,7 @@ impl Extends<M2> for Universal {
         None
     }
     fn appearance<'a>(value: <M2 as Profile>::Appearance<'a>) -> Self::Appearance<'a> {
-        UniversalAppearance::M2(value)
+        UniversalAppearance::Draw(value)
     }
     fn binding<'a>(value: <M2 as Profile>::Binding<'a>) -> Self::Binding<'a> {
         UniversalBinding::Identity(value)

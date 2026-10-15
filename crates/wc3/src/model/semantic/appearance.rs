@@ -1,5 +1,8 @@
 //! Appearance vocabularies preserve the assignments supported by their model family.
-use crate::model::semantic::profiles::Either;
+use crate::model::semantic::profiles::{
+    diablo::{d3, d4},
+    wem, Either,
+};
 use crate::model::semantic::{Error, Link, Look, LookId, MaterialSlotId, ValidateLinks};
 use std::collections::BTreeMap;
 use std::fmt::Debug;
@@ -138,38 +141,30 @@ impl<'data> DrawAppearanceSchema<'data> for DrawLooks<'data> {
     }
 }
 
-/// Built-in appearance families, retaining their original authoring domains on widening.
+/// Appearance capabilities shared by the built-in profiles.
 #[derive(Clone, Debug)]
 pub enum UniversalAppearance<'data> {
     /// Diablo III material look alternatives.
-    D3(crate::model::semantic::profiles::diablo::d3::Appearance<'data>),
+    D3(d3::Appearance<'data>),
     /// Diablo IV hashed material look alternatives.
-    D4(crate::model::semantic::profiles::diablo::d4::Appearance),
-    /// General draw-based material alternatives.
-    Flexible(DrawLooks<'data>),
-    /// Warcraft III's single material assignment.
-    Mdlx(SingleLook<'data>),
-    /// World of Warcraft draw alternatives.
-    M2(DrawLooks<'data>),
-    /// StarCraft II's single material assignment.
-    M3(SingleLook<'data>),
-    /// Static-world material assignment.
-    Wmo(SingleLook<'data>),
+    D4(d4::Appearance),
+    /// Draw-based material alternatives.
+    Draw(DrawLooks<'data>),
+    /// A single material assignment.
+    Single(SingleLook<'data>),
     /// Editable-model named slots and family-local alternatives.
-    Wem(crate::model::semantic::profiles::wem::Appearance<'data>),
+    Wem(wem::Appearance<'data>),
 }
 impl Default for UniversalAppearance<'_> {
     fn default() -> Self {
-        Self::Flexible(DrawLooks::default())
+        Self::Draw(DrawLooks::default())
     }
 }
 macro_rules! with_appearance {
     ($self:expr, $value:ident => $body:expr) => {
         match $self {
-            UniversalAppearance::Flexible($value) | UniversalAppearance::M2($value) => $body,
-            UniversalAppearance::Mdlx($value)
-            | UniversalAppearance::M3($value)
-            | UniversalAppearance::Wmo($value) => $body,
+            UniversalAppearance::Draw($value) => $body,
+            UniversalAppearance::Single($value) => $body,
             UniversalAppearance::Wem($value) => $body,
             UniversalAppearance::D4($value) => $body,
             UniversalAppearance::D3($value) => $body,
@@ -201,8 +196,8 @@ impl<'data> AppearanceSchema<'data> for UniversalAppearance<'data> {
 impl<'data> DrawAppearanceSchema<'data> for UniversalAppearance<'data> {
     fn add_look(&mut self, id: LookId, look: Look<'data>) -> Result<(), Error> {
         match self {
-            Self::Flexible(value) | Self::M2(value) => value.add_look(id, look),
-            Self::Mdlx(value) | Self::M3(value) | Self::Wmo(value) => value.add_look(id, look),
+            Self::Draw(value) => value.add_look(id, look),
+            Self::Single(value) => value.add_look(id, look),
             Self::Wem(_) | Self::D4(_) | Self::D3(_) => Err(Error::new(
                 "appearance.draw",
                 "editable-model appearances assign named polygon-group slots",
@@ -211,8 +206,8 @@ impl<'data> DrawAppearanceSchema<'data> for UniversalAppearance<'data> {
     }
     fn set_default_look(&mut self, id: Option<LookId>) -> Result<(), Error> {
         match self {
-            Self::Flexible(value) | Self::M2(value) => value.set_default_look(id),
-            Self::Mdlx(value) | Self::M3(value) | Self::Wmo(value) => value.set_default_look(id),
+            Self::Draw(value) => value.set_default_look(id),
+            Self::Single(value) => value.set_default_look(id),
             Self::Wem(_) | Self::D4(_) | Self::D3(_) => Err(Error::new(
                 "appearance.draw",
                 "editable-model appearances select family-local slot alternatives",
@@ -221,8 +216,8 @@ impl<'data> DrawAppearanceSchema<'data> for UniversalAppearance<'data> {
     }
     fn remove_look(&mut self, id: LookId) -> Option<Look<'data>> {
         match self {
-            Self::Flexible(value) | Self::M2(value) => value.remove_look(id),
-            Self::Mdlx(value) | Self::M3(value) | Self::Wmo(value) => value.remove_look(id),
+            Self::Draw(value) => value.remove_look(id),
+            Self::Single(value) => value.remove_look(id),
             Self::Wem(_) | Self::D4(_) | Self::D3(_) => None,
         }
     }

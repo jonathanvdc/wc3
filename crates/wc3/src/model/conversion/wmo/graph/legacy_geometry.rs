@@ -6,8 +6,8 @@ use crate::model::semantic::profiles::wmo::{
 };
 use crate::model::semantic::profiles::Wmo;
 use crate::model::semantic::{
-    ColorSpace, Draw, ImageEncoding, InstanceId, MaterialId, Mesh, MeshInstance, ModelBuilder,
-    Node, Resource, Sampler, SystemId, Texture, Values, WmoGeometry,
+    ColorSpace, Draw, InstanceId, MaterialId, Mesh, MeshInstance, ModelBuilder, Node, Resource,
+    Sampler, SystemId, Texture, Values, WmoGeometry,
 };
 use crate::model::wmo::group::GroupChunk;
 use crate::model::wmo::legacy::{Batch14, Batch16, LegacyGroupChunk};
@@ -248,7 +248,6 @@ pub(super) fn read<'a, 'data: 'a, B: Batch>(
                     let image = &rows.as_bytes()[index * 32772..index * 32772 + 32768];
                     region.lightmap_images.push(builder.add_texture(Texture {
                         resource: Resource::EmbeddedImage {
-                            encoding: ImageEncoding::Unspecified,
                             bytes: Cow::Borrowed(image),
                         },
                         controls: Default::default(),

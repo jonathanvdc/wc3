@@ -80,10 +80,10 @@ pub(super) fn read_texture_entry(
     value: &D3TextureEntry,
 ) -> Result<TextureEntry, Error> {
     Ok(TextureEntry {
-        texture_type: TextureType::Unknown(value.type_),
+        texture_type: TextureType(value.type_),
         unclassified_control: value.dw_unknown04,
         texture: read_asset_ref(document, &value.texture)?,
-        uv_transform_mode: UvTransformMode::Unknown(value.uv_transform_mode),
+        uv_transform_mode: UvTransformMode(value.uv_transform_mode),
         uv_row0: value.uv_row0,
         uv_row1: value.uv_row1,
         uv_row2: value.uv_row2,
@@ -103,14 +103,10 @@ pub(super) fn write_texture_entry(
     value: &TextureEntry,
 ) -> Result<D3TextureEntry, Error> {
     Ok(D3TextureEntry {
-        type_: match value.texture_type {
-            TextureType::Unknown(value) => value,
-        },
+        type_: value.texture_type.0,
         dw_unknown04: value.unclassified_control,
         texture: write_asset_ref(document, &value.texture)?,
-        uv_transform_mode: match value.uv_transform_mode {
-            UvTransformMode::Unknown(value) => value,
-        },
+        uv_transform_mode: value.uv_transform_mode.0,
         uv_row0: value.uv_row0,
         uv_row1: value.uv_row1,
         uv_row2: value.uv_row2,
@@ -161,7 +157,7 @@ pub(super) fn read_tag_value(
     value: &D3TagValue,
 ) -> Result<TagValue, Error> {
     Ok(TagValue {
-        value_type: ParameterType::Unknown(value.value_type),
+        value_type: ParameterType(value.value_type),
         tag_id: value.tag_id,
         value: value.value,
     })
@@ -171,9 +167,7 @@ pub(super) fn write_tag_value(
     value: &TagValue,
 ) -> Result<D3TagValue, Error> {
     Ok(D3TagValue {
-        value_type: match value.value_type {
-            ParameterType::Unknown(value) => value,
-        },
+        value_type: value.value_type.0,
         tag_id: value.tag_id,
         value: value.value,
     })

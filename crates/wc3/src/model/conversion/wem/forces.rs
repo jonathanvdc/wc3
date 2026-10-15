@@ -118,7 +118,7 @@ pub(super) fn write_force(value: &Force) -> ForceFieldPayload<V19> {
 }
 pub(super) fn read_warp(value: &VertexWarpPayload) -> VertexWarp {
     VertexWarp {
-        mode: WarpMode::Unknown(value.type_),
+        mode: WarpMode(value.type_),
         unclassified_control: value.reserved,
         radius: Animated::constant(value.radius),
         height: Animated::constant(value.height),
@@ -129,7 +129,7 @@ pub(super) fn read_warp(value: &VertexWarpPayload) -> VertexWarp {
     }
 }
 pub(super) fn write_warp(value: &VertexWarp) -> VertexWarpPayload {
-    let WarpMode::Unknown(type_) = value.mode;
+    let type_ = value.mode.0;
     VertexWarpPayload {
         type_,
         reserved: value.unclassified_control,

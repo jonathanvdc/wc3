@@ -42,10 +42,10 @@ pub(super) fn read(v: &native::SubObjectAppearance<'_>) -> Material<'static> {
                 .textures
                 .iter()
                 .map(|t| TextureEntry {
-                    texture_type: TextureType::Unknown(t.texture_type),
+                    texture_type: TextureType(t.texture_type),
                     unclassified_control: t.unknown04,
                     texture: asset(t.texture, Group::Textures),
-                    uv_transform_mode: UvTransformMode::Unknown(t.uv_transform_mode),
+                    uv_transform_mode: UvTransformMode(t.uv_transform_mode),
                     uv_row0: t.uv_row0,
                     uv_row1: t.uv_row1,
                     uv_row2: t.uv_row2,
@@ -67,7 +67,7 @@ pub(super) fn read(v: &native::SubObjectAppearance<'_>) -> Material<'static> {
             .shader_params
             .iter()
             .map(|t| TagValue {
-                value_type: ParameterType::Unknown(t.value_type),
+                value_type: ParameterType(t.value_type),
                 tag_id: t.tag_id,
                 value: t.value,
             })
@@ -105,9 +105,7 @@ pub(super) fn write_tags(values: &[TagValue]) -> ZeroVec<'static, native::TagMap
     let params = values
         .iter()
         .map(|t| native::TagMapEntry {
-            value_type: match t.value_type {
-                ParameterType::Unknown(v) => v,
-            },
+            value_type: t.value_type.0,
             tag_id: t.tag_id,
             value: t.value,
         })
@@ -121,14 +119,10 @@ pub(super) fn write_uber(v: &UberMaterial) -> Result<native::UberMaterial<'stati
         .iter()
         .map(|t| {
             Ok(native::MaterialTextureEntry {
-                texture_type: match t.texture_type {
-                    TextureType::Unknown(v) => v,
-                },
+                texture_type: t.texture_type.0,
                 unknown04: t.unclassified_control,
                 texture: id(&t.texture, Group::Textures)?,
-                uv_transform_mode: match t.uv_transform_mode {
-                    UvTransformMode::Unknown(v) => v,
-                },
+                uv_transform_mode: t.uv_transform_mode.0,
                 uv_row0: t.uv_row0,
                 uv_row1: t.uv_row1,
                 uv_row2: t.uv_row2,

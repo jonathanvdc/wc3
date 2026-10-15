@@ -3,7 +3,7 @@ use super::super::{actors, appearance, geometry, hierarchy, physics, stages};
 use super::{prepare::Prepared, records};
 use crate::model::conversion::{EncodingHint, Error};
 use crate::model::semantic::profiles::wem::{
-    HierarchyConvention, LodPreparation, ModelControls, SectionId, System,
+    HierarchyConvention, LodPreparation, ModelControls, SectionId,
 };
 use crate::model::semantic::profiles::Wem;
 use crate::model::semantic::{
@@ -186,7 +186,7 @@ pub(super) fn read<'view>(
         let physics = native_physics
             .map(|value| {
                 builder
-                    .add_system(System::Physics(value.physics.clone()))
+                    .add_system(value.physics.clone())
                     .map(|id| (id, value))
             })
             .transpose()?;

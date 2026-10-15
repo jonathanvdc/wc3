@@ -16,7 +16,7 @@ impl Narrows<Universal> for Wmo {
         value: <Universal as Profile>::Appearance<'a>,
     ) -> Result<Self::Appearance<'a>, Error> {
         match value {
-            UniversalAppearance::Wmo(value) => Ok(value),
+            UniversalAppearance::Single(value) => Ok(value),
             _ => Err(incompatible("appearance")),
         }
     }

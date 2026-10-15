@@ -16,7 +16,7 @@ impl Narrows<Universal> for M2 {
         value: <Universal as Profile>::Appearance<'a>,
     ) -> Result<Self::Appearance<'a>, Error> {
         match value {
-            UniversalAppearance::M2(value) => Ok(value),
+            UniversalAppearance::Draw(value) => Ok(value),
             _ => Err(incompatible("appearance")),
         }
     }

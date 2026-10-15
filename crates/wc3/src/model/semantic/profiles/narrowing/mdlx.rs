@@ -16,7 +16,7 @@ impl Narrows<Universal> for Mdlx {
         value: <Universal as Profile>::Appearance<'a>,
     ) -> Result<Self::Appearance<'a>, Error> {
         match value {
-            UniversalAppearance::Mdlx(value) => Ok(value),
+            UniversalAppearance::Single(value) => Ok(value),
             _ => Err(incompatible("appearance")),
         }
     }

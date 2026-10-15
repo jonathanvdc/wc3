@@ -56,7 +56,12 @@ A profile chooses a required controls payload where absence has no meaning,
 `Option<Payload>` where the declaration is genuinely optional, or the zero-sized
 `NoControls` value where that owner has no additional controls. `Unavailable`
 prevents constructing an unsupported payload family. These distinctions apply
-to the actual types rather than a uniform outer option on every owner.
+to the actual types rather than a uniform outer option on every owner. WEM uses
+`wem::physics::Physics` directly as its system payload, and M2 uses
+`Option<m2::ShadowControls>` for draw controls. Unresolved Diablo shader codes
+and WEM warp modes use distinct numeric newtypes, preserving their producer
+values without an artificial `Unknown` branch. Embedded image resources carry
+bytes whose encoding interpretation remains unspecified.
 
 A semantic profile and a native dialect answer different questions. `Mdlx`
 permits Warcraft III authoring behavior. A native dialect such as `mdlx::V800`
@@ -84,11 +89,20 @@ Widening preserves graph identities, meanings, and shared array storage. Its
 payload. The separate `try_narrow::<Target>()` operation checks an exact
 projection from `Universal`. It consumes the collection, moves owned resource
 paths, and retains scoped identities and borrowed arrays. Each owner must already
-carry the target family's complete payload; missing required controls, foreign behavior,
-and an incompatible asset model count return an error. Collection publication also
+carry a complete payload supported by the target; missing required controls,
+foreign behavior, and an incompatible asset model count return an error.
+Collection publication also
 checks the target profile's relationship and authoring rules. Optional physical
 encoding hints and unknown attachments remain outside the graph and survive
 `Asset::try_narrow` unchanged.
+
+Universal enum variants distinguish data, interpretation, or supported operations,
+rather than recording the source format. MDLX, M3, and WMO appearances share
+`UniversalAppearance::Single`, while M2 and general draw alternatives share
+`UniversalAppearance::Draw`. Narrowing accepts these shared payloads wherever the
+target supports them; the other owners still need their own compatible payloads.
+The single-assignment limit survives widening. Source provenance alone does not
+make an otherwise identical appearance incompatible.
 
 Custom profiles can implement `Narrows<SourceProfile>` to define the same checked
 per-owner projection from another vocabulary. Narrowing does not guess replacement

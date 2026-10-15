@@ -63,24 +63,21 @@ impl ValidateLinks for SequenceControls {
         }
     }
 }
-/// Additional behavior for an actual draw pass.
+/// Native shadow-pass behavior; geometry, range, and surface live on the draw.
 #[derive(Clone, Debug)]
-pub enum DrawControls {
-    /// Native shadow pass controls; geometry, range and surface live on the draw.
-    Shadow {
-        /// Complete shadow behavior mask.
-        flags: values::ShadowBatchFlags,
-        /// Additional shadow and edge-fade behavior.
-        extra_flags: values::ShadowBatchExtraFlags,
-        /// Unresolved shadow parameter.
-        parameter: u16,
-        /// Unresolved native color selection parameter.
-        color_parameter: u16,
-        /// Unresolved native opacity selection parameter.
-        transparency_parameter: u16,
-    },
+pub struct ShadowControls {
+    /// Complete shadow behavior mask.
+    pub flags: values::ShadowBatchFlags,
+    /// Additional shadow and edge-fade behavior.
+    pub extra_flags: values::ShadowBatchExtraFlags,
+    /// Unresolved shadow parameter.
+    pub parameter: u16,
+    /// Unresolved native color selection parameter.
+    pub color_parameter: u16,
+    /// Unresolved native opacity selection parameter.
+    pub transparency_parameter: u16,
 }
-impl ValidateLinks for DrawControls {
+impl ValidateLinks for ShadowControls {
     fn visit_links(&self, _visitor: &mut dyn FnMut(Link)) {}
 }
 /// Sparse per-bone transform override supplied by a companion asset.

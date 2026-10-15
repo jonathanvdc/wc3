@@ -50,10 +50,10 @@ impl ValidateLinks for Force {
 
 /// Deformation operation whose producer-defined categories remain unresolved.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum WarpMode {
+pub struct WarpMode(
     /// Unresolved authoring mode identifier.
-    Unknown(u32),
-}
+    pub u32,
+);
 /// Radial, axial, and angular deformation settings belonging to a node.
 #[derive(Clone, Debug)]
 pub struct VertexWarp {
