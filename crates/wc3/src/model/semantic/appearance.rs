@@ -1,8 +1,10 @@
 //! Appearance vocabularies preserve the assignments supported by their model family.
-use crate::model::semantic::profiles::{
-    diablo::{d3, d4},
-    Either,
-};
+/// Diablo III named appearance variants.
+pub mod diablo3;
+/// Diablo IV indexed appearance variants.
+pub mod diablo4;
+
+use crate::model::semantic::profiles::Either;
 use crate::model::semantic::{Error, Link, Look, LookId, MaterialSlotId, Scope, ValidateLinks};
 use std::collections::BTreeMap;
 use std::fmt::Debug;
@@ -148,9 +150,9 @@ impl<'data> DrawAppearanceSchema<'data> for DrawLooks<'data> {
 #[derive(Clone, Debug)]
 pub enum UniversalAppearance<'data> {
     /// Diablo III material look alternatives.
-    D3(d3::Appearance<'data>),
+    D3(diablo3::Appearance<'data>),
     /// Diablo IV hashed material look alternatives.
-    D4(d4::Appearance),
+    D4(diablo4::Appearance),
     /// Draw-based material alternatives.
     Draw(DrawLooks<'data>),
     /// A single material assignment.

@@ -1,4 +1,6 @@
 //! Typed curves and property destinations, independent of file clocks and channel numbers.
+/// Resettable values with authored sampling controls.
+pub mod programmed;
 use crate::model::semantic::profiles::{Extends, Narrows, Profile, Universal};
 use crate::model::semantic::{
     ClipId, ClockId, Error, EventId, FeatureId, NodeId, Quaternion, TextureId,
@@ -6,7 +8,7 @@ use crate::model::semantic::{
 use std::borrow::Cow;
 use std::collections::BTreeMap;
 use zerovec::{ule::AsULE, ZeroVec};
-mod curves;
+pub mod curves;
 pub use curves::*;
 
 /// Finite timeline time in seconds.
@@ -46,7 +48,7 @@ pub enum Interpolation {
     /// Kochanek–Bartels spline with authored tension, continuity, and bias per key.
     Tcb,
 }
-mod properties;
+pub mod properties;
 pub use properties::*;
 
 /// Rest value and optional binding to a typed animated property.

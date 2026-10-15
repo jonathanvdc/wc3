@@ -201,7 +201,7 @@ pub(super) fn model(value: &crate::model::semantic::Model<'_, super::Wmo>) -> Re
                     ));
                 }
             }
-            super::Node::Doodad(_) => {
+            super::Node::Attachment(_) => {
                 if node.transform.scale[0] != node.transform.scale[1]
                     || node.transform.scale[1] != node.transform.scale[2]
                 {
@@ -211,7 +211,7 @@ pub(super) fn model(value: &crate::model::semantic::Model<'_, super::Wmo>) -> Re
                     ));
                 }
             }
-            super::Node::PointLight(_) | super::Node::PointProgram(_) => {
+            super::Node::PointLight(_) | super::Node::LightProgram(_) => {
                 if node.transform.rotation != Default::default() || node.transform.scale != [1.; 3]
                 {
                     return Err(Error::new(
@@ -220,6 +220,31 @@ pub(super) fn model(value: &crate::model::semantic::Model<'_, super::Wmo>) -> Re
                     ));
                 }
             }
+
+            super::Node::Camera(unavailable)
+            | super::Node::Particle(unavailable)
+            | super::Node::Ribbon(unavailable)
+            | super::Node::Event(unavailable)
+            | super::Node::GeometryAnimation(unavailable)
+            | super::Node::CollisionShape(unavailable)
+            | super::Node::ParticleProgram(unavailable)
+            | super::Node::FaceActor(unavailable)
+            | super::Node::Extent(unavailable)
+            | super::Node::ParticleCopy(unavailable)
+            | super::Node::Projector(unavailable)
+            | super::Node::Force(unavailable)
+            | super::Node::Warp(unavailable)
+            | super::Node::HitTest(unavailable)
+            | super::Node::AttachmentVolume(unavailable)
+            | super::Node::Billboard(unavailable)
+            | super::Node::Turret(unavailable)
+            | super::Node::IkJoint(unavailable)
+            | super::Node::IkTwoJoint(unavailable)
+            | super::Node::IkCcd(unavailable)
+            | super::Node::OneBoneSolver(unavailable)
+            | super::Node::ShadowBox(unavailable)
+            | super::Node::ViewVolume(unavailable)
+            | super::Node::AtlasParticles(unavailable) => match *unavailable {},
         }
     }
     Ok(())

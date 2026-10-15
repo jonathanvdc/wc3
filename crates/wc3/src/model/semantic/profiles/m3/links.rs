@@ -1,14 +1,13 @@
 //! Traversal of all graph links held by M3 profile values.
 use super::{
-    AnimationControl, Attachment, AttachmentVolume, AuxiliaryGeometry, BillboardBehavior, Body,
-    BodyParameters, BoneControls, Camera, CameraBokeh, CameraClipping, CameraFalloff, Cloth,
-    ClothCollider, ClothProxy, Composite, CompositeSection, Creep, DataDriven, DataGroup,
-    DataProperties, DataProperty, Displacement, DynamicState, ExternalModel, Feature, Force, Hair,
-    HitTestShape, IkCcd, IkJoint, IkTwoJoint, Joint, LensFlare, Light, Material, ModelMetadata,
-    NodeRole, OneBoneSolver, Parameters, Particle, Projector, Property, PropertyControl,
-    Reflection, Ribbon, ShadowBox, Shape, ShapeGeometry, SplatTerrainBake, SplinePoint, Standard,
-    SubFlare, Terrain, TextureLayer, TurretBehavior, VariationControl, ViewVolume, Volume,
-    VolumeNoise, Warp,
+    AnimationControl, AttachmentVolume, AuxiliaryGeometry, BillboardBehavior, Body, BodyParameters,
+    BoneControls, Camera, CameraBokeh, CameraClipping, CameraFalloff, Cloth, ClothCollider,
+    ClothProxy, Composite, CompositeSection, Creep, DataDriven, DataGroup, DataProperties,
+    DataProperty, Displacement, DynamicState, ExternalModel, Feature, Force, Hair, HitTestShape,
+    IkCcd, IkJoint, IkTwoJoint, Joint, LensFlare, Light, Material, ModelMetadata, NodeRole,
+    OneBoneSolver, Parameters, Projector, Property, PropertyControl, Reflection, ShadowBox, Shape,
+    ShapeGeometry, SplatTerrainBake, SplinePoint, Standard, SubFlare, Terrain, TextureLayer,
+    TurretBehavior, VariationControl, ViewVolume, Volume, VolumeNoise, Warp,
 };
 use crate::model::semantic::{
     CurveValue, FeatureKind, GeometryKind, Link, Quaternion, ValidateLinks,
@@ -322,9 +321,6 @@ impl ValidateLinks for BoneControls {
         self.batching.visit_links(visitor);
     }
 }
-impl<'a> ValidateLinks for Attachment<'a> {
-    fn visit_links(&self, _visitor: &mut dyn FnMut(Link)) {}
-}
 impl<'a> ValidateLinks for ExternalModel<'a> {
     fn visit_links(&self, _visitor: &mut dyn FnMut(Link)) {}
 }
@@ -332,196 +328,6 @@ impl ValidateLinks for VariationControl {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
         self.amplitude.visit_links(visitor);
         self.frequency.visit_links(visitor);
-    }
-}
-impl<'a> ValidateLinks for Particle<'a> {
-    fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
-        if let Some(id) = self.material {
-            visitor(Link::Material(id));
-        }
-        self.initial_speed.visit_links(visitor);
-        self.initial_speed_random.visit_links(visitor);
-        self.initial_yaw.visit_links(visitor);
-        self.initial_pitch.visit_links(visitor);
-        self.initial_horizontal.visit_links(visitor);
-        self.initial_vertical.visit_links(visitor);
-        self.lifetime.visit_links(visitor);
-        self.lifetime_random.visit_links(visitor);
-        if !self.kill_radius.is_finite() {
-            visitor(Link::InvalidValue);
-        }
-        if !self.gravity.is_finite() {
-            visitor(Link::InvalidValue);
-        }
-        if !self.size_mid_time.is_finite() {
-            visitor(Link::InvalidValue);
-        }
-        if !self.color_mid_time.is_finite() {
-            visitor(Link::InvalidValue);
-        }
-        if !self.alpha_mid_time.is_finite() {
-            visitor(Link::InvalidValue);
-        }
-        if !self.rotation_mid_time.is_finite() {
-            visitor(Link::InvalidValue);
-        }
-        if !self.size_mid_hold_time.is_finite() {
-            visitor(Link::InvalidValue);
-        }
-        if !self.color_mid_hold_time.is_finite() {
-            visitor(Link::InvalidValue);
-        }
-        if !self.alpha_mid_hold_time.is_finite() {
-            visitor(Link::InvalidValue);
-        }
-        if !self.rotation_mid_hold_time.is_finite() {
-            visitor(Link::InvalidValue);
-        }
-        self.size_animation.visit_links(visitor);
-        self.rotation_animation.visit_links(visitor);
-        self.color_start.visit_links(visitor);
-        self.color_mid.visit_links(visitor);
-        self.color_end.visit_links(visitor);
-        if !self.drag.is_finite() {
-            visitor(Link::InvalidValue);
-        }
-        if !self.mass.is_finite() {
-            visitor(Link::InvalidValue);
-        }
-        if !self.mass_random.is_finite() {
-            visitor(Link::InvalidValue);
-        }
-        if !self.mass_size_multiplier.is_finite() {
-            visitor(Link::InvalidValue);
-        }
-        if !self.world_forces_mass_multiplier.is_finite() {
-            visitor(Link::InvalidValue);
-        }
-        if !self.noise_amplitude.is_finite() {
-            visitor(Link::InvalidValue);
-        }
-        if !self.noise_frequency.is_finite() {
-            visitor(Link::InvalidValue);
-        }
-        if !self.noise_coherence.is_finite() {
-            visitor(Link::InvalidValue);
-        }
-        if !self.noise_edge.is_finite() {
-            visitor(Link::InvalidValue);
-        }
-        self.emission_rate.visit_links(visitor);
-        self.shape_outer.visit_links(visitor);
-        self.shape_inner.visit_links(visitor);
-        self.outer_radius.visit_links(visitor);
-        self.inner_radius.visit_links(visitor);
-        for id in self.shape_sections.iter() {
-            visitor(Link::Mesh(*id));
-        }
-        self.size_random_animation.visit_links(visitor);
-        self.rotation_random_animation.visit_links(visitor);
-        self.color_start_random.visit_links(visitor);
-        self.color_mid_random.visit_links(visitor);
-        self.color_end_random.visit_links(visitor);
-        self.squirt_amount.visit_links(visitor);
-        if !self.flipbook_mid_time.is_finite() {
-            visitor(Link::InvalidValue);
-        }
-        if self
-            .flipbook_column_fraction
-            .is_some_and(|value| !value.is_finite())
-        {
-            visitor(Link::InvalidValue);
-        }
-        if self
-            .flipbook_row_fraction
-            .is_some_and(|value| !value.is_finite())
-        {
-            visitor(Link::InvalidValue);
-        }
-        if !self.bounce.is_finite() {
-            visitor(Link::InvalidValue);
-        }
-        if !self.friction.is_finite() {
-            visitor(Link::InvalidValue);
-        }
-        if let Some(id) = self.collision_spawn {
-            visitor(Link::TypedFeature {
-                id,
-                kind: FeatureKind::M3Particle,
-            });
-        }
-        if !self.collision_spawn_chance.is_finite() {
-            visitor(Link::InvalidValue);
-        }
-        if !self.collision_spawn_energy.is_finite() {
-            visitor(Link::InvalidValue);
-        }
-        if !self.tail_length.is_finite() {
-            visitor(Link::InvalidValue);
-        }
-        if self.instance_angle.iter().any(|v| !v.is_finite()) {
-            visitor(Link::InvalidValue);
-        }
-        if !self.instance_distance.is_finite() {
-            visitor(Link::InvalidValue);
-        }
-        self.pitch.visit_links(visitor);
-        self.yaw.visit_links(visitor);
-        self.speed.visit_links(visitor);
-        self.size.visit_links(visitor);
-        self.alpha.visit_links(visitor);
-        self.color.visit_links(visitor);
-        self.rotation.visit_links(visitor);
-        self.horizontal.visit_links(visitor);
-        self.vertical.visit_links(visitor);
-        self.particle_velocity.visit_links(visitor);
-        self.phase_shift.visit_links(visitor);
-        self.alpha_threshold.visit_links(visitor);
-        self.uv_offset.visit_links(visitor);
-        self.uv_angle.visit_links(visitor);
-        self.uv_tiling.visit_links(visitor);
-        for child in self.spline_points.iter() {
-            child.visit_links(visitor);
-        }
-        if !self.wind_multiplier.is_finite() {
-            visitor(Link::InvalidValue);
-        }
-        self.lower_bound.visit_links(visitor);
-        self.upper_bound.visit_links(visitor);
-        if let Some(id) = self.trail {
-            visitor(Link::TypedFeature {
-                id,
-                kind: FeatureKind::M3Particle,
-            });
-        }
-        if !self.trail_chance.is_finite() {
-            visitor(Link::InvalidValue);
-        }
-        self.trail_emission_rate.visit_links(visitor);
-        if let Some(id) = self.projection {
-            visitor(Link::TypedFeature {
-                id,
-                kind: FeatureKind::M3Projection,
-            });
-        }
-        if !self.splat_chance.is_finite() {
-            visitor(Link::InvalidValue);
-        }
-        for child in self.models.iter() {
-            child.visit_links(visitor);
-        }
-        if !self.spawn_ribbon_on_bounce_chance.is_finite() {
-            visitor(Link::InvalidValue);
-        }
-        if let Some(id) = self.ribbon {
-            visitor(Link::TypedFeature {
-                id,
-                kind: FeatureKind::M3Ribbon,
-            });
-        }
-        if !self.noise_smoothness.is_finite() {
-            visitor(Link::InvalidValue);
-        }
     }
 }
 impl ValidateLinks for SplinePoint {
@@ -547,111 +353,6 @@ impl ValidateLinks for SplinePoint {
         if !self.velocity_norm_factor.is_finite() {
             visitor(Link::InvalidValue);
         }
-    }
-}
-impl<'a> ValidateLinks for Ribbon<'a> {
-    fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
-        visitor(Link::Node(self.fallback_node));
-        if let Some(id) = self.material {
-            visitor(Link::Material(id));
-        }
-        self.initial_speed.visit_links(visitor);
-        self.initial_speed_random.visit_links(visitor);
-        self.initial_yaw.visit_links(visitor);
-        self.initial_pitch.visit_links(visitor);
-        self.initial_horizontal.visit_links(visitor);
-        self.initial_vertical.visit_links(visitor);
-        self.lifetime.visit_links(visitor);
-        self.lifetime_random.visit_links(visitor);
-        if !self.gravity_x.is_finite() {
-            visitor(Link::InvalidValue);
-        }
-        if !self.gravity_y.is_finite() {
-            visitor(Link::InvalidValue);
-        }
-        if !self.gravity.is_finite() {
-            visitor(Link::InvalidValue);
-        }
-        if !self.size_mid_time.is_finite() {
-            visitor(Link::InvalidValue);
-        }
-        if !self.color_mid_time.is_finite() {
-            visitor(Link::InvalidValue);
-        }
-        if !self.alpha_mid_time.is_finite() {
-            visitor(Link::InvalidValue);
-        }
-        if !self.rotation_mid_time.is_finite() {
-            visitor(Link::InvalidValue);
-        }
-        if !self.size_mid_hold_time.is_finite() {
-            visitor(Link::InvalidValue);
-        }
-        if !self.color_mid_hold_time.is_finite() {
-            visitor(Link::InvalidValue);
-        }
-        if !self.alpha_mid_hold_time.is_finite() {
-            visitor(Link::InvalidValue);
-        }
-        if !self.rotation_mid_hold_time.is_finite() {
-            visitor(Link::InvalidValue);
-        }
-        self.size_animation.visit_links(visitor);
-        self.rotation_animation.visit_links(visitor);
-        self.color_start.visit_links(visitor);
-        self.color_mid.visit_links(visitor);
-        self.color_end.visit_links(visitor);
-        if !self.drag.is_finite() {
-            visitor(Link::InvalidValue);
-        }
-        if !self.mass.is_finite() {
-            visitor(Link::InvalidValue);
-        }
-        if !self.mass_random.is_finite() {
-            visitor(Link::InvalidValue);
-        }
-        if !self.mass_size_multiplier.is_finite() {
-            visitor(Link::InvalidValue);
-        }
-        if !self.world_forces_mass_multiplier.is_finite() {
-            visitor(Link::InvalidValue);
-        }
-        if !self.noise_amplitude.is_finite() {
-            visitor(Link::InvalidValue);
-        }
-        if !self.noise_frequency.is_finite() {
-            visitor(Link::InvalidValue);
-        }
-        if !self.noise_coherence.is_finite() {
-            visitor(Link::InvalidValue);
-        }
-        if !self.noise_edge.is_finite() {
-            visitor(Link::InvalidValue);
-        }
-        if !self.divisions.is_finite() {
-            visitor(Link::InvalidValue);
-        }
-        if !self.inner_radius.is_finite() {
-            visitor(Link::InvalidValue);
-        }
-        self.max_length.visit_links(visitor);
-        for child in self.spline_points.iter() {
-            child.visit_links(visitor);
-        }
-        self.active.visit_links(visitor);
-        if !self.friction.is_finite() {
-            visitor(Link::InvalidValue);
-        }
-        if !self.bounce.is_finite() {
-            visitor(Link::InvalidValue);
-        }
-        self.yaw.visit_links(visitor);
-        self.pitch.visit_links(visitor);
-        self.speed.visit_links(visitor);
-        self.size.visit_links(visitor);
-        self.alpha.visit_links(visitor);
-        self.particle_velocity.visit_links(visitor);
-        self.overlay.visit_links(visitor);
     }
 }
 impl ValidateLinks for ShapeGeometry<'_> {
@@ -1342,8 +1043,8 @@ impl ValidateLinks for Material<'_> {
         }
     }
 }
-impl ValidateLinks for Feature<'_> {
-    fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
+impl Feature<'_> {
+    pub(crate) fn visit_profile_links(&self, visitor: &mut dyn FnMut(Link)) {
         match self {
             Self::Event(value) => value.visit_links(visitor),
             Self::Extent(value) => value.visit_links(visitor),
@@ -1366,6 +1067,14 @@ impl ValidateLinks for Feature<'_> {
             Self::OneBoneSolver(value) => value.visit_links(visitor),
             Self::ShadowBox(value) => value.visit_links(visitor),
             Self::ViewVolume(value) => value.visit_links(visitor),
+
+            Self::GeometryAnimation(unavailable)
+            | Self::CollisionShape(unavailable)
+            | Self::ParticleProgram(unavailable)
+            | Self::FaceActor(unavailable)
+            | Self::LightProgram(unavailable)
+            | Self::AtlasParticles(unavailable)
+            | Self::PointLight(unavailable) => match *unavailable {},
         }
     }
 }

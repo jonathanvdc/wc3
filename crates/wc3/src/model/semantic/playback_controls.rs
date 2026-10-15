@@ -1,16 +1,17 @@
 //! Authoring controls belong to their logical playback and controller owners.
-use crate::model::semantic::{profiles, Link, ValidateLinks};
+use crate::model::semantic::controls::{diablo3, layered, model, playback};
+use crate::model::semantic::{Link, ValidateLinks};
 /// Native authoring behavior supplementing one logical clip.
 #[derive(Clone, Debug)]
 pub enum ClipControls<'a> {
     /// Diablo III permutation selection and timing.
-    D3(profiles::diablo::d3::ClipControls),
+    D3(diablo3::ClipControls),
     /// Warcraft III sequence selection and authored interval controls.
-    Mdlx(profiles::mdlx::Sequence),
+    Mdlx(layered::Sequence),
     /// World of Warcraft sequence selection and transition controls.
-    M2(profiles::m2::SequenceControls),
+    M2(model::SequenceControls),
     /// StarCraft II sequence and controller selection.
-    M3(profiles::m3::SequenceControls<'a>),
+    M3(playback::SequenceControls<'a>),
 }
 impl ValidateLinks for ClipControls<'_> {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {

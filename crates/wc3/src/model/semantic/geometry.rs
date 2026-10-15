@@ -1,4 +1,17 @@
 //! Geometry, skin bindings, and placements use logical graph identities.
+/// Diablo III geometry with independent tangent and color streams.
+pub mod diablo3;
+/// Diablo IV independently declared geometry streams.
+pub mod diablo4;
+/// Joint-group and weighted layered-model geometry.
+pub mod layered;
+/// Programmed-model display and collider geometry.
+pub mod programmed;
+/// Four-weight model display geometry.
+pub mod weighted_model;
+/// Static-world geometry with authored draw pools.
+pub mod world;
+
 use crate::model::common::AsULE;
 use crate::model::common::IntoZeroVec;
 use crate::model::semantic::profiles::{Profile, Universal};

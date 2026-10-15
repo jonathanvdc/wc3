@@ -458,13 +458,6 @@ impl Target {
                 | (Self::Particle(_), super::ActorKind::Particle(_))
         )
     }
-    pub(crate) fn supports_material(&self, value: &super::Material<'_>) -> bool {
-        match self {
-            Self::Color | Self::Opacity => true,
-            Self::TextureUnit { index, .. } => *index < value.textures.len(),
-            _ => false,
-        }
-    }
 }
 
 impl Target {
@@ -485,21 +478,20 @@ impl Target {
             (Self::Attachment(_), NodeFeature::Attachment(Attachment::Point(value))) => {
                 matches!(value.activation, AttachmentActivation::Enabled(_))
             }
-            (Self::Ribbon(field), NodeFeature::RibbonEmitter(RibbonEmitter::Trail(value))) => {
+            (Self::Ribbon(field), NodeFeature::Ribbon(RibbonEmitter::Trail(value))) => {
                 match field {
                     RibbonField::TextureSlot => {
                         matches!(value.appearance.texture_slot, TrailAtlasSlot::Compact(_))
                     }
                     RibbonField::Enabled => {
-                        matches!(value.controls, TrailControls::EmissionAngle { .. })
+                        matches!(value.controls, TrailControls::EmissionAngle(_))
                     }
                     _ => true,
                 }
             }
-            (
-                Self::Particle(field),
-                NodeFeature::ParticleEmitter(ParticleEmitter::Simulated(value)),
-            ) => value.supports_age_driven_property(field),
+            (Self::Particle(field), NodeFeature::Particle(ParticleEmitter::Simulated(value))) => {
+                value.supports_age_driven_property(field)
+            }
             _ => false,
         }
     }

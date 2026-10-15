@@ -3,6 +3,7 @@ use super::rgba;
 use crate::model::conversion::{Context, Error};
 use crate::model::semantic::profiles::wmo as profile;
 use crate::model::semantic::profiles::Wmo;
+use crate::model::semantic::WorldPlacementAppearance;
 use crate::model::semantic::{Animated, FeatureId, ModelBuilder, Node, Quaternion};
 use crate::model::semantic::{ColorSpace, Resource, Sampler, Texture};
 use crate::model::wmo::records::{FlickerMode, LightKind, NewLightKind};
@@ -219,20 +220,23 @@ pub(super) fn read<'a, 'data: 'a>(
                 };
                 let feature_id = builder.add_feature(
                     id,
-                    profile::Node::Doodad(profile::Doodad {
+                    profile::Node::Attachment(profile::Doodad {
                         resource,
-                        color_multiplier: None,
-                        tint: light.map_or_else(
-                            || profile::DoodadTint::Color(rgba(row.color)),
-                            |light| profile::DoodadTint::Lit {
-                                color: [row.color[2], row.color[1], row.color[0]],
-                                light,
+                        point: (),
+                        appearance: WorldPlacementAppearance {
+                            color_multiplier: None,
+                            tint: light.map_or_else(
+                                || profile::DoodadTint::Color(rgba(row.color)),
+                                |light| profile::DoodadTint::Lit {
+                                    color: [row.color[2], row.color[1], row.color[0]],
+                                    light,
+                                },
+                            ),
+                            controls: {
+                                let mut flags = flags;
+                                flags.set_has_light_reference(false);
+                                flags.bits().into()
                             },
-                        ),
-                        controls: {
-                            let mut flags = flags;
-                            flags.set_has_light_reference(false);
-                            flags.bits().into()
                         },
                     }),
                 )?;
@@ -255,8 +259,8 @@ pub(super) fn read<'a, 'data: 'a>(
                     .expect("doodad exists")
                     .payload
                     .clone();
-                if let profile::Node::Doodad(source) = &mut payload {
-                    source.color_multiplier = Some(value.map_err(|error| {
+                if let profile::Node::Attachment(source) = &mut payload {
+                    source.appearance.color_multiplier = Some(value.map_err(|error| {
                         Error::new("world.doodad.color_multiplier", error.to_string())
                     })?);
                 }

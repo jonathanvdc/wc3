@@ -91,66 +91,71 @@ pub(super) fn write<'a, T: ModelDialect>(
         }
         match source {
             profile::Node::Particle(source) => {
-                let mut record = native::ParticleEmitter::new(node, &source.resource)
+                let mut record = native::ParticleEmitter::new(node, &source.details.resource)
                     .map_err(|error| Error::new("particle.resource", error.to_string()))?;
                 macro_rules! a {
-                    ($field:ident) => {
+                    ($($field:ident).+) => {
                         encoder.value(
-                            &source.$field,
+                            &source.$($field).+,
                             Ok,
-                            concat!("particle.", stringify!($field)),
+                            concat!("particle.", stringify!($($field).+)),
                         )?
                     };
                 }
-                record.emission_rate = a!(emission_rate);
-                record.gravity = a!(gravity);
-                record.longitude = a!(longitude);
-                record.latitude = a!(latitude);
-                record.life_span = a!(life_span);
-                record.initial_velocity = a!(initial_velocity);
+                record.emission_rate = a!(emission.rate);
+                record.gravity = a!(motion.gravity);
+                record.longitude = a!(details.longitude);
+                record.latitude = a!(details.latitude);
+                record.life_span = a!(lifetime.duration);
+                record.initial_velocity = a!(motion.speed);
                 record.visibility = super::encode_helpers::visibility(
-                    &source.visibility,
+                    &source.emission.activation,
                     encoder,
                     "particle.visibility",
                 )?;
                 let mut flags = record.flags();
-                flags.set_emitter_uses_mdl(source.model_resource);
-                flags.set_emitter_uses_tga(source.text_resource);
+                flags.set_emitter_uses_mdl(source.details.model_resource);
+                flags.set_emitter_uses_tga(source.details.text_resource);
                 record.set_flags(flags);
                 particles.push(record);
             }
-            profile::Node::Particle2(source) => {
+            profile::Node::AtlasParticles(source) => {
                 let mut record = native::ParticleEmitter2::new(node);
                 macro_rules! a {
-                    ($field:ident) => {
+                    ($($field:ident).+) => {
                         encoder.value(
-                            &source.$field,
+                            &source.$($field).+,
                             Ok,
-                            concat!("particle2.", stringify!($field)),
+                            concat!("particle2.", stringify!($($field).+)),
                         )?
                     };
                 }
-                record.speed = a!(speed);
-                record.variation = a!(variation);
-                record.latitude = a!(latitude);
-                record.gravity = a!(gravity);
-                record.emission_rate = a!(emission_rate);
-                record.length = a!(length);
-                record.width = a!(width);
-                record.life_span = source.life_span;
-                record.rows = source.atlas[0];
-                record.columns = source.atlas[1];
-                record.tail_length = source.tail_length;
-                record.time = source.middle_time;
-                record.segment_colors = source.colors;
-                record.alpha = source.alpha;
-                record.particle_scaling = source.scale;
-                record.uv_animations = source.uv_intervals;
-                record.texture_id = source.texture.map(|id| textures[&id]).unwrap_or(u32::MAX);
-                record.set_squirt_enabled(source.squirt);
-                record.priority_plane = source.priority_plane;
-                record.replaceable_id = source.replaceable;
-                record.filter_mode = match source.blend {
+                record.speed = a!(motion.speed);
+                record.variation = a!(motion.variation);
+                record.latitude = a!(details.shape.latitude);
+                record.gravity = a!(motion.gravity);
+                record.emission_rate = a!(emission.rate);
+                record.length = a!(details.shape.length);
+                record.width = a!(details.shape.width);
+                record.life_span = source.lifetime.duration;
+                record.rows = source.details.rendering.atlas[0];
+                record.columns = source.details.rendering.atlas[1];
+                record.tail_length = source.details.rendering.tail_length;
+                record.time = source.appearance.middle_time;
+                record.segment_colors = source.appearance.colors;
+                record.alpha = source.appearance.alpha;
+                record.particle_scaling = source.appearance.scale;
+                record.uv_animations = source.appearance.uv_intervals;
+                record.texture_id = source
+                    .details
+                    .rendering
+                    .texture
+                    .map(|id| textures[&id])
+                    .unwrap_or(u32::MAX);
+                record.set_squirt_enabled(source.emission.trigger);
+                record.priority_plane = source.details.rendering.priority_plane;
+                record.replaceable_id = source.details.rendering.replaceable;
+                record.filter_mode = match source.details.rendering.blend {
                     profile::Blend::Alpha => native::Particle2FilterMode::Blend,
                     profile::Blend::Additive => native::Particle2FilterMode::Additive,
                     profile::Blend::Modulate => native::Particle2FilterMode::Modulate,
@@ -165,22 +170,22 @@ pub(super) fn write<'a, T: ModelDialect>(
                         native::Particle2FilterMode::Blend
                     }
                 };
-                record.frames = match source.frames {
+                record.frames = match source.details.rendering.frames {
                     profile::Frames::Head => native::Particle2Frames::Head,
                     profile::Frames::Tail => native::Particle2Frames::Tail,
                     profile::Frames::Both => native::Particle2Frames::Both,
                     profile::Frames::Unknown(value) => native::Particle2Frames::Unknown(value),
                 };
                 let mut flags = record.flags();
-                flags.set_unshaded(source.unlit);
-                flags.set_sort_prims_far_z(source.sort_far_z);
-                flags.set_line_emitter(source.line_emitter);
-                flags.set_unfogged(source.unfogged);
-                flags.set_model_space(source.model_space);
-                flags.set_xy_quad(source.xy_quad);
+                flags.set_unshaded(source.details.rendering.unlit);
+                flags.set_sort_prims_far_z(source.details.rendering.sort_far_z);
+                flags.set_line_emitter(source.details.shape.line_emitter);
+                flags.set_unfogged(source.details.rendering.unfogged);
+                flags.set_model_space(source.details.model_space);
+                flags.set_xy_quad(source.details.rendering.xy_quad);
                 record.set_flags(flags);
                 record.visibility = super::encode_helpers::visibility(
-                    &source.visibility,
+                    &source.emission.activation,
                     encoder,
                     "particle2.visibility",
                 )?;
@@ -189,27 +194,31 @@ pub(super) fn write<'a, T: ModelDialect>(
             profile::Node::Ribbon(source) => {
                 let mut record = native::RibbonEmitter::new(node);
                 record.height_above =
-                    encoder.value(&source.height_above, Ok, "ribbon.height_above")?;
+                    encoder.value(&source.geometry.height_above, Ok, "ribbon.height_above")?;
                 record.height_below =
-                    encoder.value(&source.height_below, Ok, "ribbon.height_below")?;
-                record.alpha = encoder.value(&source.opacity, Ok, "ribbon.opacity")?;
-                record.color = encoder.value(&source.color, Ok, "ribbon.color")?;
+                    encoder.value(&source.geometry.height_below, Ok, "ribbon.height_below")?;
+                record.alpha = encoder.value(&source.appearance.opacity, Ok, "ribbon.opacity")?;
+                record.color = encoder.value(&source.appearance.color, Ok, "ribbon.color")?;
                 record.texture_slot =
-                    encoder.value(&source.texture_slot, Ok, "ribbon.texture_slot")?;
-                record.life_span = source.life_span;
+                    encoder.value(&source.appearance.texture_slot, Ok, "ribbon.texture_slot")?;
+                record.life_span = source.lifetime;
                 record.emission_rate = source.emission_rate;
-                record.rows = source.atlas[0];
-                record.columns = source.atlas[1];
-                record.material_id = source.material.map(|id| materials[&id]).unwrap_or(u32::MAX);
-                record.gravity = source.gravity;
+                record.rows = source.appearance.atlas[0];
+                record.columns = source.appearance.atlas[1];
+                record.material_id = source
+                    .rendering
+                    .material
+                    .map(|id| materials[&id])
+                    .unwrap_or(u32::MAX);
+                record.gravity = source.controls.gravity;
                 record.visibility = super::encode_helpers::visibility(
-                    &source.visibility,
+                    &source.controls.visibility,
                     encoder,
                     "ribbon.visibility",
                 )?;
                 ribbons.push(record);
             }
-            profile::Node::Popcorn(source) => {
+            profile::Node::ParticleProgram(source) => {
                 let mut record =
                     native::PopcornEmitter::new(node, &source.resource, &source.visibility_guide)
                         .map_err(|error| Error::new("popcorn.resource", error.to_string()))?;
@@ -234,16 +243,17 @@ pub(super) fn write<'a, T: ModelDialect>(
                 popcorn.push(record);
             }
             profile::Node::Attachment(source) => {
-                let mut record = native::Attachment::new(node, &source.resource, source.id)
-                    .map_err(|error| Error::new("attachment.resource", error.to_string()))?;
+                let mut record =
+                    native::Attachment::new(node, &source.resource, source.point.identity)
+                        .map_err(|error| Error::new("attachment.resource", error.to_string()))?;
                 record.visibility = super::encode_helpers::visibility(
-                    &source.visibility,
+                    &source.point.activation,
                     encoder,
                     "attachment.visibility",
                 )?;
                 attachments.push(record);
             }
-            profile::Node::Collision(source) => {
+            profile::Node::CollisionShape(source) => {
                 let record = match source {
                     profile::Collision::Box(points) => {
                         native::CollisionShape::new_box(node, *points)
@@ -270,12 +280,31 @@ pub(super) fn write<'a, T: ModelDialect>(
             profile::Node::Light(source) => lights.push(super::encode_lights::light::<T::Version>(
                 source, node, encoder,
             )?),
-            profile::Node::Events(source) => events.extend(super::encode_helpers::events(
+            profile::Node::Event(source) => events.extend(super::encode_helpers::events(
                 source, feature_id, node, encoder,
             )?),
             profile::Node::GeometryAnimation(_) | profile::Node::Camera(_) => {
                 unreachable!("handled non-node record family")
             }
+
+            profile::Node::FaceActor(unavailable)
+            | profile::Node::LightProgram(unavailable)
+            | profile::Node::Extent(unavailable)
+            | profile::Node::ParticleCopy(unavailable)
+            | profile::Node::Projector(unavailable)
+            | profile::Node::Force(unavailable)
+            | profile::Node::Warp(unavailable)
+            | profile::Node::HitTest(unavailable)
+            | profile::Node::AttachmentVolume(unavailable)
+            | profile::Node::Billboard(unavailable)
+            | profile::Node::Turret(unavailable)
+            | profile::Node::IkJoint(unavailable)
+            | profile::Node::IkTwoJoint(unavailable)
+            | profile::Node::IkCcd(unavailable)
+            | profile::Node::OneBoneSolver(unavailable)
+            | profile::Node::ShadowBox(unavailable)
+            | profile::Node::ViewVolume(unavailable)
+            | profile::Node::PointLight(unavailable) => match *unavailable {},
         }
     }
     for (id, node) in nodes {

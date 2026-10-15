@@ -53,12 +53,12 @@ fn diagonal_cameras_reject_vertical_field_of_view_channels() {
         .add_feature(
             node,
             NodeFeature::from(m2::ActorKind::Camera(m2::Camera {
-                kind: m2::values::CameraKind::Unknown(0),
+                convention: m2::values::CameraKind::Unknown(0),
                 field_of_view: Default::default(),
-                clip: [0.1, 100.],
-                target_base: [0.; 3],
-                position: Default::default(),
-                target: Default::default(),
+                clipping: [0.1, 100.],
+                target: [0.; 3],
+                eye_offset: Default::default(),
+                target_offset: Default::default(),
                 roll: Default::default(),
             })),
         )

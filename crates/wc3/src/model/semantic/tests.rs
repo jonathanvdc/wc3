@@ -193,7 +193,7 @@ fn typed_vocabulary_widening_preserves_ids_and_borrowed_storage() {
     let universal = union.widen::<Universal>();
     assert!(matches!(
         universal.material(material).unwrap().surface,
-        MaterialSurface::Mdlx(_)
+        MaterialSurface::Layered(_)
     ));
     assert_eq!(
         universal

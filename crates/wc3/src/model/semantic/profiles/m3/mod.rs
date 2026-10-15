@@ -1,35 +1,30 @@
 //! Logical M3 surfaces, effects, and source controls.
 /// Typed animated destinations for StarCraft II features.
 pub mod properties;
-mod unbound_animation;
-pub use unbound_animation::{OrderedKeys, UnboundBlock, UnboundKeys};
-mod materials;
-pub mod values;
-pub use materials::*;
+pub use crate::model::semantic::controls::unbound::{OrderedKeys, UnboundBlock, UnboundKeys};
+pub use crate::model::semantic::materials::programmed::*;
+/// Logical option domains selected from the shared vocabulary.
+pub use crate::model::semantic::values::programmed as values;
 mod effects;
 pub use effects::*;
 mod scene;
+pub use crate::model::semantic::systems::programmed_physics::*;
 pub use scene::*;
-mod physics;
-pub use physics::*;
 mod model;
+pub use crate::model::semantic::controls::programmed::*;
 pub use model::*;
 mod features;
 mod links;
 mod validation;
 pub use features::*;
 
-mod animation;
-pub use animation::*;
+pub use crate::model::semantic::controls::playback::*;
+/// Programmed-scene controllers select native key blocks and typed unbound keys.
+pub type ControllerControls<'a> = ControllerProgram<BlockControls, UnboundBlock<'a>>;
 
-mod geometry;
-pub use geometry::*;
-
-mod systems;
-pub use systems::*;
+pub use crate::model::semantic::systems::programmed::*;
 
 mod vocabulary;
 pub use vocabulary::M3;
 
-mod mesh;
-pub use mesh::*;
+pub use crate::model::semantic::geometry::programmed::*;

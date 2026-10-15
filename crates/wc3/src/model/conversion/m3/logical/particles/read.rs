@@ -5,6 +5,10 @@ use crate::model::conversion::Error;
 use crate::model::m3::{self as native, records as nr};
 use crate::model::semantic::profiles::m3 as surface;
 use crate::model::semantic::profiles::m3::properties::{Field, FieldPath};
+use crate::model::semantic::{
+    ParticleEmission, ParticleLifetime, ParticleMotion, ProgrammedAge, ProgrammedDirection,
+    ProgrammedForces, ProgrammedNoise, ProgrammedParticle, ProgrammedParticleGravity,
+};
 use native::Envelope;
 pub(super) fn decode<'view, E: Envelope, D: nr::ParticleEmitterDialect>(
     r: nr::ParticleEmitter<D>,
@@ -251,311 +255,331 @@ where
         }
     }
     Ok(surface::Particle {
-        material: Some(reader.material(material_index)?),
-        additional_flags: surface::values::ParticleAdditionalFlags(additional_flags),
-        initial_speed: reader.property(
-            &FieldPath::root(Field::Particle).child(Field::InitialSpeed),
-            initial_speed,
-        ),
-        initial_speed_random: reader.property(
-            &FieldPath::root(Field::Particle).child(Field::InitialSpeedRandom),
-            initial_speed_random,
-        ),
-        initial_yaw: reader.property(
-            &FieldPath::root(Field::Particle).child(Field::InitialYaw),
-            initial_yaw,
-        ),
-        initial_pitch: reader.property(
-            &FieldPath::root(Field::Particle).child(Field::InitialPitch),
-            initial_pitch,
-        ),
-        initial_horizontal: reader.property(
-            &FieldPath::root(Field::Particle).child(Field::InitialHorizontal),
-            initial_horizontal,
-        ),
-        initial_vertical: reader.property(
-            &FieldPath::root(Field::Particle).child(Field::InitialVertical),
-            initial_vertical,
-        ),
-        lifetime: reader.property(
-            &FieldPath::root(Field::Particle).child(Field::Lifetime),
-            lifetime,
-        ),
-        lifetime_random: reader.property(
-            &FieldPath::root(Field::Particle).child(Field::LifetimeRandom),
-            lifetime_random,
-        ),
-        kill_radius,
-        gravity_x,
-        gravity_y,
-        gravity,
-        size_mid_time,
-        color_mid_time,
-        alpha_mid_time,
-        rotation_mid_time,
-        size_mid_hold_time,
-        color_mid_hold_time,
-        alpha_mid_hold_time,
-        rotation_mid_hold_time,
-        size_animation: reader.property(
-            &FieldPath::root(Field::Particle).child(Field::SizeAnimation),
-            size_animation,
-        ),
-        rotation_animation: reader.property(
-            &FieldPath::root(Field::Particle).child(Field::RotationAnimation),
-            rotation_animation,
-        ),
-        color_start: reader.fixed_color(
-            &FieldPath::root(Field::Particle).child(Field::ColorStart),
-            color_start,
-        ),
-        color_mid: reader.fixed_color(
-            &FieldPath::root(Field::Particle).child(Field::ColorMid),
-            color_mid,
-        ),
-        color_end: reader.fixed_color(
-            &FieldPath::root(Field::Particle).child(Field::ColorEnd),
-            color_end,
-        ),
-        drag,
-        mass,
-        mass_random,
-        mass_size_multiplier,
-        local_forces: surface::values::LocalForces(local_forces.bits()),
-        world_forces: surface::values::WorldForces(world_forces.bits()),
-        local_forces_fallback: surface::values::LocalForces(local_forces_fallback.bits()),
-        world_forces_fallback: surface::values::WorldForces(world_forces_fallback.bits()),
-        world_forces_mass_multiplier,
-        noise_amplitude,
-        noise_frequency,
-        noise_coherence,
-        noise_edge,
-        index_plus_length,
-        max_particles,
-        emission_rate: reader.property(
-            &FieldPath::root(Field::Particle).child(Field::EmissionRate),
-            emission_rate,
-        ),
-        emitter_shape: surface::values::EmitterShape::from_raw((emitter_shape).raw()),
-        shape_outer: reader.property(
-            &FieldPath::root(Field::Particle).child(Field::ShapeOuter),
-            shape_outer,
-        ),
-        shape_inner: reader.property(
-            &FieldPath::root(Field::Particle).child(Field::ShapeInner),
-            shape_inner,
-        ),
-        outer_radius: reader.property(
-            &FieldPath::root(Field::Particle).child(Field::OuterRadius),
-            outer_radius,
-        ),
-        inner_radius: reader.property(
-            &FieldPath::root(Field::Particle).child(Field::InnerRadius),
-            inner_radius,
-        ),
-        shape_sections: reader.sections(shape_regions)?,
-        velocity_type: surface::values::VelocityKind::from_raw(velocity_type.raw()),
-        size_random_enable,
-        size_random_animation: reader.property(
-            &FieldPath::root(Field::Particle).child(Field::SizeRandomAnimation),
-            size_random_animation,
-        ),
-        rotation_random_enable,
-        rotation_random_animation: reader.property(
-            &FieldPath::root(Field::Particle).child(Field::RotationRandomAnimation),
-            rotation_random_animation,
-        ),
-        color_random_enable,
-        color_start_random: reader.color(
-            &FieldPath::root(Field::Particle).child(Field::ColorStartRandom),
-            color_start_random,
-        ),
-        color_mid_random: reader.color(
-            &FieldPath::root(Field::Particle).child(Field::ColorMidRandom),
-            color_mid_random,
-        ),
-        color_end_random: reader.color(
-            &FieldPath::root(Field::Particle).child(Field::ColorEndRandom),
-            color_end_random,
-        ),
-        alpha_random_enable,
-        squirt_amount: reader.property(
-            &FieldPath::root(Field::Particle).child(Field::SquirtAmount),
-            squirt_amount,
-        ),
-        flipbook_start_init_index,
-        flipbook_start_stop_index,
-        flipbook_end_init_index,
-        flipbook_end_stop_index,
-        flipbook_mid_time,
-        flipbook_columns,
-        flipbook_rows,
-        flipbook_column_fraction: fraction(flipbook_column_fraction)?,
-        flipbook_row_fraction: fraction(flipbook_row_fraction)?,
-        bounce,
-        friction,
-        collision_spawn: reader.particle(collision_spawn_index)?,
-        collision_spawn_min,
-        collision_spawn_max,
-        collision_spawn_chance,
-        collision_spawn_energy,
-        collision_die_bounce,
-        instance_type: surface::values::ParticleInstance::from_raw((instance_type).raw()),
-        tail_length,
-        instance_angle,
-        instance_distance,
-        pitch: surface::VariationControl {
-            kind: surface::values::Variation::from_raw((pitch_type).raw()),
-            amplitude: reader.property(
-                &FieldPath::root(Field::Particle).child(Field::PitchAmplitude),
-                pitch_amplitude,
+        details: ProgrammedParticle {
+            material: Some(reader.material(material_index)?),
+            additional_flags: surface::values::ParticleAdditionalFlags(additional_flags),
+            direction: ProgrammedDirection {
+                initial_yaw: reader.property(
+                    &FieldPath::root(Field::Particle).child(Field::InitialYaw),
+                    initial_yaw,
+                ),
+                initial_pitch: reader.property(
+                    &FieldPath::root(Field::Particle).child(Field::InitialPitch),
+                    initial_pitch,
+                ),
+                initial_horizontal: reader.property(
+                    &FieldPath::root(Field::Particle).child(Field::InitialHorizontal),
+                    initial_horizontal,
+                ),
+                initial_vertical: reader.property(
+                    &FieldPath::root(Field::Particle).child(Field::InitialVertical),
+                    initial_vertical,
+                ),
+                drag,
+            },
+            kill_radius,
+            forces: ProgrammedForces {
+                mass,
+                mass_random,
+                mass_size_multiplier,
+                local_forces: surface::values::LocalForces(local_forces.bits()),
+                world_forces: surface::values::WorldForces(world_forces.bits()),
+                local_forces_fallback: surface::values::LocalForces(local_forces_fallback.bits()),
+                world_forces_fallback: surface::values::WorldForces(world_forces_fallback.bits()),
+                world_forces_mass_multiplier,
+            },
+            noise: ProgrammedNoise {
+                noise_amplitude,
+                noise_frequency,
+                noise_coherence,
+                noise_edge,
+            },
+            index_plus_length,
+            max_particles,
+            emitter_shape: surface::values::EmitterShape::from_raw((emitter_shape).raw()),
+            shape_outer: reader.property(
+                &FieldPath::root(Field::Particle).child(Field::ShapeOuter),
+                shape_outer,
             ),
-            frequency: reader.property(
-                &FieldPath::root(Field::Particle).child(Field::PitchFrequency),
-                pitch_frequency,
+            shape_inner: reader.property(
+                &FieldPath::root(Field::Particle).child(Field::ShapeInner),
+                shape_inner,
+            ),
+            outer_radius: reader.property(
+                &FieldPath::root(Field::Particle).child(Field::OuterRadius),
+                outer_radius,
+            ),
+            inner_radius: reader.property(
+                &FieldPath::root(Field::Particle).child(Field::InnerRadius),
+                inner_radius,
+            ),
+            shape_sections: reader.sections(shape_regions)?,
+            velocity_type: surface::values::VelocityKind::from_raw(velocity_type.raw()),
+            size_random_enable,
+            size_random_animation: reader.property(
+                &FieldPath::root(Field::Particle).child(Field::SizeRandomAnimation),
+                size_random_animation,
+            ),
+            rotation_random_enable,
+            rotation_random_animation: reader.property(
+                &FieldPath::root(Field::Particle).child(Field::RotationRandomAnimation),
+                rotation_random_animation,
+            ),
+            color_random_enable,
+            color_start_random: reader.color(
+                &FieldPath::root(Field::Particle).child(Field::ColorStartRandom),
+                color_start_random,
+            ),
+            color_mid_random: reader.color(
+                &FieldPath::root(Field::Particle).child(Field::ColorMidRandom),
+                color_mid_random,
+            ),
+            color_end_random: reader.color(
+                &FieldPath::root(Field::Particle).child(Field::ColorEndRandom),
+                color_end_random,
+            ),
+            alpha_random_enable,
+            flipbook_start_init_index,
+            flipbook_start_stop_index,
+            flipbook_end_init_index,
+            flipbook_end_stop_index,
+            flipbook_mid_time,
+            flipbook_columns,
+            flipbook_rows,
+            flipbook_column_fraction: fraction(flipbook_column_fraction)?,
+            flipbook_row_fraction: fraction(flipbook_row_fraction)?,
+            bounce,
+            friction,
+            collision_spawn: reader.particle(collision_spawn_index)?,
+            collision_spawn_min,
+            collision_spawn_max,
+            collision_spawn_chance,
+            collision_spawn_energy,
+            collision_die_bounce,
+            instance_type: surface::values::ParticleInstance::from_raw((instance_type).raw()),
+            tail_length,
+            instance_angle,
+            instance_distance,
+            pitch: surface::VariationControl {
+                kind: surface::values::Variation::from_raw((pitch_type).raw()),
+                amplitude: reader.property(
+                    &FieldPath::root(Field::Particle).child(Field::PitchAmplitude),
+                    pitch_amplitude,
+                ),
+                frequency: reader.property(
+                    &FieldPath::root(Field::Particle).child(Field::PitchFrequency),
+                    pitch_frequency,
+                ),
+            },
+            yaw: surface::VariationControl {
+                kind: surface::values::Variation::from_raw((yaw_type).raw()),
+                amplitude: reader.property(
+                    &FieldPath::root(Field::Particle).child(Field::YawAmplitude),
+                    yaw_amplitude,
+                ),
+                frequency: reader.property(
+                    &FieldPath::root(Field::Particle).child(Field::YawFrequency),
+                    yaw_frequency,
+                ),
+            },
+            speed: surface::VariationControl {
+                kind: surface::values::Variation::from_raw((speed_type).raw()),
+                amplitude: reader.property(
+                    &FieldPath::root(Field::Particle).child(Field::SpeedAmplitude),
+                    speed_amplitude,
+                ),
+                frequency: reader.property(
+                    &FieldPath::root(Field::Particle).child(Field::SpeedFrequency),
+                    speed_frequency,
+                ),
+            },
+            size: surface::VariationControl {
+                kind: surface::values::Variation::from_raw((size_type).raw()),
+                amplitude: reader.property(
+                    &FieldPath::root(Field::Particle).child(Field::SizeAmplitude),
+                    size_amplitude,
+                ),
+                frequency: reader.property(
+                    &FieldPath::root(Field::Particle).child(Field::SizeFrequency),
+                    size_frequency,
+                ),
+            },
+            alpha: surface::VariationControl {
+                kind: surface::values::Variation::from_raw((alpha_type).raw()),
+                amplitude: reader.property(
+                    &FieldPath::root(Field::Particle).child(Field::AlphaAmplitude),
+                    alpha_amplitude,
+                ),
+                frequency: reader.property(
+                    &FieldPath::root(Field::Particle).child(Field::AlphaFrequency),
+                    alpha_frequency,
+                ),
+            },
+            color: surface::VariationControl {
+                kind: surface::values::Variation::from_raw((color_type).raw()),
+                amplitude: reader.property(
+                    &FieldPath::root(Field::Particle).child(Field::ColorAmplitude),
+                    color_amplitude,
+                ),
+                frequency: reader.property(
+                    &FieldPath::root(Field::Particle).child(Field::ColorFrequency),
+                    color_frequency,
+                ),
+            },
+            rotation: surface::VariationControl {
+                kind: surface::values::Variation::from_raw((rotation_type).raw()),
+                amplitude: reader.property(
+                    &FieldPath::root(Field::Particle).child(Field::RotationAmplitude),
+                    rotation_amplitude,
+                ),
+                frequency: reader.property(
+                    &FieldPath::root(Field::Particle).child(Field::RotationFrequency),
+                    rotation_frequency,
+                ),
+            },
+            horizontal: surface::VariationControl {
+                kind: surface::values::Variation::from_raw((horizontal_type).raw()),
+                amplitude: reader.property(
+                    &FieldPath::root(Field::Particle).child(Field::HorizontalAmplitude),
+                    horizontal_amplitude,
+                ),
+                frequency: reader.property(
+                    &FieldPath::root(Field::Particle).child(Field::HorizontalFrequency),
+                    horizontal_frequency,
+                ),
+            },
+            vertical: surface::VariationControl {
+                kind: surface::values::Variation::from_raw((vertical_type).raw()),
+                amplitude: reader.property(
+                    &FieldPath::root(Field::Particle).child(Field::VerticalAmplitude),
+                    vertical_amplitude,
+                ),
+                frequency: reader.property(
+                    &FieldPath::root(Field::Particle).child(Field::VerticalFrequency),
+                    vertical_frequency,
+                ),
+            },
+            particle_velocity: reader.property(
+                &FieldPath::root(Field::Particle).child(Field::ParticleVelocity),
+                particle_velocity,
+            ),
+            phase_shift: reader.property(
+                &FieldPath::root(Field::Particle).child(Field::PhaseShift),
+                phase_shift,
+            ),
+            flags: surface::values::ParticleFlags(flags.bits()),
+            rotation_flags: surface::values::ParticleRotationFlags(rotation_flags),
+            color_smoothing: surface::values::Smoothing::from_raw(color_smoothing),
+            size_smoothing: surface::values::Smoothing::from_raw(size_smoothing),
+            rotation_smoothing: surface::values::Smoothing::from_raw(rotation_smoothing),
+            alpha_threshold: reader.property(
+                &FieldPath::root(Field::Particle).child(Field::AlphaThreshold),
+                alpha_threshold,
+            ),
+            uv_offset: reader.property(
+                &FieldPath::root(Field::Particle).child(Field::UvOffset),
+                uv_offset,
+            ),
+            uv_angle: reader.property(
+                &FieldPath::root(Field::Particle).child(Field::UvAngle),
+                uv_angle,
+            ),
+            uv_tiling: reader.property(
+                &FieldPath::root(Field::Particle).child(Field::UvTiling),
+                uv_tiling,
+            ),
+            spline_points: reader.spline(spline_line_data)?,
+            wind_multiplier,
+            lod_reduce,
+            lod_cut,
+            lower_bound: reader.property(
+                &FieldPath::root(Field::Particle).child(Field::LowerBound),
+                lower_bound,
+            ),
+            upper_bound: reader.property(
+                &FieldPath::root(Field::Particle).child(Field::UpperBound),
+                upper_bound,
+            ),
+            trail: reader.particle(trail_link_index)?,
+            trail_chance,
+            trail_emission_rate: reader.property(
+                &FieldPath::root(Field::Particle).child(Field::TrailEmissionRate),
+                trail_emission_rate,
+            ),
+            projection: reader.projector(splat_projection_index)?,
+            splat_chance,
+            models: reader.models(model_paths)?,
+            spawn_ribbon_on_bounce_chance,
+            ribbon: reader.ribbon(ribbon_link_index)?,
+            noise_smoothness: deprecated_noise_smoothness,
+        },
+        motion: ParticleMotion {
+            speed: reader.property(
+                &FieldPath::root(Field::Particle).child(Field::InitialSpeed),
+                initial_speed,
+            ),
+            variation: reader.property(
+                &FieldPath::root(Field::Particle).child(Field::InitialSpeedRandom),
+                initial_speed_random,
+            ),
+            gravity: ProgrammedParticleGravity {
+                x: gravity_x,
+                y: gravity_y,
+                magnitude: gravity,
+            },
+        },
+        lifetime: ParticleLifetime {
+            duration: reader.property(
+                &FieldPath::root(Field::Particle).child(Field::Lifetime),
+                lifetime,
+            ),
+            variation: reader.property(
+                &FieldPath::root(Field::Particle).child(Field::LifetimeRandom),
+                lifetime_random,
             ),
         },
-        yaw: surface::VariationControl {
-            kind: surface::values::Variation::from_raw((yaw_type).raw()),
-            amplitude: reader.property(
-                &FieldPath::root(Field::Particle).child(Field::YawAmplitude),
-                yaw_amplitude,
+        appearance: ProgrammedAge {
+            size_mid_time,
+            color_mid_time,
+            alpha_mid_time,
+            rotation_mid_time,
+            size_mid_hold_time,
+            color_mid_hold_time,
+            alpha_mid_hold_time,
+            rotation_mid_hold_time,
+            size_animation: reader.property(
+                &FieldPath::root(Field::Particle).child(Field::SizeAnimation),
+                size_animation,
             ),
-            frequency: reader.property(
-                &FieldPath::root(Field::Particle).child(Field::YawFrequency),
-                yaw_frequency,
+            rotation_animation: reader.property(
+                &FieldPath::root(Field::Particle).child(Field::RotationAnimation),
+                rotation_animation,
             ),
-        },
-        speed: surface::VariationControl {
-            kind: surface::values::Variation::from_raw((speed_type).raw()),
-            amplitude: reader.property(
-                &FieldPath::root(Field::Particle).child(Field::SpeedAmplitude),
-                speed_amplitude,
+            color_start: reader.fixed_color(
+                &FieldPath::root(Field::Particle).child(Field::ColorStart),
+                color_start,
             ),
-            frequency: reader.property(
-                &FieldPath::root(Field::Particle).child(Field::SpeedFrequency),
-                speed_frequency,
+            color_mid: reader.fixed_color(
+                &FieldPath::root(Field::Particle).child(Field::ColorMid),
+                color_mid,
             ),
-        },
-        size: surface::VariationControl {
-            kind: surface::values::Variation::from_raw((size_type).raw()),
-            amplitude: reader.property(
-                &FieldPath::root(Field::Particle).child(Field::SizeAmplitude),
-                size_amplitude,
-            ),
-            frequency: reader.property(
-                &FieldPath::root(Field::Particle).child(Field::SizeFrequency),
-                size_frequency,
+            color_end: reader.fixed_color(
+                &FieldPath::root(Field::Particle).child(Field::ColorEnd),
+                color_end,
             ),
         },
-        alpha: surface::VariationControl {
-            kind: surface::values::Variation::from_raw((alpha_type).raw()),
-            amplitude: reader.property(
-                &FieldPath::root(Field::Particle).child(Field::AlphaAmplitude),
-                alpha_amplitude,
+        emission: ParticleEmission {
+            rate: reader.property(
+                &FieldPath::root(Field::Particle).child(Field::EmissionRate),
+                emission_rate,
             ),
-            frequency: reader.property(
-                &FieldPath::root(Field::Particle).child(Field::AlphaFrequency),
-                alpha_frequency,
+            trigger: reader.property(
+                &FieldPath::root(Field::Particle).child(Field::SquirtAmount),
+                squirt_amount,
             ),
+            variation: (),
+            activation: (),
         },
-        color: surface::VariationControl {
-            kind: surface::values::Variation::from_raw((color_type).raw()),
-            amplitude: reader.property(
-                &FieldPath::root(Field::Particle).child(Field::ColorAmplitude),
-                color_amplitude,
-            ),
-            frequency: reader.property(
-                &FieldPath::root(Field::Particle).child(Field::ColorFrequency),
-                color_frequency,
-            ),
-        },
-        rotation: surface::VariationControl {
-            kind: surface::values::Variation::from_raw((rotation_type).raw()),
-            amplitude: reader.property(
-                &FieldPath::root(Field::Particle).child(Field::RotationAmplitude),
-                rotation_amplitude,
-            ),
-            frequency: reader.property(
-                &FieldPath::root(Field::Particle).child(Field::RotationFrequency),
-                rotation_frequency,
-            ),
-        },
-        horizontal: surface::VariationControl {
-            kind: surface::values::Variation::from_raw((horizontal_type).raw()),
-            amplitude: reader.property(
-                &FieldPath::root(Field::Particle).child(Field::HorizontalAmplitude),
-                horizontal_amplitude,
-            ),
-            frequency: reader.property(
-                &FieldPath::root(Field::Particle).child(Field::HorizontalFrequency),
-                horizontal_frequency,
-            ),
-        },
-        vertical: surface::VariationControl {
-            kind: surface::values::Variation::from_raw((vertical_type).raw()),
-            amplitude: reader.property(
-                &FieldPath::root(Field::Particle).child(Field::VerticalAmplitude),
-                vertical_amplitude,
-            ),
-            frequency: reader.property(
-                &FieldPath::root(Field::Particle).child(Field::VerticalFrequency),
-                vertical_frequency,
-            ),
-        },
-        particle_velocity: reader.property(
-            &FieldPath::root(Field::Particle).child(Field::ParticleVelocity),
-            particle_velocity,
-        ),
-        phase_shift: reader.property(
-            &FieldPath::root(Field::Particle).child(Field::PhaseShift),
-            phase_shift,
-        ),
-        flags: surface::values::ParticleFlags(flags.bits()),
-        rotation_flags: surface::values::ParticleRotationFlags(rotation_flags),
-        color_smoothing: surface::values::Smoothing::from_raw(color_smoothing),
-        size_smoothing: surface::values::Smoothing::from_raw(size_smoothing),
-        rotation_smoothing: surface::values::Smoothing::from_raw(rotation_smoothing),
-        alpha_threshold: reader.property(
-            &FieldPath::root(Field::Particle).child(Field::AlphaThreshold),
-            alpha_threshold,
-        ),
-        uv_offset: reader.property(
-            &FieldPath::root(Field::Particle).child(Field::UvOffset),
-            uv_offset,
-        ),
-        uv_angle: reader.property(
-            &FieldPath::root(Field::Particle).child(Field::UvAngle),
-            uv_angle,
-        ),
-        uv_tiling: reader.property(
-            &FieldPath::root(Field::Particle).child(Field::UvTiling),
-            uv_tiling,
-        ),
-        spline_points: reader.spline(spline_line_data)?,
-        wind_multiplier,
-        lod_reduce,
-        lod_cut,
-        lower_bound: reader.property(
-            &FieldPath::root(Field::Particle).child(Field::LowerBound),
-            lower_bound,
-        ),
-        upper_bound: reader.property(
-            &FieldPath::root(Field::Particle).child(Field::UpperBound),
-            upper_bound,
-        ),
-        trail: reader.particle(trail_link_index)?,
-        trail_chance,
-        trail_emission_rate: reader.property(
-            &FieldPath::root(Field::Particle).child(Field::TrailEmissionRate),
-            trail_emission_rate,
-        ),
-        projection: reader.projector(splat_projection_index)?,
-        splat_chance,
-        models: reader.models(model_paths)?,
-        spawn_ribbon_on_bounce_chance,
-        ribbon: reader.ribbon(ribbon_link_index)?,
-        noise_smoothness: deprecated_noise_smoothness,
     })
 }
 

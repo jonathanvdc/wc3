@@ -5,8 +5,16 @@ use crate::model::conversion::Error;
 use crate::model::mdlx::{self as native, ModelDialect};
 use crate::model::semantic::profiles::mdlx as profile;
 use crate::model::semantic::profiles::Mdlx;
+use crate::model::semantic::AttachmentPointDefinition;
+use crate::model::semantic::{
+    AtlasParticle, AtlasParticleRendering, AtlasParticleShape, ModelParticle, ParticleEmission,
+    ParticleLifetime, ParticleMotion, StagedParticleAppearance,
+};
 use crate::model::semantic::{
     Clock, ClockId, Event, MaterialId, ModelBuilder, NodeId, TextureId, Time,
+};
+use crate::model::semantic::{
+    GravityTrailControls, LayeredTrailRendering, TrailAppearance, TrailGeometry,
 };
 use std::collections::BTreeMap;
 use zerovec::ZeroVec;
@@ -54,23 +62,36 @@ pub(super) fn read<'a, D: ModelDialect>(
         let flags = source.flags();
         {
             let payload = profile::Node::Particle(profile::Particle {
-                resource: source.path.text(),
-                emission_rate: a!(emission_rate, EMISSION_RATE),
-                gravity: a!(gravity, GRAVITY),
-                longitude: a!(longitude, LONGITUDE),
-                latitude: a!(latitude, LATITUDE),
-                life_span: a!(life_span, LIFE_SPAN),
-                initial_velocity: a!(initial_velocity, INITIAL_VELOCITY),
-                visibility: decoder.track(
-                    source.visibility.as_ref(),
-                    1.,
-                    owner,
-                    profile::properties::particle::VISIBILITY,
-                    |value| value,
-                )?,
-                model_resource: flags.emitter_uses_mdl(),
-                text_resource: flags.emitter_uses_tga(),
-                unclassified: Default::default(),
+                details: ModelParticle {
+                    resource: source.path.text(),
+                    longitude: a!(longitude, LONGITUDE),
+                    latitude: a!(latitude, LATITUDE),
+                    model_resource: flags.emitter_uses_mdl(),
+                    text_resource: flags.emitter_uses_tga(),
+                    unclassified: Default::default(),
+                },
+                emission: ParticleEmission {
+                    rate: a!(emission_rate, EMISSION_RATE),
+                    activation: decoder.track(
+                        source.visibility.as_ref(),
+                        1.,
+                        owner,
+                        profile::properties::particle::VISIBILITY,
+                        |value| value,
+                    )?,
+                    variation: (),
+                    trigger: (),
+                },
+                motion: ParticleMotion {
+                    gravity: a!(gravity, GRAVITY),
+                    speed: a!(initial_velocity, INITIAL_VELOCITY),
+                    variation: (),
+                },
+                lifetime: ParticleLifetime {
+                    duration: a!(life_span, LIFE_SPAN),
+                    variation: (),
+                },
+                appearance: (),
             });
             decoder.builder.set_feature(feature, payload)?;
         }
@@ -105,42 +126,58 @@ pub(super) fn read<'a, D: ModelDialect>(
             native::Particle2Frames::Unknown(value) => profile::Frames::Unknown(value),
         };
         {
-            let payload = profile::Node::Particle2(profile::Particle2 {
-                speed: a!(speed, SPEED),
-                variation: a!(variation, VARIATION),
-                latitude: a!(latitude, LATITUDE),
-                gravity: a!(gravity, GRAVITY),
-                life_span: source.life_span,
-                emission_rate: a!(emission_rate, EMISSION_RATE),
-                length: a!(length, LENGTH),
-                width: a!(width, WIDTH),
-                blend,
-                atlas: [source.rows, source.columns],
-                frames,
-                tail_length: source.tail_length,
-                middle_time: source.time,
-                colors: source.segment_colors,
-                alpha: source.alpha,
-                scale: source.particle_scaling,
-                uv_intervals: source.uv_animations,
-                texture: texture(source.texture_id)?,
-                squirt: source.squirt_enabled(),
-                priority_plane: source.priority_plane,
-                replaceable: source.replaceable_id,
-                visibility: decoder.track(
-                    source.visibility.as_ref(),
-                    1.,
-                    owner,
-                    profile::properties::particle2::VISIBILITY,
-                    |value| value,
-                )?,
-                model_space: flags.model_space(),
-                xy_quad: flags.xy_quad(),
-                line_emitter: flags.line_emitter(),
-                sort_far_z: flags.sort_prims_far_z(),
-                unlit: flags.unshaded(),
-                unfogged: flags.unfogged(),
-                unclassified: Default::default(),
+            let payload = profile::Node::AtlasParticles(profile::Particle2 {
+                motion: ParticleMotion {
+                    speed: a!(speed, SPEED),
+                    variation: a!(variation, VARIATION),
+                    gravity: a!(gravity, GRAVITY),
+                },
+                details: AtlasParticle {
+                    shape: AtlasParticleShape {
+                        latitude: a!(latitude, LATITUDE),
+                        length: a!(length, LENGTH),
+                        width: a!(width, WIDTH),
+                        line_emitter: flags.line_emitter(),
+                    },
+                    rendering: AtlasParticleRendering {
+                        blend,
+                        atlas: [source.rows, source.columns],
+                        frames,
+                        tail_length: source.tail_length,
+                        texture: texture(source.texture_id)?,
+                        priority_plane: source.priority_plane,
+                        replaceable: source.replaceable_id,
+                        xy_quad: flags.xy_quad(),
+                        sort_far_z: flags.sort_prims_far_z(),
+                        unlit: flags.unshaded(),
+                        unfogged: flags.unfogged(),
+                    },
+                    model_space: flags.model_space(),
+                    unclassified: Default::default(),
+                },
+                lifetime: ParticleLifetime {
+                    duration: source.life_span,
+                    variation: (),
+                },
+                emission: ParticleEmission {
+                    rate: a!(emission_rate, EMISSION_RATE),
+                    trigger: source.squirt_enabled(),
+                    activation: decoder.track(
+                        source.visibility.as_ref(),
+                        1.,
+                        owner,
+                        profile::properties::particle2::VISIBILITY,
+                        |value| value,
+                    )?,
+                    variation: (),
+                },
+                appearance: StagedParticleAppearance {
+                    middle_time: source.time,
+                    colors: source.segment_colors,
+                    alpha: source.alpha,
+                    scale: source.particle_scaling,
+                    uv_intervals: source.uv_animations,
+                },
             });
             decoder.builder.set_feature(feature, payload)?;
         }
@@ -161,29 +198,37 @@ pub(super) fn read<'a, D: ModelDialect>(
         }
         {
             let payload = profile::Node::Ribbon(profile::Ribbon {
-                height_above: a!(height_above, HEIGHT_ABOVE),
-                height_below: a!(height_below, HEIGHT_BELOW),
-                opacity: a!(alpha, OPACITY),
-                color: a!(color, COLOR),
-                life_span: source.life_span,
-                texture_slot: a!(texture_slot, TEXTURE_SLOT),
-                emission_rate: source.emission_rate,
-                atlas: [source.rows, source.columns],
-                material: if source.material_id == u32::MAX {
-                    None
-                } else {
-                    Some(*materials.get(source.material_id as usize).ok_or_else(|| {
-                        Error::new("ribbon.material", "material identity does not exist")
-                    })?)
+                geometry: TrailGeometry {
+                    height_above: a!(height_above, HEIGHT_ABOVE),
+                    height_below: a!(height_below, HEIGHT_BELOW),
                 },
-                gravity: source.gravity,
-                visibility: decoder.track(
-                    source.visibility.as_ref(),
-                    1.,
-                    owner,
-                    profile::properties::ribbon::VISIBILITY,
-                    |value| value,
-                )?,
+                appearance: TrailAppearance {
+                    opacity: a!(alpha, OPACITY),
+                    color: a!(color, COLOR),
+                    texture_slot: a!(texture_slot, TEXTURE_SLOT),
+                    atlas: [source.rows, source.columns],
+                },
+                lifetime: source.life_span,
+                emission_rate: source.emission_rate,
+                rendering: LayeredTrailRendering {
+                    material: if source.material_id == u32::MAX {
+                        None
+                    } else {
+                        Some(*materials.get(source.material_id as usize).ok_or_else(|| {
+                            Error::new("ribbon.material", "material identity does not exist")
+                        })?)
+                    },
+                },
+                controls: GravityTrailControls {
+                    gravity: source.gravity,
+                    visibility: decoder.track(
+                        source.visibility.as_ref(),
+                        1.,
+                        owner,
+                        profile::properties::ribbon::VISIBILITY,
+                        |value| value,
+                    )?,
+                },
             });
             decoder.builder.set_feature(feature, payload)?;
         }
@@ -205,7 +250,7 @@ pub(super) fn read<'a, D: ModelDialect>(
             }
             let flags = source.flags();
             {
-                let payload = profile::Node::Popcorn(profile::Popcorn {
+                let payload = profile::Node::ParticleProgram(profile::Popcorn {
                     resource: source.path.text(),
                     visibility_guide: source.visibility_guide.text(),
                     life_span: a!(life_span, LIFE_SPAN),
@@ -237,14 +282,18 @@ pub(super) fn read<'a, D: ModelDialect>(
         {
             let payload = profile::Node::Attachment(profile::Attachment {
                 resource: source.path.text(),
-                id: source.id,
-                visibility: decoder.track(
-                    source.visibility.as_ref(),
-                    1.,
-                    feature,
-                    profile::properties::attachment::VISIBILITY,
-                    |value| value,
-                )?,
+                appearance: (),
+                point: AttachmentPointDefinition {
+                    identity: source.id,
+                    control: (),
+                    activation: decoder.track(
+                        source.visibility.as_ref(),
+                        1.,
+                        feature,
+                        profile::properties::attachment::VISIBILITY,
+                        |value| value,
+                    )?,
+                },
             });
             decoder.builder.set_feature(feature, payload)?;
         }
@@ -282,7 +331,7 @@ pub(super) fn read<'a, D: ModelDialect>(
             }
         }
         {
-            let payload = profile::Node::Events(profile::Events {
+            let payload = profile::Node::Event(profile::Events {
                 name: source.node.name.text(),
             });
             decoder.builder.set_feature(feature, payload)?;
@@ -302,7 +351,7 @@ pub(super) fn read<'a, D: ModelDialect>(
             }
         };
         {
-            let payload = profile::Node::Collision(shape);
+            let payload = profile::Node::CollisionShape(shape);
             decoder.builder.set_feature(feature, payload)?;
         }
     }

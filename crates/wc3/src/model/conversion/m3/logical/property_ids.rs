@@ -131,51 +131,51 @@ impl Collect for surface::VariationControl {
 }
 impl<'a> Collect for surface::Particle<'a> {
     fn collect(&self, bindings: &mut Bindings) {
-        self.initial_speed.collect(bindings);
-        self.initial_speed_random.collect(bindings);
-        self.initial_yaw.collect(bindings);
-        self.initial_pitch.collect(bindings);
-        self.initial_horizontal.collect(bindings);
-        self.initial_vertical.collect(bindings);
-        self.lifetime.collect(bindings);
-        self.lifetime_random.collect(bindings);
-        self.size_animation.collect(bindings);
-        self.rotation_animation.collect(bindings);
-        self.color_start.collect(bindings);
-        self.color_mid.collect(bindings);
-        self.color_end.collect(bindings);
-        self.emission_rate.collect(bindings);
-        self.shape_outer.collect(bindings);
-        self.shape_inner.collect(bindings);
-        self.outer_radius.collect(bindings);
-        self.inner_radius.collect(bindings);
-        self.size_random_animation.collect(bindings);
-        self.rotation_random_animation.collect(bindings);
-        self.color_start_random.collect(bindings);
-        self.color_mid_random.collect(bindings);
-        self.color_end_random.collect(bindings);
-        self.squirt_amount.collect(bindings);
-        self.pitch.collect(bindings);
-        self.yaw.collect(bindings);
-        self.speed.collect(bindings);
-        self.size.collect(bindings);
-        self.alpha.collect(bindings);
-        self.color.collect(bindings);
-        self.rotation.collect(bindings);
-        self.horizontal.collect(bindings);
-        self.vertical.collect(bindings);
-        self.particle_velocity.collect(bindings);
-        self.phase_shift.collect(bindings);
-        self.alpha_threshold.collect(bindings);
-        self.uv_offset.collect(bindings);
-        self.uv_angle.collect(bindings);
-        self.uv_tiling.collect(bindings);
-        for value in self.spline_points.iter() {
+        self.motion.speed.collect(bindings);
+        self.motion.variation.collect(bindings);
+        self.details.direction.initial_yaw.collect(bindings);
+        self.details.direction.initial_pitch.collect(bindings);
+        self.details.direction.initial_horizontal.collect(bindings);
+        self.details.direction.initial_vertical.collect(bindings);
+        self.lifetime.duration.collect(bindings);
+        self.lifetime.variation.collect(bindings);
+        self.appearance.size_animation.collect(bindings);
+        self.appearance.rotation_animation.collect(bindings);
+        self.appearance.color_start.collect(bindings);
+        self.appearance.color_mid.collect(bindings);
+        self.appearance.color_end.collect(bindings);
+        self.emission.rate.collect(bindings);
+        self.details.shape_outer.collect(bindings);
+        self.details.shape_inner.collect(bindings);
+        self.details.outer_radius.collect(bindings);
+        self.details.inner_radius.collect(bindings);
+        self.details.size_random_animation.collect(bindings);
+        self.details.rotation_random_animation.collect(bindings);
+        self.details.color_start_random.collect(bindings);
+        self.details.color_mid_random.collect(bindings);
+        self.details.color_end_random.collect(bindings);
+        self.emission.trigger.collect(bindings);
+        self.details.pitch.collect(bindings);
+        self.details.yaw.collect(bindings);
+        self.details.speed.collect(bindings);
+        self.details.size.collect(bindings);
+        self.details.alpha.collect(bindings);
+        self.details.color.collect(bindings);
+        self.details.rotation.collect(bindings);
+        self.details.horizontal.collect(bindings);
+        self.details.vertical.collect(bindings);
+        self.details.particle_velocity.collect(bindings);
+        self.details.phase_shift.collect(bindings);
+        self.details.alpha_threshold.collect(bindings);
+        self.details.uv_offset.collect(bindings);
+        self.details.uv_angle.collect(bindings);
+        self.details.uv_tiling.collect(bindings);
+        for value in self.details.spline_points.iter() {
             value.collect(bindings);
         }
-        self.lower_bound.collect(bindings);
-        self.upper_bound.collect(bindings);
-        self.trail_emission_rate.collect(bindings);
+        self.details.lower_bound.collect(bindings);
+        self.details.upper_bound.collect(bindings);
+        self.details.trail_emission_rate.collect(bindings);
     }
 }
 impl Collect for surface::SplinePoint {
@@ -192,19 +192,19 @@ impl Collect for surface::SplinePoint {
 }
 impl<'a> Collect for surface::Ribbon<'a> {
     fn collect(&self, bindings: &mut Bindings) {
-        self.initial_speed.collect(bindings);
-        self.initial_speed_random.collect(bindings);
-        self.initial_yaw.collect(bindings);
-        self.initial_pitch.collect(bindings);
-        self.initial_horizontal.collect(bindings);
-        self.initial_vertical.collect(bindings);
-        self.lifetime.collect(bindings);
-        self.lifetime_random.collect(bindings);
-        self.size_animation.collect(bindings);
-        self.rotation_animation.collect(bindings);
-        self.color_start.collect(bindings);
-        self.color_mid.collect(bindings);
-        self.color_end.collect(bindings);
+        self.motion.speed.collect(bindings);
+        self.motion.variation.collect(bindings);
+        self.direction.initial_yaw.collect(bindings);
+        self.direction.initial_pitch.collect(bindings);
+        self.direction.initial_horizontal.collect(bindings);
+        self.direction.initial_vertical.collect(bindings);
+        self.lifetime.duration.collect(bindings);
+        self.lifetime.variation.collect(bindings);
+        self.appearance.size_animation.collect(bindings);
+        self.appearance.rotation_animation.collect(bindings);
+        self.appearance.color_start.collect(bindings);
+        self.appearance.color_mid.collect(bindings);
+        self.appearance.color_end.collect(bindings);
         self.max_length.collect(bindings);
         for value in self.spline_points.iter() {
             value.collect(bindings);
@@ -507,6 +507,14 @@ impl Collect for surface::Feature<'_> {
                         .insert(target.clone(), value.control.interpolation);
                 }
             }
+
+            Self::GeometryAnimation(unavailable)
+            | Self::CollisionShape(unavailable)
+            | Self::ParticleProgram(unavailable)
+            | Self::FaceActor(unavailable)
+            | Self::LightProgram(unavailable)
+            | Self::AtlasParticles(unavailable)
+            | Self::PointLight(unavailable) => match *unavailable {},
         }
     }
 }

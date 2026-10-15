@@ -37,7 +37,7 @@ pub(super) fn write<'a, D: Dialect>(
         .chain(
             model
                 .features()
-                .filter(|(_, feature)| matches!(feature.payload, profile::Node::Doodad(_))),
+                .filter(|(_, feature)| matches!(feature.payload, profile::Node::Attachment(_))),
         )
     {
         let node = model.node(feature.node).expect("validated feature anchor");
@@ -184,8 +184,8 @@ pub(super) fn write<'a, D: Dialect>(
                     });
                 }
             }
-            profile::Node::PointLight(_) | profile::Node::PointProgram(_) => {}
-            profile::Node::Doodad(source) => {
+            profile::Node::PointLight(_) | profile::Node::LightProgram(_) => {}
+            profile::Node::Attachment(source) => {
                 if node.transform.scale[1] != node.transform.scale[0]
                     || node.transform.scale[2] != node.transform.scale[0]
                 {
@@ -240,13 +240,13 @@ pub(super) fn write<'a, D: Dialect>(
                 }
                 let mut reference = records::DoodadReference::default();
                 reference.set_name_index(selector);
-                let mut flags = records::DoodadFlags(source.controls.bits());
+                let mut flags = records::DoodadFlags(source.appearance.controls.bits());
                 flags.set_has_light_reference(matches!(
-                    source.tint,
+                    source.appearance.tint,
                     profile::DoodadTint::Lit { .. }
                 ));
                 reference.set_flags(flags);
-                let color = match source.tint {
+                let color = match source.appearance.tint {
                     profile::DoodadTint::Color(color) => super::rgba(color),
                     profile::DoodadTint::Lit {
                         color: [r, g, b],
@@ -272,7 +272,7 @@ pub(super) fn write<'a, D: Dialect>(
                         Error::new("world.doodads", "doodad count exceeds reference capacity")
                     })?,
                 );
-                multipliers.push(source.color_multiplier);
+                multipliers.push(source.appearance.color_multiplier);
                 doodads.push(records::DoodadDef {
                     name_and_flags: reference,
                     position: node.transform.translation,
@@ -281,6 +281,31 @@ pub(super) fn write<'a, D: Dialect>(
                     color,
                 });
             }
+
+            profile::Node::Camera(unavailable)
+            | profile::Node::Particle(unavailable)
+            | profile::Node::Ribbon(unavailable)
+            | profile::Node::Event(unavailable)
+            | profile::Node::GeometryAnimation(unavailable)
+            | profile::Node::CollisionShape(unavailable)
+            | profile::Node::ParticleProgram(unavailable)
+            | profile::Node::FaceActor(unavailable)
+            | profile::Node::Extent(unavailable)
+            | profile::Node::ParticleCopy(unavailable)
+            | profile::Node::Projector(unavailable)
+            | profile::Node::Force(unavailable)
+            | profile::Node::Warp(unavailable)
+            | profile::Node::HitTest(unavailable)
+            | profile::Node::AttachmentVolume(unavailable)
+            | profile::Node::Billboard(unavailable)
+            | profile::Node::Turret(unavailable)
+            | profile::Node::IkJoint(unavailable)
+            | profile::Node::IkTwoJoint(unavailable)
+            | profile::Node::IkCcd(unavailable)
+            | profile::Node::OneBoneSolver(unavailable)
+            | profile::Node::ShadowBox(unavailable)
+            | profile::Node::ViewVolume(unavailable)
+            | profile::Node::AtlasParticles(unavailable) => match *unavailable {},
         }
     }
     if path_mode && file_mode {

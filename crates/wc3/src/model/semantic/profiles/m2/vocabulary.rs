@@ -1,15 +1,16 @@
 //! Built-in M2 authoring vocabulary and its lossless embeddings.
 use super::properties::Target as PropertySelector;
+use crate::model::semantic::profiles::Unavailable;
 use crate::model::semantic::profiles::UniversalProperty;
-use crate::model::semantic::profiles::{
-    m2, Extends, FeaturePayload, NoControls, Profile, SurfacePayload, Universal,
-};
+use crate::model::semantic::profiles::{m2, Extends, NoControls, Profile, Universal};
+use crate::model::semantic::Link;
 use crate::model::semantic::PropertyIdentityKey;
 use crate::model::semantic::{
     Basis, Bounds, ClipControls, DrawControls, DrawLooks, Error, FeatureKind, IdentityBinding,
     LengthUnit, M2Geometry, MaterialSurface, MeshControls, Model, ModelMetadata, NodeControls,
     PropertyPayload, System, TextureControls, UniversalAppearance, UniversalBinding,
 };
+use crate::model::semantic::{FeatureSet, FeatureView, FeatureVocabulary};
 /// Vocabulary that maps mechanically to M2 logical features.
 #[derive(Clone, Debug, Default)]
 pub struct M2;
@@ -100,21 +101,12 @@ impl Profile for M2 {
         Ok(())
     }
 }
-impl SurfacePayload for m2::Material<'_> {
-    fn supports_property(&self, key: &PropertyIdentityKey) -> bool {
-        super::properties::Target::from_identity(key).is_some_and(|key| key.supports_material(self))
-    }
-
-    fn validate(&self) -> Result<(), Error> {
-        Ok(())
-    }
-}
-impl FeaturePayload for m2::ActorKind<'_> {
-    fn supports_property(&self, key: &PropertyIdentityKey) -> bool {
+impl m2::ActorKind<'_> {
+    pub(crate) fn profile_supports_property(&self, key: &PropertyIdentityKey) -> bool {
         super::properties::Target::from_identity(key).is_some_and(|key| key.supports_feature(self))
     }
 
-    fn kind(&self) -> FeatureKind {
+    pub(crate) fn profile_payload_kind(&self) -> FeatureKind {
         FeatureKind::Other
     }
 }
@@ -141,7 +133,7 @@ impl Extends<M2> for Universal {
         System::M2(value)
     }
     fn surface<'a>(value: <M2 as Profile>::Surface<'a>) -> Self::Surface<'a> {
-        MaterialSurface::M2(Box::new(value))
+        MaterialSurface::ModelShader(Box::new(value))
     }
     fn feature<'a>(value: <M2 as Profile>::Feature<'a>) -> Self::Feature<'a> {
         value.into()
@@ -200,5 +192,48 @@ mod tests {
         let mut invalid = Model::<M2>::builder("layer");
         invalid.add_controller(Controller::default()).unwrap();
         assert!(invalid.finish().is_err());
+    }
+}
+
+impl<'a> FeatureVocabulary<'a> for M2 {
+    type Light = m2::Light;
+    type Camera = m2::Camera;
+    type Attachment = m2::Attachment;
+    type Particle = Box<m2::Particle<'a>>;
+    type Ribbon = Box<m2::Ribbon>;
+    type Event = m2::Event;
+    type GeometryAnimation = Unavailable;
+    type CollisionShape = Unavailable;
+    type ParticleProgram = Unavailable;
+    type FaceActor = Unavailable;
+    type LightProgram = Unavailable;
+    type Extent = Unavailable;
+    type ParticleCopy = Unavailable;
+    type Projector = Unavailable;
+    type Force = Unavailable;
+    type Warp = Unavailable;
+    type HitTest = Unavailable;
+    type AttachmentVolume = Unavailable;
+    type Billboard = Unavailable;
+    type Turret = Unavailable;
+    type IkJoint = Unavailable;
+    type IkTwoJoint = Unavailable;
+    type IkCcd = Unavailable;
+    type OneBoneSolver = Unavailable;
+    type ShadowBox = Unavailable;
+    type ViewVolume = Unavailable;
+    type AtlasParticles = Unavailable;
+    type PointLight = Unavailable;
+    fn visit_links(value: &FeatureSet<'a, Self>, visitor: &mut dyn FnMut(Link)) {
+        value.visit_profile_links(visitor);
+    }
+    fn feature<'view>(value: &'view FeatureSet<'a, Self>) -> FeatureView<'view, 'a> {
+        value.profile_feature()
+    }
+    fn supports_property(value: &FeatureSet<'a, Self>, key: &PropertyIdentityKey) -> bool {
+        value.profile_supports_property(key)
+    }
+    fn kind(value: &FeatureSet<'a, Self>) -> FeatureKind {
+        value.profile_payload_kind()
     }
 }

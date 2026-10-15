@@ -1,12 +1,8 @@
 //! Diablo IV authoring meanings remain independent of native format hashes.
-mod geometry;
-pub use geometry::*;
-mod material;
-pub use material::*;
-mod controls;
-pub use controls::*;
+pub use crate::model::semantic::controls::diablo4::*;
+pub use crate::model::semantic::geometry::diablo4::*;
+pub use crate::model::semantic::materials::diablo4::*;
 mod vocabulary;
 pub use vocabulary::D4;
 
-mod appearance;
-pub use appearance::*;
+pub use crate::model::semantic::appearance::diablo4::*;

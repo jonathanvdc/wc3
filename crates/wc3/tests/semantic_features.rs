@@ -1,32 +1,80 @@
 use std::borrow::Cow;
 use wc3::model::semantic::profiles::{m2, mdlx, wmo, Extends, Mdlx, Narrows, Universal, Wmo, M2};
-use wc3::model::semantic::{Animated, Model, Node};
+use wc3::model::semantic::{
+    Animated, AttachmentPointDefinition, LightEmission, Model, Node, PhotographicControls,
+    VisibleLight,
+};
+use wc3::model::semantic::{
+    AtlasParticle, AtlasParticleRendering, ModelParticle, ParticleEmission, ParticleLifetime,
+    ParticleMotion, StagedParticleAppearance,
+};
+use wc3::model::semantic::{GravityTrailControls, TrailAppearance};
 
 #[test]
 fn complete_mdlx_feature_vocabulary_round_trips_through_universal() {
     let features = [
         mdlx::Node::GeometryAnimation(mdlx::GeometryAnimation::default()),
         mdlx::Node::Particle(mdlx::Particle {
-            resource: Cow::Borrowed("particle.mdx"),
-            model_resource: true,
-            emission_rate: Animated::constant(23.),
+            details: ModelParticle {
+                resource: Cow::Borrowed("particle.mdx"),
+                model_resource: true,
+                ..Default::default()
+            },
+            emission: ParticleEmission {
+                rate: Animated::constant(23.),
+                variation: (),
+                trigger: (),
+                ..Default::default()
+            },
+            motion: ParticleMotion {
+                variation: (),
+                ..Default::default()
+            },
+            lifetime: ParticleLifetime {
+                variation: (),
+                ..Default::default()
+            },
+            appearance: (),
             ..Default::default()
         }),
-        mdlx::Node::Particle2(mdlx::Particle2 {
-            atlas: [3, 5],
-            uv_intervals: [[1, 3, 2], [4, 6, 3], [7, 9, 4], [10, 12, 5]],
-            colors: [[0.1, 0.2, 0.3], [0.4, 0.5, 0.6], [0.7, 0.8, 0.9]],
-            alpha: [255, 127, 1],
-            scale: [1., 2., 0.],
-            squirt: true,
+        mdlx::Node::AtlasParticles(mdlx::Particle2 {
+            details: AtlasParticle {
+                rendering: AtlasParticleRendering {
+                    atlas: [3, 5],
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            appearance: StagedParticleAppearance {
+                uv_intervals: [[1, 3, 2], [4, 6, 3], [7, 9, 4], [10, 12, 5]],
+                colors: [[0.1, 0.2, 0.3], [0.4, 0.5, 0.6], [0.7, 0.8, 0.9]],
+                alpha: [255, 127, 1],
+                scale: [1., 2., 0.],
+                ..Default::default()
+            },
+            emission: ParticleEmission {
+                trigger: true,
+                variation: (),
+                ..Default::default()
+            },
+            lifetime: ParticleLifetime {
+                variation: (),
+                ..Default::default()
+            },
             ..Default::default()
         }),
         mdlx::Node::Ribbon(mdlx::Ribbon {
-            gravity: 9.8,
-            atlas: [2, 4],
+            controls: GravityTrailControls {
+                gravity: 9.8,
+                ..Default::default()
+            },
+            appearance: TrailAppearance {
+                atlas: [2, 4],
+                ..Default::default()
+            },
             ..Default::default()
         }),
-        mdlx::Node::Popcorn(mdlx::Popcorn {
+        mdlx::Node::ParticleProgram(mdlx::Popcorn {
             resource: Cow::Borrowed("fire.pkfx"),
             visibility_guide: Cow::Borrowed("Stand=on\nDeath=off"),
             scaling: true,
@@ -34,31 +82,40 @@ fn complete_mdlx_feature_vocabulary_round_trips_through_universal() {
         }),
         mdlx::Node::Light(mdlx::Light {
             kind: mdlx::LightKind::Unknown(0x8000_0001),
-            shadow_casting: Some(false),
-            shadow_intensity: Some(0.25),
-            falloff: Some([
-                Animated::constant(0.1),
-                Animated::constant(0.2),
-                Animated::constant(0.3),
-            ]),
+            activation: VisibleLight {
+                shadow_casting: Some(false),
+                shadow_intensity: Some(0.25),
+                falloff: Some([
+                    Animated::constant(0.1),
+                    Animated::constant(0.2),
+                    Animated::constant(0.3),
+                ]),
+                ..Default::default()
+            },
             ..Default::default()
         }),
         mdlx::Node::Camera(mdlx::Camera {
             target: [1., 2., 3.],
             clipping: [0.1, 1000.],
             field_of_view: 0.75,
-            f_stop: Some(Animated::constant(2.8)),
+            convention: PhotographicControls {
+                f_stop: Some(Animated::constant(2.8)),
+                ..Default::default()
+            },
             ..Default::default()
         }),
         mdlx::Node::Attachment(mdlx::Attachment {
             resource: Cow::Borrowed("attachment.mdx"),
-            id: 17,
+            point: AttachmentPointDefinition {
+                identity: 17,
+                ..Default::default()
+            },
             ..Default::default()
         }),
-        mdlx::Node::Events(mdlx::Events {
+        mdlx::Node::Event(mdlx::Events {
             name: Cow::Borrowed("SNDxFootstep"),
         }),
-        mdlx::Node::Collision(mdlx::Collision::Unknown {
+        mdlx::Node::CollisionShape(mdlx::Collision::Unknown {
             kind: 0x8000_0001,
             vertices: vec![[1., 2., 3.], [4., 5., 6.]],
             radius: Some(7.),
@@ -77,7 +134,24 @@ fn feature_conversion_moves_owned_resource_paths() {
     let resource = String::from("owned-particle.mdx");
     let pointer = resource.as_ptr();
     let source = mdlx::Node::Particle(mdlx::Particle {
-        resource: Cow::Owned(resource),
+        details: ModelParticle {
+            resource: Cow::Owned(resource),
+            ..Default::default()
+        },
+        emission: ParticleEmission {
+            variation: (),
+            trigger: (),
+            ..Default::default()
+        },
+        motion: ParticleMotion {
+            variation: (),
+            ..Default::default()
+        },
+        lifetime: ParticleLifetime {
+            variation: (),
+            ..Default::default()
+        },
+        appearance: (),
         ..Default::default()
     });
     let widened = <Universal as Extends<Mdlx>>::feature(source);
@@ -85,8 +159,8 @@ fn feature_conversion_moves_owned_resource_paths() {
     let mdlx::Node::Particle(particle) = restored else {
         panic!("particle changed behavior")
     };
-    assert!(matches!(particle.resource, Cow::Owned(_)));
-    assert_eq!(particle.resource.as_ptr(), pointer);
+    assert!(matches!(particle.details.resource, Cow::Owned(_)));
+    assert_eq!(particle.details.resource.as_ptr(), pointer);
 }
 
 #[test]
@@ -94,7 +168,7 @@ fn full_model_feature_identity_survives_widening_and_narrowing() {
     let mut draft = Model::<Mdlx>::builder("features");
     let node = draft.add_node(Node::named("emitter")).unwrap();
     let feature = draft
-        .add_feature(node, mdlx::Node::Particle2(mdlx::Particle2::default()))
+        .add_feature(node, mdlx::Node::AtlasParticles(mdlx::Particle2::default()))
         .unwrap();
     let model = draft.finish().unwrap();
     let widened = model.widen::<Universal>();
@@ -103,14 +177,14 @@ fn full_model_feature_identity_survives_widening_and_narrowing() {
     assert_eq!(restored.feature(feature).unwrap().node, node);
     assert!(matches!(
         restored.feature(feature).unwrap().payload,
-        mdlx::Node::Particle2(_)
+        mdlx::Node::AtlasParticles(_)
     ));
 }
 
 #[test]
 fn world_features_retain_light_relationship_categories() {
     let features = [
-        wmo::Node::Doodad(wmo::Doodad::default()),
+        wmo::Node::Attachment(wmo::Doodad::default()),
         wmo::Node::Light(Box::new(wmo::Light {
             directional_terms: Some([([1., 2., 3.], 4.); 6]),
             modern: Some(wmo::ModernLight {
@@ -138,26 +212,30 @@ fn world_features_retain_light_relationship_categories() {
 fn m2_enable_and_camera_conventions_survive_projection() {
     let features = [
         m2::ActorKind::Attachment(m2::Attachment {
-            role: 31,
-            enabled: Animated::constant(false),
+            identity: 31,
+            activation: Animated::constant(false),
+            control: (),
         }),
         m2::ActorKind::Light(m2::Light {
             kind: m2::values::LightKind::Unknown(65535),
-            ambient_color: Animated::constant([0.1, 0.2, 0.3]),
-            ambient_intensity: Animated::constant(0.4),
-            diffuse_color: Animated::constant([0.5, 0.6, 0.7]),
-            diffuse_intensity: Animated::constant(0.8),
-            attenuation_start: Animated::constant(1.),
-            attenuation_end: Animated::constant(20.),
-            enabled: Animated::constant(false),
+            ambient: LightEmission {
+                color: Animated::constant([0.1, 0.2, 0.3]),
+                intensity: Animated::constant(0.4),
+            },
+            diffuse: LightEmission {
+                color: Animated::constant([0.5, 0.6, 0.7]),
+                intensity: Animated::constant(0.8),
+            },
+            attenuation: [Animated::constant(1.), Animated::constant(20.)],
+            activation: Animated::constant(false),
         }),
         m2::ActorKind::Camera(m2::Camera {
-            kind: m2::values::CameraKind::Unknown(0x8000_0001),
+            convention: m2::values::CameraKind::Unknown(0x8000_0001),
             field_of_view: Animated::constant(0.8),
-            clip: [0.1, 1000.],
-            target_base: [1., 2., 3.],
-            position: Animated::constant([4., 5., 6.]),
-            target: Animated::constant([7., 8., 9.]),
+            clipping: [0.1, 1000.],
+            target: [1., 2., 3.],
+            eye_offset: Animated::constant([4., 5., 6.]),
+            target_offset: Animated::constant([7., 8., 9.]),
             roll: Animated::constant(0.5),
         }),
         m2::ActorKind::Event(m2::Event {
@@ -187,8 +265,8 @@ fn editing_shared_light_fields_survives_exact_native_projection() {
     else {
         panic!("light changed behavior")
     };
-    assert_eq!(restored.intensity.default, 7.);
-    assert_eq!(restored.ambient_color.default, [0.1, 0.2, 0.3]);
+    assert_eq!(restored.diffuse.intensity.default, 7.);
+    assert_eq!(restored.ambient.color.default, [0.1, 0.2, 0.3]);
 }
 
 #[test]
@@ -203,7 +281,10 @@ fn common_animation_destinations_validate_and_narrow_with_borrowed_keys() {
         .set_feature(
             feature,
             mdlx::Node::Light(mdlx::Light {
-                intensity: Animated::new(1., mdlx::properties::light::INTENSITY.bind(feature)),
+                diffuse: LightEmission {
+                    intensity: Animated::new(1., mdlx::properties::light::INTENSITY.bind(feature)),
+                    ..Default::default()
+                },
                 ..Default::default()
             }),
         )
@@ -249,7 +330,7 @@ fn particle_copy_relationship_rejects_a_different_particle_simulation() {
     let source = draft
         .add_feature(
             node,
-            mdlx::Node::Particle2(mdlx::Particle2::default()).into(),
+            mdlx::Node::AtlasParticles(mdlx::Particle2::default()).into(),
         )
         .unwrap();
     draft
@@ -285,8 +366,12 @@ fn external_attachments_narrow_by_resource_meaning_without_source_tags() {
     use wc3::model::semantic::{scene, NodeFeature, Resource};
     let source = scene::Feature::Attachment(scene::Attachment {
         resource: Resource::Path(Cow::Borrowed(b"effects/attachment.mdx")),
-        visibility: Animated::constant(0.5),
-        id: 21,
+        point: AttachmentPointDefinition {
+            activation: Animated::constant(0.5),
+            identity: 21,
+            control: (),
+        },
+        appearance: (),
     });
     let feature = NodeFeature::from(source);
     let mdlx::Node::Attachment(restored) = <Mdlx as Narrows<Universal>>::feature(feature).unwrap()
@@ -295,16 +380,20 @@ fn external_attachments_narrow_by_resource_meaning_without_source_tags() {
     };
     assert_eq!(restored.resource, "effects/attachment.mdx");
     assert!(matches!(restored.resource, Cow::Borrowed(_)));
-    assert_eq!(restored.id, 21);
-    assert_eq!(restored.visibility.default, 0.5);
+    assert_eq!(restored.point.identity, 21);
+    assert_eq!(restored.point.activation.default, 0.5);
     for resource in [
         Resource::Path(Cow::Borrowed(&[255])),
         Resource::FileDataId(123),
     ] {
         let feature = NodeFeature::from(scene::Feature::Attachment(scene::Attachment {
             resource,
-            visibility: Animated::constant(1.),
-            id: 0,
+            point: AttachmentPointDefinition {
+                activation: Animated::constant(1.),
+                identity: 0,
+                control: (),
+            },
+            appearance: (),
         }));
         assert!(<Mdlx as Narrows<Universal>>::feature(feature).is_err());
     }

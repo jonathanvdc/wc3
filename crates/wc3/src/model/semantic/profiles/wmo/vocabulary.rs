@@ -1,12 +1,14 @@
 //! Built-in WMO authoring vocabulary and its lossless embeddings.
 use crate::model::semantic::profiles::{
-    wmo, Extends, FeaturePayload, NoControls, Profile, SurfacePayload, Unavailable, Universal,
+    wmo, Extends, NoControls, Profile, SurfacePayload, Unavailable, Universal,
 };
 use crate::model::semantic::Model;
 use crate::model::semantic::{
     DrawControls, Error, FeatureKind, InstanceControls, MaterialSurface, ModelMetadata, SingleLook,
     System, UniversalAppearance, WmoGeometry,
 };
+use crate::model::semantic::{FeatureSet, FeatureView, FeatureVocabulary};
+use crate::model::semantic::{Link, PropertyIdentityKey};
 /// Vocabulary that maps mechanically to Wmo logical features.
 #[derive(Clone, Debug, Default)]
 pub struct Wmo;
@@ -40,13 +42,38 @@ impl SurfacePayload for wmo::Material<'_> {
         Ok(())
     }
 }
-impl FeaturePayload for wmo::Node<'_> {
-    fn kind(&self) -> FeatureKind {
+impl wmo::Node<'_> {
+    pub(crate) fn profile_payload_kind(&self) -> FeatureKind {
         match self {
             Self::Light(_) => FeatureKind::WmoLight,
             Self::PointLight(_) => FeatureKind::WmoPointLight,
-            Self::PointProgram(_) => FeatureKind::WmoPointProgram,
-            Self::Doodad(_) => FeatureKind::WmoDoodad,
+            Self::LightProgram(_) => FeatureKind::WmoPointProgram,
+            Self::Attachment(_) => FeatureKind::WmoDoodad,
+
+            Self::Camera(unavailable)
+            | Self::Particle(unavailable)
+            | Self::Ribbon(unavailable)
+            | Self::Event(unavailable)
+            | Self::GeometryAnimation(unavailable)
+            | Self::CollisionShape(unavailable)
+            | Self::ParticleProgram(unavailable)
+            | Self::FaceActor(unavailable)
+            | Self::Extent(unavailable)
+            | Self::ParticleCopy(unavailable)
+            | Self::Projector(unavailable)
+            | Self::Force(unavailable)
+            | Self::Warp(unavailable)
+            | Self::HitTest(unavailable)
+            | Self::AttachmentVolume(unavailable)
+            | Self::Billboard(unavailable)
+            | Self::Turret(unavailable)
+            | Self::IkJoint(unavailable)
+            | Self::IkTwoJoint(unavailable)
+            | Self::IkCcd(unavailable)
+            | Self::OneBoneSolver(unavailable)
+            | Self::ShadowBox(unavailable)
+            | Self::ViewVolume(unavailable)
+            | Self::AtlasParticles(unavailable) => match *unavailable {},
         }
     }
 }
@@ -73,7 +100,7 @@ impl Extends<Wmo> for Universal {
         System::Wmo(value)
     }
     fn surface<'a>(value: <Wmo as Profile>::Surface<'a>) -> Self::Surface<'a> {
-        MaterialSurface::Wmo(Box::new(value))
+        MaterialSurface::World(Box::new(value))
     }
     fn feature<'a>(value: <Wmo as Profile>::Feature<'a>) -> Self::Feature<'a> {
         value.into()
@@ -100,5 +127,49 @@ impl Extends<Wmo> for Universal {
     fn controller<'a>(value: <Wmo as Profile>::Controller<'a>) -> Self::Controller<'a> {
         let _ = value;
         None
+    }
+}
+
+impl<'a> FeatureVocabulary<'a> for Wmo {
+    type Light = Box<wmo::Light>;
+    type Camera = Unavailable;
+    type Attachment = wmo::Doodad<'a>;
+    type Particle = Unavailable;
+    type Ribbon = Unavailable;
+    type Event = Unavailable;
+    type GeometryAnimation = Unavailable;
+    type CollisionShape = Unavailable;
+    type ParticleProgram = Unavailable;
+    type FaceActor = Unavailable;
+    type LightProgram = wmo::PointProgram;
+    type Extent = Unavailable;
+    type ParticleCopy = Unavailable;
+    type Projector = Unavailable;
+    type Force = Unavailable;
+    type Warp = Unavailable;
+    type HitTest = Unavailable;
+    type AttachmentVolume = Unavailable;
+    type Billboard = Unavailable;
+    type Turret = Unavailable;
+    type IkJoint = Unavailable;
+    type IkTwoJoint = Unavailable;
+    type IkCcd = Unavailable;
+    type OneBoneSolver = Unavailable;
+    type ShadowBox = Unavailable;
+    type ViewVolume = Unavailable;
+    type AtlasParticles = Unavailable;
+    type PointLight = wmo::PointLight;
+    fn visit_links(value: &FeatureSet<'a, Self>, visitor: &mut dyn FnMut(Link)) {
+        value.visit_profile_links(visitor);
+    }
+    fn feature<'view>(value: &'view FeatureSet<'a, Self>) -> FeatureView<'view, 'a> {
+        value.profile_feature()
+    }
+    fn supports_property(value: &FeatureSet<'a, Self>, key: &PropertyIdentityKey) -> bool {
+        let _ = (value, key);
+        false
+    }
+    fn kind(value: &FeatureSet<'a, Self>) -> FeatureKind {
+        value.profile_payload_kind()
     }
 }

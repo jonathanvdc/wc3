@@ -22,28 +22,31 @@ pub(super) fn light<'a, V: ModelVersion>(
     record.attenuation_start =
         encoder.value(&source.attenuation[0], Ok, "light.attenuation_start")?;
     record.attenuation_end = encoder.value(&source.attenuation[1], Ok, "light.attenuation_end")?;
-    record.color = encoder.value(&source.color, Ok, "light.color")?;
-    record.intensity = encoder.value(&source.intensity, Ok, "light.intensity")?;
-    record.ambient_color = encoder.value(&source.ambient_color, Ok, "light.ambient_color")?;
+    record.color = encoder.value(&source.diffuse.color, Ok, "light.color")?;
+    record.intensity = encoder.value(&source.diffuse.intensity, Ok, "light.intensity")?;
+    record.ambient_color = encoder.value(&source.ambient.color, Ok, "light.ambient_color")?;
     record.ambient_intensity =
-        encoder.value(&source.ambient_intensity, Ok, "light.ambient_intensity")?;
-    record.visibility =
-        super::encode_helpers::visibility(&source.visibility, encoder, "light.visibility")?;
-    if let Some(value) = source.shadow_casting {
+        encoder.value(&source.ambient.intensity, Ok, "light.ambient_intensity")?;
+    record.visibility = super::encode_helpers::visibility(
+        &source.activation.visibility,
+        encoder,
+        "light.visibility",
+    )?;
+    if let Some(value) = source.activation.shadow_casting {
         if let Err(error) = record.try_set_shadow_casting(value) {
             encoder
                 .context
                 .unsupported("light.shadow_casting", error.to_string())?;
         }
     }
-    if let Some(value) = source.shadow_intensity {
+    if let Some(value) = source.activation.shadow_intensity {
         if let Err(error) = record.try_set_shadow_intensity(value) {
             encoder
                 .context
                 .unsupported("light.shadow_intensity", error.to_string())?;
         }
     }
-    if let Some(value) = &source.shadow_range {
+    if let Some(value) = &source.activation.shadow_range {
         let range = native::scene::LightShadowRange {
             start: encoder.value(&value[0], Ok, "light.shadow_start")?,
             end: encoder.value(&value[1], Ok, "light.shadow_end")?,
@@ -54,7 +57,7 @@ pub(super) fn light<'a, V: ModelVersion>(
                 .unsupported("light.shadow_range", error.to_string())?;
         }
     }
-    if let Some(value) = &source.falloff {
+    if let Some(value) = &source.activation.falloff {
         let falloff = native::scene::LightFalloff {
             quadratic: encoder.value(&value[0], Ok, "light.quadratic")?,
             linear: encoder.value(&value[1], Ok, "light.linear")?,
@@ -121,11 +124,14 @@ pub(super) fn camera<V: ModelVersion>(
             (source.roll.default != 0.)
                 .then(|| native::animation::Track::constant(source.roll.default))
         });
-    record.visibility =
-        super::encode_helpers::visibility(&source.visibility, encoder, "camera.visibility")?;
+    record.visibility = super::encode_helpers::visibility(
+        &source.convention.visibility,
+        encoder,
+        "camera.visibility",
+    )?;
     macro_rules! lens {
         ($field:ident) => {
-            if let Some(value) = &source.$field {
+            if let Some(value) = &source.convention.$field {
                 record.$field = value
                     .property
                     .as_ref()

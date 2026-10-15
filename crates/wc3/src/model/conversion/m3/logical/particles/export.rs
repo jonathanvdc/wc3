@@ -75,7 +75,7 @@ pub(in crate::model::conversion::m3::logical) fn write<E: Envelope>(
         });
     }
     let copies = append(writer.document, &copy_rows)?.cast();
-    let legacy=graph.features().any(|(_,feature)|matches!(&feature.payload,surface::Feature::Particle(p) if p.noise_smoothness != 0.0));
+    let legacy=graph.features().any(|(_,feature)|matches!(&feature.payload,surface::Feature::Particle(p) if p.details.noise_smoothness != 0.0));
     macro_rules! encode_particles {
         ($version:ty) => {{
             let mut rows = Vec::new();

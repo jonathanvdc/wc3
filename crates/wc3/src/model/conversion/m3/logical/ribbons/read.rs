@@ -5,6 +5,10 @@ use crate::model::conversion::Error;
 use crate::model::m3::{self as native, records as nr};
 use crate::model::semantic::profiles::m3::properties::{Field, FieldPath};
 use crate::model::semantic::{profiles::m3 as surface, NodeId};
+use crate::model::semantic::{
+    ParticleLifetime, ParticleMotion, ProgrammedAge, ProgrammedDirection, ProgrammedForces,
+    ProgrammedNoise, ProgrammedTrailGravity,
+};
 use native::Envelope;
 pub(super) fn decode<'view, E: Envelope, D: nr::RibbonEmitterDialect>(
     r: nr::RibbonEmitter<D>,
@@ -235,83 +239,97 @@ where
         fallback_node,
         material: Some(reader.material(material_index)?),
         additional_flags: surface::values::RibbonAdditionalFlags(additional_flags),
-        initial_speed: reader.property(
-            &FieldPath::root(Field::Ribbon).child(Field::InitialSpeed),
-            initial_speed,
-        ),
-        initial_speed_random: reader.property(
-            &FieldPath::root(Field::Ribbon).child(Field::InitialSpeedRandom),
-            initial_speed_random,
-        ),
-        initial_yaw: reader.property(
-            &FieldPath::root(Field::Ribbon).child(Field::InitialYaw),
-            initial_yaw,
-        ),
-        initial_pitch: reader.property(
-            &FieldPath::root(Field::Ribbon).child(Field::InitialPitch),
-            initial_pitch,
-        ),
-        initial_horizontal: reader.property(
-            &FieldPath::root(Field::Ribbon).child(Field::InitialHorizontal),
-            initial_horizontal,
-        ),
-        initial_vertical: reader.property(
-            &FieldPath::root(Field::Ribbon).child(Field::InitialVertical),
-            initial_vertical,
-        ),
-        lifetime: reader.property(
-            &FieldPath::root(Field::Ribbon).child(Field::Lifetime),
-            lifetime,
-        ),
-        lifetime_random: reader.property(
-            &FieldPath::root(Field::Ribbon).child(Field::LifetimeRandom),
-            lifetime_random,
-        ),
+        motion: ParticleMotion {
+            speed: reader.property(
+                &FieldPath::root(Field::Ribbon).child(Field::InitialSpeed),
+                initial_speed,
+            ),
+            variation: reader.property(
+                &FieldPath::root(Field::Ribbon).child(Field::InitialSpeedRandom),
+                initial_speed_random,
+            ),
+            gravity: ProgrammedTrailGravity {
+                x: gravity_x,
+                y: gravity_y,
+                magnitude: gravity,
+            },
+        },
+        direction: ProgrammedDirection {
+            initial_yaw: reader.property(
+                &FieldPath::root(Field::Ribbon).child(Field::InitialYaw),
+                initial_yaw,
+            ),
+            initial_pitch: reader.property(
+                &FieldPath::root(Field::Ribbon).child(Field::InitialPitch),
+                initial_pitch,
+            ),
+            initial_horizontal: reader.property(
+                &FieldPath::root(Field::Ribbon).child(Field::InitialHorizontal),
+                initial_horizontal,
+            ),
+            initial_vertical: reader.property(
+                &FieldPath::root(Field::Ribbon).child(Field::InitialVertical),
+                initial_vertical,
+            ),
+            drag,
+        },
+        lifetime: ParticleLifetime {
+            duration: reader.property(
+                &FieldPath::root(Field::Ribbon).child(Field::Lifetime),
+                lifetime,
+            ),
+            variation: reader.property(
+                &FieldPath::root(Field::Ribbon).child(Field::LifetimeRandom),
+                lifetime_random,
+            ),
+        },
         kill_radius,
-        gravity_x,
-        gravity_y,
-        gravity,
-        size_mid_time,
-        color_mid_time,
-        alpha_mid_time,
-        rotation_mid_time,
-        size_mid_hold_time,
-        color_mid_hold_time,
-        alpha_mid_hold_time,
-        rotation_mid_hold_time,
-        size_animation: reader.property(
-            &FieldPath::root(Field::Ribbon).child(Field::SizeAnimation),
-            size_animation,
-        ),
-        rotation_animation: reader.property(
-            &FieldPath::root(Field::Ribbon).child(Field::RotationAnimation),
-            rotation_animation,
-        ),
-        color_start: reader.fixed_color(
-            &FieldPath::root(Field::Ribbon).child(Field::ColorStart),
-            color_start,
-        ),
-        color_mid: reader.fixed_color(
-            &FieldPath::root(Field::Ribbon).child(Field::ColorMid),
-            color_mid,
-        ),
-        color_end: reader.fixed_color(
-            &FieldPath::root(Field::Ribbon).child(Field::ColorEnd),
-            color_end,
-        ),
-        drag,
-        mass,
-        mass_random,
-        mass_size_multiplier,
-        local_forces: surface::values::LocalForces(local_forces.bits()),
-        world_forces: surface::values::WorldForces(world_forces.bits()),
-        local_forces_fallback: surface::values::LocalForces(local_forces_fallback.bits()),
-        world_forces_fallback: surface::values::WorldForces(world_forces_fallback.bits()),
-        world_forces_mass_multiplier,
-        noise_amplitude,
-        noise_frequency,
-        noise_coherence,
-        noise_edge,
+        appearance: ProgrammedAge {
+            size_mid_time,
+            color_mid_time,
+            alpha_mid_time,
+            rotation_mid_time,
+            size_mid_hold_time,
+            color_mid_hold_time,
+            alpha_mid_hold_time,
+            rotation_mid_hold_time,
+            size_animation: reader.property(
+                &FieldPath::root(Field::Ribbon).child(Field::SizeAnimation),
+                size_animation,
+            ),
+            rotation_animation: reader.property(
+                &FieldPath::root(Field::Ribbon).child(Field::RotationAnimation),
+                rotation_animation,
+            ),
+            color_start: reader.fixed_color(
+                &FieldPath::root(Field::Ribbon).child(Field::ColorStart),
+                color_start,
+            ),
+            color_mid: reader.fixed_color(
+                &FieldPath::root(Field::Ribbon).child(Field::ColorMid),
+                color_mid,
+            ),
+            color_end: reader.fixed_color(
+                &FieldPath::root(Field::Ribbon).child(Field::ColorEnd),
+                color_end,
+            ),
+        },
+        forces: ProgrammedForces {
+            mass,
+            mass_random,
+            mass_size_multiplier,
+            local_forces: surface::values::LocalForces(local_forces.bits()),
+            world_forces: surface::values::WorldForces(world_forces.bits()),
+            local_forces_fallback: surface::values::LocalForces(local_forces_fallback.bits()),
+            world_forces_fallback: surface::values::WorldForces(world_forces_fallback.bits()),
+            world_forces_mass_multiplier,
+        },
+        noise: ProgrammedNoise {
+            noise_amplitude,
+            noise_frequency,
+            noise_coherence,
+            noise_edge,
+        },
         index_plus_length,
         emitter_shape: emitter_shape.raw(),
         ribbon_type: surface::values::RibbonKind::from_raw((ribbon_type).raw()),

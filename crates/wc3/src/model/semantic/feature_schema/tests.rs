@@ -1,13 +1,26 @@
 use super::{CameraView, FeatureSchema, FeatureView, LightView, ParticlesView};
 use crate::model::semantic::profiles::{m2, mdlx, Either};
+use crate::model::semantic::LightEmission;
 use crate::model::semantic::{scene, Animated, NodeFeature};
+use crate::model::semantic::{
+    AngleTrailControls, SurfaceTrailRendering, TrailAppearance, TrailGeometry,
+};
+use crate::model::semantic::{ParticleEmission, ParticleLifetime, ParticleMotion};
 use std::ptr;
 
 #[test]
 fn emission_distinguishes_continuous_rates_from_keyed_burst_counts() {
     let mut authored = mdlx::Particle2 {
-        emission_rate: Animated::constant(37.5),
-        life_span: 2.25,
+        emission: ParticleEmission {
+            rate: Animated::constant(37.5),
+            variation: (),
+            ..Default::default()
+        },
+        lifetime: ParticleLifetime {
+            duration: 2.25,
+            variation: (),
+            ..Default::default()
+        },
         ..Default::default()
     };
     let view = &authored;
@@ -15,29 +28,43 @@ fn emission_distinguishes_continuous_rates_from_keyed_burst_counts() {
     else {
         panic!("continuous emitter must expose a rate");
     };
-    assert!(ptr::eq(rate, &authored.emission_rate));
+    assert!(ptr::eq(rate, &authored.emission.rate));
     assert_eq!(rate.default, 37.5);
-    authored.squirt = true;
+    authored.emission.trigger = true;
     let super::EmissionRef::BurstAtKeys(count) =
         ParticlesView::Sprite(&authored).emission().unwrap()
     else {
         panic!("squirt emitter must expose a burst count");
     };
-    assert!(ptr::eq(count, &authored.emission_rate));
+    assert!(ptr::eq(count, &authored.emission.rate));
     let super::LifetimeRef::Seconds(lifetime) =
         ParticlesView::Sprite(&authored).lifetime().unwrap()
     else {
         unreachable!();
     };
-    assert!(ptr::eq(lifetime, &authored.life_span));
+    assert!(ptr::eq(lifetime, &authored.lifetime.duration));
     assert_eq!(*lifetime, 2.25);
 }
 
 #[test]
 fn model_particle_emission_retains_animated_values_without_copying() {
     let authored = mdlx::Particle {
-        emission_rate: Animated::constant(18.),
-        life_span: Animated::constant(4.5),
+        emission: ParticleEmission {
+            rate: Animated::constant(18.),
+            variation: (),
+            trigger: (),
+            ..Default::default()
+        },
+        lifetime: ParticleLifetime {
+            duration: Animated::constant(4.5),
+            variation: (),
+            ..Default::default()
+        },
+        motion: ParticleMotion {
+            variation: (),
+            ..Default::default()
+        },
+        appearance: (),
         ..Default::default()
     };
     let view = ParticlesView::Model(&authored);
@@ -47,8 +74,8 @@ fn model_particle_emission_retains_animated_values_without_copying() {
     let super::LifetimeRef::AnimatedSeconds(lifetime) = view.lifetime().unwrap() else {
         unreachable!()
     };
-    assert!(ptr::eq(rate, &authored.emission_rate));
-    assert!(ptr::eq(lifetime, &authored.life_span));
+    assert!(ptr::eq(rate, &authored.emission.rate));
+    assert!(ptr::eq(lifetime, &authored.lifetime.duration));
     assert_eq!(rate.default, 18.);
     assert_eq!(lifetime.default, 4.5);
 }
@@ -56,19 +83,25 @@ fn model_particle_emission_retains_animated_values_without_copying() {
 #[test]
 fn ribbon_components_preserve_distinct_rate_and_atlas_integer_domains() {
     let segmented = mdlx::Ribbon {
-        color: Animated::constant([0.25, 0.5, 0.75]),
-        height_above: Animated::constant(3.5),
-        opacity: Animated::constant(0.6),
-        life_span: 2.5,
+        appearance: TrailAppearance {
+            color: Animated::constant([0.25, 0.5, 0.75]),
+            opacity: Animated::constant(0.6),
+            texture_slot: Animated::constant(70_000),
+            ..Default::default()
+        },
+        geometry: TrailGeometry {
+            height_above: Animated::constant(3.5),
+            ..Default::default()
+        },
+        lifetime: 2.5,
         emission_rate: 17,
-        texture_slot: Animated::constant(70_000),
         ..Default::default()
     };
     let view = super::RibbonView::Segmented(&segmented)
         .edge_strip()
         .unwrap();
-    assert!(ptr::eq(view.color, &segmented.color));
-    assert!(ptr::eq(view.opacity, &segmented.opacity));
+    assert!(ptr::eq(view.color, &segmented.appearance.color));
+    assert!(ptr::eq(view.opacity, &segmented.appearance.opacity));
     assert_eq!(view.height[0].default, 3.5);
     assert_eq!(*view.lifetime_seconds, 2.5);
     let super::TrailRateRef::Integral(rate) = view.emission_rate else {
@@ -78,31 +111,39 @@ fn ribbon_components_preserve_distinct_rate_and_atlas_integer_domains() {
         unreachable!()
     };
     assert!(ptr::eq(rate, &segmented.emission_rate));
-    assert!(ptr::eq(cell, &segmented.texture_slot));
+    assert!(ptr::eq(cell, &segmented.appearance.texture_slot));
     assert_eq!(*rate, 17);
     assert_eq!(cell.default, 70_000);
 
     let edge = m2::Ribbon {
-        id: 0,
-        textures: vec![],
-        materials: vec![],
-        color: Animated::constant([0.7, 0.3, 0.1]),
-        alpha: Animated::constant(0.8),
-        height_above: Animated::constant(6.),
-        height_below: Animated::constant(2.),
-        edges_per_second: 12.5,
-        edge_lifetime: 3.25,
-        emission_angle: 0.4,
-        atlas: [2, 4],
-        texture_slot: Animated::constant(31),
-        enabled: Animated::constant(true),
-        priority_plane: -2,
-        color_index: -1,
-        texture_transform: None,
+        controls: AngleTrailControls {
+            id: 0,
+            angle: 0.4,
+            enabled: Animated::constant(true),
+            priority_plane: -2,
+            color_index: -1,
+            texture_transform: None,
+        },
+        rendering: SurfaceTrailRendering {
+            textures: vec![],
+            materials: vec![],
+        },
+        appearance: TrailAppearance {
+            color: Animated::constant([0.7, 0.3, 0.1]),
+            opacity: Animated::constant(0.8),
+            atlas: [2, 4],
+            texture_slot: Animated::constant(31),
+        },
+        geometry: TrailGeometry {
+            height_above: Animated::constant(6.),
+            height_below: Animated::constant(2.),
+        },
+        emission_rate: 12.5,
+        lifetime: 3.25,
     };
     let view = super::RibbonView::Edge(&edge).edge_strip().unwrap();
-    assert!(ptr::eq(view.color, &edge.color));
-    assert!(ptr::eq(view.opacity, &edge.alpha));
+    assert!(ptr::eq(view.color, &edge.appearance.color));
+    assert!(ptr::eq(view.opacity, &edge.appearance.opacity));
     assert_eq!(view.height[0].default, 6.);
     let super::TrailRateRef::Fractional(rate) = view.emission_rate else {
         unreachable!()
@@ -110,19 +151,19 @@ fn ribbon_components_preserve_distinct_rate_and_atlas_integer_domains() {
     let super::AtlasCellRef::U16(cell) = view.atlas_cell else {
         unreachable!()
     };
-    assert!(ptr::eq(rate, &edge.edges_per_second));
-    assert!(ptr::eq(cell, &edge.texture_slot));
+    assert!(ptr::eq(rate, &edge.emission_rate));
+    assert!(ptr::eq(cell, &edge.appearance.texture_slot));
     assert_eq!(*rate, 12.5);
     assert_eq!(cell.default, 31);
 }
 
 #[test]
 fn native_discovery_borrows_the_authored_definition() {
-    let feature = mdlx::Node::Particle2(mdlx::Particle2::default());
+    let feature = mdlx::Node::AtlasParticles(mdlx::Particle2::default());
     let FeatureView::Particles(ParticlesView::Sprite(view)) = feature.feature() else {
         panic!("sprite emitter must be discoverable as particle behavior");
     };
-    let mdlx::Node::Particle2(authored) = &feature else {
+    let mdlx::Node::AtlasParticles(authored) = &feature else {
         unreachable!();
     };
     assert!(ptr::eq(view, authored));
@@ -141,8 +182,14 @@ fn unions_delegate_behavior_discovery() {
 #[test]
 fn shared_illumination_is_inspected_identically_before_and_after_widening() {
     let light = mdlx::Light {
-        color: Animated::constant([0.2, 0.4, 0.6]),
-        ambient_intensity: Animated::constant(0.75),
+        diffuse: LightEmission {
+            color: Animated::constant([0.2, 0.4, 0.6]),
+            ..Default::default()
+        },
+        ambient: LightEmission {
+            intensity: Animated::constant(0.75),
+            ..Default::default()
+        },
         ..Default::default()
     };
     let native = mdlx::Node::Light(light);
@@ -223,8 +270,16 @@ fn application_behaviors_can_keep_their_own_complete_vocabulary() {
 fn owned_emitters_expose_the_same_borrowed_emission_and_trail_components() {
     use crate::model::semantic::{ParticleDefinition, ParticleScalar, TrailEmitter};
     let definition = ParticleDefinition::from(mdlx::Particle2 {
-        squirt: true,
-        emission_rate: Animated::constant(12.5),
+        emission: ParticleEmission {
+            trigger: true,
+            rate: Animated::constant(12.5),
+            variation: (),
+            ..Default::default()
+        },
+        lifetime: ParticleLifetime {
+            variation: (),
+            ..Default::default()
+        },
         ..Default::default()
     });
     let super::EmissionRef::BurstAtKeys(value) =

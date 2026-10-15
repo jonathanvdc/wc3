@@ -176,24 +176,43 @@ pub enum FeatureView<'view, 'data> {
     /// Complete ViewVolume behavior.
     ViewVolume(&'view m3::ViewVolume),
 }
-impl<'data> FeatureSchema<'data> for mdlx::Node<'data> {
-    fn feature(&self) -> FeatureView<'_, 'data> {
+impl<'data> mdlx::Node<'data> {
+    pub(crate) fn profile_feature(&self) -> FeatureView<'_, 'data> {
         match self {
             Self::GeometryAnimation(value) => FeatureView::GeometryAnimation(value),
             Self::Particle(value) => FeatureView::Particles(ParticlesView::Model(value)),
-            Self::Particle2(value) => FeatureView::Particles(ParticlesView::Sprite(value)),
+            Self::AtlasParticles(value) => FeatureView::Particles(ParticlesView::Sprite(value)),
             Self::Ribbon(value) => FeatureView::Ribbon(RibbonView::Segmented(value)),
-            Self::Popcorn(value) => FeatureView::Particles(ParticlesView::Popcorn(value)),
+            Self::ParticleProgram(value) => FeatureView::Particles(ParticlesView::Popcorn(value)),
             Self::Light(value) => FeatureView::Light(LightView::VisibleAmbientDiffuse(value)),
             Self::Camera(value) => FeatureView::Camera(CameraView::VerticalAim(value)),
             Self::Attachment(value) => FeatureView::Attachment(AttachmentView::Path(value)),
-            Self::Events(value) => FeatureView::Event(EventView::Named(value)),
-            Self::Collision(value) => FeatureView::Collision(CollisionView::Primitive(value)),
+            Self::Event(value) => FeatureView::Event(EventView::Named(value)),
+            Self::CollisionShape(value) => FeatureView::Collision(CollisionView::Primitive(value)),
+
+            Self::FaceActor(unavailable)
+            | Self::LightProgram(unavailable)
+            | Self::Extent(unavailable)
+            | Self::ParticleCopy(unavailable)
+            | Self::Projector(unavailable)
+            | Self::Force(unavailable)
+            | Self::Warp(unavailable)
+            | Self::HitTest(unavailable)
+            | Self::AttachmentVolume(unavailable)
+            | Self::Billboard(unavailable)
+            | Self::Turret(unavailable)
+            | Self::IkJoint(unavailable)
+            | Self::IkTwoJoint(unavailable)
+            | Self::IkCcd(unavailable)
+            | Self::OneBoneSolver(unavailable)
+            | Self::ShadowBox(unavailable)
+            | Self::ViewVolume(unavailable)
+            | Self::PointLight(unavailable) => match *unavailable {},
         }
     }
 }
-impl<'data> FeatureSchema<'data> for m2::ActorKind<'data> {
-    fn feature(&self) -> FeatureView<'_, 'data> {
+impl<'data> m2::ActorKind<'data> {
+    pub(crate) fn profile_feature(&self) -> FeatureView<'_, 'data> {
         match self {
             Self::Attachment(value) => FeatureView::Attachment(AttachmentView::Role(value)),
             Self::Light(value) => FeatureView::Light(LightView::EnabledAmbientDiffuse(value)),
@@ -201,21 +220,69 @@ impl<'data> FeatureSchema<'data> for m2::ActorKind<'data> {
             Self::Ribbon(value) => FeatureView::Ribbon(RibbonView::Edge(value)),
             Self::Particle(value) => FeatureView::Particles(ParticlesView::AgeDriven(value)),
             Self::Event(value) => FeatureView::Event(EventView::Identifier(value)),
+
+            Self::GeometryAnimation(unavailable)
+            | Self::CollisionShape(unavailable)
+            | Self::ParticleProgram(unavailable)
+            | Self::FaceActor(unavailable)
+            | Self::LightProgram(unavailable)
+            | Self::Extent(unavailable)
+            | Self::ParticleCopy(unavailable)
+            | Self::Projector(unavailable)
+            | Self::Force(unavailable)
+            | Self::Warp(unavailable)
+            | Self::HitTest(unavailable)
+            | Self::AttachmentVolume(unavailable)
+            | Self::Billboard(unavailable)
+            | Self::Turret(unavailable)
+            | Self::IkJoint(unavailable)
+            | Self::IkTwoJoint(unavailable)
+            | Self::IkCcd(unavailable)
+            | Self::OneBoneSolver(unavailable)
+            | Self::ShadowBox(unavailable)
+            | Self::ViewVolume(unavailable)
+            | Self::AtlasParticles(unavailable)
+            | Self::PointLight(unavailable) => match *unavailable {},
         }
     }
 }
-impl<'data> FeatureSchema<'data> for wmo::Node<'data> {
-    fn feature(&self) -> FeatureView<'_, 'data> {
+impl<'data> wmo::Node<'data> {
+    pub(crate) fn profile_feature(&self) -> FeatureView<'_, 'data> {
         match self {
-            Self::Doodad(value) => FeatureView::Doodad(value),
+            Self::Attachment(value) => FeatureView::Doodad(value),
             Self::Light(value) => FeatureView::Light(LightView::World(value)),
             Self::PointLight(value) => FeatureView::Light(LightView::RegionPoint(value)),
-            Self::PointProgram(value) => FeatureView::Light(LightView::RegionProgram(value)),
+            Self::LightProgram(value) => FeatureView::Light(LightView::RegionProgram(value)),
+
+            Self::Camera(unavailable)
+            | Self::Particle(unavailable)
+            | Self::Ribbon(unavailable)
+            | Self::Event(unavailable)
+            | Self::GeometryAnimation(unavailable)
+            | Self::CollisionShape(unavailable)
+            | Self::ParticleProgram(unavailable)
+            | Self::FaceActor(unavailable)
+            | Self::Extent(unavailable)
+            | Self::ParticleCopy(unavailable)
+            | Self::Projector(unavailable)
+            | Self::Force(unavailable)
+            | Self::Warp(unavailable)
+            | Self::HitTest(unavailable)
+            | Self::AttachmentVolume(unavailable)
+            | Self::Billboard(unavailable)
+            | Self::Turret(unavailable)
+            | Self::IkJoint(unavailable)
+            | Self::IkTwoJoint(unavailable)
+            | Self::IkCcd(unavailable)
+            | Self::OneBoneSolver(unavailable)
+            | Self::ShadowBox(unavailable)
+            | Self::ViewVolume(unavailable)
+            | Self::AtlasParticles(unavailable) => match *unavailable {},
         }
     }
 }
-impl<'data> FeatureSchema<'data> for m3::Feature<'data> {
-    fn feature(&self) -> FeatureView<'_, 'data> {
+impl<'data> m3::Feature<'data> {
+    pub(crate) fn profile_feature(&self) -> FeatureView<'_, 'data> {
         match self {
             Self::Extent(value) => FeatureView::Extent(value),
             Self::Projector(value) => FeatureView::Projector(value),
@@ -238,6 +305,14 @@ impl<'data> FeatureSchema<'data> for m3::Feature<'data> {
             Self::Camera(value) => FeatureView::Camera(CameraView::Optical(value)),
             Self::Attachment(value) => FeatureView::Attachment(AttachmentView::Named(value)),
             Self::HitTest(value) => FeatureView::Collision(CollisionView::HitTest(value)),
+
+            Self::GeometryAnimation(unavailable)
+            | Self::CollisionShape(unavailable)
+            | Self::ParticleProgram(unavailable)
+            | Self::FaceActor(unavailable)
+            | Self::LightProgram(unavailable)
+            | Self::AtlasParticles(unavailable)
+            | Self::PointLight(unavailable) => match *unavailable {},
         }
     }
 }
@@ -308,25 +383,25 @@ impl<'view> LightView<'view> {
             }),
             Self::VisibleAmbientDiffuse(value) => Some(AmbientDiffuseLightRef {
                 ambient: IlluminationRef {
-                    color: &value.ambient_color,
-                    intensity: &value.ambient_intensity,
+                    color: &value.ambient.color,
+                    intensity: &value.ambient.intensity,
                 },
                 diffuse: IlluminationRef {
-                    color: &value.color,
-                    intensity: &value.intensity,
+                    color: &value.diffuse.color,
+                    intensity: &value.diffuse.intensity,
                 },
                 attenuation: [&value.attenuation[0], &value.attenuation[1]],
             }),
             Self::EnabledAmbientDiffuse(value) => Some(AmbientDiffuseLightRef {
                 ambient: IlluminationRef {
-                    color: &value.ambient_color,
-                    intensity: &value.ambient_intensity,
+                    color: &value.ambient.color,
+                    intensity: &value.ambient.intensity,
                 },
                 diffuse: IlluminationRef {
-                    color: &value.diffuse_color,
-                    intensity: &value.diffuse_intensity,
+                    color: &value.diffuse.color,
+                    intensity: &value.diffuse.intensity,
                 },
-                attenuation: [&value.attenuation_start, &value.attenuation_end],
+                attenuation: [&value.attenuation[0], &value.attenuation[1]],
             }),
             _ => None,
         }
@@ -386,11 +461,11 @@ impl<'view, 'data> CameraView<'view, 'data> {
                 field_of_view: AimedFieldOfViewRef::Vertical(&value.field_of_view),
             }),
             Self::DiagonalAim(value) => Some(AimedCameraRef {
-                eye_offset: &value.position,
-                target: &value.target_base,
-                target_offset: &value.target,
+                eye_offset: &value.eye_offset,
+                target: &value.target,
+                target_offset: &value.target_offset,
                 roll: &value.roll,
-                clipping: &value.clip,
+                clipping: &value.clipping,
                 field_of_view: AimedFieldOfViewRef::Diagonal(&value.field_of_view),
             }),
             _ => None,
@@ -398,8 +473,8 @@ impl<'view, 'data> CameraView<'view, 'data> {
     }
 }
 
-impl<'data> FeatureSchema<'data> for NodeFeature<'data> {
-    fn feature(&self) -> FeatureView<'_, 'data> {
+impl<'data> NodeFeature<'data> {
+    pub(crate) fn profile_feature(&self) -> FeatureView<'_, 'data> {
         match self {
             Self::Camera(v) => FeatureView::Camera(match v {
                 Camera::Portable(v) => CameraView::Scene(v),
@@ -419,11 +494,11 @@ impl<'data> FeatureSchema<'data> for NodeFeature<'data> {
                 }
                 Attachment::Point(v) => FeatureView::Attachment(AttachmentView::Point(v)),
             },
-            Self::ParticleEmitter(v) => FeatureView::Particles(match v {
+            Self::Particle(v) => FeatureView::Particles(match v {
                 ParticleEmitter::Resource(v) => ParticlesView::External(v),
                 ParticleEmitter::Simulated(v) => ParticlesView::Definition(v),
             }),
-            Self::RibbonEmitter(v) => FeatureView::Ribbon(match v {
+            Self::Ribbon(v) => FeatureView::Ribbon(match v {
                 RibbonEmitter::Resource(v) => RibbonView::External(v),
                 RibbonEmitter::Trail(v) => RibbonView::Trail(v),
                 RibbonEmitter::Programmed(v) => RibbonView::ProgrammedDefinition(v),
@@ -453,6 +528,10 @@ impl<'data> FeatureSchema<'data> for NodeFeature<'data> {
             Self::OneBoneSolver(v) => FeatureView::OneBoneSolver(v),
             Self::ShadowBox(v) => FeatureView::ShadowBox(v),
             Self::ViewVolume(v) => FeatureView::ViewVolume(v),
+
+            Self::AtlasParticles(unavailable) | Self::PointLight(unavailable) => {
+                match *unavailable {}
+            }
         }
     }
 }
@@ -512,14 +591,16 @@ impl<'view, 'data> ParticlesView<'view, 'data> {
                 (rate, trigger) => EmissionRef::Authored { rate, trigger },
             }),
             Self::External(_) => None,
-            Self::Model(v) => Some(EmissionRef::Continuous(&v.emission_rate)),
-            Self::Sprite(v) if v.squirt => Some(EmissionRef::BurstAtKeys(&v.emission_rate)),
-            Self::Sprite(v) => Some(EmissionRef::Continuous(&v.emission_rate)),
+            Self::Model(v) => Some(EmissionRef::Continuous(&v.emission.rate)),
+            Self::Sprite(v) if v.emission.trigger => {
+                Some(EmissionRef::BurstAtKeys(&v.emission.rate))
+            }
+            Self::Sprite(v) => Some(EmissionRef::Continuous(&v.emission.rate)),
             Self::Popcorn(v) => Some(EmissionRef::ProgramInput(&v.emission_rate)),
-            Self::AgeDriven(v) => Some(EmissionRef::Continuous(&v.rate)),
+            Self::AgeDriven(v) => Some(EmissionRef::Continuous(&v.emission.rate)),
             Self::Programmed(v) => Some(EmissionRef::Programmed {
-                rate: &v.emission_rate,
-                burst_count: &v.squirt_amount,
+                rate: &v.emission.rate,
+                burst_count: &v.emission.trigger,
             }),
             Self::Copy(v) => Some(EmissionRef::Programmed {
                 rate: &v.emission_rate,
@@ -533,11 +614,11 @@ impl<'view, 'data> ParticlesView<'view, 'data> {
         match self {
             Self::Definition(v) => Some(scalar_lifetime(&v.lifetime.duration)),
             Self::External(_) | Self::Copy(_) => None,
-            Self::Model(v) => Some(LifetimeRef::AnimatedSeconds(&v.life_span)),
-            Self::Sprite(v) => Some(LifetimeRef::Seconds(&v.life_span)),
+            Self::Model(v) => Some(LifetimeRef::AnimatedSeconds(&v.lifetime.duration)),
+            Self::Sprite(v) => Some(LifetimeRef::Seconds(&v.lifetime.duration)),
             Self::Popcorn(v) => Some(LifetimeRef::ProgramInput(&v.life_span)),
-            Self::AgeDriven(v) => Some(LifetimeRef::AnimatedSeconds(&v.lifespan)),
-            Self::Programmed(v) => Some(LifetimeRef::Programmed(&v.lifetime)),
+            Self::AgeDriven(v) => Some(LifetimeRef::AnimatedSeconds(&v.lifetime.duration)),
+            Self::Programmed(v) => Some(LifetimeRef::Programmed(&v.lifetime.duration)),
         }
     }
 }
@@ -592,20 +673,20 @@ impl<'view, 'data> RibbonView<'view, 'data> {
                 },
             }),
             Self::Segmented(v) => Some(EdgeStripRef {
-                color: &v.color,
-                opacity: &v.opacity,
-                height: [&v.height_above, &v.height_below],
-                lifetime_seconds: &v.life_span,
+                color: &v.appearance.color,
+                opacity: &v.appearance.opacity,
+                height: [&v.geometry.height_above, &v.geometry.height_below],
+                lifetime_seconds: &v.lifetime,
                 emission_rate: TrailRateRef::Integral(&v.emission_rate),
-                atlas_cell: AtlasCellRef::U32(&v.texture_slot),
+                atlas_cell: AtlasCellRef::U32(&v.appearance.texture_slot),
             }),
             Self::Edge(v) => Some(EdgeStripRef {
-                color: &v.color,
-                opacity: &v.alpha,
-                height: [&v.height_above, &v.height_below],
-                lifetime_seconds: &v.edge_lifetime,
-                emission_rate: TrailRateRef::Fractional(&v.edges_per_second),
-                atlas_cell: AtlasCellRef::U16(&v.texture_slot),
+                color: &v.appearance.color,
+                opacity: &v.appearance.opacity,
+                height: [&v.geometry.height_above, &v.geometry.height_below],
+                lifetime_seconds: &v.lifetime,
+                emission_rate: TrailRateRef::Fractional(&v.emission_rate),
+                atlas_cell: AtlasCellRef::U16(&v.appearance.texture_slot),
             }),
             Self::External(_) | Self::Programmed(_) | Self::ProgrammedDefinition(_) => None,
         }
@@ -616,9 +697,9 @@ impl<'view, 'data> RibbonView<'view, 'data> {
             Self::Trail(v) => Some(LifetimeRef::Seconds(&v.lifetime)),
             Self::ProgrammedDefinition(v) => Some(scalar_lifetime(&v.lifetime.duration)),
             Self::External(_) => None,
-            Self::Segmented(v) => Some(LifetimeRef::Seconds(&v.life_span)),
-            Self::Edge(v) => Some(LifetimeRef::Seconds(&v.edge_lifetime)),
-            Self::Programmed(v) => Some(LifetimeRef::Programmed(&v.lifetime)),
+            Self::Segmented(v) => Some(LifetimeRef::Seconds(&v.lifetime)),
+            Self::Edge(v) => Some(LifetimeRef::Seconds(&v.lifetime)),
+            Self::Programmed(v) => Some(LifetimeRef::Programmed(&v.lifetime.duration)),
         }
     }
 }

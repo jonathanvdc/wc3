@@ -4,6 +4,10 @@ use crate::model::conversion::{materialize, owned};
 use crate::model::semantic::{
     self as semantic, profiles::m2 as profile, Animated, Curve, Resource, Time,
 };
+use crate::model::semantic::{
+    AgeDrivenParticle, AgeDrivenParticleRendering, AgeDrivenParticleShape, ParticleEmission,
+    ParticleLifetime, ParticleMotion,
+};
 use zerovec::ZeroVec;
 
 pub(super) trait LogicalAge: Sized {
@@ -229,56 +233,71 @@ where
     };
     let spline = &value.spline_points;
     Ok(profile::Particle {
-        id: value.id,
-        flags: profile::values::ParticleFlags::from_bits_retain(value.flags.bits()),
-        blend: profile::values::ParticleBlend::from_raw(blend.raw()),
-        generator: profile::values::ParticleGenerator::from_raw(kind.raw()),
-        color_index: color as u16,
-        textures,
-        model: resource(&value.particle_model_filename),
-        child_model: resource(&value.child_model_filename),
-        legacy_shape: legacy[0],
-        head_tail: profile::values::ParticleHeadTail::from_raw(legacy[1]),
-        texture_scale: value.texture_scale.scales(),
-        texture_tile_rotation: value.texture_tile_rotation,
-        atlas: [value.rows, value.columns],
-        speed: Animated::constant(initial(&value.emission_speed).unwrap_or(0.)),
-        speed_variation: Animated::constant(initial(&value.speed_variation).unwrap_or(0.)),
-        vertical_range: Animated::constant(initial(&value.vertical_range).unwrap_or(0.)),
-        horizontal_range: Animated::constant(initial(&value.horizontal_range).unwrap_or(0.)),
-        gravity: Animated::constant(gravity_vector(
-            initial(&value.gravity).unwrap_or(0),
-            value.flags.packed_gravity(),
-        )?),
-        lifespan: Animated::constant(initial(&value.lifespan).unwrap_or(0.)),
-        lifespan_variation: value.lifespan_variation.get(),
-        rate: Animated::constant(initial(&value.emission_rate).unwrap_or(0.)),
-        rate_variation: value.emission_rate_variation.get(),
-        area_width: Animated::constant(initial(&value.emission_area_width).unwrap_or(0.)),
-        area_length: Animated::constant(initial(&value.emission_area_length).unwrap_or(0.)),
-        z_source: Animated::constant(initial(&value.z_source).unwrap_or(0.)),
+        details: AgeDrivenParticle {
+            id: value.id,
+            flags: profile::values::ParticleFlags::from_bits_retain(value.flags.bits()),
+            rendering: AgeDrivenParticleRendering {
+                blend: profile::values::ParticleBlend::from_raw(blend.raw()),
+                color_index: color as u16,
+                textures,
+                model: resource(&value.particle_model_filename),
+                child_model: resource(&value.child_model_filename),
+                head_tail: profile::values::ParticleHeadTail::from_raw(legacy[1]),
+                texture_scale: value.texture_scale.scales(),
+                texture_tile_rotation: value.texture_tile_rotation,
+                atlas: [value.rows, value.columns],
+                tail_length: value.tail_length,
+                scroll: value
+                    .multi_texture_scroll
+                    .values()
+                    .map(|v| v.map(|x| f32::from(x) / 512.)),
+            },
+            shape: AgeDrivenParticleShape {
+                generator: profile::values::ParticleGenerator::from_raw(kind.raw()),
+                legacy_shape: legacy[0],
+                vertical_range: Animated::constant(initial(&value.vertical_range).unwrap_or(0.)),
+                horizontal_range: Animated::constant(
+                    initial(&value.horizontal_range).unwrap_or(0.),
+                ),
+                area_width: Animated::constant(initial(&value.emission_area_width).unwrap_or(0.)),
+                area_length: Animated::constant(initial(&value.emission_area_length).unwrap_or(0.)),
+                z_source: Animated::constant(initial(&value.z_source).unwrap_or(0.)),
+                spline: materialize(value.spline_points.len(), move |i| spline.get(i).unwrap()),
+            },
+            twinkle_speed: value.twinkle_speed,
+            twinkle_percent: value.twinkle_percent,
+            twinkle_scale: value.twinkle_scale,
+            inherit_velocity: value.inherit_velocity_scale,
+            drag: value.drag,
+            spin: value.spin.parts(),
+            tumble_minimum: value.tumble_minimum,
+            tumble_maximum: value.tumble_maximum,
+            wind: value.wind,
+            wind_time: value.wind_time,
+            follow: [
+                [value.follow_speed_1, value.follow_scale_1],
+                [value.follow_speed_2, value.follow_scale_2],
+            ],
+        },
+        motion: ParticleMotion {
+            speed: Animated::constant(initial(&value.emission_speed).unwrap_or(0.)),
+            variation: Animated::constant(initial(&value.speed_variation).unwrap_or(0.)),
+            gravity: Animated::constant(gravity_vector(
+                initial(&value.gravity).unwrap_or(0),
+                value.flags.packed_gravity(),
+            )?),
+        },
+        lifetime: ParticleLifetime {
+            duration: Animated::constant(initial(&value.lifespan).unwrap_or(0.)),
+            variation: value.lifespan_variation.get(),
+        },
+        emission: ParticleEmission {
+            rate: Animated::constant(initial(&value.emission_rate).unwrap_or(0.)),
+            variation: value.emission_rate_variation.get(),
+            activation: Animated::constant(initial(&value.enabled).unwrap_or(1) != 0),
+            trigger: (),
+        },
         appearance: value.lifetime.logical()?,
-        tail_length: value.tail_length,
-        twinkle_speed: value.twinkle_speed,
-        twinkle_percent: value.twinkle_percent,
-        twinkle_scale: value.twinkle_scale,
-        inherit_velocity: value.inherit_velocity_scale,
-        drag: value.drag,
-        spin: value.spin.parts(),
-        tumble_minimum: value.tumble_minimum,
-        tumble_maximum: value.tumble_maximum,
-        wind: value.wind,
-        wind_time: value.wind_time,
-        follow: [
-            [value.follow_speed_1, value.follow_scale_1],
-            [value.follow_speed_2, value.follow_scale_2],
-        ],
-        spline: materialize(value.spline_points.len(), move |i| spline.get(i).unwrap()),
-        enabled: Animated::constant(initial(&value.enabled).unwrap_or(1) != 0),
-        scroll: value
-            .multi_texture_scroll
-            .values()
-            .map(|v| v.map(|x| f32::from(x) / 512.)),
     })
 }
 
@@ -334,9 +353,11 @@ where
     V::Lifetime<'static>: LogicalAge,
 {
     let mut value = native::records::ParticleEmitter::<V>::new(ModelFlags::default());
-    value.id = payload.id;
-    value.flags = ParticleFlags::from_bits_retain(payload.flags.bits());
+    value.id = payload.details.id;
+    value.flags = ParticleFlags::from_bits_retain(payload.details.flags.bits());
     let ids = payload
+        .details
+        .rendering
         .textures
         .iter()
         .map(|id| {
@@ -373,41 +394,50 @@ where
             )),
         }
     };
-    value.particle_model_filename = filename(&payload.model)?;
-    value.child_model_filename = filename(&payload.child_model)?;
+    value.particle_model_filename = filename(&payload.details.rendering.model)?;
+    value.child_model_filename = filename(&payload.details.rendering.child_model)?;
     value.kind = HeaderFields::make(
-        ParticleBlend::from_raw(payload.blend.raw()),
-        ParticleGenerator::from_raw(payload.generator.raw()),
-        u32::from(payload.color_index),
+        ParticleBlend::from_raw(payload.details.rendering.blend.raw()),
+        ParticleGenerator::from_raw(payload.details.shape.generator.raw()),
+        u32::from(payload.details.rendering.color_index),
     )?;
-    value.texture_scale = UvFields::make(payload.texture_scale, context)?;
-    value
-        .texture_scale
-        .set_legacy_parts([payload.legacy_shape, payload.head_tail.raw()], context)?;
-    value.texture_tile_rotation = payload.texture_tile_rotation;
-    value.rows = payload.atlas[0];
-    value.columns = payload.atlas[1];
-    value.lifespan_variation = OptionalFloat::make(payload.lifespan_variation, context)?;
-    value.emission_rate_variation = OptionalFloat::make(payload.rate_variation, context)?;
+    value.texture_scale = UvFields::make(payload.details.rendering.texture_scale, context)?;
+    value.texture_scale.set_legacy_parts(
+        [
+            payload.details.shape.legacy_shape,
+            payload.details.rendering.head_tail.raw(),
+        ],
+        context,
+    )?;
+    value.texture_tile_rotation = payload.details.rendering.texture_tile_rotation;
+    value.rows = payload.details.rendering.atlas[0];
+    value.columns = payload.details.rendering.atlas[1];
+    value.lifespan_variation = OptionalFloat::make(payload.lifetime.variation, context)?;
+    value.emission_rate_variation = OptionalFloat::make(payload.emission.variation, context)?;
     value.lifetime = LogicalAge::make(&payload.appearance, context)?;
-    value.tail_length = payload.tail_length;
-    value.twinkle_speed = payload.twinkle_speed;
-    value.twinkle_percent = payload.twinkle_percent;
-    value.twinkle_scale = payload.twinkle_scale;
-    value.inherit_velocity_scale = payload.inherit_velocity;
-    value.drag = payload.drag;
-    value.spin = SpinFields::make(payload.spin, context)?;
-    value.tumble_minimum = payload.tumble_minimum;
-    value.tumble_maximum = payload.tumble_maximum;
-    value.wind = payload.wind;
-    value.wind_time = payload.wind_time;
-    value.follow_speed_1 = payload.follow[0][0];
-    value.follow_scale_1 = payload.follow[0][1];
-    value.follow_speed_2 = payload.follow[1][0];
-    value.follow_scale_2 = payload.follow[1][1];
-    value.spline_points = ZeroVec::alloc_from_slice(&payload.spline.iter().collect::<Vec<_>>());
-    let scroll = payload.scroll.map(|v| v.map(|v| (v * 512.).round() as i16));
-    if let Some(original) = payload.scroll {
+    value.tail_length = payload.details.rendering.tail_length;
+    value.twinkle_speed = payload.details.twinkle_speed;
+    value.twinkle_percent = payload.details.twinkle_percent;
+    value.twinkle_scale = payload.details.twinkle_scale;
+    value.inherit_velocity_scale = payload.details.inherit_velocity;
+    value.drag = payload.details.drag;
+    value.spin = SpinFields::make(payload.details.spin, context)?;
+    value.tumble_minimum = payload.details.tumble_minimum;
+    value.tumble_maximum = payload.details.tumble_maximum;
+    value.wind = payload.details.wind;
+    value.wind_time = payload.details.wind_time;
+    value.follow_speed_1 = payload.details.follow[0][0];
+    value.follow_scale_1 = payload.details.follow[0][1];
+    value.follow_speed_2 = payload.details.follow[1][0];
+    value.follow_scale_2 = payload.details.follow[1][1];
+    value.spline_points =
+        ZeroVec::alloc_from_slice(&payload.details.shape.spline.iter().collect::<Vec<_>>());
+    let scroll = payload
+        .details
+        .rendering
+        .scroll
+        .map(|v| v.map(|v| (v * 512.).round() as i16));
+    if let Some(original) = payload.details.rendering.scroll {
         for (i, v) in original.into_iter().enumerate() {
             if !v.is_finite() || v * 512. < f32::from(i16::MIN) || v * 512. > f32::from(i16::MAX) {
                 return Err(Error::new(

@@ -41,7 +41,7 @@ impl Narrows<Universal> for M3 {
     }
     fn surface<'a>(value: <Universal as Profile>::Surface<'a>) -> Result<Self::Surface<'a>, Error> {
         match value {
-            MaterialSurface::M3(value) => Ok(*value),
+            MaterialSurface::Programmed(value) => Ok(*value),
             _ => Err(incompatible("surface")),
         }
     }

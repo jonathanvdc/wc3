@@ -1,13 +1,9 @@
 //! Diablo III authoring vocabulary, independent of native layout.
-mod material;
-pub use material::*;
+pub use crate::model::semantic::materials::diablo3::*;
 
-mod geometry;
-pub use geometry::*;
-mod controls;
-pub use controls::*;
+pub use crate::model::semantic::controls::diablo3::*;
+pub use crate::model::semantic::geometry::diablo3::*;
 mod vocabulary;
 pub use vocabulary::D3;
 
-mod appearance;
-pub use appearance::*;
+pub use crate::model::semantic::appearance::diablo3::*;

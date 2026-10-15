@@ -2,8 +2,9 @@
 use super::properties::Target as PropertySelector;
 use crate::model::semantic::profiles::UniversalProperty;
 use crate::model::semantic::profiles::{
-    mdlx, Extends, FeaturePayload, NoControls, Profile, SurfacePayload, Unavailable, Universal,
+    mdlx, Extends, NoControls, Profile, Unavailable, Universal,
 };
+use crate::model::semantic::Link;
 use crate::model::semantic::Model;
 use crate::model::semantic::PropertyIdentityKey;
 use crate::model::semantic::{
@@ -11,6 +12,7 @@ use crate::model::semantic::{
     ModelMetadata, NodeControls, PropertyPayload, SingleLook, TextureControls, UniversalAppearance,
     UniversalBinding,
 };
+use crate::model::semantic::{FeatureSet, FeatureView, FeatureVocabulary};
 /// Vocabulary that maps mechanically to Warcraft III logical features.
 ///
 /// The graph cannot accept surfaces outside its vocabulary:
@@ -52,21 +54,12 @@ impl Profile for Mdlx {
         super::validation::model(model)
     }
 }
-impl SurfacePayload for mdlx::Material<'_> {
-    fn supports_property(&self, key: &PropertyIdentityKey) -> bool {
-        super::properties::Target::from_identity(key).is_some_and(|key| key.supports_material(self))
-    }
-
-    fn validate(&self) -> Result<(), Error> {
-        Ok(())
-    }
-}
-impl FeaturePayload for mdlx::Node<'_> {
-    fn supports_property(&self, key: &PropertyIdentityKey) -> bool {
+impl mdlx::Node<'_> {
+    pub(crate) fn profile_supports_property(&self, key: &PropertyIdentityKey) -> bool {
         super::properties::Target::from_identity(key).is_some_and(|key| key.supports_feature(self))
     }
 
-    fn kind(&self) -> FeatureKind {
+    pub(crate) fn profile_payload_kind(&self) -> FeatureKind {
         match self {
             mdlx::Node::GeometryAnimation(_) => FeatureKind::MdlxGeometryAnimation,
             _ => FeatureKind::Other,
@@ -97,7 +90,7 @@ impl Extends<Mdlx> for Universal {
         match value {}
     }
     fn surface<'a>(value: <Mdlx as Profile>::Surface<'a>) -> Self::Surface<'a> {
-        MaterialSurface::Mdlx(Box::new(value))
+        MaterialSurface::Layered(Box::new(value))
     }
     fn feature<'a>(value: <Mdlx as Profile>::Feature<'a>) -> Self::Feature<'a> {
         value.into()
@@ -121,5 +114,48 @@ impl Extends<Mdlx> for Universal {
     fn controller<'a>(value: <Mdlx as Profile>::Controller<'a>) -> Self::Controller<'a> {
         let _ = value;
         None
+    }
+}
+
+impl<'a> FeatureVocabulary<'a> for Mdlx {
+    type Light = mdlx::Light;
+    type Camera = mdlx::Camera;
+    type Attachment = mdlx::Attachment<'a>;
+    type Particle = mdlx::Particle<'a>;
+    type Ribbon = mdlx::Ribbon;
+    type Event = mdlx::Events<'a>;
+    type GeometryAnimation = mdlx::GeometryAnimation;
+    type CollisionShape = mdlx::Collision;
+    type ParticleProgram = mdlx::Popcorn<'a>;
+    type FaceActor = Unavailable;
+    type LightProgram = Unavailable;
+    type Extent = Unavailable;
+    type ParticleCopy = Unavailable;
+    type Projector = Unavailable;
+    type Force = Unavailable;
+    type Warp = Unavailable;
+    type HitTest = Unavailable;
+    type AttachmentVolume = Unavailable;
+    type Billboard = Unavailable;
+    type Turret = Unavailable;
+    type IkJoint = Unavailable;
+    type IkTwoJoint = Unavailable;
+    type IkCcd = Unavailable;
+    type OneBoneSolver = Unavailable;
+    type ShadowBox = Unavailable;
+    type ViewVolume = Unavailable;
+    type AtlasParticles = mdlx::Particle2;
+    type PointLight = Unavailable;
+    fn visit_links(value: &FeatureSet<'a, Self>, visitor: &mut dyn FnMut(Link)) {
+        value.visit_profile_links(visitor);
+    }
+    fn feature<'view>(value: &'view FeatureSet<'a, Self>) -> FeatureView<'view, 'a> {
+        value.profile_feature()
+    }
+    fn supports_property(value: &FeatureSet<'a, Self>, key: &PropertyIdentityKey) -> bool {
+        value.profile_supports_property(key)
+    }
+    fn kind(value: &FeatureSet<'a, Self>) -> FeatureKind {
+        value.profile_payload_kind()
     }
 }

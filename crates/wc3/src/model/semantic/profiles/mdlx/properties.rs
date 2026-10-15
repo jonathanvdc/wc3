@@ -681,28 +681,31 @@ impl Target {
     pub(crate) fn supports_feature(&self, value: &super::Node<'_>) -> bool {
         if matches!(self, Self::ParticleContinuousRate) {
             return matches!(value, super::Node::Particle(_))
-                || matches!(value, super::Node::Particle2(particle) if !particle.squirt);
+                || matches!(value, super::Node::AtlasParticles(particle) if !particle.emission.trigger);
         }
         if matches!(self, Self::ParticleSpeed) {
-            return matches!(value, super::Node::Particle(_) | super::Node::Particle2(_));
+            return matches!(
+                value,
+                super::Node::Particle(_) | super::Node::AtlasParticles(_)
+            );
         }
         match (self, value) {
             (
                 Self::Light(LightField::ShadowStart | LightField::ShadowEnd),
                 super::Node::Light(v),
-            ) => return v.shadow_range.is_some(),
+            ) => return v.activation.shadow_range.is_some(),
             (
                 Self::Light(LightField::Quadratic | LightField::Linear | LightField::Damping),
                 super::Node::Light(v),
-            ) => return v.falloff.is_some(),
+            ) => return v.activation.falloff.is_some(),
             (Self::Camera(CameraField::FocusDistance), super::Node::Camera(v)) => {
-                return v.focus_distance.is_some()
+                return v.convention.focus_distance.is_some()
             }
             (Self::Camera(CameraField::FocalLength), super::Node::Camera(v)) => {
-                return v.focal_length.is_some()
+                return v.convention.focal_length.is_some()
             }
             (Self::Camera(CameraField::FStop), super::Node::Camera(v)) => {
-                return v.f_stop.is_some()
+                return v.convention.f_stop.is_some()
             }
             _ => {}
         }
@@ -710,31 +713,13 @@ impl Target {
             (self, value),
             (Self::Geometry(_), super::Node::GeometryAnimation(_))
                 | (Self::Particle(_), super::Node::Particle(_))
-                | (Self::Particle2(_), super::Node::Particle2(_))
+                | (Self::Particle2(_), super::Node::AtlasParticles(_))
                 | (Self::Ribbon(_), super::Node::Ribbon(_))
-                | (Self::Popcorn(_), super::Node::Popcorn(_))
+                | (Self::Popcorn(_), super::Node::ParticleProgram(_))
                 | (Self::Light(_), super::Node::Light(_))
                 | (Self::Camera(_), super::Node::Camera(_))
                 | (Self::Attachment(_), super::Node::Attachment(_))
         )
-    }
-    pub(crate) fn supports_material(&self, value: &super::Material<'_>) -> bool {
-        match self {
-            Self::Layer { index, field } => {
-                value.layers.get(*index).is_some_and(|layer| match field {
-                    LayerField::EmissiveGain => layer.emissive_gain.is_some(),
-                    LayerField::FresnelColor
-                    | LayerField::FresnelOpacity
-                    | LayerField::FresnelTeamColor => layer.fresnel.is_some(),
-                    _ => true,
-                })
-            }
-            Self::LayerTexture { layer, slot } => value
-                .layers
-                .get(*layer)
-                .is_some_and(|layer| layer.textures.get(*slot).is_some()),
-            _ => false,
-        }
     }
 }
 
@@ -789,21 +774,19 @@ impl Target {
             },
             (Self::Geometry(_), NodeFeature::GeometryAnimation(_))
             | (Self::Popcorn(_), NodeFeature::ParticleProgram(_)) => true,
-            (
-                Self::Particle(field),
-                NodeFeature::ParticleEmitter(ParticleEmitter::Simulated(value)),
-            ) => value.supports_resource_property(field),
-            (
-                Self::Particle2(field),
-                NodeFeature::ParticleEmitter(ParticleEmitter::Simulated(value)),
-            ) => value.supports_atlas_property(field),
-            (Self::Ribbon(field), NodeFeature::RibbonEmitter(RibbonEmitter::Trail(value))) => {
+            (Self::Particle(field), NodeFeature::Particle(ParticleEmitter::Simulated(value))) => {
+                value.supports_resource_property(field)
+            }
+            (Self::Particle2(field), NodeFeature::Particle(ParticleEmitter::Simulated(value))) => {
+                value.supports_atlas_property(field)
+            }
+            (Self::Ribbon(field), NodeFeature::Ribbon(RibbonEmitter::Trail(value))) => {
                 match field {
                     RibbonField::TextureSlot => {
                         matches!(value.appearance.texture_slot, TrailAtlasSlot::Wide(_))
                     }
                     RibbonField::Visibility => {
-                        matches!(value.controls, TrailControls::Gravity { .. })
+                        matches!(value.controls, TrailControls::Gravity(_))
                     }
                     _ => true,
                 }

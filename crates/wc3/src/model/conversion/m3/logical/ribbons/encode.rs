@@ -78,7 +78,9 @@ where
             "selected source revision omits this emitter control",
         )?;
     }
-    if !D::WorldForcesMassMultiplier::PRESENT && r.world_forces_mass_multiplier != f32::default() {
+    if !D::WorldForcesMassMultiplier::PRESENT
+        && r.forces.world_forces_mass_multiplier != f32::default()
+    {
         writer.context.unsupported(
             "ribbon.world_forces_mass_multiplier",
             "selected source revision omits this emitter control",
@@ -90,25 +92,25 @@ where
             "selected source revision omits this emitter control",
         )?;
     }
-    if !D::SizeMidHoldTime::PRESENT && r.size_mid_hold_time != f32::default() {
+    if !D::SizeMidHoldTime::PRESENT && r.appearance.size_mid_hold_time != f32::default() {
         writer.context.unsupported(
             "ribbon.size_mid_hold_time",
             "selected source revision omits this emitter control",
         )?;
     }
-    if !D::ColorMidHoldTime::PRESENT && r.color_mid_hold_time != f32::default() {
+    if !D::ColorMidHoldTime::PRESENT && r.appearance.color_mid_hold_time != f32::default() {
         writer.context.unsupported(
             "ribbon.color_mid_hold_time",
             "selected source revision omits this emitter control",
         )?;
     }
-    if !D::AlphaMidHoldTime::PRESENT && r.alpha_mid_hold_time != f32::default() {
+    if !D::AlphaMidHoldTime::PRESENT && r.appearance.alpha_mid_hold_time != f32::default() {
         writer.context.unsupported(
             "ribbon.alpha_mid_hold_time",
             "selected source revision omits this emitter control",
         )?;
     }
-    if !D::RotationMidHoldTime::PRESENT && r.rotation_mid_hold_time != f32::default() {
+    if !D::RotationMidHoldTime::PRESENT && r.appearance.rotation_mid_hold_time != f32::default() {
         writer.context.unsupported(
             "ribbon.rotation_mid_hold_time",
             "selected source revision omits this emitter control",
@@ -142,88 +144,105 @@ where
         })?,
         material_index: writer.material(r.material)?,
         additional_flags: D::AdditionalFlags::assign((r.additional_flags).bits()),
-        initial_speed: animated(&r.initial_speed, writer.ids),
-        initial_speed_random: animated(&r.initial_speed_random, writer.ids),
+        initial_speed: animated(&r.motion.speed, writer.ids),
+        initial_speed_random: animated(&r.motion.variation, writer.ids),
         legacy_speed_randomize: D::LegacySpeedRandomize::assign(r.additional_flags.bits() & 1),
-        legacy_initial_pitch: D::LegacyInitialPitch::assign(animated(&r.initial_pitch, writer.ids)),
-        initial_yaw: D::InitialYaw::assign(animated(&r.initial_yaw, writer.ids)),
-        legacy_initial_yaw: D::LegacyInitialYaw::assign(animated(&r.initial_yaw, writer.ids)),
-        initial_pitch: D::InitialPitch::assign(animated(&r.initial_pitch, writer.ids)),
-        initial_horizontal: animated(&r.initial_horizontal, writer.ids),
-        initial_vertical: animated(&r.initial_vertical, writer.ids),
-        lifetime: animated(&r.lifetime, writer.ids),
-        lifetime_random: animated(&r.lifetime_random, writer.ids),
+        legacy_initial_pitch: D::LegacyInitialPitch::assign(animated(
+            &r.direction.initial_pitch,
+            writer.ids,
+        )),
+        initial_yaw: D::InitialYaw::assign(animated(&r.direction.initial_yaw, writer.ids)),
+        legacy_initial_yaw: D::LegacyInitialYaw::assign(animated(
+            &r.direction.initial_yaw,
+            writer.ids,
+        )),
+        initial_pitch: D::InitialPitch::assign(animated(&r.direction.initial_pitch, writer.ids)),
+        initial_horizontal: animated(&r.direction.initial_horizontal, writer.ids),
+        initial_vertical: animated(&r.direction.initial_vertical, writer.ids),
+        lifetime: animated(&r.lifetime.duration, writer.ids),
+        lifetime_random: animated(&r.lifetime.variation, writer.ids),
         legacy_lifespan_randomize: D::LegacyLifespanRandomize::assign(
             (r.additional_flags.bits() >> 1) & 1,
         ),
         kill_radius: r.kill_radius,
-        gravity_x: r.gravity_x,
-        gravity_y: r.gravity_y,
-        gravity: r.gravity,
+        gravity_x: r.motion.gravity.x,
+        gravity_y: r.motion.gravity.y,
+        gravity: r.motion.gravity.magnitude,
         legacy_size_animation: D::LegacySizeAnimation::assign(animated(
-            &r.size_animation,
+            &r.appearance.size_animation,
             writer.ids,
         )),
-        size_mid_time: D::SizeMidTime::assign(r.size_mid_time),
-        legacy_size_mid_time: D::LegacySizeMidTime::assign(r.size_mid_time),
-        color_mid_time: D::ColorMidTime::assign(r.color_mid_time),
+        size_mid_time: D::SizeMidTime::assign(r.appearance.size_mid_time),
+        legacy_size_mid_time: D::LegacySizeMidTime::assign(r.appearance.size_mid_time),
+        color_mid_time: D::ColorMidTime::assign(r.appearance.color_mid_time),
         legacy_rotation_animation: D::LegacyRotationAnimation::assign(animated(
-            &r.rotation_animation,
+            &r.appearance.rotation_animation,
             writer.ids,
         )),
-        alpha_mid_time: D::AlphaMidTime::assign(r.alpha_mid_time),
-        legacy_rotation_mid_time: D::LegacyRotationMidTime::assign(r.rotation_mid_time),
-        rotation_mid_time: D::RotationMidTime::assign(r.rotation_mid_time),
+        alpha_mid_time: D::AlphaMidTime::assign(r.appearance.alpha_mid_time),
+        legacy_rotation_mid_time: D::LegacyRotationMidTime::assign(r.appearance.rotation_mid_time),
+        rotation_mid_time: D::RotationMidTime::assign(r.appearance.rotation_mid_time),
         legacy_color_start: D::LegacyColorStart::assign(fixed_color(
-            &r.color_start,
+            &r.appearance.color_start,
             writer.ids,
             writer.context,
         )?),
-        size_mid_hold_time: D::SizeMidHoldTime::assign(r.size_mid_hold_time),
+        size_mid_hold_time: D::SizeMidHoldTime::assign(r.appearance.size_mid_hold_time),
         legacy_color_mid: D::LegacyColorMid::assign(fixed_color(
-            &r.color_mid,
+            &r.appearance.color_mid,
             writer.ids,
             writer.context,
         )?),
-        color_mid_hold_time: D::ColorMidHoldTime::assign(r.color_mid_hold_time),
+        color_mid_hold_time: D::ColorMidHoldTime::assign(r.appearance.color_mid_hold_time),
         legacy_color_end: D::LegacyColorEnd::assign(fixed_color(
-            &r.color_end,
+            &r.appearance.color_end,
             writer.ids,
             writer.context,
         )?),
-        alpha_mid_hold_time: D::AlphaMidHoldTime::assign(r.alpha_mid_hold_time),
-        legacy_color_mid_time: D::LegacyColorMidTime::assign(r.color_mid_time),
-        rotation_mid_hold_time: D::RotationMidHoldTime::assign(r.rotation_mid_hold_time),
-        legacy_alpha_mid_time: D::LegacyAlphaMidTime::assign(r.alpha_mid_time),
-        size_animation: D::SizeAnimation::assign(animated(&r.size_animation, writer.ids)),
+        alpha_mid_hold_time: D::AlphaMidHoldTime::assign(r.appearance.alpha_mid_hold_time),
+        legacy_color_mid_time: D::LegacyColorMidTime::assign(r.appearance.color_mid_time),
+        rotation_mid_hold_time: D::RotationMidHoldTime::assign(r.appearance.rotation_mid_hold_time),
+        legacy_alpha_mid_time: D::LegacyAlphaMidTime::assign(r.appearance.alpha_mid_time),
+        size_animation: D::SizeAnimation::assign(animated(
+            &r.appearance.size_animation,
+            writer.ids,
+        )),
         rotation_animation: D::RotationAnimation::assign(animated(
-            &r.rotation_animation,
+            &r.appearance.rotation_animation,
             writer.ids,
         )),
         color_start: D::ColorStart::assign(fixed_color(
-            &r.color_start,
+            &r.appearance.color_start,
             writer.ids,
             writer.context,
         )?),
-        color_mid: D::ColorMid::assign(fixed_color(&r.color_mid, writer.ids, writer.context)?),
-        color_end: D::ColorEnd::assign(fixed_color(&r.color_end, writer.ids, writer.context)?),
-        drag: r.drag,
+        color_mid: D::ColorMid::assign(fixed_color(
+            &r.appearance.color_mid,
+            writer.ids,
+            writer.context,
+        )?),
+        color_end: D::ColorEnd::assign(fixed_color(
+            &r.appearance.color_end,
+            writer.ids,
+            writer.context,
+        )?),
+        drag: r.direction.drag,
         legacy_mass_randomize: D::LegacyMassRandomize::assign((r.additional_flags.bits() >> 2) & 1),
-        mass: r.mass,
-        mass_random: r.mass_random,
-        mass_size_multiplier: r.mass_size_multiplier,
+        mass: r.forces.mass,
+        mass_random: r.forces.mass_random,
+        mass_size_multiplier: r.forces.mass_size_multiplier,
         legacy_world_space: D::LegacyWorldSpace::assign((r.additional_flags.bits() >> 3) & 1),
-        local_forces: nr::LocalForces((r.local_forces).bits()),
-        world_forces: nr::WorldForces((r.world_forces).bits()),
-        local_forces_fallback: nr::LocalForces((r.local_forces_fallback).bits()),
-        world_forces_fallback: nr::WorldForces((r.world_forces_fallback).bits()),
+        local_forces: nr::LocalForces((r.forces.local_forces).bits()),
+        world_forces: nr::WorldForces((r.forces.world_forces).bits()),
+        local_forces_fallback: nr::LocalForces((r.forces.local_forces_fallback).bits()),
+        world_forces_fallback: nr::WorldForces((r.forces.world_forces_fallback).bits()),
         world_forces_mass_multiplier: D::WorldForcesMassMultiplier::assign(
-            r.world_forces_mass_multiplier,
+            r.forces.world_forces_mass_multiplier,
         ),
-        noise_amplitude: r.noise_amplitude,
-        noise_frequency: r.noise_frequency,
-        noise_coherence: r.noise_coherence,
-        noise_edge: r.noise_edge,
+        noise_amplitude: r.noise.noise_amplitude,
+        noise_frequency: r.noise.noise_frequency,
+        noise_coherence: r.noise.noise_coherence,
+        noise_edge: r.noise.noise_edge,
         index_plus_length: D::IndexPlusLength::assign(r.index_plus_length),
         emitter_shape: nr::EmitterShape::from_raw(r.emitter_shape),
         ribbon_type: nr::RibbonKind::from_raw(r.ribbon_type.raw()),

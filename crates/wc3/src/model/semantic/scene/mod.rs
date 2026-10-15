@@ -1,4 +1,15 @@
 //! Portable authored scene features, simulation constraints, and deformation systems.
+/// Keyframed geometry, events, collisions, and effect compositions.
+pub mod keyframed;
+/// Runtime model scene definitions.
+pub mod model;
+/// Scene projection, force, targeting, and optical programs.
+pub mod programmed;
+/// Region-local illumination and cookie programs.
+pub mod region_lights;
+/// World regions, placements, environment, and illumination.
+pub mod world;
+
 mod features;
 mod physics;
 use crate::model::semantic::{Error, Link, Scope, ValidateLinks};

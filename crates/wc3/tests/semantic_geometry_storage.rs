@@ -3,10 +3,11 @@ use wc3::model::semantic::profiles::{
     diablo::{d3, d4},
     Extends, Narrows, Universal, Wmo, D3, D4,
 };
+use wc3::model::semantic::GeometrySchema;
 use wc3::model::semantic::ValueGroups;
 use wc3::model::semantic::{
     Attribute, AttributeDomain, AttributeSemantic, AttributeValues, ConnectivitySets, GeometryData,
-    GeometryEdit, GeometryInfluences, GeometrySchema, Influence, InfluenceRows, JointInfluences,
+    GeometryEdit, GeometryInfluences, Influence, InfluenceRows, JointInfluences,
     M3CollisionGeometry, MdlxGeometry, SurfaceTriangleControls, Topology, VertexRemap, WmoGeometry,
 };
 

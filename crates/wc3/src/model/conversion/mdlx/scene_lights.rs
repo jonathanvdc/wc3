@@ -4,7 +4,7 @@ use super::state::ImportState;
 use crate::model::conversion::Error;
 use crate::model::mdlx::{self as native, ModelDialect};
 use crate::model::semantic::profiles::mdlx as profile;
-use crate::model::semantic::{Node, NodeId};
+use crate::model::semantic::{LightEmission, Node, NodeId, PhotographicControls, VisibleLight};
 use std::collections::BTreeMap;
 
 pub(super) fn read<'a, D: ModelDialect>(
@@ -84,21 +84,27 @@ pub(super) fn read<'a, D: ModelDialect>(
                     a!(attenuation_start, ATTENUATION_START),
                     a!(attenuation_end, ATTENUATION_END),
                 ],
-                color: a!(color, COLOR),
-                intensity: a!(intensity, INTENSITY),
-                ambient_color: a!(ambient_color, AMBIENT_COLOR),
-                ambient_intensity: a!(ambient_intensity, AMBIENT_INTENSITY),
-                shadow_casting: source.try_shadow_casting().ok(),
-                shadow_intensity: source.try_shadow_intensity().ok(),
-                shadow_range,
-                falloff,
-                visibility: decoder.track(
-                    source.visibility.as_ref(),
-                    1.,
-                    owner,
-                    profile::properties::light::VISIBILITY,
-                    |value| value,
-                )?,
+                diffuse: LightEmission {
+                    color: a!(color, COLOR),
+                    intensity: a!(intensity, INTENSITY),
+                },
+                ambient: LightEmission {
+                    color: a!(ambient_color, AMBIENT_COLOR),
+                    intensity: a!(ambient_intensity, AMBIENT_INTENSITY),
+                },
+                activation: VisibleLight {
+                    shadow_casting: source.try_shadow_casting().ok(),
+                    shadow_intensity: source.try_shadow_intensity().ok(),
+                    shadow_range,
+                    falloff,
+                    visibility: decoder.track(
+                        source.visibility.as_ref(),
+                        1.,
+                        owner,
+                        profile::properties::light::VISIBILITY,
+                        |value| value,
+                    )?,
+                },
             });
             decoder.builder.set_feature(feature, payload)?;
         }
@@ -152,16 +158,18 @@ pub(super) fn read<'a, D: ModelDialect>(
                     profile::properties::camera::ROLL,
                     |value| value,
                 )?,
-                visibility: decoder.track(
-                    source.visibility.as_ref(),
-                    1.,
-                    owner,
-                    profile::properties::camera::VISIBILITY,
-                    |value| value,
-                )?,
-                focus_distance: optional!(focus_distance, FOCUS_DISTANCE),
-                focal_length: optional!(focal_length, FOCAL_LENGTH),
-                f_stop: optional!(f_stop, F_STOP),
+                convention: PhotographicControls {
+                    visibility: decoder.track(
+                        source.visibility.as_ref(),
+                        1.,
+                        owner,
+                        profile::properties::camera::VISIBILITY,
+                        |value| value,
+                    )?,
+                    focus_distance: optional!(focus_distance, FOCUS_DISTANCE),
+                    focal_length: optional!(focal_length, FOCAL_LENGTH),
+                    f_stop: optional!(f_stop, F_STOP),
+                },
             });
             decoder.builder.set_feature(feature, payload)?;
         }

@@ -52,13 +52,18 @@ where
             profile::ActorKind::Attachment(value) => {
                 let (bone, position) = anchor(model, attached.node, nodes)?;
                 core.attachments.push(native::records::Attachment {
-                    id: value.role,
+                    id: value.identity,
                     bone_id: u16::try_from(bone)
                         .map_err(|_| Error::new("m2.attachment", "bone index exceeds u16"))?,
                     position,
-                    animate: animated(model, &value.enabled, starts, globals, context, |v, _| {
-                        Ok(u8::from(v))
-                    })?,
+                    animate: animated(
+                        model,
+                        &value.activation,
+                        starts,
+                        globals,
+                        context,
+                        |v, _| Ok(u8::from(v)),
+                    )?,
                     ..Default::default()
                 })
             }
@@ -80,7 +85,7 @@ where
                     position,
                     ambient_color: animated(
                         model,
-                        &value.ambient_color,
+                        &value.ambient.color,
                         starts,
                         globals,
                         context,
@@ -88,7 +93,7 @@ where
                     )?,
                     ambient_intensity: animated(
                         model,
-                        &value.ambient_intensity,
+                        &value.ambient.intensity,
                         starts,
                         globals,
                         context,
@@ -96,7 +101,7 @@ where
                     )?,
                     diffuse_color: animated(
                         model,
-                        &value.diffuse_color,
+                        &value.diffuse.color,
                         starts,
                         globals,
                         context,
@@ -104,7 +109,7 @@ where
                     )?,
                     diffuse_intensity: animated(
                         model,
-                        &value.diffuse_intensity,
+                        &value.diffuse.intensity,
                         starts,
                         globals,
                         context,
@@ -112,7 +117,7 @@ where
                     )?,
                     attenuation_start: animated(
                         model,
-                        &value.attenuation_start,
+                        &value.attenuation[0],
                         starts,
                         globals,
                         context,
@@ -120,7 +125,7 @@ where
                     )?,
                     attenuation_end: animated(
                         model,
-                        &value.attenuation_end,
+                        &value.attenuation[1],
                         starts,
                         globals,
                         context,
@@ -128,7 +133,7 @@ where
                     )?,
                     visibility: animated(
                         model,
-                        &value.enabled,
+                        &value.activation,
                         starts,
                         globals,
                         context,
@@ -139,6 +144,7 @@ where
             profile::ActorKind::Ribbon(value) => {
                 let (bone, position) = anchor(model, attached.node, nodes)?;
                 let texture_indices = value
+                    .rendering
                     .textures
                     .iter()
                     .map(|id| {
@@ -154,7 +160,7 @@ where
                     })
                     .collect::<Result<Vec<_>, _>>()?;
                 let mut material_indices = Vec::new();
-                for id in &value.materials {
+                for id in &value.rendering.materials {
                     let material = model
                         .material(*id)
                         .ok_or_else(|| Error::new("m2.ribbon.material", "missing surface"))?;
@@ -171,16 +177,30 @@ where
                     core.materials = ZeroVec::alloc_from_slice(&materials)
                 }
                 core.ribbons.push(native::records::RibbonEmitter {
-                    id: value.id,
+                    id: value.controls.id,
                     bone_id: bone,
                     position,
                     texture_indices: ZeroVec::alloc_from_slice(&texture_indices),
                     material_indices: ZeroVec::alloc_from_slice(&material_indices),
-                    color: animated(model, &value.color, starts, globals, context, |v, _| Ok(v))?,
-                    alpha: animated(model, &value.alpha, starts, globals, context, fixed_alpha)?,
+                    color: animated(
+                        model,
+                        &value.appearance.color,
+                        starts,
+                        globals,
+                        context,
+                        |v, _| Ok(v),
+                    )?,
+                    alpha: animated(
+                        model,
+                        &value.appearance.opacity,
+                        starts,
+                        globals,
+                        context,
+                        fixed_alpha,
+                    )?,
                     height_above: animated(
                         model,
-                        &value.height_above,
+                        &value.geometry.height_above,
                         starts,
                         globals,
                         context,
@@ -188,20 +208,20 @@ where
                     )?,
                     height_below: animated(
                         model,
-                        &value.height_below,
+                        &value.geometry.height_below,
                         starts,
                         globals,
                         context,
                         |v, _| Ok(v),
                     )?,
-                    edges_per_second: value.edges_per_second,
-                    edge_lifetime: value.edge_lifetime,
-                    gravity: value.emission_angle,
-                    texture_rows: value.atlas[0],
-                    texture_columns: value.atlas[1],
+                    edges_per_second: value.emission_rate,
+                    edge_lifetime: value.lifetime,
+                    gravity: value.controls.angle,
+                    texture_rows: value.appearance.atlas[0],
+                    texture_columns: value.appearance.atlas[1],
                     texture_slot: animated(
                         model,
-                        &value.texture_slot,
+                        &value.appearance.texture_slot,
                         starts,
                         globals,
                         context,
@@ -209,14 +229,18 @@ where
                     )?,
                     visibility: animated(
                         model,
-                        &value.enabled,
+                        &value.controls.enabled,
                         starts,
                         globals,
                         context,
                         |v, _| Ok(u8::from(v)),
                     )?,
                     modern: V::ribbon_tail_from(
-                        [value.priority_plane, i16::from(value.color_index), 0],
+                        [
+                            value.controls.priority_plane,
+                            i16::from(value.controls.color_index),
+                            0,
+                        ],
                         context,
                     )?,
                 })
@@ -224,17 +248,27 @@ where
             profile::ActorKind::Camera(value) => {
                 let placement = model.node(attached.node).unwrap();
                 let mut camera = native::records::Camera::<V>::new();
-                camera.kind = CameraKind::from_raw(value.kind.raw());
+                camera.kind = CameraKind::from_raw(value.convention.raw());
                 camera.position_base = placement.transform.translation;
-                camera.target_position_base = value.target_base;
-                camera.near_clip = value.clip[0];
-                camera.far_clip = value.clip[1];
-                camera.positions =
-                    animated_spline(model, &value.position, starts, globals, context, |v, _| {
-                        Ok(v)
-                    })?;
-                camera.target_positions =
-                    animated_spline(model, &value.target, starts, globals, context, |v, _| Ok(v))?;
+                camera.target_position_base = value.target;
+                camera.near_clip = value.clipping[0];
+                camera.far_clip = value.clipping[1];
+                camera.positions = animated_spline(
+                    model,
+                    &value.eye_offset,
+                    starts,
+                    globals,
+                    context,
+                    |v, _| Ok(v),
+                )?;
+                camera.target_positions = animated_spline(
+                    model,
+                    &value.target_offset,
+                    starts,
+                    globals,
+                    context,
+                    |v, _| Ok(v),
+                )?;
                 camera.roll =
                     animated_spline(model, &value.roll, starts, globals, context, |v, _| Ok(v))?;
                 V::write_logical_fov(
@@ -318,11 +352,17 @@ where
                 particle.bone_id = u16::try_from(bone)
                     .map_err(|_| Error::new("m2.particle", "bone exceeds u16"))?;
                 particle.position = position;
-                particle.emission_speed =
-                    animated(model, &value.speed, starts, globals, context, |v, _| Ok(v))?;
+                particle.emission_speed = animated(
+                    model,
+                    &value.motion.speed,
+                    starts,
+                    globals,
+                    context,
+                    |v, _| Ok(v),
+                )?;
                 particle.speed_variation = animated(
                     model,
-                    &value.speed_variation,
+                    &value.motion.variation,
                     starts,
                     globals,
                     context,
@@ -330,7 +370,7 @@ where
                 )?;
                 particle.vertical_range = animated(
                     model,
-                    &value.vertical_range,
+                    &value.details.shape.vertical_range,
                     starts,
                     globals,
                     context,
@@ -338,21 +378,31 @@ where
                 )?;
                 particle.horizontal_range = animated(
                     model,
-                    &value.horizontal_range,
+                    &value.details.shape.horizontal_range,
                     starts,
                     globals,
                     context,
                     |v, _| Ok(v),
                 )?;
-                particle.lifespan =
-                    animated(model, &value.lifespan, starts, globals, context, |v, _| {
-                        Ok(v)
-                    })?;
-                particle.emission_rate =
-                    animated(model, &value.rate, starts, globals, context, |v, _| Ok(v))?;
+                particle.lifespan = animated(
+                    model,
+                    &value.lifetime.duration,
+                    starts,
+                    globals,
+                    context,
+                    |v, _| Ok(v),
+                )?;
+                particle.emission_rate = animated(
+                    model,
+                    &value.emission.rate,
+                    starts,
+                    globals,
+                    context,
+                    |v, _| Ok(v),
+                )?;
                 particle.emission_area_width = animated(
                     model,
-                    &value.area_width,
+                    &value.details.shape.area_width,
                     starts,
                     globals,
                     context,
@@ -360,29 +410,64 @@ where
                 )?;
                 particle.emission_area_length = animated(
                     model,
-                    &value.area_length,
+                    &value.details.shape.area_length,
                     starts,
                     globals,
                     context,
                     |v, _| Ok(v),
                 )?;
-                particle.z_source =
-                    animated(model, &value.z_source, starts, globals, context, |v, _| {
-                        Ok(v)
-                    })?;
-                particle.enabled =
-                    animated(model, &value.enabled, starts, globals, context, |v, _| {
-                        Ok(u8::from(v))
-                    })?;
+                particle.z_source = animated(
+                    model,
+                    &value.details.shape.z_source,
+                    starts,
+                    globals,
+                    context,
+                    |v, _| Ok(v),
+                )?;
+                particle.enabled = animated(
+                    model,
+                    &value.emission.activation,
+                    starts,
+                    globals,
+                    context,
+                    |v, _| Ok(u8::from(v)),
+                )?;
                 let packed = particle.flags.packed_gravity();
-                particle.gravity =
-                    animated(model, &value.gravity, starts, globals, context, |v, c| {
-                        gravity_word(v, packed, c, "m2.particle.gravity")
-                    })?;
+                particle.gravity = animated(
+                    model,
+                    &value.motion.gravity,
+                    starts,
+                    globals,
+                    context,
+                    |v, c| gravity_word(v, packed, c, "m2.particle.gravity"),
+                )?;
                 let required = V::required_flags(&particle);
                 core.flags = ModelFlags::from_bits_retain(core.flags.bits() | required.bits());
                 core.particles.push(particle)
             }
+
+            profile::ActorKind::GeometryAnimation(unavailable)
+            | profile::ActorKind::CollisionShape(unavailable)
+            | profile::ActorKind::ParticleProgram(unavailable)
+            | profile::ActorKind::FaceActor(unavailable)
+            | profile::ActorKind::LightProgram(unavailable)
+            | profile::ActorKind::Extent(unavailable)
+            | profile::ActorKind::ParticleCopy(unavailable)
+            | profile::ActorKind::Projector(unavailable)
+            | profile::ActorKind::Force(unavailable)
+            | profile::ActorKind::Warp(unavailable)
+            | profile::ActorKind::HitTest(unavailable)
+            | profile::ActorKind::AttachmentVolume(unavailable)
+            | profile::ActorKind::Billboard(unavailable)
+            | profile::ActorKind::Turret(unavailable)
+            | profile::ActorKind::IkJoint(unavailable)
+            | profile::ActorKind::IkTwoJoint(unavailable)
+            | profile::ActorKind::IkCcd(unavailable)
+            | profile::ActorKind::OneBoneSolver(unavailable)
+            | profile::ActorKind::ShadowBox(unavailable)
+            | profile::ActorKind::ViewVolume(unavailable)
+            | profile::ActorKind::AtlasParticles(unavailable)
+            | profile::ActorKind::PointLight(unavailable) => match *unavailable {},
         }
     }
     Ok(())

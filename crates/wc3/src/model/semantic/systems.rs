@@ -1,20 +1,33 @@
 //! Independently authored scene systems and model-wide metadata.
-use crate::model::semantic::{profiles, scene, Link, ValidateLinks};
+/// Model collision, customization, and texture program ownership.
+pub mod model;
+/// Model-family bodies, constraints, and environmental response.
+pub mod model_physics;
+/// Programmed-model independent system ownership and relationships.
+pub mod programmed;
+/// Programmed-model collision, rigid-body, and cloth definitions.
+pub mod programmed_physics;
+
+use crate::model::semantic::controls::{
+    diablo3, diablo4, layered, model as model_controls, programmed as programmed_controls, world,
+};
+use crate::model::semantic::profiles::{ControlsPayload, Either, Unavailable};
+use crate::model::semantic::{scene, Link, ValidateLinks};
 /// Model-wide metadata chosen by the universal vocabulary.
 #[derive(Clone, Debug)]
 pub enum ModelMetadata<'a> {
     /// Diablo III appearance-wide declarations.
-    D3(profiles::diablo::d3::ModelMetadata),
+    D3(diablo3::ModelMetadata),
     /// Diablo IV appearance and structure declarations.
-    D4(profiles::diablo::d4::ModelMetadata),
+    D4(diablo4::ModelMetadata),
     /// Warcraft III animation resources and transition policy.
-    Mdlx(profiles::mdlx::ModelMetadata<'a>),
+    Mdlx(layered::ModelMetadata<'a>),
     /// World of Warcraft model behavior and gameplay lookup programs.
-    M2(profiles::m2::ModelMetadata),
+    M2(model_controls::ModelMetadata),
     /// StarCraft II model behavior.
-    M3(profiles::m3::ModelMetadata),
+    M3(programmed_controls::ModelMetadata),
     /// World-model rendering and environment settings.
-    Wmo(profiles::wmo::ModelMetadata<'a>),
+    Wmo(world::ModelMetadata<'a>),
 }
 impl ValidateLinks for ModelMetadata<'_> {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
@@ -34,11 +47,11 @@ pub enum System<'a> {
     /// Portable simulation bodies, collision shapes, and constraints.
     Physics(scene::PhysicsSystem<'a>),
     /// World of Warcraft collision, deformation, texture animation, or physics system.
-    M2(profiles::m2::System<'a>),
+    M2(model::System<'a>),
     /// StarCraft II collision, rigid physics, or cloth system.
-    M3(profiles::m3::System<'a>),
+    M3(programmed::System<'a>),
     /// Static-world groups, portals, and environment volumes.
-    Wmo(profiles::wmo::WorldSystem<'a>),
+    Wmo(world::WorldSystem<'a>),
 }
 impl ValidateLinks for System<'_> {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
@@ -71,16 +84,16 @@ pub enum SystemMember {
     WmoAmbient(u32),
 }
 /// A scene system exposes its authored local identity domains for validation.
-pub trait SystemPayload: profiles::ControlsPayload {
+pub trait SystemPayload: ControlsPayload {
     /// Whether this system owns the specified member.
     fn contains(&self, _member: SystemMember) -> bool {
         false
     }
 }
-impl SystemPayload for profiles::m2::System<'_> {}
-impl SystemPayload for profiles::m3::System<'_> {}
-impl SystemPayload for profiles::Unavailable {}
-impl SystemPayload for profiles::wmo::WorldSystem<'_> {
+impl SystemPayload for model::System<'_> {}
+impl SystemPayload for programmed::System<'_> {}
+impl SystemPayload for Unavailable {}
+impl SystemPayload for world::WorldSystem<'_> {
     fn contains(&self, member: SystemMember) -> bool {
         match member {
             SystemMember::WmoGroup(index) => (index as usize) < self.groups.len(),
@@ -91,7 +104,7 @@ impl SystemPayload for profiles::wmo::WorldSystem<'_> {
         }
     }
 }
-impl<A: SystemPayload, B: SystemPayload> SystemPayload for profiles::Either<A, B> {
+impl<A: SystemPayload, B: SystemPayload> SystemPayload for Either<A, B> {
     fn contains(&self, member: SystemMember) -> bool {
         match self {
             Self::Left(value) => value.contains(member),

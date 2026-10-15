@@ -64,7 +64,7 @@ pub(super) fn read<'a, D: Dialect>(
                 let node = builder.add_node(node)?;
                 region.point_programs.push(builder.add_feature(
                     node,
-                    wmo::Node::PointProgram(wmo::PointProgram {
+                    wmo::Node::LightProgram(wmo::PointProgram {
                         light,
                         color: rgba(row.color_bgra),
                         intensity: row.intensity,
@@ -147,7 +147,7 @@ pub(super) fn write<'a, D: Dialect>(
     }
     for id in &region.point_programs {
         let feature = model.feature(*id).expect("validated region program");
-        let wmo::Node::PointProgram(source) = &feature.payload else {
+        let wmo::Node::LightProgram(source) = &feature.payload else {
             return Err(Error::new(
                 "world.region.program",
                 "program membership has another feature kind",

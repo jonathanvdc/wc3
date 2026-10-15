@@ -52,6 +52,32 @@ complete geometry and joint-binding schemas, material surfaces, attached
 features, systems, appearance assignments, animation programs, and the controls
 carried directly by each owner.
 
+The shared definitions live directly in topic modules: `semantic::materials`,
+`features`, `scene`, `controls`, `geometry`, `systems`, `appearance`, `animation`,
+and `values`. Profiles select those definitions and apply their admissibility
+rules. The root semantic namespace reexports common
+building blocks; the profile namespaces expose their chosen compositions.
+Choosing a profile therefore constrains authoring without introducing a second
+copy of the same data structure.
+
+Parameters express independent choices within a definition. For example,
+`AmbientDiffuseLight<Kind, Activation>` selects the illumination selector and
+activation domain; `AimedCamera<FieldOfView, Convention>` selects static or
+animated projection and its controls. `AttachmentPointDefinition<Identity,
+Activation, Controls>` separates identity from activation and unresolved controls.
+`ParticleComposition<Emission, Motion, Lifetime, Appearance, Details>` combines
+complete emitter components. Narrow profiles choose exact types for these
+parameters; Universal chooses explicit alternatives that admit more behavior.
+No optional field is needed merely because another profile uses a different
+interpretation.
+
+Surface composition follows the same rule. `LayeredSurface<Layer>` owns ordered
+layers; `ShaderPass<Input>` owns ordered shader inputs. Custom layer and input
+types implement `SurfaceLayer` or `ShaderInput` to participate in property
+selection, local validation, and graph traversal. `SurfaceSet` combines complete
+surface families, with `Unavailable` for families that a selection cannot author.
+Application profiles can reuse these structures or supply their own payloads.
+
 A profile chooses a required controls payload where absence has no meaning,
 `Option<Payload>` where the declaration is genuinely optional, or the zero-sized
 `NoControls` value where that owner has no additional controls. `Unavailable`
@@ -137,6 +163,15 @@ turret behaviors, inverse-kinematics solvers, and animated bounds. These are
 independently identified features anchored to ordinary hierarchy nodes. There is
 no outer source-format variant to unwrap before discovering a feature's purpose.
 
+`NodeFeature` is an alias for `FeatureSet<Universal>`. Native feature aliases
+select the same enum with `Mdlx`, `M2`, `M3`, or `Wmo` as its vocabulary.
+`FeatureVocabulary` chooses each family's payload and supplies its inspection,
+property, and relationship rules. Unsupported families select `Unavailable`.
+For example, an MDLX particle carries a constrained `ParticleComposition`,
+while Universal's particle family also admits resource instances and broader
+simulated definitions. The family names describe behavior in every selection:
+`Particle`, `Ribbon`, `Attachment`, `Event`, and `CollisionShape`.
+
 Shared structures retain common authored fields while explicit alternatives
 preserve different interpretations. `AmbientDiffuseLight` owns independently
 animated diffuse and ambient emission and distance attenuation. Its
@@ -167,8 +202,9 @@ external placement structure, while world tint and light selection remain an
 explicit appearance program. MDLX path strings retain their borrowed or owned
 storage as byte paths; exact MDLX narrowing requires UTF-8.
 
-`ParticleDefinition` owns shared emission, motion, lifetime, and particle-age
-appearance components.
+`ParticleDefinition` is Universal's selection of `ParticleComposition`, owning
+shared emission, motion, lifetime, and particle-age appearance components.
+Native profiles select the same composition with narrower component types.
 All simulated particles expose their rate, initial speed, speed variation,
 gravity, duration, and lifetime variation through those same fields.
 `ParticleScalar` distinguishes rest-value animation from programmed values with
@@ -188,9 +224,11 @@ programs control the appearance of each living particle. Widening does not
 convert degrees to radians, reinterpret unknown controls, or bake an appearance
 program into a different simulation.
 
-MDLX and M2 ribbons widen to one owned `TrailEmitter`, composed from section
+MDLX and M2 ribbons select `TrailComposition` with their exact rate, atlas,
+rendering, and physical-control types. They widen to `TrailEmitter`, the
+broader Universal selection of that composition. The shared structure owns section
 geometry, animated appearance, rendering bindings, and physical controls.
-Generation rate uses `f64`, which exactly retains either native `u32` or `f32`
+Universal generation rate uses `f64`, which exactly retains either native `u32` or `f32`
 values. Checked export requires an integral in-range rate for MDLX or an exactly
 representable `f32` rate for M2. Atlas dimensions similarly use a shared unsigned
 width, while animated atlas selectors retain their `u16` or `u32` value domain
@@ -228,8 +266,8 @@ let mut emitter = ParticleDefinition::from(mdlx::Particle2::default());
 emitter.emission.rate = ParticleScalar::Animated(Animated::constant(24.));
 emitter.motion.speed = ParticleScalar::Animated(Animated::constant(8.));
 let exported = mdlx::Particle2::try_from(emitter).unwrap();
-assert_eq!(exported.emission_rate.default, 24.);
-assert_eq!(exported.speed.default, 8.);
+assert_eq!(exported.emission.rate.default, 24.);
+assert_eq!(exported.motion.speed.default, 8.);
 ```
 
 Widening moves each feature into its behavior representation. Exact narrowing

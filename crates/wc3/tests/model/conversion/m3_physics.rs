@@ -222,7 +222,7 @@ fn physics_and_attachment_fields_are_active_and_editable() {
     assert_eq!(attachment.unknown, 123);
     assert_eq!(attachment.bone_index, 1);
     let reread = conversion::m3::import(&output, &ImportOptions::default()).unwrap();
-    assert!(reread.value.features().any(|(_,feature)|matches!(&feature.payload,surface::Feature::Attachment(attachment)if attachment.name=="socket")));
+    assert!(reread.value.features().any(|(_,feature)|matches!(&feature.payload,surface::Feature::Attachment(attachment)if attachment.identity=="socket")));
 }
 
 #[test]

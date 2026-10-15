@@ -1,12 +1,14 @@
 //! Logical relationship traversal for checked graph construction.
+use crate::model::semantic::Resource;
 use crate::model::semantic::{
     ClipId, ClockId, MaterialId, MeshId, ModelId, NodeId, SkinId, TextureId,
 };
 use crate::model::semantic::{
     ControllerId, CurveValue, EventId, FeatureId, FeatureKind, GeometryKind, InstanceId,
-    MaterialSlotId, NodeFeature, SystemId, SystemMember, TextureTransformId,
+    MaterialSlotId, SystemId, SystemMember, TextureTransformId,
 };
 use std::any::TypeId;
+use std::borrow::Cow;
 /// A relationship to another object in the semantic graph.
 #[derive(Clone, Debug)]
 pub enum Link {
@@ -243,11 +245,6 @@ impl ValidateLinks for FeatureId {
         v(Link::Feature(*self));
     }
 }
-impl ValidateLinks for NodeFeature<'_> {
-    fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
-        self.visit_feature_links(visitor);
-    }
-}
 
 impl ValidateLinks for InstanceId {
     fn visit_links(&self, v: &mut dyn FnMut(Link)) {
@@ -281,4 +278,26 @@ impl ValidateLinks for EventId {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
         visitor(Link::Event(*self));
     }
+}
+
+impl ValidateLinks for f32 {
+    fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
+        if !self.is_finite() {
+            visitor(Link::InvalidValue);
+        }
+    }
+}
+
+impl ValidateLinks for bool {
+    fn visit_links(&self, _: &mut dyn FnMut(Link)) {}
+}
+
+impl ValidateLinks for u32 {
+    fn visit_links(&self, _: &mut dyn FnMut(Link)) {}
+}
+impl ValidateLinks for Cow<'_, str> {
+    fn visit_links(&self, _: &mut dyn FnMut(Link)) {}
+}
+impl ValidateLinks for Resource<'_> {
+    fn visit_links(&self, _: &mut dyn FnMut(Link)) {}
 }

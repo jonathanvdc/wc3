@@ -1,13 +1,16 @@
 //! Compile-time vocabulary of logical payloads; unrelated to native file revisions.
 use crate::model::semantic::{
     AppearanceSchema, BindingSchema, Bounds, Error, FeatureKind, FeatureProperty, GeometrySchema,
-    Link, MaterialSurface, Model, ModelMetadata, NodeFeature, PbrSurface, SkinId, SystemPayload,
-    ValidateLinks,
+    Link, MaterialSurface, Model, ModelMetadata, NodeFeature, SkinId, SystemPayload, ValidateLinks,
+};
+use crate::model::semantic::{
+    Attachment, EventSource, FeatureSet, FeatureView, FeatureVocabulary, Light, ParticleEmitter,
+    Resource, RibbonEmitter,
 };
 use crate::model::semantic::{Camera, CameraConvention, FeatureSchema, OwnerId};
 use crate::model::semantic::{
-    ClipControls, DrawControls, GeometryData, InstanceControls, Material, MeshControls,
-    NodeControls, System, TextureControls, UniversalAppearance, UniversalBinding,
+    ClipControls, DrawControls, GeometryData, InstanceControls, MeshControls, NodeControls, System,
+    TextureControls, UniversalAppearance, UniversalBinding,
 };
 use crate::model::semantic::{
     PropertyIdentityKey, PropertyKeyRef, PropertyPayload, PropertyTarget,
@@ -343,61 +346,8 @@ impl<P: Profile> Extends<P> for P {
         value
     }
 }
-impl ValidateLinks for MaterialSurface<'_> {
-    fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
-        match self {
-            Self::D4(value) => value.visit_links(visitor),
-            Self::D3(value) => value.visit_links(visitor),
-            Self::Generic(value) => value.visit_links(visitor),
-            Self::Mdlx(value) => value.visit_links(visitor),
-            Self::M2(value) => value.visit_links(visitor),
-            Self::M3(value) => value.visit_links(visitor),
-            Self::Wmo(value) => value.visit_links(visitor),
-        }
-    }
-}
-impl ValidateLinks for PbrSurface {
-    fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
-        for input in &self.inputs {
-            input.texture.visit_links(visitor);
-        }
-    }
-}
-impl SurfacePayload for PbrSurface {
-    fn validate(&self) -> Result<(), Error> {
-        Material {
-            name: "".into(),
-            surface: MaterialSurface::Generic(Box::new(self.clone())),
-        }
-        .validate_portable()
-    }
-}
-impl SurfacePayload for MaterialSurface<'_> {
-    fn supports_property(&self, key: &PropertyIdentityKey) -> bool {
-        match self {
-            Self::Mdlx(v) => v.supports_property(key),
-            Self::M2(v) => v.supports_property(key),
-            Self::M3(v) => v.supports_property(key),
-
-            Self::D3(v) => v.supports_property(key),
-            Self::D4(v) => v.supports_property(key),
-            Self::Wmo(v) => v.supports_property(key),
-            Self::Generic(_) => false,
-        }
-    }
-
-    fn validate(&self) -> Result<(), Error> {
-        match self {
-            Self::D4(value) => value.validate(),
-            Self::D3(value) => value.validate(),
-            Self::Generic(value) => value.validate(),
-
-            _ => Ok(()),
-        }
-    }
-}
-impl FeaturePayload for NodeFeature<'_> {
-    fn supports_property(&self, key: &PropertyIdentityKey) -> bool {
+impl NodeFeature<'_> {
+    pub(crate) fn profile_supports_property(&self, key: &PropertyIdentityKey) -> bool {
         if let Some(supported) = self.supports_shared_feature_property(key) {
             return supported;
         }
@@ -413,10 +363,6 @@ impl FeaturePayload for NodeFeature<'_> {
                 .is_some_and(|target| target.supports_universal_feature(self))
             || m3::properties::Target::from_identity(key)
                 .is_some_and(|target| target.supports_universal_feature(self))
-    }
-
-    fn kind(&self) -> FeatureKind {
-        self.kind()
     }
 }
 
@@ -663,5 +609,48 @@ impl PropertyPayload for UniversalProperty {
             Self::M2(v) => v.accepts_owner(owner),
             Self::M3(v) => v.accepts_owner(owner),
         }
+    }
+}
+
+impl<'a> FeatureVocabulary<'a> for Universal {
+    type Light = Light;
+    type Camera = Camera<'a>;
+    type Attachment = Attachment<'a>;
+    type Particle = ParticleEmitter<'a>;
+    type Ribbon = RibbonEmitter<'a>;
+    type Event = EventSource<'a>;
+    type GeometryAnimation = mdlx::GeometryAnimation;
+    type CollisionShape = mdlx::Collision;
+    type ParticleProgram = Box<mdlx::Popcorn<'a>>;
+    type FaceActor = Resource<'a>;
+    type LightProgram = wmo::PointProgram;
+    type Extent = Box<m3::ExtentBinding>;
+    type ParticleCopy = Box<m3::ParticleCopy>;
+    type Projector = Box<m3::Projector>;
+    type Force = Box<m3::Force>;
+    type Warp = Box<m3::Warp>;
+    type HitTest = Box<m3::HitTestShape>;
+    type AttachmentVolume = Box<m3::AttachmentVolume>;
+    type Billboard = Box<m3::BillboardBehavior>;
+    type Turret = Box<m3::TurretBehavior>;
+    type IkJoint = Box<m3::IkJoint>;
+    type IkTwoJoint = Box<m3::IkTwoJoint>;
+    type IkCcd = Box<m3::IkCcd>;
+    type OneBoneSolver = Box<m3::OneBoneSolver>;
+    type ShadowBox = Box<m3::ShadowBox>;
+    type ViewVolume = Box<m3::ViewVolume>;
+    type AtlasParticles = Unavailable;
+    type PointLight = Unavailable;
+    fn visit_links(value: &FeatureSet<'a, Self>, visitor: &mut dyn FnMut(Link)) {
+        value.visit_feature_links(visitor);
+    }
+    fn feature<'view>(value: &'view FeatureSet<'a, Self>) -> FeatureView<'view, 'a> {
+        value.profile_feature()
+    }
+    fn supports_property(value: &FeatureSet<'a, Self>, key: &PropertyIdentityKey) -> bool {
+        value.profile_supports_property(key)
+    }
+    fn kind(value: &FeatureSet<'a, Self>) -> FeatureKind {
+        value.profile_kind()
     }
 }

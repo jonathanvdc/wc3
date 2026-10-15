@@ -38,7 +38,7 @@ impl Narrows<Universal> for Mdlx {
     }
     fn surface<'a>(value: <Universal as Profile>::Surface<'a>) -> Result<Self::Surface<'a>, Error> {
         match value {
-            MaterialSurface::Mdlx(value) => Ok(*value),
+            MaterialSurface::Layered(value) => Ok(*value),
             _ => Err(incompatible("surface")),
         }
     }

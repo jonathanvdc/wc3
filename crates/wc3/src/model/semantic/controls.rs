@@ -1,12 +1,33 @@
 //! Owner-local authoring controls chosen by the graph vocabulary.
-use crate::model::semantic::{profiles, Link, ValidateLinks};
+/// Diablo III ownership declarations.
+pub mod diablo3;
+/// Diablo IV ownership declarations.
+pub mod diablo4;
+/// Layered-model ownership and hierarchy semantics.
+pub mod layered;
+/// Model playback, shadow passes, and external category bindings.
+pub mod model;
+/// Controller selection and playback programs.
+pub mod playback;
+/// Programmed-model skeleton and owner declarations.
+pub mod programmed;
+/// Resource sampling producer declarations.
+pub mod texture;
+/// Ordered keys whose destinations are defined externally.
+pub mod unbound;
+/// Static-world region and environment ownership declarations.
+pub mod world;
+/// Static-world draw semantics.
+pub mod world_draw;
+
+use crate::model::semantic::{Link, ValidateLinks};
 /// Additional texture behavior permitted by the universal vocabulary.
 #[derive(Clone, Debug)]
 pub enum TextureControls<'a> {
     /// World of Warcraft producer options independent of texture addressing.
-    M2(profiles::m2::TextureControls<'a>),
+    M2(texture::TextureControls<'a>),
     /// Warcraft III fallback filename and texture behavior.
-    Mdlx(profiles::mdlx::TextureControls<'a>),
+    Mdlx(layered::TextureControls<'a>),
 }
 impl ValidateLinks for TextureControls<'_> {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
@@ -20,15 +41,15 @@ impl ValidateLinks for TextureControls<'_> {
 #[derive(Clone, Debug)]
 pub enum MeshControls {
     /// Diablo III subobject behavior.
-    D3(profiles::diablo::d3::MeshControls),
+    D3(diablo3::MeshControls),
     /// Diablo IV subobject declarations and segment palettes.
-    D4(profiles::diablo::d4::MeshControls),
+    D4(diablo4::MeshControls),
     /// Warcraft III picking and sequence bounds.
-    Mdlx(profiles::mdlx::Geometry),
+    Mdlx(layered::Geometry),
     /// World of Warcraft sorting and culling frames.
-    M2(profiles::m2::GeometryControls),
+    M2(model::GeometryControls),
     /// StarCraft II region identity and behavior.
-    M3(profiles::m3::MeshControls),
+    M3(programmed::MeshControls),
 }
 impl ValidateLinks for MeshControls {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
@@ -46,9 +67,9 @@ impl ValidateLinks for MeshControls {
 #[derive(Clone, Debug)]
 pub enum InstanceControls<'a> {
     /// Static-world placed region behavior and relationships.
-    Wmo(Box<profiles::wmo::RegionControls<'a>>),
+    Wmo(Box<world::RegionControls<'a>>),
     /// StarCraft II region and draw-batch behavior.
-    M3(profiles::m3::InstanceControls),
+    M3(programmed::InstanceControls),
 }
 impl ValidateLinks for InstanceControls<'_> {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
@@ -66,15 +87,15 @@ impl ValidateLinks for () {
 #[derive(Clone, Debug)]
 pub enum NodeControls<'a> {
     /// Diablo III bone bind poses and attachment roles.
-    D3(profiles::diablo::d3::NodeRole<'a>),
+    D3(diablo3::NodeRole<'a>),
     /// Diablo IV hashed bones and independent bind poses.
-    D4(profiles::diablo::d4::NodeRole),
+    D4(diablo4::NodeRole),
     /// World of Warcraft skeleton behavior and external bone role.
-    M2(profiles::m2::BoneControls),
+    M2(model::BoneControls),
     /// Warcraft III bone scope, bind pose, and unresolved node behavior.
-    Mdlx(profiles::mdlx::NodeControls),
+    Mdlx(layered::NodeControls),
     /// StarCraft II bone controller behavior.
-    M3(profiles::m3::NodeRole),
+    M3(programmed::NodeRole),
 }
 impl ValidateLinks for NodeControls<'_> {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
@@ -93,11 +114,11 @@ impl ValidateLinks for NodeControls<'_> {
 #[derive(Clone, Debug)]
 pub enum DrawControls {
     /// World of Warcraft color or shadow pass behavior.
-    M2(profiles::m2::ShadowControls),
+    M2(model::ShadowControls),
     /// StarCraft II batching, priority, and animated culling.
-    M3(profiles::m3::BatchControls),
+    M3(programmed::BatchControls),
     /// Static-world lighting class, bounds, and lightmap behavior.
-    Wmo(profiles::wmo::DrawControls),
+    Wmo(world_draw::DrawControls),
 }
 impl ValidateLinks for DrawControls {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {

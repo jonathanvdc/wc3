@@ -40,7 +40,7 @@ impl Narrows<Universal> for Wmo {
     }
     fn surface<'a>(value: <Universal as Profile>::Surface<'a>) -> Result<Self::Surface<'a>, Error> {
         match value {
-            MaterialSurface::Wmo(value) => Ok(*value),
+            MaterialSurface::World(value) => Ok(*value),
             _ => Err(incompatible("surface")),
         }
     }

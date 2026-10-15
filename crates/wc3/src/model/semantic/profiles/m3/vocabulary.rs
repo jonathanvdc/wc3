@@ -1,8 +1,10 @@
 //! Built-in M3 authoring vocabulary and its lossless embeddings.
 use super::properties::Target as PropertySelector;
+use crate::model::semantic::profiles::m3;
+use crate::model::semantic::profiles::Unavailable;
 use crate::model::semantic::profiles::UniversalProperty;
 use crate::model::semantic::profiles::{
-    self, Extends, FeaturePayload, NoControls, Profile, SurfacePayload, Universal,
+    self, Extends, NoControls, Profile, SurfacePayload, Universal,
 };
 use crate::model::semantic::{
     Basis, Billboard, Channel, ClipControls, Clock, ColorSpace, DrawControls, Error,
@@ -11,6 +13,7 @@ use crate::model::semantic::{
     ModelMetadata, NodeControls, PropertyTarget, Resource, Sampler, SingleLook, SkinId, System,
     Topology, Transform, UniversalAppearance, UniversalBinding, ValidateLinks, VertexInfluences,
 };
+use crate::model::semantic::{FeatureSet, FeatureView, FeatureVocabulary};
 use crate::model::semantic::{PropertyIdentityKey, PropertyPayload};
 use std::collections::HashSet;
 use std::str::from_utf8;
@@ -522,12 +525,12 @@ impl SurfacePayload for profiles::m3::Material<'_> {
         Ok(())
     }
 }
-impl FeaturePayload for profiles::m3::Feature<'_> {
-    fn supports_property(&self, key: &PropertyIdentityKey) -> bool {
+impl profiles::m3::Feature<'_> {
+    pub(crate) fn profile_supports_property(&self, key: &PropertyIdentityKey) -> bool {
         super::properties::Target::from_identity(key).is_some_and(|key| key.supports_feature(self))
     }
 
-    fn kind(&self) -> FeatureKind {
+    pub(crate) fn profile_payload_kind(&self) -> FeatureKind {
         match self {
             profiles::m3::Feature::Particle(_) => FeatureKind::M3Particle,
             profiles::m3::Feature::ParticleCopy(_) => FeatureKind::M3ParticleCopy,
@@ -562,7 +565,7 @@ impl Extends<M3> for Universal {
         System::M3(value)
     }
     fn surface<'a>(value: <M3 as Profile>::Surface<'a>) -> Self::Surface<'a> {
-        MaterialSurface::M3(Box::new(value))
+        MaterialSurface::Programmed(Box::new(value))
     }
     fn feature<'a>(value: <M3 as Profile>::Feature<'a>) -> Self::Feature<'a> {
         value.into()
@@ -585,5 +588,48 @@ impl Extends<M3> for Universal {
     }
     fn controller<'a>(value: <M3 as Profile>::Controller<'a>) -> Self::Controller<'a> {
         Some(value)
+    }
+}
+
+impl<'a> FeatureVocabulary<'a> for M3 {
+    type Light = Box<m3::Light>;
+    type Camera = Box<m3::Camera<'a>>;
+    type Attachment = Box<m3::Attachment<'a>>;
+    type Particle = Box<m3::Particle<'a>>;
+    type Ribbon = Box<m3::Ribbon<'a>>;
+    type Event = Box<m3::EventCommand<'a>>;
+    type GeometryAnimation = Unavailable;
+    type CollisionShape = Unavailable;
+    type ParticleProgram = Unavailable;
+    type FaceActor = Unavailable;
+    type LightProgram = Unavailable;
+    type Extent = Box<m3::ExtentBinding>;
+    type ParticleCopy = Box<m3::ParticleCopy>;
+    type Projector = Box<m3::Projector>;
+    type Force = Box<m3::Force>;
+    type Warp = Box<m3::Warp>;
+    type HitTest = Box<m3::HitTestShape>;
+    type AttachmentVolume = Box<m3::AttachmentVolume>;
+    type Billboard = Box<m3::BillboardBehavior>;
+    type Turret = Box<m3::TurretBehavior>;
+    type IkJoint = Box<m3::IkJoint>;
+    type IkTwoJoint = Box<m3::IkTwoJoint>;
+    type IkCcd = Box<m3::IkCcd>;
+    type OneBoneSolver = Box<m3::OneBoneSolver>;
+    type ShadowBox = Box<m3::ShadowBox>;
+    type ViewVolume = Box<m3::ViewVolume>;
+    type AtlasParticles = Unavailable;
+    type PointLight = Unavailable;
+    fn visit_links(value: &FeatureSet<'a, Self>, visitor: &mut dyn FnMut(Link)) {
+        value.visit_profile_links(visitor);
+    }
+    fn feature<'view>(value: &'view FeatureSet<'a, Self>) -> FeatureView<'view, 'a> {
+        value.profile_feature()
+    }
+    fn supports_property(value: &FeatureSet<'a, Self>, key: &PropertyIdentityKey) -> bool {
+        value.profile_supports_property(key)
+    }
+    fn kind(value: &FeatureSet<'a, Self>) -> FeatureKind {
+        value.profile_payload_kind()
     }
 }

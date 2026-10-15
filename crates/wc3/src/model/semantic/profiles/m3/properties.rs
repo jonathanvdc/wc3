@@ -556,7 +556,7 @@ impl Target {
                     path.segments()
                 {
                     return match feature {
-                        super::Feature::Particle(v) => *index < v.spline_points.len(),
+                        super::Feature::Particle(v) => *index < v.details.spline_points.len(),
                         super::Feature::Ribbon(v) => *index < v.spline_points.len(),
                         _ => false,
                     };
@@ -603,7 +603,7 @@ impl Target {
                         )
                         | (
                             Some(FieldSegment::Field(Field::Ribbon)),
-                            NodeFeature::RibbonEmitter(RibbonEmitter::Programmed(_))
+                            NodeFeature::Ribbon(RibbonEmitter::Programmed(_))
                         )
                         | (
                             Some(FieldSegment::Field(Field::Shadow)),
@@ -624,10 +624,10 @@ impl Target {
                 }
                 if let Some(FieldSegment::Field(field)) = path.segments().get(1) {
                     let supported = match feature {
-                        NodeFeature::ParticleEmitter(ParticleEmitter::Simulated(value)) => {
+                        NodeFeature::Particle(ParticleEmitter::Simulated(value)) => {
                             value.supports_programmed_property(field)
                         }
-                        NodeFeature::RibbonEmitter(RibbonEmitter::Programmed(value)) => {
+                        NodeFeature::Ribbon(RibbonEmitter::Programmed(value)) => {
                             value.supports_programmed_property(field)
                         }
                         _ => true,
@@ -640,13 +640,11 @@ impl Target {
                     path.segments()
                 {
                     return match feature {
-                        NodeFeature::ParticleEmitter(ParticleEmitter::Simulated(v)) => {
-                            match &v.details {
-                                ParticleDetails::Programmed(v) => *index < v.spline_points.len(),
-                                _ => false,
-                            }
-                        }
-                        NodeFeature::RibbonEmitter(RibbonEmitter::Programmed(v)) => {
+                        NodeFeature::Particle(ParticleEmitter::Simulated(v)) => match &v.details {
+                            ParticleDetails::Programmed(v) => *index < v.spline_points.len(),
+                            _ => false,
+                        },
+                        NodeFeature::Ribbon(RibbonEmitter::Programmed(v)) => {
                             *index < v.spline_points.len()
                         }
                         _ => false,

@@ -55,7 +55,8 @@ pub(super) fn read<'a, E: Envelope>(
                     node(r.bone_index, &skeleton.nodes)?,
                     surface::Feature::Attachment(
                         (surface::Attachment {
-                            name: string(document, r.name)?,
+                            identity: string(document, r.name)?,
+                            activation: (),
                             control: r.unknown,
                         })
                         .into(),
@@ -176,7 +177,7 @@ pub(super) fn write<E: Envelope>(
         match &feature.payload {
             surface::Feature::Attachment(r) => attachments.push(nr::AttachmentPoint::<nr::V1> {
                 unknown: r.control,
-                name: super::write::string(document, &r.name)?,
+                name: super::write::string(document, &r.identity)?,
                 bone_index: index(feature.node, bones)?,
             }),
             surface::Feature::Billboard(r) => {

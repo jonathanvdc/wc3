@@ -1,18 +1,29 @@
 use wc3::model::semantic::profiles::{m2, mdlx};
+use wc3::model::semantic::{AngleTrailControls, SurfaceTrailRendering};
 use wc3::model::semantic::{Animated, TrailAtlasSlot, TrailControls, TrailEmitter, TrailRendering};
+use wc3::model::semantic::{
+    GravityTrailControls, ParticleLifetime, ParticleMotion, ProgrammedAge, ProgrammedDirection,
+    ProgrammedForces, ProgrammedNoise, ProgrammedTrailGravity, TrailAppearance,
+};
 
 #[test]
 fn trail_editing_preserves_wide_integer_rates_and_rejects_fractional_export() {
     let mut trail = TrailEmitter::from(mdlx::Ribbon {
         emission_rate: u32::MAX,
-        texture_slot: Animated::constant(70_000),
-        gravity: 9.8,
+        appearance: TrailAppearance {
+            texture_slot: Animated::constant(70_000),
+            ..Default::default()
+        },
+        controls: GravityTrailControls {
+            gravity: 9.8,
+            ..Default::default()
+        },
         ..Default::default()
     });
     assert_eq!(trail.emission_rate, f64::from(u32::MAX));
     trail.geometry.height_above.default = 2.5;
     let native = mdlx::Ribbon::try_from(trail.clone()).unwrap();
-    assert_eq!(native.height_above.default, 2.5);
+    assert_eq!(native.geometry.height_above.default, 2.5);
     assert_eq!(native.emission_rate, u32::MAX);
     trail.emission_rate = 0.5;
     let rejected = mdlx::Ribbon::try_from(trail).unwrap_err();
@@ -24,21 +35,21 @@ fn edge_trail_export_checks_numeric_width_without_conflating_direction_and_gravi
     let mut trail = TrailEmitter::from(mdlx::Ribbon::default());
     trail.emission_rate = 0.5;
     trail.appearance.texture_slot = TrailAtlasSlot::Compact(Animated::constant(7));
-    trail.rendering = TrailRendering::Surfaces {
+    trail.rendering = TrailRendering::Surfaces(SurfaceTrailRendering {
         textures: vec![],
         materials: vec![],
-    };
-    trail.controls = TrailControls::EmissionAngle {
+    });
+    trail.controls = TrailControls::EmissionAngle(AngleTrailControls {
         angle: 1.25,
         id: 9,
         enabled: Animated::constant(true),
         priority_plane: -2,
         color_index: 3,
         texture_transform: None,
-    };
+    });
     let native = m2::Ribbon::try_from(trail.clone()).unwrap();
-    assert_eq!(native.edges_per_second, 0.5);
-    assert_eq!(native.emission_angle, 1.25);
+    assert_eq!(native.emission_rate, 0.5);
+    assert_eq!(native.controls.angle, 1.25);
     trail.appearance.atlas[0] = 70_000;
     assert_eq!(
         m2::Ribbon::try_from(trail).unwrap_err().appearance.atlas[0],
@@ -93,44 +104,58 @@ fn programmed_ribbon_composition_preserves_native_controls_and_borrowed_splines(
         fallback_node: node,
         material: Default::default(),
         additional_flags: Default::default(),
-        initial_speed: property(),
-        initial_speed_random: property(),
-        initial_yaw: property(),
-        initial_pitch: property(),
-        initial_horizontal: property(),
-        initial_vertical: property(),
-        lifetime: property(),
-        lifetime_random: property(),
+        motion: ParticleMotion {
+            speed: property(),
+            variation: property(),
+            gravity: ProgrammedTrailGravity {
+                x: 1.375,
+                y: -0.625,
+                magnitude: 14.125,
+            },
+        },
+        direction: ProgrammedDirection {
+            initial_yaw: property(),
+            initial_pitch: property(),
+            initial_horizontal: property(),
+            initial_vertical: property(),
+            drag: 28.125,
+        },
+        lifetime: ParticleLifetime {
+            duration: property(),
+            variation: property(),
+        },
         kill_radius: 0xf123_4567,
-        gravity_x: 1.375,
-        gravity_y: -0.625,
-        gravity: 14.125,
-        size_mid_time: 15.125,
-        color_mid_time: 16.125,
-        alpha_mid_time: 17.125,
-        rotation_mid_time: 18.125,
-        size_mid_hold_time: 19.125,
-        color_mid_hold_time: 20.125,
-        alpha_mid_hold_time: 21.125,
-        rotation_mid_hold_time: 22.125,
-        size_animation: Default::default(),
-        rotation_animation: Default::default(),
-        color_start: Default::default(),
-        color_mid: Default::default(),
-        color_end: Default::default(),
-        drag: 28.125,
-        mass: 29.125,
-        mass_random: 30.125,
-        mass_size_multiplier: 31.125,
-        local_forces: Default::default(),
-        world_forces: Default::default(),
-        local_forces_fallback: Default::default(),
-        world_forces_fallback: Default::default(),
-        world_forces_mass_multiplier: 36.125,
-        noise_amplitude: 37.125,
-        noise_frequency: 38.125,
-        noise_coherence: 39.125,
-        noise_edge: 40.125,
+        appearance: ProgrammedAge {
+            size_mid_time: 15.125,
+            color_mid_time: 16.125,
+            alpha_mid_time: 17.125,
+            rotation_mid_time: 18.125,
+            size_mid_hold_time: 19.125,
+            color_mid_hold_time: 20.125,
+            alpha_mid_hold_time: 21.125,
+            rotation_mid_hold_time: 22.125,
+            size_animation: Default::default(),
+            rotation_animation: Default::default(),
+            color_start: Default::default(),
+            color_mid: Default::default(),
+            color_end: Default::default(),
+        },
+        forces: ProgrammedForces {
+            mass: 29.125,
+            mass_random: 30.125,
+            mass_size_multiplier: 31.125,
+            local_forces: Default::default(),
+            world_forces: Default::default(),
+            local_forces_fallback: Default::default(),
+            world_forces_fallback: Default::default(),
+            world_forces_mass_multiplier: 36.125,
+        },
+        noise: ProgrammedNoise {
+            noise_amplitude: 37.125,
+            noise_frequency: 38.125,
+            noise_coherence: 39.125,
+            noise_edge: 40.125,
+        },
         index_plus_length: 51,
         emitter_shape: 52,
         ribbon_type: Default::default(),
@@ -165,10 +190,13 @@ fn programmed_ribbon_composition_preserves_native_controls_and_borrowed_splines(
     };
     duration.initial = 7.75;
     let edited = m3::Ribbon::try_from(ribbon.clone()).unwrap();
-    assert_eq!(edited.lifetime.initial, 7.75);
-    assert_eq!(edited.lifetime.reset, source.lifetime.reset);
-    assert_eq!(edited.gravity_x, 1.375);
-    assert_eq!(edited.gravity_y, -0.625);
+    assert_eq!(edited.lifetime.duration.initial, 7.75);
+    assert_eq!(
+        edited.lifetime.duration.reset,
+        source.lifetime.duration.reset
+    );
+    assert_eq!(edited.motion.gravity.x, 1.375);
+    assert_eq!(edited.motion.gravity.y, -0.625);
     ribbon.motion.speed = ParticleScalar::Animated(Animated::constant(33.));
     let rejected = m3::Ribbon::try_from(ribbon).unwrap_err();
     let ParticleScalar::Animated(speed) = &rejected.motion.speed else {

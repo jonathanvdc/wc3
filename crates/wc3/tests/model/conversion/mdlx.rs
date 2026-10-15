@@ -160,13 +160,13 @@ fn complete_native_emitter_is_an_editable_logical_feature() {
     let graph = &imported.value;
     let (id, mut feature) = graph
         .features()
-        .find(|(_, feature)| matches!(feature.payload, profile::Node::Particle2(_)))
+        .find(|(_, feature)| matches!(feature.payload, profile::Node::AtlasParticles(_)))
         .map(|(id, feature)| (id, feature.payload.clone()))
         .unwrap();
-    let profile::Node::Particle2(emitter) = &mut feature else {
+    let profile::Node::AtlasParticles(emitter) = &mut feature else {
         unreachable!()
     };
-    emitter.emission_rate = Animated::constant(17.);
+    emitter.emission.rate = Animated::constant(17.);
     imported
         .value
         .edit(|builder| builder.set_feature(id, feature))

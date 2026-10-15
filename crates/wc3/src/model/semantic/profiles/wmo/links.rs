@@ -40,17 +40,18 @@ impl ValidateLinks for WorldSystem<'_> {
         }
     }
 }
-impl ValidateLinks for Node<'_> {
-    fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
+impl Node<'_> {
+    pub(crate) fn visit_profile_links(&self, visitor: &mut dyn FnMut(Link)) {
         match self {
-            Node::Doodad(doodad) => {
+            Node::Attachment(doodad) => {
                 if doodad
+                    .appearance
                     .color_multiplier
                     .is_some_and(|value| !value.is_finite())
                 {
                     visitor(Link::InvalidValue);
                 }
-                if let super::DoodadTint::Lit { light: id, .. } = doodad.tint {
+                if let super::DoodadTint::Lit { light: id, .. } = doodad.appearance.tint {
                     visitor(Link::TypedFeature {
                         id,
                         kind: FeatureKind::WmoLight,
@@ -65,7 +66,7 @@ impl ValidateLinks for Node<'_> {
                     visitor(Link::InvalidValue);
                 }
             }
-            Node::PointProgram(program) => {
+            Node::LightProgram(program) => {
                 visitor(Link::TypedFeature {
                     id: program.light,
                     kind: FeatureKind::WmoPointLight,
@@ -102,6 +103,31 @@ impl ValidateLinks for Node<'_> {
                     modern.doodad_set.visit_links(visitor);
                 }
             }
+
+            Node::Camera(unavailable)
+            | Node::Particle(unavailable)
+            | Node::Ribbon(unavailable)
+            | Node::Event(unavailable)
+            | Node::GeometryAnimation(unavailable)
+            | Node::CollisionShape(unavailable)
+            | Node::ParticleProgram(unavailable)
+            | Node::FaceActor(unavailable)
+            | Node::Extent(unavailable)
+            | Node::ParticleCopy(unavailable)
+            | Node::Projector(unavailable)
+            | Node::Force(unavailable)
+            | Node::Warp(unavailable)
+            | Node::HitTest(unavailable)
+            | Node::AttachmentVolume(unavailable)
+            | Node::Billboard(unavailable)
+            | Node::Turret(unavailable)
+            | Node::IkJoint(unavailable)
+            | Node::IkTwoJoint(unavailable)
+            | Node::IkCcd(unavailable)
+            | Node::OneBoneSolver(unavailable)
+            | Node::ShadowBox(unavailable)
+            | Node::ViewVolume(unavailable)
+            | Node::AtlasParticles(unavailable) => match *unavailable {},
         }
     }
 }

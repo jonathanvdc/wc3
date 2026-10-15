@@ -10,9 +10,9 @@ use wc3::model::semantic::profiles::mdlx::{
 };
 use wc3::model::semantic::profiles::{Either, FeaturePayload, Mdlx, Profile, Universal, M2};
 use wc3::model::semantic::{
-    Animated, Channel, Clock, Curve, FeatureId, FeatureKind, FeatureSchema, FeatureView, Link,
-    Material, Model, Node, OwnerId, Property, PropertyDescriptor, PropertyPayload, PropertyTarget,
-    Time, Track, ValidateLinks,
+    Animated, AttachmentPointDefinition, Channel, Clock, Curve, FeatureId, FeatureKind,
+    FeatureSchema, FeatureView, LightEmission, Link, Material, Model, Node, OwnerId, Property,
+    PropertyDescriptor, PropertyPayload, PropertyTarget, Time, Track, ValidateLinks,
 };
 
 fn light_model<'a>(times: &'a [Time], values: &'a [f32]) -> Model<'a, Mdlx> {
@@ -24,7 +24,10 @@ fn light_model<'a>(times: &'a [Time], values: &'a [f32]) -> Model<'a, Mdlx> {
         .set_feature(
             feature,
             MdlxFeature::Light(Light {
-                intensity: Animated::new(1., property.clone()),
+                diffuse: LightEmission {
+                    intensity: Animated::new(1., property.clone()),
+                    ..Default::default()
+                },
                 ..Default::default()
             }),
         )
@@ -86,7 +89,10 @@ fn selectors_require_the_actual_feature_family_even_when_declared_by_a_field() {
         .set_feature(
             feature,
             MdlxFeature::Attachment(Attachment {
-                visibility: Animated::new(1., property.clone()),
+                point: AttachmentPointDefinition {
+                    activation: Animated::new(1., property.clone()),
+                    ..Default::default()
+                },
                 ..Default::default()
             }),
         )

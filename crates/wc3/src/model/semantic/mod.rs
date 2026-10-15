@@ -43,6 +43,8 @@
 mod error;
 /// Format-independent scene features and simulation systems.
 pub mod scene;
+/// Shared logical selector and flag domains.
+pub mod values;
 pub use error::Error;
 mod ids;
 pub use ids::*;
@@ -51,14 +53,19 @@ pub use crate::model::common::ZeroVec;
 pub use value_groups::ValueGroups;
 mod rotation;
 pub use rotation::*;
-mod animation;
-pub use animation::*;
+pub mod animation;
+pub use animation::{
+    curves::*, properties::*, Animated, Channel, Clip, ClipReference, Clock, Controller, Event,
+    Interpolation, Time, Track,
+};
 mod playback_controls;
 pub use playback_controls::*;
 mod resources;
 pub use resources::*;
-mod appearance;
-pub use appearance::*;
+pub mod appearance;
+pub use appearance::{
+    AppearanceSchema, DrawAppearanceSchema, DrawLooks, SingleLook, UniversalAppearance,
+};
 mod binding;
 pub use binding::*;
 pub use profiles::m2::M2Geometry;
@@ -75,15 +82,21 @@ pub use geometry_schema::*;
 pub use profiles::wmo::WmoGeometry;
 mod geometry_domains;
 pub use geometry_domains::{ConnectivitySets, SurfaceTriangleControls, TriangleFlags};
-mod geometry;
-pub use geometry::*;
+pub mod geometry;
+pub use geometry::{
+    Attribute, AttributeDomain, AttributeSemantic, AttributeValues, Bounds, Draw, Influence, Mesh,
+    MeshInstance, NodeInfluence, Skin, Topology, VertexInfluences,
+};
 mod node;
 pub use node::*;
-mod material;
-pub use material::*;
+pub mod materials;
+pub use materials::{
+    AddressMode, Blend, ColorSpace, Cull, Material, MaterialSurface, PbrSurface, RenderState,
+    Resource, Sampler, SnoNamespace, SurfaceSet, Texture, TextureInput, TextureRole,
+};
 mod links;
 pub use links::*;
-/// Complete logical definitions for distinct game feature families.
+/// Compile-time selections and authoring rules for model families.
 pub mod profiles;
 mod space;
 pub use space::*;
@@ -93,15 +106,15 @@ mod feature_schema;
 pub use feature_schema::*;
 pub mod feature_properties;
 pub use feature_properties::FeatureProperty;
-mod feature;
-pub use feature::*;
+pub mod features;
+pub use features::*;
 /// Compile-time logical vocabularies and lossless embeddings.
-mod controls;
-pub use controls::*;
+pub mod controls;
+pub use controls::{DrawControls, InstanceControls, MeshControls, NodeControls, TextureControls};
 mod texture_transform;
 pub use texture_transform::*;
-mod systems;
-pub use systems::*;
+pub mod systems;
+pub use systems::{ModelMetadata, System, SystemMember, SystemPayload};
 mod model;
 pub use model::*;
 

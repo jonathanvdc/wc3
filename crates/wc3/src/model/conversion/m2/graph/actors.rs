@@ -1,5 +1,9 @@
 //! Native feature nodes imported directly into independent scene state.
 use super::*;
+use crate::model::semantic::LightEmission;
+use crate::model::semantic::{
+    AngleTrailControls, SurfaceTrailRendering, TrailAppearance, TrailGeometry,
+};
 use zerovec::ZeroVec;
 fn placement<'a>(
     builder: &mut GraphBuilder<'a>,
@@ -34,9 +38,9 @@ where
     let core = source.model.core();
     let tables = sequence_tables(source, &source.key)?;
     macro_rules! bind_field {
-        ($node:ident,$actor:ident,$field:ident,$key:ident,$native:expr,$variant:ident,$map:expr) => {{
+        ($node:ident,$actor:ident,$field:expr,$key:ident,$native:expr,$variant:ident,$map:expr) => {{
             let property = profile::properties::$actor::$key.bind($node);
-            $actor.$field.property = Some(property.clone().widen());
+            $field.property = Some(property.clone().widen());
             for (seq, clip) in animation::sequences(clips) {
                 let (start, _) = tables
                     .sequences
@@ -62,13 +66,14 @@ where
         )?;
         let feature = builder.reserve_feature(node);
         let mut attachment = profile::Attachment {
-            role: value.id,
-            enabled: Animated::constant(initial(&value.animate).unwrap_or(1) != 0),
+            identity: value.id,
+            control: (),
+            activation: Animated::constant(initial(&value.animate).unwrap_or(1) != 0),
         };
         bind_field!(
             feature,
             attachment,
-            enabled,
+            attachment.activation,
             ENABLED,
             &value.animate,
             Boolean,
@@ -87,18 +92,24 @@ where
         let feature = builder.reserve_feature(node);
         let mut light = profile::Light {
             kind: profile::values::LightKind::from_raw(value.kind.raw()),
-            ambient_color: Animated::constant(initial(&value.ambient_color).unwrap_or([0.; 3])),
-            ambient_intensity: Animated::constant(initial(&value.ambient_intensity).unwrap_or(0.)),
-            diffuse_color: Animated::constant(initial(&value.diffuse_color).unwrap_or([0.; 3])),
-            diffuse_intensity: Animated::constant(initial(&value.diffuse_intensity).unwrap_or(0.)),
-            attenuation_start: Animated::constant(initial(&value.attenuation_start).unwrap_or(0.)),
-            attenuation_end: Animated::constant(initial(&value.attenuation_end).unwrap_or(0.)),
-            enabled: Animated::constant(initial(&value.visibility).unwrap_or(1) != 0),
+            ambient: LightEmission {
+                color: Animated::constant(initial(&value.ambient_color).unwrap_or([0.; 3])),
+                intensity: Animated::constant(initial(&value.ambient_intensity).unwrap_or(0.)),
+            },
+            diffuse: LightEmission {
+                color: Animated::constant(initial(&value.diffuse_color).unwrap_or([0.; 3])),
+                intensity: Animated::constant(initial(&value.diffuse_intensity).unwrap_or(0.)),
+            },
+            attenuation: [
+                Animated::constant(initial(&value.attenuation_start).unwrap_or(0.)),
+                Animated::constant(initial(&value.attenuation_end).unwrap_or(0.)),
+            ],
+            activation: Animated::constant(initial(&value.visibility).unwrap_or(1) != 0),
         };
         bind_field!(
             feature,
             light,
-            ambient_color,
+            light.ambient.color,
             AMBIENT_COLOR,
             &value.ambient_color,
             Vector3,
@@ -107,7 +118,7 @@ where
         bind_field!(
             feature,
             light,
-            ambient_intensity,
+            light.ambient.intensity,
             AMBIENT_INTENSITY,
             &value.ambient_intensity,
             Scalar,
@@ -116,7 +127,7 @@ where
         bind_field!(
             feature,
             light,
-            diffuse_color,
+            light.diffuse.color,
             DIFFUSE_COLOR,
             &value.diffuse_color,
             Vector3,
@@ -125,7 +136,7 @@ where
         bind_field!(
             feature,
             light,
-            diffuse_intensity,
+            light.diffuse.intensity,
             DIFFUSE_INTENSITY,
             &value.diffuse_intensity,
             Scalar,
@@ -134,7 +145,7 @@ where
         bind_field!(
             feature,
             light,
-            attenuation_start,
+            light.attenuation[0],
             ATTENUATION_START,
             &value.attenuation_start,
             Scalar,
@@ -143,7 +154,7 @@ where
         bind_field!(
             feature,
             light,
-            attenuation_end,
+            light.attenuation[1],
             ATTENUATION_END,
             &value.attenuation_end,
             Scalar,
@@ -152,7 +163,7 @@ where
         bind_field!(
             feature,
             light,
-            enabled,
+            light.activation,
             ENABLED,
             &value.visibility,
             Boolean,
@@ -186,37 +197,55 @@ where
         let tail = D::Layout::ribbon_tail(&value.modern);
         let feature = builder.reserve_feature(node);
         let mut ribbon = profile::Ribbon {
-            id: value.id,
-            textures: value
-                .texture_indices
-                .iter()
-                .map(|i| {
-                    textures
-                        .get(i as usize)
-                        .copied()
-                        .ok_or_else(|| Error::new("m2.ribbon.texture", "missing texture"))
-                })
-                .collect::<Result<_, _>>()?,
-            materials,
-            color: Animated::constant(initial(&value.color).unwrap_or([1.; 3])),
-            alpha: Animated::constant(f32::from(initial(&value.alpha).unwrap_or(32767)) / 32767.),
-            height_above: Animated::constant(initial(&value.height_above).unwrap_or(0.)),
-            height_below: Animated::constant(initial(&value.height_below).unwrap_or(0.)),
-            edges_per_second: value.edges_per_second,
-            edge_lifetime: value.edge_lifetime,
-            emission_angle: value.gravity,
-            atlas: [value.texture_rows, value.texture_columns],
-            texture_slot: Animated::constant(initial(&value.texture_slot).unwrap_or(0)),
-            enabled: Animated::constant(initial(&value.visibility).unwrap_or(1) != 0),
-            priority_plane: tail[0],
-            color_index: tail[1] as i8,
-            texture_transform: None,
+            controls: AngleTrailControls {
+                id: value.id,
+                angle: value.gravity,
+                enabled: Animated::constant(initial(&value.visibility).unwrap_or(1) != 0),
+                priority_plane: tail[0],
+                color_index: tail[1] as i8,
+                texture_transform: None,
+            },
+            rendering: SurfaceTrailRendering {
+                textures: value
+                    .texture_indices
+                    .iter()
+                    .map(|i| {
+                        textures
+                            .get(i as usize)
+                            .copied()
+                            .ok_or_else(|| Error::new("m2.ribbon.texture", "missing texture"))
+                    })
+                    .collect::<Result<_, _>>()?,
+                materials,
+            },
+            appearance: TrailAppearance {
+                color: Animated::constant(initial(&value.color).unwrap_or([1.; 3])),
+                opacity: Animated::constant(
+                    f32::from(initial(&value.alpha).unwrap_or(32767)) / 32767.,
+                ),
+                atlas: [value.texture_rows, value.texture_columns],
+                texture_slot: Animated::constant(initial(&value.texture_slot).unwrap_or(0)),
+            },
+            geometry: TrailGeometry {
+                height_above: Animated::constant(initial(&value.height_above).unwrap_or(0.)),
+                height_below: Animated::constant(initial(&value.height_below).unwrap_or(0.)),
+            },
+            emission_rate: value.edges_per_second,
+            lifetime: value.edge_lifetime,
         };
-        bind_field!(feature, ribbon, color, COLOR, &value.color, Vector3, |v| v);
         bind_field!(
             feature,
             ribbon,
-            alpha,
+            ribbon.appearance.color,
+            COLOR,
+            &value.color,
+            Vector3,
+            |v| v
+        );
+        bind_field!(
+            feature,
+            ribbon,
+            ribbon.appearance.opacity,
             ALPHA,
             &value.alpha,
             Scalar,
@@ -225,7 +254,7 @@ where
         bind_field!(
             feature,
             ribbon,
-            height_above,
+            ribbon.geometry.height_above,
             HEIGHT_ABOVE,
             &value.height_above,
             Scalar,
@@ -234,7 +263,7 @@ where
         bind_field!(
             feature,
             ribbon,
-            height_below,
+            ribbon.geometry.height_below,
             HEIGHT_BELOW,
             &value.height_below,
             Scalar,
@@ -243,7 +272,7 @@ where
         bind_field!(
             feature,
             ribbon,
-            texture_slot,
+            ribbon.appearance.texture_slot,
             TEXTURE_SLOT,
             &value.texture_slot,
             Unsigned16,
@@ -252,7 +281,7 @@ where
         bind_field!(
             feature,
             ribbon,
-            enabled,
+            ribbon.controls.enabled,
             ENABLED,
             &value.visibility,
             Boolean,
@@ -273,7 +302,7 @@ where
         bind_field!(
             feature,
             particle,
-            speed,
+            particle.motion.speed,
             SPEED,
             &value.emission_speed,
             Scalar,
@@ -282,7 +311,7 @@ where
         bind_field!(
             feature,
             particle,
-            speed_variation,
+            particle.motion.variation,
             SPEED_VARIATION,
             &value.speed_variation,
             Scalar,
@@ -291,7 +320,7 @@ where
         bind_field!(
             feature,
             particle,
-            vertical_range,
+            particle.details.shape.vertical_range,
             VERTICAL_RANGE,
             &value.vertical_range,
             Scalar,
@@ -300,7 +329,7 @@ where
         bind_field!(
             feature,
             particle,
-            horizontal_range,
+            particle.details.shape.horizontal_range,
             HORIZONTAL_RANGE,
             &value.horizontal_range,
             Scalar,
@@ -309,7 +338,7 @@ where
         bind_field!(
             feature,
             particle,
-            lifespan,
+            particle.lifetime.duration,
             LIFESPAN,
             &value.lifespan,
             Scalar,
@@ -318,7 +347,7 @@ where
         bind_field!(
             feature,
             particle,
-            rate,
+            particle.emission.rate,
             RATE,
             &value.emission_rate,
             Scalar,
@@ -327,7 +356,7 @@ where
         bind_field!(
             feature,
             particle,
-            area_width,
+            particle.details.shape.area_width,
             AREA_WIDTH,
             &value.emission_area_width,
             Scalar,
@@ -336,7 +365,7 @@ where
         bind_field!(
             feature,
             particle,
-            area_length,
+            particle.details.shape.area_length,
             AREA_LENGTH,
             &value.emission_area_length,
             Scalar,
@@ -345,7 +374,7 @@ where
         bind_field!(
             feature,
             particle,
-            z_source,
+            particle.details.shape.z_source,
             Z_SOURCE,
             &value.z_source,
             Scalar,
@@ -354,7 +383,7 @@ where
         bind_field!(
             feature,
             particle,
-            enabled,
+            particle.emission.activation,
             ENABLED,
             &value.enabled,
             Boolean,
@@ -364,7 +393,7 @@ where
         bind_field!(
             feature,
             particle,
-            gravity,
+            particle.motion.gravity,
             GRAVITY,
             &value.gravity,
             Vector3,
@@ -382,19 +411,19 @@ where
         )?;
         let feature = builder.reserve_feature(node);
         let mut camera = profile::Camera {
-            kind: profile::values::CameraKind::from_raw(value.kind.raw()),
+            convention: profile::values::CameraKind::from_raw(value.kind.raw()),
             field_of_view: D::Layout::logical_fov(source, value, feature, clips, clocks, builder)?,
-            clip: [value.near_clip, value.far_clip],
-            target_base: value.target_position_base,
-            position: Animated::constant([0.; 3]),
-            target: Animated::constant([0.; 3]),
+            clipping: [value.near_clip, value.far_clip],
+            target: value.target_position_base,
+            eye_offset: Animated::constant([0.; 3]),
+            target_offset: Animated::constant([0.; 3]),
             roll: Animated::constant(0.),
         };
         let position = profile::properties::camera::POSITION.bind(feature);
         let target = profile::properties::camera::TARGET.bind(feature);
         let roll = profile::properties::camera::ROLL.bind(feature);
-        camera.position.property = Some(position.clone().widen());
-        camera.target.property = Some(target.clone().widen());
+        camera.eye_offset.property = Some(position.clone().widen());
+        camera.target_offset.property = Some(target.clone().widen());
         camera.roll.property = Some(roll.clone().widen());
         for (seq, clip) in animation::sequences(clips) {
             let (start, _) = tables

@@ -41,7 +41,7 @@ impl Narrows<Universal> for M2 {
     }
     fn surface<'a>(value: <Universal as Profile>::Surface<'a>) -> Result<Self::Surface<'a>, Error> {
         match value {
-            MaterialSurface::M2(value) => Ok(*value),
+            MaterialSurface::ModelShader(value) => Ok(*value),
             _ => Err(incompatible("surface")),
         }
     }

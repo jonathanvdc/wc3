@@ -1,6 +1,8 @@
 use wc3::model::semantic::feature_properties::{particle, trail};
 use wc3::model::semantic::profiles::{mdlx, Mdlx, Universal};
+use wc3::model::semantic::TrailAppearance;
 use wc3::model::semantic::{Animated, Channel, Clock, Curve, Model, Node, Time, Track};
+use wc3::model::semantic::{ParticleEmission, ParticleLifetime, ParticleMotion};
 
 #[test]
 fn atlas_speed_keeps_one_shared_identity_through_native_publication() {
@@ -11,8 +13,19 @@ fn atlas_speed_keeps_one_shared_identity_through_native_publication() {
     draft
         .set_feature(
             id,
-            mdlx::Node::Particle2(mdlx::Particle2 {
-                speed: Animated::new(2., native.clone()),
+            mdlx::Node::AtlasParticles(mdlx::Particle2 {
+                motion: ParticleMotion {
+                    speed: Animated::new(2., native.clone()),
+                    ..Default::default()
+                },
+                emission: ParticleEmission {
+                    variation: (),
+                    ..Default::default()
+                },
+                lifetime: ParticleLifetime {
+                    variation: (),
+                    ..Default::default()
+                },
                 ..Default::default()
             }),
         )
@@ -47,7 +60,10 @@ fn common_trail_fields_bind_the_owned_component_and_export_exactly() {
         .set_feature(
             id,
             mdlx::Node::Ribbon(mdlx::Ribbon {
-                opacity: Animated::new(1., mdlx::properties::ribbon::OPACITY.bind(id)),
+                appearance: TrailAppearance {
+                    opacity: Animated::new(1., mdlx::properties::ribbon::OPACITY.bind(id)),
+                    ..Default::default()
+                },
                 ..Default::default()
             }),
         )
@@ -78,8 +94,16 @@ fn a_shared_continuous_rate_narrows_on_non_burst_atlas_emitters() {
     draft
         .set_feature(
             id,
-            mdlx::Node::Particle2(mdlx::Particle2 {
-                emission_rate: Animated::new(12., particle::CONTINUOUS_RATE.bind(id)),
+            mdlx::Node::AtlasParticles(mdlx::Particle2 {
+                emission: ParticleEmission {
+                    rate: Animated::new(12., particle::CONTINUOUS_RATE.bind(id)),
+                    variation: (),
+                    ..Default::default()
+                },
+                lifetime: ParticleLifetime {
+                    variation: (),
+                    ..Default::default()
+                },
                 ..Default::default()
             }),
         )
