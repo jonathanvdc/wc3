@@ -9,6 +9,14 @@ use crate::model::semantic::{
 };
 use crate::model::semantic::{GeometryData, GeometryKind, GeometryParts, VertexData};
 use crate::model::semantic::{GeometryEdit, GeometryEditCapabilities, StreamSupport};
+type MdlxStreams<'data> = VertexStreams<
+    'data,
+    JointInfluences<'data>,
+    Vec<Values<'data, [f32; 2]>>,
+    Values<'data, [f32; 4]>,
+    (),
+>;
+
 /// Warcraft III geometry with its native stream vocabulary.
 ///
 /// Triangle groups retain their logical identities. Primitive kinds whose
@@ -18,13 +26,7 @@ use crate::model::semantic::{GeometryEdit, GeometryEditCapabilities, StreamSuppo
 /// dialect decision rather than a restriction on this family vocabulary.
 #[derive(Clone, Debug)]
 pub struct MdlxGeometry<'data> {
-    pub(crate) streams: VertexStreams<
-        'data,
-        JointInfluences<'data>,
-        Vec<Values<'data, [f32; 2]>>,
-        Values<'data, [f32; 4]>,
-        (),
-    >,
+    pub(crate) streams: MdlxStreams<'data>,
 }
 impl<'data> MdlxGeometry<'data> {
     /// Creates an empty geometry definition.

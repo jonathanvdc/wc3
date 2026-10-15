@@ -11,6 +11,9 @@ use crate::model::semantic::{
     GeometryData, GeometryInfluences, GeometryKind, GeometryParts, VertexData,
 };
 use crate::model::semantic::{GeometryEdit, GeometryEditCapabilities, StreamSupport};
+type M2Streams<'data> =
+    VertexStreams<'data, Values<'data, [Influence; 4]>, [Values<'data, [f32; 2]>; 2], (), ()>;
+
 /// World of Warcraft model geometry with two UV streams and four joint slots.
 /// Unsupported streams are unavailable through this type's constructors.
 ///
@@ -29,8 +32,7 @@ use crate::model::semantic::{GeometryEdit, GeometryEditCapabilities, StreamSuppo
 /// ```
 #[derive(Clone, Debug)]
 pub struct M2Geometry<'data> {
-    pub(crate) streams:
-        VertexStreams<'data, Values<'data, [Influence; 4]>, [Values<'data, [f32; 2]>; 2], (), ()>,
+    pub(crate) streams: M2Streams<'data>,
 }
 impl<'data> M2Geometry<'data> {
     /// Creates an empty geometry definition.

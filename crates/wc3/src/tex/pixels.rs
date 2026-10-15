@@ -73,7 +73,10 @@ fn decode(format: u32, data: &[u8], width: u32, height: u32) -> Result<RgbaImage
             let mut decoded = vec![0; count];
             decode_bc2(data, width as usize, height as usize, &mut decoded)
                 .map_err(Error::Invalid)?;
-            for (value, pixel) in decoded.into_iter().zip(pixels.chunks_exact_mut(4)) {
+            for (value, pixel) in decoded
+                .into_iter()
+                .zip(pixels.as_chunks_mut::<4>().0.iter_mut())
+            {
                 let [b, g, r, a] = value.to_le_bytes();
                 pixel.copy_from_slice(&[r, g, b, a]);
             }
@@ -97,7 +100,10 @@ fn decode(format: u32, data: &[u8], width: u32, height: u32) -> Result<RgbaImage
             _ => decode_bc7,
         };
         decoder(data, width as usize, height as usize, &mut decoded).map_err(Error::Invalid)?;
-        for (value, pixel) in decoded.into_iter().zip(pixels.chunks_exact_mut(4)) {
+        for (value, pixel) in decoded
+            .into_iter()
+            .zip(pixels.as_chunks_mut::<4>().0.iter_mut())
+        {
             let [b, g, r, a] = value.to_le_bytes();
             pixel.copy_from_slice(&[r, g, b, if format == 44 { a } else { 255 }]);
         }
@@ -111,7 +117,10 @@ fn decode(format: u32, data: &[u8], width: u32, height: u32) -> Result<RgbaImage
         if data.len() != count.checked_mul(stride).ok_or(Error::LimitExceeded)? {
             return Err(Error::Invalid("pixel mip size"));
         }
-        for (src, dst) in data.chunks_exact(stride).zip(pixels.chunks_exact_mut(4)) {
+        for (src, dst) in data
+            .chunks_exact(stride)
+            .zip(pixels.as_chunks_mut::<4>().0.iter_mut())
+        {
             let rgba = match format {
                 0 => [src[2], src[1], src[0], src[3]],
                 1 => [src[0], src[1], src[2], src[3]],

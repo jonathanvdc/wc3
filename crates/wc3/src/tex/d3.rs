@@ -145,7 +145,7 @@ impl<'a, V: Revision> Texture<'a, V> {
         if count.checked_mul(80).ok_or(Error::LimitExceeded)? != size {
             return Err(Error::Invalid("atlas frame size"));
         }
-        for frame in range(bytes, offset, size)?.chunks_exact(80) {
+        for frame in range(bytes, offset, size)?.as_chunks::<80>().0 {
             let mut uv = [0.; 4];
             for (i, value) in uv.iter_mut().enumerate() {
                 *value = f32::from_bits(u32_at(frame, i * 4)?);

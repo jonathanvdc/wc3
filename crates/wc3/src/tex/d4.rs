@@ -259,7 +259,9 @@ impl<'a, V: Revision> Texture<'a, V> {
             return Err(Error::Invalid("serialized pixel range array"));
         }
         let pixel_ranges = ranges
-            .chunks_exact(8)
+            .as_chunks::<8>()
+            .0
+            .iter()
             .map(|b| {
                 Ok(PayloadRange {
                     offset: u32_at(b, 0)?,

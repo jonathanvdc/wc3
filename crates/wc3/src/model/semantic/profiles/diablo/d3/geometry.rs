@@ -60,7 +60,7 @@ pub type VertexStreams<'a> = VertexData<
 /// let _ = Geometry::new(VertexStreams::default(), Vec::<[u32; 3]>::new(),
 ///     vec![[Influence { joint: 0, weight: 0. }; 4]]);
 /// ```
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct Geometry<'a> {
     data: GeometryStreams<'a, VertexStreams<'a>, Values<'a, [Influence; 3]>>,
 }
@@ -94,13 +94,6 @@ impl<'a> Geometry<'a> {
     /// Reads authored influence slots, preserving zero-weight contributions and their order.
     pub fn influence_rows(&self) -> &Values<'a, [Influence; 3]> {
         &self.data.influences
-    }
-}
-impl Default for Geometry<'_> {
-    fn default() -> Self {
-        Self {
-            data: GeometryStreams::default(),
-        }
     }
 }
 impl ValidateLinks for Geometry<'_> {

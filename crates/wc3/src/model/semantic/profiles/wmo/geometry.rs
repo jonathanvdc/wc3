@@ -14,6 +14,16 @@ use crate::model::semantic::{
 };
 use crate::model::semantic::{GeometryEdit, GeometryEditCapabilities, StreamSupport};
 
+type WmoStreams<'data> = VertexStreams<
+    'data,
+    (),
+    Vec<Values<'data, [f32; 2]>>,
+    (),
+    Vec<Values<'data, [f32; 4]>>,
+    Values<'data, [f32; 3]>,
+    Values<'data, [f32; 2]>,
+>;
+
 /// Static triangle geometry for a world model.
 ///
 /// Coordinate and color streams retain their authored order. Native dialects
@@ -21,15 +31,7 @@ use crate::model::semantic::{GeometryEdit, GeometryEditCapabilities, StreamSuppo
 /// not impose the limits of one particular file revision.
 #[derive(Clone, Debug)]
 pub struct WmoGeometry<'data> {
-    streams: VertexStreams<
-        'data,
-        (),
-        Vec<Values<'data, [f32; 2]>>,
-        (),
-        Vec<Values<'data, [f32; 4]>>,
-        Values<'data, [f32; 3]>,
-        Values<'data, [f32; 2]>,
-    >,
+    streams: WmoStreams<'data>,
     pools: GeometryPools<'data>,
     triangle_controls: Values<'data, SurfaceTriangleControls>,
 }
