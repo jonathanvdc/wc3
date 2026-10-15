@@ -1,4 +1,5 @@
 use wc3::model::semantic::profiles::{Mdlx, Universal};
+use wc3::model::semantic::MaterialSurface;
 use wc3::model::semantic::{
     Draw, DrawId, InstanceId, Look, LookBinding, LookId, Material, MaterialId, Mesh, MeshInstance,
     Model, ModelBuilder, Node,
@@ -15,10 +16,22 @@ fn fixture() -> (Model<'static>, InstanceId, [DrawId; 2], [MaterialId; 2]) {
     let mesh = builder.add_mesh(mesh).unwrap();
     let materials = [
         builder
-            .add_material(Material::pbr().named("first"))
+            .add_material(
+                Material {
+                    name: "".into(),
+                    surface: MaterialSurface::Layered(Box::default()),
+                }
+                .named("first"),
+            )
             .unwrap(),
         builder
-            .add_material(Material::pbr().named("second"))
+            .add_material(
+                Material {
+                    name: "".into(),
+                    surface: MaterialSurface::Layered(Box::default()),
+                }
+                .named("second"),
+            )
             .unwrap(),
     ];
     let mut instance = MeshInstance::new(node, mesh);

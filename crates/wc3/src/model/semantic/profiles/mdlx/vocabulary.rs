@@ -21,7 +21,7 @@ use crate::model::semantic::{FeatureSet, FeatureView, FeatureVocabulary};
 /// use wc3::model::semantic::profiles::Mdlx;
 /// let material = Material::<Mdlx> {
 ///     name: "invalid surface family".into(),
-///     surface: MaterialSurface::Generic(Box::default()),
+///     surface: MaterialSurface::ModelShader(Box::default()),
 /// };
 /// ```
 #[derive(Clone, Debug, Default)]

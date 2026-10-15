@@ -125,14 +125,9 @@ fn selected_coordinate_form_controls_which_destinations_exist() {
 #[test]
 fn broad_surface_selection_preserves_property_and_validation_policies() {
     use wc3::model::semantic::profiles::Unavailable;
-    use wc3::model::semantic::{MaterialSurface, PbrSurface, PropertyPayload, SurfaceSet};
-
-    let color = m2::properties::Target::Color.identity().to_owned();
-    let pbr = MaterialSurface::Generic(Box::new(PbrSurface::default()));
-    assert!(!pbr.supports_property(&color));
+    use wc3::model::semantic::SurfaceSet;
 
     type CustomSurfaces = SurfaceSet<
-        Unavailable,
         Unavailable,
         Unavailable,
         LayeredSurface<'static, CheckedPass>,

@@ -51,15 +51,3 @@ fn explicit_equation_state_checks_depth_bias_without_interpreting_unknown_codes(
     state.visit_links(&mut |link| invalid |= matches!(link, Link::InvalidValue));
     assert!(invalid);
 }
-
-#[test]
-fn custom_portable_input_traverses_its_role_and_binding() {
-    use wc3::model::semantic::materials::TextureInput;
-    let input = TextureInput {
-        role: Component(2),
-        binding: Component(3),
-    };
-    let mut count = 0;
-    input.visit_links(&mut |link| count += usize::from(matches!(link, Link::InvalidValue)));
-    assert_eq!(count, 5);
-}

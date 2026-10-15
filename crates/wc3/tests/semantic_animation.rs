@@ -2,7 +2,8 @@ use wc3::model::common::ZeroVec;
 use wc3::model::semantic::profiles::mdlx::properties::{
     light, Layer, LightField, Target as MdlxTarget,
 };
-use wc3::model::semantic::profiles::Mdlx;
+use wc3::model::semantic::profiles::{Mdlx, Universal};
+use wc3::model::semantic::MaterialSurface;
 use wc3::model::semantic::{
     BezierKeyframe, ContinuousDomain, Curve, CurveValue, HermiteKeyframe, Interpolation, Material,
     Model, Node, OwnerId, PropertyTarget, Quaternion, TcbKeyframe, TcbParameters, Time,
@@ -148,7 +149,7 @@ fn spherical_keyframes_and_discrete_keys_select_their_shapes() {
 
 #[test]
 fn descriptors_preserve_structural_fields_and_typed_owner_identities() {
-    let mut builder = Model::builder("properties");
+    let mut builder = Model::<Universal>::builder("properties");
     let node = builder.add_node(Node::named("light")).unwrap();
     let feature = builder.reserve_feature(node);
     let intensity = light::INTENSITY.bind(feature);
@@ -159,7 +160,12 @@ fn descriptors_preserve_structural_fields_and_typed_owner_identities() {
             key: MdlxTarget::Light(LightField::Intensity),
         }
     );
-    let material = builder.add_material(Material::pbr()).unwrap();
+    let material = builder
+        .add_material(Material {
+            name: "".into(),
+            surface: MaterialSurface::Layered(Box::default()),
+        })
+        .unwrap();
     let texture = Layer(2).texture_slot(3).bind(material);
     assert_eq!(
         texture.target(),

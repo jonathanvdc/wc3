@@ -127,9 +127,20 @@ fn complete_material_looks_resolve_independently() {
             [[0, 1, 2]],
         ))
         .unwrap();
-    let base = builder.add_material(Material::pbr()).unwrap();
+    let base = builder
+        .add_material(Material {
+            name: "".into(),
+            surface: MaterialSurface::Layered(Box::default()),
+        })
+        .unwrap();
     let alternative = builder
-        .add_material(Material::pbr().named("alternate"))
+        .add_material(
+            Material {
+                name: "".into(),
+                surface: MaterialSurface::Layered(Box::default()),
+            }
+            .named("alternate"),
+        )
         .unwrap();
     let subset = builder.add_primary_subset(mesh, 0, 1).unwrap();
     let instance = builder

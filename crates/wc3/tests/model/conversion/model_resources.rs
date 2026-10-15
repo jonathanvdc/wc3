@@ -1,17 +1,26 @@
-use wc3::model::semantic::materials::bindings::{Coordinates, TextureBinding};
+use wc3::model::semantic::materials::layered::{Layer, LayeredSurface};
 use wc3::model::semantic::profiles::Universal;
 use wc3::model::semantic::{
-    Animated, Material, MaterialSurface, ModelBuilder, PbrSurface, Resource, Resources, Texture,
-    TextureInput, TextureRole,
+    Animated, Material, MaterialSurface, ModelBuilder, Resource, Resources, Texture, TextureId,
 };
+
+fn textured_material(texture: TextureId) -> Material<'static> {
+    let mut layer = Layer::default();
+    layer.binding.image = Animated::constant(Some(texture));
+    Material {
+        name: "surface".into(),
+        surface: MaterialSurface::Layered(Box::new(LayeredSurface {
+            layers: vec![layer],
+            ..Default::default()
+        })),
+    }
+}
 
 #[test]
 fn model_resource_edits_are_transactional_and_clones_are_independent() {
     let mut draft = ModelBuilder::new("first");
     let texture = draft.add_texture(Texture::file("original.blp")).unwrap();
-    draft
-        .add_material(Material::pbr().base_color(texture).unwrap())
-        .unwrap();
+    draft.add_material(textured_material(texture)).unwrap();
     let mut model = draft.finish().unwrap();
     let original = model.clone();
     model
@@ -43,26 +52,7 @@ fn unanimated_texture_references_are_checked_at_publication() {
     let mut foreign = Resources::<Universal>::builder();
     let texture = foreign.add_texture(Texture::file("foreign.blp"));
     let mut draft = ModelBuilder::new("invalid");
-    draft
-        .add_material(Material {
-            name: "surface".into(),
-            surface: MaterialSurface::Generic(Box::new(PbrSurface {
-                inputs: vec![TextureInput {
-                    role: TextureRole::BaseColor,
-                    binding: TextureBinding {
-                        image: Animated::constant(Some(texture)),
-                        coordinates: Coordinates {
-                            source: 0,
-                            transform: (),
-                        },
-                        sampling: None,
-                        contribution: (),
-                    },
-                }],
-                ..Default::default()
-            })),
-        })
-        .unwrap();
+    draft.add_material(textured_material(texture)).unwrap();
     assert!(draft.finish().is_err());
 }
 
@@ -71,9 +61,7 @@ fn draft_model_exposes_its_owned_resources_before_publication() {
     let mut draft = ModelBuilder::new("draft resources");
     let texture = draft.add_texture(Texture::file("model.blp")).unwrap();
     assert!(draft.model().texture(texture).is_some());
-    draft
-        .add_material(Material::pbr().base_color(texture).unwrap())
-        .unwrap();
+    draft.add_material(textured_material(texture)).unwrap();
     let model = draft.finish().unwrap();
     assert!(model.texture(texture).is_some());
     model.validate().unwrap();

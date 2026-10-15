@@ -202,8 +202,7 @@ parameters. Programmed standard surfaces group diffuse, specular, emissive,
 opacity, and normal contributions without replacing their shader model with PBR.
 Sparse primary and secondary inputs retain their exact slots. A specular response
 keeps its color and gloss roles; normal contributions retain independent masks and
-the full authored weight vector. Portable PBR uses the same contribution structure
-for constant colors and keeps its texture inputs in their original order.
+the full authored weight vector.
 
 Shader parameters use `ParameterEntry<Key, Value, Controls>`. Their ordered
 collections retain duplicate keys. Diablo tags, Diablo value selectors, and

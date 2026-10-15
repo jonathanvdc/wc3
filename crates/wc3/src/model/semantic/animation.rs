@@ -263,8 +263,6 @@ pub struct Event<'a> {
     /// Logical payload bytes, when a format defines an event message.
     pub payload: ZeroVec<'a, u8>,
 }
-/// A clip reference used by format-specific alias and transition metadata.
-pub type ClipReference = ClipId;
 
 impl<P: Profile> Channel<'_, P> {
     /// Clock on which this channel is evaluated.

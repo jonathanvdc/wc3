@@ -2,8 +2,6 @@ use wc3::model::semantic::materials::contributions::{
     MaskedInput, NormalContributions, PairedInputs, SurfaceContribution,
 };
 use wc3::model::semantic::materials::programmed::{Property, Standard, TextureLayer};
-use wc3::model::semantic::materials::PbrSurface;
-use wc3::model::semantic::profiles::SurfacePayload;
 use wc3::model::semantic::{Link, ValidateLinks};
 
 #[test]
@@ -53,14 +51,4 @@ fn programmed_standard_keeps_sparse_slots_and_independent_weight_count() {
     assert!(value.normals.primary.input.is_none());
     assert!(value.normals.primary.mask.is_some());
     assert_eq!(value.normals.weights.len(), 5);
-}
-
-#[test]
-fn portable_constant_contributions_remain_validated() {
-    let mut surface = PbrSurface::default();
-    surface.base_color.parameters[2] = f32::NAN;
-    assert!(surface.validate().is_err());
-    surface.base_color.parameters = [1.; 4];
-    surface.emissive.parameters[1] = f32::INFINITY;
-    assert!(surface.validate().is_err());
 }

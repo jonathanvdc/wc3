@@ -1,4 +1,5 @@
 use super::*;
+use crate::model::semantic::MaterialSurface;
 #[test]
 fn shortened_splines_keep_values_between_new_boundaries() {
     for interpolation in [Interpolation::Hermite, Interpolation::Bezier] {
@@ -73,8 +74,13 @@ fn spherical_restriction_preserves_rotation_and_clamped_intervals() {
 #[test]
 fn typed_restriction_retains_clock_and_target() {
     use crate::model::semantic::{profiles::Universal, Clock, Material, Model};
-    let mut builder = Model::builder("crop");
-    let material = builder.add_material(Material::pbr()).unwrap();
+    let mut builder = Model::<Universal>::builder("crop");
+    let material = builder
+        .add_material(Material {
+            name: "".into(),
+            surface: MaterialSurface::Layered(Box::default()),
+        })
+        .unwrap();
     let track = Track {
         target: material.opacity::<Universal>(),
         curve: Curve::from_samples(

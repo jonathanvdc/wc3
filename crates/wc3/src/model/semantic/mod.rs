@@ -55,8 +55,8 @@ mod rotation;
 pub use rotation::*;
 pub mod animation;
 pub use animation::{
-    curves::*, properties::*, Animated, Channel, Clip, ClipReference, Clock, Controller, Event,
-    Interpolation, Time, Track,
+    curves::*, properties::*, Animated, Channel, Clip, Clock, Controller, Event, Interpolation,
+    Time, Track,
 };
 mod playback_controls;
 pub use playback_controls::*;
@@ -91,8 +91,8 @@ mod node;
 pub use node::*;
 pub mod materials;
 pub use materials::{
-    AddressMode, Blend, ColorSpace, Cull, Material, MaterialSurface, PbrSurface, RenderState,
-    Resource, Sampler, SnoNamespace, SurfaceSet, Texture, TextureInput, TextureRole,
+    AddressMode, ColorSpace, Material, MaterialSurface, Resource, Sampler, SnoNamespace,
+    SurfaceSet, Texture,
 };
 mod links;
 pub use links::*;

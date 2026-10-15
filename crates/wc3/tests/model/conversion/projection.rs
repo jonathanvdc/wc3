@@ -1,5 +1,6 @@
 use wc3::model::common::IntoZeroVec;
 use wc3::model::conversion::{geometry, Context, ExportOptions};
+use wc3::model::semantic::MaterialSurface;
 use wc3::model::semantic::{
     Attribute, AttributeDomain, AttributeSemantic, AttributeValues, ConnectivitySets, Draw,
     GeometryData, InstanceId, Material, Mesh, MeshId, MeshInstance, Model, ModelBuilder, Node,
@@ -9,8 +10,24 @@ use wc3::model::semantic::{
 fn fixture() -> (Model<'static>, MeshId, InstanceId) {
     let mut draft = ModelBuilder::new("seams");
     let node = draft.add_node(Node::named("placement")).unwrap();
-    let first = draft.add_material(Material::pbr().named("first")).unwrap();
-    let second = draft.add_material(Material::pbr().named("second")).unwrap();
+    let first = draft
+        .add_material(
+            Material {
+                name: "".into(),
+                surface: MaterialSurface::Layered(Box::default()),
+            }
+            .named("first"),
+        )
+        .unwrap();
+    let second = draft
+        .add_material(
+            Material {
+                name: "".into(),
+                surface: MaterialSurface::Layered(Box::default()),
+            }
+            .named("second"),
+        )
+        .unwrap();
     let mesh = draft
         .add_mesh(Mesh::new(GeometryData {
             positions: vec![[0., 0., 0.], [1., 0., 0.], [1., 1., 0.], [0., 1., 0.]].into_zero_vec(),

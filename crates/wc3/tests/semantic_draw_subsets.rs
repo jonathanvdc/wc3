@@ -1,5 +1,6 @@
 use wc3::model::common::IntoZeroVec;
 use wc3::model::conversion::{geometry, Context, ExportOptions};
+use wc3::model::semantic::MaterialSurface;
 use wc3::model::semantic::{
     Attribute, AttributeDomain, AttributeSemantic, AttributeValues, Draw, DrawSubset, Material,
     Mesh, MeshInstance, ModelBuilder, Node, PrimitiveRange, PrimitiveSelection, Topology,
@@ -16,8 +17,18 @@ fn mesh() -> Mesh<'static> {
 fn instances_share_mesh_owned_selections_with_independent_materials() {
     let mut builder = ModelBuilder::new("shared subsets");
     let node = builder.add_node(Node::named("placement")).unwrap();
-    let first = builder.add_material(Material::pbr()).unwrap();
-    let second = builder.add_material(Material::pbr()).unwrap();
+    let first = builder
+        .add_material(Material {
+            name: "".into(),
+            surface: MaterialSurface::Layered(Box::default()),
+        })
+        .unwrap();
+    let second = builder
+        .add_material(Material {
+            name: "".into(),
+            surface: MaterialSurface::Layered(Box::default()),
+        })
+        .unwrap();
     let mut source = mesh();
     let subset = source.add_primary_subset(1, 1);
     let mesh = builder.add_mesh(source).unwrap();
@@ -62,7 +73,12 @@ fn instances_share_mesh_owned_selections_with_independent_materials() {
 fn strip_selections_use_their_own_faces_and_explicit_index_counting() {
     let mut builder = ModelBuilder::new("strip subset");
     let node = builder.add_node(Node::named("placement")).unwrap();
-    let material = builder.add_material(Material::pbr()).unwrap();
+    let material = builder
+        .add_material(Material {
+            name: "".into(),
+            surface: MaterialSurface::Layered(Box::default()),
+        })
+        .unwrap();
     let mut source = mesh();
     let strip = source
         .add_connectivity(Topology::TriangleStrip(vec![0, 1, 2, 3].into_zero_vec()))
@@ -115,7 +131,12 @@ fn foreign_subset_and_connectivity_identities_are_rejected() {
     let foreign_connectivity = owner.subsets.primary();
     let mut builder = ModelBuilder::new("foreign subset");
     let node = builder.add_node(Node::named("placement")).unwrap();
-    let material = builder.add_material(Material::pbr()).unwrap();
+    let material = builder
+        .add_material(Material {
+            name: "".into(),
+            surface: MaterialSurface::Layered(Box::default()),
+        })
+        .unwrap();
     let other = builder.add_mesh(mesh()).unwrap();
     let mut instance = MeshInstance::new(node, other);
     instance.draws.push(Draw::new(subset, None));
