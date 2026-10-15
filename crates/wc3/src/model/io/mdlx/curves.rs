@@ -4,7 +4,7 @@ use crate::model::formats::mdlx::animation::{
     Interpolation as NativeInterpolation, Track, TrackValue,
 };
 use crate::model::io::materialize;
-use crate::model::{Curve, CurveValue, Error as SemanticError, Interpolation, Time};
+use crate::model::{Curve, CurveDomain, CurveValue, Error as SemanticError, Interpolation, Time};
 
 /// Materializes values once while retaining exact authored interpolation and tangents.
 pub(super) fn read<'a, T, U>(
@@ -86,6 +86,73 @@ where
             )
         });
         Curve::from_spline_samples(times, values, incoming, outgoing, interpolation)
+            .and_then(|curve| curve.with_spherical_controls(U::Domain::SUPPORTS_ROTATION))
             .map_err(failure)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::model::formats::mdlx::animation::TangentKeyframe;
+    use crate::model::io::animation::crop;
+    use crate::model::profiles::Mdlx;
+    use crate::model::{Clock, Model, Quaternion, Track as SemanticTrack};
+
+    #[test]
+    fn imported_rotation_splines_preserve_native_angular_sampling() {
+        let a = [0.0, 0.0, 0.0, 1.0];
+        let b = [0.0, 0.0, 1.0, 0.0];
+        let out = [0.0, 0.6, 0.0, 0.8];
+        let incoming = [0.6, 0.0, 0.0, 0.8];
+        let keys = [
+            TangentKeyframe {
+                frame: 0,
+                value: a,
+                in_tangent: a,
+                out_tangent: out,
+            },
+            TangentKeyframe {
+                frame: 1000,
+                value: b,
+                in_tangent: incoming,
+                out_tangent: b,
+            },
+        ];
+        for source in [
+            Track::hermite(keys, None).unwrap(),
+            Track::bezier(keys, None).unwrap(),
+        ] {
+            let curve = read(&source, 0.0, Quaternion).unwrap();
+            assert!(curve.uses_spherical_controls());
+            for t in [0.1, 0.25, 0.5, 0.8] {
+                let expected = source.evaluate_in(t * 1000.0, 0..=1000).unwrap();
+                let actual = curve.sample(Time::seconds(t).unwrap()).unwrap().0;
+                for (actual, expected) in actual.into_iter().zip(expected) {
+                    assert!((actual - expected).abs() < 1e-5);
+                }
+            }
+            let mut builder = Model::<Mdlx>::builder("curve restriction");
+            let node = builder.reserve_node();
+            let track: SemanticTrack<'_, Quaternion, Mdlx> = SemanticTrack {
+                target: node.rotation(),
+                curve,
+                clock: Clock::Clip,
+            };
+            let whole = crop(
+                &track,
+                Time::seconds(0.0).unwrap(),
+                Time::seconds(1.0).unwrap(),
+            )
+            .unwrap();
+            assert!(whole.curve.uses_spherical_controls());
+            assert!(crop(
+                &track,
+                Time::seconds(0.25).unwrap(),
+                Time::seconds(0.8).unwrap()
+            )
+            .is_err());
+            assert!(whole.curve.into_owned().uses_spherical_controls());
+        }
     }
 }

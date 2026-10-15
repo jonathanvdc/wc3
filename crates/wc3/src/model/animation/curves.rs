@@ -1,5 +1,7 @@
 //! Checked curve shapes retain canonical packed arrays.
 use zerovec::ZeroVec;
+mod sampling;
+pub use sampling::SampleValue;
 mod value;
 pub use value::*;
 mod keyframe;
@@ -51,6 +53,7 @@ pub struct Curve<'a, T: CurveValue> {
     times: ZeroVec<'a, Time>,
     values: ZeroVec<'a, T>,
     shape: CurveShape<'a, T>,
+    spherical_controls: bool,
 }
 impl<'a, T: CurveValue> Curve<'a, T> {
     fn checked(
@@ -62,6 +65,7 @@ impl<'a, T: CurveValue> Curve<'a, T> {
             times,
             values,
             shape,
+            spherical_controls: false,
         };
         curve.validate()?;
         Ok(curve)
@@ -84,6 +88,48 @@ impl<'a, T: CurveValue> Curve<'a, T> {
             keys.iter().map(|k| k.time).collect::<ZeroVec<_>>(),
             keys.iter().map(|k| k.value).collect::<ZeroVec<_>>(),
         )
+    }
+    /// Detaches packed key and control arrays from their backing input.
+    /// Already owned arrays move without rebuilding their contents.
+    pub fn into_owned(self) -> Curve<'static, T> {
+        Curve {
+            spherical_controls: self.spherical_controls,
+            times: self.times.into_owned(),
+            values: self.values.into_owned(),
+            shape: match self.shape {
+                CurveShape::Step => CurveShape::Step,
+                CurveShape::Linear => CurveShape::Linear,
+                CurveShape::Slerp => CurveShape::Slerp,
+                CurveShape::Nlerp => CurveShape::Nlerp,
+                CurveShape::Hermite(v) => CurveShape::Hermite(HermiteDerivatives {
+                    incoming: v.incoming.into_owned(),
+                    outgoing: v.outgoing.into_owned(),
+                }),
+                CurveShape::Bezier(v) => CurveShape::Bezier(BezierControls {
+                    incoming: v.incoming.into_owned(),
+                    outgoing: v.outgoing.into_owned(),
+                }),
+                CurveShape::Tcb(v) => CurveShape::Tcb(v.into_owned()),
+            },
+        }
+    }
+    /// Whether spline controls are rotations combined with nested spherical
+    /// interpolation, rather than component derivatives or control points.
+    pub fn uses_spherical_controls(&self) -> bool {
+        self.spherical_controls
+    }
+    pub(crate) fn with_spherical_controls(mut self, spherical: bool) -> Result<Self, Error> {
+        if spherical
+            && (!T::Domain::SUPPORTS_ROTATION
+                || !matches!(self.shape, CurveShape::Hermite(_) | CurveShape::Bezier(_)))
+        {
+            return Err(Error::new(
+                "curve.controls",
+                "spherical controls require a quaternion spline",
+            ));
+        }
+        self.spherical_controls = spherical;
+        Ok(self)
     }
     /// Ordered key times.
     pub fn times(&self) -> &ZeroVec<'a, Time> {
@@ -149,17 +195,18 @@ impl<'a, T: CurveValue> Curve<'a, T> {
         values: impl IntoZeroVec<'a, T>,
         mode: Interpolation,
     ) -> Result<Self, Error> {
-        let shape =
-            match mode {
-                Interpolation::Step => CurveShape::Step,
-                Interpolation::Linear if T::Domain::SUPPORTS_LINEAR => CurveShape::Linear,
-                Interpolation::Slerp if T::Domain::SUPPORTS_ROTATION => CurveShape::Slerp,
-                Interpolation::Nlerp if T::Domain::SUPPORTS_ROTATION => CurveShape::Nlerp,
-                _ => return Err(Error::new(
+        let shape = match mode {
+            Interpolation::Step => CurveShape::Step,
+            Interpolation::Linear if T::Domain::SUPPORTS_LINEAR => CurveShape::Linear,
+            Interpolation::Slerp if T::Domain::SUPPORTS_ROTATION => CurveShape::Slerp,
+            Interpolation::Nlerp if T::Domain::SUPPORTS_ROTATION => CurveShape::Nlerp,
+            _ => {
+                return Err(Error::new(
                     "curve.interpolation",
                     "sampling directive is unsupported by this value domain or requires controls",
-                )),
-            };
+                ));
+            }
+        };
         Self::checked(times.into_zero_vec(), values.into_zero_vec(), shape)
     }
     pub(crate) fn from_spline_samples(
@@ -202,7 +249,7 @@ impl<'a, T: CurveValue> Curve<'a, T> {
                 return Err(Error::new(
                     "curve.interpolation",
                     "spline controls require Hermite or Bezier interpolation",
-                ))
+                ));
             }
         };
         Self::checked(times.into_zero_vec(), values.into_zero_vec(), shape)
@@ -294,6 +341,33 @@ impl<'a, T: LinearValue> Curve<'a, T> {
     }
 }
 impl<'a, T: RotationValue> Curve<'a, T> {
+    /// Constructs a rotation spline by blending the endpoint and control arcs
+    /// with the weight `2 t (1 - t)`. Zero controls normalize to identity.
+    pub fn spherical_hermite(
+        times: impl IntoZeroVec<'a, Time>,
+        values: impl IntoZeroVec<'a, T>,
+        incoming: impl IntoZeroVec<'a, T::Derivative>,
+        outgoing: impl IntoZeroVec<'a, T::Derivative>,
+    ) -> Result<Self, Error>
+    where
+        T: SplineValue,
+    {
+        Self::hermite(times, values, incoming, outgoing)?.with_spherical_controls(true)
+    }
+    /// Constructs the spherical control interpretation used by native rotation
+    /// Bezier tracks. Evaluation blends the endpoint and control arcs.
+    pub fn spherical_bezier(
+        times: impl IntoZeroVec<'a, Time>,
+        values: impl IntoZeroVec<'a, T>,
+        incoming: impl IntoZeroVec<'a, T::ControlPoint>,
+        outgoing: impl IntoZeroVec<'a, T::ControlPoint>,
+    ) -> Result<Self, Error>
+    where
+        T: SplineValue,
+    {
+        Self::bezier(times, values, incoming, outgoing)?.with_spherical_controls(true)
+    }
+
     /// Constructs explicit spherical interpolation.
     pub fn slerp(
         times: impl IntoZeroVec<'a, Time>,

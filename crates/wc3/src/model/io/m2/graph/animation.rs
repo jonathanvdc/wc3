@@ -190,6 +190,16 @@ where
     if tracks
         .iter()
         .flatten()
+        .any(|track| track.curve.uses_spherical_controls())
+    {
+        return Err(Error::new(
+            "m2.animation.interpolation",
+            "M2 export cannot preserve spherical spline controls",
+        ));
+    }
+    if tracks
+        .iter()
+        .flatten()
         .any(|t| t.clock != first.clock || t.curve.interpolation() != first.curve.interpolation())
     {
         return Err(Error::new(

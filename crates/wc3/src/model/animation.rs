@@ -8,6 +8,8 @@ use std::collections::BTreeMap;
 use zerovec::{ule::AsULE, ZeroVec};
 pub mod curves;
 pub use curves::*;
+mod sampling;
+pub use sampling::*;
 
 /// Finite timeline time in seconds.
 #[derive(Clone, Copy, Debug, Default, PartialEq, PartialOrd)]

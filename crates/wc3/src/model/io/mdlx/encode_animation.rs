@@ -7,7 +7,7 @@ use crate::model::formats::mdlx::{
 };
 use crate::model::profiles::Mdlx;
 use crate::model::{
-    Animated, ClipId, Clock, ClockId, Interpolation, Model, Property, PropertyTarget,
+    Animated, ClipId, Clock, ClockId, CurveDomain, Interpolation, Model, Property, PropertyTarget,
 };
 use std::collections::{BTreeMap, HashSet};
 
@@ -139,6 +139,13 @@ impl Encoder<'_, '_, '_> {
                 continue;
             }
             let mode = track.curve.interpolation();
+            if U::Domain::SUPPORTS_ROTATION
+                && matches!(mode, Interpolation::Hermite | Interpolation::Bezier)
+                && !track.curve.uses_spherical_controls()
+            {
+                self.context.unsupported(path, "Warcraft III rotation splines require spherical controls; component splines cannot be encoded faithfully")?;
+                continue;
+            }
             let global = match track.clock {
                 Clock::Clip | Clock::Timeline => None,
                 Clock::Shared(id) => Some(

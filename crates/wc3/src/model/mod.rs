@@ -56,8 +56,8 @@ mod rotation;
 pub use rotation::*;
 pub mod animation;
 pub use animation::{
-    curves::*, properties::*, Animated, Channel, Clip, Clock, Controller, Event, Interpolation,
-    Time, Track,
+    curves::*, properties::*, Animated, AnimationProgram, AnimationSample, Channel, ChannelValue,
+    Clip, Clock, Controller, Event, Interpolation, SampledAnimation, Time, Track,
 };
 mod playback_controls;
 pub use playback_controls::*;

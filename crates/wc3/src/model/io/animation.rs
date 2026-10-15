@@ -68,6 +68,53 @@ pub fn crop<'a, T: FloatValue + 'a, P: Profile>(
     start: Time,
     end: Time,
 ) -> Result<Track<'a, T, P>, Error> {
+    if track.curve.uses_spherical_controls() {
+        let times = track.curve.times();
+        if start > end {
+            return Err(Error::new("curve.window", "invalid crop interval"));
+        }
+        for boundary in [start, end] {
+            if times.first().is_some_and(|first| boundary > first)
+                && times.last().is_some_and(|last| boundary < last)
+                && !times.iter().any(|key| key == boundary)
+            {
+                return Err(Error::new(
+                    "curve.spherical",
+                    "exact restriction inside a spherical spline segment is not implemented",
+                ));
+            }
+        }
+        let indices: Vec<_> = times
+            .iter()
+            .enumerate()
+            .filter_map(|(i, t)| (t >= start && t <= end).then_some(i))
+            .collect();
+        let curve = Curve::from_spline_samples(
+            indices
+                .iter()
+                .map(|i| times.get(*i).unwrap())
+                .collect::<Vec<_>>(),
+            indices
+                .iter()
+                .map(|i| track.curve.values().get(*i).unwrap())
+                .collect::<Vec<_>>(),
+            indices
+                .iter()
+                .map(|i| track.curve.incoming_value(*i).unwrap())
+                .collect::<Vec<_>>(),
+            indices
+                .iter()
+                .map(|i| track.curve.outgoing_value(*i).unwrap())
+                .collect::<Vec<_>>(),
+            track.curve.interpolation(),
+        )?
+        .with_spherical_controls(true)?;
+        return Ok(Track {
+            target: track.target.clone(),
+            curve,
+            clock: track.clock,
+        });
+    }
     if track.curve.interpolation() == Interpolation::Nlerp {
         return Err(Error::new(
             "curve.nlerp",
