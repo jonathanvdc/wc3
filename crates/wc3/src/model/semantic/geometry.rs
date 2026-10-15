@@ -84,6 +84,12 @@ pub enum AttributeSemantic<'a> {
     Normal,
     /// Surface tangent and handedness.
     Tangent,
+    /// Independently authored tangent vector without inferred handedness.
+    TangentVector,
+    /// Independently authored binormal vector.
+    Binormal,
+    /// Index into the owning cloth vertex domain.
+    ClothVertex,
     /// Color stream with its authored slot.
     Color(u32),
     /// Texture-coordinate stream with its authored slot.

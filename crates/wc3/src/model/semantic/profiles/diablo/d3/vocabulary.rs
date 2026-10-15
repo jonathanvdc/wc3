@@ -190,7 +190,7 @@ impl Extends<D3> for Universal {
         UniversalBinding::Explicit(value)
     }
     fn geometry<'a>(value: <D3 as Profile>::Geometry<'a>) -> Self::Geometry<'a> {
-        UniversalGeometry::D3(value)
+        UniversalGeometry::Data(value.into())
     }
     fn model<'a>(value: <D3 as Profile>::Model<'a>) -> Self::Model<'a> {
         Some(AnyModelControls::D3(value))
@@ -263,13 +263,7 @@ impl Narrows<Universal> for D3 {
     fn geometry<'a>(
         value: <Universal as Profile>::Geometry<'a>,
     ) -> Result<Self::Geometry<'a>, Error> {
-        match value {
-            UniversalGeometry::D3(value) => Ok(value),
-            _ => Err(Error::new(
-                "d3.narrow.geometry",
-                "payload belongs to another authoring vocabulary",
-            )),
-        }
+        value.try_into()
     }
     fn model<'a>(value: <Universal as Profile>::Model<'a>) -> Result<Self::Model<'a>, Error> {
         match value {

@@ -4,8 +4,9 @@ use crate::model::semantic::geometry_schema::validate_geometry;
 use crate::model::semantic::vertex_geometry::{GeometryStreams, RemapStreams};
 use crate::model::semantic::VertexData;
 use crate::model::semantic::{
-    Attributes, Error, GeometrySchema, Influence, InfluenceRows, Link, Topology, ValidateLinks,
-    Values,
+    Attribute, AttributeDomain, AttributeSemantic, AttributeValues, Attributes, Error,
+    GeometryData, GeometryInfluences, GeometrySchema, Influence, InfluenceRows, Link, Topology,
+    UniversalGeometry, ValidateLinks, Values,
 };
 use crate::model::semantic::{GeometryEdit, GeometryEditCapabilities, StreamSupport};
 
@@ -202,5 +203,160 @@ impl<'a> GeometrySchema<'a> for Geometry<'a> {
             ));
         }
         validate_geometry(self)
+    }
+}
+
+impl<'a> From<Geometry<'a>> for GeometryData<'a> {
+    fn from(value: Geometry<'a>) -> Self {
+        let GeometryStreams {
+            vertices,
+            topology,
+            influences,
+        } = value.data;
+        Self {
+            positions: vertices.positions,
+            normals: vertices.normals,
+            tangents: Values::default(),
+            colors: vertices.colors,
+            texture_coordinates: Vec::from(vertices.texture_coordinates),
+            attributes: vec![
+                Attribute {
+                    semantic: AttributeSemantic::TangentVector,
+                    domain: AttributeDomain::Vertex,
+                    values: AttributeValues::Vector3(vertices.tangents),
+                },
+                Attribute {
+                    semantic: AttributeSemantic::Binormal,
+                    domain: AttributeDomain::Vertex,
+                    values: AttributeValues::Vector3(vertices.extras.binormals),
+                },
+                Attribute {
+                    semantic: AttributeSemantic::Color(1),
+                    domain: AttributeDomain::Vertex,
+                    values: AttributeValues::Vector4(vertices.extras.auxiliary_colors),
+                },
+                Attribute {
+                    semantic: AttributeSemantic::ClothVertex,
+                    domain: AttributeDomain::Vertex,
+                    values: AttributeValues::Unsigned(vertices.extras.cloth_vertices),
+                },
+            ],
+            topology,
+            influences: if influences.is_empty() {
+                GeometryInfluences::None
+            } else {
+                GeometryInfluences::Three(influences)
+            },
+        }
+    }
+}
+impl<'a> From<Geometry<'a>> for UniversalGeometry<'a> {
+    fn from(value: Geometry<'a>) -> Self {
+        Self::Data(value.into())
+    }
+}
+impl<'a> TryFrom<UniversalGeometry<'a>> for Geometry<'a> {
+    type Error = Error;
+    fn try_from(value: UniversalGeometry<'a>) -> Result<Self, Error> {
+        match value {
+            UniversalGeometry::Data(value) => value.try_into(),
+            _ => Err(Error::new(
+                "d3.narrow.geometry",
+                "geometry carries a different authored domain",
+            )),
+        }
+    }
+}
+impl<'a> TryFrom<GeometryData<'a>> for Geometry<'a> {
+    type Error = Error;
+    fn try_from(value: GeometryData<'a>) -> Result<Self, Error> {
+        value.validate()?;
+        if !value.tangents.is_empty() {
+            return Err(Error::new(
+                "d3.geometry.tangents",
+                "independent tangent vectors cannot retain a tangent frame",
+            ));
+        }
+        let Topology::Triangles(triangles) = value.topology else {
+            return Err(Error::new(
+                "d3.geometry.topology",
+                "expected triangle connectivity",
+            ));
+        };
+        let influences = match value.influences {
+            GeometryInfluences::None => Values::default(),
+            GeometryInfluences::Three(rows) if !rows.is_empty() => rows,
+            _ => {
+                return Err(Error::new(
+                    "d3.geometry.influences",
+                    "expected absent or three-slot contributions",
+                ))
+            }
+        };
+        let mut tangents = None;
+        let mut binormals = None;
+        let mut auxiliary_colors = None;
+        let mut cloth_vertices = None;
+        for attribute in value.attributes {
+            if attribute.domain != AttributeDomain::Vertex {
+                return Err(Error::new(
+                    "d3.geometry.attributes",
+                    "expected vertex-domain streams",
+                ));
+            }
+            match (attribute.semantic, attribute.values) {
+                (AttributeSemantic::TangentVector, AttributeValues::Vector3(value))
+                    if tangents.is_none() =>
+                {
+                    tangents = Some(value)
+                }
+                (AttributeSemantic::Binormal, AttributeValues::Vector3(value))
+                    if binormals.is_none() =>
+                {
+                    binormals = Some(value)
+                }
+                (AttributeSemantic::Color(1), AttributeValues::Vector4(value))
+                    if auxiliary_colors.is_none() =>
+                {
+                    auxiliary_colors = Some(value)
+                }
+                (AttributeSemantic::ClothVertex, AttributeValues::Unsigned(value))
+                    if cloth_vertices.is_none() =>
+                {
+                    cloth_vertices = Some(value)
+                }
+                _ => {
+                    return Err(Error::new(
+                        "d3.geometry.attributes",
+                        "unsupported, duplicate, or incorrectly typed attribute",
+                    ))
+                }
+            }
+        }
+        let missing = || {
+            Error::new(
+                "d3.geometry.attributes",
+                "missing independent tangent, binormal, auxiliary color, or cloth mapping",
+            )
+        };
+        Self::new(
+            VertexStreams {
+                positions: value.positions,
+                normals: value.normals,
+                colors: value.colors,
+                texture_coordinates: value
+                    .texture_coordinates
+                    .try_into()
+                    .map_err(|_| Error::new("d3.geometry.uv", "expected exactly two UV streams"))?,
+                tangents: tangents.ok_or_else(missing)?,
+                extras: VertexExtras {
+                    binormals: binormals.ok_or_else(missing)?,
+                    auxiliary_colors: auxiliary_colors.ok_or_else(missing)?,
+                    cloth_vertices: cloth_vertices.ok_or_else(missing)?,
+                },
+            },
+            triangles,
+            influences,
+        )
     }
 }

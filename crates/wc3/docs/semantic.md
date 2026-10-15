@@ -173,10 +173,16 @@ rows remain separate fields of their constrained geometry owner.
 WMO retains its face controls, strip connectivity, and draw-selected tangent
 pool. Its ordered color sets and baked-light coordinates participate in shared
 vertex remapping, while face records and tangent pools keep their own domains.
-Diablo III retains independent three-vector tangents and binormals, auxiliary
-colors, and cloth mappings; its influence rows have the array type
-`[Influence; 3]`. Those additional meanings keep both geometries in distinct
-universal variants.
+These additional domains keep WMO in a distinct universal variant.
+
+Diablo III also widens to `Data`. Its independent three-vector tangents and
+binormals use the typed vertex attributes `TangentVector` and `Binormal`, auxiliary
+colors use `Color(1)`, and cloth mappings use `ClothVertex`. Widening preserves
+these streams independently, without deriving a tangent frame or handedness.
+Its influence rows retain the array type `[Influence; 3]`. Checked narrowing
+requires these complete vertex attributes with their exact value types, exactly
+two UV streams, and triangle connectivity. Unsupported or duplicate attributes,
+tangent frames, and other influence representations are rejected.
 
 Diablo IV uses `GeometryData` and widens directly to `Data`.
 Narrowing checks triangle connectivity and vertex-domain attributes before

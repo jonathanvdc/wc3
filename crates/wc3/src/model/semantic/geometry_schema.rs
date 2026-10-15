@@ -208,8 +208,6 @@ impl InfluenceRows<'_, '_> {
 /// Geometry representations distinguished by their authored data, rather than source format.
 #[derive(Clone, Debug)]
 pub enum UniversalGeometry<'data> {
-    /// Independent tangent and binormal streams and three-slot skinning.
-    D3(profiles::diablo::d3::Geometry<'data>),
     /// Shared streams, connectivity, attributes, and explicit influence representations.
     Data(GeometryData<'data>),
     /// Collision connectivity and per-triangle controls, independent of shading.
@@ -289,7 +287,6 @@ macro_rules! with_geometry {
             UniversalGeometry::Collision($value) => $body,
             UniversalGeometry::Wmo($value) => $body,
             UniversalGeometry::Wem($value) => $body,
-            UniversalGeometry::D3($value) => $body,
         }
     };
 }
@@ -303,7 +300,6 @@ impl<'data> GeometrySchema<'data> for UniversalGeometry<'data> {
             Self::Collision(value) => Ok(Self::Collision(value.edited(edit)?)),
             Self::Wmo(value) => Ok(Self::Wmo(value.edited(edit)?)),
             Self::Wem(value) => Ok(Self::Wem(value.edited(edit)?)),
-            Self::D3(value) => Ok(Self::D3(value.edited(edit)?)),
         }
     }
     fn kind(&self) -> GeometryKind {

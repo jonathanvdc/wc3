@@ -7,6 +7,7 @@ use wc3::model::diablo::d3::records::{
     Influence, SubObject, SubObjectAppearance, Transform, VertexInfluences,
 };
 use wc3::model::diablo::d3::{Appearance, V260};
+use wc3::model::semantic::profiles::{Universal, D3};
 use zerovec::ZeroVec;
 fn fixed<const N: usize>(text: &str) -> [u8; N] {
     let mut out = [0; N];
@@ -116,7 +117,12 @@ fn appearance_import_export_preserves_authored_fields() {
     let source = source();
     let imported = conversion::import(&source, &ImportOptions::default()).unwrap();
     assert!(imported.report.issues.is_empty());
-    let planned = conversion::plan(&imported.value, &ExportOptions::default()).unwrap();
+    let restored = imported
+        .value
+        .widen::<Universal>()
+        .try_narrow::<D3>()
+        .unwrap();
+    let planned = conversion::plan(&restored, &ExportOptions::default()).unwrap();
     let out = planned.execute().unwrap().value;
     assert_eq!(out.root, source.root);
     let bytes = out.write().unwrap();

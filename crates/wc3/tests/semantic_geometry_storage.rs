@@ -4,8 +4,9 @@ use wc3::model::semantic::profiles::{
 };
 use wc3::model::semantic::{
     Attribute, AttributeDomain, AttributeSemantic, AttributeValues, GeometryData, GeometryEdit,
-    GeometrySchema, Influence, InfluenceRows, JointInfluences, M3CollisionGeometry, MdlxGeometry,
-    Topology, UniversalGeometry, Values, VertexRemap, WmoGeometry, WmoTriangleControls,
+    GeometryInfluences, GeometrySchema, Influence, InfluenceRows, JointInfluences,
+    M3CollisionGeometry, MdlxGeometry, Topology, UniversalGeometry, Values, VertexRemap,
+    WmoGeometry, WmoTriangleControls,
 };
 
 fn duplicate() -> GeometryEdit<'static> {
@@ -82,6 +83,7 @@ fn world_vertex_streams_remap_while_face_controls_and_draw_pools_keep_their_doma
 #[test]
 fn three_slot_vertices_preserve_borrowing_independent_vectors_and_vertex_extras() {
     let positions = [[0., 0., 0.], [1., 0., 0.], [0., 1., 0.]];
+    let tangents = [[1., 0., 0.], [2., 0., 1.], [0., 0., 0.]];
     let binormals = [[0., -1., 0.], [0., 0., -1.], [0., 1., 0.]];
     let auxiliary = [[0.1; 4], [0.2; 4], [0.3; 4]];
     let cloth = [13, 17, 19];
@@ -103,7 +105,7 @@ fn three_slot_vertices_preserve_borrowing_independent_vectors_and_vertex_extras(
     let streams = d3::VertexStreams {
         positions: Values::from_slice(&positions),
         normals: vec![[0., 0., 1.]; 3].into(),
-        tangents: vec![[1., 0., 0.]; 3].into(),
+        tangents: Values::from_slice(&tangents),
         colors: vec![[1.; 4]; 3].into(),
         texture_coordinates: [vec![[0.; 2]; 3].into(), vec![[1.; 2]; 3].into()],
         extras: d3::VertexExtras {
@@ -114,8 +116,78 @@ fn three_slot_vertices_preserve_borrowing_independent_vectors_and_vertex_extras(
     };
     let geometry = d3::Geometry::new(streams, vec![[0, 1, 2]], Values::from_slice(&rows)).unwrap();
     let universal = <Universal as Extends<D3>>::geometry(geometry);
-    assert!(matches!(universal, UniversalGeometry::D3(_)));
+    assert!(matches!(universal, UniversalGeometry::Data(_)));
+    let UniversalGeometry::Data(data) = universal.clone() else {
+        unreachable!()
+    };
+    for index in 0..data.attributes.len() {
+        let mut missing = data.clone();
+        missing.attributes.remove(index);
+        assert!(d3::Geometry::try_from(missing).is_err());
+    }
+    let mut wrong_type = data.clone();
+    wrong_type.attributes[0].values = AttributeValues::Vector4(vec![[0.; 4]; 3].into());
+    assert!(d3::Geometry::try_from(wrong_type).is_err());
+    let mut wrong_domain = data.clone();
+    wrong_domain.attributes[0].domain = AttributeDomain::Corner;
+    assert!(d3::Geometry::try_from(wrong_domain).is_err());
+    let mut repeated = data.clone();
+    repeated.attributes.push(repeated.attributes[0].clone());
+    assert!(d3::Geometry::try_from(repeated).is_err());
+    let mut extra = data.clone();
+    extra.attributes.push(Attribute {
+        semantic: AttributeSemantic::Named("extra".into()),
+        domain: AttributeDomain::Vertex,
+        values: AttributeValues::Unsigned(vec![0; 3].into()),
+    });
+    assert!(d3::Geometry::try_from(extra).is_err());
+    let mut frames = data.clone();
+    frames.tangents = vec![[1., 0., 0., 1.]; 3].into();
+    assert!(d3::Geometry::try_from(frames).is_err());
+    let mut variable = data.clone();
+    variable.influences = GeometryInfluences::Variable(
+        rows.iter()
+            .map(|row| row.to_vec())
+            .collect::<Vec<_>>()
+            .into(),
+    );
+    assert!(d3::Geometry::try_from(variable).is_err());
+    let mut unskinned = data.clone();
+    unskinned.influences = GeometryInfluences::None;
+    let unskinned = d3::Geometry::try_from(unskinned).unwrap();
+    assert!(matches!(unskinned.influences(), InfluenceRows::None));
+    let mut wrong_uv = data.clone();
+    wrong_uv.texture_coordinates.pop();
+    assert!(d3::Geometry::try_from(wrong_uv).is_err());
+    let mut wrong_topology = data;
+    wrong_topology.topology = Topology::Points(vec![0, 1, 2].into());
+    assert!(d3::Geometry::try_from(wrong_topology).is_err());
+    let mapped_universal = universal.edited(duplicate()).unwrap();
     let restored = <D3 as Narrows<Universal>>::geometry(universal).unwrap();
+    assert_eq!(
+        restored.streams().tangents.as_slice().unwrap().as_ptr(),
+        tangents.as_ptr()
+    );
+    assert_eq!(
+        restored
+            .streams()
+            .extras
+            .auxiliary_colors
+            .as_slice()
+            .unwrap()
+            .as_ptr(),
+        auxiliary.as_ptr()
+    );
+    assert_eq!(
+        restored
+            .streams()
+            .extras
+            .cloth_vertices
+            .as_slice()
+            .unwrap()
+            .as_ptr(),
+        cloth.as_ptr()
+    );
     let InfluenceRows::Three(influences) = restored.influences() else {
         panic!("three-slot domain lost")
     };
@@ -132,7 +204,11 @@ fn three_slot_vertices_preserve_borrowing_independent_vectors_and_vertex_extras(
         binormals.as_ptr()
     );
     assert!(restored.tangents().is_none());
-    let mapped = restored.edited(duplicate()).unwrap();
+    let mapped = <D3 as Narrows<Universal>>::geometry(mapped_universal).unwrap();
+    assert_eq!(
+        mapped.streams().tangents.to_vec(),
+        vec![tangents[2], tangents[0], tangents[1], tangents[0]]
+    );
     assert_eq!(
         mapped.streams().extras.cloth_vertices.to_vec(),
         vec![19, 13, 17, 13]
