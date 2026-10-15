@@ -5,13 +5,13 @@ fn scalar_schema_rejects_ambiguous_or_lossy_definitions() {
     for (definition, expected) in [
         (
             quote!(
-                #[wem(value = u8)]
+                #[wmo(value = u8)]
                 enum Mode {
-                    #[wem(value = 0)]
+                    #[wmo(value = 0)]
                     A,
-                    #[wem(value = 0)]
+                    #[wmo(value = 0)]
                     B,
-                    #[wem(unknown)]
+                    #[wmo(unknown)]
                     Unknown(u8),
                 }
             ),
@@ -19,9 +19,9 @@ fn scalar_schema_rejects_ambiguous_or_lossy_definitions() {
         ),
         (
             quote!(
-                #[wem(value = u8)]
+                #[wmo(value = u8)]
                 enum Mode {
-                    #[wem(value = 0)]
+                    #[wmo(value = 0)]
                     A,
                 }
             ),
@@ -29,9 +29,9 @@ fn scalar_schema_rejects_ambiguous_or_lossy_definitions() {
         ),
         (
             quote!(
-                #[wem(value = u8)]
+                #[wmo(value = u8)]
                 enum Mode {
-                    #[wem(unknown)]
+                    #[wmo(unknown)]
                     Unknown(u32),
                 }
             ),
@@ -39,11 +39,11 @@ fn scalar_schema_rejects_ambiguous_or_lossy_definitions() {
         ),
         (
             quote!(
-                #[wem(value = u8)]
+                #[wmo(value = u8)]
                 enum Mode {
-                    #[wem(value = 0)]
+                    #[wmo(value = 0)]
                     A(u8),
-                    #[wem(unknown)]
+                    #[wmo(unknown)]
                     Unknown(u8),
                 }
             ),
@@ -51,9 +51,9 @@ fn scalar_schema_rejects_ambiguous_or_lossy_definitions() {
         ),
         (
             quote!(
-                #[wem(value = f32)]
+                #[wmo(value = f32)]
                 enum Mode {
-                    #[wem(unknown)]
+                    #[wmo(unknown)]
                     Unknown(f32),
                 }
             ),
@@ -61,11 +61,11 @@ fn scalar_schema_rejects_ambiguous_or_lossy_definitions() {
         ),
         (
             quote!(
-                #[wem(value = u8)]
+                #[wmo(value = u8)]
                 enum Mode {
-                    #[wem(value = 256)]
+                    #[wmo(value = 256)]
                     A,
-                    #[wem(unknown)]
+                    #[wmo(unknown)]
                     Unknown(u8),
                 }
             ),
@@ -73,11 +73,11 @@ fn scalar_schema_rejects_ambiguous_or_lossy_definitions() {
         ),
         (
             quote!(
-                #[wem(value = u8)]
+                #[wmo(value = u8)]
                 enum Mode {
-                    #[wem(value = -1)]
+                    #[wmo(value = -1)]
                     A,
-                    #[wem(unknown)]
+                    #[wmo(unknown)]
                     Unknown(u8),
                 }
             ),
@@ -85,7 +85,7 @@ fn scalar_schema_rejects_ambiguous_or_lossy_definitions() {
         ),
     ] {
         let input = syn::parse2(definition).unwrap();
-        let error = match parse(&input, Format::Wem) {
+        let error = match parse(&input, Format::Wmo) {
             Ok(_) => panic!("invalid schema accepted"),
             Err(error) => error,
         };
@@ -96,16 +96,16 @@ fn scalar_schema_rejects_ambiguous_or_lossy_definitions() {
 #[test]
 fn scalar_schema_accepts_signed_and_full_width_codes() {
     let input = syn::parse2(quote!(
-        #[wem(value = i64)]
+        #[wmo(value = i64)]
         enum Mode {
-            #[wem(value = -1)]
+            #[wmo(value = -1)]
             Sentinel,
-            #[wem(value = 0x7fffffffffffffff)]
+            #[wmo(value = 0x7fffffffffffffff)]
             Largest,
-            #[wem(unknown)]
+            #[wmo(unknown)]
             Unknown(i64),
         }
     ))
     .unwrap();
-    assert!(parse(&input, Format::Wem).is_ok());
+    assert!(parse(&input, Format::Wmo).is_ok());
 }

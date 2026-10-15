@@ -2,7 +2,6 @@ use wc3::model::conversion::{geometry, Context, ExportOptions};
 use wc3::model::semantic::{
     Attribute, AttributeDomain, AttributeSemantic, AttributeValues, Draw, DrawSubset, Material,
     Mesh, MeshInstance, ModelBuilder, Node, PrimitiveRange, PrimitiveSelection, Topology,
-    UniversalGeometry,
 };
 
 fn mesh() -> Mesh<'static> {
@@ -71,9 +70,7 @@ fn strip_selections_use_their_own_faces_and_explicit_index_counting() {
         connectivity: strip,
         range: PrimitiveRange::StripIndices { first: 0, count: 4 },
     }));
-    let UniversalGeometry::Data(data) = &mut source.geometry else {
-        unreachable!()
-    };
+    let data = &mut source.geometry;
     data.attributes
         .insert(Attribute {
             semantic: AttributeSemantic::Normal,
@@ -148,9 +145,7 @@ fn range_domains_and_connectivity_attribute_cardinality_are_checked() {
     let mut builder = ModelBuilder::new("wrong face count");
     let mut source = mesh();
     let connectivity = source.subsets.primary();
-    let UniversalGeometry::Data(data) = &mut source.geometry else {
-        unreachable!()
-    };
+    let data = &mut source.geometry;
     data.attributes
         .insert(Attribute {
             semantic: AttributeSemantic::Normal,

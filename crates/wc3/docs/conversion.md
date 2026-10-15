@@ -38,22 +38,10 @@ representations. M2, M3, and WMO also construct their native supporting document
 through bundles rather than leaving offsets or references for the caller to
 repair after writing.
 
-WEM's semantic vocabulary permits multiple models, shared resources, shader
-convention sets, and mixed payload families. Its typed domains are distinct from
-the native WEM `Document` and `RawDocument` APIs. `conversion::wem::import`
-accepts a decoded generation-three `RawDocument` and returns `Asset<Wem>`.
-Generation-one and generation-two envelopes remain accessible through the raw
-codec; the adapter does not interpret their distinct historical schemas. The WEM
-planner constructs a new generation-three `RawDocument` directly from the checked
-collection. Output record revisions
-follow actual authored declarations, including meaningful absence; the native
-document codec performs the subsequent byte encoding.
-
 Diablo III appearance import produces `Asset<D3>`. Caller-assembled bundles can
 include independently versioned animation documents, which bind to actual skeleton
 nodes by their authored bone names. Bundle output plans the appearance and
-animation resources together. Shader vocabulary is shared with WEM, but WEM's
-producer options remain outside the native Diablo shader definition.
+animation resources together.
 
 Diablo IV appearance import produces `Asset<D4>`. Native numeric vertex semantics
 and encodings require explicit caller-established `BufferLayout` declarations;
@@ -97,7 +85,7 @@ fn prepare(source: &mdlx::Model<'_, mdlx::V800>) -> Result<(), conversion::Error
 
 Selected appearance resolves the family's actual assignment domain. Native
 single-look formats use their chosen assignment; a broader appearance vocabulary
-can retain complete alternative draw assignments or WEM slot/set mounts. Native
+can retain complete alternative draw assignments or Diablo material slots. Native
 draw-based imports construct a complete default look, and export resolves each
 draw through the selected look without a base-material fallback. Export preserves
 known owner-local controls instead of synchronizing a common projection against
@@ -145,7 +133,7 @@ the default rejects them. Archiving unknown bytes cannot replace an active
 semantic definition of a known feature.
 
 Encoding hints are also separate from model meaning. They can retain physical
-qualifiers such as a native shader revision, an affine UV quantization, or otherwise
+qualifiers such as affine UV quantization or otherwise
 uninterpreted fourth bytes of D3 packed direction vectors.
 The logical values remain authoritative when they change. Hints neither store
 whole-file snapshots nor impose native layout restrictions on graph editing.
@@ -157,8 +145,8 @@ Shared assets, policies, reports, plans, and policy enforcement live under
 materials, effects, and supporting documents into focused modules. The checked
 graph and borrowed values live under `model/semantic`; authoring vocabularies
 live in its `profiles` namespace. Format-independent features and scoped simulation
-systems live under `semantic::scene`. Native WEM records and indexed-section editing
-remain under `model/wem`, independently of the semantic graph.
+systems live under `semantic::scene`. Native records remain under their format
+modules, independently of the semantic graph.
 
 Public adapter tests live under `crates/wc3/tests/model/conversion`; private
 mapping tests stay beside their implementation. They check the stated graph,

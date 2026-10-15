@@ -4,7 +4,7 @@ use crate::model::semantic::profiles::Profile;
 use crate::model::semantic::{
     Attribute, AttributeDomain, AttributeSemantic, AttributeValues, ConnectivityId, DrawId,
     GeometryParts, InfluenceRows, InstanceId, LookId, MaterialId, Mesh, Model, PrimitiveRange,
-    SkinId, Topology, UniversalGeometry, Values,
+    SkinId, Topology, Values,
 };
 use crate::model::semantic::{GeometryInfluences, GeometrySchema};
 use std::collections::BTreeMap;
@@ -254,23 +254,21 @@ pub fn project<'a, 'data: 'a, P: Profile>(
                         name: source.name.clone(),
                         controls: None,
                         bounds: source.bounds,
-                        geometry: UniversalGeometry::Data(
-                            GeometryParts {
-                                strip_set: false,
-                                surface_triangles: Values::default(),
-                                pools: Default::default(),
-                                kind: source.geometry.kind(),
-                                positions: source.positions().clone(),
-                                normals: source.normals().cloned().unwrap_or_default(),
-                                tangents: source.tangents().cloned().unwrap_or_default(),
-                                texture_coordinates: source.texture_coordinates().to_vec(),
-                                colors: source.colors().cloned().unwrap_or_default(),
-                                influences: GeometryInfluences::Variable(influences),
-                                topology: source.topology().clone(),
-                                attributes: Vec::new(),
-                            }
-                            .into_data()?,
-                        ),
+                        geometry: GeometryParts {
+                            strip_set: false,
+                            surface_triangles: Values::default(),
+                            pools: Default::default(),
+                            kind: source.geometry.kind(),
+                            positions: source.positions().clone(),
+                            normals: source.normals().cloned().unwrap_or_default(),
+                            tangents: source.tangents().cloned().unwrap_or_default(),
+                            texture_coordinates: source.texture_coordinates().to_vec(),
+                            colors: source.colors().cloned().unwrap_or_default(),
+                            influences: GeometryInfluences::Variable(influences),
+                            topology: source.topology().clone(),
+                            attributes: Vec::new(),
+                        }
+                        .into_data()?,
                     },
                 }]);
             }
@@ -511,23 +509,21 @@ pub fn project<'a, 'data: 'a, P: Profile>(
                 controls: None,
                 name: source.name.clone(),
                 bounds: source.bounds,
-                geometry: UniversalGeometry::Data(
-                    GeometryParts {
-                        strip_set: false,
-                        surface_triangles: Values::default(),
-                        pools: Default::default(),
-                        kind: source.geometry.kind(),
-                        positions,
-                        normals,
-                        tangents,
-                        colors,
-                        texture_coordinates: uv_sets,
-                        influences: GeometryInfluences::Variable(influences),
-                        topology,
-                        attributes,
-                    }
-                    .into_data()?,
-                ),
+                geometry: GeometryParts {
+                    strip_set: false,
+                    surface_triangles: Values::default(),
+                    pools: Default::default(),
+                    kind: source.geometry.kind(),
+                    positions,
+                    normals,
+                    tangents,
+                    colors,
+                    texture_coordinates: uv_sets,
+                    influences: GeometryInfluences::Variable(influences),
+                    topology,
+                    attributes,
+                }
+                .into_data()?,
             },
         });
     }

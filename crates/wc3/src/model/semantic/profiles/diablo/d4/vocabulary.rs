@@ -190,8 +190,7 @@ impl Extends<D4> for Universal {
         match value {}
     }
     fn asset<'a>(value: <D4 as Profile>::Asset<'a>) -> Self::Asset<'a> {
-        let _ = value;
-        None
+        value
     }
     fn appearance<'a>(value: <D4 as Profile>::Appearance<'a>) -> Self::Appearance<'a> {
         UniversalAppearance::D4(value)
@@ -243,13 +242,7 @@ impl Extends<D4> for Universal {
 }
 impl Narrows<Universal> for D4 {
     fn asset<'a>(value: <Universal as Profile>::Asset<'a>) -> Result<Self::Asset<'a>, Error> {
-        match value {
-            None => Ok(NoControls),
-            _ => Err(Error::new(
-                "d4.narrow.asset",
-                "payload belongs to another authoring vocabulary",
-            )),
-        }
+        Ok(value)
     }
     fn appearance<'a>(
         value: <Universal as Profile>::Appearance<'a>,

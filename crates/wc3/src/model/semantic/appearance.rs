@@ -1,7 +1,7 @@
 //! Appearance vocabularies preserve the assignments supported by their model family.
 use crate::model::semantic::profiles::{
     diablo::{d3, d4},
-    wem, Either,
+    Either,
 };
 use crate::model::semantic::{Error, Link, Look, LookId, MaterialSlotId, Scope, ValidateLinks};
 use std::collections::BTreeMap;
@@ -155,8 +155,6 @@ pub enum UniversalAppearance<'data> {
     Draw(DrawLooks<'data>),
     /// A single material assignment.
     Single(SingleLook<'data>),
-    /// Editable-model named slots and family-local alternatives.
-    Wem(wem::Appearance<'data>),
 }
 impl Default for UniversalAppearance<'_> {
     fn default() -> Self {
@@ -168,7 +166,6 @@ macro_rules! with_appearance {
         match $self {
             UniversalAppearance::Draw($value) => $body,
             UniversalAppearance::Single($value) => $body,
-            UniversalAppearance::Wem($value) => $body,
             UniversalAppearance::D4($value) => $body,
             UniversalAppearance::D3($value) => $body,
         }
@@ -201,16 +198,16 @@ impl<'data> DrawAppearanceSchema<'data> for UniversalAppearance<'data> {
         match self {
             Self::Draw(value) => value.look_mut(id),
             Self::Single(value) => value.look_mut(id),
-            Self::Wem(_) | Self::D4(_) | Self::D3(_) => None,
+            Self::D4(_) | Self::D3(_) => None,
         }
     }
     fn add_look(&mut self, id: LookId, look: Look<'data>) -> Result<(), Error> {
         match self {
             Self::Draw(value) => value.add_look(id, look),
             Self::Single(value) => value.add_look(id, look),
-            Self::Wem(_) | Self::D4(_) | Self::D3(_) => Err(Error::new(
+            Self::D4(_) | Self::D3(_) => Err(Error::new(
                 "appearance.draw",
-                "editable-model appearances assign named polygon-group slots",
+                "Diablo appearances assign material slots",
             )),
         }
     }
@@ -218,9 +215,9 @@ impl<'data> DrawAppearanceSchema<'data> for UniversalAppearance<'data> {
         match self {
             Self::Draw(value) => value.set_default_look(id),
             Self::Single(value) => value.set_default_look(id),
-            Self::Wem(_) | Self::D4(_) | Self::D3(_) => Err(Error::new(
+            Self::D4(_) | Self::D3(_) => Err(Error::new(
                 "appearance.draw",
-                "editable-model appearances select family-local slot alternatives",
+                "Diablo appearances select slot alternatives",
             )),
         }
     }
@@ -228,7 +225,7 @@ impl<'data> DrawAppearanceSchema<'data> for UniversalAppearance<'data> {
         match self {
             Self::Draw(value) => value.remove_look(id),
             Self::Single(value) => value.remove_look(id),
-            Self::Wem(_) | Self::D4(_) | Self::D3(_) => None,
+            Self::D4(_) | Self::D3(_) => None,
         }
     }
 }

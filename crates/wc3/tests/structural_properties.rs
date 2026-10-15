@@ -1,11 +1,13 @@
 use std::any::TypeId;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
-use wc3::model::semantic::profiles::mdlx::properties::{light, Layer as LayerProperties};
+use wc3::model::semantic::profiles::m2::properties::particle as m2_particle;
+use wc3::model::semantic::profiles::mdlx::properties::{
+    light, particle2, Layer as LayerProperties,
+};
 use wc3::model::semantic::profiles::mdlx::{
     Attachment, Layer as MdlxLayer, Light, Material as MdlxMaterial, Node as MdlxFeature,
 };
-use wc3::model::semantic::profiles::wem::actors::{starcraft, warcraft};
 use wc3::model::semantic::profiles::{Either, FeaturePayload, Mdlx, Profile, Universal, M2};
 use wc3::model::semantic::{
     Animated, Channel, Clock, Curve, FeatureId, FeatureKind, Link, Material, Model, Node, OwnerId,
@@ -70,14 +72,14 @@ fn target_hash<P: Profile>(target: &PropertyTarget<P>) -> u64 {
 }
 
 #[test]
-fn same_field_labels_in_distinct_producer_vocabularies_do_not_alias() {
+fn emission_rate_selectors_in_distinct_game_vocabularies_do_not_alias() {
     let mut builder = Model::<Universal>::builder("selectors");
     let node = builder.add_node(Node::named("owner")).unwrap();
     let feature = builder.reserve_feature(node);
-    let wc3 = warcraft::properties::EMISSION_RATE.bind(feature);
-    let sc2 = starcraft::properties::EMISSION_RATE.bind(feature);
-    assert_ne!(wc3, sc2);
-    assert_ne!(wc3.target().identity(), sc2.target().identity());
+    let wc3 = particle2::EMISSION_RATE.bind(feature);
+    let wow = m2_particle::RATE.bind(feature);
+    assert_ne!(wc3, wow);
+    assert_ne!(wc3.target().identity(), wow.target().identity());
 }
 
 #[test]

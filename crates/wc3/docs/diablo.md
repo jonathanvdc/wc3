@@ -177,9 +177,9 @@ independent values. Trigger attachments have no semantic event mapping.
 
 Standalone material revision 25, shader revision 150, and shader-map revision 26
 resources use `import_material`, `import_shader`, and `import_shader_map`, with
-matching `plan_*` operations. They share the Diablo shader vocabulary used by
-WEM, including external texture and shader selections, pass order, and unresolved
-option codes. WEM producer variant options remain in its own wrapper. These
+matching `plan_*` operations. They use the Diablo semantic shader vocabulary,
+including external texture and shader selections, pass order, and unresolved
+option codes. These
 resource adapters perform no dependency I/O and do not embed separately edited
 shader resources into an appearance document.
 

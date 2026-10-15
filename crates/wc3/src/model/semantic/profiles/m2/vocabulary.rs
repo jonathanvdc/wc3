@@ -129,8 +129,7 @@ impl Extends<M2> for Universal {
         UniversalProperty::M2(value)
     }
     fn asset<'a>(value: <M2 as Profile>::Asset<'a>) -> Self::Asset<'a> {
-        let _ = value;
-        None
+        value
     }
     fn appearance<'a>(value: <M2 as Profile>::Appearance<'a>) -> Self::Appearance<'a> {
         UniversalAppearance::Draw(value)

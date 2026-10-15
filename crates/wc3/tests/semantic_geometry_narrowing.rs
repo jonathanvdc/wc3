@@ -3,7 +3,7 @@ use wc3::model::semantic::{
     Attribute, AttributeDomain, AttributeSemantic, AttributeValues, ConnectivitySets, GeometryData,
     GeometryEdit, GeometryInfluences, GeometryKind, GeometrySchema, Influence, InfluenceRows,
     JointInfluences, M2Geometry, M3CollisionGeometry, M3DisplayGeometry, M3Geometry, MdlxGeometry,
-    Topology, UniversalGeometry, Values,
+    Topology, Values,
 };
 
 fn four() -> [Influence; 4] {
@@ -44,10 +44,10 @@ fn shared_vertices_narrow_across_profiles_without_changing_borrowed_streams() {
     )
     .unwrap();
     let widened = <Universal as Extends<M2>>::geometry(source);
-    assert!(matches!(widened, UniversalGeometry::Data(_)));
+
     let mdlx = <Mdlx as Narrows<Universal>>::geometry(widened.clone()).unwrap();
     let m3 = <M3 as Narrows<Universal>>::geometry(widened).unwrap();
-    for geometry in [UniversalGeometry::from(mdlx), UniversalGeometry::from(m3)] {
+    for geometry in [GeometryData::from(mdlx), GeometryData::from(m3)] {
         assert_eq!(
             geometry.positions().as_slice().unwrap().as_ptr(),
             positions.as_ptr()
@@ -162,7 +162,7 @@ fn grouping_and_collision_remain_distinct_from_single_display_topology() {
         vec![vec![[0, 0, 0]].into(), Vec::<[u32; 3]>::new().into()],
     )
     .unwrap();
-    let universal: UniversalGeometry<'_> = groups.into();
+    let universal: GeometryData<'_> = groups.into();
     assert!(<M2 as Narrows<Universal>>::geometry(universal.clone()).is_err());
     assert!(<M3 as Narrows<Universal>>::geometry(universal.clone()).is_err());
     let restored = <Mdlx as Narrows<Universal>>::geometry(universal).unwrap();
@@ -176,8 +176,8 @@ fn grouping_and_collision_remain_distinct_from_single_display_topology() {
         .unwrap()
         .with_triangle_controls(vec![3.5])
         .unwrap();
-    let universal = UniversalGeometry::from(M3Geometry::Collision(collision));
-    assert!(matches!(universal, UniversalGeometry::Data(_)));
+    let universal = GeometryData::from(M3Geometry::Collision(collision));
+
     assert_eq!(universal.kind(), GeometryKind::Collision);
     assert!(<Mdlx as Narrows<Universal>>::geometry(universal.clone()).is_err());
     let M3Geometry::Collision(restored) = <M3 as Narrows<Universal>>::geometry(universal).unwrap()
@@ -191,7 +191,7 @@ fn grouping_and_collision_remain_distinct_from_single_display_topology() {
 #[test]
 fn general_geometry_projects_only_when_its_full_domain_is_supported() {
     let mut general = GeometryData::triangles(vec![[0.; 3]], vec![[0, 0, 0]]).unwrap();
-    assert!(<Mdlx as Narrows<Universal>>::geometry(general.clone().into()).is_ok());
+    assert!(<Mdlx as Narrows<Universal>>::geometry(general.clone()).is_ok());
     general
         .attributes
         .insert(Attribute {
@@ -200,7 +200,7 @@ fn general_geometry_projects_only_when_its_full_domain_is_supported() {
             values: AttributeValues::Unsigned(vec![23].into()),
         })
         .unwrap();
-    assert!(<Mdlx as Narrows<Universal>>::geometry(general.into()).is_err());
+    assert!(<Mdlx as Narrows<Universal>>::geometry(general).is_err());
     let mut general = GeometryData::triangles(vec![[0.; 3]], vec![[0, 0, 0]]).unwrap();
     general.influences = GeometryInfluences::Variable(
         vec![vec![Influence {
@@ -209,7 +209,7 @@ fn general_geometry_projects_only_when_its_full_domain_is_supported() {
         }]]
         .into(),
     );
-    assert!(<Mdlx as Narrows<Universal>>::geometry(general.into()).is_err());
+    assert!(<Mdlx as Narrows<Universal>>::geometry(general).is_err());
 }
 
 #[test]
@@ -227,7 +227,7 @@ fn universal_edits_may_expand_capabilities_but_narrowing_checks_the_result() {
         ..Default::default()
     };
     assert!(source.edited(edit.clone()).is_err());
-    let universal = UniversalGeometry::from(source).edited(edit).unwrap();
+    let universal = GeometryData::from(source).edited(edit).unwrap();
     assert!(<M2 as Narrows<Universal>>::geometry(universal.clone()).is_err());
     assert!(<M3 as Narrows<Universal>>::geometry(universal).is_ok());
 }
@@ -256,14 +256,12 @@ fn shared_data_can_keep_custom_attributes_and_fixed_slots_together() {
             values: AttributeValues::Unsigned(Values::from_slice(&custom)),
         })
         .unwrap();
-    let universal: UniversalGeometry<'_> = data.into();
-    assert!(matches!(universal, UniversalGeometry::Data(_)));
+    let universal = data;
+
     assert!(<Mdlx as Narrows<Universal>>::geometry(universal.clone()).is_err());
     assert!(<M2 as Narrows<Universal>>::geometry(universal.clone()).is_err());
     assert!(<M3 as Narrows<Universal>>::geometry(universal.clone()).is_err());
-    let UniversalGeometry::Data(mut data) = universal else {
-        unreachable!()
-    };
+    let mut data = universal;
     let GeometryInfluences::Four(values) = &data.influences else {
         panic!("slot domain lost")
     };
@@ -488,7 +486,7 @@ fn collision_purpose_and_face_streams_survive_shared_storage() {
         assert!(M3DisplayGeometry::try_from(data.clone()).is_err());
         assert!(d3::Geometry::try_from(data.clone()).is_err());
         assert!(d4::Geometry::new(data.clone()).is_err());
-        let universal: UniversalGeometry<'_> = data.into();
+        let universal = data;
         assert!(<D3 as Narrows<Universal>>::geometry(universal.clone()).is_err());
         assert!(<D4 as Narrows<Universal>>::geometry(universal.clone()).is_err());
         let restored = <M3 as Narrows<Universal>>::geometry(universal).unwrap();

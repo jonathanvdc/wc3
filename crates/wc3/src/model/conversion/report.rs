@@ -1,4 +1,3 @@
-use super::super::wem;
 use std::error::Error as StdError;
 use std::fmt::{self, Display, Formatter};
 
@@ -67,16 +66,7 @@ impl Display for Error {
     }
 }
 impl StdError for Error {}
-impl From<wem::ReadError> for Error {
-    fn from(error: wem::ReadError) -> Self {
-        Self::new(format!("wem.bytes[{}]", error.offset), error.to_string())
-    }
-}
-impl From<wem::WriteError> for Error {
-    fn from(error: wem::WriteError) -> Self {
-        Self::new("wem", error.to_string())
-    }
-}
+
 impl From<super::super::semantic::Error> for Error {
     fn from(error: super::super::semantic::Error) -> Self {
         Self::new(error.path(), error.message())

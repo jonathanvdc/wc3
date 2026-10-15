@@ -521,6 +521,23 @@ impl<'data> GeometrySchema<'data> for M3Geometry<'data> {
     delegate!(validate,Result<(),Error>);
 }
 
+impl<'data> From<M3Geometry<'data>> for GeometryData<'data> {
+    fn from(value: M3Geometry<'data>) -> Self {
+        match value {
+            M3Geometry::Display(value) => value.into(),
+            M3Geometry::Collision(value) => value.into(),
+        }
+    }
+}
+impl<'data> TryFrom<GeometryData<'data>> for M3Geometry<'data> {
+    type Error = Error;
+    fn try_from(value: GeometryData<'data>) -> Result<Self, Error> {
+        match value.kind {
+            GeometryKind::Collision => Ok(Self::Collision(value.try_into()?)),
+            GeometryKind::Display => Ok(Self::Display(value.try_into()?)),
+        }
+    }
+}
 impl<'data> From<M3DisplayGeometry<'data>> for GeometryData<'data> {
     fn from(value: M3DisplayGeometry<'data>) -> Self {
         let GeometryStreams {

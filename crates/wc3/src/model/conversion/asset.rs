@@ -1,12 +1,11 @@
 use crate::model::common::FileKey;
 use crate::model::conversion::{Error, ExportOptions, Format};
 use crate::model::m3::records::{ReferenceFlags, VertexFlags};
-use crate::model::semantic::profiles::wem::ShaderFamily;
 use crate::model::semantic::profiles::{Extends, Narrows, Profile, Universal};
 use crate::model::semantic::Values;
 use crate::model::semantic::{
-    ClipId, ContainsCardinality, Error as SemanticError, MaterialId, MeshId, Model, ModelBuilder,
-    ModelCollection, OwnerId, Resources, ResourcesBuilder, SingleModel,
+    ContainsCardinality, Error as SemanticError, MeshId, Model, ModelBuilder, ModelCollection,
+    OwnerId, Resources, ResourcesBuilder, SingleModel,
 };
 use std::borrow::Cow;
 
@@ -36,28 +35,10 @@ pub enum EncodingHint<'a> {
         /// One triple per vertex, in normal, tangent, binormal order.
         values: Values<'a, [u8; 3]>,
     },
-    /// Producer cache fingerprints for saved WEM bake results; they do not validate edited programmes.
-    WemBakeFingerprints {
-        /// Actual clip containing the recorded bake.
-        clip: ClipId,
-        /// Fingerprint of original bake inputs.
-        inputs: u64,
-        /// Fingerprint of original generated keys.
-        written: u64,
-    },
     /// Uninterpreted qualifiers of the packed M3 vertex declaration.
     M3VertexQualifiers {
         /// Only qualifier bits 2–4; logical geometry owns all actual attribute selections.
         flags: VertexFlags,
-    },
-    /// Producer revision of a native shader declaration embedded in an editable document.
-    NativeShaderRevision {
-        /// Actual logical material whose native declaration has this provenance.
-        material: MaterialId,
-        /// Native-game family supplying the declaration.
-        source: ShaderFamily,
-        /// Producer-reported native revision, retained outside authored shading behavior.
-        revision: u32,
     },
     /// Affine native UV quantization. Current logical coordinates remain authoritative.
     M3TextureCoordinates {

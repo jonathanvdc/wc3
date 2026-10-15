@@ -85,7 +85,7 @@ fn narrowing_checks_native_asset_cardinality() {
         .finish()
         .unwrap()
         .widen::<Universal>();
-    let asset = Asset::from_models(vec![first, second], None).unwrap();
+    let asset = Asset::from_models(vec![first, second], Default::default()).unwrap();
     assert!(asset.try_narrow::<Mdlx>().is_err());
 }
 

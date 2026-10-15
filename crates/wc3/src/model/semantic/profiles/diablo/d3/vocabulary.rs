@@ -9,7 +9,7 @@ use crate::model::semantic::profiles::{
 use crate::model::semantic::{
     Basis, Billboard, Bounds, Error, ExplicitBinding, Inheritance, LengthUnit, MaterialSurface,
     Model, NodeControls, Resource, Resources, Single, SnoNamespace, Transform, UniversalAppearance,
-    UniversalBinding, UniversalGeometry,
+    UniversalBinding,
 };
 use crate::model::semantic::{
     ClipControls as AnyClipControls, MeshControls as AnyMeshControls,
@@ -180,8 +180,7 @@ impl Extends<D3> for Universal {
         match value {}
     }
     fn asset<'a>(value: <D3 as Profile>::Asset<'a>) -> Self::Asset<'a> {
-        let _ = value;
-        None
+        value
     }
     fn appearance<'a>(value: <D3 as Profile>::Appearance<'a>) -> Self::Appearance<'a> {
         UniversalAppearance::D3(value)
@@ -190,7 +189,7 @@ impl Extends<D3> for Universal {
         UniversalBinding::Explicit(value)
     }
     fn geometry<'a>(value: <D3 as Profile>::Geometry<'a>) -> Self::Geometry<'a> {
-        UniversalGeometry::Data(value.into())
+        value.into()
     }
     fn model<'a>(value: <D3 as Profile>::Model<'a>) -> Self::Model<'a> {
         Some(AnyModelControls::D3(value))
@@ -232,13 +231,7 @@ impl Extends<D3> for Universal {
 }
 impl Narrows<Universal> for D3 {
     fn asset<'a>(value: <Universal as Profile>::Asset<'a>) -> Result<Self::Asset<'a>, Error> {
-        match value {
-            None => Ok(NoControls),
-            _ => Err(Error::new(
-                "d3.narrow.asset",
-                "payload belongs to another authoring vocabulary",
-            )),
-        }
+        Ok(value)
     }
     fn appearance<'a>(
         value: <Universal as Profile>::Appearance<'a>,

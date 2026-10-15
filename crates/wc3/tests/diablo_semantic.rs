@@ -1,7 +1,7 @@
 use wc3::model::semantic::profiles::diablo::d3::{
     self, Geometry, NodeRole, VertexExtras, VertexStreams, D3,
 };
-use wc3::model::semantic::profiles::{NoControls, Universal, Wem};
+use wc3::model::semantic::profiles::{NoControls, Universal};
 use wc3::model::semantic::{Mesh, Model, Node, Resource, SnoNamespace, Texture, Values};
 
 fn triangle<'a>(positions: &'a [[f32; 3]]) -> Geometry<'a> {
@@ -95,7 +95,7 @@ fn independent_binormals_and_auxiliary_colors_are_validated() {
 }
 
 #[test]
-fn source_namespaces_do_not_alias_and_wem_cannot_erase_them() {
+fn source_namespaces_do_not_alias_and_profiles_require_their_game() {
     let d3 = Resource::Sno {
         namespace: SnoNamespace::Diablo3,
         group: 44,
@@ -107,16 +107,6 @@ fn source_namespaces_do_not_alias_and_wem_cannot_erase_them() {
         id: 7,
     };
     assert_ne!(d3, d4);
-    let mut builder = Model::<Wem>::builder("qualified");
-    builder
-        .add_texture(Texture {
-            resource: d3,
-            controls: Default::default(),
-            color_space: Default::default(),
-            sampler: Default::default(),
-        })
-        .unwrap();
-    assert!(builder.finish().is_err());
     let mut builder = Model::<D3>::builder("wrong game");
     builder
         .add_texture(Texture {
@@ -127,18 +117,6 @@ fn source_namespaces_do_not_alias_and_wem_cannot_erase_them() {
         })
         .unwrap();
     assert!(builder.finish().is_err());
-}
-
-#[test]
-fn wem_producer_options_surround_the_shared_shader_definition() {
-    use wc3::model::semantic::profiles::wem::materials::diablo::{DiabloMaterial, VariantFlags};
-    let shared = d3::Material::default();
-    let wrapper = DiabloMaterial {
-        variant_flags: Some(VariantFlags::from_bits_retain(i32::MIN)),
-        shader: shared,
-    };
-    wrapper.validate().unwrap();
-    assert_eq!(wrapper.variant_flags.unwrap().bits(), i32::MIN);
 }
 
 #[test]

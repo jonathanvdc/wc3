@@ -2,10 +2,9 @@
 
 `wc3::model::semantic` describes model meaning independently of file layout.
 Use it to inspect relationships, author changes, or prepare a native export.
-The MDLX, M2, M3, WMO, and WEM codecs remain the APIs for their encoded records
+The MDLX, M2, M3, WMO, and Diablo codecs remain the APIs for their encoded records
 and supporting documents. A semantic graph contains actual authoring values;
-it does not retain a native model or an encoded WEM document as its backing
-representation.
+it does not retain a native model as its backing representation.
 
 ## Objects and dependencies
 
@@ -39,15 +38,16 @@ the collection's resources, and its collection controls. Resource lookup through
 a view therefore uses the same owner as the rest of the collection.
 
 The cardinality parameter `Single` requires exactly one graph; `Multiple`
-permits several. Native MDLX, M2, M3, WMO, and Diablo assets use `Single`, while WEM can
-contain multiple models with shared dependencies. Collection controls describe
-shared behavior, including WEM animation selection banks. They are
-separate from declarations that belong to an individual model.
+permits several. Native MDLX, M2, M3, WMO, and Diablo assets use `Single`;
+`Universal` and union profiles can contain multiple models with shared dependencies.
+Collection controls describe shared behavior separately from declarations owned
+by an individual model. The built-in native profiles and `Universal` use
+`NoControls` for collection controls.
 
 ## Choosing an authoring vocabulary
 
 `Model<'data, P>` uses `P` to select the permitted authoring vocabulary. Built-in
-profiles in `semantic::profiles` include `Mdlx`, `M2`, `M3`, `Wmo`, `D3`, `D4`, and `Wem`.
+profiles in `semantic::profiles` include `Mdlx`, `M2`, `M3`, `Wmo`, `D3`, and `D4`.
 The default profile, `Universal`, accepts all built-in families. A profile selects
 complete geometry and joint-binding schemas, material surfaces, attached
 features, systems, appearance assignments, animation programs, and the controls
@@ -57,11 +57,11 @@ A profile chooses a required controls payload where absence has no meaning,
 `Option<Payload>` where the declaration is genuinely optional, or the zero-sized
 `NoControls` value where that owner has no additional controls. `Unavailable`
 prevents constructing an unsupported payload family. These distinctions apply
-to the actual types rather than a uniform outer option on every owner. WEM uses
-`wem::physics::Physics` directly as its system payload, and M2 uses
-`Option<m2::ShadowControls>` for draw controls. Unresolved Diablo shader codes
-and WEM warp modes use distinct numeric newtypes, preserving their producer
-values without an artificial `Unknown` branch. Embedded image resources carry
+to the actual types rather than a uniform outer option on every owner. M2 uses
+`Option<m2::ShadowControls>` for draw controls. Universal controller controls use
+`Option<m3::ControllerControls>` because M3 is the built-in controller vocabulary.
+Unresolved Diablo shader codes use distinct numeric newtypes, preserving their
+producer values without an artificial `Unknown` branch. Embedded image resources carry
 bytes whose encoding interpretation remains unspecified.
 
 A semantic profile and a native dialect answer different questions. `Mdlx`
@@ -120,7 +120,7 @@ joint identities cannot be substituted across simulation systems.
 
 Applications can implement `Profile` with their own payloads. Relationship
 traversal through `ValidateLinks` makes those payloads participate in checked
-publication. M2, M3, and WEM publication requires a bounding declaration; MDLX and
+publication. M2 and M3 publication requires a bounding declaration; MDLX and
 historical WMO retain optional bounds. A named MDLX model or one with animation-file
 or blend-time controls requires its model-info declaration. WMO bounds use an
 authored axis-aligned box with a sphere radius derived from its half-diagonal.
@@ -143,8 +143,8 @@ permits tangents, colors, and up to five UV slots with meaningful gaps. Checked
 constructors establish stream cardinalities and finite values; the profile types
 keep unsupported representations out of subsequent authoring operations.
 
-Widening these display types produces `UniversalGeometry::Data` containing
-`GeometryData`, without a source-profile tag. The arrays move unchanged,
+Widening these display types produces `GeometryData` directly, without a
+source-profile tag or an additional geometry wrapper. The arrays move unchanged,
 including borrowed slices, packed views, and shared owned buffers. Narrowing
 checks the actual streams before constructing the destination's constrained
 type. M2 geometry can therefore narrow to M3 display geometry, while M3 geometry
@@ -183,7 +183,7 @@ and influence representations that the destination cannot retain; even a
 variable-length row containing four entries remains distinct from four authored
 slots.
 
-Collision geometry also widens to `Data`, retaining `GeometryKind::Collision`
+Collision geometry also widens to `GeometryData`, retaining `GeometryKind::Collision`
 as its authored purpose. Face normals use face-domain `Normal` attributes, and
 per-triangle scalar controls use `CollisionTriangleControl`. Checked M3 narrowing
 requires collision purpose, supported connectivity, and correctly typed optional
@@ -270,8 +270,7 @@ expanding strips into triangles.
 
 Appearance schemas retain the family's actual assignment domain. A native
 family may use one material assignment, draw alternatives, or named material
-slots. WEM retains its shader-convention sets and alternatives, with slot bindings
-and a selected default. Diablo IV owns hashed material slots, slot-local variants, and hashed looks that
+slots. Diablo IV owns hashed material slots, slot-local variants, and hashed looks that
 select actual variants. These identities remain stable when native tables are
 rebuilt. Its geometry selects an actual material slot; it does not duplicate those
 assignments in common draw looks. D3 uses the same ownership pattern with named slots and named alternatives.
@@ -295,50 +294,18 @@ alternatives, complete each look before publication. `set_look` replaces an
 assignment while preserving its identity and selection. Removing a draw likewise
 requires removing its assignments from every look in the same checked edit.
 
-A material mount identifies a particular set, alternative,
-and slot; an animated shader contribution can therefore retain the authored
-selection rather than binding permanently to whichever material was initially
-visible.
-
-WEM can mix payload families within one model. Its Diablo material declaration
-wraps the shared `profiles::diablo::d3` shader vocabulary, retaining WEM producer
-variant options separately from the game shader state. Its document declarations select
-default conventions, while each surface and attached feature retains its own
-meaning. Its specialized Warcraft and World of Warcraft shader definitions
-retain external texture and transform selections alongside their independently
-authored common surface. The declared representation authority selects their
-relationship; an edit does not silently reconcile one representation from the
-other. Those selections refer to the originating shader's lookup domain, so they are distinct from document
-`TextureId` handles. StarCraft texture-layer paths instead resolve to shared
-collection texture definitions, retaining arbitrary path bytes and one edit
-authority for repeated filenames. An emitter field declared to address a WEM
-texture or material-slot table uses the corresponding checked document handle.
-
 Diablo resource identities include a game namespace: a D3 group/ID pair does not
-identify the D4 resource with the same numbers. WEM texture keys retain an
-unspecified namespace because their native record does not encode one. Export
-requires an explicit translation before a qualified identity can be written to
-that unqualified field.
+identify the D4 resource with the same numbers. Profile publication checks that
+resource identities belong to the selected game vocabulary.
 
 Playback programs belong to their actual clip or controller owners. MDLX
 non-global channels use one absolute authoring timeline, and sequences select
-intervals on it. Global sequences use shared clocks. WEM owns typed channel
-declarations on the model and typed program tracks on controller controls.
-Each declaration carries its target and initialization; each track refers to
-that declaration and owns its curve. The initialization and an actor payload's
-baseline remain separate authored values. WEM controller tracks are authoritative;
-they are not duplicated into the common controller channel list.
+intervals on it. Global sequences use shared clocks.
 
 D3 quaternion curves use explicit normalized linear interpolation (`Nlerp`),
 which remains distinct from spherical interpolation (`Slerp`). Both are restricted
 to quaternion-valued curves. Native exports reject an interpolation mode they
 cannot represent rather than substituting another rotation path.
-
-Pose stages and their animation sources have scoped identities within the model's
-pose pipeline. Stage controls address those identities, rather than preserving
-array indices as editable relationships. Simulation controls similarly select an
-actual body, rig, cloth, soft-body effect, or lump within its owning physics system.
-Their exact scalar, boolean, vector, and integer value domains remain distinct.
 
 ## Typed animation curves
 
@@ -359,8 +326,8 @@ owner identity type, value type, and property enum. For example,
 `profiles::mdlx::properties::Layer(index).texture_slot(slot)` selects a material
 layer and sampling slot through integer fields. M2 and M3 publish their selectors
 under their own `properties` modules. M3's nested fields use `FieldPath` with enum
-field segments and collection ordinals. WEM keeps Warcraft, World of Warcraft,
-and StarCraft actor selectors distinct even when their field labels coincide.
+field segments and collection ordinals. Each profile retains its own selector
+vocabulary even when field labels coincide.
 Publication checks owner identities, selector families, existing layer and slot
 ordinals, and declared value domains.
 
@@ -451,11 +418,9 @@ Ok::<(), wc3::model::semantic::Error>(())
 packing. It can borrow slices, decode packed elements on access, or project an
 indexed source through a view. Cloning shares that storage. Imported geometry
 and animation can therefore remain borrowed instead of allocating a second
-copy. The decoded source must outlive every view borrowing its storage. Canonical
-packed WEM attribute views also retain the borrowed primitive byte span, allowing
-an output codec to reuse that span when the destination representation matches.
-Edited or projected values retain their logical meaning and are encoded from those
-values when direct reuse is unavailable.
+copy. The decoded source must outlive every view borrowing its storage. Edited
+or projected values retain their logical meaning and are encoded from those
+values during export.
 
 A `ModelBuilder` collects an unpublished draft. Reserved IDs permit forward
 references where supported; `finish` checks their definitions, ownership, and
@@ -496,12 +461,11 @@ example, requires normals and exactly two UV streams. Diablo III tangent and
 binormal vectors remain distinct profile streams, so its common tangent-frame
 operation is unavailable. Capabilities guide tools before they submit an edit;
 validation still checks cardinalities, finite values, and the profile's complete
-invariants. Union branches retain their constrained schema. Universal `Data`
-geometry exposes the shared representation's broader editing capabilities: an
+invariants. Union branches retain their constrained schema. Universal `GeometryData`
+exposes the shared representation's broader editing capabilities: an
 M2 mesh widened to `Universal` can acquire tangents, but subsequent M2 narrowing
-rejects that added stream. Other universal variants retain their own complete
-schema. Custom schemas opt in by implementing the same two methods; their default
-implementation rejects common edits.
+rejects that added stream. Custom schemas opt in by implementing the same two
+methods; their default implementation rejects common edits.
 
 For structural edits, `VertexRemap` gives one old vertex index per new vertex and
 replacement connectivity. Repeated indices duplicate vertices, permutations
@@ -559,7 +523,5 @@ profile-specific attribute layers require explicit profile operations. Shared
 geometry with alternative connectivity or indexed pools rejects vertex remapping
 because those domains require separate correspondence. The constrained WMO API retains its existing strip
 restriction; pool selections need their own correspondence when vertices change.
-WEM geometry with declared edges, triangulations, or repair history also
-rejects remapping rather than guessing correspondence for those domains. Ordinary
-stream edits remain available for those meshes. Native index widths, packing, and
+Ordinary stream edits remain available for those meshes. Native index widths, packing, and
 quantization continue to be checked during export.

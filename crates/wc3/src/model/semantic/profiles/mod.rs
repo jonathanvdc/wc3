@@ -6,9 +6,8 @@ use crate::model::semantic::{
     SystemPayload, ValidateLinks,
 };
 use crate::model::semantic::{
-    ClipControls, ControllerControls, DrawControls, InstanceControls, Material, MeshControls,
+    ClipControls, DrawControls, GeometryData, InstanceControls, Material, MeshControls,
     NodeControls, System, TextureControls, UniversalAppearance, UniversalBinding,
-    UniversalGeometry,
 };
 use crate::model::semantic::{
     PropertyIdentityKey, PropertyKeyRef, PropertyPayload, PropertyTarget,
@@ -165,7 +164,7 @@ pub trait Profile: Clone + Debug + 'static {
     /// Checks relationships within additional authoring domains owned by this profile.
     ///
     /// Standard graph references have already been checked. Implementations can
-    /// inspect the complete model to validate domains such as saved pose slots.
+    /// inspect the complete model to validate profile-specific authoring domains.
     fn validate_model(model: &Model<'_, Self>) -> Result<(), Error> {
         let _ = model;
         Ok(())
@@ -251,10 +250,10 @@ pub struct Universal;
 impl Profile for Universal {
     type Property = UniversalProperty;
     type Models = Multiple;
-    type Asset<'a> = Option<wem::DocumentControls<'a>>;
+    type Asset<'a> = NoControls;
     type Appearance<'a> = UniversalAppearance<'a>;
     type Binding<'a> = UniversalBinding<'a>;
-    type Geometry<'a> = UniversalGeometry<'a>;
+    type Geometry<'a> = GeometryData<'a>;
     type Draw = Option<DrawControls>;
     type Model<'a> = Option<ModelControls<'a>>;
     type System<'a> = System<'a>;
@@ -265,22 +264,12 @@ impl Profile for Universal {
     type Mesh<'a> = Option<MeshControls>;
     type Instance<'a> = Option<InstanceControls<'a>>;
     type Clip<'a> = Option<ClipControls<'a>>;
-    type Controller<'a> = Option<ControllerControls<'a>>;
+    type Controller<'a> = Option<m3::ControllerControls<'a>>;
     fn mesh_skin(controls: &Self::Mesh<'_>) -> Option<SkinId> {
         match controls {
             Some(MeshControls::M3(value)) => value.skin,
             _ => None,
         }
-    }
-    fn validate_model(model: &Model<'_, Self>) -> Result<(), Error> {
-        wem::validate_universal_model(model)
-    }
-    fn validate_asset<'a>(
-        controls: &Self::Asset<'a>,
-        models: &[Model<'a, Self>],
-        _resources: &Resources<'a, Self>,
-    ) -> Result<(), Error> {
-        wem::validate_universal_asset(controls.as_ref(), models)
     }
 }
 /// Proof that a target vocabulary can accept every source payload unchanged.
@@ -381,7 +370,6 @@ impl ValidateLinks for MaterialSurface<'_> {
             Self::M2(value) => value.visit_links(visitor),
             Self::M3(value) => value.visit_links(visitor),
             Self::Wmo(value) => value.visit_links(visitor),
-            Self::Wem(value) => value.visit_links(visitor),
         }
     }
 }
@@ -407,7 +395,7 @@ impl SurfacePayload for MaterialSurface<'_> {
             Self::Mdlx(v) => v.supports_property(key),
             Self::M2(v) => v.supports_property(key),
             Self::M3(v) => v.supports_property(key),
-            Self::Wem(v) => v.supports_property(key),
+
             Self::D3(v) => v.supports_property(key),
             Self::D4(v) => v.supports_property(key),
             Self::Wmo(v) => v.supports_property(key),
@@ -420,7 +408,7 @@ impl SurfacePayload for MaterialSurface<'_> {
             Self::D4(value) => value.validate(),
             Self::D3(value) => value.validate(),
             Self::Generic(value) => value.validate(),
-            Self::Wem(value) => value.validate(),
+
             _ => Ok(()),
         }
     }
@@ -431,7 +419,7 @@ impl FeaturePayload for NodeFeature<'_> {
             Self::Mdlx(v) => v.supports_property(key),
             Self::M2(v) => v.supports_property(key),
             Self::M3(v) => v.supports_property(key),
-            Self::Wem(v) => v.supports_property(key),
+
             Self::Wmo(v) => v.supports_property(key),
             Self::Generic(_) => false,
         }
@@ -609,14 +597,10 @@ pub mod m3;
 pub mod mdlx;
 pub mod wmo;
 
-/// Editable-model authoring domains, independent of indexed document storage.
-pub mod wem;
-pub use wem::Wem;
-
 mod narrowing;
 pub use narrowing::Narrows;
 
-/// Diablo game authoring vocabularies shared with editable-model declarations.
+/// Diablo game authoring vocabularies independent of native document layouts.
 pub mod diablo;
 
 pub use diablo::d3::D3;
@@ -662,8 +646,6 @@ pub enum UniversalProperty {
     M2(m2::properties::Target),
     /// StarCraft II destination.
     M3(m3::properties::Target),
-    /// WEM actor destination.
-    Wem(wem::properties::Target),
 }
 impl PropertyPayload for UniversalProperty {
     fn identity(&self) -> PropertyKeyRef<'_> {
@@ -671,7 +653,6 @@ impl PropertyPayload for UniversalProperty {
             Self::Mdlx(v) => v.identity(),
             Self::M2(v) => v.identity(),
             Self::M3(v) => v.identity(),
-            Self::Wem(v) => v.identity(),
         }
     }
     fn from_identity(key: &PropertyIdentityKey) -> Option<Self> {
@@ -679,14 +660,12 @@ impl PropertyPayload for UniversalProperty {
             .map(Self::Mdlx)
             .or_else(|| m2::properties::Target::from_identity(key).map(Self::M2))
             .or_else(|| m3::properties::Target::from_identity(key).map(Self::M3))
-            .or_else(|| wem::properties::Target::from_identity(key).map(Self::Wem))
     }
     fn value_type(&self) -> Option<TypeId> {
         match self {
             Self::Mdlx(v) => v.value_type(),
             Self::M2(v) => v.value_type(),
             Self::M3(v) => v.value_type(),
-            Self::Wem(v) => v.value_type(),
         }
     }
     fn accepts_owner(&self, owner: OwnerId) -> bool {
@@ -694,7 +673,6 @@ impl PropertyPayload for UniversalProperty {
             Self::Mdlx(v) => v.accepts_owner(owner),
             Self::M2(v) => v.accepts_owner(owner),
             Self::M3(v) => v.accepts_owner(owner),
-            Self::Wem(v) => v.accepts_owner(owner),
         }
     }
 }

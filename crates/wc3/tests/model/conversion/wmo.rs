@@ -570,9 +570,7 @@ fn strip_connectivity_and_tangent_pools_are_independent_editable_geometry() {
     assert!(invalid
         .edit_model(0, |builder| {
             let mut mesh = builder.model().mesh(id).unwrap().clone();
-            let wc3::model::semantic::UniversalGeometry::Data(data) = &mut mesh.geometry else {
-                unreachable!()
-            };
+            let data = &mut mesh.geometry;
             data.connectivity = wc3::model::semantic::ConnectivitySets::new(
                 data.connectivity.primary.clone(),
                 Vec::new(),

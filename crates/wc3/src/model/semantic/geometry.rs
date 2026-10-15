@@ -6,7 +6,7 @@ use crate::model::semantic::{Attributes, BindMatrices, IdentityBinding, SurfaceT
 use crate::model::semantic::{
     ConnectivityId, ConnectivitySets, DrawId, DrawSubset, DrawSubsetId, DrawSubsets, Error,
     GeometryData, GeometryEdit, GeometrySchema, InfluenceRows, MeshId, NodeId, PrimitiveRange,
-    PrimitiveSelection, Scope, SkinId, UniversalGeometry, Values,
+    PrimitiveSelection, Scope, SkinId, Values,
 };
 use std::borrow::Cow;
 use std::collections::BTreeMap;
@@ -545,11 +545,11 @@ impl<'a> Mesh<'a> {
         positions: impl Into<Values<'a, [f32; 3]>>,
         triangles: impl Into<Values<'a, [u32; 3]>>,
     ) -> Self {
-        Self::new(UniversalGeometry::Data(GeometryData {
+        Self::new(GeometryData {
             positions: positions.into(),
             connectivity: ConnectivitySets::new(Topology::Triangles(triangles.into()), Vec::new()),
             ..GeometryData::default()
-        }))
+        })
     }
 }
 

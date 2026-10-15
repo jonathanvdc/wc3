@@ -288,7 +288,7 @@ fn static_collision_streams_remain_borrowed_and_independently_editable() {
     use wc3::model::semantic::profiles::Universal;
     use wc3::model::semantic::{
         AttributeDomain, AttributeSemantic, GeometryKind, GeometrySchema, M3CollisionGeometry,
-        M3Geometry, UniversalGeometry, Values,
+        M3Geometry, Values,
     };
     let source = source();
     let id = source.model.root_id();
@@ -342,9 +342,7 @@ fn static_collision_streams_remain_borrowed_and_independently_editable() {
         .edit_model(0, |draft| {
             let mut mesh = draft.model().mesh(collision).unwrap().clone();
             let primary = mesh.subsets.primary();
-            let UniversalGeometry::Data(data) = &mut mesh.geometry else {
-                unreachable!()
-            };
+            let data = &mut mesh.geometry;
             let index = data
                 .attributes
                 .iter()

@@ -2,8 +2,8 @@
 use crate::model::semantic::TextureCoordinates;
 use crate::model::semantic::{
     AttributeDomain, Attributes, Error, GeometryData, GeometryEdit, GeometryEditCapabilities,
-    GeometryInfluences, GeometryKind, GeometrySchema, InfluenceRows, Link, Topology,
-    UniversalGeometry, ValidateLinks, Values,
+    GeometryInfluences, GeometryKind, GeometrySchema, InfluenceRows, Link, Topology, ValidateLinks,
+    Values,
 };
 
 /// Triangle geometry whose independently declared streams retain their logical values.
@@ -91,20 +91,14 @@ impl<'a> GeometrySchema<'a> for Geometry<'a> {
     }
 }
 
-impl<'a> From<Geometry<'a>> for UniversalGeometry<'a> {
+impl<'a> From<Geometry<'a>> for GeometryData<'a> {
     fn from(value: Geometry<'a>) -> Self {
-        Self::Data(value.into_data())
+        value.into_data()
     }
 }
-impl<'a> TryFrom<UniversalGeometry<'a>> for Geometry<'a> {
+impl<'a> TryFrom<GeometryData<'a>> for Geometry<'a> {
     type Error = Error;
-    fn try_from(value: UniversalGeometry<'a>) -> Result<Self, Error> {
-        match value {
-            UniversalGeometry::Data(data) => Self::new(data),
-            _ => Err(Error::new(
-                "d4.narrow.geometry",
-                "geometry carries a different authored domain",
-            )),
-        }
+    fn try_from(value: GeometryData<'a>) -> Result<Self, Error> {
+        Self::new(value)
     }
 }

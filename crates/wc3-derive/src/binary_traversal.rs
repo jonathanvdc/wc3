@@ -27,7 +27,6 @@ fn expand_checked(input: DeriveInput, operation: Operation, format: Format) -> R
         Format::M2 => quote!(::wc3::model::m2),
         Format::Wmo => quote!(::wc3::model::wmo),
         Format::M3 => quote!(::wc3::model::m3),
-        Format::Wem => quote!(::wc3::model::wem),
     };
     let name = &input.ident;
     let (_, type_generics, _) = input.generics.split_for_impl();

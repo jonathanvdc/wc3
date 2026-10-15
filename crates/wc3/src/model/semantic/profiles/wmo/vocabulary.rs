@@ -58,8 +58,7 @@ impl Extends<Wmo> for Universal {
         match value {}
     }
     fn asset<'a>(value: <Wmo as Profile>::Asset<'a>) -> Self::Asset<'a> {
-        let _ = value;
-        None
+        value
     }
     fn appearance<'a>(value: <Wmo as Profile>::Appearance<'a>) -> Self::Appearance<'a> {
         UniversalAppearance::Single(value)

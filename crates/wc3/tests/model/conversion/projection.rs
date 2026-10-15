@@ -2,7 +2,7 @@ use wc3::model::conversion::{geometry, Context, ExportOptions};
 use wc3::model::semantic::{
     Attribute, AttributeDomain, AttributeSemantic, AttributeValues, ConnectivitySets, Draw,
     GeometryData, InstanceId, Material, Mesh, MeshId, MeshInstance, ModelBuilder, Node,
-    SingleModel, Topology, UniversalGeometry,
+    SingleModel, Topology,
 };
 
 fn fixture() -> (SingleModel<'static>, MeshId, InstanceId) {
@@ -11,7 +11,7 @@ fn fixture() -> (SingleModel<'static>, MeshId, InstanceId) {
     let first = draft.add_material(Material::pbr().named("first")).unwrap();
     let second = draft.add_material(Material::pbr().named("second")).unwrap();
     let mesh = draft
-        .add_mesh(Mesh::new(UniversalGeometry::Data(GeometryData {
+        .add_mesh(Mesh::new(GeometryData {
             positions: vec![[0., 0., 0.], [1., 0., 0.], [1., 1., 0.], [0., 1., 0.]].into(),
             connectivity: ConnectivitySets::new(
                 Topology::Triangles(vec![[0, 1, 2], [0, 2, 3]].into()),
@@ -34,7 +34,7 @@ fn fixture() -> (SingleModel<'static>, MeshId, InstanceId) {
             .try_into()
             .unwrap(),
             ..Default::default()
-        })))
+        }))
         .unwrap();
     let mut instance = MeshInstance::new(node, mesh);
     instance.draws = vec![
@@ -72,9 +72,7 @@ fn projection_preserves_face_materials_normals_and_uv_seams() {
 fn editing_a_corner_keeps_the_shared_vertex_and_other_corner_unchanged() {
     let (mut model, mesh, instance) = fixture();
     let mut edited = model.mesh(mesh).unwrap().clone();
-    let UniversalGeometry::Data(geometry) = &mut edited.geometry else {
-        unreachable!()
-    };
+    let geometry = &mut edited.geometry;
     geometry
         .attributes
         .update(1, |attribute| {
@@ -109,9 +107,7 @@ fn editing_a_corner_keeps_the_shared_vertex_and_other_corner_unchanged() {
 fn invalid_source_topology_cannot_replace_published_geometry() {
     let (mut model, mesh, _) = fixture();
     let mut edited = model.mesh(mesh).unwrap().clone();
-    let UniversalGeometry::Data(geometry) = &mut edited.geometry else {
-        unreachable!()
-    };
+    let geometry = &mut edited.geometry;
     geometry.connectivity.primary = Topology::Triangles(vec![[0, 1, 99], [0, 2, 3]].into());
     assert!(model.edit(|draft| draft.set_mesh(mesh, edited)).is_err());
     assert_eq!(model.mesh(mesh).unwrap().positions().len(), 4);
@@ -121,9 +117,7 @@ fn invalid_source_topology_cannot_replace_published_geometry() {
 fn shared_vertex_edits_update_both_draw_projections() {
     let (mut model, mesh, instance) = fixture();
     let mut edited = model.mesh(mesh).unwrap().clone();
-    let UniversalGeometry::Data(geometry) = &mut edited.geometry else {
-        unreachable!()
-    };
+    let geometry = &mut edited.geometry;
     let mut positions = geometry.positions.to_vec();
     positions[0] = [7., 0., 0.];
     geometry.positions = positions.into();
@@ -145,9 +139,7 @@ fn face_attributes_override_vertex_attributes_during_native_projection() {
     model
         .edit(|draft| {
             let mut edited = draft.model().mesh(mesh).unwrap().clone();
-            let UniversalGeometry::Data(data) = &mut edited.geometry else {
-                unreachable!()
-            };
+            let data = &mut edited.geometry;
             data.set_normals(vec![[1., 0., 0.]; 4].into());
             draft.set_mesh(mesh, edited)
         })

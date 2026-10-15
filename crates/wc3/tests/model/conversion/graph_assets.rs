@@ -29,7 +29,8 @@ fn shared_texture_edits_publish_once_for_every_model() {
             .unwrap();
         draft.finish().unwrap()
     };
-    let mut asset = Asset::from_models(vec![build("first"), build("second")], None).unwrap();
+    let mut asset =
+        Asset::from_models(vec![build("first"), build("second")], Default::default()).unwrap();
     asset
         .edit_resources(|draft| draft.set_texture(texture, Texture::file("edited.blp")))
         .unwrap();

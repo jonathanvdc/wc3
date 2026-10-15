@@ -1,4 +1,4 @@
-//! Borrowed vertex arrays and logical joint identities decoded without WEM.
+//! Borrowed vertex arrays and logical joint identities decoded from native geometry.
 use super::state::ImportState;
 use crate::model::conversion::Error;
 use crate::model::mdlx::geometry::SkinWeight;

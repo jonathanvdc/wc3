@@ -1,4 +1,4 @@
-//! Native shader and shader-map resources use the same pass vocabulary as WEM.
+//! Native shader and shader-map resources map to the Diablo pass vocabulary.
 use super::{i32_count, name, text};
 use crate::model::conversion::{Conversion, Error, ExportOptions, ImportOptions, Plan};
 use crate::model::diablo::d3::records as native;

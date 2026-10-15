@@ -526,7 +526,7 @@ impl<'data, P: Profile, C: Cardinality> ModelCollection<'data, P, C> {
 
 #[cfg(test)]
 mod tests {
-    use crate::model::semantic::profiles::Universal;
+    use crate::model::semantic::profiles::{NoControls, Universal};
     use crate::model::semantic::{
         ModelBuilder, ModelCollection, Multiple, Resources, Single, Texture,
     };
@@ -539,7 +539,7 @@ mod tests {
         let second_texture = second.add_texture(Texture::file("second.blp")).unwrap();
         let set = ModelCollection::<Universal, Multiple>::from_models(
             vec![first.finish().unwrap(), second.finish().unwrap()],
-            None,
+            NoControls,
         )
         .unwrap();
         assert_eq!(set.resources().len(), 2);
@@ -556,7 +556,7 @@ mod tests {
         let single = ModelBuilder::new("single").finish().unwrap();
         assert!(ModelCollection::<Universal, Multiple>::from_models(
             vec![single.clone(), single],
-            None
+            NoControls
         )
         .is_err());
     }
@@ -575,7 +575,7 @@ mod tests {
             .unwrap();
         assert!(ModelCollection::<Universal, Multiple>::from_models(
             vec![first.finish().unwrap(), second.finish().unwrap()],
-            None
+            NoControls
         )
         .is_err());
     }
@@ -585,7 +585,8 @@ mod tests {
         let first = ModelBuilder::new("first").finish().unwrap();
         let second = ModelBuilder::new("second").finish().unwrap();
         assert!(
-            ModelCollection::<Universal, Single>::from_models(vec![first, second], None).is_err()
+            ModelCollection::<Universal, Single>::from_models(vec![first, second], NoControls)
+                .is_err()
         );
     }
     #[test]

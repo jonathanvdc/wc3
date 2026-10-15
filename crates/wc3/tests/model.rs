@@ -11,8 +11,5 @@ mod wmo;
 #[path = "model/m3/mod.rs"]
 mod m3;
 
-#[path = "model/wem/mod.rs"]
-mod wem;
-
 #[path = "model/conversion/mod.rs"]
 mod conversion;

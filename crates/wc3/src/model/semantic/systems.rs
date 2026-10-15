@@ -15,8 +15,6 @@ pub enum ModelControls<'a> {
     M3(profiles::m3::ModelControls),
     /// World-model rendering and environment settings.
     Wmo(profiles::wmo::ModelControls<'a>),
-    /// Editable-model saved poses and preparation settings.
-    Wem(profiles::wem::ModelControls<'a>),
 }
 impl ValidateLinks for ModelControls<'_> {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
@@ -27,7 +25,6 @@ impl ValidateLinks for ModelControls<'_> {
             Self::M2(value) => value.visit_links(visitor),
             Self::M3(value) => value.visit_links(visitor),
             Self::Wmo(value) => value.visit_links(visitor),
-            Self::Wem(value) => value.visit_links(visitor),
         }
     }
 }
@@ -42,8 +39,6 @@ pub enum System<'a> {
     M3(profiles::m3::System<'a>),
     /// Static-world groups, portals, and environment volumes.
     Wmo(profiles::wmo::WorldSystem<'a>),
-    /// Editable-model mixed-family simulation domain.
-    Wem(profiles::wem::physics::Physics<'a>),
 }
 impl ValidateLinks for System<'_> {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
@@ -57,7 +52,6 @@ impl ValidateLinks for System<'_> {
             Self::M2(value) => value.visit_links(visitor),
             Self::M3(value) => value.visit_links(visitor),
             Self::Wmo(value) => value.visit_links(visitor),
-            Self::Wem(value) => value.visit_links(visitor),
         }
     }
 }
@@ -83,7 +77,6 @@ pub trait SystemPayload: profiles::ControlsPayload {
         false
     }
 }
-impl SystemPayload for profiles::wem::physics::Physics<'_> {}
 impl SystemPayload for profiles::m2::System<'_> {}
 impl SystemPayload for profiles::m3::System<'_> {}
 impl SystemPayload for profiles::Unavailable {}
@@ -110,7 +103,7 @@ impl SystemPayload for System<'_> {
     fn contains(&self, member: SystemMember) -> bool {
         match self {
             Self::Wmo(value) => value.contains(member),
-            Self::Wem(value) => value.contains(member),
+
             _ => false,
         }
     }

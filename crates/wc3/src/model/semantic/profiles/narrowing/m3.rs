@@ -2,16 +2,12 @@
 use super::{incompatible, Narrows};
 use crate::model::semantic::profiles::{NoControls, Profile, Universal, M3};
 use crate::model::semantic::{
-    ClipControls, ControllerControls, DrawControls, Error, InstanceControls, MaterialSurface,
-    MeshControls, ModelControls, NodeControls, NodeFeature, System, UniversalAppearance,
-    UniversalBinding,
+    ClipControls, DrawControls, Error, InstanceControls, MaterialSurface, MeshControls,
+    ModelControls, NodeControls, NodeFeature, System, UniversalAppearance, UniversalBinding,
 };
 impl Narrows<Universal> for M3 {
     fn asset<'a>(value: <Universal as Profile>::Asset<'a>) -> Result<Self::Asset<'a>, Error> {
-        match value {
-            None => Ok(NoControls),
-            _ => Err(incompatible("asset")),
-        }
+        Ok(value)
     }
     fn appearance<'a>(
         value: <Universal as Profile>::Appearance<'a>,
@@ -101,7 +97,7 @@ impl Narrows<Universal> for M3 {
         value: <Universal as Profile>::Controller<'a>,
     ) -> Result<Self::Controller<'a>, Error> {
         match value {
-            Some(ControllerControls::M3(value)) => Ok(value),
+            Some(value) => Ok(value),
             _ => Err(incompatible("controller")),
         }
     }

@@ -15,8 +15,6 @@ pub enum Format {
     Diablo3,
     /// Diablo IV model resources.
     Diablo4,
-    /// Editable model documents.
-    Wem,
 }
 /// Handling of data without a destination representation.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]

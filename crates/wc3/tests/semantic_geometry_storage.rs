@@ -5,8 +5,8 @@ use wc3::model::semantic::profiles::{
 use wc3::model::semantic::{
     Attribute, AttributeDomain, AttributeSemantic, AttributeValues, ConnectivitySets, GeometryData,
     GeometryEdit, GeometryInfluences, GeometrySchema, Influence, InfluenceRows, JointInfluences,
-    M3CollisionGeometry, MdlxGeometry, SurfaceTriangleControls, Topology, UniversalGeometry,
-    Values, VertexRemap, WmoGeometry,
+    M3CollisionGeometry, MdlxGeometry, SurfaceTriangleControls, Topology, Values, VertexRemap,
+    WmoGeometry,
 };
 
 fn duplicate() -> GeometryEdit<'static> {
@@ -116,10 +116,8 @@ fn three_slot_vertices_preserve_borrowing_independent_vectors_and_vertex_extras(
     };
     let geometry = d3::Geometry::new(streams, vec![[0, 1, 2]], Values::from_slice(&rows)).unwrap();
     let universal = <Universal as Extends<D3>>::geometry(geometry);
-    assert!(matches!(universal, UniversalGeometry::Data(_)));
-    let UniversalGeometry::Data(data) = universal.clone() else {
-        unreachable!()
-    };
+
+    let data = universal.clone();
     for index in 0..data.attributes.len() {
         let mut missing = data.clone();
         missing.attributes.remove(index);
@@ -250,7 +248,7 @@ fn declared_geometry_widens_without_a_format_tag_and_narrows_by_its_actual_domai
         })
         .unwrap();
     let universal = <Universal as Extends<D4>>::geometry(d4::Geometry::new(data.clone()).unwrap());
-    assert!(matches!(universal, UniversalGeometry::Data(_)));
+
     let restored = <D4 as Narrows<Universal>>::geometry(universal).unwrap();
     assert_eq!(
         restored.positions().as_slice().unwrap().as_ptr(),
@@ -260,17 +258,17 @@ fn declared_geometry_widens_without_a_format_tag_and_narrows_by_its_actual_domai
         panic!("declared stream lost")
     };
     assert_eq!(values.as_slice().unwrap().as_ptr(), declared.as_ptr());
-    assert!(<D4 as Narrows<Universal>>::geometry(data.clone().into()).is_ok());
+    assert!(<D4 as Narrows<Universal>>::geometry(data.clone()).is_ok());
     data.attributes
         .update(0, |attribute| attribute.domain = AttributeDomain::Corner)
         .unwrap();
-    assert!(<D4 as Narrows<Universal>>::geometry(data.into()).is_err());
+    assert!(<D4 as Narrows<Universal>>::geometry(data).is_err());
     let points = GeometryData {
         positions: Values::from_slice(&positions),
         connectivity: ConnectivitySets::new(Topology::Points(vec![0, 1, 2].into()), Vec::new()),
         ..Default::default()
     };
-    assert!(<D4 as Narrows<Universal>>::geometry(points.into()).is_err());
+    assert!(<D4 as Narrows<Universal>>::geometry(points).is_err());
     let vertices = MdlxGeometry::triangles(&positions[..], vec![[0, 1, 2]]).unwrap();
     assert!(<D4 as Narrows<Universal>>::geometry(vertices.clone().into()).is_ok());
     let grouped = vertices
@@ -365,10 +363,8 @@ fn world_shared_domains_preserve_pools_slots_controls_and_checked_edits() {
         .unwrap()
         .with_triangle_controls(Values::from_slice(&controls))
         .unwrap();
-    let universal: UniversalGeometry<'_> = original.into();
-    let UniversalGeometry::Data(data) = &universal else {
-        unreachable!()
-    };
+    let universal: GeometryData<'_> = original.into();
+    let data = &universal;
     assert_eq!(
         data.strip_indices().unwrap().as_slice().unwrap().as_ptr(),
         strips.as_ptr()
@@ -463,7 +459,7 @@ fn world_shared_domains_preserve_pools_slots_controls_and_checked_edits() {
     let empty = WmoGeometry::default()
         .with_color_sets(vec![Values::default(), Values::default()])
         .unwrap();
-    let restored = WmoGeometry::try_from(UniversalGeometry::from(empty)).unwrap();
+    let restored = WmoGeometry::try_from(GeometryData::from(empty)).unwrap();
     assert_eq!(restored.color_sets().len(), 2);
 }
 

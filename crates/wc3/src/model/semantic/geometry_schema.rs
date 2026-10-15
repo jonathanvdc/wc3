@@ -1,11 +1,11 @@
 //! Complete geometry vocabularies with borrowed inspection of their logical streams.
 use crate::model::semantic::geometry_edit::{check_edit, remap_values};
-use crate::model::semantic::profiles::{self as profiles, Either};
+use crate::model::semantic::profiles::Either;
 use crate::model::semantic::{
     Attribute, AttributeDomain, AttributeSemantic, AttributeValues, ConnectivityId,
     ConnectivitySets, DrawSubsetCapabilities, Error, GeometryAttributes, GeometryInfluences,
-    Influence, Link, M2Geometry, M3CollisionGeometry, M3Geometry, MdlxGeometry, NodeInfluence,
-    SurfaceTriangleControls, TextureCoordinates, Topology, ValidateLinks, Values, VertexInfluences,
+    Influence, Link, NodeInfluence, SurfaceTriangleControls, TextureCoordinates, Topology,
+    ValidateLinks, Values, VertexInfluences,
 };
 use crate::model::semantic::{GeometryEdit, GeometryEditCapabilities, StreamSupport};
 use std::fmt::{Debug, Formatter, Result as FmtResult};
@@ -243,170 +243,6 @@ impl InfluenceRows<'_, '_> {
     }
 }
 
-/// Geometry representations distinguished by their authored data, rather than source format.
-#[derive(Clone, Debug)]
-pub enum UniversalGeometry<'data> {
-    /// Shared streams, connectivity, attributes, and explicit influence representations.
-    Data(GeometryData<'data>),
-    /// Editable-model polygon groups, typed layers, and direct node influences.
-    Wem(profiles::wem::Geometry<'data>),
-}
-impl Default for UniversalGeometry<'_> {
-    fn default() -> Self {
-        Self::Data(GeometryData::default())
-    }
-}
-impl<'data> From<MdlxGeometry<'data>> for UniversalGeometry<'data> {
-    fn from(value: MdlxGeometry<'data>) -> Self {
-        Self::Data(value.into())
-    }
-}
-impl<'data> From<M2Geometry<'data>> for UniversalGeometry<'data> {
-    fn from(value: M2Geometry<'data>) -> Self {
-        Self::Data(value.into())
-    }
-}
-impl<'data> From<M3Geometry<'data>> for UniversalGeometry<'data> {
-    fn from(value: M3Geometry<'data>) -> Self {
-        match value {
-            M3Geometry::Display(value) => Self::Data(value.into()),
-            M3Geometry::Collision(value) => Self::Data(value.into()),
-        }
-    }
-}
-impl<'data> From<GeometryData<'data>> for UniversalGeometry<'data> {
-    fn from(value: GeometryData<'data>) -> Self {
-        Self::Data(value)
-    }
-}
-impl<'data> From<M3CollisionGeometry<'data>> for UniversalGeometry<'data> {
-    fn from(value: M3CollisionGeometry<'data>) -> Self {
-        Self::Data(value.into())
-    }
-}
-impl<'data> TryFrom<UniversalGeometry<'data>> for M3CollisionGeometry<'data> {
-    type Error = Error;
-    fn try_from(value: UniversalGeometry<'data>) -> Result<Self, Error> {
-        value.into_data()?.try_into()
-    }
-}
-impl<'data> UniversalGeometry<'data> {
-    fn into_data(self) -> Result<GeometryData<'data>, Error> {
-        match self {
-            Self::Data(value) => Ok(value),
-            _ => Err(Error::new(
-                "geometry",
-                "geometry carries a different authored domain",
-            )),
-        }
-    }
-}
-impl<'data> TryFrom<UniversalGeometry<'data>> for MdlxGeometry<'data> {
-    type Error = Error;
-    fn try_from(value: UniversalGeometry<'data>) -> Result<Self, Error> {
-        value.into_data()?.try_into()
-    }
-}
-impl<'data> TryFrom<UniversalGeometry<'data>> for M2Geometry<'data> {
-    type Error = Error;
-    fn try_from(value: UniversalGeometry<'data>) -> Result<Self, Error> {
-        value.into_data()?.try_into()
-    }
-}
-impl<'data> TryFrom<UniversalGeometry<'data>> for M3Geometry<'data> {
-    type Error = Error;
-    fn try_from(value: UniversalGeometry<'data>) -> Result<Self, Error> {
-        let data = value.into_data()?;
-        match data.kind {
-            GeometryKind::Collision => Ok(Self::Collision(data.try_into()?)),
-            GeometryKind::Display => Ok(Self::Display(data.try_into()?)),
-        }
-    }
-}
-macro_rules! with_geometry {
-    ($self:expr, $value:ident => $body:expr) => {
-        match $self {
-            UniversalGeometry::Data($value) => $body,
-            UniversalGeometry::Wem($value) => $body,
-        }
-    };
-}
-impl<'data> GeometrySchema<'data> for UniversalGeometry<'data> {
-    fn normalize_primary_domains(&mut self, primary: ConnectivityId) -> Result<(), Error> {
-        match self {
-            Self::Data(value) => value.normalize_primary_domains(primary),
-            Self::Wem(_) => Ok(()),
-        }
-    }
-    fn subset_capabilities(&self) -> DrawSubsetCapabilities {
-        with_geometry!(self, value => value.subset_capabilities())
-    }
-    fn add_connectivity(&mut self, topology: Topology<'data>) -> Result<usize, Error> {
-        match self {
-            Self::Data(value) => value.add_connectivity(topology),
-            Self::Wem(_) => Err(Error::new(
-                "geometry.connectivity",
-                "schema cannot add connectivity sets",
-            )),
-        }
-    }
-    fn connectivity(&self, index: usize) -> Option<Topology<'data>> {
-        with_geometry!(self, value => value.connectivity(index))
-    }
-    fn surface_triangles(&self) -> Option<&Values<'data, SurfaceTriangleControls>> {
-        with_geometry!(self, value => value.surface_triangles())
-    }
-    fn strip_indices(&self) -> Option<&Values<'data, u32>> {
-        with_geometry!(self, value => value.strip_indices())
-    }
-    fn tangent_pool(&self) -> Option<&Values<'data, [f32; 4]>> {
-        with_geometry!(self, value => value.tangent_pool())
-    }
-    fn edit_capabilities(&self) -> GeometryEditCapabilities {
-        with_geometry!(self, value => value.edit_capabilities())
-    }
-    fn edited(&self, edit: GeometryEdit<'data>) -> Result<Self, Error> {
-        match self {
-            Self::Data(value) => Ok(Self::Data(value.edited(edit)?)),
-            Self::Wem(value) => Ok(Self::Wem(value.edited(edit)?)),
-        }
-    }
-    fn kind(&self) -> GeometryKind {
-        with_geometry!(self, value => value.kind())
-    }
-    fn positions(&self) -> &Values<'data, [f32; 3]> {
-        with_geometry!(self, value => value.positions())
-    }
-    fn normals(&self) -> Option<&Values<'data, [f32; 3]>> {
-        with_geometry!(self, value => value.normals())
-    }
-    fn tangents(&self) -> Option<&Values<'data, [f32; 4]>> {
-        with_geometry!(self, value => value.tangents())
-    }
-    fn texture_coordinates(&self) -> TextureCoordinates<'_, 'data> {
-        with_geometry!(self, value => value.texture_coordinates())
-    }
-    fn colors(&self) -> Option<&Values<'data, [f32; 4]>> {
-        with_geometry!(self, value => value.colors())
-    }
-    fn attributes(&self) -> Attributes<'_, 'data> {
-        with_geometry!(self, value => value.attributes())
-    }
-    fn topology(&self) -> &Topology<'data> {
-        with_geometry!(self, value => value.topology())
-    }
-    fn influences(&self) -> InfluenceRows<'_, 'data> {
-        with_geometry!(self, value => value.influences())
-    }
-    fn validate(&self) -> Result<(), Error> {
-        with_geometry!(self, value => value.validate())
-    }
-}
-impl ValidateLinks for UniversalGeometry<'_> {
-    fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
-        with_geometry!(self, value => value.visit_links(visitor));
-    }
-}
 /// Shared geometry with canonical attributes and explicit connectivity.
 #[derive(Clone, Debug)]
 pub struct GeometryData<'data> {
@@ -998,7 +834,7 @@ mod tests {
             .unwrap()
             .with_influences(JointInfluences::MatrixGroups(Values::from_slice(&groups)))
             .unwrap();
-        let widened = UniversalGeometry::from(geometry);
+        let widened = GeometryData::from(geometry);
         assert!(widened.positions().is_borrowed());
         assert!(
             matches!(widened.influences(), InfluenceRows::MatrixGroups(values) if values.is_borrowed())

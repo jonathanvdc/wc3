@@ -3,7 +3,7 @@
 //! These macros are for maintaining or extending the record implementations.
 //! Applications using the built-in model types only need the codec traits in
 //! `wc3::model::mdlx::{mdx, mdl}`, `wc3::model::m2`, `wc3::model::wmo`,
-//! `wc3::model::m3`, `wc3::model::wem`, and `wc3::model::diablo::d4`.
+//! `wc3::model::m3`, and `wc3::model::diablo::d4`.
 //!
 //! Import macros through those format modules, for example
 //! `#[derive(mdl::Read, mdl::Write)]`. Ownership is shared through
@@ -13,7 +13,6 @@
 #![doc = include_str!("m2.md")]
 #![doc = include_str!("wmo.md")]
 #![doc = include_str!("m3.md")]
-#![doc = include_str!("wem.md")]
 #![doc = include_str!("d4.md")]
 #![deny(missing_docs)]
 mod mdl;
@@ -274,57 +273,6 @@ pub fn derive_m3_visit_references(input: TokenStream) -> TokenStream {
     .into()
 }
 
-/// Derives native WEM field decoding and allocation-free field skipping.
-#[proc_macro_derive(WemRead, attributes(wem))]
-pub fn derive_wem_read(input: TokenStream) -> TokenStream {
-    binary::expand_format(
-        parse_macro_input!(input as DeriveInput),
-        binary::Operation::Read,
-        binary::Format::Wem,
-    )
-    .into()
-}
-/// Derives native WEM field encoding, including variable inline payloads.
-#[proc_macro_derive(WemWrite, attributes(wem))]
-pub fn derive_wem_write(input: TokenStream) -> TokenStream {
-    binary::expand_format(
-        parse_macro_input!(input as DeriveInput),
-        binary::Operation::Write,
-        binary::Format::Wem,
-    )
-    .into()
-}
-/// Derives a lower bound on WEM inline record length.
-#[proc_macro_derive(WemRecordLayout, attributes(wem))]
-pub fn derive_wem_layout(input: TokenStream) -> TokenStream {
-    binary::expand_format(
-        parse_macro_input!(input as DeriveInput),
-        binary::Operation::Layout,
-        binary::Format::Wem,
-    )
-    .into()
-}
-/// Derives compositional WEM local validation.
-#[proc_macro_derive(WemValidate)]
-pub fn derive_wem_validate(input: TokenStream) -> TokenStream {
-    binary_traversal::expand_format(
-        parse_macro_input!(input as DeriveInput),
-        binary_traversal::Operation::Validate,
-        binary::Format::Wem,
-    )
-    .into()
-}
-/// Derives traversal of native WEM section links.
-#[proc_macro_derive(WemVisitReferences)]
-pub fn derive_wem_visit_references(input: TokenStream) -> TokenStream {
-    binary_traversal::expand_format(
-        parse_macro_input!(input as DeriveInput),
-        binary_traversal::Operation::VisitReferences,
-        binary::Format::Wem,
-    )
-    .into()
-}
-
 /// Wire-code conversions for M2 scalar enums, preserving unknown values.
 #[proc_macro_derive(M2Value, attributes(m2))]
 pub fn derive_m2_value(input: TokenStream) -> TokenStream {
@@ -343,16 +291,6 @@ pub fn derive_wmo_value(input: TokenStream) -> TokenStream {
     binary_value::expand(
         parse_macro_input!(input as DeriveInput),
         binary::Format::Wmo,
-    )
-    .into()
-}
-
-/// Wire-code conversions for Wem scalar enums, preserving unknown values.
-#[proc_macro_derive(WemValue, attributes(wem))]
-pub fn derive_wem_value(input: TokenStream) -> TokenStream {
-    binary_value::expand(
-        parse_macro_input!(input as DeriveInput),
-        binary::Format::Wem,
     )
     .into()
 }

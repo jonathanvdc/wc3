@@ -25,8 +25,5 @@ pub mod animation;
 /// Logical primitive and attribute normalization at native output boundaries.
 pub mod geometry;
 
-/// Editable-model authoring import and export support.
-pub mod wem;
-
 /// Diablo native model imports and typed exports.
 pub mod diablo;

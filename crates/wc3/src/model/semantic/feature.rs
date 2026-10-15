@@ -14,8 +14,6 @@ pub enum NodeFeature<'a> {
     M3(Box<profiles::m3::Feature<'a>>),
     /// Static-world doodad or light behavior.
     Wmo(Box<profiles::wmo::Node<'a>>),
-    /// Editable-model mixed-family behavior.
-    Wem(Box<profiles::wem::Feature<'a>>),
 }
 /// A feature's hierarchy anchor and logical definition.
 #[derive(Clone, Debug)]
@@ -28,12 +26,6 @@ pub struct AttachedFeature<'a, P: Profile = Universal> {
 /// Payload kinds required by relationships between attached features.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum FeatureKind {
-    /// An editable-document StarCraft particle definition.
-    WemStarcraftParticle,
-    /// An editable-document emitter copy referencing a primary particle.
-    WemStarcraftParticleCopy,
-    /// An editable-document StarCraft ribbon definition.
-    WemStarcraftRibbon,
     /// An M3 turret part anchored to a skeleton bone.
     M3Turret,
     /// Warcraft III geometry color and opacity animation.
@@ -68,7 +60,6 @@ impl NodeFeature<'_> {
             Self::M2(value) => FeaturePayload::kind(value.as_ref()),
             Self::M3(value) => FeaturePayload::kind(value.as_ref()),
             Self::Wmo(value) => FeaturePayload::kind(value.as_ref()),
-            Self::Wem(value) => FeaturePayload::kind(value.as_ref()),
         }
     }
 }

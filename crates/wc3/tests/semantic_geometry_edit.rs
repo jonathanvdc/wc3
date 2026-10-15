@@ -1,11 +1,11 @@
 use wc3::model::semantic::profiles::{
     diablo::{d3, d4},
-    wem, Either,
+    Either,
 };
 use wc3::model::semantic::{
     Attribute, AttributeDomain, AttributeSemantic, AttributeValues, GeometryData, GeometryEdit,
     GeometrySchema, Influence, JointInfluences, M2Geometry, M3CollisionGeometry, M3Geometry,
-    MdlxGeometry, StreamSupport, Topology, UniversalGeometry, Values, VertexRemap, WmoGeometry,
+    MdlxGeometry, StreamSupport, Topology, Values, VertexRemap, WmoGeometry,
 };
 
 fn positions() -> Values<'static, [f32; 3]> {
@@ -68,7 +68,7 @@ fn common_tools_work_across_profiles_and_dispatchers() {
     )
     .unwrap();
     exercise(m2.clone());
-    exercise(UniversalGeometry::from(m2.clone()));
+    exercise(GeometryData::from(m2.clone()));
     exercise(Either::<M2Geometry<'static>, GeometryData<'static>>::Left(
         m2,
     ));
@@ -83,7 +83,6 @@ fn common_tools_work_across_profiles_and_dispatchers() {
             .unwrap(),
     ));
     exercise(WmoGeometry::triangles(positions(), triangles()).unwrap());
-    exercise(wem::Geometry::new(data.clone()).unwrap());
     exercise(d4::Geometry::new(data).unwrap());
     let streams = d3::VertexStreams {
         positions: positions(),
@@ -196,10 +195,6 @@ fn constraints_and_connectivity_changes_are_explicit() {
         .unwrap();
     assert!(!wmo.edit_capabilities().vertex_remap);
     assert!(wmo.edited(duplicate()).is_err());
-    let mut wem = wem::Geometry::new(data).unwrap();
-    wem.edge_count = 1;
-    assert!(!wem.edit_capabilities().vertex_remap);
-    assert!(wem.edited(duplicate()).is_err());
 }
 
 #[test]
@@ -220,7 +215,7 @@ fn edits_publish_transactionally_and_keep_unmodified_borrowed_streams() {
     assert!(edited.normals().unwrap().is_borrowed());
     let mut draft = Model::<Universal>::builder("Editable");
     let id = draft
-        .add_mesh(Mesh::new(UniversalGeometry::from(geometry)))
+        .add_mesh(Mesh::new(GeometryData::from(geometry)))
         .unwrap();
     let mut collection = draft.finish().unwrap();
     collection
@@ -248,19 +243,21 @@ fn edits_publish_transactionally_and_keep_unmodified_borrowed_streams() {
 }
 
 #[test]
-fn polygon_corner_order_and_wem_layer_identities_survive_vertex_splits() {
+fn polygon_corner_order_and_attributes_survive_vertex_splits() {
     let mut data = GeometryData::empty();
     data.positions = positions();
     data.connectivity.primary = Topology::Polygons {
         corners: vec![0, 1, 2].into(),
         offsets: vec![0, 3].into(),
     };
-    let mut geometry = wem::Geometry::new(data).unwrap();
-    let layer = geometry.add_layer(wem::LayerData::Standard(Attribute {
+    let mut geometry = data;
+    geometry.attributes = vec![Attribute {
         semantic: AttributeSemantic::Named("selection".into()),
         domain: AttributeDomain::Vertex,
         values: AttributeValues::Unsigned(vec![10, 20, 30].into()),
-    }));
+    }]
+    .try_into()
+    .unwrap();
     let edit = GeometryEdit {
         remap: Some(VertexRemap {
             new_to_old: vec![2, 0, 1, 0],
@@ -272,15 +269,13 @@ fn polygon_corner_order_and_wem_layer_identities_survive_vertex_splits() {
         ..Default::default()
     };
     let result = geometry.edited(edit).unwrap();
-    match &result.layer(layer).unwrap().data {
-        wem::LayerData::Standard(Attribute {
-            values: AttributeValues::Unsigned(v),
-            ..
-        }) => assert_eq!(v.to_vec(), vec![30, 10, 20, 10]),
+    match &result.attributes[0].values {
+        AttributeValues::Unsigned(v) => assert_eq!(v.to_vec(), vec![30, 10, 20, 10]),
         _ => panic!(),
     }
-    assert_eq!(
-        result.face_sections().to_vec(),
-        geometry.face_sections().to_vec()
-    );
+    let Topology::Polygons { corners, offsets } = result.topology() else {
+        panic!("polygon topology changed");
+    };
+    assert_eq!(corners.to_vec(), vec![3, 2, 0]);
+    assert_eq!(offsets.to_vec(), vec![0, 3]);
 }

@@ -15,7 +15,6 @@ fn codec(format: Format) -> TokenStream {
         Format::M2 => quote!(::wc3::model::m2),
         Format::M3 => quote!(::wc3::model::m3),
         Format::Wmo => quote!(::wc3::model::wmo),
-        Format::Wem => quote!(::wc3::model::wem),
     }
 }
 fn attribute(format: Format) -> &'static str {
@@ -23,7 +22,6 @@ fn attribute(format: Format) -> &'static str {
         Format::M2 => "m2",
         Format::M3 => "m3",
         Format::Wmo => "wmo",
-        Format::Wem => "wem",
     }
 }
 fn parse(input: &DeriveInput, format: Format) -> Result<Value> {
@@ -230,36 +228,13 @@ pub(crate) fn binary(
     };
     let (generics, _, where_clause) = generics.split_for_impl();
     let m2 = matches!(format, Format::M2);
-    let wem = matches!(format, Format::Wem);
     let parameters = if m2 {
         quote!(version:u32,flags:u32)
     } else {
         quote!()
     };
     let arguments = if m2 { quote!(version, flags) } else { quote!() };
-    let size = if wem {
-        quote!(minimum_size)
-    } else {
-        quote!(size)
-    };
-    let skip = if wem {
-        quote! {
-            fn skip(decoder: &mut #decoder) -> ::core::result::Result<(), #codec::ReadError> {
-                <#wire as #codec::Read<#read_args>>::skip(decoder)
-            }
-        }
-    } else {
-        quote!()
-    };
-    let fixed = if wem {
-        quote! {
-            fn fixed_size() -> ::core::option::Option<usize> {
-                <#wire as #codec::RecordLayout>::fixed_size()
-            }
-        }
-    } else {
-        quote!()
-    };
+    let size = quote!(size);
     Ok(match operation {
         Operation::Read => {
             quote!(impl #generics #codec::Read<#read_args> for #name #types #where_clause {
@@ -267,7 +242,6 @@ pub(crate) fn binary(
                     let value = <#wire as #codec::Read<#read_args>>::read(decoder)?;
                     Ok(match value { #(#read,)* value => Self::#unknown(value) })
                 }
-                #skip
             })
         }
         Operation::Write => {
@@ -284,7 +258,6 @@ pub(crate) fn binary(
                     fn #size(#parameters) -> usize {
                         <#wire as #codec::RecordLayout #envelope_args>::#size(#arguments)
                     }
-                    #fixed
                 }
             }
         }

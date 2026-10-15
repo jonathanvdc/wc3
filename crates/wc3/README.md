@@ -1,7 +1,7 @@
 # wc3
 
-`wc3` is a Rust library for working with Blizzard model assets, native WEM
-documents, BLP and Diablo TEX textures, and MPQ archives. It provides types and codecs for
+`wc3` is a Rust library for working with Blizzard model assets, BLP and Diablo
+TEX textures, and MPQ archives. It provides types and codecs for
 reading assets, changing their contents, and writing them back, whether you are
 building an asset editor, a converter, or an application that loads game data. Binary MDX and text MDL models
 share the same typed representation, allowing model editing code to work with
@@ -9,8 +9,7 @@ both formats and with supported Classic and Reforged layouts. World of Warcraft
 M2 documents use a separate typed format API, including their supporting skin,
 geometry, animation, skeleton, bone, and physics files. WMO roots and groups
 have their own typed layouts and bundle API for static world geometry. M3 models
-and external animations retain their indexed section graphs. WEM documents hold
-multiple models, textures, and animation records under declared game profiles.
+and external animations retain their indexed section graphs.
 Diablo III and IV resources use independently typed SNO document layouts, with
 external payloads supplied by the caller.
 
@@ -28,7 +27,6 @@ operations and archive compression when your application needs them.
 | World of Warcraft WMO models | Read, edit, and write root and group documents; resolve native geometry bundles. |
 | StarCraft II and Heroes of the Storm M3 models | Read, edit, and write indexed model and external animation documents. |
 | Diablo III and IV model resources | Read, edit, and rebuild supported typed appearance, actor, animation, and material documents. |
-| WEM asset documents | Read, edit, and write native indexed multi-model documents and profile-specific records. |
 | BLP0, BLP1, and BLP2 textures | Inspect and edit encoded containers; optionally decode pixels and encode images. |
 | Diablo III and IV TEX textures | Read, edit, and write typed containers; optionally decode and encode supported pixels. |
 | MPQ v1–v4 archives | Index, extract, create, and edit archives; optionally decompress and compress entries. |
@@ -125,10 +123,6 @@ MD34 envelopes select reference widths, while each indexed section selects its
 own record revision. The [M3 guide](docs/m3.md) explains borrowed section graphs,
 typed packed vertices, shared references, external animations, and preservation
 limits for unknown payloads.
-
-WEM assets use `wc3::model::wem::{Document, RawDocument}` for native indexed
-multi-model documents. The [WEM guide](docs/wem.md) explains profile declarations,
-variable record layouts, borrowed arrays, and preserving unsupported sections.
 
 ### Diablo models
 
@@ -269,7 +263,7 @@ The API reference provides examples for each asset type, and the repository
 includes command-line examples for inspecting, editing, and converting assets.
 The model command-line examples below operate on Warcraft III MDX and MDL:
 
-- [Documentation index](docs/README.md): MDLX, M2, WMO, M3, Diablo, TEX, and WEM workflows, command-line tools,
+- [Documentation index](docs/README.md): MDLX, M2, WMO, M3, Diablo, and TEX workflows, command-line tools,
   and format-specific API references.
 - [API reference](https://docs.rs/wc3/latest/wc3/).
 - [`mpq` example](examples/mpq.rs): archive listing, extraction, creation, and editing.

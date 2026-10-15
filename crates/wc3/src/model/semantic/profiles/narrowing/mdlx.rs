@@ -7,10 +7,7 @@ use crate::model::semantic::{
 };
 impl Narrows<Universal> for Mdlx {
     fn asset<'a>(value: <Universal as Profile>::Asset<'a>) -> Result<Self::Asset<'a>, Error> {
-        match value {
-            None => Ok(NoControls),
-            _ => Err(incompatible("asset")),
-        }
+        Ok(value)
     }
     fn appearance<'a>(
         value: <Universal as Profile>::Appearance<'a>,

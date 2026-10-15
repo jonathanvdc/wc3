@@ -6,8 +6,8 @@ use crate::model::semantic::profiles::{
 };
 use crate::model::semantic::PropertyIdentityKey;
 use crate::model::semantic::{
-    Basis, Billboard, Channel, ClipControls, Clock, ColorSpace, ControllerControls, DrawControls,
-    Error, ExplicitBinding, FeatureKind, GeometrySchema as _, Inheritance, InstanceControls,
+    Basis, Billboard, Channel, ClipControls, Clock, ColorSpace, DrawControls, Error,
+    ExplicitBinding, FeatureKind, GeometrySchema as _, Inheritance, InstanceControls,
     Interpolation, LengthUnit, Link, M3Geometry, MaterialSurface, MeshControls, Model,
     ModelControls, NodeControls, NodeFeature, PropertyTarget, Resource, Resources, Sampler, Single,
     SingleLook, SkinId, System, Topology, Transform, UniversalAppearance, UniversalBinding,
@@ -553,8 +553,7 @@ impl Extends<M3> for Universal {
         UniversalProperty::M3(value)
     }
     fn asset<'a>(value: <M3 as Profile>::Asset<'a>) -> Self::Asset<'a> {
-        let _ = value;
-        None
+        value
     }
     fn appearance<'a>(value: <M3 as Profile>::Appearance<'a>) -> Self::Appearance<'a> {
         UniversalAppearance::Single(value)
@@ -597,6 +596,6 @@ impl Extends<M3> for Universal {
         Some(ClipControls::M3(value))
     }
     fn controller<'a>(value: <M3 as Profile>::Controller<'a>) -> Self::Controller<'a> {
-        Some(ControllerControls::M3(value))
+        Some(value)
     }
 }

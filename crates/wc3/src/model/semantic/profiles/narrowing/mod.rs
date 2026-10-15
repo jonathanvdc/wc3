@@ -4,7 +4,6 @@ use crate::model::semantic::{Error, PropertyPayload};
 mod m2;
 mod m3;
 mod mdlx;
-mod wem;
 mod wmo;
 /// A target vocabulary that can check and consume payloads from another profile.
 /// Implementations must preserve every accepted authored value and relationship.

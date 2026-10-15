@@ -76,14 +76,12 @@ impl<T, F: Fn(usize) -> T + Send + Sync> Source<T> for View<F> {
 pub struct Values<'a, T> {
     source: Arc<dyn Source<T> + 'a>,
     borrowed: bool,
-    borrowed_packed: Option<&'a [u8]>,
 }
 impl<T> Clone for Values<'_, T> {
     fn clone(&self) -> Self {
         Self {
             source: self.source.clone(),
             borrowed: self.borrowed,
-            borrowed_packed: self.borrowed_packed,
         }
     }
 }
@@ -106,7 +104,6 @@ impl<'a, T: Clone + Send + Sync + 'a> Values<'a, T> {
         Self {
             source: Arc::new(Borrowed(values)),
             borrowed: true,
-            borrowed_packed: None,
         }
     }
     /// Moves values into shared owned storage.
@@ -114,7 +111,6 @@ impl<'a, T: Clone + Send + Sync + 'a> Values<'a, T> {
         Self {
             source: Arc::new(Owned(values.into())),
             borrowed: false,
-            borrowed_packed: None,
         }
     }
     /// Creates a checked-length view, decoding an element only when it is requested.
@@ -122,7 +118,6 @@ impl<'a, T: Clone + Send + Sync + 'a> Values<'a, T> {
         Self {
             source: Arc::new(View { len, get }),
             borrowed: true,
-            borrowed_packed: None,
         }
     }
     /// Maps values lazily without materializing a second array.
@@ -149,7 +144,6 @@ impl<'a, T: Clone + Send + Sync + 'a> Values<'a, T> {
         Values {
             source: self.source.clone(),
             borrowed: self.borrowed,
-            borrowed_packed: self.borrowed_packed,
         }
     }
     /// Materializes values only when a consumer explicitly needs a native vector.
@@ -163,17 +157,11 @@ where
 {
     /// Stores a canonical packed array without materializing its values.
     pub(crate) fn from_zero_vec(values: ZeroVec<'a, T>) -> Self {
-        let borrowed_packed = values.as_maybe_borrowed().map(|value| value.as_bytes());
         let borrowed = !values.is_owned();
         Self {
             source: Arc::new(Packed(values)),
             borrowed,
-            borrowed_packed,
         }
-    }
-    /// Returns only packed storage whose borrow comes from the original input lifetime.
-    pub(crate) fn borrowed_canonical_bytes(&self) -> Option<&'a [u8]> {
-        self.borrowed_packed
     }
     /// Borrows canonical packed storage when this logical array already has that representation.
     pub(crate) fn as_zero_vec(&self) -> Option<ZeroVec<'_, T>> {
@@ -233,20 +221,20 @@ mod tests {
     use super::Values;
     use zerovec::ZeroVec;
 
-    fn original_bytes(bytes: &[u8]) -> &[u8] {
-        let values = Values::<u32>::from_zero_vec(ZeroVec::parse_bytes(bytes).unwrap());
-        values.borrowed_canonical_bytes().unwrap()
-    }
     #[test]
-    fn packed_original_borrows_survive_the_array_wrapper_without_exposing_owned_storage() {
+    fn packed_arrays_borrow_native_storage_and_project_logical_values() {
         let bytes = 42u32.to_le_bytes();
-        assert_eq!(original_bytes(&bytes).as_ptr(), bytes.as_ptr());
+        let borrowed = Values::<u32>::from_zero_vec(ZeroVec::parse_bytes(&bytes).unwrap());
+        assert!(borrowed.is_borrowed());
+        assert_eq!(
+            borrowed.as_zero_vec().unwrap().as_bytes().as_ptr(),
+            bytes.as_ptr()
+        );
         let owned = Values::from_zero_vec(ZeroVec::alloc_from_slice(&[42u32]));
-        assert!(owned.borrowed_canonical_bytes().is_none());
+        assert!(!owned.is_borrowed());
         assert_eq!(owned.as_zero_vec().unwrap().as_bytes(), bytes.as_slice());
-        let mapped = Values::from_zero_vec(ZeroVec::<u32>::parse_bytes(&bytes).unwrap())
-            .map(|value| value + 1);
-        assert!(mapped.borrowed_canonical_bytes().is_none());
+        let mapped = borrowed.map(|value| value + 1);
+        assert!(mapped.as_zero_vec().is_none());
         assert_eq!(mapped.get(0), Some(43));
     }
 }

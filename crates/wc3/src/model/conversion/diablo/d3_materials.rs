@@ -1,4 +1,4 @@
-//! Native Diablo material declarations share their authored vocabulary with WEM.
+//! Native Diablo material declarations map to the Diablo semantic vocabulary.
 use crate::model::conversion::{Context, Error};
 use crate::model::diablo::d3::records as native;
 use crate::model::semantic::profiles::diablo::d3::{

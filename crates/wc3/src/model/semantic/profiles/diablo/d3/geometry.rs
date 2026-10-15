@@ -7,7 +7,7 @@ use crate::model::semantic::VertexData;
 use crate::model::semantic::{
     Attribute, AttributeDomain, AttributeSemantic, AttributeValues, Attributes, Error,
     GeometryData, GeometryInfluences, GeometryKind, GeometryParts, GeometrySchema, Influence,
-    InfluenceRows, Link, Topology, UniversalGeometry, ValidateLinks, Values,
+    InfluenceRows, Link, Topology, ValidateLinks, Values,
 };
 use crate::model::semantic::{GeometryEdit, GeometryEditCapabilities, StreamSupport};
 
@@ -257,23 +257,7 @@ impl<'a> From<Geometry<'a>> for GeometryData<'a> {
         .expect("constrained geometry has unique typed attributes")
     }
 }
-impl<'a> From<Geometry<'a>> for UniversalGeometry<'a> {
-    fn from(value: Geometry<'a>) -> Self {
-        Self::Data(value.into())
-    }
-}
-impl<'a> TryFrom<UniversalGeometry<'a>> for Geometry<'a> {
-    type Error = Error;
-    fn try_from(value: UniversalGeometry<'a>) -> Result<Self, Error> {
-        match value {
-            UniversalGeometry::Data(value) => value.try_into(),
-            _ => Err(Error::new(
-                "d3.narrow.geometry",
-                "geometry carries a different authored domain",
-            )),
-        }
-    }
-}
+
 impl<'a> TryFrom<GeometryData<'a>> for Geometry<'a> {
     type Error = Error;
     fn try_from(value: GeometryData<'a>) -> Result<Self, Error> {

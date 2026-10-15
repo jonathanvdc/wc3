@@ -266,8 +266,6 @@ pub enum MaterialSurface<'a> {
     M3(Box<profiles::m3::Material<'a>>),
     /// World-model surface.
     Wmo(Box<profiles::wmo::Material<'a>>),
-    /// Editable-model common and native material authorities.
-    Wem(Box<profiles::wem::Material<'a>>),
 }
 /// A named, complete logical surface description.
 #[derive(Clone, Debug)]

@@ -17,8 +17,6 @@ to editing workflows and runnable tools.
   D4 format hashes, external payload address spaces, and semantic conversion limits.
 - [Diablo textures](tex.md) explains typed TEX containers, explicit payload
   resolution, encoded editing, and optional pixel conversion.
-- [WEM documents](wem.md) explains native multi-model graphs, profiles, variable
-  records, and indexed-section preservation.
 - [Semantic model graphs](semantic.md) explains graph relationships, typed
   authoring profiles, dependency ownership, playback declarations, borrowed arrays,
   widening, and checked edits.
@@ -38,8 +36,6 @@ The API reference contains the detailed contracts and executable examples:
   documents, native chunk records, validation, and historical layouts.
 - [M3 models](https://docs.rs/wc3/latest/wc3/model/m3/) describes native section
   records, reference envelopes, graph validation, and external animations.
-- [WEM documents](https://docs.rs/wc3/latest/wc3/model/wem/) describes native
-  profiles, typed records, graph references, and encoded section editing.
 - [Diablo models](https://docs.rs/wc3/latest/wc3/model/diablo/) describes typed
   appearance, actor, animation, and material documents.
 - [Diablo textures](https://docs.rs/wc3/latest/wc3/tex/) describes native TEX storage

@@ -12,9 +12,8 @@ covers StarCraft II and Heroes of the Storm model files and external animations.
 authoring vocabularies and checked edits. [Model conversions](crates/wc3/docs/conversion.md)
 connect those graphs to the native format APIs.
 
-WEM support adds indexed multi-model documents with profiles, shared resources,
-and independently revised native records. Diablo III and IV support adds typed
-appearance, actor, animation, and material resources, with native layout selection
+Diablo III and IV support adds typed appearance, actor, animation, and material
+resources, with native layout selection
 separate from the [semantic conversion boundary](crates/wc3/docs/diablo.md).
 
 ## Crates
@@ -34,10 +33,8 @@ file codecs, with explicit dependency resolution and coordinated bundle writing.
 M3 documents retain indexed section graphs, independently versioned records,
 packed geometry, and external animations. WMO documents expose their own root
 and group layouts, including geometry, materials, portals, liquids, and collision
-data. WEM documents hold several models, texture identities, and animation clips
-in a native indexed graph; the [WEM guide](crates/wc3/docs/wem.md) explains typed
-records, profile metadata, and preservation of unsupported payloads. Alongside
-models, it provides BLP and Diablo TEX texture and MPQ archive APIs, with optional
+data. Alongside models, it provides BLP and Diablo TEX texture and MPQ archive
+APIs, with optional
 features for working with decoded images and compressed archive entries. This
 makes it useful for asset tools and converters as well as applications that
 supply their own renderer.
@@ -48,7 +45,7 @@ maps to MDX bytes or MDL text, including how fields, defaults, and animation
 tracks are represented. Most applications use the existing record types and
 never need to work with these macros directly. For contributors extending the
 codecs or users defining additional records, the derives are available through
-`wc3`'s MDX, MDL, M2, WMO, M3, and WEM modules alongside the traits they implement.
+`wc3`'s MDX, MDL, M2, WMO, and M3 modules alongside the traits they implement.
 
 [`bevy-wc3`](crates/bevy-wc3/README.md) builds on the asset library to load and
 render Warcraft III models in Bevy. It turns models and their textures into
@@ -65,7 +62,7 @@ files using an ordered overlay. The adapter is independent of the renderer;
 `bevy-wc3` preserves the source when resolving a model's dependencies.
 
 Each crate's README explains how to get started and links to further examples.
-The [asset documentation index](crates/wc3/docs/README.md) connects MDLX, M2, WMO, M3, Diablo, TEX, and WEM
+The [asset documentation index](crates/wc3/docs/README.md) connects MDLX, M2, WMO, M3, Diablo, and TEX
 editing, command-line tools, and the format APIs.
 API references are available for [`wc3`](https://docs.rs/wc3/latest/wc3/) and
 [`wc3-derive`](https://docs.rs/wc3-derive/latest/wc3_derive/), and the

@@ -10,7 +10,7 @@ use crate::model::semantic::{
     Attribute, AttributeDomain, AttributeSemantic, AttributeValues, Attributes,
     DrawSubsetCapabilities, Error, GeometryData, GeometryInfluences, GeometryKind, GeometryParts,
     GeometryPools, GeometrySchema, InfluenceRows, Link, SurfaceTriangleControls, Topology,
-    UniversalGeometry, ValidateLinks, Values,
+    ValidateLinks, Values,
 };
 use crate::model::semantic::{GeometryEdit, GeometryEditCapabilities, StreamSupport};
 
@@ -277,11 +277,6 @@ impl<'data> GeometrySchema<'data> for WmoGeometry<'data> {
         Ok(())
     }
 }
-impl<'data> From<WmoGeometry<'data>> for UniversalGeometry<'data> {
-    fn from(value: WmoGeometry<'data>) -> Self {
-        Self::Data(value.into())
-    }
-}
 
 impl Default for WmoGeometry<'_> {
     fn default() -> Self {
@@ -350,18 +345,7 @@ impl<'data> From<WmoGeometry<'data>> for GeometryData<'data> {
         .expect("constrained geometry has unique typed attributes")
     }
 }
-impl<'data> TryFrom<UniversalGeometry<'data>> for WmoGeometry<'data> {
-    type Error = Error;
-    fn try_from(value: UniversalGeometry<'data>) -> Result<Self, Error> {
-        match value {
-            UniversalGeometry::Data(value) => value.try_into(),
-            _ => Err(Error::new(
-                "world.geometry",
-                "geometry carries a different authored domain",
-            )),
-        }
-    }
-}
+
 impl<'data> TryFrom<GeometryData<'data>> for WmoGeometry<'data> {
     type Error = Error;
     fn try_from(value: GeometryData<'data>) -> Result<Self, Error> {

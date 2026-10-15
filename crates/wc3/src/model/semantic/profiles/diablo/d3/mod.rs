@@ -1,4 +1,4 @@
-//! Diablo III authoring vocabulary, independent of native layout and WEM storage.
+//! Diablo III authoring vocabulary, independent of native layout.
 mod material;
 pub use material::*;
 
