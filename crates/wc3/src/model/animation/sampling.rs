@@ -39,6 +39,7 @@ pub struct AnimationSample<'a> {
 pub struct SampledAnimation<'view, 'data, P: Profile = Universal> {
     clocks: Cow<'view, BTreeMap<ClockId, Time>>,
     clip_time: Time,
+    clip_policy: Option<(Time, bool)>,
     timeline_time: Time,
     timeline_interval: Option<(Time, Time)>,
     shared_time: Time,
@@ -104,10 +105,12 @@ impl<'data, P: Profile> Model<'data, P> {
             .collect();
         validate_interval(sample.timeline_interval)?;
         let mut clip_time = sample.clip_time;
+        let mut clip_policy = None;
         if let Some(id) = sample.clip {
             let clip = self
                 .clip(id)
                 .ok_or_else(|| Error::new("animation.sample.clip", "unknown clip identity"))?;
+            clip_policy = Some((clip.duration(), clip.is_looping()));
             let duration = clip.duration().as_seconds();
             let seconds = clip_time.as_seconds();
             clip_time = Time::seconds(if duration > 0. {
@@ -150,6 +153,7 @@ impl<'data, P: Profile> Model<'data, P> {
                     .collect(),
             ),
             clip_time,
+            clip_policy,
             timeline_time: sample.timeline_time,
             timeline_interval: sample.timeline_interval,
             shared_time: sample.shared_time,
@@ -158,14 +162,21 @@ impl<'data, P: Profile> Model<'data, P> {
     }
 }
 
-impl<P: Profile> SampledAnimation<'_, '_, P> {
+impl<'view, 'data, P: Profile> SampledAnimation<'view, 'data, P> {
     /// Evaluates the selected channels for a typed property, or returns no override.
     pub fn property<T: ChannelValue>(&self, property: &Property<T, P>) -> Option<T> {
+        self.property_at(property, self.times())
+    }
+    fn property_at<T: ChannelValue>(
+        &self,
+        property: &Property<T, P>,
+        times: SampleTimes,
+    ) -> Option<T> {
         match &self.channels {
             ChannelSelection::Flat(channels) => channels
                 .iter()
                 .rev()
-                .find_map(|channel| self.sample_channel(channel, property)),
+                .find_map(|channel| self.sample_channel(channel, property, times)),
             ChannelSelection::Indexed(programmes) => {
                 programmes.iter().rev().find_map(|programme| {
                     programme
@@ -174,7 +185,7 @@ impl<P: Profile> SampledAnimation<'_, '_, P> {
                         .iter()
                         .rev()
                         .find_map(|index| {
-                            self.sample_channel(&programme.channels[*index], property)
+                            self.sample_channel(&programme.channels[*index], property, times)
                         })
                 })
             }
@@ -184,16 +195,18 @@ impl<P: Profile> SampledAnimation<'_, '_, P> {
         &self,
         channel: &Channel<'_, P>,
         property: &Property<T, P>,
+        times: SampleTimes,
     ) -> Option<T> {
         let track = T::channel_track(channel)?;
         if track.target != *property {
             return None;
         }
         let time = match track.clock {
-            Clock::Clip => self.clip_time,
-            Clock::Timeline => self.timeline_time,
+            Clock::Clip => times.clip,
+            Clock::Timeline => times.timeline,
             Clock::Shared(id) => Time::seconds(
-                self.shared_time
+                times
+                    .shared
                     .as_seconds()
                     .rem_euclid(self.clocks.get(&id)?.as_seconds()),
             )
@@ -206,14 +219,181 @@ impl<P: Profile> SampledAnimation<'_, '_, P> {
         }
     }
 
+    fn times(&self) -> SampleTimes {
+        SampleTimes {
+            clip: self.clip_time,
+            timeline: self.timeline_time,
+            shared: self.shared_time,
+        }
+    }
+    /// Borrows this programme selection at different clock values, without allocating.
+    ///
+    /// Local clip time wraps or clamps using the selected clip's own policy,
+    /// including an alias's duration. Timeline time remains an explicitly supplied
+    /// absolute authoring time; the existing inclusive key interval is retained.
+    /// Shared clocks independently wrap the supplied shared time. No programmes
+    /// are selected again and no events are dispatched.
+    pub fn at_times(
+        &self,
+        clip_time: Time,
+        timeline_time: Time,
+        shared_time: Time,
+    ) -> RetimedAnimation<'_, 'view, 'data, P> {
+        let clip = normalize_clip(clip_time, self.clip_policy);
+        RetimedAnimation {
+            selection: self,
+            times: SampleTimes {
+                clip,
+                timeline: timeline_time,
+                shared: shared_time,
+            },
+        }
+    }
+    /// Borrows the effective typed source track and its clock metadata.
+    /// Empty curves and curves without keys in the selected timeline interval
+    /// fall through to lower-priority tracks, exactly as value sampling does.
+    pub fn track<T: ChannelValue>(
+        &self,
+        property: &Property<T, P>,
+    ) -> Option<SampledTrack<'_, 'data, T, P>> {
+        self.track_at(property, self.times())
+    }
+    fn track_at<T: ChannelValue>(
+        &self,
+        property: &Property<T, P>,
+        times: SampleTimes,
+    ) -> Option<SampledTrack<'_, 'data, T, P>> {
+        let resolve = |channel: &'view Channel<'data, P>| {
+            self.sample_channel(channel, property, times)?;
+            let track = T::channel_track(channel)?;
+            let (time, period, origin, interval) = match track.clock {
+                Clock::Clip => (
+                    times.clip,
+                    self.clip_policy.and_then(|(duration, looping)| {
+                        (looping && duration.as_seconds() > 0.).then_some(duration)
+                    }),
+                    Time::default(),
+                    None,
+                ),
+                Clock::Timeline => (
+                    times.timeline,
+                    self.clip_policy.and_then(|(duration, looping)| {
+                        (looping && duration.as_seconds() > 0. && self.timeline_interval.is_some())
+                            .then_some(duration)
+                    }),
+                    self.timeline_interval
+                        .map_or(Time::default(), |(start, _)| start),
+                    self.timeline_interval,
+                ),
+                Clock::Shared(id) => {
+                    let period = *self.clocks.get(&id)?;
+                    (
+                        Time::seconds(times.shared.as_seconds().rem_euclid(period.as_seconds()))
+                            .ok()?,
+                        Some(period),
+                        Time::default(),
+                        None,
+                    )
+                }
+            };
+            Some(SampledTrack {
+                track,
+                time,
+                period,
+                origin,
+                interval,
+            })
+        };
+        match &self.channels {
+            ChannelSelection::Flat(channels) => {
+                channels.iter().rev().find_map(|channel| resolve(channel))
+            }
+            ChannelSelection::Indexed(programmes) => {
+                programmes.iter().rev().find_map(|programme| {
+                    programme
+                        .index
+                        .get(property.target())?
+                        .iter()
+                        .rev()
+                        .find_map(|index| resolve(&programme.channels[*index]))
+                })
+            }
+        }
+    }
     /// Evaluates an animated value, preserving its authored default without a channel.
     pub fn animated<T: ChannelValue>(&self, value: &Animated<T, P>) -> T {
         value
             .property
             .as_ref()
             .and_then(|property| self.property(property))
-            .unwrap_or_else(|| value.default.clone())
+            .unwrap_or(value.default)
     }
+}
+
+#[derive(Clone, Copy)]
+struct SampleTimes {
+    clip: Time,
+    timeline: Time,
+    shared: Time,
+}
+fn normalize_clip(time: Time, policy: Option<(Time, bool)>) -> Time {
+    let Some((duration, looping)) = policy else {
+        return time;
+    };
+    let duration = duration.as_seconds();
+    let value = if duration <= 0. {
+        0.
+    } else if looping {
+        time.as_seconds().rem_euclid(duration)
+    } else {
+        time.as_seconds().clamp(0., duration)
+    };
+    Time::seconds(value).expect("normalizing finite time by a validated clip duration")
+}
+/// Allocation-free clock override borrowing an existing programme selection.
+/// Timeline offsets are explicit, as in [`AnimationSample`].
+pub struct RetimedAnimation<'sample, 'view, 'data, P: Profile = Universal> {
+    selection: &'sample SampledAnimation<'view, 'data, P>,
+    times: SampleTimes,
+}
+impl<P: Profile> RetimedAnimation<'_, '_, '_, P> {
+    /// Evaluates the same selected programmes at the overridden clocks.
+    pub fn property<T: ChannelValue>(&self, property: &Property<T, P>) -> Option<T> {
+        self.selection.property_at(property, self.times)
+    }
+    /// Preserves an authored default when no selected channel supplies a value.
+    pub fn animated<T: ChannelValue>(&self, value: &Animated<T, P>) -> T {
+        value
+            .property
+            .as_ref()
+            .and_then(|property| self.property(property))
+            .unwrap_or(value.default)
+    }
+    /// Borrows the effective source track at the overridden clock values.
+    pub fn track<T: ChannelValue>(
+        &self,
+        property: &Property<T, P>,
+    ) -> Option<SampledTrack<'_, '_, T, P>> {
+        self.selection.track_at(property, self.times)
+    }
+}
+/// A borrowed effective curve together with its selected clock interpretation.
+///
+/// `time` is resolved for value sampling. To enumerate crossed keys, callers keep
+/// their own unwrapped clock times and use `origin`/`period` to enumerate cycles.
+/// A bounded timeline's origin is its inclusive interval start; clip aliases use
+/// the selected alias duration rather than the referenced programme's duration.
+pub struct SampledTrack<'sample, 'data, T: CurveValue, P: Profile = Universal> {
+    /// Effective typed source, without copying its packed key arrays.
+    pub track: &'sample Track<'data, T, P>,
+    /// Resolved local time used for the sampled value.
+    pub time: Time,
+    /// Repeating period, absent for nonlooping clocks.
+    pub period: Option<Time>,
+    /// Absolute origin of a bounded authoring timeline, otherwise zero.
+    pub origin: Time,
+    /// Inclusive timeline-key selection, absent for clip and shared tracks.
+    pub interval: Option<(Time, Time)>,
 }
 
 impl<T: CurveValue, P: Profile> Track<'_, T, P> {
@@ -329,11 +509,13 @@ impl<P: Profile> AnimationProgram<P> {
         validate_interval(sample.timeline_interval)?;
         let mut channels = vec![&self.global];
         let mut clip_time = sample.clip_time;
+        let mut clip_policy = None;
         if let Some(id) = sample.clip {
             let clip = self
                 .clips
                 .get(&id)
                 .ok_or_else(|| Error::new("animation.sample.clip", "unknown clip identity"))?;
+            clip_policy = Some((clip.duration, clip.looping));
             let duration = clip.duration.as_seconds();
             clip_time = Time::seconds(if duration > 0. {
                 if clip.looping {
@@ -368,6 +550,7 @@ impl<P: Profile> AnimationProgram<P> {
         Ok(SampledAnimation {
             clocks: Cow::Borrowed(&self.clocks),
             clip_time,
+            clip_policy,
             timeline_time: sample.timeline_time,
             timeline_interval: sample.timeline_interval,
             shared_time: sample.shared_time,
@@ -390,6 +573,7 @@ fn validate_interval(interval: Option<(Time, Time)>) -> Result<(), Error> {
 mod tests {
     use super::*;
     use crate::model::{Clip, Controller, Curve, ModelBuilder, Node, SharedClock};
+    use std::ptr::eq;
     fn time(seconds: f64) -> Time {
         Time::seconds(seconds).unwrap()
     }
@@ -534,6 +718,100 @@ mod tests {
                 ..sample
             })
             .is_err());
+    }
+    #[test]
+    fn retiming_borrows_indexed_programmes_and_preserves_alias_clock_policy() {
+        let mut builder = ModelBuilder::new("retime");
+        let node = builder.add_node(Node::named("node")).unwrap();
+        let property = node.translation();
+        let base = builder
+            .add_clip(Clip::named("base").with_duration(time(2.)))
+            .unwrap();
+        builder
+            .add_channel(base, channel(property.clone(), Clock::Clip, 4.))
+            .unwrap();
+        let alias = builder
+            .add_clip(
+                Clip::named("alias")
+                    .with_alias(base)
+                    .with_duration(time(1.)),
+            )
+            .unwrap();
+        let model = builder.finish().unwrap();
+        let program = AnimationProgram::compile(&model);
+        let selected = program
+            .sample(AnimationSample {
+                clip: Some(alias),
+                clip_time: time(0.1),
+                ..Default::default()
+            })
+            .unwrap();
+        let original = selected.track(&property).unwrap();
+        let retimed = selected.at_times(time(2.25), time(100.), time(100.));
+        assert!(eq(retimed.selection, &selected));
+        assert_eq!(retimed.property(&property), Some([0.5; 3]));
+        let effective = retimed.track(&property).unwrap();
+        assert!(eq(original.track, effective.track));
+        assert_eq!(effective.time, time(0.25));
+        assert_eq!(effective.period, Some(time(1.)));
+        assert_eq!(selected.property(&property), Some([0.2; 3]));
+    }
+    #[test]
+    fn retimed_timeline_and_shared_clocks_keep_offsets_intervals_and_fallback() {
+        let mut builder = ModelBuilder::new("offsets");
+        let node = builder.add_node(Node::named("node")).unwrap();
+        let translation = node.translation();
+        let scale = node.scale();
+        let period = builder.add_clock(SharedClock { period: time(2.) }).unwrap();
+        builder
+            .add_timeline_channel(Channel::Vector3(Track {
+                target: translation.clone(),
+                clock: Clock::Timeline,
+                curve: Curve::linear(
+                    [time(9.), time(10.), time(12.), time(13.)],
+                    [[90.; 3], [2.; 3], [6.; 3], [130.; 3]],
+                )
+                .unwrap(),
+            }))
+            .unwrap();
+        builder
+            .add_shared_channel(channel(scale.clone(), Clock::Shared(period), 8.))
+            .unwrap();
+        let empty = builder
+            .add_controller(Controller {
+                channels: vec![Channel::Vector3(Track {
+                    target: translation.clone(),
+                    clock: Clock::Timeline,
+                    curve: Curve::step(Vec::<Time>::new(), Vec::<[f32; 3]>::new()).unwrap(),
+                })],
+                ..Default::default()
+            })
+            .unwrap();
+        let clip = builder
+            .add_clip(Clip::named("interval").with_duration(time(2.)))
+            .unwrap();
+        let model = builder.finish().unwrap();
+        let selected = model
+            .animation_sample(AnimationSample {
+                clip: Some(clip),
+                timeline_time: time(10.5),
+                timeline_interval: Some((time(10.), time(12.))),
+                controllers: &[empty],
+                ..Default::default()
+            })
+            .unwrap();
+        let retimed = selected.at_times(time(3.), time(11.5), time(5.));
+        assert_eq!(retimed.property(&translation), Some([5.; 3]));
+        assert_eq!(retimed.property(&scale), Some([4.; 3]));
+        let track = retimed.track(&translation).unwrap();
+        assert_eq!(track.origin, time(10.));
+        assert_eq!(track.period, Some(time(2.)));
+        assert_eq!(track.interval, Some((time(10.), time(12.))));
+        assert_eq!(track.track.curve.values().len(), 4);
+        let shared = retimed.track(&scale).unwrap();
+        assert_eq!(shared.time, time(1.));
+        assert_eq!(shared.period, Some(time(2.)));
+        assert_eq!(shared.origin, Time::default());
     }
     #[test]
     #[ignore = "explicit animation throughput measurement"]

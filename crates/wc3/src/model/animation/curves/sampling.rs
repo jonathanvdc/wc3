@@ -221,12 +221,8 @@ impl<T: SampleValue> Curve<'_, T> {
                     .then_some(low + 1)
                     .filter(|i| self.times.get(*i).unwrap().as_seconds() > end);
                 let b = T::adjacent(&a, b);
-                let p = previous
-                    .and_then(|i| self.values.get(i))
-                    .unwrap_or_else(|| a.clone());
-                let n = next
-                    .and_then(|i| self.values.get(i))
-                    .unwrap_or_else(|| b.clone());
+                let p = previous.and_then(|i| self.values.get(i)).unwrap_or(a);
+                let n = next.and_then(|i| self.values.get(i)).unwrap_or(b);
                 let p = T::adjacent(&a, p);
                 let n = T::adjacent(&b, n);
                 let weights = |v: TcbParameters, incoming: bool| {

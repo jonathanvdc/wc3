@@ -4,6 +4,7 @@ use super::state::ImportState;
 use super::storage::Storage;
 use crate::model::conversion::Error;
 use crate::model::formats::mdlx::{self as native, Dialect};
+use crate::model::materials::layered::AlphaAdditiveEncoding;
 use crate::model::profiles::mdlx as profile;
 use crate::model::profiles::Mdlx;
 use crate::model::AttachmentPointDefinition;
@@ -110,7 +111,9 @@ pub(super) fn read<'source, 'a, D: Dialect, S: Storage<'source, 'a>>(
         let flags = source.flags();
         let blend = match source.filter_mode {
             native::Particle2FilterMode::Blend => profile::Blend::Alpha,
-            native::Particle2FilterMode::Additive => profile::Blend::Additive,
+            native::Particle2FilterMode::Additive => {
+                profile::Blend::AdditiveAlpha(AlphaAdditiveEncoding::Additive)
+            }
             native::Particle2FilterMode::Modulate => profile::Blend::Modulate,
             native::Particle2FilterMode::Modulate2x => profile::Blend::Modulate2x,
             native::Particle2FilterMode::AlphaKey => profile::Blend::AlphaKey(()),

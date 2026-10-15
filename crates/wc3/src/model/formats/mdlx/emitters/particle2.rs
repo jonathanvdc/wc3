@@ -72,7 +72,7 @@ pub enum Particle2FilterMode {
     /// Source-alpha blending.
     Blend,
     #[mdx(value = 1)]
-    /// Additive blending.
+    /// Add source RGB weighted by source alpha.
     Additive,
     #[mdx(value = 2)]
     /// Multiplicative blending.

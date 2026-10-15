@@ -2,6 +2,7 @@
 use super::encode_animation::Encoder;
 use crate::model::conversion::Error;
 use crate::model::formats::mdlx::{self as native, FormatVersion};
+use crate::model::materials::layered::AlphaAdditiveEncoding;
 use crate::model::profiles::mdlx as profile;
 use crate::model::TextureId;
 use std::collections::BTreeMap;
@@ -48,7 +49,15 @@ pub(super) fn write<'a, V: FormatVersion>(
     for (index, source) in source.layers.iter().enumerate() {
         let path = format!("{path}.layers[{index}]");
         let mut layer = native::Layer::<V>::new();
-        layer.filter_mode = blend(source.state.blend);
+        layer.filter_mode = if let Some(mode) = blend(source.state.blend) {
+            mode
+        } else {
+            encoder.context.unsupported(
+                format!("{path}.layers[{index}].blend"),
+                "unweighted source-color addition has no exact Warcraft III layer selector",
+            )?;
+            native::LayerFilterMode::None
+        };
         layer.shading_flags =
             native::LayerShadingFlags(source.state.rasterization.controls.unclassified.bits());
         layer
@@ -144,16 +153,21 @@ pub(super) fn write<'a, V: FormatVersion>(
     }
     Ok(material)
 }
-fn blend(source: profile::Blend) -> native::LayerFilterMode {
-    match source {
+fn blend(source: profile::Blend) -> Option<native::LayerFilterMode> {
+    Some(match source {
         profile::Blend::Opaque => native::LayerFilterMode::None,
         profile::Blend::AlphaKey(()) => native::LayerFilterMode::Transparent,
         profile::Blend::Alpha => native::LayerFilterMode::Blend,
-        profile::Blend::Additive => native::LayerFilterMode::Additive,
-        profile::Blend::AdditiveAlpha(()) => native::LayerFilterMode::AddAlpha,
+        profile::Blend::Additive => return None,
+        profile::Blend::AdditiveAlpha(AlphaAdditiveEncoding::Additive) => {
+            native::LayerFilterMode::Additive
+        }
+        profile::Blend::AdditiveAlpha(AlphaAdditiveEncoding::AddAlpha) => {
+            native::LayerFilterMode::AddAlpha
+        }
         profile::Blend::Modulate => native::LayerFilterMode::Modulate,
         profile::Blend::Modulate2x => native::LayerFilterMode::Modulate2x,
         profile::Blend::Unknown(value) => native::LayerFilterMode::Unknown(value),
         profile::Blend::Extension(value) => match value {},
-    }
+    })
 }

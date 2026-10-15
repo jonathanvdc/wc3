@@ -50,7 +50,7 @@ pub enum LayerFilterMode {
     /// Source-alpha blending.
     Blend,
     #[mdx(value = 3)]
-    /// Additive blending.
+    /// Add source RGB weighted by source alpha.
     Additive,
     #[mdx(value = 4)]
     /// Additive blending weighted by source alpha.

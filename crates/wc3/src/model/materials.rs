@@ -78,6 +78,38 @@ pub enum Resource<'a> {
         name: Cow<'a, str>,
     },
 }
+impl Resource<'_> {
+    /// Detaches the complete resource identity, including nested owners and raw paths.
+    pub fn into_owned(self) -> Resource<'static> {
+        match self {
+            Self::Unspecified => Resource::Unspecified,
+            Self::Root => Resource::Root,
+            Self::Relative { owner, suffix } => Resource::Relative {
+                owner: Box::new(owner.into_owned()),
+                suffix: Cow::Owned(suffix.into_owned()),
+            },
+            Self::Path(value) => Resource::Path(Cow::Owned(value.into_owned())),
+            Self::FileDataId(value) => Resource::FileDataId(value),
+            Self::Sno {
+                namespace,
+                group,
+                id,
+            } => Resource::Sno {
+                namespace,
+                group,
+                id,
+            },
+            Self::Replaceable(value) => Resource::Replaceable(value),
+            Self::EmbeddedImage { bytes } => Resource::EmbeddedImage {
+                bytes: Cow::Owned(bytes.into_owned()),
+            },
+            Self::Named { namespace, name } => Resource::Named {
+                namespace: Cow::Owned(namespace.into_owned()),
+                name: Cow::Owned(name.into_owned()),
+            },
+        }
+    }
+}
 /// Texture color interpretation.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum ColorSpace {
@@ -201,6 +233,7 @@ impl Default for Resource<'_> {
     }
 }
 
+
 impl<
         D3: ValidateLinks,
         D4: ValidateLinks,
@@ -252,5 +285,68 @@ impl<
             Self::Programmed(value) => value.validate(),
             Self::World(value) => value.validate(),
         }
+    }
+}
+
+#[cfg(test)]
+mod resource_tests {
+    use super::*;
+
+    #[test]
+    fn detached_resource_keeps_nested_raw_paths_and_namespaces() {
+        let owned = {
+            let raw = vec![b'u', b'/', 0xff, b'.', b'm', b'2'];
+            let suffix = String::from("00.skin");
+            Resource::Relative {
+                owner: Box::new(Resource::Relative {
+                    owner: Box::new(Resource::Path(Cow::Borrowed(&raw))),
+                    suffix: Cow::Borrowed(".variant"),
+                }),
+                suffix: Cow::Borrowed(&suffix),
+            }
+            .into_owned()
+        };
+        let Resource::Relative { owner, suffix } = owned else {
+            panic!("relative identity lost")
+        };
+        assert_eq!(suffix, "00.skin");
+        let Resource::Relative { owner, suffix } = *owner else {
+            panic!("nested owner lost")
+        };
+        assert_eq!(suffix, ".variant");
+        assert_eq!(
+            *owner,
+            Resource::Path(Cow::Owned(vec![b'u', b'/', 0xff, b'.', b'm', b'2']))
+        );
+        let named = {
+            let namespace = String::from("archive");
+            let name = String::from("texture/body");
+            Resource::Named {
+                namespace: Cow::Borrowed(&namespace),
+                name: Cow::Borrowed(&name),
+            }
+            .into_owned()
+        };
+        assert_eq!(
+            named,
+            Resource::Named {
+                namespace: Cow::Borrowed("archive"),
+                name: Cow::Borrowed("texture/body")
+            }
+        );
+        let sno = Resource::Sno {
+            namespace: SnoNamespace::Diablo4,
+            group: 18,
+            id: 72,
+        }
+        .into_owned();
+        assert_eq!(
+            sno,
+            Resource::Sno {
+                namespace: SnoNamespace::Diablo4,
+                group: 18,
+                id: 72
+            }
+        );
     }
 }

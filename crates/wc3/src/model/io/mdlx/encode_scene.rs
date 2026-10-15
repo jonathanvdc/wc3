@@ -2,6 +2,7 @@
 use super::encode_animation::Encoder;
 use crate::model::conversion::Error;
 use crate::model::formats::mdlx::{self as native, Dialect};
+use crate::model::materials::layered::AlphaAdditiveEncoding;
 use crate::model::profiles::mdlx as profile;
 use crate::model::{FeatureId, MaterialId, MeshId, NodeId, TextureId};
 use native::scene::Node;
@@ -169,7 +170,9 @@ pub(super) fn write<'a, T: Dialect>(
                 record.replaceable_id = source.details.rendering.replaceable;
                 record.filter_mode = match source.details.rendering.blend {
                     profile::Blend::Alpha => native::Particle2FilterMode::Blend,
-                    profile::Blend::Additive => native::Particle2FilterMode::Additive,
+                    profile::Blend::AdditiveAlpha(AlphaAdditiveEncoding::Additive) => {
+                        native::Particle2FilterMode::Additive
+                    }
                     profile::Blend::Modulate => native::Particle2FilterMode::Modulate,
                     profile::Blend::Modulate2x => native::Particle2FilterMode::Modulate2x,
                     profile::Blend::AlphaKey(()) => native::Particle2FilterMode::AlphaKey,

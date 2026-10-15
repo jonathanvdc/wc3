@@ -4,7 +4,7 @@ use super::storage::Storage;
 use crate::model::conversion::Error;
 use crate::model::formats::mdlx::{self as native, FormatVersion};
 use crate::model::materials::bindings::{Coordinates, TextureBinding};
-use crate::model::materials::layered::LayerOptions;
+use crate::model::materials::layered::{AlphaAdditiveEncoding, LayerOptions};
 use crate::model::materials::state::{DepthState, Lighting, Operation, PassState};
 use crate::model::profiles::mdlx as profile;
 use crate::model::profiles::mdlx::{Blend, Fresnel, Layer, Material, Shading, TextureSlot};
@@ -96,8 +96,12 @@ pub(super) fn read<'source, 'a, V: FormatVersion, S: Storage<'source, 'a>>(
                     native::LayerFilterMode::None => Blend::Opaque,
                     native::LayerFilterMode::Transparent => Blend::AlphaKey(()),
                     native::LayerFilterMode::Blend => Blend::Alpha,
-                    native::LayerFilterMode::Additive => Blend::Additive,
-                    native::LayerFilterMode::AddAlpha => Blend::AdditiveAlpha(()),
+                    native::LayerFilterMode::Additive => {
+                        Blend::AdditiveAlpha(AlphaAdditiveEncoding::Additive)
+                    }
+                    native::LayerFilterMode::AddAlpha => {
+                        Blend::AdditiveAlpha(AlphaAdditiveEncoding::AddAlpha)
+                    }
                     native::LayerFilterMode::Modulate => Blend::Modulate,
                     native::LayerFilterMode::Modulate2x => Blend::Modulate2x,
                     native::LayerFilterMode::Unknown(value) => Blend::Unknown(value),

@@ -428,6 +428,16 @@ impl NodeId {
         Property::new(PropertyTarget::Visibility(self))
     }
 }
+impl MeshId {
+    /// Geometry-owned RGB tint, independent of its assigned surface.
+    pub fn color<P: Profile>(self) -> Property<[f32; 3], P> {
+        Property::new(PropertyTarget::MeshColor(self))
+    }
+    /// Geometry-owned opacity multiplier.
+    pub fn opacity<P: Profile>(self) -> Property<f32, P> {
+        Property::new(PropertyTarget::MeshOpacity(self))
+    }
+}
 impl MaterialId {
     /// Common material opacity.
     pub fn opacity<P: Profile>(self) -> Property<f32, P> {

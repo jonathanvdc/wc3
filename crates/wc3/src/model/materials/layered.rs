@@ -13,7 +13,21 @@ use crate::model::{
 use std::{borrow::Cow, fmt::Debug};
 
 /// Blending performed by a Warcraft III material layer.
-pub type Blend = BlendOperations<Unavailable, (), (), u32>;
+pub type Blend = BlendOperations<Unavailable, (), AlphaAdditiveEncoding, u32>;
+/// Authored spelling of source-opacity-weighted RGB addition in Warcraft III.
+///
+/// Both selectors add source RGB multiplied by source alpha. Their distinct
+/// native declarations are retained so material export preserves the wire value.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum AlphaAdditiveEncoding {
+    /// The native `Additive` selector, also available on atlas particles.
+    Additive,
+    /// The native `AddAlpha` material-layer selector.
+    AddAlpha,
+}
+impl ValidateLinks for AlphaAdditiveEncoding {
+    fn visit_links(&self, _visitor: &mut dyn FnMut(Link)) {}
+}
 /// Additional sampling and unresolved controls of a layered pass.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct LayerOptions {
