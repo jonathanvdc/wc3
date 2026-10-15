@@ -1,6 +1,7 @@
 //! Direct conversion between native indexed M3 documents and checked M3 graph vocabulary.
+use crate::model::semantic::Asset;
 mod logical;
-use super::{Asset, Conversion, Error, ExportOptions, ImportOptions, Plan};
+use super::{Conversion, Error, ExportOptions, ImportOptions, Plan};
 use crate::model::m3::{Bundle, Envelope};
 use crate::model::semantic::profiles::M3;
 pub use logical::profiles::ExportProfile;

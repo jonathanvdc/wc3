@@ -38,13 +38,13 @@ fn source() -> Appearance<'static, V260> {
                 1 => [1., 0., 0.],
                 _ => [0., 1., 0.],
             },
-            normal: 0x42ff8080,
+            normal: 0x00ff8080,
             color: 0xff0000ff,
             aux_color: 0xffffffff,
             tex_coord0: 0x80008000,
             tex_coord1: 0x80008000,
-            tangent: 0x238080ff,
-            binormal: 0x1180ff80,
+            tangent: 0x008080ff,
+            binormal: 0x0080ff80,
             cloth_vertex_index: u32::MAX,
         })
         .collect::<Vec<_>>();
@@ -154,7 +154,7 @@ fn appearance_export_honors_numeric_approximation_policy() {
     let mut asset = conversion::import(&source, &ImportOptions::default())
         .unwrap()
         .value;
-    let mesh_id = asset.models[0].meshes().next().unwrap().0;
+    let mesh_id = asset[0].meshes().next().unwrap().0;
     asset
         .edit_model(0, |builder| {
             let mut mesh = builder.model().mesh(mesh_id).unwrap().clone();
@@ -248,8 +248,8 @@ fn appearance_and_animation_bundle_roundtrip_keeps_independent_declarations() {
     let asset = conversion::import(&bundle, &ImportOptions::default())
         .unwrap()
         .value;
-    assert_eq!(asset.models[0].clips().len(), 1);
-    assert!(asset.models[0].clips().next().unwrap().1.channels().iter().any(|channel| matches!(channel,wc3::model::semantic::Channel::Rotation(track) if track.curve.interpolation()==wc3::model::semantic::Interpolation::Nlerp)));
+    assert_eq!(asset[0].clips().len(), 1);
+    assert!(asset[0].clips().next().unwrap().1.channels().iter().any(|channel| matches!(channel,wc3::model::semantic::Channel::Rotation(track) if track.curve.interpolation()==wc3::model::semantic::Interpolation::Nlerp)));
     assert!(conversion::plan(&asset, &ExportOptions::default()).is_err());
     let out = conversion::plan_bundle(&asset, &ExportOptions::default())
         .unwrap()
@@ -276,11 +276,11 @@ fn actual_slot_variants_survive_without_look_or_geometry_uses() {
     let asset = conversion::import(&source, &ImportOptions::default())
         .unwrap()
         .value;
-    assert_eq!(asset.models[0].appearance().slots().len(), 2);
-    assert!(asset.models[0]
+    assert_eq!(asset[0].appearance().slots().len(), 2);
+    assert!(asset[0]
         .instances()
         .all(|(_, instance)| instance.draws.is_empty()));
-    assert!(asset.models[0]
+    assert!(asset[0]
         .materials()
         .all(|(_, material)| material.name.is_empty()));
     let output = conversion::plan(&asset, &ExportOptions::default())
@@ -296,7 +296,7 @@ fn slot_identity_renames_native_references_without_material_label_inference() {
     let mut asset = conversion::import(&source, &ImportOptions::default())
         .unwrap()
         .value;
-    let slot = asset.models[0].appearance().slots().next().unwrap().0;
+    let slot = asset[0].appearance().slots().next().unwrap().0;
     asset
         .edit_model(0, |builder| {
             let mut appearance = builder.model().appearance().clone();
@@ -353,7 +353,7 @@ fn foreign_slot_variant_id_is_not_resolved_by_its_display_name() {
     let asset = conversion::import(&source, &ImportOptions::default())
         .unwrap()
         .value;
-    let mut appearance = asset.models[0].appearance().clone();
+    let mut appearance = asset[0].appearance().clone();
     let slot = appearance.slots().next().unwrap().0;
     let material = appearance.slot(slot).unwrap().variants().next().unwrap().1;
     let look = appearance.alternatives().next().unwrap().0;
@@ -367,21 +367,22 @@ fn nlerp_is_quaternion_only() {
     assert!(Curve::nlerp(vec![Time::seconds(0.).unwrap()], vec![Quaternion::IDENTITY]).is_ok());
 }
 #[test]
-fn unknown_bone_pulses_stay_inactive_after_graph_edits() {
+fn unknown_bone_pulses_are_rejected_or_dropped_before_graph_edits() {
     let mut source = source();
     source.root.bone_pulse_count = 2;
     source.root.bone_pulses = ZeroVec::alloc_from_slice(&[10u8, 20, 30, 40]);
+    assert!(conversion::import(&source, &ImportOptions::default()).is_err());
     let mut asset = conversion::import(
         &source,
         &ImportOptions {
-            unknown: UnknownPolicy::Archive,
+            unknown: UnknownPolicy::Drop,
             ..Default::default()
         },
     )
     .unwrap()
     .value;
-    assert_eq!(asset.opaque.len(), 1);
-    let bone = asset.models[0]
+
+    let bone = asset[0]
         .nodes()
         .find(|(_, node)| {
             matches!(
@@ -398,20 +399,12 @@ fn unknown_bone_pulses_stay_inactive_after_graph_edits() {
             builder.set_node(bone, node)
         })
         .unwrap();
-    assert!(conversion::plan(&asset, &ExportOptions::default()).is_err());
-    let out = conversion::plan(
-        &asset,
-        &ExportOptions {
-            unknown: UnknownPolicy::Archive,
-            ..Default::default()
-        },
-    )
-    .unwrap()
-    .execute()
-    .unwrap()
-    .value;
+    let out = conversion::plan(&asset, &ExportOptions::default())
+        .unwrap()
+        .execute()
+        .unwrap()
+        .value;
     assert!(out.root.bone_pulses.is_empty());
-    assert_eq!(asset.opaque[0].bytes.as_ref(), &[10u8, 20, 30, 40]);
 }
 #[test]
 fn animation_from_another_appearance_is_not_bound_by_matching_bone_names() {
@@ -620,7 +613,7 @@ fn active_look_at_reference_follows_actual_bone_rename() {
     let mut asset = conversion::import(&source, &ImportOptions::default())
         .unwrap()
         .value;
-    let LookAtTarget::Bone(bone) = asset.models[0].controls().look_at.target else {
+    let LookAtTarget::Bone(bone) = asset[0].controls().look_at.target else {
         panic!("look-at reference was not resolved")
     };
     asset
@@ -658,7 +651,7 @@ fn inactive_unresolved_look_at_spelling_stays_editable_without_claiming_a_bone()
         .unwrap()
         .value;
     assert_eq!(
-        asset.models[0].controls().look_at.target,
+        asset[0].controls().look_at.target,
         LookAtTarget::Unresolved("missing".to_owned())
     );
     asset
@@ -693,7 +686,7 @@ fn look_at_typed_target_rejects_non_bones_and_ambiguous_native_export_names() {
     let mut asset = conversion::import(&source, &ImportOptions::default())
         .unwrap()
         .value;
-    let frame = asset.models[0]
+    let frame = asset[0]
         .nodes()
         .find(|(_, node)| matches!(node.controls, NodeRole::ModelSpace))
         .unwrap()
@@ -706,7 +699,7 @@ fn look_at_typed_target_rejects_non_bones_and_ambiguous_native_export_names() {
             Ok(())
         })
         .is_err());
-    let LookAtTarget::Bone(bone) = asset.models[0].controls().look_at.target else {
+    let LookAtTarget::Bone(bone) = asset[0].controls().look_at.target else {
         unreachable!()
     };
     asset
@@ -728,7 +721,7 @@ fn disabled_ambiguous_look_at_name_remains_unresolved() {
         .unwrap()
         .value;
     assert_eq!(
-        asset.models[0].controls().look_at.target,
+        asset[0].controls().look_at.target,
         LookAtTarget::Unresolved("root".to_owned())
     );
     let output = conversion::plan(&asset, &ExportOptions::default())
@@ -737,4 +730,84 @@ fn disabled_ambiguous_look_at_name_remains_unresolved() {
         .unwrap()
         .value;
     assert_eq!(output.root.look_at.bone_name, source.root.look_at.bone_name);
+}
+
+#[test]
+fn auxiliary_direction_bytes_survive_strict_import_and_profile_conversion() {
+    let mut source = source();
+    let mut vertices = source.root.geo_set0.sub_objects[0].vertices.to_vec();
+    vertices[0].normal |= 0x4200_0000;
+    vertices[0].tangent |= 0x2300_0000;
+    vertices[0].binormal |= 0x1100_0000;
+    source.root.geo_set0.sub_objects[0].vertices = ZeroVec::alloc_from_slice(&vertices);
+    let bytes = source.write().unwrap();
+    let native = Appearance::<V260>::read(&bytes).unwrap();
+    assert_eq!(
+        native.root.geo_set0.sub_objects[0]
+            .vertices
+            .get(0)
+            .unwrap()
+            .normal
+            >> 24,
+        0x42
+    );
+    let imported = conversion::import(&native, &ImportOptions::default()).unwrap();
+    assert!(imported.report.issues.is_empty());
+    let (_, mesh) = imported.value[0].meshes().next().unwrap();
+    assert!(mesh
+        .geometry
+        .streams()
+        .extras
+        .direction_auxiliary
+        .is_borrowed());
+    assert_eq!(
+        mesh.geometry.streams().extras.direction_auxiliary.get(0),
+        Some([0x42, 0x23, 0x11])
+    );
+    let restored = imported
+        .value
+        .widen::<Universal>()
+        .try_narrow::<D3>()
+        .unwrap();
+    let output = conversion::plan(&restored, &ExportOptions::default())
+        .unwrap()
+        .execute()
+        .unwrap()
+        .value;
+    let vertex = output.root.geo_set0.sub_objects[0].vertices.get(0).unwrap();
+    let original = native.root.geo_set0.sub_objects[0].vertices.get(0).unwrap();
+    assert_eq!(
+        (vertex.normal, vertex.tangent, vertex.binormal),
+        (original.normal, original.tangent, original.binormal)
+    );
+    assert_eq!(vertex.normal_vector(), original.normal_vector());
+    assert_eq!(vertex.tangent_vector(), original.tangent_vector());
+    assert_eq!(vertex.binormal_vector(), original.binormal_vector());
+}
+
+#[test]
+fn absent_auxiliary_direction_stream_exports_zero_bytes() {
+    let source = source();
+    let mut imported = conversion::import(&source, &ImportOptions::default())
+        .unwrap()
+        .value;
+    let (id, mesh) = imported[0].meshes().next().unwrap();
+    let mut mesh = mesh.clone();
+    let mut streams = mesh.geometry.streams().clone();
+    streams.extras.direction_auxiliary = Default::default();
+    mesh.geometry = mesh.geometry.with_streams(streams).unwrap();
+    imported
+        .edit_model(0, |builder| builder.set_mesh(id, mesh))
+        .unwrap();
+    let output = conversion::plan(&imported, &ExportOptions::default())
+        .unwrap()
+        .execute()
+        .unwrap()
+        .value;
+    for vertex in output.root.geo_set0.sub_objects[0].vertices.iter() {
+        assert_eq!(
+            (vertex.normal | vertex.tangent | vertex.binormal) & 0xff00_0000,
+            0
+        );
+    }
 }

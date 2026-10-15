@@ -1,6 +1,7 @@
 use std::borrow::Cow;
+use wc3::model::semantic::Asset;
 use wc3::model::{
-    conversion::{self, ApproximationPolicy, Asset, ExportOptions, ImportOptions},
+    conversion::{self, ApproximationPolicy, ExportOptions, ImportOptions},
     m3::{self, records as nr},
     semantic::{
         self as sem,
@@ -101,7 +102,7 @@ pub(super) fn asset() -> Asset<'static, M3> {
         controllers: vec![controller],
     });
     builder.add_clip(clip).unwrap();
-    Asset::new(builder.finish().unwrap())
+    builder.finish().unwrap()
 }
 pub(super) fn approximate() -> ExportOptions {
     ExportOptions {
@@ -119,7 +120,7 @@ fn geometry_skin_and_animation_survive_native_round_trip() {
     let bytes = native.value.write().unwrap();
     let decoded = m3::Bundle::from_model(m3::Model::<m3::Md34>::read(&bytes.model).unwrap());
     let imported = conversion::m3::import(&decoded, &ImportOptions::default()).unwrap();
-    let model = &imported.value.models[0];
+    let model = &imported.value[0];
     let (_, mesh) = model.meshes().next().unwrap();
     assert_eq!(mesh.positions().get(1), Some([1., 0., 0.]));
     let sem::Topology::Triangles(triangles) = mesh.topology() else {
@@ -167,7 +168,7 @@ fn profiles_select_root_and_envelope_independently() {
 #[test]
 fn standard_controls_remain_active_after_geometry_edit() {
     let mut asset = asset();
-    let (id, material) = asset.models[0].materials().next().unwrap();
+    let (id, material) = asset[0].materials().next().unwrap();
     let mut material = material.clone();
     let surface::Material::Standard(standard) = &mut material.surface else {
         unreachable!()
@@ -215,7 +216,7 @@ fn dormant_standard_and_hair_surfaces_are_authored_materials() {
         .unwrap()
         .value;
     let imported = conversion::m3::import(&native, &ImportOptions::default()).unwrap();
-    assert!(imported.value.models[0]
+    assert!(imported.value[0]
         .materials()
         .any(|(_, material)| matches!(material.surface, surface::Material::Hair(_))));
 }
@@ -234,29 +235,25 @@ fn imported_graph_widens_and_narrows_without_changing_identity_or_borrowing() {
     let imported = conversion::m3::import(&decoded, &ImportOptions::default())
         .unwrap()
         .value;
-    let model_id = imported.models[0].id();
-    let mesh_id = imported.models[0].meshes().next().unwrap().0;
-    let node_id = imported.models[0].nodes().next().unwrap().0;
-    assert!(imported.models[0]
-        .mesh(mesh_id)
-        .unwrap()
-        .positions()
-        .is_borrowed());
+    let model_id = imported[0].id();
+    let mesh_id = imported[0].meshes().next().unwrap().0;
+    let node_id = imported[0].nodes().next().unwrap().0;
+    assert!(imported[0].mesh(mesh_id).unwrap().positions().is_borrowed());
     let narrowed = imported
         .widen::<sem::profiles::Universal>()
         .try_narrow::<M3>()
         .unwrap();
-    assert_eq!(narrowed.models[0].id(), model_id);
-    assert!(narrowed.models[0].node(node_id).is_some());
-    let mesh = narrowed.models[0].mesh(mesh_id).unwrap();
+    assert_eq!(narrowed[0].id(), model_id);
+    assert!(narrowed[0].node(node_id).is_some());
+    let mesh = narrowed[0].mesh(mesh_id).unwrap();
     assert!(mesh.positions().is_borrowed());
     assert_eq!(mesh.positions().get(1), Some([1., 0., 0.]));
-    assert_eq!(narrowed.models[0].controllers().count(), 1);
+    assert_eq!(narrowed[0].controllers().count(), 1);
 }
 #[test]
 fn native_profile_rejects_coordinate_metadata_that_cannot_round_trip() {
     let mut source = asset();
-    let original = source.models[0].basis();
+    let original = source[0].basis();
     assert!(source
         .edit_model(0, |builder| {
             builder.set_basis(sem::Basis::new(
@@ -267,12 +264,68 @@ fn native_profile_rejects_coordinate_metadata_that_cannot_round_trip() {
             Ok(())
         })
         .is_err());
-    assert_eq!(source.models[0].basis(), original);
+    assert_eq!(source[0].basis(), original);
     assert!(source
         .edit_model(0, |builder| {
             builder.set_units(sem::LengthUnit::MetersPerUnit(0.5));
             Ok(())
         })
         .is_err());
-    assert_eq!(source.models[0].units(), sem::LengthUnit::Unspecified);
+    assert_eq!(source[0].units(), sem::LengthUnit::Unspecified);
+}
+
+#[test]
+fn unknown_sections_and_vertex_qualifiers_require_explicit_drop() {
+    use wc3::model::conversion::{IssueKind, UnknownPolicy};
+    let original = asset();
+    let source = conversion::m3::plan::<m3::StarCraft2>(&original, &approximate())
+        .unwrap()
+        .execute()
+        .unwrap()
+        .value;
+    let mut root = source.model.root::<nr::ModelRecord<nr::V29>>().unwrap();
+    let mut document = source.model.into_document();
+    root.vertex_flags = nr::VertexFlags(root.vertex_flags.bits() | 0x1c);
+    let root_id = document
+        .section_id(document.root_reference().index)
+        .unwrap();
+    document.replace(root_id, &[root]).unwrap();
+    document.append_raw(*b"XTRA", 1, 1, vec![7, 8, 9]).unwrap();
+    let source = m3::Bundle::from_model(m3::Model::from_document(document).unwrap());
+    assert!(conversion::m3::import(&source, &ImportOptions::default()).is_err());
+    let imported = conversion::m3::import(
+        &source,
+        &ImportOptions {
+            unknown: UnknownPolicy::Drop,
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    assert!(imported
+        .report
+        .issues
+        .iter()
+        .any(|issue| issue.path == "m3.vertex_qualifier" && issue.kind == IssueKind::Dropped));
+    assert!(imported
+        .report
+        .issues
+        .iter()
+        .any(|issue| issue.path.contains("opaque") && issue.kind == IssueKind::Dropped));
+    assert!(source
+        .model
+        .document()
+        .sections()
+        .any(|(_, section)| section.tag() == *b"XTRA"));
+    let output = conversion::m3::plan::<m3::StarCraft2>(&imported.value, &approximate())
+        .unwrap()
+        .execute()
+        .unwrap()
+        .value;
+    let root = output.model.root::<nr::ModelRecord<nr::V29>>().unwrap();
+    assert_eq!(root.vertex_flags.bits() & 0x1c, 0);
+    assert!(output
+        .model
+        .document()
+        .sections()
+        .all(|(_, section)| section.tag() != *b"XTRA"));
 }

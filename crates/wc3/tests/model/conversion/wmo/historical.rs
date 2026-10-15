@@ -145,7 +145,7 @@ fn alpha_direct_geometry_and_lighting_controls_survive_edits() {
     let mut asset = conversion::wmo::import(&source, &ImportOptions::default())
         .unwrap()
         .value;
-    let model = &asset.models[0];
+    let model = &asset[0];
     let (id, mut mesh) = model
         .meshes()
         .next()
@@ -270,7 +270,7 @@ fn historical_multiple_placements_relocate_lighting_windows() {
         .execute()
         .unwrap()
         .value;
-    assert_eq!(asset.models[0].instances().count(), 2);
+    assert_eq!(asset[0].instances().count(), 2);
     assert_eq!(
         encoded.group(0).unwrap().header.interior_batches[0].vertex_count,
         6

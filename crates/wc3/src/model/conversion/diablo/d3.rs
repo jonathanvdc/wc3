@@ -1,9 +1,6 @@
 //! Diablo III appearance import and typed native export planning.
-use super::super::{
-    Asset, Context, Conversion, EncodingHint, Error, ExportOptions, Format, ImportOptions,
-    IssueKind, OpaquePayload, Plan, UnknownPolicy,
-};
-use crate::model::common::{Borrowed as _, FileKey};
+use super::super::{Context, Conversion, Error, ExportOptions, ImportOptions, Plan};
+use crate::model::common::Borrowed as _;
 use crate::model::diablo::d3::records as native;
 use crate::model::diablo::d3::{
     Animation, Appearance, Material as NativeMaterial, V118, V25, V260,
@@ -12,6 +9,7 @@ use crate::model::semantic::profiles::diablo::d3::{
     Appearance as LogicalAppearance, BoneControls, LookAtControls, LookAtTarget, MaterialAsset,
     ModelControls, NodeRole, Slot, D3,
 };
+use crate::model::semantic::Asset;
 use crate::model::semantic::{
     Bounds, ExplicitBinding, Material, MeshInstance, Model, Node, NodeId, Quaternion, Skin,
     Transform,
@@ -171,7 +169,6 @@ fn import_appearance<'a>(
         }
         slot_ids.push(slot_id);
     }
-    let mut hints = Vec::new();
     for (lod, geoset) in [&root.geo_set0, &root.geo_set1].into_iter().enumerate() {
         for (i, sub) in geoset.sub_objects.iter().enumerate() {
             if !sub.cloth_data.is_empty() || !sub.collision_shapes.is_empty() {
@@ -191,12 +188,8 @@ fn import_appearance<'a>(
                         "subobject names an undeclared native material slot",
                     )
                 })?;
-            let (mesh, qualifiers) = geometry::read(sub, &bone_ids, Some(slot))?;
+            let mesh = geometry::read(sub, &bone_ids, Some(slot))?;
             let mesh_id = builder.add_mesh(mesh)?;
-            hints.push(EncodingHint::D3VectorQualifiers {
-                mesh: mesh_id,
-                values: qualifiers,
-            });
             let mut instance = MeshInstance::new(model_frame, mesh_id);
             instance.skin = if sub.vertex_influences.is_empty() {
                 None
@@ -226,39 +219,12 @@ fn import_appearance<'a>(
         appearance.add_look(text_owned(&look.name)?, bindings)?;
     }
     builder.set_appearance(appearance);
-    let mut asset = Asset::new(builder.finish()?);
-    asset.encoding_hints = hints;
+    let asset = builder.finish()?;
     if !root.bone_pulses.is_empty() || root.bone_pulse_count != 0 {
-        match options.unknown {
-            UnknownPolicy::Reject => {
-                return Err(Error::new(
-                    "d3.bone_pulses",
-                    "uninterpreted bone-pulse payload requires an explicit unknown-data policy",
-                ))
-            }
-            UnknownPolicy::Drop => context.issue(
-                "d3.bone_pulses",
-                IssueKind::Dropped,
-                "uninterpreted bone-pulse payload omitted",
-            ),
-            UnknownPolicy::Archive => {
-                let count = u32::try_from(root.bone_pulse_count)
-                    .map_err(|_| Error::new("d3.bone_pulses", "negative bone-pulse count"))?;
-                asset.opaque.push(OpaquePayload {
-                    format: Format::Diablo3,
-                    file: FileKey::Root,
-                    tag: *b"BPUL",
-                    revision: Some(260),
-                    count: Some(count),
-                    bytes: Cow::Borrowed(root.bone_pulses.as_bytes()),
-                });
-                context.issue(
-                    "d3.bone_pulses",
-                    IssueKind::Archived,
-                    "uninterpreted bone-pulse data retained outside the authoring graph",
-                );
-            }
-        }
+        context.unknown_data(
+            "d3.bone_pulses",
+            "uninterpreted bone-pulse payload has no semantic representation",
+        )?;
     }
     Ok(Conversion {
         value: asset,

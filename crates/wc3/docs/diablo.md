@@ -142,8 +142,8 @@ also target actual skeleton bones, so renaming a bone updates its native look-at
 reference; inactive unresolved spellings remain independently editable.
 
 The semantic `d3::VertexStreams` type shares the `semantic::VertexData` layout,
-with auxiliary colors, independent binormals, and cloth-vertex mappings in
-`VertexExtras`. Influence rows use `[Influence; 3]`, preserving their ordered
+with auxiliary colors, independent binormals, auxiliary direction bytes, and
+cloth-vertex mappings in `VertexExtras`. Influence rows use `[Influence; 3]`, preserving their ordered
 zero-weight slots.
 
 The appearance owns named material slots, slot-local variants, and named looks
@@ -179,15 +179,17 @@ Standalone material revision 25, shader revision 150, and shader-map revision 26
 resources use `import_material`, `import_shader`, and `import_shader_map`, with
 matching `plan_*` operations. They use the Diablo semantic shader vocabulary,
 including external texture and shader selections, pass order, and unresolved
-option codes. These
-resource adapters perform no dependency I/O and do not embed separately edited
+option codes. These resource adapters perform no dependency I/O and do not embed separately edited
 shader resources into an appearance document.
 
 Strict conversion rejects unsupported collision, cloth, octree, and static-light
-projections. Unknown bone-pulse bytes follow `UnknownPolicy`; archived bytes remain
-inactive attachments and are never reattached to a rebuilt graph. Packed direction
-qualifiers remain optional encoding hints. Edited UVs, colors, directions, and
-quaternion keys must be exactly encodable unless the configured approximation
+projections. D3 vertex extras retain the three auxiliary direction bytes in
+normal, tangent, and binormal order, without assuming their meaning. Their
+optional stream survives Universal widening, exact narrowing, and vertex remaps;
+new geometry without that stream exports zero auxiliary bytes. Unknown bone-pulse
+bytes follow `UnknownPolicy`: import rejects them by default or explicitly drops
+them with a diagnostic. Native codec access retains the original bytes. Edited UVs, colors,
+directions, and quaternion keys must be exactly encodable unless the configured approximation
 policy permits their measured quantization error.
 
 ## Convert declared Diablo IV geometry

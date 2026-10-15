@@ -778,6 +778,7 @@ fn project_attribute<'a, 'data: 'a>(
     }
     let values = match &attribute.values {
         AttributeValues::Boolean(source) => values!(source, Boolean),
+        AttributeValues::Byte3(source) => values!(source, Byte3),
         AttributeValues::Byte4(source) => values!(source, Byte4),
         AttributeValues::U16(source) => values!(source, U16),
         AttributeValues::Unsigned4(source) => values!(source, Unsigned4),

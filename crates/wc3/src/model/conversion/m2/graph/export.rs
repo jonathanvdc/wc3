@@ -1,6 +1,7 @@
 //! Typed M2 output planning and native graph construction.
 use super::animation::{encode, time_ms};
 use super::*;
+use crate::model::conversion::select_model;
 
 /// Plans a typed M2 bundle, checking index limits, curves and resource identities.
 pub fn plan<D: ExportDialect>(
@@ -33,7 +34,7 @@ where
         <D::Layout as native::records::BoneLayout>::RotationValue,
     >: ValuesFactory<<D::Layout as native::records::BoneLayout>::RotationValue>,
 {
-    let model = asset.model(options)?;
+    let model = select_model(asset, options)?;
     let mut context = Context::export(options);
     if model.basis() != semantic::Basis::default() {
         context.unsupported(
@@ -53,26 +54,6 @@ where
         }
     }
     let family = Some(model.controls());
-    for _payload in asset.opaque.iter().filter(|p| p.format == Format::M2) {
-        match options.unknown {
-            UnknownPolicy::Reject => {
-                return Err(Error::new(
-                    "m2.opaque",
-                    "opaque source fragments require an explicit preservation policy",
-                ));
-            }
-            UnknownPolicy::Archive => context.issue(
-                "m2.opaque",
-                IssueKind::Archived,
-                "opaque fragment remains outside the rebuilt model",
-            ),
-            UnknownPolicy::Drop => context.issue(
-                "m2.opaque",
-                IssueKind::Dropped,
-                "opaque fragment omitted from rebuilt output",
-            ),
-        }
-    }
 
     let mut bundle = Bundle::from_model(native::Model::<D>::new());
     let core = bundle.model.core_mut();

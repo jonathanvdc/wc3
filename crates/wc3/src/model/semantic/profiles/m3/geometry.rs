@@ -1,9 +1,30 @@
 //! Authored geometry behavior belongs to its mesh and placement.
 use super::values::{BatchFlags, RegionFlags};
 use crate::model::semantic::{FeatureId, FeatureKind, Link, NodeId, SkinId, ValidateLinks};
+/// Preferred affine packing shared by a region's UV channels.
+/// Logical coordinates equal `packed * scale / 32768 + offset`.
+/// Export reuses this preference when it represents the current coordinates exactly.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct UvEncoding {
+    /// Finite multiplier; zero encodes a constant coordinate.
+    pub scale: f32,
+    /// Finite offset applied after scaling.
+    pub offset: f32,
+}
+impl Default for UvEncoding {
+    fn default() -> Self {
+        Self {
+            scale: 16.,
+            offset: 0.,
+        }
+    }
+}
+
 /// Region behavior supplementing the shared geometry arrays.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct MeshControls {
+    /// Optional preferred UV packing, independent of animated texture transforms.
+    pub uv_encoding: Option<UvEncoding>,
     /// Skeleton binding belonging to this region definition.
     pub skin: Option<SkinId>,
     /// Definition-level placement for geometry with no authored draw instances.
@@ -49,6 +70,12 @@ pub struct BatchControls {
 }
 impl ValidateLinks for MeshControls {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
+        if self
+            .uv_encoding
+            .is_some_and(|uv| !uv.scale.is_finite() || !uv.offset.is_finite())
+        {
+            visitor(Link::InvalidValue);
+        }
         self.skin.visit_links(visitor);
         self.root_bone.visit_links(visitor)
     }

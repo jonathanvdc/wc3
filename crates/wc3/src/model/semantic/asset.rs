@@ -63,28 +63,12 @@ impl Cardinality for Multiple {
         values
     }
 }
-/// Proof that widening a container does not exclude its source cardinality.
-pub trait ContainsCardinality<Source: Cardinality>: Cardinality {
-    /// Embeds the source collection without changing model order.
-    fn embed<T: Clone + Debug>(source: Source::Storage<T>) -> Self::Storage<T>;
-}
-impl<C: Cardinality> ContainsCardinality<C> for C {
-    fn embed<T: Clone + Debug>(source: C::Storage<T>) -> C::Storage<T> {
-        source
-    }
-}
-impl ContainsCardinality<Single> for Multiple {
-    fn embed<T: Clone + Debug>(source: [T; 1]) -> Vec<T> {
-        Vec::from(source)
-    }
-}
-
 /// Models and their authoritative resource arena.
 ///
 /// Models contain resource identities, never a resource handle. A borrowed view
 /// supplies the collection context when those identities need resolving.
 #[derive(Clone, Debug)]
-pub struct ModelCollection<'data, P: Profile = Universal, C: Cardinality = Multiple> {
+pub struct Asset<'data, P: Profile = Universal, C: Cardinality = <P as Profile>::Models> {
     models: C::Storage<Model<'data, P>>,
     resources: Resources<'data, P>,
     metadata: P::AssetMetadata<'data>,
@@ -93,13 +77,13 @@ pub struct ModelCollection<'data, P: Profile = Universal, C: Cardinality = Multi
 ///
 /// Unlike finishing standalone models independently, this permits relationships
 /// to asset metadata that is defined after the model drafts are assembled.
-pub struct ModelCollectionBuilder<'data, P: Profile = Universal, C: Cardinality = Multiple> {
+pub struct AssetBuilder<'data, P: Profile = Universal, C: Cardinality = <P as Profile>::Models> {
     models: Vec<ModelBuilder<'data, P>>,
     resources: ResourcesBuilder<'data, P>,
     metadata: P::AssetMetadata<'data>,
     cardinality: PhantomData<C>,
 }
-impl<'data, P: Profile, C: Cardinality> ModelCollectionBuilder<'data, P, C> {
+impl<'data, P: Profile, C: Cardinality> AssetBuilder<'data, P, C> {
     /// Starts an empty draft with the profile's default collection metadata.
     pub fn new() -> Self {
         Self {
@@ -146,7 +130,7 @@ impl<'data, P: Profile, C: Cardinality> ModelCollectionBuilder<'data, P, C> {
         index
     }
     /// Validates all models against one resource arena and the final collection metadata.
-    pub fn finish(self) -> Result<ModelCollection<'data, P, C>, Error> {
+    pub fn finish(self) -> Result<Asset<'data, P, C>, Error> {
         let mut resources = self.resources.finish();
         let mut arenas = vec![resources.authority_id()];
         let mut models = Vec::with_capacity(self.models.len());
@@ -158,20 +142,20 @@ impl<'data, P: Profile, C: Cardinality> ModelCollectionBuilder<'data, P, C> {
             }
             models.push(model);
         }
-        ModelCollection::from_parts(models, resources, self.metadata)
+        Asset::from_parts(models, resources, self.metadata)
     }
 }
-impl<P: Profile, C: Cardinality> Default for ModelCollectionBuilder<'_, P, C> {
+impl<P: Profile, C: Cardinality> Default for AssetBuilder<'_, P, C> {
     fn default() -> Self {
         Self::new()
     }
 }
 /// A complete standalone model and its dependency arena.
-pub type SingleModel<'data, P = Universal> = ModelCollection<'data, P, Single>;
-impl<'data, P: Profile, C: Cardinality> ModelCollection<'data, P, C> {
+pub type SingleModel<'data, P = Universal> = Asset<'data, P, Single>;
+impl<'data, P: Profile, C: Cardinality> Asset<'data, P, C> {
     /// Begins unpublished models and their shared dependencies in one collection.
-    pub fn builder() -> ModelCollectionBuilder<'data, P, C> {
-        ModelCollectionBuilder::new()
+    pub fn builder() -> AssetBuilder<'data, P, C> {
+        AssetBuilder::new()
     }
     /// Places a complete standalone model in this collection cardinality.
     pub fn single(single: SingleModel<'data, P>) -> Self {
@@ -392,8 +376,8 @@ impl<'data, P: Profile, C: Cardinality> ModelCollection<'data, P, C> {
         Ok(result)
     }
     /// Embeds all models and resources in a containing vocabulary.
-    pub fn widen<Q: Extends<P>>(self) -> ModelCollection<'data, Q, C> {
-        ModelCollection {
+    pub fn widen<Q: Extends<P>>(self) -> Asset<'data, Q, C> {
+        Asset {
             models: C::collect(
                 C::into_vec(self.models)
                     .into_iter()
@@ -406,12 +390,12 @@ impl<'data, P: Profile, C: Cardinality> ModelCollection<'data, P, C> {
         }
     }
     /// Adds another vocabulary while retaining this collection in its left branch.
-    pub fn union<Q: Profile>(self) -> ModelCollection<'data, Union<P, Q>, C> {
+    pub fn union<Q: Profile>(self) -> Asset<'data, Union<P, Q>, C> {
         self.widen()
     }
     /// Adds another vocabulary while retaining this collection in its right branch.
-    pub fn union_right<Q: Profile>(self) -> ModelCollection<'data, Union<Q, P>, C> {
-        ModelCollection {
+    pub fn union_right<Q: Profile>(self) -> Asset<'data, Union<Q, P>, C> {
+        Asset {
             models: C::collect(
                 C::into_vec(self.models)
                     .into_iter()
@@ -423,17 +407,8 @@ impl<'data, P: Profile, C: Cardinality> ModelCollection<'data, P, C> {
             metadata: Either::Right(self.metadata),
         }
     }
-    pub(crate) fn widen_cardinality<D: ContainsCardinality<C>>(
-        self,
-    ) -> ModelCollection<'data, P, D> {
-        ModelCollection {
-            models: D::embed(self.models),
-            resources: self.resources,
-            metadata: self.metadata,
-        }
-    }
 }
-impl<'data, P: Profile> ModelCollection<'data, P, Single> {
+impl<'data, P: Profile> Asset<'data, P, Single> {
     pub(crate) fn from_single_parts(
         model: Model<'data, P>,
         resources: Resources<'data, P>,
@@ -452,21 +427,19 @@ impl<'data, P: Profile> ModelCollection<'data, P, Single> {
         self.edit_model(0, edit)
     }
 }
-impl<'data, P: Profile> Deref for ModelCollection<'data, P, Single> {
+impl<'data, P: Profile> Deref for Asset<'data, P, Single> {
     type Target = Model<'data, P>;
     fn deref(&self) -> &Self::Target {
         &self.models[0]
     }
 }
-impl<'data, P: Profile, C: Cardinality> Index<usize> for ModelCollection<'data, P, C> {
+impl<'data, P: Profile, C: Cardinality> Index<usize> for Asset<'data, P, C> {
     type Output = Model<'data, P>;
     fn index(&self, index: usize) -> &Self::Output {
         &self.as_slice()[index]
     }
 }
-impl<'view, 'data, P: Profile, C: Cardinality> IntoIterator
-    for &'view ModelCollection<'data, P, C>
-{
+impl<'view, 'data, P: Profile, C: Cardinality> IntoIterator for &'view Asset<'data, P, C> {
     type Item = &'view Model<'data, P>;
     type IntoIter = std::slice::Iter<'view, Model<'data, P>>;
     fn into_iter(self) -> Self::IntoIter {
@@ -515,14 +488,14 @@ impl<'data, P: Profile> Deref for ModelView<'_, 'data, P> {
     }
 }
 
-impl<'data, P: Profile, C: Cardinality> ModelCollection<'data, P, C> {
+impl<'data, P: Profile, C: Cardinality> Asset<'data, P, C> {
     /// Projects every owner exactly and checks the destination asset cardinality and references.
-    pub fn try_narrow<Q: Narrows<P>>(self) -> Result<ModelCollection<'data, Q, Q::Models>, Error> {
+    pub fn try_narrow<Q: Narrows<P>>(self) -> Result<Asset<'data, Q, Q::Models>, Error> {
         let models = C::into_vec(self.models)
             .into_iter()
             .map(Model::try_narrow::<Q>)
             .collect::<Result<_, Error>>()?;
-        ModelCollection::from_parts(
+        Asset::from_parts(
             models,
             self.resources.try_narrow::<Q>()?,
             Q::asset_metadata(self.metadata)?,
@@ -533,9 +506,7 @@ impl<'data, P: Profile, C: Cardinality> ModelCollection<'data, P, C> {
 #[cfg(test)]
 mod tests {
     use crate::model::semantic::profiles::{NoControls, Universal};
-    use crate::model::semantic::{
-        ModelBuilder, ModelCollection, Multiple, Resources, Single, Texture,
-    };
+    use crate::model::semantic::{Asset, ModelBuilder, Multiple, Resources, Single, Texture};
 
     #[test]
     fn joining_models_preserves_disjoint_resources() {
@@ -543,7 +514,7 @@ mod tests {
         let first_texture = first.add_texture(Texture::file("first.blp")).unwrap();
         let mut second = ModelBuilder::new("second");
         let second_texture = second.add_texture(Texture::file("second.blp")).unwrap();
-        let set = ModelCollection::<Universal, Multiple>::from_models(
+        let set = Asset::<Universal, Multiple>::from_models(
             vec![first.finish().unwrap(), second.finish().unwrap()],
             NoControls,
         )
@@ -560,7 +531,7 @@ mod tests {
     #[test]
     fn collection_rejects_duplicate_graph_identity() {
         let single = ModelBuilder::new("single").finish().unwrap();
-        assert!(ModelCollection::<Universal, Multiple>::from_models(
+        assert!(Asset::<Universal, Multiple>::from_models(
             vec![single.clone(), single],
             NoControls
         )
@@ -579,7 +550,7 @@ mod tests {
         second
             .set_texture(texture, Texture::file("edited.blp"))
             .unwrap();
-        assert!(ModelCollection::<Universal, Multiple>::from_models(
+        assert!(Asset::<Universal, Multiple>::from_models(
             vec![first.finish().unwrap(), second.finish().unwrap()],
             NoControls
         )
@@ -590,10 +561,7 @@ mod tests {
     fn single_container_checks_count_before_publication() {
         let first = ModelBuilder::new("first").finish().unwrap();
         let second = ModelBuilder::new("second").finish().unwrap();
-        assert!(
-            ModelCollection::<Universal, Single>::from_models(vec![first, second], NoControls)
-                .is_err()
-        );
+        assert!(Asset::<Universal, Single>::from_models(vec![first, second], NoControls).is_err());
     }
     #[test]
     fn cross_model_links_resolve_by_identity_and_reject_missing_targets() {
@@ -620,7 +588,7 @@ mod tests {
             type Clip<'a> = NoControls;
             type Controller<'a> = NoControls;
         }
-        let mut draft = ModelCollection::<Linked>::builder();
+        let mut draft = Asset::<Linked>::builder();
         let first = draft.add_model("first");
         let second = draft.add_model("second");
         let second_id = draft.model_id(second).unwrap();
@@ -632,11 +600,10 @@ mod tests {
         assert_eq!(collection.get_by_id(second_id).unwrap().name(), "second");
         let (mut models, resources, metadata) = collection.into_parts();
         models.swap(0, 1);
-        let collection =
-            ModelCollection::<Linked>::from_parts(models, resources, metadata).unwrap();
+        let collection = Asset::<Linked>::from_parts(models, resources, metadata).unwrap();
         assert_eq!(collection[1].controls(), &[second_id]);
         let (mut models, resources, metadata) = collection.into_parts();
         models.remove(0);
-        assert!(ModelCollection::<Linked>::from_parts(models, resources, metadata).is_err());
+        assert!(Asset::<Linked>::from_parts(models, resources, metadata).is_err());
     }
 }

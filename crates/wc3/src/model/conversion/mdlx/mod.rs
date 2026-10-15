@@ -1,7 +1,8 @@
 //! Warcraft III adapters for independent, borrowed semantic model graphs.
-use super::{Asset, Conversion, Error, ExportOptions, ImportOptions, Plan};
+use super::{Conversion, Error, ExportOptions, ImportOptions, Plan};
 use crate::model::mdlx::{Chunk, Model as NativeModel, ModelDialect};
 use crate::model::semantic::profiles::Mdlx;
+use crate::model::semantic::Asset;
 mod animation;
 mod curves;
 mod encode_animation;
@@ -34,8 +35,8 @@ where
 /// separate operation; this planner does not implicitly approximate its payloads.
 ///
 /// ```compile_fail
-/// use wc3::model::{conversion::{self, Asset, ExportOptions}, mdlx::V800, semantic::Model};
-/// let universal = Asset::new(Model::new("Example"));
+/// use wc3::model::{conversion::{self, ExportOptions}, mdlx::V800, semantic::Model};
+/// let universal = Model::standalone("Example");
 /// conversion::mdlx::plan::<V800>(&universal, &ExportOptions::default());
 /// ```
 pub fn plan<'a, 'data, T: ModelDialect>(

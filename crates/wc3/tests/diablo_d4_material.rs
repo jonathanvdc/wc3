@@ -44,8 +44,8 @@ fn standalone_materials_share_texture_identity_and_rebuild_native_resources() {
     let source = source();
     let imported = convert::import_material(&source, &ImportOptions::default()).unwrap();
     assert!(imported.report.issues.is_empty());
-    assert_eq!(imported.value.models.resources().len(), 1);
-    let (material_id, material) = imported.value.models[0].materials().next().unwrap();
+    assert_eq!(imported.value.resources().len(), 1);
+    let (material_id, material) = imported.value[0].materials().next().unwrap();
     let shader = material.surface.shader.as_ref().unwrap();
     assert_eq!(shader.textures[0].selection, shader.textures[1].selection);
     assert_eq!(shader.asset.as_ref().unwrap().sno_id, 77);
@@ -62,7 +62,7 @@ fn standalone_materials_share_texture_identity_and_rebuild_native_resources() {
     let encoded = output.write_files().unwrap();
     let decoded = d4::Material::read_with_payload(&encoded.root, &encoded.payload).unwrap();
     let second = convert::import_material(&decoded, &ImportOptions::default()).unwrap();
-    assert_eq!(second.value.models.resources().len(), 1);
+    assert_eq!(second.value.resources().len(), 1);
 }
 #[test]
 fn material_coefficients_and_unmapped_programs_are_checked() {

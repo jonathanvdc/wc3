@@ -1,6 +1,7 @@
 //! Native Warcraft III export planning over independent logical models.
 use super::encode_animation::{unsigned_frame, Encoder};
-use crate::model::conversion::{Asset, Context, Error, ExportOptions, Plan};
+use crate::model::conversion::select_model;
+use crate::model::conversion::{Context, Error, ExportOptions, Plan};
 use crate::model::mdlx::animation::Track;
 use crate::model::mdlx::mdx::FixedText;
 use crate::model::mdlx::scene::{Node as NativeNode, NodeFlags};
@@ -9,6 +10,7 @@ use crate::model::mdlx::{
     TextureFlags,
 };
 use crate::model::semantic::profiles::Mdlx;
+use crate::model::semantic::Asset;
 use crate::model::semantic::{AddressMode, Billboard, NodeId, Quaternion, Resource};
 use std::collections::BTreeMap;
 
@@ -16,7 +18,7 @@ pub(in crate::model::conversion::mdlx) fn write<'a, 'data, T: ModelDialect>(
     asset: &'a Asset<'data, Mdlx>,
     options: &ExportOptions,
 ) -> Result<Plan<NativeModel<'a, T>>, Error> {
-    let model = asset.model(options)?;
+    let model = select_model(asset, options)?;
     let mut context = Context::export(options);
     if model.systems().next().is_some() {
         context.unsupported(

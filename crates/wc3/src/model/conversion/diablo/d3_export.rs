@@ -2,12 +2,11 @@
 use super::{
     geometry, i32_count, materials, matrix, name, native, native_bounds, native_transform,
 };
-use crate::model::common::FileKey;
-use crate::model::conversion::{
-    Asset, Context, Error, ExportOptions, Format, IssueKind, Plan, UnknownPolicy,
-};
+use crate::model::conversion::select_model;
+use crate::model::conversion::{Context, Error, ExportOptions, Plan};
 use crate::model::diablo::d3::{Appearance, V260};
 use crate::model::semantic::profiles::diablo::d3::{LookAtTarget, ModelControls, NodeRole, D3};
+use crate::model::semantic::Asset;
 use crate::model::semantic::BindMatrices;
 use std::collections::BTreeMap;
 use zerovec::ZeroVec;
@@ -22,7 +21,7 @@ pub(super) fn plan_with_animations(
     options: &ExportOptions,
     animations: bool,
 ) -> Result<Plan<Appearance<'static, V260>>, Error> {
-    let model = asset.model(options)?;
+    let model = select_model(asset, options)?;
     let mut context = Context::export(options);
     if !model.name().is_empty() {
         context.unsupported(
@@ -38,39 +37,7 @@ pub(super) fn plan_with_animations(
     }
 
     let mut root = native::AppearanceRecord::default();
-    for payload in &asset.opaque {
-        match options.unknown {
-            UnknownPolicy::Reject => {
-                return Err(Error::new(
-                    "d3.opaque",
-                    "uninterpreted source payload requires explicit export policy",
-                ))
-            }
-            UnknownPolicy::Drop => context.issue(
-                "d3.opaque",
-                IssueKind::Dropped,
-                "uninterpreted source payload omitted",
-            ),
-            UnknownPolicy::Archive
-                if payload.format == Format::Diablo3
-                    && payload.file == FileKey::Root
-                    && payload.tag == *b"BPUL"
-                    && payload.revision == Some(260) =>
-            {
-                context.issue(
-                    "d3.bone_pulses",
-                    IssueKind::Archived,
-                    "inactive bone-pulse attachment remains outside native output; unresolved bone ordinals are not reattached to an edited hierarchy",
-                );
-            }
-            UnknownPolicy::Archive => {
-                return Err(Error::new(
-                    "d3.opaque",
-                    "foreign or unsupported archived payload has no native appearance location",
-                ))
-            }
-        }
-    }
+
     let look_at_name = match &model.controls().look_at.target {
         LookAtTarget::Bone(id) => {
             let node = model
@@ -306,15 +273,7 @@ pub(super) fn plan_with_animations(
                 "weighted geometry requires a placement skin",
             ));
         }
-        let sub = geometry::write(
-            mesh,
-            instance.mesh,
-            &slot.name,
-            asset,
-            &palette,
-            &bone_indices,
-            &mut context,
-        )?;
+        let sub = geometry::write(mesh, &slot.name, &palette, &bone_indices, &mut context)?;
         if lod == 0 {
             root.geo_set0.sub_objects.push(sub);
         } else {

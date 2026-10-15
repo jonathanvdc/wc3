@@ -104,7 +104,7 @@ fn source_with_unresolved_shape_bytes(populated: bool) -> m3::Bundle<'static, m3
         .unwrap();
     let root = doc
         .append(&[nr::ModelRecord::<nr::V29> {
-            vertex_flags: nr::VertexFlags(0x0182_007d),
+            vertex_flags: nr::VertexFlags(0x0182_007d & !0x1c),
             bones: m3::Ref::from_section(2, bones.index()),
             rigid_bodies: m3::Ref::from_section(2, bodies.index()),
             physics_joints: m3::Ref::from_section(1, joints.index()),
@@ -146,7 +146,7 @@ fn physics_and_attachment_fields_are_active_and_editable() {
     let mut asset = conversion::m3::import(&source, &ImportOptions::default())
         .unwrap()
         .value;
-    let (id, system) = asset.models[0]
+    let (id, system) = asset[0]
         .systems()
         .find(|(_, system)| matches!(system, surface::System::Physics(_)))
         .unwrap();
@@ -222,7 +222,7 @@ fn physics_and_attachment_fields_are_active_and_editable() {
     assert_eq!(attachment.unknown, 123);
     assert_eq!(attachment.bone_index, 1);
     let reread = conversion::m3::import(&output, &ImportOptions::default()).unwrap();
-    assert!(reread.value.models[0].features().any(|(_,feature)|matches!(&feature.payload,surface::Feature::Attachment(attachment)if attachment.name=="socket")));
+    assert!(reread.value[0].features().any(|(_,feature)|matches!(&feature.payload,surface::Feature::Attachment(attachment)if attachment.name=="socket")));
 }
 
 #[test]
@@ -288,12 +288,12 @@ fn selection_and_attachment_volumes_use_editable_collision_meshes() {
     let mut asset = conversion::m3::import(&source, &ImportOptions::default())
         .unwrap()
         .value;
-    let (id, original) = asset.models[0].features().find(|(_, value)| matches!(&value.payload, surface::Feature::HitTest(shape) if shape.role == surface::HitTestRole::Fuzzy)).unwrap();
+    let (id, original) = asset[0].features().find(|(_, value)| matches!(&value.payload, surface::Feature::HitTest(shape) if shape.role == surface::HitTestRole::Fuzzy)).unwrap();
     let mut edited = original.clone();
     let surface::Feature::HitTest(shape) = &mut edited.payload else {
         unreachable!()
     };
-    let mesh = asset.models[0].mesh(shape.mesh.unwrap()).unwrap();
+    let mesh = asset[0].mesh(shape.mesh.unwrap()).unwrap();
     assert!(mesh.positions().is_borrowed());
     assert_eq!(mesh.positions().get(1), Some([1., 0., 0.]));
     shape.size_x = 7.;
@@ -371,7 +371,7 @@ fn named_turrets_reference_active_parts_instead_of_trigger_data() {
     let mut asset = conversion::m3::import(&source, &ImportOptions::default())
         .unwrap()
         .value;
-    let groups = asset.models[0]
+    let groups = asset[0]
         .systems()
         .find_map(|(_, system)| match system {
             surface::System::TurretGroups(groups) => Some(groups),
@@ -381,7 +381,7 @@ fn named_turrets_reference_active_parts_instead_of_trigger_data() {
     assert_eq!(groups[0].name, "aim");
     assert!(matches!(groups[0].name, std::borrow::Cow::Borrowed(_)));
     let part_id = groups[0].parts[0];
-    let mut part = asset.models[0].feature(part_id).unwrap().payload.clone();
+    let mut part = asset[0].feature(part_id).unwrap().payload.clone();
     let surface::Feature::Turret(value) = &mut part else {
         unreachable!()
     };
@@ -448,7 +448,7 @@ fn body_constraints_use_checked_local_identities() {
     let mut asset = conversion::m3::import(&source, &ImportOptions::default())
         .unwrap()
         .value;
-    let (id, system) = asset.models[0]
+    let (id, system) = asset[0]
         .systems()
         .find(|(_, system)| matches!(system, surface::System::Physics(_)))
         .unwrap();
@@ -479,7 +479,7 @@ fn body_constraints_use_checked_local_identities() {
     assert_eq!(row.break_force, 75.);
     assert_eq!(row.flags.bits(), 0x8123_4567);
     assert_eq!(row.rigid_body_2, 1);
-    let mut invalid = asset.models[0].system(id).unwrap().clone();
+    let mut invalid = asset[0].system(id).unwrap().clone();
     let surface::System::Physics(world) = &mut invalid else {
         unreachable!()
     };
@@ -488,7 +488,7 @@ fn body_constraints_use_checked_local_identities() {
     assert!(asset
         .edit_model(0, |builder| builder.set_system(id, invalid))
         .is_err());
-    let surface::System::Physics(world) = asset.models[0].system(id).unwrap() else {
+    let surface::System::Physics(world) = asset[0].system(id).unwrap() else {
         unreachable!()
     };
     assert_eq!(world.bodies.len(), 2);
@@ -519,7 +519,7 @@ fn animation_split_declarations_preserve_unresolved_typed_controls() {
     let asset = conversion::m3::import(&source, &ImportOptions::default())
         .unwrap()
         .value;
-    let items = asset.models[0]
+    let items = asset[0]
         .systems()
         .find_map(|(_, system)| match system {
             surface::System::AnimationPartitions(declarations) => {
@@ -574,5 +574,5 @@ fn unresolved_reference_qualifiers_require_explicit_loss_policy() {
         .issues
         .iter()
         .any(|issue| issue.path.starts_with("m3.reference_qualifier.MODL")));
-    assert_eq!(converted.value.models[0].nodes().count(), 2);
+    assert_eq!(converted.value[0].nodes().count(), 2);
 }

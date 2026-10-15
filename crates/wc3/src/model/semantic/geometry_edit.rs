@@ -149,6 +149,7 @@ pub(crate) fn remap_attribute(attribute: &mut Attribute<'_>, map: &[u32]) {
     macro_rules! remap { ($($variant:ident),*) => { match &mut attribute.values { $(AttributeValues::$variant(v) => remap_values(v,map),)* } }; }
     remap!(
         Boolean,
+        Byte3,
         Byte4,
         U16,
         Unsigned4,

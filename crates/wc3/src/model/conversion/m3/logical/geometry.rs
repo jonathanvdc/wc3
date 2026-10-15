@@ -8,9 +8,9 @@ use super::{
 };
 
 use crate::model::conversion::m3::logical::GraphBuilder;
-use crate::model::conversion::{EncodingHint, Error};
+use crate::model::conversion::Error;
 use crate::model::m3::{self as native, records as nr};
-use crate::model::semantic::profiles::m3 as surface;
+use crate::model::semantic::profiles::m3::{self as surface, UvEncoding};
 use crate::model::semantic::ExplicitBinding;
 use crate::model::semantic::{
     Bounds, Draw, Influence, M3Geometry, MaterialId, Mesh, MeshId, MeshInstance, Node, Skin, Values,
@@ -19,7 +19,6 @@ use native::Envelope;
 use std::collections::BTreeSet;
 
 pub(super) struct Geometry {
-    pub encoding_hints: Vec<EncodingHint<'static>>,
     pub regions: Vec<Vec<MeshId>>,
 }
 pub(super) fn read<'a, E: Envelope>(
@@ -47,7 +46,6 @@ pub(super) fn read<'a, E: Envelope>(
         .map_err(read_error)?;
     let mut placement = None;
     let mut result = Geometry {
-        encoding_hints: Vec::new(),
         regions: Vec::new(),
     };
     for (lod, division) in divisions(document, division_ref)
@@ -180,11 +178,15 @@ pub(super) fn read<'a, E: Envelope>(
             .with_texture_coordinates(packed.uv_sets(
                 first,
                 count,
-                region.uv_scale,
+                region.uv_scale / 32768.,
                 region.uv_offset,
             ))?;
             let mut mesh = Mesh::new(geometry).named(format!("LOD {lod} region {index}"));
             mesh.controls = Some(surface::MeshControls {
+                uv_encoding: Some(UvEncoding {
+                    scale: region.uv_scale,
+                    offset: region.uv_offset,
+                }),
                 skin,
                 undrawn: None,
                 source_id: region.id,
@@ -206,13 +208,6 @@ pub(super) fn read<'a, E: Envelope>(
             });
             mesh.bounds = bounds_of(mesh.positions());
             let id = builder.add_mesh(mesh)?;
-            result
-                .encoding_hints
-                .push(EncodingHint::M3TextureCoordinates {
-                    mesh: id,
-                    scale: region.uv_scale * 32768.,
-                    offset: region.uv_offset,
-                });
             meshes.push((id, skin, face_count as u32 / 3));
         }
         let mut drawn = BTreeSet::new();

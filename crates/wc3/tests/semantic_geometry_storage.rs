@@ -87,6 +87,7 @@ fn three_slot_vertices_preserve_borrowing_independent_vectors_and_vertex_extras(
     let binormals = [[0., -1., 0.], [0., 0., -1.], [0., 1., 0.]];
     let auxiliary = [[0.1; 4], [0.2; 4], [0.3; 4]];
     let cloth = [13, 17, 19];
+    let direction_auxiliary = [[1, 2, 3], [4, 5, 6], [7, 8, 9]];
     let row = [
         Influence {
             joint: 2,
@@ -111,6 +112,7 @@ fn three_slot_vertices_preserve_borrowing_independent_vectors_and_vertex_extras(
         extras: d3::VertexExtras {
             auxiliary_colors: Values::from_slice(&auxiliary),
             binormals: Values::from_slice(&binormals),
+            direction_auxiliary: Values::from_slice(&direction_auxiliary),
             cloth_vertices: Values::from_slice(&cloth),
         },
     };
@@ -121,14 +123,34 @@ fn three_slot_vertices_preserve_borrowing_independent_vectors_and_vertex_extras(
     for index in 0..data.attributes.len() {
         let mut missing = data.clone();
         missing.attributes.remove(index);
-        assert!(d3::Geometry::try_from(missing).is_err());
+        if data.attributes[index].semantic
+            == AttributeSemantic::Named(d3::DIRECTION_AUXILIARY_ATTRIBUTE.into())
+        {
+            assert!(d3::Geometry::try_from(missing)
+                .unwrap()
+                .streams()
+                .extras
+                .direction_auxiliary
+                .is_empty());
+        } else {
+            assert!(d3::Geometry::try_from(missing).is_err());
+        }
     }
-    let mut wrong_type = data.clone();
-    assert!(wrong_type
+    let auxiliary_index = data
         .attributes
-        .update(0, |attribute| attribute.values =
-            AttributeValues::Vector4(vec![[0.; 4]; 3].into()))
-        .is_err());
+        .iter()
+        .position(|attribute| {
+            attribute.semantic == AttributeSemantic::Named(d3::DIRECTION_AUXILIARY_ATTRIBUTE.into())
+        })
+        .unwrap();
+    let mut wrong_type = data.clone();
+    wrong_type
+        .attributes
+        .update(auxiliary_index, |attribute| {
+            attribute.values = AttributeValues::Byte4(vec![[0; 4]; 3].into())
+        })
+        .unwrap();
+    assert!(d3::Geometry::try_from(wrong_type).is_err());
     let mut wrong_domain = data.clone();
     wrong_domain
         .attributes
@@ -175,6 +197,16 @@ fn three_slot_vertices_preserve_borrowing_independent_vectors_and_vertex_extras(
     assert!(d3::Geometry::try_from(wrong_topology).is_err());
     let mapped_universal = universal.edited(duplicate()).unwrap();
     let restored = <D3 as Narrows<Universal>>::geometry(universal).unwrap();
+    assert_eq!(
+        restored
+            .streams()
+            .extras
+            .direction_auxiliary
+            .as_slice()
+            .unwrap()
+            .as_ptr(),
+        direction_auxiliary.as_ptr()
+    );
     assert_eq!(
         restored.streams().tangents.as_slice().unwrap().as_ptr(),
         tangents.as_ptr()

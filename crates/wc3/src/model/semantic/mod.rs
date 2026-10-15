@@ -1,6 +1,6 @@
 //! Editable model meaning, independent of native encoding and record layout.
 //!
-//! [`ModelCollection`](crate::model::semantic::ModelCollection) supplies one authoritative [`Resources`](crate::model::semantic::Resources) arena to its models.
+//! [`Asset`](crate::model::semantic::Asset) supplies one authoritative [`Resources`](crate::model::semantic::Resources) arena to its models.
 //! `Resources` owns its texture map directly; model views retain the complete dependency context.
 //! A [`Model`](crate::model::semantic::Model) connects hierarchy nodes, shared geometry, material definitions,
 //! resource references, animation, and scene systems through graph-scoped IDs.
@@ -35,7 +35,7 @@
 //! Building a graph therefore need not materialize its geometry and animation
 //! arrays. [`ModelBuilder::finish`](crate::model::semantic::ModelBuilder::finish) checks relationships and values before
 //! publication. It returns a [`SingleModel`](crate::model::semantic::SingleModel) containing the graph and its resources.
-//! [`ModelCollection::edit_model`](crate::model::semantic::ModelCollection::edit_model) checks dependency changes against the complete collection.
+//! [`Asset::edit_model`](crate::model::semantic::Asset::edit_model) checks dependency changes against the complete collection.
 //!
 //! [`Model::widen`](crate::model::semantic::Model::widen) embeds payloads into a containing profile without changing
 //! their meaning, IDs, or shared array storage. [`Model::union`](crate::model::semantic::Model::union) combines two
@@ -55,8 +55,8 @@ mod animation;
 pub use animation::*;
 mod playback_controls;
 pub use playback_controls::*;
-mod model_collection;
-pub use model_collection::*;
+mod asset;
+pub use asset::*;
 mod resources;
 pub use resources::*;
 mod appearance;

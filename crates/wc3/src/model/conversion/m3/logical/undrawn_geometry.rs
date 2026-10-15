@@ -1,6 +1,6 @@
 //! Geometry definitions with no draw commands retain their binding and detail placement.
 use super::{geometry_write::Division, packing::UvTransform, vertex_write::Layout, Graph};
-use crate::model::conversion::{Context, EncodingHint, Error};
+use crate::model::conversion::{Context, Error};
 use crate::model::m3::records;
 use crate::model::semantic::{M3Geometry, MeshId, NodeId, Topology};
 use std::collections::BTreeMap;
@@ -20,7 +20,6 @@ pub(super) fn write(
     graph: &Graph<'_>,
     layout: &Layout,
     bones: &BTreeMap<NodeId, u32>,
-    hints: &[EncodingHint<'_>],
     buffers: Buffers<'_>,
     context: &mut Context,
 ) -> Result<(), Error> {
@@ -90,7 +89,12 @@ pub(super) fn write(
         } else {
             0
         };
-        let uv = UvTransform::for_mesh(id, hints, mesh.texture_coordinates())?;
+        let uv = UvTransform::for_mesh(
+            mesh.controls
+                .as_ref()
+                .and_then(|controls| controls.uv_encoding),
+            mesh.texture_coordinates(),
+        )?;
         for index in 0..mesh.positions().len() {
             buffers
                 .vertices

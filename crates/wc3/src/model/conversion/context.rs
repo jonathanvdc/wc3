@@ -2,6 +2,7 @@ use super::{
     ApproximationPolicy, Error, ExportOptions, ImportOptions, Issue, IssueKind, LossPolicy, Report,
     UnknownPolicy,
 };
+use crate::model::semantic::{profiles::Profile, Asset, Cardinality, Model};
 
 /// Shared policy enforcement used by native adapters.
 pub struct Context {
@@ -29,7 +30,7 @@ impl Context {
         Self {
             report: Report::default(),
             loss_policy: options.loss_policy,
-            unknown: options.unknown,
+            unknown: UnknownPolicy::Reject,
             approximation: options.approximation,
         }
     }
@@ -60,6 +61,22 @@ impl Context {
         self.issue(path, IssueKind::Dropped, description);
         Ok(())
     }
+    /// Rejects or reports discarded source data without a semantic representation.
+    pub fn unknown_data(
+        &mut self,
+        path: impl Into<String>,
+        description: impl Into<String>,
+    ) -> Result<(), Error> {
+        let path = path.into();
+        let description = description.into();
+        match self.unknown {
+            UnknownPolicy::Reject => Err(Error::new(path, description)),
+            UnknownPolicy::Drop => {
+                self.issue(path, IssueKind::Dropped, description);
+                Ok(())
+            }
+        }
+    }
     /// Checks one explicit numeric approximation against the configured tolerance.
     pub fn approximate(
         &mut self,
@@ -81,4 +98,15 @@ impl Context {
         }
         Err(Error::new(path, description))
     }
+}
+
+/// Checks an asset and selects the logical model requested by the export options.
+pub(crate) fn select_model<'view, 'data, P: Profile, C: Cardinality>(
+    asset: &'view Asset<'data, P, C>,
+    options: &ExportOptions,
+) -> Result<&'view Model<'data, P>, Error> {
+    asset.validate()?;
+    asset
+        .get(options.model as usize)
+        .ok_or_else(|| Error::new("model", format!("model {} is absent", options.model)))
 }

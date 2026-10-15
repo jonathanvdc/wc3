@@ -2,7 +2,7 @@
 use super::{
     animation::AnimationIds, packing::UvTransform, vertex_write::Layout, write::append, Graph,
 };
-use crate::model::conversion::{geometry::project, Context, EncodingHint, Error};
+use crate::model::conversion::{geometry::project, Context, Error};
 use crate::model::m3::{self as native, records as nr};
 use crate::model::semantic::{LookId, M3Geometry, MaterialId, MeshId, NodeId, Topology};
 use native::{Envelope, Ref};
@@ -36,7 +36,6 @@ pub(super) fn write<'view, 'source: 'view, E: Envelope>(
     document: &mut native::Document<'_, E>,
     look: Option<LookId>,
     references: References<'_>,
-    hints: &[EncodingHint<'_>],
     context: &mut Context,
 ) -> Result<Geometry, Error> {
     let References {
@@ -157,7 +156,13 @@ pub(super) fn write<'view, 'source: 'view, E: Envelope>(
             } else {
                 0
             };
-            let uv = UvTransform::for_mesh(instance.mesh, hints, mesh.texture_coordinates())?;
+            let uv = UvTransform::for_mesh(
+                source
+                    .controls
+                    .as_ref()
+                    .and_then(|controls| controls.uv_encoding),
+                mesh.texture_coordinates(),
+            )?;
             for index in 0..mesh.positions().len() {
                 vertices.extend(layout.row(mesh, index, uv, context)?);
             }
@@ -251,7 +256,6 @@ pub(super) fn write<'view, 'source: 'view, E: Envelope>(
         model,
         &layout,
         bones,
-        hints,
         super::undrawn_geometry::Buffers {
             divisions: &mut divisions,
             vertices: &mut vertices,

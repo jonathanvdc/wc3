@@ -1,5 +1,5 @@
-use wc3::model::conversion::Asset;
 use wc3::model::semantic::profiles::Universal;
+use wc3::model::semantic::Asset;
 use wc3::model::semantic::{
     Animated, Material, MaterialSurface, ModelBuilder, PbrSurface, Resource, Resources, Texture,
     TextureInput, TextureRole,
@@ -30,12 +30,13 @@ fn shared_texture_edits_publish_once_for_every_model() {
         draft.finish().unwrap()
     };
     let mut asset =
-        Asset::from_models(vec![build("first"), build("second")], Default::default()).unwrap();
+        Asset::<Universal>::from_models(vec![build("first"), build("second")], Default::default())
+            .unwrap();
     asset
         .edit_resources(|draft| draft.set_texture(texture, Texture::file("edited.blp")))
         .unwrap();
-    for index in 0..asset.models.len() {
-        let model = asset.models.view(index).unwrap();
+    for index in 0..asset.len() {
+        let model = asset.view(index).unwrap();
         assert_eq!(
             model.texture(texture).unwrap().resource,
             Resource::Path("edited.blp".as_bytes().into())
@@ -49,12 +50,7 @@ fn shared_texture_edits_publish_once_for_every_model() {
         })
         .is_err());
     assert_eq!(asset.resources().len(), 1);
-    assert!((0..asset.models.len()).all(|index| asset
-        .models
-        .view(index)
-        .unwrap()
-        .texture(texture)
-        .is_some()));
+    assert!((0..asset.len()).all(|index| asset.view(index).unwrap().texture(texture).is_some()));
 }
 
 #[test]
@@ -81,8 +77,8 @@ fn unanimated_texture_references_are_checked_at_publication() {
 
 #[test]
 fn collection_builder_resolves_shared_resources_only_when_published() {
-    use wc3::model::semantic::{ModelCollection, Multiple};
-    let mut collection = ModelCollection::<Universal, Multiple>::builder();
+    use wc3::model::semantic::{Asset, Multiple};
+    let mut collection = Asset::<Universal, Multiple>::builder();
     let first = collection.add_model("first");
     let second = collection.add_model("second");
     let texture = collection

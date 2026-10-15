@@ -2,11 +2,11 @@ use super::{
     count, error, geometry, materials, matrix, native_bounds, native_name_info, native_transform,
     signed, vertices::VertexLayout,
 };
-use crate::model::conversion::{
-    Asset, Context, Error, ExportOptions, IssueKind, Plan, UnknownPolicy,
-};
+use crate::model::conversion::select_model;
+use crate::model::conversion::{Context, Error, ExportOptions, Plan};
 use crate::model::diablo::d4::{self, records as native};
 use crate::model::semantic::profiles::diablo::d4::{NodeRole, D4};
+use crate::model::semantic::Asset;
 use crate::model::semantic::{BindMatrices, BindingSchema as _, Bounds, MeshId};
 use std::collections::BTreeMap;
 
@@ -15,7 +15,7 @@ pub(super) fn plan(
     layout: &VertexLayout,
     options: &ExportOptions,
 ) -> Result<Plan<d4::Appearance<'static>>, Error> {
-    let model = asset.model(options)?;
+    let model = select_model(asset, options)?;
     let mut context = Context::export(options);
     if model.clips().len() != 0 {
         context.unsupported(
@@ -23,26 +23,8 @@ pub(super) fn plan(
             "compressed native animation curves require a separately established decoder",
         )?;
     }
-    if !asset.opaque.is_empty() {
-        match options.unknown {
-            UnknownPolicy::Reject => {
-                return Err(error(
-                    "inactive source attachments require an explicit output policy",
-                ))
-            }
-            UnknownPolicy::Archive => context.issue(
-                "d4.opaque",
-                IssueKind::Archived,
-                "inactive source attachments remain outside rebuilt appearance output",
-            ),
-            UnknownPolicy::Drop => context.issue(
-                "d4.opaque",
-                IssueKind::Dropped,
-                "inactive source attachments omitted from appearance output",
-            ),
-        }
-    }
-    if asset.models.textures().len() != 0 {
+
+    if asset.textures().len() != 0 {
         context.unsupported("d4.resources.textures","appearance output cannot retain the collection image arena; texture inputs belong to separately planned material resources")?;
     }
     if options.look.is_some() {

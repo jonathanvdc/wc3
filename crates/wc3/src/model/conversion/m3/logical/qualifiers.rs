@@ -21,7 +21,7 @@ pub(super) fn check<E: Envelope>(
 ) -> Result<(), Error> {
     let root = document.root_reference();
     if root.flags.bits() != 0 {
-        context.unsupported("m3.reference_qualifier.root", "nonzero root reference qualifiers have no established meaning or logical encoding hint mapping")?;
+        context.unsupported("m3.reference_qualifier.root", "nonzero root reference qualifiers have no established meaning or semantic representation")?;
     }
     let mut queue = VecDeque::from([root]);
     let mut visited = BTreeMap::<u32, u32>::new();
@@ -66,7 +66,7 @@ pub(super) fn check<E: Envelope>(
         .map_err(read_error)?;
         for (field, reference) in references.0.into_iter().enumerate() {
             if reference.flags.bits() != 0 {
-                context.unsupported(format!("m3.reference_qualifier.{}.field[{field}]",String::from_utf8_lossy(&section.tag())), "nonzero native reference qualifiers have no established meaning or logical encoding hint mapping")?;
+                context.unsupported(format!("m3.reference_qualifier.{}.field[{field}]",String::from_utf8_lossy(&section.tag())), "nonzero native reference qualifiers have no established meaning or semantic representation")?;
             }
             queue.push_back(reference);
         }

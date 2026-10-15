@@ -1,18 +1,18 @@
 //! Borrowed logical views over native vertex records and explicit quantization on output.
 use super::{bounds, i32_count, name, native, native_bounds, parent, text_owned};
-use crate::model::conversion::{Asset, Context, EncodingHint, Error};
+use crate::model::conversion::{Context, Error};
 use crate::model::semantic::profiles::diablo::d3::{
     Geometry, MeshControls, VertexExtras, VertexStreams, D3,
 };
+use crate::model::semantic::Topology;
 use crate::model::semantic::{Influence, MaterialSlotId, Mesh, NodeId, Values};
-use crate::model::semantic::{MeshId, Topology};
 use std::{array::from_fn, collections::BTreeMap};
 use zerovec::ZeroVec;
 pub(super) fn read<'a>(
     sub: &'a native::SubObject<'_>,
     bones: &[NodeId],
     slot: Option<MaterialSlotId>,
-) -> Result<(Mesh<'a, D3>, Values<'a, [u8; 3]>), Error> {
+) -> Result<Mesh<'a, D3>, Error> {
     if !sub.indices.len().is_multiple_of(3) {
         return Err(Error::new(
             "d3.indices",
@@ -52,6 +52,10 @@ pub(super) fn read<'a>(
             vertices.get(i).unwrap().tangent_vector()
         }),
         extras: VertexExtras {
+            direction_auxiliary: Values::view(vertices.len(), move |i| {
+                let vertex = vertices.get(i).unwrap();
+                [vertex.normal, vertex.tangent, vertex.binormal].map(|word| (word >> 24) as u8)
+            }),
             auxiliary_colors: Values::view(vertices.len(), move |i| {
                 vertices
                     .get(i)
@@ -90,15 +94,7 @@ pub(super) fn read<'a>(
             unclassified_control: sub.unknown58,
         });
     mesh.bounds = bounds(sub.bounds);
-    let qualifiers = Values::view(vertices.len(), move |i| {
-        let v = vertices.get(i).unwrap();
-        [
-            (v.normal >> 24) as u8,
-            (v.tangent >> 24) as u8,
-            (v.binormal >> 24) as u8,
-        ]
-    });
-    Ok((mesh, qualifiers))
+    Ok(mesh)
 }
 fn quantize(
     value: f32,
@@ -121,8 +117,8 @@ fn quantize(
     )?;
     Ok(packed)
 }
-fn vector(value: [f32; 3], qualifier: u8, context: &mut Context) -> Result<u32, Error> {
-    let mut out = u32::from(qualifier) << 24;
+fn vector(value: [f32; 3], auxiliary: u8, context: &mut Context) -> Result<u32, Error> {
+    let mut out = u32::from(auxiliary) << 24;
     for (i, v) in value.into_iter().enumerate() {
         let scaled = ((v + 1.) * (255. / 2.)).round();
         if !scaled.is_finite() || !(0. ..=255.).contains(&scaled) {
@@ -156,9 +152,7 @@ fn uv(value: [f32; 2], context: &mut Context) -> Result<u32, Error> {
 }
 pub(super) fn write(
     mesh: &Mesh<'_, D3>,
-    mesh_id: MeshId,
     slot_name: &str,
-    asset: &Asset<'_, D3>,
     palette: &[u32],
     bones: &BTreeMap<NodeId, i32>,
     context: &mut Context,
@@ -171,31 +165,22 @@ pub(super) fn write(
     }
     let streams = mesh.geometry.streams();
     let count = streams.positions.len();
-    let qualifiers = asset.encoding_hints.iter().find_map(|hint| {
-        if let EncodingHint::D3VectorQualifiers { mesh, values } = hint {
-            (*mesh == mesh_id).then_some(values)
-        } else {
-            None
-        }
-    });
-    if qualifiers.is_some_and(|v| v.len() != count) {
-        return Err(Error::new(
-            "d3.encoding_hint",
-            "packed vector qualifier count differs from edited geometry",
-        ));
-    }
     let mut vertices = Vec::with_capacity(count);
     for i in 0..count {
-        let q = qualifiers.and_then(|v| v.get(i)).unwrap_or([0; 3]);
+        let auxiliary = streams.extras.direction_auxiliary.get(i).unwrap_or([0; 3]);
         vertices.push(native::FatVertex {
             position: streams.positions.get(i).unwrap(),
-            normal: vector(streams.normals.get(i).unwrap(), q[0], context)?,
+            normal: vector(streams.normals.get(i).unwrap(), auxiliary[0], context)?,
             color: color(streams.colors.get(i).unwrap(), context)?,
             aux_color: color(streams.extras.auxiliary_colors.get(i).unwrap(), context)?,
             tex_coord0: uv(streams.texture_coordinates[0].get(i).unwrap(), context)?,
             tex_coord1: uv(streams.texture_coordinates[1].get(i).unwrap(), context)?,
-            tangent: vector(streams.tangents.get(i).unwrap(), q[1], context)?,
-            binormal: vector(streams.extras.binormals.get(i).unwrap(), q[2], context)?,
+            tangent: vector(streams.tangents.get(i).unwrap(), auxiliary[1], context)?,
+            binormal: vector(
+                streams.extras.binormals.get(i).unwrap(),
+                auxiliary[2],
+                context,
+            )?,
             cloth_vertex_index: streams.extras.cloth_vertices.get(i).unwrap(),
         });
     }

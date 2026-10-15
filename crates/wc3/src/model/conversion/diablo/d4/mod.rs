@@ -4,14 +4,13 @@
 //! declarations for geometry import and a `VertexLayout` for output. Without
 //! declarations, strict import rejects populated geometry while explicit loss
 //! policy can retain the supported skeleton and material-reference graph.
+use crate::model::semantic::Asset;
 mod vertices;
 pub use vertices::{BufferLayout, ElementEncoding, ElementSemantic, VertexElement, VertexLayout};
 mod export;
 mod geometry;
 mod materials;
-use crate::model::conversion::{
-    Asset, Context, Conversion, Error, ExportOptions, ImportOptions, Plan,
-};
+use crate::model::conversion::{Context, Conversion, Error, ExportOptions, ImportOptions, Plan};
 use crate::model::diablo::d4::{self, records as native};
 use crate::model::semantic::profiles::diablo::d4::{
     Appearance as LogicalAppearance, BoneControls, Chunk, Geometry, MeshControls, ModelControls,
@@ -289,7 +288,7 @@ pub fn import_with_layouts<'a>(
     builder.set_appearance(appearance);
     builder.set_controls(controls);
     Ok(Conversion {
-        value: Asset::new(builder.finish()?),
+        value: builder.finish()?,
         report: context.report,
     })
 }

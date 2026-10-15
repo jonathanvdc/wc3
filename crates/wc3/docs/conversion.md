@@ -15,8 +15,8 @@ or original physical layout.
 
 ## Selecting a vocabulary and layout
 
-MDLX import returns `Asset<'data, Mdlx>`. The M2, M3, WMO, and Diablo adapters use their
-own concrete profiles as well. Native export requires the matching vocabulary:
+MDLX import returns `semantic::Asset<'data, Mdlx>` directly. The M2, M3, WMO, and
+Diablo adapters use their own concrete profiles as well. Native export requires the matching vocabulary:
 for example, the MDLX planner accepts `Asset<'data, Mdlx>`, rather than implicitly
 projecting a `Universal` graph into Warcraft III behavior. Widening an asset
 preserves its meanings, identities, and shared arrays; it does not translate
@@ -55,8 +55,8 @@ its strict loss boundaries.
 
 ## Editing and inspecting an output plan
 
-An `Asset` owns a checked `ModelCollection`, its resources and asset metadata,
-optional encoding hints, and explicit unknown attachments. `metadata()` exposes
+A `semantic::Asset` owns checked models, their shared resources, and asset metadata.
+Conversion adapters return this same container. `metadata()` exposes
 the collection metadata selected by `Profile::AssetMetadata`, and `set_metadata`
 checks replacements against the complete asset. Use `Asset::edit_model` or
 `Asset::edit_resources` to stage edits and publish them atomically after
@@ -124,26 +124,33 @@ Some native records have an established binary layout but an unresolved authored
 meaning. M3 import reports populated attachment and camera addon tables and the
 obsolete trailing-model effect through the loss policy. Cooked physics connectivity
 also has explicit representability limits. Strict conversion rejects these cases;
-retaining a known record layout does not establish its behavior, and unknown-byte
-archiving does not make it an editable semantic feature.
+retaining a known record layout does not establish its behavior.
 
-Unknown data follows a separate policy. `UnknownPolicy::Archive` retains actual
-uninterpreted payload bytes in `Asset::opaque`, with their source file, tag,
-revision, and count when available. These attachments are inactive and are not
-reattached to rebuilt output. `UnknownPolicy::Drop` reports discarded payloads;
-the default rejects them. Archiving unknown bytes cannot replace an active
-semantic definition of a known feature.
+Unknown source data follows an import policy. `UnknownPolicy::Reject` is the
+default; `UnknownPolicy::Drop` discards it and reports the decision. The semantic
+asset stores supported authoring values, so export needs no unknown-byte policy.
+Keep the native document separately when an application needs its original
+unknown records or bytes.
 
-Encoding hints are also separate from model meaning. They can retain physical
-qualifiers such as affine UV quantization or otherwise
-uninterpreted fourth bytes of D3 packed direction vectors.
-The logical values remain authoritative when they change. Hints neither store
-whole-file snapshots nor impose native layout restrictions on graph editing.
+Export chooses physical packing from current semantic values. M3 mesh controls
+can retain a preferred `UvEncoding`, with logical coordinates given by
+`packed * scale / 32768 + offset`. Export reuses it when all current UV channels
+are exactly representable. Otherwise it chooses canonical packing or derives an
+affine transform for a wider range. Any resulting coordinate change remains
+subject to the approximation policy; the preference never overrides edited UVs.
+This region-level preference is independent of animated texture transforms.
+
+D3 vertex extras retain the fourth bytes of packed normals, tangents, and
+binormals as an optional exact byte stream. Their unresolved meaning is not
+interpreted as padding or handedness. Universal widening preserves them in a
+named, typed vertex attribute, so vertex remaps keep them aligned with geometry.
+M3 vertex qualifier bits still require the unknown-data policy at import.
+Native codec APIs retain their own byte-preserving editing behavior.
 
 ## Where the implementation lives
 
-Shared assets, policies, reports, plans, and policy enforcement live under
-`model/conversion`. Each adapter divides geometry, hierarchy, animation,
+Policies, reports, plans, and policy enforcement live under `model/conversion`.
+The shared asset container lives under `model/semantic`. Each adapter divides geometry, hierarchy, animation,
 materials, effects, and supporting documents into focused modules. The checked
 graph and borrowed values live under `model/semantic`; authoring vocabularies
 live in its `profiles` namespace. Format-independent features and scoped simulation

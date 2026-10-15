@@ -11,9 +11,16 @@ use crate::model::semantic::{
 };
 use crate::model::semantic::{GeometryEdit, GeometryEditCapabilities, StreamSupport};
 
+/// Named vertex attribute used when widening the D3 auxiliary direction bytes.
+/// Its values are `AttributeValues::Byte3`, ordered normal, tangent, binormal.
+pub const DIRECTION_AUXILIARY_ATTRIBUTE: &str = "d3.direction_auxiliary";
+
 /// Independent auxiliary streams authored alongside Diablo III's common vertices.
 #[derive(Clone, Debug, Default)]
 pub struct VertexExtras<'a> {
+    /// Fourth packed bytes of the normal, tangent, and binormal, in that order.
+    /// Their meaning is unresolved. An absent stream exports zero bytes.
+    pub direction_auxiliary: Values<'a, [u8; 3]>,
     /// Independently authored auxiliary RGBA colors.
     pub auxiliary_colors: Values<'a, [f32; 4]>,
     /// Binormal vectors; no inferred handedness replaces this stream.
@@ -23,6 +30,7 @@ pub struct VertexExtras<'a> {
 }
 impl RemapStreams for VertexExtras<'_> {
     fn remap_streams(&mut self, indices: &[u32]) {
+        self.direction_auxiliary.remap_streams(indices);
         self.auxiliary_colors.remap_streams(indices);
         self.binormals.remap_streams(indices);
         self.cloth_vertices.remap_streams(indices);
@@ -182,6 +190,8 @@ impl<'a> GeometrySchema<'a> for Geometry<'a> {
         ]
         .iter()
         .any(|len| *len != count)
+            || (!streams.extras.direction_auxiliary.is_empty()
+                && streams.extras.direction_auxiliary.len() != count)
             || (!self.data.influences.is_empty() && self.data.influences.len() != count)
         {
             return Err(Error::new(
@@ -214,6 +224,36 @@ impl<'a> From<Geometry<'a>> for GeometryData<'a> {
             topology,
             influences,
         } = value.data;
+        let mut attributes = Vec::new();
+        if !vertices.extras.direction_auxiliary.is_empty() {
+            attributes.push(Attribute {
+                semantic: AttributeSemantic::Named(DIRECTION_AUXILIARY_ATTRIBUTE.into()),
+                domain: AttributeDomain::Vertex,
+                values: AttributeValues::Byte3(vertices.extras.direction_auxiliary),
+            });
+        }
+        attributes.extend([
+            Attribute {
+                semantic: AttributeSemantic::TangentVector,
+                domain: AttributeDomain::Vertex,
+                values: AttributeValues::Vector3(vertices.tangents),
+            },
+            Attribute {
+                semantic: AttributeSemantic::Binormal,
+                domain: AttributeDomain::Vertex,
+                values: AttributeValues::Vector3(vertices.extras.binormals),
+            },
+            Attribute {
+                semantic: AttributeSemantic::Color(1),
+                domain: AttributeDomain::Vertex,
+                values: AttributeValues::Vector4(vertices.extras.auxiliary_colors),
+            },
+            Attribute {
+                semantic: AttributeSemantic::ClothVertex,
+                domain: AttributeDomain::Vertex,
+                values: AttributeValues::Unsigned(vertices.extras.cloth_vertices),
+            },
+        ]);
         GeometryParts {
             strip_set: false,
             surface_triangles: Values::default(),
@@ -224,28 +264,7 @@ impl<'a> From<Geometry<'a>> for GeometryData<'a> {
             tangents: Values::default(),
             colors: vertices.colors,
             texture_coordinates: Vec::from(vertices.texture_coordinates),
-            attributes: vec![
-                Attribute {
-                    semantic: AttributeSemantic::TangentVector,
-                    domain: AttributeDomain::Vertex,
-                    values: AttributeValues::Vector3(vertices.tangents),
-                },
-                Attribute {
-                    semantic: AttributeSemantic::Binormal,
-                    domain: AttributeDomain::Vertex,
-                    values: AttributeValues::Vector3(vertices.extras.binormals),
-                },
-                Attribute {
-                    semantic: AttributeSemantic::Color(1),
-                    domain: AttributeDomain::Vertex,
-                    values: AttributeValues::Vector4(vertices.extras.auxiliary_colors),
-                },
-                Attribute {
-                    semantic: AttributeSemantic::ClothVertex,
-                    domain: AttributeDomain::Vertex,
-                    values: AttributeValues::Unsigned(vertices.extras.cloth_vertices),
-                },
-            ],
+            attributes,
             topology,
             influences: if influences.is_empty() {
                 GeometryInfluences::None
@@ -289,6 +308,7 @@ impl<'a> TryFrom<GeometryData<'a>> for Geometry<'a> {
                 ))
             }
         };
+        let mut direction_auxiliary = None;
         let mut tangents = None;
         let mut binormals = None;
         let mut auxiliary_colors = None;
@@ -301,6 +321,11 @@ impl<'a> TryFrom<GeometryData<'a>> for Geometry<'a> {
                 ));
             }
             match (attribute.semantic, attribute.values) {
+                (AttributeSemantic::Named(name), AttributeValues::Byte3(value))
+                    if name == DIRECTION_AUXILIARY_ATTRIBUTE && direction_auxiliary.is_none() =>
+                {
+                    direction_auxiliary = Some(value)
+                }
                 (AttributeSemantic::TangentVector, AttributeValues::Vector3(value))
                     if tangents.is_none() =>
                 {
@@ -346,6 +371,7 @@ impl<'a> TryFrom<GeometryData<'a>> for Geometry<'a> {
                     .map_err(|_| Error::new("d3.geometry.uv", "expected exactly two UV streams"))?,
                 tangents: tangents.ok_or_else(missing)?,
                 extras: VertexExtras {
+                    direction_auxiliary: direction_auxiliary.unwrap_or_default(),
                     binormals: binormals.ok_or_else(missing)?,
                     auxiliary_colors: auxiliary_colors.ok_or_else(missing)?,
                     cloth_vertices: cloth_vertices.ok_or_else(missing)?,

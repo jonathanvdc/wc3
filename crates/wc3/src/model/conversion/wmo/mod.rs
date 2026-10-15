@@ -1,6 +1,7 @@
 //! Direct codecs between world-model files and the typed world authoring vocabulary.
-use super::{Asset, Conversion, Error, ExportOptions, ImportOptions, Plan};
+use super::{Conversion, Error, ExportOptions, ImportOptions, Plan};
 use crate::model::semantic::profiles::Wmo;
+use crate::model::semantic::Asset;
 use crate::model::wmo::legacy::{Bundle16, Root14};
 use crate::model::wmo::{Bundle, Dialect};
 mod graph;

@@ -121,6 +121,8 @@ pub enum AttributeValues<'a> {
     SurfaceControls(Values<'a, SurfaceTriangleControls>),
     /// Logical boolean attributes.
     Boolean(Values<'a, bool>),
+    /// Three exact byte components.
+    Byte3(Values<'a, [u8; 3]>),
     /// Four exact byte components.
     Byte4(Values<'a, [u8; 4]>),
     /// Exact unsigned sixteen-bit values.
@@ -148,6 +150,7 @@ impl AttributeValues<'_> {
         match self {
             Self::SurfaceControls(v) => v.len(),
             Self::Boolean(v) => v.len(),
+            Self::Byte3(v) => v.len(),
             Self::Byte4(v) => v.len(),
             Self::U16(v) => v.len(),
             Self::Unsigned4(v) => v.len(),

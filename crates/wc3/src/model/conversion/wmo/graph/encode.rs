@@ -1,8 +1,10 @@
 //! Direct native root and companion construction from typed world semantics.
 use super::{geometry, materials};
 use crate::model::common::FileKey;
-use crate::model::conversion::{Asset, Context, Error, ExportOptions, IssueKind, Plan};
+use crate::model::conversion::select_model;
+use crate::model::conversion::{Context, Error, ExportOptions, IssueKind, Plan};
 use crate::model::semantic::profiles::Wmo;
+use crate::model::semantic::Asset;
 use crate::model::wmo::codec::Array;
 use crate::model::wmo::records::{HeaderTailField, RootFlags};
 use crate::model::wmo::root::RootChunk;
@@ -12,7 +14,7 @@ pub(super) fn write<'a, D: Dialect>(
     asset: &'a Asset<'_, Wmo>,
     options: &ExportOptions,
 ) -> Result<Plan<Bundle<'a, D>>, Error> {
-    let model = asset.model(options)?;
+    let model = select_model(asset, options)?;
     let mut context = Context::export(options);
     if let Some((normalized, resources)) = super::normalize::prepare(model, asset.resources())? {
         context.issue("world.groups.geometry",IssueKind::Normalized,"compatible geometry placements at the same detail level joined while preserving draw order and material assignments");

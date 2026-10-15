@@ -50,7 +50,7 @@ fn public_adapter_rebuilds_edited_cloth_density_and_node_bindings() {
     let mut imported = conversion::m3::import(&source, &Default::default())
         .unwrap()
         .value;
-    let (id, system) = imported.models[0]
+    let (id, system) = imported[0]
         .systems()
         .find(|(_, system)| matches!(system, surface::System::Cloth(_)))
         .unwrap();

@@ -1,9 +1,11 @@
 //! Animation resources bind by authored bone names, with permutation-local seconds.
 use super::{i32_count, name, native, text, text_owned};
-use crate::model::conversion::{Asset, Context, Error, ExportOptions};
+use crate::model::conversion::select_model;
+use crate::model::conversion::{Context, Error, ExportOptions};
 use crate::model::diablo::d3::{Animation, V118};
 use crate::model::semantic::profiles::diablo::d3::ClipControls;
 use crate::model::semantic::profiles::diablo::d3::{NodeRole, D3};
+use crate::model::semantic::Asset;
 use crate::model::semantic::{
     Channel, Clip, Clock, Curve, Interpolation, PropertyTarget, Time, Track,
 };
@@ -15,7 +17,7 @@ pub(super) fn read<'a>(
     sources: &[&'a Animation<'_, V118>],
     context: &mut Context,
 ) -> Result<(), Error> {
-    let model = &asset.models[0];
+    let model = &asset[0];
     let mut bones = BTreeMap::new();
     for (id, node) in model.nodes() {
         if matches!(node.controls, NodeRole::Bone(_))
@@ -227,7 +229,7 @@ pub(super) fn write(
     options: &ExportOptions,
     context: &mut Context,
 ) -> Result<Vec<Animation<'static, V118>>, Error> {
-    let model = asset.model(options)?;
+    let model = select_model(asset, options)?;
     let mut groups: Vec<native::AnimationRecord<'static>> = Vec::new();
     for (_, clip) in model.clips() {
         if clip.alias().is_some() || !clip.is_looping() {

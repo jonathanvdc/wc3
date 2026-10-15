@@ -1,13 +1,10 @@
 //! Direct Warcraft III decoding into checked independent model graphs.
 use super::{curves, materials, state::ImportState};
-use crate::model::common::FileKey;
-use crate::model::conversion::{
-    Asset, Context, Conversion, Error, Format, ImportOptions, IssueKind, OpaquePayload,
-    UnknownPolicy,
-};
-use crate::model::mdlx::{self as native, Chunk, ModelChunk, ModelDialect, ModelVersion};
+use crate::model::conversion::{Context, Conversion, Error, ImportOptions};
+use crate::model::mdlx::{self as native, Chunk, ModelChunk, ModelDialect};
 use crate::model::semantic::profiles::mdlx as profile;
 use crate::model::semantic::profiles::Mdlx;
+use crate::model::semantic::Asset;
 use crate::model::semantic::{
     AddressMode, Billboard, Bounds, Channel, Clip, Clock, Inheritance, Material, ModelBuilder,
     Node, Quaternion, Resource, Sampler, SharedClock, Texture, TextureTransform, Time, Track,
@@ -24,52 +21,14 @@ where
 {
     let mut context = Context::import(options);
     super::text::validate(source, &mut context)?;
-    let mut opaque = Vec::new();
     for chunk in &source.chunks {
         if !matches!(chunk, ModelChunk::Unknown(_) | ModelChunk::Extension(_)) {
             continue;
         }
-        match options.unknown {
-            UnknownPolicy::Reject => {
-                return Err(Error::new(
-                    "chunks",
-                    "unknown payload needs an explicit archive or drop policy",
-                ));
-            }
-            UnknownPolicy::Drop => context.issue(
-                "chunks",
-                IssueKind::Dropped,
-                "Unknown source payload omitted",
-            ),
-            UnknownPolicy::Archive => {
-                let (tag, bytes) = match chunk {
-                    ModelChunk::Unknown(value) => {
-                        (value.raw().tag, Cow::Borrowed(value.raw().data.as_ref()))
-                    }
-                    ModelChunk::Extension(value) => {
-                        let mut bytes = Vec::new();
-                        value
-                            .encode_payload_to(&mut native::Encoder::new(&mut bytes))
-                            .map_err(|error| Error::new("extension", error.to_string()))?;
-                        (value.tag(), Cow::Owned(bytes))
-                    }
-                    _ => unreachable!("checked unknown payload"),
-                };
-                opaque.push(OpaquePayload {
-                    format: Format::Mdlx,
-                    file: FileKey::Root,
-                    tag,
-                    revision: Some(D::Version::NUMBER),
-                    count: None,
-                    bytes,
-                });
-                context.issue(
-                    "chunks",
-                    IssueKind::Archived,
-                    "Unknown payload retained outside the authoring graph",
-                );
-            }
-        }
+        context.unknown_data(
+            "chunks",
+            "unknown source chunk has no semantic representation",
+        )?;
     }
     let mut builder =
         ModelBuilder::<Mdlx>::with_profile(source.model_info().map_or(Cow::Borrowed(""), |info| {
@@ -406,8 +365,7 @@ where
         builder.set_node(id, node)?;
     }
     builder.set_controls(native_profile.controls);
-    let mut asset = Asset::new(builder.finish()?);
-    asset.opaque = opaque;
+    let asset = builder.finish()?;
     Ok(Conversion {
         value: asset,
         report: context.report,

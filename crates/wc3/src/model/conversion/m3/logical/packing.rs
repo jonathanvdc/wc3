@@ -1,6 +1,7 @@
-//! Quantization uses current graph values; optional layout hints never supply geometry.
-use crate::model::conversion::{Context, EncodingHint, Error};
-use crate::model::semantic::{MeshId, TextureCoordinates, Values};
+//! Quantization selects native packing from current semantic values.
+use crate::model::conversion::{Context, Error};
+use crate::model::semantic::profiles::m3::UvEncoding;
+use crate::model::semantic::{TextureCoordinates, Values};
 
 #[derive(Clone, Copy, Debug)]
 pub(super) struct UvTransform {
@@ -9,47 +10,28 @@ pub(super) struct UvTransform {
 }
 impl UvTransform {
     pub fn for_mesh<'a, 'data: 'a>(
-        mesh: MeshId,
-        hints: &[EncodingHint<'_>],
+        preferred: Option<UvEncoding>,
         channels: impl Into<TextureCoordinates<'a, 'data>>,
     ) -> Result<Self, Error> {
         let channels = channels.into();
-        let mut selected = None;
-        for hint in hints {
-            if let EncodingHint::M3TextureCoordinates {
-                mesh: owner,
-                scale,
-                offset,
-            } = hint
-            {
-                if *owner != mesh {
-                    continue;
-                }
-                if !scale.is_finite() || !offset.is_finite() {
-                    return Err(Error::new("m3.uv.hint", "UV encoding hint must be finite"));
-                }
-                if let Some(previous) = selected {
-                    let previous: Self = previous;
-                    if previous.scale != *scale || previous.offset != *offset {
-                        return Err(Error::new(
-                            "m3.uv.hint",
-                            "conflicting UV hints for one mesh",
-                        ));
-                    }
-                }
-                selected = Some(Self {
-                    scale: *scale,
-                    offset: *offset,
-                });
+        if let Some(preferred) = preferred {
+            if !preferred.scale.is_finite() || !preferred.offset.is_finite() {
+                return Err(Error::new(
+                    "m3.uv.encoding",
+                    "preferred UV encoding must be finite",
+                ));
             }
-        }
-        // Use a hint only when every current coordinate fits its affine encoding.
-        if let Some(transform) = selected {
+            let transform = Self {
+                scale: preferred.scale,
+                offset: preferred.offset,
+            };
             if channels
                 .iter()
                 .flat_map(Values::iter)
                 .flatten()
-                .all(|value| transform.fits(value))
+                .all(|value| {
+                    transform.fits(value) && transform.decode(transform.pack(value)) == value
+                })
             {
                 return Ok(transform);
             }
@@ -115,19 +97,28 @@ impl UvTransform {
         let packed = ((f64::from(value) - f64::from(self.offset))
             / (f64::from(self.scale) / 32768.))
             .round();
-        packed >= f64::from(i16::MIN) && packed <= f64::from(i16::MAX)
+        (packed >= f64::from(i16::MIN) && packed <= f64::from(i16::MAX))
+            // Float rounding can make an authored endpoint invert one step beyond i16.
+            // Accept that endpoint only when the bounded code decodes exactly to it.
+            || self.decode(packed as i16) == value
+    }
+    fn pack(self, value: f32) -> i16 {
+        if self.scale == 0. {
+            0
+        } else {
+            ((f64::from(value) - f64::from(self.offset)) / (f64::from(self.scale) / 32768.)).round()
+                as i16
+        }
+    }
+    fn decode(self, packed: i16) -> f32 {
+        f32::from(packed) * (self.scale / 32768.) + self.offset
     }
     pub fn encode(self, value: f32, context: &mut Context) -> Result<i16, Error> {
         if !self.fits(value) {
             return Err(Error::new("m3.uv", "UV coordinate exceeds affine encoding"));
         }
-        let packed = if self.scale == 0. {
-            0
-        } else {
-            ((f64::from(value) - f64::from(self.offset)) / (f64::from(self.scale) / 32768.)).round()
-                as i16
-        };
-        let decoded = f32::from(packed) * (self.scale / 32768.) + self.offset;
+        let packed = self.pack(value);
+        let decoded = self.decode(packed);
         context.approximate(
             "m3.uv",
             (decoded - value).abs(),
@@ -162,63 +153,153 @@ pub(super) fn unorm(
 
 #[cfg(test)]
 mod tests {
-    use super::super::GraphBuilder;
     use super::*;
-    use crate::model::semantic::{M3Geometry, Mesh};
-    fn mesh() -> MeshId {
-        let mut builder = GraphBuilder::with_profile("UV packing");
-        builder.add_mesh(Mesh::new(M3Geometry::empty())).unwrap()
-    }
+    use crate::model::conversion::{ApproximationPolicy, ExportOptions};
+
     #[test]
-    fn existing_affine_hint_tracks_current_coordinates() {
-        let id = mesh();
-        let hints = [EncodingHint::M3TextureCoordinates {
-            mesh: id,
-            scale: 32.,
-            offset: 0.5,
-        }];
+    fn canonical_packing_preserves_representable_coordinates() {
         let channels = [Values::owned(vec![[0.5, 0.50097656], [1.5, -1.5]])];
-        let transform = UvTransform::for_mesh(id, &hints, &channels).unwrap();
-        assert_eq!(transform.scale, 32.);
-        assert_eq!(transform.offset, 0.5);
-        assert!(channels
-            .iter()
-            .flat_map(Values::iter)
-            .flatten()
-            .all(|x| transform.fits(x)));
+        let transform = UvTransform::for_mesh(None, &channels).unwrap();
+        assert_eq!(transform.scale, 16.);
+        assert_eq!(transform.offset, 0.);
+        let mut context = Context::export(&ExportOptions::default());
+        for value in channels.iter().flat_map(Values::iter).flatten() {
+            let packed = transform.encode(value, &mut context).unwrap();
+            assert_eq!(
+                f32::from(packed) * transform.scale / 32768. + transform.offset,
+                value
+            );
+        }
     }
     #[test]
-    fn stale_hint_does_not_supply_or_clamp_current_uvs() {
-        let id = mesh();
-        let hints = [EncodingHint::M3TextureCoordinates {
-            mesh: id,
-            scale: 16.,
-            offset: 0.,
-        }];
+    fn wide_ranges_choose_affine_packing_without_clamping() {
         let channels = [Values::owned(vec![[-1000., 1000.]])];
-        let transform = UvTransform::for_mesh(id, &hints, &channels).unwrap();
+        let transform = UvTransform::for_mesh(None, &channels).unwrap();
         assert_ne!(transform.scale, 16.);
         assert!(transform.fits(-1000.) && transform.fits(1000.));
+        let mut strict = Context::export(&ExportOptions::default());
+        assert!(transform.encode(1.2345, &mut strict).is_err());
+        let mut context = Context::export(&ExportOptions {
+            approximation: ApproximationPolicy::Allow { tolerance: 0.1 },
+            ..Default::default()
+        });
+        for value in [-1000., 1000.] {
+            assert!(transform.encode(value, &mut context).is_ok());
+        }
     }
     #[test]
-    fn constant_source_transform_and_conflicting_hints_are_checked() {
-        let id = mesh();
-        let hints = [EncodingHint::M3TextureCoordinates {
-            mesh: id,
-            scale: 0.,
-            offset: 3.,
-        }];
-        let channels = [Values::owned(vec![[3., 3.]])];
-        assert_eq!(
-            UvTransform::for_mesh(id, &hints, &channels).unwrap().scale,
-            0.
-        );
-        let mut conflicting = hints.to_vec();
-        conflicting.push(EncodingHint::M3TextureCoordinates {
-            mesh: id,
-            scale: 16.,
+    fn out_of_range_constant_coordinates_use_a_constant_transform() {
+        let channels = [Values::owned(vec![[1000., 1000.]])];
+        let transform = UvTransform::for_mesh(None, &channels).unwrap();
+        assert_eq!(transform.scale, 0.);
+        assert_eq!(transform.offset, 1000.);
+        let mut context = Context::export(&ExportOptions::default());
+        assert_eq!(transform.encode(1000., &mut context).unwrap(), 0);
+        assert!(transform.encode(1001., &mut context).is_err());
+    }
+}
+
+#[cfg(test)]
+mod preferred_encoding_tests {
+    use super::*;
+    use crate::model::conversion::ExportOptions;
+
+    #[test]
+    fn source_grids_preserve_exact_coordinates_including_negative_and_zero_scales() {
+        for preferred in [
+            UvEncoding {
+                scale: 32.,
+                offset: 0.1,
+            },
+            UvEncoding {
+                scale: -16.,
+                offset: 0.1,
+            },
+            UvEncoding {
+                scale: 0.,
+                offset: 0.1,
+            },
+            UvEncoding {
+                scale: f32::from_bits(1),
+                offset: 0.1,
+            },
+            UvEncoding {
+                scale: 16.,
+                offset: 10000.,
+            },
+            UvEncoding {
+                scale: -16.,
+                offset: -10000.,
+            },
+        ] {
+            let original = UvTransform {
+                scale: preferred.scale,
+                offset: preferred.offset,
+            };
+            let channels = [Values::owned(
+                (i16::MIN..=i16::MAX)
+                    .map(|packed| {
+                        let value = original.decode(packed);
+                        [value, value]
+                    })
+                    .collect::<Vec<_>>(),
+            )];
+            let selected = UvTransform::for_mesh(Some(preferred), &channels).unwrap();
+            assert_eq!(
+                (selected.scale, selected.offset),
+                (preferred.scale, preferred.offset)
+            );
+            let mut context = Context::export(&ExportOptions::default());
+            for value in channels[0].iter().flatten() {
+                assert_eq!(
+                    selected.decode(selected.encode(value, &mut context).unwrap()),
+                    value
+                );
+            }
+            assert!(context.report.issues.is_empty());
+        }
+    }
+
+    #[test]
+    fn incompatible_edits_replace_preferred_grid_without_clamping() {
+        let preferred = UvEncoding {
+            scale: 32.,
             offset: 0.,
-        });
-        assert!(UvTransform::for_mesh(id, &conflicting, &channels).is_err());
+        };
+        // This edit fits the preferred range, but needs a finer grid.
+        let channels = [Values::owned(vec![[1. / 2048., 0.]])];
+        let selected = UvTransform::for_mesh(Some(preferred), &channels).unwrap();
+        assert_eq!((selected.scale, selected.offset), (16., 0.));
+        let mut context = Context::export(&ExportOptions::default());
+        assert_eq!(selected.encode(1. / 2048., &mut context).unwrap(), 1);
+        let wide = [Values::owned(vec![[-1000., 1000.]])];
+        let selected = UvTransform::for_mesh(Some(preferred), &wide).unwrap();
+        assert!(selected.fits(-1000.) && selected.fits(1000.));
+        assert_ne!(selected.scale, preferred.scale);
+        let constant = UvEncoding {
+            scale: 0.,
+            offset: 0.1,
+        };
+        let selected = UvTransform::for_mesh(Some(constant), &channels).unwrap();
+        assert_eq!(selected.scale, 16.);
+    }
+
+    #[test]
+    fn invalid_preferences_and_coordinates_are_rejected() {
+        let channels = [Values::owned(vec![[0.; 2]])];
+        for preferred in [
+            UvEncoding {
+                scale: f32::NAN,
+                offset: 0.,
+            },
+            UvEncoding {
+                scale: 16.,
+                offset: f32::INFINITY,
+            },
+        ] {
+            assert!(UvTransform::for_mesh(Some(preferred), &channels).is_err());
+        }
+        let invalid = [Values::owned(vec![[f32::NAN, 0.]])];
+        assert!(UvTransform::for_mesh(Some(UvEncoding::default()), &invalid).is_err());
     }
 }

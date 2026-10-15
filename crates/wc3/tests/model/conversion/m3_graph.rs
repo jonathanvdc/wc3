@@ -1,3 +1,4 @@
+use wc3::model::semantic::Asset;
 use wc3::model::{
     conversion,
     m3::{self, records as nr},
@@ -36,11 +37,10 @@ fn source() -> m3::Bundle<'static> {
 #[test]
 fn imported_typed_graph_edits_rebuild_native_bone_fields() {
     let source = source();
-    let mut imported: conversion::Asset<'_, M3> =
-        conversion::m3::import(&source, &Default::default())
-            .unwrap()
-            .value;
-    let (id, node) = imported.models[0]
+    let mut imported: Asset<'_, M3> = conversion::m3::import(&source, &Default::default())
+        .unwrap()
+        .value;
+    let (id, node) = imported[0]
         .nodes()
         .find(|(_, node)| node.name == "b")
         .unwrap();
@@ -70,7 +70,7 @@ fn imported_typed_graph_edits_rebuild_native_bone_fields() {
     assert_eq!(bone.batching.initial_value, 0x8000_0001);
     assert_eq!(bone.id, 17);
     let reread = conversion::m3::import(&output, &Default::default()).unwrap();
-    let (_, node) = reread.value.models[0]
+    let (_, node) = reread.value[0]
         .nodes()
         .find(|(_, node)| node.name == "b")
         .unwrap();
@@ -82,7 +82,7 @@ fn complete_camera_optics_rebuild_without_editable_document_backing() {
     let mut imported = conversion::m3::import(&source, &Default::default())
         .unwrap()
         .value;
-    let (id, _) = imported.models[0]
+    let (id, _) = imported[0]
         .nodes()
         .find(|(_, node)| node.name == "b")
         .unwrap();
@@ -184,7 +184,7 @@ fn inherited_emitters_rebuild_from_independent_graph_definitions() {
     let mut imported = conversion::m3::import(&source, &Default::default())
         .unwrap()
         .value;
-    let (copy_id, feature) = imported.models[0]
+    let (copy_id, feature) = imported[0]
         .features()
         .find(|(_, feature)| matches!(feature.payload, surface::Feature::ParticleCopy(_)))
         .unwrap();
@@ -197,7 +197,7 @@ fn inherited_emitters_rebuild_from_independent_graph_definitions() {
     imported
         .edit_model(0, |draft| draft.set_feature(copy_id, payload))
         .unwrap();
-    assert_eq!(imported.models[0].feature(copy_id).unwrap().node, owner);
+    assert_eq!(imported[0].feature(copy_id).unwrap().node, owner);
     let output = conversion::m3::plan::<m3::StarCraft2>(&imported, &Default::default())
         .unwrap()
         .execute()
@@ -226,14 +226,14 @@ fn inherited_emitters_rebuild_from_independent_graph_definitions() {
     assert_eq!(copy.squirt_amount.initial_value, 3);
     let reread = conversion::m3::import(&output, &Default::default()).unwrap();
     assert_eq!(
-        reread.value.models[0]
+        reread.value[0]
             .features()
             .filter(|(_, feature)| matches!(feature.payload, surface::Feature::Particle(_)))
             .count(),
         1
     );
     assert_eq!(
-        reread.value.models[0]
+        reread.value[0]
             .features()
             .filter(|(_, feature)| matches!(feature.payload, surface::Feature::ParticleCopy(_)))
             .count(),
@@ -263,7 +263,7 @@ fn every_particle_record_revision_maps_through_logical_fields() {
             let imported=conversion::m3::import(&source,&Default::default()).unwrap().value;
             let output=conversion::m3::plan::<m3::StarCraft2>(&imported,&Default::default()).unwrap().execute().unwrap().value;
             let reread=conversion::m3::import(&output,&Default::default()).unwrap();
-            assert_eq!(reread.value.models[0].features().filter(|(_,feature)|matches!(feature.payload,surface::Feature::Particle(_))).count(),1);
+            assert_eq!(reread.value[0].features().filter(|(_,feature)|matches!(feature.payload,surface::Feature::Particle(_))).count(),1);
         }};
     }
     roundtrip!(nr::V10, deprecated_noise_smoothness = 0.375);
@@ -333,7 +333,7 @@ fn static_collision_streams_remain_borrowed_and_independently_editable() {
         .unwrap()
         .value
         .widen::<Universal>();
-    let collision = widened.models[0]
+    let collision = widened[0]
         .meshes()
         .find(|(_, mesh)| mesh.geometry.kind() == GeometryKind::Collision)
         .unwrap()
@@ -355,12 +355,11 @@ fn static_collision_streams_remain_borrowed_and_independently_editable() {
         })
         .unwrap();
     let mut imported = widened.try_narrow::<M3>().unwrap();
-    let (_, surface::System::Collision(system)) = imported.models[0].systems().next().unwrap()
-    else {
+    let (_, surface::System::Collision(system)) = imported[0].systems().next().unwrap() else {
         panic!("expected collision world")
     };
     let id = system.mesh;
-    let mesh = imported.models[0].mesh(id).unwrap();
+    let mesh = imported[0].mesh(id).unwrap();
     assert!(mesh.positions().is_borrowed());
     assert!(mesh.normals().is_none());
     let M3Geometry::Collision(geometry) = &mesh.geometry else {
@@ -424,7 +423,7 @@ fn joint_relationships_rebuild_from_edited_logical_controls() {
     let mut asset = conversion::m3::import(&source, &Default::default())
         .unwrap()
         .value;
-    let (id, system) = asset.models[0]
+    let (id, system) = asset[0]
         .systems()
         .find(|(_, system)| matches!(system, surface::System::Physics(_)))
         .unwrap();
@@ -479,7 +478,7 @@ fn body_mass_and_dynamic_defaults_are_logical_authoring_values() {
     let mut asset = conversion::m3::import(&source, &Default::default())
         .unwrap()
         .value;
-    let (id, system) = asset.models[0]
+    let (id, system) = asset[0]
         .systems()
         .find(|(_, system)| matches!(system, surface::System::Physics(_)))
         .unwrap();

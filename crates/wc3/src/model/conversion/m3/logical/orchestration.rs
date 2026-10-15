@@ -7,14 +7,14 @@ use super::{
     skeleton_write, write, GraphBuilder,
 };
 use crate::model::common::FileKey;
+use crate::model::conversion::select_model;
 use crate::model::conversion::{
-    Asset, Context, Conversion, EncodingHint, Error, ExportOptions, Format, ImportOptions,
-    IssueKind, OpaquePayload, Plan, UnknownPolicy,
+    Context, Conversion, Error, ExportOptions, ImportOptions, IssueKind, Plan,
 };
 use crate::model::m3::{self as native, records as nr};
+use crate::model::semantic::Asset;
 use crate::model::semantic::{profiles::m3 as surface, profiles::M3, LengthUnit};
 use native::Envelope;
-use std::borrow::Cow;
 use std::collections::BTreeMap;
 
 pub(in crate::model::conversion::m3) fn read<'a, E: Envelope + Send + Sync>(
@@ -188,17 +188,23 @@ pub(in crate::model::conversion::m3) fn read<'a, E: Envelope + Send + Sync>(
             "external animation closure is rebuilt inline with relocated native tracks",
         );
     }
-    let mut asset = Asset::new(builder.finish()?);
-    asset.encoding_hints = geometry.encoding_hints;
-    asset.encoding_hints.push(EncodingHint::M3VertexQualifiers {
-        flags: nr::VertexFlags(native::visit_m3_root!(root, |r| r.vertex_flags.bits()) & 0x1c),
-    });
-    opaque(&source.model, FileKey::Root, &mut asset, &mut context)?;
+    let asset = builder.finish()?;
+    if native::visit_m3_root!(root, |r| r.vertex_flags.bits()) & 0x1c != 0 {
+        context.unknown_data(
+            "m3.vertex_qualifier",
+            "packed vertex qualifier bits have no semantic representation",
+        )?;
+    }
+    check_unknown_sections(&source.model, FileKey::Root, &mut context)?;
     for (hash, file) in source.animations() {
         let file_key = FileKey::Root.sibling(format!(".animation-{hash:08x}.m3a"));
         match file {
-            native::DynamicModel::Md33(model) => opaque(model, file_key, &mut asset, &mut context)?,
-            native::DynamicModel::Md34(model) => opaque(model, file_key, &mut asset, &mut context)?,
+            native::DynamicModel::Md33(model) => {
+                check_unknown_sections(model, file_key, &mut context)?
+            }
+            native::DynamicModel::Md34(model) => {
+                check_unknown_sections(model, file_key, &mut context)?
+            }
         }
     }
     Ok(Conversion {
@@ -210,7 +216,7 @@ pub(in crate::model::conversion::m3) fn plan<'view, 'source: 'view, P: ExportPro
     asset: &'view Asset<'source, M3>,
     options: &ExportOptions,
 ) -> Result<Plan<native::Bundle<'view, P::Envelope>>, Error> {
-    let graph = asset.model(options)?;
+    let graph = select_model(asset, options)?;
     let mut context = Context::export(options);
 
     if graph.units() != LengthUnit::Unspecified {
@@ -248,7 +254,6 @@ pub(in crate::model::conversion::m3) fn plan<'view, 'source: 'view, P: ExportPro
             bones: &skeleton.indices,
             animations: &ids,
         },
-        &asset.encoding_hints,
         &mut context,
     )?;
     let vertices: Vec<_> = geometry
@@ -322,7 +327,7 @@ pub(in crate::model::conversion::m3) fn plan<'view, 'source: 'view, P: ExportPro
         flags: nr::ModelFlags(graph.controls().flags.bits()),
         bones,
         vertices,
-        vertex_flags: packed_vertex_flags(geometry.flags, &asset.encoding_hints)?,
+        vertex_flags: geometry.flags,
         divisions: geometry.divisions,
         bone_lookup: geometry.bone_lookup,
         initial_reference,
@@ -405,10 +410,9 @@ fn check_unresolved_source<E: Envelope>(
     Ok(())
 }
 
-fn opaque<'a, E: Envelope>(
-    source: &'a native::Model<'_, E>,
+fn check_unknown_sections<E: Envelope>(
+    source: &native::Model<'_, E>,
     file: FileKey,
-    asset: &mut Asset<'a, M3>,
     context: &mut Context,
 ) -> Result<(), Error> {
     for (_, section) in source.document().sections() {
@@ -422,58 +426,7 @@ fn opaque<'a, E: Envelope>(
             section.tag(),
             section.revision()
         );
-        match context.unknown {
-            UnknownPolicy::Reject => {
-                return Err(Error::new(path, "source section schema is unknown"));
-            }
-            UnknownPolicy::Drop => context.issue(
-                path,
-                IssueKind::Dropped,
-                "uninterpreted source section discarded",
-            ),
-            UnknownPolicy::Archive => {
-                asset.opaque.push(OpaquePayload {
-                    format: Format::M3,
-                    file: file.clone(),
-                    tag: section.tag(),
-                    revision: Some(section.revision()),
-                    count: Some(section.count()),
-                    bytes: Cow::Borrowed(section.bytes()),
-                });
-                context.issue(
-                    path,
-                    IssueKind::Archived,
-                    "uninterpreted payload retained outside the active logical graph",
-                );
-            }
-        }
+        context.unknown_data(path, "source section schema is unknown")?;
     }
     Ok(())
-}
-
-fn packed_vertex_flags(
-    flags: nr::VertexFlags,
-    hints: &[EncodingHint<'_>],
-) -> Result<nr::VertexFlags, Error> {
-    let mut qualifier = None;
-    for hint in hints {
-        if let EncodingHint::M3VertexQualifiers { flags } = hint {
-            if flags.bits() & !0x1c != 0 {
-                return Err(Error::new(
-                    "m3.vertex_qualifier.hint",
-                    "qualifier hint cannot select geometry attributes",
-                ));
-            }
-            if qualifier.is_some_and(|value| value != flags.bits()) {
-                return Err(Error::new(
-                    "m3.vertex_qualifier.hint",
-                    "conflicting packed-vertex qualifiers",
-                ));
-            }
-            qualifier = Some(flags.bits());
-        }
-    }
-    Ok(nr::VertexFlags(
-        (flags.bits() & !0x1c) | qualifier.unwrap_or(flags.bits() & 0x1c),
-    ))
 }

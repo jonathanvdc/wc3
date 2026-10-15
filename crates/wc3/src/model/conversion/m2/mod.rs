@@ -1,13 +1,11 @@
 //! Direct conversion between native M2 bundles and checked logical model graphs.
-use super::{
-    Asset, Context, Conversion, Error, ExportOptions, Format, ImportOptions, IssueKind,
-    OpaquePayload, Plan, UnknownPolicy,
-};
+use super::{Context, Conversion, Error, ExportOptions, ImportOptions, Plan};
 use crate::model::m2::{
     self as native,
     companions::{Skin, SkinProfile},
     records::{SkinSection, Vertex},
 };
+use crate::model::semantic::Asset;
 use native::chunks::Chunk;
 use native::codec::{Array, Decoder, Value};
 use native::records::{

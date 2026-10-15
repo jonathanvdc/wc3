@@ -1,7 +1,7 @@
 use super::*;
 use sem::GeometrySchema as _;
 #[test]
-fn draw_controls_and_uv_transforms_are_editable_native_fields() {
+fn draw_controls_and_preferred_uv_encoding_survive_geometry_edits() {
     let original = asset();
     let source = conversion::m3::plan::<m3::StarCraft2>(&original, &approximate())
         .unwrap()
@@ -61,7 +61,18 @@ fn draw_controls_and_uv_transforms_are_editable_native_fields() {
     let mut imported = conversion::m3::import(&source, &Default::default())
         .unwrap()
         .value;
-    let (id, mesh) = imported.models[0].meshes().next().unwrap();
+    imported = imported
+        .widen::<sem::profiles::Universal>()
+        .try_narrow::<sem::profiles::M3>()
+        .unwrap();
+    let (id, mesh) = imported[0].meshes().next().unwrap();
+    assert_eq!(
+        mesh.controls.as_ref().unwrap().uv_encoding,
+        Some(surface::UvEncoding {
+            scale: 32.,
+            offset: 0.5
+        })
+    );
     assert_eq!(mesh.texture_coordinates()[0].get(1), Some([2.5, 0.5]));
     let mut mesh = mesh.clone();
     let sem::M3Geometry::Display(display) = &mesh.geometry else {
@@ -130,7 +141,7 @@ fn draw_controls_and_uv_transforms_are_editable_native_fields() {
     assert_eq!(division.instances, 3);
     let reread = conversion::m3::import(&result, &Default::default()).unwrap();
     assert_eq!(
-        reread.value.models[0]
+        reread.value[0]
             .meshes()
             .next()
             .unwrap()
@@ -171,8 +182,8 @@ fn undrawn_regions_retain_definition_binding_and_detail_level() {
     let mut asset = conversion::m3::import(&source, &ImportOptions::default())
         .unwrap()
         .value;
-    assert_eq!(asset.models[0].instances().count(), 0);
-    let (id, definition) = asset.models[0].meshes().next().unwrap();
+    assert_eq!(asset[0].instances().count(), 0);
+    let (id, definition) = asset[0].meshes().next().unwrap();
     assert!(definition.skin().is_some());
     let placement = definition
         .controls
@@ -217,10 +228,10 @@ fn undrawn_regions_retain_definition_binding_and_detail_level() {
     let imported = conversion::m3::import(&source, &ImportOptions::default())
         .unwrap()
         .value;
-    let (_, mesh) = imported.models[0].meshes().next().unwrap();
+    let (_, mesh) = imported[0].meshes().next().unwrap();
     assert!(mesh.skin().is_some());
     assert_eq!(mesh.texture_coordinates()[0].get(0), Some([0.5, 0.]));
-    assert_eq!(imported.models[0].instances().count(), 0);
+    assert_eq!(imported[0].instances().count(), 0);
 }
 
 #[test]
@@ -270,7 +281,7 @@ fn unselected_bounds_definitions_are_emitted_without_invented_draws() {
         .unwrap()
         .value;
     assert_eq!(
-        imported.models[0]
+        imported[0]
             .features()
             .filter(|(_, feature)| matches!(feature.payload, surface::Feature::Extent(_)))
             .count(),
@@ -303,4 +314,109 @@ fn unselected_bounds_definitions_are_emitted_without_invented_draws() {
     assert_eq!(bounds.bounds.initial_value.maximum, [3.; 3]);
     assert_eq!(bounds.bounds.initial_value.radius, 5.);
     assert_eq!(bounds.bounds.animation_id, 42);
+}
+
+#[test]
+fn noncanonical_uv_offsets_survive_strict_export_for_drawn_and_undrawn_regions() {
+    for undrawn in [false, true] {
+        let original = asset();
+        let source = conversion::m3::plan::<m3::StarCraft2>(&original, &approximate())
+            .unwrap()
+            .execute()
+            .unwrap()
+            .value;
+        let root = source.model.root::<nr::ModelRecord<nr::V29>>().unwrap();
+        let mut document = source.model.into_document();
+        let mut division = document
+            .resolve::<nr::MeshDivision<nr::V2>>(root.divisions.cast())
+            .unwrap()
+            .get(0)
+            .unwrap()
+            .unwrap();
+        let mut region = document
+            .resolve::<nr::Region<nr::V5>>(division.regions.cast())
+            .unwrap()
+            .get(0)
+            .unwrap()
+            .unwrap();
+        region.uv_offset = 0.1;
+        document
+            .replace(
+                document.section_id(division.regions.index).unwrap(),
+                &[region],
+            )
+            .unwrap();
+        if undrawn {
+            division.batches = m3::Ref::default();
+            document
+                .replace(
+                    document.section_id(root.divisions.index).unwrap(),
+                    &[division],
+                )
+                .unwrap();
+        }
+        let source = m3::Bundle::from_model(m3::Model::from_document(document).unwrap());
+        let imported = conversion::m3::import(&source, &ImportOptions::default())
+            .unwrap()
+            .value;
+        let coordinates = imported[0].meshes().next().unwrap().1.texture_coordinates()[0].to_vec();
+        let restored = imported
+            .widen::<sem::profiles::Universal>()
+            .try_narrow::<M3>()
+            .unwrap();
+        let output = conversion::m3::plan::<m3::StarCraft2>(&restored, &ExportOptions::default())
+            .unwrap()
+            .execute()
+            .unwrap()
+            .value;
+        let root = output.model.root::<nr::ModelRecord<nr::V29>>().unwrap();
+        let division = output
+            .model
+            .document()
+            .resolve::<nr::MeshDivision<nr::V2>>(root.divisions.cast())
+            .unwrap()
+            .get(0)
+            .unwrap()
+            .unwrap();
+        let region = output
+            .model
+            .document()
+            .resolve::<nr::Region<nr::V5>>(division.regions.cast())
+            .unwrap()
+            .get(0)
+            .unwrap()
+            .unwrap();
+        assert_eq!((region.uv_scale, region.uv_offset), (16., 0.1));
+        let reread = conversion::m3::import(&output, &ImportOptions::default())
+            .unwrap()
+            .value;
+        assert_eq!(
+            reread[0].meshes().next().unwrap().1.texture_coordinates()[0].to_vec(),
+            coordinates
+        );
+    }
+}
+
+#[test]
+fn nonfinite_preferred_uv_encoding_fails_checked_mesh_edits() {
+    let mut asset = asset();
+    let (id, mesh) = asset[0].meshes().next().unwrap();
+    let mut mesh = mesh.clone();
+    mesh.controls
+        .get_or_insert_with(Default::default)
+        .uv_encoding = Some(surface::UvEncoding {
+        scale: f32::NAN,
+        offset: 0.,
+    });
+    assert!(asset
+        .edit_model(0, |builder| builder.set_mesh(id, mesh))
+        .is_err());
+    assert!(asset[0]
+        .meshes()
+        .next()
+        .unwrap()
+        .1
+        .controls
+        .as_ref()
+        .is_none_or(|c| c.uv_encoding.is_none()));
 }

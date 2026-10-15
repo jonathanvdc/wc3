@@ -93,6 +93,7 @@ fn common_tools_work_across_profiles_and_dispatchers() {
         extras: d3::VertexExtras {
             auxiliary_colors: vec![[0.5; 4]; 3].into(),
             binormals: positions(),
+            direction_auxiliary: vec![[1, 2, 3], [4, 5, 6], [7, 8, 9]].into(),
             cloth_vertices: vec![8, 9, 10].into(),
         },
     };
@@ -102,6 +103,19 @@ fn common_tools_work_across_profiles_and_dispatchers() {
         mapped.streams().extras.cloth_vertices.to_vec(),
         vec![10, 8, 9, 8]
     );
+    assert_eq!(
+        mapped.streams().extras.direction_auxiliary.to_vec(),
+        vec![[7, 8, 9], [1, 2, 3], [4, 5, 6], [1, 2, 3]]
+    );
+    let universal: GeometryData = d3.clone().into();
+    let restored = d3::Geometry::try_from(universal.edited(duplicate()).unwrap()).unwrap();
+    assert_eq!(
+        restored.streams().extras.direction_auxiliary.to_vec(),
+        mapped.streams().extras.direction_auxiliary.to_vec()
+    );
+    let mut malformed = d3.streams().clone();
+    malformed.extras.direction_auxiliary = vec![[0; 3]].into();
+    assert!(d3.clone().with_streams(malformed).is_err());
     exercise(d3);
 }
 #[test]

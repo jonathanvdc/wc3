@@ -1,4 +1,5 @@
 //! Direct typed world-model authoring graph codecs.
+use crate::model::semantic::Asset;
 mod alpha_materials;
 mod draw;
 mod encode;
@@ -23,15 +24,11 @@ mod scene;
 mod spatial_queries;
 mod visibility;
 use crate::model::common::FileKey;
-use crate::model::conversion::{
-    Asset, Context, Conversion, Error, Format, ImportOptions, IssueKind, OpaquePayload,
-    UnknownPolicy,
-};
+use crate::model::conversion::{Context, Conversion, Error, ImportOptions, IssueKind};
 use crate::model::semantic::profiles::wmo::{ModelControls, WorldOptions, WorldSystem};
 use crate::model::semantic::profiles::Wmo;
 use crate::model::semantic::{Bounds, ModelBuilder};
 use crate::model::wmo::{Bundle, Dialect, GroupKey};
-use std::borrow::Cow;
 use std::collections::BTreeSet;
 
 pub(super) fn import<'a, D: Dialect>(
@@ -42,19 +39,16 @@ pub(super) fn import<'a, D: Dialect>(
         .validate_complete()
         .map_err(|error| Error::new("world", error.to_string()))?;
     let mut context = Context::import(options);
-    let mut opaque = Vec::new();
     for chunk in source.root.chunks() {
         use crate::model::wmo::root::RootChunk;
         let unresolved = match chunk {
-            RootChunk::Unknown { tag, data } => Some((*tag, data.as_ref())),
-            RootChunk::M3Materials(data) | RootChunk::DetailDoodads(data) => {
-                Some((chunk.tag(), data.as_ref()))
-            }
-            RootChunk::ParticulateVolumes(rows) => Some((chunk.tag(), rows.as_bytes())),
+            RootChunk::Unknown { tag, .. } => Some(*tag),
+            RootChunk::M3Materials(_) | RootChunk::DetailDoodads(_) => Some(chunk.tag()),
+            RootChunk::ParticulateVolumes(_) => Some(chunk.tag()),
             _ => None,
         };
-        if let Some((tag, data)) = unresolved {
-            handle_unknown(&mut opaque, &mut context, options, FileKey::Root, tag, data)?;
+        if let Some(tag) = unresolved {
+            handle_unknown(&mut context, FileKey::Root, tag)?;
         }
     }
     let mut builder = ModelBuilder::<Wmo>::with_profile("World model");
@@ -119,34 +113,29 @@ pub(super) fn import<'a, D: Dialect>(
         for chunk in group.chunks() {
             use crate::model::wmo::group::GroupChunk;
             let unresolved = match chunk {
-                GroupChunk::Unknown { tag, data } => Some((*tag, data.as_ref())),
-                GroupChunk::SpotLights(rows) => Some((chunk.tag(), rows.as_bytes())),
-                GroupChunk::PrepassBatches(rows) => Some((chunk.tag(), rows.as_bytes())),
-                GroupChunk::QueryGeometry(query) if query.extension.len() > 1 => {
-                    Some((chunk.tag(), &query.extension[1..]))
-                }
-                GroupChunk::SpotLightAnimations(rows) => Some((chunk.tag(), rows.as_bytes())),
-                GroupChunk::LightMapMaterials(data)
-                | GroupChunk::LightMapData(data)
-                | GroupChunk::LegacyIndices(data)
-                | GroupChunk::LightMapCoordinates(data)
-                | GroupChunk::LegacyBatchVertices(data)
-                | GroupChunk::LegacyBatchIndices(data)
-                | GroupChunk::LegacyBatchGeometry(data)
-                | GroupChunk::LegacyBatchPlanes(data) => Some((chunk.tag(), data.as_ref())),
+                GroupChunk::Unknown { tag, .. } => Some(*tag),
+                GroupChunk::SpotLights(_) => Some(chunk.tag()),
+                GroupChunk::PrepassBatches(_) => Some(chunk.tag()),
+                GroupChunk::QueryGeometry(query) if query.extension.len() > 1 => Some(chunk.tag()),
+                GroupChunk::SpotLightAnimations(_) => Some(chunk.tag()),
+                GroupChunk::LightMapMaterials(_)
+                | GroupChunk::LightMapData(_)
+                | GroupChunk::LegacyIndices(_)
+                | GroupChunk::LightMapCoordinates(_)
+                | GroupChunk::LegacyBatchVertices(_)
+                | GroupChunk::LegacyBatchIndices(_)
+                | GroupChunk::LegacyBatchGeometry(_)
+                | GroupChunk::LegacyBatchPlanes(_) => Some(chunk.tag()),
                 _ => None,
             };
-            if let Some((tag, data)) = unresolved {
+            if let Some(tag) = unresolved {
                 handle_unknown(
-                    &mut opaque,
                     &mut context,
-                    options,
                     source
                         .group_file_key(key)
                         .expect("resolved group identity")
                         .clone(),
                     tag,
-                    data,
                 )?;
             }
         }
@@ -227,11 +216,7 @@ pub(super) fn import<'a, D: Dialect>(
     }
     builder.set_system(owner, world)?;
     Ok(Conversion {
-        value: {
-            let mut asset = Asset::new(builder.finish()?);
-            asset.opaque = opaque;
-            asset
-        },
+        value: builder.finish()?,
         report: context.report,
     })
 }
@@ -258,43 +243,11 @@ pub(super) fn plan<'a, D: Dialect>(
     encode::write(asset, options)
 }
 
-fn handle_unknown<'a>(
-    opaque: &mut Vec<OpaquePayload<'a>>,
-    context: &mut Context,
-    options: &ImportOptions,
-    file: FileKey,
-    tag: [u8; 4],
-    data: &'a [u8],
-) -> Result<(), Error> {
-    match options.unknown {
-        UnknownPolicy::Reject => {
-            return Err(Error::new(
-                "world.unknown",
-                "unknown payload requires an explicit archive or drop policy",
-            ));
-        }
-        UnknownPolicy::Drop => context.issue(
-            "world.unknown",
-            IssueKind::Dropped,
-            "Unknown native payload omitted",
-        ),
-        UnknownPolicy::Archive => {
-            opaque.push(OpaquePayload {
-                format: Format::Wmo,
-                file,
-                tag,
-                revision: None,
-                count: None,
-                bytes: Cow::Borrowed(data),
-            });
-            context.issue(
-                "world.unknown",
-                IssueKind::Archived,
-                "Unknown payload retained outside the authoring graph",
-            );
-        }
-    }
-    Ok(())
+fn handle_unknown(context: &mut Context, file: FileKey, tag: [u8; 4]) -> Result<(), Error> {
+    context.unknown_data(
+        format!("world.{file:?}.unknown.{}", String::from_utf8_lossy(&tag)),
+        "unknown native payload has no semantic representation",
+    )
 }
 
 pub(super) fn import_alpha<'a>(

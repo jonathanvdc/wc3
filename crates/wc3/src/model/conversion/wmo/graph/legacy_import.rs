@@ -1,9 +1,10 @@
 //! Historical root envelopes decoded directly into the world vocabulary.
 use super::{environment, legacy_geometry, materials, root_view::CommonRoot, scene, visibility};
 use crate::model::common::FileKey;
-use crate::model::conversion::{Asset, Context, Conversion, Error, ImportOptions, OpaquePayload};
+use crate::model::conversion::{Context, Conversion, Error, ImportOptions};
 use crate::model::semantic::profiles::wmo::{ModelControls, WorldOptions, WorldSystem};
 use crate::model::semantic::profiles::Wmo;
+use crate::model::semantic::Asset;
 use crate::model::semantic::{ModelBuilder, Resource};
 use crate::model::wmo::legacy::{Bundle16, Root14, RootChunk14};
 use crate::model::wmo::root::RootChunk;
@@ -15,17 +16,9 @@ pub(super) fn alpha<'a>(
 ) -> Result<Conversion<Asset<'a, Wmo>>, Error> {
     source.validate().map_err(read_error)?;
     let mut context = Context::import(options);
-    let mut opaque = Vec::new();
-    collect_root(source, options, &mut context, &mut opaque)?;
+    collect_root(source, &mut context)?;
     for unknown in source.unknown_chunks() {
-        super::handle_unknown(
-            &mut opaque,
-            &mut context,
-            options,
-            FileKey::Root,
-            unknown.tag,
-            unknown.data.as_ref(),
-        )?;
+        super::handle_unknown(&mut context, FileKey::Root, unknown.tag)?;
     }
     let mut builder = ModelBuilder::<Wmo>::with_profile("World model");
     builder.set_controls(ModelControls {
@@ -44,9 +37,7 @@ pub(super) fn alpha<'a>(
         collect_group(
             &group.chunks,
             FileKey::Root.sibling(format!("_{index:03}.wmo")),
-            options,
             &mut context,
-            &mut opaque,
         )?;
         let header = &group.header;
         let portal_start = usize::try_from(header.portal_start).map_err(|_| {
@@ -122,11 +113,7 @@ pub(super) fn alpha<'a>(
     }
     builder.set_system(owner, world)?;
     Ok(Conversion {
-        value: {
-            let mut asset = Asset::new(builder.finish()?);
-            asset.opaque = opaque;
-            asset
-        },
+        value: builder.finish()?,
         report: context.report,
     })
 }
@@ -136,8 +123,7 @@ pub(super) fn beta<'a>(
 ) -> Result<Conversion<Asset<'a, Wmo>>, Error> {
     source.validate_complete().map_err(read_error)?;
     let mut context = Context::import(options);
-    let mut opaque = Vec::new();
-    collect_root(&source.root, options, &mut context, &mut opaque)?;
+    collect_root(&source.root, &mut context)?;
     let mut builder = ModelBuilder::<Wmo>::with_profile("World model");
     let header = source.root.header();
     let flags = header.flags();
@@ -175,9 +161,7 @@ pub(super) fn beta<'a>(
         collect_group(
             &group.chunks,
             FileKey::Root.sibling(format!("_{index:03}.wmo")),
-            options,
             &mut context,
-            &mut opaque,
         )?;
         let header = &group.header;
         let portal_start = usize::try_from(header.portal_start).map_err(|_| {
@@ -240,11 +224,7 @@ pub(super) fn beta<'a>(
     }
     builder.set_system(owner, world)?;
     Ok(Conversion {
-        value: {
-            let mut asset = Asset::new(builder.finish()?);
-            asset.opaque = opaque;
-            asset
-        },
+        value: builder.finish()?,
         report: context.report,
     })
 }
@@ -267,21 +247,17 @@ fn read_error(error: impl std::fmt::Display) -> Error {
 
 fn collect_root<'a, 'data: 'a>(
     source: &'a impl CommonRoot<'data>,
-    options: &ImportOptions,
     context: &mut Context,
-    opaque: &mut Vec<OpaquePayload<'a>>,
 ) -> Result<(), Error> {
     for chunk in source.common_chunks() {
         let unknown = match chunk {
-            RootChunk::Unknown { tag, data } => Some((*tag, data.as_ref())),
-            RootChunk::M3Materials(data) | RootChunk::DetailDoodads(data) => {
-                Some((chunk.tag(), data.as_ref()))
-            }
-            RootChunk::ParticulateVolumes(rows) => Some((chunk.tag(), rows.as_bytes())),
+            RootChunk::Unknown { tag, .. } => Some(*tag),
+            RootChunk::M3Materials(_) | RootChunk::DetailDoodads(_) => Some(chunk.tag()),
+            RootChunk::ParticulateVolumes(_) => Some(chunk.tag()),
             _ => None,
         };
-        if let Some((tag, bytes)) = unknown {
-            super::handle_unknown(opaque, context, options, FileKey::Root, tag, bytes)?;
+        if let Some(tag) = unknown {
+            super::handle_unknown(context, FileKey::Root, tag)?;
         }
     }
     Ok(())
@@ -289,27 +265,23 @@ fn collect_root<'a, 'data: 'a>(
 fn collect_group<'a, 'data: 'a, B>(
     chunks: &'a [crate::model::wmo::legacy::LegacyGroupChunk<'data, B>],
     file: FileKey,
-    options: &ImportOptions,
     context: &mut Context,
-    opaque: &mut Vec<OpaquePayload<'a>>,
 ) -> Result<(), Error> {
     use crate::model::wmo::group::GroupChunk;
     use crate::model::wmo::legacy::LegacyGroupChunk;
     for chunk in chunks {
         if let LegacyGroupChunk::Common(chunk) = chunk {
             let unknown = match chunk {
-                GroupChunk::Unknown { tag, data } => Some((*tag, data.as_ref())),
-                GroupChunk::SpotLights(rows) => Some((chunk.tag(), rows.as_bytes())),
-                GroupChunk::SpotLightAnimations(rows) => Some((chunk.tag(), rows.as_bytes())),
-                GroupChunk::PrepassBatches(rows) => Some((chunk.tag(), rows.as_bytes())),
-                GroupChunk::TangentsUnresolved(data) => Some((chunk.tag(), data.as_ref())),
-                GroupChunk::QueryGeometry(query) if query.extension.len() > 1 => {
-                    Some((chunk.tag(), &query.extension[1..]))
-                }
+                GroupChunk::Unknown { tag, .. } => Some(*tag),
+                GroupChunk::SpotLights(_) => Some(chunk.tag()),
+                GroupChunk::SpotLightAnimations(_) => Some(chunk.tag()),
+                GroupChunk::PrepassBatches(_) => Some(chunk.tag()),
+                GroupChunk::TangentsUnresolved(_) => Some(chunk.tag()),
+                GroupChunk::QueryGeometry(query) if query.extension.len() > 1 => Some(chunk.tag()),
                 _ => None,
             };
-            if let Some((tag, bytes)) = unknown {
-                super::handle_unknown(opaque, context, options, file.clone(), tag, bytes)?;
+            if let Some(tag) = unknown {
+                super::handle_unknown(context, file.clone(), tag)?;
             }
         }
     }

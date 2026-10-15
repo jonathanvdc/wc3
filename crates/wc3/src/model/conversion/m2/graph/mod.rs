@@ -348,7 +348,7 @@ where
         builder.add_system(profile::System::Physics(physics))?;
     }
     builder.set_controls(family);
-    let mut asset = Asset::new(builder.finish()?);
+    let asset = builder.finish()?;
     for chunk in source.model.extensions() {
         match chunk {
             Chunk::Core(_)
@@ -365,26 +365,11 @@ where
                 "extension semantics do not yet have a logical mapping",
             )?,
         }
-        if let Chunk::Unknown { tag, data } = chunk {
-            match options.unknown {
-                UnknownPolicy::Reject => {
-                    return Err(Error::new(
-                        "m2.chunk",
-                        "unknown extension requires an explicit policy",
-                    ));
-                }
-                UnknownPolicy::Drop => {
-                    context.issue("m2.chunk", IssueKind::Dropped, "unknown extension omitted")
-                }
-                UnknownPolicy::Archive => asset.opaque.push(OpaquePayload {
-                    format: Format::M2,
-                    file: source.key.clone(),
-                    tag: *tag,
-                    revision: None,
-                    count: None,
-                    bytes: Cow::Borrowed(data),
-                }),
-            }
+        if let Chunk::Unknown { .. } = chunk {
+            context.unknown_data(
+                "m2.chunk",
+                "unknown extension has no semantic representation",
+            )?;
         }
     }
     Ok(Conversion {

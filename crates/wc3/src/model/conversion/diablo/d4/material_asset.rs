@@ -1,12 +1,12 @@
 //! Standalone material-resource conversion retains shader inputs and owner-local declarations.
 use super::materials::{read_shader, write_shader};
-use crate::model::conversion::{
-    Asset, Context, Conversion, Error, ExportOptions, ImportOptions, IssueKind, Plan, UnknownPolicy,
-};
+use crate::model::conversion::select_model;
+use crate::model::conversion::{Context, Conversion, Error, ExportOptions, ImportOptions, Plan};
 use crate::model::diablo::d4::{self, records as native};
 use crate::model::semantic::profiles::diablo::d4::{
     Material as Surface, MaterialAssetControls, D4,
 };
+use crate::model::semantic::Asset;
 use crate::model::semantic::{Material, MaterialId, Model, Resources};
 
 /// Imports one standalone material resource as a checked material-only graph.
@@ -53,7 +53,7 @@ pub fn import_material<'a>(
         },
     })?;
     Ok(Conversion {
-        value: Asset::new(model.finish()?),
+        value: model.finish()?,
         report: context.report,
     })
 }
@@ -63,7 +63,7 @@ pub fn plan_material(
     material: MaterialId,
     options: &ExportOptions,
 ) -> Result<Plan<d4::Material<'static>>, Error> {
-    let model = asset.model(options)?;
+    let model = select_model(asset, options)?;
     let surface = &model
         .material(material)
         .ok_or_else(|| Error::new("d4.material", "material belongs to another model"))?
@@ -87,33 +87,14 @@ pub fn plan_material(
             "standalone material output has no draw-based look selection",
         ));
     }
-    if !asset.opaque.is_empty() {
-        match options.unknown {
-            UnknownPolicy::Reject => {
-                return Err(Error::new(
-                    "d4.material.opaque",
-                    "inactive source attachments require an explicit output policy",
-                ))
-            }
-            UnknownPolicy::Archive => context.issue(
-                "d4.material.opaque",
-                IssueKind::Archived,
-                "inactive source attachments remain outside rebuilt material output",
-            ),
-            UnknownPolicy::Drop => context.issue(
-                "d4.material.opaque",
-                IssueKind::Dropped,
-                "inactive source attachments omitted from material output",
-            ),
-        }
-    }
+
     let mut output = d4::Material::default();
     output.root = native::MaterialRecord {
         sno_id: controls.sno_id,
         record_flags: controls.record_flags,
         flags: controls.flags,
         surface: controls.surface,
-        uber_material: write_shader(shader, asset.models.resources(), &mut context)?,
+        uber_material: write_shader(shader, asset.resources(), &mut context)?,
         unk_93ea20a: controls.unclassified_scalars[0],
         unk_a08119e: controls.unclassified_scalars[1],
         unk_5b1ce37: controls.unclassified_scalars[2],

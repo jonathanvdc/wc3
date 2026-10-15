@@ -73,7 +73,7 @@ pub(super) fn regions<E: Envelope>(
                             index_count: face_count as u32,
                             first_bone_lookup: r.first_bone_lookup,
                             bone_lookup_count: r.bone_lookup_count,
-                            uv_scale: 1.0 / 2048.0,
+                            uv_scale: 16.0,
                             uv_offset: 0.0,
                         });
                     }
@@ -85,12 +85,12 @@ pub(super) fn regions<E: Envelope>(
                 legacy!(nr::V1);
             }
         }
-        2 => read!(nr::V2, |_| 1.0 / 2048.0, |_| 0.0),
-        3 => read!(nr::V3, |_| 1.0 / 2048.0, |_| 0.0),
-        4 => read!(nr::V4, |_| 1.0 / 2048.0, |_| 0.0),
+        2 => read!(nr::V2, |_| 16.0, |_| 0.0),
+        3 => read!(nr::V3, |_| 16.0, |_| 0.0),
+        4 => read!(nr::V4, |_| 16.0, |_| 0.0),
         5 => read!(
             nr::V5,
-            |r: &nr::Region<nr::V5>| r.uv_scale / 32768.,
+            |r: &nr::Region<nr::V5>| r.uv_scale,
             |r: &nr::Region<nr::V5>| r.uv_offset
         ),
         _ => {

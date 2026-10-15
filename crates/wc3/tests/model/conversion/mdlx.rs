@@ -30,7 +30,7 @@ fn native_model_sequence_and_geoset_metadata_rebuilds_without_source_bytes() {
     let asset = conversion::mdlx::import(&source, &ImportOptions::default())
         .unwrap()
         .value;
-    assert!(asset.opaque.is_empty());
+
     let output = conversion::mdlx::plan::<mdlx::V800>(&asset, &ExportOptions::default())
         .unwrap()
         .execute()
@@ -129,7 +129,7 @@ fn empty_native_tables_do_not_replace_reserved_root() {
 fn complete_native_surface_is_an_editable_logical_payload() {
     let source = source();
     let mut imported = conversion::mdlx::import(&source, &ImportOptions::default()).unwrap();
-    let graph = &imported.value.models[0];
+    let graph = &imported.value[0];
     let (id, material) = graph.materials().next().unwrap();
     let mut material = material.surface.clone();
     material.layers[0].opacity.default = 0.25;
@@ -156,7 +156,7 @@ fn complete_native_emitter_is_an_editable_logical_feature() {
     source.set_particle_emitters2([emitter]);
     source.set_pivot_points(&[[0.; 3], [0.; 3]]);
     let mut imported = conversion::mdlx::import(&source, &ImportOptions::default()).unwrap();
-    let graph = &imported.value.models[0];
+    let graph = &imported.value[0];
     let (id, mut feature) = graph
         .features()
         .find(|(_, feature)| matches!(feature.payload, profile::Node::Particle2(_)))
@@ -186,7 +186,7 @@ fn complete_native_emitter_is_an_editable_logical_feature() {
     );
 }
 #[test]
-fn unknown_blocks_are_separate_and_inactive_after_authoring_edits() {
+fn unknown_blocks_are_rejected_or_dropped_before_authoring_edits() {
     let mut source = source();
     source.chunks.push(mdlx::chunks::ModelChunk::Unknown(
         mdlx::chunks::UnknownChunk::new(mdlx::chunks::RawChunk::new(
@@ -199,14 +199,22 @@ fn unknown_blocks_are_separate_and_inactive_after_authoring_edits() {
     let mut imported = conversion::mdlx::import(
         &source,
         &ImportOptions {
-            unknown: UnknownPolicy::Archive,
+            unknown: UnknownPolicy::Drop,
             ..Default::default()
         },
     )
     .unwrap();
-    assert_eq!(imported.value.opaque.len(), 1);
-    assert_eq!(imported.value.opaque[0].bytes.as_ref(), [1, 2, 3]);
-    let graph = &imported.value.models[0];
+
+    assert!(imported
+        .report
+        .issues
+        .iter()
+        .any(|issue| issue.path == "chunks" && issue.kind == conversion::IssueKind::Dropped));
+    assert!(source
+        .chunks
+        .iter()
+        .any(|chunk| matches!(chunk, mdlx::chunks::ModelChunk::Unknown(_))));
+    let graph = &imported.value[0];
     let (id, mesh) = graph.meshes().next().unwrap();
     let mut mesh = mesh.clone();
     mesh.geometry = mesh
@@ -223,17 +231,11 @@ fn unknown_blocks_are_separate_and_inactive_after_authoring_edits() {
         .value
         .edit_model(0, |builder| builder.set_mesh(id, mesh))
         .unwrap();
-    let output = conversion::mdlx::plan::<mdlx::V800>(
-        &imported.value,
-        &ExportOptions {
-            unknown: UnknownPolicy::Archive,
-            ..Default::default()
-        },
-    )
-    .unwrap()
-    .execute()
-    .unwrap()
-    .value;
+    let output = conversion::mdlx::plan::<mdlx::V800>(&imported.value, &ExportOptions::default())
+        .unwrap()
+        .execute()
+        .unwrap()
+        .value;
     assert!(output
         .chunks
         .iter()
@@ -264,7 +266,7 @@ fn shared_spline_keys_are_borrowed_and_editable_without_encoded_bridges() {
     );
     source.set_global_sequences(&[2000]);
     let mut imported = conversion::mdlx::import(&source, &ImportOptions::default()).unwrap();
-    let graph = &imported.value.models[0];
+    let graph = &imported.value[0];
     let Channel::Vector3(mut track) = graph.shared_channels()[0].clone() else {
         panic!("translation curve missing")
     };
@@ -322,12 +324,7 @@ fn ambient_illumination_and_nonlooping_clips_preserve_behavior() {
         .flags
         .set_non_looping(true);
     let imported = conversion::mdlx::import(&source, &ImportOptions::default()).unwrap();
-    assert!(!imported.value.models[0]
-        .clips()
-        .next()
-        .unwrap()
-        .1
-        .is_looping());
+    assert!(!imported.value[0].clips().next().unwrap().1.is_looping());
     let output = conversion::mdlx::plan::<mdlx::V800>(&imported.value, &ExportOptions::default())
         .unwrap()
         .execute()

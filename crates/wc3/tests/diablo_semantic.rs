@@ -15,6 +15,7 @@ fn triangle<'a>(positions: &'a [[f32; 3]]) -> Geometry<'a> {
             extras: VertexExtras {
                 auxiliary_colors: vec![[0.; 4]; 3].into(),
                 binormals: vec![[0., -1., 0.]; 3].into(),
+                direction_auxiliary: Values::default(),
                 cloth_vertices: vec![0; 3].into(),
             },
         },

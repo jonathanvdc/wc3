@@ -12,8 +12,6 @@ pub enum IssueKind {
     Approximated,
     /// Explicitly accepted semantic loss.
     Dropped,
-    /// Uninterpreted payload retained separately from active model data.
-    Archived,
 }
 /// A diagnostic at a stable semantic location.
 #[derive(Clone, Debug, Eq, PartialEq)]

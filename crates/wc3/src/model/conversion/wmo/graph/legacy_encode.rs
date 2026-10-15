@@ -4,11 +4,13 @@ use super::{
     relationships, root_output::RootOutput, visibility,
 };
 use crate::model::common::FileKey;
-use crate::model::conversion::{Asset, Context, Error, ExportOptions, IssueKind, Plan};
+use crate::model::conversion::select_model;
+use crate::model::conversion::{Context, Error, ExportOptions, IssueKind, Plan};
 use crate::model::semantic::profiles::wmo::{
     Group as WorldGroup, ModelControls, RegionControls, WorldSystem,
 };
 use crate::model::semantic::profiles::Wmo;
+use crate::model::semantic::Asset;
 use crate::model::semantic::{InstanceId, Model, Quaternion, Resource, Resources};
 use crate::model::wmo::legacy::{
     Batch14, Batch16, Bundle16, Group14, Group16, GroupInfo14, HeaderBatchRange, Root14, Root16,
@@ -22,7 +24,7 @@ pub(super) fn alpha<'a>(
     asset: &'a Asset<'_, Wmo>,
     options: &ExportOptions,
 ) -> Result<Plan<Root14<'a>>, Error> {
-    let model = asset.model(options)?;
+    let model = select_model(asset, options)?;
     let mut context = Context::export(options);
     if let Some((model, resources)) = super::normalize::prepare(model, asset.resources())? {
         context.issue("world.groups.geometry", IssueKind::Normalized, "compatible geometry placements joined with relocated historical vertex and lighting selections");
@@ -151,7 +153,7 @@ pub(super) fn beta<'a>(
     asset: &'a Asset<'_, Wmo>,
     options: &ExportOptions,
 ) -> Result<Plan<Bundle16<'a>>, Error> {
-    let model = asset.model(options)?;
+    let model = select_model(asset, options)?;
     let mut context = Context::export(options);
     if let Some((model, resources)) = super::normalize::prepare(model, asset.resources())? {
         context.issue("world.groups.geometry", IssueKind::Normalized, "compatible geometry placements joined with relocated historical vertex and lighting selections");
