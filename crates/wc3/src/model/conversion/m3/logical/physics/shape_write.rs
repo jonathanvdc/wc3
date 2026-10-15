@@ -4,8 +4,9 @@ use crate::model::conversion::{Context, Error, IssueKind};
 use crate::model::m3::{records, Document, Envelope, Ref};
 use crate::model::semantic::{
     profiles::m3::{values::PhysicsShapeKind, Shape, ShapeGeometry},
-    M3Geometry, MeshId, Topology, Values,
+    M3Geometry, MeshId, Topology,
 };
+use zerovec::ZeroVec;
 
 struct Geometry {
     points: Vec<records::Vector3>,
@@ -13,7 +14,7 @@ struct Geometry {
     planes: Vec<records::Vector4>,
     controls: Vec<f32>,
 }
-fn mesh(graph: &Graph<'_>, id: MeshId, planes: &Values<'_, [f32; 4]>) -> Result<Geometry, Error> {
+fn mesh(graph: &Graph<'_>, id: MeshId, planes: &ZeroVec<'_, [f32; 4]>) -> Result<Geometry, Error> {
     let mesh = graph
         .mesh(id)
         .ok_or_else(|| Error::new("m3.physics.geometry", "missing collision mesh"))?;

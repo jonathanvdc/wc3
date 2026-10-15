@@ -1,7 +1,9 @@
 //! Quantization selects native packing from current semantic values.
+#[cfg(test)]
+use crate::model::conversion::owned;
 use crate::model::conversion::{Context, Error};
 use crate::model::semantic::profiles::m3::UvEncoding;
-use crate::model::semantic::{TextureCoordinates, Values};
+use crate::model::semantic::TextureCoordinates;
 
 #[derive(Clone, Copy, Debug)]
 pub(super) struct UvTransform {
@@ -27,7 +29,7 @@ impl UvTransform {
             };
             if channels
                 .iter()
-                .flat_map(Values::iter)
+                .flat_map(|values| values.iter())
                 .flatten()
                 .all(|value| {
                     transform.fits(value) && transform.decode(transform.pack(value)) == value
@@ -42,7 +44,7 @@ impl UvTransform {
         };
         if channels
             .iter()
-            .flat_map(Values::iter)
+            .flat_map(|values| values.iter())
             .flatten()
             .all(|value| canonical.fits(value))
         {
@@ -51,7 +53,7 @@ impl UvTransform {
         // A common transform for every UV channel fits the authored range in i16.
         let mut minimum = f32::INFINITY;
         let mut maximum = f32::NEG_INFINITY;
-        for value in channels.iter().flat_map(Values::iter).flatten() {
+        for value in channels.iter().flat_map(|values| values.iter()).flatten() {
             if !value.is_finite() {
                 return Err(Error::new("m3.uv", "UV coordinates must be finite"));
             }
@@ -76,7 +78,7 @@ impl UvTransform {
             || scale == 0.
             || !channels
                 .iter()
-                .flat_map(Values::iter)
+                .flat_map(|values| values.iter())
                 .flatten()
                 .all(|value| transform.fits(value))
         {
@@ -158,12 +160,12 @@ mod tests {
 
     #[test]
     fn canonical_packing_preserves_representable_coordinates() {
-        let channels = [Values::owned(vec![[0.5, 0.50097656], [1.5, -1.5]])];
+        let channels = [owned(vec![[0.5, 0.50097656], [1.5, -1.5]])];
         let transform = UvTransform::for_mesh(None, &channels).unwrap();
         assert_eq!(transform.scale, 16.);
         assert_eq!(transform.offset, 0.);
         let mut context = Context::export(&ExportOptions::default());
-        for value in channels.iter().flat_map(Values::iter).flatten() {
+        for value in channels.iter().flat_map(|values| values.iter()).flatten() {
             let packed = transform.encode(value, &mut context).unwrap();
             assert_eq!(
                 f32::from(packed) * transform.scale / 32768. + transform.offset,
@@ -173,7 +175,7 @@ mod tests {
     }
     #[test]
     fn wide_ranges_choose_affine_packing_without_clamping() {
-        let channels = [Values::owned(vec![[-1000., 1000.]])];
+        let channels = [owned(vec![[-1000., 1000.]])];
         let transform = UvTransform::for_mesh(None, &channels).unwrap();
         assert_ne!(transform.scale, 16.);
         assert!(transform.fits(-1000.) && transform.fits(1000.));
@@ -189,7 +191,7 @@ mod tests {
     }
     #[test]
     fn out_of_range_constant_coordinates_use_a_constant_transform() {
-        let channels = [Values::owned(vec![[1000., 1000.]])];
+        let channels = [owned(vec![[1000., 1000.]])];
         let transform = UvTransform::for_mesh(None, &channels).unwrap();
         assert_eq!(transform.scale, 0.);
         assert_eq!(transform.offset, 1000.);
@@ -236,7 +238,7 @@ mod preferred_encoding_tests {
                 scale: preferred.scale,
                 offset: preferred.offset,
             };
-            let channels = [Values::owned(
+            let channels = [owned(
                 (i16::MIN..=i16::MAX)
                     .map(|packed| {
                         let value = original.decode(packed);
@@ -267,12 +269,12 @@ mod preferred_encoding_tests {
             offset: 0.,
         };
         // This edit fits the preferred range, but needs a finer grid.
-        let channels = [Values::owned(vec![[1. / 2048., 0.]])];
+        let channels = [owned(vec![[1. / 2048., 0.]])];
         let selected = UvTransform::for_mesh(Some(preferred), &channels).unwrap();
         assert_eq!((selected.scale, selected.offset), (16., 0.));
         let mut context = Context::export(&ExportOptions::default());
         assert_eq!(selected.encode(1. / 2048., &mut context).unwrap(), 1);
-        let wide = [Values::owned(vec![[-1000., 1000.]])];
+        let wide = [owned(vec![[-1000., 1000.]])];
         let selected = UvTransform::for_mesh(Some(preferred), &wide).unwrap();
         assert!(selected.fits(-1000.) && selected.fits(1000.));
         assert_ne!(selected.scale, preferred.scale);
@@ -286,7 +288,7 @@ mod preferred_encoding_tests {
 
     #[test]
     fn invalid_preferences_and_coordinates_are_rejected() {
-        let channels = [Values::owned(vec![[0.; 2]])];
+        let channels = [owned(vec![[0.; 2]])];
         for preferred in [
             UvEncoding {
                 scale: f32::NAN,
@@ -299,7 +301,7 @@ mod preferred_encoding_tests {
         ] {
             assert!(UvTransform::for_mesh(Some(preferred), &channels).is_err());
         }
-        let invalid = [Values::owned(vec![[f32::NAN, 0.]])];
+        let invalid = [owned(vec![[f32::NAN, 0.]])];
         assert!(UvTransform::for_mesh(Some(UvEncoding::default()), &invalid).is_err());
     }
 }

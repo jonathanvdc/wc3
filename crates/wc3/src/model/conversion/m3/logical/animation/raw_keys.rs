@@ -1,8 +1,9 @@
 //! Typed ordered keys are retained even when their property header is unavailable.
+use crate::model::conversion::materialize;
 use crate::model::conversion::Error;
 use crate::model::m3::{self as native, records as nr};
 use crate::model::semantic::profiles::m3::{BlockFlags, OrderedKeys, UnboundBlock, UnboundKeys};
-use crate::model::semantic::{Bounds, Quaternion, Time, Values};
+use crate::model::semantic::{Bounds, Quaternion, Time};
 use native::Envelope;
 
 fn error(value: native::ReadError) -> Error {
@@ -50,11 +51,11 @@ pub(super) fn read_index<'a, E: Envelope + Send + Sync>(
                 value.map_err(error)?;
             }
             let keys = OrderedKeys {
-                times: Values::view(times.len(), move |index| {
+                times: materialize(times.len(), move |index| {
                     Time::seconds(f64::from(times.get(index).unwrap().unwrap().value) / 1000.)
                         .unwrap()
                 }),
-                values: Values::view(values.len(), move |index| {
+                values: materialize(values.len(), move |index| {
                     ($convert)(values.get(index).unwrap().unwrap())
                 }),
             };

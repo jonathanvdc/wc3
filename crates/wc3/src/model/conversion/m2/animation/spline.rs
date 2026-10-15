@@ -1,5 +1,6 @@
 //! Dialect-selected camera spline value storage.
 use super::*;
+use zerovec::ZeroVec;
 /// Builds typed native spline records from logical values and control tangents.
 pub trait SplineFactory<T: Value>: Sized
 where

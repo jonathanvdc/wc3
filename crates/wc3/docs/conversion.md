@@ -8,8 +8,9 @@ them. File decoding, dependency resolution, and encoding remain the native
 codec's responsibility; conversion performs no external I/O.
 
 The graph contains authoring values rather than an embedded source file.
-Geometry and animation arrays can borrow native storage through
-`semantic::Values`, so their decoded source must outlive those views. Retain the
+Compatible geometry and animation arrays borrow native encoded storage through
+`ZeroVec`, so their decoded source must outlive those arrays. Adapters materialize
+arrays once when the native layout differs from the semantic element layout. Retain the
 original native model separately if the application also needs its codec APIs
 or original physical layout.
 
@@ -19,7 +20,7 @@ MDLX import returns `semantic::Model<'data, Mdlx>` directly. The M2, M3, WMO, an
 Diablo adapters use their own concrete profiles as well. Native export requires the matching vocabulary:
 for example, the MDLX planner accepts `Model<'data, Mdlx>`, rather than implicitly
 projecting a `Universal` graph into Warcraft III behavior. Widening a model
-preserves its meanings, identities, and shared arrays; it does not translate
+preserves its meanings, identities, and encoded arrays; it does not translate
 materials, effects, or playback semantics into another game's equivalents.
 A union vocabulary likewise retains both families distinctly. Use
 `try_narrow::<TargetProfile>()` when every owner already carries a complete
@@ -47,7 +48,7 @@ Diablo IV appearance import produces `Model<D4>`. Native numeric vertex semantic
 and encodings require explicit caller-established `BufferLayout` declarations;
 matching the root hash alone does not establish every vertex interpretation.
 The output `VertexLayout` separately selects native packing. Packed arrays become
-logical borrowed streams, while actual chunks, material slots, variants, and
+logical encoded streams, while actual chunks, material slots, variants, and
 segment palettes retain checked identities. Compressed D4 animation payloads
 remain accessible through the native codec; semantic animation decoding is not
 implemented. The [Diablo guide](diablo.md) explains the supported projection and
@@ -150,7 +151,7 @@ Native codec APIs retain their own byte-preserving editing behavior.
 Policies, reports, plans, and policy enforcement live under `model/conversion`.
 Each adapter divides geometry, hierarchy, animation,
 materials, effects, and supporting documents into focused modules. The checked
-graph and borrowed values live under `model/semantic`; authoring vocabularies
+graph and encoded values live under `model/semantic`; authoring vocabularies
 live in its `profiles` namespace. Format-independent features and scoped simulation
 systems live under `semantic::scene`. Native records remain under their format
 modules, independently of the semantic graph.

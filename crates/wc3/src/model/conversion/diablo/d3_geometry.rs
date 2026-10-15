@@ -1,11 +1,12 @@
-//! Borrowed logical views over native vertex records and explicit quantization on output.
+//! Materialized logical arrays from native vertex records and explicit quantization on output.
 use super::{bounds, i32_count, name, native, native_bounds, parent, text_owned};
+use crate::model::conversion::materialize;
 use crate::model::conversion::{Context, Error};
 use crate::model::semantic::profiles::diablo::d3::{
     Geometry, MeshControls, VertexExtras, VertexStreams, D3,
 };
 use crate::model::semantic::Topology;
-use crate::model::semantic::{Influence, MaterialSlotId, Mesh, NodeId, Values};
+use crate::model::semantic::{Influence, MaterialSlotId, Mesh, NodeId};
 use std::{array::from_fn, collections::BTreeMap};
 use zerovec::ZeroVec;
 pub(super) fn read<'a>(
@@ -37,26 +38,26 @@ pub(super) fn read<'a>(
     }
     let vertices = &sub.vertices;
     let streams = VertexStreams {
-        positions: Values::view(vertices.len(), move |i| vertices.get(i).unwrap().position),
-        normals: Values::view(vertices.len(), move |i| {
+        positions: materialize(vertices.len(), move |i| vertices.get(i).unwrap().position),
+        normals: materialize(vertices.len(), move |i| {
             vertices.get(i).unwrap().normal_vector()
         }),
-        colors: Values::view(vertices.len(), move |i| {
+        colors: materialize(vertices.len(), move |i| {
             vertices.get(i).unwrap().rgba().map(|v| f32::from(v) / 255.)
         }),
         texture_coordinates: [
-            Values::view(vertices.len(), move |i| vertices.get(i).unwrap().uv0()),
-            Values::view(vertices.len(), move |i| vertices.get(i).unwrap().uv1()),
+            materialize(vertices.len(), move |i| vertices.get(i).unwrap().uv0()),
+            materialize(vertices.len(), move |i| vertices.get(i).unwrap().uv1()),
         ],
-        tangents: Values::view(vertices.len(), move |i| {
+        tangents: materialize(vertices.len(), move |i| {
             vertices.get(i).unwrap().tangent_vector()
         }),
         extras: VertexExtras {
-            direction_auxiliary: Values::view(vertices.len(), move |i| {
+            direction_auxiliary: materialize(vertices.len(), move |i| {
                 let vertex = vertices.get(i).unwrap();
                 [vertex.normal, vertex.tangent, vertex.binormal].map(|word| (word >> 24) as u8)
             }),
-            auxiliary_colors: Values::view(vertices.len(), move |i| {
+            auxiliary_colors: materialize(vertices.len(), move |i| {
                 vertices
                     .get(i)
                     .unwrap()
@@ -64,20 +65,20 @@ pub(super) fn read<'a>(
                     .to_le_bytes()
                     .map(|v| f32::from(v) / 255.)
             }),
-            binormals: Values::view(vertices.len(), move |i| {
+            binormals: materialize(vertices.len(), move |i| {
                 vertices.get(i).unwrap().binormal_vector()
             }),
-            cloth_vertices: Values::view(vertices.len(), move |i| {
+            cloth_vertices: materialize(vertices.len(), move |i| {
                 vertices.get(i).unwrap().cloth_vertex_index
             }),
         },
     };
     let indices = &sub.indices;
-    let triangles = Values::view(indices.len() / 3, move |i| {
+    let triangles = materialize(indices.len() / 3, move |i| {
         from_fn(|j| u32::from(indices.get(i * 3 + j).unwrap()))
     });
     let influences = &sub.vertex_influences;
-    let rows = Values::view(influences.len(), move |i| {
+    let rows = materialize(influences.len(), move |i| {
         let r = influences.get(i).unwrap();
         [r.influence0, r.influence1, r.influence2].map(|v| Influence {
             joint: v.bone_index as u32,

@@ -1,16 +1,17 @@
 //! Ordered program keys remain editable when their destination is externally defined.
 use super::BlockFlags;
+use crate::model::common::AsULE;
 use crate::model::semantic::{
-    Bounds, CurveValue, Error, EventId, Link, Quaternion, Time, ValidateLinks, Values,
+    Bounds, CurveValue, Error, EventId, Link, Quaternion, Time, ValidateLinks, ZeroVec,
 };
 
 /// Typed keys without a sampling convention inferred from a property declaration.
 #[derive(Clone, Debug, PartialEq)]
-pub struct OrderedKeys<'a, T> {
+pub struct OrderedKeys<'a, T: AsULE> {
     /// Absolute model-timeline key times, including authored pre-roll.
-    pub times: Values<'a, Time>,
+    pub times: ZeroVec<'a, Time>,
     /// Values in the same authored order.
-    pub values: Values<'a, T>,
+    pub values: ZeroVec<'a, T>,
 }
 impl<T: CurveValue> OrderedKeys<'_, T> {
     /// Checks ordering, cardinality, and the value domain without inventing interpolation.
@@ -22,7 +23,7 @@ impl<T: CurveValue> OrderedKeys<'_, T> {
         Ok(())
     }
 }
-impl<T> OrderedKeys<'_, T> {
+impl<T: AsULE> OrderedKeys<'_, T> {
     fn validate_order(&self) -> Result<(), Error> {
         if self.times.len() != self.values.len()
             || self

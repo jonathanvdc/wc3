@@ -1,6 +1,6 @@
 //! Logical M3 emitters and their animation properties.
 use super::{values::*, Property};
-use crate::model::semantic::{FeatureId, MaterialId, MeshId, NodeId, Values};
+use crate::model::semantic::{FeatureId, MaterialId, MeshId, NodeId};
 use std::borrow::Cow;
 
 /// External model resource used by an instanced particle.
@@ -240,7 +240,7 @@ pub struct Particle<'a> {
     /// Animated tiling factors for the two texture-coordinate axes.
     pub uv_tiling: Property<[f32; 2]>,
     /// Authored spline control points defining the emission curve.
-    pub spline_points: Values<'a, Property<[f32; 3]>>,
+    pub spline_points: Cow<'a, [Property<[f32; 3]>]>,
     /// Wind multiplier parameter stored as a floating-point value.
     pub wind_multiplier: f32,
     /// Stored level-of-detail reduction control.
@@ -404,7 +404,7 @@ pub struct Ribbon<'a> {
     /// Animated maximum-length control for the ribbon.
     pub max_length: Property<f32>,
     /// Authored spline control points defining the emission curve.
-    pub spline_points: Values<'a, SplinePoint>,
+    pub spline_points: Cow<'a, [SplinePoint]>,
     /// Animated ribbon activation control.
     pub active: Property<u32>,
     /// Stored state bits; unknown bits are retained.

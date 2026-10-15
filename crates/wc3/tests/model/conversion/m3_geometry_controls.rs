@@ -1,5 +1,6 @@
 use super::*;
 use sem::GeometrySchema as _;
+use wc3::model::common::IntoZeroVec;
 #[test]
 fn draw_controls_and_preferred_uv_encoding_survive_geometry_edits() {
     let original = asset();
@@ -83,7 +84,7 @@ fn draw_controls_and_preferred_uv_encoding_survive_geometry_edits() {
     mesh.geometry = sem::M3Geometry::Display(
         display
             .clone()
-            .with_texture_coordinates(vec![sem::Values::owned(coordinates)])
+            .with_texture_coordinates(vec![(coordinates).into_zero_vec()])
             .unwrap(),
     );
     imported.edit(|builder| builder.set_mesh(id, mesh)).unwrap();
@@ -200,7 +201,7 @@ fn undrawn_regions_retain_definition_binding_and_detail_level() {
     edited.geometry = sem::M3Geometry::Display(
         display
             .clone()
-            .with_texture_coordinates(vec![sem::Values::owned(vec![[0.5, 0.]; 3])])
+            .with_texture_coordinates(vec![(vec![[0.5, 0.]; 3]).into_zero_vec()])
             .unwrap(),
     );
     asset.edit(|builder| builder.set_mesh(id, edited)).unwrap();

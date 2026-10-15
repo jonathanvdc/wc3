@@ -25,3 +25,14 @@ pub mod geometry;
 
 /// Diablo native model imports and typed exports.
 pub mod diablo;
+
+use zerovec::{ule::AsULE, ZeroVec};
+
+/// Materializes a projection once at the native conversion boundary.
+fn materialize<T: AsULE>(len: usize, get: impl Fn(usize) -> T) -> ZeroVec<'static, T> {
+    (0..len).map(get).collect()
+}
+
+fn owned<T: AsULE>(values: impl AsRef<[T]>) -> ZeroVec<'static, T> {
+    ZeroVec::alloc_from_slice(values.as_ref())
+}

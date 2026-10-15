@@ -30,14 +30,14 @@
 //! Custom profiles implement [`PropertyPayload`](crate::model::semantic::PropertyPayload)
 //! and [`PropertyDescriptor`](crate::model::semantic::PropertyDescriptor) for their own destinations.
 //!
-//! [`Values`](crate::model::semantic::Values) can borrow aligned arrays, packed native storage, or indexed views.
-//! Building a graph therefore need not materialize its geometry and animation
-//! arrays. [`ModelBuilder::finish`](crate::model::semantic::ModelBuilder::finish) checks relationships and values before
+//! Fixed-width arrays use [`ZeroVec`](crate::model::semantic::ZeroVec), borrowing compatible packed storage.
+//! Native slices and differing layouts are encoded into owned arrays once. Variable-length
+//! rows use [`ValueGroups`](crate::model::semantic::ValueGroups) with flat elements and row offsets. [`ModelBuilder::finish`](crate::model::semantic::ModelBuilder::finish) checks relationships and values before
 //! publication. It returns a [`Model`](crate::model::semantic::Model) containing the graph, metadata, and resources.
 //! [`Model::edit`](crate::model::semantic::Model::edit) checks dependency changes against the complete model.
 //!
 //! [`Model::widen`](crate::model::semantic::Model::widen) embeds payloads into a containing profile without changing
-//! their meaning, IDs, or shared array storage. [`Model::union`](crate::model::semantic::Model::union) combines two
+//! their meaning, IDs, or encoded array storage. [`Model::union`](crate::model::semantic::Model::union) combines two
 //! vocabularies without translating one into the other. Native adapters and
 //! representability policies live in [the conversion API](crate::model::conversion).
 mod error;
@@ -46,8 +46,9 @@ pub mod scene;
 pub use error::Error;
 mod ids;
 pub use ids::*;
-mod values;
-pub use values::Values;
+mod value_groups;
+pub use crate::model::common::ZeroVec;
+pub use value_groups::ValueGroups;
 mod rotation;
 pub use rotation::*;
 mod animation;

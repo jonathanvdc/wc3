@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use wc3::model::common::{IntoZeroVec, ZeroVec};
 use wc3::model::{
     conversion::{
         self, ApproximationPolicy, ExportOptions, ImportOptions, LossPolicy, UnknownPolicy,
@@ -16,7 +17,6 @@ use wc3::model::{
     semantic as sm,
     semantic::profiles::m2 as mp,
 };
-use zerovec::ZeroVec;
 
 fn native_triangle() -> m2::Bundle<'static, m2::Flat<m2::V256>> {
     let mut model = m2::Model::<m2::Flat<m2::V256>>::new();
@@ -85,12 +85,12 @@ fn classic_geometry_becomes_editable_and_exports_modern_skin() {
     let imported = conversion::m2::import(&source, &ImportOptions::default()).unwrap();
     let semantic = &imported.value;
     let mesh = semantic.meshes().next().unwrap().1;
-    assert!(mesh.positions().is_borrowed());
+    assert!(mesh.positions().is_owned());
     assert_eq!(mesh.positions().get(1), Some([1., 0., 0.]));
     let sm::Topology::Triangles(triangles) = mesh.topology() else {
         panic!("triangle topology lost")
     };
-    assert!(triangles.is_borrowed());
+    assert!(triangles.is_owned());
     assert_eq!(triangles.get(0), Some([0, 1, 2]));
     assert_eq!(mesh.influences().joint_weights(0).unwrap()[0].weight, 1.);
     let texture = imported.value.resources().textures().next().unwrap().1;
@@ -166,7 +166,7 @@ fn hermite_tangents_and_legacy_clock_survive_editable_roundtrip() {
         panic!("translation channel lost")
     };
     assert_eq!(track.curve.interpolation(), sm::Interpolation::Hermite);
-    assert!(track.curve.values().is_borrowed());
+    assert!(track.curve.values().is_owned());
     assert_eq!(track.curve.times().get(0).unwrap().as_seconds(), 0.);
     assert_eq!(track.curve.times().get(1).unwrap().as_seconds(), 1.);
     assert_eq!(
@@ -206,16 +206,14 @@ fn semantic_geometry_edits_rebuild_native_values() {
     };
     let normals = mesh.normals().unwrap().clone();
     let uv = std::array::from_fn(|slot| mesh.texture_coordinates()[slot].clone());
-    let influences = sm::Values::owned(
-        mesh.influences()
-            .iter()
-            .map(|row| -> [sm::Influence; 4] {
-                row.into_joint_weights().unwrap().try_into().unwrap()
-            })
-            .collect::<Vec<_>>(),
-    );
+    let influences = (mesh
+        .influences()
+        .iter()
+        .map(|row| -> [sm::Influence; 4] { row.into_joint_weights().unwrap().try_into().unwrap() })
+        .collect::<Vec<_>>())
+    .into_zero_vec();
     mesh.geometry = sm::M2Geometry::new(
-        sm::Values::owned(positions),
+        (positions).into_zero_vec(),
         normals,
         uv,
         triangles.clone(),
@@ -248,8 +246,8 @@ fn quantization_requires_an_explicit_tolerance() {
         .add_clip(sm::Clip::named("clip").with_duration(sm::Time::seconds(1.).unwrap()))
         .unwrap();
     let curve = sm::Curve::linear(
-        sm::Values::owned(vec![sm::Time::seconds(0.0004).unwrap()]),
-        sm::Values::owned(vec![[0.; 3]]),
+        (vec![sm::Time::seconds(0.0004).unwrap()]).into_zero_vec(),
+        (vec![[0.; 3]]).into_zero_vec(),
     )
     .unwrap();
     builder
@@ -613,11 +611,11 @@ fn sparse_bone_overrides_use_editable_pose_matrices() {
         unreachable!()
     };
     let matrices = &mut overrides[0].transforms;
-    assert!(matrices.is_borrowed());
+    assert!(matrices.is_owned());
     let mut matrix = matrices.get(0).unwrap();
     assert_eq!(matrix[3][0], 3.);
     matrix[3][0] = 9.;
-    *matrices = sm::Values::owned(vec![matrix]);
+    *matrices = (vec![matrix]).into_zero_vec();
     asset
         .edit(|draft| draft.set_system(system_id, system))
         .unwrap();
@@ -739,8 +737,8 @@ fn local_effect_transforms_drive_the_effects_emitted_bone() {
                 period: sm::Time::seconds(1.)?,
             })?;
             let curve = sm::Curve::step(
-                sm::Values::owned(vec![sm::Time::default()]),
-                sm::Values::owned(vec![[5., 0., 0.]]),
+                (vec![sm::Time::default()]).into_zero_vec(),
+                (vec![[5., 0., 0.]]).into_zero_vec(),
             )?;
             draft.add_shared_channel(sm::Channel::Vector3(sm::Track {
                 target: node.translation(),

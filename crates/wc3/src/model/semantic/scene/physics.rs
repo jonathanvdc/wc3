@@ -1,5 +1,5 @@
 //! Collision geometry and body constraints with logical identities.
-use crate::model::semantic::{Animated, Id, NodeId, Values};
+use crate::model::semantic::{Animated, Id, NodeId, ZeroVec};
 /// Identity marker for collision geometry.
 pub enum ShapeObject {}
 /// Collision geometry identity scoped to one simulation system.
@@ -26,7 +26,7 @@ pub enum Geometry<'a> {
         /// Cap-center separation.
         length: f32,
         /// Explicit authored cap centers, when present.
-        centers: Values<'a, [f32; 3]>,
+        centers: ZeroVec<'a, [f32; 3]>,
     },
     /// Cylinder radius and length.
     Cylinder {
@@ -36,13 +36,13 @@ pub enum Geometry<'a> {
         length: f32,
     },
     /// Convex hull points.
-    ConvexHull(Values<'a, [f32; 3]>),
+    ConvexHull(ZeroVec<'a, [f32; 3]>),
     /// Triangle-mesh collision positions and primitives.
     Triangles {
         /// Local positions.
-        positions: Values<'a, [f32; 3]>,
+        positions: ZeroVec<'a, [f32; 3]>,
         /// Triangle vertex indices.
-        triangles: Values<'a, [u32; 3]>,
+        triangles: ZeroVec<'a, [u32; 3]>,
     },
     /// Authored collision category with unresolved geometry semantics.
     Unknown {
@@ -55,11 +55,11 @@ pub enum Geometry<'a> {
         /// Authored length.
         length: f32,
         /// Authored shape points.
-        points: Values<'a, [f32; 3]>,
+        points: ZeroVec<'a, [f32; 3]>,
         /// Authored collision vertices.
-        vertices: Values<'a, [f32; 3]>,
+        vertices: ZeroVec<'a, [f32; 3]>,
         /// Authored triangle indices.
-        triangles: Values<'a, [u32; 3]>,
+        triangles: ZeroVec<'a, [u32; 3]>,
     },
 }
 /// Physical density, contact friction, and rebound response.

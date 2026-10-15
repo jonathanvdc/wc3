@@ -1,5 +1,7 @@
 //! Fixtures retain their actual geometric and contact properties.
 use super::*;
+use crate::model::conversion::materialize;
+use crate::model::semantic::ValueGroups;
 use native::records::PhysicsShapeKind;
 use profile::{values::PhysicsGameFlags, MassProperties, Shape, ShapeGeometry};
 pub(super) fn shapes<'a>(file: &'a PhysicsFile<'_>) -> Result<Vec<Shape<'a>>, Error> {
@@ -121,11 +123,11 @@ pub(super) fn shapes<'a>(file: &'a PhysicsFile<'_>) -> Result<Vec<Shape<'a>>, Er
                     surface_area: value.header.surface_area,
                 });
                 ShapeGeometry::ConvexHull {
-                    vertices: Values::view(value.vertices.len(), move |i| {
+                    vertices: materialize(value.vertices.len(), move |i| {
                         value.vertices.get(i).unwrap()
                     }),
-                    planes: Values::view(value.planes.len(), move |i| value.planes.get(i).unwrap()),
-                    faces: Values::owned(faces),
+                    planes: materialize(value.planes.len(), move |i| value.planes.get(i).unwrap()),
+                    faces: ValueGroups::from_rows(faces),
                 }
             }
             PhysicsShapeKind::Unknown(value) => {

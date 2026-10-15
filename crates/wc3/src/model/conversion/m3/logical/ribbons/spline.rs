@@ -1,15 +1,17 @@
 //! Authored ribbon spline controls, anchored to actual graph nodes.
+
 use super::super::{materials::read_error, particles::context::Reader};
 use crate::model::conversion::Error;
 use crate::model::m3::{self as native, records as nr};
 use crate::model::semantic::profiles::m3::properties::{Field, FieldPath};
-use crate::model::semantic::{profiles::m3 as surface, NodeId, Values};
+use crate::model::semantic::{profiles::m3 as surface, NodeId};
 use native::{Envelope, Ref};
+use std::borrow::Cow;
 pub(super) fn read<'view, E: Envelope>(
     reader: &mut Reader<'view, '_, '_, E>,
     nodes: &[NodeId],
     reference: Ref<nr::targets::SplineRibbon>,
-) -> Result<Values<'view, surface::SplinePoint>, Error> {
+) -> Result<Cow<'view, [surface::SplinePoint]>, Error> {
     let mut rows = Vec::new();
     for (index, row) in reader
         .source
@@ -68,11 +70,11 @@ pub(super) fn read<'view, E: Envelope>(
             },
         });
     }
-    Ok(Values::owned(rows))
+    Ok(Cow::Owned(rows))
 }
 
 pub(super) fn write<E: Envelope>(
-    points: &Values<'_, surface::SplinePoint>,
+    points: &Cow<'_, [surface::SplinePoint]>,
     writer: &mut super::super::particles::writer::Writer<'_, '_, E>,
     bones: &std::collections::BTreeMap<NodeId, u32>,
 ) -> Result<Ref<nr::targets::SplineRibbon>, Error> {

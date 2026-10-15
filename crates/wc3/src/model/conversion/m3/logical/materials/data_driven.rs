@@ -2,13 +2,14 @@
 use super::{
     identity, native, nr, read_error, revision, string, surface, Envelope, Error, Reader, Slot,
 };
-use crate::model::semantic::Values;
+use zerovec::ZeroVec;
+
 fn parameters<'a, E: Envelope>(
     source: &'a native::Document<'_, E>,
     reference: native::Ref<nr::targets::Character>,
 ) -> Result<surface::Parameters<'a>, Error> {
     let Some(section) = source.referenced_section(reference).map_err(read_error)? else {
-        return Ok(surface::Parameters::Unresolved(Values::default()));
+        return Ok(surface::Parameters::Unresolved(ZeroVec::new()));
     };
     if section.tag() != *b"CHAR" || section.revision() != 0 {
         return Err(Error::new(
@@ -25,7 +26,9 @@ fn parameters<'a, E: Envelope>(
                 "parameter span exceeds source values",
             )
         })?;
-    Ok(surface::Parameters::Unresolved(Values::from_slice(bytes)))
+    Ok(surface::Parameters::Unresolved(ZeroVec::new_borrowed(
+        bytes,
+    )))
 }
 pub(super) fn datadriven<'a, E: Envelope, D: nr::DataDrivenMaterialDialect>(
     source: &'a native::Document<'_, E>,

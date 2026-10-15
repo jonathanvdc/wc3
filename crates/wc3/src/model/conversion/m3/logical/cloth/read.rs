@@ -1,18 +1,20 @@
-//! Particle anchors and proxy contributions borrow the encoded numeric arrays.
+//! Particle anchors and proxy contributions project native numeric arrays into semantic storage.
 use super::super::{
     bindings::{self, Bindings},
     materials::{anim, read_error, revision},
     slots::{Slot, Unresolved as _},
     GraphBuilder,
 };
+use crate::model::conversion::materialize;
 use crate::model::conversion::{Context, Error};
 use crate::model::m3::{records, Document, Envelope, Ref};
 use crate::model::semantic::{
     profiles::m3::{CageInfluence, Cloth, ClothCollider, ClothId, ClothProxy, ClothSystem, System},
-    MeshId, NodeId, NodeInfluence, OwnerId, Values,
+    MeshId, NodeId, NodeInfluence, OwnerId,
 };
 use std::array::from_fn;
 use std::collections::BTreeMap;
+use zerovec::ZeroVec;
 
 fn mesh(regions: &[MeshId], index: u32) -> Result<MeshId, Error> {
     regions.get(index as usize).copied().ok_or_else(|| {
@@ -27,7 +29,7 @@ fn anchors<'view, E: Envelope + Send + Sync>(
     bones: Ref<records::targets::U32>,
     weights: Ref<records::targets::U32>,
     palette: Vec<NodeId>,
-) -> Result<Values<'view, [Option<NodeInfluence>; 4]>, Error> {
+) -> Result<ZeroVec<'view, [Option<NodeInfluence>; 4]>, Error> {
     let bones = document
         .resolve::<records::U32>(bones.cast())
         .map_err(read_error)?;
@@ -62,7 +64,7 @@ fn anchors<'view, E: Envelope + Send + Sync>(
             }
         }
     }
-    Ok(Values::view(bones.len(), move |index| {
+    Ok(materialize(bones.len(), move |index| {
         let b = bones.get(index).unwrap().unwrap().value.to_le_bytes();
         let w = weights.get(index).unwrap().unwrap().value.to_le_bytes();
         from_fn(|lane| {
@@ -104,7 +106,7 @@ fn proxies<'view, E: Envelope + Send + Sync>(
         for row in weights.iter() {
             row.map_err(read_error)?;
         }
-        let influences = Values::view(indices.len(), move |index| {
+        let influences = materialize(indices.len(), move |index| {
             let vertices = indices.get(index).unwrap().unwrap().value;
             let weights = weights.get(index).unwrap().unwrap().value.to_le_bytes();
             from_fn(|lane| CageInfluence {
@@ -183,7 +185,7 @@ pub(in crate::model::conversion::m3::logical) fn read<'view, E: Envelope + Send 
                 for row in particles.iter() {
                     row.map_err(read_error)?;
                 }
-                let particles = Values::view(particles.len(), move |index| {
+                let particles = materialize(particles.len(), move |index| {
                     particles.get(index).unwrap().unwrap().value
                 });
                 let colliders = document

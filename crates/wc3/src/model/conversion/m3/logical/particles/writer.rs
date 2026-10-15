@@ -5,8 +5,9 @@ use super::super::{
 };
 use crate::model::conversion::{Context, Error};
 use crate::model::m3::{self as native, records as nr};
-use crate::model::semantic::{profiles::m3 as surface, FeatureId, MaterialId, MeshId, Values};
+use crate::model::semantic::{profiles::m3 as surface, FeatureId, MaterialId, MeshId};
 use native::{Envelope, Ref};
+use std::borrow::Cow;
 use std::collections::BTreeMap;
 pub(in crate::model::conversion::m3::logical) struct Writer<'out, 'draft, E: Envelope> {
     pub document: &'draft mut native::Document<'out, E>,
@@ -62,7 +63,7 @@ impl<E: Envelope> Writer<'_, '_, E> {
     }
     pub fn spline(
         &mut self,
-        points: &Values<'_, surface::Property<[f32; 3]>>,
+        points: &Cow<'_, [surface::Property<[f32; 3]>]>,
     ) -> Result<Ref<nr::targets::AnimationValueVector3>, Error> {
         let rows = points
             .iter()

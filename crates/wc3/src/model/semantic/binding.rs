@@ -1,6 +1,7 @@
 //! Profile-specific joint binding with borrowed matrix inspection.
+use crate::model::common::IntoZeroVec;
 use crate::model::semantic::profiles::{Either, Unavailable};
-use crate::model::semantic::{Error, Link, ValidateLinks, Values};
+use crate::model::semantic::{Error, Link, ValidateLinks, ZeroVec};
 use std::fmt::Debug;
 
 /// A transform mapping an authored vertex into a joint's bind space.
@@ -26,7 +27,7 @@ pub enum BindMatrices<'view, 'data> {
     /// Every joint uses the authored model coordinates directly.
     Identity(usize),
     /// Explicit inverse transforms in palette order.
-    Explicit(&'view Values<'data, BindMatrix>),
+    Explicit(&'view ZeroVec<'data, BindMatrix>),
 }
 impl BindMatrices<'_, '_> {
     /// Number of transforms in the joint palette.
@@ -71,19 +72,19 @@ impl<'data> BindingSchema<'data> for IdentityBinding {
 /// An explicitly authored inverse bind transform per joint.
 #[derive(Clone, Debug)]
 pub struct ExplicitBinding<'data> {
-    matrices: Values<'data, BindMatrix>,
+    matrices: ZeroVec<'data, BindMatrix>,
 }
 impl<'data> ExplicitBinding<'data> {
     /// Constructs a finite inverse bind stream; the owning skin checks its cardinality.
-    pub fn new(matrices: impl Into<Values<'data, BindMatrix>>) -> Result<Self, Error> {
+    pub fn new(matrices: impl IntoZeroVec<'data, BindMatrix>) -> Result<Self, Error> {
         let value = Self {
-            matrices: matrices.into(),
+            matrices: matrices.into_zero_vec(),
         };
         value.validate(value.matrices.len())?;
         Ok(value)
     }
     /// Authored transforms, retaining their borrowed storage.
-    pub fn values(&self) -> &Values<'data, BindMatrix> {
+    pub fn values(&self) -> &ZeroVec<'data, BindMatrix> {
         &self.matrices
     }
 }

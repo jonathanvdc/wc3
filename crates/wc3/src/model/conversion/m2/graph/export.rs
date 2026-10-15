@@ -1,6 +1,7 @@
 //! Typed M2 output planning and native graph construction.
 use super::animation::{encode, time_ms};
 use super::*;
+use zerovec::ZeroVec;
 
 /// Plans a typed M2 bundle, checking index limits, curves and resource identities.
 pub fn plan<D: ExportDialect>(

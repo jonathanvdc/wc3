@@ -6,6 +6,8 @@ use super::{
     topology::{divisions, regions},
     vertices::Packed,
 };
+use crate::model::conversion::{materialize, owned};
+use zerovec::ZeroVec;
 
 use crate::model::conversion::m3::logical::GraphBuilder;
 use crate::model::conversion::Error;
@@ -13,7 +15,7 @@ use crate::model::m3::{self as native, records as nr};
 use crate::model::semantic::profiles::m3::{self as surface, UvEncoding};
 use crate::model::semantic::ExplicitBinding;
 use crate::model::semantic::{
-    Bounds, Draw, Influence, M3Geometry, MaterialId, Mesh, MeshId, MeshInstance, Node, Skin, Values,
+    Bounds, Draw, Influence, M3Geometry, MaterialId, Mesh, MeshId, MeshInstance, Node, Skin,
 };
 use native::Envelope;
 use std::collections::BTreeSet;
@@ -96,7 +98,7 @@ pub(super) fn read<'a, E: Envelope>(
                 .referenced_section(division.faces)
                 .map_err(read_error)?
                 .map_or(&[][..], |section| section.bytes());
-            let triangles = Values::view(face_count / 3, move |i| {
+            let triangles = materialize(face_count / 3, move |i| {
                 [0, 1, 2].map(|lane| {
                     let offset = (face_start + i * 3 + lane) * 2;
                     u32::from(u16::from_le_bytes(
@@ -122,7 +124,7 @@ pub(super) fn read<'a, E: Envelope>(
                     Error::new("m3.region.skin", "inverse bind matrix is missing")
                 })?);
             }
-            let mut influences = Values::view(count, |_| {
+            let mut influences = materialize(count, |_| {
                 [Influence {
                     joint: 0,
                     weight: 0.,
@@ -164,7 +166,7 @@ pub(super) fn read<'a, E: Envelope>(
                 });
                 Some(builder.add_skin(Skin {
                     joints,
-                    binding: ExplicitBinding::new(Values::owned(inverse))?,
+                    binding: ExplicitBinding::new(owned(inverse))?,
                 })?)
             };
             let geometry = M3Geometry::new(
@@ -323,7 +325,7 @@ pub(super) fn read<'a, E: Envelope>(
     Ok(result)
 }
 
-fn bounds_of(positions: &Values<'_, [f32; 3]>) -> Bounds {
+fn bounds_of(positions: &ZeroVec<'_, [f32; 3]>) -> Bounds {
     let Some(first) = positions.get(0) else {
         return Bounds::default();
     };

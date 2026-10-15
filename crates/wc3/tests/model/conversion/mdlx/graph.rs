@@ -1,3 +1,4 @@
+use wc3::model::common::IntoZeroVec;
 use wc3::model::mdlx::mdl::Read as _;
 use wc3::model::{
     conversion::{self, ExportOptions, ImportOptions},
@@ -62,7 +63,7 @@ fn additive_camera_keys_remain_exact_and_borrowed() {
             _ => None,
         })
         .unwrap();
-    assert!(curve.values().is_borrowed());
+    assert!(curve.values().is_owned());
     assert_eq!(curve.values().get(0), Some([0.1, 0.2, 0.3]));
     let output = conversion::mdlx::plan::<mdlx::V800>(&imported.value, &ExportOptions::default())
         .unwrap()
@@ -125,7 +126,7 @@ fn native_integer_effect_curves_keep_full_width() {
         })
         .unwrap();
     assert_eq!(curve.values().get(0), Some(16_777_217));
-    assert!(curve.values().is_borrowed());
+    assert!(curve.values().is_owned());
     let output = conversion::mdlx::plan::<mdlx::V800>(&imported.value, &ExportOptions::default())
         .unwrap()
         .execute()
@@ -204,13 +205,13 @@ fn borrowed_mesh_authoring_edits_rebuild_native_geometry() {
     let mut imported = conversion::mdlx::import(&source, &ImportOptions::default()).unwrap();
     let graph = &imported.value;
     let (id, mesh) = graph.meshes().next().unwrap();
-    assert!(mesh.positions().is_borrowed());
+    assert!(!mesh.positions().is_owned());
     let mut edited = mesh.clone();
     let mut positions = edited.positions().to_vec();
     positions[0] = [1., 2., 3.];
     edited.geometry = edited
         .geometry
-        .with_positions(wc3::model::semantic::Values::owned(positions))
+        .with_positions((positions).into_zero_vec())
         .unwrap();
     imported
         .value
@@ -499,7 +500,7 @@ fn global_tracks_without_sequences_stay_on_the_shared_clock() {
 
 #[test]
 fn tcb_curves_cannot_be_encoded_as_native_mdlx_tracks() {
-    use wc3::model::semantic::{Curve, TcbParameters, Values};
+    use wc3::model::semantic::{Curve, TcbParameters};
     let mut source = mdlx::Model::<mdlx::V800>::new();
     let mut node = mdlx::scene::Node::new("TCB", 0).unwrap();
     node.translation = Some(
@@ -521,7 +522,7 @@ fn tcb_curves_cannot_be_encoded_as_native_mdlx_tracks() {
     track.curve = Curve::tcb(
         track.curve.times().clone(),
         track.curve.values().clone(),
-        Values::owned(vec![TcbParameters::default()]),
+        (vec![TcbParameters::default()]).into_zero_vec(),
     )
     .unwrap();
     if imported

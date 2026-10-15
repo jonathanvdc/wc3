@@ -1,8 +1,10 @@
 //! Native particle fields mapped directly into independent authoring state.
 use super::*;
+use crate::model::conversion::{materialize, owned};
 use crate::model::semantic::{
-    self as semantic, profiles::m2 as profile, Animated, Curve, Resource, Time, Values,
+    self as semantic, profiles::m2 as profile, Animated, Curve, Resource, Time,
 };
+use zerovec::ZeroVec;
 
 pub(super) trait LogicalAge: Sized {
     fn make(value: &profile::Appearance<'_>, context: &mut Context) -> Result<Self, Error>;
@@ -20,10 +22,10 @@ where
         return Ok(None);
     }
     Ok(Some(Curve::linear(
-        Values::view(track.timestamps.len(), move |i| {
+        materialize(track.timestamps.len(), move |i| {
             Time::seconds(f64::from(track.timestamps.get(i).unwrap()) / 65535.).unwrap()
         }),
-        Values::view(track.values.len(), move |i| {
+        materialize(track.values.len(), move |i| {
             map(track.values.get(i).unwrap())
         }),
     )?))
@@ -158,7 +160,7 @@ impl LogicalAge for native::records::LegacyParticleLifetime {
     }
 
     fn logical<'a>(&'a self) -> Result<profile::Appearance<'a>, Error> {
-        let times = Values::owned(
+        let times = owned(
             [0., f64::from(self.midpoint), 1.]
                 .into_iter()
                 .map(Time::seconds)
@@ -180,12 +182,9 @@ impl LogicalAge for native::records::LegacyParticleLifetime {
                 tail_lifespan: self.tail_lifespan_uv,
                 tail_decay: self.tail_decay_uv,
             }),
-            color: Some(Curve::linear(
-                times.clone(),
-                Values::owned(colors.to_vec()),
-            )?),
-            alpha: Some(Curve::linear(times.clone(), Values::owned(alpha.to_vec()))?),
-            scale: Some(Curve::linear(times, Values::owned(scale.to_vec()))?),
+            color: Some(Curve::linear(times.clone(), owned(colors.to_vec()))?),
+            alpha: Some(Curve::linear(times.clone(), owned(alpha.to_vec()))?),
+            scale: Some(Curve::linear(times, owned(scale.to_vec()))?),
             ..Default::default()
         })
     }
@@ -274,7 +273,7 @@ where
             [value.follow_speed_1, value.follow_scale_1],
             [value.follow_speed_2, value.follow_scale_2],
         ],
-        spline: Values::view(value.spline_points.len(), move |i| spline.get(i).unwrap()),
+        spline: materialize(value.spline_points.len(), move |i| spline.get(i).unwrap()),
         enabled: Animated::constant(initial(&value.enabled).unwrap_or(1) != 0),
         scroll: value
             .multi_texture_scroll

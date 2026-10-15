@@ -2,9 +2,7 @@
 use super::encode_animation::Encoder;
 use crate::model::conversion::{Context, Error};
 use crate::model::mdlx::{self as native, ModelDialect};
-use crate::model::semantic::{
-    JointInfluences, LookId, MaterialId, MeshId, NodeId, Topology, Values,
-};
+use crate::model::semantic::{JointInfluences, LookId, MaterialId, MeshId, NodeId, Topology};
 use native::geometry::SkinWeight;
 use std::collections::BTreeMap;
 use zerovec::{ule::AsULE, ZeroVec};
@@ -234,14 +232,12 @@ fn quantize(weight: f32, context: &mut Context) -> Result<u16, Error> {
     Ok(rounded as u16)
 }
 
-fn packed<'a, T>(values: &'a Values<'_, T>) -> ZeroVec<'a, T>
+fn packed<'a, T>(values: &'a ZeroVec<'_, T>) -> ZeroVec<'a, T>
 where
     T: AsULE + Clone + Send + Sync,
     T::ULE: Send + Sync,
 {
-    values
-        .as_zero_vec()
-        .unwrap_or_else(|| ZeroVec::alloc_from_slice(&values.to_vec()))
+    values.as_slice().as_zerovec()
 }
 
 fn triangles(topology: &Topology<'_>) -> Vec<[u32; 3]> {

@@ -1,14 +1,16 @@
 //! Native projection expands logical corner and face attributes at the output boundary.
 use super::{Context, Error};
+use crate::model::common::Borrowed as _;
+use crate::model::conversion::{materialize, owned};
 use crate::model::semantic::profiles::Profile;
 use crate::model::semantic::{
     Attribute, AttributeDomain, AttributeSemantic, AttributeValues, ConnectivityId, DrawId,
     GeometryParts, InfluenceRows, InstanceId, LookId, MaterialId, Mesh, Model, PrimitiveRange,
-    SkinId, Topology, Values,
+    SkinId, Topology, ValueGroups,
 };
 use crate::model::semantic::{GeometryInfluences, GeometrySchema};
 use std::collections::BTreeMap;
-use std::sync::Arc;
+use zerovec::ZeroVec;
 /// Geometry for one material draw after attribute seams and polygons are resolved.
 #[derive(Clone, Debug)]
 pub struct ProjectedDraw<'a> {
@@ -19,7 +21,7 @@ pub struct ProjectedDraw<'a> {
     /// Geometry with seam vertices expanded and polygon connectivity resolved.
     pub mesh: Mesh<'a>,
     /// Original vertex ordinal for each projected vertex.
-    pub source_vertices: Values<'a, u32>,
+    pub source_vertices: ZeroVec<'a, u32>,
     /// Joint palette retained by the projected placement.
     pub skin: Option<SkinId>,
 }
@@ -177,7 +179,7 @@ fn lookup<'a, 'data: 'a, P: Profile>(
             AttributeDomain::Pool => 4,
         })
 }
-/// Projects each draw while borrowing its logical values until native packing is required.
+/// Projects each draw, encoding expanded attributes once at the output boundary.
 pub fn project<'a, 'data: 'a, P: Profile>(
     model: &'a Model<'data, P>,
     instance: InstanceId,
@@ -237,18 +239,18 @@ pub fn project<'a, 'data: 'a, P: Profile>(
                 let length = source.positions().len();
                 let rows = source.influences();
                 let influences = if rows.is_empty() {
-                    Values::default()
+                    ValueGroups::default()
                 } else {
-                    Values::view(rows.len(), move |index| {
+                    ValueGroups::from_rows((0..rows.len()).map(|index| {
                         rows.joint_weights(index)
                             .expect("checked joint-slot influence index")
-                    })
+                    }))
                 };
                 return Ok(vec![ProjectedDraw {
                     material: model.material_for_draw(instance_id, draw.id, look)?,
                     source_draw: draw.id,
                     skin: instance.skin.or_else(|| source.skin()),
-                    source_vertices: Values::view(length, |index| index as u32),
+                    source_vertices: materialize(length, |index| index as u32),
                     mesh: Mesh {
                         subsets: Default::default(),
                         name: source.name.clone(),
@@ -256,14 +258,27 @@ pub fn project<'a, 'data: 'a, P: Profile>(
                         bounds: source.bounds,
                         geometry: GeometryParts {
                             strip_set: false,
-                            surface_triangles: Values::default(),
+                            surface_triangles: ZeroVec::new(),
                             pools: Default::default(),
                             kind: source.geometry.kind(),
-                            positions: source.positions().clone(),
-                            normals: source.normals().cloned().unwrap_or_default(),
-                            tangents: source.tangents().cloned().unwrap_or_default(),
-                            texture_coordinates: source.texture_coordinates().to_vec(),
-                            colors: source.colors().cloned().unwrap_or_default(),
+                            positions: source.positions().as_borrowed(),
+                            normals: source
+                                .normals()
+                                .map(ZeroVec::as_borrowed)
+                                .unwrap_or_default(),
+                            tangents: source
+                                .tangents()
+                                .map(ZeroVec::as_borrowed)
+                                .unwrap_or_default(),
+                            texture_coordinates: source
+                                .texture_coordinates()
+                                .iter()
+                                .map(ZeroVec::as_borrowed)
+                                .collect(),
+                            colors: source
+                                .colors()
+                                .map(ZeroVec::as_borrowed)
+                                .unwrap_or_default(),
                             influences: GeometryInfluences::Variable(influences),
                             topology: source.topology().clone(),
                             attributes: Vec::new(),
@@ -303,7 +318,7 @@ pub fn project<'a, 'data: 'a, P: Profile>(
                         "strip selection requires strip connectivity",
                     ));
                 };
-                let selected = Values::view(count as usize, move |index| {
+                let selected = materialize(count as usize, |index| {
                     indices
                         .get(first as usize + index)
                         .expect("validated strip window")
@@ -362,25 +377,23 @@ pub fn project<'a, 'data: 'a, P: Profile>(
         for primitive in selected {
             match primitive {
                 Primitive::Point(point) => {
-                    groups.push(Topology::Points(Values::owned(vec![vertex(*point)])))
+                    groups.push(Topology::Points(owned(vec![vertex(*point)])))
                 }
                 Primitive::Line(pair) => {
-                    groups.push(Topology::Lines(Values::owned(vec![pair.map(&mut vertex)])))
+                    groups.push(Topology::Lines(owned(vec![pair.map(&mut vertex)])))
                 }
                 Primitive::Polygon(polygon) => {
                     let triangles: Vec<[u32; 3]> = triangulate(source, polygon)?
                         .into_iter()
                         .map(|triangle| triangle.map(&mut vertex))
                         .collect();
-                    groups.push(Topology::Triangles(Values::owned(triangles)));
+                    groups.push(Topology::Triangles(owned(triangles)));
                 }
             }
         }
-        let points: Arc<[Corner]> = points.into();
         let length = points.len();
         let positions = {
-            let points = points.clone();
-            Values::view(length, move |i| {
+            materialize(length, |i| {
                 source
                     .positions()
                     .get(points[i].vertex as usize)
@@ -424,22 +437,21 @@ pub fn project<'a, 'data: 'a, P: Profile>(
             )?);
         }
         let influences = if source.influences().is_empty() {
-            Values::default()
+            ValueGroups::default()
         } else {
-            let points = points.clone();
-            Values::view(length, move |i| {
+            ValueGroups::from_rows((0..length).map(|i| {
                 source
                     .influences()
                     .joint_weights(points[i].vertex as usize)
                     .expect("validated influence")
-            })
+            }))
         };
 
         let topology = if groups
             .iter()
             .all(|group| matches!(group, Topology::Triangles(_)))
         {
-            Topology::Triangles(Values::owned(
+            Topology::Triangles(owned(
                 groups
                     .into_iter()
                     .flat_map(|group| match group {
@@ -452,7 +464,7 @@ pub fn project<'a, 'data: 'a, P: Profile>(
             .iter()
             .all(|group| matches!(group, Topology::Lines(_)))
         {
-            Topology::Lines(Values::owned(
+            Topology::Lines(owned(
                 groups
                     .into_iter()
                     .flat_map(|group| match group {
@@ -465,7 +477,7 @@ pub fn project<'a, 'data: 'a, P: Profile>(
             .iter()
             .all(|group| matches!(group, Topology::Points(_)))
         {
-            Topology::Points(Values::owned(
+            Topology::Points(owned(
                 groups
                     .into_iter()
                     .flat_map(|group| match group {
@@ -477,10 +489,7 @@ pub fn project<'a, 'data: 'a, P: Profile>(
         } else {
             Topology::Mixed(groups)
         };
-        let source_vertices = {
-            let points = points.clone();
-            Values::view(length, move |i| points[i].vertex)
-        };
+        let source_vertices = { materialize(length, |i| points[i].vertex) };
         let attributes = source
             .attributes()
             .iter()
@@ -511,7 +520,7 @@ pub fn project<'a, 'data: 'a, P: Profile>(
                 bounds: source.bounds,
                 geometry: GeometryParts {
                     strip_set: false,
-                    surface_triangles: Values::default(),
+                    surface_triangles: ZeroVec::new(),
                     pools: Default::default(),
                     kind: source.geometry.kind(),
                     positions,
@@ -533,9 +542,9 @@ pub fn project<'a, 'data: 'a, P: Profile>(
 fn vector3<'a, 'data: 'a, P: Profile>(
     mesh: &'a Mesh<'data, P>,
     semantic: AttributeSemantic<'_>,
-    points: &Arc<[Corner]>,
-    fallback: Option<&'a Values<'data, [f32; 3]>>,
-) -> Result<Values<'a, [f32; 3]>, Error> {
+    points: &[Corner],
+    fallback: Option<&'a ZeroVec<'data, [f32; 3]>>,
+) -> Result<ZeroVec<'a, [f32; 3]>, Error> {
     if let Some(attribute) = lookup(
         mesh,
         &semantic,
@@ -550,29 +559,27 @@ fn vector3<'a, 'data: 'a, P: Profile>(
                 "expected a three-component vector",
             ));
         };
-        let points = points.clone();
-        Ok(Values::view(points.len(), move |i| {
+        Ok(materialize(points.len(), |i| {
             values
                 .get(index(attribute, points[i]))
                 .expect("validated attribute")
         }))
     } else if let Some(fallback) = fallback.filter(|values| !values.is_empty()) {
-        let points = points.clone();
-        Ok(Values::view(points.len(), move |i| {
+        Ok(materialize(points.len(), |i| {
             fallback
                 .get(points[i].vertex as usize)
                 .expect("validated attribute")
         }))
     } else {
-        Ok(Values::default())
+        Ok(ZeroVec::new())
     }
 }
 fn vector4<'a, 'data: 'a, P: Profile>(
     mesh: &'a Mesh<'data, P>,
     semantic: AttributeSemantic<'_>,
-    points: &Arc<[Corner]>,
-    fallback: Option<&'a Values<'data, [f32; 4]>>,
-) -> Result<Values<'a, [f32; 4]>, Error> {
+    points: &[Corner],
+    fallback: Option<&'a ZeroVec<'data, [f32; 4]>>,
+) -> Result<ZeroVec<'a, [f32; 4]>, Error> {
     if let Some(attribute) = lookup(
         mesh,
         &semantic,
@@ -587,29 +594,27 @@ fn vector4<'a, 'data: 'a, P: Profile>(
                 "expected a four-component vector",
             ));
         };
-        let points = points.clone();
-        Ok(Values::view(points.len(), move |i| {
+        Ok(materialize(points.len(), |i| {
             values
                 .get(index(attribute, points[i]))
                 .expect("validated attribute")
         }))
     } else if let Some(fallback) = fallback.filter(|values| !values.is_empty()) {
-        let points = points.clone();
-        Ok(Values::view(points.len(), move |i| {
+        Ok(materialize(points.len(), |i| {
             fallback
                 .get(points[i].vertex as usize)
                 .expect("validated attribute")
         }))
     } else {
-        Ok(Values::default())
+        Ok(ZeroVec::new())
     }
 }
 fn vector2<'a, 'data: 'a, P: Profile>(
     mesh: &'a Mesh<'data, P>,
     semantic: AttributeSemantic<'_>,
-    points: &Arc<[Corner]>,
-    fallback: Option<&'a Values<'data, [f32; 2]>>,
-) -> Result<Values<'a, [f32; 2]>, Error> {
+    points: &[Corner],
+    fallback: Option<&'a ZeroVec<'data, [f32; 2]>>,
+) -> Result<ZeroVec<'a, [f32; 2]>, Error> {
     if let Some(attribute) = lookup(
         mesh,
         &semantic,
@@ -624,21 +629,19 @@ fn vector2<'a, 'data: 'a, P: Profile>(
                 "expected a two-component vector",
             ));
         };
-        let points = points.clone();
-        Ok(Values::view(points.len(), move |i| {
+        Ok(materialize(points.len(), |i| {
             values
                 .get(index(attribute, points[i]))
                 .expect("validated attribute")
         }))
     } else if let Some(fallback) = fallback.filter(|values| !values.is_empty()) {
-        let points = points.clone();
-        Ok(Values::view(points.len(), move |i| {
+        Ok(materialize(points.len(), |i| {
             fallback
                 .get(points[i].vertex as usize)
                 .expect("validated attribute")
         }))
     } else {
-        Ok(Values::default())
+        Ok(ZeroVec::new())
     }
 }
 // Ear clipping preserves authored winding and supports concave simple polygons.
@@ -763,13 +766,12 @@ fn triangulate<P: Profile>(
 
 fn project_attribute<'a, 'data: 'a>(
     attribute: &'a Attribute<'data>,
-    points: &Arc<[Corner]>,
+    points: &[Corner],
 ) -> Attribute<'a> {
     macro_rules! values {
         ($values:expr, $variant:ident) => {{
             let source = $values;
-            let points = points.clone();
-            AttributeValues::$variant(Values::view(points.len(), move |i| {
+            AttributeValues::$variant(materialize(points.len(), |i| {
                 source
                     .get(index(attribute, points[i]))
                     .expect("validated attribute")

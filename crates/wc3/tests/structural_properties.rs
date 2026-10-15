@@ -39,7 +39,7 @@ fn light_model<'a>(times: &'a [Time], values: &'a [f32]) -> Model<'a, Mdlx> {
 }
 
 #[test]
-fn containing_profiles_preserve_structural_identity_hashes_and_borrowed_curves() {
+fn containing_profiles_preserve_structural_identity_hashes_and_curve_values() {
     let times = [Time::seconds(0.).unwrap(), Time::seconds(1.).unwrap()];
     let values = [1f32, 2.];
     let model = light_model(&times, &values);
@@ -54,14 +54,8 @@ fn containing_profiles_preserve_structural_identity_hashes_and_borrowed_curves()
         panic!("wrong curve type")
     };
     assert_eq!(track.target.target(), &original);
-    assert_eq!(
-        track.curve.values().as_slice().unwrap().as_ptr(),
-        values.as_ptr()
-    );
-    assert_eq!(
-        track.curve.times().as_slice().unwrap().as_ptr(),
-        times.as_ptr()
-    );
+    assert_eq!(track.curve.values().to_vec(), values);
+    assert_eq!(track.curve.times().to_vec(), times);
 }
 
 fn target_hash<P: Profile>(target: &PropertyTarget<P>) -> u64 {
@@ -250,10 +244,7 @@ fn custom_profile_enums_remain_typed_and_preserve_identity_in_either_union_branc
     let Channel::Scalar(track) = &right.timeline_channels()[0] else {
         panic!("wrong curve type")
     };
-    assert_eq!(
-        track.curve.values().as_slice().unwrap().as_ptr(),
-        values.as_ptr()
-    );
+    assert_eq!(track.curve.values().to_vec(), values);
 }
 
 #[test]

@@ -4,11 +4,12 @@ use super::{
     write::append,
     Graph, GraphBuilder,
 };
+use crate::model::conversion::materialize;
 use crate::model::conversion::{Context, Error};
 use crate::model::m3::{self as m3, records, Document, Envelope, Ref};
 use crate::model::semantic::{
     profiles::m3::{values::VolumeShape, AttachmentVolume, Feature, HitTestRole, HitTestShape},
-    GeometrySchema as _, M3CollisionGeometry, M3Geometry, Mesh, MeshId, NodeId, Topology, Values,
+    GeometrySchema as _, M3CollisionGeometry, M3Geometry, Mesh, MeshId, NodeId, Topology,
 };
 use std::array::from_fn;
 use std::collections::BTreeMap;
@@ -46,7 +47,7 @@ fn mesh<'a, E: Envelope + Send + Sync>(
             "volume connectivity must contain complete triangles",
         ));
     }
-    let points = Values::view(points.len(), move |i| {
+    let points = materialize(points.len(), move |i| {
         points
             .get(i)
             .expect("checked volume point")
@@ -56,7 +57,7 @@ fn mesh<'a, E: Envelope + Send + Sync>(
     let geometry = if indices.is_empty() {
         M3CollisionGeometry::points(points)?
     } else {
-        let triangles = Values::view(indices.len() / 3, move |i| {
+        let triangles = materialize(indices.len() / 3, move |i| {
             from_fn(|lane| {
                 u32::from(
                     indices

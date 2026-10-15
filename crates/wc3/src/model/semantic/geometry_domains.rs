@@ -1,5 +1,6 @@
 //! Additional geometry domains selected by faces and draw windows.
-use super::{MaterialId, Topology, Values};
+use super::{MaterialId, Topology, ZeroVec};
+use crate::model::common::AsULE;
 use bitfield::bitfield;
 bitfield! {
     /// Unresolved triangle flags retained alongside named authoring controls.
@@ -66,7 +67,7 @@ pub struct ConnectivitySets<'data> {
 impl Default for ConnectivitySets<'_> {
     fn default() -> Self {
         Self {
-            primary: Topology::Triangles(Values::default()),
+            primary: Topology::Triangles(ZeroVec::default()),
             additional: Vec::new(),
         }
     }
@@ -75,8 +76,8 @@ impl Default for ConnectivitySets<'_> {
 // Constrained WMO storage keeps its independently indexed arrays together.
 #[derive(Clone, Debug, Default)]
 pub(crate) struct GeometryPools<'data> {
-    pub triangle_strip_indices: Values<'data, u32>,
-    pub tangent_vectors: Values<'data, [f32; 4]>,
+    pub triangle_strip_indices: ZeroVec<'data, u32>,
+    pub tangent_vectors: ZeroVec<'data, [f32; 4]>,
 }
 
 impl<'data> ConnectivitySets<'data> {
@@ -95,5 +96,119 @@ impl<'data> ConnectivitySets<'data> {
     pub fn add(&mut self, topology: Topology<'data>) -> usize {
         self.additional.push(topology);
         self.additional.len()
+    }
+}
+
+impl AsULE for TriangleFlags {
+    type ULE = <u16 as AsULE>::ULE;
+    fn to_unaligned(self) -> Self::ULE {
+        self.bits().to_unaligned()
+    }
+    fn from_unaligned(value: Self::ULE) -> Self {
+        Self::from_bits_retain(u16::from_unaligned(value))
+    }
+}
+type SurfaceRecord = (
+    (
+        bool,
+        Option<MaterialId>,
+        Option<u16>,
+        Option<u32>,
+        Option<u8>,
+        u8,
+    ),
+    (bool, bool, bool, bool, bool, bool),
+    (bool, bool, TriangleFlags),
+);
+impl AsULE for SurfaceTriangleControls {
+    type ULE = <SurfaceRecord as AsULE>::ULE;
+    fn to_unaligned(self) -> Self::ULE {
+        (
+            (
+                self.spatial_queries,
+                self.material,
+                self.ground_type_selector,
+                self.ground_type,
+                self.lightmap_selector,
+                self.alignment,
+            ),
+            (
+                self.transition,
+                self.no_camera_collision,
+                self.detail,
+                self.collision,
+                self.hint,
+                self.render,
+            ),
+            (self.cull_objects, self.collide_hit, self.unclassified),
+        )
+            .to_unaligned()
+    }
+    fn from_unaligned(value: Self::ULE) -> Self {
+        let (
+            (
+                spatial_queries,
+                material,
+                ground_type_selector,
+                ground_type,
+                lightmap_selector,
+                alignment,
+            ),
+            (transition, no_camera_collision, detail, collision, hint, render),
+            (cull_objects, collide_hit, unclassified),
+        ) = SurfaceRecord::from_unaligned(value);
+        Self {
+            spatial_queries,
+            material,
+            ground_type_selector,
+            ground_type,
+            lightmap_selector,
+            alignment,
+            transition,
+            no_camera_collision,
+            detail,
+            collision,
+            hint,
+            render,
+            cull_objects,
+            collide_hit,
+            unclassified,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{SurfaceTriangleControls, TriangleFlags};
+    use crate::model::common::ZeroVec;
+    use crate::model::semantic::Scope;
+
+    #[test]
+    fn packed_surface_controls_preserve_optional_zero_values_and_identity() {
+        let material = Scope::default().allocate();
+        let record = SurfaceTriangleControls {
+            spatial_queries: true,
+            material: Some(material),
+            ground_type_selector: Some(0),
+            ground_type: Some(0),
+            lightmap_selector: Some(0),
+            alignment: 255,
+            transition: true,
+            no_camera_collision: true,
+            detail: true,
+            collision: true,
+            hint: true,
+            render: true,
+            cull_objects: true,
+            collide_hit: true,
+            unclassified: TriangleFlags::from_bits_retain(u16::MAX),
+        };
+        let packed = ZeroVec::alloc_from_slice(&[SurfaceTriangleControls::default(), record]);
+        let parsed = ZeroVec::<SurfaceTriangleControls>::parse_bytes(packed.as_bytes()).unwrap();
+        assert_eq!(parsed.get(0), Some(SurfaceTriangleControls::default()));
+        assert_eq!(parsed.get(1), Some(record));
+        let mut invalid = packed.as_bytes().to_vec();
+        invalid[0] = 2;
+        assert!(ZeroVec::<SurfaceTriangleControls>::parse_bytes(&invalid).is_err());
     }
 }

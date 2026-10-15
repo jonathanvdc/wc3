@@ -1,6 +1,6 @@
 //! Logical M3 data driven values.
 use super::super::values::{ShaderFresnelFlags, ShaderType};
-use crate::model::semantic::{TextureId, Values};
+use crate::model::semantic::{TextureId, ZeroVec};
 use std::borrow::Cow;
 
 /// Editable M3 DataDriven values.
@@ -83,7 +83,7 @@ pub enum Parameters<'a> {
     /// Decoded named groups supplied by an authoring format.
     Named(DataProperties<'a>),
     /// Unresolved parameter language bytes; no dictionary schema is claimed.
-    Unresolved(Values<'a, u8>),
+    Unresolved(ZeroVec<'a, u8>),
 }
 impl Default for Parameters<'_> {
     fn default() -> Self {

@@ -1,4 +1,4 @@
-//! Infallible payload embeddings preserve identities and shared storage.
+//! Infallible payload embeddings preserve identities and encoded storage.
 use crate::model::semantic::profiles::{Either, Extends, Profile, Union};
 use crate::model::semantic::{
     AttachedFeature, Clip, Controller, Draw, Material, Mesh, MeshInstance, Model, Node, Skin,

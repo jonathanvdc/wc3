@@ -1,6 +1,7 @@
+use wc3::model::common::{IntoZeroVec, ZeroVec};
 use wc3::model::{
     conversion::{self, ExportOptions, ImportOptions},
-    semantic::{Resource, Values},
+    semantic::Resource,
     wmo::{self, Bundle, Dialect, FileKey, Group, GroupKey, Root},
 };
 use wmo::{codec::Array, group::GroupChunk, records as r, root::RootChunk};
@@ -200,7 +201,7 @@ fn edited_geometry_rebuilds_native_companions() {
     positions[0] = [0.25, 0.5, 0.75];
     mesh.geometry = mesh
         .geometry
-        .with_positions(Values::owned(positions))
+        .with_positions((positions).into_zero_vec())
         .unwrap();
     asset.edit(|builder| builder.set_mesh(id, mesh)).unwrap();
     let output = conversion::wmo::plan::<wmo::Classic>(&asset, &ExportOptions::default())
@@ -347,7 +348,7 @@ fn liquid_grid_fields_are_editable_without_source_packets() {
         panic!("unresolved liquid interpretation changed")
     };
     *height = 6.;
-    liquid.vertices = Values::owned(vertices);
+    liquid.vertices = (vertices).into_zero_vec();
     asset
         .edit(|builder| builder.set_instance(id, instance))
         .unwrap();
@@ -580,11 +581,11 @@ fn strip_connectivity_and_tangent_pools_are_independent_editable_geometry() {
         .next()
         .map(|(id, mesh)| (id, mesh.clone()))
         .unwrap();
-    assert!(mesh.geometry.tangent_vectors().is_borrowed());
+    assert!(!mesh.geometry.tangent_vectors().is_owned());
     assert_eq!(mesh.geometry.strip_indices().to_vec(), vec![0, 1, 2]);
     mesh.geometry = mesh
         .geometry
-        .with_tangent_vectors(Values::owned(vec![[1., 0., 0., -1.]]))
+        .with_tangent_vectors((vec![[1., 0., 0., -1.]]).into_zero_vec())
         .unwrap();
     asset.edit(|builder| builder.set_mesh(id, mesh)).unwrap();
     let output = conversion::wmo::plan::<wmo::Classic>(&asset, &ExportOptions::default())
@@ -728,8 +729,9 @@ fn compatible_same_detail_geometry_joins_without_changing_material_look_or_sourc
     let mut second_mesh = model.mesh(original.mesh).unwrap().clone();
     let positions = second_mesh
         .positions()
-        .clone()
-        .map(|position| [position[0] + 2., position[1], position[2]]);
+        .iter()
+        .map(|position| [position[0] + 2., position[1], position[2]])
+        .collect::<ZeroVec<_>>();
     second_mesh.geometry = second_mesh.geometry.with_positions(positions).unwrap();
     second_mesh.bounds = Bounds {
         minimum: [2., 0., 0.],

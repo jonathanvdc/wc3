@@ -1,7 +1,8 @@
 //! Portal polygons, authored separating planes, and historical visibility regions.
+use crate::model::conversion::materialize;
 use crate::model::conversion::Error;
 use crate::model::semantic::profiles::wmo as profile;
-use crate::model::semantic::Values;
+
 use crate::model::wmo::root::RootChunk;
 use crate::model::wmo::Dialect;
 use zerovec::ZeroVec;
@@ -32,7 +33,7 @@ pub(super) fn read<'a, 'data: 'a>(
                     ));
                 }
                 world.portals.push(profile::Portal {
-                    vertices: Values::view(count, move |index| {
+                    vertices: materialize(count, move |index| {
                         source
                             .get(start + index)
                             .expect("checked portal index")
@@ -82,7 +83,7 @@ pub(super) fn read<'a, 'data: 'a>(
                             "visibility range exceeds table",
                         ));
                     }
-                    world.visibility.push(Values::view(count, move |index| {
+                    world.visibility.push(materialize(count, move |index| {
                         source
                             .get(start + index)
                             .expect("checked visibility vertex")
@@ -91,10 +92,8 @@ pub(super) fn read<'a, 'data: 'a>(
                 }
             }
             RootChunk::ConvexPlanes(rows) => {
-                world.occluders = Values::from_zero_vec(
-                    ZeroVec::parse_bytes(rows.as_bytes())
-                        .map_err(|error| Error::new("world.occluders", error.to_string()))?,
-                )
+                world.occluders = ZeroVec::parse_bytes(rows.as_bytes())
+                    .map_err(|error| Error::new("world.occluders", error.to_string()))?
             }
             _ => {}
         }

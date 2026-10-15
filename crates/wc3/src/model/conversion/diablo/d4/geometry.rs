@@ -1,5 +1,6 @@
 use super::vertices::{self, ElementSemantic, VertexLayout};
 use super::{count, nonnegative};
+use crate::model::common::IntoZeroVec;
 use crate::model::conversion::{Context, Error};
 use crate::model::diablo::d4::records as native;
 use crate::model::semantic::profiles::diablo::d4::{Geometry, Segment};
@@ -151,21 +152,21 @@ pub(super) fn read(
     if gaps {
         context.unsupported("d4.geometry.vertex_padding","nonzero bytes outside explicitly interpreted vertex elements cannot define semantic attributes")?;
     }
-    data.positions = positions.into();
-    data.set_normals(normals.into());
-    data.set_tangents(tangents.into());
-    data.set_colors(colors.into());
-    data.set_texture_coordinates(uvs.into_iter().map(Into::into).collect());
+    data.positions = positions.into_zero_vec();
+    data.set_normals(normals.into_zero_vec());
+    data.set_tangents(tangents.into_zero_vec());
+    data.set_colors(colors.into_zero_vec());
+    data.set_texture_coordinates(uvs.into_iter().map(IntoZeroVec::into_zero_vec).collect());
     data.influences = if layout
         .elements
         .iter()
         .any(|element| element.semantic == ElementSemantic::JointWeights)
     {
-        GeometryInfluences::Four(rows.into())
+        GeometryInfluences::Four(rows.into_zero_vec())
     } else {
         GeometryInfluences::None
     };
-    data.connectivity.primary = Topology::Triangles(triangles.into());
+    data.connectivity.primary = Topology::Triangles(triangles.into_zero_vec());
     Ok((Geometry::new(data)?, segments))
 }
 

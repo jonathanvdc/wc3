@@ -2,22 +2,22 @@
 use super::{
     Attribute, AttributeDomain, AttributeSemantic, AttributeValues, ConnectivitySets, Error,
     GeometryData, GeometryInfluences, GeometryKind, GeometryPools, GeometrySchema,
-    SurfaceTriangleControls, Topology, Values,
+    SurfaceTriangleControls, Topology, ZeroVec,
 };
 
 #[derive(Clone, Debug)]
 pub(crate) struct GeometryParts<'data> {
     pub kind: GeometryKind,
     pub strip_set: bool,
-    pub positions: Values<'data, [f32; 3]>,
-    pub normals: Values<'data, [f32; 3]>,
-    pub tangents: Values<'data, [f32; 4]>,
-    pub colors: Values<'data, [f32; 4]>,
-    pub texture_coordinates: Vec<Values<'data, [f32; 2]>>,
+    pub positions: ZeroVec<'data, [f32; 3]>,
+    pub normals: ZeroVec<'data, [f32; 3]>,
+    pub tangents: ZeroVec<'data, [f32; 4]>,
+    pub colors: ZeroVec<'data, [f32; 4]>,
+    pub texture_coordinates: Vec<ZeroVec<'data, [f32; 2]>>,
     pub topology: Topology<'data>,
     pub influences: GeometryInfluences<'data>,
     pub attributes: Vec<Attribute<'data>>,
-    pub surface_triangles: Values<'data, SurfaceTriangleControls>,
+    pub surface_triangles: ZeroVec<'data, SurfaceTriangleControls>,
     pub pools: GeometryPools<'data>,
 }
 impl Default for GeometryParts<'_> {
@@ -25,15 +25,15 @@ impl Default for GeometryParts<'_> {
         Self {
             kind: GeometryKind::Display,
             strip_set: false,
-            positions: Values::default(),
-            normals: Values::default(),
-            tangents: Values::default(),
-            colors: Values::default(),
+            positions: ZeroVec::default(),
+            normals: ZeroVec::default(),
+            tangents: ZeroVec::default(),
+            colors: ZeroVec::default(),
             texture_coordinates: Vec::new(),
-            topology: Topology::Triangles(Values::default()),
+            topology: Topology::Triangles(ZeroVec::default()),
             influences: GeometryInfluences::None,
             attributes: Vec::new(),
-            surface_triangles: Values::default(),
+            surface_triangles: ZeroVec::default(),
             pools: GeometryPools::default(),
         }
     }

@@ -1,6 +1,6 @@
 //! Model-clock emission and particle-age appearance are distinct logical controls.
 use super::values::{ParticleBlend, ParticleFlags, ParticleGenerator, ParticleHeadTail};
-use crate::model::semantic::{Animated, Curve, Link, Resource, TextureId, ValidateLinks, Values};
+use crate::model::semantic::{Animated, Curve, Link, Resource, TextureId, ValidateLinks, ZeroVec};
 /// Appearance evaluated against normalized particle age rather than a model clip.
 #[derive(Clone, Debug, Default)]
 pub struct Appearance<'a> {
@@ -112,7 +112,7 @@ pub struct Particle<'a> {
     /// Two follow-speed and follow-scale parameter pairs.
     pub follow: [[f32; 2]; 2],
     /// Emission path in model coordinates.
-    pub spline: Values<'a, [f32; 3]>,
+    pub spline: ZeroVec<'a, [f32; 3]>,
     /// Animated emission toggle.
     pub enabled: Animated<bool>,
     /// Layer/component UV centers followed by ranges, in texture units.

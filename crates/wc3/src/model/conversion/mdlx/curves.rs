@@ -1,11 +1,10 @@
-//! Borrowed logical curves read directly from Warcraft III animation records.
+//! Warcraft III animation records are projected into canonical logical curves.
+use crate::model::conversion::materialize;
 use crate::model::conversion::Error;
 use crate::model::mdlx::animation::{Interpolation as NativeInterpolation, Track, TrackValue};
-use crate::model::semantic::{
-    Curve, CurveValue, Error as SemanticError, Interpolation, Time, Values,
-};
+use crate::model::semantic::{Curve, CurveValue, Error as SemanticError, Interpolation, Time};
 
-/// Decodes values lazily while retaining exact authored interpolation and tangents.
+/// Materializes values once while retaining exact authored interpolation and tangents.
 pub(super) fn read<'a, T, U>(
     source: &'a Track<'_, T>,
     offset: f64,
@@ -46,7 +45,7 @@ where
             times.push(time);
             indices.push(index);
         }
-        let values = Values::view(indices.len(), move |index| {
+        let values = materialize(indices.len(), move |index| {
             value_map(keys.get(indices[index]).expect("checked source key").value)
         });
         Curve::from_samples(times, values, interpolation).map_err(failure)
@@ -67,17 +66,17 @@ where
         let outgoing_indices = indices.clone();
         let value_map = value_map.clone();
         let incoming_map = tangent_map.clone();
-        let values = Values::view(indices.len(), move |index| {
+        let values = materialize(indices.len(), move |index| {
             value_map(keys.get(indices[index]).expect("checked source key").value)
         });
-        let incoming = Values::view(incoming_indices.len(), move |index| {
+        let incoming = materialize(incoming_indices.len(), move |index| {
             incoming_map(
                 keys.get(incoming_indices[index])
                     .expect("checked source key")
                     .in_tangent,
             )
         });
-        let outgoing = Values::view(outgoing_indices.len(), move |index| {
+        let outgoing = materialize(outgoing_indices.len(), move |index| {
             tangent_map(
                 keys.get(outgoing_indices[index])
                     .expect("checked source key")

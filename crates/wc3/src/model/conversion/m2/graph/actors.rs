@@ -1,5 +1,6 @@
 //! Native feature nodes imported directly into independent scene state.
 use super::*;
+use zerovec::ZeroVec;
 fn placement<'a>(
     builder: &mut GraphBuilder<'a>,
     nodes: &[semantic::NodeId],
@@ -494,7 +495,7 @@ where
                     name: Cow::Owned(String::from_utf8_lossy(&value.identifier).into_owned()),
                     node: Some(node),
                     feature: Some(feature),
-                    payload: Values::default(),
+                    payload: ZeroVec::new(),
                 };
                 if global == u16::MAX {
                     builder.add_event(

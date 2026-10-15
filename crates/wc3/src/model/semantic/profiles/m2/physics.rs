@@ -1,6 +1,7 @@
 //! Physics bodies, collision shapes, and constraints use hierarchy identities.
 use super::values::{PhysicsBodyKind, PhysicsGameFlags, PhysicsKind, PhysicsMotorMode};
-use crate::model::semantic::{Error, Link, NodeId, Resource, ValidateLinks, Values};
+use crate::model::semantic::ValueGroups;
+use crate::model::semantic::{Error, Link, NodeId, Resource, ValidateLinks, ZeroVec};
 /// Physics simulation data, optionally supplied by an external resource.
 #[derive(Clone, Debug)]
 pub struct Physics<'a> {
@@ -17,7 +18,7 @@ pub struct Physics<'a> {
     /// Environmental response parameters.
     pub wind_coefficients: Option<[f32; 3]>,
     /// Host-skeleton name hashes allowed to use authored pose-follow factors.
-    pub follow_allow_list: Values<'a, u32>,
+    pub follow_allow_list: ZeroVec<'a, u32>,
     /// Environmental vegetation response systems.
     pub vegetation: Vec<Vegetation>,
 }
@@ -84,11 +85,11 @@ pub enum ShapeGeometry<'a> {
     /// Convex-hull vertices and oriented faces.
     ConvexHull {
         /// Hull vertices in shape coordinates.
-        vertices: Values<'a, [f32; 3]>,
+        vertices: ZeroVec<'a, [f32; 3]>,
         /// Plane equations of the convex boundary.
-        planes: Values<'a, [f32; 4]>,
+        planes: ZeroVec<'a, [f32; 4]>,
         /// Oriented polygon boundaries, expressed as vertex indices.
-        faces: Values<'a, Vec<u32>>,
+        faces: ValueGroups<'a, u32>,
     },
 }
 /// Constraint frame in a body's local coordinates.
@@ -363,18 +364,17 @@ impl Physics<'_> {
                         }
                         let mut edges = BTreeSet::new();
                         for face in faces.iter() {
-                            if face.len() < 3 || face.iter().any(|i| *i as usize >= vertices.len())
-                            {
+                            if face.len() < 3 || face.iter().any(|i| i as usize >= vertices.len()) {
                                 return Err(Error::new(
                                     "physics.hull.faces",
                                     "face vertex indices are invalid",
                                 ));
                             }
-                            for (&a, &b) in face
-                                .iter()
-                                .zip(face.iter().cycle().skip(1))
-                                .take(face.len())
-                            {
+                            for index in 0..face.len() {
+                                let a = face.get(index).expect("checked face index");
+                                let b = face
+                                    .get((index + 1) % face.len())
+                                    .expect("checked face index");
                                 if a == b || !edges.insert((a, b)) {
                                     return Err(Error::new(
                                         "physics.hull.faces",

@@ -1,10 +1,11 @@
 //! Static collision surfaces borrow their actual positions, faces, and face normals.
 use super::{materials::read_error, write::append, Graph, GraphBuilder};
+use crate::model::conversion::materialize;
 use crate::model::conversion::Error;
 use crate::model::m3::records::{self, Extent, Vector3, U16};
 use crate::model::m3::{self, Document, Envelope, Model, Ref};
 use crate::model::semantic::profiles::m3::{CollisionSystem, System};
-use crate::model::semantic::{Bounds, M3CollisionGeometry, M3Geometry, Mesh, Topology, Values};
+use crate::model::semantic::{Bounds, M3CollisionGeometry, M3Geometry, Mesh, Topology};
 use std::array::from_fn;
 
 pub(super) fn read<'view, E: Envelope + Send + Sync>(
@@ -29,7 +30,7 @@ pub(super) fn read<'view, E: Envelope + Send + Sync>(
     for row in points.iter() {
         row.map_err(read_error)?;
     }
-    let positions = Values::view(points.len(), move |index| {
+    let positions = materialize(points.len(), move |index| {
         points
             .get(index)
             .expect("checked collision position index")
@@ -49,7 +50,7 @@ pub(super) fn read<'view, E: Envelope + Send + Sync>(
     for row in indices.iter() {
         row.map_err(read_error)?;
     }
-    let triangles = Values::view(indices.len() / 3, move |index| {
+    let triangles = materialize(indices.len() / 3, move |index| {
         from_fn(|lane| {
             u32::from(
                 indices
@@ -67,7 +68,7 @@ pub(super) fn read<'view, E: Envelope + Send + Sync>(
     for row in normals.iter() {
         row.map_err(read_error)?;
     }
-    let normals = Values::view(normals.len(), move |index| {
+    let normals = materialize(normals.len(), move |index| {
         normals
             .get(index)
             .expect("checked collision normal index")

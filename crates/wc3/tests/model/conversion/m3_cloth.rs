@@ -58,7 +58,7 @@ fn public_adapter_rebuilds_edited_cloth_density_and_node_bindings() {
     let surface::System::Cloth(cloths) = &mut system else {
         unreachable!()
     };
-    assert!(cloths.cloths[0].anchors.is_borrowed());
+    assert!(cloths.cloths[0].anchors.is_owned());
     let anchor = cloths.cloths[0].anchors.get(0).unwrap()[0].unwrap();
     assert_eq!(cloths.cloths[0].colliders[0].bone, Some(anchor.node));
     cloths.cloths[0].density = 7.;

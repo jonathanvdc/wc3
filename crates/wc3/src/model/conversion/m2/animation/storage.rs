@@ -1,5 +1,6 @@
 //! Storage components for native animation conversion.
 use super::*;
+use zerovec::ZeroVec;
 
 /// Construction of a native timestamp family from complete sequence leaves.
 pub trait TimelineFactory: Sized {

@@ -4,25 +4,27 @@ use super::super::{
     slots::{Slot, Unresolved as _},
     GraphBuilder,
 };
+use crate::model::conversion::materialize;
 use crate::model::conversion::{Context, Error};
 use crate::model::m3::{records, Document, Envelope, Ref};
 use crate::model::semantic::{
     profiles::m3::{values::PhysicsShapeKind, AuxiliaryGeometry, Shape, ShapeGeometry},
-    M3CollisionGeometry, M3Geometry, Mesh, Values,
+    M3CollisionGeometry, M3Geometry, Mesh,
 };
 use std::array::from_fn;
+use zerovec::ZeroVec;
 
 fn points<'view, E: Envelope + Send + Sync>(
     document: &'view Document<'_, E>,
     reference: Ref<records::targets::Vector3>,
-) -> Result<Values<'view, [f32; 3]>, Error> {
+) -> Result<ZeroVec<'view, [f32; 3]>, Error> {
     let rows = document
         .resolve::<records::Vector3>(reference.cast())
         .map_err(read_error)?;
     for row in rows.iter() {
         row.map_err(read_error)?;
     }
-    Ok(Values::view(rows.len(), move |index| {
+    Ok(materialize(rows.len(), move |index| {
         rows.get(index)
             .expect("checked point index")
             .expect("validated point")
@@ -32,14 +34,14 @@ fn points<'view, E: Envelope + Send + Sync>(
 fn planes<'view, E: Envelope + Send + Sync>(
     document: &'view Document<'_, E>,
     reference: Ref<records::targets::Vector4>,
-) -> Result<Values<'view, [f32; 4]>, Error> {
+) -> Result<ZeroVec<'view, [f32; 4]>, Error> {
     let rows = document
         .resolve::<records::Vector4>(reference.cast())
         .map_err(read_error)?;
     for row in rows.iter() {
         row.map_err(read_error)?;
     }
-    Ok(Values::view(rows.len(), move |index| {
+    Ok(materialize(rows.len(), move |index| {
         rows.get(index)
             .expect("checked plane index")
             .expect("validated plane")
@@ -86,7 +88,7 @@ fn geometry<'view, E: Envelope + Send + Sync>(
                 )?;
             }
         }
-        Values::view(rows.len(), move |index| {
+        materialize(rows.len(), move |index| {
             let p = rows
                 .get(index)
                 .expect("checked point index")
@@ -123,7 +125,7 @@ fn geometry<'view, E: Envelope + Send + Sync>(
                 "source connectivity must contain complete triangles",
             ));
         }
-        let triangles = Values::view(rows.len() / 3, move |index| {
+        let triangles = materialize(rows.len() / 3, move |index| {
             from_fn(|lane| {
                 u32::from(
                     rows.get(index * 3 + lane)
@@ -141,7 +143,7 @@ fn geometry<'view, E: Envelope + Send + Sync>(
         for row in rows.iter() {
             row.map_err(read_error)?;
         }
-        let triangles = Values::view(rows.len(), move |index| {
+        let triangles = materialize(rows.len(), move |index| {
             let row = rows
                 .get(index)
                 .expect("checked triangle")
@@ -151,7 +153,7 @@ fn geometry<'view, E: Envelope + Send + Sync>(
         let controls = document
             .resolve::<records::PhysicsMeshTriangle>(input.mesh_triangles.cast())
             .map_err(read_error)?;
-        let controls = Values::view(controls.len(), move |index| {
+        let controls = materialize(controls.len(), move |index| {
             controls
                 .get(index)
                 .expect("checked triangle control")
@@ -321,7 +323,7 @@ pub(super) fn read<'view, E: Envelope + Send + Sync>(
                         )
                     }
                     kind => {
-                        let (mesh, planes) = auxiliary.map_or((None, Values::default()), |value| {
+                        let (mesh, planes) = auxiliary.map_or((None, ZeroVec::new()), |value| {
                             (Some(value.mesh), value.planes)
                         });
                         (

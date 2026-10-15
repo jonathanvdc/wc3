@@ -21,7 +21,6 @@ use native::{
 use native::{ProfileRef, ResolvedValues};
 use std::borrow::Cow;
 use std::collections::BTreeMap;
-use zerovec::ZeroVec;
 
 mod animation;
 use animation::{ensure_constant, initial, sequence_tables};

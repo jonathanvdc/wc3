@@ -3,7 +3,7 @@ use crate::model::semantic::TextureCoordinates;
 use crate::model::semantic::{
     AttributeDomain, Attributes, Error, GeometryData, GeometryEdit, GeometryEditCapabilities,
     GeometryInfluences, GeometryKind, GeometrySchema, InfluenceRows, Link, Topology, ValidateLinks,
-    Values,
+    ZeroVec,
 };
 
 /// Triangle geometry whose independently declared streams retain their logical values.
@@ -40,19 +40,19 @@ impl<'a> GeometrySchema<'a> for Geometry<'a> {
         Self::new(self.data.edited(edit)?)
     }
 
-    fn positions(&self) -> &Values<'a, [f32; 3]> {
+    fn positions(&self) -> &ZeroVec<'a, [f32; 3]> {
         self.data.positions()
     }
-    fn normals(&self) -> Option<&Values<'a, [f32; 3]>> {
+    fn normals(&self) -> Option<&ZeroVec<'a, [f32; 3]>> {
         self.data.normals()
     }
-    fn tangents(&self) -> Option<&Values<'a, [f32; 4]>> {
+    fn tangents(&self) -> Option<&ZeroVec<'a, [f32; 4]>> {
         self.data.tangents()
     }
     fn texture_coordinates(&self) -> TextureCoordinates<'_, 'a> {
         self.data.texture_coordinates()
     }
-    fn colors(&self) -> Option<&Values<'a, [f32; 4]>> {
+    fn colors(&self) -> Option<&ZeroVec<'a, [f32; 4]>> {
         self.data.colors()
     }
     fn attributes(&self) -> Attributes<'_, 'a> {

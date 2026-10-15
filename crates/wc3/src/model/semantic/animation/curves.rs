@@ -1,8 +1,10 @@
-//! Checked curve shapes retain native borrowed arrays.
+//! Checked curve shapes retain canonical packed arrays.
+use zerovec::ZeroVec;
 mod value;
 pub use value::*;
 mod keyframe;
-use crate::model::semantic::{Error, Interpolation, Link, Time, Values};
+use crate::model::common::IntoZeroVec;
+use crate::model::semantic::{Error, Interpolation, Link, Time};
 pub use keyframe::*;
 
 #[derive(Clone, Debug)]
@@ -13,12 +15,12 @@ enum CurveShape<'a, T: CurveValue> {
     Nlerp,
     Hermite(HermiteDerivatives<'a, T::Derivative>),
     Bezier(BezierControls<'a, T::ControlPoint>),
-    Tcb(Values<'a, TcbParameters>),
+    Tcb(ZeroVec<'a, TcbParameters>),
 }
 /// Checked, ordered typed keys with exactly the controls required by interpolation.
 ///
-/// Separate arrays retain borrowed native storage. Keyframe constructors provide
-/// an interleaved authoring interface without requiring an interleaved allocation.
+/// Separate arrays retain compatible borrowed packed storage. Keyframe constructors
+/// deinterleave authored keys into packed time, value, and control arrays.
 /// Coincident keys preserve an authored discontinuity: the first supplies the
 /// incoming limit and the last supplies the boundary value and outgoing segment.
 ///
@@ -46,14 +48,14 @@ enum CurveShape<'a, T: CurveValue> {
 /// ```
 #[derive(Clone, Debug)]
 pub struct Curve<'a, T: CurveValue> {
-    times: Values<'a, Time>,
-    values: Values<'a, T>,
+    times: ZeroVec<'a, Time>,
+    values: ZeroVec<'a, T>,
     shape: CurveShape<'a, T>,
 }
 impl<'a, T: CurveValue> Curve<'a, T> {
     fn checked(
-        times: Values<'a, Time>,
-        values: Values<'a, T>,
+        times: ZeroVec<'a, Time>,
+        values: ZeroVec<'a, T>,
         shape: CurveShape<'a, T>,
     ) -> Result<Self, Error> {
         let curve = Self {
@@ -66,22 +68,29 @@ impl<'a, T: CurveValue> Curve<'a, T> {
     }
     /// Constructs stepped values, including discrete resource selections.
     pub fn step(
-        times: impl Into<Values<'a, Time>>,
-        values: impl Into<Values<'a, T>>,
+        times: impl IntoZeroVec<'a, Time>,
+        values: impl IntoZeroVec<'a, T>,
     ) -> Result<Self, Error> {
-        Self::checked(times.into(), values.into(), CurveShape::Step)
+        Self::checked(
+            times.into_zero_vec(),
+            values.into_zero_vec(),
+            CurveShape::Step,
+        )
     }
     /// Constructs stepped values from typed keyframes, preserving input order.
-    pub fn step_keys(keys: impl Into<Values<'a, ValueKeyframe<T>>>) -> Result<Self, Error> {
-        let keys = keys.into();
-        Self::step(keys.clone().map(|k| k.time), keys.map(|k| k.value))
+    pub fn step_keys(keys: impl IntoIterator<Item = ValueKeyframe<T>>) -> Result<Self, Error> {
+        let keys: Vec<_> = keys.into_iter().collect();
+        Self::step(
+            keys.iter().map(|k| k.time).collect::<ZeroVec<_>>(),
+            keys.iter().map(|k| k.value).collect::<ZeroVec<_>>(),
+        )
     }
     /// Ordered key times.
-    pub fn times(&self) -> &Values<'a, Time> {
+    pub fn times(&self) -> &ZeroVec<'a, Time> {
         &self.times
     }
     /// Values matching key times.
-    pub fn values(&self) -> &Values<'a, T> {
+    pub fn values(&self) -> &ZeroVec<'a, T> {
         &self.values
     }
     /// Interpolation selected by the curve's shape.
@@ -113,7 +122,7 @@ impl<'a, T: CurveValue> Curve<'a, T> {
         }
     }
     /// Authored parameters only when this is a TCB curve.
-    pub fn tcb_parameters(&self) -> Option<&Values<'a, TcbParameters>> {
+    pub fn tcb_parameters(&self) -> Option<&ZeroVec<'a, TcbParameters>> {
         if let CurveShape::Tcb(v) = &self.shape {
             Some(v)
         } else {
@@ -136,8 +145,8 @@ impl<'a, T: CurveValue> Curve<'a, T> {
     }
     /// Decodes a native sampling directive; public authoring uses capability-bound constructors.
     pub(crate) fn from_samples(
-        times: impl Into<Values<'a, Time>>,
-        values: impl Into<Values<'a, T>>,
+        times: impl IntoZeroVec<'a, Time>,
+        values: impl IntoZeroVec<'a, T>,
         mode: Interpolation,
     ) -> Result<Self, Error> {
         let shape =
@@ -151,13 +160,13 @@ impl<'a, T: CurveValue> Curve<'a, T> {
                     "sampling directive is unsupported by this value domain or requires controls",
                 )),
             };
-        Self::checked(times.into(), values.into(), shape)
+        Self::checked(times.into_zero_vec(), values.into_zero_vec(), shape)
     }
     pub(crate) fn from_spline_samples(
-        times: impl Into<Values<'a, Time>>,
-        values: impl Into<Values<'a, T>>,
-        incoming: impl Into<Values<'a, T>>,
-        outgoing: impl Into<Values<'a, T>>,
+        times: impl IntoZeroVec<'a, Time>,
+        values: impl IntoZeroVec<'a, T>,
+        incoming: impl IntoZeroVec<'a, T>,
+        outgoing: impl IntoZeroVec<'a, T>,
         mode: Interpolation,
     ) -> Result<Self, Error> {
         if !T::Domain::SUPPORTS_SPLINE {
@@ -166,16 +175,28 @@ impl<'a, T: CurveValue> Curve<'a, T> {
                 "this value domain does not support splines",
             ));
         }
-        let incoming = incoming.into();
-        let outgoing = outgoing.into();
+        let incoming = incoming.into_zero_vec();
+        let outgoing = outgoing.into_zero_vec();
         let shape = match mode {
             Interpolation::Hermite => CurveShape::Hermite(HermiteDerivatives {
-                incoming: incoming.map(T::into_derivative),
-                outgoing: outgoing.map(T::into_derivative),
+                incoming: incoming
+                    .iter()
+                    .map(T::into_derivative)
+                    .collect::<ZeroVec<_>>(),
+                outgoing: outgoing
+                    .iter()
+                    .map(T::into_derivative)
+                    .collect::<ZeroVec<_>>(),
             }),
             Interpolation::Bezier => CurveShape::Bezier(BezierControls {
-                incoming: incoming.map(T::into_control_point),
-                outgoing: outgoing.map(T::into_control_point),
+                incoming: incoming
+                    .iter()
+                    .map(T::into_control_point)
+                    .collect::<ZeroVec<_>>(),
+                outgoing: outgoing
+                    .iter()
+                    .map(T::into_control_point)
+                    .collect::<ZeroVec<_>>(),
             }),
             _ => {
                 return Err(Error::new(
@@ -184,7 +205,7 @@ impl<'a, T: CurveValue> Curve<'a, T> {
                 ))
             }
         };
-        Self::checked(times.into(), values.into(), shape)
+        Self::checked(times.into_zero_vec(), values.into_zero_vec(), shape)
     }
     fn validate(&self) -> Result<(), Error> {
         if self.times.len() != self.values.len() {
@@ -192,7 +213,7 @@ impl<'a, T: CurveValue> Curve<'a, T> {
         }
         let mut previous = None;
         for time in self.times.iter() {
-            if previous.is_some_and(|p| time < p) {
+            if !time.as_seconds().is_finite() || previous.is_some_and(|p| time < p) {
                 return Err(Error::new("curve.times", "keys must be nondecreasing"));
             }
             previous = Some(time);
@@ -226,7 +247,7 @@ impl<'a, T: CurveValue> Curve<'a, T> {
         }
         Ok(())
     }
-    fn validate_controls<U: CurveValue>(&self, values: &Values<'_, U>) -> Result<(), Error> {
+    fn validate_controls<U: CurveValue>(&self, values: &ZeroVec<'_, U>) -> Result<(), Error> {
         if values.len() != self.times.len() || values.iter().any(|v| !v.is_valid()) {
             return Err(Error::new(
                 "curve.controls",
@@ -254,115 +275,136 @@ impl<'a, T: CurveValue> Curve<'a, T> {
 impl<'a, T: LinearValue> Curve<'a, T> {
     /// Constructs linear interpolation; quaternion values retain angular interpolation.
     pub fn linear(
-        times: impl Into<Values<'a, Time>>,
-        values: impl Into<Values<'a, T>>,
+        times: impl IntoZeroVec<'a, Time>,
+        values: impl IntoZeroVec<'a, T>,
     ) -> Result<Self, Error> {
-        Self::checked(times.into(), values.into(), CurveShape::Linear)
+        Self::checked(
+            times.into_zero_vec(),
+            values.into_zero_vec(),
+            CurveShape::Linear,
+        )
     }
     /// Constructs linear interpolation from typed keyframes.
-    pub fn linear_keys(keys: impl Into<Values<'a, ValueKeyframe<T>>>) -> Result<Self, Error> {
-        let keys = keys.into();
-        Self::linear(keys.clone().map(|k| k.time), keys.map(|k| k.value))
+    pub fn linear_keys(keys: impl IntoIterator<Item = ValueKeyframe<T>>) -> Result<Self, Error> {
+        let keys: Vec<_> = keys.into_iter().collect();
+        Self::linear(
+            keys.iter().map(|k| k.time).collect::<ZeroVec<_>>(),
+            keys.iter().map(|k| k.value).collect::<ZeroVec<_>>(),
+        )
     }
 }
 impl<'a, T: RotationValue> Curve<'a, T> {
     /// Constructs explicit spherical interpolation.
     pub fn slerp(
-        times: impl Into<Values<'a, Time>>,
-        values: impl Into<Values<'a, T>>,
+        times: impl IntoZeroVec<'a, Time>,
+        values: impl IntoZeroVec<'a, T>,
     ) -> Result<Self, Error> {
-        Self::checked(times.into(), values.into(), CurveShape::Slerp)
+        Self::checked(
+            times.into_zero_vec(),
+            values.into_zero_vec(),
+            CurveShape::Slerp,
+        )
     }
     /// Constructs explicit normalized linear interpolation.
     pub fn nlerp(
-        times: impl Into<Values<'a, Time>>,
-        values: impl Into<Values<'a, T>>,
+        times: impl IntoZeroVec<'a, Time>,
+        values: impl IntoZeroVec<'a, T>,
     ) -> Result<Self, Error> {
-        Self::checked(times.into(), values.into(), CurveShape::Nlerp)
+        Self::checked(
+            times.into_zero_vec(),
+            values.into_zero_vec(),
+            CurveShape::Nlerp,
+        )
     }
     /// Constructs spherical interpolation from typed keyframes.
-    pub fn slerp_keys(keys: impl Into<Values<'a, ValueKeyframe<T>>>) -> Result<Self, Error> {
-        let keys = keys.into();
-        Self::slerp(keys.clone().map(|k| k.time), keys.map(|k| k.value))
+    pub fn slerp_keys(keys: impl IntoIterator<Item = ValueKeyframe<T>>) -> Result<Self, Error> {
+        let keys: Vec<_> = keys.into_iter().collect();
+        Self::slerp(
+            keys.iter().map(|k| k.time).collect::<ZeroVec<_>>(),
+            keys.iter().map(|k| k.value).collect::<ZeroVec<_>>(),
+        )
     }
     /// Constructs normalized linear interpolation from typed keyframes.
-    pub fn nlerp_keys(keys: impl Into<Values<'a, ValueKeyframe<T>>>) -> Result<Self, Error> {
-        let keys = keys.into();
-        Self::nlerp(keys.clone().map(|k| k.time), keys.map(|k| k.value))
+    pub fn nlerp_keys(keys: impl IntoIterator<Item = ValueKeyframe<T>>) -> Result<Self, Error> {
+        let keys: Vec<_> = keys.into_iter().collect();
+        Self::nlerp(
+            keys.iter().map(|k| k.time).collect::<ZeroVec<_>>(),
+            keys.iter().map(|k| k.value).collect::<ZeroVec<_>>(),
+        )
     }
 }
 impl<'a, T: SplineValue> Curve<'a, T> {
     /// Constructs a Hermite curve with derivatives in their mathematical domain.
     pub fn hermite(
-        times: impl Into<Values<'a, Time>>,
-        values: impl Into<Values<'a, T>>,
-        incoming: impl Into<Values<'a, T::Derivative>>,
-        outgoing: impl Into<Values<'a, T::Derivative>>,
+        times: impl IntoZeroVec<'a, Time>,
+        values: impl IntoZeroVec<'a, T>,
+        incoming: impl IntoZeroVec<'a, T::Derivative>,
+        outgoing: impl IntoZeroVec<'a, T::Derivative>,
     ) -> Result<Self, Error> {
         Self::checked(
-            times.into(),
-            values.into(),
+            times.into_zero_vec(),
+            values.into_zero_vec(),
             CurveShape::Hermite(HermiteDerivatives {
-                incoming: incoming.into(),
-                outgoing: outgoing.into(),
+                incoming: incoming.into_zero_vec(),
+                outgoing: outgoing.into_zero_vec(),
             }),
         )
     }
     /// Constructs a Bezier curve with component control points.
     pub fn bezier(
-        times: impl Into<Values<'a, Time>>,
-        values: impl Into<Values<'a, T>>,
-        incoming: impl Into<Values<'a, T::ControlPoint>>,
-        outgoing: impl Into<Values<'a, T::ControlPoint>>,
+        times: impl IntoZeroVec<'a, Time>,
+        values: impl IntoZeroVec<'a, T>,
+        incoming: impl IntoZeroVec<'a, T::ControlPoint>,
+        outgoing: impl IntoZeroVec<'a, T::ControlPoint>,
     ) -> Result<Self, Error> {
         Self::checked(
-            times.into(),
-            values.into(),
+            times.into_zero_vec(),
+            values.into_zero_vec(),
             CurveShape::Bezier(BezierControls {
-                incoming: incoming.into(),
-                outgoing: outgoing.into(),
+                incoming: incoming.into_zero_vec(),
+                outgoing: outgoing.into_zero_vec(),
             }),
         )
     }
     /// Constructs a TCB curve retaining its authored parameters.
     pub fn tcb(
-        times: impl Into<Values<'a, Time>>,
-        values: impl Into<Values<'a, T>>,
-        parameters: impl Into<Values<'a, TcbParameters>>,
+        times: impl IntoZeroVec<'a, Time>,
+        values: impl IntoZeroVec<'a, T>,
+        parameters: impl IntoZeroVec<'a, TcbParameters>,
     ) -> Result<Self, Error> {
         Self::checked(
-            times.into(),
-            values.into(),
-            CurveShape::Tcb(parameters.into()),
+            times.into_zero_vec(),
+            values.into_zero_vec(),
+            CurveShape::Tcb(parameters.into_zero_vec()),
         )
     }
     /// Constructs Hermite interpolation from typed keyframes.
-    pub fn hermite_keys(keys: impl Into<Values<'a, HermiteKeyframe<T>>>) -> Result<Self, Error> {
-        let keys = keys.into();
+    pub fn hermite_keys(keys: impl IntoIterator<Item = HermiteKeyframe<T>>) -> Result<Self, Error> {
+        let keys: Vec<_> = keys.into_iter().collect();
         Self::hermite(
-            keys.clone().map(|k| k.time),
-            keys.clone().map(|k| k.value),
-            keys.clone().map(|k| k.incoming),
-            keys.map(|k| k.outgoing),
+            keys.iter().map(|k| k.time).collect::<ZeroVec<_>>(),
+            keys.iter().map(|k| k.value).collect::<ZeroVec<_>>(),
+            keys.iter().map(|k| k.incoming).collect::<ZeroVec<_>>(),
+            keys.iter().map(|k| k.outgoing).collect::<ZeroVec<_>>(),
         )
     }
     /// Constructs Bezier interpolation from typed keyframes.
-    pub fn bezier_keys(keys: impl Into<Values<'a, BezierKeyframe<T>>>) -> Result<Self, Error> {
-        let keys = keys.into();
+    pub fn bezier_keys(keys: impl IntoIterator<Item = BezierKeyframe<T>>) -> Result<Self, Error> {
+        let keys: Vec<_> = keys.into_iter().collect();
         Self::bezier(
-            keys.clone().map(|k| k.time),
-            keys.clone().map(|k| k.value),
-            keys.clone().map(|k| k.incoming),
-            keys.map(|k| k.outgoing),
+            keys.iter().map(|k| k.time).collect::<ZeroVec<_>>(),
+            keys.iter().map(|k| k.value).collect::<ZeroVec<_>>(),
+            keys.iter().map(|k| k.incoming).collect::<ZeroVec<_>>(),
+            keys.iter().map(|k| k.outgoing).collect::<ZeroVec<_>>(),
         )
     }
     /// Constructs TCB interpolation from typed keyframes.
-    pub fn tcb_keys(keys: impl Into<Values<'a, TcbKeyframe<T>>>) -> Result<Self, Error> {
-        let keys = keys.into();
+    pub fn tcb_keys(keys: impl IntoIterator<Item = TcbKeyframe<T>>) -> Result<Self, Error> {
+        let keys: Vec<_> = keys.into_iter().collect();
         Self::tcb(
-            keys.clone().map(|k| k.time),
-            keys.clone().map(|k| k.value),
-            keys.map(|k| k.parameters),
+            keys.iter().map(|k| k.time).collect::<ZeroVec<_>>(),
+            keys.iter().map(|k| k.value).collect::<ZeroVec<_>>(),
+            keys.iter().map(|k| k.parameters).collect::<ZeroVec<_>>(),
         )
     }
 }

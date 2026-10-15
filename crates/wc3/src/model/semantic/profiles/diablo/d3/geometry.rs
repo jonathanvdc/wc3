@@ -1,4 +1,5 @@
 //! Diablo III vertex meanings retain their independent color and tangent streams.
+use crate::model::common::IntoZeroVec;
 use crate::model::semantic::geometry_edit::{check_edit, remap_values};
 use crate::model::semantic::geometry_schema::validate_geometry;
 use crate::model::semantic::vertex_geometry::{GeometryStreams, RemapStreams};
@@ -7,7 +8,7 @@ use crate::model::semantic::VertexData;
 use crate::model::semantic::{
     Attribute, AttributeDomain, AttributeSemantic, AttributeValues, Attributes, Error,
     GeometryData, GeometryInfluences, GeometryKind, GeometryParts, GeometrySchema, Influence,
-    InfluenceRows, Link, Topology, ValidateLinks, Values,
+    InfluenceRows, Link, Topology, ValidateLinks, ZeroVec,
 };
 use crate::model::semantic::{GeometryEdit, GeometryEditCapabilities, StreamSupport};
 
@@ -20,13 +21,13 @@ pub const DIRECTION_AUXILIARY_ATTRIBUTE: &str = "d3.direction_auxiliary";
 pub struct VertexExtras<'a> {
     /// Fourth packed bytes of the normal, tangent, and binormal, in that order.
     /// Their meaning is unresolved. An absent stream exports zero bytes.
-    pub direction_auxiliary: Values<'a, [u8; 3]>,
+    pub direction_auxiliary: ZeroVec<'a, [u8; 3]>,
     /// Independently authored auxiliary RGBA colors.
-    pub auxiliary_colors: Values<'a, [f32; 4]>,
+    pub auxiliary_colors: ZeroVec<'a, [f32; 4]>,
     /// Binormal vectors; no inferred handedness replaces this stream.
-    pub binormals: Values<'a, [f32; 3]>,
+    pub binormals: ZeroVec<'a, [f32; 3]>,
     /// Authored mapping to the subobject's cloth vertices.
-    pub cloth_vertices: Values<'a, u32>,
+    pub cloth_vertices: ZeroVec<'a, u32>,
 }
 impl RemapStreams for VertexExtras<'_> {
     fn remap_streams(&mut self, indices: &[u32]) {
@@ -46,10 +47,10 @@ impl RemapStreams for VertexExtras<'_> {
 /// ```
 pub type VertexStreams<'a> = VertexData<
     'a,
-    [Values<'a, [f32; 2]>; 2],
-    Values<'a, [f32; 3]>,
-    Values<'a, [f32; 4]>,
-    Values<'a, [f32; 3]>,
+    [ZeroVec<'a, [f32; 2]>; 2],
+    ZeroVec<'a, [f32; 3]>,
+    ZeroVec<'a, [f32; 4]>,
+    ZeroVec<'a, [f32; 3]>,
     VertexExtras<'a>,
 >;
 /// Diablo III triangle geometry with zero or three ordered skin contributions per vertex.
@@ -62,20 +63,20 @@ pub type VertexStreams<'a> = VertexData<
 /// ```
 #[derive(Clone, Debug, Default)]
 pub struct Geometry<'a> {
-    data: GeometryStreams<'a, VertexStreams<'a>, Values<'a, [Influence; 3]>>,
+    data: GeometryStreams<'a, VertexStreams<'a>, ZeroVec<'a, [Influence; 3]>>,
 }
 impl<'a> Geometry<'a> {
     /// Checks stream cardinalities, triangle indices, and ordered influence rows.
     pub fn new(
         streams: VertexStreams<'a>,
-        triangles: impl Into<Values<'a, [u32; 3]>>,
-        influences: impl Into<Values<'a, [Influence; 3]>>,
+        triangles: impl IntoZeroVec<'a, [u32; 3]>,
+        influences: impl IntoZeroVec<'a, [Influence; 3]>,
     ) -> Result<Self, Error> {
         let value = Self {
             data: GeometryStreams {
                 vertices: streams,
-                topology: Topology::Triangles(triangles.into()),
-                influences: influences.into(),
+                topology: Topology::Triangles(triangles.into_zero_vec()),
+                influences: influences.into_zero_vec(),
             },
         };
         value.validate()?;
@@ -92,7 +93,7 @@ impl<'a> Geometry<'a> {
         Ok(self)
     }
     /// Reads authored influence slots, preserving zero-weight contributions and their order.
-    pub fn influence_rows(&self) -> &Values<'a, [Influence; 3]> {
+    pub fn influence_rows(&self) -> &ZeroVec<'a, [Influence; 3]> {
         &self.data.influences
     }
 }
@@ -140,19 +141,19 @@ impl<'a> GeometrySchema<'a> for Geometry<'a> {
         Ok(result)
     }
 
-    fn positions(&self) -> &Values<'a, [f32; 3]> {
+    fn positions(&self) -> &ZeroVec<'a, [f32; 3]> {
         &self.data.vertices.positions
     }
-    fn normals(&self) -> Option<&Values<'a, [f32; 3]>> {
+    fn normals(&self) -> Option<&ZeroVec<'a, [f32; 3]>> {
         Some(&self.data.vertices.normals)
     }
-    fn tangents(&self) -> Option<&Values<'a, [f32; 4]>> {
+    fn tangents(&self) -> Option<&ZeroVec<'a, [f32; 4]>> {
         None
     }
     fn texture_coordinates(&self) -> TextureCoordinates<'_, 'a> {
         TextureCoordinates::Slice(&self.data.vertices.texture_coordinates)
     }
-    fn colors(&self) -> Option<&Values<'a, [f32; 4]>> {
+    fn colors(&self) -> Option<&ZeroVec<'a, [f32; 4]>> {
         Some(&self.data.vertices.colors)
     }
     fn attributes(&self) -> Attributes<'_, 'a> {
@@ -249,12 +250,12 @@ impl<'a> From<Geometry<'a>> for GeometryData<'a> {
         ]);
         GeometryParts {
             strip_set: false,
-            surface_triangles: Values::default(),
+            surface_triangles: ZeroVec::default(),
             pools: Default::default(),
             kind: GeometryKind::Display,
             positions: vertices.positions,
             normals: vertices.normals,
-            tangents: Values::default(),
+            tangents: ZeroVec::default(),
             colors: vertices.colors,
             texture_coordinates: Vec::from(vertices.texture_coordinates),
             attributes,
@@ -292,7 +293,7 @@ impl<'a> TryFrom<GeometryData<'a>> for Geometry<'a> {
             ));
         };
         let influences = match value.influences {
-            GeometryInfluences::None => Values::default(),
+            GeometryInfluences::None => ZeroVec::default(),
             GeometryInfluences::Three(rows) if !rows.is_empty() => rows,
             _ => {
                 return Err(Error::new(

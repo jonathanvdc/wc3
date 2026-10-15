@@ -27,3 +27,14 @@ impl Default for Quaternion {
         Self::IDENTITY
     }
 }
+
+use zerovec::ule::AsULE;
+impl AsULE for Quaternion {
+    type ULE = <[f32; 4] as AsULE>::ULE;
+    fn to_unaligned(self) -> Self::ULE {
+        self.0.to_unaligned()
+    }
+    fn from_unaligned(value: Self::ULE) -> Self {
+        Self(<[f32; 4]>::from_unaligned(value))
+    }
+}

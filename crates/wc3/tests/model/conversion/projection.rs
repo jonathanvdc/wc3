@@ -1,3 +1,4 @@
+use wc3::model::common::IntoZeroVec;
 use wc3::model::conversion::{geometry, Context, ExportOptions};
 use wc3::model::semantic::{
     Attribute, AttributeDomain, AttributeSemantic, AttributeValues, ConnectivitySets, Draw,
@@ -12,22 +13,25 @@ fn fixture() -> (Model<'static>, MeshId, InstanceId) {
     let second = draft.add_material(Material::pbr().named("second")).unwrap();
     let mesh = draft
         .add_mesh(Mesh::new(GeometryData {
-            positions: vec![[0., 0., 0.], [1., 0., 0.], [1., 1., 0.], [0., 1., 0.]].into(),
+            positions: vec![[0., 0., 0.], [1., 0., 0.], [1., 1., 0.], [0., 1., 0.]].into_zero_vec(),
             connectivity: ConnectivitySets::new(
-                Topology::Triangles(vec![[0, 1, 2], [0, 2, 3]].into()),
+                Topology::Triangles(vec![[0, 1, 2], [0, 2, 3]].into_zero_vec()),
                 Vec::new(),
             ),
             attributes: vec![
                 Attribute {
                     semantic: AttributeSemantic::Normal,
                     domain: AttributeDomain::Face,
-                    values: AttributeValues::Vector3(vec![[0., 0., 1.], [0., 1., 0.]].into()),
+                    values: AttributeValues::Vector3(
+                        vec![[0., 0., 1.], [0., 1., 0.]].into_zero_vec(),
+                    ),
                 },
                 Attribute {
                     semantic: AttributeSemantic::TexCoord(0),
                     domain: AttributeDomain::Corner,
                     values: AttributeValues::Vector2(
-                        vec![[0., 0.], [1., 0.], [1., 1.], [0.25, 0.], [1., 1.], [0., 1.]].into(),
+                        vec![[0., 0.], [1., 0.], [1., 1.], [0.25, 0.], [1., 1.], [0., 1.]]
+                            .into_zero_vec(),
                     ),
                 },
             ]
@@ -81,7 +85,7 @@ fn editing_a_corner_keeps_the_shared_vertex_and_other_corner_unchanged() {
             };
             let mut values = coordinates.to_vec();
             values[3] = [0.5, 0.];
-            *coordinates = values.into();
+            *coordinates = values.into_zero_vec();
         })
         .unwrap();
     model.edit(|draft| draft.set_mesh(mesh, edited)).unwrap();
@@ -108,7 +112,8 @@ fn invalid_source_topology_cannot_replace_published_geometry() {
     let (mut model, mesh, _) = fixture();
     let mut edited = model.mesh(mesh).unwrap().clone();
     let geometry = &mut edited.geometry;
-    geometry.connectivity.primary = Topology::Triangles(vec![[0, 1, 99], [0, 2, 3]].into());
+    geometry.connectivity.primary =
+        Topology::Triangles(vec![[0, 1, 99], [0, 2, 3]].into_zero_vec());
     assert!(model.edit(|draft| draft.set_mesh(mesh, edited)).is_err());
     assert_eq!(model.mesh(mesh).unwrap().positions().len(), 4);
 }
@@ -120,7 +125,7 @@ fn shared_vertex_edits_update_both_draw_projections() {
     let geometry = &mut edited.geometry;
     let mut positions = geometry.positions.to_vec();
     positions[0] = [7., 0., 0.];
-    geometry.positions = positions.into();
+    geometry.positions = positions.into_zero_vec();
     model.edit(|draft| draft.set_mesh(mesh, edited)).unwrap();
     let draws = geometry::project(
         &model,
@@ -140,7 +145,7 @@ fn face_attributes_override_vertex_attributes_during_native_projection() {
         .edit(|draft| {
             let mut edited = draft.model().mesh(mesh).unwrap().clone();
             let data = &mut edited.geometry;
-            data.set_normals(vec![[1., 0., 0.]; 4].into());
+            data.set_normals(vec![[1., 0., 0.]; 4].into_zero_vec());
             draft.set_mesh(mesh, edited)
         })
         .unwrap();

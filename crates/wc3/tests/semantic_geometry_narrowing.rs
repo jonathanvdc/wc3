@@ -1,9 +1,11 @@
+use wc3::model::common::{IntoZeroVec, ZeroVec};
 use wc3::model::semantic::profiles::{Extends, Mdlx, Narrows, Universal, M2, M3};
+use wc3::model::semantic::ValueGroups;
 use wc3::model::semantic::{
     Attribute, AttributeDomain, AttributeSemantic, AttributeValues, ConnectivitySets, GeometryData,
     GeometryEdit, GeometryInfluences, GeometryKind, GeometrySchema, Influence, InfluenceRows,
     JointInfluences, M2Geometry, M3CollisionGeometry, M3DisplayGeometry, M3Geometry, MdlxGeometry,
-    Topology, Values,
+    Topology,
 };
 
 fn four() -> [Influence; 4] {
@@ -28,19 +30,28 @@ fn four() -> [Influence; 4] {
 }
 
 #[test]
-fn shared_vertices_narrow_across_profiles_without_changing_borrowed_streams() {
+fn shared_vertices_narrow_across_profiles_without_changing_borrowed_buffers() {
     let positions = [[0., 0., 0.], [1., 0., 0.], [0., 1., 0.]];
     let normals = [[0., 0., 1.]; 3];
     let uv0 = [[0., 0.], [1., 0.], [0., 1.]];
     let uv1 = [[0.2, 0.3]; 3];
     let triangles = [[0, 1, 2]];
     let influences = [four(); 3];
+    let encoded_positions = ZeroVec::alloc_from_slice(&positions);
+    let encoded_normals = ZeroVec::alloc_from_slice(&normals);
+    let encoded_uv0 = ZeroVec::alloc_from_slice(&uv0);
+    let encoded_uv1 = ZeroVec::alloc_from_slice(&uv1);
+    let encoded_triangles = ZeroVec::alloc_from_slice(&triangles);
+    let encoded_influences = ZeroVec::alloc_from_slice(&influences);
     let source = M2Geometry::new(
-        &positions[..],
-        &normals[..],
-        [&uv0[..], &uv1[..]].map(Values::from_slice),
-        &triangles[..],
-        &influences[..],
+        encoded_positions.as_slice().as_zerovec(),
+        encoded_normals.as_slice().as_zerovec(),
+        [
+            encoded_uv0.as_slice().as_zerovec(),
+            encoded_uv1.as_slice().as_zerovec(),
+        ],
+        encoded_triangles.as_slice().as_zerovec(),
+        encoded_influences.as_slice().as_zerovec(),
     )
     .unwrap();
     let widened = <Universal as Extends<M2>>::geometry(source);
@@ -48,52 +59,39 @@ fn shared_vertices_narrow_across_profiles_without_changing_borrowed_streams() {
     let mdlx = <Mdlx as Narrows<Universal>>::geometry(widened.clone()).unwrap();
     let m3 = <M3 as Narrows<Universal>>::geometry(widened).unwrap();
     for geometry in [GeometryData::from(mdlx), GeometryData::from(m3)] {
+        assert!(!geometry.positions().is_owned());
         assert_eq!(
-            geometry.positions().as_slice().unwrap().as_ptr(),
-            positions.as_ptr()
+            geometry.positions().as_bytes().as_ptr(),
+            encoded_positions.as_bytes().as_ptr()
         );
-        assert_eq!(
-            geometry.normals().unwrap().as_slice().unwrap().as_ptr(),
-            normals.as_ptr()
-        );
-        assert_eq!(
-            geometry.texture_coordinates()[0]
-                .as_slice()
-                .unwrap()
-                .as_ptr(),
-            uv0.as_ptr()
-        );
-        assert_eq!(
-            geometry.texture_coordinates()[1]
-                .as_slice()
-                .unwrap()
-                .as_ptr(),
-            uv1.as_ptr()
-        );
+        assert_eq!(geometry.positions().to_vec(), positions);
+        assert_eq!(geometry.normals().unwrap().to_vec(), normals);
+        assert_eq!(geometry.texture_coordinates()[0].to_vec(), uv0);
+        assert_eq!(geometry.texture_coordinates()[1].to_vec(), uv1);
         let InfluenceRows::Four(rows) = geometry.influences() else {
             panic!("slot representation changed")
         };
-        assert_eq!(rows.as_slice().unwrap().as_ptr(), influences.as_ptr());
+        assert_eq!(rows.to_vec(), influences);
         assert_eq!(rows.get(0), Some(four()));
         let Topology::Triangles(rows) = geometry.topology() else {
             panic!("topology changed")
         };
-        assert_eq!(rows.as_slice().unwrap().as_ptr(), triangles.as_ptr());
+        assert_eq!(rows.to_vec(), triangles);
         let restored = <M2 as Narrows<Universal>>::geometry(geometry).unwrap();
         assert_eq!(restored.influences().joint_weights(0).unwrap(), four());
     }
 }
 
 #[test]
-fn owned_and_projected_storage_survives_geometry_projection() {
-    let positions: Values<'static, [f32; 3]> = vec![[1., 2., 3.]].into();
-    let pointer = positions.as_slice().unwrap().as_ptr();
-    let normals = Values::owned(vec![[0., 0., 1.]]).map(|value| value);
+fn owned_encoded_storage_survives_geometry_projection() {
+    let positions: ZeroVec<'static, [f32; 3]> = vec![[1., 2., 3.]].into_zero_vec();
+    let pointer = positions.as_bytes().as_ptr();
+    let normals = (vec![[0., 0., 1.]]).into_zero_vec();
     let source = M3Geometry::new(positions, normals, Vec::<[u32; 3]>::new(), vec![four()]).unwrap();
     let widened = <Universal as Extends<M3>>::geometry(source);
     let restored = <Mdlx as Narrows<Universal>>::geometry(widened).unwrap();
-    assert_eq!(restored.positions().as_slice().unwrap().as_ptr(), pointer);
-    assert!(restored.normals().unwrap().as_slice().is_none());
+    assert_eq!(restored.positions().as_bytes().as_ptr(), pointer);
+    assert!(restored.normals().unwrap().is_owned());
     assert_eq!(restored.normals().unwrap().get(0), Some([0., 0., 1.]));
 }
 
@@ -102,7 +100,9 @@ fn matrix_groups_keep_equal_weight_semantics_and_reject_weighted_only_profiles()
     let groups = [vec![8, 2, 19, 6, 5]];
     let source = MdlxGeometry::triangles(vec![[0.; 3]], Vec::<[u32; 3]>::new())
         .unwrap()
-        .with_influences(JointInfluences::MatrixGroups(Values::from_slice(&groups)))
+        .with_influences(JointInfluences::MatrixGroups(ValueGroups::from_rows(
+            groups.iter().cloned(),
+        )))
         .unwrap();
     let widened = <Universal as Extends<Mdlx>>::geometry(source);
     assert!(<M2 as Narrows<Universal>>::geometry(widened.clone()).is_err());
@@ -111,7 +111,7 @@ fn matrix_groups_keep_equal_weight_semantics_and_reject_weighted_only_profiles()
     let JointInfluences::MatrixGroups(rows) = restored.vertex_influences() else {
         panic!("matrix groups changed")
     };
-    assert_eq!(rows.as_slice().unwrap().as_ptr(), groups.as_ptr());
+    assert_eq!(rows.to_vec(), groups);
     assert_eq!(
         restored.influences().joint_weights(0).unwrap()[0].weight,
         0.2
@@ -130,7 +130,7 @@ fn target_restrictions_reject_streams_instead_of_dropping_or_fabricating_them() 
         .unwrap()
     };
     let two_uv = make()
-        .with_texture_coordinates(vec![vec![[0.; 2]].into(); 2])
+        .with_texture_coordinates(vec![vec![[0.; 2]].into_zero_vec(); 2])
         .unwrap();
     assert!(M2Geometry::try_from(GeometryData::from(two_uv.clone())).is_ok());
     let colors = two_uv.clone().with_colors(vec![[1.; 4]]).unwrap();
@@ -141,14 +141,14 @@ fn target_restrictions_reject_streams_instead_of_dropping_or_fabricating_them() 
     assert!(MdlxGeometry::try_from(GeometryData::from(tangents)).is_ok());
     assert!(M2Geometry::try_from(GeometryData::from(make())).is_err());
     let sparse = make()
-        .with_texture_coordinates(vec![Values::default(), vec![[1.; 2]].into()])
+        .with_texture_coordinates(vec![ZeroVec::default(), vec![[1.; 2]].into_zero_vec()])
         .unwrap();
     assert!(M3DisplayGeometry::try_from(GeometryData::from(sparse.clone())).is_ok());
     assert!(M2Geometry::try_from(GeometryData::from(sparse.clone())).is_err());
     assert!(MdlxGeometry::try_from(GeometryData::from(sparse)).is_err());
     let no_normals = MdlxGeometry::triangles(vec![[0.; 3]], Vec::<[u32; 3]>::new())
         .unwrap()
-        .with_influences(JointInfluences::Four(vec![four()].into()))
+        .with_influences(JointInfluences::Four(vec![four()].into_zero_vec()))
         .unwrap();
     assert!(M3DisplayGeometry::try_from(GeometryData::from(no_normals)).is_err());
     let no_skin = GeometryData::triangles(vec![[0.; 3]], Vec::<[u32; 3]>::new()).unwrap();
@@ -159,7 +159,10 @@ fn target_restrictions_reject_streams_instead_of_dropping_or_fabricating_them() 
 fn grouping_and_collision_remain_distinct_from_single_display_topology() {
     let groups = MdlxGeometry::triangle_groups(
         vec![[0.; 3]],
-        vec![vec![[0, 0, 0]].into(), Vec::<[u32; 3]>::new().into()],
+        vec![
+            vec![[0, 0, 0]].into_zero_vec(),
+            Vec::<[u32; 3]>::new().into_zero_vec(),
+        ],
     )
     .unwrap();
     let universal: GeometryData<'_> = groups.into();
@@ -197,7 +200,7 @@ fn general_geometry_projects_only_when_its_full_domain_is_supported() {
         .insert(Attribute {
             semantic: AttributeSemantic::Named("custom".into()),
             domain: AttributeDomain::Vertex,
-            values: AttributeValues::Unsigned(vec![23].into()),
+            values: AttributeValues::Unsigned(vec![23].into_zero_vec()),
         })
         .unwrap();
     assert!(<Mdlx as Narrows<Universal>>::geometry(general).is_err());
@@ -217,13 +220,13 @@ fn universal_edits_may_expand_capabilities_but_narrowing_checks_the_result() {
     let source = M2Geometry::new(
         vec![[0.; 3]],
         vec![[0., 0., 1.]],
-        [vec![[0.; 2]].into(), vec![[0.; 2]].into()],
+        [vec![[0.; 2]].into_zero_vec(), vec![[0.; 2]].into_zero_vec()],
         Vec::<[u32; 3]>::new(),
         vec![four()],
     )
     .unwrap();
     let edit = GeometryEdit {
-        tangents: Some(vec![[1., 0., 0., 1.]].into()),
+        tangents: Some(vec![[1., 0., 0., 1.]].into_zero_vec()),
         ..Default::default()
     };
     assert!(source.edited(edit.clone()).is_err());
@@ -243,7 +246,10 @@ fn shared_data_can_keep_custom_attributes_and_fixed_slots_together() {
         M2Geometry::new(
             &positions[..],
             &normals[..],
-            [Values::from_slice(&uv), Values::from_slice(&uv)],
+            [
+                ZeroVec::alloc_from_slice(&uv),
+                ZeroVec::alloc_from_slice(&uv),
+            ],
             vec![[0, 1, 2]],
             &rows[..],
         )
@@ -253,7 +259,7 @@ fn shared_data_can_keep_custom_attributes_and_fixed_slots_together() {
         .insert(Attribute {
             semantic: AttributeSemantic::Named("custom".into()),
             domain: AttributeDomain::Vertex,
-            values: AttributeValues::Unsigned(Values::from_slice(&custom)),
+            values: AttributeValues::Unsigned(ZeroVec::alloc_from_slice(&custom)),
         })
         .unwrap();
     let universal = data;
@@ -265,7 +271,7 @@ fn shared_data_can_keep_custom_attributes_and_fixed_slots_together() {
     let GeometryInfluences::Four(values) = &data.influences else {
         panic!("slot domain lost")
     };
-    assert_eq!(values.as_slice().unwrap().as_ptr(), rows.as_ptr());
+    assert_eq!(values.to_vec(), rows);
     let AttributeValues::Unsigned(values) = &data
         .attributes
         .get(
@@ -277,7 +283,7 @@ fn shared_data_can_keep_custom_attributes_and_fixed_slots_together() {
     else {
         unreachable!()
     };
-    assert_eq!(values.as_slice().unwrap().as_ptr(), custom.as_ptr());
+    assert_eq!(values.to_vec(), custom);
     data.attributes.take(
         &AttributeSemantic::Named("custom".into()),
         AttributeDomain::Vertex,
@@ -286,7 +292,7 @@ fn shared_data_can_keep_custom_attributes_and_fixed_slots_together() {
     let InfluenceRows::Four(values) = restored.influences() else {
         unreachable!()
     };
-    assert_eq!(values.as_slice().unwrap().as_ptr(), rows.as_ptr());
+    assert_eq!(values.to_vec(), rows);
 }
 
 #[test]
@@ -309,21 +315,21 @@ fn remapping_keeps_each_influence_domain_and_custom_attribute_correspondence() {
     let custom = [10u32, 20, 30];
     for influences in [
         GeometryInfluences::None,
-        GeometryInfluences::Variable(Values::from_slice(&variable)),
-        GeometryInfluences::Three(Values::from_slice(&three)),
-        GeometryInfluences::Four(Values::from_slice(&four)),
-        GeometryInfluences::MatrixGroups(Values::from_slice(&groups)),
+        GeometryInfluences::Variable(ValueGroups::from_rows(variable)),
+        GeometryInfluences::Three(ZeroVec::alloc_from_slice(&three)),
+        GeometryInfluences::Four(ZeroVec::alloc_from_slice(&four)),
+        GeometryInfluences::MatrixGroups(ValueGroups::from_rows(groups)),
     ] {
         let data = GeometryData {
-            positions: Values::from_slice(&positions),
+            positions: ZeroVec::alloc_from_slice(&positions),
             connectivity: ConnectivitySets::new(
-                Topology::Triangles(vec![[0, 1, 2]].into()),
+                Topology::Triangles(vec![[0, 1, 2]].into_zero_vec()),
                 Vec::new(),
             ),
             attributes: vec![Attribute {
                 semantic: AttributeSemantic::Named("custom".into()),
                 domain: AttributeDomain::Vertex,
-                values: AttributeValues::Unsigned(Values::from_slice(&custom)),
+                values: AttributeValues::Unsigned(ZeroVec::alloc_from_slice(&custom)),
             }]
             .try_into()
             .unwrap(),
@@ -334,7 +340,7 @@ fn remapping_keeps_each_influence_domain_and_custom_attribute_correspondence() {
             .edited(GeometryEdit {
                 remap: Some(VertexRemap {
                     new_to_old: vec![2, 0, 1, 0],
-                    topology: Topology::Triangles(vec![[3, 2, 0]].into()),
+                    topology: Topology::Triangles(vec![[3, 2, 0]].into_zero_vec()),
                 }),
                 ..Default::default()
             })
@@ -363,13 +369,17 @@ fn narrowing_does_not_relabel_variable_width_rows_as_fixed_slots() {
         M2Geometry::new(
             vec![[0.; 3]; 3],
             vec![[0., 0., 1.]; 3],
-            [vec![[0.; 2]; 3].into(), vec![[0.; 2]; 3].into()],
+            [
+                vec![[0.; 2]; 3].into_zero_vec(),
+                vec![[0.; 2]; 3].into_zero_vec(),
+            ],
             vec![[0, 1, 2]],
             &rows[..],
         )
         .unwrap(),
     );
-    data.influences = GeometryInfluences::Variable(vec![four().to_vec(); 3].into());
+    data.influences =
+        GeometryInfluences::Variable(ValueGroups::from_rows(vec![four().to_vec(); 3]));
     assert!(M2Geometry::try_from(data.clone()).is_err());
     assert!(MdlxGeometry::try_from(data.clone()).is_err());
     assert!(M3DisplayGeometry::try_from(data).is_err());
@@ -394,52 +404,22 @@ fn collision_purpose_and_face_streams_survive_shared_storage() {
     let data = GeometryData::from(original);
     assert_eq!(data.kind(), GeometryKind::Collision);
     let restored = M3CollisionGeometry::try_from(data.clone()).unwrap();
-    assert_eq!(
-        restored.positions().as_slice().unwrap().as_ptr(),
-        positions.as_ptr()
-    );
-    assert_eq!(
-        restored
-            .face_normals()
-            .unwrap()
-            .as_slice()
-            .unwrap()
-            .as_ptr(),
-        normals.as_ptr()
-    );
-    assert_eq!(
-        restored
-            .triangle_controls()
-            .unwrap()
-            .as_slice()
-            .unwrap()
-            .as_ptr(),
-        controls.as_ptr()
-    );
+    assert_eq!(restored.positions().to_vec(), positions);
+    assert_eq!(restored.face_normals().unwrap().to_vec(), normals);
+    assert_eq!(restored.triangle_controls().unwrap().to_vec(), controls);
     let mapped = data
         .edited(GeometryEdit {
             remap: Some(VertexRemap {
                 new_to_old: vec![2, 0, 1, 0],
-                topology: Topology::Triangles(vec![[3, 2, 0]].into()),
+                topology: Topology::Triangles(vec![[3, 2, 0]].into_zero_vec()),
             }),
             ..Default::default()
         })
         .unwrap();
     assert_eq!(mapped.kind(), GeometryKind::Collision);
     let mapped = M3CollisionGeometry::try_from(mapped).unwrap();
-    assert_eq!(
-        mapped.face_normals().unwrap().as_slice().unwrap().as_ptr(),
-        normals.as_ptr()
-    );
-    assert_eq!(
-        mapped
-            .triangle_controls()
-            .unwrap()
-            .as_slice()
-            .unwrap()
-            .as_ptr(),
-        controls.as_ptr()
-    );
+    assert_eq!(mapped.face_normals().unwrap().to_vec(), normals);
+    assert_eq!(mapped.triangle_controls().unwrap().to_vec(), controls);
     let mut duplicate = data.clone();
     assert!(duplicate
         .attributes
@@ -449,7 +429,7 @@ fn collision_purpose_and_face_streams_survive_shared_storage() {
     assert!(wrong_type
         .attributes
         .update(0, |attribute| attribute.values =
-            AttributeValues::Scalar(vec![1.].into()))
+            AttributeValues::Scalar(vec![1.].into_zero_vec()))
         .is_err());
     let mut wrong_domain = data.clone();
     wrong_domain
@@ -458,26 +438,26 @@ fn collision_purpose_and_face_streams_survive_shared_storage() {
         .unwrap();
     assert!(M3CollisionGeometry::try_from(wrong_domain).is_err());
     let mut shading = data.clone();
-    shading.set_normals(vec![[0., 0., 1.]; 3].into());
+    shading.set_normals(vec![[0., 0., 1.]; 3].into_zero_vec());
     assert!(M3CollisionGeometry::try_from(shading).is_err());
     let mut skinning = data.clone();
-    skinning.influences = GeometryInfluences::Four(vec![four(); 3].into());
+    skinning.influences = GeometryInfluences::Four(vec![four(); 3].into_zero_vec());
     assert!(M3CollisionGeometry::try_from(skinning).is_err());
     let mut display = data;
     display.kind = GeometryKind::Display;
     assert!(M3CollisionGeometry::try_from(display).is_err());
 
     for topology in [
-        Topology::Points(vec![0, 1, 2].into()),
+        Topology::Points(vec![0, 1, 2].into_zero_vec()),
         Topology::Polygons {
-            corners: vec![0, 1, 2].into(),
-            offsets: vec![0, 3].into(),
+            corners: vec![0, 1, 2].into_zero_vec(),
+            offsets: vec![0, 3].into_zero_vec(),
         },
-        Topology::Triangles(vec![[0, 1, 2]].into()),
+        Topology::Triangles(vec![[0, 1, 2]].into_zero_vec()),
     ] {
         let data = GeometryData {
             kind: GeometryKind::Collision,
-            positions: Values::from_slice(&positions),
+            positions: ZeroVec::alloc_from_slice(&positions),
             connectivity: ConnectivitySets::new(topology, Vec::new()),
             ..Default::default()
         };

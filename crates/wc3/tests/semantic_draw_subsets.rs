@@ -1,3 +1,4 @@
+use wc3::model::common::IntoZeroVec;
 use wc3::model::conversion::{geometry, Context, ExportOptions};
 use wc3::model::semantic::{
     Attribute, AttributeDomain, AttributeSemantic, AttributeValues, Draw, DrawSubset, Material,
@@ -64,7 +65,7 @@ fn strip_selections_use_their_own_faces_and_explicit_index_counting() {
     let material = builder.add_material(Material::pbr()).unwrap();
     let mut source = mesh();
     let strip = source
-        .add_connectivity(Topology::TriangleStrip(vec![0, 1, 2, 3].into()))
+        .add_connectivity(Topology::TriangleStrip(vec![0, 1, 2, 3].into_zero_vec()))
         .unwrap();
     let subset = source.add_subset(DrawSubset::new(PrimitiveSelection {
         connectivity: strip,
@@ -75,7 +76,7 @@ fn strip_selections_use_their_own_faces_and_explicit_index_counting() {
         .insert(Attribute {
             semantic: AttributeSemantic::Normal,
             domain: AttributeDomain::ConnectivityFace(strip),
-            values: AttributeValues::Vector3(vec![[0., 0., 1.], [0., 0., -1.]].into()),
+            values: AttributeValues::Vector3(vec![[0., 0., 1.], [0., 0., -1.]].into_zero_vec()),
         })
         .unwrap();
     let mesh = builder.add_mesh(source).unwrap();
@@ -150,7 +151,7 @@ fn range_domains_and_connectivity_attribute_cardinality_are_checked() {
         .insert(Attribute {
             semantic: AttributeSemantic::Normal,
             domain: AttributeDomain::ConnectivityFace(connectivity),
-            values: AttributeValues::Vector3(vec![[0.; 3]].into()),
+            values: AttributeValues::Vector3(vec![[0.; 3]].into_zero_vec()),
         })
         .unwrap();
     builder.add_mesh(source).unwrap();

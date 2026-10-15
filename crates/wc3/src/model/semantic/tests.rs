@@ -1,6 +1,6 @@
 use crate::model::common::Borrowed as _;
 use crate::model::semantic::*;
-
+use zerovec::ZeroVec;
 #[test]
 fn foreign_graph_handles_are_rejected() {
     let mut first = ModelBuilder::new("first");
@@ -34,31 +34,25 @@ fn forward_parents_are_resolved_and_cycles_rejected() {
 
 #[test]
 fn borrowing_survives_graph_construction_and_clone() {
-    let positions = [[0., 0., 0.], [1., 0., 0.], [0., 1., 0.]];
+    let positions = ZeroVec::alloc_from_slice(&[[0., 0., 0.], [1., 0., 0.], [0., 1., 0.]]);
     let faces = [[0, 1, 2]];
     let mut builder = ModelBuilder::new("triangle");
     let id = builder
-        .add_mesh(Mesh::triangles(positions.as_slice(), faces.as_slice()))
+        .add_mesh(Mesh::triangles(positions.as_borrowed(), faces.as_slice()))
         .unwrap();
     let graph = builder.finish().unwrap();
     let clone = graph.clone();
     assert_eq!(
-        clone
-            .mesh(id)
-            .unwrap()
-            .positions()
-            .as_slice()
-            .unwrap()
-            .as_ptr(),
-        positions.as_ptr()
+        clone.mesh(id).unwrap().positions().as_bytes().as_ptr(),
+        positions.as_bytes().as_ptr()
     );
 }
 
 #[test]
 fn owned_array_detachment_shares_storage() {
-    let values = Values::owned(vec![1u32, 2, 3]);
-    let pointer = values.as_slice().unwrap().as_ptr();
-    assert_eq!(values.into_owned().as_slice().unwrap().as_ptr(), pointer);
+    let values = ZeroVec::alloc_from_slice(&[1u32, 2, 3]);
+    let pointer = values.as_bytes().as_ptr();
+    assert_eq!(values.into_owned().as_bytes().as_ptr(), pointer);
 }
 
 #[test]
@@ -175,10 +169,10 @@ fn complete_material_looks_resolve_independently() {
 #[test]
 fn typed_vocabulary_widening_preserves_ids_and_borrowed_storage() {
     use crate::model::semantic::profiles::{Either, Mdlx, Union, Universal, M2};
-    let positions = [[0., 0., 0.], [1., 0., 0.], [0., 1., 0.]];
+    let positions = ZeroVec::alloc_from_slice(&[[0., 0., 0.], [1., 0., 0.], [0., 1., 0.]]);
     let faces = [[0, 1, 2]];
     let mut builder = ModelBuilder::<Mdlx>::with_profile("typed triangle");
-    let geometry = MdlxGeometry::triangles(positions.as_slice(), faces.as_slice()).unwrap();
+    let geometry = MdlxGeometry::triangles(positions.as_borrowed(), faces.as_slice()).unwrap();
     let mesh = builder.add_mesh(Mesh::new(geometry)).unwrap();
     let material = builder
         .add_material(Material::<Mdlx> {
@@ -193,14 +187,8 @@ fn typed_vocabulary_widening_preserves_ids_and_borrowed_storage() {
         Either::Left(_)
     ));
     assert_eq!(
-        union
-            .mesh(mesh)
-            .unwrap()
-            .positions()
-            .as_slice()
-            .unwrap()
-            .as_ptr(),
-        positions.as_ptr()
+        union.mesh(mesh).unwrap().positions().as_bytes().as_ptr(),
+        positions.as_bytes().as_ptr()
     );
     let universal = union.widen::<Universal>();
     assert!(matches!(
@@ -212,10 +200,9 @@ fn typed_vocabulary_widening_preserves_ids_and_borrowed_storage() {
             .mesh(mesh)
             .unwrap()
             .positions()
-            .as_slice()
-            .unwrap()
+            .as_bytes()
             .as_ptr(),
-        positions.as_ptr()
+        positions.as_bytes().as_ptr()
     );
 }
 
@@ -223,19 +210,11 @@ fn typed_vocabulary_widening_preserves_ids_and_borrowed_storage() {
 fn canonical_packed_arrays_can_be_exported_without_copying() {
     use zerovec::ZeroVec;
     let packed = ZeroVec::alloc_from_slice(&[1u32, 2, 3]);
-    let values = Values::from_zero_vec(packed.as_borrowed());
+    let values = packed.as_borrowed();
     assert_eq!(values.get(1), Some(2));
+    assert_eq!(values.as_bytes().as_ptr(), packed.as_bytes().as_ptr());
     assert_eq!(
-        values.as_zero_vec().unwrap().as_bytes().as_ptr(),
-        packed.as_bytes().as_ptr()
-    );
-    assert_eq!(
-        values
-            .as_borrowed()
-            .as_zero_vec()
-            .unwrap()
-            .as_bytes()
-            .as_ptr(),
+        values.as_borrowed().as_bytes().as_ptr(),
         packed.as_bytes().as_ptr()
     );
 }
@@ -354,15 +333,15 @@ fn native_single_appearance_cannot_publish_alternative_looks() {
 
 #[test]
 fn tcb_curves_preserve_authoring_parameters_and_check_cardinality() {
-    let parameters = [TcbParameters {
+    let parameters = ZeroVec::alloc_from_slice(&[TcbParameters {
         tension: 0.3,
         continuity: -0.2,
         bias: 0.1,
-    }];
-    let curve = Curve::tcb([Time::default()], [1f32], &parameters[..]).unwrap();
+    }]);
+    let curve = Curve::tcb([Time::default()], [1f32], parameters.as_borrowed()).unwrap();
     assert_eq!(curve.interpolation(), Interpolation::Tcb);
-    assert!(curve.tcb_parameters().unwrap().is_borrowed());
-    assert_eq!(curve.tcb_parameters().unwrap().get(0), Some(parameters[0]));
+    assert!(curve.tcb_parameters().unwrap().is_owned() == false);
+    assert_eq!(curve.tcb_parameters().unwrap().get(0), parameters.get(0));
     assert!(Curve::tcb([Time::default()], [1f32], Vec::<TcbParameters>::new()).is_err());
     assert!(Curve::from_samples([Time::default()], [1f32], Interpolation::Tcb).is_err());
 }

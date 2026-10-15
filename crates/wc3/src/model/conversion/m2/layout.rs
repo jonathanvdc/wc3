@@ -1,5 +1,6 @@
 //! Static target dialect capabilities and version-selected field families.
 use super::*;
+use zerovec::ZeroVec;
 
 /// Native skin placement selected by the target core layout.
 ///

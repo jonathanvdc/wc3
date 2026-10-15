@@ -1,14 +1,15 @@
 //! Animation resources bind by authored bone names, with permutation-local seconds.
 use super::{i32_count, name, native, text, text_owned};
+use crate::model::conversion::materialize;
 use crate::model::conversion::{Context, Error, ExportOptions};
 use crate::model::diablo::d3::{Animation, V118};
 use crate::model::semantic::profiles::diablo::d3::ClipControls;
 use crate::model::semantic::profiles::diablo::d3::{NodeRole, D3};
 use crate::model::semantic::Model;
+use crate::model::semantic::Quaternion;
 use crate::model::semantic::{
     Channel, Clip, Clock, Curve, Interpolation, PropertyTarget, Time, Track,
 };
-use crate::model::semantic::{Quaternion, Values};
 use std::collections::BTreeMap;
 use zerovec::ZeroVec;
 pub(super) fn read<'a>(
@@ -131,10 +132,10 @@ pub(super) fn read<'a>(
             for (i, &node) in nodes.iter().enumerate() {
                 let keys = &p.translation_curves[i].keys;
                 if !keys.is_empty() {
-                    let times = Values::view(keys.len(), move |k| {
+                    let times = materialize(keys.len(), move |k| {
                         Time::seconds(f64::from(keys.get(k).unwrap().frame) / fps).unwrap()
                     });
-                    let values = Values::view(keys.len(), move |k| keys.get(k).unwrap().position);
+                    let values = materialize(keys.len(), move |k| keys.get(k).unwrap().position);
                     channels.push(Channel::Vector3(Track {
                         target: node.translation(),
                         curve: Curve::linear(times, values)?,
@@ -143,10 +144,10 @@ pub(super) fn read<'a>(
                 }
                 let keys = &p.rotation_curves[i].keys;
                 if !keys.is_empty() {
-                    let times = Values::view(keys.len(), move |k| {
+                    let times = materialize(keys.len(), move |k| {
                         Time::seconds(f64::from(keys.get(k).unwrap().frame) / fps).unwrap()
                     });
-                    let values = Values::view(keys.len(), move |k| {
+                    let values = materialize(keys.len(), move |k| {
                         Quaternion(keys.get(k).unwrap().rotation.components())
                     });
                     channels.push(Channel::Rotation(Track {
@@ -157,10 +158,10 @@ pub(super) fn read<'a>(
                 }
                 let keys = &p.scale_curves[i].keys;
                 if !keys.is_empty() {
-                    let times = Values::view(keys.len(), move |k| {
+                    let times = materialize(keys.len(), move |k| {
                         Time::seconds(f64::from(keys.get(k).unwrap().frame) / fps).unwrap()
                     });
-                    let values = Values::view(keys.len(), move |k| [keys.get(k).unwrap().scale; 3]);
+                    let values = materialize(keys.len(), move |k| [keys.get(k).unwrap().scale; 3]);
                     channels.push(Channel::Vector3(Track {
                         target: node.scale(),
                         curve: Curve::linear(times, values)?,

@@ -4,10 +4,10 @@ use crate::model::conversion::Error;
 use crate::model::m3::{self as native, records as nr};
 use crate::model::semantic::{
     profiles::m3 as surface, Clock, ControllerId, Event, EventId, FeatureId, Node, NodeId, Time,
-    Values,
 };
 use native::Envelope;
 use std::collections::BTreeMap;
+use zerovec::ZeroVec;
 pub(super) type Cache = BTreeMap<(u32, u32), FeatureId>;
 trait OptionalWord {
     fn optional(self) -> Option<u32>;
@@ -104,7 +104,7 @@ pub(super) fn read<'a, E: Envelope>(
                         name: name.into(),
                         node: anchor,
                         feature: Some(feature),
-                        payload: Values::default(),
+                        payload: ZeroVec::new(),
                     },
                 )?;
                 features.push(occurrence);

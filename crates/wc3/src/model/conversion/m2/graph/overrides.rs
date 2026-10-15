@@ -1,5 +1,7 @@
 //! Sparse customization transforms are logical bone bindings, not saved encoded files.
 use super::*;
+use crate::model::conversion::materialize;
+use zerovec::ZeroVec;
 pub(super) fn import<'a, 'data: 'a, D: Dialect>(
     source: &'a Bundle<'data, D>,
     nodes: &[semantic::NodeId],
@@ -26,7 +28,7 @@ pub(super) fn import<'a, 'data: 'a, D: Dialect>(
                             .ok_or_else(|| Error::new("m2.bone_override", "missing bone"))
                     })
                     .collect::<Result<_, _>>()?,
-                transforms: Values::view(file.matrices.len(), move |i| {
+                transforms: materialize(file.matrices.len(), move |i| {
                     std::array::from_fn(|row| {
                         std::array::from_fn(|column| file.matrices[i].values[row * 4 + column])
                     })

@@ -1,21 +1,23 @@
 //! Native skeleton fields become graph nodes and independently typed bone controls.
 use super::bindings::Bindings;
 use super::materials::{anim, read_error, string};
+use crate::model::conversion::materialize;
 use crate::model::conversion::Error;
+use zerovec::ZeroVec;
 
 use crate::model::conversion::m3::logical::GraphBuilder;
 use crate::model::m3::{self as native, records as nr};
 use crate::model::semantic::ExplicitBinding;
 use crate::model::semantic::{
     profiles::m3 as surface, Billboard, Inheritance, Node, NodeId, Property, Quaternion, Skin,
-    Transform, Values,
+    Transform,
 };
 use native::Envelope;
 use std::array::from_fn;
 
 pub(super) struct Skeleton<'a> {
     pub nodes: Vec<NodeId>,
-    pub inverse_bind: Values<'a, [[f32; 4]; 4]>,
+    pub inverse_bind: ZeroVec<'a, [[f32; 4]; 4]>,
 }
 fn control<T>(value: surface::Property<T>, binding: Property<T>) -> surface::PropertyControl<T> {
     surface::PropertyControl {
@@ -136,7 +138,7 @@ pub(super) fn read<'a, E: Envelope>(
     let array = document
         .resolve::<nr::InitialReference>(initial.cast())
         .map_err(read_error)?;
-    // Validate once so the lazy field view remains infallible after publication.
+    // Validate source records before projecting them into the semantic array.
     for item in array.iter() {
         item.map_err(read_error)?;
     }
@@ -145,7 +147,7 @@ pub(super) fn read<'a, E: Envelope>(
         .referenced_section(initial)
         .map_err(read_error)?
         .map_or(&[][..], |section| section.bytes());
-    let inverse_bind = Values::view(count, move |index| {
+    let inverse_bind = materialize(count, move |index| {
         from_fn(|column| {
             from_fn(|row| {
                 let offset = index * 64 + (column * 4 + row) * 4;

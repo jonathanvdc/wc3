@@ -1,22 +1,26 @@
+use wc3::model::common::{IntoZeroVec, ZeroVec};
 use wc3::model::semantic::profiles::diablo::d3::{
     self, Geometry, NodeRole, VertexExtras, VertexStreams, D3,
 };
 use wc3::model::semantic::profiles::{NoControls, Universal};
-use wc3::model::semantic::{Mesh, Model, Node, Resource, SnoNamespace, Texture, Values};
+use wc3::model::semantic::{Mesh, Model, Node, Resource, SnoNamespace, Texture};
 
 fn triangle<'a>(positions: &'a [[f32; 3]]) -> Geometry<'a> {
     Geometry::new(
         VertexStreams {
-            positions: Values::from_slice(positions),
-            normals: vec![[0., 0., 1.]; 3].into(),
-            colors: vec![[1.; 4]; 3].into(),
-            texture_coordinates: [vec![[0.; 2]; 3].into(), vec![[1.; 2]; 3].into()],
-            tangents: vec![[1., 0., 0.]; 3].into(),
+            positions: ZeroVec::alloc_from_slice(positions),
+            normals: vec![[0., 0., 1.]; 3].into_zero_vec(),
+            colors: vec![[1.; 4]; 3].into_zero_vec(),
+            texture_coordinates: [
+                vec![[0.; 2]; 3].into_zero_vec(),
+                vec![[1.; 2]; 3].into_zero_vec(),
+            ],
+            tangents: vec![[1., 0., 0.]; 3].into_zero_vec(),
             extras: VertexExtras {
-                auxiliary_colors: vec![[0.; 4]; 3].into(),
-                binormals: vec![[0., -1., 0.]; 3].into(),
-                direction_auxiliary: Values::default(),
-                cloth_vertices: vec![0; 3].into(),
+                auxiliary_colors: vec![[0.; 4]; 3].into_zero_vec(),
+                binormals: vec![[0., -1., 0.]; 3].into_zero_vec(),
+                direction_auxiliary: ZeroVec::default(),
+                cloth_vertices: vec![0; 3].into_zero_vec(),
             },
         },
         vec![[0, 1, 2]],
@@ -49,27 +53,9 @@ fn widening_and_narrowing_preserve_geometry_identity_and_borrowed_arrays() {
         .unwrap();
     let model = builder.finish().unwrap();
     let wider = model.widen::<Universal>();
-    assert_eq!(
-        wider
-            .mesh(id)
-            .unwrap()
-            .positions()
-            .as_slice()
-            .unwrap()
-            .as_ptr(),
-        positions.as_ptr()
-    );
+    assert_eq!(wider.mesh(id).unwrap().positions().to_vec(), positions);
     let restored = wider.try_narrow::<D3>().unwrap();
-    assert_eq!(
-        restored
-            .mesh(id)
-            .unwrap()
-            .positions()
-            .as_slice()
-            .unwrap()
-            .as_ptr(),
-        positions.as_ptr()
-    );
+    assert_eq!(restored.mesh(id).unwrap().positions().to_vec(), positions);
     assert_eq!(
         restored
             .mesh(id)
@@ -88,10 +74,10 @@ fn independent_binormals_and_auxiliary_colors_are_validated() {
     let positions = [[0.; 3]; 3];
     let geometry = triangle(&positions);
     let mut streams = geometry.streams().clone();
-    streams.extras.binormals = vec![[f32::NAN, 0., 0.]; 3].into();
+    streams.extras.binormals = vec![[f32::NAN, 0., 0.]; 3].into_zero_vec();
     assert!(geometry.clone().with_streams(streams).is_err());
     let mut streams = geometry.streams().clone();
-    streams.extras.auxiliary_colors = vec![[0.; 4]; 2].into();
+    streams.extras.auxiliary_colors = vec![[0.; 4]; 2].into_zero_vec();
     assert!(geometry.with_streams(streams).is_err());
 }
 

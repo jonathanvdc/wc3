@@ -1,5 +1,6 @@
+use wc3::model::common::{IntoZeroVec, ZeroVec};
 use wc3::model::conversion::{self, ExportOptions, ImportOptions};
-use wc3::model::semantic::{Draw, Values};
+use wc3::model::semantic::Draw;
 use wc3::model::wmo::codec::Array;
 use wc3::model::wmo::group::GroupChunk;
 use wc3::model::wmo::legacy::{
@@ -151,12 +152,12 @@ fn alpha_direct_geometry_and_lighting_controls_survive_edits() {
         .next()
         .map(|(id, mesh)| (id, mesh.clone()))
         .unwrap();
-    assert!(mesh.positions().is_borrowed());
+    assert!(!mesh.positions().is_owned());
     let mut positions = mesh.positions().to_vec();
     positions[0][0] = 0.5;
     mesh.geometry = mesh
         .geometry
-        .with_positions(Values::owned(positions))
+        .with_positions((positions).into_zero_vec())
         .unwrap();
     asset.edit(|builder| builder.set_mesh(id, mesh)).unwrap();
     let output = conversion::wmo::plan::<conversion::wmo::V14>(&asset, &ExportOptions::default())
@@ -243,8 +244,9 @@ fn historical_multiple_placements_relocate_lighting_windows() {
             let mut mesh = builder.model().mesh(placement.mesh).unwrap().clone();
             let positions = mesh
                 .positions()
-                .clone()
-                .map(|point| [point[0] + 2., point[1], point[2]]);
+                .iter()
+                .map(|point| [point[0] + 2., point[1], point[2]])
+                .collect::<ZeroVec<_>>();
             mesh.geometry = mesh.geometry.with_positions(positions)?;
             placement.mesh = builder.add_mesh(mesh)?;
             let materials = placement

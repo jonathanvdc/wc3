@@ -1,12 +1,11 @@
 //! Borrowed typed keys retain native integer precision and millisecond clocks.
 use super::super::bindings::Target;
+use crate::model::conversion::materialize;
 use crate::model::conversion::{Context, Error};
 use crate::model::m3::{self as native, records as nr};
 use crate::model::semantic::profiles::M3;
 use crate::model::semantic::{profiles::m3 as surface, EventId, FeatureId, PropertyTarget};
-use crate::model::semantic::{
-    Channel, Clock, Curve, Interpolation, Quaternion, Time, Track, Values,
-};
+use crate::model::semantic::{Channel, Clock, Curve, Interpolation, Quaternion, Time, Track};
 use native::Envelope;
 
 fn read_error(error: native::ReadError) -> Error {
@@ -107,11 +106,11 @@ pub(super) fn read<'a, E: Envelope + Send + Sync>(
             }
             if let $target = target {
                 let curve = Curve::from_samples(
-                    Values::view(times.len(), move |i| {
+                    materialize(times.len(), move |i| {
                         Time::seconds(f64::from(times.get(i).unwrap().unwrap().value) / 1000.)
                             .unwrap()
                     }),
-                    Values::view(values.len(), move |i| {
+                    materialize(values.len(), move |i| {
                         ($convert)(values.get(i).unwrap().unwrap())
                     }),
                     mode,

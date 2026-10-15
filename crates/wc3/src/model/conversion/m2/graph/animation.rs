@@ -1,7 +1,9 @@
 //! Borrowed native curves expressed as typed logical channels.
 use super::*;
+use crate::model::conversion::materialize;
 use semantic::profiles::M2;
-use semantic::{Clock, Curve, CurveValue, Property, Time, Values};
+use semantic::{Clock, Curve, CurveValue, Property, Time};
+use zerovec::ZeroVec;
 
 pub(super) fn curve<'a, 'data: 'a, D: Dialect, T, U: CurveValue + 'a>(
     source: &'a Bundle<'data, D>,
@@ -56,7 +58,7 @@ where
     if first + len > timestamps.len() {
         return Err(Error::new("m2.animation", "timestamp range exceeds array"));
     }
-    let times = Values::view(len, move |i| {
+    let times = materialize(len, move |i| {
         let ms = timestamps.get(first + i).unwrap();
         Time::seconds(
             (f64::from(ms)
@@ -83,7 +85,7 @@ where
     };
     let curve = match resolved.values {
         ResolvedValues::Values(values) => {
-            let data = Values::view(len, move |i| map(values.get(first + i).unwrap()));
+            let data = materialize(len, move |i| map(values.get(first + i).unwrap()));
             Curve::from_samples(times, data, interpolation)?
         }
         ResolvedValues::Splines(values) => {
@@ -93,9 +95,9 @@ where
             let mb = map.clone();
             Curve::from_spline_samples(
                 times,
-                Values::view(len, move |i| map(values.get(first + i).unwrap()[0])),
-                Values::view(len, move |i| ma(a.get(first + i).unwrap()[1])),
-                Values::view(len, move |i| mb(b.get(first + i).unwrap()[2])),
+                materialize(len, move |i| map(values.get(first + i).unwrap()[0])),
+                materialize(len, move |i| ma(a.get(first + i).unwrap()[1])),
+                materialize(len, move |i| mb(b.get(first + i).unwrap()[2])),
                 interpolation,
             )?
         }
@@ -389,7 +391,7 @@ where
     };
     let first = range.as_ref().map_or(0, |r| r.start);
     let len = range.map_or(times.len(), |r| r.end - r.start);
-    let timestamps = Values::view(len, move |i| {
+    let timestamps = materialize(len, move |i| {
         Time::seconds(
             (f64::from(times.get(first + i).unwrap())
                 - if global == u16::MAX {
@@ -403,7 +405,7 @@ where
     });
     let a = values.clone();
     let b = values.clone();
-    let keys = Values::view(len, move |i| values.get(first + i).unwrap()[0]);
+    let keys = materialize(len, move |i| values.get(first + i).unwrap()[0]);
     let interpolation = match track.base.interpolation {
         NativeInterpolation::Step => semantic::Interpolation::Step,
         NativeInterpolation::Linear => semantic::Interpolation::Linear,
@@ -418,8 +420,8 @@ where
         Curve::from_spline_samples(
             timestamps,
             keys,
-            Values::view(len, move |i| a.get(first + i).unwrap()[1]),
-            Values::view(len, move |i| b.get(first + i).unwrap()[2]),
+            materialize(len, move |i| a.get(first + i).unwrap()[1]),
+            materialize(len, move |i| b.get(first + i).unwrap()[2]),
             interpolation,
         )?
     } else {

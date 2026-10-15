@@ -1,13 +1,15 @@
 //! Borrowed vertex arrays and logical joint identities decoded from native geometry.
 use super::state::ImportState;
 use crate::model::conversion::Error;
+use crate::model::conversion::{materialize, owned};
 use crate::model::mdlx::geometry::SkinWeight;
 use crate::model::mdlx::{self as native, ModelDialect, ModelVersion};
 use crate::model::semantic::profiles::mdlx::{self as profile, Bone};
 use crate::model::semantic::profiles::Mdlx;
+use crate::model::semantic::ValueGroups;
 use crate::model::semantic::{
     Bounds, ClipId, ClockId, Draw, Influence, JointInfluences, MaterialId, MdlxGeometry, Mesh,
-    MeshInstance, ModelBuilder, Node, NodeId, Skin, Values,
+    MeshInstance, ModelBuilder, Node, NodeId, Skin,
 };
 use std::collections::BTreeMap;
 use zerovec::ZeroVec;
@@ -39,7 +41,7 @@ pub(super) fn read<'a, D: ModelDialect>(
         }
         let positions = mesh.vertices();
         let faces = mesh.face_indices();
-        let triangles = Values::view(faces.len() / 3, move |index| {
+        let triangles = materialize(faces.len() / 3, move |index| {
             [
                 u32::from(faces.get(index * 3).expect("checked triangle index")),
                 u32::from(faces.get(index * 3 + 1).expect("checked triangle index")),
@@ -66,7 +68,7 @@ pub(super) fn read<'a, D: ModelDialect>(
                     ));
                 }
                 let data = triangles.clone();
-                Ok(Values::view(count as usize / 3, move |index| {
+                Ok(materialize(count as usize / 3, move |index| {
                     data.get(start + index).expect("checked triangle group")
                 }))
             })
@@ -78,30 +80,24 @@ pub(super) fn read<'a, D: ModelDialect>(
             ));
         }
         let mut geometry = MdlxGeometry::triangle_groups(
-            Values::from_zero_vec(
-                ZeroVec::parse_bytes(positions.as_bytes()).expect("validated canonical array"),
-            ),
+            ZeroVec::parse_bytes(positions.as_bytes()).expect("validated canonical array"),
             groups,
         )?;
         let mut value = Mesh::<Mdlx>::new(geometry.clone());
         value.name = mesh.try_name().unwrap_or_default();
         let normals = mesh.normals();
-        geometry = geometry.with_normals(Values::from_zero_vec(
+        geometry = geometry.with_normals(
             ZeroVec::parse_bytes(normals.as_bytes()).expect("validated canonical array"),
-        ))?;
+        )?;
         if let Ok(Some(tangents)) = mesh.try_tangents() {
-            geometry = geometry.with_tangents(Values::from_zero_vec(
+            geometry = geometry.with_tangents(
                 ZeroVec::parse_bytes(tangents.as_bytes()).expect("validated canonical array"),
-            ))?;
+            )?;
         }
         geometry = geometry.with_texture_coordinates(
             mesh.uv_sets()
                 .iter()
-                .map(|uv| {
-                    Values::from_zero_vec(
-                        ZeroVec::parse_bytes(uv.as_bytes()).expect("validated canonical array"),
-                    )
-                })
+                .map(|uv| ZeroVec::parse_bytes(uv.as_bytes()).expect("validated canonical array"))
                 .collect(),
         )?;
         value.bounds = Bounds {
@@ -110,7 +106,7 @@ pub(super) fn read<'a, D: ModelDialect>(
             sphere_radius: mesh.extent.bounds_radius,
         };
         let rows = influences(mesh).map_err(|error| Error::new("mesh.skin", error))?;
-        let rows = Values::owned(
+        let rows = ValueGroups::from_rows(
             rows.into_iter()
                 .map(|row| {
                     row.into_iter()
@@ -157,11 +153,13 @@ pub(super) fn read<'a, D: ModelDialect>(
                         Ok(result)
                     })
                     .collect::<Result<Vec<_>, Error>>()?;
-                JointInfluences::Four(Values::owned(slots))
+                JointInfluences::Four(owned(slots))
             } else {
-                JointInfluences::MatrixGroups(rows.map(|row: Vec<Influence>| {
-                    row.into_iter().map(|influence| influence.joint).collect()
-                }))
+                JointInfluences::MatrixGroups(ValueGroups::from_rows(rows.iter().map(|row| {
+                    row.iter()
+                        .map(|influence| influence.joint)
+                        .collect::<Vec<_>>()
+                })))
             })?;
         value.geometry = geometry;
         let primitive_count = faces.len() as u32 / 3;

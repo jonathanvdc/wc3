@@ -110,14 +110,14 @@ impl<'owned, T: AsULE + 'owned> Detached<'owned> for ZeroVec<'_, T> {
         self.into_owned()
     }
 }
-impl<'view> Borrowed<'view> for Cow<'_, [u8]> {
-    type View = Cow<'view, [u8]>;
+impl<'view, T: Clone + 'view> Borrowed<'view> for Cow<'_, [T]> {
+    type View = Cow<'view, [T]>;
     fn as_borrowed(&'view self) -> Self::View {
         Cow::Borrowed(self.as_ref())
     }
 }
-impl<'owned> Detached<'owned> for Cow<'_, [u8]> {
-    type Detached = Cow<'owned, [u8]>;
+impl<'owned, T: Clone + 'owned> Detached<'owned> for Cow<'_, [T]> {
+    type Detached = Cow<'owned, [T]>;
     fn into_detached(self) -> Self::Detached {
         Cow::Owned(self.into_owned())
     }

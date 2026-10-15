@@ -1,4 +1,4 @@
-//! Checked payload projections preserve identities and shared storage.
+//! Checked payload projections preserve identities and encoded storage.
 use crate::model::semantic::profiles::{Narrows, Profile};
 use crate::model::semantic::GeometrySchema as _;
 use crate::model::semantic::{

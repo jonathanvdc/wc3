@@ -1,11 +1,13 @@
 //! Complete geometry vocabularies with borrowed inspection of their logical streams.
+use crate::model::common::{AsULE, IntoZeroVec};
 use crate::model::semantic::geometry_edit::{check_edit, remap_values};
 use crate::model::semantic::profiles::Either;
+use crate::model::semantic::ValueGroups;
 use crate::model::semantic::{
     Attribute, AttributeDomain, AttributeSemantic, AttributeValues, ConnectivityId,
     ConnectivitySets, DrawSubsetCapabilities, Error, GeometryAttributes, GeometryInfluences,
     Influence, Link, NodeInfluence, SurfaceTriangleControls, TextureCoordinates, Topology,
-    ValidateLinks, Values, VertexInfluences,
+    ValidateLinks, VertexInfluences, ZeroVec,
 };
 use crate::model::semantic::{GeometryEdit, GeometryEditCapabilities, StreamSupport};
 use std::fmt::{Debug, Formatter, Result as FmtResult};
@@ -143,27 +145,27 @@ pub trait GeometrySchema<'data>: Clone + Debug + Send + Sync + ValidateLinks {
         ))
     }
     /// Typed surface behavior in primary triangle order, when supported.
-    fn surface_triangles(&self) -> Option<&Values<'data, SurfaceTriangleControls>> {
+    fn surface_triangles(&self) -> Option<&ZeroVec<'data, SurfaceTriangleControls>> {
         None
     }
     /// Independently indexed draw pools, when supported.
-    fn strip_indices(&self) -> Option<&Values<'data, u32>> {
+    fn strip_indices(&self) -> Option<&ZeroVec<'data, u32>> {
         None
     }
     /// Independently indexed tangent attributes selected by draw bindings.
-    fn tangent_pool(&self) -> Option<&Values<'data, [f32; 4]>> {
+    fn tangent_pool(&self) -> Option<&ZeroVec<'data, [f32; 4]>> {
         None
     }
     /// Model-space vertex positions.
-    fn positions(&self) -> &Values<'data, [f32; 3]>;
+    fn positions(&self) -> &ZeroVec<'data, [f32; 3]>;
     /// Vertex normals, when authored.
-    fn normals(&self) -> Option<&Values<'data, [f32; 3]>>;
+    fn normals(&self) -> Option<&ZeroVec<'data, [f32; 3]>>;
     /// Vertex tangents with handedness, when authored.
-    fn tangents(&self) -> Option<&Values<'data, [f32; 4]>>;
+    fn tangents(&self) -> Option<&ZeroVec<'data, [f32; 4]>>;
     /// Ordered texture-coordinate streams.
     fn texture_coordinates(&self) -> TextureCoordinates<'_, 'data>;
     /// Vertex colors, when authored.
-    fn colors(&self) -> Option<&Values<'data, [f32; 4]>>;
+    fn colors(&self) -> Option<&ZeroVec<'data, [f32; 4]>>;
     /// Additional authoring attributes supported by this vocabulary.
     fn attributes(&self) -> Attributes<'_, 'data>;
     /// Logical primitive connectivity.
@@ -180,15 +182,15 @@ pub enum InfluenceRows<'view, 'data> {
     /// Rigid geometry with no authored distributions.
     None,
     /// Variable-length normalized distributions.
-    Variable(&'view Values<'data, Vec<Influence>>),
+    Variable(&'view ValueGroups<'data, Influence>),
     /// Three ordered influence slots per vertex; zero-weight slots are retained.
-    Three(&'view Values<'data, [Influence; 3]>),
+    Three(&'view ZeroVec<'data, [Influence; 3]>),
     /// Four ordered influence slots per vertex; zero-weight slots are retained.
-    Four(&'view Values<'data, [Influence; 4]>),
+    Four(&'view ZeroVec<'data, [Influence; 4]>),
     /// Direct hierarchy-node contributions, without an invented joint palette.
-    Nodes(&'view Values<'data, Vec<NodeInfluence>>),
+    Nodes(&'view ValueGroups<'data, NodeInfluence>),
     /// Warcraft III matrix groups, whose members receive equal weights.
-    MatrixGroups(&'view Values<'data, Vec<u32>>),
+    MatrixGroups(&'view ValueGroups<'data, u32>),
 }
 impl InfluenceRows<'_, '_> {
     /// Number of authored vertex distributions.
@@ -218,8 +220,12 @@ impl InfluenceRows<'_, '_> {
     pub fn get(&self, index: usize) -> Option<VertexInfluences> {
         match self {
             Self::None => None,
-            Self::Nodes(values) => values.get(index).map(VertexInfluences::Nodes),
-            Self::Variable(values) => values.get(index).map(VertexInfluences::Joints),
+            Self::Nodes(values) => values
+                .get(index)
+                .map(|row| VertexInfluences::Nodes(row.to_vec())),
+            Self::Variable(values) => values
+                .get(index)
+                .map(|row| VertexInfluences::Joints(row.to_vec())),
             Self::Three(values) => values
                 .get(index)
                 .map(|v| VertexInfluences::Joints(Vec::from(v))),
@@ -234,7 +240,7 @@ impl InfluenceRows<'_, '_> {
                 };
                 VertexInfluences::Joints(
                     joints
-                        .into_iter()
+                        .iter()
                         .map(|joint| Influence { joint, weight })
                         .collect(),
                 )
@@ -249,7 +255,7 @@ pub struct GeometryData<'data> {
     /// Authored purpose, independent of representation.
     pub kind: GeometryKind,
     /// Vertex positions addressed by connectivity and vertex attributes.
-    pub positions: Values<'data, [f32; 3]>,
+    pub positions: ZeroVec<'data, [f32; 3]>,
     /// Primary topology and additional draw-selected connectivity.
     pub connectivity: ConnectivitySets<'data>,
     /// Canonical typed attributes, including independently indexed pools.
@@ -264,12 +270,15 @@ impl<'data> GeometryData<'data> {
     }
     /// Creates display triangles without copying their arrays.
     pub fn triangles(
-        positions: impl Into<Values<'data, [f32; 3]>>,
-        triangles: impl Into<Values<'data, [u32; 3]>>,
+        positions: impl IntoZeroVec<'data, [f32; 3]>,
+        triangles: impl IntoZeroVec<'data, [u32; 3]>,
     ) -> Result<Self, Error> {
         let value = Self {
-            positions: positions.into(),
-            connectivity: ConnectivitySets::new(Topology::Triangles(triangles.into()), Vec::new()),
+            positions: positions.into_zero_vec(),
+            connectivity: ConnectivitySets::new(
+                Topology::Triangles(triangles.into_zero_vec()),
+                Vec::new(),
+            ),
             ..Default::default()
         };
         value.validate()?;
@@ -285,15 +294,15 @@ impl<'data> GeometryData<'data> {
         Ok(self)
     }
     /// Replaces the vertex normal stream; an empty stream removes it.
-    pub fn set_normals(&mut self, values: Values<'data, [f32; 3]>) {
+    pub fn set_normals(&mut self, values: ZeroVec<'data, [f32; 3]>) {
         self.set_stream(AttributeSemantic::Normal, AttributeValues::Vector3(values));
     }
     /// Replaces the vertex tangent-frame stream; an empty stream removes it.
-    pub fn set_tangents(&mut self, values: Values<'data, [f32; 4]>) {
+    pub fn set_tangents(&mut self, values: ZeroVec<'data, [f32; 4]>) {
         self.set_stream(AttributeSemantic::Tangent, AttributeValues::Vector4(values));
     }
     /// Replaces the primary vertex color stream; an empty stream removes it.
-    pub fn set_colors(&mut self, values: Values<'data, [f32; 4]>) {
+    pub fn set_colors(&mut self, values: ZeroVec<'data, [f32; 4]>) {
         self.set_stream(
             AttributeSemantic::Color(0),
             AttributeValues::Vector4(values),
@@ -313,7 +322,7 @@ impl<'data> GeometryData<'data> {
         }
     }
     /// Replaces ordered UV slots, including authored empty slots.
-    pub fn set_texture_coordinates(&mut self, values: Vec<Values<'data, [f32; 2]>>) {
+    pub fn set_texture_coordinates(&mut self, values: Vec<ZeroVec<'data, [f32; 2]>>) {
         self.attributes.retain(|attribute| {
             !matches!(
                 (&attribute.semantic, attribute.domain),
@@ -409,7 +418,7 @@ impl<'data> GeometrySchema<'data> for GeometryData<'data> {
             self.connectivity.additional().get(index - 1).cloned()
         }
     }
-    fn surface_triangles(&self) -> Option<&Values<'data, SurfaceTriangleControls>> {
+    fn surface_triangles(&self) -> Option<&ZeroVec<'data, SurfaceTriangleControls>> {
         match &self
             .attributes
             .get(&AttributeSemantic::SurfaceControls, AttributeDomain::Face)?
@@ -419,13 +428,13 @@ impl<'data> GeometrySchema<'data> for GeometryData<'data> {
             _ => None,
         }
     }
-    fn strip_indices(&self) -> Option<&Values<'data, u32>> {
+    fn strip_indices(&self) -> Option<&ZeroVec<'data, u32>> {
         match self.connectivity.additional().first()? {
             Topology::TriangleStrip(indices) => Some(indices),
             _ => None,
         }
     }
-    fn tangent_pool(&self) -> Option<&Values<'data, [f32; 4]>> {
+    fn tangent_pool(&self) -> Option<&ZeroVec<'data, [f32; 4]>> {
         self.attributes
             .vector4(&AttributeSemantic::Tangent, AttributeDomain::Pool)
     }
@@ -476,18 +485,18 @@ impl<'data> GeometrySchema<'data> for GeometryData<'data> {
         result.validate()?;
         Ok(result)
     }
-    fn positions(&self) -> &Values<'data, [f32; 3]> {
+    fn positions(&self) -> &ZeroVec<'data, [f32; 3]> {
         &self.positions
     }
-    fn normals(&self) -> Option<&Values<'data, [f32; 3]>> {
+    fn normals(&self) -> Option<&ZeroVec<'data, [f32; 3]>> {
         self.attributes
             .vector3(&AttributeSemantic::Normal, AttributeDomain::Vertex)
     }
-    fn tangents(&self) -> Option<&Values<'data, [f32; 4]>> {
+    fn tangents(&self) -> Option<&ZeroVec<'data, [f32; 4]>> {
         self.attributes
             .vector4(&AttributeSemantic::Tangent, AttributeDomain::Vertex)
     }
-    fn colors(&self) -> Option<&Values<'data, [f32; 4]>> {
+    fn colors(&self) -> Option<&ZeroVec<'data, [f32; 4]>> {
         self.attributes
             .vector4(&AttributeSemantic::Color(0), AttributeDomain::Vertex)
     }
@@ -545,19 +554,19 @@ impl<'data, A: GeometrySchema<'data>, B: GeometrySchema<'data>> GeometrySchema<'
             Self::Right(value) => value.connectivity(index),
         }
     }
-    fn surface_triangles(&self) -> Option<&Values<'data, SurfaceTriangleControls>> {
+    fn surface_triangles(&self) -> Option<&ZeroVec<'data, SurfaceTriangleControls>> {
         match self {
             Self::Left(value) => value.surface_triangles(),
             Self::Right(value) => value.surface_triangles(),
         }
     }
-    fn strip_indices(&self) -> Option<&Values<'data, u32>> {
+    fn strip_indices(&self) -> Option<&ZeroVec<'data, u32>> {
         match self {
             Self::Left(value) => value.strip_indices(),
             Self::Right(value) => value.strip_indices(),
         }
     }
-    fn tangent_pool(&self) -> Option<&Values<'data, [f32; 4]>> {
+    fn tangent_pool(&self) -> Option<&ZeroVec<'data, [f32; 4]>> {
         match self {
             Self::Left(value) => value.tangent_pool(),
             Self::Right(value) => value.tangent_pool(),
@@ -582,19 +591,19 @@ impl<'data, A: GeometrySchema<'data>, B: GeometrySchema<'data>> GeometrySchema<'
             Self::Right(v) => v.kind(),
         }
     }
-    fn positions(&self) -> &Values<'data, [f32; 3]> {
+    fn positions(&self) -> &ZeroVec<'data, [f32; 3]> {
         match self {
             Self::Left(v) => v.positions(),
             Self::Right(v) => v.positions(),
         }
     }
-    fn normals(&self) -> Option<&Values<'data, [f32; 3]>> {
+    fn normals(&self) -> Option<&ZeroVec<'data, [f32; 3]>> {
         match self {
             Self::Left(v) => v.normals(),
             Self::Right(v) => v.normals(),
         }
     }
-    fn tangents(&self) -> Option<&Values<'data, [f32; 4]>> {
+    fn tangents(&self) -> Option<&ZeroVec<'data, [f32; 4]>> {
         match self {
             Self::Left(v) => v.tangents(),
             Self::Right(v) => v.tangents(),
@@ -606,7 +615,7 @@ impl<'data, A: GeometrySchema<'data>, B: GeometrySchema<'data>> GeometrySchema<'
             Self::Right(v) => v.texture_coordinates(),
         }
     }
-    fn colors(&self) -> Option<&Values<'data, [f32; 4]>> {
+    fn colors(&self) -> Option<&ZeroVec<'data, [f32; 4]>> {
         match self {
             Self::Left(v) => v.colors(),
             Self::Right(v) => v.colors(),
@@ -638,9 +647,9 @@ impl<'data, A: GeometrySchema<'data>, B: GeometrySchema<'data>> GeometrySchema<'
     }
 }
 
-pub(crate) fn present<'view, 'data, T>(
-    values: &'view Values<'data, T>,
-) -> Option<&'view Values<'data, T>> {
+pub(crate) fn present<'view, 'data, T: AsULE>(
+    values: &'view ZeroVec<'data, T>,
+) -> Option<&'view ZeroVec<'data, T>> {
     (!values.is_empty()).then_some(values)
 }
 
@@ -648,15 +657,15 @@ pub(crate) fn validate_geometry<'data>(geometry: &impl GeometrySchema<'data>) ->
     let count = geometry.positions().len();
     for stream in geometry
         .normals()
-        .map(Values::len)
+        .map(|values| values.len())
         .into_iter()
-        .chain(geometry.tangents().map(Values::len))
-        .chain(geometry.colors().map(Values::len))
+        .chain(geometry.tangents().map(|values| values.len()))
+        .chain(geometry.colors().map(|values| values.len()))
         .chain(
             geometry
                 .texture_coordinates()
                 .iter()
-                .map(Values::len)
+                .map(|values| values.len())
                 .filter(|len| *len != 0),
         )
         .chain(Some(geometry.influences().len()).filter(|len| *len != 0))
@@ -769,7 +778,7 @@ fn validate_topology(topology: &Topology<'_>, vertices: usize) -> Result<(), Err
         Topology::Polygons { corners, offsets } => {
             let offsets = offsets.to_vec();
             offsets.first() == Some(&0)
-                && offsets.last().copied().map(|value| value as usize) == Some(corners.len())
+                && offsets.last().map(|value| *value as usize) == Some(corners.len())
                 && offsets
                     .windows(2)
                     .all(|pair| pair[1] >= pair[0] && pair[1] - pair[0] >= 3)
@@ -790,7 +799,7 @@ impl Default for GeometryData<'_> {
     fn default() -> Self {
         Self {
             kind: GeometryKind::Display,
-            positions: Values::default(),
+            positions: ZeroVec::default(),
             connectivity: ConnectivitySets::default(),
             attributes: GeometryAttributes::default(),
             influences: GeometryInfluences::None,
@@ -811,33 +820,40 @@ impl ValidateLinks for GeometryData<'_> {
 
 #[cfg(test)]
 mod tests {
+    use crate::model::common::Borrowed as _;
     use crate::model::semantic::*;
+    use zerovec::ZeroVec;
 
     #[test]
     fn borrowed_geometry_rejects_invalid_streams_and_indices() {
-        let positions = [[0., 0., 0.], [1., 0., 0.], [0., 1., 0.]];
+        let positions = ZeroVec::alloc_from_slice(&[[0., 0., 0.], [1., 0., 0.], [0., 1., 0.]]);
         let triangles = [[0, 1, 2]];
-        let geometry = MdlxGeometry::triangles(&positions[..], &triangles[..]).unwrap();
-        assert!(geometry.positions().is_borrowed());
+        let geometry = MdlxGeometry::triangles(positions.as_borrowed(), &triangles[..]).unwrap();
+        assert!(!geometry.positions().is_owned());
         assert!(geometry.clone().with_normals(vec![[0., 0., 1.]]).is_err());
         assert!(geometry
             .with_tangents(vec![[0., 0., f32::NAN, 1.]; 3])
             .is_err());
-        assert!(MdlxGeometry::triangles(&positions[..], vec![[0, 1, 3]]).is_err());
+        assert!(MdlxGeometry::triangles(positions.as_borrowed(), vec![[0, 1, 3]]).is_err());
     }
 
     #[test]
     fn four_slots_and_matrix_groups_widen_without_losing_distribution() {
-        let positions = [[0., 0., 0.]];
+        let positions = ZeroVec::alloc_from_slice(&[[0., 0., 0.]]);
         let groups = [vec![3, 8, 12, 19, 24]];
-        let geometry = MdlxGeometry::triangles(&positions[..], Vec::<[u32; 3]>::new())
+        let geometry = MdlxGeometry::triangles(positions.as_borrowed(), Vec::<[u32; 3]>::new())
             .unwrap()
-            .with_influences(JointInfluences::MatrixGroups(Values::from_slice(&groups)))
+            .with_influences(JointInfluences::MatrixGroups(ValueGroups::from_slice(
+                &groups,
+            )))
             .unwrap();
         let widened = GeometryData::from(geometry);
-        assert!(widened.positions().is_borrowed());
+        assert_eq!(
+            widened.positions().as_bytes().as_ptr(),
+            positions.as_bytes().as_ptr()
+        );
         assert!(
-            matches!(widened.influences(), InfluenceRows::MatrixGroups(values) if values.is_borrowed())
+            matches!(widened.influences(), InfluenceRows::MatrixGroups(values) if values.to_vec() == groups)
         );
         let row = widened.influences().joint_weights(0).unwrap();
         assert_eq!(row.len(), 5);
@@ -859,7 +875,7 @@ mod tests {
         assert!(M2Geometry::new(
             positions,
             normals,
-            [Values::owned(vec![[0., 0.]]), Values::default()],
+            [ZeroVec::alloc_from_slice(&[[0., 0.]]), ZeroVec::default()],
             Vec::<[u32; 3]>::new(),
             weights
         )
@@ -880,7 +896,7 @@ mod tests {
             ],
         )
         .unwrap();
-        let coordinates = vec![Values::owned(vec![[0., 0.]]); 5];
+        let coordinates = vec![ZeroVec::alloc_from_slice(&[[0., 0.]]); 5];
         assert_eq!(
             geometry
                 .clone()
@@ -891,7 +907,7 @@ mod tests {
             5
         );
         assert!(geometry
-            .with_texture_coordinates(vec![Values::owned(vec![[0., 0.]]); 6])
+            .with_texture_coordinates(vec![ZeroVec::alloc_from_slice(&[[0., 0.]]); 6])
             .is_err());
     }
 }

@@ -1,6 +1,7 @@
 //! Direct historical group fields, with no upgraded native document.
 use super::{bounds, geometry, relationships, root_view::CommonRoot, scene::Identities};
 use crate::model::conversion::wmo::graph::draw::{bind_draw, ImportedDrawControls};
+use crate::model::conversion::{materialize, owned};
 use crate::model::conversion::{Context, Error};
 use crate::model::semantic::profiles::wmo::{
     Group as WorldGroup, GroupOptions, Lighting, RegionControls, WorldSystem,
@@ -8,7 +9,7 @@ use crate::model::semantic::profiles::wmo::{
 use crate::model::semantic::profiles::Wmo;
 use crate::model::semantic::{
     ColorSpace, InstanceId, MaterialId, Mesh, MeshInstance, ModelBuilder, Node, Resource, Sampler,
-    SystemId, Texture, Values, WmoGeometry,
+    SystemId, Texture, WmoGeometry,
 };
 use crate::model::wmo::group::GroupChunk;
 use crate::model::wmo::legacy::{Batch14, Batch16, LegacyGroupChunk};
@@ -140,33 +141,29 @@ pub(super) fn read<'a, 'data: 'a, B: Batch>(
             _ => None,
         })
     };
-    let mut positions = Values::default();
-    let mut normals = Values::default();
+    let mut positions = ZeroVec::new();
+    let mut normals = ZeroVec::new();
     let mut coordinates = Vec::new();
     let mut colors = Vec::new();
-    let mut indices = Values::default();
+    let mut indices = ZeroVec::new();
     for chunk in common() {
         match chunk {
             GroupChunk::Positions(rows) => {
-                positions = Values::from_zero_vec(
-                    ZeroVec::parse_bytes(rows.as_bytes()).map_err(read_error)?,
-                )
+                positions = ZeroVec::parse_bytes(rows.as_bytes()).map_err(read_error)?
             }
             GroupChunk::Normals(rows) => {
-                normals = Values::from_zero_vec(
-                    ZeroVec::parse_bytes(rows.as_bytes()).map_err(read_error)?,
-                )
+                normals = ZeroVec::parse_bytes(rows.as_bytes()).map_err(read_error)?
             }
-            GroupChunk::TextureCoordinates(rows) => coordinates.push(Values::from_zero_vec(
-                ZeroVec::parse_bytes(rows.as_bytes()).map_err(read_error)?,
-            )),
+            GroupChunk::TextureCoordinates(rows) => {
+                coordinates.push(ZeroVec::parse_bytes(rows.as_bytes()).map_err(read_error)?)
+            }
             GroupChunk::Indices(rows) => {
-                indices = Values::view(rows.len(), move |index| {
+                indices = materialize(rows.len(), move |index| {
                     u32::from(rows.get(index).unwrap().unwrap())
                 })
             }
             GroupChunk::VertexColors(rows) | GroupChunk::VertexColors2(rows) => {
-                colors.push(Values::view(rows.len(), move |index| {
+                colors.push(materialize(rows.len(), move |index| {
                     super::rgba(rows.get(index).unwrap().unwrap())
                         .map(|value| f32::from(value) / 255.)
                 }))
@@ -176,7 +173,7 @@ pub(super) fn read<'a, 'data: 'a, B: Batch>(
     }
     for chunk in chunks {
         if let LegacyGroupChunk::LegacyIndices(rows) = chunk {
-            indices = Values::view(rows.len(), move |index| {
+            indices = materialize(rows.len(), move |index| {
                 u32::from(rows.get(index).unwrap().unwrap())
             });
         }
@@ -187,7 +184,7 @@ pub(super) fn read<'a, 'data: 'a, B: Batch>(
             "historical indices must form complete triangles",
         ));
     }
-    let triangles = Values::view(indices.len() / 3, move |index| {
+    let triangles = materialize(indices.len() / 3, move |index| {
         [
             indices.get(index * 3).unwrap(),
             indices.get(index * 3 + 1).unwrap(),
@@ -221,7 +218,7 @@ pub(super) fn read<'a, 'data: 'a, B: Batch>(
         .with_normals(normals)?
         .with_texture_coordinates(coordinates)?
         .with_color_sets(colors)?
-        .with_triangle_controls(Values::owned(faces))?;
+        .with_triangle_controls(owned(faces))?;
     let mut region = RegionControls {
         description: relationships::name(root, header.description)?,
         area_id: u32::from_ne_bytes(header.area.to_ne_bytes()),
@@ -234,12 +231,12 @@ pub(super) fn read<'a, 'data: 'a, B: Batch>(
     for chunk in chunks {
         match chunk {
             LegacyGroupChunk::LightMapCoordinates(rows) => {
-                geometry = geometry.with_lightmap_coordinates(Values::from_zero_vec(
+                geometry = geometry.with_lightmap_coordinates(
                     ZeroVec::parse_bytes(rows.as_bytes()).map_err(read_error)?,
-                ))?
+                )?
             }
             LegacyGroupChunk::LightMaps(rows) => {
-                region.lightmap_rectangles = Values::view(rows.len(), move |index| {
+                region.lightmap_rectangles = materialize(rows.len(), move |index| {
                     let row = rows.get(index).unwrap().unwrap();
                     [row.x, row.y, row.width, row.height]
                 })
@@ -266,7 +263,7 @@ pub(super) fn read<'a, 'data: 'a, B: Batch>(
                             .header
                             .vertex_dimensions
                             .map(|value| u32::try_from(value).expect("validated dimensions")),
-                        vertices: Values::view(liquid.vertices.len(), move |index| {
+                        vertices: materialize(liquid.vertices.len(), move |index| {
                             let row = liquid.vertices.get(index).unwrap().unwrap();
                             crate::model::semantic::profiles::wmo::LiquidVertex::Unresolved {
                                 height: row.height,
@@ -276,7 +273,7 @@ pub(super) fn read<'a, 'data: 'a, B: Batch>(
                                 ],
                             }
                         }),
-                        tiles: Values::view(liquid.tiles.len(), move |index| {
+                        tiles: materialize(liquid.tiles.len(), move |index| {
                             liquid.tiles.get(index).unwrap().unwrap()
                         }),
                         material: Some(
@@ -297,21 +294,19 @@ pub(super) fn read<'a, 'data: 'a, B: Batch>(
                     .auxiliary_geometry
                     .get_or_insert_with(Default::default)
                     .indices =
-                    Values::view(rows.len(), move |index| rows.get(index).unwrap().unwrap())
+                    materialize(rows.len(), move |index| rows.get(index).unwrap().unwrap())
             }
             LegacyGroupChunk::BatchGeometry(rows) => {
                 region
                     .auxiliary_geometry
                     .get_or_insert_with(Default::default)
-                    .values = Values::from_zero_vec(
-                    ZeroVec::parse_bytes(rows.as_bytes()).map_err(read_error)?,
-                )
+                    .values = ZeroVec::parse_bytes(rows.as_bytes()).map_err(read_error)?
             }
             LegacyGroupChunk::BatchVertices(rows) => {
                 region
                     .auxiliary_geometry
                     .get_or_insert_with(Default::default)
-                    .vertex_windows = Values::view(rows.len(), move |index| {
+                    .vertex_windows = materialize(rows.len(), move |index| {
                     let row = rows.get(index).unwrap().unwrap();
                     [row.start, row.count]
                 })
@@ -320,7 +315,7 @@ pub(super) fn read<'a, 'data: 'a, B: Batch>(
                 region
                     .auxiliary_geometry
                     .get_or_insert_with(Default::default)
-                    .plane_windows = Values::view(rows.len(), move |index| {
+                    .plane_windows = materialize(rows.len(), move |index| {
                     let row = rows.get(index).unwrap().unwrap();
                     [row.start, row.count]
                 })

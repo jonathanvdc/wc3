@@ -4,7 +4,8 @@ use super::{
     WorldFlags,
 };
 use super::{DoodadSetId, GroupId, PortalId};
-use crate::model::semantic::{Animated, FeatureId, MaterialId, Resource, TextureId, Values};
+use crate::model::common::AsULE;
+use crate::model::semantic::{Animated, FeatureId, MaterialId, Resource, TextureId, ZeroVec};
 use std::borrow::Cow;
 
 /// Root world rendering options.
@@ -47,7 +48,7 @@ pub struct GroupOptions {
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Portal<'a> {
     /// Boundary polygon in world coordinates.
-    pub vertices: Values<'a, [f32; 3]>,
+    pub vertices: ZeroVec<'a, [f32; 3]>,
     /// Plane equation (normal XYZ, distance).
     pub plane: [f32; 4],
     /// Supplemental culling-plane adjustment, whose individual controls are unresolved.
@@ -321,11 +322,103 @@ pub struct Liquid<'a> {
     /// Number of vertices along X and Y.
     pub dimensions: [u32; 2],
     /// Surface grid vertices in row-major order.
-    pub vertices: Values<'a, LiquidVertex>,
+    pub vertices: ZeroVec<'a, LiquidVertex>,
     /// Tile rendering and liquid selectors with unresolved bit-level meanings.
-    pub tiles: Values<'a, u8>,
+    pub tiles: ZeroVec<'a, u8>,
     /// Rendering material.
     pub material: Option<MaterialId>,
     /// External liquid-type database identifier.
     pub liquid_type: u32,
+}
+
+#[zerovec::make_ule(LiquidKindULE)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[repr(u8)]
+#[doc(hidden)]
+pub enum LiquidKind {
+    Water = 0,
+    Magma = 1,
+    Unresolved = 2,
+}
+
+impl AsULE for LiquidVertex {
+    type ULE = <(LiquidKind, f32, [u16; 2]) as AsULE>::ULE;
+    fn to_unaligned(self) -> Self::ULE {
+        let record: (LiquidKind, f32, [u16; 2]) = match self {
+            Self::Water {
+                height,
+                velocities,
+                first_percentage,
+                control,
+            } => (
+                LiquidKind::Water,
+                height,
+                [
+                    u16::from_le_bytes(velocities),
+                    u16::from_le_bytes([first_percentage, control]),
+                ],
+            ),
+            Self::Magma {
+                height,
+                coordinates,
+            } => (LiquidKind::Magma, height, coordinates.map(|n| n as u16)),
+            Self::Unresolved { height, controls } => (LiquidKind::Unresolved, height, controls),
+        };
+        record.to_unaligned()
+    }
+    fn from_unaligned(value: Self::ULE) -> Self {
+        let (kind, height, controls) = <(LiquidKind, f32, [u16; 2])>::from_unaligned(value);
+        match kind {
+            LiquidKind::Water => {
+                let [first_percentage, control] = controls[1].to_le_bytes();
+                Self::Water {
+                    height,
+                    velocities: controls[0].to_le_bytes(),
+                    first_percentage,
+                    control,
+                }
+            }
+            LiquidKind::Magma => Self::Magma {
+                height,
+                coordinates: controls.map(|n| n as i16),
+            },
+            LiquidKind::Unresolved => Self::Unresolved { height, controls },
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::LiquidVertex;
+    use zerovec::ZeroVec;
+
+    #[test]
+    fn packed_liquid_vertices_preserve_variants_and_reject_unknown_tags() {
+        let vertices = [
+            LiquidVertex::Water {
+                height: 1.,
+                velocities: [2, 3],
+                first_percentage: 4,
+                control: 5,
+            },
+            LiquidVertex::Magma {
+                height: 6.,
+                coordinates: [-7, 8],
+            },
+            LiquidVertex::Unresolved {
+                height: 9.,
+                controls: [10, 11],
+            },
+        ];
+        let packed = ZeroVec::alloc_from_slice(&vertices);
+        assert_eq!(
+            ZeroVec::<LiquidVertex>::parse_bytes(packed.as_bytes())
+                .unwrap()
+                .to_vec(),
+            vertices
+        );
+        let mut bytes = packed.as_bytes().to_vec();
+        bytes[0] = 3;
+        assert!(ZeroVec::<LiquidVertex>::parse_bytes(&bytes).is_err());
+    }
 }

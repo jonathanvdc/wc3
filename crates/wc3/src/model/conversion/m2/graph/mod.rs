@@ -1,5 +1,6 @@
 //! Direct native M2 adapters for the independent authoring graph.
 use super::*;
+use crate::model::conversion::materialize;
 use crate::model::semantic::{self, profiles::m2 as profile};
 mod actors;
 mod actors_export;
@@ -15,7 +16,7 @@ use semantic::profiles::M2 as M2Vocabulary;
 pub(in super::super) type Graph<'a> = semantic::Model<'a, M2Vocabulary>;
 pub(in super::super) type GraphBuilder<'a> = semantic::ModelBuilder<'a, M2Vocabulary>;
 pub use export::plan;
-use semantic::{Animated, Channel, Node, Resource, SharedClock, Time, Values};
+use semantic::{Animated, Channel, Node, Resource, SharedClock, Time};
 
 /// Imports an M2 bundle without a canonical intermediate encoding.
 pub fn import<'a, 'data: 'a, D: Dialect>(
@@ -326,13 +327,13 @@ where
     let collision_indices = &core.collision_indices;
     let collision_normals = &core.collision_normals;
     let collision = (!core.collision_vertices.is_empty()).then(|| profile::Collision {
-        positions: Values::view(core.collision_vertices.len(), move |i| {
+        positions: materialize(core.collision_vertices.len(), move |i| {
             collision_positions.get(i).unwrap()
         }),
-        triangles: Values::view(core.collision_indices.len() / 3, move |i| {
+        triangles: materialize(core.collision_indices.len() / 3, move |i| {
             std::array::from_fn(|j| u32::from(collision_indices.get(i * 3 + j).unwrap()))
         }),
-        normals: Values::view(core.collision_normals.len(), move |i| {
+        normals: materialize(core.collision_normals.len(), move |i| {
             collision_normals.get(i).unwrap()
         }),
         bounds: bounds(core.collision),

@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use wc3::model::common::IntoZeroVec;
 use wc3::model::semantic::Model;
 use wc3::model::{
     conversion::{self, ApproximationPolicy, ExportOptions, ImportOptions},
@@ -13,7 +14,7 @@ pub(super) fn asset() -> Model<'static, M3> {
     let node = builder
         .add_node(sem::Node::named("Root").with_controls(surface::BoneControls::default()))
         .unwrap();
-    let influences = sem::Values::owned(vec![
+    let influences = (vec![
         [
             sem::Influence {
                 joint: 0,
@@ -33,15 +34,16 @@ pub(super) fn asset() -> Model<'static, M3> {
             }
         ];
         3
-    ]);
+    ])
+    .into_zero_vec();
     let geometry = sem::M3Geometry::new(
-        sem::Values::owned(vec![[0., 0., 0.], [1., 0., 0.], [0., 1., 0.]]),
-        sem::Values::owned(vec![[0., 0., 1.]; 3]),
-        sem::Values::owned(vec![[0, 1, 2]]),
+        (vec![[0., 0., 0.], [1., 0., 0.], [0., 1., 0.]]).into_zero_vec(),
+        (vec![[0., 0., 1.]; 3]).into_zero_vec(),
+        (vec![[0, 1, 2]]).into_zero_vec(),
         influences,
     )
     .unwrap()
-    .with_texture_coordinates(vec![sem::Values::owned(vec![[0., 0.], [1., 0.], [0., 1.]])])
+    .with_texture_coordinates(vec![(vec![[0., 0.], [1., 0.], [0., 1.]]).into_zero_vec()])
     .unwrap();
     let mesh = builder.add_mesh(sem::Mesh::new(geometry)).unwrap();
     let material = builder
@@ -59,7 +61,7 @@ pub(super) fn asset() -> Model<'static, M3> {
     let skin = builder
         .add_skin(sem::Skin::new(
             vec![node],
-            sem::ExplicitBinding::new(sem::Values::owned(vec![identity])).unwrap(),
+            sem::ExplicitBinding::new((vec![identity]).into_zero_vec()).unwrap(),
         ))
         .unwrap();
     let frame = builder.add_node(sem::Node::named("")).unwrap();
@@ -85,11 +87,12 @@ pub(super) fn asset() -> Model<'static, M3> {
                 target: node.translation(),
                 clock: sem::Clock::Timeline,
                 curve: sem::Curve::linear(
-                    sem::Values::owned(vec![
+                    (vec![
                         sem::Time::seconds(0.).unwrap(),
                         sem::Time::seconds(1.).unwrap(),
-                    ]),
-                    sem::Values::owned(vec![[0., 0., 0.], [1., 2., 3.]]),
+                    ])
+                    .into_zero_vec(),
+                    (vec![[0., 0., 0.], [1., 2., 3.]]).into_zero_vec(),
                 )
                 .unwrap(),
             }),
@@ -225,7 +228,7 @@ fn dormant_standard_and_hair_surfaces_are_authored_materials() {
 #[path = "m3_geometry_controls.rs"]
 mod geometry_controls;
 #[test]
-fn imported_graph_widens_and_narrows_without_changing_identity_or_borrowing() {
+fn imported_graph_widens_and_narrows_without_changing_identity_or_values() {
     let source = asset();
     let native = conversion::m3::plan::<m3::StarCraft2>(&source, &approximate())
         .unwrap()
@@ -239,7 +242,7 @@ fn imported_graph_widens_and_narrows_without_changing_identity_or_borrowing() {
     let model_id = imported.id();
     let mesh_id = imported.meshes().next().unwrap().0;
     let node_id = imported.nodes().next().unwrap().0;
-    assert!(imported.mesh(mesh_id).unwrap().positions().is_borrowed());
+    assert!(imported.mesh(mesh_id).unwrap().positions().is_owned());
     let narrowed = imported
         .widen::<sem::profiles::Universal>()
         .try_narrow::<M3>()
@@ -247,7 +250,7 @@ fn imported_graph_widens_and_narrows_without_changing_identity_or_borrowing() {
     assert_eq!(narrowed.id(), model_id);
     assert!(narrowed.node(node_id).is_some());
     let mesh = narrowed.mesh(mesh_id).unwrap();
-    assert!(mesh.positions().is_borrowed());
+    assert!(mesh.positions().is_owned());
     assert_eq!(mesh.positions().get(1), Some([1., 0., 0.]));
     assert_eq!(narrowed.controllers().count(), 1);
 }

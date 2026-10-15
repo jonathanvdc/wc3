@@ -1,4 +1,5 @@
 //! Transient import identities resolve field links into the checked graph.
+
 use super::super::{
     bindings::{self, Bindings, Value},
     materials::{anim, color, fixed_color, read_error, string},
@@ -6,10 +7,9 @@ use super::super::{
 use crate::model::conversion::{Context, Error};
 use crate::model::m3::{self as native, records as nr};
 use crate::model::semantic::profiles::m3::properties::{Field, FieldPath};
-use crate::model::semantic::{
-    profiles::m3 as surface, FeatureId, MaterialId, MeshId, OwnerId, Values,
-};
+use crate::model::semantic::{profiles::m3 as surface, FeatureId, MaterialId, MeshId, OwnerId};
 use native::{Envelope, Ref};
+use std::borrow::Cow;
 pub(in crate::model::conversion::m3::logical) struct Reader<'view, 'data, 'draft, E: Envelope> {
     pub source: &'view native::Document<'data, E>,
     pub owner: FeatureId,
@@ -98,7 +98,7 @@ impl<'view, E: Envelope> Reader<'view, '_, '_, E> {
     pub fn spline(
         &mut self,
         reference: Ref<nr::targets::AnimationValueVector3>,
-    ) -> Result<Values<'view, surface::Property<[f32; 3]>>, Error> {
+    ) -> Result<Cow<'view, [surface::Property<[f32; 3]>]>, Error> {
         let mut points = Vec::new();
         for (index, row) in self
             .source
@@ -116,7 +116,7 @@ impl<'view, E: Envelope> Reader<'view, '_, '_, E> {
                 ),
             );
         }
-        Ok(Values::owned(points))
+        Ok(Cow::Owned(points))
     }
     pub fn models(
         &self,

@@ -20,12 +20,12 @@ fn native_widening_and_narrowing_preserves_identities_and_borrowed_geometry() {
     let model_id = asset.id();
     let mesh_id = asset.meshes().next().unwrap().0;
     let positions = asset.mesh(mesh_id).unwrap().positions().clone();
-    assert!(positions.is_borrowed());
+    assert!(!positions.is_owned());
 
     let asset = asset.widen::<Universal>().try_narrow::<Mdlx>().unwrap();
     assert_eq!(asset.id(), model_id);
     let restored = asset.mesh(mesh_id).unwrap().positions();
-    assert!(restored.is_borrowed());
+    assert!(!restored.is_owned());
     assert_eq!(
         restored.iter().collect::<Vec<_>>(),
         positions.iter().collect::<Vec<_>>()

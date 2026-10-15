@@ -1,5 +1,8 @@
 //! Checked common edits preserve the concrete geometry vocabulary.
-use super::{Attribute, AttributeDomain, AttributeValues, Error, GeometrySchema, Topology, Values};
+use super::{
+    Attribute, AttributeDomain, AttributeValues, Error, GeometrySchema, Topology, ZeroVec,
+};
+use crate::model::common::AsULE;
 
 /// Availability of a stream in a geometry vocabulary.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -34,6 +37,7 @@ pub struct GeometryEditCapabilities {
 /// an empty replacement removes an optional stream. Influence representations are retained.
 ///
 /// ```
+/// use wc3::model::common::IntoZeroVec;
 /// use wc3::model::semantic::{GeometryData, GeometryEdit, GeometrySchema};
 ///
 /// let geometry = GeometryData::triangles(
@@ -41,7 +45,7 @@ pub struct GeometryEditCapabilities {
 ///     vec![[0, 1, 2]],
 /// )?;
 /// let edited = geometry.edited(GeometryEdit {
-///     positions: Some(vec![[0., 0., 1.], [1., 0., 1.], [0., 1., 1.]].into()),
+///     positions: Some(vec![[0., 0., 1.], [1., 0., 1.], [0., 1., 1.]].into_zero_vec()),
 ///     ..GeometryEdit::default()
 /// })?;
 /// assert_eq!(edited.positions.get(0), Some([0., 0., 1.]));
@@ -51,15 +55,15 @@ pub struct GeometryEditCapabilities {
 #[derive(Clone, Debug, Default)]
 pub struct GeometryEdit<'a> {
     /// Replacement positions.
-    pub positions: Option<Values<'a, [f32; 3]>>,
+    pub positions: Option<ZeroVec<'a, [f32; 3]>>,
     /// Replacement vertex normals.
-    pub normals: Option<Values<'a, [f32; 3]>>,
+    pub normals: Option<ZeroVec<'a, [f32; 3]>>,
     /// Replacement vertex tangents and handedness.
-    pub tangents: Option<Values<'a, [f32; 4]>>,
+    pub tangents: Option<ZeroVec<'a, [f32; 4]>>,
     /// Replacement primary vertex colors.
-    pub colors: Option<Values<'a, [f32; 4]>>,
+    pub colors: Option<ZeroVec<'a, [f32; 4]>>,
     /// Replacement ordered UV streams.
-    pub texture_coordinates: Option<Vec<Values<'a, [f32; 2]>>>,
+    pub texture_coordinates: Option<Vec<ZeroVec<'a, [f32; 2]>>>,
     /// Structural correspondence applied before stream replacements.
     pub remap: Option<VertexRemap<'a>>,
 }
@@ -130,13 +134,10 @@ fn equivalent(old: &Topology<'_>, new: &Topology<'_>, map: &[u32]) -> bool {
         _ => false,
     }
 }
-pub(crate) fn remap_values<'a, T: Clone + Send + Sync + 'a>(
-    values: &mut Values<'a, T>,
-    map: &[u32],
-) {
+pub(crate) fn remap_values<'a, T: AsULE + 'a>(values: &mut ZeroVec<'a, T>, map: &[u32]) {
     if !values.is_empty() {
-        *values = Values::owned(
-            map.iter()
+        *values = ZeroVec::alloc_from_slice(
+            &map.iter()
                 .map(|i| values.get(*i as usize).expect("validated vertex stream"))
                 .collect::<Vec<_>>(),
         );

@@ -294,7 +294,7 @@ fn selection_and_attachment_volumes_use_editable_collision_meshes() {
         unreachable!()
     };
     let mesh = asset.mesh(shape.mesh.unwrap()).unwrap();
-    assert!(mesh.positions().is_borrowed());
+    assert!(mesh.positions().is_owned());
     assert_eq!(mesh.positions().get(1), Some([1., 0., 0.]));
     shape.size_x = 7.;
     asset
@@ -528,7 +528,7 @@ fn animation_split_declarations_preserve_unresolved_typed_controls() {
             _ => None,
         })
         .unwrap();
-    assert!(items.is_borrowed());
+    assert!(items.is_owned());
     assert_eq!(items.get(1), Some(u16::MAX));
     let output = conversion::m3::plan::<m3::StarCraft2>(&asset, &ExportOptions::default())
         .unwrap()

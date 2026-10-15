@@ -142,3 +142,19 @@ pub type MaterialSlotId = Id<MaterialSlotObject>;
 pub enum DrawObject {}
 /// Stable identity of a draw binding, resolved within its owning instance.
 pub type DrawId = Id<DrawObject>;
+
+use zerovec::ule::AsULE;
+impl<K> AsULE for Id<K> {
+    type ULE = <[u64; 2] as AsULE>::ULE;
+    fn to_unaligned(self) -> Self::ULE {
+        [self.scope, self.key].to_unaligned()
+    }
+    fn from_unaligned(value: Self::ULE) -> Self {
+        let [scope, key] = <[u64; 2]>::from_unaligned(value);
+        Self {
+            scope,
+            key,
+            marker: PhantomData,
+        }
+    }
+}

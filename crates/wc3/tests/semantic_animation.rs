@@ -1,3 +1,4 @@
+use wc3::model::common::ZeroVec;
 use wc3::model::semantic::profiles::mdlx::properties::{
     light, Layer, LightField, Target as MdlxTarget,
 };
@@ -5,31 +6,41 @@ use wc3::model::semantic::profiles::Mdlx;
 use wc3::model::semantic::{
     BezierKeyframe, ContinuousDomain, Curve, CurveValue, HermiteKeyframe, Interpolation, Material,
     Model, Node, OwnerId, PropertyTarget, Quaternion, TcbKeyframe, TcbParameters, Time,
-    ValueKeyframe, Values,
+    ValueKeyframe,
 };
+use zerovec::ule::AsULE;
 
 fn time(seconds: f64) -> Time {
     Time::seconds(seconds).unwrap()
 }
 
 #[test]
-fn separate_spline_arrays_retain_their_borrowed_storage() {
+fn separate_spline_arrays_retain_encoded_borrowed_storage() {
     let times = [time(-1.), time(0.), time(0.), time(1.)];
     let values = [0f32, 1., 2., 3.];
     let incoming = [0f32; 4];
     let outgoing = [1f32; 4];
-    let curve = Curve::hermite(&times[..], &values[..], &incoming[..], &outgoing[..]).unwrap();
-    assert_eq!(curve.times().as_slice().unwrap().as_ptr(), times.as_ptr());
-    assert_eq!(curve.values().as_slice().unwrap().as_ptr(), values.as_ptr());
+    let encoded_times = ZeroVec::alloc_from_slice(&times);
+    let encoded_values = ZeroVec::alloc_from_slice(&values);
+    let encoded_incoming = ZeroVec::alloc_from_slice(&incoming);
+    let encoded_outgoing = ZeroVec::alloc_from_slice(&outgoing);
+    let curve = Curve::hermite(
+        encoded_times.as_slice().as_zerovec(),
+        encoded_values.as_slice().as_zerovec(),
+        encoded_incoming.as_slice().as_zerovec(),
+        encoded_outgoing.as_slice().as_zerovec(),
+    )
+    .unwrap();
+    assert!(!curve.values().is_owned());
+    assert_eq!(
+        curve.values().as_bytes().as_ptr(),
+        encoded_values.as_bytes().as_ptr()
+    );
+    assert_eq!(curve.times().to_vec(), times);
+    assert_eq!(curve.values().to_vec(), values);
     let derivatives = curve.hermite_derivatives().unwrap();
-    assert_eq!(
-        derivatives.incoming.as_slice().unwrap().as_ptr(),
-        incoming.as_ptr()
-    );
-    assert_eq!(
-        derivatives.outgoing.as_slice().unwrap().as_ptr(),
-        outgoing.as_ptr()
-    );
+    assert_eq!(derivatives.incoming.to_vec(), incoming);
+    assert_eq!(derivatives.outgoing.to_vec(), outgoing);
     assert!(curve.bezier_controls().is_none());
     assert!(curve.tcb_parameters().is_none());
     // Duplicate keys keep both sides of the discontinuity in authored order.
@@ -38,15 +49,15 @@ fn separate_spline_arrays_retain_their_borrowed_storage() {
 }
 
 #[test]
-fn typed_keyframes_can_borrow_without_materializing_separate_arrays() {
+fn typed_keyframes_materialize_separate_encoded_arrays() {
     let keys = [HermiteKeyframe {
         time: time(0.),
         value: Quaternion::IDENTITY,
         incoming: [0.; 4],
         outgoing: [0.; 4],
     }];
-    let curve = Curve::hermite_keys(&keys[..]).unwrap();
-    assert!(curve.values().is_borrowed());
+    let curve = Curve::hermite_keys(keys).unwrap();
+    assert!(curve.values().is_owned());
     assert_eq!(curve.values().get(0), Some(Quaternion::IDENTITY));
     assert_eq!(
         curve.hermite_derivatives().unwrap().incoming.get(0),
@@ -108,7 +119,7 @@ fn constructors_check_order_cardinality_and_finite_controls() {
         }]
     )
     .is_err());
-    assert!(Curve::<f32>::linear(Values::default(), Values::default()).is_ok());
+    assert!(Curve::<f32>::linear(ZeroVec::default(), ZeroVec::default()).is_ok());
     assert!(Time::seconds(f64::INFINITY).is_err());
 }
 
@@ -119,11 +130,11 @@ fn spherical_keyframes_and_discrete_keys_select_their_shapes() {
         value: Quaternion::IDENTITY,
     }];
     assert_eq!(
-        Curve::slerp_keys(&keys[..]).unwrap().interpolation(),
+        Curve::slerp_keys(keys.clone()).unwrap().interpolation(),
         Interpolation::Slerp
     );
     assert_eq!(
-        Curve::nlerp_keys(&keys[..]).unwrap().interpolation(),
+        Curve::nlerp_keys(keys).unwrap().interpolation(),
         Interpolation::Nlerp
     );
     let curve = Curve::step_keys([ValueKeyframe {
@@ -159,8 +170,17 @@ fn descriptors_preserve_structural_fields_and_typed_owner_identities() {
     );
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 struct Probability(f32);
+impl AsULE for Probability {
+    type ULE = <f32 as AsULE>::ULE;
+    fn to_unaligned(self) -> Self::ULE {
+        self.0.to_unaligned()
+    }
+    fn from_unaligned(value: Self::ULE) -> Self {
+        Self(f32::from_unaligned(value))
+    }
+}
 impl CurveValue for Probability {
     type Domain = ContinuousDomain;
     type Derivative = f32;

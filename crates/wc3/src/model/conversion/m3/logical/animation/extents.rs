@@ -1,11 +1,12 @@
 //! Structured native extents become one feature with three editable typed channels.
 use super::super::GraphBuilder;
+use crate::model::conversion::materialize;
 use crate::model::conversion::{Context, Error};
 use crate::model::m3::{self as native, records as nr};
 use crate::model::semantic::profiles::M3;
 use crate::model::semantic::{
     profiles::m3 as surface, Channel, Clock, ControllerId, Curve, FeatureId, Interpolation, Time,
-    Track, Values,
+    Track,
 };
 use native::Envelope;
 
@@ -72,7 +73,7 @@ pub(super) fn read<'a, E: Envelope + Send + Sync>(
             "animated bounds have no declared extent destination",
         ));
     }
-    let time_values = Values::view(times.len(), move |i| {
+    let time_values = materialize(times.len(), move |i| {
         Time::seconds(f64::from(times.get(i).unwrap().unwrap().value) / 1000.).unwrap()
     });
     let mut features = Vec::new();
@@ -100,7 +101,7 @@ pub(super) fn read<'a, E: Envelope + Send + Sync>(
                 target: minimum.clone().try_narrow::<M3>()?,
                 curve: Curve::from_samples(
                     time_values.clone(),
-                    Values::view(min_rows.len(), move |i| {
+                    materialize(min_rows.len(), move |i| {
                         min_rows.get(i).unwrap().unwrap().value.minimum
                     }),
                     mode,
@@ -114,7 +115,7 @@ pub(super) fn read<'a, E: Envelope + Send + Sync>(
                 target: maximum.clone().try_narrow::<M3>()?,
                 curve: Curve::from_samples(
                     time_values.clone(),
-                    Values::view(max_rows.len(), move |i| {
+                    materialize(max_rows.len(), move |i| {
                         max_rows.get(i).unwrap().unwrap().value.maximum
                     }),
                     mode,
@@ -128,7 +129,7 @@ pub(super) fn read<'a, E: Envelope + Send + Sync>(
                 target: radius.clone().try_narrow::<M3>()?,
                 curve: Curve::from_samples(
                     time_values.clone(),
-                    Values::view(radius_rows.len(), move |i| {
+                    materialize(radius_rows.len(), move |i| {
                         radius_rows.get(i).unwrap().unwrap().value.radius
                     }),
                     mode,

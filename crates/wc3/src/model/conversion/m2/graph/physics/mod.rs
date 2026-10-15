@@ -4,7 +4,7 @@ use crate::model::conversion::{Context, Error};
 use crate::model::m2::{self as native, Bundle, Dialect, File};
 use crate::model::semantic::{
     self, profiles::m2 as profile, profiles::M2 as M2Vocabulary, Model, ModelBuilder, Node, NodeId,
-    Resource, Transform, Values,
+    Resource, Transform,
 };
 type Graph<'a> = Model<'a, M2Vocabulary>;
 type GraphBuilder<'a> = ModelBuilder<'a, M2Vocabulary>;

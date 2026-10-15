@@ -1,12 +1,15 @@
 //! Joins compatible region geometry without changing draw order or shared identities.
 use crate::model::conversion::Error;
+use crate::model::conversion::{materialize, owned};
 use crate::model::semantic::profiles::Wmo;
 use crate::model::semantic::{
     Bounds, DrawAppearanceSchema, DrawSubsets, InstanceId, Model, ModelBuilder, PrimitiveRange,
-    PrimitiveSelection, Values, WmoGeometry,
+    PrimitiveSelection, WmoGeometry,
 };
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Display;
+use zerovec::ule::AsULE;
+use zerovec::ZeroVec;
 
 pub(super) fn prepare<'data>(
     model: &Model<'data, Wmo>,
@@ -127,18 +130,20 @@ pub(super) fn prepare<'data>(
                     "world geometry requires triangle connectivity",
                 ));
             };
-            triangles.push(
+            triangles.push(owned(
                 connectivity
-                    .clone()
-                    .map(move |triangle| triangle.map(|vertex| vertex + vertex_base)),
-            );
+                    .iter()
+                    .map(move |triangle| triangle.map(|vertex| vertex + vertex_base))
+                    .collect::<Vec<_>>(),
+            ));
             faces.push(mesh.geometry.triangle_controls().clone());
-            strips.push(
+            strips.push(owned(
                 mesh.geometry
                     .strip_indices()
-                    .clone()
-                    .map(move |vertex| vertex + vertex_base),
-            );
+                    .iter()
+                    .map(move |vertex| vertex + vertex_base)
+                    .collect::<Vec<_>>(),
+            ));
             tangents.push(mesh.geometry.tangent_vectors().clone());
             windows.append(
                 instance.controls.interior_windows,
@@ -296,9 +301,9 @@ pub(super) fn prepare<'data>(
     }
     Ok(Some(builder.finish()?))
 }
-fn concat<'data, T: Clone + Send + Sync + 'data>(
-    parts: Vec<Values<'data, T>>,
-) -> Result<Values<'data, T>, Error> {
+fn concat<'data, T: AsULE + Clone + Send + Sync + 'data>(
+    parts: Vec<ZeroVec<'data, T>>,
+) -> Result<ZeroVec<'data, T>, Error> {
     let mut ends = Vec::with_capacity(parts.len());
     let mut length = 0usize;
     for part in &parts {
@@ -307,7 +312,7 @@ fn concat<'data, T: Clone + Send + Sync + 'data>(
             .ok_or_else(|| Error::new("world.group.merge", "stream length overflows"))?;
         ends.push(length);
     }
-    Ok(Values::view(length, move |index| {
+    Ok(materialize(length, move |index| {
         let part = ends.partition_point(|end| *end <= index);
         let base = if part == 0 { 0 } else { ends[part - 1] };
         parts[part]

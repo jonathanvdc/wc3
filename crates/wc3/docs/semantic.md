@@ -84,7 +84,7 @@ assert_eq!(restored.node(root).unwrap().name, "Root");
 Ok::<(), wc3::model::semantic::Error>(())
 ```
 
-Widening preserves graph identities, meanings, and shared array storage. Its
+Widening preserves graph identities, meanings, and encoded array storage. Its
 `Extends` bound proves that the destination vocabulary can embed every source
 payload. The separate `try_narrow::<Target>()` operation checks an exact
 projection from `Universal`. It consumes the model, moves owned resource
@@ -130,7 +130,7 @@ attaching arbitrary streams to a narrower native schema.
 ## Geometry representations and profile constraints
 
 `MdlxGeometry`, `M2Geometry`, and `M3DisplayGeometry` retain distinct constrained
-APIs while sharing vertex-stream storage. M2 construction requires a two-element
+APIs built on the same packed vertex-stream types. M2 construction requires a two-element
 UV array and four weighted influence slots per vertex, and exposes no tangent or
 color constructor. MDLX supports optional normals and tangents, ordered triangle
 groups, and `JointInfluences` with either equal-weight matrix groups or four
@@ -144,7 +144,7 @@ against current UV values as described in the [conversion guide](conversion.md).
 
 Widening these display types produces `GeometryData` directly, without a
 source-profile tag or an additional geometry wrapper. The arrays move unchanged,
-including borrowed slices, packed views, and shared owned buffers. Narrowing
+including borrowed encoded arrays and owned encoded buffers. Narrowing
 checks the actual streams before constructing the destination's constrained
 type. M2 geometry can therefore narrow to M3 display geometry, while M3 geometry
 with colors cannot narrow to MDLX or M2. Missing normals, absent weighted rows,
@@ -342,7 +342,7 @@ field can use `property.widen::<Universal>()`. Custom payloads may instead use
 `Animated<T, ApplicationProfile>` to constrain their own bindings directly.
 Program channels always carry their model's profile.
 
-Widening maps program selectors into the containing enum while sharing the existing
+Widening maps program selectors into the containing enum while moving the existing
 curve arrays. A union carries selectors in `Either::Left` or `Either::Right` along
 with its other payloads. These wrappers preserve canonical structural identity,
 so the channels still address their owner fields. Exact narrowing projects accepted
@@ -374,7 +374,8 @@ seconds and can precede playback. Coincident keys retain their input order: the
 first key defines the incoming limit, while the last defines the boundary value
 and outgoing segment.
 
-Custom value types implement `CurveValue` and select `DiscreteDomain`,
+Custom value types implement `AsULE` for encoded storage and `CurveValue` for
+curve behavior, selecting `DiscreteDomain`,
 `NumericDomain`, `ContinuousDomain`, or `RotationDomain` through its associated
 `Domain` type. That choice derives the constructor capability traits and supplies
 the native decoder's checks. Applications do not implement those capability
@@ -391,12 +392,12 @@ rescale them to derivatives per second or infer a new quaternion spline conventi
 Native adapters check decoded sampling directives against these capabilities
 and translate component layouts without changing the interpolation mode.
 
-The array constructors accept separate `Values` for times, values, and controls,
-so native adapters can retain borrowed arrays and packed projections. Typed
-`ValueKeyframe`, `HermiteKeyframe`, `BezierKeyframe`, and `TcbKeyframe` records
-provide a convenient authoring interface through the corresponding `*_keys`
-constructors. Those constructors project their input lazily, so borrowing an
-interleaved keyframe slice does not require allocating separate value arrays.
+The array constructors accept separate `ZeroVec` arrays for times, values, and
+controls through `IntoZeroVec`. Existing encoded arrays move unchanged; native
+slices, arrays, and vectors are encoded into owned storage. Typed `ValueKeyframe`,
+`HermiteKeyframe`, `BezierKeyframe`, and `TcbKeyframe` records provide a convenient
+authoring interface through the corresponding `*_keys` constructors. Those
+constructors materialize separate encoded arrays from the interleaved records.
 For example, a quaternion Hermite curve can carry zero derivatives explicitly:
 
 ```rust
@@ -408,21 +409,27 @@ let keys = [HermiteKeyframe {
     incoming: [0.; 4],
     outgoing: [0.; 4],
 }];
-let curve = Curve::hermite_keys(&keys[..])?;
-assert!(curve.values().is_borrowed());
+let curve = Curve::hermite_keys(keys)?;
+assert!(curve.values().is_owned());
 assert_eq!(curve.hermite_derivatives().unwrap().incoming.get(0), Some([0.; 4]));
 Ok::<(), wc3::model::semantic::Error>(())
 ```
 
 ## Borrowing and checked edits
 
-`Values<'data, T>` exposes logical elements independently of their native
-packing. It can borrow slices, decode packed elements on access, or project an
-indexed source through a view. Cloning shares that storage. Imported geometry
-and animation can therefore remain borrowed instead of allocating a second
-copy. The decoded source must outlive every view borrowing its storage. Edited
-or projected values retain their logical meaning and are encoded from those
-values during export.
+Fixed-width semantic arrays use `ZeroVec<'data, T>` directly. Their encoded
+storage exposes logical elements through `get` and `iter`, with `AsULE` defining
+the element representation. Compatible native arrays can retain borrowed encoded
+buffers; conversions between different layouts materialize the logical values
+once. The decoded source must outlive arrays borrowing its storage. Cloning a
+borrowed array retains its buffer, while cloning an owned array copies its
+encoded storage.
+
+Variable-length rows use `ValueGroups<'data, T>`, which stores one flat `ZeroVec`
+plus encoded row offsets. `from_rows` materializes authoring rows; `get` and
+`iter` return borrowed encoded row views. Matrix groups and variable influence
+rows therefore retain their grouping without nested allocations or an abstract
+source behind each array.
 
 A `ModelBuilder` collects an unpublished draft. Reserved IDs permit forward
 references where supported; `finish` checks their definitions, ownership, and
@@ -453,8 +460,9 @@ profile-specific constructor. `GeometryEdit` supplies atomic replacements for
 positions, vertex normals, tangent frames, primary colors, and ordered UV streams.
 An omitted field retains its existing value; an empty stream removes an optional
 value. The operation returns a validated replacement and leaves the original
-geometry unchanged on success or failure. Unchanged `Values` retain shared storage;
-remapped streams are materialized as owned logical values.
+geometry unchanged on success or failure. Unchanged arrays retain their values and
+borrowed buffers; owned buffers are copied when cloning the geometry. Remapped
+streams are materialized as owned encoded arrays.
 
 `edit_capabilities` describes supported common streams, required normals or colors,
 UV-set limits, and whether the current geometry permits vertex remapping. M2, for
@@ -483,6 +491,7 @@ The following edit duplicates a shared vertex while retaining its triangle's
 corner order. The same operation works for any schema that supports remapping.
 
 ```rust
+use wc3::model::common::IntoZeroVec;
 use wc3::model::semantic::{
     GeometryData, GeometryEdit, GeometrySchema, Topology, VertexRemap,
 };
@@ -494,7 +503,7 @@ let geometry = GeometryData::triangles(
 let edited = geometry.edited(GeometryEdit {
     remap: Some(VertexRemap {
         new_to_old: vec![0, 1, 2, 0],
-        topology: Topology::Triangles(vec![[3, 1, 2]].into()),
+        topology: Topology::Triangles(vec![[3, 1, 2]].into_zero_vec()),
     }),
     ..GeometryEdit::default()
 })?;

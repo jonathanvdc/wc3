@@ -1,6 +1,8 @@
 //! Shared vertex storage with constrained profile owners and a profile-independent view.
 use super::geometry_edit::remap_values;
-use super::{Influence, Topology, Values};
+use super::{Influence, Topology, ZeroVec};
+use crate::model::common::AsULE;
+use crate::model::semantic::ValueGroups;
 use std::ops::{Deref, DerefMut};
 
 /// Joint distributions preserve their authored slot structure and blending interpretation.
@@ -10,9 +12,9 @@ pub enum JointInfluences<'data> {
     #[default]
     None,
     /// Equal blending among the ordered joints of each matrix group.
-    MatrixGroups(Values<'data, Vec<u32>>),
+    MatrixGroups(ValueGroups<'data, u32>),
     /// Four ordered weighted joint slots, including zero-weight slots.
-    Four(Values<'data, [Influence; 4]>),
+    Four(ZeroVec<'data, [Influence; 4]>),
 }
 /// Typed vertex streams shared by constrained geometry owners. Stream types
 /// express fixed UV slots, independent vector tangents, multiple colors, or
@@ -20,14 +22,14 @@ pub enum JointInfluences<'data> {
 #[derive(Clone, Debug, Default)]
 pub struct VertexData<
     'data,
-    U = Vec<Values<'data, [f32; 2]>>,
-    T = Values<'data, [f32; 4]>,
-    C = Values<'data, [f32; 4]>,
-    N = Values<'data, [f32; 3]>,
+    U = Vec<ZeroVec<'data, [f32; 2]>>,
+    T = ZeroVec<'data, [f32; 4]>,
+    C = ZeroVec<'data, [f32; 4]>,
+    N = ZeroVec<'data, [f32; 3]>,
     E = (),
 > {
     /// Model-space positions.
-    pub positions: Values<'data, [f32; 3]>,
+    pub positions: ZeroVec<'data, [f32; 3]>,
     /// Normal stream, or () for geometry without shading.
     pub normals: N,
     /// Tangent representation supported by this vocabulary.
@@ -47,23 +49,32 @@ pub(crate) trait RemapStreams {
 impl RemapStreams for () {
     fn remap_streams(&mut self, _: &[u32]) {}
 }
-impl<'a, T: Clone + Send + Sync + 'a> RemapStreams for Values<'a, T> {
+impl<'a, T: AsULE + 'a> RemapStreams for ZeroVec<'a, T> {
     fn remap_streams(&mut self, indices: &[u32]) {
         remap_values(self, indices);
     }
 }
-impl<'a, T: Clone + Send + Sync + 'a> RemapStreams for Vec<Values<'a, T>> {
+impl<'a, T: AsULE + 'a> RemapStreams for Vec<ZeroVec<'a, T>> {
     fn remap_streams(&mut self, indices: &[u32]) {
         for stream in self {
             stream.remap_streams(indices);
         }
     }
 }
-impl<'a, T: Clone + Send + Sync + 'a, const N: usize> RemapStreams for [Values<'a, T>; N] {
+impl<'a, T: AsULE + 'a, const N: usize> RemapStreams for [ZeroVec<'a, T>; N] {
     fn remap_streams(&mut self, indices: &[u32]) {
         for stream in self {
             stream.remap_streams(indices);
         }
+    }
+}
+impl<T: AsULE> RemapStreams for ValueGroups<'_, T> {
+    fn remap_streams(&mut self, indices: &[u32]) {
+        *self = ValueGroups::from_rows(indices.iter().map(|index| {
+            self.get(*index as usize)
+                .expect("validated influence row")
+                .to_vec()
+        }));
     }
 }
 impl<U, T, C, N, E> VertexData<'_, U, T, C, N, E> {
@@ -94,7 +105,7 @@ impl<V: Default, I: Default> Default for GeometryStreams<'_, V, I> {
     fn default() -> Self {
         Self {
             vertices: V::default(),
-            topology: Topology::Triangles(Values::default()),
+            topology: Topology::Triangles(ZeroVec::default()),
             influences: I::default(),
         }
     }
@@ -113,9 +124,9 @@ impl<V, I> DerefMut for GeometryStreams<'_, V, I> {
 pub(crate) type VertexStreams<
     'data,
     I,
-    U = Vec<Values<'data, [f32; 2]>>,
-    T = Values<'data, [f32; 4]>,
-    C = Values<'data, [f32; 4]>,
-    N = Values<'data, [f32; 3]>,
+    U = Vec<ZeroVec<'data, [f32; 2]>>,
+    T = ZeroVec<'data, [f32; 4]>,
+    C = ZeroVec<'data, [f32; 4]>,
+    N = ZeroVec<'data, [f32; 3]>,
     E = (),
 > = GeometryStreams<'data, VertexData<'data, U, T, C, N, E>, I>;

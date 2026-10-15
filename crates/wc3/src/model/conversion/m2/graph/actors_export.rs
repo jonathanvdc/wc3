@@ -1,6 +1,7 @@
 //! Feature-local fields and curves become typed native effect records.
 use super::animation::{animated, animated_spline, fixed_alpha, time_ms};
 use super::*;
+use zerovec::ZeroVec;
 fn anchor(
     model: &Graph<'_>,
     node: semantic::NodeId,

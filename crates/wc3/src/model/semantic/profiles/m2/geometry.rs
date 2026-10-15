@@ -1,18 +1,19 @@
 //! Geometry streams and connectivity available to this model family.
+use crate::model::common::IntoZeroVec;
 use crate::model::semantic::geometry_edit::{check_edit, remap_values};
 use crate::model::semantic::geometry_schema::validate_geometry;
 use crate::model::semantic::vertex_geometry::{GeometryStreams, VertexStreams};
 use crate::model::semantic::TextureCoordinates;
 use crate::model::semantic::{
     Attributes, Error, GeometrySchema, Influence, InfluenceRows, Link, Topology, ValidateLinks,
-    Values,
+    ZeroVec,
 };
 use crate::model::semantic::{
     GeometryData, GeometryInfluences, GeometryKind, GeometryParts, VertexData,
 };
 use crate::model::semantic::{GeometryEdit, GeometryEditCapabilities, StreamSupport};
 type M2Streams<'data> =
-    VertexStreams<'data, Values<'data, [Influence; 4]>, [Values<'data, [f32; 2]>; 2], (), ()>;
+    VertexStreams<'data, ZeroVec<'data, [Influence; 4]>, [ZeroVec<'data, [f32; 2]>; 2], (), ()>;
 
 /// World of Warcraft model geometry with two UV streams and four joint slots.
 /// Unsupported streams are unavailable through this type's constructors.
@@ -24,10 +25,10 @@ type M2Streams<'data> =
 /// ```
 ///
 /// ```compile_fail
-/// use wc3::model::semantic::{Influence, M2Geometry, Values};
+/// use wc3::model::semantic::{Influence, M2Geometry, ZeroVec};
 /// let _ = M2Geometry::new(
 ///     Vec::<[f32; 3]>::new(), Vec::<[f32; 3]>::new(),
-///     [Values::default()], Vec::<[u32; 3]>::new(), Vec::<[Influence; 4]>::new(),
+///     [ZeroVec::default()], Vec::<[u32; 3]>::new(), Vec::<[Influence; 4]>::new(),
 /// );
 /// ```
 #[derive(Clone, Debug)]
@@ -41,24 +42,24 @@ impl<'data> M2Geometry<'data> {
     }
     /// Creates checked native-family geometry from borrowed or owned streams.
     pub fn new(
-        positions: impl Into<Values<'data, [f32; 3]>>,
-        normals: impl Into<Values<'data, [f32; 3]>>,
-        texture_coordinates: [Values<'data, [f32; 2]>; 2],
-        triangles: impl Into<Values<'data, [u32; 3]>>,
-        influences: impl Into<Values<'data, [Influence; 4]>>,
+        positions: impl IntoZeroVec<'data, [f32; 3]>,
+        normals: impl IntoZeroVec<'data, [f32; 3]>,
+        texture_coordinates: [ZeroVec<'data, [f32; 2]>; 2],
+        triangles: impl IntoZeroVec<'data, [u32; 3]>,
+        influences: impl IntoZeroVec<'data, [Influence; 4]>,
     ) -> Result<Self, Error> {
         let geometry = Self {
             streams: VertexStreams {
                 vertices: VertexData {
                     tangents: (),
                     colors: (),
-                    positions: positions.into(),
-                    normals: normals.into(),
+                    positions: positions.into_zero_vec(),
+                    normals: normals.into_zero_vec(),
                     texture_coordinates,
                     extras: (),
                 },
-                topology: Topology::Triangles(triangles.into()),
-                influences: influences.into(),
+                topology: Topology::Triangles(triangles.into_zero_vec()),
+                influences: influences.into_zero_vec(),
             },
         };
         geometry.validate()?;
@@ -103,19 +104,19 @@ impl<'data> GeometrySchema<'data> for M2Geometry<'data> {
         Ok(result)
     }
 
-    fn positions(&self) -> &Values<'data, [f32; 3]> {
+    fn positions(&self) -> &ZeroVec<'data, [f32; 3]> {
         &self.streams.positions
     }
-    fn normals(&self) -> Option<&Values<'data, [f32; 3]>> {
+    fn normals(&self) -> Option<&ZeroVec<'data, [f32; 3]>> {
         Some(&self.streams.normals)
     }
-    fn tangents(&self) -> Option<&Values<'data, [f32; 4]>> {
+    fn tangents(&self) -> Option<&ZeroVec<'data, [f32; 4]>> {
         None
     }
     fn texture_coordinates(&self) -> TextureCoordinates<'_, 'data> {
         TextureCoordinates::Slice(&self.streams.texture_coordinates)
     }
-    fn colors(&self) -> Option<&Values<'data, [f32; 4]>> {
+    fn colors(&self) -> Option<&ZeroVec<'data, [f32; 4]>> {
         None
     }
     fn attributes(&self) -> Attributes<'_, 'data> {
@@ -164,13 +165,13 @@ impl Default for M2Geometry<'_> {
                 vertices: VertexData {
                     tangents: (),
                     colors: (),
-                    positions: Values::default(),
-                    normals: Values::default(),
-                    texture_coordinates: [Values::default(), Values::default()],
+                    positions: ZeroVec::default(),
+                    normals: ZeroVec::default(),
+                    texture_coordinates: [ZeroVec::default(), ZeroVec::default()],
                     extras: (),
                 },
-                topology: Topology::Triangles(Values::default()),
-                influences: Values::default(),
+                topology: Topology::Triangles(ZeroVec::default()),
+                influences: ZeroVec::default(),
             },
         }
     }
@@ -189,13 +190,13 @@ impl<'data> From<M2Geometry<'data>> for GeometryData<'data> {
         } = value.streams;
         GeometryParts {
             strip_set: false,
-            surface_triangles: Values::default(),
+            surface_triangles: ZeroVec::default(),
             pools: Default::default(),
             kind: GeometryKind::Display,
             positions: vertices.positions,
             normals: vertices.normals,
-            tangents: Values::default(),
-            colors: Values::default(),
+            tangents: ZeroVec::default(),
+            colors: ZeroVec::default(),
             texture_coordinates: Vec::from(vertices.texture_coordinates),
             attributes: Vec::new(),
             topology,

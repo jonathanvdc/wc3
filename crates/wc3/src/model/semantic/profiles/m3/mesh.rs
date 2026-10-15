@@ -1,23 +1,26 @@
 //! M3 display and collision geometry remain distinct authored shapes.
 //! Display vertices carry the streams needed for skinning and shading. Collision
 //! meshes contain positions and connectivity, without invented shading data.
+use crate::model::common::{AsULE, IntoZeroVec};
 use crate::model::semantic::geometry_edit::{check_edit, remap_values};
 use crate::model::semantic::geometry_schema::validate_geometry;
 use crate::model::semantic::vertex_geometry::{GeometryStreams, VertexStreams};
 use crate::model::semantic::TextureCoordinates;
 use crate::model::semantic::{
     Attribute, AttributeDomain, AttributeSemantic, AttributeValues, Attributes, Error,
-    GeometryKind, GeometrySchema, Influence, InfluenceRows, Link, Topology, ValidateLinks, Values,
+    GeometryKind, GeometrySchema, Influence, InfluenceRows, Link, Topology, ValidateLinks, ZeroVec,
 };
 use crate::model::semantic::{GeometryData, GeometryInfluences, GeometryParts, VertexData};
 use crate::model::semantic::{GeometryEdit, GeometryEditCapabilities, StreamSupport};
-fn present<'view, 'data, T>(values: &'view Values<'data, T>) -> Option<&'view Values<'data, T>> {
+fn present<'view, 'data, T: AsULE>(
+    values: &'view ZeroVec<'data, T>,
+) -> Option<&'view ZeroVec<'data, T>> {
     (!values.is_empty()).then_some(values)
 }
 /// StarCraft II geometry with native vertex streams and four joint slots.
 #[derive(Clone, Debug)]
 pub struct M3DisplayGeometry<'data> {
-    pub(crate) streams: VertexStreams<'data, Values<'data, [Influence; 4]>>,
+    pub(crate) streams: VertexStreams<'data, ZeroVec<'data, [Influence; 4]>>,
 }
 impl<'data> M3DisplayGeometry<'data> {
     /// Creates an empty geometry definition.
@@ -26,23 +29,23 @@ impl<'data> M3DisplayGeometry<'data> {
     }
     /// Creates checked triangle geometry with its required vertex-normal stream.
     pub fn new(
-        positions: impl Into<Values<'data, [f32; 3]>>,
-        normals: impl Into<Values<'data, [f32; 3]>>,
-        triangles: impl Into<Values<'data, [u32; 3]>>,
-        influences: impl Into<Values<'data, [Influence; 4]>>,
+        positions: impl IntoZeroVec<'data, [f32; 3]>,
+        normals: impl IntoZeroVec<'data, [f32; 3]>,
+        triangles: impl IntoZeroVec<'data, [u32; 3]>,
+        influences: impl IntoZeroVec<'data, [Influence; 4]>,
     ) -> Result<Self, Error> {
         let geometry = Self {
             streams: VertexStreams {
                 vertices: VertexData {
-                    positions: positions.into(),
-                    normals: normals.into(),
-                    tangents: Values::default(),
+                    positions: positions.into_zero_vec(),
+                    normals: normals.into_zero_vec(),
+                    tangents: ZeroVec::default(),
                     texture_coordinates: Vec::new(),
-                    colors: Values::default(),
+                    colors: ZeroVec::default(),
                     extras: (),
                 },
-                topology: Topology::Triangles(triangles.into()),
-                influences: influences.into(),
+                topology: Topology::Triangles(triangles.into_zero_vec()),
+                influences: influences.into_zero_vec(),
             },
         };
         geometry.validate()?;
@@ -51,27 +54,24 @@ impl<'data> M3DisplayGeometry<'data> {
     /// Supplies a native tangent stream.
     pub fn with_tangents(
         mut self,
-        tangents: impl Into<Values<'data, [f32; 4]>>,
+        tangents: impl IntoZeroVec<'data, [f32; 4]>,
     ) -> Result<Self, Error> {
-        self.streams.tangents = tangents.into();
+        self.streams.tangents = tangents.into_zero_vec();
         self.validate()?;
         Ok(self)
     }
     /// Supplies up to five native texture-coordinate streams.
     pub fn with_texture_coordinates(
         mut self,
-        coordinates: Vec<Values<'data, [f32; 2]>>,
+        coordinates: Vec<ZeroVec<'data, [f32; 2]>>,
     ) -> Result<Self, Error> {
         self.streams.texture_coordinates = coordinates;
         self.validate()?;
         Ok(self)
     }
     /// Supplies native vertex colors.
-    pub fn with_colors(
-        mut self,
-        colors: impl Into<Values<'data, [f32; 4]>>,
-    ) -> Result<Self, Error> {
-        self.streams.colors = colors.into();
+    pub fn with_colors(mut self, colors: impl IntoZeroVec<'data, [f32; 4]>) -> Result<Self, Error> {
+        self.streams.colors = colors.into_zero_vec();
         self.validate()?;
         Ok(self)
     }
@@ -118,19 +118,19 @@ impl<'data> GeometrySchema<'data> for M3DisplayGeometry<'data> {
         Ok(result)
     }
 
-    fn positions(&self) -> &Values<'data, [f32; 3]> {
+    fn positions(&self) -> &ZeroVec<'data, [f32; 3]> {
         &self.streams.positions
     }
-    fn normals(&self) -> Option<&Values<'data, [f32; 3]>> {
+    fn normals(&self) -> Option<&ZeroVec<'data, [f32; 3]>> {
         Some(&self.streams.normals)
     }
-    fn tangents(&self) -> Option<&Values<'data, [f32; 4]>> {
+    fn tangents(&self) -> Option<&ZeroVec<'data, [f32; 4]>> {
         present(&self.streams.tangents)
     }
     fn texture_coordinates(&self) -> TextureCoordinates<'_, 'data> {
         TextureCoordinates::Slice(&self.streams.texture_coordinates)
     }
-    fn colors(&self) -> Option<&Values<'data, [f32; 4]>> {
+    fn colors(&self) -> Option<&ZeroVec<'data, [f32; 4]>> {
         present(&self.streams.colors)
     }
     fn attributes(&self) -> Attributes<'_, 'data> {
@@ -166,15 +166,15 @@ impl Default for M3DisplayGeometry<'_> {
         Self {
             streams: VertexStreams {
                 vertices: VertexData {
-                    positions: Values::default(),
-                    normals: Values::default(),
-                    tangents: Values::default(),
+                    positions: ZeroVec::default(),
+                    normals: ZeroVec::default(),
+                    tangents: ZeroVec::default(),
                     texture_coordinates: Vec::new(),
-                    colors: Values::default(),
+                    colors: ZeroVec::default(),
                     extras: (),
                 },
-                topology: Topology::Triangles(Values::default()),
-                influences: Values::default(),
+                topology: Topology::Triangles(ZeroVec::default()),
+                influences: ZeroVec::default(),
             },
         }
     }
@@ -187,44 +187,44 @@ impl ValidateLinks for M3DisplayGeometry<'_> {
 #[derive(Clone, Debug)]
 pub struct M3CollisionGeometry<'data> {
     streams: VertexStreams<'data, (), (), (), (), ()>,
-    face_normals: Values<'data, [f32; 3]>,
-    triangle_controls: Values<'data, f32>,
+    face_normals: ZeroVec<'data, [f32; 3]>,
+    triangle_controls: ZeroVec<'data, f32>,
 }
 impl<'data> M3CollisionGeometry<'data> {
     /// Constructs checked triangle connectivity over borrowed or owned positions.
     pub fn new(
-        positions: impl Into<Values<'data, [f32; 3]>>,
-        triangles: impl Into<Values<'data, [u32; 3]>>,
+        positions: impl IntoZeroVec<'data, [f32; 3]>,
+        triangles: impl IntoZeroVec<'data, [u32; 3]>,
     ) -> Result<Self, Error> {
         let result = Self {
             streams: VertexStreams {
                 vertices: VertexData {
-                    positions: positions.into(),
+                    positions: positions.into_zero_vec(),
                     normals: (),
                     tangents: (),
                     colors: (),
                     texture_coordinates: (),
                     extras: (),
                 },
-                topology: Topology::Triangles(triangles.into()),
+                topology: Topology::Triangles(triangles.into_zero_vec()),
                 influences: (),
             },
-            face_normals: Values::default(),
-            triangle_controls: Values::default(),
+            face_normals: ZeroVec::default(),
+            triangle_controls: ZeroVec::default(),
         };
         result.validate()?;
         Ok(result)
     }
     /// Defines collision points from which a convex boundary can be constructed.
-    pub fn points(positions: impl Into<Values<'data, [f32; 3]>>) -> Result<Self, Error> {
-        let positions = positions.into();
+    pub fn points(positions: impl IntoZeroVec<'data, [f32; 3]>) -> Result<Self, Error> {
+        let positions = positions.into_zero_vec();
         u32::try_from(positions.len()).map_err(|_| {
             Error::new(
                 "m3.collision.points",
                 "point count exceeds logical index capacity",
             )
         })?;
-        let indices = Values::view(positions.len(), |index| index as u32);
+        let indices = (0..positions.len()).map(|index| index as u32).collect();
         let result = Self {
             streams: VertexStreams {
                 vertices: VertexData {
@@ -238,22 +238,22 @@ impl<'data> M3CollisionGeometry<'data> {
                 topology: Topology::Points(indices),
                 influences: (),
             },
-            face_normals: Values::default(),
-            triangle_controls: Values::default(),
+            face_normals: ZeroVec::default(),
+            triangle_controls: ZeroVec::default(),
         };
         result.validate()?;
         Ok(result)
     }
     /// Defines polygon boundaries for authored convex-hull geometry.
     pub fn polygons(
-        positions: impl Into<Values<'data, [f32; 3]>>,
-        corners: impl Into<Values<'data, u32>>,
-        offsets: impl Into<Values<'data, u32>>,
+        positions: impl IntoZeroVec<'data, [f32; 3]>,
+        corners: impl IntoZeroVec<'data, u32>,
+        offsets: impl IntoZeroVec<'data, u32>,
     ) -> Result<Self, Error> {
         let result = Self {
             streams: VertexStreams {
                 vertices: VertexData {
-                    positions: positions.into(),
+                    positions: positions.into_zero_vec(),
                     normals: (),
                     tangents: (),
                     colors: (),
@@ -261,13 +261,13 @@ impl<'data> M3CollisionGeometry<'data> {
                     extras: (),
                 },
                 topology: Topology::Polygons {
-                    corners: corners.into(),
-                    offsets: offsets.into(),
+                    corners: corners.into_zero_vec(),
+                    offsets: offsets.into_zero_vec(),
                 },
                 influences: (),
             },
-            face_normals: Values::default(),
-            triangle_controls: Values::default(),
+            face_normals: ZeroVec::default(),
+            triangle_controls: ZeroVec::default(),
         };
         result.validate()?;
         Ok(result)
@@ -275,27 +275,27 @@ impl<'data> M3CollisionGeometry<'data> {
     /// Supplies an optional normal for each collision triangle.
     pub fn with_face_normals(
         mut self,
-        normals: impl Into<Values<'data, [f32; 3]>>,
+        normals: impl IntoZeroVec<'data, [f32; 3]>,
     ) -> Result<Self, Error> {
-        self.face_normals = normals.into();
+        self.face_normals = normals.into_zero_vec();
         self.validate()?;
         Ok(self)
     }
     /// Supplies scalar triangle controls whose game interpretation is unresolved.
     pub fn with_triangle_controls(
         mut self,
-        controls: impl Into<Values<'data, f32>>,
+        controls: impl IntoZeroVec<'data, f32>,
     ) -> Result<Self, Error> {
-        self.triangle_controls = controls.into();
+        self.triangle_controls = controls.into_zero_vec();
         self.validate()?;
         Ok(self)
     }
     /// Returns the declared control for each triangle, when authored.
-    pub fn triangle_controls(&self) -> Option<&Values<'data, f32>> {
+    pub fn triangle_controls(&self) -> Option<&ZeroVec<'data, f32>> {
         present(&self.triangle_controls)
     }
     /// Returns authored per-triangle normals, independent of vertex shading streams.
-    pub fn face_normals(&self) -> Option<&Values<'data, [f32; 3]>> {
+    pub fn face_normals(&self) -> Option<&ZeroVec<'data, [f32; 3]>> {
         present(&self.face_normals)
     }
 }
@@ -334,19 +334,19 @@ impl<'data> GeometrySchema<'data> for M3CollisionGeometry<'data> {
     fn kind(&self) -> GeometryKind {
         GeometryKind::Collision
     }
-    fn positions(&self) -> &Values<'data, [f32; 3]> {
+    fn positions(&self) -> &ZeroVec<'data, [f32; 3]> {
         &self.streams.positions
     }
-    fn normals(&self) -> Option<&Values<'data, [f32; 3]>> {
+    fn normals(&self) -> Option<&ZeroVec<'data, [f32; 3]>> {
         None
     }
-    fn tangents(&self) -> Option<&Values<'data, [f32; 4]>> {
+    fn tangents(&self) -> Option<&ZeroVec<'data, [f32; 4]>> {
         None
     }
     fn texture_coordinates(&self) -> TextureCoordinates<'_, 'data> {
         TextureCoordinates::Slice(&[])
     }
-    fn colors(&self) -> Option<&Values<'data, [f32; 4]>> {
+    fn colors(&self) -> Option<&ZeroVec<'data, [f32; 4]>> {
         None
     }
     fn attributes(&self) -> Attributes<'_, 'data> {
@@ -420,10 +420,10 @@ impl<'data> M3Geometry<'data> {
     }
     /// Creates checked display geometry with four ordered influence slots.
     pub fn new(
-        positions: impl Into<Values<'data, [f32; 3]>>,
-        normals: impl Into<Values<'data, [f32; 3]>>,
-        triangles: impl Into<Values<'data, [u32; 3]>>,
-        influences: impl Into<Values<'data, [Influence; 4]>>,
+        positions: impl IntoZeroVec<'data, [f32; 3]>,
+        normals: impl IntoZeroVec<'data, [f32; 3]>,
+        triangles: impl IntoZeroVec<'data, [u32; 3]>,
+        influences: impl IntoZeroVec<'data, [Influence; 4]>,
     ) -> Result<Self, Error> {
         Ok(Self::Display(M3DisplayGeometry::new(
             positions, normals, triangles, influences,
@@ -431,15 +431,15 @@ impl<'data> M3Geometry<'data> {
     }
     /// Creates collision geometry without synthesizing absent vertex streams.
     pub fn collision(
-        positions: impl Into<Values<'data, [f32; 3]>>,
-        triangles: impl Into<Values<'data, [u32; 3]>>,
+        positions: impl IntoZeroVec<'data, [f32; 3]>,
+        triangles: impl IntoZeroVec<'data, [u32; 3]>,
     ) -> Result<Self, Error> {
         Ok(Self::Collision(M3CollisionGeometry::new(
             positions, triangles,
         )?))
     }
     /// Adds tangents to display geometry; collision geometry has no tangent stream.
-    pub fn with_tangents(self, values: impl Into<Values<'data, [f32; 4]>>) -> Result<Self, Error> {
+    pub fn with_tangents(self, values: impl IntoZeroVec<'data, [f32; 4]>) -> Result<Self, Error> {
         match self {
             Self::Display(value) => Ok(Self::Display(value.with_tangents(values)?)),
             Self::Collision(_) => Err(Error::new(
@@ -451,7 +451,7 @@ impl<'data> M3Geometry<'data> {
     /// Adds ordered display UV slots; an empty slot denotes an absent native channel.
     pub fn with_texture_coordinates(
         self,
-        values: Vec<Values<'data, [f32; 2]>>,
+        values: Vec<ZeroVec<'data, [f32; 2]>>,
     ) -> Result<Self, Error> {
         match self {
             Self::Display(value) => Ok(Self::Display(value.with_texture_coordinates(values)?)),
@@ -462,7 +462,7 @@ impl<'data> M3Geometry<'data> {
         }
     }
     /// Adds vertex colors to display geometry.
-    pub fn with_colors(self, values: impl Into<Values<'data, [f32; 4]>>) -> Result<Self, Error> {
+    pub fn with_colors(self, values: impl IntoZeroVec<'data, [f32; 4]>) -> Result<Self, Error> {
         match self {
             Self::Display(value) => Ok(Self::Display(value.with_colors(values)?)),
             Self::Collision(_) => Err(Error::new(
@@ -510,11 +510,11 @@ impl<'data> GeometrySchema<'data> for M3Geometry<'data> {
     }
 
     delegate!(kind, GeometryKind);
-    delegate!(positions, &Values<'data, [f32; 3]>);
-    delegate!(normals, Option<&Values<'data, [f32; 3]>>);
-    delegate!(tangents, Option<&Values<'data, [f32; 4]>>);
+    delegate!(positions, &ZeroVec<'data, [f32; 3]>);
+    delegate!(normals, Option<&ZeroVec<'data, [f32; 3]>>);
+    delegate!(tangents, Option<&ZeroVec<'data, [f32; 4]>>);
     delegate!(texture_coordinates, TextureCoordinates<'_, 'data>);
-    delegate!(colors, Option<&Values<'data, [f32; 4]>>);
+    delegate!(colors, Option<&ZeroVec<'data, [f32; 4]>>);
     delegate!(attributes, Attributes<'_, 'data>);
     delegate!(topology, &Topology<'data>);
     delegate!(influences, InfluenceRows<'_, 'data>);
@@ -547,7 +547,7 @@ impl<'data> From<M3DisplayGeometry<'data>> for GeometryData<'data> {
         } = value.streams;
         GeometryParts {
             strip_set: false,
-            surface_triangles: Values::default(),
+            surface_triangles: ZeroVec::default(),
             pools: Default::default(),
             kind: GeometryKind::Display,
             positions: vertices.positions,

@@ -1,7 +1,8 @@
 //! Authored liquid grids retain the explicitly selected flow vocabulary.
+use crate::model::conversion::materialize;
 use crate::model::conversion::Error;
 use crate::model::semantic::profiles::wmo as profile;
-use crate::model::semantic::{MaterialId, Values};
+use crate::model::semantic::MaterialId;
 use crate::model::wmo::group::{GroupChunk, LiquidVertices};
 use crate::model::wmo::{Dialect, Group};
 pub(super) fn read<'a, D: Dialect>(
@@ -17,7 +18,7 @@ pub(super) fn read<'a, D: Dialect>(
                 .vertex_dimensions
                 .map(|value| u32::try_from(value).expect("validated nonnegative liquid dimension"));
             let vertices = match &liquid.vertices {
-                LiquidVertices::Water(rows) => Values::view(rows.len(), move |index| {
+                LiquidVertices::Water(rows) => materialize(rows.len(), move |index| {
                     let row = rows
                         .get(index)
                         .expect("checked liquid vertex")
@@ -29,7 +30,7 @@ pub(super) fn read<'a, D: Dialect>(
                         control: row.filler,
                     }
                 }),
-                LiquidVertices::Magma(rows) => Values::view(rows.len(), move |index| {
+                LiquidVertices::Magma(rows) => materialize(rows.len(), move |index| {
                     let row = rows
                         .get(index)
                         .expect("checked liquid vertex")
@@ -39,7 +40,7 @@ pub(super) fn read<'a, D: Dialect>(
                         coordinates: row.texture_coordinates,
                     }
                 }),
-                LiquidVertices::Unresolved(rows) => Values::view(rows.len(), move |index| {
+                LiquidVertices::Unresolved(rows) => materialize(rows.len(), move |index| {
                     let row = rows
                         .get(index)
                         .expect("checked liquid vertex")
@@ -64,7 +65,7 @@ pub(super) fn read<'a, D: Dialect>(
                         })?,
                 )
             };
-            let tiles = Values::view(liquid.tiles.len(), move |index| {
+            let tiles = materialize(liquid.tiles.len(), move |index| {
                 liquid
                     .tiles
                     .get(index)

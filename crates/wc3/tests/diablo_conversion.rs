@@ -1,3 +1,4 @@
+use wc3::model::common::IntoZeroVec;
 use wc3::model::conversion::{
     diablo::d3 as conversion, ApproximationPolicy, ExportOptions, ImportOptions, LossPolicy,
     UnknownPolicy,
@@ -159,7 +160,7 @@ fn appearance_export_honors_numeric_approximation_policy() {
         .edit(|builder| {
             let mut mesh = builder.model().mesh(mesh_id).unwrap().clone();
             let mut streams = mesh.geometry.streams().clone();
-            streams.normals = vec![[0., 0., 1.]; 3].into();
+            streams.normals = vec![[0., 0., 1.]; 3].into_zero_vec();
             mesh.geometry = mesh.geometry.with_streams(streams)?;
             builder.set_mesh(mesh_id, mesh)
         })
@@ -759,7 +760,7 @@ fn auxiliary_direction_bytes_survive_strict_import_and_profile_conversion() {
         .streams()
         .extras
         .direction_auxiliary
-        .is_borrowed());
+        .is_owned());
     assert_eq!(
         mesh.geometry.streams().extras.direction_auxiliary.get(0),
         Some([0x42, 0x23, 0x11])

@@ -1,10 +1,11 @@
 //! Typed curves and property destinations, independent of file clocks and channel numbers.
 use crate::model::semantic::profiles::{Extends, Narrows, Profile, Universal};
 use crate::model::semantic::{
-    ClipId, ClockId, Error, EventId, FeatureId, NodeId, Quaternion, TextureId, Values,
+    ClipId, ClockId, Error, EventId, FeatureId, NodeId, Quaternion, TextureId,
 };
 use std::borrow::Cow;
 use std::collections::BTreeMap;
+use zerovec::{ule::AsULE, ZeroVec};
 mod curves;
 pub use curves::*;
 
@@ -258,7 +259,7 @@ pub struct Event<'a> {
     /// Optional node anchor.
     pub node: Option<NodeId>,
     /// Logical payload bytes, when a format defines an event message.
-    pub payload: Values<'a, u8>,
+    pub payload: ZeroVec<'a, u8>,
 }
 /// A clip reference used by format-specific alias and transition metadata.
 pub type ClipReference = ClipId;
@@ -357,5 +358,15 @@ impl<T: PartialEq, P: Profile, Q: Profile> PartialEq<Animated<T, Q>> for Animate
                 (Some(a), Some(b)) => a == b,
                 _ => false,
             }
+    }
+}
+
+impl AsULE for Time {
+    type ULE = <f64 as AsULE>::ULE;
+    fn to_unaligned(self) -> Self::ULE {
+        self.0.to_unaligned()
+    }
+    fn from_unaligned(value: Self::ULE) -> Self {
+        Self(f64::from_unaligned(value))
     }
 }

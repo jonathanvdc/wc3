@@ -1,4 +1,6 @@
 //! Geometry, skin bindings, and placements use logical graph identities.
+use crate::model::common::AsULE;
+use crate::model::common::IntoZeroVec;
 use crate::model::semantic::profiles::{Profile, Universal};
 use crate::model::semantic::BindingSchema as _;
 use crate::model::semantic::TextureCoordinates;
@@ -6,7 +8,7 @@ use crate::model::semantic::{Attributes, BindMatrices, IdentityBinding, SurfaceT
 use crate::model::semantic::{
     ConnectivityId, ConnectivitySets, DrawId, DrawSubset, DrawSubsetId, DrawSubsets, Error,
     GeometryData, GeometryEdit, GeometrySchema, InfluenceRows, MeshId, NodeId, PrimitiveRange,
-    PrimitiveSelection, Scope, SkinId, Values,
+    PrimitiveSelection, Scope, SkinId, ZeroVec,
 };
 use std::borrow::Cow;
 use std::collections::BTreeMap;
@@ -55,20 +57,20 @@ pub enum Topology<'a> {
     /// Ordered groups containing different primitive families.
     Mixed(Vec<Topology<'a>>),
     /// Triangle primitives.
-    Triangles(Values<'a, [u32; 3]>),
+    Triangles(ZeroVec<'a, [u32; 3]>),
     /// Polygon face corners with one face-offset boundary per polygon plus a final boundary.
     Polygons {
         /// Vertex index of each corner.
-        corners: Values<'a, u32>,
+        corners: ZeroVec<'a, u32>,
         /// Face boundaries in the corner array.
-        offsets: Values<'a, u32>,
+        offsets: ZeroVec<'a, u32>,
     },
     /// Line primitives.
-    Lines(Values<'a, [u32; 2]>),
+    Lines(ZeroVec<'a, [u32; 2]>),
     /// Triangle-strip indices, retaining their authored index order.
-    TriangleStrip(Values<'a, u32>),
+    TriangleStrip(ZeroVec<'a, u32>),
     /// Point primitives.
-    Points(Values<'a, u32>),
+    Points(ZeroVec<'a, u32>),
 }
 /// Which logical geometry elements carry an attribute.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -118,31 +120,31 @@ pub enum AttributeSemantic<'a> {
 #[derive(Clone, Debug)]
 pub enum AttributeValues<'a> {
     /// Complete typed surface records, including material relationships.
-    SurfaceControls(Values<'a, SurfaceTriangleControls>),
+    SurfaceControls(ZeroVec<'a, SurfaceTriangleControls>),
     /// Logical boolean attributes.
-    Boolean(Values<'a, bool>),
+    Boolean(ZeroVec<'a, bool>),
     /// Three exact byte components.
-    Byte3(Values<'a, [u8; 3]>),
+    Byte3(ZeroVec<'a, [u8; 3]>),
     /// Four exact byte components.
-    Byte4(Values<'a, [u8; 4]>),
+    Byte4(ZeroVec<'a, [u8; 4]>),
     /// Exact unsigned sixteen-bit values.
-    U16(Values<'a, u16>),
+    U16(ZeroVec<'a, u16>),
     /// Four exact unsigned integer components.
-    Unsigned4(Values<'a, [u32; 4]>),
+    Unsigned4(ZeroVec<'a, [u32; 4]>),
     /// Quaternion components, distinguished from arbitrary four-vectors.
-    Quaternion(Values<'a, [f32; 4]>),
+    Quaternion(ZeroVec<'a, [f32; 4]>),
     /// Scalar floating-point values.
-    Scalar(Values<'a, f32>),
+    Scalar(ZeroVec<'a, f32>),
     /// Two-component floating-point vectors.
-    Vector2(Values<'a, [f32; 2]>),
+    Vector2(ZeroVec<'a, [f32; 2]>),
     /// Three-component floating-point vectors.
-    Vector3(Values<'a, [f32; 3]>),
+    Vector3(ZeroVec<'a, [f32; 3]>),
     /// Four-component values without implied quaternion meaning.
-    Vector4(Values<'a, [f32; 4]>),
+    Vector4(ZeroVec<'a, [f32; 4]>),
     /// Exact unsigned integers.
-    Unsigned(Values<'a, u32>),
+    Unsigned(ZeroVec<'a, u32>),
     /// Exact signed integers.
-    Signed(Values<'a, i32>),
+    Signed(ZeroVec<'a, i32>),
 }
 impl AttributeValues<'_> {
     /// Number of domain elements carrying a value.
@@ -324,15 +326,15 @@ impl<'a, P: Profile> Mesh<'a, P> {
         P::mesh_skin(&self.controls)
     }
     /// Borrows model-space vertex positions without decoding the entire stream.
-    pub fn positions(&self) -> &Values<'a, [f32; 3]> {
+    pub fn positions(&self) -> &ZeroVec<'a, [f32; 3]> {
         self.geometry.positions()
     }
     /// Borrows authored vertex normals when present.
-    pub fn normals(&self) -> Option<&Values<'a, [f32; 3]>> {
+    pub fn normals(&self) -> Option<&ZeroVec<'a, [f32; 3]>> {
         self.geometry.normals()
     }
     /// Borrows authored vertex tangents when present.
-    pub fn tangents(&self) -> Option<&Values<'a, [f32; 4]>> {
+    pub fn tangents(&self) -> Option<&ZeroVec<'a, [f32; 4]>> {
         self.geometry.tangents()
     }
     /// Borrows ordered texture-coordinate streams.
@@ -340,7 +342,7 @@ impl<'a, P: Profile> Mesh<'a, P> {
         self.geometry.texture_coordinates()
     }
     /// Borrows authored vertex colors when present.
-    pub fn colors(&self) -> Option<&Values<'a, [f32; 4]>> {
+    pub fn colors(&self) -> Option<&ZeroVec<'a, [f32; 4]>> {
         self.geometry.colors()
     }
     /// Borrows additional attributes permitted by this geometry vocabulary.
@@ -545,12 +547,15 @@ impl<'a, P: Profile> MeshInstance<'a, P> {
 impl<'a> Mesh<'a> {
     /// Creates an unrestricted triangle mesh; publication validates the arrays.
     pub fn triangles(
-        positions: impl Into<Values<'a, [f32; 3]>>,
-        triangles: impl Into<Values<'a, [u32; 3]>>,
+        positions: impl IntoZeroVec<'a, [f32; 3]>,
+        triangles: impl IntoZeroVec<'a, [u32; 3]>,
     ) -> Self {
         Self::new(GeometryData {
-            positions: positions.into(),
-            connectivity: ConnectivitySets::new(Topology::Triangles(triangles.into()), Vec::new()),
+            positions: positions.into_zero_vec(),
+            connectivity: ConnectivitySets::new(
+                Topology::Triangles(triangles.into_zero_vec()),
+                Vec::new(),
+            ),
             ..GeometryData::default()
         })
     }
@@ -563,4 +568,39 @@ pub(crate) struct ResolvedDraw<'view, P: Profile> {
     pub count: u32,
     pub controls: &'view P::Draw,
     pub subset: &'view DrawSubset,
+}
+
+impl AsULE for Influence {
+    type ULE = <(u32, f32) as AsULE>::ULE;
+    fn to_unaligned(self) -> Self::ULE {
+        (self.joint, self.weight).to_unaligned()
+    }
+    fn from_unaligned(value: Self::ULE) -> Self {
+        let (joint, weight) = <(u32, f32)>::from_unaligned(value);
+        Self { joint, weight }
+    }
+}
+impl AsULE for NodeInfluence {
+    type ULE = <(NodeId, f32) as AsULE>::ULE;
+    fn to_unaligned(self) -> Self::ULE {
+        (self.node, self.weight).to_unaligned()
+    }
+    fn from_unaligned(value: Self::ULE) -> Self {
+        let (node, weight) = <(NodeId, f32)>::from_unaligned(value);
+        Self { node, weight }
+    }
+}
+impl AsULE for Bounds {
+    type ULE = <([f32; 3], [f32; 3], f32) as AsULE>::ULE;
+    fn to_unaligned(self) -> Self::ULE {
+        (self.minimum, self.maximum, self.sphere_radius).to_unaligned()
+    }
+    fn from_unaligned(value: Self::ULE) -> Self {
+        let (minimum, maximum, sphere_radius) = <([f32; 3], [f32; 3], f32)>::from_unaligned(value);
+        Self {
+            minimum,
+            maximum,
+            sphere_radius,
+        }
+    }
 }

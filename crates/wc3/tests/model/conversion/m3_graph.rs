@@ -1,3 +1,4 @@
+use wc3::model::common::IntoZeroVec;
 use wc3::model::semantic::Model;
 use wc3::model::{
     conversion,
@@ -277,11 +278,11 @@ fn every_particle_record_revision_maps_through_logical_fields() {
 }
 
 #[test]
-fn static_collision_streams_remain_borrowed_and_independently_editable() {
+fn static_collision_streams_are_materialized_and_independently_editable() {
     use wc3::model::semantic::profiles::Universal;
     use wc3::model::semantic::{
         AttributeDomain, AttributeSemantic, GeometryKind, GeometrySchema, M3CollisionGeometry,
-        M3Geometry, Values,
+        M3Geometry,
     };
     let source = source();
     let id = source.model.root_id();
@@ -353,20 +354,20 @@ fn static_collision_streams_remain_borrowed_and_independently_editable() {
     };
     let id = system.mesh;
     let mesh = imported.mesh(id).unwrap();
-    assert!(mesh.positions().is_borrowed());
+    assert!(mesh.positions().is_owned());
     assert!(mesh.normals().is_none());
     let M3Geometry::Collision(geometry) = &mesh.geometry else {
         panic!("expected collision geometry")
     };
-    assert!(geometry.face_normals().unwrap().is_borrowed());
+    assert!(geometry.face_normals().unwrap().is_owned());
     let mut edited = mesh.clone();
     edited.geometry = M3Geometry::Collision(
         M3CollisionGeometry::new(
-            Values::owned(vec![[0., 0., 0.], [2., 0., 0.], [0., 1., 0.]]),
-            Values::owned(vec![[0, 1, 2]]),
+            (vec![[0., 0., 0.], [2., 0., 0.], [0., 1., 0.]]).into_zero_vec(),
+            (vec![[0, 1, 2]]).into_zero_vec(),
         )
         .unwrap()
-        .with_face_normals(Values::owned(vec![[0., 0., 1.]]))
+        .with_face_normals((vec![[0., 0., 1.]]).into_zero_vec())
         .unwrap(),
     );
     imported.edit(|draft| draft.set_mesh(id, edited)).unwrap();

@@ -3,7 +3,7 @@
 //! introduces a hidden skeleton or owns an encoded model document.
 use super::{values::BoneSetFlags, Body, BodyId, Cloth, Constraint, ControllerSelection, Joint};
 use crate::model::semantic::{
-    Error, FeatureId, FeatureKind, GeometryKind, Link, MeshId, ValidateLinks, Values,
+    Error, FeatureId, FeatureKind, GeometryKind, Link, MeshId, ValidateLinks, ZeroVec,
 };
 use std::borrow::Cow;
 use std::collections::HashSet;
@@ -59,7 +59,7 @@ pub struct AnimationPartition<'a> {
     /// Fallback selector in the same unresolved namespace.
     pub fallback_selector: u16,
     /// Ordered authored split-item controls, without an invented bone interpretation.
-    pub split_items: Values<'a, u16>,
+    pub split_items: ZeroVec<'a, u16>,
 }
 /// Independent M3 scene systems whose ownership is separate from node features.
 #[derive(Clone, Debug, PartialEq)]

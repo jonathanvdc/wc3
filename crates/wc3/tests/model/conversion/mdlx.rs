@@ -1,10 +1,11 @@
+use wc3::model::common::IntoZeroVec;
 #[path = "mdlx/graph.rs"]
 mod graph;
 use std::borrow::Cow;
 use wc3::model::{
     conversion::{self, ExportOptions, ImportOptions, UnknownPolicy},
     mdlx::{self, mdl::Read as _},
-    semantic::{profiles::mdlx as profile, Animated, Channel, Clock, Values},
+    semantic::{profiles::mdlx as profile, Animated, Channel, Clock},
 };
 fn source() -> mdlx::Model<'static, mdlx::V800> {
     mdlx::Model::decode_mdl(include_str!("../../fixtures/mdl/quad_model.mdl")).unwrap()
@@ -220,12 +221,14 @@ fn unknown_blocks_are_rejected_or_dropped_before_authoring_edits() {
     mesh.geometry = mesh
         .geometry
         .clone()
-        .with_positions(Values::owned(
-            mesh.positions()
+        .with_positions(
+            (mesh
+                .positions()
                 .iter()
                 .map(|position| position.map(|value| value + 1.))
-                .collect::<Vec<_>>(),
-        ))
+                .collect::<Vec<_>>())
+            .into_zero_vec(),
+        )
         .unwrap();
     imported
         .value
@@ -242,7 +245,7 @@ fn unknown_blocks_are_rejected_or_dropped_before_authoring_edits() {
         .all(|chunk| !matches!(chunk, mdlx::chunks::ModelChunk::Unknown(_))));
 }
 #[test]
-fn shared_spline_keys_are_borrowed_and_editable_without_encoded_bridges() {
+fn spline_keys_materialize_once_and_remain_editable() {
     let mut source = source();
     source.bones_mut().next().unwrap().node.translation = Some(
         mdlx::animation::Track::hermite(
@@ -271,12 +274,12 @@ fn shared_spline_keys_are_borrowed_and_editable_without_encoded_bridges() {
         panic!("translation curve missing")
     };
     assert!(matches!(track.clock, Clock::Shared(_)));
-    assert!(track.curve.values().is_borrowed());
+    assert!(track.curve.values().is_owned());
     let mut values = track.curve.values().to_vec();
     values[1] = [3.; 3];
     track.curve = wc3::model::semantic::Curve::hermite(
         track.curve.times().to_vec(),
-        Values::owned(values),
+        (values).into_zero_vec(),
         track.curve.hermite_derivatives().unwrap().incoming.clone(),
         track.curve.hermite_derivatives().unwrap().outgoing.clone(),
     )

@@ -6,9 +6,10 @@ use crate::model::mdlx::{self as native, ModelDialect};
 use crate::model::semantic::profiles::mdlx as profile;
 use crate::model::semantic::profiles::Mdlx;
 use crate::model::semantic::{
-    Clock, ClockId, Event, MaterialId, ModelBuilder, NodeId, TextureId, Time, Values,
+    Clock, ClockId, Event, MaterialId, ModelBuilder, NodeId, TextureId, Time,
 };
 use std::collections::BTreeMap;
+use zerovec::ZeroVec;
 
 pub(super) fn read<'a, D: ModelDialect>(
     source: &'a native::Model<'_, D>,
@@ -268,7 +269,7 @@ pub(super) fn read<'a, D: ModelDialect>(
                 node: Some(id),
                 feature: Some(feature),
                 clock,
-                payload: Values::default(),
+                payload: ZeroVec::new(),
             };
             if let Some(clock) = clock {
                 decoder

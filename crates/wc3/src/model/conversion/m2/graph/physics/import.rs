@@ -1,6 +1,7 @@
 //! Imports native rigid-body documents without an intermediate model encoding.
 use super::super::overrides::resource;
 use super::*;
+use crate::model::conversion::materialize;
 use profile::{
     values::{PhysicsBodyKind, PhysicsKind},
     Body, Physics, Vegetation,
@@ -98,7 +99,7 @@ pub(in super::super) fn import<'a, 'data: 'a, D: Dialect>(
             .iter()
             .find_map(|chunk| {
                 if let Pc::AllowList { keys, .. } = chunk {
-                    Some(Values::view(keys.len(), move |i| keys.get(i).unwrap()))
+                    Some(materialize(keys.len(), move |i| keys.get(i).unwrap()))
                 } else {
                     None
                 }

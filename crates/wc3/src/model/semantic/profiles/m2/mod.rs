@@ -14,7 +14,7 @@ pub use physics::*;
 /// Logical choices and behavior flags specific to this model family.
 pub mod values;
 use crate::model::semantic::{
-    Animated, Bounds, ClipId, Link, NodeId, Resource, ValidateLinks, Values,
+    Animated, Bounds, ClipId, Link, NodeId, Resource, ValidateLinks, ZeroVec,
 };
 use values::{ModelFlags, SequenceFlags};
 
@@ -88,7 +88,7 @@ pub struct BoneOverride<'a> {
     /// Bones receiving the matrices, in matching order.
     pub bones: Vec<NodeId>,
     /// Model-space override transforms.
-    pub transforms: Values<'a, [[f32; 4]; 4]>,
+    pub transforms: ZeroVec<'a, [[f32; 4]; 4]>,
 }
 /// Model-wide behavior and external game-category bindings.
 #[derive(Clone, Debug, Default)]
@@ -124,11 +124,11 @@ pub struct TextureAnimations {
 #[derive(Clone, Debug)]
 pub struct Collision<'a> {
     /// Collision vertices in model coordinates.
-    pub positions: Values<'a, [f32; 3]>,
+    pub positions: ZeroVec<'a, [f32; 3]>,
     /// Collision face connectivity.
-    pub triangles: Values<'a, [u32; 3]>,
+    pub triangles: ZeroVec<'a, [u32; 3]>,
     /// Per-face collision normals.
-    pub normals: Values<'a, [f32; 3]>,
+    pub normals: ZeroVec<'a, [f32; 3]>,
     /// Conservative collision bounds.
     pub bounds: Bounds,
 }

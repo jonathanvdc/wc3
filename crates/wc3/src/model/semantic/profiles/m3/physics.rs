@@ -1,7 +1,8 @@
 //! Logical M3 collision shapes, bodies, joints, and cloth.
 use super::{values::*, Property};
+use crate::model::common::AsULE;
 use crate::model::semantic::ids::Scope;
-use crate::model::semantic::{Id, MeshId, NodeId, NodeInfluence, Values};
+use crate::model::semantic::{Id, MeshId, NodeId, NodeInfluence, ZeroVec};
 
 /// Identifies one cloth definition in the M3 profile.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
@@ -53,7 +54,7 @@ pub enum ShapeGeometry<'a> {
         /// Collision geometry supplying the hull's points and any authored connectivity.
         mesh: MeshId,
         /// Authored plane equations, when declared.
-        planes: Values<'a, [f32; 4]>,
+        planes: ZeroVec<'a, [f32; 4]>,
     },
     /// Triangle collision surface.
     TriangleMesh {
@@ -62,7 +63,7 @@ pub enum ShapeGeometry<'a> {
         /// Collision mesh supplying positions and triangle connectivity.
         mesh: MeshId,
         /// Authored plane equations, when declared.
-        planes: Values<'a, [f32; 4]>,
+        planes: ZeroVec<'a, [f32; 4]>,
     },
     /// Unrecognized game collider category with its understood numeric and geometric controls.
     Unknown {
@@ -73,7 +74,7 @@ pub enum ShapeGeometry<'a> {
         /// Understood collision geometry, when supplied.
         mesh: Option<MeshId>,
         /// Authored plane equations, when supplied.
-        planes: Values<'a, [f32; 4]>,
+        planes: ZeroVec<'a, [f32; 4]>,
     },
 }
 /// Additional authored geometry carried alongside a primitive collider.
@@ -82,7 +83,7 @@ pub struct AuxiliaryGeometry<'a> {
     /// Independently addressable collision geometry.
     pub mesh: MeshId,
     /// Authored plane equations associated with this geometry.
-    pub planes: Values<'a, [f32; 4]>,
+    pub planes: ZeroVec<'a, [f32; 4]>,
 }
 /// Collider placement and definition in body-local space.
 #[derive(Clone, Debug, PartialEq)]
@@ -212,7 +213,7 @@ pub struct ClothProxy<'a> {
     /// Cloth cage used to deform the proxy mesh.
     pub cloth: ClothId,
     /// Four cage-vertex contributions for each proxy vertex.
-    pub influences: Values<'a, [CageInfluence; 4]>,
+    pub influences: ZeroVec<'a, [CageInfluence; 4]>,
 }
 
 /// Editable M3 Cloth values.
@@ -221,11 +222,11 @@ pub struct Cloth<'a> {
     /// Mesh defining the simulated cloth cage.
     pub cage: MeshId,
     /// Four scene-node contributions anchoring each simulated particle.
-    pub anchors: Values<'a, [Option<NodeInfluence>; 4]>,
+    pub anchors: ZeroVec<'a, [Option<NodeInfluence>; 4]>,
     /// Unresolved authored cage-and-anchor control.
     pub anchor_control: u32,
     /// Particle movement controls; bit zero permits motion and remaining bits are unresolved.
-    pub sim_enabled: Values<'a, u8>,
+    pub sim_enabled: ZeroVec<'a, u8>,
     /// Capsule colliders participating in cloth collision.
     pub colliders: Vec<ClothCollider>,
     /// Deformation bindings from simulated cage vertices to output meshes.
@@ -314,4 +315,15 @@ pub struct Constraint {
     pub flags: ConstraintFlags,
     /// Force threshold associated with constraint breakage.
     pub break_force: f32,
+}
+
+impl AsULE for CageInfluence {
+    type ULE = <(u32, f32) as AsULE>::ULE;
+    fn to_unaligned(self) -> Self::ULE {
+        (self.vertex, self.weight).to_unaligned()
+    }
+    fn from_unaligned(value: Self::ULE) -> Self {
+        let (vertex, weight) = <(u32, f32)>::from_unaligned(value);
+        Self { vertex, weight }
+    }
 }

@@ -4,12 +4,11 @@ use super::face;
 use crate::model::conversion::wmo::graph::draw::{
     bind_draw, ImportedDrawControls, StripWindow, TangentWindow,
 };
+use crate::model::conversion::{materialize, owned};
 use crate::model::conversion::{Context, Error};
 use crate::model::semantic::profiles::wmo::{Group as LogicalGroup, Lighting, WorldSystem};
 use crate::model::semantic::profiles::Wmo;
-use crate::model::semantic::{
-    MaterialId, Mesh, MeshInstance, ModelBuilder, Node, Values, WmoGeometry,
-};
+use crate::model::semantic::{MaterialId, Mesh, MeshInstance, ModelBuilder, Node, WmoGeometry};
 use crate::model::wmo::group::GroupChunk;
 use crate::model::wmo::records::{BatchMetadata, HeaderTailMetadata, TriangleFlags2};
 use crate::model::wmo::{Dialect, Group, GroupKey};
@@ -24,33 +23,29 @@ pub(in crate::model::conversion::wmo::graph) fn read<'a, D: Dialect>(
     context: &mut Context,
 ) -> Result<crate::model::semantic::InstanceId, Error> {
     let (key, root) = group_root;
-    let mut positions = Values::default();
-    let mut normals = Values::default();
-    let mut indices = Values::default();
+    let mut positions = ZeroVec::new();
+    let mut normals = ZeroVec::new();
+    let mut indices = ZeroVec::new();
     let mut coordinates = Vec::new();
     let mut colors = Vec::new();
-    let mut strip_indices = Values::default();
-    let mut tangent_vectors = Values::default();
+    let mut strip_indices = ZeroVec::new();
+    let mut tangent_vectors = ZeroVec::new();
     for chunk in source.chunks() {
         match chunk {
             GroupChunk::Positions(values) => {
-                positions = Values::from_zero_vec(
-                    ZeroVec::parse_bytes(values.as_bytes())
-                        .map_err(|error| Error::new("world.positions", error.to_string()))?,
-                )
+                positions = ZeroVec::parse_bytes(values.as_bytes())
+                    .map_err(|error| Error::new("world.positions", error.to_string()))?
             }
             GroupChunk::Normals(values) => {
-                normals = Values::from_zero_vec(
-                    ZeroVec::parse_bytes(values.as_bytes())
-                        .map_err(|error| Error::new("world.normals", error.to_string()))?,
-                )
+                normals = ZeroVec::parse_bytes(values.as_bytes())
+                    .map_err(|error| Error::new("world.normals", error.to_string()))?
             }
-            GroupChunk::TextureCoordinates(values) => coordinates.push(Values::from_zero_vec(
+            GroupChunk::TextureCoordinates(values) => coordinates.push(
                 ZeroVec::parse_bytes(values.as_bytes())
                     .map_err(|error| Error::new("world.coordinates", error.to_string()))?,
-            )),
+            ),
             GroupChunk::VertexColors(values) | GroupChunk::VertexColors2(values) => {
-                colors.push(Values::view(values.len(), move |index| {
+                colors.push(materialize(values.len(), move |index| {
                     let [b, g, r, a] = values
                         .get(index)
                         .expect("checked color index")
@@ -59,15 +54,13 @@ pub(in crate::model::conversion::wmo::graph) fn read<'a, D: Dialect>(
                 }))
             }
             GroupChunk::StripIndices(rows) => {
-                strip_indices = Values::view(rows.len(), move |index| {
+                strip_indices = materialize(rows.len(), move |index| {
                     u32::from(rows.get(index).unwrap().unwrap())
                 })
             }
             GroupChunk::Tangents(rows) => {
-                tangent_vectors = Values::from_zero_vec(
-                    ZeroVec::parse_bytes(rows.tangents.as_bytes())
-                        .map_err(|error| Error::new("world.tangents", error.to_string()))?,
-                )
+                tangent_vectors = ZeroVec::parse_bytes(rows.tangents.as_bytes())
+                    .map_err(|error| Error::new("world.tangents", error.to_string()))?
             }
             GroupChunk::TangentsUnresolved(bytes) => {
                 let count = source
@@ -87,13 +80,11 @@ pub(in crate::model::conversion::wmo::graph) fn read<'a, D: Dialect>(
                 let bytes = bytes.get(prefix..).ok_or_else(|| {
                     Error::new("world.tangents", "batch map exceeds tangent payload")
                 })?;
-                tangent_vectors = Values::from_zero_vec(
-                    ZeroVec::parse_bytes(bytes)
-                        .map_err(|error| Error::new("world.tangents", error.to_string()))?,
-                );
+                tangent_vectors = ZeroVec::parse_bytes(bytes)
+                    .map_err(|error| Error::new("world.tangents", error.to_string()))?;
             }
             GroupChunk::Indices(values) => {
-                indices = Values::view(values.len(), move |index| {
+                indices = materialize(values.len(), move |index| {
                     u32::from(
                         values
                             .get(index)
@@ -103,7 +94,7 @@ pub(in crate::model::conversion::wmo::graph) fn read<'a, D: Dialect>(
                 })
             }
             GroupChunk::Indices32(values) => {
-                indices = Values::view(values.len(), move |index| {
+                indices = materialize(values.len(), move |index| {
                     values
                         .get(index)
                         .expect("checked index")
@@ -119,7 +110,7 @@ pub(in crate::model::conversion::wmo::graph) fn read<'a, D: Dialect>(
             "indices do not form complete triangles",
         ));
     }
-    let triangles = Values::view(indices.len() / 3, move |index| {
+    let triangles = materialize(indices.len() / 3, move |index| {
         [
             indices.get(index * 3).unwrap(),
             indices.get(index * 3 + 1).unwrap(),
@@ -186,7 +177,7 @@ pub(in crate::model::conversion::wmo::graph) fn read<'a, D: Dialect>(
         .with_normals(normals)?
         .with_texture_coordinates(coordinates)?
         .with_color_sets(colors)?
-        .with_triangle_controls(Values::owned(face_controls))?;
+        .with_triangle_controls(owned(face_controls))?;
     let header = source.header();
     let mut mesh = Mesh::<Wmo>::new(geometry);
     mesh.name = super::relationships::name(root, source.header().name_offset)?;
@@ -330,7 +321,7 @@ pub(in crate::model::conversion::wmo::graph) fn read<'a, D: Dialect>(
     for chunk in source.chunks() {
         match chunk {
             GroupChunk::TerrainCutPlanes(rows) => {
-                region.terrain_cut_planes = Values::view(rows.len(), move |index| {
+                region.terrain_cut_planes = materialize(rows.len(), move |index| {
                     let row = rows
                         .get(index)
                         .expect("checked plane index")

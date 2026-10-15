@@ -1,4 +1,5 @@
 use super::*;
+use crate::model::common::Borrowed as _;
 use crate::model::semantic::Quaternion;
 
 #[test]
@@ -45,4 +46,27 @@ fn native_quaternion_controls_round_trip_without_rotation_validation() {
         assert_eq!(curve.outgoing_value(1), None);
         assert_eq!(curve.interpolation(), mode);
     }
+}
+
+#[test]
+fn packed_curve_arrays_borrow_and_detach_without_changing_keys() {
+    use zerovec::ZeroVec;
+    let times =
+        ZeroVec::alloc_from_slice(&[Time::seconds(-0.5).unwrap(), Time::seconds(1.).unwrap()]);
+    let values = ZeroVec::alloc_from_slice(&[2f32, 4.]);
+    let curve = Curve::linear(times.as_borrowed(), values.as_borrowed()).unwrap();
+    assert_eq!(curve.times().as_bytes().as_ptr(), times.as_bytes().as_ptr());
+    assert_eq!(
+        curve.values().as_bytes().as_ptr(),
+        values.as_bytes().as_ptr()
+    );
+    assert_eq!(curve.values().clone().into_owned().to_vec(), vec![2., 4.]);
+}
+
+#[test]
+fn packed_time_cannot_bypass_finite_curve_validation() {
+    use zerovec::ZeroVec;
+    let bytes = f64::NAN.to_le_bytes();
+    let times = ZeroVec::<Time>::parse_bytes(&bytes).unwrap();
+    assert!(Curve::step(times, [1f32]).is_err());
 }

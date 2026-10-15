@@ -14,6 +14,7 @@ use crate::model::wmo::records::{
 };
 use crate::model::wmo::{RecordLayout, Write};
 use std::collections::BTreeMap;
+use zerovec::ZeroVec;
 
 pub(super) struct DrawFields {
     pub bounds: CullingBox,
@@ -485,7 +486,7 @@ fn write_lighting<'a, B: RecordLayout>(
                 &auxiliary.values.to_vec(),
             )?));
         }
-        let windows = |values: &crate::model::semantic::Values<'_, [u16; 2]>| {
+        let windows = |values: &ZeroVec<'_, [u16; 2]>| {
             values
                 .iter()
                 .map(|[start, count]| BatchRange { start, count })

@@ -1,8 +1,11 @@
-//! Borrowed attribute views over native packed vertex fields.
+//! Native packed vertex fields are projected into canonical semantic arrays.
+use crate::model::conversion::materialize;
 use crate::model::conversion::Error;
+use zerovec::ule::AsULE;
+use zerovec::ZeroVec;
 
 use crate::model::m3::{self as native};
-use crate::model::semantic::Values;
+
 use crate::visit_m3_vertices;
 use native::Envelope;
 use std::array::from_fn;
@@ -58,39 +61,39 @@ impl<'a> Packed<'a> {
     fn row(&self, index: usize) -> &[u8] {
         &self.source[index * self.stride..(index + 1) * self.stride]
     }
-    fn view<T: Clone + Send + Sync + 'a>(
+    fn project<T: AsULE + Clone + Send + Sync + 'a>(
         &self,
         start: usize,
         count: usize,
         map: impl Fn(&[u8]) -> T + Send + Sync + 'a,
-    ) -> Values<'a, T> {
+    ) -> ZeroVec<'a, T> {
         let packed = self.clone();
-        Values::view(count, move |index| map(packed.row(start + index)))
+        materialize(count, move |index| map(packed.row(start + index)))
     }
-    pub fn positions(&self, start: usize, count: usize) -> Values<'a, [f32; 3]> {
-        self.view(start, count, |row| {
+    pub fn positions(&self, start: usize, count: usize) -> ZeroVec<'a, [f32; 3]> {
+        self.project(start, count, |row| {
             [0, 4, 8].map(|offset| f32::from_le_bytes(row[offset..offset + 4].try_into().unwrap()))
         })
     }
-    pub fn normals(&self, start: usize, count: usize) -> Values<'a, [f32; 3]> {
-        self.view(start, count, |row| {
+    pub fn normals(&self, start: usize, count: usize) -> ZeroVec<'a, [f32; 3]> {
+        self.project(start, count, |row| {
             [20, 21, 22].map(|offset| f32::from(row[offset]) / 255. * 2. - 1.)
         })
     }
-    pub fn tangents(&self, start: usize, count: usize) -> Values<'a, [f32; 4]> {
+    pub fn tangents(&self, start: usize, count: usize) -> ZeroVec<'a, [f32; 4]> {
         if count == 0 {
-            return Values::default();
+            return ZeroVec::new();
         }
         let at = self.stride - 4;
-        self.view(start, count, move |row| {
+        self.project(start, count, move |row| {
             [at, at + 1, at + 2, at + 3].map(|offset| f32::from(row[offset]) / 255. * 2. - 1.)
         })
     }
-    pub fn colors(&self, start: usize, count: usize) -> Values<'a, [f32; 4]> {
+    pub fn colors(&self, start: usize, count: usize) -> ZeroVec<'a, [f32; 4]> {
         if !self.color {
-            return Values::default();
+            return ZeroVec::new();
         }
-        self.view(start, count, |row| {
+        self.project(start, count, |row| {
             [26, 25, 24, 27].map(|offset| f32::from(row[offset]) / 255.)
         })
     }
@@ -100,7 +103,7 @@ impl<'a> Packed<'a> {
         count: usize,
         scale: f32,
         offset: f32,
-    ) -> Vec<Values<'a, [f32; 2]>> {
+    ) -> Vec<ZeroVec<'a, [f32; 2]>> {
         let Some(last) = self.uv.iter().rposition(Option::is_some) else {
             return Vec::new();
         };
@@ -108,9 +111,9 @@ impl<'a> Packed<'a> {
             .iter()
             .map(|at| {
                 let Some(at) = *at else {
-                    return Values::default();
+                    return ZeroVec::new();
                 };
-                self.view(start, count, move |row| {
+                self.project(start, count, move |row| {
                     [at, at + 2].map(|lane| {
                         f32::from(i16::from_le_bytes(row[lane..lane + 2].try_into().unwrap()))
                             * scale
@@ -128,14 +131,14 @@ impl<'a> Packed<'a> {
             row[16..20].try_into().unwrap(),
         )
     }
-    pub fn influences<T: Clone + Send + Sync + 'a>(
+    pub fn influences<T: AsULE + Clone + Send + Sync + 'a>(
         &self,
         start: usize,
         count: usize,
         map: impl Fn([u8; 4], [u8; 4]) -> T + Send + Sync + 'a,
-    ) -> Values<'a, T> {
+    ) -> ZeroVec<'a, T> {
         let packed = self.clone();
-        Values::view(count, move |i| {
+        materialize(count, move |i| {
             let (weights, joints) = packed.skin(start + i);
             map(weights, joints)
         })

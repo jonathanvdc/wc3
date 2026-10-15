@@ -1,6 +1,8 @@
 //! Borrowed section geometry and logical shader passes.
 use super::*;
+use crate::model::conversion::materialize;
 use semantic::{Draw, Influence, M2Geometry, Mesh, MeshInstance, Skin, Topology};
+use zerovec::ZeroVec;
 pub(super) fn import<'a, 'data: 'a, D: Dialect>(
     source: &'a Bundle<'data, D>,
     nodes: &[semantic::NodeId],
@@ -84,18 +86,18 @@ where
                     .unwrap()
             };
             let geometry = M2Geometry::new(
-                Values::view(count, move |i| vertex(i).position),
-                Values::view(count, move |i| vertex(i).normal),
+                materialize(count, move |i| vertex(i).position),
+                materialize(count, move |i| vertex(i).normal),
                 std::array::from_fn(|set| {
-                    Values::view(count, move |i| vertex(i).texture_coordinates[set])
+                    materialize(count, move |i| vertex(i).texture_coordinates[set])
                 }),
-                Values::view(faces, move |i| {
+                materialize(faces, move |i| {
                     std::array::from_fn(|corner| {
                         u32::from(section_indices.get(start + i * 3 + corner).unwrap())
                             .wrapping_sub(first as u32)
                     })
                 }),
-                Values::view(count, move |i| {
+                materialize(count, move |i| {
                     let v = vertex(i);
                     std::array::from_fn(|slot| Influence {
                         joint: u32::from(v.bone_indices[slot]),

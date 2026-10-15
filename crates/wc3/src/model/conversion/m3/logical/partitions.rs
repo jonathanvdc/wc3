@@ -4,12 +4,10 @@ use super::{
     write::{append, string as write_string},
     Graph, GraphBuilder,
 };
+use crate::model::conversion::materialize;
 use crate::model::conversion::Error;
 use crate::model::m3::{records, Document, Envelope, Ref};
-use crate::model::semantic::{
-    profiles::m3::{values::BoneSetFlags, AnimationPartition, System},
-    Values,
-};
+use crate::model::semantic::profiles::m3::{values::BoneSetFlags, AnimationPartition, System};
 pub(super) fn read<'a, E: Envelope + Send + Sync>(
     document: &'a Document<'_, E>,
     reference: Ref<records::targets::BoneAnimationSet>,
@@ -33,7 +31,7 @@ pub(super) fn read<'a, E: Envelope + Send + Sync>(
             flags: BoneSetFlags(row.flags.bits()),
             selector: row.animation_sequence_index,
             fallback_selector: row.fallback_sequence_index,
-            split_items: Values::view(items.len(), move |index| {
+            split_items: materialize(items.len(), move |index| {
                 items
                     .get(index)
                     .expect("checked split item")

@@ -1,13 +1,15 @@
 use super::super::Graph;
 use super::*;
+use crate::model::conversion::owned;
 use crate::model::{
     conversion::{Context, ExportOptions},
     m3::{self as native, records as nr},
     semantic::{
         profiles::M3, Channel, Clip, Clock, Controller, Curve, Interpolation, Node, Quaternion,
-        Time, Track, Values,
+        Time, Track,
     },
 };
+use zerovec::ZeroVec;
 
 #[test]
 fn exact_unsigned_keys_rebuild_typed_native_controller_tables() {
@@ -70,8 +72,8 @@ fn exact_unsigned_keys_rebuild_typed_native_controller_tables() {
             Channel::Unsigned(Track {
                 target: batching.clone().try_narrow::<M3>().unwrap(),
                 curve: Curve::from_samples(
-                    Values::owned(vec![Time::seconds(0.).unwrap(), Time::seconds(1.).unwrap()]),
-                    Values::owned(vec![16_777_217, u32::MAX]),
+                    owned(vec![Time::seconds(0.).unwrap(), Time::seconds(1.).unwrap()]),
+                    owned(vec![16_777_217, u32::MAX]),
                     Interpolation::Linear,
                 )
                 .unwrap(),
@@ -130,11 +132,11 @@ fn unselected_program_and_orphan_keys_remain_editable() {
     };
     let mut builder = Graph::builder("program pools");
     let keys = OrderedKeys {
-        times: Values::owned(vec![
+        times: owned(vec![
             Time::seconds(-0.5).unwrap(),
             Time::seconds(2.).unwrap(),
         ]),
-        values: Values::owned(vec![16_777_217u32, u32::MAX]),
+        values: owned(vec![16_777_217u32, u32::MAX]),
     };
     builder
         .add_controller(Controller {
@@ -197,7 +199,7 @@ fn unselected_program_and_orphan_keys_remain_editable() {
         assert_eq!(keys.times.get(0).unwrap().as_seconds(), -0.5);
         assert_eq!(keys.values.get(0), Some(16_777_217));
         assert_eq!(keys.values.get(1), Some(u32::MAX));
-        assert!(keys.values.is_borrowed());
+        assert!(keys.values.is_owned());
     }
     assert_eq!(controller.controls.unbound[0].identity, Some(77));
     assert_eq!(controller.controls.unbound[1].identity, None);
@@ -242,7 +244,7 @@ fn event_blocks_select_occurrences_instead_of_command_features() {
                         time: Time::seconds(time).unwrap(),
                         name: "shared command".into(),
                         node: None,
-                        payload: Values::default(),
+                        payload: ZeroVec::new(),
                     },
                 )
                 .unwrap(),

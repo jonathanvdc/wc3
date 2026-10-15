@@ -1,6 +1,7 @@
 //! Typed authoring keys and borrowed spline controls.
 use super::CurveValue;
-use crate::model::semantic::{Time, Values};
+use crate::model::semantic::Time;
+use zerovec::{ule::AsULE, ZeroVec};
 
 /// Per-key Kochanek–Bartels spline parameters.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
@@ -56,17 +57,32 @@ pub struct TcbKeyframe<T> {
 }
 /// Incoming and outgoing Hermite derivatives stored independently of key values.
 #[derive(Clone, Debug)]
-pub struct HermiteDerivatives<'a, T> {
+pub struct HermiteDerivatives<'a, T: AsULE> {
     /// Derivatives approaching each key.
-    pub incoming: Values<'a, T>,
+    pub incoming: ZeroVec<'a, T>,
     /// Derivatives leaving each key.
-    pub outgoing: Values<'a, T>,
+    pub outgoing: ZeroVec<'a, T>,
 }
 /// Incoming and outgoing Bezier control points stored independently of key values.
 #[derive(Clone, Debug)]
-pub struct BezierControls<'a, T> {
+pub struct BezierControls<'a, T: AsULE> {
     /// Control points approaching each key.
-    pub incoming: Values<'a, T>,
+    pub incoming: ZeroVec<'a, T>,
     /// Control points leaving each key.
-    pub outgoing: Values<'a, T>,
+    pub outgoing: ZeroVec<'a, T>,
+}
+
+impl AsULE for TcbParameters {
+    type ULE = <[f32; 3] as AsULE>::ULE;
+    fn to_unaligned(self) -> Self::ULE {
+        [self.tension, self.continuity, self.bias].to_unaligned()
+    }
+    fn from_unaligned(value: Self::ULE) -> Self {
+        let [tension, continuity, bias] = <[f32; 3]>::from_unaligned(value);
+        Self {
+            tension,
+            continuity,
+            bias,
+        }
+    }
 }
