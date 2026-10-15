@@ -1,5 +1,7 @@
 //! Logical WEM authoring vocabulary, independent of sections and record revisions.
 mod metadata;
+/// Structural animation-property selectors for actor vocabularies.
+pub mod properties;
 pub use metadata::{Metadata, MetadataEntry};
 mod node;
 pub use node::{DeclaredRole, NodeControls, SupplementalNodeFlags};

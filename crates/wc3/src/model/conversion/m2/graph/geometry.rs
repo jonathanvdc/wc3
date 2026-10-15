@@ -184,8 +184,8 @@ where
                     if let Some(color) = core.colors.get(batch.color_index as usize) {
                         let rgb = profile::properties::COLOR.bind(material);
                         let alpha = profile::properties::OPACITY.bind(material);
-                        surface.color.property = Some(rgb.clone());
-                        surface.opacity.property = Some(alpha.clone());
+                        surface.color.property = Some(rgb.clone().widen());
+                        surface.opacity.property = Some(alpha.clone().widen());
                         for (seq, clip) in animation::sequences(clips) {
                             let (start, _) = tables
                                 .sequences
@@ -223,7 +223,7 @@ where
                         let prop = profile::properties::TextureUnit(slot)
                             .weight()
                             .bind(material);
-                        unit.weight.property = Some(prop.clone());
+                        unit.weight.property = Some(prop.clone().widen());
                         for (seq, clip) in animation::sequences(clips) {
                             let (start, _) = tables
                                 .sequences
@@ -256,9 +256,9 @@ where
                         let sc = profile::properties::TextureUnit(slot)
                             .scale()
                             .bind(material);
-                        unit.transform.translation.property = Some(tr.clone());
-                        unit.transform.rotation.property = Some(ro.clone());
-                        unit.transform.scale.property = Some(sc.clone());
+                        unit.transform.translation.property = Some(tr.clone().widen());
+                        unit.transform.rotation.property = Some(ro.clone().widen());
+                        unit.transform.scale.property = Some(sc.clone().widen());
                         for (seq, clip) in animation::sequences(clips) {
                             let (start, _) = tables
                                 .sequences

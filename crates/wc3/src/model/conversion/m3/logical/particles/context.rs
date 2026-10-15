@@ -5,6 +5,7 @@ use super::super::{
 };
 use crate::model::conversion::{Context, Error};
 use crate::model::m3::{self as native, records as nr};
+use crate::model::semantic::profiles::m3::properties::{Field, FieldPath};
 use crate::model::semantic::{
     profiles::m3 as surface, FeatureId, MaterialId, MeshId, OwnerId, Values,
 };
@@ -23,7 +24,7 @@ pub(in crate::model::conversion::m3::logical) struct Reader<'view, 'data, 'draft
 impl<'view, E: Envelope> Reader<'view, '_, '_, E> {
     pub fn property<T: Value>(
         &mut self,
-        path: &str,
+        path: &FieldPath,
         value: nr::AnimationValue<T>,
     ) -> surface::Property<T> {
         let mut result = anim(value);
@@ -37,7 +38,7 @@ impl<'view, E: Envelope> Reader<'view, '_, '_, E> {
     }
     pub fn color(
         &mut self,
-        path: &str,
+        path: &FieldPath,
         value: nr::AnimationValue<[u8; 4]>,
     ) -> surface::Property<[f32; 4]> {
         let mut result = color(value);
@@ -51,7 +52,7 @@ impl<'view, E: Envelope> Reader<'view, '_, '_, E> {
     }
     pub fn fixed_color(
         &mut self,
-        path: &str,
+        path: &FieldPath,
         value: nr::AnimationValue<nr::FixedBytes<4>>,
     ) -> surface::Property<[f32; 4]> {
         let mut result = fixed_color(value);
@@ -106,10 +107,14 @@ impl<'view, E: Envelope> Reader<'view, '_, '_, E> {
             .iter()
             .enumerate()
         {
-            points.push(self.property(
-                &format!("particle.spline_points[{index}]"),
-                row.map_err(read_error)?.value,
-            ));
+            points.push(
+                self.property(
+                    &FieldPath::root(Field::Particle)
+                        .child(Field::SplinePoints)
+                        .indexed(index),
+                    row.map_err(read_error)?.value,
+                ),
+            );
         }
         Ok(Values::owned(points))
     }

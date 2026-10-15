@@ -670,7 +670,7 @@ fn packed_particle_gravity_is_a_direction_and_rejects_malformed_words() {
         .unwrap()
         .value;
     let semantic = asset.model(&ExportOptions::default()).unwrap();
-    let sm::Channel::Vector3(track)=semantic.shared_channels().iter().find(|c|matches!(c,sm::Channel::Vector3(t)if matches!(t.target.target(),sm::PropertyTarget::Named{name,..}if name=="m2.particle.gravity"))).unwrap() else{panic!("gravity channel lost")};
+    let sm::Channel::Vector3(track)=semantic.shared_channels().iter().find(|c|matches!(c,sm::Channel::Vector3(t)if matches!(t.target.target(),sm::PropertyTarget::Profile{key:mp::properties::Target::Particle(mp::properties::ParticleField::Gravity),..}))).unwrap() else{panic!("gravity channel lost")};
     let gravity = track.curve.values().get(0).unwrap();
     assert!(gravity[0] > 1.);
     assert_eq!(gravity[1], 0.);

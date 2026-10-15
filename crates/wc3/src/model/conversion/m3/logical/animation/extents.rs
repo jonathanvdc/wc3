@@ -2,6 +2,7 @@
 use super::super::GraphBuilder;
 use crate::model::conversion::{Context, Error};
 use crate::model::m3::{self as native, records as nr};
+use crate::model::semantic::profiles::M3;
 use crate::model::semantic::{
     profiles::m3 as surface, Channel, Clock, ControllerId, Curve, FeatureId, Interpolation, Time,
     Track, Values,
@@ -96,7 +97,7 @@ pub(super) fn read<'a, E: Envelope + Send + Sync>(
         builder.add_controller_channel(
             layer,
             Channel::Vector3(Track {
-                target: minimum.clone(),
+                target: minimum.clone().try_narrow::<M3>()?,
                 curve: Curve::from_samples(
                     time_values.clone(),
                     Values::view(min_rows.len(), move |i| {
@@ -110,7 +111,7 @@ pub(super) fn read<'a, E: Envelope + Send + Sync>(
         builder.add_controller_channel(
             layer,
             Channel::Vector3(Track {
-                target: maximum.clone(),
+                target: maximum.clone().try_narrow::<M3>()?,
                 curve: Curve::from_samples(
                     time_values.clone(),
                     Values::view(max_rows.len(), move |i| {
@@ -124,7 +125,7 @@ pub(super) fn read<'a, E: Envelope + Send + Sync>(
         builder.add_controller_channel(
             layer,
             Channel::Scalar(Track {
-                target: radius.clone(),
+                target: radius.clone().try_narrow::<M3>()?,
                 curve: Curve::from_samples(
                     time_values.clone(),
                     Values::view(radius_rows.len(), move |i| {

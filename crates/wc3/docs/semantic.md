@@ -175,20 +175,56 @@ Their exact scalar, boolean, vector, and integer value domains remain distinct.
 
 ## Typed animation curves
 
-A `Track<T>` connects a `Property<T>` to a checked `Curve<T>` and an explicit
-clock. `Animated<T>` keeps the property's rest value and optional binding separate
-from its playback programs. Common destinations come from typed ID methods such
-as `NodeId::translation` and `MaterialId::texture`. Profile definitions fix both
-an owner identity type and a value type: for example,
-`profiles::mdlx::properties::light::INTENSITY.bind(feature)` produces a
-`Property<f32>`, while `profiles::mdlx::properties::Layer(index).texture()` defines
-an optional texture selection on a material. M2 and M3 publish their definitions
-under their own `properties` modules; WEM emitter definitions belong to their
-Warcraft, World of Warcraft, or StarCraft actor vocabulary. Applications define
-custom profile properties through `PropertyDescriptor`, then bind those definitions
-with `Property::profile`. Property names describe logical destinations rather
-than serialized channel numbers, and publication checks their owner identities
-and rejects conflicting value definitions.
+A `Track<T, P>` connects a `Property<T, P>` to a checked `Curve<T>` and an explicit
+clock. The value type determines which curve values are permitted, while the
+profile determines the structural property vocabulary. `Profile::Property` selects
+an enum implementing `PropertyPayload`. `PropertyTarget<P>` describes common
+transform and sampling destinations directly, or carries an owner ID and one of
+that profile's selectors. Neither display labels nor formatted paths participate
+in equality, hashing, validation, or native routing.
+
+Common destinations come from typed ID methods such as
+`NodeId::translation::<Mdlx>()` and `MaterialId::texture::<Mdlx>(slot)`; the profile
+can also be inferred from the surrounding channel. Profile descriptors fix an
+owner identity type, value type, and property enum. For example,
+`profiles::mdlx::properties::light::INTENSITY.bind(feature)` returns a
+`Property<f32, Mdlx>` selecting the explicit light-intensity variant, while
+`profiles::mdlx::properties::Layer(index).texture_slot(slot)` selects a material
+layer and sampling slot through integer fields. M2 and M3 publish their selectors
+under their own `properties` modules. M3's nested fields use `FieldPath` with enum
+field segments and collection ordinals. WEM keeps Warcraft, World of Warcraft,
+and StarCraft actor selectors distinct even when their field labels coincide.
+Publication checks owner identities, selector families, existing layer and slot
+ordinals, and declared value domains.
+
+`Animated<T, P>` keeps a rest value and optional binding separate from playback
+programs. Built-in owner payloads retain bindings in the universal structural
+vocabulary so their complete payloads can move unchanged into containing profiles.
+`Animated::new` embeds a supplied property into that vocabulary when the
+`Extends` relationship permits it. Direct assignment to a payload's `property`
+field can use `property.widen::<Universal>()`. Custom payloads may instead use
+`Animated<T, ApplicationProfile>` to constrain their own bindings directly.
+Program channels always carry their model's profile.
+
+Widening maps program selectors into the containing enum while sharing the existing
+curve arrays. A union carries selectors in `Either::Left` or `Either::Right` along
+with its other payloads. These wrappers preserve canonical structural identity,
+so the channels still address their owner fields. Exact narrowing projects accepted
+selectors into the destination enum and rejects foreign vocabularies. Relationship
+traversal uses transient, profile-independent structural identities to compare
+bindings from different containing vocabularies; active targets retain their actual
+enums. Model-level owners carry a scoped `ModelId`, just as feature and material
+owners carry their own scoped IDs.
+
+Applications define their own property enum through `Profile::Property` and
+implement `PropertyPayload` for it. The default identity is the enum value itself;
+containing enums delegate identity to the selected child vocabulary. A custom
+`PropertyDescriptor` specifies its `Profile`, `Owner`, and `Value` types and
+returns an enum selector from `key`. `Property::profile` binds that selector to an
+owner. Feature and surface payloads can implement `supports_property` to check
+which selectors and indexed elements they actually expose. This extends the
+structural schema without registering property names or manufacturing numeric
+surrogate keys.
 
 Choose interpolation through `Curve::step`, `linear`, `hermite`, `bezier`, `tcb`,
 `slerp`, or `nlerp`. The constructor's trait bounds express the permitted value

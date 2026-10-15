@@ -31,9 +31,17 @@ impl<'a, P: Profile> Model<'a, P> {
                 .into_iter()
                 .map(|(id, value)| Ok((id, system(value)?)))
                 .collect::<Result<_, Error>>()?,
-            timeline_channels: self.timeline_channels,
+            timeline_channels: self
+                .timeline_channels
+                .into_iter()
+                .map(|channel| channel.map_profile(Q::property))
+                .collect::<Result<_, Error>>()?,
             timeline_events: self.timeline_events,
-            shared_channels: self.shared_channels,
+            shared_channels: self
+                .shared_channels
+                .into_iter()
+                .map(|channel| channel.map_profile(Q::property))
+                .collect::<Result<_, Error>>()?,
             shared_events: self.shared_events,
             appearance: appearance(self.appearance)?,
             skins: self
@@ -153,7 +161,10 @@ impl<'a, P: Profile> Model<'a, P> {
                             name,
                             duration,
                             looping,
-                            channels,
+                            channels: channels
+                                .into_iter()
+                                .map(|channel| channel.map_profile(Q::property))
+                                .collect::<Result<_, Error>>()?,
                             events,
                             controls: clip(controls)?,
                         },
@@ -222,7 +233,10 @@ impl<'a, P: Profile> Model<'a, P> {
                             name,
                             priority,
                             concurrent,
-                            channels,
+                            channels: channels
+                                .into_iter()
+                                .map(|channel| channel.map_profile(Q::property))
+                                .collect::<Result<_, Error>>()?,
                             events,
                             controls: controller(controls)?,
                         },

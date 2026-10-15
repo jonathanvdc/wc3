@@ -1,5 +1,6 @@
 //! Independent emitters and their explicitly inherited instances.
 use super::emitter_links::Links;
+use crate::model::semantic::profiles::m3::properties::{Field, FieldPath};
 pub(super) mod context;
 mod encode;
 mod export;
@@ -103,9 +104,11 @@ pub(super) fn import<'view, E: Envelope>(
                     let payload = surface::ParticleCopy {
                         source: particles[index],
                         emission_rate: reader
-                            .property("particle_copy.emission_rate", copy.emission_rate),
+                            .property(&FieldPath::root(Field::ParticleCopy).child(Field::EmissionRate),
+copy.emission_rate),
                         squirt_amount: reader
-                            .property("particle_copy.squirt_amount", copy.squirt_amount),
+                            .property(&FieldPath::root(Field::ParticleCopy).child(Field::SquirtAmount),
+copy.squirt_amount),
                     };
                     builder.set_feature(owner, surface::Feature::ParticleCopy((payload).into()))?;
                 }

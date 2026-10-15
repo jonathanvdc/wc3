@@ -6,6 +6,7 @@ use super::super::{
 use super::{blocks::Blocks, AnimationId, AnimationIds};
 use crate::model::conversion::{Context, Error};
 use crate::model::m3::{self as native, records as nr};
+use crate::model::semantic::profiles::{Universal, M3};
 use crate::model::semantic::{
     profiles::m3 as surface, Channel, Clock, Interpolation, NodeId, PropertyTarget, Time,
 };
@@ -61,7 +62,7 @@ fn target(value: &Target) -> &PropertyTarget {
         Target::Unsigned4(p) => p.target(),
     }
 }
-fn interpolation(channel: &Channel<'_>) -> Interpolation {
+fn interpolation(channel: &Channel<'_, M3>) -> Interpolation {
     match channel {
         Channel::Scalar(t) => t.curve.interpolation(),
         Channel::Vector2(t) => t.curve.interpolation(),
@@ -125,7 +126,7 @@ pub(in crate::model::conversion::m3::logical) fn prepare(
                     continue;
                 }
             };
-            if let Some(previous) = ids.get(channel.target()) {
+            if let Some(previous) = ids.get(&channel.target().clone().widen::<Universal>()) {
                 if previous.interpolation != mode {
                     context.unsupported(
                         "m3.animation.interpolation",
@@ -135,7 +136,7 @@ pub(in crate::model::conversion::m3::logical) fn prepare(
                 continue;
             }
             let id = if let Some(id) = original
-                .get(channel.target())
+                .get(&channel.target().clone().widen::<Universal>())
                 .copied()
                 .filter(|id| *id != 0)
                 .filter(|id| !claimed.contains_key(id))
@@ -148,14 +149,14 @@ pub(in crate::model::conversion::m3::logical) fn prepare(
                 id
             };
             ids.insert(
-                channel.target().clone(),
+                channel.target().clone().widen::<Universal>(),
                 AnimationId {
                     id,
                     interpolation: mode,
                     keyed: true,
                 },
             );
-            claimed.insert(id, channel.target().clone());
+            claimed.insert(id, channel.target().clone().widen::<Universal>());
         }
     }
     if !model.shared_channels().is_empty() || !model.shared_events().is_empty() {
@@ -208,7 +209,7 @@ pub(in crate::model::conversion::m3::logical) fn write<E: Envelope>(
                 continue;
             }
             if native_controls.is_some_and(|c|c.blocks.iter().any(|b|b.encoding==surface::KeyEncoding::Extent&&b.extents.iter().any(|id|model.feature(*id).is_some_and(|f|matches!(&f.payload,surface::Feature::Extent(binding)if channel.target()==binding.minimum.target()||channel.target()==binding.maximum.target()||channel.target()==binding.radius.target()))))){continue}
-            let Some(identity) = ids.get(channel.target()) else {
+            let Some(identity) = ids.get(&channel.target().clone().widen::<Universal>()) else {
                 context.unsupported(
                     "m3.animation.destination",
                     "channel lacks a native property identity",
@@ -225,7 +226,7 @@ pub(in crate::model::conversion::m3::logical) fn write<E: Envelope>(
             let block = native_controls.and_then(|c| {
                 c.blocks
                     .iter()
-                    .find(|b| b.targets.contains(channel.target()))
+                    .find(|b| b.targets.iter().any(|target| target == channel.target()))
             });
             if let Some(selector) = blocks.add(
                 document,

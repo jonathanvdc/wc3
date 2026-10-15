@@ -4,9 +4,9 @@ use crate::model::semantic::{Animated, Link, Resource, ValidateLinks};
 #[derive(Clone, Debug)]
 pub enum Feature<'a> {
     /// Authored camera parameters.
-    Camera(Camera),
+    Camera(Box<Camera>),
     /// Authored illumination.
-    Light(Light),
+    Light(Box<Light>),
     /// External model attachment.
     Attachment(Attachment<'a>),
     /// External particle-system instance.

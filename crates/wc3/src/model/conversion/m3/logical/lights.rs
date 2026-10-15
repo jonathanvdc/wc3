@@ -7,6 +7,7 @@ use super::{
 use super::{Graph, GraphBuilder};
 use crate::model::conversion::Error;
 use crate::model::m3::{self as native, records as nr};
+use crate::model::semantic::profiles::m3::properties::{Field, FieldPath};
 use crate::model::semantic::NodeId;
 use crate::model::semantic::{profiles::m3 as surface, OwnerId};
 use native::{Envelope, Ref};
@@ -52,49 +53,49 @@ pub(super) fn read<'a, E: Envelope>(
                 bindings::field(
                     &mut light.diffuse_color,
                     OwnerId::Feature(feature),
-                    "light.diffuse_color",
+                    &FieldPath::root(Field::Light).child(Field::DiffuseColor),
                     registry,
                 );
                 bindings::field(
                     &mut light.intensity_multiplier,
                     OwnerId::Feature(feature),
-                    "light.intensity_multiplier",
+                    &FieldPath::root(Field::Light).child(Field::IntensityMultiplier),
                     registry,
                 );
                 bindings::field(
                     &mut light.specular_color,
                     OwnerId::Feature(feature),
-                    "light.specular_color",
+                    &FieldPath::root(Field::Light).child(Field::SpecularColor),
                     registry,
                 );
                 bindings::field(
                     &mut light.specular_multiplier,
                     OwnerId::Feature(feature),
-                    "light.specular_multiplier",
+                    &FieldPath::root(Field::Light).child(Field::SpecularMultiplier),
                     registry,
                 );
                 bindings::field(
                     &mut light.decay,
                     OwnerId::Feature(feature),
-                    "light.decay",
+                    &FieldPath::root(Field::Light).child(Field::Decay),
                     registry,
                 );
                 bindings::field(
                     &mut light.attenuation_start,
                     OwnerId::Feature(feature),
-                    "light.attenuation_start",
+                    &FieldPath::root(Field::Light).child(Field::AttenuationStart),
                     registry,
                 );
                 bindings::field(
                     &mut light.hot_spot,
                     OwnerId::Feature(feature),
-                    "light.hot_spot",
+                    &FieldPath::root(Field::Light).child(Field::HotSpot),
                     registry,
                 );
                 bindings::field(
                     &mut light.falloff,
                     OwnerId::Feature(feature),
-                    "light.falloff",
+                    &FieldPath::root(Field::Light).child(Field::Falloff),
                     registry,
                 );
                 builder.set_feature(feature, surface::Feature::Light((light).into()))?;

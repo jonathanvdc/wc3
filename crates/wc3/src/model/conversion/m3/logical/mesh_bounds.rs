@@ -54,9 +54,9 @@ pub(super) fn read<'a, E: Envelope>(
                             initial: bounds(r.bounds.initial_value),
                             reset: bounds(r.bounds.null_value),
                             control,
-                            minimum: surface::properties::EXTENT_MINIMUM.bind(feature),
-                            maximum: surface::properties::EXTENT_MAXIMUM.bind(feature),
-                            radius: surface::properties::EXTENT_RADIUS.bind(feature),
+                            minimum: surface::properties::EXTENT_MINIMUM.bind(feature).widen(),
+                            maximum: surface::properties::EXTENT_MAXIMUM.bind(feature).widen(),
+                            radius: surface::properties::EXTENT_RADIUS.bind(feature).widen(),
                         })
                         .into(),
                     ),

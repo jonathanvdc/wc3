@@ -72,9 +72,11 @@ fn spherical_restriction_preserves_rotation_and_clamped_intervals() {
 
 #[test]
 fn typed_restriction_retains_clock_and_target() {
-    use crate::model::semantic::{Clock, OwnerId, Property};
+    use crate::model::semantic::{profiles::Universal, Clock, Material, Model};
+    let mut builder = Model::builder("crop");
+    let material = builder.add_material(Material::pbr()).unwrap();
     let track = Track {
-        target: Property::named(OwnerId::Model, "opacity"),
+        target: material.opacity::<Universal>(),
         curve: Curve::from_samples(
             [Time::seconds(-1.).unwrap(), Time::seconds(2.).unwrap()],
             [0f32, 3.],

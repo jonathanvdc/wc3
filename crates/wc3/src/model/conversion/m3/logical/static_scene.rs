@@ -9,6 +9,7 @@ use super::{
 };
 use crate::model::conversion::Error;
 use crate::model::m3::{self as native, records as nr};
+use crate::model::semantic::profiles::m3::properties::{Field, FieldPath};
 use crate::model::semantic::{profiles::m3 as surface, NodeId, OwnerId};
 use native::{Envelope, Ref};
 use std::collections::BTreeMap;
@@ -119,19 +120,19 @@ pub(super) fn read<'a, E: Envelope>(
         bindings::field(
             &mut payload.length,
             OwnerId::Feature(owner),
-            "shadow.length",
+            &FieldPath::root(Field::Shadow).child(Field::Length),
             registry,
         );
         bindings::field(
             &mut payload.width,
             OwnerId::Feature(owner),
-            "shadow.width",
+            &FieldPath::root(Field::Shadow).child(Field::Width),
             registry,
         );
         bindings::field(
             &mut payload.height,
             OwnerId::Feature(owner),
-            "shadow.height",
+            &FieldPath::root(Field::Shadow).child(Field::Height),
             registry,
         );
         builder.set_feature(owner, surface::Feature::ShadowBox((payload).into()))?;
@@ -147,7 +148,7 @@ pub(super) fn read<'a, E: Envelope>(
         bindings::field(
             &mut payload.size,
             OwnerId::Feature(owner),
-            "view_volume.size",
+            &FieldPath::root(Field::ViewVolume).child(Field::Size),
             registry,
         );
         builder.set_feature(owner, surface::Feature::ViewVolume((payload).into()))?;

@@ -13,10 +13,10 @@ use crate::model::semantic::{
 
 pub(super) trait Value: CurveValue {
     fn kind() -> &'static str;
-    fn channel<'a>(track: Track<'a, Self>) -> Channel<'a>
+    fn channel<'a>(track: Track<'a, Self, Mdlx>) -> Channel<'a, Mdlx>
     where
         Self: Sized;
-    fn track<'a, 'b>(channel: &'b Channel<'a>) -> Option<&'b Track<'a, Self>>
+    fn track<'a, 'b>(channel: &'b Channel<'a, Mdlx>) -> Option<&'b Track<'a, Self, Mdlx>>
     where
         Self: Sized;
 }
@@ -24,8 +24,8 @@ macro_rules! value {
     ($($ty:ty => $variant:ident),* $(,)?) => {$ (
         impl Value for $ty {
             fn kind() -> &'static str { stringify!($variant) }
-            fn channel<'a>(track: Track<'a, Self>) -> Channel<'a> { Channel::$variant(track) }
-            fn track<'a, 'b>(channel: &'b Channel<'a>) -> Option<&'b Track<'a, Self>> { if let Channel::$variant(track) = channel { Some(track) } else { None } }
+            fn channel<'a>(track: Track<'a, Self, Mdlx>) -> Channel<'a, Mdlx> { Channel::$variant(track) }
+            fn track<'a, 'b>(channel: &'b Channel<'a, Mdlx>) -> Option<&'b Track<'a, Self, Mdlx>> { if let Channel::$variant(track) = channel { Some(track) } else { None } }
         }
     )*};
 }
@@ -48,7 +48,7 @@ impl<'a> Decoder<'a, '_> {
         T: TrackValue + Send + Sync + 'a,
         T::ULE: Sync,
         U: Value + 'a,
-        D: PropertyDescriptor<Value = U> + Clone,
+        D: PropertyDescriptor<Profile = Mdlx, Value = U> + Clone,
     {
         let default = map(source.value().copied().unwrap_or_default());
         self.track(source.track(), default, owner, descriptor, map)
@@ -65,12 +65,12 @@ impl<'a> Decoder<'a, '_> {
         T: TrackValue + Send + Sync + 'a,
         T::ULE: Sync,
         U: Value + 'a,
-        D: PropertyDescriptor<Value = U> + Clone,
+        D: PropertyDescriptor<Profile = Mdlx, Value = U> + Clone,
     {
         let Some(source) = source else {
             return Ok(Animated::constant(default));
         };
-        let name = descriptor.clone().name();
+        let name = format!("{:?}", descriptor.clone().key());
         let property = Property::profile(owner, descriptor);
         self.track_property(source, default, property, &name, map.clone(), map)
     }
@@ -78,7 +78,7 @@ impl<'a> Decoder<'a, '_> {
         &mut self,
         source: &'a NativeTrack<'_, T>,
         default: U,
-        property: Property<U>,
+        property: Property<U, Mdlx>,
         name: &str,
         map: impl Fn(T) -> U + Clone + Send + Sync + 'a,
         tangents: impl Fn(T) -> U + Clone + Send + Sync + 'a,

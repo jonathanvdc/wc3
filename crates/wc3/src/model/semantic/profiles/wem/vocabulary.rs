@@ -1,9 +1,11 @@
 //! The editable-model vocabulary retains its own mixed-family authoring domains.
 use super::attachment_validation::usable_face;
+use super::properties::Target as PropertySelector;
 use super::{
     Appearance, ClipControls, ControllerControls, DocumentControls, Feature, Geometry, Material,
     MeshControls, ModelControls, NodeControls, System, TextureControls,
 };
+use crate::model::semantic::profiles::UniversalProperty;
 use crate::model::semantic::profiles::{Extends, NoControls, Profile, Unavailable, Universal};
 use crate::model::semantic::{Basis, LengthUnit};
 use crate::model::semantic::{Error, Model, Multiple, NodeFeature, Resources};
@@ -12,6 +14,7 @@ use crate::model::semantic::{Error, Model, Multiple, NodeFeature, Resources};
 #[derive(Clone, Debug, Default)]
 pub struct Wem;
 impl Profile for Wem {
+    type Property = PropertySelector;
     fn default_bounds() -> Option<crate::model::semantic::Bounds> {
         Some(Default::default())
     }
@@ -253,6 +256,9 @@ impl Profile for Wem {
 }
 
 impl Extends<Wem> for Universal {
+    fn property(value: <Wem as Profile>::Property) -> Self::Property {
+        UniversalProperty::Wem(value)
+    }
     fn asset<'a>(value: <Wem as Profile>::Asset<'a>) -> Self::Asset<'a> {
         Some(value)
     }

@@ -1,4 +1,5 @@
 //! Compile-time vocabulary of logical payloads; unrelated to native file revisions.
+use crate::model::semantic::OwnerId;
 use crate::model::semantic::{
     AppearanceSchema, BindingSchema, Bounds, Cardinality, Error, FeatureKind, GeometrySchema, Link,
     MaterialSurface, Model, ModelControls, Multiple, NodeFeature, PbrSurface, Resources, SkinId,
@@ -9,16 +10,30 @@ use crate::model::semantic::{
     NodeControls, System, TextureControls, UniversalAppearance, UniversalBinding,
     UniversalGeometry,
 };
+use crate::model::semantic::{
+    PropertyIdentityKey, PropertyKeyRef, PropertyPayload, PropertyTarget,
+};
+use std::any::TypeId;
 use std::fmt::Debug;
 use std::marker::PhantomData;
 
 /// A checked surface supplied by a semantic profile.
 pub trait SurfacePayload: Clone + Debug + Send + Sync + ValidateLinks {
+    /// Checks that a structural property selects an existing field in this surface.
+    fn supports_property(&self, _key: &PropertyIdentityKey) -> bool {
+        true
+    }
+
     /// Checks local invariants independent of graph references.
     fn validate(&self) -> Result<(), Error>;
 }
 /// A checked attached behavior supplied by a semantic profile.
 pub trait FeaturePayload: Clone + Debug + Send + Sync + ValidateLinks {
+    /// Checks the selected field family and any owner-local element ordinal.
+    fn supports_property(&self, _key: &PropertyIdentityKey) -> bool {
+        true
+    }
+
     /// Relationship category used by typed feature references.
     fn kind(&self) -> FeatureKind;
 }
@@ -34,7 +49,7 @@ impl ValidateLinks for NoControls {
 ///
 /// Use this for object families that a profile cannot describe. An owner with
 /// optional controls can still exist, but its controls must remain absent.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Unavailable {}
 impl ValidateLinks for Unavailable {
     fn visit_links(&self, _visitor: &mut dyn FnMut(Link)) {
@@ -69,6 +84,8 @@ impl<T: Clone + Debug + Send + Sync + ValidateLinks> ControlsPayload for T {}
 /// Implementations may use their own payload types. Implementing relationship traversal
 /// is mandatory: graph validation checks custom references exactly like built-in ones.
 pub trait Profile: Clone + Debug + 'static {
+    /// Structural animation-property vocabulary accepted by this profile.
+    type Property: PropertyPayload;
     /// Model cardinality represented by a native asset in this vocabulary.
     type Models: Cardinality;
     /// Authoring controls genuinely owned by an asset containing several models.
@@ -101,6 +118,32 @@ pub trait Profile: Clone + Debug + 'static {
     type Clip<'a>: ControlsPayload + Default;
     /// Additional layered-controller behavior.
     type Controller<'a>: ControlsPayload + Default;
+    /// Checks a structural selector against its actual owner payload.
+    fn validate_property(
+        model: &Model<'_, Self>,
+        target: &PropertyTarget<Self>,
+    ) -> Result<(), Error> {
+        if let PropertyTarget::Profile { owner, key } = target {
+            let identity = key.identity().to_owned();
+            let supported = match owner {
+                OwnerId::Feature(id) => model
+                    .feature(*id)
+                    .is_some_and(|v| v.payload.supports_property(&identity)),
+                OwnerId::Material(id) => model
+                    .material(*id)
+                    .is_some_and(|v| v.surface.supports_property(&identity)),
+                OwnerId::Model(id) => *id == model.id(),
+                _ => true,
+            };
+            if !supported {
+                return Err(Error::new(
+                    "animation.target",
+                    "structural selector does not select a field or element of its actual owner",
+                ));
+            }
+        }
+        Ok(())
+    }
     /// Initial bounding volume for a new model draft.
     fn default_bounds() -> Option<Bounds> {
         None
@@ -129,7 +172,7 @@ pub trait Profile: Clone + Debug + 'static {
     }
 }
 /// Either vocabulary is accepted, without conversion between their meanings.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Either<A, B> {
     /// Payload belonging to the first vocabulary.
     Left(A),
@@ -145,6 +188,13 @@ impl<A: ValidateLinks, B: ValidateLinks> ValidateLinks for Either<A, B> {
     }
 }
 impl<A: SurfacePayload, B: SurfacePayload> SurfacePayload for Either<A, B> {
+    fn supports_property(&self, key: &PropertyIdentityKey) -> bool {
+        match self {
+            Self::Left(v) => v.supports_property(key),
+            Self::Right(v) => v.supports_property(key),
+        }
+    }
+
     fn validate(&self) -> Result<(), Error> {
         match self {
             Self::Left(value) => value.validate(),
@@ -153,6 +203,13 @@ impl<A: SurfacePayload, B: SurfacePayload> SurfacePayload for Either<A, B> {
     }
 }
 impl<A: FeaturePayload, B: FeaturePayload> FeaturePayload for Either<A, B> {
+    fn supports_property(&self, key: &PropertyIdentityKey) -> bool {
+        match self {
+            Self::Left(v) => v.supports_property(key),
+            Self::Right(v) => v.supports_property(key),
+        }
+    }
+
     fn kind(&self) -> FeatureKind {
         match self {
             Self::Left(value) => value.kind(),
@@ -164,6 +221,7 @@ impl<A: FeaturePayload, B: FeaturePayload> FeaturePayload for Either<A, B> {
 #[derive(Clone, Debug, Default)]
 pub struct Union<A, B>(PhantomData<(A, B)>);
 impl<A: Profile, B: Profile> Profile for Union<A, B> {
+    type Property = Either<A::Property, B::Property>;
     type Models = Multiple;
     type Asset<'a> = Either<A::Asset<'a>, B::Asset<'a>>;
     type Appearance<'a> = Either<A::Appearance<'a>, B::Appearance<'a>>;
@@ -191,6 +249,7 @@ impl<A: Profile, B: Profile> Profile for Union<A, B> {
 #[derive(Clone, Debug, Default)]
 pub struct Universal;
 impl Profile for Universal {
+    type Property = UniversalProperty;
     type Models = Multiple;
     type Asset<'a> = Option<wem::DocumentControls<'a>>;
     type Appearance<'a> = UniversalAppearance<'a>;
@@ -229,6 +288,8 @@ impl Profile for Universal {
 /// This is separate from approximate translation. Implementations must preserve meaning
 /// and borrowed storage, and must not discard fields or relationships.
 pub trait Extends<Source: Profile>: Profile {
+    /// Embeds structural property selectors without changing their identity.
+    fn property(value: Source::Property) -> Self::Property;
     /// Embeds asset-wide authoring controls without changing their meaning.
     fn asset<'a>(value: Source::Asset<'a>) -> Self::Asset<'a>;
     /// Embeds the complete appearance vocabulary while preserving identities.
@@ -261,6 +322,9 @@ pub trait Extends<Source: Profile>: Profile {
     fn controller<'a>(value: Source::Controller<'a>) -> Self::Controller<'a>;
 }
 impl<P: Profile> Extends<P> for P {
+    fn property(value: P::Property) -> Self::Property {
+        value
+    }
     fn asset<'a>(value: <P as Profile>::Asset<'a>) -> Self::Asset<'a> {
         value
     }
@@ -338,6 +402,19 @@ impl SurfacePayload for PbrSurface {
     }
 }
 impl SurfacePayload for MaterialSurface<'_> {
+    fn supports_property(&self, key: &PropertyIdentityKey) -> bool {
+        match self {
+            Self::Mdlx(v) => v.supports_property(key),
+            Self::M2(v) => v.supports_property(key),
+            Self::M3(v) => v.supports_property(key),
+            Self::Wem(v) => v.supports_property(key),
+            Self::D3(v) => v.supports_property(key),
+            Self::D4(v) => v.supports_property(key),
+            Self::Wmo(v) => v.supports_property(key),
+            Self::Generic(_) => false,
+        }
+    }
+
     fn validate(&self) -> Result<(), Error> {
         match self {
             Self::D4(value) => value.validate(),
@@ -349,12 +426,26 @@ impl SurfacePayload for MaterialSurface<'_> {
     }
 }
 impl FeaturePayload for NodeFeature<'_> {
+    fn supports_property(&self, key: &PropertyIdentityKey) -> bool {
+        match self {
+            Self::Mdlx(v) => v.supports_property(key),
+            Self::M2(v) => v.supports_property(key),
+            Self::M3(v) => v.supports_property(key),
+            Self::Wem(v) => v.supports_property(key),
+            Self::Wmo(v) => v.supports_property(key),
+            Self::Generic(_) => false,
+        }
+    }
+
     fn kind(&self) -> FeatureKind {
         self.kind()
     }
 }
 
 impl<A: Profile, B: Profile> Extends<A> for Union<A, B> {
+    fn property(value: A::Property) -> Self::Property {
+        Either::Left(value)
+    }
     fn asset<'a>(value: <A as Profile>::Asset<'a>) -> Self::Asset<'a> {
         Either::Left(value)
     }
@@ -405,6 +496,12 @@ impl<A: Profile, B: Profile> Extends<Union<A, B>> for Universal
 where
     Universal: Extends<A> + Extends<B>,
 {
+    fn property(value: <Union<A, B> as Profile>::Property) -> Self::Property {
+        match value {
+            Either::Left(v) => <Self as Extends<A>>::property(v),
+            Either::Right(v) => <Self as Extends<B>>::property(v),
+        }
+    }
     fn asset<'a>(value: <Union<A, B> as Profile>::Asset<'a>) -> Self::Asset<'a> {
         match value {
             Either::Left(value) => <Self as Extends<A>>::asset(value),
@@ -525,3 +622,79 @@ pub mod diablo;
 pub use diablo::d3::D3;
 
 pub use diablo::d4::D4;
+
+impl PropertyPayload for Unavailable {
+    fn identity(&self) -> PropertyKeyRef<'_> {
+        match *self {}
+    }
+}
+impl<A: PropertyPayload, B: PropertyPayload> PropertyPayload for Either<A, B> {
+    fn identity(&self) -> PropertyKeyRef<'_> {
+        match self {
+            Self::Left(v) => v.identity(),
+            Self::Right(v) => v.identity(),
+        }
+    }
+    fn from_identity(key: &PropertyIdentityKey) -> Option<Self> {
+        A::from_identity(key)
+            .map(Self::Left)
+            .or_else(|| B::from_identity(key).map(Self::Right))
+    }
+    fn value_type(&self) -> Option<TypeId> {
+        match self {
+            Self::Left(v) => v.value_type(),
+            Self::Right(v) => v.value_type(),
+        }
+    }
+    fn accepts_owner(&self, owner: OwnerId) -> bool {
+        match self {
+            Self::Left(v) => v.accepts_owner(owner),
+            Self::Right(v) => v.accepts_owner(owner),
+        }
+    }
+}
+/// Structural property selectors from all built-in semantic vocabularies.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum UniversalProperty {
+    /// Warcraft III destination.
+    Mdlx(mdlx::properties::Target),
+    /// World of Warcraft destination.
+    M2(m2::properties::Target),
+    /// StarCraft II destination.
+    M3(m3::properties::Target),
+    /// WEM actor destination.
+    Wem(wem::properties::Target),
+}
+impl PropertyPayload for UniversalProperty {
+    fn identity(&self) -> PropertyKeyRef<'_> {
+        match self {
+            Self::Mdlx(v) => v.identity(),
+            Self::M2(v) => v.identity(),
+            Self::M3(v) => v.identity(),
+            Self::Wem(v) => v.identity(),
+        }
+    }
+    fn from_identity(key: &PropertyIdentityKey) -> Option<Self> {
+        mdlx::properties::Target::from_identity(key)
+            .map(Self::Mdlx)
+            .or_else(|| m2::properties::Target::from_identity(key).map(Self::M2))
+            .or_else(|| m3::properties::Target::from_identity(key).map(Self::M3))
+            .or_else(|| wem::properties::Target::from_identity(key).map(Self::Wem))
+    }
+    fn value_type(&self) -> Option<TypeId> {
+        match self {
+            Self::Mdlx(v) => v.value_type(),
+            Self::M2(v) => v.value_type(),
+            Self::M3(v) => v.value_type(),
+            Self::Wem(v) => v.value_type(),
+        }
+    }
+    fn accepts_owner(&self, owner: OwnerId) -> bool {
+        match self {
+            Self::Mdlx(v) => v.accepts_owner(owner),
+            Self::M2(v) => v.accepts_owner(owner),
+            Self::M3(v) => v.accepts_owner(owner),
+            Self::Wem(v) => v.accepts_owner(owner),
+        }
+    }
+}

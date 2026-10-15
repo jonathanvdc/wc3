@@ -26,9 +26,9 @@ pub struct Model<'a, P: Profile = Universal> {
     bounds: Option<Bounds>,
     controls: P::Model<'a>,
     systems: BTreeMap<SystemId, P::System<'a>>,
-    timeline_channels: Vec<Channel<'a>>,
+    timeline_channels: Vec<Channel<'a, P>>,
     timeline_events: Vec<Event<'a>>,
-    shared_channels: Vec<Channel<'a>>,
+    shared_channels: Vec<Channel<'a, P>>,
     shared_events: Vec<Event<'a>>,
     features: BTreeMap<FeatureId, AttachedFeature<'a, P>>,
     appearance: P::Appearance<'a>,
@@ -81,7 +81,7 @@ impl<'a, P: Profile> Model<'a, P> {
             .find_map(|controller| controller.events.get(&id))
     }
     /// Channels authored on the absolute model timeline, independent of playback intervals.
-    pub fn timeline_channels(&self) -> &[Channel<'a>] {
+    pub fn timeline_channels(&self) -> &[Channel<'a, P>] {
         &self.timeline_channels
     }
     /// Event occurrences authored on the absolute model timeline.
@@ -89,7 +89,7 @@ impl<'a, P: Profile> Model<'a, P> {
         &self.timeline_events
     }
     /// Channels governed by shared clocks rather than an individual playback clip.
-    pub fn shared_channels(&self) -> &[Channel<'a>] {
+    pub fn shared_channels(&self) -> &[Channel<'a, P>] {
         &self.shared_channels
     }
     /// Event occurrences governed by shared clocks.

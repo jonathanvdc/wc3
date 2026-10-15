@@ -2,6 +2,7 @@
 use super::super::bindings::Target;
 use crate::model::conversion::{Context, Error};
 use crate::model::m3::{self as native, records as nr};
+use crate::model::semantic::profiles::M3;
 use crate::model::semantic::{profiles::m3 as surface, EventId, FeatureId, PropertyTarget};
 use crate::model::semantic::{
     Channel, Clock, Curve, Interpolation, Quaternion, Time, Track, Values,
@@ -75,7 +76,7 @@ pub(super) fn read<'a, E: Envelope + Send + Sync>(
     target: &Target,
     mode: Interpolation,
     context: &mut Context,
-) -> Result<Option<Channel<'a>>, Error> {
+) -> Result<Option<Channel<'a, M3>>, Error> {
     let index = (selector & 0xffff) as usize;
     macro_rules! keys {
         ($block:ty, $reference:expr, $record:ty, $convert:expr, $target:pat => $property:expr, $channel:ident) => {{
@@ -116,7 +117,7 @@ pub(super) fn read<'a, E: Envelope + Send + Sync>(
                     mode,
                 )?;
                 Some(Channel::$channel(Track {
-                    target: $property.clone(),
+                    target: $property.clone().try_narrow::<M3>()?,
                     curve,
                     clock: Clock::Timeline,
                 }))

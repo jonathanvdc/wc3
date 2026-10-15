@@ -329,7 +329,7 @@ fn shared_uv_transform_links_are_scoped_and_rebuild_animation() {
     let (id, transform) = graph.texture_transforms().next().unwrap();
     assert_eq!(
         transform.translation.property.as_ref().unwrap(),
-        &id.translation()
+        &id.translation::<Mdlx>()
     );
     let material = &graph.materials().next().unwrap().1.surface;
     assert_eq!(material.layers[0].texture_transform, Some(id));

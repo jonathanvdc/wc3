@@ -1,5 +1,6 @@
 //! Borrowed native curves expressed as typed logical channels.
 use super::*;
+use semantic::profiles::M2;
 use semantic::{Clock, Curve, CurveValue, Property, Time, Values};
 
 pub(super) fn curve<'a, 'data: 'a, D: Dialect, T, U: CurveValue + 'a>(
@@ -104,9 +105,9 @@ where
 pub(in super::super) fn bind<'a, T: CurveValue + 'a>(
     curve: Curve<'a, T>,
     global: u16,
-    target: Property<T>,
+    target: Property<T, M2>,
     clocks: &[semantic::ClockId],
-) -> Result<semantic::Track<'a, T>, Error> {
+) -> Result<semantic::Track<'a, T, M2>, Error> {
     Ok(semantic::Track {
         target,
         curve,
@@ -124,10 +125,10 @@ pub(in super::super) fn bind<'a, T: CurveValue + 'a>(
 
 pub(in super::super) trait ChannelValue: CurveValue {
     fn restrict<'a>(
-        track: &semantic::Track<'a, Self>,
+        track: &semantic::Track<'a, Self, M2>,
         start: Time,
         end: Time,
-    ) -> Result<semantic::Track<'a, Self>, Error>
+    ) -> Result<semantic::Track<'a, Self, M2>, Error>
     where
         Self: Sized,
     {
@@ -141,14 +142,14 @@ pub(in super::super) trait ChannelValue: CurveValue {
     }
 
     fn channel<'v, 'data>(
-        value: &'v semantic::Channel<'data>,
-    ) -> Option<&'v semantic::Track<'data, Self>>
+        value: &'v semantic::Channel<'data, M2>,
+    ) -> Option<&'v semantic::Track<'data, Self, M2>>
     where
         Self: Sized;
 }
-macro_rules! channel_value {($($ty:ty=>$variant:ident),*)=>{$(impl ChannelValue for $ty{fn channel<'v,'data>(value:&'v semantic::Channel<'data>)->Option<&'v semantic::Track<'data,Self>>{if let semantic::Channel::$variant(value)=value{Some(value)}else{None}}})*};}
+macro_rules! channel_value {($($ty:ty=>$variant:ident),*)=>{$(impl ChannelValue for $ty{fn channel<'v,'data>(value:&'v semantic::Channel<'data, M2>)->Option<&'v semantic::Track<'data,Self,M2>>{if let semantic::Channel::$variant(value)=value{Some(value)}else{None}}})*};}
 channel_value!(u32=>Unsigned,i32=>Signed,u16=>Unsigned16,u8=>Byte,bool=>Boolean);
-macro_rules! float_channel {($($ty:ty=>$variant:ident),*)=>{$(impl ChannelValue for $ty{fn channel<'v,'data>(value:&'v semantic::Channel<'data>)->Option<&'v semantic::Track<'data,Self>>{if let semantic::Channel::$variant(value)=value{Some(value)}else{None}}fn restrict<'a>(track:&semantic::Track<'a,Self>,start:Time,end:Time)->Result<semantic::Track<'a,Self>,Error>{if track.curve.times().iter().any(|t|t<start||t>end){crate::model::conversion::animation::crop(track,start,end)}else{Ok(track.clone())}}})*};}
+macro_rules! float_channel {($($ty:ty=>$variant:ident),*)=>{$(impl ChannelValue for $ty{fn channel<'v,'data>(value:&'v semantic::Channel<'data, M2>)->Option<&'v semantic::Track<'data,Self,M2>>{if let semantic::Channel::$variant(value)=value{Some(value)}else{None}}fn restrict<'a>(track:&semantic::Track<'a,Self,M2>,start:Time,end:Time)->Result<semantic::Track<'a,Self,M2>,Error>{if track.curve.times().iter().any(|t|t<start||t>end){crate::model::conversion::animation::crop(track,start,end)}else{Ok(track.clone())}}})*};}
 float_channel!(f32=>Scalar,[f32;2]=>Vector2,[f32;3]=>Vector3,[f32;4]=>Vector4,semantic::Quaternion=>Rotation);
 pub(super) fn encode<V: ModelLayout, U: ChannelValue, T: Value>(
     model: &Graph<'_>,
@@ -508,7 +509,7 @@ pub(in super::super) fn sequences(
 pub(in super::super) fn insert<'a>(
     builder: &mut GraphBuilder<'a>,
     clip: Option<semantic::ClipId>,
-    channel: semantic::Channel<'a>,
+    channel: semantic::Channel<'a, M2>,
 ) -> Result<(), Error> {
     let (target, clock) = (channel.target(), channel.clock());
     match clock {

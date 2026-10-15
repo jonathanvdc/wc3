@@ -1,7 +1,10 @@
 //! Built-in M3 authoring vocabulary and its lossless embeddings.
+use super::properties::Target as PropertySelector;
+use crate::model::semantic::profiles::UniversalProperty;
 use crate::model::semantic::profiles::{
     self, Extends, FeaturePayload, NoControls, Profile, SurfacePayload, Universal,
 };
+use crate::model::semantic::PropertyIdentityKey;
 use crate::model::semantic::{
     Basis, Billboard, Channel, ClipControls, Clock, ColorSpace, ControllerControls, DrawControls,
     Error, ExplicitBinding, FeatureKind, GeometrySchema as _, Inheritance, InstanceControls,
@@ -16,6 +19,7 @@ use std::str::from_utf8;
 #[derive(Clone, Debug, Default)]
 pub struct M3;
 impl Profile for M3 {
+    type Property = PropertySelector;
     fn default_bounds() -> Option<crate::model::semantic::Bounds> {
         Some(Default::default())
     }
@@ -174,7 +178,7 @@ impl Profile for M3 {
                     PropertyTarget::Translation(_)
                         | PropertyTarget::Rotation(_)
                         | PropertyTarget::Scale(_)
-                        | PropertyTarget::Named { .. }
+                        | PropertyTarget::Profile { .. }
                 ) {
                     return Err(Error::new(
                         "m3.controller.target",
@@ -517,11 +521,21 @@ impl Profile for M3 {
     }
 }
 impl SurfacePayload for profiles::m3::Material<'_> {
+    fn supports_property(&self, key: &PropertyIdentityKey) -> bool {
+        key.downcast_ref::<super::properties::Target>()
+            .is_some_and(|key| key.supports_material())
+    }
+
     fn validate(&self) -> Result<(), Error> {
         Ok(())
     }
 }
 impl FeaturePayload for profiles::m3::Feature<'_> {
+    fn supports_property(&self, key: &PropertyIdentityKey) -> bool {
+        key.downcast_ref::<super::properties::Target>()
+            .is_some_and(|key| key.supports_feature(self))
+    }
+
     fn kind(&self) -> FeatureKind {
         match self {
             profiles::m3::Feature::Particle(_) => FeatureKind::M3Particle,
@@ -535,6 +549,9 @@ impl FeaturePayload for profiles::m3::Feature<'_> {
     }
 }
 impl Extends<M3> for Universal {
+    fn property(value: <M3 as Profile>::Property) -> Self::Property {
+        UniversalProperty::M3(value)
+    }
     fn asset<'a>(value: <M3 as Profile>::Asset<'a>) -> Self::Asset<'a> {
         let _ = value;
         None

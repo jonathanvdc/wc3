@@ -135,7 +135,7 @@ impl<'a, P: Profile> ModelBuilder<'a, P> {
     pub fn add_controller_channel(
         &mut self,
         id: ControllerId,
-        channel: Channel<'a>,
+        channel: Channel<'a, P>,
     ) -> Result<(), Error> {
         self.model
             .controllers
@@ -241,7 +241,7 @@ impl<'a, P: Profile> ModelBuilder<'a, P> {
         self.model.bounds = bounds;
     }
     /// Adds a channel authored on the absolute model timeline.
-    pub fn add_timeline_channel(&mut self, channel: Channel<'a>) -> Result<(), Error> {
+    pub fn add_timeline_channel(&mut self, channel: Channel<'a, P>) -> Result<(), Error> {
         if channel.clock() != Clock::Timeline {
             return Err(Error::new(
                 "timeline_channels.clock",
@@ -255,7 +255,7 @@ impl<'a, P: Profile> ModelBuilder<'a, P> {
     pub fn set_timeline_channel(
         &mut self,
         index: usize,
-        channel: Channel<'a>,
+        channel: Channel<'a, P>,
     ) -> Result<(), Error> {
         if channel.clock() != Clock::Timeline {
             return Err(Error::new(
@@ -299,7 +299,7 @@ impl<'a, P: Profile> ModelBuilder<'a, P> {
         Ok(())
     }
     /// Adds a channel that must use a shared repeating clock.
-    pub fn add_shared_channel(&mut self, channel: Channel<'a>) -> Result<(), Error> {
+    pub fn add_shared_channel(&mut self, channel: Channel<'a, P>) -> Result<(), Error> {
         if !matches!(channel.clock(), Clock::Shared(_)) {
             return Err(Error::new(
                 "shared_channels.clock",
@@ -310,7 +310,11 @@ impl<'a, P: Profile> ModelBuilder<'a, P> {
         Ok(())
     }
     /// Replaces an existing shared-clock channel without appending a duplicate program.
-    pub fn set_shared_channel(&mut self, index: usize, channel: Channel<'a>) -> Result<(), Error> {
+    pub fn set_shared_channel(
+        &mut self,
+        index: usize,
+        channel: Channel<'a, P>,
+    ) -> Result<(), Error> {
         if !matches!(channel.clock(), Clock::Shared(_)) {
             return Err(Error::new(
                 "shared_channels.clock",
@@ -554,7 +558,7 @@ impl<'a, P: Profile> ModelBuilder<'a, P> {
         Ok(id)
     }
     /// Appends a typed channel to an existing playback clip.
-    pub fn add_channel(&mut self, id: ClipId, channel: Channel<'a>) -> Result<(), Error> {
+    pub fn add_channel(&mut self, id: ClipId, channel: Channel<'a, P>) -> Result<(), Error> {
         self.model
             .clips
             .get_mut(&id)

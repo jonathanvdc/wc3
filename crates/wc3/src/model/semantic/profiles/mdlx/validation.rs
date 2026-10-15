@@ -80,7 +80,7 @@ pub(super) fn model(value: &Model<'_, Mdlx>) -> Result<(), Error> {
     }
     Ok(())
 }
-fn validate_channel(channel: &Channel<'_>) -> Result<(), Error> {
+fn validate_channel(channel: &Channel<'_, super::Mdlx>) -> Result<(), Error> {
     if matches!(
         channel.target(),
         PropertyTarget::Visibility(_)

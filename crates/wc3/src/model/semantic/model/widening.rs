@@ -4,6 +4,7 @@ use crate::model::semantic::{
     AttachedFeature, Clip, Controller, Draw, Material, Mesh, MeshInstance, Model, Node, Skin,
 };
 struct PayloadMap<'a, P: Profile, Q: Profile> {
+    property: fn(P::Property) -> Q::Property,
     appearance: fn(P::Appearance<'a>) -> Q::Appearance<'a>,
     geometry: fn(P::Geometry<'a>) -> Q::Geometry<'a>,
     binding: fn(P::Binding<'a>) -> Q::Binding<'a>,
@@ -22,6 +23,7 @@ impl<'a, P: Profile> Model<'a, P> {
     /// Embeds the complete graph into a containing vocabulary without copying array storage.
     pub fn widen<Q: Extends<P>>(self) -> Model<'a, Q> {
         self.map_payloads(PayloadMap {
+            property: Q::property,
             appearance: Q::appearance,
             geometry: Q::geometry,
             binding: Q::binding,
@@ -44,6 +46,7 @@ impl<'a, P: Profile> Model<'a, P> {
     /// Adds another vocabulary, preserving this model in the right branch.
     pub fn union_right<Q: Profile>(self) -> Model<'a, Union<Q, P>> {
         self.map_payloads(PayloadMap {
+            property: Either::Right,
             appearance: Either::Right,
             geometry: Either::Right,
             binding: Either::Right,
@@ -73,9 +76,25 @@ impl<'a, P: Profile> Model<'a, P> {
                 .into_iter()
                 .map(|(id, value)| (id, (maps.system)(value)))
                 .collect(),
-            timeline_channels: self.timeline_channels,
+            timeline_channels: self
+                .timeline_channels
+                .into_iter()
+                .map(|channel| {
+                    channel
+                        .map_profile(|key| Ok((maps.property)(key)))
+                        .expect("infallible property embedding")
+                })
+                .collect(),
             timeline_events: self.timeline_events,
-            shared_channels: self.shared_channels,
+            shared_channels: self
+                .shared_channels
+                .into_iter()
+                .map(|channel| {
+                    channel
+                        .map_profile(|key| Ok((maps.property)(key)))
+                        .expect("infallible property embedding")
+                })
+                .collect(),
             shared_events: self.shared_events,
             appearance: (maps.appearance)(self.appearance),
             skins: self
@@ -195,7 +214,14 @@ impl<'a, P: Profile> Model<'a, P> {
                             name,
                             duration,
                             looping,
-                            channels,
+                            channels: channels
+                                .into_iter()
+                                .map(|channel| {
+                                    channel
+                                        .map_profile(|key| Ok((maps.property)(key)))
+                                        .expect("infallible property embedding")
+                                })
+                                .collect(),
                             events,
                             controls: (maps.clip)(controls),
                         },
@@ -262,7 +288,14 @@ impl<'a, P: Profile> Model<'a, P> {
                             name,
                             priority,
                             concurrent,
-                            channels,
+                            channels: channels
+                                .into_iter()
+                                .map(|channel| {
+                                    channel
+                                        .map_profile(|key| Ok((maps.property)(key)))
+                                        .expect("infallible property embedding")
+                                })
+                                .collect(),
                             events,
                             controls: (maps.controller)(controls),
                         },

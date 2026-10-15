@@ -1,8 +1,7 @@
 //! Playback controls and structured event and extent animation semantics.
 use super::values::SequenceFlags;
 use crate::model::semantic::{
-    Bounds, ControllerId, EventId, FeatureId, Link, OwnerId, Property, PropertyTarget, Time,
-    ValidateLinks,
+    Bounds, ControllerId, EventId, FeatureId, Link, Property, PropertyTarget, Time, ValidateLinks,
 };
 use bitfield::bitfield;
 use std::borrow::Cow;
@@ -217,15 +216,10 @@ impl ValidateLinks for ControllerControls<'_> {
                     PropertyTarget::MeshColor(id) | PropertyTarget::MeshOpacity(id) => {
                         id.visit_links(visitor)
                     }
-                    PropertyTarget::Named { owner, .. } => match owner {
-                        OwnerId::Model => (),
-                        OwnerId::Feature(id) => id.visit_links(visitor),
-                        OwnerId::Node(id) => id.visit_links(visitor),
-                        OwnerId::Material(id) => id.visit_links(visitor),
-                        OwnerId::Mesh(id) => id.visit_links(visitor),
-                        OwnerId::System(id) => id.visit_links(visitor),
-                        OwnerId::TextureTransform(id) => id.visit_links(visitor),
-                    },
+                    PropertyTarget::TextureTranslation(id)
+                    | PropertyTarget::TextureRotation(id)
+                    | PropertyTarget::TextureScale(id) => id.visit_links(visitor),
+                    PropertyTarget::Profile { owner, .. } => owner.visit_links(visitor),
                 }
             }
         }

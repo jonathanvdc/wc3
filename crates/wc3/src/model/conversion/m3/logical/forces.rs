@@ -7,6 +7,7 @@ use super::{
 use super::{Graph, GraphBuilder};
 use crate::model::conversion::Error;
 use crate::model::m3::{self as native, records as nr};
+use crate::model::semantic::profiles::m3::properties::{Field, FieldPath};
 use crate::model::semantic::NodeId;
 use crate::model::semantic::{profiles::m3 as surface, OwnerId};
 use native::{Envelope, Ref};
@@ -48,25 +49,25 @@ pub(super) fn force<'a, E: Envelope>(
                 bindings::field(
                     &mut payload.strength,
                     OwnerId::Feature(feature),
-                    "force.strength",
+                    &FieldPath::root(Field::Force).child(Field::Strength),
                     registry,
                 );
                 bindings::field(
                     &mut payload.width,
                     OwnerId::Feature(feature),
-                    "force.width",
+                    &FieldPath::root(Field::Force).child(Field::Width),
                     registry,
                 );
                 bindings::field(
                     &mut payload.height,
                     OwnerId::Feature(feature),
-                    "force.height",
+                    &FieldPath::root(Field::Force).child(Field::Height),
                     registry,
                 );
                 bindings::field(
                     &mut payload.length,
                     OwnerId::Feature(feature),
-                    "force.length",
+                    &FieldPath::root(Field::Force).child(Field::Length),
                     registry,
                 );
                 builder.set_feature(feature, surface::Feature::Force((payload).into()))?;
@@ -115,37 +116,37 @@ pub(super) fn warp<'a, E: Envelope>(
         bindings::field(
             &mut payload.radius,
             OwnerId::Feature(feature),
-            "warp.radius",
+            &FieldPath::root(Field::Warp).child(Field::Radius),
             registry,
         );
         bindings::field(
             &mut payload.height,
             OwnerId::Feature(feature),
-            "warp.height",
+            &FieldPath::root(Field::Warp).child(Field::Height),
             registry,
         );
         bindings::field(
             &mut payload.strength,
             OwnerId::Feature(feature),
-            "warp.strength",
+            &FieldPath::root(Field::Warp).child(Field::Strength),
             registry,
         );
         bindings::field(
             &mut payload.angular,
             OwnerId::Feature(feature),
-            "warp.angular",
+            &FieldPath::root(Field::Warp).child(Field::Angular),
             registry,
         );
         bindings::field(
             &mut payload.axial,
             OwnerId::Feature(feature),
-            "warp.axial",
+            &FieldPath::root(Field::Warp).child(Field::Axial),
             registry,
         );
         bindings::field(
             &mut payload.radial,
             OwnerId::Feature(feature),
-            "warp.radial",
+            &FieldPath::root(Field::Warp).child(Field::Radial),
             registry,
         );
         builder.set_feature(feature, surface::Feature::Warp((payload).into()))?;

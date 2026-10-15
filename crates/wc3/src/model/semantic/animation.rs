@@ -1,12 +1,10 @@
 //! Typed curves and property destinations, independent of file clocks and channel numbers.
-use crate::model::semantic::profiles::{Profile, Universal};
+use crate::model::semantic::profiles::{Extends, Narrows, Profile, Universal};
 use crate::model::semantic::{
-    ClipId, ClockId, Error, EventId, FeatureId, MaterialId, MeshId, NodeId, Quaternion, SystemId,
-    TextureId, TextureTransformId, Values,
+    ClipId, ClockId, Error, EventId, FeatureId, NodeId, Quaternion, TextureId, Values,
 };
 use std::borrow::Cow;
 use std::collections::BTreeMap;
-use std::marker::PhantomData;
 mod curves;
 pub use curves::*;
 
@@ -47,208 +45,18 @@ pub enum Interpolation {
     /// Kochanek–Bartels spline with authored tension, continuity, and bias per key.
     Tcb,
 }
-/// An object whose properties may be animated.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum OwnerId {
-    /// Shared texture-coordinate transformation.
-    TextureTransform(TextureTransformId),
-    /// Independently authored scene system.
-    System(SystemId),
-    /// One attached logical feature.
-    Feature(FeatureId),
-    /// Model-level property.
-    Model,
-    /// Node or attached feature.
-    Node(NodeId),
-    /// Material property.
-    Material(MaterialId),
-    /// Geometry property.
-    Mesh(MeshId),
-}
-/// Semantic destination of an animation channel.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum PropertyTarget {
-    /// Local translation.
-    Translation(NodeId),
-    /// Local rotation quaternion.
-    Rotation(NodeId),
-    /// Local scale.
-    Scale(NodeId),
-    /// Node visibility.
-    Visibility(NodeId),
-    /// Material opacity.
-    MaterialOpacity(MaterialId),
-    /// Material texture selection for a logical input slot.
-    MaterialTexture(MaterialId, u32),
-    /// Mesh tint.
-    MeshColor(MeshId),
-    /// Mesh opacity.
-    MeshOpacity(MeshId),
-    /// A profile property named independently of its physical channel encoding.
-    Named {
-        /// Semantic owner.
-        owner: OwnerId,
-        /// Logical profile property path.
-        name: String,
-    },
-}
-/// A property handle whose value type determines the permitted curve shape.
-pub struct Property<T> {
-    target: PropertyTarget,
-    marker: PhantomData<fn() -> T>,
-}
-impl<T> Clone for Property<T> {
-    fn clone(&self) -> Self {
-        Self {
-            target: self.target.clone(),
-            marker: PhantomData,
-        }
-    }
-}
-impl<T> std::fmt::Debug for Property<T> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.target.fmt(f)
-    }
-}
-impl<T> PartialEq for Property<T> {
-    fn eq(&self, other: &Self) -> bool {
-        self.target == other.target
-    }
-}
-impl<T> Eq for Property<T> {}
-impl<T> Property<T> {
-    /// Binds a profile-defined destination whose descriptor fixes its value and owner types.
-    ///
-    /// Custom profiles implement [`PropertyDescriptor`] once per property definition;
-    /// callers choose that definition rather than supplying a name and value type independently.
-    /// ```compile_fail
-    /// use wc3::model::semantic::{FeatureId, Property};
-    /// use wc3::model::semantic::profiles::mdlx::properties::light;
-    /// fn invalid(owner: FeatureId) -> Property<bool> {
-    ///     Property::profile(owner, light::INTENSITY)
-    /// }
-    /// ```
-    pub fn profile<D: PropertyDescriptor<Value = T>>(owner: D::Owner, descriptor: D) -> Self {
-        Self::named(owner.into(), descriptor.name())
-    }
-    /// Decoded profile property path. Public authoring uses typed descriptors.
-    pub(crate) fn named(owner: OwnerId, name: impl Into<String>) -> Self {
-        Self {
-            target: PropertyTarget::Named {
-                owner,
-                name: name.into(),
-            },
-            marker: PhantomData,
-        }
-    }
-    /// Logical destination.
-    pub fn target(&self) -> &PropertyTarget {
-        &self.target
-    }
-    pub(crate) fn new(target: PropertyTarget) -> Self {
-        Self {
-            target,
-            marker: PhantomData,
-        }
-    }
-}
-impl NodeId {
-    /// Local translation property.
-    pub fn translation(self) -> Property<[f32; 3]> {
-        Property::new(PropertyTarget::Translation(self))
-    }
-    /// Local quaternion property, in x/y/z/w component order.
-    pub fn rotation(self) -> Property<Quaternion> {
-        Property::new(PropertyTarget::Rotation(self))
-    }
-    /// Local scale property.
-    pub fn scale(self) -> Property<[f32; 3]> {
-        Property::new(PropertyTarget::Scale(self))
-    }
-    /// Visibility property.
-    pub fn visibility(self) -> Property<bool> {
-        Property::new(PropertyTarget::Visibility(self))
-    }
-}
-impl MaterialId {
-    /// Opacity property.
-    pub fn opacity(self) -> Property<f32> {
-        Property::new(PropertyTarget::MaterialOpacity(self))
-    }
-    /// Resource choice for a logical texture input.
-    pub fn texture(self, slot: u32) -> Property<TextureId> {
-        Property::new(PropertyTarget::MaterialTexture(self, slot))
-    }
-}
-/// A profile property definition fixing both its owner and animated value domains.
-///
-/// Applications can implement this trait for their own vocabulary. A descriptor's
-/// name is its logical address, independent of native channel numbers. Graph
-/// publication still checks owner identity and conflicting property definitions.
-pub trait PropertyDescriptor {
-    /// Owner identity accepted by this definition.
-    type Owner: Into<OwnerId>;
-    /// Animated value domain accepted by this definition.
-    type Value;
-    /// Logical property path.
-    fn name(self) -> Cow<'static, str>;
-}
-/// A built-in typed property definition. Profile modules publish keys for their vocabulary.
-#[derive(Debug)]
-pub struct PropertyKey<O, T> {
-    name: Cow<'static, str>,
-    marker: PhantomData<fn(O) -> T>,
-}
-impl<O, T> Clone for PropertyKey<O, T> {
-    fn clone(&self) -> Self {
-        Self {
-            name: self.name.clone(),
-            marker: PhantomData,
-        }
-    }
-}
-impl<O: Into<OwnerId>, T> PropertyDescriptor for PropertyKey<O, T> {
-    type Owner = O;
-    type Value = T;
-    fn name(self) -> Cow<'static, str> {
-        self.name
-    }
-}
-impl<O: Into<OwnerId>, T> PropertyKey<O, T> {
-    pub(crate) const fn new(name: &'static str) -> Self {
-        Self {
-            name: Cow::Borrowed(name),
-            marker: PhantomData,
-        }
-    }
-    pub(crate) fn indexed(name: String) -> Self {
-        Self {
-            name: Cow::Owned(name),
-            marker: PhantomData,
-        }
-    }
-    /// Binds this definition to an owner in a semantic graph.
-    pub fn bind(self, owner: O) -> Property<T> {
-        Property::profile(owner, self)
-    }
-}
-macro_rules! owner_identity {
-    ($($id:ty => $kind:ident),* $(,)?) => {$ (
-        impl From<$id> for OwnerId { fn from(id: $id) -> Self { Self::$kind(id) } }
-    )*};
-}
-owner_identity!(NodeId => Node, MaterialId => Material, MeshId => Mesh,
-    TextureTransformId => TextureTransform, FeatureId => Feature, SystemId => System);
+mod properties;
+pub use properties::*;
 
 /// Rest value and optional binding to a typed animated property.
-#[derive(Clone, Debug, PartialEq)]
-pub struct Animated<T> {
+#[derive(Clone, Debug)]
+pub struct Animated<T, P: Profile = Universal> {
     /// Value when no animation overrides this property.
     pub default: T,
     /// Typed animated destination.
-    pub property: Option<Property<T>>,
+    pub property: Option<Property<T, P>>,
 }
-impl<T> Animated<T> {
+impl<T, P: Profile> Animated<T, P> {
     /// An unanimated value.
     pub fn constant(default: T) -> Self {
         Self {
@@ -257,14 +65,17 @@ impl<T> Animated<T> {
         }
     }
     /// Binds a rest value to its animation destination.
-    pub fn new(default: T, property: Property<T>) -> Self {
+    pub fn new<Q: Profile>(default: T, property: Property<T, Q>) -> Self
+    where
+        P: Extends<Q>,
+    {
         Self {
             default,
-            property: Some(property),
+            property: Some(property.widen()),
         }
     }
 }
-impl<T: Default> Default for Animated<T> {
+impl<T: Default, P: Profile> Default for Animated<T, P> {
     fn default() -> Self {
         Self::constant(T::default())
     }
@@ -288,7 +99,7 @@ pub struct Controller<'a, P: Profile = Universal> {
     /// Controller display name.
     pub name: Cow<'a, str>,
     /// Curves owned by this programme, rather than duplicated by playback clips.
-    pub channels: Vec<Channel<'a>>,
+    pub channels: Vec<Channel<'a, P>>,
     /// Event occurrences owned by this programme.
     pub events: BTreeMap<EventId, Event<'a>>,
     /// Evaluation priority.
@@ -310,45 +121,58 @@ impl<P: Profile> Default for Controller<'_, P> {
 }
 /// One typed animation channel.
 #[derive(Clone, Debug)]
-pub struct Track<'a, T: CurveValue> {
+pub struct Track<'a, T: CurveValue, P: Profile = Universal> {
     /// Typed animated destination.
-    pub target: Property<T>,
+    pub target: Property<T, P>,
     /// Checked key data.
     pub curve: Curve<'a, T>,
     /// Evaluation clock.
     pub clock: Clock,
 }
-/// Heterogeneous typed channels in one clip.
+/// Heterogeneous typed channels in one profile's playback programme.
+///
+/// Profile property vocabularies cannot be mixed implicitly:
+/// ```compile_fail
+/// use wc3::model::semantic::{Channel, Clock, Curve, FeatureId, Time, Track};
+/// use wc3::model::semantic::profiles::{M2, mdlx::properties::light};
+/// fn invalid(feature: FeatureId) {
+///     let _: Channel<'static, M2> = Channel::Scalar(Track {
+///         target: light::INTENSITY.bind(feature),
+///         curve: Curve::step([Time::default()], [1f32]).unwrap(),
+///         clock: Clock::Timeline,
+///     });
+/// }
+/// ```
 #[derive(Clone, Debug)]
-pub enum Channel<'a> {
+pub enum Channel<'a, P: Profile = Universal> {
     /// Four unsigned integer components.
-    Unsigned4(Track<'a, [u32; 4]>),
+    Unsigned4(Track<'a, [u32; 4], P>),
     /// Four byte components.
-    Bytes4(Track<'a, [u8; 4]>),
+    Bytes4(Track<'a, [u8; 4], P>),
     /// Quaternion rotation, including angular interpolation for linear curves.
-    Rotation(Track<'a, Quaternion>),
+    Rotation(Track<'a, Quaternion, P>),
     /// Float scalar.
-    Scalar(Track<'a, f32>),
+    Scalar(Track<'a, f32, P>),
     /// Two float components.
-    Vector2(Track<'a, [f32; 2]>),
+    Vector2(Track<'a, [f32; 2], P>),
     /// Three float components.
-    Vector3(Track<'a, [f32; 3]>),
+    Vector3(Track<'a, [f32; 3], P>),
     /// Four float components.
-    Vector4(Track<'a, [f32; 4]>),
+    Vector4(Track<'a, [f32; 4], P>),
     /// Unsigned scalar.
-    Unsigned(Track<'a, u32>),
+    Unsigned(Track<'a, u32, P>),
     /// Signed scalar.
-    Signed(Track<'a, i32>),
+    Signed(Track<'a, i32, P>),
     /// Unsigned short.
-    Unsigned16(Track<'a, u16>),
+    Unsigned16(Track<'a, u16, P>),
     /// Byte scalar.
-    Byte(Track<'a, u8>),
+    Byte(Track<'a, u8, P>),
     /// Boolean.
-    Boolean(Track<'a, bool>),
+    Boolean(Track<'a, bool, P>),
     /// Texture resource.
-    Texture(Track<'a, TextureId>),
+    Texture(Track<'a, TextureId, P>),
     /// Optional texture selection.
-    OptionalTexture(Track<'a, Option<TextureId>>),
+    OptionalTexture(Track<'a, Option<TextureId>, P>),
 }
 /// A named playback interval with typed channels and event occurrences.
 #[derive(Clone, Debug)]
@@ -356,15 +180,15 @@ pub struct Clip<'a, P: Profile = Universal> {
     /// Vocabulary-specific playback controls.
     pub controls: P::Clip<'a>,
     pub(crate) alias: Option<ClipId>,
-    pub(crate) name: std::borrow::Cow<'a, str>,
+    pub(crate) name: Cow<'a, str>,
     pub(crate) duration: Time,
     pub(crate) looping: bool,
-    pub(crate) channels: Vec<Channel<'a>>,
+    pub(crate) channels: Vec<Channel<'a, P>>,
     pub(crate) events: Vec<Event<'a>>,
 }
 impl<'a, P: Profile> Clip<'a, P> {
     /// Creates an empty clip.
-    pub fn named(name: impl Into<std::borrow::Cow<'a, str>>) -> Self {
+    pub fn named(name: impl Into<Cow<'a, str>>) -> Self {
         Self {
             name: name.into(),
             controls: Default::default(),
@@ -412,7 +236,7 @@ impl<'a, P: Profile> Clip<'a, P> {
         self.looping
     }
     /// Typed channel definitions.
-    pub fn channels(&self) -> &[Channel<'a>] {
+    pub fn channels(&self) -> &[Channel<'a, P>] {
         &self.channels
     }
     /// Event occurrences.
@@ -439,7 +263,7 @@ pub struct Event<'a> {
 /// A clip reference used by format-specific alias and transition metadata.
 pub type ClipReference = ClipId;
 
-impl Channel<'_> {
+impl<P: Profile> Channel<'_, P> {
     /// Clock on which this channel is evaluated.
     pub fn clock(&self) -> Clock {
         match self {
@@ -460,7 +284,7 @@ impl Channel<'_> {
         }
     }
     /// Logical destination of this typed channel.
-    pub fn target(&self) -> &PropertyTarget {
+    pub fn target(&self) -> &PropertyTarget<P> {
         match self {
             Self::Unsigned4(track) => track.target.target(),
             Self::Bytes4(track) => track.target.target(),
@@ -477,5 +301,61 @@ impl Channel<'_> {
             Self::Texture(track) => track.target.target(),
             Self::OptionalTexture(track) => track.target.target(),
         }
+    }
+}
+
+impl<'a, T: CurveValue, P: Profile> Track<'a, T, P> {
+    fn map_profile<Q: Profile>(
+        self,
+        map: impl Fn(P::Property) -> Result<Q::Property, Error>,
+    ) -> Result<Track<'a, T, Q>, Error> {
+        Ok(Track {
+            target: Property::new(self.target.target().clone().map_profile(map)?),
+            curve: self.curve,
+            clock: self.clock,
+        })
+    }
+}
+impl<'a, P: Profile> Channel<'a, P> {
+    pub(crate) fn map_profile<Q: Profile>(
+        self,
+        map: impl Fn(P::Property) -> Result<Q::Property, Error> + Copy,
+    ) -> Result<Channel<'a, Q>, Error> {
+        Ok(match self {
+            Self::Unsigned4(track) => Channel::Unsigned4(track.map_profile(map)?),
+            Self::Bytes4(track) => Channel::Bytes4(track.map_profile(map)?),
+            Self::Rotation(track) => Channel::Rotation(track.map_profile(map)?),
+            Self::Scalar(track) => Channel::Scalar(track.map_profile(map)?),
+            Self::Vector2(track) => Channel::Vector2(track.map_profile(map)?),
+            Self::Vector3(track) => Channel::Vector3(track.map_profile(map)?),
+            Self::Vector4(track) => Channel::Vector4(track.map_profile(map)?),
+            Self::Unsigned(track) => Channel::Unsigned(track.map_profile(map)?),
+            Self::Signed(track) => Channel::Signed(track.map_profile(map)?),
+            Self::Unsigned16(track) => Channel::Unsigned16(track.map_profile(map)?),
+            Self::Byte(track) => Channel::Byte(track.map_profile(map)?),
+            Self::Boolean(track) => Channel::Boolean(track.map_profile(map)?),
+            Self::Texture(track) => Channel::Texture(track.map_profile(map)?),
+            Self::OptionalTexture(track) => Channel::OptionalTexture(track.map_profile(map)?),
+        })
+    }
+    /// Embeds a typed programme in a containing vocabulary while sharing its curve arrays.
+    pub fn widen<Q: Extends<P>>(self) -> Channel<'a, Q> {
+        self.map_profile(|key| Ok(Q::property(key)))
+            .expect("infallible property embedding")
+    }
+    /// Projects a typed programme into a subset vocabulary without rebuilding its curves.
+    pub fn try_narrow<Q: Narrows<P>>(self) -> Result<Channel<'a, Q>, Error> {
+        self.map_profile(Q::property)
+    }
+}
+
+impl<T: PartialEq, P: Profile, Q: Profile> PartialEq<Animated<T, Q>> for Animated<T, P> {
+    fn eq(&self, other: &Animated<T, Q>) -> bool {
+        self.default == other.default
+            && match (&self.property, &other.property) {
+                (None, None) => true,
+                (Some(a), Some(b)) => a == b,
+                _ => false,
+            }
     }
 }

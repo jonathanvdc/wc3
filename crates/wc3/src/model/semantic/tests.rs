@@ -95,14 +95,15 @@ fn graph_can_cross_thread_boundaries() {
 }
 
 #[test]
-fn incompatible_named_property_bindings_are_rejected() {
+fn incompatible_structural_property_bindings_are_rejected() {
     let mut builder = ModelBuilder::new("ambiguous property");
     let clip = builder.add_clip(Clip::named("clip")).unwrap();
+    let node = builder.add_node(Node::named("owner")).unwrap();
     builder
         .add_channel(
             clip,
             Channel::Scalar(Track {
-                target: Property::named(OwnerId::Model, "value"),
+                target: Property::new(PropertyTarget::Translation(node)),
                 curve: Curve::from_samples([Time::default()], [1f32], Interpolation::Step).unwrap(),
                 clock: Clock::Clip,
             }),
@@ -112,7 +113,7 @@ fn incompatible_named_property_bindings_are_rejected() {
         .add_channel(
             clip,
             Channel::Vector3(Track {
-                target: Property::named(OwnerId::Model, "value"),
+                target: Property::new(PropertyTarget::Translation(node)),
                 curve: Curve::from_samples([Time::default()], [[1f32; 3]], Interpolation::Step)
                     .unwrap(),
                 clock: Clock::Clip,
@@ -259,6 +260,7 @@ fn application_vocabularies_participate_in_graph_validation_and_unions() {
         }
     }
     impl Profile for Application {
+        type Property = profiles::Unavailable;
         type Models = Multiple;
         type Asset<'a> = profiles::NoControls;
         type Appearance<'a> = UniversalAppearance<'a>;

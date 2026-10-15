@@ -13,7 +13,7 @@ use crate::model::{
 fn exact_unsigned_keys_rebuild_typed_native_controller_tables() {
     let mut builder = Graph::builder("integer controller");
     let node = builder.reserve_node();
-    let batching = surface::properties::BATCHING.bind(node);
+    let batching = surface::properties::BATCHING.bind(node).widen();
     let controls = surface::BoneControls {
         source_id: 0,
         extra_flags: Default::default(),
@@ -68,7 +68,7 @@ fn exact_unsigned_keys_rebuild_typed_native_controller_tables() {
         .add_controller_channel(
             controller,
             Channel::Unsigned(Track {
-                target: batching.clone(),
+                target: batching.clone().try_narrow::<M3>().unwrap(),
                 curve: Curve::from_samples(
                     Values::owned(vec![Time::seconds(0.).unwrap(), Time::seconds(1.).unwrap()]),
                     Values::owned(vec![16_777_217, u32::MAX]),

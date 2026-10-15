@@ -25,7 +25,7 @@ pub(in crate::model::conversion::wem) fn bind_property(
             (&mut actor.horizontal_range, properties::HORIZONTAL_RANGE)
         }
         M2ParticleProperty::Gravity => {
-            let property = properties::GRAVITY.bind(owner);
+            let property = properties::GRAVITY.bind(owner).widen();
             actor.gravity.property = Some(property.clone());
             return Some(Bound::Vector3(property));
         }
@@ -36,7 +36,7 @@ pub(in crate::model::conversion::wem) fn bind_property(
         M2ParticleProperty::ZSource => (&mut actor.z_source, properties::Z_SOURCE),
         M2ParticleProperty::Count | M2ParticleProperty::Unknown(_) => return None,
     };
-    let property = descriptor.bind(owner);
+    let property = descriptor.bind(owner).widen();
     field.property = Some(property.clone());
     Some(Bound::Scalar(property))
 }

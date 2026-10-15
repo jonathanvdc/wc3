@@ -35,7 +35,7 @@ where
     macro_rules! bind_field {
         ($node:ident,$actor:ident,$field:ident,$key:ident,$native:expr,$variant:ident,$map:expr) => {{
             let property = profile::properties::$actor::$key.bind($node);
-            $actor.$field.property = Some(property.clone());
+            $actor.$field.property = Some(property.clone().widen());
             for (seq, clip) in animation::sequences(clips) {
                 let (start, _) = tables
                     .sequences
@@ -257,7 +257,7 @@ where
             Boolean,
             |v| v != 0
         );
-        builder.set_feature(feature, profile::ActorKind::Ribbon(ribbon))?;
+        builder.set_feature(feature, profile::ActorKind::Ribbon(Box::new(ribbon)))?;
     }
     for (index, value) in core.particles.iter().enumerate() {
         let node = placement(
@@ -392,9 +392,9 @@ where
         let position = profile::properties::camera::POSITION.bind(feature);
         let target = profile::properties::camera::TARGET.bind(feature);
         let roll = profile::properties::camera::ROLL.bind(feature);
-        camera.position.property = Some(position.clone());
-        camera.target.property = Some(target.clone());
-        camera.roll.property = Some(roll.clone());
+        camera.position.property = Some(position.clone().widen());
+        camera.target.property = Some(target.clone().widen());
+        camera.roll.property = Some(roll.clone().widen());
         for (seq, clip) in animation::sequences(clips) {
             let (start, _) = tables
                 .sequences

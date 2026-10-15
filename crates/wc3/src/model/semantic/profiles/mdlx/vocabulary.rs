@@ -1,7 +1,10 @@
 //! Built-in MDLX authoring vocabulary and its lossless embeddings.
+use super::properties::Target as PropertySelector;
+use crate::model::semantic::profiles::UniversalProperty;
 use crate::model::semantic::profiles::{
     mdlx, Extends, FeaturePayload, NoControls, Profile, SurfacePayload, Unavailable, Universal,
 };
+use crate::model::semantic::PropertyIdentityKey;
 use crate::model::semantic::{
     ClipControls, Error, FeatureKind, IdentityBinding, MaterialSurface, MdlxGeometry, MeshControls,
     ModelControls, NodeControls, NodeFeature, Single, SingleLook, TextureControls,
@@ -21,6 +24,7 @@ use crate::model::semantic::{
 #[derive(Clone, Debug, Default)]
 pub struct Mdlx;
 impl Profile for Mdlx {
+    type Property = PropertySelector;
     fn default_bounds() -> Option<crate::model::semantic::Bounds> {
         Some(Default::default())
     }
@@ -52,11 +56,21 @@ impl Profile for Mdlx {
     }
 }
 impl SurfacePayload for mdlx::Material<'_> {
+    fn supports_property(&self, key: &PropertyIdentityKey) -> bool {
+        key.downcast_ref::<super::properties::Target>()
+            .is_some_and(|key| key.supports_material(self))
+    }
+
     fn validate(&self) -> Result<(), Error> {
         Ok(())
     }
 }
 impl FeaturePayload for mdlx::Node<'_> {
+    fn supports_property(&self, key: &PropertyIdentityKey) -> bool {
+        key.downcast_ref::<super::properties::Target>()
+            .is_some_and(|key| key.supports_feature(self))
+    }
+
     fn kind(&self) -> FeatureKind {
         match self {
             mdlx::Node::GeometryAnimation(_) => FeatureKind::MdlxGeometryAnimation,
@@ -65,6 +79,9 @@ impl FeaturePayload for mdlx::Node<'_> {
     }
 }
 impl Extends<Mdlx> for Universal {
+    fn property(value: <Mdlx as Profile>::Property) -> Self::Property {
+        UniversalProperty::Mdlx(value)
+    }
     fn asset<'a>(value: <Mdlx as Profile>::Asset<'a>) -> Self::Asset<'a> {
         let _ = value;
         None

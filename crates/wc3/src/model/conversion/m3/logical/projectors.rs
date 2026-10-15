@@ -9,6 +9,7 @@ use super::{
 };
 use crate::model::conversion::Error;
 use crate::model::m3::{self as native, records as nr};
+use crate::model::semantic::profiles::m3::properties::{Field, FieldPath};
 use crate::model::semantic::{profiles::m3 as surface, FeatureId, MaterialId, NodeId, OwnerId};
 use native::{Envelope, Ref};
 use std::collections::BTreeMap;
@@ -79,91 +80,91 @@ pub(super) fn read<E: Envelope>(
                 bindings::field(
                     &mut payload.offset,
                     OwnerId::Feature(owner),
-                    "projector.offset",
+                    &FieldPath::root(Field::Projector).child(Field::Offset),
                     registry,
                 );
                 bindings::field(
                     &mut payload.pitch,
                     OwnerId::Feature(owner),
-                    "projector.pitch",
+                    &FieldPath::root(Field::Projector).child(Field::Pitch),
                     registry,
                 );
                 bindings::field(
                     &mut payload.yaw,
                     OwnerId::Feature(owner),
-                    "projector.yaw",
+                    &FieldPath::root(Field::Projector).child(Field::Yaw),
                     registry,
                 );
                 bindings::field(
                     &mut payload.roll,
                     OwnerId::Feature(owner),
-                    "projector.roll",
+                    &FieldPath::root(Field::Projector).child(Field::Roll),
                     registry,
                 );
                 bindings::field(
                     &mut payload.field_of_view,
                     OwnerId::Feature(owner),
-                    "projector.field_of_view",
+                    &FieldPath::root(Field::Projector).child(Field::FieldOfView),
                     registry,
                 );
                 bindings::field(
                     &mut payload.aspect_ratio,
                     OwnerId::Feature(owner),
-                    "projector.aspect_ratio",
+                    &FieldPath::root(Field::Projector).child(Field::AspectRatio),
                     registry,
                 );
                 bindings::field(
                     &mut payload.near,
                     OwnerId::Feature(owner),
-                    "projector.near",
+                    &FieldPath::root(Field::Projector).child(Field::Near),
                     registry,
                 );
                 bindings::field(
                     &mut payload.far,
                     OwnerId::Feature(owner),
-                    "projector.far",
+                    &FieldPath::root(Field::Projector).child(Field::Far),
                     registry,
                 );
                 bindings::field(
                     &mut payload.box_offset_z_bottom,
                     OwnerId::Feature(owner),
-                    "projector.box_offset_z_bottom",
+                    &FieldPath::root(Field::Projector).child(Field::BoxOffsetZBottom),
                     registry,
                 );
                 bindings::field(
                     &mut payload.box_offset_z_top,
                     OwnerId::Feature(owner),
-                    "projector.box_offset_z_top",
+                    &FieldPath::root(Field::Projector).child(Field::BoxOffsetZTop),
                     registry,
                 );
                 bindings::field(
                     &mut payload.box_offset_x_left,
                     OwnerId::Feature(owner),
-                    "projector.box_offset_x_left",
+                    &FieldPath::root(Field::Projector).child(Field::BoxOffsetXLeft),
                     registry,
                 );
                 bindings::field(
                     &mut payload.box_offset_x_right,
                     OwnerId::Feature(owner),
-                    "projector.box_offset_x_right",
+                    &FieldPath::root(Field::Projector).child(Field::BoxOffsetXRight),
                     registry,
                 );
                 bindings::field(
                     &mut payload.box_offset_y_front,
                     OwnerId::Feature(owner),
-                    "projector.box_offset_y_front",
+                    &FieldPath::root(Field::Projector).child(Field::BoxOffsetYFront),
                     registry,
                 );
                 bindings::field(
                     &mut payload.box_offset_y_back,
                     OwnerId::Feature(owner),
-                    "projector.box_offset_y_back",
+                    &FieldPath::root(Field::Projector).child(Field::BoxOffsetYBack),
                     registry,
                 );
                 bindings::field(
                     &mut payload.active,
                     OwnerId::Feature(owner),
-                    "projector.active",
+                    &FieldPath::root(Field::Projector).child(Field::Active),
                     registry,
                 );
                 builder.set_feature(owner, surface::Feature::Projector((payload).into()))?;

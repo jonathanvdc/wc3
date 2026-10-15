@@ -1,6 +1,7 @@
 //! Shared, animated texture-coordinate transformations.
+use crate::model::semantic::profiles::Profile;
 use crate::model::semantic::{
-    Animated, Link, OwnerId, Property, Quaternion, TextureTransformId, ValidateLinks,
+    Animated, Link, Property, PropertyTarget, Quaternion, TextureTransformId, ValidateLinks,
 };
 /// A shared texture-coordinate transform, independent of any surface or file table.
 #[derive(Clone, Debug, PartialEq)]
@@ -30,15 +31,15 @@ impl ValidateLinks for TextureTransform {
 }
 impl TextureTransformId {
     /// Animated coordinate translation of this shared transform.
-    pub fn translation(self) -> Property<[f32; 3]> {
-        Property::named(OwnerId::TextureTransform(self), "translation")
+    pub fn translation<P: Profile>(self) -> Property<[f32; 3], P> {
+        Property::new(PropertyTarget::TextureTranslation(self))
     }
     /// Animated coordinate rotation of this shared transform.
-    pub fn rotation(self) -> Property<Quaternion> {
-        Property::named(OwnerId::TextureTransform(self), "rotation")
+    pub fn rotation<P: Profile>(self) -> Property<Quaternion, P> {
+        Property::new(PropertyTarget::TextureRotation(self))
     }
     /// Animated coordinate scale of this shared transform.
-    pub fn scale(self) -> Property<[f32; 3]> {
-        Property::named(OwnerId::TextureTransform(self), "scale")
+    pub fn scale<P: Profile>(self) -> Property<[f32; 3], P> {
+        Property::new(PropertyTarget::TextureScale(self))
     }
 }

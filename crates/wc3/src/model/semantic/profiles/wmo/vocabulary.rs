@@ -10,6 +10,7 @@ use crate::model::semantic::{
 #[derive(Clone, Debug, Default)]
 pub struct Wmo;
 impl Profile for Wmo {
+    type Property = Unavailable;
     type Models = Single;
     type Asset<'a> = NoControls;
     type Appearance<'a> = SingleLook<'a>;
@@ -53,6 +54,9 @@ impl FeaturePayload for wmo::Node<'_> {
     }
 }
 impl Extends<Wmo> for Universal {
+    fn property(value: <Wmo as Profile>::Property) -> Self::Property {
+        match value {}
+    }
     fn asset<'a>(value: <Wmo as Profile>::Asset<'a>) -> Self::Asset<'a> {
         let _ = value;
         None

@@ -44,7 +44,7 @@ pub enum ActorKind<'a> {
     /// Camera and look-at controls.
     Camera(Camera),
     /// Ribbon trail.
-    Ribbon(Ribbon),
+    Ribbon(Box<Ribbon>),
     /// Particle generator.
     Particle(Box<Particle<'a>>),
     /// Timestamp-triggered game action.

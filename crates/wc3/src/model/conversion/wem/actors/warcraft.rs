@@ -334,7 +334,7 @@ pub(in crate::model::conversion::wem) fn bind_property(
         },
         Feature::FaceAnimation(_) => return Ok(None),
     };
-    let property = descriptor.bind(id);
+    let property = descriptor.bind(id).widen();
     field.property = Some(property.clone());
     Ok(Some(property))
 }

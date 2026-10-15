@@ -1,5 +1,6 @@
 //! Curve restrictions shared by native clocks with bounded unsigned timestamps.
 use super::Error;
+use crate::model::semantic::profiles::Profile;
 use crate::model::semantic::{Curve, CurveValue, Interpolation, Quaternion, Time, Track};
 
 #[derive(Clone)]
@@ -62,11 +63,11 @@ impl FloatValue for Quaternion {
     }
 }
 /// Restricts a typed floating-point track without resampling its spline segments.
-pub fn crop<'a, T: FloatValue + 'a>(
-    track: &Track<'a, T>,
+pub fn crop<'a, T: FloatValue + 'a, P: Profile>(
+    track: &Track<'a, T, P>,
     start: Time,
     end: Time,
-) -> Result<Track<'a, T>, Error> {
+) -> Result<Track<'a, T, P>, Error> {
     if track.curve.interpolation() == Interpolation::Nlerp {
         return Err(Error::new(
             "curve.nlerp",

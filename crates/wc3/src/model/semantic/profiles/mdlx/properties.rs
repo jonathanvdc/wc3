@@ -1,152 +1,203 @@
 //! Typed Warcraft III property definitions used by semantic animation bindings.
-use crate::model::semantic::{FeatureId, MaterialId, PropertyKey, TextureId};
+use crate::model::semantic::profiles::Mdlx;
+use crate::model::semantic::{
+    FeatureId, MaterialId, OwnerId, PropertyKey, PropertyPayload, TextureId,
+};
+use std::any::TypeId;
 
 /// Animated geometry properties on an attached feature.
 pub mod geometry {
+    use super::*;
     use super::{FeatureId, PropertyKey};
     /// Animated opacity.
-    pub const OPACITY: PropertyKey<FeatureId, f32> = PropertyKey::new("geometry.opacity");
+    pub const OPACITY: PropertyKey<FeatureId, f32, Mdlx> =
+        PropertyKey::new(Target::Geometry(GeometryField::Opacity));
     /// Animated color.
-    pub const COLOR: PropertyKey<FeatureId, [f32; 3]> = PropertyKey::new("geometry.color");
+    pub const COLOR: PropertyKey<FeatureId, [f32; 3], Mdlx> =
+        PropertyKey::new(Target::Geometry(GeometryField::Color));
 }
 
 /// Animated particle properties on an attached feature.
 pub mod particle {
+    use super::*;
     use super::{FeatureId, PropertyKey};
     /// Animated emission rate.
-    pub const EMISSION_RATE: PropertyKey<FeatureId, f32> =
-        PropertyKey::new("particle.emission_rate");
+    pub const EMISSION_RATE: PropertyKey<FeatureId, f32, Mdlx> =
+        PropertyKey::new(Target::Particle(ParticleField::EmissionRate));
     /// Animated gravity.
-    pub const GRAVITY: PropertyKey<FeatureId, f32> = PropertyKey::new("particle.gravity");
+    pub const GRAVITY: PropertyKey<FeatureId, f32, Mdlx> =
+        PropertyKey::new(Target::Particle(ParticleField::Gravity));
     /// Animated longitude.
-    pub const LONGITUDE: PropertyKey<FeatureId, f32> = PropertyKey::new("particle.longitude");
+    pub const LONGITUDE: PropertyKey<FeatureId, f32, Mdlx> =
+        PropertyKey::new(Target::Particle(ParticleField::Longitude));
     /// Animated latitude.
-    pub const LATITUDE: PropertyKey<FeatureId, f32> = PropertyKey::new("particle.latitude");
+    pub const LATITUDE: PropertyKey<FeatureId, f32, Mdlx> =
+        PropertyKey::new(Target::Particle(ParticleField::Latitude));
     /// Animated life span.
-    pub const LIFE_SPAN: PropertyKey<FeatureId, f32> = PropertyKey::new("particle.life_span");
+    pub const LIFE_SPAN: PropertyKey<FeatureId, f32, Mdlx> =
+        PropertyKey::new(Target::Particle(ParticleField::LifeSpan));
     /// Animated initial velocity.
-    pub const INITIAL_VELOCITY: PropertyKey<FeatureId, f32> =
-        PropertyKey::new("particle.initial_velocity");
+    pub const INITIAL_VELOCITY: PropertyKey<FeatureId, f32, Mdlx> =
+        PropertyKey::new(Target::Particle(ParticleField::InitialVelocity));
     /// Animated visibility.
-    pub const VISIBILITY: PropertyKey<FeatureId, f32> = PropertyKey::new("particle.visibility");
+    pub const VISIBILITY: PropertyKey<FeatureId, f32, Mdlx> =
+        PropertyKey::new(Target::Particle(ParticleField::Visibility));
 }
 
 /// Animated particle2 properties on an attached feature.
 pub mod particle2 {
+    use super::*;
     use super::{FeatureId, PropertyKey};
     /// Animated speed.
-    pub const SPEED: PropertyKey<FeatureId, f32> = PropertyKey::new("particle2.speed");
+    pub const SPEED: PropertyKey<FeatureId, f32, Mdlx> =
+        PropertyKey::new(Target::Particle2(Particle2Field::Speed));
     /// Animated variation.
-    pub const VARIATION: PropertyKey<FeatureId, f32> = PropertyKey::new("particle2.variation");
+    pub const VARIATION: PropertyKey<FeatureId, f32, Mdlx> =
+        PropertyKey::new(Target::Particle2(Particle2Field::Variation));
     /// Animated latitude.
-    pub const LATITUDE: PropertyKey<FeatureId, f32> = PropertyKey::new("particle2.latitude");
+    pub const LATITUDE: PropertyKey<FeatureId, f32, Mdlx> =
+        PropertyKey::new(Target::Particle2(Particle2Field::Latitude));
     /// Animated gravity.
-    pub const GRAVITY: PropertyKey<FeatureId, f32> = PropertyKey::new("particle2.gravity");
+    pub const GRAVITY: PropertyKey<FeatureId, f32, Mdlx> =
+        PropertyKey::new(Target::Particle2(Particle2Field::Gravity));
     /// Animated emission rate.
-    pub const EMISSION_RATE: PropertyKey<FeatureId, f32> =
-        PropertyKey::new("particle2.emission_rate");
+    pub const EMISSION_RATE: PropertyKey<FeatureId, f32, Mdlx> =
+        PropertyKey::new(Target::Particle2(Particle2Field::EmissionRate));
     /// Animated length.
-    pub const LENGTH: PropertyKey<FeatureId, f32> = PropertyKey::new("particle2.length");
+    pub const LENGTH: PropertyKey<FeatureId, f32, Mdlx> =
+        PropertyKey::new(Target::Particle2(Particle2Field::Length));
     /// Animated width.
-    pub const WIDTH: PropertyKey<FeatureId, f32> = PropertyKey::new("particle2.width");
+    pub const WIDTH: PropertyKey<FeatureId, f32, Mdlx> =
+        PropertyKey::new(Target::Particle2(Particle2Field::Width));
     /// Animated visibility.
-    pub const VISIBILITY: PropertyKey<FeatureId, f32> = PropertyKey::new("particle2.visibility");
+    pub const VISIBILITY: PropertyKey<FeatureId, f32, Mdlx> =
+        PropertyKey::new(Target::Particle2(Particle2Field::Visibility));
 }
 
 /// Animated ribbon properties on an attached feature.
 pub mod ribbon {
+    use super::*;
     use super::{FeatureId, PropertyKey};
     /// Animated height above.
-    pub const HEIGHT_ABOVE: PropertyKey<FeatureId, f32> = PropertyKey::new("ribbon.height_above");
+    pub const HEIGHT_ABOVE: PropertyKey<FeatureId, f32, Mdlx> =
+        PropertyKey::new(Target::Ribbon(RibbonField::HeightAbove));
     /// Animated height below.
-    pub const HEIGHT_BELOW: PropertyKey<FeatureId, f32> = PropertyKey::new("ribbon.height_below");
+    pub const HEIGHT_BELOW: PropertyKey<FeatureId, f32, Mdlx> =
+        PropertyKey::new(Target::Ribbon(RibbonField::HeightBelow));
     /// Animated opacity.
-    pub const OPACITY: PropertyKey<FeatureId, f32> = PropertyKey::new("ribbon.alpha");
+    pub const OPACITY: PropertyKey<FeatureId, f32, Mdlx> =
+        PropertyKey::new(Target::Ribbon(RibbonField::Opacity));
     /// Animated color.
-    pub const COLOR: PropertyKey<FeatureId, [f32; 3]> = PropertyKey::new("ribbon.color");
+    pub const COLOR: PropertyKey<FeatureId, [f32; 3], Mdlx> =
+        PropertyKey::new(Target::Ribbon(RibbonField::Color));
     /// Animated texture slot.
-    pub const TEXTURE_SLOT: PropertyKey<FeatureId, u32> = PropertyKey::new("ribbon.texture_slot");
+    pub const TEXTURE_SLOT: PropertyKey<FeatureId, u32, Mdlx> =
+        PropertyKey::new(Target::Ribbon(RibbonField::TextureSlot));
     /// Animated visibility.
-    pub const VISIBILITY: PropertyKey<FeatureId, f32> = PropertyKey::new("ribbon.visibility");
+    pub const VISIBILITY: PropertyKey<FeatureId, f32, Mdlx> =
+        PropertyKey::new(Target::Ribbon(RibbonField::Visibility));
 }
 
 /// Animated popcorn properties on an attached feature.
 pub mod popcorn {
+    use super::*;
     use super::{FeatureId, PropertyKey};
     /// Animated life span.
-    pub const LIFE_SPAN: PropertyKey<FeatureId, f32> = PropertyKey::new("popcorn.life_span");
+    pub const LIFE_SPAN: PropertyKey<FeatureId, f32, Mdlx> =
+        PropertyKey::new(Target::Popcorn(PopcornField::LifeSpan));
     /// Animated emission rate.
-    pub const EMISSION_RATE: PropertyKey<FeatureId, f32> =
-        PropertyKey::new("popcorn.emission_rate");
+    pub const EMISSION_RATE: PropertyKey<FeatureId, f32, Mdlx> =
+        PropertyKey::new(Target::Popcorn(PopcornField::EmissionRate));
     /// Animated speed.
-    pub const SPEED: PropertyKey<FeatureId, f32> = PropertyKey::new("popcorn.speed");
+    pub const SPEED: PropertyKey<FeatureId, f32, Mdlx> =
+        PropertyKey::new(Target::Popcorn(PopcornField::Speed));
     /// Animated color.
-    pub const COLOR: PropertyKey<FeatureId, [f32; 3]> = PropertyKey::new("popcorn.color");
+    pub const COLOR: PropertyKey<FeatureId, [f32; 3], Mdlx> =
+        PropertyKey::new(Target::Popcorn(PopcornField::Color));
     /// Animated opacity.
-    pub const OPACITY: PropertyKey<FeatureId, f32> = PropertyKey::new("popcorn.alpha");
+    pub const OPACITY: PropertyKey<FeatureId, f32, Mdlx> =
+        PropertyKey::new(Target::Popcorn(PopcornField::Opacity));
     /// Animated visibility.
-    pub const VISIBILITY: PropertyKey<FeatureId, f32> = PropertyKey::new("popcorn.visibility");
+    pub const VISIBILITY: PropertyKey<FeatureId, f32, Mdlx> =
+        PropertyKey::new(Target::Popcorn(PopcornField::Visibility));
 }
 
 /// Animated light properties on an attached feature.
 pub mod light {
+    use super::*;
     use super::{FeatureId, PropertyKey};
     /// Animated color.
-    pub const COLOR: PropertyKey<FeatureId, [f32; 3]> = PropertyKey::new("light.color");
+    pub const COLOR: PropertyKey<FeatureId, [f32; 3], Mdlx> =
+        PropertyKey::new(Target::Light(LightField::Color));
     /// Animated intensity.
-    pub const INTENSITY: PropertyKey<FeatureId, f32> = PropertyKey::new("light.intensity");
+    pub const INTENSITY: PropertyKey<FeatureId, f32, Mdlx> =
+        PropertyKey::new(Target::Light(LightField::Intensity));
     /// Animated ambient color.
-    pub const AMBIENT_COLOR: PropertyKey<FeatureId, [f32; 3]> =
-        PropertyKey::new("light.ambient_color");
+    pub const AMBIENT_COLOR: PropertyKey<FeatureId, [f32; 3], Mdlx> =
+        PropertyKey::new(Target::Light(LightField::AmbientColor));
     /// Animated ambient intensity.
-    pub const AMBIENT_INTENSITY: PropertyKey<FeatureId, f32> =
-        PropertyKey::new("light.ambient_intensity");
+    pub const AMBIENT_INTENSITY: PropertyKey<FeatureId, f32, Mdlx> =
+        PropertyKey::new(Target::Light(LightField::AmbientIntensity));
     /// Animated visibility.
-    pub const VISIBILITY: PropertyKey<FeatureId, f32> = PropertyKey::new("light.visibility");
+    pub const VISIBILITY: PropertyKey<FeatureId, f32, Mdlx> =
+        PropertyKey::new(Target::Light(LightField::Visibility));
     /// Animated attenuation start.
-    pub const ATTENUATION_START: PropertyKey<FeatureId, f32> =
-        PropertyKey::new("light.attenuation_start");
+    pub const ATTENUATION_START: PropertyKey<FeatureId, f32, Mdlx> =
+        PropertyKey::new(Target::Light(LightField::AttenuationStart));
     /// Animated attenuation end.
-    pub const ATTENUATION_END: PropertyKey<FeatureId, f32> =
-        PropertyKey::new("light.attenuation_end");
+    pub const ATTENUATION_END: PropertyKey<FeatureId, f32, Mdlx> =
+        PropertyKey::new(Target::Light(LightField::AttenuationEnd));
     /// Animated shadow start.
-    pub const SHADOW_START: PropertyKey<FeatureId, f32> = PropertyKey::new("light.shadow_start");
+    pub const SHADOW_START: PropertyKey<FeatureId, f32, Mdlx> =
+        PropertyKey::new(Target::Light(LightField::ShadowStart));
     /// Animated shadow end.
-    pub const SHADOW_END: PropertyKey<FeatureId, f32> = PropertyKey::new("light.shadow_end");
+    pub const SHADOW_END: PropertyKey<FeatureId, f32, Mdlx> =
+        PropertyKey::new(Target::Light(LightField::ShadowEnd));
     /// Animated quadratic.
-    pub const QUADRATIC: PropertyKey<FeatureId, f32> = PropertyKey::new("light.quadratic");
+    pub const QUADRATIC: PropertyKey<FeatureId, f32, Mdlx> =
+        PropertyKey::new(Target::Light(LightField::Quadratic));
     /// Animated linear.
-    pub const LINEAR: PropertyKey<FeatureId, f32> = PropertyKey::new("light.linear");
+    pub const LINEAR: PropertyKey<FeatureId, f32, Mdlx> =
+        PropertyKey::new(Target::Light(LightField::Linear));
     /// Animated damping.
-    pub const DAMPING: PropertyKey<FeatureId, f32> = PropertyKey::new("light.damping");
+    pub const DAMPING: PropertyKey<FeatureId, f32, Mdlx> =
+        PropertyKey::new(Target::Light(LightField::Damping));
 }
 
 /// Animated camera properties on an attached feature.
 pub mod camera {
+    use super::*;
     use super::{FeatureId, PropertyKey};
     /// Animated eye offset.
-    pub const EYE_OFFSET: PropertyKey<FeatureId, [f32; 3]> = PropertyKey::new("camera.eye_offset");
+    pub const EYE_OFFSET: PropertyKey<FeatureId, [f32; 3], Mdlx> =
+        PropertyKey::new(Target::Camera(CameraField::EyeOffset));
     /// Animated target offset.
-    pub const TARGET_OFFSET: PropertyKey<FeatureId, [f32; 3]> =
-        PropertyKey::new("camera.target_offset");
+    pub const TARGET_OFFSET: PropertyKey<FeatureId, [f32; 3], Mdlx> =
+        PropertyKey::new(Target::Camera(CameraField::TargetOffset));
     /// Animated roll.
-    pub const ROLL: PropertyKey<FeatureId, f32> = PropertyKey::new("camera.roll");
+    pub const ROLL: PropertyKey<FeatureId, f32, Mdlx> =
+        PropertyKey::new(Target::Camera(CameraField::Roll));
     /// Animated visibility.
-    pub const VISIBILITY: PropertyKey<FeatureId, f32> = PropertyKey::new("camera.visibility");
+    pub const VISIBILITY: PropertyKey<FeatureId, f32, Mdlx> =
+        PropertyKey::new(Target::Camera(CameraField::Visibility));
     /// Animated focus distance.
-    pub const FOCUS_DISTANCE: PropertyKey<FeatureId, f32> =
-        PropertyKey::new("camera.focus_distance");
+    pub const FOCUS_DISTANCE: PropertyKey<FeatureId, f32, Mdlx> =
+        PropertyKey::new(Target::Camera(CameraField::FocusDistance));
     /// Animated focal length.
-    pub const FOCAL_LENGTH: PropertyKey<FeatureId, f32> = PropertyKey::new("camera.focal_length");
+    pub const FOCAL_LENGTH: PropertyKey<FeatureId, f32, Mdlx> =
+        PropertyKey::new(Target::Camera(CameraField::FocalLength));
     /// Animated f stop.
-    pub const F_STOP: PropertyKey<FeatureId, f32> = PropertyKey::new("camera.f_stop");
+    pub const F_STOP: PropertyKey<FeatureId, f32, Mdlx> =
+        PropertyKey::new(Target::Camera(CameraField::FStop));
 }
 
 /// Animated attachment properties on an attached feature.
 pub mod attachment {
+    use super::*;
     use super::{FeatureId, PropertyKey};
     /// Animated visibility.
-    pub const VISIBILITY: PropertyKey<FeatureId, f32> = PropertyKey::new("attachment.visibility");
+    pub const VISIBILITY: PropertyKey<FeatureId, f32, Mdlx> =
+        PropertyKey::new(Target::Attachment(AttachmentField::Visibility));
 }
 
 /// Material-layer destinations selected by their logical layer index.
@@ -154,31 +205,456 @@ pub mod attachment {
 pub struct Layer(pub usize);
 impl Layer {
     /// Animated layer opacity.
-    pub fn opacity(self) -> PropertyKey<MaterialId, f32> {
-        PropertyKey::indexed(format!("layers[{}].opacity", self.0))
+    pub fn opacity(self) -> PropertyKey<MaterialId, f32, Mdlx> {
+        PropertyKey::new(Target::Layer {
+            index: self.0,
+            field: LayerField::Opacity,
+        })
     }
     /// Animated layer texture selection.
-    pub fn texture(self) -> PropertyKey<MaterialId, Option<TextureId>> {
-        PropertyKey::indexed(format!("layers[{}].texture", self.0))
+    pub fn texture(self) -> PropertyKey<MaterialId, Option<TextureId>, Mdlx> {
+        PropertyKey::new(Target::Layer {
+            index: self.0,
+            field: LayerField::Texture,
+        })
     }
     /// Animated emissive gain.
-    pub fn emissive_gain(self) -> PropertyKey<MaterialId, f32> {
-        PropertyKey::indexed(format!("layers[{}].emissive_gain", self.0))
+    pub fn emissive_gain(self) -> PropertyKey<MaterialId, f32, Mdlx> {
+        PropertyKey::new(Target::Layer {
+            index: self.0,
+            field: LayerField::EmissiveGain,
+        })
     }
     /// Animated Fresnel color.
-    pub fn fresnel_color(self) -> PropertyKey<MaterialId, [f32; 3]> {
-        PropertyKey::indexed(format!("layers[{}].fresnel.color", self.0))
+    pub fn fresnel_color(self) -> PropertyKey<MaterialId, [f32; 3], Mdlx> {
+        PropertyKey::new(Target::Layer {
+            index: self.0,
+            field: LayerField::FresnelColor,
+        })
     }
     /// Animated Fresnel opacity.
-    pub fn fresnel_opacity(self) -> PropertyKey<MaterialId, f32> {
-        PropertyKey::indexed(format!("layers[{}].fresnel.opacity", self.0))
+    pub fn fresnel_opacity(self) -> PropertyKey<MaterialId, f32, Mdlx> {
+        PropertyKey::new(Target::Layer {
+            index: self.0,
+            field: LayerField::FresnelOpacity,
+        })
     }
     /// Animated Fresnel team-color contribution.
-    pub fn fresnel_team_color(self) -> PropertyKey<MaterialId, f32> {
-        PropertyKey::indexed(format!("layers[{}].fresnel.team_color", self.0))
+    pub fn fresnel_team_color(self) -> PropertyKey<MaterialId, f32, Mdlx> {
+        PropertyKey::new(Target::Layer {
+            index: self.0,
+            field: LayerField::FresnelTeamColor,
+        })
     }
     /// Animated texture selection for an additional logical sampling slot.
-    pub fn texture_slot(self, slot: usize) -> PropertyKey<MaterialId, Option<TextureId>> {
-        PropertyKey::indexed(format!("layers[{}].textures[{slot}]", self.0))
+    pub fn texture_slot(self, slot: usize) -> PropertyKey<MaterialId, Option<TextureId>, Mdlx> {
+        PropertyKey::new(Target::LayerTexture {
+            layer: self.0,
+            slot,
+        })
+    }
+}
+
+/// Structural destinations owned by this property vocabulary.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum Target {
+    /// Geometry properties.
+    Geometry(GeometryField),
+    /// Particle properties.
+    Particle(ParticleField),
+    /// Particle2 properties.
+    Particle2(Particle2Field),
+    /// Ribbon properties.
+    Ribbon(RibbonField),
+    /// Popcorn properties.
+    Popcorn(PopcornField),
+    /// Light properties.
+    Light(LightField),
+    /// Camera properties.
+    Camera(CameraField),
+    /// Attachment properties.
+    Attachment(AttachmentField),
+    /// One logical material-layer texture slot.
+    LayerTexture {
+        /// Logical material layer ordinal.
+        layer: usize,
+        /// Sampling slot within this layer.
+        slot: usize,
+    },
+    /// Indexed layer property.
+    Layer {
+        /// Owner-local element ordinal.
+        index: usize,
+        /// Field of the selected element.
+        field: LayerField,
+    },
+}
+/// Structural geometry field selectors.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum GeometryField {
+    /// Animated opacity.
+    Opacity,
+    /// Animated color.
+    Color,
+}
+
+/// Structural particle field selectors.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum ParticleField {
+    /// Animated emission rate.
+    EmissionRate,
+    /// Animated gravity.
+    Gravity,
+    /// Animated longitude.
+    Longitude,
+    /// Animated latitude.
+    Latitude,
+    /// Animated life span.
+    LifeSpan,
+    /// Animated initial velocity.
+    InitialVelocity,
+    /// Animated visibility.
+    Visibility,
+}
+
+/// Structural particle2 field selectors.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum Particle2Field {
+    /// Animated speed.
+    Speed,
+    /// Animated variation.
+    Variation,
+    /// Animated latitude.
+    Latitude,
+    /// Animated gravity.
+    Gravity,
+    /// Animated emission rate.
+    EmissionRate,
+    /// Animated length.
+    Length,
+    /// Animated width.
+    Width,
+    /// Animated visibility.
+    Visibility,
+}
+
+/// Structural ribbon field selectors.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum RibbonField {
+    /// Animated height above.
+    HeightAbove,
+    /// Animated height below.
+    HeightBelow,
+    /// Animated opacity.
+    Opacity,
+    /// Animated color.
+    Color,
+    /// Animated texture slot.
+    TextureSlot,
+    /// Animated visibility.
+    Visibility,
+}
+
+/// Structural popcorn field selectors.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum PopcornField {
+    /// Animated life span.
+    LifeSpan,
+    /// Animated emission rate.
+    EmissionRate,
+    /// Animated speed.
+    Speed,
+    /// Animated color.
+    Color,
+    /// Animated opacity.
+    Opacity,
+    /// Animated visibility.
+    Visibility,
+}
+
+/// Structural light field selectors.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum LightField {
+    /// Animated color.
+    Color,
+    /// Animated intensity.
+    Intensity,
+    /// Animated ambient color.
+    AmbientColor,
+    /// Animated ambient intensity.
+    AmbientIntensity,
+    /// Animated visibility.
+    Visibility,
+    /// Animated attenuation start.
+    AttenuationStart,
+    /// Animated attenuation end.
+    AttenuationEnd,
+    /// Animated shadow start.
+    ShadowStart,
+    /// Animated shadow end.
+    ShadowEnd,
+    /// Animated quadratic.
+    Quadratic,
+    /// Animated linear.
+    Linear,
+    /// Animated damping.
+    Damping,
+}
+
+/// Structural camera field selectors.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum CameraField {
+    /// Animated eye offset.
+    EyeOffset,
+    /// Animated target offset.
+    TargetOffset,
+    /// Animated roll.
+    Roll,
+    /// Animated visibility.
+    Visibility,
+    /// Animated focus distance.
+    FocusDistance,
+    /// Animated focal length.
+    FocalLength,
+    /// Animated f stop.
+    FStop,
+}
+
+/// Structural attachment field selectors.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum AttachmentField {
+    /// Animated visibility.
+    Visibility,
+}
+
+/// Structural layer field selectors.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum LayerField {
+    /// Animated opacity.
+    Opacity,
+    /// Animated texture.
+    Texture,
+    /// Animated emissive gain.
+    EmissiveGain,
+    /// Animated fresnel color.
+    FresnelColor,
+    /// Animated fresnel opacity.
+    FresnelOpacity,
+    /// Animated fresnel team color.
+    FresnelTeamColor,
+}
+
+impl PropertyPayload for Target {
+    fn value_type(&self) -> Option<TypeId> {
+        Some(match self {
+            Target::Geometry(GeometryField::Opacity) => TypeId::of::<f32>(),
+            Target::Geometry(GeometryField::Color) => TypeId::of::<[f32; 3]>(),
+            Target::Particle(ParticleField::EmissionRate) => TypeId::of::<f32>(),
+            Target::Particle(ParticleField::Gravity) => TypeId::of::<f32>(),
+            Target::Particle(ParticleField::Longitude) => TypeId::of::<f32>(),
+            Target::Particle(ParticleField::Latitude) => TypeId::of::<f32>(),
+            Target::Particle(ParticleField::LifeSpan) => TypeId::of::<f32>(),
+            Target::Particle(ParticleField::InitialVelocity) => TypeId::of::<f32>(),
+            Target::Particle(ParticleField::Visibility) => TypeId::of::<f32>(),
+            Target::Particle2(Particle2Field::Speed) => TypeId::of::<f32>(),
+            Target::Particle2(Particle2Field::Variation) => TypeId::of::<f32>(),
+            Target::Particle2(Particle2Field::Latitude) => TypeId::of::<f32>(),
+            Target::Particle2(Particle2Field::Gravity) => TypeId::of::<f32>(),
+            Target::Particle2(Particle2Field::EmissionRate) => TypeId::of::<f32>(),
+            Target::Particle2(Particle2Field::Length) => TypeId::of::<f32>(),
+            Target::Particle2(Particle2Field::Width) => TypeId::of::<f32>(),
+            Target::Particle2(Particle2Field::Visibility) => TypeId::of::<f32>(),
+            Target::Ribbon(RibbonField::HeightAbove) => TypeId::of::<f32>(),
+            Target::Ribbon(RibbonField::HeightBelow) => TypeId::of::<f32>(),
+            Target::Ribbon(RibbonField::Opacity) => TypeId::of::<f32>(),
+            Target::Ribbon(RibbonField::Color) => TypeId::of::<[f32; 3]>(),
+            Target::Ribbon(RibbonField::TextureSlot) => TypeId::of::<u32>(),
+            Target::Ribbon(RibbonField::Visibility) => TypeId::of::<f32>(),
+            Target::Popcorn(PopcornField::LifeSpan) => TypeId::of::<f32>(),
+            Target::Popcorn(PopcornField::EmissionRate) => TypeId::of::<f32>(),
+            Target::Popcorn(PopcornField::Speed) => TypeId::of::<f32>(),
+            Target::Popcorn(PopcornField::Color) => TypeId::of::<[f32; 3]>(),
+            Target::Popcorn(PopcornField::Opacity) => TypeId::of::<f32>(),
+            Target::Popcorn(PopcornField::Visibility) => TypeId::of::<f32>(),
+            Target::Light(LightField::Color) => TypeId::of::<[f32; 3]>(),
+            Target::Light(LightField::Intensity) => TypeId::of::<f32>(),
+            Target::Light(LightField::AmbientColor) => TypeId::of::<[f32; 3]>(),
+            Target::Light(LightField::AmbientIntensity) => TypeId::of::<f32>(),
+            Target::Light(LightField::Visibility) => TypeId::of::<f32>(),
+            Target::Light(LightField::AttenuationStart) => TypeId::of::<f32>(),
+            Target::Light(LightField::AttenuationEnd) => TypeId::of::<f32>(),
+            Target::Light(LightField::ShadowStart) => TypeId::of::<f32>(),
+            Target::Light(LightField::ShadowEnd) => TypeId::of::<f32>(),
+            Target::Light(LightField::Quadratic) => TypeId::of::<f32>(),
+            Target::Light(LightField::Linear) => TypeId::of::<f32>(),
+            Target::Light(LightField::Damping) => TypeId::of::<f32>(),
+            Target::Camera(CameraField::EyeOffset) => TypeId::of::<[f32; 3]>(),
+            Target::Camera(CameraField::TargetOffset) => TypeId::of::<[f32; 3]>(),
+            Target::Camera(CameraField::Roll) => TypeId::of::<f32>(),
+            Target::Camera(CameraField::Visibility) => TypeId::of::<f32>(),
+            Target::Camera(CameraField::FocusDistance) => TypeId::of::<f32>(),
+            Target::Camera(CameraField::FocalLength) => TypeId::of::<f32>(),
+            Target::Camera(CameraField::FStop) => TypeId::of::<f32>(),
+            Target::Attachment(AttachmentField::Visibility) => TypeId::of::<f32>(),
+            Target::Layer {
+                field: LayerField::Opacity,
+                ..
+            } => TypeId::of::<f32>(),
+            Target::Layer {
+                field: LayerField::Texture,
+                ..
+            } => TypeId::of::<Option<TextureId>>(),
+            Target::Layer {
+                field: LayerField::EmissiveGain,
+                ..
+            } => TypeId::of::<f32>(),
+            Target::Layer {
+                field: LayerField::FresnelColor,
+                ..
+            } => TypeId::of::<[f32; 3]>(),
+            Target::Layer {
+                field: LayerField::FresnelOpacity,
+                ..
+            } => TypeId::of::<f32>(),
+            Target::Layer {
+                field: LayerField::FresnelTeamColor,
+                ..
+            } => TypeId::of::<f32>(),
+            Target::LayerTexture { .. } => TypeId::of::<Option<TextureId>>(),
+        })
+    }
+    fn accepts_owner(&self, owner: OwnerId) -> bool {
+        match self {
+            Target::Geometry(GeometryField::Opacity) => matches!(owner, OwnerId::Feature(_)),
+            Target::Geometry(GeometryField::Color) => matches!(owner, OwnerId::Feature(_)),
+            Target::Particle(ParticleField::EmissionRate) => matches!(owner, OwnerId::Feature(_)),
+            Target::Particle(ParticleField::Gravity) => matches!(owner, OwnerId::Feature(_)),
+            Target::Particle(ParticleField::Longitude) => matches!(owner, OwnerId::Feature(_)),
+            Target::Particle(ParticleField::Latitude) => matches!(owner, OwnerId::Feature(_)),
+            Target::Particle(ParticleField::LifeSpan) => matches!(owner, OwnerId::Feature(_)),
+            Target::Particle(ParticleField::InitialVelocity) => {
+                matches!(owner, OwnerId::Feature(_))
+            }
+            Target::Particle(ParticleField::Visibility) => matches!(owner, OwnerId::Feature(_)),
+            Target::Particle2(Particle2Field::Speed) => matches!(owner, OwnerId::Feature(_)),
+            Target::Particle2(Particle2Field::Variation) => matches!(owner, OwnerId::Feature(_)),
+            Target::Particle2(Particle2Field::Latitude) => matches!(owner, OwnerId::Feature(_)),
+            Target::Particle2(Particle2Field::Gravity) => matches!(owner, OwnerId::Feature(_)),
+            Target::Particle2(Particle2Field::EmissionRate) => matches!(owner, OwnerId::Feature(_)),
+            Target::Particle2(Particle2Field::Length) => matches!(owner, OwnerId::Feature(_)),
+            Target::Particle2(Particle2Field::Width) => matches!(owner, OwnerId::Feature(_)),
+            Target::Particle2(Particle2Field::Visibility) => matches!(owner, OwnerId::Feature(_)),
+            Target::Ribbon(RibbonField::HeightAbove) => matches!(owner, OwnerId::Feature(_)),
+            Target::Ribbon(RibbonField::HeightBelow) => matches!(owner, OwnerId::Feature(_)),
+            Target::Ribbon(RibbonField::Opacity) => matches!(owner, OwnerId::Feature(_)),
+            Target::Ribbon(RibbonField::Color) => matches!(owner, OwnerId::Feature(_)),
+            Target::Ribbon(RibbonField::TextureSlot) => matches!(owner, OwnerId::Feature(_)),
+            Target::Ribbon(RibbonField::Visibility) => matches!(owner, OwnerId::Feature(_)),
+            Target::Popcorn(PopcornField::LifeSpan) => matches!(owner, OwnerId::Feature(_)),
+            Target::Popcorn(PopcornField::EmissionRate) => matches!(owner, OwnerId::Feature(_)),
+            Target::Popcorn(PopcornField::Speed) => matches!(owner, OwnerId::Feature(_)),
+            Target::Popcorn(PopcornField::Color) => matches!(owner, OwnerId::Feature(_)),
+            Target::Popcorn(PopcornField::Opacity) => matches!(owner, OwnerId::Feature(_)),
+            Target::Popcorn(PopcornField::Visibility) => matches!(owner, OwnerId::Feature(_)),
+            Target::Light(LightField::Color) => matches!(owner, OwnerId::Feature(_)),
+            Target::Light(LightField::Intensity) => matches!(owner, OwnerId::Feature(_)),
+            Target::Light(LightField::AmbientColor) => matches!(owner, OwnerId::Feature(_)),
+            Target::Light(LightField::AmbientIntensity) => matches!(owner, OwnerId::Feature(_)),
+            Target::Light(LightField::Visibility) => matches!(owner, OwnerId::Feature(_)),
+            Target::Light(LightField::AttenuationStart) => matches!(owner, OwnerId::Feature(_)),
+            Target::Light(LightField::AttenuationEnd) => matches!(owner, OwnerId::Feature(_)),
+            Target::Light(LightField::ShadowStart) => matches!(owner, OwnerId::Feature(_)),
+            Target::Light(LightField::ShadowEnd) => matches!(owner, OwnerId::Feature(_)),
+            Target::Light(LightField::Quadratic) => matches!(owner, OwnerId::Feature(_)),
+            Target::Light(LightField::Linear) => matches!(owner, OwnerId::Feature(_)),
+            Target::Light(LightField::Damping) => matches!(owner, OwnerId::Feature(_)),
+            Target::Camera(CameraField::EyeOffset) => matches!(owner, OwnerId::Feature(_)),
+            Target::Camera(CameraField::TargetOffset) => matches!(owner, OwnerId::Feature(_)),
+            Target::Camera(CameraField::Roll) => matches!(owner, OwnerId::Feature(_)),
+            Target::Camera(CameraField::Visibility) => matches!(owner, OwnerId::Feature(_)),
+            Target::Camera(CameraField::FocusDistance) => matches!(owner, OwnerId::Feature(_)),
+            Target::Camera(CameraField::FocalLength) => matches!(owner, OwnerId::Feature(_)),
+            Target::Camera(CameraField::FStop) => matches!(owner, OwnerId::Feature(_)),
+            Target::Attachment(AttachmentField::Visibility) => matches!(owner, OwnerId::Feature(_)),
+            Target::Layer {
+                field: LayerField::Opacity,
+                ..
+            } => matches!(owner, OwnerId::Material(_)),
+            Target::Layer {
+                field: LayerField::Texture,
+                ..
+            } => matches!(owner, OwnerId::Material(_)),
+            Target::Layer {
+                field: LayerField::EmissiveGain,
+                ..
+            } => matches!(owner, OwnerId::Material(_)),
+            Target::Layer {
+                field: LayerField::FresnelColor,
+                ..
+            } => matches!(owner, OwnerId::Material(_)),
+            Target::Layer {
+                field: LayerField::FresnelOpacity,
+                ..
+            } => matches!(owner, OwnerId::Material(_)),
+            Target::Layer {
+                field: LayerField::FresnelTeamColor,
+                ..
+            } => matches!(owner, OwnerId::Material(_)),
+            Target::LayerTexture { .. } => matches!(owner, OwnerId::Material(_)),
+        }
+    }
+}
+
+impl Target {
+    pub(crate) fn supports_feature(&self, value: &super::Node<'_>) -> bool {
+        match (self, value) {
+            (
+                Self::Light(LightField::ShadowStart | LightField::ShadowEnd),
+                super::Node::Light(v),
+            ) => return v.shadow_range.is_some(),
+            (
+                Self::Light(LightField::Quadratic | LightField::Linear | LightField::Damping),
+                super::Node::Light(v),
+            ) => return v.falloff.is_some(),
+            (Self::Camera(CameraField::FocusDistance), super::Node::Camera(v)) => {
+                return v.focus_distance.is_some()
+            }
+            (Self::Camera(CameraField::FocalLength), super::Node::Camera(v)) => {
+                return v.focal_length.is_some()
+            }
+            (Self::Camera(CameraField::FStop), super::Node::Camera(v)) => {
+                return v.f_stop.is_some()
+            }
+            _ => {}
+        }
+        matches!(
+            (self, value),
+            (Self::Geometry(_), super::Node::GeometryAnimation(_))
+                | (Self::Particle(_), super::Node::Particle(_))
+                | (Self::Particle2(_), super::Node::Particle2(_))
+                | (Self::Ribbon(_), super::Node::Ribbon(_))
+                | (Self::Popcorn(_), super::Node::Popcorn(_))
+                | (Self::Light(_), super::Node::Light(_))
+                | (Self::Camera(_), super::Node::Camera(_))
+                | (Self::Attachment(_), super::Node::Attachment(_))
+        )
+    }
+    pub(crate) fn supports_material(&self, value: &super::Material<'_>) -> bool {
+        match self {
+            Self::Layer { index, field } => {
+                value.layers.get(*index).is_some_and(|layer| match field {
+                    LayerField::EmissiveGain => layer.emissive_gain.is_some(),
+                    LayerField::FresnelColor
+                    | LayerField::FresnelOpacity
+                    | LayerField::FresnelTeamColor => layer.fresnel.is_some(),
+                    _ => true,
+                })
+            }
+            Self::LayerTexture { layer, slot } => value
+                .layers
+                .get(*layer)
+                .is_some_and(|layer| layer.textures.get(*slot).is_some()),
+            _ => false,
+        }
     }
 }

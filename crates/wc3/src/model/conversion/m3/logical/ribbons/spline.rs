@@ -2,6 +2,7 @@
 use super::super::{materials::read_error, particles::context::Reader};
 use crate::model::conversion::Error;
 use crate::model::m3::{self as native, records as nr};
+use crate::model::semantic::profiles::m3::properties::{Field, FieldPath};
 use crate::model::semantic::{profiles::m3 as surface, NodeId, Values};
 use native::{Envelope, Ref};
 pub(super) fn read<'view, E: Envelope>(
@@ -18,7 +19,9 @@ pub(super) fn read<'view, E: Envelope>(
         .enumerate()
     {
         let r = row.map_err(read_error)?;
-        let prefix = format!("ribbon.spline_points[{index}]");
+        let prefix = FieldPath::root(Field::Ribbon)
+            .child(Field::SplinePoints)
+            .indexed(index);
         rows.push(surface::SplinePoint {
             node: *nodes.get(r.bone_index as usize).ok_or_else(|| {
                 Error::new(
@@ -31,35 +34,35 @@ pub(super) fn read<'view, E: Envelope>(
             reserved: r.reserved,
             emission_vector_norm_factor: r.emission_vector_norm_factor,
             velocity_norm_factor: r.velocity_norm_factor,
-            velocity: reader.property(&format!("{prefix}.velocity"), r.velocity),
+            velocity: reader.property(&prefix.child(Field::Velocity), r.velocity),
             velocity_base_factor: reader.property(
-                &format!("{prefix}.velocity_base_factor"),
+                &prefix.child(Field::VelocityBaseFactor),
                 r.velocity_base_factor,
             ),
             velocity_end_factor: reader.property(
-                &format!("{prefix}.velocity_end_factor"),
+                &prefix.child(Field::VelocityEndFactor),
                 r.velocity_end_factor,
             ),
-            yaw: reader.property(&format!("{prefix}.yaw"), r.yaw),
-            pitch: reader.property(&format!("{prefix}.pitch"), r.pitch),
+            yaw: reader.property(&prefix.child(Field::Yaw), r.yaw),
+            pitch: reader.property(&prefix.child(Field::Pitch), r.pitch),
             yaw_variation: surface::VariationControl {
                 kind: surface::values::Variation::from_raw((r.yaw_type).raw()),
-                amplitude: reader.property(&format!("{prefix}.yaw_amplitude"), r.yaw_amplitude),
-                frequency: reader.property(&format!("{prefix}.yaw_frequency"), r.yaw_frequency),
+                amplitude: reader.property(&prefix.child(Field::YawAmplitude), r.yaw_amplitude),
+                frequency: reader.property(&prefix.child(Field::YawFrequency), r.yaw_frequency),
             },
             pitch_variation: surface::VariationControl {
                 kind: surface::values::Variation::from_raw((r.pitch_type).raw()),
-                amplitude: reader.property(&format!("{prefix}.pitch_amplitude"), r.pitch_amplitude),
-                frequency: reader.property(&format!("{prefix}.pitch_frequency"), r.pitch_frequency),
+                amplitude: reader.property(&prefix.child(Field::PitchAmplitude), r.pitch_amplitude),
+                frequency: reader.property(&prefix.child(Field::PitchFrequency), r.pitch_frequency),
             },
             velocity_variation: surface::VariationControl {
                 kind: surface::values::Variation::from_raw(r.velocity_type.raw()),
                 amplitude: reader.property(
-                    &format!("{prefix}.velocity_amplitude"),
+                    &prefix.child(Field::VelocityAmplitude),
                     r.velocity_amplitude,
                 ),
                 frequency: reader.property(
-                    &format!("{prefix}.velocity_frequency"),
+                    &prefix.child(Field::VelocityFrequency),
                     r.velocity_frequency,
                 ),
             },

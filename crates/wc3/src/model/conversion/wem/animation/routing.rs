@@ -312,7 +312,7 @@ pub(in crate::model::conversion::wem) fn write<T>(
         }
         Target::Property(property) => {
             let target = property.target();
-            let PropertyTarget::Named {
+            let PropertyTarget::Profile {
                 owner: OwnerId::Feature(id),
                 ..
             } = target

@@ -1,6 +1,6 @@
 //! Exact checked projections of complete owner payloads.
 use super::Profile;
-use crate::model::semantic::Error;
+use crate::model::semantic::{Error, PropertyPayload};
 mod m2;
 mod m3;
 mod mdlx;
@@ -10,6 +10,12 @@ mod wmo;
 /// Implementations must preserve every accepted authored value and relationship.
 /// Returning an error is required when an exact projection is unavailable.
 pub trait Narrows<Source: Profile>: Profile {
+    /// Projects structural selectors when their exact vocabulary is supported.
+    fn property(value: Source::Property) -> Result<Self::Property, Error> {
+        Self::Property::from_identity(&value.identity().to_owned())
+            .ok_or_else(|| incompatible("animation property"))
+    }
+
     /// Projects asset-wide authoring controls without changing their meaning.
     fn asset<'a>(value: Source::Asset<'a>) -> Result<Self::Asset<'a>, Error>;
     /// Projects the complete appearance vocabulary while preserving identities.
@@ -42,6 +48,9 @@ pub trait Narrows<Source: Profile>: Profile {
     fn controller<'a>(value: Source::Controller<'a>) -> Result<Self::Controller<'a>, Error>;
 }
 impl<P: Profile> Narrows<P> for P {
+    fn property(value: P::Property) -> Result<Self::Property, Error> {
+        Ok(value)
+    }
     fn asset<'a>(value: P::Asset<'a>) -> Result<Self::Asset<'a>, Error> {
         Ok(value)
     }

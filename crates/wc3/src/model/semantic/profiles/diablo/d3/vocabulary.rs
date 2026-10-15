@@ -20,6 +20,7 @@ use crate::model::semantic::{
 #[derive(Clone, Debug, Default)]
 pub struct D3;
 impl Profile for D3 {
+    type Property = Unavailable;
     type Models = Single;
     type Asset<'a> = NoControls;
     type Appearance<'a> = Appearance<'a>;
@@ -175,6 +176,9 @@ impl SurfacePayload for Material<'_> {
     }
 }
 impl Extends<D3> for Universal {
+    fn property(value: <D3 as Profile>::Property) -> Self::Property {
+        match value {}
+    }
     fn asset<'a>(value: <D3 as Profile>::Asset<'a>) -> Self::Asset<'a> {
         let _ = value;
         None

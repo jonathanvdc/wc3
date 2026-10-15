@@ -50,7 +50,7 @@ pub enum Link {
     /// The value type of a logical animated destination.
     Property {
         /// Animated destination whose owner must exist.
-        target: PropertyTarget,
+        target: PropertyIdentity,
         /// Rust value type required by this destination.
         value_type: TypeId,
         /// Whether this reference declares an authored destination, rather than targeting it.
@@ -147,14 +147,24 @@ impl ValidateLinks for ClockId {
     }
 }
 
-use crate::model::semantic::{Animated, OwnerId, Property, PropertyTarget};
-impl<T: 'static> ValidateLinks for Property<T> {
+use crate::model::semantic::profiles::Profile;
+use crate::model::semantic::{
+    Animated, Property, PropertyIdentity, PropertyPayload, PropertyTarget,
+};
+impl<T: 'static, P: Profile> ValidateLinks for Property<T, P> {
     fn visit_links(&self, v: &mut dyn FnMut(Link)) {
         v(Link::Property {
-            target: self.target().clone(),
+            target: self.target().identity(),
             value_type: TypeId::of::<T>(),
             definition: true,
         });
+        if self
+            .target()
+            .value_type()
+            .is_some_and(|expected| expected != TypeId::of::<T>())
+        {
+            v(Link::InvalidValue);
+        }
         match self.target() {
             PropertyTarget::Translation(id)
             | PropertyTarget::Rotation(id)
@@ -164,19 +174,19 @@ impl<T: 'static> ValidateLinks for Property<T> {
                 id.visit_links(v)
             }
             PropertyTarget::MeshColor(id) | PropertyTarget::MeshOpacity(id) => id.visit_links(v),
-            PropertyTarget::Named { owner, .. } => match owner {
-                OwnerId::Model => (),
-                OwnerId::TextureTransform(id) => id.visit_links(v),
-                OwnerId::System(id) => id.visit_links(v),
-                OwnerId::Feature(id) => v(Link::Feature(*id)),
-                OwnerId::Node(id) => id.visit_links(v),
-                OwnerId::Material(id) => id.visit_links(v),
-                OwnerId::Mesh(id) => id.visit_links(v),
-            },
+            PropertyTarget::TextureTranslation(id)
+            | PropertyTarget::TextureRotation(id)
+            | PropertyTarget::TextureScale(id) => id.visit_links(v),
+            PropertyTarget::Profile { owner, key } => {
+                if !key.accepts_owner(*owner) {
+                    v(Link::InvalidValue);
+                }
+                owner.visit_links(v);
+            }
         }
     }
 }
-impl<T: CurveValue + 'static> ValidateLinks for Animated<T> {
+impl<T: CurveValue + 'static, P: Profile> ValidateLinks for Animated<T, P> {
     fn visit_links(&self, v: &mut dyn FnMut(Link)) {
         if !self.default.is_valid() {
             v(Link::InvalidValue);
@@ -186,7 +196,7 @@ impl<T: CurveValue + 'static> ValidateLinks for Animated<T> {
     }
 }
 use crate::model::semantic::{Channel, Clock, Track};
-impl<T: CurveValue + 'static> ValidateLinks for Track<'_, T> {
+impl<T: CurveValue + 'static, P: Profile> ValidateLinks for Track<'_, T, P> {
     fn visit_links(&self, v: &mut dyn FnMut(Link)) {
         for value in self.curve.values().iter() {
             value.visit_value_links(v);
@@ -207,7 +217,7 @@ impl<T: CurveValue + 'static> ValidateLinks for Track<'_, T> {
         }
     }
 }
-impl ValidateLinks for Channel<'_> {
+impl<P: Profile> ValidateLinks for Channel<'_, P> {
     fn visit_links(&self, v: &mut dyn FnMut(Link)) {
         match self {
             Self::Unsigned4(t) => t.visit_links(v),

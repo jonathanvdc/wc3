@@ -595,6 +595,7 @@ mod tests {
         #[derive(Clone, Debug)]
         struct Linked;
         impl Profile for Linked {
+            type Property = crate::model::semantic::profiles::Unavailable;
             type Models = Multiple;
             type Asset<'a> = NoControls;
             type Appearance<'a> = SingleLook<'a>;

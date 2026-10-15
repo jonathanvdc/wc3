@@ -1,6 +1,8 @@
 //! Individually typed authored WEM behaviors may mix supported game families.
 use crate::model::semantic::profiles::FeaturePayload;
-use crate::model::semantic::{FeatureKind, Link, SystemPayload, ValidateLinks};
+use crate::model::semantic::{
+    FeatureKind, Link, PropertyIdentityKey, SystemPayload, ValidateLinks,
+};
 /// Complete attached behavior, independent of a model-wide game selector.
 #[derive(Clone, Debug)]
 pub enum Feature<'a> {
@@ -33,6 +35,11 @@ impl ValidateLinks for Feature<'_> {
     }
 }
 impl FeaturePayload for Feature<'_> {
+    fn supports_property(&self, key: &PropertyIdentityKey) -> bool {
+        key.downcast_ref::<super::properties::Target>()
+            .is_some_and(|key| key.supports_feature(self))
+    }
+
     fn kind(&self) -> FeatureKind {
         match self {
             Self::Warcraft(_) | Self::Wow(_) => FeatureKind::Other,

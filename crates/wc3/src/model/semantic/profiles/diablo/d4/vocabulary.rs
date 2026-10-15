@@ -14,6 +14,7 @@ use crate::model::semantic::{MeshControls as AnyMeshControls, ModelControls as A
 #[derive(Clone, Debug, Default)]
 pub struct D4;
 impl Profile for D4 {
+    type Property = Unavailable;
     type Models = Single;
     type Asset<'a> = NoControls;
     type Appearance<'a> = Appearance;
@@ -185,6 +186,9 @@ impl Profile for D4 {
     }
 }
 impl Extends<D4> for Universal {
+    fn property(value: <D4 as Profile>::Property) -> Self::Property {
+        match value {}
+    }
     fn asset<'a>(value: <D4 as Profile>::Asset<'a>) -> Self::Asset<'a> {
         let _ = value;
         None

@@ -1,7 +1,10 @@
 //! Built-in M2 authoring vocabulary and its lossless embeddings.
+use super::properties::Target as PropertySelector;
+use crate::model::semantic::profiles::UniversalProperty;
 use crate::model::semantic::profiles::{
     m2, Extends, FeaturePayload, NoControls, Profile, SurfacePayload, Universal,
 };
+use crate::model::semantic::PropertyIdentityKey;
 use crate::model::semantic::{
     Basis, Bounds, ClipControls, DrawControls, DrawLooks, Error, FeatureKind, IdentityBinding,
     LengthUnit, M2Geometry, MaterialSurface, MeshControls, Model, ModelControls, NodeControls,
@@ -11,6 +14,7 @@ use crate::model::semantic::{
 #[derive(Clone, Debug, Default)]
 pub struct M2;
 impl Profile for M2 {
+    type Property = PropertySelector;
     fn default_bounds() -> Option<Bounds> {
         Some(Default::default())
     }
@@ -101,16 +105,29 @@ impl Profile for M2 {
     }
 }
 impl SurfacePayload for m2::Material<'_> {
+    fn supports_property(&self, key: &PropertyIdentityKey) -> bool {
+        key.downcast_ref::<super::properties::Target>()
+            .is_some_and(|key| key.supports_material(self))
+    }
+
     fn validate(&self) -> Result<(), Error> {
         Ok(())
     }
 }
 impl FeaturePayload for m2::ActorKind<'_> {
+    fn supports_property(&self, key: &PropertyIdentityKey) -> bool {
+        key.downcast_ref::<super::properties::Target>()
+            .is_some_and(|key| key.supports_feature(self))
+    }
+
     fn kind(&self) -> FeatureKind {
         FeatureKind::Other
     }
 }
 impl Extends<M2> for Universal {
+    fn property(value: <M2 as Profile>::Property) -> Self::Property {
+        UniversalProperty::M2(value)
+    }
     fn asset<'a>(value: <M2 as Profile>::Asset<'a>) -> Self::Asset<'a> {
         let _ = value;
         None

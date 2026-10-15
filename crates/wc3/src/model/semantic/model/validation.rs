@@ -2,7 +2,7 @@
 use crate::model::semantic::profiles::{FeaturePayload, Profile};
 use crate::model::semantic::{
     AppearanceSchema, BindingSchema as _, Clock, Error, GeometrySchema, Link, Model, ModelId,
-    PropertyTarget, Resources, SystemPayload, ValidateLinks, VertexInfluences,
+    PropertyIdentity, PropertyTarget, Resources, SystemPayload, ValidateLinks, VertexInfluences,
 };
 use std::collections::{BTreeSet, HashMap, HashSet};
 impl<P: Profile> Model<'_, P> {
@@ -86,7 +86,7 @@ impl<P: Profile> Model<'_, P> {
                         animated_properties.insert(target.clone());
                     }
                     if property_types
-                        .insert(target, value_type)
+                        .insert(target.clone(), value_type)
                         .is_some_and(|previous| previous != value_type)
                     {
                         conflicting_types = true;
@@ -224,12 +224,22 @@ impl<P: Profile> Model<'_, P> {
             system.visit_links(&mut visit);
         }
         if animated_properties.iter().any(|target| {
-            matches!(target, PropertyTarget::Named { .. }) && !declared_properties.contains(target)
+            matches!(
+                target,
+                PropertyIdentity::Profile { .. }
+                    | PropertyIdentity::TextureTranslation(_)
+                    | PropertyIdentity::TextureRotation(_)
+                    | PropertyIdentity::TextureScale(_)
+            ) && !declared_properties.contains(target)
         }) {
             return Err(Error::new(
                 "animation.target",
-                "named destination is not declared by an authored owner field",
+                "structural destination is not declared by an authored owner field",
             ));
+        }
+        for target in property_types.keys() {
+            let target = PropertyTarget::<P>::from_identity(target)?;
+            P::validate_property(self, &target)?;
         }
         if conflicting_types {
             return Err(Error::new(
