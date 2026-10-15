@@ -1,14 +1,14 @@
 use wc3::model::common::IntoZeroVec;
 use wc3::model::conversion::{
-    diablo::d3 as conversion, ApproximationPolicy, ExportOptions, ImportOptions, LossPolicy,
-    UnknownPolicy,
+    ApproximationPolicy, ExportOptions, ImportOptions, LossPolicy, UnknownPolicy,
 };
-use wc3::model::diablo::d3::records::{
+use wc3::model::formats::diablo::d3::records::{
     AppearanceLook, AppearanceMaterial, AppearanceRecord, BoneStructure, FatVertex, GeoSet,
     Influence, SubObject, SubObjectAppearance, Transform, VertexInfluences,
 };
-use wc3::model::diablo::d3::{Appearance, V260};
-use wc3::model::semantic::profiles::{Universal, D3};
+use wc3::model::formats::diablo::d3::{Appearance, V260};
+use wc3::model::io::diablo::d3 as conversion;
+use wc3::model::profiles::{Universal, D3};
 use zerovec::ZeroVec;
 fn fixed<const N: usize>(text: &str) -> [u8; N] {
     let mut out = [0; N];
@@ -178,11 +178,11 @@ fn appearance_export_honors_numeric_approximation_policy() {
 }
 #[test]
 fn appearance_and_animation_bundle_roundtrip_keeps_independent_declarations() {
-    use wc3::model::diablo::d3::records::{
+    use wc3::model::formats::diablo::d3::records::{
         AnimationPermutation, AnimationRecord, BoneName, Quaternion16, RotationCurve, RotationKey,
         ScaleCurve, ScaleKey, TranslationCurve, TranslationKey,
     };
-    use wc3::model::diablo::d3::{Animation, V118};
+    use wc3::model::formats::diablo::d3::{Animation, V118};
     let appearance = source();
     let permutation = AnimationPermutation {
         name: fixed("walk"),
@@ -250,7 +250,7 @@ fn appearance_and_animation_bundle_roundtrip_keeps_independent_declarations() {
         .unwrap()
         .value;
     assert_eq!(asset.clips().len(), 1);
-    assert!(asset.clips().next().unwrap().1.channels().iter().any(|channel| matches!(channel,wc3::model::semantic::Channel::Rotation(track) if track.curve.interpolation()==wc3::model::semantic::Interpolation::Nlerp)));
+    assert!(asset.clips().next().unwrap().1.channels().iter().any(|channel| matches!(channel,wc3::model::Channel::Rotation(track) if track.curve.interpolation()==wc3::model::Interpolation::Nlerp)));
     assert!(conversion::plan(&asset, &ExportOptions::default()).is_err());
     let out = conversion::plan_bundle(&asset, &ExportOptions::default())
         .unwrap()
@@ -349,7 +349,7 @@ fn native_implicit_look_ordinals_cannot_silently_reassign_actual_variants() {
 }
 #[test]
 fn foreign_slot_variant_id_is_not_resolved_by_its_display_name() {
-    use wc3::model::semantic::profiles::diablo::d3::Slot;
+    use wc3::model::profiles::diablo::d3::Slot;
     let source = source();
     let asset = conversion::import(&source, &ImportOptions::default())
         .unwrap()
@@ -364,7 +364,7 @@ fn foreign_slot_variant_id_is_not_resolved_by_its_display_name() {
 }
 #[test]
 fn nlerp_is_quaternion_only() {
-    use wc3::model::semantic::{Curve, Quaternion, Time};
+    use wc3::model::{Curve, Quaternion, Time};
     assert!(Curve::nlerp(vec![Time::seconds(0.).unwrap()], vec![Quaternion::IDENTITY]).is_ok());
 }
 #[test]
@@ -388,7 +388,7 @@ fn unknown_bone_pulses_are_rejected_or_dropped_before_graph_edits() {
         .find(|(_, node)| {
             matches!(
                 node.controls,
-                wc3::model::semantic::profiles::diablo::d3::NodeRole::Bone(_)
+                wc3::model::profiles::diablo::d3::NodeRole::Bone(_)
             )
         })
         .unwrap()
@@ -409,8 +409,8 @@ fn unknown_bone_pulses_are_rejected_or_dropped_before_graph_edits() {
 }
 #[test]
 fn animation_from_another_appearance_is_not_bound_by_matching_bone_names() {
-    use wc3::model::diablo::d3::records::AnimationRecord;
-    use wc3::model::diablo::d3::{Animation, V118};
+    use wc3::model::formats::diablo::d3::records::AnimationRecord;
+    use wc3::model::formats::diablo::d3::{Animation, V118};
     let appearance = source();
     let animation = Animation::<V118>::new(AnimationRecord {
         sno_id: 1,
@@ -425,10 +425,10 @@ fn animation_from_another_appearance_is_not_bound_by_matching_bone_names() {
 }
 #[test]
 fn standalone_material_resource_roundtrip_keeps_shared_shader_declarations() {
-    use wc3::model::diablo::d3::records::{
+    use wc3::model::formats::diablo::d3::records::{
         MaterialRecord, MaterialTextureAnim, MaterialTextureEntry, TagMapEntry,
     };
-    use wc3::model::diablo::d3::{Material, V25};
+    use wc3::model::formats::diablo::d3::{Material, V25};
     let mut root = MaterialRecord {
         sno_id: 42,
         unknown0_c: 7,
@@ -490,7 +490,6 @@ fn standalone_material_resource_roundtrip_keeps_shared_shader_declarations() {
             rate0: 17.,
             rate1: 18.,
         },
-        ..Default::default()
     }]);
     let source = Material::<V25>::new(root);
     let value = conversion::import_material(&source, &ImportOptions::default())
@@ -513,7 +512,7 @@ fn standalone_material_resource_roundtrip_keeps_shared_shader_declarations() {
 }
 #[test]
 fn standalone_material_validation_rejects_nonfinite_coefficients() {
-    use wc3::model::diablo::d3::{Material, V25};
+    use wc3::model::formats::diablo::d3::{Material, V25};
     let mut source = Material::<V25>::default();
     source.root.material.colors.shininess = f32::NAN;
     assert!(conversion::import_material(&source, &ImportOptions::default()).is_err());
@@ -526,11 +525,11 @@ fn standalone_material_validation_rejects_nonfinite_coefficients() {
 }
 #[test]
 fn standalone_shader_passes_and_shader_map_roundtrip() {
-    use wc3::model::diablo::d3::records::{
+    use wc3::model::formats::diablo::d3::records::{
         RenderParams, RenderPass, ShaderMap, ShaderMapEntry, ShaderTagMapEntry, Shaders,
         TextureStageParams,
     };
-    use wc3::model::diablo::d3::{Shader, ShaderMapDocument, V150, V26};
+    use wc3::model::formats::diablo::d3::{Shader, ShaderMapDocument, V150, V26};
     let params = RenderParams {
         cull_mode: 17,
         z_write_enable: 99,
@@ -612,7 +611,7 @@ fn standalone_shader_passes_and_shader_map_roundtrip() {
 }
 #[test]
 fn duplicate_native_slot_names_cannot_hide_distinct_scoped_relationships() {
-    use wc3::model::semantic::profiles::diablo::d3::Slot;
+    use wc3::model::profiles::diablo::d3::Slot;
     let mut duplicate = source();
     duplicate
         .root
@@ -646,7 +645,7 @@ fn duplicate_native_slot_names_cannot_hide_distinct_scoped_relationships() {
 }
 #[test]
 fn active_look_at_reference_follows_actual_bone_rename() {
-    use wc3::model::semantic::profiles::diablo::d3::LookAtTarget;
+    use wc3::model::profiles::diablo::d3::LookAtTarget;
     let mut source = source();
     source.root.look_at.enabled = 1;
     source.root.look_at.bone_name = fixed("root");
@@ -684,7 +683,7 @@ fn active_look_at_names_require_a_unique_actual_bone() {
 }
 #[test]
 fn inactive_unresolved_look_at_spelling_stays_editable_without_claiming_a_bone() {
-    use wc3::model::semantic::profiles::diablo::d3::LookAtTarget;
+    use wc3::model::profiles::diablo::d3::LookAtTarget;
     let mut source = source();
     source.root.look_at.bone_name = fixed("missing");
     let mut asset = conversion::import(&source, &ImportOptions::default())
@@ -719,7 +718,7 @@ fn inactive_unresolved_look_at_spelling_stays_editable_without_claiming_a_bone()
 }
 #[test]
 fn look_at_typed_target_rejects_non_bones_and_ambiguous_native_export_names() {
-    use wc3::model::semantic::profiles::diablo::d3::{LookAtTarget, NodeRole};
+    use wc3::model::profiles::diablo::d3::{LookAtTarget, NodeRole};
     let mut source = source();
     source.root.look_at.enabled = 1;
     source.root.look_at.bone_name = fixed("root");
@@ -752,7 +751,7 @@ fn look_at_typed_target_rejects_non_bones_and_ambiguous_native_export_names() {
 }
 #[test]
 fn disabled_ambiguous_look_at_name_remains_unresolved() {
-    use wc3::model::semantic::profiles::diablo::d3::LookAtTarget;
+    use wc3::model::profiles::diablo::d3::LookAtTarget;
     let mut source = source();
     source.root.look_at.bone_name = fixed("root");
     source.root.bones.push(source.root.bones[0].clone());

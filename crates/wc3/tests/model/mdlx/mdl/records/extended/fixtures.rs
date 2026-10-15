@@ -1,5 +1,5 @@
 use super::*;
-use wc3::model::mdlx::animation::Animatable;
+use wc3::model::formats::mdlx::animation::Animatable;
 
 #[test]
 fn spec_examples_match_independently_packed_binary_records() {

@@ -2,8 +2,8 @@
 //!
 //! These macros are for maintaining or extending the record implementations.
 //! Applications using the built-in model types only need the codec traits in
-//! `wc3::model::mdlx::{mdx, mdl}`, `wc3::model::m2`, `wc3::model::wmo`,
-//! `wc3::model::m3`, and `wc3::model::diablo::d4`.
+//! `wc3::model::formats::mdlx::{mdx, mdl}`, `wc3::model::formats::m2`, `wc3::model::formats::wmo`,
+//! `wc3::model::formats::m3`, and `wc3::model::formats::diablo::d4`.
 //!
 //! Import macros through those format modules, for example
 //! `#[derive(mdl::Read, mdl::Write)]`. Ownership is shared through

@@ -1,8 +1,8 @@
-use wc3::model::mdlx::animation::{Animatable, Track};
-use wc3::model::mdlx::animation::{GeosetAnimation, GeosetAnimationFlags};
-use wc3::model::mdlx::mdl::{Read as _, ReadErrorKind, Write as _, Writer};
-use wc3::model::mdlx::mdx::{Read as _, Write as _};
-use wc3::model::mdlx::Color;
+use wc3::model::formats::mdlx::animation::{Animatable, Track};
+use wc3::model::formats::mdlx::animation::{GeosetAnimation, GeosetAnimationFlags};
+use wc3::model::formats::mdlx::mdl::{Read as _, ReadErrorKind, Write as _, Writer};
+use wc3::model::formats::mdlx::mdx::{Read as _, Write as _};
+use wc3::model::formats::mdlx::Color;
 
 fn roundtrip<'data>(source: &str) -> GeosetAnimation<'data> {
     let value = GeosetAnimation::decode_mdl(source).unwrap();

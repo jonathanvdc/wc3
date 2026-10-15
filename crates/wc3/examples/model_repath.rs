@@ -4,7 +4,7 @@ use clap::{builder::NonEmptyStringValueParser, Parser};
 use std::convert::Infallible;
 use std::path::PathBuf;
 use support::{load, save, Result};
-use wc3::model::mdlx::resources::{ResourceEdit, ResourceValue};
+use wc3::model::formats::mdlx::resources::{ResourceEdit, ResourceValue};
 
 #[derive(Parser)]
 #[command(about = "Rewrite declared model paths with a case-sensitive prefix replacement")]

@@ -1,7 +1,7 @@
 use std::sync::atomic::{AtomicUsize, Ordering};
-use wc3::model::mdlx::animation::{Animatable, Track};
+use wc3::model::formats::mdlx::animation::{Animatable, Track};
 
-use wc3::model::mdlx::mdl::{self, Read as _, ValueEq as _, Write as _, Writer};
+use wc3::model::formats::mdlx::mdl::{self, Read as _, ValueEq as _, Write as _, Writer};
 
 fn refuses_before_output<T: mdl::Write>(value: &T) {
     let mut writer = Writer::new(Vec::new());

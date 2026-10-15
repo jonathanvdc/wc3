@@ -7,7 +7,9 @@ use std::borrow::Cow;
 use std::fs;
 use std::path::Path;
 use std::time::{Duration, Instant};
-use wc3::model::mdlx::mdx::Write as _;
+use wc3::model::formats::mdlx::mdl::Read as _;
+use wc3::model::formats::mdlx::mdx::Write as _;
+use wc3::model::formats::mdlx::{Document, V800};
 
 fn wait_for(app: &mut App, mut ready: impl FnMut(&App) -> bool) {
     let deadline = Instant::now() + Duration::from_secs(5);
@@ -87,11 +89,11 @@ fn asset_server_resolves_child_models_and_keeps_missing_slots() {
         std::env::temp_dir().join(format!("bevy-wc3-child-assets-{}", std::process::id()));
     fs::create_dir_all(directory.join("units")).unwrap();
     let child = "Version { FormatVersion 800, } Model \"Child\" {}";
-    let source = bevy_wc3::Wc3Model::decode_mdl(child).unwrap();
+    let source = Document::<V800>::decode_mdl(child).unwrap();
     // Local MDX fallback wins over an MDL at the asset root.
     fs::write(
         directory.join("units/spark.mdx"),
-        source.model.encode_mdx().unwrap(),
+        source.encode_mdx().unwrap(),
     )
     .unwrap();
     fs::write(directory.join("spark.mdl"), child).unwrap();
@@ -99,7 +101,7 @@ fn asset_server_resolves_child_models_and_keeps_missing_slots() {
     fs::write(directory.join("units/weapon.mdl"), child).unwrap();
     fs::write(
         directory.join("units/weapon.mdx"),
-        source.model.encode_mdx().unwrap(),
+        source.encode_mdx().unwrap(),
     )
     .unwrap();
     fs::write(directory.join("root.mdl"), child).unwrap();

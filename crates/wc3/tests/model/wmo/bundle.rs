@@ -1,4 +1,4 @@
-use wc3::model::wmo::{
+use wc3::model::formats::wmo::{
     self, Bundle, Classic, DependencyKind, FileKey, Group, GroupKey, Root, TextureReference,
 };
 use wmo::codec::Array;

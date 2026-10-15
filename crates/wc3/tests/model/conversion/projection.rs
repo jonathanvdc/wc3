@@ -1,7 +1,8 @@
 use wc3::model::common::IntoZeroVec;
-use wc3::model::conversion::{geometry, Context, ExportOptions};
-use wc3::model::semantic::MaterialSurface;
-use wc3::model::semantic::{
+use wc3::model::conversion::{Context, ExportOptions};
+use wc3::model::io::geometry;
+use wc3::model::MaterialSurface;
+use wc3::model::{
     Attribute, AttributeDomain, AttributeSemantic, AttributeValues, ConnectivitySets, Draw,
     GeometryData, InstanceId, Material, Mesh, MeshId, MeshInstance, Model, ModelBuilder, Node,
     Topology,

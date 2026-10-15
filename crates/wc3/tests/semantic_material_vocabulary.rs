@@ -1,12 +1,10 @@
-use wc3::model::semantic::controls::playback::ControllerProgram;
-use wc3::model::semantic::materials::bindings::{Coordinates, ImageSelection};
-use wc3::model::semantic::materials::layered::{LayeredSurface, SurfaceLayer};
-use wc3::model::semantic::materials::model_shader::FrameSampling;
-use wc3::model::semantic::materials::model_shader::{ShaderInput, ShaderPass, TextureUnit};
-use wc3::model::semantic::profiles::{m2, mdlx, SurfacePayload};
-use wc3::model::semantic::{
-    Animated, Error, Link, PropertyPayload, TextureTransform, ValidateLinks,
-};
+use wc3::model::controls::playback::ControllerProgram;
+use wc3::model::materials::bindings::{Coordinates, ImageSelection};
+use wc3::model::materials::layered::{LayeredSurface, SurfaceLayer};
+use wc3::model::materials::model_shader::FrameSampling;
+use wc3::model::materials::model_shader::{ShaderInput, ShaderPass, TextureUnit};
+use wc3::model::profiles::{m2, mdlx, SurfacePayload};
+use wc3::model::{Animated, Error, Link, PropertyPayload, TextureTransform, ValidateLinks};
 
 #[derive(Clone, Debug, Default)]
 struct CheckedPass {
@@ -124,8 +122,8 @@ fn selected_coordinate_form_controls_which_destinations_exist() {
 
 #[test]
 fn broad_surface_selection_preserves_property_and_validation_policies() {
-    use wc3::model::semantic::profiles::Unavailable;
-    use wc3::model::semantic::SurfaceSet;
+    use wc3::model::profiles::Unavailable;
+    use wc3::model::SurfaceSet;
 
     type CustomSurfaces = SurfaceSet<
         Unavailable,
@@ -143,7 +141,7 @@ fn broad_surface_selection_preserves_property_and_validation_policies() {
 
 #[test]
 fn texture_bindings_traverse_every_selected_component() {
-    use wc3::model::semantic::materials::bindings::TextureBinding;
+    use wc3::model::materials::bindings::TextureBinding;
 
     #[derive(Clone, Debug)]
     struct Component;
@@ -172,11 +170,11 @@ fn texture_bindings_traverse_every_selected_component() {
 
 #[test]
 fn programmed_input_validation_reaches_nested_components_at_publication() {
-    use wc3::model::semantic::materials::programmed::{
+    use wc3::model::materials::programmed::{
         Material as ProgrammedMaterial, SamplingProgram, Standard, TextureLayer,
     };
-    use wc3::model::semantic::profiles::M3;
-    use wc3::model::semantic::{Material, Model};
+    use wc3::model::profiles::M3;
+    use wc3::model::{Material, Model};
 
     let mut layer = TextureLayer::default();
     layer.binding.sampling = SamplingProgram {
@@ -197,9 +195,9 @@ fn programmed_input_validation_reaches_nested_components_at_publication() {
 
 #[test]
 fn model_rasterization_preserves_unknown_flags_and_edits_known_operations() {
-    use wc3::model::semantic::materials::model_shader::{material_flags, rasterization};
-    use wc3::model::semantic::materials::state::Operation;
-    use wc3::model::semantic::values::model::MaterialFlags;
+    use wc3::model::materials::model_shader::{material_flags, rasterization};
+    use wc3::model::materials::state::Operation;
+    use wc3::model::values::model::MaterialFlags;
 
     for raw in [0, 0x001f, 0x8000, 0xffff] {
         let flags = MaterialFlags::from_bits_retain(raw);
@@ -214,9 +212,9 @@ fn model_rasterization_preserves_unknown_flags_and_edits_known_operations() {
 
 #[test]
 fn image_source_vocabularies_can_supply_graph_relationships() {
-    use wc3::model::semantic::materials::bindings::TextureBinding;
-    use wc3::model::semantic::profiles::Universal;
-    use wc3::model::semantic::{Resources, Texture};
+    use wc3::model::materials::bindings::TextureBinding;
+    use wc3::model::profiles::Universal;
+    use wc3::model::{Resources, Texture};
 
     let mut resources = Resources::<Universal>::builder();
     let source = resources.add_texture(Texture::file("generated-source.blp"));

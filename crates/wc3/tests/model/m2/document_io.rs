@@ -1,8 +1,8 @@
 //! Full companion documents participate in the format-qualified codec traits.
-use wc3::model::m2;
-use wc3::model::m2::codec::{Decoder, Encoder};
-use wc3::model::m2::companions::{BoneFile, GeometryFile, PhysicsFile};
-use wc3::model::m2::records::ModelFlags;
+use wc3::model::formats::m2;
+use wc3::model::formats::m2::codec::{Decoder, Encoder};
+use wc3::model::formats::m2::companions::{BoneFile, GeometryFile, PhysicsFile};
+use wc3::model::formats::m2::records::ModelFlags;
 
 fn frame(tag: [u8; 4], payload: &[u8]) -> Vec<u8> {
     let mut bytes = tag.to_vec();

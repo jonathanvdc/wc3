@@ -3,7 +3,7 @@ use crate::preparation::shared::Shared;
 use bevy::prelude::*;
 use std::f32::consts::FRAC_PI_2;
 use std::sync::Arc;
-use wc3::model::mdlx::emitters::{Particle2Frames, ParticleEmitter2};
+use wc3::model::formats::mdlx::emitters::{Particle2Frames, ParticleEmitter2};
 
 use crate::effects::simulation::{
     birth_animation, sequence_ended, simulation_delta, EmissionPhase, EmissionRounding, EmitterRng,

@@ -1,6 +1,6 @@
-use wc3::model::mdlx::animation::{TangentKeyframe, Track, ValueKeyframe};
-use wc3::model::mdlx::mdl::{Read as _, Write as _};
-use wc3::model::mdlx::mdx::Read as _;
+use wc3::model::formats::mdlx::animation::{TangentKeyframe, Track, ValueKeyframe};
+use wc3::model::formats::mdlx::mdl::{Read as _, Write as _};
+use wc3::model::formats::mdlx::mdx::Read as _;
 
 #[test]
 fn constructors_stably_sort_all_interpolation_modes() {

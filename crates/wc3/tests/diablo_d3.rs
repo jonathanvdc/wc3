@@ -1,6 +1,6 @@
 //! Independently constructed SNO byte images exercise native address spaces.
 use wc3::model::common::{Borrowed, IntoOwned};
-use wc3::model::diablo::d3::{
+use wc3::model::formats::diablo::d3::{
     self,
     records::{FatVertex, MaterialTextureEntry, SubObject},
     Appearance, V260,

@@ -1,7 +1,7 @@
 //! Attachment points, mounted models, and animated attachment visibility.
 use bevy::prelude::*;
 use std::collections::{HashMap, HashSet};
-use wc3::model::mdlx::animation::Track;
+use wc3::model::formats::mdlx::animation::Track;
 
 use crate::animation::{sample, Wc3Animation};
 use crate::assets::loader::Wc3ModelAsset;

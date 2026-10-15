@@ -2,7 +2,7 @@
 use mdx::{Read as _, ReadOwned as _};
 use std::borrow::Cow;
 use wc3::model::common::Ownership;
-use wc3::model::mdlx::mdx;
+use wc3::model::formats::mdlx::mdx;
 
 #[derive(Clone, Debug, Ownership, mdx::ReadOwned)]
 struct Handwritten<'data> {

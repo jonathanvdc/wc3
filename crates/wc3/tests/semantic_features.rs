@@ -1,14 +1,14 @@
 use std::borrow::Cow;
-use wc3::model::semantic::profiles::{m2, mdlx, wmo, Extends, Mdlx, Narrows, Universal, Wmo, M2};
-use wc3::model::semantic::{
+use wc3::model::profiles::{m2, mdlx, wmo, Extends, Mdlx, Narrows, Universal, Wmo, M2};
+use wc3::model::{
     Animated, AttachmentPointDefinition, LightEmission, Model, Node, PhotographicControls,
     VisibleLight,
 };
-use wc3::model::semantic::{
+use wc3::model::{
     AtlasParticle, AtlasParticleRendering, ModelParticle, ParticleEmission, ParticleLifetime,
     ParticleMotion, StagedParticleAppearance,
 };
-use wc3::model::semantic::{GravityTrailControls, TrailAppearance};
+use wc3::model::{GravityTrailControls, TrailAppearance};
 
 #[test]
 fn complete_mdlx_feature_vocabulary_round_trips_through_universal() {
@@ -35,7 +35,6 @@ fn complete_mdlx_feature_vocabulary_round_trips_through_universal() {
                 ..Default::default()
             },
             appearance: (),
-            ..Default::default()
         }),
         mdlx::Node::AtlasParticles(mdlx::Particle2 {
             details: AtlasParticle {
@@ -152,7 +151,6 @@ fn feature_conversion_moves_owned_resource_paths() {
             ..Default::default()
         },
         appearance: (),
-        ..Default::default()
     });
     let widened = <Universal as Extends<Mdlx>>::feature(source);
     let restored = <Mdlx as Narrows<Universal>>::feature(widened).unwrap();
@@ -253,7 +251,7 @@ fn m2_enable_and_camera_conventions_survive_projection() {
 
 #[test]
 fn editing_shared_light_fields_survives_exact_native_projection() {
-    use wc3::model::semantic::{Light, NodeFeature};
+    use wc3::model::{Light, NodeFeature};
     let source = mdlx::Node::Light(mdlx::Light::default());
     let mut widened = <Universal as Extends<Mdlx>>::feature(source);
     let NodeFeature::Light(Light::AmbientDiffuse(light)) = &mut widened else {
@@ -272,8 +270,8 @@ fn editing_shared_light_fields_survives_exact_native_projection() {
 #[test]
 fn common_animation_destinations_validate_and_narrow_with_borrowed_keys() {
     use wc3::model::common::ZeroVec;
-    use wc3::model::semantic::feature_properties::light;
-    use wc3::model::semantic::{Channel, Clock, Curve, Time, Track};
+    use wc3::model::feature_properties::light;
+    use wc3::model::{Channel, Clock, Curve, Time, Track};
     let mut draft = Model::<Mdlx>::builder("animated light");
     let node = draft.add_node(Node::named("light")).unwrap();
     let feature = draft.reserve_feature(node);
@@ -323,8 +321,8 @@ fn common_animation_destinations_validate_and_narrow_with_borrowed_keys() {
 
 #[test]
 fn particle_copy_relationship_rejects_a_different_particle_simulation() {
-    use wc3::model::semantic::profiles::m3;
-    use wc3::model::semantic::NodeFeature;
+    use wc3::model::profiles::m3;
+    use wc3::model::NodeFeature;
     let mut draft = Model::<Universal>::builder("invalid particle inheritance");
     let node = draft.add_node(Node::named("effects")).unwrap();
     let source = draft
@@ -348,7 +346,7 @@ fn particle_copy_relationship_rejects_a_different_particle_simulation() {
 
 #[test]
 fn camera_narrowing_rejects_newly_authored_animation_on_static_field_of_view() {
-    use wc3::model::semantic::{Camera, NodeFeature};
+    use wc3::model::{Camera, NodeFeature};
     let mut ids = Model::<Universal>::builder("camera IDs");
     let node = ids.add_node(Node::named("camera")).unwrap();
     let id = ids.reserve_feature(node);
@@ -363,7 +361,7 @@ fn camera_narrowing_rejects_newly_authored_animation_on_static_field_of_view() {
 
 #[test]
 fn external_attachments_narrow_by_resource_meaning_without_source_tags() {
-    use wc3::model::semantic::{scene, NodeFeature, Resource};
+    use wc3::model::{scene, NodeFeature, Resource};
     let source = scene::Feature::Attachment(scene::Attachment {
         resource: Resource::Path(Cow::Borrowed(b"effects/attachment.mdx")),
         point: AttachmentPointDefinition {
@@ -401,7 +399,7 @@ fn external_attachments_narrow_by_resource_meaning_without_source_tags() {
 
 #[test]
 fn unresolved_light_kind_cannot_be_reinterpreted_by_changing_activation() {
-    use wc3::model::semantic::{Light, LightActivation, NodeFeature};
+    use wc3::model::{Light, LightActivation, NodeFeature};
     let mut feature = <Universal as Extends<Mdlx>>::feature(mdlx::Node::Light(mdlx::Light {
         kind: mdlx::LightKind::Unknown(17),
         ..Default::default()

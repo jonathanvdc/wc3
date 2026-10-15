@@ -1,12 +1,12 @@
-use wc3::model::mdlx::animation::{Animatable, Track};
+use wc3::model::formats::mdlx::animation::{Animatable, Track};
 
-use wc3::model::mdlx::animation::ValueKeyframe;
-use wc3::model::mdlx::emitters::ParticleEmitter;
-use wc3::model::mdlx::mdx::Read as _;
-use wc3::model::mdlx::mdx::Write as _;
+use wc3::model::formats::mdlx::animation::ValueKeyframe;
+use wc3::model::formats::mdlx::emitters::ParticleEmitter;
+use wc3::model::formats::mdlx::mdx::Read as _;
+use wc3::model::formats::mdlx::mdx::Write as _;
 
-use wc3::model::mdlx::scene::Node;
-use wc3::model::mdlx::Model;
+use wc3::model::formats::mdlx::scene::Node;
+use wc3::model::formats::mdlx::Document;
 
 #[test]
 fn classic_particle_emitter_round_trip() {
@@ -26,11 +26,12 @@ fn classic_particle_emitter_round_trip() {
     )
     .unwrap();
     emitter.visibility = Some(track.clone());
-    let mut model = Model::<wc3::model::mdlx::V800>::new();
+    let mut model = Document::<wc3::model::formats::mdlx::V800>::new();
     model.set_particle_emitters([emitter]);
-    let parsed = Model::<wc3::model::mdlx::V800>::decode_mdx(&model.encode_mdx().unwrap())
-        .unwrap()
-        .into_owned();
+    let parsed =
+        Document::<wc3::model::formats::mdlx::V800>::decode_mdx(&model.encode_mdx().unwrap())
+            .unwrap()
+            .into_owned();
     let emitter = &parsed.particle_emitters().next().unwrap();
     assert_eq!(emitter.node.name.text(), "Smoke");
     assert_eq!(emitter.path.text(), "smoke.mdl");

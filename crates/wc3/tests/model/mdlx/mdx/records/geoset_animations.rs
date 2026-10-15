@@ -1,12 +1,12 @@
-use wc3::model::mdlx::animation::{Animatable, Track};
-use wc3::model::mdlx::Color;
+use wc3::model::formats::mdlx::animation::{Animatable, Track};
+use wc3::model::formats::mdlx::Color;
 
-use wc3::model::mdlx::animation::{GeosetAnimation, GeosetAnimationFlags, ValueKeyframe};
-use wc3::model::mdlx::mdl::Read as _;
-use wc3::model::mdlx::mdx::Read as _;
-use wc3::model::mdlx::mdx::Write as _;
+use wc3::model::formats::mdlx::animation::{GeosetAnimation, GeosetAnimationFlags, ValueKeyframe};
+use wc3::model::formats::mdlx::mdl::Read as _;
+use wc3::model::formats::mdlx::mdx::Read as _;
+use wc3::model::formats::mdlx::mdx::Write as _;
 
-use wc3::model::mdlx::Model;
+use wc3::model::formats::mdlx::Document;
 
 #[test]
 fn geoset_animation_fields_round_trip() {
@@ -14,11 +14,12 @@ fn geoset_animation_fields_round_trip() {
     animation.alpha = Animatable::Static(0.5);
     animation.flags = GeosetAnimationFlags(7);
     animation.color = Animatable::Static([0.1, 0.2, 0.3]);
-    let mut model = Model::<wc3::model::mdlx::V1800>::new();
+    let mut model = Document::<wc3::model::formats::mdlx::V1800>::new();
     model.set_geoset_animations([animation]);
-    let parsed = Model::<wc3::model::mdlx::V1800>::decode_mdx(&model.encode_mdx().unwrap())
-        .unwrap()
-        .into_owned();
+    let parsed =
+        Document::<wc3::model::formats::mdlx::V1800>::decode_mdx(&model.encode_mdx().unwrap())
+            .unwrap()
+            .into_owned();
     let actual = &parsed.geoset_animations().next().unwrap();
     assert_eq!(actual.geoset_id, 2);
     assert_eq!(actual.alpha, Animatable::Static(0.5));

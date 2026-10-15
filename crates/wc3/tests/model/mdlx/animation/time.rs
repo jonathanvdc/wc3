@@ -1,4 +1,6 @@
-use wc3::model::mdlx::animation::{Animatable, AnimationTime, Sequence, Track, ValueKeyframe};
+use wc3::model::formats::mdlx::animation::{
+    Animatable, AnimationTime, Sequence, Track, ValueKeyframe,
+};
 
 fn ramp<'data>(global: Option<u32>) -> Track<'data, f32> {
     Track::linear(

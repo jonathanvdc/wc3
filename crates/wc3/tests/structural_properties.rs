@@ -1,15 +1,13 @@
 use std::any::TypeId;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
-use wc3::model::semantic::profiles::m2::properties::particle as m2_particle;
-use wc3::model::semantic::profiles::mdlx::properties::{
-    light, particle2, Layer as LayerProperties,
-};
-use wc3::model::semantic::profiles::mdlx::{
+use wc3::model::profiles::m2::properties::particle as m2_particle;
+use wc3::model::profiles::mdlx::properties::{light, particle2, Layer as LayerProperties};
+use wc3::model::profiles::mdlx::{
     Attachment, Layer as MdlxLayer, Light, Material as MdlxMaterial, Node as MdlxFeature,
 };
-use wc3::model::semantic::profiles::{FeaturePayload, Mdlx, Profile, Universal, M2};
-use wc3::model::semantic::{
+use wc3::model::profiles::{FeaturePayload, Mdlx, Profile, Universal, M2};
+use wc3::model::{
     Animated, AttachmentPointDefinition, Channel, Clock, Curve, FeatureId, FeatureKind,
     FeatureSchema, FeatureView, LightEmission, Link, Material, Model, Node, OwnerId, Property,
     PropertyDescriptor, PropertyPayload, PropertyTarget, Time, Track, ValidateLinks,

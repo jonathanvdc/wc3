@@ -1,6 +1,7 @@
-use wc3::model::semantic::profiles::{Mdlx, Universal};
-use wc3::model::semantic::MaterialSurface;
-use wc3::model::semantic::{
+use wc3::model::io::geometry;
+use wc3::model::profiles::{Mdlx, Universal};
+use wc3::model::MaterialSurface;
+use wc3::model::{
     Draw, DrawId, InstanceId, Look, LookBinding, LookId, Material, MaterialId, Mesh, MeshInstance,
     Model, ModelBuilder, Node,
 };
@@ -45,7 +46,7 @@ fn fixture() -> (Model<'static>, InstanceId, [DrawId; 2], [MaterialId; 2]) {
 
 #[test]
 fn reordering_draws_retains_material_and_projection_identity() {
-    use wc3::model::conversion::{geometry, Context, ExportOptions};
+    use wc3::model::conversion::{Context, ExportOptions};
     let (mut model, instance, draws, materials) = fixture();
     model
         .edit(|draft| {
@@ -254,8 +255,8 @@ fn mismatched_material_count_leaves_the_builder_unchanged() {
 
 #[test]
 fn draw_and_look_identities_survive_widening_and_exact_narrowing() {
-    use wc3::model::semantic::profiles::mdlx::Material as MdlxMaterial;
-    use wc3::model::semantic::MdlxGeometry;
+    use wc3::model::profiles::mdlx::Material as MdlxMaterial;
+    use wc3::model::MdlxGeometry;
     let mut draft = Model::<Mdlx>::builder("typed draw");
     let node = draft.add_node(Node::named("placement")).unwrap();
     let mut mesh = Mesh::new(MdlxGeometry::triangles(vec![[0.; 3]; 3], vec![[0, 1, 2]]).unwrap());

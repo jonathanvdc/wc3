@@ -1,6 +1,8 @@
 use std::borrow::Cow;
-use wc3::model::m3;
-use wc3::model::m3::vertices::{Color, DynamicVertices, ExtraRaw, NoColor, Packed, Raw, Vertices};
+use wc3::model::formats::m3;
+use wc3::model::formats::m3::vertices::{
+    Color, DynamicVertices, ExtraRaw, NoColor, Packed, Raw, Vertices,
+};
 
 #[test]
 fn packed_vertices_borrow_unaligned_data_and_edit_native_fields() {

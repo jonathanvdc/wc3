@@ -2,8 +2,8 @@
 use crate::preparation::shared::Shared;
 use bevy::prelude::*;
 use std::collections::HashMap;
-use wc3::model::mdlx::scene::{Light, LightType};
-use wc3::model::mdlx::V1800;
+use wc3::model::formats::mdlx::scene::{Light, LightType};
+use wc3::model::formats::mdlx::V1800;
 
 use crate::animation::{sample, sample_value, Wc3Animation};
 use crate::preparation::PreparedModel;

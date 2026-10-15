@@ -1,8 +1,9 @@
 use super::*;
-use crate::assets::Wc3Model;
+use crate::assets::Wc3Document;
 
 fn asset() -> Wc3ModelAsset {
-    let source = Wc3Model::decode_mdl(include_str!("../../tests/fixtures/quad_model.mdl")).unwrap();
+    let source =
+        Wc3Document::decode_mdl(include_str!("../../tests/fixtures/quad_model.mdl")).unwrap();
     Wc3ModelAsset::from_source(&source, default(), default()).unwrap()
 }
 

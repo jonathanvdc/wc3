@@ -59,12 +59,12 @@ pub(super) fn expand(input: DeriveInput, options: Container, reading: bool) -> R
         generics
             .make_where_clause()
             .predicates
-            .push(parse_quote!(#ty: ::wc3::model::mdlx::mdl::Read));
+            .push(parse_quote!(#ty: ::wc3::model::formats::mdlx::mdl::Read));
     } else {
         generics
             .make_where_clause()
             .predicates
-            .push(parse_quote!(#ty: ::wc3::model::mdlx::mdl::Write));
+            .push(parse_quote!(#ty: ::wc3::model::formats::mdlx::mdl::Write));
     }
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
     if reading {
@@ -77,10 +77,10 @@ pub(super) fn expand(input: DeriveInput, options: Container, reading: bool) -> R
         let prefix = options
             .property
             .map(|property| quote!(__wc3_mdl_parser.expect_ident(#property)?;));
-        let validate = options.validate_read.map(|function| quote!(#function(&__wc3_mdl_value, ::wc3::model::mdlx::mdl::Span::new(__wc3_mdl_start, __wc3_mdl_parser.position()))?;));
+        let validate = options.validate_read.map(|function| quote!(#function(&__wc3_mdl_value, ::wc3::model::formats::mdlx::mdl::Span::new(__wc3_mdl_start, __wc3_mdl_parser.position()))?;));
         Ok(quote! {
-            impl #impl_generics ::wc3::model::mdlx::mdl::Read for #name #ty_generics #where_clause {
-                fn read_mdl(__wc3_mdl_parser: &mut ::wc3::model::mdlx::mdl::Parser<'_>) -> ::core::result::Result<Self, ::wc3::model::mdlx::mdl::ReadError> {
+            impl #impl_generics ::wc3::model::formats::mdlx::mdl::Read for #name #ty_generics #where_clause {
+                fn read_mdl(__wc3_mdl_parser: &mut ::wc3::model::formats::mdlx::mdl::Parser<'_>) -> ::core::result::Result<Self, ::wc3::model::formats::mdlx::mdl::ReadError> {
                     #start
                     #prefix
                     let __wc3_mdl_value = Self(__wc3_mdl_parser.read_property::<#ty>()?);
@@ -99,8 +99,8 @@ pub(super) fn expand(input: DeriveInput, options: Container, reading: bool) -> R
             None => quote!(__wc3_mdl_writer.entry(&self.0)),
         };
         Ok(quote! {
-            impl #impl_generics ::wc3::model::mdlx::mdl::Write for #name #ty_generics #where_clause {
-                fn write_mdl<#sink: ::std::io::Write>(&self, __wc3_mdl_writer: &mut ::wc3::model::mdlx::mdl::Writer<#sink>) -> ::core::result::Result<(), ::wc3::model::mdlx::IoError<::wc3::model::mdlx::mdl::WriteError>> {
+            impl #impl_generics ::wc3::model::formats::mdlx::mdl::Write for #name #ty_generics #where_clause {
+                fn write_mdl<#sink: ::std::io::Write>(&self, __wc3_mdl_writer: &mut ::wc3::model::formats::mdlx::mdl::Writer<#sink>) -> ::core::result::Result<(), ::wc3::model::formats::mdlx::IoError<::wc3::model::formats::mdlx::mdl::WriteError>> {
                     #validate
                     #write
                 }

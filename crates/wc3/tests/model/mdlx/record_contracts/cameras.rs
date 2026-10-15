@@ -1,5 +1,5 @@
 use super::*;
-use wc3::model::mdlx::animation::Track;
+use wc3::model::formats::mdlx::animation::Track;
 
 #[test]
 fn camera_dof_scalar_keywords_produce_correct_keyed_wire_tags() {
@@ -53,10 +53,10 @@ fn camera_extended_tracks_survive_model_io_and_conversion() {
     camera.focus_distance = Some(Track::constant(180.0));
     camera.focal_length = Some(Track::constant(50.0));
     camera.f_stop = Some(Track::constant(2.8));
-    let mut model = Model::<V1800>::new();
+    let mut model = Document::<V1800>::new();
     model.set_cameras([camera.clone()]);
     let bytes = model.encode_mdx().unwrap();
-    let parsed = Model::<V1800>::decode_mdx(&bytes).unwrap();
+    let parsed = Document::<V1800>::decode_mdx(&bytes).unwrap();
     assert_eq!(parsed.cameras().next().unwrap(), &camera);
     assert_eq!(parsed.encode_mdx().unwrap(), bytes);
     // These track tags are recognized by the new client without a layout gate.
@@ -78,7 +78,7 @@ fn camera_extended_tracks_survive_model_io_and_conversion() {
     );
     assert_eq!(converted.cameras().next().unwrap().f_stop, camera.f_stop);
     assert_eq!(
-        Model::<V800>::decode_mdx(&converted.encode_mdx().unwrap())
+        Document::<V800>::decode_mdx(&converted.encode_mdx().unwrap())
             .unwrap()
             .into_owned()
             .cameras()

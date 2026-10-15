@@ -3,11 +3,11 @@ use crate::animation::pose::animate_nodes;
 use bevy::camera::visibility::VisibilityPlugin;
 use bevy::ecs::world::CommandQueue;
 use bevy::mesh::skinning::SkinnedMeshInverseBindposes;
-use wc3::model::mdlx::animation::{Sequence, ValueKeyframe};
-use wc3::model::mdlx::scene::{Attachment, Node};
+use wc3::model::formats::mdlx::animation::{Sequence, ValueKeyframe};
+use wc3::model::formats::mdlx::scene::{Attachment, Node};
 
 use crate::assets::loader::ResolvedModelTextures;
-use crate::assets::model::Wc3Model;
+use crate::assets::model::Wc3Document;
 use crate::assets::resources::Wc3ModelResources;
 use crate::instance::spawn::Wc3NodeEntities;
 use crate::instance::{spawn_loaded_instances, ModelSource, PreparedModelCache};
@@ -35,16 +35,16 @@ fn app() -> App {
     app
 }
 
-fn asset(source: Wc3Model, models: Wc3ModelResources) -> Wc3ModelAsset {
+fn asset(source: Wc3Document, models: Wc3ModelResources) -> Wc3ModelAsset {
     Wc3ModelAsset::from_source(&source, ResolvedModelTextures::default(), models).unwrap()
 }
 
-fn parent_source() -> Wc3Model {
-    Wc3Model::decode_mdl(include_str!("../tests/fixtures/attachment_capture.mdl")).unwrap()
+fn parent_source() -> Wc3Document {
+    Wc3Document::decode_mdl(include_str!("../tests/fixtures/attachment_capture.mdl")).unwrap()
 }
 
-fn child_source() -> Wc3Model {
-    Wc3Model::decode_mdl(include_str!(
+fn child_source() -> Wc3Document {
+    Wc3Document::decode_mdl(include_str!(
         "../tests/fixtures/attachment_capture_child.mdl"
     ))
     .unwrap()
@@ -75,7 +75,7 @@ fn paths_and_consumer_models_follow_points_visibility_and_independent_animation(
         .resource_mut::<Assets<Wc3ModelAsset>>()
         .add(asset(child_source(), default()));
     let source = parent_source();
-    let resources = Wc3ModelResources::resolve(&source.model, |_| Some(child.clone()));
+    let resources = Wc3ModelResources::resolve_document(&source.model, |_| Some(child.clone()));
     let parent = app
         .world_mut()
         .resource_mut::<Assets<Wc3ModelAsset>>()
@@ -274,7 +274,7 @@ fn delayed_and_nested_attachments_restart_in_parent_order() {
         .resource::<Assets<Wc3ModelAsset>>()
         .reserve_handle();
     let source = parent_source();
-    let resources = Wc3ModelResources::resolve(&source.model, |_| Some(child.clone()));
+    let resources = Wc3ModelResources::resolve_document(&source.model, |_| Some(child.clone()));
     let parent = app
         .world_mut()
         .resource_mut::<Assets<Wc3ModelAsset>>()
@@ -307,7 +307,7 @@ fn delayed_and_nested_attachments_restart_in_parent_order() {
     );
     source.model.set_attachments([nested]);
     source.model.set_pivot_points(&[[0.0; 3], [0.0; 3]]);
-    let resources = Wc3ModelResources::resolve(&source.model, |_| Some(leaf.clone()));
+    let resources = Wc3ModelResources::resolve_document(&source.model, |_| Some(leaf.clone()));
     app.world_mut()
         .resource_mut::<Assets<Wc3ModelAsset>>()
         .insert(&child, asset(source, resources))
@@ -359,7 +359,7 @@ fn recursive_model_paths_do_not_expand_forever() {
     let a = assets.reserve_handle();
     let b = assets.reserve_handle();
     let source = || {
-        Wc3Model::decode_mdl(
+        Wc3Document::decode_mdl(
             r#"
             Version { FormatVersion 800, } Model "Cycle" {}
             Attachment "Nested Ref" { ObjectId 0, Path "cycle.mdl", }
@@ -369,7 +369,7 @@ fn recursive_model_paths_do_not_expand_forever() {
     };
     for (handle, child) in [(&a, &b), (&b, &a)] {
         let source = source();
-        let models = Wc3ModelResources::resolve(&source.model, |_| Some(child.clone()));
+        let models = Wc3ModelResources::resolve_document(&source.model, |_| Some(child.clone()));
         app.world_mut()
             .resource_mut::<Assets<Wc3ModelAsset>>()
             .insert(handle, asset(source, models))

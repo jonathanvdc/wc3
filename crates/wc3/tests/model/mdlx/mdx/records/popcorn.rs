@@ -1,10 +1,10 @@
-use wc3::model::mdlx::animation::Animatable;
-use wc3::model::mdlx::emitters::PopcornEmitter;
-use wc3::model::mdlx::mdx::Read as _;
-use wc3::model::mdlx::mdx::Write as _;
+use wc3::model::formats::mdlx::animation::Animatable;
+use wc3::model::formats::mdlx::emitters::PopcornEmitter;
+use wc3::model::formats::mdlx::mdx::Read as _;
+use wc3::model::formats::mdlx::mdx::Write as _;
 
-use wc3::model::mdlx::scene::Node;
-use wc3::model::mdlx::Model;
+use wc3::model::formats::mdlx::scene::Node;
+use wc3::model::formats::mdlx::Document;
 
 #[test]
 fn popcorn_fixed_fields_round_trip() {
@@ -16,11 +16,12 @@ fn popcorn_fixed_fields_round_trip() {
     emitter.color = Animatable::Static([1.0, 0.5, 0.25]);
     emitter.alpha = Animatable::Static(0.75);
     emitter.replaceable_id = 1;
-    let mut model = Model::<wc3::model::mdlx::V1800>::new();
+    let mut model = Document::<wc3::model::formats::mdlx::V1800>::new();
     model.set_popcorn_emitters([emitter]);
-    let parsed = Model::<wc3::model::mdlx::V1800>::decode_mdx(&model.encode_mdx().unwrap())
-        .unwrap()
-        .into_owned();
+    let parsed =
+        Document::<wc3::model::formats::mdlx::V1800>::decode_mdx(&model.encode_mdx().unwrap())
+            .unwrap()
+            .into_owned();
     let emitter = &parsed.popcorn_emitters().next().unwrap();
     assert_eq!(emitter.node.name.text(), "Spark");
     assert_eq!(emitter.path.text(), "spark.mdx");

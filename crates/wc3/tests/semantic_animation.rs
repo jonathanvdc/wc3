@@ -1,10 +1,8 @@
 use wc3::model::common::ZeroVec;
-use wc3::model::semantic::profiles::mdlx::properties::{
-    light, Layer, LightField, Target as MdlxTarget,
-};
-use wc3::model::semantic::profiles::{Mdlx, Universal};
-use wc3::model::semantic::MaterialSurface;
-use wc3::model::semantic::{
+use wc3::model::profiles::mdlx::properties::{light, Layer, LightField, Target as MdlxTarget};
+use wc3::model::profiles::{Mdlx, Universal};
+use wc3::model::MaterialSurface;
+use wc3::model::{
     BezierKeyframe, ContinuousDomain, Curve, CurveValue, HermiteKeyframe, Interpolation, Material,
     Model, Node, OwnerId, PropertyTarget, Quaternion, TcbKeyframe, TcbParameters, Time,
     ValueKeyframe,

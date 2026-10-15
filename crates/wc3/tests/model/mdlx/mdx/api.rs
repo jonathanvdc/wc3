@@ -1,18 +1,18 @@
 use std::fmt::Debug;
 
-use wc3::model::mdlx::animation::Sequence;
-use wc3::model::mdlx::chunks::{
+use wc3::model::formats::mdlx::animation::Sequence;
+use wc3::model::formats::mdlx::chunks::{
     AttachmentsChunk, BindPoseChunk, BonesChunk, CamerasChunk, CollisionShapesChunk,
     EventObjectsChunk, FaceFxChunk, GeosetAnimationsChunk, GeosetsChunk, GlobalSequencesChunk,
     HelpersChunk, KnownChunk, LightsChunk, MaterialsChunk, ModelInfoChunk, ParticleEmitters2Chunk,
     ParticleEmittersChunk, PivotPointsChunk, PopcornEmittersChunk, RibbonEmittersChunk,
     SequencesChunk, TextureAnimationsChunk, TexturesChunk, VersionChunk,
 };
-use wc3::model::mdlx::emitters::{ParticleEmitter, ParticleEmitter2, RibbonEmitter};
-use wc3::model::mdlx::geometry::Geoset;
-use wc3::model::mdlx::mdx::{self, Cursor, Encoder, Read as _, Write as _};
-use wc3::model::mdlx::scene::{Bone, Camera, Node};
-use wc3::model::mdlx::{Borrowed, IntoOwned, Model, V1800, V800};
+use wc3::model::formats::mdlx::emitters::{ParticleEmitter, ParticleEmitter2, RibbonEmitter};
+use wc3::model::formats::mdlx::geometry::Geoset;
+use wc3::model::formats::mdlx::mdx::{self, Cursor, Encoder, Read as _, Write as _};
+use wc3::model::formats::mdlx::scene::{Bone, Camera, Node};
+use wc3::model::formats::mdlx::{Borrowed, Document, IntoOwned, V1800, V800};
 
 fn round_trip<T>(value: &T)
 where
@@ -28,10 +28,10 @@ where
 
 #[test]
 fn one_api_handles_model_fixed_and_versioned_records() {
-    let model = Model::<V800>::new();
+    let model = Document::<V800>::new();
     let bytes = model.encode_mdx().unwrap();
     assert_eq!(
-        Model::<V800>::decode_mdx(&bytes)
+        Document::<V800>::decode_mdx(&bytes)
             .unwrap()
             .encode_mdx()
             .unwrap(),

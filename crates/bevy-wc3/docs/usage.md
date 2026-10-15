@@ -84,9 +84,10 @@ with loose-file overrides and the reader's memory and concurrency behavior.
 
 A viewer or game can choose textures using the compiled asset's
 `compiled().texture_definitions()` and its own state, including model type,
-team, and blight. Full source inspection is available separately through
-`Wc3Model::decode`; loaded rendering assets do not retain decoded models. Bind
-by replaceable ID or by exact bitmap/PRE2 slot. Slot bindings take precedence:
+team, and blight. Semantic inspection is available through
+`Wc3Model::decode`; exact native records are available through the core
+`wc3::model::formats::mdlx` codecs. Loaded rendering assets do not retain decoded
+models. Bind by replaceable ID or by exact bitmap/PRE2 slot. Slot bindings take precedence:
 
 ```rust
 let mut textures = Wc3TextureBindings::default();
@@ -209,10 +210,10 @@ child models. Their playback and cleanup rules are described in
 
 ## Prepare custom model sources
 
-For custom sources, decode and compile while the input buffer is alive, then
-insert the compiled geometry into Bevy's asset stores. Compilation consumes the
-normalized model, moving owned buffers and owning borrowed runtime data only
-where needed. The bytes can be released before preparation or spawning:
+For custom sources, decode an owned semantic Warcraft III graph, compile it,
+then insert the resulting geometry into Bevy's asset stores. Decoding releases
+the graph from the encoded input; compilation consumes the graph and strictly
+lowers it into the renderer's current WC3 runtime vocabulary:
 
 ```rust
 let decoded = DecodedModel::decode(&bytes)?;
@@ -236,10 +237,12 @@ preparation needs meshes and inverse bind poses; spawning also needs materials.
 `CompiledModel` retains CPU meshes, so drop it after insertion when they are no
 longer needed. Prepared runtime definitions remain shared and alive.
 
-If a tool needs to retain or edit source records, use the owned `Wc3Model` decoding
-APIs and `prepare_model` or `prepare_model_with_resources`. These borrow the source
-and preserve it for inspection. For an already loaded rendering asset,
-`prepare_model_asset` performs only Bevy asset insertion and is infallible;
+Use `Wc3Model` with `prepare_model` or `prepare_model_with_resources` to
+retain a semantic graph for inspection and editing. Tools that edit native
+MDX/MDL documents use the core `wc3::model::formats::mdlx` codecs and import the
+result through `wc3::model::io::mdlx` before calling Bevy preparation APIs.
+For an already loaded rendering asset, `prepare_model_asset` performs only Bevy
+asset insertion and is infallible;
 geometry validation has already happened during loading. Use
 `spawn_prepared_model_with_bindings` for per-instance texture choices.
 

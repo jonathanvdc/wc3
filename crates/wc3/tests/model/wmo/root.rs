@@ -1,7 +1,9 @@
 //! Root record fixtures assembled independently of the native encoders.
-use wc3::model::wmo::records::{AmbientBox, DoodadDef, FogBox, Header, Material, NewLight};
-use wc3::model::wmo::root::RootChunk;
-use wc3::model::wmo::{Classic, Legion, RecordLayout};
+use wc3::model::formats::wmo::records::{
+    AmbientBox, DoodadDef, FogBox, Header, Material, NewLight,
+};
+use wc3::model::formats::wmo::root::RootChunk;
+use wc3::model::formats::wmo::{Classic, Legion, RecordLayout};
 
 #[test]
 fn fixed_record_strides_match_documented_wire_layouts() {

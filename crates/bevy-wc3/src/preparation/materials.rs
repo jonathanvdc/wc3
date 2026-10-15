@@ -2,9 +2,9 @@ use crate::materials::{Wc3LayerMaterial, Wc3LayerState};
 use bevy::material::OpaqueRendererMethod;
 use bevy::prelude::*;
 use bevy::render::render_resource::Face;
-use wc3::model::mdlx::animation::Animatable;
-use wc3::model::mdlx::materials::{Layer, LayerFilterMode, ShaderType};
-use wc3::model::mdlx::V1800;
+use wc3::model::formats::mdlx::animation::Animatable;
+use wc3::model::formats::mdlx::materials::{Layer, LayerFilterMode, ShaderType};
+use wc3::model::formats::mdlx::V1800;
 
 pub(super) fn layer_texture_id<'view, 'data>(
     layer: &'view Layer<'data, V1800>,

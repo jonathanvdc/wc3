@@ -1,8 +1,8 @@
-use wc3::model::mdlx::chunks::Chunk;
-use wc3::model::mdlx::mdx::Write as _;
-use wc3::model::mdlx::NoExtensions;
+use wc3::model::formats::mdlx::chunks::Chunk;
+use wc3::model::formats::mdlx::mdx::Write as _;
+use wc3::model::formats::mdlx::NoExtensions;
 
-use wc3::model::mdlx::{DynamicModel, Model, ModelDialect};
+use wc3::model::formats::mdlx::{Dialect, Document, DynamicDocument};
 
 use std::path::{Path, PathBuf};
 use std::{env, fs};
@@ -12,13 +12,13 @@ use std::{env, fs};
 fn local_files_round_trip() {
     for path in fixture_paths() {
         let bytes = fs::read(&path).unwrap();
-        let model = DynamicModel::<NoExtensions>::decode_mdx(&bytes, 800)
+        let model = DynamicDocument::<NoExtensions>::decode_mdx(&bytes, 800)
             .unwrap_or_else(|error| panic!("{}: {error}", path.display()));
         assert_eq!(model.encode_mdx().unwrap(), bytes, "{}", path.display());
     }
 }
 
-fn check_accessors<'data, V: ModelDialect>(mut model: Model<'data, V>, bytes: &[u8], path: &Path)
+fn check_accessors<'data, V: Dialect>(mut model: Document<'data, V>, bytes: &[u8], path: &Path)
 where
     V::Extension: Chunk,
 {
@@ -111,9 +111,9 @@ where
 fn typed_accessors_preserve_local_files() {
     for path in fixture_paths() {
         let bytes = fs::read(&path).unwrap();
-        let model = DynamicModel::<NoExtensions>::decode_mdx(&bytes, 800)
+        let model = DynamicDocument::<NoExtensions>::decode_mdx(&bytes, 800)
             .unwrap_or_else(|error| panic!("{}: {error}", path.display()));
-        wc3::visit_model!(model, |model| check_accessors(model, &bytes, &path));
+        wc3::visit_document!(model, |model| check_accessors(model, &bytes, &path));
     }
 }
 

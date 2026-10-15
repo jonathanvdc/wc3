@@ -1,22 +1,21 @@
 # wc3
 
 `wc3` is a Rust library for working with Blizzard model assets, BLP and Diablo
-TEX textures, and MPQ archives. It provides types and codecs for
-reading assets, changing their contents, and writing them back, whether you are
-building an asset editor, a converter, or an application that loads game data. Binary MDX and text MDL models
-share the same typed representation, allowing model editing code to work with
-both formats and with supported Classic and Reforged layouts. World of Warcraft
-M2 documents use a separate typed format API, including their supporting skin,
-geometry, animation, skeleton, bone, and physics files. WMO roots and groups
-have their own typed layouts and bundle API for static world geometry. M3 models
-and external animations retain their indexed section graphs.
-Diablo III and IV resources use independently typed SNO document layouts, with
-external payloads supplied by the caller.
+TEX textures, and MPQ archives. `wc3::model::Model` is the model representation
+for authoring and processing: a checked graph of geometry, materials, animation,
+scene relationships, and shared resources. Profiles select game-specific meaning
+without tying that graph to a file revision.
+
+Native documents and codecs live under `wc3::model::formats`. They retain the
+records, layouts, opaque data, and supporting files needed for native inspection
+and round trips. `wc3::model::io` connects those documents to semantic models
+through imports and export plans, with explicit representability policies from
+`wc3::model::conversion`.
 
 ## Capabilities
 
-The library covers three kinds of assets. Models can be edited through typed
-records, while textures and archives can be inspected and rewritten without
+The library covers three kinds of assets. Models support checked semantic editing
+and native record editing, while textures and archives can be inspected and rewritten without
 first decoding their image or file contents. Optional features add pixel
 operations and archive compression when your application needs them.
 
@@ -36,11 +35,10 @@ storage through `wc3::model::common`. Each format retains its own codec traits,
 reference types, layout rules, and validation. Shared storage therefore preserves
 the addressing and editing rules of the native document.
 
-Native model APIs describe encoded records and supporting documents. For
-independent authoring values, use [semantic model graphs](docs/semantic.md):
-typed vocabularies, graph relationships, shared resource ownership, and checked
-edits. The [conversion guide](docs/conversion.md) connects those graphs to native
-imports and export plans, with explicit representability policies.
+The [model guide](docs/semantic.md) explains authoring profiles, graph
+relationships, shared resource ownership, and checked edits. The
+[import and export guide](docs/conversion.md) explains the native boundary and
+its representability policies.
 
 For Warcraft III model loading, animation, and rendering in Bevy, see the
 companion [`bevy-wc3`](../bevy-wc3/README.md) crate.
@@ -55,21 +53,60 @@ and compression features separately as described below.
 cargo add wc3
 ```
 
-### Warcraft III models
+### Authoring models
 
-MDX and MDL model types live under `wc3::model::mdlx`, where the `mdx` and `mdl`
+Choose a profile for the vocabulary your application edits. `Mdlx` describes
+Warcraft III semantics; a native dialect such as `V800` separately selects an
+encoding layout. The default `Universal` profile admits the built-in families.
+
+```rust
+use wc3::model::{Model, Node};
+use wc3::model::profiles::Mdlx;
+
+let mut draft = Model::<Mdlx>::builder("Example");
+let root = draft.add_node(Node::named("Root"))?;
+let model = draft.finish()?;
+assert_eq!(model.node(root).unwrap().name, "Root");
+# Ok::<(), wc3::model::Error>(())
+```
+
+For Warcraft III files, `model::io::mdlx::decode_mdx` and `decode_mdl` return an
+independent semantic model and an import report. This path owns its authoring
+values, so the input bytes or text can be released after decoding.
+
+```rust
+use wc3::model::conversion::ImportOptions;
+use wc3::model::io;
+
+let source = r#"Version { FormatVersion 800, } Model "Example" {}"#;
+let imported = io::mdlx::decode_mdl(source, &ImportOptions::default())?;
+assert_eq!(imported.value.name(), "Example");
+# Ok::<(), wc3::model::conversion::Error>(())
+```
+
+Alternatively, decode a native document and pass it to the corresponding
+`model::io` adapter. Borrowing imports retain compatible arrays from that document;
+keep the source alive while using the imported model. MDLX also provides
+`import_owned` to detach an already decoded document. Export plans produce native
+documents or bundles for encoding and report values that the selected layout
+cannot represent. The [import and export guide](docs/conversion.md) shows how to
+inspect and execute an MDLX plan.
+
+### Warcraft III documents
+
+MDX and MDL model types live under `wc3::model::formats::mdlx`, where the `mdx` and `mdl`
 modules provide the codecs for each format. The example below reads a small MDL
 model, changes its name, and writes the result in both formats. Importing the codec traits as
 `_` makes their methods available without introducing conflicting trait names.
 
 ```rust
-use wc3::model::mdlx::{Model, V800};
-use wc3::model::mdlx::mdl::{Read as _, Write as _};
-use wc3::model::mdlx::mdx::Write as _;
+use wc3::model::formats::mdlx::{Document, V800};
+use wc3::model::formats::mdlx::mdl::{Read as _, Write as _};
+use wc3::model::formats::mdlx::mdx::Write as _;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let source = r#"Version { FormatVersion 800, } Model "Example" {}"#;
-    let mut model = Model::<V800>::decode_mdl(source)?;
+    let mut model = Document::<V800>::decode_mdl(source)?;
     let mut info = model.model_info().unwrap();
     info.name.set_text("Renamed")?;
     model.set_model_info(&info);
@@ -82,12 +119,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-The example uses `Model<V800>` because its input has a known format version.
-When the version needs to be determined from the file, `DynamicModel` provides
+The example uses `Document<V800>` because its input has a known format version.
+When the version needs to be determined from the file, `DynamicDocument` provides
 the same model operations with runtime version selection. Once a model is
 loaded, its records give you access to geometry, materials, scene nodes,
 animation, and effects. The
-[`mdlx` module documentation](https://docs.rs/wc3/latest/wc3/model/mdlx/) explains
+[`mdlx` module documentation](https://docs.rs/wc3/latest/wc3/model/formats/mdlx/) explains
 how to edit those collections and convert between supported versions.
 
 Continue with the [model editing guide](docs/models.md) for runtime version
@@ -96,16 +133,16 @@ rewriting. The API reference supplies the record types and codec contracts.
 
 ### World of Warcraft models
 
-M2 types live under `wc3::model::m2`. Choose a numeric layout and either the flat
-MD20 or chunked MD21 envelope, or use `DynamicModel` to detect both from bytes:
+M2 types live under `wc3::model::formats::m2`. Choose a numeric layout and either the flat
+MD20 or chunked MD21 envelope, or use `DynamicDocument` to detect both from bytes:
 
 ```rust
-use wc3::model::m2::{Chunked, Model, V274};
+use wc3::model::formats::m2::{Chunked, Document, V274};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let model = Model::<Chunked<V274>>::new();
+    let model = Document::<Chunked<V274>>::new();
     let bytes = model.encode_m2()?;
-    let decoded = Model::<Chunked<V274>>::decode_m2(&bytes)?;
+    let decoded = Document::<Chunked<V274>>::decode_m2(&bytes)?;
     assert_eq!(decoded.version(), 274);
     Ok(())
 }
@@ -118,12 +155,12 @@ coordinates external animation offsets when writing. The [M2 guide](docs/m2.md)
 explains layout selection, ownership, complete bundle output, and preservation
 boundaries. M2 rendering is not implemented.
 
-World geometry uses `wc3::model::wmo::{Root, Group, Bundle}` with an explicit
+World geometry uses `wc3::model::formats::wmo::{Root, Group, Bundle}` with an explicit
 client profile, since WMO's version field does not identify every layout change.
 The [WMO guide](docs/wmo.md) explains borrowed chunk records, dependency
 resolution, validation, and coordinated root/group output.
 
-StarCraft II and Heroes of the Storm models use `wc3::model::m3`. The MD33 and
+StarCraft II and Heroes of the Storm models use `wc3::model::formats::m3`. The MD33 and
 MD34 envelopes select reference widths, while each indexed section selects its
 own record revision. The [M3 guide](docs/m3.md) explains borrowed section graphs,
 typed packed vertices, shared references, external animations, and preservation
@@ -131,7 +168,7 @@ limits for unknown payloads.
 
 ### Diablo models
 
-Diablo resources live under `wc3::model::diablo::{d3, d4}`. D3 document families
+Diablo resources live under `wc3::model::formats::diablo::{d3, d4}`. D3 document families
 select their own numeric revision: an appearance revision does not select an
 animation or material revision. D4 uses exact format hashes to select concrete
 root layouts. Both families resolve borrowed native arrays and relocate their
@@ -199,7 +236,7 @@ the API and describes format support, editing behavior, and archive recovery.
 ## Optional features
 
 The crate has no default features, so applications that only work with models
-or encoded containers do not pull in image or compression dependencies. Model
+or encoded containers do not pull in image or compression dependencies. Document
 codecs, BLP/TEX container operations, and MPQ indexing, stored entries, encryption,
 and encoded archive editing are always available. The following features add
 the operations that require decoding or encoding asset contents:
@@ -230,8 +267,8 @@ For Warcraft III models, MDX preserves chunk order and opaque data, while MDL
 produces canonical text and reports data it cannot faithfully represent. MDL source
 formatting is therefore discarded when writing a model back to text. Readers
 accept both Warcraft III and Hive Workshop spellings, and writers use Warcraft
-III syntax by default. The [MDX](https://docs.rs/wc3/latest/wc3/model/mdlx/mdx/) and
-[MDL](https://docs.rs/wc3/latest/wc3/model/mdlx/mdl/) documentation explains these
+III syntax by default. The [MDX](https://docs.rs/wc3/latest/wc3/model/formats/mdlx/mdx/) and
+[MDL](https://docs.rs/wc3/latest/wc3/model/formats/mdlx/mdl/) documentation explains these
 behaviors in more detail.
 
 Converting between MDLX model versions returns a model and a report. `convert`

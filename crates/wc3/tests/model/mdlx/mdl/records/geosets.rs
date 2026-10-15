@@ -1,9 +1,9 @@
-use wc3::model::mdlx::geometry::{Geoset, SkinWeights};
-use wc3::model::mdlx::mdl::{Read as _, Write as _};
-use wc3::model::mdlx::mdx::{Read as _, Write as _};
-use wc3::model::mdlx::ZeroVec;
-use wc3::model::mdlx::{
-    mdl, ModelVersion, V1000, V1100, V1200, V1300, V1400, V1600, V1800, V800, V900,
+use wc3::model::formats::mdlx::geometry::{Geoset, SkinWeights};
+use wc3::model::formats::mdlx::mdl::{Read as _, Write as _};
+use wc3::model::formats::mdlx::mdx::{Read as _, Write as _};
+use wc3::model::formats::mdlx::ZeroVec;
+use wc3::model::formats::mdlx::{
+    mdl, FormatVersion, V1000, V1100, V1200, V1300, V1400, V1600, V1800, V800, V900,
 };
 
 const QUAD: &str = include_str!("../../../../fixtures/mdl/quad_geoset.mdl");
@@ -14,7 +14,7 @@ fn with_fields(source: &str, fields: &str) -> String {
     let end = source.rfind('}').unwrap();
     format!("{} {fields} }}", &source[..end])
 }
-fn roundtrip<'data, V: ModelVersion>(value: &Geoset<'data, V>) {
+fn roundtrip<'data, V: FormatVersion>(value: &Geoset<'data, V>) {
     let binary = value.encode_mdx().unwrap();
     let text = value.encode_mdl().unwrap();
     let decoded = Geoset::<V>::decode_mdl(&text).unwrap_or_else(|error| panic!("{error}: {text}"));
@@ -338,7 +338,7 @@ fn skin_weights_only_replace_an_empty_legacy_group_array() {
 
 #[test]
 fn geoset_names_use_dialect_aliases_and_preserve_binary_storage() {
-    use wc3::model::mdlx::mdl::Dialect;
+    use wc3::model::formats::mdlx::mdl::Dialect;
     macro_rules! check {
         ($($version:ty),*) => { $( {
             for spelling in ["Name", "LevelOfDetailName"] {

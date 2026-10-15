@@ -4,7 +4,7 @@ use bevy::camera::RenderTarget;
 use bevy::prelude::*;
 use std::collections::HashMap;
 use std::iter::once;
-use wc3::model::mdlx::{Model, V1800};
+use wc3::model::formats::mdlx::{Document, V1800};
 
 use crate::animation::pose::{
     default_node_camera, inherited_node_camera, Wc3DefaultNodeCamera, Wc3NodeCamera,
@@ -167,7 +167,7 @@ pub(crate) struct LodBounds {
 }
 
 impl LodBounds {
-    pub(crate) fn from_model(model: &Model<'_, V1800>) -> Self {
+    pub(crate) fn from_model(model: &Document<'_, V1800>) -> Self {
         let mut min = Vec3::splat(f32::INFINITY);
         let mut max = Vec3::splat(f32::NEG_INFINITY);
         let mut include = |point: Vec3| {

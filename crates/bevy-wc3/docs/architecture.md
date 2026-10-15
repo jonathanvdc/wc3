@@ -18,12 +18,12 @@ preparing reusable render assets, and creating an entity hierarchy for each
 instance. The corresponding modules keep file handling separate from asset
 construction and runtime ownership:
 
-- `assets/` decodes MDX/MDL with strict version conversion, resolves images and
+- `assets/` imports MDX/MDL semantics with strict policies, resolves images and
   child models, and compiles the model before returning `Wc3ModelAsset`. The asset
   retains owned CPU meshes, runtime definitions, and dependency handles rather
   than a decoded source container. Format definitions and codecs remain in `wc3`.
 - `preparation/` separates CPU compilation from Bevy asset insertion.
-  `compile_model` consumes a normalized `Model` and produces `CompiledModel`
+  `compile_model` consumes a semantic `Model<Mdlx>` and produces `CompiledModel`
   without an ECS world or asset stores. `CompiledModel::prepare` inserts meshes
   and inverse bind poses into Bevy and returns `PreparedModel`. Both forms share
   owned runtime definitions and preserve texture provenance. Offline pose baking
@@ -34,34 +34,34 @@ construction and runtime ownership:
   their runtime definitions and render assets. Compilation failures are reported
   by the loader, before an asset reaches the preparation cache.
 
-`DecodedModel::decode` borrows compatible MDX arrays from the encoded input.
-Strict version conversion moves unchanged chunks and allocates only where the
-conversion requires a new representation. Compilation reads borrowed geometry
-while constructing meshes, then consumes the decoded records. Retained animation
-and feature records move already-owned buffers and copy borrowed buffers into
-owned storage. MDL decoding already owns its buffers, so consuming compilation
-moves those buffers directly. Geometry records and unrelated chunks are discarded
-without converting their source arrays to owned data.
+`DecodedModel::decode` imports MDX or MDL into an owned
+`wc3::model::Model<Mdlx>`. Its checked graph is independent of the source file
+version and encoded bytes. `Wc3Model` retains that graph for inspection and
+semantic editing; `prepare_model` and `prepare_model_with_resources` borrow it,
+while `compile_model` consumes a semantic graph.
 
-`CompiledModel` is the ownership boundary: it can outlive the input bytes and the
-decoded container. Nodes belonging to scene features project their tracks from
-the same owned records used by attachments, lights, events, or emitter simulation.
-Preparation shares these definition buffers rather than copying them again.
-Compiled meshes are shared between passes with identical UV variants; insertion
-copies each unique CPU mesh into Bevy once per prepared model. The compiled asset
-keeps its CPU meshes until it is unloaded. Spawning and offline baking use only
-`PreparedModel`; no decoded source is retained at runtime.
+The current renderer lowers the semantic graph through the strict MDLX export
+planner to V1800 records before compiling meshes and runtime definitions. This
+is an explicit implementation boundary: materials, animation sampling, and
+effects still use the WC3 native record vocabulary internally. Lowering rejects
+unrepresentable data rather than silently dropping it. It may allocate native
+geometry and animation buffers, so the default loading path does not promise
+zero-copy geometry or preservation of source buffer addresses.
 
-Tools that need full source records can explicitly use `Wc3Model::decode` or
-`decode_mdl`. Those owned inspection APIs remain separate from the renderer's
-borrowed loading path. `prepare_model` and `prepare_model_with_resources` borrow
-an inspected source, while `compile_model` consumes a model when retaining it is
-unnecessary.
+Native document inspection belongs to `wc3::model::formats::mdlx`, whose MDX
+and MDL codecs expose the original file structure. Tools can author or inspect
+those documents independently, then import them through `wc3::model::io::mdlx`
+before rendering. Bevy's public preparation and spawning APIs accept semantic
+graphs only. Graph validation rejects inconsistent native references, such as a
+geoset referring to an absent material.
 
-The prepared container is independent of the source container's layout. Its
-current animation, material, and effect definitions still express WC3 semantics
-and reuse types from `wc3::model`; another format needs a preparation adapter and
-appropriate runtime behavior for features with different semantics.
+`CompiledModel` is the ownership boundary: it can outlive the input bytes,
+semantic graph, and native document. Nodes belonging to scene features project
+tracks from the same owned records used by attachments, lights, events, or
+emitter simulation. Preparation shares those definition buffers. Compiled meshes
+are shared between passes with identical UV variants; insertion copies each
+unique CPU mesh into Bevy once per prepared model. Spawning and offline baking
+use only `PreparedModel`.
 
 After asset-backed spawning, the root's `Wc3ModelInstance` loading request is
 removed and replaced by `ModelSource`, an asset ID that preserves provenance and
@@ -90,7 +90,7 @@ pose transition state. `play` uses model BlendTime; immediate and duration-overr
 controls use the same playback path. The node system caches authored local poses
 before inheritance/camera corrections. Transitions retain a frozen source and
 blend into the advancing destination, including effect births and event poses.
-`Wc3Animation::time()` exposes a borrowed `wc3::model::mdlx::animation::AnimationTime`.
+`Wc3Animation::time()` exposes a borrowed `wc3::model::formats::mdlx::animation::AnimationTime`.
 `wc3` resolves sequence/global-sequence clocks and samples tracks and properties;
 `animation/sampling.rs` adapts those operations for Bevy effect callers.
 `animation/pose/` owns animated node data, camera selection, pose evaluation,
@@ -104,7 +104,7 @@ the same hierarchy composition rules.
 
 `event.rs` dispatches crossed event keys as `Wc3ModelEvent` messages. Prepared
 instances share event definitions and retain independent cursors. Interval
-traversal lives under `wc3::model::mdlx::animation`; explicit playback restart/seek
+traversal lives under `wc3::model::formats::mdlx::animation`; explicit playback restart/seek
 metadata lives with `Wc3Animation`. Event names are interpreted by applications.
 
 `materials/` owns Bevy material specialization, layer/geoset animation, surface

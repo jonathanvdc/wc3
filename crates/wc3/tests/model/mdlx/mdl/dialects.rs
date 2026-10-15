@@ -1,12 +1,12 @@
-use wc3::model::mdlx::animation::{Animatable, Track};
-use wc3::model::mdlx::geometry::Geoset;
-use wc3::model::mdlx::materials::{Layer, Material};
-use wc3::model::mdlx::mdl::{Dialect, Read as _, Write as _, WriteFields as _, Writer};
-use wc3::model::mdlx::mdx::{Read as _, Write as _};
-use wc3::model::mdlx::NoExtensions;
-use wc3::model::mdlx::{
-    mdl, mdx, DynamicModel, Model, ModelVersion, V1000, V1100, V1200, V1300, V1400, V1600, V1800,
-    V800, V900,
+use wc3::model::formats::mdlx::animation::{Animatable, Track};
+use wc3::model::formats::mdlx::geometry::Geoset;
+use wc3::model::formats::mdlx::materials::{Layer, Material};
+use wc3::model::formats::mdlx::mdl::{Dialect, Read as _, Write as _, WriteFields as _, Writer};
+use wc3::model::formats::mdlx::mdx::{Read as _, Write as _};
+use wc3::model::formats::mdlx::NoExtensions;
+use wc3::model::formats::mdlx::{
+    mdl, mdx, Document, DynamicDocument, FormatVersion, V1000, V1100, V1200, V1300, V1400, V1600,
+    V1800, V800, V900,
 };
 
 const ENGINE: &str = include_str!("../../../fixtures/mdl/dialects/hd_layer.engine.mdl");
@@ -63,7 +63,7 @@ fn static_slots_match_independent_canonical_fixtures_in_both_dialects() {
 
 #[test]
 fn sd_bindings_use_subtextures_from_version_1100_in_both_dialects() {
-    fn check<V: ModelVersion>() {
+    fn check<V: FormatVersion>() {
         for (shader, name) in [(0, "Shader_SD_Legacy"), (2, "Shader_SD_FixedFunction")] {
             for animated in [false, true] {
                 // Pack the documented Layer and SubTexture fields independently
@@ -316,10 +316,12 @@ fn flags_use_context_specific_spellings_and_omit_engine_only_bits_in_hive() {
         layer
     );
     // The far-Z alias belongs to materials, not emitter flag vocabulary.
-    assert!(wc3::model::mdlx::emitters::ParticleEmitter2::decode_mdl(
-        "ParticleEmitter2 \"p\" { ObjectId 0, SortPrimitives, }"
-    )
-    .is_err());
+    assert!(
+        wc3::model::formats::mdlx::emitters::ParticleEmitter2::decode_mdl(
+            "ParticleEmitter2 \"p\" { ObjectId 0, SortPrimitives, }"
+        )
+        .is_err()
+    );
 }
 #[test]
 fn geoset_dialect_data_and_skin_row_forms_preserve_binary_payloads() {
@@ -356,19 +358,19 @@ fn geoset_dialect_data_and_skin_row_forms_preserve_binary_payloads() {
         }
     }
 }
-fn version<V: ModelVersion>() {
+fn version<V: FormatVersion>() {
     let hd = if V::NUMBER >= 1100 {
         HIVE.to_owned()
     } else {
         "Layer { FilterMode Blend, static TextureID 7, }".to_owned()
     };
     let source = format!("Version {{ FormatVersion {}, }} Model \"Both\" {{}} Materials 1 {{ Material {{ SortPrimitives, {hd} }} }} {QUAD}", V::NUMBER);
-    let value = Model::<V>::decode_mdl(&source).unwrap();
+    let value = Document::<V>::decode_mdl(&source).unwrap();
     roundtrip_hive(&value);
     let text = hive(&value);
     assert!(text.contains("SortPrimitives,"));
     assert_eq!(
-        DynamicModel::<NoExtensions>::decode_mdl(&text)
+        DynamicDocument::<NoExtensions>::decode_mdl(&text)
             .unwrap()
             .encode_mdl_with_dialect(Dialect::HiveWorkshop)
             .unwrap(),
@@ -376,7 +378,7 @@ fn version<V: ModelVersion>() {
     );
     let engine = value.encode_mdl().unwrap();
     assert_eq!(
-        Model::<V>::decode_mdl(&engine)
+        Document::<V>::decode_mdl(&engine)
             .unwrap()
             .encode_mdx()
             .unwrap(),
@@ -457,16 +459,17 @@ fn derive_aliases_work_inside_flattened_groups_and_share_presence_bits() {
 fn whole_model_preserves_hive_only_data_and_rejects_engine_export() {
     let mesh = geoset_source("SelectionFlags 128, LevelOfDetailName \"LOD\",");
     let source = format!("Version {{ FormatVersion 1800, }} Model \"Hive\" {{}} Materials 1 {{ Material {{ SortPrimitives, Layer {{ ShaderTypeId 1, NormalTextureID 1 {{ Bezier, GlobalSeqId 3, -2: 7, InTan 8, OutTan 9, }} }} }} }} {mesh}");
-    let model = Model::<V1800>::decode_mdl(&source).unwrap();
+    let model = Document::<V1800>::decode_mdl(&source).unwrap();
     roundtrip_hive(&model);
     assert!(model.encode_mdl().is_err());
     let text = hive(&model);
-    let dynamic = DynamicModel::<NoExtensions>::decode_mdl(&text).unwrap();
+    let dynamic = DynamicDocument::<NoExtensions>::decode_mdl(&text).unwrap();
     assert_eq!(hive(&dynamic), text);
     assert_eq!(dynamic.encode_mdx().unwrap(), model.encode_mdx().unwrap());
     assert_eq!(
         hive(
-            &DynamicModel::<NoExtensions>::decode_mdx(&model.encode_mdx().unwrap(), 1800).unwrap()
+            &DynamicDocument::<NoExtensions>::decode_mdx(&model.encode_mdx().unwrap(), 1800)
+                .unwrap()
         ),
         text
     );

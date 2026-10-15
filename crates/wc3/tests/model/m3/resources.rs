@@ -1,13 +1,13 @@
 use wc3::model::common::FileKey;
-use wc3::model::m3;
-use wc3::model::m3::records::{
+use wc3::model::formats::m3;
+use wc3::model::formats::m3::records::{
     Character, DataDrivenMaterial, StringReference, TextureLayer, V0, V1, V20,
 };
-use wc3::model::m3::{Document, Md34, Ref, TextureOwner};
+use wc3::model::formats::m3::{Container, Md34, Ref, TextureOwner};
 
 #[test]
 fn only_native_texture_fields_declare_dependencies() {
-    let mut document = Document::<Md34>::new();
+    let mut document = Container::<Md34>::new();
     let name = document
         .append(&[Character { value: b'n' }, Character { value: 0 }])
         .unwrap();
@@ -59,7 +59,7 @@ fn only_native_texture_fields_declare_dependencies() {
 
 #[test]
 fn malformed_texture_string_is_reported() {
-    let mut document = Document::<Md34>::new();
+    let mut document = Container::<Md34>::new();
     let path = document.append(&[Character { value: b'x' }]).unwrap();
     document
         .append(&[TextureLayer::<V20> {
@@ -72,7 +72,7 @@ fn malformed_texture_string_is_reported() {
 
 #[test]
 fn historically_defined_material_revisions_declare_texture_paths() {
-    let mut document = Document::<Md34>::new();
+    let mut document = Container::<Md34>::new();
     let path = document
         .append(&[Character { value: b'x' }, Character { value: 0 }])
         .unwrap();

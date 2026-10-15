@@ -1,7 +1,7 @@
 //! Storage and binary mechanics shared by native model formats.
 //!
-//! [`binary`] supplies bounded address spaces, sequential cursors, and output
-//! buffers. [`EncodedArray`] retains fixed records in borrowed encoded storage
+//! [`binary`](crate::model::common::binary) supplies bounded address spaces, sequential cursors, and output
+//! buffers. [`EncodedArray`](crate::model::common::EncodedArray) retains fixed records in borrowed encoded storage
 //! until editing requires ownership; format adapters supply their record layouts
 //! and codecs. [`ZeroVec`] serves unaligned scalar arrays directly.
 //!

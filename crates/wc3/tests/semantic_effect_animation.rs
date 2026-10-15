@@ -1,8 +1,8 @@
-use wc3::model::semantic::feature_properties::{particle, trail};
-use wc3::model::semantic::profiles::{mdlx, Mdlx, Universal};
-use wc3::model::semantic::TrailAppearance;
-use wc3::model::semantic::{Animated, Channel, Clock, Curve, Model, Node, Time, Track};
-use wc3::model::semantic::{ParticleEmission, ParticleLifetime, ParticleMotion};
+use wc3::model::feature_properties::{particle, trail};
+use wc3::model::profiles::{mdlx, Mdlx, Universal};
+use wc3::model::TrailAppearance;
+use wc3::model::{Animated, Channel, Clock, Curve, Model, Node, Time, Track};
+use wc3::model::{ParticleEmission, ParticleLifetime, ParticleMotion};
 
 #[test]
 fn atlas_speed_keeps_one_shared_identity_through_native_publication() {
@@ -124,8 +124,8 @@ fn a_shared_continuous_rate_narrows_on_non_burst_atlas_emitters() {
 
 #[test]
 fn changing_gravity_representation_removes_the_old_scalar_destination() {
-    use wc3::model::semantic::profiles::FeaturePayload;
-    use wc3::model::semantic::{NodeFeature, ParticleDefinition, ParticleGravity, PropertyPayload};
+    use wc3::model::profiles::FeaturePayload;
+    use wc3::model::{NodeFeature, ParticleDefinition, ParticleGravity, PropertyPayload};
     let mut definition = ParticleDefinition::from(mdlx::Particle2::default());
     let key = mdlx::properties::Target::Particle2(mdlx::properties::Particle2Field::Gravity)
         .identity()

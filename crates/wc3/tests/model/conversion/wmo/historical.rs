@@ -1,15 +1,16 @@
 use wc3::model::common::{IntoZeroVec, ZeroVec};
-use wc3::model::conversion::{self, ExportOptions, ImportOptions};
-use wc3::model::semantic::Draw;
-use wc3::model::wmo::codec::Array;
-use wc3::model::wmo::group::GroupChunk;
-use wc3::model::wmo::legacy::{
+use wc3::model::conversion::{ExportOptions, ImportOptions};
+use wc3::model::formats::wmo::codec::Array;
+use wc3::model::formats::wmo::group::GroupChunk;
+use wc3::model::formats::wmo::legacy::{
     Batch14, Batch16, Bundle16, Group14, Group16, GroupInfo14, HeaderBatchRange, LegacyGroupChunk,
     LegacyTriangle, Material14, Root14, Root16, RootChunk14,
 };
-use wc3::model::wmo::records::{CullingBox, GroupInfo, Material};
-use wc3::model::wmo::root::RootChunk;
-use wc3::model::wmo::{Classic, FileKey};
+use wc3::model::formats::wmo::records::{CullingBox, GroupInfo, Material};
+use wc3::model::formats::wmo::root::RootChunk;
+use wc3::model::formats::wmo::{Classic, FileKey};
+use wc3::model::io;
+use wc3::model::Draw;
 
 fn triangle<B>() -> Vec<LegacyGroupChunk<'static, B>> {
     vec![
@@ -143,7 +144,7 @@ fn beta() -> Bundle16<'static> {
 #[test]
 fn alpha_direct_geometry_and_lighting_controls_survive_edits() {
     let source = alpha();
-    let mut asset = conversion::wmo::import(&source, &ImportOptions::default())
+    let mut asset = io::wmo::import(&source, &ImportOptions::default())
         .unwrap()
         .value;
     let model = &asset;
@@ -160,7 +161,7 @@ fn alpha_direct_geometry_and_lighting_controls_survive_edits() {
         .with_positions((positions).into_zero_vec())
         .unwrap();
     asset.edit(|builder| builder.set_mesh(id, mesh)).unwrap();
-    let output = conversion::wmo::plan::<conversion::wmo::V14>(&asset, &ExportOptions::default())
+    let output = io::wmo::plan::<io::wmo::V14>(&asset, &ExportOptions::default())
         .unwrap()
         .execute()
         .unwrap()
@@ -205,10 +206,10 @@ fn alpha_direct_geometry_and_lighting_controls_survive_edits() {
 #[test]
 fn beta_native_header_and_draw_controls_survive_semantic_roundtrip() {
     let source = beta();
-    let asset = conversion::wmo::import(&source, &ImportOptions::default())
+    let asset = io::wmo::import(&source, &ImportOptions::default())
         .unwrap()
         .value;
-    let output = conversion::wmo::plan::<conversion::wmo::V16>(&asset, &ExportOptions::default())
+    let output = io::wmo::plan::<io::wmo::V16>(&asset, &ExportOptions::default())
         .unwrap()
         .execute()
         .unwrap()
@@ -232,7 +233,7 @@ fn beta_native_header_and_draw_controls_survive_semantic_roundtrip() {
 #[test]
 fn historical_multiple_placements_relocate_lighting_windows() {
     let source = alpha();
-    let mut asset = conversion::wmo::import(&source, &ImportOptions::default())
+    let mut asset = io::wmo::import(&source, &ImportOptions::default())
         .unwrap()
         .value;
     asset
@@ -265,7 +266,7 @@ fn historical_multiple_placements_relocate_lighting_windows() {
             Ok(())
         })
         .unwrap();
-    let encoded = conversion::wmo::plan::<conversion::wmo::V14>(&asset, &ExportOptions::default())
+    let encoded = io::wmo::plan::<io::wmo::V14>(&asset, &ExportOptions::default())
         .unwrap()
         .execute()
         .unwrap()

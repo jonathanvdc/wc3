@@ -1,7 +1,7 @@
-use wc3::model::mdlx::animation::{Animatable, TangentKeyframe, Track, ValueKeyframe};
-use wc3::model::mdlx::mdx::{self, Read as _, Write as _};
-use wc3::model::mdlx::scene::Node;
-use wc3::model::mdlx::Vec3;
+use wc3::model::formats::mdlx::animation::{Animatable, TangentKeyframe, Track, ValueKeyframe};
+use wc3::model::formats::mdlx::mdx::{self, Read as _, Write as _};
+use wc3::model::formats::mdlx::scene::Node;
+use wc3::model::formats::mdlx::Vec3;
 
 #[test]
 fn node_transform_tracks_round_trip() {

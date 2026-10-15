@@ -1,10 +1,10 @@
 use super::*;
 use crate::animation::Wc3Animation;
-use crate::assets::Wc3Model;
+use crate::assets::Wc3Document;
 use crate::instance::spawn::spawn_prepared_model;
 use crate::materials::layers::{animate_layers, AnimatedLayer};
 use crate::materials::Wc3LayerMaterial;
-use crate::preparation::prepare_model;
+use crate::preparation::prepare_document;
 use crate::schedule::{configure, Wc3Systems};
 use bevy::camera::visibility::RenderLayers;
 use bevy::camera::visibility::{VisibilityPlugin, VisibilitySystems};
@@ -180,7 +180,8 @@ fn projection_handles_zoom_viewport_scale_and_near_plane() {
 }
 
 fn scene() -> (App, Entity, Entity) {
-    let source = Wc3Model::decode_mdl(include_str!("../tests/fixtures/lod_capture.mdl")).unwrap();
+    let source =
+        Wc3Document::decode_mdl(include_str!("../tests/fixtures/lod_capture.mdl")).unwrap();
     let mut app = App::new();
     app.add_plugins((MinimalPlugins, TransformPlugin, VisibilityPlugin));
     configure(&mut app);
@@ -190,7 +191,7 @@ fn scene() -> (App, Entity, Entity) {
     let mut meshes = Assets::<Mesh>::default();
     let mut materials = Assets::<Wc3LayerMaterial>::default();
     let mut bindposes = Assets::<SkinnedMeshInverseBindposes>::default();
-    let prepared = prepare_model(&mut meshes, &mut bindposes, &source, |_| None).unwrap();
+    let prepared = prepare_document(&mut meshes, &mut bindposes, &source, |_| None).unwrap();
     assert_eq!(prepared.lod_levels(), [0, 2]);
     assert_eq!(
         prepared
@@ -418,19 +419,19 @@ fn lod_selection_precedes_visibility_and_follows_projection_updates() {
 #[test]
 fn common_only_and_classic_models_have_a_safe_single_level() {
     let mut source =
-        Wc3Model::decode_mdl(include_str!("../tests/fixtures/lod_capture.mdl")).unwrap();
+        Wc3Document::decode_mdl(include_str!("../tests/fixtures/lod_capture.mdl")).unwrap();
     let geosets = source.model.geosets().cloned().collect::<Vec<_>>();
     source.model.set_geosets(geosets.into_iter().skip(2));
     let mut meshes = Assets::<Mesh>::default();
     let mut bindposes = Assets::<SkinnedMeshInverseBindposes>::default();
-    let prepared = prepare_model(&mut meshes, &mut bindposes, &source, |_| None).unwrap();
+    let prepared = prepare_document(&mut meshes, &mut bindposes, &source, |_| None).unwrap();
     assert_eq!(prepared.lod_levels(), [0]);
     assert_eq!(prepared.geosets[0].lod, None);
-    let classic = Wc3Model::decode(include_bytes!("../tests/fixtures/quad_model.mdx")).unwrap();
-    let prepared = prepare_model(&mut meshes, &mut bindposes, &classic, |_| None).unwrap();
+    let classic = Wc3Document::decode(include_bytes!("../tests/fixtures/quad_model.mdx")).unwrap();
+    let prepared = prepare_document(&mut meshes, &mut bindposes, &classic, |_| None).unwrap();
     assert_eq!(prepared.lod_levels(), [0]);
     source.model.set_geosets([]);
-    let prepared = prepare_model(&mut meshes, &mut bindposes, &source, |_| None).unwrap();
+    let prepared = prepare_document(&mut meshes, &mut bindposes, &source, |_| None).unwrap();
     assert_eq!(prepared.lod_levels(), [0]);
     assert!(prepared.geosets.is_empty());
 }

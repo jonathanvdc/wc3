@@ -1,9 +1,9 @@
-use wc3::model::mdlx::geometry::BindPoseMatrix;
-use wc3::model::mdlx::visit_model;
-use wc3::model::mdlx::{
-    CommonModelAccess, DynamicModel, Model, TryModelAccess, ValueError, V1800, V800, V900,
+use wc3::model::formats::mdlx::geometry::BindPoseMatrix;
+use wc3::model::formats::mdlx::visit_document;
+use wc3::model::formats::mdlx::{
+    CommonModelAccess, Document, DynamicDocument, TryModelAccess, ValueError, V1800, V800, V900,
 };
-use wc3::model::mdlx::{Extended, NoExtensions};
+use wc3::model::formats::mdlx::{Extended, NoExtensions};
 
 fn replace_durations<'data>(model: &mut impl CommonModelAccess<'data>) {
     model.set_global_sequences(&[100, 250]);
@@ -12,10 +12,10 @@ fn replace_durations<'data>(model: &mut impl CommonModelAccess<'data>) {
 
 #[test]
 fn shared_accessors_work_for_typed_and_runtime_models() {
-    let mut typed = Model::<V800>::new();
+    let mut typed = Document::<V800>::new();
     replace_durations(&mut typed);
 
-    let mut runtime = DynamicModel::<NoExtensions>::V1800(Model::new());
+    let mut runtime = DynamicDocument::<NoExtensions>::V1800(Document::new());
     replace_durations(&mut runtime);
     assert_eq!(runtime.global_sequences(), [100, 250]);
     assert_eq!(runtime.model_info(), None);
@@ -40,19 +40,19 @@ fn check_bind_poses<'data>(model: &mut impl TryModelAccess<'data>, supported: bo
 
 #[test]
 fn checked_accessors_distinguish_unsupported_and_empty() {
-    let mut old = Model::<V800>::new();
+    let mut old = Document::<V800>::new();
     check_bind_poses(&mut old, false);
     assert_eq!(old.chunks.len(), 1);
 
-    let mut modern = Model::<V1800>::new();
+    let mut modern = Document::<V1800>::new();
     check_bind_poses(&mut modern, true);
     assert_eq!(
         modern.bind_poses().cloned().collect::<Vec<_>>(),
         [BindPoseMatrix([0.0; 12])]
     );
-    assert!(Model::<V900>::new().bind_poses().next().is_none());
+    assert!(Document::<V900>::new().bind_poses().next().is_none());
 
-    let mut runtime = DynamicModel::<NoExtensions>::V800(Model::new());
+    let mut runtime = DynamicDocument::<NoExtensions>::V800(Document::new());
     check_bind_poses(&mut runtime, false);
     assert!(runtime.try_bind_poses().is_err());
     assert!(
@@ -64,7 +64,7 @@ fn checked_accessors_distinguish_unsupported_and_empty() {
     assert!(runtime.try_set_face_fx([]).is_err());
     assert!(runtime.try_set_popcorn_emitters([]).is_err());
 
-    let mut runtime = DynamicModel::<NoExtensions>::V1800(Model::new());
+    let mut runtime = DynamicDocument::<NoExtensions>::V1800(Document::new());
     assert!(runtime.try_face_fx().unwrap().next().is_none());
     assert!(runtime.try_popcorn_emitters().unwrap().next().is_none());
     runtime.try_set_face_fx([]).unwrap();
@@ -73,19 +73,19 @@ fn checked_accessors_distinguish_unsupported_and_empty() {
 
 #[test]
 fn public_visit_macro_supports_versioned_records_and_edits() {
-    let mut model = DynamicModel::<NoExtensions>::V900(Model::new());
-    let geoset_count = visit_model!(&model, |typed| typed.geosets().count());
+    let mut model = DynamicDocument::<NoExtensions>::V900(Document::new());
+    let geoset_count = visit_document!(&model, |typed| typed.geosets().count());
     assert_eq!(geoset_count, 0);
 
-    visit_model!(&mut model, |typed| typed.set_global_sequences(&[42]));
+    visit_document!(&mut model, |typed| typed.set_global_sequences(&[42]));
     assert_eq!(model.global_sequences(), [42]);
 }
 
 #[test]
 fn named_setters_move_owned_record_buffers() {
-    use wc3::model::mdlx::animation::{Track, ValueKeyframe};
-    use wc3::model::mdlx::geometry::Geoset;
-    use wc3::model::mdlx::scene::{Bone, Node};
+    use wc3::model::formats::mdlx::animation::{Track, ValueKeyframe};
+    use wc3::model::formats::mdlx::geometry::Geoset;
+    use wc3::model::formats::mdlx::scene::{Bone, Node};
 
     let geoset = Geoset::<V800>::new([[1.0; 3]], [[0.0; 3]], []).unwrap();
     let vertices = geoset.vertices().as_bytes().as_ptr();
@@ -109,7 +109,7 @@ fn named_setters_move_owned_record_buffers() {
         .as_bytes()
         .as_ptr();
     let bone = Bone::new(node, u32::MAX, u32::MAX);
-    let mut model = Model::<V800>::new();
+    let mut model = Document::<V800>::new();
     model.set_geosets([geoset]);
     model.set_bones(vec![bone]);
     assert_eq!(
@@ -154,10 +154,10 @@ fn edit_repeated_sequences<'data>(model: &mut impl CommonModelAccess<'data>) {
 
 #[test]
 fn named_mutable_iterators_preserve_repeated_chunks_for_typed_and_dynamic_models() {
-    use wc3::model::mdlx::animation::Sequence;
-    use wc3::model::mdlx::chunks::{ModelChunk, RawChunk, SequencesChunk, UnknownChunk};
+    use wc3::model::formats::mdlx::animation::Sequence;
+    use wc3::model::formats::mdlx::chunks::{ModelChunk, RawChunk, SequencesChunk, UnknownChunk};
 
-    let mut model = Model::<Extended<V800, NoExtensions>>::new();
+    let mut model = Document::<Extended<V800, NoExtensions>>::new();
     model
         .chunks
         .push(SequencesChunk::new(vec![Sequence::new("First", [0, 10]).unwrap()]).into());
@@ -177,9 +177,9 @@ fn named_mutable_iterators_preserve_repeated_chunks_for_typed_and_dynamic_models
             .collect::<Vec<_>>(),
         tags
     );
-    let mut dynamic = DynamicModel::<NoExtensions>::V800(model);
+    let mut dynamic = DynamicDocument::<NoExtensions>::V800(model);
     edit_repeated_sequences(&mut dynamic);
-    visit_model!(&dynamic, |model| assert_eq!(
+    visit_document!(&dynamic, |model| assert_eq!(
         model
             .chunks
             .iter()
@@ -195,10 +195,10 @@ fn named_mutable_iterators_preserve_repeated_chunks_for_typed_and_dynamic_models
 #[test]
 fn checked_mutable_accessors_edit_supported_records_and_reject_before_iteration() {
     use std::iter::once_with;
-    use wc3::model::mdlx::emitters::PopcornEmitter;
-    use wc3::model::mdlx::scene::{FaceFx, Node};
+    use wc3::model::formats::mdlx::emitters::PopcornEmitter;
+    use wc3::model::formats::mdlx::scene::{FaceFx, Node};
 
-    let mut model = DynamicModel::<NoExtensions>::V1800(Model::new());
+    let mut model = DynamicDocument::<NoExtensions>::V1800(Document::new());
     model
         .try_set_bind_poses([BindPoseMatrix([0.0; 12])])
         .unwrap();
@@ -242,7 +242,7 @@ fn checked_mutable_accessors_edit_supported_records_and_reject_before_iteration(
         1
     );
 
-    let mut old = Model::<V800>::new();
+    let mut old = Document::<V800>::new();
     assert!(old
         .try_set_bind_poses(once_with(|| panic!("unsupported input must not be read")))
         .is_err());

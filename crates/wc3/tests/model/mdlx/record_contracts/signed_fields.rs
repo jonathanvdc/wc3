@@ -22,7 +22,7 @@ fn signed_event_times_and_material_priority_preserve_wire_bits() {
         Material::<V800>::decode_mdx(&bytes).unwrap().priority_plane,
         -7
     );
-    let mut model = Model::<V800>::new();
+    let mut model = Document::<V800>::new();
     model.set_materials([material]);
     model.set_event_objects([event]);
     let converted = model

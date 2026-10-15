@@ -1,5 +1,5 @@
-use wc3::model::m3::codec::{Decoder, Encoder};
-use wc3::model::m3::{self, Array, Md33, Md34, Ref, VisitReferences as _};
+use wc3::model::formats::m3::codec::{Decoder, Encoder};
+use wc3::model::formats::m3::{self, Array, Md33, Md34, Ref, VisitReferences as _};
 
 #[derive(
     Clone,

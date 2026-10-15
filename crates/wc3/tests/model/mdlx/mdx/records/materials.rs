@@ -1,18 +1,18 @@
-use wc3::model::mdlx::animation::ValueKeyframe;
-use wc3::model::mdlx::animation::{Animatable, Track};
+use wc3::model::formats::mdlx::animation::ValueKeyframe;
+use wc3::model::formats::mdlx::animation::{Animatable, Track};
 
-use wc3::model::mdlx::mdx::Read as _;
-use wc3::model::mdlx::mdx::Write as _;
+use wc3::model::formats::mdlx::mdx::Read as _;
+use wc3::model::formats::mdlx::mdx::Write as _;
 
-use wc3::model::mdlx::materials::{
+use wc3::model::formats::mdlx::materials::{
     Layer, LayerFilterMode, LayerShadingFlags, LayerTextureSlot, Material, MaterialRenderFlags,
     ShaderType,
 };
-use wc3::model::mdlx::{
-    Model, ModelVersion, V1000, V1100, V1200, V1300, V1400, V1600, V1800, V800, V900,
+use wc3::model::formats::mdlx::{
+    Document, FormatVersion, V1000, V1100, V1200, V1300, V1400, V1600, V1800, V800, V900,
 };
 
-fn sample_material<V: ModelVersion>() -> Material<'static, V> {
+fn sample_material<V: FormatVersion>() -> Material<'static, V> {
     let mut layer = Layer::<V>::new();
     layer.filter_mode = LayerFilterMode::Transparent;
     layer.texture_id = Animatable::Static(2);
@@ -37,14 +37,14 @@ fn material_layers_round_trip_across_layouts() {
     check_version::<V1800>();
 }
 
-fn check_version<V: ModelVersion>() {
+fn check_version<V: FormatVersion>() {
     let version = V::NUMBER;
     let mut material = sample_material::<V>();
     material.priority_plane = 3;
     material.render_mode = MaterialRenderFlags(7);
-    let mut model = Model::<V>::new();
+    let mut model = Document::<V>::new();
     model.set_materials([material]);
-    let decoded = Model::<V>::decode_mdx(&model.encode_mdx().unwrap())
+    let decoded = Document::<V>::decode_mdx(&model.encode_mdx().unwrap())
         .unwrap()
         .into_owned();
     let material = decoded.materials().next().unwrap();
@@ -189,8 +189,8 @@ fn preserves_shader_padding_and_float_bits() {
 
 #[test]
 fn independent_layer_fields_preserve_wire_order_across_versions() {
-    fn check<V: ModelVersion>() {
-        use wc3::model::mdlx::materials::LayerFresnel;
+    fn check<V: FormatVersion>() {
+        use wc3::model::formats::mdlx::materials::LayerFresnel;
 
         let mut layer = Layer::<V>::new();
         let fresnel = LayerFresnel {
@@ -268,7 +268,7 @@ fn independent_layer_fields_preserve_wire_order_across_versions() {
 
 #[test]
 fn fresnel_convenience_accessors_preserve_other_components() {
-    use wc3::model::mdlx::materials::LayerFresnel;
+    use wc3::model::formats::mdlx::materials::LayerFresnel;
 
     let mut layer = Layer::<V1000>::new();
     assert_eq!(layer.fresnel().clone(), LayerFresnel::default());
@@ -307,8 +307,8 @@ fn fresnel_convenience_accessors_preserve_other_components() {
 
 #[test]
 fn infallible_layer_accessors_cover_supported_versions() {
-    use wc3::model::mdlx::materials::LayerFresnel;
-    use wc3::model::mdlx::{
+    use wc3::model::formats::mdlx::materials::LayerFresnel;
+    use wc3::model::formats::mdlx::{
         SupportsEmissiveGain, SupportsFresnel, SupportsLayerShaderTypeId, SupportsLayerTextureSlots,
     };
 

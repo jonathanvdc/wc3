@@ -278,10 +278,14 @@ pub(super) fn expand(input: &DeriveInput, reading: bool) -> Result<TokenStream> 
     for variant in &variants {
         if let Some(ty) = &variant.ty {
             let bound = match (&variant.kind, reading) {
-                (Kind::Block, true) => parse_quote!(#ty: ::wc3::model::mdlx::mdl::ReadFields),
-                (Kind::Block, false) => parse_quote!(#ty: ::wc3::model::mdlx::mdl::WriteFields),
-                (_, true) => parse_quote!(#ty: ::wc3::model::mdlx::mdl::Read),
-                (_, false) => parse_quote!(#ty: ::wc3::model::mdlx::mdl::Write),
+                (Kind::Block, true) => {
+                    parse_quote!(#ty: ::wc3::model::formats::mdlx::mdl::ReadFields)
+                }
+                (Kind::Block, false) => {
+                    parse_quote!(#ty: ::wc3::model::formats::mdlx::mdl::WriteFields)
+                }
+                (_, true) => parse_quote!(#ty: ::wc3::model::formats::mdlx::mdl::Read),
+                (_, false) => parse_quote!(#ty: ::wc3::model::formats::mdlx::mdl::Write),
             };
             generics.make_where_clause().predicates.push(bound);
         }
@@ -296,30 +300,30 @@ pub(super) fn expand(input: &DeriveInput, reading: bool) -> Result<TokenStream> 
             let read = match kind {
                 Kind::Value => quote! { __wc3_mdl_parser.next_token()?; Self::#member },
                 Kind::Flag => {
-                    quote! { __wc3_mdl_parser.next_token()?; __wc3_mdl_parser.expect(::wc3::model::mdlx::mdl::TokenKind::Comma)?; Self::#member }
+                    quote! { __wc3_mdl_parser.next_token()?; __wc3_mdl_parser.expect(::wc3::model::formats::mdlx::mdl::TokenKind::Comma)?; Self::#member }
                 }
                 Kind::Property => {
                     quote! { __wc3_mdl_parser.next_token()?; Self::#member(__wc3_mdl_parser.read_property::<#ty>()?) }
                 }
                 Kind::Block => {
-                    quote! { __wc3_mdl_parser.next_token()?; Self::#member(::wc3::model::mdlx::mdl::read_mdl_body::<#ty>(__wc3_mdl_parser, __wc3_mdl_token.span.start)?) }
+                    quote! { __wc3_mdl_parser.next_token()?; Self::#member(::wc3::model::formats::mdlx::mdl::read_mdl_body::<#ty>(__wc3_mdl_parser, __wc3_mdl_token.span.start)?) }
                 }
                 Kind::Delegate => quote! { Self::#member(__wc3_mdl_parser.read::<#ty>()?) },
             };
             choices.push(quote! { { #read } });
         }
         let indexes = 0..choices.len();
-        let validate = validate_read.map(|function| quote!(#function(&__wc3_mdl_value, ::wc3::model::mdlx::mdl::Span::new(__wc3_mdl_token.span.start, __wc3_mdl_parser.position()))?;));
+        let validate = validate_read.map(|function| quote!(#function(&__wc3_mdl_value, ::wc3::model::formats::mdlx::mdl::Span::new(__wc3_mdl_token.span.start, __wc3_mdl_parser.position()))?;));
         Ok(quote! {
-            impl #impl_generics ::wc3::model::mdlx::mdl::Read for #name #ty_generics #where_clause {
-                fn read_mdl(__wc3_mdl_parser: &mut ::wc3::model::mdlx::mdl::Parser<'_>) -> ::core::result::Result<Self, ::wc3::model::mdlx::mdl::ReadError> {
+            impl #impl_generics ::wc3::model::formats::mdlx::mdl::Read for #name #ty_generics #where_clause {
+                fn read_mdl(__wc3_mdl_parser: &mut ::wc3::model::formats::mdlx::mdl::Parser<'_>) -> ::core::result::Result<Self, ::wc3::model::formats::mdlx::mdl::ReadError> {
                     let __wc3_mdl_names: &[&str] = &[#(#names,)*];
-                    if !::wc3::model::mdlx::mdl::enum_names_valid(__wc3_mdl_names) { return ::core::result::Result::Err(__wc3_mdl_parser.error(::wc3::model::mdlx::mdl::ReadErrorKind::UnsupportedField)); }
-                    let __wc3_mdl_token = __wc3_mdl_parser.peek()?.ok_or_else(|| __wc3_mdl_parser.error(::wc3::model::mdlx::mdl::ReadErrorKind::Expected("an enum variant name")))?;
-                    let ::wc3::model::mdlx::mdl::TokenKind::Ident(__wc3_mdl_tag) = __wc3_mdl_token.kind else { return ::core::result::Result::Err(::wc3::model::mdlx::mdl::ReadError::new(__wc3_mdl_token.span, ::wc3::model::mdlx::mdl::ReadErrorKind::Expected("an enum variant name"))); };
+                    if !::wc3::model::formats::mdlx::mdl::enum_names_valid(__wc3_mdl_names) { return ::core::result::Result::Err(__wc3_mdl_parser.error(::wc3::model::formats::mdlx::mdl::ReadErrorKind::UnsupportedField)); }
+                    let __wc3_mdl_token = __wc3_mdl_parser.peek()?.ok_or_else(|| __wc3_mdl_parser.error(::wc3::model::formats::mdlx::mdl::ReadErrorKind::Expected("an enum variant name")))?;
+                    let ::wc3::model::formats::mdlx::mdl::TokenKind::Ident(__wc3_mdl_tag) = __wc3_mdl_token.kind else { return ::core::result::Result::Err(::wc3::model::formats::mdlx::mdl::ReadError::new(__wc3_mdl_token.span, ::wc3::model::formats::mdlx::mdl::ReadErrorKind::Expected("an enum variant name"))); };
                     let __wc3_mdl_value = match __wc3_mdl_names.iter().position(|__wc3_mdl_name| *__wc3_mdl_name == __wc3_mdl_tag) {
                         #(::core::option::Option::Some(#indexes) => #choices,)*
-                        _ => return ::core::result::Result::Err(::wc3::model::mdlx::mdl::ReadError::new(__wc3_mdl_token.span, ::wc3::model::mdlx::mdl::ReadErrorKind::UnknownField)),
+                        _ => return ::core::result::Result::Err(::wc3::model::formats::mdlx::mdl::ReadError::new(__wc3_mdl_token.span, ::wc3::model::formats::mdlx::mdl::ReadErrorKind::UnknownField)),
                     };
                     #validate
                     ::core::result::Result::Ok(__wc3_mdl_value)
@@ -347,26 +351,26 @@ pub(super) fn expand(input: &DeriveInput, reading: bool) -> Result<TokenStream> 
                 }
                 Kind::Delegate => quote!(__wc3_mdl_writer.write(__wc3_mdl_value)),
                 Kind::Block => quote! {
-                    let __wc3_mdl_state = <#ty as ::wc3::model::mdlx::mdl::WriteFields>::prepare_mdl_fields(__wc3_mdl_value, __wc3_mdl_writer.dialect())?;
+                    let __wc3_mdl_state = <#ty as ::wc3::model::formats::mdlx::mdl::WriteFields>::prepare_mdl_fields(__wc3_mdl_value, __wc3_mdl_writer.dialect())?;
                     __wc3_mdl_writer.indent()?;
                     __wc3_mdl_writer.identifier(__wc3_mdl_names[#index])?;
-                    <#ty as ::wc3::model::mdlx::mdl::WriteFields>::write_mdl_headers(__wc3_mdl_value, __wc3_mdl_writer)?;
+                    <#ty as ::wc3::model::formats::mdlx::mdl::WriteFields>::write_mdl_headers(__wc3_mdl_value, __wc3_mdl_writer)?;
                     __wc3_mdl_writer.open_body()?;
-                    <#ty as ::wc3::model::mdlx::mdl::WriteFields>::write_mdl_fields(__wc3_mdl_value, __wc3_mdl_state, __wc3_mdl_writer)?;
+                    <#ty as ::wc3::model::formats::mdlx::mdl::WriteFields>::write_mdl_fields(__wc3_mdl_value, __wc3_mdl_state, __wc3_mdl_writer)?;
                     __wc3_mdl_writer.end_block()
                 },
             };
             choices.push(quote!(#pattern => { #write }));
         }
         if let Some(member) = unknown {
-            choices.push(quote!(Self::#member(_) => Err(::wc3::model::mdlx::mdl::WriteError::Unrepresentable { field: concat!("unknown ", stringify!(#name), " value") }.into())));
+            choices.push(quote!(Self::#member(_) => Err(::wc3::model::formats::mdlx::mdl::WriteError::Unrepresentable { field: concat!("unknown ", stringify!(#name), " value") }.into())));
         }
         let validate = validate_write.map(|function| quote!(#function(self)?;));
         Ok(quote! {
-            impl #impl_generics ::wc3::model::mdlx::mdl::Write for #name #ty_generics #where_clause {
-                fn write_mdl<#sink: ::std::io::Write>(&self, __wc3_mdl_writer: &mut ::wc3::model::mdlx::mdl::Writer<#sink>) -> ::core::result::Result<(), ::wc3::model::mdlx::IoError<::wc3::model::mdlx::mdl::WriteError>> {
+            impl #impl_generics ::wc3::model::formats::mdlx::mdl::Write for #name #ty_generics #where_clause {
+                fn write_mdl<#sink: ::std::io::Write>(&self, __wc3_mdl_writer: &mut ::wc3::model::formats::mdlx::mdl::Writer<#sink>) -> ::core::result::Result<(), ::wc3::model::formats::mdlx::IoError<::wc3::model::formats::mdlx::mdl::WriteError>> {
                     let __wc3_mdl_names: &[&str] = &[#(#names,)*];
-                    if !::wc3::model::mdlx::mdl::enum_names_valid(__wc3_mdl_names) { return ::core::result::Result::Err(::wc3::model::mdlx::mdl::WriteError::InvalidStructure { field: "invalid or duplicate MDL enum variant names" }.into()); }
+                    if !::wc3::model::formats::mdlx::mdl::enum_names_valid(__wc3_mdl_names) { return ::core::result::Result::Err(::wc3::model::formats::mdlx::mdl::WriteError::InvalidStructure { field: "invalid or duplicate MDL enum variant names" }.into()); }
                     #validate
                     match self { #(#choices,)* }
                 }
@@ -408,9 +412,9 @@ fn expand_choice(
             ))
         } else {
             quote!(::core::result::Result::Err(
-                ::wc3::model::mdlx::mdl::ReadError::new(
+                ::wc3::model::formats::mdlx::mdl::ReadError::new(
                     span,
-                    ::wc3::model::mdlx::mdl::ReadErrorKind::Expected(concat!(
+                    ::wc3::model::formats::mdlx::mdl::ReadErrorKind::Expected(concat!(
                         "a ",
                         stringify!(#name),
                         " choice"
@@ -419,31 +423,31 @@ fn expand_choice(
             ))
         };
         Ok(quote! {
-            impl #impl_generics ::wc3::model::mdlx::mdl::ReadFields for #name #ty_generics #clause {
+            impl #impl_generics ::wc3::model::formats::mdlx::mdl::ReadFields for #name #ty_generics #clause {
                 type State = ::core::option::Option<Self>;
                 #visit
                 fn accepts_mdl_field(name: &str, static_form: bool) -> bool {
                     !static_form && [#(#names,)*].contains(&name)
                 }
-                fn begin_mdl_fields(parser: &mut ::wc3::model::mdlx::mdl::Parser<'_>) -> ::core::result::Result<Self::State, ::wc3::model::mdlx::mdl::ReadError> {
-                    if !::wc3::model::mdlx::mdl::enum_names_valid(&[#(#names,)*]) {
-                        return ::core::result::Result::Err(parser.error(::wc3::model::mdlx::mdl::ReadErrorKind::UnsupportedField));
+                fn begin_mdl_fields(parser: &mut ::wc3::model::formats::mdlx::mdl::Parser<'_>) -> ::core::result::Result<Self::State, ::wc3::model::formats::mdlx::mdl::ReadError> {
+                    if !::wc3::model::formats::mdlx::mdl::enum_names_valid(&[#(#names,)*]) {
+                        return ::core::result::Result::Err(parser.error(::wc3::model::formats::mdlx::mdl::ReadErrorKind::UnsupportedField));
                     }
                     ::core::result::Result::Ok(::core::option::Option::None)
                 }
-                fn read_mdl_field<'a>(state: Self::State, parser: &mut ::wc3::model::mdlx::mdl::Parser<'a>, field: ::wc3::model::mdlx::mdl::Field<'a>, _: ::wc3::model::mdlx::mdl::Parser<'a>) -> ::core::result::Result<Self::State, ::wc3::model::mdlx::mdl::ReadError> {
+                fn read_mdl_field<'a>(state: Self::State, parser: &mut ::wc3::model::formats::mdlx::mdl::Parser<'a>, field: ::wc3::model::formats::mdlx::mdl::Field<'a>, _: ::wc3::model::formats::mdlx::mdl::Parser<'a>) -> ::core::result::Result<Self::State, ::wc3::model::formats::mdlx::mdl::ReadError> {
                     if state.is_some() {
-                        return ::core::result::Result::Err(::wc3::model::mdlx::mdl::ReadError::new(field.span, ::wc3::model::mdlx::mdl::ReadErrorKind::DuplicateField));
+                        return ::core::result::Result::Err(::wc3::model::formats::mdlx::mdl::ReadError::new(field.span, ::wc3::model::formats::mdlx::mdl::ReadErrorKind::DuplicateField));
                     }
                     let names = [#(#names,)*];
                     let value = match names.iter().position(|name| *name == field.name) {
                         #(::core::option::Option::Some(#members_index) => Self::#members,)*
-                        _ => return ::core::result::Result::Err(::wc3::model::mdlx::mdl::ReadError::new(field.span, ::wc3::model::mdlx::mdl::ReadErrorKind::UnknownField)),
+                        _ => return ::core::result::Result::Err(::wc3::model::formats::mdlx::mdl::ReadError::new(field.span, ::wc3::model::formats::mdlx::mdl::ReadErrorKind::UnknownField)),
                     };
-                    parser.expect(::wc3::model::mdlx::mdl::TokenKind::Comma)?;
+                    parser.expect(::wc3::model::formats::mdlx::mdl::TokenKind::Comma)?;
                     ::core::result::Result::Ok(::core::option::Option::Some(value))
                 }
-                fn finish_mdl_fields(state: Self::State, span: ::wc3::model::mdlx::mdl::Span, _: ::wc3::model::mdlx::mdl::Span) -> ::core::result::Result<Self, ::wc3::model::mdlx::mdl::ReadError> {
+                fn finish_mdl_fields(state: Self::State, span: ::wc3::model::formats::mdlx::mdl::Span, _: ::wc3::model::formats::mdlx::mdl::Span) -> ::core::result::Result<Self, ::wc3::model::formats::mdlx::mdl::ReadError> {
                     match state { ::core::option::Option::Some(value) => ::core::result::Result::Ok(value), ::core::option::Option::None => #missing }
                 }
             }
@@ -452,27 +456,27 @@ fn expand_choice(
         let sink = sink_name(input);
         let reject_unknown = unknown.map(|member| quote! {
             if let Self::#member(_) = self {
-                return ::core::result::Result::Err(::wc3::model::mdlx::mdl::WriteError::Unrepresentable { field: concat!("unknown ", stringify!(#name), " value") }.into());
+                return ::core::result::Result::Err(::wc3::model::formats::mdlx::mdl::WriteError::Unrepresentable { field: concat!("unknown ", stringify!(#name), " value") }.into());
             }
         });
         let unknown_arm = unknown.map(|member| quote! {
-            Self::#member(_) => return ::core::result::Result::Err(::wc3::model::mdlx::mdl::WriteError::Unrepresentable { field: concat!("unknown ", stringify!(#name), " value") }.into()),
+            Self::#member(_) => return ::core::result::Result::Err(::wc3::model::formats::mdlx::mdl::WriteError::Unrepresentable { field: concat!("unknown ", stringify!(#name), " value") }.into()),
         });
         Ok(quote! {
-            impl #impl_generics ::wc3::model::mdlx::mdl::WriteFields for #name #ty_generics #clause {
+            impl #impl_generics ::wc3::model::formats::mdlx::mdl::WriteFields for #name #ty_generics #clause {
                 type State = ();
                 #visit
-                fn prepare_mdl_fields(&self, _: ::wc3::model::mdlx::mdl::Dialect) -> ::core::result::Result<(), ::wc3::model::mdlx::mdl::WriteError> {
-                    if !::wc3::model::mdlx::mdl::enum_names_valid(&[#(#names,)*]) {
-                        return ::core::result::Result::Err(::wc3::model::mdlx::mdl::WriteError::InvalidStructure { field: "invalid or duplicate MDL enum variant names" }.into());
+                fn prepare_mdl_fields(&self, _: ::wc3::model::formats::mdlx::mdl::Dialect) -> ::core::result::Result<(), ::wc3::model::formats::mdlx::mdl::WriteError> {
+                    if !::wc3::model::formats::mdlx::mdl::enum_names_valid(&[#(#names,)*]) {
+                        return ::core::result::Result::Err(::wc3::model::formats::mdlx::mdl::WriteError::InvalidStructure { field: "invalid or duplicate MDL enum variant names" }.into());
                     }
                     #reject_unknown
                     ::core::result::Result::Ok(())
                 }
-                fn write_mdl_headers<#sink: ::std::io::Write>(&self, _: &mut ::wc3::model::mdlx::mdl::Writer<#sink>) -> ::core::result::Result<(), ::wc3::model::mdlx::IoError<::wc3::model::mdlx::mdl::WriteError>> {
+                fn write_mdl_headers<#sink: ::std::io::Write>(&self, _: &mut ::wc3::model::formats::mdlx::mdl::Writer<#sink>) -> ::core::result::Result<(), ::wc3::model::formats::mdlx::IoError<::wc3::model::formats::mdlx::mdl::WriteError>> {
                     ::core::result::Result::Ok(())
                 }
-                fn write_mdl_fields<#sink: ::std::io::Write>(&self, _: (), writer: &mut ::wc3::model::mdlx::mdl::Writer<#sink>) -> ::core::result::Result<(), ::wc3::model::mdlx::IoError<::wc3::model::mdlx::mdl::WriteError>> {
+                fn write_mdl_fields<#sink: ::std::io::Write>(&self, _: (), writer: &mut ::wc3::model::formats::mdlx::mdl::Writer<#sink>) -> ::core::result::Result<(), ::wc3::model::formats::mdlx::IoError<::wc3::model::formats::mdlx::mdl::WriteError>> {
                     writer.flag(match self { #(Self::#members => #names,)* #unknown_arm })
                 }
             }

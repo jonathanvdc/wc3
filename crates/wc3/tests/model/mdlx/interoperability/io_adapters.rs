@@ -1,9 +1,9 @@
 use std::error::Error as _;
 use std::io::{self, Read as IoRead, Write as IoWrite};
-use wc3::model::mdlx::mdl::Write as _;
-use wc3::model::mdlx::mdx::Write as _;
-use wc3::model::mdlx::IoError;
-use wc3::model::mdlx::{mdl, mdx, DynamicModel, Model, V800};
+use wc3::model::formats::mdlx::mdl::Write as _;
+use wc3::model::formats::mdlx::mdx::Write as _;
+use wc3::model::formats::mdlx::IoError;
+use wc3::model::formats::mdlx::{mdl, mdx, Document, DynamicDocument, V800};
 
 struct ShortIo {
     bytes: Vec<u8>,
@@ -62,21 +62,22 @@ const SOURCE: &str = "Version { FormatVersion 800, } Model \"Example\" {}";
 
 #[test]
 fn adapters_handle_short_io_interruptions_and_dynamic_models() {
-    let model: Model<'static, V800> = SOURCE.parse().unwrap();
+    let model: Document<'static, V800> = SOURCE.parse().unwrap();
     let binary = model.encode_mdx().unwrap();
     let text = model.encode_mdl().unwrap();
-    let decoded: Model<'static, V800> = mdx::from_reader(short(binary.clone())).unwrap();
+    let decoded: Document<'static, V800> = mdx::from_reader(short(binary.clone())).unwrap();
     assert_eq!(decoded.encode_mdx().unwrap(), binary);
-    let dynamic: DynamicModel<'static> =
+    let dynamic: DynamicDocument<'static> =
         mdx::from_reader_with_version(short(binary.clone()), 900).unwrap();
     assert_eq!(dynamic.version(), 800);
-    let fallback: DynamicModel<'static> =
+    let fallback: DynamicDocument<'static> =
         mdx::from_reader_with_version(b"MDLX".as_slice(), 800).unwrap();
     assert_eq!(fallback.version(), 800);
     let mut sink = short(Vec::new());
     mdx::to_writer(&mut sink, &dynamic).unwrap();
     assert_eq!(sink.bytes, binary);
-    let decoded: DynamicModel<'static> = mdl::from_reader(short(text.as_bytes().to_vec())).unwrap();
+    let decoded: DynamicDocument<'static> =
+        mdl::from_reader(short(text.as_bytes().to_vec())).unwrap();
     let mut sink = short(Vec::new());
     mdl::to_writer(&mut sink, &decoded).unwrap();
     assert_eq!(sink.bytes, text.as_bytes());
@@ -93,14 +94,14 @@ fn adapters_handle_short_io_interruptions_and_dynamic_models() {
 
 #[test]
 fn adapters_preserve_io_and_codec_errors() {
-    let error = mdx::from_reader::<Model<'static, V800>>(Failing).unwrap_err();
+    let error = mdx::from_reader::<Document<'static, V800>>(Failing).unwrap_err();
     assert!(error.source().is_some());
     assert!(matches!(error, IoError::Io(error) if error.kind() == io::ErrorKind::PermissionDenied));
     assert!(
-        matches!(mdl::from_reader::<Model<V800>>(Failing), Err(IoError::Io(error)) if error.kind() == io::ErrorKind::PermissionDenied)
+        matches!(mdl::from_reader::<Document<V800>>(Failing), Err(IoError::Io(error)) if error.kind() == io::ErrorKind::PermissionDenied)
     );
     assert!(
-        matches!(mdl::from_reader::<Model<V800>>([0xff].as_slice()), Err(IoError::Io(error)) if error.kind() == io::ErrorKind::InvalidData)
+        matches!(mdl::from_reader::<Document<V800>>([0xff].as_slice()), Err(IoError::Io(error)) if error.kind() == io::ErrorKind::InvalidData)
     );
     assert!(matches!(
         mdx::from_reader::<u32>([0, 0, 0, 0, 1].as_slice()),

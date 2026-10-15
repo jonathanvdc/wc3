@@ -1,16 +1,17 @@
 use wc3::model::common::IntoZeroVec;
-use wc3::model::semantic::Model;
+use wc3::model::io;
+use wc3::model::Model;
 use wc3::model::{
-    conversion,
-    m3::{self, records as nr},
-    semantic::{profiles::m3 as surface, profiles::M3},
+    formats::m3::{self, records as nr},
+    profiles::m3 as surface,
+    profiles::M3,
 };
 
 fn source() -> m3::Bundle<'static> {
-    let model = m3::Model::new::<m3::StarCraft2>().unwrap();
+    let model = m3::Document::new::<m3::StarCraft2>().unwrap();
     let id = model.root_id();
     let mut root = model.root::<nr::ModelRecord<nr::V29>>().unwrap();
-    let mut document = model.into_document();
+    let mut document = model.into_container();
     let name = document
         .append(&[nr::Character { value: b'b' }, nr::Character { value: 0 }])
         .unwrap();
@@ -33,14 +34,12 @@ fn source() -> m3::Bundle<'static> {
     let bones = document.append(&[bone]).unwrap();
     root.bones = m3::Ref::from_section(1, bones.index());
     document.replace(id, &[root]).unwrap();
-    m3::Bundle::from_model(m3::Model::from_document(document).unwrap())
+    m3::Bundle::from_model(m3::Document::from_container(document).unwrap())
 }
 #[test]
 fn imported_typed_graph_edits_rebuild_native_bone_fields() {
     let source = source();
-    let mut imported: Model<'_, M3> = conversion::m3::import(&source, &Default::default())
-        .unwrap()
-        .value;
+    let mut imported: Model<'_, M3> = io::m3::import(&source, &Default::default()).unwrap().value;
     let (id, node) = imported.nodes().find(|(_, node)| node.name == "b").unwrap();
     assert!(matches!(node.name, std::borrow::Cow::Borrowed(_)));
     let mut node = node.clone();
@@ -50,7 +49,7 @@ fn imported_typed_graph_edits_rebuild_native_bone_fields() {
     };
     controls.batching.initial = 0x8000_0001;
     imported.edit(|draft| draft.set_node(id, node)).unwrap();
-    let output = conversion::m3::plan::<m3::StarCraft2>(&imported, &Default::default())
+    let output = io::m3::plan::<m3::StarCraft2>(&imported, &Default::default())
         .unwrap()
         .execute()
         .unwrap()
@@ -58,14 +57,14 @@ fn imported_typed_graph_edits_rebuild_native_bone_fields() {
     let root = output.model.root_record().unwrap();
     let bones = output
         .model
-        .document()
+        .container()
         .resolve::<nr::Bone<nr::V1>>(root.bones().cast())
         .unwrap();
     let bone = bones.get(0).unwrap().unwrap();
     assert_eq!(bone.position.initial_value, [3., 4., 5.]);
     assert_eq!(bone.batching.initial_value, 0x8000_0001);
     assert_eq!(bone.id, 17);
-    let reread = conversion::m3::import(&output, &Default::default()).unwrap();
+    let reread = io::m3::import(&output, &Default::default()).unwrap();
     let (_, node) = reread
         .value
         .nodes()
@@ -76,9 +75,7 @@ fn imported_typed_graph_edits_rebuild_native_bone_fields() {
 #[test]
 fn complete_camera_optics_rebuild_without_editable_document_backing() {
     let source = source();
-    let mut imported = conversion::m3::import(&source, &Default::default())
-        .unwrap()
-        .value;
+    let mut imported = io::m3::import(&source, &Default::default()).unwrap().value;
     let (id, _) = imported.nodes().find(|(_, node)| node.name == "b").unwrap();
     let constant = |value| surface::Property {
         initial: value,
@@ -100,7 +97,7 @@ fn complete_camera_optics_rebuild_without_editable_document_backing() {
     imported
         .edit(|draft| draft.add_feature(id, surface::Feature::Camera((camera).into())))
         .unwrap();
-    let output = conversion::m3::plan::<m3::StarCraft2>(&imported, &Default::default())
+    let output = io::m3::plan::<m3::StarCraft2>(&imported, &Default::default())
         .unwrap()
         .execute()
         .unwrap()
@@ -109,7 +106,7 @@ fn complete_camera_optics_rebuild_without_editable_document_backing() {
     let reference = m3::visit_m3_root!(root, |r| r.cameras);
     let camera = output
         .model
-        .document()
+        .container()
         .resolve::<nr::Camera<nr::V2>>(reference.cast())
         .unwrap()
         .get(0)
@@ -125,7 +122,7 @@ fn inherited_emitters_rebuild_from_independent_graph_definitions() {
     let source = source();
     let id = source.model.root_id();
     let mut root = source.model.root::<nr::ModelRecord<nr::V29>>().unwrap();
-    let mut document = source.model.into_document();
+    let mut document = source.model.into_container();
     let material = document
         .append(&[nr::StandardMaterial::<nr::V20>::default()])
         .unwrap();
@@ -172,10 +169,8 @@ fn inherited_emitters_rebuild_from_independent_graph_definitions() {
         .unwrap();
     root.particle_emitters = m3::Ref::from_section(1, particle.index());
     document.replace(id, &[root]).unwrap();
-    let source = m3::Bundle::from_model(m3::Model::from_document(document).unwrap());
-    let mut imported = conversion::m3::import(&source, &Default::default())
-        .unwrap()
-        .value;
+    let source = m3::Bundle::from_model(m3::Document::from_container(document).unwrap());
+    let mut imported = io::m3::import(&source, &Default::default()).unwrap().value;
     let (copy_id, feature) = imported
         .features()
         .find(|(_, feature)| matches!(feature.payload, surface::Feature::ParticleCopy(_)))
@@ -190,7 +185,7 @@ fn inherited_emitters_rebuild_from_independent_graph_definitions() {
         .edit(|draft| draft.set_feature(copy_id, payload))
         .unwrap();
     assert_eq!(imported.feature(copy_id).unwrap().node, owner);
-    let output = conversion::m3::plan::<m3::StarCraft2>(&imported, &Default::default())
+    let output = io::m3::plan::<m3::StarCraft2>(&imported, &Default::default())
         .unwrap()
         .execute()
         .unwrap()
@@ -198,7 +193,7 @@ fn inherited_emitters_rebuild_from_independent_graph_definitions() {
     let root = output.model.root::<nr::ModelRecord<nr::V29>>().unwrap();
     let particle = output
         .model
-        .document()
+        .container()
         .resolve::<nr::ParticleEmitter<nr::V24>>(root.particle_emitters.cast())
         .unwrap()
         .get(0)
@@ -207,7 +202,7 @@ fn inherited_emitters_rebuild_from_independent_graph_definitions() {
     assert_eq!(particle.ribbon_link_index, 0);
     let copy = output
         .model
-        .document()
+        .container()
         .resolve::<nr::ParticleEmitterCopy>(root.particle_emitter_copies.cast())
         .unwrap()
         .get(0)
@@ -216,7 +211,7 @@ fn inherited_emitters_rebuild_from_independent_graph_definitions() {
     assert_eq!(copy.emission_rate.initial_value, 25.);
     assert_eq!(copy.emission_rate.null_value, 2.);
     assert_eq!(copy.squirt_amount.initial_value, 3);
-    let reread = conversion::m3::import(&output, &Default::default()).unwrap();
+    let reread = io::m3::import(&output, &Default::default()).unwrap();
     assert_eq!(
         reread
             .value
@@ -242,7 +237,7 @@ fn every_particle_record_revision_maps_through_logical_fields() {
             let source=source();
             let id=source.model.root_id();
             let mut root=source.model.root::<nr::ModelRecord<nr::V29>>().unwrap();
-            let mut document=source.model.into_document();
+            let mut document=source.model.into_container();
             let material=document.append(&[nr::StandardMaterial::<nr::V20>::default()]).unwrap();
             root.standard_materials=m3::Ref::from_section(1,material.index());
             let maps=document.append(&[nr::MaterialMap{material_type:nr::MaterialKind::Standard,material_index:0}]).unwrap();
@@ -253,10 +248,10 @@ fn every_particle_record_revision_maps_through_logical_fields() {
             let particles=document.append(&[emitter]).unwrap();
             root.particle_emitters=m3::Ref::from_section(1,particles.index());
             document.replace(id,&[root]).unwrap();
-            let source=m3::Bundle::from_model(m3::Model::from_document(document).unwrap());
-            let imported=conversion::m3::import(&source,&Default::default()).unwrap().value;
-            let output=conversion::m3::plan::<m3::StarCraft2>(&imported,&Default::default()).unwrap().execute().unwrap().value;
-            let reread=conversion::m3::import(&output,&Default::default()).unwrap();
+            let source=m3::Bundle::from_model(m3::Document::from_container(document).unwrap());
+            let imported=io::m3::import(&source,&Default::default()).unwrap().value;
+            let output=io::m3::plan::<m3::StarCraft2>(&imported,&Default::default()).unwrap().execute().unwrap().value;
+            let reread=io::m3::import(&output,&Default::default()).unwrap();
             assert_eq!(reread.value.features().filter(|(_,feature)|matches!(feature.payload,surface::Feature::Particle(_))).count(),1);
         }};
     }
@@ -279,15 +274,15 @@ fn every_particle_record_revision_maps_through_logical_fields() {
 
 #[test]
 fn static_collision_streams_are_materialized_and_independently_editable() {
-    use wc3::model::semantic::profiles::Universal;
-    use wc3::model::semantic::{
+    use wc3::model::profiles::Universal;
+    use wc3::model::{
         AttributeDomain, AttributeSemantic, GeometryKind, GeometrySchema, M3CollisionGeometry,
         M3Geometry,
     };
     let source = source();
     let id = source.model.root_id();
     let mut root = source.model.root::<nr::ModelRecord<nr::V29>>().unwrap();
-    let mut document = source.model.into_document();
+    let mut document = source.model.into_container();
     let positions = document
         .append(&[
             nr::Vector3 {
@@ -322,8 +317,8 @@ fn static_collision_streams_are_materialized_and_independently_editable() {
         radius: 1.,
     };
     document.replace(id, &[root]).unwrap();
-    let source = m3::Bundle::from_model(m3::Model::from_document(document).unwrap());
-    let mut widened = conversion::m3::import(&source, &Default::default())
+    let source = m3::Bundle::from_model(m3::Document::from_container(document).unwrap());
+    let mut widened = io::m3::import(&source, &Default::default())
         .unwrap()
         .value
         .widen::<Universal>();
@@ -371,7 +366,7 @@ fn static_collision_streams_are_materialized_and_independently_editable() {
         .unwrap(),
     );
     imported.edit(|draft| draft.set_mesh(id, edited)).unwrap();
-    let output = conversion::m3::plan::<m3::StarCraft2>(&imported, &Default::default())
+    let output = io::m3::plan::<m3::StarCraft2>(&imported, &Default::default())
         .unwrap()
         .execute()
         .unwrap()
@@ -380,7 +375,7 @@ fn static_collision_streams_are_materialized_and_independently_editable() {
     assert_eq!(
         output
             .model
-            .document()
+            .container()
             .resolve::<nr::Vector3>(root.collision_verts.cast())
             .unwrap()
             .get(1)
@@ -407,14 +402,12 @@ fn joint_relationships_rebuild_from_edited_logical_controls() {
         collision_control: -17,
         ..Default::default()
     };
-    let mut document = source.model.into_document();
+    let mut document = source.model.into_container();
     let joints = document.append(&[joint]).unwrap();
     root.physics_joints = m3::Ref::from_section(1, joints.index());
     document.replace(root_id, &[root]).unwrap();
-    source.model = m3::Model::from_document(document).unwrap();
-    let mut asset = conversion::m3::import(&source, &Default::default())
-        .unwrap()
-        .value;
+    source.model = m3::Document::from_container(document).unwrap();
+    let mut asset = io::m3::import(&source, &Default::default()).unwrap().value;
     let (id, system) = asset
         .systems()
         .find(|(_, system)| matches!(system, surface::System::Physics(_)))
@@ -427,7 +420,7 @@ fn joint_relationships_rebuild_from_edited_logical_controls() {
     asset
         .edit(|builder| builder.set_system(id, system))
         .unwrap();
-    let output = conversion::m3::plan::<m3::StarCraft2>(&asset, &Default::default())
+    let output = io::m3::plan::<m3::StarCraft2>(&asset, &Default::default())
         .unwrap()
         .execute()
         .unwrap()
@@ -435,7 +428,7 @@ fn joint_relationships_rebuild_from_edited_logical_controls() {
     let root = output.model.root::<nr::ModelRecord<nr::V29>>().unwrap();
     let joints = output
         .model
-        .document()
+        .container()
         .resolve::<nr::PhysicsJoint>(root.physics_joints.cast())
         .unwrap();
     let joint = joints.get(0).unwrap().unwrap();
@@ -462,14 +455,12 @@ fn body_mass_and_dynamic_defaults_are_logical_authoring_values() {
         },
         ..Default::default()
     };
-    let mut document = source.model.into_document();
+    let mut document = source.model.into_container();
     let bodies = document.append(&[body]).unwrap();
     root.rigid_bodies = m3::Ref::from_section(1, bodies.index());
     document.replace(root_id, &[root]).unwrap();
-    source.model = m3::Model::from_document(document).unwrap();
-    let mut asset = conversion::m3::import(&source, &Default::default())
-        .unwrap()
-        .value;
+    source.model = m3::Document::from_container(document).unwrap();
+    let mut asset = io::m3::import(&source, &Default::default()).unwrap().value;
     let (id, system) = asset
         .systems()
         .find(|(_, system)| matches!(system, surface::System::Physics(_)))
@@ -484,7 +475,7 @@ fn body_mass_and_dynamic_defaults_are_logical_authoring_values() {
     asset
         .edit(|builder| builder.set_system(id, system))
         .unwrap();
-    let output = conversion::m3::plan::<m3::StarCraft2>(&asset, &Default::default())
+    let output = io::m3::plan::<m3::StarCraft2>(&asset, &Default::default())
         .unwrap()
         .execute()
         .unwrap()
@@ -492,7 +483,7 @@ fn body_mass_and_dynamic_defaults_are_logical_authoring_values() {
     let root = output.model.root::<nr::ModelRecord<nr::V29>>().unwrap();
     let bodies = output
         .model
-        .document()
+        .container()
         .resolve::<nr::RigidBody<nr::V4>>(root.rigid_bodies.cast())
         .unwrap();
     let body = bodies.get(0).unwrap().unwrap();

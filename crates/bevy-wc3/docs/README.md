@@ -15,7 +15,7 @@ applications that need explicit control over scheduling or preparation.
   poses, mount child models, configure lights, and detect instance readiness.
 - [Viewer and captures](tools.md): inspect assets, override textures, and render
   PNGs at controlled simulation times, including synchronized frame measurements.
-- [Architecture](architecture.md): loading and preparation, shared and per-instance
+- [Architecture](architecture.md): semantic loading and preparation, shared and per-instance
   state, renderer modules, effect record storage, and the `Wc3Systems` scheduling
   contract.
 - API reference: `cargo doc -p bevy-wc3 --no-deps --open`.

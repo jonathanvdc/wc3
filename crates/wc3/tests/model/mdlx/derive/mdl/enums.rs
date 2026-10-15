@@ -1,10 +1,10 @@
 use std::io::Write as IoWrite;
-use wc3::model::mdlx::animation::Interpolation;
-use wc3::model::mdlx::animation::Track;
-use wc3::model::mdlx::mdl;
-use wc3::model::mdlx::mdl::{Read as _, Write as _};
-use wc3::model::mdlx::IoError;
-use wc3::model::mdlx::Vec3;
+use wc3::model::formats::mdlx::animation::Interpolation;
+use wc3::model::formats::mdlx::animation::Track;
+use wc3::model::formats::mdlx::mdl;
+use wc3::model::formats::mdlx::mdl::{Read as _, Write as _};
+use wc3::model::formats::mdlx::IoError;
+use wc3::model::formats::mdlx::Vec3;
 
 #[derive(Debug, PartialEq, mdl::Read, mdl::Write)]
 #[mdl(value)]
@@ -238,8 +238,8 @@ fn existing_interpolation_and_track_group_enums_roundtrip() {
 
 #[allow(dead_code)]
 mod hygiene {
-    use wc3::model::mdlx::mdl;
-    use wc3::model::mdlx::mdl::{Read as _, Write as _};
+    use wc3::model::formats::mdlx::mdl;
+    use wc3::model::formats::mdlx::mdl::{Read as _, Write as _};
     struct Some;
     struct Ok;
     struct Err;

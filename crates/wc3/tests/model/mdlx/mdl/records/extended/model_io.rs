@@ -12,7 +12,7 @@ fn model_io_supports_all_three_with_popcorn_version_gate() {
     whole_model::<V1600>();
     whole_model::<V1800>();
     assert_eq!(
-        Model::<V800>::decode_mdl(&format!(
+        Document::<V800>::decode_mdl(&format!(
             "Version {{ FormatVersion 800, }} Model \"a\" {{}} {POPCORN}"
         ))
         .unwrap_err()

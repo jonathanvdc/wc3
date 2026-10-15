@@ -1,6 +1,6 @@
 use super::*;
-use wc3::model::mdlx::ConversionOptions;
-use wc3::model::mdlx::NoExtensions;
+use wc3::model::formats::mdlx::ConversionOptions;
+use wc3::model::formats::mdlx::NoExtensions;
 
 #[test]
 fn gliders_keep_every_entry_in_all_versions_and_reject_partial_words() {
@@ -16,10 +16,10 @@ fn gliders_keep_every_entry_in_all_versions_and_reject_partial_words() {
         GlidersChunk::new(entries.to_vec()).encode_mdx().unwrap(),
         expected
     );
-    let mut model = Model::<V800>::new();
+    let mut model = Document::<V800>::new();
     model.set_gliders(entries);
     let bytes = model.encode_mdx().unwrap();
-    let parsed = Model::<V800>::decode_mdx(&bytes).unwrap();
+    let parsed = Document::<V800>::decode_mdx(&bytes).unwrap();
     assert_eq!(parsed.gliders().cloned().collect::<Vec<_>>(), entries);
     assert_eq!(parsed.encode_mdx().unwrap(), bytes);
     let newer = model
@@ -32,7 +32,7 @@ fn gliders_keep_every_entry_in_all_versions_and_reject_partial_words() {
         .unwrap()
         .model;
     assert_eq!(older.gliders().cloned().collect::<Vec<_>>(), entries);
-    let mut dynamic = DynamicModel::<NoExtensions>::V1800(
+    let mut dynamic = DynamicDocument::<NoExtensions>::V1800(
         newer.convert(&ConversionOptions::strict()).unwrap().model,
     );
     assert_eq!(dynamic.gliders().copied().collect::<Vec<_>>(), entries);

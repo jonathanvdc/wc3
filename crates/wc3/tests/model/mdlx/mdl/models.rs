@@ -1,43 +1,47 @@
-use wc3::model::mdlx::animation::{GlobalSequence, Sequence};
-use wc3::model::mdlx::chunks::{
+use wc3::model::formats::mdlx::animation::{GlobalSequence, Sequence};
+use wc3::model::formats::mdlx::chunks::{
     BindPoseChunk, CamerasChunk, FaceFxChunk, GlidersChunk, GlobalSequencesChunk, ModelChunk,
     ModelInfoChunk, ParticleEmitters2Chunk, PopcornEmittersChunk, RawChunk, SequencesChunk,
     UnknownChunk, VersionChunk,
 };
-use wc3::model::mdlx::emitters::{ParticleEmitter2, PopcornEmitter};
-use wc3::model::mdlx::geometry::BindPoseMatrix;
-use wc3::model::mdlx::mdl::{Read as _, Write as _};
-use wc3::model::mdlx::mdx::{Read as _, Write as _};
-use wc3::model::mdlx::scene::{Camera, CameraVariant, FaceFx, Glider, ModelInfo, Node};
-use wc3::model::mdlx::NoExtensions;
-use wc3::model::mdlx::{
-    mdl, DynamicModel, Model, ModelVersion, V1000, V1100, V1200, V1300, V1400, V1600, V1800, V800,
-    V900,
+use wc3::model::formats::mdlx::emitters::{ParticleEmitter2, PopcornEmitter};
+use wc3::model::formats::mdlx::geometry::BindPoseMatrix;
+use wc3::model::formats::mdlx::mdl::{Read as _, Write as _};
+use wc3::model::formats::mdlx::mdx::{Read as _, Write as _};
+use wc3::model::formats::mdlx::scene::{Camera, CameraVariant, FaceFx, Glider, ModelInfo, Node};
+use wc3::model::formats::mdlx::NoExtensions;
+use wc3::model::formats::mdlx::{
+    mdl, Document, DynamicDocument, FormatVersion, V1000, V1100, V1200, V1300, V1400, V1600, V1800,
+    V800, V900,
 };
 
 const QUAD: &str = include_str!("../../../fixtures/mdl/quad_model.mdl");
 const CANONICAL: &str = include_str!("../../../fixtures/mdl/quad_model.canonical.mdl");
 const BINARY: &[u8] = include_bytes!("../../../fixtures/mdl/quad_model.mdx");
 const MINIMAL: &str = "Version { FormatVersion 800, } Model \"Minimal\" {}";
-fn roundtrip<'data, V: ModelVersion>(model: &Model<'data, V>) {
+fn roundtrip<'data, V: FormatVersion>(model: &Document<'data, V>) {
     let text = model.encode_mdl().unwrap();
-    let decoded = Model::<V>::decode_mdl(&text).unwrap_or_else(|error| panic!("{error}: {text}"));
+    let decoded =
+        Document::<V>::decode_mdl(&text).unwrap_or_else(|error| panic!("{error}: {text}"));
     let wire = decoded.encode_mdx().unwrap();
     assert_eq!(
-        Model::<V>::decode_mdx(&wire).unwrap().encode_mdl().unwrap(),
+        Document::<V>::decode_mdx(&wire)
+            .unwrap()
+            .encode_mdl()
+            .unwrap(),
         text
     );
     assert_eq!(decoded.encode_mdl().unwrap(), text);
 }
 #[test]
 fn specification_quad_roundtrips_independent_text_and_binary_fixtures() {
-    let model = Model::<V800>::decode_mdl(QUAD).unwrap();
+    let model = Document::<V800>::decode_mdl(QUAD).unwrap();
     assert_eq!(model.encode_mdl().unwrap(), CANONICAL);
     assert_eq!(model.encode_mdx().unwrap(), BINARY);
-    let decoded = Model::<V800>::decode_mdx(BINARY).unwrap();
+    let decoded = Document::<V800>::decode_mdx(BINARY).unwrap();
     assert_eq!(decoded.encode_mdl().unwrap(), CANONICAL);
     assert_eq!(
-        Model::<V800>::decode_mdl(CANONICAL)
+        Document::<V800>::decode_mdl(CANONICAL)
             .unwrap()
             .encode_mdx()
             .unwrap(),
@@ -46,7 +50,7 @@ fn specification_quad_roundtrips_independent_text_and_binary_fixtures() {
     assert_eq!(model.bones().next().unwrap().node.object_id, 0);
     assert_eq!(model.geosets().next().unwrap().material_id, 0);
     assert_eq!(
-        DynamicModel::<NoExtensions>::decode_mdl(QUAD)
+        DynamicDocument::<NoExtensions>::decode_mdl(QUAD)
             .unwrap()
             .encode_mdl()
             .unwrap(),
@@ -57,16 +61,16 @@ fn specification_quad_roundtrips_independent_text_and_binary_fixtures() {
 fn typed_and_dynamic_models_cover_every_supported_version() {
     macro_rules! check { ($($version:ty),*) => { $( {
         let source = QUAD.replace("FormatVersion 800", &format!("FormatVersion {}", <$version>::NUMBER));
-        let model = Model::<$version>::decode_mdl(&source).unwrap();
+        let model = Document::<$version>::decode_mdl(&source).unwrap();
         roundtrip(&model);
         let text = model.encode_mdl().unwrap();
-        assert_eq!(Model::<$version>::decode_mdl(&text).unwrap().encode_mdx().unwrap(), model.encode_mdx().unwrap());
-        let dynamic = DynamicModel::<NoExtensions>::decode_mdl(&source).unwrap();
+        assert_eq!(Document::<$version>::decode_mdl(&text).unwrap().encode_mdx().unwrap(), model.encode_mdx().unwrap());
+        let dynamic = DynamicDocument::<NoExtensions>::decode_mdl(&source).unwrap();
         assert_eq!(dynamic.version(), <$version>::NUMBER);
         assert_eq!(dynamic.encode_mdl().unwrap(), text);
     } )* }; }
     check!(V800, V900, V1000, V1100, V1200, V1300, V1400, V1600, V1800);
-    let error = Model::<V900>::decode_mdl(MINIMAL).unwrap_err();
+    let error = Document::<V900>::decode_mdl(MINIMAL).unwrap_err();
     assert_eq!(
         error.kind,
         mdl::ReadErrorKind::VersionMismatch {
@@ -76,7 +80,7 @@ fn typed_and_dynamic_models_cover_every_supported_version() {
     );
     assert!(error.to_string().contains("expected format version 900"));
     let source = MINIMAL.replace("800", "1500");
-    let error = DynamicModel::<NoExtensions>::decode_mdl(&source).unwrap_err();
+    let error = DynamicDocument::<NoExtensions>::decode_mdl(&source).unwrap_err();
     assert_eq!(
         error.kind,
         mdl::ReadErrorKind::UnsupportedVersion { version: 1500 }
@@ -96,7 +100,7 @@ fn noncanonical_input_preserves_record_order_ids_and_canonical_block_order() {
         PivotPoints 1 { { 0.0, 0.0, 0.0 }, }
         Glider { GeosetId 2, }
     "#;
-    let model = Model::<V800>::decode_mdl(source).unwrap();
+    let model = Document::<V800>::decode_mdl(source).unwrap();
     assert_eq!(
         model
             .helpers()
@@ -142,7 +146,7 @@ fn available_record_codecs_dispatch_through_model_io() {
         FaceFX "Face" { Path "face.facefx", }
         BindPose { Matrices 1 { { 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0 }, } }
     "#;
-    let model = Model::<V900>::decode_mdl(source).unwrap();
+    let model = Document::<V900>::decode_mdl(source).unwrap();
     assert_eq!(model.texture_animations().count(), 1);
     assert_eq!(model.lights().count(), 1);
     assert_eq!(*model.event_objects().next().unwrap().frames(), [-5, 10]);
@@ -151,7 +155,7 @@ fn available_record_codecs_dispatch_through_model_io() {
     roundtrip(&model);
     for name in ["FaceFX \"Face\" {}", "BindPose { Matrices 0 {} }"] {
         assert_eq!(
-            Model::<V800>::decode_mdl(&format!("{MINIMAL} {name}"))
+            Document::<V800>::decode_mdl(&format!("{MINIMAL} {name}"))
                 .unwrap_err()
                 .kind,
             mdl::ReadErrorKind::UnsupportedField
@@ -167,11 +171,11 @@ fn malformed_and_duplicate_top_level_blocks_retain_diagnostics() {
         "Version { FormatVersion 800, }",
         "Version { FormatVersion 800, FormatVersion 800, } Model \"a\" {}",
     ] {
-        assert!(Model::<V800>::decode_mdl(source).is_err());
+        assert!(Document::<V800>::decode_mdl(source).is_err());
     }
     for block in ["Version { FormatVersion 800, }", "Model \"Other\" {}"] {
         assert_eq!(
-            Model::<V800>::decode_mdl(&format!("{MINIMAL} {block}"))
+            Document::<V800>::decode_mdl(&format!("{MINIMAL} {block}"))
                 .unwrap_err()
                 .kind,
             mdl::ReadErrorKind::DuplicateField
@@ -186,30 +190,30 @@ fn malformed_and_duplicate_top_level_blocks_retain_diagnostics() {
         "PivotPoints",
     ] {
         let source = format!("{MINIMAL} {name} 0 {{}} {name} 0 {{}}");
-        let error = Model::<V800>::decode_mdl(&source).unwrap_err();
+        let error = Document::<V800>::decode_mdl(&source).unwrap_err();
         assert_eq!(error.kind, mdl::ReadErrorKind::DuplicateField);
         assert_eq!(&source[error.span.start..error.span.end], name);
-        assert!(Model::<V800>::decode_mdl(&format!("{MINIMAL} {name} 1 {{}}")).is_err());
+        assert!(Document::<V800>::decode_mdl(&format!("{MINIMAL} {name} 1 {{}}")).is_err());
     }
     let source = "Version { FormatVersion 900, } Model \"a\" {} BindPose { Matrices 0 {} } BindPose { Matrices 0 {} }";
     assert_eq!(
-        Model::<V900>::decode_mdl(source).unwrap_err().kind,
+        Document::<V900>::decode_mdl(source).unwrap_err().kind,
         mdl::ReadErrorKind::DuplicateField
     );
     for name in ["BlendColors", "ComponentSkin", "Unknown"] {
         let source = format!("{MINIMAL} {name} {{}}");
-        let error = Model::<V800>::decode_mdl(&source).unwrap_err();
+        let error = Document::<V800>::decode_mdl(&source).unwrap_err();
         assert_eq!(error.kind, mdl::ReadErrorKind::UnknownField);
         assert_eq!(&source[error.span.start..error.span.end], name);
     }
     assert_eq!(
-        Model::<V800>::decode_mdl(&format!("{MINIMAL} ParticleEmitterPopcorn \"a\" {{}}"))
+        Document::<V800>::decode_mdl(&format!("{MINIMAL} ParticleEmitterPopcorn \"a\" {{}}"))
             .unwrap_err()
             .kind,
         mdl::ReadErrorKind::UnsupportedField
     );
     assert_eq!(
-        Model::<V800>::decode_mdl(&format!("{MINIMAL} ,"))
+        Document::<V800>::decode_mdl(&format!("{MINIMAL} ,"))
             .unwrap_err()
             .kind,
         mdl::ReadErrorKind::TrailingInput
@@ -218,7 +222,7 @@ fn malformed_and_duplicate_top_level_blocks_retain_diagnostics() {
 #[test]
 fn writers_merge_known_collections_in_chunk_order_and_omit_empty_ones() {
     let mut model =
-        Model::<V900>::decode_mdl("Version { FormatVersion 900, } Model \"Merged\" {}").unwrap();
+        Document::<V900>::decode_mdl("Version { FormatVersion 900, } Model \"Merged\" {}").unwrap();
     model
         .chunks
         .push(SequencesChunk::new(vec![Sequence::new("One", [0, 10]).unwrap()]).into());
@@ -249,7 +253,7 @@ fn writers_merge_known_collections_in_chunk_order_and_omit_empty_ones() {
     assert_eq!(text.matches("Sequences 2").count(), 2); // includes GlobalSequences
     assert_eq!(text.matches("BindPose {").count(), 1);
     assert!(text.contains("Matrices 2"));
-    let parsed = Model::<V900>::decode_mdl(&text).unwrap();
+    let parsed = Document::<V900>::decode_mdl(&text).unwrap();
     assert_eq!(
         parsed
             .sequences()
@@ -272,12 +276,12 @@ fn writers_merge_known_collections_in_chunk_order_and_omit_empty_ones() {
 }
 #[test]
 fn writer_rejects_missing_duplicate_extended_opaque_and_unsupported_chunks() {
-    let mut model = Model::<V800>::new();
+    let mut model = Document::<V800>::new();
     assert!(model.encode_mdl().is_err());
     model.set_model_info(&ModelInfo::new("a").unwrap());
     model.chunks.retain(|chunk| chunk.tag() != *b"VERS");
     assert!(model.encode_mdl().is_err());
-    let base = Model::<V800>::decode_mdl(MINIMAL).unwrap();
+    let base = Document::<V800>::decode_mdl(MINIMAL).unwrap();
     let mut model = base.clone();
     model.chunks.push(VersionChunk::<V800>::new().into());
     assert!(model.encode_mdl().is_err());
@@ -364,18 +368,18 @@ fn small_derived_record_codecs_keep_required_headers_counts_and_defaults() {
 
 #[test]
 fn models_parse_from_strings_and_preserve_validation() {
-    let typed: Model<'static, V800> = QUAD.parse().unwrap();
-    let dynamic: DynamicModel<'static> = QUAD.parse().unwrap();
+    let typed: Document<'static, V800> = QUAD.parse().unwrap();
+    let dynamic: DynamicDocument<'static> = QUAD.parse().unwrap();
     assert_eq!(typed.encode_mdl().unwrap(), CANONICAL);
     assert_eq!(dynamic.encode_mdl().unwrap(), CANONICAL);
 
-    assert!(QUAD.parse::<Model<V900>>().is_err());
+    assert!(QUAD.parse::<Document<V900>>().is_err());
     for source in [
         "",
         "Model \"Missing version\" {}",
         &format!("{MINIMAL} garbage"),
     ] {
-        assert!(source.parse::<Model<V800>>().is_err());
-        assert!(source.parse::<DynamicModel>().is_err());
+        assert!(source.parse::<Document<V800>>().is_err());
+        assert!(source.parse::<DynamicDocument>().is_err());
     }
 }

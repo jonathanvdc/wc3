@@ -1,11 +1,11 @@
 use wc3::model::common::{IntoZeroVec, ZeroVec};
-use wc3::model::semantic::profiles::{
+use wc3::model::profiles::{
     diablo::{d3, d4},
     Extends, Narrows, Universal, Wmo, D3, D4,
 };
-use wc3::model::semantic::GeometrySchema;
-use wc3::model::semantic::ValueGroups;
-use wc3::model::semantic::{
+use wc3::model::GeometrySchema;
+use wc3::model::ValueGroups;
+use wc3::model::{
     Attribute, AttributeDomain, AttributeSemantic, AttributeValues, ConnectivitySets, GeometryData,
     GeometryEdit, GeometryInfluences, Influence, InfluenceRows, JointInfluences,
     M3CollisionGeometry, MdlxGeometry, SurfaceTriangleControls, Topology, VertexRemap, WmoGeometry,
@@ -317,8 +317,8 @@ fn collision_remapping_preserves_face_stream_values_and_rejects_shading() {
 
 #[test]
 fn world_shared_domains_preserve_pools_slots_controls_and_checked_edits() {
-    use wc3::model::semantic::profiles::diablo::{d3, d4};
-    use wc3::model::semantic::{GeometryKind, M2Geometry, M3DisplayGeometry};
+    use wc3::model::profiles::diablo::{d3, d4};
+    use wc3::model::{GeometryKind, M2Geometry, M3DisplayGeometry};
     let positions = [[0., 0., 0.], [1., 0., 0.], [0., 1., 0.]];
     let triangles = [[0, 1, 2]];
     let colors = [[0.5; 4]; 3];
@@ -377,10 +377,8 @@ fn world_shared_domains_preserve_pools_slots_controls_and_checked_edits() {
     assert_eq!(edited.color_sets()[0].to_vec(), vec![[0.75; 4]; 3]);
     assert_eq!(edited.color_sets()[1].to_vec(), colors);
     let mut without_pools = data.clone();
-    without_pools.connectivity = wc3::model::semantic::ConnectivitySets::new(
-        without_pools.connectivity.primary.clone(),
-        Vec::new(),
-    );
+    without_pools.connectivity =
+        wc3::model::ConnectivitySets::new(without_pools.connectivity.primary.clone(), Vec::new());
     without_pools
         .attributes
         .take(&AttributeSemantic::Tangent, AttributeDomain::Pool);
@@ -391,7 +389,7 @@ fn world_shared_domains_preserve_pools_slots_controls_and_checked_edits() {
     );
     assert_eq!(remapped.triangle_controls().to_vec(), controls);
     let mut invalid_indices = data.clone();
-    invalid_indices.connectivity = wc3::model::semantic::ConnectivitySets::new(
+    invalid_indices.connectivity = wc3::model::ConnectivitySets::new(
         invalid_indices.connectivity.primary.clone(),
         vec![Topology::TriangleStrip(vec![3].into_zero_vec())],
     );
@@ -432,7 +430,7 @@ fn world_shared_domains_preserve_pools_slots_controls_and_checked_edits() {
 
 #[test]
 fn canonical_attributes_share_storage_and_check_keys_types_and_domains() {
-    use wc3::model::semantic::{GeometryAttributes, GeometryKind};
+    use wc3::model::{GeometryAttributes, GeometryKind};
     let positions = [[0., 0., 0.], [1., 0., 0.], [0., 1., 0.]];
     let normals = [[0., 0., 1.]; 3];
     let face_normals = [[0., 1., 0.]];

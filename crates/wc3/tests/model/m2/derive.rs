@@ -1,7 +1,7 @@
 use m2::codec::{Decoder, Encoder};
 use m2::{Read as _, RecordLayout as _, Write as _};
-use wc3::model::m2;
-use wc3::model::m2::records::ModelFlags;
+use wc3::model::formats::m2;
+use wc3::model::formats::m2::records::ModelFlags;
 
 #[derive(Debug, PartialEq, m2::Read, m2::Write, m2::RecordLayout)]
 struct Child<'data> {
@@ -159,20 +159,20 @@ fn native_record_layout_is_selected_by_the_type() {
 
 #[test]
 fn document_traits_and_dynamic_layout_selection_preserve_framing() {
-    let model = m2::Model::<m2::Flat<m2::V272PreSplit>>::new();
+    let model = m2::Document::<m2::Flat<m2::V272PreSplit>>::new();
     let mut encoder = Encoder::new(0, ModelFlags::default());
     encoder.write(&model).unwrap();
     let bytes = encoder.finish();
-    let decoded = m2::Model::<m2::Flat<m2::V272PreSplit>>::read(&mut Decoder::new(
+    let decoded = m2::Document::<m2::Flat<m2::V272PreSplit>>::read(&mut Decoder::new(
         &bytes,
         0,
         ModelFlags::default(),
     ))
     .unwrap();
     assert_eq!(decoded, model);
-    let dynamic = m2::DynamicModel::decode_m2_with_layout::<m2::V272PreSplit>(&bytes).unwrap();
-    assert!(matches!(dynamic, m2::DynamicModel::Flat272PreSplit(_)));
-    assert!(m2::DynamicModel::decode_m2_with_layout::<m2::V264>(&bytes).is_err());
+    let dynamic = m2::DynamicDocument::decode_m2_with_layout::<m2::V272PreSplit>(&bytes).unwrap();
+    assert!(matches!(dynamic, m2::DynamicDocument::Flat272PreSplit(_)));
+    assert!(m2::DynamicDocument::decode_m2_with_layout::<m2::V264>(&bytes).is_err());
     let mut written = Vec::new();
     m2::to_writer(&mut written, &dynamic).unwrap();
     assert_eq!(written, bytes);

@@ -3,10 +3,10 @@ use mdl::Read as _;
 use std::collections::HashMap;
 use std::env;
 use std::fmt::Write as _;
-use wc3::model::mdlx::geometry::SkinWeights;
-use wc3::model::mdlx::materials::{LayerTextureSlot, ShaderType};
-use wc3::model::mdlx::ZeroVec;
-use wc3::model::mdlx::{mdl, ConversionOptions, Model, V1800, V800};
+use wc3::model::formats::mdlx::geometry::SkinWeights;
+use wc3::model::formats::mdlx::materials::{LayerTextureSlot, ShaderType};
+use wc3::model::formats::mdlx::ZeroVec;
+use wc3::model::formats::mdlx::{mdl, ConversionOptions, Document, V1800, V800};
 
 #[derive(Clone, Copy)]
 pub struct Profile {
@@ -65,15 +65,15 @@ pub fn profiles() -> Vec<Profile> {
     profiles
 }
 
-pub fn classic<'data>(profile: Profile) -> Model<'data, V800> {
+pub fn classic<'data>(profile: Profile) -> Document<'data, V800> {
     let text = source(profile);
     let model =
-        Model::decode_mdl(&text).unwrap_or_else(|error| panic!("{}", error.diagnostic(&text)));
+        Document::decode_mdl(&text).unwrap_or_else(|error| panic!("{}", error.diagnostic(&text)));
     validate(&model, profile);
     model
 }
 
-fn validate<'data>(model: &Model<'data, V800>, profile: Profile) {
+fn validate<'data>(model: &Document<'data, V800>, profile: Profile) {
     let nodes = model.nodes();
     let parents: HashMap<_, _> = nodes
         .iter()
@@ -121,7 +121,7 @@ fn validate<'data>(model: &Model<'data, V800>, profile: Profile) {
     }
 }
 
-pub fn modern<'data>(profile: Profile) -> Model<'data, V1800> {
+pub fn modern<'data>(profile: Profile) -> Document<'data, V1800> {
     let mut model = classic(profile)
         .into_convert::<V1800>(&ConversionOptions::strict())
         .unwrap()

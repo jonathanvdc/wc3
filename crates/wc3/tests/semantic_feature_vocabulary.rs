@@ -1,10 +1,10 @@
-use wc3::model::semantic::profiles::mdlx;
-use wc3::model::semantic::profiles::{Mdlx, Profile, Unavailable};
-use wc3::model::semantic::{
+use wc3::model::profiles::mdlx;
+use wc3::model::profiles::{Mdlx, Profile, Unavailable};
+use wc3::model::{
     Animated, FeatureKind, FeatureSet, FeatureView, FeatureVocabulary, LightEmission, LightView,
     Link, Model, Node, PropertyIdentityKey,
 };
-use wc3::model::semantic::{FeatureSchema as _, ValidateLinks as _};
+use wc3::model::{FeatureSchema as _, ValidateLinks as _};
 #[derive(Clone, Debug)]
 struct LightsOnly;
 impl<'a> FeatureVocabulary<'a> for LightsOnly {

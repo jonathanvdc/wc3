@@ -1,7 +1,7 @@
 use wc3::model::common::{IntoZeroVec, ZeroVec};
-use wc3::model::semantic::profiles::{Extends, Mdlx, Narrows, Universal, M2, M3};
-use wc3::model::semantic::ValueGroups;
-use wc3::model::semantic::{
+use wc3::model::profiles::{Extends, Mdlx, Narrows, Universal, M2, M3};
+use wc3::model::ValueGroups;
+use wc3::model::{
     Attribute, AttributeDomain, AttributeSemantic, AttributeValues, ConnectivitySets, GeometryData,
     GeometryEdit, GeometryInfluences, GeometryKind, GeometrySchema, Influence, InfluenceRows,
     JointInfluences, M2Geometry, M3CollisionGeometry, M3DisplayGeometry, M3Geometry, MdlxGeometry,
@@ -298,7 +298,7 @@ fn shared_data_can_keep_custom_attributes_and_fixed_slots_together() {
 #[test]
 fn remapping_keeps_each_influence_domain_and_custom_attribute_correspondence() {
     use std::mem::discriminant;
-    use wc3::model::semantic::VertexRemap;
+    use wc3::model::VertexRemap;
     let positions = [[0., 0., 0.], [1., 0., 0.], [0., 1., 0.]];
     let weighted = Influence {
         joint: 2,
@@ -387,11 +387,11 @@ fn narrowing_does_not_relabel_variable_width_rows_as_fixed_slots() {
 
 #[test]
 fn collision_purpose_and_face_streams_survive_shared_storage() {
-    use wc3::model::semantic::profiles::{
+    use wc3::model::profiles::{
         diablo::{d3, d4},
         D3, D4,
     };
-    use wc3::model::semantic::VertexRemap;
+    use wc3::model::VertexRemap;
     let positions = [[0., 0., 0.], [1., 0., 0.], [0., 1., 0.]];
     let normals = [[0., 0., 2.]];
     let controls = [-3.5];

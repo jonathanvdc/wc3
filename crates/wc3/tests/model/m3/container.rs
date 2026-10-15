@@ -1,7 +1,7 @@
 //! Independently authored index-table wire fixtures.
 use m3::codec::{Decoder, Encoder};
-use wc3::model::m3::{
-    self, Document, Envelope, Md33, Md34, ReadError, Record, RecordLayout, Ref, WriteError,
+use wc3::model::formats::m3::{
+    self, Container, Envelope, Md33, Md34, ReadError, Record, RecordLayout, Ref, WriteError,
 };
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 struct Word(u32);
@@ -52,7 +52,7 @@ fn words_fixture(magic: [u8; 4]) -> Vec<u8> {
 }
 fn check_fixture<E: Envelope>() {
     let bytes = words_fixture(E::MAGIC);
-    let document = Document::<E>::read(&bytes).unwrap();
+    let document = Container::<E>::read(&bytes).unwrap();
     document.validate().unwrap();
     assert_eq!(document.write().unwrap(), bytes);
     let id = document.sections().nth(1).unwrap().0;
@@ -77,7 +77,7 @@ fn check_fixture<E: Envelope>() {
     let mut document = document.into_owned();
     document.replace(id, &[Word(7), Word(8), Word(9)]).unwrap();
     let encoded = document.write().unwrap();
-    let decoded = Document::<E>::read(&encoded).unwrap();
+    let decoded = Container::<E>::read(&encoded).unwrap();
     assert!(decoded.array::<Word>(id).is_err());
     let id = decoded.section_id(id.index()).unwrap();
     assert_eq!(decoded.array::<Word>(id).unwrap().len(), 3);
@@ -105,12 +105,12 @@ fn malformed_index_offsets_spans_and_counts_fail() {
     ] {
         let mut bytes = words_fixture(*b"MD34");
         bytes[offset..offset + 4].copy_from_slice(&value.to_le_bytes());
-        assert!(Document::<Md34>::read(&bytes).is_err(), "offset {offset}");
+        assert!(Container::<Md34>::read(&bytes).is_err(), "offset {offset}");
     }
 }
 #[test]
 fn md33_rejects_unrepresentable_reference_flags() {
-    let mut document = Document::<Md33>::read(&words_fixture(*b"MD33"))
+    let mut document = Container::<Md33>::read(&words_fixture(*b"MD33"))
         .unwrap()
         .into_owned();
     document.set_root(Ref::<m3::Any>::with_flags(

@@ -29,6 +29,9 @@ use std::io::Write as _;
 use std::path::PathBuf;
 use std::thread::sleep;
 use std::time::{Duration, Instant};
+use wc3::model::conversion::ExportOptions;
+use wc3::model::formats::mdlx::V1800;
+use wc3::model::io;
 
 type CaptureResult<T> = Result<T, Box<dyn Error>>;
 const TIMEOUT: Duration = Duration::from_secs(30);
@@ -283,12 +286,15 @@ impl Options {
     }
 
     fn camera(&self, model: &Wc3Model) -> CaptureResult<Transform> {
+        let document = io::mdlx::plan::<V1800>(&model.model, &ExportOptions::default())?
+            .execute()?
+            .value;
         if let Some(index) = self.model_camera {
-            let mut definitions = model.model.cameras();
+            let mut definitions = document.cameras();
             let definition = definitions.nth(index).ok_or_else(|| {
                 format!(
                     "model camera {index} is out of range ({} cameras)",
-                    model.model.cameras().count()
+                    document.cameras().count()
                 )
             })?;
             let sample = Wc3CameraSample {
@@ -305,7 +311,7 @@ impl Options {
             // Animated pose is resolved after the instance has loaded.
             return Ok(Transform::default());
         }
-        let info = model.model.model_info();
+        let info = document.model_info();
         let center = info
             .as_ref()
             .map(|info| {
@@ -427,7 +433,7 @@ fn main() -> CaptureResult<()> {
         .into_owned();
     // Report parse/conversion errors before initializing the GPU.
     let source = Wc3Model::decode(&read(&model_path)?)?;
-    let sequence_count = source.model.sequences().count();
+    let sequence_count = source.model.clips().count();
     if options.sequence >= sequence_count && !(sequence_count == 0 && options.sequence == 0) {
         return Err(format!(
             "sequence {} is out of range ({} sequences)",

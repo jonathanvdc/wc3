@@ -1,5 +1,5 @@
 use std::borrow::Cow;
-use wc3::model::wmo::{
+use wc3::model::formats::wmo::{
     self, Classic, DynamicFile, File, Group, GroupFraming, Profile, RawDocument, Root,
 };
 use wmo::root::RootChunk;

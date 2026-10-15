@@ -1,5 +1,5 @@
 //! Alpha and early-beta group records retain their historical widths and framing.
-use wc3::model::wmo::{self, Read as _, RecordLayout as _, Validate as _};
+use wc3::model::formats::wmo::{self, Read as _, RecordLayout as _, Validate as _};
 use wmo::codec::Decoder;
 use wmo::legacy::{
     Batch14, Batch16, Group14, Group16, GroupChunk14, GroupHeader14, GroupHeader16,

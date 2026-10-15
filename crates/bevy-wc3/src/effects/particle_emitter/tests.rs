@@ -4,10 +4,10 @@ use bevy::camera::visibility::VisibilityPlugin;
 use bevy::mesh::skinning::SkinnedMeshInverseBindposes;
 use bevy::transform::TransformSystems;
 use std::time::Duration;
-use wc3::model::mdlx::scene::Node;
+use wc3::model::formats::mdlx::scene::Node;
 
 use crate::animation::advance_animation;
-use crate::assets::model::Wc3Model;
+use crate::assets::model::Wc3Document;
 use crate::instance::{spawn_loaded_instances, PreparedModelCache, Wc3OwnedModels};
 use crate::materials::layers::animate_layers;
 use crate::materials::Wc3LayerMaterial;
@@ -36,7 +36,7 @@ fn setup() -> (App, Entity, Entity) {
         PostUpdate,
         update_particles.before(TransformSystems::Propagate),
     );
-    let source = Wc3Model::decode_mdl(include_str!(
+    let source = Wc3Document::decode_mdl(include_str!(
         "../../../tests/fixtures/attachment_capture_child.mdl"
     ))
     .unwrap();
@@ -226,7 +226,7 @@ fn moving_nodes_are_sampled_at_birth() {
     let (mut app, root, emitter) = setup();
     let node = app.world().get::<ParticleState>(emitter).unwrap().node;
     let source =
-        Wc3Model::decode_mdl(include_str!("../../../tests/fixtures/prem_capture.mdl")).unwrap();
+        Wc3Document::decode_mdl(include_str!("../../../tests/fixtures/prem_capture.mdl")).unwrap();
     app.world_mut()
         .get_mut::<Wc3Animation>(root)
         .unwrap()
@@ -271,7 +271,7 @@ fn recursive_particle_models_are_blocked() {
 
 #[test]
 fn blended_switch_keeps_live_model_particles_but_immediate_switch_retires_them() {
-    use wc3::model::mdlx::animation::Sequence;
+    use wc3::model::formats::mdlx::animation::Sequence;
 
     let (mut app, root, emitter) = setup();
     let node_entity = app.world().get::<ParticleState>(emitter).unwrap().node;

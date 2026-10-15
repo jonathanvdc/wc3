@@ -3,11 +3,11 @@ use m3::records::{
     Character, ModelRecord, StandardMaterial, StringReference, TextureLayer, V15, V20, V21, V23,
     V24,
 };
-use wc3::model::m3::{self, Document, Md34, Model, Ref};
+use wc3::model::formats::m3::{self, Container, Document, Md34, Ref};
 
 #[test]
 fn typed_resolution_checks_family_revision_and_count() {
-    let mut document = Document::<Md34>::new();
+    let mut document = Container::<Md34>::new();
     let characters = document.append(&[Character { value: 0 }]).unwrap();
     let layers = document.append(&[TextureLayer::<V20>::default()]).unwrap();
     assert!(document
@@ -35,7 +35,7 @@ fn typed_resolution_checks_family_revision_and_count() {
 #[test]
 fn dangling_and_wrong_family_references_in_native_records_fail_validation() {
     for index in [999, 1] {
-        let mut document = Document::<Md34>::new();
+        let mut document = Container::<Md34>::new();
         document.append(&[TextureLayer::<V20>::default()]).unwrap();
         document
             .append(&[StringReference {
@@ -49,7 +49,7 @@ fn dangling_and_wrong_family_references_in_native_records_fail_validation() {
 
 #[test]
 fn referenced_arrays_cannot_be_cleared_until_the_reference_is_removed() {
-    let mut document = Document::<Md34>::new();
+    let mut document = Container::<Md34>::new();
     let target = document.append(&[Character { value: 0 }]).unwrap();
     let incoming = document
         .append(&[StringReference {
@@ -91,7 +91,7 @@ fn opaque_fixture(tag: [u8; 4], revision: u32) -> Vec<u8> {
 fn unknown_tags_and_unknown_revisions_keep_original_placement() {
     for tag in [*b"????", *b"LAYR"] {
         let source = opaque_fixture(tag, 999);
-        let mut document = Document::<Md34>::read(&source).unwrap();
+        let mut document = Container::<Md34>::read(&source).unwrap();
         assert_eq!(document.write().unwrap(), source);
         let opaque = document.sections().nth(1).unwrap().0;
         assert!(document.section(opaque).unwrap().is_borrowed());
@@ -108,7 +108,7 @@ fn unknown_tags_and_unknown_revisions_keep_original_placement() {
 
 #[test]
 fn root_and_material_revisions_remain_independent_after_editing() {
-    let mut document = Document::<Md34>::new();
+    let mut document = Container::<Md34>::new();
     let material = document
         .append(&[StandardMaterial::<V15>::default()])
         .unwrap();
@@ -123,23 +123,23 @@ fn root_and_material_revisions_remain_independent_after_editing() {
         root.index(),
         m3::records::ReferenceFlags(17),
     ));
-    let model = Model::from_document(document).unwrap();
+    let model = Document::from_container(document).unwrap();
     assert!(model.root::<ModelRecord<V24>>().is_err());
     let bytes = model.write().unwrap();
-    let parsed = Model::<Md34>::read(&bytes).unwrap();
+    let parsed = Document::<Md34>::read(&bytes).unwrap();
     let root = parsed.root::<ModelRecord<V23>>().unwrap();
     assert_eq!(
         parsed
-            .document()
+            .container()
             .resolve::<StandardMaterial<V15>>(root.standard_materials.cast())
             .unwrap()
             .len(),
         1
     );
-    assert_eq!(parsed.document().root_reference().flags.bits(), 17);
+    assert_eq!(parsed.container().root_reference().flags.bits(), 17);
     assert_eq!(
         parsed
-            .document()
+            .container()
             .referenced_section(root.standard_materials)
             .unwrap()
             .unwrap()
@@ -163,7 +163,7 @@ fn malformed_index_mutations_return_errors_without_panicking() {
             let mut bytes = source.clone();
             bytes[offset..offset + 4].copy_from_slice(&value.to_le_bytes());
             assert!(
-                Document::<Md34>::read(&bytes).is_err(),
+                Container::<Md34>::read(&bytes).is_err(),
                 "offset {offset}, value {value}"
             );
         }

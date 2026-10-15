@@ -1,10 +1,12 @@
-use wc3::model::mdlx::geometry::{Geoset, GeosetExtent, SkinWeight, SkinWeights};
-use wc3::model::mdlx::mdx::Read as _;
-use wc3::model::mdlx::mdx::Write as _;
-use wc3::model::mdlx::AsULE;
-use wc3::model::mdlx::ZeroVec;
+use wc3::model::formats::mdlx::geometry::{Geoset, GeosetExtent, SkinWeight, SkinWeights};
+use wc3::model::formats::mdlx::mdx::Read as _;
+use wc3::model::formats::mdlx::mdx::Write as _;
+use wc3::model::formats::mdlx::AsULE;
+use wc3::model::formats::mdlx::ZeroVec;
 
-use wc3::model::mdlx::{Model, ModelVersion, V1100, V1200, V1300, V1400, V1600, V1800, V800, V900};
+use wc3::model::formats::mdlx::{
+    Document, FormatVersion, V1100, V1200, V1300, V1400, V1600, V1800, V800, V900,
+};
 
 fn sample_geoset() -> Geoset<'static, V1800> {
     let geoset = Geoset::<V1800>::new([[1.0, 2.0, 3.0]], [[0.0, 0.0, 1.0]], [0, 0, 0]).unwrap();
@@ -20,9 +22,9 @@ fn geoset_mesh_edit_preserves_other_sections() {
     assert_eq!(*geoset.normals(), [[0.0, 0.0, 1.0]]);
     assert_eq!(*geoset.face_indices(), [0, 0, 0]);
     geoset.set_vertex(0, [4.0, 5.0, 6.0]).unwrap();
-    let mut model = Model::<V1800>::new();
+    let mut model = Document::<V1800>::new();
     model.set_geosets([geoset]);
-    let decoded = Model::<V1800>::decode_mdx(&model.encode_mdx().unwrap())
+    let decoded = Document::<V1800>::decode_mdx(&model.encode_mdx().unwrap())
         .unwrap()
         .into_owned();
     assert_eq!(
@@ -47,7 +49,7 @@ fn builds_complete_synthetic_geosets() {
     check_version::<V1800>();
 }
 
-fn check_version<V: ModelVersion>() {
+fn check_version<V: FormatVersion>() {
     let version = V::NUMBER;
     let mut geoset = Geoset::<V>::new(
         [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]],
@@ -134,9 +136,9 @@ fn check_version<V: ModelVersion>() {
             .into_owned(),
         geoset
     );
-    let mut model = Model::<V>::new();
+    let mut model = Document::<V>::new();
     model.set_geosets([geoset]);
-    let parsed = Model::<V>::decode_mdx(&model.encode_mdx().unwrap())
+    let parsed = Document::<V>::decode_mdx(&model.encode_mdx().unwrap())
         .unwrap()
         .into_owned();
     assert_eq!(parsed.geosets().next().unwrap().version(), version);
@@ -258,7 +260,7 @@ fn rejects_incomplete_skin_vertices_and_out_of_range_wide_weights() {
 
 #[test]
 fn skin_arrays_borrow_their_version_selected_wire_layout() {
-    fn check<V: ModelVersion>(width: usize) {
+    fn check<V: FormatVersion>(width: usize) {
         let mut geoset = Geoset::<V>::new([[0.0; 3]], [[0.0; 3]], []).unwrap();
         geoset
             .try_set_skin_weights(Some(ZeroVec::alloc_from_slice(&[

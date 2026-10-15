@@ -9,13 +9,13 @@ use bevy::prelude::*;
 use bevy::reflect::TypePath;
 use std::path::Path;
 
-use wc3::model::mdlx::materials::{Texture, TextureFlags};
+use wc3::model::formats::mdlx::materials::{Texture, TextureFlags};
 
 #[cfg(test)]
-use crate::assets::model::Wc3Model;
+use crate::assets::model::Wc3Document;
 use crate::assets::model::{DecodedModel, ModelError};
 use crate::assets::resources::Wc3ModelResources;
-use crate::preparation::{compile_resolved_model, CompiledModel};
+use crate::preparation::{compile_resolved_model, lower_model, CompiledModel};
 
 /// An MDX or MDL model compiled into owned CPU geometry and runtime definitions.
 /// Resolved image and child-model handles preserve its dependencies. Encoded bytes
@@ -111,7 +111,7 @@ impl Wc3ModelAsset {
 
     #[cfg(test)]
     pub(crate) fn from_source(
-        source: &Wc3Model,
+        source: &Wc3Document,
         textures: ResolvedModelTextures,
         models: Wc3ModelResources,
     ) -> Result<Self, ModelError> {
@@ -124,9 +124,9 @@ impl Wc3ModelAsset {
 
 /// Bevy loader for `.mdx` and `.mdl` model assets and their dependencies.
 ///
-/// Registered by [`crate::Wc3BevyPlugin`]. Models are decoded and strictly
-/// normalized with [`DecodedModel::decode`] and compiled while buffers can borrow
-/// the input. Textures and child models retain the
+/// Registered by [`crate::Wc3BevyPlugin`]. Models are imported through
+/// [`DecodedModel::decode`] and strictly lowered to the renderer vocabulary.
+/// Textures and child models retain the
 /// source asset's named source and resolve beside the model before its asset root.
 #[derive(Default, TypePath)]
 pub struct Wc3ModelLoader;
@@ -148,13 +148,14 @@ impl AssetLoader for Wc3ModelLoader {
             .await
             .map_err(|error| ModelError(error.to_string()))?;
         let source = DecodedModel::decode(&bytes)?;
+        let document = lower_model(&source.model)?;
         let model_path = context.path().clone_owned();
         let mut textures = ResolvedModelTextures::default();
-        for texture in source.model.textures() {
+        for texture in document.textures() {
             let binding = load_texture(context, &model_path, texture).await?;
             textures.bitmaps.push(binding);
         }
-        for emitter in source.model.particle_emitters2() {
+        for emitter in document.particle_emitters2() {
             textures.particles.push(ResolvedTexture {
                 replaceable_id: emitter.replaceable_id,
                 bitmap_id: (emitter.replaceable_id == 0).then_some(emitter.texture_id as usize),
@@ -162,11 +163,11 @@ impl AssetLoader for Wc3ModelLoader {
             });
         }
         let mut attachments = Vec::new();
-        for attachment in source.model.attachments() {
+        for attachment in document.attachments() {
             attachments.push(load_model(context, &model_path, &attachment.path.text()).await?);
         }
         let mut particles = Vec::new();
-        for emitter in source.model.particle_emitters() {
+        for emitter in document.particle_emitters() {
             particles.push(if emitter.flags().emitter_uses_mdl() {
                 load_model(context, &model_path, &emitter.path.text()).await?
             } else {
@@ -176,7 +177,7 @@ impl AssetLoader for Wc3ModelLoader {
         let models = Wc3ModelResources::from_handles(attachments, particles);
         Ok(Wc3ModelAsset {
             source_version: source.source_version,
-            compiled: compile_resolved_model(source.model, textures, models)?,
+            compiled: compile_resolved_model(document, textures, models)?,
         })
     }
 

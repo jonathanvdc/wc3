@@ -1,6 +1,6 @@
-use wc3::model::semantic::materials::state::BlendOperations;
-use wc3::model::semantic::materials::{layered, world};
-use wc3::model::semantic::values::{model, programmed};
+use wc3::model::materials::state::BlendOperations;
+use wc3::model::materials::{layered, world};
+use wc3::model::values::{model, programmed};
 
 #[test]
 fn model_and_programmed_blending_preserve_every_known_and_unknown_selector() {

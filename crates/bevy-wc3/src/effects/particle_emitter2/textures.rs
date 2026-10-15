@@ -22,11 +22,11 @@ pub(crate) fn update_particle_textures(
 mod tests {
     use super::*;
     use crate::assets::loader::{ResolvedModelTextures, ResolvedTexture};
-    use wc3::model::mdlx::mdl::Read as _;
-    use wc3::model::mdlx::{Model, V1800};
+    use wc3::model::formats::mdlx::mdl::Read as _;
+    use wc3::model::formats::mdlx::{Document, V1800};
     #[test]
     fn changing_particle_binding_updates_its_render_data() {
-        let model = Model::<V1800>::decode_mdl(include_str!(
+        let model = Document::<V1800>::decode_mdl(include_str!(
             "../../../tests/fixtures/attachment_parent.mdl"
         ))
         .unwrap();

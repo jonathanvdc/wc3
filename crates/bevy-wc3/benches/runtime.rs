@@ -18,7 +18,7 @@ use std::{
     thread,
     time::{Duration, Instant},
 };
-use wc3::model::mdlx::mdx;
+use wc3::model::formats::mdlx::mdx;
 
 #[path = "../../../benchmarks/support/model.rs"]
 mod fixtures;

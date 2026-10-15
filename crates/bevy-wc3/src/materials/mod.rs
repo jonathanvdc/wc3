@@ -10,7 +10,7 @@ use bevy::render::render_resource::{
     RenderPipelineDescriptor, ShaderType, SpecializedMeshPipelineError,
 };
 use bevy::shader::{ShaderDefVal, ShaderRef};
-use wc3::model::mdlx::materials::LayerFilterMode;
+use wc3::model::formats::mdlx::materials::LayerFilterMode;
 
 use crate::preparation::mesh::{EXTRA_JOINT_INDEX, EXTRA_JOINT_WEIGHT};
 

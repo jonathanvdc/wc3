@@ -1,6 +1,6 @@
-use wc3::model::semantic::materials::diablo3::RenderParams;
-use wc3::model::semantic::materials::state::{BlendEquation, DepthState, PassState, Rasterization};
-use wc3::model::semantic::{Link, ValidateLinks};
+use wc3::model::materials::diablo3::RenderParams;
+use wc3::model::materials::state::{BlendEquation, DepthState, PassState, Rasterization};
+use wc3::model::{Link, ValidateLinks};
 
 #[derive(Clone, Copy, Debug)]
 struct Component(u8);

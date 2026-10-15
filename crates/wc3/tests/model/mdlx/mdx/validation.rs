@@ -1,16 +1,19 @@
-use wc3::model::mdlx::chunks::{ModelChunk, RawChunk, VersionChunk};
-use wc3::model::mdlx::emitters::RibbonEmitter;
-use wc3::model::mdlx::materials::Layer;
-use wc3::model::mdlx::mdx::Read as _;
-use wc3::model::mdlx::mdx::ReadError;
-use wc3::model::mdlx::mdx::ReadErrorKind;
-use wc3::model::mdlx::mdx::Write as _;
-use wc3::model::mdlx::scene::Node;
-use wc3::model::mdlx::{Model, V1800, V800};
+use wc3::model::formats::mdlx::chunks::{ModelChunk, RawChunk, VersionChunk};
+use wc3::model::formats::mdlx::emitters::RibbonEmitter;
+use wc3::model::formats::mdlx::materials::Layer;
+use wc3::model::formats::mdlx::mdx::Read as _;
+use wc3::model::formats::mdlx::mdx::ReadError;
+use wc3::model::formats::mdlx::mdx::ReadErrorKind;
+use wc3::model::formats::mdlx::mdx::Write as _;
+use wc3::model::formats::mdlx::scene::Node;
+use wc3::model::formats::mdlx::{Document, V1800, V800};
 
 #[test]
 fn empty_mdlx_uses_the_requested_type() {
-    assert_eq!(Model::<V800>::decode_mdx(b"MDLX").unwrap().version(), 800);
+    assert_eq!(
+        Document::<V800>::decode_mdx(b"MDLX").unwrap().version(),
+        800
+    );
 }
 
 #[test]
@@ -26,12 +29,12 @@ fn malformed_known_track_cannot_enter_typed_model() {
 
 #[test]
 fn repeated_versions_must_match_the_type() {
-    let mut bytes = Model::<V800>::new().encode_mdx().unwrap();
+    let mut bytes = Document::<V800>::new().encode_mdx().unwrap();
     bytes.extend_from_slice(b"VERS");
     bytes.extend_from_slice(&2u32.to_le_bytes());
     bytes.extend_from_slice(&[1, 2]);
     assert!(matches!(
-        Model::<V800>::decode_mdx(&bytes),
+        Document::<V800>::decode_mdx(&bytes),
         Err(ReadError {
             kind: ReadErrorKind::UnexpectedEnd { .. },
             ..
@@ -54,7 +57,7 @@ fn repeated_versions_must_match_the_type() {
 
 #[test]
 fn version_extension_is_preserved_without_mutable_version_number() {
-    let mut model = Model::<V800>::new();
+    let mut model = Document::<V800>::new();
     let ModelChunk::Version(first) = &mut model.chunks[0] else {
         unreachable!()
     };
@@ -63,7 +66,7 @@ fn version_extension_is_preserved_without_mutable_version_number() {
         .chunks
         .push(ModelChunk::from(VersionChunk::<V800>::new()));
     let bytes = model.encode_mdx().unwrap();
-    let parsed = Model::<V800>::decode_mdx(&bytes).unwrap();
+    let parsed = Document::<V800>::decode_mdx(&bytes).unwrap();
     let ModelChunk::Version(first) = &parsed.chunks[0] else {
         unreachable!()
     };
@@ -94,12 +97,12 @@ fn nested_track_failures_keep_absolute_offsets_and_animation_tags() {
     payload.extend_from_slice(&u32::MAX.to_le_bytes());
     let len = payload.len() as u32;
     payload[..4].copy_from_slice(&len.to_le_bytes());
-    let mut bytes = Model::<V800>::new().encode_mdx().unwrap();
+    let mut bytes = Document::<V800>::new().encode_mdx().unwrap();
     let payload_start = bytes.len() + 8;
     bytes.extend_from_slice(b"RIBB");
     bytes.extend_from_slice(&len.to_le_bytes());
     bytes.extend_from_slice(&payload);
-    let error = Model::<V800>::decode_mdx(&bytes).unwrap_err();
+    let error = Document::<V800>::decode_mdx(&bytes).unwrap_err();
     assert_eq!(error.offset, payload_start + track_start + 8);
     assert_eq!(error.tag, Some(*b"KRVS"));
     assert_eq!(
@@ -115,7 +118,7 @@ fn nested_track_failures_keep_absolute_offsets_and_animation_tags() {
 #[test]
 fn version_failures_identify_the_version_value() {
     let bytes = b"MDLXVERS\x04\0\0\0\x20\x03\0\0";
-    let error = Model::<V1800>::decode_mdx(bytes).unwrap_err();
+    let error = Document::<V1800>::decode_mdx(bytes).unwrap_err();
     assert_eq!(error.offset, 12);
     assert_eq!(error.tag, Some(*b"VERS"));
     assert_eq!(

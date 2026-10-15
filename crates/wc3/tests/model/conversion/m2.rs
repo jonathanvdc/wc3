@@ -1,10 +1,12 @@
 use std::borrow::Cow;
 use wc3::model::common::{IntoZeroVec, ZeroVec};
+use wc3::model::io;
 use wc3::model::{
+    self as sm,
     conversion::{
         self, ApproximationPolicy, ExportOptions, ImportOptions, LossPolicy, UnknownPolicy,
     },
-    m2::{
+    formats::m2::{
         self,
         companions::SkinProfile,
         records::{
@@ -14,12 +16,11 @@ use wc3::model::{
             Track, TrackBase, Vertex,
         },
     },
-    semantic as sm,
-    semantic::profiles::m2 as mp,
+    profiles::m2 as mp,
 };
 
 fn native_triangle() -> m2::Bundle<'static, m2::Flat<m2::V256>> {
-    let mut model = m2::Model::<m2::Flat<m2::V256>>::new();
+    let mut model = m2::Document::<m2::Flat<m2::V256>>::new();
     let core = model.core_mut();
     core.name = ZeroVec::alloc_from_slice(b"triangle\0");
     core.bones = vec![Bone::new()];
@@ -82,7 +83,7 @@ fn native_triangle() -> m2::Bundle<'static, m2::Flat<m2::V256>> {
 #[test]
 fn classic_geometry_becomes_editable_and_exports_modern_skin() {
     let source = native_triangle();
-    let imported = conversion::m2::import(&source, &ImportOptions::default()).unwrap();
+    let imported = io::m2::import(&source, &ImportOptions::default()).unwrap();
     let semantic = &imported.value;
     let mesh = semantic.meshes().next().unwrap().1;
     assert!(mesh.positions().is_owned());
@@ -97,12 +98,11 @@ fn classic_geometry_becomes_editable_and_exports_modern_skin() {
     assert!(
         matches!(&texture.resource,sm::Resource::Path(Cow::Borrowed(path))if *path==b"textures/checker.blp")
     );
-    let target =
-        conversion::m2::plan::<m2::Chunked<m2::V274>>(&imported.value, &ExportOptions::default())
-            .unwrap()
-            .execute()
-            .unwrap()
-            .value;
+    let target = io::m2::plan::<m2::Chunked<m2::V274>>(&imported.value, &ExportOptions::default())
+        .unwrap()
+        .execute()
+        .unwrap()
+        .value;
     assert_eq!(
         target
             .model
@@ -159,7 +159,7 @@ fn hermite_tangents_and_legacy_clock_survive_editable_roundtrip() {
             [[2., 0., 0.], [3., 0., 0.], [4., 0., 0.]],
         ])),
     };
-    let imported = conversion::m2::import(&source, &ImportOptions::default()).unwrap();
+    let imported = io::m2::import(&source, &ImportOptions::default()).unwrap();
     let model = &imported.value;
     let clip = model.clips().next().unwrap().1;
     let sm::Channel::Vector3(track) = &clip.channels()[0] else {
@@ -173,12 +173,11 @@ fn hermite_tangents_and_legacy_clock_survive_editable_roundtrip() {
         track.curve.hermite_derivatives().unwrap().incoming.get(1),
         Some([3., 0., 0.])
     );
-    let exported =
-        conversion::m2::plan::<m2::Flat<m2::V256>>(&imported.value, &ExportOptions::default())
-            .unwrap()
-            .execute()
-            .unwrap()
-            .value;
+    let exported = io::m2::plan::<m2::Flat<m2::V256>>(&imported.value, &ExportOptions::default())
+        .unwrap()
+        .execute()
+        .unwrap()
+        .value;
     let track = exported.model.core().bones[0]
         .translation
         .sequence(0)
@@ -194,7 +193,7 @@ fn hermite_tangents_and_legacy_clock_survive_editable_roundtrip() {
 #[test]
 fn semantic_geometry_edits_rebuild_native_values() {
     let source = native_triangle();
-    let mut asset = conversion::m2::import(&source, &ImportOptions::default())
+    let mut asset = io::m2::import(&source, &ImportOptions::default())
         .unwrap()
         .value;
     let (id, mesh) = asset.meshes().next().unwrap();
@@ -221,7 +220,7 @@ fn semantic_geometry_edits_rebuild_native_values() {
     )
     .unwrap();
     asset.edit(|draft| draft.set_mesh(id, mesh)).unwrap();
-    let output = conversion::m2::plan::<m2::Flat<m2::V263>>(&asset, &ExportOptions::default())
+    let output = io::m2::plan::<m2::Flat<m2::V263>>(&asset, &ExportOptions::default())
         .unwrap()
         .execute()
         .unwrap()
@@ -261,8 +260,8 @@ fn quantization_requires_an_explicit_tolerance() {
         )
         .unwrap();
     let asset = builder.finish().unwrap();
-    assert!(conversion::m2::plan::<m2::Flat<m2::V264>>(&asset, &ExportOptions::default()).is_err());
-    let plan = conversion::m2::plan::<m2::Flat<m2::V264>>(
+    assert!(io::m2::plan::<m2::Flat<m2::V264>>(&asset, &ExportOptions::default()).is_err());
+    let plan = io::m2::plan::<m2::Flat<m2::V264>>(
         &asset,
         &ExportOptions {
             approximation: ApproximationPolicy::Allow { tolerance: 0.0005 },
@@ -274,9 +273,9 @@ fn quantization_requires_an_explicit_tolerance() {
 }
 #[test]
 fn unresolved_companions_are_errors() {
-    let mut model = m2::Model::<m2::Flat<m2::V264>>::new();
+    let mut model = m2::Document::<m2::Flat<m2::V264>>::new();
     model.core_mut().skins = 1;
-    assert!(conversion::m2::import(
+    assert!(io::m2::import(
         &m2::Bundle::from_model(model),
         &ImportOptions {
             loss_policy: LossPolicy::Drop,
@@ -298,7 +297,7 @@ fn native_unknown_extensions_are_not_silently_reinserted() {
         )
         .unwrap();
     let source = m2::Bundle::from_model(model);
-    assert!(conversion::m2::import(&source, &ImportOptions::default()).is_err());
+    assert!(io::m2::import(&source, &ImportOptions::default()).is_err());
 }
 
 fn constant<T: m2::codec::Value>(value: T) -> Track<'static, T, m2::V256>
@@ -358,7 +357,7 @@ fn lights_particles_ribbons_and_collision_use_logical_fields() {
     core.collision_vertices =
         ZeroVec::alloc_from_slice(&[[0., 0., 0.], [1., 0., 0.], [0., 1., 0.]]);
     core.collision_indices = ZeroVec::alloc_from_slice(&[0, 1, 2]);
-    let imported = conversion::m2::import(&source, &ImportOptions::default()).unwrap();
+    let imported = io::m2::import(&source, &ImportOptions::default()).unwrap();
 
     let model = &imported.value;
     assert_eq!(
@@ -379,12 +378,11 @@ fn lights_particles_ribbons_and_collision_use_logical_fields() {
     assert!(model
         .systems()
         .any(|(_, system)| matches!(system, mp::System::Collision(_))));
-    let exported =
-        conversion::m2::plan::<m2::Flat<m2::V256>>(&imported.value, &ExportOptions::default())
-            .unwrap()
-            .execute()
-            .unwrap()
-            .value;
+    let exported = io::m2::plan::<m2::Flat<m2::V256>>(&imported.value, &ExportOptions::default())
+        .unwrap()
+        .execute()
+        .unwrap()
+        .value;
     let core = exported.model.core();
     assert_eq!(core.lights.len(), 1);
     match core.lights[0].diffuse_intensity.sequence(0).unwrap().values {
@@ -401,7 +399,7 @@ fn lights_particles_ribbons_and_collision_use_logical_fields() {
 #[test]
 fn native_material_edits_affect_rebuilt_output() {
     let source = native_triangle();
-    let mut asset = conversion::m2::import(&source, &ImportOptions::default())
+    let mut asset = io::m2::import(&source, &ImportOptions::default())
         .unwrap()
         .value;
     let (id, material) = asset.materials().next().unwrap();
@@ -410,7 +408,7 @@ fn native_material_edits_affect_rebuilt_output() {
     asset
         .edit(|draft| draft.set_material_surface(id, surface))
         .unwrap();
-    let output = conversion::m2::plan::<m2::Flat<m2::V256>>(&asset, &ExportOptions::default())
+    let output = io::m2::plan::<m2::Flat<m2::V256>>(&asset, &ExportOptions::default())
         .unwrap()
         .execute()
         .unwrap()
@@ -430,8 +428,8 @@ fn unknown_extensions_require_explicit_drop_policy() {
         )
         .unwrap();
     let source = m2::Bundle::from_model(model);
-    assert!(conversion::m2::import(&source, &ImportOptions::default()).is_err());
-    let imported = conversion::m2::import(
+    assert!(io::m2::import(&source, &ImportOptions::default()).is_err());
+    let imported = io::m2::import(
         &source,
         &ImportOptions {
             unknown: UnknownPolicy::Drop,
@@ -445,11 +443,10 @@ fn unknown_extensions_require_explicit_drop_policy() {
         .issues
         .iter()
         .any(|issue| issue.path == "m2.chunk" && issue.kind == conversion::IssueKind::Dropped));
-    let output =
-        conversion::m2::plan::<m2::Chunked<m2::V256>>(&imported.value, &ExportOptions::default())
-            .unwrap()
-            .execute()
-            .unwrap();
+    let output = io::m2::plan::<m2::Chunked<m2::V256>>(&imported.value, &ExportOptions::default())
+        .unwrap()
+        .execute()
+        .unwrap();
     assert!(!output
         .value
         .model
@@ -458,14 +455,14 @@ fn unknown_extensions_require_explicit_drop_policy() {
 }
 #[test]
 fn compressed_rotations_decode_to_unit_components() {
-    use conversion::m2::RotationComponents as _;
+    use io::m2::RotationComponents as _;
     assert_eq!([-32768i16, -32768, -32768, -1].floats(), [0., 0., 0., 1.]);
     assert_eq!([0i16, 0, 0, 32767].floats(), [-1., -1., -1., 0.]);
 }
 
 #[test]
 fn native_physics_shapes_and_body_offsets_are_editable() {
-    use wc3::model::m2::companions::{
+    use wc3::model::formats::m2::companions::{
         PhysicsBody4, PhysicsBox, PhysicsChunk, PhysicsFile, PhysicsFrame, PhysicsShape,
         PhysicsShape2,
     };
@@ -511,7 +508,7 @@ fn native_physics_shapes_and_body_offsets_are_editable() {
         padding: Cow::Owned(Vec::new()),
     };
     source.insert(source.key.sibling(".phys"), m2::File::Physics(file));
-    let mut asset = conversion::m2::import(&source, &ImportOptions::default())
+    let mut asset = io::m2::import(&source, &ImportOptions::default())
         .unwrap()
         .value;
     let (system_id, system) = asset
@@ -531,7 +528,7 @@ fn native_physics_shapes_and_body_offsets_are_editable() {
     asset
         .edit(|draft| draft.set_system(system_id, system))
         .unwrap();
-    let output = conversion::m2::plan::<m2::Flat<m2::V256>>(&asset, &ExportOptions::default())
+    let output = io::m2::plan::<m2::Flat<m2::V256>>(&asset, &ExportOptions::default())
         .unwrap()
         .execute()
         .unwrap()
@@ -577,7 +574,7 @@ fn native_physics_shapes_and_body_offsets_are_editable() {
 
 #[test]
 fn sparse_bone_overrides_use_editable_pose_matrices() {
-    use wc3::model::m2::companions::{BoneFile, BoneMatrix};
+    use wc3::model::formats::m2::companions::{BoneFile, BoneMatrix};
     let mut model = native_triangle().model.into_chunked();
     model
         .insert_extension(
@@ -599,7 +596,7 @@ fn sparse_bone_overrides_use_editable_pose_matrices() {
             matrices: vec![BoneMatrix { values }],
         }),
     );
-    let mut asset = conversion::m2::import(&source, &ImportOptions::default())
+    let mut asset = io::m2::import(&source, &ImportOptions::default())
         .unwrap()
         .value;
     let (system_id, system) = asset
@@ -619,7 +616,7 @@ fn sparse_bone_overrides_use_editable_pose_matrices() {
     asset
         .edit(|draft| draft.set_system(system_id, system))
         .unwrap();
-    let output = conversion::m2::plan::<m2::Chunked<m2::V256>>(&asset, &ExportOptions::default())
+    let output = io::m2::plan::<m2::Chunked<m2::V256>>(&asset, &ExportOptions::default())
         .unwrap()
         .execute()
         .unwrap()
@@ -653,7 +650,7 @@ fn packed_particle_gravity_is_a_direction_and_rejects_malformed_words() {
     emitter.bone_id = 0;
     emitter.gravity = constant(word);
     source.model.core_mut().particles.push(emitter);
-    let asset = conversion::m2::import(&source, &ImportOptions::default())
+    let asset = io::m2::import(&source, &ImportOptions::default())
         .unwrap()
         .value;
     let semantic = &asset;
@@ -666,7 +663,7 @@ fn packed_particle_gravity_is_a_direction_and_rejects_malformed_words() {
         approximation: ApproximationPolicy::Allow { tolerance: 0.00001 },
         ..Default::default()
     };
-    let output = conversion::m2::plan::<m2::Flat<m2::V256>>(&asset, &options)
+    let output = io::m2::plan::<m2::Flat<m2::V256>>(&asset, &options)
         .unwrap()
         .execute()
         .unwrap()
@@ -677,13 +674,13 @@ fn packed_particle_gravity_is_a_direction_and_rejects_malformed_words() {
     }
     drop(asset);
     source.model.core_mut().particles[0].gravity = constant(u32::from_le_bytes([127, 127, 100, 0]));
-    assert!(conversion::m2::import(&source, &ImportOptions::default()).is_err());
+    assert!(io::m2::import(&source, &ImportOptions::default()).is_err());
 }
 
 #[test]
 fn static_node_transforms_become_constant_native_curves() {
     let source = native_triangle();
-    let mut asset = conversion::m2::import(&source, &ImportOptions::default())
+    let mut asset = io::m2::import(&source, &ImportOptions::default())
         .unwrap()
         .value;
     let id = asset
@@ -694,7 +691,7 @@ fn static_node_transforms_become_constant_native_curves() {
     let mut node = asset.node(id).unwrap().clone();
     node.transform.translation = [2., 3., 4.];
     asset.edit(|draft| draft.set_node(id, node)).unwrap();
-    let output = conversion::m2::plan::<m2::Flat<m2::V256>>(&asset, &ExportOptions::default())
+    let output = io::m2::plan::<m2::Flat<m2::V256>>(&asset, &ExportOptions::default())
         .unwrap()
         .execute()
         .unwrap()
@@ -722,7 +719,7 @@ fn local_effect_transforms_drive_the_effects_emitted_bone() {
         position: [1., 2., 3.],
         ..Default::default()
     });
-    let mut asset = conversion::m2::import(&source, &ImportOptions::default())
+    let mut asset = io::m2::import(&source, &ImportOptions::default())
         .unwrap()
         .value;
     let node = asset
@@ -747,7 +744,7 @@ fn local_effect_transforms_drive_the_effects_emitted_bone() {
             }))
         })
         .unwrap();
-    let output = conversion::m2::plan::<m2::Flat<m2::V256>>(&asset, &ExportOptions::default())
+    let output = io::m2::plan::<m2::Flat<m2::V256>>(&asset, &ExportOptions::default())
         .unwrap()
         .execute()
         .unwrap()
@@ -767,7 +764,7 @@ fn unknown_native_blend_does_not_collide_with_common_transparency() {
         flags: MaterialFlags::default(),
         blending_mode: BlendMode::Unknown(8),
     }]);
-    let mut asset = conversion::m2::import(&source, &ImportOptions::default())
+    let mut asset = io::m2::import(&source, &ImportOptions::default())
         .unwrap()
         .value;
     let surface = &asset.materials().next().unwrap().1.surface;
@@ -776,7 +773,7 @@ fn unknown_native_blend_does_not_collide_with_common_transparency() {
     let mut node = asset.node(id).unwrap().clone();
     node.name = Cow::Borrowed("edited");
     asset.edit(|draft| draft.set_node(id, node)).unwrap();
-    let output = conversion::m2::plan::<m2::Flat<m2::V256>>(&asset, &ExportOptions::default())
+    let output = io::m2::plan::<m2::Flat<m2::V256>>(&asset, &ExportOptions::default())
         .unwrap()
         .execute()
         .unwrap()
@@ -798,10 +795,10 @@ fn legacy_particle_shape_and_head_tail_controls_survive_conversion() {
         head_or_tail: ParticleHeadTail::Both,
     };
     source.model.core_mut().particles.push(particle);
-    let imported = conversion::m2::import(&source, &ImportOptions::default())
+    let imported = io::m2::import(&source, &ImportOptions::default())
         .unwrap()
         .value;
-    let output = conversion::m2::plan::<m2::Flat<m2::V256>>(&imported, &ExportOptions::default())
+    let output = io::m2::plan::<m2::Flat<m2::V256>>(&imported, &ExportOptions::default())
         .unwrap()
         .execute()
         .unwrap()
@@ -820,14 +817,14 @@ fn legacy_particle_shape_and_head_tail_controls_survive_conversion() {
 fn texture_options_keep_unknown_bits_and_reject_unencoded_interpretations() {
     let mut source = native_triangle();
     source.model.core_mut().textures[0].flags = TextureFlags::from_bits_retain(0x8000_0001);
-    let mut asset = conversion::m2::import(&source, &ImportOptions::default())
+    let mut asset = io::m2::import(&source, &ImportOptions::default())
         .unwrap()
         .value;
     let id = asset.resources().textures().next().unwrap().0;
     let texture = asset.resources().texture(id).unwrap();
     assert_eq!(texture.controls.flags.bits(), 0x8000_0000);
     assert_eq!(texture.color_space, sm::ColorSpace::Unspecified);
-    let native = conversion::m2::plan::<m2::Flat<m2::V256>>(&asset, &ExportOptions::default())
+    let native = io::m2::plan::<m2::Flat<m2::V256>>(&asset, &ExportOptions::default())
         .unwrap()
         .execute()
         .unwrap()
@@ -855,7 +852,7 @@ fn texture_options_keep_unknown_bits_and_reject_unencoded_interpretations() {
 fn replacement_texture_retains_its_separately_declared_filename() {
     let mut source = native_triangle();
     source.model.core_mut().textures[0].kind = TextureSource::Unknown(0x1234);
-    let asset = conversion::m2::import(&source, &ImportOptions::default())
+    let asset = io::m2::import(&source, &ImportOptions::default())
         .unwrap()
         .value;
     let texture = asset.resources().textures().next().unwrap().1;
@@ -865,7 +862,7 @@ fn replacement_texture_retains_its_separately_declared_filename() {
         texture.controls.path.as_deref(),
         Some(b"textures/checker.blp".as_slice())
     );
-    let native = conversion::m2::plan::<m2::Flat<m2::V256>>(&asset, &ExportOptions::default())
+    let native = io::m2::plan::<m2::Flat<m2::V256>>(&asset, &ExportOptions::default())
         .unwrap()
         .execute()
         .unwrap()

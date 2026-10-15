@@ -79,9 +79,9 @@ pub(crate) fn update_skin_bounds(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::assets::Wc3Model;
+    use crate::assets::Wc3Document;
     use crate::instance::spawn::spawn_prepared_model;
-    use crate::preparation::prepare_model;
+    use crate::preparation::prepare_document;
     use bevy::camera::visibility::{VisibilityPlugin, VisibilitySystems};
     use bevy::ecs::world::CommandQueue;
     use bevy::math::Vec3A;
@@ -90,13 +90,13 @@ mod tests {
     #[test]
     fn unchanged_rigs_keep_bounds_and_hidden_motion_refreshes_on_reveal() {
         let source =
-            Wc3Model::decode(include_bytes!("../../tests/fixtures/quad_model.mdx")).unwrap();
+            Wc3Document::decode(include_bytes!("../../tests/fixtures/quad_model.mdx")).unwrap();
         let mut app = App::new();
         app.add_plugins((MinimalPlugins, TransformPlugin, VisibilityPlugin));
         let mut meshes = Assets::<Mesh>::default();
         let mut materials = Assets::default();
         let mut bindposes = Assets::<SkinnedMeshInverseBindposes>::default();
-        let prepared = prepare_model(&mut meshes, &mut bindposes, &source, |_| None).unwrap();
+        let prepared = prepare_document(&mut meshes, &mut bindposes, &source, |_| None).unwrap();
         let mut queue = CommandQueue::default();
         let mut commands = Commands::new(&mut queue, app.world());
         let root = spawn_prepared_model(&mut commands, &mut meshes, &mut materials, &prepared);

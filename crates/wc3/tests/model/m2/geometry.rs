@@ -1,9 +1,11 @@
 //! Modern geometry wire fixtures follow the documented stream format codes,
 //! independently of the production encoder. Undocumented metadata stays opaque.
 use wc3::model::common::IntoZeroVec;
-use wc3::model::m2::companions::{GeometryChunk, GeometryFile, StreamValues, VertexStream};
-use wc3::model::m2::resources::FileKey;
-use wc3::model::m2::{Bundle, Chunked, File, ProfileRef, V274};
+use wc3::model::formats::m2::companions::{
+    GeometryChunk, GeometryFile, StreamValues, VertexStream,
+};
+use wc3::model::formats::m2::resources::FileKey;
+use wc3::model::formats::m2::{Bundle, Chunked, File, ProfileRef, V274};
 
 fn frame(tag: [u8; 4], payload: &[u8]) -> Vec<u8> {
     let mut bytes = tag.to_vec();

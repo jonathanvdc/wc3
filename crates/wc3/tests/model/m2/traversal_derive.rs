@@ -4,9 +4,9 @@ use m2::records::{ModernTimeline, Track, TrackBase, TrackValues};
 use m2::{ReadError, Validate as _, VisitArrays as _, ZeroVec, V264};
 use std::cell::RefCell;
 use std::rc::Rc;
-use wc3::model::m2;
-use wc3::model::m2::records::Interpolation;
-use wc3::model::m2::records::ModelFlags;
+use wc3::model::formats::m2;
+use wc3::model::formats::m2::records::Interpolation;
+use wc3::model::formats::m2::records::ModelFlags;
 
 struct Leaf<'data> {
     id: usize,

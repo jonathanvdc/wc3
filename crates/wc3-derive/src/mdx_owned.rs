@@ -29,7 +29,7 @@ pub(crate) fn expand(input: &DeriveInput) -> TokenStream {
     reader_generics
         .make_where_clause()
         .predicates
-        .push(parse_quote!(for<'input> #read_ty: ::wc3::model::mdlx::mdx::Read<'input>));
+        .push(parse_quote!(for<'input> #read_ty: ::wc3::model::formats::mdlx::mdx::Read<'input>));
     reader_generics
         .make_where_clause()
         .predicates
@@ -38,9 +38,9 @@ pub(crate) fn expand(input: &DeriveInput) -> TokenStream {
         ));
     let (reader_impl, _, reader_where) = reader_generics.split_for_impl();
     quote! {
-            impl #reader_impl ::wc3::model::mdlx::mdx::ReadOwned for #static_ty #reader_where {
-                fn decode_owned<'input>(bytes:&'input[u8])->Result<Self,::wc3::model::mdlx::mdx::ReadError> {
-                    <#read_ty as ::wc3::model::mdlx::mdx::Read<'input>>::decode_mdx(bytes)
+            impl #reader_impl ::wc3::model::formats::mdlx::mdx::ReadOwned for #static_ty #reader_where {
+                fn decode_owned<'input>(bytes:&'input[u8])->Result<Self,::wc3::model::formats::mdlx::mdx::ReadError> {
+                    <#read_ty as ::wc3::model::formats::mdlx::mdx::Read<'input>>::decode_mdx(bytes)
                         .map(::wc3::model::common::IntoOwned::into_owned)
                 }
             }
@@ -57,12 +57,12 @@ fn expand_static_owned_read(input: &DeriveInput) -> TokenStream {
     generics
         .make_where_clause()
         .predicates
-        .push(parse_quote!(#ty:'static+for<'input> ::wc3::model::mdlx::mdx::Read<'input>));
+        .push(parse_quote!(#ty:'static+for<'input> ::wc3::model::formats::mdlx::mdx::Read<'input>));
     let (impl_generics, _, where_clause) = generics.split_for_impl();
     quote! {
-        impl #impl_generics ::wc3::model::mdlx::mdx::ReadOwned for #ty #where_clause {
-            fn decode_owned<'input>(bytes:&'input[u8])->Result<Self,::wc3::model::mdlx::mdx::ReadError> {
-                <Self as ::wc3::model::mdlx::mdx::Read<'input>>::decode_mdx(bytes)
+        impl #impl_generics ::wc3::model::formats::mdlx::mdx::ReadOwned for #ty #where_clause {
+            fn decode_owned<'input>(bytes:&'input[u8])->Result<Self,::wc3::model::formats::mdlx::mdx::ReadError> {
+                <Self as ::wc3::model::formats::mdlx::mdx::Read<'input>>::decode_mdx(bytes)
             }
         }
     }

@@ -1,6 +1,6 @@
 //! Semantic failures from independently assembled root payload bytes.
-use wc3::model::wmo::root::RootChunk;
-use wc3::model::wmo::{Classic, Root, Validate};
+use wc3::model::formats::wmo::root::RootChunk;
+use wc3::model::formats::wmo::{Classic, Root, Validate};
 
 fn insert(root: &mut Root<'static, Classic>, tag: [u8; 4], bytes: Vec<u8>) {
     // Decoded records are detached through the public ownership contract.

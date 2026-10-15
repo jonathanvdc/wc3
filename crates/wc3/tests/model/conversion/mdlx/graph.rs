@@ -1,20 +1,19 @@
 use wc3::model::common::IntoZeroVec;
-use wc3::model::mdlx::mdl::Read as _;
+use wc3::model::formats::mdlx::mdl::Read as _;
+use wc3::model::io;
 use wc3::model::{
-    conversion::{self, ExportOptions, ImportOptions},
-    mdlx::{
+    conversion::{ExportOptions, ImportOptions},
+    formats::mdlx::{
         self,
         animation::{SequenceFlags, Track, ValueKeyframe},
     },
-    semantic::{
-        profiles::{mdlx as profile, Mdlx},
-        Bounds, Channel, Model,
-    },
+    profiles::{mdlx as profile, Mdlx},
+    Bounds, Channel, Model,
 };
 
 #[test]
 fn additive_camera_keys_remain_exact_and_borrowed() {
-    let mut source = mdlx::Model::<mdlx::V800>::new();
+    let mut source = mdlx::Document::<mdlx::V800>::new();
     let mut camera = mdlx::scene::Camera::<mdlx::V800>::new("Camera").unwrap();
     camera.position = [10_000_000., 20., 30.];
     camera.target_position = [30_000_000., 40., 50.];
@@ -45,7 +44,7 @@ fn additive_camera_keys_remain_exact_and_borrowed() {
         .unwrap(),
     );
     source.set_cameras([camera]);
-    let imported = conversion::mdlx::import(&source, &ImportOptions::default()).unwrap();
+    let imported = io::mdlx::import(&source, &ImportOptions::default()).unwrap();
     let graph = &imported.value;
     let (_, feature) = graph.features().next().unwrap();
     let profile::Node::Camera(camera) = &feature.payload else {
@@ -65,7 +64,7 @@ fn additive_camera_keys_remain_exact_and_borrowed() {
         .unwrap();
     assert!(curve.values().is_owned());
     assert_eq!(curve.values().get(0), Some([0.1, 0.2, 0.3]));
-    let output = conversion::mdlx::plan::<mdlx::V800>(&imported.value, &ExportOptions::default())
+    let output = io::mdlx::plan::<mdlx::V800>(&imported.value, &ExportOptions::default())
         .unwrap()
         .execute()
         .unwrap()
@@ -99,7 +98,7 @@ fn additive_camera_keys_remain_exact_and_borrowed() {
 
 #[test]
 fn native_integer_effect_curves_keep_full_width() {
-    let mut source = mdlx::Model::<mdlx::V800>::new();
+    let mut source = mdlx::Document::<mdlx::V800>::new();
     source.set_materials([mdlx::materials::Material::new()]);
     let node = mdlx::scene::Node::new("Ribbon", 0).unwrap();
     let mut ribbon = mdlx::emitters::RibbonEmitter::new(node);
@@ -115,7 +114,7 @@ fn native_integer_effect_curves_keep_full_width() {
     );
     source.set_ribbon_emitters([ribbon]);
     source.set_pivot_points(&[[0.; 3]]);
-    let imported = conversion::mdlx::import(&source, &ImportOptions::default()).unwrap();
+    let imported = io::mdlx::import(&source, &ImportOptions::default()).unwrap();
     let graph = &imported.value;
     let curve = graph
         .timeline_channels()
@@ -127,7 +126,7 @@ fn native_integer_effect_curves_keep_full_width() {
         .unwrap();
     assert_eq!(curve.values().get(0), Some(16_777_217));
     assert!(curve.values().is_owned());
-    let output = conversion::mdlx::plan::<mdlx::V800>(&imported.value, &ExportOptions::default())
+    let output = io::mdlx::plan::<mdlx::V800>(&imported.value, &ExportOptions::default())
         .unwrap()
         .execute()
         .unwrap()
@@ -151,18 +150,18 @@ fn native_integer_effect_curves_keep_full_width() {
 
 #[test]
 fn unknown_native_blend_remains_its_own_operation() {
-    let mut source = mdlx::Model::<mdlx::V800>::new();
+    let mut source = mdlx::Document::<mdlx::V800>::new();
     let mut material = mdlx::materials::Material::new();
     let mut layer = mdlx::materials::Layer::new();
     layer.texture_id = mdlx::animation::Animatable::Static(u32::MAX);
     layer.filter_mode = mdlx::materials::LayerFilterMode::Unknown(8);
     material.layers.push(layer);
     source.set_materials([material]);
-    let imported = conversion::mdlx::import(&source, &ImportOptions::default()).unwrap();
+    let imported = io::mdlx::import(&source, &ImportOptions::default()).unwrap();
     let surface = &imported.value.materials().next().unwrap().1.surface;
     let material = surface;
     assert_eq!(material.layers[0].state.blend, profile::Blend::Unknown(8));
-    let output = conversion::mdlx::plan::<mdlx::V800>(&imported.value, &ExportOptions::default())
+    let output = io::mdlx::plan::<mdlx::V800>(&imported.value, &ExportOptions::default())
         .unwrap()
         .execute()
         .unwrap()
@@ -175,7 +174,7 @@ fn unknown_native_blend_remains_its_own_operation() {
 
 #[test]
 fn unsigned_native_intervals_and_blend_duration_are_not_keyframe_limited() {
-    let mut source = mdlx::Model::<mdlx::V800>::new();
+    let mut source = mdlx::Document::<mdlx::V800>::new();
     source.set_global_sequences(&[u32::MAX]);
     source.set_sequences([
         mdlx::animation::Sequence::new("Long", [3_000_000_000, 4_000_000_000]).unwrap(),
@@ -183,8 +182,8 @@ fn unsigned_native_intervals_and_blend_duration_are_not_keyframe_limited() {
     let mut info = mdlx::scene::ModelInfo::new("Long").unwrap();
     info.blend_time = u32::MAX;
     source.set_model_info(&info);
-    let imported = conversion::mdlx::import(&source, &ImportOptions::default()).unwrap();
-    let output = conversion::mdlx::plan::<mdlx::V800>(&imported.value, &ExportOptions::default())
+    let imported = io::mdlx::import(&source, &ImportOptions::default()).unwrap();
+    let output = io::mdlx::plan::<mdlx::V800>(&imported.value, &ExportOptions::default())
         .unwrap()
         .execute()
         .unwrap()
@@ -199,10 +198,11 @@ fn unsigned_native_intervals_and_blend_duration_are_not_keyframe_limited() {
 
 #[test]
 fn borrowed_mesh_authoring_edits_rebuild_native_geometry() {
-    let source =
-        mdlx::Model::<mdlx::V800>::decode_mdl(include_str!("../../../fixtures/mdl/quad_model.mdl"))
-            .unwrap();
-    let mut imported = conversion::mdlx::import(&source, &ImportOptions::default()).unwrap();
+    let source = mdlx::Document::<mdlx::V800>::decode_mdl(include_str!(
+        "../../../fixtures/mdl/quad_model.mdl"
+    ))
+    .unwrap();
+    let mut imported = io::mdlx::import(&source, &ImportOptions::default()).unwrap();
     let graph = &imported.value;
     let (id, mesh) = graph.meshes().next().unwrap();
     assert!(!mesh.positions().is_owned());
@@ -217,7 +217,7 @@ fn borrowed_mesh_authoring_edits_rebuild_native_geometry() {
         .value
         .edit(|builder| builder.set_mesh(id, edited))
         .unwrap();
-    let output = conversion::mdlx::plan::<mdlx::V800>(&imported.value, &ExportOptions::default())
+    let output = io::mdlx::plan::<mdlx::V800>(&imported.value, &ExportOptions::default())
         .unwrap()
         .execute()
         .unwrap()
@@ -239,14 +239,14 @@ fn borrowed_mesh_authoring_edits_rebuild_native_geometry() {
 #[test]
 fn invalid_unicode_names_need_an_explicit_loss_policy() {
     use wc3::model::conversion::LossPolicy;
-    let mut source = mdlx::Model::<mdlx::V800>::new();
+    let mut source = mdlx::Document::<mdlx::V800>::new();
     let mut node = mdlx::scene::Node::new("Name", 0).unwrap();
     let mut bytes = [0u8; 80];
     bytes[0] = 0xff;
     node.name = mdlx::mdx::FixedText::from_bytes(bytes);
     source.set_helpers([node]);
-    assert!(conversion::mdlx::import(&source, &ImportOptions::default()).is_err());
-    let output = conversion::mdlx::import(
+    assert!(io::mdlx::import(&source, &ImportOptions::default()).is_err());
+    let output = io::mdlx::import(
         &source,
         &ImportOptions {
             loss_policy: LossPolicy::Drop,
@@ -260,7 +260,7 @@ fn invalid_unicode_names_need_an_explicit_loss_policy() {
 
 #[test]
 fn exterior_keys_keep_exact_milliseconds_across_large_clip_origins() {
-    let mut source = mdlx::Model::<mdlx::V800>::new();
+    let mut source = mdlx::Document::<mdlx::V800>::new();
     source.set_sequences([
         mdlx::animation::Sequence::new("Late", [3_000_000_000, 4_000_000_000]).unwrap(),
     ]);
@@ -276,8 +276,8 @@ fn exterior_keys_keep_exact_milliseconds_across_large_clip_origins() {
         .unwrap(),
     );
     source.set_helpers([node]);
-    let imported = conversion::mdlx::import(&source, &ImportOptions::default()).unwrap();
-    let output = conversion::mdlx::plan::<mdlx::V800>(&imported.value, &ExportOptions::default())
+    let imported = io::mdlx::import(&source, &ImportOptions::default()).unwrap();
+    let output = io::mdlx::plan::<mdlx::V800>(&imported.value, &ExportOptions::default())
         .unwrap()
         .execute()
         .unwrap()
@@ -301,7 +301,7 @@ fn exterior_keys_keep_exact_milliseconds_across_large_clip_origins() {
 
 #[test]
 fn shared_uv_transform_links_are_scoped_and_rebuild_animation() {
-    let mut source = mdlx::Model::<mdlx::V800>::new();
+    let mut source = mdlx::Document::<mdlx::V800>::new();
     source.set_textures([mdlx::materials::Texture::new("UV.blp").unwrap()]);
     let mut layer = mdlx::materials::Layer::new();
     layer.texture_animation_id = 0;
@@ -320,7 +320,7 @@ fn shared_uv_transform_links_are_scoped_and_rebuild_animation() {
         .unwrap(),
     );
     source.set_texture_animations([transform]);
-    let imported = conversion::mdlx::import(&source, &ImportOptions::default()).unwrap();
+    let imported = io::mdlx::import(&source, &ImportOptions::default()).unwrap();
     let graph = &imported.value;
     let (id, transform) = graph.texture_transforms().next().unwrap();
     assert_eq!(
@@ -329,7 +329,7 @@ fn shared_uv_transform_links_are_scoped_and_rebuild_animation() {
     );
     let material = &graph.materials().next().unwrap().1.surface;
     assert_eq!(material.layers[0].binding.coordinates.transform, Some(id));
-    let output = conversion::mdlx::plan::<mdlx::V800>(&imported.value, &ExportOptions::default())
+    let output = io::mdlx::plan::<mdlx::V800>(&imported.value, &ExportOptions::default())
         .unwrap()
         .execute()
         .unwrap()
@@ -357,11 +357,12 @@ fn shared_uv_transform_links_are_scoped_and_rebuild_animation() {
 
 #[test]
 fn unchanged_packed_geometry_is_borrowed_by_native_output() {
-    let source =
-        mdlx::Model::<mdlx::V800>::decode_mdl(include_str!("../../../fixtures/mdl/quad_model.mdl"))
-            .unwrap();
-    let imported = conversion::mdlx::import(&source, &ImportOptions::default()).unwrap();
-    let output = conversion::mdlx::plan::<mdlx::V800>(&imported.value, &ExportOptions::default())
+    let source = mdlx::Document::<mdlx::V800>::decode_mdl(include_str!(
+        "../../../fixtures/mdl/quad_model.mdl"
+    ))
+    .unwrap();
+    let imported = io::mdlx::import(&source, &ImportOptions::default()).unwrap();
+    let output = io::mdlx::plan::<mdlx::V800>(&imported.value, &ExportOptions::default())
         .unwrap()
         .execute()
         .unwrap()
@@ -375,7 +376,7 @@ fn unchanged_packed_geometry_is_borrowed_by_native_output() {
 
 #[test]
 fn absolute_tracks_without_sequences_do_not_invent_playback_clips() {
-    let mut source = mdlx::Model::<mdlx::V800>::new();
+    let mut source = mdlx::Document::<mdlx::V800>::new();
     let mut node = mdlx::scene::Node::new("Timeline", 0).unwrap();
     node.translation = Some(
         Track::linear(
@@ -388,11 +389,11 @@ fn absolute_tracks_without_sequences_do_not_invent_playback_clips() {
         .unwrap(),
     );
     source.set_helpers([node]);
-    let imported = conversion::mdlx::import(&source, &ImportOptions::default()).unwrap();
+    let imported = io::mdlx::import(&source, &ImportOptions::default()).unwrap();
     let model = &imported.value;
     assert_eq!(model.clips().len(), 0);
     assert_eq!(model.timeline_channels().len(), 1);
-    let output = conversion::mdlx::plan::<mdlx::V800>(&imported.value, &ExportOptions::default())
+    let output = io::mdlx::plan::<mdlx::V800>(&imported.value, &ExportOptions::default())
         .unwrap()
         .execute()
         .unwrap()
@@ -414,7 +415,7 @@ fn absolute_tracks_without_sequences_do_not_invent_playback_clips() {
 
 #[test]
 fn overlapping_sequences_share_one_authored_absolute_curve() {
-    let mut source = mdlx::Model::<mdlx::V800>::new();
+    let mut source = mdlx::Document::<mdlx::V800>::new();
     source.set_sequences([
         mdlx::animation::Sequence::new("First", [0, 1000]).unwrap(),
         mdlx::animation::Sequence::new("Second", [500, 1500]).unwrap(),
@@ -431,7 +432,7 @@ fn overlapping_sequences_share_one_authored_absolute_curve() {
         .unwrap(),
     );
     source.set_helpers([node]);
-    let mut imported = conversion::mdlx::import(&source, &ImportOptions::default()).unwrap();
+    let mut imported = io::mdlx::import(&source, &ImportOptions::default()).unwrap();
     let graph = &imported.value;
     assert_eq!(graph.clips().len(), 2);
     assert_eq!(graph.timeline_channels().len(), 1);
@@ -440,13 +441,12 @@ fn overlapping_sequences_share_one_authored_absolute_curve() {
         panic!("translation curve missing")
     };
     track.curve =
-        wc3::model::semantic::Curve::linear(track.curve.times().clone(), vec![[4., 5., 6.]])
-            .unwrap();
+        wc3::model::Curve::linear(track.curve.times().clone(), vec![[4., 5., 6.]]).unwrap();
     imported
         .value
         .edit(|builder| builder.set_timeline_channel(0, Channel::Vector3(track)))
         .unwrap();
-    let output = conversion::mdlx::plan::<mdlx::V800>(&imported.value, &ExportOptions::default())
+    let output = io::mdlx::plan::<mdlx::V800>(&imported.value, &ExportOptions::default())
         .unwrap()
         .execute()
         .unwrap()
@@ -462,7 +462,7 @@ fn overlapping_sequences_share_one_authored_absolute_curve() {
 
 #[test]
 fn global_tracks_without_sequences_stay_on_the_shared_clock() {
-    let mut source = mdlx::Model::<mdlx::V800>::new();
+    let mut source = mdlx::Document::<mdlx::V800>::new();
     source.set_global_sequences(&[1000]);
     let mut node = mdlx::scene::Node::new("Global", 0).unwrap();
     node.translation = Some(
@@ -476,12 +476,12 @@ fn global_tracks_without_sequences_stay_on_the_shared_clock() {
         .unwrap(),
     );
     source.set_helpers([node]);
-    let imported = conversion::mdlx::import(&source, &ImportOptions::default()).unwrap();
+    let imported = io::mdlx::import(&source, &ImportOptions::default()).unwrap();
     let graph = &imported.value;
     assert_eq!(graph.clips().len(), 0);
     assert!(graph.timeline_channels().is_empty());
     assert_eq!(graph.shared_channels().len(), 1);
-    let output = conversion::mdlx::plan::<mdlx::V800>(&imported.value, &ExportOptions::default())
+    let output = io::mdlx::plan::<mdlx::V800>(&imported.value, &ExportOptions::default())
         .unwrap()
         .execute()
         .unwrap()
@@ -500,8 +500,8 @@ fn global_tracks_without_sequences_stay_on_the_shared_clock() {
 
 #[test]
 fn tcb_curves_cannot_be_encoded_as_native_mdlx_tracks() {
-    use wc3::model::semantic::{Curve, TcbParameters};
-    let mut source = mdlx::Model::<mdlx::V800>::new();
+    use wc3::model::{Curve, TcbParameters};
+    let mut source = mdlx::Document::<mdlx::V800>::new();
     let mut node = mdlx::scene::Node::new("TCB", 0).unwrap();
     node.translation = Some(
         Track::linear(
@@ -514,7 +514,7 @@ fn tcb_curves_cannot_be_encoded_as_native_mdlx_tracks() {
         .unwrap(),
     );
     source.set_helpers([node]);
-    let mut imported = conversion::mdlx::import(&source, &ImportOptions::default()).unwrap();
+    let mut imported = io::mdlx::import(&source, &ImportOptions::default()).unwrap();
     let graph = &imported.value;
     let Channel::Vector3(mut track) = graph.timeline_channels()[0].clone() else {
         panic!("translation missing")
@@ -530,19 +530,17 @@ fn tcb_curves_cannot_be_encoded_as_native_mdlx_tracks() {
         .edit(|builder| builder.set_timeline_channel(0, Channel::Vector3(track)))
         .is_ok()
     {
-        assert!(
-            conversion::mdlx::plan::<mdlx::V800>(&imported.value, &ExportOptions::default())
-                .is_err()
-        );
+        assert!(io::mdlx::plan::<mdlx::V800>(&imported.value, &ExportOptions::default()).is_err());
     }
 }
 
 #[test]
 fn skinned_geometry_placement_edits_cannot_silently_disappear() {
-    let source =
-        mdlx::Model::<mdlx::V800>::decode_mdl(include_str!("../../../fixtures/mdl/quad_model.mdl"))
-            .unwrap();
-    let mut asset = conversion::mdlx::import(&source, &ImportOptions::default())
+    let source = mdlx::Document::<mdlx::V800>::decode_mdl(include_str!(
+        "../../../fixtures/mdl/quad_model.mdl"
+    ))
+    .unwrap();
+    let mut asset = io::mdlx::import(&source, &ImportOptions::default())
         .unwrap()
         .value;
     let anchor = asset.instances().next().unwrap().1.node;
@@ -557,18 +555,19 @@ fn skinned_geometry_placement_edits_cannot_silently_disappear() {
 
 #[test]
 fn logical_sequence_flag_words_keep_unknown_bits_through_native_output() {
-    let mut source =
-        mdlx::Model::<mdlx::V800>::decode_mdl(include_str!("../../../fixtures/mdl/quad_model.mdl"))
-            .unwrap();
+    let mut source = mdlx::Document::<mdlx::V800>::decode_mdl(include_str!(
+        "../../../fixtures/mdl/quad_model.mdl"
+    ))
+    .unwrap();
     source.sequences_mut().next().unwrap().flags = SequenceFlags(0x8000_0000);
-    let asset = conversion::mdlx::import(&source, &ImportOptions::default())
+    let asset = io::mdlx::import(&source, &ImportOptions::default())
         .unwrap()
         .value;
     assert_eq!(
         asset.clips().next().unwrap().1.controls.unclassified.bits(),
         0x8000_0000
     );
-    let output = conversion::mdlx::plan::<mdlx::V800>(&asset, &ExportOptions::default())
+    let output = io::mdlx::plan::<mdlx::V800>(&asset, &ExportOptions::default())
         .unwrap()
         .execute()
         .unwrap()
@@ -578,13 +577,13 @@ fn logical_sequence_flag_words_keep_unknown_bits_through_native_output() {
 
 #[test]
 fn absent_model_info_stays_absent_while_named_drafts_declare_bounds() {
-    let source = mdlx::Model::<mdlx::V800>::new();
+    let source = mdlx::Document::<mdlx::V800>::new();
     assert!(source.model_info().is_none());
-    let asset = conversion::mdlx::import(&source, &ImportOptions::default())
+    let asset = io::mdlx::import(&source, &ImportOptions::default())
         .unwrap()
         .value;
     assert!(asset.bounds().is_none());
-    let output = conversion::mdlx::plan::<mdlx::V800>(&asset, &ExportOptions::default())
+    let output = io::mdlx::plan::<mdlx::V800>(&asset, &ExportOptions::default())
         .unwrap()
         .execute()
         .unwrap()

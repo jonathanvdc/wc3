@@ -3,8 +3,8 @@ mod support;
 use clap::Parser;
 use std::path::PathBuf;
 use support::{load, Result};
-use wc3::model::mdlx::chunks::Chunk;
-use wc3::model::mdlx::{visit_model, Model, ModelDialect};
+use wc3::model::formats::mdlx::chunks::Chunk;
+use wc3::model::formats::mdlx::{visit_document, Dialect, Document};
 
 #[derive(Parser)]
 #[command(about = "Inspect model metadata, geometry, and animations")]
@@ -16,11 +16,11 @@ struct Args {
 fn main() -> Result<()> {
     let args = Args::parse();
     let model = load(&args.input)?;
-    visit_model!(&model, |typed| dump(typed));
+    visit_document!(&model, |typed| dump(typed));
     Ok(())
 }
 
-fn dump<'data, V: ModelDialect>(model: &Model<'data, V>)
+fn dump<'data, V: Dialect>(model: &Document<'data, V>)
 where
     V::Extension: Chunk,
 {

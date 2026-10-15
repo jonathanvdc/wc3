@@ -1,11 +1,12 @@
 use super::*;
 use crate::assets::loader::{ResolvedModelTextures, ResolvedTexture};
-use crate::assets::model::Wc3Model;
+use crate::assets::model::Wc3Document;
 use crate::materials::layers::{animate_layers, AnimatedLayer};
 
 #[test]
 fn repeated_instances_prepare_one_model() {
-    let source = Wc3Model::decode(include_bytes!("../../tests/fixtures/quad_model.mdx")).unwrap();
+    let source =
+        Wc3Document::decode(include_bytes!("../../tests/fixtures/quad_model.mdx")).unwrap();
     let textures = ResolvedModelTextures::default();
     let mut app = App::new();
     app.insert_resource(Assets::<Wc3ModelAsset>::default());
@@ -65,7 +66,7 @@ fn repeated_instances_prepare_one_model() {
 #[test]
 fn changing_bindings_updates_only_the_target_instance() {
     let mut source =
-        Wc3Model::decode(include_bytes!("../../tests/fixtures/quad_model.mdx")).unwrap();
+        Wc3Document::decode(include_bytes!("../../tests/fixtures/quad_model.mdx")).unwrap();
     let mut bitmaps = source.model.textures().cloned().collect::<Vec<_>>();
     bitmaps[0].path.set_text("").unwrap();
     bitmaps[0].replaceable_id = 31;

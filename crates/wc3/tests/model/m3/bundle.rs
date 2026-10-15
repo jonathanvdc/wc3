@@ -1,8 +1,10 @@
-use wc3::model::m3;
-use wc3::model::m3::records::{ModelRecord, U32, V23};
-use wc3::model::m3::{AnimationFile, Bundle, Document, Envelope, Md33, Md34, Model, Ref};
-fn model<E: Envelope>(primary: u32, additional: &[u32]) -> Model<'static, E> {
-    let mut document = Document::new();
+use wc3::model::formats::m3;
+use wc3::model::formats::m3::records::{ModelRecord, U32, V23};
+use wc3::model::formats::m3::{
+    AnimationFile, Bundle, Container, Document, Envelope, Md33, Md34, Ref,
+};
+fn model<E: Envelope>(primary: u32, additional: &[u32]) -> Document<'static, E> {
+    let mut document = Container::new();
     let hashes: Vec<_> = additional
         .iter()
         .map(|value| U32 { value: *value })
@@ -15,7 +17,7 @@ fn model<E: Envelope>(primary: u32, additional: &[u32]) -> Model<'static, E> {
     };
     let id = document.append(&[root]).unwrap();
     document.set_root(Ref::<ModelRecord<V23>>::from_section(1, id.index()));
-    Model::from_document(document).unwrap()
+    Document::from_container(document).unwrap()
 }
 #[test]
 fn external_animation_closure_retains_native_envelopes_and_hashes() {
@@ -85,8 +87,8 @@ fn public_root_dispatch_is_accessible_from_an_application() {
 
 #[test]
 fn native_roots_share_one_name_section_and_record_revisions_remain_independent() {
-    use wc3::model::m3::records::{AnimationGroup, Character, V21};
-    let mut document = Document::<Md34>::new();
+    use wc3::model::formats::m3::records::{AnimationGroup, Character, V21};
+    let mut document = Container::<Md34>::new();
     let characters: Vec<_> = b"shared\0"
         .iter()
         .map(|byte| Character { value: *byte })
@@ -108,16 +110,16 @@ fn native_roots_share_one_name_section_and_record_revisions_remain_independent()
     };
     let root_id = document.append(&[root]).unwrap();
     document.set_root(Ref::<ModelRecord<V21>>::from_section(1, root_id.index()));
-    let model = Model::from_document(document).unwrap();
+    let model = Document::from_container(document).unwrap();
     let a = model
-        .document()
+        .container()
         .resolve::<Character>(model.root::<ModelRecord<V21>>().unwrap().name.cast())
         .unwrap();
     let b = model
-        .document()
+        .container()
         .resolve::<Character>(
             model
-                .document()
+                .container()
                 .array::<AnimationGroup>(group_id)
                 .unwrap()
                 .get(0)
@@ -129,12 +131,12 @@ fn native_roots_share_one_name_section_and_record_revisions_remain_independent()
         .unwrap();
     assert_eq!(a.as_bytes().as_ptr(), b.as_bytes().as_ptr());
     let bytes = model.write().unwrap();
-    let decoded = Model::<Md34>::read(&bytes).unwrap();
+    let decoded = Document::<Md34>::read(&bytes).unwrap();
     assert_eq!(decoded.root_record().unwrap().revision(), 21);
     assert_eq!(
         decoded
-            .document()
-            .section(decoded.document().section_id(group_id.index()).unwrap())
+            .container()
+            .section(decoded.container().section_id(group_id.index()).unwrap())
             .unwrap()
             .revision(),
         0
@@ -152,16 +154,16 @@ fn native_roots_share_one_name_section_and_record_revisions_remain_independent()
 
 #[test]
 fn creation_profiles_select_defaults_without_converting_existing_roots() {
-    use wc3::model::m3::{Beta, HeroesOfTheStorm, StarCraft2};
-    let beta = Model::<Md33>::new::<Beta>().unwrap();
-    let sc2 = Model::<Md34>::new::<StarCraft2>().unwrap();
-    let heroes = Model::<Md34>::new::<HeroesOfTheStorm>().unwrap();
+    use wc3::model::formats::m3::{Beta, HeroesOfTheStorm, StarCraft2};
+    let beta = Document::<Md33>::new::<Beta>().unwrap();
+    let sc2 = Document::<Md34>::new::<StarCraft2>().unwrap();
+    let heroes = Document::<Md34>::new::<HeroesOfTheStorm>().unwrap();
     assert_eq!(beta.root_record().unwrap().revision(), 23);
     assert_eq!(sc2.root_record().unwrap().revision(), 29);
     assert_eq!(heroes.root_record().unwrap().revision(), 30);
     let existing = model::<Md34>(0, &[]).write().unwrap();
     assert_eq!(
-        Model::<Md34>::read(&existing)
+        Document::<Md34>::read(&existing)
             .unwrap()
             .root_record()
             .unwrap()
@@ -184,8 +186,8 @@ fn creation_profiles_select_defaults_without_converting_existing_roots() {
 
 #[test]
 fn newly_established_root_revisions_have_exact_common_metadata() {
-    use wc3::model::m3::records::{V22, V27};
-    let mut document = Document::<Md34>::new();
+    use wc3::model::formats::m3::records::{V22, V27};
+    let mut document = Container::<Md34>::new();
     let id = document
         .append(&[ModelRecord::<V22> {
             m3a_anim_hash: 22,
@@ -193,10 +195,10 @@ fn newly_established_root_revisions_have_exact_common_metadata() {
         }])
         .unwrap();
     document.set_root(Ref::<ModelRecord<V22>>::from_section(1, id.index()));
-    let model = Model::from_document(document).unwrap();
+    let model = Document::from_container(document).unwrap();
     assert_eq!(model.root_record().unwrap().revision(), 22);
     assert_eq!(model.animation_hashes().unwrap(), [22]);
-    let mut document = Document::<Md33>::new();
+    let mut document = Container::<Md33>::new();
     let hashes = document.append(&[U32 { value: 28 }]).unwrap();
     let id = document
         .append(&[ModelRecord::<V27> {
@@ -206,7 +208,7 @@ fn newly_established_root_revisions_have_exact_common_metadata() {
         }])
         .unwrap();
     document.set_root(Ref::<ModelRecord<V27>>::from_section(1, id.index()));
-    let model = Model::from_document(document).unwrap();
+    let model = Document::from_container(document).unwrap();
     assert_eq!(model.root_record().unwrap().revision(), 27);
     assert_eq!(model.animation_hashes().unwrap(), [27, 28]);
 }

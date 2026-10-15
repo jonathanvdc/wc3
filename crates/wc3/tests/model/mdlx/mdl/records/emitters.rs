@@ -1,10 +1,10 @@
-use wc3::model::mdlx::animation::{Animatable, Track};
+use wc3::model::formats::mdlx::animation::{Animatable, Track};
 
-use wc3::model::mdlx::emitters::{ParticleEmitter, ParticleEmitterFlags, RibbonEmitter};
-use wc3::model::mdlx::mdl::{Read as _, Write as _};
-use wc3::model::mdlx::mdx::{Read as _, Write as _};
-use wc3::model::mdlx::scene::{Node, NodeFlags};
-use wc3::model::mdlx::{mdl, mdx};
+use wc3::model::formats::mdlx::emitters::{ParticleEmitter, ParticleEmitterFlags, RibbonEmitter};
+use wc3::model::formats::mdlx::mdl::{Read as _, Write as _};
+use wc3::model::formats::mdlx::mdx::{Read as _, Write as _};
+use wc3::model::formats::mdlx::scene::{Node, NodeFlags};
+use wc3::model::formats::mdlx::{mdl, mdx};
 fn roundtrip<T>(value: &T)
 where
     T: mdl::Read + mdl::Write + mdx::Write + mdx::ReadOwned,
@@ -186,7 +186,7 @@ fn particle_path_is_a_single_260_byte_field() {
 
 #[test]
 fn typed_emitter_nodes_share_common_mdl_flags() {
-    use wc3::model::mdlx::emitters::{ParticleEmitter2, PopcornEmitter};
+    use wc3::model::formats::mdlx::emitters::{ParticleEmitter2, PopcornEmitter};
 
     let mut particle = ParticleEmitter2::decode_mdl(
         "ParticleEmitter2 \"typed\" { ObjectId 1, DontInheritRotation, LineEmitter, }",

@@ -1,6 +1,6 @@
 # Editing semantic model graphs
 
-`wc3::model::semantic` describes model meaning independently of file layout.
+`wc3::model` describes model meaning independently of file layout.
 Use it to inspect relationships, author changes, or prepare a native export.
 The MDLX, M2, M3, WMO, and Diablo codecs remain the APIs for their encoded records
 and supporting documents. A semantic graph contains actual authoring values;
@@ -46,16 +46,16 @@ those dependencies remains the application's responsibility.
 ## Choosing an authoring vocabulary
 
 `Model<'data, P>` uses `P` to select the permitted authoring vocabulary. Built-in
-profiles in `semantic::profiles` include `Mdlx`, `M2`, `M3`, `Wmo`, `D3`, and `D4`.
+profiles in `model::profiles` include `Mdlx`, `M2`, `M3`, `Wmo`, `D3`, and `D4`.
 The default profile, `Universal`, accepts all built-in families. A profile selects
 complete geometry and joint-binding schemas, material surfaces, attached
 features, systems, appearance assignments, animation programs, and the controls
 carried directly by each owner.
 
-The shared definitions live directly in topic modules: `semantic::materials`,
+The shared definitions live directly in topic modules: `model::materials`,
 `features`, `scene`, `controls`, `geometry`, `systems`, `appearance`, `animation`,
 and `values`. Profiles select those definitions and apply their admissibility
-rules. The root semantic namespace reexports common
+rules. The root model namespace reexports common
 building blocks; the profile namespaces expose their chosen compositions.
 Choosing a profile therefore constrains authoring without introducing a second
 copy of the same data structure.
@@ -90,8 +90,8 @@ value. Format-specific imports and exports use their concrete profile; translati
 an incompatible vocabulary requires a separate representability decision.
 
 ```rust
-use wc3::model::semantic::{Model, Node};
-use wc3::model::semantic::profiles::{Mdlx, Universal};
+use wc3::model::{Model, Node};
+use wc3::model::profiles::{Mdlx, Universal};
 
 let mut draft = Model::<Mdlx>::builder("Example");
 let root = draft.add_node(Node::named("Root"))?;
@@ -100,7 +100,7 @@ let broader: Model<'_, Universal> = model.widen();
 assert_eq!(broader.node(root).unwrap().name, "Root");
 let restored = broader.try_narrow::<Mdlx>()?;
 assert_eq!(restored.node(root).unwrap().name, "Root");
-Ok::<(), wc3::model::semantic::Error>(())
+Ok::<(), wc3::model::Error>(())
 ```
 
 Widening preserves graph identities, meanings, and encoded array storage. Its
@@ -127,7 +127,7 @@ explicit transformation before narrowing.
 
 There is no separate Portable or Generic profile. Format-independent features and
 checked simulation arenas live under
-`semantic::scene`, within the universal vocabulary. Their scoped shape, body, and
+`model::scene`, within the universal vocabulary. Their scoped shape, body, and
 joint identities cannot be substituted across simulation systems.
 
 Applications can implement `Profile` with their own payloads. Relationship
@@ -146,7 +146,7 @@ attaching arbitrary streams to a narrower native schema.
 ## Materials, shader inputs, and draw state
 
 A material combines a rendering program with its input values. Its components
-live under `semantic::materials`, where profiles select complete compositions
+live under `model::materials`, where profiles select complete compositions
 with their own supported value domains. `LayeredSurface<Layer>` owns ordered
 layers; `ShaderPass<Input>` owns ordered shader inputs. Custom layer and input
 types implement `SurfaceLayer` or `ShaderInput` to participate in property
@@ -173,8 +173,8 @@ The following shader pass selects inputs without an inline coordinate transform.
 Its inputs still use the same owning binding structure as other selections:
 
 ```rust
-use wc3::model::semantic::materials::model_shader::{ShaderPass, TextureUnit};
-use wc3::model::semantic::Animated;
+use wc3::model::materials::model_shader::{ShaderPass, TextureUnit};
+use wc3::model::Animated;
 
 let mut input = TextureUnit::<()>::default();
 input.coordinates.source = 1;
@@ -319,8 +319,8 @@ curves. After widening, the shared owned components can be edited without select
 native payload:
 
 ```rust
-use wc3::model::semantic::profiles::mdlx;
-use wc3::model::semantic::{Animated, ParticleDefinition, ParticleScalar};
+use wc3::model::profiles::mdlx;
+use wc3::model::{Animated, ParticleDefinition, ParticleScalar};
 
 let mut emitter = ParticleDefinition::from(mdlx::Particle2::default());
 emitter.emission.rate = ParticleScalar::Animated(Animated::constant(24.));
@@ -620,7 +620,7 @@ constructors materialize separate encoded arrays from the interleaved records.
 For example, a quaternion Hermite curve can carry zero derivatives explicitly:
 
 ```rust
-use wc3::model::semantic::{Curve, HermiteKeyframe, Quaternion, Time};
+use wc3::model::{Curve, HermiteKeyframe, Quaternion, Time};
 
 let keys = [HermiteKeyframe {
     time: Time::seconds(0.)?,
@@ -631,7 +631,7 @@ let keys = [HermiteKeyframe {
 let curve = Curve::hermite_keys(keys)?;
 assert!(curve.values().is_owned());
 assert_eq!(curve.hermite_derivatives().unwrap().incoming.get(0), Some([0.; 4]));
-Ok::<(), wc3::model::semantic::Error>(())
+Ok::<(), wc3::model::Error>(())
 ```
 
 ## Borrowing and checked edits
@@ -711,7 +711,7 @@ corner order. The same operation works for any schema that supports remapping.
 
 ```rust
 use wc3::model::common::IntoZeroVec;
-use wc3::model::semantic::{
+use wc3::model::{
     GeometryData, GeometryEdit, GeometrySchema, Topology, VertexRemap,
 };
 
@@ -728,7 +728,7 @@ let edited = geometry.edited(GeometryEdit {
 })?;
 assert_eq!(edited.positions.len(), 4);
 assert_eq!(geometry.positions.len(), 3);
-Ok::<(), wc3::model::semantic::Error>(())
+Ok::<(), wc3::model::Error>(())
 ```
 
 Use `Mesh::edited` to apply a geometry edit and validate its subset references

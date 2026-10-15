@@ -1,5 +1,6 @@
-use wc3::model::conversion::{diablo::d4 as convert, ExportOptions, ImportOptions, LossPolicy};
-use wc3::model::diablo::d4::{self, records as native};
+use wc3::model::conversion::{ExportOptions, ImportOptions, LossPolicy};
+use wc3::model::formats::diablo::d4::{self, records as native};
+use wc3::model::io::diablo::d4 as convert;
 
 fn source() -> d4::Material<'static> {
     let mut source = d4::Material::default();

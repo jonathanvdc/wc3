@@ -24,7 +24,7 @@ use bevy::render::{
     Render, RenderApp, RenderStartup, RenderSystems,
 };
 use std::collections::HashMap;
-use wc3::model::mdlx::materials::LayerFilterMode;
+use wc3::model::formats::mdlx::materials::LayerFilterMode;
 
 use super::records::{
     segment_center, RibbonInstances, RibbonSection, RibbonSegment, RibbonUniform,

@@ -1,5 +1,5 @@
 use super::*;
-use wc3::model::mdlx::animation::Animatable;
+use wc3::model::formats::mdlx::animation::Animatable;
 
 #[test]
 fn popcorn_defaults_flags_and_literal_strings() {

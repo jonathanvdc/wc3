@@ -1,4 +1,4 @@
-use wc3::model::semantic::{
+use wc3::model::{
     Animated, Link, ParticleComposition, ParticleEmission, TrailAppearance, TrailComposition,
     TrailGeometry, ValidateLinks,
 };

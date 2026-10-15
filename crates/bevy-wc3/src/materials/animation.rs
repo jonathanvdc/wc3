@@ -6,9 +6,9 @@ use bevy::asset::AssetEvent;
 use bevy::math::Affine2;
 use bevy::prelude::*;
 use std::array::from_fn;
-use wc3::model::mdlx::animation::{Animatable, Interpolate, TextureAnimation, TrackValue};
-use wc3::model::mdlx::materials::{Layer, LayerFresnel, ShaderType};
-use wc3::model::mdlx::V1800;
+use wc3::model::formats::mdlx::animation::{Animatable, Interpolate, TextureAnimation, TrackValue};
+use wc3::model::formats::mdlx::materials::{Layer, LayerFresnel, ShaderType};
+use wc3::model::formats::mdlx::V1800;
 
 use crate::animation::{clocks::SamplingTime, Wc3Animation};
 use crate::materials::textures::Wc3TextureBindings;

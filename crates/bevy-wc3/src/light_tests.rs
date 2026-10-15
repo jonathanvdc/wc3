@@ -1,13 +1,13 @@
 use super::*;
 use crate::animation::pose::animate_nodes;
-use crate::assets::model::Wc3Model;
+use crate::assets::model::Wc3Document;
 use crate::instance::spawn::{spawn_prepared_model, Wc3NodeEntities};
 use crate::materials::Wc3LayerMaterial;
-use crate::preparation::prepare_model;
+use crate::preparation::prepare_document;
 use bevy::camera::visibility::VisibilityPlugin;
 use bevy::ecs::world::CommandQueue;
 use bevy::mesh::skinning::SkinnedMeshInverseBindposes;
-use wc3::model::mdlx::animation::Animatable;
+use wc3::model::formats::mdlx::animation::Animatable;
 
 fn scene() -> (App, Entity, Entity) {
     let mut app = App::new();
@@ -17,11 +17,12 @@ fn scene() -> (App, Entity, Entity) {
         ..default()
     });
     app.add_systems(Update, (animate_nodes, animate_lights).chain());
-    let source = Wc3Model::decode_mdl(include_str!("../tests/fixtures/light_capture.mdl")).unwrap();
+    let source =
+        Wc3Document::decode_mdl(include_str!("../tests/fixtures/light_capture.mdl")).unwrap();
     let mut meshes = Assets::<Mesh>::default();
     let mut materials = Assets::<Wc3LayerMaterial>::default();
     let mut poses = Assets::<SkinnedMeshInverseBindposes>::default();
-    let prepared = prepare_model(&mut meshes, &mut poses, &source, |_| None).unwrap();
+    let prepared = prepare_document(&mut meshes, &mut poses, &source, |_| None).unwrap();
     let mut queue = CommandQueue::default();
     let mut commands = Commands::new(&mut queue, app.world());
     let first = spawn_prepared_model(&mut commands, &mut meshes, &mut materials, &prepared);

@@ -4,8 +4,8 @@ use super::Wc3LayerMaterial;
 use crate::animation::{clocks::SamplingTime, Wc3Animation};
 use crate::preparation::shared::Shared;
 use bevy::prelude::*;
-use wc3::model::mdlx::animation::Animatable;
-use wc3::model::mdlx::materials::LayerFilterMode;
+use wc3::model::formats::mdlx::animation::Animatable;
+use wc3::model::formats::mdlx::materials::LayerFilterMode;
 
 #[derive(Component)]
 pub(crate) struct AnimatedLayer {

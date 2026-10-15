@@ -1,6 +1,6 @@
-use wc3::model::mdlx::mdx;
-use wc3::model::mdlx::mdx::Read as _;
-use wc3::model::mdlx::mdx::{Cursor, Encoder, WriteError};
+use wc3::model::formats::mdlx::mdx;
+use wc3::model::formats::mdlx::mdx::Read as _;
+use wc3::model::formats::mdlx::mdx::{Cursor, Encoder, WriteError};
 
 #[derive(Debug, PartialEq, mdx::Read, mdx::ReadOwned, mdx::Write)]
 struct Header {
@@ -121,10 +121,10 @@ fn sized_derive_rejects_truncated_vector_item() {
     let error = SizedPacket::<()>::decode_mdx(&[8, 0, 0, 0, 7, 0, 11, 0]).unwrap_err();
     assert_eq!(
         error,
-        wc3::model::mdlx::mdx::ReadError {
+        wc3::model::formats::mdlx::mdx::ReadError {
             offset: 6,
             tag: Some(TEST_TAG),
-            kind: wc3::model::mdlx::mdx::ReadErrorKind::UnexpectedEnd {
+            kind: wc3::model::formats::mdlx::mdx::ReadErrorKind::UnexpectedEnd {
                 needed: 4,
                 remaining: 2
             }
@@ -146,10 +146,10 @@ fn sized_derive_rejects_zero_width_items() {
     let error = EmptyItems::decode_mdx(&[5, 0, 0, 0, 42]).unwrap_err();
     assert_eq!(
         error,
-        wc3::model::mdlx::mdx::ReadError {
+        wc3::model::formats::mdlx::mdx::ReadError {
             offset: 4,
             tag: Some(TEST_TAG),
-            kind: wc3::model::mdlx::mdx::ReadErrorKind::NoProgress
+            kind: wc3::model::formats::mdlx::mdx::ReadErrorKind::NoProgress
         }
     );
 }

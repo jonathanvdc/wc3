@@ -2,9 +2,9 @@
 
 mod chunks {
     use wc3::model::common::IntoZeroVec;
-    use wc3::model::m2::chunks::*;
-    use wc3::model::m2::records::ModelFlags;
-    use wc3::model::m2::V274;
+    use wc3::model::formats::m2::chunks::*;
+    use wc3::model::formats::m2::records::ModelFlags;
+    use wc3::model::formats::m2::V274;
 
     #[test]
     fn exp2_uses_descriptor_header_and_relocates_particle_keys() {
@@ -54,11 +54,11 @@ mod chunks {
 }
 
 mod skeleton {
-    use wc3::model::m2::codec::Array;
-    use wc3::model::m2::codec::ArrayRef;
-    use wc3::model::m2::companions::{Skeleton, SkeletonChunk};
-    use wc3::model::m2::records::ModelFlags;
-    use wc3::model::m2::V274;
+    use wc3::model::formats::m2::codec::Array;
+    use wc3::model::formats::m2::codec::ArrayRef;
+    use wc3::model::formats::m2::companions::{Skeleton, SkeletonChunk};
+    use wc3::model::formats::m2::records::ModelFlags;
+    use wc3::model::formats::m2::V274;
 
     fn word(data: &mut [u8], offset: usize, value: u32) {
         data[offset..offset + 4].copy_from_slice(&value.to_le_bytes());
@@ -123,12 +123,12 @@ mod skeleton {
 
 mod resources {
     use wc3::model::common::IntoZeroVec;
-    use wc3::model::m2::chunks::Chunk;
-    use wc3::model::m2::records::Texture;
-    use wc3::model::m2::records::{TextureFlags, TextureSource};
-    use wc3::model::m2::resources::*;
-    use wc3::model::m2::Model;
-    use wc3::model::m2::{Chunked, Flat, V264, V274};
+    use wc3::model::formats::m2::chunks::Chunk;
+    use wc3::model::formats::m2::records::Texture;
+    use wc3::model::formats::m2::records::{TextureFlags, TextureSource};
+    use wc3::model::formats::m2::resources::*;
+    use wc3::model::formats::m2::Document;
+    use wc3::model::formats::m2::{Chunked, Flat, V264, V274};
 
     #[test]
     fn sibling_names_ignore_dots_in_directories_and_preserve_native_bytes() {
@@ -154,7 +154,7 @@ mod resources {
     }
     #[test]
     fn declared_skin_and_texture_references_preserve_names() {
-        let mut model = Model::<Flat<V264>>::new();
+        let mut model = Document::<Flat<V264>>::new();
         model.core_mut().skins = 2;
         model.core_mut().textures = vec![
             Texture {
@@ -183,7 +183,7 @@ mod resources {
     }
     #[test]
     fn modern_skin_ids_split_base_views_from_lods() {
-        let mut model = Model::<Chunked<V274>>::new();
+        let mut model = Document::<Chunked<V274>>::new();
         model.core_mut().skins = 1;
         model
             .insert_extension(1, Chunk::SkinIds([7, 8, 0, 9].into_zero_vec()))

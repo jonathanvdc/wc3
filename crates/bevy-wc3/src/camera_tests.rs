@@ -2,8 +2,8 @@ use super::*;
 use crate::animation::pose::{animate_nodes, Wc3NodeCamera};
 use crate::schedule::{configure, Wc3Systems};
 use std::f32::consts::FRAC_PI_2;
-use wc3::model::mdlx::animation::{Sequence, Track, ValueKeyframe};
-use wc3::model::mdlx::scene::NodeFlags;
+use wc3::model::formats::mdlx::animation::{Sequence, Track, ValueKeyframe};
+use wc3::model::formats::mdlx::scene::NodeFlags;
 
 fn definition() -> ModelCamera<'static, V1800> {
     let mut camera = ModelCamera::new("Portrait").unwrap();

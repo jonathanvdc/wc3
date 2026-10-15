@@ -1,14 +1,14 @@
 use std::io::Write;
 use std::marker::PhantomData;
-use wc3::model::mdlx::animation::{Animatable, Track, TrackValue};
-use wc3::model::mdlx::mdl;
-use wc3::model::mdlx::mdl::Read as _;
-use wc3::model::mdlx::mdl::{Parser, ReadError, ReadErrorKind, Span, WriteError, Writer};
-use wc3::model::mdlx::mdx::Read as _;
-use wc3::model::mdlx::mdx::Write as _;
-use wc3::model::mdlx::scene::ModelInfo;
-use wc3::model::mdlx::FixedText;
-use wc3::model::mdlx::IoError;
+use wc3::model::formats::mdlx::animation::{Animatable, Track, TrackValue};
+use wc3::model::formats::mdlx::mdl;
+use wc3::model::formats::mdlx::mdl::Read as _;
+use wc3::model::formats::mdlx::mdl::{Parser, ReadError, ReadErrorKind, Span, WriteError, Writer};
+use wc3::model::formats::mdlx::mdx::Read as _;
+use wc3::model::formats::mdlx::mdx::Write as _;
+use wc3::model::formats::mdlx::scene::ModelInfo;
+use wc3::model::formats::mdlx::FixedText;
+use wc3::model::formats::mdlx::IoError;
 
 fn print<T: mdl::Write>(value: &T) -> Result<String, WriteError> {
     value.encode_mdl()
@@ -374,8 +374,8 @@ fn tuple_value_forms_preserve_prefixes_and_entry_punctuation() {
 
 #[test]
 fn typed_record_flags_keep_their_original_binary_layout_and_unknown_bits() {
-    use wc3::model::mdlx::animation::{Sequence, SequenceFlags};
-    use wc3::model::mdlx::materials::{Texture, TextureFlags};
+    use wc3::model::formats::mdlx::animation::{Sequence, SequenceFlags};
+    use wc3::model::formats::mdlx::materials::{Texture, TextureFlags};
     let raw = 0x80000003u32.to_le_bytes();
     assert_eq!(
         TextureFlags::decode_mdx(&raw)

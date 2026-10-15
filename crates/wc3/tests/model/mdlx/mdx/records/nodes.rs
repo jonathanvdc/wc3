@@ -1,9 +1,9 @@
-use wc3::model::mdlx::animation::Track;
-use wc3::model::mdlx::mdx::Read as _;
-use wc3::model::mdlx::mdx::Write as _;
-use wc3::model::mdlx::scene::{Bone, Node, NodeFlags};
-use wc3::model::mdlx::Model;
-use wc3::model::mdlx::Vec3;
+use wc3::model::formats::mdlx::animation::Track;
+use wc3::model::formats::mdlx::mdx::Read as _;
+use wc3::model::formats::mdlx::mdx::Write as _;
+use wc3::model::formats::mdlx::scene::{Bone, Node, NodeFlags};
+use wc3::model::formats::mdlx::Document;
+use wc3::model::formats::mdlx::Vec3;
 
 #[test]
 fn bones_and_helpers_round_trip() {
@@ -11,12 +11,13 @@ fn bones_and_helpers_round_trip() {
     node.parent_id = 3;
     node.flags = NodeFlags(0x100);
     let bone = Bone::new(node.clone(), 2, u32::MAX);
-    let mut model = Model::<wc3::model::mdlx::V1800>::new();
+    let mut model = Document::<wc3::model::formats::mdlx::V1800>::new();
     model.set_bones([bone]);
     model.set_helpers([node]);
-    let parsed = Model::<wc3::model::mdlx::V1800>::decode_mdx(&model.encode_mdx().unwrap())
-        .unwrap()
-        .into_owned();
+    let parsed =
+        Document::<wc3::model::formats::mdlx::V1800>::decode_mdx(&model.encode_mdx().unwrap())
+            .unwrap()
+            .into_owned();
     let bone = &parsed.bones().next().unwrap();
     assert_eq!(bone.node.name.text(), "Root");
     assert_eq!(bone.node.object_id, 7);
@@ -43,7 +44,7 @@ fn node_flags_preserve_unknown_bits() {
 
 #[test]
 fn typed_node_flags_preserve_the_complete_word_and_node() {
-    use wc3::model::mdlx::emitters::{Particle2Flags, ParticleEmitterFlags, PopcornFlags};
+    use wc3::model::formats::mdlx::emitters::{Particle2Flags, ParticleEmitterFlags, PopcornFlags};
 
     let bits = 0x8002_1001;
     let mut original = Node::new("Typed", 9).unwrap();

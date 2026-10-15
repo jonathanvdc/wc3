@@ -1,9 +1,9 @@
 use mdl::{Read as _, Write as _};
 use mdx::{Read as _, Write as _};
-use wc3::model::mdlx::emitters::{Particle2FilterMode, Particle2Frames, ParticleEmitter2};
-use wc3::model::mdlx::materials::{Layer, LayerFilterMode, LayerShadingFlags};
-use wc3::model::mdlx::V800;
-use wc3::model::mdlx::{mdl, mdx};
+use wc3::model::formats::mdlx::emitters::{Particle2FilterMode, Particle2Frames, ParticleEmitter2};
+use wc3::model::formats::mdlx::materials::{Layer, LayerFilterMode, LayerShadingFlags};
+use wc3::model::formats::mdlx::V800;
+use wc3::model::formats::mdlx::{mdl, mdx};
 
 #[derive(Debug, PartialEq, mdx::Read, mdx::ReadOwned, mdx::Write, mdx::Value)]
 #[mdx(value = u32)]
@@ -61,7 +61,8 @@ fn typed_storage_retains_unknown_data_during_edits() {
     assert_eq!(decoded, layer);
     assert_eq!(decoded.shading_flags.bits(), 0x8000_0010);
     assert!(layer.encode_mdl().is_err());
-    let mut emitter = ParticleEmitter2::new(wc3::model::mdlx::scene::Node::new("p", 0).unwrap());
+    let mut emitter =
+        ParticleEmitter2::new(wc3::model::formats::mdlx::scene::Node::new("p", 0).unwrap());
     emitter.filter_mode = Particle2FilterMode::Unknown(99);
     emitter.frames = Particle2Frames::Unknown(u32::MAX);
     assert_eq!(
@@ -96,8 +97,8 @@ fn layer_filter_keywords_and_unknown_rejection() {
 
 #[test]
 fn emitter_flags_interpret_overlapping_bits_and_preserve_other_bits() {
-    use wc3::model::mdlx::emitters::{ParticleEmitter, ParticleEmitter2, PopcornEmitter};
-    use wc3::model::mdlx::scene::{Node, NodeFlags};
+    use wc3::model::formats::mdlx::emitters::{ParticleEmitter, ParticleEmitter2, PopcornEmitter};
+    use wc3::model::formats::mdlx::scene::{Node, NodeFlags};
     let mut node = Node::new("flags", 0).unwrap();
     node.flags = NodeFlags(0x8002_0001);
     let mut particles = ParticleEmitter2::new(node.clone());
@@ -123,7 +124,7 @@ fn emitter_flags_interpret_overlapping_bits_and_preserve_other_bits() {
 
 #[test]
 fn light_type_preserves_unknown_binary_values_and_rejects_text_output() {
-    use wc3::model::mdlx::scene::{Light, LightType, Node};
+    use wc3::model::formats::mdlx::scene::{Light, LightType, Node};
 
     for raw in [0, 1, 2, 3, u32::MAX] {
         let value = LightType::decode_mdx(&raw.to_le_bytes()).unwrap();

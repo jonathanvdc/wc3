@@ -1,9 +1,9 @@
-use wc3::model::mdlx::geometry::{CollisionGeometry, CollisionShape};
-use wc3::model::mdlx::mdx::Read as _;
-use wc3::model::mdlx::mdx::Write as _;
+use wc3::model::formats::mdlx::geometry::{CollisionGeometry, CollisionShape};
+use wc3::model::formats::mdlx::mdx::Read as _;
+use wc3::model::formats::mdlx::mdx::Write as _;
 
-use wc3::model::mdlx::scene::Node;
-use wc3::model::mdlx::Model;
+use wc3::model::formats::mdlx::scene::Node;
+use wc3::model::formats::mdlx::Document;
 
 #[test]
 fn collision_primitives_round_trip() {
@@ -21,11 +21,12 @@ fn collision_primitives_round_trip() {
         [[0.0, 0.0, 0.0], [0.0, 0.0, 2.0]],
         0.5,
     );
-    let mut model = Model::<wc3::model::mdlx::V800>::new();
+    let mut model = Document::<wc3::model::formats::mdlx::V800>::new();
     model.set_collision_shapes([box_shape, sphere, plane, cylinder]);
-    let decoded = Model::<wc3::model::mdlx::V800>::decode_mdx(&model.encode_mdx().unwrap())
-        .unwrap()
-        .into_owned();
+    let decoded =
+        Document::<wc3::model::formats::mdlx::V800>::decode_mdx(&model.encode_mdx().unwrap())
+            .unwrap()
+            .into_owned();
     let shapes = decoded.collision_shapes().collect::<Vec<_>>();
     assert_eq!(shapes[0].node.name.text(), "Box");
     assert_eq!(

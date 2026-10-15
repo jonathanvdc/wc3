@@ -1,17 +1,21 @@
 //! Shared meshes, bind poses, and material templates prepared before instantiation.
+use crate::assets::model::Wc3Model;
 use crate::materials::runtime::MaterialTemplateId;
 use bevy::mesh::skinning::SkinnedMeshInverseBindposes;
 use bevy::prelude::*;
 use std::collections::HashMap;
 use std::sync::Arc;
-use wc3::model::mdlx::animation::{Animatable, GeosetAnimation};
-use wc3::model::mdlx::animation::{Sequence, TextureAnimation};
-use wc3::model::mdlx::emitters::{ParticleEmitter, ParticleEmitter2, RibbonEmitter};
-use wc3::model::mdlx::materials::ShaderType;
-use wc3::model::mdlx::materials::{Material, Texture};
-use wc3::model::mdlx::scene::EventObject;
-use wc3::model::mdlx::scene::{Attachment, Camera, Light};
-use wc3::model::mdlx::{Model, V1800};
+use wc3::model::conversion::ExportOptions;
+use wc3::model::formats::mdlx::animation::{Animatable, GeosetAnimation};
+use wc3::model::formats::mdlx::animation::{Sequence, TextureAnimation};
+use wc3::model::formats::mdlx::emitters::{ParticleEmitter, ParticleEmitter2, RibbonEmitter};
+use wc3::model::formats::mdlx::materials::ShaderType;
+use wc3::model::formats::mdlx::materials::{Material, Texture};
+use wc3::model::formats::mdlx::scene::EventObject;
+use wc3::model::formats::mdlx::scene::{Attachment, Camera, Light};
+use wc3::model::formats::mdlx::{Document, V1800};
+use wc3::model::io::mdlx as semantic_mdlx;
+use wc3::model::{profiles::Mdlx, Model};
 
 mod compilation;
 use compilation::RuntimeRecords;
@@ -32,7 +36,9 @@ use crate::assets::loader::Wc3ModelAsset;
 use crate::assets::loader::{
     resolve_texture as resolve_texture_binding, ResolvedModelTextures, ResolvedTexture,
 };
-use crate::assets::model::{ModelError, Wc3Model};
+use crate::assets::model::ModelError;
+#[cfg(test)]
+use crate::assets::model::Wc3Document;
 use crate::assets::resources::Wc3ModelResources;
 use crate::lod::LodBounds;
 use crate::materials::animation::AnimatedSurface;
@@ -155,19 +161,20 @@ pub fn prepare_model_asset(
 /// The resolver receives literal bitmap paths and may return `None` for missing
 /// images. Replaceable IDs are supplied when spawning or through instance texture
 /// bindings. This convenience function leaves child-model resources unresolved;
-/// use [`prepare_model_with_resources`] to resolve attachments and PREM models.
+/// use [`prepare_document_with_resources`] to resolve attachments and PREM models.
 ///
 /// # Errors
 ///
 /// Returns [`ModelError`] when geometry cannot be prepared, including unsupported
 /// influence counts or unavailable texture-coordinate sets.
-pub fn prepare_model(
+#[cfg(test)]
+pub(crate) fn prepare_document(
     meshes: &mut Assets<Mesh>,
     inverse_bindposes: &mut Assets<SkinnedMeshInverseBindposes>,
-    source: &Wc3Model,
+    source: &Wc3Document,
     resolve_texture: impl FnMut(&str) -> Option<Handle<Image>>,
 ) -> Result<PreparedModel, ModelError> {
-    prepare_model_with_resources(meshes, inverse_bindposes, source, resolve_texture, |_| None)
+    prepare_document_with_resources(meshes, inverse_bindposes, source, resolve_texture, |_| None)
 }
 
 /// Prepare shared geometry, material templates, and dependencies through
@@ -179,15 +186,16 @@ pub fn prepare_model(
 ///
 /// # Errors
 ///
-/// Returns [`ModelError`] for geometry preparation failures, as in [`prepare_model`].
-pub fn prepare_model_with_resources(
+/// Returns [`ModelError`] for geometry preparation failures, as in [`prepare_document`].
+#[cfg(test)]
+pub(crate) fn prepare_document_with_resources(
     meshes: &mut Assets<Mesh>,
     inverse_bindposes: &mut Assets<SkinnedMeshInverseBindposes>,
-    source: &Wc3Model,
+    source: &Wc3Document,
     resolve_texture: impl FnMut(&str) -> Option<Handle<Image>>,
     resolve_model: impl FnMut(&str) -> Option<Handle<Wc3ModelAsset>>,
 ) -> Result<PreparedModel, ModelError> {
-    let compiled = compile_model(source.model.as_borrowed(), resolve_texture, resolve_model)?;
+    let compiled = compile_document(source.model.as_borrowed(), resolve_texture, resolve_model)?;
     Ok(compiled.prepare(meshes, inverse_bindposes))
 }
 
@@ -195,25 +203,16 @@ pub fn prepare_model_with_resources(
 /// Geometry stays borrowed while meshes are built. Runtime records move owned
 /// buffers and copy only borrowed buffers. No Bevy asset stores are needed.
 ///
-/// ```
-/// use bevy_wc3::{compile_model, DecodedModel};
-/// let bytes = b"Version { FormatVersion 800, } Model \"Empty\" {}".to_vec();
-/// let decoded = DecodedModel::decode(&bytes)?;
-/// let compiled = compile_model(decoded.model, |_| None, |_| None)?;
-/// drop(bytes);
-/// assert_eq!(compiled.lod_levels(), &[0]);
-/// # Ok::<(), bevy_wc3::ModelError>(())
-/// ```
 ///
 /// # Errors
 /// Returns an error for geometry that cannot be compiled, including unsupported
 /// influence counts. No mesh or bind-pose assets are inserted on failure.
-pub fn compile_model(
-    model: Model<'_, V1800>,
+pub(crate) fn compile_document(
+    model: Document<'_, V1800>,
     mut resolve_texture: impl FnMut(&str) -> Option<Handle<Image>>,
     resolve_model: impl FnMut(&str) -> Option<Handle<Wc3ModelAsset>>,
 ) -> Result<CompiledModel, ModelError> {
-    let models = Wc3ModelResources::resolve(&model, resolve_model);
+    let models = Wc3ModelResources::resolve_document(&model, resolve_model);
     let textures = ResolvedModelTextures {
         bitmaps: model
             .textures()
@@ -232,7 +231,7 @@ pub fn compile_model(
 }
 
 pub(crate) fn compile_resolved_model(
-    model: Model<'_, V1800>,
+    model: Document<'_, V1800>,
     textures: ResolvedModelTextures,
     models: Wc3ModelResources,
 ) -> Result<CompiledModel, ModelError> {
@@ -438,4 +437,48 @@ impl CompiledModel {
             inverse_bindposes: inverse_bindposes.add(self.inverse_bindposes.to_vec()),
         }
     }
+}
+
+/// Compile the default semantic model into owned meshes and runtime definitions.
+/// The current WC3 renderer lowers strictly to its V1800 runtime vocabulary.
+/// Unsupported semantic data produces an error instead of being discarded.
+pub fn compile_model(
+    model: Model<'_, Mdlx>,
+    resolve_texture: impl FnMut(&str) -> Option<Handle<Image>>,
+    resolve_model: impl FnMut(&str) -> Option<Handle<Wc3ModelAsset>>,
+) -> Result<CompiledModel, ModelError> {
+    let document = lower_model(&model)?;
+    compile_document(document, resolve_texture, resolve_model)
+}
+
+pub(crate) fn lower_model<'a>(
+    model: &'a Model<'_, Mdlx>,
+) -> Result<Document<'a, V1800>, ModelError> {
+    semantic_mdlx::plan::<V1800>(model, &ExportOptions::default())
+        .and_then(|plan| plan.execute())
+        .map(|conversion| conversion.value)
+        .map_err(|error| ModelError(error.to_string()))
+}
+
+/// Prepare shared Bevy assets from a semantic Warcraft III graph.
+pub fn prepare_model(
+    meshes: &mut Assets<Mesh>,
+    inverse_bindposes: &mut Assets<SkinnedMeshInverseBindposes>,
+    source: &Wc3Model,
+    resolve_texture: impl FnMut(&str) -> Option<Handle<Image>>,
+) -> Result<PreparedModel, ModelError> {
+    prepare_model_with_resources(meshes, inverse_bindposes, source, resolve_texture, |_| None)
+}
+
+/// Prepare a semantic graph using application-defined dependency resolvers.
+pub fn prepare_model_with_resources(
+    meshes: &mut Assets<Mesh>,
+    inverse_bindposes: &mut Assets<SkinnedMeshInverseBindposes>,
+    source: &Wc3Model,
+    resolve_texture: impl FnMut(&str) -> Option<Handle<Image>>,
+    resolve_model: impl FnMut(&str) -> Option<Handle<Wc3ModelAsset>>,
+) -> Result<PreparedModel, ModelError> {
+    let document = lower_model(&source.model)?;
+    let compiled = compile_document(document, resolve_texture, resolve_model)?;
+    Ok(compiled.prepare(meshes, inverse_bindposes))
 }

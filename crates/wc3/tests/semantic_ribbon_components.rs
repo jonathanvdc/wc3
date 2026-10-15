@@ -1,7 +1,7 @@
-use wc3::model::semantic::profiles::{m2, mdlx};
-use wc3::model::semantic::{AngleTrailControls, SurfaceTrailRendering};
-use wc3::model::semantic::{Animated, TrailAtlasSlot, TrailControls, TrailEmitter, TrailRendering};
-use wc3::model::semantic::{
+use wc3::model::profiles::{m2, mdlx};
+use wc3::model::{AngleTrailControls, SurfaceTrailRendering};
+use wc3::model::{Animated, TrailAtlasSlot, TrailControls, TrailEmitter, TrailRendering};
+use wc3::model::{
     GravityTrailControls, ParticleLifetime, ParticleMotion, ProgrammedAge, ProgrammedDirection,
     ProgrammedForces, ProgrammedNoise, ProgrammedTrailGravity, TrailAppearance,
 };
@@ -61,8 +61,8 @@ fn edge_trail_export_checks_numeric_width_without_conflating_direction_and_gravi
 fn programmed_ribbon_composition_preserves_native_controls_and_borrowed_splines() {
     use std::borrow::Cow;
     use std::ptr;
-    use wc3::model::semantic::profiles::{m3, Universal};
-    use wc3::model::semantic::{Model, Node, ParticleScalar, ProgrammedRibbon};
+    use wc3::model::profiles::{m3, Universal};
+    use wc3::model::{Model, Node, ParticleScalar, ProgrammedRibbon};
     fn variation() -> m3::VariationControl {
         m3::VariationControl {
             kind: Default::default(),

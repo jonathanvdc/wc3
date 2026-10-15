@@ -1,9 +1,9 @@
-# Converting native model assets
+# Importing and exporting model assets
 
-The adapters under `wc3::model::conversion` connect native model APIs to
+The adapters under `wc3::model::io` connect native documents to
 independent [semantic model graphs](semantic.md). Import maps decoded meanings
 into checked objects and relationships. An export planner constructs a native
-model or bundle from those objects and reports how the destination represents
+document or bundle from those objects and reports how the destination represents
 them. File decoding, dependency resolution, and encoding remain the native
 codec's responsibility; conversion performs no external I/O.
 
@@ -11,12 +11,19 @@ The graph contains authoring values rather than an embedded source file.
 Compatible geometry and animation arrays borrow native encoded storage through
 `ZeroVec`, so their decoded source must outlive those arrays. Adapters materialize
 arrays once when the native layout differs from the semantic element layout. Retain the
-original native model separately if the application also needs its codec APIs
+original native document separately if the application also needs its codec APIs
 or original physical layout.
+
+For an independent Warcraft III model, `io::mdlx::decode_mdx` and `decode_mdl`
+combine native decoding with owned import. Both return `Model<'static, Mdlx>`
+and an import report, so their input can be released immediately. `import_owned`
+provides the same ownership choice for an already decoded MDLX document. The
+borrowing `import` entry point remains useful when the application retains its
+native source and wants to reuse compatible encoded arrays.
 
 ## Selecting a vocabulary and layout
 
-MDLX import returns `semantic::Model<'data, Mdlx>` directly. The M2, M3, WMO, and
+MDLX import returns `model::Model<'data, Mdlx>` directly. The M2, M3, WMO, and
 Diablo adapters use their own concrete profiles as well. Native export requires the matching vocabulary:
 for example, the MDLX planner accepts `Model<'data, Mdlx>`, rather than implicitly
 projecting a `Universal` graph into Warcraft III behavior. Widening a model
@@ -55,7 +62,7 @@ its strict loss boundaries.
 
 ## Editing and inspecting an output plan
 
-A `semantic::Model` owns its checked graph, resources, and profile-specific
+A `model::Model` owns its checked graph, resources, and profile-specific
 metadata. Conversion adapters return this same model. `metadata()` exposes the
 payload selected by `Profile::ModelMetadata`; use `ModelBuilder::set_metadata`
 inside `Model::edit` to replace it. `Model::edit` and `Model::edit_resources`
@@ -66,16 +73,16 @@ changing one placement need not modify every user of a shared mesh.
 A plan exposes its proposed native value through `draft()` and its ordered
 conversion decisions through `report()`. Inspect both before calling `execute()`.
 Execution accepts the prepared draft and returns the value with its report;
-it does not perform file writes. Use the resulting model or bundle's codec when
+it does not perform file writes. Use the resulting document or bundle's codec when
 ready to encode it.
 
 ```rust
-use wc3::model::{conversion, mdlx};
+use wc3::model::{conversion, formats::mdlx, io};
 use conversion::{ExportOptions, ImportOptions};
 
-fn prepare(source: &mdlx::Model<'_, mdlx::V800>) -> Result<(), conversion::Error> {
-    let model = conversion::mdlx::import(source, &ImportOptions::default())?.value;
-    let plan = conversion::mdlx::plan::<mdlx::V800>(&model, &ExportOptions::default())?;
+fn prepare(source: &mdlx::Document<'_, mdlx::V800>) -> Result<(), conversion::Error> {
+    let model = io::mdlx::import(source, &ImportOptions::default())?.value;
+    let plan = io::mdlx::plan::<mdlx::V800>(&model, &ExportOptions::default())?;
     let _proposed_model = plan.draft();
     let _decisions = plan.report();
     let _output = plan.execute()?;
@@ -148,12 +155,11 @@ Native codec APIs retain their own byte-preserving editing behavior.
 ## Where the implementation lives
 
 Policies, reports, plans, and policy enforcement live under `model/conversion`.
-Each adapter divides geometry, hierarchy, animation,
+Native adapters live under `model/io`; each divides geometry, hierarchy, animation,
 materials, effects, and supporting documents into focused modules. The checked
-graph and encoded values live under `model/semantic`; authoring vocabularies
+graph and encoded values live under `model`; authoring vocabularies
 live in its `profiles` namespace. Format-independent features and scoped simulation
-systems live under `semantic::scene`. Native records remain under their format
-modules, independently of the semantic graph.
+systems live under `model::scene`. Native records remain under `model::formats`, independently of the semantic graph.
 
 Public adapter tests live under `crates/wc3/tests/model/conversion`; private
 mapping tests stay beside their implementation. They check the stated graph,

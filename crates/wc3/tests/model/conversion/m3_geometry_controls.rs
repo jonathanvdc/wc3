@@ -1,16 +1,17 @@
 use super::*;
 use sem::GeometrySchema as _;
 use wc3::model::common::IntoZeroVec;
+use wc3::model::io;
 #[test]
 fn draw_controls_and_preferred_uv_encoding_survive_geometry_edits() {
     let original = asset();
-    let source = conversion::m3::plan::<m3::StarCraft2>(&original, &approximate())
+    let source = io::m3::plan::<m3::StarCraft2>(&original, &approximate())
         .unwrap()
         .execute()
         .unwrap()
         .value;
     let root = source.model.root::<nr::ModelRecord<nr::V29>>().unwrap();
-    let mut document = source.model.into_document();
+    let mut document = source.model.into_container();
     let mut division = document
         .resolve::<nr::MeshDivision<nr::V2>>(root.divisions.cast())
         .unwrap()
@@ -58,10 +59,8 @@ fn draw_controls_and_preferred_uv_encoding_survive_geometry_edits() {
             &[division],
         )
         .unwrap();
-    let source = m3::Bundle::from_model(m3::Model::from_document(document).unwrap());
-    let mut imported = conversion::m3::import(&source, &Default::default())
-        .unwrap()
-        .value;
+    let source = m3::Bundle::from_model(m3::Document::from_container(document).unwrap());
+    let mut imported = io::m3::import(&source, &Default::default()).unwrap().value;
     imported = imported
         .widen::<sem::profiles::Universal>()
         .try_narrow::<sem::profiles::M3>()
@@ -88,7 +87,7 @@ fn draw_controls_and_preferred_uv_encoding_survive_geometry_edits() {
             .unwrap(),
     );
     imported.edit(|builder| builder.set_mesh(id, mesh)).unwrap();
-    let result = conversion::m3::plan::<m3::StarCraft2>(&imported, &approximate())
+    let result = io::m3::plan::<m3::StarCraft2>(&imported, &approximate())
         .unwrap()
         .execute()
         .unwrap()
@@ -96,7 +95,7 @@ fn draw_controls_and_preferred_uv_encoding_survive_geometry_edits() {
     let root = result.model.root::<nr::ModelRecord<nr::V29>>().unwrap();
     let division = result
         .model
-        .document()
+        .container()
         .resolve::<nr::MeshDivision<nr::V2>>(root.divisions.cast())
         .unwrap()
         .get(0)
@@ -104,7 +103,7 @@ fn draw_controls_and_preferred_uv_encoding_survive_geometry_edits() {
         .unwrap();
     let region = result
         .model
-        .document()
+        .container()
         .resolve::<nr::Region<nr::V5>>(division.regions.cast())
         .unwrap()
         .get(0)
@@ -112,7 +111,7 @@ fn draw_controls_and_preferred_uv_encoding_survive_geometry_edits() {
         .unwrap();
     let batch = result
         .model
-        .document()
+        .container()
         .resolve::<nr::Batch<nr::V1>>(division.batches.cast())
         .unwrap()
         .get(0)
@@ -138,7 +137,7 @@ fn draw_controls_and_preferred_uv_encoding_survive_geometry_edits() {
         (0x321, 9, 17, 0)
     );
     assert_eq!(division.instances, 3);
-    let reread = conversion::m3::import(&result, &Default::default()).unwrap();
+    let reread = io::m3::import(&result, &Default::default()).unwrap();
     assert_eq!(
         reread
             .value
@@ -155,7 +154,7 @@ fn draw_controls_and_preferred_uv_encoding_survive_geometry_edits() {
 #[test]
 fn undrawn_regions_retain_definition_binding_and_detail_level() {
     let asset = asset();
-    let source = conversion::m3::plan::<m3::StarCraft2>(&asset, &approximate())
+    let source = io::m3::plan::<m3::StarCraft2>(&asset, &approximate())
         .unwrap()
         .execute()
         .unwrap()
@@ -164,7 +163,7 @@ fn undrawn_regions_retain_definition_binding_and_detail_level() {
     let mut root = source.model.root::<nr::ModelRecord<nr::V29>>().unwrap();
     let mut division = source
         .model
-        .document()
+        .container()
         .resolve::<nr::MeshDivision<nr::V2>>(root.divisions.cast())
         .unwrap()
         .get(0)
@@ -172,14 +171,14 @@ fn undrawn_regions_retain_definition_binding_and_detail_level() {
         .unwrap();
     division.batches = m3::Ref::default();
     division.instances = 7;
-    let mut document = source.model.into_document();
+    let mut document = source.model.into_container();
     let divisions = document
         .append(&[nr::MeshDivision::<nr::V2>::default(), division])
         .unwrap();
     root.divisions = m3::Ref::from_section(2, divisions.index());
     document.replace(root_id, &[root]).unwrap();
-    let source = m3::Bundle::from_model(m3::Model::from_document(document).unwrap());
-    let mut asset = conversion::m3::import(&source, &ImportOptions::default())
+    let source = m3::Bundle::from_model(m3::Document::from_container(document).unwrap());
+    let mut asset = io::m3::import(&source, &ImportOptions::default())
         .unwrap()
         .value;
     assert_eq!(asset.instances().count(), 0);
@@ -205,7 +204,7 @@ fn undrawn_regions_retain_definition_binding_and_detail_level() {
             .unwrap(),
     );
     asset.edit(|builder| builder.set_mesh(id, edited)).unwrap();
-    let rebuilt = conversion::m3::plan::<m3::StarCraft2>(&asset, &approximate())
+    let rebuilt = io::m3::plan::<m3::StarCraft2>(&asset, &approximate())
         .unwrap()
         .execute()
         .unwrap()
@@ -213,7 +212,7 @@ fn undrawn_regions_retain_definition_binding_and_detail_level() {
     let root = rebuilt.model.root::<nr::ModelRecord<nr::V29>>().unwrap();
     let divisions = rebuilt
         .model
-        .document()
+        .container()
         .resolve::<nr::MeshDivision<nr::V2>>(root.divisions.cast())
         .unwrap();
     assert_eq!(divisions.len(), 2);
@@ -222,8 +221,8 @@ fn undrawn_regions_retain_definition_binding_and_detail_level() {
     assert_eq!(division.batches.entries, 0);
     assert_eq!(division.regions.entries, 1);
     let encoded = rebuilt.write().unwrap();
-    let source = m3::Bundle::from_model(m3::Model::<m3::Md34>::read(&encoded.model).unwrap());
-    let imported = conversion::m3::import(&source, &ImportOptions::default())
+    let source = m3::Bundle::from_model(m3::Document::<m3::Md34>::read(&encoded.model).unwrap());
+    let imported = io::m3::import(&source, &ImportOptions::default())
         .unwrap()
         .value;
     let (_, mesh) = imported.meshes().next().unwrap();
@@ -235,7 +234,7 @@ fn undrawn_regions_retain_definition_binding_and_detail_level() {
 #[test]
 fn unselected_bounds_definitions_are_emitted_without_invented_draws() {
     let asset = asset();
-    let source = conversion::m3::plan::<m3::StarCraft2>(&asset, &approximate())
+    let source = io::m3::plan::<m3::StarCraft2>(&asset, &approximate())
         .unwrap()
         .execute()
         .unwrap()
@@ -243,18 +242,18 @@ fn unselected_bounds_definitions_are_emitted_without_invented_draws() {
     let root = source.model.root::<nr::ModelRecord<nr::V29>>().unwrap();
     let division_id = source
         .model
-        .document()
+        .container()
         .section_id(root.divisions.index)
         .unwrap();
     let mut division = source
         .model
-        .document()
+        .container()
         .resolve::<nr::MeshDivision<nr::V2>>(root.divisions.cast())
         .unwrap()
         .get(0)
         .unwrap()
         .unwrap();
-    let mut document = source.model.into_document();
+    let mut document = source.model.into_container();
     let bounds = document
         .append(&[
             nr::MeshSection::<nr::V1>::default(),
@@ -274,8 +273,8 @@ fn unselected_bounds_definitions_are_emitted_without_invented_draws() {
         .unwrap();
     division.msec = m3::Ref::from_section(2, bounds.index());
     document.replace(division_id, &[division]).unwrap();
-    let source = m3::Bundle::from_model(m3::Model::from_document(document).unwrap());
-    let imported = conversion::m3::import(&source, &ImportOptions::default())
+    let source = m3::Bundle::from_model(m3::Document::from_container(document).unwrap());
+    let imported = io::m3::import(&source, &ImportOptions::default())
         .unwrap()
         .value;
     assert_eq!(
@@ -285,7 +284,7 @@ fn unselected_bounds_definitions_are_emitted_without_invented_draws() {
             .count(),
         2
     );
-    let output = conversion::m3::plan::<m3::StarCraft2>(&imported, &approximate())
+    let output = io::m3::plan::<m3::StarCraft2>(&imported, &approximate())
         .unwrap()
         .execute()
         .unwrap()
@@ -293,7 +292,7 @@ fn unselected_bounds_definitions_are_emitted_without_invented_draws() {
     let root = output.model.root::<nr::ModelRecord<nr::V29>>().unwrap();
     let division = output
         .model
-        .document()
+        .container()
         .resolve::<nr::MeshDivision<nr::V2>>(root.divisions.cast())
         .unwrap()
         .get(0)
@@ -303,7 +302,7 @@ fn unselected_bounds_definitions_are_emitted_without_invented_draws() {
     assert_eq!(division.msec.entries, 2);
     let bounds = output
         .model
-        .document()
+        .container()
         .resolve::<nr::MeshSection<nr::V1>>(division.msec.cast())
         .unwrap()
         .get(1)
@@ -318,13 +317,13 @@ fn unselected_bounds_definitions_are_emitted_without_invented_draws() {
 fn noncanonical_uv_offsets_survive_strict_export_for_drawn_and_undrawn_regions() {
     for undrawn in [false, true] {
         let original = asset();
-        let source = conversion::m3::plan::<m3::StarCraft2>(&original, &approximate())
+        let source = io::m3::plan::<m3::StarCraft2>(&original, &approximate())
             .unwrap()
             .execute()
             .unwrap()
             .value;
         let root = source.model.root::<nr::ModelRecord<nr::V29>>().unwrap();
-        let mut document = source.model.into_document();
+        let mut document = source.model.into_container();
         let mut division = document
             .resolve::<nr::MeshDivision<nr::V2>>(root.divisions.cast())
             .unwrap()
@@ -353,8 +352,8 @@ fn noncanonical_uv_offsets_survive_strict_export_for_drawn_and_undrawn_regions()
                 )
                 .unwrap();
         }
-        let source = m3::Bundle::from_model(m3::Model::from_document(document).unwrap());
-        let imported = conversion::m3::import(&source, &ImportOptions::default())
+        let source = m3::Bundle::from_model(m3::Document::from_container(document).unwrap());
+        let imported = io::m3::import(&source, &ImportOptions::default())
             .unwrap()
             .value;
         let coordinates = imported.meshes().next().unwrap().1.texture_coordinates()[0].to_vec();
@@ -362,7 +361,7 @@ fn noncanonical_uv_offsets_survive_strict_export_for_drawn_and_undrawn_regions()
             .widen::<sem::profiles::Universal>()
             .try_narrow::<M3>()
             .unwrap();
-        let output = conversion::m3::plan::<m3::StarCraft2>(&restored, &ExportOptions::default())
+        let output = io::m3::plan::<m3::StarCraft2>(&restored, &ExportOptions::default())
             .unwrap()
             .execute()
             .unwrap()
@@ -370,7 +369,7 @@ fn noncanonical_uv_offsets_survive_strict_export_for_drawn_and_undrawn_regions()
         let root = output.model.root::<nr::ModelRecord<nr::V29>>().unwrap();
         let division = output
             .model
-            .document()
+            .container()
             .resolve::<nr::MeshDivision<nr::V2>>(root.divisions.cast())
             .unwrap()
             .get(0)
@@ -378,14 +377,14 @@ fn noncanonical_uv_offsets_survive_strict_export_for_drawn_and_undrawn_regions()
             .unwrap();
         let region = output
             .model
-            .document()
+            .container()
             .resolve::<nr::Region<nr::V5>>(division.regions.cast())
             .unwrap()
             .get(0)
             .unwrap()
             .unwrap();
         assert_eq!((region.uv_scale, region.uv_offset), (16., 0.1));
-        let reread = conversion::m3::import(&output, &ImportOptions::default())
+        let reread = io::m3::import(&output, &ImportOptions::default())
             .unwrap()
             .value;
         assert_eq!(

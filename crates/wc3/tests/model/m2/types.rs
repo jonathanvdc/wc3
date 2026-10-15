@@ -1,4 +1,4 @@
-use wc3::model::m2::{
+use wc3::model::formats::m2::{
     codec::{Decoder, Encoder},
     records::{
         BlendMode, Interpolation, Material, MaterialFlags, ModelFlags, ParticleGenerator,

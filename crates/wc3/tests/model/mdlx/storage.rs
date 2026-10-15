@@ -1,10 +1,12 @@
 use std::borrow::Cow;
-use wc3::model::mdlx::animation::{Track, TrackValue, ValueKeyframe};
-use wc3::model::mdlx::chunks::{BonesChunk, GeosetsChunk, ModelChunk, RawChunk, UnknownChunk};
-use wc3::model::mdlx::geometry::Geoset;
-use wc3::model::mdlx::mdx::{Read as _, Write as _};
-use wc3::model::mdlx::scene::{Bone, Node};
-use wc3::model::mdlx::{mdx, ConversionOptions, Model, ZeroVec, V1800, V800};
+use wc3::model::formats::mdlx::animation::{Track, TrackValue, ValueKeyframe};
+use wc3::model::formats::mdlx::chunks::{
+    BonesChunk, GeosetsChunk, ModelChunk, RawChunk, UnknownChunk,
+};
+use wc3::model::formats::mdlx::geometry::Geoset;
+use wc3::model::formats::mdlx::mdx::{Read as _, Write as _};
+use wc3::model::formats::mdlx::scene::{Bone, Node};
+use wc3::model::formats::mdlx::{mdx, ConversionOptions, Document, ZeroVec, V1800, V800};
 
 use zerovec::ule::AsULE;
 
@@ -12,11 +14,11 @@ use zerovec::ule::AsULE;
 fn geometry_borrows_unaligned_source_and_only_an_edited_array_becomes_owned() {
     let geoset =
         Geoset::<V800>::new([[1.0, 2.0, 3.0]; 32], [[0.0, 0.0, 1.0]; 32], [0, 1, 2]).unwrap();
-    let mut model = Model::<V800>::new();
+    let mut model = Document::<V800>::new();
     model.replace_records::<GeosetsChunk<V800>>(vec![geoset]);
     let mut source = vec![99];
     source.extend(model.encode_mdx().unwrap());
-    let original = Model::<V800>::decode_mdx(&source[1..]).unwrap();
+    let original = Document::<V800>::decode_mdx(&source[1..]).unwrap();
     let mut converted = original
         .convert::<V1800>(&ConversionOptions::strict())
         .unwrap()
@@ -104,7 +106,7 @@ fn sorted_track_sampling_keeps_wire_storage_and_unsorted_input_sorts_stably() {
 
 #[test]
 fn consuming_conversion_moves_records_and_geometry_allocations() {
-    let mut model = Model::<V800>::new();
+    let mut model = Document::<V800>::new();
     model.replace_records::<BonesChunk>(vec![Bone::new(
         Node::new("bone", 0).unwrap(),
         u32::MAX,
@@ -146,12 +148,12 @@ fn consuming_conversion_moves_records_and_geometry_allocations() {
 
 #[test]
 fn opaque_payloads_borrow_the_source_and_can_resize_independently() {
-    let mut model = Model::<V800>::new();
+    let mut model = Document::<V800>::new();
     model.chunks.push(ModelChunk::Unknown(
         UnknownChunk::new(RawChunk::new(*b"TEST", vec![1, 2, 3])).unwrap(),
     ));
     let source = model.encode_mdx().unwrap();
-    let mut decoded = Model::<V800>::decode_mdx(&source).unwrap();
+    let mut decoded = Document::<V800>::decode_mdx(&source).unwrap();
     let ModelChunk::Unknown(chunk) = decoded.chunks.last_mut().unwrap() else {
         panic!("missing chunk")
     };
@@ -165,7 +167,7 @@ fn opaque_payloads_borrow_the_source_and_can_resize_independently() {
     assert_eq!(&source[source.len() - 3..], &[1, 2, 3]);
     let bytes = decoded.encode_mdx().unwrap();
     assert_eq!(
-        Model::<V800>::decode_mdx(&bytes)
+        Document::<V800>::decode_mdx(&bytes)
             .unwrap()
             .encode_mdx()
             .unwrap(),
@@ -261,8 +263,8 @@ fn custom_track_values_keep_semantic_validation() {
 
 #[test]
 fn skin_conversion_moves_owned_arrays_when_layouts_match() {
-    use wc3::model::mdlx::geometry::{SkinWeight, SkinWeights};
-    use wc3::model::mdlx::{V1300, V1400, V900};
+    use wc3::model::formats::mdlx::geometry::{SkinWeight, SkinWeights};
+    use wc3::model::formats::mdlx::{V1300, V1400, V900};
 
     let mut geoset = Geoset::<V900>::new([[0.0; 3]], [[0.0; 3]], []).unwrap();
     geoset
@@ -271,7 +273,7 @@ fn skin_conversion_moves_owned_arrays_when_layouts_match() {
             weights: [128, 64, 32, 31],
         }])))
         .unwrap();
-    let mut narrow = Model::<V900>::new();
+    let mut narrow = Document::<V900>::new();
     narrow.replace_records::<GeosetsChunk<V900>>(vec![geoset]);
     let pointer = narrow
         .geosets()
@@ -352,8 +354,8 @@ fn skin_conversion_moves_owned_arrays_when_layouts_match() {
 
 #[test]
 fn skin_conversion_keeps_encoded_storage_borrowed_when_layouts_match() {
-    use wc3::model::mdlx::geometry::SkinWeights;
-    use wc3::model::mdlx::{V1300, V1400, V900};
+    use wc3::model::formats::mdlx::geometry::SkinWeights;
+    use wc3::model::formats::mdlx::{V1300, V1400, V900};
 
     let mut narrow = Geoset::<V900>::new([[0.0; 3]], [[0.0; 3]], []).unwrap();
     narrow
@@ -397,7 +399,7 @@ fn skin_conversion_keeps_encoded_storage_borrowed_when_layouts_match() {
 
 #[test]
 fn native_inputs_encode_into_storage_independent_of_their_lifetimes() {
-    use wc3::model::mdlx::IntoZeroVec;
+    use wc3::model::formats::mdlx::IntoZeroVec;
 
     let from_array: ZeroVec<'static, u32> = [1, 2, 3].into_zero_vec();
     let from_vec: ZeroVec<'static, u32> = vec![1, 2, 3].into_zero_vec();
@@ -415,7 +417,7 @@ fn native_inputs_encode_into_storage_independent_of_their_lifetimes() {
 
 #[test]
 fn encoded_inputs_move_owned_and_borrowed_buffers_unchanged() {
-    use wc3::model::mdlx::{Borrowed, IntoZeroVec};
+    use wc3::model::formats::mdlx::{Borrowed, IntoZeroVec};
 
     let owned: ZeroVec<u32> = [1, 2, 3].into_zero_vec();
     let pointer = owned.as_bytes().as_ptr();
@@ -429,7 +431,7 @@ fn encoded_inputs_move_owned_and_borrowed_buffers_unchanged() {
 
 #[test]
 fn geometry_construction_moves_encoded_arrays_and_accepts_mixed_native_inputs() {
-    use wc3::model::mdlx::{Borrowed, IntoZeroVec};
+    use wc3::model::formats::mdlx::{Borrowed, IntoZeroVec};
 
     let vertices: ZeroVec<[f32; 3]> = [[1.0, 2.0, 3.0]].into_zero_vec();
     let normals: ZeroVec<[f32; 3]> = [[0.0, 0.0, 1.0]].into_zero_vec();
@@ -459,7 +461,7 @@ fn geometry_construction_moves_encoded_arrays_and_accepts_mixed_native_inputs() 
 
 #[test]
 fn track_constructors_copy_native_slices_and_sort_without_changing_the_source() {
-    use wc3::model::mdlx::animation::TangentKeyframe;
+    use wc3::model::formats::mdlx::animation::TangentKeyframe;
 
     let keys = [
         ValueKeyframe {

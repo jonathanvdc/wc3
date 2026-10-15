@@ -4,8 +4,8 @@ use crate::materials::textures::Wc3TextureSlot;
 use crate::materials::Wc3LayerState;
 use bevy::render::render_resource::TextureFormat;
 use std::f32::consts::FRAC_PI_2;
-use wc3::model::mdlx::animation::{Sequence, Track, ValueKeyframe};
-use wc3::model::mdlx::materials::LayerTextureSlot;
+use wc3::model::formats::mdlx::animation::{Sequence, Track, ValueKeyframe};
+use wc3::model::formats::mdlx::materials::LayerTextureSlot;
 
 fn animation() -> Wc3Animation {
     Wc3Animation {

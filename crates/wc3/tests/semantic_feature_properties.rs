@@ -1,8 +1,6 @@
-use wc3::model::semantic::feature_properties::camera;
-use wc3::model::semantic::profiles::{
-    m2, mdlx, Extends, Mdlx, Narrows, Universal, UniversalProperty, M2,
-};
-use wc3::model::semantic::{
+use wc3::model::feature_properties::camera;
+use wc3::model::profiles::{m2, mdlx, Extends, Mdlx, Narrows, Universal, UniversalProperty, M2};
+use wc3::model::{
     Camera, Channel, Clock, Curve, FeatureProperty, Model, Node, NodeFeature, Time, Track,
 };
 

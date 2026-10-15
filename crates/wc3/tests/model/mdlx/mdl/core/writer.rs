@@ -1,5 +1,5 @@
 use super::*;
-use wc3::model::mdlx::IoError;
+use wc3::model::formats::mdlx::IoError;
 
 #[test]
 fn finite_float_output_preserves_bits_including_signed_zero() {

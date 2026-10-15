@@ -1,4 +1,4 @@
-use super::super::semantic::LookId;
+use super::super::LookId;
 
 /// Handling of data without a destination representation.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]

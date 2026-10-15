@@ -12,9 +12,9 @@ pub(crate) struct Value {
 }
 fn codec(format: Format) -> TokenStream {
     match format {
-        Format::M2 => quote!(::wc3::model::m2),
-        Format::M3 => quote!(::wc3::model::m3),
-        Format::Wmo => quote!(::wc3::model::wmo),
+        Format::M2 => quote!(::wc3::model::formats::m2),
+        Format::M3 => quote!(::wc3::model::formats::m3),
+        Format::Wmo => quote!(::wc3::model::formats::wmo),
     }
 }
 fn attribute(format: Format) -> &'static str {

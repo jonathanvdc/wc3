@@ -1,24 +1,24 @@
-use wc3::model::mdlx::animation::{GeosetAnimation, Sequence, TextureAnimation};
-use wc3::model::mdlx::emitters::{
+use wc3::model::formats::mdlx::animation::{GeosetAnimation, Sequence, TextureAnimation};
+use wc3::model::formats::mdlx::emitters::{
     ParticleEmitter, ParticleEmitter2, PopcornEmitter, RibbonEmitter,
 };
-use wc3::model::mdlx::geometry::BindPoseMatrix;
-use wc3::model::mdlx::geometry::{CollisionShape, Geoset};
-use wc3::model::mdlx::mdx::Read as _;
-use wc3::model::mdlx::mdx::Write as _;
+use wc3::model::formats::mdlx::geometry::BindPoseMatrix;
+use wc3::model::formats::mdlx::geometry::{CollisionShape, Geoset};
+use wc3::model::formats::mdlx::mdx::Read as _;
+use wc3::model::formats::mdlx::mdx::Write as _;
 
-use wc3::model::mdlx::materials::{Layer, Material, Texture};
-use wc3::model::mdlx::scene::{
+use wc3::model::formats::mdlx::materials::{Layer, Material, Texture};
+use wc3::model::formats::mdlx::scene::{
     Attachment, Bone, Camera, EventObject, FaceFx, Light, LightType, ModelInfo, Node,
 };
-use wc3::model::mdlx::{
-    Model, ModelVersion, V1000, V1100, V1200, V1300, V1400, V1600, V1800, V800, V900,
+use wc3::model::formats::mdlx::{
+    Document, FormatVersion, V1000, V1100, V1200, V1300, V1400, V1600, V1800, V800, V900,
 };
 
-fn full_model<'data, V: ModelVersion>() -> Model<'data, V> {
+fn full_model<'data, V: FormatVersion>() -> Document<'data, V> {
     let version = V::NUMBER;
-    let mut model = Model::<V>::new();
-    model.set_model_info(&ModelInfo::new("Complete Synthetic Model").unwrap());
+    let mut model = Document::<V>::new();
+    model.set_model_info(&ModelInfo::new("Complete Synthetic Document").unwrap());
     model.set_sequences([Sequence::new("Stand", [0, 1000]).unwrap()]);
     model.set_global_sequences(&[1000]);
     model.set_textures([Texture::new("Textures\\Sample.blp").unwrap()]);
@@ -90,11 +90,11 @@ fn all_chunk_families_validate_and_round_trip_across_versions() {
     check_version::<V1800>();
 }
 
-fn check_version<V: ModelVersion>() {
+fn check_version<V: FormatVersion>() {
     let version = V::NUMBER;
     let model = full_model::<V>();
     let bytes = model.encode_mdx().unwrap();
-    let parsed = Model::<V>::decode_mdx(&bytes).unwrap();
+    let parsed = Document::<V>::decode_mdx(&bytes).unwrap();
     assert_eq!(parsed.encode_mdx().unwrap(), bytes, "version {version}");
     assert_eq!(parsed.version(), version);
     assert_eq!(parsed.materials().next().unwrap().layers.len(), 1);

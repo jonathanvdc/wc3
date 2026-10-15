@@ -1,9 +1,9 @@
-use wc3::model::mdlx::animation::{
+use wc3::model::formats::mdlx::animation::{
     Interpolation, TangentKeyframe, TextureAnimation, ValueKeyframe,
 };
-use wc3::model::mdlx::animation::{Track, TrackValue};
-use wc3::model::mdlx::mdl::{self, Read as _, ReadErrorKind, Write as _};
-use wc3::model::mdlx::{Quaternion, Vec3};
+use wc3::model::formats::mdlx::animation::{Track, TrackValue};
+use wc3::model::formats::mdlx::mdl::{self, Read as _, ReadErrorKind, Write as _};
+use wc3::model::formats::mdlx::{Quaternion, Vec3};
 
 fn roundtrip<'data, K>(value: Track<'data, K>)
 where
@@ -140,7 +140,7 @@ fn texture_animation_dispatch_and_roundtrip() {
 
 #[test]
 fn signed_frames_preserve_mdx_bits_and_mdl_spelling() {
-    use wc3::model::mdlx::mdx::{Read as _, Write as _};
+    use wc3::model::formats::mdlx::mdx::{Read as _, Write as _};
     for frame in [i32::MIN, -3600, -1, 0, i32::MAX] {
         let source = format!("Track 1 {{ Linear, {frame}: 0.5, }}");
         let track = Track::<f32>::decode_mdl(&source).unwrap();
@@ -164,9 +164,9 @@ fn signed_frames_preserve_mdx_bits_and_mdl_spelling() {
 
 #[test]
 fn spec_property_spellings_and_camera_target_context() {
-    use wc3::model::mdlx::emitters::ParticleEmitter;
-    use wc3::model::mdlx::scene::{Camera, Light};
-    use wc3::model::mdlx::V800;
+    use wc3::model::formats::mdlx::emitters::ParticleEmitter;
+    use wc3::model::formats::mdlx::scene::{Camera, Light};
+    use wc3::model::formats::mdlx::V800;
     let light = Light::<V800>::decode_mdl(
         "Light \"L\" { ObjectId 0, Ambient, AmbColor 0 { Linear, } AmbIntensity 0 { Linear, } }",
     )
@@ -193,8 +193,8 @@ fn spec_property_spellings_and_camera_target_context() {
 
 #[test]
 fn texture_anims_spec_container_transcodes_without_losing_tracks() {
-    use wc3::model::mdlx::mdl::{Parser, Writer};
-    use wc3::model::mdlx::mdx::{Read as _, Write as _};
+    use wc3::model::formats::mdlx::mdl::{Parser, Writer};
+    use wc3::model::formats::mdlx::mdx::{Read as _, Write as _};
     let source = r#"TextureAnims 2 {
         TVertexAnim {
             Translation 2 {

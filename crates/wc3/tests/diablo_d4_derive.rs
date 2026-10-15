@@ -4,7 +4,7 @@ use d4::records::{Polymorphic, TexAnim};
 use d4::{Read as _, RecordLayout as _, Write as _};
 use std::{array::from_fn, borrow::Cow};
 use wc3::model::common;
-use wc3::model::diablo::d4;
+use wc3::model::formats::diablo::d4;
 use zerovec::ZeroVec;
 
 #[derive(Debug, PartialEq, d4::Read, d4::Write, d4::RecordLayout)]

@@ -1,13 +1,12 @@
 use std::borrow::Cow;
 use wc3::model::common::IntoZeroVec;
-use wc3::model::semantic::Model;
+use wc3::model::io;
+use wc3::model::Model;
 use wc3::model::{
-    conversion::{self, ApproximationPolicy, ExportOptions, ImportOptions},
-    m3::{self, records as nr},
-    semantic::{
-        self as sem,
-        profiles::{m3 as surface, M3},
-    },
+    self as sem,
+    conversion::{ApproximationPolicy, ExportOptions, ImportOptions},
+    formats::m3::{self, records as nr},
+    profiles::{m3 as surface, M3},
 };
 pub(super) fn asset() -> Model<'static, M3> {
     let mut builder = sem::Model::<M3>::builder("Triangle");
@@ -116,13 +115,13 @@ pub(super) fn approximate() -> ExportOptions {
 #[test]
 fn geometry_skin_and_animation_survive_native_round_trip() {
     let asset = asset();
-    let native = conversion::m3::plan::<m3::StarCraft2>(&asset, &approximate())
+    let native = io::m3::plan::<m3::StarCraft2>(&asset, &approximate())
         .unwrap()
         .execute()
         .unwrap();
     let bytes = native.value.write().unwrap();
-    let decoded = m3::Bundle::from_model(m3::Model::<m3::Md34>::read(&bytes.model).unwrap());
-    let imported = conversion::m3::import(&decoded, &ImportOptions::default()).unwrap();
+    let decoded = m3::Bundle::from_model(m3::Document::<m3::Md34>::read(&bytes.model).unwrap());
+    let imported = io::m3::import(&decoded, &ImportOptions::default()).unwrap();
     let model = &imported.value;
     let (_, mesh) = model.meshes().next().unwrap();
     assert_eq!(mesh.positions().get(1), Some([1., 0., 0.]));
@@ -149,20 +148,19 @@ fn geometry_skin_and_animation_survive_native_round_trip() {
 }
 #[test]
 fn quantization_requires_an_explicit_policy() {
-    let error =
-        conversion::m3::plan::<m3::StarCraft2>(&asset(), &ExportOptions::default()).unwrap_err();
+    let error = io::m3::plan::<m3::StarCraft2>(&asset(), &ExportOptions::default()).unwrap_err();
     assert!(error.path.contains("normal"));
 }
 #[test]
 fn profiles_select_root_and_envelope_independently() {
     let asset = asset();
-    let beta = conversion::m3::plan::<m3::Beta>(&asset, &approximate())
+    let beta = io::m3::plan::<m3::Beta>(&asset, &approximate())
         .unwrap()
         .execute()
         .unwrap();
     assert_eq!(beta.value.model.root_record().unwrap().revision(), 23);
     assert_eq!(&beta.value.write().unwrap().model[..4], b"33DM");
-    let heroes = conversion::m3::plan::<m3::HeroesOfTheStorm>(&asset, &approximate())
+    let heroes = io::m3::plan::<m3::HeroesOfTheStorm>(&asset, &approximate())
         .unwrap()
         .execute()
         .unwrap();
@@ -181,7 +179,7 @@ fn standard_controls_remain_active_after_geometry_edit() {
     asset
         .edit(|builder| builder.set_material(id, material))
         .unwrap();
-    let native = conversion::m3::plan::<m3::StarCraft2>(&asset, &approximate())
+    let native = io::m3::plan::<m3::StarCraft2>(&asset, &approximate())
         .unwrap()
         .execute()
         .unwrap()
@@ -189,7 +187,7 @@ fn standard_controls_remain_active_after_geometry_edit() {
     let root = native.model.root::<nr::ModelRecord<nr::V29>>().unwrap();
     let material = native
         .model
-        .document()
+        .container()
         .resolve::<nr::StandardMaterial<nr::V20>>(root.standard_materials.cast())
         .unwrap()
         .get(0)
@@ -213,12 +211,12 @@ fn dormant_standard_and_hair_surfaces_are_authored_materials() {
             })
         })
         .unwrap();
-    let native = conversion::m3::plan::<m3::StarCraft2>(&asset, &approximate())
+    let native = io::m3::plan::<m3::StarCraft2>(&asset, &approximate())
         .unwrap()
         .execute()
         .unwrap()
         .value;
-    let imported = conversion::m3::import(&native, &ImportOptions::default()).unwrap();
+    let imported = io::m3::import(&native, &ImportOptions::default()).unwrap();
     assert!(imported
         .value
         .materials()
@@ -230,13 +228,13 @@ mod geometry_controls;
 #[test]
 fn imported_graph_widens_and_narrows_without_changing_identity_or_values() {
     let source = asset();
-    let native = conversion::m3::plan::<m3::StarCraft2>(&source, &approximate())
+    let native = io::m3::plan::<m3::StarCraft2>(&source, &approximate())
         .unwrap()
         .execute()
         .unwrap();
     let bytes = native.value.write().unwrap();
-    let decoded = m3::Bundle::from_model(m3::Model::<m3::Md34>::read(&bytes.model).unwrap());
-    let imported = conversion::m3::import(&decoded, &ImportOptions::default())
+    let decoded = m3::Bundle::from_model(m3::Document::<m3::Md34>::read(&bytes.model).unwrap());
+    let imported = io::m3::import(&decoded, &ImportOptions::default())
         .unwrap()
         .value;
     let model_id = imported.id();
@@ -282,22 +280,22 @@ fn native_profile_rejects_coordinate_metadata_that_cannot_round_trip() {
 fn unknown_sections_and_vertex_qualifiers_require_explicit_drop() {
     use wc3::model::conversion::{IssueKind, UnknownPolicy};
     let original = asset();
-    let source = conversion::m3::plan::<m3::StarCraft2>(&original, &approximate())
+    let source = io::m3::plan::<m3::StarCraft2>(&original, &approximate())
         .unwrap()
         .execute()
         .unwrap()
         .value;
     let mut root = source.model.root::<nr::ModelRecord<nr::V29>>().unwrap();
-    let mut document = source.model.into_document();
+    let mut document = source.model.into_container();
     root.vertex_flags = nr::VertexFlags(root.vertex_flags.bits() | 0x1c);
     let root_id = document
         .section_id(document.root_reference().index)
         .unwrap();
     document.replace(root_id, &[root]).unwrap();
     document.append_raw(*b"XTRA", 1, 1, vec![7, 8, 9]).unwrap();
-    let source = m3::Bundle::from_model(m3::Model::from_document(document).unwrap());
-    assert!(conversion::m3::import(&source, &ImportOptions::default()).is_err());
-    let imported = conversion::m3::import(
+    let source = m3::Bundle::from_model(m3::Document::from_container(document).unwrap());
+    assert!(io::m3::import(&source, &ImportOptions::default()).is_err());
+    let imported = io::m3::import(
         &source,
         &ImportOptions {
             unknown: UnknownPolicy::Drop,
@@ -317,10 +315,10 @@ fn unknown_sections_and_vertex_qualifiers_require_explicit_drop() {
         .any(|issue| issue.path.contains("opaque") && issue.kind == IssueKind::Dropped));
     assert!(source
         .model
-        .document()
+        .container()
         .sections()
         .any(|(_, section)| section.tag() == *b"XTRA"));
-    let output = conversion::m3::plan::<m3::StarCraft2>(&imported.value, &approximate())
+    let output = io::m3::plan::<m3::StarCraft2>(&imported.value, &approximate())
         .unwrap()
         .execute()
         .unwrap()
@@ -329,7 +327,7 @@ fn unknown_sections_and_vertex_qualifiers_require_explicit_drop() {
     assert_eq!(root.vertex_flags.bits() & 0x1c, 0);
     assert!(output
         .model
-        .document()
+        .container()
         .sections()
         .all(|(_, section)| section.tag() != *b"XTRA"));
 }
@@ -363,12 +361,12 @@ fn contribution_groups_round_trip_sparse_slots_and_arbitrary_normal_weights() {
     asset
         .edit(|builder| builder.set_material(id, material))
         .unwrap();
-    let native = conversion::m3::plan::<m3::StarCraft2>(&asset, &approximate())
+    let native = io::m3::plan::<m3::StarCraft2>(&asset, &approximate())
         .unwrap()
         .execute()
         .unwrap()
         .value;
-    let imported = conversion::m3::import(&native, &ImportOptions::default())
+    let imported = io::m3::import(&native, &ImportOptions::default())
         .unwrap()
         .value;
     let (_, material) = imported

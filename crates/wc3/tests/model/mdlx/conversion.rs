@@ -1,29 +1,31 @@
-use wc3::model::mdlx::animation::ValueKeyframe;
-use wc3::model::mdlx::animation::{Animatable, Track};
-use wc3::model::mdlx::chunks::{
+use wc3::model::formats::mdlx::animation::ValueKeyframe;
+use wc3::model::formats::mdlx::animation::{Animatable, Track};
+use wc3::model::formats::mdlx::chunks::{
     BindPoseChunk, MaterialsChunk, ModelChunk, RawChunk, UnknownChunk, VersionChunk,
 };
-use wc3::model::mdlx::emitters::PopcornEmitter;
-use wc3::model::mdlx::geometry::{Geoset, SkinWeight, SkinWeights};
-use wc3::model::mdlx::mdl::Read as _;
-use wc3::model::mdlx::mdl::Write as _;
-use wc3::model::mdlx::mdx::Read as _;
-use wc3::model::mdlx::mdx::Write as _;
-use wc3::model::mdlx::NoExtensions;
-use wc3::model::mdlx::ZeroVec;
+use wc3::model::formats::mdlx::emitters::PopcornEmitter;
+use wc3::model::formats::mdlx::geometry::{Geoset, SkinWeight, SkinWeights};
+use wc3::model::formats::mdlx::mdl::Read as _;
+use wc3::model::formats::mdlx::mdl::Write as _;
+use wc3::model::formats::mdlx::mdx::Read as _;
+use wc3::model::formats::mdlx::mdx::Write as _;
+use wc3::model::formats::mdlx::NoExtensions;
+use wc3::model::formats::mdlx::ZeroVec;
 
-use wc3::model::mdlx::materials::{Layer, LayerFresnel, LayerTextureSlot, Material, ShaderType};
-use wc3::model::mdlx::scene::{
+use wc3::model::formats::mdlx::materials::{
+    Layer, LayerFresnel, LayerTextureSlot, Material, ShaderType,
+};
+use wc3::model::formats::mdlx::scene::{
     Camera, CameraVariant, Light, LightFalloff, LightShadowRange, LightType, Node,
     NodeFlagInterpretation, NodeFlags,
 };
-use wc3::model::mdlx::{
-    ConversionIssueKind, ConversionOptions, DynamicModel, Model, ModelVersion, UnknownChunkPolicy,
-    V1000, V1100, V1200, V1300, V1400, V1600, V1800, V800, V900,
+use wc3::model::formats::mdlx::{
+    ConversionIssueKind, ConversionOptions, Document, DynamicDocument, FormatVersion,
+    UnknownChunkPolicy, V1000, V1100, V1200, V1300, V1400, V1600, V1800, V800, V900,
 };
 
-fn sample<'data, V: ModelVersion>() -> Model<'data, V> {
-    let mut model = Model::<V>::new();
+fn sample<'data, V: FormatVersion>() -> Document<'data, V> {
+    let mut model = Document::<V>::new();
     let mut material = Material::<V>::new();
     let mut layer = Layer::<V>::new();
     if V::NUMBER >= 1100 {
@@ -56,7 +58,8 @@ fn sample<'data, V: ModelVersion>() -> Model<'data, V> {
 #[test]
 fn missing_popcorn_kind_is_normalized_without_changing_source_or_behavior_flags() {
     let mut source =
-        Model::<V1200>::decode_mdl("Version { FormatVersion 1200, } Model \"Minimal\" {}").unwrap();
+        Document::<V1200>::decode_mdl("Version { FormatVersion 1200, } Model \"Minimal\" {}")
+            .unwrap();
     let mut emitter = PopcornEmitter::new(Node::new("Hero_Glow", 153).unwrap(), "", "").unwrap();
     emitter.node.flags.set_unfogged(true);
     source.try_set_popcorn_emitters([emitter]).unwrap();
@@ -86,7 +89,7 @@ fn missing_popcorn_kind_is_normalized_without_changing_source_or_behavior_flags(
         "chunks[2].popcorn_emitters[0].node.flags"
     );
     let text = converted.model.encode_mdl().unwrap();
-    let restored = Model::<V1200>::decode_mdl(&text).unwrap();
+    let restored = Document::<V1200>::decode_mdl(&text).unwrap();
     assert!(restored
         .try_popcorn_emitters()
         .unwrap()
@@ -103,7 +106,7 @@ fn missing_popcorn_kind_is_normalized_without_changing_source_or_behavior_flags(
 
 #[test]
 fn conflicting_popcorn_kind_is_preserved_and_still_refused_by_mdl() {
-    let mut source = Model::<V1200>::new();
+    let mut source = Document::<V1200>::new();
     let mut node = Node::new("Conflicting", 0).unwrap();
     node.flags.set_bone(true);
     let emitter = PopcornEmitter::new(node, "", "").unwrap();
@@ -124,7 +127,7 @@ fn conflicting_popcorn_kind_is_preserved_and_still_refused_by_mdl() {
 
 #[test]
 fn kind_normalization_preserves_inheritance_and_unknown_bits() {
-    let mut source = Model::<V1200>::new();
+    let mut source = Document::<V1200>::new();
     let mut node = Node::new("UnknownFlags", 0).unwrap();
     node.flags = NodeFlags::from_bits(0x8000_0004);
     let emitter = PopcornEmitter::new(node, "", "").unwrap();
@@ -156,7 +159,7 @@ fn runtime_normalization_preserves_each_version_and_matches_typed_normalization(
             source.set_cameras([camera]);
             let original = source.encode_mdx().unwrap();
             let expected = source.normalized().unwrap();
-            let dynamic = DynamicModel::<NoExtensions>::decode_mdx(&original, 800).unwrap();
+            let dynamic = DynamicDocument::<NoExtensions>::decode_mdx(&original, 800).unwrap();
             let normalized = dynamic.normalized().unwrap();
             assert_eq!(normalized.model.version(), $version::NUMBER);
             assert_eq!(normalized.model.encode_mdx().unwrap(), expected.model.encode_mdx().unwrap());
@@ -169,13 +172,13 @@ fn runtime_normalization_preserves_each_version_and_matches_typed_normalization(
     check!(V800, V900, V1000, V1100, V1200, V1300, V1400, V1600, V1800);
 }
 
-fn check_pair<S: ModelVersion, T: ModelVersion>() {
+fn check_pair<S: FormatVersion, T: FormatVersion>() {
     let source = sample::<S>();
     let original = source.encode_mdx().unwrap();
     let converted = source.convert::<T>(&ConversionOptions::strict()).unwrap();
     assert_eq!(converted.model.version(), T::NUMBER);
     let bytes = converted.model.encode_mdx().unwrap();
-    let decoded = Model::<T>::decode_mdx(&bytes).unwrap();
+    let decoded = Document::<T>::decode_mdx(&bytes).unwrap();
     assert_eq!(
         decoded.geosets().next().unwrap().raw_unselectable(),
         0x8000_0002
@@ -215,7 +218,7 @@ fn default_records_convert_between_every_supported_version() {
 fn shader_transition_is_explicit_and_source_is_unchanged() {
     let mut material = Material::<V1000>::new();
     material.set_shader("Shaders\\Unit.shader").unwrap();
-    let mut model = Model::<V1000>::new();
+    let mut model = Document::<V1000>::new();
     model.set_materials([material]);
     let original = model.encode_mdx().unwrap();
     let error = model
@@ -231,7 +234,7 @@ fn shader_transition_is_explicit_and_source_is_unchanged() {
         .iter()
         .any(|issue| issue.path == error.path && issue.kind == ConversionIssueKind::Dropped));
     assert_eq!(model.encode_mdx().unwrap(), original);
-    Model::<V1100>::decode_mdx(&result.model.encode_mdx().unwrap())
+    Document::<V1100>::decode_mdx(&result.model.encode_mdx().unwrap())
         .unwrap()
         .into_owned();
 }
@@ -357,7 +360,7 @@ fn skin_narrowing_checks_indices_and_never_truncates_them() {
 
 #[test]
 fn opaque_chunks_have_an_independent_policy() {
-    let mut model = Model::<V800>::new();
+    let mut model = Document::<V800>::new();
     model.chunks.push(ModelChunk::Unknown(
         UnknownChunk::new(RawChunk::new(*b"FUTR", vec![1, 2, 3])).unwrap(),
     ));
@@ -395,7 +398,7 @@ fn opaque_chunks_have_an_independent_policy() {
 
 #[test]
 fn unsupported_chunks_are_rejected_or_reported_and_removed() {
-    let mut model = Model::<V900>::new();
+    let mut model = Document::<V900>::new();
     model.chunks.push(BindPoseChunk::new(vec![]).into());
     assert_eq!(
         model
@@ -471,7 +474,7 @@ fn camera_variants_preserve_their_self_describing_layout_and_opaque_bytes() {
 
 #[test]
 fn camera_conversion_normalizes_equivalent_variants_to_each_target_layout() {
-    fn check<S: ModelVersion, T: ModelVersion>() {
+    fn check<S: FormatVersion, T: FormatVersion>() {
         for variant in [CameraVariant::Variant0, CameraVariant::Variant3] {
             let mut camera = Camera::<S>::new("Animated Camera").unwrap();
             camera.variant = variant;
@@ -528,7 +531,7 @@ fn camera_conversion_normalizes_equivalent_variants_to_each_target_layout() {
 
 #[test]
 fn model_camera_upgrade_downgrade_and_same_version_normalization_are_reported() {
-    let mut source = Model::<V800>::new();
+    let mut source = Document::<V800>::new();
     source.set_cameras([Camera::<V800>::new("View").unwrap()]);
     let bytes = source.encode_mdx().unwrap();
     let upgraded = source
@@ -561,15 +564,16 @@ fn model_camera_upgrade_downgrade_and_same_version_normalization_are_reported() 
     );
     assert_eq!(source.encode_mdx().unwrap(), bytes);
 
-    let mut noncanonical = Model::<V1800>::new();
+    let mut noncanonical = Document::<V1800>::new();
     let mut camera = Camera::<V1800>::new("Portrait").unwrap();
     camera.variant = CameraVariant::Variant0;
     noncanonical.set_cameras([camera]);
-    let result = DynamicModel::<NoExtensions>::decode_mdx(&noncanonical.encode_mdx().unwrap(), 800)
-        .unwrap()
-        .into_owned()
-        .into_convert::<V1800>(&ConversionOptions::strict())
-        .unwrap();
+    let result =
+        DynamicDocument::<NoExtensions>::decode_mdx(&noncanonical.encode_mdx().unwrap(), 800)
+            .unwrap()
+            .into_owned()
+            .into_convert::<V1800>(&ConversionOptions::strict())
+            .unwrap();
     assert_eq!(
         result.model.cameras().next().unwrap().variant,
         CameraVariant::Variant3
@@ -582,7 +586,7 @@ fn model_camera_upgrade_downgrade_and_same_version_normalization_are_reported() 
 
 #[test]
 fn absent_version_is_inserted_and_dynamic_sources_convert() {
-    let source = Model::<V800>::decode_mdx(b"MDLX").unwrap();
+    let source = Document::<V800>::decode_mdx(b"MDLX").unwrap();
     let converted = source
         .convert::<V900>(&ConversionOptions::strict())
         .unwrap();
@@ -592,7 +596,7 @@ fn absent_version_is_inserted_and_dynamic_sources_convert() {
     ));
     assert_eq!(converted.model.version(), 900);
     assert_eq!(converted.report.issues[0].path, "VERS");
-    let dynamic = DynamicModel::<NoExtensions>::V800(
+    let dynamic = DynamicDocument::<NoExtensions>::V800(
         sample::<V800>()
             .into_convert(&ConversionOptions::strict())
             .unwrap()

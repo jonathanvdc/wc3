@@ -1,13 +1,13 @@
-use wc3::model::mdlx::animation::ValueKeyframe;
-use wc3::model::mdlx::animation::{Animatable, Track};
-use wc3::model::mdlx::Color;
+use wc3::model::formats::mdlx::animation::ValueKeyframe;
+use wc3::model::formats::mdlx::animation::{Animatable, Track};
+use wc3::model::formats::mdlx::Color;
 
-use wc3::model::mdlx::emitters::RibbonEmitter;
-use wc3::model::mdlx::mdx::Read as _;
-use wc3::model::mdlx::mdx::Write as _;
+use wc3::model::formats::mdlx::emitters::RibbonEmitter;
+use wc3::model::formats::mdlx::mdx::Read as _;
+use wc3::model::formats::mdlx::mdx::Write as _;
 
-use wc3::model::mdlx::scene::Node;
-use wc3::model::mdlx::Model;
+use wc3::model::formats::mdlx::scene::Node;
+use wc3::model::formats::mdlx::Document;
 
 #[test]
 fn ribbon_fields_and_integer_animation_round_trip() {
@@ -22,10 +22,10 @@ fn ribbon_fields_and_integer_animation_round_trip() {
     emitter
         .texture_slot
         .set_track(Track::<u32>::linear([key], None).unwrap());
-    let mut model = Model::<wc3::model::mdlx::V800>::new();
+    let mut model = Document::<wc3::model::formats::mdlx::V800>::new();
     model.set_ribbon_emitters([emitter.clone()]);
     let bytes = model.encode_mdx().unwrap();
-    let parsed = Model::<wc3::model::mdlx::V800>::decode_mdx(&bytes).unwrap();
+    let parsed = Document::<wc3::model::formats::mdlx::V800>::decode_mdx(&bytes).unwrap();
     let ribbons = parsed.ribbon_emitters().cloned().collect::<Vec<_>>();
     assert_eq!(ribbons[0], emitter);
     assert_eq!(

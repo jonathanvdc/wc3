@@ -1,11 +1,11 @@
-use wc3::model::mdlx::animation::{Animatable, Track};
+use wc3::model::formats::mdlx::animation::{Animatable, Track};
 
-use wc3::model::mdlx::materials::{
+use wc3::model::formats::mdlx::materials::{
     Layer, LayerShadingFlags, LayerTextureSlot, Material, MaterialRenderFlags, ShaderType,
 };
-use wc3::model::mdlx::mdl::{Read as _, Write as _};
-use wc3::model::mdlx::scene::{Attachment, Bone, Node, NodeFlags};
-use wc3::model::mdlx::{mdl, mdx, V1000, V1100, V1800, V800, V900};
+use wc3::model::formats::mdlx::mdl::{Read as _, Write as _};
+use wc3::model::formats::mdlx::scene::{Attachment, Bone, Node, NodeFlags};
+use wc3::model::formats::mdlx::{mdl, mdx, V1000, V1100, V1800, V800, V900};
 
 fn roundtrip<T: mdl::Read + mdl::Write + mdx::Write>(value: &T) {
     let binary = value.encode_mdx().unwrap();
@@ -126,7 +126,7 @@ fn malformed_and_unrepresentable_layers() {
 
 #[test]
 fn rejects_hidden_binary_storage_and_noncanonical_channel_order() {
-    use wc3::model::mdlx::mdx::Write as _;
+    use wc3::model::formats::mdlx::mdx::Write as _;
     let layer = Layer::<V800>::decode_mdl("Layer { static TextureID 0 <= 0, }").unwrap();
     let mut layer = layer;
     layer.alpha.set_track(Track::linear([], None).unwrap());
@@ -148,7 +148,7 @@ fn rejects_hidden_binary_storage_and_noncanonical_channel_order() {
 
 #[test]
 fn default_materials_roundtrip_at_every_supported_version() {
-    use wc3::model::mdlx::{V1200, V1300, V1400, V1600};
+    use wc3::model::formats::mdlx::{V1200, V1300, V1400, V1600};
     macro_rules! check {
         ($($version:ty),*) => { $( {
             let mut material = Material::<$version>::new();
@@ -161,7 +161,7 @@ fn default_materials_roundtrip_at_every_supported_version() {
 
 #[test]
 fn animated_emissive_gain_ignores_nan_base_and_preserves_keys() {
-    use wc3::model::mdlx::mdx::Write as _;
+    use wc3::model::formats::mdlx::mdx::Write as _;
     let mut layer = Layer::<V1000>::decode_mdl(
         "Layer { EmissiveGain 1 { Hermite, GlobalSeqId 2, -7: 3, InTan 4, OutTan 5, } }",
     )
@@ -183,7 +183,7 @@ fn animated_emissive_gain_ignores_nan_base_and_preserves_keys() {
 
 #[test]
 fn animated_texture_slots_ignore_base_ids() {
-    use wc3::model::mdlx::mdl::Dialect;
+    use wc3::model::formats::mdlx::mdl::Dialect;
     let mut layer = Layer::<V1100>::new();
     layer.set_shader_type(ShaderType::HD_DEFAULT_UNIT);
     layer.set_texture_slots(&[LayerTextureSlot {
@@ -207,8 +207,8 @@ fn animated_texture_slots_ignore_base_ids() {
 
 #[test]
 fn material_and_layer_two_sided_flags_roundtrip_independently() {
-    use wc3::model::mdlx::mdl::Dialect;
-    use wc3::model::mdlx::mdx::{Read as _, Write as _};
+    use wc3::model::formats::mdlx::mdl::Dialect;
+    use wc3::model::formats::mdlx::mdx::{Read as _, Write as _};
     macro_rules! check {
         ($($version:ty),*) => { $( {
             for material_flag in ["", "TwoSided,"] {

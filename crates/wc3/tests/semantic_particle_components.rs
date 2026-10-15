@@ -1,12 +1,12 @@
 use std::borrow::Cow;
-use wc3::model::semantic::profiles::mdlx;
-use wc3::model::semantic::{
+use wc3::model::profiles::mdlx;
+use wc3::model::{
     AgeDrivenParticle, AgeDrivenParticleRendering, AgeDrivenParticleShape, AtlasParticle,
     AtlasParticleRendering, ModelParticle, ParticleEmission, ParticleLifetime, ParticleMotion,
     ProgrammedAge, ProgrammedDirection, ProgrammedForces, ProgrammedNoise, ProgrammedParticle,
     ProgrammedParticleGravity, StagedParticleAppearance,
 };
-use wc3::model::semantic::{
+use wc3::model::{
     Animated, ParticleAppearance, ParticleDefinition, ParticleDetails, ParticleScalar,
     ParticleTrigger, ZeroVec,
 };
@@ -34,10 +34,8 @@ fn model_particles_share_editable_rate_speed_and_lifetime() {
         lifetime: ParticleLifetime {
             duration: Animated::constant(2.5),
             variation: (),
-            ..Default::default()
         },
         appearance: (),
-        ..Default::default()
     };
     let mut definition = ParticleDefinition::from(source.clone());
     let ParticleDetails::Model(details) = &definition.details else {
@@ -63,7 +61,6 @@ fn atlas_appearance_and_rendering_survive_composition() {
         lifetime: ParticleLifetime {
             duration: 3.0,
             variation: (),
-            ..Default::default()
         },
         emission: ParticleEmission {
             trigger: true,
@@ -83,7 +80,6 @@ fn atlas_appearance_and_rendering_survive_composition() {
             },
             ..Default::default()
         },
-        ..Default::default()
     };
     let definition = ParticleDefinition::from(source.clone());
     assert!(matches!(
@@ -112,7 +108,7 @@ fn narrowing_retains_unsupported_authored_variation() {
     assert_eq!(value.default, 0.75);
 }
 
-use wc3::model::semantic::profiles::{m2, m3};
+use wc3::model::profiles::{m2, m3};
 
 #[test]
 fn age_driven_roundtrip_preserves_borrowed_spline_and_common_randomness() {

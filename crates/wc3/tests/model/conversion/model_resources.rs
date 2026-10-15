@@ -1,6 +1,6 @@
-use wc3::model::semantic::materials::layered::{Layer, LayeredSurface};
-use wc3::model::semantic::profiles::Universal;
-use wc3::model::semantic::{
+use wc3::model::materials::layered::{Layer, LayeredSurface};
+use wc3::model::profiles::Universal;
+use wc3::model::{
     Animated, Material, MaterialSurface, ModelBuilder, Resource, Resources, Texture, TextureId,
 };
 
@@ -69,8 +69,8 @@ fn draft_model_exposes_its_owned_resources_before_publication() {
 
 #[test]
 fn native_profiles_publish_declared_bounds_and_reject_clearing_them() {
-    use wc3::model::semantic::profiles::{Universal, M2};
-    use wc3::model::semantic::{Bounds, Model};
+    use wc3::model::profiles::{Universal, M2};
+    use wc3::model::{Bounds, Model};
     let mut native = Model::<M2>::builder("required bounds").finish().unwrap();
     assert_eq!(native.bounds(), Some(Bounds::default()));
     assert!(native
@@ -88,8 +88,8 @@ fn native_profiles_publish_declared_bounds_and_reject_clearing_them() {
 
 #[test]
 fn metadata_edits_validate_and_preserve_the_published_model_on_failure() {
-    use wc3::model::semantic::profiles::{mdlx::ModelMetadata, Mdlx};
-    use wc3::model::semantic::Model;
+    use wc3::model::profiles::{mdlx::ModelMetadata, Mdlx};
+    use wc3::model::Model;
     let mut draft = Model::<Mdlx>::builder("metadata");
     draft.set_metadata(ModelMetadata {
         blend_time: 0.25,

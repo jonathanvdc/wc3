@@ -1,5 +1,5 @@
 use super::*;
-use wc3::model::mdlx::IoError;
+use wc3::model::formats::mdlx::IoError;
 
 #[test]
 fn tokens_borrow_source_and_cover_all_punctuation() {

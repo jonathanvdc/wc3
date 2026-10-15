@@ -1,7 +1,8 @@
 //! Explicit vertex declarations are supplied by the caller, never guessed from a game revision.
-use wc3::model::conversion::{diablo::d4 as convert, ExportOptions, ImportOptions};
-use wc3::model::diablo::d4::{self, records as native};
-use wc3::model::semantic::{GeometrySchema as _, InfluenceRows};
+use wc3::model::conversion::{ExportOptions, ImportOptions};
+use wc3::model::formats::diablo::d4::{self, records as native};
+use wc3::model::io::diablo::d4 as convert;
+use wc3::model::{GeometrySchema as _, InfluenceRows};
 use zerovec::ZeroVec;
 
 fn layout() -> convert::VertexLayout {

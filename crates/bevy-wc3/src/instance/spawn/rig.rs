@@ -112,16 +112,16 @@ pub(super) fn spawn_rig(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::preparation::compile_model;
+    use crate::preparation::compile_document;
     use crate::preparation::rig::{joint_ids, node_order};
     use bevy::ecs::world::{CommandQueue, World};
-    use wc3::model::mdlx::mdl::Read as _;
-    use wc3::model::mdlx::{Model, V1800};
+    use wc3::model::formats::mdlx::mdl::Read as _;
+    use wc3::model::formats::mdlx::{Document, V1800};
 
     #[test]
     fn every_node_type_keeps_its_entity_and_parent_from_mdl() {
         let source = include_str!("../../../tests/fixtures/attachment_parent.mdl");
-        let model = Model::<V1800>::decode_mdl(source).unwrap();
+        let model = Document::<V1800>::decode_mdl(source).unwrap();
         assert_eq!(*model.geosets().next().unwrap().matrix_indices(), [2, 10]);
         let mut world = World::new();
         let root = world.spawn(Transform::default()).id();
@@ -131,7 +131,7 @@ mod tests {
         let mut commands = Commands::new(&mut queue, &world);
         let pivots = model.pivot_points();
         let joint_ids = joint_ids(&model);
-        let mut nodes = compile_model(model, |_| None, |_| None).unwrap().nodes;
+        let mut nodes = compile_document(model, |_| None, |_| None).unwrap().nodes;
         nodes.reverse();
         let order = node_order(&nodes);
         let rig = spawn_rig(

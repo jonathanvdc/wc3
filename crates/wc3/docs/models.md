@@ -1,42 +1,47 @@
-# Reading and editing Warcraft III models
+# Reading and editing Warcraft III documents
 
-MDX and MDL share the record types in `wc3::model::mdlx`. Choose a version, decode a
-model, edit its records, and encode the result in either format. The
-[crate README](../README.md#warcraft-iii-models) provides a first example; this guide explains
-the choices that matter for editors, converters, and asset pipelines.
+For native record editing, MDX and MDL share the document and record types in `wc3::model::formats::mdlx`. Choose a version, decode a
+document, edit its records, and encode the result in either format. The
+[crate README](../README.md#warcraft-iii-documents) provides a first example; this guide explains
+the choices that matter for editors, converters, and asset pipelines. For checked
+authoring relationships, use the default [model representation](semantic.md) and
+its [native import and export adapters](conversion.md).
 
 ## Choose a model version
 
-Use `Model<V800>` when the input must use a particular layout. Its decoder checks
+Use `Document<V800>` when the input must use a particular layout. Its decoder checks
 the file's version against that marker. Supported markers are `V800`, `V900`,
 `V1000`, `V1100`, `V1200`, `V1300`, `V1400`, `V1600`, and `V1800`.
-Version capabilities determine which fields and collections are available.
+`FormatVersion` describes a numeric revision and its capabilities. `Dialect`
+combines that revision with application extensions; ordinary version markers
+implement both traits. These capabilities determine which fields and collections
+are available.
 
-Use `DynamicModel` when the input version is discovered at runtime. MDX decoding
+Use `DynamicDocument` when the input version is discovered at runtime. MDX decoding
 requires a fallback version for files without a `VERS` chunk; it does not override
 an explicit version. MDL requires a `Version` block followed by a `Model` block:
 
 ```rust
-use wc3::model::mdlx::{DynamicModel, NoExtensions};
-use wc3::model::mdlx::mdl::{Read as _, Write as _};
+use wc3::model::formats::mdlx::{DynamicDocument, NoExtensions};
+use wc3::model::formats::mdlx::mdl::{Read as _, Write as _};
 
 let source = r#"Version { FormatVersion 800, } Model "Example" {}"#;
-let model = DynamicModel::<NoExtensions>::decode_mdl(source)?;
+let model = DynamicDocument::<NoExtensions>::decode_mdl(source)?;
 assert_eq!(model.version(), 800);
 let binary = model.encode_mdx()?;
-let decoded = DynamicModel::<NoExtensions>::decode_mdx(&binary, 800)?;
+let decoded = DynamicDocument::<NoExtensions>::decode_mdx(&binary, 800)?;
 assert_eq!(decoded.version(), 800);
 # Ok::<(), Box<dyn std::error::Error>>(())
 ```
 
 `NoExtensions` retains unknown MDX chunks as opaque bytes. Applications defining
-additional chunks can use `Extended<V, E>` with `Model`, or select `E` on
-`DynamicModel`. The [model API](https://docs.rs/wc3/latest/wc3/model/mdlx/) explains
+additional chunks can use `Extended<V, E>` with `Document`, or select `E` on
+`DynamicDocument`. The [model API](https://docs.rs/wc3/latest/wc3/model/formats/mdlx/) explains
 how `mdx::Extension` and `mdl::Extension` dispatch those payloads.
 
 ## Edit collections and fields
 
-Model getters for borrowed record collections return iterators without temporary
+Document getters for borrowed record collections return iterators without temporary
 vectors. Named mutable iterators such as `geosets_mut()` and `materials_mut()`
 edit records in place while preserving chunk boundaries and file order. Named
 record setters accept arrays, vectors, or iterators of records, moving their
@@ -85,9 +90,9 @@ version field. `convert::<Target>()` retains and borrows the source;
 `Conversion { model, report }`:
 
 ```rust
-use wc3::model::mdlx::{ConversionOptions, Model, V800, V1800};
+use wc3::model::formats::mdlx::{ConversionOptions, Document, V800, V1800};
 
-let source = Model::<V800>::new();
+let source = Document::<V800>::new();
 let converted = source.into_convert::<V1800>(&ConversionOptions::strict())?;
 assert_eq!(converted.model.version(), 1800);
 for issue in &converted.report.issues {
@@ -110,7 +115,7 @@ Resource tools can use `resources()` on either model type to enumerate direct
 literal paths and replaceable IDs with typed source locations. `rewrite_resources()`
 validates every proposed change before modifying the model and reports actual edits,
 retaining chunk organization and unchanged bytes. The
-[`resources` API](https://docs.rs/wc3/latest/wc3/model/mdlx/resources/) includes an example.
+[`resources` API](https://docs.rs/wc3/latest/wc3/model/formats/mdlx/resources/) includes an example.
 File resolution, recursive discovery, path normalization, and packaging policy remain
 application-owned, so enumeration includes PopcornFX and FaceFX even when a renderer
 does not support them.
@@ -125,7 +130,7 @@ writing fails; field-loss policy does not relax text representability checks.
 
 Use `encode_mdx()` or `encode_mdl()` to finish encoding in memory before writing
 the result to a file. Standard I/O adapters do not flush their sinks, and transport
-failures can leave partial output. The [MDX](https://docs.rs/wc3/latest/wc3/model/mdlx/mdx/)
-and [MDL](https://docs.rs/wc3/latest/wc3/model/mdlx/mdl/) API references explain error
+failures can leave partial output. The [MDX](https://docs.rs/wc3/latest/wc3/model/formats/mdlx/mdx/)
+and [MDL](https://docs.rs/wc3/latest/wc3/model/formats/mdlx/mdl/) API references explain error
 locations, dialect differences, and record-level streaming. The
 [command-line guide](tools.md) covers the equivalent conversion and repath tools.

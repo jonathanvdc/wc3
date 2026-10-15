@@ -1,5 +1,5 @@
 //! Independent group payload widths and contextual liquid/tangent decoding.
-use wc3::model::wmo::{self, Classic, Legion, Shadowlands};
+use wc3::model::formats::wmo::{self, Classic, Legion, Shadowlands};
 use wmo::codec::{Decoder, Encoder};
 use wmo::group::{GroupChunk, GroupContext, LiquidKind, LiquidVertices};
 use wmo::records::{Batch, GroupHeader};

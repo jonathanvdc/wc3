@@ -1,16 +1,16 @@
-use wc3::model::mdlx::animation::ValueKeyframe;
-use wc3::model::mdlx::animation::{Animatable, Track};
-use wc3::model::mdlx::Color;
+use wc3::model::formats::mdlx::animation::ValueKeyframe;
+use wc3::model::formats::mdlx::animation::{Animatable, Track};
+use wc3::model::formats::mdlx::Color;
 
-use wc3::model::mdlx::mdx::Read as _;
-use wc3::model::mdlx::mdx::Write as _;
+use wc3::model::formats::mdlx::mdx::Read as _;
+use wc3::model::formats::mdlx::mdx::Write as _;
 
-use wc3::model::mdlx::scene::{Light, LightFalloff, LightShadowRange, LightType, Node};
-use wc3::model::mdlx::Model;
+use wc3::model::formats::mdlx::scene::{Light, LightFalloff, LightShadowRange, LightType, Node};
+use wc3::model::formats::mdlx::Document;
 
 #[test]
 fn light_fields_round_trip() {
-    let mut light = Light::<wc3::model::mdlx::V1200>::new(
+    let mut light = Light::<wc3::model::formats::mdlx::V1200>::new(
         Node::new("Torch", 2).unwrap(),
         LightType::Directional,
     );
@@ -20,11 +20,12 @@ fn light_fields_round_trip() {
     light.intensity = Animatable::Static(2.0);
     light.ambient_color = Animatable::Static([0.1, 0.2, 0.3]);
     light.ambient_intensity = Animatable::Static(0.5);
-    let mut model = Model::<wc3::model::mdlx::V1200>::new();
+    let mut model = Document::<wc3::model::formats::mdlx::V1200>::new();
     model.set_lights([light]);
-    let parsed = Model::<wc3::model::mdlx::V1200>::decode_mdx(&model.encode_mdx().unwrap())
-        .unwrap()
-        .into_owned();
+    let parsed =
+        Document::<wc3::model::formats::mdlx::V1200>::decode_mdx(&model.encode_mdx().unwrap())
+            .unwrap()
+            .into_owned();
     let light = &parsed.lights().next().unwrap();
     assert_eq!(light.node.name.text(), "Torch");
     assert_eq!(light.light_type, LightType::Directional);
@@ -38,7 +39,7 @@ fn light_fields_round_trip() {
 
 #[test]
 fn light_color_track_round_trip() {
-    let mut light = Light::<wc3::model::mdlx::V800>::new(
+    let mut light = Light::<wc3::model::formats::mdlx::V800>::new(
         Node::new("Lamp", 3).unwrap(),
         LightType::Omnidirectional,
     );
@@ -51,7 +52,7 @@ fn light_color_track_round_trip() {
     )
     .unwrap();
     light.color.set_track(track.clone());
-    let parsed = Light::<wc3::model::mdlx::V800>::decode_mdx(&light.encode_mdx().unwrap())
+    let parsed = Light::<wc3::model::formats::mdlx::V800>::decode_mdx(&light.encode_mdx().unwrap())
         .unwrap()
         .into_owned();
     assert_eq!(parsed.color.track(), Some(&track));
@@ -59,7 +60,7 @@ fn light_color_track_round_trip() {
 
 #[test]
 fn extended_light_fields_and_tracks_round_trip() {
-    let mut light = Light::<wc3::model::mdlx::V1800>::new(
+    let mut light = Light::<wc3::model::formats::mdlx::V1800>::new(
         Node::new("Glow", 4).unwrap(),
         LightType::Omnidirectional,
     );
@@ -87,9 +88,10 @@ fn extended_light_fields_and_tracks_round_trip() {
     )
     .unwrap();
     light.visibility = Some(track.clone());
-    let parsed = Light::<wc3::model::mdlx::V1800>::decode_mdx(&light.encode_mdx().unwrap())
-        .unwrap()
-        .into_owned();
+    let parsed =
+        Light::<wc3::model::formats::mdlx::V1800>::decode_mdx(&light.encode_mdx().unwrap())
+            .unwrap()
+            .into_owned();
     assert!(parsed.try_shadow_casting().unwrap());
     assert_eq!(parsed.try_shadow_intensity().unwrap(), 1.0);
     assert_eq!(
@@ -112,9 +114,9 @@ fn extended_light_fields_and_tracks_round_trip() {
 
 #[test]
 fn intermediate_light_layouts_follow_version_gates() {
-    use wc3::model::mdlx::{V1300, V1400, V1600};
+    use wc3::model::formats::mdlx::{V1300, V1400, V1600};
 
-    let base = Light::<wc3::model::mdlx::V1200>::new(
+    let base = Light::<wc3::model::formats::mdlx::V1200>::new(
         Node::new("Lamp", 1).unwrap(),
         LightType::Omnidirectional,
     )
@@ -157,7 +159,7 @@ fn intermediate_light_layouts_follow_version_gates() {
 
 #[test]
 fn shadow_casting_and_falloff_round_trip() {
-    use wc3::model::mdlx::{V1300, V1600};
+    use wc3::model::formats::mdlx::{V1300, V1600};
 
     let mut old = Light::<V1300>::new(Node::new("Old", 1).unwrap(), LightType::Omnidirectional);
     assert_eq!(old.falloff(), LightFalloff::default());
@@ -195,7 +197,7 @@ fn shadow_casting_and_falloff_round_trip() {
 
 #[test]
 fn infallible_light_accessors_cover_supported_versions() {
-    use wc3::model::mdlx::{
+    use wc3::model::formats::mdlx::{
         SupportsLightFalloff, SupportsLightShadowCasting, SupportsLightShadowIntensity, V1200,
         V1300, V1400, V1600, V1800,
     };

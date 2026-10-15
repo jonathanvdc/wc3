@@ -1,6 +1,6 @@
 # Reading and editing Diablo model resources
 
-Diablo models live under `wc3::model::diablo`. A model is assembled from independently
+Diablo models live under `wc3::model::formats::diablo`. A model is assembled from independently
 versioned SNO resources rather than one self-contained file. The native codecs
 resolve each document's internal address space without performing storage I/O;
 applications supply actor, appearance, animation, and material files themselves.
@@ -32,7 +32,7 @@ ranges, complete element sizes, tag-map prefixes, and the established redundant
 array counts.
 
 ```rust
-use wc3::model::diablo::d3::{Appearance, V260};
+use wc3::model::formats::diablo::d3::{Appearance, V260};
 
 let mut appearance = Appearance::<V260>::default();
 appearance.root.sno_id = 123;
@@ -68,7 +68,7 @@ header hash. Native records expose named fields and reserved gaps; no source-fil
 image substitutes for the editable fields.
 
 ```rust
-use wc3::model::diablo::d4::Appearance;
+use wc3::model::formats::diablo::d4::Appearance;
 
 let mut appearance = Appearance::default();
 appearance.root.sno_id = 123;
@@ -132,7 +132,7 @@ numeric rather than being replaced with guessed enum variants.
 
 ## Convert Diablo III appearances and resources
 
-`wc3::model::conversion::diablo::d3::import` converts an appearance into an
+`wc3::model::io::diablo::d3::import` converts an appearance into an
 independent `Model<D3>`. Geometry streams borrow the native vertex and index
 storage while exposing logical positions, directions, colors, UVs, and three
 ordered skin contributions. Skeleton nodes retain their local rest transforms
@@ -141,7 +141,7 @@ actual skeleton relationships rather than numeric bone indices. Look-at controll
 also target actual skeleton bones, so renaming a bone updates its native look-at
 reference; inactive unresolved spellings remain independently editable.
 
-The semantic `d3::VertexStreams` type shares the `semantic::VertexData` layout,
+The semantic `d3::VertexStreams` type shares the `model::VertexData` layout,
 with auxiliary colors, independent binormals, auxiliary direction bytes, and
 cloth-vertex mappings in `VertexExtras`. Influence rows use `[Influence; 3]`, preserving their ordered
 zero-weight slots.
@@ -155,12 +155,12 @@ select variants by ordinal, so an arbitrary logical selection that conflicts wit
 that ordering requires an explicit semantic transformation before export.
 
 ```rust
-use wc3::model::{conversion, diablo::d3};
+use wc3::model::{conversion, formats::diablo::d3, io};
 use conversion::{ExportOptions, ImportOptions};
 
 let source = d3::Appearance::<d3::V260>::default();
-let imported = conversion::diablo::d3::import(&source, &ImportOptions::default())?;
-let planned = conversion::diablo::d3::plan(&imported.value, &ExportOptions::default())?;
+let imported = io::diablo::d3::import(&source, &ImportOptions::default())?;
+let planned = io::diablo::d3::plan(&imported.value, &ExportOptions::default())?;
 let output = planned.execute()?.value;
 let bytes = output.write()?;
 # Ok::<(), Box<dyn std::error::Error>>(())
@@ -194,8 +194,8 @@ policy permits their measured quantization error.
 
 ## Convert declared Diablo IV geometry
 
-`wc3::model::conversion::diablo::d4` converts supported appearance declarations to
-an independent `semantic::profiles::diablo::d4::D4` graph. The native record graph
+`wc3::model::io::diablo::d4` converts supported appearance declarations to
+an independent `model::profiles::diablo::d4::D4` graph. The native record graph
 remains the place to edit packed or procedural data whose semantic interpretation
 has not been established. Choosing a supported SNO format hash does not establish
 the meanings of every vertex-format code used by that file.
@@ -250,7 +250,7 @@ supported record vocabulary even when the semantic adapter rejects a projection.
 
 ## Convert standalone Diablo IV materials
 
-`conversion::diablo::d4::import_material` creates a checked material-only graph
+`io::diablo::d4::import_material` creates a checked material-only graph
 from a native material resource. The shader definition retains external shader-map
 and value-set selections, ordered texture inputs, constant scalar/vector parameters,
 and its material-resource controls. Texture SNOs are interned in the model's

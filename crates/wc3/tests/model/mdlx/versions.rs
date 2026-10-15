@@ -1,27 +1,27 @@
 use std::mem::size_of;
-use wc3::model::mdlx::animation::Animatable;
-use wc3::model::mdlx::chunks::{ModelChunk, RawChunk, UnknownChunk};
-use wc3::model::mdlx::mdx::Read as _;
-use wc3::model::mdlx::mdx::ReadErrorKind;
-use wc3::model::mdlx::mdx::Write as _;
-use wc3::model::mdlx::NoExtensions;
-use wc3::model::mdlx::ValueError;
-use wc3::model::mdlx::ZeroVec;
+use wc3::model::formats::mdlx::animation::Animatable;
+use wc3::model::formats::mdlx::chunks::{ModelChunk, RawChunk, UnknownChunk};
+use wc3::model::formats::mdlx::mdx::Read as _;
+use wc3::model::formats::mdlx::mdx::ReadErrorKind;
+use wc3::model::formats::mdlx::mdx::Write as _;
+use wc3::model::formats::mdlx::NoExtensions;
+use wc3::model::formats::mdlx::ValueError;
+use wc3::model::formats::mdlx::ZeroVec;
 
-use wc3::model::mdlx::geometry::{
+use wc3::model::formats::mdlx::geometry::{
     Geoset, GeosetLayout, NoGeosetExtraSections, ReforgedGeosetExtraSections,
 };
-use wc3::model::mdlx::materials::{Layer, Material};
-use wc3::model::mdlx::mdx::ReadError;
-use wc3::model::mdlx::scene::{Camera, CameraVariant, Light, LightType, Node};
-use wc3::model::mdlx::{DynamicModel, Model, V1000, V1800, V800, V900};
+use wc3::model::formats::mdlx::materials::{Layer, Material};
+use wc3::model::formats::mdlx::mdx::ReadError;
+use wc3::model::formats::mdlx::scene::{Camera, CameraVariant, Light, LightType, Node};
+use wc3::model::formats::mdlx::{Document, DynamicDocument, V1000, V1800, V800, V900};
 
 #[test]
 fn version_is_shared_by_model_and_nested_records() {
     let mut material = Material::<V1800>::new();
     material.layers = [Layer::<V1800>::new()].to_vec();
 
-    let mut model = Model::<V1800>::new();
+    let mut model = Document::<V1800>::new();
     model.set_materials([material]);
     model.set_geosets([Geoset::<V1800>::new([], [], []).unwrap()]);
     model.set_lights([Light::<V1800>::new(
@@ -31,7 +31,7 @@ fn version_is_shared_by_model_and_nested_records() {
     model.set_cameras([Camera::<V1800>::new("View").unwrap()]);
 
     let bytes = model.encode_mdx().unwrap();
-    let parsed = Model::<V1800>::decode_mdx(&bytes).unwrap();
+    let parsed = Document::<V1800>::decode_mdx(&bytes).unwrap();
     assert_eq!(parsed.materials().count(), 1);
     assert_eq!(parsed.geosets().count(), 1);
     assert_eq!(parsed.lights().count(), 1);
@@ -40,8 +40,8 @@ fn version_is_shared_by_model_and_nested_records() {
         CameraVariant::Variant3
     );
     assert!(matches!(
-        DynamicModel::<NoExtensions>::decode_mdx(&bytes, 800),
-        Ok(DynamicModel::V1800(_))
+        DynamicDocument::<NoExtensions>::decode_mdx(&bytes, 800),
+        Ok(DynamicDocument::V1800(_))
     ));
 }
 
@@ -49,11 +49,11 @@ fn version_is_shared_by_model_and_nested_records() {
 fn unknown_tags_are_explicit_and_known_tags_cannot_be_disguised() {
     assert!(UnknownChunk::<V800>::new(RawChunk::new(*b"VERS", vec![0; 4])).is_none());
     let unknown = UnknownChunk::<V800>::new(RawChunk::new(*b"FUTR", vec![1, 2])).unwrap();
-    let mut model = Model::<V800>::new();
+    let mut model = Document::<V800>::new();
     model.chunks.push(ModelChunk::Unknown(unknown));
     let bytes = model.encode_mdx().unwrap();
     assert_eq!(
-        Model::<V800>::decode_mdx(&bytes)
+        Document::<V800>::decode_mdx(&bytes)
             .unwrap()
             .encode_mdx()
             .unwrap(),
@@ -113,10 +113,10 @@ fn version_markers_select_record_fields() {
 
 #[test]
 fn runtime_dispatch_rejects_versions_without_a_layout() {
-    let mut bytes = Model::<V800>::new().encode_mdx().unwrap();
+    let mut bytes = Document::<V800>::new().encode_mdx().unwrap();
     bytes[12..16].copy_from_slice(&777u32.to_le_bytes());
     assert!(matches!(
-        DynamicModel::<NoExtensions>::decode_mdx(&bytes, 800),
+        DynamicDocument::<NoExtensions>::decode_mdx(&bytes, 800),
         Err(ReadError {
             offset: 12,
             tag: Some([86, 69, 82, 83]),

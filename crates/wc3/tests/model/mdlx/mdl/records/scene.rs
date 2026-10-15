@@ -1,9 +1,11 @@
-use wc3::model::mdlx::animation::{Animatable, Track};
-use wc3::model::mdlx::geometry::CollisionShape;
-use wc3::model::mdlx::mdl::{Read as _, Write as _};
-use wc3::model::mdlx::mdx::{Read as _, Write as _};
-use wc3::model::mdlx::scene::{EventObject, Light, LightType, NodeFlags};
-use wc3::model::mdlx::{mdl, mdx, V1000, V1100, V1200, V1300, V1400, V1600, V1800, V800, V900};
+use wc3::model::formats::mdlx::animation::{Animatable, Track};
+use wc3::model::formats::mdlx::geometry::CollisionShape;
+use wc3::model::formats::mdlx::mdl::{Read as _, Write as _};
+use wc3::model::formats::mdlx::mdx::{Read as _, Write as _};
+use wc3::model::formats::mdlx::scene::{EventObject, Light, LightType, NodeFlags};
+use wc3::model::formats::mdlx::{
+    mdl, mdx, V1000, V1100, V1200, V1300, V1400, V1600, V1800, V800, V900,
+};
 
 fn roundtrip<T>(value: &T)
 where
@@ -187,7 +189,7 @@ fn collision_rejects_inconsistent_geometry() {
 
 #[test]
 fn independent_binary_record_fixtures_roundtrip() {
-    use wc3::model::mdlx::scene::{LightFalloff, LightShadowRange, Node};
+    use wc3::model::formats::mdlx::scene::{LightFalloff, LightShadowRange, Node};
     let mut node = Node::new("fixture", 7).unwrap();
     node.flags = NodeFlags(0x200);
     let mut light = Light::<V1800>::new(node.clone(), LightType::Directional);

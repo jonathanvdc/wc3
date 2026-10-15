@@ -1,10 +1,10 @@
 use wc3::model::common::{IntoZeroVec, ZeroVec};
-use wc3::model::semantic::profiles::{
+use wc3::model::profiles::{
     diablo::{d3, d4},
     Either,
 };
-use wc3::model::semantic::ValueGroups;
-use wc3::model::semantic::{
+use wc3::model::ValueGroups;
+use wc3::model::{
     Attribute, AttributeDomain, AttributeSemantic, AttributeValues, GeometryData, GeometryEdit,
     GeometrySchema, Influence, JointInfluences, M2Geometry, M3CollisionGeometry, M3Geometry,
     MdlxGeometry, StreamSupport, Topology, VertexRemap, WmoGeometry,
@@ -234,8 +234,8 @@ fn constraints_and_connectivity_changes_are_explicit() {
 
 #[test]
 fn edits_publish_transactionally_and_keep_unmodified_borrowed_streams() {
-    use wc3::model::semantic::profiles::Universal;
-    use wc3::model::semantic::{Error, Mesh, Model};
+    use wc3::model::profiles::Universal;
+    use wc3::model::{Error, Mesh, Model};
     let source = ZeroVec::alloc_from_slice(&[[0., 0., 1.]; 3]);
     let geometry = MdlxGeometry::triangles(positions(), triangles())
         .unwrap()

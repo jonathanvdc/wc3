@@ -1,7 +1,8 @@
+use wc3::model::io;
 use wc3::model::{
-    conversion::{self, ExportOptions, ImportOptions, LossPolicy},
-    m3::{self, records as nr},
-    semantic::profiles::m3 as surface,
+    conversion::{ExportOptions, ImportOptions, LossPolicy},
+    formats::m3::{self, records as nr},
+    profiles::m3 as surface,
 };
 const IDENTITY: [[f32; 4]; 4] = [
     [1., 0., 0., 0.],
@@ -13,7 +14,7 @@ fn source() -> m3::Bundle<'static, m3::Md34> {
     source_with_unresolved_shape_bytes(false)
 }
 fn source_with_unresolved_shape_bytes(populated: bool) -> m3::Bundle<'static, m3::Md34> {
-    let mut doc = m3::Document::<m3::Md34>::new();
+    let mut doc = m3::Container::<m3::Md34>::new();
     let bones = doc
         .append(
             &[nr::Bone::<nr::V1> {
@@ -116,17 +117,17 @@ fn source_with_unresolved_shape_bytes(populated: bool) -> m3::Bundle<'static, m3
         1,
         root.index(),
     ));
-    m3::Bundle::from_model(m3::Model::from_document(doc).unwrap())
+    m3::Bundle::from_model(m3::Document::from_container(doc).unwrap())
 }
 
 #[test]
 fn unresolved_shape_bytes_require_explicit_loss_policy() {
     let source = source_with_unresolved_shape_bytes(true);
-    let error = conversion::m3::import(&source, &ImportOptions::default()).unwrap_err();
+    let error = io::m3::import(&source, &ImportOptions::default()).unwrap_err();
     assert!(error
         .to_string()
         .contains("m3.physics.shape.legacy_reserved_1"));
-    let result = conversion::m3::import(
+    let result = io::m3::import(
         &source,
         &ImportOptions {
             loss_policy: LossPolicy::Drop,
@@ -143,7 +144,7 @@ fn unresolved_shape_bytes_require_explicit_loss_policy() {
 #[test]
 fn physics_and_attachment_fields_are_active_and_editable() {
     let source = source();
-    let mut asset = conversion::m3::import(&source, &ImportOptions::default())
+    let mut asset = io::m3::import(&source, &ImportOptions::default())
         .unwrap()
         .value;
     let (id, system) = asset
@@ -166,7 +167,7 @@ fn physics_and_attachment_fields_are_active_and_editable() {
     asset
         .edit(|builder| builder.set_system(id, system))
         .unwrap();
-    let output = conversion::m3::plan::<m3::StarCraft2>(&asset, &ExportOptions::default())
+    let output = io::m3::plan::<m3::StarCraft2>(&asset, &ExportOptions::default())
         .unwrap()
         .execute()
         .unwrap()
@@ -175,7 +176,7 @@ fn physics_and_attachment_fields_are_active_and_editable() {
     assert_eq!(root.bones.entries, 2);
     let body = output
         .model
-        .document()
+        .container()
         .resolve::<nr::RigidBody<nr::V4>>(root.rigid_bodies.cast())
         .unwrap()
         .get(0)
@@ -186,7 +187,7 @@ fn physics_and_attachment_fields_are_active_and_editable() {
     assert_eq!(body.mass, 3.);
     let shape = output
         .model
-        .document()
+        .container()
         .resolve::<nr::PhysicsShape<nr::V1>>(body.rigid_body_shape.cast())
         .unwrap()
         .get(0)
@@ -195,13 +196,13 @@ fn physics_and_attachment_fields_are_active_and_editable() {
     assert_eq!(shape.shape_dimensions, [3., 0., 0.]);
     let planes = output
         .model
-        .document()
+        .container()
         .resolve::<nr::Vector4>(shape.planes.cast())
         .unwrap();
     assert_eq!(planes.get(0).unwrap().unwrap().value, [0., 0., 1., 2.]);
     let joint = output
         .model
-        .document()
+        .container()
         .resolve::<nr::PhysicsJoint>(root.physics_joints.cast())
         .unwrap()
         .get(0)
@@ -213,7 +214,7 @@ fn physics_and_attachment_fields_are_active_and_editable() {
     assert_eq!(joint.break_threshold, 42.);
     let attachment = output
         .model
-        .document()
+        .container()
         .resolve::<nr::AttachmentPoint<nr::V1>>(root.attachment_points.cast())
         .unwrap()
         .get(0)
@@ -221,7 +222,7 @@ fn physics_and_attachment_fields_are_active_and_editable() {
         .unwrap();
     assert_eq!(attachment.unknown, 123);
     assert_eq!(attachment.bone_index, 1);
-    let reread = conversion::m3::import(&output, &ImportOptions::default()).unwrap();
+    let reread = io::m3::import(&output, &ImportOptions::default()).unwrap();
     assert!(reread.value.features().any(|(_,feature)|matches!(&feature.payload,surface::Feature::Attachment(attachment)if attachment.identity=="socket")));
 }
 
@@ -230,7 +231,7 @@ fn selection_and_attachment_volumes_use_editable_collision_meshes() {
     let source = source();
     let root_id = source.model.root_id();
     let mut root = source.model.root::<nr::ModelRecord<nr::V29>>().unwrap();
-    let mut document = source.model.into_document();
+    let mut document = source.model.into_container();
     let points = document
         .append(&[
             nr::Vector3 {
@@ -284,8 +285,8 @@ fn selection_and_attachment_volumes_use_editable_collision_meshes() {
         .unwrap();
     root.attachment_volumes = m3::Ref::from_section(1, attachment.index());
     document.replace(root_id, &[root]).unwrap();
-    let source = m3::Bundle::from_model(m3::Model::from_document(document).unwrap());
-    let mut asset = conversion::m3::import(&source, &ImportOptions::default())
+    let source = m3::Bundle::from_model(m3::Document::from_container(document).unwrap());
+    let mut asset = io::m3::import(&source, &ImportOptions::default())
         .unwrap()
         .value;
     let (id, original) = asset.features().find(|(_, value)| matches!(&value.payload, surface::Feature::HitTest(shape) if shape.role == surface::HitTestRole::Fuzzy)).unwrap();
@@ -300,7 +301,7 @@ fn selection_and_attachment_volumes_use_editable_collision_meshes() {
     asset
         .edit(|builder| builder.set_feature(id, edited.payload))
         .unwrap();
-    let output = conversion::m3::plan::<m3::StarCraft2>(&asset, &ExportOptions::default())
+    let output = io::m3::plan::<m3::StarCraft2>(&asset, &ExportOptions::default())
         .unwrap()
         .execute()
         .unwrap()
@@ -310,7 +311,7 @@ fn selection_and_attachment_volumes_use_editable_collision_meshes() {
     assert_eq!(root.tight_hit_test_object.bone_index, 1);
     let fuzzy = output
         .model
-        .document()
+        .container()
         .resolve::<nr::HitTestShape<nr::V1>>(root.fuzzy_hit_test_objects.cast())
         .unwrap()
         .get(0)
@@ -320,7 +321,7 @@ fn selection_and_attachment_volumes_use_editable_collision_meshes() {
     assert_eq!(fuzzy.face_indices.entries, 3);
     let attachment = output
         .model
-        .document()
+        .container()
         .resolve::<nr::AttachmentVolume>(root.attachment_volumes.cast())
         .unwrap()
         .get(0)
@@ -335,7 +336,7 @@ fn named_turrets_reference_active_parts_instead_of_trigger_data() {
     let source = source();
     let root_id = source.model.root_id();
     let mut root = source.model.root::<nr::ModelRecord<nr::V29>>().unwrap();
-    let mut document = source.model.into_document();
+    let mut document = source.model.into_container();
     let part = document
         .append(&[nr::TurretBehavior::<nr::V1> {
             transform: IDENTITY,
@@ -367,8 +368,8 @@ fn named_turrets_reference_active_parts_instead_of_trigger_data() {
     root.turret_behaviors = m3::Ref::from_section(1, part.index());
     root.turret_groups = m3::Ref::from_section(1, groups.index());
     document.replace(root_id, &[root]).unwrap();
-    let source = m3::Bundle::from_model(m3::Model::from_document(document).unwrap());
-    let mut asset = conversion::m3::import(&source, &ImportOptions::default())
+    let source = m3::Bundle::from_model(m3::Document::from_container(document).unwrap());
+    let mut asset = io::m3::import(&source, &ImportOptions::default())
         .unwrap()
         .value;
     let groups = asset
@@ -390,7 +391,7 @@ fn named_turrets_reference_active_parts_instead_of_trigger_data() {
     asset
         .edit(|builder| builder.set_feature(part_id, part))
         .unwrap();
-    let output = conversion::m3::plan::<m3::StarCraft2>(&asset, &ExportOptions::default())
+    let output = io::m3::plan::<m3::StarCraft2>(&asset, &ExportOptions::default())
         .unwrap()
         .execute()
         .unwrap()
@@ -398,7 +399,7 @@ fn named_turrets_reference_active_parts_instead_of_trigger_data() {
     let root = output.model.root::<nr::ModelRecord<nr::V29>>().unwrap();
     let part = output
         .model
-        .document()
+        .container()
         .resolve::<nr::TurretBehavior<nr::V4>>(root.turret_behaviors.cast())
         .unwrap()
         .get(0)
@@ -409,7 +410,7 @@ fn named_turrets_reference_active_parts_instead_of_trigger_data() {
     assert_eq!(part.use_as_main_turret.bits(), 0x81);
     let group = output
         .model
-        .document()
+        .container()
         .resolve::<nr::TurretGroup>(root.turret_groups.cast())
         .unwrap()
         .get(0)
@@ -417,7 +418,7 @@ fn named_turrets_reference_active_parts_instead_of_trigger_data() {
         .unwrap();
     let member = output
         .model
-        .document()
+        .container()
         .resolve::<nr::U32>(group.parts.cast())
         .unwrap()
         .get(0)
@@ -431,7 +432,7 @@ fn body_constraints_use_checked_local_identities() {
     let source = source();
     let root_id = source.model.root_id();
     let mut root = source.model.root::<nr::ModelRecord<nr::V29>>().unwrap();
-    let mut document = source.model.into_document();
+    let mut document = source.model.into_container();
     let dependent = document.append(&[nr::U16 { value: 1 }]).unwrap();
     let constraint = document
         .append(&[nr::PhysicsConstraint {
@@ -444,8 +445,8 @@ fn body_constraints_use_checked_local_identities() {
         .unwrap();
     root.physics_constraints = m3::Ref::from_section(1, constraint.index());
     document.replace(root_id, &[root]).unwrap();
-    let source = m3::Bundle::from_model(m3::Model::from_document(document).unwrap());
-    let mut asset = conversion::m3::import(&source, &ImportOptions::default())
+    let source = m3::Bundle::from_model(m3::Document::from_container(document).unwrap());
+    let mut asset = io::m3::import(&source, &ImportOptions::default())
         .unwrap()
         .value;
     let (id, system) = asset
@@ -462,7 +463,7 @@ fn body_constraints_use_checked_local_identities() {
     asset
         .edit(|builder| builder.set_system(id, edited))
         .unwrap();
-    let output = conversion::m3::plan::<m3::StarCraft2>(&asset, &ExportOptions::default())
+    let output = io::m3::plan::<m3::StarCraft2>(&asset, &ExportOptions::default())
         .unwrap()
         .execute()
         .unwrap()
@@ -470,7 +471,7 @@ fn body_constraints_use_checked_local_identities() {
     let root = output.model.root::<nr::ModelRecord<nr::V29>>().unwrap();
     let row = output
         .model
-        .document()
+        .container()
         .resolve::<nr::PhysicsConstraint>(root.physics_constraints.cast())
         .unwrap()
         .get(0)
@@ -499,7 +500,7 @@ fn animation_split_declarations_preserve_unresolved_typed_controls() {
     let source = source();
     let root_id = source.model.root_id();
     let mut root = source.model.root::<nr::ModelRecord<nr::V29>>().unwrap();
-    let mut document = source.model.into_document();
+    let mut document = source.model.into_container();
     let items = document
         .append(&[nr::U16 { value: 17 }, nr::U16 { value: u16::MAX }])
         .unwrap();
@@ -515,8 +516,8 @@ fn animation_split_declarations_preserve_unresolved_typed_controls() {
     root.bone_animation_sets = m3::Ref::from_section(1, declarations.index());
     root.animation_split_count = 0x8123_4567;
     document.replace(root_id, &[root]).unwrap();
-    let source = m3::Bundle::from_model(m3::Model::from_document(document).unwrap());
-    let asset = conversion::m3::import(&source, &ImportOptions::default())
+    let source = m3::Bundle::from_model(m3::Document::from_container(document).unwrap());
+    let asset = io::m3::import(&source, &ImportOptions::default())
         .unwrap()
         .value;
     let items = asset
@@ -530,7 +531,7 @@ fn animation_split_declarations_preserve_unresolved_typed_controls() {
         .unwrap();
     assert!(items.is_owned());
     assert_eq!(items.get(1), Some(u16::MAX));
-    let output = conversion::m3::plan::<m3::StarCraft2>(&asset, &ExportOptions::default())
+    let output = io::m3::plan::<m3::StarCraft2>(&asset, &ExportOptions::default())
         .unwrap()
         .execute()
         .unwrap()
@@ -539,7 +540,7 @@ fn animation_split_declarations_preserve_unresolved_typed_controls() {
     assert_eq!(root.animation_split_count, 0x8123_4567);
     let declaration = output
         .model
-        .document()
+        .container()
         .resolve::<nr::BoneAnimationSet>(root.bone_animation_sets.cast())
         .unwrap()
         .get(0)
@@ -556,12 +557,12 @@ fn unresolved_reference_qualifiers_require_explicit_loss_policy() {
     let root_id = source.model.root_id();
     let mut root = source.model.root::<nr::ModelRecord<nr::V29>>().unwrap();
     root.bones.flags = nr::ReferenceFlags(0x8000_0001);
-    let mut document = source.model.into_document();
+    let mut document = source.model.into_container();
     document.replace(root_id, &[root]).unwrap();
-    let source = m3::Bundle::from_model(m3::Model::from_document(document).unwrap());
-    let error = conversion::m3::import(&source, &ImportOptions::default()).unwrap_err();
+    let source = m3::Bundle::from_model(m3::Document::from_container(document).unwrap());
+    let error = io::m3::import(&source, &ImportOptions::default()).unwrap_err();
     assert!(error.to_string().contains("m3.reference_qualifier.MODL"));
-    let converted = conversion::m3::import(
+    let converted = io::m3::import(
         &source,
         &ImportOptions {
             loss_policy: LossPolicy::Drop,

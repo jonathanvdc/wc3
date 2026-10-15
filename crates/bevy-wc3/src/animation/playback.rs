@@ -2,7 +2,7 @@ use bevy::prelude::*;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
-use wc3::model::mdlx::animation::{AnimationTime, Sequence};
+use wc3::model::formats::mdlx::animation::{AnimationTime, Sequence};
 
 /// Per-instance sequence playback and local-pose transitions.
 /// Query this component on a spawned model root. Call [`Self::play`] when the

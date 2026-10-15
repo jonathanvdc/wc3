@@ -6,23 +6,23 @@ the codec traits in `wc3`; the derives are re-exported through its format module
 
 ## Derives
 
-Import `wc3::model::mdlx::{mdx, mdl}` to distinguish the binary and text derives.
-Import `wc3::model::{m2, wmo}` for the World of Warcraft formats and
-`wc3::model::m3` for indexed StarCraft II models. Import
-`wc3::model::diablo::d4` for native Diablo IV records. The format modules
+Import `wc3::model::formats::mdlx::{mdx, mdl}` to distinguish the binary and text derives.
+Import `wc3::model::{formats::m2, formats::wmo}` for the World of Warcraft formats and
+`wc3::model::formats::m3` for indexed StarCraft II models. Import
+`wc3::model::formats::diablo::d4` for native Diablo IV records. The format modules
 re-export the following macros alongside their codec traits:
 
 | Derive through `wc3` | Purpose |
 | --- | --- |
 | `mdx::Read`, `mdx::Write` | Read and write binary MDX records. |
 | `mdx::ReadOwned` | Decode MDX values into independently owned storage. |
-| `mdx::Value`, `m2::Value`, `m3::Value`, `wmo::Value` | Generate scalar enum `raw()` and `from_raw()` conversions. |
+| `mdx::Value`, `formats::m2::Value`, `formats::m3::Value`, `formats::wmo::Value` | Generate scalar enum `raw()` and `from_raw()` conversions. |
 | `mdl::Read`, `mdl::Write` | Read and write text MDL records. |
-| `m2::Read`, `m2::Write`, `m2::RecordLayout` | Read and write offset-addressed M2 records and describe their inline metadata width. |
-| `m2::Validate`, `m2::VisitArrays` | Compose field validation and animation-leaf traversal. |
-| `m3::Read`, `m3::Write`, `m3::RecordLayout` | Compose indexed M3 record codecs with envelope-selected reference widths. |
-| `m3::Validate`, `m3::VisitReferences` | Compose field validation and section-reference traversal. |
-| `wmo::Read`, `wmo::Write`, `wmo::RecordLayout`, `wmo::Validate` | Compose WMO record codecs, fixed inline widths, and field validation. |
+| `formats::m2::Read`, `formats::m2::Write`, `formats::m2::RecordLayout` | Read and write offset-addressed M2 records and describe their inline metadata width. |
+| `formats::m2::Validate`, `formats::m2::VisitArrays` | Compose field validation and animation-leaf traversal. |
+| `formats::m3::Read`, `formats::m3::Write`, `formats::m3::RecordLayout` | Compose indexed M3 record codecs with envelope-selected reference widths. |
+| `formats::m3::Validate`, `formats::m3::VisitReferences` | Compose field validation and section-reference traversal. |
+| `formats::wmo::Read`, `formats::wmo::Write`, `formats::wmo::RecordLayout`, `formats::wmo::Validate` | Compose WMO record codecs, fixed inline widths, and field validation. |
 | `d4::Read`, `d4::Write`, `d4::RecordLayout` | Compose sequential Diablo IV records, computed widths, and relocated descriptors. |
 
 Scalar choice fields in M2, M3, and WMO use named enums with an explicit
@@ -60,9 +60,9 @@ This record has a binary representation with fields in declaration order and a
 text representation as an MDL block:
 
 ```rust
-use wc3::model::mdlx::{mdx, mdl};
-use wc3::model::mdlx::mdx::{Read as _, Write as _};
-use wc3::model::mdlx::mdl::{Read as _, Write as _};
+use wc3::model::formats::mdlx::{mdx, mdl};
+use wc3::model::formats::mdlx::mdx::{Read as _, Write as _};
+use wc3::model::formats::mdlx::mdl::{Read as _, Write as _};
 
 #[derive(mdx::Read, mdx::Write, mdl::Read, mdl::Write)]
 #[mdl(block = "Example")]
@@ -118,9 +118,9 @@ guides when connecting those records to whole-model operations:
   fixed records, section identity, and reference traversal.
 - [D4 derive reference](src/d4.md): wire-order fields, computed widths,
   relocated descriptors, and external payloads.
-- [MDX codec documentation](https://docs.rs/wc3/latest/wc3/model/mdlx/mdx/): binary
+- [MDX codec documentation](https://docs.rs/wc3/latest/wc3/model/formats/mdlx/mdx/): binary
   derives, numeric enums, and animation records.
-- [`wc3` model documentation](https://docs.rs/wc3/latest/wc3/model/mdlx/): built-in
+- [`wc3` model documentation](https://docs.rs/wc3/latest/wc3/model/formats/mdlx/): built-in
   records and whole-model operations.
 
 From a workspace checkout, build the derive documentation with:

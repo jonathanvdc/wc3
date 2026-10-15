@@ -1,10 +1,10 @@
 use std::{io::Write as IoWrite, marker::PhantomData};
-use wc3::model::mdlx::animation::Sequence;
-use wc3::model::mdlx::animation::{Animatable, Track};
-use wc3::model::mdlx::mdl;
-use wc3::model::mdlx::mdl::{Read as _, Write as _};
-use wc3::model::mdlx::IoError;
-use wc3::model::mdlx::{AsULE, Vec3, ZeroVec};
+use wc3::model::formats::mdlx::animation::Sequence;
+use wc3::model::formats::mdlx::animation::{Animatable, Track};
+use wc3::model::formats::mdlx::mdl;
+use wc3::model::formats::mdlx::mdl::{Read as _, Write as _};
+use wc3::model::formats::mdlx::IoError;
+use wc3::model::formats::mdlx::{AsULE, Vec3, ZeroVec};
 
 #[derive(Debug, PartialEq, mdl::Read, mdl::Write)]
 #[mdl(fields)]
@@ -201,7 +201,7 @@ fn existing_sequence_roundtrips_flattened_extent_in_both_formats() {
     assert!(text.find("MinimumExtent").unwrap() < text.find("MaximumExtent").unwrap());
     assert!(text.find("MaximumExtent").unwrap() < text.find("BoundsRadius").unwrap());
     assert_eq!(Sequence::decode_mdl(&text).unwrap(), sequence);
-    use wc3::model::mdlx::mdx::{Read as _, Write as _};
+    use wc3::model::formats::mdlx::mdx::{Read as _, Write as _};
     let bytes = sequence.encode_mdx().unwrap();
     assert_eq!(bytes.len(), 132);
     assert_eq!(Sequence::decode_mdx(&bytes).unwrap(), sequence);

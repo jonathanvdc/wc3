@@ -1,6 +1,6 @@
 use std::borrow::Cow;
-use wc3::model::semantic::materials::parameters::{OpaqueBytes, ParameterEntry};
-use wc3::model::semantic::materials::programmed::{DataGroup, DataProperty, NamedShaderKey};
+use wc3::model::materials::parameters::{OpaqueBytes, ParameterEntry};
+use wc3::model::materials::programmed::{DataGroup, DataProperty, NamedShaderKey};
 
 #[test]
 fn named_parameter_groups_preserve_hash_spelling_bytes_and_duplicate_order() {
@@ -32,8 +32,8 @@ fn named_parameter_groups_preserve_hash_spelling_bytes_and_duplicate_order() {
 
 #[test]
 fn parameter_entries_traverse_custom_key_value_and_controls_in_order() {
-    use wc3::model::semantic::profiles::Universal;
-    use wc3::model::semantic::{Link, Resources, Texture, TextureId, ValidateLinks};
+    use wc3::model::profiles::Universal;
+    use wc3::model::{Link, Resources, Texture, TextureId, ValidateLinks};
     struct Reference(TextureId);
     impl ValidateLinks for Reference {
         fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
@@ -59,8 +59,8 @@ fn parameter_entries_traverse_custom_key_value_and_controls_in_order() {
 
 #[test]
 fn opaque_words_are_retained_while_interpreted_numbers_are_validated() {
-    use wc3::model::semantic::materials::parameters::{OpaqueWord, ShaderTag, ShaderValue};
-    use wc3::model::semantic::{Link, ValidateLinks};
+    use wc3::model::materials::parameters::{OpaqueWord, ShaderTag, ShaderValue};
+    use wc3::model::{Link, ValidateLinks};
     let opaque = ParameterEntry {
         key: ShaderTag(17),
         value: OpaqueWord(0x7fc00001),

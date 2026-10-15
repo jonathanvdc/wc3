@@ -1,8 +1,8 @@
 //! Regression checks from independent assembly and framing review.
-use wc3::model::wmo::codec::Array;
-use wc3::model::wmo::records::GroupInfo;
-use wc3::model::wmo::root::RootChunk;
-use wc3::model::wmo::{Bundle, Classic, FileKey, Group, GroupKey, Legion, Root};
+use wc3::model::formats::wmo::codec::Array;
+use wc3::model::formats::wmo::records::GroupInfo;
+use wc3::model::formats::wmo::root::RootChunk;
+use wc3::model::formats::wmo::{Bundle, Classic, FileKey, Group, GroupKey, Legion, Root};
 
 fn frame(mut tag: [u8; 4], payload: &[u8]) -> Vec<u8> {
     tag.reverse();
@@ -75,7 +75,7 @@ fn header_only_body_preserves_intervening_version_frame_position() {
 
 #[test]
 fn path_rewrite_preserves_absent_texture_references() {
-    use wc3::model::wmo::{records::Material, TextureReference};
+    use wc3::model::formats::wmo::{records::Material, TextureReference};
     let mut root = Root::<Classic>::new();
     root.insert_chunk(
         0,

@@ -1,7 +1,8 @@
 use wc3::model::common::IntoZeroVec;
-use wc3::model::conversion::{geometry, Context, ExportOptions};
-use wc3::model::semantic::MaterialSurface;
-use wc3::model::semantic::{
+use wc3::model::conversion::{Context, ExportOptions};
+use wc3::model::io::geometry;
+use wc3::model::MaterialSurface;
+use wc3::model::{
     Attribute, AttributeDomain, AttributeSemantic, AttributeValues, Draw, DrawSubset, Material,
     Mesh, MeshInstance, ModelBuilder, Node, PrimitiveRange, PrimitiveSelection, Topology,
 };
@@ -181,8 +182,8 @@ fn range_domains_and_connectivity_attribute_cardinality_are_checked() {
 
 #[test]
 fn constrained_profiles_reject_unsupported_subset_bindings() {
-    use wc3::model::semantic::profiles::Mdlx;
-    use wc3::model::semantic::{MdlxGeometry, Model};
+    use wc3::model::profiles::Mdlx;
+    use wc3::model::{MdlxGeometry, Model};
     let geometry = MdlxGeometry::triangles(vec![[0.; 3]; 3], vec![[0, 1, 2]]).unwrap();
     let mut mesh = Mesh::<Mdlx>::new(geometry);
     let subset = mesh.add_primary_subset(0, 1);

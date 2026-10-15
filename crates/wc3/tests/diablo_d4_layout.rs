@@ -1,5 +1,5 @@
 //! Documented native fixed-record sizes.
-use wc3::model::diablo::d4::{records, RecordLayout};
+use wc3::model::formats::diablo::d4::{records, RecordLayout};
 
 #[test]
 fn documented_native_record_sizes_match_their_field_layouts() {

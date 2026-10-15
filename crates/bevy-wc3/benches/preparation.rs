@@ -4,7 +4,7 @@ use criterion::{criterion_group, criterion_main, BatchSize, Criterion, Throughpu
 use mdl::Write as _;
 use mdx::Write as _;
 use std::hint::black_box;
-use wc3::model::mdlx::{mdl, mdx};
+use wc3::model::formats::mdlx::{mdl, mdx};
 
 #[path = "../../../benchmarks/support/model.rs"]
 mod fixtures;

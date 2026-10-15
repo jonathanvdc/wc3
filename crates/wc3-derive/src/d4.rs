@@ -137,7 +137,7 @@ fn checked_layout(input: &DeriveInput, widths: &[TokenStream], actual: bool) -> 
     let index = fresh_ident(input, "__d4_index");
     let actual_check = actual.then(|| {
         quote! {
-            assert!(#total == <Self as ::wc3::model::diablo::d4::RecordLayout>::SIZE,
+            assert!(#total == <Self as ::wc3::model::formats::diablo::d4::RecordLayout>::SIZE,
                 "D4 field widths differ from RecordLayout::SIZE");
         }
     });
@@ -175,7 +175,7 @@ fn expand_checked(input: DeriveInput, operation: Operation) -> Result<TokenStrea
             "D4 records require named fields",
         ));
     };
-    let codec = quote!(::wc3::model::diablo::d4);
+    let codec = quote!(::wc3::model::formats::diablo::d4);
     let name = &input.ident;
     let (_, type_generics, _) = input.generics.split_for_impl();
     let mut generics = input.generics.clone();

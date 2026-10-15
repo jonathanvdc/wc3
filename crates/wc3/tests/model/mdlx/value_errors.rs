@@ -1,8 +1,8 @@
-use wc3::model::mdlx::geometry::Geoset;
-use wc3::model::mdlx::mdx::Write as _;
-use wc3::model::mdlx::mdx::WriteError;
-use wc3::model::mdlx::scene::Node;
-use wc3::model::mdlx::ValueError;
+use wc3::model::formats::mdlx::geometry::Geoset;
+use wc3::model::formats::mdlx::mdx::Write as _;
+use wc3::model::formats::mdlx::mdx::WriteError;
+use wc3::model::formats::mdlx::scene::Node;
+use wc3::model::formats::mdlx::ValueError;
 
 #[test]
 fn construction_and_mutation_report_value_errors() {
@@ -12,7 +12,7 @@ fn construction_and_mutation_report_value_errors() {
         ValueError::InvalidString { max_bytes: 79 }
     );
 
-    let mut geoset = Geoset::<wc3::model::mdlx::V800>::new([], [], []).unwrap();
+    let mut geoset = Geoset::<wc3::model::formats::mdlx::V800>::new([], [], []).unwrap();
     assert_eq!(
         geoset.set_vertex(0, [0.0; 3]),
         Err(ValueError::IndexOutOfBounds {

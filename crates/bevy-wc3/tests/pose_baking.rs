@@ -1,3 +1,4 @@
+mod support;
 use bevy::asset::RenderAssetUsages;
 use bevy::ecs::world::CommandQueue;
 use bevy::image::{ImageAddressMode, ImageSampler, ImageSamplerDescriptor};
@@ -5,20 +6,21 @@ use bevy::mesh::{skinning::SkinnedMeshInverseBindposes, VertexAttributeValues};
 use bevy::prelude::*;
 use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
 use bevy_wc3::{
-    prepare_model, spawn_prepared_model, PreparedModel, Wc3Model, Wc3PartId, Wc3PoseBaker,
-    Wc3PoseOptions, Wc3TextureBindings, Wc3TextureColorSpace, Wc3TextureRole, Wc3TextureSlot,
+    prepare_model, spawn_prepared_model, PreparedModel, Wc3PartId, Wc3PoseBaker, Wc3PoseOptions,
+    Wc3TextureBindings, Wc3TextureColorSpace, Wc3TextureRole, Wc3TextureSlot,
 };
-use wc3::model::mdlx::animation::{Track, ValueKeyframe};
-use wc3::model::mdlx::geometry::Geoset;
-use wc3::model::mdlx::materials::LayerFilterMode;
-use wc3::model::mdlx::scene::{Bone, Node, NodeFlags};
+use support::NativeFixture;
+use wc3::model::formats::mdlx::animation::{Track, ValueKeyframe};
+use wc3::model::formats::mdlx::geometry::Geoset;
+use wc3::model::formats::mdlx::materials::LayerFilterMode;
+use wc3::model::formats::mdlx::scene::{Bone, Node, NodeFlags};
 
-fn prepare(source: &Wc3Model) -> (PreparedModel, Assets<Mesh>) {
+fn prepare(source: &NativeFixture) -> (PreparedModel, Assets<Mesh>) {
     let mut meshes = Assets::default();
     let prepared = prepare_model(
         &mut meshes,
         &mut Assets::<SkinnedMeshInverseBindposes>::default(),
-        source,
+        &source.checked().unwrap(),
         |_| None,
     )
     .unwrap();
@@ -60,11 +62,18 @@ fn vector_track<'data>(global: Option<u32>) -> Track<'data, [f32; 3]> {
 
 #[test]
 fn source_identity_survives_empty_geosets_shared_meshes_and_spawning() {
-    let mut source = Wc3Model::decode_mdl(include_str!("fixtures/geoset_capture.mdl")).unwrap();
+    let mut source =
+        NativeFixture::decode_mdl(include_str!("fixtures/geoset_capture.mdl")).unwrap();
     let mut geosets = source.model.geosets().cloned().collect::<Vec<_>>();
     let empty = Geoset::new([], [], []).unwrap();
     geosets.insert(0, empty);
     source.model.set_geosets(geosets);
+    for animation in source.model.geoset_animations_mut() {
+        animation.geoset_id += 1;
+    }
+    for bone in source.model.bones_mut() {
+        bone.geoset_id = bone.geoset_id.saturating_add(1);
+    }
     let material = source.model.materials_mut().next().unwrap();
     material.layers.push(material.layers[0].clone());
     let (prepared, mut meshes) = prepare(&source);
@@ -116,7 +125,7 @@ fn source_identity_survives_empty_geosets_shared_meshes_and_spawning() {
 
 #[test]
 fn independent_clocks_pose_eight_influences_and_repeat_without_mutating_meshes() {
-    let mut source = Wc3Model::decode_mdl(include_str!("fixtures/quad_model.mdl")).unwrap();
+    let mut source = NativeFixture::decode_mdl(include_str!("fixtures/quad_model.mdl")).unwrap();
     source.model.set_global_sequences(&[1000]);
     let mut bones = Vec::new();
     for id in 0..8 {
@@ -193,7 +202,7 @@ fn independent_clocks_pose_eight_influences_and_repeat_without_mutating_meshes()
 
 #[test]
 fn material_snapshots_preserve_override_provenance_and_reuse_linear_variants() {
-    let mut source = Wc3Model::decode_mdl(include_str!("fixtures/hd_capture.mdl")).unwrap();
+    let mut source = NativeFixture::decode_mdl(include_str!("fixtures/hd_capture.mdl")).unwrap();
     source.model.textures_mut().nth(1).unwrap().replaceable_id = 31;
     source.model.materials_mut().next().unwrap().layers[0].filter_mode =
         LayerFilterMode::Transparent;
@@ -275,7 +284,7 @@ fn material_snapshots_preserve_override_provenance_and_reuse_linear_variants() {
 
 #[test]
 fn nonlooping_visibility_tint_bounds_and_lods_are_evaluated_without_world_state() {
-    let source = Wc3Model::decode_mdl(include_str!("fixtures/geoset_capture.mdl")).unwrap();
+    let source = NativeFixture::decode_mdl(include_str!("fixtures/geoset_capture.mdl")).unwrap();
     let (prepared, meshes) = prepare(&source);
     let mut baker = Wc3PoseBaker::default();
     let pose = baker
@@ -300,7 +309,7 @@ fn nonlooping_visibility_tint_bounds_and_lods_are_evaluated_without_world_state(
         [0.0, 1.0, 0.0, 0.0]
     );
     assert_eq!(pose.bounds.unwrap().center, pose.parts[0].bounds.center);
-    let source = Wc3Model::decode_mdl(include_str!("fixtures/lod_capture.mdl")).unwrap();
+    let source = NativeFixture::decode_mdl(include_str!("fixtures/lod_capture.mdl")).unwrap();
     let (prepared, meshes) = prepare(&source);
     let pose = baker
         .bake(
@@ -320,7 +329,7 @@ fn nonlooping_visibility_tint_bounds_and_lods_are_evaluated_without_world_state(
 
 #[test]
 fn malformed_hierarchies_nonfinite_times_and_missing_camera_are_errors() {
-    let mut source = Wc3Model::decode_mdl(include_str!("fixtures/quad_model.mdl")).unwrap();
+    let mut source = NativeFixture::decode_mdl(include_str!("fixtures/quad_model.mdl")).unwrap();
     let (prepared, meshes) = prepare(&source);
     let mut baker = Wc3PoseBaker::default();
     let mut images = Assets::default();
@@ -372,21 +381,15 @@ fn malformed_hierarchies_nonfinite_times_and_missing_camera_are_errors() {
     let bone = source.model.bones_mut().next().unwrap();
     bone.node.flags = NodeFlags(0);
     bone.node.parent_id = 0;
-    let (prepared, meshes) = prepare(&source);
-    assert!(baker
-        .bake(
-            &prepared,
-            &meshes,
-            &mut images,
-            &Wc3TextureBindings::default(),
-            options(0.0)
-        )
-        .is_err());
+    assert!(
+        source.checked().is_err(),
+        "cyclic hierarchy must be rejected at import"
+    );
 }
 
 #[test]
 fn mirrored_and_collapsed_scales_keep_normals_and_tangents_finite() {
-    let mut source = Wc3Model::decode_mdl(include_str!("fixtures/quad_model.mdl")).unwrap();
+    let mut source = NativeFixture::decode_mdl(include_str!("fixtures/quad_model.mdl")).unwrap();
     let bone = source.model.bones_mut().next().unwrap();
     bone.node.scaling = Some(Track::constant([-2.0, 1.0, 1.0]));
     let (prepared, meshes) = prepare(&source);

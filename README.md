@@ -2,19 +2,16 @@
 
 This project provides Rust libraries for working with Blizzard assets, from
 editing a model or converting a texture to displaying an animated character in
-Bevy. It brings together support for MDX and MDL models, BLP/TEX textures, and MPQ
-archives, so applications can work with these assets throughout the process of
-loading, modifying, and rendering them. World of Warcraft M2 support covers
-file formats and supporting documents through the asset library. WMO support
-adds native world-model roots, geometry groups, and bundle validation. M3 support
-covers StarCraft II and Heroes of the Storm model files and external animations.
-[Semantic model graphs](crates/wc3/docs/semantic.md) provide independent typed
-authoring vocabularies and checked edits. [Model conversions](crates/wc3/docs/conversion.md)
-connect those graphs to the native format APIs.
+Bevy. [`wc3::model::Model`](crates/wc3/docs/semantic.md) represents models as
+checked graphs with typed authoring profiles, shared resources, geometry,
+materials, animation, and scene relationships. Profiles describe game meaning
+independently of file revisions.
 
-Diablo III and IV support adds typed appearance, actor, animation, and material
-resources, with native layout selection
-separate from the [semantic conversion boundary](crates/wc3/docs/diablo.md).
+Native documents and codecs remain available under `wc3::model::formats` for
+Warcraft III MDX/MDL, World of Warcraft M2/WMO, StarCraft II and Heroes of the
+Storm M3, and Diablo III/IV resources. [Import and export adapters](crates/wc3/docs/conversion.md)
+connect those documents to semantic models with explicit representability
+policies. The asset library also supports BLP/TEX textures and MPQ archives.
 
 ## Crates
 
@@ -24,10 +21,10 @@ contributors defining model codecs. These crates can be used separately or
 combined according to your application's needs.
 
 [`wc3`](crates/wc3/README.md) is the starting point for applications that need to
-read, edit, or write assets. It represents binary MDX and text MDL models using
-the same Rust types, so model editing code can work with either format. Those
-types cover geometry, materials, animation, and effects across Classic and
-Reforged layouts, and the library can convert between supported model versions.
+read, edit, or write assets. Semantic models are the common authoring interface;
+native documents retain the formats' record layouts and preservation behavior.
+Binary MDX and text MDL share one native document representation, with explicit
+Classic and Reforged dialects and conversion between supported versions.
 World of Warcraft M2 models have their own typed layouts and native supporting
 file codecs, with explicit dependency resolution and coordinated bundle writing.
 M3 documents retain indexed section graphs, independently versioned records,

@@ -1,14 +1,14 @@
 //! Independent wire-layout checks. Fixture bytes are constructed from documented
 //! offsets and literal records, without using the production encoder.
-use wc3::model::m2::codec::{Array, ArrayRef};
-use wc3::model::m2::companions::{
+use wc3::model::formats::m2::codec::{Array, ArrayRef};
+use wc3::model::formats::m2::companions::{
     AnimationFile, BoneFile, PhysicsChunk, PhysicsFile, Skeleton, SkeletonChunk, Skin,
 };
-use wc3::model::m2::records::ModelFlags;
-use wc3::model::m2::records::Validate as _;
-use wc3::model::m2::records::{BlendMode, PhysicsJointKind, PhysicsShapeKind};
-use wc3::model::m2::{
-    Chunked, Dialect, Flat, IntoZeroVec, Model, ModelLayout, V256, V257, V260, V263, V264, V265,
+use wc3::model::formats::m2::records::ModelFlags;
+use wc3::model::formats::m2::records::Validate as _;
+use wc3::model::formats::m2::records::{BlendMode, PhysicsJointKind, PhysicsShapeKind};
+use wc3::model::formats::m2::{
+    Chunked, Dialect, Document, Flat, IntoZeroVec, ModelLayout, V256, V257, V260, V263, V264, V265,
     V272, V273, V274,
 };
 
@@ -51,7 +51,7 @@ fn core_fixture(version: u32) -> Vec<u8> {
 }
 fn dialect_fixture<D: Dialect>() -> Vec<u8> {
     let core = core_fixture(D::VERSION);
-    if Model::<D>::new().is_chunked() {
+    if Document::<D>::new().is_chunked() {
         frame(*b"MD21", &core)
     } else {
         core
@@ -59,12 +59,16 @@ fn dialect_fixture<D: Dialect>() -> Vec<u8> {
 }
 fn check_dialect<D: Dialect>() {
     let bytes = dialect_fixture::<D>();
-    let model = Model::<D>::decode_m2(&bytes).unwrap();
+    let model = Document::<D>::decode_m2(&bytes).unwrap();
     assert_eq!(model.version(), D::VERSION);
-    assert_eq!(model.is_chunked(), Model::<D>::new().is_chunked());
+    assert_eq!(model.is_chunked(), Document::<D>::new().is_chunked());
     assert_eq!(model.core().name.as_bytes(), b"unit\0");
     assert_eq!(model.core().global_sequences.get(0), Some(1234));
-    let origin = if Model::<D>::new().is_chunked() { 8 } else { 0 };
+    let origin = if Document::<D>::new().is_chunked() {
+        8
+    } else {
+        0
+    };
     let header = if D::VERSION <= 257 {
         340
     } else if D::VERSION < 264 {
@@ -83,7 +87,7 @@ fn check_dialect<D: Dialect>() {
     assert!(model.core().embedded_skins().is_empty());
     assert_eq!(model.core().external_skin_count(), 0);
     let written = model.encode_m2().unwrap();
-    let decoded = Model::<D>::decode_m2(&written).unwrap();
+    let decoded = Document::<D>::decode_m2(&written).unwrap();
     assert_eq!(decoded.core(), model.core());
 }
 
@@ -107,12 +111,12 @@ fn every_supported_layout_reads_both_envelopes_from_independent_offsets() {
 #[test]
 fn resizing_arrays_relocates_payloads_without_overwriting_other_fields() {
     let bytes = dialect_fixture::<Chunked<V274>>();
-    let mut model = Model::<Chunked<V274>>::decode_m2(&bytes).unwrap();
+    let mut model = Document::<Chunked<V274>>::decode_m2(&bytes).unwrap();
     let name_pointer = model.core().name.as_bytes().as_ptr();
     model.core_mut().global_sequences = [11, 22, 33, 44].into_zero_vec();
     assert_eq!(model.core().name.as_bytes().as_ptr(), name_pointer);
     let written = model.encode_m2().unwrap();
-    let decoded = Model::<Chunked<V274>>::decode_m2(&written).unwrap();
+    let decoded = Document::<Chunked<V274>>::decode_m2(&written).unwrap();
     assert_eq!(decoded.core().name.as_bytes(), b"unit\0");
     assert_eq!(
         decoded.core().global_sequences.iter().collect::<Vec<_>>(),
@@ -124,20 +128,20 @@ fn resizing_arrays_relocates_payloads_without_overwriting_other_fields() {
 fn malformed_offsets_counts_versions_and_chunk_lengths_are_rejected() {
     let mut bytes = core_fixture(274);
     word(&mut bytes, 24, u32::MAX);
-    assert!(Model::<Flat<V274>>::decode_m2(&bytes).is_err());
+    assert!(Document::<Flat<V274>>::decode_m2(&bytes).is_err());
     let mut bytes = core_fixture(274);
     word(&mut bytes, 20, u32::MAX);
-    assert!(Model::<Flat<V274>>::decode_m2(&bytes).is_err());
+    assert!(Document::<Flat<V274>>::decode_m2(&bytes).is_err());
     let mut bytes = core_fixture(274);
     word(&mut bytes, 44, u32::MAX); // Bone count, before any allocation.
-    assert!(Model::<Flat<V274>>::decode_m2(&bytes).is_err());
-    assert!(Model::<Flat<V273>>::decode_m2(&core_fixture(274)).is_err());
+    assert!(Document::<Flat<V274>>::decode_m2(&bytes).is_err());
+    assert!(Document::<Flat<V273>>::decode_m2(&core_fixture(274)).is_err());
     let mut bytes = dialect_fixture::<Chunked<V274>>();
     word(&mut bytes, 4, u32::MAX);
-    assert!(Model::<Chunked<V274>>::decode_m2(&bytes).is_err());
+    assert!(Document::<Chunked<V274>>::decode_m2(&bytes).is_err());
     let mut bytes = dialect_fixture::<Chunked<V274>>();
     bytes.extend_from_slice(b"short");
-    assert!(Model::<Chunked<V274>>::decode_m2(&bytes).is_err());
+    assert!(Document::<Chunked<V274>>::decode_m2(&bytes).is_err());
 }
 
 #[test]
@@ -169,7 +173,7 @@ fn animation_streams_require_explicit_framing_and_keep_unknown_streams() {
 
 #[test]
 fn external_skins_use_document_offsets_and_four_bone_bytes_per_vertex() {
-    fn check<V: wc3::model::m2::companions::SupportsExternalSkins>() {
+    fn check<V: wc3::model::formats::m2::companions::SupportsExternalSkins>() {
         let version = V::VERSION;
         let header = if version < 265 { 48 } else { 64 };
         let mut bytes = vec![0; header + 4];
@@ -325,7 +329,7 @@ fn native_sequence_timing_and_blend_words_follow_independent_layouts() {
             bytes[offset + 28..offset + 30].copy_from_slice(&150u16.to_le_bytes());
             bytes[offset + 30..offset + 32].copy_from_slice(&275u16.to_le_bytes());
         }
-        let model = Model::<Flat<V>>::decode_m2(&bytes).unwrap();
+        let model = Document::<Flat<V>>::decode_m2(&bytes).unwrap();
         let sequence = &model.core().sequences[0];
         assert_eq!(sequence.id, 7);
         assert_eq!(sequence.frequency, -4);
@@ -336,7 +340,7 @@ fn native_sequence_timing_and_blend_words_follow_independent_layouts() {
             &bytes[offset..]
         );
         assert_eq!(
-            Model::<Flat<V>>::decode_m2(&written)
+            Document::<Flat<V>>::decode_m2(&written)
                 .unwrap()
                 .core()
                 .sequences,
@@ -419,15 +423,15 @@ fn physics_writer_checks_edited_layouts_and_opaque_tags() {
 
 #[test]
 fn classic_header_tails_and_version257_opaque_address_space_survive_edits() {
-    use wc3::model::m2::DynamicModel;
+    use wc3::model::formats::m2::DynamicDocument;
     let mut bytes = core_fixture(256);
     for (index, value) in bytes[0x144..0x154].iter_mut().enumerate() {
         *value = index as u8 + 1;
     }
-    let model = Model::<Flat<V256>>::decode_m2(&bytes).unwrap();
+    let model = Document::<Flat<V256>>::decode_m2(&bytes).unwrap();
     let written = model.encode_m2().unwrap();
     assert_eq!(&written[0x144..0x154], &bytes[0x144..0x154]);
-    assert!(Model::<Flat<V256>>::decode_m2(&bytes[..0x153]).is_err());
+    assert!(Document::<Flat<V256>>::decode_m2(&bytes[..0x153]).is_err());
 
     let mut bytes = core_fixture(257);
     let opaque_offset = bytes.len();
@@ -436,7 +440,7 @@ fn classic_header_tails_and_version257_opaque_address_space_survive_edits() {
     word(&mut bytes, 0x144, 2); // Count deliberately conveys no invented stride.
     word(&mut bytes, 0x148, opaque_offset as u32);
     bytes[0x14c..0x154].copy_from_slice(&[1, 3, 5, 7, 9, 11, 13, 15]);
-    let DynamicModel::Flat257(mut model) = DynamicModel::decode_m2(&bytes).unwrap() else {
+    let DynamicDocument::Flat257(mut model) = DynamicDocument::decode_m2(&bytes).unwrap() else {
         panic!("classic layout")
     };
     assert_eq!(model.version(), 257);
@@ -456,7 +460,7 @@ fn classic_header_tails_and_version257_opaque_address_space_survive_edits() {
         opaque_payload
     );
     assert_eq!(&written[0x144..0x154], &bytes[0x144..0x154]);
-    let decoded = Model::<Flat<V257>>::decode_m2(&written).unwrap();
+    let decoded = Document::<Flat<V257>>::decode_m2(&written).unwrap();
     assert_eq!(decoded.core().name.as_bytes(), b"changed\0");
     assert_eq!(
         decoded.core().global_sequences.iter().collect::<Vec<_>>(),
@@ -471,7 +475,7 @@ fn classic_unnamed_lookup_uses_the_documented_header_offset() {
     bytes.extend_from_slice(&71u16.to_le_bytes());
     word(&mut bytes, 0xac, 1);
     word(&mut bytes, 0xb0, offset as u32);
-    let model = Model::<Flat<V256>>::decode_m2(&bytes).unwrap();
+    let model = Document::<Flat<V256>>::decode_m2(&bytes).unwrap();
     let opaque = &model.core().classic_lookup;
     assert_eq!(opaque.reference.count, 1);
     assert_eq!(
@@ -486,7 +490,7 @@ fn classic_unnamed_lookup_uses_the_documented_header_offset() {
     assert_eq!(&written[offset..offset + 2], &71u16.to_le_bytes());
     let mut malformed = bytes;
     word(&mut malformed, 0xb0, u32::MAX);
-    assert!(Model::<Flat<V256>>::decode_m2(&malformed).is_err());
+    assert!(Document::<Flat<V256>>::decode_m2(&malformed).is_err());
 }
 
 fn external_bone_fixture(version: u32, address_base: usize) -> Vec<u8> {
@@ -541,9 +545,9 @@ fn external_core_fixture(bones: bool, chunked_animation: bool) -> Vec<u8> {
 
 #[test]
 fn bundles_borrow_resolved_animation_keys_and_encode_relocated_external_leaves() {
-    use wc3::model::m2::records::TrackValues;
-    use wc3::model::m2::resources::FileKey;
-    use wc3::model::m2::{Bundle, ResolvedValues};
+    use wc3::model::formats::m2::records::TrackValues;
+    use wc3::model::formats::m2::resources::FileKey;
+    use wc3::model::formats::m2::{Bundle, ResolvedValues};
     let model_bytes = external_core_fixture(true, false);
     let animation_bytes = external_animation_fixture();
     let model_key = FileKey::Path("units/test.m2".into());
@@ -591,9 +595,9 @@ fn bundles_borrow_resolved_animation_keys_and_encode_relocated_external_leaves()
 
 #[test]
 fn bundle_skeleton_tracks_use_the_skeletons_afsb_stream_and_file_identity() {
-    use wc3::model::m2::records::TrackValues;
-    use wc3::model::m2::resources::FileKey;
-    use wc3::model::m2::{Bundle, File, ResolvedValues};
+    use wc3::model::formats::m2::records::TrackValues;
+    use wc3::model::formats::m2::resources::FileKey;
+    use wc3::model::formats::m2::{Bundle, File, ResolvedValues};
     let core = external_core_fixture(false, true);
     let mut model_bytes = frame(*b"MD21", &core);
     model_bytes.extend(frame(*b"SKID", &17u32.to_le_bytes()));
@@ -715,7 +719,7 @@ fn physics_validation_checks_known_reference_domains_without_reinterpreting_unkn
 
 #[test]
 fn late_tbc_header_keeps_its_pre_wrath_lookup_and_embedded_skin_layout() {
-    use wc3::model::m2::DynamicModel;
+    use wc3::model::formats::m2::DynamicDocument;
     let mut bytes = core_fixture(263);
     let lookup = bytes.len();
     bytes.resize(lookup + 34, 0);
@@ -736,12 +740,12 @@ fn late_tbc_header_keeps_its_pre_wrath_lookup_and_embedded_skin_layout() {
     bytes.resize(skin + 44, 0);
     word(&mut bytes, 0x4c, 1);
     word(&mut bytes, 0x50, skin as u32);
-    let DynamicModel::Flat263(model) = DynamicModel::decode_m2(&bytes).unwrap() else {
+    let DynamicDocument::Flat263(model) = DynamicDocument::decode_m2(&bytes).unwrap() else {
         panic!("TBC layout")
     };
     assert_eq!(model.version(), 263);
     let frames = &model.core().texture_flipbooks[0].frames;
-    let wc3::model::m2::records::LegacyValues::Values(values) = &frames.values else {
+    let wc3::model::formats::m2::records::LegacyValues::Values(values) = &frames.values else {
         panic!("plain flipbook frames")
     };
     assert_eq!(values.get(0), Some(81));
@@ -755,15 +759,15 @@ fn late_tbc_header_keeps_its_pre_wrath_lookup_and_embedded_skin_layout() {
     assert_eq!(skins.len(), 1);
     let written = model.encode_m2().unwrap();
     assert_eq!(
-        Model::<Flat<V263>>::decode_m2(&written).unwrap().core(),
+        Document::<Flat<V263>>::decode_m2(&written).unwrap().core(),
         model.core()
     );
 }
 
 #[test]
 fn version272_profiles_distinguish_single_and_split_blend_words() {
-    use wc3::model::m2::records::SplitBlendTime;
-    use wc3::model::m2::{DynamicModel, V272PreSplit};
+    use wc3::model::formats::m2::records::SplitBlendTime;
+    use wc3::model::formats::m2::{DynamicDocument, V272PreSplit};
     let mut bytes = core_fixture(272);
     let offset = bytes.len();
     bytes.resize(offset + 64, 0);
@@ -772,10 +776,10 @@ fn version272_profiles_distinguish_single_and_split_blend_words() {
     word(&mut bytes, offset + 4, 1000);
     word(&mut bytes, offset + 12, 0x20);
     word(&mut bytes, offset + 28, 350);
-    let mut older = Model::<Flat<V272PreSplit>>::decode_m2(&bytes).unwrap();
+    let mut older = Document::<Flat<V272PreSplit>>::decode_m2(&bytes).unwrap();
     assert_eq!(older.core().sequences[0].timing, 1000);
     assert_eq!(older.core().sequences[0].blend_time, 350);
-    let newer = Model::<Flat<V272>>::decode_m2(&bytes).unwrap();
+    let newer = Document::<Flat<V272>>::decode_m2(&bytes).unwrap();
     assert_eq!(
         newer.core().sequences[0].blend_time,
         SplitBlendTime {
@@ -786,44 +790,44 @@ fn version272_profiles_distinguish_single_and_split_blend_words() {
     older.core_mut().sequences[0].blend_time = 700;
     let written = older.encode_m2().unwrap();
     assert_eq!(
-        Model::<Flat<V272PreSplit>>::decode_m2(&written)
+        Document::<Flat<V272PreSplit>>::decode_m2(&written)
             .unwrap()
             .core()
             .sequences[0]
             .blend_time,
         700
     );
-    fn edit<D: Dialect<Layout = V272PreSplit>>(model: &mut Model<'_, D>) {
+    fn edit<D: Dialect<Layout = V272PreSplit>>(model: &mut Document<'_, D>) {
         assert_eq!(model.core().sequences[0].blend_time, 350);
         model.core_mut().sequences[0].blend_time = 123456;
     }
     for input in [&bytes, &frame(*b"MD21", &bytes)] {
-        let mut dynamic = DynamicModel::decode_m2_with_layout::<V272PreSplit>(input).unwrap();
+        let mut dynamic = DynamicDocument::decode_m2_with_layout::<V272PreSplit>(input).unwrap();
         match &mut dynamic {
-            DynamicModel::Flat272PreSplit(model) => edit(model),
-            DynamicModel::Chunked272PreSplit(model) => edit(model),
+            DynamicDocument::Flat272PreSplit(model) => edit(model),
+            DynamicDocument::Chunked272PreSplit(model) => edit(model),
             _ => panic!("selected blend profile"),
         }
         let encoded = dynamic.encode_m2().unwrap();
-        let decoded = DynamicModel::decode_m2_with_layout::<V272PreSplit>(&encoded).unwrap();
+        let decoded = DynamicDocument::decode_m2_with_layout::<V272PreSplit>(&encoded).unwrap();
         match decoded {
-            DynamicModel::Flat272PreSplit(model) => {
+            DynamicDocument::Flat272PreSplit(model) => {
                 assert_eq!(model.core().sequences[0].blend_time, 123456)
             }
-            DynamicModel::Chunked272PreSplit(model) => {
+            DynamicDocument::Chunked272PreSplit(model) => {
                 assert_eq!(model.core().sequences[0].blend_time, 123456)
             }
             _ => panic!("selected blend profile"),
         }
-        match DynamicModel::decode_m2(input).unwrap() {
-            DynamicModel::Flat272(model) => assert_eq!(
+        match DynamicDocument::decode_m2(input).unwrap() {
+            DynamicDocument::Flat272(model) => assert_eq!(
                 model.core().sequences[0].blend_time,
                 SplitBlendTime {
                     incoming: 350,
                     outgoing: 0
                 }
             ),
-            DynamicModel::Chunked272(model) => assert_eq!(
+            DynamicDocument::Chunked272(model) => assert_eq!(
                 model.core().sequences[0].blend_time,
                 SplitBlendTime {
                     incoming: 350,
@@ -833,8 +837,8 @@ fn version272_profiles_distinguish_single_and_split_blend_words() {
             _ => panic!("default blend profile"),
         }
     }
-    assert!(DynamicModel::decode_m2_with_layout::<V272PreSplit>(&core_fixture(274)).is_err());
-    assert!(DynamicModel::decode_m2_with_layout::<V272>(&core_fixture(264)).is_err());
+    assert!(DynamicDocument::decode_m2_with_layout::<V272PreSplit>(&core_fixture(274)).is_err());
+    assert!(DynamicDocument::decode_m2_with_layout::<V272>(&core_fixture(264)).is_err());
     let mut payload = vec![0; 32];
     word(&mut payload, 8, 1);
     word(&mut payload, 12, 32);
@@ -859,7 +863,7 @@ fn version272_profiles_distinguish_single_and_split_blend_words() {
 fn opaque_classic_arrays_ignore_empty_offsets_but_require_backing_for_nonempty_data() {
     let mut bytes = core_fixture(257);
     word(&mut bytes, 0x148, u32::MAX);
-    let model = Model::<Flat<V257>>::decode_m2(&bytes).unwrap();
+    let model = Document::<Flat<V257>>::decode_m2(&bytes).unwrap();
     let encoded = model.encode_m2().unwrap();
     assert_eq!(
         u32::from_le_bytes(encoded[0x148..0x14c].try_into().unwrap()),
@@ -868,5 +872,5 @@ fn opaque_classic_arrays_ignore_empty_offsets_but_require_backing_for_nonempty_d
     word(&mut bytes, 0x144, 1);
     let end = bytes.len() as u32;
     word(&mut bytes, 0x148, end);
-    assert!(Model::<Flat<V257>>::decode_m2(&bytes).is_err());
+    assert!(Document::<Flat<V257>>::decode_m2(&bytes).is_err());
 }

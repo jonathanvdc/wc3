@@ -1,6 +1,6 @@
 # Renderer overview
 
-bevy-wc3 turns a decoded Warcraft III model into shared Bevy assets and an
+bevy-wc3 turns a semantic Warcraft III model into shared Bevy assets and an
 independently animated entity hierarchy for each instance. The renderer uses
 Bevy lighting, GPU skinning, and render phases; effect renderers generate their
 geometry from immutable birth records.
@@ -119,6 +119,7 @@ provide the detailed rules.
 | Area | Limit |
 | --- | --- |
 | Textures | BLP0 external base-level loading is implemented; real beta-game compatibility remains unverified. Authored BLP mip chains are not uploaded. |
+| Model preparation | Default semantic graphs lower strictly to V1800 runtime records. Direct semantic evaluation is not implemented; lowering may allocate and rejects unrepresentable data. |
 | Skinning | More than eight influences is rejected. Explicit model bind-pose records are not consumed. |
 | LOD | Authored geometry switching is implemented. Generated simplification, per-view selection, animation throttling, and effect budgets are absent; exact game LOD semantics remain unverified. |
 | Materials and ordering | Classic sphere environment mapping and a dedicated WC3 ordering scheme across meshes/effects are absent. Mesh SortPrimsFarZ/NearZ is not applied. Crystal and unknown shaders use a warned diffuse fallback. |

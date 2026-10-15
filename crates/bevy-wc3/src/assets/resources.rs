@@ -1,6 +1,9 @@
-//! Model resources referenced by attachments and Classic particle emitters.
+//! Document resources referenced by attachments and Classic particle emitters.
+use crate::assets::model::ModelError;
+use crate::preparation::lower_model;
 use bevy::prelude::*;
-use wc3::model::mdlx::{Model, V1800};
+use wc3::model::formats::mdlx::{Document, V1800};
+use wc3::model::{profiles::Mdlx, Model};
 
 use crate::assets::loader::Wc3ModelAsset;
 
@@ -15,8 +18,8 @@ pub struct Wc3ModelResources {
 impl Wc3ModelResources {
     /// Resolve literal paths using a consumer's asset source. The callback owns
     /// path normalization and any MDL-to-MDX fallback policy.
-    pub fn resolve(
-        model: &Model<'_, V1800>,
+    pub(crate) fn resolve_document(
+        model: &Document<'_, V1800>,
         mut resolve: impl FnMut(&str) -> Option<Handle<Wc3ModelAsset>>,
     ) -> Self {
         let attachments = model
@@ -47,6 +50,16 @@ impl Wc3ModelResources {
         }
     }
 
+    /// Resolve child resources from a semantic Warcraft III graph.
+    /// Returns an error when the graph cannot be lowered to the renderer vocabulary.
+    pub fn resolve(
+        model: &Model<'_, Mdlx>,
+        resolve: impl FnMut(&str) -> Option<Handle<Wc3ModelAsset>>,
+    ) -> Result<Self, ModelError> {
+        let document = lower_model(model)?;
+        Ok(Self::resolve_document(&document, resolve))
+    }
+
     /// Attachment record index, not attachment ID or node object ID.
     pub fn attachment(&self, index: usize) -> Option<Handle<Wc3ModelAsset>> {
         self.attachments.get(index).cloned().flatten()
@@ -71,17 +84,17 @@ impl Wc3ModelResources {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::assets::model::Wc3Model;
+    use crate::assets::model::Wc3Document;
     use crate::instance::spawn::spawn_prepared_model;
     use crate::materials::Wc3LayerMaterial;
-    use crate::preparation::prepare_model_with_resources;
+    use crate::preparation::prepare_document_with_resources;
     use bevy::ecs::world::CommandQueue;
     use bevy::mesh::skinning::SkinnedMeshInverseBindposes;
-    use wc3::model::mdlx::mdl::Read as _;
+    use wc3::model::formats::mdlx::mdl::Read as _;
 
     #[test]
     fn resolver_preserves_record_slots_and_skips_empty_and_image_paths() {
-        let model = Model::<V1800>::decode_mdl(
+        let model = Document::<V1800>::decode_mdl(
             r#"
             Version { FormatVersion 1800, }
             Model "Resources" {}
@@ -89,17 +102,17 @@ mod tests {
             Attachment "Weapon" { ObjectId 1, AttachmentID 7, Path "Weapon.mdl", }
             Attachment "Missing" { ObjectId 2, Path "Missing.mdx", }
             ParticleEmitter "Empty" { ObjectId 3, EmitterUsesMdl, }
-            ParticleEmitter "Model" { ObjectId 4, EmitterUsesMdl, Path "Spark.mdl", }
+            ParticleEmitter "Document" { ObjectId 4, EmitterUsesMdl, Path "Spark.mdl", }
             ParticleEmitter "Image" { ObjectId 5, EmitterUsesTga, Path "Image.tga", }
         "#,
         )
         .unwrap();
         let mut assets = Assets::<Wc3ModelAsset>::default();
         let child =
-            Wc3Model::decode_mdl("Version { FormatVersion 800, } Model \"Child\" {}").unwrap();
+            Wc3Document::decode_mdl("Version { FormatVersion 800, } Model \"Child\" {}").unwrap();
         let handle = assets.add(Wc3ModelAsset::from_source(&child, default(), default()).unwrap());
         let mut requested = Vec::new();
-        let resources = Wc3ModelResources::resolve(&model, |path| {
+        let resources = Wc3ModelResources::resolve_document(&model, |path| {
             requested.push(path.to_owned());
             (path != "Missing.mdx").then(|| handle.clone())
         });
@@ -112,14 +125,14 @@ mod tests {
         assert_eq!(resources.particle(1), Some(handle.clone()));
         assert!(resources.particle(2).is_none());
 
-        let source = Wc3Model {
+        let source = Wc3Document {
             source_version: 1800,
             model: (model).into(),
         };
         let mut meshes = Assets::<Mesh>::default();
         let mut materials = Assets::<Wc3LayerMaterial>::default();
         let mut bindposes = Assets::<SkinnedMeshInverseBindposes>::default();
-        let prepared = prepare_model_with_resources(
+        let prepared = prepare_document_with_resources(
             &mut meshes,
             &mut bindposes,
             &source,

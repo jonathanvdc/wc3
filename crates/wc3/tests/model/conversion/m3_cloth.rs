@@ -1,20 +1,20 @@
 use super::m3::{approximate, asset};
+use wc3::model::io;
 use wc3::model::{
-    conversion,
-    m3::{self, records as nr, Ref},
-    semantic::profiles::m3 as surface,
+    formats::m3::{self, records as nr, Ref},
+    profiles::m3 as surface,
 };
 #[test]
 fn public_adapter_rebuilds_edited_cloth_density_and_node_bindings() {
     let original = asset();
-    let native = conversion::m3::plan::<m3::StarCraft2>(&original, &approximate())
+    let native = io::m3::plan::<m3::StarCraft2>(&original, &approximate())
         .unwrap()
         .execute()
         .unwrap()
         .value;
     let root_id = native.model.root_id();
     let mut root = native.model.root::<nr::ModelRecord<nr::V29>>().unwrap();
-    let mut document = native.model.into_document();
+    let mut document = native.model.into_container();
     let enabled = document.append(&[nr::Byte { value: 1 }; 3]).unwrap();
     let palette = document.append(&[nr::U16 { value: 0 }]).unwrap();
     let bones = document.append(&[nr::U32 { value: 0 }; 3]).unwrap();
@@ -46,10 +46,8 @@ fn public_adapter_rebuilds_edited_cloth_density_and_node_bindings() {
         .unwrap();
     root.cloth_physics = Ref::from_section(1, cloth.index());
     document.replace(root_id, &[root]).unwrap();
-    let source = m3::Bundle::from_model(m3::Model::from_document(document).unwrap());
-    let mut imported = conversion::m3::import(&source, &Default::default())
-        .unwrap()
-        .value;
+    let source = m3::Bundle::from_model(m3::Document::from_container(document).unwrap());
+    let mut imported = io::m3::import(&source, &Default::default()).unwrap().value;
     let (id, system) = imported
         .systems()
         .find(|(_, system)| matches!(system, surface::System::Cloth(_)))
@@ -66,7 +64,7 @@ fn public_adapter_rebuilds_edited_cloth_density_and_node_bindings() {
     imported
         .edit(|builder| builder.set_system(id, system))
         .unwrap();
-    let result = conversion::m3::plan::<m3::StarCraft2>(&imported, &approximate())
+    let result = io::m3::plan::<m3::StarCraft2>(&imported, &approximate())
         .unwrap()
         .execute()
         .unwrap()
@@ -74,7 +72,7 @@ fn public_adapter_rebuilds_edited_cloth_density_and_node_bindings() {
     let root = result.model.root::<nr::ModelRecord<nr::V29>>().unwrap();
     let cloth = result
         .model
-        .document()
+        .container()
         .resolve::<nr::ClothPhysics<nr::V4>>(root.cloth_physics.cast())
         .unwrap()
         .get(0)
@@ -84,7 +82,7 @@ fn public_adapter_rebuilds_edited_cloth_density_and_node_bindings() {
     assert_eq!(cloth.anchor_control, 0x8000_0011);
     let collider = result
         .model
-        .document()
+        .container()
         .resolve::<nr::ClothCollider>(cloth.colliders.cast())
         .unwrap()
         .get(0)
@@ -94,7 +92,7 @@ fn public_adapter_rebuilds_edited_cloth_density_and_node_bindings() {
     assert_eq!(collider.bone, 0);
     let weights = result
         .model
-        .document()
+        .container()
         .resolve::<nr::U32>(cloth.vertex_weights.cast())
         .unwrap();
     assert_eq!(weights.get(0).unwrap().unwrap().value, 255);

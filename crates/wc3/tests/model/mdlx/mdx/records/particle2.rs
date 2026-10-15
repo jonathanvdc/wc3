@@ -1,10 +1,10 @@
-use wc3::model::mdlx::animation::Animatable;
-use wc3::model::mdlx::emitters::{Particle2Frames, ParticleEmitter2};
-use wc3::model::mdlx::mdx::Read as _;
-use wc3::model::mdlx::mdx::Write as _;
+use wc3::model::formats::mdlx::animation::Animatable;
+use wc3::model::formats::mdlx::emitters::{Particle2Frames, ParticleEmitter2};
+use wc3::model::formats::mdlx::mdx::Read as _;
+use wc3::model::formats::mdlx::mdx::Write as _;
 
-use wc3::model::mdlx::scene::Node;
-use wc3::model::mdlx::Model;
+use wc3::model::formats::mdlx::scene::Node;
+use wc3::model::formats::mdlx::Document;
 
 #[test]
 fn particle_emitter2_fields_round_trip() {
@@ -20,10 +20,11 @@ fn particle_emitter2_fields_round_trip() {
     emitter.set_squirt_enabled(true);
     assert_eq!(emitter.frames, Particle2Frames::Both);
     assert!(emitter.squirt_enabled());
-    let mut model = Model::<wc3::model::mdlx::V1800>::new();
+    let mut model = Document::<wc3::model::formats::mdlx::V1800>::new();
     model.set_particle_emitters2([emitter.clone()]);
-    let parsed = Model::<wc3::model::mdlx::V1800>::decode_mdx(&model.encode_mdx().unwrap())
-        .unwrap()
-        .into_owned();
+    let parsed =
+        Document::<wc3::model::formats::mdlx::V1800>::decode_mdx(&model.encode_mdx().unwrap())
+            .unwrap()
+            .into_owned();
     assert_eq!(parsed.particle_emitters2().next().unwrap(), &emitter);
 }

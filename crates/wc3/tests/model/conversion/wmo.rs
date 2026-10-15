@@ -1,8 +1,9 @@
 use wc3::model::common::{IntoZeroVec, ZeroVec};
+use wc3::model::io;
 use wc3::model::{
     conversion::{self, ExportOptions, ImportOptions},
-    semantic::Resource,
-    wmo::{self, Bundle, Dialect, FileKey, Group, GroupKey, Root},
+    formats::wmo::{self, Bundle, Dialect, FileKey, Group, GroupKey, Root},
+    Resource,
 };
 use wmo::{codec::Array, group::GroupChunk, records as r, root::RootChunk};
 fn fixture<D: Dialect>() -> Bundle<'static, D> {
@@ -68,15 +69,15 @@ fn fixture<D: Dialect>() -> Bundle<'static, D> {
     bundle
 }
 fn roundtrip<D: Dialect>() {
-    use wc3::model::semantic::profiles::{Universal, Wmo};
+    use wc3::model::profiles::{Universal, Wmo};
     let source = fixture::<D>();
-    let asset = conversion::wmo::import(&source, &ImportOptions::default())
+    let asset = io::wmo::import(&source, &ImportOptions::default())
         .unwrap()
         .value
         .widen::<Universal>()
         .try_narrow::<Wmo>()
         .unwrap();
-    let output = conversion::wmo::plan::<D>(&asset, &ExportOptions::default())
+    let output = io::wmo::plan::<D>(&asset, &ExportOptions::default())
         .unwrap()
         .execute()
         .unwrap()
@@ -128,7 +129,7 @@ fn region_lights_are_independent_editable_features() {
         }])
         .unwrap(),
     ));
-    let mut asset = conversion::wmo::import(&source, &ImportOptions::default())
+    let mut asset = io::wmo::import(&source, &ImportOptions::default())
         .unwrap()
         .value;
     let model = &asset;
@@ -137,18 +138,18 @@ fn region_lights_are_independent_editable_features() {
         .find(|(_, feature)| {
             matches!(
                 feature.payload,
-                wc3::model::semantic::profiles::wmo::Node::PointLight(_)
+                wc3::model::profiles::wmo::Node::PointLight(_)
             )
         })
         .map(|(id, value)| (id, value.payload.clone()))
         .unwrap();
-    if let wc3::model::semantic::profiles::wmo::Node::PointLight(light) = &mut feature {
+    if let wc3::model::profiles::wmo::Node::PointLight(light) = &mut feature {
         light.intensity = 7.;
     }
     asset
         .edit(|builder| builder.set_feature(id, feature))
         .unwrap();
-    let output = conversion::wmo::plan::<wmo::Classic>(&asset, &ExportOptions::default())
+    let output = io::wmo::plan::<wmo::Classic>(&asset, &ExportOptions::default())
         .unwrap()
         .execute()
         .unwrap()
@@ -188,7 +189,7 @@ fn region_lights_are_independent_editable_features() {
 #[test]
 fn edited_geometry_rebuilds_native_companions() {
     let source = fixture::<wmo::Classic>();
-    let mut asset = conversion::wmo::import(&source, &ImportOptions::default())
+    let mut asset = io::wmo::import(&source, &ImportOptions::default())
         .unwrap()
         .value;
     let model = &asset;
@@ -204,7 +205,7 @@ fn edited_geometry_rebuilds_native_companions() {
         .with_positions((positions).into_zero_vec())
         .unwrap();
     asset.edit(|builder| builder.set_mesh(id, mesh)).unwrap();
-    let output = conversion::wmo::plan::<wmo::Classic>(&asset, &ExportOptions::default())
+    let output = io::wmo::plan::<wmo::Classic>(&asset, &ExportOptions::default())
         .unwrap()
         .execute()
         .unwrap()
@@ -257,7 +258,7 @@ fn draw_batches_override_collision_face_material_and_keep_classification() {
         }])
         .unwrap(),
     ));
-    let asset = conversion::wmo::import(&source, &ImportOptions::default())
+    let asset = io::wmo::import(&source, &ImportOptions::default())
         .unwrap()
         .value;
     let model = &asset;
@@ -272,7 +273,7 @@ fn draw_batches_override_collision_face_material_and_keep_classification() {
         .unwrap()
         .material
         .is_none());
-    let output = conversion::wmo::plan::<wmo::Classic>(&asset, &ExportOptions::default())
+    let output = io::wmo::plan::<wmo::Classic>(&asset, &ExportOptions::default())
         .unwrap()
         .execute()
         .unwrap()
@@ -309,7 +310,7 @@ fn draw_batches_override_collision_face_material_and_keep_classification() {
 
 #[test]
 fn liquid_grid_fields_are_editable_without_source_packets() {
-    use wc3::model::semantic::profiles::wmo::LiquidVertex as SurfaceVertex;
+    use wc3::model::profiles::wmo::LiquidVertex as SurfaceVertex;
     use wmo::group::{Liquid, LiquidHeader, LiquidVertex, LiquidVertices};
     let mut source = fixture::<wmo::Classic>();
     source
@@ -334,7 +335,7 @@ fn liquid_grid_fields_are_editable_without_source_packets() {
             ),
             tiles: Array::from_records(&[0u8]).unwrap(),
         }));
-    let mut asset = conversion::wmo::import(&source, &ImportOptions::default())
+    let mut asset = io::wmo::import(&source, &ImportOptions::default())
         .unwrap()
         .value;
     let (id, mut instance) = asset
@@ -352,7 +353,7 @@ fn liquid_grid_fields_are_editable_without_source_packets() {
     asset
         .edit(|builder| builder.set_instance(id, instance))
         .unwrap();
-    let output = conversion::wmo::plan::<wmo::Classic>(&asset, &ExportOptions::default())
+    let output = io::wmo::plan::<wmo::Classic>(&asset, &ExportOptions::default())
         .unwrap()
         .execute()
         .unwrap()
@@ -378,7 +379,7 @@ fn liquid_grid_fields_are_editable_without_source_packets() {
 
 #[test]
 fn unknown_native_blends_keep_their_family_namespace_during_edits() {
-    use wc3::model::semantic::profiles::wmo::Blend;
+    use wc3::model::profiles::wmo::Blend;
     for code in [8, 9] {
         let mut source = fixture::<wmo::Classic>();
         for chunk in source.root.chunks_mut() {
@@ -388,7 +389,7 @@ fn unknown_native_blends_keep_their_family_namespace_during_edits() {
                 *rows = Array::from_records(&values).unwrap();
             }
         }
-        let mut asset = conversion::wmo::import(&source, &ImportOptions::default())
+        let mut asset = io::wmo::import(&source, &ImportOptions::default())
             .unwrap()
             .value;
         let (id, mut material) = asset
@@ -401,7 +402,7 @@ fn unknown_native_blends_keep_their_family_namespace_during_edits() {
         asset
             .edit(|builder| builder.set_material(id, material))
             .unwrap();
-        let output = conversion::wmo::plan::<wmo::Classic>(&asset, &ExportOptions::default())
+        let output = io::wmo::plan::<wmo::Classic>(&asset, &ExportOptions::default())
             .unwrap()
             .execute()
             .unwrap()
@@ -439,8 +440,8 @@ fn unknown_payloads_are_rejected_or_dropped_before_rebuilding_files() {
             },
         )
         .unwrap();
-    assert!(conversion::wmo::import(&source, &ImportOptions::default()).is_err());
-    let asset = conversion::wmo::import(
+    assert!(io::wmo::import(&source, &ImportOptions::default()).is_err());
+    let asset = io::wmo::import(
         &source,
         &ImportOptions {
             unknown: UnknownPolicy::Drop,
@@ -450,7 +451,7 @@ fn unknown_payloads_are_rejected_or_dropped_before_rebuilding_files() {
     .unwrap()
     .value;
 
-    let output = conversion::wmo::plan::<wmo::Classic>(&asset, &ExportOptions::default())
+    let output = io::wmo::plan::<wmo::Classic>(&asset, &ExportOptions::default())
         .unwrap()
         .execute()
         .unwrap()
@@ -495,7 +496,7 @@ fn portals_are_scoped_authoring_relationships_and_rebuild_native_windows() {
         .header_mut()
         .portal_count = 1;
     source.validate_complete().unwrap();
-    let asset = conversion::wmo::import(&source, &ImportOptions::default())
+    let asset = io::wmo::import(&source, &ImportOptions::default())
         .unwrap()
         .value;
     let world = asset.systems().next().unwrap().1;
@@ -503,7 +504,7 @@ fn portals_are_scoped_authoring_relationships_and_rebuild_native_windows() {
     let region = &asset.instances().next().unwrap().1.controls;
     assert_eq!(region.portals[0].portal.index, 0);
     assert_eq!(region.portals[0].neighbor.index, 0);
-    let output = conversion::wmo::plan::<wmo::Classic>(&asset, &ExportOptions::default())
+    let output = io::wmo::plan::<wmo::Classic>(&asset, &ExportOptions::default())
         .unwrap()
         .execute()
         .unwrap()
@@ -523,7 +524,7 @@ fn portals_are_scoped_authoring_relationships_and_rebuild_native_windows() {
 #[test]
 fn strip_connectivity_and_tangent_pools_are_independent_editable_geometry() {
     use std::borrow::Cow;
-    use wc3::model::semantic::profiles::{Universal, Wmo};
+    use wc3::model::profiles::{Universal, Wmo};
     let mut source = fixture::<wmo::Classic>();
     let group = source.group_mut(GroupKey { index: 0, lod: 0 }).unwrap();
     group.header_mut().interior_batch_count = 1;
@@ -558,7 +559,7 @@ fn strip_connectivity_and_tangent_pools_are_independent_editable_geometry() {
     group
         .chunks_mut()
         .push(GroupChunk::TangentsUnresolved(Cow::Owned(tangent_bytes)));
-    let asset = conversion::wmo::import(&source, &ImportOptions::default())
+    let asset = io::wmo::import(&source, &ImportOptions::default())
         .unwrap()
         .value
         .widen::<Universal>();
@@ -568,10 +569,8 @@ fn strip_connectivity_and_tangent_pools_are_independent_editable_geometry() {
         .edit(|builder| {
             let mut mesh = builder.model().mesh(id).unwrap().clone();
             let data = &mut mesh.geometry;
-            data.connectivity = wc3::model::semantic::ConnectivitySets::new(
-                data.connectivity.primary.clone(),
-                Vec::new(),
-            );
+            data.connectivity =
+                wc3::model::ConnectivitySets::new(data.connectivity.primary.clone(), Vec::new());
             builder.set_mesh(id, mesh)
         })
         .is_err());
@@ -588,7 +587,7 @@ fn strip_connectivity_and_tangent_pools_are_independent_editable_geometry() {
         .with_tangent_vectors((vec![[1., 0., 0., -1.]]).into_zero_vec())
         .unwrap();
     asset.edit(|builder| builder.set_mesh(id, mesh)).unwrap();
-    let output = conversion::wmo::plan::<wmo::Classic>(&asset, &ExportOptions::default())
+    let output = io::wmo::plan::<wmo::Classic>(&asset, &ExportOptions::default())
         .unwrap()
         .execute()
         .unwrap()
@@ -622,7 +621,7 @@ fn strip_connectivity_and_tangent_pools_are_independent_editable_geometry() {
 
 #[test]
 fn ambient_memberships_remap_scoped_volumes_across_native_table_order() {
-    use wc3::model::semantic::profiles::wmo::Volume;
+    use wc3::model::profiles::wmo::Volume;
     let mut source = fixture::<wmo::Legion>();
     for chunk in [
         RootChunk::AmbientBoxes(
@@ -663,7 +662,7 @@ fn ambient_memberships_remap_scoped_volumes_across_native_table_order() {
         Array::from_records(&[0u16]).unwrap(),
     ));
     source.validate_complete().unwrap();
-    let asset = conversion::wmo::import(&source, &ImportOptions::default())
+    let asset = io::wmo::import(&source, &ImportOptions::default())
         .unwrap()
         .value;
     let model = &asset;
@@ -678,7 +677,7 @@ fn ambient_memberships_remap_scoped_volumes_across_native_table_order() {
         world.ambient_volumes[region.ambients[1].index as usize].volume,
         Volume::Planes { .. }
     ));
-    let output = conversion::wmo::plan::<wmo::Legion>(&asset, &ExportOptions::default())
+    let output = io::wmo::plan::<wmo::Legion>(&asset, &ExportOptions::default())
         .unwrap()
         .execute()
         .unwrap()
@@ -698,7 +697,7 @@ fn ambient_memberships_remap_scoped_volumes_across_native_table_order() {
 
 #[test]
 fn compatible_same_detail_geometry_joins_without_changing_material_look_or_source() {
-    use wc3::model::semantic::{Bounds, Draw};
+    use wc3::model::{Bounds, Draw};
     let mut source = fixture::<wmo::Classic>();
     let group = source.group_mut(GroupKey { index: 0, lod: 0 }).unwrap();
     group.header_mut().exterior_batch_count = 1;
@@ -717,7 +716,7 @@ fn compatible_same_detail_geometry_joins_without_changing_material_look_or_sourc
         }])
         .unwrap(),
     ));
-    let mut asset = conversion::wmo::import(&source, &ImportOptions::default())
+    let mut asset = io::wmo::import(&source, &ImportOptions::default())
         .unwrap()
         .value;
     let model = &asset;
@@ -761,7 +760,7 @@ fn compatible_same_detail_geometry_joins_without_changing_material_look_or_sourc
             Ok(())
         })
         .unwrap();
-    let result = conversion::wmo::plan::<wmo::Classic>(&asset, &ExportOptions::default())
+    let result = io::wmo::plan::<wmo::Classic>(&asset, &ExportOptions::default())
         .unwrap()
         .execute()
         .unwrap();
@@ -804,13 +803,13 @@ fn implicitly_filled_region_keeps_its_liquid_category_without_a_surface_grid() {
     let group = source.group_mut(key).unwrap();
     group.header_mut().flags.set_has_liquid(true);
     group.header_mut().liquid_type = 37;
-    let asset = conversion::wmo::import(&source, &ImportOptions::default())
+    let asset = io::wmo::import(&source, &ImportOptions::default())
         .unwrap()
         .value;
     let (_, instance) = asset.instances().next().unwrap();
     assert_eq!(instance.controls.implicit_liquid, Some(37));
     assert!(instance.controls.liquids.is_empty());
-    let output = conversion::wmo::plan::<wmo::Classic>(&asset, &ExportOptions::default())
+    let output = io::wmo::plan::<wmo::Classic>(&asset, &ExportOptions::default())
         .unwrap()
         .execute()
         .unwrap()
@@ -827,7 +826,7 @@ fn implicitly_filled_region_keeps_its_liquid_category_without_a_surface_grid() {
 #[test]
 fn region_selection_groups_are_rejected_before_native_export() {
     let source = fixture::<wmo::Legion>();
-    let mut asset = conversion::wmo::import(&source, &ImportOptions::default())
+    let mut asset = io::wmo::import(&source, &ImportOptions::default())
         .unwrap()
         .value;
     let instance = asset.instances().next().unwrap().0;
@@ -844,11 +843,11 @@ fn region_selection_groups_are_rejected_before_native_export() {
 fn logical_world_flag_words_keep_unknown_bits_through_native_output() {
     let mut source = fixture::<wmo::Legion>();
     source.root.header_mut().tail.flags = r::RootFlags(0x8000);
-    let asset = conversion::wmo::import(&source, &ImportOptions::default())
+    let asset = io::wmo::import(&source, &ImportOptions::default())
         .unwrap()
         .value;
     assert_eq!(asset.metadata().options.unclassified.bits(), 0x8000);
-    let output = conversion::wmo::plan::<wmo::Legion>(&asset, &ExportOptions::default())
+    let output = io::wmo::plan::<wmo::Legion>(&asset, &ExportOptions::default())
         .unwrap()
         .execute()
         .unwrap()
@@ -859,7 +858,7 @@ fn logical_world_flag_words_keep_unknown_bits_through_native_output() {
 #[test]
 fn modern_world_output_requires_explicit_bounds_or_loss_policy() {
     let source = fixture::<wmo::Legion>();
-    let mut asset = conversion::wmo::import(&source, &ImportOptions::default())
+    let mut asset = io::wmo::import(&source, &ImportOptions::default())
         .unwrap()
         .value;
     asset
@@ -868,8 +867,8 @@ fn modern_world_output_requires_explicit_bounds_or_loss_policy() {
             Ok(())
         })
         .unwrap();
-    assert!(conversion::wmo::plan::<wmo::Legion>(&asset, &ExportOptions::default()).is_err());
-    let plan = conversion::wmo::plan::<wmo::Legion>(
+    assert!(io::wmo::plan::<wmo::Legion>(&asset, &ExportOptions::default()).is_err());
+    let plan = io::wmo::plan::<wmo::Legion>(
         &asset,
         &ExportOptions {
             loss_policy: conversion::LossPolicy::Drop,
@@ -887,7 +886,7 @@ fn modern_world_output_requires_explicit_bounds_or_loss_policy() {
 #[test]
 fn world_radius_is_derived_from_each_authored_box() {
     let source = fixture::<wmo::Legion>();
-    let mut asset = conversion::wmo::import(&source, &ImportOptions::default())
+    let mut asset = io::wmo::import(&source, &ImportOptions::default())
         .unwrap()
         .value;
     let original = asset.bounds().unwrap();

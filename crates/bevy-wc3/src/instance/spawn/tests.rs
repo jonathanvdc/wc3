@@ -1,28 +1,30 @@
 use super::*;
 use crate::animation::pose::animate_nodes;
 use crate::animation::Wc3Animation;
+use crate::assets::model::Wc3Document;
 use crate::effects::particle_emitter2::Particle2State;
 use crate::effects::ribbon_emitter::{RibbonInstances, RibbonLayer, RibbonState};
 use crate::instance::{Wc3ModelOwner, Wc3OwnedModels};
 use crate::materials::layers::{animate_layers, AnimatedLayer};
+use crate::preparation::prepare_document;
 use bevy::camera::visibility::VisibilityPlugin;
 use bevy::ecs::world::{CommandQueue, World};
 use bevy::mesh::skinning::SkinnedMesh;
-use wc3::model::mdlx::animation::{Animatable, Track, ValueKeyframe};
-use wc3::model::mdlx::materials::{Layer, LayerFilterMode};
-use wc3::model::mdlx::mdl::Read as _;
-use wc3::model::mdlx::{Model, V1800};
+use wc3::model::formats::mdlx::animation::{Animatable, Track, ValueKeyframe};
+use wc3::model::formats::mdlx::materials::{Layer, LayerFilterMode};
+use wc3::model::formats::mdlx::mdl::Read as _;
+use wc3::model::formats::mdlx::{Document, V1800};
 
 #[test]
 fn child_instances_inherit_visibility_and_cleanup_without_sharing_animation() {
     let source =
-        Wc3Model::decode(include_bytes!("../../../tests/fixtures/quad_model.mdx")).unwrap();
+        Wc3Document::decode(include_bytes!("../../../tests/fixtures/quad_model.mdx")).unwrap();
     let mut app = App::new();
     app.add_plugins((MinimalPlugins, TransformPlugin, VisibilityPlugin));
     let mut meshes = Assets::<Mesh>::default();
     let mut materials = Assets::<Wc3LayerMaterial>::default();
     let mut bindposes = Assets::<SkinnedMeshInverseBindposes>::default();
-    let prepared = prepare_model(&mut meshes, &mut bindposes, &source, |_| None).unwrap();
+    let prepared = prepare_document(&mut meshes, &mut bindposes, &source, |_| None).unwrap();
     assert_eq!(source.model.strong_count(), 1);
     drop(source);
     let owner = app
@@ -43,9 +45,10 @@ fn child_instances_inherit_visibility_and_cleanup_without_sharing_animation() {
         .insert((Wc3ModelOwner(owner), Transform::from_xyz(20.0, 0.0, 0.0)));
     // Include effects in the same ownership/visibility check.
     let particles =
-        Wc3Model::decode_mdl(include_str!("../../../tests/fixtures/particle_capture.mdl")).unwrap();
+        Wc3Document::decode_mdl(include_str!("../../../tests/fixtures/particle_capture.mdl"))
+            .unwrap();
     let particle_prepared =
-        prepare_model(&mut meshes, &mut bindposes, &particles, |_| None).unwrap();
+        prepare_document(&mut meshes, &mut bindposes, &particles, |_| None).unwrap();
     assert_eq!(particles.model.strong_count(), 1);
     drop(particles);
     let effects = spawn_prepared_model(
@@ -198,7 +201,7 @@ fn child_instances_inherit_visibility_and_cleanup_without_sharing_animation() {
 #[test]
 fn prepared_assets_share_static_layers_and_isolate_animated_layers() {
     let bytes = include_bytes!("../../../tests/fixtures/quad_model.mdx");
-    let mut source = Wc3Model::decode(bytes).unwrap();
+    let mut source = Wc3Document::decode(bytes).unwrap();
     let mut material_records = source.model.materials().cloned().collect::<Vec<_>>();
     assert!(!material_records.is_empty());
     assert!(!material_records[0].layers.is_empty());
@@ -224,7 +227,7 @@ fn prepared_assets_share_static_layers_and_isolate_animated_layers() {
     let mut meshes = Assets::<Mesh>::default();
     let mut materials = Assets::<Wc3LayerMaterial>::default();
     let mut bindposes = Assets::<SkinnedMeshInverseBindposes>::default();
-    let prepared = prepare_model(&mut meshes, &mut bindposes, &source, |_| None).unwrap();
+    let prepared = prepare_document(&mut meshes, &mut bindposes, &source, |_| None).unwrap();
     let mesh_count = meshes.len();
     let static_count = materials.len();
     assert_eq!(static_count, 0);
@@ -250,7 +253,8 @@ fn ribbons_share_sections_across_layers_and_keep_instances_bindings_and_ownershi
     use std::time::Duration;
 
     let mut source =
-        Wc3Model::decode_mdl(include_str!("../../../tests/fixtures/ribbon_capture.mdl")).unwrap();
+        Wc3Document::decode_mdl(include_str!("../../../tests/fixtures/ribbon_capture.mdl"))
+            .unwrap();
     let mut definitions = source.model.materials().cloned().collect::<Vec<_>>();
     let mut second = definitions[0].layers[0].clone();
     second.alpha = 0.5.into();
@@ -268,7 +272,7 @@ fn ribbons_share_sections_across_layers_and_keep_instances_bindings_and_ownershi
     let mut meshes = Assets::<Mesh>::default();
     let mut materials = Assets::<Wc3LayerMaterial>::default();
     let mut bindposes = Assets::<SkinnedMeshInverseBindposes>::default();
-    let prepared = prepare_model(&mut meshes, &mut bindposes, &source, |_| None).unwrap();
+    let prepared = prepare_document(&mut meshes, &mut bindposes, &source, |_| None).unwrap();
     let mut images = Assets::<Image>::default();
     let chosen = images.add(Image::default());
     let mut bindings = Wc3TextureBindings::default();
@@ -362,18 +366,18 @@ fn ribbons_share_sections_across_layers_and_keep_instances_bindings_and_ownershi
 
 #[test]
 fn pre2_emitter_is_spawned_per_instance_and_owned_by_root() {
-    let model = Model::<V1800>::decode_mdl(include_str!(
+    let model = Document::<V1800>::decode_mdl(include_str!(
         "../../../tests/fixtures/attachment_parent.mdl"
     ))
     .unwrap();
-    let source = Wc3Model {
+    let source = Wc3Document {
         source_version: 1800,
         model: (model).into(),
     };
     let mut meshes = Assets::<Mesh>::default();
     let mut materials = Assets::<Wc3LayerMaterial>::default();
     let mut bindposes = Assets::<SkinnedMeshInverseBindposes>::default();
-    let prepared = prepare_model(&mut meshes, &mut bindposes, &source, |_| None).unwrap();
+    let prepared = prepare_document(&mut meshes, &mut bindposes, &source, |_| None).unwrap();
     let mut world = World::new();
     let mut queue = CommandQueue::default();
     let mut commands = Commands::new(&mut queue, &world);
@@ -392,7 +396,7 @@ fn pre2_emitter_is_spawned_per_instance_and_owned_by_root() {
 #[test]
 fn slot_binding_selects_replaceable_bitmap_for_geosets() {
     let mut source =
-        Wc3Model::decode(include_bytes!("../../../tests/fixtures/quad_model.mdx")).unwrap();
+        Wc3Document::decode(include_bytes!("../../../tests/fixtures/quad_model.mdx")).unwrap();
     let mut bitmaps = source.model.textures().cloned().collect::<Vec<_>>();
     bitmaps[0].path.set_text("").unwrap();
     bitmaps[0].replaceable_id = 1;
@@ -402,7 +406,7 @@ fn slot_binding_selects_replaceable_bitmap_for_geosets() {
     let mut meshes = Assets::<Mesh>::default();
     let mut materials = Assets::<Wc3LayerMaterial>::default();
     let mut bindposes = Assets::<SkinnedMeshInverseBindposes>::default();
-    let prepared = prepare_model(&mut meshes, &mut bindposes, &source, |_| None).unwrap();
+    let prepared = prepare_document(&mut meshes, &mut bindposes, &source, |_| None).unwrap();
     let mut bindings = Wc3TextureBindings::default();
     bindings.set_replaceable(1, selected.clone());
     let mut world = World::new();
@@ -427,7 +431,8 @@ fn slot_binding_selects_replaceable_bitmap_for_geosets() {
 #[test]
 fn geoset_tints_isolate_shared_materials_and_model_instances() {
     let mut source =
-        Wc3Model::decode_mdl(include_str!("../../../tests/fixtures/geoset_capture.mdl")).unwrap();
+        Wc3Document::decode_mdl(include_str!("../../../tests/fixtures/geoset_capture.mdl"))
+            .unwrap();
     // A third geoset has nonwhite color data with the color flag disabled.
     let mut geosets = source.model.geosets().cloned().collect::<Vec<_>>();
     geosets.push(geosets[0].clone());
@@ -461,7 +466,7 @@ fn geoset_tints_isolate_shared_materials_and_model_instances() {
     let mut meshes = Assets::<Mesh>::default();
     let mut materials = Assets::<Wc3LayerMaterial>::default();
     let mut bindposes = Assets::<SkinnedMeshInverseBindposes>::default();
-    let prepared = prepare_model(&mut meshes, &mut bindposes, &source, |_| None).unwrap();
+    let prepared = prepare_document(&mut meshes, &mut bindposes, &source, |_| None).unwrap();
     assert_eq!(
         prepared
             .geosets

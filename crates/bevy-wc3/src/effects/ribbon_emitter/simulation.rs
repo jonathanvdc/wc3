@@ -2,11 +2,11 @@
 use crate::preparation::shared::Shared;
 use bevy::prelude::*;
 use std::sync::Arc;
-use wc3::model::mdlx::animation::Animatable;
-use wc3::model::mdlx::animation::TextureAnimation;
-use wc3::model::mdlx::emitters::RibbonEmitter;
-use wc3::model::mdlx::materials::Layer;
-use wc3::model::mdlx::V1800;
+use wc3::model::formats::mdlx::animation::Animatable;
+use wc3::model::formats::mdlx::animation::TextureAnimation;
+use wc3::model::formats::mdlx::emitters::RibbonEmitter;
+use wc3::model::formats::mdlx::materials::Layer;
+use wc3::model::formats::mdlx::V1800;
 
 use crate::effects::records::RingCursor;
 use crate::effects::simulation::{

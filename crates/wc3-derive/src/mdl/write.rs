@@ -39,22 +39,24 @@ pub(super) fn expand(
                 let ty = &field.ty;
                 let local = &field.local;
                 state_names.push(local.clone());
-                state_types.push(quote!(<#ty as ::wc3::model::mdlx::mdl::WriteFields>::State));
-                required_flags.push(quote!(let #local = ::wc3::model::mdlx::mdl::WriteFields::prepare_mdl_fields(&#access, __wc3_mdl_dialect)?;));
-                writes.push(quote!(::wc3::model::mdlx::mdl::WriteFields::write_mdl_fields(&#access, #local, __wc3_mdl_writer)?;));
+                state_types
+                    .push(quote!(<#ty as ::wc3::model::formats::mdlx::mdl::WriteFields>::State));
+                required_flags.push(quote!(let #local = ::wc3::model::formats::mdlx::mdl::WriteFields::prepare_mdl_fields(&#access, __wc3_mdl_dialect)?;));
+                writes.push(quote!(::wc3::model::formats::mdlx::mdl::WriteFields::write_mdl_fields(&#access, #local, __wc3_mdl_writer)?;));
             }
             Kind::Block(mdl_name) => {
                 let ty = &field.ty;
                 let local = &field.local;
                 state_names.push(local.clone());
-                state_types.push(quote!(<#ty as ::wc3::model::mdlx::mdl::WriteFields>::State));
-                required_flags.push(quote!(let #local = ::wc3::model::mdlx::mdl::WriteFields::prepare_mdl_fields(&#access, __wc3_mdl_dialect)?;));
+                state_types
+                    .push(quote!(<#ty as ::wc3::model::formats::mdlx::mdl::WriteFields>::State));
+                required_flags.push(quote!(let #local = ::wc3::model::formats::mdlx::mdl::WriteFields::prepare_mdl_fields(&#access, __wc3_mdl_dialect)?;));
                 writes.push(quote! {
                     __wc3_mdl_writer.indent()?;
                     __wc3_mdl_writer.identifier(#mdl_name)?;
-                    ::wc3::model::mdlx::mdl::WriteFields::write_mdl_headers(&#access, __wc3_mdl_writer)?;
+                    ::wc3::model::formats::mdlx::mdl::WriteFields::write_mdl_headers(&#access, __wc3_mdl_writer)?;
                     __wc3_mdl_writer.open_body()?;
-                    ::wc3::model::mdlx::mdl::WriteFields::write_mdl_fields(&#access, #local, __wc3_mdl_writer)?;
+                    ::wc3::model::formats::mdlx::mdl::WriteFields::write_mdl_fields(&#access, #local, __wc3_mdl_writer)?;
                     __wc3_mdl_writer.end_block()?;
                 });
             }
@@ -70,14 +72,14 @@ pub(super) fn expand(
                     required_flags.push(quote! {
                         for (index, item) in (#access).iter().enumerate() {
                             if (#access).iter().take(index).any(|previous| #key(#previous) == #key(#item)) {
-                                return Err(::wc3::model::mdlx::mdl::WriteError::InvalidStructure { field: "duplicate repeated record" }.into());
+                                return Err(::wc3::model::formats::mdlx::mdl::WriteError::InvalidStructure { field: "duplicate repeated record" }.into());
                             }
                         }
                     });
                 }
                 if field.virtual_field {
                     writes.push(quote!(for item in (#access).iter() {
-                        use ::wc3::model::mdlx::mdl::Write as _;
+                        use ::wc3::model::formats::mdlx::mdl::Write as _;
                         item.write_mdl(__wc3_mdl_writer)?;
                     }));
                 } else {
@@ -90,8 +92,8 @@ pub(super) fn expand(
             }
             Kind::DelegatedProperty(mdl_name) => {
                 let hive_name = field.hive_name.as_ref().unwrap_or(mdl_name);
-                required_flags.push(quote!(::wc3::model::mdlx::mdl::WriteProperty::validate_mdl_property(&#access, if __wc3_mdl_dialect == ::wc3::model::mdlx::mdl::Dialect::HiveWorkshop { #hive_name } else { #mdl_name }, __wc3_mdl_dialect)?;));
-                writes.push(quote!(::wc3::model::mdlx::mdl::WriteProperty::write_mdl_property(&#access, if __wc3_mdl_writer.dialect() == ::wc3::model::mdlx::mdl::Dialect::HiveWorkshop { #hive_name } else { #mdl_name }, __wc3_mdl_writer)?;));
+                required_flags.push(quote!(::wc3::model::formats::mdlx::mdl::WriteProperty::validate_mdl_property(&#access, if __wc3_mdl_dialect == ::wc3::model::formats::mdlx::mdl::Dialect::HiveWorkshop { #hive_name } else { #mdl_name }, __wc3_mdl_dialect)?;));
+                writes.push(quote!(::wc3::model::formats::mdlx::mdl::WriteProperty::write_mdl_property(&#access, if __wc3_mdl_writer.dialect() == ::wc3::model::formats::mdlx::mdl::Dialect::HiveWorkshop { #hive_name } else { #mdl_name }, __wc3_mdl_writer)?;));
             }
             Kind::Animatable(mdl_name) => {
                 let access = field.borrow(quote!(self));
@@ -114,12 +116,12 @@ pub(super) fn expand(
                 state_names.push(emit.clone());
                 state_types.push(quote!(bool));
                 required_flags.push(quote! {
-                    let #emit = (#enabled && #available && ::wc3::model::mdlx::mdl::WriteAnimationProperty::has_animation(#access)) || #condition;
-                    if !#emit && !::wc3::model::mdlx::mdl::ValueEq::eq_mdl(#access, &#default) {
-                        return Err(::wc3::model::mdlx::mdl::WriteError::Unrepresentable { field: concat!("nondefault omitted property ", #mdl_name) }.into());
+                    let #emit = (#enabled && #available && ::wc3::model::formats::mdlx::mdl::WriteAnimationProperty::has_animation(#access)) || #condition;
+                    if !#emit && !::wc3::model::formats::mdlx::mdl::ValueEq::eq_mdl(#access, &#default) {
+                        return Err(::wc3::model::formats::mdlx::mdl::WriteError::Unrepresentable { field: concat!("nondefault omitted property ", #mdl_name) }.into());
                     }
                 });
-                writes.push(quote!(if #emit { ::wc3::model::mdlx::mdl::WriteAnimationProperty::write_mdl_animation_property(#access, #mdl_name, __wc3_mdl_writer)?; }));
+                writes.push(quote!(if #emit { ::wc3::model::formats::mdlx::mdl::WriteAnimationProperty::write_mdl_animation_property(#access, #mdl_name, __wc3_mdl_writer)?; }));
             }
             Kind::Property(mdl_name) | Kind::StaticProperty(mdl_name) => {
                 let prefix = matches!(kind, Kind::StaticProperty(_))
@@ -127,7 +129,7 @@ pub(super) fn expand(
                 let hive_name = field.hive_name.as_ref().unwrap_or(mdl_name);
                 let write = quote! {
                     __wc3_mdl_writer.indent()?; #prefix
-                    __wc3_mdl_writer.identifier(if __wc3_mdl_writer.dialect() == ::wc3::model::mdlx::mdl::Dialect::HiveWorkshop { #hive_name } else { #mdl_name })?;
+                    __wc3_mdl_writer.identifier(if __wc3_mdl_writer.dialect() == ::wc3::model::formats::mdlx::mdl::Dialect::HiveWorkshop { #hive_name } else { #mdl_name })?;
                     __wc3_mdl_writer.raw(" ")?; #value __wc3_mdl_writer.raw(",\n")?;
                 };
                 let mut condition = omission::predicate(field);
@@ -138,8 +140,8 @@ pub(super) fn expand(
                     let default = omission::default_value(field, options);
                     required_flags.push(quote! {
                         let #emit = #condition;
-                        if !#emit && !::wc3::model::mdlx::mdl::ValueEq::eq_mdl(&#access, &#default) {
-                            return Err(::wc3::model::mdlx::mdl::WriteError::Unrepresentable { field: concat!("nondefault omitted property ", #mdl_name) }.into());
+                        if !#emit && !::wc3::model::formats::mdlx::mdl::ValueEq::eq_mdl(&#access, &#default) {
+                            return Err(::wc3::model::formats::mdlx::mdl::WriteError::Unrepresentable { field: concat!("nondefault omitted property ", #mdl_name) }.into());
                         }
                     });
                     condition = quote!(#emit);
@@ -151,14 +153,14 @@ pub(super) fn expand(
                     .iter()
                     .fold(field.allow_bits, |bits, (_, mask)| bits | mask);
                 required_flags.push(quote! {
-                        if ::wc3::model::mdlx::mdl::BitRange::<u32>::bit_range(&#access, 31, 0) & !#known != 0 { return ::core::result::Result::Err(::wc3::model::mdlx::mdl::WriteError::Unrepresentable { field: concat!("unknown flag bits in ", stringify!(#member)) }.into()); }
+                        if ::wc3::model::formats::mdlx::mdl::BitRange::<u32>::bit_range(&#access, 31, 0) & !#known != 0 { return ::core::result::Result::Err(::wc3::model::formats::mdlx::mdl::WriteError::Unrepresentable { field: concat!("unknown flag bits in ", stringify!(#member)) }.into()); }
                     });
                 if options.default && field.default.is_none() && !field.virtual_field {
                     required_flags.push(quote! {
-                            let defaults = ::wc3::model::mdlx::mdl::BitRange::<u32>::bit_range(&#default_access, 31, 0);
-                            let actual = ::wc3::model::mdlx::mdl::BitRange::<u32>::bit_range(&#access, 31, 0);
+                            let defaults = ::wc3::model::formats::mdlx::mdl::BitRange::<u32>::bit_range(&#default_access, 31, 0);
+                            let actual = ::wc3::model::formats::mdlx::mdl::BitRange::<u32>::bit_range(&#access, 31, 0);
                             if defaults & !actual != 0 {
-                                return ::core::result::Result::Err(::wc3::model::mdlx::mdl::WriteError::Unrepresentable { field: "cleared flag supplied by record default" }.into());
+                                return ::core::result::Result::Err(::wc3::model::formats::mdlx::mdl::WriteError::Unrepresentable { field: "cleared flag supplied by record default" }.into());
                             }
                         });
                 }
@@ -178,24 +180,24 @@ pub(super) fn expand(
                     })
                     .collect::<Vec<_>>();
                 let emit = |mappings: &Vec<(syn::LitStr, u32)>| {
-                    mappings.iter().map(|(name, mask)| quote!(if ::wc3::model::mdlx::mdl::BitRange::<u32>::bit_range(&#access, 31, 0) & #mask != 0 { __wc3_mdl_writer.flag(#name)?; })).collect::<Vec<_>>()
+                    mappings.iter().map(|(name, mask)| quote!(if ::wc3::model::formats::mdlx::mdl::BitRange::<u32>::bit_range(&#access, 31, 0) & #mask != 0 { __wc3_mdl_writer.flag(#name)?; })).collect::<Vec<_>>()
                 };
                 let engine_writes = emit(flags);
                 let hive_writes = emit(&hive);
                 writes.push(quote! {
-                    if __wc3_mdl_writer.dialect() == ::wc3::model::mdlx::mdl::Dialect::HiveWorkshop { #(#hive_writes)* } else { #(#engine_writes)* }
+                    if __wc3_mdl_writer.dialect() == ::wc3::model::formats::mdlx::mdl::Dialect::HiveWorkshop { #(#hive_writes)* } else { #(#engine_writes)* }
                 });
             }
             Kind::Flag(mdl_name) => {
                 if field.default.is_none() && !options.default {
                     required_flags.push(quote! {
-                        if !#access { return ::core::result::Result::Err(::wc3::model::mdlx::mdl::WriteError::InvalidStructure { field: concat!("absent required flag ", #mdl_name) }.into()); }
+                        if !#access { return ::core::result::Result::Err(::wc3::model::formats::mdlx::mdl::WriteError::InvalidStructure { field: concat!("absent required flag ", #mdl_name) }.into()); }
                     });
                 }
                 if options.default && field.default.is_none() {
                     required_flags.push(quote! {
                             if #default_access && !#access {
-                                return ::core::result::Result::Err(::wc3::model::mdlx::mdl::WriteError::Unrepresentable { field: "false flag supplied by record default" }.into());
+                                return ::core::result::Result::Err(::wc3::model::formats::mdlx::mdl::WriteError::Unrepresentable { field: "false flag supplied by record default" }.into());
                             }
                         });
                 }
@@ -215,7 +217,7 @@ pub(super) fn expand(
                 headers.push(quote!(__wc3_mdl_writer.raw(" ")?; #value));
             }
             Kind::Flatten => {
-                headers.push(quote!(::wc3::model::mdlx::mdl::WriteFields::write_mdl_headers(&#access, __wc3_mdl_writer)?;));
+                headers.push(quote!(::wc3::model::formats::mdlx::mdl::WriteFields::write_mdl_headers(&#access, __wc3_mdl_writer)?;));
             }
             _ => {}
         }
@@ -231,40 +233,40 @@ pub(super) fn expand(
     let (state_name, state_definition) =
         state_type(input, &generics, "Write", &state_names, &state_types);
     let check_names = schema.fields.iter().any(|field| matches!(field.kind, Kind::Flatten)).then(|| quote! {
-        if !::wc3::model::mdlx::mdl::field_names_unique(<Self as ::wc3::model::mdlx::mdl::WriteFields>::visit_mdl_names) {
-            return Err(::wc3::model::mdlx::mdl::WriteError::InvalidStructure { field: "overlapping flattened MDL field names" }.into());
+        if !::wc3::model::formats::mdlx::mdl::field_names_unique(<Self as ::wc3::model::formats::mdlx::mdl::WriteFields>::visit_mdl_names) {
+            return Err(::wc3::model::formats::mdlx::mdl::WriteError::InvalidStructure { field: "overlapping flattened MDL field names" }.into());
         }
     });
     let write_impl = block.map(|block| quote! {
-        impl #impl_generics ::wc3::model::mdlx::mdl::Write for #name #ty_generics #where_clause {
-            fn write_mdl<#sink: ::std::io::Write>(&self, __wc3_mdl_writer: &mut ::wc3::model::mdlx::mdl::Writer<#sink>) -> ::core::result::Result<(), ::wc3::model::mdlx::IoError<::wc3::model::mdlx::mdl::WriteError>> {
-                let state = <Self as ::wc3::model::mdlx::mdl::WriteFields>::prepare_mdl_fields(self, __wc3_mdl_writer.dialect())?;
+        impl #impl_generics ::wc3::model::formats::mdlx::mdl::Write for #name #ty_generics #where_clause {
+            fn write_mdl<#sink: ::std::io::Write>(&self, __wc3_mdl_writer: &mut ::wc3::model::formats::mdlx::mdl::Writer<#sink>) -> ::core::result::Result<(), ::wc3::model::formats::mdlx::IoError<::wc3::model::formats::mdlx::mdl::WriteError>> {
+                let state = <Self as ::wc3::model::formats::mdlx::mdl::WriteFields>::prepare_mdl_fields(self, __wc3_mdl_writer.dialect())?;
                 __wc3_mdl_writer.indent()?;
                 __wc3_mdl_writer.identifier(#block)?;
-                <Self as ::wc3::model::mdlx::mdl::WriteFields>::write_mdl_headers(self, __wc3_mdl_writer)?;
+                <Self as ::wc3::model::formats::mdlx::mdl::WriteFields>::write_mdl_headers(self, __wc3_mdl_writer)?;
                 __wc3_mdl_writer.open_body()?;
-                <Self as ::wc3::model::mdlx::mdl::WriteFields>::write_mdl_fields(self, state, __wc3_mdl_writer)?;
+                <Self as ::wc3::model::formats::mdlx::mdl::WriteFields>::write_mdl_fields(self, state, __wc3_mdl_writer)?;
                 __wc3_mdl_writer.end_block()
             }
         }
     });
     Ok(quote! {
         #state_definition
-        impl #impl_generics ::wc3::model::mdlx::mdl::WriteFields for #name #ty_generics #where_clause {
+        impl #impl_generics ::wc3::model::formats::mdlx::mdl::WriteFields for #name #ty_generics #where_clause {
             type State = #state_name #ty_generics;
             fn visit_mdl_names(visitor: &mut dyn FnMut(&'static str, bool)) { #visit_names }
-            fn write_mdl_headers<#sink: ::std::io::Write>(&self, __wc3_mdl_writer: &mut ::wc3::model::mdlx::mdl::Writer<#sink>) -> ::core::result::Result<(), ::wc3::model::mdlx::IoError<::wc3::model::mdlx::mdl::WriteError>> {
+            fn write_mdl_headers<#sink: ::std::io::Write>(&self, __wc3_mdl_writer: &mut ::wc3::model::formats::mdlx::mdl::Writer<#sink>) -> ::core::result::Result<(), ::wc3::model::formats::mdlx::IoError<::wc3::model::formats::mdlx::mdl::WriteError>> {
                 #(#headers)*
                 Ok(())
             }
-            fn prepare_mdl_fields(&self, __wc3_mdl_dialect: ::wc3::model::mdlx::mdl::Dialect) -> ::core::result::Result<Self::State, ::wc3::model::mdlx::mdl::WriteError> {
+            fn prepare_mdl_fields(&self, __wc3_mdl_dialect: ::wc3::model::formats::mdlx::mdl::Dialect) -> ::core::result::Result<Self::State, ::wc3::model::formats::mdlx::mdl::WriteError> {
                 #check_names
                 #validate
                 #initialize_defaults
                 #(#required_flags)*
                 Ok(#state_name { #(#state_names,)* __wc3_mdl_marker: ::core::marker::PhantomData })
             }
-            fn write_mdl_fields<#sink: ::std::io::Write>(&self, state: Self::State, __wc3_mdl_writer: &mut ::wc3::model::mdlx::mdl::Writer<#sink>) -> ::core::result::Result<(), ::wc3::model::mdlx::IoError<::wc3::model::mdlx::mdl::WriteError>> {
+            fn write_mdl_fields<#sink: ::std::io::Write>(&self, state: Self::State, __wc3_mdl_writer: &mut ::wc3::model::formats::mdlx::mdl::Writer<#sink>) -> ::core::result::Result<(), ::wc3::model::formats::mdlx::IoError<::wc3::model::formats::mdlx::mdl::WriteError>> {
                 let #state_name { #(#state_names,)* .. } = state;
                 #(#writes)*
                 Ok(())

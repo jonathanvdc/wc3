@@ -1,8 +1,8 @@
-use wc3::model::semantic::materials::contributions::{
+use wc3::model::materials::contributions::{
     MaskedInput, NormalContributions, PairedInputs, SurfaceContribution,
 };
-use wc3::model::semantic::materials::programmed::{Property, Standard, TextureLayer};
-use wc3::model::semantic::{Link, ValidateLinks};
+use wc3::model::materials::programmed::{Property, Standard, TextureLayer};
+use wc3::model::{Link, ValidateLinks};
 
 #[test]
 fn contribution_compositions_validate_inputs_masks_and_response_independently() {

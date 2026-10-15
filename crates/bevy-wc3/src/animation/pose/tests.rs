@@ -4,15 +4,15 @@ use bevy::ecs::system::SystemState;
 use bevy::transform::TransformSystems;
 use std::collections::HashMap;
 use std::f32::consts::FRAC_PI_2;
-use wc3::model::mdlx::animation::{Track, ValueKeyframe};
-use wc3::model::mdlx::scene::NodeFlags;
+use wc3::model::formats::mdlx::animation::{Track, ValueKeyframe};
+use wc3::model::formats::mdlx::scene::NodeFlags;
 
 use crate::animation::pose::sample_emitter_transform;
-use crate::assets::model::Wc3Model;
+use crate::assets::model::Wc3Document;
 
 fn animation() -> Wc3Animation {
-    let model =
-        Wc3Model::decode_mdl(include_str!("../../../tests/fixtures/geoset_capture.mdl")).unwrap();
+    let model = Wc3Document::decode_mdl(include_str!("../../../tests/fixtures/geoset_capture.mdl"))
+        .unwrap();
     Wc3Animation {
         sequence: 0,
         elapsed_ms: 0.0,
@@ -542,17 +542,17 @@ fn rotation_suppression_and_axis_lock_compose_in_the_effective_parent_frame() {
 fn node_flags_survive_mdl_loading_and_reach_the_spawned_rig() {
     use crate::instance::spawn::{spawn_prepared_model, Wc3NodeEntities};
     use crate::materials::Wc3LayerMaterial;
-    use crate::preparation::prepare_model;
+    use crate::preparation::prepare_document;
     use bevy::ecs::world::CommandQueue;
     use bevy::mesh::skinning::SkinnedMeshInverseBindposes;
 
     let source = include_str!("../../../tests/fixtures/attachment_capture_child.mdl")
         .replace("ObjectId 0,", "ObjectId 0, DontInheritTranslation, DontInheritRotation, DontInheritScaling, Billboarded, BillboardedLockX, BillboardedLockY, BillboardedLockZ, CameraAnchored,");
-    let model = Wc3Model::decode_mdl(&source).unwrap();
+    let model = Wc3Document::decode_mdl(&source).unwrap();
     let mut meshes = Assets::<Mesh>::default();
     let mut materials = Assets::<Wc3LayerMaterial>::default();
     let mut bindposes = Assets::<SkinnedMeshInverseBindposes>::default();
-    let prepared = prepare_model(&mut meshes, &mut bindposes, &model, |_| None).unwrap();
+    let prepared = prepare_document(&mut meshes, &mut bindposes, &model, |_| None).unwrap();
     let mut world = World::new();
     let mut queue = CommandQueue::default();
     let mut commands = Commands::new(&mut queue, &world);
@@ -568,7 +568,7 @@ fn node_flags_survive_mdl_loading_and_reach_the_spawned_rig() {
 #[test]
 fn transitions_cache_authored_poses_and_share_birth_sampling() {
     use std::time::Duration;
-    use wc3::model::mdlx::animation::Sequence;
+    use wc3::model::formats::mdlx::animation::Sequence;
 
     let (mut app, root) = scene();
     {

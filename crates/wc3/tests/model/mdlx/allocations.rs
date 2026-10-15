@@ -4,15 +4,15 @@ use std::alloc::{GlobalAlloc, Layout, System};
 use std::cell::Cell;
 use std::io::{Cursor as IoCursor, Write};
 use std::ptr::eq;
-use wc3::model::mdlx::animation::Track;
-use wc3::model::mdlx::animation::{GlobalSequence, Interpolation, Sequence};
-use wc3::model::mdlx::materials::Texture;
-use wc3::model::mdlx::mdl::Read as _;
-use wc3::model::mdlx::mdl::{Lexer, Parser, Writer};
-use wc3::model::mdlx::scene::ModelInfo;
-use wc3::model::mdlx::Encoder;
-use wc3::model::mdlx::Vec3;
-use wc3::model::mdlx::ZeroVec;
+use wc3::model::formats::mdlx::animation::Track;
+use wc3::model::formats::mdlx::animation::{GlobalSequence, Interpolation, Sequence};
+use wc3::model::formats::mdlx::materials::Texture;
+use wc3::model::formats::mdlx::mdl::Read as _;
+use wc3::model::formats::mdlx::mdl::{Lexer, Parser, Writer};
+use wc3::model::formats::mdlx::scene::ModelInfo;
+use wc3::model::formats::mdlx::Encoder;
+use wc3::model::formats::mdlx::Vec3;
+use wc3::model::formats::mdlx::ZeroVec;
 
 struct CountingAllocator;
 thread_local! { static ALLOCATIONS: Cell<Option<usize>> = const { Cell::new(None) }; }
@@ -108,8 +108,8 @@ fn counted_records_can_transcode_without_an_owned_collection() {
 
 #[test]
 fn derived_records_write_existing_tracks_without_cloning() {
-    use wc3::model::mdlx::animation::TextureAnimation;
-    use wc3::model::mdlx::emitters::{ParticleEmitter, RibbonEmitter};
+    use wc3::model::formats::mdlx::animation::TextureAnimation;
+    use wc3::model::formats::mdlx::emitters::{ParticleEmitter, RibbonEmitter};
     let texture_animation = TextureAnimation::decode_mdl("TVertexAnim { Scaling 1 { Linear, 0: { 1, 2, 3 }, } Translation 1 { Linear, 0: { 4, 5, 6 }, } }").unwrap();
     let particle = ParticleEmitter::decode_mdl("ParticleEmitter \"a\" { ObjectId 0, EmitterUsesMdl, Translation 1 { Linear, 0: { 1, 2, 3 }, } EmissionRate 1 { Linear, 0: 2.0, } Visibility 1 { Linear, 0: 1.0, } }").unwrap();
     let ribbon = RibbonEmitter::decode_mdl("RibbonEmitter \"a\" { ObjectId 0, HeightAbove 1 { Linear, 0: 2.0, } TextureSlot 1 { Linear, 0: 3, } Visibility 1 { Linear, 0: 1.0, } }").unwrap();
@@ -126,9 +126,9 @@ fn derived_records_write_existing_tracks_without_cloning() {
 
 #[test]
 fn version_selected_lights_and_layers_write_without_cloning_storage() {
-    use wc3::model::mdlx::materials::Layer;
-    use wc3::model::mdlx::scene::Light;
-    use wc3::model::mdlx::{V1600, V1800, V800};
+    use wc3::model::formats::mdlx::materials::Layer;
+    use wc3::model::formats::mdlx::scene::Light;
+    use wc3::model::formats::mdlx::{V1600, V1800, V800};
     let light = Light::<V1600>::decode_mdl("Light \"a\" { ObjectId 0, Ambient, Translation 1 { Linear, 0: { 1, 2, 3 }, } Intensity 1 { Linear, 0: 1.0, } ShadowCastingStart 1 { Linear, 0: 2.0, } Damping 1 { Linear, 0: 0.00001, } }").unwrap();
     let sd = Layer::<V800>::decode_mdl(
         "Layer { Alpha 1 { Linear, 0: 1.0, } TextureID 1 { Linear, 0: 3, } }",
@@ -150,8 +150,8 @@ fn version_selected_lights_and_layers_write_without_cloning_storage() {
 
 #[test]
 fn materials_write_layers_and_tracks_without_cloning() {
-    use wc3::model::mdlx::materials::Material;
-    use wc3::model::mdlx::V900;
+    use wc3::model::formats::mdlx::materials::Material;
+    use wc3::model::formats::mdlx::V900;
 
     let material = Material::<V900>::decode_mdl(
         "Material { Shader \"Shader_HD_DefaultUnit\", Layer { Alpha 1 { Linear, 0: 0.5, } } }",
@@ -168,8 +168,8 @@ fn materials_write_layers_and_tracks_without_cloning() {
 
 #[test]
 fn geosets_write_borrowed_mesh_sections_without_allocating() {
-    use wc3::model::mdlx::geometry::{Geoset, SkinWeights};
-    use wc3::model::mdlx::V1400;
+    use wc3::model::formats::mdlx::geometry::{Geoset, SkinWeights};
+    use wc3::model::formats::mdlx::V1400;
     let mut geoset =
         Geoset::<V1400>::decode_mdl(include_str!("../../fixtures/mdl/quad_geoset.mdl")).unwrap();
     geoset.set_tangents(Some(ZeroVec::alloc_from_slice(&[[1.0, 0.0, 0.0, -1.0]; 4])));
@@ -193,12 +193,13 @@ fn geosets_write_borrowed_mesh_sections_without_allocating() {
 
 #[test]
 fn model_assembly_writes_borrowed_collections_without_allocating() {
-    use wc3::model::mdlx::chunks::{GlidersChunk, GlobalSequencesChunk};
-    use wc3::model::mdlx::geometry::Geoset;
-    use wc3::model::mdlx::scene::Glider;
-    use wc3::model::mdlx::{Model, V800};
+    use wc3::model::formats::mdlx::chunks::{GlidersChunk, GlobalSequencesChunk};
+    use wc3::model::formats::mdlx::geometry::Geoset;
+    use wc3::model::formats::mdlx::scene::Glider;
+    use wc3::model::formats::mdlx::{Document, V800};
     let mut model =
-        Model::<V800>::decode_mdl("Version { FormatVersion 800, } Model \"Borrowed\" {}").unwrap();
+        Document::<V800>::decode_mdl("Version { FormatVersion 800, } Model \"Borrowed\" {}")
+            .unwrap();
     model.set_geosets([Geoset::<V800>::decode_mdl(include_str!(
         "../../fixtures/mdl/quad_geoset.mdl"
     ))
@@ -223,9 +224,9 @@ fn model_assembly_writes_borrowed_collections_without_allocating() {
 
 #[test]
 fn cameras_particle2_and_popcorn_write_borrowed_tracks_without_allocating() {
-    use wc3::model::mdlx::emitters::{ParticleEmitter2, PopcornEmitter};
-    use wc3::model::mdlx::scene::Camera;
-    use wc3::model::mdlx::V1800;
+    use wc3::model::formats::mdlx::emitters::{ParticleEmitter2, PopcornEmitter};
+    use wc3::model::formats::mdlx::scene::Camera;
+    use wc3::model::formats::mdlx::V1800;
     let camera = Camera::<V1800>::decode_mdl("Camera \"c\" { FieldOfView 1, FarClip 100, Translation 1 { Linear, -1: { 1, 2, 3 }, } DOFDistance 20, Target { Translation 1 { Linear, -2: { 3, 2, 1 }, } } Visibility 1 { Linear, 0: 1, } }").unwrap();
     let particle = ParticleEmitter2::decode_mdl("ParticleEmitter2 \"p\" { ObjectId 0, Speed 1 { Linear, -1: 2, } Visibility 1 { Linear, 0: 1, } }").unwrap();
     let popcorn = PopcornEmitter::decode_mdl("ParticleEmitterPopcorn \"p\" { ObjectId 0, Color 1 { Linear, -2: { 1, 2, 3 }, } LifeSpan 1 { Linear, 0: 1, } }").unwrap();
@@ -242,10 +243,10 @@ fn cameras_particle2_and_popcorn_write_borrowed_tracks_without_allocating() {
 
 #[test]
 fn hive_dialect_writes_named_tracks_and_mesh_data_without_allocating() {
-    use wc3::model::mdlx::geometry::Geoset;
-    use wc3::model::mdlx::materials::Layer;
-    use wc3::model::mdlx::mdl::Dialect;
-    use wc3::model::mdlx::{V1400, V1800};
+    use wc3::model::formats::mdlx::geometry::Geoset;
+    use wc3::model::formats::mdlx::materials::Layer;
+    use wc3::model::formats::mdlx::mdl::Dialect;
+    use wc3::model::formats::mdlx::{V1400, V1800};
     let layer = Layer::<V1800>::decode_mdl("Layer { ShaderTypeId 1, NormalTextureID 1 { Hermite, GlobalSeqId 2, -1: 3, InTan 4, OutTan 5, } ORMTextureID 1 { Linear, 0: 1, } }").unwrap();
     let source = include_str!("../../fixtures/mdl/quad_geoset.mdl");
     let end = source.rfind('}').unwrap();
@@ -264,7 +265,7 @@ fn hive_dialect_writes_named_tracks_and_mesh_data_without_allocating() {
 
 #[test]
 fn borrowed_arrays_clone_sample_and_encode_without_allocating() {
-    use wc3::model::mdlx::mdx::{Read as _, Write as _};
+    use wc3::model::formats::mdlx::mdx::{Read as _, Write as _};
     let track = Track::<f32>::decode_mdl("Track 2 { Linear, 0: 0, 100: 1, }").unwrap();
     let bytes = track.encode_mdx().unwrap();
     let track = Track::<f32>::decode_mdx(&bytes).unwrap();
@@ -292,12 +293,14 @@ fn borrowed_arrays_clone_sample_and_encode_without_allocating() {
 
 #[test]
 fn named_collection_iterators_borrow_duplicate_chunks_without_allocating() {
-    use wc3::model::mdlx::chunks::{ModelChunk, RawChunk, SequencesChunk, UnknownChunk};
-    use wc3::model::mdlx::{CommonModelAccess, DynamicModel, Extended, Model, NoExtensions, V800};
+    use wc3::model::formats::mdlx::chunks::{ModelChunk, RawChunk, SequencesChunk, UnknownChunk};
+    use wc3::model::formats::mdlx::{
+        CommonModelAccess, Document, DynamicDocument, Extended, NoExtensions, V800,
+    };
 
     let first = Sequence::new("Stand", [0, 100]).unwrap();
     let second = Sequence::new("Walk", [101, 200]).unwrap();
-    let mut model = Model::<Extended<V800, NoExtensions>>::new();
+    let mut model = Document::<Extended<V800, NoExtensions>>::new();
     model
         .chunks
         .push(ModelChunk::from(SequencesChunk::new(vec![first.clone()])));
@@ -326,7 +329,7 @@ fn named_collection_iterators_borrow_duplicate_chunks_without_allocating() {
     assert_eq!(allocations, 0);
     assert_eq!(output, [first, second]);
 
-    let runtime = DynamicModel::<NoExtensions>::V800(model);
+    let runtime = DynamicDocument::<NoExtensions>::V800(model);
     let (names, allocations) = measured(|| {
         let mut records = runtime.sequences();
         let first = records.next().unwrap().name.text();
@@ -341,14 +344,16 @@ fn named_collection_iterators_borrow_duplicate_chunks_without_allocating() {
 
 #[test]
 fn runtime_collection_getters_do_not_allocate_for_any_version() {
-    use wc3::model::mdlx::emitters::PopcornEmitter;
-    use wc3::model::mdlx::geometry::BindPoseMatrix;
-    use wc3::model::mdlx::scene::{FaceFx, Node};
-    use wc3::model::mdlx::{CommonModelAccess, DynamicModel, Model, NoExtensions, TryModelAccess};
+    use wc3::model::formats::mdlx::emitters::PopcornEmitter;
+    use wc3::model::formats::mdlx::geometry::BindPoseMatrix;
+    use wc3::model::formats::mdlx::scene::{FaceFx, Node};
+    use wc3::model::formats::mdlx::{
+        CommonModelAccess, Document, DynamicDocument, NoExtensions, TryModelAccess,
+    };
 
     macro_rules! check_version {
         ($variant:ident) => {{
-            let mut model = DynamicModel::<NoExtensions>::$variant(Model::new());
+            let mut model = DynamicDocument::<NoExtensions>::$variant(Document::new());
             model.set_sequences([Sequence::new("Stand", [0, 100]).unwrap()]);
             model.set_textures([Texture::new("body.blp").unwrap()]);
             model.set_helpers([Node::new("Root", 0).unwrap()]);
@@ -398,11 +403,11 @@ fn runtime_collection_getters_do_not_allocate_for_any_version() {
 
 #[test]
 fn named_geometry_and_material_getters_stream_without_allocating() {
-    use wc3::model::mdlx::mdx::Read as _;
-    use wc3::model::mdlx::{Model, V800};
+    use wc3::model::formats::mdlx::mdx::Read as _;
+    use wc3::model::formats::mdlx::{Document, V800};
 
     let model =
-        Model::<V800>::decode_mdx(include_bytes!("../../fixtures/mdl/quad_model.mdx")).unwrap();
+        Document::<V800>::decode_mdx(include_bytes!("../../fixtures/mdl/quad_model.mdx")).unwrap();
     let ((vertices, materials), allocations) = measured(|| {
         let vertices = model
             .geosets()
@@ -433,8 +438,8 @@ fn mdl_tracks_construct_encoded_keys_without_an_intermediate_vector() {
 
 #[test]
 fn mdl_skin_and_extent_adapters_move_their_encoded_buffers() {
-    use wc3::model::mdlx::geometry::Geoset;
-    use wc3::model::mdlx::V1400;
+    use wc3::model::formats::mdlx::geometry::Geoset;
+    use wc3::model::formats::mdlx::V1400;
 
     let source = include_str!("../../fixtures/mdl/quad_geoset.mdl");
     let end = source.rfind('}').unwrap();
@@ -451,9 +456,9 @@ fn mdl_skin_and_extent_adapters_move_their_encoded_buffers() {
 
 #[test]
 fn encoded_arrays_move_into_track_constructors_and_skin_setters() {
-    use wc3::model::mdlx::animation::ValueKeyframe;
-    use wc3::model::mdlx::geometry::{Geoset, SkinWeights};
-    use wc3::model::mdlx::{ZeroVec, V1300};
+    use wc3::model::formats::mdlx::animation::ValueKeyframe;
+    use wc3::model::formats::mdlx::geometry::{Geoset, SkinWeights};
+    use wc3::model::formats::mdlx::{ZeroVec, V1300};
 
     let keys: ZeroVec<ValueKeyframe<f32>> = [ValueKeyframe {
         frame: 0,
@@ -491,7 +496,7 @@ fn encoded_arrays_move_into_track_constructors_and_skin_setters() {
 
 #[test]
 fn input_conversion_encodes_once_and_moves_existing_storage_without_allocating() {
-    use wc3::model::mdlx::{Borrowed, IntoZeroVec};
+    use wc3::model::formats::mdlx::{Borrowed, IntoZeroVec};
 
     let (owned, allocations): (ZeroVec<u32>, _) = measured(|| [1, 2, 3].into_zero_vec());
     assert_eq!(allocations, 1);

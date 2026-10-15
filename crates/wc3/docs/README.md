@@ -4,7 +4,12 @@ Start with the [crate README](../README.md) to choose model, texture, or archive
 APIs and enable the optional codecs you need. These guides connect that overview
 to editing workflows and runnable tools.
 
-- [Warcraft III model editing](models.md) explains version selection, collection
+- [Semantic model graphs](semantic.md) explains graph relationships, typed
+  authoring profiles, dependency ownership, playback declarations, borrowed arrays,
+  widening, and checked edits.
+- [Model import and export](conversion.md) explains native imports and export plans,
+  concrete profiles, selected appearance, and representability policies.
+- [Warcraft III native document editing](models.md) explains version selection, collection
   edits, buffer ownership, conversion, and resource references.
 - [World of Warcraft M2 models](m2.md) explains core layouts, supporting documents,
   borrowed records and geometry streams, dependency resolution, and coordinated
@@ -17,26 +22,23 @@ to editing workflows and runnable tools.
   D4 format hashes, external payload address spaces, and semantic conversion limits.
 - [Diablo textures](tex.md) explains typed TEX containers, explicit payload
   resolution, encoded editing, and optional pixel conversion.
-- [Semantic model graphs](semantic.md) explains graph relationships, typed
-  authoring profiles, dependency ownership, playback declarations, borrowed arrays,
-  widening, and checked edits.
-- [Model conversions](conversion.md) explains native imports and export plans,
-  concrete profiles, selected appearance, and representability policies.
 - [Asset command-line tools](tools.md) covers inspection, dependency reporting,
   repathing, conversion, texture export, and archive operations.
 
 The API reference contains the detailed contracts and executable examples:
 
-- [MDLX models](https://docs.rs/wc3/latest/wc3/model/mdlx/) describes record organization
-  and application chunks; [MDX](https://docs.rs/wc3/latest/wc3/model/mdlx/mdx/) and
-  [MDL](https://docs.rs/wc3/latest/wc3/model/mdlx/mdl/) describe binary and text codecs.
-- [M2 models](https://docs.rs/wc3/latest/wc3/model/m2/) describes native core and
+- [Model graphs](https://docs.rs/wc3/latest/wc3/model/) describes the default model
+  representation, profiles, checked edits, and native adapters.
+- [MDLX models](https://docs.rs/wc3/latest/wc3/model/formats/mdlx/) describes record organization
+  and application chunks; [MDX](https://docs.rs/wc3/latest/wc3/model/formats/mdlx/mdx/) and
+  [MDL](https://docs.rs/wc3/latest/wc3/model/formats/mdlx/mdl/) describe binary and text codecs.
+- [M2 models](https://docs.rs/wc3/latest/wc3/model/formats/m2/) describes native core and
   companion records, typed envelopes, dependency identities, and bundle assembly.
-- [WMO models](https://docs.rs/wc3/latest/wc3/model/wmo/) describes root and group
+- [WMO models](https://docs.rs/wc3/latest/wc3/model/formats/wmo/) describes root and group
   documents, native chunk records, validation, and historical layouts.
-- [M3 models](https://docs.rs/wc3/latest/wc3/model/m3/) describes native section
+- [M3 models](https://docs.rs/wc3/latest/wc3/model/formats/m3/) describes native section
   records, reference envelopes, graph validation, and external animations.
-- [Diablo models](https://docs.rs/wc3/latest/wc3/model/diablo/) describes typed
+- [Diablo models](https://docs.rs/wc3/latest/wc3/model/formats/diablo/) describes typed
   appearance, actor, animation, and material documents.
 - [Diablo textures](https://docs.rs/wc3/latest/wc3/tex/) describes native TEX storage
   and optional pixel conversion.

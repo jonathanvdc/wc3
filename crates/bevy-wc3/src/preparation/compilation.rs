@@ -1,11 +1,11 @@
 //! Selective ownership conversion of decoded runtime records.
 use super::shared::{RuntimeNode, Shared};
-use wc3::model::mdlx::animation::{GeosetAnimation, TextureAnimation};
-use wc3::model::mdlx::chunks::ModelChunk;
-use wc3::model::mdlx::emitters::{ParticleEmitter, ParticleEmitter2, RibbonEmitter};
-use wc3::model::mdlx::materials::Material;
-use wc3::model::mdlx::scene::{Attachment, Camera, EventObject, Light};
-use wc3::model::mdlx::{Model, V1800};
+use wc3::model::formats::mdlx::animation::{GeosetAnimation, TextureAnimation};
+use wc3::model::formats::mdlx::chunks::ModelChunk;
+use wc3::model::formats::mdlx::emitters::{ParticleEmitter, ParticleEmitter2, RibbonEmitter};
+use wc3::model::formats::mdlx::materials::Material;
+use wc3::model::formats::mdlx::scene::{Attachment, Camera, EventObject, Light};
+use wc3::model::formats::mdlx::{Document, V1800};
 
 #[derive(Default)]
 pub(super) struct RuntimeRecords {
@@ -23,7 +23,7 @@ pub(super) struct RuntimeRecords {
 }
 
 impl RuntimeRecords {
-    pub fn consume(model: Model<'_, V1800>) -> Self {
+    pub fn consume(model: Document<'_, V1800>) -> Self {
         let mut result = Self::default();
         for chunk in model.chunks {
             macro_rules! definitions {

@@ -1,24 +1,25 @@
-use wc3::model::mdlx::chunks::ModelChunk;
-use wc3::model::mdlx::chunks::RawChunk;
-use wc3::model::mdlx::mdl::Read as _;
-use wc3::model::mdlx::mdx::Read as _;
-use wc3::model::mdlx::mdx::Write as _;
+use wc3::model::formats::mdlx::chunks::ModelChunk;
+use wc3::model::formats::mdlx::chunks::RawChunk;
+use wc3::model::formats::mdlx::mdl::Read as _;
+use wc3::model::formats::mdlx::mdx::Read as _;
+use wc3::model::formats::mdlx::mdx::Write as _;
 
-use wc3::model::mdlx::materials::{Texture, TextureFlags};
-use wc3::model::mdlx::mdl::Writer;
-use wc3::model::mdlx::Model;
+use wc3::model::formats::mdlx::materials::{Texture, TextureFlags};
+use wc3::model::formats::mdlx::mdl::Writer;
+use wc3::model::formats::mdlx::Document;
 
 #[test]
 fn texture_fields_round_trip() {
     let mut texture = Texture::new("Textures\\Footman.blp").unwrap();
     texture.replaceable_id = 1;
     texture.flags = TextureFlags(3);
-    let mut model = Model::<wc3::model::mdlx::V1800>::new();
+    let mut model = Document::<wc3::model::formats::mdlx::V1800>::new();
     model.set_textures([texture]);
 
-    let decoded = Model::<wc3::model::mdlx::V1800>::decode_mdx(&model.encode_mdx().unwrap())
-        .unwrap()
-        .into_owned();
+    let decoded =
+        Document::<wc3::model::formats::mdlx::V1800>::decode_mdx(&model.encode_mdx().unwrap())
+            .unwrap()
+            .into_owned();
     let texture = &decoded.textures().next().unwrap();
     assert_eq!(texture.path.text(), "Textures\\Footman.blp");
     assert_eq!(texture.replaceable_id, 1);
@@ -28,7 +29,7 @@ fn texture_fields_round_trip() {
 
 #[test]
 fn texture_path_padding_roundtrips_and_is_cleared_when_replacing_the_path() {
-    let mut model = Model::<wc3::model::mdlx::V800>::new();
+    let mut model = Document::<wc3::model::formats::mdlx::V800>::new();
     let mut data = Texture::new("a.blp").unwrap().encode_mdx().unwrap();
     data[260..264].copy_from_slice(&[9, 8, 7, 6]);
     model

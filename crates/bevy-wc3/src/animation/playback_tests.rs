@@ -1,5 +1,5 @@
 use super::*;
-use wc3::model::mdlx::animation::Sequence;
+use wc3::model::formats::mdlx::animation::Sequence;
 
 fn animation() -> Wc3Animation {
     Wc3Animation {

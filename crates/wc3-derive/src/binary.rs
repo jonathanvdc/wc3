@@ -52,9 +52,9 @@ fn expand_checked(input: DeriveInput, operation: Operation, format: Format) -> R
     let m2 = matches!(format, Format::M2);
     let m3 = matches!(format, Format::M3);
     let codec = match format {
-        Format::M2 => quote!(::wc3::model::m2),
-        Format::Wmo => quote!(::wc3::model::wmo),
-        Format::M3 => quote!(::wc3::model::m3),
+        Format::M2 => quote!(::wc3::model::formats::m2),
+        Format::Wmo => quote!(::wc3::model::formats::wmo),
+        Format::M3 => quote!(::wc3::model::formats::m3),
     };
     let envelope = fresh_ident(&input, "__M3Envelope");
     let envelope_args = if m3 { quote!(<#envelope>) } else { quote!() };

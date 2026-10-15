@@ -1,6 +1,6 @@
-use wc3::model::mdlx::animation::{GeosetAnimationFlags, SequenceFlags};
-use wc3::model::mdlx::materials::{LayerShadingFlags, MaterialRenderFlags, TextureFlags};
-use wc3::model::mdlx::scene::NodeFlags;
+use wc3::model::formats::mdlx::animation::{GeosetAnimationFlags, SequenceFlags};
+use wc3::model::formats::mdlx::materials::{LayerShadingFlags, MaterialRenderFlags, TextureFlags};
+use wc3::model::formats::mdlx::scene::NodeFlags;
 
 macro_rules! check_fields {
     ($name:ident, $(($get:ident, $set:ident, $bit:literal)),+ $(,)?) => {{

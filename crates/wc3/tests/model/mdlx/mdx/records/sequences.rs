@@ -1,8 +1,8 @@
-use wc3::model::mdlx::animation::{Sequence, SequenceFlags};
-use wc3::model::mdlx::mdx::Read as _;
-use wc3::model::mdlx::mdx::Write as _;
+use wc3::model::formats::mdlx::animation::{Sequence, SequenceFlags};
+use wc3::model::formats::mdlx::mdx::Read as _;
+use wc3::model::formats::mdlx::mdx::Write as _;
 
-use wc3::model::mdlx::Model;
+use wc3::model::formats::mdlx::Document;
 
 #[test]
 fn sequence_fields_round_trip() {
@@ -16,11 +16,12 @@ fn sequence_fields_round_trip() {
     stand.extent.bounds_radius = 42.0;
     stand.extent.minimum = [-2.0, -3.0, -4.0];
     stand.extent.maximum = [2.0, 3.0, 4.0];
-    let mut model = Model::<wc3::model::mdlx::V800>::new();
+    let mut model = Document::<wc3::model::formats::mdlx::V800>::new();
     model.set_sequences([stand]);
-    let decoded = Model::<wc3::model::mdlx::V800>::decode_mdx(&model.encode_mdx().unwrap())
-        .unwrap()
-        .into_owned();
+    let decoded =
+        Document::<wc3::model::formats::mdlx::V800>::decode_mdx(&model.encode_mdx().unwrap())
+            .unwrap()
+            .into_owned();
     let sequence = &decoded.sequences().next().unwrap();
     assert_eq!(sequence.name.text(), "Stand");
     assert_eq!(sequence.interval, [0, 1000]);

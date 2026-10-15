@@ -114,8 +114,8 @@ impl<T: Debug> Debug for Shared<T> {
     }
 }
 
-use wc3::model::mdlx::animation::Track;
-use wc3::model::mdlx::scene::{Node, NodeFlagInterpretation, NodeFlags};
+use wc3::model::formats::mdlx::animation::Track;
+use wc3::model::formats::mdlx::scene::{Node, NodeFlagInterpretation, NodeFlags};
 /// One node's metadata and shared animation definitions.
 #[derive(Clone)]
 pub(crate) struct RuntimeNode {
@@ -144,7 +144,7 @@ impl RuntimeNode {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use wc3::model::mdlx::animation::ValueKeyframe;
+    use wc3::model::formats::mdlx::animation::ValueKeyframe;
 
     #[test]
     fn cloned_runtime_nodes_share_prepared_key_buffers() {

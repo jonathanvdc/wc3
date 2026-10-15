@@ -1,6 +1,6 @@
 //! Historical regressions from independent framing and embedded-address review.
 use std::borrow::Cow;
-use wc3::model::wmo::{self, Read as _};
+use wc3::model::formats::wmo::{self, Read as _};
 use wmo::codec::Decoder;
 use wmo::group::GroupChunk;
 use wmo::legacy::{Group14, Group16, LegacyGroupChunk, Root14, Root16, RootChunk14};

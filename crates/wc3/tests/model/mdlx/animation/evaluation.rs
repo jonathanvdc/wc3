@@ -1,6 +1,8 @@
 use std::ops::RangeInclusive;
-use wc3::model::mdlx::animation::{Animatable, Interpolate, TangentKeyframe, Track, ValueKeyframe};
-use wc3::model::mdlx::Quaternion;
+use wc3::model::formats::mdlx::animation::{
+    Animatable, Interpolate, TangentKeyframe, Track, ValueKeyframe,
+};
+use wc3::model::formats::mdlx::Quaternion;
 
 fn key(frame: i32, value: f32) -> ValueKeyframe<f32> {
     ValueKeyframe { frame, value }

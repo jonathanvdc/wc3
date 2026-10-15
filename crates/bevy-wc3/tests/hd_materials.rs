@@ -1,12 +1,16 @@
+mod support;
 use bevy::mesh::skinning::SkinnedMeshInverseBindposes;
 use bevy::prelude::{Assets, Mesh};
-use bevy_wc3::{prepare_model, Wc3Model};
+use bevy_wc3::prepare_model;
+use support::NativeFixture;
 
 #[test]
 fn preparation_shares_identical_uv_meshes_and_preserves_distinct_tangent_sources() {
-    let mut source = Wc3Model::decode_mdl(include_str!("fixtures/hd_capture.mdl")).unwrap();
+    let mut source = NativeFixture::decode_mdl(include_str!("fixtures/hd_capture.mdl")).unwrap();
     let first = source.model.geosets().next().unwrap().clone();
     source.model.set_geosets([first]);
+    let animation = source.model.geoset_animations().next().unwrap().clone();
+    source.model.set_geoset_animations([animation]);
     let geoset = source.model.geosets_mut().next().unwrap();
     let uv = geoset.uv_sets()[0].clone();
     let mut coordinate = uv.get(0).unwrap();
@@ -24,7 +28,10 @@ fn preparation_shares_identical_uv_meshes_and_preserves_distinct_tangent_sources
         .collect();
     let mut meshes = Assets::<Mesh>::default();
     let mut binds = Assets::<SkinnedMeshInverseBindposes>::default();
-    let prepared = prepare_model(&mut meshes, &mut binds, &source, |_| None).unwrap();
+    let prepared = prepare_model(&mut meshes, &mut binds, &source.checked().unwrap(), |_| {
+        None
+    })
+    .unwrap();
     assert_eq!(
         meshes.len(),
         2,
@@ -39,7 +46,10 @@ fn preparation_shares_identical_uv_meshes_and_preserves_distinct_tangent_sources
             .collect(),
     ));
     let mut meshes = Assets::<Mesh>::default();
-    let _prepared = prepare_model(&mut meshes, &mut binds, &source, |_| None).unwrap();
+    let _prepared = prepare_model(&mut meshes, &mut binds, &source.checked().unwrap(), |_| {
+        None
+    })
+    .unwrap();
     assert_eq!(
         meshes.len(),
         3,

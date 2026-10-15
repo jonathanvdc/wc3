@@ -1,8 +1,9 @@
 use std::borrow::Cow;
-use wc3::model::conversion::{self, ImportOptions};
-use wc3::model::mdlx::{self, mdl::Read as _, mdx::Read as _, mdx::Write as _};
-use wc3::model::semantic::profiles::{Extends, Mdlx, Narrows, Universal, Wmo, M2, M3};
-use wc3::model::semantic::{
+use wc3::model::conversion::ImportOptions;
+use wc3::model::formats::mdlx::{self, mdl::Read as _, mdx::Read as _, mdx::Write as _};
+use wc3::model::io;
+use wc3::model::profiles::{Extends, Mdlx, Narrows, Universal, Wmo, M2, M3};
+use wc3::model::{
     AppearanceSchema, DrawAppearanceSchema, DrawLooks, Look, Model, Resource, SingleLook, Texture,
     UniversalAppearance,
 };
@@ -10,11 +11,11 @@ use wc3::model::semantic::{
 #[test]
 fn native_widening_and_narrowing_preserves_identities_and_borrowed_geometry() {
     let source =
-        mdlx::Model::<mdlx::V800>::decode_mdl(include_str!("../../fixtures/mdl/quad_model.mdl"))
+        mdlx::Document::<mdlx::V800>::decode_mdl(include_str!("../../fixtures/mdl/quad_model.mdl"))
             .unwrap();
     let bytes = source.encode_mdx().unwrap();
-    let source = mdlx::Model::<mdlx::V800>::decode_mdx(&bytes).unwrap();
-    let asset = conversion::mdlx::import(&source, &ImportOptions::default())
+    let source = mdlx::Document::<mdlx::V800>::decode_mdx(&bytes).unwrap();
+    let asset = io::mdlx::import(&source, &ImportOptions::default())
         .unwrap()
         .value;
     let model_id = asset.id();

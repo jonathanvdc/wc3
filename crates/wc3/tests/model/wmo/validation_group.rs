@@ -1,5 +1,5 @@
 //! Group validation separates local geometry from references into the owning root.
-use wc3::model::wmo::{self, Bundle, Classic, Group, Root, Validate as _};
+use wc3::model::formats::wmo::{self, Bundle, Classic, Group, Root, Validate as _};
 use wmo::codec::Array;
 use wmo::group::GroupChunk;
 use wmo::records::{Batch, BspNode, Material, Triangle};

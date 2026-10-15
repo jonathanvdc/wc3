@@ -65,8 +65,8 @@ impl Display for Error {
 }
 impl StdError for Error {}
 
-impl From<super::super::semantic::Error> for Error {
-    fn from(error: super::super::semantic::Error) -> Self {
+impl From<super::super::Error> for Error {
+    fn from(error: super::super::Error) -> Self {
         Self::new(error.path(), error.message())
     }
 }

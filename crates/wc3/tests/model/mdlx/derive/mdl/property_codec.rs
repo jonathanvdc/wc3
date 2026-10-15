@@ -1,7 +1,9 @@
 use std::io::Write as IoWrite;
-use wc3::model::mdlx::mdl;
-use wc3::model::mdlx::mdl::{Field, Parser, Read as _, ReadErrorKind, Span, Write as _, Writer};
-use wc3::model::mdlx::IoError;
+use wc3::model::formats::mdlx::mdl;
+use wc3::model::formats::mdlx::mdl::{
+    Field, Parser, Read as _, ReadErrorKind, Span, Write as _, Writer,
+};
+use wc3::model::formats::mdlx::IoError;
 
 trait Layout {
     type Extra;

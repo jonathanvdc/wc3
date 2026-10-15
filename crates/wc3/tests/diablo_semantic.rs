@@ -1,9 +1,7 @@
 use wc3::model::common::{IntoZeroVec, ZeroVec};
-use wc3::model::semantic::profiles::diablo::d3::{
-    self, Geometry, NodeRole, VertexExtras, VertexStreams, D3,
-};
-use wc3::model::semantic::profiles::{NoControls, Universal};
-use wc3::model::semantic::{Mesh, Model, Node, Resource, SnoNamespace, Texture};
+use wc3::model::profiles::diablo::d3::{self, Geometry, NodeRole, VertexExtras, VertexStreams, D3};
+use wc3::model::profiles::{NoControls, Universal};
+use wc3::model::{Mesh, Model, Node, Resource, SnoNamespace, Texture};
 
 fn triangle<'a>(positions: &'a [[f32; 3]]) -> Geometry<'a> {
     Geometry::new(
@@ -34,7 +32,7 @@ fn widening_and_narrowing_preserve_geometry_identity_and_borrowed_arrays() {
     let positions = [[0., 0., 0.], [1., 0., 0.], [0., 1., 0.]];
     let mut builder = Model::<D3>::builder("triangle");
     let material = builder
-        .add_material(wc3::model::semantic::Material {
+        .add_material(wc3::model::Material {
             name: "".into(),
             surface: d3::Material::default(),
         })
@@ -118,7 +116,7 @@ fn nonuniform_bone_transforms_fail_checked_publication() {
 
 #[test]
 fn d4_resource_publication_requires_the_correct_game_namespace() {
-    use wc3::model::semantic::profiles::D4;
+    use wc3::model::profiles::D4;
     for (namespace, valid) in [
         (SnoNamespace::Diablo4, true),
         (SnoNamespace::Diablo3, false),
@@ -142,8 +140,8 @@ fn d4_resource_publication_requires_the_correct_game_namespace() {
 
 #[test]
 fn d4_chunks_and_look_hashes_have_model_scoped_ownership() {
-    use wc3::model::semantic::profiles::diablo::d4::{self, Chunk, D4};
-    use wc3::model::semantic::GeometryData;
+    use wc3::model::profiles::diablo::d4::{self, Chunk, D4};
+    use wc3::model::GeometryData;
     let mut foreign = d4::ModelMetadata::default();
     let foreign_id = foreign.add_chunk(Chunk::default());
     let mut own = d4::ModelMetadata::default();
@@ -165,7 +163,7 @@ fn d4_chunks_and_look_hashes_have_model_scoped_ownership() {
     let slot_b = b.add_slot(d4::Slot::new(1, 0, 0));
     let mut builder = Model::<D4>::builder("material");
     let material = builder
-        .add_material(wc3::model::semantic::Material {
+        .add_material(wc3::model::Material {
             name: "".into(),
             surface: d4::Material::default(),
         })

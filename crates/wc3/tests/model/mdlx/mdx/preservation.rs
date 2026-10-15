@@ -1,13 +1,13 @@
-use wc3::model::mdlx::chunks::{ModelChunk, RawChunk, UnknownChunk};
-use wc3::model::mdlx::mdx::Read as _;
-use wc3::model::mdlx::mdx::Write as _;
+use wc3::model::formats::mdlx::chunks::{ModelChunk, RawChunk, UnknownChunk};
+use wc3::model::formats::mdlx::mdx::Read as _;
+use wc3::model::formats::mdlx::mdx::Write as _;
 
-use wc3::model::mdlx::{
-    Model, ModelVersion, V1000, V1100, V1200, V1300, V1400, V1600, V1800, V800, V900,
+use wc3::model::formats::mdlx::{
+    Document, FormatVersion, V1000, V1100, V1200, V1300, V1400, V1600, V1800, V800, V900,
 };
 
-fn check_version<V: ModelVersion>() {
-    let mut model = Model::<V>::new();
+fn check_version<V: FormatVersion>() {
+    let mut model = Document::<V>::new();
     model
         .chunks
         .push(ModelChunk::from_raw(RawChunk::new(*b"MODL", vec![0; 372])).unwrap());
@@ -15,7 +15,7 @@ fn check_version<V: ModelVersion>() {
         UnknownChunk::<V>::new(RawChunk::new(*b"FUTR", vec![0, 1, 2, 255])).unwrap(),
     ));
     let bytes = model.encode_mdx().unwrap();
-    let parsed = Model::<V>::decode_mdx(&bytes).unwrap();
+    let parsed = Document::<V>::decode_mdx(&bytes).unwrap();
     assert_eq!(parsed.version(), V::NUMBER);
     assert_eq!(parsed.encode_mdx().unwrap(), bytes);
 }
@@ -35,13 +35,13 @@ fn synthetic_versions_and_unknown_chunks_round_trip() {
 
 #[test]
 fn preserves_repeated_chunks_and_order() {
-    let mut model = Model::<V800>::new();
+    let mut model = Document::<V800>::new();
     for data in [vec![1], vec![2]] {
         model.chunks.push(ModelChunk::Unknown(
             UnknownChunk::<V800>::new(RawChunk::new(*b"ABCD", data)).unwrap(),
         ));
     }
-    let parsed = Model::<V800>::decode_mdx(&model.encode_mdx().unwrap())
+    let parsed = Document::<V800>::decode_mdx(&model.encode_mdx().unwrap())
         .unwrap()
         .into_owned();
     assert!(

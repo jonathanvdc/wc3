@@ -2,16 +2,16 @@
 use super::shared::RuntimeNode;
 use bevy::prelude::{Mat4, Vec3};
 use std::collections::{HashMap, VecDeque};
-use wc3::model::mdlx::{Model, V1800};
+use wc3::model::formats::mdlx::{Document, V1800};
 
-pub(crate) fn joint_ids<'data>(model: &Model<'data, V1800>) -> Vec<u32> {
+pub(crate) fn joint_ids<'data>(model: &Document<'data, V1800>) -> Vec<u32> {
     let mut ids: Vec<_> = model.bones().map(|bone| bone.node.object_id).collect();
     ids.sort_unstable();
     ids
 }
 
 pub(super) fn inverse_bind_matrices<'data>(
-    model: &Model<'data, V1800>,
+    model: &Document<'data, V1800>,
     joint_ids: &[u32],
 ) -> Vec<Mat4> {
     let pivots = model.pivot_points();

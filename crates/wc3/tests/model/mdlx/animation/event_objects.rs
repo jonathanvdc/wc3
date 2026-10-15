@@ -1,8 +1,8 @@
 use mdl::{Read as _, Write as _};
 use mdx::{Read as _, Write as _};
-use wc3::model::mdlx::animation::{AnimationTime, Sequence};
-use wc3::model::mdlx::scene::{EventObject, Node};
-use wc3::model::mdlx::{mdl, mdx};
+use wc3::model::formats::mdlx::animation::{AnimationTime, Sequence};
+use wc3::model::formats::mdlx::scene::{EventObject, Node};
+use wc3::model::formats::mdlx::{mdl, mdx};
 
 fn event<'data>(frames: &[i32], global: u32) -> EventObject<'data> {
     EventObject::new(Node::new("Arbitrary", 0).unwrap(), global, frames)

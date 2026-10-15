@@ -1,25 +1,25 @@
 use std::convert::Infallible;
 use std::error::Error;
 use std::io;
-use wc3::model::mdlx::chunks::{
+use wc3::model::formats::mdlx::chunks::{
     AttachmentsChunk, FaceFxChunk, ModelChunk, ModelInfoChunk, ParticleEmitters2Chunk,
     ParticleEmittersChunk, PopcornEmittersChunk, RawChunk, TexturesChunk, UnknownChunk,
 };
-use wc3::model::mdlx::emitters::{ParticleEmitter, ParticleEmitter2, PopcornEmitter};
-use wc3::model::mdlx::materials::{Layer, Material, Texture};
-use wc3::model::mdlx::mdl::{Read as _, Write as _};
-use wc3::model::mdlx::mdx::Write as _;
-use wc3::model::mdlx::resources::{
+use wc3::model::formats::mdlx::emitters::{ParticleEmitter, ParticleEmitter2, PopcornEmitter};
+use wc3::model::formats::mdlx::materials::{Layer, Material, Texture};
+use wc3::model::formats::mdlx::mdl::{Read as _, Write as _};
+use wc3::model::formats::mdlx::mdx::Write as _;
+use wc3::model::formats::mdlx::resources::{
     OwnedResourceValue, ResourceEdit, ResourceField, ResourceLocation, ResourceSite, ResourceValue,
     RewriteError,
 };
-use wc3::model::mdlx::scene::{Attachment, FaceFx, ModelInfo, Node};
-use wc3::model::mdlx::ConversionOptions;
-use wc3::model::mdlx::NoExtensions;
-use wc3::model::mdlx::{DynamicModel, FixedText, Model, V1800, V800};
+use wc3::model::formats::mdlx::scene::{Attachment, FaceFx, ModelInfo, Node};
+use wc3::model::formats::mdlx::ConversionOptions;
+use wc3::model::formats::mdlx::NoExtensions;
+use wc3::model::formats::mdlx::{Document, DynamicDocument, FixedText, V1800, V800};
 
-fn fixture<'data>() -> Model<'data, V1800> {
-    let mut model = Model::new();
+fn fixture<'data>() -> Document<'data, V1800> {
+    let mut model = Document::new();
     let mut info = ModelInfo::new("resources").unwrap();
     info.animation_file_name
         .set_text("Anims\\External.mdx")
@@ -86,7 +86,7 @@ fn fixture<'data>() -> Model<'data, V1800> {
     model
 }
 
-fn resource_texts<'data>(model: &Model<'data, V1800>) -> Vec<String> {
+fn resource_texts<'data>(model: &Document<'data, V1800>) -> Vec<String> {
     model
         .resources()
         .map(|reference| match reference.value {
@@ -319,7 +319,7 @@ fn noops_retain_nonzero_padding_and_reports_keep_lossless_before_values() {
 
 #[test]
 fn malformed_source_text_is_kept_unless_explicitly_replaced() {
-    let mut model = Model::<V800>::new();
+    let mut model = Document::<V800>::new();
     let mut bitmap = Texture::new("").unwrap();
     let mut bytes = [0; 260];
     bytes[..4].copy_from_slice(&[b'a', 0xff, b'b', 0]);
@@ -347,7 +347,7 @@ fn malformed_source_text_is_kept_unless_explicitly_replaced() {
 
 #[test]
 fn path_and_replaceable_id_are_independent_and_can_be_cleared() {
-    let mut model = Model::<V800>::new();
+    let mut model = Document::<V800>::new();
     let mut texture = Texture::new("body.blp").unwrap();
     texture.replaceable_id = 31;
     model.set_textures([texture]);
@@ -380,7 +380,7 @@ fn path_and_replaceable_id_are_independent_and_can_be_cleared() {
 fn dynamic_models_keep_source_versions_and_duplicate_chunks_for_every_layout() {
     for version in [800, 900, 1000, 1100, 1200, 1300, 1400, 1600, 1800] {
         let text = format!("Version {{ FormatVersion {version}, }} Model \"resources\" {{}} Textures 1 {{ Bitmap {{ Image \"old.blp\", }} }}");
-        let mut model = DynamicModel::<NoExtensions>::decode_mdl(&text).unwrap();
+        let mut model = DynamicDocument::<NoExtensions>::decode_mdl(&text).unwrap();
         let report = model
             .rewrite_resources(|reference| {
                 Ok::<_, Infallible>(match reference.value {
@@ -393,16 +393,16 @@ fn dynamic_models_keep_source_versions_and_duplicate_chunks_for_every_layout() {
             .unwrap();
         assert_eq!(report.changes.len(), 1);
         let binary = model.encode_mdx().unwrap();
-        let decoded = DynamicModel::<NoExtensions>::decode_mdx(&binary, 800).unwrap();
+        let decoded = DynamicDocument::<NoExtensions>::decode_mdx(&binary, 800).unwrap();
         assert_eq!(decoded.version(), version);
         assert!(decoded.resources().any(|reference| matches!(reference.value, ResourceValue::Path(path) if path.text() == "new.blp")));
         let mdl = model.encode_mdl().unwrap();
-        let decoded = DynamicModel::<NoExtensions>::decode_mdl(&mdl).unwrap();
+        let decoded = DynamicDocument::<NoExtensions>::decode_mdl(&mdl).unwrap();
         assert_eq!(decoded.version(), version);
         assert!(decoded.resources().any(|reference| matches!(reference.value, ResourceValue::Path(path) if path.text() == "new.blp")));
     }
     let typed = fixture();
-    let mut dynamic = DynamicModel::<NoExtensions>::V1800(
+    let mut dynamic = DynamicDocument::<NoExtensions>::V1800(
         typed
             .clone()
             .into_convert(&ConversionOptions::strict())
@@ -428,7 +428,7 @@ fn dynamic_models_keep_source_versions_and_duplicate_chunks_for_every_layout() {
 
 #[test]
 fn empty_models_and_collections_terminate_without_fabricating_references() {
-    let mut model = Model::<V800>::new();
+    let mut model = Document::<V800>::new();
     model.chunks.push(TexturesChunk::new(Vec::new()).into());
     model.chunks.push(AttachmentsChunk::new(Vec::new()).into());
     assert_eq!(model.resources().count(), 0);
@@ -494,7 +494,7 @@ fn every_resource_site_can_be_rewritten_without_reenumerating_cleared_ids() {
         })
         .collect();
     assert_eq!(actual, expected);
-    let decoded = DynamicModel::<NoExtensions>::decode_mdx(&model.encode_mdx().unwrap(), 800)
+    let decoded = DynamicDocument::<NoExtensions>::decode_mdx(&model.encode_mdx().unwrap(), 800)
         .unwrap()
         .into_owned();
     assert_eq!(decoded.resources().count(), actual.len());

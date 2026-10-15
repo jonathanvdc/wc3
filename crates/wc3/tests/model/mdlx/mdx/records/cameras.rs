@@ -1,15 +1,15 @@
-use wc3::model::mdlx::animation::Track;
+use wc3::model::formats::mdlx::animation::Track;
 
-use wc3::model::mdlx::animation::ValueKeyframe;
-use wc3::model::mdlx::mdx::Read as _;
-use wc3::model::mdlx::mdx::Write as _;
+use wc3::model::formats::mdlx::animation::ValueKeyframe;
+use wc3::model::formats::mdlx::mdx::Read as _;
+use wc3::model::formats::mdlx::mdx::Write as _;
 
-use wc3::model::mdlx::scene::{Camera, CameraVariant};
-use wc3::model::mdlx::Model;
+use wc3::model::formats::mdlx::scene::{Camera, CameraVariant};
+use wc3::model::formats::mdlx::Document;
 
 #[test]
 fn camera_fields_and_tracks_round_trip() {
-    let mut camera = Camera::<wc3::model::mdlx::V1100>::new("Portrait").unwrap();
+    let mut camera = Camera::<wc3::model::formats::mdlx::V1100>::new("Portrait").unwrap();
     camera.position = [1.0, 2.0, 3.0];
     camera.target_position = [4.0, 5.0, 6.0];
     camera.field_of_view = 0.7;
@@ -24,11 +24,12 @@ fn camera_fields_and_tracks_round_trip() {
     )
     .unwrap();
     camera.rotation = Some(track.clone());
-    let mut model = Model::<wc3::model::mdlx::V1100>::new();
+    let mut model = Document::<wc3::model::formats::mdlx::V1100>::new();
     model.set_cameras([camera]);
-    let decoded = Model::<wc3::model::mdlx::V1100>::decode_mdx(&model.encode_mdx().unwrap())
-        .unwrap()
-        .into_owned();
+    let decoded =
+        Document::<wc3::model::formats::mdlx::V1100>::decode_mdx(&model.encode_mdx().unwrap())
+            .unwrap()
+            .into_owned();
     let camera = &decoded.cameras().next().unwrap();
     assert_eq!(camera.name.text(), "Portrait");
     assert_eq!(camera.position, [1.0, 2.0, 3.0]);
@@ -41,13 +42,13 @@ fn camera_fields_and_tracks_round_trip() {
 
 #[test]
 fn newer_camera_variant_round_trip() {
-    let mut camera = Camera::<wc3::model::mdlx::V1800>::new("Portrait").unwrap();
+    let mut camera = Camera::<wc3::model::formats::mdlx::V1800>::new("Portrait").unwrap();
     assert_eq!(camera.variant, CameraVariant::Variant3);
     camera.field_of_view = 0.8;
-    let mut model = Model::<wc3::model::mdlx::V1800>::new();
+    let mut model = Document::<wc3::model::formats::mdlx::V1800>::new();
     model.set_cameras([camera]);
     let bytes = model.encode_mdx().unwrap();
-    let parsed = Model::<wc3::model::mdlx::V1800>::decode_mdx(&bytes).unwrap();
+    let parsed = Document::<wc3::model::formats::mdlx::V1800>::decode_mdx(&bytes).unwrap();
     assert_eq!(
         parsed.cameras().next().unwrap().variant,
         CameraVariant::Variant3
@@ -65,13 +66,13 @@ fn camera_variants_round_trip() {
         CameraVariant::Unknown(0x80),
     ];
     for variant in variants {
-        let mut camera = Camera::<wc3::model::mdlx::V1200>::new("Portrait").unwrap();
+        let mut camera = Camera::<wc3::model::formats::mdlx::V1200>::new("Portrait").unwrap();
         camera.variant = variant;
         camera.target_position = [4.0, 5.0, 6.0];
-        let mut model = Model::<wc3::model::mdlx::V1200>::new();
+        let mut model = Document::<wc3::model::formats::mdlx::V1200>::new();
         model.set_cameras([camera]);
         let bytes = model.encode_mdx().unwrap();
-        let parsed = Model::<wc3::model::mdlx::V1200>::decode_mdx(&bytes).unwrap();
+        let parsed = Document::<wc3::model::formats::mdlx::V1200>::decode_mdx(&bytes).unwrap();
         assert_eq!(parsed.cameras().next().unwrap().variant, variant);
         assert_eq!(
             parsed.cameras().next().unwrap().target_position,

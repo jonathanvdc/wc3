@@ -1,6 +1,6 @@
 # World of Warcraft world models
 
-The `wc3::model::wmo` API reads, edits, and writes WMO root documents and their
+The `wc3::model::formats::wmo` API reads, edits, and writes WMO root documents and their
 geometry groups. It preserves the native layout of each selected client profile,
 borrows encoded arrays, and keeps unknown chunks in their original order. The
 format layer exposes materials, portals, doodads, lighting, collision, liquids,
@@ -27,7 +27,7 @@ multiple successes require caller provenance, not an arbitrary first match.
 profile and return an ambiguity error otherwise.
 
 ```rust
-use wc3::model::wmo::{Classic, Root};
+use wc3::model::formats::wmo::{Classic, Root};
 
 fn rename_identity(bytes: &[u8], identity: u32) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
     let mut root = Root::<Classic>::decode(bytes)?;
@@ -94,9 +94,9 @@ borrowed array's bytes on its first edit; `replace()` replaces an entire record 
 `from_records()` constructs an owned encoded array for insertion into a document.
 
 ```rust
-use wc3::model::wmo::{Classic, Root};
-use wc3::model::wmo::root::RootChunk;
-use wc3::model::wmo::records::BlendMode;
+use wc3::model::formats::wmo::{Classic, Root};
+use wc3::model::formats::wmo::root::RootChunk;
+use wc3::model::formats::wmo::records::BlendMode;
 
 fn change_blending(root: &mut Root<'_, Classic>) -> Result<(), Box<dyn std::error::Error>> {
     for chunk in root.chunks_mut() {
@@ -158,7 +158,7 @@ registered bundle identity.
 
 ```rust
 use std::collections::BTreeMap;
-use wc3::model::wmo::{Bundle, Classic, FileKey};
+use wc3::model::formats::wmo::{Bundle, Classic, FileKey};
 
 fn load<'data>(
     root: &'data [u8],

@@ -1,7 +1,7 @@
 //! Native revision matrix and bit-preserving record codecs under both envelopes.
 use m3::codec::{Decoder, Encoder};
 use m3::records::*;
-use wc3::model::m3::{self, Envelope, Md33, Md34, Read, RecordLayout, Write};
+use wc3::model::formats::m3::{self, Envelope, Md33, Md34, Read, RecordLayout, Write};
 fn roundtrip<E: Envelope, T: for<'data> Read<'data, E> + Write<E> + RecordLayout<E>>() {
     let width = T::size();
     let bytes: Vec<u8> = (0..width)
@@ -654,11 +654,11 @@ fn descriptor_shaped_material_metadata_is_not_a_document_graph_edge() {
     material.reserved_0.entries = u32::MAX;
     material.reserved_0.index = u32::MAX;
     material.reserved_0.third_word = 0xdead_beef;
-    let mut document = m3::Document::<Md34>::new();
+    let mut document = m3::Container::<Md34>::new();
     let id = document.append(&[material]).unwrap();
     document.validate().unwrap();
     let bytes = document.write().unwrap();
-    let decoded = m3::Document::<Md34>::read(&bytes).unwrap();
+    let decoded = m3::Container::<Md34>::read(&bytes).unwrap();
     decoded.validate().unwrap();
     let decoded_id = decoded.section_id(id.index()).unwrap();
     let array = decoded.array::<DataDrivenMaterial<V3>>(decoded_id).unwrap();

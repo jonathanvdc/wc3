@@ -1,27 +1,27 @@
 use std::io::Write as IoWrite;
 use std::marker::PhantomData;
 
-use wc3::model::mdlx::chunks::{Chunk, KnownChunk, ModelChunk, RawChunk, UnknownChunk};
-use wc3::model::mdlx::geometry::{BindPoseMatrix, Geoset};
-use wc3::model::mdlx::materials::Material;
-use wc3::model::mdlx::mdl::{self, Read as _, Write as _};
-use wc3::model::mdlx::mdx::{self, Extension as _, Read as _, Write as _};
-use wc3::model::mdlx::scene::ModelInfo;
-use wc3::model::mdlx::{
-    visit_model, CommonModelAccess, ConversionIssueKind, ConversionOptions, Cursor, DynamicModel,
-    Encoder, Extended, IoError, Model, ModelDialect, ModelVersion, NoExtensions, Tag,
+use wc3::model::formats::mdlx::chunks::{Chunk, KnownChunk, ModelChunk, RawChunk, UnknownChunk};
+use wc3::model::formats::mdlx::geometry::{BindPoseMatrix, Geoset};
+use wc3::model::formats::mdlx::materials::Material;
+use wc3::model::formats::mdlx::mdl::{self, Read as _, Write as _};
+use wc3::model::formats::mdlx::mdx::{self, Extension as _, Read as _, Write as _};
+use wc3::model::formats::mdlx::scene::ModelInfo;
+use wc3::model::formats::mdlx::{
+    visit_document, CommonModelAccess, ConversionIssueKind, ConversionOptions, Cursor, Dialect,
+    Document, DynamicDocument, Encoder, Extended, FormatVersion, IoError, NoExtensions, Tag,
     TryModelAccess, UnknownChunkPolicy, V1800, V800,
 };
 
 #[derive(Clone, Debug, PartialEq)]
-enum ApplicationChunk<V: ModelVersion = V1800> {
+enum ApplicationChunk<V: FormatVersion = V1800> {
     Note(u32),
     VersionBound(u32, PhantomData<V>),
     Reserved,
     WrongTag,
 }
 
-impl<V: ModelVersion> Chunk for ApplicationChunk<V> {
+impl<V: FormatVersion> Chunk for ApplicationChunk<V> {
     fn tag(&self) -> Tag {
         match self {
             Self::Note(_) => *b"NOTE",
@@ -43,7 +43,7 @@ impl<V: ModelVersion> Chunk for ApplicationChunk<V> {
     }
 }
 
-impl<'data, V: ModelVersion> mdx::Extension<'data> for ApplicationChunk<V> {
+impl<'data, V: FormatVersion> mdx::Extension<'data> for ApplicationChunk<V> {
     fn read_extension(tag: Tag, input: &mut Cursor<'data>) -> Result<Option<Self>, mdx::ReadError> {
         Ok(match &tag {
             b"NOTE" => Some(Self::Note(input.read()?)),
@@ -73,11 +73,11 @@ type Application800 = Extended<V800, ApplicationChunk<V800>>;
 fn standard_records_use_the_base_version_and_custom_dialects_are_open() {
     #[derive(Clone, Debug)]
     struct ApplicationDialect;
-    impl ModelDialect for ApplicationDialect {
+    impl Dialect for ApplicationDialect {
         type Version = V1800;
         type Extension = ApplicationChunk;
     }
-    let mut model = Model::<ApplicationDialect>::new();
+    let mut model = Document::<ApplicationDialect>::new();
     model.set_geosets([Geoset::<V1800>::new([], [], []).unwrap()]);
     model.set_materials([Material::<V1800>::new()]);
     model.set_bind_poses([BindPoseMatrix([0.; 12])]);
@@ -85,7 +85,7 @@ fn standard_records_use_the_base_version_and_custom_dialects_are_open() {
         .chunks
         .push(ModelChunk::Extension(ApplicationChunk::Note(42)));
     let bytes = model.encode_mdx().unwrap();
-    let decoded = Model::<ApplicationDialect>::decode_mdx(&bytes).unwrap();
+    let decoded = Document::<ApplicationDialect>::decode_mdx(&bytes).unwrap();
     assert_eq!(decoded.version(), 1800);
     assert_eq!(decoded.geosets().count(), 1);
     assert_eq!(decoded.materials().count(), 1);
@@ -98,7 +98,7 @@ fn standard_records_use_the_base_version_and_custom_dialects_are_open() {
 
 #[test]
 fn unknown_chunks_and_repeated_extensions_retain_order() {
-    let mut model = Model::<Application1800>::new();
+    let mut model = Document::<Application1800>::new();
     model
         .chunks
         .push(ModelChunk::Extension(ApplicationChunk::Note(1)));
@@ -109,7 +109,7 @@ fn unknown_chunks_and_repeated_extensions_retain_order() {
         .chunks
         .push(ModelChunk::Extension(ApplicationChunk::Note(2)));
     let bytes = model.encode_mdx().unwrap();
-    let decoded = Model::<Application1800>::decode_mdx(&bytes).unwrap();
+    let decoded = Document::<Application1800>::decode_mdx(&bytes).unwrap();
     assert_eq!(
         decoded
             .chunks
@@ -122,7 +122,7 @@ fn unknown_chunks_and_repeated_extensions_retain_order() {
         matches!(&decoded.chunks[2], ModelChunk::Unknown(chunk) if chunk.raw().data.as_ref() == [9, 8, 7])
     );
     assert_eq!(decoded.encode_mdx().unwrap(), bytes);
-    let standard = Model::<V1800>::decode_mdx(&bytes).unwrap();
+    let standard = Document::<V1800>::decode_mdx(&bytes).unwrap();
     assert!(matches!(&standard.chunks[1], ModelChunk::Unknown(_)));
     assert_eq!(standard.encode_mdx().unwrap(), bytes);
 }
@@ -139,12 +139,12 @@ fn runtime_dispatch_supports_extensions_in_every_version() {
         RawChunk::new(*b"NOTE", payload)
             .write_mdx(&mut output)
             .unwrap();
-        let mut model = DynamicModel::<NoteChunk>::decode_mdx(&bytes, 800).unwrap();
+        let mut model = DynamicDocument::<NoteChunk>::decode_mdx(&bytes, 800).unwrap();
         assert_eq!(model.version(), version);
         model.set_global_sequences(&[100]);
         assert_eq!(model.global_sequences(), [100]);
         assert_eq!(model.try_bind_poses().is_ok(), version >= 900);
-        visit_model!(&model, |typed| assert!(matches!(
+        visit_document!(&model, |typed| assert!(matches!(
             typed.chunks[1],
             ModelChunk::Extension(NoteChunk(NotePayload { value: 17 }))
         )));
@@ -163,7 +163,7 @@ fn missing_vers_uses_the_runtime_fallback_for_extensions() {
         .write_mdx(&mut Encoder::new(&mut bytes))
         .unwrap();
     for version in [800, 1800] {
-        let model = DynamicModel::<NoteChunk>::decode_mdx(&bytes, version).unwrap();
+        let model = DynamicDocument::<NoteChunk>::decode_mdx(&bytes, version).unwrap();
         assert_eq!(model.version(), version);
         assert_eq!(model.encode_mdx().unwrap(), bytes);
     }
@@ -171,12 +171,12 @@ fn missing_vers_uses_the_runtime_fallback_for_extensions() {
 
 #[test]
 fn recognized_malformed_chunks_fail_with_payload_offsets_and_tag_context() {
-    let mut bytes = Model::<V1800>::new().encode_mdx().unwrap();
+    let mut bytes = Document::<V1800>::new().encode_mdx().unwrap();
     let offset = bytes.len();
     RawChunk::new(*b"NOTE", vec![1, 2])
         .write_mdx(&mut Encoder::new(&mut bytes))
         .unwrap();
-    let error = Model::<Application1800>::decode_mdx(&bytes).unwrap_err();
+    let error = Document::<Application1800>::decode_mdx(&bytes).unwrap_err();
     assert_eq!(error.tag, Some(*b"NOTE"));
     assert_eq!(error.offset, offset + 8);
     assert!(matches!(
@@ -211,7 +211,7 @@ fn standard_tags_and_decoder_tag_changes_are_rejected() {
 
 #[test]
 fn conversion_reclassifies_extensions_and_opaque_chunks_without_losing_bytes() {
-    let mut model = Model::<Application1800>::new();
+    let mut model = Document::<Application1800>::new();
     model
         .chunks
         .push(ModelChunk::Extension(ApplicationChunk::Note(99)));
@@ -243,7 +243,7 @@ fn conversion_reclassifies_extensions_and_opaque_chunks_without_losing_bytes() {
 
 #[test]
 fn conversion_checks_version_bound_extensions_and_reports_invalid_targets() {
-    let mut model = Model::<Application1800>::new();
+    let mut model = Document::<Application1800>::new();
     model
         .chunks
         .push(ModelChunk::Extension(ApplicationChunk::VersionBound(
@@ -256,7 +256,7 @@ fn conversion_checks_version_bound_extensions_and_reports_invalid_targets() {
         .unwrap_err();
     assert_eq!(error.path, "chunks[1]");
     assert_eq!(model.encode_mdx().unwrap(), original);
-    let mut standard = Model::<V1800>::new();
+    let mut standard = Document::<V1800>::new();
     standard.chunks.push(ModelChunk::Unknown(
         UnknownChunk::new(RawChunk::new(*b"NOTE", vec![0])).unwrap(),
     ));
@@ -267,7 +267,7 @@ fn conversion_checks_version_bound_extensions_and_reports_invalid_targets() {
 
 #[test]
 fn mdl_extensions_round_trip_with_standard_records_and_dynamic_dispatch() {
-    let mut model = Model::<Application1800>::new();
+    let mut model = Document::<Application1800>::new();
     model.set_model_info(&ModelInfo::new("Example").unwrap());
     for value in [42, 7] {
         model
@@ -275,18 +275,18 @@ fn mdl_extensions_round_trip_with_standard_records_and_dynamic_dispatch() {
             .push(ModelChunk::Extension(ApplicationChunk::Note(value)));
     }
     let source = model.encode_mdl().unwrap();
-    let decoded = Model::<Application1800>::decode_mdl(&source).unwrap();
+    let decoded = Document::<Application1800>::decode_mdl(&source).unwrap();
     assert_eq!(decoded.encode_mdx().unwrap(), model.encode_mdx().unwrap());
     assert_eq!(decoded.encode_mdl().unwrap(), source);
-    let dynamic = DynamicModel::<ApplicationChunk>::decode_mdl(&source).unwrap();
+    let dynamic = DynamicDocument::<ApplicationChunk>::decode_mdl(&source).unwrap();
     assert_eq!(dynamic.version(), 1800);
     assert_eq!(dynamic.encode_mdl().unwrap(), source);
-    assert!(DynamicModel::<NoExtensions>::decode_mdl(&source).is_err());
-    assert!(Model::<Application1800>::decode_mdl(
+    assert!(DynamicDocument::<NoExtensions>::decode_mdl(&source).is_err());
+    assert!(Document::<Application1800>::decode_mdl(
         "Version { FormatVersion 1800, } Model \"Example\" {} Note { Value \"bad\", }"
     )
     .is_err());
-    assert!(Model::<Application1800>::decode_mdl(
+    assert!(Document::<Application1800>::decode_mdl(
         "Version { FormatVersion 1800, } Model \"Example\" {} Future {}"
     )
     .is_err());
@@ -301,7 +301,7 @@ fn mdl_extensions_round_trip_with_standard_records_and_dynamic_dispatch() {
 
 #[test]
 fn extensions_unknown_to_a_new_version_follow_the_opaque_policy() {
-    let mut model = Model::<Application1800>::new();
+    let mut model = Document::<Application1800>::new();
     model
         .chunks
         .push(ModelChunk::Extension(ApplicationChunk::Note(42)));
@@ -319,7 +319,7 @@ fn extensions_unknown_to_a_new_version_follow_the_opaque_policy() {
     assert_eq!(dropped.model.chunks.len(), 1);
     assert_eq!(dropped.report.issues[0].kind, ConversionIssueKind::Dropped);
     // A decoder that owns the tag can establish compatibility without opaque policy.
-    let standard = Model::<V1800>::decode_mdx(&model.encode_mdx().unwrap())
+    let standard = Document::<V1800>::decode_mdx(&model.encode_mdx().unwrap())
         .unwrap()
         .into_owned();
     let recognized = standard
@@ -333,15 +333,15 @@ fn extensions_unknown_to_a_new_version_follow_the_opaque_policy() {
 
 #[test]
 fn io_adapter_uses_the_selected_extension_codec() {
-    let mut model = Model::<Application1800>::new();
+    let mut model = Document::<Application1800>::new();
     model
         .chunks
         .push(ModelChunk::Extension(ApplicationChunk::Note(42)));
     let bytes = model.encode_mdx().unwrap();
-    let decoded: DynamicModel<'static, ApplicationChunk> =
+    let decoded: DynamicDocument<'static, ApplicationChunk> =
         mdx::from_reader_with_version(bytes.as_slice(), 800).unwrap();
     assert_eq!(decoded.encode_mdx().unwrap(), bytes);
-    visit_model!(&decoded, |typed| assert!(matches!(
+    visit_document!(&decoded, |typed| assert!(matches!(
         typed.chunks[1],
         ModelChunk::Extension(ApplicationChunk::Note(42))
     )));
@@ -377,10 +377,10 @@ impl<'data> KnownChunk<'data> for NoteChunk {
 fn known_chunks_reuse_standard_codecs_and_dispatch_automatically() {
     type Dialect = Extended<V1800, NoteChunk>;
     let note = NoteChunk(NotePayload { value: 42 });
-    let mut model = Model::<Dialect>::new();
+    let mut model = Document::<Dialect>::new();
     model.chunks.push(ModelChunk::Extension(note.clone()));
     let bytes = model.encode_mdx().unwrap();
-    let decoded = Model::<Dialect>::decode_mdx(&bytes).unwrap();
+    let decoded = Document::<Dialect>::decode_mdx(&bytes).unwrap();
     assert!(matches!(&decoded.chunks[1], ModelChunk::Extension(value) if value == &note));
     assert_eq!(decoded.encode_mdx().unwrap(), bytes);
     // Chunk codecs include exactly one header when used independently.
@@ -406,7 +406,7 @@ struct NoteText {
     value: u32,
 }
 
-impl<V: ModelVersion> mdl::Extension for ApplicationChunk<V> {
+impl<V: FormatVersion> mdl::Extension for ApplicationChunk<V> {
     fn read_extension(
         name: &str,
         parser: &mut mdl::Parser<'_>,
@@ -420,7 +420,7 @@ impl<V: ModelVersion> mdl::Extension for ApplicationChunk<V> {
     }
 }
 
-impl<V: ModelVersion> mdl::Write for ApplicationChunk<V> {
+impl<V: FormatVersion> mdl::Write for ApplicationChunk<V> {
     fn write_mdl<W: IoWrite>(
         &self,
         writer: &mut mdl::Writer<W>,
@@ -451,7 +451,7 @@ impl mdl::Extension for NoteText {
 #[test]
 fn mdl_only_extensions_support_model_io_and_standard_accessors() {
     type TextDialect = Extended<V800, NoteText>;
-    let mut model = Model::<TextDialect>::decode_mdl(
+    let mut model = Document::<TextDialect>::decode_mdl(
         "Version { FormatVersion 800, } Model \"Example\" {} Note { Value 9, }",
     )
     .unwrap();
@@ -459,7 +459,7 @@ fn mdl_only_extensions_support_model_io_and_standard_accessors() {
     model.set_gliders([]);
     assert_eq!(model.global_sequences(), [100]);
     let source = model.encode_mdl().unwrap();
-    let mut dynamic = DynamicModel::<NoteText>::decode_mdl(&source).unwrap();
+    let mut dynamic = DynamicDocument::<NoteText>::decode_mdl(&source).unwrap();
     assert_eq!(dynamic.version(), 800);
     dynamic.set_global_sequences(&[200]);
     assert_eq!(dynamic.global_sequences(), [200]);
@@ -497,16 +497,16 @@ impl mdl::Write for WriteOnlyNote {
 #[test]
 fn mdl_reading_and_writing_require_only_their_respective_codecs() {
     let source = "Version { FormatVersion 800, } Model \"Example\" {} Note { Value 9, }";
-    let model: Model<'static, Extended<V800, ReadOnlyNote>> = source.parse().unwrap();
+    let model: Document<'static, Extended<V800, ReadOnlyNote>> = source.parse().unwrap();
     assert!(matches!(&model.chunks[2], ModelChunk::Extension(note) if note.0.value == 9));
-    let dynamic = DynamicModel::<ReadOnlyNote>::decode_mdl(source).unwrap();
+    let dynamic = DynamicDocument::<ReadOnlyNote>::decode_mdl(source).unwrap();
     assert_eq!(dynamic.version(), 800);
 
-    let mut output = Model::<Extended<V800, WriteOnlyNote>>::new();
+    let mut output = Document::<Extended<V800, WriteOnlyNote>>::new();
     output.set_model_info(&ModelInfo::new("Example").unwrap());
     output
         .chunks
         .push(ModelChunk::Extension(WriteOnlyNote(NoteText { value: 9 })));
-    let dynamic = DynamicModel::V800(output);
+    let dynamic = DynamicDocument::V800(output);
     assert!(dynamic.encode_mdl().unwrap().contains("Value 9,"));
 }

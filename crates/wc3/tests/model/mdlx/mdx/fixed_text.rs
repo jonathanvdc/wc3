@@ -1,5 +1,5 @@
-use wc3::model::mdlx::mdx::{Cursor, Encoder, FixedText};
-use wc3::model::mdlx::ValueError;
+use wc3::model::formats::mdlx::mdx::{Cursor, Encoder, FixedText};
+use wc3::model::formats::mdlx::ValueError;
 
 #[test]
 fn fixed_text_preserves_raw_bytes_until_edited() {

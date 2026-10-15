@@ -1,13 +1,13 @@
 //! Convert model formats and optionally versions, reporting conversion losses.
-use wc3::model::mdlx::{Extended, NoExtensions};
+use wc3::model::formats::mdlx::{Extended, NoExtensions};
 mod support;
 use clap::Parser;
 use std::path::PathBuf;
 use std::result::Result as ParseResult;
 use support::{load, save, Result};
-use wc3::model::mdlx::{
-    ConversionOptions, DynamicModel, Model, ModelVersion, V1000, V1100, V1200, V1300, V1400, V1600,
-    V1800, V800, V900,
+use wc3::model::formats::mdlx::{
+    ConversionOptions, Document, DynamicDocument, FormatVersion, V1000, V1100, V1200, V1300, V1400,
+    V1600, V1800, V800, V900,
 };
 
 #[derive(Parser)]
@@ -44,7 +44,7 @@ fn main() -> Result<()> {
         ($($number:literal => $version:ident),*) => {
             match args.version {
                 None => model,
-                $(Some($number) => DynamicModel::$version(convert::<$version>(model, &options)?),)*
+                $(Some($number) => DynamicDocument::$version(convert::<$version>(model, &options)?),)*
                 Some(value) => return Err(format!("unsupported target version: {value}").into()),
             }
         };
@@ -53,10 +53,10 @@ fn main() -> Result<()> {
     save(&model, &args.output)
 }
 
-fn convert<'data, V: ModelVersion>(
-    model: DynamicModel<'data>,
+fn convert<'data, V: FormatVersion>(
+    model: DynamicDocument<'data>,
     options: &ConversionOptions,
-) -> Result<Model<'data, Extended<V, NoExtensions>>> {
+) -> Result<Document<'data, Extended<V, NoExtensions>>> {
     let converted = model.into_convert::<Extended<V, NoExtensions>>(options)?;
     for issue in converted.report.issues {
         eprintln!("{:?} at {}: {}", issue.kind, issue.path, issue.description);

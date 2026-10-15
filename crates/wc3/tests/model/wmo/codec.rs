@@ -1,4 +1,4 @@
-use wc3::model::wmo::{
+use wc3::model::formats::wmo::{
     self,
     codec::{Array, Decoder, Encoder},
 };

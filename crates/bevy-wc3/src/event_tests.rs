@@ -1,11 +1,11 @@
 use super::*;
 use crate::animation::advance_animation;
 use crate::animation::pose::animate_nodes;
-use crate::assets::Wc3Model;
+use crate::assets::Wc3Document;
 use crate::instance::spawn::spawn_prepared_model;
 use crate::instance::spawn::Wc3NodeEntities;
 use crate::materials::Wc3LayerMaterial;
-use crate::preparation::prepare_model;
+use crate::preparation::prepare_document;
 use crate::schedule::{configure, Wc3Systems};
 use bevy::ecs::world::CommandQueue;
 use bevy::mesh::skinning::SkinnedMeshInverseBindposes;
@@ -24,11 +24,11 @@ fn scene() -> (App, Entity, Entity) {
         PostUpdate,
         dispatch_events.in_set(Wc3Systems::DispatchEvents),
     );
-    let source = Wc3Model::decode_mdl(include_str!("../tests/fixtures/events.mdl")).unwrap();
+    let source = Wc3Document::decode_mdl(include_str!("../tests/fixtures/events.mdl")).unwrap();
     let mut meshes = Assets::<Mesh>::default();
     let mut materials = Assets::<Wc3LayerMaterial>::default();
     let mut bindposes = Assets::<SkinnedMeshInverseBindposes>::default();
-    let prepared = prepare_model(&mut meshes, &mut bindposes, &source, |_| None).unwrap();
+    let prepared = prepare_document(&mut meshes, &mut bindposes, &source, |_| None).unwrap();
     let mut queue = CommandQueue::default();
     let mut commands = Commands::new(&mut queue, app.world());
     let first = spawn_prepared_model(&mut commands, &mut meshes, &mut materials, &prepared);

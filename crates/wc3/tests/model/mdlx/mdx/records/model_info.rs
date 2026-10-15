@@ -1,14 +1,14 @@
-use wc3::model::mdlx::chunks::ModelChunk;
-use wc3::model::mdlx::chunks::RawChunk;
-use wc3::model::mdlx::mdx::Read as _;
-use wc3::model::mdlx::mdx::Write as _;
+use wc3::model::formats::mdlx::chunks::ModelChunk;
+use wc3::model::formats::mdlx::chunks::RawChunk;
+use wc3::model::formats::mdlx::mdx::Read as _;
+use wc3::model::formats::mdlx::mdx::Write as _;
 
-use wc3::model::mdlx::scene::ModelInfo;
-use wc3::model::mdlx::Model;
+use wc3::model::formats::mdlx::scene::ModelInfo;
+use wc3::model::formats::mdlx::Document;
 
 #[test]
 fn model_info_edit_round_trip() {
-    let mut model = Model::<wc3::model::mdlx::V1800>::new();
+    let mut model = Document::<wc3::model::formats::mdlx::V1800>::new();
     let mut info = ModelInfo::new("Footman").unwrap();
     info.bounds_radius = 42.5;
     info.minimum_extent = [-1.0, -2.0, -3.0];
@@ -16,9 +16,10 @@ fn model_info_edit_round_trip() {
     info.blend_time = 150;
     model.set_model_info(&info);
 
-    let parsed = Model::<wc3::model::mdlx::V1800>::decode_mdx(&model.encode_mdx().unwrap())
-        .unwrap()
-        .into_owned();
+    let parsed =
+        Document::<wc3::model::formats::mdlx::V1800>::decode_mdx(&model.encode_mdx().unwrap())
+            .unwrap()
+            .into_owned();
     let actual = parsed.model_info().unwrap();
     assert_eq!(actual.name.text(), "Footman");
     assert_eq!(actual.bounds_radius, 42.5);
@@ -29,7 +30,7 @@ fn model_info_edit_round_trip() {
 
 #[test]
 fn renaming_preserves_the_separate_animation_file_field() {
-    let mut model = Model::<wc3::model::mdlx::V800>::new();
+    let mut model = Document::<wc3::model::formats::mdlx::V800>::new();
     let mut original = ModelInfo::new("Old").unwrap();
     original
         .animation_file_name
@@ -56,15 +57,16 @@ fn renaming_preserves_the_separate_animation_file_field() {
 
 #[test]
 fn model_info_rejects_malformed_chunks() {
-    let mut model = Model::<wc3::model::mdlx::V800>::new();
+    let mut model = Document::<wc3::model::formats::mdlx::V800>::new();
     assert!(
-        ModelChunk::<wc3::model::mdlx::V800>::from_raw(RawChunk::new(*b"MODL", vec![1])).is_err()
+        ModelChunk::<wc3::model::formats::mdlx::V800>::from_raw(RawChunk::new(*b"MODL", vec![1]))
+            .is_err()
     );
     assert!(model.model_info().is_none());
 
     let expected = ModelInfo::new("Decoded").unwrap();
     model.chunks.push(ModelChunk::from(
-        wc3::model::mdlx::chunks::ModelInfoChunk::new(
+        wc3::model::formats::mdlx::chunks::ModelInfoChunk::new(
             ModelInfo::new("Duplicate").unwrap(),
             Vec::new(),
         ),

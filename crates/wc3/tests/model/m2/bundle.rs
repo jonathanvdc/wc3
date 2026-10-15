@@ -1,14 +1,14 @@
 //! Public bundle checks using independently assembled animation streams and
 //! explicit document identities, including aliases and inherited skeletons.
 use std::borrow::Cow;
-use wc3::model::m2::records::{Interpolation, ModelFlags, SequenceFlags};
+use wc3::model::formats::m2::records::{Interpolation, ModelFlags, SequenceFlags};
 
-use wc3::model::m2::{
+use wc3::model::formats::m2::{
     chunks::{AnimationFileId, Chunk},
     codec::{Array, ArrayRef},
     companions::{AnimationFile, AnimationStream, Skeleton, SkeletonChunk},
     records::{Bone, Sequence, TimelineStorage, TrackValues, ValuesLeaf, ValuesStorage},
-    Bundle, Chunked, DependencyKind, File, FileKey, Flat, Model, ModelLayout, ResolvedValues,
+    Bundle, Chunked, DependencyKind, Document, File, FileKey, Flat, ModelLayout, ResolvedValues,
     ZeroVec, V264, V272,
 };
 
@@ -69,8 +69,8 @@ fn animation_bytes() -> Vec<u8> {
 fn path() -> FileKey {
     FileKey::Path("models/unit.m2".into())
 }
-fn raw_model() -> Model<'static, Flat<V264>> {
-    let mut model = Model::new();
+fn raw_model() -> Document<'static, Flat<V264>> {
+    let mut model = Document::new();
     model
         .core_mut()
         .sequences
@@ -102,8 +102,8 @@ fn skeleton(chunks: Vec<SkeletonChunk<'static, V272>>) -> Skeleton<'static, V272
         chunks,
     }
 }
-fn skeleton_model() -> Model<'static, Chunked<V272>> {
-    let mut model = Model::new();
+fn skeleton_model() -> Document<'static, Chunked<V272>> {
+    let mut model = Document::new();
     model.insert_extension(1, Chunk::SkeletonId(10)).unwrap();
     model
 }
@@ -185,7 +185,7 @@ fn aliases_select_terminal_identity_but_requested_leaf_offsets() {
 
 #[test]
 fn wrong_chunked_animation_stream_is_rejected_for_core_bones() {
-    let mut model = Model::<Chunked<V272>>::new();
+    let mut model = Document::<Chunked<V272>>::new();
     model.core_mut().flags.set_chunked_animations(true);
     model
         .core_mut()
@@ -389,7 +389,7 @@ fn skeleton_alias_cycles_are_rejected_even_without_animation_leaves() {
 
 #[test]
 fn duplicate_core_payloads_cannot_silently_skip_external_relocation() {
-    let mut first = Model::<Flat<V272>>::new();
+    let mut first = Document::<Flat<V272>>::new();
     first
         .core_mut()
         .sequences
@@ -509,12 +509,12 @@ fn zero_parent_skeleton_id_keeps_inherited_sequence_context() {
 
 #[test]
 fn nested_model_skin_uses_its_native_owner_layout() {
-    use wc3::model::m2::{
+    use wc3::model::formats::m2::{
         companions::{LayoutKind, Skin, SkinProfile},
         records::ParticleEmitter,
         V274,
     };
-    let mut root = Model::<Chunked<V274>>::new();
+    let mut root = Document::<Chunked<V274>>::new();
     root.core_mut()
         .particles
         .push(ParticleEmitter::new(ModelFlags::default()));
@@ -523,7 +523,7 @@ fn nested_model_skin_uses_its_native_owner_layout() {
         Chunk::GeometryParticleIds(ZeroVec::alloc_from_slice(&[33])),
     )
     .unwrap();
-    let mut child = Model::<Chunked<V264>>::new();
+    let mut child = Document::<Chunked<V264>>::new();
     child.core_mut().skins = 1;
     child
         .insert_extension(1, Chunk::SkinIds(ZeroVec::alloc_from_slice(&[66])))
@@ -561,11 +561,11 @@ fn nested_model_skin_uses_its_native_owner_layout() {
 
 #[test]
 fn cached_skin_cannot_be_reused_by_an_owner_with_a_different_layout() {
-    use wc3::model::m2::{
+    use wc3::model::formats::m2::{
         companions::{Skin, SkinProfile},
         V274,
     };
-    let mut root = Model::<Chunked<V274>>::new();
+    let mut root = Document::<Chunked<V274>>::new();
     root.core_mut().skins = 1;
     root.insert_extension(1, Chunk::SkinIds(ZeroVec::alloc_from_slice(&[66])))
         .unwrap();

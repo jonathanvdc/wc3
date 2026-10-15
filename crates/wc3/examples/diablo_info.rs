@@ -1,7 +1,7 @@
 //! Inspect typed Diablo SNO resources without opening their dependencies.
 use clap::{Parser, ValueEnum};
 use std::{error::Error, fs, path::PathBuf};
-use wc3::model::diablo::{d3, d4};
+use wc3::model::formats::diablo::{d3, d4};
 
 #[derive(Clone, Copy, Debug, ValueEnum)]
 enum Game {

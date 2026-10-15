@@ -1,5 +1,5 @@
 use super::*;
-use wc3::model::mdlx::animation::{Sequence, ValueKeyframe};
+use wc3::model::formats::mdlx::animation::{Sequence, ValueKeyframe};
 #[test]
 fn sequence_clock_loops_and_global_clock_runs_independently() {
     let animation = Wc3Animation {

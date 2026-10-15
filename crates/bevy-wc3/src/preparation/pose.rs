@@ -6,8 +6,8 @@ use bevy::mesh::VertexAttributeValues;
 use bevy::prelude::*;
 use std::array::from_fn;
 use std::collections::{HashMap, HashSet};
-use wc3::model::mdlx::animation::AnimationTime;
-use wc3::model::mdlx::materials::{LayerFilterMode, ShaderType};
+use wc3::model::formats::mdlx::animation::AnimationTime;
+use wc3::model::formats::mdlx::materials::{LayerFilterMode, ShaderType};
 
 use super::mesh::{EXTRA_JOINT_INDEX, EXTRA_JOINT_WEIGHT};
 use super::PreparedModel;

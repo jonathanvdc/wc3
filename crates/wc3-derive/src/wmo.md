@@ -1,6 +1,6 @@
 ## WMO record derives
 
-Import `wc3::model::wmo` to derive `wmo::Read`, `wmo::Write`,
+Import `wc3::model::formats::wmo` to derive `wmo::Read`, `wmo::Write`,
 `wmo::RecordLayout`, and `wmo::Validate` for ordinary records. Named, tuple,
 unit, and generic structs are supported. Read and write have independent field
 bounds, and a writer does not require a fixed record layout when it contains
@@ -8,7 +8,7 @@ variable payloads. `RecordLayout` sums fixed inline field widths without a
 runtime version argument; associated field types express dialect differences.
 
 ```rust
-use wc3::model::wmo;
+use wc3::model::formats::wmo;
 use wmo::codec::{Decoder, Encoder};
 use wmo::{Read as _, RecordLayout as _, Validate as _, Write as _};
 
@@ -44,7 +44,7 @@ derive. Every enum requires exactly one `Unknown` payload with the same wire
 type, so unrecognized codes round-trip without being interpreted as a known choice.
 
 ```rust
-use wc3::model::wmo;
+use wc3::model::formats::wmo;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq,
          wmo::Value, wmo::Read, wmo::Write, wmo::RecordLayout)]

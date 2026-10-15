@@ -1,7 +1,7 @@
 # MDX derives
 
 The binary derives describe individual record layouts. Import them through
-`wc3::model::mdlx::mdx` alongside the traits they implement. They encode fields and
+`wc3::model::formats::mdlx::mdx` alongside the traits they implement. They encode fields and
 record framing; whole-model codecs supply the `MDLX` header and top-level chunk
 headers separately.
 
@@ -13,8 +13,8 @@ supported. Numeric scalar codecs use little-endian storage. `PhantomData<T>`
 fields occupy no bytes.
 
 ```rust
-use wc3::model::mdlx::mdx;
-use wc3::model::mdlx::mdx::{Read as _, Write as _};
+use wc3::model::formats::mdlx::mdx;
+use wc3::model::formats::mdlx::mdx::{Read as _, Write as _};
 
 #[derive(mdx::Read, mdx::Write)]
 struct Pair {
@@ -44,7 +44,7 @@ requirements. Records without borrowed storage can derive `ReadOwned` without
 an ownership implementation.
 
 ```rust
-use wc3::model::mdlx::mdx;
+use wc3::model::formats::mdlx::mdx;
 use mdx::ReadOwned as _;
 
 #[derive(mdx::Read, mdx::ReadOwned)]
@@ -63,8 +63,8 @@ identifies errors; it is not written into the record. Reading confines the body
 to that length, and writing patches the length after the body is complete.
 
 ```rust
-use wc3::model::mdlx::mdx;
-use wc3::model::mdlx::mdx::{Read as _, Write as _};
+use wc3::model::formats::mdlx::mdx;
+use wc3::model::formats::mdlx::mdx::{Read as _, Write as _};
 
 #[derive(mdx::Read, mdx::Write)]
 #[mdx(sized(tag = *b"TEST"))]
@@ -111,8 +111,8 @@ Rust discriminants do not define this mapping. An optional `#[mdx(unknown)]`
 variant contains exactly one `u32` and preserves unrecognized values:
 
 ```rust
-use wc3::model::mdlx::mdx;
-use wc3::model::mdlx::mdx::{Read as _, Write as _};
+use wc3::model::formats::mdlx::mdx;
+use wc3::model::formats::mdlx::mdx::{Read as _, Write as _};
 
 #[derive(Debug, PartialEq, mdx::Read, mdx::Write, mdx::Value)]
 #[mdx(value = u32)]

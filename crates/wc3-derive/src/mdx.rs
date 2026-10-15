@@ -145,29 +145,29 @@ fn expand_checked(input: DeriveInput, reading: bool) -> Result<TokenStream> {
             }
             seen_tags.push(key);
             let bound = if reading {
-                parse_quote!(#ty: ::wc3::model::mdlx::mdx::ReadTrackProperty<#data_lifetime>)
+                parse_quote!(#ty: ::wc3::model::formats::mdlx::mdx::ReadTrackProperty<#data_lifetime>)
             } else {
-                parse_quote!(#ty: ::wc3::model::mdlx::mdx::WriteTrackProperty)
+                parse_quote!(#ty: ::wc3::model::formats::mdlx::mdx::WriteTrackProperty)
             };
             generics.make_where_clause().predicates.push(bound);
             track_reads.push(quote! {
                 if tag == #track_tag {
-                    ::wc3::model::mdlx::mdx::ReadTrackProperty::read_mdx_track_property(&mut self.#member, cursor).map_err(|error| error.in_chunk(tag))?;
+                    ::wc3::model::formats::mdlx::mdx::ReadTrackProperty::read_mdx_track_property(&mut self.#member, cursor).map_err(|error| error.in_chunk(tag))?;
                     return Ok(true);
                 }
             });
-            track_writes.push(quote!(::wc3::model::mdlx::mdx::WriteTrackProperty::write_mdx_track_property(&self.#member, #track_tag, encoder)?;));
+            track_writes.push(quote!(::wc3::model::formats::mdlx::mdx::WriteTrackProperty::write_mdx_track_property(&self.#member, #track_tag, encoder)?;));
         }
         if flatten {
             let bound = if reading {
-                parse_quote!(#ty: ::wc3::model::mdlx::mdx::ReadTracks<#data_lifetime>)
+                parse_quote!(#ty: ::wc3::model::formats::mdlx::mdx::ReadTracks<#data_lifetime>)
             } else {
-                parse_quote!(#ty: ::wc3::model::mdlx::mdx::WriteTracks)
+                parse_quote!(#ty: ::wc3::model::formats::mdlx::mdx::WriteTracks)
             };
             generics.make_where_clause().predicates.push(bound);
-            track_reads.push(quote!(if ::wc3::model::mdlx::mdx::ReadTracks::read_mdx_track(&mut self.#member, tag, cursor)? { return Ok(true); }));
+            track_reads.push(quote!(if ::wc3::model::formats::mdlx::mdx::ReadTracks::read_mdx_track(&mut self.#member, tag, cursor)? { return Ok(true); }));
             track_writes.push(
-                quote!(::wc3::model::mdlx::mdx::WriteTracks::write_mdx_tracks(&self.#member, encoder)?;),
+                quote!(::wc3::model::formats::mdlx::mdx::WriteTracks::write_mdx_tracks(&self.#member, encoder)?;),
             );
         }
         let track_only = track_tag.is_some() && type_argument(ty, "Option").is_some();
@@ -181,9 +181,9 @@ fn expand_checked(input: DeriveInput, reading: bool) -> Result<TokenStream> {
         }
         if let Some(item) = vec_item {
             let predicate = if reading {
-                parse_quote!(#item: ::wc3::model::mdlx::mdx::Read<#data_lifetime>)
+                parse_quote!(#item: ::wc3::model::formats::mdlx::mdx::Read<#data_lifetime>)
             } else {
-                parse_quote!(#item: ::wc3::model::mdlx::mdx::Write)
+                parse_quote!(#item: ::wc3::model::formats::mdlx::mdx::Write)
             };
             generics.make_where_clause().predicates.push(predicate);
             reads.push(quote!({
@@ -192,7 +192,7 @@ fn expand_checked(input: DeriveInput, reading: bool) -> Result<TokenStream> {
                     let offset = cursor.absolute_position();
                     let value = cursor.read::<#item>()?;
                     if cursor.absolute_position() == offset {
-                        return Err(::wc3::model::mdlx::mdx::ReadError { offset, tag: Some(#tag), kind: ::wc3::model::mdlx::mdx::ReadErrorKind::NoProgress });
+                        return Err(::wc3::model::formats::mdlx::mdx::ReadError { offset, tag: Some(#tag), kind: ::wc3::model::formats::mdlx::mdx::ReadErrorKind::NoProgress });
                     }
                     values.push(value);
                 }
@@ -205,9 +205,9 @@ fn expand_checked(input: DeriveInput, reading: bool) -> Result<TokenStream> {
             reads.push(quote!(::std::marker::PhantomData));
         } else {
             let predicate = if reading {
-                parse_quote!(#ty: ::wc3::model::mdlx::mdx::Read<#data_lifetime>)
+                parse_quote!(#ty: ::wc3::model::formats::mdlx::mdx::Read<#data_lifetime>)
             } else {
-                parse_quote!(#ty: ::wc3::model::mdlx::mdx::Write)
+                parse_quote!(#ty: ::wc3::model::formats::mdlx::mdx::Write)
             };
             generics.make_where_clause().predicates.push(predicate);
             reads.push(quote!(cursor.read()?));
@@ -233,13 +233,13 @@ fn expand_checked(input: DeriveInput, reading: bool) -> Result<TokenStream> {
                 while !cursor.remaining().is_empty() {
                     let offset = cursor.absolute_position();
                     let tag = cursor.read()?;
-                    if !::wc3::model::mdlx::mdx::ReadTracks::read_mdx_track(&mut value, tag, &mut cursor)? {
-                        return Err(::wc3::model::mdlx::mdx::ReadError { offset, tag: Some(#record_tag), kind: ::wc3::model::mdlx::mdx::ReadErrorKind::UnknownTag { actual: tag } });
+                    if !::wc3::model::formats::mdlx::mdx::ReadTracks::read_mdx_track(&mut value, tag, &mut cursor)? {
+                        return Err(::wc3::model::formats::mdlx::mdx::ReadError { offset, tag: Some(#record_tag), kind: ::wc3::model::formats::mdlx::mdx::ReadErrorKind::UnknownTag { actual: tag } });
                     }
                 }
                 cursor.finish()?;
                 Ok(value)
-                })().map_err(|error: ::wc3::model::mdlx::mdx::ReadError| error.in_chunk(#record_tag))
+                })().map_err(|error: ::wc3::model::formats::mdlx::mdx::ReadError| error.in_chunk(#record_tag))
             }
         } else {
             quote! {
@@ -248,15 +248,15 @@ fn expand_checked(input: DeriveInput, reading: bool) -> Result<TokenStream> {
             }
         };
         Ok(quote! {
-            impl #impl_generics ::wc3::model::mdlx::mdx::ReadTracks<#data_lifetime> for #name #ty_generics #where_clause {
-                fn read_mdx_track(&mut self, tag: ::wc3::model::mdlx::Tag, cursor: &mut ::wc3::model::mdlx::mdx::Cursor<#data_lifetime>) -> Result<bool, ::wc3::model::mdlx::mdx::ReadError> {
+            impl #impl_generics ::wc3::model::formats::mdlx::mdx::ReadTracks<#data_lifetime> for #name #ty_generics #where_clause {
+                fn read_mdx_track(&mut self, tag: ::wc3::model::formats::mdlx::Tag, cursor: &mut ::wc3::model::formats::mdlx::mdx::Cursor<#data_lifetime>) -> Result<bool, ::wc3::model::formats::mdlx::mdx::ReadError> {
                     #(#track_reads)*
                     let _ = (tag, cursor);
                     Ok(false)
                 }
             }
-            impl #impl_generics ::wc3::model::mdlx::mdx::Read<#data_lifetime> for #name #ty_generics #where_clause {
-                fn read_mdx(source: &mut ::wc3::model::mdlx::mdx::Cursor<#data_lifetime>) -> Result<Self, ::wc3::model::mdlx::mdx::ReadError> {
+            impl #impl_generics ::wc3::model::formats::mdlx::mdx::Read<#data_lifetime> for #name #ty_generics #where_clause {
+                fn read_mdx(source: &mut ::wc3::model::formats::mdlx::mdx::Cursor<#data_lifetime>) -> Result<Self, ::wc3::model::formats::mdlx::mdx::ReadError> {
                     #body
                 }
             }
@@ -266,22 +266,22 @@ fn expand_checked(input: DeriveInput, reading: bool) -> Result<TokenStream> {
             quote! {
                 let marker = encoder.begin_sized();
                 #(#writes)*
-                ::wc3::model::mdlx::mdx::WriteTracks::write_mdx_tracks(self, encoder)?;
+                ::wc3::model::formats::mdlx::mdx::WriteTracks::write_mdx_tracks(self, encoder)?;
                 encoder.finish_sized(marker, #tag)?;
             }
         } else {
             quote!(#(#writes)*)
         };
         Ok(quote! {
-            impl #impl_generics ::wc3::model::mdlx::mdx::WriteTracks for #name #ty_generics #where_clause {
-                fn write_mdx_tracks(&self, encoder: &mut ::wc3::model::mdlx::mdx::Encoder<'_>) -> Result<(), ::wc3::model::mdlx::mdx::WriteError> {
+            impl #impl_generics ::wc3::model::formats::mdlx::mdx::WriteTracks for #name #ty_generics #where_clause {
+                fn write_mdx_tracks(&self, encoder: &mut ::wc3::model::formats::mdlx::mdx::Encoder<'_>) -> Result<(), ::wc3::model::formats::mdlx::mdx::WriteError> {
                     #(#track_writes)*
                     let _ = encoder;
                     Ok(())
                 }
             }
-            impl #impl_generics ::wc3::model::mdlx::mdx::Write for #name #ty_generics #where_clause {
-                fn write_mdx(&self, encoder: &mut ::wc3::model::mdlx::mdx::Encoder<'_>) -> Result<(), ::wc3::model::mdlx::mdx::WriteError> {
+            impl #impl_generics ::wc3::model::formats::mdlx::mdx::Write for #name #ty_generics #where_clause {
+                fn write_mdx(&self, encoder: &mut ::wc3::model::formats::mdlx::mdx::Encoder<'_>) -> Result<(), ::wc3::model::formats::mdlx::mdx::WriteError> {
                     #body
                     Ok(())
                 }
@@ -443,11 +443,11 @@ fn expand_enum(input: &DeriveInput, reading: bool, conversions: bool) -> Result<
         let fallback = if let Some(member) = unknown {
             quote!(value => Self::#member(value))
         } else {
-            quote!(value => return Err(::wc3::model::mdlx::mdx::ReadError { offset, tag: None, kind: ::wc3::model::mdlx::mdx::ReadErrorKind::UnknownEnumValue { enum_name: stringify!(#name), value } }))
+            quote!(value => return Err(::wc3::model::formats::mdlx::mdx::ReadError { offset, tag: None, kind: ::wc3::model::formats::mdlx::mdx::ReadErrorKind::UnknownEnumValue { enum_name: stringify!(#name), value } }))
         };
         Ok(quote! {
-            impl #impl_generics ::wc3::model::mdlx::mdx::Read<#data_lifetime> for #name #ty_generics #where_clause {
-                fn read_mdx(cursor: &mut ::wc3::model::mdlx::mdx::Cursor<#data_lifetime>) -> Result<Self, ::wc3::model::mdlx::mdx::ReadError> {
+            impl #impl_generics ::wc3::model::formats::mdlx::mdx::Read<#data_lifetime> for #name #ty_generics #where_clause {
+                fn read_mdx(cursor: &mut ::wc3::model::formats::mdlx::mdx::Cursor<#data_lifetime>) -> Result<Self, ::wc3::model::formats::mdlx::mdx::ReadError> {
                     let offset = cursor.absolute_position();
                     let value = cursor.read::<#wire>()?;
                     let _ = offset;
@@ -457,8 +457,8 @@ fn expand_enum(input: &DeriveInput, reading: bool, conversions: bool) -> Result<
         })
     } else {
         Ok(quote! {
-            impl #impl_generics ::wc3::model::mdlx::mdx::Write for #name #ty_generics #where_clause {
-                fn write_mdx(&self, encoder: &mut ::wc3::model::mdlx::mdx::Encoder<'_>) -> Result<(), ::wc3::model::mdlx::mdx::WriteError> {
+            impl #impl_generics ::wc3::model::formats::mdlx::mdx::Write for #name #ty_generics #where_clause {
+                fn write_mdx(&self, encoder: &mut ::wc3::model::formats::mdlx::mdx::Encoder<'_>) -> Result<(), ::wc3::model::formats::mdlx::mdx::WriteError> {
                     let value: #wire = match self { #(#write_arms,)* };
                     encoder.write(&value)
                 }

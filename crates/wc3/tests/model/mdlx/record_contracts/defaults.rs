@@ -1,6 +1,6 @@
 use super::*;
-use wc3::model::mdlx::animation::Animatable;
-use wc3::model::mdlx::scene::LightType;
+use wc3::model::formats::mdlx::animation::Animatable;
+use wc3::model::formats::mdlx::scene::LightType;
 
 #[test]
 fn constructors_use_documented_defaults_without_changing_decoded_values() {

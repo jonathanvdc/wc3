@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 
-use wc3::model::semantic::profiles::{m2, m3, mdlx, wmo};
-use wc3::model::semantic::{
+use wc3::model::profiles::{m2, m3, mdlx, wmo};
+use wc3::model::{
     Animated, AttachmentActivation, AttachmentIdentity, AttachmentPoint, AttachmentPointDefinition,
     ExternalAttachment, PlacementAppearance, Resource, WorldPlacementAppearance,
 };
@@ -111,10 +111,8 @@ fn world_appearance_survives_rejected_attachment_export() {
 
 #[test]
 fn custom_attachment_parts_traverse_their_graph_relationships() {
-    use wc3::model::semantic::profiles::Universal;
-    use wc3::model::semantic::{
-        ExternalAttachmentDefinition, Link, Model, Node, NodeId, ValidateLinks,
-    };
+    use wc3::model::profiles::Universal;
+    use wc3::model::{ExternalAttachmentDefinition, Link, Model, Node, NodeId, ValidateLinks};
 
     #[derive(Clone, Debug)]
     struct LinkedControl(NodeId);

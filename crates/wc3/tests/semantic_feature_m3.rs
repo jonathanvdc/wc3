@@ -1,7 +1,7 @@
 use std::borrow::Cow;
-use wc3::model::semantic::profiles::m3;
-use wc3::model::semantic::FeatureSchema;
-use wc3::model::semantic::{Camera, EventSource, FeatureView, Light, NodeFeature};
+use wc3::model::profiles::m3;
+use wc3::model::FeatureSchema;
+use wc3::model::{Camera, EventSource, FeatureView, Light, NodeFeature};
 
 #[test]
 fn optical_programs_keep_initial_reset_and_reference_controls() {
