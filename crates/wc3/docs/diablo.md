@@ -141,6 +141,11 @@ actual skeleton relationships rather than numeric bone indices. Look-at controll
 also target actual skeleton bones, so renaming a bone updates its native look-at
 reference; inactive unresolved spellings remain independently editable.
 
+The semantic `d3::VertexStreams` type shares the `semantic::VertexData` layout,
+with auxiliary colors, independent binormals, and cloth-vertex mappings in
+`VertexExtras`. Influence rows use `[Influence; 3]`, preserving their ordered
+zero-weight slots.
+
 The appearance owns named material slots, slot-local variants, and named looks
 that select actual variants. Renaming a slot preserves its identity and updates
 native subobject references during export. Unused slots and variants remain

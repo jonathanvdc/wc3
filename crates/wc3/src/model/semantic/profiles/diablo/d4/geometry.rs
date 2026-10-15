@@ -1,7 +1,7 @@
 //! Diablo IV declared vertex streams are logical values independent of buffer packing.
 use crate::model::semantic::{
     AttributeDomain, Attributes, Error, GeometryData, GeometryEdit, GeometryEditCapabilities,
-    GeometrySchema, InfluenceRows, Link, Topology, ValidateLinks, Values,
+    GeometrySchema, InfluenceRows, Link, Topology, UniversalGeometry, ValidateLinks, Values,
 };
 
 /// Triangle geometry whose independently declared streams retain their logical values.
@@ -76,5 +76,24 @@ impl<'a> GeometrySchema<'a> for Geometry<'a> {
             ));
         }
         self.data.validate()
+    }
+}
+
+impl<'a> From<Geometry<'a>> for UniversalGeometry<'a> {
+    fn from(value: Geometry<'a>) -> Self {
+        Self::General(value.into_data())
+    }
+}
+impl<'a> TryFrom<UniversalGeometry<'a>> for Geometry<'a> {
+    type Error = Error;
+    fn try_from(value: UniversalGeometry<'a>) -> Result<Self, Error> {
+        match value {
+            UniversalGeometry::General(data) => Self::new(data),
+            UniversalGeometry::Vertex(data) => Self::new(data.try_into()?),
+            _ => Err(Error::new(
+                "d4.narrow.geometry",
+                "geometry carries a different authored domain",
+            )),
+        }
     }
 }

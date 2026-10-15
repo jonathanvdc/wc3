@@ -6,7 +6,7 @@ use crate::model::semantic::profiles::{
 use crate::model::semantic::{
     Basis, Billboard, Bounds, ColorSpace, Error, ExplicitBinding, Inheritance, LengthUnit,
     MaterialSurface, Model, NodeControls, Resource, Resources, Sampler, Single, SnoNamespace,
-    Transform, UniversalAppearance, UniversalBinding, UniversalGeometry,
+    Transform, UniversalAppearance, UniversalBinding,
 };
 use crate::model::semantic::{MeshControls as AnyMeshControls, ModelControls as AnyModelControls};
 
@@ -200,7 +200,7 @@ impl Extends<D4> for Universal {
         UniversalBinding::Explicit(value)
     }
     fn geometry<'a>(value: <D4 as Profile>::Geometry<'a>) -> Self::Geometry<'a> {
-        UniversalGeometry::D4(value)
+        value.into()
     }
     fn model<'a>(value: <D4 as Profile>::Model<'a>) -> Self::Model<'a> {
         Some(AnyModelControls::D4(value))
@@ -274,13 +274,7 @@ impl Narrows<Universal> for D4 {
     fn geometry<'a>(
         value: <Universal as Profile>::Geometry<'a>,
     ) -> Result<Self::Geometry<'a>, Error> {
-        match value {
-            UniversalGeometry::D4(value) => Ok(value),
-            _ => Err(Error::new(
-                "d4.narrow.geometry",
-                "payload belongs to another authoring vocabulary",
-            )),
-        }
+        value.try_into()
     }
     fn model<'a>(value: <Universal as Profile>::Model<'a>) -> Result<Self::Model<'a>, Error> {
         match value {

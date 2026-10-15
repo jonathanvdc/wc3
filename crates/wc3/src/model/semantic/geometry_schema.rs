@@ -143,6 +143,8 @@ pub enum InfluenceRows<'view, 'data> {
     None,
     /// Variable-length normalized distributions.
     Variable(&'view Values<'data, Vec<Influence>>),
+    /// Three ordered influence slots per vertex; zero-weight slots are retained.
+    Three(&'view Values<'data, [Influence; 3]>),
     /// Four ordered influence slots per vertex; zero-weight slots are retained.
     Four(&'view Values<'data, [Influence; 4]>),
     /// Direct hierarchy-node contributions, without an invented joint palette.
@@ -156,6 +158,7 @@ impl InfluenceRows<'_, '_> {
         match self {
             Self::None => 0,
             Self::Variable(values) => values.len(),
+            Self::Three(values) => values.len(),
             Self::Four(values) => values.len(),
             Self::MatrixGroups(values) => values.len(),
             Self::Nodes(values) => values.len(),
@@ -179,6 +182,9 @@ impl InfluenceRows<'_, '_> {
             Self::None => None,
             Self::Nodes(values) => values.get(index).map(VertexInfluences::Nodes),
             Self::Variable(values) => values.get(index).map(VertexInfluences::Joints),
+            Self::Three(values) => values
+                .get(index)
+                .map(|v| VertexInfluences::Joints(Vec::from(v))),
             Self::Four(values) => values
                 .get(index)
                 .map(|v| VertexInfluences::Joints(Vec::from(v))),
@@ -204,8 +210,6 @@ impl InfluenceRows<'_, '_> {
 pub enum UniversalGeometry<'data> {
     /// Independent tangent and binormal streams and three-slot skinning.
     D3(profiles::diablo::d3::Geometry<'data>),
-    /// Declared logical streams and material-slot relationships.
-    D4(profiles::diablo::d4::Geometry<'data>),
     /// General authoring geometry, including polygons, custom attributes, and variable influences.
     General(GeometryData<'data>),
     /// Shared vertex streams with explicit joint-distribution semantics.
@@ -295,7 +299,6 @@ macro_rules! with_geometry {
             UniversalGeometry::Wmo($value) => $body,
             UniversalGeometry::Wem($value) => $body,
             UniversalGeometry::D3($value) => $body,
-            UniversalGeometry::D4($value) => $body,
         }
     };
 }
@@ -311,7 +314,6 @@ impl<'data> GeometrySchema<'data> for UniversalGeometry<'data> {
             Self::Wmo(value) => Ok(Self::Wmo(value.edited(edit)?)),
             Self::Wem(value) => Ok(Self::Wem(value.edited(edit)?)),
             Self::D3(value) => Ok(Self::D3(value.edited(edit)?)),
-            Self::D4(value) => Ok(Self::D4(value.edited(edit)?)),
         }
     }
     fn kind(&self) -> GeometryKind {

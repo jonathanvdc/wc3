@@ -1,4 +1,6 @@
-use wc3::model::semantic::profiles::diablo::d3::{self, Geometry, NodeRole, VertexStreams, D3};
+use wc3::model::semantic::profiles::diablo::d3::{
+    self, Geometry, NodeRole, VertexExtras, VertexStreams, D3,
+};
 use wc3::model::semantic::profiles::{NoControls, Universal, Wem};
 use wc3::model::semantic::{Mesh, Model, Node, Resource, SnoNamespace, Texture, Values};
 
@@ -8,11 +10,13 @@ fn triangle<'a>(positions: &'a [[f32; 3]]) -> Geometry<'a> {
             positions: Values::from_slice(positions),
             normals: vec![[0., 0., 1.]; 3].into(),
             colors: vec![[1.; 4]; 3].into(),
-            auxiliary_colors: vec![[0.; 4]; 3].into(),
             texture_coordinates: [vec![[0.; 2]; 3].into(), vec![[1.; 2]; 3].into()],
             tangents: vec![[1., 0., 0.]; 3].into(),
-            binormals: vec![[0., -1., 0.]; 3].into(),
-            cloth_vertices: vec![0; 3].into(),
+            extras: VertexExtras {
+                auxiliary_colors: vec![[0.; 4]; 3].into(),
+                binormals: vec![[0., -1., 0.]; 3].into(),
+                cloth_vertices: vec![0; 3].into(),
+            },
         },
         vec![[0, 1, 2]],
         Vec::new(),
@@ -71,6 +75,7 @@ fn widening_and_narrowing_preserve_geometry_identity_and_borrowed_arrays() {
             .unwrap()
             .geometry
             .streams()
+            .extras
             .binormals
             .get(0),
         Some([0., -1., 0.])
@@ -82,10 +87,10 @@ fn independent_binormals_and_auxiliary_colors_are_validated() {
     let positions = [[0.; 3]; 3];
     let geometry = triangle(&positions);
     let mut streams = geometry.streams().clone();
-    streams.binormals = vec![[f32::NAN, 0., 0.]; 3].into();
+    streams.extras.binormals = vec![[f32::NAN, 0., 0.]; 3].into();
     assert!(geometry.clone().with_streams(streams).is_err());
     let mut streams = geometry.streams().clone();
-    streams.auxiliary_colors = vec![[0.; 4]; 2].into();
+    streams.extras.auxiliary_colors = vec![[0.; 4]; 2].into();
     assert!(geometry.with_streams(streams).is_err());
 }
 

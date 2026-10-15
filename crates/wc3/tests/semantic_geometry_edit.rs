@@ -89,15 +89,20 @@ fn common_tools_work_across_profiles_and_dispatchers() {
         positions: positions(),
         normals: positions(),
         colors: vec![[1.; 4]; 3].into(),
-        auxiliary_colors: vec![[0.5; 4]; 3].into(),
         texture_coordinates: [vec![[0.; 2]; 3].into(), vec![[1.; 2]; 3].into()],
         tangents: positions(),
-        binormals: positions(),
-        cloth_vertices: vec![8, 9, 10].into(),
+        extras: d3::VertexExtras {
+            auxiliary_colors: vec![[0.5; 4]; 3].into(),
+            binormals: positions(),
+            cloth_vertices: vec![8, 9, 10].into(),
+        },
     };
     let d3 = d3::Geometry::new(streams, triangles(), Values::default()).unwrap();
     let mapped = d3.edited(duplicate()).unwrap();
-    assert_eq!(mapped.streams().cloth_vertices.to_vec(), vec![10, 8, 9, 8]);
+    assert_eq!(
+        mapped.streams().extras.cloth_vertices.to_vec(),
+        vec![10, 8, 9, 8]
+    );
     exercise(d3);
 }
 #[test]

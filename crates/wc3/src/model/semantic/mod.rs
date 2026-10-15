@@ -67,7 +67,7 @@ pub use profiles::m2::M2Geometry;
 pub use profiles::m3::{M3CollisionGeometry, M3DisplayGeometry, M3Geometry};
 pub use profiles::mdlx::MdlxGeometry;
 mod vertex_geometry;
-pub use vertex_geometry::{JointInfluences, VertexGeometry};
+pub use vertex_geometry::{JointInfluences, VertexData, VertexGeometry};
 mod geometry_edit;
 pub use geometry_edit::*;
 mod geometry_schema;

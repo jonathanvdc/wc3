@@ -158,9 +158,27 @@ controls separate from display geometry. `General` retains custom attributes,
 polygon domains, and variable-length influence rows. General geometry can narrow
 to the shared vertex representation when it has no custom attributes or authored
 variable influences; otherwise those domains require an explicit transformation.
-WMO, WEM, and Diablo retain their richer geometry payloads, including face
-controls, named sections, and independent tangent/binormal streams. Sharing
-vertex storage does not make their additional data interchangeable.
+
+`VertexData` shares the typed vertex layout used by display geometry, WMO,
+Diablo III, and collision. Its stream types select fixed UV arrays, optional
+streams, multiple color sets, or `()` for unavailable shading data. An explicit
+extras type owns additional vertex streams. Common remapping carries those
+streams through the same vertex correspondence, while connectivity and joint
+rows remain separate fields of their constrained geometry owner.
+
+WMO retains its face controls, strip connectivity, and draw-selected tangent
+pool. Its ordered color sets and baked-light coordinates participate in shared
+vertex remapping, while face records and tangent pools keep their own domains.
+Diablo III retains independent three-vector tangents and binormals, auxiliary
+colors, and cloth mappings; its influence rows have the array type
+`[Influence; 3]`. Those additional meanings keep both geometries in distinct
+universal variants.
+
+Diablo IV already uses `GeometryData` and widens directly to `General`.
+Narrowing checks triangle connectivity and vertex-domain attributes before
+constructing `d4::Geometry`. Unskinned shared vertex geometry can also narrow
+without copying its arrays. Fixed weighted slots and equal-weight matrix groups
+require an explicit transformation before becoming variable influence rows.
 
 ## Appearance and playback
 

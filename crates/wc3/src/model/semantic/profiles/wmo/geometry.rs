@@ -1,7 +1,9 @@
 //! Static world geometry with the authored world-model stream vocabulary.
 use super::TriangleFlags;
-use crate::model::semantic::geometry_edit::{check_edit, remap_values};
+use crate::model::semantic::geometry_edit::check_edit;
 use crate::model::semantic::geometry_schema::validate_geometry;
+use crate::model::semantic::vertex_geometry::VertexStreams;
+use crate::model::semantic::VertexData;
 use crate::model::semantic::{
     Attributes, Error, GeometrySchema, InfluenceRows, Link, MaterialId, Topology,
     UniversalGeometry, ValidateLinks, Values,
@@ -15,20 +17,23 @@ use crate::model::semantic::{GeometryEdit, GeometryEditCapabilities, StreamSuppo
 /// not impose the limits of one particular file revision.
 #[derive(Clone, Debug)]
 pub struct WmoGeometry<'data> {
-    positions: Values<'data, [f32; 3]>,
-    normals: Values<'data, [f32; 3]>,
-    coordinates: Vec<Values<'data, [f32; 2]>>,
-    colors: Vec<Values<'data, [f32; 4]>>,
+    streams: VertexStreams<
+        'data,
+        (),
+        Vec<Values<'data, [f32; 2]>>,
+        (),
+        Vec<Values<'data, [f32; 4]>>,
+        Values<'data, [f32; 3]>,
+        Values<'data, [f32; 2]>,
+    >,
     strip_indices: Values<'data, u32>,
     tangent_vectors: Values<'data, [f32; 4]>,
-    lightmap_coordinates: Values<'data, [f32; 2]>,
     triangle_controls: Values<'data, WmoTriangleControls>,
-    topology: Topology<'data>,
 }
 impl<'data> WmoGeometry<'data> {
     /// Replaces positions while checking all geometry stream relationships.
     pub fn with_positions(mut self, positions: Values<'data, [f32; 3]>) -> Result<Self, Error> {
-        self.positions = positions;
+        self.streams.positions = positions;
         self.validate()?;
         Ok(self)
     }
@@ -40,15 +45,21 @@ impl<'data> WmoGeometry<'data> {
         let triangles = triangles.into();
         let triangle_controls = Values::view(triangles.len(), |_| WmoTriangleControls::default());
         let geometry = Self {
-            positions: positions.into(),
-            normals: Values::default(),
-            coordinates: Vec::new(),
-            colors: Vec::new(),
+            streams: VertexStreams {
+                vertices: VertexData {
+                    positions: positions.into(),
+                    normals: Values::default(),
+                    texture_coordinates: Vec::new(),
+                    colors: Vec::new(),
+                    tangents: (),
+                    extras: Values::default(),
+                },
+                topology: Topology::Triangles(triangles),
+                influences: (),
+            },
             strip_indices: Values::default(),
             tangent_vectors: Values::default(),
-            lightmap_coordinates: Values::default(),
             triangle_controls,
-            topology: Topology::Triangles(triangles),
         };
         geometry.validate()?;
         Ok(geometry)
@@ -87,13 +98,13 @@ impl<'data> WmoGeometry<'data> {
         mut self,
         coordinates: Values<'data, [f32; 2]>,
     ) -> Result<Self, Error> {
-        self.lightmap_coordinates = coordinates;
+        self.streams.extras = coordinates;
         self.validate()?;
         Ok(self)
     }
     /// Reads the independently authored baked-light coordinate stream.
     pub fn lightmap_coordinates(&self) -> &Values<'data, [f32; 2]> {
-        &self.lightmap_coordinates
+        &self.streams.extras
     }
     /// Reads per-triangle controls in connectivity order.
     pub fn triangle_controls(&self) -> &Values<'data, WmoTriangleControls> {
@@ -104,7 +115,7 @@ impl<'data> WmoGeometry<'data> {
         mut self,
         normals: impl Into<Values<'data, [f32; 3]>>,
     ) -> Result<Self, Error> {
-        self.normals = normals.into();
+        self.streams.normals = normals.into();
         self.validate()?;
         Ok(self)
     }
@@ -113,19 +124,19 @@ impl<'data> WmoGeometry<'data> {
         mut self,
         coordinates: Vec<Values<'data, [f32; 2]>>,
     ) -> Result<Self, Error> {
-        self.coordinates = coordinates;
+        self.streams.texture_coordinates = coordinates;
         self.validate()?;
         Ok(self)
     }
     /// Sets ordered vertex-color streams, including independent lighting sets.
     pub fn with_color_sets(mut self, colors: Vec<Values<'data, [f32; 4]>>) -> Result<Self, Error> {
-        self.colors = colors;
+        self.streams.colors = colors;
         self.validate()?;
         Ok(self)
     }
     /// Reads all independently authored vertex-color sets.
     pub fn color_sets(&self) -> &[Values<'data, [f32; 4]>] {
-        &self.colors
+        &self.streams.colors
     }
 }
 impl<'data> GeometrySchema<'data> for WmoGeometry<'data> {
@@ -146,35 +157,27 @@ impl<'data> GeometrySchema<'data> for WmoGeometry<'data> {
         let mut result = self.clone();
         if let Some(map) = &edit.remap {
             map.check(self)?;
-            remap_values(&mut result.positions, &map.new_to_old);
-            remap_values(&mut result.normals, &map.new_to_old);
-            for stream in &mut result.coordinates {
-                remap_values(stream, &map.new_to_old);
-            }
-            for stream in &mut result.colors {
-                remap_values(stream, &map.new_to_old);
-            }
-            remap_values(&mut result.lightmap_coordinates, &map.new_to_old);
-            result.topology = map.topology.clone();
+            result.streams.vertices.remap(&map.new_to_old);
+            result.streams.topology = map.topology.clone();
         }
         if let Some(values) = edit.positions {
-            result.positions = values;
+            result.streams.positions = values;
         }
         if let Some(values) = edit.normals {
-            result.normals = values;
+            result.streams.normals = values;
         }
         if let Some(values) = edit.texture_coordinates {
-            result.coordinates = values;
+            result.streams.texture_coordinates = values;
         }
         if let Some(values) = edit.colors {
             if values.is_empty() {
-                if !result.colors.is_empty() {
-                    result.colors.remove(0);
+                if !result.streams.colors.is_empty() {
+                    result.streams.colors.remove(0);
                 }
-            } else if result.colors.is_empty() {
-                result.colors.push(values);
+            } else if result.streams.colors.is_empty() {
+                result.streams.colors.push(values);
             } else {
-                result.colors[0] = values;
+                result.streams.colors[0] = values;
             }
         }
         result.validate()?;
@@ -182,25 +185,25 @@ impl<'data> GeometrySchema<'data> for WmoGeometry<'data> {
     }
 
     fn positions(&self) -> &Values<'data, [f32; 3]> {
-        &self.positions
+        &self.streams.positions
     }
     fn normals(&self) -> Option<&Values<'data, [f32; 3]>> {
-        (!self.normals.is_empty()).then_some(&self.normals)
+        (!self.streams.normals.is_empty()).then_some(&self.streams.normals)
     }
     fn tangents(&self) -> Option<&Values<'data, [f32; 4]>> {
         None
     }
     fn texture_coordinates(&self) -> &[Values<'data, [f32; 2]>] {
-        &self.coordinates
+        &self.streams.texture_coordinates
     }
     fn colors(&self) -> Option<&Values<'data, [f32; 4]>> {
-        self.colors.first()
+        self.streams.colors.first()
     }
     fn attributes(&self) -> Attributes<'_, 'data> {
         Attributes::Slice(&[])
     }
     fn topology(&self) -> &Topology<'data> {
-        &self.topology
+        &self.streams.topology
     }
     fn influences(&self) -> InfluenceRows<'_, 'data> {
         InfluenceRows::None
@@ -210,7 +213,7 @@ impl<'data> GeometrySchema<'data> for WmoGeometry<'data> {
         if self
             .strip_indices
             .iter()
-            .any(|index| index as usize >= self.positions.len())
+            .any(|index| index as usize >= self.streams.positions.len())
             || !self.tangent_vectors.iter().flatten().all(f32::is_finite)
         {
             return Err(Error::new(
@@ -219,28 +222,25 @@ impl<'data> GeometrySchema<'data> for WmoGeometry<'data> {
             ));
         }
         if !self.triangle_controls.is_empty()
-            && self.triangle_controls.len() != self.topology.primitive_count()
+            && self.triangle_controls.len() != self.streams.topology.primitive_count()
         {
             return Err(Error::new(
                 "geometry.triangle_controls",
                 "controls must match triangle count",
             ));
         }
-        if !self.lightmap_coordinates.is_empty()
-            && (self.lightmap_coordinates.len() != self.positions.len()
-                || !self
-                    .lightmap_coordinates
-                    .iter()
-                    .flatten()
-                    .all(f32::is_finite))
+        if !self.streams.extras.is_empty()
+            && (self.streams.extras.len() != self.streams.positions.len()
+                || !self.streams.extras.iter().flatten().all(f32::is_finite))
         {
             return Err(Error::new(
                 "geometry.lightmap_coordinates",
                 "baked-light coordinates must contain one finite coordinate per vertex",
             ));
         }
-        for colors in &self.colors {
-            if colors.len() != self.positions.len() || !colors.iter().flatten().all(f32::is_finite)
+        for colors in &self.streams.colors {
+            if colors.len() != self.streams.positions.len()
+                || !colors.iter().flatten().all(f32::is_finite)
             {
                 return Err(Error::new(
                     "geometry.colors",
@@ -260,15 +260,21 @@ impl<'data> From<WmoGeometry<'data>> for UniversalGeometry<'data> {
 impl Default for WmoGeometry<'_> {
     fn default() -> Self {
         Self {
-            positions: Values::default(),
-            normals: Values::default(),
-            coordinates: Vec::new(),
-            colors: Vec::new(),
+            streams: VertexStreams {
+                vertices: VertexData {
+                    positions: Values::default(),
+                    normals: Values::default(),
+                    texture_coordinates: Vec::new(),
+                    colors: Vec::new(),
+                    tangents: (),
+                    extras: Values::default(),
+                },
+                topology: Topology::Triangles(Values::default()),
+                influences: (),
+            },
             strip_indices: Values::default(),
             tangent_vectors: Values::default(),
-            lightmap_coordinates: Values::default(),
             triangle_controls: Values::default(),
-            topology: Topology::Triangles(Values::default()),
         }
     }
 }

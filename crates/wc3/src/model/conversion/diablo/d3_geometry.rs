@@ -1,7 +1,9 @@
 //! Borrowed logical views over native vertex records and explicit quantization on output.
 use super::{bounds, i32_count, name, native, native_bounds, parent, text_owned};
 use crate::model::conversion::{Asset, Context, EncodingHint, Error};
-use crate::model::semantic::profiles::diablo::d3::{Geometry, MeshControls, VertexStreams, D3};
+use crate::model::semantic::profiles::diablo::d3::{
+    Geometry, MeshControls, VertexExtras, VertexStreams, D3,
+};
 use crate::model::semantic::{Influence, MaterialSlotId, Mesh, NodeId, Values};
 use crate::model::semantic::{MeshId, Topology};
 use std::{array::from_fn, collections::BTreeMap};
@@ -42,14 +44,6 @@ pub(super) fn read<'a>(
         colors: Values::view(vertices.len(), move |i| {
             vertices.get(i).unwrap().rgba().map(|v| f32::from(v) / 255.)
         }),
-        auxiliary_colors: Values::view(vertices.len(), move |i| {
-            vertices
-                .get(i)
-                .unwrap()
-                .aux_color
-                .to_le_bytes()
-                .map(|v| f32::from(v) / 255.)
-        }),
         texture_coordinates: [
             Values::view(vertices.len(), move |i| vertices.get(i).unwrap().uv0()),
             Values::view(vertices.len(), move |i| vertices.get(i).unwrap().uv1()),
@@ -57,12 +51,22 @@ pub(super) fn read<'a>(
         tangents: Values::view(vertices.len(), move |i| {
             vertices.get(i).unwrap().tangent_vector()
         }),
-        binormals: Values::view(vertices.len(), move |i| {
-            vertices.get(i).unwrap().binormal_vector()
-        }),
-        cloth_vertices: Values::view(vertices.len(), move |i| {
-            vertices.get(i).unwrap().cloth_vertex_index
-        }),
+        extras: VertexExtras {
+            auxiliary_colors: Values::view(vertices.len(), move |i| {
+                vertices
+                    .get(i)
+                    .unwrap()
+                    .aux_color
+                    .to_le_bytes()
+                    .map(|v| f32::from(v) / 255.)
+            }),
+            binormals: Values::view(vertices.len(), move |i| {
+                vertices.get(i).unwrap().binormal_vector()
+            }),
+            cloth_vertices: Values::view(vertices.len(), move |i| {
+                vertices.get(i).unwrap().cloth_vertex_index
+            }),
+        },
     };
     let indices = &sub.indices;
     let triangles = Values::view(indices.len() / 3, move |i| {
@@ -71,12 +75,10 @@ pub(super) fn read<'a>(
     let influences = &sub.vertex_influences;
     let rows = Values::view(influences.len(), move |i| {
         let r = influences.get(i).unwrap();
-        [r.influence0, r.influence1, r.influence2]
-            .map(|v| Influence {
-                joint: v.bone_index as u32,
-                weight: v.weight,
-            })
-            .to_vec()
+        [r.influence0, r.influence1, r.influence2].map(|v| Influence {
+            joint: v.bone_index as u32,
+            weight: v.weight,
+        })
     });
     let mut mesh =
         Mesh::new(Geometry::new(streams, triangles, rows)?).with_controls(MeshControls {
@@ -189,12 +191,12 @@ pub(super) fn write(
             position: streams.positions.get(i).unwrap(),
             normal: vector(streams.normals.get(i).unwrap(), q[0], context)?,
             color: color(streams.colors.get(i).unwrap(), context)?,
-            aux_color: color(streams.auxiliary_colors.get(i).unwrap(), context)?,
+            aux_color: color(streams.extras.auxiliary_colors.get(i).unwrap(), context)?,
             tex_coord0: uv(streams.texture_coordinates[0].get(i).unwrap(), context)?,
             tex_coord1: uv(streams.texture_coordinates[1].get(i).unwrap(), context)?,
             tangent: vector(streams.tangents.get(i).unwrap(), q[1], context)?,
-            binormal: vector(streams.binormals.get(i).unwrap(), q[2], context)?,
-            cloth_vertex_index: streams.cloth_vertices.get(i).unwrap(),
+            binormal: vector(streams.extras.binormals.get(i).unwrap(), q[2], context)?,
+            cloth_vertex_index: streams.extras.cloth_vertices.get(i).unwrap(),
         });
     }
     let Topology::Triangles(triangles) = mesh.topology() else {

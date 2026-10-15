@@ -1,13 +1,13 @@
 //! Geometry streams and connectivity available to this model family.
 use crate::model::semantic::geometry_edit::{check_edit, remap_values};
 use crate::model::semantic::geometry_schema::{present, validate_geometry};
-use crate::model::semantic::vertex_geometry::VertexStreams;
-use crate::model::semantic::VertexGeometry;
+use crate::model::semantic::vertex_geometry::{GeometryStreams, VertexStreams};
 use crate::model::semantic::{
     Attributes, Error, GeometrySchema, InfluenceRows, JointInfluences, Link, Topology,
     ValidateLinks, Values,
 };
 use crate::model::semantic::{GeometryEdit, GeometryEditCapabilities, StreamSupport};
+use crate::model::semantic::{VertexData, VertexGeometry};
 /// Warcraft III geometry with its native stream vocabulary.
 ///
 /// Triangle groups retain their logical identities. Primitive kinds whose
@@ -37,11 +37,14 @@ impl<'data> MdlxGeometry<'data> {
     ) -> Result<Self, Error> {
         let geometry = Self {
             streams: VertexStreams {
-                colors: (),
-                positions: positions.into(),
-                normals: Values::default(),
-                tangents: Values::default(),
-                texture_coordinates: Vec::new(),
+                vertices: VertexData {
+                    colors: (),
+                    positions: positions.into(),
+                    normals: Values::default(),
+                    tangents: Values::default(),
+                    texture_coordinates: Vec::new(),
+                    extras: (),
+                },
                 topology: Topology::Triangles(triangles.into()),
                 influences: JointInfluences::None,
             },
@@ -56,7 +59,11 @@ impl<'data> MdlxGeometry<'data> {
     ) -> Result<Self, Error> {
         let geometry = Self {
             streams: VertexStreams {
-                positions: positions.into(),
+                vertices: VertexData {
+                    positions: positions.into(),
+                    extras: (),
+                    ..Self::default().streams.vertices
+                },
                 topology: Topology::Mixed(groups.into_iter().map(Topology::Triangles).collect()),
                 ..Self::default().streams
             },
@@ -129,12 +136,7 @@ impl<'data> GeometrySchema<'data> for MdlxGeometry<'data> {
         let mut result = self.clone();
         if let Some(map) = &edit.remap {
             map.check(self)?;
-            remap_values(&mut result.streams.positions, &map.new_to_old);
-            remap_values(&mut result.streams.normals, &map.new_to_old);
-            remap_values(&mut result.streams.tangents, &map.new_to_old);
-            for stream in &mut result.streams.texture_coordinates {
-                remap_values(stream, &map.new_to_old);
-            }
+            result.streams.vertices.remap(&map.new_to_old);
             match &mut result.streams.influences {
                 JointInfluences::None => {}
                 JointInfluences::MatrixGroups(v) => remap_values(v, &map.new_to_old),
@@ -220,11 +222,14 @@ impl Default for MdlxGeometry<'_> {
     fn default() -> Self {
         Self {
             streams: VertexStreams {
-                colors: (),
-                positions: Values::default(),
-                normals: Values::default(),
-                tangents: Values::default(),
-                texture_coordinates: Vec::new(),
+                vertices: VertexData {
+                    colors: (),
+                    positions: Values::default(),
+                    normals: Values::default(),
+                    tangents: Values::default(),
+                    texture_coordinates: Vec::new(),
+                    extras: (),
+                },
                 topology: Topology::Triangles(Values::default()),
                 influences: JointInfluences::None,
             },
@@ -238,16 +243,23 @@ impl ValidateLinks for MdlxGeometry<'_> {
 
 impl<'data> From<MdlxGeometry<'data>> for VertexGeometry<'data> {
     fn from(value: MdlxGeometry<'data>) -> Self {
-        let s = value.streams;
+        let GeometryStreams {
+            vertices,
+            topology,
+            influences,
+        } = value.streams;
         Self {
             streams: VertexStreams {
-                positions: s.positions,
-                normals: s.normals,
-                tangents: s.tangents,
-                colors: Values::default(),
-                texture_coordinates: s.texture_coordinates,
-                topology: s.topology,
-                influences: s.influences,
+                vertices: VertexData {
+                    positions: vertices.positions,
+                    normals: vertices.normals,
+                    tangents: vertices.tangents,
+                    colors: Values::default(),
+                    texture_coordinates: vertices.texture_coordinates,
+                    extras: (),
+                },
+                topology,
+                influences,
             },
         }
     }
@@ -256,8 +268,12 @@ impl<'data> TryFrom<VertexGeometry<'data>> for MdlxGeometry<'data> {
     type Error = Error;
     fn try_from(value: VertexGeometry<'data>) -> Result<Self, Error> {
         value.validate()?;
-        let s = value.streams;
-        if !s.colors.is_empty() {
+        let GeometryStreams {
+            vertices,
+            topology,
+            influences,
+        } = value.streams;
+        if !vertices.colors.is_empty() {
             return Err(Error::new(
                 "geometry.colors",
                 "MDLX geometry has no vertex color stream",
@@ -265,13 +281,16 @@ impl<'data> TryFrom<VertexGeometry<'data>> for MdlxGeometry<'data> {
         }
         let result = Self {
             streams: VertexStreams {
-                positions: s.positions,
-                normals: s.normals,
-                tangents: s.tangents,
-                colors: (),
-                texture_coordinates: s.texture_coordinates,
-                topology: s.topology,
-                influences: s.influences,
+                vertices: VertexData {
+                    positions: vertices.positions,
+                    normals: vertices.normals,
+                    tangents: vertices.tangents,
+                    colors: (),
+                    texture_coordinates: vertices.texture_coordinates,
+                    extras: (),
+                },
+                topology,
+                influences,
             },
         };
         result.validate()?;

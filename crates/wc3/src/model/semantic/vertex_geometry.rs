@@ -5,6 +5,7 @@ use super::{
     Attributes, Error, GeometryData, GeometryEdit, GeometryEditCapabilities, GeometrySchema,
     Influence, InfluenceRows, Link, StreamSupport, Topology, ValidateLinks, Values,
 };
+use std::ops::{Deref, DerefMut};
 
 /// Joint distributions preserve their authored slot structure and blending interpretation.
 #[derive(Clone, Debug, Default)]
@@ -34,24 +35,111 @@ impl<'data> JointInfluences<'data> {
     }
 }
 
-// Profile owners choose concrete field types: absent streams use (), M2 UVs use
-// an array, and weighted-only profiles store four-slot rows without an enum.
+/// Typed vertex streams shared by constrained geometry owners. Stream types
+/// express fixed UV slots, independent vector tangents, multiple colors, or
+/// unavailable streams. Additional vertex data belongs to the explicit extras type.
+#[derive(Clone, Debug, Default)]
+pub struct VertexData<
+    'data,
+    U = Vec<Values<'data, [f32; 2]>>,
+    T = Values<'data, [f32; 4]>,
+    C = Values<'data, [f32; 4]>,
+    N = Values<'data, [f32; 3]>,
+    E = (),
+> {
+    /// Model-space positions.
+    pub positions: Values<'data, [f32; 3]>,
+    /// Normal stream, or () for geometry without shading.
+    pub normals: N,
+    /// Tangent representation supported by this vocabulary.
+    pub tangents: T,
+    /// Primary or independently ordered color streams.
+    pub colors: C,
+    /// Ordered texture-coordinate streams or fixed slots.
+    pub texture_coordinates: U,
+    /// Additional independently authored vertex streams.
+    pub extras: E,
+}
+
+/// Mechanical vertex correspondence for one typed stream or stream collection.
+pub(crate) trait RemapStreams {
+    fn remap_streams(&mut self, indices: &[u32]);
+}
+impl RemapStreams for () {
+    fn remap_streams(&mut self, _: &[u32]) {}
+}
+impl<'a, T: Clone + Send + Sync + 'a> RemapStreams for Values<'a, T> {
+    fn remap_streams(&mut self, indices: &[u32]) {
+        remap_values(self, indices);
+    }
+}
+impl<'a, T: Clone + Send + Sync + 'a> RemapStreams for Vec<Values<'a, T>> {
+    fn remap_streams(&mut self, indices: &[u32]) {
+        for stream in self {
+            stream.remap_streams(indices);
+        }
+    }
+}
+impl<'a, T: Clone + Send + Sync + 'a, const N: usize> RemapStreams for [Values<'a, T>; N] {
+    fn remap_streams(&mut self, indices: &[u32]) {
+        for stream in self {
+            stream.remap_streams(indices);
+        }
+    }
+}
+impl<U, T, C, N, E> VertexData<'_, U, T, C, N, E> {
+    pub(crate) fn remap(&mut self, indices: &[u32])
+    where
+        U: RemapStreams,
+        T: RemapStreams,
+        C: RemapStreams,
+        N: RemapStreams,
+        E: RemapStreams,
+    {
+        self.positions.remap_streams(indices);
+        self.normals.remap_streams(indices);
+        self.tangents.remap_streams(indices);
+        self.colors.remap_streams(indices);
+        self.texture_coordinates.remap_streams(indices);
+        self.extras.remap_streams(indices);
+    }
+}
+
 #[derive(Clone, Debug)]
-pub(crate) struct VertexStreams<
+pub(crate) struct GeometryStreams<'data, V, I> {
+    pub vertices: V,
+    pub topology: Topology<'data>,
+    pub influences: I,
+}
+impl<V: Default, I: Default> Default for GeometryStreams<'_, V, I> {
+    fn default() -> Self {
+        Self {
+            vertices: V::default(),
+            topology: Topology::Triangles(Values::default()),
+            influences: I::default(),
+        }
+    }
+}
+impl<V, I> Deref for GeometryStreams<'_, V, I> {
+    type Target = V;
+    fn deref(&self) -> &V {
+        &self.vertices
+    }
+}
+impl<V, I> DerefMut for GeometryStreams<'_, V, I> {
+    fn deref_mut(&mut self) -> &mut V {
+        &mut self.vertices
+    }
+}
+pub(crate) type VertexStreams<
     'data,
     I,
     U = Vec<Values<'data, [f32; 2]>>,
     T = Values<'data, [f32; 4]>,
     C = Values<'data, [f32; 4]>,
-> {
-    pub positions: Values<'data, [f32; 3]>,
-    pub normals: Values<'data, [f32; 3]>,
-    pub tangents: T,
-    pub colors: C,
-    pub texture_coordinates: U,
-    pub topology: Topology<'data>,
-    pub influences: I,
-}
+    N = Values<'data, [f32; 3]>,
+    E = (),
+> = GeometryStreams<'data, VertexData<'data, U, T, C, N, E>, I>;
 
 /// Vertex streams without source-format identity. Profile owners retain their
 /// constrained constructors; checked conversion back never synthesizes streams.
@@ -67,7 +155,11 @@ impl<'data> VertexGeometry<'data> {
     ) -> Result<Self, Error> {
         let result = Self {
             streams: VertexStreams {
-                positions: positions.into(),
+                vertices: VertexData {
+                    positions: positions.into(),
+                    extras: (),
+                    ..Self::default().streams.vertices
+                },
                 topology: Topology::Triangles(triangles.into()),
                 ..Self::default().streams
             },
@@ -90,11 +182,14 @@ impl Default for VertexGeometry<'_> {
     fn default() -> Self {
         Self {
             streams: VertexStreams {
-                positions: Values::default(),
-                normals: Values::default(),
-                tangents: Values::default(),
-                colors: Values::default(),
-                texture_coordinates: Vec::new(),
+                vertices: VertexData {
+                    positions: Values::default(),
+                    normals: Values::default(),
+                    tangents: Values::default(),
+                    colors: Values::default(),
+                    texture_coordinates: Vec::new(),
+                    extras: (),
+                },
                 topology: Topology::Triangles(Values::default()),
                 influences: JointInfluences::None,
             },
@@ -123,13 +218,7 @@ impl<'data> GeometrySchema<'data> for VertexGeometry<'data> {
         let streams = &mut result.streams;
         if let Some(map) = &edit.remap {
             map.check(self)?;
-            remap_values(&mut streams.positions, &map.new_to_old);
-            remap_values(&mut streams.normals, &map.new_to_old);
-            remap_values(&mut streams.tangents, &map.new_to_old);
-            remap_values(&mut streams.colors, &map.new_to_old);
-            for stream in &mut streams.texture_coordinates {
-                remap_values(stream, &map.new_to_old);
-            }
+            streams.vertices.remap(&map.new_to_old);
             streams.influences.remap(&map.new_to_old);
             streams.topology = map.topology.clone();
         }
@@ -191,16 +280,47 @@ impl<'data> TryFrom<GeometryData<'data>> for VertexGeometry<'data> {
         }
         let result = Self {
             streams: VertexStreams {
-                positions: value.positions,
-                normals: value.normals,
-                tangents: value.tangents,
-                colors: value.colors,
-                texture_coordinates: value.texture_coordinates,
+                vertices: VertexData {
+                    positions: value.positions,
+                    normals: value.normals,
+                    tangents: value.tangents,
+                    colors: value.colors,
+                    texture_coordinates: value.texture_coordinates,
+                    extras: (),
+                },
                 topology: value.topology,
                 influences: JointInfluences::None,
             },
         };
         result.validate()?;
         Ok(result)
+    }
+}
+
+impl<'data> TryFrom<VertexGeometry<'data>> for GeometryData<'data> {
+    type Error = Error;
+    fn try_from(value: VertexGeometry<'data>) -> Result<Self, Error> {
+        value.validate()?;
+        let GeometryStreams {
+            vertices,
+            topology,
+            influences,
+        } = value.streams;
+        if !matches!(influences, JointInfluences::None) {
+            return Err(Error::new(
+                "geometry.influences",
+                "general geometry cannot retain fixed weighted slots or equal-weight matrix groups",
+            ));
+        }
+        Ok(Self {
+            positions: vertices.positions,
+            normals: vertices.normals,
+            tangents: vertices.tangents,
+            colors: vertices.colors,
+            texture_coordinates: vertices.texture_coordinates,
+            topology,
+            attributes: Vec::new(),
+            influences: Values::default(),
+        })
     }
 }

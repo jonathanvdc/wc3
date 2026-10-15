@@ -1,13 +1,13 @@
 //! Geometry streams and connectivity available to this model family.
 use crate::model::semantic::geometry_edit::{check_edit, remap_values};
 use crate::model::semantic::geometry_schema::validate_geometry;
-use crate::model::semantic::vertex_geometry::VertexStreams;
-use crate::model::semantic::VertexGeometry;
+use crate::model::semantic::vertex_geometry::{GeometryStreams, VertexStreams};
 use crate::model::semantic::{
     Attributes, Error, GeometrySchema, Influence, InfluenceRows, JointInfluences, Link, Topology,
     ValidateLinks, Values,
 };
 use crate::model::semantic::{GeometryEdit, GeometryEditCapabilities, StreamSupport};
+use crate::model::semantic::{VertexData, VertexGeometry};
 /// World of Warcraft model geometry with two UV streams and four joint slots.
 /// Unsupported streams are unavailable through this type's constructors.
 ///
@@ -44,11 +44,14 @@ impl<'data> M2Geometry<'data> {
     ) -> Result<Self, Error> {
         let geometry = Self {
             streams: VertexStreams {
-                tangents: (),
-                colors: (),
-                positions: positions.into(),
-                normals: normals.into(),
-                texture_coordinates,
+                vertices: VertexData {
+                    tangents: (),
+                    colors: (),
+                    positions: positions.into(),
+                    normals: normals.into(),
+                    texture_coordinates,
+                    extras: (),
+                },
                 topology: Topology::Triangles(triangles.into()),
                 influences: influences.into(),
             },
@@ -75,11 +78,7 @@ impl<'data> GeometrySchema<'data> for M2Geometry<'data> {
         let mut result = self.clone();
         if let Some(map) = &edit.remap {
             map.check(self)?;
-            remap_values(&mut result.streams.positions, &map.new_to_old);
-            remap_values(&mut result.streams.normals, &map.new_to_old);
-            for stream in &mut result.streams.texture_coordinates {
-                remap_values(stream, &map.new_to_old);
-            }
+            result.streams.vertices.remap(&map.new_to_old);
             remap_values(&mut result.streams.influences, &map.new_to_old);
             result.streams.topology = map.topology.clone();
         }
@@ -157,11 +156,14 @@ impl Default for M2Geometry<'_> {
     fn default() -> Self {
         Self {
             streams: VertexStreams {
-                tangents: (),
-                colors: (),
-                positions: Values::default(),
-                normals: Values::default(),
-                texture_coordinates: [Values::default(), Values::default()],
+                vertices: VertexData {
+                    tangents: (),
+                    colors: (),
+                    positions: Values::default(),
+                    normals: Values::default(),
+                    texture_coordinates: [Values::default(), Values::default()],
+                    extras: (),
+                },
                 topology: Topology::Triangles(Values::default()),
                 influences: Values::default(),
             },
@@ -175,16 +177,23 @@ impl ValidateLinks for M2Geometry<'_> {
 
 impl<'data> From<M2Geometry<'data>> for VertexGeometry<'data> {
     fn from(value: M2Geometry<'data>) -> Self {
-        let s = value.streams;
+        let GeometryStreams {
+            vertices,
+            topology,
+            influences,
+        } = value.streams;
         Self {
             streams: VertexStreams {
-                positions: s.positions,
-                normals: s.normals,
-                tangents: Values::default(),
-                colors: Values::default(),
-                texture_coordinates: Vec::from(s.texture_coordinates),
-                topology: s.topology,
-                influences: JointInfluences::Four(s.influences),
+                vertices: VertexData {
+                    positions: vertices.positions,
+                    normals: vertices.normals,
+                    tangents: Values::default(),
+                    colors: Values::default(),
+                    texture_coordinates: Vec::from(vertices.texture_coordinates),
+                    extras: (),
+                },
+                topology,
+                influences: JointInfluences::Four(influences),
             },
         }
     }
@@ -193,26 +202,30 @@ impl<'data> TryFrom<VertexGeometry<'data>> for M2Geometry<'data> {
     type Error = Error;
     fn try_from(value: VertexGeometry<'data>) -> Result<Self, Error> {
         value.validate()?;
-        let s = value.streams;
-        if !s.tangents.is_empty() || !s.colors.is_empty() {
+        let GeometryStreams {
+            vertices,
+            topology,
+            influences,
+        } = value.streams;
+        if !vertices.tangents.is_empty() || !vertices.colors.is_empty() {
             return Err(Error::new(
                 "geometry.streams",
                 "M2 geometry has no tangent or vertex color streams",
             ));
         }
-        if !matches!(s.topology, Topology::Triangles(_)) {
+        if !matches!(topology, Topology::Triangles(_)) {
             return Err(Error::new(
                 "geometry.topology",
                 "M2 geometry requires triangle connectivity",
             ));
         }
-        let JointInfluences::Four(influences) = s.influences else {
+        let JointInfluences::Four(influences) = influences else {
             return Err(Error::new(
                 "geometry.influences",
                 "M2 geometry requires four authored joint slots",
             ));
         };
-        let texture_coordinates = s.texture_coordinates.try_into().map_err(|_| {
+        let texture_coordinates = vertices.texture_coordinates.try_into().map_err(|_| {
             Error::new(
                 "geometry.texture_coordinates",
                 "M2 geometry requires exactly two UV streams",
@@ -220,12 +233,15 @@ impl<'data> TryFrom<VertexGeometry<'data>> for M2Geometry<'data> {
         })?;
         let result = Self {
             streams: VertexStreams {
-                positions: s.positions,
-                normals: s.normals,
-                tangents: (),
-                colors: (),
-                texture_coordinates,
-                topology: s.topology,
+                vertices: VertexData {
+                    positions: vertices.positions,
+                    normals: vertices.normals,
+                    tangents: (),
+                    colors: (),
+                    texture_coordinates,
+                    extras: (),
+                },
+                topology,
                 influences,
             },
         };

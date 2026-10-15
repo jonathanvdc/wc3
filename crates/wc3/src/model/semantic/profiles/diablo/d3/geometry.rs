@@ -1,75 +1,95 @@
 //! Diablo III vertex meanings retain their independent color and tangent streams.
 use crate::model::semantic::geometry_edit::{check_edit, remap_values};
 use crate::model::semantic::geometry_schema::validate_geometry;
+use crate::model::semantic::vertex_geometry::{GeometryStreams, RemapStreams};
+use crate::model::semantic::VertexData;
 use crate::model::semantic::{
     Attributes, Error, GeometrySchema, Influence, InfluenceRows, Link, Topology, ValidateLinks,
     Values,
 };
 use crate::model::semantic::{GeometryEdit, GeometryEditCapabilities, StreamSupport};
 
-/// Complete logical streams carried by an uncompressed Diablo III appearance vertex.
+/// Independent auxiliary streams authored alongside Diablo III's common vertices.
 #[derive(Clone, Debug, Default)]
-pub struct VertexStreams<'a> {
-    /// Model-space vertex positions.
-    pub positions: Values<'a, [f32; 3]>,
-    /// Authored normals, without implicit renormalization.
-    pub normals: Values<'a, [f32; 3]>,
-    /// Primary RGBA colors.
-    pub colors: Values<'a, [f32; 4]>,
+pub struct VertexExtras<'a> {
     /// Independently authored auxiliary RGBA colors.
     pub auxiliary_colors: Values<'a, [f32; 4]>,
-    /// Both authored texture-coordinate streams.
-    pub texture_coordinates: [Values<'a, [f32; 2]>; 2],
-    /// Tangent vectors, independent of binormal vectors.
-    pub tangents: Values<'a, [f32; 3]>,
     /// Binormal vectors; no inferred handedness replaces this stream.
     pub binormals: Values<'a, [f32; 3]>,
     /// Authored mapping to the subobject's cloth vertices.
     pub cloth_vertices: Values<'a, u32>,
 }
+impl RemapStreams for VertexExtras<'_> {
+    fn remap_streams(&mut self, indices: &[u32]) {
+        self.auxiliary_colors.remap_streams(indices);
+        self.binormals.remap_streams(indices);
+        self.cloth_vertices.remap_streams(indices);
+    }
+}
+/// Complete logical streams carried by an uncompressed Diablo III appearance vertex.
+/// Tangents are three-vectors independent of the binormals in `extras`.
+///
+/// ```compile_fail
+/// use wc3::model::semantic::profiles::diablo::d3::VertexStreams;
+/// let mut streams = VertexStreams::default();
+/// streams.tangents = vec![[1., 0., 0., 1.]].into();
+/// ```
+pub type VertexStreams<'a> = VertexData<
+    'a,
+    [Values<'a, [f32; 2]>; 2],
+    Values<'a, [f32; 3]>,
+    Values<'a, [f32; 4]>,
+    Values<'a, [f32; 3]>,
+    VertexExtras<'a>,
+>;
 /// Diablo III triangle geometry with zero or three ordered skin contributions per vertex.
+///
+/// ```compile_fail
+/// use wc3::model::semantic::profiles::diablo::d3::{Geometry, VertexStreams};
+/// use wc3::model::semantic::Influence;
+/// let _ = Geometry::new(VertexStreams::default(), Vec::<[u32; 3]>::new(),
+///     vec![[Influence { joint: 0, weight: 0. }; 4]]);
+/// ```
 #[derive(Clone, Debug)]
 pub struct Geometry<'a> {
-    streams: VertexStreams<'a>,
-    topology: Topology<'a>,
-    influences: Values<'a, Vec<Influence>>,
+    data: GeometryStreams<'a, VertexStreams<'a>, Values<'a, [Influence; 3]>>,
 }
 impl<'a> Geometry<'a> {
     /// Checks stream cardinalities, triangle indices, and ordered influence rows.
     pub fn new(
         streams: VertexStreams<'a>,
         triangles: impl Into<Values<'a, [u32; 3]>>,
-        influences: impl Into<Values<'a, Vec<Influence>>>,
+        influences: impl Into<Values<'a, [Influence; 3]>>,
     ) -> Result<Self, Error> {
         let value = Self {
-            streams,
-            topology: Topology::Triangles(triangles.into()),
-            influences: influences.into(),
+            data: GeometryStreams {
+                vertices: streams,
+                topology: Topology::Triangles(triangles.into()),
+                influences: influences.into(),
+            },
         };
         value.validate()?;
         Ok(value)
     }
     /// Inspects all independent logical vertex streams without decoding a second copy.
     pub fn streams(&self) -> &VertexStreams<'a> {
-        &self.streams
+        &self.data.vertices
     }
     /// Replaces complete vertex streams and checks their cardinalities.
     pub fn with_streams(mut self, streams: VertexStreams<'a>) -> Result<Self, Error> {
-        self.streams = streams;
+        self.data.vertices = streams;
         self.validate()?;
         Ok(self)
     }
     /// Reads authored influence slots, preserving zero-weight contributions and their order.
-    pub fn influence_rows(&self) -> &Values<'a, Vec<Influence>> {
-        &self.influences
+    pub fn influence_rows(&self) -> &Values<'a, [Influence; 3]> {
+        &self.data.influences
     }
 }
 impl Default for Geometry<'_> {
     fn default() -> Self {
         Self {
-            streams: VertexStreams::default(),
-            topology: Topology::Triangles(Values::default()),
-            influences: Values::default(),
+            data: GeometryStreams::default(),
         }
     }
 }
@@ -94,30 +114,21 @@ impl<'a> GeometrySchema<'a> for Geometry<'a> {
         let mut result = self.clone();
         if let Some(map) = &edit.remap {
             map.check(self)?;
-            remap_values(&mut result.streams.positions, &map.new_to_old);
-            remap_values(&mut result.streams.normals, &map.new_to_old);
-            remap_values(&mut result.streams.colors, &map.new_to_old);
-            for stream in &mut result.streams.texture_coordinates {
-                remap_values(stream, &map.new_to_old);
-            }
-            remap_values(&mut result.streams.auxiliary_colors, &map.new_to_old);
-            remap_values(&mut result.streams.tangents, &map.new_to_old);
-            remap_values(&mut result.streams.binormals, &map.new_to_old);
-            remap_values(&mut result.streams.cloth_vertices, &map.new_to_old);
-            remap_values(&mut result.influences, &map.new_to_old);
-            result.topology = map.topology.clone();
+            result.data.vertices.remap(&map.new_to_old);
+            remap_values(&mut result.data.influences, &map.new_to_old);
+            result.data.topology = map.topology.clone();
         }
         if let Some(values) = edit.positions {
-            result.streams.positions = values;
+            result.data.vertices.positions = values;
         }
         if let Some(values) = edit.normals {
-            result.streams.normals = values;
+            result.data.vertices.normals = values;
         }
         if let Some(values) = edit.colors {
-            result.streams.colors = values;
+            result.data.vertices.colors = values;
         }
         if let Some(values) = edit.texture_coordinates {
-            result.streams.texture_coordinates = values
+            result.data.vertices.texture_coordinates = values
                 .try_into()
                 .map_err(|_| Error::new("geometry.edit.uv", "expected two UV streams"))?;
         }
@@ -127,51 +138,49 @@ impl<'a> GeometrySchema<'a> for Geometry<'a> {
     }
 
     fn positions(&self) -> &Values<'a, [f32; 3]> {
-        &self.streams.positions
+        &self.data.vertices.positions
     }
     fn normals(&self) -> Option<&Values<'a, [f32; 3]>> {
-        Some(&self.streams.normals)
+        Some(&self.data.vertices.normals)
     }
     fn tangents(&self) -> Option<&Values<'a, [f32; 4]>> {
         None
     }
     fn texture_coordinates(&self) -> &[Values<'a, [f32; 2]>] {
-        &self.streams.texture_coordinates
+        &self.data.vertices.texture_coordinates
     }
     fn colors(&self) -> Option<&Values<'a, [f32; 4]>> {
-        Some(&self.streams.colors)
+        Some(&self.data.vertices.colors)
     }
     fn attributes(&self) -> Attributes<'_, 'a> {
         Attributes::Slice(&[])
     }
     fn topology(&self) -> &Topology<'a> {
-        &self.topology
+        &self.data.topology
     }
     fn influences(&self) -> InfluenceRows<'_, 'a> {
-        if self.influences.is_empty() {
+        if self.data.influences.is_empty() {
             InfluenceRows::None
         } else {
-            InfluenceRows::Variable(&self.influences)
+            InfluenceRows::Three(&self.data.influences)
         }
     }
     fn validate(&self) -> Result<(), Error> {
-        let count = self.streams.positions.len();
-        let streams = &self.streams;
+        let count = self.data.vertices.positions.len();
+        let streams = &self.data.vertices;
         if [
             streams.normals.len(),
             streams.colors.len(),
-            streams.auxiliary_colors.len(),
+            streams.extras.auxiliary_colors.len(),
             streams.texture_coordinates[0].len(),
             streams.texture_coordinates[1].len(),
             streams.tangents.len(),
-            streams.binormals.len(),
-            streams.cloth_vertices.len(),
+            streams.extras.binormals.len(),
+            streams.extras.cloth_vertices.len(),
         ]
         .iter()
         .any(|len| *len != count)
-            || (!self.influences.is_empty()
-                && (self.influences.len() != count
-                    || self.influences.iter().any(|row| row.len() != 3)))
+            || (!self.data.influences.is_empty() && self.data.influences.len() != count)
         {
             return Err(Error::new(
                 "d3.geometry.streams",
@@ -179,11 +188,12 @@ impl<'a> GeometrySchema<'a> for Geometry<'a> {
             ));
         }
         if streams
+            .extras
             .auxiliary_colors
             .iter()
             .flatten()
             .chain(streams.tangents.iter().flatten())
-            .chain(streams.binormals.iter().flatten())
+            .chain(streams.extras.binormals.iter().flatten())
             .any(|v| !v.is_finite())
         {
             return Err(Error::new(

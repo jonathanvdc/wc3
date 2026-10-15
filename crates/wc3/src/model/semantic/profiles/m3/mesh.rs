@@ -3,13 +3,13 @@
 //! meshes contain positions and connectivity, without invented shading data.
 use crate::model::semantic::geometry_edit::{check_edit, remap_values};
 use crate::model::semantic::geometry_schema::validate_geometry;
-use crate::model::semantic::vertex_geometry::VertexStreams;
-use crate::model::semantic::VertexGeometry;
+use crate::model::semantic::vertex_geometry::{GeometryStreams, VertexStreams};
 use crate::model::semantic::{
     Attributes, Error, GeometryKind, GeometrySchema, Influence, InfluenceRows, JointInfluences,
     Link, Topology, ValidateLinks, Values,
 };
 use crate::model::semantic::{GeometryEdit, GeometryEditCapabilities, StreamSupport};
+use crate::model::semantic::{VertexData, VertexGeometry};
 fn present<'view, 'data, T>(values: &'view Values<'data, T>) -> Option<&'view Values<'data, T>> {
     (!values.is_empty()).then_some(values)
 }
@@ -32,11 +32,14 @@ impl<'data> M3DisplayGeometry<'data> {
     ) -> Result<Self, Error> {
         let geometry = Self {
             streams: VertexStreams {
-                positions: positions.into(),
-                normals: normals.into(),
-                tangents: Values::default(),
-                texture_coordinates: Vec::new(),
-                colors: Values::default(),
+                vertices: VertexData {
+                    positions: positions.into(),
+                    normals: normals.into(),
+                    tangents: Values::default(),
+                    texture_coordinates: Vec::new(),
+                    colors: Values::default(),
+                    extras: (),
+                },
                 topology: Topology::Triangles(triangles.into()),
                 influences: influences.into(),
             },
@@ -90,13 +93,7 @@ impl<'data> GeometrySchema<'data> for M3DisplayGeometry<'data> {
         let mut result = self.clone();
         if let Some(map) = &edit.remap {
             map.check(self)?;
-            remap_values(&mut result.streams.positions, &map.new_to_old);
-            remap_values(&mut result.streams.normals, &map.new_to_old);
-            remap_values(&mut result.streams.tangents, &map.new_to_old);
-            remap_values(&mut result.streams.colors, &map.new_to_old);
-            for stream in &mut result.streams.texture_coordinates {
-                remap_values(stream, &map.new_to_old);
-            }
+            result.streams.vertices.remap(&map.new_to_old);
             remap_values(&mut result.streams.influences, &map.new_to_old);
             result.streams.topology = map.topology.clone();
         }
@@ -167,11 +164,14 @@ impl Default for M3DisplayGeometry<'_> {
     fn default() -> Self {
         Self {
             streams: VertexStreams {
-                positions: Values::default(),
-                normals: Values::default(),
-                tangents: Values::default(),
-                texture_coordinates: Vec::new(),
-                colors: Values::default(),
+                vertices: VertexData {
+                    positions: Values::default(),
+                    normals: Values::default(),
+                    tangents: Values::default(),
+                    texture_coordinates: Vec::new(),
+                    colors: Values::default(),
+                    extras: (),
+                },
                 topology: Topology::Triangles(Values::default()),
                 influences: Values::default(),
             },
@@ -185,8 +185,7 @@ impl ValidateLinks for M3DisplayGeometry<'_> {
 /// Collision triangles without shading or skinning streams.
 #[derive(Clone, Debug)]
 pub struct M3CollisionGeometry<'data> {
-    positions: Values<'data, [f32; 3]>,
-    topology: Topology<'data>,
+    streams: VertexStreams<'data, (), (), (), (), ()>,
     face_normals: Values<'data, [f32; 3]>,
     triangle_controls: Values<'data, f32>,
 }
@@ -197,8 +196,18 @@ impl<'data> M3CollisionGeometry<'data> {
         triangles: impl Into<Values<'data, [u32; 3]>>,
     ) -> Result<Self, Error> {
         let result = Self {
-            positions: positions.into(),
-            topology: Topology::Triangles(triangles.into()),
+            streams: VertexStreams {
+                vertices: VertexData {
+                    positions: positions.into(),
+                    normals: (),
+                    tangents: (),
+                    colors: (),
+                    texture_coordinates: (),
+                    extras: (),
+                },
+                topology: Topology::Triangles(triangles.into()),
+                influences: (),
+            },
             face_normals: Values::default(),
             triangle_controls: Values::default(),
         };
@@ -216,8 +225,18 @@ impl<'data> M3CollisionGeometry<'data> {
         })?;
         let indices = Values::view(positions.len(), |index| index as u32);
         let result = Self {
-            positions,
-            topology: Topology::Points(indices),
+            streams: VertexStreams {
+                vertices: VertexData {
+                    positions,
+                    normals: (),
+                    tangents: (),
+                    colors: (),
+                    texture_coordinates: (),
+                    extras: (),
+                },
+                topology: Topology::Points(indices),
+                influences: (),
+            },
             face_normals: Values::default(),
             triangle_controls: Values::default(),
         };
@@ -231,10 +250,20 @@ impl<'data> M3CollisionGeometry<'data> {
         offsets: impl Into<Values<'data, u32>>,
     ) -> Result<Self, Error> {
         let result = Self {
-            positions: positions.into(),
-            topology: Topology::Polygons {
-                corners: corners.into(),
-                offsets: offsets.into(),
+            streams: VertexStreams {
+                vertices: VertexData {
+                    positions: positions.into(),
+                    normals: (),
+                    tangents: (),
+                    colors: (),
+                    texture_coordinates: (),
+                    extras: (),
+                },
+                topology: Topology::Polygons {
+                    corners: corners.into(),
+                    offsets: offsets.into(),
+                },
+                influences: (),
             },
             face_normals: Values::default(),
             triangle_controls: Values::default(),
@@ -290,12 +319,11 @@ impl<'data> GeometrySchema<'data> for M3CollisionGeometry<'data> {
         let mut result = self.clone();
         if let Some(map) = &edit.remap {
             map.check(self)?;
-            remap_values(&mut result.positions, &map.new_to_old);
-
-            result.topology = map.topology.clone();
+            result.streams.vertices.remap(&map.new_to_old);
+            result.streams.topology = map.topology.clone();
         }
         if let Some(values) = edit.positions {
-            result.positions = values;
+            result.streams.positions = values;
         }
 
         result.validate()?;
@@ -306,7 +334,7 @@ impl<'data> GeometrySchema<'data> for M3CollisionGeometry<'data> {
         GeometryKind::Collision
     }
     fn positions(&self) -> &Values<'data, [f32; 3]> {
-        &self.positions
+        &self.streams.positions
     }
     fn normals(&self) -> Option<&Values<'data, [f32; 3]>> {
         None
@@ -324,14 +352,14 @@ impl<'data> GeometrySchema<'data> for M3CollisionGeometry<'data> {
         Attributes::Slice(&[])
     }
     fn topology(&self) -> &Topology<'data> {
-        &self.topology
+        &self.streams.topology
     }
     fn influences(&self) -> InfluenceRows<'_, 'data> {
         InfluenceRows::None
     }
     fn validate(&self) -> Result<(), Error> {
         validate_geometry(self)?;
-        let face_count = match &self.topology {
+        let face_count = match &self.streams.topology {
             Topology::Triangles(triangles) => triangles.len(),
             Topology::Points(_) | Topology::Polygons { .. }
                 if self.face_normals.is_empty() && self.triangle_controls.is_empty() =>
@@ -494,16 +522,23 @@ impl<'data> GeometrySchema<'data> for M3Geometry<'data> {
 
 impl<'data> From<M3DisplayGeometry<'data>> for VertexGeometry<'data> {
     fn from(value: M3DisplayGeometry<'data>) -> Self {
-        let s = value.streams;
+        let GeometryStreams {
+            vertices,
+            topology,
+            influences,
+        } = value.streams;
         Self {
             streams: VertexStreams {
-                positions: s.positions,
-                normals: s.normals,
-                tangents: s.tangents,
-                colors: s.colors,
-                texture_coordinates: s.texture_coordinates,
-                topology: s.topology,
-                influences: JointInfluences::Four(s.influences),
+                vertices: VertexData {
+                    positions: vertices.positions,
+                    normals: vertices.normals,
+                    tangents: vertices.tangents,
+                    colors: vertices.colors,
+                    texture_coordinates: vertices.texture_coordinates,
+                    extras: (),
+                },
+                topology,
+                influences: JointInfluences::Four(influences),
             },
         }
     }
@@ -512,14 +547,18 @@ impl<'data> TryFrom<VertexGeometry<'data>> for M3DisplayGeometry<'data> {
     type Error = Error;
     fn try_from(value: VertexGeometry<'data>) -> Result<Self, Error> {
         value.validate()?;
-        let s = value.streams;
-        if !matches!(s.topology, Topology::Triangles(_)) {
+        let GeometryStreams {
+            vertices,
+            topology,
+            influences,
+        } = value.streams;
+        if !matches!(topology, Topology::Triangles(_)) {
             return Err(Error::new(
                 "geometry.topology",
                 "M3 display geometry requires triangle connectivity",
             ));
         }
-        let JointInfluences::Four(influences) = s.influences else {
+        let JointInfluences::Four(influences) = influences else {
             return Err(Error::new(
                 "geometry.influences",
                 "M3 display geometry requires four authored joint slots",
@@ -527,12 +566,15 @@ impl<'data> TryFrom<VertexGeometry<'data>> for M3DisplayGeometry<'data> {
         };
         let result = Self {
             streams: VertexStreams {
-                positions: s.positions,
-                normals: s.normals,
-                tangents: s.tangents,
-                colors: s.colors,
-                texture_coordinates: s.texture_coordinates,
-                topology: s.topology,
+                vertices: VertexData {
+                    positions: vertices.positions,
+                    normals: vertices.normals,
+                    tangents: vertices.tangents,
+                    colors: vertices.colors,
+                    texture_coordinates: vertices.texture_coordinates,
+                    extras: (),
+                },
+                topology,
                 influences,
             },
         };
