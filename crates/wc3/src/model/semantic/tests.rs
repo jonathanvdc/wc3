@@ -124,7 +124,7 @@ fn incompatible_structural_property_bindings_are_rejected() {
 }
 
 #[test]
-fn material_looks_resolve_without_changing_base_draws() {
+fn complete_material_looks_resolve_independently() {
     let mut builder = ModelBuilder::new("looks");
     let node = builder.add_node(Node::named("root")).unwrap();
     let mesh = builder
@@ -139,37 +139,37 @@ fn material_looks_resolve_without_changing_base_draws() {
         .unwrap();
     let subset = builder.add_primary_subset(mesh, 0, 1).unwrap();
     let instance = builder
-        .add_instance(MeshInstance {
-            controls: None,
-            node,
-            mesh,
-            skin: None,
-            draws: vec![Draw {
+        .add_instance_with_materials(
+            MeshInstance {
                 controls: None,
-                subset,
-                material: base,
-            }],
-            lod: None,
-            selection_group: 0,
-        })
+                node,
+                mesh,
+                skin: None,
+                draws: vec![Draw::new(subset, None)],
+                lod: None,
+                selection_group: 0,
+            },
+            vec![base],
+        )
         .unwrap();
+    let draw = builder.model().instance(instance).unwrap().draws[0].id();
     let look = builder
         .add_look(Look {
             name: "alternate".into(),
             bindings: vec![LookBinding {
                 instance,
-                draw: 0,
+                draw,
                 material: alternative,
             }],
         })
         .unwrap();
     let model = builder.finish().unwrap();
-    assert_eq!(model.material_for_draw(instance, 0, None).unwrap(), base);
+    assert_eq!(model.material_for_draw(instance, draw, None).unwrap(), base);
     assert_eq!(
-        model.material_for_draw(instance, 0, Some(look)).unwrap(),
+        model.material_for_draw(instance, draw, Some(look)).unwrap(),
         alternative
     );
-    assert_eq!(model.instance(instance).unwrap().draws[0].material, base);
+    assert_eq!(model.instance(instance).unwrap().draws[0].id(), draw);
 }
 
 #[test]
@@ -348,7 +348,7 @@ fn absolute_timeline_does_not_require_a_playback_clip() {
 #[test]
 fn native_single_appearance_cannot_publish_alternative_looks() {
     let mut draft = Model::<profiles::Mdlx>::builder("native");
-    draft.add_look(Look::default()).unwrap();
+    assert_eq!(draft.model().looks().len(), 1);
     assert!(draft.add_look(Look::default()).is_err());
     assert_eq!(draft.finish().unwrap().looks().len(), 1);
 }

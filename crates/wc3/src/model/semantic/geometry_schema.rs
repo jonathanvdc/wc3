@@ -964,18 +964,10 @@ impl Default for GeometryData<'_> {
 impl ValidateLinks for GeometryData<'_> {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
         for attribute in &self.attributes {
-            match &attribute.values {
-                AttributeValues::Materials(values) => {
-                    for id in values.iter() {
-                        id.visit_links(visitor);
-                    }
+            if let AttributeValues::SurfaceControls(values) = &attribute.values {
+                for face in values.iter() {
+                    face.material.visit_links(visitor);
                 }
-                AttributeValues::SurfaceControls(values) => {
-                    for face in values.iter() {
-                        face.material.visit_links(visitor);
-                    }
-                }
-                _ => {}
             }
         }
     }

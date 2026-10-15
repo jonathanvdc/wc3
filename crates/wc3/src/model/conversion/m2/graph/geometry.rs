@@ -126,6 +126,7 @@ where
             }))?;
             let node = builder.add_node(Node::named(format!("mesh-{index}-{section_index}")))?;
             let mut draws = Vec::new();
+            let mut draw_materials = Vec::new();
             for batch in profile
                 .batches
                 .iter()
@@ -293,21 +294,24 @@ where
                     }
                 }
                 builder.set_material_surface(material, surface)?;
-                draws.push(Draw {
-                    controls: Default::default(),
-                    subset: builder.add_primary_subset(mesh, 0, faces as u32)?,
-                    material,
-                });
+                draw_materials.push(material);
+                draws.push(Draw::new(
+                    builder.add_primary_subset(mesh, 0, faces as u32)?,
+                    Default::default(),
+                ));
             }
-            builder.add_instance(MeshInstance {
-                controls: NoControls,
-                node,
-                mesh,
-                skin,
-                draws,
-                lod: Some(index as u32 + u32::from(lod)),
-                selection_group: section.id as u32,
-            })?;
+            builder.add_instance_with_materials(
+                MeshInstance {
+                    controls: NoControls,
+                    node,
+                    mesh,
+                    skin,
+                    draws,
+                    lod: Some(index as u32 + u32::from(lod)),
+                    selection_group: section.id as u32,
+                },
+                draw_materials,
+            )?;
         }
     }
     Ok(())
@@ -526,9 +530,9 @@ where
                 .unwrap_or(0),
             sort_center: SectionSorting::make(geoset.and_then(|g| g.sorting), context)?,
         });
-        for (draw_index, draw) in instance.draws.iter().enumerate() {
+        for draw in &instance.draws {
             let draw = mesh.resolve_draw(draw)?;
-            let material_id = model.material_for_draw(instance_id, draw_index as u32, look)?;
+            let material_id = model.material_for_draw(instance_id, draw.id, look)?;
             if draw.first != 0 || draw.count as usize != triangles.len() {
                 context.unsupported(
                     "m2.mesh.draw",

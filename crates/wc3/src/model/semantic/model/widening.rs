@@ -254,11 +254,11 @@ impl<'a, P: Profile> Model<'a, P> {
                                 .map(
                                     |Draw {
                                          subset,
-                                         material,
+                                         id,
                                          controls,
                                      }| Draw {
                                         subset,
-                                        material,
+                                        id,
                                         controls: (maps.draw)(controls),
                                     },
                                 )

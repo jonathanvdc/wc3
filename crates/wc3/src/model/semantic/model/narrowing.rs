@@ -199,12 +199,12 @@ impl<'a, P: Profile> Model<'a, P> {
                                 .map(
                                     |Draw {
                                          subset,
-                                         material,
+                                         id,
                                          controls,
                                      }| {
                                         Ok(Draw {
                                             subset,
-                                            material,
+                                            id,
                                             controls: draw(controls)?,
                                         })
                                     },

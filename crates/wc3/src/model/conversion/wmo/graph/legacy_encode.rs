@@ -24,9 +24,7 @@ pub(super) fn alpha<'a>(
 ) -> Result<Plan<Root14<'a>>, Error> {
     let model = asset.model(options)?;
     let mut context = Context::export(options);
-    if let Some((model, resources)) =
-        super::normalize::prepare(model, asset.resources(), options.look)?
-    {
+    if let Some((model, resources)) = super::normalize::prepare(model, asset.resources())? {
         context.issue("world.groups.geometry", IssueKind::Normalized, "compatible geometry placements joined with relocated historical vertex and lighting selections");
         alpha_model(&model, &resources, options, context)
     } else {
@@ -155,9 +153,7 @@ pub(super) fn beta<'a>(
 ) -> Result<Plan<Bundle16<'a>>, Error> {
     let model = asset.model(options)?;
     let mut context = Context::export(options);
-    if let Some((model, resources)) =
-        super::normalize::prepare(model, asset.resources(), options.look)?
-    {
+    if let Some((model, resources)) = super::normalize::prepare(model, asset.resources())? {
         context.issue("world.groups.geometry", IssueKind::Normalized, "compatible geometry placements joined with relocated historical vertex and lighting selections");
         beta_model(&model, &resources, options, context)
     } else {

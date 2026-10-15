@@ -48,7 +48,6 @@ impl<'data> GeometryAttributes<'data> {
             (S::SurfaceControls, V::SurfaceControls(_)) => {
                 attribute.domain == AttributeDomain::Face
             }
-            (S::Material, V::Materials(_)) => true,
             (S::Named(_), _) => true,
             _ => false,
         };

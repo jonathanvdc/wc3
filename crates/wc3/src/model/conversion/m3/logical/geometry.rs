@@ -255,40 +255,42 @@ pub(super) fn read<'a, E: Envelope>(
                         }
                     };
                     let subset = builder.add_primary_subset(mesh, 0, count)?;
-                    builder.add_instance(MeshInstance {
-                        controls: Some(surface::InstanceControls {
-                            instance_count: division.instances,
-                        }),
-                        node: placement,
-                        mesh,
-                        skin: None,
-                        draws: vec![Draw {
-                            controls: Some(surface::BatchControls {
-                                flags: surface::values::BatchFlags(batch.flags.bits()),
-                                priority: batch.priority_plane,
-                                batching_bone,
-                                bounds: if extent_features.is_empty() {
-                                    None
-                                } else {
-                                    Some(
-                                        *extent_features
-                                            .get(batch.bounds_index as usize)
-                                            .ok_or_else(|| {
-                                                Error::new(
-                                                    "m3.batch.bounds",
-                                                    "bounds control exceeds division",
-                                                )
-                                            })?,
-                                    )
-                                },
-                                color_control: batch.color_index,
+                    builder.add_instance_with_materials(
+                        MeshInstance {
+                            controls: Some(surface::InstanceControls {
+                                instance_count: division.instances,
                             }),
-                            subset,
-                            material,
-                        }],
-                        lod: Some(lod as u32),
-                        selection_group: 0,
-                    })?;
+                            node: placement,
+                            mesh,
+                            skin: None,
+                            draws: vec![Draw::new(
+                                subset,
+                                Some(surface::BatchControls {
+                                    flags: surface::values::BatchFlags(batch.flags.bits()),
+                                    priority: batch.priority_plane,
+                                    batching_bone,
+                                    bounds: if extent_features.is_empty() {
+                                        None
+                                    } else {
+                                        Some(
+                                            *extent_features
+                                                .get(batch.bounds_index as usize)
+                                                .ok_or_else(|| {
+                                                    Error::new(
+                                                        "m3.batch.bounds",
+                                                        "bounds control exceeds division",
+                                                    )
+                                                })?,
+                                        )
+                                    },
+                                    color_control: batch.color_index,
+                                }),
+                            )],
+                            lod: Some(lod as u32),
+                            selection_group: 0,
+                        },
+                        vec![material],
+                    )?;
                 }
             };
         }

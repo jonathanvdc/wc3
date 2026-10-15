@@ -4,9 +4,9 @@ use crate::model::semantic::profiles::{Profile, Universal};
 use crate::model::semantic::{
     AttachedFeature, Basis, Bounds, Channel, Clip, ClipId, Clock, ClockId, Controller,
     ControllerId, DrawAppearanceSchema, DrawSubsetId, Error, Event, EventId, FeatureId, InstanceId,
-    LengthUnit, Look, LookId, Material, MaterialId, Mesh, MeshId, MeshInstance, Model, ModelId,
-    Node, NodeId, Resources, ResourcesBuilder, SharedClock, SingleModel, Skin, SkinId, SystemId,
-    Texture, TextureId, TextureTransform, TextureTransformId,
+    LengthUnit, Look, LookBinding, LookId, Material, MaterialId, Mesh, MeshId, MeshInstance, Model,
+    ModelId, Node, NodeId, Resources, ResourcesBuilder, SharedClock, SingleModel, Skin, SkinId,
+    SystemId, Texture, TextureId, TextureTransform, TextureTransformId,
 };
 use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet};
@@ -428,6 +428,68 @@ impl<'a, P: Profile> ModelBuilder<'a, P> {
         P::Appearance<'a>: DrawAppearanceSchema<'a>,
     {
         self.model.appearance.set_default_look(look)
+    }
+    /// Replaces a complete look without changing its identity or default selection.
+    pub fn set_look(&mut self, id: LookId, look: Look<'a>) -> Result<(), Error>
+    where
+        P::Appearance<'a>: DrawAppearanceSchema<'a>,
+    {
+        *self
+            .model
+            .appearance
+            .look_mut(id)
+            .ok_or_else(|| Error::new("look", "unknown identity"))? = look;
+        Ok(())
+    }
+    /// Inserts a placement and appends its materials to the default complete look.
+    /// Material order must match the placement's draw order. Alternative looks must
+    /// be completed separately before publication.
+    pub fn add_instance_with_materials(
+        &mut self,
+        instance: MeshInstance<'a, P>,
+        materials: Vec<MaterialId>,
+    ) -> Result<InstanceId, Error>
+    where
+        P::Appearance<'a>: DrawAppearanceSchema<'a>,
+    {
+        if instance.draws.len() != materials.len() {
+            return Err(Error::new(
+                "instance.materials",
+                "one material is required per draw",
+            ));
+        }
+        let id = self.model.scope.allocate();
+        if !instance.draws.is_empty() {
+            let bindings = instance
+                .draws
+                .iter()
+                .zip(materials)
+                .map(|(draw, material)| LookBinding {
+                    instance: id,
+                    draw: draw.id(),
+                    material,
+                });
+            if let Some(selected) = self.model.default_look() {
+                self.model
+                    .appearance
+                    .look_mut(selected)
+                    .ok_or_else(|| Error::new("appearance.default", "default look is absent"))?
+                    .bindings
+                    .extend(bindings);
+            } else {
+                let selected = self.model.scope.allocate();
+                let look = Look {
+                    name: Cow::Borrowed(""),
+                    bindings: bindings.collect(),
+                };
+                let mut appearance = self.model.appearance.clone();
+                appearance.add_look(selected, look)?;
+                appearance.set_default_look(Some(selected))?;
+                self.model.appearance = appearance;
+            }
+        }
+        self.model.instances.insert(id, instance);
+        Ok(id)
     }
     /// Adds a mesh-owned primitive selection to the draft.
     pub fn add_primary_subset(

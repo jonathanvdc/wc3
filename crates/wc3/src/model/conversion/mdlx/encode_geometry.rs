@@ -20,7 +20,7 @@ pub(super) fn write<'a, 'data, T: ModelDialect>(
     let mut output = Vec::new();
     let mut mapping = BTreeMap::<MeshId, Vec<u32>>::new();
     for (instance_id, instance) in model.instances() {
-        for (draw_index, draw) in instance.draws.iter().enumerate() {
+        for draw in &instance.draws {
             let mesh = model.mesh(instance.mesh).expect("validated mesh");
             let draw = mesh.resolve_draw(draw)?;
             if mesh.positions().len() > 65536 {
@@ -61,7 +61,7 @@ pub(super) fn write<'a, 'data, T: ModelDialect>(
                 .set_triangle_group_counts(&counts)
                 .map_err(|error| Error::new("mesh.triangle_groups", error.to_string()))?;
             geoset.material_id = materials[&model
-                .material_for_draw(instance_id, draw_index as u32, look)
+                .material_for_draw(instance_id, draw.id, look)
                 .expect("validated material look")];
             geoset.selection_group = instance.selection_group;
             geoset.extent = native::GeosetExtent {

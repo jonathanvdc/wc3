@@ -62,7 +62,7 @@ pub(crate) fn bind_draw(
     count: u32,
     material: MaterialId,
     controls: Option<ImportedDrawControls>,
-) -> Result<Draw<Wmo>, Error> {
+) -> Result<(Draw<Wmo>, MaterialId), Error> {
     let mut mesh = builder
         .model()
         .mesh(mesh_id)
@@ -106,9 +106,5 @@ pub(crate) fn bind_draw(
         .transpose()?;
     let subset = mesh.add_subset(subset);
     builder.set_mesh(mesh_id, mesh)?;
-    Ok(Draw {
-        subset,
-        material,
-        controls,
-    })
+    Ok((Draw::new(subset, controls), material))
 }

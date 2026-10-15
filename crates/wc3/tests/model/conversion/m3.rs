@@ -64,12 +64,13 @@ pub(super) fn asset() -> Asset<'static, M3> {
     let frame = builder.add_node(sem::Node::named("")).unwrap();
     let mut instance = sem::MeshInstance::new(frame, mesh);
     instance.skin = Some(skin);
-    instance.draws.push(sem::Draw {
-        controls: None,
-        subset: builder.add_primary_subset(mesh, 0, 1).unwrap(),
-        material,
-    });
-    builder.add_instance(instance).unwrap();
+    instance.draws.push(sem::Draw::new(
+        builder.add_primary_subset(mesh, 0, 1).unwrap(),
+        None,
+    ));
+    builder
+        .add_instance_with_materials(instance, vec![material])
+        .unwrap();
     let controller = builder
         .add_controller(sem::Controller {
             name: Cow::Borrowed("Movement"),

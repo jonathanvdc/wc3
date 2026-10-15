@@ -23,12 +23,10 @@ fn instances_share_mesh_owned_selections_with_independent_materials() {
     let mesh = builder.add_mesh(source).unwrap();
     for material in [first, second] {
         let mut instance = MeshInstance::new(node, mesh);
-        instance.draws.push(Draw {
-            subset,
-            material,
-            controls: None,
-        });
-        builder.add_instance(instance).unwrap();
+        instance.draws.push(Draw::new(subset, None));
+        builder
+            .add_instance_with_materials(instance, vec![material])
+            .unwrap();
     }
     let mut model = builder.finish().unwrap();
     model
@@ -50,7 +48,12 @@ fn instances_share_mesh_owned_selections_with_independent_materials() {
             &mut Context::export(&ExportOptions::default()),
         )
         .unwrap();
-        assert_eq!(projected[0].material, instance.draws[0].material);
+        assert_eq!(
+            projected[0].material,
+            model
+                .material_for_draw(id, instance.draws[0].id(), None)
+                .unwrap()
+        );
         assert_eq!(projected[0].mesh.topology().primitive_count(), 2);
     }
 }
@@ -80,12 +83,10 @@ fn strip_selections_use_their_own_faces_and_explicit_index_counting() {
         .unwrap();
     let mesh = builder.add_mesh(source).unwrap();
     let mut instance = MeshInstance::new(node, mesh);
-    instance.draws.push(Draw {
-        subset,
-        material,
-        controls: None,
-    });
-    let instance = builder.add_instance(instance).unwrap();
+    instance.draws.push(Draw::new(subset, None));
+    let instance = builder
+        .add_instance_with_materials(instance, vec![material])
+        .unwrap();
     let model = builder.finish().unwrap();
     let projected = geometry::project(
         &model,
@@ -119,12 +120,10 @@ fn foreign_subset_and_connectivity_identities_are_rejected() {
     let material = builder.add_material(Material::pbr()).unwrap();
     let other = builder.add_mesh(mesh()).unwrap();
     let mut instance = MeshInstance::new(node, other);
-    instance.draws.push(Draw {
-        subset,
-        material,
-        controls: None,
-    });
-    builder.add_instance(instance).unwrap();
+    instance.draws.push(Draw::new(subset, None));
+    builder
+        .add_instance_with_materials(instance, vec![material])
+        .unwrap();
     assert!(builder.finish().is_err());
     let mut builder = ModelBuilder::new("foreign connectivity");
     let mut other = mesh();

@@ -11,7 +11,8 @@ representation.
 
 Hierarchy nodes describe placement, transform inheritance, and camera-facing
 behavior. Meshes describe geometry, while mesh instances place that geometry at
-a node. Each instance's draws bind mesh-owned draw subsets to materials. A complete material
+a node. Each instance's draws select mesh-owned draw subsets and rendering controls.
+Looks assign materials to those draws. A complete material
 surface owns its rendering and sampling behavior, including the family's layers
 or passes. Shared texture-coordinate transforms describe animated translation,
 rotation, and scale before texture sampling; they belong to the sampling domain
@@ -237,10 +238,12 @@ A mesh owns reusable `DrawSubset` declarations. Each subset selects a scoped
 `ConnectivityId` and a typed `PrimitiveRange`: `Primitives` counts logical
 primitives, while `StripIndices` counts authored strip indices. `Mixed` describes
 one ordered primitive collection within a set; it does not combine independently
-selected alternatives. An instance's `Draw` stores a `DrawSubsetId`, material,
-and rendering controls, so several instances can reuse the same geometry selection
-with different material bindings. Subset and connectivity identities survive
-widening and checked narrowing.
+selected alternatives. An instance's `Draw` stores a `DrawSubsetId` and rendering
+controls. `Draw::new` creates its stable `DrawId`, retained through edits and
+reordering. Looks reference a draw through `(InstanceId, DrawId)`, so several
+instances can reuse the same geometry selection with different materials. Draw,
+subset, and connectivity identities survive widening and checked narrowing.
+Cloning a draw preserves its identity; use `Draw::new` for an independent binding.
 
 `Mesh::add_primary_subset` creates a primitive range in primary topology.
 `Mesh::add_connectivity` adds a profile-supported alternative and returns its
@@ -251,7 +254,7 @@ an instance draw, even when both meshes have identical connectivity.
 
 WMO subsets retain their ordinary triangle selection together with optional
 strip declarations, vertex windows, and tangent-pool associations. Their instance
-draws retain material, lighting, pass, and other rendering behavior. Import does
+draws retain lighting, pass, and other rendering behavior. Import does
 not turn a supplemental strip declaration into another draw. Export resolves
 subset identities into native batch ranges, and joining world placements relocates
 the mesh-owned selections and pool associations together.
@@ -271,9 +274,26 @@ slots. WEM retains its shader-convention sets and alternatives, with slot bindin
 and a selected default. Diablo IV owns hashed material slots, slot-local variants, and hashed looks that
 select actual variants. These identities remain stable when native tables are
 rebuilt. Its geometry selects an actual material slot; it does not duplicate those
-assignments in common draw overrides. D3 uses the same ownership pattern with named slots and named alternatives.
+assignments in common draw looks. D3 uses the same ownership pattern with named slots and named alternatives.
 Both profiles retain unused variants independently of the looks that select them;
 neither infers slot identity from mutable material display names.
+
+Draw-based looks are complete assignments, with exactly one material for every
+instance draw. Draws and geometry attributes carry no fallback material. Selecting
+an explicit look uses only that look; otherwise `material_for_draw` uses the
+default. Missing selections or assignments produce errors. Publication rejects
+incomplete looks, duplicate assignments, and references to absent draws or materials.
+MDLX, M3, and WMO use `SingleLook`, which always contains exactly one look,
+initially with empty bindings. That look is always the default; edit it through
+`set_look` rather than adding or removing an alternative. MDLX import places each
+geoset in one mesh instance with one draw and stores its material in that complete
+look.
+
+`ModelBuilder::add_instance_with_materials` inserts a placement and extends its
+default look with one material per draw, in the supplied order. When authoring
+alternatives, complete each look before publication. `set_look` replaces an
+assignment while preserving its identity and selection. Removing a draw likewise
+requires removing its assignments from every look in the same checked edit.
 
 A material mount identifies a particular set, alternative,
 and slot; an animated shader contribution can therefore retain the authored

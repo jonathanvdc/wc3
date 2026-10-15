@@ -705,7 +705,7 @@ fn ambient_memberships_remap_scoped_volumes_across_native_table_order() {
 
 #[test]
 fn compatible_same_detail_geometry_joins_without_changing_material_look_or_source() {
-    use wc3::model::semantic::{Bounds, Look, LookBinding};
+    use wc3::model::semantic::{Bounds, Draw};
     let mut source = fixture::<wmo::Classic>();
     let group = source.group_mut(GroupKey { index: 0, lod: 0 }).unwrap();
     group.header_mut().exterior_batch_count = 1;
@@ -745,6 +745,11 @@ fn compatible_same_detail_geometry_joins_without_changing_material_look_or_sourc
         sphere_radius: 0.75f32.sqrt(),
     };
     let mut second = original.clone();
+    second.draws = second
+        .draws
+        .iter()
+        .map(|draw| Draw::new(draw.subset, draw.controls.clone()))
+        .collect();
     let (world_id, mut world) = model
         .systems()
         .next()
@@ -756,18 +761,9 @@ fn compatible_same_detail_geometry_joins_without_changing_material_look_or_sourc
             let material = builder.add_material(material)?;
             let mesh = builder.add_mesh(second_mesh)?;
             second.mesh = mesh;
-            let second = builder.add_instance(second)?;
+            let second = builder.add_instance_with_materials(second, vec![material])?;
             world.groups[0].instances.push(second);
             builder.set_system(world_id, world)?;
-            let look = builder.add_look(Look {
-                name: "chosen".into(),
-                bindings: vec![LookBinding {
-                    instance: second,
-                    draw: 0,
-                    material,
-                }],
-            })?;
-            builder.set_default_look(Some(look))?;
             Ok(())
         })
         .unwrap();

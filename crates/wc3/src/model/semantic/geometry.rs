@@ -4,9 +4,9 @@ use crate::model::semantic::BindingSchema as _;
 use crate::model::semantic::TextureCoordinates;
 use crate::model::semantic::{Attributes, BindMatrices, IdentityBinding, SurfaceTriangleControls};
 use crate::model::semantic::{
-    ConnectivityId, ConnectivitySets, DrawSubset, DrawSubsetId, DrawSubsets, Error, GeometryData,
-    GeometryEdit, GeometrySchema, InfluenceRows, MaterialId, MeshId, NodeId, PrimitiveRange,
-    PrimitiveSelection, SkinId, UniversalGeometry, Values,
+    ConnectivityId, ConnectivitySets, DrawId, DrawSubset, DrawSubsetId, DrawSubsets, Error,
+    GeometryData, GeometryEdit, GeometrySchema, InfluenceRows, MeshId, NodeId, PrimitiveRange,
+    PrimitiveSelection, Scope, SkinId, UniversalGeometry, Values,
 };
 use std::borrow::Cow;
 use std::collections::BTreeMap;
@@ -111,8 +111,6 @@ pub enum AttributeSemantic<'a> {
     SurfaceControls,
     /// Independently authored baked-light texture coordinates.
     LightmapCoordinates,
-    /// Material assigned to the domain element.
-    Material,
     /// Application-defined attribute meaning.
     Named(Cow<'a, str>),
 }
@@ -143,8 +141,6 @@ pub enum AttributeValues<'a> {
     Unsigned(Values<'a, u32>),
     /// Exact signed integers.
     Signed(Values<'a, i32>),
-    /// References to authored material definitions.
-    Materials(Values<'a, MaterialId>),
 }
 impl AttributeValues<'_> {
     /// Number of domain elements carrying a value.
@@ -162,7 +158,6 @@ impl AttributeValues<'_> {
             Self::Vector4(v) => v.len(),
             Self::Unsigned(v) => v.len(),
             Self::Signed(v) => v.len(),
-            Self::Materials(v) => v.len(),
         }
     }
     /// Whether this attribute contains no values.
@@ -264,6 +259,7 @@ impl<'a, P: Profile> Mesh<'a, P> {
             ));
         }
         Ok(ResolvedDraw {
+            id: draw.id(),
             first,
             count,
             controls: &draw.controls,
@@ -447,15 +443,28 @@ impl<'a, P: Profile<Binding<'a> = IdentityBinding>> Skin<'a, P> {
         Self::new(joints, IdentityBinding)
     }
 }
-/// One material draw range over a geometry object.
+/// One identified geometry binding with instance-local rendering behavior.
 #[derive(Clone, Debug)]
 pub struct Draw<P: Profile = Universal> {
+    pub(crate) id: DrawId,
     /// Behavioral controls permitted by this vocabulary.
     pub controls: P::Draw,
     /// Mesh-owned geometry selection rendered by this binding.
     pub subset: DrawSubsetId,
-    /// Material used by this draw.
-    pub material: MaterialId,
+}
+impl<P: Profile> Draw<P> {
+    /// Creates a draw binding with an independent stable identity.
+    pub fn new(subset: DrawSubsetId, controls: P::Draw) -> Self {
+        Self {
+            id: Scope::default().allocate(),
+            subset,
+            controls,
+        }
+    }
+    /// Stable identity retained when the draw is reordered or edited.
+    pub fn id(&self) -> DrawId {
+        self.id
+    }
 }
 /// Geometry attached to a node, with independent skin and draw bindings.
 #[derive(Clone, Debug)]
@@ -468,7 +477,7 @@ pub struct MeshInstance<'a, P: Profile = Universal> {
     pub mesh: MeshId,
     /// Optional joint binding.
     pub skin: Option<SkinId>,
-    /// Material draw ranges.
+    /// Identified geometry bindings; appearances own their material assignments.
     pub draws: Vec<Draw<P>>,
     /// Authored LOD membership; none means shared across levels.
     pub lod: Option<u32>,
@@ -502,6 +511,15 @@ impl Topology<'_> {
 }
 
 impl<'a, P: Profile> MeshInstance<'a, P> {
+    /// Borrows a draw only when this placement owns its identity.
+    pub fn draw(&self, id: DrawId) -> Option<&Draw<P>> {
+        self.draws.iter().find(|draw| draw.id() == id)
+    }
+    /// Edits a draw without changing its identity; publication checks its subset.
+    pub fn draw_mut(&mut self, id: DrawId) -> Option<&mut Draw<P>> {
+        self.draws.iter_mut().find(|draw| draw.id() == id)
+    }
+
     /// Places shared geometry at a node with no initial material draws or skin.
     pub fn new(node: NodeId, mesh: MeshId) -> Self {
         Self {
@@ -537,6 +555,7 @@ impl<'a> Mesh<'a> {
 
 /// Borrowed adapter view; ranges come from mesh-owned selections, never instance storage.
 pub(crate) struct ResolvedDraw<'view, P: Profile> {
+    pub id: DrawId,
     pub first: u32,
     pub count: u32,
     pub controls: &'view P::Draw,

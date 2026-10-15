@@ -77,7 +77,6 @@ fn semantic(value: &AttributeSemantic<'_>) -> String {
             }
         }
         AttributeSemantic::TexCoord(index) => format!("uv{index}"),
-        AttributeSemantic::Material => "material".into(),
         AttributeSemantic::Named(name) => name.to_string(),
     }
 }

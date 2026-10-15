@@ -399,15 +399,19 @@ pub(super) fn read<'a, 'data: 'a, B: Batch>(
     if header.flags.has_liquid() && region.liquids.is_empty() {
         region.implicit_liquid = Some(header.liquid_type);
     }
-    let instance = builder.add_instance(MeshInstance {
-        controls: region,
-        node,
-        mesh,
-        skin: None,
-        draws,
-        lod: Some(0),
-        selection_group: 0,
-    })?;
+    let (draws, draw_materials): (Vec<_>, Vec<_>) = draws.into_iter().unzip();
+    let instance = builder.add_instance_with_materials(
+        MeshInstance {
+            controls: region,
+            node,
+            mesh,
+            skin: None,
+            draws,
+            lod: Some(0),
+            selection_group: 0,
+        },
+        draw_materials,
+    )?;
     while world.groups.len() <= index {
         world.groups.push(WorldGroup::default());
     }

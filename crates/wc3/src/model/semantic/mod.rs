@@ -5,8 +5,8 @@
 //! A [`Model`](crate::model::semantic::Model) connects hierarchy nodes, shared geometry, material definitions,
 //! resource references, animation, and scene systems through graph-scoped IDs.
 //! A [`MeshInstance`](crate::model::semantic::MeshInstance) places a mesh at a node; its [`Draw`](crate::model::semantic::Draw) values select the
-//! geometry and material for individual passes. A [`Look`](crate::model::semantic::Look) overrides those
-//! material choices. Shared [`TextureTransform`](crate::model::semantic::TextureTransform) objects animate sampling
+//! geometry and rendering controls for individual passes. A [`Look`](crate::model::semantic::Look) supplies a complete
+//! material assignment for those draws. Shared [`TextureTransform`](crate::model::semantic::TextureTransform) objects animate sampling
 //! coordinates independently of node placement. An [`AttachedFeature`](crate::model::semantic::AttachedFeature) gives a node an effect or behavior,
 //! while [`System`](crate::model::semantic::System) describes independently authored relationships such as physics
 //! bodies or world portals.

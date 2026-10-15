@@ -365,15 +365,19 @@ pub(in crate::model::conversion::wmo::graph) fn read<'a, D: Dialect>(
         region.parent_or_first_child = resolve(first)?;
         region.next_child = resolve(next)?;
     }
-    let instance_id = builder.add_instance(MeshInstance {
-        controls: region,
-        node,
-        mesh: mesh_id,
-        skin: None,
-        draws,
-        lod: Some(key.lod as u32),
-        selection_group: 0,
-    })?;
+    let (draws, draw_materials): (Vec<_>, Vec<_>) = draws.into_iter().unzip();
+    let instance_id = builder.add_instance_with_materials(
+        MeshInstance {
+            controls: region,
+            node,
+            mesh: mesh_id,
+            skin: None,
+            draws,
+            lod: Some(key.lod as u32),
+            selection_group: 0,
+        },
+        draw_materials,
+    )?;
     while world.groups.len() <= key.index {
         world.groups.push(LogicalGroup::default());
     }

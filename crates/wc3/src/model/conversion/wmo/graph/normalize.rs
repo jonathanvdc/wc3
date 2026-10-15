@@ -2,8 +2,8 @@
 use crate::model::conversion::Error;
 use crate::model::semantic::profiles::Wmo;
 use crate::model::semantic::{
-    Bounds, DrawAppearanceSchema, DrawSubsets, InstanceId, LookId, Model, ModelBuilder,
-    PrimitiveRange, PrimitiveSelection, Resources, Values, WmoGeometry,
+    Bounds, DrawAppearanceSchema, DrawSubsets, InstanceId, Model, ModelBuilder, PrimitiveRange,
+    PrimitiveSelection, Resources, Values, WmoGeometry,
 };
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -12,7 +12,6 @@ type Normalized<'a> = (Model<'a, Wmo>, Resources<'a, Wmo>);
 pub(super) fn prepare<'data>(
     model: &Model<'data, Wmo>,
     resources: &Resources<'data, Wmo>,
-    look: Option<LookId>,
 ) -> Result<Option<Normalized<'data>>, Error> {
     let mut merges = Vec::new();
     for (system_id, world) in model.systems() {
@@ -38,7 +37,7 @@ pub(super) fn prepare<'data>(
         return Ok(None);
     }
     let mut builder = ModelBuilder::from_parts(model.clone(), resources.clone());
-    let mut removed = BTreeSet::new();
+    let mut rehomed = BTreeMap::new();
     let mut old_meshes = BTreeSet::new();
     let mut old_nodes = BTreeSet::new();
     for (system_id, group_index, instances) in merges {
@@ -149,7 +148,7 @@ pub(super) fn prepare<'data>(
                 vertex_base,
                 u32::try_from(draws.len()).map_err(error)?,
             )?;
-            for (ordinal, source) in instance.draws.iter().enumerate() {
+            for source in &instance.draws {
                 let source_draw = mesh.resolve_draw(source)?;
                 let mut subset = source_draw.subset.clone();
                 subset.selection = PrimitiveSelection {
@@ -199,9 +198,6 @@ pub(super) fn prepare<'data>(
                 }
                 let mut draw = source.clone();
                 draw.subset = subsets.insert(subset);
-                draw.material = model
-                    .material_for_draw(*id, ordinal as u32, look)
-                    .expect("validated material assignment");
                 draws.push(draw);
             }
             vertex_base = next_vertex;
@@ -264,7 +260,7 @@ pub(super) fn prepare<'data>(
         builder.set_system(system_id, world)?;
         for id in &instances[1..] {
             let instance = builder.remove_instance(*id).expect("existing placement");
-            removed.insert(*id);
+            rehomed.insert(*id, first_id);
             old_meshes.insert(instance.mesh);
             old_nodes.insert(instance.node);
         }
@@ -272,17 +268,12 @@ pub(super) fn prepare<'data>(
     let mut appearance = model.appearance().clone();
     for (id, look) in model.looks() {
         let mut updated = look.clone();
-        updated.bindings.retain(|binding| {
-            !removed.contains(&binding.instance)
-                && !model.instance(binding.instance).is_some_and(|instance| {
-                    builder
-                        .model()
-                        .instance(binding.instance)
-                        .is_some_and(|normalized| normalized.draws.len() != instance.draws.len())
-                })
-        });
-        appearance.remove_look(id);
-        appearance.add_look(id, updated)?;
+        for binding in &mut updated.bindings {
+            if let Some(instance) = rehomed.get(&binding.instance) {
+                binding.instance = *instance;
+            }
+        }
+        *appearance.look_mut(id).expect("existing sole look") = updated;
     }
     appearance.set_default_look(model.default_look())?;
     builder.set_appearance(appearance);

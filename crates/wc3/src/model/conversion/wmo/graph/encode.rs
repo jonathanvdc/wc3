@@ -14,9 +14,7 @@ pub(super) fn write<'a, D: Dialect>(
 ) -> Result<Plan<Bundle<'a, D>>, Error> {
     let model = asset.model(options)?;
     let mut context = Context::export(options);
-    if let Some((normalized, resources)) =
-        super::normalize::prepare(model, asset.resources(), options.look)?
-    {
+    if let Some((normalized, resources)) = super::normalize::prepare(model, asset.resources())? {
         context.issue("world.groups.geometry",IssueKind::Normalized,"compatible geometry placements at the same detail level joined while preserving draw order and material assignments");
         write_model(&normalized, &resources, options, context)
     } else {

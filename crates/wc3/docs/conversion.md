@@ -97,13 +97,16 @@ fn prepare(source: &mdlx::Model<'_, mdlx::V800>) -> Result<(), conversion::Error
 
 Selected appearance resolves the family's actual assignment domain. Native
 single-look formats use their chosen assignment; a broader appearance vocabulary
-can retain alternative draw bindings or WEM slot/set mounts. Export preserves
+can retain complete alternative draw assignments or WEM slot/set mounts. Native
+draw-based imports construct a complete default look, and export resolves each
+draw through the selected look without a base-material fallback. Export preserves
 known owner-local controls instead of synchronizing a common projection against
 a parallel native extension table.
 
 Geometry normalization is a representation decision. World-model export can
 join compatible placements within one group and detail level while preserving
-draw order and selected materials. The join relocates connectivity, strip and
+draw order and selected materials. The join rehomes complete look assignments
+using stable draw identities and relocates connectivity, strip and
 tangent selections, and historical lighting windows; it leaves the source graph
 unchanged. Native limits still apply, including the historical header's capacity
 for four disjoint lighting windows. Incompatible region behavior or geometry

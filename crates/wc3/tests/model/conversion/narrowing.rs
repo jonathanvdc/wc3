@@ -92,11 +92,15 @@ fn narrowing_checks_native_asset_cardinality() {
 #[test]
 fn shared_single_appearances_narrow_by_capability_and_preserve_values() {
     let mut builder = Model::<Mdlx>::builder("single appearance");
-    let id = builder
-        .add_look(Look {
-            name: Cow::Borrowed("shared"),
-            bindings: Vec::new(),
-        })
+    let id = builder.model().default_look().unwrap();
+    builder
+        .set_look(
+            id,
+            Look {
+                name: Cow::Borrowed("shared"),
+                bindings: Vec::new(),
+            },
+        )
         .unwrap();
     builder.set_default_look(Some(id)).unwrap();
     let model = builder.finish().unwrap();
@@ -139,16 +143,15 @@ fn universal_draw_appearances_support_m2_without_a_source_tag() {
 #[test]
 fn single_appearance_limit_survives_widening() {
     let mut builder = Model::<Universal>::builder("look identities");
-    let first = builder.add_look(Look::default()).unwrap();
-    let second = builder.add_look(Look::default()).unwrap();
+    let foreign = builder.add_look(Look::default()).unwrap();
     let mut appearance = <Universal as Extends<M3>>::appearance(SingleLook::default());
-    appearance.add_look(first, Look::default()).unwrap();
-    assert!(appearance.add_look(second, Look::default()).is_err());
+    let sole = appearance.default_look().unwrap();
+    assert!(appearance.add_look(foreign, Look::default()).is_err());
     assert_eq!(appearance.looks().len(), 1);
-    appearance.set_default_look(Some(first)).unwrap();
-    assert!(appearance.remove_look(first).is_some());
-    assert!(appearance.validate().is_err());
-    appearance.set_default_look(None).unwrap();
-    appearance.add_look(second, Look::default()).unwrap();
+    appearance.set_default_look(Some(sole)).unwrap();
+    assert!(appearance.remove_look(sole).is_none());
+    assert!(appearance.set_default_look(None).is_err());
+    assert!(appearance.set_default_look(Some(foreign)).is_err());
+    assert_eq!(appearance.default_look(), Some(sole));
     appearance.validate().unwrap();
 }

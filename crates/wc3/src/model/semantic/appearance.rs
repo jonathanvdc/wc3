@@ -3,13 +3,14 @@ use crate::model::semantic::profiles::{
     diablo::{d3, d4},
     wem, Either,
 };
-use crate::model::semantic::{Error, Link, Look, LookId, MaterialSlotId, ValidateLinks};
+use crate::model::semantic::{Error, Link, Look, LookId, MaterialSlotId, Scope, ValidateLinks};
 use std::collections::BTreeMap;
 use std::fmt::Debug;
+use std::iter::once;
 
 /// A complete appearance vocabulary, including its own material assignment domains.
 pub trait AppearanceSchema<'data>: Clone + Debug + Default + Send + Sync + ValidateLinks {
-    /// Draw overrides exposed by this vocabulary, when it uses draw-based appearances.
+    /// Complete draw assignments exposed by this vocabulary, when it uses draw-based appearances.
     fn looks(&self) -> Box<dyn ExactSizeIterator<Item = (LookId, &Look<'data>)> + '_>;
     /// Looks up a draw-based appearance by identity.
     fn look(&self, id: LookId) -> Option<&Look<'data>>;
@@ -22,8 +23,10 @@ pub trait AppearanceSchema<'data>: Clone + Debug + Default + Send + Sync + Valid
     /// Checks local authoring invariants before publication.
     fn validate(&self) -> Result<(), Error>;
 }
-/// An appearance vocabulary that supports direct draw-material overrides.
+/// An appearance vocabulary that supports complete direct draw-material assignments.
 pub trait DrawAppearanceSchema<'data>: AppearanceSchema<'data> {
+    /// Edits an existing complete assignment; publication checks its relationships.
+    fn look_mut(&mut self, id: LookId) -> Option<&mut Look<'data>>;
     /// Adds a draw-based appearance with an identity supplied by its owning graph.
     fn add_look(&mut self, id: LookId, look: Look<'data>) -> Result<(), Error>;
     /// Chooses the default appearance; publication checks that it exists.
@@ -32,64 +35,61 @@ pub trait DrawAppearanceSchema<'data>: AppearanceSchema<'data> {
     fn remove_look(&mut self, id: LookId) -> Option<Look<'data>>;
 }
 
-/// One authored material assignment, as supported by MDLX, M3, and WMO.
-#[derive(Clone, Debug, Default)]
+/// Exactly one authored material assignment, as supported by MDLX, M3, and WMO.
+/// The look always exists; an empty binding vector represents an empty assignment.
+#[derive(Clone, Debug)]
 pub struct SingleLook<'data> {
-    look: Option<(LookId, Look<'data>)>,
-    default: Option<LookId>,
+    id: LookId,
+    look: Look<'data>,
+}
+impl Default for SingleLook<'_> {
+    fn default() -> Self {
+        Self {
+            id: Scope::default().allocate(),
+            look: Look::default(),
+        }
+    }
 }
 impl ValidateLinks for SingleLook<'_> {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
-        if let Some((_, look)) = &self.look {
-            visit_look(look, visitor);
-        }
+        visit_look(&self.look, visitor);
     }
 }
 impl<'data> AppearanceSchema<'data> for SingleLook<'data> {
     fn looks(&self) -> Box<dyn ExactSizeIterator<Item = (LookId, &Look<'data>)> + '_> {
-        Box::new(self.look.iter().map(|(id, look)| (*id, look)))
+        Box::new(once((self.id, &self.look)))
     }
     fn look(&self, id: LookId) -> Option<&Look<'data>> {
-        self.look
-            .as_ref()
-            .filter(|(key, _)| *key == id)
-            .map(|(_, look)| look)
+        (id == self.id).then_some(&self.look)
     }
     fn default_look(&self) -> Option<LookId> {
-        self.default
+        Some(self.id)
     }
     fn validate(&self) -> Result<(), Error> {
-        if self.default.is_some_and(|id| self.look(id).is_none()) {
-            Err(Error::new(
-                "appearance.default",
-                "default appearance is absent",
-            ))
-        } else {
-            Ok(())
-        }
+        Ok(())
     }
 }
 impl<'data> DrawAppearanceSchema<'data> for SingleLook<'data> {
-    fn add_look(&mut self, id: LookId, look: Look<'data>) -> Result<(), Error> {
-        if self.look.is_some() {
-            return Err(Error::new(
-                "appearance",
-                "this profile permits one material assignment",
-            ));
-        }
-        self.look = Some((id, look));
-        Ok(())
+    fn look_mut(&mut self, id: LookId) -> Option<&mut Look<'data>> {
+        (id == self.id).then_some(&mut self.look)
+    }
+    fn add_look(&mut self, _id: LookId, _look: Look<'data>) -> Result<(), Error> {
+        Err(Error::new(
+            "appearance",
+            "this profile always has exactly one material assignment",
+        ))
     }
     fn set_default_look(&mut self, id: Option<LookId>) -> Result<(), Error> {
-        self.default = id;
+        if id != Some(self.id) {
+            return Err(Error::new(
+                "appearance.default",
+                "the sole look is always the default",
+            ));
+        }
         Ok(())
     }
-    fn remove_look(&mut self, id: LookId) -> Option<Look<'data>> {
-        if self.look(id).is_some() {
-            self.look.take().map(|(_, look)| look)
-        } else {
-            None
-        }
+    fn remove_look(&mut self, _id: LookId) -> Option<Look<'data>> {
+        None
     }
 }
 
@@ -128,6 +128,9 @@ impl<'data> AppearanceSchema<'data> for DrawLooks<'data> {
     }
 }
 impl<'data> DrawAppearanceSchema<'data> for DrawLooks<'data> {
+    fn look_mut(&mut self, id: LookId) -> Option<&mut Look<'data>> {
+        self.looks.get_mut(&id)
+    }
     fn add_look(&mut self, id: LookId, look: Look<'data>) -> Result<(), Error> {
         self.looks.insert(id, look);
         Ok(())
@@ -194,6 +197,13 @@ impl<'data> AppearanceSchema<'data> for UniversalAppearance<'data> {
     }
 }
 impl<'data> DrawAppearanceSchema<'data> for UniversalAppearance<'data> {
+    fn look_mut(&mut self, id: LookId) -> Option<&mut Look<'data>> {
+        match self {
+            Self::Draw(value) => value.look_mut(id),
+            Self::Single(value) => value.look_mut(id),
+            Self::Wem(_) | Self::D4(_) | Self::D3(_) => None,
+        }
+    }
     fn add_look(&mut self, id: LookId, look: Look<'data>) -> Result<(), Error> {
         match self {
             Self::Draw(value) => value.add_look(id, look),
@@ -264,6 +274,12 @@ impl<'data, A: AppearanceSchema<'data>, B: AppearanceSchema<'data>> AppearanceSc
 impl<'data, A: DrawAppearanceSchema<'data>, B: DrawAppearanceSchema<'data>>
     DrawAppearanceSchema<'data> for Either<A, B>
 {
+    fn look_mut(&mut self, id: LookId) -> Option<&mut Look<'data>> {
+        match self {
+            Self::Left(value) => value.look_mut(id),
+            Self::Right(value) => value.look_mut(id),
+        }
+    }
     fn add_look(&mut self, id: LookId, look: Look<'data>) -> Result<(), Error> {
         match self {
             Self::Left(value) => value.add_look(id, look),

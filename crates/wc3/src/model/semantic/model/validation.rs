@@ -160,7 +160,6 @@ impl<P: Profile> Model<'_, P> {
             instance.mesh.visit_links(&mut visit);
             instance.skin.visit_links(&mut visit);
             for draw in &instance.draws {
-                draw.material.visit_links(&mut visit);
                 draw.controls.visit_links(&mut visit);
             }
         }
@@ -286,6 +285,25 @@ impl<P: Profile> Model<'_, P> {
                 }
             }
         }
+        let mut draw_ids = BTreeSet::new();
+        let expected: BTreeSet<_> = self
+            .instances
+            .iter()
+            .flat_map(|(id, instance)| instance.draws.iter().map(move |draw| (*id, draw.id())))
+            .collect();
+        for instance in self.instances.values() {
+            for draw in &instance.draws {
+                if !draw_ids.insert(draw.id()) {
+                    return Err(Error::new(
+                        "instance.draw",
+                        "draw identity is used more than once",
+                    ));
+                }
+            }
+        }
+        if !expected.is_empty() && self.looks().len() == 0 {
+            return Err(Error::new("look", "draws require a complete material look"));
+        }
         for (_, look) in self.looks() {
             let mut assignments = BTreeSet::new();
             for binding in &look.bindings {
@@ -296,13 +314,21 @@ impl<P: Profile> Model<'_, P> {
                     || self
                         .instances
                         .get(&binding.instance)
-                        .is_none_or(|instance| binding.draw as usize >= instance.draws.len())
+                        .is_none_or(|instance| {
+                            !instance.draws.iter().any(|draw| draw.id() == binding.draw)
+                        })
                 {
                     return Err(Error::new(
                         "look.bindings",
                         "material or instance draw is absent",
                     ));
                 }
+            }
+            if assignments != expected {
+                return Err(Error::new(
+                    "look.bindings",
+                    "look must assign every instance draw",
+                ));
             }
         }
         for instance in self.instances.values() {

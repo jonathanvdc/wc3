@@ -214,9 +214,9 @@ pub(in crate::model::conversion::wmo::graph) fn write<'a, D: Dialect>(
     }
     if faces.is_empty() {
         faces.resize(triangles.len(), Triangle2::default());
-        for (index, draw) in instance.draws.iter().enumerate() {
+        for draw in &instance.draws {
             let draw = mesh.resolve_draw(draw)?;
-            let material = materials[&model.material_for_draw(instance_id, index as u32, look)?];
+            let material = materials[&model.material_for_draw(instance_id, draw.id, look)?];
             for face in &mut faces[draw.first as usize..(draw.first + draw.count) as usize] {
                 face.flags.set_render(true);
                 face.material = material;
@@ -293,9 +293,9 @@ pub(in crate::model::conversion::wmo::graph) fn write<'a, D: Dialect>(
     let mut strip_windows = Vec::new();
     let mut tangent_starts = Vec::new();
     let mut shadow_batches = Vec::new();
-    for (index, draw) in instance.draws.iter().enumerate() {
+    for draw in &instance.draws {
         let draw = mesh.resolve_draw(draw)?;
-        let material = materials[&model.material_for_draw(instance_id, index as u32, look)?];
+        let material = materials[&model.material_for_draw(instance_id, draw.id, look)?];
         if let Some(crate::model::semantic::profiles::wmo::Pass::Shadow {
             controls,
             supplemental,

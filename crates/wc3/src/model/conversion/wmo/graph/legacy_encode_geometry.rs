@@ -255,7 +255,7 @@ pub(super) fn write<'a, B: Batch>(
             )?)));
     }
     let mut batches = Vec::new();
-    for (draw_index, draw) in instance.draws.iter().enumerate() {
+    for draw in &instance.draws {
         let draw = mesh.resolve_draw(draw)?;
         let control = draw.controls.clone().unwrap_or_default();
         if draw.subset.strip.is_some() || draw.subset.tangents.is_some() {
@@ -273,7 +273,7 @@ pub(super) fn write<'a, B: Batch>(
         }
         let material = u8::try_from(
             materials[&model
-                .material_for_draw(instance_id, draw_index as u32, look)
+                .material_for_draw(instance_id, draw.id, look)
                 .expect("validated material selection")],
         )
         .map_err(error)?;

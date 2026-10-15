@@ -1,6 +1,7 @@
 //! Checked logical graphs and transactional construction.
 use crate::model::semantic::ids::Scope;
 use crate::model::semantic::profiles::{Profile, Universal};
+use crate::model::semantic::DrawId;
 use crate::model::semantic::{
     AppearanceSchema as _, AttachedFeature, Basis, Bounds, Channel, Clip, ClipId, ClockId,
     Controller, ControllerId, Error, Event, EventId, FeatureId, InstanceId, LengthUnit, Look,
@@ -174,25 +175,23 @@ impl<'a, P: Profile> Model<'a, P> {
     pub fn material_for_draw(
         &self,
         instance: InstanceId,
-        draw: u32,
+        draw: DrawId,
         look: Option<LookId>,
     ) -> Result<MaterialId, Error> {
-        let base = self
-            .instance(instance)
-            .and_then(|instance| instance.draws.get(draw as usize))
-            .ok_or_else(|| Error::new("draw", "instance draw is absent"))?
-            .material;
-        if let Some(id) = look.or(self.default_look()) {
-            let look = self
-                .look(id)
-                .ok_or_else(|| Error::new("look", "look is absent or belongs to another graph"))?;
-            return Ok(look
-                .bindings
-                .iter()
-                .find(|binding| binding.instance == instance && binding.draw == draw)
-                .map_or(base, |binding| binding.material));
-        }
-        Ok(base)
+        self.instance(instance)
+            .and_then(|instance| instance.draw(draw))
+            .ok_or_else(|| Error::new("draw", "instance draw is absent"))?;
+        let id = look
+            .or(self.default_look())
+            .ok_or_else(|| Error::new("look", "no material look selected"))?;
+        let look = self
+            .look(id)
+            .ok_or_else(|| Error::new("look", "look is absent or belongs to another graph"))?;
+        look.bindings
+            .iter()
+            .find(|binding| binding.instance == instance && binding.draw == draw)
+            .map(|binding| binding.material)
+            .ok_or_else(|| Error::new("look.bindings", "draw has no material assignment"))
     }
     /// Iterates hierarchy node definitions in stable graph identity order.
     pub fn nodes(&self) -> impl ExactSizeIterator<Item = (NodeId, &Node<'a, P>)> {

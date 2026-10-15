@@ -140,3 +140,8 @@ pub type SystemId = Id<SystemObject>;
 pub enum MaterialSlotObject {}
 /// Scoped identity of a slot in an appearance vocabulary.
 pub type MaterialSlotId = Id<MaterialSlotObject>;
+
+/// Draw binding identity marker.
+pub enum DrawObject {}
+/// Stable identity of a draw binding, resolved within its owning instance.
+pub type DrawId = Id<DrawObject>;

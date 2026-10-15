@@ -194,12 +194,6 @@ pub(super) fn write<'view, 'data: 'view>(
             scalar!(v);
             records::AttrType::I32
         }
-        AttributeValues::Materials(_) => {
-            return Err(Error::new(
-                "wem.attribute.material",
-                "material references require an explicit appearance-slot translation",
-            ));
-        }
     };
     if bytes.is_empty() {
         return Ok((kind, Default::default()));

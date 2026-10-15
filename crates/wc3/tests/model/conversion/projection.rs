@@ -38,18 +38,12 @@ fn fixture() -> (SingleModel<'static>, MeshId, InstanceId) {
         .unwrap();
     let mut instance = MeshInstance::new(node, mesh);
     instance.draws = vec![
-        Draw {
-            subset: draft.add_primary_subset(mesh, 0, 1).unwrap(),
-            material: first,
-            controls: None,
-        },
-        Draw {
-            subset: draft.add_primary_subset(mesh, 1, 1).unwrap(),
-            material: second,
-            controls: None,
-        },
+        Draw::new(draft.add_primary_subset(mesh, 0, 1).unwrap(), None),
+        Draw::new(draft.add_primary_subset(mesh, 1, 1).unwrap(), None),
     ];
-    let instance = draft.add_instance(instance).unwrap();
+    let instance = draft
+        .add_instance_with_materials(instance, vec![first, second])
+        .unwrap();
     (draft.finish().unwrap(), mesh, instance)
 }
 

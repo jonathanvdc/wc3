@@ -174,19 +174,18 @@ pub(super) fn read<'a, D: ModelDialect>(
             .get(mesh.material_id as usize)
             .ok_or_else(|| Error::new("mesh.material", "material does not exist"))?;
         let subset = builder.add_primary_subset(mesh_id, 0, primitive_count)?;
-        builder.add_instance(MeshInstance {
-            controls: Default::default(),
-            node: placement,
-            mesh: mesh_id,
-            skin: Some(skin),
-            draws: vec![Draw {
+        builder.add_instance_with_materials(
+            MeshInstance {
                 controls: Default::default(),
-                subset,
-                material,
-            }],
-            lod: mesh.try_level_of_detail().ok(),
-            selection_group: mesh.selection_group,
-        })?;
+                node: placement,
+                mesh: mesh_id,
+                skin: Some(skin),
+                draws: vec![Draw::new(subset, Default::default())],
+                lod: mesh.try_level_of_detail().ok(),
+                selection_group: mesh.selection_group,
+            },
+            vec![material],
+        )?;
         profile.geometry.push((
             mesh_id,
             profile::Geometry {

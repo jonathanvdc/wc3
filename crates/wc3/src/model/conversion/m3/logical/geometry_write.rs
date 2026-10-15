@@ -200,7 +200,8 @@ pub(super) fn write<'view, 'source: 'view, E: Envelope>(
             });
             let draw = instance
                 .draws
-                .get(projected.source_draw as usize)
+                .iter()
+                .find(|draw| draw.id() == projected.source_draw)
                 .ok_or_else(|| {
                     Error::new("m3.geometry.draw", "projected draw lost its source control")
                 })?;

@@ -159,7 +159,6 @@ pub(crate) fn remap_attribute(attribute: &mut Attribute<'_>, map: &[u32]) {
         Vector4,
         Unsigned,
         Signed,
-        Materials,
         SurfaceControls
     );
 }

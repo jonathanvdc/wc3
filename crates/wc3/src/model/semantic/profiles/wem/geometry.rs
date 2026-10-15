@@ -299,26 +299,8 @@ impl ValidateLinks for Geometry<'_> {
                 influence.node.visit_links(visitor);
             }
         }
-        for attribute in self.attributes() {
-            if let AttributeValues::Materials(values) = &attribute.values {
-                for id in values.iter() {
-                    id.visit_links(visitor);
-                }
-            }
-        }
         for section in &self.sections {
             section.visit_links(visitor);
-        }
-        for layer in &self.layers {
-            if let LayerData::Edge(EdgeAttribute {
-                values: AttributeValues::Materials(values),
-                ..
-            }) = &layer.data
-            {
-                for id in values.iter() {
-                    id.visit_links(visitor);
-                }
-            }
         }
 
         if self.validate().is_err() {

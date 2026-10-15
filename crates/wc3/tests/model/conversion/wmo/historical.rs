@@ -1,5 +1,5 @@
 use wc3::model::conversion::{self, ExportOptions, ImportOptions};
-use wc3::model::semantic::Values;
+use wc3::model::semantic::{Draw, Values};
 use wc3::model::wmo::codec::Array;
 use wc3::model::wmo::group::GroupChunk;
 use wc3::model::wmo::legacy::{
@@ -249,7 +249,17 @@ fn historical_multiple_placements_relocate_lighting_windows() {
                 .map(|point| [point[0] + 2., point[1], point[2]]);
             mesh.geometry = mesh.geometry.with_positions(positions)?;
             placement.mesh = builder.add_mesh(mesh)?;
-            let second = builder.add_instance(placement)?;
+            let materials = placement
+                .draws
+                .iter()
+                .map(|draw| builder.model().material_for_draw(first, draw.id(), None))
+                .collect::<Result<Vec<_>, _>>()?;
+            placement.draws = placement
+                .draws
+                .iter()
+                .map(|draw| Draw::new(draw.subset, draw.controls.clone()))
+                .collect();
+            let second = builder.add_instance_with_materials(placement, materials)?;
             world.groups[0].instances.push(second);
             builder.set_system(system, world)?;
             Ok(())
