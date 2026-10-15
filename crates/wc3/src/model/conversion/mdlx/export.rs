@@ -146,7 +146,7 @@ pub(in crate::model::conversion::mdlx) fn write<'a, 'data, T: ModelDialect>(
         let mut node = NativeNode::new(&source.name, node_ids[&id])
             .map_err(|error| Error::new("node.name", error.to_string()))?;
         node.parent_id = source.parent.map_or(u32::MAX, |parent| node_ids[&parent]);
-        node.flags = NodeFlags(source.controls.unclassified.bits());
+        node.flags = NodeFlags(source.controls.unmapped_flags.bits());
         node.flags
             .set_dont_inherit_translation(!source.inheritance.translation);
         node.flags

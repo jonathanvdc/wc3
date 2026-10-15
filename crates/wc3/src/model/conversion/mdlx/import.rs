@@ -343,7 +343,7 @@ where
     }
     for id in ids {
         let controls = profile::NodeControls {
-            unclassified: native_profile
+            unmapped_flags: native_profile
                 .node_controls
                 .iter()
                 .find(|(key, _)| *key == id)

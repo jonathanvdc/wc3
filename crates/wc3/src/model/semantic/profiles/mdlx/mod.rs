@@ -61,8 +61,8 @@ pub struct Bone {
 /// Warcraft III authoring controls attached directly to one hierarchy node.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct NodeControls {
-    /// Behavior bits whose meanings remain unresolved.
-    pub unclassified: NodeFlags,
+    /// Native flag bits not mapped to explicit semantic fields.
+    pub unmapped_flags: NodeFlags,
     /// Optional deformation-joint gate controls.
     pub bone: Option<Bone>,
     /// Optional authored bind-pose matrix, without an inferred matrix convention.
