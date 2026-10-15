@@ -1,5 +1,5 @@
 //! Infallible payload embeddings preserve identities and encoded storage.
-use crate::model::semantic::profiles::{Either, Extends, Profile, Union};
+use crate::model::semantic::profiles::{Extends, Profile};
 use crate::model::semantic::{
     AttachedFeature, Clip, Controller, Draw, Material, Mesh, MeshInstance, Model, Node, Skin,
 };
@@ -39,30 +39,6 @@ impl<'a, P: Profile> Model<'a, P> {
             draw: Q::draw,
             clip: Q::clip,
             controller: Q::controller,
-        })
-    }
-    /// Adds another vocabulary, preserving this model in the left branch.
-    pub fn union<Q: Profile>(self) -> Model<'a, Union<P, Q>> {
-        self.widen()
-    }
-    /// Adds another vocabulary, preserving this model in the right branch.
-    pub fn union_right<Q: Profile>(self) -> Model<'a, Union<Q, P>> {
-        self.map_payloads(PayloadMap {
-            texture: Either::Right,
-            property: Either::Right,
-            appearance: Either::Right,
-            geometry: Either::Right,
-            binding: Either::Right,
-            model: Either::Right,
-            system: Either::Right,
-            map_surface: Either::Right,
-            feature: Either::Right,
-            node: Either::Right,
-            mesh: Either::Right,
-            instance: Either::Right,
-            draw: Either::Right,
-            clip: Either::Right,
-            controller: Either::Right,
         })
     }
     fn map_payloads<Q: Profile>(self, maps: PayloadMap<'a, P, Q>) -> Model<'a, Q> {

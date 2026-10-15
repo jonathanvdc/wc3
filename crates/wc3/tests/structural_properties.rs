@@ -8,7 +8,7 @@ use wc3::model::semantic::profiles::mdlx::properties::{
 use wc3::model::semantic::profiles::mdlx::{
     Attachment, Layer as MdlxLayer, Light, Material as MdlxMaterial, Node as MdlxFeature,
 };
-use wc3::model::semantic::profiles::{Either, FeaturePayload, Mdlx, Profile, Universal, M2};
+use wc3::model::semantic::profiles::{FeaturePayload, Mdlx, Profile, Universal, M2};
 use wc3::model::semantic::{
     Animated, AttachmentPointDefinition, Channel, Clock, Curve, FeatureId, FeatureKind,
     FeatureSchema, FeatureView, LightEmission, Link, Material, Model, Node, OwnerId, Property,
@@ -49,7 +49,7 @@ fn containing_profiles_preserve_structural_identity_hashes_and_curve_values() {
     let model = light_model(&times, &values);
     let original = model.timeline_channels()[0].target().clone();
     let original_hash = target_hash(&original);
-    let broader = model.union::<M2>().widen::<Universal>();
+    let broader = model.widen::<Universal>();
     let target = broader.timeline_channels()[0].target();
     assert_eq!(&original, target);
     assert_eq!(target_hash(target), original_hash);
@@ -217,7 +217,7 @@ impl PropertyDescriptor for Weight {
 }
 
 #[test]
-fn custom_profile_enums_remain_typed_and_preserve_identity_in_either_union_branch() {
+fn custom_profile_enums_remain_typed_and_preserve_identity() {
     let times = [Time::default()];
     let values = [0.5f32];
     let mut builder = Model::<Application>::builder("custom");
@@ -241,25 +241,15 @@ fn custom_profile_enums_remain_typed_and_preserve_identity_in_either_union_branc
         }))
         .unwrap();
     let model = builder.finish().unwrap();
-    let left = model.clone().union::<Mdlx>();
-    let right = model.union_right::<Mdlx>();
     assert!(matches!(
-        left.timeline_channels()[0].target(),
+        model.timeline_channels()[0].target(),
         PropertyTarget::Profile {
-            key: Either::Left(ApplicationProperty::Weight),
+            key: ApplicationProperty::Weight,
             ..
         }
     ));
-    assert!(matches!(
-        right.timeline_channels()[0].target(),
-        PropertyTarget::Profile {
-            key: Either::Right(ApplicationProperty::Weight),
-            ..
-        }
-    ));
-    assert_eq!(left.timeline_channels()[0].target(), &original);
-    assert_eq!(right.timeline_channels()[0].target(), &original);
-    let Channel::Scalar(track) = &right.timeline_channels()[0] else {
+    assert_eq!(model.timeline_channels()[0].target(), &original);
+    let Channel::Scalar(track) = &model.timeline_channels()[0] else {
         panic!("wrong curve type")
     };
     assert_eq!(track.curve.values().to_vec(), values);

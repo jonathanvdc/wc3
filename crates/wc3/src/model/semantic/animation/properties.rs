@@ -66,7 +66,7 @@ impl<T: Clone + Debug + Eq + Hash + Send + Sync + 'static> KeyValue for T {
     }
 }
 /// A borrowed structural selector identity used for equality and relationship checking.
-/// Profile and union wrappers delegate to their underlying selector; no labels enter identity.
+/// Containing enum wrappers delegate to their underlying selector; no labels enter identity.
 pub struct PropertyKeyRef<'a>(&'a dyn KeyValue);
 impl<'a> PropertyKeyRef<'a> {
     pub(crate) fn new<T: PropertyPayload>(value: &'a T) -> Self {
@@ -328,7 +328,7 @@ impl<P: Profile> PropertyTarget<P> {
         })
     }
 }
-// Identity is canonical across containing profiles, including both branches of a union.
+// Identity is canonical across containing profiles.
 impl<P: Profile, Q: Profile> PartialEq<PropertyTarget<Q>> for PropertyTarget<P> {
     fn eq(&self, other: &PropertyTarget<Q>) -> bool {
         self.identity_ref() == other.identity_ref()

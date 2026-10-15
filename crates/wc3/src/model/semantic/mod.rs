@@ -37,8 +37,8 @@
 //! [`Model::edit`](crate::model::semantic::Model::edit) checks dependency changes against the complete model.
 //!
 //! [`Model::widen`](crate::model::semantic::Model::widen) embeds payloads into a containing profile without changing
-//! their meaning, IDs, or encoded array storage. [`Model::union`](crate::model::semantic::Model::union) combines two
-//! vocabularies without translating one into the other. Native adapters and
+//! their meaning, IDs, or encoded array storage. Applications implement custom
+//! profiles to select their own payload vocabularies. Native adapters and
 //! representability policies live in [the conversion API](crate::model::conversion).
 mod error;
 /// Format-independent scene features and simulation systems.

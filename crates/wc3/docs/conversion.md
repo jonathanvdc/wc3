@@ -22,8 +22,7 @@ for example, the MDLX planner accepts `Model<'data, Mdlx>`, rather than implicit
 projecting a `Universal` graph into Warcraft III behavior. Widening a model
 preserves its meanings, identities, and encoded arrays; it does not translate
 materials, effects, or playback semantics into another game's equivalents.
-A union vocabulary likewise retains both families distinctly. Use
-`try_narrow::<TargetProfile>()` when every owner already carries a complete
+Use `try_narrow::<TargetProfile>()` when every owner already carries a complete
 payload supported by the target, including capabilities shared across profiles.
 It moves the existing values and checks required metadata, controls, and references.
 Shared vertex geometry is checked against the

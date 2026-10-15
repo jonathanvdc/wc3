@@ -125,11 +125,8 @@ per-owner projection from another vocabulary. Narrowing does not guess replaceme
 materials, synthesize controls, or perform approximate semantic translation; those require a separate
 explicit transformation before narrowing.
 
-The `union::<OtherProfile>()` operation creates a `Union` vocabulary: existing
-payloads occupy `Either::Left`, and the other vocabulary can occupy
-`Either::Right`. Combining vocabularies does not translate one game's shader or
-emitter into another game's behavior. There is no separate Portable or Generic
-profile. Format-independent features and checked simulation arenas live under
+There is no separate Portable or Generic profile. Format-independent features and
+checked simulation arenas live under
 `semantic::scene`, within the universal vocabulary. Their scoped shape, body, and
 joint identities cannot be substituted across simulation systems.
 
@@ -308,7 +305,7 @@ programmed emitter. Events distinguish named sources, four-character gameplay
 identifiers, and structured engine commands.
 
 `FeatureSchema::feature` borrows a `FeatureView` from any profile's feature
-payload, including custom unions. Application-specific behaviors can return
+payload, including custom enums. Application-specific behaviors can return
 `FeatureView::Custom` while retaining their concrete profile vocabulary.
 Consumers can discover behavior before widening an entire model. `LightView::ambient_diffuse` and `CameraView::aimed` expose common
 borrowed fields across the constrained and universal representations. The views
@@ -567,8 +564,7 @@ field can use `property.widen::<Universal>()`. Custom payloads may instead use
 Program channels always carry their model's profile.
 
 Widening maps program selectors into the containing enum while moving the existing
-curve arrays. A union carries selectors in `Either::Left` or `Either::Right` along
-with its other payloads. These wrappers preserve canonical structural identity,
+curve arrays. Containing property enums preserve canonical structural identity,
 so the channels still address their owner fields. Exact narrowing projects accepted
 selectors into the destination enum and rejects foreign vocabularies. Relationship
 traversal uses transient, profile-independent structural identities to compare
@@ -694,8 +690,8 @@ example, requires normals and exactly two UV streams. Diablo III tangent and
 binormal vectors remain distinct profile streams, so its common tangent-frame
 operation is unavailable. Capabilities guide tools before they submit an edit;
 validation still checks cardinalities, finite values, and the profile's complete
-invariants. Union branches retain their constrained schema. Universal `GeometryData`
-exposes the shared representation's broader editing capabilities: an
+invariants. Universal `GeometryData` exposes the shared representation's broader
+editing capabilities: an
 M2 mesh widened to `Universal` can acquire tangents, but subsequent M2 narrowing
 rejects that added stream. Custom schemas opt in by implementing the same two
 methods; their default implementation rejects common edits.

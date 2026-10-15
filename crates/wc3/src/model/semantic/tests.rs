@@ -168,7 +168,7 @@ fn complete_material_looks_resolve_independently() {
 
 #[test]
 fn typed_vocabulary_widening_preserves_ids_and_borrowed_storage() {
-    use crate::model::semantic::profiles::{Either, Mdlx, Union, Universal, M2};
+    use crate::model::semantic::profiles::{Mdlx, Universal};
     let positions = ZeroVec::alloc_from_slice(&[[0., 0., 0.], [1., 0., 0.], [0., 1., 0.]]);
     let faces = [[0, 1, 2]];
     let mut builder = ModelBuilder::<Mdlx>::with_profile("typed triangle");
@@ -181,16 +181,7 @@ fn typed_vocabulary_widening_preserves_ids_and_borrowed_storage() {
         })
         .unwrap();
     let narrow = builder.finish().unwrap();
-    let union = narrow.widen::<Union<Mdlx, M2>>();
-    assert!(matches!(
-        union.material(material).unwrap().surface,
-        Either::Left(_)
-    ));
-    assert_eq!(
-        union.mesh(mesh).unwrap().positions().as_bytes().as_ptr(),
-        positions.as_bytes().as_ptr()
-    );
-    let universal = union.widen::<Universal>();
+    let universal = narrow.widen::<Universal>();
     assert!(matches!(
         universal.material(material).unwrap().surface,
         MaterialSurface::Layered(_)
@@ -220,8 +211,8 @@ fn canonical_packed_arrays_can_be_exported_without_copying() {
 }
 
 #[test]
-fn application_vocabularies_participate_in_graph_validation_and_unions() {
-    use crate::model::semantic::profiles::{Profile, SurfacePayload, Unavailable, Universal};
+fn application_vocabularies_participate_in_graph_validation() {
+    use crate::model::semantic::profiles::{Profile, SurfacePayload, Unavailable};
     #[derive(Clone, Debug)]
     struct Application;
     #[derive(Clone, Debug)]
@@ -264,11 +255,8 @@ fn application_vocabularies_participate_in_graph_validation_and_unions() {
             surface: Surface { texture },
         })
         .unwrap();
-    let graph = first.finish().unwrap().union_right::<Universal>();
-    assert!(matches!(
-        graph.material(material).unwrap().surface,
-        profiles::Either::Right(_)
-    ));
+    let graph = first.finish().unwrap();
+    assert_eq!(graph.material(material).unwrap().surface.texture, texture);
     let mut foreign = ModelBuilder::<Application>::with_profile("foreign");
     foreign
         .add_material(Material::<Application> {

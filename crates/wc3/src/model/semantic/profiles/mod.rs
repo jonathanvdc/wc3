@@ -17,7 +17,6 @@ use crate::model::semantic::{
 };
 use std::any::TypeId;
 use std::fmt::Debug;
-use std::marker::PhantomData;
 
 /// A checked surface supplied by a semantic profile.
 pub trait SurfacePayload: Clone + Debug + Send + Sync + ValidateLinks {
@@ -211,33 +210,7 @@ impl<A: FeaturePayload, B: FeaturePayload> FeaturePayload for Either<A, B> {
         }
     }
 }
-/// Union of two vocabularies, preserving the original payloads unchanged.
-#[derive(Clone, Debug, Default)]
-pub struct Union<A, B>(PhantomData<(A, B)>);
-impl<A: Profile, B: Profile> Profile for Union<A, B> {
-    type Property = Either<A::Property, B::Property>;
-    type Appearance<'a> = Either<A::Appearance<'a>, B::Appearance<'a>>;
-    type Binding<'a> = Either<A::Binding<'a>, B::Binding<'a>>;
-    type Geometry<'a> = Either<A::Geometry<'a>, B::Geometry<'a>>;
-    type Draw = Either<A::Draw, B::Draw>;
-    type ModelMetadata<'a> = Either<A::ModelMetadata<'a>, B::ModelMetadata<'a>>;
-    type System<'a> = Either<A::System<'a>, B::System<'a>>;
-    type Surface<'a> = Either<A::Surface<'a>, B::Surface<'a>>;
-    type Feature<'a> = Either<A::Feature<'a>, B::Feature<'a>>;
-    type Node<'a> = Either<A::Node<'a>, B::Node<'a>>;
-    type Texture<'a> = Either<A::Texture<'a>, B::Texture<'a>>;
-    type Mesh<'a> = Either<A::Mesh<'a>, B::Mesh<'a>>;
-    type Instance<'a> = Either<A::Instance<'a>, B::Instance<'a>>;
-    type Clip<'a> = Either<A::Clip<'a>, B::Clip<'a>>;
-    type Controller<'a> = Either<A::Controller<'a>, B::Controller<'a>>;
-    fn mesh_skin(controls: &Self::Mesh<'_>) -> Option<SkinId> {
-        match controls {
-            Either::Left(value) => A::mesh_skin(value),
-            Either::Right(value) => B::mesh_skin(value),
-        }
-    }
-}
-/// All built-in logical feature families. Custom families can be added with `Union`.
+/// All built-in logical feature families. Applications can define custom profiles.
 #[derive(Clone, Debug, Default)]
 pub struct Universal;
 impl Profile for Universal {
@@ -363,154 +336,6 @@ impl NodeFeature<'_> {
                 .is_some_and(|target| target.supports_universal_feature(self))
             || m3::properties::Target::from_identity(key)
                 .is_some_and(|target| target.supports_universal_feature(self))
-    }
-}
-
-impl<A: Profile, B: Profile> Extends<A> for Union<A, B> {
-    fn property(value: A::Property) -> Self::Property {
-        Either::Left(value)
-    }
-    fn appearance<'a>(value: <A as Profile>::Appearance<'a>) -> Self::Appearance<'a> {
-        Either::Left(value)
-    }
-    fn binding<'a>(value: <A as Profile>::Binding<'a>) -> Self::Binding<'a> {
-        Either::Left(value)
-    }
-    fn geometry<'a>(value: <A as Profile>::Geometry<'a>) -> Self::Geometry<'a> {
-        Either::Left(value)
-    }
-    fn draw(value: <A as Profile>::Draw) -> Self::Draw {
-        Either::Left(value)
-    }
-    fn model_metadata<'a>(value: <A as Profile>::ModelMetadata<'a>) -> Self::ModelMetadata<'a> {
-        Either::Left(value)
-    }
-    fn system<'a>(value: <A as Profile>::System<'a>) -> Self::System<'a> {
-        Either::Left(value)
-    }
-    fn surface<'a>(value: A::Surface<'a>) -> Self::Surface<'a> {
-        Either::Left(value)
-    }
-    fn feature<'a>(value: A::Feature<'a>) -> Self::Feature<'a> {
-        Either::Left(value)
-    }
-    fn node<'a>(value: <A as Profile>::Node<'a>) -> Self::Node<'a> {
-        Either::Left(value)
-    }
-    fn texture<'a>(value: <A as Profile>::Texture<'a>) -> Self::Texture<'a> {
-        Either::Left(value)
-    }
-    fn mesh<'a>(value: <A as Profile>::Mesh<'a>) -> Self::Mesh<'a> {
-        Either::Left(value)
-    }
-    fn instance<'a>(value: <A as Profile>::Instance<'a>) -> Self::Instance<'a> {
-        Either::Left(value)
-    }
-    fn clip<'a>(value: <A as Profile>::Clip<'a>) -> Self::Clip<'a> {
-        Either::Left(value)
-    }
-    fn controller<'a>(value: <A as Profile>::Controller<'a>) -> Self::Controller<'a> {
-        Either::Left(value)
-    }
-}
-impl<A: Profile, B: Profile> Extends<Union<A, B>> for Universal
-where
-    Universal: Extends<A> + Extends<B>,
-{
-    fn property(value: <Union<A, B> as Profile>::Property) -> Self::Property {
-        match value {
-            Either::Left(v) => <Self as Extends<A>>::property(v),
-            Either::Right(v) => <Self as Extends<B>>::property(v),
-        }
-    }
-    fn appearance<'a>(value: <Union<A, B> as Profile>::Appearance<'a>) -> Self::Appearance<'a> {
-        match value {
-            Either::Left(value) => <Self as Extends<A>>::appearance(value),
-            Either::Right(value) => <Self as Extends<B>>::appearance(value),
-        }
-    }
-    fn binding<'a>(value: <Union<A, B> as Profile>::Binding<'a>) -> Self::Binding<'a> {
-        match value {
-            Either::Left(value) => <Self as Extends<A>>::binding(value),
-            Either::Right(value) => <Self as Extends<B>>::binding(value),
-        }
-    }
-    fn geometry<'a>(value: <Union<A, B> as Profile>::Geometry<'a>) -> Self::Geometry<'a> {
-        match value {
-            Either::Left(value) => <Self as Extends<A>>::geometry(value),
-            Either::Right(value) => <Self as Extends<B>>::geometry(value),
-        }
-    }
-
-    fn draw(value: <Union<A, B> as Profile>::Draw) -> Self::Draw {
-        match value {
-            Either::Left(value) => <Self as Extends<A>>::draw(value),
-            Either::Right(value) => <Self as Extends<B>>::draw(value),
-        }
-    }
-
-    fn model_metadata<'a>(
-        value: <Union<A, B> as Profile>::ModelMetadata<'a>,
-    ) -> Self::ModelMetadata<'a> {
-        match value {
-            Either::Left(value) => <Self as Extends<A>>::model_metadata(value),
-            Either::Right(value) => <Self as Extends<B>>::model_metadata(value),
-        }
-    }
-    fn system<'a>(value: <Union<A, B> as Profile>::System<'a>) -> Self::System<'a> {
-        match value {
-            Either::Left(value) => <Self as Extends<A>>::system(value),
-            Either::Right(value) => <Self as Extends<B>>::system(value),
-        }
-    }
-
-    fn surface<'a>(value: <Union<A, B> as Profile>::Surface<'a>) -> Self::Surface<'a> {
-        match value {
-            Either::Left(value) => <Self as Extends<A>>::surface(value),
-            Either::Right(value) => <Self as Extends<B>>::surface(value),
-        }
-    }
-    fn feature<'a>(value: <Union<A, B> as Profile>::Feature<'a>) -> Self::Feature<'a> {
-        match value {
-            Either::Left(value) => <Self as Extends<A>>::feature(value),
-            Either::Right(value) => <Self as Extends<B>>::feature(value),
-        }
-    }
-    fn node<'a>(value: <Union<A, B> as Profile>::Node<'a>) -> Self::Node<'a> {
-        match value {
-            Either::Left(value) => <Self as Extends<A>>::node(value),
-            Either::Right(value) => <Self as Extends<B>>::node(value),
-        }
-    }
-    fn texture<'a>(value: <Union<A, B> as Profile>::Texture<'a>) -> Self::Texture<'a> {
-        match value {
-            Either::Left(value) => <Self as Extends<A>>::texture(value),
-            Either::Right(value) => <Self as Extends<B>>::texture(value),
-        }
-    }
-    fn mesh<'a>(value: <Union<A, B> as Profile>::Mesh<'a>) -> Self::Mesh<'a> {
-        match value {
-            Either::Left(value) => <Self as Extends<A>>::mesh(value),
-            Either::Right(value) => <Self as Extends<B>>::mesh(value),
-        }
-    }
-    fn instance<'a>(value: <Union<A, B> as Profile>::Instance<'a>) -> Self::Instance<'a> {
-        match value {
-            Either::Left(value) => <Self as Extends<A>>::instance(value),
-            Either::Right(value) => <Self as Extends<B>>::instance(value),
-        }
-    }
-    fn clip<'a>(value: <Union<A, B> as Profile>::Clip<'a>) -> Self::Clip<'a> {
-        match value {
-            Either::Left(value) => <Self as Extends<A>>::clip(value),
-            Either::Right(value) => <Self as Extends<B>>::clip(value),
-        }
-    }
-    fn controller<'a>(value: <Union<A, B> as Profile>::Controller<'a>) -> Self::Controller<'a> {
-        match value {
-            Either::Left(value) => <Self as Extends<A>>::controller(value),
-            Either::Right(value) => <Self as Extends<B>>::controller(value),
-        }
     }
 }
 
