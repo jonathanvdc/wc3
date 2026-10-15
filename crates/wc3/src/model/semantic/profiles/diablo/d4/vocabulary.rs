@@ -16,7 +16,7 @@ pub struct D4;
 impl Profile for D4 {
     type Property = Unavailable;
     type Models = Single;
-    type Asset<'a> = NoControls;
+    type AssetMetadata<'a> = NoControls;
     type Appearance<'a> = Appearance;
     type Binding<'a> = ExplicitBinding<'a>;
     type Geometry<'a> = Geometry<'a>;
@@ -189,7 +189,7 @@ impl Extends<D4> for Universal {
     fn property(value: <D4 as Profile>::Property) -> Self::Property {
         match value {}
     }
-    fn asset<'a>(value: <D4 as Profile>::Asset<'a>) -> Self::Asset<'a> {
+    fn asset_metadata<'a>(value: <D4 as Profile>::AssetMetadata<'a>) -> Self::AssetMetadata<'a> {
         value
     }
     fn appearance<'a>(value: <D4 as Profile>::Appearance<'a>) -> Self::Appearance<'a> {
@@ -241,7 +241,9 @@ impl Extends<D4> for Universal {
     }
 }
 impl Narrows<Universal> for D4 {
-    fn asset<'a>(value: <Universal as Profile>::Asset<'a>) -> Result<Self::Asset<'a>, Error> {
+    fn asset_metadata<'a>(
+        value: <Universal as Profile>::AssetMetadata<'a>,
+    ) -> Result<Self::AssetMetadata<'a>, Error> {
         Ok(value)
     }
     fn appearance<'a>(

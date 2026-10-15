@@ -87,8 +87,8 @@ pub trait Profile: Clone + Debug + 'static {
     type Property: PropertyPayload;
     /// Model cardinality represented by a native asset in this vocabulary.
     type Models: Cardinality;
-    /// Authoring controls genuinely owned by an asset containing several models.
-    type Asset<'a>: ControlsPayload + Default;
+    /// Metadata shared by the models in an asset.
+    type AssetMetadata<'a>: ControlsPayload + Default;
     /// Complete material-assignment and appearance vocabulary.
     type Appearance<'a>: AppearanceSchema<'a>;
     /// Joint binding interpretations supported by this vocabulary.
@@ -154,11 +154,11 @@ pub trait Profile: Clone + Debug + 'static {
     }
     /// Checks asset-wide authoring domains after model and standard references are valid.
     fn validate_asset<'a>(
-        controls: &Self::Asset<'a>,
+        metadata: &Self::AssetMetadata<'a>,
         models: &[Model<'a, Self>],
         library: &Resources<'a, Self>,
     ) -> Result<(), Error> {
-        let _ = (controls, models, library);
+        let _ = (metadata, models, library);
         Ok(())
     }
     /// Checks relationships within additional authoring domains owned by this profile.
@@ -222,7 +222,7 @@ pub struct Union<A, B>(PhantomData<(A, B)>);
 impl<A: Profile, B: Profile> Profile for Union<A, B> {
     type Property = Either<A::Property, B::Property>;
     type Models = Multiple;
-    type Asset<'a> = Either<A::Asset<'a>, B::Asset<'a>>;
+    type AssetMetadata<'a> = Either<A::AssetMetadata<'a>, B::AssetMetadata<'a>>;
     type Appearance<'a> = Either<A::Appearance<'a>, B::Appearance<'a>>;
     type Binding<'a> = Either<A::Binding<'a>, B::Binding<'a>>;
     type Geometry<'a> = Either<A::Geometry<'a>, B::Geometry<'a>>;
@@ -250,7 +250,7 @@ pub struct Universal;
 impl Profile for Universal {
     type Property = UniversalProperty;
     type Models = Multiple;
-    type Asset<'a> = NoControls;
+    type AssetMetadata<'a> = NoControls;
     type Appearance<'a> = UniversalAppearance<'a>;
     type Binding<'a> = UniversalBinding<'a>;
     type Geometry<'a> = GeometryData<'a>;
@@ -279,8 +279,8 @@ impl Profile for Universal {
 pub trait Extends<Source: Profile>: Profile {
     /// Embeds structural property selectors without changing their identity.
     fn property(value: Source::Property) -> Self::Property;
-    /// Embeds asset-wide authoring controls without changing their meaning.
-    fn asset<'a>(value: Source::Asset<'a>) -> Self::Asset<'a>;
+    /// Embeds asset-wide metadata without changing its meaning.
+    fn asset_metadata<'a>(value: Source::AssetMetadata<'a>) -> Self::AssetMetadata<'a>;
     /// Embeds the complete appearance vocabulary while preserving identities.
     fn appearance<'a>(value: Source::Appearance<'a>) -> Self::Appearance<'a>;
     /// Embeds the authored joint binding without changing its interpretation.
@@ -314,7 +314,7 @@ impl<P: Profile> Extends<P> for P {
     fn property(value: P::Property) -> Self::Property {
         value
     }
-    fn asset<'a>(value: <P as Profile>::Asset<'a>) -> Self::Asset<'a> {
+    fn asset_metadata<'a>(value: <P as Profile>::AssetMetadata<'a>) -> Self::AssetMetadata<'a> {
         value
     }
     fn appearance<'a>(value: <P as Profile>::Appearance<'a>) -> Self::Appearance<'a> {
@@ -434,7 +434,7 @@ impl<A: Profile, B: Profile> Extends<A> for Union<A, B> {
     fn property(value: A::Property) -> Self::Property {
         Either::Left(value)
     }
-    fn asset<'a>(value: <A as Profile>::Asset<'a>) -> Self::Asset<'a> {
+    fn asset_metadata<'a>(value: <A as Profile>::AssetMetadata<'a>) -> Self::AssetMetadata<'a> {
         Either::Left(value)
     }
     fn appearance<'a>(value: <A as Profile>::Appearance<'a>) -> Self::Appearance<'a> {
@@ -490,10 +490,12 @@ where
             Either::Right(v) => <Self as Extends<B>>::property(v),
         }
     }
-    fn asset<'a>(value: <Union<A, B> as Profile>::Asset<'a>) -> Self::Asset<'a> {
+    fn asset_metadata<'a>(
+        value: <Union<A, B> as Profile>::AssetMetadata<'a>,
+    ) -> Self::AssetMetadata<'a> {
         match value {
-            Either::Left(value) => <Self as Extends<A>>::asset(value),
-            Either::Right(value) => <Self as Extends<B>>::asset(value),
+            Either::Left(value) => <Self as Extends<A>>::asset_metadata(value),
+            Either::Right(value) => <Self as Extends<B>>::asset_metadata(value),
         }
     }
     fn appearance<'a>(value: <Union<A, B> as Profile>::Appearance<'a>) -> Self::Appearance<'a> {

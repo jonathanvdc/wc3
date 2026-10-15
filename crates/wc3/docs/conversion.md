@@ -55,8 +55,10 @@ its strict loss boundaries.
 
 ## Editing and inspecting an output plan
 
-An `Asset` owns a checked `ModelCollection`, its resources, optional encoding
-hints, and explicit unknown attachments. Use `Asset::edit_model` or
+An `Asset` owns a checked `ModelCollection`, its resources and asset metadata,
+optional encoding hints, and explicit unknown attachments. `metadata()` exposes
+the collection metadata selected by `Profile::AssetMetadata`, and `set_metadata`
+checks replacements against the complete asset. Use `Asset::edit_model` or
 `Asset::edit_resources` to stage edits and publish them atomically after
 validation. For a standalone graph, `SingleModel::edit` provides the same
 checked workflow. Models, dependencies, mesh placements, draws, and material

@@ -15,8 +15,10 @@ pub trait Narrows<Source: Profile>: Profile {
             .ok_or_else(|| incompatible("animation property"))
     }
 
-    /// Projects asset-wide authoring controls without changing their meaning.
-    fn asset<'a>(value: Source::Asset<'a>) -> Result<Self::Asset<'a>, Error>;
+    /// Projects asset-wide metadata without changing its meaning.
+    fn asset_metadata<'a>(
+        value: Source::AssetMetadata<'a>,
+    ) -> Result<Self::AssetMetadata<'a>, Error>;
     /// Projects the complete appearance vocabulary while preserving identities.
     fn appearance<'a>(value: Source::Appearance<'a>) -> Result<Self::Appearance<'a>, Error>;
     /// Projects the authored joint binding without changing its interpretation.
@@ -50,7 +52,7 @@ impl<P: Profile> Narrows<P> for P {
     fn property(value: P::Property) -> Result<Self::Property, Error> {
         Ok(value)
     }
-    fn asset<'a>(value: P::Asset<'a>) -> Result<Self::Asset<'a>, Error> {
+    fn asset_metadata<'a>(value: P::AssetMetadata<'a>) -> Result<Self::AssetMetadata<'a>, Error> {
         Ok(value)
     }
     fn appearance<'a>(value: P::Appearance<'a>) -> Result<Self::Appearance<'a>, Error> {

@@ -181,7 +181,7 @@ impl FeaturePayload for ApplicationFeature {
 impl Profile for Application {
     type Property = ApplicationProperty;
     type Models = <Universal as Profile>::Models;
-    type Asset<'a> = <Universal as Profile>::Asset<'a>;
+    type AssetMetadata<'a> = <Universal as Profile>::AssetMetadata<'a>;
     type Appearance<'a> = <Universal as Profile>::Appearance<'a>;
     type Binding<'a> = <Universal as Profile>::Binding<'a>;
     type Geometry<'a> = <Universal as Profile>::Geometry<'a>;

@@ -87,25 +87,25 @@ impl ContainsCardinality<Single> for Multiple {
 pub struct ModelCollection<'data, P: Profile = Universal, C: Cardinality = Multiple> {
     models: C::Storage<Model<'data, P>>,
     resources: Resources<'data, P>,
-    controls: P::Asset<'data>,
+    metadata: P::AssetMetadata<'data>,
 }
-/// An unpublished collection that validates models and shared authoring domains together.
+/// An unpublished collection that validates models and asset metadata together.
 ///
 /// Unlike finishing standalone models independently, this permits relationships
-/// to collection controls that are defined after the model drafts are assembled.
+/// to asset metadata that is defined after the model drafts are assembled.
 pub struct ModelCollectionBuilder<'data, P: Profile = Universal, C: Cardinality = Multiple> {
     models: Vec<ModelBuilder<'data, P>>,
     resources: ResourcesBuilder<'data, P>,
-    controls: P::Asset<'data>,
+    metadata: P::AssetMetadata<'data>,
     cardinality: PhantomData<C>,
 }
 impl<'data, P: Profile, C: Cardinality> ModelCollectionBuilder<'data, P, C> {
-    /// Starts an empty draft with the profile's default collection controls.
+    /// Starts an empty draft with the profile's default collection metadata.
     pub fn new() -> Self {
         Self {
             models: Vec::new(),
             resources: Resources::builder(),
-            controls: Default::default(),
+            metadata: Default::default(),
             cardinality: Default::default(),
         }
     }
@@ -113,9 +113,9 @@ impl<'data, P: Profile, C: Cardinality> ModelCollectionBuilder<'data, P, C> {
     pub fn resources_mut(&mut self) -> &mut ResourcesBuilder<'data, P> {
         &mut self.resources
     }
-    /// Replaces collection-wide controls, checked when the collection is finished.
-    pub fn set_collection_controls(&mut self, controls: P::Asset<'data>) {
-        self.controls = controls;
+    /// Replaces collection-wide metadata, checked when the collection is finished.
+    pub fn set_metadata(&mut self, metadata: P::AssetMetadata<'data>) {
+        self.metadata = metadata;
     }
     /// Appends an unpublished model whose resource references resolve at publication.
     pub fn add_model(&mut self, name: impl Into<Cow<'data, str>>) -> usize {
@@ -145,7 +145,7 @@ impl<'data, P: Profile, C: Cardinality> ModelCollectionBuilder<'data, P, C> {
         self.models.push(model);
         index
     }
-    /// Validates all models against one resource arena and the final collection controls.
+    /// Validates all models against one resource arena and the final collection metadata.
     pub fn finish(self) -> Result<ModelCollection<'data, P, C>, Error> {
         let mut resources = self.resources.finish();
         let mut arenas = vec![resources.authority_id()];
@@ -158,7 +158,7 @@ impl<'data, P: Profile, C: Cardinality> ModelCollectionBuilder<'data, P, C> {
             }
             models.push(model);
         }
-        ModelCollection::from_parts(models, resources, self.controls)
+        ModelCollection::from_parts(models, resources, self.metadata)
     }
 }
 impl<P: Profile, C: Cardinality> Default for ModelCollectionBuilder<'_, P, C> {
@@ -179,16 +179,16 @@ impl<'data, P: Profile, C: Cardinality> ModelCollection<'data, P, C> {
         Self {
             models: C::single(model),
             resources: single.resources,
-            controls: single.controls,
+            metadata: single.metadata,
         }
     }
     /// Joins standalone models with an explicitly chosen collection authoring context.
     ///
-    /// The caller chooses collection controls rather than silently inheriting one
-    /// model's document context. Conflicting resource edits are rejected.
+    /// The caller chooses asset metadata rather than silently inheriting one
+    /// standalone model's metadata. Conflicting resource edits are rejected.
     pub fn from_models(
         singles: Vec<SingleModel<'data, P>>,
-        controls: P::Asset<'data>,
+        metadata: P::AssetMetadata<'data>,
     ) -> Result<Self, Error> {
         let mut resources = Resources::default();
         let mut authorities = Vec::new();
@@ -202,34 +202,40 @@ impl<'data, P: Profile, C: Cardinality> ModelCollection<'data, P, C> {
                 resources = resources.merge(single.resources)?;
             }
         }
-        Self::from_parts(models, resources, controls)
+        Self::from_parts(models, resources, metadata)
     }
     /// Checks graphs and their dependency definitions before publishing a collection.
     pub fn from_parts(
         models: Vec<Model<'data, P>>,
         resources: Resources<'data, P>,
-        controls: P::Asset<'data>,
+        metadata: P::AssetMetadata<'data>,
     ) -> Result<Self, Error> {
         let set = Self {
             models: C::collect(models)?,
             resources,
-            controls,
+            metadata,
         };
         set.validate()?;
         Ok(set)
     }
     /// Consumes the collection without losing its dependency or authoring context.
-    pub fn into_parts(self) -> (Vec<Model<'data, P>>, Resources<'data, P>, P::Asset<'data>) {
-        (C::into_vec(self.models), self.resources, self.controls)
+    pub fn into_parts(
+        self,
+    ) -> (
+        Vec<Model<'data, P>>,
+        Resources<'data, P>,
+        P::AssetMetadata<'data>,
+    ) {
+        (C::into_vec(self.models), self.resources, self.metadata)
     }
-    /// Collection-wide authoring context supplied by this profile.
-    pub fn collection_controls(&self) -> &P::Asset<'data> {
-        &self.controls
+    /// Metadata shared by all models in the asset.
+    pub fn metadata(&self) -> &P::AssetMetadata<'data> {
+        &self.metadata
     }
-    /// Checks replacement collection controls before publishing them.
-    pub fn set_collection_controls(&mut self, controls: P::Asset<'data>) -> Result<(), Error> {
+    /// Checks replacement asset metadata before publishing it.
+    pub fn set_metadata(&mut self, metadata: P::AssetMetadata<'data>) -> Result<(), Error> {
         let mut draft = self.clone();
-        draft.controls = controls;
+        draft.metadata = metadata;
         draft.validate()?;
         *self = draft;
         Ok(())
@@ -251,7 +257,7 @@ impl<'data, P: Profile, C: Cardinality> ModelCollection<'data, P, C> {
         Some(ModelView {
             model: self.get_by_id(id)?,
             resources: &self.resources,
-            controls: &self.controls,
+            metadata: &self.metadata,
         })
     }
     /// Number of models in the collection.
@@ -271,7 +277,7 @@ impl<'data, P: Profile, C: Cardinality> ModelCollection<'data, P, C> {
         self.get(index).map(|model| ModelView {
             model,
             resources: &self.resources,
-            controls: &self.controls,
+            metadata: &self.metadata,
         })
     }
     /// The single owned arena used to resolve texture identities.
@@ -303,7 +309,7 @@ impl<'data, P: Profile, C: Cardinality> ModelCollection<'data, P, C> {
         }
         let mut invalid = false;
         {
-            self.controls.visit_links(&mut |link| {
+            self.metadata.visit_links(&mut |link| {
                 let exists = match link {
                     Link::Model(id) => model_ids.contains(&id),
                     Link::Texture(id) => self.resources().texture(id).is_some(),
@@ -344,11 +350,11 @@ impl<'data, P: Profile, C: Cardinality> ModelCollection<'data, P, C> {
         }
         if invalid {
             return Err(Error::new(
-                "asset.controls",
-                "authoring controls contain an invalid value or missing relationship",
+                "asset.metadata",
+                "asset metadata contains an invalid value or missing relationship",
             ));
         }
-        P::validate_asset(&self.controls, self.as_slice(), self.resources())
+        P::validate_asset(&self.metadata, self.as_slice(), self.resources())
     }
     /// Edits a model and its dependencies, checking the complete collection before publication.
     pub fn edit_model<R>(
@@ -366,7 +372,7 @@ impl<'data, P: Profile, C: Cardinality> ModelCollection<'data, P, C> {
         let [model] = single.models;
         let mut models = self.as_slice().to_vec();
         models[index] = model;
-        let draft = Self::from_parts(models, single.resources, self.controls.clone())?;
+        let draft = Self::from_parts(models, single.resources, self.metadata.clone())?;
         *self = draft;
         Ok(result)
     }
@@ -380,7 +386,7 @@ impl<'data, P: Profile, C: Cardinality> ModelCollection<'data, P, C> {
         let draft = Self::from_parts(
             self.as_slice().to_vec(),
             builder.finish(),
-            self.controls.clone(),
+            self.metadata.clone(),
         )?;
         *self = draft;
         Ok(result)
@@ -396,7 +402,7 @@ impl<'data, P: Profile, C: Cardinality> ModelCollection<'data, P, C> {
             )
             .expect("unchanged cardinality"),
             resources: self.resources.widen::<Q>(),
-            controls: Q::asset(self.controls),
+            metadata: Q::asset_metadata(self.metadata),
         }
     }
     /// Adds another vocabulary while retaining this collection in its left branch.
@@ -414,7 +420,7 @@ impl<'data, P: Profile, C: Cardinality> ModelCollection<'data, P, C> {
             )
             .expect("unchanged cardinality"),
             resources: self.resources.map_controls(Either::Right),
-            controls: Either::Right(self.controls),
+            metadata: Either::Right(self.metadata),
         }
     }
     pub(crate) fn widen_cardinality<D: ContainsCardinality<C>>(
@@ -423,7 +429,7 @@ impl<'data, P: Profile, C: Cardinality> ModelCollection<'data, P, C> {
         ModelCollection {
             models: D::embed(self.models),
             resources: self.resources,
-            controls: self.controls,
+            metadata: self.metadata,
         }
     }
 }
@@ -472,7 +478,7 @@ impl<'view, 'data, P: Profile, C: Cardinality> IntoIterator
 pub struct ModelView<'view, 'data, P: Profile = Universal> {
     model: &'view Model<'data, P>,
     resources: &'view Resources<'data, P>,
-    controls: &'view P::Asset<'data>,
+    metadata: &'view P::AssetMetadata<'data>,
 }
 impl<P: Profile> Copy for ModelView<'_, '_, P> {}
 impl<P: Profile> Clone for ModelView<'_, '_, P> {
@@ -489,9 +495,9 @@ impl<'view, 'data, P: Profile> ModelView<'view, 'data, P> {
     pub fn resources(&self) -> &'view Resources<'data, P> {
         self.resources
     }
-    /// Collection-wide authoring context, including shared banks where supported.
-    pub fn collection_controls(&self) -> &'view P::Asset<'data> {
-        self.controls
+    /// Metadata borrowed from the owning asset collection.
+    pub fn metadata(&self) -> &'view P::AssetMetadata<'data> {
+        self.metadata
     }
     /// Resolves a texture identity against this view's collection.
     pub fn texture(&self, id: TextureId) -> Option<&'view Texture<'data, P>> {
@@ -519,7 +525,7 @@ impl<'data, P: Profile, C: Cardinality> ModelCollection<'data, P, C> {
         ModelCollection::from_parts(
             models,
             self.resources.try_narrow::<Q>()?,
-            Q::asset(self.controls)?,
+            Q::asset_metadata(self.metadata)?,
         )
     }
 }
@@ -598,7 +604,7 @@ mod tests {
         impl Profile for Linked {
             type Property = crate::model::semantic::profiles::Unavailable;
             type Models = Multiple;
-            type Asset<'a> = NoControls;
+            type AssetMetadata<'a> = NoControls;
             type Appearance<'a> = SingleLook<'a>;
             type Binding<'a> = Unavailable;
             type Geometry<'a> = GeometryData<'a>;
@@ -624,13 +630,13 @@ mod tests {
             .set_controls(vec![second_id]);
         let collection = draft.finish().unwrap();
         assert_eq!(collection.get_by_id(second_id).unwrap().name(), "second");
-        let (mut models, resources, controls) = collection.into_parts();
+        let (mut models, resources, metadata) = collection.into_parts();
         models.swap(0, 1);
         let collection =
-            ModelCollection::<Linked>::from_parts(models, resources, controls).unwrap();
+            ModelCollection::<Linked>::from_parts(models, resources, metadata).unwrap();
         assert_eq!(collection[1].controls(), &[second_id]);
-        let (mut models, resources, controls) = collection.into_parts();
+        let (mut models, resources, metadata) = collection.into_parts();
         models.remove(0);
-        assert!(ModelCollection::<Linked>::from_parts(models, resources, controls).is_err());
+        assert!(ModelCollection::<Linked>::from_parts(models, resources, metadata).is_err());
     }
 }

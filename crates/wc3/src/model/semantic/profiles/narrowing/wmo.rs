@@ -6,7 +6,9 @@ use crate::model::semantic::{
     UniversalAppearance,
 };
 impl Narrows<Universal> for Wmo {
-    fn asset<'a>(value: <Universal as Profile>::Asset<'a>) -> Result<Self::Asset<'a>, Error> {
+    fn asset_metadata<'a>(
+        value: <Universal as Profile>::AssetMetadata<'a>,
+    ) -> Result<Self::AssetMetadata<'a>, Error> {
         Ok(value)
     }
     fn appearance<'a>(

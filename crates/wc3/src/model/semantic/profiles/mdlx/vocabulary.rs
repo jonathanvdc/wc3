@@ -29,7 +29,7 @@ impl Profile for Mdlx {
         Some(Default::default())
     }
     type Models = Single;
-    type Asset<'a> = NoControls;
+    type AssetMetadata<'a> = NoControls;
     type Appearance<'a> = SingleLook<'a>;
     type Binding<'a> = IdentityBinding;
     type Geometry<'a> = MdlxGeometry<'a>;
@@ -45,7 +45,7 @@ impl Profile for Mdlx {
     type Clip<'a> = mdlx::Sequence;
     type Controller<'a> = NoControls;
     fn validate_asset<'a>(
-        _controls: &Self::Asset<'a>,
+        _metadata: &Self::AssetMetadata<'a>,
         _models: &[crate::model::semantic::Model<'a, Self>],
         resources: &crate::model::semantic::Resources<'a, Self>,
     ) -> Result<(), Error> {
@@ -82,7 +82,7 @@ impl Extends<Mdlx> for Universal {
     fn property(value: <Mdlx as Profile>::Property) -> Self::Property {
         UniversalProperty::Mdlx(value)
     }
-    fn asset<'a>(value: <Mdlx as Profile>::Asset<'a>) -> Self::Asset<'a> {
+    fn asset_metadata<'a>(value: <Mdlx as Profile>::AssetMetadata<'a>) -> Self::AssetMetadata<'a> {
         value
     }
     fn appearance<'a>(value: <Mdlx as Profile>::Appearance<'a>) -> Self::Appearance<'a> {

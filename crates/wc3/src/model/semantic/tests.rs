@@ -262,7 +262,7 @@ fn application_vocabularies_participate_in_graph_validation_and_unions() {
     impl Profile for Application {
         type Property = profiles::Unavailable;
         type Models = Multiple;
-        type Asset<'a> = profiles::NoControls;
+        type AssetMetadata<'a> = profiles::NoControls;
         type Appearance<'a> = UniversalAppearance<'a>;
         type Binding<'a> = UniversalBinding<'a>;
         type Geometry<'a> = GeometryData<'a>;

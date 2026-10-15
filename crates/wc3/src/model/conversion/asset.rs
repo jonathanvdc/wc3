@@ -92,24 +92,24 @@ impl<'a, P: Profile> Asset<'a, P> {
     /// Joins models according to this profile's native asset cardinality.
     pub fn from_models(
         models: Vec<SingleModel<'a, P>>,
-        controls: P::Asset<'a>,
+        metadata: P::AssetMetadata<'a>,
     ) -> Result<Self, Error> {
         Ok(Self {
-            models: ModelCollection::from_models(models, controls)
+            models: ModelCollection::from_models(models, metadata)
                 .map_err(|error| Error::new("models", error.to_string()))?,
             opaque: Vec::new(),
             encoding_hints: Vec::new(),
         })
     }
-    /// Collection-wide authoring controls selected by this profile.
-    pub fn controls(&self) -> &P::Asset<'a> {
-        self.models.collection_controls()
+    /// Metadata shared by the models in this asset.
+    pub fn metadata(&self) -> &P::AssetMetadata<'a> {
+        self.models.metadata()
     }
-    /// Replaces collection controls after checking all their relationships.
-    pub fn set_controls(&mut self, controls: P::Asset<'a>) -> Result<(), Error> {
+    /// Replaces asset metadata after checking all its relationships.
+    pub fn set_metadata(&mut self, metadata: P::AssetMetadata<'a>) -> Result<(), Error> {
         self.models
-            .set_collection_controls(controls)
-            .map_err(|error| Error::new("asset.controls", error.to_string()))
+            .set_metadata(metadata)
+            .map_err(|error| Error::new("asset.metadata", error.to_string()))
     }
     /// The single authoritative resource arena shared by the models.
     pub fn resources(&self) -> &Resources<'a, P> {

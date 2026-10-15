@@ -6,7 +6,9 @@ use crate::model::semantic::{
     ModelControls, NodeControls, NodeFeature, System, UniversalAppearance, UniversalBinding,
 };
 impl Narrows<Universal> for M3 {
-    fn asset<'a>(value: <Universal as Profile>::Asset<'a>) -> Result<Self::Asset<'a>, Error> {
+    fn asset_metadata<'a>(
+        value: <Universal as Profile>::AssetMetadata<'a>,
+    ) -> Result<Self::AssetMetadata<'a>, Error> {
         Ok(value)
     }
     fn appearance<'a>(

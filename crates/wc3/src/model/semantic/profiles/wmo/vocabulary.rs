@@ -12,7 +12,7 @@ pub struct Wmo;
 impl Profile for Wmo {
     type Property = Unavailable;
     type Models = Single;
-    type Asset<'a> = NoControls;
+    type AssetMetadata<'a> = NoControls;
     type Appearance<'a> = SingleLook<'a>;
     type Binding<'a> = Unavailable;
     type Geometry<'a> = WmoGeometry<'a>;
@@ -28,7 +28,7 @@ impl Profile for Wmo {
     type Clip<'a> = NoControls;
     type Controller<'a> = NoControls;
     fn validate_asset<'a>(
-        _controls: &Self::Asset<'a>,
+        _metadata: &Self::AssetMetadata<'a>,
         _models: &[crate::model::semantic::Model<'a, Self>],
         resources: &crate::model::semantic::Resources<'a, Self>,
     ) -> Result<(), Error> {
@@ -57,7 +57,7 @@ impl Extends<Wmo> for Universal {
     fn property(value: <Wmo as Profile>::Property) -> Self::Property {
         match value {}
     }
-    fn asset<'a>(value: <Wmo as Profile>::Asset<'a>) -> Self::Asset<'a> {
+    fn asset_metadata<'a>(value: <Wmo as Profile>::AssetMetadata<'a>) -> Self::AssetMetadata<'a> {
         value
     }
     fn appearance<'a>(value: <Wmo as Profile>::Appearance<'a>) -> Self::Appearance<'a> {

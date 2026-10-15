@@ -24,7 +24,7 @@ impl Profile for M3 {
         Some(Default::default())
     }
     type Models = Single;
-    type Asset<'a> = NoControls;
+    type AssetMetadata<'a> = NoControls;
     type Appearance<'a> = SingleLook<'a>;
     type Binding<'a> = ExplicitBinding<'a>;
     type Geometry<'a> = M3Geometry<'a>;
@@ -477,7 +477,7 @@ impl Profile for M3 {
     }
 
     fn validate_asset<'a>(
-        _: &Self::Asset<'a>,
+        _: &Self::AssetMetadata<'a>,
         models: &[Model<'a, Self>],
         resources: &Resources<'a, Self>,
     ) -> Result<(), Error> {
@@ -552,7 +552,7 @@ impl Extends<M3> for Universal {
     fn property(value: <M3 as Profile>::Property) -> Self::Property {
         UniversalProperty::M3(value)
     }
-    fn asset<'a>(value: <M3 as Profile>::Asset<'a>) -> Self::Asset<'a> {
+    fn asset_metadata<'a>(value: <M3 as Profile>::AssetMetadata<'a>) -> Self::AssetMetadata<'a> {
         value
     }
     fn appearance<'a>(value: <M3 as Profile>::Appearance<'a>) -> Self::Appearance<'a> {

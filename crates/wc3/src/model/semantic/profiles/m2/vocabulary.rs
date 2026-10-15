@@ -19,7 +19,7 @@ impl Profile for M2 {
         Some(Default::default())
     }
     type Models = Single;
-    type Asset<'a> = NoControls;
+    type AssetMetadata<'a> = NoControls;
     type Appearance<'a> = DrawLooks<'a>;
     type Binding<'a> = IdentityBinding;
     type Geometry<'a> = M2Geometry<'a>;
@@ -35,7 +35,7 @@ impl Profile for M2 {
     type Clip<'a> = m2::SequenceControls;
     type Controller<'a> = NoControls;
     fn validate_asset<'a>(
-        _: &Self::Asset<'a>,
+        _: &Self::AssetMetadata<'a>,
         _: &[Model<'a, Self>],
         resources: &Resources<'a, Self>,
     ) -> Result<(), Error> {
@@ -128,7 +128,7 @@ impl Extends<M2> for Universal {
     fn property(value: <M2 as Profile>::Property) -> Self::Property {
         UniversalProperty::M2(value)
     }
-    fn asset<'a>(value: <M2 as Profile>::Asset<'a>) -> Self::Asset<'a> {
+    fn asset_metadata<'a>(value: <M2 as Profile>::AssetMetadata<'a>) -> Self::AssetMetadata<'a> {
         value
     }
     fn appearance<'a>(value: <M2 as Profile>::Appearance<'a>) -> Self::Appearance<'a> {

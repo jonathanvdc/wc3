@@ -34,15 +34,18 @@ which objects refer to one another.
 `Resources` arena. Textures live in that arena, which owns a plain map of texture
 definitions. Models store texture IDs but own no separate texture map or resource
 handle. `ModelCollection::view` returns a `ModelView` borrowing a selected graph,
-the collection's resources, and its collection controls. Resource lookup through
+the collection's resources, and its asset metadata. Resource lookup through
 a view therefore uses the same owner as the rest of the collection.
 
 The cardinality parameter `Single` requires exactly one graph; `Multiple`
 permits several. Native MDLX, M2, M3, WMO, and Diablo assets use `Single`;
 `Universal` and union profiles can contain multiple models with shared dependencies.
-Collection controls describe shared behavior separately from declarations owned
-by an individual model. The built-in native profiles and `Universal` use
-`NoControls` for collection controls.
+`Profile::AssetMetadata` selects metadata shared by all models in an asset,
+separately from declarations owned by an individual model. Access it through
+`ModelCollection::metadata`, `ModelView::metadata`, or conversion `Asset::metadata`.
+`set_metadata` checks replacements before publication; the collection builder
+checks its metadata when `finish` publishes the draft. The built-in native profiles
+and `Universal` use the zero-sized `NoControls` value for asset metadata.
 
 ## Choosing an authoring vocabulary
 
