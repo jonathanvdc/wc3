@@ -1,9 +1,11 @@
 //! WEM retains polygon domains without projecting corners into duplicated vertices.
 use super::{Layer, LayerData, RepairHistory, Section, SectionId};
+use crate::model::semantic::geometry_edit::{check_edit, remap_attribute, remap_values};
 use crate::model::semantic::{
     validate_geometry, AttributeValues, Attributes, Error, GeometryData, GeometrySchema,
     InfluenceRows, Link, NodeInfluence, Scope, Topology, ValidateLinks, Values,
 };
+use crate::model::semantic::{GeometryEdit, GeometryEditCapabilities, StreamSupport};
 use std::borrow::Cow;
 use std::sync::atomic::{AtomicU64, Ordering};
 static NEXT_SECTION_SCOPE: AtomicU64 = AtomicU64::new(1);
@@ -149,6 +151,61 @@ impl<'a> Geometry<'a> {
     }
 }
 impl<'a> GeometrySchema<'a> for Geometry<'a> {
+    fn edit_capabilities(&self) -> GeometryEditCapabilities {
+        GeometryEditCapabilities {
+            positions: true,
+            normals: StreamSupport::Optional,
+            tangents: StreamSupport::Optional,
+            colors: StreamSupport::Optional,
+            minimum_uv_sets: 0,
+            maximum_uv_sets: None,
+            vertex_remap: self.edge_count == 0
+                && self.triangulation.is_empty()
+                && self.repair.splits.is_empty()
+                && self.repair.removed_faces.is_empty(),
+        }
+    }
+    fn edited(&self, edit: GeometryEdit<'a>) -> Result<Self, Error> {
+        self.validate()?;
+        check_edit(&edit, self.edit_capabilities())?;
+        let mut result = self.clone();
+        if let Some(map) = &edit.remap {
+            map.check(self)?;
+            remap_values(&mut result.positions, &map.new_to_old);
+            remap_values(&mut result.normals, &map.new_to_old);
+            remap_values(&mut result.tangents, &map.new_to_old);
+            remap_values(&mut result.colors, &map.new_to_old);
+            for stream in &mut result.texture_coordinates {
+                remap_values(stream, &map.new_to_old);
+            }
+            remap_values(&mut result.influences, &map.new_to_old);
+            for layer in &mut result.layers {
+                if let LayerData::Standard(attribute) = &mut layer.data {
+                    remap_attribute(attribute, &map.new_to_old);
+                }
+            }
+            result.topology = map.topology.clone();
+        }
+        if let Some(values) = edit.positions {
+            result.positions = values;
+        }
+        if let Some(values) = edit.normals {
+            result.normals = values;
+        }
+        if let Some(values) = edit.tangents {
+            result.tangents = values;
+        }
+        if let Some(values) = edit.colors {
+            result.colors = values;
+        }
+        if let Some(values) = edit.texture_coordinates {
+            result.texture_coordinates = values;
+        }
+
+        result.validate()?;
+        Ok(result)
+    }
+
     fn positions(&self) -> &Values<'a, [f32; 3]> {
         &self.positions
     }

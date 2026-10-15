@@ -1,9 +1,11 @@
 //! Complete geometry vocabularies with borrowed inspection of their logical streams.
+use crate::model::semantic::geometry_edit::{check_edit, remap_attribute, remap_values};
 use crate::model::semantic::profiles::Either;
 use crate::model::semantic::{
     Attribute, AttributeDomain, AttributeValues, Error, Influence, Link, M2Geometry, M3Geometry,
     MdlxGeometry, NodeInfluence, Topology, ValidateLinks, Values, VertexInfluences, WmoGeometry,
 };
+use crate::model::semantic::{GeometryEdit, GeometryEditCapabilities, StreamSupport};
 use std::fmt::{Debug, Formatter, Result as FmtResult};
 
 /// An owner exposing attribute definitions without requiring contiguous storage.
@@ -97,6 +99,18 @@ pub enum GeometryKind {
 /// second geometry object or materialize encoded arrays. Validation checks
 /// authoring structure; native index widths and quantization belong to export.
 pub trait GeometrySchema<'data>: Clone + Debug + Send + Sync + ValidateLinks {
+    /// Describes common editing operations supported by this representation.
+    fn edit_capabilities(&self) -> GeometryEditCapabilities {
+        GeometryEditCapabilities::default()
+    }
+    /// Applies an atomic edit, returning a checked replacement and preserving this value.
+    /// Custom schemas may opt in by overriding this method and the capabilities query.
+    fn edited(&self, _edit: GeometryEdit<'data>) -> Result<Self, Error> {
+        Err(Error::new(
+            "geometry.edit",
+            "this geometry schema does not support common edits",
+        ))
+    }
     /// Returns the authored geometry category without inspecting its packed representation.
     fn kind(&self) -> GeometryKind {
         GeometryKind::Display
@@ -230,6 +244,31 @@ impl<'data> From<GeometryData<'data>> for UniversalGeometry<'data> {
     }
 }
 impl<'data> GeometrySchema<'data> for UniversalGeometry<'data> {
+    fn edit_capabilities(&self) -> GeometryEditCapabilities {
+        match self {
+            Self::Flexible(value) => value.edit_capabilities(),
+            Self::Mdlx(value) => value.edit_capabilities(),
+            Self::M2(value) => value.edit_capabilities(),
+            Self::M3(value) => value.edit_capabilities(),
+            Self::Wmo(value) => value.edit_capabilities(),
+            Self::Wem(value) => value.edit_capabilities(),
+            Self::D3(value) => value.edit_capabilities(),
+            Self::D4(value) => value.edit_capabilities(),
+        }
+    }
+    fn edited(&self, edit: GeometryEdit<'data>) -> Result<Self, Error> {
+        match self {
+            Self::Flexible(value) => Ok(Self::Flexible(value.edited(edit)?)),
+            Self::Mdlx(value) => Ok(Self::Mdlx(value.edited(edit)?)),
+            Self::M2(value) => Ok(Self::M2(value.edited(edit)?)),
+            Self::M3(value) => Ok(Self::M3(value.edited(edit)?)),
+            Self::Wmo(value) => Ok(Self::Wmo(value.edited(edit)?)),
+            Self::Wem(value) => Ok(Self::Wem(value.edited(edit)?)),
+            Self::D3(value) => Ok(Self::D3(value.edited(edit)?)),
+            Self::D4(value) => Ok(Self::D4(value.edited(edit)?)),
+        }
+    }
+
     fn kind(&self) -> GeometryKind {
         match self {
             Self::Flexible(v) => v.kind(),
@@ -410,6 +449,56 @@ impl<'data> GeometryData<'data> {
     }
 }
 impl<'data> GeometrySchema<'data> for GeometryData<'data> {
+    fn edit_capabilities(&self) -> GeometryEditCapabilities {
+        GeometryEditCapabilities {
+            positions: true,
+            normals: StreamSupport::Optional,
+            tangents: StreamSupport::Optional,
+            colors: StreamSupport::Optional,
+            minimum_uv_sets: 0,
+            maximum_uv_sets: None,
+            vertex_remap: true,
+        }
+    }
+    fn edited(&self, edit: GeometryEdit<'data>) -> Result<Self, Error> {
+        self.validate()?;
+        check_edit(&edit, self.edit_capabilities())?;
+        let mut result = self.clone();
+        if let Some(map) = &edit.remap {
+            map.check(self)?;
+            remap_values(&mut result.positions, &map.new_to_old);
+            remap_values(&mut result.normals, &map.new_to_old);
+            remap_values(&mut result.tangents, &map.new_to_old);
+            remap_values(&mut result.colors, &map.new_to_old);
+            for stream in &mut result.texture_coordinates {
+                remap_values(stream, &map.new_to_old);
+            }
+            remap_values(&mut result.influences, &map.new_to_old);
+            for attribute in &mut result.attributes {
+                remap_attribute(attribute, &map.new_to_old);
+            }
+            result.topology = map.topology.clone();
+        }
+        if let Some(values) = edit.positions {
+            result.positions = values;
+        }
+        if let Some(values) = edit.normals {
+            result.normals = values;
+        }
+        if let Some(values) = edit.tangents {
+            result.tangents = values;
+        }
+        if let Some(values) = edit.colors {
+            result.colors = values;
+        }
+        if let Some(values) = edit.texture_coordinates {
+            result.texture_coordinates = values;
+        }
+
+        result.validate()?;
+        Ok(result)
+    }
+
     fn positions(&self) -> &Values<'data, [f32; 3]> {
         &self.positions
     }
@@ -442,6 +531,19 @@ impl<'data> GeometrySchema<'data> for GeometryData<'data> {
 impl<'data, A: GeometrySchema<'data>, B: GeometrySchema<'data>> GeometrySchema<'data>
     for Either<A, B>
 {
+    fn edit_capabilities(&self) -> GeometryEditCapabilities {
+        match self {
+            Self::Left(value) => value.edit_capabilities(),
+            Self::Right(value) => value.edit_capabilities(),
+        }
+    }
+    fn edited(&self, edit: GeometryEdit<'data>) -> Result<Self, Error> {
+        match self {
+            Self::Left(value) => Ok(Self::Left(value.edited(edit)?)),
+            Self::Right(value) => Ok(Self::Right(value.edited(edit)?)),
+        }
+    }
+
     fn kind(&self) -> GeometryKind {
         match self {
             Self::Left(v) => v.kind(),

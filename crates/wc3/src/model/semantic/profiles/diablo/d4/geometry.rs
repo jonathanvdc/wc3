@@ -1,7 +1,7 @@
 //! Diablo IV declared vertex streams are logical values independent of buffer packing.
 use crate::model::semantic::{
-    AttributeDomain, Attributes, Error, GeometryData, GeometrySchema, InfluenceRows, Link,
-    Topology, ValidateLinks, Values,
+    AttributeDomain, Attributes, Error, GeometryData, GeometryEdit, GeometryEditCapabilities,
+    GeometrySchema, InfluenceRows, Link, Topology, ValidateLinks, Values,
 };
 
 /// Triangle geometry whose independently declared streams retain their logical values.
@@ -31,6 +31,13 @@ impl ValidateLinks for Geometry<'_> {
     }
 }
 impl<'a> GeometrySchema<'a> for Geometry<'a> {
+    fn edit_capabilities(&self) -> GeometryEditCapabilities {
+        self.data.edit_capabilities()
+    }
+    fn edited(&self, edit: GeometryEdit<'a>) -> Result<Self, Error> {
+        Self::new(self.data.edited(edit)?)
+    }
+
     fn positions(&self) -> &Values<'a, [f32; 3]> {
         self.data.positions()
     }

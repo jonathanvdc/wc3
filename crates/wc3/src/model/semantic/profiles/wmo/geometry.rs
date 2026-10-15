@@ -1,10 +1,12 @@
 //! Static world geometry with the authored world-model stream vocabulary.
 use super::TriangleFlags;
+use crate::model::semantic::geometry_edit::{check_edit, remap_values};
 use crate::model::semantic::geometry_schema::validate_geometry;
 use crate::model::semantic::{
     Attributes, Error, GeometrySchema, InfluenceRows, Link, MaterialId, Topology,
     UniversalGeometry, ValidateLinks, Values,
 };
+use crate::model::semantic::{GeometryEdit, GeometryEditCapabilities, StreamSupport};
 
 /// Static triangle geometry for a world model.
 ///
@@ -127,6 +129,58 @@ impl<'data> WmoGeometry<'data> {
     }
 }
 impl<'data> GeometrySchema<'data> for WmoGeometry<'data> {
+    fn edit_capabilities(&self) -> GeometryEditCapabilities {
+        GeometryEditCapabilities {
+            positions: true,
+            normals: StreamSupport::Optional,
+            tangents: StreamSupport::Unsupported,
+            colors: StreamSupport::Optional,
+            minimum_uv_sets: 0,
+            maximum_uv_sets: None,
+            vertex_remap: self.strip_indices.is_empty(),
+        }
+    }
+    fn edited(&self, edit: GeometryEdit<'data>) -> Result<Self, Error> {
+        self.validate()?;
+        check_edit(&edit, self.edit_capabilities())?;
+        let mut result = self.clone();
+        if let Some(map) = &edit.remap {
+            map.check(self)?;
+            remap_values(&mut result.positions, &map.new_to_old);
+            remap_values(&mut result.normals, &map.new_to_old);
+            for stream in &mut result.coordinates {
+                remap_values(stream, &map.new_to_old);
+            }
+            for stream in &mut result.colors {
+                remap_values(stream, &map.new_to_old);
+            }
+            remap_values(&mut result.lightmap_coordinates, &map.new_to_old);
+            result.topology = map.topology.clone();
+        }
+        if let Some(values) = edit.positions {
+            result.positions = values;
+        }
+        if let Some(values) = edit.normals {
+            result.normals = values;
+        }
+        if let Some(values) = edit.texture_coordinates {
+            result.coordinates = values;
+        }
+        if let Some(values) = edit.colors {
+            if values.is_empty() {
+                if !result.colors.is_empty() {
+                    result.colors.remove(0);
+                }
+            } else if result.colors.is_empty() {
+                result.colors.push(values);
+            } else {
+                result.colors[0] = values;
+            }
+        }
+        result.validate()?;
+        Ok(result)
+    }
+
     fn positions(&self) -> &Values<'data, [f32; 3]> {
         &self.positions
     }

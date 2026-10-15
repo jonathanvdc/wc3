@@ -1,11 +1,13 @@
 //! M3 display and collision geometry remain distinct authored shapes.
 //! Display vertices carry the streams needed for skinning and shading. Collision
 //! meshes contain positions and connectivity, without invented shading data.
+use crate::model::semantic::geometry_edit::{check_edit, remap_values};
 use crate::model::semantic::geometry_schema::validate_geometry;
 use crate::model::semantic::{
     Attributes, Error, GeometryKind, GeometrySchema, Influence, InfluenceRows, Link, Topology,
     ValidateLinks, Values,
 };
+use crate::model::semantic::{GeometryEdit, GeometryEditCapabilities, StreamSupport};
 fn present<'view, 'data, T>(values: &'view Values<'data, T>) -> Option<&'view Values<'data, T>> {
     (!values.is_empty()).then_some(values)
 }
@@ -73,6 +75,53 @@ impl<'data> M3DisplayGeometry<'data> {
     }
 }
 impl<'data> GeometrySchema<'data> for M3DisplayGeometry<'data> {
+    fn edit_capabilities(&self) -> GeometryEditCapabilities {
+        GeometryEditCapabilities {
+            positions: true,
+            normals: StreamSupport::Required,
+            tangents: StreamSupport::Optional,
+            colors: StreamSupport::Optional,
+            minimum_uv_sets: 0,
+            maximum_uv_sets: Some(5),
+            vertex_remap: true,
+        }
+    }
+    fn edited(&self, edit: GeometryEdit<'data>) -> Result<Self, Error> {
+        self.validate()?;
+        check_edit(&edit, self.edit_capabilities())?;
+        let mut result = self.clone();
+        if let Some(map) = &edit.remap {
+            map.check(self)?;
+            remap_values(&mut result.positions, &map.new_to_old);
+            remap_values(&mut result.normals, &map.new_to_old);
+            remap_values(&mut result.tangents, &map.new_to_old);
+            remap_values(&mut result.colors, &map.new_to_old);
+            for stream in &mut result.texture_coordinates {
+                remap_values(stream, &map.new_to_old);
+            }
+            remap_values(&mut result.influences, &map.new_to_old);
+            result.topology = map.topology.clone();
+        }
+        if let Some(values) = edit.positions {
+            result.positions = values;
+        }
+        if let Some(values) = edit.normals {
+            result.normals = values;
+        }
+        if let Some(values) = edit.tangents {
+            result.tangents = values;
+        }
+        if let Some(values) = edit.colors {
+            result.colors = values;
+        }
+        if let Some(values) = edit.texture_coordinates {
+            result.texture_coordinates = values;
+        }
+
+        result.validate()?;
+        Ok(result)
+    }
+
     fn positions(&self) -> &Values<'data, [f32; 3]> {
         &self.positions
     }
@@ -224,6 +273,35 @@ impl ValidateLinks for M3CollisionGeometry<'_> {
     fn visit_links(&self, _visitor: &mut dyn FnMut(Link)) {}
 }
 impl<'data> GeometrySchema<'data> for M3CollisionGeometry<'data> {
+    fn edit_capabilities(&self) -> GeometryEditCapabilities {
+        GeometryEditCapabilities {
+            positions: true,
+            normals: StreamSupport::Unsupported,
+            tangents: StreamSupport::Unsupported,
+            colors: StreamSupport::Unsupported,
+            minimum_uv_sets: 0,
+            maximum_uv_sets: Some(0),
+            vertex_remap: true,
+        }
+    }
+    fn edited(&self, edit: GeometryEdit<'data>) -> Result<Self, Error> {
+        self.validate()?;
+        check_edit(&edit, self.edit_capabilities())?;
+        let mut result = self.clone();
+        if let Some(map) = &edit.remap {
+            map.check(self)?;
+            remap_values(&mut result.positions, &map.new_to_old);
+
+            result.topology = map.topology.clone();
+        }
+        if let Some(values) = edit.positions {
+            result.positions = values;
+        }
+
+        result.validate()?;
+        Ok(result)
+    }
+
     fn kind(&self) -> GeometryKind {
         GeometryKind::Collision
     }
@@ -389,6 +467,19 @@ macro_rules! delegate {
     };
 }
 impl<'data> GeometrySchema<'data> for M3Geometry<'data> {
+    fn edit_capabilities(&self) -> GeometryEditCapabilities {
+        match self {
+            Self::Display(value) => value.edit_capabilities(),
+            Self::Collision(value) => value.edit_capabilities(),
+        }
+    }
+    fn edited(&self, edit: GeometryEdit<'data>) -> Result<Self, Error> {
+        match self {
+            Self::Display(value) => Ok(Self::Display(value.edited(edit)?)),
+            Self::Collision(value) => Ok(Self::Collision(value.edited(edit)?)),
+        }
+    }
+
     delegate!(kind, GeometryKind);
     delegate!(positions, &Values<'data, [f32; 3]>);
     delegate!(normals, Option<&Values<'data, [f32; 3]>>);

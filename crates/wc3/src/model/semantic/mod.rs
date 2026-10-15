@@ -66,6 +66,8 @@ pub use binding::*;
 pub use profiles::m2::M2Geometry;
 pub use profiles::m3::{M3CollisionGeometry, M3DisplayGeometry, M3Geometry};
 pub use profiles::mdlx::{MdlxGeometry, MdlxVertexInfluences};
+mod geometry_edit;
+pub use geometry_edit::*;
 mod geometry_schema;
 pub use geometry_schema::*;
 pub use profiles::wmo::{WmoGeometry, WmoTriangleControls};

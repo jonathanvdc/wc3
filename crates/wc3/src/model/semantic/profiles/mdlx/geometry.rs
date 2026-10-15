@@ -1,9 +1,11 @@
 //! Geometry streams and connectivity available to this model family.
+use crate::model::semantic::geometry_edit::{check_edit, remap_values};
 use crate::model::semantic::geometry_schema::{present, validate_geometry};
 use crate::model::semantic::{
     Attributes, Error, GeometrySchema, Influence, InfluenceRows, Link, Topology, ValidateLinks,
     Values,
 };
+use crate::model::semantic::{GeometryEdit, GeometryEditCapabilities, StreamSupport};
 /// Warcraft III joint distributions preserve matrix-group or weighted semantics.
 #[derive(Clone, Debug, Default)]
 pub enum MdlxVertexInfluences<'data> {
@@ -117,6 +119,53 @@ impl<'data> MdlxGeometry<'data> {
     }
 }
 impl<'data> GeometrySchema<'data> for MdlxGeometry<'data> {
+    fn edit_capabilities(&self) -> GeometryEditCapabilities {
+        GeometryEditCapabilities {
+            positions: true,
+            normals: StreamSupport::Optional,
+            tangents: StreamSupport::Optional,
+            colors: StreamSupport::Unsupported,
+            minimum_uv_sets: 0,
+            maximum_uv_sets: None,
+            vertex_remap: true,
+        }
+    }
+    fn edited(&self, edit: GeometryEdit<'data>) -> Result<Self, Error> {
+        self.validate()?;
+        check_edit(&edit, self.edit_capabilities())?;
+        let mut result = self.clone();
+        if let Some(map) = &edit.remap {
+            map.check(self)?;
+            remap_values(&mut result.positions, &map.new_to_old);
+            remap_values(&mut result.normals, &map.new_to_old);
+            remap_values(&mut result.tangents, &map.new_to_old);
+            for stream in &mut result.texture_coordinates {
+                remap_values(stream, &map.new_to_old);
+            }
+            match &mut result.influences {
+                MdlxVertexInfluences::None => {}
+                MdlxVertexInfluences::MatrixGroups(v) => remap_values(v, &map.new_to_old),
+                MdlxVertexInfluences::Weighted(v) => remap_values(v, &map.new_to_old),
+            }
+            result.topology = map.topology.clone();
+        }
+        if let Some(values) = edit.positions {
+            result.positions = values;
+        }
+        if let Some(values) = edit.normals {
+            result.normals = values;
+        }
+        if let Some(values) = edit.tangents {
+            result.tangents = values;
+        }
+        if let Some(values) = edit.texture_coordinates {
+            result.texture_coordinates = values;
+        }
+
+        result.validate()?;
+        Ok(result)
+    }
+
     fn positions(&self) -> &Values<'data, [f32; 3]> {
         &self.positions
     }

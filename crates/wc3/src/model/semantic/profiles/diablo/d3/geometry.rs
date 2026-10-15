@@ -1,9 +1,11 @@
 //! Diablo III vertex meanings retain their independent color and tangent streams.
+use crate::model::semantic::geometry_edit::{check_edit, remap_values};
 use crate::model::semantic::geometry_schema::validate_geometry;
 use crate::model::semantic::{
     Attributes, Error, GeometrySchema, Influence, InfluenceRows, Link, Topology, ValidateLinks,
     Values,
 };
+use crate::model::semantic::{GeometryEdit, GeometryEditCapabilities, StreamSupport};
 
 /// Complete logical streams carried by an uncompressed Diablo III appearance vertex.
 #[derive(Clone, Debug, Default)]
@@ -75,6 +77,55 @@ impl ValidateLinks for Geometry<'_> {
     fn visit_links(&self, _: &mut dyn FnMut(Link)) {}
 }
 impl<'a> GeometrySchema<'a> for Geometry<'a> {
+    fn edit_capabilities(&self) -> GeometryEditCapabilities {
+        GeometryEditCapabilities {
+            positions: true,
+            normals: StreamSupport::Required,
+            tangents: StreamSupport::Unsupported,
+            colors: StreamSupport::Required,
+            minimum_uv_sets: 2,
+            maximum_uv_sets: Some(2),
+            vertex_remap: true,
+        }
+    }
+    fn edited(&self, edit: GeometryEdit<'a>) -> Result<Self, Error> {
+        self.validate()?;
+        check_edit(&edit, self.edit_capabilities())?;
+        let mut result = self.clone();
+        if let Some(map) = &edit.remap {
+            map.check(self)?;
+            remap_values(&mut result.streams.positions, &map.new_to_old);
+            remap_values(&mut result.streams.normals, &map.new_to_old);
+            remap_values(&mut result.streams.colors, &map.new_to_old);
+            for stream in &mut result.streams.texture_coordinates {
+                remap_values(stream, &map.new_to_old);
+            }
+            remap_values(&mut result.streams.auxiliary_colors, &map.new_to_old);
+            remap_values(&mut result.streams.tangents, &map.new_to_old);
+            remap_values(&mut result.streams.binormals, &map.new_to_old);
+            remap_values(&mut result.streams.cloth_vertices, &map.new_to_old);
+            remap_values(&mut result.influences, &map.new_to_old);
+            result.topology = map.topology.clone();
+        }
+        if let Some(values) = edit.positions {
+            result.streams.positions = values;
+        }
+        if let Some(values) = edit.normals {
+            result.streams.normals = values;
+        }
+        if let Some(values) = edit.colors {
+            result.streams.colors = values;
+        }
+        if let Some(values) = edit.texture_coordinates {
+            result.streams.texture_coordinates = values
+                .try_into()
+                .map_err(|_| Error::new("geometry.edit.uv", "expected two UV streams"))?;
+        }
+
+        result.validate()?;
+        Ok(result)
+    }
+
     fn positions(&self) -> &Values<'a, [f32; 3]> {
         &self.streams.positions
     }

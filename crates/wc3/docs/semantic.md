@@ -323,6 +323,80 @@ and explicitly archived unknown attachments, and delegates the same checked
 editing operations.
 
 Coordinate basis and length units describe authored numeric values. Changing
-those declarations does not transform geometry. Continue with the
-[conversion guide](conversion.md) for native imports, output plans, and policies
-for values a destination cannot represent.
+those declarations does not transform geometry. Native imports, output plans,
+and policies for values a destination cannot represent are described in the
+[conversion guide](conversion.md).
+
+## Common geometry editing
+
+Editors can use `GeometrySchema::edited` to change geometry without selecting a
+profile-specific constructor. `GeometryEdit` supplies atomic replacements for
+positions, vertex normals, tangent frames, primary colors, and ordered UV streams.
+An omitted field retains its existing value; an empty stream removes an optional
+value. The operation returns a validated replacement and leaves the original
+geometry unchanged on success or failure. Unchanged `Values` retain shared storage;
+remapped streams are materialized as owned logical values.
+
+`edit_capabilities` describes supported common streams, required normals or colors,
+UV-set limits, and whether the current geometry permits vertex remapping. M2, for
+example, requires normals and exactly two UV streams. Diablo III tangent and
+binormal vectors remain distinct profile streams, so its common tangent-frame
+operation is unavailable. Capabilities guide tools before they submit an edit;
+validation still checks cardinalities, finite values, and the profile's complete
+invariants. Universal geometry and union branches delegate to the retained concrete
+schema. Custom schemas opt in by implementing the same two methods; their default
+implementation rejects common edits.
+
+For structural edits, `VertexRemap` gives one old vertex index per new vertex and
+replacement connectivity. Repeated indices duplicate vertices, permutations
+reorder them, and unused vertices can be deleted. Each new corner must select the
+same old vertex as its corresponding old corner. Primitive kinds, mixed groups,
+polygon boundaries, face order, and corner order remain unchanged. Adapters carry
+all vertex streams through this correspondence, including skin influences,
+additional vertex attributes, Diablo auxiliary colors and cloth mappings, and WMO
+lighting colors and baked-light coordinates. Face and corner attributes and their
+scoped identities remain intact. Stream replacements apply after remapping, which
+allows a tool to duplicate vertices and move the copies in one checked operation.
+
+The following edit duplicates a shared vertex while retaining its triangle's
+corner order. The same operation works for any schema that supports remapping.
+
+```rust
+use wc3::model::semantic::{
+    GeometryData, GeometryEdit, GeometrySchema, Topology, VertexRemap,
+};
+
+let geometry = GeometryData::triangles(
+    vec![[0., 0., 0.], [1., 0., 0.], [0., 1., 0.]],
+    vec![[0, 1, 2]],
+)?;
+let edited = geometry.edited(GeometryEdit {
+    remap: Some(VertexRemap {
+        new_to_old: vec![0, 1, 2, 0],
+        topology: Topology::Triangles(vec![[3, 1, 2]].into()),
+    }),
+    ..GeometryEdit::default()
+})?;
+assert_eq!(edited.positions.len(), 4);
+assert_eq!(geometry.positions.len(), 3);
+Ok::<(), wc3::model::semantic::Error>(())
+```
+
+To publish an edit, clone the mesh from the draft's model, replace its `geometry`
+with the result of `edited`, and submit it through `ModelBuilder::set_mesh` inside
+`SingleModel::edit` or `ModelCollection::edit_model`. Geometry editing does not
+recompute mesh or model bounds, transform normals automatically when positions
+change, or rewrite references held by other graph objects. Tools must update those
+related declarations in the same collection transaction where needed. In
+particular, vertex references in physics systems require their own correspondence
+updates; graph validation cannot establish that an in-range index still identifies
+the intended vertex.
+
+The common protocol currently preserves topology structure. Adding or splitting
+faces, interpolating new vertices, changing skinning representations, and creating
+profile-specific attribute layers require explicit profile operations. WMO geometry
+with strip indices rejects vertex remapping because draws retain separate strip
+windows. WEM geometry with declared edges, triangulations, or repair history also
+rejects remapping rather than guessing correspondence for those domains. Ordinary
+stream edits remain available for those meshes. Native index widths, packing, and
+quantization continue to be checked during export.
